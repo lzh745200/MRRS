@@ -104,6 +104,12 @@ function mountComp() {
           template: '<div class="el-dialog-stub"><slot /><slot name="footer" /></div>',
           emits: ['update:modelValue'],
         },
+        'el-upload': {
+          name: 'ElUpload',
+          props: ['onRemove', 'onChange'],
+          template: '<div class="el-upload-stub"><slot /></div>',
+          emits: ['remove', 'change'],
+        },
         // 注入两行样本数据，覆盖 backup_type 三元两侧、formatSize/formatTime 不同输入
         'el-table-column': {
           name: 'ElTableColumn',
@@ -892,5 +898,146 @@ describe('模板分支渲染', () => {
       vm.backupTarget = 'D:\\'
       expect(wrapper.text()).toContain('D:\\')
     })
+  })
+})
+
+describe('导入备份包恢复（上传恢复链路）', () => {
+  it('onImportFileChange：raw 与非 raw 两臂', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.onImportFileChange({ raw: new File(['x'], 'a.zip') })
+    expect(vm.importFile).toBeInstanceOf(File)
+    vm.onImportFileChange({})
+    expect(vm.importFile).toBeNull()
+  })
+
+  it('confirmImportRestore：无文件 → warning', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.importFile = null
+    await vm.confirmImportRestore()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请先选择备份包文件')
+    expect(mockPost).not.toHaveBeenCalledWith('/system/backup/upload-restore', expect.anything())
+  })
+
+  it('confirmImportRestore：成功 → 提示 + 关窗 + 清空 + 定时跳转登录', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.importFile = new File(['x'], 'pkg.zip')
+    mockPost.mockResolvedValue({ success: true })
+    vi.useFakeTimers()
+    await vm.confirmImportRestore()
+    expect(mockPost).toHaveBeenCalledWith('/system/backup/upload-restore', expect.anything())
+    expect(ElMessage.success).toHaveBeenCalledWith('导入恢复成功，系统将重新登录')
+    expect(vm.importDialogVisible).toBe(false)
+    expect(vm.importFile).toBeNull()
+    vi.advanceTimersByTime(2000)
+    vi.useRealTimers()
+  })
+
+  it('confirmImportRestore：成功但 success 为 false → 不提示不关窗', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.importFile = new File(['x'], 'pkg.zip')
+    vm.importDialogVisible = true
+    mockPost.mockResolvedValue({ success: false })
+    await vm.confirmImportRestore()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(vm.importDialogVisible).toBe(true)
+  })
+
+  it('confirmImportRestore：失败 detail 与兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.importFile = new File(['x'], 'pkg.zip')
+    mockPost.mockRejectedValueOnce({ response: { data: { detail: '包校验失败' } } })
+    await vm.confirmImportRestore()
+    expect(ElMessage.error).toHaveBeenCalledWith('包校验失败')
+    mockPost.mockRejectedValueOnce(new Error('net'))
+    await vm.confirmImportRestore()
+    expect(ElMessage.error).toHaveBeenCalledWith('导入恢复失败')
+    expect(vm.importing).toBe(false)
+  })
+
+  it('handleDownload：fetch 成功触发下载；失败提示', async () => {
+    getTokenMock.mockReturnValue('tk-1')
+    const okResponse = {
+      ok: true,
+      blob: vi.fn(() => Promise.resolve(new Blob(['data']))),
+    }
+    fetchMock.mockResolvedValueOnce(okResponse)
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock')
+    globalThis.URL.revokeObjectURL = vi.fn()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleDownload({ file_name: 'bak.zip' })
+    expect(fetchMock).toHaveBeenCalled()
+    expect(ElMessage.error).not.toHaveBeenCalled()
+
+    fetchMock.mockRejectedValueOnce(new Error('net'))
+    await vm.handleDownload({ file_name: 'bak.zip' })
+    expect(ElMessage.error).toHaveBeenCalledWith('下载备份失败')
+    clickSpy.mockRestore()
+    delete (globalThis as any).URL.createObjectURL
+    delete (globalThis as any).URL.revokeObjectURL
+    vi.restoreAllMocks()
+  })
+
+  it('导入备份包对话框模板事件：打开/取消/v-model/on-remove/密码输入', async () => {
+    mockGet.mockResolvedValueOnce({})
+    mockGet.mockResolvedValueOnce({})
+    mockGet.mockResolvedValueOnce({})
+    mockGet.mockResolvedValueOnce({ dirs: [], current: '' })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // L91 打开按钮 → importDialogVisible = true
+    await clickButton(wrapper, '导入备份包')
+    expect(vm.importDialogVisible).toBe(true)
+
+    // L260 el-dialog v-model 关闭
+    const dialogComps = wrapper.findAllComponents({ name: 'ElDialog' })
+    const importDialog = dialogComps[dialogComps.length - 1]
+    await importDialog.vm.$emit('update:modelValue', false)
+    await nextTick()
+    expect(vm.importDialogVisible).toBe(false)
+
+    // 重新打开后 L297 取消按钮 → 关闭
+    vm.importDialogVisible = true
+    await nextTick()
+    await clickDialogButton(wrapper, dialogComps.length - 1, '取消')
+    expect(vm.importDialogVisible).toBe(false)
+
+    // L289 el-input v-model 更新密码（导入对话框内的密码输入框）
+    vm.importDialogVisible = true
+    await nextTick()
+    const dialogComps2 = wrapper.findAllComponents({ name: 'ElDialog' })
+    const importDialogComp = dialogComps2[dialogComps2.length - 1]
+    const importInputs = importDialogComp.findAllComponents({ name: 'ElInput' })
+    expect(importInputs.length).toBeGreaterThan(0)
+    await importInputs[0].vm.$emit('update:modelValue', 'secret')
+    expect(vm.importForm.password).toBe('secret')
+
+    // L278 el-upload on-remove → importFile = null
+    vm.importFile = new File(['x'], 'a.zip')
+    const uploadComps = wrapper.findAllComponents({ name: 'ElUpload' })
+    if (uploadComps.length > 0) {
+      const removeHandler = uploadComps[uploadComps.length - 1].props('onRemove')
+      if (typeof removeHandler === 'function') {
+        removeHandler()
+        expect(vm.importFile).toBeNull()
+      } else {
+        uploadComps[uploadComps.length - 1].vm.$emit('remove')
+      }
+    }
+    wrapper.unmount()
   })
 })

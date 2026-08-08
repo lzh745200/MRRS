@@ -16,12 +16,14 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
 
-# Buster 已 EOL，apt 源重定向到 archive.debian.org
+# Buster 已 EOL，apt 源重定向到 archive.debian.org；增加重试与容错
 RUN echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list && \
-    echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list
+    echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list && \
+    echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries && \
+    echo 'Acquire::http::Timeout "60";' >> /etc/apt/apt.conf.d/80-retries
 
 # 安装编译依赖
-RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --no-install-recommends \
+RUN apt-get update -o Acquire::Check-Valid-Until=false -o Acquire::Retries=5 && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
     libffi-dev \
@@ -54,10 +56,10 @@ RUN grep -v -E '^(prophet|cmdstanpy|stanio|scikit-learn|scipy|Scrapy|Twisted|mat
     requirements.txt > requirements-arm64.txt && \
     echo "python-magic==0.4.27" >> requirements-arm64.txt
 
-# 安装 Python 依赖 + PyInstaller
-RUN pip install --retries 3 --timeout 120 \
+# 安装 Python 依赖 + PyInstaller（ARM64 编译失败时输出完整日志定位）
+RUN pip install --retries 5 --timeout 180 \
     -r requirements-arm64.txt pyinstaller > /tmp/pip-install.log 2>&1; \
-    code=$?; tail -20 /tmp/pip-install.log; \
+    code=$?; tail -40 /tmp/pip-install.log; \
     if [ $code -ne 0 ]; then echo "ERROR: pip install 失败 (exit $code)"; exit 1; fi
 
 # 复制后端源码

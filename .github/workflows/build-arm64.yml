@@ -23,6 +23,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.1.0
 
+      - name: Pre-pull base image (retry for EOL registry)
+        run: |
+          # python:3.11-slim-buster 为 EOL 镜像，拉取可能间歇失败；重试 3 次
+          for i in 1 2 3; do
+            docker pull --platform linux/arm64 python:3.11-slim-buster && break
+            echo "pull failed (attempt $i), retrying..."
+            sleep 15
+          done
+
       - name: Build backend binary in ARM64 Debian Buster container
         run: |
           mkdir -p backend/dist
@@ -31,6 +40,7 @@ jobs:
             --target output \
             -f docker/Dockerfile.backend-arm64 \
             --output type=local,dest=backend/dist \
+            --pull=false \
             .
 
       - name: Verify backend binary
