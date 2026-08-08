@@ -150,6 +150,20 @@ async def list_backups(
 
         items = []
         for r in records:
+            # 检测是否为加密备份（读文件头标记），供前端决定是否提示输入解密密码
+            is_encrypted = False
+            try:
+                from app.services.backup_service import BackupService
+
+                with open(r.file_path, "rb") as _f:
+                    is_encrypted = (
+                        _f.read(len(BackupService._ENCRYPTED_MARKER))
+                        == BackupService._ENCRYPTED_MARKER
+                    )
+            except Exception:
+                # 文件缺失/不可读/记录为 mock 路径时按未加密处理
+                is_encrypted = False
+
             items.append({
                 "backup_id": r.backup_id,
                 "file_name": r.file_name,
@@ -158,6 +172,7 @@ async def list_backups(
                 "description": r.description,
                 "created_at": r.created_at.isoformat(),
                 "backup_type": r.backup_type,
+                "is_encrypted": is_encrypted,
             })
 
         return ok_list(items=items, total=len(items))

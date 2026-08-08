@@ -269,6 +269,39 @@ class TestUploadAndRestore:
         assert svc.restore_backup.call_args.kwargs.get("password") is None  # 未提供密码
         assert list(tmp_path.glob("upload_*")) == []  # 临时文件已清理
 
+    def test_list_reports_is_encrypted(self, bk_client, tmp_path):
+        """备份列表返回 is_encrypted（加密/明文/读取失败三态）"""
+        enc_path = os.path.join(str(tmp_path), "enc.zip")
+        plain_path = os.path.join(str(tmp_path), "plain.zip")
+        with open(plain_path, "wb") as f:
+            f.write(_valid_zip_bytes())
+        with open(enc_path, "wb") as f:
+            f.write(_encrypted_zip_bytes("pwd123"))
+
+        def make_record(name, path):
+            rec = MagicMock()
+            rec.backup_id = 1
+            rec.file_name = name
+            rec.file_path = path
+            rec.file_size = 10
+            rec.description = "d"
+            rec.backup_type = "full"
+            rec.created_at.isoformat.return_value = "2024-01-01T00:00:00"
+            return rec
+
+        records = [
+            make_record("enc.zip", enc_path),
+            make_record("plain.zip", plain_path),
+            make_record("missing.zip", os.path.join(str(tmp_path), "nope.zip")),
+        ]
+        p, svc = _svc_patch()
+        svc.list_backups.return_value = records
+        with p:
+            resp = bk_client.get("/api/v1/system/backup")
+        assert resp.status_code == 200
+        by_name = {it["file_name"]: it["is_encrypted"] for it in resp.json()["data"]["items"]}
+        assert by_name == {"enc.zip": True, "plain.zip": False, "missing.zip": False}
+
     def test_encrypted_requires_password_400(self, bk_client, tmp_path):
         """加密备份未提供密码 → 400（覆盖预校验分支），磁盘零残留"""
         p, svc = _svc_patch()
