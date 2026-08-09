@@ -280,6 +280,23 @@ System roles reduced from 7+ to 4: `super_admin`/`admin`/`user`/`viewer`. `norma
 
 `files.py` upload endpoint was returning bare dict instead of `{code:200, data:{...}, message:"成功"}` envelope. Fixed to use `success_response()`. Removed unused `db` param. Added audit logging.
 
+### Backup Upload-Restore (2026-08-09)
+
+`POST /api/v1/system/backup/upload-restore` — the "import any backup package" endpoint:
+- Supports **encrypted** backups via `password` Form field (PBKDF2+Fernet, same as `BackupService._decrypt_to_temp`)
+- **Streams** upload to disk in 8MB chunks (never `await file.read()` whole — OOM risk with multi-GB packages); 10GB defensive cap → 413
+- Pre-validates after save: encrypted marker requires password; plain ZIP must be a valid zip containing `data/rural_revitalization.db`; `BackupRestoreError` → 400 (user error, not 500)
+- All rejection paths (HTTPException) delete the temp file — zero disk residue
+- `GET /system/backup` list returns `is_encrypted` per item (frontend restore dialog shows password field only then)
+
+### Token Blacklist Is Unified (2026-08-09)
+
+The in-memory `TokenBlacklist` class in `app/core/security.py` was **deleted** (dead code — JWT validation goes through `app/core/token_manager.py` → `app/core/token_blacklist.py` module with DB persistence). `app/services/token_blacklist_service.py` (async service, zero app references) also deleted. Admin force-logout uses `revoke_token()`; sessions stats use `core/token_blacklist.count()`. NEVER add a third blacklist implementation — use `app.core.token_blacklist`.
+
+### ENCRYPTION_KEY Auto-Provision (2026-08-09)
+
+Production mode with empty `ENCRYPTION_KEY` now auto-loads/generates a persisted Fernet key via `runtime_secrets.get_or_create_secret("ENCRYPTION_FERNET_KEY")` (per-machine random, survives restarts, same key the encryption service falls back to — no data-compat break). The old "默认测试密钥" warning is gone; a warning only fires if even auto-generation fails.
+
 ### WinError 10054 (Connection Reset)
 
 Auto-fixed by `app/utils/win_proactor_fix.py`. Loaded by `start.py` and `main.py`. No action needed.

@@ -5,6 +5,33 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布] - 2026-08-09 备份恢复完整链路 + 深度审计
+
+### 功能
+- ✨ **备份包上传恢复完整链路**：`POST /system/backup/upload-restore` 现支持**加密备份**（`password` Form 参数，PBKDF2+Fernet 解密），任意机器导出的备份包均可导入恢复
+- ✨ **前端「导入备份包」入口**：备份管理页新增导入对话框（文件选择 + 可选解密密码 + 危险警告），成功后自动跳转登录
+
+### 修复
+- 🐛 **备份列表缺少 `is_encrypted`**：前端恢复对话框依赖该字段决定是否显示密码框，缺失导致加密备份无法从列表恢复。列表项现按文件头标记返回 `is_encrypted`（加密/明文/读取失败三态）
+- 🐛 **备份上传 OOM 风险**：`upload_and_restore` 原先整包读入内存，多 GB 备份可拖垮进程。改为 8MB 分块流式落盘 + 10GB 防御性上限（413 明确报错）
+- 🐛 **校验拒绝时磁盘残留**：加密密码缺失/损坏 ZIP/缺库文件等拒绝分支此前不清理已落盘的临时文件，现统一清理（磁盘零残留）
+- 🐛 **加密备份验证提示笼统**：`verify_backup` 对加密包报通用 ZIP 错误，现返回明确提示（`"备份文件已加密，无法直接验证（请通过恢复流程输入密码）"` + `encrypted: true`）
+- 🐛 **强制登出无效**：`admin.py` 强制登出写入 `security.py` 的内存黑名单，与真实 JWT 校验路径（`token_manager` → DB 持久化黑名单）互不相通。改用 `revoke_token()` 统一到持久化黑名单；会话统计改用 `core/token_blacklist.count()`
+- 🔒 **密码重置明文落盘**：机器码重置密码不再写入 `%TEMP%` 明文临时文件（Windows 无权限限制且永不清理），新密码仅响应返回（localhost）
+- 🐛 **版本一致性测试**：纳入环境变量优先级（Electron 注入设计），并清除本机残留的 `PROJECT_VERSION=1.4.2` 系统级环境变量
+- 🐛 **ENCRYPTION_KEY 告警误报**：生产环境缺密钥时自动从运行时密钥存储加载/生成持久化 Fernet 密钥（与加密服务共用，兼容既有密文），仅自动生成失败才告警
+- 🐛 **管理员密码重置工具弱口令**：`reset_admin_password.py` 默认 `admin123` 已移除，密码必填且强制复杂度校验（≥8 位含大小写/数字/特殊字符）
+
+### 架构清理
+- 🧹 **删除死代码**：`services/token_blacklist_service.py`（异步版黑名单，app 零引用）及其专属测试；`security.py` 中失效的 `TokenBlacklist` 类/`validate_session_token`/`generate_session_id`（无调用方）
+- 🧹 **Electron 启动健壮性**：页面重试前先做 `/health` 健康检查（每轮 60s 等待），后端就绪后再加载；就绪超时从 3 分钟放宽到 5 分钟（PyInstaller 冷启动 + 杀软扫描实测可超 3 分钟）
+
+### 测试与质量
+- **覆盖率攻坚**：`fund_budgets.py`（附件上传/列表、used_amount 映射）86%→**100%**；`policy.py`（附件路径映射、FTS 同步、工作日志降级）95%→**100%**
+- 后端全量：**12,109 passed**，覆盖率 **99.86%**（门禁 98%）
+- 前端全量：**6,120 passed**（351 个测试文件）
+- 安全扫描：bandit 0 发现；前后端 API 契约核对 207 个调用全部匹配
+
 ## [未发布] - 2026-08-09 路由遮蔽修复
 
 ### 修复

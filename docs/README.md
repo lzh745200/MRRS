@@ -1,6 +1,6 @@
 # 文档中心
 
-帮扶管理信息系统 v1.5.0 项目文档。
+帮扶管理信息系统 v1.7.2 项目文档。
 
 ## 快速入口
 
@@ -21,3 +21,4 @@
 - Schema 以 `backend/app/models/` 和 Alembic 迁移为准
 - 构建配置以 `package.json` build 段 + `backend/assistance-backend.spec` 为准
 - 审计日志必须同时写入文件日志和数据库（audit_logs + login_attempts 表）
+- 备份恢复统一走 `/api/v1/system/backup/upload-restore`（支持加密备份，见 AGENTS.md）
