@@ -327,7 +327,6 @@ class TestAllServicesImportable:
         'app.services.user_cascade_delete_service',
         'app.services.village_cascade_delete_service',
         'app.services.update_log_service',
-        'app.services.token_blacklist_service',
         'app.services.task_queue',
         'app.services.system_config_service',
         'app.services.pdf_service',

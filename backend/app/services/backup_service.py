@@ -797,6 +797,15 @@ class BackupService:
             # 计算文件哈希
             file_hash = self._calculate_file_hash(backup_file_path)
 
+            # 加密备份无法直接验证内容，需先通过恢复流程解密
+            if self._is_encrypted(backup_file_path):
+                return {
+                    "status": "error",
+                    "message": "备份文件已加密，无法直接验证内容（请通过恢复流程输入密码后验证）",
+                    "file_hash": file_hash,
+                    "encrypted": True,
+                }
+
             # 尝试打开ZIP文件
             with zipfile.ZipFile(backup_file_path, "r") as zipf:
                 # 测试ZIP文件完整性

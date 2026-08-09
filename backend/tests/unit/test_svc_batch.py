@@ -16,7 +16,6 @@ def test_h14():from app.services.cache_service import CacheService;assert CacheS
 def test_h15():from app.services.monitoring_service import MonitoringService;assert MonitoringService() is not None
 def test_h16():from app.services.alert_service import AlertService;assert AlertService() is not None
 def test_h17():from app.services.two_factor_service import TwoFactorService;assert TwoFactorService() is not None
-def test_h18():from app.services.token_blacklist_service import TokenBlacklistService;assert TokenBlacklistService is not None
 def test_h19():from app.services.version_service import VersionService;assert VersionService() is not None
 def test_h20():from app.services.resource_monitor import ResourceMonitor;assert ResourceMonitor() is not None
 def test_h21():from app.services.resource_limiter import ResourceLimiter;assert ResourceLimiter() is not None

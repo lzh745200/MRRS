@@ -573,7 +573,7 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
 
     file_path = None  # 预初始化，便于异常时清理
     try:
-        import io
+        import time
         import zipfile
 
         from app.utils.paths import get_backup_path
@@ -581,31 +581,7 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
         backup_dir = str(get_backup_path())
         os.makedirs(backup_dir, exist_ok=True)
 
-        # 读取上传内容
-        content = await file.read()
-
-        # ── 落盘前校验（内存完成，拒绝无效包时磁盘零残留） ──
-        # 1. 加密备份：必须提供密码
-        from app.services.backup_service import BackupService
-
-        if content[:len(BackupService._ENCRYPTED_MARKER)] == BackupService._ENCRYPTED_MARKER:
-            if not password:
-                raise HTTPException(status_code=400, detail="备份文件已加密，请提供解密密码")
-        else:
-            # 2. 明文 ZIP：必须是有效 ZIP 且包含数据库文件
-            try:
-                with zipfile.ZipFile(io.BytesIO(content), "r") as _zf:
-                    _names = {n.replace("\\", "/") for n in _zf.namelist()}
-            except zipfile.BadZipFile:
-                raise HTTPException(status_code=400, detail="上传的文件不是有效的备份包（ZIP 已损坏）")
-            if "data/rural_revitalization.db" not in _names:
-                raise HTTPException(
-                    status_code=400,
-                    detail="上传的文件不是有效的备份包（缺少数据库文件 data/rural_revitalization.db）",
-                )
-
         # 使用时间戳前缀避免覆盖已有备份
-        import time
         safe_name = f"upload_{int(time.time())}_{original_name}"
         file_path = os.path.join(backup_dir, safe_name)
 
@@ -615,14 +591,46 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
         if not real_path.startswith(real_backup_dir):
             raise HTTPException(status_code=403, detail="禁止写入备份目录外的路径")
 
-        # 保存上传文件
+        # 分块流式落盘（避免大备份包整体读入内存导致 OOM），并施加防御性大小上限
+        _MAX_RESTORE_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024  # 10GB
+        _CHUNK_SIZE = 8 * 1024 * 1024
+        total = 0
         with open(file_path, "wb") as f:
-            f.write(content)
+            while True:
+                chunk = await file.read(_CHUNK_SIZE)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > _MAX_RESTORE_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="备份包超过大小限制（10GB）")
+                f.write(chunk)
 
         logger.info(
             "备份文件已上传: %s (%d bytes)，操作人: %s",
-            safe_name, len(content), getattr(current_user, "username", "unknown"),
+            safe_name, total, getattr(current_user, "username", "unknown"),
         )
+
+        # ── 落盘后校验：拒绝明显无效的备份包（fail fast，避免进入恢复流程） ──
+        # 1. 加密备份：必须提供密码
+        from app.services.backup_service import BackupService
+
+        with open(file_path, "rb") as _f:
+            _head = _f.read(len(BackupService._ENCRYPTED_MARKER))
+        if _head == BackupService._ENCRYPTED_MARKER:
+            if not password:
+                raise HTTPException(status_code=400, detail="备份文件已加密，请提供解密密码")
+        else:
+            # 2. 明文 ZIP：必须是有效 ZIP 且包含数据库文件
+            try:
+                with zipfile.ZipFile(file_path, "r") as _zf:
+                    _names = {n.replace("\\", "/") for n in _zf.namelist()}
+            except zipfile.BadZipFile:
+                raise HTTPException(status_code=400, detail="上传的文件不是有效的备份包（ZIP 已损坏）")
+            if "data/rural_revitalization.db" not in _names:
+                raise HTTPException(
+                    status_code=400,
+                    detail="上传的文件不是有效的备份包（缺少数据库文件 data/rural_revitalization.db）",
+                )
 
         # 调用恢复逻辑
         svc = get_backup_service(db)
@@ -654,6 +662,13 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
                 pass
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
+        # 校验/大小限制/路径逃逸等拒绝分支同样清理已落盘的临时文件
+        if file_path:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except OSError:
+                pass
         raise
     except Exception as e:
         logger.error("上传恢复备份失败: %s", e)
