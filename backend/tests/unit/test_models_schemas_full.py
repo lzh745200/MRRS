@@ -476,7 +476,6 @@ class TestSchemasImportable:
         'app.schemas.fund',
         'app.schemas.data_package',
         'app.schemas.rural_work',
-        'app.schemas.template_fields',
         'app.schemas.supported_village',
         'app.schemas.permission_package',
         'app.schemas.auth',

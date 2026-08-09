@@ -157,7 +157,6 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SkeletonList: typeof import('./components/SkeletonList.vue')['default']
-    TemplatesTemplateDownload: typeof import('./components/templates/TemplateDownload.vue')['default']
     UiSecurityMonitor: typeof import('./components/ui/SecurityMonitor.vue')['default']
   }
   export interface ComponentCustomProperties {

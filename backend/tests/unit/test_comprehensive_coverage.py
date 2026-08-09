@@ -424,7 +424,6 @@ SCHEMA_FILES = [
     'app.schemas.data_report',
     'app.schemas.monitor',
     'app.schemas.permission_package',
-    'app.schemas.template_fields',
     'app.schemas.village',
     'app.schemas.army_unit',
     'app.schemas.document',
