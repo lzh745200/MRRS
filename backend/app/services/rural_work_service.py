@@ -309,15 +309,48 @@ class RuralWorkService:
         )
 
     def get_villages_for_select(self) -> List[Dict[str, Any]]:
-        """获取村庄列表（用于下拉选择）。"""
+        """获取村庄列表（用于下拉选择）。
+
+        系统真实村庄数据在 supported_villages 表；villages 表为 RuralWork 外键目标。
+        本方法从帮扶村表读取并独立事务 upsert 到 villages 表（按名称），
+        保证下拉有真实数据且外键一致。
+        """
+        from app.core.database import SessionLocal
+        from app.models.supported_village import SupportedVillage
         from app.models.village import Village
 
-        rows = (
-            self.db.query(Village.id, Village.name)
-            .order_by(Village.name.asc())
-            .all()
-        )
-        return [{"id": vid, "name": vname} for vid, vname in rows]
+        db = SessionLocal()
+        try:
+            svs = (
+                db.query(SupportedVillage)
+                .filter(SupportedVillage.is_active.is_(True))
+                .order_by(SupportedVillage.village_name.asc())
+                .all()
+            )
+            existing = {v.name: v.id for v in db.query(Village).all()}
+            rows: List[Dict[str, Any]] = []
+            for sv in svs:
+                vid = existing.get(sv.name)
+                if vid is None:
+                    village = Village(
+                        name=sv.name,
+                        county=getattr(sv, "county", None),
+                        township=getattr(sv, "township", None),
+                        organization_id=getattr(sv, "organization_id", None),
+                    )
+                    db.add(village)
+                    db.flush()
+                    vid = village.id
+                    existing[sv.name] = vid
+                rows.append({
+                    "id": vid,
+                    "name": sv.name,
+                    "county": getattr(sv, "county", None),
+                })
+            db.commit()
+        finally:
+            db.close()
+        return rows
 
     def generate_work_report(
         self,
@@ -353,6 +386,14 @@ class RuralWorkService:
             "by_status": by_status,
             "by_type": by_type,
             "completion_rate": completion_rate,
+            # 前端统计卡兼容字段
+            "summary": {
+                "total": total,
+                "completed": completed,
+                "in_progress": by_status.get("in_progress", 0),
+                "delayed": by_status.get("delayed", 0),
+                "planned": by_status.get("planned", 0),
+            },
             "items": [self._to_dict(r) for r in rows],
         }
 

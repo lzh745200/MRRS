@@ -99,6 +99,16 @@ async function loadReport() {
     const res: any = await get('/rural-works/report/generate', params)
     reportData.value = res?.data || res
     items.value = reportData.value?.items || reportData.value?.works || []
+    // 统计卡兼容后端两种结构：summary 对象（新）或 by_status 映射（旧）
+    const d = reportData.value || {}
+    const bs = d.by_status || {}
+    const summary = d.summary || {}
+    d.summary = {
+      total: summary.total ?? d.total ?? 0,
+      completed: summary.completed ?? bs.completed ?? 0,
+      inProgress: summary.inProgress ?? bs.in_progress ?? 0,
+      delayed: summary.delayed ?? bs.delayed ?? 0,
+    }
     if (!items.value.length) {
       ElMessage.info('暂无符合条件的报告数据')
     }

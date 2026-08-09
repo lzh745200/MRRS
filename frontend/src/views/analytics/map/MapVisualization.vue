@@ -157,7 +157,10 @@ onMounted(async () => {
       '/supported-villages',
       { limit: 200 }
     )
-    if (res.code === 200 && res.data) tableData.value = res.data
+    // 后端 ok_list 信封 → 拦截器把 items 提升到顶层，res.data 是 {items,total} 对象
+    const payload: any = res
+    const list = Array.isArray(res?.data) ? res.data : payload?.items || payload?.data?.items || []
+    tableData.value = list
   } catch {
     /* silent */
   } finally {

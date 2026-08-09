@@ -81,6 +81,11 @@ function mountComp() {
     global: {
       renderStubDefaultSlot: true,
       stubs: {
+        // 整合页内嵌 PassCodeManagement 子组件，测试中 stub 掉避免渲染其内部组件干扰计数
+        PassCodeManagement: {
+          name: 'PassCodeManagement',
+          template: '<div class="pass-code-stub" />',
+        },
         'el-card': {
           name: 'ElCard',
           template: '<div class="el-card-stub"><slot name="header" /><slot /></div>',

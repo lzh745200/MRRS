@@ -38,18 +38,26 @@ async def validate_data(
     db: Session = Depends(get_db),
 ):
     """
-    验证数据
+    验证数据（按实体类型从规则库加载校验规则）
     """
     engine = ValidationEngine(db)
-    issues = engine.validate(
-        entity_type=request.entity_type,
-        data=request.data,
-        field_name=request.field_name,
-    )
+    errors = engine.validate_with_db_rules(data=request.data, module=request.entity_type)
+
+    issues = []
+    for err in errors:
+        # 错误消息格式兼容两种：{field}: {message} 或纯消息
+        if isinstance(err, dict):
+            issues.append(err)
+        elif ":" in err:
+            field, _, message = err.partition(":")
+            issues.append({"field": field.strip(), "message": message.strip(), "severity": "error"})
+        else:
+            issues.append({"field": request.field_name or "", "message": err, "severity": "error"})
 
     return {
-        "valid": len([i for i in issues if i["severity"] == "error"]) == 0,
+        "valid": not errors,
         "issues": issues,
+        "message": "校验通过" if not errors else f"发现 {len(errors)} 个问题",
     }
 
 

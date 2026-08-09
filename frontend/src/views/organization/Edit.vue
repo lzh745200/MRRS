@@ -217,6 +217,7 @@ const handleSubmit = async () => {
       if (isEdit.value) {
         await updateOrganization(safeRouteParam(route.params.id) as number, {
           name: formData.name,
+          parent_id: formData.parent_id ?? undefined, // 编辑也必须提交上级组织（此前被丢弃）
           org_type: formData.org_type,
           description: formData.description || undefined,
           contact_person: formData.contact_person || undefined,

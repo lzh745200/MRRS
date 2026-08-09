@@ -185,6 +185,7 @@ export const useUserStore = defineStore('user', () => {
     if (!id) throw new Error('无法获取用户ID，请重新登录')
     const formData = new FormData()
     formData.append('avatar', file)
+    // post() 对 FormData 自动移除 Content-Type（浏览器设置 multipart boundary）
     const res = await post<ApiResponse<{ avatar_url?: string; url?: string }>>(
       `/users/${id}/avatar`,
       formData

@@ -158,8 +158,15 @@ const yearlyComparison = ref({
 async function loadAnalysisData() {
   loading.value = true
   try {
-    const res = await get('/statistics/analysis')
-    const data = res?.data ?? {}
+    const res: any = await get('/statistics/analysis')
+    // get() 已自动解包信封，后端返回裸对象 → 直接用 res（避免 res?.data 双重解包导致恒空）
+    const data =
+      res?.data &&
+      typeof res.data === 'object' &&
+      !Array.isArray(res.data) &&
+      'overview' in res.data
+        ? res.data
+        : (res ?? {})
     overview.value = data.overview || overview.value
     // 处理后端返回小数形式的完整率（如 0.85 → 85）
     if (overview.value.completeness > 0 && overview.value.completeness <= 1) {

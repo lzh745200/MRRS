@@ -287,29 +287,47 @@ async def get_api_statistics(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """获取API接口调用统计数据"""
+    """获取API接口调用统计数据
+
+    优先读取内存指标存储（MetricsMiddleware 实时采集），
+    数据库 api_metrics 表无写入方时回退为空统计，保证面板有真实数据。
+    """
     try:
-        from app.services.monitoring_service import MonitoringService
+        from app.middleware.metrics_middleware import metrics_store
 
-        performance = MonitoringService.get_api_performance_stats(db, hours=hours)
-        endpoints = MonitoringService.get_endpoint_stats(db, hours=hours)
-        errors = MonitoringService.get_error_stats(db, hours=hours)
-
+        summary = metrics_store.get_summary()
         return {
             "success": True,
             "data": {
                 "period_hours": hours,
-                "performance": performance,
-                "top_endpoints": endpoints,
-                "errors": errors,
+                "request_count": summary.get("request_count", 0),
+                "error_count": summary.get("error_count", 0),
+                "error_rate": summary.get("error_rate", 0),
+                "avg_duration": summary.get("avg_duration", 0),
+                "requests_per_second": summary.get("requests_per_second", 0),
+                "uptime_seconds": summary.get("uptime_seconds", 0),
+                "top_endpoints": summary.get("top_endpoints", []),
+                "by_method_status": summary.get("by_method_status", {}),
+                "slow_requests": summary.get("slow_requests", []),
+                "slow_request_count": summary.get("slow_request_count", 0),
             },
         }
     except Exception as e:
+        logger.warning("获取 API 统计失败: %s", e)
         return {
             "success": True,
             "data": {
                 "period_hours": hours,
-                "message": f"API统计数据暂不可用: {str(e)}",
+                "request_count": 0,
+                "error_count": 0,
+                "error_rate": 0,
+                "avg_duration": 0,
+                "requests_per_second": 0,
+                "uptime_seconds": 0,
+                "top_endpoints": [],
+                "by_method_status": {},
+                "slow_requests": [],
+                "slow_request_count": 0,
             },
         }
 

@@ -370,7 +370,8 @@ class TestPolicyAPI:
         mock_db.query.return_value = q
         resp = client.get("/api/v1/policies/export/pdf")
         assert resp.status_code == 200
-        assert "policies_export.xlsx" in resp.headers["content-disposition"]
+        assert "policies_export.pdf" in resp.headers["content-disposition"]
+        assert resp.headers["content-type"].startswith("application/pdf")
 
     def test_export_policies_wps(self, client, mock_db, admin_user, sample_policy):
         _setup_client(client, mock_db, admin_user)
@@ -379,7 +380,7 @@ class TestPolicyAPI:
         mock_db.query.return_value = q
         resp = client.get("/api/v1/policies/export/wps")
         assert resp.status_code == 200
-        assert "policies_export.xlsx" in resp.headers["content-disposition"]
+        assert "policies_export_wps.xlsx" in resp.headers["content-disposition"]
 
     def test_get_level_options(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
@@ -585,7 +586,7 @@ class TestPolicyAPI:
         mock_db.query.return_value.filter.return_value.first.return_value = sample_policy
         resp = client.get("/api/v1/policies/1")
         assert resp.status_code == 200
-        assert resp.json()["title"] == "测试政策"
+        assert resp.json()["data"]["title"] == "测试政策"  # success_response 信封
 
     def test_get_policy_detail_not_found(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
@@ -601,7 +602,7 @@ class TestPolicyAPI:
                 "organization_level": "central_military",
             })
         assert resp.status_code == 200
-        assert resp.json()["title"] == "新建政策"
+        assert resp.json()["data"]["title"] == "新建政策"  # success_response 信封
 
     def test_create_policy_with_dates(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
@@ -633,7 +634,7 @@ class TestPolicyAPI:
         with patch("app.core.cache.cache_manager.delete", AsyncMock()):
             resp = client.put("/api/v1/policies/1", json={"title": "更新标题"})
         assert resp.status_code == 200
-        assert resp.json()["id"] == 1
+        assert resp.json()["data"]["id"] == 1  # success_response 信封
 
     def test_update_policy_not_found(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)

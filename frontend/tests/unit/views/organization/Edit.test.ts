@@ -360,6 +360,7 @@ describe('编辑模式', () => {
     await clickBtn(wrapper, '保存')
     expect(mockUpdateOrganization).toHaveBeenCalledWith(5, {
       name: '改名后的总部',
+      parent_id: 3, // 编辑也提交上级组织（修复：此前被丢弃）
       org_type: 'support_unit',
       description: '描述',
       contact_person: '张三',

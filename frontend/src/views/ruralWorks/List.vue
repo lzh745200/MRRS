@@ -606,7 +606,9 @@ function generateDefaultYears(): number[] {
 async function loadVillages() {
   try {
     const { ruralWorkApi } = await import('@/api/ruralWork')
-    villageOptions.value = await ruralWorkApi.getVillagesForSelect()
+    const res: any = await ruralWorkApi.getVillagesForSelect()
+    // 兼容信封展开：items / data / 纯数组
+    villageOptions.value = Array.isArray(res) ? res : res?.items || res?.data || []
   } catch (error) {
     logger.error('加载村庄列表失败', error)
     villageOptions.value = []

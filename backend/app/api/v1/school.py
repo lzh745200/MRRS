@@ -630,6 +630,16 @@ async def list_schools(
     return result
 
 
+async def _invalidate_school_list_cache() -> None:
+    """清除学校列表缓存，保证新增/修改/删除后列表实时可见"""
+    try:
+        from app.core.cache import cache_manager
+
+        await cache_manager.delete_by_prefix("schools:list:")
+    except Exception:
+        logger.debug("清除学校列表缓存失败")
+
+
 @router.get("/{school_id}")
 async def get_school(
     school_id: int,
@@ -707,7 +717,8 @@ async def create_school(
         detail=f"所在：{school.district}" if school.district else "",
     )
 
-    # 清除仪表板缓存
+    # 清除学校列表 + 仪表板缓存
+    await _invalidate_school_list_cache()
     try:
         from app.api.v1.data.data.dashboard import invalidate_dashboard_cache
 
@@ -772,7 +783,8 @@ async def update_school(
         username=getattr(current_user, "username", "系统"),
     )
 
-    # 清除仪表板缓存
+    # 清除学校列表 + 仪表板缓存
+    await _invalidate_school_list_cache()
     try:
         from app.api.v1.data.data.dashboard import invalidate_dashboard_cache
 
@@ -815,7 +827,8 @@ async def delete_school(
         detail=f"所在：{school.district}" if school.district else "",
     )
 
-    # 清除仪表板缓存
+    # 清除学校列表 + 仪表板缓存
+    await _invalidate_school_list_cache()
     try:
         from app.api.v1.data.data.dashboard import invalidate_dashboard_cache
 

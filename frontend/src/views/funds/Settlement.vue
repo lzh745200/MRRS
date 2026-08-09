@@ -193,6 +193,7 @@ interface PerformanceData {
 
 const route = useRoute()
 const projectId = computed(() => safeRouteParam(route.params.projectId))
+const invalidProject = computed(() => !projectId.value || projectId.value <= 0)
 
 const loading = ref(false)
 const performance = ref<PerformanceData | null>(null)
@@ -220,6 +221,11 @@ const approveRules = {
 }
 
 async function loadData() {
+  if (invalidProject.value) {
+    ElMessage.warning('请先从「经费管理 → 列表」选择具体项目，再进入决算结算')
+    pushSafe('/funds')
+    return
+  }
   loading.value = true
   try {
     const data = await fundLifecycleApi.getPerformance(projectId.value)

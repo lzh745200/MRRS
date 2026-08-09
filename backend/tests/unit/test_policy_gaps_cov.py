@@ -91,7 +91,7 @@ class TestCreatePolicy:
         data = m.PolicyCreateRequest(title="新政策", effective_date="bad-date")
         with patch.object(m, "cache_manager", AsyncMock()):
             result = await m.create_policy(data=data, current_user=_admin(), db=_q())
-        assert result["title"] == "新政策"
+        assert result["data"]["title"] == "新政策"  # success_response 信封
 
     async def test_http_exception_passthrough(self):
         data = m.PolicyCreateRequest(title="新政策")

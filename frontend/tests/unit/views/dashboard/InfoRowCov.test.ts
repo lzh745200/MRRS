@@ -63,11 +63,12 @@ afterEach(() => {
 })
 
 describe('InfoRow 编辑与删除', () => {
-  it('自定义条目渲染编辑/删除按钮；startEdit 填充表单并进入编辑模式', async () => {
+  it('自定义条目渲染编辑按钮，所有条目渲染删除按钮；startEdit 填充表单并进入编辑模式', async () => {
     const wrapper = mountInfo()
     await flushPromises()
+    // 编辑按钮仅自定义条目（2 个）；删除按钮对所有动态显示（4 个，系统动态为隐藏式删除）
     expect(wrapper.findAll('.tl-edit-btn').length).toBe(2)
-    expect(wrapper.findAll('.tl-delete-btn').length).toBe(2)
+    expect(wrapper.findAll('.tl-delete-btn').length).toBe(4)
 
     const vm = wrapper.vm as any
     await wrapper.findAll('.tl-edit-btn')[0].trigger('click')

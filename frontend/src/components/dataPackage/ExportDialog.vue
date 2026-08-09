@@ -86,7 +86,14 @@ async function handleExport() {
     const data: any = result
     const packageId = data?.package_id ?? data?.id
     if (packageId) {
-      ElMessage.success(`数据包已导出（ID: ${packageId}）`)
+      ElMessage.success(`数据包已导出（ID: ${packageId}），正在下载文件...`)
+      // 导出成功立即触发下载，避免"提示成功却看不到文件"
+      try {
+        const { useDataPackageStore } = await import('@/stores/dataPackage')
+        await useDataPackageStore().downloadPackage(packageId)
+      } catch {
+        /* 下载失败不阻塞（可到列表手动下载） */
+      }
       emit('success')
       emit('update:modelValue', false)
     } else {

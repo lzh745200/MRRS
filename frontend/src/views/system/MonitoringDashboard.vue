@@ -660,11 +660,12 @@ async function fetchHealthChecks() {
 async function refreshAll() {
   loading.value = true
   try {
-    const [snap, stats, health] = await Promise.allSettled([
+    const [snap, stats, health, sysLogs] = await Promise.allSettled([
       fetchSnapshot(),
       fetchApiStats(),
       fetchHealth(),
       fetchHealthChecks(),
+      fetchSystemLogs(),
     ])
     /* c8 ignore start -- allSettled rejected/falsy branches, fetch* 内部自吞错 */
     const snapData = snap.status === 'fulfilled' ? snap.value : null
@@ -673,9 +674,14 @@ async function refreshAll() {
     if (snap.status === 'rejected') logger.error('Snapshot fetch failed', snap.reason)
     if (stats.status === 'rejected') logger.error('API stats fetch failed', stats.reason)
     if (health.status === 'rejected') logger.error('Health fetch failed', health.reason)
+    if (sysLogs.status === 'rejected') logger.error('System logs fetch failed', sysLogs.reason)
     /* c8 ignore stop */
 
-    if (snapData) {
+    // 系统日志：优先展示后端真实日志（/system/logs），后端不可用时回退资源摘要
+    const sysLogsData = sysLogs.status === 'fulfilled' ? (sysLogs as any).value : null
+    if (Array.isArray(sysLogsData) && sysLogsData.length) {
+      recentLogs.value = sysLogsData
+    } else if (snapData) {
       pushHistory(snapData.cpu_usage, snapData.memory_usage, snapData.disk_usage)
       const sid = Date.now()
       const logs: typeof recentLogs.value = []
@@ -715,6 +721,35 @@ async function refreshAll() {
   } finally {
     loading.value = false
     lastUpdated.value = new Date().toLocaleTimeString()
+  }
+}
+
+/** 拉取后端真实系统日志（app.log 尾部） */
+async function fetchSystemLogs() {
+  try {
+    const res: any = await get('/system/logs', { page: 1, page_size: 50 })
+    const payload = res?.data ?? res
+    const raw = Array.isArray(payload) ? payload : payload?.items || []
+    // 后端返回 {line: "时间 - 级别 - 消息"} 行文本，解析为结构化日志
+    return raw.map((item: any, idx: number) => {
+      const line: string = typeof item === 'string' ? item : item.line || ''
+      const m = /^(\d{4}-\d{2}-\d{2}[^ ]*)\s+(\d+:\d+:\d+)[,\d]*\s+(\S+)\s+-\s+(.*)$/.exec(line)
+      if (m) {
+        return {
+          id: idx,
+          time: `${m[1]} ${m[2]}`,
+          level: m[3].toLowerCase().includes('error')
+            ? 'error'
+            : m[3].toLowerCase().includes('warn')
+              ? 'warn'
+              : 'info',
+          message: m[4],
+        }
+      }
+      return { id: idx, time: '', level: 'info', message: line || '--' }
+    })
+  } catch {
+    return []
   }
 }
 

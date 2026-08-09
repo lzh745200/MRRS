@@ -148,15 +148,30 @@ const SENSITIVE_KEYS = ['SECRET_KEY', 'CSRF_SECRET_KEY', 'SMTP_PASSWORD', 'ENCRY
 async function loadConfig() {
   loading.value = true
   try {
-    const res = await get<{ code: number; data: Record<string, string> }>('/system/config')
-    if (res.code === 200 && res.data) {
-      configList.value = Object.entries(res.data).map(([k, v]) => ({
-        key: k,
-        value: typeof v === 'string' ? v : JSON.stringify(v),
-        description: '',
-        sensitive: SENSITIVE_KEYS.includes(k),
-      }))
+    const res = await get<any>('/system/config')
+    // 兼容三种形态：旧扁平 {key:value} / 信封 data:{items,total} / 拦截器展开后的响应
+    let payload: any = res ?? {}
+    if (
+      payload.data &&
+      typeof payload.data === 'object' &&
+      !Array.isArray(payload.data) &&
+      Object.keys(payload.data).length > 0
+    ) {
+      payload = payload.data
     }
+    if (payload.code !== undefined && payload.code !== 200 && !Array.isArray(payload.items)) {
+      configList.value = []
+      return
+    }
+    const items: any[] = Array.isArray(payload.items)
+      ? payload.items
+      : Object.entries(payload).map(([k, v]) => ({ key: k, value: v }))
+    configList.value = items.map((it) => ({
+      key: it.key,
+      value: typeof it.value === 'string' ? it.value : JSON.stringify(it.value ?? ''),
+      description: it.description || '',
+      sensitive: SENSITIVE_KEYS.includes(it.key),
+    }))
   } catch {
     configList.value = []
   } finally {

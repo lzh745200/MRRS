@@ -128,7 +128,7 @@ class TestCreatePolicyWithAttachments:
             from app.api.v1.policy import create_policy, PolicyCreateRequest
             req = PolicyCreateRequest(**payload)
             result = await create_policy(req, current_user=_admin(), db=db)
-        assert result["title"] == "新政策"
+        assert result["data"]["title"] == "新政策"  # 信封格式 data 字段
         sync.assert_called_once()
         wl.assert_called_once()
 
@@ -148,7 +148,7 @@ class TestCreatePolicyWithAttachments:
             from app.api.v1.policy import create_policy, PolicyCreateRequest
             req = PolicyCreateRequest(**payload)
             result = await create_policy(req, current_user=_admin(), db=db)
-        assert result["title"] == "新政策2"
+        assert result["data"]["title"] == "新政策2"
 
 
 class TestUpdatePolicyWithAttachments:
@@ -167,7 +167,7 @@ class TestUpdatePolicyWithAttachments:
             from app.api.v1.policy import update_policy, PolicyUpdateRequest
             req = PolicyUpdateRequest(title="改标题", attachment_urls=["/uploads/policies/a.pdf"])
             result = await update_policy(1, req, current_user=_admin(), db=db)
-        assert result["title"] == "改标题"
+        assert result["data"]["title"] == "改标题"  # 信封格式 data 字段
         assert policy.file_path == sub
 
     async def test_update_worklog_failure_degrades(self):
@@ -179,7 +179,7 @@ class TestUpdatePolicyWithAttachments:
             from app.api.v1.policy import update_policy, PolicyUpdateRequest
             req = PolicyUpdateRequest(description="新描述")
             result = await update_policy(1, req, current_user=_admin(), db=db)
-        assert result["title"] == "测试政策"
+        assert result["data"]["title"] == "测试政策"  # 信封格式 data 字段
 
 
 class TestDeletePolicyWorkLogDegrade:

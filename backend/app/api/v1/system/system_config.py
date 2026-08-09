@@ -59,13 +59,9 @@ async def get_all_configs(
         desc = svc.DEFAULT_CONFIGS.get(key, {}).get("description", "")
         items.append({"key": key, "value": value, "description": desc})
 
-    return {
-        "success": True,
-        "data": {
-            "items": items,
-            "total": len(items),
-        },
-    }
+    from app.core.response import ok_list
+
+    return ok_list(items=items, total=len(items))
 
 
 @router.put("", summary="批量更新配置项")

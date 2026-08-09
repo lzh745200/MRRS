@@ -537,6 +537,94 @@ def _query_policies_for_export(db: Session, params: dict) -> List[Policy]:
     return query.order_by(Policy.created_at.desc()).all()
 
 
+def _build_policies_pdf(policies_list: List[Policy]) -> bytes:
+    """构建政策列表 PDF（reportlab + Adobe CID 中文字体，离线可用）"""
+    from datetime import datetime as _dt
+
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        _FONT = "STSong-Light"
+    except Exception:
+        _FONT = "Helvetica"
+
+    level_display = _level_display_map()
+    status_display = _status_display_map()
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "PdfTitle", parent=styles["Title"], fontName=_FONT, fontSize=16,
+        alignment=TA_CENTER, spaceAfter=6,
+    )
+    head_style = ParagraphStyle(
+        "PdfHead", parent=styles["Normal"], fontName=_FONT, fontSize=11,
+        alignment=TA_CENTER, spaceAfter=10,
+    )
+    foot_style = ParagraphStyle(
+        "PdfFoot", parent=styles["Normal"], fontName=_FONT, fontSize=8, textColor=colors.grey,
+    )
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4),
+        rightMargin=12 * mm, leftMargin=12 * mm, topMargin=14 * mm, bottomMargin=14 * mm,
+        title="帮扶政策清单",
+    )
+    story = []
+    story.append(Paragraph("帮扶政策清单", title_style))
+    story.append(Paragraph(
+        f"导出时间：{_dt.now().strftime('%Y-%m-%d %H:%M')}    共 {len(policies_list)} 条",
+        head_style,
+    ))
+    story.append(Spacer(1, 6))
+
+    headers = ["序号", "政策标题", "政策文号", "分类", "级别", "发布机关", "发布日期", "状态", "关键词"]
+    data = [headers]
+    for idx, p in enumerate(policies_list, 1):
+        level_val = str(p.level) if p.level else ""
+        status_val = str(p.status) if p.status else "draft"
+        cat = str(p.category) if p.category else ""
+        data.append([
+            str(idx),
+            str(p.title or ""),
+            str(p.code or ""),
+            ("专项政策" if cat == "military" else "地方政策" if cat == "local" else cat),
+            level_display.get(level_val, level_val),
+            str(p.issuing_authority or ""),
+            p.issue_date.strftime("%Y-%m-%d") if p.issue_date else "",
+            status_display.get(status_val, status_val),
+            str(p.keywords or ""),
+        ])
+
+    table = Table(data, repeatRows=1)
+    table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), _FONT),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2E6B55")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#B8C6BE")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F7F4")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(table)
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("— 帮扶管理信息系统自动导出 —", foot_style))
+
+    doc.build(story)
+    return buffer.getvalue()
+
+
 @router.get("/export/excel")
 async def export_policies_excel(
     category: Optional[str] = None,
@@ -578,7 +666,7 @@ async def export_policies_pdf(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """导出政策列表（Excel 格式，.xlsx 后缀）"""
+    """导出政策列表为真实 PDF 文档"""
     policies_list = _query_policies_for_export(
         db,
         {
@@ -588,16 +676,12 @@ async def export_policies_pdf(
             "search": search,
         },
     )
-    wb = _build_export_workbook(policies_list)
-
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
+    pdf_bytes = _build_policies_pdf(policies_list)
 
     return StreamingResponse(
-        output,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=policies_export.xlsx"},
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=policies_export.pdf"},
     )
 
 
@@ -610,7 +694,7 @@ async def export_policies_wps(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """导出政策列表（Excel 格式，WPS 兼容）"""
+    """导出政策列表为 WPS 兼容表格（xlsx，WPS/Excel 均可打开）"""
     policies_list = _query_policies_for_export(
         db,
         {
@@ -629,7 +713,7 @@ async def export_policies_wps(
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=policies_export.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=policies_export_wps.xlsx"},
     )
 
 
@@ -984,7 +1068,7 @@ async def get_policy(
     setattr(policy, "view_count", current_count + 1)
     safe_commit(db)
 
-    return _policy_to_frontend(policy)
+    return success_response(data=_policy_to_frontend(policy))
 
 
 @router.post("")
@@ -1030,16 +1114,23 @@ async def create_policy(
         safe_commit(db)
         db.refresh(policy)
         await cache_manager.delete("policies:list")
-        # FTS 索引同步
-        from app.services.policy_fts_service import sync_policy_to_fts
-        sync_policy_to_fts(db, policy.id)
+        # FTS 索引同步（先确保 FTS 表存在，避免首条记录静默丢失索引）
+        from app.services.policy_fts_service import ensure_fts_table, sync_policy_to_fts
+        try:
+            ensure_fts_table(db)
+        except Exception:
+            logger.warning("FTS 表初始化失败", exc_info=True)
+        try:
+            sync_policy_to_fts(db, policy.id)
+        except Exception:
+            logger.warning("政策 FTS 索引同步失败（不影响主流程）", exc_info=True)
         # 审计日志
         try:
             write_work_log(db, "policy", "create", policy.id, f"创建政策: {policy.title}",
                            user_id=current_user.id, username=getattr(current_user, "username", ""))
         except Exception:
             logger.debug("记录工作日志失败", exc_info=True)
-        return _policy_to_frontend(policy)
+        return success_response(data=_policy_to_frontend(policy))
     except HTTPException:
         raise
     except Exception as e:
@@ -1108,16 +1199,23 @@ async def update_policy(
         safe_commit(db)
         db.refresh(policy)
         await cache_manager.delete("policies:list")
-        # FTS 索引同步
-        from app.services.policy_fts_service import sync_policy_to_fts
-        sync_policy_to_fts(db, policy.id)
+        # FTS 索引同步（先确保 FTS 表存在，避免首条记录静默丢失索引）
+        from app.services.policy_fts_service import ensure_fts_table, sync_policy_to_fts
+        try:
+            ensure_fts_table(db)
+        except Exception:
+            logger.warning("FTS 表初始化失败", exc_info=True)
+        try:
+            sync_policy_to_fts(db, policy.id)
+        except Exception:
+            logger.warning("政策 FTS 索引同步失败（不影响主流程）", exc_info=True)
         # 审计日志
         try:
             write_work_log(db, "policy", "update", policy.id, f"更新政策: {policy.title}",
                            user_id=current_user.id, username=getattr(current_user, "username", ""))
         except Exception:
             logger.debug("记录工作日志失败", exc_info=True)
-        return _policy_to_frontend(policy)
+        return success_response(data=_policy_to_frontend(policy))
     except HTTPException:
         raise
     except Exception as e:

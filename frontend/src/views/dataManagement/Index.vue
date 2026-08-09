@@ -38,9 +38,13 @@
         <ExportSection @export-complete="handleExportComplete" />
       </el-tab-pane>
 
-      <!-- 数据备份 -->
+      <!-- 数据备份（已整合至系统管理 → 备份管理，此处跳转避免功能重复） -->
       <el-tab-pane label="数据备份" name="backup">
-        <BackupSection @backup-complete="handleBackupComplete" />
+        <el-card shadow="never" class="redirect-card">
+          <el-empty description="备份与恢复功能已整合至「系统管理 → 备份管理」">
+            <el-button type="primary" @click="goBackupManagement">前往备份管理</el-button>
+          </el-empty>
+        </el-card>
       </el-tab-pane>
 
       <!-- 数据质量 -->
@@ -57,12 +61,19 @@ import { logger } from '@/utils/logger'
 import { ref, onMounted, defineAsyncComponent } from 'vue'
 import { ElMessage } from 'element-plus'
 import { get, apiRequest } from '@/api/request'
+import { useRouterSafe } from '@/composables/useRouterSafe'
+
+const { pushSafe } = useRouterSafe()
 
 // 异步加载子组件
 const ImportSection = defineAsyncComponent(() => import('./components/ImportSection.vue'))
 const ExportSection = defineAsyncComponent(() => import('./components/ExportSection.vue'))
-const BackupSection = defineAsyncComponent(() => import('./components/BackupSection.vue'))
 const QualitySection = defineAsyncComponent(() => import('./components/QualitySection.vue'))
+
+// 备份管理已整合至系统管理，跳转避免重复
+function goBackupManagement() {
+  pushSafe('/system/backup')
+}
 
 // 状态
 const activeTab = ref('import')
@@ -126,11 +137,6 @@ function handleImportComplete() {
 function handleExportComplete() {
   loadStats()
   ElMessage.success('数据导出完成')
-}
-
-function handleBackupComplete() {
-  loadStats()
-  ElMessage.success('数据备份完成')
 }
 
 onMounted(() => {

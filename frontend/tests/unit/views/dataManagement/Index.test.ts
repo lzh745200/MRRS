@@ -166,10 +166,8 @@ describe('事件处理', () => {
     expect(ElMessage.success).toHaveBeenCalledWith('数据导出完成')
     expect(mockGet.mock.calls.length).toBe(base + 2)
 
-    vm.handleBackupComplete()
-    await flushPromises()
-    expect(ElMessage.success).toHaveBeenCalledWith('数据备份完成')
-    expect(mockGet.mock.calls.length).toBe(base + 3)
+    // 备份管理已整合至系统管理：验证跳转入口存在
+    expect((wrapper.vm as any).goBackupManagement).toBeTypeOf('function')
   })
 })
 

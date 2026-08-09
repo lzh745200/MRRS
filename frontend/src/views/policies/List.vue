@@ -210,7 +210,7 @@ const policyStore = usePolicyStore()
 const authStore = useAuthStore()
 
 // Store uses different property names; bridge with computed
-const policiesData = computed(() => (policyStore as any).policies ?? [])
+const policiesData = computed(() => (policyStore as any).policyList ?? [])
 
 // 搜索表单
 const searchForm = reactive({
@@ -247,11 +247,31 @@ const canDelete = computed(() => {
   return ADMIN_ROLES.includes(role)
 })
 
-// 层级选项（根据分类动态变化）
-const levelOptions = computed(() => {
-  if (!searchForm.category) return []
-  return (getLevelOptions as any)(searchForm.category)
-})
+// 层级选项（根据分类动态变化）——getLevelOptions 返回 Promise，必须异步填充
+const levelOptions = ref<Array<{ value: string; label: string }>>([])
+let levelOptionsRequestId = 0
+
+async function refreshLevelOptions() {
+  const category = searchForm.category
+  if (!category) {
+    levelOptions.value = []
+    return
+  }
+  const reqId = ++levelOptionsRequestId
+  try {
+    const res: any = await getLevelOptions()
+    // 兼容信封/裸数组/嵌套 data.data
+    const nested = res?.data?.data
+    let list: any = []
+    if (Array.isArray(res)) list = res
+    else if (res?.items) list = res.items
+    else if (Array.isArray(res?.data)) list = res.data
+    else if (Array.isArray(nested)) list = nested
+    if (reqId === levelOptionsRequestId) levelOptions.value = list
+  } catch {
+    if (reqId === levelOptionsRequestId) levelOptions.value = []
+  }
+}
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
@@ -260,9 +280,10 @@ const formatDate = (dateStr: string) => {
   return date.toLocaleDateString('zh-CN')
 }
 
-// 分类变化时清空层级选择
+// 分类变化时清空层级选择并异步加载层级选项
 const handleCategoryChange = () => {
   searchForm.organization_level = ''
+  refreshLevelOptions()
 }
 
 // 搜索
@@ -279,7 +300,9 @@ const handleReset = () => {
     organization_level: '',
     status: '',
   })
+  policyStore.setFilters({}) // 清空 store 残留排序等筛选条件
   currentPage.value = 1
+  refreshLevelOptions()
   loadData()
 }
 
@@ -287,8 +310,8 @@ const handleReset = () => {
 const loadData = async () => {
   try {
     await policyStore.fetchPolicies({
-      skip: currentPage.value,
-      limit: pageSize.value,
+      page: currentPage.value,
+      page_size: pageSize.value,
       category: searchForm.category || undefined,
       organization_level: searchForm.organization_level || undefined,
       status: searchForm.status || undefined,
@@ -482,6 +505,7 @@ onMounted(() => {
   if (route.query.level) {
     searchForm.organization_level = route.query.level as OrganizationLevel
   }
+  refreshLevelOptions()
   loadData()
 })
 </script>

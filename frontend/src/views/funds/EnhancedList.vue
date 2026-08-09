@@ -169,7 +169,7 @@
 
     <!-- 搜索筛选 -->
     <div class="filter-card">
-      <el-form :model="filterForm" inline>
+      <el-form :model="filterForm" inline @submit.prevent>
         <el-form-item label="经费名称">
           <el-input
             v-model="filterForm.keyword"

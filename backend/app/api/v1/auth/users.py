@@ -839,7 +839,7 @@ async def upload_avatar(
         raise NotFoundException("用户不存在")
 
     # 校验文件类型 — 必须有 Content-Type 且为允许的图片格式
-    allowed_types = {"image/jpeg", "image/png", "image/gi", "image/webp"}
+    allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     if not avatar.content_type or avatar.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="仅支持 JPG/PNG/GIF/WebP 格式")
 
@@ -853,7 +853,7 @@ async def upload_avatar(
     upload_dir = _Path(settings.UPLOAD_DIR) / "avatars"
     upload_dir.mkdir(parents=True, exist_ok=True)
     ext = (_os.path.splitext(avatar.filename or "avatar.png")[1] or ".png").lower()
-    if ext not in (".jpg", ".jpeg", ".png", ".gi", ".webp"):
+    if ext not in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
         ext = ".png"
     filename = f"{_uuid.uuid4().hex}{ext}"
     file_path = upload_dir / filename

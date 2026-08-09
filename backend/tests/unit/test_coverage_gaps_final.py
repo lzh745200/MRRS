@@ -724,10 +724,25 @@ class TestDataQuality:
         user = _make_user()
         req = ValidateDataRequest(entity_type="village", data={"name": "test"})
         mock_engine = MagicMock()
-        mock_engine.validate.return_value = [{"severity": "warning", "message": "ok"}]
+        # 新实现：validate_with_db_rules 返回 List[str]，按 {field}: {message} 解析
+        mock_engine.validate_with_db_rules.return_value = ["name: 名称为必填项"]
+        with patch("app.api.v1.data_quality.ValidationEngine", return_value=mock_engine):
+            result = await validate_data(req, current_user=user, db=db)
+            assert result["valid"] is False
+            assert result["issues"][0]["field"] == "name"
+            assert result["issues"][0]["severity"] == "error"
+
+    async def test_validate_data_pass(self):
+        from app.api.v1.data_quality import validate_data, ValidateDataRequest
+        db = _mock_db()
+        user = _make_user()
+        req = ValidateDataRequest(entity_type="village", data={"name": "test"})
+        mock_engine = MagicMock()
+        mock_engine.validate_with_db_rules.return_value = []
         with patch("app.api.v1.data_quality.ValidationEngine", return_value=mock_engine):
             result = await validate_data(req, current_user=user, db=db)
             assert result["valid"] is True
+            assert result["issues"] == []
 
     async def test_clean_data(self):
         from app.api.v1.data_quality import clean_data, CleanDataRequest

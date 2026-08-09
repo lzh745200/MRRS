@@ -53,6 +53,10 @@ def _get_project_or_403(project_id: int, current_user, db: Session) -> Project:
 
     所有带 project_id 的详情端点必须先过此校验，防止跨组织读取经费数据。
     """
+    if not project_id or project_id <= 0:
+        # 前端从菜单/快捷入口进入生命周期页时可能缺 projectId（回退为 0），
+        # 返回 400 而非 404，避免误导用户以为项目不存在。
+        raise HTTPException(status_code=400, detail="缺少有效的项目ID，请从经费列表中选择具体项目进入")
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
@@ -1609,12 +1613,11 @@ async def get_health(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """资金健康度评分"""
+    """资金健康度评分（按项目聚合其下全部资金记录计算）"""
     _get_project_or_403(project_id, current_user, db)
-    from ...services.fund_health import calculate_health_score
+    from ...services.fund_health_service import calculate_project_health_sync
 
-    result = calculate_health_score(db, project_id)
-    safe_commit(db)
+    result = calculate_project_health_sync(db, project_id)
     return success_response(data=result)
 
 
@@ -1629,10 +1632,11 @@ async def batch_health(
     db: Session = Depends(get_db),
 ):
     """批量获取多项目健康度（项目列表用）"""
-    from ...services.fund_health import calculate_health_batch
+    if not data.project_ids:
+        return success_response(data=[])
+    from ...services.fund_health_service import calculate_projects_health_sync
 
-    result = calculate_health_batch(db, data.project_ids)
-    safe_commit(db)
+    result = calculate_projects_health_sync(db, data.project_ids)
     return success_response(data=result)
 
 

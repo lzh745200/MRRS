@@ -153,6 +153,7 @@
 
 <script setup lang="ts">
 import { ref, computed, shallowRef, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { getMapMarkers, getRegions } from '@/api/map'
 import { parseCoordinate, calculateRoute, type LatLng, type RouteResult } from '@/utils/geo'
@@ -331,7 +332,8 @@ function handleRegionClick(region: any) {
 function handleLocate() {
   const coord = parseCoordinate(coordInput.value)
   if (!coord) {
-    error.value = '坐标格式错误，请输入如: 26.5,107.5'
+    // 格式错误用轻提示，不触发页面级"地图加载失败"分支
+    ElMessage.warning('坐标格式错误，请输入如: 26.5,107.5（纬度,经度 或 经度,纬度 均可）')
     return
   }
   originCoord.value = coord

@@ -23,7 +23,8 @@ const {
   routeBox: { params: {} as Record<string, any> },
   policyStore: {
     fetchPolicyById: vi.fn(),
-    currentPolicy: null as any,
+    fetchPolicy: vi.fn(),
+    current: null as any,
     updatePolicy: vi.fn(),
     createPolicy: vi.fn(),
   },
@@ -135,10 +136,10 @@ function mountComp() {
 beforeEach(() => {
   vi.resetAllMocks()
   routeBox.params = {}
-  policyStore.currentPolicy = null
-  policyStore.fetchPolicyById.mockResolvedValue({})
-  policyStore.updatePolicy.mockResolvedValue({})
-  policyStore.createPolicy.mockResolvedValue({})
+  policyStore.current = null
+  policyStore.fetchPolicy.mockResolvedValue({ code: 200, data: { id: 5, title: "政策标题" } })
+  policyStore.updatePolicy.mockResolvedValue({ code: 200, data: { id: 5 } })
+  policyStore.createPolicy.mockResolvedValue({ code: 200, data: { id: 6 } })
   getLevelOptionsMock.mockResolvedValue({ data: { data: [{ value: 'national', label: '国家级' }] } })
   authStorageMock.getToken.mockReturnValue('token-123')
   validateMock.mockResolvedValue(true)
@@ -154,7 +155,7 @@ describe('新增/编辑模式与初始化', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.isEdit).toBe(false)
-    expect(policyStore.fetchPolicyById).not.toHaveBeenCalled()
+    expect(policyStore.fetchPolicy).not.toHaveBeenCalled()
     expect(getLevelOptionsMock).not.toHaveBeenCalled()
     expect(vm.levelOptions).toEqual([])
     expect(wrapper.text()).toContain('新增政策')
@@ -162,13 +163,13 @@ describe('新增/编辑模式与初始化', () => {
 
   it('编辑模式：isEdit true + loadData 回填', async () => {
     routeBox.params = { id: '5' }
-    policyStore.fetchPolicyById.mockResolvedValue({})
-    policyStore.currentPolicy = editPolicy
+    policyStore.fetchPolicy.mockResolvedValue({ code: 200, data: { id: 5, title: "政策标题" } })
+    policyStore.current = editPolicy
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.isEdit).toBe(true)
-    expect(policyStore.fetchPolicyById).toHaveBeenCalledWith(5)
+    expect(policyStore.fetchPolicy).toHaveBeenCalledWith(5)
     expect(vm.formData.title).toBe('政策标题')
     expect(vm.formData.category).toBe('military')
     expect(vm.formData.organization_level).toBe('national')
@@ -184,12 +185,12 @@ describe('新增/编辑模式与初始化', () => {
     routeBox.params = { id: 'abc' }
     const wrapper = mountComp()
     await flushPromises()
-    expect(policyStore.fetchPolicyById).not.toHaveBeenCalled()
+    expect(policyStore.fetchPolicy).not.toHaveBeenCalled()
   })
 
   it('loadData 无政策 → 错误 + 返回列表', async () => {
     routeBox.params = { id: '5' }
-    policyStore.currentPolicy = null
+    policyStore.current = null
     const wrapper = mountComp()
     await flushPromises()
     expect(ElMessage.error).toHaveBeenCalledWith('未找到该政策')
@@ -198,7 +199,7 @@ describe('新增/编辑模式与初始化', () => {
 
   it('loadData 失败 → 错误 + 返回列表', async () => {
     routeBox.params = { id: '5' }
-    policyStore.fetchPolicyById.mockRejectedValue(new Error('加载失败'))
+    policyStore.fetchPolicy.mockRejectedValue(new Error('加载失败'))
     const wrapper = mountComp()
     await flushPromises()
     expect(ElMessage.error).toHaveBeenCalledWith('加载失败')
@@ -207,7 +208,7 @@ describe('新增/编辑模式与初始化', () => {
 
   it('loadData 无 attachment_urls → fileList 为空', async () => {
     routeBox.params = { id: '5' }
-    policyStore.currentPolicy = { ...editPolicy, attachment_urls: [] }
+    policyStore.current = { ...editPolicy, attachment_urls: [] }
     const wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).fileList).toEqual([])
@@ -215,7 +216,7 @@ describe('新增/编辑模式与初始化', () => {
 
   it('loadData 字段缺失走 || 兜底', async () => {
     routeBox.params = { id: '5' }
-    policyStore.currentPolicy = {
+    policyStore.current = {
       id: 5,
       title: 'T',
       category: 'military',
@@ -245,7 +246,7 @@ describe('新增/编辑模式与初始化', () => {
 
   it('loadData attachment_urls 缺失 → || [] 兜底', async () => {
     routeBox.params = { id: '5' }
-    policyStore.currentPolicy = { ...editPolicy, attachment_urls: undefined }
+    policyStore.current = { ...editPolicy, attachment_urls: undefined }
     const wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).fileList).toEqual([])
@@ -253,7 +254,7 @@ describe('新增/编辑模式与初始化', () => {
 
   it('loadData department/issuing_authority 均缺失 → || 兜底', async () => {
     routeBox.params = { id: '5' }
-    policyStore.currentPolicy = {
+    policyStore.current = {
       ...editPolicy,
       department: undefined,
       issuing_authority: undefined,
@@ -265,7 +266,7 @@ describe('新增/编辑模式与初始化', () => {
 
   it('loadData 失败无 message → 兜底文案', async () => {
     routeBox.params = { id: '5' }
-    policyStore.fetchPolicyById.mockRejectedValue({})
+    policyStore.fetchPolicy.mockRejectedValue({})
     const wrapper = mountComp()
     await flushPromises()
     expect(ElMessage.error).toHaveBeenCalledWith('加载政策数据失败')
@@ -410,7 +411,7 @@ describe('提交', () => {
 
   it('编辑成功 → 提示 + 返回列表', async () => {
     routeBox.params = { id: '5' }
-    policyStore.currentPolicy = editPolicy
+    policyStore.current = editPolicy
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any

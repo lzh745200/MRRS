@@ -361,11 +361,52 @@ class TestRuralWorkService:
     # ── get_villages_for_select ──
 
     def test_get_villages_for_select(self, svc):
-        q = MagicMock()
-        svc.db.query.return_value = q
-        q.order_by.return_value.all.return_value = [(1, "村1"), (2, "村2")]
-        result = svc.get_villages_for_select()
-        assert result == [{"id": 1, "name": "村1"}, {"id": 2, "name": "村2"}]
+        """村庄下拉：从 supported_villages 读取并 upsert 到 villages 表（保持外键一致）"""
+        mock_db = MagicMock()
+        sv1 = MagicMock()
+        sv1.name = "村1"
+        sv1.county = "某县"
+        sv1.township = "某镇"
+        sv1.organization_id = 1
+        sv2 = MagicMock()
+        sv2.name = "村2"
+        sv2.county = None
+        sv2.township = None
+        sv2.organization_id = None
+
+        def _query(model):
+            if model.__name__ == "SupportedVillage":
+                q = MagicMock()
+                q.filter.return_value = q
+                q.order_by.return_value.all.return_value = [sv1, sv2]
+                return q
+            # Village 查询：仅村2 已存在（id=2），村1 需新增
+            v2 = MagicMock()
+            v2.name = "村2"
+            v2.id = 2
+            q = MagicMock()
+            q.all.return_value = [v2]
+            return q
+
+        mock_db.query.side_effect = _query
+        # flush 模拟真实数据库为主键赋值
+        def _flush():
+            added = mock_db.add.call_args[0][0]
+            if getattr(added, "id", None) is None:
+                added.id = 100
+
+        mock_db.flush.side_effect = _flush
+        # get_villages_for_select 内部懒导入 SessionLocal → patch 源模块
+        with patch("app.core.database.SessionLocal", return_value=mock_db):
+            result = svc.get_villages_for_select()
+        assert len(result) == 2
+        assert result[0]["name"] == "村1"
+        assert result[0]["id"] == 100
+        assert result[1] == {"id": 2, "name": "村2", "county": None}
+        # 村1 被 upsert 进 villages 表
+        added = mock_db.add.call_args[0][0]
+        assert added.name == "村1"
+        mock_db.commit.assert_called_once()
 
     # ── generate_work_report ──
 

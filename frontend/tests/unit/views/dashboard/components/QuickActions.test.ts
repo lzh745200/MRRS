@@ -88,14 +88,14 @@ const WORKFLOW_PATHS = [
   '/approval',
   '/rural-works/list',
   '/message',
-  '/funds/lifecycle',
+  '/funds', // 资金周期（需从经费列表选项目进入）
   '/funds/contract',
   '/funds/anomaly',
   '/funds/budget',
   '/report/templates',
   '/todos',
   '/funds/report',
-  '/funds/settlement',
+  '/funds', // 经费结算（需从经费列表选项目进入）
 ]
 
 const SYSTEM_PATHS = [

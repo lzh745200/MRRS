@@ -1,137 +1,100 @@
 <template>
   <div class="approval-overview">
     <div class="page-header">
-      <h2 class="page-title">操作日志</h2>
-      <p class="page-desc">记录系统重要操作，便于追溯和统计</p>
+      <h2 class="page-title">审批概览</h2>
+      <p class="page-desc">集中查看待办审批、我的申请与审批历史</p>
     </div>
 
     <!-- 统计仪表板 -->
     <div class="stats-row">
-      <el-card class="stat-card">
-        <div class="stat-num">{{ stats.total }}</div>
-        <div class="stat-label">总记录数</div>
-      </el-card>
       <el-card class="stat-card stat-pending">
-        <div class="stat-num">{{ stats.today }}</div>
-        <div class="stat-label">今日操作</div>
+        <div class="stat-num">{{ stats.pending_count }}</div>
+        <div class="stat-label">待我审批</div>
+      </el-card>
+      <el-card class="stat-card">
+        <div class="stat-num">{{ stats.my_pending }}</div>
+        <div class="stat-label">我的待办申请</div>
       </el-card>
       <el-card class="stat-card stat-approved">
-        <div class="stat-num">{{ stats.dataChanges }}</div>
-        <div class="stat-label">数据变更</div>
+        <div class="stat-num">{{ stats.approved_count }}</div>
+        <div class="stat-label">已通过</div>
       </el-card>
       <el-card class="stat-card stat-rejected">
-        <div class="stat-num">{{ stats.exports }}</div>
-        <div class="stat-label">导出操作</div>
+        <div class="stat-num">{{ stats.rejected_count }}</div>
+        <div class="stat-label">已驳回</div>
       </el-card>
-      <el-card class="stat-card stat-overdue">
-        <div class="stat-num">{{ stats.pending }}</div>
-        <div class="stat-label">待处理项</div>
+      <el-card class="stat-card">
+        <div class="stat-num">{{ stats.total_count }}</div>
+        <div class="stat-label">审批总任务</div>
       </el-card>
     </div>
 
-    <!-- 筛选 -->
-    <el-card>
-      <el-form :inline="true" :model="filters">
-        <el-form-item label="操作类型">
-          <el-select v-model="filters.status" clearable placeholder="全部" style="width: 130px">
-            <el-option label="数据变更" value="data_change" />
-            <el-option label="数据导入" value="data_import" />
-            <el-option label="数据导出" value="data_export" />
-            <el-option label="系统设置" value="system" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="操作人">
-          <el-input v-model="filters.applicant" placeholder="姓名" clearable style="width: 140px" />
-        </el-form-item>
-        <el-form-item label="时间范围">
-          <el-date-picker
-            v-model="filters.dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始"
-            end-placeholder="结束"
-            style="width: 260px"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadData">查询</el-button>
-          <el-button @click="resetFilters">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <!-- 快捷入口 -->
+    <div class="entry-row">
+      <el-card class="entry-card" shadow="hover" @click="pushSafe('/approval/pending')">
+        <div class="entry-icon">📥</div>
+        <div class="entry-title">待审批任务</div>
+        <div class="entry-desc">处理需要您审批的申请</div>
+      </el-card>
+      <el-card class="entry-card" shadow="hover" @click="pushSafe('/approval/my')">
+        <div class="entry-icon">📝</div>
+        <div class="entry-title">我的申请</div>
+        <div class="entry-desc">查看我提交的审批及其状态</div>
+      </el-card>
+      <el-card class="entry-card" shadow="hover" @click="pushSafe('/approval/history')">
+        <div class="entry-icon">🗂️</div>
+        <div class="entry-title">审批历史</div>
+        <div class="entry-desc">全部审批记录追溯</div>
+      </el-card>
+    </div>
 
-    <!-- 操作日志列表 -->
+    <!-- 待审批任务快捷列表 -->
     <el-card>
-      <el-table v-loading="loading" :data="filteredTasks" stripe>
-        <el-table-column prop="title" label="操作内容" min-width="200" />
-        <el-table-column prop="applicant_name" label="操作人" width="100" />
-        <el-table-column prop="type" label="类型" width="120">
+      <template #header>
+        <div class="card-header">
+          <span style="font-weight: 600; color: #1b4332">最新待审批任务</span>
+          <el-button text type="primary" @click="pushSafe('/approval/pending')">查看全部</el-button>
+        </div>
+      </template>
+      <el-table v-loading="loading" :data="pendingTasks" stripe empty-text="暂无待审批任务">
+        <el-table-column prop="title" label="事项" min-width="220" show-overflow-tooltip />
+        <el-table-column label="类型" width="110">
           <template #default="{ row }">
-            <el-tag size="small" :type="getTypeTagType(row.type)">
-              {{ getTypeLabel(row.type) }}
-            </el-tag>
+            <el-tag size="small">{{ typeLabel(row.entity_type || row.type) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">
-              {{ statusLabel(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="操作时间" width="170">
+        <el-table-column prop="submitter_name" label="申请人" width="110" />
+        <el-table-column label="提交时间" width="170">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column prop="reviewer_name" label="审批人" width="120" />
-        <el-table-column prop="reviewed_at" label="处理时间" width="170">
+        <el-table-column label="操作" width="140">
           <template #default="{ row }">
-            {{ formatDate(row.reviewed_at) }}
+            <el-button size="small" type="primary" @click="goApprove(row)">审批</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
     <!-- 单机版快捷操作 -->
-    <el-card>
+    <el-card v-if="stats.pending_count > 0">
       <template #header>
         <span style="font-weight: 600; color: #1b4332">单机版快捷操作</span>
       </template>
-      <el-form label-width="160px">
+      <el-form label-width="200px">
         <el-form-item label="一键审批所有待处理">
           <el-button
             type="success"
             :loading="autoApproving"
-            :disabled="stats.pending === 0"
+            :disabled="stats.pending_count === 0"
             @click="handleAutoApproveAll"
           >
-            一键通过全部 {{ stats.pending }} 个待处理任务
+            一键通过全部 {{ stats.pending_count }} 个待处理任务
           </el-button>
-          <span style="margin-left: 8px; color: #888">适用于单机版快速处理</span>
-        </el-form-item>
-        <el-form-item label="导出操作日志">
-          <el-button type="primary" @click="handleExportLog"> 导出当前查询结果 </el-button>
-          <span style="margin-left: 8px; color: #888">导出为Excel文件</span>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <!-- 提醒规则设置 -->
-    <el-card>
-      <template #header>
-        <span style="font-weight: 600; color: #1b4332">提醒规则设置</span>
-      </template>
-      <el-form :model="reminderConfig" label-width="160px">
-        <el-form-item label="超时提醒天数">
-          <el-input-number v-model="reminderConfig.overdueDays" :min="1" :max="30" />
-          <span style="margin-left: 8px; color: #888">天未处理时发送提醒</span>
-        </el-form-item>
-        <el-form-item label="启用自动提醒">
-          <el-switch v-model="reminderConfig.enabled" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="saveReminder">保存设置</el-button>
+          <span style="margin-left: 8px; color: #888"
+            >适用于单机版快速处理（可稍后在审批历史中追溯）</span
+          >
         </el-form-item>
       </el-form>
     </el-card>
@@ -139,238 +102,154 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getAllTasks, autoApproveAll, type ApprovalTask } from '@/api/approval'
-import { exportUtil, format } from '@/utils'
+import { getOverview, getPendingTasks, batchApprove } from '@/api/approval'
+import { useRouterSafe } from '@/composables/useRouterSafe'
 
-const MS_PER_DAY = 86400000
+const { pushSafe } = useRouterSafe()
+
 const loading = ref(false)
 const autoApproving = ref(false)
-const allTasks = ref<
-  (ApprovalTask & {
-    applicant_name?: string
-    reviewer_name?: string
-    reviewed_at?: string
-    type?: string
-  })[]
->([])
-const filters = reactive({ status: '', applicant: '', dateRange: null as any })
-const reminderConfig = reactive({ overdueDays: 3, enabled: true })
-
-const stats = computed(() => {
-  const list = filteredTasks.value
-  const now = new Date()
-  const nowMs = now.getTime()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const overdueMs = reminderConfig.overdueDays * MS_PER_DAY
-
-  let pending = 0,
-    approved = 0,
-    rejected = 0,
-    overdue = 0,
-    today = 0,
-    dataChanges = 0,
-    exports = 0
-
-  for (const a of list) {
-    const s = a.status
-    if (s === 'pending') pending++
-    else if (s === 'approved') approved++
-    else if (s === 'rejected') rejected++
-
-    const createdMs = new Date(a.created_at).getTime()
-    if (createdMs >= todayStart) today++
-
-    if (s === 'pending' && nowMs - createdMs > overdueMs) overdue++
-
-    const type = (a.type || '').toLowerCase()
-    const isExport = type.includes('export')
-    if (isExport) exports++
-    // dataChanges 含导入、数据变更、导出（导出单独计数）
-    if (type.includes('import') || type.includes('data') || isExport) dataChanges++
-  }
-
-  return {
-    total: list.length,
-    pending,
-    approved,
-    rejected,
-    overdue,
-    today,
-    dataChanges,
-    exports,
-  }
+const pendingTasks = ref<any[]>([])
+const stats = reactive({
+  pending_count: 0,
+  my_pending: 0,
+  approved_count: 0,
+  rejected_count: 0,
+  total_count: 0,
 })
 
-// 统一的标签映射（status 和 type 共用）
-const _LABEL_MAP: Record<string, string> = {
-  pending: '待处理',
-  approved: '已完成',
-  rejected: '已驳回',
-  withdrawn: '已撤回',
-  data_change: '数据变更',
-  data_import: '数据导入',
-  data_export: '数据导出',
-  system: '系统设置',
+const TYPE_LABELS: Record<string, string> = {
+  project: '项目',
+  fund: '经费',
+  village: '帮扶村',
+  school: '学校',
+  rural_work: '乡村工作',
+  policy: '政策',
+  other: '其他',
 }
 
-const statusLabel = (s: string) => _LABEL_MAP[s] || s
-
-// statusLabel 与 typeLabel 共用同一映射表
-const getTypeLabel = (type: string) => _LABEL_MAP[type] || type || '其他'
-
-const statusTagType = (
-  s: string
-): 'success' | 'warning' | 'danger' | 'info' | 'primary' | undefined =>
-  (
-    ({
-      pending: 'warning',
-      approved: 'success',
-      rejected: 'danger',
-      withdrawn: 'info',
-    }) as Record<string, 'success' | 'warning' | 'danger' | 'info' | 'primary'>
-  )[s] || 'info'
-
-const getTypeTagType = (
-  type: string
-): 'success' | 'warning' | 'danger' | 'info' | 'primary' | undefined => {
-  const t = (type || '').toLowerCase()
-  if (t.includes('import') || t.includes('data_change')) return 'primary'
-  if (t.includes('export')) return 'success'
-  if (t.includes('system')) return 'info'
-  if (t.includes('pending')) return 'warning'
-  if (t.includes('approved') || t.includes('completed')) return 'success'
-  if (t.includes('rejected') || t.includes('failed')) return 'danger'
-  return 'info' as const
+function typeLabel(t?: string) {
+  return TYPE_LABELS[t || 'other'] || t || '其他'
 }
 
-const formatDate = (d: string) => format.formatDateTimeLocale(d)
-
-const filteredTasks = computed(() => {
-  let list = allTasks.value
-  if (filters.applicant) {
-    const q = filters.applicant.toLowerCase()
-    list = list.filter((t) => (t.applicant_name || '').toLowerCase().includes(q))
+function formatDate(v?: string) {
+  if (!v) return '-'
+  try {
+    return new Date(v).toLocaleString('zh-CN')
+  } catch {
+    return String(v)
   }
-  if (filters.dateRange && filters.dateRange[0] && filters.dateRange[1]) {
-    const start = new Date(filters.dateRange[0]).getTime()
-    const end = new Date(filters.dateRange[1]).getTime() + MS_PER_DAY
-    list = list.filter((t) => {
-      const ts = new Date(t.created_at).getTime()
-      return ts >= start && ts < end
-    })
-  }
-  return list
-})
+}
 
-async function loadData() {
+async function loadOverview() {
+  try {
+    const res: any = await getOverview()
+    const d = res?.data || res || {}
+    stats.pending_count = Number(d.pending_count ?? 0)
+    stats.approved_count = Number(d.approved_count ?? 0)
+    stats.rejected_count = Number(d.rejected_count ?? 0)
+    stats.total_count = Number(d.total_count ?? 0)
+    stats.my_pending = Number(d.my_pending ?? d.pending_count ?? 0)
+  } catch {
+    /* 概览统计失败不阻塞页面 */
+  }
+}
+
+async function loadPending() {
   loading.value = true
   try {
-    const params: Record<string, any> = {}
-    if (filters.status) params.entity_type = filters.status
-    allTasks.value = await getAllTasks(params)
+    const res: any = await getPendingTasks({ limit: 10 })
+    pendingTasks.value = Array.isArray(res)
+      ? res
+      : res?.items || res?.data?.items || []
   } catch {
-    allTasks.value = []
+    pendingTasks.value = []
   } finally {
     loading.value = false
   }
 }
 
-function resetFilters() {
-  filters.status = ''
-  filters.applicant = ''
-  filters.dateRange = null
-  loadData()
-}
-function saveReminder() {
-  ElMessage.success('提醒规则已保存')
+function goApprove(row: any) {
+  if (row?.task_id || row?.id) {
+    pushSafe(`/approval/pending?focus=${row.task_id || row.id}`)
+  } else {
+    pushSafe('/approval/pending')
+  }
 }
 
 async function handleAutoApproveAll() {
-  const pendingCount = stats.value.pending
-  if (pendingCount === 0) return
   try {
     await ElMessageBox.confirm(
-      `确定要一键处理所有 ${pendingCount} 个待处理任务吗？`,
-      '一键全部处理',
-      {
-        type: 'warning',
-        confirmButtonText: '全部通过',
-        cancelButtonText: '取消',
-      }
+      `确定一键通过全部 ${stats.pending_count} 个待审批任务吗？\n此操作会批量写入审批意见，请确认内容无误。`,
+      '一键审批确认',
+      { type: 'warning', confirmButtonText: '确认全部通过', cancelButtonText: '取消' }
     )
-    autoApproving.value = true
-    const result = await autoApproveAll('单机版一键批量处理')
-    ElMessage.success(`批量处理完成：成功 ${result.success.length}，失败 ${result.failed.length}`)
-    loadData()
   } catch {
-    // 用户取消
+    return
+  }
+  autoApproving.value = true
+  try {
+    const ids = pendingTasks.value.map((t) => t.task_id ?? t.id).filter((id) => id != null)
+    if (ids.length) {
+      await batchApprove(ids, '单机版一键审批通过')
+      ElMessage.success(`已通过 ${ids.length} 个待审批任务`)
+    } else {
+      ElMessage.info('当前没有可批量审批的任务')
+    }
+    await Promise.all([loadOverview(), loadPending()])
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '批量审批失败')
   } finally {
     autoApproving.value = false
   }
 }
 
-function handleExportLog() {
-  const list = filteredTasks.value
-  if (list.length === 0) {
-    ElMessage.warning('当前没有可导出的数据')
-    return
-  }
-
-  const timestamp = new Date().toISOString().slice(0, 10)
-  const data = list.map((t) => ({
-    操作内容: t.title || '',
-    操作人: t.applicant_name || '',
-    类型: getTypeLabel(t.type ?? ''),
-    状态: statusLabel(t.status),
-    操作时间: formatDate(t.created_at),
-    处理人: t.reviewer_name ?? '',
-    处理时间: formatDate(t.reviewed_at ?? ''),
-  }))
-
-  exportUtil.exportToCSV(data, `操作日志_${timestamp}`)
-  ElMessage.success('操作日志已导出')
-}
-
-onMounted(loadData)
+onMounted(() => {
+  loadOverview()
+  loadPending()
+})
 </script>
 
 <style scoped>
 .approval-overview {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  padding: 20px;
+}
+.page-header {
+  margin-bottom: 18px;
 }
 .page-title {
-  font-size: 20px;
-  font-weight: 600;
+  margin: 0 0 6px;
   color: #1b4332;
-  margin: 0 0 4px;
+  font-size: 22px;
 }
 .page-desc {
-  font-size: 14px;
-  color: #666;
   margin: 0;
+  color: #6b7280;
+  font-size: 13px;
 }
 .stats-row {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 .stat-card {
   text-align: center;
-  padding: 16px;
+}
+.stat-card :deep(.el-card__body) {
+  padding: 18px 10px;
 }
 .stat-num {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 700;
   color: #1b4332;
 }
 .stat-label {
+  margin-top: 6px;
+  color: #6b7280;
   font-size: 13px;
-  color: #888;
-  margin-top: 4px;
 }
 .stat-pending .stat-num {
   color: #e6a23c;
@@ -381,7 +260,40 @@ onMounted(loadData)
 .stat-rejected .stat-num {
   color: #f56c6c;
 }
-.stat-overdue .stat-num {
-  color: #e63946;
+.entry-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.entry-card {
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.15s ease;
+}
+.entry-card:hover {
+  transform: translateY(-2px);
+}
+.entry-card :deep(.el-card__body) {
+  padding: 22px 12px;
+}
+.entry-icon {
+  font-size: 30px;
+}
+.entry-title {
+  margin-top: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1b4332;
+}
+.entry-desc {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 12px;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 </style>

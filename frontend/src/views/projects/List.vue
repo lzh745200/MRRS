@@ -24,7 +24,7 @@
 
     <!-- 搜索筛选 -->
     <div class="filter-card">
-      <el-form :model="filterForm" inline>
+      <el-form :model="filterForm" inline @submit.prevent>
         <el-form-item label="项目名称">
           <el-input
             v-model="filterForm.name"
@@ -334,6 +334,8 @@ const loadData = async () => {
       keyword: filterForm.name || undefined,
       project_type: filterForm.type || undefined,
       status: filterForm.status || undefined,
+      region: filterForm.region || undefined,
+      year: filterForm.year || undefined,
     }
     if (filterForm.status === 'cancelled') {
       params.include_cancelled = true

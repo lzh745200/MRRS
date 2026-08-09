@@ -154,6 +154,7 @@ const selectedCheck = ref<CheckItem | null>(null)
 const issueDetails = ref<IssueDetail[]>([])
 const canAutoFix = ref(false)
 const formattedCheckTime = ref(props.stats.lastCheckTime || '')
+const lastIssues = ref<any[]>([])
 
 // 检查项列表
 const checkItems = ref<CheckItem[]>([
@@ -223,17 +224,14 @@ function getStatusText(status: string): string {
   return statusMap[status] || status
 }
 
-// 执行检查 — 使用真实后端 /data-quality/validate
+// 执行检查 — 使用真实后端全量质量检查 /data-quality/full-check
 async function handleCheck() {
   checking.value = true
   try {
-    const res = await post('/data-quality/validate', {
-      entity_type: 'village',
-      data: {},
-    })
+    const res = await post('/data-quality/full-check')
     const data = res?.data ?? res
-    const issues = data?.issues ?? []
-    const valid = data?.valid ?? issues.length === 0
+    const issues: any[] = data?.issues ?? []
+    const valid = (data?.valid ?? true) && issues.length === 0
 
     checkItems.value = checkItems.value.map((item) => ({
       ...item,
@@ -241,30 +239,32 @@ async function handleCheck() {
       issues: valid ? 0 : issues.length,
     }))
     formattedCheckTime.value = new Date().toLocaleString('zh-CN')
+    lastIssues.value = issues
     ElMessage.success(valid ? '数据质量检查通过' : `发现 ${issues.length} 个问题`)
-  } catch {
+  } catch (e: any) {
     checkItems.value = checkItems.value.map((item) => ({
       ...item,
       status: 'pending',
       issues: 0,
     }))
-    ElMessage.warning('无法连接质量检查服务')
+    ElMessage.error(e?.response?.data?.detail || '质量检查执行失败，请稍后重试')
   } finally {
     checking.value = false
   }
 }
 
-// 查看问题详情 — reuse last validate response
+// 查看问题详情 — 使用最近一次 full-check 结果
 async function handleViewIssues(check: CheckItem) {
   selectedCheck.value = check
   try {
-    const res = await post('/data-quality/validate', {
-      entity_type: 'village',
-      data: {},
-    })
-    const data = res?.data ?? res
-    const issues = data?.issues ?? []
-    issueDetails.value = issues.map((d: any) => ({
+    const issues = lastIssues.value?.length
+      ? lastIssues.value
+      : (async () => {
+          const res = await post('/data-quality/full-check')
+          return (res?.data ?? res)?.issues ?? []
+        })()
+    const list = await issues
+    issueDetails.value = (Array.isArray(list) ? list : []).map((d: any) => ({
       record_id: d.record_id ?? d.id ?? 0,
       field: d.field ?? d.field_name ?? '',
       issue: d.message ?? d.issue ?? d.description ?? '',

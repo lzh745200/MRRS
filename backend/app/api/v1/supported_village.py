@@ -265,8 +265,11 @@ async def list_villages(
     keyword: Optional[str] = None,
     department: Optional[str] = None,
     county: Optional[str] = None,
-    isRevitalizationTier: Optional[bool] = None,
-    isThreeRegions: Optional[int] = None,
+    is_revitalization_tier: Optional[bool] = None,
+    is_three_regions: Optional[bool] = None,
+    is_ethnic_area: Optional[bool] = None,
+    is_key_county: Optional[bool] = None,
+    isRevitalizationTier: Optional[bool] = None,  # 兼容旧参数名
     include_deleted: bool = Depends(enforce_admin_include_deleted),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -277,13 +280,15 @@ async def list_villages(
     import hashlib
     import json
     import os
+    # 兼容旧 camelCase 参数名（新代码统一 snake_case）——缓存 key 与过滤共用
+    tier = is_revitalization_tier if is_revitalization_tier is not None else isRevitalizationTier
     _ckey = None
     if not os.environ.get("PYTEST_CURRENT_TEST"):
         from app.core.cache import get_cache_service
         _cache = await get_cache_service()
         try:
             _key_data = json.dumps(
-                [keyword, department, county, isRevitalizationTier, isThreeRegions, include_deleted],
+                [keyword, department, county, tier, is_three_regions, is_ethnic_area, is_key_county, include_deleted],
                 default=str,
             ).encode()
             _org_id = getattr(current_user, "organization_id", None) or 0
@@ -314,10 +319,15 @@ async def list_villages(
         query = query.filter(SupportedVillage.department == department)
     if county:
         query = query.filter(SupportedVillage.county == county)
-    if isRevitalizationTier is not None:
-        query = query.filter(SupportedVillage.is_revitalization_tier == isRevitalizationTier)
-    if isThreeRegions is not None:
-        query = query.filter(SupportedVillage.is_three_regions == bool(isThreeRegions))
+    # 兼容旧 camelCase 参数名（新代码统一 snake_case）
+    if tier is not None:
+        query = query.filter(SupportedVillage.is_revitalization_tier == bool(tier))
+    if is_three_regions is not None:
+        query = query.filter(SupportedVillage.is_three_regions == bool(is_three_regions))
+    if is_ethnic_area is not None:
+        query = query.filter(SupportedVillage.is_ethnic_area == bool(is_ethnic_area))
+    if is_key_county is not None:
+        query = query.filter(SupportedVillage.is_key_county == bool(is_key_county))
 
     total = query.count()
     # Model-level lazy="selectin" on SupportedVillage relationships prevents

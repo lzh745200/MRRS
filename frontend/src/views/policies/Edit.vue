@@ -278,8 +278,8 @@ const loadData = async () => {
 
   loading.value = true
   try {
-    await (policyStore as any).fetchPolicyById(id)
-    const policy = (policyStore as any).currentPolicy
+    await (policyStore as any).fetchPolicy(id)
+    const policy = (policyStore as any).current
 
     if (policy) {
       formData.title = policy.title
@@ -391,11 +391,15 @@ const handleSubmit = async () => {
       if (isEdit.value) {
         // 更新政策
         const id = safeRouteParam(route.params.id)
-        await (policyStore as any).updatePolicy(id, data)
+        const res: any = await (policyStore as any).updatePolicy(id, data)
+        if (res?.code !== 200) throw new Error(res?.message || '更新失败，请稍后重试')
         ElMessage.success('更新成功')
       } else {
         // 新增政策
-        await (policyStore as any).createPolicy(data)
+        const res: any = await (policyStore as any).createPolicy(data)
+        if (res?.code !== 200 || !res?.data) {
+          throw new Error(res?.message || '新增失败，请稍后重试')
+        }
         ElMessage.success('新增成功')
       }
 

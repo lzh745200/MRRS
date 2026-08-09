@@ -172,7 +172,7 @@ beforeEach(() => {
   policyApi.getLevelLabel.mockImplementation((l: any) => `lvl:${l}`)
   policyApi.getStatusLabel.mockImplementation((s: any) => `status:${s}`)
   policyApi.getStatusColor.mockReturnValue('danger')
-  policyApi.getLevelOptions.mockReturnValue([{ label: '省级', value: 'province' }])
+  policyApi.getLevelOptions.mockResolvedValue([{ label: '省级', value: 'province' }])
   policyApi.importPolicies.mockResolvedValue({ imported: 1, errors: [] })
   policyApi.exportPoliciesPDF.mockResolvedValue(undefined)
   policyApi.exportPoliciesWPS.mockResolvedValue(undefined)
@@ -191,8 +191,8 @@ describe('挂载与数据加载', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     expect(policyStore.fetchPolicies).toHaveBeenCalledWith({
-      skip: 1,
-      limit: 10,
+      page: 1,
+      page_size: 10,
       category: undefined,
       organization_level: undefined,
       status: undefined,
@@ -226,8 +226,8 @@ describe('挂载与数据加载', () => {
     vm.searchForm.status = 'active'
     await vm.loadData()
     expect(policyStore.fetchPolicies).toHaveBeenLastCalledWith({
-      skip: 1,
-      limit: 10,
+      page: 1,
+      page_size: 10,
       category: 'military',
       organization_level: 'province',
       status: 'active',
@@ -374,8 +374,10 @@ describe('搜索 / 重置 / 排序 / 分页 / 表单 v-model', () => {
     const selects = wrapper.findAllComponents({ name: 'ElSelect' })
     expect(selects.length).toBeGreaterThanOrEqual(3)
     selects[0].vm.$emit('update:modelValue', 'military')
+    selects[0].vm.$emit('change') // 触发 handleCategoryChange → refreshLevelOptions
     expect(vm.searchForm.category).toBe('military')
-    // category 有值 → levelOptions 调 getLevelOptions
+    // category 有值 → levelOptions 异步加载（getLevelOptions 返回 Promise）
+    await flushPromises()
     expect(vm.levelOptions).toEqual([{ label: '省级', value: 'province' }])
 
     selects[1].vm.$emit('update:modelValue', 'province')

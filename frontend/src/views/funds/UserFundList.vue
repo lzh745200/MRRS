@@ -13,7 +13,7 @@
         <el-button v-if="isManager" type="success" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>新增经费记录
         </el-button>
-        <el-button @click="pushSafe('/approval/my-applications')">
+        <el-button @click="pushSafe('/approval/my')">
           <el-icon><Tickets /></el-icon>我的申请
         </el-button>
       </div>

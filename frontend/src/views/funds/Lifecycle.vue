@@ -318,6 +318,17 @@ import type { PhaseInfo, HealthScore } from '@/api/fundLifecycle'
 const route = useRoute()
 const { pushSafe } = useRouterSafe()
 const projectId = computed(() => safeRouteParam(route.params.projectId))
+const invalidProject = computed(() => !projectId.value || projectId.value <= 0)
+
+// 无有效 projectId（从菜单/快捷入口进入）→ 提示并从经费列表进入
+function requireProject(): boolean {
+  if (invalidProject.value) {
+    ElMessage.warning('请先从「经费管理 → 列表」选择具体项目，再进入资金周期管理')
+    pushSafe('/funds')
+    return false
+  }
+  return true
+}
 
 const loading = ref(false)
 const phases = ref<PhaseInfo[]>([])
@@ -400,6 +411,7 @@ async function handleRollback() {
 
 // 阶段1
 async function handleInitiate() {
+  if (!requireProject()) return
   loading.value = true
   try {
     await fundLifecycleApi.initiate(projectId.value)
@@ -524,7 +536,11 @@ async function loadHealth() {
 }
 
 onMounted(async () => {
-  if (!projectId.value) return
+  if (invalidProject.value) {
+    ElMessage.warning('请先从「经费管理 → 列表」选择具体项目，再进入资金周期管理')
+    pushSafe('/funds')
+    return
+  }
   await loadPhases()
   try {
     reportData.value = await fundLifecycleApi.getReportTemplate(projectId.value)

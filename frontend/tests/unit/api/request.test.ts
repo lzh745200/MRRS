@@ -786,7 +786,8 @@ describe('api/request — 封装方法参数透传', () => {
     await post('/upload2', fd)
     const config = mockInst.request.mock.calls[0][0]
     expect(config.data).toBe(fd)
-    expect(config.headers).toBeUndefined()
+    // 新行为：FormData 时始终构造 headers 对象并移除 Content-Type（防止 axios JSON 序列化 multipart）
+    expect(config.headers).toEqual({})
   })
 
   it('post 非 FormData 数据时保留 headers', async () => {

@@ -55,13 +55,15 @@ export function calculateRoute(origin: LatLng, dest: LatLng): RouteResult {
   }
 }
 
-/** 解析坐标: "26.5,107.5" 或 "26.5, 107.5" */
+/** 解析坐标: "26.5,107.5" 或 "107.5,26.5"（自动识别 经度,纬度 顺序） */
 export function parseCoordinate(input: string): LatLng | null {
   const m = /^(-?\d+\.?\d*)\s*[,，]\s*(-?\d+\.?\d*)$/.exec(input.trim())
   if (m) {
-    const lat = parseFloat(m[1]),
-      lng = parseFloat(m[2])
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng }
+    const a = parseFloat(m[1])
+    const b = parseFloat(m[2])
+    // 优先按 纬度,经度 解释；若第一值超出纬度范围（|x|>90）而第二值在范围内，按 经度,纬度 解释
+    if (a >= -90 && a <= 90 && b >= -180 && b <= 180) return { lat: a, lng: b }
+    if (b >= -90 && b <= 90 && a >= -180 && a <= 180) return { lat: b, lng: a }
   }
   return null
 }

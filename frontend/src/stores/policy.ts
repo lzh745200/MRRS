@@ -7,15 +7,21 @@ export const usePolicyStore = defineStore('policy', () => {
   const current = ref<any>(null)
   const loading = ref(false)
   const total = ref(0)
+  const filters = ref<Record<string, any>>({})
+
+  function setFilters(f: Record<string, any>) {
+    filters.value = { ...filters.value, ...f }
+  }
 
   async function fetchPolicies(params?: any) {
     loading.value = true
     try {
-      const res = await get<{ code: number; data: any[]; total?: number }>('/policies', params)
+      const res = await get<any>('/policies', { ...filters.value, ...params })
       if (res.code === 200 && res.data) {
-        policyList.value = res.data
-        /* c8 ignore next -- 防御性兜底：res.total 缺失时回退 data.length（测试仅覆盖 total 存在） */
-        total.value = res.total || res.data.length
+        // 兼容三种响应形状：旧 bare data=[...] / 新信封 data={items,total} / 拦截器展开 items
+        const items = Array.isArray(res.data) ? res.data : res.items || res.data?.items || []
+        policyList.value = items
+        total.value = res.total ?? items.length
       }
     } catch {
       /* silent */
@@ -69,10 +75,12 @@ export const usePolicyStore = defineStore('policy', () => {
     current,
     loading,
     total,
+    filters,
     fetchPolicies,
     fetchPolicy,
     createPolicy,
     updatePolicy,
     deletePolicy,
+    setFilters,
   }
 })

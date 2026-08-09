@@ -208,7 +208,7 @@ export async function getAllTasks(params?: {
   limit?: number
 }): Promise<ApprovalTask[]> {
   const response = await get<any>('/approval/tasks/all', params)
-  return Array.isArray(response) ? response : []
+  return Array.isArray(response) ? response : response?.items || response?.data || []
 }
 
 /**
@@ -219,7 +219,7 @@ export async function getPendingTasks(params?: {
   limit?: number
 }): Promise<ApprovalTask[]> {
   const response = await get<any>('/approval/tasks/pending', params)
-  return Array.isArray(response) ? response : []
+  return Array.isArray(response) ? response : response?.items || response?.data || []
 }
 
 /**
@@ -256,7 +256,7 @@ export async function getApprovalHistory(params?: {
   limit?: number
 }): Promise<ApprovalTask[]> {
   const response = await get<any>('/approval/history', params)
-  return Array.isArray(response) ? response : []
+  return Array.isArray(response) ? response : response?.items || response?.data || []
 }
 
 // ==================== 单机版优化 API ====================

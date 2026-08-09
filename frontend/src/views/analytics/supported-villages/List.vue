@@ -2,7 +2,7 @@
   <div class="supported-village-list">
     <!-- 搜索筛选区域 -->
     <el-card class="filter-card" shadow="never">
-      <el-form :model="filters" inline>
+      <el-form :model="filters" inline @submit.prevent>
         <el-form-item label="关键词">
           <el-input
             v-model="filters.keyword"

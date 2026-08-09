@@ -564,7 +564,8 @@ const updateCharts = async () => {
     let incomeData: number[] = years.map(() => 0)
 
     try {
-      const trendData = (await getYearlyTrends(years.length)) as any
+      // 后端 years 参数上限 10（ge=1, le=10），超限会 422
+      const trendData = (await getYearlyTrends(Math.min(years.length, 10))) as any
       if (trendData && trendData.years) {
         years = trendData.years
         villagesData = trendData.villages ?? villagesData

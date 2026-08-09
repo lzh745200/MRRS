@@ -331,28 +331,38 @@ class TestGetApiStatistics:
         mock_db = MagicMock()
         client_with_mocked_auth.app.dependency_overrides[get_db] = lambda: mock_db
 
-        with patch("app.services.monitoring_service.MonitoringService") as MockSvc:
-            MockSvc.get_api_performance_stats.return_value = {"avg": 0.5}
-            MockSvc.get_endpoint_stats.return_value = [{"path": "/api/test"}]
-            MockSvc.get_error_stats.return_value = [{"error": "timeout"}]
-
+        with patch("app.middleware.metrics_middleware.metrics_store") as MockStore:
+            MockStore.get_summary.return_value = {
+                "request_count": 10,
+                "error_count": 1,
+                "error_rate": 0.1,
+                "avg_duration": 0.5,
+                "requests_per_second": 1.2,
+                "uptime_seconds": 100,
+                "top_endpoints": [{"path": "/api/test", "count": 5}],
+                "by_method_status": {},
+                "slow_requests": [],
+                "slow_request_count": 0,
+            }
             resp = client_with_mocked_auth.get("/api/v1/system/monitor/api-stats?hours=48")
             assert resp.status_code == 200
             data = resp.json()
-            assert data["data"]["performance"]["avg"] == 0.5
+            assert data["data"]["request_count"] == 10
             assert data["data"]["period_hours"] == 48
+            assert data["data"]["top_endpoints"][0]["path"] == "/api/test"
 
     def test_service_exception(self, client_with_mocked_auth):
         from app.core.database import get_db
         mock_db = MagicMock()
         client_with_mocked_auth.app.dependency_overrides[get_db] = lambda: mock_db
 
-        with patch("app.services.monitoring_service.MonitoringService.get_api_performance_stats",
+        with patch("app.middleware.metrics_middleware.metrics_store.get_summary",
                    side_effect=RuntimeError("no data")):
             resp = client_with_mocked_auth.get("/api/v1/system/monitor/api-stats")
             assert resp.status_code == 200
             data = resp.json()
-            assert "暂不可用" in data["data"]["message"]
+            assert data["data"]["request_count"] == 0
+            assert data["data"]["top_endpoints"] == []
 
 
 class TestGetDatabaseSize:

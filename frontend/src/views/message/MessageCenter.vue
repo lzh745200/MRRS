@@ -59,79 +59,137 @@
 
     <!-- 消息列表 -->
     <el-card class="list-card">
-      <el-table
-        ref="tableRef"
-        v-loading="loading"
-        :data="messages"
-        :row-class-name="getRowClassName"
-        stripe
-        @selection-change="handleSelectionChange"
-        @row-click="handleRowClick"
-      >
-        <el-table-column type="selection" width="55" />
-        <el-table-column label="类型" width="120">
-          <template #default="{ row }">
-            <el-tag :type="formatMessageType(row.message_type).type as any" size="small">
-              {{ formatMessageType(row.message_type).text }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="title" label="标题" min-width="200">
-          <template #default="{ row }">
-            <div class="message-title">
-              <el-badge v-if="!row.is_read" is-dot class="unread-dot" />
-              <span :class="{ unread: !row.is_read }">{{ row.title }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span class="message-content">{{ row.content }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="时间" width="150">
-          <template #default="{ row }">
-            {{ formatRelativeTime(row.created_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button-group>
-              <el-button
-                size="small"
-                :disabled="row.is_read"
-                @click.stop="handleMarkRead(row as Message)"
-              >
-                <el-icon><Check /></el-icon>
-              </el-button>
-              <el-button size="small" type="danger" @click.stop="handleDelete(row as Message)">
-                <el-icon><Delete /></el-icon>
-              </el-button>
-              <el-button
-                v-if="row.link"
-                size="small"
-                type="primary"
-                @click.stop="handleGoToLink(row as Message)"
-              >
-                <el-icon><Link /></el-icon>
-              </el-button>
-            </el-button-group>
-          </template>
-        </el-table-column>
-      </el-table>
+      <el-tabs v-model="activeTab">
+        <!-- 页签1：消息 -->
+        <el-tab-pane label="消息" name="messages">
+          <el-table
+            ref="tableRef"
+            v-loading="loading"
+            :data="messages"
+            :row-class-name="getRowClassName"
+            stripe
+            @selection-change="handleSelectionChange"
+            @row-click="handleRowClick"
+          >
+            <el-table-column type="selection" width="55" />
+            <el-table-column label="类型" width="120">
+              <template #default="{ row }">
+                <el-tag :type="formatMessageType(row.message_type).type as any" size="small">
+                  {{ formatMessageType(row.message_type).text }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="title" label="标题" min-width="200">
+              <template #default="{ row }">
+                <div class="message-title">
+                  <el-badge v-if="!row.is_read" is-dot class="unread-dot" />
+                  <span :class="{ unread: !row.is_read }">{{ row.title }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span class="message-content">{{ row.content }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="时间" width="150">
+              <template #default="{ row }">
+                {{ formatRelativeTime(row.created_at) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="150" fixed="right">
+              <template #default="{ row }">
+                <el-button-group>
+                  <el-button
+                    size="small"
+                    :disabled="row.is_read"
+                    @click.stop="handleMarkRead(row as Message)"
+                  >
+                    <el-icon><Check /></el-icon>
+                  </el-button>
+                  <el-button size="small" type="danger" @click.stop="handleDelete(row as Message)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                  <el-button
+                    v-if="row.link"
+                    size="small"
+                    type="primary"
+                    @click.stop="handleGoToLink(row as Message)"
+                  >
+                    <el-icon><Link /></el-icon>
+                  </el-button>
+                </el-button-group>
+              </template>
+            </el-table-column>
+          </el-table>
 
-      <!-- 分页 -->
-      <el-pagination
-        v-if="total > 0"
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
-        class="pagination"
-        :total="total"
-        :page-sizes="[10, 20, 50]"
-        layout="total, sizes, prev, pager, next"
-        @size-change="loadMessages"
-        @current-change="loadMessages"
-      />
+          <!-- 分页 -->
+          <el-pagination
+            v-if="total > 0"
+            v-model:current-page="page"
+            v-model:page-size="pageSize"
+            class="pagination"
+            :total="total"
+            :page-sizes="[10, 20, 50]"
+            layout="total, sizes, prev, pager, next"
+            @size-change="loadMessages"
+            @current-change="loadMessages"
+          />
+        </el-tab-pane>
+
+        <!-- 页签2：系统动态 -->
+        <el-tab-pane label="系统动态" name="activities">
+          <div v-loading="activitiesLoading" class="activity-pane">
+            <el-timeline v-if="recentActivities.length">
+              <el-timeline-item
+                v-for="act in recentActivities"
+                :key="act.id"
+                :timestamp="formatDateTime(act.time || act.created_at)"
+                placement="top"
+                :type="activityType(act.type)"
+              >
+                <div class="activity-item">
+                  <span class="activity-title">{{ act.title }}</span>
+                  <div v-if="act.description" class="activity-desc">{{ act.description }}</div>
+                </div>
+              </el-timeline-item>
+            </el-timeline>
+            <el-empty v-else description="暂无系统动态" />
+            <div class="activity-actions">
+              <el-button size="small" :loading="activitiesLoading" @click="loadActivities"
+                >刷新动态</el-button
+              >
+            </div>
+          </div>
+        </el-tab-pane>
+
+        <!-- 页签3：我的操作 -->
+        <el-tab-pane label="我的操作" name="myLogs">
+          <div v-loading="logsLoading" class="activity-pane">
+            <el-timeline v-if="myLogs.length">
+              <el-timeline-item
+                v-for="log in myLogs"
+                :key="log.id"
+                :timestamp="formatDateTime(log.created_at)"
+                placement="top"
+              >
+                <div class="activity-item">
+                  <span class="activity-title">{{
+                    log.action || log.content || log.description || '--'
+                  }}</span>
+                  <div v-if="log.entity_name" class="activity-desc">{{ log.entity_name }}</div>
+                </div>
+              </el-timeline-item>
+            </el-timeline>
+            <el-empty v-else description="暂无操作记录" />
+            <div class="activity-actions">
+              <el-button size="small" :loading="logsLoading" @click="loadMyLogs"
+                >刷新记录</el-button
+              >
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
     </el-card>
 
     <!-- 消息详情对话框 -->
@@ -172,15 +230,23 @@ import {
   markAsRead,
   markAllAsRead,
   deleteMessages,
+  getRecentActivities,
   formatMessageType,
   formatRelativeTime,
   type Message,
   type MessageType,
 } from '@/api/message'
+import { get } from '@/api/request'
 
 const { pushSafe } = useRouterSafe()
 
 // ==================== 状态 ====================
+
+const activeTab = ref('messages')
+const activitiesLoading = ref(false)
+const recentActivities = ref<any[]>([])
+const logsLoading = ref(false)
+const myLogs = ref<any[]>([])
 
 const loading = ref(false)
 const messages = ref<Message[]>([])
@@ -201,6 +267,47 @@ const currentMessage = ref<Message | null>(null)
 
 // WebSocket（单机版禁用，消息通过 HTTP 轮询）
 // ==================== 方法 ====================
+
+/** 系统动态（后端从审计日志实时映射） */
+async function loadActivities() {
+  activitiesLoading.value = true
+  try {
+    const res: any = await getRecentActivities()
+    recentActivities.value = Array.isArray(res) ? res : res?.items || res?.data || []
+  } catch {
+    recentActivities.value = []
+  } finally {
+    activitiesLoading.value = false
+  }
+}
+
+/** 我的操作（工作日志：非管理员自动只看到自己的） */
+async function loadMyLogs() {
+  logsLoading.value = true
+  try {
+    const res: any = await get('/work-logs', { page: 1, page_size: 20 })
+    const payload = res?.data ?? res
+    const list = Array.isArray(payload) ? payload : payload?.items || []
+    myLogs.value = list
+  } catch {
+    myLogs.value = []
+  } finally {
+    logsLoading.value = false
+  }
+}
+
+function activityType(t?: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' {
+  const map: Record<string, 'primary' | 'success' | 'warning' | 'danger' | 'info'> = {
+    create: 'success',
+    update: 'primary',
+    delete: 'danger',
+    import: 'warning',
+    export: 'info',
+    login: 'info',
+    backup: 'warning',
+  }
+  return map[t || ''] || 'info'
+}
 
 /**
  * 加载消息列表
@@ -366,6 +473,8 @@ function closeWebSocket() {
 
 onMounted(() => {
   loadMessages()
+  loadActivities()
+  loadMyLogs()
   initWebSocket()
 })
 
@@ -444,5 +553,29 @@ onUnmounted(() => {
     margin-top: 20px;
     text-align: center;
   }
+}
+
+.activity-pane {
+  min-height: 200px;
+  padding: 8px 4px;
+}
+
+.activity-item {
+  .activity-title {
+    font-weight: 600;
+    color: #1b4332;
+  }
+
+  .activity-desc {
+    margin-top: 4px;
+    font-size: 13px;
+    color: #666;
+    line-height: 1.5;
+  }
+}
+
+.activity-actions {
+  margin-top: 16px;
+  text-align: right;
 }
 </style>

@@ -192,7 +192,14 @@ async function fetchRankings() {
   try {
     const response = await getRankings(filterForm.year, filterForm.limit)
     const data = response?.data ?? response
-    rankings.value = data?.items ?? (Array.isArray(data) ? data : [])
+    const list = data?.rankings ?? data?.items ?? (Array.isArray(data) ? data : [])
+    // 后端字段适配：grade → level、support_unit 兼容
+    rankings.value = (Array.isArray(list) ? list : []).map((r: any) => ({
+      ...r,
+      level: r.level ?? r.grade ?? null,
+      support_unit: r.support_unit ?? r.support_unit_name ?? null,
+      scores: r.scores || {},
+    }))
   } catch {
     loadError.value = true
   } finally {

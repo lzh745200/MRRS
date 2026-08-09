@@ -152,7 +152,27 @@
                 {{ tag }}
               </el-tag>
             </div>
-            <div class="article-content" v-html="sanitizedContent" />
+            <!-- 结构化分层渲染：识别【小标题】分段 + 目录导航 -->
+            <div v-if="articleSections.length > 1" class="article-toc">
+              <span class="toc-label">目录</span>
+              <a
+                v-for="(sec, i) in articleSections.filter((s) => s.heading)"
+                :key="i"
+                class="toc-link"
+                :href="`#help-sec-${i}`"
+                >{{ sec.heading }}</a
+              >
+            </div>
+            <div
+              v-for="(sec, i) in articleSections"
+              :id="`help-sec-${i}`"
+              :key="i"
+              class="article-section"
+            >
+              <h3 v-if="sec.heading" class="article-section-title">{{ sec.heading }}</h3>
+              <p v-for="(ln, j) in sec.lines" :key="j" class="article-section-line">{{ ln }}</p>
+            </div>
+            <div v-if="!articleSections.length" class="article-content" v-html="sanitizedContent" />
           </div>
           <el-empty v-else description="文档加载失败" />
         </el-card>
@@ -231,6 +251,31 @@ const activeCategoryName = computed(() => {
   const cat = categories.value.find((c) => c.key === activeCategory.value)
   return cat?.name || ''
 })
+
+/** 解析纯文本帮助内容为结构化分段：[{heading, lines[]}] */
+function parseArticleSections(raw: string): Array<{ heading: string; lines: string[] }> {
+  if (!raw) return []
+  const sections: Array<{ heading: string; lines: string[] }> = []
+  let current: { heading: string; lines: string[] } | null = null
+  for (const rawLine of raw.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const head = /^【(.+?)】/.exec(line)
+    if (head) {
+      current = { heading: head[1], lines: [] }
+      sections.push(current)
+      const rest = line.slice(head[0].length).trim()
+      if (rest) current.lines.push(rest)
+    } else if (current) {
+      current.lines.push(line)
+    } else {
+      sections.push({ heading: '', lines: [line] })
+    }
+  }
+  return sections
+}
+
+const articleSections = computed(() => parseArticleSections(articleDetail.value?.content || ''))
 
 const sanitizedContent = computed(() => {
   if (!articleDetail.value?.content) return '(无内容)'
@@ -479,6 +524,52 @@ onMounted(() => {
 
 .article-tags {
   margin-bottom: 16px;
+}
+
+.article-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: #f2f7f4;
+  border: 1px solid #dce8e0;
+  border-radius: 6px;
+
+  .toc-label {
+    font-weight: 600;
+    color: #1b4332;
+  }
+
+  .toc-link {
+    color: #2e6b55;
+    font-size: 13px;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.article-section {
+  margin-bottom: 14px;
+
+  .article-section-title {
+    margin: 14px 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1b4332;
+    padding-left: 10px;
+    border-left: 3px solid #c9a227;
+  }
+
+  .article-section-line {
+    margin: 6px 0;
+    line-height: 1.8;
+    color: #303133;
+    font-size: 14px;
+  }
 }
 
 .article-content {

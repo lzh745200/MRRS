@@ -126,7 +126,7 @@ class TestListVillagesCache:
         ):
             result = await sv.list_villages(
                 page=1, page_size=20, keyword=None, department=None, county=None,
-                isRevitalizationTier=None, isThreeRegions=None, include_deleted=False,
+                is_revitalization_tier=None, is_three_regions=None, include_deleted=False,
                 current_user=_admin(), db=self._db([village]),
             )
         cache.set.assert_awaited_once()
@@ -141,7 +141,7 @@ class TestListVillagesCache:
         ):
             result = await sv.list_villages(
                 page=1, page_size=20, keyword=None, department=None, county=None,
-                isRevitalizationTier=None, isThreeRegions=None, include_deleted=False,
+                is_revitalization_tier=None, is_three_regions=None, include_deleted=False,
                 current_user=_admin(), db=MagicMock(),
             )
         assert result == {"cached": True}
@@ -158,7 +158,7 @@ class TestListVillagesCache:
         ):
             result = await sv.list_villages(
                 page=1, page_size=20, keyword=None, department=None, county=None,
-                isRevitalizationTier=None, isThreeRegions=None, include_deleted=False,
+                is_revitalization_tier=None, is_three_regions=None, include_deleted=False,
                 current_user=_admin(), db=self._db([village]),
             )
         cache.set.assert_not_called()  # _ckey 已置 None，跳过回写

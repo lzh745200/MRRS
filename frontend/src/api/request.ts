@@ -493,10 +493,11 @@ export async function post<T = any>(
     data,
     ...(extra || {}),
   }
-  if (data instanceof FormData && config.headers) {
+  if (data instanceof FormData) {
     // 移除 Content-Type 让浏览器自动设置 multipart boundary
-    // 保留其他自定义 headers（如 Authorization）
-    const h = { ...config.headers } as Record<string, any>
+    // （无论调用方是否传 headers——否则 axios 会按默认 JSON 序列化 FormData，
+    //   导致后端 UploadFile 参数 422）
+    const h = { ...(config.headers || {}) } as Record<string, any>
     delete h['Content-Type']
     delete h['content-type']
     config.headers = h

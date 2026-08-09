@@ -128,10 +128,7 @@ describe('handleCheck', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     await vm.handleCheck()
-    expect(mockPost).toHaveBeenCalledWith('/data-quality/validate', {
-      entity_type: 'village',
-      data: {},
-    })
+    expect(mockPost).toHaveBeenCalledWith('/data-quality/full-check')
     expect(vm.checkItems.every((i: any) => i.status === 'pass' && i.issues === 0)).toBe(true)
     expect(ElMessage.success).toHaveBeenCalledWith('数据质量检查通过')
     expect(vm.checking).toBe(false)
@@ -173,7 +170,7 @@ describe('handleCheck', () => {
     const vm = wrapper.vm as any
     await vm.handleCheck()
     expect(vm.checkItems.every((i: any) => i.status === 'pending' && i.issues === 0)).toBe(true)
-    expect(ElMessage.warning).toHaveBeenCalledWith('无法连接质量检查服务')
+    expect(ElMessage.error).toHaveBeenCalledWith('质量检查执行失败，请稍后重试')
     expect(vm.checking).toBe(false)
   })
 })
@@ -253,12 +250,9 @@ describe('handleAutoFix', () => {
     })
     expect(ElMessage.success).toHaveBeenCalledWith('自动修复完成，处理了 3 条记录')
     expect(vm.showIssuesDialog).toBe(false)
-    // handleAutoFix 内部会再调 handleCheck → 再次请求 validate
+    // handleAutoFix 内部会再调 handleCheck → 再次请求 full-check
     await flushPromises()
-    expect(mockPost).toHaveBeenCalledWith('/data-quality/validate', {
-      entity_type: 'village',
-      data: {},
-    })
+    expect(mockPost).toHaveBeenCalledWith('/data-quality/full-check')
     expect(vm.fixing).toBe(false)
   })
 
@@ -293,10 +287,7 @@ describe('模板交互（内联处理器与 v-model 覆盖）', () => {
     await flushPromises()
     await findBtn(wrapper, '开始检查').trigger('click')
     await flushPromises()
-    expect(mockPost).toHaveBeenCalledWith('/data-quality/validate', {
-      entity_type: 'village',
-      data: {},
-    })
+    expect(mockPost).toHaveBeenCalledWith('/data-quality/full-check')
   })
 
   it('点击「查看详情」按钮触发 handleViewIssues（注入行）', async () => {

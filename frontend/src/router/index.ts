@@ -404,8 +404,8 @@ export const routes: RouteRecordRaw[] = [
         path: '/organizations/pass-code',
         alias: '/organization/pass-code',
         name: 'OrganizationPassCode',
-        component: () => retryImport(() => import('@/views/organization/PassCodeManagement.vue')),
-        meta: { title: '通行证码管理', roles: ['admin', 'super_admin'] },
+        // 整合：通行码管理并入「机器码管理」板块（功能完整保留）
+        redirect: '/admin/machine-code/management',
       },
       {
         path: '/organizations/:id',

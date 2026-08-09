@@ -1474,26 +1474,26 @@ class TestPerformance:
 
 class TestHealth:
     def test_success(self, client, project):
-        import sys
-        mock_mod = Mock()
-        mock_mod.calculate_health_score.return_value = {"score": 85}
-        sys.modules['app.services.fund_health'] = mock_mod
-        try:
-            resp = client.get(f"/api/v1/fund-lifecycle/health/{project.id}")
-            assert resp.json()["data"]["score"] == 85
-        finally:
-            sys.modules.pop('app.services.fund_health', None)
+        """健康度端点按项目聚合资金记录计算，返回 health_score + details"""
+        resp = client.get(f"/api/v1/fund-lifecycle/health/{project.id}")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert "health_score" in data
+        assert 0 <= data["health_score"] <= 100
+        assert "details" in data
+        assert "budget_execution" in data["details"]
+        assert "score" in data["details"]["budget_execution"]
+
+    def test_invalid_project_id_400(self, client):
+        """project_id <= 0 → 400 提示选择具体项目（不再误导为项目不存在）"""
+        resp = client.get("/api/v1/fund-lifecycle/health/0")
+        assert resp.status_code == 400
+        assert "项目ID" in resp.json()["detail"]
 
     def test_batch(self, client):
-        import sys
-        mock_mod = Mock()
-        mock_mod.calculate_health_batch.return_value = [{1: {"score": 90}}]
-        sys.modules['app.services.fund_health'] = mock_mod
-        try:
-            resp = client.post("/api/v1/fund-lifecycle/health/batch", json={"project_ids": [1, 2]})
-            assert resp.json()["success"] is True
-        finally:
-            sys.modules.pop('app.services.fund_health', None)
+        resp = client.post("/api/v1/fund-lifecycle/health/batch", json={"project_ids": []})
+        assert resp.status_code == 200
+        assert resp.json()["data"] == []
 
 
 # =====================================================================

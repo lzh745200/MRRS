@@ -37,6 +37,7 @@ from app.core.exceptions import NotFoundException
 from app.core.response import ok_list, success_response
 from app.core.security import AuditLogService, check_rate_limit, get_client_ip, get_current_user
 from app.models.project import Fund, Project, ProjectFile, ProjectStatus, ProjectTask
+from app.models.supported_village import SupportedVillage
 from app.services.audit_enhancement_service import AuditEnhancementService
 from app.models.audit import AuditAction
 from app.utils.db_error_handler import handle_db_errors_async
@@ -624,6 +625,8 @@ async def list_projects(
     project_type: Optional[str] = None,
     status: Optional[str] = None,
     village_id: Optional[int] = None,
+    region: Optional[str] = None,
+    year: Optional[int] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = Query("desc"),
     include_cancelled: bool = Query(False, description="是否包含已取消项目"),
@@ -665,6 +668,14 @@ async def list_projects(
         query = query.filter(Project.status == status)
     if village_id:
         query = query.filter(Project.village_id == village_id)
+    if region:
+        # 地区筛选：通过关联帮扶村（supported_villages.county）过滤
+        query = query.join(SupportedVillage, Project.village_id == SupportedVillage.id)
+        query = query.filter(SupportedVillage.county == region)
+    if year:
+        from sqlalchemy import func as _func
+
+        query = query.filter(_func.strftime("%Y", Project.start_date) == str(year))
 
     # 排序
     sort_column = getattr(Project, sort_by, None) if sort_by else None
