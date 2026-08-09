@@ -5,6 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布] - 2026-08-09 路由遮蔽修复
+
+### 修复
+- 🐛 **仪表盘趋势端点重复注册**：`dashboard.py` 与 `dashboard_trends.py` 均注册 `/dashboard/kpi-trends` 与 `/dashboard/yearly-trends`，后者被 FastAPI 注册顺序完全遮蔽（永远不可达）。`dashboard_trends` 的同比实现改挂 `/dashboard/trends/` 前缀，两个端点恢复可达，同比功能保留
+
+### 审计确认无问题
+- 全端点路由遮蔽扫描：759 个真实路由仅上述 2 处重复，其余动态/静态路径（`{user_id}` 与 `/me` 等）由 FastAPI 类型校验自动正确匹配
+- 核心业务端点（funds/budgets/policies/projects/schools/villages/rural-works/organizations）全量 200 正常响应，无字段缺失或 500
+- 跳过测试仅 3 处（matplotlib 条件跳过，合理）
+
 ## [未发布] - 2026-08-08 深度审计
 
 ### 修复（全面审计发现）

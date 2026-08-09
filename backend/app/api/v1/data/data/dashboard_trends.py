@@ -19,7 +19,7 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/dashboard", tags=["仪表盘趋势"])
+router = APIRouter(prefix="/dashboard/trends", tags=["仪表盘趋势同比"])
 
 
 def _yoy(cur_val: float, prev_val: float) -> float:
