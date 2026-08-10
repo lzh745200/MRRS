@@ -300,3 +300,12 @@ describe('类型标签空串', () => {
     wrapper.unmount()
   })
 })
+
+describe('类型标签null', () => {
+  it('typeLabel(null) → 其他', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).typeLabel(null)).toBe('其他')
+    wrapper.unmount()
+  })
+})

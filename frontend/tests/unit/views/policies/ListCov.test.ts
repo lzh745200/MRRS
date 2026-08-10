@@ -841,3 +841,17 @@ describe('层级加载失败分支2', () => {
     wrapper.unmount()
   })
 })
+
+describe('审批提交分支收尾', () => {
+  it('确认后 reject cancel / reject detail', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    confirmMock.mockResolvedValue(true)
+    ;(submitApprovalMock as any).mockRejectedValueOnce('cancel')
+    await vm.handleSubmitApproval({ id: 4, title: 't4', code: 'c4' })
+    ;(submitApprovalMock as any).mockRejectedValueOnce({ response: { data: { detail: '无权限' } } })
+    await vm.handleSubmitApproval({ id: 5, title: 't5', code: 'c5' })
+    wrapper.unmount()
+  })
+})

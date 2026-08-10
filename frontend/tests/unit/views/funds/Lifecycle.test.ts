@@ -695,3 +695,16 @@ describe('无效项目守卫分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('无项目路由分支', () => {
+  it('projectId 空 → handleInitiate 早退', async () => {
+    routeParams.projectId = ''
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleInitiate()
+    expect(vm.loading).toBe(false)
+    routeParams.projectId = '1'
+    wrapper.unmount()
+  })
+})

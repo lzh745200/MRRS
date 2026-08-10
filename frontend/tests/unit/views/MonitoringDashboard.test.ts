@@ -495,3 +495,20 @@ describe('日志形态收尾2', () => {
     wrapper.unmount()
   })
 })
+
+describe('日志级别收尾', () => {
+  it('fetchSystemLogs INFO 行 → info 级别', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/logs')
+        return Promise.resolve([{ line: '2026-01-01 10:00:00 INFO - 正常启动' }])
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const logs = await vm.fetchSystemLogs()
+    expect(logs.some((l: any) => l.level === 'info' && l.message === '正常启动')).toBe(true)
+    wrapper.unmount()
+  })
+})

@@ -480,3 +480,17 @@ describe('空白与目录渲染', () => {
     wrapper.unmount()
   })
 })
+
+describe('标题元素渲染', () => {
+  it('有 heading 的 section → h3 渲染', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.articleDetail = { content: '【说明】内容' }
+    vm.viewMode = 'detail'
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('h3.article-section-title').exists()).toBe(true)
+    wrapper.unmount()
+  })
+})

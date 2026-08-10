@@ -483,3 +483,18 @@ describe('条件列渲染补充', () => {
     wrapper.unmount()
   })
 })
+
+describe('匹配行渲染', () => {
+  it('matched=true → 满足', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(mapped[1] as any).matched = true
+    vm.qc.conditions = [{ field: 'villageName', operator: 'eq', value: 'x' }]
+    vm.qcResult = { rows: [mapped[1]], total: 1, unmatched: 0 }
+    vm.showResult = true
+    await wrapper.vm.$nextTick()
+    expect(wrapper.html()).toContain('满足')
+    wrapper.unmount()
+  })
+})

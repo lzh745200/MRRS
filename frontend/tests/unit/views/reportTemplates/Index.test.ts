@@ -1000,3 +1000,30 @@ describe('信封形态收尾2', () => {
     wrapper.unmount()
   })
 })
+
+describe('空响应与卡片按钮', () => {
+  it('available-fields 返回 undefined → 空数组', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.newTemplate.module = 'village'
+    ;(mockGet as any).mockResolvedValueOnce(undefined)
+    await vm.loadAvailableFields()
+    expect(vm.availableFields).toEqual([])
+    ;(mockGet as any).mockResolvedValueOnce(undefined)
+    await vm.loadModuleFieldsForFill('village')
+    expect(vm.fillFields).toEqual([])
+    wrapper.unmount()
+  })
+  it('卡片列表「在线填报」按钮 → openFillDialog', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.templates = [{ id: 1, name: 't', type: 'import', module: 'village', fields: '' }]
+    await wrapper.vm.$nextTick()
+    const btns = wrapper.findAll('el-button-stub').filter((b: any) => b.text().includes('在线填报'))
+    if (btns.length > 1) await btns[btns.length - 1].trigger('click')
+    expect(vm.showFillDialog).toBe(true)
+    wrapper.unmount()
+  })
+})
