@@ -116,7 +116,12 @@
                 <el-option label="或者" value="or" />
               </el-select>
               <el-select v-model="rule.field" placeholder="选择字段" class="rule-field">
-                <el-option v-for="f in ruleFieldOptions" :key="f.key" :label="f.label" :value="f.key" />
+                <el-option
+                  v-for="f in ruleFieldOptions"
+                  :key="f.key"
+                  :label="f.label"
+                  :value="f.key"
+                />
               </el-select>
               <el-select v-model="rule.operator" placeholder="操作符" class="rule-op">
                 <el-option label="等于" value="eq" />
@@ -149,7 +154,12 @@
         show-icon
         style="margin-bottom: 12px"
       />
-      <el-table v-if="ruleResult?.failed?.length" :data="ruleResult.failed" max-height="220" size="small">
+      <el-table
+        v-if="ruleResult?.failed?.length"
+        :data="ruleResult.failed"
+        max-height="220"
+        size="small"
+      >
         <el-table-column prop="record_id" label="记录ID" width="90" />
         <el-table-column prop="label" label="记录" min-width="150" />
       </el-table>
