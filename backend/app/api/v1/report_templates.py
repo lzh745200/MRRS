@@ -377,6 +377,13 @@ async def create_template(
         raise HTTPException(status_code=500, detail=f"创建模板失败: {str(e)}")
 
 
+@router.get("/available-fields", summary="获取模块可用字段（字段组合生成模板）")
+def get_available_fields(module: str = Query(..., description="模块标识")):
+    """返回指定模块可选的字段列表，供管理员组合生成报表模板"""
+    fields = MODULE_FIELDS.get(module, [])
+    return {"code": 200, "success": True, "data": fields, "message": "成功"}
+
+
 @router.get("/{template_id}")
 async def get_template(
     template_id: int,
@@ -1300,8 +1307,3 @@ MODULE_FIELDS: dict = {
 }
 
 
-@router.get("/available-fields", summary="获取模块可用字段（字段组合生成模板）")
-def get_available_fields(module: str = Query(..., description="模块标识")):
-    """返回指定模块可选的字段列表，供管理员组合生成报表模板"""
-    fields = MODULE_FIELDS.get(module, [])
-    return {"code": 200, "success": True, "data": fields, "message": "成功"}
