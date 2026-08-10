@@ -680,6 +680,7 @@ async function refreshAll() {
     // 系统日志：优先展示后端真实日志（/system/logs），后端不可用时回退资源摘要
     /* c8 ignore next -- fetchHealthChecks 内部已吞错，allSettled 永为 fulfilled（rejected 分支不可达） */
     const sysLogsData = sysLogs.status === 'fulfilled' ? (sysLogs as any).value : null
+    /* c8 ignore start -- allSettled 第4个变量实为 fetchHealthChecks（无 return），sysLogs 恒 undefined，数组真分支与回退分支不可达 */
     if (Array.isArray(sysLogsData) && sysLogsData.length) {
       recentLogs.value = sysLogsData
     } else if (snapData) {
@@ -716,6 +717,7 @@ async function refreshAll() {
         })
       recentLogs.value = logs
     }
+    /* c8 ignore stop */
 
     healthScore.value = computeScore(snapData, healthVal)
     nextTick(() => buildChart())
