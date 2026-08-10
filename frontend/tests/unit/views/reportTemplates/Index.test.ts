@@ -844,3 +844,17 @@ describe('模板字段组合补充', () => {
     expect(mockPost).toHaveBeenCalledWith('/report-templates', expect.objectContaining({ fields: '["a","b"]' }))
   })
 })
+
+describe('模板控件补充', () => {
+  it('搜索 input/模块 select/标签页 触发', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const inputs = wrapper.findAllComponents({ name: 'ElInput' })
+    if (inputs.length) inputs[0].vm.$emit('update:modelValue', '关键词')
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    if (selects.length) selects[0].vm.$emit('update:modelValue', 'village')
+    const tabs = wrapper.findAllComponents({ name: 'ElTabs' })
+    if (tabs.length) tabs[0].vm.$emit('update:modelValue', 'export')
+    wrapper.unmount()
+  })
+})

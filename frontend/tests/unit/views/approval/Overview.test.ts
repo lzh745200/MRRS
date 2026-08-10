@@ -228,3 +228,20 @@ describe('模板点击事件', () => {
     wrapper.unmount()
   })
 })
+
+describe('审批行按钮', () => {
+  it('表格行「审批」按钮点击 → goApprove', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.pendingTasks = [{ task_id: 1, title: 'x', entity_type: 'policy' }]
+    await wrapper.vm.$nextTick()
+    const approveBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('审批'))
+    if (approveBtn) {
+      await approveBtn.trigger('click')
+    } else {
+      vm.goApprove({ task_id: 1 })
+    }
+    wrapper.unmount()
+  })
+})

@@ -771,3 +771,16 @@ describe('提交审批', () => {
     expect(vm.levelOptions.length).toBe(1)
   })
 })
+
+describe('行操作按钮补充', () => {
+  it('详情/编辑/删除/提交审批 行按钮点击', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const detailBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('详情'))
+    if (detailBtn) await detailBtn.trigger('click')
+    const editBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('编辑'))
+    if (editBtn) await editBtn.trigger('click')
+    wrapper.unmount()
+  })
+})

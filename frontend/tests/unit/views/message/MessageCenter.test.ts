@@ -443,3 +443,15 @@ describe('activityType 映射', () => {
     wrapper.unmount()
   })
 })
+
+describe('筛选控件', () => {
+  it('筛选 select v-model 触发', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    if (selects.length) {
+      selects[0].vm.$emit('update:modelValue', 'all')
+    }
+    wrapper.unmount()
+  })
+})

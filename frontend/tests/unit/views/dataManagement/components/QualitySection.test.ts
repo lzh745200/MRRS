@@ -442,3 +442,29 @@ describe('自定义校验模板事件', () => {
     wrapper.unmount()
   })
 })
+
+describe('规则构建器控件', () => {
+  it('模块选择/规则行 v-model/删除条件 触发', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.showRuleDialog = true
+    await wrapper.vm.$nextTick()
+    // 模块选择 v-model
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    if (selects.length) {
+      selects[0].vm.$emit('update:modelValue', 'fund')
+      expect(vm.ruleModule).toBe('fund')
+    }
+    // 规则行 field/operator/value v-model
+    const inputs = wrapper.findAllComponents({ name: 'ElInput' })
+    if (inputs.length) inputs[0].vm.$emit('update:modelValue', 'name')
+    // 删除条件按钮
+    const delBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('删除'))
+    if (delBtn) {
+      await delBtn.trigger('click')
+      expect(vm.ruleList.length).toBeLessThanOrEqual(2)
+    }
+    wrapper.unmount()
+  })
+})

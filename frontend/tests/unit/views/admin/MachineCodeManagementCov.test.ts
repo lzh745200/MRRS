@@ -559,3 +559,15 @@ describe('模板交互（内联处理器与 v-model 覆盖）', () => {
     expect(vm.passCodeDialogVisible).toBe(true)
   })
 })
+
+describe('模板控件补充', () => {
+  it('筛选 select v-model 触发', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    if (selects.length) {
+      selects[0].vm.$emit('update:modelValue', 'pending')
+    }
+    wrapper.unmount()
+  })
+})

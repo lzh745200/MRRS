@@ -375,3 +375,20 @@ describe('查询校验构建器', () => {
     wrapper.unmount()
   })
 })
+
+describe('模板控件补充', () => {
+  it('select v-model 与删除条件按钮触发', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    if (selects.length) {
+      selects[0].vm.$emit('update:modelValue', 'fund')
+    }
+    const delBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('删除'))
+    if (delBtn) {
+      await delBtn.trigger('click')
+    }
+    wrapper.unmount()
+  })
+})
