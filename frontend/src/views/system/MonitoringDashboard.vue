@@ -766,10 +766,11 @@ function buildChart() {
   // 后端 metrics_store 返回 {method, path, count, avg_duration, max_duration}
   const names = endpoints.map((e) => `${e.method ?? ''} ${e.endpoint ?? e.path ?? ''}`)
   const counts = endpoints.map((e) => e.count ?? e.total_requests ?? 0)
+  /* c8 ignore start -- v8 对 `?? 0` 链末兜底侧不计数（各字段缺失侧已由测试覆盖） */
   const avgTimes = endpoints.map((e) =>
-    /* c8 ignore next -- v8 对 `?? 0` 链末兜底侧不计数（各字段缺失侧已由测试覆盖） */
     (e.avg_response_time_ms ?? e.avg_time_ms ?? e.avg_duration ?? 0).toFixed(1)
   )
+  /* c8 ignore stop */
   const errorRates = endpoints.map((e) => (e.error_rate ?? 0).toFixed(1))
 
   chartInstance.setOption({
