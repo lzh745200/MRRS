@@ -378,6 +378,14 @@ describe('分支收尾', () => {
     mockGetSyncLogs.mockResolvedValue({ data: { items: [{ ...rowB }] } })
     await vm.loadImportHistory()
     expect(vm.importHistory.length).toBe(1)
+    mockGetSyncLogs.mockResolvedValue([{ ...rowB }])
+    await vm.loadImportHistory()
+    expect(vm.importHistory.length).toBe(1)
+    mockImportData.mockResolvedValue({ success: 'yes' })
+    vm.selectedFile = { name: 'g.zip' } as any
+    vm.importForm.password = ''
+    await vm.handleImport()
+    expect(ElMessage.success).toHaveBeenCalledWith('导入成功')
     wrapper.unmount()
   })
 })
