@@ -385,7 +385,7 @@ describe('模板控件补充', () => {
     if (selects.length) {
       selects[0].vm.$emit('update:modelValue', 'fund')
     }
-    const delBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('删除'))
+    const delBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('删除'))
     if (delBtn) {
       await delBtn.trigger('click')
     }
@@ -411,6 +411,45 @@ describe('校验边界补充', () => {
     vm.qc.conditions = [{ field: 'a', operator: 'eq', value: '1' }]
     ;(mockPost as any).mockRejectedValueOnce(new Error('x'))
     await vm.qcRunCheck()
+    wrapper.unmount()
+  })
+})
+
+describe('查询对话框全控件', () => {
+  it('dialog v-model 打开 → radio/selects/input → 删除条件', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const dialog = wrapper.findComponent({ name: 'ElDialog' })
+    if (dialog.exists()) {
+      await dialog.vm.$emit('update:modelValue', true)
+      await wrapper.vm.$nextTick()
+    } else {
+      vm.showQueryDialog = true
+      await wrapper.vm.$nextTick()
+    }
+    vm.qc.conditions = [
+      { field: 'a', operator: 'eq', value: '1' },
+      { field: 'b', operator: 'contains', value: '2' },
+    ]
+    await wrapper.vm.$nextTick()
+    const radios = wrapper.findAllComponents({ name: 'ElRadioGroup' })
+    for (const r of radios) {
+      r.vm.$emit('update:modelValue', 'or')
+      await wrapper.vm.$nextTick()
+    }
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    for (const s of selects) {
+      s.vm.$emit('update:modelValue', 'eq')
+      await wrapper.vm.$nextTick()
+    }
+    const inputs = wrapper.findAllComponents({ name: 'ElInput' })
+    for (const i of inputs) {
+      i.vm.$emit('update:modelValue', 'v')
+      await wrapper.vm.$nextTick()
+    }
+    const delBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('删除'))
+    if (delBtn) await delBtn.trigger('click')
     wrapper.unmount()
   })
 })

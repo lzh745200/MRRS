@@ -1,4 +1,4 @@
-/**
+﻿/**
  * views/reportTemplates/Index.vue 覆盖率攻坚（四指标 100%）
  * 覆盖：moduleIcon/moduleLabel 映射与兜底、formatDate、parseFields（无/JSON 数组/非数组/对象字段/异常回退）、
  * displayTemplates（类型/搜索/模块过滤）、loadTemplates（数组/data/items/null/失败）、
@@ -910,6 +910,41 @@ describe('填报导出边界补充', () => {
     const vm = wrapper.vm as any
     vm.openFillDialog({ name: '', fields: 'k1' })
     await vm.handleFillExport()
+    wrapper.unmount()
+  })
+})
+
+describe('在线填报全控件', () => {
+  it('行内「在线填报」→ 控件 v-model → 取消', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const fillBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('在线填报'))
+    if (fillBtn) {
+      await fillBtn.trigger('click')
+    } else {
+      vm.openFillDialog({ name: 't', fields: 'k1,k2' })
+    }
+    await wrapper.vm.$nextTick()
+    const inputs = wrapper.findAllComponents({ name: 'ElInput' })
+    for (const i of inputs) {
+      i.vm.$emit('update:modelValue', 'v')
+      await wrapper.vm.$nextTick()
+    }
+    const checkboxes = wrapper.findAllComponents({ name: 'ElCheckboxGroup' })
+    for (const c of checkboxes) {
+      c.vm.$emit('update:modelValue', ['k1'])
+      await wrapper.vm.$nextTick()
+    }
+    let cancelBtn: any = null
+    for (const d of wrapper.findAll('.el-dialog-stub')) {
+      if (d.findAll('el-button-stub').some((b: any) => b.text().includes('导出 Excel'))) {
+        cancelBtn = d.findAll('el-button-stub').find((b: any) => b.text().includes('取消'))
+        break
+      }
+    }
+    if (cancelBtn) await cancelBtn.trigger('click')
+    expect(vm.showFillDialog).toBe(false)
     wrapper.unmount()
   })
 })

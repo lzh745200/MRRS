@@ -777,9 +777,9 @@ describe('行操作按钮补充', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    const detailBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('详情'))
+    const detailBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('详情'))
     if (detailBtn) await detailBtn.trigger('click')
-    const editBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('编辑'))
+    const editBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('编辑'))
     if (editBtn) await editBtn.trigger('click')
     wrapper.unmount()
   })
@@ -794,6 +794,19 @@ describe('提交审批失败分支', () => {
     await vm.handleSubmitApproval({ id: 1, title: 't', code: 'c' }).catch(() => {})
     ;(submitApprovalMock as any).mockRejectedValueOnce(new Error('网络错误'))
     await vm.handleSubmitApproval({ id: 2, title: 't2', code: 'c2' }).catch(() => {})
+    wrapper.unmount()
+  })
+})
+
+describe('可编辑行提交按钮', () => {
+  it('canEdit=true 时行内「提交审批」按钮点击', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.canEdit = true
+    await wrapper.vm.$nextTick()
+    const btn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('提交审批'))
+    if (btn) await btn.trigger('click')
     wrapper.unmount()
   })
 })

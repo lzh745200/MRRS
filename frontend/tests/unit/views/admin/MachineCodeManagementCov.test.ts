@@ -571,3 +571,13 @@ describe('模板控件补充', () => {
     wrapper.unmount()
   })
 })
+
+describe('标签页切换', () => {
+  it('el-tabs v-model 切换', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const tabs = wrapper.findAllComponents({ name: 'ElTabs' })
+    if (tabs.length) tabs[0].vm.$emit('update:modelValue', 'logs')
+    wrapper.unmount()
+  })
+})

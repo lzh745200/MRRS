@@ -415,26 +415,26 @@ describe('自定义校验模板事件', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     // 自定义校验按钮
-    const openBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('自定义校验'))
+    const openBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('自定义校验'))
     if (openBtn) {
       await openBtn.trigger('click')
       expect(vm.showRuleDialog).toBe(true)
     }
     // 添加条件按钮
-    const addBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('添加条件'))
+    const addBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('添加条件'))
     if (addBtn) {
       await addBtn.trigger('click')
       expect(vm.ruleList.length).toBe(2)
     }
     // 执行校验按钮
     mockPost.mockResolvedValue({ data: { total: 6, unmatched: 0 } })
-    const runBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('执行校验'))
+    const runBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('执行校验'))
     if (runBtn) {
       await runBtn.trigger('click')
       await flushPromises()
     }
     // 关闭按钮
-    const closeBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().trim() === '关闭')
+    const closeBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().trim() === '关闭')
     if (closeBtn) {
       await closeBtn.trigger('click')
       expect(vm.showRuleDialog).toBe(false)
@@ -460,7 +460,7 @@ describe('规则构建器控件', () => {
     const inputs = wrapper.findAllComponents({ name: 'ElInput' })
     if (inputs.length) inputs[0].vm.$emit('update:modelValue', 'name')
     // 删除条件按钮
-    const delBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('删除'))
+    const delBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('删除'))
     if (delBtn) {
       await delBtn.trigger('click')
       expect(vm.ruleList.length).toBeLessThanOrEqual(2)
@@ -508,6 +508,38 @@ describe('边界分支补充', () => {
     await vm.handleViewIssues(vm.checkItems[0])
     expect(vm.issueDetails).toEqual([])
     expect(vm.canAutoFix).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+describe('对话框全控件', () => {
+  it('dialog v-model 打开 → 规则行控件逐个触发 → 删除/关闭', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const dialog = wrapper.findComponent({ name: 'ElDialog' })
+    if (dialog.exists()) {
+      await dialog.vm.$emit('update:modelValue', true)
+      await wrapper.vm.$nextTick()
+    } else {
+      ;(wrapper.vm as any).showRuleDialog = true
+      await wrapper.vm.$nextTick()
+    }
+    const vm = wrapper.vm as any
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    for (const s of selects) {
+      s.vm.$emit('update:modelValue', 'eq')
+      await wrapper.vm.$nextTick()
+    }
+    const inputs = wrapper.findAllComponents({ name: 'ElInput' })
+    for (const i of inputs) {
+      i.vm.$emit('update:modelValue', 'x')
+      await wrapper.vm.$nextTick()
+    }
+    const delBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('删除'))
+    if (delBtn) await delBtn.trigger('click')
+    const closeBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('关闭'))
+    if (closeBtn) await closeBtn.trigger('click')
+    expect(vm.showRuleDialog).toBe(false)
     wrapper.unmount()
   })
 })
