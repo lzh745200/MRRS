@@ -260,13 +260,15 @@ interface SnapshotData {
 }
 
 interface ApiStat {
-  endpoint: string
+  endpoint?: string
+  path?: string
   method?: string
   count?: number
   total_requests?: number
   avg_time_ms?: number
   avg_response_time_ms?: number
-  error_rate: number
+  avg_duration?: number
+  error_rate?: number
 }
 
 interface HealthData {
@@ -660,7 +662,7 @@ async function fetchHealthChecks() {
 async function refreshAll() {
   loading.value = true
   try {
-    const [snap, stats, health, healthChecks, sysLogs] = await Promise.allSettled([
+    const [snap, stats, health, , sysLogs] = await Promise.allSettled([
       fetchSnapshot(),
       fetchApiStats(),
       fetchHealth(),

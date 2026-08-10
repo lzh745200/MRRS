@@ -105,7 +105,10 @@
       </div>
 
       <!-- 错误列表 -->
-      <div v-if="Array.isArray(importResult.errors) && importResult.errors.length > 0" class="errors-section">
+      <div
+        v-if="Array.isArray(importResult.errors) && importResult.errors.length > 0"
+        class="errors-section"
+      >
         <h4>错误信息</h4>
         <el-alert
           v-for="(error, index) in importResult.errors"
@@ -221,14 +224,14 @@ const handleImport = async () => {
     const result = response?.data ?? response
     importResult.value = result
 
-    const hasStats = !!result && (
-      result.success_records !== undefined ||
-      result.total_records !== undefined ||
-      result.failed_records !== undefined ||
-      result.inserted_count !== undefined ||
-      result.updated_count !== undefined ||
-      result.skipped_count !== undefined
-    )
+    const hasStats =
+      !!result &&
+      (result.success_records !== undefined ||
+        result.total_records !== undefined ||
+        result.failed_records !== undefined ||
+        result.inserted_count !== undefined ||
+        result.updated_count !== undefined ||
+        result.skipped_count !== undefined)
     if (result?.success && hasStats) {
       const stats = [
         `成功 ${result.success_records ?? 0} 条`,
@@ -278,9 +281,7 @@ const loadImportHistory = async () => {
   try {
     const response: any = await getSyncLogs({ action: 'import', page: 1, page_size: 20 })
     // 兼容信封 items / 裸数组
-    const list = Array.isArray(response)
-      ? response
-      : response?.items || response?.data?.items || []
+    const list = Array.isArray(response) ? response : response?.items || response?.data?.items || []
     importHistory.value = Array.isArray(list) ? list : []
   } catch (error) {
     logger.error('加载导入历史失败', error)

@@ -250,9 +250,7 @@ const loadExportHistory = async () => {
   try {
     const response: any = await getSyncLogs({ action: 'export', page: 1, page_size: 20 })
     // 兼容信封 items / 裸数组
-    const list = Array.isArray(response)
-      ? response
-      : response?.items || response?.data?.items || []
+    const list = Array.isArray(response) ? response : response?.items || response?.data?.items || []
     exportHistory.value = Array.isArray(list) ? list : []
   } catch (error) {
     logger.error('加载导出历史失败', error)

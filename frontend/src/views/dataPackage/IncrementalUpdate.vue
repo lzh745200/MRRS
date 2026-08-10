@@ -225,7 +225,8 @@ const fetchPackageList = async () => {
   try {
     const response: any = await get('/data-packages')
     // 后端裸返回 {items, total, ...}（拦截器已解包）
-    const items = response?.items || response?.data?.items || (Array.isArray(response) ? response : [])
+    const items =
+      response?.items || response?.data?.items || (Array.isArray(response) ? response : [])
     packageList.value = items.filter((p: PackageItem) => p.type !== 'update')
     incrementalPackages.value = items.filter((p: PackageItem) => p.type === 'update')
   } catch {
@@ -321,7 +322,10 @@ const handleImport = async () => {
     })
 
     const result = response?.data ?? response
-    if (result && (result.success === true || result.package_id || result.total_records !== undefined)) {
+    if (
+      result &&
+      (result.success === true || result.package_id || result.total_records !== undefined)
+    ) {
       importResult.value = result
       ElMessage.success(importForm.value.apply_changes ? '导入成功' : '预览完成')
     } else if (result?.message) {

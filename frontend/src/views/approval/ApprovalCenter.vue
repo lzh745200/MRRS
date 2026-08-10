@@ -118,8 +118,7 @@ async function loadTasks() {
   try {
     // 后端：/approval/tasks/all（管理员全部）与 /approval/tasks/pending（待审批），
     // 分页参数为 skip/limit
-    const url =
-      activeTab.value === 'pending' ? '/approval/tasks/pending' : '/approval/tasks/all'
+    const url = activeTab.value === 'pending' ? '/approval/tasks/pending' : '/approval/tasks/all'
     const params: Record<string, unknown> = {
       skip: (page.value - 1) * pageSize.value,
       limit: pageSize.value,
