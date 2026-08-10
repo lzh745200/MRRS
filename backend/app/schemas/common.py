@@ -23,14 +23,14 @@ class DataResponse(ResponseBase, Generic[T]):
 class ListResponse(ResponseBase, Generic[T]):
     """Generic list response."""
 
-    data: List[T] = []
+    data: List[T] = Field(default_factory=list)
     total: int = 0
 
 
 class PaginatedResponse(ResponseBase, Generic[T]):
     """Paginated response."""
 
-    data: List[T] = []
+    data: List[T] = Field(default_factory=list)
     total: int = 0
     page: int = 1
     page_size: int = 10

@@ -381,7 +381,7 @@ async def get_report_package(
     # 获取数据包信息
 
     # 简化返回
-    return {"report_id": report_id, "package_id": report.package_id}
+    return success_response(data={"report_id": report_id, "package_id": report.package_id})
 
 
 @router.get("/{report_id}/preview")

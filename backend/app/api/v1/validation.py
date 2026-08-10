@@ -217,7 +217,7 @@ async def validate_data(
                     "message": message,
                 }
             )
-    return {"valid": len(errors) == 0, "errors": errors}
+    return success_response(data={"valid": len(errors) == 0, "errors": errors})
 
 
 def _check_rule(rule: ValidationRule, value, params: dict, full_data: dict) -> bool:

@@ -206,7 +206,14 @@ def _save_section_data(db: Session, model: Any, village_id: int, year: int, data
 
 def _get_village_or_404(db: Session, village_id: int, current_user: User = None) -> SupportedVillage:
     """根据 ID 获取帮扶村，不存在时抛 404；存在但跨组织时抛 403（数据隔离）。"""
-    village = db.query(SupportedVillage).filter(SupportedVillage.id == village_id).first()
+    from sqlalchemy.orm import selectinload
+
+    village = (
+        db.query(SupportedVillage)
+        .filter(SupportedVillage.id == village_id)
+        .options(selectinload(SupportedVillage.organization))
+        .first()
+    )
     if not village:
         raise HTTPException(status_code=404, detail="帮扶村不存在")
     # 数据权限校验：非本组织/非本人创建且非管理员 → 403（区分"不存在"与"越权"）
@@ -257,6 +264,7 @@ def _process_import_row(row: tuple, field_names: List[str], db: Session, row_idx
 # ═══════════════════════════════════════════════════════════════
 #  列表 & 筛选选项（无路径参数，必须在 /{village_id} 之前注册）
 # ═══════════════════════════════════════════════════════════════
+
 
 @router.get("")
 async def list_villages(
@@ -496,6 +504,7 @@ async def batch_delete_villages(
 #  单个帮扶村 CRUD（/{village_id} 必须在所有显式路径之后注册）
 # ═══════════════════════════════════════════════════════════════
 
+
 @router.get("/{village_id}")
 async def get_village(
     village_id: int,
@@ -587,6 +596,7 @@ async def delete_village(
 # ═══════════════════════════════════════════════════════════════
 #  年度数据
 # ═══════════════════════════════════════════════════════════════
+
 
 @router.get("/{village_id}/yearly/{year}")
 async def get_yearly_data(

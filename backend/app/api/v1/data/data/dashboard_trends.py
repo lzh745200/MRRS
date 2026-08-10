@@ -16,6 +16,7 @@ from app.core.security import get_current_user
 from app.models.fund import Fund
 from app.models.supported_village import SupportedVillage, VillageIncome, VillagePopulation
 from app.models.user import User
+from app.core.response import success_response
 
 logger = logging.getLogger(__name__)
 
@@ -93,21 +94,21 @@ def get_kpi_trends(
                 .filter(VillageIncome.year == prev_year).scalar() or 0
             )
 
-        return {
+        return success_response(data={
             "villages": _yoy(villages_cur, villages_prev),
             "population": _yoy(pop_cur, pop_prev),
             "income": _yoy(income_cur, income_prev),
             "investment": _yoy(invest_cur, invest_prev),
             "current_year": cur_year,
             "previous_year": prev_year,
-        }
+        })
     except Exception as e:
         logger.error("KPI趋势查询失败: %s", e, exc_info=True)
-        return {
+        return success_response(data={
             "villages": 0, "population": 0, "income": 0, "investment": 0,
             "current_year": datetime.now().year,
             "previous_year": datetime.now().year - 1,
-        }
+        })
 
 
 @router.get("/yearly-trends", summary="年度趋势对比数据")
@@ -163,21 +164,21 @@ def get_yearly_trends(
             )
             investment_data.append(round(inv, 1))
 
-        return {
+        return success_response(data={
             "years": year_list,
             "villages": villages_data,
             "population": population_data,
             "income": income_data,
             "investment": investment_data,
-        }
+        })
     except Exception as e:
         logger.error("年度趋势查询失败: %s", e, exc_info=True)
         cur_year = datetime.now().year
         year_list = list(range(cur_year - years + 1, cur_year + 1))
-        return {
+        return success_response(data={
             "years": year_list,
             "villages": [0] * len(year_list),
             "population": [0] * len(year_list),
             "income": [0] * len(year_list),
             "investment": [0] * len(year_list),
-        }
+        })

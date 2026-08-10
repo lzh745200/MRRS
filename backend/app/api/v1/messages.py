@@ -28,6 +28,7 @@ from app.services.message_service import MessageService
 from app.services.message_template_service import MessageTemplateService
 from app.services.notification_preference_service import NotificationPreferenceService
 from app.services.work_log_service import write_work_log
+from app.core.response import success_response
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +235,7 @@ async def mark_messages_as_read(
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
     except Exception:  # pragma: no cover
         logger.debug("记录工作日志失败", exc_info=True)
-    return {"message": f"已标记 {count} 条消息为已读", "count": count}
+    return success_response(data={"message": f"已标记 {count} 条消息为已读", "count": count}, message=f"已标记 {count} 条消息为已读")
 
 
 @router.post("/mark-all-read")
@@ -250,7 +251,7 @@ async def mark_all_as_read(
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
     except Exception:  # pragma: no cover
         logger.debug("记录工作日志失败", exc_info=True)
-    return {"message": f"已标记 {count} 条消息为已读", "count": count}
+    return success_response(data={"message": f"已标记 {count} 条消息为已读", "count": count}, message=f"已标记 {count} 条消息为已读")
 
 
 @router.delete("")
@@ -270,7 +271,7 @@ async def delete_messages(
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
     except Exception:  # pragma: no cover
         logger.debug("记录工作日志失败", exc_info=True)
-    return {"message": f"已删除 {count} 条消息", "count": count}
+    return success_response(data={"message": f"已删除 {count} 条消息", "count": count}, message=f"已删除 {count} 条消息")
 
 
 @router.delete("/read")
@@ -285,7 +286,7 @@ async def delete_all_read_messages(
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
     except Exception:  # pragma: no cover
         logger.debug("记录工作日志失败", exc_info=True)
-    return {"message": f"已删除 {count} 条已读消息", "count": count}
+    return success_response(data={"message": f"已删除 {count} 条已读消息", "count": count}, message=f"已删除 {count} 条已读消息")
 
 
 @router.get("/stats/summary")

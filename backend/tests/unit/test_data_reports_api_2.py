@@ -566,8 +566,8 @@ class TestToggleSubscription:
 
         resp = test_client.post(f"/api/v1/reports/subscriptions/{sub_id}/toggle")
         assert resp.status_code == 200
-        assert resp.json()["is_active"] is False
-        assert resp.json()["message"] == "订阅已禁用"
+        assert resp.json()["data"]["is_active"] is False
+        assert resp.json()["data"]["message"] == "订阅已禁用"
 
     def test_toggle_off_to_on(self, client):
         test_client, db = client
@@ -578,8 +578,8 @@ class TestToggleSubscription:
 
         resp = test_client.post(f"/api/v1/reports/subscriptions/{sub_id}/toggle")
         assert resp.status_code == 200
-        assert resp.json()["is_active"] is True
-        assert resp.json()["message"] == "订阅已启用"
+        assert resp.json()["data"]["is_active"] is True
+        assert resp.json()["data"]["message"] == "订阅已启用"
 
     def test_not_found(self, client):
         test_client, db = client

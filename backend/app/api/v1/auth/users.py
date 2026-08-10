@@ -19,6 +19,7 @@ from app.models.user import User
 from app.services.user_service import VALID_ROLES
 from app.core.constants import normalize_role
 from app.core.transaction import safe_commit
+from app.core.response import success_response
 
 logger = logging.getLogger(__name__)
 
@@ -396,7 +397,7 @@ async def get_user(user_id: int, current_user=Depends(get_current_user), db: Ses
     org = user.organization
     org_info = {"id": org.id, "name": org.name, "code": org.code} if org else None
 
-    return {
+    return success_response(data={
         "id": user.id,
         "username": user.username,
         "email": user.email,
@@ -423,7 +424,7 @@ async def get_user(user_id: int, current_user=Depends(get_current_user), db: Ses
         "last_login": user.last_login.isoformat() if user.last_login else None,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
-    }
+    })
 
 
 @router.post("")
@@ -497,7 +498,7 @@ async def create_user(
     safe_commit(db)
     db.refresh(user)
 
-    return {
+    return success_response(data={
         "id": user.id,
         "username": user.username,
         "role": user.role,
@@ -506,7 +507,8 @@ async def create_user(
         "is_active": user.is_active,
         "message": "用户创建成功"
         + ("，请通知用户登录" if user.is_active else "，用户当前处于待审核状态，需激活后才能登录"),
-    }
+    }, message="用户创建成功"
+        + ("，请通知用户登录" if user.is_active else "，用户当前处于待审核状态，需激活后才能登录"))
 
 
 @router.put("/{user_id}")
@@ -633,7 +635,7 @@ async def update_user_permissions(
     safe_commit(db)
     db.refresh(user)
 
-    return {
+    return success_response(data={
         "message": "用户权限更新成功",
         "user_id": user.id,
         "username": user.username,
@@ -641,7 +643,7 @@ async def update_user_permissions(
         "organization_id": user.organization_id,
         "data_scope": user.data_scope,
         "is_active": user.is_active,
-    }
+    }, message="用户权限更新成功")
 
 
 @router.get("/roles/options", summary="获取角色选项")
@@ -652,14 +654,14 @@ async def get_role_options(
     """获取可用的角色列表，用于创建/编辑用户时选择角色"""
     require_admin(current_user)
 
-    return {
+    return success_response(data={
         "roles": [
             {"value": "super_admin", "label": "超级管理员", "description": "系统最高权限，可管理所有功能"},
             {"value": "admin", "label": "系统管理员", "description": "可管理用户、组织、系统配置"},
             {"value": "user", "label": "普通用户", "description": "日常数据录入和操作"},
             {"value": "viewer", "label": "访客", "description": "只能查看数据，无法修改"},
         ]
-    }
+    })
 
 
 @router.get("/data-scopes/options", summary="获取数据范围选项")
@@ -670,14 +672,14 @@ async def get_data_scope_options(
     """获取可用的数据范围选项"""
     require_admin(current_user)
 
-    return {
+    return success_response(data={
         "data_scopes": [
             {"value": "all", "label": "全部数据", "description": "可访问系统内所有数据"},
             {"value": "org_children", "label": "本组织及下级", "description": "可访问本组织及其下级组织的所有数据"},
             {"value": "org", "label": "仅本组织", "description": "仅能访问本组织的数据"},
             {"value": "self", "label": "仅自己", "description": "仅能访问自己创建的数据"},
         ]
-    }
+    })
 
 
 @router.get("/permissions/options", summary="获取权限选项")
@@ -688,7 +690,7 @@ async def get_permission_options(
     """获取可用的权限列表，用于给用户分配具体权限"""
     require_admin(current_user)
 
-    return {
+    return success_response(data={
         "permissions": [
             # 系统管理权限
             {"code": "system:manage", "name": "系统管理", "category": "系统"},
@@ -712,7 +714,7 @@ async def get_permission_options(
             {"code": "approve:submit", "name": "提交审批", "category": "审批"},
             {"code": "approve:process", "name": "处理审批", "category": "审批"},
         ]
-    }
+    })
 
 
 @router.post("/{user_id}/admin-reset-password", summary="管理员重置用户密码")

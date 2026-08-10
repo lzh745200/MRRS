@@ -538,7 +538,7 @@ async def delete_subscription(
         db.delete(subscription)
         safe_commit(db)
 
-        return {"message": "订阅已删除", "id": subscription_id}
+        return success_response(data={"message": "订阅已删除", "id": subscription_id}, message="订阅已删除")
     except HTTPException:
         raise
     except Exception as e:
@@ -573,11 +573,11 @@ async def toggle_subscription(
         subscription.is_active = not subscription.is_active  # type: ignore[assignment]
         safe_commit(db)
 
-        return {
+        return success_response(data={
             "id": subscription_id,
             "is_active": subscription.is_active,
             "message": "订阅已启用" if subscription.is_active else "订阅已禁用",
-        }
+        }, message="订阅已启用" if subscription.is_active else "订阅已禁用")
     except HTTPException:
         raise
     except Exception as e:

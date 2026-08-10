@@ -239,6 +239,7 @@ _DEFAULT_POLICIES = [{"id": "ztp-001",
 
 # ==================== API 端点 ====================
 
+
 @router.get("/assessment", summary="获取信任评估")
 async def get_trust_assessment(
     request: Request,

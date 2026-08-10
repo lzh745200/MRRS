@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.response import success_response
 router = APIRouter(prefix="/supported-villages/export", tags=["帮扶村数据导出"])
 
 
@@ -28,13 +29,15 @@ def _parse_id_list(raw: Optional[str], field_name: str) -> Optional[list]:
 async def get_export_modules(current_user=Depends(get_current_user)):
     """获取可导出的模块列表"""
     from app.services.supported_village_export_service import MODULE_NAMES
-    return {"modules": [{"key": k, "label": v} for k, v in MODULE_NAMES.items()]}
+    return success_response(data={"modules": [{"key": k, "label": v} for k, v in MODULE_NAMES.items()]})
 
 
 @router.get("/formats")
 async def get_export_formats(current_user=Depends(get_current_user)):
     """获取支持的导出格式"""
-    return {"formats": [{"key": "xlsx", "label": "Excel (.xlsx)"}, {"key": "csv", "label": "CSV (.csv)"}]}
+    return success_response(
+        data={"formats": [{"key": "xlsx", "label": "Excel (.xlsx)"}, {"key": "csv", "label": "CSV (.csv)"}]}
+    )
 
 
 @router.get("")
