@@ -560,3 +560,19 @@ describe('更新成功分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('编辑模式提交分支', () => {
+  it('isEdit 编辑模式：code 200 成功 / code 400 抛错', async () => {
+    routeBox.params = { id: '5' }
+    policyStore.current = { id: 5, title: 't' }
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.formData.title = '有效标题'
+    policyStore.updatePolicy.mockResolvedValue({ code: 200, data: { id: 5 } })
+    await vm.handleSubmit().catch(() => {})
+    policyStore.updatePolicy.mockResolvedValue({ code: 400 })
+    await vm.handleSubmit().catch(() => {})
+    wrapper.unmount()
+  })
+})

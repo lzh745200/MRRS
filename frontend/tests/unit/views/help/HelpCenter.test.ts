@@ -459,3 +459,24 @@ describe('内容渲染分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('空白与目录渲染', () => {
+  it('空白内容 → sanitizedContent 渲染', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.articleDetail = { content: '   ' }
+    await flushPromises()
+    expect((wrapper.vm as any).sanitizedContent).toBe('   ')
+    wrapper.unmount()
+  })
+  it('多 section → 目录 + 标题渲染', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.articleDetail = { content: '【一】甲\n【二】乙' }
+    await flushPromises()
+    expect((wrapper.vm as any).articleSections.length).toBeGreaterThan(1)
+    wrapper.unmount()
+  })
+})

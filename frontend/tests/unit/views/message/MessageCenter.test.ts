@@ -509,3 +509,20 @@ describe('形态收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('纯数组形态', () => {
+  it('activities 纯数组响应', async () => {
+    ;(mockRecentActivities as any).mockResolvedValueOnce([{ id: 1 }])
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).recentActivities).toEqual([{ id: 1 }])
+    wrapper.unmount()
+  })
+  it('activities 请求失败 → 空列表', async () => {
+    ;(mockRecentActivities as any).mockRejectedValueOnce(new Error('x'))
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).recentActivities).toEqual([])
+    wrapper.unmount()
+  })
+})

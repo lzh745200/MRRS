@@ -436,3 +436,62 @@ describe('日志形态收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('日志形态收尾2', () => {
+  it('health/full 空数组 / 非数组 / 拒绝 → 快照回退', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/health/full') return Promise.resolve({ data: [] })
+      if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
+      if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
+      if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    expect((wrapper.vm as any).recentLogs.length).toBeGreaterThan(0)
+    wrapper.unmount()
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/health/full') return Promise.resolve({ data: { x: 1 } })
+      if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
+      if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
+      if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
+      return Promise.resolve({})
+    })
+    const wrapper2 = mountComponent()
+    await flushPromises()
+    expect((wrapper2.vm as any).recentLogs.length).toBeGreaterThan(0)
+    wrapper2.unmount()
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/health/full') return Promise.reject(new Error('x'))
+      if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
+      if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
+      if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
+      return Promise.resolve({})
+    })
+    const wrapper3 = mountComponent()
+    await flushPromises()
+    wrapper3.unmount()
+  })
+  it('fetchSystemLogs WARN / line 空对象 / 空 line', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/logs')
+        return Promise.resolve([
+          { line: '2026-01-01 10:00:00 WARN - 内存偏高' },
+          { line: '' },
+          '   ',
+        ])
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const logs = await vm.fetchSystemLogs()
+    expect(logs.some((l: any) => l.level === 'warn')).toBe(true)
+    expect(logs.some((l: any) => l.message === '--')).toBe(true)
+    wrapper.unmount()
+  })
+})

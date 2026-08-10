@@ -466,3 +466,20 @@ describe('结果行渲染分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('条件列渲染补充', () => {
+  it('conditions 有值 + matched false + values 有值', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(mapped[0] as any).values = { name: '张三' }
+    ;(mapped[0] as any).matched = false
+    vm.qc.conditions = [{ field: 'name', operator: 'eq', value: '张三' }]
+    vm.qcResult = { rows: mapped.slice(0, 3), total: 1, unmatched: 1 }
+    vm.showResult = true
+    await wrapper.vm.$nextTick()
+    expect(wrapper.html()).toContain('不满足')
+    expect(wrapper.html()).toContain('张三')
+    wrapper.unmount()
+  })
+})

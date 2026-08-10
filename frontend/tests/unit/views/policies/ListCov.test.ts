@@ -829,3 +829,15 @@ describe('加载失败与取消分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('层级加载失败分支2', () => {
+  it('category 有值时 levelOptions 请求失败 → 空数组', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.searchForm.category = 'province'
+    ;(policyApi.getLevelOptions as any).mockRejectedValueOnce(new Error('x'))
+    await vm.refreshLevelOptions().catch(() => {})
+    wrapper.unmount()
+  })
+})

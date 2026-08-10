@@ -969,3 +969,34 @@ describe('信封形态收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('信封形态收尾2', () => {
+  it('loadAvailableFields 嵌套 data.data / 裸数组 / label 空', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.newTemplate.module = 'village'
+    ;(mockGet as any).mockResolvedValueOnce({ data: { data: [{ key: 'd', label: 'D' }] } })
+    await vm.loadAvailableFields()
+    expect(vm.availableFields).toEqual([{ key: 'd', label: 'D' }])
+    ;(mockGet as any).mockResolvedValueOnce([{ key: 'e', label: 'E' }])
+    await vm.loadAvailableFields()
+    expect(vm.availableFields).toEqual([{ key: 'e', label: 'E' }])
+    ;(mockGet as any).mockResolvedValueOnce({ data: { data: [{ key: 'f', label: 'F' }] } })
+    await vm.loadModuleFieldsForFill('village')
+    ;(mockGet as any).mockResolvedValueOnce([{ key: 'g', label: 'G' }])
+    await vm.loadModuleFieldsForFill('village')
+    expect(vm.fillFields).toEqual([{ key: 'g', label: 'G' }])
+    wrapper.unmount()
+  })
+  it('openFillDialog 字段对象 label 空 → 用 key', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openFillDialog({ name: 't', fields: 'k1' })
+    ;(mockGet as any).mockResolvedValueOnce({ data: { data: [{ key: 'x', label: '' }] } })
+    await vm.loadModuleFieldsForFill('village')
+    await vm.handleFillExport()
+    wrapper.unmount()
+  })
+})

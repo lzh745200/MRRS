@@ -315,3 +315,15 @@ describe('字段有值分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('全缺省分支', () => {
+  it('level/support_unit/scores 全缺省 → null 兜底', async () => {
+    ;(mockGetRankings as any).mockResolvedValueOnce({ data: { rankings: [{ rank: 9 }] } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.rankings[0].level).toBeNull()
+    expect(vm.rankings[0].support_unit).toBeNull()
+    wrapper.unmount()
+  })
+})

@@ -291,3 +291,12 @@ describe('分支收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('类型标签空串', () => {
+  it('typeLabel 空字符串', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).typeLabel('')).toBe('其他')
+    wrapper.unmount()
+  })
+})
