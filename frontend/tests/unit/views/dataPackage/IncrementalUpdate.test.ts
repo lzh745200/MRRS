@@ -416,3 +416,38 @@ describe('导入增量包', () => {
     wrapper.unmount()
   })
 })
+
+describe('响应形态收尾', () => {
+  it('package 列表数组 / changes 摘要 / message-only / package_id / total_records', async () => {
+    mockPost.mockResolvedValue({ success: true, data: {} })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(mockGet as any).mockResolvedValueOnce([{ id: 1, name: 'p1', type: 'full' }])
+    await (vm as any).fetchPackageList()
+    expect(vm.packageList.length).toBeGreaterThan(0)
+    ;(mockPost as any).mockResolvedValueOnce({
+      success: true,
+      changes: [{ id: 1 }],
+      by_type: { village: { added: 1, modified: 0, deleted: 0, total: 1 } },
+      total_added: 1,
+      total_modified: 0,
+      total_deleted: 0,
+    })
+    vm.exportForm.base_package_id = 1
+    await vm.handleDetectChanges()
+    expect(vm.changesSummary).toBeTruthy()
+    ;(mockPost as any).mockResolvedValueOnce({ message: '无变更' })
+    await vm.handleDetectChanges()
+    expect(ElMessage.info).toHaveBeenCalledWith('未检测到变更')
+    ;(mockPost as any).mockResolvedValueOnce({ success: true, package_id: 2 })
+    vm.importForm.package_id = 1
+    await vm.handleImport()
+    expect(vm.importResult.package_id).toBe(2)
+    ;(mockPost as any).mockResolvedValueOnce({ success: true, total_records: 5 })
+    await vm.handleImport()
+    expect(vm.importResult.total_records).toBe(5)
+    wrapper.unmount()
+  })
+})
+

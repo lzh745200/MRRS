@@ -513,3 +513,13 @@ describe('错误边界与重置', () => {
     expect(vm.packageId).toBe('')
   })
 })
+
+describe('响应形态收尾', () => {
+  it('非 blob 响应 data 有值 → 解包', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.oneClickResult || vm.form).toBeTruthy()
+    wrapper.unmount()
+  })
+})

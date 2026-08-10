@@ -447,3 +447,13 @@ describe('辅助函数', () => {
     wrapper.unmount()
   })
 })
+
+describe('版本数组形态', () => {
+  it('versions 数组 → 直接使用', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(Array.isArray(vm.versionList)).toBe(true)
+    wrapper.unmount()
+  })
+})

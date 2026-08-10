@@ -58,22 +58,53 @@ def test_evaluate_village_not_found():
     assert r == {"error": "村庄 99 不存在"}
 
 
-def test_evaluate_village_no_evaluation():
+def test_evaluate_village_creates_evaluation():
+    """无评估记录 → 基于年度数据自动计算并写入（修复死循环）"""
     village = MagicMock()
     db = MagicMock()
     db.query.side_effect = [_chain(village), _chain(None)]
-    r = EffectivenessService.evaluate_village(db, 1, 2024, 1)
-    assert r == {"error": "村庄在 2024 年暂无评估数据"}
+    computed = {
+        "economic": 80.0,
+        "social": 70.0,
+        "ecological": 60.0,
+        "indicators": {"per_capita_income": 5000},
+    }
+    with patch.object(
+        EffectivenessService, "_compute_indicators", return_value=computed
+    ), patch.object(EffectivenessService, "_find_evaluation", return_value=None):
+        r = EffectivenessService.evaluate_village(db, 1, 2024, 1)
+    assert "error" not in r
+    assert r["total_score"] == round(80 * 0.4 + 70 * 0.35 + 60 * 0.25, 1)
+    assert r["grade"] in ("A", "B", "C", "D")
+    # 新评估被写入
+    added = db.add.call_args[0][0]
+    assert added.village_id == 1
+    assert added.year == 2024
+    assert added.economic_score == 80.0
+    assert db.commit.call_count >= 1
 
 
-def test_evaluate_village_success():
+def test_evaluate_village_updates_existing():
+    """已有评估记录 → 更新分数与等级（幂等）"""
     village = MagicMock()
     ev = _ev()
     db = MagicMock()
-    db.query.side_effect = [_chain(village), _chain(ev)]
-    r = EffectivenessService.evaluate_village(db, 1, 2024, 1)
-    assert r["total_score"] == 80.0
+    # 查询序列：Village → 已有评估 → 排名更新（同年度评估列表）
+    db.query.side_effect = [_chain(village), _chain(ev), _chain([ev])]
+    computed = {
+        "economic": 90.0,
+        "social": 85.0,
+        "ecological": 80.0,
+        "indicators": {"per_capita_income": 6000},
+    }
+    with patch.object(
+        EffectivenessService, "_compute_indicators", return_value=computed
+    ):
+        r = EffectivenessService.evaluate_village(db, 1, 2024, 1)
+    assert r["total_score"] == round(90 * 0.4 + 85 * 0.35 + 80 * 0.25, 1)
+    assert ev.economic_score == 90.0
     assert "village_name" in r
+    assert db.commit.call_count >= 1
 
 
 def test_get_evaluation_report_none_and_found():

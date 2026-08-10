@@ -565,3 +565,31 @@ describe('真实日志集成', () => {
     wrapper.unmount()
   })
 })
+
+describe('API统计字段形态', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  it('avg_time_ms/avg_duration/全缺 → 图表构建不崩', async () => {
+    mockApiRequest.mockReset()
+    mockApiRequest.mockImplementation((config: any) => {
+      if (config?.url === '/system/monitor/api-stats')
+        return Promise.resolve({
+          data: {
+            data: {
+              top_endpoints: [
+                { method: 'GET', path: '/a', count: 1, avg_time_ms: 2.5 },
+                { method: 'POST', path: '/b', avg_duration: 3.5, total_requests: 4 },
+                { method: 'GET', path: '/c' },
+              ],
+            },
+          },
+        })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await advanceFakeTimersAndFlush()
+    expect((wrapper.vm as any).apiStats.length).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+})

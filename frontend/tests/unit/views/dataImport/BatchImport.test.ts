@@ -619,3 +619,18 @@ describe('分支补全：|| 回退侧', () => {
     }
   })
 })
+
+describe('响应形态收尾', () => {
+  it('res.data 有值 → 解包使用（校验 data 侧）', async () => {
+    const wrapper = mountImport()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.handleFileSelect({ raw: xlsxFile })
+    ;(mockPost as any).mockResolvedValueOnce({
+      data: { error_count: 0, first_errors: [], total_rows: 3 },
+    })
+    await vm.handleValidate().catch(() => {})
+    expect(vm.previewCount).toBe(3)
+    wrapper.unmount()
+  })
+})

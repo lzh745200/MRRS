@@ -325,3 +325,25 @@ describe('表单 v-model', () => {
     expect(vm.exportForm.confirmPassword).toBe('pw123456')
   })
 })
+
+describe('响应形态收尾2', () => {
+  it('total_records 缺省 / message-only / detail / 数组历史', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockExportData.mockResolvedValue({ success: true })
+    vm.exportForm.encrypted = false
+    await vm.handleExport()
+    expect(ElMessage.success).toHaveBeenCalledWith('导出成功! 共 0 条记录')
+    mockExportData.mockResolvedValue({ message: '无数据可导出' })
+    await vm.handleExport()
+    expect(ElMessage.warning).toHaveBeenCalledWith('无数据可导出')
+    mockExportData.mockRejectedValue({ response: { data: { detail: '导出失败' } } })
+    await vm.handleExport().catch(() => {})
+    expect(ElMessage.error).toHaveBeenCalledWith('导出失败')
+    mockGetSyncLogs.mockResolvedValue({ data: { items: [{ id: 1 }] } })
+    await vm.loadExportHistory()
+    expect(vm.exportHistory).toEqual([{ id: 1 }])
+    wrapper.unmount()
+  })
+})

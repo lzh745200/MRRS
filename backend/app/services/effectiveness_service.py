@@ -81,7 +81,6 @@ class EffectivenessService:
         from app.models.annual_income import AnnualIncome
         from app.models.annual_infrastructure import AnnualInfrastructure
         from app.models.annual_industry import AnnualIndustry
-        from app.models.supported_village import SupportedVillage
         from sqlalchemy import func
 
         # 年度收入（人均收入与增长率）
@@ -188,8 +187,6 @@ class EffectivenessService:
         db.refresh(ev)
 
         # 更新同年度全部评估的排名
-        from sqlalchemy import func as _func
-
         all_evs = (
             db.query(EffectivenessEvaluation)
             .filter(EffectivenessEvaluation.year == year)

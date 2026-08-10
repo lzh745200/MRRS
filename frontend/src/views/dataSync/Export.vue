@@ -249,8 +249,10 @@ const handleDownloadByName = async (packageName: string) => {
 const loadExportHistory = async () => {
   try {
     const response: any = await getSyncLogs({ action: 'export', page: 1, page_size: 20 })
-    // 后端 ok_list 信封 → items 已在顶层
-    const list = response?.items || response?.data?.items || []
+    // 兼容信封 items / 裸数组
+    const list = Array.isArray(response)
+      ? response
+      : response?.items || response?.data?.items || []
     exportHistory.value = Array.isArray(list) ? list : []
   } catch (error) {
     logger.error('加载导出历史失败', error)

@@ -6,6 +6,7 @@ database-backed persistence layer for production use.
 """
 
 import logging
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -15,8 +16,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # In-memory store
 # ---------------------------------------------------------------------------
-
-import threading
 
 # Stores (token_jti, expires_at_epoch) tuples
 _blacklist: dict[str, float] = {}

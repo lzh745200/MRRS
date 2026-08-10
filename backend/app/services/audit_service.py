@@ -343,7 +343,7 @@ class AuditService:
         recent_activity = query.order_by(desc(AuditLog.created_at)).limit(20).all()
 
         # 前端统计卡派生字段（today_operations / active_users / failed_operations / warnings）
-        from datetime import datetime as _dt, timedelta as _td
+        from datetime import datetime as _dt
 
         today_start = _dt.now().replace(hour=0, minute=0, second=0, microsecond=0)
         today_operations = (

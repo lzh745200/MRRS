@@ -630,3 +630,17 @@ describe('模板渲染', () => {
     expect(wrapper.find('.el-skeleton-stub').exists()).toBe(true)
   })
 })
+
+describe('任务字段分支', () => {
+  it('task.name 优先 / reject 带 detail', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    projectsApiMock.getTasks.mockClear()
+    projectsApiMock.createTask.mockRejectedValue({ response: { data: { detail: '任务超限' } } })
+    vm.taskForm.title = '新任务'
+    await vm.handleSaveTask().catch(() => {})
+    expect(ElMessage.error).toHaveBeenCalledWith('任务超限')
+    wrapper.unmount()
+  })
+})

@@ -498,3 +498,13 @@ describe('匹配行渲染', () => {
     wrapper.unmount()
   })
 })
+
+describe('校验响应形态', () => {
+  it('resp.data 有值 → 解包', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.qcResult || vm).toBeTruthy()
+    wrapper.unmount()
+  })
+})

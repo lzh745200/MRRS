@@ -332,3 +332,34 @@ describe('表单 v-model', () => {
     expect(vm.importForm.password).toBe('pw123456')
   })
 })
+
+describe('响应形态收尾2', () => {
+  it('加密导入（带密码）/ stats 缺省 / message-only / detail / 数组响应', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.selectedFile = { name: 'e.rrs' } as any
+    vm.importForm.password = 'secret1'
+    mockImportEncryptedData.mockResolvedValue({ success: true, total_records: 3 })
+    await vm.handleImport()
+    expect(mockImportEncryptedData).toHaveBeenCalledWith({ name: 'e.rrs' }, 'secret1')
+
+    // 空密码加密文件 → 预检查拦截
+    vm.importForm.password = ''
+    await vm.handleImport()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请输入解密密码')
+
+    mockImportData.mockResolvedValue({ success: true, message: '仅提示' })
+    vm.selectedFile = { name: 'f.zip' } as any
+    vm.importForm.password = ''
+    await vm.handleImport()
+    expect(ElMessage.warning).toHaveBeenCalledWith('仅提示')
+    mockImportData.mockRejectedValue({ response: { data: { detail: '权限不足' } } })
+    await vm.handleImport().catch(() => {})
+    expect(ElMessage.error).toHaveBeenCalledWith('权限不足')
+    mockGetSyncLogs.mockResolvedValue({ data: { items: [{ ...rowA }] } })
+    await vm.loadImportHistory()
+    expect(vm.importHistory.length).toBe(1)
+    wrapper.unmount()
+  })
+})

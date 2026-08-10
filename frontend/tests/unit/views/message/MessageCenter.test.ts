@@ -24,6 +24,7 @@ const {
   mockPushSafe,
   mockGet,
   mockRecentActivities,
+  mockUnreadCount,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   confirmMock: vi.fn(),
@@ -34,6 +35,7 @@ const {
   mockPushSafe: vi.fn(),
   mockGet: vi.fn(),
   mockRecentActivities: vi.fn(),
+  mockUnreadCount: vi.fn(),
 }))
 
 vi.mock('@/api/request', () => ({
@@ -57,6 +59,7 @@ vi.mock('@/api/message', () => ({
   markAllAsRead: (...args: any[]) => mockMarkAllAsRead(...args),
   deleteMessages: (...args: any[]) => mockDeleteMessages(...args),
   getRecentActivities: (...args: any[]) => mockRecentActivities(...args),
+  getUnreadCount: (...args: any[]) => mockUnreadCount(...args),
   formatMessageType: (type: string) => {
     const map: Record<string, { text: string; type: string }> = {
       system: { text: '系统通知', type: 'info' },
@@ -470,7 +473,7 @@ describe('响应形态补充2', () => {
     wrapper.unmount()
   })
   it('activities 空对象 → 空列表', async () => {
-    ;(mockRecentActivities as any).mockResolvedValueOnce({})
+    ;(mockUnreadCount as any).mockResolvedValueOnce({})
     const wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).recentActivities).toEqual([])
@@ -523,6 +526,21 @@ describe('纯数组形态', () => {
     const wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).recentActivities).toEqual([])
+    wrapper.unmount()
+  })
+})
+
+describe('消息计数形态', () => {
+  it('total/count/空 → 计数归一', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(mockUnreadCount as any).mockResolvedValueOnce({ total: 5 })
+    expect(await vm.loadUnreadCountValue()).toBe(5)
+    ;(mockUnreadCount as any).mockResolvedValueOnce({ count: 3 })
+    expect(await vm.loadUnreadCountValue()).toBe(3)
+    ;(mockUnreadCount as any).mockResolvedValueOnce({})
+    expect(await vm.loadUnreadCountValue()).toBe(0)
     wrapper.unmount()
   })
 })

@@ -96,18 +96,21 @@
       </el-descriptions>
 
       <!-- 冲突列表 -->
-      <div v-if="importResult.conflicts.length > 0" class="conflicts-section">
+      <div
+        v-if="Array.isArray(importResult.conflicts) && importResult.conflicts.length > 0"
+        class="conflicts-section"
+      >
         <h4>冲突记录</h4>
         <el-button type="primary" size="small" @click="showConflicts"> 查看并解决冲突 </el-button>
       </div>
 
       <!-- 错误列表 -->
-      <div v-if="importResult.errors.length > 0" class="errors-section">
+      <div v-if="Array.isArray(importResult.errors) && importResult.errors.length > 0" class="errors-section">
         <h4>错误信息</h4>
         <el-alert
           v-for="(error, index) in importResult.errors"
           :key="index"
-          :title="error"
+          :title="String(error)"
           type="error"
           :closable="false"
           style="margin-bottom: 10px"
@@ -217,7 +220,15 @@ const handleImport = async () => {
     const result = response?.data ?? response
     importResult.value = result
 
-    if (result?.success) {
+    const hasStats = !!result && (
+      result.success_records !== undefined ||
+      result.total_records !== undefined ||
+      result.failed_records !== undefined ||
+      result.inserted_count !== undefined ||
+      result.updated_count !== undefined ||
+      result.skipped_count !== undefined
+    )
+    if (result?.success && hasStats) {
       const stats = [
         `成功 ${result.success_records ?? 0} 条`,
         `失败 ${result.failed_records ?? 0} 条`,
@@ -239,6 +250,8 @@ const handleImport = async () => {
       importForm.value.password = ''
     } else if (result?.message) {
       ElMessage.warning(result.message)
+    } else if (result?.success) {
+      ElMessage.success('导入成功')
     }
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || error.message || '导入失败')
@@ -263,8 +276,10 @@ const showConflicts = () => {
 const loadImportHistory = async () => {
   try {
     const response: any = await getSyncLogs({ action: 'import', page: 1, page_size: 20 })
-    // 后端 ok_list 信封 → items 已在顶层
-    const list = response?.items || response?.data?.items || []
+    // 兼容信封 items / 裸数组
+    const list = Array.isArray(response)
+      ? response
+      : response?.items || response?.data?.items || []
     importHistory.value = Array.isArray(list) ? list : []
   } catch (error) {
     logger.error('加载导入历史失败', error)

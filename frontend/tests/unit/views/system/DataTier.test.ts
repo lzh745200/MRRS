@@ -399,3 +399,20 @@ describe('DataTier.vue', () => {
     expect(vm.cleanupMaxAge).toBe(180)
   })
 })
+
+describe('统计结构分支', () => {
+  it('by_tier 嵌套优先 / 顶层字段兜底', async () => {
+    dataTierApi.getStats.mockResolvedValue({
+      by_tier: { hot: { count: 3, size_mb: 1.5 } },
+      cold_count: 9,
+      cold_size_mb: 2.5,
+    })
+    const w = await mountComp()
+    const vm = w.vm as any
+    expect(vm.stats.hot_count).toBe(3)
+    expect(vm.stats.hot_size_mb).toBe(1.5)
+    expect(vm.stats.cold_count).toBe(9)
+    expect(vm.stats.cold_size_mb).toBe(2.5)
+    w.unmount()
+  })
+})

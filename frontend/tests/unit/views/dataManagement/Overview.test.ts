@@ -308,3 +308,14 @@ describe('模板交互', () => {
     expect(wrapper.text()).toContain('88%') // 填报进度插槽
   })
 })
+
+describe('响应形态收尾', () => {
+  it('res.data 有值 → 解包使用', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    ;(mockGet as any).mockResolvedValueOnce({ data: { villages: 7 } })
+    await (wrapper.vm as any).loadOverview()
+    expect((wrapper.vm as any).overview.villages).toBe(7)
+    wrapper.unmount()
+  })
+})
