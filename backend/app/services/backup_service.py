@@ -252,44 +252,45 @@ class BackupService:
             except Exception as _wal_err:
                 logger.warning("备份前 WAL checkpoint 失败（备份可能不完整）: %s", _wal_err)
 
-        # 创建备份
-        with zipfile.ZipFile(backup_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-            # 备份数据库（优先一致性快照，回退主库文件）
-            if snapshot_path and os.path.exists(snapshot_path):
-                zipf.write(snapshot_path, "data/rural_revitalization.db")
-            elif os.path.exists(self.database_path):
-                zipf.write(self.database_path, "data/rural_revitalization.db")
+        # 创建备份（zip 写入异常时 finally 统一清理快照，避免泄漏 backup_snapshot_*.db）
+        try:
+            with zipfile.ZipFile(backup_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                # 备份数据库（优先一致性快照，回退主库文件）
+                if snapshot_path and os.path.exists(snapshot_path):
+                    zipf.write(snapshot_path, "data/rural_revitalization.db")
+                elif os.path.exists(self.database_path):
+                    zipf.write(self.database_path, "data/rural_revitalization.db")
 
-            # 备份上传文件
-            if include_uploads and os.path.exists(self.uploads_dir):
-                for root, dirs, files in os.walk(self.uploads_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
+                # 备份上传文件
+                if include_uploads and os.path.exists(self.uploads_dir):
+                    for root, dirs, files in os.walk(self.uploads_dir):
+                        for file in files:
+                            file_path = os.path.join(root, file)
 
-                        # 验证路径安全性，防止路径遍历攻击
-                        if not self._validate_path(file_path):
-                            logger.warning(f"跳过不安全的路径: {file_path}")
-                            continue
+                            # 验证路径安全性，防止路径遍历攻击
+                            if not self._validate_path(file_path):
+                                logger.warning(f"跳过不安全的路径: {file_path}")
+                                continue
 
-                        arcname = os.path.join("uploads", os.path.relpath(file_path, self.uploads_dir))
-                        zipf.write(file_path, arcname)
+                            arcname = os.path.join("uploads", os.path.relpath(file_path, self.uploads_dir))
+                            zipf.write(file_path, arcname)
 
-            # 添加备份信息
-            backup_info = {
-                "timestamp": timestamp,
-                "description": description,
-                "include_uploads": include_uploads,
-                "database_included": os.path.exists(self.database_path),
-                "created_at": datetime.now().isoformat(),
-            }
-            zipf.writestr("backup_info.json", str(backup_info))
-
-        # 清理一致性快照临时文件（无论加密与否）
-        if snapshot_path:
-            try:
-                os.remove(snapshot_path)
-            except OSError:
-                pass
+                # 添加备份信息
+                backup_info = {
+                    "timestamp": timestamp,
+                    "description": description,
+                    "include_uploads": include_uploads,
+                    "database_included": os.path.exists(self.database_path),
+                    "created_at": datetime.now().isoformat(),
+                }
+                zipf.writestr("backup_info.json", str(backup_info))
+        finally:
+            # 清理一致性快照临时文件（无论成功/异常，避免磁盘残留）
+            if snapshot_path:
+                try:
+                    os.remove(snapshot_path)
+                except OSError:
+                    pass
 
         # ── 加密（可选） ──
         if password:
