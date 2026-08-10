@@ -728,3 +728,24 @@ describe('导出 CSV', () => {
     clickSpy.mockRestore()
   })
 })
+
+describe('loadVillages 补充', () => {
+  it('数组/items/data/失败 四种形态', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // getVillagesForSelect 内部调 get('/rural-works/villages') → 由 mockGet 控制响应形态
+    mockGet.mockResolvedValueOnce([{ id: 1, name: 'A' }])
+    await vm.loadVillages()
+    expect(vm.villageOptions.length).toBe(1)
+    mockGet.mockResolvedValueOnce({ items: [{ id: 2, name: 'B' }] })
+    await vm.loadVillages()
+    expect(vm.villageOptions.length).toBe(1)
+    mockGet.mockResolvedValueOnce({ data: [{ id: 3, name: 'C' }] })
+    await vm.loadVillages()
+    expect(vm.villageOptions.length).toBe(1)
+    mockGet.mockRejectedValueOnce(new Error('x'))
+    await vm.loadVillages()
+    expect(vm.villageOptions).toEqual([])
+  })
+})

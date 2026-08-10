@@ -515,3 +515,15 @@ describe('导航与模板', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('服务异常')
     wrapper.unmount()
   })
+
+  it('createPolicy 响应非 200 → 抛错提示', async () => {
+    routeBox.params = {}
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.formData.title = 'T'
+    policyStore.createPolicy.mockResolvedValueOnce({ code: 500, message: '服务异常' })
+    await vm.handleSubmit()
+    expect(ElMessage.error).toHaveBeenCalledWith('服务异常')
+    wrapper.unmount()
+  })
