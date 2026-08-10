@@ -365,7 +365,7 @@ describe('分支收尾', () => {
 })
 
 describe('历史形态收尾', () => {
-  it('data.items 解包 / list 非数组兜底', async () => {
+  it('data.items 解包 / list 非数组兜底 / 纯数组 / 空对象', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -373,6 +373,12 @@ describe('历史形态收尾', () => {
     await vm.loadExportHistory()
     expect(vm.exportHistory).toEqual([{ id: 2 }])
     mockGetSyncLogs.mockResolvedValue({ data: { items: { oops: true } } })
+    await vm.loadExportHistory()
+    expect(vm.exportHistory).toEqual([])
+    mockGetSyncLogs.mockResolvedValue([{ id: 3 }])
+    await vm.loadExportHistory()
+    expect(vm.exportHistory).toEqual([{ id: 3 }])
+    mockGetSyncLogs.mockResolvedValue({})
     await vm.loadExportHistory()
     expect(vm.exportHistory).toEqual([])
     wrapper.unmount()

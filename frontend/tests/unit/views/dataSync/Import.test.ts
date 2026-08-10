@@ -381,6 +381,9 @@ describe('分支收尾', () => {
     mockGetSyncLogs.mockResolvedValue([{ ...rowB }])
     await vm.loadImportHistory()
     expect(vm.importHistory.length).toBe(1)
+    mockGetSyncLogs.mockResolvedValue({})
+    await vm.loadImportHistory()
+    expect(vm.importHistory).toEqual([])
     mockImportData.mockResolvedValue({ success: 'yes' })
     vm.selectedFile = { name: 'g.zip' } as any
     vm.importForm.password = ''
