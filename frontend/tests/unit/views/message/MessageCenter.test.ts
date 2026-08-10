@@ -494,3 +494,18 @@ describe('标签页切换', () => {
     wrapper.unmount()
   })
 })
+
+describe('形态收尾', () => {
+  it('activities {items:[...]} / logs 数组形态 / 描述与entity渲染', async () => {
+    ;(mockRecentActivities as any).mockResolvedValueOnce({ items: [{ id: 1, title: 't', description: 'd' }] })
+    ;(mockGet as any).mockResolvedValueOnce({ data: [{ id: 2 }] })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.myLogs = [{ id: 2, action: 'a', entity_name: '实体' }]
+    await wrapper.vm.$nextTick()
+    expect(vm.recentActivities).toEqual([{ id: 1, title: 't', description: 'd' }])
+    expect(vm.myLogs).toEqual([{ id: 2, action: 'a', entity_name: '实体' }])
+    wrapper.unmount()
+  })
+})

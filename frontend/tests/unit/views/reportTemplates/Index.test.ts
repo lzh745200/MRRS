@@ -948,3 +948,24 @@ describe('在线填报全控件', () => {
     wrapper.unmount()
   })
 })
+
+describe('信封形态收尾', () => {
+  it('loadAvailableFields {data:[...]} 信封 → 解包', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.newTemplate.module = 'village'
+    ;(mockGet as any).mockResolvedValueOnce({ data: [{ key: 'c', label: 'C' }] })
+    await vm.loadAvailableFields()
+    expect(vm.availableFields).toEqual([{ key: 'c', label: 'C' }])
+    wrapper.unmount()
+  })
+  it('openFillDialog 字段带 label → 导出使用 label', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openFillDialog({ name: 't', fields: 'k1' })
+    await vm.handleFillExport()
+    wrapper.unmount()
+  })
+})

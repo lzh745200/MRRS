@@ -228,3 +228,13 @@ describe('裸对象分支补充', () => {
     wrapper.unmount()
   })
 })
+
+describe('空响应分支', () => {
+  it('get 返回 null → 空对象兜底', async () => {
+    ;(mockGet as any).mockResolvedValueOnce(null)
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).overview).toBeTruthy()
+    wrapper.unmount()
+  })
+})

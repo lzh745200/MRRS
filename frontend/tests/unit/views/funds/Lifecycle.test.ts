@@ -683,3 +683,15 @@ describe('无项目守卫分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('无效项目守卫分支', () => {
+  it('invalidProject=true → handleInitiate 直接返回', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.invalidProject = true
+    await vm.handleInitiate()
+    expect(vm.loading).toBe(false)
+    wrapper.unmount()
+  })
+})

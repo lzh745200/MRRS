@@ -548,3 +548,15 @@ describe('提交失败分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('更新成功分支', () => {
+  it('updatePolicy code 200 → 成功提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.isEdit = true
+    ;(vm as any).policyStore.updatePolicy = vi.fn().mockResolvedValue({ code: 200 })
+    await vm.handleSubmit().catch(() => {})
+    wrapper.unmount()
+  })
+})

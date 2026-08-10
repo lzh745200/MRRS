@@ -446,3 +446,16 @@ describe('解析边界补充', () => {
     wrapper.unmount()
   })
 })
+
+describe('内容渲染分支', () => {
+  it('sanitizedContent 有值 / 有 heading section 渲染', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.articleDetail = { content: '【说明】一些内容' }
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.html()).toContain('说明')
+    wrapper.unmount()
+  })
+})

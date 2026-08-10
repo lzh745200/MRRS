@@ -453,3 +453,16 @@ describe('查询对话框全控件', () => {
     wrapper.unmount()
   })
 })
+
+describe('结果行渲染分支', () => {
+  it('matched=false 行 + values 有值渲染', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.qcResult = { rows: [{ matched: false, values: { name: '张三' } }], total: 1, unmatched: 1 }
+    vm.showResult = true
+    await wrapper.vm.$nextTick()
+    expect(wrapper.html()).toContain('不满足')
+    wrapper.unmount()
+  })
+})

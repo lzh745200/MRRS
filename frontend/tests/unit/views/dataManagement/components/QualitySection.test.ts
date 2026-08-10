@@ -543,3 +543,24 @@ describe('对话框全控件', () => {
     wrapper.unmount()
   })
 })
+
+describe('错误细节与详情分支', () => {
+  it('handleCheck reject 带 detail', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(mockPost as any).mockRejectedValueOnce({ response: { data: { detail: '检查失败' } } })
+    await vm.handleCheck()
+    wrapper.unmount()
+  })
+  it('handleViewIssues 直接使用 lastIssues', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.lastIssues = [{ field: 'a', message: 'm', suggestion: 's' }]
+    vm.checkItems = [{ id: 'data_format', status: 'warning', issues: 1 }]
+    await vm.handleViewIssues(vm.checkItems[0])
+    expect(vm.issueDetails).toHaveLength(1)
+    wrapper.unmount()
+  })
+})

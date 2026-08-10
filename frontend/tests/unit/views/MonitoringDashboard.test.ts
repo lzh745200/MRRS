@@ -395,3 +395,44 @@ describe('日志回退分支补充', () => {
     wrapper.unmount()
   })
 })
+
+describe('日志形态收尾', () => {
+  it('sysLogs 拒绝 → 回退快照；sysLogs 非数组对象', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/logs') return Promise.reject(new Error('x'))
+      if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
+      if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
+      if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    expect((wrapper.vm as any).recentLogs.length).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+  it('fetchSystemLogs 数组 payload / ERROR 日志 / 未匹配行', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/logs')
+        return Promise.resolve([
+          { line: '2026-01-01 10:00:00 ERROR - 崩溃' },
+          '无法解析的一行',
+        ])
+      if (url === '/system/health/full')
+        return Promise.resolve({
+          data: [{ line: '2026-01-02 09:00:00 ERROR - 数据库断开' }],
+        })
+      if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
+      if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
+      if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const logs = await vm.fetchSystemLogs()
+    expect(JSON.stringify(logs)).toContain('error')
+    wrapper.unmount()
+  })
+})

@@ -301,3 +301,17 @@ describe('字段缺省分支补充', () => {
     wrapper.unmount()
   })
 })
+
+describe('字段有值分支', () => {
+  it('level/support_unit 直接使用', async () => {
+    ;(mockGetRankings as any).mockResolvedValueOnce({
+      data: { rankings: [{ level: 'good', support_unit: '单位X', scores: { a: 1 } }] },
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.rankings[0].level).toBe('good')
+    expect(vm.rankings[0].support_unit).toBe('单位X')
+    wrapper.unmount()
+  })
+})

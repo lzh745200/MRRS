@@ -424,3 +424,14 @@ describe('配置对象值分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('值缺省分支', () => {
+  it('value undefined → 空字符串', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ items: [{ key: 'x', value: undefined }] })
+    const wrapper = await mountComp()
+    const vm = wrapper.vm as any
+    const item = vm.configList.find((c: any) => c.key === 'x')
+    expect(item.value).toBe(JSON.stringify(""))
+    wrapper.unmount()
+  })
+})

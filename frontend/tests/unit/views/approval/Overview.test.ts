@@ -279,3 +279,15 @@ describe('边界分支补充', () => {
     wrapper.unmount()
   })
 })
+
+describe('分支收尾', () => {
+  it('typeLabel 已知类型 / getOverview undefined', async () => {
+    ;(mockGetOverview as any).mockResolvedValueOnce(undefined)
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.typeLabel('policy')).toBe('政策')
+    expect(vm.stats.pending_count).toBe(0)
+    wrapper.unmount()
+  })
+})

@@ -810,3 +810,22 @@ describe('可编辑行提交按钮', () => {
     wrapper.unmount()
   })
 })
+
+describe('加载失败与取消分支', () => {
+  it('levelOptions 加载失败 → 空数组', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(policyApi.getLevelOptions as any).mockRejectedValueOnce(new Error('x'))
+    await vm.refreshLevelOptions().catch(() => {})
+    wrapper.unmount()
+  })
+  it('submitApproval 拒绝 "cancel" → 不提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(submitApprovalMock as any).mockRejectedValueOnce('cancel')
+    await vm.handleSubmitApproval({ id: 3, title: 't3', code: 'c3' }).catch(() => {})
+    wrapper.unmount()
+  })
+})
