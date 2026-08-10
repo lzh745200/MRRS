@@ -36,6 +36,33 @@ def scan_overtime_approvals(db: Session, hours_threshold: int = 48) -> List[Dict
     ]
 
 
+def scan_approaching_approvals(
+    db: Session, warning_hours: int = 36, deadline_hours: int = 48
+) -> List[Dict[str, Any]]:
+    """扫描即将超时的审批任务（36~48 小时预警档，与旧 reminder_service 功能对齐）。"""
+    now = datetime.now()
+    warning_time = now - timedelta(hours=warning_hours)
+    deadline = now - timedelta(hours=deadline_hours)
+    tasks = (
+        db.query(ApprovalTask)
+        .filter(
+            ApprovalTask.status == ApprovalStatus.PENDING.value,
+            ApprovalTask.created_at <= warning_time,
+            ApprovalTask.created_at > deadline,
+        )
+        .all()
+    )
+    return [
+        {
+            "type": "approval_approaching",
+            "entity_id": t.id,
+            "title": getattr(t, "title", "") or f"审批任务 #{t.id}",
+            "elapsed_hours": round((now - t.created_at).total_seconds() / 3600, 1),
+        }
+        for t in tasks
+    ]
+
+
 def scan_deadline_warnings(db: Session, days_threshold: int = 7) -> List[Dict[str, Any]]:
     """扫描即将到期的项目."""
     now = datetime.now().date()

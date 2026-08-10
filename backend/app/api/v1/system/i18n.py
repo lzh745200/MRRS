@@ -167,6 +167,7 @@ class TranslationResource(BaseModel):
 
 # ==================== API 端点 ====================
 
+
 @router.get("/languages", summary="获取支持的语言列表")
 async def get_supported_languages():
     """获取系统支持的语言列表"""

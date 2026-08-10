@@ -169,6 +169,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import {
   getMachineCode as fetchMachineCode,
   generateInitialPassword,
@@ -198,8 +199,8 @@ const resetForm = ref({
 })
 
 const isAdmin = computed(() => {
-  const role = userStore.currentUser?.role
-  return role === 'super_admin' || role === 'admin'
+  const role = normalizeRole(userStore.currentUser?.role)
+  return ADMIN_ROLES.includes(role)
 })
 
 const getMachineCode = async () => {

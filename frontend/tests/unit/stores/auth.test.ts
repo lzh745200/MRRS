@@ -39,6 +39,11 @@ vi.mock('@/utils/authStorage', () => ({
 
 vi.mock('@/utils/roleAccess', () => ({
   ADMIN_ROLES: ['admin', 'superuser'],
+  normalizeRole: (role?: string | null) => {
+    if (!role) return 'user'
+    const r = role.toLowerCase()
+    return ['approval_leader', 'manager', 'editor'].includes(r) ? 'admin' : r === 'operator' ? 'user' : r
+  },
 }))
 
 vi.mock('@/stores/menu', () => ({

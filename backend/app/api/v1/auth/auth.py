@@ -16,6 +16,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, 
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.constants import ADMIN_ROLES, normalize_role
 from app.core.database import get_db
 from app.core.transaction import safe_commit
 from app.core.exceptions import InvalidCredentialsError, UserAlreadyExistsError
@@ -245,7 +246,7 @@ async def login(
         full_name=user.full_name,
         role=user_role,
         is_active=user.is_active if user.is_active is not None else True,
-        is_superuser=user.is_superuser or user.role in ("admin", "super_admin"),
+        is_superuser=user.is_superuser or normalize_role(user.role) in ADMIN_ROLES,
         organization_id=getattr(user, "organization_id", None),
         organization_name=getattr(user, "organization_name", "") or "",
         permissions=getattr(user, "permissions_list", []) or [],
@@ -401,7 +402,7 @@ async def two_factor_verify_login(
         full_name=user.full_name,
         role=user_role,
         is_active=user.is_active if user.is_active is not None else True,
-        is_superuser=user.is_superuser or user.role in ("admin", "super_admin"),
+        is_superuser=user.is_superuser or normalize_role(user.role) in ADMIN_ROLES,
         organization_id=getattr(user, "organization_id", None),
         organization_name=getattr(user, "organization_name", "") or "",
         permissions=getattr(user, "permissions_list", []) or [],
@@ -495,7 +496,7 @@ async def get_current_user_info(
             "full_name": user.full_name,
             "role": user_role,
             "is_active": user.is_active if user.is_active is not None else True,
-            "is_superuser": user.is_superuser or user.role in ("admin", "super_admin"),
+            "is_superuser": user.is_superuser or normalize_role(user.role) in ADMIN_ROLES,
             "organization_id": getattr(user, "organization_id", None),
             "organization_name": getattr(user, "organization_name", "") or "",
             "permissions": getattr(user, "permissions_list", []) or [],
@@ -627,7 +628,7 @@ async def refresh_token(request: Request, token: str = Body(..., embed=True), db
             full_name=user.full_name,
             role=user.role or "user",
             is_active=user.is_active if user.is_active is not None else True,
-            is_superuser=user.is_superuser or user.role in ("admin", "super_admin"),
+            is_superuser=user.is_superuser or normalize_role(user.role) in ADMIN_ROLES,
             organization_id=getattr(user, "organization_id", None),
             organization_name=getattr(user, "organization_name", "") or "",
             permissions=getattr(user, "permissions_list", []) or [],
@@ -829,7 +830,7 @@ async def register_user(
             full_name=user.full_name,
             role=user.role or "user",
             is_active=user.is_active if user.is_active is not None else True,
-            is_superuser=user.is_superuser or user.role in ("admin", "super_admin"),
+            is_superuser=user.is_superuser or normalize_role(user.role) in ADMIN_ROLES,
             allowed_menus=getattr(user, "allowed_menus", None),
             allowed_menus_list=getattr(user, "allowed_menus_list", None),
         )

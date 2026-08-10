@@ -12,6 +12,7 @@ from app.api.v1.deps import get_current_active_user, get_db
 from app.models.user import User
 from app.services.data_cleaning_service import DataCleaningService
 from app.services.validation_engine_service import ValidationEngine
+from app.core.response import success_response
 
 router = APIRouter(prefix="/data-quality", tags=["数据质量"])
 
@@ -54,11 +55,11 @@ async def validate_data(
         else:
             issues.append({"field": request.field_name or "", "message": err, "severity": "error"})
 
-    return {
+    return success_response(data={
         "valid": not errors,
         "issues": issues,
         "message": "校验通过" if not errors else f"发现 {len(errors)} 个问题",
-    }
+    }, message="校验通过" if not errors else f"发现 {len(errors)} 个问题")
 
 
 @router.post("/clean")
@@ -74,11 +75,11 @@ async def clean_data(request: CleanDataRequest, current_user: User = Depends(get
 
     cleaned_records = DataCleaningService.clean_dataset(records=request.records, cleaning_rules=request.cleaning_rules)
 
-    return {
+    return success_response(data={
         "original_count": len(request.records),
         "cleaned_count": len(cleaned_records),
         "cleaned_records": cleaned_records,
-    }
+    })
 
 
 @router.post("/deduplicate")
@@ -97,12 +98,12 @@ async def deduplicate_data(
         similarity_threshold=similarity_threshold,
     )
 
-    return {
+    return success_response(data={
         "original_count": len(records),
         "unique_count": len(unique_records),
         "duplicates_removed": len(records) - len(unique_records),
         "records": unique_records,
-    }
+    })
 
 
 # ==================== 自定义规则校验（下拉 + 与或非） ====================

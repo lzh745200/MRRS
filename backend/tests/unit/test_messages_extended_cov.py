@@ -25,7 +25,8 @@ class TestSendMessage:
         db = MagicMock()
         with patch.object(m, "MessageService", return_value=svc) as ms:
             result = await m.send_message(request=req, current_user=MagicMock(), db=db)
-        assert result == {"message_id": 42, "created_at": CREATED_AT.isoformat()}
+        assert result["data"]["message_id"] == 42
+        assert result["data"]["created_at"] == CREATED_AT.isoformat()
         ms.assert_called_once_with(db)
         svc.send_message.assert_called_once_with(
             user_id=7, message_type="system", title="标题", content="内容"
@@ -37,7 +38,7 @@ class TestSendMessage:
         req = m.SendMessageRequest(receiver_id=8, title="审批", content="请审批", message_type="approval")
         with patch.object(m, "MessageService", return_value=svc):
             result = await m.send_message(request=req, current_user=MagicMock(), db=MagicMock())
-        assert result["message_id"] == 43
+        assert result["data"]["message_id"] == 43
         svc.send_message.assert_called_once_with(
             user_id=8, message_type="approval", title="审批", content="请审批"
         )
@@ -56,7 +57,7 @@ class TestGetUnreadCount:
         svc.get_unread_count.return_value = 9
         with patch.object(m, "MessageService", return_value=svc):
             result = await m.get_unread_count(current_user=SimpleNamespace(id=5), db=MagicMock())
-        assert result == {"unread_count": 9}
+        assert result["data"]["unread_count"] == 9
         svc.get_unread_count.assert_called_once_with(user_id=5)
 
 
@@ -81,12 +82,12 @@ class TestGetMessages:
         svc.get_messages.assert_called_once_with(
             user_id=5, message_type="system", is_read=False, page=3, page_size=10
         )
-        assert result["total"] == 2
-        assert [item["id"] for item in result["messages"]] == [1, 2]
-        assert result["messages"][0]["read_at"] is None
-        assert result["messages"][1]["read_at"] == READ_AT.isoformat()
-        assert result["messages"][1]["created_at"] == CREATED_AT.isoformat()
-        assert result["messages"][1]["message_type"] == "task"
+        assert result["data"]["total"] == 2
+        assert [item["id"] for item in result["data"]["messages"]] == [1, 2]
+        assert result["data"]["messages"][0]["read_at"] is None
+        assert result["data"]["messages"][1]["read_at"] == READ_AT.isoformat()
+        assert result["data"]["messages"][1]["created_at"] == CREATED_AT.isoformat()
+        assert result["data"]["messages"][1]["message_type"] == "task"
 
 
 class TestMarkAsRead:
@@ -120,7 +121,7 @@ class TestMarkAllAsRead:
         svc.mark_all_as_read.return_value = 4
         with patch.object(m, "MessageService", return_value=svc):
             result = await m.mark_all_as_read(current_user=SimpleNamespace(id=5), db=MagicMock())
-        assert result == {"marked_count": 4}
+        assert result["data"]["marked_count"] == 4
         svc.mark_all_as_read.assert_called_once_with(user_id=5)
 
 

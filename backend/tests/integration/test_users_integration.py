@@ -110,7 +110,7 @@ class TestUserDetail:
         user, _ = admin_user
         resp = client.get(f"/api/v1/users/{user.id}", headers=admin_headers)
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]  # 用户详情返回统一信封，业务字段在 data 层
         assert data["id"] == user.id
         assert data["username"] == user.username
 
@@ -131,7 +131,7 @@ class TestUserCreate:
             "role": "operator",
         })
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]  # 创建用户返回统一信封，业务字段在 data 层
         assert data["username"] == "createduser"
 
 

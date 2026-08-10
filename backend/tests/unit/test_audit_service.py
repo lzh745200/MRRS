@@ -96,7 +96,8 @@ class TestAuditService:
         assert result.user_ip == "127.0.0.1"
         assert result.duration_ms == 100
         assert result.response_status == 200
-        assert result.metadata == {"source": "web"}
+        # 修复后 metadata 写入 DB 列（metadata_），而非普通实例属性
+        assert result.metadata_ == {"source": "web"}
         mock_db.add.assert_called_once()
 
     def test_log_with_string_values(self, audit_svc, mock_db):

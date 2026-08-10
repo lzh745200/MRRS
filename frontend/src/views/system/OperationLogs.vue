@@ -199,7 +199,7 @@ onMounted(loadLogs)
   color: #303133;
 }
 .log-user {
-  color: #409eff;
+  color: var(--el-color-primary, #409eff);
   min-width: 60px;
 }
 .log-time {

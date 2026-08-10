@@ -176,6 +176,8 @@ def _fund_to_dict(f: Fund) -> Dict[str, Any]:
         result["village_name"] = f.village.village_name
     if hasattr(f, "school") and f.school:
         result["school_name"] = f.school.name
+    if getattr(f, "organization", None) is not None:
+        result["organization_name"] = f.organization.name
 
     return result
 

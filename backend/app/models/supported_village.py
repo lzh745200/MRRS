@@ -121,6 +121,9 @@ class SupportedVillage(Base, TimestampMixin):
         comment="创建者ID",
     )
 
+    # 关联组织（lazy="noload"：不自动查询，仅在 API 层显式 selectinload 后可用）
+    organization = relationship("Organization", foreign_keys=[organization_id], lazy="noload")
+
     # ── 关系 ──
     population_data = relationship(
         "VillagePopulation",
@@ -242,6 +245,12 @@ class SupportedVillage(Base, TimestampMixin):
             "is_deleted": self.is_active is False,
             "organizationId": self.organization_id,
             "organization_id": self.organization_id,
+            "organizationName": getattr(self, "organization", None).name
+            if getattr(self, "organization", None) is not None
+            else None,
+            "organization_name": getattr(self, "organization", None).name
+            if getattr(self, "organization", None) is not None
+            else None,
             "createdBy": self.created_by,
             "created_by": self.created_by,
             "createdAt": self.created_at.isoformat() if self.created_at else None,

@@ -67,6 +67,14 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+@event.listens_for(engine, "after_cursor_execute")
+def _count_query_execution(conn, cursor, statement, parameters, context, executemany) -> None:
+    """N+1 检测：SQL 执行计数写入当前请求的 contextvar 计数器（query_counter 中间件消费）。"""
+    from app.middleware.query_counter import _on_cursor_execute
+
+    _on_cursor_execute(conn, cursor, statement, parameters, context, executemany)
+
+
 @event.listens_for(engine, "connect")
 def _set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
     """

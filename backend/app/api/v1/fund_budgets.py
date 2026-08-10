@@ -266,7 +266,7 @@ async def get_budget_summary(
         by_category[cat]["budget"] += float(b.budget_amount or 0)
         by_category[cat]["executed"] += float(b.executed_amount or 0)
 
-    return {
+    return success_response(data={
         "year": target_year,
         "total_budget": round(total_budget, 2),
         "total_executed": round(total_executed, 2),
@@ -282,7 +282,7 @@ async def get_budget_summary(
             }
             for cat, v in by_category.items()
         ],
-    }
+    })
 
 
 # ==================== 使用明细 API ====================

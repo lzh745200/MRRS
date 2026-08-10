@@ -13,6 +13,7 @@ from app.models.project import Project
 from app.models.school import School, SchoolSupport
 from app.models.user import User
 from app.models.village import Village
+from app.core.response import success_response
 
 logger = logging.getLogger(__name__)
 
@@ -296,7 +297,9 @@ async def get_villages_distribution(current_user=Depends(get_current_user), db: 
         by_province = db.query(Village.province, func.count(Village.id)).group_by(Village.province).all()
         province_data = [{"name": province or "未知", "value": count} for province, count in by_province if province]
 
-        return {"by_status": status_data, "top_population": top_data, "by_province": province_data}
+        return success_response(
+            data={"by_status": status_data, "top_population": top_data, "by_province": province_data}
+        )
     except Exception as e:
         logger.error("帮扶村分布统计查询失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
@@ -322,14 +325,14 @@ async def get_projects_statistics(current_user=Depends(get_current_user), db: Se
             for p in recent_projects
         ]
 
-        return {
+        return success_response(data={
             "by_status": status_data,
             "by_type": type_data,
             "total_budget": budget_sum,
             "total_invested": invested_sum,
             "average_progress": round(avg_progress, 1),
             "recent_projects": recent_data,
-        }
+        })
     except Exception as e:
         logger.error("项目统计查询失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
@@ -368,12 +371,12 @@ async def get_funds_statistics(year: int = None, current_user=Depends(get_curren
             {"month": month, "count": count, "amount": amount or 0} for month, count, amount in monthly_stats
         ]
 
-        return {
+        return success_response(data={
             "by_type": type_data,
             "total_amount": total_amount,
             "approved_amount": approved_amount,
             "monthly_trend": monthly_data,
-        }
+        })
     except Exception as e:
         logger.error("经费统计查询失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
@@ -402,13 +405,13 @@ async def get_schools_statistics(current_user=Depends(get_current_user), db: Ses
             or 0
         )
 
-        return {
+        return success_response(data={
             "by_type": type_data,
             "total_students": total_students,
             "total_teachers": total_teachers,
             "by_support_type": support_data,
             "total_support_amount": total_support_amount,
-        }
+        })
     except Exception as e:
         logger.error("学校统计查询失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")

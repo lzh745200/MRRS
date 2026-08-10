@@ -79,7 +79,7 @@ class TestGetDataQualityReport:
 
         resp = client.get("/api/v1/data-quality/report")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert "null_rate_report" in data
         assert "income_anomalies" in data
         assert "filing_progress" in data
@@ -95,7 +95,7 @@ class TestGetDataQualityReport:
         try:
             resp = client.get("/api/v1/data-quality/report")
             assert resp.status_code == 200
-            data = resp.json()
+            data = resp.json()["data"]
             assert "error" in data
             assert data["null_rate_report"] == {}
             assert data["income_anomalies"] == []
@@ -111,7 +111,7 @@ class TestRunFullCheck:
     def test_no_issues(self, client):
         resp = client.post("/api/v1/data-quality/full-check")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["score"] == 100
         assert data["total_issues"] == 0
 
@@ -137,7 +137,7 @@ class TestRunFullCheck:
 
         resp = client.post("/api/v1/data-quality/full-check")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["total_issues"] >= 4
         assert data["score"] < 100
 
@@ -152,7 +152,7 @@ class TestRunFullCheck:
         with patch("app.api.v1.data.data.data_quality.getattr", side_effect=lambda obj, name, *a: None):
             resp = client.post("/api/v1/data-quality/full-check")
             assert resp.status_code == 200
-            assert resp.json()["total_issues"] >= 0
+            assert resp.json()["data"]["total_issues"] >= 0
 
     def test_dup_villages_none_names(self, client):
         """Cover `', '.join(d[0] or '' for d in dup_villages[:5])` when name is None"""
@@ -165,7 +165,7 @@ class TestRunFullCheck:
 
         resp = client.post("/api/v1/data-quality/full-check")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert any(i["check"] == "duplicate" for i in data["issues"])
 
     def test_no_orphan_projects(self, client):
@@ -179,7 +179,7 @@ class TestRunFullCheck:
         db.commit()
         resp = client.post("/api/v1/data-quality/full-check")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert any(i["check"] == "referential_integrity" and i["table"] == "projects" for i in data["issues"])
 
     def test_orphan_fund_project(self, client):
@@ -189,7 +189,7 @@ class TestRunFullCheck:
         db.commit()
         resp = client.post("/api/v1/data-quality/full-check")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert any(i["check"] == "referential_integrity" and i["table"] == "funds" for i in data["issues"])
 
     def test_negative_budget(self, client):
@@ -199,7 +199,7 @@ class TestRunFullCheck:
         db.commit()
         resp = client.post("/api/v1/data-quality/full-check")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert any(i["check"] == "value_range" and i["field"] == "budget" for i in data["issues"])
 
 

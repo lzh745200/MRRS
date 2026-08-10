@@ -167,6 +167,10 @@ class Project(Base):
     creator = relationship("User", back_populates="projects", foreign_keys=[created_by])
     tasks = relationship("ProjectTask", back_populates="project", cascade="all, delete-orphan")
     funds = relationship("Fund", back_populates="project")
+    # 关联名称补充（lazy="noload"：不自动查询，仅在 API 层显式 selectinload 后可用，
+    # 未加载时访问返回 None，不影响现有查询行为）
+    village = relationship("SupportedVillage", foreign_keys=[village_id], lazy="noload")
+    organization = relationship("Organization", foreign_keys=[organization_id], lazy="noload")
 
     def __repr__(self):
         return f"<Project(id={self.id}, name={self.name}, status={self.status})>"

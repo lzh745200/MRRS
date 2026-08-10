@@ -103,7 +103,8 @@ class TestBackupAuth:
         monkeypatch.setenv("INTERNAL_BACKUP_KEY", "secret123")
         p, svc = _svc_patch()
         svc.create_backup.return_value = self._record()
-        with p:
+        # 端点内 get_config 走真实库,需打桩避免环境依赖
+        with p, patch("app.services.system_config_service.get_config", return_value=""):
             resp = bk_client.post(
                 "/api/v1/system/backup",
                 json={"description": "自动"},
@@ -118,10 +119,11 @@ class TestBackupAuth:
         monkeypatch.setenv("INTERNAL_BACKUP_KEY", "different-key")
         p, svc = _svc_patch()
         svc.create_backup.return_value = self._record()
+        # 端点内 get_config 走真实库,需打桩避免环境依赖
         with p, patch(
             "app.core.security.get_current_user",
             AsyncMock(return_value=_admin()),
-        ):
+        ), patch("app.services.system_config_service.get_config", return_value=""):
             resp = bk_client.post(
                 "/api/v1/system/backup",
                 json={"description": "手动"},

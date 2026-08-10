@@ -7,6 +7,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.constants import normalize_role
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.audit import AuditAction, AuditLevel, AuditStatus
@@ -89,7 +90,7 @@ async def batch_delete_audit_logs(
     - actions / action: 按操作类型（列表或单个）删除
     - before_date: 按日期范围删除（可与 actions 组合）
     """
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import AuditLog as AuditLogModel
@@ -150,7 +151,7 @@ async def delete_audit_log(
     db: Session = Depends(get_db),
 ):
     """删除单条审计日志"""
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import AuditLog as AuditLogModel
@@ -175,7 +176,7 @@ async def update_audit_log_remark(
     db: Session = Depends(get_db),
 ):
     """更新审计日志备注"""
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import AuditLog as AuditLogModel
@@ -218,7 +219,7 @@ async def export_audit_logs(  # noqa: C901
     - csv: 返回 .csv 文件下载
     需要管理员权限。
     """
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import AuditLog as AuditLogModel
@@ -349,7 +350,7 @@ async def get_audit_logs(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     audit = AuditService(db)
@@ -378,7 +379,7 @@ async def get_audit_logs(
 
 @router.get("/logs/{log_id}")
 async def get_audit_log_detail(log_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import AuditLog as AuditLogModel
@@ -398,7 +399,7 @@ async def get_audit_stats(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     audit = AuditService(db)
@@ -407,12 +408,12 @@ async def get_audit_stats(
 
 @router.get("/actions")
 async def get_available_actions():
-    return {"actions": [a.value for a in AuditAction]}
+    return success_response(data={"actions": [a.value for a in AuditAction]})
 
 
 @router.get("/levels")
 async def get_available_levels():
-    return {"levels": [level.value for level in AuditLevel]}
+    return success_response(data={"levels": [level.value for level in AuditLevel]})
 
 
 @router.get("/security/events")
@@ -427,7 +428,7 @@ async def get_security_events(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     service = SecurityEventService(db)
@@ -444,7 +445,7 @@ async def get_security_events(
 
 @router.get("/security/stats")
 async def get_security_stats(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     service = SecurityEventService(db)
@@ -458,7 +459,7 @@ async def resolve_security_event(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     service = SecurityEventService(db)
@@ -485,7 +486,7 @@ async def get_login_attempts(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import LoginAttempt
@@ -518,7 +519,7 @@ async def get_api_access_logs(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import APIAccessLog
@@ -551,7 +552,7 @@ async def get_export_logs(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if getattr(current_user, "role", None) not in ("admin", "super_admin"):
+    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import DataExportLog
@@ -581,7 +582,7 @@ async def get_user_activity(
     db: Session = Depends(get_db),
 ):
     if (
-        getattr(current_user, "role", None) not in ("admin", "super_admin")
+        normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin")
         and getattr(current_user, "id", None) != user_id
     ):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -604,10 +605,10 @@ async def get_user_activity(
         action = log.action
         action_counts[action] = action_counts.get(action, 0) + 1
 
-    return {
+    return success_response(data={
         "user_id": user_id,
         "period_days": days,
         "total_actions": len(logs),
         "action_breakdown": action_counts,
         "recent_activity": [log.to_dict() for log in logs[:20]],
-    }
+    })

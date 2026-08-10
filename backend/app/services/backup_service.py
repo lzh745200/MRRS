@@ -204,23 +204,60 @@ class BackupService:
         backup_file_name = f"backup_{timestamp}_{int(datetime.now().timestamp() * 1000) % 1000:03d}.zip"
         backup_file_path = os.path.join(self.backup_dir, backup_file_name)
 
-        # WAL 完整性：备份前将未 checkpoint 的 -wal 事务合并进主库，
-        # 否则备份包可能缺少最近一批数据（WAL 模式下主库文件不含未落盘事务）
+        # 磁盘空间预检（≥150MB，覆盖 db + uploads + zip 压缩余量；磁盘满载时提前失败，
+        # 避免写出损坏的 .zip/.bak 文件）
         try:
-            import sqlite3 as _sqlite3
+            from app.core.database import check_disk_space
 
-            _conn = _sqlite3.connect(self.database_path)
+            disk = check_disk_space(min_mb=150)
+            if not disk.get("sufficient", False):
+                raise BackupRestoreError(
+                    f"磁盘剩余空间不足（{disk.get('free_mb', -1)}MB < 150MB），备份已取消"
+                )
+        except BackupRestoreError:
+            raise
+        except Exception as _disk_err:  # pragma: no cover - 预检本身失败不阻塞备份
+            logger.warning("磁盘空间预检失败: %s", _disk_err)
+
+        # 一致性快照：使用 SQLite Backup API 复制在线数据库（自动合并 -wal 内容），
+        # 替代裸文件拷贝 —— 并发写入/强制断电场景下保证备份包内数据库一致
+        snapshot_path = None
+        try:
+            if os.path.exists(self.database_path):
+                fd, snapshot_path = tempfile.mkstemp(suffix=".db", prefix="backup_snapshot_")
+                os.close(fd)
+                src = sqlite3.connect(self.database_path)
+                dst = sqlite3.connect(snapshot_path)
+                try:
+                    with dst:
+                        src.backup(dst)
+                finally:
+                    dst.close()
+                    src.close()
+        except Exception as _snap_err:
+            logger.error("SQLite 一致性快照失败，回退 WAL checkpoint + 裸拷贝: %s", _snap_err)
+            if snapshot_path:
+                try:
+                    os.remove(snapshot_path)
+                except OSError:
+                    pass
+                snapshot_path = None
+            # 回退：原 WAL checkpoint 逻辑
             try:
-                _conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            finally:
-                _conn.close()
-        except Exception as _wal_err:
-            logger.warning("备份前 WAL checkpoint 失败（备份可能不完整）: %s", _wal_err)
+                _conn = sqlite3.connect(self.database_path)
+                try:
+                    _conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                finally:
+                    _conn.close()
+            except Exception as _wal_err:
+                logger.warning("备份前 WAL checkpoint 失败（备份可能不完整）: %s", _wal_err)
 
         # 创建备份
         with zipfile.ZipFile(backup_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-            # 备份数据库
-            if os.path.exists(self.database_path):
+            # 备份数据库（优先一致性快照，回退主库文件）
+            if snapshot_path and os.path.exists(snapshot_path):
+                zipf.write(snapshot_path, "data/rural_revitalization.db")
+            elif os.path.exists(self.database_path):
                 zipf.write(self.database_path, "data/rural_revitalization.db")
 
             # 备份上传文件
@@ -246,6 +283,13 @@ class BackupService:
                 "created_at": datetime.now().isoformat(),
             }
             zipf.writestr("backup_info.json", str(backup_info))
+
+        # 清理一致性快照临时文件（无论加密与否）
+        if snapshot_path:
+            try:
+                os.remove(snapshot_path)
+            except OSError:
+                pass
 
         # ── 加密（可选） ──
         if password:

@@ -157,7 +157,7 @@ class TestMarkRead:
         resp = authed_client.post("/api/v1/messages/mark-read", json={"message_ids": [1, 2, 3]})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["count"] == 3
+        assert data["data"]["count"] == 3
         assert "3" in data["message"]
         msg_service.mark_as_read.assert_called_once_with(mock_user.id, [1, 2, 3])
 
@@ -169,7 +169,7 @@ class TestMarkRead:
         msg_service.mark_all_as_read.return_value = 9
         resp = authed_client.post("/api/v1/messages/mark-all-read?message_type=task")
         assert resp.status_code == 200
-        assert resp.json()["count"] == 9
+        assert resp.json()["data"]["count"] == 9
         msg_service.mark_all_as_read.assert_called_once_with(mock_user.id, "task")
 
     def test_mark_all_read_no_type(self, authed_client, msg_service, mock_user):
@@ -187,7 +187,7 @@ class TestDeleteMessages:
         msg_service.delete_messages.return_value = 2
         resp = authed_client.request("DELETE", "/api/v1/messages", json={"message_ids": [5, 6]})
         assert resp.status_code == 200
-        assert resp.json()["count"] == 2
+        assert resp.json()["data"]["count"] == 2
         msg_service.delete_messages.assert_called_once_with(mock_user.id, [5, 6])
 
     def test_delete_messages_empty_ids_422(self, authed_client):

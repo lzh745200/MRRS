@@ -143,7 +143,7 @@ class TestValidateData:
             json={"name": "test"},
         )
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["valid"] is True
         assert data["errors"] == []
 
@@ -157,7 +157,7 @@ class TestValidateData:
             json={"name": "John"},
         )
         assert resp.status_code == 200
-        assert resp.json()["valid"] is True
+        assert resp.json()["data"]["valid"] is True
 
     def test_validate_fails_required(self, client_with_mocked_auth):
         client_with_mocked_auth.post(
@@ -169,7 +169,7 @@ class TestValidateData:
             json={"name": "John"},
         )
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["valid"] is False
         assert any(e["field"] == "email" for e in data["errors"])
 
@@ -184,7 +184,7 @@ class TestValidateData:
             json={"a": "ok"},
         )
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["valid"] is False
         field_names = [e["field"] for e in data["errors"]]
         assert "b" in field_names
@@ -200,7 +200,7 @@ class TestValidateData:
             json={"phone": "123"},
         )
         assert resp.status_code == 200
-        assert resp.json()["valid"] is False
+        assert resp.json()["data"]["valid"] is False
 
     def test_validate_field_label_in_error(self, client_with_mocked_auth):
         client_with_mocked_auth.post(
@@ -212,7 +212,7 @@ class TestValidateData:
             f"{BASE}/validate?module=villages",
             json={},
         )
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["valid"] is False
         error = data["errors"][0]
         assert error["field_label"] == "帮扶村名称"

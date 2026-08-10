@@ -26,6 +26,7 @@ from ...core.data_permission import filter_by_data_scope
 from ...core.response import ok_list
 from ...core.security import get_current_user
 from ...models.report_template import ReportTemplate
+from app.core.response import success_response
 
 logger = logging.getLogger(__name__)
 
@@ -1228,14 +1229,14 @@ async def upload_filled_template(
 
     # 预览模式
     if mode == "preview":
-        return {
+        return success_response(data={
             "total_rows": len(rows),
             "success_count": len(parsed_data),
             "error_count": len(errors),
             "errors": errors[:50],
             "parsed_data": parsed_data[:10],
             "module": t.module,
-        }
+        })
 
     # 确认导入模式
     user_id = getattr(current_user, "id", None)
@@ -1256,11 +1257,11 @@ async def upload_filled_template(
     else:
         raise HTTPException(status_code=400, detail=f"模块「{t.module}」暂不支持导入")
 
-    return {
+    return success_response(data={
         "total_rows": len(rows),
         "module": t.module,
         **result,
-    }
+    })
 
 
 # ==================== 模板字段组合（管理员生成模板） ====================

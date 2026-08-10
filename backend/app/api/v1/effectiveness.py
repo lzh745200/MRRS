@@ -12,6 +12,7 @@ from app.core.permission_utils import is_admin
 from app.models.user import User
 from app.models.village import Village
 from app.services.effectiveness_service import EffectivenessService
+from app.core.response import success_response
 
 router = APIRouter(prefix="/effectiveness", tags=["成效评估"])
 
@@ -134,7 +135,7 @@ async def get_rankings(
     query = apply_scope_filter(query, current_user, Village, db=db)
     evaluations = query.order_by(EffectivenessEvaluation.rank).limit(limit).all()
 
-    return {
+    return success_response(data={
         "year": year,
         "rankings": [
             {
@@ -152,4 +153,4 @@ async def get_rankings(
             }
             for eval, village_name in evaluations
         ],
-    }
+    })

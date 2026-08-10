@@ -30,7 +30,8 @@ class TestDashboardSummaryUnit:
                 data_scope=_Scope(),
                 db=MagicMock(),
             ))
-        assert result is cached_payload
+        # 端点返回信封,缓存 payload 位于 data 层
+        assert result["data"] is cached_payload
 
     def test_cache_miss_queries_and_sets(self):
         import asyncio
@@ -61,6 +62,6 @@ class TestDashboardSummaryUnit:
                 data_scope=_Scope(),
                 db=db,
             ))
-        assert "stats" in result
-        assert result["recent_activities"] == activities_payload["items"]
+        assert "stats" in result["data"]
+        assert result["data"]["recent_activities"] == activities_payload["items"]
         mock_set.assert_called_once()

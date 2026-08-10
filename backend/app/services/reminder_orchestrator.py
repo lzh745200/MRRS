@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # reminder_engine 提醒类型 → Message.message_type
 _TYPE_TO_MESSAGE = {
     "approval_overtime": "approval_overtime",
+    "approval_approaching": "approval_approaching",
     "deadline_warning": "deadline_warning",
     "budget_warning": "budget_warning",
 }
@@ -36,25 +37,28 @@ def run_reminder_scans() -> List[Dict[str, Any]]:
         with get_db_context() as db:
             scans = [
                 reminder_engine.scan_overtime_approvals(db),
+                reminder_engine.scan_approaching_approvals(db),
                 reminder_engine.scan_deadline_warnings(db),
                 reminder_engine.scan_budget_warnings(db),
             ]
             for reminders in scans:
                 for r in reminders:
                     link = _dedupe_link(r)
+                    msg_type = _TYPE_TO_MESSAGE.get(r.get("type", ""), "reminder")
                     exists = (
                         db.query(Message)
-                        .filter(Message.message_type == _TYPE_TO_MESSAGE.get(r.get("type", ""), "reminder"))
+                        .filter(Message.message_type == msg_type)
                         .filter(Message.link == link)
                         .first()
                     )
                     if exists:
                         continue
                     msg = Message(
-                        message_type=_TYPE_TO_MESSAGE.get(r.get("type", ""), "reminder"),
+                        message_type=msg_type,
                         title=r.get("title", "系统提醒"),
                         content=_format_reminder(r),
                         link=link,
+                        user_id=r.get("user_id"),
                     )
                     db.add(msg)
                     created.append(r)
@@ -70,6 +74,8 @@ def _format_reminder(r: Dict[str, Any]) -> str:
     t = r.get("type", "")
     if t == "approval_overtime":
         return f"审批任务已超时 {r.get('elapsed_hours', 0)} 小时，请及时处理。"
+    if t == "approval_approaching":
+        return f"审批任务已等待 {r.get('elapsed_hours', 0)} 小时，即将超时，请及时审批。"
     if t == "deadline_warning":
         return f"项目将于 {r.get('end_date', '')} 到期（剩 {r.get('days_left', 0)} 天）。"
     if t == "budget_warning":
@@ -86,7 +92,8 @@ def list_reminders(limit: int = 50) -> List[Dict[str, Any]]:
         rows = (
             db.query(Message)
             .filter(Message.message_type.in_(
-                ["approval_overtime", "deadline_warning", "budget_warning", "backup_reminder", "package_reminder"]
+                ["approval_overtime", "approval_approaching", "deadline_warning",
+                 "budget_warning", "backup_reminder", "package_reminder"]
             ))
             .order_by(Message.created_at.desc())
             .limit(limit)

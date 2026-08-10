@@ -25,6 +25,7 @@ from ...models.user import User
 from ...services.organization_service import OrganizationService
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
+from app.core.response import success_response
 
 router = APIRouter(prefix="/organizations", tags=["组织管理"])
 
@@ -484,7 +485,7 @@ async def get_subordinates(
 @router.get("/types/options")
 async def get_type_options():
     """获取组织类型选项"""
-    return {
+    return success_response(data={
         "types": [
             {"value": "department", "label": "部门单位"},
             {"value": "support_unit", "label": "帮扶单位"},
@@ -495,7 +496,7 @@ async def get_type_options():
             {"value": "level_3", "label": "三级单位"},
             {"value": "level_4", "label": "四级单位"},
         ],
-    }
+    })
 
 
 @router.get("/{org_id}", response_model=OrganizationResponse)
@@ -683,10 +684,10 @@ async def delete_organization(
     await cache_manager.delete("orgs:list")
     _invalidate_dashboard_cache_safe()
 
-    return {
+    return success_response(data={
         "message": "组织已删除",
         "type": "soft_delete",
-    }
+    }, message="组织已删除")
 
 
 @router.get("/{org_id}/children", response_model=List[OrganizationResponse])
@@ -769,7 +770,7 @@ async def move_organization(
     safe_commit(db)
     await cache_manager.delete("orgs:list")
     _invalidate_dashboard_cache_safe()
-    return {"message": "移动成功"}
+    return success_response(data={"message": "移动成功"}, message="移动成功")
 
 
 @router.post("/batch-update-sort")
@@ -1028,7 +1029,7 @@ async def activate_organization(
     safe_commit(db)
     await cache_manager.delete("orgs:list")
     _invalidate_dashboard_cache_safe()
-    return {"message": "组织已激活", "id": org_id, "is_active": True}
+    return success_response(data={"message": "组织已激活", "id": org_id, "is_active": True}, message="组织已激活")
 
 
 @router.post("/{org_id}/deactivate", summary="停用组织")
@@ -1052,4 +1053,4 @@ async def deactivate_organization(
     safe_commit(db)
     await cache_manager.delete("orgs:list")
     _invalidate_dashboard_cache_safe()
-    return {"message": "组织已停用", "id": org_id, "is_active": False}
+    return success_response(data={"message": "组织已停用", "id": org_id, "is_active": False}, message="组织已停用")

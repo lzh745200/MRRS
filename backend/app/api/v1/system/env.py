@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.response import success_response
 from app.core.security import get_current_user
 
 router = APIRouter(prefix="/env", tags=["运行环境"])
@@ -80,4 +81,4 @@ def check_env(
     if missing:
         result["fix_command"] = f"pip install {' '.join(missing)}"
 
-    return result
+    return success_response(data=result)

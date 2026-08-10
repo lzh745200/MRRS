@@ -77,7 +77,7 @@
       font-weight: var(--font-weight-bold);
       color: #fff;
       white-space: nowrap;
-      background: linear-gradient(135deg, #409eff, #67c23a);
+      background: linear-gradient(135deg, var(--el-color-primary, #409eff), #67c23a);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -122,10 +122,10 @@
           rgba(64, 158, 255, 0.3),
           transparent
         );
-        color: #409eff;
+        color: var(--el-color-primary, #409eff);
 
         &::before {
-          background-color: #409eff;
+          background-color: var(--el-color-primary, #409eff);
         }
       }
 
@@ -552,7 +552,7 @@
         font-size: var(--font-size-lg);
         font-weight: var(--font-weight-medium);
         border-radius: var(--radius-lg);
-        background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+        background: linear-gradient(135deg, var(--el-color-primary, #409eff) 0%, #67c23a 100%);
         border: none;
 
         &:hover {

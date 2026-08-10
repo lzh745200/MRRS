@@ -95,7 +95,7 @@ class RuralTaskListResponse(BaseModel):
     """任务列表响应"""
 
     total: int = 0
-    items: list = []
+    items: list = Field(default_factory=list)
     skip: int = 0
     limit: int = 10
 
@@ -109,8 +109,8 @@ class RuralTaskStatistics(BaseModel):
     in_progress: int = 0
     completed: int = 0
     rejected: int = 0
-    by_category: Dict[str, Any] = {}
-    by_year: Dict[str, Any] = {}
+    by_category: Dict[str, Any] = Field(default_factory=dict)
+    by_year: Dict[str, Any] = Field(default_factory=dict)
     total_budget: float = 0.0
     total_actual_cost: float = 0.0
     completion_rate: float = 0.0
