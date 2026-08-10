@@ -368,7 +368,7 @@ describe('日志回退分支补充', () => {
   it('系统日志空数组 → 回退资源快照生成日志', async () => {
     mockGet.mockReset()
     mockGet.mockImplementation((url: string) => {
-      if (url === '/system/logs') return Promise.resolve({ data: [] })
+      if (url === '/system/admin/logs') return Promise.resolve({ data: [] })
       if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
       if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
       if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
@@ -382,7 +382,7 @@ describe('日志回退分支补充', () => {
   it('fetchSystemLogs {items:[...]} 信封 → 解析', async () => {
     mockGet.mockReset()
     mockGet.mockImplementation((url: string) => {
-      if (url === '/system/logs')
+      if (url === '/system/admin/logs')
         return Promise.resolve({ items: [{ line: '2026-01-01 10:00:00 - INFO - 启动' }] })
       if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
       if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
@@ -400,7 +400,7 @@ describe('日志形态收尾', () => {
   it('sysLogs 拒绝 → 回退快照；sysLogs 非数组对象', async () => {
     mockGet.mockReset()
     mockGet.mockImplementation((url: string) => {
-      if (url === '/system/logs') return Promise.reject(new Error('x'))
+      if (url === '/system/admin/logs') return Promise.reject(new Error('x'))
       if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
       if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
       if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
@@ -414,7 +414,7 @@ describe('日志形态收尾', () => {
   it('fetchSystemLogs 数组 payload / ERROR 日志 / 未匹配行', async () => {
     mockGet.mockReset()
     mockGet.mockImplementation((url: string) => {
-      if (url === '/system/logs')
+      if (url === '/system/admin/logs')
         return Promise.resolve([
           { line: '2026-01-01 10:00:00 ERROR - 崩溃' },
           '无法解析的一行',
@@ -478,7 +478,7 @@ describe('日志形态收尾2', () => {
   it('fetchSystemLogs WARN / line 空对象 / 空 line', async () => {
     mockGet.mockReset()
     mockGet.mockImplementation((url: string) => {
-      if (url === '/system/logs')
+      if (url === '/system/admin/logs')
         return Promise.resolve([
           { line: '2026-01-01 10:00:00 WARN - 内存偏高' },
           { line: '' },
@@ -500,7 +500,7 @@ describe('日志级别收尾', () => {
   it('fetchSystemLogs INFO 行 → info 级别', async () => {
     mockGet.mockReset()
     mockGet.mockImplementation((url: string) => {
-      if (url === '/system/logs')
+      if (url === '/system/admin/logs')
         return Promise.resolve([{ line: '2026-01-01 10:00:00 INFO - 正常启动' }])
       return Promise.resolve({})
     })

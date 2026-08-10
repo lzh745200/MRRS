@@ -727,10 +727,10 @@ async function refreshAll() {
   }
 }
 
-/** 拉取后端真实系统日志（app.log 尾部） */
+/** 拉取后端真实系统日志（app.log 尾部，端点: /api/v1/system/admin/logs） */
 async function fetchSystemLogs() {
   try {
-    const res: any = await get('/system/logs', { page: 1, page_size: 50 })
+    const res: any = await get('/system/admin/logs', { page: 1, page_size: 50 })
     const payload = res?.data ?? res
     const raw = Array.isArray(payload) ? payload : payload?.items || []
     // 后端返回 {line: "时间 - 级别 - 消息"} 行文本，解析为结构化日志
