@@ -231,7 +231,7 @@ async def _get_overview_impl(db: Session):
     try:
         today_ops = db.query(AuditLog).filter(AuditLog.created_at >= today_start).count()
     except Exception:
-        logger.debug("查询今日操作数失败")
+        logger.warning("查询今日操作数失败（看板将显示 0）", exc_info=True)
 
     # 近7天数据趋势（单次 GROUP BY 查询替代 7 次循环查询）
     trend = []
@@ -245,7 +245,7 @@ async def _get_overview_impl(db: Session):
         )
         day_counts = {r.day: r.cnt for r in daily_results}
     except Exception:
-        logger.debug("查询近7天趋势失败")
+        logger.warning("查询近7天趋势失败（看板趋势将为空）", exc_info=True)
         day_counts = {}
 
     for i in range(6, -1, -1):
@@ -268,7 +268,7 @@ async def _get_overview_impl(db: Session):
                 }
             )
     except Exception:
-        logger.debug("查询最近操作记录失败")
+        logger.warning("查询最近操作记录失败（最近操作列表将为空）", exc_info=True)
 
     return {
         "villages": villages_count,

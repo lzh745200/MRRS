@@ -425,13 +425,16 @@ async function loadHistory() {
 }
 
 // --- Task CRUD ---
+const PRIORITY_MAP: Record<string, number> = { low: 2, normal: 5, high: 8, urgent: 10 }
+
 function openTaskDialog(task?: any) {
   editingTask.value = task ?? null
   taskForm.value = task
     ? {
-        title: task.title,
-        status: task.status,
-        priority: task.priority,
+        // 后端返回 name 字段；priority 为数字 0-10
+        title: task.name ?? task.title ?? '',
+        status: task.status ?? 'pending',
+        priority: task.priority ?? 'normal',
         assignee: task.assignee ?? '',
         due_date: task.due_date ?? '',
       }
@@ -446,18 +449,26 @@ async function handleSaveTask() {
   }
   taskSaving.value = true
   try {
+    // 契约对齐：后端字段 name（必填）、priority 为数字 0-10
+    const payload = {
+      name: taskForm.value.title.trim(),
+      status: taskForm.value.status,
+      priority: PRIORITY_MAP[taskForm.value.priority] ?? 5,
+      assignee: taskForm.value.assignee || undefined,
+      due_date: taskForm.value.due_date || undefined,
+    }
     if (editingTask.value) {
-      await projectsApi.updateTask(projectId, editingTask.value.id, taskForm.value)
+      await projectsApi.updateTask(projectId, editingTask.value.id, payload)
       ElMessage.success('任务已更新')
     } else {
-      await projectsApi.createTask(projectId, taskForm.value)
+      await projectsApi.createTask(projectId, payload)
       ElMessage.success('任务已创建')
     }
     taskDialogVisible.value = false
     await loadTasks()
   } catch (e: any) {
     logger.error('保存任务失败', e)
-    ElMessage.error(e?.message || '保存任务失败')
+    ElMessage.error(e?.response?.data?.detail || e?.message || '保存任务失败')
   } finally {
     taskSaving.value = false
   }

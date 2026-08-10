@@ -328,7 +328,8 @@ def _compute_trends(db: Session, data_scope: OrgScopeFilter) -> dict:
         trends["funds"] = _pct_change(float(current_funds), float(prev_funds))
 
     except Exception:
-        logger.debug("趋势计算失败，返回空趋势", exc_info=True)
+        # 趋势接口静默返回空会误导看板决策，升级为 warning 可观测
+        logger.warning("趋势计算失败，返回空趋势", exc_info=True)
 
     return trends
 

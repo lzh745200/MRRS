@@ -116,17 +116,23 @@ function statusLabel(status: string) {
 async function loadTasks() {
   loading.value = true
   try {
-    let url = '/approval/tasks'
-    const params: Record<string, unknown> = { page: page.value, page_size: pageSize.value }
-    if (activeTab.value === 'pending') {
-      url = '/approval/tasks/pending'
-    } else if (activeTab.value === 'completed') {
+    // 后端：/approval/tasks/all（管理员全部）与 /approval/tasks/pending（待审批），
+    // 分页参数为 skip/limit
+    const url =
+      activeTab.value === 'pending' ? '/approval/tasks/pending' : '/approval/tasks/all'
+    const params: Record<string, unknown> = {
+      skip: (page.value - 1) * pageSize.value,
+      limit: pageSize.value,
+    }
+    if (activeTab.value === 'completed') {
       params.status = 'completed'
     }
-    const res = await get(url, params)
-    const data = res.data || res
-    tasks.value = data.items || data || []
-    total.value = data.total || tasks.value.length
+    const res: any = await get(url, params)
+    // get() 已解包：items 提升到顶层
+    const data = res?.data ?? res
+    const list = data?.items || data?.data?.items || (Array.isArray(data) ? data : [])
+    tasks.value = Array.isArray(list) ? list : []
+    total.value = data?.total ?? tasks.value.length
   } catch (e: unknown) {
     ElMessage.error(e instanceof Error ? e.message : '加载审批任务失败')
   } finally {
@@ -136,9 +142,9 @@ async function loadTasks() {
 
 async function loadPendingCount() {
   try {
-    const res = await get('/approval/tasks/pending', { page: 1, page_size: 1 })
-    const data = res.data || res
-    pendingCount.value = data.total || 0
+    const res: any = await get('/approval/tasks/pending', { skip: 0, limit: 1 })
+    const data = res?.data ?? res
+    pendingCount.value = data?.total ?? 0
   } catch {
     pendingCount.value = 0
   }

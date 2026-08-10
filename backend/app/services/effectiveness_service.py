@@ -76,20 +76,131 @@ class EffectivenessService:
         )
 
     @staticmethod
+    def _compute_indicators(db, village: Any, year: int) -> Dict[str, Any]:
+        """基于村庄年度数据计算三唯评估指标（无数据时给出中性基线）。"""
+        from app.models.annual_income import AnnualIncome
+        from app.models.annual_infrastructure import AnnualInfrastructure
+        from app.models.annual_industry import AnnualIndustry
+        from app.models.supported_village import SupportedVillage
+        from sqlalchemy import func
+
+        # 年度收入（人均收入与增长率）
+        incomes = (
+            db.query(AnnualIncome)
+            .filter(AnnualIncome.village_id == village.id, AnnualIncome.year == year)
+            .all()
+        )
+        per_capita = 0.0
+        income_growth = 0.0
+        if incomes and getattr(incomes[0], "per_capita_income", None) is not None:
+            per_capita = float(incomes[0].per_capita_income or 0)
+        prev = (
+            db.query(AnnualIncome)
+            .filter(AnnualIncome.village_id == village.id, AnnualIncome.year == year - 1)
+            .first()
+        )
+        if prev and getattr(prev, "per_capita_income", None) and per_capita > 0:
+            prev_val = float(prev.per_capita_income or 0)
+            if prev_val > 0:
+                income_growth = round((per_capita - prev_val) / prev_val * 100, 1)
+
+        # 基础设施覆盖
+        infra_count = (
+            db.query(func.count(AnnualInfrastructure.id))
+            .filter(AnnualInfrastructure.village_id == village.id, AnnualInfrastructure.year == year)
+            .scalar()
+            or 0
+        )
+        industry_count = (
+            db.query(func.count(AnnualIndustry.id))
+            .filter(AnnualIndustry.village_id == village.id, AnnualIndustry.year == year)
+            .scalar()
+            or 0
+        )
+
+        # 经济分：人均收入 + 增长率
+        economic = round(min(60, per_capita / 2000 * 60) + min(40, max(0, income_growth) * 4), 1)
+        # 社会分：基础设施 + 产业覆盖
+        social = round(min(70, infra_count * 15) + min(30, industry_count * 6), 1)
+        # 生态分：中性基线 + 数据完整度加成（无年度数据时给 60 基线）
+        ecological = round(60.0 + min(40, infra_count * 5), 1)
+
+        indicators = {
+            "per_capita_income": round(per_capita, 2),
+            "income_growth_rate": income_growth,
+            "infrastructure_count": infra_count,
+            "industry_count": industry_count,
+            "data_complete": bool(incomes),
+        }
+        return {
+            "economic": min(100, economic),
+            "social": min(100, social),
+            "ecological": min(100, ecological),
+            "indicators": indicators,
+        }
+
+    @staticmethod
     def evaluate_village(db, village_id: int, year: int, user_id: int) -> Dict[str, Any]:
         """评估村庄年度成效（/evaluate 端点）。
 
-        幂等查询：已有评估记录直接返回；无记录返回 error（完整指标
-        计算体系尚未落地，不生成虚构评分）。
+        基于村庄年度收入/基础设施/产业数据计算三唯分数并写入评估表；
+        重复评估时更新已有记录（幂等）。
         """
         from app.models.village import Village
 
         village = db.query(Village).filter(Village.id == village_id).first()
         if not village:
             return {"error": f"村庄 {village_id} 不存在"}
+
+        from app.models.effectiveness import EffectivenessEvaluation
+
         ev = EffectivenessService._find_evaluation(db, village_id, year)
-        if not ev:
-            return {"error": f"村庄在 {year} 年暂无评估数据"}
+        computed = EffectivenessService._compute_indicators(db, village, year)
+        total = round(
+            computed["economic"] * 0.4 + computed["social"] * 0.35 + computed["ecological"] * 0.25,
+            1,
+        )
+        grade = "A" if total >= 85 else "B" if total >= 70 else "C" if total >= 55 else "D"
+
+        if ev:
+            # 更新已有评估
+            ev.economic_score = computed["economic"]
+            ev.social_score = computed["social"]
+            ev.ecological_score = computed["ecological"]
+            ev.total_score = total
+            ev.grade = grade
+            ev.indicators = computed["indicators"]
+            ev.evaluated_by = user_id
+        else:
+            ev = EffectivenessEvaluation(
+                village_id=village_id,
+                year=year,
+                economic_score=computed["economic"],
+                social_score=computed["social"],
+                ecological_score=computed["ecological"],
+                total_score=total,
+                grade=grade,
+                indicators=computed["indicators"],
+                evaluated_by=user_id,
+            )
+            db.add(ev)
+        db.commit()
+        db.refresh(ev)
+
+        # 更新同年度全部评估的排名
+        from sqlalchemy import func as _func
+
+        all_evs = (
+            db.query(EffectivenessEvaluation)
+            .filter(EffectivenessEvaluation.year == year)
+            .order_by(EffectivenessEvaluation.total_score.desc())
+            .all()
+        )
+        for idx, row in enumerate(all_evs, 1):
+            if row.rank != idx:
+                row.rank = idx
+        db.commit()
+
         result = EffectivenessService._eval_to_dict(ev)
         result["village_name"] = getattr(village, "name", "")
         return result

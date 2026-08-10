@@ -211,18 +211,24 @@ const handleExport = async () => {
       response = await exportData(params)
     }
 
-    if (response.success) {
-      ElMessage.success(`导出成功! 共 ${response.data.total_records} 条记录`)
+    // post() 已自动解包，后端裸返回 {success, package_name, total_records, ...}
+    const result = response?.data ?? response
+    if (result?.success) {
+      ElMessage.success(`导出成功! 共 ${result.total_records ?? 0} 条记录`)
       // 自动下载
-      await handleDownloadByName(response.data.package_name)
+      if (result.package_name) {
+        await handleDownloadByName(result.package_name)
+      }
       // 刷新历史
       await loadExportHistory()
       // 清空密码
       exportForm.value.password = ''
       exportForm.value.confirmPassword = ''
+    } else if (result?.message) {
+      ElMessage.warning(result.message)
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '导出失败')
+    ElMessage.error(error?.response?.data?.detail || error.message || '导出失败')
   } finally {
     exporting.value = false
   }
@@ -242,10 +248,10 @@ const handleDownloadByName = async (packageName: string) => {
 
 const loadExportHistory = async () => {
   try {
-    const response = await (getSyncLogs as any)('export', 20)
-    if (response.success) {
-      exportHistory.value = response.data
-    }
+    const response: any = await getSyncLogs({ action: 'export', page: 1, page_size: 20 })
+    // 后端 ok_list 信封 → items 已在顶层
+    const list = response?.items || response?.data?.items || []
+    exportHistory.value = Array.isArray(list) ? list : []
   } catch (error) {
     logger.error('加载导出历史失败', error)
   }

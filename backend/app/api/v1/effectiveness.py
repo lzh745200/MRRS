@@ -2,12 +2,13 @@
 成效评估API
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
-from app.core.data_permission import filter_by_data_scope
+from app.core.data_scope_adapter import apply_scope_filter
+from app.core.permission_utils import is_admin
 from app.models.user import User
 from app.models.village import Village
 from app.services.effectiveness_service import EffectivenessService
@@ -29,12 +30,10 @@ async def evaluate_village(
     db: Session = Depends(get_db),
 ):
     """
-    评估村庄成效
-    需要管理员权限
+    评估村庄成效（根据年度收入/基础设施/产业数据计算三唯分数并落库）
+    需要管理角色权限
     """
-    if not current_user.is_superuser:
-        from fastapi import HTTPException
-
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     result = EffectivenessService.evaluate_village(
@@ -42,8 +41,6 @@ async def evaluate_village(
     )
 
     if "error" in result:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=result["error"])
 
     # 年度考核闭环：评估完成后提交"复核"审批任务（若配置了 assessment 工作流）
@@ -57,7 +54,7 @@ async def evaluate_village(
             entity_id=request.village_id,
             submitter_id=current_user.id,
             title=f"年度考核复核-村{request.village_id}-{request.year}年",
-            change_data={"year": request.year, "score": result.get("score")},
+            change_data={"year": request.year, "score": result.get("total_score")},
         )
         if task:
             review_task_id = task.id
@@ -80,20 +77,16 @@ async def get_evaluation_report(
     db: Session = Depends(get_db),
 ):
     """获取评估报告"""
-    village = filter_by_data_scope(
+    village = apply_scope_filter(
         db.query(Village).filter(Village.id == village_id),
-        Village, current_user, db=db
+        current_user, Village, db=db
     ).first()
     if not village:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="评估报告不存在")
 
     report = EffectivenessService.get_evaluation_report(db=db, village_id=village_id, year=year)
 
     if not report:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="评估报告不存在")
 
     return report
@@ -108,20 +101,16 @@ async def compare_evaluations(
     db: Session = Depends(get_db),
 ):
     """对比两年的评估结果"""
-    village = filter_by_data_scope(
+    village = apply_scope_filter(
         db.query(Village).filter(Village.id == village_id),
-        Village, current_user, db=db
+        current_user, Village, db=db
     ).first()
     if not village:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="评估报告不存在")
 
     comparison = EffectivenessService.compare_evaluations(db=db, village_id=village_id, year1=year1, year2=year2)
 
     if "error" in comparison:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=400, detail=comparison["error"])
 
     return comparison
@@ -142,7 +131,7 @@ async def get_rankings(
         .join(Village, EffectivenessEvaluation.village_id == Village.id)
         .filter(EffectivenessEvaluation.year == year)
     )
-    query = filter_by_data_scope(query, Village, current_user, db=db)
+    query = apply_scope_filter(query, current_user, Village, db=db)
     evaluations = query.order_by(EffectivenessEvaluation.rank).limit(limit).all()
 
     return {

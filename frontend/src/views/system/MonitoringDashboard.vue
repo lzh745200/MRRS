@@ -763,9 +763,12 @@ function buildChart() {
   chartInstance = echarts.init(chartRef.value, isDark ? 'militaryTechDark' : undefined)
 
   const endpoints = apiStats.value.slice(0, 10)
-  const names = endpoints.map((e) => `${e.method ?? ''} ${e.endpoint}`)
+  // 后端 metrics_store 返回 {method, path, count, avg_duration, max_duration}
+  const names = endpoints.map((e) => `${e.method ?? ''} ${e.endpoint ?? e.path ?? ''}`)
   const counts = endpoints.map((e) => e.count ?? e.total_requests ?? 0)
-  const avgTimes = endpoints.map((e) => (e.avg_response_time_ms ?? e.avg_time_ms ?? 0).toFixed(1))
+  const avgTimes = endpoints.map((e) =>
+    (e.avg_response_time_ms ?? e.avg_time_ms ?? e.avg_duration ?? 0).toFixed(1)
+  )
   const errorRates = endpoints.map((e) => (e.error_rate ?? 0).toFixed(1))
 
   chartInstance.setOption({

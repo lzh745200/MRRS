@@ -150,7 +150,7 @@ def sync_policy_to_fts(db: Session, policy_id: int) -> None:
         )
         safe_commit(db)
     except Exception:
-        logger.debug("FTS同步失败 policy_id=%s", policy_id, exc_info=True)
+        logger.warning("FTS同步失败 policy_id=%s（全文检索可能搜不到该政策）", policy_id, exc_info=True)
 
 
 def remove_policy_from_fts(db: Session, policy_id: int) -> None:
@@ -159,4 +159,4 @@ def remove_policy_from_fts(db: Session, policy_id: int) -> None:
         db.execute(text(f"DELETE FROM {FTS_TABLE} WHERE rowid = :id"), {"id": policy_id})  # nosec B608
         safe_commit(db)
     except Exception:
-        logger.debug("FTS删除失败 policy_id=%s", policy_id, exc_info=True)
+        logger.warning("FTS删除失败 policy_id=%s（已删除政策可能仍可被搜索到）", policy_id, exc_info=True)

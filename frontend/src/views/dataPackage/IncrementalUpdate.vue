@@ -223,13 +223,11 @@ const importForm = ref({
 // 获取数据包列表
 const fetchPackageList = async () => {
   try {
-    const response = await get('/data-packages')
-    if (response.data.items) {
-      packageList.value = response.data.items.filter((p: PackageItem) => p.type !== 'update')
-      incrementalPackages.value = response.data.items.filter(
-        (p: PackageItem) => p.type === 'update'
-      )
-    }
+    const response: any = await get('/data-packages')
+    // 后端裸返回 {items, total, ...}（拦截器已解包）
+    const items = response?.items || response?.data?.items || (Array.isArray(response) ? response : [])
+    packageList.value = items.filter((p: PackageItem) => p.type !== 'update')
+    incrementalPackages.value = items.filter((p: PackageItem) => p.type === 'update')
   } catch {
     ElMessage.error('获取数据包列表失败')
   }
@@ -248,7 +246,7 @@ const handleDetectChanges = async () => {
   }
 
   try {
-    const response = await post('/data-packages/incremental/detect-changes', null, {
+    const response: any = await post('/data-packages/incremental/detect-changes', null, {
       params: {
         org_id: null, // 使用当前用户组织
         data_types: exportForm.value.data_types,
@@ -256,9 +254,12 @@ const handleDetectChanges = async () => {
       },
     })
 
-    if (response.success) {
-      changesSummary.value = response.data.summary
+    const result = response?.data ?? response
+    if (result && (result.summary || result.changes)) {
+      changesSummary.value = result.summary ?? result
       ElMessage.success('变更检测完成')
+    } else {
+      ElMessage.info('未检测到变更')
     }
   } catch (error: unknown) {
     handleApiError(error, '检测变更失败')
@@ -268,21 +269,23 @@ const handleDetectChanges = async () => {
 // 导出增量包
 const handleExport = async () => {
   try {
-    const response = await post('/data-packages/incremental/export', {
+    const response: any = await post('/data-packages/incremental/export', {
       org_id: null,
       data_types: exportForm.value.data_types,
       base_package_id: exportForm.value.base_package_id,
       description: exportForm.value.description || '增量更新包',
     })
 
-    if (response.success) {
+    const result = response?.data ?? response
+    if (result && (result.package_id || result.download_url)) {
       ElMessage.success('增量包导出成功')
 
       // 使用认证请求下载文件（兼容 Electron，避免 window.open 无 token 问题）
-      if (response.data.download_url) {
+      const downloadUrl = result.download_url || result.url
+      if (downloadUrl) {
         try {
           const token = AuthStorage.getToken()
-          const dlResponse = await fetch(response.data.download_url, {
+          const dlResponse = await fetch(downloadUrl, {
             headers: { Authorization: `Bearer ${token}` },
           })
           if (!dlResponse.ok) throw new Error('Download failed')
@@ -290,7 +293,7 @@ const handleExport = async () => {
           const blobUrl = URL.createObjectURL(blob)
           const link = document.createElement('a')
           link.href = blobUrl
-          link.download = response.data.filename || '增量更新包.zip'
+          link.download = result.filename || '增量更新包.zip'
           link.click()
           setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
         } catch {
@@ -301,6 +304,8 @@ const handleExport = async () => {
       // 刷新列表
       fetchPackageList()
       changesSummary.value = null
+    } else if (result?.message) {
+      ElMessage.warning(result.message)
     }
   } catch (error: unknown) {
     handleApiError(error, '导出失败')
@@ -310,14 +315,17 @@ const handleExport = async () => {
 // 导入增量包
 const handleImport = async () => {
   try {
-    const response = await post('/data-packages/incremental/import', {
+    const response: any = await post('/data-packages/incremental/import', {
       package_id: importForm.value.package_id,
       apply_changes: importForm.value.apply_changes,
     })
 
-    if (response.success) {
-      importResult.value = response.data
+    const result = response?.data ?? response
+    if (result && (result.success === true || result.package_id || result.total_records !== undefined)) {
+      importResult.value = result
       ElMessage.success(importForm.value.apply_changes ? '导入成功' : '预览完成')
+    } else if (result?.message) {
+      ElMessage.warning(result.message)
     }
   } catch (error: unknown) {
     handleApiError(error, '操作失败')

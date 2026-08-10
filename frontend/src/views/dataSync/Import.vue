@@ -203,32 +203,33 @@ const handleImport = async () => {
     let response
 
     if (isEncryptedFile.value) {
-      // 加密文件导入
-      response = await (importEncryptedData as any)({
-        file: selectedFile.value,
-        password: importForm.value.password,
-        strategy: importForm.value.strategy,
-      })
+      // 加密文件导入（importEncryptedData 签名: file, password 位置参数）
+      response = await importEncryptedData(
+        selectedFile.value,
+        importForm.value.password || ''
+      )
     } else {
       // 旧版文件导入
       response = await importData(selectedFile.value, importForm.value.strategy)
     }
 
-    importResult.value = response.data
+    // post() 已自动解包，后端裸返回 {success, total_records, ...}
+    const result = response?.data ?? response
+    importResult.value = result
 
-    if (response.success) {
+    if (result?.success) {
       const stats = [
-        `成功 ${response.data.success_records} 条`,
-        `失败 ${response.data.failed_records} 条`,
+        `成功 ${result.success_records ?? 0} 条`,
+        `失败 ${result.failed_records ?? 0} 条`,
       ]
-      if (response.data.inserted_count !== undefined) {
-        stats.push(`新增 ${response.data.inserted_count} 条`)
+      if (result.inserted_count !== undefined) {
+        stats.push(`新增 ${result.inserted_count} 条`)
       }
-      if (response.data.updated_count !== undefined) {
-        stats.push(`更新 ${response.data.updated_count} 条`)
+      if (result.updated_count !== undefined) {
+        stats.push(`更新 ${result.updated_count} 条`)
       }
-      if (response.data.skipped_count !== undefined) {
-        stats.push(`跳过 ${response.data.skipped_count} 条`)
+      if (result.skipped_count !== undefined) {
+        stats.push(`跳过 ${result.skipped_count} 条`)
       }
 
       ElMessage.success(`导入成功! ${stats.join(', ')}`)
@@ -236,16 +237,19 @@ const handleImport = async () => {
       await loadImportHistory()
       // 清空密码
       importForm.value.password = ''
+    } else if (result?.message) {
+      ElMessage.warning(result.message)
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '导入失败')
+    ElMessage.error(error?.response?.data?.detail || error.message || '导入失败')
   } finally {
     importing.value = false
   }
 }
 
 const showConflicts = () => {
-  if (importResult.value && importResult.value.conflicts.length > 0) {
+  const conflicts = importResult.value?.conflicts
+  if (Array.isArray(conflicts) && conflicts.length > 0) {
     // 跳转到冲突解决页面
     pushSafe({
       name: 'DataSyncConflicts',
@@ -258,10 +262,10 @@ const showConflicts = () => {
 
 const loadImportHistory = async () => {
   try {
-    const response = await (getSyncLogs as any)('import', 20)
-    if (response.success) {
-      importHistory.value = response.data
-    }
+    const response: any = await getSyncLogs({ action: 'import', page: 1, page_size: 20 })
+    // 后端 ok_list 信封 → items 已在顶层
+    const list = response?.items || response?.data?.items || []
+    importHistory.value = Array.isArray(list) ? list : []
   } catch (error) {
     logger.error('加载导入历史失败', error)
   }

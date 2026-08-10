@@ -113,7 +113,8 @@ def _write_audit_from_event(mapper, connection, target, action: str):
             )
         )
     except Exception:
-        logger.debug("审计日志写入失败 (non-critical): %s %s", action, type(target).__name__, exc_info=True)
+        # 审计轨迹丢失属军事合规风险，必须可观测（升级为 warning）
+        logger.warning("审计日志写入失败 (non-critical): %s %s", action, type(target).__name__, exc_info=True)
 
 
 def _after_insert(mapper, connection, target):

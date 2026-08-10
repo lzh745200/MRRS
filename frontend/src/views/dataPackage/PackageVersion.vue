@@ -270,10 +270,10 @@ const compareResult = ref<CompareResult | null>(null)
 // 获取版本列表
 const fetchVersionList = async () => {
   try {
-    const response = await get(`/data-packages/${packageId.value}/versions`)
-    if (response.success) {
-      versionList.value = response.data.versions
-    }
+    const response: any = await get(`/data-packages/${packageId.value}/versions`)
+    // 后端裸返回 {versions, total}
+    const versions = response?.versions || response?.data?.versions || []
+    versionList.value = Array.isArray(versions) ? versions : []
   } catch {
     ElMessage.error('获取版本列表失败')
   }

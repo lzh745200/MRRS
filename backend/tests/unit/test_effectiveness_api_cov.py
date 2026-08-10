@@ -28,8 +28,8 @@ def client():
     app.dependency_overrides[get_current_active_user] = lambda: SimpleNamespace(
         id=1, username="admin", is_superuser=True
     )
-    # 数据权限过滤直通（单测不涉权限矩阵）
-    with patch("app.api.v1.effectiveness.filter_by_data_scope", side_effect=lambda q, *a, **kw: q):
+    # 数据权限过滤直通（单测不涉权限矩阵）——端点已改用 apply_scope_filter
+    with patch("app.api.v1.effectiveness.apply_scope_filter", side_effect=lambda q, *a, **kw: q):
         yield TestClient(app, raise_server_exceptions=False), db
     app.dependency_overrides = original
 

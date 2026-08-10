@@ -290,7 +290,9 @@ async function loadRules() {
     if (filterModule.value) params.module = filterModule.value
     if (filterActive.value !== '') params.is_active = filterActive.value === 'true'
     const res = await listRules(params)
-    rules.value = (res as any)?.data || (res as any)?.items || []
+    // 后端裸返回数组（response_model=List[ValidationRuleOut]）
+    const list = (res as any)?.data || (res as any)?.items || res
+    rules.value = Array.isArray(list) ? list : []
   } catch {
     ElMessage.error('加载校验规则失败')
   } finally {

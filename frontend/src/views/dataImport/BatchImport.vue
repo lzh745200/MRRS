@@ -499,7 +499,8 @@ const handleValidate = async () => {
       params: { entity_type: selectedTemplate.value },
       headers: { 'Content-Type': 'multipart/form-data' },
     })
-    const data = res.data
+    // post() 已自动解包，后端裸返回校验结果对象
+    const data = res?.data ?? res
     if (data.error_count > 0 && data.first_errors) {
       validationErrors.value = data.first_errors.map((e: any) => ({
         row: e.row_number || e.row || 0,
@@ -538,7 +539,8 @@ const handleImport = async () => {
       }
     )
     importProgress.value = 100
-    const data = res.data
+    // post() 已自动解包，后端裸返回导入结果对象
+    const data = res?.data ?? res
     importResult.value = {
       success: data.success_rows || 0,
       failed: data.failed_rows || 0,

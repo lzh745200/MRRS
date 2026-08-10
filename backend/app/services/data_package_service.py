@@ -750,3 +750,14 @@ class DataPackageService:
         if type_filter:
             query = query.filter(DataPackage.type == type_filter)
         return query.order_by(DataPackage.created_at.desc()).offset(skip).limit(limit).all()
+
+    def count_packages_by_org(
+        self, org_id: int, status: str = None, type_filter: str = None
+    ) -> int:
+        """统计某组织的数据包总数（不随分页截断）"""
+        query = self.db.query(DataPackage).filter(DataPackage.org_id == org_id)
+        if status:
+            query = query.filter(DataPackage.status == status)
+        if type_filter:
+            query = query.filter(DataPackage.type == type_filter)
+        return query.count()

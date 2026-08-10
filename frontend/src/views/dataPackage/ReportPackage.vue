@@ -293,10 +293,12 @@ async function handleOneClickReport() {
       })
 
       // 检查响应类型：可能是文件流或 JSON
-      const data = response.data
-      if (data instanceof Blob) {
+      // apiRequest 已解包：responseType:'blob' 时 response 即 Blob，否则为响应体对象
+      const isBlobResp = response instanceof Blob
+      const data = isBlobResp ? null : (response?.data ?? response)
+      if (isBlobResp) {
         // 直接下载文件流
-        const url = URL.createObjectURL(data)
+        const url = URL.createObjectURL(response)
         const link = document.createElement('a')
         link.href = url
         link.download = `上报数据包_${form.year}.zip`
@@ -312,7 +314,7 @@ async function handleOneClickReport() {
           responseType: 'blob',
         })
         // dlRes 已是 Blob 本身（apiRequest responseType:'blob' 直接返回）
-        const blob = new Blob([dlRes])
+        const blob = new Blob([dlRes as BlobPart])
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url

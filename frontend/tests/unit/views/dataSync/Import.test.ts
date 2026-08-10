@@ -134,9 +134,9 @@ const findBtn = (wrapper: any, text: string) => {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockGetSyncLogs.mockResolvedValue({ success: true, data: [rowA, rowB] })
-  mockImportData.mockResolvedValue({ success: true, data: resultOK })
-  mockImportEncryptedData.mockResolvedValue({ success: true, data: resultOK })
+  mockGetSyncLogs.mockResolvedValue({ success: true, items: [rowA, rowB] })
+  mockImportData.mockResolvedValue({ success: true, ...resultOK })
+  mockImportEncryptedData.mockResolvedValue({ success: true, ...resultOK })
 })
 
 describe('挂载与历史', () => {
@@ -144,7 +144,7 @@ describe('挂载与历史', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(mockGetSyncLogs).toHaveBeenCalledWith('import', 20)
+    expect(mockGetSyncLogs).toHaveBeenCalledWith({ action: 'import', page: 1, page_size: 20 })
     expect(vm.importHistory).toEqual([rowA, rowB])
     // 模板插槽渲染：成功/失败/冲突数字标签（slot 内容）
     const text = wrapper.text()
@@ -205,12 +205,8 @@ describe('handleImport', () => {
     vm.selectedFile = { name: 'a.rrs' } as any
     vm.importForm.password = '12345678'
     await vm.handleImport()
-    expect(mockImportEncryptedData).toHaveBeenCalledWith({
-      file: { name: 'a.rrs' },
-      password: '12345678',
-      strategy: 'merge',
-    })
-    expect(vm.importResult).toEqual(resultOK)
+    expect(mockImportEncryptedData).toHaveBeenCalledWith({ name: 'a.rrs' }, '12345678')
+    expect(vm.importResult).toEqual(expect.objectContaining(resultOK))
     expect(ElMessage.success).toHaveBeenCalledWith(
       '导入成功! 成功 7 条, 失败 1 条, 新增 3 条, 更新 2 条, 跳过 1 条'
     )
@@ -222,7 +218,10 @@ describe('handleImport', () => {
   it('stats 条件全缺（inserted/updated/skipped undefined）；旧版导入', async () => {
     mockImportData.mockResolvedValue({
       success: true,
-      data: { success_records: 1, failed_records: 0, conflicts: [], errors: [] },
+      success_records: 1,
+      failed_records: 0,
+      conflicts: [],
+      errors: [],
     })
     const wrapper = mountComp()
     await flushPromises()
@@ -245,7 +244,8 @@ describe('handleImport', () => {
     await findBtn(wrapper, '开始导入').trigger('click')
     await flushPromises()
     expect(mockImportEncryptedData).toHaveBeenCalledWith(
-      expect.objectContaining({ strategy: 'overwrite' })
+      expect.objectContaining({ name: 'c.rrs' }),
+      '12345678'
     )
   })
 

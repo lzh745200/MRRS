@@ -262,7 +262,8 @@ describe('DataTier.vue', () => {
   it('loadStats：data 为空 → 空对象', async () => {
     dataTierApi.getStats.mockResolvedValue(null)
     const w = await mountComp()
-    expect((w.vm as any).stats).toEqual({})
+    expect((w.vm as any).stats.hot_count).toBe(0)
+    expect((w.vm as any).stats.cold_size_mb).toBe(0)
   })
 
   it('loadArchives：缺少 cold/warm 字段 → 空数组兜底', async () => {

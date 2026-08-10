@@ -882,7 +882,10 @@ class DataSyncService:
                 # 如果导入的记录更新，则更新
                 return imported_time > existing_time
             except Exception:
-                logger.debug("数据同步更新比较失败")
+                # 时间解析失败会静默跳过该记录 → 数据不一致，升级为 warning 可观测
+                logger.warning(
+                    "数据同步更新比较失败（记录可能被跳过）: %s", imported.get("id", "?"), exc_info=True
+                )
 
         # 默认不更新
         return False

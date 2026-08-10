@@ -376,8 +376,18 @@ function tierLabel(tier: string): string {
 
 async function loadStats() {
   try {
-    const data = await dataTierApi.getStats()
-    stats.value = data || {}
+    const data: any = (await dataTierApi.getStats()) || {}
+    // 后端返回 by_tier.{hot,warm,cold}.{count,size_mb} 嵌套结构 → 归一化为扁平字段
+    const byTier = data.by_tier || {}
+    const flat = {
+      hot_count: byTier.hot?.count ?? data.hot_count ?? 0,
+      hot_size_mb: byTier.hot?.size_mb ?? data.hot_size_mb ?? 0,
+      warm_count: byTier.warm?.count ?? data.warm_count ?? 0,
+      warm_size_mb: byTier.warm?.size_mb ?? data.warm_size_mb ?? 0,
+      cold_count: byTier.cold?.count ?? data.cold_count ?? 0,
+      cold_size_mb: byTier.cold?.size_mb ?? data.cold_size_mb ?? 0,
+    }
+    stats.value = { ...data, ...flat }
   } catch {
     ElMessage.error('加载存储统计失败')
   }

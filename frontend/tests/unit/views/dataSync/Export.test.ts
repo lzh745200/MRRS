@@ -106,12 +106,13 @@ const findBtn = (wrapper: any, text: string) => {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockGetSyncLogs.mockResolvedValue({ success: true, data: [rowA, rowB, rowC] })
+  mockGetSyncLogs.mockResolvedValue({ success: true, items: [rowA, rowB, rowC] })
   mockExportEncryptedData.mockResolvedValue({
     success: true,
-    data: { total_records: 99, package_name: 'pkg_x.rrs' },
+    total_records: 99,
+    package_name: 'pkg_x.rrs',
   })
-  mockExportData.mockResolvedValue({ success: true, data: { total_records: 5, package_name: 'old.zip' } })
+  mockExportData.mockResolvedValue({ success: true, total_records: 5, package_name: 'old.zip' })
   mockDownloadExportPackage.mockResolvedValue(undefined)
 })
 
@@ -120,7 +121,7 @@ describe('挂载与历史', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(mockGetSyncLogs).toHaveBeenCalledWith('export', 20)
+    expect(mockGetSyncLogs).toHaveBeenCalledWith({ action: 'export', page: 1, page_size: 20 })
     expect(vm.exportHistory).toEqual([rowA, rowB, rowC])
     expect(vm.exportForm.modules).toHaveLength(13)
     const text = wrapper.text()

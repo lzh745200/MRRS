@@ -420,7 +420,8 @@ async function handleBatchCheck() {
       const resp = await post('/validation/validate', raw, {
         params: { module: 'village' },
       })
-      const result = resp.data
+      // post() 已自动解包，后端裸返回 {valid, errors}
+      const result = resp?.data ?? resp
       if (result?.valid) {
         // 后端规则通过，再检查完整度
         row.verifyStatus = row.completeness >= 80 ? 'pass' : 'pending'

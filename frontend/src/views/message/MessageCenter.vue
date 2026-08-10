@@ -324,11 +324,23 @@ async function loadMessages() {
     })
     messages.value = response.items
     total.value = response.total
-    unreadCount.value = response.unread_count
+    // 列表响应不含 unread_count（在 /messages/unread-count 端点），单独获取
+    unreadCount.value = response.unread_count ?? (await loadUnreadCountValue())
   } catch (error) {
     ElMessage.error('加载消息列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadUnreadCountValue(): Promise<number> {
+  try {
+    const { getUnreadCount } = await import('@/api/message')
+    const res: any = await getUnreadCount()
+    const d = res?.data ?? res
+    return Number(d?.total ?? d?.count ?? 0) || 0
+  } catch {
+    return 0
   }
 }
 

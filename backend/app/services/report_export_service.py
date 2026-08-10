@@ -50,7 +50,8 @@ class ReportExportService:
                 "sections": [],
             }
         except Exception:
-            logger.debug("学校统计数据查询失败", exc_info=True)
+            # 报表数据查询失败若返回全 0 会生成误导性正式报表，升级为 warning 可观测
+            logger.warning("学校统计数据查询失败（报表将输出 0）", exc_info=True)
             return {"year": year, "total_schools": 0, "total_students": 0, "total_teachers": 0, "sections": []}
 
     def generate_village_summary_report_data(self, db, year: int) -> dict:
@@ -69,7 +70,7 @@ class ReportExportService:
                 "sections": [],
             }
         except Exception:
-            logger.debug("帮扶村汇总数据查询失败", exc_info=True)
+            logger.warning("帮扶村汇总数据查询失败（报表将输出 0）", exc_info=True)
             return {"year": year, "total_villages": 0, "sections": []}
 
     def generate_annual_summary_report_data(self, db, year: int) -> dict:

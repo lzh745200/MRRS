@@ -16,8 +16,13 @@ logger = logging.getLogger(__name__)
 # In-memory store
 # ---------------------------------------------------------------------------
 
+import threading
+
 # Stores (token_jti, expires_at_epoch) tuples
 _blacklist: dict[str, float] = {}
+
+# 并发保护锁（is_blacklisted 每次请求都会触发 _cleanup_expired，多线程下防 KeyError）
+_BLACKLIST_LOCK = threading.Lock()
 
 
 def add(token_jti: str, *, expires_at: Optional[datetime] = None, ttl_seconds: int = 0) -> None:
@@ -35,11 +40,16 @@ def add(token_jti: str, *, expires_at: Optional[datetime] = None, ttl_seconds: i
         return
 
     if expires_at is not None:
-        expiry = expires_at.timestamp()
+        exp = expires_at
+        if exp.tzinfo is None:
+            # 统一按 UTC 解释（与 JWT exp 一致），避免本地时区偏移
+            exp = exp.replace(tzinfo=timezone.utc)
+        expiry = exp.timestamp()
     else:
         expiry = time.time() + max(ttl_seconds, 1) if ttl_seconds else time.time() + 86400
 
-    _blacklist[token_jti] = expiry
+    with _BLACKLIST_LOCK:
+        _blacklist[token_jti] = expiry
     _cleanup_expired()
 
 
@@ -76,7 +86,15 @@ def load_from_db(db_session) -> int:
         )
         for entry in entries:
             if entry.token_jti not in _blacklist:
-                expiry = entry.expires_at.timestamp() if entry.expires_at else now + 86400
+                if entry.expires_at is None:
+                    expiry = now + 86400
+                else:
+                    # expires_at 为 UTC 存储的 aware/naive datetime：
+                    # 统一按 UTC 解析，避免按本地时区解释导致吊销条目提前 8h 过期
+                    exp = entry.expires_at
+                    if exp.tzinfo is None:
+                        exp = exp.replace(tzinfo=timezone.utc)
+                    expiry = exp.timestamp()
                 _blacklist[entry.token_jti] = expiry
         if entries:
             logger.info("从数据库加载 %d 条黑名单记录", len(entries))
@@ -100,9 +118,10 @@ def count() -> int:
 def _cleanup_expired() -> None:
     """Remove entries whose expiry timestamp has passed."""
     now = time.time()
-    expired = [jti for jti, exp in _blacklist.items() if exp <= now]
-    for jti in expired:
-        del _blacklist[jti]
+    with _BLACKLIST_LOCK:
+        expired = [jti for jti, exp in _blacklist.items() if exp <= now]
+        for jti in expired:
+            del _blacklist[jti]
     if expired:
         logger.debug("清理过期黑名单条目: %d 个", len(expired))
 

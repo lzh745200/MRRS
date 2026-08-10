@@ -880,7 +880,11 @@ async def add_organization_members(
 
     added = 0
     for uid in user_ids:
-        user = db.query(User).filter(User.id == int(uid)).first()
+        try:
+            uid_int = int(uid)
+        except (ValueError, TypeError):
+            continue  # 非数字 ID 跳过，不导致整接口 500
+        user = db.query(User).filter(User.id == uid_int).first()
         if user and user.is_active:
             user.organization_id = org_id
             added += 1

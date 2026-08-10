@@ -48,7 +48,7 @@ async def _get_user_from_token(authorization: Optional[str] = None) -> Optional[
         if info:
             return info.get("username") or str(info.get("id", ""))
     except Exception:
-        logger.debug("从 token 获取用户信息失败")
+        logger.warning("从 token 获取用户信息失败（反馈将无归属）", exc_info=True)
     return None
 
 

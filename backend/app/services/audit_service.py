@@ -342,6 +342,24 @@ class AuditService:
 
         recent_activity = query.order_by(desc(AuditLog.created_at)).limit(20).all()
 
+        # 前端统计卡派生字段（today_operations / active_users / failed_operations / warnings）
+        from datetime import datetime as _dt, timedelta as _td
+
+        today_start = _dt.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_operations = (
+            self.db.query(func.count(AuditLog.id))
+            .filter(AuditLog.created_at >= today_start)
+            .scalar()
+            or 0
+        )
+        active_users = len(top_users)
+        failed_operations = sum(
+            c for k, c in status_counts.items() if str(k).lower() in ("failed", "failure", "error")
+        )
+        warnings = sum(
+            c for k, c in level_counts.items() if str(k).lower() in ("warning", "warn")
+        )
+
         return {
             "total_count": query.count(),
             "by_action": action_counts,
@@ -349,6 +367,12 @@ class AuditService:
             "by_level": level_counts,
             "top_users": top_users,
             "recent_activity": [log.to_dict() for log in recent_activity],
+            # 前端兼容字段
+            "today_operations": today_operations,
+            "total_operations": query.count(),
+            "active_users": active_users,
+            "failed_operations": failed_operations,
+            "warnings": warnings,
         }
 
 

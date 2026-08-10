@@ -199,10 +199,23 @@ class BackupService:
         Returns:
             备份记录
         """
-        # 生成备份文件名
+        # 生成备份文件名（毫秒级时间戳，避免同秒两次备份互相覆盖）
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file_name = f"backup_{timestamp}.zip"
+        backup_file_name = f"backup_{timestamp}_{int(datetime.now().timestamp() * 1000) % 1000:03d}.zip"
         backup_file_path = os.path.join(self.backup_dir, backup_file_name)
+
+        # WAL 完整性：备份前将未 checkpoint 的 -wal 事务合并进主库，
+        # 否则备份包可能缺少最近一批数据（WAL 模式下主库文件不含未落盘事务）
+        try:
+            import sqlite3 as _sqlite3
+
+            _conn = _sqlite3.connect(self.database_path)
+            try:
+                _conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            finally:
+                _conn.close()
+        except Exception as _wal_err:
+            logger.warning("备份前 WAL checkpoint 失败（备份可能不完整）: %s", _wal_err)
 
         # 创建备份
         with zipfile.ZipFile(backup_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
@@ -429,6 +442,22 @@ class BackupService:
         finally:
             self._cleanup_temp(temp_dir, decrypted_temp_path)
 
+    def _query_backup_records(self):
+        """查询备份记录（仅匹配备份文件条目，排除 backup_* 配置键）。
+
+        备份记录 key 形如 backup_YYYYMMDD_HHMMSS 且值指向 .zip 文件；
+        配置键（backup_interval_days / backup_target_dir 等）不参与备份管理。
+        """
+        return (
+            self.db.query(SystemConfig)
+            .filter(
+                SystemConfig.key.like("backup_20%"),
+                SystemConfig.value.like("%.zip"),
+            )
+            .order_by(SystemConfig.created_at.desc())
+            .all()
+        )
+
     def list_backups(self) -> List[BackupRecord]:
         """
         列出所有备份
@@ -438,16 +467,11 @@ class BackupService:
         """
         backups = []
 
-        # 查询数据库中的备份记录
-        configs = (
-            self.db.query(SystemConfig)
-            .filter(SystemConfig.key.like("backup_%"))
-            .order_by(SystemConfig.created_at.desc())
-            .all()
-        )
+        # 查询数据库中的备份记录（仅 .zip 文件条目，排除 backup_* 配置键）
+        configs = self._query_backup_records()
 
         for config in configs:
-            if os.path.exists(config.value):
+            if os.path.exists(config.value) and os.path.isfile(config.value):
                 file_size = os.path.getsize(config.value)
                 file_name = os.path.basename(config.value)
 
@@ -502,13 +526,8 @@ class BackupService:
         Returns:
             删除的备份数量
         """
-        # 获取所有备份
-        configs = (
-            self.db.query(SystemConfig)
-            .filter(SystemConfig.key.like("backup_%"))
-            .order_by(SystemConfig.created_at.desc())
-            .all()
-        )
+        # 获取所有备份（仅 .zip 文件条目，排除 backup_* 配置键）
+        configs = self._query_backup_records()
 
         # 删除超出数量的旧备份
         deleted_count = 0
@@ -516,7 +535,7 @@ class BackupService:
             if os.path.exists(config.value):
                 try:
                     os.unlink(config.value)
-                except FileNotFoundError:
+                except (FileNotFoundError, IsADirectoryError, PermissionError):
                     pass
             self.db.delete(config)
             deleted_count += 1

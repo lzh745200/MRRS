@@ -212,7 +212,10 @@ async def list_data_packages(
         target_org_id, status=status_filter, type_filter=type_filter, skip=(page - 1) * page_size, limit=page_size
     )
 
-    total = len(packages)  # 简化实现，实际应该单独查询总数
+    # 真实总数（独立查询，不随分页截断）
+    total = service.count_packages_by_org(
+        target_org_id, status=status_filter, type_filter=type_filter
+    )
 
     return DataPackageListResponse(
         total=total,

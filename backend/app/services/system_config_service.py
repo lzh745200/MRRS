@@ -29,34 +29,61 @@ class ConfigEntry:
     description: str = ""
 
 
-# 全局服务实例
+# 全局服务实例（可选注入；未注入时全局函数使用独立短会话）
 _global_config_service: Optional["SystemConfigService"] = None
+
+
+def _config_session():
+    """创建独立短会话（全局函数自行管理生命周期，不依赖全局实例注入）"""
+    from app.core.database import SessionLocal
+
+    return SessionLocal()
 
 
 def get_config(key: str, default: Any = None) -> Optional[str]:
     """获取配置值（全局函数）"""
-    if _global_config_service is None:
-        return default
-    return _global_config_service.get(key, default)
+    if _global_config_service is not None:
+        return _global_config_service.get(key, default)
+    db = _config_session()
+    try:
+        return SystemConfigService(db).get(key, default)
+    finally:
+        db.close()
 
 
 def set_config(key: str, value: Any, description: str = ""):
     """设置配置值（全局函数）"""
-    if _global_config_service:
+    if _global_config_service is not None:
         _global_config_service.set(key, value, description)
+        return
+    db = _config_session()
+    try:
+        SystemConfigService(db).set(key, value, description)
+    finally:
+        db.close()
 
 
 def delete_config(key: str):
     """删除配置（全局函数）"""
-    if _global_config_service:
+    if _global_config_service is not None:
         _global_config_service.delete(key)
+        return
+    db = _config_session()
+    try:
+        SystemConfigService(db).delete(key)
+    finally:
+        db.close()
 
 
 def list_configs() -> Dict[str, str]:
     """列出所有配置（全局函数）"""
-    if _global_config_service is None:
-        return {}
-    return _global_config_service.get_all()
+    if _global_config_service is not None:
+        return _global_config_service.get_all()
+    db = _config_session()
+    try:
+        return SystemConfigService(db).get_all()
+    finally:
+        db.close()
 
 
 class SystemConfigService:

@@ -319,7 +319,7 @@ describe('downloadPackage', () => {
 describe('一键上报', () => {
   it('Blob 响应 → 直接触发下载并进步骤 2（点击「一键上报」按钮）', async () => {
     const clickSpy = spyAnchorClick()
-    postMock.mockResolvedValue({ data: new Blob(['zip-bytes']) })
+    postMock.mockResolvedValue(new Blob(['zip-bytes']))
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any

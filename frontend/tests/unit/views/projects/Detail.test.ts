@@ -404,7 +404,7 @@ describe('任务 CRUD', () => {
     vm.taskForm.title = '新标题'
     projectsApiMock.getTasks.mockClear()
     await vm.handleSaveTask()
-    expect(projectsApiMock.updateTask).toHaveBeenCalledWith(7, 2, vm.taskForm)
+    expect(projectsApiMock.updateTask).toHaveBeenCalledWith(7, 2, expect.objectContaining({ name: vm.taskForm.title.trim() }))
     expect(ElMessage.success).toHaveBeenCalledWith('任务已更新')
     expect(vm.taskDialogVisible).toBe(false)
     expect(projectsApiMock.getTasks).toHaveBeenCalled()
@@ -417,7 +417,7 @@ describe('任务 CRUD', () => {
     vm.taskForm.title = '新任务'
     projectsApiMock.getTasks.mockClear()
     await vm.handleSaveTask()
-    expect(projectsApiMock.createTask).toHaveBeenCalledWith(7, vm.taskForm)
+    expect(projectsApiMock.createTask).toHaveBeenCalledWith(7, expect.objectContaining({ name: vm.taskForm.title.trim() }))
     expect(ElMessage.success).toHaveBeenCalledWith('任务已创建')
   })
 

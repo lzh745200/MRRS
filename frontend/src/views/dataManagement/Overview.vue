@@ -369,8 +369,9 @@ function handleModuleClick(row: any) {
 async function loadOverview() {
   loading.value = true
   try {
-    const res = await get('/statistics/overview')
-    const d = res.data
+    const res: any = await get('/statistics/overview')
+    // 后端裸返回统计对象（拦截器已解包）
+    const d = res?.data ?? res
     Object.assign(overview, {
       villages: d.villages ?? 0,
       projects: d.projects ?? 0,
