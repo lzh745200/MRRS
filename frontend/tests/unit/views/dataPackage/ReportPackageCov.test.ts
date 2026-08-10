@@ -526,11 +526,13 @@ describe('响应形态收尾', () => {
 
 describe('Blob响应收尾', () => {
   it('post 返回 Blob → isBlobResp 分支', async () => {
+    HTMLAnchorElement.prototype.click = vi.fn()
     postMock.mockResolvedValue(new Blob(['x']))
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     await vm.handleOneClickReport().catch(() => {})
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
     wrapper.unmount()
   })
 })

@@ -636,7 +636,7 @@ describe('响应形态收尾', () => {
 })
 
 describe('响应形态收尾2', () => {
-  it('校验响应无 data 包裹 → 直接使用', async () => {
+  it('校验响应无 data 包裹 → 直接使用；导入响应无 data', async () => {
     const wrapper = mountImport()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -644,6 +644,13 @@ describe('响应形态收尾2', () => {
     vm.selectedFile = new File(['x'], 'a.csv')
     await vm.handleValidate().catch(() => {})
     expect(vm.previewCount).toBe(2)
+    ;(mockPost as any).mockResolvedValueOnce({
+      success_rows: 2,
+      failed_rows: 0,
+      errors: [],
+    })
+    await vm.handleImport().catch(() => {})
+    expect((vm as any).importResult || (vm as any).importSuccess).toBeTruthy()
     wrapper.unmount()
   })
 })

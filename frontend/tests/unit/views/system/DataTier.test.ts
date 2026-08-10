@@ -416,3 +416,22 @@ describe('统计结构分支', () => {
     w.unmount()
   })
 })
+
+describe('顶层字段兜底2', () => {
+  it('无 by_tier → data 顶层 warm/cold 字段', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    dataTierApi.getStats.mockResolvedValue({
+      warm_count: 4,
+      warm_size_mb: 2,
+      cold_count: 5,
+      cold_size_mb: 3,
+    })
+    await vm.loadStats()
+    expect(vm.stats.warm_count).toBe(4)
+    expect(vm.stats.warm_size_mb).toBe(2)
+    expect(vm.stats.cold_count).toBe(5)
+    expect(vm.stats.cold_size_mb).toBe(3)
+    w.unmount()
+  })
+})

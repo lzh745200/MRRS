@@ -510,14 +510,13 @@ describe('校验响应形态', () => {
 })
 
 describe('裸响应形态', () => {
-  it('resp 无 data → 直接使用', async () => {
+  it('resp 无 data → 直接使用（validate 裸响应）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    ;(mockPost as any).mockResolvedValueOnce({ rows: [], total: 0, unmatched: 0 })
-    vm.qc.conditions = [{ field: 'a', operator: 'eq', value: '1' }]
-    await vm.qcRunCheck()
-    expect(vm.qcResult.total).toBe(0)
+    ;(mockPost as any).mockResolvedValueOnce({ valid: true })
+    await vm.handleBatchCheck().catch(() => {})
+    expect((mockPost as any)).toHaveBeenCalled()
     wrapper.unmount()
   })
 })

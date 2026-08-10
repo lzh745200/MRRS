@@ -616,6 +616,8 @@ describe('API统计字段形态2', () => {
     const wrapper = mountComponent()
     await advanceFakeTimersAndFlush()
     expect((wrapper.vm as any).apiStats.length).toBe(1)
+    ;(wrapper.vm as any).buildChart()
+    expect(mockSetOption).toHaveBeenCalled()
     wrapper.unmount()
   })
 })
