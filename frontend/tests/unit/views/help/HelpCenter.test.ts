@@ -399,3 +399,26 @@ describe('工具函数', () => {
     expect(vm.highlightKeyword('x a.b y')).toContain('a.b')
   })
 })
+
+describe('文章解析补充', () => {
+  it('parseArticleSections 全分支；sanitizedContent 空内容', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 空内容 → []
+    expect(vm.parseArticleSections('')).toEqual([])
+    // 标题+正文 / 独立行 / 标题后同行内容
+    const out = vm.parseArticleSections('【一】标题\n正文1\n正文2\n无标题行')
+    expect(out.length).toBe(1)
+    expect(out[0].heading).toBe('一')
+    expect(out[0].lines).toEqual(['标题', '正文1', '正文2', '无标题行'])
+    // 【二】标题带同行内容
+    const out2 = vm.parseArticleSections('【二】标题 同段内容')
+    expect(out2[0].heading).toBe('二')
+    expect(out2[0].lines).toContain('标题 同段内容')
+    // sanitizedContent 空 → 占位
+    vm.articleDetail = { content: '' }
+    expect(vm.sanitizedContent).toBe('(无内容)')
+    wrapper.unmount()
+  })
+})

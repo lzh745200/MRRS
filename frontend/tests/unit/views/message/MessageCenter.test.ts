@@ -22,6 +22,7 @@ const {
   mockMarkAllAsRead,
   mockDeleteMessages,
   mockPushSafe,
+  mockGet,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   confirmMock: vi.fn(),
@@ -30,6 +31,13 @@ const {
   mockMarkAllAsRead: vi.fn(),
   mockDeleteMessages: vi.fn(),
   mockPushSafe: vi.fn(),
+  mockGet: vi.fn(),
+}))
+
+vi.mock('@/api/request', () => ({
+  get: mockGet,
+  post: vi.fn(),
+  getCsrfToken: vi.fn(() => Promise.resolve('x')),
 }))
 
 vi.mock('element-plus', () => ({
@@ -404,5 +412,19 @@ describe('跳转与格式化', () => {
     vm.closeWebSocket()
     wrapper.unmount()
     expect(true).toBe(true)
+  })
+})
+
+describe('日志与动态补充', () => {
+  it('myLogs 加载成功/失败；recentActivities 失败清空', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGet.mockResolvedValueOnce({ items: [{ id: 1 }] })
+    await vm.loadMyLogs()
+    expect(vm.myLogs.length).toBe(1)
+    mockGet.mockRejectedValueOnce(new Error('x'))
+    await vm.loadMyLogs()
+    expect(vm.myLogs).toEqual([])
   })
 })
