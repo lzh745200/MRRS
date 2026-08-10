@@ -216,7 +216,6 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { logger } from '@/utils/logger'
 import { Plus, CopyDocument } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import PassCodeManagement from '@/views/organization/PassCodeManagement.vue'
 import {
   listMachineCodes,
@@ -229,8 +228,8 @@ import { copyToClipboard } from '@/utils/clipboard'
 
 const userStore = useUserStore()
 const isAdmin = computed(() => {
-  const role = normalizeRole(userStore.currentUser?.role)
-  return ADMIN_ROLES.includes(role)
+  const role = userStore.currentUser?.role
+  return role === 'super_admin' || role === 'admin'
 })
 
 const activeTab = ref('machineCodes')

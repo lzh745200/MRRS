@@ -4,7 +4,7 @@ import { apiRequest, _setCachedToken, prefetchCsrfToken } from '@/api/request'
 import { useMenuStore } from '@/stores/menu'
 import { getCurrentUser } from '@/api/queries/user'
 import { AuthStorage } from '@/utils/authStorage'
-import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
+import { ADMIN_ROLES } from '@/utils/roleAccess'
 import { verifyLoginTwoFactor } from '@/api/twoFactor'
 import type { AuthData } from '@/utils/authStorage'
 import type { ApiResponse } from '@/types/api'
@@ -60,7 +60,7 @@ export const useAuthStore = defineStore('auth', () => {
   const modulePermissions = computed(() => {
     const perms: string[] = user.value?.permissions || []
     // super_admin 拥有所有模块的全部权限 — 不使用硬编码列表，任何模块皆可
-    if (user.value?.is_superuser || normalizeRole(user.value?.role) === 'super_admin') {
+    if (user.value?.is_superuser || user.value?.role === 'super_admin') {
       return new Proxy<Record<string, { view: boolean; edit: boolean }>>(Object.create(null), {
         get(_target, prop: string) {
           if (prop === 'then' || prop === 'toJSON') return undefined

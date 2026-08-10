@@ -191,7 +191,7 @@ class TestPolicyAPI:
         mock_db.query.return_value.order_by.return_value.all.return_value = []
         resp = client.get("/api/v1/policies/categories")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "military" in data and "local" in data
 
     def test_get_categories_with_parent(self, client, mock_db, admin_user):

@@ -13,8 +13,6 @@ let backendProcess = null;
 let tray = null;
 let isQuitting = false;
 let backendRestartCount = 0;
-let backendRestartTimer = null; // 后端自动重启定时器句柄（退出时清理）
-let rendererCrashedOnce = false; // 渲染进程崩溃自动恢复防循环标志
 const MAX_BACKEND_RESTARTS = 3;
 const INTERNAL_BACKUP_KEY = crypto.randomBytes(16).toString('hex');
 const INTERNAL_SHUTDOWN_KEY = crypto.randomBytes(16).toString('hex');
@@ -323,10 +321,7 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
         backendRestartCount++;
         console.log(`[Backend] 自动重启 (${backendRestartCount}/${MAX_BACKEND_RESTARTS})...`);
         writeDiagnosticLog(`自动重启 ${backendRestartCount}/${MAX_BACKEND_RESTARTS}`);
-        // 保存定时器句柄并在 before-quit 时清理，避免退出竞态下残留进程
-        backendRestartTimer = setTimeout(async () => {
-          backendRestartTimer = null;
-          if (isQuitting) { console.log('[Backend] 应用正在退出，取消自动重启'); return; }
+        setTimeout(async () => {
           const restartStderr = [];
           // 重启时复用已确定的端口（isFirstStart=false），避免前端连接失效
           backendProcess = await startBackend(restartStderr, false);
@@ -607,53 +602,8 @@ function createMainWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
   mainWindow.webContents.on('render-process-gone', (event, details) => {
     console.error('[Renderer] 崩溃:', details.reason);
-    // 自动恢复：崩溃后尝试重载页面一次（防循环），失败才提示用户
-    if (rendererCrashedOnce) {
-      dialog.showErrorBox('页面异常', `渲染进程崩溃 (${details.reason})，请重启程序。`);
-      return;
-    }
-    rendererCrashedOnce = true;
-    dialog.showMessageBox({
-      type: 'warning',
-      title: '页面异常',
-      message: `渲染进程崩溃 (${details.reason})，正在尝试自动恢复...`,
-    }).catch(() => {});
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.loadURL(`http://127.0.0.1:${backendPort}`).catch((err) => {
-          console.error('[Window] 崩溃后重载失败:', err?.message || err);
-          dialog.showErrorBox('页面异常', '自动恢复失败，请重启程序。');
-        });
-      }
-    }, 1500);
+    dialog.showErrorBox('页面异常', `渲染进程崩溃 (${details.reason})，请重启程序。`);
   });
-}
-
-/**
- * 系统休眠/锁屏恢复处理：探测后端健康后重载页面，
- * 修复睡眠恢复后页面状态（路由/定时器/WebSocket）丢失的问题。
- */
-function handleSystemResume() {
-  console.log('[System] 检测到系统恢复（resume），探测后端健康...');
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    const http = require('http');
-    const req = http.get({ hostname: '127.0.0.1', port: backendPort, path: '/api/v1/system/health/liveness', timeout: 3000 }, (res) => {
-      res.resume();
-      if (res.statusCode === 200) {
-        // 后端健康：重载页面恢复前端状态（sessionStorage 登录态在 reload 后保留）
-        setTimeout(() => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            console.log('[System] 后端健康，重载页面恢复状态');
-            mainWindow.webContents.reload();
-          }
-        }, 1000);
-      } else {
-        console.warn('[System] 后端状态异常，交由自动重启流程处理');
-      }
-    });
-    req.on('error', () => { console.warn('[System] 后端探测失败，交由自动重启流程处理'); });
-    req.on('timeout', () => { req.destroy(); });
-  }
 }
 
 async function restartBackend() {
@@ -665,51 +615,16 @@ async function restartBackend() {
 
 // ─── 系统托盘 ───
 let trayUnreadCount = 0;
-let trayBaseImage = null; // 原始托盘图标（用于合成角标）
-
-/**
- * 生成带未读角标的托盘图标（nativeImage SVG 合成）。
- * count=0 时恢复原始图标；超过 99 显示 99+。
- */
-function buildBadgeTrayImage(count) {
-  if (!trayBaseImage) return null;
-  try {
-    const base64 = trayBaseImage.toPNG().toString('base64');
-    const label = count > 99 ? '99+' : String(count);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
-      <image href="data:image/png;base64,${base64}" width="32" height="32"/>
-      <circle cx="25" cy="7" r="8" fill="#e02020" stroke="#ffffff" stroke-width="1"/>
-      <text x="25" y="10" font-family="Segoe UI, Arial" font-size="9" font-weight="bold"
-            fill="#ffffff" text-anchor="middle">${label}</text>
-    </svg>`;
-    const { nativeImage } = require('electron');
-    const img = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
-    if (!img.isEmpty()) return img;
-  } catch (_) { /* 合成失败则退回原图标 */ }
-  return null;
-}
 
 function updateTrayUnread(count) {
   trayUnreadCount = Math.max(0, Number(count) || 0);
   if (!tray) return;
   tray.setToolTip(trayUnreadCount > 0 ? `${APP_TITLE}（${trayUnreadCount} 条未读消息）` : APP_TITLE);
-  try {
-    if (trayUnreadCount > 0) {
-      const badge = buildBadgeTrayImage(trayUnreadCount);
-      if (badge) tray.setImage(badge);
-    } else if (trayBaseImage) {
-      tray.setImage(trayBaseImage);
-    }
-  } catch (_) { /* 角标更新失败不阻塞 */ }
 }
 
 function createTray() {
   const iconPath = getIconPath();
   if (!fs.existsSync(iconPath)) return;
-  const { nativeImage } = require('electron');
-  try {
-    trayBaseImage = nativeImage.createFromPath(iconPath);
-  } catch (_) { trayBaseImage = null; }
   tray = new Tray(iconPath);
   const menu = Menu.buildFromTemplate([
     { label: '显示主窗口', click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } } },
@@ -769,7 +684,6 @@ function handleCloseBehaviorPrompt(win) {
 // ─── 全局快捷键 ───
 function registerGlobalShortcuts() {
   const { globalShortcut } = require('electron');
-  const failedShortcuts = [];
   const shortcuts = [
     { accelerator: 'CommandOrControl+Alt+N', route: '/approval/pending', name: '新建审批' },
     { accelerator: 'CommandOrControl+Alt+T', route: '/todos', name: '我的待办' },
@@ -783,24 +697,7 @@ function registerGlobalShortcuts() {
       else { performAutoBackup(); showTrayNotification('备份任务', '执行中...'); }
     }); } catch (_) { ok = false; }
     if (ok) { console.log(`[Shortcut] 已注册 ${s.accelerator} (${s.name})`); }
-    else {
-      console.warn(`[Shortcut] 注册失败 ${s.accelerator} (${s.name})，可能被其他程序占用`);
-      failedShortcuts.push(`${s.accelerator}（${s.name}）`);
-    }
-  }
-  // 注册失败时给出一次性用户提示（Windows 托盘气泡/系统通知）
-  if (failedShortcuts.length > 0) {
-    setTimeout(() => {
-      try {
-        const { Notification } = require('electron');
-        if (Notification.isSupported()) {
-          new Notification({
-            title: '全局快捷键部分注册失败',
-            body: `以下快捷键被其他程序占用：${failedShortcuts.join('、')}`,
-          }).show();
-        }
-      } catch (_) { /* 通知失败静默 */ }
-    }, 3000);
+    else { console.warn(`[Shortcut] 注册失败 ${s.accelerator} (${s.name})，可能被其他程序占用`); }
   }
   app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (_) {} });
 }
@@ -1006,7 +903,7 @@ app.whenReady().then(async () => {
   try {
     const splashPath = path.join(__dirname, 'splash.html');
     if (fs.existsSync(splashPath)) {
-      splash = new BrowserWindow({ width: 400, height: 300, frame: false, transparent: true, alwaysOnTop: true, resizable: false, icon: getIconPath(), webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
+      splash = new BrowserWindow({ width: 400, height: 300, frame: false, transparent: true, alwaysOnTop: true, resizable: false, icon: getIconPath(), webPreferences: { nodeIntegration: false, contextIsolation: true } });
       splash.loadFile(splashPath);
       splash.center();
     }
@@ -1058,23 +955,8 @@ app.whenReady().then(async () => {
   startAutoBackup();
 });
 
-app.on('before-quit', () => {
-  isQuitting = true;
-  // 清理后端自动重启定时器，避免退出后残留后端进程
-  if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null; }
-  stopBackend();
-});
+app.on('before-quit', () => { isQuitting = true; stopBackend(); });
 app.on('activate', () => { if (!mainWindow) createMainWindow(); else mainWindow.show(); });
-
-// 系统休眠/锁屏恢复：重载页面恢复前端状态（登录态/路由/定时器）
-try {
-  const { powerMonitor } = require('electron');
-  powerMonitor.on('resume', handleSystemResume);
-  powerMonitor.on('unlock', handleSystemResume);
-  console.log('[System] powerMonitor resume/unlock 事件已注册');
-} catch (err) {
-  console.warn('[System] powerMonitor 注册失败:', err?.message || err);
-}
 
 app.disableHardwareAcceleration();
 if (process.platform === 'win32') {

@@ -156,10 +156,9 @@ class TestPolicyCategories:
         resp = client.get("/api/v1/policies/categories", headers=admin_headers)
         assert resp.status_code == 200
         data = resp.json()
-        # 返回静态分类配置（信封 data 层）或数据库分类
+        # 返回静态分类配置或数据库分类
         if isinstance(data, dict):
-            inner = data.get("data", data)  # 兼容信封 {code,message,success,data:{military,local}} 与裸 dict
-            assert "military" in inner or "local" in inner
+            assert "military" in data or "local" in data
         elif isinstance(data, list):
             assert len(data) >= 0  # 可能为空列表
 

@@ -568,7 +568,7 @@ onMounted(() => {
 }
 
 .tier-card.tier-cold {
-  border-left-color: var(--el-color-primary, #409eff);
+  border-left-color: #409eff;
 }
 
 .tier-size {
@@ -633,7 +633,7 @@ onMounted(() => {
 }
 
 .bar-fill.bar-cold {
-  background: var(--el-color-primary, #409eff);
+  background: #409eff;
 }
 
 .bar-value {

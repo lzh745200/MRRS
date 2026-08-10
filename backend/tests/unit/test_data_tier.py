@@ -144,7 +144,7 @@ class TestGetTierInfo:
     def test_hot_tier(self, admin_client):
         resp = admin_client.get(f"{BASE}/tier/hot")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["tier"] == "hot"
         assert data["hot_threshold_days"] is not None
         assert data["warm_threshold_days"] is None
@@ -152,7 +152,7 @@ class TestGetTierInfo:
     def test_warm_tier(self, admin_client):
         resp = admin_client.get(f"{BASE}/tier/warm")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["tier"] == "warm"
         assert data["hot_threshold_days"] is None
         assert data["warm_threshold_days"] is not None
@@ -160,7 +160,7 @@ class TestGetTierInfo:
     def test_cold_tier(self, admin_client):
         resp = admin_client.get(f"{BASE}/tier/cold")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["tier"] == "cold"
         assert data["hot_threshold_days"] is None
         assert data["warm_threshold_days"] is None
@@ -168,7 +168,7 @@ class TestGetTierInfo:
     def test_case_insensitive(self, admin_client):
         resp = admin_client.get(f"{BASE}/tier/HOT")
         assert resp.status_code == 200
-        assert resp.json()["data"]["tier"] == "hot"
+        assert resp.json()["tier"] == "hot"
 
     def test_invalid_tier(self, admin_client):
         resp = admin_client.get(f"{BASE}/tier/invalid_tier")
@@ -178,7 +178,7 @@ class TestGetTierInfo:
     def test_regular_user(self, regular_client):
         resp = regular_client.get(f"{BASE}/tier/hot")
         assert resp.status_code == 200
-        assert resp.json()["data"]["tier"] == "hot"
+        assert resp.json()["tier"] == "hot"
 
 
 # ─────── POST /archive/{model_name} ───────
@@ -193,7 +193,7 @@ class TestArchiveModel:
                    return_value=mock_result):
             resp = admin_client.post(f"{BASE}/archive/auditlog")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["archived_count"] == 100
         assert data["model"] == "auditlog"
         assert "before_date" in data
@@ -204,7 +204,7 @@ class TestArchiveModel:
                    return_value=mock_result):
             resp = admin_client.post(f"{BASE}/archive/worklog?before_days=180&batch_size=500")
         assert resp.status_code == 200
-        assert resp.json()["data"]["archived_count"] == 50
+        assert resp.json()["archived_count"] == 50
 
     def test_invalid_model(self, admin_client):
         resp = admin_client.post(f"{BASE}/archive/invalid_model")
@@ -228,7 +228,7 @@ class TestArchiveModel:
                    return_value=mock_result):
             resp = admin_client.post(f"{BASE}/archive/auditlog")
         assert resp.status_code == 200
-        assert resp.json()["data"]["archived_count"] == 0
+        assert resp.json()["archived_count"] == 0
 
 
 # ─────── GET /archives ───────
@@ -244,7 +244,7 @@ class TestListArchives:
             with patch.object(data_tier_service.config, 'WARM_DATA_PATH', '/nonexistent/warm'):
                 resp = admin_client.get(f"{BASE}/archives")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["cold_archives"] == []
         assert data["warm_archives"] == []
 
@@ -264,7 +264,7 @@ class TestListArchives:
                 with patch.object(data_tier_service.config, 'WARM_DATA_PATH', str(warm_file)):
                     resp = admin_client.get(f"{BASE}/archives")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert len(data["cold_archives"]) == 1
         assert data["cold_archives"][0]["name"] == "test_archive.gz"
         assert data["cold_archives"][0]["size"] > 0
@@ -281,7 +281,7 @@ class TestListArchives:
                 with patch.object(data_tier_service.config, 'WARM_DATA_PATH', '/nonexistent/warm'):
                     resp = admin_client.get(f"{BASE}/archives?tier=cold")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "cold_archives" in data
         assert len(data["cold_archives"]) == 1
 
@@ -295,7 +295,7 @@ class TestListArchives:
                 with patch.object(data_tier_service.config, 'WARM_DATA_PATH', str(warm_file)):
                     resp = admin_client.get(f"{BASE}/archives?tier=warm")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "warm_archives" in data
 
     def test_tier_filter_invalid(self, admin_client):
@@ -304,7 +304,7 @@ class TestListArchives:
             with patch.object(data_tier_service.config, 'WARM_DATA_PATH', '/nonexistent/warm'):
                 resp = admin_client.get(f"{BASE}/archives?tier=unknown")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "cold_archives" in data
         assert "warm_archives" in data
 
@@ -328,7 +328,7 @@ class TestRestoreFromArchive:
                 params={"archive_file": "auditlog_20240101.gz", "model_name": "auditlog"},
             )
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["restored_count"] == 50
         assert data["archive_file"] == "auditlog_20240101.gz"
 
@@ -368,7 +368,7 @@ class TestRestoreFromArchive:
                 params={"archive_file": "empty.gz", "model_name": "message"},
             )
         assert resp.status_code == 200
-        assert resp.json()["data"]["restored_count"] == 0
+        assert resp.json()["restored_count"] == 0
 
 
 # ─────── DELETE /cleanup ───────
@@ -383,7 +383,7 @@ class TestCleanupOldArchives:
                    return_value=mock_result):
             resp = admin_client.delete(f"{BASE}/cleanup")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["deleted_count"] == 10
         assert data["max_age_days"] == 365
 
@@ -393,8 +393,8 @@ class TestCleanupOldArchives:
                    return_value=mock_result):
             resp = admin_client.delete(f"{BASE}/cleanup?max_age_days=180")
         assert resp.status_code == 200
-        assert resp.json()["data"]["max_age_days"] == 180
-        assert resp.json()["data"]["deleted_count"] == 5
+        assert resp.json()["max_age_days"] == 180
+        assert resp.json()["deleted_count"] == 5
 
     def test_zero_deleted(self, admin_client):
         mock_result = (0, "没有需要清理的文件")
@@ -402,7 +402,7 @@ class TestCleanupOldArchives:
                    return_value=mock_result):
             resp = admin_client.delete(f"{BASE}/cleanup")
         assert resp.status_code == 200
-        assert resp.json()["data"]["deleted_count"] == 0
+        assert resp.json()["deleted_count"] == 0
 
     def test_forbidden_regular_user(self, regular_client):
         resp = regular_client.delete(f"{BASE}/cleanup")
@@ -423,7 +423,7 @@ class TestGetTierForRecord:
                    return_value=DataTier.HOT):
             resp = admin_client.get(f"{BASE}/tier-for-record/{date_str}")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["tier"] == "hot"
         assert isinstance(data["age_days"], int)
 
@@ -435,7 +435,7 @@ class TestGetTierForRecord:
                    return_value=DataTier.WARM):
             resp = admin_client.get(f"{BASE}/tier-for-record/{date_str}")
         assert resp.status_code == 200
-        assert resp.json()["data"]["tier"] == "warm"
+        assert resp.json()["tier"] == "warm"
 
     def test_cold_record(self, admin_client):
         old_date = datetime.now(timezone.utc) - timedelta(days=1500)
@@ -445,7 +445,7 @@ class TestGetTierForRecord:
                    return_value=DataTier.COLD):
             resp = admin_client.get(f"{BASE}/tier-for-record/{date_str}")
         assert resp.status_code == 200
-        assert resp.json()["data"]["tier"] == "cold"
+        assert resp.json()["tier"] == "cold"
 
     def test_regular_user(self, regular_client):
         date_str = "2024-01-01T00:00:00"
@@ -454,4 +454,4 @@ class TestGetTierForRecord:
                    return_value=DataTier.HOT):
             resp = regular_client.get(f"{BASE}/tier-for-record/{date_str}")
         assert resp.status_code == 200
-        assert resp.json()["data"]["tier"] == "hot"
+        assert resp.json()["tier"] == "hot"

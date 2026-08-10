@@ -221,7 +221,7 @@ class TestOrganizationEndpoints:
             result = await delete_organization(
                 1, force=False, confirm_password="pass123", current_user=user, db=db
             )
-            assert result["data"]["type"] == "soft_delete"
+            assert result["type"] == "soft_delete"
 
     async def test_get_organization_statistics(self):
         from app.api.v1.organization import get_organization_statistics
@@ -350,7 +350,7 @@ class TestOrganizationEndpoints:
              patch("app.api.v1.organization.cache_manager") as cm:
             cm.delete = AsyncMock()
             result = await activate_organization(1, current_user=user, db=db)
-            assert result["data"]["is_active"] is True
+            assert result["is_active"] is True
 
     async def test_deactivate_organization(self):
         from app.api.v1.organization import deactivate_organization
@@ -362,7 +362,7 @@ class TestOrganizationEndpoints:
              patch("app.api.v1.organization.cache_manager") as cm:
             cm.delete = AsyncMock()
             result = await deactivate_organization(1, current_user=user, db=db)
-            assert result["data"]["is_active"] is False
+            assert result["is_active"] is False
 
 
 # ===================================================================
@@ -728,9 +728,9 @@ class TestDataQuality:
         mock_engine.validate_with_db_rules.return_value = ["name: 名称为必填项"]
         with patch("app.api.v1.data_quality.ValidationEngine", return_value=mock_engine):
             result = await validate_data(req, current_user=user, db=db)
-            assert result["data"]["valid"] is False
-            assert result["data"]["issues"][0]["field"] == "name"
-            assert result["data"]["issues"][0]["severity"] == "error"
+            assert result["valid"] is False
+            assert result["issues"][0]["field"] == "name"
+            assert result["issues"][0]["severity"] == "error"
 
     async def test_validate_data_pass(self):
         from app.api.v1.data_quality import validate_data, ValidateDataRequest
@@ -741,8 +741,8 @@ class TestDataQuality:
         mock_engine.validate_with_db_rules.return_value = []
         with patch("app.api.v1.data_quality.ValidationEngine", return_value=mock_engine):
             result = await validate_data(req, current_user=user, db=db)
-            assert result["data"]["valid"] is True
-            assert result["data"]["issues"] == []
+            assert result["valid"] is True
+            assert result["issues"] == []
 
     async def test_clean_data(self):
         from app.api.v1.data_quality import clean_data, CleanDataRequest
@@ -751,7 +751,7 @@ class TestDataQuality:
         with patch("app.api.v1.data_quality.DataCleaningService") as svc:
             svc.clean_dataset.return_value = [{"a": 1}]
             result = await clean_data(req, current_user=user)
-            assert result["data"]["original_count"] == 1
+            assert result["original_count"] == 1
 
     async def test_clean_data_forbidden(self):
         from app.api.v1.data_quality import clean_data, CleanDataRequest
@@ -770,7 +770,7 @@ class TestDataQuality:
                 records=[{"a": 1}, {"a": 1}], key_fields=["a"],
                 similarity_threshold=0.9, current_user=user,
             )
-            assert result["data"]["original_count"] == 2
+            assert result["original_count"] == 2
 
 
 # ===================================================================
@@ -816,7 +816,7 @@ class TestMessagesEndpoints:
         data = MarkReadRequest(message_ids=[1, 2])
         with patch("app.api.v1.messages.write_work_log", side_effect=Exception("fail")):
             result = await mark_messages_as_read(data, current_user=user, service=svc)
-            assert result["data"]["count"] == 2
+            assert result["count"] == 2
 
     async def test_mark_all_read_log_fail(self):
         from app.api.v1.messages import mark_all_as_read
@@ -826,7 +826,7 @@ class TestMessagesEndpoints:
         svc.db = _mock_db()
         with patch("app.api.v1.messages.write_work_log", side_effect=Exception("fail")):
             result = await mark_all_as_read(current_user=user, service=svc)
-            assert result["data"]["count"] == 5
+            assert result["count"] == 5
 
     async def test_delete_messages_log_fail(self):
         from app.api.v1.messages import delete_messages, DeleteMessagesRequest
@@ -837,7 +837,7 @@ class TestMessagesEndpoints:
         data = DeleteMessagesRequest(message_ids=[1])
         with patch("app.api.v1.messages.write_work_log", side_effect=Exception("fail")):
             result = await delete_messages(data, current_user=user, service=svc)
-            assert result["data"]["count"] == 1
+            assert result["count"] == 1
 
     async def test_delete_all_read_log_fail(self):
         from app.api.v1.messages import delete_all_read_messages
@@ -847,7 +847,7 @@ class TestMessagesEndpoints:
         svc.db = _mock_db()
         with patch("app.api.v1.messages.write_work_log", side_effect=Exception("fail")):
             result = await delete_all_read_messages(current_user=user, service=svc)
-            assert result["data"]["count"] == 3
+            assert result["count"] == 3
 
 
 # ===================================================================
@@ -870,7 +870,7 @@ class TestMessagesExtended:
         with patch("app.api.v1.messages_extended.MessageService", return_value=mock_svc), \
              patch("app.api.v1.messages_extended.write_work_log", side_effect=Exception("fail")):
             result = await send_message(req, current_user=user, db=db)
-            assert result["data"]["message_id"] == 1
+            assert result["message_id"] == 1
 
     async def test_mark_read_log_fail(self):
         from app.api.v1.messages_extended import mark_as_read
@@ -892,7 +892,7 @@ class TestMessagesExtended:
         with patch("app.api.v1.messages_extended.MessageService", return_value=mock_svc), \
              patch("app.api.v1.messages_extended.write_work_log", side_effect=Exception("fail")):
             result = await mark_all_as_read(current_user=user, db=db)
-            assert result["data"]["marked_count"] == 3
+            assert result["marked_count"] == 3
 
     async def test_delete_message_log_fail(self):
         from app.api.v1.messages_extended import delete_message
@@ -1488,7 +1488,7 @@ class TestRuralTasks:
         db.query.return_value = mock_q
         with patch("app.api.v1.rural_tasks.is_admin", return_value=False), \
              patch("app.api.v1.rural_tasks.safe_commit"):
-            result = await batch_delete_tasks({"ids": [1, 2]}, current_user=user, db=db)
+            result = await batch_delete_tasks([1, 2], current_user=user, db=db)
             assert result.data["deleted"] == 2
 
 
@@ -2224,8 +2224,8 @@ class TestSystemEnv:
         user = _make_user()
         with patch("app.api.v1.system.env._get_installed_packages", return_value={}):
             result = check_env(db=db, current_user=user)
-            assert len(result["data"]["missing_packages"]) > 0
-            assert "fix_command" in result["data"]
+            assert len(result["missing_packages"]) > 0
+            assert "fix_command" in result
 
     def test_check_env_no_missing(self):
         from app.api.v1.system.env import check_env, REQUIRED_PACKAGES
@@ -2234,4 +2234,4 @@ class TestSystemEnv:
         all_installed = {pkg: "1.0" for pkg in REQUIRED_PACKAGES}
         with patch("app.api.v1.system.env._get_installed_packages", return_value=all_installed):
             result = check_env(db=db, current_user=user)
-            assert len(result["data"]["missing_packages"]) == 0
+            assert len(result["missing_packages"]) == 0

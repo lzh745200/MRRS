@@ -317,7 +317,7 @@ onUnmounted(() => {
 
 // ── 图标颜色 ──
 .status-icon-sync {
-  color: var(--el-color-primary, #3b82f6);
+  color: #3b82f6;
   font-size: 13px;
 }
 .status-icon-db {

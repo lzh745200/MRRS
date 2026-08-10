@@ -311,7 +311,7 @@ class TestGetUser:
             mock_req.return_value = None
             response = client.get(f"{self.prefix}/2")
             assert response.status_code == 200
-            assert response.json()["data"]["organization"] == {"id": 1, "name": "Org1", "code": "ORG1"}
+            assert response.json()["organization"] == {"id": 1, "name": "Org1", "code": "ORG1"}
         _clear_overrides(client, get_db, get_current_user)
 
     def test_get_other_user_no_admin(self, client):
@@ -358,7 +358,7 @@ class TestGetUser:
             mock_req.return_value = None
             response = client.get(f"{self.prefix}/5")
             assert response.status_code == 200
-            assert response.json()["data"]["organization"] is None
+            assert response.json()["organization"] is None
         _clear_overrides(client, get_db, get_current_user)
 
 
@@ -678,7 +678,7 @@ class TestUpdateUserPermissions:
             mock_req.return_value = None
             response = client.put(f"{self.prefix}/2/permissions", json={"role": "admin", "is_active": True})
             assert response.status_code == 200
-            assert response.json()["data"]["role"] == "admin"
+            assert response.json()["role"] == "admin"
         _clear_overrides(client, get_db, get_current_user)
 
 
@@ -691,7 +691,7 @@ class TestRoleOptions:
             mock_req.return_value = None
             response = client.get(f"{self.prefix}/roles/options")
             assert response.status_code == 200
-            assert len(response.json()["data"]["roles"]) == 4
+            assert len(response.json()["roles"]) == 4
         _clear_overrides(client, get_current_user)
 
 
@@ -704,7 +704,7 @@ class TestDataScopeOptions:
             mock_req.return_value = None
             response = client.get(f"{self.prefix}/data-scopes/options")
             assert response.status_code == 200
-            assert len(response.json()["data"]["data_scopes"]) == 4
+            assert len(response.json()["data_scopes"]) == 4
         _clear_overrides(client, get_current_user)
 
 

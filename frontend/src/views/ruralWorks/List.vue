@@ -78,18 +78,7 @@
 
     <!-- 数据表格 -->
     <el-card class="table-card">
-      <!-- 加载失败占位 -->
-      <el-result
-        v-if="loadError"
-        icon="error"
-        title="加载失败"
-        sub-title="数据加载失败，请检查网络或稍后重试"
-      >
-        <template #extra>
-          <el-button type="primary" @click="fetchData">重试</el-button>
-        </template>
-      </el-result>
-      <el-table v-else v-loading="loading" :data="filteredData" border stripe style="width: 100%">
+      <el-table v-loading="loading" :data="filteredData" border stripe style="width: 100%">
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="name" label="工作名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="type" label="工作类型" width="130">
@@ -294,7 +283,6 @@ const { ds } = useDesensitize()
 
 // 状态
 const loading = ref(false)
-const loadError = ref(false)
 const searchText = ref('')
 const filterStatus = ref('')
 const filterType = ref('')
@@ -399,7 +387,6 @@ function getTypeTagColor(type: string): 'info' | 'primary' | 'success' | 'warnin
 
 async function fetchData() {
   loading.value = true
-  loadError.value = false
   try {
     const { getRuralWorks } = await import('@/api/ruralWork')
     const result = await getRuralWorks({
@@ -415,7 +402,6 @@ async function fetchData() {
   } catch (error) {
     logger.error('加载数据失败', error)
     ElMessage.error('加载数据失败')
-    loadError.value = true
     tableData.value = []
     total.value = 0
   } finally {

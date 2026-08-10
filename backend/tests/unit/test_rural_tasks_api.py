@@ -812,7 +812,7 @@ class TestBatchDelete:
     def test_batch_delete_success(self, client, mock_db):
         q = mock_db.query.return_value
         q.delete.return_value = 3
-        resp = client.post("/api/v1/rural-tasks/batch-delete", json={"ids": [1, 2, 3]})
+        resp = client.post("/api/v1/rural-tasks/batch-delete", json=[1, 2, 3])
         assert resp.status_code == 200
         data = resp.json()
         assert data["code"] == 200
@@ -822,20 +822,24 @@ class TestBatchDelete:
     def test_batch_delete_single(self, client, mock_db):
         q = mock_db.query.return_value
         q.delete.return_value = 1
-        resp = client.post("/api/v1/rural-tasks/batch-delete", json={"ids": [42]})
+        resp = client.post("/api/v1/rural-tasks/batch-delete", json=[42])
         assert resp.status_code == 200
         assert resp.json()["data"]["deleted"] == 1
 
     def test_batch_delete_empty_list(self, client, mock_db):
-        """Empty ids → 400,拒绝空删除。"""
-        resp = client.post("/api/v1/rural-tasks/batch-delete", json={"ids": []})
-        assert resp.status_code == 400
-        assert "未提供要删除的ID" in resp.json()["detail"]
+        """Empty list → deletes 0 records, returns success."""
+        q = mock_db.query.return_value
+        q.delete.return_value = 0
+        resp = client.post("/api/v1/rural-tasks/batch-delete", json=[])
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["data"]["deleted"] == 0
+        assert "成功删除0条" in data["message"]
 
     def test_batch_delete_nonexistent_ids(self, client, mock_db):
         """Nonexistent IDs → delete returns 0, still success."""
         q = mock_db.query.return_value
         q.delete.return_value = 0
-        resp = client.post("/api/v1/rural-tasks/batch-delete", json={"ids": [9999, 9998]})
+        resp = client.post("/api/v1/rural-tasks/batch-delete", json=[9999, 9998])
         assert resp.status_code == 200
         assert resp.json()["data"]["deleted"] == 0

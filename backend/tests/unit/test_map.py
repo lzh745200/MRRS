@@ -145,7 +145,7 @@ class TestGetMapMarkers:
     def test_all_marker_types(self, client_with_mocked_auth):
         resp = client_with_mocked_auth.get(f"{BASE}/markers")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "villages" in data
         assert "schools" in data
 
@@ -154,14 +154,14 @@ class TestGetMapMarkers:
         # 直接走测试库即可（与 test_all_marker_types 一致）
         resp = client_with_mocked_auth.get(f"{BASE}/markers", params={"marker_type": "villages"})
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "villages" in data
         assert "schools" not in data
 
     def test_schools_only(self, client_with_mocked_auth):
         resp = client_with_mocked_auth.get(f"{BASE}/markers", params={"marker_type": "schools"})
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "schools" in data
         assert "villages" not in data
 
@@ -170,7 +170,7 @@ class TestGetCountyCoordinates:
     def test_success(self, client):
         resp = client.get(f"{BASE}/county-coords")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "center" in data
         assert "counties" in data
         assert "都匀市" in data["counties"]
@@ -324,7 +324,7 @@ class TestGetDistances:
         with patch("app.api.v1.map._map_cache", None):
             resp = client_with_mocked_auth.get(f"{BASE}/distances")
             assert resp.status_code == 200
-            data = resp.json()["data"]
+            data = resp.json()
             assert "base" in data
             assert "villages" in data
             assert "schools" in data
@@ -341,7 +341,7 @@ class TestGetTileInfo:
             mock_dir.exists.return_value = False
             resp = client.get(f"{BASE}/tile-info")
             assert resp.status_code == 200
-            data = resp.json()["data"]
+            data = resp.json()
             assert data["available"] is False
 
     def test_tiles_available(self, client):
@@ -351,7 +351,7 @@ class TestGetTileInfo:
             mock_dir.rglob.return_value = []
             resp = client.get(f"{BASE}/tile-info")
             assert resp.status_code == 200
-            data = resp.json()["data"]
+            data = resp.json()
             assert data["available"] is False
 
 

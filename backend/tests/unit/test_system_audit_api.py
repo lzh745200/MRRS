@@ -92,7 +92,7 @@ class TestGetActions:
     def test_returns_list(self, client_with_mocked_auth):
         resp = client_with_mocked_auth.get(self.URL)
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "actions" in data
         assert len(data["actions"]) > 0
 
@@ -103,7 +103,7 @@ class TestGetLevels:
     def test_returns_list(self, client_with_mocked_auth):
         resp = client_with_mocked_auth.get(self.URL)
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "levels" in data
         assert len(data["levels"]) > 0
 
@@ -690,7 +690,7 @@ class TestGetUserActivity:
         session.commit()
         resp = client.get(f"{self.URL}/1?days=30")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["user_id"] == 1
         assert data["total_actions"] == 3
         assert data["action_breakdown"]["create"] == 1

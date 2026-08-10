@@ -166,7 +166,7 @@ class TestMarkersWithData:
         _use_db(map_client, _db_with([_q(all=[_village()]), _q(all=[_school()])]))
         resp = map_client.get(f"{BASE}/markers")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         v = data["villages"][0]
         assert v["isEstimated"] is True  # 无坐标 → 估算
         assert v["isKeyCounty"] is True
@@ -181,7 +181,7 @@ class TestMarkersWithData:
         # marker_type=schools 时只执行学校查询（源码 line 227）
         _use_db(map_client, _db_with([_q(all=[s])]))
         resp = map_client.get(f"{BASE}/markers?marker_type=schools")
-        item = resp.json()["data"]["schools"][0]
+        item = resp.json()["schools"][0]
         assert item["type"] is None
         assert item["supportStatus"] is None
 
@@ -197,7 +197,7 @@ class TestDistancesBranches:
         with patch.object(map_mod, "_map_cache", None):
             resp = map_client.get(f"{BASE}/distances")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["base"]["name"] == "区域中心"
         # 按距离排序：近村在前
         assert [v["name"] for v in data["villages"]] == ["近村", "远村"]
@@ -221,7 +221,7 @@ class TestDistancesBranches:
         with patch.object(map_mod, "_map_cache", mc):
             resp = map_client.get(f"{BASE}/distances")
         assert resp.status_code == 200
-        assert resp.json()["data"]["villages"] == []
+        assert resp.json()["villages"] == []
 
 
 # ==================== /map/tile-info 与瓦片服务分支 ====================
@@ -233,7 +233,7 @@ class TestTileBranches:
         with patch.object(map_mod, "TILES_DIR", tmp_path):
             resp = map_client.get(f"{BASE}/tile-info")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["available"] is False
         assert data["zoomLevels"] == []
 
@@ -320,7 +320,7 @@ class TestTileInfoWithZoom:
         with patch.object(map_mod, "TILES_DIR", fake_dir):
             resp = map_client.get(f"{BASE}/tile-info")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["available"] is True
         assert data["tileCount"] == 3
         assert data["zoomLevels"] == [12]

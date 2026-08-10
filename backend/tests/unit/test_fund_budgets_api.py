@@ -148,16 +148,13 @@ class TestBudgetSummary:
         mock_db.all.return_value = []
         resp = client.get("/fund-budgets/summary")
         assert resp.status_code == 200
-        # 信封格式：data.total_budget
-        data = resp.json().get("data", resp.json())
-        assert data["total_budget"] == 0
+        assert resp.json()["total_budget"] == 0
 
     def test_with_data(self, client, mock_db):
         mock_db.all.return_value = [_make_budget()]
         resp = client.get("/fund-budgets/summary?year=2025")
         assert resp.status_code == 200
-        data = resp.json().get("data", resp.json())
-        assert data["total_budget"] > 0
+        assert resp.json()["total_budget"] > 0
 
 
 class TestGetTransactions:

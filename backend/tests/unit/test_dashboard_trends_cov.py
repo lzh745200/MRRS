@@ -77,17 +77,17 @@ class TestKpiTrendsDirect:
         db = _make_db([10, 8, 500, 450, 1000.0, 800.0, 6000.0, 5500.0])
         result = dt.get_kpi_trends(db=db, current_user=SimpleNamespace(id=1),
                                    data_scope=_Scope())
-        assert result["data"]["villages"] == 25.0
-        assert result["data"]["population"] == pytest.approx(11.1, abs=0.1)
-        assert result["data"]["income"] == pytest.approx(9.1, abs=0.1)
-        assert result["data"]["investment"] == 25.0
+        assert result["villages"] == 25.0
+        assert result["population"] == pytest.approx(11.1, abs=0.1)
+        assert result["income"] == pytest.approx(9.1, abs=0.1)
+        assert result["investment"] == 25.0
 
     def test_zero_prev_gives_100(self):
         db = _make_db([0, 0, 0, 0, 0, 0, 0, 0])
         result = dt.get_kpi_trends(db=db, current_user=SimpleNamespace(id=1),
                                    data_scope=_Scope())
-        assert result["data"]["villages"] == 0.0
-        assert result["data"]["income"] == 0.0
+        assert result["villages"] == 0.0
+        assert result["income"] == 0.0
 
     def test_no_per_capita_income_attr(self):
         db = _make_db([5, 3, 100, 90, 50.0, 40.0])
@@ -95,22 +95,22 @@ class TestKpiTrendsDirect:
                    SimpleNamespace(year=None)):
             result = dt.get_kpi_trends(db=db, current_user=SimpleNamespace(id=1),
                                        data_scope=_Scope())
-            assert result["data"]["income"] == 0.0
+            assert result["income"] == 0.0
 
     def test_scalar_none_falls_back_zero(self):
         db = _make_db([None] * 8)
         result = dt.get_kpi_trends(db=db, current_user=SimpleNamespace(id=1),
                                    data_scope=_Scope())
-        assert result["data"]["villages"] == 0.0
-        assert result["data"]["investment"] == 0.0
+        assert result["villages"] == 0.0
+        assert result["investment"] == 0.0
 
     def test_exception_returns_fallback(self):
         db = MagicMock()
         db.query.side_effect = RuntimeError("db down")
         result = dt.get_kpi_trends(db=db, current_user=SimpleNamespace(id=1),
                                    data_scope=_Scope())
-        assert result["data"]["villages"] == 0
-        assert result["data"]["income"] == 0
+        assert result["villages"] == 0
+        assert result["income"] == 0
 
 
 # ==================== get_yearly_trends（直接调用） ====================
@@ -124,10 +124,10 @@ class TestYearlyTrendsDirect:
         db = _make_db(scalars)
         result = dt.get_yearly_trends(db=db, current_user=SimpleNamespace(id=1),
                                       data_scope=_Scope(), years=3)
-        assert len(result["data"]["years"]) == 3
-        assert result["data"]["villages"] == [1, 1, 1]
-        assert result["data"]["income"] == [2000.0, 2000.0, 2000.0]
-        assert result["data"]["investment"] == [50.0, 50.0, 50.0]
+        assert len(result["years"]) == 3
+        assert result["villages"] == [1, 1, 1]
+        assert result["income"] == [2000.0, 2000.0, 2000.0]
+        assert result["investment"] == [50.0, 50.0, 50.0]
 
     def test_no_per_capita_income_attr(self):
         scalars = []
@@ -138,22 +138,22 @@ class TestYearlyTrendsDirect:
                    SimpleNamespace(year=None)):
             result = dt.get_yearly_trends(db=db, current_user=SimpleNamespace(id=1),
                                           data_scope=_Scope(), years=3)
-            assert result["data"]["income"] == [0.0, 0.0, 0.0]
+            assert result["income"] == [0.0, 0.0, 0.0]
 
     def test_scalar_none_falls_back_zero(self):
         db = _make_db([None] * 12)
         result = dt.get_yearly_trends(db=db, current_user=SimpleNamespace(id=1),
                                       data_scope=_Scope(), years=3)
-        assert result["data"]["villages"] == [0, 0, 0]
-        assert result["data"]["population"] == [0, 0, 0]
+        assert result["villages"] == [0, 0, 0]
+        assert result["population"] == [0, 0, 0]
 
     def test_exception_returns_fallback(self):
         db = MagicMock()
         db.query.side_effect = RuntimeError("boom")
         result = dt.get_yearly_trends(db=db, current_user=SimpleNamespace(id=1),
                                       data_scope=_Scope(), years=3)
-        assert len(result["data"]["years"]) == 3
-        assert result["data"]["villages"] == [0, 0, 0]
+        assert len(result["years"]) == 3
+        assert result["villages"] == [0, 0, 0]
 
 
 # ==================== dashboard.py 缓存命中分支 ====================
@@ -165,8 +165,7 @@ class TestDashboardCacheHit:
         from app.api.v1.data.data.dashboard import _get_cached
         import app.api.v1.data.data.dashboard as dash_mod
 
-        # 缓存内容为裸业务 dict,端点会包进信封的 data 层
-        cached_payload = {"cached": True}
+        cached_payload = {"success": True, "data": {"cached": True}}
         with patch.object(dash_mod, "_get_cached", return_value=cached_payload):
             resp = dt_client.get(f"{BASE}/summary")
             assert resp.status_code == 200

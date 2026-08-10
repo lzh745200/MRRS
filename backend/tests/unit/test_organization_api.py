@@ -303,8 +303,8 @@ class TestGetTypeOptions:
     def test_options(self, client_admin):
         resp = client_admin.get("/api/v1/organizations/types/options")
         assert resp.status_code == 200
-        assert len(resp.json()["data"]["types"]) == 2
-        assert len(resp.json()["data"]["levels"]) == 4
+        assert len(resp.json()["types"]) == 2
+        assert len(resp.json()["levels"]) == 4
 
 
 # ---------------------------------------------------------------------------
@@ -460,7 +460,7 @@ class TestDeleteOrganization:
         mock_db.query.return_value = children_q
         resp = client_admin.delete("/api/v1/organizations/1?confirm_password=pass123")
         assert resp.status_code == 200
-        assert resp.json()["data"]["type"] == "soft_delete"
+        assert resp.json()["type"] == "soft_delete"
 
 
 # ---------------------------------------------------------------------------
@@ -614,7 +614,7 @@ class TestActivateDeactivate:
         q.first.return_value = org
         resp = client_admin.post("/api/v1/organizations/1/activate")
         assert resp.status_code == 200
-        assert resp.json()["data"]["is_active"] is True
+        assert resp.json()["is_active"] is True
         assert org.is_active is True
 
     def test_deactivate_permission_denied(self, client_regular):
@@ -632,7 +632,7 @@ class TestActivateDeactivate:
         q.first.return_value = org
         resp = client_admin.post("/api/v1/organizations/1/deactivate")
         assert resp.status_code == 200
-        assert resp.json()["data"]["is_active"] is False
+        assert resp.json()["is_active"] is False
         assert org.is_active is False
 
 

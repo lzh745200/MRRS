@@ -1516,15 +1516,6 @@ async def approve_settlement(
     s = db.query(FundSettlement).filter(FundSettlement.id == settlement_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="决算记录不存在")
-    # 幂等守卫：仅 SUBMITTED（或 DRAFT 直接提交）可审批，重复审批拒绝，
-    # 避免覆盖 auditor/audit_opinion/performance_* 审计字段并重复写工作日志
-    if s.status not in (
-        SettlementStatus.SUBMITTED.value,
-        SettlementStatus.DRAFT.value,
-    ):
-        raise HTTPException(status_code=400, detail="当前状态不可审批，请检查决算状态")
-    if s.status == SettlementStatus.APPROVED.value:
-        raise HTTPException(status_code=400, detail="该决算已审批通过")
 
     s.status = SettlementStatus.APPROVED.value
     s.auditor = _get_username(current_user)

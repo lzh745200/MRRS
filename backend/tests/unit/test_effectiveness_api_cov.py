@@ -144,7 +144,7 @@ class TestRankings:
 
         resp = c.get(f"{BASE}/rankings?year=2026&limit=20")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["year"] == 2026
         assert data["rankings"][0]["village_name"] == "幸福村"
         assert data["rankings"][0]["grade"] == "A"

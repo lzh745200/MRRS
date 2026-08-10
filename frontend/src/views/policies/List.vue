@@ -103,20 +103,7 @@
         </div>
       </template>
 
-      <!-- 加载失败占位 -->
-      <el-result
-        v-if="loadError"
-        icon="error"
-        title="加载失败"
-        sub-title="政策列表加载失败，请检查网络或稍后重试"
-      >
-        <template #extra>
-          <el-button type="primary" @click="loadData">重试</el-button>
-        </template>
-      </el-result>
-
       <el-table
-        v-else
         v-loading="policyStore.loading"
         :data="policiesData"
         stripe
@@ -234,7 +221,6 @@ const authStore = useAuthStore()
 
 // Store uses different property names; bridge with computed
 const policiesData = computed(() => (policyStore as any).policyList ?? [])
-const loadError = ref(false)
 
 // 搜索表单
 const searchForm = reactive({
@@ -332,7 +318,6 @@ const handleReset = () => {
 
 // 加载数据
 const loadData = async () => {
-  loadError.value = false
   try {
     await policyStore.fetchPolicies({
       page: currentPage.value,
@@ -344,7 +329,6 @@ const loadData = async () => {
     })
   } catch (error) {
     ElMessage.error('加载数据失败')
-    loadError.value = true
   }
 }
 

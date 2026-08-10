@@ -261,7 +261,7 @@ class TestStatsWithData:
         with patch.object(dash, "_cache", None):
             resp = cov_client.get("/api/v1/dashboard/stats")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["total_villages"] == 3
         assert data["total_funds"] == 100.0
         assert data["total_projects"] == 10
@@ -304,7 +304,7 @@ class TestDashboardSummary:
             m_act.side_effect = fake_act
             resp = cov_client.get("/api/v1/dashboard/summary")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["stats"]["total_villages"] == 3
         assert data["recent_activities"] == [{"id": "x"}]
 
@@ -312,7 +312,7 @@ class TestDashboardSummary:
         with patch.object(dash, "_cache") as mc:
             mc.get.return_value = {"stats": {}, "recent_activities": []}
             resp = cov_client.get("/api/v1/dashboard/summary")
-            assert resp.json()["data"] == {"stats": {}, "recent_activities": []}
+            assert resp.json() == {"stats": {}, "recent_activities": []}
 
     def test_summary_stats_exception_degrades(self, cov_client):
         db = MagicMock()
@@ -324,7 +324,7 @@ class TestDashboardSummary:
             m_act.side_effect = fake_act
             resp = cov_client.get("/api/v1/dashboard/summary")
         assert resp.status_code == 200
-        assert resp.json()["data"]["stats"] == {}
+        assert resp.json()["stats"] == {}
 
 
 # ==================== _fetch_* 动态获取器 ====================
@@ -462,7 +462,7 @@ class TestRecentActivitiesEndpoint:
         ):
             resp = cov_client.get("/api/v1/dashboard/recent-activities")
         assert resp.status_code == 200
-        items = resp.json()["data"]["items"]
+        items = resp.json()["items"]
         ids = [i["id"] for i in items]
         assert "approval_1" not in ids  # 隐藏被过滤
         assert ids == ["fund_1", "custom_1", "project_1"]  # 按时间倒序
@@ -471,7 +471,7 @@ class TestRecentActivitiesEndpoint:
         with patch.object(dash, "_cache") as mc:
             mc.get.return_value = {"items": [{"id": "cached"}]}
             resp = cov_client.get("/api/v1/dashboard/recent-activities")
-            assert resp.json()["data"] == {"items": [{"id": "cached"}]}
+            assert resp.json() == {"items": [{"id": "cached"}]}
 
     def test_recent_slice_to_10(self, cov_client):
         many = [{"id": f"custom_{i}", "time": f"07-{10 + i:02d} 00:00"} for i in range(15)]
@@ -483,7 +483,7 @@ class TestRecentActivitiesEndpoint:
             dash, "_fetch_approval_activities", return_value=[]
         ):
             resp = cov_client.get("/api/v1/dashboard/recent-activities")
-        assert len(resp.json()["data"]["items"]) == 10
+        assert len(resp.json()["items"]) == 10
 
 
 # ==================== recent-activities CRUD ====================
@@ -505,7 +505,7 @@ class TestActivityCrud:
                 json={"type": "fund", "action": "拨付", "target": "经费X"},
             )
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["id"] == "custom_5"
         assert data["user"] == "管理员"
         assert data["time"] == "07-24 12:00"
@@ -523,7 +523,7 @@ class TestActivityCrud:
                 json={"action": "操作", "target": "对象"},
             )
         assert resp.status_code == 200
-        assert resp.json()["data"]["user"] == "系统"
+        assert resp.json()["user"] == "系统"
 
     def test_create_activity_exception_500(self, cov_client):
         db = MagicMock()
@@ -637,7 +637,7 @@ class TestCacheAndFallbackBranches:
             mc.get.return_value = {"total_villages": 9}
             resp = cov_client.get("/api/v1/dashboard/stats")
         assert resp.status_code == 200
-        assert resp.json()["data"]["total_villages"] == 9
+        assert resp.json() == {"total_villages": 9}
 
     def test_stats_no_data_returns_null(self, cov_client):
         """统计全为 0 → 返回 None，前端显示空状态（覆盖 has_data=False）"""
@@ -675,7 +675,7 @@ class TestCacheAndFallbackBranches:
             mc.set.side_effect = Exception("cache down")
             resp = cov_client.get("/api/v1/dashboard/stats")
         assert resp.status_code == 200
-        assert resp.json()["data"]["total_villages"] == 1
+        assert resp.json()["total_villages"] == 1
 
     def test_invalidate_dashboard_cache(self):
         """invalidate_dashboard_cache 正常/异常/无缓存三分支"""

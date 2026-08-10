@@ -310,8 +310,8 @@ const activeGroups = ref(['core'])
   transition: all 0.15s ease;
   white-space: nowrap;
   &:hover {
-    border-color: var(--el-color-primary, #409eff);
-    color: var(--el-color-primary, #409eff);
+    border-color: #409eff;
+    color: #409eff;
     background: #f0f5ff;
   }
   &:disabled {
@@ -331,7 +331,7 @@ const activeGroups = ref(['core'])
   &.primary {
     background: #ecf5ff;
     border-color: #b3d8ff;
-    color: var(--el-color-primary, #409eff);
+    color: #409eff;
     &:hover {
       background: #d9ecff;
     }

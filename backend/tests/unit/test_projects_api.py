@@ -152,11 +152,11 @@ class TestUtilityFunctions:
         assert _can_modify_project(sample_project, regular_user) is False
 
     def test_get_project_or_404_found(self, mock_db, sample_project):
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         assert _get_project_or_404(mock_db, 1).id == 1
 
     def test_get_project_or_404_not_found(self, mock_db):
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = None
+        mock_db.query.return_value.filter.return_value.first.return_value = None
         with pytest.raises(NotFoundException):
             _get_project_or_404(mock_db, 999)
 
@@ -257,7 +257,7 @@ class TestProjectsAPI:
 
     def test_get_project_detail(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         mock_db.query.return_value.filter.return_value.scalar.return_value = 2
         resp = client.get("/api/v1/projects/1")
         assert resp.status_code == 200
@@ -265,7 +265,7 @@ class TestProjectsAPI:
 
     def test_get_project_detail_404(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = None
+        mock_db.query.return_value.filter.return_value.first.return_value = None
         resp = client.get("/api/v1/projects/999")
         assert resp.status_code == 404
 
@@ -307,21 +307,21 @@ class TestProjectsAPI:
             mock_al.return_value.log = AsyncMock()
             mock_ae.create_audit_log.return_value = MagicMock()
             mock_ae.record_changes.return_value = None
-            mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+            mock_db.query.return_value.filter.return_value.first.return_value = sample_project
             resp = client.put("/api/v1/projects/1", json={"name": "更新名称"})
         assert resp.status_code == 200 and resp.json()["message"] == "更新成功"
 
     def test_update_project_forbidden(self, client, mock_db, regular_user, sample_project):
         _setup_client(client, mock_db, regular_user)
         sample_project.created_by = 1
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         resp = client.put("/api/v1/projects/1", json={"name": "x"})
         assert resp.status_code == 500  # AppError → handle_db_errors_async → 500
 
     def test_update_project_date_validation(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)
         sample_project.start_date = date(2026, 6, 1)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         resp = client.put("/api/v1/projects/1", json={
             "start_date": "2026-12-01", "end_date": "2026-01-01"
         })
@@ -336,7 +336,7 @@ class TestProjectsAPI:
              patch("app.services.fund_event_handler.on_project_status_change") as mock_psc:
             mock_al.return_value.log = AsyncMock()
             mock_ae.create_audit_log.return_value = MagicMock()
-            mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+            mock_db.query.return_value.filter.return_value.first.return_value = sample_project
             resp = client.put("/api/v1/projects/1", json={"status": "in_progress"})
         assert resp.status_code == 200
         mock_psc.assert_called_once()
@@ -346,7 +346,7 @@ class TestProjectsAPI:
         _setup_client(client, mock_db, admin_user)
         with patch("app.services.fund_event_handler.on_project_status_change",
                    side_effect=Exception("fund error")):
-            mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+            mock_db.query.return_value.filter.return_value.first.return_value = sample_project
             resp = client.put("/api/v1/projects/1", json={"status": "in_progress"})
         assert resp.status_code == 500
         assert mock_db.rollback.call_count == 2
@@ -361,21 +361,21 @@ class TestProjectsAPI:
              patch("app.api.v1.projects.write_work_log"):
             mock_al.return_value.log = AsyncMock()
             mock_ae.create_audit_log.return_value = MagicMock()
-            mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+            mock_db.query.return_value.filter.return_value.first.return_value = sample_project
             resp = client.delete("/api/v1/projects/1")
         assert resp.status_code == 200 and resp.json()["message"] == "删除成功"
 
     def test_delete_project_already_cancelled(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)
         sample_project.status = "cancelled"
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         resp = client.delete("/api/v1/projects/1")
         assert resp.status_code == 400
 
     def test_delete_project_forbidden(self, client, mock_db, regular_user, sample_project):
         _setup_client(client, mock_db, regular_user)
         sample_project.created_by = 1
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         resp = client.delete("/api/v1/projects/1")
         assert resp.status_code == 500
 
@@ -383,7 +383,7 @@ class TestProjectsAPI:
         _setup_client(client, mock_db, admin_user)
         with patch("app.api.v1.projects.AuditEnhancementService.get_change_history",
                    return_value=[{"field": "name"}]):
-            mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+            mock_db.query.return_value.filter.return_value.first.return_value = sample_project
             resp = client.get("/api/v1/projects/1/history/changes")
         assert resp.status_code == 200 and len(resp.json()["data"]["items"]) == 1
 
@@ -402,13 +402,13 @@ class TestProjectsAPI:
 
     def test_create_project_fund(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         resp = client.post("/api/v1/projects/1/funds", json={"name": "新增经费", "amount": 50.0})
         assert resp.status_code == 201
 
     def test_create_project_fund_fail(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         mock_db.commit.side_effect = Exception("db error")
         resp = client.post("/api/v1/projects/1/funds", json={"name": "经费", "amount": 50.0})
         assert resp.status_code == 500
@@ -440,13 +440,13 @@ class TestProjectsAPI:
 
     def test_create_project_task(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         resp = client.post("/api/v1/projects/1/tasks", json={"name": "新任务"})
         assert resp.status_code == 201
 
     def test_create_project_task_fail(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         mock_db.commit.side_effect = Exception("fail")
         resp = client.post("/api/v1/projects/1/tasks", json={"name": "任务"})
         assert resp.status_code == 500
@@ -569,7 +569,7 @@ class TestProjectsAPI:
         ws.append(["测试项目", "基础设施", "单位A", "张三", 100])
         buf = io.BytesIO(); wb.save(buf); buf.seek(0)
 
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = None
+        mock_db.query.return_value.filter.return_value.first.return_value = None
         async def mock_check(*a, **kw): return True
         with patch("app.api.v1.projects.check_rate_limit", mock_check):
             resp = client.post(
@@ -602,7 +602,7 @@ class TestProjectsAPI:
 
     def test_upload_project_files(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         tmpdir = tempfile.mkdtemp()
         try:
             mock_settings = MagicMock()
@@ -623,7 +623,7 @@ class TestProjectsAPI:
 
     def test_upload_project_files_invalid_category(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         resp = client.post(
             "/api/v1/projects/1/files",
             data={"category": "invalid_cat"},
@@ -633,7 +633,7 @@ class TestProjectsAPI:
 
     def test_upload_project_files_type_check(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         mock_settings = MagicMock()
         mock_settings.allowed_file_types_list = ["pdf", "doc"]
         mock_settings.MAX_FILE_SIZE = 50 * 1024 * 1024
@@ -650,7 +650,7 @@ class TestProjectsAPI:
     def test_upload_project_files_forbidden(self, client, mock_db, regular_user, sample_project):
         _setup_client(client, mock_db, regular_user)
         sample_project.created_by = 1
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         resp = client.post(
             "/api/v1/projects/1/files",
             data={"category": "research"},
@@ -705,7 +705,7 @@ class TestProjectsAPI:
     def test_delete_project_file_forbidden(self, client, mock_db, regular_user, sample_project):
         _setup_client(client, mock_db, regular_user)
         sample_project.created_by = 1
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = sample_project
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project
         resp = client.delete("/api/v1/projects/1/files/1")
         assert resp.status_code == 403
 
@@ -727,18 +727,13 @@ class TestProjectsAPI:
 
     def test_download_project_file_not_found(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = None
+        mock_db.query.return_value.filter.return_value.first.return_value = None
         resp = client.get("/api/v1/projects/1/files/999/download")
         assert resp.status_code == 404
 
-    def test_download_project_file_missing_on_disk(self, client, mock_db, admin_user, sample_project_file, sample_project):
+    def test_download_project_file_missing_on_disk(self, client, mock_db, admin_user, sample_project_file):
         _setup_client(client, mock_db, admin_user)
-        # _get_project_or_404 走 options 链返回 Project；ProjectFile 查询（无 options）返回文件记录
-        q_project = MagicMock()
-        q_project.filter.return_value.options.return_value.first.return_value = sample_project
-        q_file = MagicMock()
-        q_file.filter.return_value.first.return_value = sample_project_file
-        mock_db.query.side_effect = [q_project, q_file]
+        mock_db.query.return_value.filter.return_value.first.return_value = sample_project_file
         resp = client.get("/api/v1/projects/1/files/1/download")
         assert resp.status_code == 404
 
@@ -760,6 +755,6 @@ class TestProjectsAPI:
 
     def test_preview_project_file_not_found(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
-        mock_db.query.return_value.filter.return_value.options.return_value.first.return_value = None
+        mock_db.query.return_value.filter.return_value.first.return_value = None
         resp = client.get("/api/v1/projects/1/files/999/preview")
         assert resp.status_code == 404
