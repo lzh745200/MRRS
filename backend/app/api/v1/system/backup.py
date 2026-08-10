@@ -379,7 +379,7 @@ async def download_backup(
     # 安全检查：确保路径在备份目录内
     real_path = os.path.realpath(file_path)
     real_backup_dir = os.path.realpath(backup_dir)
-    if not real_path.startswith(real_backup_dir):
+    if not (real_path == real_backup_dir or real_path.startswith(real_backup_dir + os.sep)):
         raise HTTPException(status_code=403, detail="禁止访问备份目录外的文件")
 
     logger.info(
@@ -421,7 +421,7 @@ async def preview_backup(
     # 安全检查：确保路径在备份目录内
     real_path = os.path.realpath(file_path)
     real_backup_dir = os.path.realpath(backup_dir)
-    if not real_path.startswith(real_backup_dir):
+    if not (real_path == real_backup_dir or real_path.startswith(real_backup_dir + os.sep)):
         raise HTTPException(status_code=403, detail="禁止访问备份目录外的文件")
 
     try:
@@ -475,7 +475,7 @@ async def verify_backup(
         # 安全检查：确保路径在备份目录内
         real_path = os.path.realpath(file_path)
         real_backup_dir = os.path.realpath(backup_dir)
-        if not real_path.startswith(real_backup_dir):
+        if not (real_path == real_backup_dir or real_path.startswith(real_backup_dir + os.sep)):
             raise HTTPException(status_code=403, detail="禁止访问备份目录外的文件")
 
         svc = get_backup_service(db)
@@ -589,7 +589,7 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
         # 确保最终路径仍在备份目录内
         real_path = os.path.realpath(file_path)
         real_backup_dir = os.path.realpath(backup_dir)
-        if not real_path.startswith(real_backup_dir):
+        if not (real_path == real_backup_dir or real_path.startswith(real_backup_dir + os.sep)):
             raise HTTPException(status_code=403, detail="禁止写入备份目录外的路径")
 
         # 分块流式落盘（避免大备份包整体读入内存导致 OOM），并施加防御性大小上限
