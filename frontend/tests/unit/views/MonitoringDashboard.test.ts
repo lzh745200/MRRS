@@ -667,6 +667,7 @@ describe('图表耗时全缺', () => {
               top_endpoints: [
                 { method: 'GET', endpoint: '/ep', count: 1 },
                 { method: 'POST', path: '/p', count: 2 },
+                { method: 'DELETE' },
               ],
             },
           },
