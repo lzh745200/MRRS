@@ -10,7 +10,6 @@ from app.core.security import get_current_active_user
 from app.core.permission_utils import is_admin
 from app.models.user import User
 from app.services.secrets_manager import secrets_manager
-from app.core.response import success_response
 
 router = APIRouter(prefix="/secrets", tags=["密钥管理"])
 
@@ -29,7 +28,7 @@ async def list_key_versions(
     """
     _require_admin(current_user)
     versions = secrets_manager.list_key_versions()
-    return success_response(data={"versions": versions, "count": len(versions)})
+    return {"versions": versions, "count": len(versions)}
 
 
 @router.post("/rotate")
@@ -43,7 +42,7 @@ async def rotate_key(
     _require_admin(current_user)
     try:
         new_version = secrets_manager.rotate_key(version_id)
-        return success_response(data={"message": "密钥轮换成功", "new_version": new_version}, message="密钥轮换成功")
+        return {"message": "密钥轮换成功", "new_version": new_version}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -59,7 +58,7 @@ async def create_key(
     """
     _require_admin(current_user)
     version_id = secrets_manager.create_key(key_type=key_type, expires_days=expires_days)
-    return success_response(data={"message": "密钥创建成功", "version_id": version_id}, message="密钥创建成功")
+    return {"message": "密钥创建成功", "version_id": version_id}
 
 
 @router.post("/revoke/{version_id}")
@@ -74,7 +73,7 @@ async def revoke_key(
     success = secrets_manager.revoke_key(version_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"密钥版本不存在: {version_id}")
-    return success_response(data={"message": "密钥已撤销", "version_id": version_id}, message="密钥已撤销")
+    return {"message": "密钥已撤销", "version_id": version_id}
 
 
 @router.post("/cleanup")
@@ -87,10 +86,7 @@ async def cleanup_expired_keys(
     """
     _require_admin(current_user)
     count = secrets_manager.cleanup_expired_keys(keep_days)
-    return success_response(
-        data={"message": f"清理了 {count} 个过期密钥", "deleted_count": count},
-        message=f"清理了 {count} 个过期密钥",
-    )
+    return {"message": f"清理了 {count} 个过期密钥", "deleted_count": count}
 
 
 @router.get("/status")
@@ -103,9 +99,9 @@ async def get_secrets_status(
     versions = secrets_manager.list_key_versions()
     active_versions = [v for v in versions if v.get("is_active")]
 
-    return success_response(data={
+    return {
         "total_versions": len(versions),
         "active_versions": len(active_versions),
         "latest_version": versions[0] if versions else None,
         "requires_rotation": len(active_versions) == 0,
-    })
+    }

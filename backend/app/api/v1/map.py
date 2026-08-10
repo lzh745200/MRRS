@@ -27,7 +27,6 @@ from ...models.supported_village import SupportedVillage
 from app.core.unified_data_scope import OrgScopeFilter, get_org_scope
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
-from app.core.response import success_response
 
 logger = logging.getLogger(__name__)
 
@@ -256,14 +255,14 @@ async def get_map_markers(
 @router.get("/county-coords")
 async def get_county_coordinates():
     """获取铴南州12县市坐标（前端地图选点参考用）"""
-    return success_response(data={
+    return {
         "center": {"lng": QIANNAN_CENTER[0], "lat": QIANNAN_CENTER[1]},
         "counties": {
             name: {"lng": coords[0], "lat": coords[1]}
             for name, coords in QIANNAN_COUNTY_COORDS.items()
             if "县" in name or "市" in name  # 只返回全称
         },
-    })
+    }
 
 
 @router.get("/regions")
@@ -583,32 +582,32 @@ async def search_map_markers(
 async def get_tile_info():
     """获取离线瓦片信息：是否可用、缩放级别范围、瓦片数量"""
     if not TILES_DIR.exists():
-        return success_response(data={
+        return {
             "available": False,
             "tileCount": 0,
             "zoomLevels": [],
             "dir": str(TILES_DIR),
-        })
+        }
 
     zoom_levels = sorted(int(d.name) for d in TILES_DIR.iterdir() if d.is_dir() and d.name.isdigit())
     if not zoom_levels:
-        return success_response(data={
+        return {
             "available": False,
             "tileCount": 0,
             "zoomLevels": [],
             "dir": str(TILES_DIR),
-        })
+        }
 
     # 统计 .png 文件数量
     tile_count = sum(1 for _ in TILES_DIR.rglob("*.png"))
-    return success_response(data={
+    return {
         "available": tile_count > 0,
         "tileCount": tile_count,
         "zoomLevels": zoom_levels,
         "minZoom": zoom_levels[0],
         "maxZoom": zoom_levels[-1],
         "dir": str(TILES_DIR),
-    })
+    }
 
 
 @router.get("/tiles/{z}/{x}/{y}.png")

@@ -49,7 +49,6 @@ class ConfigPackageResponse(BaseModel):
 
 # ==================== API 端点 ====================
 
-
 @router.get("", summary="获取可用配置包列表")
 async def list_config_packages(
     db: Session = Depends(get_db),

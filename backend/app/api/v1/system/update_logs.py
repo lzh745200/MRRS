@@ -50,7 +50,6 @@ class VersionHistoryInit(BaseModel):
 
 # ==================== API 端点 ====================
 
-
 @router.get("", summary="获取更新日志列表")
 async def get_update_logs(
     page: int = Query(1, ge=1, description="页码"),

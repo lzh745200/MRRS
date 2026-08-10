@@ -1223,7 +1223,7 @@ watch(healthExpanded, (val) => {
   width: 38px;
 }
 .log-info .log-level {
-  color: #409eff;
+  color: var(--el-color-primary, #409eff);
 }
 .log-warn .log-level {
   color: #e6a23c;

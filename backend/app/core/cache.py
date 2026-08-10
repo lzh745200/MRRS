@@ -6,6 +6,8 @@ import threading
 import time
 from typing import Any, Callable, Optional
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -130,7 +132,7 @@ def cached(
     return decorator
 
 
-default_cache = SimpleCache()
+default_cache = SimpleCache(max_size=settings.CACHE_MAX_SIZE)
 cache_manager = CacheManager(default_cache)
 cache = cache_manager
 

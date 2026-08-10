@@ -296,11 +296,21 @@ async def approve_task(
 
 @router.post("/batch-delete", response_model=ResponseModel)
 async def batch_delete_tasks(
-    ids: List[int],
+    body: dict,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """批量删除任务（非管理员仅能删除自己创建的任务）"""
+    """批量删除任务（非管理员仅能删除自己创建的任务），请求体统一为 {ids: [...]}"""
+    raw_ids = body.get("ids", [])
+    if not isinstance(raw_ids, list):
+        raise HTTPException(status_code=422, detail="ids 必须是数组")
+    ids: List[int] = []
+    for rid in raw_ids:
+        if isinstance(rid, bool) or not isinstance(rid, int) or rid <= 0:
+            raise HTTPException(status_code=422, detail="ids 只能包含正整数")
+        ids.append(rid)
+    if not ids:
+        raise HTTPException(status_code=400, detail="未提供要删除的ID")
     query = db.query(RuralTask).filter(RuralTask.id.in_(ids))
     if not is_admin(current_user):
         query = query.filter(RuralTask.created_by == current_user.id)

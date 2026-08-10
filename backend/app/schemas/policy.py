@@ -137,7 +137,7 @@ class PolicyResponse(BaseModel):
 
 
 class PolicyListResponse(BaseModel):
-    items: List[PolicyResponse] = Field(default_factory=list)
+    items: List[PolicyResponse] = []
     total: int = 0
     page: int = 1
     page_size: int = 10
@@ -151,8 +151,8 @@ class CategoryLevelConfig(BaseModel):
 class CategoryConfig(BaseModel):
     value: str
     label: str
-    levels: List[CategoryLevelConfig] = Field(default_factory=list)
+    levels: List[CategoryLevelConfig] = []
 
 
 class CategoriesResponse(BaseModel):
-    categories: List[CategoryConfig] = Field(default_factory=list)
+    categories: List[CategoryConfig] = []

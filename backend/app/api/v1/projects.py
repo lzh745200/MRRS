@@ -106,17 +106,7 @@ def _can_modify_project(project: Project, user) -> bool:
 
 def _get_project_or_404(db: Session, project_id: int, current_user=None) -> Project:
     """获取项目或抛出 404；存在但跨组织时抛 403（数据隔离）。"""
-    from sqlalchemy.orm import selectinload
-
-    project = (
-        db.query(Project)
-        .filter(Project.id == project_id)
-        .options(
-            selectinload(Project.village),
-            selectinload(Project.organization),
-        )
-        .first()
-    )
+    project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise NotFoundException("项目不存在")
     if current_user is not None and not check_record_access(
@@ -397,9 +387,7 @@ def _project_to_dict(p: Project) -> dict:
         "description": p.description,
         "objectives": p.objectives,
         "village_id": p.village_id,
-        "village_name": p.village.village_name if getattr(p, "village", None) else None,
         "organization_id": p.organization_id,
-        "organization_name": p.organization.name if getattr(p, "organization", None) else None,
         "budget": float(p.budget) if p.budget else 0,
         "actual_cost": float(p.actual_cost) if p.actual_cost else 0,
         "progress": p.progress or 0,
@@ -449,9 +437,7 @@ def _project_to_list_dict(p: Project) -> dict:
         "type": p.type,
         "status": p.status,
         "village_id": p.village_id,
-        "village_name": p.village.village_name if getattr(p, "village", None) else None,
         "organization_id": p.organization_id,
-        "organization_name": p.organization.name if getattr(p, "organization", None) else None,
         "budget": float(p.budget) if p.budget else 0,
         "actual_cost": float(p.actual_cost) if p.actual_cost else 0,
         "progress": p.progress or 0,
@@ -660,8 +646,6 @@ async def list_projects(
     query = query.options(
         selectinload(Project.tasks),
         selectinload(Project.funds),
-        selectinload(Project.village),
-        selectinload(Project.organization),
     )
 
     if not include_cancelled:

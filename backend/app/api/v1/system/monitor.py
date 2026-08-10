@@ -51,7 +51,6 @@ class AlertRule(BaseModel):
 
 # ==================== API 端点 ====================
 
-
 @router.get("/snapshot", summary="获取当前系统快照")
 async def get_monitor_snapshot(current_user=Depends(get_current_user)):
     """获取当前时刻系统运行状态的实时快照

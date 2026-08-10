@@ -69,7 +69,7 @@ class OrganizationTreeNode(OrganizationBase):
     created_by: Optional[int] = None
     updated_at: Optional[datetime] = None
     updated_by: Optional[int] = None
-    children: List["OrganizationTreeNode"] = Field(default_factory=list)
+    children: List["OrganizationTreeNode"] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -82,7 +82,7 @@ class OrganizationStatistics(BaseModel):
     inactive: int = 0
     by_level: dict = Field(default={}, alias="level_distribution")
     max_level: int = 0
-    type_distribution: dict = Field(default_factory=dict)
+    type_distribution: dict = {}
 
     model_config = ConfigDict(
         populate_by_name=True,  # 允许通过字段名或别名填充
@@ -96,4 +96,4 @@ class OrganizationListResponse(BaseModel):
     total: int = 0
     page: int = 1
     page_size: int = 20
-    items: List[OrganizationResponse] = Field(default_factory=list)
+    items: List[OrganizationResponse] = []

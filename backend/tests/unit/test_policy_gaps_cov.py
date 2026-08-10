@@ -66,8 +66,8 @@ class TestGetCategoriesExcept:
         db.query.side_effect = TypeError("boom")
         result = await m.get_categories(
             parent_id=None, is_active=None, current_user=_admin(), db=db, response=None)
-        assert result["military"]["label"] == "专项政策"
-        assert result["local"]["label"] == "地方政策"
+        assert result["data"]["military"]["label"] == "专项政策"
+        assert result["data"]["local"]["label"] == "地方政策"
 
 
 class TestGetCategoryTree:

@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 from app.models.data_package import PackageType
@@ -55,14 +55,14 @@ class DataPackageListResponse(BaseModel):
     total: int = 0
     page: int = 1
     page_size: int = 20
-    items: List[DataPackageResponse] = Field(default_factory=list)
+    items: List[DataPackageResponse] = []
 
 
 class DataPackageExportRequest(BaseModel):
     """数据包导出请求"""
 
     org_id: Optional[int] = None
-    data_types: List[str] = Field(default_factory=list)
+    data_types: List[str] = []
     description: Optional[str] = None
     type: PackageType = PackageType.report  # task: 任务包, report: 上报包
     incremental: bool = False  # 增量包: 仅导出 sync_version 大于 since_sync_version 的记录
@@ -84,15 +84,15 @@ class DataPackageManifest(BaseModel):
     package_type: PackageType = PackageType.report  # report: 上报, task: 任务, update: 更新
     org_code: Optional[str] = ""
     org_name: Optional[str] = ""
-    data_types: List[str] = Field(default_factory=list)
-    record_counts: Dict[str, int] = Field(default_factory=dict)
+    data_types: List[str] = []
+    record_counts: Dict[str, int] = {}
     export_time: Optional[datetime] = None
     exported_by: Optional[str] = None
     description: Optional[str] = None
     checksum: Optional[str] = None
     encryption: str = "none"  # none, aes256
     compression: str = "zip"
-    dependencies: List[str] = Field(default_factory=list)  # 依赖的其他数据包
+    dependencies: List[str] = []  # 依赖的其他数据包
     incremental: bool = False  # 是否增量更新
     base_package_id: Optional[int] = None  # 基础包ID（增量更新时）
     changes: Optional[Dict[str, Any]] = None  # 变更记录（增量更新时）
@@ -118,10 +118,10 @@ class DataPackageImportResult(BaseModel):
     package_code: str = ""
     status: Optional[str] = None
     manifest: Optional[DataPackageManifest] = None
-    preview: List[Any] = Field(default_factory=list)
+    preview: List[Any] = []
     validation: Optional[Any] = None
     records_imported: int = 0
-    errors: List[str] = Field(default_factory=list)
+    errors: List[str] = []
 
 
 class DataPackagePreviewData(BaseModel):
@@ -130,9 +130,9 @@ class DataPackagePreviewData(BaseModel):
     data_type: str = ""
     total: int = 0
     sample: List[Dict[str, Any]] = []
-    columns: List[str] = Field(default_factory=list)
-    tables: List[str] = Field(default_factory=list)
-    record_counts: Dict[str, int] = Field(default_factory=dict)
+    columns: List[str] = []
+    tables: List[str] = []
+    record_counts: Dict[str, int] = {}
     sample_data: Optional[Dict[str, Any]] = None
 
 
@@ -140,8 +140,8 @@ class DataPackageValidationResult(BaseModel):
     """数据包验证结果"""
 
     is_valid: bool = True
-    errors: List[Any] = Field(default_factory=list)
-    warnings: List[str] = Field(default_factory=list)
+    errors: List[Any] = []
+    warnings: List[str] = []
     manifest: Optional[DataPackageManifest] = None
 
 
@@ -159,9 +159,9 @@ class DataPackageConfirmResult(BaseModel):
 
     success: bool = True
     package_id: Optional[int] = None
-    imported_counts: Dict[str, int] = Field(default_factory=dict)
-    skipped_counts: Dict[str, int] = Field(default_factory=dict)
-    error_counts: Dict[str, int] = Field(default_factory=dict)
-    errors: List[Any] = Field(default_factory=list)
+    imported_counts: Dict[str, int] = {}
+    skipped_counts: Dict[str, int] = {}
+    error_counts: Dict[str, int] = {}
+    errors: List[Any] = []
     records_imported: int = 0
     message: str = ""

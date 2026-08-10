@@ -893,7 +893,6 @@ class HelpArticleResponse(BaseModel):
 
 # ==================== API 端点 ====================
 
-
 @router.get("/categories", summary="获取帮助分类列表")
 async def get_help_categories():
     """获取所有帮助文档分类"""

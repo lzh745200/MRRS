@@ -45,7 +45,6 @@ class ErrorReportUpdate(BaseModel):
 
 # ==================== API 端点 ====================
 
-
 @router.post("", summary="上报系统错误")
 async def report_error(
     report: ErrorReportCreate,

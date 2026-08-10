@@ -46,7 +46,6 @@ class PerformanceMetric(BaseModel):
 
 # ==================== API 端点 ====================
 
-
 @router.get("", summary="获取系统综合指标")
 async def get_system_metrics(current_user=Depends(get_current_user)):
     """获取系统运行的综合指标数据

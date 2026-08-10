@@ -32,6 +32,9 @@ def mock_db():
     q.order_by.return_value = q
     q.offset.return_value = q
     q.limit.return_value = q
+    # _get_village_or_404 使用 .filter(...).options(selectinload(...)).first() 链，
+    # 必须让 options 返回同一个 q，否则 first() 拿不到预置返回值
+    q.options.return_value = q
     q.all.return_value = []
     q.count.return_value = 0
     q.first.return_value = None

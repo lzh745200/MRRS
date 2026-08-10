@@ -47,7 +47,7 @@ class DataReportListResponse(BaseModel):
     total: int = 0
     page: int = 1
     page_size: int = 20
-    items: List[DataReportResponse] = Field(default_factory=list)
+    items: List[DataReportResponse] = []
 
 
 class DataReportReview(BaseModel):
@@ -103,4 +103,4 @@ class SubordinateReportDashboard(BaseModel):
     reported_count: int = 0
     unreported_count: int = 0
     statistics: Optional[DataReportStatistics] = None
-    subordinates: List[SubordinateReportSummary] = Field(default_factory=list)
+    subordinates: List[SubordinateReportSummary] = []

@@ -65,6 +65,20 @@ class TimestampMixin:
     )
 
 
+# ── sync_version 自动递增 ──
+# 修复增量数据包过滤失效：此前 sync_version 恒为 1，`sync_version > since` 过滤
+# 永远为空。这里在每次 UPDATE 前自动递增，使增量包按版本号过滤真正生效。
+from sqlalchemy import event as _sqla_event  # noqa: E402
+
+
+@_sqla_event.listens_for(TimestampMixin, "before_update", propagate=True)
+def _bump_sync_version_on_update(mapper, connection, target) -> None:
+    """每次 UPDATE 前递增 sync_version（新行 default=1，更新即 +1）。"""
+    sv = getattr(target, "sync_version", None)
+    if sv is not None:
+        target.sync_version = (sv or 0) + 1
+
+
 # ── 软删除混入 ──
 class SoftDeleteMixin:
     """为模型添加软删除支持。

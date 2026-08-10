@@ -91,7 +91,7 @@ class AuditService:
             status=status.value if isinstance(status, AuditStatus) else status,
             error_message=error_message,
             level=level.value if isinstance(level, AuditLevel) else level,
-            metadata_=metadata,
+            metadata=metadata,
             duration_ms=duration_ms,
             response_status=response_status,
         )

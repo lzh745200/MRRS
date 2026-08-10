@@ -112,10 +112,10 @@ class TestGetTwoFactorStatus:
         with patch(f"{SVC_PATH}.is_enabled", return_value=True):
             resp = client.get("/two-factor/status")
             assert resp.status_code == 200
-            assert resp.json()["enabled"] is True
+            assert resp.json()["data"]["enabled"] is True
 
     def test_disabled(self, client):
         with patch(f"{SVC_PATH}.is_enabled", return_value=False):
             resp = client.get("/two-factor/status")
             assert resp.status_code == 200
-            assert resp.json()["enabled"] is False
+            assert resp.json()["data"]["enabled"] is False

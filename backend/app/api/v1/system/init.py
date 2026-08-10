@@ -56,7 +56,6 @@ class InitStepResponse(BaseModel):
 
 # ==================== API 端点 ====================
 
-
 @router.get("/status", summary="检查系统初始化状态")
 async def check_init_status(db: Session = Depends(get_db)):
     """检查系统是否已完成初始化

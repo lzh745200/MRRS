@@ -324,7 +324,7 @@
 
     // 各主题色变体
     &.primary::before {
-      background: linear-gradient(180deg, var(--dash-brand-blue, #1e4d8c), #3b82f6);
+      background: linear-gradient(180deg, var(--dash-brand-blue, #1e4d8c), var(--el-color-primary, #3b82f6));
     }
     &.success::before {
       background: linear-gradient(180deg, var(--dash-brand-green, #2d6a4f), #22c55e);

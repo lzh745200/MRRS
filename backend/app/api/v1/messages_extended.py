@@ -57,7 +57,7 @@ async def send_message(
     except Exception:
         logger.debug("记录工作日志失败", exc_info=True)
 
-    return success_response(data={"message_id": message.id, "created_at": message.created_at.isoformat()})
+    return {"message_id": message.id, "created_at": message.created_at.isoformat()}
 
 
 @router.get("/unread-count")
@@ -65,7 +65,7 @@ async def get_unread_count(current_user: User = Depends(get_current_active_user)
     """获取未读消息数量"""
     service = MessageService(db)
     count = service.get_unread_count(user_id=current_user.id)
-    return success_response(data={"unread_count": count})
+    return {"unread_count": count}
 
 
 @router.get("/list")
@@ -91,7 +91,7 @@ async def get_messages(
     )
 
     messages = result["items"]
-    return success_response(data={
+    return {
         "total": result["total"],
         "messages": [
             {
@@ -105,7 +105,7 @@ async def get_messages(
             }
             for msg in messages
         ],
-    })
+    }
 
 
 @router.post("/{message_id}/read")
@@ -139,7 +139,7 @@ async def mark_all_as_read(current_user: User = Depends(get_current_active_user)
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
     except Exception:
         logger.debug("记录工作日志失败", exc_info=True)
-    return success_response(data={"marked_count": count})
+    return {"marked_count": count}
 
 
 @router.delete("/{message_id}")

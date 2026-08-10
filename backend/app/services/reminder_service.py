@@ -131,16 +131,18 @@ class ApprovalReminderService:
             db.close()
 
     def _create_reminder_message(self, db, approval_task, level: str):  # pragma: no cover
-        """创建提醒消息（幂等——同一审批任务+同一提醒级别不重复创建）"""
+        """创建提醒消息（幂等——与 reminder_orchestrator 共用 type:entity_id 去重键，
+        避免双服务并存时同一审批生成重复消息）"""
         from app.models.message import Message
 
-        # 检查是否已发送过同类提醒（通过 link 字段标识关联实体）
-        ref_link = f"/approval/tasks/{approval_task.id}"
+        # 去重键与统一提醒中心一致：approval_overtime:{id} / approval_approaching:{id}
+        msg_type = "approval_overtime" if level == "overdue" else "approval_approaching"
+        ref_link = f"{msg_type}:{approval_task.id}"
         existing = (
             db.query(Message)
             .filter(
                 Message.link == ref_link,
-                Message.message_type == f"approval_{level}",
+                Message.message_type == msg_type,
             )
             .first()
         )
@@ -158,7 +160,7 @@ class ApprovalReminderService:
             user_id=approval_task.current_approver_id,
             title=title,
             content=content,
-            message_type=f"approval_{level}",
+            message_type=msg_type,
             link=ref_link,
             is_read=False,
         )

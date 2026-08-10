@@ -79,7 +79,7 @@ async def get_system_info(current_user=Depends(get_current_user), db: Session = 
     project_count = db.query(Project).count()
     village_count = db.query(Village).count()
 
-    return success_response(data={
+    return {
         "version": settings.PROJECT_VERSION,
         "database_size": db_size,
         "user_count": user_count,
@@ -87,7 +87,7 @@ async def get_system_info(current_user=Depends(get_current_user), db: Session = 
         "project_count": project_count,
         "village_count": village_count,
         "uptime": "运行中",
-    })
+    }
 
 
 @router.post("/backup")

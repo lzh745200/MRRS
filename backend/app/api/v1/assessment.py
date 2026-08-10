@@ -16,7 +16,6 @@ from app.core.security import get_current_user
 from app.models.fund import Fund
 from app.models.project import Project
 from app.models.supported_village import SupportedVillage, VillageIncome
-from app.core.response import success_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/assessment", tags=["考核评估"])
@@ -261,11 +260,11 @@ async def get_trend_prediction(
         )
 
         if len(rows) < 2:
-            return success_response(data={
+            return {
                 "message": "数据不足，至少需要两年数据",
                 "historical": [],
                 "predicted": [],
-            }, message="数据不足，至少需要两年数据")
+            }
 
         # 线性回归 y = a + b*x
         xs = [r[0] for r in rows]
@@ -287,13 +286,13 @@ async def get_trend_prediction(
             pred_value = max(0, round(a + b * pred_year, 2))
             predictions.append({"year": pred_year, "value": pred_value})
 
-        return success_response(data={
+        return {
             "metric": metric,
             "historical": [{"year": x, "value": round(y, 2)} for x, y in zip(xs, ys)],
             "predicted": predictions,
             "slope": round(b, 4),
             "intercept": round(a, 4),
-        })
+        }
     except Exception:
         logger.exception("Failed to get trend prediction")
         raise HTTPException(status_code=500, detail="趋势预测失败")

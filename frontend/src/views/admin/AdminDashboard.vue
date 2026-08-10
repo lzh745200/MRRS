@@ -195,6 +195,7 @@ import { logger } from '@/utils/logger'
 import { ref, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useUserStore } from '@/stores/user'
+import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import { get } from '@/api/request'
 import {
   UserFilled,
@@ -214,8 +215,8 @@ import {
 const { pushSafe } = useRouterSafe()
 const userStore = useUserStore()
 const isAdmin = computed(() => {
-  const role = userStore.currentUser?.role
-  return role === 'super_admin' || role === 'admin'
+  const role = normalizeRole(userStore.currentUser?.role)
+  return ADMIN_ROLES.includes(role)
 })
 
 const currentDate = new Date().toLocaleDateString('zh-CN', {
@@ -667,7 +668,7 @@ onMounted(() => {
 }
 
 .pending-item.low {
-  border-left-color: #409eff;
+  border-left-color: var(--el-color-primary, #409eff);
 }
 
 .pending-type {

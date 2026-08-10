@@ -727,14 +727,14 @@ async def create_activity(
                 _cache.delete("dashboard_recent_activities")
             except Exception:
                 logger.debug("清除仪表盘活动缓存失败")
-        return success_response(data={
+        return {
             "id": f"custom_{activity.id}",
             "type": activity.type,
             "action": activity.action,
             "target": activity.target,
             "user": activity.user,
             "time": activity.created_at.strftime("%m-%d %H:%M") if activity.created_at else "",
-        })
+        }
     except Exception as e:
         logger.error("创建自定义动态失败: %s", e, exc_info=True)
         db.rollback()

@@ -13,7 +13,6 @@ from app.core.security import get_current_active_user
 from app.core.permission_utils import is_admin
 from app.models.user import User
 from app.services.data_tier_service import data_tier_service, DataTier
-from app.core.response import success_response
 
 router = APIRouter(prefix="/data-tier", tags=["数据分级存储"])
 
@@ -60,7 +59,7 @@ async def get_tier_info(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"无效的数据分级: {tier}")
 
-    return success_response(data={
+    return {
         "tier": data_tier.value,
         "hot_threshold_days": data_tier_service.config.HOT_THRESHOLD_DAYS if data_tier == DataTier.HOT else None,
         "warm_threshold_days": data_tier_service.config.WARM_THRESHOLD_DAYS if data_tier == DataTier.WARM else None,
@@ -69,7 +68,7 @@ async def get_tier_info(
             DataTier.WARM: data_tier_service.config.WARM_DATA_PATH,
             DataTier.COLD: data_tier_service.config.COLD_ARCHIVE_PATH,
         }.get(data_tier),
-    })
+    }
 
 
 @router.post("/archive/{model_name}")
@@ -116,11 +115,7 @@ async def archive_model(
         db=db, model_class=model_class, before_date=before_date, batch_size=batch_size
     )
 
-    return success_response(
-        data={"archived_count": count, "message": message, "model": model_name,
-              "before_date": before_date.isoformat()},
-        message=message,
-    )
+    return {"archived_count": count, "message": message, "model": model_name, "before_date": before_date.isoformat()}
 
 
 @router.get("/archives")
@@ -167,7 +162,7 @@ async def list_archives(
     if tier:
         tier_key = f"{tier.lower()}_archives"
         if tier_key in result:
-            return success_response(data={tier_key: result[tier_key]})
+            return {tier_key: result[tier_key]}
 
     return result
 
@@ -205,10 +200,7 @@ async def restore_from_archive(
 
     count, message = data_tier_service.restore_from_archive(db=db, model_class=model_class, archive_file=archive_file)
 
-    return success_response(
-        data={"restored_count": count, "message": message, "archive_file": archive_file},
-        message=message,
-    )
+    return {"restored_count": count, "message": message, "archive_file": archive_file}
 
 
 @router.delete("/cleanup")
@@ -222,10 +214,7 @@ async def cleanup_old_archives(
     _require_admin(current_user)
     deleted, message = data_tier_service.cleanup_old_archives(max_age_days)
 
-    return success_response(
-        data={"deleted_count": deleted, "message": message, "max_age_days": max_age_days},
-        message=message,
-    )
+    return {"deleted_count": deleted, "message": message, "max_age_days": max_age_days}
 
 
 @router.get("/tier-for-record/{date}")
@@ -239,8 +228,8 @@ async def get_tier_for_record(
     tier = data_tier_service.determine_tier(date)
 
     aware_date = date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date
-    return success_response(data={
+    return {
         "record_date": date.isoformat(),
         "tier": tier.value,
         "age_days": (datetime.now(timezone.utc) - aware_date).days,
-    })
+    }

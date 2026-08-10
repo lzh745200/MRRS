@@ -92,7 +92,6 @@ def _create_task_record(task_type: str, task_name: str, created_by: str = None, 
 
 # ==================== API 端点 ====================
 
-
 @router.get("", summary="获取任务列表")
 async def list_tasks(
     status: Optional[str] = Query(None, description="按状态筛选: pending/running/completed/failed"),

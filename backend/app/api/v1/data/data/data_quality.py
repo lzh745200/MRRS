@@ -19,7 +19,6 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.supported_village import (SupportedVillage, VillageIncome,
                                           VillagePopulation)
-from app.core.response import success_response
 
 logger = logging.getLogger(__name__)
 
@@ -39,21 +38,21 @@ async def get_data_quality_report(
         anomalies = _detect_income_anomalies(db)
         progress = _calc_filing_progress(db)
 
-        return success_response(data={
+        return {
             "generated_at": datetime.now().isoformat(),
             "null_rate_report": null_rate,
             "income_anomalies": anomalies,
             "filing_progress": progress,
-        })
+        }
     except Exception as e:
         logger.error("数据质量报告生成失败: %s", e, exc_info=True)
-        return success_response(data={
+        return {
             "generated_at": datetime.now().isoformat(),
             "error": str(e),
             "null_rate_report": {},
             "income_anomalies": [],
             "filing_progress": {},
-        })
+        }
 
 
 # ------------------------------------------------------------------
@@ -336,14 +335,14 @@ async def run_full_check(
     medium_count = sum(1 for i in issues if i["severity"] == "medium")
     score = max(0, 100 - high_count * 10 - medium_count * 5)
 
-    return success_response(data={
+    return {
         "generated_at": datetime.now().isoformat(),
         "score": score,
         "total_issues": len(issues),
         "high_issues": high_count,
         "medium_issues": medium_count,
         "issues": issues,
-    })
+    }
 
 
 def _calc_filing_progress(db: Session) -> dict:

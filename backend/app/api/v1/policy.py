@@ -237,7 +237,7 @@ async def get_categories(
         logger.warning(f"查询分类表失败: {e}")
 
     # 返回前端期望的静态分类配置
-    return success_response(data={
+    return {
         "military": {
             "label": "专项政策",
             "levels": [
@@ -256,7 +256,7 @@ async def get_categories(
                 {"value": "county", "label": "县级"},
             ],
         },
-    })
+    }
 
 
 @router.get("/categories/tree")
@@ -917,20 +917,9 @@ async def download_policy_file(
 async def batch_delete_policies(data: dict, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """批量删除政策"""
     require_manager_role(current_user)
-    raw_ids = data.get("ids", [])
-    if not raw_ids:
+    ids = data.get("ids", [])
+    if not ids:
         raise HTTPException(status_code=400, detail="未提供要删除的ID")
-    if not isinstance(raw_ids, list):
-        raise HTTPException(status_code=422, detail="ids 必须是数组")
-    ids: List[int] = []
-    for rid in raw_ids:
-        if isinstance(rid, bool) or not isinstance(rid, int):
-            raise HTTPException(status_code=422, detail="ids 只能包含正整数")
-        if rid <= 0:
-            raise HTTPException(status_code=422, detail="ids 只能包含正整数")
-        ids.append(rid)
-    if len(ids) > 1000:
-        raise HTTPException(status_code=422, detail="单次最多删除1000条")
 
     deleted = db.query(Policy).filter(Policy.id.in_(ids)).delete(synchronize_session=False)
     safe_commit(db)

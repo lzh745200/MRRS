@@ -58,13 +58,13 @@ class TestStaticEndpoints:
         c, _ = client
         resp = c.get(f"{BASE}/modules")
         assert resp.status_code == 200
-        assert len(resp.json()["modules"]) > 0
+        assert len(resp.json()["data"]["modules"]) > 0
 
     def test_formats(self, client):
         c, _ = client
         resp = c.get(f"{BASE}/formats")
         assert resp.status_code == 200
-        keys = [f["key"] for f in resp.json()["formats"]]
+        keys = [f["key"] for f in resp.json()["data"]["formats"]]
         assert keys == ["xlsx", "csv"]
 
 

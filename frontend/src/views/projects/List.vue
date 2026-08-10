@@ -145,7 +145,19 @@
         </el-button>
         <el-button size="small" text @click="clearSelection">取消选择</el-button>
       </div>
+      <!-- 加载失败占位 -->
+      <el-result
+        v-if="loadError"
+        icon="error"
+        title="加载失败"
+        sub-title="项目列表加载失败，请检查网络或稍后重试"
+      >
+        <template #extra>
+          <el-button type="primary" @click="loadData">重试</el-button>
+        </template>
+      </el-result>
       <el-table
+        v-else
         ref="tableRef"
         v-loading="loading"
         :data="projectList"
@@ -230,6 +242,7 @@ import { projectApi, type Project } from '@/api/projects'
 const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
 const loading = ref(false)
+const loadError = ref(false)
 const batchDeleting = ref(false)
 const selectedRows = ref<Project[]>([])
 const selectedIds = computed(() => selectedRows.value.map((r) => r.id))
@@ -327,6 +340,7 @@ const loadStats = async () => {
 // 加载项目列表
 const loadData = async () => {
   loading.value = true
+  loadError.value = false
   try {
     const params: Record<string, any> = {
       page: pagination.page,
@@ -346,6 +360,7 @@ const loadData = async () => {
   } catch (e) {
     logger.error('[Projects] loadData failed:', e)
     ElMessage.error('加载项目列表失败')
+    loadError.value = true
     projectList.value = []
     pagination.total = 0
   } finally {

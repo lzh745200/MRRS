@@ -89,7 +89,7 @@ class TestGetDashboardStats:
         import app.api.v1.data.data.dashboard as d
         with patch.object(d, "_cache") as mc:
             mc.get.return_value = {"v": 1}
-            assert client.get("/api/v1/dashboard/stats").json() == {"v": 1}
+            assert client.get("/api/v1/dashboard/stats").json()["data"] == {"v": 1}
 
     def test_refresh(self, client):
         assert client.get("/api/v1/dashboard/stats?refresh=true").status_code == 200
@@ -108,19 +108,19 @@ class TestGetDashboardSummary:
         import app.api.v1.data.data.dashboard as d
         with patch.object(d, "_cache", None):
             r = client.get("/api/v1/dashboard/summary")
-            assert "stats" in r.json() and "recent_activities" in r.json()
+            assert "stats" in r.json()["data"] and "recent_activities" in r.json()["data"]
 
     def test_cached(self, client):
         import app.api.v1.data.data.dashboard as d
         with patch.object(d, "_cache") as mc:
             mc.get.return_value = {"stats": {}, "recent_activities": []}
-            assert client.get("/api/v1/dashboard/summary").json() == {"stats": {}, "recent_activities": []}
+            assert client.get("/api/v1/dashboard/summary").json()["data"] == {"stats": {}, "recent_activities": []}
 
     def test_stats_exception(self, client):
         import app.api.v1.data.data.dashboard as d
         with patch.object(d, "_cache", None), patch.object(d, "_query_village_stats") as mv:
             mv.side_effect = Exception("x")
-            assert client.get("/api/v1/dashboard/summary").json()["stats"] == {}
+            assert client.get("/api/v1/dashboard/summary").json()["data"]["stats"] == {}
 
 
 # ==================== GET /dashboard/recent-activities ====================
@@ -134,22 +134,22 @@ class TestGetRecentActivities:
 
     def test_empty(self, client):
         import app.api.v1.data.data.dashboard as d
-        with patch.object(d, "_cache", None), patch("app.core.database.SessionLocal") as msl:
+        with patch.object(d, "_cache", None), patch("app.api.v1.data.data.dashboard.SessionLocal") as msl:
             s = MagicMock()
             msl.return_value = s
             s.query.return_value.order_by.return_value.limit.return_value.all.return_value = []
             s.query.return_value.all.return_value = []
-            assert client.get("/api/v1/dashboard/recent-activities").json()["items"] == []
+            assert client.get("/api/v1/dashboard/recent-activities").json()["data"]["items"] == []
 
     def test_cached(self, client):
         import app.api.v1.data.data.dashboard as d
         with patch.object(d, "_cache") as mc:
             mc.get.return_value = {"items": [{"id": "x"}]}
-            assert client.get("/api/v1/dashboard/recent-activities").json()["items"][0]["id"] == "x"
+            assert client.get("/api/v1/dashboard/recent-activities").json()["data"]["items"][0]["id"] == "x"
 
     def test_hidden_filter(self, client):
         import app.api.v1.data.data.dashboard as d
-        with patch.object(d, "_cache", None), patch("app.core.database.SessionLocal") as msl:
+        with patch.object(d, "_cache", None), patch("app.api.v1.data.data.dashboard.SessionLocal") as msl:
             s = MagicMock(); msl.return_value = s
             s.query.return_value.all.return_value = [("pid",)]
             s.query.return_value.order_by.return_value.limit.return_value.all.return_value = []
@@ -157,7 +157,7 @@ class TestGetRecentActivities:
 
     def test_fetch_hidden_exc(self, client):
         import app.api.v1.data.data.dashboard as d
-        with patch.object(d, "_cache", None), patch("app.core.database.SessionLocal") as msl:
+        with patch.object(d, "_cache", None), patch("app.api.v1.data.data.dashboard.SessionLocal") as msl:
             s = MagicMock(); msl.return_value = s
             s.query.return_value.all.side_effect = Exception("x")
             s.query.return_value.order_by.return_value.limit.return_value.all.return_value = []
@@ -165,7 +165,7 @@ class TestGetRecentActivities:
 
     def test_custom_exc(self, client):
         import app.api.v1.data.data.dashboard as d
-        with patch.object(d, "_cache", None), patch("app.core.database.SessionLocal") as msl:
+        with patch.object(d, "_cache", None), patch("app.api.v1.data.data.dashboard.SessionLocal") as msl:
             s = MagicMock(); msl.return_value = s
             s.query.return_value.all.return_value = []
             s.query.return_value.order_by.return_value.limit.return_value.all.side_effect = Exception("x")
@@ -181,7 +181,7 @@ class TestCreateActivity:
         import app.api.v1.data.data.dashboard as d
         with patch.object(d, "_cache", None):
             r = client.post("/api/v1/dashboard/recent-activities", json={"action": "a", "target": "t"})
-            assert r.status_code == 200 and "id" in r.json()
+            assert r.status_code == 200 and "id" in r.json()["data"]
 
     def test_exception(self, client):
         import app.api.v1.data.data.dashboard as d

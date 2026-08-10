@@ -551,8 +551,8 @@ class TestTrendPrediction:
         assert resp.status_code == 200
         data = resp.json()
         assert data["message"] == "数据不足，至少需要两年数据"
-        assert data["historical"] == []
-        assert data["predicted"] == []
+        assert data["data"]["historical"] == []
+        assert data["data"]["predicted"] == []
 
     def test_insufficient_data_one_row(self, client_and_db):
         client, db = client_and_db
@@ -572,7 +572,7 @@ class TestTrendPrediction:
 
         resp = client.get("/api/v1/assessment/trend-prediction?metric=per_capita_income")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["metric"] == "per_capita_income"
         assert len(data["historical"]) == 2
         assert len(data["predicted"]) == 2
@@ -590,7 +590,7 @@ class TestTrendPrediction:
 
         resp = client.get("/api/v1/assessment/trend-prediction?metric=per_capita_income")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert len(data["historical"]) == 3
         assert [h["year"] for h in data["historical"]] == [2023, 2024, 2025]
 
@@ -603,7 +603,7 @@ class TestTrendPrediction:
 
         resp = client.get("/api/v1/assessment/trend-prediction?metric=collective_income")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["metric"] == "collective_income"
         assert data["historical"][0]["value"] == 20.0
         assert data["historical"][1]["value"] == 30.0
@@ -616,7 +616,7 @@ class TestTrendPrediction:
         db.commit()
 
         resp = client.get("/api/v1/assessment/trend-prediction")
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["slope"] == 0.0
         for h in data["historical"]:
             assert h["value"] == 2.0
@@ -632,7 +632,7 @@ class TestTrendPrediction:
         db.commit()
 
         resp = client.get("/api/v1/assessment/trend-prediction")
-        assert resp.json()["slope"] < 0
+        assert resp.json()["data"]["slope"] < 0
 
     def test_predicted_values_non_negative(self, client_and_db):
         client, db = client_and_db
@@ -642,7 +642,7 @@ class TestTrendPrediction:
         db.commit()
 
         resp = client.get("/api/v1/assessment/trend-prediction")
-        for p in resp.json()["predicted"]:
+        for p in resp.json()["data"]["predicted"]:
             assert p["value"] >= 0
 
     def test_intercept_field_present(self, client_and_db):
@@ -653,7 +653,7 @@ class TestTrendPrediction:
         db.commit()
 
         resp = client.get("/api/v1/assessment/trend-prediction")
-        data = resp.json()
+        data = resp.json()["data"]
         assert "slope" in data
         assert "intercept" in data
         assert isinstance(data["slope"], (int, float))
@@ -670,7 +670,7 @@ class TestTrendPrediction:
         db.commit()
 
         resp = client.get("/api/v1/assessment/trend-prediction")
-        data = resp.json()
+        data = resp.json()["data"]
         assert len(data["historical"]) == 2
         assert data["historical"][0]["value"] == 2.0
         assert data["historical"][1]["value"] == 3.0
@@ -684,7 +684,7 @@ class TestTrendPrediction:
 
         resp = client.get("/api/v1/assessment/trend-prediction?metric=collective_income")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["historical"][0]["value"] == 0.0
         assert data["historical"][1]["value"] == 20.0
 
@@ -698,7 +698,7 @@ class TestTrendPrediction:
         db.commit()
 
         resp = client.get("/api/v1/assessment/trend-prediction")
-        data = resp.json()
+        data = resp.json()["data"]
         assert data["historical"][0]["value"] == 1.0
         assert data["historical"][1]["value"] == 1.5
 

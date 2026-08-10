@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from app.api.v1.deps import get_current_active_user, get_db
 from app.models.user import User
 from app.services.two_factor_service import TwoFactorService
-from app.core.response import success_response
 
 router = APIRouter(prefix="/two-factor", tags=["双因素认证"])
 
@@ -55,7 +54,7 @@ async def verify_and_enable(
     try:
         success = TwoFactorService.verify_and_enable(db, current_user, request.token)
         if success:
-            return success_response(data={"message": "双因素认证已启用"}, message="双因素认证已启用")
+            return {"message": "双因素认证已启用"}
         else:
             raise HTTPException(status_code=400, detail="验证码错误")
     except HTTPException:
@@ -73,7 +72,7 @@ async def disable_two_factor(current_user: User = Depends(get_current_active_use
     """
     try:
         TwoFactorService.disable_two_factor(db, current_user)
-        return success_response(data={"message": "双因素认证已禁用"}, message="双因素认证已禁用")
+        return {"message": "双因素认证已禁用"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"禁用失败: {str(e)}")
 
@@ -84,4 +83,4 @@ async def get_two_factor_status(current_user: User = Depends(get_current_active_
     获取双因素认证状态
     """
     enabled = TwoFactorService.is_enabled(db, current_user)
-    return success_response(data={"enabled": enabled})
+    return {"enabled": enabled}

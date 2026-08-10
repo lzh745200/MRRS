@@ -65,7 +65,12 @@ def test_ensure_target_dir_creates_and_checks():
 
 
 def test_get_dirs_success(bk_client):
-    resp = bk_client.get("/api/v1/system/backup/dirs")
+    # 固定盘符检测与配置读取,避免依赖真实环境(真实库/U盘)
+    fake_dirs = [{"path": "C:\\backup", "type": "local", "available": True}]
+    with patch("app.utils.drive_detect.list_backup_dirs", return_value=fake_dirs), patch(
+        "app.services.system_config_service.get_config", return_value="C:\\backup"
+    ):
+        resp = bk_client.get("/api/v1/system/backup/dirs")
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert isinstance(data["dirs"], list)
@@ -94,21 +99,25 @@ def test_get_dirs_error_500(bk_client):
 
 
 def test_set_target_success(bk_client):
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory() as tmp, patch(
+        "app.services.system_config_service.set_config"
+    ):
         resp = bk_client.put("/api/v1/system/backup/target", json={"target_dir": tmp})
         assert resp.status_code == 200
         assert resp.json()["data"]["target_dir"] == tmp
 
 
 def test_set_target_invalid(bk_client):
-    resp = bk_client.put("/api/v1/system/backup/target", json={"target_dir": "Z:\\not\\writable\\x"})
-    # 该路径在 Windows 上不可写 -> 400; 若恰好可写(异常环境)则 200, 此处不依赖具体结果
-    assert resp.status_code in (200, 400)
+    with patch("app.services.system_config_service.set_config"):
+        resp = bk_client.put("/api/v1/system/backup/target", json={"target_dir": "Z:\\not\\writable\\x"})
+        # 该路径在 Windows 上不可写 -> 400; 若恰好可写(异常环境)则 200, 此处不依赖具体结果
+        assert resp.status_code in (200, 400)
 
 
 def test_set_target_empty_clears(bk_client):
-    resp = bk_client.put("/api/v1/system/backup/target", json={"target_dir": ""})
-    assert resp.status_code == 200
+    with patch("app.services.system_config_service.set_config"):
+        resp = bk_client.put("/api/v1/system/backup/target", json={"target_dir": ""})
+        assert resp.status_code == 200
 
 
 # ==================== API: POST /system/backup 支持 target_dir ====================
