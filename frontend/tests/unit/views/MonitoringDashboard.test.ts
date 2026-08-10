@@ -648,3 +648,28 @@ describe('图表耗时字段收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('图表耗时全缺', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setupDefaultMocks()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+  it('耗时字段全缺 → 0 兜底', async () => {
+    mockApiRequest.mockReset()
+    mockApiRequest.mockImplementation((config: any) => {
+      if (config?.url === '/system/monitor/api-stats')
+        return Promise.resolve({
+          data: { data: { top_endpoints: [{ method: 'GET', path: '/a', count: 1 }] } },
+        })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await advanceFakeTimersAndFlush()
+    ;(wrapper.vm as any).buildChart()
+    expect(mockSetOption).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})

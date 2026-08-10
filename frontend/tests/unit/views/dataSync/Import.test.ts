@@ -392,3 +392,17 @@ describe('分支收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('加密导入密码分支', () => {
+  it('加密文件带密码 → 传 password', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.selectedFile = { name: 'h.rrs' } as any
+    vm.importForm.password = 'secret1'
+    mockImportEncryptedData.mockResolvedValue({ success: true })
+    await vm.handleImport()
+    expect(mockImportEncryptedData).toHaveBeenCalledWith({ name: 'h.rrs' }, 'secret1')
+    wrapper.unmount()
+  })
+})
