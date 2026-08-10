@@ -335,3 +335,43 @@ describe('行操作', () => {
     expect(vm.batchResultVisible).toBe(false)
   })
 })
+
+describe('查询校验构建器', () => {
+  it('qcAddCondition/qcRemoveCondition/qcReset/qcRunCheck 全流程', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // qcFieldLabel 兜底
+    vm.qc.fields = [{ key: 'name', label: '名称' }]
+    expect(vm.qcFieldLabel('name')).toBe('名称')
+    expect(vm.qcFieldLabel('unknown')).toBe('unknown')
+    // 添加/移除条件
+    vm.qcAddCondition()
+    expect(vm.qc.conditions.length).toBe(2)
+    vm.qcRemoveCondition(1)
+    expect(vm.qc.conditions.length).toBe(1)
+    // 无字段 → warning
+    vm.qc.conditions = [{ field: '', operator: 'eq', value: '' }]
+    await vm.qcRunCheck()
+    expect(ElMessage.warning).toHaveBeenCalled()
+    // 校验成功（unmatched=0）
+    vm.qc.conditions = [{ field: 'name', operator: 'eq', value: '幸福村' }]
+    mockPost.mockResolvedValue({ data: { total: 6, unmatched: 0 } })
+    await vm.qcRunCheck()
+    expect(ElMessage.success).toHaveBeenCalledWith('全部 6 条记录均满足条件')
+    // unmatched > 0
+    mockPost.mockResolvedValue({ data: { total: 6, unmatched: 2 } })
+    await vm.qcRunCheck()
+    expect(ElMessage.warning).toHaveBeenCalledWith('发现 2 条记录不满足条件')
+    // 失败
+    mockPost.mockRejectedValue({ response: { data: { detail: '服务异常' } } })
+    await vm.qcRunCheck()
+    expect(ElMessage.error).toHaveBeenCalledWith('服务异常')
+    // qcReset
+    vm.qcResult = { total: 1, unmatched: 0 }
+    vm.qcReset()
+    expect(vm.qcResult).toBeNull()
+    expect(vm.qc.conditions.length).toBe(1)
+    wrapper.unmount()
+  })
+})

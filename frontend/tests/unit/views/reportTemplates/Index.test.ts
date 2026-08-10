@@ -812,3 +812,35 @@ describe('在线填报与字段组合', () => {
     expect(vm.availableFields.length).toBeGreaterThan(0)
   })
 })
+
+describe('模板字段组合补充', () => {
+  it('loadAvailableFields 失败/无模块；loadModuleFieldsForFill；selectedFields 提交', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 无模块 → 直接返回空
+    vm.newTemplate.module = ''
+    await vm.loadAvailableFields()
+    expect(vm.availableFields).toEqual([])
+    // 失败 → 空
+    vm.newTemplate.module = 'village'
+    mockGet.mockRejectedValueOnce(new Error('x'))
+    await vm.loadAvailableFields()
+    expect(vm.availableFields).toEqual([])
+    // loadModuleFieldsForFill 成功 + 失败
+    mockGet.mockResolvedValueOnce({ data: [{ key: 'a', label: 'A' }] })
+    await vm.loadModuleFieldsForFill('village')
+    expect(vm.fillFields.length).toBe(1)
+    mockGet.mockRejectedValueOnce(new Error('x'))
+    await vm.loadModuleFieldsForFill('village')
+    expect(vm.fillFields).toEqual([])
+    // selectedFields 提交
+    vm.newTemplate.name = 'T'
+    vm.newTemplate.type = 'export'
+    vm.newTemplate.module = 'village'
+    vm.newTemplate.selectedFields = ['a', 'b']
+    vm.formRef = { validate: vi.fn(() => Promise.resolve()) }
+    await vm.handleCreate()
+    expect(mockPost).toHaveBeenCalledWith('/report-templates', expect.objectContaining({ fields: '["a","b"]' }))
+  })
+})

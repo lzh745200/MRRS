@@ -93,3 +93,15 @@ describe('setFilters 合并', () => {
     expect(store.filters.status).toBe('active')
   })
 })
+
+describe('fetchPolicies 响应形态', () => {
+  it('items 形态与 data 数组形态', async () => {
+    const store = usePolicyStore()
+    mockGet.mockResolvedValueOnce({ code: 200, data: { items: [{ id: 1 }], total: 1 } })
+    await store.fetchPolicies({})
+    expect(store.policyList.length).toBe(1)
+    mockGet.mockResolvedValueOnce({ code: 200, data: [{ id: 2 }] })
+    await store.fetchPolicies({})
+    expect(store.policyList.length).toBe(1)
+  })
+})
