@@ -155,12 +155,13 @@ describe('desensitize', () => {
     it('viewer -> HIDDEN', () => {
       expect(getDesensitizeLevel('viewer')).toBe(DesensitizeLevel.HIDDEN)
     })
-    it('历史角色归一化: manager/approval_leader/editor->FULL, operator->PARTIAL', () => {
+    it('历史角色归一化: manager/approval_leader->FULL, operator->PARTIAL', () => {
       expect(getDesensitizeLevel('manager')).toBe(DesensitizeLevel.FULL)
       expect(getDesensitizeLevel('approval_leader')).toBe(DesensitizeLevel.FULL)
-      expect(getDesensitizeLevel('editor')).toBe(DesensitizeLevel.FULL)  // 与 roleAccess.ts 一致
       expect(getDesensitizeLevel('operator')).toBe(DesensitizeLevel.PARTIAL)
       expect(getDesensitizeLevel('unknown')).toBe(DesensitizeLevel.PARTIAL)
+      // editor 与后端 normalize_role 一致不映射（非管理员）→ PARTIAL
+      expect(getDesensitizeLevel('editor')).toBe(DesensitizeLevel.PARTIAL)
     })
   })
 

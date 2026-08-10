@@ -112,7 +112,6 @@ function normalizeRoleLocal(role: string): string {
   const map: Record<string, string> = {
     approval_leader: 'admin',
     manager: 'admin',
-    editor: 'admin', // 历史残留的 editor 视为 admin（与 roleAccess.ts 保持一致）
     operator: 'user',
   }
   const r = (role || '').toLowerCase()

@@ -13,7 +13,6 @@ const ROLE_NORMALIZE_MAP: Record<string, string> = {
   approval_leader: 'admin',
   manager: 'admin',
   operator: 'user',
-  editor: 'admin', // 历史残留的 editor 视为 admin
 }
 
 /** 角色优先级（数字越小权限越高） */

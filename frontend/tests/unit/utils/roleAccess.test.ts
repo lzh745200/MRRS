@@ -44,7 +44,7 @@ describe('roleAccess utility', () => {
     expect(normalizeRole('manager')).toBe('admin')
     expect(normalizeRole('approval_leader')).toBe('admin')
     expect(normalizeRole('operator')).toBe('user')
-    expect(normalizeRole('editor')).toBe('admin')
+    expect(normalizeRole('editor')).toBe('editor')
   })
 
   it('getEffectiveRoles maps super_admin to include admin', () => {
