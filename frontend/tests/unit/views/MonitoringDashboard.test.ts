@@ -512,3 +512,21 @@ describe('日志级别收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('真实日志优先分支', () => {
+  it('health/full 返回日志数组 → recentLogs 直接用数组', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/health/full')
+        return Promise.resolve({ data: [{ line: '2026-01-02 09:00:00 INFO - 启动' }] })
+      if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
+      if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
+      if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    expect((wrapper.vm as any).recentLogs.length).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+})

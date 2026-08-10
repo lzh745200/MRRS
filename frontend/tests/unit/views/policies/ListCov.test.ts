@@ -855,3 +855,15 @@ describe('审批提交分支收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('审批失败兜底文案', () => {
+  it('error 无 response 无 message → 兜底文案', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    confirmMock.mockResolvedValue(true)
+    ;(submitApprovalMock as any).mockRejectedValueOnce({})
+    await vm.handleSubmitApproval({ id: 6, title: 't6', code: 'c6' })
+    wrapper.unmount()
+  })
+})

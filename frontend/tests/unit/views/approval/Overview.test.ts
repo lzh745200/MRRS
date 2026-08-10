@@ -309,3 +309,13 @@ describe('类型标签null', () => {
     wrapper.unmount()
   })
 })
+
+describe('日期格式化分支', () => {
+  it('formatDate 有效日期 → 本地化字符串', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const out = (wrapper.vm as any).formatDate('2024-01-01T10:00:00')
+    expect(typeof out).toBe('string')
+    wrapper.unmount()
+  })
+})
