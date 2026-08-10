@@ -23,6 +23,15 @@ if _sys.stderr and hasattr(_sys.stderr, 'reconfigure'):
         pass
 
 import pytest
+
+# ── 根因修复：会话启动时清理遗留 test.db（跨会话残留导致顺序敏感偶发失败） ──
+import os as _cleanup_os
+import glob as _cleanup_glob
+for _db in _cleanup_glob.glob(_cleanup_os.path.join(_cleanup_os.path.dirname(__file__), "..", "test.db")):
+    try:
+        _cleanup_os.remove(_db)
+    except OSError:
+        pass
 import sys
 from pathlib import Path
 from unittest.mock import Mock
