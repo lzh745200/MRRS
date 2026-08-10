@@ -5,6 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.5.2] - 2026-08-11
+
+### 修复
+
+- 审批概览 `GET /api/v1/approval` 由占位模块信息改为真实统计（待审批/已通过/已拒绝/总数/我的待审批），前端概览页统计卡恢复真实数据
+- 报表订阅模块全链路修复：service 订阅方法完整实现（列表/创建/更新/取消）、响应字段 getattr 容错（修复 500）、生成接口兼容 `subscription_id` 调用；订阅 CRUD/切换/生成/下载真实 API 验证全部通过
+- 监控面板 `Promise.allSettled` 解构错位修复（4 变量取 5 个 promise），系统日志面板恢复展示后端真实日志（/system/admin/logs）
+- 测试隔离：conftest 会话启动清理遗留 test.db，消除跨会话顺序敏感偶发失败
+- 清理误提交的协作者工作区改动与 .reasonix 临时文件，测试套件恢复稳定（后端 12118 / 前端 6273 全过，覆盖率 100%）
+
 ## [未发布] - 2026-08-09 备份恢复完整链路 + 深度审计
 
 ### 功能

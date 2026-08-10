@@ -1,6 +1,6 @@
 {
   "name": "assistance-management-information-frontend",
-  "version": "1.7.2",
+  "version": "1.5.2",
   "private": true,
   "type": "module",
   "description": "帮扶管理信息系统 - 前端 (Assistance Management Information System)",
