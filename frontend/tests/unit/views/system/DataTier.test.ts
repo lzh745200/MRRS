@@ -435,3 +435,22 @@ describe('顶层字段兜底2', () => {
     w.unmount()
   })
 })
+
+describe('嵌套暖冷字段', () => {
+  it('by_tier warm/cold 嵌套优先', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    dataTierApi.getStats.mockResolvedValue({
+      by_tier: {
+        warm: { count: 4, size_mb: 2.2 },
+        cold: { count: 5, size_mb: 3.3 },
+      },
+    })
+    await vm.loadStats()
+    expect(vm.stats.warm_count).toBe(4)
+    expect(vm.stats.warm_size_mb).toBe(2.2)
+    expect(vm.stats.cold_count).toBe(5)
+    expect(vm.stats.cold_size_mb).toBe(3.3)
+    w.unmount()
+  })
+})

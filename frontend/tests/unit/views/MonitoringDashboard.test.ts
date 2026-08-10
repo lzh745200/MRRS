@@ -621,3 +621,30 @@ describe('API统计字段形态2', () => {
     wrapper.unmount()
   })
 })
+
+describe('图表耗时字段收尾', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setupDefaultMocks()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+  it('avg_duration 有值 → 图表使用', async () => {
+    mockApiRequest.mockReset()
+    mockApiRequest.mockImplementation((config: any) => {
+      if (config?.url === '/system/monitor/api-stats')
+        return Promise.resolve({
+          data: {
+            data: { top_endpoints: [{ method: 'GET', path: '/a', count: 1, avg_duration: 3.5 }] },
+          },
+        })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await advanceFakeTimersAndFlush()
+    ;(wrapper.vm as any).buildChart()
+    expect(mockSetOption).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})

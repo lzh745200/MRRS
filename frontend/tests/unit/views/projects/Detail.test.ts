@@ -655,3 +655,14 @@ describe('任务名优先分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('任务名全缺分支', () => {
+  it('name/title 均无 → 空字符串', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openTaskDialog({ id: 3, status: 'pending', priority: 'normal' })
+    expect(vm.taskForm.title).toBe('')
+    wrapper.unmount()
+  })
+})

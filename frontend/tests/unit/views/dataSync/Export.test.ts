@@ -363,3 +363,18 @@ describe('分支收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('历史形态收尾', () => {
+  it('data.items 解包 / list 非数组兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGetSyncLogs.mockResolvedValue({ data: { items: [{ id: 2 }] } })
+    await vm.loadExportHistory()
+    expect(vm.exportHistory).toEqual([{ id: 2 }])
+    mockGetSyncLogs.mockResolvedValue({ data: { items: { oops: true } } })
+    await vm.loadExportHistory()
+    expect(vm.exportHistory).toEqual([])
+    wrapper.unmount()
+  })
+})
