@@ -133,6 +133,14 @@
             <div class="card-header">
               <span class="title">组织成员</span>
               <el-tag size="small" type="info">{{ memberTotal }}</el-tag>
+              <el-button
+                size="small"
+                type="primary"
+                style="margin-left: auto"
+                @click="goManageMembers"
+              >
+                分配成员
+              </el-button>
             </div>
           </template>
           <el-table v-loading="memberLoading" :data="members" border stripe size="small">
@@ -300,6 +308,11 @@ const handleEdit = () => {
 
 const handleBack = () => {
   pushSafe('/organizations')
+}
+
+/** 成员本质为"用户 + 所属组织"，分配入口在用户管理（可编辑用户所属组织） */
+const goManageMembers = () => {
+  pushSafe(`/system/users?org_id=${detail.id}`)
 }
 
 onMounted(() => {

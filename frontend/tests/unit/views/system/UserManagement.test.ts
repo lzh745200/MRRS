@@ -57,6 +57,10 @@ vi.mock('@/api/request', () => ({
   apiRequest: mockApiRequest,
   getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
 
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: {} as Record<string, any> }),
+}))
+
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => authState,
 }))

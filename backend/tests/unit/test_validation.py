@@ -407,3 +407,60 @@ class TestCheckRule:
     def test_none_value_skips_non_required(self):
         from app.api.v1.validation import _check_rule
         assert _check_rule(_make_rule("positive"), None, {}, {}) is False
+
+
+# ── query-check / fields（小白友好条件查询校验） ──────────────────────
+
+class TestQueryCheck:
+    def test_fields_endpoint(self, client_with_mocked_auth):
+        resp = client_with_mocked_auth.get(f"{BASE}/fields?module=village")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["module"] == "village"
+        assert any(f["key"] == "village_name" for f in data["fields"])
+
+    def test_fields_unsupported_module(self, client_with_mocked_auth):
+        resp = client_with_mocked_auth.get(f"{BASE}/fields?module=unknown")
+        assert resp.status_code == 400
+
+    def test_query_check_success(self, client_with_mocked_auth):
+        resp = client_with_mocked_auth.post(
+            f"{BASE}/query-check",
+            json={
+                "module": "village",
+                "logic": "and",
+                "conditions": [
+                    {"field": "county", "operator": "eq", "value": "赫章县"},
+                    {"field": "village_name", "operator": "not_empty", "value": None},
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert "total" in data and "matched" in data and "results" in data
+        assert data["condition_count"] == 2
+
+    def test_query_check_invalid_field(self, client_with_mocked_auth):
+        resp = client_with_mocked_auth.post(
+            f"{BASE}/query-check",
+            json={
+                "module": "village",
+                "logic": "and",
+                "conditions": [{"field": "no_such_column", "operator": "eq", "value": "x"}],
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_query_check_invalid_module(self, client_with_mocked_auth):
+        resp = client_with_mocked_auth.post(
+            f"{BASE}/query-check",
+            json={"module": "bad", "logic": "and", "conditions": [{"field": "x", "operator": "eq", "value": "1"}]},
+        )
+        assert resp.status_code == 400
+
+    def test_query_check_invalid_logic(self, client_with_mocked_auth):
+        resp = client_with_mocked_auth.post(
+            f"{BASE}/query-check",
+            json={"module": "village", "logic": "xor", "conditions": [{"field": "county", "operator": "eq", "value": "x"}]},
+        )
+        assert resp.status_code == 400

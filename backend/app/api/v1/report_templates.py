@@ -1254,3 +1254,54 @@ async def upload_filled_template(
         "module": t.module,
         **result,
     }
+
+
+
+# ==================== 模板字段组合（管理员生成模板） ====================
+
+# 各模块可用字段（供前端"字段组合生成模板"使用）
+MODULE_FIELDS: dict = {
+    "village": [
+        {"key": "village_name", "label": "村名"}, {"key": "province", "label": "省"},
+        {"key": "county", "label": "县"}, {"key": "township", "label": "乡镇"},
+        {"key": "department", "label": "帮扶部门"}, {"key": "support_unit", "label": "帮扶单位"},
+        {"key": "is_three_regions", "label": "三区三州"}, {"key": "is_revitalization_tier", "label": "振兴梯队"},
+    ],
+    "school": [
+        {"key": "name", "label": "学校名称"}, {"key": "code", "label": "学校代码"},
+        {"key": "type", "label": "类型"}, {"key": "province", "label": "省"},
+        {"key": "city", "label": "市"}, {"key": "district", "label": "区县"},
+        {"key": "principal", "label": "校长"}, {"key": "student_count", "label": "学生数"},
+        {"key": "teacher_count", "label": "教师数"}, {"key": "support_unit", "label": "帮扶单位"},
+    ],
+    "fund": [
+        {"key": "name", "label": "经费名称"}, {"key": "fund_type", "label": "经费类型"},
+        {"key": "fund_source", "label": "经费来源"}, {"key": "amount", "label": "金额"},
+        {"key": "allocated_amount", "label": "拨付金额"}, {"key": "used_amount", "label": "使用金额"},
+        {"key": "status", "label": "状态"}, {"key": "year", "label": "年度"},
+    ],
+    "project": [
+        {"key": "name", "label": "项目名称"}, {"key": "code", "label": "项目编号"},
+        {"key": "status", "label": "状态"}, {"key": "budget", "label": "预算"},
+        {"key": "progress", "label": "进度"}, {"key": "start_date", "label": "开始日期"},
+        {"key": "end_date", "label": "结束日期"}, {"key": "responsible_person", "label": "负责人"},
+    ],
+    "rural_work": [
+        {"key": "name", "label": "工作名称"}, {"key": "type", "label": "工作类型"},
+        {"key": "status", "label": "状态"}, {"key": "village_id", "label": "所属村庄"},
+        {"key": "start_date", "label": "开始日期"}, {"key": "end_date", "label": "结束日期"},
+        {"key": "progress", "label": "进度"}, {"key": "responsible_person", "label": "负责人"},
+    ],
+    "comprehensive": [
+        {"key": "village_name", "label": "村名"}, {"key": "project_name", "label": "项目"},
+        {"key": "fund_amount", "label": "经费金额"}, {"key": "work_name", "label": "乡村工作"},
+        {"key": "year", "label": "年度"},
+    ],
+}
+
+
+@router.get("/available-fields", summary="获取模块可用字段（字段组合生成模板）")
+def get_available_fields(module: str = Query(..., description="模块标识")):
+    """返回指定模块可选的字段列表，供管理员组合生成报表模板"""
+    fields = MODULE_FIELDS.get(module, [])
+    return {"code": 200, "success": True, "data": fields, "message": "成功"}

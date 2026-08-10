@@ -7,7 +7,7 @@ import json
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
@@ -328,3 +328,169 @@ _RULE_HANDLERS = {
     RuleType.enum_values: _check_enum_values,
     RuleType.cross_field: _check_cross_field,
 }
+
+
+# ==================== 小白友好：下拉式条件查询校验 ====================
+# 前端通过「字段 + 运算符 + 值 + 与/或」组合条件，对指定模块的存量数据
+# 做查询式校验（匹配/不匹配一目了然），无需理解规则引擎。
+
+class QueryCondition(BaseModel):
+    """单条查询条件"""
+    field: str = Field(..., description="字段名（FIELD_LABELS 中文标签展示）")
+    operator: str = Field(..., description="eq/ne/gt/gte/lt/lte/contains/not_contains/empty/not_empty")
+    value: Optional[str] = Field(None, description="比较值（empty/not_empty 时忽略）")
+
+
+class QueryCheckRequest(BaseModel):
+    """条件查询校验请求"""
+    module: str = Field(..., description="数据模块: village/school/project/fund")
+    conditions: List[QueryCondition] = Field(..., min_length=1, description="条件列表（≥1 条）")
+    logic: str = Field("and", description="多条件组合逻辑: and=全部满足 / or=任一满足")
+    limit: int = Field(200, ge=1, le=1000)
+
+
+# 模块 → 模型映射（条件校验对象）
+_QUERY_CHECK_MODELS = {}
+
+
+def _get_query_model(module: str):
+    if module not in _QUERY_CHECK_MODELS:
+        from app.models.fund import Fund
+        from app.models.project import Project
+        from app.models.school import School
+        from app.models.supported_village import SupportedVillage
+
+        _QUERY_CHECK_MODELS.update({
+            "village": SupportedVillage,
+            "school": School,
+            "project": Project,
+            "fund": Fund,
+        })
+    return _QUERY_CHECK_MODELS.get(module)
+
+
+def _apply_query_condition(cond: QueryCondition, row) -> bool:
+    """对单行记录应用单条条件，返回是否满足"""
+    value = getattr(row, cond.field, None)
+    op = cond.operator
+    if value is None:
+        return op == "empty"
+
+    if op == "empty":
+        return str(value).strip() == ""
+    if op == "not_empty":
+        return str(value).strip() != ""
+
+    target = (cond.value or "").strip()
+    if op == "contains":
+        return target.lower() in str(value).lower()
+    if op == "not_contains":
+        return target.lower() not in str(value).lower()
+
+    # 数值比较：双方可转 float 时按数值比较，否则按字符串
+    try:
+        v_num = float(value)
+        t_num = float(target)
+        numeric = True
+    except (ValueError, TypeError):
+        numeric = False
+
+    if op in ("eq", "ne"):
+        if numeric and target:
+            match = v_num == t_num
+        else:
+            match = str(value).strip() == target
+        return match if op == "eq" else not match
+    if op in ("gt", "gte", "lt", "lte"):
+        if not numeric or not target:
+            return False
+        if op == "gt":
+            return v_num > t_num
+        if op == "gte":
+            return v_num >= t_num
+        if op == "lt":
+            return v_num < t_num
+        return v_num <= t_num
+    return False
+
+
+@router.get("/fields", summary="获取模块可校验字段（中文标签）")
+async def list_validation_fields(
+    module: str = Query("village", description="数据模块: village/school/project/fund"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回指定模块的可查询字段列表（含中文标签），供下拉式校验面板使用"""
+    model = _get_query_model(module)
+    if model is None:
+        raise HTTPException(status_code=400, detail=f"不支持的模块: {module}")
+    fields = [
+        {"key": c.name, "label": FIELD_LABELS.get(c.name, c.name)}
+        for c in model.__table__.columns
+        if not c.name.startswith("_")
+    ]
+    return success_response(data={"module": module, "fields": fields})
+
+
+@router.post("/query-check", summary="条件查询校验（小白友好：字段+运算符+值组合）")
+async def query_check(
+    data: QueryCheckRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """按条件对存量数据做查询式校验，返回匹配/不匹配明细。
+
+    前端以中文标签下拉选择字段与运算符，组合「与/或」逻辑，即可快速
+    查出不符合条件（或符合条件）的记录，无需理解规则引擎。
+    """
+    model = _get_query_model(data.module)
+    if model is None:
+        raise HTTPException(status_code=400, detail=f"不支持的模块: {data.module}（可选 village/school/project/fund）")
+
+    # 校验字段存在性（给出中文提示）
+    valid_columns = {c.name for c in model.__table__.columns}
+    for cond in data.conditions:
+        if cond.field not in valid_columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"字段「{FIELD_LABELS.get(cond.field, cond.field)}」在 {data.module} 模块中不存在",
+            )
+    if data.logic not in ("and", "or"):
+        raise HTTPException(status_code=400, detail="logic 仅支持 and（全部满足）/ or（任一满足）")
+
+    from app.core.data_scope_adapter import apply_scope_filter
+
+    query = db.query(model)
+    query = apply_scope_filter(query, current_user, model, db=db)
+    # 软删过滤（模型有 is_active 时）
+    if hasattr(model, "is_active"):
+        query = query.filter(model.is_active == True)  # noqa: E712
+    rows = query.limit(data.limit).all()
+
+    results = []
+    matched_count = 0
+    for row in rows:
+        if data.logic == "and":
+            ok = all(_apply_query_condition(c, row) for c in data.conditions)
+        else:
+            ok = any(_apply_query_condition(c, row) for c in data.conditions)
+        if ok:
+            matched_count += 1
+        results.append({
+            "id": getattr(row, "id", None),
+            "matched": ok,
+            "values": {c.field: str(getattr(row, c.field, "") or "") for c in data.conditions},
+        })
+
+    return success_response(data={
+        "module": data.module,
+        "logic": data.logic,
+        "condition_count": len(data.conditions),
+        "total": len(rows),
+        "matched": matched_count,
+        "unmatched": len(rows) - matched_count,
+        "results": results,
+        "message": (
+            f"共 {len(rows)} 条记录，满足条件 {matched_count} 条，不满足 {len(rows) - matched_count} 条"
+        ),
+    })

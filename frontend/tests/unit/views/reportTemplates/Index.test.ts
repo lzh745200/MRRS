@@ -549,14 +549,15 @@ describe('预览与删除', () => {
     vm.showPreviewDialog = true
     vm.showUploadDialog = true
     vm.showImportResult = true
+    vm.showFillDialog = true
     vm.editTemplate = templates[0]
     await nextTick()
     const dialogs = wrapper.findAllComponents({ name: 'ElDialog' })
-    expect(dialogs.length).toBe(5)
+    expect(dialogs.length).toBe(6)
     const cancels = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '取消')
     await cancels[1].trigger('click') // 编辑对话框取消
     expect(vm.showEditDialog).toBe(false)
-    await cancels[2].trigger('click') // 上传对话框取消
+    await cancels[3].trigger('click') // 上传对话框取消（cancels[2] 为在线填报对话框取消）
     expect(vm.showUploadDialog).toBe(false)
     vm.showEditDialog = true
     vm.showUploadDialog = true
@@ -568,6 +569,7 @@ describe('预览与删除', () => {
     dialogs[2].vm.$emit('update:modelValue', false)
     dialogs[3].vm.$emit('update:modelValue', false)
     dialogs[4].vm.$emit('update:modelValue', false)
+    dialogs[5].vm.$emit('update:modelValue', false)
     expect(vm.showCreateDialog).toBe(false)
     expect(vm.showEditDialog).toBe(false)
     expect(vm.showPreviewDialog).toBe(false)

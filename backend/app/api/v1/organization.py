@@ -859,6 +859,59 @@ async def get_organization_members(
         raise HTTPException(status_code=500, detail="获取成员列表失败")
 
 
+@router.post("/{org_id}/members", summary="添加组织成员（将用户划入组织）")
+async def add_organization_members(
+    org_id: int,
+    data: dict,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """将指定的用户划入该组织（设置 organization_id）"""
+    from app.api.v1.deps import require_manager_role
+
+    require_manager_role(current_user)
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="组织不存在")
+
+    user_ids = data.get("user_ids") or []
+    if not user_ids:
+        raise HTTPException(status_code=400, detail="请选择要添加的成员")
+
+    added = 0
+    for uid in user_ids:
+        user = db.query(User).filter(User.id == int(uid)).first()
+        if user and user.is_active:
+            user.organization_id = org_id
+            added += 1
+    safe_commit(db)
+    return {"code": 200, "success": True, "message": f"已添加 {added} 名成员", "data": {"added": added}}
+
+
+@router.delete("/{org_id}/members/{user_id}", summary="移除组织成员")
+async def remove_organization_member(
+    org_id: int,
+    user_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """将成员移出组织（清空 organization_id）"""
+    from app.api.v1.deps import require_manager_role
+
+    require_manager_role(current_user)
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="组织不存在")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    user.organization_id = None
+    safe_commit(db)
+    return {"code": 200, "success": True, "message": "已移除成员", "data": {"removed": user_id}}
+
+
 @router.get("/{org_id}/detail", summary="获取组织详情（含子组织和成员数）")
 async def get_organization_detail(
     org_id: int,

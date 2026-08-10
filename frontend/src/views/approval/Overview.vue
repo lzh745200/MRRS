@@ -161,9 +161,7 @@ async function loadPending() {
   loading.value = true
   try {
     const res: any = await getPendingTasks({ limit: 10 })
-    pendingTasks.value = Array.isArray(res)
-      ? res
-      : res?.items || res?.data?.items || []
+    pendingTasks.value = Array.isArray(res) ? res : res?.items || res?.data?.items || []
   } catch {
     pendingTasks.value = []
   } finally {

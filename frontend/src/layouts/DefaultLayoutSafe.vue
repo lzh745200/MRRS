@@ -331,6 +331,20 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
+          <!-- 消息中心铃铛（未读角标） -->
+          <el-tooltip content="消息中心" placement="bottom">
+            <span class="theme-trigger message-bell" role="button" tabindex="0" @click="goMessages">
+              <el-badge
+                :value="unreadCount"
+                :hidden="unreadCount === 0"
+                :max="99"
+                class="bell-badge"
+              >
+                <el-icon><Bell /></el-icon>
+              </el-badge>
+            </span>
+          </el-tooltip>
+
           <!-- 主题切换器 -->
           <el-dropdown trigger="click" class="theme-switcher" @command="handleThemeChange">
             <span class="theme-trigger" role="button" tabindex="0" aria-label="切换外观主题">
@@ -393,7 +407,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
 import { useAutoLock as useAutoLockModule } from '@/composables/useAutoLock'
 import { useRoute } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -420,6 +434,7 @@ import {
   Connection,
   OfficeBuilding,
   Message,
+  Bell,
   Calendar,
   ArrowDown,
   Lock,
@@ -439,6 +454,31 @@ const configStore = useConfigStore()
 function goFundsList() {
   pushSafe('/funds')
 }
+
+// ── 消息中心未读角标 ──
+const unreadCount = ref(0)
+
+function goMessages() {
+  pushSafe('/message')
+}
+
+async function loadUnreadCount() {
+  try {
+    const { getUnreadCount } = await import('@/api/message')
+    const res: any = await getUnreadCount()
+    const d = res?.data ?? res
+    unreadCount.value = Number(d?.total ?? d?.count ?? 0) || 0
+  } catch {
+    /* 轮询失败静默 */
+  }
+}
+
+onMounted(() => {
+  loadUnreadCount()
+  // 每 60 秒轮询未读数（单机版无 WebSocket）
+  const timer = window.setInterval(loadUnreadCount, 60000)
+  onBeforeUnmount(() => window.clearInterval(timer))
+})
 
 // ── 主题切换 ──
 // 顶栏仅开放已完成适配的主题；dark/military 待全站硬编码 Token 化后开放（见 UI 设计方案 §3）

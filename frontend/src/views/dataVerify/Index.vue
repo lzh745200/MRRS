@@ -24,6 +24,107 @@
       </div>
     </div>
 
+    <el-card class="query-check-card">
+      <template #header>
+        <div class="card-header">
+          <span>条件查询校验（小白友好：下拉选择字段与关系，快速筛查数据）</span>
+        </div>
+      </template>
+      <el-form :inline="false" label-width="80px">
+        <el-form-item label="数据模块">
+          <el-select v-model="qc.module" style="width: 180px" @change="qcLoadFields">
+            <el-option label="帮扶村" value="village" />
+            <el-option label="学校" value="school" />
+            <el-option label="项目" value="project" />
+            <el-option label="经费" value="fund" />
+          </el-select>
+          <el-radio-group v-model="qc.logic" style="margin-left: 16px">
+            <el-radio value="and">全部满足（与）</el-radio>
+            <el-radio value="or">任一满足（或）</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item
+          v-for="(cond, idx) in qc.conditions"
+          :key="idx"
+          :label="idx === 0 ? '校验条件' : ''"
+        >
+          <el-select v-model="cond.field" placeholder="选择字段" style="width: 180px" filterable>
+            <el-option v-for="f in qc.fields" :key="f.key" :label="f.label" :value="f.key" />
+          </el-select>
+          <el-select v-model="cond.operator" style="width: 140px; margin-left: 8px">
+            <el-option label="等于" value="eq" />
+            <el-option label="不等于" value="ne" />
+            <el-option label="大于" value="gt" />
+            <el-option label="大于等于" value="gte" />
+            <el-option label="小于" value="lt" />
+            <el-option label="小于等于" value="lte" />
+            <el-option label="包含" value="contains" />
+            <el-option label="不包含" value="not_contains" />
+            <el-option label="为空" value="empty" />
+            <el-option label="不为空" value="not_empty" />
+          </el-select>
+          <el-input
+            v-if="!['empty', 'not_empty'].includes(cond.operator)"
+            v-model="cond.value"
+            placeholder="输入比较值"
+            style="width: 160px; margin-left: 8px"
+          />
+          <el-button
+            v-if="qc.conditions.length > 1"
+            link
+            type="danger"
+            style="margin-left: 8px"
+            @click="qcRemoveCondition(idx)"
+          >
+            删除
+          </el-button>
+        </el-form-item>
+
+        <el-form-item>
+          <el-button type="primary" :loading="qcLoading" @click="qcRunCheck">执行校验</el-button>
+          <el-button @click="qcAddCondition">添加条件</el-button>
+          <el-button @click="qcReset">重置</el-button>
+        </el-form-item>
+      </el-form>
+
+      <el-alert
+        v-if="qcResult"
+        :type="qcResult.unmatched === 0 ? 'success' : 'warning'"
+        :title="qcResult.message"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px"
+      />
+      <el-table
+        v-if="qcResult"
+        v-loading="qcLoading"
+        :data="qcResult.results"
+        size="small"
+        stripe
+        max-height="360"
+      >
+        <el-table-column prop="id" label="记录ID" width="80" />
+        <el-table-column label="是否满足" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.matched ? 'success' : 'danger'" size="small">
+              {{ row.matched ? '满足' : '不满足' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column
+          v-for="c in qc.conditions"
+          :key="c.field"
+          :label="qcFieldLabel(c.field)"
+          min-width="110"
+        >
+          <template #default="{ row }">
+            {{ row.values?.[c.field] ?? '-' }}
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <el-card>
       <template #header>
         <div class="card-header">
@@ -166,6 +267,84 @@ const batchResult = reactive({
   failedRows: [] as any[],
 })
 
+// ── 条件查询校验（小白友好：下拉字段+运算符+值与/或组合） ──
+const qcLoading = ref(false)
+const qcResult = ref<any>(null)
+const qc = reactive({
+  module: 'village',
+  logic: 'and',
+  fields: [] as Array<{ key: string; label: string }>,
+  conditions: [{ field: '', operator: 'eq', value: '' }],
+})
+
+const qcFieldLabel = (key: string) => {
+  const f = qc.fields.find((x) => x.key === key)
+  return f?.label || key
+}
+
+async function qcLoadFields() {
+  try {
+    const res: any = await apiRequest({
+      method: 'GET',
+      url: '/validation/fields',
+      params: { module: qc.module },
+    })
+    qc.fields = res.data?.fields || []
+  } catch {
+    qc.fields = []
+  }
+}
+
+function qcAddCondition() {
+  qc.conditions.push({ field: '', operator: 'eq', value: '' })
+}
+
+function qcRemoveCondition(idx: number) {
+  qc.conditions.splice(idx, 1)
+}
+
+function qcReset() {
+  qc.conditions = [{ field: '', operator: 'eq', value: '' }]
+  qcResult.value = null
+  qcLoadFields()
+}
+
+async function qcRunCheck() {
+  const valid = qc.conditions.filter((c) => c.field)
+  if (valid.length === 0) {
+    ElMessage.warning('请至少选择一个字段')
+    return
+  }
+  qcLoading.value = true
+  try {
+    const res: any = await post('/validation/query-check', {
+      module: qc.module,
+      logic: qc.logic,
+      conditions: valid.map((c) => ({
+        field: c.field,
+        operator: c.operator,
+        value: c.value || null,
+      })),
+    })
+    const d = res.data || res
+    qcResult.value = d
+    if (d.unmatched > 0) {
+      ElMessage.warning(`发现 ${d.unmatched} 条记录不满足条件`)
+    } else {
+      ElMessage.success(`全部 ${d.total} 条记录均满足条件`)
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '校验执行失败')
+  } finally {
+    qcLoading.value = false
+  }
+}
+
+onMounted(() => {
+  qcLoadFields()
+  loadData()
+})
+
 // 状态文本映射
 const getVerifyStatusText = (status: string): string => {
   const statusMap: Record<string, string> = {
@@ -302,7 +481,10 @@ const handleReject = (row: any) => {
   ElMessage.warning('已驳回')
 }
 
-onMounted(() => loadData())
+onMounted(() => {
+  qcLoadFields()
+  loadData()
+})
 </script>
 
 <style scoped>

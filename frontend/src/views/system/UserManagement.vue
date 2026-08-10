@@ -85,6 +85,27 @@
         </div>
       </template>
 
+      <el-alert
+        v-if="orgFilterId"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px"
+      >
+        <template #title>
+          当前仅显示该组织的成员
+          <el-button
+            link
+            type="primary"
+            size="small"
+            style="margin-left: 8px"
+            @click="clearOrgFilter"
+          >
+            清除筛选
+          </el-button>
+        </template>
+      </el-alert>
+
       <el-table v-loading="loading" :data="tableData" stripe border>
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="username" label="用户名" min-width="120" />
@@ -400,6 +421,7 @@ import { logger } from '@/utils/logger'
 import { generateRandomPassword } from '@/utils/clipboard'
 
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import RoleManagement from './Role.vue'
 
 const activeTab = ref('users')
@@ -416,6 +438,16 @@ import PermissionAssignmentDrawer from '@/components/permission/PermissionAssign
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.isAdmin)
 const { ds } = useDesensitize()
+const route = useRoute()
+
+// 组织成员预筛选（从组织详情"分配成员"进入时携带 ?org_id=）
+const orgFilterId = ref<number | null>(null)
+
+function clearOrgFilter() {
+  orgFilterId.value = null
+  pagination.page = 1
+  loadData()
+}
 
 interface User {
   id: number
@@ -643,6 +675,7 @@ const loadData = async () => {
         keyword: searchForm.name || undefined,
         role: searchForm.role || undefined,
         is_active: searchForm.is_active,
+        organization_id: orgFilterId.value || undefined,
       },
     })
     const data = response
@@ -1105,6 +1138,11 @@ const handleDelete = async (row: any) => {
 }
 
 onMounted(() => {
+  // 组织详情"分配成员"跳转携带 ?org_id=，预筛选本组织成员
+  const q = Number(route?.query?.org_id)
+  if (q > 0) {
+    orgFilterId.value = q
+  }
   loadData()
   loadOrgTree()
   loadPendingCount()

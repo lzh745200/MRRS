@@ -11,6 +11,13 @@ backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+# 记录本 conftest 要设置的测试环境变量原值（teardown 时快照恢复，
+# 避免无条件 pop 破坏环境中预先存在的值；根 conftest 的 mock_settings 不管理 CSRF_SECRET_KEY）
+_saved_test_env = {
+    k: os.environ.get(k)
+    for k in ("ENVIRONMENT", "DATABASE_URL", "SECRET_KEY", "CSRF_SECRET_KEY", "CSRF_ENABLED", "DEBUG")
+}
+
 # 设置测试环境变量（在导入 app 之前）
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DATABASE_URL"] = "sqlite:///./test_integration.db"
@@ -18,6 +25,12 @@ os.environ["SECRET_KEY"] = "test-secret-key-for-integration-tests"
 os.environ["CSRF_SECRET_KEY"] = "test-csrf-secret-key"
 os.environ["CSRF_ENABLED"] = "false"  # 测试环境禁用 CSRF
 os.environ["DEBUG"] = "true"
+
+# 记录 app.core.database 原始全局对象（供 teardown 恢复，避免污染其他测试）
+import app.core.database as _db_mod_orig  # noqa: E402
+
+_db_mod_orig._orig_session_local = _db_mod_orig.SessionLocal
+_db_mod_orig._orig_engine = _db_mod_orig.engine
 
 from datetime import datetime, timezone
 
@@ -154,9 +167,6 @@ def setup_database():
     import app.core.database as _db_mod
     _db_mod.SessionLocal = TestingSessionLocal
     _db_mod.engine = engine
-    if hasattr(_db_mod, 'db_manager') and _db_mod.db_manager is not None:
-        _db_mod.db_manager.SessionLocal = TestingSessionLocal
-        _db_mod.db_manager.engine = engine
 
     # 导入所有模型以确保表定义已注册
     import app.models  # noqa: F401
@@ -164,6 +174,15 @@ def setup_database():
     yield
     Base.metadata.drop_all(bind=engine)
     fastapi_app.dependency_overrides.clear()
+    # 恢复被替换的全局数据库对象，并快照恢复本 conftest 设置的测试环境变量
+    import app.core.database as _db_mod
+    _db_mod.SessionLocal = _db_mod._orig_session_local
+    _db_mod.engine = _db_mod._orig_engine
+    for _k, _v in _saved_test_env.items():
+        if _v is None:
+            os.environ.pop(_k, None)
+        else:
+            os.environ[_k] = _v
 
 
 @pytest.fixture

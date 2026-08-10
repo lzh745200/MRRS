@@ -314,7 +314,10 @@ describe('模板交互（内联处理器与 v-model 覆盖）', () => {
     const vm = wrapper.vm as any
     vm.showIssuesDialog = true
     await nextTick()
-    await findBtn(wrapper, '关闭').trigger('click')
+    // 问题详情对话框是第 2 个 el-dialog（第 1 个为自定义校验对话框），在其内部查找「关闭」
+    const dialogs = wrapper.findAllComponents({ name: 'ElDialog' })
+    const btns = dialogs[1].findAll('el-button-stub').filter((b: any) => b.text().trim() === '关闭')
+    await btns[0].trigger('click')
     expect(vm.showIssuesDialog).toBe(false)
   })
 
@@ -338,10 +341,14 @@ describe('模板交互（内联处理器与 v-model 覆盖）', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     const dialogs = wrapper.findAllComponents({ name: 'ElDialog' })
-    expect(dialogs.length).toBeGreaterThan(0)
-    dialogs[0].vm.$emit('update:modelValue', true)
+    expect(dialogs.length).toBeGreaterThan(1)
+    // 问题详情对话框为第 2 个（第 1 个为自定义校验对话框）
+    const issuesDialog = dialogs[1]
+    issuesDialog.vm.$emit('update:modelValue', true)
+    await nextTick()
     expect(vm.showIssuesDialog).toBe(true)
-    dialogs[0].vm.$emit('update:modelValue', false)
+    issuesDialog.vm.$emit('update:modelValue', false)
+    await nextTick()
     expect(vm.showIssuesDialog).toBe(false)
   })
 })

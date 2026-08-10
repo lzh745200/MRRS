@@ -63,6 +63,7 @@
             <div class="t-actions">
               <el-button type="primary" link @click="handlePreview(t)">预览</el-button>
               <el-button type="primary" link @click="handleDownload(t)">下载</el-button>
+              <el-button type="success" link @click="openFillDialog(t)">在线填报</el-button>
               <el-button link @click="openUploadDialog(t)">上传填报</el-button>
               <el-button link @click="handleEdit(t)">编辑</el-button>
               <el-button link type="danger" @click="handleDelete(t)">删除</el-button>
@@ -93,6 +94,7 @@
             <div class="t-actions">
               <el-button type="primary" link @click="handlePreview(t)">预览</el-button>
               <el-button type="primary" link @click="handleDownload(t)">下载</el-button>
+              <el-button type="success" link @click="openFillDialog(t)">在线填报</el-button>
               <el-button link @click="handleEdit(t)">编辑</el-button>
               <el-button link type="danger" @click="handleDelete(t)">删除</el-button>
             </div>
@@ -129,6 +131,7 @@
             placeholder="请选择关联模块"
             clearable
             style="width: 100%"
+            @change="loadAvailableFields"
           >
             <el-option label="帮扶村" value="village" />
             <el-option label="帮扶学校" value="school" />
@@ -137,6 +140,16 @@
             <el-option label="乡村工作" value="rural_work" />
             <el-option label="综合报表" value="comprehensive" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="选择字段">
+          <el-checkbox-group v-model="newTemplate.selectedFields" class="field-checkbox-group">
+            <el-checkbox v-for="f in availableFields" :key="f.key" :label="f.key">
+              {{ f.label }}
+            </el-checkbox>
+          </el-checkbox-group>
+          <div v-if="availableFields.length === 0" class="field-empty-tip">
+            选择模块后加载可选字段；不勾选则使用系统默认字段
+          </div>
         </el-form-item>
         <el-form-item label="描述">
           <el-input
@@ -183,6 +196,33 @@
       <template #footer>
         <el-button @click="showEditDialog = false">取消</el-button>
         <el-button type="primary" :loading="creating" @click="handleSaveEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 在线填报对话框 -->
+    <el-dialog v-model="showFillDialog" :title="`在线填报 — ${fillTemplate?.name || ''}`" width="640px">
+      <el-alert
+        title="按模板字段填写数据，支持多行记录，填写完成后点击「导出 Excel」保存"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+      />
+      <el-form label-width="100px">
+        <el-form-item
+          v-for="(field, idx) in fillFields"
+          :key="field.key + '-' + idx"
+          :label="field.label"
+        >
+          <el-input v-model="fillRow[field.key]" :placeholder="`请输入${field.label}`" />
+        </el-form-item>
+        <el-form-item v-if="fillFields.length === 0" label="提示">
+          该模板未配置字段，可直接导出空白模板
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showFillDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleFillExport">导出 Excel</el-button>
       </template>
     </el-dialog>
 
@@ -467,7 +507,65 @@ const newTemplate = reactive({
   type: 'import',
   module: 'village',
   description: '',
+  selectedFields: [] as string[],
 })
+
+// 字段组合生成（available-fields）
+const availableFields = ref<Array<{ key: string; label: string }>>([])
+
+async function loadAvailableFields() {
+  availableFields.value = []
+  if (!newTemplate.module) return
+  try {
+    const { get } = await import('@/api/request')
+    const res: any = await get('/report-templates/available-fields', { module: newTemplate.module })
+    const list = res?.data?.data ?? res?.data ?? res ?? []
+    availableFields.value = Array.isArray(list) ? list : []
+  } catch {
+    availableFields.value = []
+  }
+}
+
+// 在线填报
+const showFillDialog = ref(false)
+const fillTemplate = ref<Template | null>(null)
+const fillFields = ref<Array<{ key: string; label: string }>>([])
+const fillRow = ref<Record<string, any>>({})
+
+function openFillDialog(t: Template) {
+  fillTemplate.value = t
+  showFillDialog.value = true
+  fillRow.value = {}
+  // 解析模板字段（兼容对象/字符串数组）
+  const keys = parseFields(t.fields)
+  fillFields.value = keys.map((k: string) => ({ key: k, label: k }))
+  // 若模板无字段配置，加载模块默认字段
+  if (fillFields.value.length === 0 && t.module) {
+    loadModuleFieldsForFill(t.module)
+  }
+}
+
+async function loadModuleFieldsForFill(module: string) {
+  try {
+    const { get } = await import('@/api/request')
+    const res: any = await get('/report-templates/available-fields', { module })
+    const list = res?.data?.data ?? res?.data ?? res ?? []
+    fillFields.value = Array.isArray(list) ? list : []
+  } catch {
+    fillFields.value = []
+  }
+}
+
+async function handleFillExport() {
+  const XLSX = (await import('xlsx')) as any
+  const header = fillFields.value.map((f) => f.label || f.key)
+  const row = fillFields.value.map((f) => fillRow.value[f.key] ?? '')
+  const ws = XLSX.utils.aoa_to_sheet([header, row])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+  XLSX.writeFile(wb, `${fillTemplate.value?.name || '填报'}_填报.xlsx`)
+  ElMessage.success('已导出 Excel 文件')
+}
 
 const createRules: FormRules = {
   name: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
@@ -586,7 +684,16 @@ async function handleCreate() {
   }
   creating.value = true
   try {
-    await post('/report-templates', newTemplate)
+    const payload: any = {
+      name: newTemplate.name,
+      type: newTemplate.type,
+      module: newTemplate.module,
+      description: newTemplate.description || undefined,
+    }
+    if (newTemplate.selectedFields.length > 0) {
+      payload.fields = JSON.stringify(newTemplate.selectedFields)
+    }
+    await post('/report-templates', payload)
     ElMessage.success('模板创建成功')
     showCreateDialog.value = false
     activeTab.value = newTemplate.type

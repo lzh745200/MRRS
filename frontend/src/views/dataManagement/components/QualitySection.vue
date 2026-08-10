@@ -50,6 +50,10 @@
               <el-icon><Search /></el-icon>
               开始检查
             </el-button>
+            <el-button type="success" @click="openRuleDialog">
+              <el-icon><Filter /></el-icon>
+              自定义校验
+            </el-button>
           </div>
         </div>
       </template>
@@ -91,6 +95,71 @@
       </el-table>
     </el-card>
 
+    <!-- 自定义规则校验对话框（下拉+操作符+值与或非） -->
+    <el-dialog v-model="showRuleDialog" title="自定义数据校验" width="720px">
+      <el-form label-width="90px">
+        <el-form-item label="校验模块">
+          <el-select v-model="ruleModule" style="width: 220px">
+            <el-option label="帮扶村" value="village" />
+            <el-option label="经费管理" value="fund" />
+            <el-option label="帮扶项目" value="project" />
+            <el-option label="帮扶学校" value="school" />
+            <el-option label="乡村工作" value="rural_work" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="校验条件">
+          <div class="rule-builder">
+            <div v-for="(rule, idx) in ruleList" :key="idx" class="rule-row">
+              <el-select v-model="rule.logic" class="rule-logic" :disabled="idx === 0">
+                <el-option label="并且" value="and" />
+                <el-option label="或者" value="or" />
+              </el-select>
+              <el-select v-model="rule.field" placeholder="选择字段" class="rule-field">
+                <el-option v-for="f in ruleFieldOptions" :key="f.key" :label="f.label" :value="f.key" />
+              </el-select>
+              <el-select v-model="rule.operator" placeholder="操作符" class="rule-op">
+                <el-option label="等于" value="eq" />
+                <el-option label="不等于" value="ne" />
+                <el-option label="包含" value="contains" />
+                <el-option label="大于" value="gt" />
+                <el-option label="小于" value="lt" />
+                <el-option label="不为空" value="not_empty" />
+                <el-option label="为空" value="is_empty" />
+              </el-select>
+              <el-input
+                v-model="rule.value"
+                placeholder="比较值"
+                class="rule-value"
+                :disabled="rule.operator === 'not_empty' || rule.operator === 'is_empty'"
+              />
+              <el-button type="danger" link @click="ruleList.splice(idx, 1)">删除</el-button>
+            </div>
+            <el-button type="primary" link @click="addRule">+ 添加条件</el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+
+      <el-divider v-if="ruleResult" />
+      <el-alert
+        v-if="ruleResult"
+        :type="ruleResult.failed_count > 0 ? 'warning' : 'success'"
+        :title="`校验完成：满足条件 ${ruleResult.matched_count} 条，不满足 ${ruleResult.failed_count} 条`"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px"
+      />
+      <el-table v-if="ruleResult?.failed?.length" :data="ruleResult.failed" max-height="220" size="small">
+        <el-table-column prop="record_id" label="记录ID" width="90" />
+        <el-table-column prop="label" label="记录" min-width="150" />
+      </el-table>
+
+      <template #footer>
+        <el-button @click="showRuleDialog = false">关闭</el-button>
+        <el-button type="primary" :loading="ruleChecking" @click="runRuleCheck">执行校验</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 问题详情对话框 -->
     <el-dialog
       v-model="showIssuesDialog"
@@ -116,7 +185,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, Filter } from '@element-plus/icons-vue'
 import { post } from '@/api/request'
 
 interface QualityStats {
@@ -224,7 +293,63 @@ function getStatusText(status: string): string {
   return statusMap[status] || status
 }
 
-// 执行检查 — 使用真实后端全量质量检查 /data-quality/full-check
+// 自定义规则校验（下拉+与或非）
+const showRuleDialog = ref(false)
+const ruleChecking = ref(false)
+const ruleModule = ref('village')
+const ruleResult = ref<any>(null)
+const ruleFieldOptions = [
+  { key: 'village_name', label: '村名' },
+  { key: 'county', label: '县' },
+  { key: 'department', label: '帮扶部门' },
+  { key: 'support_unit', label: '帮扶单位' },
+  { key: 'name', label: '名称' },
+  { key: 'status', label: '状态' },
+  { key: 'amount', label: '金额' },
+  { key: 'year', label: '年度' },
+  { key: 'progress', label: '进度' },
+  { key: 'budget', label: '预算' },
+]
+const ruleList = ref<any[]>([{ logic: 'and', field: 'village_name', operator: 'eq', value: '' }])
+
+function addRule() {
+  ruleList.value.push({ logic: 'and', field: 'village_name', operator: 'eq', value: '' })
+}
+
+function openRuleDialog() {
+  ruleResult.value = null
+  ruleList.value = [{ logic: 'and', field: 'village_name', operator: 'eq', value: '' }]
+  showRuleDialog.value = true
+}
+
+async function runRuleCheck() {
+  const rules = ruleList.value
+    .filter((r) => r.field)
+    .map((r) => ({
+      field: r.field,
+      operator: r.operator,
+      value: r.operator === 'not_empty' || r.operator === 'is_empty' ? undefined : r.value,
+      logic: r.logic || 'and',
+    }))
+  if (rules.length === 0) {
+    ElMessage.warning('请至少添加一条校验条件')
+    return
+  }
+  ruleChecking.value = true
+  try {
+    const res = await post('/data-quality/validate-rules', {
+      entity_type: ruleModule.value,
+      rules,
+    })
+    const data = res?.data ?? res
+    ruleResult.value = data
+    ElMessage.success(data?.message || '校验完成')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '校验执行失败')
+  } finally {
+    ruleChecking.value = false
+  }
+}
 async function handleCheck() {
   checking.value = true
   try {
