@@ -279,3 +279,25 @@ describe('排名响应别名兼容', () => {
     expect(vm.rankings[0].support_unit).toBe('某旅')
   })
 })
+
+describe('字段缺省分支补充', () => {
+  it('grade 兼容/字段缺省/非数组 data', async () => {
+    ;(mockGetRankings as any).mockResolvedValueOnce({
+      data: { rankings: [{ grade: 'A', support_unit_name: '镇', scores: null }] },
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.rankings[0].level).toBe('A')
+    expect(vm.rankings[0].support_unit).toBe('镇')
+    expect(vm.rankings[0].scores).toEqual({})
+    wrapper.unmount()
+  })
+  it('rankings 返回非数组对象 → 空列表', async () => {
+    ;(mockGetRankings as any).mockResolvedValueOnce({ data: { rankings: { x: 1 } } })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).rankings).toEqual([])
+    wrapper.unmount()
+  })
+})

@@ -468,3 +468,46 @@ describe('规则构建器控件', () => {
     wrapper.unmount()
   })
 })
+
+describe('边界分支补充', () => {
+  it('is_empty 规则值/无logic/裸对象响应', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.showRuleDialog = true
+    vm.ruleList = [{ field: 'name', operator: 'is_empty', value: 'x' }, { field: 'age', operator: 'eq', logic: '' }]
+    ;(mockPost as any).mockResolvedValueOnce({ issues: [] })
+    await vm.runRuleCheck()
+    expect(vm.ruleResult).toEqual({ issues: [] })
+    wrapper.unmount()
+  })
+  it('runRuleCheck reject 无 detail', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.ruleList = [{ field: 'name', operator: 'eq', value: 'x' }]
+    ;(mockPost as any).mockRejectedValueOnce(new Error('boom'))
+    await vm.runRuleCheck()
+    wrapper.unmount()
+  })
+  it('handleCheck reject 无 detail', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(mockPost as any).mockRejectedValueOnce(new Error('boom'))
+    await vm.handleCheck()
+    wrapper.unmount()
+  })
+  it('handleViewIssues lastIssues 为空 → 内部请求；issues 非数组', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.lastIssues = null
+    vm.checkItems = [{ id: 'data_format', status: 'warning', issues: 2 }]
+    ;(mockPost as any).mockResolvedValueOnce({ issues: { bad: true } })
+    await vm.handleViewIssues(vm.checkItems[0])
+    expect(vm.issueDetails).toEqual([])
+    expect(vm.canAutoFix).toBe(true)
+    wrapper.unmount()
+  })
+})

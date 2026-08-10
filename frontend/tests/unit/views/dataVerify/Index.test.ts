@@ -392,3 +392,25 @@ describe('模板控件补充', () => {
     wrapper.unmount()
   })
 })
+
+describe('校验边界补充', () => {
+  it('查询条件值空/裸对象响应/unmatched 触发', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.qc.conditions = [{ field: 'a', operator: 'eq', value: '' }, { field: 'b', operator: 'empty', value: 'x' }]
+    ;(mockPost as any).mockResolvedValueOnce({ unmatched: 2, total: 5, rows: [{ values: {} }] })
+    await vm.qcRunCheck()
+    expect(vm.qcResult.unmatched).toBe(2)
+    wrapper.unmount()
+  })
+  it('handleQueryCheck reject 无 detail', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.qc.conditions = [{ field: 'a', operator: 'eq', value: '1' }]
+    ;(mockPost as any).mockRejectedValueOnce(new Error('x'))
+    await vm.qcRunCheck()
+    wrapper.unmount()
+  })
+})

@@ -363,3 +363,35 @@ describe("MonitoringDashboard", () => {
     globalThis.clearInterval = origClearInterval;
   });
 });
+
+describe('日志回退分支补充', () => {
+  it('系统日志空数组 → 回退资源快照生成日志', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/logs') return Promise.resolve({ data: [] })
+      if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
+      if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
+      if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    expect((wrapper.vm as any).recentLogs.length).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+  it('fetchSystemLogs {items:[...]} 信封 → 解析', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/logs')
+        return Promise.resolve({ items: [{ line: '2026-01-01 10:00:00 - INFO - 启动' }] })
+      if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
+      if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
+      if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    expect((wrapper.vm as any).recentLogs.length).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+})

@@ -527,3 +527,24 @@ describe('导航与模板', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('服务异常')
     wrapper.unmount()
   })
+
+describe('提交失败分支', () => {
+  it('updatePolicy code!=200 → 抛错', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.isEdit = true
+    ;(vm as any).policyStore.updatePolicy = vi.fn().mockResolvedValue({ code: 400 })
+    await vm.handleSubmit().catch(() => {})
+    wrapper.unmount()
+  })
+  it('createPolicy code200 但 data 空 → 抛错', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.isEdit = false
+    ;(vm as any).policyStore.createPolicy = vi.fn().mockResolvedValue({ code: 200, data: null })
+    await vm.handleSubmit().catch(() => {})
+    wrapper.unmount()
+  })
+})

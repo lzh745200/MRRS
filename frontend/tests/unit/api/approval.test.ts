@@ -312,3 +312,27 @@ describe('列表响应多形态解包', () => {
     expect(await getPendingTasks()).toEqual([{ id: 3 }])
   })
 })
+
+describe('响应形态补充', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+  it('getPendingTasks 收到 {data:[...]} 信封 → 解包', async () => {
+    ;(mockGet as any).mockResolvedValue({ data: [{ task_id: 9 }] })
+    const r = await getPendingTasks()
+    expect(r).toEqual([{ task_id: 9 }])
+  })
+  it('getPendingTasks 收到空对象 → 空数组', async () => {
+    ;(mockGet as any).mockResolvedValue({})
+    const r = await getPendingTasks()
+    expect(r).toEqual([])
+  })
+  it('getApprovalHistory 收到 {data:[...]} 信封 → 解包', async () => {
+    ;(mockGet as any).mockResolvedValue({ data: [{ task_id: 7 }] })
+    const r = await getApprovalHistory({ entity_type: 'policy' })
+    expect(r).toEqual([{ task_id: 7 }])
+  })
+  it('getApprovalHistory 收到空对象 → 空数组', async () => {
+    ;(mockGet as any).mockResolvedValue({})
+    const r = await getApprovalHistory()
+    expect(r).toEqual([])
+  })
+})

@@ -749,3 +749,22 @@ describe('loadVillages 补充', () => {
     expect(vm.villageOptions).toEqual([])
   })
 })
+
+describe('村庄信封补充', () => {
+  it('getVillagesForSelect {data:[...]} 信封 → 选项', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    ;(mockGet as any).mockResolvedValueOnce({ data: [{ id: 1, name: 'A村' }] })
+    await (wrapper.vm as any).loadVillages()
+    expect((wrapper.vm as any).villageOptions).toEqual([{ id: 1, name: 'A村' }])
+    wrapper.unmount()
+  })
+  it('getVillagesForSelect 空对象 → 空选项', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    ;(mockGet as any).mockResolvedValueOnce({})
+    await (wrapper.vm as any).loadVillages()
+    expect((wrapper.vm as any).villageOptions).toEqual([])
+    wrapper.unmount()
+  })
+})

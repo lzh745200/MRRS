@@ -671,3 +671,15 @@ describe('无效项目守卫', () => {
     expect(ElMessage.warning).toHaveBeenCalled()
   })
 })
+
+describe('无项目守卫分支', () => {
+  it('handleInitiate 无项目 → 直接返回', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.projectId = null
+    await vm.handleInitiate()
+    expect(vm.loading).toBe(false)
+    wrapper.unmount()
+  })
+})

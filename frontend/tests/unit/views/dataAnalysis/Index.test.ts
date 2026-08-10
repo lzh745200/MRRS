@@ -216,3 +216,15 @@ describe('交互控件', () => {
     wrapper.unmount()
   })
 })
+
+describe('裸对象分支补充', () => {
+  it('get 返回裸 overview 对象（无 data 包裹）', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ overview: { completeness: 0.85, total_count: 10 } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.overview.total_count).toBe(10)
+    expect(vm.overview.completeness).toBe(85)
+    wrapper.unmount()
+  })
+})

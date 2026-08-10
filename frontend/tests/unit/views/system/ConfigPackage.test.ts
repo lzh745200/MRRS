@@ -413,3 +413,14 @@ describe('配置 value 类型分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('配置对象值分支', () => {
+  it('value 非字符串 → JSON 序列化', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ items: [{ key: 'obj', value: { a: 1 } }] })
+    const wrapper = await mountComp()
+    const vm = wrapper.vm as any
+    const item = vm.configList.find((c: any) => c.key === 'obj')
+    expect(item.value).toBe('{"a":1}')
+    wrapper.unmount()
+  })
+})

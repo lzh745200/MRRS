@@ -25,6 +25,7 @@ const {
   genPwdMock,
   normalizeMock,
   clipWrite,
+  routeQuery,
 } = vi.hoisted(() => {
   return {
     authState: { isAdmin: true },
@@ -41,6 +42,7 @@ const {
     genPwdMock: vi.fn(),
     normalizeMock: vi.fn(),
     clipWrite: vi.fn(),
+    routeQuery: { query: {} as Record<string, any> },
   }
 })
 
@@ -58,7 +60,7 @@ vi.mock('@/api/request', () => ({
   getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
 
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ query: {} as Record<string, any> }),
+  useRoute: () => routeQuery,
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -1425,5 +1427,16 @@ describe('组织筛选清除', () => {
     }
     expect(vm.orgFilterId).toBeNull()
     wrapper.unmount()
+  })
+})
+
+describe('org_id 跳转筛选分支', () => {
+  it('route.query.org_id>0 → 预筛选组织', async () => {
+    routeQuery.query = { org_id: '5' }
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).orgFilterId).toBe(5)
+    wrapper.unmount()
+    routeQuery.query = {}
   })
 })

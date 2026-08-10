@@ -12,6 +12,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
+vi.mock('xlsx', () => ({
+  utils: {
+    aoa_to_sheet: vi.fn(() => ({})),
+    book_new: vi.fn(() => ({})),
+    book_append_sheet: vi.fn(),
+  },
+  writeFile: vi.fn(),
+}))
+
 const {
   ElMessage,
   confirmMock,
@@ -855,6 +864,52 @@ describe('模板控件补充', () => {
     if (selects.length) selects[0].vm.$emit('update:modelValue', 'village')
     const tabs = wrapper.findAllComponents({ name: 'ElTabs' })
     if (tabs.length) tabs[0].vm.$emit('update:modelValue', 'export')
+    wrapper.unmount()
+  })
+})
+
+describe('填报导出边界补充', () => {
+  it('loadAvailableFields 裸数组/非数组对象', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.newTemplate.module = 'village'
+    ;(mockGet as any).mockResolvedValueOnce([{ key: 'a', label: 'A' }])
+    await vm.loadAvailableFields()
+    expect(vm.availableFields).toEqual([{ key: 'a', label: 'A' }])
+    ;(mockGet as any).mockResolvedValueOnce({ data: { x: 1 } })
+    await vm.loadAvailableFields()
+    expect(vm.availableFields).toEqual([])
+    wrapper.unmount()
+  })
+  it('openFillDialog 无字段无模块 / 有模块触发加载', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openFillDialog({ name: 't1', fields: '' })
+    expect(vm.fillFields).toEqual([])
+    vm.openFillDialog({ name: 't2', fields: '', module: 'village' })
+    expect(vm.fillFields).toEqual([])
+    wrapper.unmount()
+  })
+  it('loadModuleFieldsForFill 信封 data.data / 非数组', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(mockGet as any).mockResolvedValueOnce({ data: { data: [{ key: 'b', label: 'B' }] } })
+    await vm.loadModuleFieldsForFill('village')
+    expect(vm.fillFields).toEqual([{ key: 'b', label: 'B' }])
+    ;(mockGet as any).mockResolvedValueOnce({ data: { data: { y: 1 } } })
+    await vm.loadModuleFieldsForFill('village')
+    expect(vm.fillFields).toEqual([])
+    wrapper.unmount()
+  })
+  it('handleFillExport 无 label/空值/无模板名', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openFillDialog({ name: '', fields: 'k1' })
+    await vm.handleFillExport()
     wrapper.unmount()
   })
 })

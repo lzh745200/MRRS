@@ -23,6 +23,7 @@ const {
   mockDeleteMessages,
   mockPushSafe,
   mockGet,
+  mockRecentActivities,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   confirmMock: vi.fn(),
@@ -32,6 +33,7 @@ const {
   mockDeleteMessages: vi.fn(),
   mockPushSafe: vi.fn(),
   mockGet: vi.fn(),
+  mockRecentActivities: vi.fn(),
 }))
 
 vi.mock('@/api/request', () => ({
@@ -54,6 +56,7 @@ vi.mock('@/api/message', () => ({
   markAsRead: (...args: any[]) => mockMarkAsRead(...args),
   markAllAsRead: (...args: any[]) => mockMarkAllAsRead(...args),
   deleteMessages: (...args: any[]) => mockDeleteMessages(...args),
+  getRecentActivities: (...args: any[]) => mockRecentActivities(...args),
   formatMessageType: (type: string) => {
     const map: Record<string, { text: string; type: string }> = {
       system: { text: '系统通知', type: 'info' },
@@ -452,6 +455,32 @@ describe('筛选控件', () => {
     if (selects.length) {
       selects[0].vm.$emit('update:modelValue', 'all')
     }
+    wrapper.unmount()
+  })
+})
+
+describe('响应形态补充2', () => {
+  it('activities {data:[...]} / logs {items:[...]} 信封', async () => {
+    ;(mockRecentActivities as any).mockResolvedValueOnce({ data: [{ id: 1 }] })
+    ;(mockGet as any).mockResolvedValueOnce({ data: { items: [{ id: 2 }] } })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).recentActivities).toEqual([{ id: 1 }])
+    expect((wrapper.vm as any).myLogs).toEqual([{ id: 2 }])
+    wrapper.unmount()
+  })
+  it('activities 空对象 → 空列表', async () => {
+    ;(mockRecentActivities as any).mockResolvedValueOnce({})
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).recentActivities).toEqual([])
+    wrapper.unmount()
+  })
+  it('logs 空对象 → 空列表', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ data: {} })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).myLogs).toEqual([])
     wrapper.unmount()
   })
 })

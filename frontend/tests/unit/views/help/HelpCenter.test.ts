@@ -422,3 +422,27 @@ describe('文章解析补充', () => {
     wrapper.unmount()
   })
 })
+
+describe('解析边界补充', () => {
+  it('parseArticleSections 空行跳过/无内容占位', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const parsed = vm.parseArticleSections('【标题】\n\n正文')
+    expect(parsed[0].heading).toBe('标题')
+    vm.articleDetail = { content: '' }
+    await wrapper.vm.$nextTick()
+    expect(vm.sanitizedContent).toBe('(无内容)')
+    wrapper.unmount()
+  })
+  it('无 heading 的 section 渲染', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.articleDetail = { content: '无标题段落' }
+    await wrapper.vm.$nextTick()
+    const headings = wrapper.findAll('.article-section-title')
+    expect(headings.length).toBe(0)
+    wrapper.unmount()
+  })
+})

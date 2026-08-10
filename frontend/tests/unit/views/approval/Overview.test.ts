@@ -245,3 +245,37 @@ describe('审批行按钮', () => {
     wrapper.unmount()
   })
 })
+
+describe('边界分支补充', () => {
+  it('typeLabel 未知类型 / formatDate 无效日期 / 响应形态', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.typeLabel('unknown_type')).toBe('unknown_type')
+    expect(vm.typeLabel(undefined)).toBe('其他')
+    expect(vm.formatDate(Symbol('x') as any)).toBe('Symbol(x)')
+    expect(vm.formatDate(undefined)).toBe('-')
+    wrapper.unmount()
+  })
+  it('getOverview 裸对象 → 直接取数', async () => {
+    ;(mockGetOverview as any).mockResolvedValueOnce({ pending_count: 3 })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).stats.pending_count).toBe(3)
+    wrapper.unmount()
+  })
+  it('getPendingTasks {data:{items}} 信封 → 列表', async () => {
+    ;(mockGetPending as any).mockResolvedValueOnce({ data: { items: [{ task_id: 1 }] } })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).pendingTasks).toEqual([{ task_id: 1 }])
+    wrapper.unmount()
+  })
+  it('getPendingTasks 空对象 → 空列表', async () => {
+    ;(mockGetPending as any).mockResolvedValueOnce({})
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).pendingTasks).toEqual([])
+    wrapper.unmount()
+  })
+})

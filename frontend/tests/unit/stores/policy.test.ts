@@ -105,3 +105,19 @@ describe('fetchPolicies 响应形态', () => {
     expect(store.policyList.length).toBe(1)
   })
 })
+
+describe('fetchPolicies 响应形态补充', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+  it('信封 data.items → 赋值', async () => {
+    ;(get as any).mockResolvedValue({ code: 200, data: { items: [{ id: 3 }], total: 1 } })
+    const s = usePolicyStore()
+    await s.fetchPolicies()
+    expect(s.policyList).toEqual([{ id: 3 }])
+  })
+  it('data 为空对象 → 空列表', async () => {
+    ;(get as any).mockResolvedValue({ code: 200, data: {} })
+    const s = usePolicyStore()
+    await s.fetchPolicies()
+    expect(s.policyList).toEqual([])
+  })
+})

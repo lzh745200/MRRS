@@ -784,3 +784,16 @@ describe('行操作按钮补充', () => {
     wrapper.unmount()
   })
 })
+
+describe('提交审批失败分支', () => {
+  it('reject 带 detail / 普通 Error', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(submitApprovalMock as any).mockRejectedValueOnce({ response: { data: { detail: '无权限' } } })
+    await vm.handleSubmitApproval({ id: 1, title: 't', code: 'c' }).catch(() => {})
+    ;(submitApprovalMock as any).mockRejectedValueOnce(new Error('网络错误'))
+    await vm.handleSubmitApproval({ id: 2, title: 't2', code: 'c2' }).catch(() => {})
+    wrapper.unmount()
+  })
+})
