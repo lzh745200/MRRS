@@ -361,7 +361,7 @@ class TestUploadFilledTemplate:
                               [["示范村", "某县", "部队"]])
         resp = self._upload(auth_setup, village_template, buf, "preview")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert data["total_rows"] >= 1
         assert data["module"] == "village"
 
@@ -376,14 +376,14 @@ class TestUploadFilledTemplate:
                               [["修路项目", "基础设施", "交通局"]])
         resp = self._upload(auth_setup, project_template, buf, "preview")
         assert resp.status_code == 200
-        assert resp.json()["data"]["module"] == "project"
+        assert resp.json()["module"] == "project"
 
     def test_upload_preview_rural_work(self, auth_setup, work_template):
         buf = self._make_xlsx(["工作名称", "工作类型"],
                               [["环境整治", "环境"]])
         resp = self._upload(auth_setup, work_template, buf, "preview")
         assert resp.status_code == 200
-        assert resp.json()["data"]["module"] == "rural_work"
+        assert resp.json()["module"] == "rural_work"
 
     def test_upload_preview_fund(self, auth_setup, fund_template):
         buf = self._make_xlsx(["名称"],
@@ -441,7 +441,7 @@ class TestUploadFilledTemplate:
                               [["增村", "乙县", "部队"]])
         resp = self._upload(auth_setup, village_template, buf, "confirm", "incremental")
         assert resp.status_code == 200
-        data = resp.json()["data"]
+        data = resp.json()
         assert "imported" in data
 
     def test_upload_confirm_school_incremental(self, auth_setup, school_template, db_session):
@@ -449,21 +449,21 @@ class TestUploadFilledTemplate:
                               [["增量小学", "丙区"]])
         resp = self._upload(auth_setup, school_template, buf, "confirm", "incremental")
         assert resp.status_code == 200
-        assert resp.json()["data"]["imported"] >= 1
+        assert resp.json()["imported"] >= 1
 
     def test_upload_confirm_project_incremental(self, auth_setup, project_template, db_session):
         buf = self._make_xlsx(["项目名称", "项目类型", "负责单位"],
                               [["增项目", "基础设施", "局"]])
         resp = self._upload(auth_setup, project_template, buf, "confirm", "incremental")
         assert resp.status_code == 200
-        assert resp.json()["data"]["imported"] >= 1
+        assert resp.json()["imported"] >= 1
 
     def test_upload_confirm_rural_work_incremental(self, auth_setup, work_template, db_session):
         buf = self._make_xlsx(["工作名称", "工作类型"],
                               [["增工作", "环境"]])
         resp = self._upload(auth_setup, work_template, buf, "confirm", "incremental")
         assert resp.status_code == 200
-        assert resp.json()["data"]["imported"] >= 1
+        assert resp.json()["imported"] >= 1
 
     # ── Confirm mode: overwrite ──
 
@@ -478,7 +478,7 @@ class TestUploadFilledTemplate:
                               [["覆盖小学", "戊区"]])
         resp = self._upload(auth_setup, school_template, buf, "confirm", "overwrite")
         assert resp.status_code == 200
-        assert resp.json()["data"]["imported"] >= 1
+        assert resp.json()["imported"] >= 1
 
     def test_upload_confirm_project_overwrite(self, auth_setup, project_template, db_session):
         buf = self._make_xlsx(["项目名称", "项目类型", "负责单位"],
@@ -511,7 +511,7 @@ class TestUploadFilledTemplate:
                                [["重复小学", "区X"]])
         resp = self._upload(auth_setup, school_template, buf2, "confirm", "incremental")
         assert resp.status_code == 200
-        assert resp.json()["data"]["skipped"] >= 1
+        assert resp.json()["skipped"] >= 1
 
     def test_upload_confirm_project_incremental_duplicate(self, auth_setup, project_template, db_session):
         buf = self._make_xlsx(["项目名称", "项目类型", "负责单位"],
@@ -521,7 +521,7 @@ class TestUploadFilledTemplate:
                                [["重项目", "基础设施", "局"]])
         resp = self._upload(auth_setup, project_template, buf2, "confirm", "incremental")
         assert resp.status_code == 200
-        assert resp.json()["data"]["skipped"] >= 1
+        assert resp.json()["skipped"] >= 1
 
     def test_upload_confirm_work_incremental_duplicate(self, auth_setup, work_template, db_session):
         buf = self._make_xlsx(["工作名称", "工作类型"],
@@ -531,7 +531,7 @@ class TestUploadFilledTemplate:
                                [["重工作", "环境"]])
         resp = self._upload(auth_setup, work_template, buf2, "confirm", "incremental")
         assert resp.status_code == 200
-        assert resp.json()["data"]["skipped"] >= 1
+        assert resp.json()["skipped"] >= 1
 
     # ── Edge case data for helper functions ──
 

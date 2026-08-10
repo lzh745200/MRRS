@@ -652,15 +652,6 @@ def mock_settings():
     settings.DEBUG = True
     settings.DATABASE_URL = "sqlite:///./test.db"
     settings.CSRF_ENABLED = False
-    # 确保 test.db 表结构存在（幂等）：直接连 SessionLocal 的测试（如 sync_version
-    # 回归测试）依赖该库；全量测试中部分 teardown 可能清空表结构
-    try:
-        from app.models import Base
-        from app.core.database import engine as _test_engine
-
-        Base.metadata.create_all(bind=_test_engine)
-    except Exception:
-        pass
     yield
     # 恢复 settings 对象属性，防止状态泄漏到其他测试
     for key, val in _saved.items():
