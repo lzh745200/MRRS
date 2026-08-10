@@ -82,3 +82,14 @@ describe('usePolicyStore', () => {
     expect(store.total).toBe(1)
   })
 })
+
+describe('setFilters 合并', () => {
+  it('合并传入过滤条件', () => {
+    const store = usePolicyStore()
+    store.setFilters({ status: 'active' })
+    expect(store.filters.status).toBe('active')
+    store.setFilters({ order_by: 'publish_date' })
+    expect(store.filters.order_by).toBe('publish_date')
+    expect(store.filters.status).toBe('active')
+  })
+})

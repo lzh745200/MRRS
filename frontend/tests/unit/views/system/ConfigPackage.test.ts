@@ -395,3 +395,21 @@ describe('ConfigPackage.vue', () => {
     })
   })
 })
+
+describe('配置 value 类型分支', () => {
+  it('字符串原样/对象序列化', async () => {
+    const wrapper = await mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGet.mockResolvedValueOnce({ items: [
+      { key: 's', value: 'plain', description: 'd' },
+      { key: 'o', value: { a: 1 } },
+    ] })
+    await vm.loadConfig()
+    const s = vm.configList.find((c: any) => c.key === 's')
+    const o = vm.configList.find((c: any) => c.key === 'o')
+    expect(s.value).toBe('plain')
+    expect(o.value).toBe('{"a":1}')
+    wrapper.unmount()
+  })
+})

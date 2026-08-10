@@ -658,3 +658,16 @@ describe('补缺：模板内联函数与列插槽 else 分支', () => {
     expect(wrapper.text()).toContain('偏差')
   })
 })
+
+describe('无效项目守卫', () => {
+  it('projectId 无效 → 警告并跳回经费列表', async () => {
+    routeParams.projectId = undefined as unknown as string
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.invalidProject).toBe(true)
+    const r = vm.requireProject()
+    expect(r).toBe(false)
+    expect(ElMessage.warning).toHaveBeenCalled()
+  })
+})

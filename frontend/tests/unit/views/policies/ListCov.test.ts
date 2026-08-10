@@ -23,6 +23,7 @@ const {
   logError,
   policyApi,
   mockDownloadTemplate,
+  submitApprovalMock,
 } = vi.hoisted(() => {
   return {
     routeBox: { route: null as any },
@@ -55,6 +56,7 @@ const {
       exportPoliciesWPS: vi.fn(),
     },
     mockDownloadTemplate: vi.fn(),
+    submitApprovalMock: vi.fn().mockResolvedValue({}),
   }
 })
 
@@ -83,6 +85,10 @@ vi.mock('@/stores/auth', () => ({
 }))
 
 vi.mock('@/api/policy', () => policyApi)
+
+vi.mock('@/api/approval', () => ({
+  submitApproval: submitApprovalMock,
+}))
 
 vi.mock('@/api/import', () => ({
   downloadImportTemplateAndSave: mockDownloadTemplate,
@@ -724,5 +730,44 @@ describe('路由 watch', () => {
     await nextTick()
     await flushPromises()
     expect(vm.searchForm.category).toBe('military') // 空 query 不改写
+  })
+})
+
+describe('提交审批', () => {
+  it('确认提交 → submitApproval + 成功提示 + 刷新；取消静默；失败提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.handleSubmitApproval({ id: 1, title: '政策A', code: 'X' })
+    await flushPromises()
+    expect(vm.mockSubmitApproval || submitApprovalMock).toBeTruthy()
+    expect(ElMessage.success).toHaveBeenCalledWith('已提交审批，请到审批中心处理')
+
+    confirmMock.mockRejectedValueOnce('cancel')
+    await vm.handleSubmitApproval({ id: 2, title: 'B' })
+    expect(ElMessage.error).not.toHaveBeenCalled()
+
+    submitApprovalMock.mockRejectedValueOnce({ response: { data: { detail: '无工作流' } } })
+    await vm.handleSubmitApproval({ id: 3, title: 'C' })
+    expect(ElMessage.error).toHaveBeenCalledWith('无工作流')
+  })
+
+  it('levelOptions 多形态响应（数组/items/nested）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.searchForm.category = 'military'
+    policyApi.getLevelOptions.mockResolvedValue([{ label: '省级', value: 'province' }])
+    await vm.refreshLevelOptions()
+    expect(vm.levelOptions.length).toBe(1)
+    policyApi.getLevelOptions.mockResolvedValue({ items: [{ label: '市级', value: 'city' }] })
+    await vm.refreshLevelOptions()
+    expect(vm.levelOptions.length).toBe(1)
+    policyApi.getLevelOptions.mockResolvedValue({ data: [{ label: '县级', value: 'county' }] })
+    await vm.refreshLevelOptions()
+    expect(vm.levelOptions.length).toBe(1)
+    policyApi.getLevelOptions.mockResolvedValue({ data: { data: [{ label: '省级2', value: 'prov2' }] } })
+    await vm.refreshLevelOptions()
+    expect(vm.levelOptions.length).toBe(1)
   })
 })

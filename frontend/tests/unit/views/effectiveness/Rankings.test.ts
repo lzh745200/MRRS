@@ -267,3 +267,15 @@ describe('模板交互', () => {
     )
   })
 })
+
+describe('排名响应别名兼容', () => {
+  it('grade/support_unit_name 旧字段映射', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGetRankings.mockResolvedValue({ items: [{ id: 1, grade: 'A', support_unit_name: '某旅', scores: { x: 1 } }] })
+    await vm.fetchRankings()
+    expect(vm.rankings[0].level).toBe('A')
+    expect(vm.rankings[0].support_unit).toBe('某旅')
+  })
+})

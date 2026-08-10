@@ -298,3 +298,17 @@ describe('api/approval', () => {
     })
   })
 })
+
+describe('列表响应多形态解包', () => {
+  it('getAllTasks/getPendingTasks 兼容对象形态(items/data/空)', async () => {
+    const { getAllTasks, getPendingTasks } = await import('@/api/approval')
+    mockGet.mockResolvedValueOnce({ items: [{ id: 1 }] })
+    expect(await getAllTasks()).toEqual([{ id: 1 }])
+    mockGet.mockResolvedValueOnce({ data: [{ id: 2 }] })
+    expect(await getAllTasks()).toEqual([{ id: 2 }])
+    mockGet.mockResolvedValueOnce({})
+    expect(await getAllTasks()).toEqual([])
+    mockGet.mockResolvedValueOnce({ items: [{ id: 3 }] })
+    expect(await getPendingTasks()).toEqual([{ id: 3 }])
+  })
+})

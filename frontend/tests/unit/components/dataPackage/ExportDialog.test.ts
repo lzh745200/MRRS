@@ -4,10 +4,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const { ElMessage, mockPost } = vi.hoisted(() => {
+const { ElMessage, mockPost, downloadMock } = vi.hoisted(() => {
   return {
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
     mockPost: vi.fn(),
+    downloadMock: vi.fn().mockResolvedValue(undefined),
   }
 })
 
@@ -19,6 +20,10 @@ vi.mock('element-plus', () => ({
 vi.mock('@/api/request', () => ({
   post: mockPost,
   getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
+
+vi.mock('@/stores/dataPackage', () => ({
+  useDataPackageStore: () => ({ downloadPackage: downloadMock }),
 }))
 
 import ExportDialog from '@/components/dataPackage/ExportDialog.vue'
@@ -171,4 +176,27 @@ describe('dataPackage/ExportDialog.vue', () => {
     await wrapper.vm.handleExport()
     expect(ElMessage.success).toHaveBeenCalled()
     wrapper.unmount()
+})
+
+describe('导出后自动下载', () => {
+  it('有 package_id → 自动下载 + 关闭对话框；无 id → 仅提示；下载失败不阻塞', async () => {
+    const wrapper = mountDialog()
+    await flushPromises()
+    wrapper.vm.formRef = { validate: vi.fn(() => Promise.resolve()) }
+    mockPost.mockResolvedValue({ package_id: 5 })
+    await wrapper.vm.handleExport()
+    expect(mockPost).toHaveBeenCalled()
+    expect(downloadMock).toHaveBeenCalledWith(5)
+    expect(ElMessage.success).toHaveBeenCalled()
+
+    mockPost.mockResolvedValue({ success: true })
+    await wrapper.vm.handleExport()
+    expect(ElMessage.success).toHaveBeenCalledWith('数据包导出成功')
+
+    downloadMock.mockRejectedValue(new Error('net'))
+    mockPost.mockResolvedValue({ package_id: 6 })
+    await wrapper.vm.handleExport()
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
 })

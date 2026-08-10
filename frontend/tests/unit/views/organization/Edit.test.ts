@@ -375,6 +375,18 @@ describe('编辑模式', () => {
     wrapper.unmount()
   })
 
+  it('编辑时 parent_id 为 null → 提交 undefined', async () => {
+    routeBox.params = { id: '5' }
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.formData.parent_id = null
+    await clickBtn(wrapper, '保存')
+    expect(mockUpdateOrganization).toHaveBeenCalledWith(5, expect.objectContaining({ parent_id: undefined }))
+    wrapper.unmount()
+  })
+
+
   it('handleSubmit 编辑失败 → 错误提示；空字段 → undefined', async () => {
     routeBox.params = { id: '7' }
     mockUpdateOrganization.mockRejectedValue(new Error('boom'))

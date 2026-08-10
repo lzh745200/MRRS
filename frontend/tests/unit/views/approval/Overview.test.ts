@@ -169,3 +169,34 @@ describe('审批概览', () => {
     wrapper.unmount()
   })
 })
+
+describe('审批概览补充分支', () => {
+  it('typeLabel/formatDate 兜底；goApprove 三形态；loadPending 多形态响应', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // typeLabel 兜底
+    expect(vm.typeLabel('custom')).toBe('custom')
+    // formatDate 非法日期 → 原样返回
+    expect(vm.formatDate('not-a-date')).toBe('Invalid Date')
+    // goApprove：task_id / id / 无 id
+    vm.goApprove({ task_id: 5 })
+    vm.goApprove({ id: 6 })
+    vm.goApprove({})
+    // loadPending：数组形态
+    mockGetPending.mockResolvedValue([{ task_id: 9, title: 'x' }])
+    await vm.loadPending()
+    expect(vm.pendingTasks.length).toBe(1)
+    // loadPending：items 形态 + 异常
+    mockGetPending.mockResolvedValue({ items: [{ task_id: 8 }] })
+    await vm.loadPending()
+    expect(vm.pendingTasks.length).toBe(1)
+    mockGetPending.mockRejectedValue(new Error('x'))
+    await vm.loadPending()
+    expect(vm.pendingTasks).toEqual([])
+    // getOverview 返回裸对象
+    mockGetOverview.mockResolvedValue({ pending_count: 2 })
+    await vm.loadOverview()
+    expect(vm.stats.pending_count).toBe(2)
+  })
+})
