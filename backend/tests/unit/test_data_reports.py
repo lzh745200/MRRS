@@ -681,7 +681,7 @@ class TestGetReportPackage:
         with patch("app.api.v1.data.data.data_reports.get_user_org_id", return_value=1):
             resp = client_with_mocked_auth.get(f"{BASE}/1/package")
             assert resp.status_code == 200
-            assert resp.json()["package_id"] == 10
+            assert resp.json()["data"]["package_id"] == 10
         mock_perm.can_access_organization.assert_not_called()
 
     def test_success_as_target(self, client_with_mocked_auth):

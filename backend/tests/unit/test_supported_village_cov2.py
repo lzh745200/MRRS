@@ -30,6 +30,7 @@ def _q(**kw):
     q = MagicMock()
     for attr in ("filter", "order_by", "offset", "limit"):
         getattr(q, attr).return_value = q
+    q.options.return_value = q  # _get_village_or_404 走 .options(selectinload(...)).first() 链
     q.first.return_value = kw.get("first")
     q.all.return_value = kw.get("all", [])
     q.count.return_value = kw.get("count", 0)

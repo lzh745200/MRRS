@@ -67,7 +67,9 @@ const displayName = computed(
   () => authStore.user?.full_name || authStore.user?.username || '管理员'
 )
 
-const isAdmin = computed(() => ADMIN_ROLES.includes(normalizeRole(authStore.user?.role)) || authStore.user?.is_superuser)
+const isAdmin = computed(
+  () => ADMIN_ROLES.includes(normalizeRole(authStore.user?.role)) || authStore.user?.is_superuser
+)
 
 const formattedDate = computed(() => {
   const now = new Date()

@@ -169,7 +169,7 @@ async def list_archives(
         if tier_key in result:
             return success_response(data={tier_key: result[tier_key]})
 
-    return result
+    return success_response(data=result)
 
 
 @router.post("/restore")

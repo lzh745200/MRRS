@@ -250,7 +250,7 @@ async def get_map_markers(
             )
         result["schools"] = school_list
 
-    return result
+    return success_response(data=result)
 
 
 @router.get("/county-coords")
@@ -502,7 +502,7 @@ async def get_distances(
         except Exception:
             logger.debug("写入地图距离缓存失败")
 
-    return result
+    return success_response(data=result)
 
 
 # --------------- 离线瓦片服务 ---------------

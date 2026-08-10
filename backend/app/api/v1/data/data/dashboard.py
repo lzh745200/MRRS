@@ -354,7 +354,7 @@ async def get_dashboard_stats(
     if not refresh:
         cached = _get_cached(cache_key)
         if cached is not None:
-            return cached
+            return success_response(data=cached)
 
     try:
         village_stats = _query_village_stats(db, data_scope)
@@ -379,7 +379,7 @@ async def get_dashboard_stats(
             return None
 
         _set_cached(cache_key, result)
-        return result
+        return success_response(data=result)
     except Exception as e:
         logger.error("仪表盘统计查询失败: %s", e, exc_info=True)
         # 降级返回 None，让前端显示空状态
@@ -539,7 +539,7 @@ async def get_dashboard_summary(
     cache_key = f"dashboard_summary:{user_id}"
     cached = _get_cached(cache_key)
     if cached is not None:
-        return cached
+        return success_response(data=cached)
 
     try:
         village_stats = _query_village_stats(db, data_scope)
@@ -555,7 +555,7 @@ async def get_dashboard_summary(
 
     result = {"stats": stats, "recent_activities": activities.get("items", [])}
     _set_cached(cache_key, result, ttl=120)  # 2 分钟缓存
-    return result
+    return success_response(data=result)
 
 
 def _fetch_hidden_activities() -> set:
@@ -667,7 +667,7 @@ async def get_recent_activities(
     cache_key = "dashboard_recent_activities"
     cached = _get_cached(cache_key)
     if cached is not None:
-        return cached
+        return success_response(data=cached)
 
     hidden_ids, custom_items, project_items, fund_items, approval_items = await asyncio.gather(
         asyncio.to_thread(_fetch_hidden_activities),
@@ -685,7 +685,7 @@ async def get_recent_activities(
     items.sort(key=lambda x: x.get("time", ""), reverse=True)
     result = {"items": items[:10]}
     _set_cached(cache_key, result, ttl=60)
-    return result
+    return success_response(data=result)
 
 
 class ActivityCreate(BaseModel):
