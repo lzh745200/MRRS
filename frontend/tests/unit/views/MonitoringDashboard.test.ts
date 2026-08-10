@@ -662,7 +662,14 @@ describe('图表耗时全缺', () => {
     mockApiRequest.mockImplementation((config: any) => {
       if (config?.url === '/system/monitor/api-stats')
         return Promise.resolve({
-          data: { data: { top_endpoints: [{ method: 'GET', path: '/a', count: 1 }] } },
+          data: {
+            data: {
+              top_endpoints: [
+                { method: 'GET', endpoint: '/ep', count: 1 },
+                { method: 'POST', path: '/p', count: 2 },
+              ],
+            },
+          },
         })
       return Promise.resolve({})
     })
