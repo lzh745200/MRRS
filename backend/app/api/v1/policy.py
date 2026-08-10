@@ -1072,7 +1072,7 @@ async def get_policy(
 
 
 @router.post("")
-async def create_policy(
+async def create_policy(  # noqa: C901
     data: PolicyCreateRequest,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),

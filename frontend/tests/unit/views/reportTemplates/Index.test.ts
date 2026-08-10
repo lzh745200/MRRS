@@ -779,3 +779,36 @@ describe('上传填报', () => {
     expect(vm.importMode).toBe('overwrite')
   })
 })
+
+describe('在线填报与字段组合', () => {
+  it('openFillDialog 解析模板字段；无字段时加载模块默认字段', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const t = { id: 1, name: '测试模板', fields: JSON.stringify(['village_name', 'county']), module: 'village' }
+    await vm.openFillDialog(t)
+    expect(vm.showFillDialog).toBe(true)
+    expect(vm.fillFields.length).toBe(2)
+    expect(vm.fillFields[0].key).toBe('village_name')
+  })
+
+  it('handleFillExport 导出 Excel 并提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fillTemplate = { id: 1, name: '导出模板' }
+    vm.fillFields = [{ key: 'name', label: '名称' }, { key: 'county', label: '县' }]
+    vm.fillRow = { name: '幸福村', county: '长顺县' }
+    await vm.handleFillExport()
+    expect(ElMessage.success).toHaveBeenCalledWith('已导出 Excel 文件')
+  })
+
+  it('loadAvailableFields 加载模块字段', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.newTemplate.module = 'village'
+    await vm.loadAvailableFields()
+    expect(vm.availableFields.length).toBeGreaterThan(0)
+  })
+})

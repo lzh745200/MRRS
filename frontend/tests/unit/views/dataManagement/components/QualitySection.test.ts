@@ -352,3 +352,59 @@ describe('模板交互（内联处理器与 v-model 覆盖）', () => {
     expect(vm.showIssuesDialog).toBe(false)
   })
 })
+
+describe('自定义规则校验', () => {
+  it('openRuleDialog 重置状态；addRule 添加条件；runRuleCheck 提交与失败', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openRuleDialog()
+    expect(vm.showRuleDialog).toBe(true)
+    expect(vm.ruleResult).toBeNull()
+    expect(vm.ruleList.length).toBe(1)
+    vm.addRule()
+    expect(vm.ruleList.length).toBe(2)
+    // 无字段条件 → 提示（清空全部规则字段）
+    vm.ruleList = [{ logic: 'and', field: '', operator: 'eq', value: '' }]
+    await vm.runRuleCheck()
+    expect(ElMessage.warning).toHaveBeenCalled()
+    // 正常提交
+    vm.ruleList[0].field = 'county'
+    vm.ruleList[0].operator = 'eq'
+    vm.ruleList[0].value = '长顺县'
+    mockPost.mockResolvedValue({ data: { matched_count: 6, failed_count: 0, message: '校验完成' } })
+    await vm.runRuleCheck()
+    expect(mockPost).toHaveBeenCalledWith('/data-quality/validate-rules', expect.anything())
+    expect(vm.ruleResult.matched_count).toBe(6)
+    // 失败
+    mockPost.mockRejectedValue({ response: { data: { detail: '失败' } } })
+    await vm.runRuleCheck()
+    expect(ElMessage.error).toHaveBeenCalledWith('失败')
+  })
+})
+
+describe('自定义规则校验补充', () => {
+  it('runRuleCheck 失败分支与 handleViewIssues fallback', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 规则结果带 failed → 触发表格分支
+    mockPost.mockResolvedValue({ data: { matched_count: 5, failed_count: 1, failed: [{ record_id: 1, label: 'x' }] } })
+    await vm.runRuleCheck()
+    expect(vm.ruleResult.failed_count).toBe(1)
+    // runRuleCheck 异常 → 错误提示
+    mockPost.mockRejectedValue({ response: { data: { detail: '服务异常' } } })
+    await vm.runRuleCheck()
+    expect(ElMessage.error).toHaveBeenCalledWith('服务异常')
+    // handleViewIssues：lastIssues 为空 → fallback 调 full-check
+    vm.lastIssues = []
+    mockPost.mockResolvedValue({ data: { issues: [{ field: 'name', message: '缺失', suggestion: '补全' }] } })
+    await vm.handleViewIssues({ id: 'data_format', name: '格式' })
+    expect(vm.issueDetails.length).toBe(1)
+    expect(vm.showIssuesDialog).toBe(true)
+    // handleViewIssues 异常 → 空列表
+    mockPost.mockRejectedValue(new Error('boom'))
+    await vm.handleViewIssues({ id: 'data_format', name: '格式' })
+    expect(vm.issueDetails).toEqual([])
+  })
+})

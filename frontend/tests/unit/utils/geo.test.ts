@@ -106,4 +106,22 @@ describe('utils/geo', () => {
       expect(parseCoordinate('1,2,3')).toBeNull()
     })
   })
+
+  describe('parseCoordinate 补充', () => {
+    it('经度,纬度 顺序自动识别（互换分支）', () => {
+      expect(parseCoordinate('107.5,26.5')).toEqual({ lat: 26.5, lng: 107.5 })
+    })
+    it('中文逗号分隔', () => {
+      expect(parseCoordinate('26.5，107.5')).toEqual({ lat: 26.5, lng: 107.5 })
+    })
+    it('负数坐标', () => {
+      expect(parseCoordinate('-30,-110')).toEqual({ lat: -30, lng: -110 })
+    })
+    it('非法输入返回 null', () => {
+      expect(parseCoordinate('abc')).toBeNull()
+      expect(parseCoordinate('')).toBeNull()
+      expect(parseCoordinate('1000,2000')).toBeNull()
+      expect(parseCoordinate('90,1000')).toBeNull()
+    })
+  })
 })

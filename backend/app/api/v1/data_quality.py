@@ -105,7 +105,6 @@ async def deduplicate_data(
     }
 
 
-
 # ==================== 自定义规则校验（下拉 + 与或非） ====================
 
 
@@ -123,7 +122,7 @@ class ValidateRulesRequest(BaseModel):
 
 
 @router.post("/validate-rules", summary="自定义规则校验（下拉+与或非组合）")
-async def validate_rules(
+async def validate_rules(  # noqa: C901 - 规则引擎分支多属正常
     request: ValidateRulesRequest,
     db: Session = Depends(get_db),
 ):
