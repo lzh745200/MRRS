@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, Mock, patch, AsyncMock
 from datetime import datetime
 
 from app.services.report_service import ReportService
@@ -169,24 +169,82 @@ class TestReportService:
             assert filename == "report_20250601_123000.xlsx"
 
     @pytest.mark.asyncio
-    async def test_get_report_subscriptions(self, svc):
-        with pytest.raises(NotImplementedError):
-            await svc.get_report_subscriptions(user_id=1)
+    async def test_get_report_subscriptions(self, svc, mock_db):
+        mock_sub = Mock()
+        mock_sub.id = 1
+        mock_sub.user_id = 1
+        mock_sub.name = "月度报表"
+        mock_sub.report_type = "village"
+        mock_sub.format = "xlsx"
+        mock_sub.frequency = "monthly"
+        mock_sub.send_day = None
+        mock_sub.send_time = None
+        mock_sub.email = ""
+        mock_sub.output_dir = None
+        mock_sub.output_format = "pdf"
+        mock_sub.is_active = True
+        mock_sub.created_at = None
+        q = MagicMock()
+        q.filter.return_value.order_by.return_value.all.return_value = [mock_sub]
+        mock_db.query.return_value = q
+        items = await svc.get_report_subscriptions(user_id=1)
+        assert items == [{"id": 1, "user_id": 1, "name": "月度报表", "report_type": "village",
+                          "format": "xlsx", "frequency": "monthly", "send_day": None,
+                          "send_time": None, "email": "", "output_dir": "",
+                          "output_format": "pdf", "is_active": True, "created_at": None}]
 
     @pytest.mark.asyncio
-    async def test_create_subscription(self, svc):
-        with pytest.raises(NotImplementedError):
-            await svc.create_subscription(user_id=1, data={"name": "Weekly"})
+    async def test_create_subscription(self, svc, mock_db):
+        mock_sub = Mock()
+        mock_sub.id = 9
+        mock_sub.user_id = 1
+        mock_sub.name = "Weekly"
+        mock_sub.report_type = "summary"
+        mock_sub.format = "xlsx"
+        mock_sub.frequency = "weekly"
+        mock_sub.is_active = True
+        from app.core.transaction import safe_commit
+        with patch("app.core.transaction.safe_commit", return_value=None):
+            result = await svc.create_subscription(
+                user_id=1, data={"name": "Weekly", "report_type": "summary"}
+            )
+        assert result["name"] == "Weekly"
+        assert result["report_type"] == "summary"
+        assert mock_db.add.called
 
     @pytest.mark.asyncio
-    async def test_update_subscription(self, svc):
-        with pytest.raises(NotImplementedError):
-            await svc.update_subscription(subscription_id=5, data={"name": "Updated"})
+    async def test_update_subscription(self, svc, mock_db):
+        mock_sub = Mock()
+        mock_sub.id = 5
+        mock_sub.user_id = 1
+        mock_sub.name = "Updated"
+        mock_sub.report_type = "summary"
+        mock_sub.format = "xlsx"
+        mock_sub.frequency = "weekly"
+        mock_sub.is_active = True
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_sub
+        from app.core.transaction import safe_commit
+        with patch("app.core.transaction.safe_commit", return_value=None):
+            result = await svc.update_subscription(
+                subscription_id=5, data={"name": "Updated"}
+            )
+        assert result["name"] == "Updated"
 
     @pytest.mark.asyncio
-    async def test_cancel_subscription(self, svc):
-        with pytest.raises(NotImplementedError):
-            await svc.cancel_subscription(subscription_id=10)
+    async def test_cancel_subscription(self, svc, mock_db):
+        mock_sub = Mock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_sub
+        from app.core.transaction import safe_commit
+        with patch("app.core.transaction.safe_commit", return_value=None):
+            ok = await svc.cancel_subscription(subscription_id=10)
+        assert ok is True
+        assert mock_sub.is_active is False
+
+    @pytest.mark.asyncio
+    async def test_cancel_subscription_missing(self, svc, mock_db):
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        ok = await svc.cancel_subscription(subscription_id=999)
+        assert ok is False
 
     @pytest.mark.asyncio
     async def test_fetch_report_data_success(self, svc, mock_db):

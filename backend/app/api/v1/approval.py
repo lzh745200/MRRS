@@ -45,11 +45,63 @@ router = APIRouter(prefix="/approval", tags=["审批管理"])
 
 
 @router.get("")
-async def approval_overview(current_user: User = Depends(get_current_user)):
-    """审批管理概览"""
+async def approval_overview(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """审批管理模块概览统计（pending/approved/rejected/total/my_pending）"""
+    from sqlalchemy import func
+
+    from app.models.approval import ApprovalStatus as AS
+    from app.models.approval import ApprovalTask as AT
+
+    total = db.query(func.count(AT.id)).scalar() or 0
+    pending = (
+        db.query(func.count(AT.id))
+        .filter(AT.status == AS.PENDING.value)
+        .scalar()
+        or 0
+    )
+    approved = (
+        db.query(func.count(AT.id))
+        .filter(AT.status == AS.APPROVED.value)
+        .scalar()
+        or 0
+    )
+    rejected = (
+        db.query(func.count(AT.id))
+        .filter(AT.status == AS.REJECTED.value)
+        .scalar()
+        or 0
+    )
+    my_pending = (
+        db.query(func.count(AT.id))
+        .filter(
+            AT.status == AS.PENDING.value,
+            AT.current_approver_id == current_user.id,
+        )
+        .scalar()
+        or 0
+    )
+    if my_pending == 0 and not is_admin(current_user):
+        my_pending = (
+            db.query(func.count(AT.id))
+            .filter(
+                AT.status == AS.PENDING.value,
+                AT.submitter_id == current_user.id,
+            )
+            .scalar()
+            or 0
+        )
     return success_response(
-        message="审批管理模块",
-        data={"endpoints": ["/workflows", "/submit", "/tasks"]},
+        message="审批管理模块概览",
+        data={
+            "pending_count": pending,
+            "approved_count": approved,
+            "rejected_count": rejected,
+            "total_count": total,
+            "my_pending": my_pending,
+        },
     )
 
 

@@ -537,3 +537,31 @@ describe('真实日志优先分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('真实日志集成', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setupDefaultMocks()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+  it('/system/admin/logs 返回数组 → recentLogs 为结构化日志', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/admin/logs')
+        return Promise.resolve([{ line: '2026-01-01 10:00:00 ERROR - 数据库断开' }])
+      if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
+      if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
+      if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await advanceFakeTimersAndFlush()
+    const vm = wrapper.vm as any
+    expect(vm.recentLogs.length).toBeGreaterThan(0)
+    expect(vm.recentLogs[0]).toHaveProperty('level')
+    expect(vm.recentLogs[0]).toHaveProperty('message')
+    wrapper.unmount()
+  })
+})

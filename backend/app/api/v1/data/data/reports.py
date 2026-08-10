@@ -7,13 +7,14 @@ Requirements: 19.3 - 19.5, 3.1, 3.5
 import io
 import json
 import logging
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote
 
 from app.utils.helpers import safe_json_loads
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -604,8 +605,8 @@ def _subscription_to_response(subscription: ReportSubscription) -> dict:
         "output_dir": subscription.output_dir,
         "output_format": subscription.output_format,
         "is_active": subscription.is_active,
-        "last_sent_at": subscription.last_sent_at,
-        "next_send_at": subscription.next_send_at,
+        "last_sent_at": getattr(subscription, "last_sent_at", None),
+        "next_send_at": getattr(subscription, "next_send_at", None),
         "created_at": subscription.created_at,
         "updated_at": subscription.updated_at,
     }
@@ -616,7 +617,8 @@ def _subscription_to_response(subscription: ReportSubscription) -> dict:
 
 class ReportGenerateRequest(BaseModel):
     """报表生成请求"""
-    report_type: str  # comprehensive/summary/statistics
+    report_type: str = "summary"  # comprehensive/summary/statistics（缺省 summary）
+    subscription_id: Optional[int] = None  # 报表订阅场景：从订阅读取报表类型与参数
     year: Optional[int] = None
     village_ids: Optional[List[int]] = None
     include_sections: Optional[List[str]] = None
@@ -635,7 +637,27 @@ async def generate_report(
     根据指定参数生成报表数据，返回报表内容（JSON格式）或文件下载链接。
     """
     try:
-        from app.models.supported_village import SupportedVillage
+        from app.models.supported_village import ReportSubscription, SupportedVillage
+
+        # 订阅场景：从订阅读取报表类型/年份/格式
+        if request.subscription_id and request.report_type == "summary":
+            sub = (
+                service.db.query(ReportSubscription)
+                .filter(ReportSubscription.id == request.subscription_id)
+                .first()
+            )
+            if sub is not None:
+                request.report_type = sub.report_type or "summary"
+                if request.year is None:
+                    request.year = sub.year
+                if not request.village_ids and sub.village_ids:
+                    try:
+                        import json as _json
+                        parsed = _json.loads(sub.village_ids)
+                        if isinstance(parsed, list):
+                            request.village_ids = [int(x) for x in parsed]
+                    except Exception:
+                        pass
 
         # 构建报表数据
         report_data = {

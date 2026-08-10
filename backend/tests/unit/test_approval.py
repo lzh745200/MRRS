@@ -76,8 +76,11 @@ class TestApprovalOverview:
         resp = client_with_mocked_auth.get(BASE)
         assert resp.status_code == 200
         data = resp.json()
-        assert "endpoints" in data["data"]
-        assert data["message"] == "审批管理模块"
+        assert "pending_count" in data["data"]
+        assert "approved_count" in data["data"]
+        assert "rejected_count" in data["data"]
+        assert "total_count" in data["data"]
+        assert "my_pending" in data["data"]
 
 
 # ── create_workflow ────────────────────────────────────────────────

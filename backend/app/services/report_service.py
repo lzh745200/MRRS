@@ -194,68 +194,136 @@ class ReportService:
         return f"{report_type}_{timestamp}.xlsx"
 
     async def get_report_subscriptions(self, user_id: int) -> List[Dict[str, Any]]:
-        """List report subscriptions for a user.
+        """List report subscriptions for a user."""
+        from app.models.supported_village import ReportSubscription
 
-        .. warning::
-            此前恒返回空列表（stub），且无路由调用本方法（路由层直接通过
-            ``db.query(ReportSubscription)`` 查询订阅）。完整实现需查询
-            ``ReportSubscription`` 模型，超出本次 BugFix 范围。
-
-        Raises:
-            NotImplementedError: 本方法为占位 stub，未接入路由。
-        """
-        raise NotImplementedError(
-            "ReportService.get_report_subscriptions 尚未实现（此前恒返回空列表，"
-            "未接入路由；路由层直接查询 ReportSubscription 模型）。"
-            "超出本次 BugFix 范围。"
+        rows = (
+            self.db.query(ReportSubscription)
+            .filter(ReportSubscription.user_id == user_id)
+            .order_by(ReportSubscription.id.desc())
+            .all()
         )
+        return [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "name": r.name or "",
+                "report_type": r.report_type or "",
+                "format": r.format or "xlsx",
+                "frequency": r.frequency or "weekly",
+                "send_day": r.send_day,
+                "send_time": r.send_time,
+                "email": r.email or "",
+                "output_dir": r.output_dir or "",
+                "output_format": r.output_format or "pdf",
+                "is_active": bool(r.is_active),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
 
     async def create_subscription(self, user_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a new report subscription.
+        """Create a new report subscription."""
+        from app.core.transaction import safe_commit
+        from app.models.supported_village import ReportSubscription
 
-        .. warning::
-            此前仅返回拼接字典（不持久化），且无路由调用本方法。
-
-        Raises:
-            NotImplementedError: 本方法为占位 stub，未接入路由。
-        """
-        raise NotImplementedError(
-            "ReportService.create_subscription 尚未实现（此前不持久化，"
-            "未接入路由；路由层直接操作 ReportSubscription 模型）。"
-            "超出本次 BugFix 范围。"
+        sub = ReportSubscription(
+            user_id=user_id,
+            name=(data.get("name") or "").strip(),
+            report_type=(data.get("report_type") or "").strip(),
+            format=data.get("format") or "xlsx",
+            year=data.get("year"),
+            village_ids=(
+                str(data["village_ids"])
+                if data.get("village_ids")
+                else None
+            ),
+            include_sections=(
+                str(data["include_sections"])
+                if data.get("include_sections")
+                else None
+            ),
+            frequency=data.get("frequency") or "weekly",
+            send_day=data.get("send_day"),
+            send_time=data.get("send_time"),
+            email=data.get("email"),
+            output_dir=data.get("output_dir"),
+            output_format=data.get("output_format") or "pdf",
+            is_active=True,
         )
+        self.db.add(sub)
+        safe_commit(self.db)
+        return {
+            "id": sub.id,
+            "user_id": sub.user_id,
+            "name": sub.name,
+            "report_type": sub.report_type,
+            "format": sub.format,
+            "frequency": sub.frequency,
+            "is_active": True,
+        }
 
     async def update_subscription(
         self, subscription_id: int, data: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Update an existing subscription.
+        """Update an existing subscription."""
+        from app.core.transaction import safe_commit
+        from app.models.supported_village import ReportSubscription
 
-        .. warning::
-            此前仅返回拼接字典（不持久化），且无路由调用本方法。
-
-        Raises:
-            NotImplementedError: 本方法为占位 stub，未接入路由。
-        """
-        raise NotImplementedError(
-            "ReportService.update_subscription 尚未实现（此前不持久化，"
-            "未接入路由；路由层直接操作 ReportSubscription 模型）。"
-            "超出本次 BugFix 范围。"
+        sub = (
+            self.db.query(ReportSubscription)
+            .filter(ReportSubscription.id == subscription_id)
+            .first()
         )
+        if sub is None:
+            return None
+        for key in (
+            "name",
+            "report_type",
+            "format",
+            "year",
+            "village_ids",
+            "include_sections",
+            "frequency",
+            "send_day",
+            "send_time",
+            "email",
+            "output_dir",
+            "output_format",
+        ):
+            if key in data and data[key] is not None:
+                value = data[key]
+                if key in ("village_ids", "include_sections") and isinstance(value, list):
+                    value = str(value)
+                setattr(sub, key, value)
+        if "is_active" in data and data["is_active"] is not None:
+            sub.is_active = bool(data["is_active"])
+        safe_commit(self.db)
+        return {
+            "id": sub.id,
+            "user_id": sub.user_id,
+            "name": sub.name,
+            "report_type": sub.report_type,
+            "format": sub.format,
+            "frequency": sub.frequency,
+            "is_active": bool(sub.is_active),
+        }
 
     async def cancel_subscription(self, subscription_id: int) -> bool:
-        """Cancel a subscription.
+        """Cancel a subscription (soft delete via is_active=False)."""
+        from app.core.transaction import safe_commit
+        from app.models.supported_village import ReportSubscription
 
-        .. warning::
-            此前恒返回 ``True``（不持久化），且无路由调用本方法。
-
-        Raises:
-            NotImplementedError: 本方法为占位 stub，未接入路由。
-        """
-        raise NotImplementedError(
-            "ReportService.cancel_subscription 尚未实现（此前恒返回 True，"
-            "未接入路由；路由层直接操作 ReportSubscription 模型）。"
-            "超出本次 BugFix 范围。"
+        sub = (
+            self.db.query(ReportSubscription)
+            .filter(ReportSubscription.id == subscription_id)
+            .first()
         )
+        if sub is None:
+            return False
+        sub.is_active = False
+        safe_commit(self.db)
+        return True
 
     # ── Internal helpers ──
 
