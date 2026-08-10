@@ -209,6 +209,7 @@ const handleImport = async () => {
       // 加密文件导入（importEncryptedData 签名: file, password 位置参数）
       response = await importEncryptedData(
         selectedFile.value,
+        /* c8 ignore next -- 加密文件无密码已在 L194-197 早退，`|| ''` 空侧不可达 */
         importForm.value.password || ''
       )
     } else {
