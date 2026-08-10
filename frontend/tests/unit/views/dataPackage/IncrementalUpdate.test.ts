@@ -451,3 +451,22 @@ describe('响应形态收尾', () => {
   })
 })
 
+describe('分支收尾', () => {
+  it('导出 message-only / 导入 success===true', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.exportForm.base_package_id = 1
+    ;(mockPost as any).mockResolvedValueOnce({ message: '导出被拒' })
+    await vm.handleExport()
+    expect(ElMessage.warning).toHaveBeenCalledWith('导出被拒')
+    vm.importForm.package_id = 1
+    ;(mockPost as any).mockResolvedValueOnce({ success: true, message: '仅成功' })
+    await vm.handleImport()
+    expect(vm.importResult).toBeTruthy()
+    ;(mockPost as any).mockResolvedValueOnce({ message: '导入被拒' })
+    await vm.handleImport()
+    expect(ElMessage.warning).toHaveBeenCalledWith('导入被拒')
+    wrapper.unmount()
+  })
+})

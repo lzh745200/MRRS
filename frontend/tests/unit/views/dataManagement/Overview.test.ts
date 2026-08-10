@@ -319,3 +319,14 @@ describe('响应形态收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('裸响应形态', () => {
+  it('无 data 包裹 → 直接使用', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    ;(mockGet as any).mockResolvedValueOnce({ projects: 11 })
+    await (wrapper.vm as any).loadOverview()
+    expect((wrapper.vm as any).overview.projects).toBe(11)
+    wrapper.unmount()
+  })
+})

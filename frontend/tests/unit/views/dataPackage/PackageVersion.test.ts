@@ -457,3 +457,14 @@ describe('版本数组形态', () => {
     wrapper.unmount()
   })
 })
+
+describe('版本非数组', () => {
+  it('versions 非数组 → 空列表', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    ;(mockGet as any).mockResolvedValue({ versions: { bad: true } })
+    await (wrapper.vm as any).fetchVersionList()
+    expect((wrapper.vm as any).versionList).toEqual([])
+    wrapper.unmount()
+  })
+})

@@ -644,3 +644,14 @@ describe('任务字段分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('任务名优先分支', () => {
+  it('task.name 优先于 title', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openTaskDialog({ id: 1, name: '指定名', title: '标题' })
+    expect(vm.taskForm.title).toBe('指定名')
+    wrapper.unmount()
+  })
+})

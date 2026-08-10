@@ -544,3 +544,13 @@ describe('消息计数形态', () => {
     wrapper.unmount()
   })
 })
+
+describe('未读数异常', () => {
+  it('getUnreadCount 失败 → 0', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    ;(mockUnreadCount as any).mockRejectedValueOnce(new Error('x'))
+    expect(await (wrapper.vm as any).loadUnreadCountValue()).toBe(0)
+    wrapper.unmount()
+  })
+})

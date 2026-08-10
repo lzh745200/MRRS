@@ -523,3 +523,14 @@ describe('响应形态收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('Blob响应收尾', () => {
+  it('post 返回 Blob → isBlobResp 分支', async () => {
+    postMock.mockResolvedValue(new Blob(['x']))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleOneClickReport().catch(() => {})
+    wrapper.unmount()
+  })
+})

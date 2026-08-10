@@ -634,3 +634,16 @@ describe('响应形态收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('响应形态收尾2', () => {
+  it('校验响应无 data 包裹 → 直接使用', async () => {
+    const wrapper = mountImport()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(mockPost as any).mockResolvedValueOnce({ error_count: 0, first_errors: [], total_rows: 2 })
+    vm.selectedFile = new File(['x'], 'a.csv')
+    await vm.handleValidate().catch(() => {})
+    expect(vm.previewCount).toBe(2)
+    wrapper.unmount()
+  })
+})

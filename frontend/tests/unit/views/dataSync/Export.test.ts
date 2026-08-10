@@ -347,3 +347,18 @@ describe('响应形态收尾2', () => {
     wrapper.unmount()
   })
 })
+
+describe('分支收尾', () => {
+  it('response.items 直接 / 历史非数组兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGetSyncLogs.mockResolvedValue({ items: [{ id: 9 }] })
+    await vm.loadExportHistory()
+    expect(vm.exportHistory).toEqual([{ id: 9 }])
+    mockGetSyncLogs.mockResolvedValue({ items: { bad: true } })
+    await vm.loadExportHistory()
+    expect(vm.exportHistory).toEqual([])
+    wrapper.unmount()
+  })
+})

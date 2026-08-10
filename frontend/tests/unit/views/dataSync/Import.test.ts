@@ -363,3 +363,18 @@ describe('响应形态收尾2', () => {
     wrapper.unmount()
   })
 })
+
+describe('分支收尾', () => {
+  it('items 非数组兜底 / 历史 items 直接', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGetSyncLogs.mockResolvedValue({ items: [{ ...rowA }] })
+    await vm.loadImportHistory()
+    expect(vm.importHistory.length).toBe(1)
+    mockGetSyncLogs.mockResolvedValue({ items: { bad: true } })
+    await vm.loadImportHistory()
+    expect(vm.importHistory).toEqual([])
+    wrapper.unmount()
+  })
+})
