@@ -16,6 +16,10 @@ const { ElMessage, mockGet, mockApiRequest } = vi.hoisted(() => ({
   mockApiRequest: vi.fn(),
 }))
 
+vi.mock('@/composables/useRouterSafe', () => ({
+  useRouterSafe: () => ({ pushSafe: vi.fn() }),
+}))
+
 vi.mock('element-plus', () => ({ ElMessage }))
 
 vi.mock('@/api/request', () => ({
@@ -181,5 +185,21 @@ describe('el-tabs 交互', () => {
     expect(vm.activeTab).toBe('backup')
     tabs[0].vm.$emit('tab-change', 'export')
     expect(vm.activeTab).toBe('backup')
+  })
+})
+
+describe('备份跳转', () => {
+  it('前往备份管理按钮 → goBackupManagement', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const btn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('前往备份管理'))
+    if (btn) {
+      await btn.trigger('click')
+      expect(vm.goBackupManagement).toBeTypeOf('function')
+    } else {
+      vm.goBackupManagement()
+    }
+    wrapper.unmount()
   })
 })

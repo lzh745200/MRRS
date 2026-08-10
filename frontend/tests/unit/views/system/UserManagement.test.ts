@@ -1409,3 +1409,21 @@ describe('逻辑或 / 空值合并兜底分支', () => {
     spy.mockRestore()
   })
 })
+
+describe('组织筛选清除', () => {
+  it('orgFilterId 有值时清除按钮触发', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.orgFilterId = 5
+    await wrapper.vm.$nextTick()
+    const btn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('清除筛选'))
+    if (btn) {
+      await btn.trigger('click')
+    } else {
+      vm.clearOrgFilter()
+    }
+    expect(vm.orgFilterId).toBeNull()
+    wrapper.unmount()
+  })
+})

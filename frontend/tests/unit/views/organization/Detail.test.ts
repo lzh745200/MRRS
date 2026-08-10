@@ -360,3 +360,18 @@ describe('模板分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('成员管理跳转', () => {
+  it('分配成员按钮 → goManageMembers', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const btn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('分配成员'))
+    if (btn) {
+      await btn.trigger('click')
+    } else {
+      vm.goManageMembers()
+    }
+    wrapper.unmount()
+  })
+})

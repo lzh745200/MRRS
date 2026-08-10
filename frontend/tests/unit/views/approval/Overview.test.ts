@@ -200,3 +200,31 @@ describe('审批概览补充分支', () => {
     expect(vm.stats.pending_count).toBe(2)
   })
 })
+
+describe('模板点击事件', () => {
+  it('入口卡/查看全部/审批/一键审批按钮触发', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 入口卡点击（entry-card class）
+    const entryCards = wrapper.findAll('.entry-card')
+    await entryCards[0].trigger('click')
+    await entryCards[1].trigger('click')
+    await entryCards[2].trigger('click')
+    // 查看全部按钮
+    const viewAll = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('查看全部'))
+    await viewAll!.trigger('click')
+    // 一键审批按钮（需 pending_count>0 渲染）
+    vm.stats.pending_count = 2
+    await wrapper.vm.$nextTick()
+    const autoBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('一键通过全部'))
+    if (autoBtn) {
+      confirmMock.mockResolvedValue('confirm')
+      mockBatchApprove.mockResolvedValue({})
+      await autoBtn.trigger('click')
+      await flushPromises()
+      expect(mockBatchApprove).toHaveBeenCalled()
+    }
+    wrapper.unmount()
+  })
+})

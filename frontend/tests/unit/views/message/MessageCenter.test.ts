@@ -428,3 +428,18 @@ describe('日志与动态补充', () => {
     expect(vm.myLogs).toEqual([])
   })
 })
+
+describe('activityType 映射', () => {
+  it('create/update/delete/approve/未知 全分支', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.activityType('create')).toBe('success')
+    expect(vm.activityType('update')).toBe('primary')
+    expect(vm.activityType('delete')).toBe('danger')
+    expect(vm.activityType('import')).toBe('warning')
+    expect(vm.activityType('backup')).toBe('warning')
+    expect(vm.activityType(undefined)).toBe('info')
+    wrapper.unmount()
+  })
+})

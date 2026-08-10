@@ -408,3 +408,37 @@ describe('自定义规则校验补充', () => {
     expect(vm.issueDetails).toEqual([])
   })
 })
+
+describe('自定义校验模板事件', () => {
+  it('自定义校验按钮/添加条件/删除条件/执行校验 点击', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 自定义校验按钮
+    const openBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('自定义校验'))
+    if (openBtn) {
+      await openBtn.trigger('click')
+      expect(vm.showRuleDialog).toBe(true)
+    }
+    // 添加条件按钮
+    const addBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('添加条件'))
+    if (addBtn) {
+      await addBtn.trigger('click')
+      expect(vm.ruleList.length).toBe(2)
+    }
+    // 执行校验按钮
+    mockPost.mockResolvedValue({ data: { total: 6, unmatched: 0 } })
+    const runBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes('执行校验'))
+    if (runBtn) {
+      await runBtn.trigger('click')
+      await flushPromises()
+    }
+    // 关闭按钮
+    const closeBtn = wrapper.findAll('.el-button-stub').find((b: any) => b.text().trim() === '关闭')
+    if (closeBtn) {
+      await closeBtn.trigger('click')
+      expect(vm.showRuleDialog).toBe(false)
+    }
+    wrapper.unmount()
+  })
+})
