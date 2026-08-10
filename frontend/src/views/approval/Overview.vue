@@ -131,6 +131,7 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 function typeLabel(t?: string) {
+  /* c8 ignore next -- TYPE_LABELS['other'] 恒有值，'其他' 兜底分支不可达 */
   return TYPE_LABELS[t || 'other'] || t || '其他'
 }
 

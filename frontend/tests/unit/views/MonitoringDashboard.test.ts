@@ -514,6 +514,13 @@ describe('日志级别收尾', () => {
 })
 
 describe('真实日志优先分支', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    setupDefaultMocks()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
   it('health/full 返回日志数组 → recentLogs 直接用数组', async () => {
     mockGet.mockReset()
     mockGet.mockImplementation((url: string) => {
@@ -525,7 +532,7 @@ describe('真实日志优先分支', () => {
       return Promise.resolve({})
     })
     const wrapper = mountComponent()
-    await flushPromises()
+    await advanceFakeTimersAndFlush()
     expect((wrapper.vm as any).recentLogs.length).toBeGreaterThan(0)
     wrapper.unmount()
   })
