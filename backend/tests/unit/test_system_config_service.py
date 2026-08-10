@@ -10,8 +10,18 @@ class TestGlobalFunctions:
 
     @patch("app.services.system_config_service._global_config_service", None)
     def test_get_config_no_service(self):
+        """无全局实例 → 使用独立短会话查询（修复全局函数空转）"""
         from app.services.system_config_service import get_config
-        assert get_config("key", "default") == "default"
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        with patch("app.core.database.SessionLocal", return_value=mock_db):
+            # 配置不存在 → 返回默认值
+            assert get_config("no_such_key", "default") == "default"
+            # 预设默认配置键 → 返回预设值（不依赖 DB 有记录）
+            mock_db.query.return_value.filter.return_value.first.return_value = None
+            assert get_config("system_version") is not None
+            mock_db.close.assert_called()
 
     @patch("app.services.system_config_service._global_config_service")
     def test_set_config(self, mock_global):
@@ -21,8 +31,16 @@ class TestGlobalFunctions:
 
     @patch("app.services.system_config_service._global_config_service", None)
     def test_set_config_no_service(self):
+        """无全局实例 → 独立短会话写入（修复备份目标等设置不生效）"""
         from app.services.system_config_service import set_config
-        set_config("key", "val")
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        with patch("app.core.database.SessionLocal", return_value=mock_db):
+            set_config("key", "val", "desc")
+            mock_db.add.assert_called()
+            mock_db.commit.assert_called()
+            mock_db.close.assert_called()
 
     @patch("app.services.system_config_service._global_config_service")
     def test_delete_config(self, mock_global):
@@ -33,7 +51,12 @@ class TestGlobalFunctions:
     @patch("app.services.system_config_service._global_config_service", None)
     def test_delete_config_no_service(self):
         from app.services.system_config_service import delete_config
-        delete_config("key")
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        with patch("app.core.database.SessionLocal", return_value=mock_db):
+            delete_config("key")
+            mock_db.close.assert_called()
 
     @patch("app.services.system_config_service._global_config_service")
     def test_list_configs(self, mock_global):
@@ -43,8 +66,14 @@ class TestGlobalFunctions:
 
     @patch("app.services.system_config_service._global_config_service", None)
     def test_list_configs_no_service(self):
+        """无全局实例 → 独立短会话列出配置"""
         from app.services.system_config_service import list_configs
-        assert list_configs() == {}
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.all.return_value = []
+        with patch("app.core.database.SessionLocal", return_value=mock_db):
+            assert list_configs() == {}
+            mock_db.close.assert_called()
 
 
 class TestSystemConfigService:
