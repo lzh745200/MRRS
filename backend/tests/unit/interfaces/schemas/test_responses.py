@@ -13,6 +13,7 @@ class TestResponseModel:
         assert resp.code == 200
         assert resp.data is None
         assert resp.message == "success"
+        assert resp.success is True  # 与 success_response 信封对齐（前端 res.success 判断依赖）
 
     def test_custom_values(self):
         resp = ResponseModel(code=404, data={"error": "not found"}, message="Not Found")
