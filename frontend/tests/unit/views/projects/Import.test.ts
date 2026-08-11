@@ -29,7 +29,8 @@ vi.mock('@/api/request', () => ({
   apiRequest: requestMock.apiRequest,
   downloadBlob: requestMock.downloadBlob,
   parseContentDisposition: requestMock.parseContentDisposition,
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/composables/useDesensitize', () => ({
   useDesensitize: () => ({
@@ -92,8 +93,7 @@ function mountComp() {
         },
         'el-upload': { template: '<div class="el-upload-stub"><slot /><slot name="tip" /></div>' },
         'el-table': {
-          template:
-            '<div class="el-table-stub"><slot name="empty" /><slot name="default" /></div>',
+          template: '<div class="el-table-stub"><slot name="empty" /><slot name="default" /></div>',
         },
         'el-table-column': {
           name: 'ElTableColumn',
@@ -104,7 +104,8 @@ function mountComp() {
           },
         },
         'el-empty': {
-          template: '<div class="el-empty-stub"><slot name="description" /><slot name="bottom" /></div>',
+          template:
+            '<div class="el-empty-stub"><slot name="description" /><slot name="bottom" /></div>',
         },
       },
     },
@@ -159,7 +160,10 @@ describe('步骤向导', () => {
     // 再次点击（同一步骤块内重复触发编译后的缓存内联函数）
     vm.currentStep = 1
     await wrapper.vm.$nextTick()
-    await wrapper.findAll('.el-button-stub').find((b) => b.text().includes('继续上传'))!.trigger('click')
+    await wrapper
+      .findAll('.el-button-stub')
+      .find((b) => b.text().includes('继续上传'))!
+      .trigger('click')
     await wrapper.vm.$nextTick()
     expect(vm.currentStep).toBe(2)
   })
@@ -546,7 +550,13 @@ describe('结果页', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.currentStep = 4
-    vm.importResult = { success: true, failure: false, successCount: 1, failureCount: 0, totalCount: 1 }
+    vm.importResult = {
+      success: true,
+      failure: false,
+      successCount: 1,
+      failureCount: 0,
+      totalCount: 1,
+    }
     await wrapper.vm.$nextTick()
     const btn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('重新导入'))
     await btn!.trigger('click')
@@ -558,7 +568,13 @@ describe('结果页', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.currentStep = 4
-    vm.importResult = { success: true, failure: false, successCount: 1, failureCount: 0, totalCount: 1 }
+    vm.importResult = {
+      success: true,
+      failure: false,
+      successCount: 1,
+      failureCount: 0,
+      totalCount: 1,
+    }
     await wrapper.vm.$nextTick()
     const btn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('查看项目列表'))
     await btn!.trigger('click')
@@ -570,7 +586,14 @@ describe('结果页', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.currentStep = 4
-    vm.importResult = { success: false, failure: true, successCount: 0, failureCount: 1, totalCount: 1, message: '' }
+    vm.importResult = {
+      success: false,
+      failure: true,
+      successCount: 0,
+      failureCount: 1,
+      totalCount: 1,
+      message: '',
+    }
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('导入失败')
     expect(wrapper.text()).toContain('未知错误')

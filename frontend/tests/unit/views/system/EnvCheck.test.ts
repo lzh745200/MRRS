@@ -68,7 +68,8 @@ async function mountComp() {
         'el-table': { name: 'ElTable', template: '<table class="el-table-stub"><slot /></table>' },
         'el-table-column': {
           name: 'ElTableColumn',
-          template: '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /></div>',
+          template:
+            '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /></div>',
           data() {
             return {
               rowA: { name: 'fastapi', version: '0.110.0', installed: true },
@@ -197,9 +198,7 @@ describe('EnvCheck.vue', () => {
     const input = w.find('.el-input-stub')
     await input.setValue('sql')
     expect(vm.pkgFilter).toBe('sql')
-    const recheckBtn = w
-      .findAll('button')
-      .find((b) => b.text().includes('重新检查'))
+    const recheckBtn = w.findAll('button').find((b) => b.text().includes('重新检查'))
     await recheckBtn!.trigger('click')
     expect(envApi.check).toHaveBeenCalled()
   })

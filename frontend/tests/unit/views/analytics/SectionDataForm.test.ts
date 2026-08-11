@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 
 enableAutoUnmount(afterEach)
@@ -141,6 +142,33 @@ describe('SectionDataForm.vue 保存/取消', () => {
     expect(mocks.logger.error).toHaveBeenCalled()
   })
 
+  it('保存 API 失败且无 message：回退默认文案', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    st.formRef = { validate: vi.fn().mockResolvedValue(true) }
+    mocks.savePopulationData.mockRejectedValue(new Error())
+    const errSpy = vi.spyOn(ElMessage, 'error')
+    await st.handleSave()
+    expect(errSpy).toHaveBeenCalledWith('保存失败，请重试')
+  })
+
+  it('committee 板块保存：走 committee 专属 saveFn（含 members 组装）', async () => {
+    const wrapper = mountForm({ sectionKey: 'committee' })
+    await flushPromises()
+    const st = state(wrapper)
+    st.formRef = { validate: vi.fn().mockResolvedValue(true) }
+    st.committeeMembers = [{ name: '张三', position: '支书', phone: '', isVeteran: true, remark: '' }]
+    await st.handleSave()
+    expect(mocks.saveCommitteeData).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        year: expect.any(Number),
+        members: [{ name: '张三', position: '支书', phone: '', isVeteran: true, remark: '' }],
+      }),
+    )
+  })
+
   it('取消：emit close', async () => {
     const wrapper = mountForm()
     await flushPromises()
@@ -188,6 +216,207 @@ describe('SectionDataForm.vue 文件上传', () => {
     await st.handleCustomUpload({ file: new File(['x'], 'a.jpg') } as any)
     expect(errSpy).toHaveBeenCalledWith('上传失败')
   })
+
+  it('customUpload 失败且无 message：回退默认文案', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    mocks.uploadSectionAttachment.mockRejectedValue({})
+    const st = state(wrapper)
+    const errSpy = vi.spyOn(ElMessage, 'error')
+    await st.handleCustomUpload({ file: new File(['x'], 'a.jpg') } as any)
+    expect(errSpy).toHaveBeenCalledWith('上传失败')
+  })
+
+  it('uploadRemove：空实现可调用（el-upload 内部移除回调）', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    expect(() => st.handleUploadRemove({} as any)).not.toThrow()
+  })
+})
+
+describe('SectionDataForm.vue 初始化与年份切换', () => {
+  it('附件加载失败 → 回退空数组', async () => {
+    mocks.getSectionAttachments.mockRejectedValue(new Error('net'))
+    const wrapper = mountForm()
+    await flushPromises()
+    expect(state(wrapper).attachments).toEqual([])
+  })
+
+  it('handleYearChange → 重新加载数据与附件', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    st.handleYearChange()
+    await flushPromises()
+    expect(mocks.getYearlyData).toHaveBeenCalledTimes(2)
+    expect(mocks.getSectionAttachments).toHaveBeenCalledTimes(2)
+  })
+
+  it('年度数据存在 → 回填表单（null/undefined 字段跳过）', async () => {
+    mocks.getYearlyData.mockResolvedValue({
+      population: { totalHouseholds: 12, totalPopulation: 30, laborForce: null, migrantWorkers: undefined },
+    })
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    expect(st.formData.totalHouseholds).toBe(12)
+    expect(st.formData.totalPopulation).toBe(30)
+    expect(st.formData.laborForce).toBe(0)
+  })
+
+  it('committee 板块含成员数据 → 加载成员列表', async () => {
+    mocks.getYearlyData.mockResolvedValue({
+      committee: {
+        overview: '概况',
+        members: [{ name: '李四', position: '主任', phone: '138', isVeteran: true, remark: 'r' }],
+      },
+    })
+    const wrapper = mountForm({ sectionKey: 'committee' })
+    await flushPromises()
+    const st = state(wrapper)
+    expect(st.committeeMembers).toEqual([
+      { name: '李四', position: '主任', phone: '138', isVeteran: true, remark: 'r' },
+    ])
+  })
+
+  it('committee 成员字段缺失 → 空字符串兜底', async () => {
+    mocks.getYearlyData.mockResolvedValue({
+      committee: { members: [{ name: null, isVeteran: 1 }] },
+    })
+    const wrapper = mountForm({ sectionKey: 'committee' })
+    await flushPromises()
+    expect(state(wrapper).committeeMembers).toEqual([
+      { name: '', position: '', phone: '', isVeteran: true, remark: '' },
+    ])
+  })
+
+  it('addCommitteeMember → 追加空成员', async () => {
+    const wrapper = mountForm({ sectionKey: 'committee' })
+    await flushPromises()
+    const st = state(wrapper)
+    st.addCommitteeMember()
+    expect(st.committeeMembers).toHaveLength(1)
+    expect(st.committeeMembers[0]).toEqual({ name: '', position: '', phone: '', isVeteran: false, remark: '' })
+  })
+
+  it('年度数据加载失败 → 使用默认值（catch 分支）', async () => {
+    mocks.getYearlyData.mockRejectedValue(new Error('net'))
+    const wrapper = mountForm()
+    await flushPromises()
+    expect(state(wrapper).formData.totalHouseholds).toBe(0)
+  })
+
+  it('population 表单校验：总人数≤0 被拒绝（validator error 分支）', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    const validators = st.formRules.totalPopulation.filter((r: any) => r.validator)
+    const rule = validators[validators.length - 1] // 业务校验在规则数组末尾
+    const err = await new Promise((resolve) => {
+      rule.validator({}, 0, (e?: Error) => resolve(e))
+    })
+    expect(err).toBeInstanceOf(Error)
+  })
+
+  it('population 表单校验：总人数>0 通过（callback 无错分支）', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    const validators = st.formRules.totalPopulation.filter((r: any) => r.validator)
+    const rule = validators[validators.length - 1]
+    const err = await new Promise((resolve) => {
+      rule.validator({}, 10, (e?: Error) => resolve(e))
+    })
+    expect(err).toBeUndefined()
+  })
+
+  it('population 表单校验：总人数为 null → 跳过校验（value != null false 分支）', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    const validators = st.formRules.totalPopulation.filter((r: any) => r.validator)
+    const rule = validators[validators.length - 1]
+    const err = await new Promise((resolve) => {
+      rule.validator({}, null, (e?: Error) => resolve(e))
+    })
+    expect(err).toBeUndefined()
+  })
+
+  it('population 表单校验：常住人口超过总人数被拒绝', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    st.formData.totalPopulation = 10
+    const validators = st.formRules.residentPopulation.filter((r: any) => r.validator)
+    const rule = validators[validators.length - 1]
+    const err = await new Promise((resolve) => {
+      rule.validator({}, 15, (e?: Error) => resolve(e))
+    })
+    expect(err).toBeInstanceOf(Error)
+  })
+
+  it('population 表单校验：总人数为 0 时常住人口判定（|| 0 兜底分支）', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    st.formData.totalPopulation = 0
+    const validators = st.formRules.residentPopulation.filter((r: any) => r.validator)
+    const rule = validators[validators.length - 1]
+    const err = await new Promise((resolve) => {
+      rule.validator({}, 5, (e?: Error) => resolve(e))
+    })
+    // totalPopulation=0 → (0 || 0)=0 → 5>0 → 校验拒绝
+    expect(err).toBeInstanceOf(Error)
+  })
+
+  it('population 表单校验：常住人口未超总人数通过', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    st.formData.totalPopulation = 10
+    const validators = st.formRules.residentPopulation.filter((r: any) => r.validator)
+    const rule = validators[validators.length - 1]
+    const err = await new Promise((resolve) => {
+      rule.validator({}, 5, (e?: Error) => resolve(e))
+    })
+    expect(err).toBeUndefined()
+  })
+
+  it('population 表单校验：常住人口为 null → 跳过校验（value != null false 分支）', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    st.formData.totalPopulation = 10
+    const validators = st.formRules.residentPopulation.filter((r: any) => r.validator)
+    const rule = validators[validators.length - 1]
+    const err = await new Promise((resolve) => {
+      rule.validator({}, null, (e?: Error) => resolve(e))
+    })
+    expect(err).toBeUndefined()
+  })
+
+  it('非负校验：负数被拒绝（nonNegativeRule error 分支）', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    const rule = st.formRules.totalHouseholds.find((r: any) => r.validator)
+    const err = await new Promise((resolve) => {
+      rule.validator({}, -1, (e?: Error) => resolve(e))
+    })
+    expect(err).toBeInstanceOf(Error)
+  })
+
+  it('非负校验：非负数通过（nonNegativeRule else 分支）', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    const rule = st.formRules.totalHouseholds.find((r: any) => r.validator)
+    const err = await new Promise((resolve) => {
+      rule.validator({}, 5, (e?: Error) => resolve(e))
+    })
+    expect(err).toBeUndefined()
+  })
 })
 
 describe('SectionDataForm.vue 附件管理', () => {
@@ -227,6 +456,18 @@ describe('SectionDataForm.vue 附件管理', () => {
     expect(errSpy).toHaveBeenCalledWith('删除失败')
   })
 
+  it('删除附件：API 失败且无 message：回退默认文案', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    st.attachments = [{ ...attachment }]
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    mocks.deleteSectionAttachment.mockRejectedValue({})
+    const errSpy = vi.spyOn(ElMessage, 'error')
+    await st.handleDeleteAttachment(attachment)
+    expect(errSpy).toHaveBeenCalledWith('删除失败')
+  })
+
   it('预览：设置预览状态并打开弹窗', async () => {
     const wrapper = mountForm()
     await flushPromises()
@@ -237,6 +478,18 @@ describe('SectionDataForm.vue 附件管理', () => {
     expect(st.previewUrl).toBe('http://x/file.pdf')
     expect(st.previewType).toBe('pdf')
     expect(st.previewVisible).toBe(true)
+  })
+
+  it('预览弹窗关闭：触发 v-model 更新函数', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    st.handlePreview(attachment)
+    await nextTick()
+    const dialog = wrapper.findComponent({ name: 'ElDialog' })
+    dialog.vm.$emit('update:modelValue', false)
+    await nextTick()
+    expect(st.previewVisible).toBe(false)
   })
 
   it('下载：创建 a 标签并触发点击', async () => {

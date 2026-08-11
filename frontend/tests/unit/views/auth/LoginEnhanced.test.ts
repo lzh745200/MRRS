@@ -53,7 +53,8 @@ vi.mock('@/api/request', () => ({
   post: vi.fn(),
   put: vi.fn(),
   del: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/logger', () => ({
   logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), log: vi.fn() },
@@ -326,7 +327,11 @@ describe('LoginEnhanced.vue', () => {
             template: '<div class="el-dialog-stub"><slot /><slot name="footer" /></div>',
             emits: ['update:modelValue'],
           },
-          'el-button': { name: 'ElButton', template: '<button @click="$emit(\'click\')"><slot /></button>', emits: ['click'] },
+          'el-button': {
+            name: 'ElButton',
+            template: '<button @click="$emit(\'click\')"><slot /></button>',
+            emits: ['click'],
+          },
         },
       },
     })
@@ -349,7 +354,11 @@ describe('LoginEnhanced.vue', () => {
             template: '<div class="el-dialog-stub"><slot /><slot name="footer" /></div>',
             emits: ['update:modelValue'],
           },
-          'el-button': { name: 'ElButton', template: '<button @click="$emit(\'click\')"><slot /></button>', emits: ['click'] },
+          'el-button': {
+            name: 'ElButton',
+            template: '<button @click="$emit(\'click\')"><slot /></button>',
+            emits: ['click'],
+          },
         },
       },
     })
@@ -357,9 +366,7 @@ describe('LoginEnhanced.vue', () => {
     const vm = w.vm as any
     vm.permissionImportVisible = true
     await nextTick()
-    const cancelBtn = w
-      .findAll('button')
-      .find((b) => b.text().includes('取消'))
+    const cancelBtn = w.findAll('button').find((b) => b.text().includes('取消'))
     expect(cancelBtn).toBeTruthy()
     await cancelBtn!.trigger('click')
     await nextTick()

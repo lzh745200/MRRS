@@ -739,16 +739,28 @@ async function fetchSystemLogs() {
       // 兼容后端 app.log 真实行格式：`2026-08-11 20:31:46 [INFO] logger: message`
       // 以及旧式 `2026-01-01 10:00:00 ERROR - message`（级别可带 [ ]，后跟可选 logger 名）
       // 注意：级别后允许 ` logger: ` 形式（如 `[INFO] app.request: msg`），用非贪婪避免误吞
-      const m = /^(\d{4}-\d{2}-\d{2}[^ ]*)\s+(\d+:\d+:\d+)[,\d]*\s+\[?([A-Za-z]+)\]?(?:\s+\S+)?\s*[:|-]\s+(.*)$/.exec(line)
+      // 优先匹配旧式 `时间 级别 - 消息`（级别不带括号）
+      let m = /^(\d{4}-\d{2}-\d{2}[^ ]*)\s+(\d+:\d+:\d+)[,\d]*\s+\[?(\S+?)\]?\s*[:|-]\s+(.*)$/.exec(
+        line
+      )
+      if (!m) {
+        // 兼容真实日志格式：`2026-08-11 20:31:46 [INFO] logger: message`
+        m =
+          /^(\d{4}-\d{2}-\d{2}[^ ]*)\s+(\d+:\d+:\d+)[,\d]*\s+\[?([A-Za-z]+)\]?[^:]*:\s*(.*)$/.exec(
+            line
+          )
+      }
       if (m) {
         return {
           id: idx,
           time: `${m[1]} ${m[2]}`,
+          /* c8 ignore start -- m[3] 为正则捕获组（必非空），|| '' 兜底分支不可达 */
           level: (m[3] || '').toLowerCase().includes('error')
             ? 'error'
             : (m[3] || '').toLowerCase().includes('warn')
               ? 'warn'
               : 'info',
+          /* c8 ignore stop */
           message: m[4],
         }
       }

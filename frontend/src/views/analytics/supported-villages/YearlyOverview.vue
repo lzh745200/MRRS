@@ -3,9 +3,9 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="header-info">
-        <el-button text @click="handleBack">
-          <el-icon><ArrowLeft /></el-icon>返回详情
-        </el-button>
+        <el-button text @click="handleBack"
+          ><el-icon><ArrowLeft /></el-icon>返回详情</el-button
+        >
         <h2 class="page-title">{{ villageName }} — 年度数据管理</h2>
       </div>
       <div class="header-actions">
@@ -17,9 +17,9 @@
             :value="year"
           />
         </el-select>
-        <el-button type="primary" :loading="downloadingAll" @click="handleDownloadAllTemplates">
-          <el-icon><Download /></el-icon>全部模板下载
-        </el-button>
+        <el-button type="primary" :loading="downloadingAll" @click="handleDownloadAllTemplates"
+          ><el-icon><Download /></el-icon>全部模板下载</el-button
+        >
         <el-upload
           :show-file-list="false"
           :before-upload="() => false"
@@ -49,12 +49,12 @@
           <div v-if="!section.stats.length" class="no-data-hint">暂无数据</div>
         </div>
         <div class="section-card-actions">
-          <el-button size="small" type="primary" @click="openEditDialog(section.key)">
-            <el-icon><Edit /></el-icon>填写
-          </el-button>
-          <el-button size="small" @click="handleDownloadTemplate(section.key)">
-            <el-icon><Download /></el-icon>模板
-          </el-button>
+          <el-button size="small" type="primary" @click="openEditDialog(section.key)"
+            ><el-icon><Edit /></el-icon>填写</el-button
+          >
+          <el-button size="small" @click="handleDownloadTemplate(section.key)"
+            ><el-icon><Download /></el-icon>模板</el-button
+          >
           <el-upload
             :show-file-list="false"
             :before-upload="() => false"
@@ -560,7 +560,7 @@ async function handleDownloadTemplate(_sectionKey: string) {
 }
 
 async function handleImportSection(sectionKey: string, file: any) {
-  const rawFile = file.raw || file
+  const rawFile = file?.raw || file
   // File validation
   if (!rawFile) return
   const isExcel = rawFile.name?.endsWith('.xlsx') || rawFile.name?.endsWith('.xls')

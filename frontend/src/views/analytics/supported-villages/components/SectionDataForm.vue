@@ -934,7 +934,7 @@ const formRules = computed(() => {
   // 2) 特殊业务规则（人口板块：总人数须大于0，常住人口不能超过总人数）
   if (props.sectionKey === 'population') {
     rules.totalPopulation = [
-      ...(rules.totalPopulation ?? []),
+      ...rules.totalPopulation,
       {
         validator: (_rule: any, value: number, callback: (error?: Error) => void) => {
           if (value != null && value <= 0) {
@@ -947,7 +947,7 @@ const formRules = computed(() => {
       },
     ]
     rules.residentPopulation = [
-      ...(rules.residentPopulation ?? []),
+      ...rules.residentPopulation,
       {
         validator: (_rule: any, value: number, callback: (error?: Error) => void) => {
           if (value != null && value > (formData.totalPopulation || 0)) {

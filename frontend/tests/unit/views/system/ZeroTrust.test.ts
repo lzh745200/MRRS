@@ -62,8 +62,24 @@ const policiesData = {
   success: true,
   data: {
     policies: [
-      { id: 'p1', name: '策略1', description: '描述', category: 'authentication', enabled: true, severity: 'critical', conditions: { ip: '1.1.1.1' }, actions: ['allow'] },
-      { id: 'p2', name: '策略2', description: '', category: 'network', enabled: false, severity: 'low' },
+      {
+        id: 'p1',
+        name: '策略1',
+        description: '描述',
+        category: 'authentication',
+        enabled: true,
+        severity: 'critical',
+        conditions: { ip: '1.1.1.1' },
+        actions: ['allow'],
+      },
+      {
+        id: 'p2',
+        name: '策略2',
+        description: '',
+        category: 'network',
+        enabled: false,
+        severity: 'low',
+      },
     ],
     total: 2,
     enabled_count: 1,
@@ -74,8 +90,22 @@ const eventsData = {
   success: true,
   data: {
     items: [
-      { id: 1, event_type: 'auth_failure', source: '10.0.0.1', severity: 'critical', message: '多次失败', timestamp: '2024-01-01T10:00:00Z' },
-      { id: 2, event_type: 'data_leak', source: '10.0.0.2', severity: 'medium', message: '泄露', timestamp: 'not-a-date' },
+      {
+        id: 1,
+        event_type: 'auth_failure',
+        source: '10.0.0.1',
+        severity: 'critical',
+        message: '多次失败',
+        timestamp: '2024-01-01T10:00:00Z',
+      },
+      {
+        id: 2,
+        event_type: 'data_leak',
+        source: '10.0.0.2',
+        severity: 'medium',
+        message: '泄露',
+        timestamp: 'not-a-date',
+      },
     ],
     total: 2,
   },
@@ -121,15 +151,36 @@ async function mountComp() {
           data() {
             return {
               rowA: {
-                factor: '设备', score: 90, status: 'pass', detail: '正常',
-                name: '策略1', category: 'authentication', severity: 'critical', enabled: true, description: '描述',
-                conditions: { ip: '1.1.1.1' }, actions: ['allow'],
-                event_type: 'auth_failure', source: '10.0.0.1', message: '多次失败', timestamp: '2024-01-01T10:00:00Z',
+                factor: '设备',
+                score: 90,
+                status: 'pass',
+                detail: '正常',
+                name: '策略1',
+                category: 'authentication',
+                severity: 'critical',
+                enabled: true,
+                description: '描述',
+                conditions: { ip: '1.1.1.1' },
+                actions: ['allow'],
+                event_type: 'auth_failure',
+                source: '10.0.0.1',
+                message: '多次失败',
+                timestamp: '2024-01-01T10:00:00Z',
               },
               rowB: {
-                factor: '网络', score: 50, status: 'warning', detail: '异地',
-                name: '策略2', category: 'network', severity: 'low', enabled: false, description: '',
-                event_type: 'data_leak', source: '10.0.0.2', message: '泄露', timestamp: 'not-a-date',
+                factor: '网络',
+                score: 50,
+                status: 'warning',
+                detail: '异地',
+                name: '策略2',
+                category: 'network',
+                severity: 'low',
+                enabled: false,
+                description: '',
+                event_type: 'data_leak',
+                source: '10.0.0.2',
+                message: '泄露',
+                timestamp: 'not-a-date',
               },
             }
           },
@@ -148,7 +199,11 @@ async function mountComp() {
           template:
             '<select class="el-select-stub" @change="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)"><slot /></select>',
         },
-        'el-option': { name: 'ElOption', props: ['value'], template: '<option :value="value"><slot /></option>' },
+        'el-option': {
+          name: 'ElOption',
+          props: ['value'],
+          template: '<option :value="value"><slot /></option>',
+        },
         'el-checkbox': {
           name: 'ElCheckbox',
           props: ['modelValue'],
@@ -193,7 +248,14 @@ beforeEach(() => {
   zeroTrustApi.listPolicies.mockResolvedValue(policiesData)
   zeroTrustApi.evaluateAccess.mockResolvedValue({
     success: true,
-    data: { resource: '/api', action: 'read', username: 'admin', result: 'allowed', message: '允许', evaluated_at: '2024-01-01T10:00:00Z' },
+    data: {
+      resource: '/api',
+      action: 'read',
+      username: 'admin',
+      result: 'allowed',
+      message: '允许',
+      evaluated_at: '2024-01-01T10:00:00Z',
+    },
   })
   zeroTrustApi.listEvents.mockResolvedValue(eventsData)
 })
@@ -369,7 +431,10 @@ describe('ZeroTrust.vue', () => {
     vm.policyFilterCategory = 'authentication'
     vm.policyFilterEnabledOnly = true
     await vm.loadPolicies()
-    expect(zeroTrustApi.listPolicies).toHaveBeenCalledWith({ category: 'authentication', enabled_only: true })
+    expect(zeroTrustApi.listPolicies).toHaveBeenCalledWith({
+      category: 'authentication',
+      enabled_only: true,
+    })
   })
 
   it('策略筛选控件：分类 select / 启用 checkbox', async () => {
@@ -389,7 +454,10 @@ describe('ZeroTrust.vue', () => {
     checkbox.setValue(true)
     await nextTick()
     expect(vm.policyFilterEnabledOnly).toBe(true)
-    expect(zeroTrustApi.listPolicies).toHaveBeenCalledWith({ category: 'network', enabled_only: true })
+    expect(zeroTrustApi.listPolicies).toHaveBeenCalledWith({
+      category: 'network',
+      enabled_only: true,
+    })
   })
 
   it('loadStats：异常带 response.detail → 展示 detail', async () => {
@@ -405,7 +473,9 @@ describe('ZeroTrust.vue', () => {
   })
 
   it('handleEvaluate：异常带 response.detail → 展示 detail', async () => {
-    zeroTrustApi.evaluateAccess.mockRejectedValue({ response: { data: { detail: '评估服务拒绝' } } })
+    zeroTrustApi.evaluateAccess.mockRejectedValue({
+      response: { data: { detail: '评估服务拒绝' } },
+    })
     const w = await mountComp()
     const vm = w.vm as any
     vm.evaluateForm.resource = '/api'
@@ -423,7 +493,14 @@ describe('ZeroTrust.vue', () => {
   it('handleEvaluate：拒绝结果 → 告警类型走拒绝分支', async () => {
     zeroTrustApi.evaluateAccess.mockResolvedValue({
       success: true,
-      data: { resource: '/api', action: 'write', username: 'admin', result: 'denied', message: '拒绝', evaluated_at: '2024-01-01T10:00:00Z' },
+      data: {
+        resource: '/api',
+        action: 'write',
+        username: 'admin',
+        result: 'denied',
+        message: '拒绝',
+        evaluated_at: '2024-01-01T10:00:00Z',
+      },
     })
     const w = await mountComp()
     const vm = w.vm as any

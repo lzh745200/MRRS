@@ -45,8 +45,10 @@ vi.mock('element-plus', () => ({ ElMessage, ElMessageBox: { confirm: confirmMock
 
 vi.mock('@/api/policy', () => policyApiMock)
 
-vi.mock('@/api/request', () => ({ downloadBlob: downloadBlobMock,
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+vi.mock('@/api/request', () => ({
+  downloadBlob: downloadBlobMock,
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => authState }))
 
@@ -91,8 +93,7 @@ function mountComp() {
           emits: ['click'],
         },
         'el-table': {
-          template:
-            '<div class="el-table-stub"><slot name="default" /></div>',
+          template: '<div class="el-table-stub"><slot name="default" /></div>',
         },
         'el-table-column': {
           name: 'ElTableColumn',
@@ -100,8 +101,22 @@ function mountComp() {
             '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /></div>',
           data() {
             return {
-              rowA: { id: 2, title: '相关政策', category: 'military', status: 'active', category_name: '', status_name: '' },
-              rowB: { id: 3, title: 'B政策', category: 'local', status: 'invalid', category_name: '地方政策', status_name: '失效' },
+              rowA: {
+                id: 2,
+                title: '相关政策',
+                category: 'military',
+                status: 'active',
+                category_name: '',
+                status_name: '',
+              },
+              rowB: {
+                id: 3,
+                title: 'B政策',
+                category: 'local',
+                status: 'invalid',
+                category_name: '地方政策',
+                status_name: '失效',
+              },
             }
           },
         },
@@ -276,7 +291,10 @@ describe('发布/归档', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     await vm.handleArchive()
-    expect(confirmMock).toHaveBeenCalledWith('确定归档该政策？归档后将不再显示为有效状态。', '确认归档')
+    expect(confirmMock).toHaveBeenCalledWith(
+      '确定归档该政策？归档后将不再显示为有效状态。',
+      '确认归档'
+    )
     expect(policyApiMock.archivePolicy).toHaveBeenCalledWith(1)
     expect(ElMessage.success).toHaveBeenCalledWith('归档成功')
 
