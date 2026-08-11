@@ -646,3 +646,12 @@ describe('LoginEnhanced.vue', () => {
     })
   })
 })
+
+describe('LoginEnhanced.vue 权限包导入兜底分支', () => {
+  it('文件无名称 → 提示仅支持 .zip（空名兜底）', async () => {
+    const w = await mountComp()
+    const st = (w.vm as any).$.setupState
+    st.onPermissionFileChange({ raw: { name: '' } })
+    expect(ElMessage.error).toHaveBeenCalledWith('仅支持 .zip 格式的权限配置包')
+  })
+})

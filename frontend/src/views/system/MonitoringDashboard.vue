@@ -736,7 +736,10 @@ async function fetchSystemLogs() {
     // 后端返回 {line: "时间 - 级别 - 消息"} 行文本，解析为结构化日志
     return raw.map((item: any, idx: number) => {
       const line: string = typeof item === 'string' ? item : item.line || ''
-      const m = /^(\d{4}-\d{2}-\d{2}[^ ]*)\s+(\d+:\d+:\d+)[,\d]*\s+(\S+)\s+-\s+(.*)$/.exec(line)
+      // 兼容后端 app.log 真实行格式：`2026-08-11 20:31:46 [INFO] logger: message`
+      // 以及旧式 `2026-01-01 10:00:00 ERROR - message`（级别可带 [ ]，后跟可选 logger 名）
+      // 注意：级别后允许 ` logger: ` 形式（如 `[INFO] app.request: msg`），用非贪婪避免误吞
+      const m = /^(\d{4}-\d{2}-\d{2}[^ ]*)\s+(\d+:\d+:\d+)[,\d]*\s+\[?([A-Za-z]+)\]?(?:\s+\S+)?\s*[:|-]\s+(.*)$/.exec(line)
       if (m) {
         return {
           id: idx,

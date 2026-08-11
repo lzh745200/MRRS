@@ -99,6 +99,7 @@ describe('desensitize additional coverage', () => {
     expect(autoDesensitize('test@example.com', 'email')).toBe('t***@example.com')
     expect(autoDesensitize('non-sensitive', 'description')).toBe('non-sensitive')
     expect(autoDesensitize('13800138000', 'phone', 'admin')).toBe('13800138000')
+    expect(autoDesensitize('13800138000', '')).toBe('13800138000')  // 空字段名 → 原值
   })
 
   it('desensitizes object fields', async () => {

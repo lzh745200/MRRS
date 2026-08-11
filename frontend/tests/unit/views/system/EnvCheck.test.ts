@@ -214,3 +214,16 @@ describe('EnvCheck.vue', () => {
     expect(w.find('.el-empty-stub').exists()).toBe(true)
   })
 })
+
+describe('EnvCheck.vue 依赖筛选兜底分支', () => {
+  it('依赖包无名称 → 筛选不报错（空名兜底）', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.envData = { packages: { '': '1.0', axios: '1.6.0' } }
+    vm.missingPackages = ['axios']
+    vm.pkgFilter = 'ax'
+    await nextTick()
+    expect(vm.filteredDependencies.length).toBe(1)
+    expect(vm.filteredDependencies[0].name).toBe('axios')
+  })
+})

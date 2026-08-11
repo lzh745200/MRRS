@@ -441,3 +441,13 @@ describe('模板渲染', () => {
     expect(wrapper.text()).toContain('-')
   })
 })
+
+describe('policies/Detail.vue 内容净化兜底分支', () => {
+  it('政策内容为空 → 净化结果为空白（空内容兜底）', async () => {
+    policyApiMock.getPolicy.mockResolvedValue({ ...policy, content: '' })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.sanitizedPolicyContent).toBe('')
+  })
+})

@@ -440,7 +440,7 @@ Every new feature must verify:
 
 | Purpose | Path |
 |---------|------|
-| Version number | `backend/app/core/config.py` → `Settings.PROJECT_VERSION` (v1.5.0) |
+| Version number | `backend/app/core/config.py` → `Settings.PROJECT_VERSION` (v1.5.2) |
 | DB schema source | `backend/app/models/` + `backend/alembic/versions/` |
 | Baseline migration | `backend/alembic/versions/012_consolidate_baseline.py` |
 | API router registry | `backend/app/api/v1/__init__.py` → `_BUSINESS_MODULES` |

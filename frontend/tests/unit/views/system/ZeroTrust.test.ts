@@ -648,3 +648,17 @@ describe('ZeroTrust.vue', () => {
     expect(vm.levelTagType).toBe('warning')
   })
 })
+
+describe('ZeroTrust.vue 状态判定兜底分支', () => {
+  it('getFactorStatusType(undefined) → info', async () => {
+    const w = await mountComp()
+    const st = (w.vm as any).$.setupState
+    expect(st.getFactorStatusType(undefined)).toBe('info')
+  })
+
+  it('getSeverityTagType(undefined) → info', async () => {
+    const w = await mountComp()
+    const st = (w.vm as any).$.setupState
+    expect(st.getSeverityTagType(undefined)).toBe('info')
+  })
+})

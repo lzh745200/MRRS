@@ -579,3 +579,13 @@ describe('结果页', () => {
     expect(vm.currentStep).toBe(0)
   })
 })
+
+describe('projects/Import.vue 文件名校验兜底', () => {
+  it('文件无名称 → 扩展名非法提示（空名兜底分支）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const st = (wrapper.vm as any).$.setupState
+    st.handleFileChange({ name: '', size: 100 }, [])
+    expect(ElMessage.error).toHaveBeenCalledWith('请上传.xlsx或.xls格式的文件')
+  })
+})

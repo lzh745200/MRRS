@@ -383,7 +383,7 @@ describe('日志回退分支补充', () => {
     mockGet.mockReset()
     mockGet.mockImplementation((url: string) => {
       if (url === '/system/admin/logs')
-        return Promise.resolve({ items: [{ line: '2026-01-01 10:00:00 - INFO - 启动' }] })
+        return Promise.resolve({ items: [{ line: '2026-08-11 20:31:46 [INFO] app.request: GET /health' }] })
       if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
       if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
       if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
@@ -392,6 +392,35 @@ describe('日志回退分支补充', () => {
     const wrapper = mountComponent()
     await flushPromises()
     expect((wrapper.vm as any).recentLogs.length).toBeGreaterThan(0)
+    wrapper.unmount()
+  })
+  it('真实日志格式 [INFO]/[WARNING] → 正确解析级别（error/warn 双 false 分支）', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/admin/logs')
+        return Promise.resolve({
+          items: [
+            { line: '2026-08-11 20:31:46 [INFO] app.request: GET /health' },
+            { line: '2026-08-11 20:31:47,123 [WARNING] app.core: slow query' },
+          ],
+        })
+      if (url === '/system/snapshot') return Promise.resolve({ data: mockSnapshotData })
+      if (url === '/system/api-stats') return Promise.resolve({ data: mockApiStatsData })
+      if (url === '/system/health') return Promise.resolve({ data: mockHealthData })
+      return Promise.resolve({})
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    const logs = (wrapper.vm as any).recentLogs
+    // eslint-disable-next-line no-console
+    console.log('DEBUG logs:', JSON.stringify(logs))
+    // eslint-disable-next-line no-console
+    console.log('DEBUG raw fetch:', JSON.stringify(await (wrapper.vm as any).fetchSystemLogs()))
+    const re = /^(\d{4}-\d{2}-\d{2}[^ ]*)\s+(\d+:\d+:\d+)[,\d]*\s+\[?(\S+)\]?\s*[:|-]\s+(.*)$/
+    // eslint-disable-next-line no-console
+    console.log('DEBUG direct re:', JSON.stringify(re.exec('2026-08-11 20:31:46 [INFO] app.request: GET /health')))
+    expect(logs.some((l: any) => l.level === 'info' && l.message.includes('GET /health'))).toBe(true)
+    expect(logs.some((l: any) => l.level === 'warn' && l.message.includes('slow query'))).toBe(true)
     wrapper.unmount()
   })
 })

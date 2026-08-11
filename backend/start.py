@@ -161,6 +161,12 @@ def _check_port_available(host: str, port: int) -> bool:
         print(f"  无法确定占用进程，请手动释放端口 {port}")
         return False
 
+    # 安全策略：只自动终止本项目开发模式的残留后端（python.exe），
+    # 绝不强杀打包版桌面应用的后端（assistance-backend.exe）或其他无关进程——
+    # 否则会中断正在运行的桌面应用（Electron 虽会自动重启，但会打断用户操作）。
+    _DEV_BACKEND_NAMES = {"python.exe", "python3.exe", "pythonw.exe", "python311.exe"}
+    _PACKAGED_BACKEND_NAMES = {"assistance-backend.exe", "assistance-backend"}
+
     for pid in old_pids:
         try:
             name_result = subprocess.run(
@@ -168,7 +174,23 @@ def _check_port_available(host: str, port: int) -> bool:
                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5
             )
             proc_info = name_result.stdout.strip() if name_result.stdout.strip() else f"PID {pid}"
-            print(f"  终止进程: {proc_info}")
+            # tasklist CSV 首字段为映像名: "python.exe","1234",...
+            proc_name = ""
+            if '"' in proc_info:
+                proc_name = proc_info.split('"')[1].strip().lower()
+            if proc_name in _PACKAGED_BACKEND_NAMES:
+                print(
+                    f"  检测到打包版桌面应用正在运行（{proc_info}），"
+                    "为避免中断应用，请先退出桌面应用后再启动开发后端"
+                )
+                return False
+            if proc_name and proc_name not in _DEV_BACKEND_NAMES:
+                print(
+                    f"  端口 {port} 被非本项目进程占用（{proc_info}），"
+                    "为安全起见不自动终止，请手动释放端口后重试"
+                )
+                return False
+            print(f"  终止本项目残留后端进程: {proc_info}")
             subprocess.run(
                 ['taskkill', '/PID', str(pid), '/F'],
                 capture_output=True, timeout=10

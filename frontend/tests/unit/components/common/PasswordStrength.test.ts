@@ -30,4 +30,10 @@ describe('common/PasswordStrength.vue', () => {
     expect(wrapper.find('.strength-badge').classes()).toContain('strength-none')
     expect(wrapper.text()).toBe('未设置')
   })
+
+  it('handles missing prop -> none (nullish fallback)', () => {
+    const wrapper = mount(PasswordStrength)
+    expect(wrapper.find('.strength-badge').classes()).toContain('strength-none')
+    expect(wrapper.text()).toBe('未设置')
+  })
 })

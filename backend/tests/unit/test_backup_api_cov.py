@@ -305,9 +305,10 @@ class TestUploadAndRestore:
         assert by_name == {"enc.zip": True, "plain.zip": False, "missing.zip": False}
 
     def test_encrypted_requires_password_400(self, bk_client, tmp_path):
-        """加密备份未提供密码 → 400（覆盖预校验分支），磁盘零残留"""
+        """加密备份未提供密码且自动备份密钥不可用 → 400（覆盖预校验分支），磁盘零残留"""
         p, svc = _svc_patch()
-        with patch("app.utils.paths.get_backup_path", return_value=tmp_path), p:
+        with patch("app.utils.paths.get_backup_path", return_value=tmp_path), \
+             patch("app.utils.runtime_secrets.get_or_create_secret", side_effect=RuntimeError("no secrets")), p:
             resp = bk_client.post(
                 "/api/v1/system/backup/upload-restore",
                 files={"file": ("enc.zip", _encrypted_zip_bytes("pwd123"), "application/zip")},
@@ -315,6 +316,21 @@ class TestUploadAndRestore:
         assert resp.status_code == 400
         assert "password" in resp.json()["detail"] or "密码" in resp.json()["detail"]
         svc.restore_backup.assert_not_called()
+        assert list(tmp_path.glob("upload_*")) == []
+
+    def test_encrypted_auto_key_fallback_success(self, bk_client, tmp_path):
+        """加密备份未提供密码但本机存在自动备份密钥 → 自动兜底解密并恢复"""
+        p, svc = _svc_patch()
+        svc.restore_backup.return_value = {"restored": True}
+        with patch("app.utils.paths.get_backup_path", return_value=tmp_path), \
+             patch("app.utils.runtime_secrets.get_or_create_secret", return_value="auto-backup-secret"), p:
+            resp = bk_client.post(
+                "/api/v1/system/backup/upload-restore",
+                files={"file": ("enc.zip", _encrypted_zip_bytes("pwd123"), "application/zip")},
+            )
+        assert resp.status_code == 200
+        svc.restore_backup.assert_called_once()
+        assert svc.restore_backup.call_args.kwargs.get("password") == "auto-backup-secret"
         assert list(tmp_path.glob("upload_*")) == []
 
     def test_encrypted_with_password_success(self, bk_client, tmp_path):
