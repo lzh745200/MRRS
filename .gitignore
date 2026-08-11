@@ -104,6 +104,8 @@ data/cache/
 data/offline_tiles/
 data/archives/
 data/*.json
+backend/data/*.json
+backend/data/runtime_secrets.json
 exports/
 uploads/
 backups/
