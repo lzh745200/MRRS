@@ -1258,8 +1258,8 @@ async function handleDeleteAttachment(att: SectionAttachment) {
 
 // ==================== 文件预览相关 ====================
 
-function isPreviewable(fileType: string): boolean {
-  const type = fileType.toLowerCase()
+function isPreviewable(fileType?: string): boolean {
+  const type = (fileType ?? '').toLowerCase()
   return (
     type.startsWith('image/') ||
     type === 'application/pdf' ||
@@ -1267,8 +1267,8 @@ function isPreviewable(fileType: string): boolean {
   )
 }
 
-function getPreviewType(fileType: string): 'image' | 'pdf' | 'other' {
-  const type = fileType.toLowerCase()
+function getPreviewType(fileType?: string): 'image' | 'pdf' | 'other' {
+  const type = (fileType ?? '').toLowerCase()
   if (type.startsWith('image/') || /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(type)) {
     return 'image'
   }

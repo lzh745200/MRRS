@@ -182,7 +182,7 @@ const filteredDependencies = computed(() => {
   }))
   if (!pkgFilter.value) return entries
   const kw = pkgFilter.value.toLowerCase()
-  return entries.filter((e) => e.name.toLowerCase().includes(kw))
+  return entries.filter((e) => (e.name || '').toLowerCase().includes(kw))
 })
 
 async function runCheck() {

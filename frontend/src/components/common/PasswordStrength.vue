@@ -10,13 +10,13 @@
 import { computed } from 'vue'
 
 interface Props {
-  passwordStrength: string
+  passwordStrength?: string
 }
 
 const props = defineProps<Props>()
 
 const level = computed(() => {
-  const strength = props.passwordStrength.toLowerCase()
+  const strength = (props.passwordStrength ?? '').toLowerCase()
   if (strength === 'weak' || strength === '弱') return 'weak'
   if (strength === 'medium' || strength === '中') return 'medium'
   if (strength === 'strong' || strength === '强') return 'strong'

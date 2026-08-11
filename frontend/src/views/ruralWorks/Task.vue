@@ -823,9 +823,9 @@ const filteredTasks = computed(() => {
     const query = searchQuery.value.toLowerCase()
     filtered = filtered.filter(
       (task) =>
-        task.name.toLowerCase().includes(query) ||
+        (task.name || '').toLowerCase().includes(query) ||
         (task.assigneeName && task.assigneeName.toLowerCase().includes(query)) ||
-        task.projectName.toLowerCase().includes(query)
+        (task.projectName || '').toLowerCase().includes(query)
     )
   }
 

@@ -478,8 +478,8 @@ function getScoreClass(score: number): string {
   return 'score-text-green'
 }
 
-function getFactorStatusType(status: string): 'success' | 'warning' | 'danger' | 'info' {
-  const s = status.toLowerCase()
+function getFactorStatusType(status?: string): 'success' | 'warning' | 'danger' | 'info' {
+  const s = (status ?? '').toLowerCase()
   if (s === 'pass' || s === 'passed' || s === 'ok' || s === 'good') return 'success'
   if (s === 'warn' || s === 'warning') return 'warning'
   if (s === 'fail' || s === 'failed' || s === 'error') return 'danger'
@@ -524,8 +524,8 @@ const postureLabel = computed(() => {
   return '一般'
 })
 
-function getSeverityTagType(severity: string): 'danger' | 'warning' | 'success' | 'info' {
-  const s = severity.toLowerCase()
+function getSeverityTagType(severity?: string): 'danger' | 'warning' | 'success' | 'info' {
+  const s = (severity ?? '').toLowerCase()
   if (s === 'critical') return 'danger'
   if (s === 'high') return 'warning'
   if (s === 'medium') return 'info'

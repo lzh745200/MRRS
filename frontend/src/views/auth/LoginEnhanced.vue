@@ -219,7 +219,7 @@ function openPermissionImport() {
 function onPermissionFileChange(file: UploadFile) {
   const raw = file.raw
   if (!raw) return
-  if (!raw.name.toLowerCase().endsWith('.zip')) {
+  if (!(raw.name || '').toLowerCase().endsWith('.zip')) {
     ElMessage.error('仅支持 .zip 格式的权限配置包')
     permissionFileList.value = []
     permissionFile.value = null

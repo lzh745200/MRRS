@@ -209,7 +209,7 @@ const SENSITIVE_FIELD_PATTERNS: Array<{
 export function autoDesensitize(value: any, fieldName: string, role?: UserRole | string): string {
   if (value === null || value === undefined) return ''
   const str = String(value)
-  const lower = fieldName.toLowerCase()
+  const lower = (fieldName || '').toLowerCase()
 
   // 匹配脱敏类型
   for (const { pattern, type } of SENSITIVE_FIELD_PATTERNS) {

@@ -373,7 +373,9 @@ const downloadTemplate = async () => {
 
 const handleFileChange = (file: any, files: any[]) => {
   fileList.value = files.length > 1 ? files.slice(-1) : files
-  const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+  const fileExtension = (file?.name || '')
+    .substring((file?.name || '').lastIndexOf('.'))
+    .toLowerCase()
   if (!VALID_EXTENSIONS.includes(fileExtension)) {
     ElMessage.error('请上传.xlsx或.xls格式的文件')
     clearFileList()

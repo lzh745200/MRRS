@@ -741,9 +741,9 @@ async function fetchSystemLogs() {
         return {
           id: idx,
           time: `${m[1]} ${m[2]}`,
-          level: m[3].toLowerCase().includes('error')
+          level: (m[3] || '').toLowerCase().includes('error')
             ? 'error'
-            : m[3].toLowerCase().includes('warn')
+            : (m[3] || '').toLowerCase().includes('warn')
               ? 'warn'
               : 'info',
           message: m[4],
