@@ -185,27 +185,8 @@ class BackupService:
 
     # ── 备份操作 ────────────────────────────────────────────────
 
-    def create_backup(
-        self, description: str = "手动备份", include_uploads: bool = True,
-        password: str | None = None,
-    ) -> BackupRecord:
-        """
-        创建系统备份
-
-        Args:
-            description: 备份描述
-            include_uploads: 是否包含上传文件
-
-        Returns:
-            备份记录
-        """
-        # 生成备份文件名（毫秒级时间戳，避免同秒两次备份互相覆盖）
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file_name = f"backup_{timestamp}_{int(datetime.now().timestamp() * 1000) % 1000:03d}.zip"
-        backup_file_path = os.path.join(self.backup_dir, backup_file_name)
-
-        # 磁盘空间预检（≥150MB，覆盖 db + uploads + zip 压缩余量；磁盘满载时提前失败，
-        # 避免写出损坏的 .zip/.bak 文件）
+    def _ensure_disk_space(self) -> None:
+        """磁盘空间预检（≥150MB；磁盘满载时提前失败，避免写出损坏的 .zip/.bak 文件）"""
         try:
             from app.core.database import check_disk_space
 
@@ -219,8 +200,11 @@ class BackupService:
         except Exception as _disk_err:  # pragma: no cover - 预检本身失败不阻塞备份
             logger.warning("磁盘空间预检失败: %s", _disk_err)
 
-        # 一致性快照：使用 SQLite Backup API 复制在线数据库（自动合并 -wal 内容），
-        # 替代裸文件拷贝 —— 并发写入/强制断电场景下保证备份包内数据库一致
+    def _create_consistency_snapshot(self) -> Optional[str]:
+        """使用 SQLite Backup API 生成一致性快照（自动合并 -wal 内容）。
+
+        失败时回退 WAL checkpoint + 裸拷贝；返回快照临时文件路径（无则回退主库）。
+        """
         snapshot_path = None
         try:
             if os.path.exists(self.database_path):
@@ -251,8 +235,13 @@ class BackupService:
                     _conn.close()
             except Exception as _wal_err:
                 logger.warning("备份前 WAL checkpoint 失败（备份可能不完整）: %s", _wal_err)
+        return snapshot_path
 
-        # 创建备份（zip 写入异常时 finally 统一清理快照，避免泄漏 backup_snapshot_*.db）
+    def _write_backup_zip(
+        self, backup_file_path: str, snapshot_path: Optional[str],
+        timestamp: str, description: str, include_uploads: bool,
+    ) -> None:
+        """写入备份 zip（异常时删除半成品并清理快照，避免磁盘残留）"""
         try:
             with zipfile.ZipFile(backup_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
                 # 备份数据库（优先一致性快照，回退主库文件）
@@ -298,6 +287,34 @@ class BackupService:
                     os.remove(snapshot_path)
                 except OSError:
                     pass
+
+    def create_backup(
+        self, description: str = "手动备份", include_uploads: bool = True,
+        password: str | None = None,
+    ) -> BackupRecord:
+        """
+        创建系统备份
+
+        Args:
+            description: 备份描述
+            include_uploads: 是否包含上传文件
+
+        Returns:
+            备份记录
+        """
+        # 生成备份文件名（毫秒级时间戳，避免同秒两次备份互相覆盖）
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file_name = f"backup_{timestamp}_{int(datetime.now().timestamp() * 1000) % 1000:03d}.zip"
+        backup_file_path = os.path.join(self.backup_dir, backup_file_name)
+
+        self._ensure_disk_space()
+
+        # 一致性快照：SQLite Backup API（自动合并 -wal 内容），失败回退 checkpoint + 裸拷贝
+        snapshot_path = self._create_consistency_snapshot()
+
+        self._write_backup_zip(
+            backup_file_path, snapshot_path, timestamp, description, include_uploads
+        )
 
         # ── 加密（可选） ──
         if password:
