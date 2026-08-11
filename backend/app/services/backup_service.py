@@ -254,7 +254,8 @@ class BackupService:
 
         # 创建备份（zip 写入异常时 finally 统一清理快照，避免泄漏 backup_snapshot_*.db）
         try:
-            with zipfile.ZipFile(backup_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:                # 备份数据库（优先一致性快照，回退主库文件）
+            with zipfile.ZipFile(backup_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                # 备份数据库（优先一致性快照，回退主库文件）
                 if snapshot_path and os.path.exists(snapshot_path):
                     zipf.write(snapshot_path, "data/rural_revitalization.db")
                 elif os.path.exists(self.database_path):
