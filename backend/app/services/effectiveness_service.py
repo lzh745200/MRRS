@@ -183,10 +183,11 @@ class EffectivenessService:
                 evaluated_by=user_id,
             )
             db.add(ev)
-        db.commit()
+        db.flush()  # 先 flush 获得 ev.id（不提交事务）
         db.refresh(ev)
 
-        # 更新同年度全部评估的排名
+        # 更新同年度全部评估的排名（与评估写入同一事务：排名更新后统一 commit，
+        # 保证"评估+排名"原子提交——避免第一步成功、第二步失败留下脏态）
         all_evs = (
             db.query(EffectivenessEvaluation)
             .filter(EffectivenessEvaluation.year == year)

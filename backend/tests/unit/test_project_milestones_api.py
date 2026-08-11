@@ -95,7 +95,8 @@ class TestCreateMilestone:
             "responsible_person": "李四", "sort_order": 2
         })
         assert resp.status_code == 200
-        mock_db.add.assert_called_once()
+        # 里程碑写入 + write_work_log 均会 db.add，断言至少调用
+        mock_db.add.assert_called()
 
     def test_project_not_found(self, client, mock_db):
         mock_db.first.return_value = None

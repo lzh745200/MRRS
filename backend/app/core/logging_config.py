@@ -88,8 +88,10 @@ class SensitiveDataFilter(logging.Filter):
         r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
     )
     # 键值对形式的口令/令牌（query string、配置、错误消息等），如 password=xxx、token: xxx
+    # 注：用 (?<![a-z0-9]) 而非 \b —— \b 将下划线视为词字符，导致 access_token=/refresh_token=
+    # 等复合键名漏脱敏（真实凭据可能明文落日志）
     _SECRET_KV = re.compile(
-        r"(?i)\b(password|passwd|pwd|token|secret|api[_-]?key|csrf[_-]?secret)"
+        r"(?i)(?<![a-z0-9])(password|passwd|pwd|token|secret|api[_-]?key|csrf[_-]?secret)"
         r"([\s]*[=:]\s*)(['\"]?)[^\s&,'\"]{4,}\3"
     )
 

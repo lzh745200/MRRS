@@ -144,14 +144,14 @@ export class AuthStorage {
 
   /**
    * 记住登录：将认证数据持久化到 localStorage（供"本机自动登录"使用）
-   * 默认关闭——由登录页"记住登录"勾选显式开启
+   * 默认关闭——由登录页"记住登录"勾选显式开启。
+   * 安全设计：仅持久化 access token（8h 有效）与用户信息；refresh token 属长期凭据
+   * （30 天），裸存 localStorage 会被任意脚本读取（XSS 窃取面），故不持久化——
+   * 过期后需重新登录，换取更小的凭据暴露面。
    */
   static persistForAutoLogin(data: AuthData): void {
     localStorage.setItem(STORAGE_KEYS.PERSIST_TOKEN, data.token)
     localStorage.setItem(STORAGE_KEYS.PERSIST_USER, JSON.stringify(data.user))
-    if (data.refreshToken) {
-      localStorage.setItem(STORAGE_KEYS.PERSIST_REFRESH, data.refreshToken)
-    }
   }
 
   /** 清除记住登录的持久数据 */

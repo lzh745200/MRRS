@@ -27,6 +27,8 @@ function _wait(ms: number): Promise<void> {
  * @param baseDelay  - 基础延迟毫秒数（默认 1000ms，实际延迟 = baseDelay × 重试序号）
  * @returns Promise<T> — 成功时返回模块，全部失败时抛出最后一次错误
  */
+import { logger } from '@/utils/logger'
+
 export async function retryImport<T = any>(
   importFn: () => Promise<T>,
   maxRetries: number = 3,
@@ -42,7 +44,7 @@ export async function retryImport<T = any>(
       }
       // 指数退避: attempt=0 → delay=baseDelay*1, attempt=1 → delay=baseDelay*2
       const delay = baseDelay * (attempt + 1)
-      console.warn(
+      logger.warn(
         `[ChunkLoader] 模块加载失败，${delay}ms 后重试 (${attempt + 1}/${maxRetries})`,
         error instanceof Error ? error.message : error
       )

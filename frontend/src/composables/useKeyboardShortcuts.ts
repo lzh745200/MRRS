@@ -8,6 +8,7 @@
  * - 输入框内禁用（避免在表单中输入时误触发）
  */
 
+import { logger } from '@/utils/logger'
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 
 export interface Shortcut {
@@ -106,7 +107,7 @@ export function useKeyboardShortcuts(shortcuts: Shortcut[]) {
   function register(shortcut: Shortcut) {
     const existing = shortcutMap.value.get(formatShortcut(shortcut))
     if (existing) {
-      console.warn(`[快捷键] ${formatShortcut(shortcut)} 已注册，将被覆盖`)
+      logger.warn(`[快捷键] ${formatShortcut(shortcut)} 已注册，将被覆盖`)
       unregister(existing)
     }
     registered.value.push(shortcut)

@@ -128,6 +128,7 @@ async def export_schools(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_admin(current_user, error_message="仅管理员可导出数据")
     query = db.query(School)
 
     if keyword:
@@ -173,6 +174,7 @@ async def export_projects(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_admin(current_user, error_message="仅管理员可导出数据")
     query = db.query(Project)
 
     if keyword:
@@ -221,6 +223,7 @@ async def export_funds(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_admin(current_user, error_message="仅管理员可导出数据")
     query = db.query(Fund)
 
     if keyword:
@@ -361,6 +364,8 @@ async def export_report_word(
     """
     导出 Word 格式公文报告
     """
+    require_admin(current_user, error_message="仅管理员可导出数据")
+
     if report_type not in _REPORT_TYPE_MAP:
         raise HTTPException(status_code=400, detail=f"不支持的报告类型: {report_type}")
 

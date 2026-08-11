@@ -65,9 +65,17 @@ async def auto_backup_job():
 
             backup_service = BackupService(db, backup_dir=target_dir) if target_dir else BackupService(db)
             if encrypt:
+                # 加密口令：从 runtime_secrets 读取/生成持久密钥（随机 32 字符），
+                # 替代硬编码 "auto-backup-key"（公开已知口令 = 加密形同虚设）
+                from app.utils.runtime_secrets import get_or_create_secret
+
+                backup_password = get_or_create_secret(
+                    "BACKUP_ENCRYPTION_KEY",
+                    generate=lambda: __import__("secrets").token_urlsafe(32),
+                )
                 backup = backup_service.create_backup(
                     description="自动备份", include_uploads=False,
-                    password="auto-backup-key",
+                    password=backup_password,
                 )
             else:
                 backup = backup_service.create_backup(

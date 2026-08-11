@@ -15,6 +15,7 @@ from ...core.security import get_current_user
 from ...models.validation_rule import RuleType, ValidationRule
 from app.core.response import success_response
 from app.core.transaction import safe_commit
+from app.services.work_log_service import write_work_log
 
 router = APIRouter(prefix="/validation", tags=["数据校验"])
 
@@ -106,6 +107,9 @@ async def create_rule(
     db.add(rule)
     safe_commit(db)
     db.refresh(rule)
+    write_work_log(db, "validation", "create_rule", rule.id,
+                   f"创建校验规则: {rule.module}.{rule.field}", user_id=current_user.id,
+                   username=getattr(current_user, "username", ""))
     return rule
 
 
@@ -133,6 +137,9 @@ async def update_rule(
 
     safe_commit(db)
     db.refresh(rule)
+    write_work_log(db, "validation", "update_rule", rule.id,
+                   f"更新校验规则: {rule.module}.{rule.field}", user_id=current_user.id,
+                   username=getattr(current_user, "username", ""), detail=str(update_data))
     return rule
 
 
@@ -146,8 +153,12 @@ async def delete_rule(
     rule = db.query(ValidationRule).filter(ValidationRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="规则不存在")
+    rule_name = f"{rule.module}.{rule.field}"
     db.delete(rule)
     safe_commit(db)
+    write_work_log(db, "validation", "delete_rule", rule_id,
+                   f"删除校验规则: {rule_name}", user_id=current_user.id,
+                   username=getattr(current_user, "username", ""))
     return success_response(message="规则已删除")
 
 

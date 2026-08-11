@@ -3,6 +3,7 @@
  */
 import axios, { type AxiosRequestConfig, type Canceler } from 'axios'
 import { ElMessage } from 'element-plus'
+import { logger } from '@/utils/logger'
 import { AuthStorage } from '@/utils/authStorage'
 import { safeArray } from '@/composables/useSafeData'
 import { isOfflineMode, getMockResponse } from '@/utils/offlineMock'
@@ -223,7 +224,7 @@ request.interceptors.response.use(
       if ('items' in data) {
         const safe = safeArray(data.items)
         if (safe !== data.items) {
-          console.warn("[API] 'items' field sanitized (was not an array)", data)
+          logger.warn("[API] 'items' field sanitized (was not an array)", data)
           data.items = safe
         }
       }

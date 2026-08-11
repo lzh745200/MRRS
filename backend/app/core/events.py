@@ -70,7 +70,19 @@ class EventBus:
                 if asyncio.iscoroutinefunction(handler):
                     try:
                         loop = asyncio.get_running_loop()
-                        loop.create_task(handler(*args, **kwargs))
+                        task = loop.create_task(handler(*args, **kwargs))
+
+                        # 兜底：异步 handler 内部异常不丢失（否则 "Task exception was never retrieved"）
+                        def _log_task_exception(t, _event=event, _handler=handler):
+                            if t.cancelled():
+                                return
+                            exc = t.exception()
+                            if exc:
+                                logger.error(
+                                    "异步事件处理器异常 event=%s handler=%s: %s",
+                                    _event, getattr(_handler, "__name__", _handler), exc,
+                                )
+                        task.add_done_callback(_log_task_exception)
                     except RuntimeError:
                         asyncio.run(handler(*args, **kwargs))
                 else:

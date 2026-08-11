@@ -13,6 +13,7 @@ from app.core.security import get_current_user
 from app.core.response import ok_list, success_response
 from app.models.project import Project
 from app.core.transaction import safe_commit
+from app.services.work_log_service import write_work_log
 from app.core.data_permission import filter_by_data_scope
 from app.models.project_milestone import (
     TRANSITION_REQUIREMENTS,
@@ -133,6 +134,9 @@ async def create_milestone(
     db.add(milestone)
     safe_commit(db)
     db.refresh(milestone)
+    write_work_log(db, "project", "create_milestone", milestone.id,
+                   f"创建里程碑: {milestone.name}", user_id=current_user.id,
+                   username=getattr(current_user, "username", ""))
     return milestone
 
 
@@ -166,6 +170,9 @@ async def update_milestone(
 
     safe_commit(db)
     db.refresh(milestone)
+    write_work_log(db, "project", "update_milestone", milestone.id,
+                   f"更新里程碑: {milestone.name}", user_id=current_user.id,
+                   username=getattr(current_user, "username", ""), detail=str(update_data))
 
     # 自动更新项目进度
     _auto_update_project_progress(db, project_id)
@@ -192,8 +199,12 @@ async def delete_milestone(
     if not milestone:
         raise HTTPException(status_code=404, detail="里程碑不存在")
 
+    milestone_title = milestone.name
     db.delete(milestone)
     safe_commit(db)
+    write_work_log(db, "project", "delete_milestone", milestone_id,
+                   f"删除里程碑: {milestone_title}", user_id=current_user.id,
+                   username=getattr(current_user, "username", ""))
 
     # 自动更新项目进度
     _auto_update_project_progress(db, project_id)

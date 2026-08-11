@@ -44,6 +44,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { logger } from '@/utils/logger'
 import BaseChart from '@/components/common/BaseChart.vue'
 import { getDashboardStats, getYearlyTrends } from '@/api/dashboard'
 import { getRankings } from '@/api/effectiveness'
@@ -158,29 +160,36 @@ const yearlyOption = computed(() => {
 })
 
 async function loadAll() {
+  let failedCount = 0
   try {
     const s = await getDashboardStats(true)
     stats.value = s ?? {}
   } catch {
-    /* 汇报场景静默降级 */
+    failedCount++
   }
   try {
     const y = await getYearlyTrends(5)
     yearlyTrends.value = y?.trends ?? y ?? []
   } catch {
-    /* 静默 */
+    failedCount++
   }
   try {
     const r = await getRankings(new Date().getFullYear(), 10)
     rankings.value = r?.items ?? r ?? []
   } catch {
-    /* 静默 */
+    failedCount++
   }
   try {
     const sm = await getSummaryStatistics()
     summary.value = sm ?? {}
   } catch {
-    /* 静默 */
+    failedCount++
+  }
+  if (failedCount > 0) {
+    logger.warn(`[BigScreen] ${failedCount} 个数据接口加载失败，已静默降级`)
+    if (failedCount === 4) {
+      ElMessage.warning('大屏数据加载失败，请检查服务连接')
+    }
   }
 }
 

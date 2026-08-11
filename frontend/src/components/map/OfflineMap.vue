@@ -12,6 +12,7 @@
  * - 支持标记点（村庄、学校等）、路线连线、出发点标注
  */
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { logger } from '@/utils/logger'
 import echarts from '@/utils/echarts'
 
 interface Marker {
@@ -75,7 +76,7 @@ onMounted(async () => {
       const module = await import('@/assets/geo/guizhou.json')
       geoJson = module.default || module
     } catch {
-      console.warn('[OfflineMap] 贵州 GeoJSON 加载失败，使用空地图')
+      logger.warn('[OfflineMap] 贵州 GeoJSON 加载失败，使用空地图')
       geoJson = { type: 'FeatureCollection', features: [] }
     }
   }

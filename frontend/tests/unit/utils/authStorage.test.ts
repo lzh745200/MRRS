@@ -204,11 +204,12 @@ describe('utils/authStorage', () => {
   })
 
   describe('记住登录（自动登录持久化）', () => {
-    it('persistForAutoLogin 写入 localStorage', () => {
+    it('persistForAutoLogin 写入 localStorage（仅 token+user，不持久化 refresh token）', () => {
       AuthStorage.persistForAutoLogin({ token: 'persist-t', user: USER, refreshToken: 'persist-r' })
       expect(localStorage.getItem('auth_persist_token')).toBe('persist-t')
       expect(localStorage.getItem('auth_persist_user')).toContain('admin')
-      expect(localStorage.getItem('auth_persist_refresh')).toBe('persist-r')
+      // 安全设计：refresh token 属长期凭据，不持久化到 localStorage（防 XSS 窃取）
+      expect(localStorage.getItem('auth_persist_refresh')).toBeNull()
     })
 
     it('persistForAutoLogin 无 refreshToken 时不写入', () => {

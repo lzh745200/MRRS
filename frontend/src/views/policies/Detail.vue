@@ -60,8 +60,9 @@
     <!-- 政策正文 -->
     <el-card v-if="policy?.content" class="content-card">
       <template #header><span>政策内容</span></template>
+      <!-- 已净化（sanitizedPolicyContent 经 sanitizeHtml）：v-html 渲染安全 -->
       <!-- eslint-disable-next-line vue/no-v-html -->
-      <div class="policy-content" v-html="policy.content"></div>
+      <div class="policy-content" v-html="sanitizedPolicyContent"></div>
     </el-card>
 
     <!-- 文件操作 -->
@@ -105,6 +106,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { sanitizeHtml } from '@/utils/sanitize'
 import {
   getPolicy,
   publishPolicy,
@@ -137,6 +139,10 @@ const canEdit = computed(() => {
   return ADMIN_ROLES.includes(role)
 })
 const policy = ref<Policy | null>(null)
+// 净化后内容（v-html 渲染前必须 sanitize，防 XSS）
+const sanitizedPolicyContent = computed(() =>
+  policy.value?.content ? sanitizeHtml(policy.value.content) : ''
+)
 const loading = ref(false)
 const previewLoading = ref(false)
 const previewUrl = ref('')
