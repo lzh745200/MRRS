@@ -595,7 +595,7 @@ function createMainWindow() {
   mainWindow.on('close', (e) => {
     saveWindowState();
     if (!isQuitting) {
-      const remembered = closeBehaviorStore.get();
+      const remembered = closeBehaviorStore().get();
       if (remembered === 'quit') { isQuitting = true; return; }
       if (remembered === 'hide') { e.preventDefault(); mainWindow.hide(); return; }
       e.preventDefault();
