@@ -57,7 +57,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         token = auth_header[7:]
         try:
-            from jose import jwt
+            import jwt
             from app.core.config import settings
 
             payload = jwt.decode(

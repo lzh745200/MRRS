@@ -17,7 +17,7 @@ hiddenimports = [
     'sqlalchemy', 'sqlalchemy.dialects.sqlite', 'sqlalchemy.orm', 'sqlalchemy.ext.declarative',
     'pydantic', 'pydantic.v1', 'pydantic_settings',
     'passlib', 'passlib.handlers.bcrypt', 'passlib.handlers.sha2_crypt',
-    'jose', 'jose.jwt', 'jose.exceptions',
+    'jwt', 'jwt.jwt', 'jwt.exceptions',
     'cryptography', 'cryptography.fernet', 'cryptography.hazmat',
     'aiosqlite', 'alembic', 'alembic.config',
     'email_validator', 'python_multipart', 'multipart',

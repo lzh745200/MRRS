@@ -1,7 +1,7 @@
 """覆盖 app.core.audit_middleware 缺口：JWT 解析成功路径（含 sub 非整数的兜底）。"""
 from types import SimpleNamespace
 
-from jose import jwt
+import jwt
 
 from app.core.audit_middleware import AuditMiddleware
 from app.core.config import settings

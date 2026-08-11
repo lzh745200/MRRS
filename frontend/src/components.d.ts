@@ -7,16 +7,11 @@ export {}
 
 declare module 'vue' {
   export interface GlobalComponents {
-    BusinessBeforeAfterSlider: typeof import('./components/business/BeforeAfterSlider.vue')['default']
     BusinessChartCardChartCard: typeof import('./components/business/ChartCard/ChartCard.vue')['default']
     BusinessDataStatistics: typeof import('./components/business/DataStatistics.vue')['default']
     BusinessDataTableDataTable: typeof import('./components/business/DataTable/DataTable.vue')['default']
     BusinessEmptyStateEmptyState: typeof import('./components/business/EmptyState/EmptyState.vue')['default']
     BusinessFormBuilderFormBuilder: typeof import('./components/business/FormBuilder/FormBuilder.vue')['default']
-    BusinessGalleryView: typeof import('./components/business/GalleryView.vue')['default']
-    BusinessImageComparison: typeof import('./components/business/ImageComparison.vue')['default']
-    BusinessIndustryCard: typeof import('./components/business/IndustryCard.vue')['default']
-    BusinessPersonnelList: typeof import('./components/business/PersonnelList.vue')['default']
     BusinessProgressAlbum: typeof import('./components/business/ProgressAlbum.vue')['default']
     BusinessProjectCard: typeof import('./components/business/ProjectCard.vue')['default']
     BusinessSystemStatus: typeof import('./components/business/SystemStatus.vue')['default']
@@ -53,7 +48,6 @@ declare module 'vue' {
     CommonSkipLink: typeof import('./components/common/SkipLink.vue')['default']
     CommonStatsCard: typeof import('./components/common/StatsCard.vue')['default']
     CommonVirtualList: typeof import('./components/common/VirtualList.vue')['default']
-    CommonVirtualTable: typeof import('./components/common/VirtualTable.vue')['default']
     DashboardActivityFeed: typeof import('./components/dashboard/ActivityFeed.vue')['default']
     DashboardBackupRestoreModal: typeof import('./components/dashboard/BackupRestoreModal.vue')['default']
     DashboardProjectProgress: typeof import('./components/dashboard/ProjectProgress.vue')['default']
@@ -156,7 +150,6 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SkeletonList: typeof import('./components/SkeletonList.vue')['default']
-    UiSecurityMonitor: typeof import('./components/ui/SecurityMonitor.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

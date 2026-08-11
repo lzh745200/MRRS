@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
-from jose import jwt as pyjwt
+import jwt as pyjwt
 
 from app.core.security import (
     ADMIN_ROLES,

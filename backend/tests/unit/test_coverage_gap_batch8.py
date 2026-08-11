@@ -435,10 +435,11 @@ class TestBackupSchedulerExtras:
         with patch("app.services.backup_scheduler.get_db_context", return_value=cm), \
              patch("app.services.backup_scheduler.get_config", side_effect=config_side_effect), \
              patch("app.utils.drive_detect.ensure_target_dir", return_value=True), \
+             patch("app.utils.runtime_secrets.get_or_create_secret", return_value="persisted-key-32chars"), \
              patch("app.services.backup_scheduler.BackupService", return_value=mock_service):
             await auto_backup_job()
         mock_service.create_backup.assert_called_once_with(
-            description="自动备份", include_uploads=False, password="auto-backup-key"
+            description="自动备份", include_uploads=False, password="persisted-key-32chars"
         )
 
     @pytest.mark.asyncio

@@ -24,6 +24,7 @@
     ]
   },
   "dependencies": {
+    "@e965/xlsx": "^0.20.3",
     "@element-plus/icons-vue": "^2.3.1",
     "axios": "^1.6.7",
     "chart.js": "^4.4.1",
@@ -36,7 +37,7 @@
     "sortablejs": "^1.15.2",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "npm:@e965/xlsx@^0.20.3"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.0.3",

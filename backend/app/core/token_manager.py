@@ -95,7 +95,7 @@ def create_token_pair(
     secret = _get_secret_key()
     algorithm = _get_algorithm()
 
-    from jose import jwt
+    import jwt
 
     # Access token
     access_payload = {
@@ -149,7 +149,8 @@ def validate_token(token: str, *, token_type: str = "access") -> Tuple[bool, Opt
     from app.core.token_blacklist import is_blacklisted
 
     try:
-        from jose import JWTError, jwt
+        import jwt
+        from jwt import InvalidTokenError as JWTError
         secret = _get_secret_key()
         algorithm = _get_algorithm()
         payload = jwt.decode(token, secret, algorithms=[algorithm])
@@ -183,7 +184,7 @@ def revoke_token(token: str, *, reason: str = "") -> bool:
         *True* if the token was successfully revoked.
     """
     try:
-        from jose import jwt
+        import jwt
         secret = _get_secret_key()
         algorithm = _get_algorithm()
         # Decode without expiry check so we can blacklist it anyway

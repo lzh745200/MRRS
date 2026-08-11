@@ -784,7 +784,7 @@ class TestAuditMiddleware:
         from app.core.audit_middleware import AuditMiddleware
         request = MagicMock()
         request.headers = {"Authorization": "Bearer bad-token"}
-        with patch("jose.jwt.decode", side_effect=Exception("bad token")):
+        with patch("jwt.decode", side_effect=Exception("bad token")):
             uid, uname = AuditMiddleware._extract_user_identity(request)
             assert uid is None
             assert uname is None

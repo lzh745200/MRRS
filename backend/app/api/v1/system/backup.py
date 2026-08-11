@@ -43,6 +43,24 @@ class DeleteBackupRequest(BaseModel):
     filename: str = Field(..., description="备份文件名")
 
 
+def _resolve_auto_backup_password(provided: Optional[str]) -> Optional[str]:
+    """恢复加密备份时的密码兜底。
+
+    自动备份的加密口令是运行时持久化的随机密钥（BACKUP_ENCRYPTION_KEY，
+    见 backup_scheduler.auto_backup_job），管理员无法得知其值。
+    恢复时若未提供密码，自动尝试该密钥，保证自动备份可恢复；
+    密钥不可用时返回 None（明文备份与用户手动设置的密码不受影响）。
+    """
+    if provided:
+        return provided
+    try:
+        from app.utils.runtime_secrets import get_or_create_secret
+
+        return get_or_create_secret("BACKUP_ENCRYPTION_KEY")
+    except Exception:  # pragma: no cover - 密钥存储异常时按未提供处理
+        return None
+
+
 class BackupScheduleUpdate(BaseModel):
     """备份计划更新"""
     enabled: bool = Field(..., description="是否启用自动备份")
@@ -517,7 +535,7 @@ async def restore_backup(
             raise HTTPException(status_code=404, detail=f"备份文件 '{body.filename}' 不存在")
 
         svc = get_backup_service(db)
-        result = svc.restore_backup(file_path, password=body.password)
+        result = svc.restore_backup(file_path, password=_resolve_auto_backup_password(body.password))
 
         logger.warning(
             "系统已从备份恢复: %s，操作人: %s",
@@ -619,7 +637,9 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
             _head = _f.read(len(BackupService._ENCRYPTED_MARKER))
         if _head == BackupService._ENCRYPTED_MARKER:
             if not password:
-                raise HTTPException(status_code=400, detail="备份文件已加密，请提供解密密码")
+                password = _resolve_auto_backup_password(None)
+                if not password:
+                    raise HTTPException(status_code=400, detail="备份文件已加密，请提供解密密码")
         else:
             # 2. 明文 ZIP：必须是有效 ZIP 且包含数据库文件
             try:

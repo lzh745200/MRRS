@@ -155,9 +155,6 @@ describe('common/StatsCard.vue', () => {
 describe('common/VirtualList.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/components/common/VirtualList.vue'); const w = mount(C, { props: { items: [], itemSize: 40 } }); expect(w.exists()).toBe(true) })
 })
-describe('common/VirtualTable.vue', () => {
-  it('渲染', async () => { const { default: C } = await import('@/components/common/VirtualTable.vue'); const w = mount(C, { props: { data: [], columns: [] } }); expect(w.exists()).toBe(true) })
-})
 describe('common/BaseButton.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/components/common/BaseButton.vue'); const w = mount(C, { slots: { default: 'Click' } }); expect(w.exists()).toBe(true) })
 })
@@ -192,14 +189,9 @@ describe('dashboard/ProjectProgress.vue', () => { it('渲染', async () => { con
 
 // --- business/ components ---
 describe('business/DataStatistics.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/business/DataStatistics.vue'); const w = mount(C, { props: { data: [] } }); expect(w.exists()).toBe(true) }) })
-describe('business/GalleryView.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/business/GalleryView.vue'); const w = mount(C, { props: { images: [] } }); expect(w.exists()).toBe(true) }) })
-describe('business/ImageComparison.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/business/ImageComparison.vue'); const w = mount(C, { props: { before: '', after: '' } }); expect(w.exists()).toBe(true) }) })
-describe('business/IndustryCard.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/business/IndustryCard.vue'); const w = mount(C, { props: { data: {} } }); expect(w.exists()).toBe(true) }) })
-describe('business/PersonnelList.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/business/PersonnelList.vue'); const w = mount(C, { props: { data: [] } }); expect(w.exists()).toBe(true) }) })
 describe('business/ProjectCard.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/business/ProjectCard.vue'); const w = mount(C, { props: { project: {} } }); expect(w.exists()).toBe(true) }) })
 describe('business/SystemStatus.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/business/SystemStatus.vue'); const w = mount(C); expect(w.exists()).toBe(true) }) })
 describe('business/VillageCard.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/business/VillageCard.vue'); const w = mount(C, { props: { village: {} } }); expect(w.exists()).toBe(true) }) })
-describe('business/BeforeAfterSlider.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/business/BeforeAfterSlider.vue'); const w = mount(C, { props: { before: '', after: '' } }); expect(w.exists()).toBe(true) }) })
 describe('business/ProgressAlbum.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/business/ProgressAlbum.vue'); const w = mount(C, { props: { items: [] } }); expect(w.exists()).toBe(true) }) })
 
 // --- Other components ---
@@ -208,7 +200,6 @@ describe('GlobalSearch.vue', () => { it('渲染', async () => { const { default:
 describe('PageHeader.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/PageHeader.vue'); const w = mount(C, { props: { title: 'Test' } }); expect(w.exists()).toBe(true) }) })
 describe('MapPicker.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/MapPicker.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) }) })
 describe('charts/StatisticsCard.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/charts/StatisticsCard.vue'); const w = mount(C, { props: { title: 'Test', value: 100 } }); expect(w.exists()).toBe(true) }) })
-describe('ui/SecurityMonitor.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/ui/SecurityMonitor.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) }) })
 describe('map/OfflineMap.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/map/OfflineMap.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) }) })
 describe('rbac/PermissionManager.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/rbac/PermissionManager.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) }) })
 describe('permission/MenuVisibilityPanel.vue', () => { it('渲染', async () => { const { default: C } = await import('@/components/permission/MenuVisibilityPanel.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) }) })

@@ -52,7 +52,8 @@ except Exception as e:
 
 from fastapi import Depends, HTTPException, Request, status  # noqa: E402
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer  # noqa: E402
-from jose import JWTError, jwt  # noqa: E402
+import jwt  # noqa: E402  # PyJWT（替代 python-jose，CVE-2024-33663/33664 修复）
+from jwt import InvalidTokenError as JWTError  # noqa: E402  # 兼容别名
 from passlib.context import CryptContext  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 

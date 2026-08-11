@@ -231,7 +231,6 @@ describe('Common component imports', () => {
     ['ProgressDialog', '@/components/common/ProgressDialog.vue'],
     ['PasswordStrength', '@/components/common/PasswordStrength.vue'],
     ['VirtualList', '@/components/common/VirtualList.vue'],
-    ['VirtualTable', '@/components/common/VirtualTable.vue'],
     ['ResponsiveDataTable', '@/components/common/ResponsiveDataTable.vue'],
     ['SkipLink', '@/components/common/SkipLink.vue'],
     ['NetworkStatusIndicator', '@/components/common/NetworkStatusIndicator.vue'],

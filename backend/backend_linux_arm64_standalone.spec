@@ -60,7 +60,7 @@ hiddenimports = [
     'app.api.v1', 'app.static_files',
 
     # ── 认证与安全 ──
-    'jose', 'jose.jwt', 'bcrypt', 'passlib', 'passlib.hash',
+    'jwt', 'jwt.jwt', 'bcrypt', 'passlib', 'passlib.hash',
     'pyotp', 'cryptography', 'cryptography.hazmat',
 
     # ── 调度与缓存 ──

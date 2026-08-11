@@ -80,6 +80,7 @@ def update_nsis_scripts(version: str):
 
 
 def update_env_example(version: str):
+    # 前端 VITE_APP_VERSION（frontend/.env.example + .env.production）
     for env_path in [
         PROJECT_ROOT / "frontend" / ".env.example",
         PROJECT_ROOT / "frontend" / ".env.production",
@@ -95,6 +96,19 @@ def update_env_example(version: str):
         if new_content != content:
             env_path.write_text(new_content, encoding="utf-8")
             print(f"  UPD: {env_path.relative_to(PROJECT_ROOT)}")
+
+    # 根 .env.example 的 PROJECT_VERSION（后端运行时读取）
+    root_env_example = PROJECT_ROOT / ".env.example"
+    if root_env_example.exists():
+        content = root_env_example.read_text(encoding="utf-8")
+        new_content = re.sub(
+            r'PROJECT_VERSION=\S+',
+            f'PROJECT_VERSION={version}',
+            content,
+        )
+        if new_content != content:
+            root_env_example.write_text(new_content, encoding="utf-8")
+            print(f"  UPD: {root_env_example.relative_to(PROJECT_ROOT)}")
 
 
 def main():

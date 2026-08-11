@@ -3,7 +3,7 @@
  * 支持 Excel/CSV/PDF 导出
  */
 
-import * as XLSX from 'xlsx'
+import * as XLSX from '@e965/xlsx'
 import { downloadBlob } from '@/api/request'
 
 /** RFC 4180 兼容 CSV 转义 */

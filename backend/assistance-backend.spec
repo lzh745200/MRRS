@@ -83,8 +83,9 @@ hiddenimports = [
     'pydantic_core',
 
     # 认证和安全
-    'jose.jwt',
-    'jose.backends.cryptography_backend',
+    'jwt',
+    'jwt.jwt',
+    'jwt.exceptions',
     'passlib.context',
     'passlib.handlers.bcrypt',
     'passlib.handlers.pbkdf2',

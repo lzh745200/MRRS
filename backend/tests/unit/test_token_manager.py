@@ -106,7 +106,7 @@ class TestCreateTokenPair:
     @patch("app.core.token_manager._get_settings")
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.encode", side_effect=lambda p, s, algorithm=None: f"encoded.{p.get('type')}")
+    @patch("jwt.encode", side_effect=lambda p, s, algorithm=None: f"encoded.{p.get('type')}")
     def test_basic(self, mock_encode, mock_algo, mock_key, mock_settings):
         mock_settings.return_value = MagicMock(
             ACCESS_TOKEN_EXPIRE_MINUTES=30, REFRESH_TOKEN_EXPIRE_DAYS=7
@@ -123,7 +123,7 @@ class TestCreateTokenPair:
     @patch("app.core.token_manager._get_settings", return_value=None)
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.encode", side_effect=lambda p, s, algorithm=None: f"e.{p.get('type')}")
+    @patch("jwt.encode", side_effect=lambda p, s, algorithm=None: f"e.{p.get('type')}")
     def test_no_settings_fallback_defaults(self, mock_encode, mock_algo, mock_key, mock_settings):
         result = create_token_pair("user1")
         assert result["expires_in"] == 480 * 60
@@ -131,7 +131,7 @@ class TestCreateTokenPair:
     @patch("app.core.token_manager._get_settings")
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.encode", side_effect=lambda p, s, algorithm=None: f"e.{p.get('type')}")
+    @patch("jwt.encode", side_effect=lambda p, s, algorithm=None: f"e.{p.get('type')}")
     def test_with_extra_claims(self, mock_encode, mock_algo, mock_key, mock_settings):
         mock_settings.return_value = MagicMock(
             ACCESS_TOKEN_EXPIRE_MINUTES=30, REFRESH_TOKEN_EXPIRE_DAYS=7
@@ -147,7 +147,7 @@ class TestCreateTokenPair:
     @patch("app.core.token_manager._get_settings")
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.encode", side_effect=lambda p, s, algorithm=None: f"e.{p.get('type')}")
+    @patch("jwt.encode", side_effect=lambda p, s, algorithm=None: f"e.{p.get('type')}")
     def test_custom_ttl(self, mock_encode, mock_algo, mock_key, mock_settings):
         mock_settings.return_value = MagicMock(
             ACCESS_TOKEN_EXPIRE_MINUTES=30, REFRESH_TOKEN_EXPIRE_DAYS=7
@@ -160,7 +160,7 @@ class TestCreateTokenPair:
     @patch("app.core.token_manager._get_settings")
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.encode", side_effect=lambda p, s, algorithm=None: f"e.{p.get('type')}")
+    @patch("jwt.encode", side_effect=lambda p, s, algorithm=None: f"e.{p.get('type')}")
     def test_settings_missing_attrs(self, mock_encode, mock_algo, mock_key, mock_settings):
         settings_mock = MagicMock(spec=[])
         del settings_mock.ACCESS_TOKEN_EXPIRE_MINUTES
@@ -179,7 +179,7 @@ class TestCreateTokenPair:
 class TestValidateToken:
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.decode")
+    @patch("jwt.decode")
     @patch("app.core.token_blacklist.is_blacklisted", return_value=False)
     def test_valid_token(self, mock_blacklisted, mock_decode, mock_algo, mock_key):
         mock_decode.return_value = {"sub": "user1", "jti": "abc", "type": "access"}
@@ -190,7 +190,7 @@ class TestValidateToken:
 
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.decode")
+    @patch("jwt.decode")
     @patch("app.core.token_blacklist.is_blacklisted", return_value=True)
     def test_blacklisted_token(self, mock_blacklisted, mock_decode, mock_algo, mock_key):
         mock_decode.return_value = {"sub": "user1", "jti": "abc", "type": "access"}
@@ -201,7 +201,7 @@ class TestValidateToken:
 
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.decode")
+    @patch("jwt.decode")
     @patch("app.core.token_blacklist.is_blacklisted", return_value=False)
     def test_wrong_type(self, mock_blacklisted, mock_decode, mock_algo, mock_key):
         mock_decode.return_value = {"sub": "user1", "jti": "abc", "type": "refresh"}
@@ -211,7 +211,7 @@ class TestValidateToken:
 
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.decode")
+    @patch("jwt.decode")
     @patch("app.core.token_blacklist.is_blacklisted", return_value=False)
     def test_no_type_claim(self, mock_blacklisted, mock_decode, mock_algo, mock_key):
         mock_decode.return_value = {"sub": "user1", "jti": "abc"}
@@ -222,7 +222,7 @@ class TestValidateToken:
 
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.decode")
+    @patch("jwt.decode")
     @patch("app.core.token_blacklist.is_blacklisted", return_value=False)
     def test_no_jti_claim(self, mock_blacklisted, mock_decode, mock_algo, mock_key):
         mock_decode.return_value = {"sub": "user1", "type": "access"}
@@ -233,9 +233,9 @@ class TestValidateToken:
 
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.decode")
+    @patch("jwt.decode")
     def test_jwt_error(self, mock_decode, mock_algo, mock_key):
-        from jose import JWTError
+        from jwt import InvalidTokenError as JWTError
 
         mock_decode.side_effect = JWTError("bad sig")
         valid, payload, err = validate_token("bad-token")
@@ -263,7 +263,7 @@ class TestRevokeToken:
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
     @patch("app.core.token_manager._persist_revocation")
     @patch("app.core.token_blacklist.add")
-    @patch("jose.jwt.decode")
+    @patch("jwt.decode")
     def test_success(self, mock_decode, mock_add, mock_persist, mock_algo, mock_key):
         mock_decode.return_value = {"jti": "abc123", "exp": 9999999999}
         result = revoke_token("some-token", reason="logout")
@@ -279,7 +279,7 @@ class TestRevokeToken:
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
     @patch("app.core.token_manager._persist_revocation")
     @patch("app.core.token_blacklist.add")
-    @patch("jose.jwt.decode")
+    @patch("jwt.decode")
     def test_missing_jti(self, mock_decode, mock_add, mock_persist, mock_algo, mock_key):
         mock_decode.return_value = {"sub": "user1"}
         result = revoke_token("some-token")
@@ -289,7 +289,7 @@ class TestRevokeToken:
 
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
-    @patch("jose.jwt.decode")
+    @patch("jwt.decode")
     def test_decode_exception(self, mock_decode, mock_algo, mock_key):
         mock_decode.side_effect = RuntimeError("network error")
         result = revoke_token("some-token")
@@ -299,7 +299,7 @@ class TestRevokeToken:
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")
     @patch("app.core.token_manager._persist_revocation")
     @patch("app.core.token_blacklist.add")
-    @patch("jose.jwt.decode")
+    @patch("jwt.decode")
     def test_no_exp_claim(self, mock_decode, mock_add, mock_persist, mock_algo, mock_key):
         mock_decode.return_value = {"jti": "abc123"}
         result = revoke_token("some-token")
