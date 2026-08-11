@@ -1,308 +1,311 @@
 <template>
-  <el-form
-    ref="formRef"
-    :model="formData"
-    :rules="rules"
-    :disabled="mode === 'view'"
-    label-width="120px"
-  >
-    <!-- 基本信息 -->
-    <el-divider content-position="left">基本信息</el-divider>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <el-form-item label="序号" prop="sequenceNo">
-          <el-input-number v-model="formData.sequenceNo" :min="1" style="width: 100%" />
-        </el-form-item>
-      </el-col>
-      <el-col :span="12">
-        <el-form-item label="部门单位" prop="department">
-          <el-input v-model="formData.department" placeholder="请输入部门单位" />
-        </el-form-item>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <el-form-item label="帮扶单位" prop="supportUnit">
-          <el-input v-model="formData.supportUnit" placeholder="请输入帮扶单位" />
-        </el-form-item>
-      </el-col>
-      <el-col :span="12">
-        <el-form-item label="帮扶村名称" prop="villageName">
-          <el-input v-model="formData.villageName" placeholder="请输入帮扶村名称" />
-        </el-form-item>
-      </el-col>
-    </el-row>
-
-    <!-- 地域属性 - 贵州省地区选择 -->
-    <el-divider content-position="left">地域属性</el-divider>
-    <el-row :gutter="20">
-      <el-col :span="24">
-        <el-form-item label="所在地区">
-          <GuizhouRegionSelector
-            v-model="regionValue"
-            :disabled="mode === 'view'"
-            :show-township="true"
-          />
-        </el-form-item>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <el-form-item label="地区范围" prop="regionScope">
-          <el-input v-model="formData.regionScope" placeholder="请输入地区范围" />
-        </el-form-item>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="8">
-        <el-form-item label="三区三州">
-          <el-switch v-model="formData.isThreeRegions" />
-        </el-form-item>
-      </el-col>
-      <el-col :span="8">
-        <el-form-item label="边疆地区">
-          <el-switch v-model="formData.isBorderArea" />
-        </el-form-item>
-      </el-col>
-      <el-col :span="8">
-        <el-form-item label="民族地区">
-          <el-switch v-model="formData.isEthnicArea" />
-        </el-form-item>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="8">
-        <el-form-item label="革命地区">
-          <el-switch v-model="formData.isRevolutionaryArea" />
-        </el-form-item>
-      </el-col>
-      <el-col :span="8">
-        <el-form-item label="重点帮扶县">
-          <el-switch v-model="formData.isKeyCounty" />
-        </el-form-item>
-      </el-col>
-    </el-row>
-
-    <!-- 振兴发展属性 -->
-    <el-divider content-position="left">振兴发展属性</el-divider>
-    <el-row :gutter="20">
-      <el-col :span="8">
-        <el-form-item label="振兴梯队">
-          <el-switch v-model="formData.isRevitalizationTier" />
-        </el-form-item>
-      </el-col>
-      <el-col :span="8">
-        <el-form-item label="省级示范">
-          <el-switch v-model="formData.isProvincialDemo" />
-        </el-form-item>
-      </el-col>
-      <el-col :span="8">
-        <el-form-item label="百村示范">
-          <el-switch v-model="formData.isHundredVillageDemo" />
-        </el-form-item>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="8">
-        <el-form-item label="梯次振兴">
-          <el-switch v-model="formData.isTieredDevelopment" />
-        </el-form-item>
-      </el-col>
-    </el-row>
-
-    <!-- 跨域帮扶 -->
-    <el-divider content-position="left">跨域帮扶</el-divider>
-    <el-row :gutter="20">
-      <el-col :span="8">
-        <el-form-item label="跨省帮扶">
-          <el-switch v-model="formData.isCrossProvince" />
-        </el-form-item>
-      </el-col>
-      <el-col :span="8">
-        <el-form-item label="跨市帮扶">
-          <el-switch v-model="formData.isCrossCity" />
-        </el-form-item>
-      </el-col>
-    </el-row>
-
-    <!-- 协作与表彰 -->
-    <el-divider content-position="left">协作与表彰</el-divider>
-    <el-row :gutter="20">
-      <el-col :span="8">
-        <el-form-item label="跨单位协作">
-          <el-switch v-model="formData.isCrossUnitCooperation" />
-        </el-form-item>
-      </el-col>
-      <el-col :span="8">
-        <el-form-item label="纳入总盘子">
-          <el-switch v-model="formData.isInOverallPlan" />
-        </el-form-item>
-      </el-col>
-    </el-row>
-    <el-row>
-      <el-col :span="24">
-        <el-form-item label="获得表彰" prop="honors">
-          <el-input
-            v-model="formData.honors"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入获得的国家或省级表彰"
-          />
-        </el-form-item>
-      </el-col>
-    </el-row>
-  </el-form>
-
-  <!-- 地理位置（独立区域）-->
-  <el-divider content-position="left">地理位置</el-divider>
-  <el-row style="margin-bottom: 16px">
-    <el-col :span="24">
-      <label class="funding-label">坐标设置</label>
-      <MapPicker
-        v-model:latitude="formData.latitude"
-        v-model:longitude="formData.longitude"
-        :disabled="mode === 'view'"
-      />
-    </el-col>
-  </el-row>
-
-  <!-- 帮扶经费（独立区域，不受 form disabled 影响）-->
-  <el-divider content-position="left">帮扶经费</el-divider>
-  <div class="funding-section" :class="{ 'funding-section--disabled': mode === 'view' }">
-    <!-- 单行紧凑布局：选择年度 + 专项投入 + 地方投入 + 按钮 -->
-    <el-row :gutter="12" style="margin-bottom: 16px" align="bottom">
-      <el-col :span="5">
-        <label class="funding-label">选择年度</label>
-        <el-select
-          v-model="selectedFundingYear"
-          placeholder="年度"
-          style="width: 100%"
-          filterable
-          allow-create
-          teleported
-          :popper-options="{ strategy: 'fixed' }"
-          :disabled="mode === 'view'"
-          @change="onFundingYearChange"
-        >
-          <el-option v-for="y in availableFundingYears" :key="y" :label="`${y}年`" :value="y" />
-        </el-select>
-      </el-col>
-      <el-col :span="6">
-        <label class="funding-label">专项投入（万元）</label>
-        <el-input-number
-          v-model="currentMilitaryInput"
-          :min="0"
-          :precision="2"
-          :controls="true"
-          controls-position="right"
-          style="width: 100%"
-          placeholder="专项投入"
-          :disabled="mode === 'view'"
-        />
-      </el-col>
-      <el-col :span="6">
-        <label class="funding-label">地方投入（万元）</label>
-        <el-input-number
-          v-model="currentLocalInput"
-          :min="0"
-          :precision="2"
-          :controls="true"
-          controls-position="right"
-          style="width: 100%"
-          placeholder="地方投入"
-          :disabled="mode === 'view'"
-        />
-      </el-col>
-      <el-col :span="7">
-        <el-button v-if="mode !== 'view'" type="primary" @click="addOrUpdateFunding">
-          {{ hasFundingYear(selectedFundingYear) ? '更新' : '添加' }}
-        </el-button>
-        <el-popconfirm
-          v-if="hasFundingYear(selectedFundingYear) && mode !== 'view'"
-          title="确定删除该年度经费？"
-          width="180"
-          @confirm="removeFundingByYear(selectedFundingYear)"
-        >
-          <template #reference>
-            <el-button type="danger" plain>删除</el-button>
-          </template>
-        </el-popconfirm>
-      </el-col>
-    </el-row>
-
-    <!-- 年度汇总表 -->
-    <el-table
-      v-if="transitionFundingRows.length > 0"
-      :data="transitionFundingRows"
-      border
-      stripe
-      size="small"
-      style="margin-bottom: 16px"
+  <!-- 单根包裹（display:contents）：避免 transition 内多根导致 setAttribute('0') 崩溃 -->
+  <div style="display: contents">
+    <el-form
+      ref="formRef"
+      :model="formData"
+      :rules="rules"
+      :disabled="mode === 'view'"
+      label-width="120px"
     >
-      <el-table-column label="年度" width="90" align="center">
-        <template #default="{ row }">{{ row.year }}年</template>
-      </el-table-column>
-      <el-table-column label="专项投入（万元）" align="right">
-        <template #default="{ row }">
-          <span class="funding-number">{{ (row.militaryInvestment || 0).toFixed(2) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="地方投入（万元）" align="right">
-        <template #default="{ row }">
-          <span class="funding-number">{{ (row.localInvestment || 0).toFixed(2) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="年度合计（万元）" width="150" align="right">
-        <template #default="{ row }">
-          <span class="funding-number funding-number--total">
-            {{ ((row.militaryInvestment || 0) + (row.localInvestment || 0)).toFixed(2) }}
-          </span>
-        </template>
-      </el-table-column>
-      <el-table-column v-if="mode !== 'view'" label="操作" width="130" align="center">
-        <template #default="{ row }">
-          <el-button type="primary" size="small" link @click="editFundingYear(row.year)"
-            >编辑</el-button
+      <!-- 基本信息 -->
+      <el-divider content-position="left">基本信息</el-divider>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="序号" prop="sequenceNo">
+            <el-input-number v-model="formData.sequenceNo" :min="1" style="width: 100%" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="部门单位" prop="department">
+            <el-input v-model="formData.department" placeholder="请输入部门单位" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="帮扶单位" prop="supportUnit">
+            <el-input v-model="formData.supportUnit" placeholder="请输入帮扶单位" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="帮扶村名称" prop="villageName">
+            <el-input v-model="formData.villageName" placeholder="请输入帮扶村名称" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <!-- 地域属性 - 贵州省地区选择 -->
+      <el-divider content-position="left">地域属性</el-divider>
+      <el-row :gutter="20">
+        <el-col :span="24">
+          <el-form-item label="所在地区">
+            <GuizhouRegionSelector
+              v-model="regionValue"
+              :disabled="mode === 'view'"
+              :show-township="true"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="地区范围" prop="regionScope">
+            <el-input v-model="formData.regionScope" placeholder="请输入地区范围" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="三区三州">
+            <el-switch v-model="formData.isThreeRegions" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="边疆地区">
+            <el-switch v-model="formData.isBorderArea" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="民族地区">
+            <el-switch v-model="formData.isEthnicArea" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="革命地区">
+            <el-switch v-model="formData.isRevolutionaryArea" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="重点帮扶县">
+            <el-switch v-model="formData.isKeyCounty" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <!-- 振兴发展属性 -->
+      <el-divider content-position="left">振兴发展属性</el-divider>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="振兴梯队">
+            <el-switch v-model="formData.isRevitalizationTier" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="省级示范">
+            <el-switch v-model="formData.isProvincialDemo" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="百村示范">
+            <el-switch v-model="formData.isHundredVillageDemo" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="梯次振兴">
+            <el-switch v-model="formData.isTieredDevelopment" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <!-- 跨域帮扶 -->
+      <el-divider content-position="left">跨域帮扶</el-divider>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="跨省帮扶">
+            <el-switch v-model="formData.isCrossProvince" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="跨市帮扶">
+            <el-switch v-model="formData.isCrossCity" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <!-- 协作与表彰 -->
+      <el-divider content-position="left">协作与表彰</el-divider>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="跨单位协作">
+            <el-switch v-model="formData.isCrossUnitCooperation" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="纳入总盘子">
+            <el-switch v-model="formData.isInOverallPlan" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row>
+        <el-col :span="24">
+          <el-form-item label="获得表彰" prop="honors">
+            <el-input
+              v-model="formData.honors"
+              type="textarea"
+              :rows="3"
+              placeholder="请输入获得的国家或省级表彰"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+    </el-form>
+
+    <!-- 地理位置（独立区域）-->
+    <el-divider content-position="left">地理位置</el-divider>
+    <el-row style="margin-bottom: 16px">
+      <el-col :span="24">
+        <label class="funding-label">坐标设置</label>
+        <MapPicker
+          v-model:latitude="formData.latitude"
+          v-model:longitude="formData.longitude"
+          :disabled="mode === 'view'"
+        />
+      </el-col>
+    </el-row>
+
+    <!-- 帮扶经费（独立区域，不受 form disabled 影响）-->
+    <el-divider content-position="left">帮扶经费</el-divider>
+    <div class="funding-section" :class="{ 'funding-section--disabled': mode === 'view' }">
+      <!-- 单行紧凑布局：选择年度 + 专项投入 + 地方投入 + 按钮 -->
+      <el-row :gutter="12" style="margin-bottom: 16px" align="bottom">
+        <el-col :span="5">
+          <label class="funding-label">选择年度</label>
+          <el-select
+            v-model="selectedFundingYear"
+            placeholder="年度"
+            style="width: 100%"
+            filterable
+            allow-create
+            teleported
+            :popper-options="{ strategy: 'fixed' }"
+            :disabled="mode === 'view'"
+            @change="onFundingYearChange"
           >
+            <el-option v-for="y in availableFundingYears" :key="y" :label="`${y}年`" :value="y" />
+          </el-select>
+        </el-col>
+        <el-col :span="6">
+          <label class="funding-label">专项投入（万元）</label>
+          <el-input-number
+            v-model="currentMilitaryInput"
+            :min="0"
+            :precision="2"
+            :controls="true"
+            controls-position="right"
+            style="width: 100%"
+            placeholder="专项投入"
+            :disabled="mode === 'view'"
+          />
+        </el-col>
+        <el-col :span="6">
+          <label class="funding-label">地方投入（万元）</label>
+          <el-input-number
+            v-model="currentLocalInput"
+            :min="0"
+            :precision="2"
+            :controls="true"
+            controls-position="right"
+            style="width: 100%"
+            placeholder="地方投入"
+            :disabled="mode === 'view'"
+          />
+        </el-col>
+        <el-col :span="7">
+          <el-button v-if="mode !== 'view'" type="primary" @click="addOrUpdateFunding">
+            {{ hasFundingYear(selectedFundingYear) ? '更新' : '添加' }}
+          </el-button>
           <el-popconfirm
+            v-if="hasFundingYear(selectedFundingYear) && mode !== 'view'"
             title="确定删除该年度经费？"
             width="180"
-            @confirm="removeFundingByYear(row.year)"
+            @confirm="removeFundingByYear(selectedFundingYear)"
           >
             <template #reference>
-              <el-button type="danger" size="small" link>删除</el-button>
+              <el-button type="danger" plain>删除</el-button>
             </template>
           </el-popconfirm>
-        </template>
-      </el-table-column>
-    </el-table>
-    <el-empty
-      v-else
-      description="暂无帮扶经费数据，请选择年度添加"
-      :image-size="60"
-      style="margin-bottom: 16px"
-    />
+        </el-col>
+      </el-row>
 
-    <!-- 合计行 -->
-    <el-descriptions v-if="transitionFundingRows.length > 0" :column="2" border size="small">
-      <el-descriptions-item label="专项合计（万元）" align="right">
-        <strong>{{ transitionMilitaryTotal.toFixed(2) }}</strong>
-      </el-descriptions-item>
-      <el-descriptions-item label="地方合计（万元）" align="right">
-        <strong>{{ transitionLocalTotal.toFixed(2) }}</strong>
-      </el-descriptions-item>
-    </el-descriptions>
-  </div>
+      <!-- 年度汇总表 -->
+      <el-table
+        v-if="transitionFundingRows.length > 0"
+        :data="transitionFundingRows"
+        border
+        stripe
+        size="small"
+        style="margin-bottom: 16px"
+      >
+        <el-table-column label="年度" width="90" align="center">
+          <template #default="{ row }">{{ row.year }}年</template>
+        </el-table-column>
+        <el-table-column label="专项投入（万元）" align="right">
+          <template #default="{ row }">
+            <span class="funding-number">{{ (row.militaryInvestment || 0).toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="地方投入（万元）" align="right">
+          <template #default="{ row }">
+            <span class="funding-number">{{ (row.localInvestment || 0).toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="年度合计（万元）" width="150" align="right">
+          <template #default="{ row }">
+            <span class="funding-number funding-number--total">
+              {{ ((row.militaryInvestment || 0) + (row.localInvestment || 0)).toFixed(2) }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column v-if="mode !== 'view'" label="操作" width="130" align="center">
+          <template #default="{ row }">
+            <el-button type="primary" size="small" link @click="editFundingYear(row.year)"
+              >编辑</el-button
+            >
+            <el-popconfirm
+              title="确定删除该年度经费？"
+              width="180"
+              @confirm="removeFundingByYear(row.year)"
+            >
+              <template #reference>
+                <el-button type="danger" size="small" link>删除</el-button>
+              </template>
+            </el-popconfirm>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty
+        v-else
+        description="暂无帮扶经费数据，请选择年度添加"
+        :image-size="60"
+        style="margin-bottom: 16px"
+      />
 
-  <!-- 保存/取消 — 页面最底部 -->
-  <div class="form-actions" style="margin-top: 24px">
-    <template v-if="mode !== 'view'">
-      <el-button type="primary" @click="handleSubmit">保存</el-button>
-      <el-button @click="handleCancel">取消</el-button>
-    </template>
-    <template v-else>
-      <el-button @click="handleCancel">关闭</el-button>
-    </template>
+      <!-- 合计行 -->
+      <el-descriptions v-if="transitionFundingRows.length > 0" :column="2" border size="small">
+        <el-descriptions-item label="专项合计（万元）" align="right">
+          <strong>{{ transitionMilitaryTotal.toFixed(2) }}</strong>
+        </el-descriptions-item>
+        <el-descriptions-item label="地方合计（万元）" align="right">
+          <strong>{{ transitionLocalTotal.toFixed(2) }}</strong>
+        </el-descriptions-item>
+      </el-descriptions>
+    </div>
+
+    <!-- 保存/取消 — 页面最底部 -->
+    <div class="form-actions" style="margin-top: 24px">
+      <template v-if="mode !== 'view'">
+        <el-button type="primary" @click="handleSubmit">保存</el-button>
+        <el-button @click="handleCancel">取消</el-button>
+      </template>
+      <template v-else>
+        <el-button @click="handleCancel">关闭</el-button>
+      </template>
+    </div>
   </div>
 </template>
 

@@ -1,176 +1,183 @@
 <template>
-  <div v-loading="loading" class="village-detail-page">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-info">
-        <el-button text @click="handleBack">
-          <el-icon><ArrowLeft /></el-icon>返回列表
-        </el-button>
-        <h2 class="page-title">{{ pageTitle }}</h2>
-      </div>
-      <div v-if="pageMode === 'view'" class="header-actions">
-        <el-button @click="handleEdit">
-          <el-icon><Edit /></el-icon>编辑
-        </el-button>
-        <el-button type="primary" @click="handleYearlyData">
-          <el-icon><Calendar /></el-icon>年度数据
-        </el-button>
-        <el-button @click="openChangeHistory">变更历史</el-button>
-      </div>
-    </div>
-
-    <!-- 编辑 / 创建模式 -->
-    <template v-if="pageMode === 'edit' || pageMode === 'create'">
-      <div class="info-card">
-        <SupportedVillageForm
-          :village="village"
-          :mode="pageMode"
-          @submit="handleFormSubmit"
-          @cancel="handleFormCancel"
-        />
-      </div>
-    </template>
-
-    <!-- 查看模式 -->
-    <template v-if="pageMode === 'view' && village">
-      <!-- 基本信息卡片 -->
-      <div class="info-card">
-        <h3 class="card-title">基本信息</h3>
-        <el-descriptions :column="3" border>
-          <el-descriptions-item label="序号">{{ village.sequenceNo || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="部门">{{ village.department }}</el-descriptions-item>
-          <el-descriptions-item label="帮扶单位">{{ village.supportUnit }}</el-descriptions-item>
-          <el-descriptions-item label="帮扶村名称">{{ village.villageName }}</el-descriptions-item>
-          <el-descriptions-item label="地区范围">{{
-            village.regionScope || '-'
-          }}</el-descriptions-item>
-          <el-descriptions-item label="振兴梯队">{{
-            village.isRevitalizationTier ? '是' : '否'
-          }}</el-descriptions-item>
-        </el-descriptions>
-      </div>
-
-      <!-- 属性标签卡片 -->
-      <div class="info-card">
-        <h3 class="card-title">属性标签</h3>
-        <div class="tag-sections">
-          <div class="tag-section">
-            <span class="section-label">地域属性：</span>
-            <div class="tag-list">
-              <el-tag v-if="village.isThreeRegions" type="danger">三区三州</el-tag>
-              <el-tag v-if="village.isBorderArea" type="warning">边疆地区</el-tag>
-              <el-tag v-if="village.isEthnicArea" type="info">民族地区</el-tag>
-              <el-tag v-if="village.isRevolutionaryArea" type="success">革命地区</el-tag>
-              <el-tag v-if="village.isKeyCounty">重点帮扶县</el-tag>
-              <span v-if="!hasRegionTags" class="no-data">无</span>
-            </div>
-          </div>
-          <div class="tag-section">
-            <span class="section-label">振兴属性：</span>
-            <div class="tag-list">
-              <el-tag v-if="village.isRevitalizationTier" type="danger">振兴梯队</el-tag>
-              <el-tag v-if="village.isProvincialDemo" type="success">省级示范</el-tag>
-              <el-tag v-if="village.isHundredVillageDemo" type="primary">百村示范</el-tag>
-              <el-tag v-if="village.isTieredDevelopment">梯次发展</el-tag>
-              <span v-if="!hasRevitalizationTags" class="no-data">无</span>
-            </div>
-          </div>
-          <div class="tag-section">
-            <span class="section-label">跨域帮扶：</span>
-            <div class="tag-list">
-              <el-tag v-if="village.isCrossProvince" type="danger">跨省帮扶</el-tag>
-              <el-tag v-if="village.isCrossCity" type="warning">跨市帮扶</el-tag>
-              <span v-if="!village.isCrossProvince && !village.isCrossCity" class="no-data"
-                >无</span
-              >
-            </div>
-          </div>
-          <div class="tag-section">
-            <span class="section-label">协作情况：</span>
-            <div class="tag-list">
-              <el-tag v-if="village.isCrossUnitCooperation" type="info">跨单位协作</el-tag>
-              <el-tag v-if="village.isInOverallPlan" type="success">纳入总盘子</el-tag>
-              <span
-                v-if="!village.isCrossUnitCooperation && !village.isInOverallPlan"
-                class="no-data"
-                >无</span
-              >
-            </div>
-          </div>
+  <!-- 单根包裹（display:contents）：避免 transition 内多根导致 setAttribute('0') 崩溃 -->
+  <div style="display: contents">
+    <div v-loading="loading" class="village-detail-page">
+      <!-- 页面头部 -->
+      <div class="page-header">
+        <div class="header-info">
+          <el-button text @click="handleBack">
+            <el-icon><ArrowLeft /></el-icon>返回列表
+          </el-button>
+          <h2 class="page-title">{{ pageTitle }}</h2>
+        </div>
+        <div v-if="pageMode === 'view'" class="header-actions">
+          <el-button @click="handleEdit">
+            <el-icon><Edit /></el-icon>编辑
+          </el-button>
+          <el-button type="primary" @click="handleYearlyData">
+            <el-icon><Calendar /></el-icon>年度数据
+          </el-button>
+          <el-button @click="openChangeHistory">变更历史</el-button>
         </div>
       </div>
 
-      <!-- 表彰情况 -->
-      <div v-if="village.honors" class="info-card">
-        <h3 class="card-title">表彰情况</h3>
-        <p class="honors-text">{{ village.honors }}</p>
-      </div>
+      <!-- 编辑 / 创建模式 -->
+      <template v-if="pageMode === 'edit' || pageMode === 'create'">
+        <div class="info-card">
+          <SupportedVillageForm
+            :village="village"
+            :mode="pageMode"
+            @submit="handleFormSubmit"
+            @cancel="handleFormCancel"
+          />
+        </div>
+      </template>
 
-      <!-- 年度数据概览 -->
-      <div class="info-card">
-        <h3 class="card-title">
-          {{ selectedYear }}年数据概览
-          <el-select
-            v-model="selectedYear"
-            size="small"
-            style="width: 100px; margin-left: 12px"
-            @change="loadYearlyData"
-          >
-            <el-option
-              v-for="year in availableYears"
-              :key="year"
-              :label="`${year}年`"
-              :value="year"
-            />
-          </el-select>
-        </h3>
-        <el-row v-loading="yearlyLoading" :gutter="20">
-          <el-col :span="6">
-            <div class="stat-card">
-              <div class="stat-value">
-                {{ yearlyData?.population?.totalPopulation || 0 }}
-              </div>
-              <div class="stat-label">总人口(人)</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="stat-card">
-              <div class="stat-value">
-                {{ yearlyData?.income?.perCapitaIncome?.toFixed(2) || '0.00' }}
-              </div>
-              <div class="stat-label">人均收入(万元)</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="stat-card">
-              <div class="stat-value">
-                {{ yearlyData?.income?.collectiveIncome?.toFixed(2) || '0.00' }}
-              </div>
-              <div class="stat-label">集体收入(万元)</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="stat-card">
-              <div class="stat-value">{{ totalInvestment.toFixed(2) }}</div>
-              <div class="stat-label">帮扶投入(万元)</div>
-            </div>
-          </el-col>
-        </el-row>
-      </div>
+      <!-- 查看模式 -->
+      <template v-if="pageMode === 'view' && village">
+        <!-- 基本信息卡片 -->
+        <div class="info-card">
+          <h3 class="card-title">基本信息</h3>
+          <el-descriptions :column="3" border>
+            <el-descriptions-item label="序号">{{
+              village.sequenceNo || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="部门">{{ village.department }}</el-descriptions-item>
+            <el-descriptions-item label="帮扶单位">{{ village.supportUnit }}</el-descriptions-item>
+            <el-descriptions-item label="帮扶村名称">{{
+              village.villageName
+            }}</el-descriptions-item>
+            <el-descriptions-item label="地区范围">{{
+              village.regionScope || '-'
+            }}</el-descriptions-item>
+            <el-descriptions-item label="振兴梯队">{{
+              village.isRevitalizationTier ? '是' : '否'
+            }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
 
-      <!-- 多年趋势图 -->
-      <div class="info-card">
-        <h3 class="card-title">人均收入多年趋势</h3>
-        <div ref="trendChartRef" class="trend-chart"></div>
-      </div>
-    </template>
+        <!-- 属性标签卡片 -->
+        <div class="info-card">
+          <h3 class="card-title">属性标签</h3>
+          <div class="tag-sections">
+            <div class="tag-section">
+              <span class="section-label">地域属性：</span>
+              <div class="tag-list">
+                <el-tag v-if="village.isThreeRegions" type="danger">三区三州</el-tag>
+                <el-tag v-if="village.isBorderArea" type="warning">边疆地区</el-tag>
+                <el-tag v-if="village.isEthnicArea" type="info">民族地区</el-tag>
+                <el-tag v-if="village.isRevolutionaryArea" type="success">革命地区</el-tag>
+                <el-tag v-if="village.isKeyCounty">重点帮扶县</el-tag>
+                <span v-if="!hasRegionTags" class="no-data">无</span>
+              </div>
+            </div>
+            <div class="tag-section">
+              <span class="section-label">振兴属性：</span>
+              <div class="tag-list">
+                <el-tag v-if="village.isRevitalizationTier" type="danger">振兴梯队</el-tag>
+                <el-tag v-if="village.isProvincialDemo" type="success">省级示范</el-tag>
+                <el-tag v-if="village.isHundredVillageDemo" type="primary">百村示范</el-tag>
+                <el-tag v-if="village.isTieredDevelopment">梯次发展</el-tag>
+                <span v-if="!hasRevitalizationTags" class="no-data">无</span>
+              </div>
+            </div>
+            <div class="tag-section">
+              <span class="section-label">跨域帮扶：</span>
+              <div class="tag-list">
+                <el-tag v-if="village.isCrossProvince" type="danger">跨省帮扶</el-tag>
+                <el-tag v-if="village.isCrossCity" type="warning">跨市帮扶</el-tag>
+                <span v-if="!village.isCrossProvince && !village.isCrossCity" class="no-data"
+                  >无</span
+                >
+              </div>
+            </div>
+            <div class="tag-section">
+              <span class="section-label">协作情况：</span>
+              <div class="tag-list">
+                <el-tag v-if="village.isCrossUnitCooperation" type="info">跨单位协作</el-tag>
+                <el-tag v-if="village.isInOverallPlan" type="success">纳入总盘子</el-tag>
+                <span
+                  v-if="!village.isCrossUnitCooperation && !village.isInOverallPlan"
+                  class="no-data"
+                  >无</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 表彰情况 -->
+        <div v-if="village.honors" class="info-card">
+          <h3 class="card-title">表彰情况</h3>
+          <p class="honors-text">{{ village.honors }}</p>
+        </div>
+
+        <!-- 年度数据概览 -->
+        <div class="info-card">
+          <h3 class="card-title">
+            {{ selectedYear }}年数据概览
+            <el-select
+              v-model="selectedYear"
+              size="small"
+              style="width: 100px; margin-left: 12px"
+              @change="loadYearlyData"
+            >
+              <el-option
+                v-for="year in availableYears"
+                :key="year"
+                :label="`${year}年`"
+                :value="year"
+              />
+            </el-select>
+          </h3>
+          <el-row v-loading="yearlyLoading" :gutter="20">
+            <el-col :span="6">
+              <div class="stat-card">
+                <div class="stat-value">
+                  {{ yearlyData?.population?.totalPopulation || 0 }}
+                </div>
+                <div class="stat-label">总人口(人)</div>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="stat-card">
+                <div class="stat-value">
+                  {{ yearlyData?.income?.perCapitaIncome?.toFixed(2) || '0.00' }}
+                </div>
+                <div class="stat-label">人均收入(万元)</div>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="stat-card">
+                <div class="stat-value">
+                  {{ yearlyData?.income?.collectiveIncome?.toFixed(2) || '0.00' }}
+                </div>
+                <div class="stat-label">集体收入(万元)</div>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="stat-card">
+                <div class="stat-value">{{ totalInvestment.toFixed(2) }}</div>
+                <div class="stat-label">帮扶投入(万元)</div>
+              </div>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 多年趋势图 -->
+        <div class="info-card">
+          <h3 class="card-title">人均收入多年趋势</h3>
+          <div ref="trendChartRef" class="trend-chart"></div>
+        </div>
+      </template>
+    </div>
+
+    <ChangeHistoryDialog
+      v-model:visible="changeHistoryVisible"
+      :history="changeHistory"
+      :loading="changeHistoryLoading"
+    />
   </div>
-
-  <ChangeHistoryDialog
-    v-model:visible="changeHistoryVisible"
-    :history="changeHistory"
-    :loading="changeHistoryLoading"
-  />
 </template>
 
 <script setup lang="ts">

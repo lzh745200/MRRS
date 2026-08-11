@@ -1,192 +1,195 @@
 <template>
-  <template v-if="isAdmin">
-    <div class="admin-dashboard">
-      <!-- 管理员欢迎横幅 -->
-      <div class="admin-banner">
-        <div class="banner-content">
-          <h2 class="welcome-title">管理控制台</h2>
-          <p class="welcome-subtitle">{{ currentDate }}</p>
-        </div>
-        <div class="admin-actions">
-          <button class="action-btn gold" @click="pushSafe('/system/users-orgs')">
-            <el-icon><UserFilled /></el-icon> 用户管理
-          </button>
-          <button class="action-btn gold" @click="pushSafe('/data-management/backup')">
-            <el-icon><Files /></el-icon> 数据备份
-          </button>
-          <button class="action-btn gold" @click="pushSafe('/system/audit')">
-            <el-icon><Document /></el-icon> 操作审计
-          </button>
-          <button class="action-btn gold" @click="pushSafe('/system/config')">
-            <el-icon><Setting /></el-icon> 系统配置
-          </button>
-        </div>
-      </div>
-
-      <!-- 系统概览统计 -->
-      <div class="admin-stats-grid">
-        <div v-for="stat in adminStats" :key="stat.label" class="admin-stat-card">
-          <div class="stat-header">
-            <span class="stat-icon"
-              ><el-icon><component :is="stat.icon" /></el-icon
-            ></span>
-            <span class="stat-label">{{ stat.label }}</span>
+  <!-- 单根包裹：避免 transition 内多根导致 setAttribute('0') 崩溃 -->
+  <div style="display: contents">
+    <template v-if="isAdmin">
+      <div class="admin-dashboard">
+        <!-- 管理员欢迎横幅 -->
+        <div class="admin-banner">
+          <div class="banner-content">
+            <h2 class="welcome-title">管理控制台</h2>
+            <p class="welcome-subtitle">{{ currentDate }}</p>
           </div>
-          <div class="stat-value">{{ stat.value }}</div>
-          <div class="stat-trend" :class="stat.trendClass">
-            {{ stat.trend }}
+          <div class="admin-actions">
+            <button class="action-btn gold" @click="pushSafe('/system/users-orgs')">
+              <el-icon><UserFilled /></el-icon> 用户管理
+            </button>
+            <button class="action-btn gold" @click="pushSafe('/data-management/backup')">
+              <el-icon><Files /></el-icon> 数据备份
+            </button>
+            <button class="action-btn gold" @click="pushSafe('/system/audit')">
+              <el-icon><Document /></el-icon> 操作审计
+            </button>
+            <button class="action-btn gold" @click="pushSafe('/system/config')">
+              <el-icon><Setting /></el-icon> 系统配置
+            </button>
           </div>
         </div>
-      </div>
 
-      <!-- 双列布局 -->
-      <div class="admin-main-grid">
-        <!-- 左列 -->
-        <div class="admin-left-col">
-          <!-- 系统状态 -->
-          <div class="admin-card">
-            <div class="card-header">
-              <h3>
-                <el-icon><Monitor /></el-icon> 系统状态
-              </h3>
+        <!-- 系统概览统计 -->
+        <div class="admin-stats-grid">
+          <div v-for="stat in adminStats" :key="stat.label" class="admin-stat-card">
+            <div class="stat-header">
+              <span class="stat-icon"
+                ><el-icon><component :is="stat.icon" /></el-icon
+              ></span>
+              <span class="stat-label">{{ stat.label }}</span>
             </div>
-            <div class="system-status">
-              <div v-if="systemStatus.length === 0" class="empty-tip">加载中...</div>
-              <div v-for="status in systemStatus" :key="status.name" class="status-item">
-                <span class="status-name">{{ status.name }}</span>
-                <span class="status-value" :class="status.status">
-                  <span class="status-dot"></span>
-                  {{ status.statusText }}
-                </span>
+            <div class="stat-value">{{ stat.value }}</div>
+            <div class="stat-trend" :class="stat.trendClass">
+              {{ stat.trend }}
+            </div>
+          </div>
+        </div>
+
+        <!-- 双列布局 -->
+        <div class="admin-main-grid">
+          <!-- 左列 -->
+          <div class="admin-left-col">
+            <!-- 系统状态 -->
+            <div class="admin-card">
+              <div class="card-header">
+                <h3>
+                  <el-icon><Monitor /></el-icon> 系统状态
+                </h3>
               </div>
-            </div>
-          </div>
-
-          <!-- 最近登录用户 -->
-          <div class="admin-card">
-            <div class="card-header">
-              <h3>
-                <el-icon><Lock /></el-icon> 最近登录
-              </h3>
-            </div>
-            <div class="login-list">
-              <div v-if="recentLogins.length === 0" class="empty-tip">暂无登录记录</div>
-              <div v-for="login in recentLogins" :key="login.id" class="login-item">
-                <div class="login-avatar">
-                  {{ (login.name || '').charAt(0) || 'U' }}
+              <div class="system-status">
+                <div v-if="systemStatus.length === 0" class="empty-tip">加载中...</div>
+                <div v-for="status in systemStatus" :key="status.name" class="status-item">
+                  <span class="status-name">{{ status.name }}</span>
+                  <span class="status-value" :class="status.status">
+                    <span class="status-dot"></span>
+                    {{ status.statusText }}
+                  </span>
                 </div>
-                <div class="login-info">
-                  <span class="login-name">{{ login.name }}</span>
-                  <span class="login-time">{{ login.time }}</span>
+              </div>
+            </div>
+
+            <!-- 最近登录用户 -->
+            <div class="admin-card">
+              <div class="card-header">
+                <h3>
+                  <el-icon><Lock /></el-icon> 最近登录
+                </h3>
+              </div>
+              <div class="login-list">
+                <div v-if="recentLogins.length === 0" class="empty-tip">暂无登录记录</div>
+                <div v-for="login in recentLogins" :key="login.id" class="login-item">
+                  <div class="login-avatar">
+                    {{ (login.name || '').charAt(0) || 'U' }}
+                  </div>
+                  <div class="login-info">
+                    <span class="login-name">{{ login.name }}</span>
+                    <span class="login-time">{{ login.time }}</span>
+                  </div>
+                  <span class="login-ip">{{ login.ip }}</span>
                 </div>
-                <span class="login-ip">{{ login.ip }}</span>
+              </div>
+            </div>
+
+            <!-- 审计日志 -->
+            <div class="admin-card">
+              <div class="card-header">
+                <h3>
+                  <el-icon><EditPen /></el-icon> 审计日志
+                </h3>
+                <button class="text-btn" @click="pushSafe('/system/audit')">查看全部</button>
+              </div>
+              <div class="audit-list">
+                <div v-if="auditLogs.length === 0" class="empty-tip">暂无审计记录</div>
+                <div v-for="log in auditLogs" :key="log.id" class="audit-item">
+                  <span class="audit-action" :class="log.type">{{ log.action }}</span>
+                  <span class="audit-user">{{ log.user }}</span>
+                  <span class="audit-target">{{ log.target }}</span>
+                  <span class="audit-time">{{ log.time }}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- 审计日志 -->
-          <div class="admin-card">
-            <div class="card-header">
-              <h3>
-                <el-icon><EditPen /></el-icon> 审计日志
-              </h3>
-              <button class="text-btn" @click="pushSafe('/system/audit')">查看全部</button>
-            </div>
-            <div class="audit-list">
-              <div v-if="auditLogs.length === 0" class="empty-tip">暂无审计记录</div>
-              <div v-for="log in auditLogs" :key="log.id" class="audit-item">
-                <span class="audit-action" :class="log.type">{{ log.action }}</span>
-                <span class="audit-user">{{ log.user }}</span>
-                <span class="audit-target">{{ log.target }}</span>
-                <span class="audit-time">{{ log.time }}</span>
+          <!-- 右列 -->
+          <div class="admin-right-col">
+            <!-- 快捷操作 -->
+            <div class="admin-card">
+              <div class="card-header">
+                <h3>
+                  <el-icon><Cpu /></el-icon> 快捷操作
+                </h3>
+              </div>
+              <div class="quick-actions-grid">
+                <div
+                  v-for="action in quickActions"
+                  :key="action.path"
+                  class="quick-action"
+                  @click="pushSafe(action.path)"
+                >
+                  <span class="action-icon"
+                    ><el-icon><component :is="action.icon" /></el-icon
+                  ></span>
+                  <span class="action-label">{{ action.label }}</span>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <!-- 右列 -->
-        <div class="admin-right-col">
-          <!-- 快捷操作 -->
-          <div class="admin-card">
-            <div class="card-header">
-              <h3>
-                <el-icon><Cpu /></el-icon> 快捷操作
-              </h3>
-            </div>
-            <div class="quick-actions-grid">
-              <div
-                v-for="action in quickActions"
-                :key="action.path"
-                class="quick-action"
-                @click="pushSafe(action.path)"
-              >
-                <span class="action-icon"
-                  ><el-icon><component :is="action.icon" /></el-icon
-                ></span>
-                <span class="action-label">{{ action.label }}</span>
+            <!-- 待处理事项 -->
+            <div class="admin-card">
+              <div class="card-header">
+                <h3>
+                  <el-icon><Bell /></el-icon> 待处理事项
+                </h3>
+                <span class="pending-count">{{ pendingItems.length }}</span>
+              </div>
+              <div class="pending-list">
+                <div v-if="pendingItems.length === 0" class="empty-tip">暂无待处理事项</div>
+                <div
+                  v-for="item in pendingItems"
+                  :key="item.id"
+                  class="pending-item"
+                  :class="item.priority"
+                >
+                  <span class="pending-type">{{ item.type }}</span>
+                  <span class="pending-desc">{{ item.description }}</span>
+                  <span class="pending-time">{{ item.time }}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- 待处理事项 -->
-          <div class="admin-card">
-            <div class="card-header">
-              <h3>
-                <el-icon><Bell /></el-icon> 待处理事项
-              </h3>
-              <span class="pending-count">{{ pendingItems.length }}</span>
-            </div>
-            <div class="pending-list">
-              <div v-if="pendingItems.length === 0" class="empty-tip">暂无待处理事项</div>
-              <div
-                v-for="item in pendingItems"
-                :key="item.id"
-                class="pending-item"
-                :class="item.priority"
-              >
-                <span class="pending-type">{{ item.type }}</span>
-                <span class="pending-desc">{{ item.description }}</span>
-                <span class="pending-time">{{ item.time }}</span>
+            <!-- 存储使用 -->
+            <div class="admin-card">
+              <div class="card-header">
+                <h3>
+                  <el-icon><Files /></el-icon> 存储使用
+                </h3>
               </div>
-            </div>
-          </div>
-
-          <!-- 存储使用 -->
-          <div class="admin-card">
-            <div class="card-header">
-              <h3>
-                <el-icon><Files /></el-icon> 存储使用
-              </h3>
-            </div>
-            <div class="storage-info">
-              <div class="storage-bar">
-                <div class="storage-used" :style="{ width: storagePercent + '%' }"></div>
+              <div class="storage-info">
+                <div class="storage-bar">
+                  <div class="storage-used" :style="{ width: storagePercent + '%' }"></div>
+                </div>
+                <div class="storage-text">
+                  已使用 {{ formatSize(storageUsed) }} /
+                  {{ formatSize(storageTotal) }}
+                </div>
               </div>
-              <div class="storage-text">
-                已使用 {{ formatSize(storageUsed) }} /
-                {{ formatSize(storageTotal) }}
-              </div>
-            </div>
-            <div class="storage-breakdown">
-              <div class="breakdown-item">
-                <span class="breakdown-label">数据库</span>
-                <span class="breakdown-value">{{ formatSize(dbSize) }}</span>
-              </div>
-              <div class="breakdown-item">
-                <span class="breakdown-label">备份文件</span>
-                <span class="breakdown-value">{{ formatSize(backupSize) }}</span>
-              </div>
-              <div class="breakdown-item">
-                <span class="breakdown-label">日志文件</span>
-                <span class="breakdown-value">{{ formatSize(logSize) }}</span>
+              <div class="storage-breakdown">
+                <div class="breakdown-item">
+                  <span class="breakdown-label">数据库</span>
+                  <span class="breakdown-value">{{ formatSize(dbSize) }}</span>
+                </div>
+                <div class="breakdown-item">
+                  <span class="breakdown-label">备份文件</span>
+                  <span class="breakdown-value">{{ formatSize(backupSize) }}</span>
+                </div>
+                <div class="breakdown-item">
+                  <span class="breakdown-label">日志文件</span>
+                  <span class="breakdown-value">{{ formatSize(logSize) }}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  </template>
-  <el-empty v-else description="无权限访问此页面" />
+    </template>
+    <el-empty v-else description="无权限访问此页面" />
+  </div>
 </template>
 
 <script setup lang="ts">
