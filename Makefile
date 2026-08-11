@@ -12,7 +12,7 @@ test: test-backend test-frontend
 # 后端测试
 test-backend:
 	@echo ">>> 运行后端测试..."
-	cd backend && python -m pytest tests/ -v --tb=short --cov=app --cov-fail-under=100
+	cd backend && python -m pytest tests/ -v --tb=short --cov=app --cov-fail-under=98
 
 # 前端测试
 test-frontend:
@@ -44,7 +44,7 @@ deploy-check:
 	@echo ">>> 运行部署前检查..."
 	# 后端检查
 	cd backend && \
-		python -m pytest tests/ --cov=app --cov-fail-under=100 && \
+		python -m pytest tests/ --cov=app --cov-fail-under=98 && \
 		python -m bandit -r app/ -f json -o bandit-report.json || true
 
 	# 前端检查

@@ -299,15 +299,13 @@ describe('权限 computed 全分支', () => {
     expect(vm.canDelete).toBe(true)
   })
 
-  it('role editor → 归一化为 admin（历史兼容），canEdit/canDelete 均 true', async () => {
+  it('role editor → 不归一化为 admin（与后端 normalize_role 一致），canEdit/canDelete 均 false', async () => {
     authState.user = { role: 'editor' }
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.canEdit).toBe(true)
-    expect(vm.canDelete).toBe(true)
-    findBtn(wrapper, '新增政策')
-    findBtn(wrapper, '批量删除')
+    expect(vm.canEdit).toBe(false)
+    expect(vm.canDelete).toBe(false)
   })
 
   it('role viewer → 均 false（|| 全假侧）', async () => {
