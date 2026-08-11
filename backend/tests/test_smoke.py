@@ -25,8 +25,10 @@ class TestHealthEndpoints:
         assert resp.status_code in HTTP_SUCCESS_OR_ERROR
         if resp.status_code == 200:
             data = resp.json()
-            assert "system" in data
-            assert "packages" in data
+            # 兼容信封格式 {code, data: {system, packages}, message} 与裸对象
+            payload = data.get("data", data) if isinstance(data, dict) and isinstance(data.get("data"), dict) else data
+            assert "system" in payload
+            assert "packages" in payload
 
 
 class TestAuthEndpoints:

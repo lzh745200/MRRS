@@ -780,6 +780,24 @@ describe('api/request — 封装方法参数透传', () => {
     expect(config.headers['X-Keep']).toBe('yes')
   })
 
+  it('post FormData 时设置 transformRequest：透传 FormData 并清除 Content-Type（防 JSON 序列化 422）', async () => {
+    mockInst.request.mockResolvedValueOnce({ data: {} })
+    const fd = new FormData()
+    fd.append('file', new File(['x'], 'a.xlsx'))
+    await post('/upload', fd)
+    const config = mockInst.request.mock.calls[0][0]
+    expect(Array.isArray(config.transformRequest)).toBe(true)
+    // FormData 分支：清除 Content-Type（让浏览器自动 multipart boundary）并原样返回
+    const headers = { setContentType: vi.fn() }
+    const out = config.transformRequest[0](fd, headers)
+    expect(out).toBe(fd)
+    expect(headers.setContentType).toHaveBeenCalledWith(undefined)
+    // 非 FormData 分支：原样返回
+    const plain = { a: 1 }
+    expect(config.transformRequest[0](plain, headers)).toBe(plain)
+    expect(headers.setContentType).toHaveBeenCalledTimes(1)
+  })
+
   it('post FormData 无 extra headers 时跳过 Content-Type 清理', async () => {
     mockInst.request.mockResolvedValueOnce({ data: {} })
     const fd = new FormData()

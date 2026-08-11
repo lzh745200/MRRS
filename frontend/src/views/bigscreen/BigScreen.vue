@@ -169,13 +169,15 @@ async function loadAll() {
   }
   try {
     const y = await getYearlyTrends(5)
-    yearlyTrends.value = y?.trends ?? y ?? []
+    // 兼容数组直返 / {trends:[...]} / 信封展开三种结构，防止对象被当作数组使用
+    yearlyTrends.value = Array.isArray(y) ? y : (y?.trends ?? [])
   } catch {
     failedCount++
   }
   try {
     const r = await getRankings(new Date().getFullYear(), 10)
-    rankings.value = r?.items ?? r ?? []
+    // 后端返回 {year, rankings:[...]}（字段名为 rankings 而非 items）——兼容两种字段名与数组直返
+    rankings.value = Array.isArray(r) ? r : (r?.rankings ?? r?.items ?? [])
   } catch {
     failedCount++
   }

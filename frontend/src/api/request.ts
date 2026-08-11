@@ -502,6 +502,19 @@ export async function post<T = any>(
     delete h['Content-Type']
     delete h['content-type']
     config.headers = h
+    // 覆盖默认 transformRequest：实例级默认 headers 的 application/json 会在
+    // mergeConfig 时合并回来（hasJSONContentType=true → JSON.stringify(FormData)=="{}"，
+    // 后端 multipart 解析失败返回 422 file missing）。此处原样透传 FormData，
+    // 并在转换阶段彻底清除 Content-Type，让浏览器自动生成 multipart boundary。
+    config.transformRequest = [
+      (d: any, hdrs: any) => {
+        if (d instanceof FormData) {
+          hdrs?.setContentType?.(undefined)
+          return d
+        }
+        return d
+      },
+    ]
   }
   return apiRequest<T>(config)
 }

@@ -50,7 +50,8 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
       ],
     })
     mocks.getRankings.mockResolvedValue({
-      items: [
+      year: 2026,
+      rankings: [
         { village_name: '甲村', score: 92 },
         { village_name: '乙村', score: 85 },
       ],
@@ -221,6 +222,45 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
     expect(vm.yearlyTrends).toEqual([])
     expect(vm.rankings).toEqual([])
     expect(vm.summary).toEqual({})
+    wrapper.unmount()
+  })
+
+  it('rankings 数组直返 / items 旧格式兼容（Array.isArray 与双字段兜底）', async () => {
+    // 数组直返
+    mocks.getRankings.mockResolvedValue([{ village_name: '丙村', score: 77 }])
+    let wrapper = mountComp()
+    await flushPromises()
+    let vm = wrapper.vm as any
+    expect(vm.rankings).toEqual([{ village_name: '丙村', score: 77 }])
+    expect(vm.rankOption.yAxis.data).toContain('丙村')
+    wrapper.unmount()
+    // items 旧格式（历史客户端兼容）
+    mocks.getRankings.mockResolvedValue({ items: [{ village_name: '丁村', score: 66 }] })
+    wrapper = mountComp()
+    await flushPromises()
+    vm = wrapper.vm as any
+    expect(vm.rankings).toEqual([{ village_name: '丁村', score: 66 }])
+    expect(vm.rankOption.yAxis.data).toContain('丁村')
+    wrapper.unmount()
+  })
+
+  it('yearlyTrends 数组直返兼容', async () => {
+    mocks.getYearlyTrends.mockResolvedValue([{ year: 2023, total_planned: 60 }])
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.yearlyTrends).toEqual([{ year: 2023, total_planned: 60 }])
+    expect(vm.fundTrendOption.xAxis.data).toContain(2023)
+    wrapper.unmount()
+  })
+
+  it('rankings 返回无 rankings/items 字段的对象 → 空数组兜底（不崩溃）', async () => {
+    mocks.getRankings.mockResolvedValue({ error: 'no data' })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.rankings).toEqual([])
+    expect(vm.rankOption.yAxis.data).toEqual([])
     wrapper.unmount()
   })
 })

@@ -70,6 +70,37 @@ class TestFundLifecycleContract:
         })
         assert resp.status_code in (200, 201, 400, 404, 405, 422)
 
+    def test_create_contract_empty_date_strings(self, auth_client):
+        """前端表单未选日期提交空字符串 → 不应 422（Pydantic date 解析兜底）"""
+        resp = auth_client.post("/api/v1/fund-lifecycle/contracts/1", json={
+            "contract_name": "空日期合同",
+            "contract_no": "C-EMPTY-DATE",
+            "contract_amount": 100.0,
+            "sign_date": "",
+            "deadline": "",
+        })
+        assert resp.status_code not in (422,)
+        assert resp.status_code in (200, 201, 400, 404, 405)
+
+    def test_update_contract_empty_date_strings(self, auth_client):
+        """更新合同时空字符串日期 → 不应 422"""
+        resp = auth_client.put("/api/v1/fund-lifecycle/contracts/1", json={
+            "sign_date": "",
+            "deadline": "  ",
+        })
+        assert resp.status_code not in (422,)
+        assert resp.status_code in (200, 400, 404, 405)
+
+    def test_create_voucher_empty_date_string(self, auth_client):
+        """转账凭证 transfer_date 空字符串 → 不应 422"""
+        resp = auth_client.post("/api/v1/fund-lifecycle/vouchers/1", json={
+            "amount": 50.0,
+            "direction": "military_to_local",
+            "transfer_date": "",
+        })
+        assert resp.status_code not in (422,)
+        assert resp.status_code in (200, 201, 400, 404, 405)
+
 
 class TestFundLifecycleAnomaly:
     """Phase 5: 异常检测."""

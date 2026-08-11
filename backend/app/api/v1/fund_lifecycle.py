@@ -637,6 +637,14 @@ class TransferVoucherCreate(BaseModel):
     transfer_date: Optional[date] = None
     remarks: Optional[str] = None
 
+    @field_validator("transfer_date", mode="before")
+    @classmethod
+    def _empty_date_to_none(cls, v):
+        """前端表单未选择日期时提交空字符串 → 视为 None，避免 Pydantic date 解析 422"""
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
 
 class TransferVoucherUpdate(BaseModel):
     direction: Optional[str] = None
@@ -646,6 +654,14 @@ class TransferVoucherUpdate(BaseModel):
     transfer_date: Optional[date] = None
     status: Optional[str] = None
     remarks: Optional[str] = None
+
+    @field_validator("transfer_date", mode="before")
+    @classmethod
+    def _empty_date_to_none(cls, v):
+        """前端表单未选择日期时提交空字符串 → 视为 None，避免 Pydantic date 解析 422"""
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
 
 @router.get("/transfer-vouchers")
@@ -914,6 +930,14 @@ class ContractCreate(BaseModel):
     deadline: Optional[date] = None
     remarks: Optional[str] = None
 
+    @field_validator("sign_date", "deadline", mode="before")
+    @classmethod
+    def _empty_date_to_none(cls, v):
+        """前端表单未选择日期时提交空字符串 → 视为 None，避免 Pydantic date 解析 422"""
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
 
 class ContractUpdate(BaseModel):
     contract_name: Optional[str] = None
@@ -924,6 +948,14 @@ class ContractUpdate(BaseModel):
     deadline: Optional[date] = None
     status: Optional[str] = None
     remarks: Optional[str] = None
+
+    @field_validator("sign_date", "deadline", mode="before")
+    @classmethod
+    def _empty_date_to_none(cls, v):
+        """前端表单未选择日期时提交空字符串 → 视为 None，避免 Pydantic date 解析 422"""
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
 
 @router.get("/contracts")

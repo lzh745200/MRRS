@@ -288,7 +288,7 @@ def admin_token_headers(client, mock_token_payload):
     user.permissions_list = ["*"]
     user.organization_id = 1
 
-    async def mock_get_current_user(*args, **kwargs):
+    async def mock_get_current_user():
         return user
 
     client.app.dependency_overrides[get_current_user] = mock_get_current_user
@@ -311,7 +311,7 @@ def user_token_headers(client):
     user.permissions_list = ["read"]
     user.organization_id = 2
 
-    async def mock_get_current_user(*args, **kwargs):
+    async def mock_get_current_user():
         return user
 
     client.app.dependency_overrides[get_current_user] = mock_get_current_user
@@ -334,7 +334,7 @@ def operator_token_headers(client):
     user.permissions_list = ["read", "write"]
     user.organization_id = 1
 
-    async def mock_get_current_user(*args, **kwargs):
+    async def mock_get_current_user():
         return user
 
     client.app.dependency_overrides[get_current_user] = mock_get_current_user
@@ -416,7 +416,7 @@ def auth_client(client):
     user.email = "admin@test.com"
     user.full_name = "Admin"
 
-    async def mock_get_current_user(*args, **kwargs):
+    async def mock_get_current_user():
         return user
 
     original_overrides = client.app.dependency_overrides.copy()
