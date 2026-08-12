@@ -254,19 +254,36 @@ export interface EducationSupport {
 
 /**
  * 年度数据汇总
+ * 注意：键名与后端 /supported-villages/{id}/yearly/{year} 返回的 section key 完全一致
+ * （force-investment / party-building 为 kebab-case，非 camelCase）
  */
+export interface VillageCommittee {
+  overview?: string
+  specialIndustry?: string
+  collectiveIncomeDesc?: string
+  collectiveIncomeAmount?: number
+  members?: Array<{
+    name: string
+    position: string
+    phone: string
+    isVeteran: boolean
+    remark: string
+  }>
+}
+
 export interface YearlyDataSummary {
   year: number
   population?: VillagePopulation
   income?: VillageIncome
-  forceInvestment?: ForceInvestment
-  industrySupport?: IndustrySupport
+  'force-investment'?: ForceInvestment
+  industry?: IndustrySupport
   infrastructure?: InfrastructureImprovement
-  partyBuilding?: PartyBuildingSupport
-  medicalSupport?: MedicalSupport
-  consumptionSupport?: ConsumptionSupport
-  employmentSupport?: EmploymentSupport
-  educationSupport?: EducationSupport
+  'party-building'?: PartyBuildingSupport
+  medical?: MedicalSupport
+  consumption?: ConsumptionSupport
+  employment?: EmploymentSupport
+  education?: EducationSupport
+  committee?: VillageCommittee
 }
 
 // ==================== 查询和筛选类型 ====================

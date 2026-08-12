@@ -85,7 +85,8 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "path": "/funds",
         "icon": "Money",
         "order": 5,
-        "roles": ["admin", "super_admin"],
+        # 普通用户可完整操作经费管理（申请/审批/拨付/结算全流程）
+        "roles": ["admin", "super_admin", "user", "viewer"],
     },
     {
         "key": "funds-user",
@@ -94,6 +95,22 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "icon": "Money",
         "order": 6,
         "roles": ["user", "viewer"],
+    },
+    {
+        "key": "funds-lifecycle",
+        "label": "资金周期",
+        "path": "/funds/lifecycle",
+        "icon": "Money",
+        "order": 6,
+        "roles": ["admin", "super_admin", "user", "viewer"],
+    },
+    {
+        "key": "funds-settlement",
+        "label": "决算结算",
+        "path": "/funds/settlement",
+        "icon": "Money",
+        "order": 7,
+        "roles": ["admin", "super_admin", "user", "viewer"],
     },
     {
         "key": "policies",

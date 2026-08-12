@@ -41,6 +41,7 @@
             <el-option label="系统通知" value="system" />
             <el-option label="审批通知" value="approval" />
             <el-option label="任务提醒" value="task" />
+            <el-option label="备份提醒" value="backup" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">

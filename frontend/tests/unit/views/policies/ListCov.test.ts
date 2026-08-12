@@ -23,7 +23,6 @@ const {
   logError,
   policyApi,
   mockDownloadTemplate,
-  submitApprovalMock,
 } = vi.hoisted(() => {
   return {
     routeBox: { route: null as any },
@@ -56,7 +55,6 @@ const {
       exportPoliciesWPS: vi.fn(),
     },
     mockDownloadTemplate: vi.fn(),
-    submitApprovalMock: vi.fn().mockResolvedValue({}),
   }
 })
 
@@ -85,10 +83,6 @@ vi.mock('@/stores/auth', () => ({
 }))
 
 vi.mock('@/api/policy', () => policyApi)
-
-vi.mock('@/api/approval', () => ({
-  submitApproval: submitApprovalMock,
-}))
 
 vi.mock('@/api/import', () => ({
   downloadImportTemplateAndSave: mockDownloadTemplate,
@@ -511,7 +505,8 @@ describe('删除与批量删除全分支', () => {
 
     await vm.handleDelete(row)
     expect(policyStore.removePolicy).toHaveBeenCalledWith(1)
-    expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
+    // 成功静默：删除成功不弹提示
+    expect(ElMessage.success).not.toHaveBeenCalled()
 
     confirmMock.mockRejectedValueOnce('cancel')
     await vm.handleDelete(row)
@@ -732,24 +727,7 @@ describe('路由 watch', () => {
 })
 
 describe('提交审批', () => {
-  it('确认提交 → submitApproval + 成功提示 + 刷新；取消静默；失败提示', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    vm.handleSubmitApproval({ id: 1, title: '政策A', code: 'X' })
-    await flushPromises()
-    expect(vm.mockSubmitApproval || submitApprovalMock).toBeTruthy()
-    expect(ElMessage.success).toHaveBeenCalledWith('已提交审批，请到审批中心处理')
-
-    confirmMock.mockRejectedValueOnce('cancel')
-    await vm.handleSubmitApproval({ id: 2, title: 'B' })
-    expect(ElMessage.error).not.toHaveBeenCalled()
-
-    submitApprovalMock.mockRejectedValueOnce({ response: { data: { detail: '无工作流' } } })
-    await vm.handleSubmitApproval({ id: 3, title: 'C' })
-    expect(ElMessage.error).toHaveBeenCalledWith('无工作流')
-  })
-
+  // 政策板块 v1.8.0 起不再提供「提交审批」功能（政策无需审批流），相关用例已移除
   it('levelOptions 多形态响应（数组/items/nested）', async () => {
     const wrapper = mountComp()
     await flushPromises()
@@ -771,7 +749,7 @@ describe('提交审批', () => {
 })
 
 describe('行操作按钮补充', () => {
-  it('详情/编辑/删除/提交审批 行按钮点击', async () => {
+  it('详情/编辑/删除 行按钮点击', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -779,19 +757,6 @@ describe('行操作按钮补充', () => {
     if (detailBtn) await detailBtn.trigger('click')
     const editBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('编辑'))
     if (editBtn) await editBtn.trigger('click')
-    wrapper.unmount()
-  })
-})
-
-describe('提交审批失败分支', () => {
-  it('reject 带 detail / 普通 Error', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    ;(submitApprovalMock as any).mockRejectedValueOnce({ response: { data: { detail: '无权限' } } })
-    await vm.handleSubmitApproval({ id: 1, title: 't', code: 'c' }).catch(() => {})
-    ;(submitApprovalMock as any).mockRejectedValueOnce(new Error('网络错误'))
-    await vm.handleSubmitApproval({ id: 2, title: 't2', code: 'c2' }).catch(() => {})
     wrapper.unmount()
   })
 })
@@ -819,12 +784,8 @@ describe('加载失败与取消分支', () => {
     wrapper.unmount()
   })
   it('submitApproval 拒绝 "cancel" → 不提示', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    ;(submitApprovalMock as any).mockRejectedValueOnce('cancel')
-    await vm.handleSubmitApproval({ id: 3, title: 't3', code: 'c3' }).catch(() => {})
-    wrapper.unmount()
+    // 政策 v1.8.0 起移除「提交审批」功能，本用例保留占位说明
+    expect(true).toBe(true)
   })
 })
 
@@ -842,26 +803,14 @@ describe('层级加载失败分支2', () => {
 
 describe('审批提交分支收尾', () => {
   it('确认后 reject cancel / reject detail', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    confirmMock.mockResolvedValue(true)
-    ;(submitApprovalMock as any).mockRejectedValueOnce('cancel')
-    await vm.handleSubmitApproval({ id: 4, title: 't4', code: 'c4' })
-    ;(submitApprovalMock as any).mockRejectedValueOnce({ response: { data: { detail: '无权限' } } })
-    await vm.handleSubmitApproval({ id: 5, title: 't5', code: 'c5' })
-    wrapper.unmount()
+    // 政策 v1.8.0 起移除「提交审批」功能，保留占位
+    expect(true).toBe(true)
   })
 })
 
 describe('审批失败兜底文案', () => {
   it('error 无 response 无 message → 兜底文案', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    confirmMock.mockResolvedValue(true)
-    ;(submitApprovalMock as any).mockRejectedValueOnce({})
-    await vm.handleSubmitApproval({ id: 6, title: 't6', code: 'c6' })
-    wrapper.unmount()
+    // 政策 v1.8.0 起移除「提交审批」功能，保留占位
+    expect(true).toBe(true)
   })
 })

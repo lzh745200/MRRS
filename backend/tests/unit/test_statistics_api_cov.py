@@ -205,6 +205,10 @@ class TestAnalysisDataImpl:
             _q(first=SimpleNamespace(cnt=1, inv=400.0)),   # 消费帮扶
             _q(first=SimpleNamespace(cnt=1, ben=80.0)),    # 就业帮扶
             _q(all=[("甲县", 2, 100.0, 50.0)]),            # county_data
+            # 年度对比：各村人口年份 / 投入年份 / 收入年份（v1.8.0）
+            _q(all=[(2024, 2), (2025, 3)]),                # pop_rows
+            _q(all=[(2024, 100.0), (2025, 150.0)]),        # inv_rows
+            _q(all=[(2024, 1.2), (2025, 1.5)]),            # inc_rows
         ])
         result = await st._get_analysis_data_impl(db)
         ov = result["overview"]
@@ -230,6 +234,12 @@ class TestAnalysisDataImpl:
         assert result["region_stats"] == [
             {"region": "甲县", "villages": 2, "investment": 150.0, "avgIncome": 0}
         ]
+        # 年度对比（v1.8.0）
+        yc = result["yearly_comparison"]
+        assert yc["years"] == ["2024", "2025"]
+        assert yc["villages"] == {"2024": 2, "2025": 3}
+        assert yc["investment"] == {"2024": 100.0, "2025": 150.0}
+        assert yc["income"] == {"2024": 1.2, "2025": 1.5}
 
     async def test_empty_villages_path(self):
         """无帮扶村 → 趋势为空、完整率为 0（覆盖 460-463 的 False 分支）"""
@@ -248,12 +258,17 @@ class TestAnalysisDataImpl:
             _q(first=SimpleNamespace(cnt=0, inv=0.0)),   # 消费
             _q(first=SimpleNamespace(cnt=0, ben=0.0)),   # 就业
             _q(all=[]),                  # county_data
+            _q(all=[]),                  # pop_rows（年度对比，v1.8.0）
+            _q(all=[]),                  # inv_rows
+            _q(all=[]),                  # inc_rows
         ])
         result = await st._get_analysis_data_impl(db)
         assert result["overview"]["completeness"] == 0
         assert result["investment_trend"] == []
         assert all(c["ratio"] == 0 for c in result["category_stats"])  # total_cat_inv=0 跳过占比
         assert result["region_stats"] == []
+        # 年度对比空数据兜底
+        assert result["yearly_comparison"] == {"years": [], "villages": {}, "investment": {}, "income": {}}
 
 
 # ==================== 端点 500 与缓存命中 ====================

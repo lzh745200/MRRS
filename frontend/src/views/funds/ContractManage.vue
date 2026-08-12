@@ -173,10 +173,13 @@
         </el-table-column>
         <el-table-column prop="uploaded_by" label="上传人" width="100" />
         <el-table-column prop="created_at" label="上传时间" width="140" />
-        <el-table-column label="操作" width="70">
+        <el-table-column label="操作" width="130">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openAttachment(row.url)"
+            <el-button link type="primary" size="small" @click="openAttachment(row)"
               >打开</el-button
+            >
+            <el-button link type="primary" size="small" @click="downloadAttachment(row)"
+              >下载</el-button
             >
           </template>
         </el-table-column>
@@ -195,6 +198,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { fundLifecycleApi } from '@/api/fundLifecycle'
 import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
 import { useUploadHeaders } from '@/composables/useUploadHeaders'
+import { AuthStorage } from '@/utils/authStorage'
 
 const { pushSafe } = useRouterSafe()
 const route = useRoute()
@@ -396,9 +400,44 @@ function formatSize(size: any) {
   return `${(num / 1024 / 1024).toFixed(2)}MB`
 }
 
-function openAttachment(url: string) {
+// 带认证拉取文件 blob（后端 JWT 校验，window.open 无法携带 Authorization 头）
+async function fetchAttachmentBlob(row: any): Promise<Blob> {
   const base = import.meta.env.VITE_API_BASE_URL || ''
-  window.open(`${base}${url}`, '_blank')
+  const token = AuthStorage.getToken()
+  const response = await fetch(`${base}${row.url || row.download_url}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+  if (!response.ok) throw new Error('加载失败')
+  return response.blob()
+}
+
+// 打开附件（图片/PDF 新窗口预览，其余类型触发下载）
+async function openAttachment(row: any) {
+  try {
+    const blob = await fetchAttachmentBlob(row)
+    const objectUrl = URL.createObjectURL(blob)
+    window.open(objectUrl, '_blank')
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  } catch {
+    ElMessage.error('附件打开失败')
+  }
+}
+
+// 下载附件
+async function downloadAttachment(row: any) {
+  try {
+    const blob = await fetchAttachmentBlob(row)
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = row.file_name || 'attachment'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(objectUrl)
+  } catch {
+    ElMessage.error('附件下载失败')
+  }
 }
 
 onMounted(loadData)

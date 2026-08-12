@@ -43,7 +43,8 @@ export const downloadTemplate = downloadImportTemplate
 
 // ── Filter options ──
 export const getFilterOptions = () => get('/supported-villages/filter-options')
-export const getChangeHistory = (_villageId: number) => Promise.resolve([])
+export const getChangeHistory = (villageId: number) =>
+  get(`/supported-villages/${villageId}/change-history`)
 
 // ── Yearly data ──
 export const getYearlyData = (villageId: number, year: number) =>

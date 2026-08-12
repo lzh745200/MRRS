@@ -65,10 +65,13 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="说明" width="200" />
-        <el-table-column label="操作" width="120">
+        <el-table-column label="操作" width="160">
           <template #default="{ row }">
             <el-button size="small" text type="primary" @click="editConfig(row as any)"
               >编辑</el-button
+            >
+            <el-button size="small" text type="danger" @click="deleteConfig(row as any)"
+              >删除</el-button
             >
           </template>
         </el-table-column>
@@ -111,7 +114,7 @@
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Upload, RefreshRight, Refresh } from '@element-plus/icons-vue'
-import { get, post, put } from '@/api/request'
+import { get, post, put, del } from '@/api/request'
 import { useConfigStore } from '@/stores/config'
 
 interface ConfigItem {
@@ -197,6 +200,25 @@ async function saveConfig() {
     } catch {
       ElMessage.error('保存失败')
     }
+  }
+}
+
+async function deleteConfig(row: ConfigItem) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除配置项 "${row.key}" 吗？删除后将回退使用系统默认值。`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await del(`/system/config/${encodeURIComponent(row.key)}`)
+    ElMessage.success('配置已删除')
+    loadConfig()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '删除失败')
   }
 }
 

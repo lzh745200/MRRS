@@ -129,12 +129,6 @@
 
   .el-select .el-input__wrapper {
     border-radius: 8px;
-    box-shadow: 0 0 0 1px var(--color-border-lighter, #ebeef5) inset;
-    transition: box-shadow 0.25s ease;
-
-    &:hover {
-      box-shadow: 0 0 0 1px var(--color-primary-light-3, #a0cfff) inset;
-    }
   }
 
   .el-form-item__label {

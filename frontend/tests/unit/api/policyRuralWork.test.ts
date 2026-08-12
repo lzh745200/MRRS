@@ -296,9 +296,13 @@ describe('api/policy 补充（此前未覆盖函数）', () => {
     expect(config.headers['Content-Type']).toBe('multipart/form-data')
   })
 
-  it('previewPolicyFile GET /policies/{id}/preview', () => {
+  it('previewPolicyFile apiRequest blob（v1.8.0：预览按 blob 流处理）', () => {
     previewPolicyFile(4)
-    expect(mockGet).toHaveBeenCalledWith('/policies/4/preview')
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/policies/4/preview',
+      responseType: 'blob',
+    })
   })
 
   it('downloadPolicyFile apiRequest blob', () => {

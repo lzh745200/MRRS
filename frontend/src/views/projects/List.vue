@@ -413,7 +413,7 @@ const handleDelete = async (row: any) => {
   }
   try {
     await projectApi.delete(id)
-    ElMessage.success('删除成功')
+    // 成功静默：仅刷新列表
     pagination.page = 1 // 重置到第1页，确保新建/编辑后的数据可见
     await loadData()
     loadStats()

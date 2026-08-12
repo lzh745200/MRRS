@@ -53,7 +53,7 @@ export const MENU_CONFIG: MenuItem[] = [
     path: '/funds',
     icon: 'Money',
     order: 5,
-    roles: ['admin', 'super_admin', 'manager'],
+    roles: ['admin', 'super_admin', 'user', 'viewer'],
   },
   {
     key: 'funds-user',
@@ -61,7 +61,23 @@ export const MENU_CONFIG: MenuItem[] = [
     path: '/funds/user',
     icon: 'Money',
     order: 6,
-    roles: ['operator', 'viewer', 'approval_leader'],
+    roles: ['user', 'viewer'],
+  },
+  {
+    key: 'funds-lifecycle',
+    label: '资金周期',
+    path: '/funds/lifecycle',
+    icon: 'Money',
+    order: 16,
+    roles: ['admin', 'super_admin', 'user', 'viewer'],
+  },
+  {
+    key: 'funds-settlement',
+    label: '决算结算',
+    path: '/funds/settlement',
+    icon: 'Money',
+    order: 17,
+    roles: ['admin', 'super_admin', 'user', 'viewer'],
   },
   {
     key: 'policies',
@@ -135,8 +151,8 @@ export const MENU_CONFIG: MenuItem[] = [
       },
       {
         key: 'backup',
-        label: '数据备份',
-        path: '/data-management/backup',
+        label: '备份管理',
+        path: '/system/backup',
         icon: 'FolderOpened',
       },
       {

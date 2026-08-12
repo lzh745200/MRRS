@@ -70,14 +70,14 @@ const fullData = {
   year: 2026,
   population: { totalPopulation: 100, totalHouseholds: 30, residentPopulation: 90 },
   income: { perCapitaIncome: 1.2, collectiveIncome: 3.4 },
-  forceInvestment: { seniorLeaderVisits: 5, unitSoldierVisits: 8 },
-  industrySupport: { investment: 10 },
+  'force-investment': { seniorLeaderVisits: 5, unitSoldierVisits: 8 },
+  industry: { investment: 10 },
   infrastructure: { investment: 20 },
-  partyBuilding: { investment: 30, jointActivities: 4 },
-  medicalSupport: { investment: 40, patientsServed: 50 },
-  consumptionSupport: { villageProductsPurchase: 6 },
-  employmentSupport: { hiredPopulation: 7, trainedPopulation: 9 },
-  educationSupport: { investment: 8, aidedStudents: 12 },
+  'party-building': { investment: 30, jointActivities: 4 },
+  medical: { investment: 40, patientsServed: 50 },
+  consumption: { villageProductsPurchase: 6 },
+  employment: { hiredPopulation: 7, trainedPopulation: 9 },
+  education: { investment: 8, aidedStudents: 12 },
   committee: { members: [{ name: 'a' }, { name: 'b' }], collectiveIncomeAmount: 5 },
 }
 
@@ -159,7 +159,7 @@ describe('YearlyOverview.vue 加载与板块统计', () => {
   })
 
   it('employment/education 板块字段缺失：0 兜底', async () => {
-    mocks.getYearlyData.mockResolvedValue({ employmentSupport: {}, educationSupport: {} })
+    mocks.getYearlyData.mockResolvedValue({ employment: {}, education: {} })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -173,14 +173,15 @@ describe('YearlyOverview.vue 加载与板块统计', () => {
 
   it('party/medical/consumption 板块字段缺失：0 兜底', async () => {
     mocks.getYearlyData.mockResolvedValue({
-      partyBuilding: {},
-      medicalSupport: {},
-      consumptionSupport: {},
+      'party-building': {},
+      medical: {},
+      consumption: {},
     })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     const party = vm.sections.find((s: any) => s.key === 'party_building')
+    expect(party.stats[0].value).toBe('0.00')
     expect(party.stats[1].value).toBe(0)
     const medical = vm.sections.find((s: any) => s.key === 'medical')
     expect(medical.stats[0].value).toBe('0.00')
@@ -191,8 +192,8 @@ describe('YearlyOverview.vue 加载与板块统计', () => {
 
   it('force/industry/infrastructure 板块字段缺失：0 兜底', async () => {
     mocks.getYearlyData.mockResolvedValue({
-      forceInvestment: {},
-      industrySupport: {},
+      'force-investment': {},
+      industry: {},
       infrastructure: {},
     })
     const wrapper = mountComp()

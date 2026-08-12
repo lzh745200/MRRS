@@ -204,6 +204,19 @@ async def todo_reminder_job():
             logger.error("待办提醒失败: %s", e, exc_info=True)
 
 
+async def message_cleanup_job():
+    """清理过期站内消息（每日 03:30，保留最近 30 天）"""
+    with get_db_context() as db:
+        try:
+            from app.services.message_service import MessageService
+
+            svc = MessageService(db)
+            deleted = svc.cleanup_old_messages(days=30)
+            logger.info("消息清理完成，删除 %d 条过期消息（保留 30 天）", deleted)
+        except Exception as e:
+            logger.error("消息清理失败: %s", e, exc_info=True)
+
+
 async def weekly_report_job():
     """每周一生成工作周报消息（每周一 06:30）"""
     with get_db_context() as db:
@@ -456,12 +469,13 @@ def start_backup_scheduler():
     _schedule_daily(anomaly_detection_job, 1, 0, "anomaly_detection")
     _schedule_daily(auto_backup_job, 2, 0, "auto_backup")
     _schedule_daily(auto_package_job, 3, 0, "auto_package")
+    _schedule_daily(message_cleanup_job, 3, 30, "message_cleanup")
     _schedule_interval(reminder_scan_job, 6 * 3600, "reminder_scan")
     _schedule_daily(todo_reminder_job, 8, 0, "todo_reminder")
     _schedule_weekly(weekly_report_job, 0, 6, 30, "weekly_report")
 
     _scheduler_started = True
-    logger.info("调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 自动打包 + 提醒扫描 + 待办提醒 + 周报）")
+    logger.info("调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 自动打包 + 消息清理 + 提醒扫描 + 待办提醒 + 周报）")
 
 
 def stop_backup_scheduler():

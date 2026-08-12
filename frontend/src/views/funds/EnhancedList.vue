@@ -22,6 +22,37 @@
       </div>
     </div>
 
+    <!-- 经费管理全流程步骤条 -->
+    <el-card class="flow-card">
+      <el-steps
+        :active="flowActiveStep"
+        align-center
+        finish-status="success"
+        class="fund-flow-steps"
+      >
+        <el-step
+          v-for="step in fundFlowSteps"
+          :key="step.key"
+          :title="step.label"
+          :description="step.desc"
+          class="fund-flow-step"
+        >
+          <template #icon>
+            <el-icon @click="goFlowStep(step.path)"
+              ><component :is="flowIcons[step.icon]"
+            /></el-icon>
+          </template>
+        </el-step>
+      </el-steps>
+      <div class="flow-guide">
+        <el-icon><InfoFilled /></el-icon>
+        <span
+          >当前流程阶段：<b>{{ currentFlowLabel }}</b
+          >。点击步骤图标可跳转对应功能页，操作按钮下方均有前置条件说明。</span
+        >
+      </div>
+    </el-card>
+
     <!-- 年度经费总览 -->
     <el-card class="year-overview-card">
       <div class="year-overview-header">
@@ -419,7 +450,7 @@ import { logger } from '@/utils/logger'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import {
   Plus,
   Download,
@@ -430,6 +461,11 @@ import {
   Money,
   Warning,
   DataAnalysis,
+  Stamp,
+  Coin,
+  DocumentChecked,
+  FolderOpened,
+  InfoFilled,
 } from '@element-plus/icons-vue'
 import { get, del, apiRequest } from '@/api/request'
 import { fundApi } from '@/api/funds'
@@ -534,6 +570,68 @@ const overview = reactive({
   remaining: '0.00',
 })
 
+// ── 经费管理全流程步骤条（预算编制 → 申请 → 审批 → 拨付 → 使用 → 核销 → 结算 → 归档） ──
+const fundFlowSteps = [
+  {
+    key: 'budget',
+    label: '预算编制',
+    desc: '年度预算管理',
+    path: '/funds/budget',
+    icon: 'Tickets',
+  },
+  { key: 'apply', label: '经费申请', desc: '提交经费申请', path: '/funds/user', icon: 'EditPen' },
+  { key: 'approve', label: '审批', desc: '审批通过', path: '/approval/pending', icon: 'Stamp' },
+  { key: 'allocate', label: '拨付', desc: '经费拨付到账', path: '/funds', icon: 'Money' },
+  { key: 'use', label: '使用执行', desc: '投入使用', path: '/funds', icon: 'Coin' },
+  {
+    key: 'reimburse',
+    label: '报销核销',
+    desc: '发票与报销',
+    path: '/funds/contract',
+    icon: 'DocumentChecked',
+  },
+  {
+    key: 'settle',
+    label: '决算结算',
+    desc: '项目结算',
+    path: '/funds/settlement',
+    icon: 'DataAnalysis',
+  },
+  { key: 'archive', label: '归档', desc: '审计归档', path: '/funds/report', icon: 'FolderOpened' },
+] as const
+
+// 图标组件映射（字符串 → 组件，供模板 <component :is> 使用）
+const flowIcons: Record<string, any> = {
+  Tickets,
+  EditPen,
+  Stamp,
+  Money,
+  Coin,
+  DocumentChecked,
+  DataAnalysis,
+  FolderOpened,
+}
+
+// 当前已到达的流程阶段（根据年度总览统计启发式计算）
+const flowActiveStep = computed(() => {
+  let step = 0
+  if (Number(overview.budgetTotal) > 0) step = 1
+  if (overview.appliedCount > 0) step = 2
+  if (overview.allocatedCount > 0) step = 3
+  if (Number(overview.usedAmount) > 0) step = 4
+  return step
+})
+
+const currentFlowLabel = computed(() => {
+  const steps = fundFlowSteps
+  const idx = Math.min(flowActiveStep.value, steps.length - 1)
+  return steps[idx].label
+})
+
+function goFlowStep(path: string) {
+  pushSafe(path)
+}
+
 async function loadYearOverview() {
   try {
     const res = await get('/funds/statistics/overview', { year: overviewYear.value })
@@ -633,7 +731,7 @@ async function handleDelete(row: any) {
   deleting.value[row.id] = true
   try {
     await del(`/funds/${row.id}`)
-    ElMessage.success('删除成功')
+    // 成功静默：仅刷新列表（关键反馈留给审批/拨付等动作）
     // 立即从前端列表中移除，确保界面及时更新
     tableData.value = tableData.value.filter((item: any) => item.id !== row.id)
     total.value = Math.max(0, total.value - 1)
@@ -677,7 +775,11 @@ async function quickApprove(row: any) {
   approving.value[row.id] = true
   try {
     await fundApi.approve(row.id, {})
-    ElMessage.success('审批成功')
+    ElNotification({
+      title: '审批通过',
+      message: `经费「${row.name || row.id}」已审批通过`,
+      type: 'success',
+    })
     currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     fetchData()
     loadStats()
@@ -692,7 +794,11 @@ async function quickAllocate(row: any) {
   allocating.value[row.id] = true
   try {
     await fundApi.allocate(row.id, {})
-    ElMessage.success('拨付成功')
+    ElNotification({
+      title: '经费拨付',
+      message: `经费「${row.name || row.id}」已拨付到账`,
+      type: 'success',
+    })
     currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     fetchData()
     loadStats()
@@ -814,6 +920,34 @@ onMounted(() => {
 <style scoped>
 .fund-list-page {
   padding: 20px;
+}
+
+/* 经费管理全流程步骤条 */
+.flow-card {
+  margin-bottom: 16px;
+}
+.fund-flow-steps {
+  padding: 8px 0;
+}
+.fund-flow-step {
+  cursor: pointer;
+}
+.flow-guide {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--color-primary-light-9, #f0f9f4);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.flow-guide .el-icon {
+  color: var(--color-primary);
+}
+.flow-guide b {
+  color: var(--color-primary-dark-1);
 }
 
 .page-header {

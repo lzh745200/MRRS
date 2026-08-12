@@ -488,7 +488,8 @@ describe('查看 / 编辑 / 删除 / 新增', () => {
     pops[0].vm.$emit('confirm')
     await flushPromises()
     expect(delMock).toHaveBeenCalledWith('/schools/1')
-    expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
+    // 成功静默：删除成功不弹提示
+    expect(ElMessage.success).not.toHaveBeenCalled()
     expect(vm.currentPage).toBe(1)
     expect(apiRequestMock).toHaveBeenCalled()
 

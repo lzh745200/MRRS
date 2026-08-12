@@ -226,9 +226,26 @@ async function toggleFavorite() {
 async function handlePreview() {
   previewLoading.value = true
   try {
-    const res = await previewPolicyFile(policyId)
-    previewUrl.value = (res as any)?.url || (res as any)?.preview_url || ''
-    if (!previewUrl.value) ElMessage.info('暂无可预览的文件')
+    const blob = (await previewPolicyFile(policyId)) as Blob
+    if (!blob || blob.size === 0) {
+      ElMessage.info('暂无可预览的文件')
+      return
+    }
+    // 释放上一个预览 Blob URL
+    if (previewUrl.value) {
+      URL.revokeObjectURL(previewUrl.value)
+      previewUrl.value = ''
+    }
+    const type = blob.type || ''
+    // 图片 / PDF / HTML（正文或 mammoth 转换结果）可直接 iframe 预览
+    if (type.startsWith('image/') || type === 'application/pdf' || type.includes('html')) {
+      previewUrl.value = URL.createObjectURL(blob)
+    } else {
+      // Office 等其他类型不支持在线预览 → 提示并直接下载
+      const ext = (policy.value?.fileType as string) || (policy.value as any)?.file_type || 'file'
+      downloadBlob(blob, `${policy.value?.title || '政策文件'}.${ext}`)
+      ElMessage.info('该文件类型不支持在线预览，已为您下载')
+    }
   } catch {
     ElMessage.warning('该政策暂无附件')
   } finally {
@@ -238,9 +255,9 @@ async function handlePreview() {
 
 async function handleDownload() {
   try {
-    const res = await downloadPolicyFile(policyId)
-    const blob = new Blob([res as any])
-    downloadBlob(blob, `${policy.value?.title || '政策文件'}.pdf`)
+    const blob = (await downloadPolicyFile(policyId)) as Blob
+    const ext = (policy.value?.fileType as string) || (policy.value as any)?.file_type || 'file'
+    downloadBlob(blob, `${policy.value?.title || '政策文件'}.${ext}`)
   } catch {
     ElMessage.warning('该政策暂无附件')
   }

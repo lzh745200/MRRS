@@ -577,7 +577,25 @@ class TestSaveYearlySection:
 
         resp = client.post("/api/v1/supported-villages/1/yearly/2025/population", json={"total_households": 100})
         assert resp.status_code == 200
-        mock_db.add.assert_called_once()
+        # 数据行 + 审计日志（AuditLog）各 add 一次
+        from app.models.audit import AuditLog
+        add_calls = [c.args[0] for c in mock_db.add.call_args_list]
+        assert any(isinstance(c, SupportedVillage) or type(c).__name__ == "VillagePopulation" for c in add_calls)
+        assert any(isinstance(c, AuditLog) for c in add_calls)
+
+    def test_change_history_endpoint(self, client, mock_db):
+        """变更历史端点返回 ok_list 信封且只允许本组织访问"""
+        q = mock_db.query.return_value
+        v = _make_mock_village(1)
+        q.first.return_value = v
+        q.order_by.return_value = q
+        q.limit.return_value = q
+        q.all.return_value = []
+        resp = client.get("/api/v1/supported-villages/1/change-history")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("code") == 200
+        assert body["data"]["total"] == 0
 
 
 # ---------------------------------------------------------------------------

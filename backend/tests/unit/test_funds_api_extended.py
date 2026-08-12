@@ -496,12 +496,19 @@ class TestCreateFund:
             assert resp.status_code == 201
             assert resp.json()["data"]["id"] == 100
 
-    def test_create_fund_non_admin_forbidden(self, client_regular, mock_db):
-        """Regular user cannot create via admin endpoint."""
-        resp = client_regular.post("/api/v1/funds", json={
-            "name": "新经费", "amount": 1000,
-        })
-        assert resp.status_code == 403
+    def test_create_fund_regular_user_allowed(self, client_regular, mock_db):
+        """普通用户（user）也可直接创建经费记录（产品要求：经费全流程对普通用户开放）。"""
+        created = Mock()
+        created.id = 100
+        with patch("app.services.fund_service.FundService") as MockService:
+            mock_svc = MockService.return_value
+            mock_svc.create_fund_for_user.return_value = created
+
+            resp = client_regular.post("/api/v1/funds", json={
+                "name": "新经费", "amount": 1000,
+            })
+            assert resp.status_code == 201
+            assert resp.json()["data"]["id"] == 100
 
     def test_create_fund_with_all_fields(self, client, mock_db):
         """Create with all optional fields populated."""
@@ -601,10 +608,13 @@ class TestUpdateFund:
         resp = client.put("/api/v1/funds/999", json={"name": "不存在"})
         assert resp.status_code == 404
 
-    def test_update_fund_non_admin_forbidden(self, client_regular, mock_db):
-        """Regular user cannot update funds."""
+    def test_update_fund_regular_user_allowed(self, client_regular, mock_db):
+        """普通用户（user）可更新经费（pending 状态）。"""
+        fund = FundMock(1, status="pending")
+        mock_db.execute.return_value = _exec_with_scalar_one_or_none(fund)
+
         resp = client_regular.put("/api/v1/funds/1", json={"name": "尝试修改"})
-        assert resp.status_code == 403
+        assert resp.status_code == 200
 
     def test_update_fund_immutable_status_rejected(self, client, mock_db):
         """Fund in approved+ status cannot be modified."""
@@ -664,10 +674,13 @@ class TestDeleteFund:
         resp = client.delete("/api/v1/funds/999")
         assert resp.status_code == 404
 
-    def test_delete_fund_non_admin_forbidden(self, client_regular, mock_db):
-        """Regular user cannot delete funds."""
+    def test_delete_fund_regular_user_allowed(self, client_regular, mock_db):
+        """普通用户（user）可删除 pending 状态的经费。"""
+        fund = FundMock(1, status="pending")
+        mock_db.execute.return_value = _exec_with_scalar_one_or_none(fund)
+
         resp = client_regular.delete("/api/v1/funds/1")
-        assert resp.status_code == 403
+        assert resp.status_code == 200
 
     def test_delete_fund_non_pending_rejected(self, client, mock_db):
         """Only pending funds can be deleted."""
@@ -1037,10 +1050,14 @@ class TestApproveFund:
         resp = client.post("/api/v1/funds/999/approve")
         assert resp.status_code == 404
 
-    def test_approve_fund_non_admin_forbidden(self, client_regular, mock_db):
-        """Regular user cannot approve."""
+    def test_approve_fund_regular_user_allowed(self, client_regular, mock_db):
+        """普通用户（user）可执行经费审批。"""
+        fund = FundMock(1, status="pending")
+        fund.attachments = []
+        mock_db.execute.return_value = _exec_with_scalar_one_or_none(fund)
+
         resp = client_regular.post("/api/v1/funds/1/approve")
-        assert resp.status_code == 403
+        assert resp.status_code == 200
 
     def test_approve_fund_illegal_transition(self, client, mock_db):
         """Cannot approve a fund in non-pending/planned states."""
@@ -1352,9 +1369,9 @@ class TestFundHistoryOperations:
         fund = FundMock(1)
         mock_db.execute.return_value = _exec_with_scalar_one_or_none(fund)
 
-        log = SimpleObj(id=1, fund_id=1, operation="approve",
-                        operator="管理员",
-                        detail="通过审批",
+        log = SimpleObj(id=1, fund_id=1, operation_type="approve",
+                        operator_name="管理员",
+                        operation_detail="通过审批",
                         created_at=datetime(2025, 6, 16, tzinfo=timezone.utc))
 
         chain = MagicMock()
@@ -1371,7 +1388,7 @@ class TestFundHistoryOperations:
         assert resp.status_code == 200
         data = resp.json()["data"]["items"]
         assert len(data) == 1
-        assert data[0]["operation"] == "approve"
+        assert data[0]["operation_type"] == "approve"
 
     def test_operation_logs_not_found(self, client, mock_db):
         """Operation logs for non-existent fund returns 404."""

@@ -544,7 +544,8 @@ describe('对话框与表单提交', () => {
     const [url, payload] = mockPut.mock.calls[0]
     expect(url).toBe('/organizations/2')
     expect(payload).toMatchObject({ name: '分部', is_active: false })
-    expect(ElMessage.success).toHaveBeenCalledWith('已保存')
+    // 成功静默：保存成功不弹提示（v1.8.0 提示策略）
+    expect(ElMessage.success).not.toHaveBeenCalled()
   })
 
   it('handleSubmit：无 formRef 直接返回；validate 失败返回不发请求', async () => {

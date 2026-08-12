@@ -398,7 +398,8 @@ describe('导航与 CRUD', () => {
     projectApiMock.getStats.mockClear()
     await vm.handleDelete(projectRow)
     expect(projectApiMock.delete).toHaveBeenCalledWith(1)
-    expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
+    // 成功静默：删除成功不弹提示
+    expect(ElMessage.success).not.toHaveBeenCalled()
     expect(vm.pagination.page).toBe(1)
     expect(projectApiMock.list).toHaveBeenCalled()
     expect(projectApiMock.getStats).toHaveBeenCalled()

@@ -14,6 +14,7 @@ import { nextTick, reactive } from 'vue'
 // 所有被工厂引用的对象放入 vi.hoisted 中先行初始化。
 const {
   ElMessage,
+  ElNotification,
   confirmMock,
   mockGet,
   mockPost,
@@ -36,6 +37,7 @@ const {
   auditMock,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+  ElNotification: vi.fn(),
   confirmMock: vi.fn(),
   mockGet: vi.fn(),
   mockPost: vi.fn(),
@@ -61,6 +63,7 @@ const {
 
 vi.mock('element-plus', () => ({
   ElMessage,
+  ElNotification,
   ElMessageBox: { confirm: confirmMock },
 }))
 
@@ -632,7 +635,9 @@ describe('工作流', () => {
     await run('audit', auditMock, { audit_result: '通过' })
     expect(auditMock.mock.calls[0][1].allocated_amount).toBeUndefined()
 
-    expect(ElMessage.success).toHaveBeenCalledWith('audit操作成功')
+    expect(ElNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'audit', type: 'success' })
+    )
     expect(vm.wfDialogVisible).toBe(false)
     expect(vm.wfSubmitting).toBe(false)
     expect(mockGet).toHaveBeenCalledWith('/funds/5') // 成功后重新加载
@@ -815,7 +820,8 @@ describe('附件管理', () => {
     confirms[0].vm.$emit('confirm')
     await flushPromises()
     expect(deleteAttachmentMock).toHaveBeenCalledWith(11)
-    expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
+    // 成功静默：删除成功不弹提示
+    expect(ElMessage.success).not.toHaveBeenCalled()
     expect(listAttachments).toHaveBeenCalledWith(5)
 
     deleteAttachmentMock.mockRejectedValue(new Error('net'))
@@ -1003,7 +1009,8 @@ describe('编辑与提交', () => {
     expect('approved_amount' in payload).toBe(false)
     expect('dateRange' in payload).toBe(false)
     expect('village_id' in payload).toBe(false)
-    expect(ElMessage.success).toHaveBeenCalledWith('创建成功')
+    // 成功静默：创建成功不弹提示
+    expect(ElMessage.success).not.toHaveBeenCalled()
     expect(pushSafe).toHaveBeenCalledWith('/funds')
     expect(vm.submitting).toBe(false)
   })
@@ -1034,7 +1041,8 @@ describe('编辑与提交', () => {
     vm.formRef = { validate: vi.fn().mockResolvedValue(true) }
     await vm.handleSubmit()
     expect(mockPut).toHaveBeenCalledWith('/funds/5', expect.objectContaining({ name: '改后名' }))
-    expect(ElMessage.success).toHaveBeenCalledWith('保存成功')
+    // 成功静默：保存成功不弹提示
+    expect(ElMessage.success).not.toHaveBeenCalled()
     expect(vm.isEdit).toBe(false)
     expect(mockGet).toHaveBeenCalledWith('/funds/5')
     expect(vm.submitting).toBe(false)
@@ -1144,7 +1152,8 @@ describe('删除记录', () => {
       expect.objectContaining({ type: 'warning' })
     )
     expect(mockDel).toHaveBeenCalledWith('/funds/5')
-    expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
+    // 成功静默：删除成功不弹提示
+    expect(ElMessage.success).not.toHaveBeenCalled()
     expect(pushSafe).toHaveBeenCalledWith('/funds')
   })
 

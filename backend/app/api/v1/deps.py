@@ -27,6 +27,20 @@ def require_manager_role(current_user) -> None:
         raise HTTPException(status_code=403, detail="权限不足，仅管理员或管理角色可执行此操作")
 
 
+def require_funds_operator_role(current_user) -> None:
+    """经费管理操作权限：放行 user 及以上角色（viewer 保持只读）。
+
+    产品要求普通用户（user）可完整操作经费管理（申请/审批/拨付/结算全流程），
+    viewer 仍为只读角色；数据隔离由 filter_by_data_scope / check_record_access 保障。
+    """
+    from app.core.constants import normalize_role
+
+    role = normalize_role(getattr(current_user, "role", ""))
+    if role == "viewer" and not is_superuser(current_user):
+        raise HTTPException(status_code=403, detail="权限不足，viewer 角色仅可查看经费数据")
+    return None
+
+
 def enforce_admin_include_deleted(
     include_deleted: bool = Query(False, description="是否包含已软删的记录（仅管理员可用）"),
     current_user=Depends(get_current_user),

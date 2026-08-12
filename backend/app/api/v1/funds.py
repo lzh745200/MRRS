@@ -14,6 +14,7 @@
 # 数据权限过滤已迁移到 app.core.data_scope_adapter.apply_scope_filter()
 # 支持组织树展开（org_children 含下级组织），与 school.py 行为一致
 
+import json
 import logging
 import mimetypes
 from datetime import date, datetime, timezone
@@ -25,7 +26,7 @@ from pydantic import BaseModel
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.api.v1.deps import require_manager_role, enforce_admin_include_deleted, build_viewable_because
+from app.api.v1.deps import require_funds_operator_role, enforce_admin_include_deleted, build_viewable_because
 from app.core.database import get_db
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
@@ -36,7 +37,7 @@ from app.services.work_log_service import write_work_log
 from app.utils.upload_helper import save_upload_file, get_attachment_response, delete_attachment_file
 
 from app.models.fund import Fund, FundAttachment
-from app.models.fund_history import FundStatusHistory, FundOperationLog
+from app.models.fund_history import FundFieldChange, FundStatusHistory, FundOperationLog
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -340,7 +341,7 @@ def create_fund(
     db: Session = Depends(get_db),
 ):
     """创建经费记录（需管理员权限）"""
-    require_manager_role(current_user)
+    require_funds_operator_role(current_user)
     from app.services.fund_service import FundService
     fund = FundService(db).create_fund_for_user(
         data, current_user.id, current_user.organization_id,
@@ -372,7 +373,7 @@ def update_fund(
     db: Session = Depends(get_db),
 ):
     """更新经费记录"""
-    require_manager_role(current_user)
+    require_funds_operator_role(current_user)
     fund = _get_fund_or_404(db, fund_id, current_user)
 
     # 业务校验：已审批或已拨付的经费不允许随意修改核心字段
@@ -380,9 +381,22 @@ def update_fund(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前状态不允许修改")
 
     # exclude_unset: 仅排除客户端未发送的字段，显式传 null 的字段会设为 None（清空）
+    changed_by_name = getattr(current_user, "full_name", None) or current_user.username
     for key, value in data.model_dump(exclude_unset=True).items():
         if hasattr(fund, key):
-            setattr(fund, key, _parse_date_value(key, value))
+            new_value = _parse_date_value(key, value)
+            old_value = getattr(fund, key)
+            # 字段级变更留痕：仅在实际值发生变化时记录
+            if _safe_val(old_value) != _safe_val(new_value):
+                db.add(FundFieldChange(
+                    fund_id=fund.id,
+                    field_name=key,
+                    old_value=json.dumps(_safe_val(old_value), ensure_ascii=False, default=str),
+                    new_value=json.dumps(_safe_val(new_value), ensure_ascii=False, default=str),
+                    changed_by=current_user.id,
+                    changed_by_name=changed_by_name,
+                ))
+            setattr(fund, key, new_value)
         else:  # pragma: no cover —— FundUpdate schema 字段在 Fund 模型上全部存在，防御分支不可达
             logger.warning("update_fund: skipping unknown field '%s' on Fund(id=%d)", key, fund_id)
 
@@ -397,7 +411,7 @@ def delete_fund(
     db: Session = Depends(get_db),
 ):
     """软删经费记录（置 is_active=False，保留数据以便恢复/审计）"""
-    require_manager_role(current_user)
+    require_funds_operator_role(current_user)
     fund = _get_fund_or_404(db, fund_id, current_user)
 
     if fund.status != "pending":
@@ -571,13 +585,19 @@ def _transition_status(
     allowed_statuses: List[str],
     *,
     required_attachments: Optional[List[str]] = None,
+    operator: Optional[User] = None,
+    remark: Optional[str] = None,
     **kwargs,
 ):
     """内部辅助：状态流转核心逻辑。
 
+    每次合法流转都会落库一条 FundStatusHistory（经费详情-状态变更日志）。
+
     Args:
         required_attachments: 必需的附件类别列表（如 ["contract", "allocation_order"]）。
             传 None 表示不检查附件；传空列表 [] 表示至少需要一个附件（任意类别）。
+        operator: 执行流转的当前用户（记录 operator_id/operator_name）。
+        remark: 操作备注/原因（可选）。
     """
     if fund.status not in allowed_statuses:
         raise HTTPException(
@@ -610,21 +630,34 @@ def _transition_status(
                     detail=f"缺少必需文档: {', '.join(missing_labels)}",
                 )
 
+    from_status = fund.status
     fund.status = target_status
     for k, v in kwargs.items():
         if hasattr(fund, k):
             setattr(fund, k, v)
         else:  # noqa: E501 —— 全部调用方仅传 Fund 已有字段（approved_by/allocation_date/start_date/end_date/audit_date），防御分支不可达
             logger.warning("_transition_status: skipping unknown field '%s' on Fund(id=%d)", k, fund.id)
+
+    # 状态变更历史落库（与本次流转同事务提交）
+    db.add(FundStatusHistory(
+        fund_id=fund.id,
+        from_status=from_status,
+        to_status=target_status,
+        operator_id=getattr(operator, "id", None),
+        operator_name=(getattr(operator, "full_name", None) or getattr(operator, "username", None)) if operator else None,
+        remark=remark,
+        operation_time=datetime.now(timezone.utc),
+    ))
     safe_commit(db)
 
 
 @router.post("/{fund_id}/approve")
 def approve_fund(fund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_manager_role(current_user)
+    require_funds_operator_role(current_user)
     fund = _get_fund_or_404(db, fund_id, current_user)
     _transition_status(db, fund, "approved", ["pending", "planned"],
                        required_attachments=[],  # 至少需要 1 个附件
+                       operator=current_user,
                        approved_by=current_user.full_name or current_user.username,
                        approval_date=datetime.now(timezone.utc))
     return success_response(message="审批通过")
@@ -632,9 +665,10 @@ def approve_fund(fund_id: int, current_user: User = Depends(get_current_user), d
 
 @router.post("/{fund_id}/reject")
 def reject_fund(fund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_manager_role(current_user)
+    require_funds_operator_role(current_user)
     fund = _get_fund_or_404(db, fund_id, current_user)
     _transition_status(db, fund, "rejected", ["pending", "planned"],
+                       operator=current_user,
                        approved_by=current_user.full_name or current_user.username)
     return success_response(message="审批驳回")
 
@@ -646,7 +680,7 @@ def allocate_fund(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_manager_role(current_user)
+    require_funds_operator_role(current_user)
     fund = _get_fund_or_404(db, fund_id, current_user)
 
     # ── 里程碑-经费绑定检查 ──
@@ -671,33 +705,37 @@ def allocate_fund(
 
     _transition_status(db, fund, "allocated", ["approved"],
                        required_attachments=["contract", "allocation_order"],
+                       operator=current_user,
                        allocation_date=datetime.now(timezone.utc))
     return success_response(message="经费已拨付")
 
 
 @router.post("/{fund_id}/start-use")
 def start_use_fund(fund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_manager_role(current_user)
+    require_funds_operator_role(current_user)
     fund = _get_fund_or_404(db, fund_id, current_user)
     _transition_status(db, fund, "in_use", ["allocated"],
+                       operator=current_user,
                        start_date=datetime.now(timezone.utc))
     return success_response(message="经费已开始使用")
 
 
 @router.post("/{fund_id}/complete")
 def complete_fund(fund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_manager_role(current_user)
+    require_funds_operator_role(current_user)
     fund = _get_fund_or_404(db, fund_id, current_user)
     _transition_status(db, fund, "completed", ["in_use"],
+                       operator=current_user,
                        end_date=datetime.now(timezone.utc))
     return success_response(message="经费使用完成")
 
 
 @router.post("/{fund_id}/audit")
 def audit_fund(fund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_manager_role(current_user)
+    require_funds_operator_role(current_user)
     fund = _get_fund_or_404(db, fund_id, current_user)
     _transition_status(db, fund, "audited", ["completed"],
+                       operator=current_user,
                        audit_date=datetime.now(timezone.utc))
     return success_response(message="经费审计完成")
 
@@ -901,6 +939,43 @@ def fund_history_status(fund_id: int, current_user: User = Depends(get_current_u
     } for r in rows])
 
 
+@router.get("/{fund_id}/approval-flow")
+def fund_approval_flow(fund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """获取经费审批流程：当前节点 + 状态流转节点列表
+
+    审批流程节点按经费状态机推导：申请(pending) → 审批(approved) → 拨付(allocated)
+    → 使用(in_use) → 完成(completed) → 审计(audited)，结合状态日志标注已到达节点。
+    """
+    fund = _get_fund_or_404(db, fund_id, current_user)
+    # 状态机顺序（用于节点排序与高亮）
+    flow_order = ["pending", "planned", "approved", "allocated", "in_use", "completed", "audited"]
+    nodes = [
+        {"status": "pending", "label": "经费申请", "description": "提交经费申请"},
+        {"status": "approved", "label": "审批通过", "description": "审核通过待拨付"},
+        {"status": "allocated", "label": "拨付", "description": "经费拨付到账"},
+        {"status": "in_use", "label": "使用执行", "description": "经费投入使用"},
+        {"status": "completed", "label": "完成", "description": "经费使用完成"},
+        {"status": "audited", "label": "审计归档", "description": "审计通过归档"},
+    ]
+    # 已到达节点：状态日志中出现过该状态，或当前状态已超越该节点
+    reached = {r.to_status for r in db.query(FundStatusHistory).filter(FundStatusHistory.fund_id == fund_id).all()}
+    current_idx = flow_order.index(fund.status) if fund.status in flow_order else -1
+    nodes_out = []
+    for i, n in enumerate(nodes):
+        nodes_out.append({
+            **n,
+            "reached": n["status"] in reached or (current_idx >= 0 and i <= current_idx),
+            "current": fund.status == n["status"],
+        })
+    return success_response(data={
+        "fund_id": fund_id,
+        "current_status": fund.status,
+        "current_approver": fund.approved_by,
+        "approval_date": fund.approval_date.isoformat() if fund.approval_date else None,
+        "nodes": nodes_out,
+    })
+
+
 @router.get("/{fund_id}/history/fields")
 def fund_history_fields(fund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """获取经费字段变更历史"""
@@ -915,6 +990,7 @@ def fund_history_fields(fund_id: int, current_user: User = Depends(get_current_u
     items = [{
         "id": r.id, "field_name": r.field_name, "old_value": r.old_value,
         "new_value": r.new_value, "changed_by": r.changed_by,
+        "changed_by_name": r.changed_by_name,
         "changed_at": r.changed_at.isoformat() if r.changed_at else None,
     } for r in rows]
     return ok_list(items, len(items))
@@ -935,8 +1011,9 @@ def fund_history_operations(
         .limit(100).all()
     )
     items = [{
-        "id": r.id, "operation": r.operation, "operator": r.operator,
-        "detail": r.detail, "created_at": r.created_at.isoformat() if r.created_at else None,
+        "id": r.id, "operation_type": r.operation_type,
+        "operation_detail": r.operation_detail, "operator_name": r.operator_name,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
     } for r in rows]
     return ok_list(items, len(items))
 

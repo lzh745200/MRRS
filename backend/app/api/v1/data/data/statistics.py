@@ -559,6 +559,39 @@ async def _get_analysis_data_impl(db: Session):
             }
         )
 
+    # --- 年度关键指标对比（按年份聚合，供前端年度对比图/描述展示） ---
+    yearly_comparison = {"years": [], "villages": {}, "investment": {}, "income": {}}
+    # 各年有数据的帮扶村数（以人口数据为准）
+    pop_rows = (
+        db.query(VillagePopulation.year, func.count(func.distinct(VillagePopulation.supported_village_id)))
+        .group_by(VillagePopulation.year)
+        .all()
+    )
+    for yr, cnt in pop_rows:
+        yearly_comparison["years"].append(str(yr))
+        yearly_comparison["villages"][str(yr)] = cnt
+    # 各年投入（万元）
+    inv_rows = (
+        db.query(
+            SupportFunding.year,
+            func.coalesce(func.sum(SupportFunding.military_investment), 0)
+            + func.coalesce(func.sum(SupportFunding.local_investment), 0),
+        )
+        .group_by(SupportFunding.year)
+        .all()
+    )
+    for yr, amt in inv_rows:
+        yearly_comparison["investment"][str(yr)] = round(float(amt), 2)
+    # 各年人均收入均值（万元）
+    inc_rows = (
+        db.query(VillageIncome.year, func.avg(VillageIncome.per_capita_income))
+        .group_by(VillageIncome.year)
+        .all()
+    )
+    for yr, avg_inc in inc_rows:
+        yearly_comparison["income"][str(yr)] = round(float(avg_inc or 0), 4)
+    yearly_comparison["years"] = sorted(set(yearly_comparison["years"]))
+
     return {
         "overview": {
             "total_villages": total_villages,
@@ -569,6 +602,7 @@ async def _get_analysis_data_impl(db: Session):
         "investment_trend": investment_trend,
         "category_stats": cat_stats,
         "region_stats": region_stats,
+        "yearly_comparison": yearly_comparison,
     }
 
 

@@ -116,6 +116,10 @@
                 <el-icon><Check /></el-icon>
                 快速通过
               </el-button>
+              <el-button size="small" @click="handleTransfer(row)">
+                <el-icon><Switch /></el-icon>
+                转交
+              </el-button>
               <el-button size="small" type="danger" @click="handleReject(row)">
                 <el-icon><Close /></el-icon>
                 拒绝
@@ -164,6 +168,41 @@
       </template>
     </el-dialog>
 
+    <!-- 转交对话框 -->
+    <el-dialog v-model="transferDialogVisible" title="转交审批" width="500px">
+      <el-form :model="transferForm" label-width="80px">
+        <el-form-item label="转交对象" required>
+          <el-select
+            v-model="transferForm.transferToId"
+            filterable
+            placeholder="请选择审批人"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="u in candidateUsers"
+              :key="u.id"
+              :label="`${u.username}（${u.role || 'user'}）`"
+              :value="u.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="转交原因">
+          <el-input
+            v-model="transferForm.reason"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入转交原因（可选）"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="transferDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="confirmTransfer">
+          确认转交
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- 变更对比对话框 -->
     <el-dialog v-model="diffDialogVisible" title="变更对比" width="800px">
       <div v-if="taskDiff" class="diff-view">
@@ -196,7 +235,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Check, Close, View, Edit } from '@element-plus/icons-vue'
+import { Refresh, Check, Close, View, Edit, Switch } from '@element-plus/icons-vue'
 import {
   getPendingTasks,
   approveTask,
@@ -206,9 +245,11 @@ import {
   formatEntityType,
   autoApproveSingleTask,
   autoApproveAll,
+  transferTask,
   type ApprovalTask,
   type TaskDiff,
 } from '@/api/approval'
+import { listUsers } from '@/api/userManagement'
 
 // ==================== 状态 ====================
 
@@ -223,10 +264,13 @@ const currentTask = ref<ApprovalTask | null>(null)
 const approveDialogVisible = ref(false)
 const rejectDialogVisible = ref(false)
 const diffDialogVisible = ref(false)
+const transferDialogVisible = ref(false)
 
 // 表单
 const approveForm = ref({ opinion: '' })
 const rejectForm = ref({ opinion: '' })
+const transferForm = ref({ transferToId: undefined as number | undefined, reason: '' })
+const candidateUsers = ref<Array<{ id: number; username: string; role?: string }>>([])
 
 // 变更对比
 const taskDiff = ref<TaskDiff | null>(null)
@@ -369,6 +413,49 @@ function handleReject(task: any) {
   currentTask.value = task
   rejectForm.value = { opinion: '' }
   rejectDialogVisible.value = true
+}
+
+/**
+ * 转交审批：打开转交对话框并加载可转交用户列表
+ */
+async function handleTransfer(task: any) {
+  currentTask.value = task
+  transferForm.value = { transferToId: undefined, reason: '' }
+  transferDialogVisible.value = true
+  try {
+    const res: any = await listUsers({ page_size: 200 })
+    const users = Array.isArray(res) ? res : res?.items || res?.data?.items || []
+    // 排除当前审批人自身
+    candidateUsers.value = (users as any[]).filter((u: any) => u.id !== task.current_approver_id)
+  } catch {
+    candidateUsers.value = []
+  }
+}
+
+/**
+ * 确认转交
+ */
+async function confirmTransfer() {
+  if (!currentTask.value) return
+  if (!transferForm.value.transferToId) {
+    ElMessage.warning('请选择转交对象')
+    return
+  }
+  submitting.value = true
+  try {
+    await transferTask(
+      currentTask.value.id,
+      transferForm.value.transferToId,
+      transferForm.value.reason || undefined
+    )
+    ElMessage.success('已转交')
+    transferDialogVisible.value = false
+    loadTasks()
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail || '转交失败')
+  } finally {
+    submitting.value = false
+  }
 }
 
 /**

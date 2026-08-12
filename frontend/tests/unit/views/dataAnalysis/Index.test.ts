@@ -38,12 +38,10 @@ const analysisData = {
   category_stats: [{ category: '产业', count: 3, investment: 60, beneficiaries: 200, ratio: 30 }],
   region_stats: [{ region: '黔南', villages: 5, investment: 100, avgIncome: 8000 }],
   yearly_comparison: {
-    villagesA: 10,
-    villagesB: 12,
-    investmentA: '200万',
-    investmentB: '300万',
-    incomeA: '5000',
-    incomeB: '6000',
+    years: ['2023', '2024'],
+    villages: { '2023': 10, '2024': 12 },
+    investment: { '2023': 200, '2024': 300 },
+    income: { '2023': 5000, '2024': 6000 },
   },
 }
 
@@ -121,7 +119,10 @@ describe('挂载与加载', () => {
     expect(vm.investmentTrend).toHaveLength(2)
     expect(vm.categoryStats).toHaveLength(1)
     expect(vm.regionStats).toHaveLength(1)
-    expect(vm.yearlyComparison.villagesA).toBe(10)
+    // 新结构：按年份映射取值（compareYearA 默认 currentYear-1=2025，mock 数据仅到 2024 → '-')
+    expect(vm.yearlyComparison.years).toEqual(['2023', '2024'])
+    expect(vm.comparisonA).toMatchObject({ villages: '-', investment: '-', income: '-' })
+    expect(vm.comparisonB).toMatchObject({ villages: '-', investment: '-', income: '-' })
     const text = wrapper.text()
     expect(text).toContain('数据统计分析')
     expect(text).toContain('12')
@@ -134,7 +135,6 @@ describe('挂载与加载', () => {
     expect(text).toContain('黔南')
     expect(text).toContain('8000')
     expect(text).toContain('2025年帮扶村总数') // compareYearA 默认
-    expect(text).toContain('10')
   })
 
   it('完整率转换全分支：0 跳过 / 0.85→85 / 1→100 / 1.5 跳过', async () => {
@@ -164,7 +164,9 @@ describe('挂载与加载', () => {
     expect(vm.investmentTrend).toEqual([])
     expect(vm.categoryStats).toEqual([])
     expect(vm.regionStats).toEqual([])
-    expect(vm.yearlyComparison.villagesA).toBe('-')
+    // 缺省响应：yearly_comparison 空结构兜底
+    expect(vm.yearlyComparison.years).toEqual([])
+    expect(vm.comparisonA.villages).toBe('-')
   })
 
   it('加载失败 → logger.error，loading 复位', async () => {
@@ -202,7 +204,7 @@ describe('交互控件', () => {
     await nextTick()
     const text = wrapper.text()
     expect(text).toContain('2023年帮扶村总数')
-    expect(text).toContain('2024年总投入')
+    expect(text).toContain('2024年总投入(万元)')
   })
 
 

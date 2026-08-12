@@ -573,13 +573,28 @@ describe('合同附件', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('上传失败')
   })
 
-  it('openAttachment 新窗口打开', async () => {
+  it('openAttachment 认证拉取 blob 后新窗口预览', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
-    ;(wrapper.vm as any).openAttachment('/uploads/a.pdf')
-    expect(openSpy).toHaveBeenCalledWith('/uploads/a.pdf', '_blank')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['pdf'])),
+    } as any)
+    await (wrapper.vm as any).openAttachment({ url: '/uploads/a.pdf', file_name: 'a.pdf' })
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/uploads/a.pdf'), expect.anything())
+    expect(openSpy).toHaveBeenCalledWith(expect.stringMatching(/^blob:/), '_blank')
     openSpy.mockRestore()
+    fetchMock.mockRestore()
+  })
+
+  it('openAttachment 加载失败 → 错误提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false } as any)
+    await (wrapper.vm as any).openAttachment({ url: '/uploads/a.pdf' })
+    expect(ElMessage.error).toHaveBeenCalledWith('附件打开失败')
+    fetchMock.mockRestore()
   })
 
   it('创建表单校验: formRef 缺失时直接返回', async () => {

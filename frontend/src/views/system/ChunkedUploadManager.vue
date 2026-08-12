@@ -436,7 +436,7 @@ onUnmounted(() => {
   background: #67c23a;
 }
 .chunk-bar.chunk-current {
-  background: var(--el-color-primary, #409eff);
+  background: var(--color-primary);
   animation: pulse 0.8s infinite;
 }
 .chunk-bar.chunk-pending {

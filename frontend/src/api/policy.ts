@@ -21,6 +21,10 @@ export type Policy = {
   expiry_date?: string
   created_at?: string
   updated_at?: string
+  /** 附件类型（如 pdf/png/docx），用于下载文件名扩展名 */
+  fileType?: string
+  /** 附件 URL 列表（后端返回） */
+  attachment_urls?: string[]
 }
 export type PolicyQuery = {
   keyword?: string
@@ -73,7 +77,12 @@ export const uploadPolicyFile = (policyId: number, file: File) => {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }
-export const previewPolicyFile = (policyId: number) => get(`/policies/${policyId}/preview`)
+export const previewPolicyFile = (policyId: number) =>
+  apiRequest({
+    method: 'GET',
+    url: `/policies/${policyId}/preview`,
+    responseType: 'blob',
+  })
 export const downloadPolicyFile = (policyId: number) =>
   apiRequest({ method: 'GET', url: `/policies/${policyId}/download`, responseType: 'blob' })
 

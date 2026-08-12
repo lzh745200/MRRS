@@ -160,15 +160,6 @@
             <el-button v-if="canEdit" type="warning" size="small" link @click="handleEdit(row)">
               编辑
             </el-button>
-            <el-button
-              v-if="canEdit"
-              type="success"
-              size="small"
-              link
-              @click="handleSubmitApproval(row)"
-            >
-              提交审批
-            </el-button>
             <el-button v-if="canDelete" type="danger" size="small" link @click="handleDelete(row)">
               删除
             </el-button>
@@ -215,7 +206,6 @@ import {
   type PolicyStatus,
 } from '@/api/policy'
 import { downloadImportTemplateAndSave } from '@/api/import'
-import { submitApproval } from '@/api/approval'
 
 type OrganizationLevel = string
 
@@ -392,35 +382,10 @@ const handleDelete = async (row: any) => {
       type: 'warning',
     })
     await (policyStore as any).removePolicy(row.id)
-    ElMessage.success('删除成功')
+    // 成功静默：删除成功仅刷新列表
   } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.message || '删除失败')
-    }
-  }
-}
-
-// 提交审批（接入审批流：单机版内部审核流程）
-const handleSubmitApproval = async (row: any) => {
-  try {
-    await ElMessageBox.confirm(
-      `将政策"${row.title}"提交审批？提交后可在"审批概览/我的申请"中跟踪。`,
-      '提交审批',
-      {
-        type: 'info',
-      }
-    )
-    await submitApproval({
-      entity_type: 'policy',
-      entity_id: row.id,
-      title: `政策发布审批：${row.title}`,
-      change_data: { title: row.title, code: row.code },
-    })
-    ElMessage.success('已提交审批，请到审批中心处理')
-    loadData()
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error?.response?.data?.detail || error.message || '提交审批失败')
     }
   }
 }

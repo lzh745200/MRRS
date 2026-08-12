@@ -9,7 +9,7 @@ import { get, post, put, apiRequest } from '@/api/request'
 // ==================== 类型定义 ====================
 
 /** 消息类型 */
-export type MessageType = 'system' | 'approval' | 'task'
+export type MessageType = 'system' | 'approval' | 'task' | 'backup'
 
 /** 站内消息 */
 export interface Message {
@@ -166,6 +166,7 @@ export function formatMessageType(type: MessageType): {
     system: { text: '系统通知', type: 'info' },
     approval: { text: '审批通知', type: 'warning' },
     task: { text: '任务提醒', type: 'primary' },
+    backup: { text: '备份提醒', type: 'success' },
   }
   return typeMap[type] || { text: type, type: 'info' }
 }

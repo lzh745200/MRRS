@@ -21,7 +21,7 @@
             <el-option label="已拒绝" value="rejected" />
           </el-select>
         </div>
-        <el-button type="primary" @click="showCreateDialog = true">新建凭证</el-button>
+        <el-button type="primary" @click="openCreateDialog">新建凭证</el-button>
       </div>
 
       <el-table v-loading="loading" :data="vouchers" size="default" class="mt-3">
@@ -179,6 +179,25 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+// 新建凭证：每次打开都重置为空白表单（防止残留上次已新增的内容）
+function openCreateDialog() {
+  Object.assign(form, {
+    voucher_no: '',
+    direction: 'military_to_local',
+    amount: 0,
+    payer_account: '',
+    payee_account: '',
+    transfer_date: '',
+    remarks: '',
+    fund_id: undefined,
+  })
+  // 防御：测试环境/未挂载时 formRef 可能为空对象
+  if (formRef.value && typeof formRef.value.clearValidate === 'function') {
+    formRef.value.clearValidate()
+  }
+  showCreateDialog.value = true
 }
 
 async function handleCreate() {

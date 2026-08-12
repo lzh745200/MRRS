@@ -427,7 +427,7 @@ async function handleSubmit() {
 
     if (formData.value.id) {
       await put(`/organizations/${formData.value.id}`, payload)
-      ElMessage.success('已保存')
+      // 成功静默：保存成功仅刷新列表
     } else {
       await post('/organizations', payload)
       ElMessage.success('已创建')

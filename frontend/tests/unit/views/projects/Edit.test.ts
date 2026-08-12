@@ -950,10 +950,13 @@ describe('模板交互（v-model 与内联处理器）', () => {
     await flushPromises()
     expect(vm.previewVisible).toBe(true)
 
-    // 已上传删除按钮（photo + research 两个内联箭头）
+    // 已上传删除/下载按钮（photo + research 各含删除+下载，共 6 个）
     const delButtons = wrapper.findAll('.uploaded-files el-button-stub')
-    expect(delButtons.length).toBe(3)
-    for (const b of delButtons) await b.trigger('click')
+    expect(delButtons.length).toBe(6)
+    // 只触发删除按钮（按文本筛选），避免下载按钮触发真实 fetch
+    const deleteBtns = delButtons.filter((b) => b.text().includes('删除'))
+    expect(deleteBtns.length).toBe(3)
+    for (const b of deleteBtns) await b.trigger('click')
     await flushPromises()
     expect(api.deleteFile).toHaveBeenCalledWith(7, 1)
     expect(api.deleteFile).toHaveBeenCalledWith(7, 2)

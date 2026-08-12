@@ -367,7 +367,8 @@ describe('删除', () => {
     await flushPromises()
 
     expect(mockDeleteApi).toHaveBeenCalledWith(1)
-    expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
+    // 成功静默：删除成功不弹提示（v1.8.0 提示策略）
+    expect(ElMessage.success).not.toHaveBeenCalled()
     // 删除后应重新加载列表
     expect(mockList).toHaveBeenCalled()
   })

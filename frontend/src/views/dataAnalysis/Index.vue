@@ -95,26 +95,35 @@
                 <el-option v-for="y in yearOptions" :key="'b' + y" :label="`${y}年`" :value="y" />
               </el-select>
             </div>
-            <el-descriptions :column="2" border>
-              <el-descriptions-item :label="`${compareYearA}年帮扶村总数`">{{
-                yearlyComparison.villagesA
-              }}</el-descriptions-item>
-              <el-descriptions-item :label="`${compareYearB}年帮扶村总数`">{{
-                yearlyComparison.villagesB
-              }}</el-descriptions-item>
-              <el-descriptions-item :label="`${compareYearA}年总投入`">{{
-                yearlyComparison.investmentA
-              }}</el-descriptions-item>
-              <el-descriptions-item :label="`${compareYearB}年总投入`">{{
-                yearlyComparison.investmentB
-              }}</el-descriptions-item>
-              <el-descriptions-item :label="`${compareYearA}年人均收入`">{{
-                yearlyComparison.incomeA
-              }}</el-descriptions-item>
-              <el-descriptions-item :label="`${compareYearB}年人均收入`">{{
-                yearlyComparison.incomeB
-              }}</el-descriptions-item>
-            </el-descriptions>
+            <el-empty
+              v-if="!yearlyComparison.years.length"
+              description="暂无年度数据，请先在帮扶村年度数据管理中录入数据"
+              :image-size="80"
+            />
+            <template v-else>
+              <el-descriptions :column="2" border>
+                <el-descriptions-item :label="`${compareYearA}年帮扶村总数`">{{
+                  comparisonA.villages
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="`${compareYearB}年帮扶村总数`">{{
+                  comparisonB.villages
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="`${compareYearA}年总投入(万元)`">{{
+                  comparisonA.investment
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="`${compareYearB}年总投入(万元)`">{{
+                  comparisonB.investment
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="`${compareYearA}年人均收入(万元)`">{{
+                  comparisonA.income
+                }}</el-descriptions-item>
+                <el-descriptions-item :label="`${compareYearB}年人均收入(万元)`">{{
+                  comparisonB.income
+                }}</el-descriptions-item>
+              </el-descriptions>
+              <!-- 年度投入对比柱状图 -->
+              <div ref="compareChartRef" class="compare-chart"></div>
+            </template>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -125,9 +134,10 @@
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
 
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { get } from '@/api/request'
+import echarts from '@/utils/echarts'
 
 const activeTab = ref('investment')
 const loading = ref(false)
@@ -146,14 +156,80 @@ const currentYear = new Date().getFullYear()
 const yearOptions = Array.from({ length: currentYear - 2000 + 2 }, (_, i) => 2000 + i)
 const compareYearA = ref(currentYear - 1)
 const compareYearB = ref(currentYear)
-const yearlyComparison = ref({
-  villagesA: '-',
-  villagesB: '-',
-  investmentA: '-',
-  investmentB: '-',
-  incomeA: '-',
-  incomeB: '-',
-})
+// 后端返回按年份聚合的指标：{ years: string[], villages: {}, investment: {}, income: {} }
+const yearlyComparison = ref<{
+  years: string[]
+  villages: Record<string, number>
+  investment: Record<string, number>
+  income: Record<string, number>
+}>({ years: [], villages: {}, investment: {}, income: {} })
+
+// 按所选年份取指标（无数据时显示 '-'）
+const comparisonA = computed(() => pickYear(compareYearA.value))
+const comparisonB = computed(() => pickYear(compareYearB.value))
+
+function pickYear(year: number) {
+  const y = String(year)
+  return {
+    villages: yearlyComparison.value.villages[y] ?? '-',
+    investment: yearlyComparison.value.investment[y] ?? '-',
+    income: yearlyComparison.value.income[y] ?? '-',
+  }
+}
+
+// ── 年度投入对比柱状图 ──
+const compareChartRef = ref<HTMLElement | null>(null)
+let compareChart: ReturnType<typeof echarts.init> | null = null
+
+function renderCompareChart() {
+  if (!compareChartRef.value || !yearlyComparison.value.years.length) return
+  if (!compareChart) {
+    compareChart = echarts.init(compareChartRef.value)
+  }
+  const years = [...yearlyComparison.value.years].sort()
+  compareChart.setOption(
+    {
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['总投入(万元)', '人均收入(万元)'], bottom: 0 },
+      grid: { left: '3%', right: '4%', top: 30, bottom: 40, containLabel: true },
+      xAxis: { type: 'category', data: years.map((y) => `${y}年`) },
+      yAxis: [
+        { type: 'value', name: '万元' },
+        { type: 'value', name: '万元' },
+      ],
+      series: [
+        {
+          name: '总投入(万元)',
+          type: 'bar',
+          barMaxWidth: 36,
+          data: years.map((y) => yearlyComparison.value.investment[y] ?? 0),
+          itemStyle: { color: '#40916c' },
+        },
+        {
+          name: '人均收入(万元)',
+          type: 'line',
+          smooth: true,
+          yAxisIndex: 1,
+          data: years.map((y) => yearlyComparison.value.income[y] ?? 0),
+          itemStyle: { color: '#d4af37' },
+        },
+      ],
+    },
+    { notMerge: true }
+  )
+}
+
+function handleChartResize() {
+  compareChart?.resize()
+}
+
+watch(
+  () => [compareYearA.value, compareYearB.value, yearlyComparison.value.years],
+  async () => {
+    await nextTick()
+    renderCompareChart()
+  }
+)
 
 async function loadAnalysisData() {
   loading.value = true
@@ -176,7 +252,13 @@ async function loadAnalysisData() {
     categoryStats.value = data.category_stats || []
     regionStats.value = data.region_stats || []
     if (data.yearly_comparison) {
-      yearlyComparison.value = data.yearly_comparison
+      const yc = data.yearly_comparison
+      yearlyComparison.value = {
+        years: Array.isArray(yc.years) ? yc.years : Object.keys(yc.villages || {}),
+        villages: yc.villages || {},
+        investment: yc.investment || {},
+        income: yc.income || {},
+      }
     }
   } catch (e) {
     logger.error('加载分析数据失败:', e)
@@ -185,7 +267,18 @@ async function loadAnalysisData() {
   }
 }
 
-onMounted(() => loadAnalysisData())
+onMounted(() => {
+  loadAnalysisData()
+  window.addEventListener('resize', handleChartResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleChartResize)
+  if (compareChart) {
+    compareChart.dispose()
+    compareChart = null
+  }
+})
 </script>
 
 <style scoped>
@@ -248,5 +341,10 @@ onMounted(() => loadAnalysisData())
   margin: 0 0 16px;
   font-size: 16px;
   color: #1b4332;
+}
+.compare-chart {
+  width: 100%;
+  height: 300px;
+  margin-top: 16px;
 }
 </style>

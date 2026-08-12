@@ -772,6 +772,14 @@ async function fetchSystemLogs() {
 }
 
 // ── ECharts ──
+// 从设计 Token 读取主色（jsdom 等无样式环境回退到 token 默认绿 #2d6a4f）
+function getPrimaryColor(): string {
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim() ||
+    '#2d6a4f'
+  )
+}
+
 function buildChart() {
   if (!chartRef.value) return
   if (chartInstance) chartInstance.dispose()
@@ -812,7 +820,7 @@ function buildChart() {
         name: '请求数',
         type: 'bar',
         data: counts,
-        itemStyle: { color: '#409eff' },
+        itemStyle: { color: getPrimaryColor() },
         barMaxWidth: 28,
       },
       {
@@ -1238,7 +1246,7 @@ watch(healthExpanded, (val) => {
   width: 38px;
 }
 .log-info .log-level {
-  color: #409eff;
+  color: var(--color-primary);
 }
 .log-warn .log-level {
   color: #e6a23c;

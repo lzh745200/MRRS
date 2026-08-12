@@ -10,6 +10,7 @@ import { nextTick } from 'vue'
 
 const {
   ElMessage,
+  ElNotification,
   confirmMock,
   mockGet,
   mockDel,
@@ -22,6 +23,7 @@ const {
   logError,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+  ElNotification: vi.fn(),
   confirmMock: vi.fn(),
   mockGet: vi.fn(),
   mockDel: vi.fn(),
@@ -40,6 +42,7 @@ const {
 
 vi.mock('element-plus', () => ({
   ElMessage,
+  ElNotification,
   ElMessageBox: { confirm: confirmMock },
 }))
 
@@ -448,7 +451,8 @@ describe('删除经费', () => {
     mockApiRequest.mockResolvedValue({ data: { items: [], total: 0 } })
     await vm.handleDelete(sampleFund)
     expect(mockDel).toHaveBeenCalledWith('/funds/1')
-    expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
+    // 成功静默：删除成功不弹提示，仅刷新列表
+    expect(ElMessage.success).not.toHaveBeenCalled()
     await flushPromises()
     expect(vm.tableData).toEqual([])
     expect(vm.total).toBe(0)
@@ -493,7 +497,10 @@ describe('快速审批 / 拨付', () => {
     mockApiRequest.mockClear()
     await vm.quickApprove(sampleFund)
     expect(fundApiMock.approve).toHaveBeenCalledWith(1, {})
-    expect(ElMessage.success).toHaveBeenCalledWith('审批成功')
+    // 关键动作升级为带标题的通知
+    expect(ElNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '审批通过', type: 'success' })
+    )
     expect(mockApiRequest).toHaveBeenCalled()
   })
 
@@ -523,7 +530,10 @@ describe('快速审批 / 拨付', () => {
     mockApiRequest.mockClear()
     await vm.quickAllocate({ ...sampleFund, status: 'approved' })
     expect(fundApiMock.allocate).toHaveBeenCalledWith(1, {})
-    expect(ElMessage.success).toHaveBeenCalledWith('拨付成功')
+    // 关键动作升级为带标题的通知
+    expect(ElNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '经费拨付', type: 'success' })
+    )
     expect(mockApiRequest).toHaveBeenCalled()
   })
 

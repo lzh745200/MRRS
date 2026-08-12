@@ -514,7 +514,7 @@ async function handleDelete(row: SupportedVillage) {
     // 乐观更新：立即从表格数据中移除已删除行，避免等待列表重载
     tableData.value = tableData.value.filter((item) => item.id !== row.id)
     pagination.total = Math.max(0, pagination.total - 1)
-    ElMessage.success('删除成功')
+    // 成功静默：删除成功仅刷新列表
     // 后台静默刷新列表数据（不显示 loading），重置到第1页确保数据可见
     pagination.page = 1
     loadData()
@@ -569,11 +569,11 @@ async function handleFormSubmit(data: SupportedVillageCreate) {
           logger.error('创建时保存过渡资金失败:', fundErr)
         }
       }
-      ElMessage.success('创建成功')
+      // 成功静默：创建成功仅刷新列表
     } else if (dialogMode.value === 'edit' && currentVillage.value) {
       logger.info('更新帮扶村，ID:', currentVillage.value.id)
       await updateSupportedVillage(currentVillage.value.id, data)
-      ElMessage.success('更新成功')
+      // 成功静默：更新成功仅刷新列表
     }
     dialogVisible.value = false
     pagination.page = 1

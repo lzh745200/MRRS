@@ -19,6 +19,7 @@ from app.core.database import get_db
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.user import User
+from app.models.audit import AuditAction
 from app.utils.common import dict_keys_to_camel, StringHelper
 from app.models.supported_village import (
     SupportedVillage,
@@ -183,6 +184,9 @@ def _save_section_data(db: Session, model: Any, village_id: int, year: int, data
         if hasattr(row, key):
             setattr(row, key, value)
     if members_data is not None and model is VillageCommitteeInfo:
+        # 新建行需先 flush 拿到主键，成员才能正确外键关联
+        if row.id is None:
+            db.flush()
         # 清除旧成员，写入新成员
         db.query(VillageCommitteeMember).filter(
             VillageCommitteeMember.committee_info_id == row.id
@@ -191,6 +195,7 @@ def _save_section_data(db: Session, model: Any, village_id: int, year: int, data
             if isinstance(m, dict):
                 member = VillageCommitteeMember(
                     committee_info_id=row.id,
+                    supported_village_id=village_id,
                     name=m.get("name", ""),
                     position=m.get("position", ""),
                     phone=m.get("phone", ""),
@@ -202,6 +207,41 @@ def _save_section_data(db: Session, model: Any, village_id: int, year: int, data
                 )
                 db.add(member)
     return row
+
+
+def _village_to_diff_dict(village: SupportedVillage) -> Dict[str, Any]:
+    """帮扶村字段级 Diff 快照（排除审计元数据列）"""
+    skip = frozenset({"id", "organization_id", "created_by", "created_at", "updated_at", "is_active"})
+    result = {}
+    for col in SupportedVillage.__table__.columns:
+        if col.name in skip:
+            continue
+        result[col.name] = getattr(village, col.name, None)
+    return dict_keys_to_camel(result)
+
+
+def _record_village_change(
+    db: Session,
+    action: Any,
+    current_user: User,
+    village: SupportedVillage,
+    old_data: Optional[Dict[str, Any]] = None,
+    new_data: Optional[Dict[str, Any]] = None,
+    detail: Optional[str] = None,
+):
+    """记录帮扶村字段级变更历史（与项目/经费一致的审计留痕）"""
+    from app.services.audit_enhancement_service import AuditEnhancementService
+
+    AuditEnhancementService.log_entity_changes(
+        db,
+        action,
+        current_user,
+        "supported_village",
+        str(village.id),
+        old_data,
+        new_data,
+        detail=detail,
+    )
 
 
 def _get_village_or_404(db: Session, village_id: int, current_user: User = None) -> SupportedVillage:
@@ -534,6 +574,10 @@ async def create_village(
     safe_commit(db)
     db.refresh(village)
     await _invalidate_village_cache()
+    _record_village_change(
+        db, AuditAction.CREATE, current_user, village, new_data=_village_to_diff_dict(village),
+        detail=f"创建帮扶村: {village.village_name}",
+    )
     return success_response(data={"id": village.id}, message="创建成功")
 
 
@@ -547,6 +591,7 @@ async def update_village(
     """更新帮扶村（过渡状态变更需管理员权限 + 写入审计日志）"""
     village = _get_village_or_404(db, village_id, current_user)
     update_dict = data.model_dump(exclude_unset=True)
+    old_snapshot = _village_to_diff_dict(village)
 
     # ── 过渡状态变更强制审批检查 ──
     if "transition_status" in update_dict:
@@ -575,6 +620,11 @@ async def update_village(
             setattr(village, key, value)
     safe_commit(db)
     await _invalidate_village_cache()
+    _record_village_change(
+        db, AuditAction.UPDATE, current_user, village,
+        old_data=old_snapshot, new_data=_village_to_diff_dict(village),
+        detail=f"更新帮扶村: {village.village_name}",
+    )
     return success_response(message="更新成功")
 
 
@@ -647,11 +697,31 @@ async def save_yearly_section(
     """保存帮扶村某年度某个section的数据"""
     if section not in _SECTION_MODEL:
         raise HTTPException(status_code=400, detail=f"未知的数据分类: {section}")
-    _get_village_or_404(db, village_id, current_user)
+    village = _get_village_or_404(db, village_id, current_user)
     model = _SECTION_MODEL[section]
+    old_data = _get_section_data(db, model, village_id, year)
     _save_section_data(db, model, village_id, year, data.model_dump())
     safe_commit(db)
+    _record_village_change(
+        db, AuditAction.UPDATE, current_user, village,
+        old_data=old_data, new_data=_get_section_data(db, model, village_id, year),
+        detail=f"年度数据保存: {section} {year}年",
+    )
     return success_response(message=f"保存成功: {section}")
+
+
+@router.get("/{village_id}/change-history")
+async def get_village_change_history(
+    village_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """获取帮扶村字段级变更历史（时间倒序）"""
+    _get_village_or_404(db, village_id, current_user)
+    from app.services.audit_enhancement_service import AuditEnhancementService
+
+    history = AuditEnhancementService.get_change_history(db, "supported_village", str(village_id), limit=100)
+    return ok_list(history, len(history))
 
 
 @router.post("/{village_id}/yearly/{year}/validate")

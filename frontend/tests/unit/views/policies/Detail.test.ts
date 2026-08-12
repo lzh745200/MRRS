@@ -74,6 +74,7 @@ const policy = {
   created_at: '2024-01-02',
   updated_at: '',
   content: '<p>政策内容</p>',
+  fileType: 'pdf',
 }
 
 const related = [{ id: 2, title: '相关政策', category: 'local', status: 'active' }]
@@ -137,7 +138,7 @@ beforeEach(() => {
   policyApiMock.getPolicyRelated.mockResolvedValue(related)
   policyApiMock.publishPolicy.mockResolvedValue({})
   policyApiMock.archivePolicy.mockResolvedValue({})
-  policyApiMock.previewPolicyFile.mockResolvedValue({ url: '/preview/1' })
+  policyApiMock.previewPolicyFile.mockResolvedValue(new Blob(['pdf'], { type: 'application/pdf' }))
   policyApiMock.downloadPolicyFile.mockResolvedValue(new Blob(['x']))
   policyApiMock.addPolicyFavorite.mockResolvedValue({})
   policyApiMock.removePolicyFavorite.mockResolvedValue({})
@@ -354,22 +355,33 @@ describe('收藏', () => {
 })
 
 describe('预览与下载', () => {
-  it('handlePreview 成功 → previewUrl', async () => {
+  it('handlePreview 成功 → previewUrl 为 blob URL', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     await vm.handlePreview()
     expect(policyApiMock.previewPolicyFile).toHaveBeenCalledWith(1)
-    expect(vm.previewUrl).toBe('/preview/1')
+    expect(vm.previewUrl).toMatch(/^blob:/)
     expect(vm.previewLoading).toBe(false)
   })
 
-  it('handlePreview 无 url → info 提示', async () => {
+  it('handlePreview 空 blob → info 提示', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    policyApiMock.previewPolicyFile.mockResolvedValueOnce({})
+    policyApiMock.previewPolicyFile.mockResolvedValueOnce(new Blob([]))
     await (wrapper.vm as any).handlePreview()
     expect(ElMessage.info).toHaveBeenCalledWith('暂无可预览的文件')
+  })
+
+  it('handlePreview 非可预览类型 → 提示并下载', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    policyApiMock.previewPolicyFile.mockResolvedValueOnce(
+      new Blob(['doc'], { type: 'application/msword' })
+    )
+    await (wrapper.vm as any).handlePreview()
+    expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), expect.stringContaining('.pdf'))
+    expect(ElMessage.info).toHaveBeenCalledWith('该文件类型不支持在线预览，已为您下载')
   })
 
   it('handlePreview 失败 → warning', async () => {
@@ -391,7 +403,7 @@ describe('预览与下载', () => {
   it('handleDownload 无标题 → 兜底文件名', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    ;(wrapper.vm as any).policy = { title: '' }
+    ;(wrapper.vm as any).policy = { title: '', fileType: 'pdf' }
     await (wrapper.vm as any).handleDownload()
     expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), '政策文件.pdf')
   })

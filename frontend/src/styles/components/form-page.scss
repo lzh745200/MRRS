@@ -10,9 +10,9 @@
   max-width: 900px;
 
   .el-form-item__label { font-weight: 600; color: var(--color-text-primary); font-size: 13px; }
-  .el-input__wrapper { border-radius: 8px; box-shadow: 0 0 0 1px var(--color-border-light) inset; transition: box-shadow .2s; }
-  .el-input__wrapper:hover { box-shadow: 0 0 0 1px var(--color-primary-light-3) inset; }
-  .el-input.is-focus .el-input__wrapper { box-shadow: 0 0 0 2px rgba(45,106,79,.2) inset !important; }
+  /* 输入框只保留 Element Plus 原生边框（wrapper 默认 1px inset 边框），
+     不再叠加自定义 box-shadow，避免出现双重方框 */
+  .el-input__wrapper { border-radius: 8px; }
   .el-textarea__inner { border-radius: 8px; }
   .el-select .el-input__wrapper { border-radius: 8px; }
 }

@@ -5,6 +5,43 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.8.0] - 2026-08-12
+
+### 功能
+
+- ✨ **经费管理全流程化**：列表页新增 8 阶段流程步骤条（预算编制 → 经费申请 → 审批 → 拨付 → 使用执行 → 报销核销 → 决算结算 → 归档），按年度统计自动高亮当前阶段，步骤图标可跳转对应功能页；步骤条下方附流程指引说明
+- ✨ **普通用户可完整操作经费**：新增 `require_funds_operator_role`（放行 user 及以上，viewer 保持只读），经费/经费生命周期/预算/转账凭证/合同/结算全部端点对 user 角色开放；后端菜单 `funds-admin`/新增 `funds-lifecycle`/`funds-settlement` 对 user/viewer 可见
+- ✨ **经费详情审批流程可视化**：新增 `GET /funds/{id}/approval-flow`（状态机 6 节点 + reached/current 高亮），详情页「审批流程」页签新增 `el-steps` 步骤条与当前审批人展示
+- ✨ **审批转交**：待审批列表新增「转交」操作（选择审批人 + 可选原因），对接 `POST /approval/tasks/{id}/transfer`
+- ✨ **数据分析年度对比**：后端 `/statistics/analysis` 新增 `yearly_comparison`（按年份聚合村数/投入/人均收入），前端年度对比页签支持按年份取值、`el-empty` 空态、投入 vs 收入对比柱状图
+- ✨ **政策文件预览修复**：预览接口按 blob 流处理（图片/PDF/HTML 内联预览，Office 提示并下载），下载文件名使用真实扩展名；移除政策「提交审批」按钮（政策无需审批流）
+- ✨ **系统配置删除**：配置列表新增「删除」按钮（二次确认），对接 `DELETE /system/config/{key}`
+- ✨ **消息中心类型扩展**：新增「备份提醒」消息类型（筛选/标签/格式化），每日 03:30 自动清理 30 天前消息（`message_cleanup_job`）
+- ✨ **贵州省 88 县区补全**：毕节/遵义/安顺/铜仁/黔东南/黔西南补齐全部县级行政区（合计 88 个），含各乡镇数据
+
+### 修复
+
+- 🐛 **帮扶村年度数据保存后不显示**：`YearlyOverview`/`Detail` 读取年度数据用错 key（`industrySupport`/`partyBuilding` 等臆造 camelCase），实际后端按 section 原始 key 返回（`industry`/`party-building` 等），全部修正并对齐类型定义
+- 🐛 **帮扶村变更历史无效**：前端 `getChangeHistory` 硬编码返回空数组从未调用后端；后端新增字段级留痕（创建/更新/年度数据保存写 AuditChange）+ `GET /supported-villages/{id}/change-history` 端点
+- 🐛 **帮扶村详情编辑无效**：`?mode=edit` 查询参数未被 `pageMode` 计算识别，点击编辑无响应，已支持
+- 🐛 **资金周期/决算结算跳转错乱**：布局菜单 `@click="goFundsList"` 强制跳转经费总览覆盖路由跳转，已移除（含死代码）
+- 🐛 **新建转账凭证残留上次数据**：打开弹窗未重置表单，新增 `openCreateDialog` 每次重置并清校验
+- 🐛 **经费详情状态日志不显示**：`/funds/{id}/history/status` 返回数组但前端取 `res.data.items` 恒空，兼容数组/信封两种形态
+- 🐛 **项目/合同附件不能下载**：项目附件列表补「下载」按钮（认证 fetch → blob）；合同附件「打开/下载」改用认证 fetch（原 `window.open` 无法携带 JWT 头必 401）
+- 🐛 **项目表单预计完成率输入框过长**：`el-input-number` 全局 100% 宽度改为定宽 160px
+- 🐛 **输入框双重方框**：移除 `form-page.scss`/`dashboard-theme.scss` 与 Element Plus 原生边框叠加的 `box-shadow`
+- 🐛 **提示策略优化**：单条增删改成功静默（仅刷新列表），关键动作（审批通过/经费拨付等）升级为带标题的 `ElNotification`，失败保留明确 `ElMessage.error`
+
+### 架构清理
+
+- 🧹 删除无引用的 `views/dataManagement/components/BackupSection.vue`（备份已收口至系统管理 → 备份管理，菜单路径同步修正）
+- 🧹 删除布局中失效的 `goFundsList` 函数与政策列表 `handleSubmitApproval` 死代码
+
+### 测试与质量
+
+- 后端全量：**12,126 passed**（更新经费权限/菜单/附件权限过时断言，新增 approval-flow、变更历史、年度对比等测试）
+- 前端受影响模块测试全部回归通过（经费列表/转账凭证/政策详情/年度数据/数据分析/审批转交等）
+
 ## [1.5.2] - 2026-08-11
 
 ### 修复

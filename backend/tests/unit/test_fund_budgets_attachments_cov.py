@@ -170,19 +170,24 @@ class TestBudgetAttachments:
         )
         assert resp.status_code == 404
 
-    def test_upload_attachment_forbidden_for_user(self, mock_db):
+    def test_upload_attachment_allowed_for_user(self, mock_db):
+        """普通用户（user）可上传经费附件（产品要求：经费全流程对普通用户开放）。"""
         app = FastAPI()
         app.dependency_overrides[deps.get_current_user] = lambda: _make_user(role="user")
         app.dependency_overrides[deps.get_db] = lambda: mock_db
         from app.api.v1.fund_budgets import router
 
+        _set_db_first(mock_db, _make_existing_budget(remarks="[]"))
+
         app.include_router(router)
         c = TestClient(app, raise_server_exceptions=False)
-        resp = c.post(
-            "/fund-budgets/1/attachments",
-            files={"file": ("a.pdf", b"%PDF", "application/pdf")},
-        )
-        assert resp.status_code == 403
+        with patch("app.utils.upload_helper.save_upload_file", new=pytest_asyncio_wrap(self.UPLOAD_INFO)), \
+                patch("app.api.v1.fund_budgets.settings.UPLOAD_DIR", "C:/uploads"):
+            resp = c.post(
+                "/fund-budgets/1/attachments",
+                files={"file": ("a.pdf", b"%PDF", "application/pdf")},
+            )
+        assert resp.status_code == 200
 
     def test_list_attachments_with_records(self, client, mock_db):
         remarks = (

@@ -176,8 +176,10 @@ const editSectionKey = ref('')
 const editSectionTitle = ref('')
 
 // 板块定义
+// 注意：后端 /yearly/{year} 按 section 原始 key 返回（force-investment/party-building/industry 等），
+// 读取时用与实际返回一致的 key，不能臆造 camelCase 别名
 const sections = computed(() => {
-  const d = yearlyData.value
+  const d: any = yearlyData.value
   return [
     {
       key: 'population',
@@ -212,15 +214,15 @@ const sections = computed(() => {
       key: 'force_investment',
       title: '力量投入',
       icon: markRaw(Medal),
-      stats: d?.forceInvestment
+      stats: d?.['force-investment']
         ? [
             {
               label: '领导到村(人次)',
-              value: d.forceInvestment.seniorLeaderVisits ?? 0,
+              value: d['force-investment'].seniorLeaderVisits ?? 0,
             },
             {
               label: '人员到村(人次)',
-              value: d.forceInvestment.unitSoldierVisits ?? 0,
+              value: d['force-investment'].unitSoldierVisits ?? 0,
             },
           ]
         : [],
@@ -229,11 +231,11 @@ const sections = computed(() => {
       key: 'industry',
       title: '产业帮扶',
       icon: markRaw(OfficeBuilding),
-      stats: d?.industrySupport
+      stats: d?.industry
         ? [
             {
               label: '当年投入(万)',
-              value: (d.industrySupport.investment ?? 0).toFixed(2),
+              value: (d.industry.investment ?? 0).toFixed(2),
             },
           ]
         : [],
@@ -255,15 +257,15 @@ const sections = computed(() => {
       key: 'party_building',
       title: '党建帮扶',
       icon: markRaw(Stamp),
-      stats: d?.partyBuilding
+      stats: d?.['party-building']
         ? [
             {
               label: '投入(万)',
-              value: (d.partyBuilding.investment ?? 0).toFixed(2),
+              value: (d['party-building'].investment ?? 0).toFixed(2),
             },
             {
               label: '联建活动(次)',
-              value: d.partyBuilding.jointActivities ?? 0,
+              value: d['party-building'].jointActivities ?? 0,
             },
           ]
         : [],
@@ -272,15 +274,15 @@ const sections = computed(() => {
       key: 'medical',
       title: '医疗帮扶',
       icon: markRaw(FirstAidKit),
-      stats: d?.medicalSupport
+      stats: d?.medical
         ? [
             {
               label: '投入(万)',
-              value: (d.medicalSupport.investment ?? 0).toFixed(2),
+              value: (d.medical.investment ?? 0).toFixed(2),
             },
             {
               label: '巡诊(人次)',
-              value: d.medicalSupport.patientsServed ?? 0,
+              value: d.medical.patientsServed ?? 0,
             },
           ]
         : [],
@@ -289,11 +291,11 @@ const sections = computed(() => {
       key: 'consumption',
       title: '消费帮扶',
       icon: markRaw(ShoppingCart),
-      stats: d?.consumptionSupport
+      stats: d?.consumption
         ? [
             {
               label: '采购产品(万)',
-              value: (d.consumptionSupport.villageProductsPurchase ?? 0).toFixed(2),
+              value: (d.consumption.villageProductsPurchase ?? 0).toFixed(2),
             },
           ]
         : [],
@@ -302,15 +304,15 @@ const sections = computed(() => {
       key: 'employment',
       title: '就业帮扶',
       icon: markRaw(Briefcase),
-      stats: d?.employmentSupport
+      stats: d?.employment
         ? [
             {
               label: '聘用(人)',
-              value: d.employmentSupport.hiredPopulation ?? 0,
+              value: d.employment.hiredPopulation ?? 0,
             },
             {
               label: '培训(人次)',
-              value: d.employmentSupport.trainedPopulation ?? 0,
+              value: d.employment.trainedPopulation ?? 0,
             },
           ]
         : [],
@@ -319,15 +321,15 @@ const sections = computed(() => {
       key: 'education',
       title: '教育帮扶',
       icon: markRaw(Reading),
-      stats: d?.educationSupport
+      stats: d?.education
         ? [
             {
               label: '投入(万)',
-              value: (d.educationSupport.investment ?? 0).toFixed(2),
+              value: (d.education.investment ?? 0).toFixed(2),
             },
             {
               label: '资助学生(人)',
-              value: d.educationSupport.aidedStudents ?? 0,
+              value: d.education.aidedStudents ?? 0,
             },
           ]
         : [],
@@ -336,15 +338,15 @@ const sections = computed(() => {
       key: 'committee',
       title: '村委会情况',
       icon: markRaw(House),
-      stats: (d as any)?.committee
+      stats: d?.committee
         ? [
             {
               label: '成员数',
-              value: (d as any).committee.members?.length ?? 0,
+              value: d.committee.members?.length ?? 0,
             },
             {
               label: '集体收入(万)',
-              value: ((d as any).committee.collectiveIncomeAmount ?? 0).toFixed(2),
+              value: (d.committee.collectiveIncomeAmount ?? 0).toFixed(2),
             },
           ]
         : [],
@@ -454,18 +456,18 @@ function renderTrendChart() {
 
 // 当年各板块投入分布
 const investmentDistribution = computed(() => {
-  const d = yearlyData.value
+  const d: any = yearlyData.value
   const items: Array<{ name: string; value: number }> = []
   if (!d) return items
   const push = (name: string, value: number | undefined) => {
     const v = Number(value ?? 0)
     if (v > 0) items.push({ name, value: v })
   }
-  push('产业帮扶', d.industrySupport?.investment)
+  push('产业帮扶', d.industry?.investment)
   push('基础设施', d.infrastructure?.investment)
-  push('党建帮扶', d.partyBuilding?.investment)
-  push('医疗帮扶', d.medicalSupport?.investment)
-  push('教育帮扶', d.educationSupport?.investment)
+  push('党建帮扶', d['party-building']?.investment)
+  push('医疗帮扶', d.medical?.investment)
+  push('教育帮扶', d.education?.investment)
   return items
 })
 

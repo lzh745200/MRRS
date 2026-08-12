@@ -230,7 +230,7 @@ onUnmounted(() => {
       box-shadow: 0 0 0 1px #c0c4cc;
     }
     &.is-focus {
-      box-shadow: 0 0 0 2px var(--el-color-primary, #409eff);
+      box-shadow: 0 0 0 2px var(--color-primary);
     }
   }
   :deep(.el-input__inner) {
@@ -294,7 +294,7 @@ onUnmounted(() => {
   }
   &.active {
     .item-title {
-      color: var(--el-color-primary, #409eff);
+      color: var(--color-primary);
     }
   }
 }

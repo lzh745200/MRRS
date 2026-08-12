@@ -199,8 +199,20 @@ async function openChangeHistory() {
   changeHistoryVisible.value = true
   changeHistoryLoading.value = true
   try {
-    const res = await getChangeHistory(safeRouteParam(route.params.id))
-    changeHistory.value = (res as any)?.data?.items || (res as any)?.items || []
+    const res: any = await getChangeHistory(safeRouteParam(route.params.id))
+    const items = res?.items || res?.data?.items || res || []
+    // 后端结构 {timestamp, username, action, changes[]} → 弹窗结构 {time, action, user}
+    changeHistory.value = Array.isArray(items)
+      ? items.map((item: any) => {
+          const fieldCount = Array.isArray(item?.changes) ? item.changes.length : 0
+          const actionText = item.action || 'update'
+          return {
+            time: item.timestamp || item.time || '',
+            action: fieldCount ? `${actionText}（${fieldCount} 个字段）` : actionText,
+            user: item.username || item.user || '未知用户',
+          }
+        })
+      : []
   } catch {
     ElMessage.error('加载变更历史失败')
   } finally {
@@ -233,7 +245,7 @@ const selectedYear = ref(currentYear)
 // 页面模式：根据路由自动判断
 const pageMode = computed(() => {
   const path = route.path
-  if (path.endsWith('/edit')) return 'edit'
+  if (path.endsWith('/edit') || route.query.mode === 'edit') return 'edit'
   if (path.includes('/create') || !route.params.id) return 'create'
   return 'view'
 })
@@ -267,10 +279,15 @@ const hasRevitalizationTags = computed(() => {
 
 const totalInvestment = computed(() => {
   if (!yearlyData.value) return 0
+  const d: any = yearlyData.value
   let total = 0
-  if (yearlyData.value.industrySupport) total += yearlyData.value.industrySupport.investment || 0
-  if (yearlyData.value.infrastructure) total += yearlyData.value.infrastructure.investment || 0
-  if (yearlyData.value.educationSupport) total += yearlyData.value.educationSupport.investment || 0
+  // 后端 yearly 接口按 section 原始 key 返回（industry/infrastructure/education 等）
+  if (d.industry) total += Number(d.industry.investment) || 0
+  if (d.infrastructure) total += Number(d.infrastructure.investment) || 0
+  if (d.education) total += Number(d.education.investment) || 0
+  if (d.medical) total += Number(d.medical.investment) || 0
+  if (d['party-building']) total += Number(d['party-building'].investment) || 0
+  if (d.consumption) total += Number(d.consumption.villageProductsPurchase) || 0
   return total
 })
 

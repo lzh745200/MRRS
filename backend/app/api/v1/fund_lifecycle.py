@@ -39,7 +39,7 @@ from ...models.project import Project
 from ...core.permission_utils import is_superuser
 from ...core.data_permission import apply_data_scope, check_record_access
 from ...services.work_log_service import write_work_log
-from .deps import ADMIN_ROLES, require_manager_role as _require_manager  # noqa: F401
+from .deps import ADMIN_ROLES, require_funds_operator_role as _require_manager  # noqa: F401
 
 router = APIRouter(prefix="/fund-lifecycle", tags=["经费生命周期"])
 

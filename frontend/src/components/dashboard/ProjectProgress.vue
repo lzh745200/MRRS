@@ -124,7 +124,7 @@ const displayProjects = computed(() => props.projects.slice(0, props.maxDisplay)
 }
 .project-status.active {
   background: #ecf5ff;
-  color: var(--el-color-primary, #409eff);
+  color: var(--color-primary);
 }
 .project-status.completed {
   background: #f0f9eb;

@@ -558,7 +558,7 @@ async function handleDelete(row: any) {
   if (!row?.id) return
   try {
     await del(`/schools/${row.id}`)
-    ElMessage.success('删除成功')
+    // 成功静默：删除成功仅刷新列表
     currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     fetchData()
   } catch (error) {

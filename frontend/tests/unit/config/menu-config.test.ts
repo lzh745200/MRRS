@@ -8,8 +8,8 @@ describe('config/menu-config', () => {
     expect(MENU_CONFIG.length).toBeGreaterThan(0)
   })
 
-  it('顶层菜单项数量为 15', () => {
-    expect(MENU_CONFIG.length).toBe(15)
+  it('顶层菜单项数量为 17', () => {
+    expect(MENU_CONFIG.length).toBe(17)
   })
 
   it('顶层 key 唯一', () => {
@@ -33,7 +33,7 @@ describe('config/menu-config', () => {
   it('getAllMenuKeys 返回全部 key 且无重复', () => {
     const keys = getAllMenuKeys()
     expect(new Set(keys).size).toBe(keys.length)
-    expect(keys).toHaveLength(52)
+    expect(keys).toHaveLength(54)
     expect(keys).toContain('dashboard')
     expect(keys).toContain('system-overview')
     expect(keys).toContain('batch-import')
@@ -51,12 +51,23 @@ describe('config/menu-config', () => {
   it('funds-admin 角色白名单', () => {
     const funds = MENU_CONFIG.find((m) => m.key === 'funds-admin')!
     expect(funds.path).toBe('/funds')
-    expect(funds.roles).toEqual(['admin', 'super_admin', 'manager'])
+    // v1.8.0：普通用户可完整操作经费管理，viewer 可见菜单（操作仍只读）
+    expect(funds.roles).toEqual(['admin', 'super_admin', 'user', 'viewer'])
   })
 
   it('funds-user 角色白名单', () => {
     const fundsUser = MENU_CONFIG.find((m) => m.key === 'funds-user')!
-    expect(fundsUser.roles).toEqual(['operator', 'viewer', 'approval_leader'])
+    // 废弃角色（operator/approval_leader）已移除，统一为 user/viewer
+    expect(fundsUser.roles).toEqual(['user', 'viewer'])
+  })
+
+  it('funds-lifecycle/funds-settlement 角色白名单', () => {
+    const lifecycle = MENU_CONFIG.find((m) => m.key === 'funds-lifecycle')!
+    expect(lifecycle.path).toBe('/funds/lifecycle')
+    expect(lifecycle.roles).toEqual(['admin', 'super_admin', 'user', 'viewer'])
+    const settlement = MENU_CONFIG.find((m) => m.key === 'funds-settlement')!
+    expect(settlement.path).toBe('/funds/settlement')
+    expect(settlement.roles).toEqual(['admin', 'super_admin', 'user', 'viewer'])
   })
 
   it('approval 角色白名单', () => {

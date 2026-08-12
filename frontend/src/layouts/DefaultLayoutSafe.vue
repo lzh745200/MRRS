@@ -102,12 +102,8 @@
             <el-menu-item index="/funds/contract"><span>合同管理</span></el-menu-item>
             <el-menu-item index="/funds/transfer"><span>转账凭证</span></el-menu-item>
             <el-menu-item index="/funds/anomaly"><span>异常监控</span></el-menu-item>
-            <el-menu-item index="/funds/lifecycle" @click="goFundsList"
-              ><span>资金周期</span></el-menu-item
-            >
-            <el-menu-item index="/funds/settlement" @click="goFundsList"
-              ><span>决算结算</span></el-menu-item
-            >
+            <el-menu-item index="/funds/lifecycle"><span>资金周期</span></el-menu-item>
+            <el-menu-item index="/funds/settlement"><span>决算结算</span></el-menu-item>
             <el-menu-item index="/funds/analysis"><span>经费分析</span></el-menu-item>
             <el-menu-item index="/funds/report"><span>经费报表</span></el-menu-item>
           </el-sub-menu>
@@ -449,11 +445,6 @@ const { pushSafe } = useRouterSafe()
 const authStore = useAuthStore()
 const menuStore = useMenuStore()
 const configStore = useConfigStore()
-
-// 资金周期/决算结算依赖具体项目，菜单入口统一跳转经费列表由行内按钮带项目进入
-function goFundsList() {
-  pushSafe('/funds')
-}
 
 // ── 消息中心未读角标 ──
 const unreadCount = ref(0)

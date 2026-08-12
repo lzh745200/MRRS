@@ -172,9 +172,12 @@ class TestGetAccessibleMenus:
         assert resp.status_code == 200
         body = resp.json()
         keys = [m["key"] for m in body["data"]]
-        # viewer should NOT see system or funds-admin
+        # viewer should NOT see system（系统管理仍仅管理员可见）
         assert "system" not in keys
-        assert "funds-admin" not in keys
+        # 经费管理对普通用户开放菜单（操作权限由 require_funds_operator_role 限制）
+        assert "funds-admin" in keys
+        assert "funds-lifecycle" in keys
+        assert "funds-settlement" in keys
         # viewer should see generic-access menus
         assert "dashboard" in keys
 
@@ -655,7 +658,10 @@ class TestHelperFunctions:
         from app.api.v1.menus import _get_role_default_menu_keys
         viewer_keys = _get_role_default_menu_keys("viewer")
         assert "system" not in viewer_keys
-        assert "funds-admin" not in viewer_keys
+        # 经费管理对普通用户（含 viewer）可见菜单，但操作权限由 require_funds_operator_role 限制
+        assert "funds-admin" in viewer_keys
+        assert "funds-lifecycle" in viewer_keys
+        assert "funds-settlement" in viewer_keys
 
     def test_get_user_accessible_uses_custom_over_role(self):
         from app.api.v1.menus import _get_user_accessible_menu_keys

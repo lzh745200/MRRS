@@ -425,15 +425,18 @@ describe('审批通过与拒绝', () => {
     expect(vm.approveForm.opinion).toBe('审批意见X')
     expect(vm.rejectForm.opinion).toBe('拒绝原因Y')
 
-    // 两个「取消」按钮：[0] 审批对话框，[1] 拒绝对话框
+    // 三个「取消」按钮：[0] 审批对话框，[1] 拒绝对话框，[2] 转交对话框（v1.8.0）
     vm.approveDialogVisible = true
     vm.rejectDialogVisible = true
+    vm.transferDialogVisible = true
     const cancels = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '取消')
-    expect(cancels.length).toBe(2)
+    expect(cancels.length).toBe(3)
     await cancels[0].trigger('click')
     expect(vm.approveDialogVisible).toBe(false)
     await cancels[1].trigger('click')
     expect(vm.rejectDialogVisible).toBe(false)
+    await cancels[2].trigger('click')
+    expect(vm.transferDialogVisible).toBe(false)
 
     // 确认通过 / 确认拒绝 按钮真实点击
     vm.currentTask = { id: 7 }
@@ -446,18 +449,21 @@ describe('审批通过与拒绝', () => {
     await flushPromises()
     expect(mockRejectTask).toHaveBeenCalledWith(7, '拒绝原因Y')
 
-    // 三个对话框 v-model 同步
+    // 四个对话框 v-model 同步（审批/拒绝/diff/转交——v1.8.0 新增转交）
     const dialogs = wrapper.findAllComponents({ name: 'ElDialog' })
-    expect(dialogs.length).toBe(3)
+    expect(dialogs.length).toBe(4)
     vm.approveDialogVisible = true
     vm.rejectDialogVisible = true
     vm.diffDialogVisible = true
+    vm.transferDialogVisible = true
     dialogs[0].vm.$emit('update:modelValue', false)
     dialogs[1].vm.$emit('update:modelValue', false)
     dialogs[2].vm.$emit('update:modelValue', false)
+    dialogs[3].vm.$emit('update:modelValue', false)
     expect(vm.approveDialogVisible).toBe(false)
     expect(vm.rejectDialogVisible).toBe(false)
     expect(vm.diffDialogVisible).toBe(false)
+    expect(vm.transferDialogVisible).toBe(false)
   })
 })
 

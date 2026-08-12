@@ -160,9 +160,23 @@
             <div class="detail-card" style="margin-bottom: 0">
               <div class="card-header"><h3>审批信息</h3></div>
               <div class="card-body">
-                <el-descriptions :column="3" border>
+                <el-steps
+                  v-if="approvalFlow.nodes.length"
+                  :active="approvalActiveStep"
+                  finish-status="success"
+                  align-center
+                >
+                  <el-step
+                    v-for="node in approvalFlow.nodes"
+                    :key="node.status"
+                    :title="node.label"
+                    :description="node.description"
+                    :status="node.current ? 'process' : node.reached ? 'success' : 'wait'"
+                  />
+                </el-steps>
+                <el-descriptions :column="3" border style="margin-top: 16px">
                   <el-descriptions-item label="审批人">{{
-                    fundData.approved_by || '-'
+                    approvalFlow.currentApprover || fundData.approved_by || '-'
                   }}</el-descriptions-item>
                   <el-descriptions-item label="审批日期">{{
                     formatDateTime(fundData.approval_date)
@@ -641,7 +655,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, onBeforeUnmount, watch
 import { useRoute } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { ArrowLeft, Edit, Delete, Loading, Upload } from '@element-plus/icons-vue'
 import { get, post, put, del } from '@/api/request'
 import { fundApi } from '@/api/funds'
@@ -681,12 +695,22 @@ const previewVisible = ref(false)
 const previewUrl = ref('')
 const previewTitle = ref('')
 
+// 审批流程当前步骤索引（el-steps active 语义：已完成步骤数）
+const approvalActiveStep = computed(() => {
+  const nodes = approvalFlow.value.nodes
+  if (!nodes.length) return 0
+  const idx = nodes.findIndex((n: any) => n.current)
+  return idx >= 0 ? idx + 1 : nodes.filter((n: any) => n.reached).length
+})
+
 // 加载历史记录
 async function loadStatusHistory() {
   if (!fundData.id) return
   try {
-    const res = await get(`/funds/${fundData.id}/history/status`)
-    statusHistory.value = res.data?.items || []
+    const res: any = await get(`/funds/${fundData.id}/history/status`)
+    // 后端返回 success_response(data=[...]) 数组形态（非 ok_list），兼容两种
+    const data = Array.isArray(res) ? res : res?.data
+    statusHistory.value = Array.isArray(data) ? data : data?.items || []
   } catch (error) {
     logger.error('加载状态历史失败', error)
   }
@@ -695,8 +719,9 @@ async function loadStatusHistory() {
 async function loadFieldChanges() {
   if (!fundData.id) return
   try {
-    const res = await get(`/funds/${fundData.id}/history/fields`)
-    fieldChanges.value = res.data?.items || []
+    const res: any = await get(`/funds/${fundData.id}/history/fields`)
+    const data = Array.isArray(res) ? res : res?.data
+    fieldChanges.value = Array.isArray(data) ? data : data?.items || []
   } catch (error) {
     logger.error('加载字段变更历史失败', error)
   }
@@ -705,10 +730,33 @@ async function loadFieldChanges() {
 async function loadOperationLogs() {
   if (!fundData.id) return
   try {
-    const res = await get(`/funds/${fundData.id}/history/operations`)
-    operationLogs.value = res.data?.items || []
+    const res: any = await get(`/funds/${fundData.id}/history/operations`)
+    const data = Array.isArray(res) ? res : res?.data
+    operationLogs.value = Array.isArray(data) ? data : data?.items || []
   } catch (error) {
     logger.error('加载操作日志失败', error)
+  }
+}
+
+// 审批流程（当前节点 + 状态机节点）
+const approvalFlow = ref<{ currentStatus: string; currentApprover: string; nodes: any[] }>({
+  currentStatus: '',
+  currentApprover: '',
+  nodes: [],
+})
+
+async function loadApprovalFlow() {
+  if (!fundData.id) return
+  try {
+    const res: any = await get(`/funds/${fundData.id}/approval-flow`)
+    const data = res?.data || res || {}
+    approvalFlow.value = {
+      currentStatus: data.current_status || data.currentStatus || '',
+      currentApprover: data.current_approver || data.currentApprover || '',
+      nodes: Array.isArray(data.nodes) ? data.nodes : [],
+    }
+  } catch (error) {
+    logger.error('加载审批流程失败', error)
   }
 }
 
@@ -718,6 +766,7 @@ async function loadAllHistory() {
     loadStatusHistory(),
     loadFieldChanges(),
     loadOperationLogs(),
+    loadApprovalFlow(),
     loadAttachments(),
   ])
 }
@@ -787,7 +836,7 @@ function downloadAttachment(row: any) {
 async function deleteAttachment(row: any) {
   try {
     await fundApi.deleteAttachment(row.id)
-    ElMessage.success('删除成功')
+    // 成功静默：删除成功仅刷新
     await loadAttachments()
   } catch {
     ElMessage.error('删除失败')
@@ -1013,7 +1062,12 @@ async function submitWorkflow() {
       allocation_method: wfAction.value === 'allocate' ? wfForm.allocation_method : undefined,
       audit_result: wfAction.value === 'audit' ? wfForm.audit_result : undefined,
     })
-    ElMessage.success(`${wfDialogTitle.value}操作成功`)
+    // 关键动作（审批/拨付/审计等）用带标题的通知
+    ElNotification({
+      title: wfDialogTitle.value,
+      message: `${wfDialogTitle.value}操作成功`,
+      type: 'success',
+    })
     wfDialogVisible.value = false
     await loadFundDetail()
   } catch (e: any) {
@@ -1103,11 +1157,11 @@ const handleSubmit = async () => {
     })
     if (isCreate.value) {
       await post('/funds', payload)
-      ElMessage.success('创建成功')
+      // 成功静默：创建成功仅刷新
       pushSafe('/funds')
     } else {
       await put(`/funds/${fundData.id}`, payload)
-      ElMessage.success('保存成功')
+      // 成功静默：保存成功仅刷新
       isEdit.value = false
       await loadFundDetail()
     }
@@ -1128,7 +1182,7 @@ const handleDelete = async () => {
       type: 'warning',
     })
     await del(`/funds/${fundData.id}`)
-    ElMessage.success('删除成功')
+    // 成功静默：删除成功仅刷新
     pushSafe('/funds')
   } catch (e: any) {
     if (e !== 'cancel') logger.error('删除失败', e)

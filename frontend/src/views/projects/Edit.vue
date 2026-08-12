@@ -531,9 +531,14 @@
                     />
                     <div class="photo-info">
                       <span class="file-name">{{ uf.filename }}</span>
-                      <el-button type="danger" link size="small" @click="handleDeleteFile(uf)"
-                        >删除</el-button
-                      >
+                      <span class="photo-actions">
+                        <el-button type="primary" link size="small" @click="handleDownloadFile(uf)"
+                          >下载</el-button
+                        >
+                        <el-button type="danger" link size="small" @click="handleDeleteFile(uf)"
+                          >删除</el-button
+                        >
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -546,6 +551,9 @@
                     <span class="file-name">{{ uf.filename }}</span>
                     <span class="file-size">{{ formatFileSize(uf.file_size) }}</span>
                     <span class="file-date">{{ uf.created_at?.slice(0, 10) }}</span>
+                    <el-button type="primary" link size="small" @click="handleDownloadFile(uf)"
+                      >下载</el-button
+                    >
                     <el-button type="danger" link size="small" @click="handleDeleteFile(uf)"
                       >删除</el-button
                     >
@@ -925,6 +933,30 @@ function handlePreviewClose() {
   if (previewUrl.value) {
     URL.revokeObjectURL(previewUrl.value)
     previewUrl.value = ''
+  }
+}
+
+// 下载已上传文件（认证 fetch → blob → 触发浏览器下载）
+async function handleDownloadFile(file: any) {
+  try {
+    const url = getFileUrl(file)
+    const token = AuthStorage.getToken()
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!response.ok) throw new Error('Download failed')
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = file.filename || file.name || 'download'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(objectUrl)
+  } catch (e) {
+    logger.error('下载文件失败:', e)
+    ElMessage.error('文件下载失败，请稍后重试')
   }
 }
 
@@ -1421,9 +1453,12 @@ onUnmounted(() => {
 
 .el-select,
 .el-input,
-.el-date-editor,
-.el-input-number {
+.el-date-editor {
   width: 100%;
+}
+/* 数字输入框（完成率/金额等）定宽，避免被 flex 拉伸过长 */
+.el-input-number {
+  width: 160px;
 }
 
 .el-checkbox-group {

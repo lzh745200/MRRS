@@ -73,10 +73,11 @@ describe('api/supportedVillage — 过滤/年度数据', () => {
     expect(result).toEqual({ years: [2024] })
   })
 
-  it('getChangeHistory 本地返回空数组（不发请求）', async () => {
+  it('getChangeHistory 调用后端变更历史接口', async () => {
+    mockGet.mockResolvedValueOnce({ items: [{ id: 1 }], total: 1 })
     const result = await getChangeHistory(5)
-    expect(result).toEqual([])
-    expect(mockGet).not.toHaveBeenCalled()
+    expect(mockGet).toHaveBeenCalledWith('/supported-villages/5/change-history')
+    expect(result).toEqual({ items: [{ id: 1 }], total: 1 })
   })
 
   it('getYearlyData GET /{id}/yearly/{year} 并透传返回值', async () => {
