@@ -300,6 +300,20 @@ describe('composables/useMessageNotification', () => {
       expect(localStorage.getItem('backup-reminder-notified')).toBeNull()
       w.unmount()
     })
+
+    it('后端返回 {success, data:{lastBackup}} 内层结构 → 正常提醒', async () => {
+      const ctorSpy = vi.fn()
+      stubNotification({ ctorImpl: ctorSpy })
+      ;(getUnreadCount as any).mockResolvedValue(0)
+      ;(get as any).mockResolvedValue({
+        success: true,
+        data: { lastBackup: new Date(Date.now() - 8 * 86400000).toISOString() },
+      })
+      const w = mountNotifier()
+      await vi.advanceTimersByTimeAsync(8000)
+      expect(ctorSpy).toHaveBeenCalledTimes(1)
+      w.unmount()
+    })
   })
 
   describe('卸载清理', () => {

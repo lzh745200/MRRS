@@ -58,6 +58,13 @@ describe('useOrganizationStore', () => {
     expect(store.tree).toHaveLength(1)
   })
 
+  it('fetchTree 后端直接返回数组（裸格式兼容）', async () => {
+    mockGet.mockResolvedValueOnce([{ id: 2, name: 'Root2', children: [] }])
+    await store.fetchTree()
+    expect(store.tree).toHaveLength(1)
+    expect(store.tree[0].name).toBe('Root2')
+  })
+
   it('createOrganization adds to list', async () => {
     mockPost.mockResolvedValueOnce({
       code: 200,
@@ -206,6 +213,14 @@ describe('useOrganizationStore', () => {
       url: '/organizations/subordinates',
       timeout: 10000,
     })
+  })
+
+  it('fetchSubordinateOrganizations 后端直接返回数组（裸格式兼容）', async () => {
+    const { apiRequest } = await import('@/api/request')
+    const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
+    mockApiRequest.mockResolvedValueOnce([{ id: 9, name: 'SubArr' }])
+    await store.fetchSubordinateOrganizations()
+    expect(store.subordinateOrganizations).toEqual([{ id: 9, name: 'SubArr' }])
   })
 
   it('fetchSubordinateOrganizations 成功时回退到 res.items', async () => {

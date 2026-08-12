@@ -62,10 +62,11 @@ export async function getMessages(params?: {
 
 /**
  * 获取未读消息数量
+ * 后端返回 {total, by_type}（无 count 字段）——兼容 total/count 两种字段
  */
 export async function getUnreadCount(): Promise<number> {
-  const response = await get<{ count: number }>('/messages/unread-count')
-  return response.count
+  const response = await get<{ total?: number; count?: number }>('/messages/unread-count')
+  return Number(response?.total ?? response?.count ?? 0) || 0
 }
 
 /**

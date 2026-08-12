@@ -82,8 +82,9 @@ export function useMessageNotification() {
     try {
       const today = new Date().toISOString().slice(0, 10)
       if (localStorage.getItem(REMINDER_STORAGE_KEY) === today) return
-      const res = await get('/system/backup/stats')
-      const lastBackup = res?.lastBackup
+      const res = await get<any>('/system/backup/stats')
+      // 后端返回 {success, data: {lastBackup, ...}}——兼容内层与顶层两种结构
+      const lastBackup = res?.data?.lastBackup ?? res?.lastBackup
       if (!lastBackup) return
       const lastTs = new Date(lastBackup).getTime()
       if (Number.isNaN(lastTs)) return

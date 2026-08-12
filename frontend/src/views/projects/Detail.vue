@@ -404,7 +404,8 @@ async function loadFiles() {
   filesLoading.value = true
   try {
     const res = await projectsApi.listFiles(projectId)
-    files.value = res?.items ?? res ?? []
+    // 后端返回 {files: [...], grouped: {...}}（非 items）——兼容两种结构，防止对象被当数组
+    files.value = Array.isArray(res) ? res : (res?.files ?? res?.items ?? [])
   } catch (e) {
     logger.error('加载附件失败', e)
   } finally {

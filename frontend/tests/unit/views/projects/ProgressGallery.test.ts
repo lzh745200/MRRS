@@ -120,6 +120,15 @@ describe('挂载与数据加载', () => {
     expect(vm.loading).toBe(false)
   })
 
+  it('后端返回 {files: [...]}（非 items）→ 兼容加载', async () => {
+    projectsApiMock.listFiles.mockResolvedValue({ files: [fileBefore, fileAfter], grouped: { progress: [fileBefore] } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.allFiles).toHaveLength(2)
+    expect(vm.progressFiles).toHaveLength(2)
+  })
+
   it('fetch 非 2xx → 不设置 URL', async () => {
     fetchMock.mockResolvedValue({ ok: false })
     const wrapper = mountComp()
@@ -253,6 +262,22 @@ describe('上传', () => {
     await (wrapper.vm as any).handleUpload({ file: {} })
     expect((wrapper.vm as any).allFiles).toEqual([])
   })
+
+  it('上传成功且 listFiles 返回 {files:[...]}（后端实际结构）→ 兼容刷新', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    projectsApiMock.listFiles.mockResolvedValue({ files: [fileBefore], grouped: { progress: [fileBefore] } })
+    await (wrapper.vm as any).handleUpload({ file: {} })
+    expect((wrapper.vm as any).allFiles).toHaveLength(1)
+  })
+
+  it('上传成功且 listFiles 返回数组直返 → 兼容刷新', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    projectsApiMock.listFiles.mockResolvedValue([fileBefore])
+    await (wrapper.vm as any).handleUpload({ file: {} })
+    expect((wrapper.vm as any).allFiles).toHaveLength(1)
+  })
 })
 
 describe('删除', () => {
@@ -277,6 +302,22 @@ describe('删除', () => {
     projectsApiMock.listFiles.mockResolvedValue(null)
     await (wrapper.vm as any).handleDelete(11)
     expect((wrapper.vm as any).allFiles).toEqual([])
+  })
+
+  it('删除成功且 listFiles 返回 {files:[...]}（后端实际结构）→ 兼容刷新', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    projectsApiMock.listFiles.mockResolvedValue({ files: [fileAfter], grouped: { progress: [fileAfter] } })
+    await (wrapper.vm as any).handleDelete(11)
+    expect((wrapper.vm as any).allFiles).toHaveLength(1)
+  })
+
+  it('删除成功且 listFiles 返回数组直返 → 兼容刷新', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    projectsApiMock.listFiles.mockResolvedValue([fileAfter])
+    await (wrapper.vm as any).handleDelete(11)
+    expect((wrapper.vm as any).allFiles).toHaveLength(1)
   })
 
   it('取消 → 不删除', async () => {

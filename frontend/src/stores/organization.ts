@@ -38,8 +38,11 @@ export const useOrganizationStore = defineStore('organization', () => {
 
   async function fetchTree() {
     try {
-      const res = await get<ApiResponse<any[]>>('/organizations/tree')
-      if (res.code === 200 && res.data) tree.value = res.data
+      const res = await get<any>('/organizations/tree')
+      // 后端直接返回数组——兼容数组直返与信封两种格式
+      if (Array.isArray(res)) tree.value = res
+      else if ((res?.code === 200 || res?.success !== false) && Array.isArray(res?.data))
+        tree.value = res.data
     } catch {
       /* silent */
     }
@@ -89,7 +92,8 @@ export const useOrganizationStore = defineStore('organization', () => {
         url: '/organizations/subordinates',
         timeout: 10000,
       })
-      subordinateOrganizations.value = res?.data || res?.items || []
+      // 后端直接返回数组——兼容数组直返与信封两种格式
+      subordinateOrganizations.value = Array.isArray(res) ? res : res?.data || res?.items || []
     } catch {
       subordinateOrganizations.value = []
     }

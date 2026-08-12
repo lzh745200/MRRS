@@ -26,8 +26,10 @@ export const useRbacStore = defineStore('rbac', () => {
   async function fetchRoles() {
     loading.value = true
     try {
-      const res = await get<{ code: number; data: Role[] }>('/rbac/roles')
-      if (res.code === 200 && res.data) roles.value = res.data
+      const res = await get<{ code?: number; success?: boolean; data: Role[] }>('/rbac/roles')
+      // 后端返回 {success, data}（无 code 字段）——兼容 code===200 与 success 两种格式
+      if ((res.code === 200 || res.success !== false) && Array.isArray(res.data))
+        roles.value = res.data
     } catch {
       /* silent */
     } finally {
@@ -38,8 +40,12 @@ export const useRbacStore = defineStore('rbac', () => {
   async function fetchPermissions() {
     loading.value = true
     try {
-      const res = await get<{ code: number; data: Permission[] }>('/rbac/permissions')
-      if (res.code === 200 && res.data) permissions.value = res.data
+      const res = await get<{ code?: number; success?: boolean; data: Permission[] }>(
+        '/rbac/permissions'
+      )
+      // 后端返回 {success, data, categories}（无 code 字段）——兼容 code===200 与 success 两种格式
+      if ((res.code === 200 || res.success !== false) && Array.isArray(res.data))
+        permissions.value = res.data
     } catch {
       /* silent */
     } finally {

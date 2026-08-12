@@ -276,7 +276,8 @@ async function loadData() {
       projectsApi.listFiles(projectId),
     ])
     project.value = proj
-    allFiles.value = filesRes?.items ?? filesRes ?? []
+    // 后端返回 {files: [...], grouped: {...}}——兼容两种结构，防止对象被当数组
+    allFiles.value = Array.isArray(filesRes) ? filesRes : (filesRes?.files ?? filesRes?.items ?? [])
     // 异步加载所有进度照片的 Blob URL
     await loadAllBlobUrls()
   } catch (e: any) {
@@ -294,7 +295,8 @@ async function handleUpload(options: any) {
     ElMessage.success('上传成功')
     // Refresh file list
     const filesRes = await projectsApi.listFiles(projectId)
-    allFiles.value = filesRes?.items ?? filesRes ?? []
+    // 后端返回 {files: [...], grouped: {...}}——兼容两种结构，防止对象被当数组
+    allFiles.value = Array.isArray(filesRes) ? filesRes : (filesRes?.files ?? filesRes?.items ?? [])
     // 加载新照片的 Blob URL
     await loadAllBlobUrls()
   } catch (e: any) {
@@ -315,7 +317,8 @@ async function handleDelete(fileId: number) {
     }
     ElMessage.success('已删除')
     const filesRes = await projectsApi.listFiles(projectId)
-    allFiles.value = filesRes?.items ?? filesRes ?? []
+    // 后端返回 {files: [...], grouped: {...}}——兼容两种结构，防止对象被当数组
+    allFiles.value = Array.isArray(filesRes) ? filesRes : (filesRes?.files ?? filesRes?.items ?? [])
   } catch (e: any) {
     if (e === 'cancel' || e?.toString?.().includes('cancel')) return
     logger.error('删除进度照片失败', e)

@@ -60,6 +60,18 @@ describe('api/message', () => {
     expect(r).toBe(5)
   })
 
+  it('getUnreadCount 后端 total 字段（无 count）', async () => {
+    mockGet.mockResolvedValueOnce({ total: 3, by_type: { system: 3 } })
+    const r = await getUnreadCount()
+    expect(r).toBe(3)
+  })
+
+  it('getUnreadCount 无 total/count → 0 兜底', async () => {
+    mockGet.mockResolvedValueOnce({ by_type: {} })
+    const r = await getUnreadCount()
+    expect(r).toBe(0)
+  })
+
   it('markAsRead POST with message_ids', async () => {
     mockPost.mockResolvedValueOnce({ count: 3 })
     const r = await markAsRead([1, 2, 3])
