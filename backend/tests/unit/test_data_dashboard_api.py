@@ -83,7 +83,14 @@ class TestCacheHelpers:
 
 class TestGetDashboardStats:
     def test_all_zero(self, client):
-        assert client.get("/api/v1/dashboard/stats").json() is None
+        # 隔离全局状态: 模拟空数据(全量测试时库中可能已有其他测试写入的数据/缓存)
+        import app.api.v1.data.data.dashboard as d
+        with patch.object(d, "_cache", None), \
+             patch.object(d, "_query_village_stats", return_value={}), \
+             patch.object(d, "_query_fund_stats", return_value={}), \
+             patch.object(d, "_query_project_approval_stats", return_value={}), \
+             patch.object(d, "_compute_trends", return_value={}):
+            assert client.get("/api/v1/dashboard/stats").json() is None
 
     def test_cached(self, client):
         import app.api.v1.data.data.dashboard as d
@@ -95,9 +102,10 @@ class TestGetDashboardStats:
         assert client.get("/api/v1/dashboard/stats?refresh=true").status_code == 200
 
     def test_exception(self, client):
+        # 隔离全局状态: 清除缓存, 强制走查询异常分支
         import app.api.v1.data.data.dashboard as d
-        with patch.object(d, "_query_village_stats") as mv:
-            mv.side_effect = Exception("x")
+        with patch.object(d, "_cache", None), \
+             patch.object(d, "_query_village_stats", side_effect=Exception("x")):
             assert client.get("/api/v1/dashboard/stats").json() is None
 
 
