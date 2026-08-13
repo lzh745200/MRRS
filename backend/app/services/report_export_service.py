@@ -74,8 +74,16 @@ class ReportExportService:
                 ],
                 "table": None,
             },
-            {"title": "三、帮扶项目进展", "paragraphs": [], "table": project["sections"][0]["table"] if project["sections"] else None},
-            {"title": "四、帮扶资金执行", "paragraphs": [], "table": fund["sections"][0]["table"] if fund["sections"] else None},
+            {
+                "title": "三、帮扶项目进展",
+                "paragraphs": [],
+                "table": project["sections"][0]["table"] if project["sections"] else None,
+            },
+            {
+                "title": "四、帮扶资金执行",
+                "paragraphs": [],
+                "table": fund["sections"][0]["table"] if fund["sections"] else None,
+            },
         ]
         return {"year": year, "title": _REPORT_TITLES["summary"], "sections": sections}
 
@@ -124,7 +132,11 @@ class ReportExportService:
                 "rows": table_rows,
             }
             paragraphs = [] if rows else [f"{year} 年度暂无经费记录。"]
-            return {"year": year, "title": _REPORT_TITLES["fund_detail"], "sections": [{"title": "经费执行明细", "paragraphs": paragraphs, "table": table}]}
+            return {
+                "year": year,
+                "title": _REPORT_TITLES["fund_detail"],
+                "sections": [{"title": "经费执行明细", "paragraphs": paragraphs, "table": table}],
+            }
         except Exception:
             logger.warning("经费明细数据查询失败（报表将输出空表）", exc_info=True)
             return {
@@ -182,7 +194,11 @@ class ReportExportService:
                 "rows": table_rows,
             }
             paragraphs = [] if rows else [f"{year} 年度暂无项目记录。"]
-            return {"year": year, "title": _REPORT_TITLES["project_progress"], "sections": [{"title": "项目进展统计", "paragraphs": paragraphs, "table": table}]}
+            return {
+                "year": year,
+                "title": _REPORT_TITLES["project_progress"],
+                "sections": [{"title": "项目进展统计", "paragraphs": paragraphs, "table": table}],
+            }
         except Exception:
             logger.warning("项目进度数据查询失败（报表将输出空表）", exc_info=True)
             return {
@@ -365,9 +381,15 @@ class ReportExportService:
             pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
 
         title = data.get("title") or _REPORT_TITLES.get(report_type, "帮扶工作报告")
-        title_style = ParagraphStyle("title", fontName="STSong-Light", fontSize=18, leading=26, alignment=1, spaceAfter=6)
-        meta_style = ParagraphStyle("meta", fontName="STSong-Light", fontSize=10, leading=14, alignment=1, textColor=colors.grey)
-        heading_style = ParagraphStyle("heading", fontName="STSong-Light", fontSize=14, leading=20, spaceBefore=10, spaceAfter=4)
+        title_style = ParagraphStyle(
+            "title", fontName="STSong-Light", fontSize=18, leading=26, alignment=1, spaceAfter=6
+        )
+        meta_style = ParagraphStyle(
+            "meta", fontName="STSong-Light", fontSize=10, leading=14, alignment=1, textColor=colors.grey
+        )
+        heading_style = ParagraphStyle(
+            "heading", fontName="STSong-Light", fontSize=14, leading=20, spaceBefore=10, spaceAfter=4
+        )
         body_style = ParagraphStyle("body", fontName="STSong-Light", fontSize=11, leading=16)
 
         story = [
