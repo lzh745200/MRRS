@@ -5,6 +5,26 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.8.1] - 2026-08-13
+
+### 修复
+
+- 🐛 **报表 Word/PDF 导出为空文件**：`report_export_service` 的 `export_word`/`export_pdf` 此前直接返回空 bytes，管理员在「数据导出 → 报告导出」下载到 0 字节文件；现已用 python-docx / reportlab 实现真实公文渲染（标题/年度/生成时间/章节表格，PDF 内置 STSong-Light 中文 CID 字体、无需字体文件），无数据时输出带"暂无数据"说明的有效文档
+- 🐛 **报表数据为空壳**：`generate_summary_report_data`/`generate_fund_detail_report_data`/`generate_project_progress_report_data` 此前返回空数组；现按年度真实聚合——经费按类型分组统计笔数与申请/批准/拨付/使用金额，项目按状态分组统计数量/平均进度/预算/实际花费，年度总结与综合报告合并村/校/项目/经费四板块
+
+### 移除
+
+- 🗑️ **死代码**：删除 `ReportExportService.export_to_excel`（无任何调用方，且委托目标 `ExcelExportService.export` 不存在的断裂方法）
+
+### 优化
+
+- ⚡ **useRouterSafe 调试日志**改走统一 `logger.debug`（内部含生产环境门控），移除生产路径上的 `console.log` 残留
+
+### 测试
+
+- 新增 `tests/unit/test_report_export_service.py`：针对真实实现的数据聚合断言、docx/pdf 魔法字节与最小体积校验、空数据仍输出有效文档、docx 解包校验表格内容（防"返回空 bytes"回归）
+- 更新 `tests/unit/test_cov_final_report_export_service.py` 断言至 v1.8.1 新数据契约（title/sections 结构）
+
 ## [1.8.0] - 2026-08-12
 
 ### 功能

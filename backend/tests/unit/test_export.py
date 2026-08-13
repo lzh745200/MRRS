@@ -556,3 +556,22 @@ class TestExportReportPdf:
 
         assert resp.status_code == 400
         assert "不支持的报告类型" in resp.text
+
+    def test_viewer_rejected(self, client_with_mocked_auth):
+        """v1.8.1：PDF 报告导出与 Word 一致，仅管理员可用（viewer 返回 403）。"""
+        from app.core.security import get_current_user
+
+        client = client_with_mocked_auth
+        viewer = Mock()
+        viewer.id = 2
+        viewer.username = "viewer"
+        viewer.role = "viewer"
+        viewer.is_superuser = False
+        viewer.is_active = True
+        viewer.permissions_list = []
+        client.app.dependency_overrides[get_current_user] = lambda: viewer
+
+        resp = client.get(f"{BASE}/report-pdf", params={"report_type": "summary"})
+
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+

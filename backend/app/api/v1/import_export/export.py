@@ -409,6 +409,8 @@ async def export_report_pdf(
     """
     导出 PDF 格式公文报告
     """
+    require_admin(current_user, error_message="仅管理员可导出数据")
+
     if report_type not in _REPORT_TYPE_MAP:
         raise HTTPException(status_code=400, detail=f"不支持的报告类型: {report_type}")
 

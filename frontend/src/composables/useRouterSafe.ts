@@ -1,6 +1,8 @@
 import { useRouter } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 
+import { logger } from '@/utils/logger'
+
 function getPathString(path: string | RouteLocationRaw): string | undefined {
   return typeof path === 'string' ? path : path.path
 }
@@ -49,8 +51,9 @@ export function useRouterSafe() {
     }
 
     try {
-      if (debugLabel && import.meta.env.DEV) {
-        console.log(`尝试跳转到${debugLabel}页面`)
+      if (debugLabel) {
+        // logger.debug 内部已做生产环境门控，无需手写 import.meta.env.DEV 判断
+        logger.debug(`尝试跳转到${debugLabel}页面`)
       }
 
       router.push(path)?.catch((err) => {
