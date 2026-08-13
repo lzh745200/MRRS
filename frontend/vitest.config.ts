@@ -8,7 +8,10 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     pool: 'threads',
+    // vitest 3.x 中 singleThread 已废弃，需用 fileParallelism:false 才能真正单 worker；
+    // 多 worker 时各 provider 实例 clean() 互相删除 coverage/.tmp 导致 ENOENT（Windows 复现）
     singleThread: true,
+    fileParallelism: false,
     setupFiles: ['./src/test/setup.ts'],
     // 排除E2E测试（由Playwright运行）
     exclude: [
@@ -24,9 +27,7 @@ export default defineConfig({
       '**/src/**/__tests__/**/*.spec.ts'
     ],
     coverage: {
-      // v8 provider 在本机 Windows 存在 coverage/.tmp 写入竞态（ENOENT，偶发且随文件数放大），
-      // 切换 istanbul provider：合并机制不依赖 .tmp 临时文件，Windows 下稳定
-      provider: 'istanbul',
+      provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: [
         'src/**/*.{ts,vue}',
