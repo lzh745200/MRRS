@@ -639,6 +639,24 @@ describe('合同附件', () => {
     tokenSpy.mockRestore()
   })
 
+  it('fetchAttachmentBlob：有 token → 携带 Authorization 头分支', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const { AuthStorage } = await import('@/utils/authStorage')
+    const tokenSpy = vi.spyOn(AuthStorage, 'getToken').mockReturnValue('token123')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['x'])),
+    } as any)
+    await (wrapper.vm as any).openAttachment({ url: '/uploads/a.pdf' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/uploads/a.pdf'),
+      { headers: { Authorization: 'Bearer token123' } }
+    )
+    fetchMock.mockRestore()
+    tokenSpy.mockRestore()
+  })
+
   it('创建表单校验: formRef 缺失时直接返回', async () => {
     const wrapper = mountComp()
     await flushPromises()

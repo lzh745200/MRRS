@@ -29,7 +29,7 @@ from app.core.logging import logger
 from app.models.data_package import DataPackage, PackageStatus, PackageType
 from app.models.project import Fund, Project
 from app.models.school import School
-from app.models.village import Village
+from app.models.supported_village import SupportedVillage
 from app.schemas.data_package import (
     DataPackageConfirmResult,
     DataPackageExportResult,
@@ -49,7 +49,7 @@ CURRENT_VERSION = "1.0"
 
 # 数据类型映射
 DATA_TYPE_MODELS = {
-    "villages": Village,
+    "villages": SupportedVillage,
     "projects": Project,
     "funds": Fund,
     "schools": School,

@@ -149,6 +149,18 @@ describe('挂载与导出历史', () => {
     expect((wrapper.vm as any).loadingHistory).toBe(false)
   })
 
+  it('空对象/null 响应 → historyList 兜底为空数组', async () => {
+    mockGetExportTasks.mockResolvedValue({})
+    let wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).historyList).toEqual([])
+
+    mockGetExportTasks.mockResolvedValue(null)
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).historyList).toEqual([])
+  })
+
   it('刷新按钮触发 loadHistory', async () => {
     const wrapper = mountComp()
     await flushPromises()

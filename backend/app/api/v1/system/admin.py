@@ -72,12 +72,12 @@ async def get_system_info(current_user=Depends(get_current_user), db: Session = 
     # 统计各类数据数量
     from app.models.organization import Organization
     from app.models.project import Project
-    from app.models.village import Village
+    from app.models.supported_village import SupportedVillage
 
     user_count = db.query(User).count()
     org_count = db.query(Organization).count()
     project_count = db.query(Project).count()
-    village_count = db.query(Village).count()
+    village_count = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count()
 
     # 注意：本端点带 response_model=SystemInfo，由 Pydantic 序列化顶层字段，
     # 不能包 data 层（信封化会导致 response_model 校验 500）

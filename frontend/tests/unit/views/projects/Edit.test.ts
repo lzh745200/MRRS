@@ -1013,19 +1013,70 @@ describe('模板交互（v-model 与内联处理器）', () => {
       ok: true,
       blob: vi.fn().mockResolvedValue(new Blob(['x'])),
     } as any)
-    const downloadBtn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('下载'))
-    if (downloadBtn) {
-      await downloadBtn.trigger('click')
-      await flushPromises()
-      expect(fetchMock).toHaveBeenCalled()
-    }
+    const downloadBtn = wrapper
+      .findAll('.uploaded-files el-button-stub')
+      .find((b) => b.text().includes('下载'))
+    expect(downloadBtn).toBeTruthy()
+    await downloadBtn!.trigger('click')
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalled()
     // 删除按钮模板箭头（photo 区）
-    const delBtn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('删除'))
-    if (delBtn) {
-      await delBtn.trigger('click')
-      await flushPromises()
-      expect(api.deleteFile).toHaveBeenCalledWith(7, 1)
-    }
+    const delBtn = wrapper
+      .findAll('.uploaded-files el-button-stub')
+      .find((b) => b.text().includes('删除'))
+    expect(delBtn).toBeTruthy()
+    await delBtn!.trigger('click')
+    await flushPromises()
+    expect(api.deleteFile).toHaveBeenCalledWith(7, 1)
+    fetchMock.mockRestore()
+    clickSpy.mockRestore()
+  })
+
+  it('文件区「下载/删除」按钮点击 → handleDownloadFile/handleDeleteFile（v-else 模板箭头）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 非 photo 类别走 v-else 文件列表分支
+    vm.uploadedFiles.research = [{ id: 2, filename: 'r.pdf', download_url: '/dl/r' }]
+    await nextTick()
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['x'])),
+    } as any)
+    const downloadBtn = wrapper
+      .findAll('.uploaded-files el-button-stub')
+      .find((b) => b.text().includes('下载'))
+    expect(downloadBtn).toBeTruthy()
+    await downloadBtn!.trigger('click')
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalled()
+    const delBtn = wrapper
+      .findAll('.uploaded-files el-button-stub')
+      .find((b) => b.text().includes('删除'))
+    expect(delBtn).toBeTruthy()
+    await delBtn!.trigger('click')
+    await flushPromises()
+    expect(api.deleteFile).toHaveBeenCalledWith(7, 2)
+    fetchMock.mockRestore()
+    clickSpy.mockRestore()
+  })
+
+  it('handleDownloadFile：filename/name 均缺 → 兜底文件名 download', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['x'])),
+    } as any)
+    await vm.handleDownloadFile({ id: 9, download_url: '/dl/x' })
+    expect(fetchMock).toHaveBeenCalled()
     fetchMock.mockRestore()
     clickSpy.mockRestore()
   })

@@ -404,4 +404,32 @@ describe('无项目参数：项目选择视图', () => {
     await flushPromises()
     expect((wrapper.vm as any).projectOptions).toEqual([])
   })
+
+  it('项目列表多种响应形态：信封/裸数组/非数组/空值兜底', async () => {
+    routeParams.projectId = ''
+    // 信封形态 res.data.items
+    projectsListMock.mockResolvedValue({ data: { items: [{ id: 2, name: '桥' }] } })
+    let wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).projectOptions).toEqual([{ id: 2, name: '桥' }])
+    wrapper.unmount()
+    // 裸数组形态
+    projectsListMock.mockResolvedValue([{ id: 3, name: '路' }])
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).projectOptions).toEqual([{ id: 3, name: '路' }])
+    wrapper.unmount()
+    // items 非数组 → 空数组兜底
+    projectsListMock.mockResolvedValue({ items: 'bad' })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).projectOptions).toEqual([])
+    wrapper.unmount()
+    // null 响应 → 可选链短路兜底
+    projectsListMock.mockResolvedValue(null)
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).projectOptions).toEqual([])
+    wrapper.unmount()
+  })
 })

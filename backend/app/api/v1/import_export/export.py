@@ -9,12 +9,13 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.data_permission import filter_by_data_scope
 from app.core.permission_utils import require_admin
 from app.core.security import get_current_user
 from app.models.project import Fund, Project
 from app.models.school import School
+from app.models.supported_village import SupportedVillage
 from app.models.user import User
-from app.models.village import Village
 from app.services.export_service import export_service
 from app.services.report_export_service import report_export_service
 
@@ -31,6 +32,14 @@ def format_datetime(dt):
     if isinstance(dt, datetime):
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     return str(dt)
+
+
+def _latest_population(v) -> int:
+    """取帮扶村最近年度人口（无数据返回 0）"""
+    if not v.population_data:
+        return 0
+    latest = max(v.population_data, key=lambda p: p.year or 0)
+    return latest.total_population or 0
 
 
 def _to_csv(data: list) -> bytes:
@@ -108,25 +117,26 @@ async def export_villages(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Village)
+    query = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
+    query = filter_by_data_scope(query, SupportedVillage, current_user, db=db)
 
     if keyword:
-        query = query.filter(Village.name.contains(keyword))
+        query = query.filter(SupportedVillage.village_name.contains(keyword))
     if status:
-        query = query.filter(Village.status == status)
+        query = query.filter(SupportedVillage.transition_status == status)
 
-    villages = query.limit(MAX_EXPORT_ROWS).all()
+    villages = query.order_by(SupportedVillage.id).limit(MAX_EXPORT_ROWS).all()
 
     village_data = [
         {
             "ID": v.id,
             "名称": v.name,
-            "编码": v.code,
+            "编码": v.sequence_no or "",
             "省份": v.province or "",
             "城市": v.city or "",
             "区县": v.county or "",
-            "人口": v.total_population or 0,
-            "状态": v.status,
+            "人口": _latest_population(v),
+            "状态": v.transition_status or "",
             "创建时间": format_datetime(v.created_at),
         }
         for v in villages
@@ -264,7 +274,9 @@ async def export_comprehensive_report(
     db: Session = Depends(get_db),
 ):
     users_count = db.query(User).count()
-    villages_count = db.query(Village).count()
+    village_q = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
+    village_q = filter_by_data_scope(village_q, SupportedVillage, current_user, db=db)
+    villages_count = village_q.count()
     schools_count = db.query(School).count()
     projects_count = db.query(Project).count()
     from sqlalchemy import func as sql_func
@@ -281,12 +293,14 @@ async def export_comprehensive_report(
         "生成时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
-    villages = db.query(Village).limit(100).all()
+    villages = (
+        village_q.order_by(SupportedVillage.id).limit(100).all()
+    )
     village_data = [
         {
             "ID": v.id,
             "名称": v.name,
-            "人口": v.total_population or 0,
+            "人口": _latest_population(v),
             "项目数": 0,
             "产业数": 0,
         }

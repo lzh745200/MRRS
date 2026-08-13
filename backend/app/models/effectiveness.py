@@ -54,7 +54,7 @@ class EffectivenessEvaluation(Base):
     id = Column(Integer, primary_key=True, index=True)
     village_id = Column(
         Integer,
-        ForeignKey("villages.id", ondelete="CASCADE"),
+        ForeignKey("supported_villages.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

@@ -178,11 +178,15 @@ class TestExportVillages:
         mock_svc.export_village_list.return_value = b"fake_xlsx"
 
         villages = [
-            _model(id=1, name="v1", code="001", province="P", city="C",
-                   county="Co", total_population=500, status="active",
+            _model(id=1, name="v1", village_name="v1", sequence_no="001",
+                   province="P", city="C", county="Co",
+                   transition_status="active",
+                   population_data=[_model(year=2024, total_population=500)],
                    created_at=datetime(2024, 3, 1, 12, 0, 0)),
-            _model(id=2, name="v2", code="002", province="", city="",
-                   county=None, total_population=None, status="inactive",
+            _model(id=2, name="v2", village_name="v2", sequence_no=None,
+                   province="", city="", county=None,
+                   transition_status="",
+                   population_data=[],
                    created_at=None),
         ]
         db = _model(query=Mock(return_value=_query_mock(villages)))
@@ -193,7 +197,11 @@ class TestExportVillages:
         assert resp.status_code == 200
         data = mock_svc.export_village_list.call_args[0][0]
         assert len(data) == 2
+        assert data[0]["编码"] == "001"
+        assert data[0]["人口"] == 500
+        assert data[0]["状态"] == "active"
         assert data[1]["人口"] == 0
+        assert data[1]["编码"] == ""
         assert data[1]["创建时间"] == ""
         assert data[0]["创建时间"] == "2024-03-01 12:00:00"
 
@@ -358,14 +366,14 @@ class TestExportComprehensive:
         mock_svc.export_comprehensive_report.return_value = b"fake_xlsx"
 
         user_mock = _model(id=1, username="admin")
-        village_mock = _model(id=1, name="v1", total_population=500)
+        village_mock = _model(id=1, name="v1", population_data=[])
         school_mock = _model(id=1, name="s1")
         project_mock = _model(id=1, name="p1", status="active", budget=10000, progress=50)
         fund_mock = _model(id=1, name="f1", amount=1000, status="approved", date=datetime(2024, 1, 1))
 
         registry = {
             "User": [user_mock],
-            "Village": [village_mock],
+            "SupportedVillage": [village_mock],
             "School": [school_mock],
             "Project": [project_mock],
             "Fund": [fund_mock],

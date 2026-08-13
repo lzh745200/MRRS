@@ -145,9 +145,9 @@ class EffectivenessService:
         基于村庄年度收入/基础设施/产业数据计算三唯分数并写入评估表；
         重复评估时更新已有记录（幂等）。
         """
-        from app.models.village import Village
+        from app.models.supported_village import SupportedVillage
 
-        village = db.query(Village).filter(Village.id == village_id).first()
+        village = db.query(SupportedVillage).filter(SupportedVillage.id == village_id).first()
         if not village:
             return {"error": f"村庄 {village_id} 不存在"}
 

@@ -122,6 +122,62 @@ describe('加载与渲染', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('加载审批任务失败')
   })
 
+  it('任务列表多种响应形态：嵌套 data.items / 裸数组 / 非数组兜底', async () => {
+    // 嵌套形态 data.data.items
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/approval/tasks/pending') {
+        return Promise.resolve({ data: { items: [{ id: 7, title: '嵌套任务' }] } })
+      }
+      return Promise.resolve({ items: [], total: 0 })
+    })
+    let wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).tasks).toEqual([{ id: 7, title: '嵌套任务' }])
+    wrapper.unmount()
+
+    // 双层嵌套形态 data.data.data.items（data.items 为空时深入一层）
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/approval/tasks/pending') {
+        return Promise.resolve({ data: { data: { items: [{ id: 9, title: '双层嵌套' }] } } })
+      }
+      return Promise.resolve({ items: [], total: 0 })
+    })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).tasks).toEqual([{ id: 9, title: '双层嵌套' }])
+    wrapper.unmount()
+
+    // 裸数组形态
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/approval/tasks/pending') return Promise.resolve([{ id: 8, title: '数组任务' }])
+      return Promise.resolve({ items: [], total: 0 })
+    })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).tasks).toEqual([{ id: 8, title: '数组任务' }])
+    wrapper.unmount()
+
+    // items 非数组 → 空数组兜底
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/approval/tasks/pending') return Promise.resolve({ items: 'bad' })
+      return Promise.resolve({ items: [], total: 0 })
+    })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).tasks).toEqual([])
+    wrapper.unmount()
+
+    // null 响应 → data?. 可选链短路兜底
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/approval/tasks/pending') return Promise.resolve(null)
+      return Promise.resolve({ items: [], total: 0 })
+    })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).tasks).toEqual([])
+    wrapper.unmount()
+  })
+
   it('选中任务后显示批量操作栏', async () => {
     const wrapper = mountComp()
     await flushPromises()

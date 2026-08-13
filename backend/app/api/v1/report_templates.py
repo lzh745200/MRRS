@@ -951,8 +951,8 @@ def _project_process_rows(
 
             village_id = None
             if data.get("village_name"):
-                from app.models.village import Village
-                v = db.query(Village).filter(Village.name == data["village_name"]).first()
+                from app.models.supported_village import SupportedVillage as SVImport
+                v = db.query(SVImport).filter(SVImport.village_name == data["village_name"]).first()
                 if v:
                     village_id = v.id
 

@@ -121,7 +121,8 @@ async def get_summary(current_user=Depends(get_current_user), db: Session = Depe
 
         # 缓存未命中，从数据库查询
         users_count = db.query(User).filter(User.is_active == True).count()  # noqa: E712
-        villages_count = db.query(Village).count()
+        from app.models.supported_village import SupportedVillage as SVModel
+        villages_count = db.query(SVModel).filter(SVModel.is_active.is_(True)).count()
         schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
         projects_count = db.query(Project).count()
         funds_count = db.query(Fund).count()

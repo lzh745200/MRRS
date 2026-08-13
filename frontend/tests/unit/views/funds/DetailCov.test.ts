@@ -1332,4 +1332,52 @@ describe('审批流程可视化（v1.8.0）', () => {
     await vm.loadStatusHistory()
     expect(vm.statusHistory).toEqual([])
   })
+
+  it('字段变更/操作日志：数组与 items 信封多形态 + 空兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fundData.id = 5
+    // 字段变更：数组形态
+    mockGet.mockResolvedValueOnce([{ field: 'a' }])
+    await vm.loadFieldChanges()
+    expect(vm.fieldChanges).toEqual([{ field: 'a' }])
+    // 字段变更：items 形态
+    mockGet.mockResolvedValueOnce({ data: { items: [{ field: 'b' }] } })
+    await vm.loadFieldChanges()
+    expect(vm.fieldChanges).toEqual([{ field: 'b' }])
+    // 操作日志：数组形态
+    mockGet.mockResolvedValueOnce([{ op: 'x' }])
+    await vm.loadOperationLogs()
+    expect(vm.operationLogs).toEqual([{ op: 'x' }])
+    // 操作日志：items 形态 + 空兜底
+    mockGet.mockResolvedValueOnce({ data: { items: [{ op: 'y' }] } })
+    await vm.loadOperationLogs()
+    expect(vm.operationLogs).toEqual([{ op: 'y' }])
+    mockGet.mockResolvedValueOnce({})
+    await vm.loadOperationLogs()
+    expect(vm.operationLogs).toEqual([])
+  })
+
+  it('loadApprovalFlow：响应无 data 字段 → 原对象兜底 → 空 {}', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fundData.id = 5
+    // 无 data 字段：res 直接是流程对象
+    mockGet.mockResolvedValueOnce({ current_status: 'approved', nodes: [] })
+    await vm.loadApprovalFlow()
+    expect(vm.approvalFlow.currentStatus).toBe('approved')
+    // 两者皆空 → {}
+    mockGet.mockResolvedValueOnce({})
+    await vm.loadApprovalFlow()
+    expect(vm.approvalFlow.currentStatus).toBe('')
+    expect(vm.approvalFlow.nodes).toEqual([])
+    // 响应整体为空 → || {} 最终兜底
+    mockGet.mockResolvedValueOnce(null)
+    await vm.loadApprovalFlow()
+    expect(vm.approvalFlow.currentStatus).toBe('')
+    expect(vm.approvalFlow.currentApprover).toBe('')
+    expect(vm.approvalFlow.nodes).toEqual([])
+  })
 })

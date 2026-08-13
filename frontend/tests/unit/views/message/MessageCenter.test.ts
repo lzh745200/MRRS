@@ -554,3 +554,29 @@ describe('未读数异常', () => {
     wrapper.unmount()
   })
 })
+
+describe('列表响应缺 items/total 兜底（v1.8.0）', () => {
+  it('loadMessages：响应无 items/total → 空数组与 0', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(mockGetMessages as any).mockResolvedValueOnce({ unread_count: 0 })
+    await vm.loadMessages()
+    expect(vm.messages).toEqual([])
+    expect(vm.total).toBe(0)
+    expect(vm.unreadCount).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('loadMessages：响应无 unread_count → 回退调用 getUnreadCount', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    ;(mockGetMessages as any).mockResolvedValueOnce({ items: [msg1], total: 1 })
+    ;(mockUnreadCount as any).mockResolvedValueOnce({ count: 5 })
+    await vm.loadMessages()
+    expect(vm.messages).toEqual([msg1])
+    expect(vm.unreadCount).toBe(5)
+    wrapper.unmount()
+  })
+})

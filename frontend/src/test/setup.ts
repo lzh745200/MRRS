@@ -3,6 +3,16 @@
  * 在 jsdom 环境中模拟浏览器 API
  */
 
+// v8 coverage provider 在 Windows 上存在 .tmp 目录竞态（写入 ENOENT）。
+// 每次测试文件执行前确保目录存在（幂等），避免 clean:false 下无人创建。
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+try {
+  mkdirSync(join(process.cwd(), 'coverage', '.tmp'), { recursive: true })
+} catch {
+  // 目录创建失败不影响测试本体
+}
+
 // Mock localStorage
 const localStorageMock = (() => {
   let store: Record<string, string> = {}

@@ -10,7 +10,7 @@ from app.api.v1.deps import get_current_active_user, get_db
 from app.core.data_scope_adapter import apply_scope_filter
 from app.core.permission_utils import is_admin
 from app.models.user import User
-from app.models.village import Village
+from app.models.supported_village import SupportedVillage
 from app.services.effectiveness_service import EffectivenessService
 from app.core.response import success_response
 
@@ -79,8 +79,8 @@ async def get_evaluation_report(
 ):
     """获取评估报告"""
     village = apply_scope_filter(
-        db.query(Village).filter(Village.id == village_id),
-        current_user, Village, db=db
+        db.query(SupportedVillage).filter(SupportedVillage.id == village_id),
+        current_user, SupportedVillage, db=db
     ).first()
     if not village:
         raise HTTPException(status_code=404, detail="评估报告不存在")
@@ -103,8 +103,8 @@ async def compare_evaluations(
 ):
     """对比两年的评估结果"""
     village = apply_scope_filter(
-        db.query(Village).filter(Village.id == village_id),
-        current_user, Village, db=db
+        db.query(SupportedVillage).filter(SupportedVillage.id == village_id),
+        current_user, SupportedVillage, db=db
     ).first()
     if not village:
         raise HTTPException(status_code=404, detail="评估报告不存在")
@@ -128,11 +128,11 @@ async def get_rankings(
     from app.models.effectiveness import EffectivenessEvaluation
 
     query = (
-        db.query(EffectivenessEvaluation, Village.name)
-        .join(Village, EffectivenessEvaluation.village_id == Village.id)
+        db.query(EffectivenessEvaluation, SupportedVillage.name)
+        .join(SupportedVillage, EffectivenessEvaluation.village_id == SupportedVillage.id)
         .filter(EffectivenessEvaluation.year == year)
     )
-    query = apply_scope_filter(query, current_user, Village, db=db)
+    query = apply_scope_filter(query, current_user, SupportedVillage, db=db)
     evaluations = query.order_by(EffectivenessEvaluation.rank).limit(limit).all()
 
     return success_response(data={

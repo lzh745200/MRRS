@@ -298,4 +298,15 @@ describe('图表联动（v1.8.0）', () => {
     expect(vm.yearlyComparison.years).toEqual(['2023'])
     expect(vm.yearlyComparison.investment).toEqual({ '2023': 10 })
   })
+
+  it('yearly_comparison 空对象 → years/villages/investment/income 全部 || 兜底', async () => {
+    mockGet.mockResolvedValueOnce({ yearly_comparison: {} })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.yearlyComparison.years).toEqual([])
+    expect(vm.yearlyComparison.villages).toEqual({})
+    expect(vm.yearlyComparison.investment).toEqual({})
+    expect(vm.yearlyComparison.income).toEqual({})
+  })
 })

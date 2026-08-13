@@ -24,7 +24,9 @@ export default defineConfig({
       '**/src/**/__tests__/**/*.spec.ts'
     ],
     coverage: {
-      provider: 'v8',
+      // v8 provider 在本机 Windows 存在 coverage/.tmp 写入竞态（ENOENT，偶发且随文件数放大），
+      // 切换 istanbul provider：合并机制不依赖 .tmp 临时文件，Windows 下稳定
+      provider: 'istanbul',
       reporter: ['text', 'json', 'html'],
       include: [
         'src/**/*.{ts,vue}',

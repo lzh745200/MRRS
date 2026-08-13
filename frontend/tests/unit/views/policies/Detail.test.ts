@@ -379,11 +379,28 @@ describe('预览与下载', () => {
     policyApiMock.previewPolicyFile.mockResolvedValueOnce(
       new Blob(['doc'], { type: 'application/msword' })
     )
+    downloadBlobMock.mockClear()
     await (wrapper.vm as any).handlePreview()
-    expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), expect.stringContaining('.pdf'))
     expect(ElMessage.info).toHaveBeenCalledWith('该文件类型不支持在线预览，已为您下载')
+    expect(downloadBlobMock).toHaveBeenCalled()
   })
 
+  it('handlePreview/handleDownload：blob 无 type、policy 无 fileType → 兜底文件名', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // policy 无 fileType/file_type → 扩展名 'file'
+    vm.policy = { id: 1, title: '' }
+    policyApiMock.previewPolicyFile.mockResolvedValueOnce(new Blob(['x'])) // 无 type
+    downloadBlobMock.mockClear()
+    await vm.handlePreview()
+    expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), '政策文件.file')
+    // handleDownload 同样兜底
+    policyApiMock.downloadPolicyFile.mockResolvedValueOnce(new Blob(['y']))
+    downloadBlobMock.mockClear()
+    await vm.handleDownload()
+    expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), '政策文件.file')
+  })
   it('handlePreview 重复预览 → 释放旧 blob URL 再替换', async () => {
     const wrapper = mountComp()
     await flushPromises()

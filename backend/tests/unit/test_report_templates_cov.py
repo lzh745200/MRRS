@@ -34,6 +34,7 @@ from app.models import Base
 from app.models.project import Project
 from app.models.report_template import ReportTemplate
 from app.models.rural_work import RuralWork
+from app.models.supported_village import SupportedVillage
 from app.models.village import Village
 
 API_PREFIX = "/api/v1"
@@ -324,18 +325,18 @@ class TestProjectImportGaps:
         assert any("项目名称为空" in e for e in errors)
 
     def test_process_rows_village_found(self):
-        """覆盖 925: village_name 在 Village 表中命中 → village_id 被赋值。"""
+        """覆盖 925: village_name 在 SupportedVillage 表中命中 → village_id 被赋值。"""
         db = _mock_db()
         village = MagicMock()
         village.id = 7
-        village.name = "示范村"
+        village.village_name = "示范村"
 
         def _query(*args):
             q = MagicMock()
             q.filter.return_value = q
             q.all.return_value = []
             q.delete.return_value = 0
-            q.first.return_value = village if args and args[0] is Village else None
+            q.first.return_value = village if args and args[0] is SupportedVillage else None
             return q
 
         db.query.side_effect = _query

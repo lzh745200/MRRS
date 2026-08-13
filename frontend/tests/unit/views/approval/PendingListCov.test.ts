@@ -624,6 +624,22 @@ describe('转交审批（v1.8.0）', () => {
     expect(vm.candidateUsers).toEqual([])
   })
 
+  it('handleTransfer 信封形态（data.items）与空对象兜底', async () => {
+    mockListUsers.mockResolvedValue({ data: { items: [{ id: 3, name: '丙' }] } })
+    let wrapper = mountComp()
+    await flushPromises()
+    let vm = wrapper.vm as any
+    await vm.handleTransfer({ id: 9 })
+    expect(vm.candidateUsers).toEqual([{ id: 3, name: '丙' }])
+
+    mockListUsers.mockResolvedValue({})
+    wrapper = mountComp()
+    await flushPromises()
+    vm = wrapper.vm as any
+    await vm.handleTransfer({ id: 9 })
+    expect(vm.candidateUsers).toEqual([])
+  })
+
   it('confirmTransfer：无任务早退 / 未选对象 warning', async () => {
     const wrapper = mountComp()
     await flushPromises()
