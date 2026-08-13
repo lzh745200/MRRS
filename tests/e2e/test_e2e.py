@@ -38,7 +38,7 @@
 import os
 import re
 import pytest
-from playwright.sync_api import Page, expect, BrowserContext
+from playwright.sync_api import Page, expect, Browser, BrowserContext
 
 
 # ============================================================
@@ -76,21 +76,52 @@ def browser_type_launch_args(browser_type_launch_args):
     }
 
 
+@pytest.fixture(scope="session")
+def auth_payload() -> dict:
+    """会话级登录：API 登录一次获取令牌与用户对象。
+
+    /auth/login 有滑动窗口限流（5 次/60s），每个测试单独 UI 登录会触发 429。
+    认证令牌存于 sessionStorage（Playwright storage_state 不捕获），
+    故会话级登录一次，各测试上下文用 init script 注入 sessionStorage。
+    """
+    import httpx
+
+    resp = httpx.post(
+        f"{API_URL}/api/v1/auth/login",
+        json={"username": USERNAME, "password": PASSWORD},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    assert body.get("code") == 200 and body.get("data"), f"E2E 登录失败: {body}"
+    return body["data"]
+
+
 @pytest.fixture
-def logged_in_page(page: Page):
-    """已登录页面 — 各测试类复用"""
-    page.goto(f"{BASE_URL}/login")
-    page.wait_for_load_state("networkidle")
+def logged_in_page(browser: Browser, auth_payload: dict):
+    """已登录页面 — 注入会话级登录态，每个测试独立浏览器上下文"""
+    import json
 
-    # 填写登录表单
-    page.fill('input[type="text"]', USERNAME)
-    page.fill('input[type="password"]', PASSWORD)
-    page.click('button[type="submit"]')
-
-    # 等待跳转到工作台
-    page.wait_for_url("**/dashboard", timeout=15000)
+    token = auth_payload["access_token"]
+    user = auth_payload.get("user") or {}
+    refresh = auth_payload.get("refresh_token") or ""
+    context = browser.new_context(
+        viewport={"width": 1920, "height": 1080},
+        locale="zh-CN",
+        timezone_id="Asia/Shanghai",
+    )
+    # 与 AuthStorage 写入格式一致：auth_user 为 JSON 字符串
+    context.add_init_script(
+        "sessionStorage.setItem('auth_token', %s);"
+        "sessionStorage.setItem('auth_user', %s);"
+        "sessionStorage.setItem('refresh_token', %s);"
+        % (json.dumps(token), json.dumps(json.dumps(user)), json.dumps(refresh))
+    )
+    page = context.new_page()
+    page.goto(f"{BASE_URL}/dashboard")
     page.wait_for_load_state("networkidle")
-    return page
+    yield page
+    context.close()
 
 
 # ============================================================
@@ -133,9 +164,10 @@ class TestAuthFlow:
         page.fill('input[type="password"]', PASSWORD)
         page.click('button[type="submit"]')
 
-        # 应显示表单验证错误
-        validation_error = page.locator(".el-form-item__error")
+        # 登录页为自定义表单（非 el-form），错误显示在 .error-banner
+        validation_error = page.locator(".error-banner")
         expect(validation_error).to_be_visible(timeout=5000)
+        expect(validation_error).to_contain_text("请输入用户名和密码")
 
     def test_login_empty_password(self, page: Page):
         """测试：空密码 → 表单验证错误"""
@@ -145,12 +177,23 @@ class TestAuthFlow:
         page.fill('input[type="text"]', USERNAME)
         page.click('button[type="submit"]')
 
-        validation_error = page.locator(".el-form-item__error")
+        validation_error = page.locator(".error-banner")
         expect(validation_error).to_be_visible(timeout=5000)
+        expect(validation_error).to_contain_text("请输入用户名和密码")
 
-    def test_logout(self, logged_in_page: Page):
-        """测试：退出登录 → 跳转登录页"""
-        page = logged_in_page
+    def test_logout(self, page: Page):
+        """测试：退出登录 → 跳转登录页
+
+        使用独立登录（不复用共享登录态）：退出会吊销服务端令牌，
+        若共享会导致后续测试登录态失效。
+        """
+        page.goto(f"{BASE_URL}/login")
+        page.wait_for_load_state("networkidle")
+        page.fill('input[type="text"]', USERNAME)
+        page.fill('input[type="password"]', PASSWORD)
+        page.click('button[type="submit"]')
+        page.wait_for_url("**/dashboard", timeout=15000)
+        page.wait_for_load_state("networkidle")
 
         # 查找退出按钮（可能在下拉菜单中）
         # 先尝试直接点击退出

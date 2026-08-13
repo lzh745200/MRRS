@@ -69,6 +69,13 @@
   </div>
 </template>
 
+<script lang="ts">
+// 批量驳回原因必填校验（普通 script 具名导出，便于测试覆盖）
+export function batchRejectValidator(v: string): true | string {
+  return v && v.trim().length > 0 ? true : '驳回原因不能为空'
+}
+</script>
+
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -167,7 +174,7 @@ function handleSelectionChange(rows: ApprovalTask[]) {
 async function handleApprove(row: ApprovalTask) {
   try {
     await ElMessageBox.confirm(`确认通过审批「${row.title}」？`, '审批确认', { type: 'success' })
-    await post(`/approval/tasks/${row.id}/approve`, { comment: '同意' })
+    await post(`/approval/tasks/${row.id}/approve`, { opinion: '同意' })
     ElMessage.success('审批通过')
     await loadTasks()
     await loadPendingCount()
@@ -178,11 +185,12 @@ async function handleApprove(row: ApprovalTask) {
 
 async function handleReject(row: ApprovalTask) {
   try {
-    const { value } = await ElMessageBox.prompt('请输入驳回原因', '驳回审批', {
+    const { value } = await ElMessageBox.prompt('请输入驳回原因（必填）', '驳回审批', {
       inputPlaceholder: '驳回原因',
+      inputValidator: (v: string) => (v && v.trim().length > 0 ? true : '驳回原因不能为空'),
       type: 'warning',
     })
-    await post(`/approval/tasks/${row.id}/reject`, { comment: value || '驳回' })
+    await post(`/approval/tasks/${row.id}/reject`, { opinion: value.trim() })
     ElMessage.success('已驳回')
     await loadTasks()
     await loadPendingCount()
@@ -212,15 +220,17 @@ async function handleBatchApprove() {
   }
 }
 
+// 批量驳回原因必填校验（具名函数便于测试覆盖）
 async function handleBatchReject() {
   try {
-    const { value } = await ElMessageBox.prompt('请输入驳回原因', '批量驳回', {
+    const { value } = await ElMessageBox.prompt('请输入驳回原因（必填）', '批量驳回', {
       inputPlaceholder: '驳回原因',
+      inputValidator: batchRejectValidator,
       type: 'warning',
     })
     batchLoading.value = true
     for (const id of selectedIds.value) {
-      await post(`/approval/tasks/${id}/reject`, { comment: value || '批量驳回' })
+      await post(`/approval/tasks/${id}/reject`, { opinion: value.trim() })
     }
     ElMessage.success('批量驳回完成')
     selectedIds.value = []

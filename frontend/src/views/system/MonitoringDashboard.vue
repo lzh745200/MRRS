@@ -243,6 +243,7 @@ import echarts from '@/utils/echarts'
 import { get, apiRequest } from '@/api/request'
 import { useConfigStore } from '@/stores/config'
 import { logger } from '@/utils/logger'
+import { chartColorPrimary } from '@/utils/chartColors'
 
 // ── Types ──
 interface SnapshotData {
@@ -772,13 +773,6 @@ async function fetchSystemLogs() {
 }
 
 // ── ECharts ──
-// 从设计 Token 读取主色（jsdom 等无样式环境回退到 token 默认绿 #2d6a4f）
-function getPrimaryColor(): string {
-  return (
-    getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim() ||
-    '#2d6a4f'
-  )
-}
 
 function buildChart() {
   if (!chartRef.value) return
@@ -820,7 +814,7 @@ function buildChart() {
         name: '请求数',
         type: 'bar',
         data: counts,
-        itemStyle: { color: getPrimaryColor() },
+        itemStyle: { color: chartColorPrimary() },
         barMaxWidth: 28,
       },
       {

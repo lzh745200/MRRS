@@ -34,7 +34,7 @@ class MessageService:
     """
 
     # 消息保留天数
-    MESSAGE_RETENTION_DAYS = 90
+    MESSAGE_RETENTION_DAYS = 30
 
     def __init__(self, db: Session):
         self.db = db

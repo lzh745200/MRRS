@@ -95,6 +95,18 @@ class TestDeleteConfig:
         result = await sc.delete_config("custom", MagicMock(), _admin())
         assert result["success"] is True
 
+    async def test_delete_writes_audit_log(self, svc):
+        """删除配置必须记录审计日志（问题19）"""
+        svc.delete.return_value = True
+        from unittest.mock import patch as _patch
+        with _patch("app.api.v1.system.system_config.write_work_log") as mock_log:
+            await sc.delete_config("custom", MagicMock(), _admin())
+            mock_log.assert_called_once()
+            args, kwargs = mock_log.call_args
+            assert args[1] == "system_config"
+            assert args[2] == "delete"
+            assert "custom" in args[4]
+
 
 class TestExportImport:
     async def test_export(self, svc):

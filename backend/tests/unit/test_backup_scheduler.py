@@ -104,6 +104,35 @@ class TestAutoBackupJob:
                 from app.services.backup_scheduler import auto_backup_job
                 await auto_backup_job()
 
+    @pytest.mark.asyncio
+    async def test_auto_backup_sends_backup_message(self, mock_db_context, mock_db):
+        """自动备份成功后向管理员发送 backup 类型消息（问题20：备份提醒）"""
+        mock_backup_service = MagicMock()
+        mock_backup_record = MagicMock()
+        mock_backup_record.file_name = "backup_2025.db"
+        mock_backup_record.file_size = 1024
+        mock_backup_service.create_backup.return_value = mock_backup_record
+        mock_backup_service.cleanup_old_backups.return_value = 0
+        # 管理员查询返回一个用户
+        mock_db.query.return_value.filter.return_value.all.return_value = [(1,)]
+
+        with patch("app.services.backup_scheduler.get_db_context", return_value=mock_db_context):
+            with patch("app.services.backup_scheduler.get_config") as mock_config:
+                mock_config.side_effect = lambda key, default=None: {
+                    "auto_backup": "true",
+                    "max_backup_count": "5",
+                }.get(key, default)
+                with patch("app.services.backup_scheduler.BackupService", return_value=mock_backup_service):
+                    with patch("app.services.message_service.MessageService") as mock_ms_cls:
+                        from app.services.backup_scheduler import auto_backup_job
+                        await auto_backup_job()
+                        send = mock_ms_cls.return_value.send_batch_messages
+                        send.assert_called_once()
+                        kwargs = send.call_args.kwargs
+                        assert kwargs["message_type"] == "backup"
+                        assert kwargs["user_ids"] == [1]
+                        assert "备份" in kwargs["title"]
+
 
 class TestKpiPrecalculateJob:
     @pytest.mark.asyncio

@@ -217,24 +217,40 @@ describe('挂载与初始化', () => {
     wrapper.unmount()
   })
 
-  it('普通用户：新增按钮隐藏；user 为 null 时角色回退空串', async () => {
+  it('普通用户：新增按钮可见（canOperate）；viewer 只读全隐藏；user 为 null 时角色回退空串', async () => {
     authState.user = { role: 'user', id: 2 }
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.isManager).toBe(false)
-    expect(wrapper.text()).not.toContain('新增经费记录')
+    expect(vm.canOperate).toBe(true)
+    expect(wrapper.text()).toContain('新增经费记录')
     // canEdit/canDelete 直调覆盖各臂
-    expect(vm.canEdit({ created_by: 2, status: 'draft' })).toBe(true)
-    expect(vm.canEdit({ created_by: 2, status: 'pending' })).toBe(false)
-    expect(vm.canEdit({ created_by: 99, status: 'draft' })).toBe(false)
-    expect(vm.canDelete({})).toBe(false)
+    expect(vm.canEdit({ created_by: 2, status: 'pending' })).toBe(true)
+    expect(vm.canEdit({ created_by: 2, status: 'rejected' })).toBe(true)
+    expect(vm.canEdit({ created_by: 2, status: 'approved' })).toBe(false)
+    expect(vm.canEdit({ created_by: 99, status: 'pending' })).toBe(false)
+    expect(vm.canDelete({ created_by: 2, status: 'pending' })).toBe(true)
+    expect(vm.canDelete({ created_by: 99, status: 'pending' })).toBe(false)
+    expect(vm.canDelete({ created_by: 2, status: 'approved' })).toBe(false)
     wrapper.unmount()
+
+    // viewer 只读：按钮隐藏，canEdit/canDelete 全 false
+    authState.user = { role: 'viewer', id: 3 }
+    const wrapperV = mountComp()
+    await flushPromises()
+    const vmV = wrapperV.vm as any
+    expect(vmV.canOperate).toBe(false)
+    expect(wrapperV.text()).not.toContain('新增经费记录')
+    expect(vmV.canEdit({ created_by: 3, status: 'pending' })).toBe(false)
+    expect(vmV.canDelete({ created_by: 3, status: 'pending' })).toBe(false)
+    wrapperV.unmount()
 
     authState.user = null
     const wrapper2 = mountComp()
     await flushPromises()
     expect((wrapper2.vm as any).isManager).toBe(false)
+    expect((wrapper2.vm as any).canOperate).toBe(false)
     expect((wrapper2.vm as any).currentUserId).toBeUndefined()
     wrapper2.unmount()
   })
@@ -427,8 +443,9 @@ describe('表格列模板', () => {
     await nextTick()
     expect(vm.dialogMode).toBe('edit')
     expect(vm.editingId).toBe(1)
+    // 删除按钮：与后端一致——仅 pending 状态可删除（rowA pending 显示；weird_status/空不显示）
     const delBtns = wrapper.findAll('el-button-stub').filter((b) => b.text().trim() === '删除')
-    expect(delBtns.length).toBe(3)
+    expect(delBtns.length).toBe(1)
     await delBtns[0].trigger('click')
     await flushPromises()
     expect(mockDel).toHaveBeenCalledWith('/funds/1')

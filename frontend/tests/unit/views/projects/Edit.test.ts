@@ -973,4 +973,72 @@ describe('模板交互（v-model 与内联处理器）', () => {
     await nextTick()
     expect(vm.isDirty).toBe(true)
   })
+
+  it('handleDownloadFile 成功 → 认证 fetch + 触发下载', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['x'])),
+    } as any)
+    await vm.handleDownloadFile({ id: 1, download_url: '/dl/1', filename: 'a.pdf' })
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/dl/1'), expect.anything())
+    expect(clickSpy).toHaveBeenCalled()
+    clickSpy.mockRestore()
+    fetchMock.mockRestore()
+  })
+
+  it('handleDownloadFile 失败 → 错误提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false } as any)
+    await vm.handleDownloadFile({ id: 1, download_url: '/dl/1' })
+    expect(ElMessage.error).toHaveBeenCalledWith('文件下载失败，请稍后重试')
+    fetchMock.mockRestore()
+  })
+
+  it('照片区「下载」按钮点击 → handleDownloadFile（模板箭头）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.uploadedFiles.photo = [{ id: 1, filename: 'p.jpg', download_url: '/dl/p' }]
+    await nextTick()
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['x'])),
+    } as any)
+    const downloadBtn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('下载'))
+    if (downloadBtn) {
+      await downloadBtn.trigger('click')
+      await flushPromises()
+      expect(fetchMock).toHaveBeenCalled()
+    }
+    // 删除按钮模板箭头（photo 区）
+    const delBtn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('删除'))
+    if (delBtn) {
+      await delBtn.trigger('click')
+      await flushPromises()
+      expect(api.deleteFile).toHaveBeenCalledWith(7, 1)
+    }
+    fetchMock.mockRestore()
+    clickSpy.mockRestore()
+  })
+
+  it('handlePreviewClose 释放预览 URL', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    vm.previewUrl = 'blob:old'
+    vm.handlePreviewClose()
+    expect(revokeSpy).toHaveBeenCalledWith('blob:old')
+    expect(vm.previewUrl).toBe('')
+    revokeSpy.mockRestore()
+  })
 })

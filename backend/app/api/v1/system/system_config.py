@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.services.system_config_service import SystemConfigService
+from app.services.work_log_service import write_work_log
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ async def batch_update_configs(
     需要管理员权限。
     """
     from app.core.permission_utils import require_admin
-    require_admin(current_user, error_message="仅超级管理员可修改系统配置")
+    require_admin(current_user, error_message="仅管理员可修改系统配置")
 
     svc = SystemConfigService(db)
     updated = []
@@ -90,6 +91,12 @@ async def batch_update_configs(
         "批量更新 %d 项系统配置，操作人: %s",
         len(updated),
         getattr(current_user, "username", "unknown"),
+    )
+    write_work_log(
+        db, "system_config", "update", 0,
+        f"批量更新系统配置: {', '.join(updated)}",
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", ""),
     )
 
     return {
@@ -131,7 +138,7 @@ async def import_configs(
     可用于配置的恢复和迁移。需要管理员权限。
     """
     from app.core.permission_utils import require_admin
-    require_admin(current_user, error_message="仅超级管理员可导入系统配置")
+    require_admin(current_user, error_message="仅管理员可导入系统配置")
 
     svc = SystemConfigService(db)
     success = svc.import_config(body.data)
@@ -142,6 +149,11 @@ async def import_configs(
     logger.info(
         "系统配置已从JSON导入，操作人: %s",
         getattr(current_user, "username", "unknown"),
+    )
+    write_work_log(
+        db, "system_config", "import", 0, "从JSON导入系统配置",
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", ""),
     )
 
     return {"success": True, "message": "配置导入成功"}
@@ -206,7 +218,7 @@ async def update_config(
     需要管理员权限。
     """
     from app.core.permission_utils import require_admin
-    require_admin(current_user, error_message="仅超级管理员可修改系统配置")
+    require_admin(current_user, error_message="仅管理员可修改系统配置")
 
     svc = SystemConfigService(db)
     svc.set(key, value, description)
@@ -216,6 +228,11 @@ async def update_config(
         key,
         value,
         getattr(current_user, "username", "unknown"),
+    )
+    write_work_log(
+        db, "system_config", "update", 0, f"更新配置项: {key}",
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", ""),
     )
 
     return {
@@ -237,7 +254,7 @@ async def delete_config(
     需要管理员权限。
     """
     from app.core.permission_utils import require_admin
-    require_admin(current_user, error_message="仅超级管理员可删除系统配置")
+    require_admin(current_user, error_message="仅管理员可删除系统配置")
 
     svc = SystemConfigService(db)
 
@@ -253,6 +270,11 @@ async def delete_config(
         "系统配置 '%s' 已删除，操作人: %s",
         key,
         getattr(current_user, "username", "unknown"),
+    )
+    write_work_log(
+        db, "system_config", "delete", 0, f"删除配置项: {key}",
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", ""),
     )
 
     return {"success": True, "message": f"配置项 '{key}' 已删除"}

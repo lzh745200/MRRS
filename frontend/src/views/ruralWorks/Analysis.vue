@@ -285,6 +285,7 @@
 
 <script lang="ts" setup>
 import { logger } from '@/utils/logger'
+import { chartColor, chartColorPrimary, chartPalette } from '@/utils/chartColors'
 
 import { ref, onMounted, nextTick, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -613,7 +614,7 @@ const initTypeCharts = () => {
         datasets: [
           {
             data: typeData.values,
-            backgroundColor: ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399'],
+            backgroundColor: chartPalette(),
             borderColor: '#fff',
             borderWidth: 2,
           },
@@ -695,10 +696,10 @@ const initStatusCharts = () => {
           {
             data: statusData.values,
             backgroundColor: [
-              '#67C23A', // 已完成 - 绿色
-              '#409EFF', // 进行中 - 蓝色
-              '#E6A23C', // 计划中 - 橙色
-              '#F56C6C', // 已延期 - 红色
+              chartColor('success'), // 已完成 - 绿色
+              chartColorPrimary(), // 进行中 - 主色
+              chartColor('warning'), // 计划中 - 橙色
+              chartColor('danger'), // 已延期 - 红色
             ],
             borderColor: '#fff',
             borderWidth: 2,
@@ -743,10 +744,10 @@ const initStatusCharts = () => {
             label: '工作数量',
             data: statusData.values,
             backgroundColor: [
-              '#67C23A', // 已完成 - 绿色
-              '#409EFF', // 进行中 - 蓝色
-              '#E6A23C', // 计划中 - 橙色
-              '#F56C6C', // 已延期 - 红色
+              chartColor('success'), // 已完成 - 绿色
+              chartColorPrimary(), // 进行中 - 主色
+              chartColor('warning'), // 计划中 - 橙色
+              chartColor('danger'), // 已延期 - 红色
             ],
             borderRadius: 4,
           },

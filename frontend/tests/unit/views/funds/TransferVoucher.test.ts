@@ -278,6 +278,26 @@ describe('新建凭证', () => {
     await btn!.trigger('click')
     expect((wrapper.vm as any).showCreateDialog).toBe(true)
   })
+
+  it('openCreateDialog：formRef 存在但无 clearValidate → 防御不抛错', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.formRef = {} // 空对象（测试环境/未挂载形态）
+    await vm.openCreateDialog()
+    expect(vm.showCreateDialog).toBe(true)
+    expect(vm.form.voucher_no).toBe('')
+  })
+
+  it('openCreateDialog：formRef 有 clearValidate → 调用清除校验', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const clearValidate = vi.fn()
+    vm.formRef = { clearValidate }
+    await vm.openCreateDialog()
+    expect(clearValidate).toHaveBeenCalled()
+  })
 })
 
 describe('确认凭证', () => {

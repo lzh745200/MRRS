@@ -20,7 +20,11 @@ const { ElMessage, lifecycleApi, pushSafeMock, routeParams, validateMock } = vi.
   validateMock: vi.fn(),
 }))
 
+const projectsListMock = vi.hoisted(() => vi.fn())
+
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: routeParams }) }))
+
+vi.mock('@/api/projects', () => ({ projectsApi: { list: projectsListMock } }))
 
 vi.mock('element-plus', () => ({
   ElMessage,
@@ -122,6 +126,7 @@ function mountComp() {
 beforeEach(() => {
   vi.resetAllMocks()
   routeParams.projectId = '1'
+  projectsListMock.mockResolvedValue({ items: [{ id: 1, name: '产业路' }] })
   lifecycleApi.getPerformance.mockResolvedValue(perfData)
   lifecycleApi.createSettlement.mockResolvedValue({})
   lifecycleApi.approveSettlement.mockResolvedValue({})
@@ -360,5 +365,43 @@ describe('模板分支', () => {
     await flushPromises()
     await nextTick()
     expect(wrapper.text()).toContain('D')
+  })
+})
+
+describe('无项目参数：项目选择视图', () => {
+  it('菜单无参进入 → 加载项目列表且不请求绩效；选择后跳转带参路由', async () => {
+    routeParams.projectId = ''
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.invalidProject).toBe(true)
+    expect(projectsListMock).toHaveBeenCalledWith({ page: 1, page_size: 100 })
+    expect(lifecycleApi.getPerformance).not.toHaveBeenCalled()
+    expect(vm.projectOptions).toHaveLength(1)
+    await nextTick()
+    // el-empty 的 description 为 prop（stub 不渲染），断言选择按钮文本即可
+    expect(wrapper.text()).toContain('查看决算结算')
+
+    // 未选择 → 不跳转；选择后 → 跳转
+    vm.goSelectedProject()
+    expect(pushSafeMock).not.toHaveBeenCalled()
+    vm.selectedProjectId = 1
+    vm.goSelectedProject()
+    expect(pushSafeMock).toHaveBeenCalledWith('/funds/settlement/1')
+
+    // 模板 select v-model 箭头（无项目视图渲染时触发）
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    for (const sel of selects) {
+      sel.vm.$emit('update:modelValue', 2)
+    }
+    expect(vm.selectedProjectId).toBe(2)
+  })
+
+  it('项目列表加载失败 → 空数组兜底', async () => {
+    routeParams.projectId = ''
+    projectsListMock.mockRejectedValue(new Error('net'))
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).projectOptions).toEqual([])
   })
 })

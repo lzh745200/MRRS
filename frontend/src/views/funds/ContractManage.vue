@@ -402,9 +402,12 @@ function formatSize(size: any) {
 
 // 带认证拉取文件 blob（后端 JWT 校验，window.open 无法携带 Authorization 头）
 async function fetchAttachmentBlob(row: any): Promise<Blob> {
-  const base = import.meta.env.VITE_API_BASE_URL || ''
+  const raw = row.url || row.download_url || ''
+  // /uploads/ 由后端根路径静态托管（不在 /api/v1 前缀下），直接用相对路径，
+  // 拼 /api/v1 前缀会 404；dev 环境由 vite 代理 /uploads → 后端
+  const url = raw.startsWith('/uploads/') ? raw : `${import.meta.env.VITE_API_BASE_URL || ''}${raw}`
   const token = AuthStorage.getToken()
-  const response = await fetch(`${base}${row.url || row.download_url}`, {
+  const response = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
   if (!response.ok) throw new Error('加载失败')

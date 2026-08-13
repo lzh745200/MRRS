@@ -40,7 +40,7 @@ async def send_message(
 ):
     """发送消息（仅系统/审批/任务类型，不支持任意用户间私信）"""
     # 仅允许发送三种合法类型，防止任意私信绕过权限
-    allowed_types = {"system", "approval", "task"}
+    allowed_types = {"system", "approval", "task", "backup"}
     if request.message_type not in allowed_types:
         raise HTTPException(status_code=400, detail=f"不支持的消息类型: {request.message_type}")
 

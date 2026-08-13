@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   post: vi.fn(),
   put: vi.fn(),
   del: vi.fn(),
+  apiRequest: vi.fn(),
   requestGet: vi.fn(),
 }))
 
@@ -19,6 +20,7 @@ vi.mock('@/api/request', () => ({
   post: mocks.post,
   put: mocks.put,
   del: mocks.del,
+  apiRequest: mocks.apiRequest,
   // @/api/helpers/blobDownload 依赖这两个导出
   parseContentDisposition: vi.fn(() => 'download.xlsx'),
   downloadBlob: vi.fn(),
@@ -116,10 +118,14 @@ describe('projectsApi', () => {
     expect(mocks.del).toHaveBeenCalledWith('/projects/1/files/2')
   })
 
-  it('previewFile calls GET', async () => {
-    mocks.get.mockResolvedValueOnce({ url: 'preview' })
+  it('previewFile calls apiRequest blob', async () => {
+    mocks.apiRequest.mockResolvedValueOnce(new Blob(['pdf']))
     await projectsApi.previewFile(1, 2)
-    expect(mocks.get).toHaveBeenCalledWith('/projects/1/files/2/preview')
+    expect(mocks.apiRequest).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/projects/1/files/2/preview',
+      responseType: 'blob',
+    })
   })
 
   it('getChangeHistory calls GET', async () => {

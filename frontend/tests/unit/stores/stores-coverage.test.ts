@@ -42,17 +42,6 @@ describe('Store Import Verification', () => {
     expect(store).toBeDefined()
   })
 
-  it('should import village store', async () => {
-    try {
-      const { useVillageStore } = await import('@/stores/village')
-      const store = useVillageStore()
-      expect(store).toBeDefined()
-    } catch (e) {
-      // Store may use a different export name
-      expect(true).toBe(true)
-    }
-  })
-
   it('should import organization store', async () => {
     try {
       const { useOrganizationStore } = await import('@/stores/organization')

@@ -37,10 +37,28 @@
 - 🧹 删除无引用的 `views/dataManagement/components/BackupSection.vue`（备份已收口至系统管理 → 备份管理，菜单路径同步修正）
 - 🧹 删除布局中失效的 `goFundsList` 函数与政策列表 `handleSubmitApproval` 死代码
 
+### 修复（第二轮补漏）
+
+- 🐛 **帮扶村两委年度数据错乱**：`village_committee` 年度子表按年份存取修正，`record_changes` 字段级留痕落库，年度对比取 `latest_year` 真实值
+- 🐛 **审批驳回可不填原因**：后端对缺失驳回意见的请求返回 400，前端驳回/批量驳回弹窗增加必填校验（inputValidator）
+- 🐛 **审批列表缺提交人**：待审批任务返回 `submitter_name`，前端待审批列表新增「提交人」列与类型/时间筛选（五类实体 + 日期范围）
+- 🐛 **审批中心参数错误**：通过/驳回/批量操作请求体 `comment` 改为后端契约字段 `opinion`
+- 🐛 **系统配置删除无审计**：`DELETE /system/config/{key}` 补审计日志；配置包保存/重置/导入对齐后端契约（`ConfigBatchUpdate.configs` / `ConfigExportImport.data`）
+- 🐛 **备份提醒消息未送达**：备份结果消息发送给 admin/super_admin；30 天自动清理任务生效
+- 🐛 **资金周期/决算结算无参进入空白**：菜单无项目参数时渲染项目选择页（下拉选择项目后进入详情），修复内部链接单复数路径（/funds/transfer、/funds/contract、/funds/anomaly）
+- 🐛 **经费权限按钮不一致**：经费详情/用户经费列表按 `canOperate`（user 及以上可见操作、viewer 只读）统一控制；编辑/删除仅待审批（pending）状态可用，移除不存在的 draft 状态引用
+- 🐛 **硬编码主题色清零**：新增 `utils/chartColors.ts`（运行时读取 CSS 变量色值），全局 `#409eff` 等硬编码色替换为 `var(--color-*)` / chartColors（ECharts canvas 场景）；AdminDashboard/OfflineMap/数据管理/经费分析/乡村工作分析/监控面板全部 token 化
+- 🐛 **备份入口不唯一**：AdminDashboard 与数据管理总览中的旧链接统一指向 `/system/backup`
+- 🐛 **数据导出含无效 PDF 选项**：后端仅支持 xlsx/csv，移除导出区 PDF 单选项
+- 🐛 **托盘角标不联动**：未读消息数变化时调用 `electronAPI.updateTrayUnread` 同步 Electron 托盘角标
+- 🧹 **死代码清理**：删除无引用的 `composables/useMessageNotification.ts` 及其测试文件
+
 ### 测试与质量
 
-- 后端全量：**12,126 passed**（更新经费权限/菜单/附件权限过时断言，新增 approval-flow、变更历史、年度对比等测试）
-- 前端受影响模块测试全部回归通过（经费列表/转账凭证/政策详情/年度数据/数据分析/审批转交等）
+- 后端全量：**12,143 passed**（更新经费权限/菜单/附件权限过时断言，新增 approval-flow、变更历史、年度对比等测试；第二轮同步驳回 403 断言与消息 30 天保留期断言）
+- 前端全量：**6,362 passed**（351 个测试文件）；`eslint --max-warnings=0`、`vue-tsc --noEmit`、`flake8 app/` 零错误
+- E2E：Playwright 五条关键路径（认证/工作台/帮扶村/项目/经费）**16/16 passed**；E2E 基建修复——登录态改为会话级 API 登录 + sessionStorage 注入（规避 /auth/login 5 次/60s 限流导致的 fixture 级联超时），空字段断言对齐登录页自定义 `.error-banner`
+- 安装包：Windows x64 `帮扶管理系统 Setup 1.8.0.exe`（271MB）构建成功，打包版后端启动冒烟通过（/health 200，version=1.8.0）
 
 ## [1.5.2] - 2026-08-11
 

@@ -597,6 +597,48 @@ describe('合同附件', () => {
     fetchMock.mockRestore()
   })
 
+  it('downloadAttachment 成功 → 触发浏览器下载', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['pdf'])),
+    } as any)
+    await (wrapper.vm as any).downloadAttachment({ url: '/uploads/a.pdf', file_name: '合同.pdf' })
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/uploads/a.pdf'), expect.anything())
+    expect(clickSpy).toHaveBeenCalled()
+    clickSpy.mockRestore()
+    fetchMock.mockRestore()
+  })
+
+  it('downloadAttachment 失败 → 错误提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('net'))
+    await (wrapper.vm as any).downloadAttachment({ url: '/uploads/a.pdf' })
+    expect(ElMessage.error).toHaveBeenCalledWith('附件下载失败')
+    fetchMock.mockRestore()
+  })
+
+  it('fetchAttachmentBlob：无 token → headers undefined 分支', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const { AuthStorage } = await import('@/utils/authStorage')
+    const tokenSpy = vi.spyOn(AuthStorage, 'getToken').mockReturnValue('')
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['x'])),
+    } as any)
+    await (wrapper.vm as any).openAttachment({ url: '/uploads/a.pdf' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/uploads/a.pdf'),
+      { headers: undefined }
+    )
+    fetchMock.mockRestore()
+    tokenSpy.mockRestore()
+  })
+
   it('创建表单校验: formRef 缺失时直接返回', async () => {
     const wrapper = mountComp()
     await flushPromises()
@@ -611,7 +653,7 @@ describe('合同附件', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    // 打开附件对话框 → 渲染附件表格与打开按钮
+    // 打开附件对话框 → 渲染附件表格与打开/下载按钮
     vm.attachmentDialogVisible = true
     vm.attachmentList = [{ url: '/u/a.pdf', file_name: 'a.pdf', file_size: 100 }]
     await wrapper.vm.$nextTick()
@@ -619,6 +661,22 @@ describe('合同附件', () => {
     if (openBtns.length) {
       await openBtns[0].trigger('click')
     }
+    // 下载按钮模板箭头（认证 fetch 触发下载）
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['x'])),
+    } as any)
+    const dlBtns = wrapper.findAll('.el-button-stub').filter((b) => b.text().includes('下载'))
+    if (dlBtns.length) {
+      await dlBtns[0].trigger('click')
+      await flushPromises()
+      expect(fetchMock).toHaveBeenCalled()
+    }
+    fetchMock.mockRestore()
+    clickSpy.mockRestore()
     // 触发表格区登记付款按钮(行 62 事件箭头)
     const payBtns = wrapper.findAll('.el-button-stub').filter((b) => b.text().includes('登记付款'))
     for (const b of payBtns) {

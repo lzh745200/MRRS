@@ -28,7 +28,6 @@
               <el-radio-group v-model="exportForm.format">
                 <el-radio value="xlsx">Excel (.xlsx)</el-radio>
                 <el-radio value="csv">CSV (.csv)</el-radio>
-                <el-radio value="pdf">PDF</el-radio>
               </el-radio-group>
             </el-form-item>
 
@@ -184,7 +183,7 @@ async function loadHistory() {
   loadingHistory.value = true
   try {
     const res = await getExportTasks({ page: 1, page_size: 10 })
-    historyList.value = (res as any)?.data?.items || (res as any)?.items
+    historyList.value = (res as any)?.data?.items || (res as any)?.items || []
   } catch (error) {
     logger.error('加载导出历史失败:', error)
   } finally {

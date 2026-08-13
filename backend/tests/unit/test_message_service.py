@@ -210,4 +210,4 @@ class TestGetMessageStats:
 
 class TestMessageRetention:
     def test_default_retention_days(self, msg_svc):
-        assert msg_svc.MESSAGE_RETENTION_DAYS == 90
+        assert msg_svc.MESSAGE_RETENTION_DAYS == 30

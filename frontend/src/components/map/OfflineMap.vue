@@ -13,6 +13,7 @@
  */
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { logger } from '@/utils/logger'
+import { chartColor, chartColorPrimary } from '@/utils/chartColors'
 import echarts from '@/utils/echarts'
 
 interface Marker {
@@ -243,7 +244,7 @@ function renderMap() {
         polyline: false,
         data: [{ coords: line.coords }],
         lineStyle: {
-          color: '#E6A23C',
+          color: chartColor('warning'),
           width: 2,
           type: 'dashed' as const,
           opacity: 0.7,
@@ -259,7 +260,7 @@ function renderMap() {
           show: true,
           position: 'middle' as const,
           fontSize: 11,
-          color: '#E6A23C',
+          color: chartColor('warning'),
           formatter: (_p: any) => line.label,
         },
       })),
@@ -278,13 +279,13 @@ function renderMap() {
               ],
               symbolSize: 16,
               symbol: 'pin',
-              itemStyle: { color: '#F56C6C' },
+              itemStyle: { color: chartColor('danger') },
               label: {
                 show: true,
                 position: 'top' as const,
                 fontSize: 12,
                 fontWeight: 'bold' as const,
-                color: '#F56C6C',
+                color: chartColor('danger'),
                 formatter: '出发点',
               },
             },
@@ -297,12 +298,13 @@ function renderMap() {
 }
 
 function getMarkerColor(type: string): string {
+  // canvas 无法解析 var()，运行时取 tokens.scss 语义色计算值
   const colorMap: Record<string, string> = {
-    village: '#409EFF',
-    school: '#67C23A',
-    project: '#E6A23C',
-    hospital: '#F56C6C',
-    default: '#909399',
+    village: chartColorPrimary(),
+    school: chartColor('success'),
+    project: chartColor('warning'),
+    hospital: chartColor('danger'),
+    default: chartColor('info'),
   }
   return colorMap[type] || colorMap.default
 }

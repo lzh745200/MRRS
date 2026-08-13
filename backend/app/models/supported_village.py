@@ -191,6 +191,29 @@ class SupportedVillage(Base, TimestampMixin):
         lazy="selectin",
     )
 
+    @property
+    def latest_year(self):
+        """各年度子表中最新的数据年份（无年度数据时为 None）。
+
+        上述年度关系均为 selectin 加载，列表查询时已随主查询载入，
+        此处取 max 不产生额外 SQL。供列表页「最近年度」列展示。
+        """
+        years = []
+        for rel in (
+            self.population_data,
+            self.income_data,
+            self.force_investment_data,
+            self.industry_support_data,
+            self.infrastructure_data,
+            self.party_building_data,
+            self.medical_support_data,
+            self.consumption_support_data,
+            self.employment_support_data,
+            self.education_support_data,
+        ):
+            years.extend(r.year for r in rel if getattr(r, "year", None) is not None)
+        return max(years) if years else None
+
     def to_dict(self) -> dict:
         """序列化为前端期望的 camelCase 格式，同时返回 snake_case 别名以兼容历史前端代码"""
         return {
@@ -257,6 +280,8 @@ class SupportedVillage(Base, TimestampMixin):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "latestYear": self.latest_year,
+            "latest_year": self.latest_year,
         }
 
     @property

@@ -47,7 +47,6 @@ vi.mock('@/stores/menu', () => ({ useMenuStore: () => ({ canAccessMenu: () => tr
 vi.mock('@/stores/project', () => ({ useProjectStore: () => ({ projects: [], currentProject: null }) }))
 vi.mock('@/stores/policy', () => ({ usePolicyStore: () => ({ policyList: [], total: 0, current: null }) }))
 vi.mock('@/stores/funds', () => ({ useFundsStore: () => ({ fundList: [], total: 0 }) }))
-vi.mock('@/stores/village', () => ({ useVillageStore: () => ({ villageList: [], total: 0 }) }))
 vi.mock('@/stores/organization', () => ({ useOrganizationStore: () => ({ orgs: [], tree: [] }) }))
 vi.mock('@/stores/rbac', () => ({ useRbacStore: () => ({ roles: [], permissions: [], hasPermission: () => true }) }))
 vi.mock('@/stores/config', () => ({ useConfigStore: () => ({ theme: 'light', appName: 'Test' }) }))
@@ -252,7 +251,7 @@ describe('Common component imports', () => {
 
 describe('Store imports', () => {
   const stores = [
-    'app', 'auth', 'user', 'project', 'funds', 'village', 'policy',
+    'app', 'auth', 'user', 'project', 'funds', 'policy',
     'organization', 'rbac', 'menu', 'config', 'route',
     'taskQueue', 'dataPackage', 'dataReport',
   ]

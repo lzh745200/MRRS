@@ -72,7 +72,8 @@ describe('config/menu-config', () => {
 
   it('approval 角色白名单', () => {
     const approval = MENU_CONFIG.find((m) => m.key === 'approval')!
-    expect(approval.roles).toEqual(['admin', 'super_admin', 'approval_leader', 'manager'])
+    // 废弃角色（approval_leader/manager 已归一化为 admin）不再出现于菜单配置
+    expect(approval.roles).toEqual(['admin', 'super_admin'])
   })
 
   it('system-security 含 19 个子项且角色受限', () => {
@@ -88,7 +89,8 @@ describe('config/menu-config', () => {
   it('helpData 含 8 个子项', () => {
     const help = MENU_CONFIG.find((m) => m.key === 'helpData')!
     expect(help.children).toHaveLength(8)
-    expect(help.roles).toEqual(['admin', 'super_admin', 'manager', 'operator'])
+    // 废弃角色（manager/operator 已归一化）不再出现于菜单配置
+    expect(help.roles).toEqual(['admin', 'super_admin'])
   })
 
   it('analytics 含 6 个子项', () => {

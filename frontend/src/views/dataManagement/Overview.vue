@@ -224,7 +224,7 @@
             <el-button
               type="warning"
               class="quick-action-btn"
-              @click="navigateTo('/data-management/backup')"
+              @click="navigateTo('/system/backup')"
             >
               <el-icon><FolderAdd /></el-icon>
               数据备份
@@ -298,9 +298,10 @@ function formatTime(val: string | null) {
 }
 
 function getCompletenessColor(percentage: number) {
-  if (percentage >= 90) return '#67c23a'
-  if (percentage >= 70) return '#e6a23c'
-  return '#f56c6c'
+  // el-progress :color 走内联样式，可直接使用 CSS 变量
+  if (percentage >= 90) return 'var(--color-success)'
+  if (percentage >= 70) return 'var(--color-warning)'
+  return 'var(--color-danger)'
 }
 
 function getModuleIcon(module: string) {
@@ -316,8 +317,9 @@ function getModuleIcon(module: string) {
 }
 
 function getModuleIconColor(row: any) {
-  if (!row.healthy) return '#e6a23c'
-  return '#67c23a'
+  // el-icon :color 走内联样式，可直接使用 CSS 变量
+  if (!row.healthy) return 'var(--color-warning)'
+  return 'var(--color-success)'
 }
 
 function getTrendType(trend: number) {
@@ -339,15 +341,16 @@ function getActionIcon(actionType: string) {
 }
 
 function getActionColor(actionType: string) {
+  // el-icon color 走内联样式，可直接使用 CSS 变量（tokens.scss 语义色）
   const colorMap: Record<string, string> = {
-    create: '#67c23a',
-    update: '#409eff',
-    delete: '#f56c6c',
-    import: '#e6a23c',
-    export: '#909399',
-    backup: '#67c23a',
+    create: 'var(--color-success)',
+    update: 'var(--color-primary)',
+    delete: 'var(--color-danger)',
+    import: 'var(--color-warning)',
+    export: 'var(--color-info)',
+    backup: 'var(--color-success)',
   }
-  return colorMap[actionType] || '#909399'
+  return colorMap[actionType] || 'var(--color-info)'
 }
 
 function navigateTo(path: string) {
@@ -449,12 +452,12 @@ onMounted(() => {
   background: var(--color-primary-light-8);
 }
 .stat-card.success .stat-icon {
-  color: #67c23a;
+  color: var(--color-success);
   background: var(--color-primary-light-8);
 }
 .stat-card.warning .stat-icon {
-  color: #e6a23c;
-  background: #fdf6ec;
+  color: var(--color-warning);
+  background: var(--color-warning-lightest);
 }
 .stat-card.info .stat-icon {
   color: #909399;

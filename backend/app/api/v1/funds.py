@@ -644,7 +644,11 @@ def _transition_status(
         from_status=from_status,
         to_status=target_status,
         operator_id=getattr(operator, "id", None),
-        operator_name=(getattr(operator, "full_name", None) or getattr(operator, "username", None)) if operator else None,
+        operator_name=(
+            (getattr(operator, "full_name", None) or getattr(operator, "username", None))
+            if operator
+            else None
+        ),
         remark=remark,
         operation_time=datetime.now(timezone.utc),
     ))

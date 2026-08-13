@@ -384,6 +384,21 @@ describe('预览与下载', () => {
     expect(ElMessage.info).toHaveBeenCalledWith('该文件类型不支持在线预览，已为您下载')
   })
 
+  it('handlePreview 重复预览 → 释放旧 blob URL 再替换', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    vm.previewUrl = 'blob:old-url'
+    policyApiMock.previewPolicyFile.mockResolvedValueOnce(
+      new Blob(['pdf'], { type: 'application/pdf' })
+    )
+    await vm.handlePreview()
+    expect(revokeSpy).toHaveBeenCalledWith('blob:old-url')
+    expect(vm.previewUrl).toMatch(/^blob:/)
+    revokeSpy.mockRestore()
+  })
+
   it('handlePreview 失败 → warning', async () => {
     const wrapper = mountComp()
     await flushPromises()

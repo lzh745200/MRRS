@@ -403,7 +403,10 @@ def reject_task(
     Requirements: 3.5 - 审批拒绝后终止流程
 
     单机版优化：允许当前用户直接拒绝（跳过审批人校验）
+    安全要求：驳回必须填写原因（与前端必填校验对齐，防止绕过前端空原因驳回）
     """
+    if not data.opinion or not data.opinion.strip():
+        raise HTTPException(status_code=400, detail="驳回必须填写原因")
     service = ApprovalWorkflowService(db)
     task = service.reject_task(task_id, current_user.id, data.opinion)
 
@@ -684,6 +687,14 @@ def get_pending_tasks(
             query = query.filter(AT.submitter_id == current_user.id)
         tasks = query.order_by(AT.priority.desc(), AT.created_at.asc()).offset(skip).limit(limit).all()
 
+    # 提交人姓名映射（前端列表「提交人」列）
+    submitter_ids = {t.submitter_id for t in tasks if t.submitter_id}
+    name_map = (
+        dict(db.query(User.id, User.username).filter(User.id.in_(submitter_ids)).all())
+        if submitter_ids
+        else {}
+    )
+
     return {
         "code": 200,
         "success": True,
@@ -698,6 +709,7 @@ def get_pending_tasks(
                 "priority": t.priority,
                 "status": t.status,
                 "submitter_id": t.submitter_id,
+                "submitter_name": name_map.get(t.submitter_id),
                 "created_at": t.created_at.isoformat() if t.created_at else None,
             }
             for t in tasks

@@ -11,7 +11,10 @@
         <el-button type="primary" @click="handleEdit"
           ><el-icon><Edit /></el-icon>编辑</el-button
         >
-        <el-button v-if="isManager" type="danger" @click="handleDelete"
+        <el-button
+          v-if="canOperate && fundData.status === 'pending'"
+          type="danger"
+          @click="handleDelete"
           ><el-icon><Delete /></el-icon>删除</el-button
         >
       </div>
@@ -23,7 +26,7 @@
       <!-- 查看模式 -->
       <template v-if="!isEdit">
         <!-- 工作流操作栏 -->
-        <div v-if="isManager && fundData.id" class="workflow-bar">
+        <div v-if="canOperate && fundData.id" class="workflow-bar">
           <div class="workflow-status">
             当前状态：<el-tag :type="getStatusType(fundData.status)" size="large">{{
               getStatusText(fundData.status)
@@ -676,11 +679,18 @@ const isManager = computed(() => {
   return ['admin', 'super_admin'].includes(role)
 })
 
+// 经费操作权限：与后端 require_funds_operator_role 对齐——viewer 只读，user 及以上可操作
+const canOperate = computed(() => {
+  const role = authStore.user?.role || ''
+  return role !== '' && role !== 'viewer'
+})
+
 // 判断当前用户是否可以编辑此经费
 const canEditFund = computed(() => {
+  if (!canOperate.value) return false
   if (isManager.value) return true
-  // 普通用户：只能编辑自己创建的草稿/驳回状态经费
-  const editableStatuses = ['draft', 'rejected']
+  // 普通用户：只能编辑自己创建的待审批/已驳回状态经费
+  const editableStatuses = ['pending', 'rejected']
   return fundData.created_by === authStore.user?.id && editableStatuses.includes(fundData.status)
 })
 

@@ -168,12 +168,15 @@
               <template #default="{ row }">{{ row.filename ?? row.name ?? '-' }}</template>
             </el-table-column>
             <el-table-column prop="category" label="分类" width="100" />
-            <el-table-column prop="size" label="大小" width="100">
-              <template #default="{ row }">{{ formatSize(row.size) }}</template>
+            <el-table-column prop="file_size" label="大小" width="100">
+              <template #default="{ row }">{{ formatSize(row.file_size ?? row.size) }}</template>
             </el-table-column>
             <el-table-column prop="created_at" label="上传时间" width="170" />
-            <el-table-column label="操作" width="150" fixed="right">
+            <el-table-column label="操作" width="200" fixed="right">
               <template #default="{ row }">
+                <el-button link type="primary" size="small" @click="handlePreviewFile(row)"
+                  >预览</el-button
+                >
                 <el-button link type="primary" size="small" @click="handleDownload(row)"
                   >下载</el-button
                 >
@@ -255,6 +258,13 @@
         <el-button type="primary" :loading="taskSaving" @click="handleSaveTask">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 附件预览（通用组件，复用政策/经费预览策略） -->
+    <FilePreview
+      v-model="previewVisible"
+      :fetch-blob="previewFetchBlob"
+      :file-name="previewFileName"
+    />
   </div>
 </template>
 
@@ -267,6 +277,7 @@ import { logger } from '@/utils/logger'
 import { projectsApi } from '@/api/projects'
 import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
 import { AuthStorage } from '@/utils/authStorage'
+import FilePreview from '@/components/FilePreview.vue'
 
 const route = useRoute()
 const { pushSafe } = useRouterSafe()
@@ -285,6 +296,10 @@ const funds = ref<any[]>([])
 const fundsLoading = ref(false)
 const files = ref<any[]>([])
 const filesLoading = ref(false)
+// 附件预览（FilePreview 通用组件）
+const previewVisible = ref(false)
+const previewFileName = ref('')
+const previewFetchBlob = ref<() => Promise<Blob>>(() => Promise.resolve(new Blob()))
 const history = ref<any[]>([])
 const historyLoading = ref(false)
 
@@ -380,7 +395,7 @@ async function loadTasks() {
   tasksLoading.value = true
   try {
     const res = await projectsApi.getTasks(projectId)
-    tasks.value = res?.items ?? res ?? []
+    tasks.value = Array.isArray(res) ? res : (res?.items ?? [])
   } catch (e) {
     logger.error('加载任务失败', e)
   } finally {
@@ -392,7 +407,7 @@ async function loadFunds() {
   fundsLoading.value = true
   try {
     const res = await projectsApi.getFunds(projectId)
-    funds.value = res?.items ?? res ?? []
+    funds.value = Array.isArray(res) ? res : (res?.items ?? [])
   } catch (e) {
     logger.error('加载经费失败', e)
   } finally {
@@ -417,7 +432,7 @@ async function loadHistory() {
   historyLoading.value = true
   try {
     const res = await projectsApi.getChangeHistory(projectId)
-    history.value = res?.items ?? res ?? []
+    history.value = Array.isArray(res) ? res : (res?.items ?? [])
   } catch (e) {
     logger.error('加载变更历史失败', e)
   } finally {
@@ -489,13 +504,19 @@ async function handleDeleteTask(taskId: number) {
 // --- Files ---
 async function handleFileUpload(options: any) {
   try {
-    await projectsApi.uploadFiles(projectId, 'attachment', [options.file])
-    ElMessage.success('上传成功')
+    // 分类须在后端白名单（research/approval/implementation/acceptance/photo）内，否则 400
+    await projectsApi.uploadFiles(projectId, 'implementation', [options.file])
     await loadFiles()
   } catch (e: any) {
     logger.error('上传附件失败', e)
     ElMessage.error(e?.message || '上传失败')
   }
+}
+
+function handlePreviewFile(file: any) {
+  previewFileName.value = file.filename || file.name || '附件'
+  previewFetchBlob.value = () => projectsApi.previewFile(projectId, file.id)
+  previewVisible.value = true
 }
 
 async function handleDownload(file: any) {

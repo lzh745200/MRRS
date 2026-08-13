@@ -169,6 +169,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { chartColor, chartColorPrimary, chartPalette } from '@/utils/chartColors'
 
 import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount, markRaw } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -373,7 +374,7 @@ function updateCharts() {
         datasets: [
           {
             data: Object.values(typeCounts),
-            backgroundColor: ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399'],
+            backgroundColor: chartPalette(),
             borderWidth: 2,
             borderColor: '#fff',
           },
@@ -461,8 +462,9 @@ function updateCharts() {
           {
             label: '新增工作',
             data: newByMonth,
-            borderColor: '#409EFF',
-            backgroundColor: 'rgba(64,158,255,0.1)',
+            borderColor: chartColorPrimary(),
+            // 8 位 hex（末两位 1a ≈ 10% 透明度），tokens 主色的同色浅填充
+            backgroundColor: `${chartColorPrimary()}1a`,
             fill: true,
             tension: 0.4,
             pointRadius: 4,
@@ -470,8 +472,8 @@ function updateCharts() {
           {
             label: '完成工作',
             data: completedByMonth,
-            borderColor: '#67C23A',
-            backgroundColor: 'rgba(103,194,58,0.1)',
+            borderColor: chartColor('success'),
+            backgroundColor: `${chartColor('success')}1a`, // 同色 10% 浅填充
             fill: true,
             tension: 0.4,
             pointRadius: 4,

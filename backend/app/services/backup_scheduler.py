@@ -27,6 +27,36 @@ _scheduler_started = False
 _timers: list[threading.Timer] = []
 
 
+def _admin_user_ids(db):
+    """查询管理员用户 ID 列表（用于备份结果/失败提醒）"""
+    from app.models.user import User
+
+    return [
+        row[0]
+        for row in db.query(User.id)
+        .filter(
+            User.is_active == True,  # noqa: E712
+            (User.is_superuser == True) | (User.role.in_(["admin", "super_admin"])),  # noqa: E712
+        )
+        .all()
+    ]
+
+
+def _send_backup_reminder(db, title: str, content: str) -> None:
+    """向管理员发送备份提醒消息（消息中心「备份提醒」分类）"""
+    from app.services.message_service import MessageService
+
+    admin_ids = _admin_user_ids(db)
+    if admin_ids:
+        MessageService(db).send_batch_messages(
+            user_ids=admin_ids,
+            message_type="backup",
+            title=title,
+            content=content,
+            link="/system/backup",
+        )
+
+
 async def auto_backup_job():
     """自动备份任务（支持自定义目标目录与默认加密，按 backup_interval_days 间隔执行）"""
     with get_db_context() as db:
@@ -87,8 +117,30 @@ async def auto_backup_job():
             deleted_count = backup_service.cleanup_old_backups(keep_count=max_count)
             if deleted_count > 0:
                 logger.info("清理了 %d 个旧备份", deleted_count)
+
+            # 备份提醒消息：通知管理员备份结果（消息中心「备份提醒」分类）
+            try:
+                _send_backup_reminder(
+                    db,
+                    "自动备份完成",
+                    (
+                        f"定时备份已生成：{backup.file_name}"
+                        f"（{(backup.file_size or 0) / 1024 / 1024:.1f} MB），"
+                        f"仅保留最近 {max_count} 份。"
+                    ),
+                )
+            except Exception as msg_err:
+                logger.warning("备份完成提醒消息发送失败: %s", msg_err)
         except Exception as e:
             logger.error("自动备份失败: %s", str(e), exc_info=True)
+            try:
+                _send_backup_reminder(
+                    db,
+                    "自动备份失败",
+                    f"定时自动备份执行失败：{e}，请检查备份目录与磁盘空间后手动备份。",
+                )
+            except Exception as msg_err:
+                logger.warning("备份失败提醒消息发送失败: %s", msg_err)
 
 
 async def kpi_precalculate_job():

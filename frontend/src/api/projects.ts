@@ -1,4 +1,4 @@
-import request, { get, post, put, del } from '@/api/request'
+import request, { get, post, put, del, apiRequest } from '@/api/request'
 import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
 
 // Types
@@ -61,8 +61,12 @@ export const projectsApi = {
     `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/projects/${projectId}/files/${fileId}/download`,
   deleteFile: (projectId: number | string, fileId: number) =>
     del('/projects/' + projectId + '/files/' + fileId),
-  previewFile: (projectId: number, fileId: number) =>
-    get(`/projects/${projectId}/files/${fileId}/preview`),
+  previewFile: (projectId: number | string, fileId: number) =>
+    apiRequest({
+      method: 'GET',
+      url: `/projects/${projectId}/files/${fileId}/preview`,
+      responseType: 'blob',
+    }) as Promise<Blob>,
 
   // ========== 项目变更历史 ==========
   getChangeHistory: (projectId: number) => get(`/projects/${projectId}/history/changes`),

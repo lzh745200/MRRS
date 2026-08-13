@@ -168,6 +168,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { chartColorPrimary, chartColor } from '@/utils/chartColors'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Search, Download } from '@element-plus/icons-vue'
@@ -228,8 +229,8 @@ const pieChartOption = computed<EChartsOption>(() => {
     '#d4af37',
     '#b8860b',
     '#8b6914',
-    '#409eff',
-    '#e6a23c',
+    chartColorPrimary(),
+    chartColor('warning'),
   ]
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c}万元 ({d}%)' },

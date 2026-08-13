@@ -140,6 +140,10 @@ class AuditEnhancementService:
                 )
                 db.add(change)
 
+        # 显式提交——与 create_audit_log 一致：调用方可能在业务 commit 之后
+        # 才记录变更（如 supported_village.py），不提交则字段级明细静默丢失。
+        safe_commit(db)
+
     @staticmethod
     def _serialize_value(value: Any) -> Any:
         """序列化值为 JSON 兼容格式"""

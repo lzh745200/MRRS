@@ -6,6 +6,7 @@
 import io
 import json
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import openpyxl
@@ -950,20 +951,16 @@ async def save_committee_data(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """保存帮扶村委数据"""
+    """保存帮扶村委数据（旧前端路径兼容入口）。
+
+    根因修复：旧实现查询不带 year（跨年互相覆盖），且对 members 关系属性
+    直接 setattr dict 列表导致 flush 时 UnmappedInstanceError → 500。
+    现统一委托 _save_section_data：按年隔离 + 成员子表删除重写。
+    """
     _get_village_or_404(db, village_id, current_user)
-    from app.models.supported_village import VillageCommitteeInfo
-    committee = (
-        db.query(VillageCommitteeInfo)
-        .filter(VillageCommitteeInfo.supported_village_id == village_id)
-        .first()
-    )
-    if not committee:
-        committee = VillageCommitteeInfo(supported_village_id=village_id)
-        db.add(committee)
-    for k, v in data.items():
-        if hasattr(committee, k) and k not in ("id", "supported_village_id"):
-            setattr(committee, k, v)
+    payload = dict(data)
+    year = payload.pop("year", None) or datetime.now().year
+    _save_section_data(db, VillageCommitteeInfo, village_id, int(year), payload)
     safe_commit(db)
     return {"code": 200, "success": True, "message": "保存成功"}
 

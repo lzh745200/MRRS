@@ -169,9 +169,9 @@ describe('计算属性与工具函数', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.getCompletenessColor(95)).toBe('#67c23a')
-    expect(vm.getCompletenessColor(80)).toBe('#e6a23c')
-    expect(vm.getCompletenessColor(50)).toBe('#f56c6c')
+    expect(vm.getCompletenessColor(95)).toBe('var(--color-success)')
+    expect(vm.getCompletenessColor(80)).toBe('var(--color-warning)')
+    expect(vm.getCompletenessColor(50)).toBe('var(--color-danger)')
   })
 
   it('getModuleIcon 六映射 + 兜底', async () => {
@@ -188,8 +188,8 @@ describe('计算属性与工具函数', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.getModuleIconColor({ healthy: true })).toBe('#67c23a')
-    expect(vm.getModuleIconColor({ healthy: false })).toBe('#e6a23c')
+    expect(vm.getModuleIconColor({ healthy: true })).toBe('var(--color-success)')
+    expect(vm.getModuleIconColor({ healthy: false })).toBe('var(--color-warning)')
   })
 
   it('getTrendType 三分支', async () => {
@@ -210,7 +210,7 @@ describe('计算属性与工具函数', () => {
       expect(vm.getActionColor(t)).toBeTruthy()
     }
     expect(vm.getActionIcon('x')).toBeTruthy()
-    expect(vm.getActionColor('x')).toBe('#909399')
+    expect(vm.getActionColor('x')).toBe('var(--color-info)')
   })
 
   it('navigateTo 与 handleModuleClick（已知/未知）', async () => {
@@ -260,7 +260,7 @@ describe('模板交互', () => {
     }
     expect(pushSafeMock).toHaveBeenCalledWith('/data-entry/comprehensive')
     expect(pushSafeMock).toHaveBeenCalledWith('/data-import/batch')
-    expect(pushSafeMock).toHaveBeenCalledWith('/data-management/backup')
+    expect(pushSafeMock).toHaveBeenCalledWith('/system/backup')
     expect(pushSafeMock).toHaveBeenCalledWith('/data-management/quality')
 
     await findBtn(wrapper, '查看更多').trigger('click')

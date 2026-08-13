@@ -72,13 +72,31 @@ class TestUnauthorized:
 # ─── 400 Unsupported Format ───
 
 class TestUnsupportedFormat:
-    @pytest.mark.parametrize("path", [
-        "/users", "/villages", "/schools", "/projects", "/funds", "/comprehensive",
-    ])
+    @pytest.mark.parametrize("path", ["/comprehensive"])
     def test_csv_format(self, client_with_mocked_auth, path):
         client = client_with_mocked_auth
         resp = client.get(f"{BASE}{path}", params={"format": "csv"})
         assert resp.status_code == 400
+
+    @pytest.mark.parametrize("path", ["/users", "/villages", "/schools", "/projects", "/funds"])
+    def test_pdf_format_rejected(self, client_with_mocked_auth, path):
+        """pdf 不属于支持的导出格式 → 400（前端已下线 pdf 选项）"""
+        client = client_with_mocked_auth
+        resp = client.get(f"{BASE}{path}", params={"format": "pdf"})
+        assert resp.status_code == 400
+
+
+class TestCsvFormat:
+    """csv 导出格式支持（问题18：数据导出全功能）。"""
+
+    @pytest.mark.parametrize("path", ["/users", "/villages", "/schools", "/projects", "/funds"])
+    def test_csv_format_supported(self, client_with_mocked_auth, path):
+        client = client_with_mocked_auth
+        resp = client.get(f"{BASE}{path}", params={"format": "csv"})
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/csv")
+        disposition = resp.headers["content-disposition"]
+        assert ".csv" in disposition
 
 
 # ─── export_users ───

@@ -183,6 +183,12 @@ export default defineConfig(({ mode }) => {
           secure: false,
           // 不重写路径，保持 /api/v1/xxx 格式
           // rewrite: (path) => path
+        },
+        // 后端 /uploads 静态文件（附件预览/下载）挂根路径，与 /api 并列代理
+        '/uploads': {
+          target: 'http://127.0.0.1:8000',
+          changeOrigin: true,
+          secure: false,
         }
       }
     },

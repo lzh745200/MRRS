@@ -240,3 +240,62 @@ describe('空响应分支', () => {
     wrapper.unmount()
   })
 })
+
+describe('图表联动（v1.8.0）', () => {
+  it('handleChartResize 调用 chart.resize（chart 存在）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const resize = vi.fn()
+    vm.compareChart = { resize, dispose: vi.fn() }
+    vm.handleChartResize()
+    expect(resize).toHaveBeenCalled()
+    wrapper.unmount() // 卸载时调用 dispose
+  })
+
+  it('年份切换 watch 触发图表渲染（chart 为空时静默不抛错）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.compareChart = null
+    vm.compareYearA = 2020
+    await nextTick()
+    await flushPromises()
+    expect(vm.compareYearA).toBe(2020)
+  })
+
+  it('renderCompareChart：ref 缺失早退；投资/收入缺年度数据 ?? 0 兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 模板 ref 在实例上暴露为解包值：置 null → 早退（不创建新实例）
+    vm.compareChartRef = null
+    vm.compareChart = null
+    vm.yearlyComparison = { years: ['2024', '2025'], villages: {}, investment: { '2024': 100 }, income: {} }
+    vm.renderCompareChart()
+    expect(vm.compareChart).toBeNull()
+    // years 含缺失数据 → ?? 0 兜底（chart 存在时 setOption）
+    const dispose = vi.fn()
+    const setOption = vi.fn()
+    const resize = vi.fn()
+    vm.compareChart = { setOption, dispose, resize }
+    vm.compareChartRef = {}
+    vm.renderCompareChart()
+    expect(setOption).toHaveBeenCalled()
+  })
+
+  it('yearly_comparison 归一化：years 非数组 → villages keys 兜底', async () => {
+    mockGet.mockResolvedValueOnce({
+      yearly_comparison: {
+        villages: { '2023': 5 },
+        investment: { '2023': 10 },
+        income: { '2023': 1 },
+      },
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.yearlyComparison.years).toEqual(['2023'])
+    expect(vm.yearlyComparison.investment).toEqual({ '2023': 10 })
+  })
+})

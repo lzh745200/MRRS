@@ -190,9 +190,9 @@ function editConfig(row: ConfigItem) {
 async function saveConfig() {
   if (editRow.value) {
     try {
+      // 后端批量更新端点契约：{ configs: [{ key, value }] }
       await put('/system/config', {
-        key: editRow.value.key,
-        value: editRow.value.value,
+        configs: [{ key: editRow.value.key, value: editRow.value.value }],
       })
       ElMessage.success('已保存')
       dialogVisible.value = false
@@ -247,8 +247,9 @@ async function handleFileImport(e: Event) {
   if (!file) return
   try {
     const text = await file.text()
-    const data = JSON.parse(text)
-    await post('/system/config/import/json', data)
+    JSON.parse(text) // 先本地校验格式，避免把坏文件发给后端
+    // 后端导入端点契约：{ data: "<JSON字符串>" }
+    await post('/system/config/import/json', { data: text })
     ElMessage.success('配置已导入')
     loadConfig()
   } catch {
@@ -265,7 +266,7 @@ async function resetConfig() {
     const items = defaults?.data || defaults || {}
     const entries = Object.entries(items).map(([key, value]) => ({ key, value: String(value) }))
     if (entries.length > 0) {
-      await put('/system/config', { items: entries })
+      await put('/system/config', { configs: entries })
     }
     ElMessage.success('已恢复默认配置')
     loadConfig()

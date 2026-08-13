@@ -28,6 +28,7 @@ class MessageType(str, enum.Enum):
     SYSTEM = "system"  # 系统通知
     APPROVAL = "approval"  # 审批通知
     TASK = "task"  # 任务提醒
+    BACKUP = "backup"  # 备份提醒
 
 
 class Message(Base):
@@ -49,7 +50,7 @@ class Message(Base):
         nullable=False,
         comment="接收用户ID",
     )
-    message_type = Column(String(20), nullable=False, comment="消息类型: system / approval / task")
+    message_type = Column(String(20), nullable=False, comment="消息类型: system / approval / task / backup")
     title = Column(String(200), nullable=False, comment="消息标题")
     content = Column(Text, nullable=False, comment="消息内容")
     link = Column(String(500), nullable=True, comment="关联链接")

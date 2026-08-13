@@ -323,10 +323,10 @@ async function loadMessages() {
       is_read:
         filterForm.value.is_read === 1 ? true : filterForm.value.is_read === 0 ? false : undefined,
     })
-    messages.value = response.items
-    total.value = response.total
+    messages.value = response?.items ?? []
+    total.value = response?.total ?? 0
     // 列表响应不含 unread_count（在 /messages/unread-count 端点），单独获取
-    unreadCount.value = response.unread_count ?? (await loadUnreadCountValue())
+    unreadCount.value = response?.unread_count ?? (await loadUnreadCountValue())
   } catch (error) {
     ElMessage.error('加载消息列表失败')
   } finally {

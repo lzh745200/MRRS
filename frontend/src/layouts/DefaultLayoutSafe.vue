@@ -459,6 +459,8 @@ async function loadUnreadCount() {
     const res: any = await getUnreadCount()
     const d = res?.data ?? res
     unreadCount.value = Number(d?.total ?? d?.count ?? 0) || 0
+    // Electron 托盘角标与未读数联动（浏览器/麒麟模式无 electronAPI，可选链静默跳过）
+    ;(window as any).electronAPI?.updateTrayUnread?.(unreadCount.value)
   } catch {
     /* 轮询失败静默 */
   }

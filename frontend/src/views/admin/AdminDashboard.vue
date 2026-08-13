@@ -13,7 +13,7 @@
             <button class="action-btn gold" @click="pushSafe('/system/users-orgs')">
               <el-icon><UserFilled /></el-icon> 用户管理
             </button>
-            <button class="action-btn gold" @click="pushSafe('/data-management/backup')">
+            <button class="action-btn gold" @click="pushSafe('/system/backup')">
               <el-icon><Files /></el-icon> 数据备份
             </button>
             <button class="action-btn gold" @click="pushSafe('/system/audit')">
@@ -251,7 +251,7 @@ const auditLogs = ref<any[]>([])
 const quickActions = [
   { icon: UserFilled, label: '用户管理', path: '/system/users-orgs' },
   { icon: Key, label: '角色权限', path: '/system/roles' },
-  { icon: Files, label: '数据备份', path: '/data-management/backup' },
+  { icon: Files, label: '数据备份', path: '/system/backup' },
   { icon: Document, label: '操作审计', path: '/system/audit' },
   { icon: Setting, label: '系统配置', path: '/system/config' },
   { icon: DataAnalysis, label: '数据总览', path: '/data-management/overview' },
@@ -671,7 +671,7 @@ onMounted(() => {
 }
 
 .pending-item.low {
-  border-left-color: var(--el-color-primary, #409eff);
+  border-left-color: var(--color-primary);
 }
 
 .pending-type {

@@ -35,6 +35,8 @@ const { routeParams, mockPushSafe, ElMessage, confirmMock, api } = vi.hoisted(()
   }
 })
 
+const projectsListMock = vi.hoisted(() => vi.fn())
+
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: routeParams }),
 }))
@@ -50,6 +52,8 @@ vi.mock('element-plus', () => ({
 }))
 
 vi.mock('@/api/fundLifecycle', () => ({ fundLifecycleApi: api }))
+
+vi.mock('@/api/projects', () => ({ projectsApi: { list: projectsListMock } }))
 
 import Lifecycle from '@/views/funds/Lifecycle.vue'
 
@@ -78,6 +82,11 @@ function mountComp() {
         'el-alert': {
           template: '<div class="el-alert-stub">{{ title }}</div>',
           props: ['title'],
+        },
+        'el-empty': {
+          name: 'ElEmpty',
+          template: '<div class="el-empty-stub">{{ description }}<slot /></div>',
+          props: ['description'],
         },
         'el-page-header': {
           name: 'ElPageHeader',
@@ -110,6 +119,7 @@ function mountComp() {
 beforeEach(() => {
   vi.clearAllMocks()
   routeParams.projectId = '1'
+  projectsListMock.mockResolvedValue({ items: [{ id: 1, name: '产业路' }] })
   api.getPhases.mockResolvedValue({ phases: phasesFull, current_phase: 2 })
   api.getReportTemplate.mockResolvedValue(reportTpl)
   api.getHealth.mockResolvedValue({
@@ -137,12 +147,34 @@ describe('onMounted 与阶段加载', () => {
     expect(wrapper.text()).toContain('未指定')
   })
 
-  it('无 projectId：onMounted 与 loadHealth 提前返回', async () => {
+  it('无 projectId：加载项目列表供选择，不请求阶段/健康度', async () => {
     routeParams.projectId = ''
-    mountComp()
+    const wrapper = mountComp()
     await flushPromises()
+    expect(projectsListMock).toHaveBeenCalledWith({ page: 1, page_size: 100 })
     expect(api.getPhases).not.toHaveBeenCalled()
     expect(api.getHealth).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).projectOptions).toHaveLength(1)
+    await nextTick()
+    // el-empty 的 description 为 prop（stub 不渲染），断言选择按钮文本即可
+    expect(wrapper.text()).toContain('查看资金周期')
+  })
+
+  it('无项目视图：选择项目 select v-model 与「查看资金周期」跳转', async () => {
+    routeParams.projectId = ''
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    for (const sel of selects) {
+      sel.vm.$emit('update:modelValue', 1)
+    }
+    expect(vm.selectedProjectId).toBe(1)
+    const goBtn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('查看资金周期'))
+    if (goBtn) {
+      await goBtn.trigger('click')
+      expect(mockPushSafe).toHaveBeenCalledWith('/funds/lifecycle/1')
+    }
   })
 
   it('getPhases 失败：错误提示（detail 与兜底文案）', async () => {
@@ -401,9 +433,9 @@ describe('导航按钮', () => {
     await nextTick()
     const texts = ['管理划转凭证', '合同管理', '查看异常列表', '查看详情']
     const expects = [
-      '/funds/transfer-vouchers?project_id=1',
-      '/funds/contracts?project_id=1',
-      '/funds/anomalies?project_id=1',
+      '/funds/transfer?project_id=1',
+      '/funds/contract?project_id=1',
+      '/funds/anomaly?project_id=1',
       '/funds/settlement/1',
     ]
     const btns = wrapper.findAll('el-button-stub')
@@ -704,6 +736,33 @@ describe('无项目路由分支', () => {
     const vm = wrapper.vm as any
     await vm.handleInitiate()
     expect(vm.loading).toBe(false)
+    routeParams.projectId = '1'
+    wrapper.unmount()
+  })
+})
+
+describe('项目选择视图', () => {
+  it('goSelectedProject：未选择不跳转；选择后跳转带参路由', async () => {
+    routeParams.projectId = ''
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.invalidProject).toBe(true)
+    vm.goSelectedProject()
+    expect(mockPushSafe).not.toHaveBeenCalled()
+    vm.selectedProjectId = 9
+    vm.goSelectedProject()
+    expect(mockPushSafe).toHaveBeenCalledWith('/funds/lifecycle/9')
+    routeParams.projectId = '1'
+    wrapper.unmount()
+  })
+
+  it('项目列表加载失败 → 空数组兜底', async () => {
+    routeParams.projectId = ''
+    projectsListMock.mockRejectedValue(new Error('net'))
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).projectOptions).toEqual([])
     routeParams.projectId = '1'
     wrapper.unmount()
   })

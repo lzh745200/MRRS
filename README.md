@@ -2,7 +2,7 @@
 
 > 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.5.2
 
-![Version](https://img.shields.io/badge/version-1.5.2-blue)
+![Version](https://img.shields.io/badge/version-1.8.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-18%2C200%2B-brightgreen)

@@ -218,7 +218,7 @@ describe('交互', () => {
     }
 
     expect(mockPush).toHaveBeenCalledWith('/system/users-orgs')
-    expect(mockPush).toHaveBeenCalledWith('/data-management/backup')
+    expect(mockPush).toHaveBeenCalledWith('/system/backup')
     expect(mockPush).toHaveBeenCalledWith('/system/audit')
     expect(mockPush).toHaveBeenCalledWith('/system/config')
   })

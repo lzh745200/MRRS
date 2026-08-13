@@ -282,7 +282,7 @@ class TestRejectTask:
             svc = MagicMock()
             svc.reject_task.return_value = None
             MockSvc.return_value = svc
-            resp = client_with_mocked_auth.post(f"{BASE}/tasks/1/reject", json={})
+            resp = client_with_mocked_auth.post(f"{BASE}/tasks/1/reject", json={"opinion": "不同意"})
             assert resp.status_code == 403
 
 

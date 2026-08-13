@@ -1,6 +1,8 @@
 from datetime import datetime
-from typing import Optional
+from typing import Callable, Optional
 from urllib.parse import quote
+import csv
+import io
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -19,6 +21,7 @@ from app.services.report_export_service import report_export_service
 router = APIRouter(prefix="/export", tags=["数据导出"])
 
 _XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_CSV_MEDIA_TYPE = "text/csv"
 MAX_EXPORT_ROWS = 10000
 
 
@@ -28,6 +31,36 @@ def format_datetime(dt):
     if isinstance(dt, datetime):
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     return str(dt)
+
+
+def _to_csv(data: list) -> bytes:
+    """将 dict 列表序列化为 CSV（utf-8-sig 供 Excel 正确识别中文）。"""
+    buf = io.StringIO()
+    if data:
+        writer = csv.DictWriter(buf, fieldnames=list(data[0].keys()))
+        writer.writeheader()
+        writer.writerows(data)
+    return buf.getvalue().encode("utf-8-sig")
+
+
+def _export_file_response(data: list, format: str, base_name: str, xlsx_exporter: Callable[[], bytes]):
+    """按 format 构造导出文件响应（xlsx 延迟生成，csv 即时序列化）。"""
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    if format == "xlsx":
+        content = xlsx_exporter()
+        filename = f"{base_name}_{ts}.xlsx"
+        media_type = _XLSX_MEDIA_TYPE
+    elif format == "csv":
+        content = _to_csv(data)
+        filename = f"{base_name}_{ts}.csv"
+        media_type = _CSV_MEDIA_TYPE
+    else:
+        raise HTTPException(status_code=400, detail="不支持的导出格式")
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 @router.get("/users")
@@ -62,22 +95,14 @@ async def export_users(
         for u in users
     ]
 
-    if format == "xlsx":
-        content = export_service.export_user_list(user_data)
-        filename = f"用户列表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    else:
-        raise HTTPException(status_code=400, detail="不支持的导出格式")
-
-    return Response(
-        content=content,
-        media_type=_XLSX_MEDIA_TYPE,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    return _export_file_response(
+        user_data, format, "用户列表", lambda: export_service.export_user_list(user_data)
     )
 
 
 @router.get("/villages")
 async def export_villages(
-    format: str = Query("xlsx", description="导出格式: xlsx"),
+    format: str = Query("xlsx", description="导出格式: xlsx 或 csv"),
     keyword: Optional[str] = None,
     status: Optional[str] = None,
     current_user=Depends(get_current_user),
@@ -107,22 +132,14 @@ async def export_villages(
         for v in villages
     ]
 
-    if format == "xlsx":
-        content = export_service.export_village_list(village_data)
-        filename = f"村庄列表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    else:
-        raise HTTPException(status_code=400, detail="不支持的导出格式")
-
-    return Response(
-        content=content,
-        media_type=_XLSX_MEDIA_TYPE,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    return _export_file_response(
+        village_data, format, "村庄列表", lambda: export_service.export_village_list(village_data)
     )
 
 
 @router.get("/schools")
 async def export_schools(
-    format: str = Query("xlsx", description="导出格式: xlsx"),
+    format: str = Query("xlsx", description="导出格式: xlsx 或 csv"),
     keyword: Optional[str] = None,
     school_type: Optional[str] = None,
     current_user=Depends(get_current_user),
@@ -152,22 +169,14 @@ async def export_schools(
         for s in schools
     ]
 
-    if format == "xlsx":
-        content = export_service.export_school_list(school_data)
-        filename = f"学校列表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    else:
-        raise HTTPException(status_code=400, detail="不支持的导出格式")
-
-    return Response(
-        content=content,
-        media_type=_XLSX_MEDIA_TYPE,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    return _export_file_response(
+        school_data, format, "学校列表", lambda: export_service.export_school_list(school_data)
     )
 
 
 @router.get("/projects")
 async def export_projects(
-    format: str = Query("xlsx", description="导出格式: xlsx"),
+    format: str = Query("xlsx", description="导出格式: xlsx 或 csv"),
     keyword: Optional[str] = None,
     project_type: Optional[str] = None,
     status: Optional[str] = None,
@@ -201,22 +210,14 @@ async def export_projects(
         for p in projects
     ]
 
-    if format == "xlsx":
-        content = export_service.export_project_list(project_data)
-        filename = f"项目列表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    else:
-        raise HTTPException(status_code=400, detail="不支持的导出格式")
-
-    return Response(
-        content=content,
-        media_type=_XLSX_MEDIA_TYPE,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    return _export_file_response(
+        project_data, format, "项目列表", lambda: export_service.export_project_list(project_data)
     )
 
 
 @router.get("/funds")
 async def export_funds(
-    format: str = Query("xlsx", description="导出格式: xlsx"),
+    format: str = Query("xlsx", description="导出格式: xlsx 或 csv"),
     keyword: Optional[str] = None,
     fund_type: Optional[str] = None,
     status: Optional[str] = None,
@@ -250,16 +251,8 @@ async def export_funds(
         for f in funds
     ]
 
-    if format == "xlsx":
-        content = export_service.export_fund_list(fund_data)
-        filename = f"经费列表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    else:
-        raise HTTPException(status_code=400, detail="不支持的导出格式")
-
-    return Response(
-        content=content,
-        media_type=_XLSX_MEDIA_TYPE,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    return _export_file_response(
+        fund_data, format, "经费列表", lambda: export_service.export_fund_list(fund_data)
     )
 
 

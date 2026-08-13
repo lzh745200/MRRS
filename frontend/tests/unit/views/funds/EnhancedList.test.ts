@@ -1106,3 +1106,61 @@ describe('补缺：模板内联按钮点击', () => {
     expect(pushSafeMock).toHaveBeenCalled()
     wrapper.unmount()
   })
+
+describe('经费流程步骤条（v1.8.0）', () => {
+  it('goFlowStep 跳转对应功能页', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.goFlowStep('/funds/settlement')
+    expect(pushSafeMock).toHaveBeenCalledWith('/funds/settlement')
+  })
+
+  it('flowActiveStep 为数字且当前阶段标签非空', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(typeof vm.flowActiveStep).toBe('number')
+    expect(vm.currentFlowLabel.length).toBeGreaterThan(0)
+  })
+
+  it('流程步骤条配置包含完整 8 阶段', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.fundFlowSteps).toHaveLength(8)
+    const keys = vm.fundFlowSteps.map((s: any) => s.key)
+    expect(keys).toEqual(['budget', 'apply', 'approve', 'allocate', 'use', 'reimburse', 'settle', 'archive'])
+  })
+
+  it('flowActiveStep 各阶段推进分支（overview 统计触发）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.overview.budgetTotal = '100'
+    expect(vm.flowActiveStep).toBeGreaterThanOrEqual(1)
+    vm.overview.appliedCount = 3
+    expect(vm.flowActiveStep).toBeGreaterThanOrEqual(2)
+    vm.overview.allocatedCount = 2
+    expect(vm.flowActiveStep).toBeGreaterThanOrEqual(3)
+    vm.overview.usedAmount = '50'
+    expect(vm.flowActiveStep).toBe(4)
+  })
+
+  it('quickApprove/quickAllocate：row 无 name → 消息用 id 兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fundApiMock.approve.mockResolvedValueOnce({})
+    fundApiMock.allocate.mockResolvedValueOnce({})
+    mockApiRequest.mockResolvedValue({ data: { items: [], total: 0 } })
+    await vm.quickApprove({ id: 66 })
+    expect(ElNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '经费「66」已审批通过' })
+    )
+    await vm.quickAllocate({ id: 66, status: 'approved' })
+    expect(ElNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '经费「66」已拨付到账' })
+    )
+  })
+})

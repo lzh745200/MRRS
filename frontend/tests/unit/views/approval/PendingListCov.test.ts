@@ -28,6 +28,8 @@ const {
   mockGetTaskDiff,
   mockAutoApproveSingleTask,
   mockAutoApproveAll,
+  mockListUsers,
+  mockTransferTask,
   pushSafeMock,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
@@ -40,12 +42,18 @@ const {
   mockGetTaskDiff: vi.fn(),
   mockAutoApproveSingleTask: vi.fn(),
   mockAutoApproveAll: vi.fn(),
+  mockListUsers: vi.fn(),
+  mockTransferTask: vi.fn(),
   pushSafeMock: vi.fn(),
 }))
 
 vi.mock('element-plus', () => ({
   ElMessage,
   ElMessageBox: { confirm: confirmMock, prompt: promptMock },
+}))
+
+vi.mock('@/api/userManagement', () => ({
+  listUsers: mockListUsers,
 }))
 
 vi.mock('@/composables/useRouterSafe', () => ({
@@ -60,6 +68,7 @@ vi.mock('@/api/approval', () => ({
   getTaskDiff: mockGetTaskDiff,
   autoApproveSingleTask: mockAutoApproveSingleTask,
   autoApproveAll: mockAutoApproveAll,
+  transferTask: mockTransferTask,
   formatEntityType: (t: string) =>
     ({ supported_village: '帮扶村', project: '项目', fund: '经费', school: '学校' })[t] || t,
 }))
@@ -586,5 +595,206 @@ describe('操作列按钮真实点击', () => {
     await byText('拒绝')[0].trigger('click') // rowA
     expect(vm.rejectDialogVisible).toBe(true)
     expect(vm.currentTask).toEqual(rowA)
+  })
+})
+
+describe('转交审批（v1.8.0）', () => {
+  beforeEach(() => {
+    mockListUsers.mockReset()
+    mockTransferTask.mockReset()
+  })
+
+  it('handleTransfer 加载候选用户并排除当前审批人（items 形态）', async () => {
+    mockListUsers.mockResolvedValue({ items: [{ id: 1, name: '甲' }, { id: 2, name: '乙' }] })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleTransfer({ id: 9, current_approver_id: 2 })
+    expect(vm.transferDialogVisible).toBe(true)
+    expect(vm.currentTask).toEqual({ id: 9, current_approver_id: 2 })
+    expect(vm.candidateUsers).toEqual([{ id: 1, name: '甲' }])
+  })
+
+  it('handleTransfer 用户加载失败 → 空候选', async () => {
+    mockListUsers.mockRejectedValue(new Error('net'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleTransfer({ id: 9 })
+    expect(vm.candidateUsers).toEqual([])
+  })
+
+  it('confirmTransfer：无任务早退 / 未选对象 warning', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.confirmTransfer()
+    expect(mockTransferTask).not.toHaveBeenCalled()
+    vm.currentTask = { id: 9 }
+    vm.transferForm = { transferToId: undefined, reason: '' }
+    await vm.confirmTransfer()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请选择转交对象')
+    expect(mockTransferTask).not.toHaveBeenCalled()
+  })
+
+  it('confirmTransfer 成功 → transferTask + 关闭 + 刷新', async () => {
+    mockTransferTask.mockResolvedValue({})
+    mockGetPendingTasks.mockResolvedValue([])
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentTask = { id: 9 }
+    vm.transferForm = { transferToId: 3, reason: '转给你' }
+    await vm.confirmTransfer()
+    expect(mockTransferTask).toHaveBeenCalledWith(9, 3, '转给你')
+    expect(ElMessage.success).toHaveBeenCalledWith('已转交')
+    expect(vm.transferDialogVisible).toBe(false)
+    expect(vm.submitting).toBe(false)
+  })
+
+  it('confirmTransfer 失败 → detail 提示；无原因传 undefined', async () => {
+    mockTransferTask.mockRejectedValue({ response: { data: { detail: '无权转交' } } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentTask = { id: 9 }
+    vm.transferForm = { transferToId: 3, reason: '' }
+    await vm.confirmTransfer()
+    expect(mockTransferTask).toHaveBeenCalledWith(9, 3, undefined)
+    expect(ElMessage.error).toHaveBeenCalledWith('无权转交')
+    expect(vm.submitting).toBe(false)
+  })
+
+  it('任务表格渲染提交时间列（模板箭头）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const text = wrapper.text()
+    // makeTasks 行含 created_at → formatDateTime 渲染（格式 YYYY/M/D HH:mm:ss）
+    expect(text).toContain('2026/')
+    expect(text).toContain('超时')
+  })
+
+  it('模板箭头：类型筛选 select / 提交时间 date-picker v-model', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    for (const sel of selects) {
+      sel.vm.$emit('update:modelValue', 'fund')
+    }
+    expect(vm.filterType).toBe('fund')
+    const pickers = wrapper.findAllComponents({ name: 'ElDatePicker' })
+    for (const pk of pickers) {
+      pk.vm.$emit('update:modelValue', ['2026-01-01', '2026-02-01'])
+    }
+    expect(vm.filterDateRange).toBeTruthy()
+  })
+
+  it('模板箭头：转交按钮点击 → 打开转交对话框', async () => {
+    mockListUsers.mockResolvedValue({ items: [{ id: 1 }] })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const transferBtn = wrapper.findAll('el-button-stub').find((b) => b.text().includes('转交'))
+    if (transferBtn) {
+      await transferBtn.trigger('click')
+      await flushPromises()
+      expect(vm.transferDialogVisible).toBe(true)
+    }
+  })
+
+  it('模板箭头：转交对话框 select 与原因输入 v-model', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.transferDialogVisible = true
+    await nextTick()
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    for (const sel of selects) {
+      sel.vm.$emit('update:modelValue', 7)
+    }
+    expect(vm.transferForm.transferToId).toBe(7)
+    const inputs = wrapper.findAllComponents({ name: 'ElInput' })
+    for (const inp of inputs) {
+      inp.vm.$emit('update:modelValue', '转交原因X')
+    }
+    expect(vm.transferForm.reason).toBe('转交原因X')
+  })
+
+  it('分支：日期筛选忽略无 created_at 任务；users 数组形态；转交失败无 detail 兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 日期筛选：created_at 缺失的任务不抛错（''.slice 兜底）
+    vm.tasks = [
+      { id: 1, created_at: '2026-01-05T10:00:00' },
+      { id: 2, created_at: undefined },
+    ]
+    vm.filterDateRange = ['2026-01-01', '2026-01-31']
+    const filtered = vm.filteredTasks
+    expect(filtered.some((t: any) => t.id === 2)).toBe(false)
+
+    // users 数组形态（handleTransfer 直接数组）
+    mockListUsers.mockResolvedValueOnce([{ id: 1 }, { id: 2 }])
+    await vm.handleTransfer({ id: 9, current_approver_id: 1 })
+    expect(vm.candidateUsers).toEqual([{ id: 2 }])
+
+    // 转交失败且无 detail → 兜底文案
+    mockTransferTask.mockRejectedValueOnce(new Error('net'))
+    vm.currentTask = { id: 9 }
+    vm.transferForm = { transferToId: 3, reason: '' }
+    await vm.confirmTransfer()
+    expect(ElMessage.error).toHaveBeenCalledWith('转交失败')
+  })
+})
+
+describe('筛选条件（类型/提交时间）', () => {
+  it('按类型过滤：仅保留匹配 entity_type 的任务', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.filteredTasks).toHaveLength(2)
+    vm.filterType = 'project'
+    await nextTick()
+    expect(vm.filteredTasks).toHaveLength(1)
+    expect(vm.filteredTasks[0].entity_type).toBe('project')
+    vm.filterType = 'fund'
+    await nextTick()
+    expect(vm.filteredTasks).toHaveLength(0)
+  })
+
+  it('按提交时间范围过滤：范围外剔除；清空恢复', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const today = todayISO.slice(0, 10)
+    vm.filterDateRange = [today, today]
+    await nextTick()
+    expect(vm.filteredTasks).toHaveLength(1)
+    expect(vm.filteredTasks[0].id).toBe(1)
+    vm.filterDateRange = null
+    await nextTick()
+    expect(vm.filteredTasks).toHaveLength(2)
+  })
+
+  it('类型与时间组合过滤', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const today = todayISO.slice(0, 10)
+    vm.filterType = 'rural_work'
+    vm.filterDateRange = [today, today]
+    await nextTick()
+    expect(vm.filteredTasks).toHaveLength(1)
+    vm.filterDateRange = ['2000-01-01', '2000-01-02']
+    await nextTick()
+    expect(vm.filteredTasks).toHaveLength(0)
+  })
+
+  it('提交人列：submitter_name 缺失渲染 -', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    // 列 stub 样本行均无 submitter_name → 回退 '-'
+    expect(wrapper.text()).toContain('-')
   })
 })

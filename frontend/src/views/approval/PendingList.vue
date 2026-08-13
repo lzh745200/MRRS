@@ -37,7 +37,11 @@
           <el-statistic title="待审批" :value="tasks.length" />
         </el-col>
         <el-col :span="6">
-          <el-statistic title="高优先级" :value="highPriorityCount" value-style="color: #f56c6c" />
+          <el-statistic
+            title="高优先级"
+            :value="highPriorityCount"
+            value-style="color: var(--color-danger)"
+          />
         </el-col>
         <el-col :span="6">
           <el-statistic title="今日新增" :value="todayCount" />
@@ -48,12 +52,39 @@
       </el-row>
     </el-card>
 
+    <!-- 筛选条件 -->
+    <el-card class="filter-card" shadow="never">
+      <el-form inline>
+        <el-form-item label="类型">
+          <el-select v-model="filterType" placeholder="全部类型" clearable style="width: 140px">
+            <el-option
+              v-for="t in entityTypeOptions"
+              :key="t.value"
+              :label="t.label"
+              :value="t.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="提交时间">
+          <el-date-picker
+            v-model="filterDateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+            style="width: 260px"
+          />
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <!-- 任务列表 -->
     <el-card class="list-card">
       <el-table
         ref="tableRef"
         v-loading="loading"
-        :data="tasks"
+        :data="filteredTasks"
         stripe
         row-key="id"
         @selection-change="handleSelectionChange"
@@ -76,6 +107,11 @@
         <el-table-column label="类型" width="100">
           <template #default="{ row }">
             {{ formatEntityType(row.entity_type) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="提交人" width="110">
+          <template #default="{ row }">
+            {{ row.submitter_name || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="当前级别" width="100" align="center">
@@ -274,6 +310,32 @@ const candidateUsers = ref<Array<{ id: number; username: string; role?: string }
 
 // 变更对比
 const taskDiff = ref<TaskDiff | null>(null)
+
+// 筛选条件（类型/提交时间）
+const filterType = ref('')
+const filterDateRange = ref<[string, string] | null>(null)
+const entityTypeOptions = [
+  { value: 'supported_village', label: '帮扶村' },
+  { value: 'project', label: '项目' },
+  { value: 'fund', label: '经费' },
+  { value: 'school', label: '学校' },
+  { value: 'rural_work', label: '乡村工作' },
+]
+
+const filteredTasks = computed(() => {
+  let list = tasks.value
+  if (filterType.value) {
+    list = list.filter((t) => t.entity_type === filterType.value)
+  }
+  if (filterDateRange.value && filterDateRange.value.length === 2) {
+    const [start, end] = filterDateRange.value
+    list = list.filter((t) => {
+      const day = (t.created_at || '').slice(0, 10)
+      return day >= start && day <= end
+    })
+  }
+  return list
+})
 
 // ==================== 计算属性 ====================
 
@@ -576,6 +638,14 @@ onMounted(() => {
 <style scoped lang="scss">
 .pending-list {
   padding: 20px;
+}
+
+.filter-card {
+  margin-bottom: 20px;
+
+  :deep(.el-form-item) {
+    margin-bottom: 0;
+  }
 }
 
 .header-card {

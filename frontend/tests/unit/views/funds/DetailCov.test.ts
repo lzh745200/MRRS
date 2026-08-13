@@ -496,12 +496,12 @@ describe('权限 computed', () => {
     expect((wrapper.vm as any).isManager).toBe(false)
   })
 
-  it('canEditFund：管理员直通；普通用户仅本人草稿/驳回可编辑', async () => {
-    // 普通用户 + 本人 + draft → true
+  it('canEditFund：管理员直通；普通用户仅本人待审批/驳回可编辑；viewer 只读', async () => {
+    // 普通用户 + 本人 + pending → true
     authState.user = { role: 'user', id: 1 }
     mockGet.mockImplementation((url: string) => {
       if (url === '/funds/5') {
-        return Promise.resolve({ data: { ...fundDetail, created_by: 1, status: 'draft' } })
+        return Promise.resolve({ data: { ...fundDetail, created_by: 1, status: 'pending' } })
       }
       return defaultGetImpl(url)
     })
@@ -522,10 +522,10 @@ describe('权限 computed', () => {
     expect((wrapper.vm as any).canEditFund).toBe(true)
     wrapper.unmount()
 
-    // 本人 + pending → false
+    // 本人 + approved → false
     mockGet.mockImplementation((url: string) => {
       if (url === '/funds/5') {
-        return Promise.resolve({ data: { ...fundDetail, created_by: 1, status: 'pending' } })
+        return Promise.resolve({ data: { ...fundDetail, created_by: 1, status: 'approved' } })
       }
       return defaultGetImpl(url)
     })
@@ -537,7 +537,7 @@ describe('权限 computed', () => {
     // 非本人 → false（且无编辑按钮，覆盖 header-actions v-if 假侧）
     mockGet.mockImplementation((url: string) => {
       if (url === '/funds/5') {
-        return Promise.resolve({ data: { ...fundDetail, created_by: 2, status: 'draft' } })
+        return Promise.resolve({ data: { ...fundDetail, created_by: 2, status: 'pending' } })
       }
       return defaultGetImpl(url)
     })
@@ -545,6 +545,21 @@ describe('权限 computed', () => {
     await flushPromises()
     expect((wrapper.vm as any).canEditFund).toBe(false)
     expect(wrapper.findAll('el-button-stub').some((b) => b.text().trim() === '编辑')).toBe(false)
+    wrapper.unmount()
+
+    // viewer + 本人 + pending → false（canOperate 守卫）
+    authState.user = { role: 'viewer', id: 1 }
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/funds/5') {
+        return Promise.resolve({ data: { ...fundDetail, created_by: 1, status: 'pending' } })
+      }
+      return defaultGetImpl(url)
+    })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).canOperate).toBe(false)
+    expect((wrapper.vm as any).canEditFund).toBe(false)
+    wrapper.unmount()
   })
 })
 
@@ -1246,5 +1261,75 @@ describe('路由 watch 与生命周期', () => {
     const btn = wrapper.findAll('el-button-stub').find((b) => b.text().includes('返回列表'))!
     await btn.trigger('click')
     expect(pushSafe).toHaveBeenCalledWith('/funds')
+  })
+})
+
+describe('审批流程可视化（v1.8.0）', () => {
+  it('approvalActiveStep：无节点 → 0；current 命中 → idx+1', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.approvalFlow = { nodes: [] }
+    expect(vm.approvalActiveStep).toBe(0)
+    vm.approvalFlow = { nodes: [{ key: 'a', reached: true }, { key: 'b', current: true }] }
+    expect(vm.approvalActiveStep).toBe(2)
+  })
+
+  it('approvalActiveStep：无 current → 按 reached 计数', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.approvalFlow = { nodes: [{ key: 'a', reached: true }, { key: 'b', reached: false }] }
+    expect(vm.approvalActiveStep).toBe(1)
+  })
+
+  it('loadApprovalFlow 失败 → logger.error 且不抛错', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fundData.id = 5
+    // mount 后再设置（mount 时 onMounted 的 get 会消耗 once）
+    mockGet.mockRejectedValueOnce(new Error('net'))
+    await vm.loadApprovalFlow()
+    expect(logError).toHaveBeenCalled()
+  })
+
+  it('loadApprovalFlow 成功 → 归一化字段（camelCase 兼容）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fundData.id = 5
+    mockGet.mockResolvedValueOnce({
+      current_status: 'pending',
+      current_approver: '张三',
+      nodes: [{ key: 'submit', reached: true }],
+    })
+    await vm.loadApprovalFlow()
+    expect(vm.approvalFlow.currentStatus).toBe('pending')
+    expect(vm.approvalFlow.currentApprover).toBe('张三')
+    expect(vm.approvalFlow.nodes).toHaveLength(1)
+  })
+
+  it('历史记录：状态日志数组/信封/items 多形态与失败兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fundData.id = 5
+    // 数组形态
+    mockGet.mockResolvedValueOnce([{ id: 1 }])
+    await vm.loadStatusHistory()
+    expect(vm.statusHistory).toEqual([{ id: 1 }])
+    // items 信封形态（拦截器解包后 data.items）
+    mockGet.mockResolvedValueOnce({ data: { items: [{ id: 2 }] } })
+    await vm.loadStatusHistory()
+    expect(vm.statusHistory).toEqual([{ id: 2 }])
+    // 空对象兜底
+    mockGet.mockResolvedValueOnce({})
+    await vm.loadStatusHistory()
+    expect(vm.statusHistory).toEqual([])
+    // 失败 → logger + 空数组
+    mockGet.mockRejectedValueOnce(new Error('net'))
+    await vm.loadStatusHistory()
+    expect(vm.statusHistory).toEqual([])
   })
 })

@@ -10,7 +10,7 @@
         <el-button type="primary" @click="openApplyDialog">
           <el-icon><EditPen /></el-icon>提交经费申请
         </el-button>
-        <el-button v-if="isManager" type="success" @click="openCreateDialog">
+        <el-button v-if="canOperate" type="success" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>新增经费记录
         </el-button>
         <el-button @click="pushSafe('/approval/my')">
@@ -73,7 +73,6 @@
             clearable
             style="width: 130px"
           >
-            <el-option label="草稿" value="draft" />
             <el-option label="待审批" value="pending" />
             <el-option label="已计划" value="planned" />
             <el-option label="已批准" value="approved" />
@@ -342,20 +341,28 @@ const isManager = computed(() => {
   return ['admin', 'super_admin'].includes(role)
 })
 
+// 经费操作权限：与后端 require_funds_operator_role 对齐——viewer 只读，user 及以上可操作
+const canOperate = computed(() => {
+  const role = authStore.user?.role || ''
+  return role !== '' && role !== 'viewer'
+})
+
 // 获取当前用户ID
 const currentUserId = computed(() => authStore.user?.id)
 
-// 判断是否可以编辑：管理员可编辑所有，普通用户只能编辑自己创建的草稿/驳回状态
+// 判断是否可以编辑：管理员可编辑所有，普通用户只能编辑自己创建的待审批/驳回状态
 function canEdit(row: any): boolean {
+  if (!canOperate.value) return false
   if (isManager.value) return true
-  // 普通用户：自己创建 AND (草稿状态 OR 驳回状态)
-  const editableStatuses = ['draft', 'rejected']
+  // 普通用户：自己创建 AND (待审批状态 OR 驳回状态)
+  const editableStatuses = ['pending', 'rejected']
   return row.created_by === currentUserId.value && editableStatuses.includes(row.status)
 }
 
-// 判断是否可以删除：只有管理员可以删除
-function canDelete(_row: any): boolean {
-  return isManager.value
+// 判断是否可以删除：与后端一致——非 viewer 可删除待审批(pending)状态经费（普通用户仅限本人创建）
+function canDelete(row: any): boolean {
+  if (!canOperate.value || row.status !== 'pending') return false
+  return isManager.value || row.created_by === currentUserId.value
 }
 const tableData = ref<any[]>([])
 const loading = ref(false)

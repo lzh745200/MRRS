@@ -8,12 +8,13 @@ import { nextTick } from 'vue'
 
 enableAutoUnmount(afterEach)
 
-const { ElMessage, ElMessageBox, mockGet, mockPost, mockPut, configStore } = vi.hoisted(() => ({
+const { ElMessage, ElMessageBox, mockGet, mockPost, mockPut, mockDel, configStore } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   ElMessageBox: { confirm: vi.fn(), alert: vi.fn() },
   mockGet: vi.fn(),
   mockPost: vi.fn(),
   mockPut: vi.fn(),
+  mockDel: vi.fn(),
   configStore: { theme: 'light', setTheme: vi.fn() },
 }))
 
@@ -27,7 +28,7 @@ vi.mock('@/api/request', () => ({
   get: mockGet,
   post: mockPost,
   put: mockPut,
-  del: vi.fn(),
+  del: mockDel,
   apiRequest: vi.fn(),
   getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
 
@@ -71,7 +72,7 @@ async function mountComp() {
         },
         'el-button': {
           name: 'ElButton',
-          template: '<button class="el-button-stub"><slot /></button>',
+          template: '<button class="el-button-stub" @click="$emit(\'click\')"><slot /></button>',
         },
         'el-dialog': {
           name: 'ElDialog',
@@ -181,7 +182,9 @@ describe('ConfigPackage.vue', () => {
     const vm = w.vm as any
     vm.editConfig({ key: 'SITE_NAME', value: '新值', description: 'd' })
     await vm.saveConfig()
-    expect(mockPut).toHaveBeenCalledWith('/system/config', { key: 'SITE_NAME', value: '新值' })
+    expect(mockPut).toHaveBeenCalledWith('/system/config', {
+      configs: [{ key: 'SITE_NAME', value: '新值' }],
+    })
     expect(ElMessage.success).toHaveBeenCalledWith('已保存')
     expect(vm.dialogVisible).toBe(false)
   })
@@ -251,7 +254,10 @@ describe('ConfigPackage.vue', () => {
     const vm = w.vm as any
     const file = { text: vi.fn().mockResolvedValue(JSON.stringify({ A: '1' })) }
     await vm.handleFileImport({ target: { files: [file] } })
-    expect(mockPost).toHaveBeenCalledWith('/system/config/import/json', { A: '1' })
+    // 后端契约：{ data: "<JSON字符串>" }，原文透传
+    expect(mockPost).toHaveBeenCalledWith('/system/config/import/json', {
+      data: JSON.stringify({ A: '1' }),
+    })
     expect(ElMessage.success).toHaveBeenCalledWith('配置已导入')
   })
 
@@ -279,7 +285,7 @@ describe('ConfigPackage.vue', () => {
     await vm.resetConfig()
     expect(ElMessageBox.confirm).toHaveBeenCalled()
     expect(mockPut).toHaveBeenCalledWith('/system/config', {
-      items: [
+      configs: [
         { key: 'A', value: '1' },
         { key: 'B', value: 'x' },
       ],
@@ -432,6 +438,61 @@ describe('值缺省分支', () => {
     const vm = wrapper.vm as any
     const item = vm.configList.find((c: any) => c.key === 'x')
     expect(item.value).toBe(JSON.stringify(""))
+    wrapper.unmount()
+  })
+})
+
+describe('删除配置（v1.8.0）', () => {
+  it('deleteConfig 确认后调用 del 并刷新；取消静默', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ items: [{ key: 'SITE_NAME', value: 'x' }] })
+    const wrapper = await mountComp()
+    const vm = wrapper.vm as any
+    ElMessageBox.confirm.mockResolvedValueOnce('confirm')
+    mockDel.mockResolvedValueOnce({})
+    await vm.deleteConfig({ key: 'SITE_NAME' })
+    expect(mockDel).toHaveBeenCalledWith('/system/config/SITE_NAME')
+    expect(ElMessage.success).toHaveBeenCalledWith('配置已删除')
+    expect(mockGet).toHaveBeenCalled()
+
+    mockDel.mockClear()
+    ElMessageBox.confirm.mockRejectedValueOnce('cancel')
+    await vm.deleteConfig({ key: 'SITE_NAME' })
+    expect(mockDel).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('deleteConfig 删除失败 → 错误提示（detail 优先）', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ items: [{ key: 'SITE_NAME', value: 'x' }] })
+    const wrapper = await mountComp()
+    const vm = wrapper.vm as any
+    ElMessageBox.confirm.mockResolvedValueOnce('confirm')
+    mockDel.mockRejectedValueOnce({ response: { data: { detail: '系统保留项' } } })
+    await vm.deleteConfig({ key: 'SITE_NAME' })
+    expect(ElMessage.error).toHaveBeenCalledWith('系统保留项')
+    wrapper.unmount()
+  })
+
+  it('deleteConfig 删除失败 → 默认错误文案', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ items: [{ key: 'K', value: 'x' }] })
+    const wrapper = await mountComp()
+    const vm = wrapper.vm as any
+    ElMessageBox.confirm.mockResolvedValueOnce('confirm')
+    mockDel.mockRejectedValueOnce(new Error('net'))
+    await vm.deleteConfig({ key: 'K' })
+    expect(ElMessage.error).toHaveBeenCalledWith('删除失败')
+    wrapper.unmount()
+  })
+
+  it('操作列「删除」按钮点击 → 触发 deleteConfig', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ items: [{ key: 'SITE_NAME', value: 'x' }] })
+    const wrapper = await mountComp()
+    ElMessageBox.confirm.mockResolvedValueOnce('confirm')
+    mockDel.mockResolvedValueOnce({})
+    const delBtns = wrapper.findAll('.el-button-stub').filter((b) => b.text().includes('删除'))
+    expect(delBtns.length).toBeGreaterThan(0)
+    await delBtns[0].trigger('click')
+    await flushPromises()
+    expect(mockDel).toHaveBeenCalledWith('/system/config/SITE_NAME')
     wrapper.unmount()
   })
 })
