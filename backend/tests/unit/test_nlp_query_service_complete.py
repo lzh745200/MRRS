@@ -181,14 +181,14 @@ class TestNLPQueryServiceExecuteQuery:
             ("village1", 10000, 2024),
             ("village2", 12000, 2024),
         ]
-        mock_result.keys.return_value = ["name", "per_capita_income", "year"]
+        mock_result.keys.return_value = ["village_name", "per_capita_income", "year"]
         mock_db.execute.return_value = mock_result
 
         result = NLPQueryService.execute_query(mock_db, "收入最高的村庄")
 
         assert result["success"] is True
         assert len(result["data"]) == 2
-        assert result["data"][0]["name"] == "village1"
+        assert result["data"][0]["village_name"] == "village1"
 
 class TestNLPQueryServiceGenerateExplanation:
     """测试 _generate_explanation 方法"""
@@ -247,7 +247,7 @@ class TestNLPQueryServiceGenerateExplanation:
         """测试生成村庄收入解释"""
         from app.services.ai.nlp_query_service import NLPQueryService
 
-        data = [{"name": "张家村", "per_capita_income": 15000.50, "year": 2024}]
+        data = [{"village_name": "张家村", "per_capita_income": 15000.50, "year": 2024}]
         result = NLPQueryService._generate_explanation("village_income", data, {})
 
         assert "张家村" in result
@@ -259,8 +259,8 @@ class TestNLPQueryServiceGenerateExplanation:
         from app.services.ai.nlp_query_service import NLPQueryService
 
         data = [
-            {"name": "富村", "per_capita_income": 50000},
-            {"name": "中村", "per_capita_income": 30000},
+            {"village_name": "富村", "per_capita_income": 50000},
+            {"village_name": "中村", "per_capita_income": 30000},
         ]
         result = NLPQueryService._generate_explanation("top_villages_by_income", data, {})
 

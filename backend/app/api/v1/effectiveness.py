@@ -128,7 +128,7 @@ async def get_rankings(
     from app.models.effectiveness import EffectivenessEvaluation
 
     query = (
-        db.query(EffectivenessEvaluation, SupportedVillage.name)
+        db.query(EffectivenessEvaluation, SupportedVillage.village_name)
         .join(SupportedVillage, EffectivenessEvaluation.village_id == SupportedVillage.id)
         .filter(EffectivenessEvaluation.year == year)
     )

@@ -21,12 +21,12 @@ class NLPQueryService:
     QUERY_TEMPLATES = {
         "village_by_province": {
             "patterns": [r"(.+?省)有多少个?村", r"(.+?的)村庄"],
-            "sql": "SELECT COUNT(*) as count FROM villages WHERE province = :province",
+            "sql": "SELECT COUNT(*) as count FROM supported_villages WHERE province = :province",
             "description": "查询指定省份的村庄数量",
         },
         "village_count": {
             "patterns": [r"有多少个?村", r"村庄数量", r"村的数量"],
-            "sql": "SELECT COUNT(*) as count FROM villages",
+            "sql": "SELECT COUNT(*) as count FROM supported_villages",
             "description": "查询村庄总数",
         },
         "project_count": {
@@ -47,11 +47,11 @@ class NLPQueryService:
         "village_income": {
             "patterns": [r"(.+?)村的收入", r"(.+?)的人均收入"],
             "sql": """
-                SELECT v.name, ai.per_capita_income, ai.year
-                FROM villages v
-                JOIN annual_income ai ON v.id = ai.village_id
-                WHERE v.name LIKE '%' || :village_name || '%'
-                ORDER BY ai.year DESC
+                SELECT sv.village_name, vi.per_capita_income, vi.year
+                FROM supported_villages sv
+                JOIN village_income vi ON sv.id = vi.supported_village_id
+                WHERE sv.village_name LIKE '%' || :village_name || '%'
+                ORDER BY vi.year DESC
                 LIMIT 1
             """,
             "description": "查询村庄收入",
@@ -59,11 +59,11 @@ class NLPQueryService:
         "top_villages_by_income": {
             "patterns": [r"收入最高的.*?村", r"人均收入排名", r"收入前.*?名"],
             "sql": """
-                SELECT v.name, ai.per_capita_income, ai.year
-                FROM villages v
-                JOIN annual_income ai ON v.id = ai.village_id
-                WHERE ai.year = (SELECT MAX(year) FROM annual_income)
-                ORDER BY ai.per_capita_income DESC
+                SELECT sv.village_name, vi.per_capita_income, vi.year
+                FROM supported_villages sv
+                JOIN village_income vi ON sv.id = vi.supported_village_id
+                WHERE vi.year = (SELECT MAX(year) FROM village_income)
+                ORDER BY vi.per_capita_income DESC
                 LIMIT :limit
             """,
             "description": "查询收入最高的村庄",
@@ -213,7 +213,7 @@ class NLPQueryService:
             return f"资金总额为 {total:,.2f} 元"
 
         elif template == "village_income":
-            village_name = data[0].get("name", "")
+            village_name = data[0].get("village_name", "")
             income = data[0].get("per_capita_income", 0)
             year = data[0].get("year", "")
             return f"{village_name}在 {year} 年的人均收入为 {income:,.2f} 元"
@@ -223,7 +223,7 @@ class NLPQueryService:
             count = len(data)
             per_capita = top_village.get("per_capita_income", 0)
             return (
-                f"收入最高的村庄是 {top_village.get('name', '')}，"
+                f"收入最高的村庄是 {top_village.get('village_name', '')}，"
                 f"人均收入 {per_capita:,.2f} 元。共查询到 {count} 个村庄的数据。"
             )
 

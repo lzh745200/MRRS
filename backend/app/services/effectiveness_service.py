@@ -84,35 +84,39 @@ class EffectivenessService:
         from sqlalchemy import func
 
         # 年度收入（人均收入与增长率）
+        # AnnualIncome 的人均收入按年份分散列存储（per_capita_income_2020..2025），
+        # 外键为 supported_village_id（village_id 字段已废弃）。
+        income_field = f"per_capita_income_{year}"
+        prev_field = f"per_capita_income_{year - 1}"
         incomes = (
             db.query(AnnualIncome)
-            .filter(AnnualIncome.village_id == village.id, AnnualIncome.year == year)
+            .filter(AnnualIncome.supported_village_id == village.id, AnnualIncome.year == year)
             .all()
         )
         per_capita = 0.0
         income_growth = 0.0
-        if incomes and getattr(incomes[0], "per_capita_income", None) is not None:
-            per_capita = float(incomes[0].per_capita_income or 0)
+        if incomes and getattr(incomes[0], income_field, None) is not None:
+            per_capita = float(getattr(incomes[0], income_field) or 0)
         prev = (
             db.query(AnnualIncome)
-            .filter(AnnualIncome.village_id == village.id, AnnualIncome.year == year - 1)
+            .filter(AnnualIncome.supported_village_id == village.id, AnnualIncome.year == year - 1)
             .first()
         )
-        if prev and getattr(prev, "per_capita_income", None) and per_capita > 0:
-            prev_val = float(prev.per_capita_income or 0)
+        if prev and getattr(prev, prev_field, None) and per_capita > 0:
+            prev_val = float(getattr(prev, prev_field) or 0)
             if prev_val > 0:
                 income_growth = round((per_capita - prev_val) / prev_val * 100, 1)
 
         # 基础设施覆盖
         infra_count = (
             db.query(func.count(AnnualInfrastructure.id))
-            .filter(AnnualInfrastructure.village_id == village.id, AnnualInfrastructure.year == year)
+            .filter(AnnualInfrastructure.supported_village_id == village.id, AnnualInfrastructure.year == year)
             .scalar()
             or 0
         )
         industry_count = (
             db.query(func.count(AnnualIndustry.id))
-            .filter(AnnualIndustry.village_id == village.id, AnnualIndustry.year == year)
+            .filter(AnnualIndustry.supported_village_id == village.id, AnnualIndustry.year == year)
             .scalar()
             or 0
         )
@@ -200,7 +204,7 @@ class EffectivenessService:
         db.commit()
 
         result = EffectivenessService._eval_to_dict(ev)
-        result["village_name"] = getattr(village, "name", "")
+        result["village_name"] = village.village_name
         return result
 
     @staticmethod

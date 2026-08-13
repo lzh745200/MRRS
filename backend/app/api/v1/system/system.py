@@ -98,7 +98,7 @@ async def get_system_info(
 
     try:
         from sqlalchemy import text
-        total_villages = db.execute(text("SELECT COUNT(*) FROM villages")).scalar() or 0
+        total_villages = db.execute(text("SELECT COUNT(*) FROM supported_villages")).scalar() or 0
     except Exception as e:
         stat_errors.append(f"villages({e})")
         logger.warning("Failed to count villages: %s", e)

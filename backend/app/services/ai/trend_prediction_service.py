@@ -279,9 +279,12 @@ class TrendPredictionService:
         """
         from app.models.annual_income import AnnualIncome
 
-        # 查询历史收入数据
+        # 查询历史收入数据（AnnualIncome 外键为 supported_village_id，人均收入按年份列存储）
         income_records = (
-            db.query(AnnualIncome).filter(AnnualIncome.village_id == village_id).order_by(AnnualIncome.year).all()
+            db.query(AnnualIncome)
+            .filter(AnnualIncome.supported_village_id == village_id)
+            .order_by(AnnualIncome.year)
+            .all()
         )
 
         if not income_records:
@@ -290,7 +293,8 @@ class TrendPredictionService:
         # 准备数据
         historical_data = []
         for record in income_records:
-            historical_data.append({"date": f"{record.year}-01-01", "value": record.per_capita_income or 0})
+            value = getattr(record, f"per_capita_income_{record.year}", 0)
+            historical_data.append({"date": f"{record.year}-01-01", "value": float(value or 0)})
 
         # 预测
         return TrendPredictionService.predict_time_series(
@@ -316,10 +320,10 @@ class TrendPredictionService:
         """
         from app.models.annual_population import AnnualPopulation
 
-        # 查询历史人口数据
+        # 查询历史人口数据（AnnualPopulation 外键为 supported_village_id，人口字段为 population）
         population_records = (
             db.query(AnnualPopulation)
-            .filter(AnnualPopulation.village_id == village_id)
+            .filter(AnnualPopulation.supported_village_id == village_id)
             .order_by(AnnualPopulation.year)
             .all()
         )
@@ -330,7 +334,7 @@ class TrendPredictionService:
         # 准备数据
         historical_data = []
         for record in population_records:
-            historical_data.append({"date": f"{record.year}-01-01", "value": record.total_population or 0})
+            historical_data.append({"date": f"{record.year}-01-01", "value": record.population or 0})
 
         # 预测
         return TrendPredictionService.predict_time_series(
