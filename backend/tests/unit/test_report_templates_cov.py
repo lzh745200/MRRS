@@ -205,16 +205,14 @@ class TestSafeFloat:
 
 
 class TestVillageImportGaps:
-    def test_process_rows_success_with_village_link(self):
-        """覆盖 village_map 命中 → 赋 village_id → add → created+1 及 _to_bool 非 None 值。
+    def test_process_rows_success(self):
+        """覆盖成功建行路径（含 _to_bool 非 None 值）。
 
         使用真实 SupportedVillage 模型（此前的 kwargs bug 已修复：prefecture→city，
-        并移除模型不存在的 total_households/registered_population）。
+        并移除模型不存在的 total_households/registered_population；错表 village_map
+        关联逻辑已移除——SupportedVillage 无 village_id 字段）。
         """
         db = _mock_db()
-        village = MagicMock()
-        village.id = 42
-        village.name = "示范村"
         parsed = [
             {
                 "village_name": "示范村",
@@ -225,7 +223,7 @@ class TestVillageImportGaps:
             }
         ]
         created, skipped, errors = rt._village_process_rows(
-            db, parsed, "overwrite", set(), {"示范村": village}, 1
+            db, parsed, "overwrite", set(), 1
         )
         assert created == 1
         assert skipped == 0
@@ -235,7 +233,6 @@ class TestVillageImportGaps:
         assert record.city == "黔南布依族苗族自治州"
         assert record.is_three_regions is True
         assert record.longitude == 107.5
-        assert record.village_id == 42
         db.add.assert_called_once()
 
     def test_process_rows_row_exception(self):
@@ -247,7 +244,7 @@ class TestVillageImportGaps:
 
         db = _mock_db()
         created, skipped, errors = rt._village_process_rows(
-            db, [{"village_name": _BadStr()}], "overwrite", set(), {}, 1
+            db, [{"village_name": _BadStr()}], "overwrite", set(), 1
         )
         assert created == 0
         assert any("boom" in e for e in errors)
@@ -256,7 +253,7 @@ class TestVillageImportGaps:
         """覆盖 656-657: 村名空白 → 记错误并跳过。"""
         db = _mock_db()
         created, skipped, errors = rt._village_process_rows(
-            db, [{"village_name": "   "}], "incremental", set(), {}, 1
+            db, [{"village_name": "   "}], "incremental", set(), 1
         )
         assert created == 0
         assert any("村名为空" in e for e in errors)
@@ -269,7 +266,6 @@ class TestVillageImportGaps:
             [{"village_name": "示范村"}],
             "incremental",
             {"示范村"},
-            {},
             1,
         )
         assert created == 0

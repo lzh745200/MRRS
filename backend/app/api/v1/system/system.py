@@ -253,7 +253,7 @@ async def get_environment_info(current_user=Depends(get_current_user)):
     # 获取已安装的关键依赖包版本
     key_packages = [
         "fastapi", "uvicorn", "sqlalchemy", "pydantic",
-        "python-jose", "passlib", "alembic", "openpyxl",
+        "PyJWT", "passlib", "alembic", "openpyxl",
     ]
     packages = {}
     for pkg_name in key_packages:

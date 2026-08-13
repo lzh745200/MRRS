@@ -625,7 +625,6 @@ def _village_prepare_import(
     安全修复：覆盖模式下仅删除当前用户数据范围内的记录，而非全表删除。
     """
     from app.models.supported_village import SupportedVillage
-    from app.models.village import Village
 
     deleted = 0
     if mode == "overwrite":
@@ -648,21 +647,12 @@ def _village_prepare_import(
                 .all() if r[0]
             }
 
-    all_village_names = list({
-        str(r.get("village_name", "")).strip()
-        for r in parsed_data if r.get("village_name")
-    })
-    village_map = {}
-    if all_village_names:
-        villages = db.query(Village).filter(Village.name.in_(all_village_names)).all()
-        village_map = {v.name: v for v in villages}
-
-    return deleted, existing_names, village_map
+    return deleted, existing_names
 
 
 def _village_process_rows(
     db: Session, parsed_data: List[Dict[str, Any]], mode: str,
-    existing_names: set, village_map: dict, user_id: Optional[int]
+    existing_names: set, user_id: Optional[int]
 ) -> Tuple[int, int, list]:
     """Process village data rows, returning (created, skipped, errors)."""
     from app.models.supported_village import SupportedVillage
@@ -682,8 +672,6 @@ def _village_process_rows(
                 skipped += 1
                 continue
 
-            village_obj = village_map.get(name)
-
             record = SupportedVillage(
                 village_name=name,
                 province=_safe_str(data.get("province")) or "贵州省",
@@ -702,8 +690,6 @@ def _village_process_rows(
                 latitude=_safe_float(data.get("latitude")),
                 created_by=user_id,
             )
-            if village_obj:
-                record.village_id = village_obj.id
 
             db.add(record)
             created += 1
@@ -721,9 +707,9 @@ def _import_village_data(
     Args:
         mode: "incremental"=跳过重复, "overwrite"=清空后全量导入
     """
-    deleted, existing_names, village_map = _village_prepare_import(db, parsed_data, mode, current_user)
+    deleted, existing_names = _village_prepare_import(db, parsed_data, mode, current_user)
     created, skipped, errors = _village_process_rows(
-        db, parsed_data, mode, existing_names, village_map, user_id,
+        db, parsed_data, mode, existing_names, user_id,
     )
 
     safe_commit(db)

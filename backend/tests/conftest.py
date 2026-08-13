@@ -6,6 +6,12 @@
 # ── 关键修复：强制 UTF-8 编码，消除 Windows 控制台 GBK 导致的 UnicodeEncodeError ──
 import os as _os
 _os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+# ── 关键修复：测试数据库隔离必须在任何 app 模块导入之前生效 ──
+# app/core/database.py 在模块级用 settings.DATABASE_URL 创建全局 engine，
+# 若此处不提前设置，engine 会绑定真实开发库（data/rural_revitalization.db），
+# 直接连 SessionLocal 的测试将读写真实库 —— 并发 pytest 进程曾因此把开发库写坏
+# （btreeInitPage 页损坏 / database disk image is malformed）。
+_os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 # ── 关键修复：无头测试环境强制 matplotlib 使用 Agg 后端 ──
 # 默认后端（如 TkAgg）会在测试期间初始化 tkinter 资源，解释器关闭时
 # 触发 "main thread is not in main loop" 的 ResourceWarning。

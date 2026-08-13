@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.project import Fund, Project
 from app.models.school import School
-from app.models.village import Village
+from app.models.supported_village import SupportedVillage
 
 
 class ConflictStrategy:
@@ -58,7 +58,7 @@ class ConflictDetectionResult:
 
 # 业务唯一键映射（不依赖org_id）
 BUSINESS_KEY_FIELDS = {
-    "villages": ["code"],  # 村庄仅使用code作为唯一键
+    "villages": ["village_name"],  # 帮扶村使用村名作为唯一键
     "projects": ["code"],  # 项目使用code作为唯一键
     "funds": ["code"],  # 资金使用code作为唯一键
     "schools": ["code"],  # 学校使用code作为唯一键
@@ -66,7 +66,7 @@ BUSINESS_KEY_FIELDS = {
 
 # 数据类型模型映射
 DATA_TYPE_MODELS = {
-    "villages": Village,
+    "villages": SupportedVillage,
     "projects": Project,
     "funds": Fund,
     "schools": School,
@@ -276,7 +276,7 @@ class SmartConflictResolver:
     def _get_code_field(self, data_type: str) -> Optional[str]:
         """获取数据类型的编码字段名"""
         code_fields = {
-            "villages": "code",
+            "villages": "village_name",
             "projects": "code",
             "funds": "code",
             "schools": "code",

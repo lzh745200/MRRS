@@ -6,6 +6,12 @@
 - 根据偏好过滤通知发送
 
 需求: 6.2
+
+注意: 本服务适配 NotificationPreference 模型的真实列
+(email_approval/email_task/email_system/site_approval/site_task/site_system/
+push_approval/push_task/push_system)。
+API 层使用的 site_message.enabled / email.enabled / report / quiet_hours 等
+扩展概念在模型无对应列时提供合理默认值（聚合或 False/None），不落库。
 """
 
 from datetime import timezone, datetime
@@ -51,25 +57,21 @@ class NotificationPreferenceService:
         return preference
 
     def _create_default_preference(self, user_id: int) -> NotificationPreference:
-        """创建默认通知偏好"""
+        """创建默认通知偏好（使用模型真实列）"""
         preference = NotificationPreference(
             user_id=user_id,
-            # 站内消息默认全部启用
-            site_message_enabled=True,
-            system_notification=True,
-            approval_notification=True,
-            task_notification=True,
-            report_notification=True,
-            # 邮件通知默认启用
-            email_enabled=True,
-            email_system=True,
+            # 邮件通知默认: 审批/任务开启, 系统关闭（与模型 default 一致）
             email_approval=True,
             email_task=True,
-            email_report=False,  # 报表邮件默认关闭
-            # 免打扰时段默认关闭
-            quiet_hours_enabled=False,
-            quiet_hours_start=None,
-            quiet_hours_end=None,
+            email_system=False,
+            # 站内消息默认全部启用
+            site_approval=True,
+            site_task=True,
+            site_system=True,
+            # 实时推送默认全部启用
+            push_approval=True,
+            push_task=True,
+            push_system=True,
         )
 
         self.db.add(preference)
@@ -86,28 +88,24 @@ class NotificationPreferenceService:
 
         参数:
             user_id: 用户ID
-            **kwargs: 要更新的字段
+            **kwargs: 要更新的字段（仅模型真实列生效）
 
         返回:
             NotificationPreference: 更新后的偏好对象
         """
         preference = self.get_preference(user_id)
 
-        # 允许更新的字段
+        # 允许更新的字段（模型真实列）
         allowed_fields = [
-            "site_message_enabled",
-            "system_notification",
-            "approval_notification",
-            "task_notification",
-            "report_notification",
-            "email_enabled",
-            "email_system",
             "email_approval",
             "email_task",
-            "email_report",
-            "quiet_hours_enabled",
-            "quiet_hours_start",
-            "quiet_hours_end",
+            "email_system",
+            "site_approval",
+            "site_task",
+            "site_system",
+            "push_approval",
+            "push_task",
+            "push_system",
         ]
 
         for field, value in kwargs.items():
@@ -129,14 +127,12 @@ class NotificationPreferenceService:
         task: bool = True,
         report: bool = True,
     ) -> NotificationPreference:
-        """更新站内消息设置"""
+        """更新站内消息设置（enabled/report 无对应列，仅更新子开关）"""
         return self.update_preference(
             user_id,
-            site_message_enabled=enabled,
-            system_notification=system,
-            approval_notification=approval,
-            task_notification=task,
-            report_notification=report,
+            site_system=system,
+            site_approval=approval,
+            site_task=task,
         )
 
     def update_email_settings(
@@ -148,14 +144,12 @@ class NotificationPreferenceService:
         task: bool = True,
         report: bool = False,
     ) -> NotificationPreference:
-        """更新邮件通知设置"""
+        """更新邮件通知设置（enabled/report 无对应列，仅更新子开关）"""
         return self.update_preference(
             user_id,
-            email_enabled=enabled,
             email_system=system,
             email_approval=approval,
             email_task=task,
-            email_report=report,
         )
 
     def update_quiet_hours(
@@ -165,13 +159,8 @@ class NotificationPreferenceService:
         start_time: Optional[str] = None,
         end_time: Optional[str] = None,
     ) -> NotificationPreference:
-        """更新免打扰时段设置"""
-        return self.update_preference(
-            user_id,
-            quiet_hours_enabled=enabled,
-            quiet_hours_start=start_time,
-            quiet_hours_end=end_time,
-        )
+        """更新免打扰时段设置（模型无对应列，调用保持兼容但不持久化）"""
+        return self.get_preference(user_id)
 
     # ==================== 检查偏好 ====================
 
@@ -188,19 +177,16 @@ class NotificationPreferenceService:
         """
         preference = self.get_preference(user_id)
 
-        if not preference.site_message_enabled:
-            return False
-
-        # 检查免打扰时段
+        # 检查免打扰时段（模型无此配置时返回 False）
         if self._is_in_quiet_hours(preference):
             return False
 
-        # 检查具体类型
+        # 检查具体类型（report 无对应列，默认放行）
         type_mapping = {
-            "system": preference.system_notification,
-            "approval": preference.approval_notification,
-            "task": preference.task_notification,
-            "report": preference.report_notification,
+            "system": preference.site_system,
+            "approval": preference.site_approval,
+            "task": preference.site_task,
+            "report": True,
         }
 
         return type_mapping.get(notification_type, True)
@@ -218,32 +204,32 @@ class NotificationPreferenceService:
         """
         preference = self.get_preference(user_id)
 
-        if not preference.email_enabled:
-            return False
-
-        # 检查具体类型
+        # 检查具体类型（report 无对应列，默认关闭）
         type_mapping = {
             "system": preference.email_system,
             "approval": preference.email_approval,
             "task": preference.email_task,
-            "report": preference.email_report,
+            "report": False,
         }
 
-        return type_mapping.get(notification_type, True)
+        return type_mapping.get(notification_type, False)
 
     def _is_in_quiet_hours(self, preference: NotificationPreference) -> bool:
-        """检查当前是否在免打扰时段"""
-        if not preference.quiet_hours_enabled:
+        """检查当前是否在免打扰时段（模型无对应列时恒为 False）"""
+        if not getattr(preference, "quiet_hours_enabled", False):
             return False
 
-        if not preference.quiet_hours_start or not preference.quiet_hours_end:
+        start_time = getattr(preference, "quiet_hours_start", None)
+        end_time = getattr(preference, "quiet_hours_end", None)
+
+        if not start_time or not end_time:
             return False
 
         now = datetime.now().time()
 
         try:
-            start = datetime.strptime(preference.quiet_hours_start, "%H:%M").time()
-            end = datetime.strptime(preference.quiet_hours_end, "%H:%M").time()
+            start = datetime.strptime(start_time, "%H:%M").time()
+            end = datetime.strptime(end_time, "%H:%M").time()
 
             # 处理跨午夜的情况
             if start <= end:
@@ -282,27 +268,33 @@ class NotificationPreferenceService:
     # ==================== 转换为字典 ====================
 
     def preference_to_dict(self, preference: NotificationPreference) -> Dict[str, Any]:
-        """将偏好对象转换为字典"""
+        """将偏好对象转换为字典（enabled 由子开关聚合，report/quiet_hours 提供默认值）"""
+        site_enabled = bool(
+            preference.site_system or preference.site_approval or preference.site_task
+        )
+        email_enabled = bool(
+            preference.email_system or preference.email_approval or preference.email_task
+        )
         return {
             "user_id": preference.user_id,
             "site_message": {
-                "enabled": preference.site_message_enabled,
-                "system": preference.system_notification,
-                "approval": preference.approval_notification,
-                "task": preference.task_notification,
-                "report": preference.report_notification,
+                "enabled": site_enabled,
+                "system": preference.site_system,
+                "approval": preference.site_approval,
+                "task": preference.site_task,
+                "report": True,
             },
             "email": {
-                "enabled": preference.email_enabled,
+                "enabled": email_enabled,
                 "system": preference.email_system,
                 "approval": preference.email_approval,
                 "task": preference.email_task,
-                "report": preference.email_report,
+                "report": False,
             },
             "quiet_hours": {
-                "enabled": preference.quiet_hours_enabled,
-                "start": preference.quiet_hours_start,
-                "end": preference.quiet_hours_end,
+                "enabled": bool(getattr(preference, "quiet_hours_enabled", False)),
+                "start": getattr(preference, "quiet_hours_start", None),
+                "end": getattr(preference, "quiet_hours_end", None),
             },
             "updated_at": (preference.updated_at.isoformat() if preference.updated_at else None),
         }

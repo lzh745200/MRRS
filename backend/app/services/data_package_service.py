@@ -673,6 +673,9 @@ class DataPackageService:
 
                     resolver = SmartConflictResolver(self.db)
 
+                    # 收集所有支持类型的数据，一次性交给冲突解决器导入，
+                    # 保证跨类型外键映射（projects.village_id -> villages 新 id）正确
+                    data_dict: Dict[str, List[Dict]] = {}
                     for data_type in data_types:
                         if data_type not in DATA_TYPE_MODELS:
                             continue
@@ -681,10 +684,11 @@ class DataPackageService:
                             continue
 
                         records = json.loads(zf.read(data_file).decode("utf-8"))
-                        model = DATA_TYPE_MODELS[data_type]
+                        if records:
+                            data_dict[data_type] = records
 
-                        # 调用冲突解决器 (假设 SmartConflictResolver 有 resolve_and_import 方法)
-                        resolver.resolve_and_import(model, records, conflict_strategy)
+                    if data_dict:
+                        resolver.import_with_id_mapping(data_dict, conflict_strategy)
 
                 package.status = PackageStatus.imported.value
                 package.imported_at = datetime.now(timezone.utc)

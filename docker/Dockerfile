@@ -154,7 +154,7 @@ RUN apk add --no-cache \
 # 安装 Python 运行时依赖（仅后端运行时所需）
 RUN pip install --upgrade pip && \
     pip install fastapi uvicorn sqlalchemy alembic bcrypt \
-    python-jose[cryptography] passlib[bcrypt] python-multipart \
+    PyJWT passlib[bcrypt] python-multipart \
     -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 安装 serve（用于托管前端静态文件）

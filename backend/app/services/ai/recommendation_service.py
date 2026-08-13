@@ -25,7 +25,7 @@ class RecommendationService:
 
         Args:
             db: 数据库会话
-            village_id: 村庄ID
+            village_id: 村庄ID（supported_villages.id）
             limit: 推荐数量
             user: 当前用户，用于数据权限过滤
 
@@ -34,11 +34,12 @@ class RecommendationService:
         """
         from app.core.data_permission import filter_by_data_scope
         from app.models.project import Project
-        from app.models.village import Village
+        from app.models.supported_village import SupportedVillage
 
         # 获取村庄信息（受数据权限约束）
         village_query = filter_by_data_scope(
-            db.query(Village).filter(Village.id == village_id), Village, user, db=db
+            db.query(SupportedVillage).filter(SupportedVillage.id == village_id),
+            SupportedVillage, user, db=db,
         )
         village = village_query.first()
         if not village:
@@ -46,14 +47,14 @@ class RecommendationService:
 
         # 查询相似村庄的成功项目（受数据权限约束）
         similar_villages_query = filter_by_data_scope(
-            db.query(Village).filter(
+            db.query(SupportedVillage).filter(
                 and_(
-                    Village.id != village_id,
-                    Village.province == village.province,
-                    Village.city == village.city,
+                    SupportedVillage.id != village_id,
+                    SupportedVillage.province == village.province,
+                    SupportedVillage.city == village.city,
                 )
             ),
-            Village,
+            SupportedVillage,
             user,
             db=db,
         )
@@ -139,7 +140,7 @@ class RecommendationService:
         Args:
             db: 数据库会话
             total_budget: 总预算
-            village_ids: 村庄ID列表
+            village_ids: 村庄ID列表（supported_villages.id）
             user: 当前用户，用于数据权限过滤
 
         Returns:
@@ -148,14 +149,15 @@ class RecommendationService:
         from app.core.data_permission import filter_by_data_scope
         from app.models.annual_income import AnnualIncome
         from app.models.annual_population import AnnualPopulation
-        from app.models.village import Village
+        from app.models.supported_village import SupportedVillage
 
         if not village_ids:
             return {"allocations": [], "error": "村庄列表为空"}
 
         # 获取村庄信息（受数据权限约束）
         villages = filter_by_data_scope(
-            db.query(Village).filter(Village.id.in_(village_ids)), Village, user, db=db
+            db.query(SupportedVillage).filter(SupportedVillage.id.in_(village_ids)),
+            SupportedVillage, user, db=db,
         ).all()
 
         if not villages:
@@ -164,11 +166,11 @@ class RecommendationService:
         # 批量查询所有村庄的最新人口数据（避免 N+1）
         pop_subq = (
             db.query(
-                AnnualPopulation.village_id,
+                AnnualPopulation.supported_village_id,
                 sa_func.max(AnnualPopulation.year).label("max_year"),
             )
-            .filter(AnnualPopulation.village_id.in_(village_ids))
-            .group_by(AnnualPopulation.village_id)
+            .filter(AnnualPopulation.supported_village_id.in_(village_ids))
+            .group_by(AnnualPopulation.supported_village_id)
             .subquery()
         )
         pop_rows = (
@@ -176,22 +178,22 @@ class RecommendationService:
             .join(
                 pop_subq,
                 and_(
-                    AnnualPopulation.village_id == pop_subq.c.village_id,
+                    AnnualPopulation.supported_village_id == pop_subq.c.supported_village_id,
                     AnnualPopulation.year == pop_subq.c.max_year,
                 ),
             )
             .all()
         )
-        pop_by_village = {p.village_id: p for p in pop_rows}
+        pop_by_village = {p.supported_village_id: p for p in pop_rows}
 
         # 批量查询所有村庄的最新收入数据（避免 N+1）
         inc_subq = (
             db.query(
-                AnnualIncome.village_id,
+                AnnualIncome.supported_village_id,
                 sa_func.max(AnnualIncome.year).label("max_year"),
             )
-            .filter(AnnualIncome.village_id.in_(village_ids))
-            .group_by(AnnualIncome.village_id)
+            .filter(AnnualIncome.supported_village_id.in_(village_ids))
+            .group_by(AnnualIncome.supported_village_id)
             .subquery()
         )
         inc_rows = (
@@ -199,13 +201,23 @@ class RecommendationService:
             .join(
                 inc_subq,
                 and_(
-                    AnnualIncome.village_id == inc_subq.c.village_id,
+                    AnnualIncome.supported_village_id == inc_subq.c.supported_village_id,
                     AnnualIncome.year == inc_subq.c.max_year,
                 ),
             )
             .all()
         )
-        inc_by_village = {i.village_id: i for i in inc_rows}
+        inc_by_village = {i.supported_village_id: i for i in inc_rows}
+
+        def _income_value(income: Any) -> float:
+            """取年度收入记录中对应年份的人均纯收入（按年份列动态取值，兼容任意年份）"""
+            if income is None:
+                return 0.0
+            value = getattr(income, f"per_capita_income_{income.year}", None)
+            try:
+                return float(value) if value is not None else 0.0
+            except (TypeError, ValueError):
+                return 0.0
 
         # 计算每个村庄的需求指数
         allocations = []
@@ -216,8 +228,9 @@ class RecommendationService:
             income = inc_by_village.get(village.id)
 
             # 计算需求分数(人口多、收入低的村庄分数高)
-            population_score = (population.total_population or 0) / 1000 if population else 0
-            income_score = 10000 / (income.per_capita_income or 10000) if income else 1
+            population_score = (population.population or 0) / 1000 if population else 0
+            income_value = _income_value(income)
+            income_score = 10000 / (income_value or 10000) if income else 1
 
             score = population_score * 0.4 + income_score * 0.6
             total_score += score
@@ -225,10 +238,10 @@ class RecommendationService:
             allocations.append(
                 {
                     "village_id": village.id,
-                    "village_name": village.name,
+                    "village_name": village.village_name,
                     "score": score,
-                    "population": population.total_population if population else 0,
-                    "per_capita_income": income.per_capita_income if income else 0,
+                    "population": population.population if population else 0,
+                    "per_capita_income": income_value,
                 }
             )
 
@@ -256,8 +269,8 @@ class RecommendationService:
 
         Args:
             db: 数据库会话
-            village_id: 村庄ID
-            limit: 推荐数量
+            village_id: 村庄ID（supported_villages.id）
+            limit: 匹配数量
             user: 当前用户，用于数据权限过滤
 
         Returns:
@@ -265,11 +278,12 @@ class RecommendationService:
         """
         from app.core.data_permission import filter_by_data_scope
         from app.models.policy import Policy
-        from app.models.village import Village
+        from app.models.supported_village import SupportedVillage
 
         # 获取村庄信息（受数据权限约束）
         village = filter_by_data_scope(
-            db.query(Village).filter(Village.id == village_id), Village, user, db=db
+            db.query(SupportedVillage).filter(SupportedVillage.id == village_id),
+            SupportedVillage, user, db=db,
         ).first()
         if not village:
             return []
@@ -299,7 +313,7 @@ class RecommendationService:
                     reasons.append(f"适用于{village.city}")
 
             # 关键词匹配(简化实现)
-            village_keywords = [village.name, village.province, village.city]
+            village_keywords = [village.village_name, village.province, village.city]
             policy_text = f"{policy.title} {policy.content or ''}"
 
             for keyword in village_keywords:

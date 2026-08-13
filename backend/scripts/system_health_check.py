@@ -42,7 +42,7 @@ class SystemHealthChecker:
             'sqlalchemy',
             'pydantic',
             'bcrypt',
-            'jose',  # python-jose
+            'jwt',  # PyJWT（替代 python-jose）
             'httpx',
             'openpyxl',
             'pandas'

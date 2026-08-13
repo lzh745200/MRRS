@@ -46,12 +46,16 @@ class TestCreateDefaultPreference:
         mock_model.assert_called_once()
         _, kwargs = mock_model.call_args
         assert kwargs['user_id'] == 42
-        assert kwargs['site_message_enabled'] is True
-        assert kwargs['email_enabled'] is True
-        assert kwargs['quiet_hours_enabled'] is False
-        assert kwargs['email_report'] is False
-        assert kwargs['quiet_hours_start'] is None
-        assert kwargs['quiet_hours_end'] is None
+        # 模型真实列
+        assert kwargs['site_system'] is True
+        assert kwargs['site_approval'] is True
+        assert kwargs['site_task'] is True
+        assert kwargs['email_system'] is False
+        assert kwargs['email_approval'] is True
+        assert kwargs['email_task'] is True
+        assert kwargs['push_system'] is True
+        assert kwargs['push_approval'] is True
+        assert kwargs['push_task'] is True
         mock_db.add.assert_called_once_with(mock_pref)
         mock_db.commit.assert_called_once()
         mock_db.refresh.assert_called_once_with(mock_pref)
@@ -60,21 +64,18 @@ class TestCreateDefaultPreference:
 class TestUpdatePreference:
     def test_updates_allowed_fields(self, svc, mock_db):
         pref = MagicMock()
-        pref.site_message_enabled = True
-        pref.email_enabled = True
-        pref.quiet_hours_enabled = False
+        pref.site_system = True
+        pref.email_system = True
         pref.updated_at = None
         svc.get_preference = MagicMock(return_value=pref)
         result = svc.update_preference(
             1,
-            site_message_enabled=False,
-            email_enabled=False,
-            quiet_hours_enabled=True,
+            site_system=False,
+            email_system=False,
         )
         assert result is pref
-        assert pref.site_message_enabled is False
-        assert pref.email_enabled is False
-        assert pref.quiet_hours_enabled is True
+        assert pref.site_system is False
+        assert pref.email_system is False
         assert pref.updated_at is not None
         mock_db.commit.assert_called_once()
         mock_db.refresh.assert_called_once_with(pref)
@@ -82,15 +83,18 @@ class TestUpdatePreference:
     def test_updates_all_allowed_fields(self, svc, mock_db):
         pref = MagicMock()
         svc.get_preference = MagicMock(return_value=pref)
-        svc.update_preference(1, site_message_enabled=True, system_notification=True,
-                              approval_notification=True, task_notification=True,
-                              report_notification=True, email_enabled=True,
+        svc.update_preference(1, site_system=True, site_approval=True, site_task=True,
                               email_system=True, email_approval=True, email_task=True,
-                              email_report=True, quiet_hours_enabled=True,
-                              quiet_hours_start="22:00", quiet_hours_end="06:00")
-        assert pref.site_message_enabled is True
-        assert pref.quiet_hours_start == "22:00"
-        assert pref.quiet_hours_end == "06:00"
+                              push_system=True, push_approval=True, push_task=True)
+        assert pref.site_system is True
+        assert pref.site_approval is True
+        assert pref.site_task is True
+        assert pref.email_system is True
+        assert pref.email_approval is True
+        assert pref.email_task is True
+        assert pref.push_system is True
+        assert pref.push_approval is True
+        assert pref.push_task is True
 
     def test_ignores_unknown_fields(self, svc, mock_db):
         pref = MagicMock()
@@ -111,11 +115,9 @@ class TestUpdateSiteMessageSettings:
         result = svc.update_site_message_settings(1, enabled=False, system=False)
         svc.update_preference.assert_called_once_with(
             1,
-            site_message_enabled=False,
-            system_notification=False,
-            approval_notification=True,
-            task_notification=True,
-            report_notification=True,
+            site_system=False,
+            site_approval=True,
+            site_task=True,
         )
         assert result is svc.update_preference.return_value
 
@@ -126,46 +128,29 @@ class TestUpdateEmailSettings:
         result = svc.update_email_settings(1, enabled=False, report=True)
         svc.update_preference.assert_called_once_with(
             1,
-            email_enabled=False,
             email_system=True,
             email_approval=True,
             email_task=True,
-            email_report=True,
         )
         assert result is svc.update_preference.return_value
 
 
 class TestUpdateQuietHours:
-    def test_delegates_all_params(self, svc):
-        svc.update_preference = MagicMock()
+    def test_compat_no_crash(self, svc, mock_db):
+        pref = MagicMock()
+        svc.get_preference = MagicMock(return_value=pref)
         result = svc.update_quiet_hours(1, enabled=True, start_time="22:00", end_time="06:00")
-        svc.update_preference.assert_called_once_with(
-            1,
-            quiet_hours_enabled=True,
-            quiet_hours_start="22:00",
-            quiet_hours_end="06:00",
-        )
-        assert result is svc.update_preference.return_value
-
-    def test_delegates_no_times(self, svc):
-        svc.update_preference = MagicMock()
-        svc.update_quiet_hours(1, enabled=True)
-        svc.update_preference.assert_called_once_with(
-            1,
-            quiet_hours_enabled=True,
-            quiet_hours_start=None,
-            quiet_hours_end=None,
-        )
+        assert result is pref
 
 
 class TestShouldSendSiteMessage:
-    def test_disabled(self, svc, mock_db):
-        pref = MagicMock(site_message_enabled=False)
+    def test_disabled_all(self, svc, mock_db):
+        pref = MagicMock(site_system=False, site_approval=False, site_task=False, quiet_hours_enabled=False)
         mock_db.query.return_value.filter.return_value.first.return_value = pref
         assert svc.should_send_site_message(1, "system") is False
 
     def test_in_quiet_hours(self, svc, mock_db):
-        pref = MagicMock(site_message_enabled=True, quiet_hours_enabled=True,
+        pref = MagicMock(site_system=True, quiet_hours_enabled=True,
                          quiet_hours_start="22:00", quiet_hours_end="06:00")
         mock_db.query.return_value.filter.return_value.first.return_value = pref
         with patch('app.services.notification_preference_service.datetime') as mock_dt:
@@ -181,17 +166,16 @@ class TestShouldSendSiteMessage:
         ("task", True, True),
         ("task", False, False),
         ("report", True, True),
-        ("report", False, False),
+        ("report", False, True),
         ("unknown", None, True),
     ])
     def test_type_mapping(self, svc, mock_db, notif_type, attr_val, expected):
-        pref = MagicMock(site_message_enabled=True, quiet_hours_enabled=False)
-        if attr_val is not None:
+        pref = MagicMock(site_system=True, site_approval=True, site_task=True, quiet_hours_enabled=False)
+        if attr_val is not None and notif_type != "report":
             attr_map = {
-                "system": "system_notification",
-                "approval": "approval_notification",
-                "task": "task_notification",
-                "report": "report_notification",
+                "system": "site_system",
+                "approval": "site_approval",
+                "task": "site_task",
             }
             setattr(pref, attr_map[notif_type], attr_val)
         mock_db.query.return_value.filter.return_value.first.return_value = pref
@@ -200,7 +184,7 @@ class TestShouldSendSiteMessage:
 
 class TestShouldSendEmail:
     def test_disabled(self, svc, mock_db):
-        pref = MagicMock(email_enabled=False)
+        pref = MagicMock(email_system=False, email_approval=False, email_task=False, quiet_hours_enabled=False)
         mock_db.query.return_value.filter.return_value.first.return_value = pref
         assert svc.should_send_email(1, "system") is False
 
@@ -211,18 +195,17 @@ class TestShouldSendEmail:
         ("approval", False, False),
         ("task", True, True),
         ("task", False, False),
-        ("report", True, True),
+        ("report", True, False),
         ("report", False, False),
-        ("unknown", None, True),
+        ("unknown", None, False),
     ])
     def test_type_mapping(self, svc, mock_db, notif_type, attr_val, expected):
-        pref = MagicMock(email_enabled=True)
-        if attr_val is not None:
+        pref = MagicMock(email_system=True, email_approval=True, email_task=True, quiet_hours_enabled=False)
+        if attr_val is not None and notif_type != "report":
             attr_map = {
                 "system": "email_system",
                 "approval": "email_approval",
                 "task": "email_task",
-                "report": "email_report",
             }
             setattr(pref, attr_map[notif_type], attr_val)
         mock_db.query.return_value.filter.return_value.first.return_value = pref
@@ -232,6 +215,10 @@ class TestShouldSendEmail:
 class TestIsInQuietHours:
     def test_not_enabled(self, svc):
         pref = MagicMock(quiet_hours_enabled=False)
+        assert svc._is_in_quiet_hours(pref) is False
+
+    def test_model_without_field(self, svc):
+        pref = MagicMock(spec=[])  # 模型无 quiet_hours 列时的行为
         assert svc._is_in_quiet_hours(pref) is False
 
     def test_no_start_time(self, svc):
@@ -317,49 +304,41 @@ class TestPreferenceToDict:
     def test_with_updated_at(self, svc):
         pref = MagicMock(
             user_id=1,
-            site_message_enabled=True,
-            system_notification=True,
-            approval_notification=True,
-            task_notification=True,
-            report_notification=False,
-            email_enabled=True,
+            site_system=True,
+            site_approval=True,
+            site_task=True,
             email_system=True,
             email_approval=True,
             email_task=False,
-            email_report=False,
-            quiet_hours_enabled=True,
-            quiet_hours_start="22:00",
-            quiet_hours_end="06:00",
+            quiet_hours_enabled=False,
+            quiet_hours_start=None,
+            quiet_hours_end=None,
             updated_at=datetime.datetime(2024, 1, 1, 12, 0, 0),
         )
         result = svc.preference_to_dict(pref)
         assert result["user_id"] == 1
         assert result["site_message"]["enabled"] is True
         assert result["site_message"]["system"] is True
-        assert result["site_message"]["report"] is False
+        assert result["site_message"]["report"] is True
         assert result["email"]["enabled"] is True
         assert result["email"]["task"] is False
-        assert result["quiet_hours"]["enabled"] is True
-        assert result["quiet_hours"]["start"] == "22:00"
+        assert result["email"]["report"] is False
+        assert result["quiet_hours"]["enabled"] is False
+        assert result["quiet_hours"]["start"] is None
         assert result["updated_at"] == "2024-01-01T12:00:00"
 
     def test_without_updated_at(self, svc):
         pref = MagicMock(
             user_id=2,
-            site_message_enabled=False,
-            system_notification=False,
-            approval_notification=False,
-            task_notification=False,
-            report_notification=False,
-            email_enabled=False,
+            site_system=False,
+            site_approval=False,
+            site_task=False,
             email_system=False,
             email_approval=False,
             email_task=False,
-            email_report=False,
-            quiet_hours_enabled=False,
-            quiet_hours_start=None,
-            quiet_hours_end=None,
             updated_at=None,
         )
         result = svc.preference_to_dict(pref)
         assert result["updated_at"] is None
+        assert result["site_message"]["enabled"] is False
+        assert result["email"]["enabled"] is False

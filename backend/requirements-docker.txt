@@ -20,7 +20,7 @@ pydantic-settings==2.14.2
 email-validator==2.1.1
 
 # 安全与认证
-python-jose[cryptography]==3.5.0
+PyJWT==2.9.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 itsdangerous==2.1.2

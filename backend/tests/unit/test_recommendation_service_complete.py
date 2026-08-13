@@ -233,15 +233,16 @@ class TestRecommendFundAllocationComplete:
         # 使用普通对象代替MagicMock来避免比较问题
         class MockVillage:
             id = 1
-            name = "测试村"
+            village_name = "测试村"
 
         class MockPop:
-            village_id = 1
-            total_population = 5000
+            supported_village_id = 1
+            population = 5000
 
         class MockInc:
-            village_id = 1
-            per_capita_income = 5000
+            supported_village_id = 1
+            year = 2025
+            per_capita_income_2025 = 5000
 
         mock_village = MockVillage()
         mock_pop = MockPop()
@@ -294,11 +295,12 @@ class TestRecommendFundAllocationComplete:
 
         class MockVillage:
             id = 1
-            name = "测试村"
+            village_name = "测试村"
 
         class MockInc:
-            village_id = 1
-            per_capita_income = 5000
+            supported_village_id = 1
+            year = 2025
+            per_capita_income_2025 = 5000
 
         mock_village = MockVillage()
         mock_inc = MockInc()
@@ -341,11 +343,11 @@ class TestRecommendFundAllocationComplete:
 
         mock_village = MagicMock()
         mock_village.id = 1
-        mock_village.name = "测试村"
+        mock_village.village_name = "测试村"
 
         mock_pop = MagicMock()
-        mock_pop.village_id = 1
-        mock_pop.total_population = 5000
+        mock_pop.supported_village_id = 1
+        mock_pop.population = 5000
 
         self._create_mock_models()
 
@@ -384,27 +386,29 @@ class TestRecommendFundAllocationComplete:
 
         class MockVillage1:
             id = 1
-            name = "村1"
+            village_name = "村1"
 
         class MockVillage2:
             id = 2
-            name = "村2"
+            village_name = "村2"
 
         class MockPop1:
-            village_id = 1
-            total_population = 5000
+            supported_village_id = 1
+            population = 5000
 
         class MockPop2:
-            village_id = 2
-            total_population = 3000
+            supported_village_id = 2
+            population = 3000
 
         class MockInc1:
-            village_id = 1
-            per_capita_income = 5000
+            supported_village_id = 1
+            year = 2025
+            per_capita_income_2025 = 5000
 
         class MockInc2:
-            village_id = 2
-            per_capita_income = 8000
+            supported_village_id = 2
+            year = 2025
+            per_capita_income_2025 = 8000
 
         mock_village1 = MockVillage1()
         mock_village2 = MockVillage2()
@@ -458,7 +462,7 @@ class TestMatchPolicies:
 
         mock_village = MagicMock()
         mock_village.id = 1
-        mock_village.name = "测试村"
+        mock_village.village_name = "测试村"
         mock_village.province = "广东"
         mock_village.city = "深圳"
 
@@ -515,7 +519,7 @@ class TestMatchPolicies:
 
         mock_village = MagicMock()
         mock_village.id = 1
-        mock_village.name = "测试村"
+        mock_village.village_name = "测试村"
         mock_village.province = "广东"
         mock_village.city = "深圳"
 
@@ -545,7 +549,7 @@ class TestMatchPolicies:
 
         mock_village = MagicMock()
         mock_village.id = 1
-        mock_village.name = "测试村"
+        mock_village.village_name = "测试村"
         mock_village.province = "广东"
         mock_village.city = "深圳"
 
@@ -575,7 +579,7 @@ class TestMatchPolicies:
 
         mock_village = MagicMock()
         mock_village.id = 1
-        mock_village.name = "测试村"
+        mock_village.village_name = "测试村"
         mock_village.province = "广东"
         mock_village.city = "深圳"
 
@@ -606,7 +610,7 @@ class TestMatchPolicies:
 
         mock_village = MagicMock()
         mock_village.id = 1
-        mock_village.name = "测试村"
+        mock_village.village_name = "测试村"
         mock_village.province = "广东"
         mock_village.city = "深圳"
 

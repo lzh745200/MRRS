@@ -202,8 +202,6 @@ excludes = [
     'notebook', 'spyder', 'pylint',
     'docx', 'apscheduler',
     # 注意：mammoth 不再排除（policy.py 用于 .docx → HTML 转换，是运行时依赖）
-    'jose.backends.native_types',
-    'jose.backends.pycryptodome_backend',
     'app.api.v1.users',           # 旧路径，已不存在
     'app.api.v1.user_management', # 旧路径
     'app.api.v1.rbac',            # 旧路径

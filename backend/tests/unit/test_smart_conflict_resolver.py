@@ -29,6 +29,7 @@ class MockModelBase:
 class MockVillage(MockModelBase):
     id = 1
     code = "V001"
+    village_name = "V001"
     name = "Test Village"
     province = "Guizhou"
     county = "County X"
@@ -140,7 +141,7 @@ class TestSmartConflictResolver:
                     resolver.detect_conflicts_by_business_key([], "test_type")
 
     def test_detect_conflicts_by_business_key_new_records(self, resolver, mock_db):
-        records = [{"code": "V001", "name": "New Village"}]
+        records = [{"village_name": "New Village"}]
         mock_db.query.return_value.filter.return_value.first.return_value = None
         result = resolver.detect_conflicts_by_business_key(records, "villages")
         assert len(result.new_records) == 1
@@ -156,18 +157,18 @@ class TestSmartConflictResolver:
 
     def test_detect_conflicts_by_business_key_conflict(self, resolver, mock_db):
         local = MockVillage()
-        records = [{"code": "V001", "name": "Different Name"}]
+        records = [{"village_name": "Different Name"}]
         mock_db.query.return_value.filter.return_value.first.return_value = local
         result = resolver.detect_conflicts_by_business_key(records, "villages")
         assert len(result.new_records) == 0
         assert len(result.conflict_records) == 1
         assert len(result.no_conflict_records) == 0
-        assert result.conflict_records[0].differences == ["name"]
+        assert result.conflict_records[0].differences == ["village_name"]
 
     def test_detect_conflicts_by_business_key_no_conflict(self, resolver, mock_db):
         local = MockVillage()
-        local.name = "Same Name"
-        records = [{"code": "V001", "name": "Same Name"}]
+        local.village_name = "Same Name"
+        records = [{"village_name": "Same Name"}]
         mock_db.query.return_value.filter.return_value.first.return_value = local
         result = resolver.detect_conflicts_by_business_key(records, "villages")
         assert len(result.new_records) == 0
@@ -271,8 +272,8 @@ class TestSmartConflictResolver:
     def test_resolve_conflicts_keep_both(self, resolver, mock_db):
         local = MockVillage()
         conflict = DataConflict(
-            "villages", {"code": "V001"}, local,
-            {"id": 10, "code": "V001", "name": "New Copy"},
+            "villages", {"village_name": "V001"}, local,
+            {"id": 10, "village_name": "V001", "name": "New Copy"},
             ["name"]
         )
         with patch("app.services.smart_conflict_resolver.time.time", return_value=1234567890):
@@ -281,7 +282,7 @@ class TestSmartConflictResolver:
         mock_db.add.assert_called_once()
         added = mock_db.add.call_args[0][0]
         assert isinstance(added, MockVillage)
-        assert added.code == "V001_imp_1234567890"
+        assert added.village_name == "V001_imp_1234567890"
         assert added.name == "New Copy"
 
     def test_resolve_conflicts_keep_both_no_code_field(self, resolver, mock_db):
@@ -360,7 +361,7 @@ class TestSmartConflictResolver:
         mock_db.flush.assert_called_once()
 
     def test_get_code_field(self, resolver):
-        assert resolver._get_code_field("villages") == "code"
+        assert resolver._get_code_field("villages") == "village_name"
         assert resolver._get_code_field("projects") == "code"
         assert resolver._get_code_field("funds") == "code"
         assert resolver._get_code_field("schools") == "code"
@@ -468,8 +469,8 @@ class TestSmartConflictResolver:
         mock_db.query.return_value.filter.return_value.first.side_effect = [local, None]
         data = {
             "villages": [
-                {"code": "V001", "name": "Changed Name"},
-                {"code": "V002", "name": "Brand New"},
+                {"village_name": "V001", "name": "Changed Name"},
+                {"village_name": "V002", "name": "Brand New"},
             ]
         }
         result = resolver.import_with_id_mapping(data)
@@ -479,9 +480,9 @@ class TestSmartConflictResolver:
         local = MockVillage()
         mock_db.query.return_value.filter.return_value.first.side_effect = [local, None, None]
         records = [
-            {"code": "V001", "name": "Changed"},
-            {"code": "V002", "name": "New"},
-            {"code": "V003", "name": "Another"},
+            {"village_name": "V001", "name": "Changed"},
+            {"village_name": "V002", "name": "New"},
+            {"village_name": "V003", "name": "Another"},
         ]
         result = resolver.detect_conflicts_by_business_key(records, "villages")
         assert len(result.conflict_records) == 1

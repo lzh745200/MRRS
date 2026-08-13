@@ -114,7 +114,7 @@ async def recommend_projects(
     limit: int = Query(DEFAULT_RECOMMENDATION_LIMIT, ge=MIN_RECOMMENDATION_LIMIT, le=MAX_RECOMMENDATION_LIMIT),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-) -> Dict[str, Any]:
+) -> List[Dict[str, Any]]:
     """项目推荐 - 根据村庄特征推荐适合的项目"""
     service = _get_recommendation_service()
     return service.recommend_projects(db=db, village_id=village_id, limit=limit, user=current_user)

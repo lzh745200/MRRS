@@ -2,7 +2,7 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -12,7 +12,6 @@ from app.models.fund import Fund
 from app.models.project import Project
 from app.models.school import School, SchoolSupport
 from app.models.user import User
-from app.models.village import Village
 from app.core.response import success_response
 
 logger = logging.getLogger(__name__)
@@ -173,8 +172,9 @@ async def _get_overview_impl(db: Session):
     from datetime import datetime, timedelta
 
     from app.models.audit import AuditLog
+    from app.models.supported_village import SupportedVillage
 
-    villages_count = db.query(Village).count()
+    villages_count = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count()
     projects_count = db.query(Project).count()
     schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
     funds_count = db.query(Fund).count()
@@ -194,7 +194,7 @@ async def _get_overview_impl(db: Session):
         {
             "module": "帮扶村数据",
             "records": villages_count,
-            "lastUpdate": _last_update(Village),
+            "lastUpdate": _last_update(SupportedVillage),
             "healthy": villages_count > 0,
         },
         {
@@ -276,11 +276,18 @@ async def _get_overview_impl(db: Session):
         "villages": villages_count,
         "projects": projects_count,
         "schools": schools_count,
+        "users": users_count,
         "funds_amount": float(funds_total),
         "completeness": completeness,
         "health_score": health_score,
         "today_operations": today_ops,
         "modules": modules,
+        "filing_rates": [
+            {"module": "帮扶村", "rate": completeness},
+            {"module": "帮扶项目", "rate": 100 if projects_count > 0 else 0},
+            {"module": "帮扶学校", "rate": 100 if schools_count > 0 else 0},
+            {"module": "经费管理", "rate": 100 if funds_count > 0 else 0},
+        ],
         "trend": trend,
         "recent_logs": recent_logs,
     }
@@ -289,13 +296,45 @@ async def _get_overview_impl(db: Session):
 @router.get("/villages/distribution")
 async def get_villages_distribution(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
-        by_status = db.query(Village.status, func.count(Village.id)).group_by(Village.status).all()
-        status_data = [{"name": status, "value": count} for status, count in by_status]
+        from app.models.supported_village import SupportedVillage, VillagePopulation
 
-        top_villages = db.query(Village).order_by(Village.total_population.desc()).limit(10).all()
-        top_data = [{"name": v.name, "value": v.total_population or 0} for v in top_villages]
+        by_status = (
+            db.query(SupportedVillage.transition_status, func.count(SupportedVillage.id))
+            .group_by(SupportedVillage.transition_status)
+            .all()
+        )
+        status_data = [{"name": status or "未分类", "value": count} for status, count in by_status]
 
-        by_province = db.query(Village.province, func.count(Village.id)).group_by(Village.province).all()
+        # 人口最多的村庄：取每个村最新年人口（避免 N+1）
+        pop_subq = (
+            db.query(
+                VillagePopulation.supported_village_id,
+                func.max(VillagePopulation.year).label("max_year"),
+            )
+            .group_by(VillagePopulation.supported_village_id)
+            .subquery()
+        )
+        top_villages = (
+            db.query(SupportedVillage.village_name, VillagePopulation.total_population)
+            .join(pop_subq, pop_subq.c.supported_village_id == SupportedVillage.id)
+            .join(
+                VillagePopulation,
+                and_(
+                    VillagePopulation.supported_village_id == SupportedVillage.id,
+                    VillagePopulation.year == pop_subq.c.max_year,
+                ),
+            )
+            .order_by(VillagePopulation.total_population.desc())
+            .limit(10)
+            .all()
+        )
+        top_data = [{"name": name, "value": population or 0} for name, population in top_villages]
+
+        by_province = (
+            db.query(SupportedVillage.province, func.count(SupportedVillage.id))
+            .group_by(SupportedVillage.province)
+            .all()
+        )
         province_data = [{"name": province or "未知", "value": count} for province, count in by_province if province]
 
         return success_response(
@@ -621,9 +660,11 @@ async def get_dashboard_data(current_user=Depends(get_current_user), db: Session
         if cached:
             return cached
 
+        from app.models.supported_village import SupportedVillage
+
         summary = {
             "total_users": db.query(User).count(),
-            "total_villages": db.query(Village).count(),
+            "total_villages": db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count(),
             "total_schools": db.query(School).count(),
             "total_projects": db.query(Project).count(),
             "active_projects": db.query(Project).filter(Project.status == "active").count(),

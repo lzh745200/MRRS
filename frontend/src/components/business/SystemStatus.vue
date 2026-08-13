@@ -97,7 +97,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Timer, Coin, Monitor, Files, Cpu, Refresh } from '@element-plus/icons-vue'
-import { getMonitorSnapshot } from '@/api/systemMonitor'
+import { getMonitorSnapshot, getDatabaseFileSize } from '@/api/systemMonitor'
 import type { MonitorSnapshot } from '@/api/systemMonitor'
 import { logger } from '@/utils/logger'
 
@@ -177,7 +177,6 @@ const dbSizeText = computed(() => {
 const estimateDbSize = async () => {
   try {
     // 尝试从后端获取数据库文件大小
-    const { getDatabaseFileSize } = await import('@/api/systemMonitor')
     const res = await getDatabaseFileSize()
     if (res?.data?.size_bytes) {
       dbSizeBytes.value = res.data.size_bytes
