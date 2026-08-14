@@ -88,10 +88,41 @@
       </el-form>
     </el-card>
 
+    <!-- 导出结果 -->
+    <el-card v-if="exportResult" class="export-result">
+      <h3 class="section-title">导出结果</h3>
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="数据包名称">
+          {{ exportResult.package_name }}
+        </el-descriptions-item>
+        <el-descriptions-item label="记录数">
+          {{ exportResult.total_records ?? 0 }}
+        </el-descriptions-item>
+        <el-descriptions-item label="导出时间">
+          {{ exportResult.exported_at ? formatDate(exportResult.exported_at) : '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="数据包大小">
+          {{ formatSize(exportResult.size || 0) }}
+        </el-descriptions-item>
+      </el-descriptions>
+      <div class="result-actions">
+        <el-button
+          type="primary"
+          :loading="downloading"
+          @click="handleDownloadByName(exportResult.package_name)"
+        >
+          <el-icon style="margin-right: 4px"><Download /></el-icon>重新下载数据包
+        </el-button>
+      </div>
+    </el-card>
+
     <!-- 导出历史 -->
     <el-card class="export-history">
       <h3 class="section-title">导出历史</h3>
-      <el-table :data="exportHistory" style="width: 100%">
+      <el-table v-loading="loadingHistory" :data="exportHistory" style="width: 100%">
+        <template #empty>
+          <el-empty description="暂无导出记录" />
+        </template>
         <el-table-column prop="package_name" label="数据包名称" />
         <el-table-column prop="total_records" label="记录数" width="100" />
         <el-table-column label="大小" width="120">
@@ -118,6 +149,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Download } from '@element-plus/icons-vue'
 import { logger } from '@/utils/logger'
 import {
   exportData,
@@ -138,7 +170,15 @@ const exportForm = ref({
 })
 
 const exporting = ref(false)
+const downloading = ref(false)
+const loadingHistory = ref(false)
 const exportHistory = ref<any[]>([])
+const exportResult = ref<{
+  package_name: string
+  total_records?: number
+  exported_at?: string
+  size?: number
+} | null>(null)
 
 const allModules = [
   'supported_villages',
@@ -214,7 +254,13 @@ const handleExport = async () => {
     // post() 已自动解包，后端裸返回 {success, package_name, total_records, ...}
     const result = response?.data ?? response
     if (result?.success) {
-      ElMessage.success(`导出成功! 共 ${result.total_records ?? 0} 条记录`)
+      exportResult.value = {
+        package_name: result.package_name,
+        total_records: result.total_records ?? 0,
+        exported_at: result.exported_at,
+        size: result.size ?? 0,
+      }
+      ElMessage.success(`导出成功! 共 ${exportResult.value.total_records} 条记录`)
       // 自动下载
       if (result.package_name) {
         await handleDownloadByName(result.package_name)
@@ -239,14 +285,18 @@ const handleDownload = async (row: any) => {
 }
 
 const handleDownloadByName = async (packageName: string) => {
+  downloading.value = true
   try {
     await downloadExportPackage(packageName)
   } catch (error: any) {
     ElMessage.error(error.message || '下载失败')
+  } finally {
+    downloading.value = false
   }
 }
 
 const loadExportHistory = async () => {
+  loadingHistory.value = true
   try {
     const response: any = await getSyncLogs({ action: 'export', page: 1, page_size: 20 })
     // 兼容信封 items / 裸数组
@@ -254,6 +304,8 @@ const loadExportHistory = async () => {
     exportHistory.value = Array.isArray(list) ? list : []
   } catch (error) {
     logger.error('加载导出历史失败', error)
+  } finally {
+    loadingHistory.value = false
   }
 }
 
@@ -298,8 +350,15 @@ onMounted(() => {
 }
 
 .export-config,
-.export-history {
+.export-history,
+.export-result {
   margin-bottom: 20px;
+}
+
+.result-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
 }
 
 .section-title {

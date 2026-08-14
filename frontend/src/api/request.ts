@@ -188,6 +188,64 @@ request.interceptors.request.use(async (config) => {
  *
  * @see apiRequest — auto-unwrapped access (returns res.data directly)
  */
+// ── 错误提示策略（2026-08-14 重构）──
+// 拦截器不再对业务错误直接弹全局提示（避免与页面 catch 双重弹窗、并发请求刷屏）：
+// 1. 401 保持系统级处理（登录过期提示 + refresh 续期 / 跳转登录）
+// 2. 其余错误统一挂载 error.userMessage（含 Blob 响应体中的 JSON 错误解析），
+//    由页面自行决定提示方式；未被任何页面捕获的失败由全局
+//    unhandledrejection 兜底提示（utils/errorHandler.ts），保证每个失败最多一条提示。
+// 3. 请求配置支持 silent: true —— 页面明确不需要任何错误提示（连兜底也跳过）。
+
+/** 从错误响应中提取服务端返回的可读信息（支持 Blob 响应体中的 JSON 错误） */
+async function _extractServerMessage(error: any): Promise<string> {
+  const data = error?.response?.data
+  if (data instanceof Blob) {
+    try {
+      const text = await data.text()
+      const parsed = JSON.parse(text)
+      if (parsed?.detail) return typeof parsed.detail === 'string' ? parsed.detail : ''
+      if (parsed?.message) return typeof parsed.message === 'string' ? parsed.message : ''
+      return ''
+    } catch {
+      return ''
+    }
+  }
+  const detail = data?.detail
+  if (typeof detail === 'string' && detail) return detail
+  const message = data?.message
+  if (typeof message === 'string' && message) return message
+  return ''
+}
+
+/** 构建用户可读的错误消息（挂载到 error.userMessage） */
+async function _buildUserMessage(error: any): Promise<string> {
+  const serverMsg = await _extractServerMessage(error)
+  const status = error?.response?.status
+
+  if (status === 422) {
+    const detail: any = error?.response?.data?.detail
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0]
+      return `${first.loc?.join('.') || ''}: ${first.msg || first.message || ''}`.trim()
+    }
+    return serverMsg || '输入数据校验失败'
+  }
+  if (status === 403) return serverMsg || '权限不足，无法执行此操作'
+  if (status === 404) return serverMsg || '请求的资源不存在'
+  if (status >= 500) return serverMsg || '服务器错误，请稍后重试'
+  if (status) return serverMsg || `请求失败 (${status})`
+  if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+    return '请求超时，请重试'
+  }
+  if (error.code === 'ERR_NETWORK' || error.message?.includes('NetworkError')) {
+    return '网络连接失败，请检查服务是否启动'
+  }
+  if (typeof error?.message === 'string' && error.message && error.message !== 'Network Error') {
+    return error.message
+  }
+  return '操作失败'
+}
+
 request.interceptors.response.use(
   (response) => {
     const requestKey = _makeRequestKey(
@@ -247,13 +305,13 @@ request.interceptors.response.use(
       pendingRequests.delete(requestKey)
     }
 
+    const originalRequest = error.config
+
     // ── HTTP 状态码分类处理 ──
     if (error.response) {
-      const { status, data } = error.response
+      const { status } = error.response
       if (status === 401) {
-        const originalRequest = error.config
-
-        // 不对登录/刷新/2FA验证端点本身做 refresh（防无限循环）
+        // 系统级处理：登录过期提示 + refresh 续期 / 跳转登录（保留全局提示）
         if (!originalRequest || _isAuthEndpoint(originalRequest.url)) {
           _cachedToken = null
           AuthStorage.clear()
@@ -268,6 +326,7 @@ request.interceptors.response.use(
           ) {
             window.location.href = '/login'
           }
+          error.userMessage = '登录已过期，请重新登录'
           return Promise.reject(error)
         }
 
@@ -288,6 +347,7 @@ request.interceptors.response.use(
           ) {
             window.location.href = '/login'
           }
+          error.userMessage = '登录已过期，请重新登录'
           return Promise.reject(error)
         }
 
@@ -355,49 +415,36 @@ request.interceptors.response.use(
           ) {
             window.location.href = '/login'
           }
+          error.userMessage = '登录已过期，请重新登录'
           return Promise.reject(refreshError)
           /* c8 ignore next -- finally 分支为 v8 计数伪影（try/catch 必定走到 finally） */
         } finally {
           _isRefreshing = false
         }
-      } else if (status === 403) {
+      }
+
+      if (status === 403) {
         // CSRF 校验失败时重置 token 缓存，自动获取新 token 并重试一次
-        const msg: string = data?.detail || data?.message || ''
-        if (msg.includes('CSRF') || msg.includes('csrf')) {
+        const serverMsg = await _extractServerMessage(error)
+        if (serverMsg.includes('CSRF') || serverMsg.includes('csrf')) {
           _csrfToken = null
           // 自动重试：获取新 CSRF token 后重发原请求（仅重试一次，防无限循环）
-          if (error.config && !error.config._csrfRetried) {
-            error.config._csrfRetried = true
+          if (originalRequest && !originalRequest._csrfRetried) {
+            originalRequest._csrfRetried = true
             return _ensureCsrfToken().then((newToken) => {
               if (newToken) {
-                error.config.headers[_CSRF_HEADER_NAME] = newToken
+                originalRequest.headers[_CSRF_HEADER_NAME] = newToken
               }
-              return request.request(error.config)
+              return request.request(originalRequest)
             })
           }
-          ElMessage.error('安全校验已过期，请重试（CSRF）')
+          error.userMessage = '安全校验已过期，请重试（CSRF）'
         } else {
-          ElMessage.error(msg || '权限不足，无法执行此操作')
-        }
-      } else if (status === 404) {
-        // 404 资源不存在：弹窗提示（避免静默失败）
-        const url = error.config?.url || ''
-        ElMessage.warning(data?.detail || data?.message || `请求的资源不存在: ${url}`)
-      } else if (status >= 500) {
-        ElMessage.error('服务器错误，请稍后重试')
-      } else if (status === 422) {
-        // 422 验证错误：提取第一个字段错误展示
-        const detail: any = data?.detail
-        if (Array.isArray(detail) && detail.length > 0) {
-          const first = detail[0]
-          ElMessage.warning(`${first.loc?.join('.') || ''}: ${first.msg || first.message}`)
-        } else {
-          ElMessage.warning(typeof detail === 'string' ? detail : '输入数据校验失败')
+          error.userMessage = serverMsg || '权限不足，无法执行此操作'
         }
       } else {
-        // 400 等客户端错误：显示服务端返回的详情
-        const msg = data?.detail || data?.message || ''
-        if (msg) ElMessage.warning(typeof msg === 'string' ? msg : JSON.stringify(msg))
+        // 400/404/422/5xx：不再全局弹窗，挂载 userMessage 由页面/兜底处理
+        error.userMessage = await _buildUserMessage(error)
       }
     } else if (error.code === 'ERR_NETWORK' || error.message?.includes('NetworkError')) {
       // 离线回退：检查是否处于离线模式，尝试从离线 Mock 提供数据
@@ -419,11 +466,18 @@ request.interceptors.response.use(
           return request.request(error.config)
         })
       }
-      ElMessage.error('网络连接失败，请检查服务是否启动')
+      error.userMessage = '网络连接失败，请检查服务是否启动'
     } else if (error.code === 'ECONNABORTED') {
-      ElMessage.warning('请求超时，请重试')
+      error.userMessage = '请求超时，请重试'
     } else {
       console.error('[API] Unexpected error:', error.message || error)
+      error.userMessage =
+        typeof error?.message === 'string' && error.message ? error.message : '操作失败'
+    }
+
+    // silent 配置：页面明确不需要任何错误提示（连全局兜底也跳过）
+    if ((originalRequest as any)?.silent) {
+      error.__silent = true
     }
 
     return Promise.reject(error)

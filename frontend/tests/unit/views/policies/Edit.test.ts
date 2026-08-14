@@ -373,9 +373,9 @@ describe('上传处理', () => {
     const vm = wrapper.vm as any
     expect(await vm.beforeUpload({ type: 'image/png', size: 100 })).toBe(true)
     expect(await vm.beforeUpload({ type: 'text/html', size: 100 })).toBe(false)
-    expect(ElMessage.error).toHaveBeenCalledWith('只能上传 jpg/png/pdf/doc/docx 文件!')
-    expect(await vm.beforeUpload({ type: 'image/png', size: 11 * 1024 * 1024 })).toBe(false)
-    expect(ElMessage.error).toHaveBeenCalledWith('文件大小不能超过 10MB!')
+    expect(ElMessage.error).toHaveBeenCalledWith('只能上传 jpg/png/pdf/doc/docx/pptx 文件!')
+    expect(await vm.beforeUpload({ type: 'image/png', size: 51 * 1024 * 1024 })).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('文件大小不能超过 50MB!')
   })
 })
 

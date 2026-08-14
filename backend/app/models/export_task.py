@@ -109,6 +109,12 @@ class ExportTask(Base):
 
         if self.status != ExportStatus.COMPLETED.value:
             return False
-        if self.expires_at and self.expires_at < datetime.now(timezone.utc):
-            return False
+        if self.expires_at:
+            expires = self.expires_at
+            # SQLite DateTime 列不保留时区信息，读取值为 naive datetime；
+            # 统一补上 UTC 时区后再与 aware now 比较，避免 TypeError
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            if expires < datetime.now(timezone.utc):
+                return False
         return True

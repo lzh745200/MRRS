@@ -603,6 +603,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -638,6 +639,8 @@ const isEditMode = computed(() => {
 
 // 加载状态
 const loading = ref(false)
+// 保存失败的详细原因（供外层提示，替代笼统的“保存失败，请稍后重试”）
+const saveErrorMessage = ref('')
 
 // 文件列表
 const fileList = ref<any[]>([])
@@ -956,7 +959,7 @@ async function handleDownloadFile(file: any) {
     URL.revokeObjectURL(objectUrl)
   } catch (e) {
     logger.error('下载文件失败:', e)
-    ElMessage.error('文件下载失败，请稍后重试')
+    ElMessage.error(getErrorMessage(e, '文件下载失败，请稍后重试'))
   }
 }
 
@@ -1003,7 +1006,7 @@ async function uploadAllPendingFiles(projectId: number | string) {
       pendingFiles[cat] = []
     } catch (e) {
       logger.error(`上传${cat}分类文件失败:`, e)
-      ElMessage.error(`部分文件上传失败（${cat}），请稍后重试`)
+      ElMessage.error(getErrorMessage(e, `部分文件上传失败（${cat}），请稍后重试`))
     }
   }
   return totalUploaded
@@ -1101,7 +1104,7 @@ async function loadProjectData() {
     await loadProjectFiles(projectId)
   } catch (error) {
     logger.error('加载项目数据失败:', error)
-    ElMessage.error('数据加载失败，请稍后重试')
+    ElMessage.error(getErrorMessage(error, '数据加载失败，请稍后重试'))
     pushSafe('/projects')
   } finally {
     loading.value = false
@@ -1191,6 +1194,7 @@ async function saveProjectData(): Promise<number | string | false> {
     }
   } catch (error) {
     logger.error('保存项目数据失败:', error)
+    saveErrorMessage.value = getErrorMessage(error, '保存失败，请稍后重试')
     return false
   } finally {
     loading.value = false
@@ -1216,7 +1220,8 @@ async function handleSave(_formName: string) {
       ElMessage.success(isEditMode.value ? '项目更新成功' : '项目创建成功')
       pushSafe('/projects')
     } else {
-      ElMessage.error('保存失败，请稍后重试')
+      ElMessage.error(saveErrorMessage.value || '保存失败，请稍后重试')
+      saveErrorMessage.value = ''
     }
   })
 }
@@ -1243,7 +1248,8 @@ async function handleSaveAndContinue() {
       // 滚动到页面顶部
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
-      ElMessage.error('保存失败，请稍后重试')
+      ElMessage.error(saveErrorMessage.value || '保存失败，请稍后重试')
+      saveErrorMessage.value = ''
     }
   })
 }

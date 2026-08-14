@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { ref, onMounted, defineAsyncComponent } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -124,7 +125,7 @@ async function loadStats() {
     }
   } catch (error) {
     logger.error('加载统计数据失败:', error)
-    ElMessage.error('加载统计数据失败，请稍后重试')
+    ElMessage.error(getErrorMessage(error, '加载统计数据失败，请稍后重试'))
   }
 }
 

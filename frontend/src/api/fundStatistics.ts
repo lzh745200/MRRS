@@ -120,6 +120,7 @@ export function getFundStatisticsByType(params?: FundQueryParams) {
 export function getYearlyFundComparison(params?: FundQueryParams) {
   return get<{
     success: boolean
+    message?: string
     data: YearlyFundSummary[]
   }>('/funds/supported-village/statistics/yearly-comparison', params)
 }

@@ -265,14 +265,15 @@ describe('挂载与初始化', () => {
     expect((wrapper.vm as any).schoolOptions).toEqual([])
   })
 
-  it('fetchData 失败 → error=true 并提示', async () => {
+  it('fetchData 失败 → error=true + 内联错误信息（不再弹提示）', async () => {
     mockApiRequest.mockRejectedValue(new Error('boom'))
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.error).toBe(true)
+    expect(vm.errorMsg).toBe('boom')
     expect(logError).toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('数据加载失败，请稍后重试')
+    expect(ElMessage.error).not.toHaveBeenCalled()
     expect(vm.loading).toBe(false)
   })
 
@@ -580,7 +581,7 @@ describe('导出 / 模板下载', () => {
     const vm = wrapper.vm as any
     fundApiMock.exportList.mockRejectedValueOnce(new Error('net'))
     await vm.handleExport()
-    expect(ElMessage.error).toHaveBeenCalledWith('导出失败')
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
     expect(vm.exporting).toBe(false)
   })
 
@@ -690,7 +691,7 @@ describe('批量操作', () => {
     const vm = wrapper.vm as any
     fundApiMock.exportList.mockRejectedValueOnce(new Error('net'))
     await vm.handleBatchExport()
-    expect(ElMessage.error).toHaveBeenCalledWith('导出失败')
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
   })
 
   it('handleBatchExport 重复 → 直接返回', async () => {

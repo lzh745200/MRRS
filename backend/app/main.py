@@ -72,9 +72,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     _start_wal_checkpoint_scheduler()
     # 备份调度器（KPI 预计算/异常检测/自动备份/待办提醒/周报）
     _start_backup_scheduler()
+    # 本地任务队列（异步导出等后台任务执行）
+    from app.services.task_queue import task_queue
+
+    await task_queue.start()
     # _start_db_maintenance() — 已禁用，VACUUM 会生成大量临时文件
     yield
     # _stop_db_maintenance()
+    await task_queue.stop()
     _stop_backup_scheduler()
     _stop_wal_checkpoint_scheduler()
     _stop_approval_reminder()

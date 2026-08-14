@@ -1,4 +1,4 @@
-﻿/**
+/**
  * views/ruralWorks/Analysis.vue 覆盖率攻坚（四指标 100%）
  * 覆盖：onMounted 加载数据与图表初始化、筛选（村庄/类型）、数据排序、
  * 指标计算、refreshData、exportAnalysis、视图切换、图表数据函数、字典函数全分支。
@@ -165,7 +165,7 @@ describe('挂载与数据加载', () => {
     const wrapper = mountComp()
     await flushPromises()
     expect(logError).toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('加载数据失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
     expect((wrapper.vm as any).analysisData).toEqual([])
   })
 

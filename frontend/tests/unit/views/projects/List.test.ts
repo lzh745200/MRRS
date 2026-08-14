@@ -450,7 +450,7 @@ describe('导出', () => {
 
     projectApiMock.exportList.mockRejectedValueOnce(new Error('net'))
     await vm.handleExport()
-    expect(ElMessage.error).toHaveBeenCalledWith('导出失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
   })
 
   it('导出按钮 → handleExport', async () => {

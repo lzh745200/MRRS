@@ -122,8 +122,8 @@ describe('加载与渲染', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('加载审批任务失败')
   })
 
-  it('任务列表多种响应形态：嵌套 data.items / 裸数组 / 非数组兜底', async () => {
-    // 嵌套形态 data.data.items
+  it('任务列表多种响应形态：嵌套 data.items / data 数组 / 裸数组 / 非数组兜底', async () => {
+    // 嵌套形态 data.items
     mockGet.mockImplementation((url: string) => {
       if (url === '/approval/tasks/pending') {
         return Promise.resolve({ data: { items: [{ id: 7, title: '嵌套任务' }] } })
@@ -135,16 +135,16 @@ describe('加载与渲染', () => {
     expect((wrapper.vm as any).tasks).toEqual([{ id: 7, title: '嵌套任务' }])
     wrapper.unmount()
 
-    // 双层嵌套形态 data.data.data.items（data.items 为空时深入一层）
+    // data 为数组形态（envelope 内层数组未展开为 items 时）
     mockGet.mockImplementation((url: string) => {
       if (url === '/approval/tasks/pending') {
-        return Promise.resolve({ data: { data: { items: [{ id: 9, title: '双层嵌套' }] } } })
+        return Promise.resolve({ data: [{ id: 9, title: 'data数组' }] })
       }
       return Promise.resolve({ items: [], total: 0 })
     })
     wrapper = mountComp()
     await flushPromises()
-    expect((wrapper.vm as any).tasks).toEqual([{ id: 9, title: '双层嵌套' }])
+    expect((wrapper.vm as any).tasks).toEqual([{ id: 9, title: 'data数组' }])
     wrapper.unmount()
 
     // 裸数组形态
@@ -285,29 +285,29 @@ describe('批量审批', () => {
 })
 
 describe('页签与分页', () => {
-  it('切换 completed 页签 → 携带 status 参数请求全部任务', async () => {
+  it('切换 completed 页签 → 请求任务历史（completed=true）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.activeTab = 'completed'
     vm.handleTabChange()
     await flushPromises()
-    expect(mockGet).toHaveBeenCalledWith('/approval/tasks/all', {
+    expect(mockGet).toHaveBeenCalledWith('/approval/tasks/history', {
       skip: 0,
       limit: 20,
-      status: 'completed',
+      completed: true,
     })
     expect(vm.selectedIds).toEqual([])
   })
 
-  it('切换 initiated 页签 → 不带 status', async () => {
+  it('切换 initiated 页签 → 请求我的申请（不带 status）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.activeTab = 'initiated'
     vm.handleTabChange()
     await flushPromises()
-    expect(mockGet).toHaveBeenCalledWith('/approval/tasks/all', { skip: 0, limit: 20 })
+    expect(mockGet).toHaveBeenCalledWith('/approval/tasks/mine', { skip: 0, limit: 20 })
   })
 
   it('handleSelectionChange 与 handlePageChange', async () => {
@@ -338,7 +338,7 @@ describe('页签与分页', () => {
       tabs.vm.$emit('update:modelValue', 'initiated')
       tabs.vm.$emit('tab-change', 'initiated')
       await flushPromises()
-      expect(mockGet).toHaveBeenCalledWith('/approval/tasks/all', { skip: 0, limit: 20 })
+      expect(mockGet).toHaveBeenCalledWith('/approval/tasks/mine', { skip: 0, limit: 20 })
     }
     // 分页器 current-change 模板箭头（渲染条件 total>pageSize）
     const pagers = wrapper.findAllComponents({ name: 'ElPagination' })

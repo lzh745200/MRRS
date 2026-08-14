@@ -132,19 +132,32 @@ export const fundApi = {
     return response.data
   },
   async statisticsMultiDimension(params?: Record<string, string | number | boolean>) {
+    // 注意：get() 已自动解包（返回 res.data）。此处必须原样返回，
+    // 不能再次取 .data —— 否则会得到裸数组，调用方 .success 守卫永远为 false，
+    // 导致 Report.vue / Analysis.vue 图表空数据。
     const response = await get(`${FUNDS_BASE}/statistics/multi-dimension`, params)
-    return response.data
+    return response
   },
 
-  // ========== 导出（默认CSV格式下载） ==========
-  async exportList(params?: { search?: string; type?: string; status?: string }) {
+  // ========== 导出（真实导出端点 /export/funds，xlsx/csv 文件下载） ==========
+  // 修复 2026-08-14：旧实现下载 /funds/export（后端返回 JSON），用户得到
+  // 名为 .csv 的 JSON 文本文件。现改为调用真实文件导出端点。
+  async exportList(
+    params?: { search?: string; type?: string; status?: string },
+    format: 'xlsx' | 'csv' = 'xlsx'
+  ) {
     await downloadBlobAsFile(
       () =>
-        request.get(`${FUNDS_BASE}/export`, {
-          params: { ...params, format: 'csv' },
+        request.get('/export/funds', {
+          params: {
+            keyword: params?.search || undefined,
+            fund_type: params?.type || undefined,
+            status: params?.status || undefined,
+            format,
+          },
           responseType: 'blob',
         }),
-      { fallbackFileName: `经费列表_${new Date().toISOString().slice(0, 10)}.csv` }
+      { fallbackFileName: `经费列表_${new Date().toISOString().slice(0, 10)}.${format}` }
     )
   },
 

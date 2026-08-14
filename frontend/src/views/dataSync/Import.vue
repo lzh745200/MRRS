@@ -124,7 +124,10 @@
     <!-- 导入历史 -->
     <el-card class="import-history">
       <h3 class="section-title">导入历史</h3>
-      <el-table :data="importHistory" style="width: 100%">
+      <el-table v-loading="loadingHistory" :data="importHistory" style="width: 100%">
+        <template #empty>
+          <el-empty description="暂无导入记录" />
+        </template>
         <el-table-column prop="package_name" label="数据包名称" />
         <el-table-column prop="total_records" label="总记录数" width="100" />
         <el-table-column prop="success_records" label="成功" width="80">
@@ -175,6 +178,7 @@ const importForm = ref({
 })
 
 const importing = ref(false)
+const loadingHistory = ref(false)
 const selectedFile = ref<File | null>(null)
 const fileList = ref<UploadFile[]>([])
 const importResult = ref<any>(null)
@@ -278,6 +282,7 @@ const showConflicts = () => {
 }
 
 const loadImportHistory = async () => {
+  loadingHistory.value = true
   try {
     const response: any = await getSyncLogs({ action: 'import', page: 1, page_size: 20 })
     // 兼容信封 items / 裸数组
@@ -285,6 +290,8 @@ const loadImportHistory = async () => {
     importHistory.value = Array.isArray(list) ? list : []
   } catch (error) {
     logger.error('加载导入历史失败', error)
+  } finally {
+    loadingHistory.value = false
   }
 }
 

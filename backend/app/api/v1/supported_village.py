@@ -42,10 +42,26 @@ from app.core.data_scope_adapter import apply_scope_filter
 from app.api.v1.deps import enforce_admin_include_deleted, build_viewable_because
 from app.schemas.supported_village import SupportedVillageCreate, SupportedVillageUpdate
 from app.core.transaction import safe_commit
+from app.services.approval_workflow_service import (
+    ApprovalWorkflowService,
+    submit_entity_change_approval,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/supported-villages", tags=["帮扶村管理"])
+
+
+def _apply_village_approval_result(db: Session, task) -> None:
+    """审批终态回写帮扶村（注册到 ApprovalWorkflowService）
+
+    帮扶村无 pending 状态门（创建即生效），审批通过后无字段需回写；
+    此处保留处理器接口，便于后续扩展（如 transition_status 审批门）。
+    """
+    _ = (db, task)
+
+
+ApprovalWorkflowService.register_entity_apply_handler("supported_village", _apply_village_approval_result)
 
 
 class BatchDeleteRequest(BaseModel):
@@ -102,6 +118,48 @@ _IMPORT_COLUMNS = [
 # 预计算，避免重复 destructure
 _FIELD_NAMES = [col[0] for col in _IMPORT_COLUMNS]
 _HEADER_NAMES = [col[1] for col in _IMPORT_COLUMNS]
+
+# 表头标签 → 模型字段（覆盖官方模板 VILLAGE_FIELDS 19 列 + 旧平铺格式别名）
+# 官方模板：表头第 6 行、首列"序号"、表头带必填 * 前缀
+_IMPORT_LABEL_MAP = {
+    "各部门各单位": "department",
+    "部门单位": "department",
+    "具体帮扶单位": "support_unit",
+    "帮扶单位": "support_unit",
+    "定点帮扶村": "village_name",
+    "帮扶村名称": "village_name",
+    "省": "province",
+    "市": "city",
+    "县/市": "county",
+    "县 / 市": "county",
+    "乡镇": "township",
+    "地区范围": "region_scope",
+    "是否属于三区三州": "is_three_regions",
+    "是否三区三州": "is_three_regions",
+    "是否属于边疆地区": "is_border_area",
+    "是否属于民族地区": "is_ethnic_area",
+    "是否属于革命地区": "is_revolutionary_area",
+    "是否属于160个国家乡村振兴重点帮扶县": "is_key_county",
+    "是否重点帮扶县": "is_key_county",
+    "是否振兴梯队": "is_revitalization_tier",
+    "省级乡村振兴示范创建对象": "is_provincial_demo",
+    "百村示范创建对象": "is_hundred_village_demo",
+    "梯次振兴发展对象": "is_tiered_development",
+    "是否跨省": "is_cross_province",
+    "是否跨市": "is_cross_city",
+    "是否跨大单位协作帮扶": "is_cross_unit_cooperation",
+    "是否纳入总盘子": "is_in_overall_plan",
+    "2021年以来获得的国家或省级表彰": "honors",
+    "经度": "longitude",
+    "纬度": "latitude",
+}
+
+_BOOL_IMPORT_FIELDS = frozenset({
+    "is_three_regions", "is_border_area", "is_ethnic_area", "is_revolutionary_area",
+    "is_key_county", "is_revitalization_tier", "is_provincial_demo",
+    "is_hundred_village_demo", "is_tiered_development", "is_cross_province",
+    "is_cross_city", "is_cross_unit_cooperation", "is_in_overall_plan",
+})
 
 # 年度数据辅助函数中需要跳过的元数据列
 _SKIP_COLUMNS = frozenset({"id", "supported_village_id", "year", "created_at", "updated_at"})
@@ -278,15 +336,43 @@ async def _invalidate_village_cache():
         logger.debug("清理帮扶村列表缓存失败: %s", e)
 
 
-def _process_import_row(row: tuple, field_names: List[str], db: Session, row_idx: int):
-    """处理单行导入数据。返回 (success: bool, error_msg: Optional[str])"""
-    values = {}
-    for i, field_name in enumerate(field_names):
-        val = row[i] if i < len(row) else None
+def _find_village_header_row(ws) -> tuple:
+    """探测表头行，返回 (header_row_idx, col_map: {field_name: col_index})。
+
+    官方模板：第 1-5 行为装饰标题区，第 6 行表头（带 * 前缀），第 7 行示例行。
+    用户自制平铺文件：第 1 行表头。按表头标签驱动列映射，避免位置错位。
+    探测失败回退：假定第 1 行表头、按 _IMPORT_COLUMNS 位置映射（旧行为）。
+    """
+    for idx, row in enumerate(ws.iter_rows(min_row=1, max_row=10, values_only=True), start=1):
+        col_map: Dict[str, int] = {}
+        for col_idx, cell in enumerate(row):
+            if cell is None:
+                continue
+            label = str(cell).lstrip("*").strip()
+            field = _IMPORT_LABEL_MAP.get(label)
+            if field and field not in col_map:
+                col_map[field] = col_idx
+        if "village_name" in col_map:
+            return idx, col_map
+    # 回退：旧平铺格式（无表头识别时按位置映射）
+    return 1, {name: i for i, name in enumerate(_FIELD_NAMES)}
+
+
+def _process_import_row(
+    row: tuple, col_map: Dict[str, int], db: Session, row_idx: int, current_user=None
+):
+    """处理单行导入数据（表头驱动列映射）。返回 (success, error_msg)"""
+    values: Dict[str, Any] = {}
+    for field_name, col_idx in col_map.items():
+        val = row[col_idx] if col_idx < len(row) else None
         if val is not None and isinstance(val, str):
             val = val.strip()
-        if field_name in ("is_three_regions", "is_key_county", "is_revitalization_tier"):
-            val = str(val).strip() in ("是", "1", "True", "true", "yes", "Y")
+        if field_name in _BOOL_IMPORT_FIELDS:
+            # 空单元格保持 None（不写 False），有值才解析布尔
+            if val is None or (isinstance(val, str) and not val):
+                val = None
+            else:
+                val = str(val).strip() in ("是", "1", "True", "true", "yes", "Y")
         values[field_name] = val
     if not values.get("village_name"):
         return False, f"第{row_idx}行: 帮扶村名称不能为空"
@@ -298,6 +384,10 @@ def _process_import_row(row: tuple, field_names: List[str], db: Session, row_idx
     if existing:
         return False, f"第{row_idx}行: 帮扶村 '{values['village_name']}' 已存在，跳过"
     village = SupportedVillage(**{k: v for k, v in values.items() if v is not None})
+    # 归属字段：与手工创建一致，保证导入者在数据权限范围内可见/可编辑
+    if current_user is not None:
+        village.organization_id = getattr(current_user, "organization_id", None)
+        village.created_by = getattr(current_user, "id", None)
     db.add(village)
     return True, None
 
@@ -493,17 +583,23 @@ async def import_villages(
         ws = wb.active
     except Exception:
         raise HTTPException(status_code=400, detail="无法解析 Excel 文件，请检查文件格式")
-    rows = list(ws.iter_rows(min_row=2, values_only=True))
+    header_row, col_map = _find_village_header_row(ws)
+    rows = list(ws.iter_rows(min_row=header_row + 1, values_only=True))
     if not rows:
         raise HTTPException(status_code=400, detail="Excel 文件中没有数据行，请至少添加一行数据")
     imported = 0
     errors = []
-    field_names = _FIELD_NAMES
-    for row_idx, row in enumerate(rows, start=2):
+    for row_idx, row in enumerate(rows, start=header_row + 1):
         if not any(row):
             continue
+        # 跳过模板示例行（行尾标注"← 示例行（导入时自动跳过）"）与说明/页脚行
+        if any(
+            isinstance(c, str) and ("示例行" in c or "填写说明" in c or "帮扶管理信息系统 v" in c)
+            for c in row
+        ):
+            continue
         try:
-            success, error_msg = _process_import_row(row, field_names, db, row_idx)
+            success, error_msg = _process_import_row(row, col_map, db, row_idx, current_user)
             if success:
                 imported += 1
             else:
@@ -513,7 +609,7 @@ async def import_villages(
     safe_commit(db)
     await _invalidate_village_cache()
     return success_response(
-        data={"imported": imported, "errors": errors[:20]},
+        data={"imported": imported, "failed": len(errors), "errors": errors},
         message=f"成功导入 {imported} 条记录" + (f"，{len(errors)} 条跳过" if errors else ""),
     )
 
@@ -579,7 +675,17 @@ async def create_village(
         db, AuditAction.CREATE, current_user, village, new_data=_village_to_diff_dict(village),
         detail=f"创建帮扶村: {village.village_name}",
     )
-    return success_response(data={"id": village.id}, message="创建成功")
+    # 数据变更自动创建审批任务（Requirement 3.2）：帮扶村新增进入待审批板块
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="supported_village",
+        entity_id=village.id,
+        submitter_id=current_user.id,
+        title=f"帮扶村新增：{village.village_name}",
+        change_data=_village_to_diff_dict(village),
+    )
+    return success_response(data={"id": village.id, "approval_task_id": approval_task_id},
+                            message="创建成功")
 
 
 @router.put("/{village_id}")
@@ -626,7 +732,18 @@ async def update_village(
         old_data=old_snapshot, new_data=_village_to_diff_dict(village),
         detail=f"更新帮扶村: {village.village_name}",
     )
-    return success_response(message="更新成功")
+    # 数据变更自动创建审批任务（Requirement 3.2）：帮扶村修改进入待审批板块（含变更对比）
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="supported_village",
+        entity_id=village.id,
+        submitter_id=current_user.id,
+        title=f"帮扶村变更：{village.village_name}",
+        change_data=_village_to_diff_dict(village),
+        original_data=old_snapshot,
+    )
+    return success_response(data={"id": village.id, "approval_task_id": approval_task_id},
+                            message="更新成功")
 
 
 @router.delete("/{village_id}")
@@ -641,7 +758,18 @@ async def delete_village(
     village.is_active = False
     safe_commit(db)
     await _invalidate_village_cache()
-    return success_response(message="删除成功")
+    # 数据变更自动创建审批任务：帮扶村删除进入待审批板块
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="supported_village",
+        entity_id=village.id,
+        submitter_id=current_user.id,
+        title=f"帮扶村删除：{village.village_name}",
+        change_data={"deleted": True, "village_name": village.village_name},
+        original_data=_village_to_diff_dict(village),
+    )
+    return success_response(data={"id": village.id, "approval_task_id": approval_task_id},
+                            message="删除成功")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -967,6 +1095,96 @@ async def save_committee_data(
 
 # ── 区块数据导入 ──
 
+_SECTION_SKIP_ATTRS = frozenset({"id", "supported_village_id", "year", "created_at", "updated_at"})
+
+
+def _section_label_map(model: Any) -> Dict[str, str]:
+    """从模型列注释构建 中文标签 → 属性名 映射（如 "总户数" → "total_households"）。"""
+    mapping: Dict[str, str] = {}
+    for col in model.__table__.columns:
+        if col.name in _SECTION_SKIP_ATTRS:
+            continue
+        if col.comment:
+            # 注释可能带补充说明（如 "总户数" / "进度(%)"），取原文并去掉括号备注
+            label = col.comment.split("(")[0].split("（")[0].strip()
+            if label:
+                mapping.setdefault(label, col.name)
+            mapping.setdefault(col.comment.strip(), col.name)
+        # 英文属性名本身也可作为表头（兼容机器生成文件）
+        mapping.setdefault(col.name, col.name)
+    return mapping
+
+
+def _coerce_section_value(model: Any, attr: str, value: Any) -> Any:
+    """按模型列类型把 Excel 单元格值转为合适 Python 类型。"""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    col = model.__table__.columns.get(attr)
+    if col is None:
+        return value
+    from sqlalchemy import Boolean, Float, Integer, Numeric
+    try:
+        if isinstance(col.type, Boolean):
+            return str(value).strip() in ("是", "1", "True", "true", "yes", "Y")
+        if isinstance(col.type, Integer):
+            return int(float(str(value).strip()))
+        if isinstance(col.type, (Float, Numeric)):
+            return float(str(value).strip())
+    except (ValueError, TypeError):
+        return None
+    return value.strip() if isinstance(value, str) else value
+
+
+def _import_section_sheet(ws, model: Any, village_id: int, year: int, db: Session) -> Dict[str, int]:
+    """解析单个工作表并按年写库（upsert）。返回 {imported, failed}。"""
+    label_map = _section_label_map(model)
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return {"imported": 0, "failed": 0}
+    # 表头行：第一个能命中 ≥2 个标签的行（跳过可能的标题/装饰行）
+    header_idx = None
+    attr_by_col: Dict[int, str] = {}
+    for idx, row in enumerate(rows[:10]):
+        hits = {}
+        for col_idx, cell in enumerate(row):
+            if cell is None:
+                continue
+            label = str(cell).lstrip("*").strip()
+            attr = label_map.get(label)
+            if attr:
+                hits[col_idx] = attr
+        if len(hits) >= 2:
+            header_idx = idx
+            attr_by_col = hits
+            break
+    if header_idx is None:
+        return {"imported": 0, "failed": max(0, len(rows) - 1)}
+
+    imported = 0
+    failed = 0
+    for row in rows[header_idx + 1:]:
+        if not row or not any(c is not None and str(c).strip() for c in row):
+            continue
+        if any(isinstance(c, str) and "示例行" in c for c in row):
+            continue
+        data: Dict[str, Any] = {}
+        for col_idx, attr in attr_by_col.items():
+            val = row[col_idx] if col_idx < len(row) else None
+            coerced = _coerce_section_value(model, attr, val)
+            if coerced is not None:
+                data[attr] = coerced
+        # 年份列优先取单元格，其次用请求参数
+        row_year = data.pop("year", None) or year
+        if not data:
+            failed += 1
+            continue
+        try:
+            _save_section_data(db, model, village_id, int(row_year), data)
+            imported += 1
+        except Exception:
+            failed += 1
+    return {"imported": imported, "failed": failed}
+
 
 @router.post("/{village_id}/sections/import")
 async def import_section_data(
@@ -977,28 +1195,24 @@ async def import_section_data(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """导入帮扶村单个区块数据（Excel）"""
+    """导入帮扶村单个区块数据（Excel 表头驱动解析，真实写库）"""
     _get_village_or_404(db, village_id, current_user)
+    model = _SECTION_MODEL.get(section_key or "")
+    if model is None:
+        raise HTTPException(status_code=400, detail=f"未知板块标识: {section_key}")
     try:
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(await file.read()))
         ws = wb.active
-        rows = [[cell.value for cell in row] for row in ws.iter_rows()][1:]  # skip header
-        return {
-            "code": 200,
-            "success": True,
-            "data": {
-                "rows": len(rows),
-                "imported": len(rows),
-                "failed": 0,
-                "preview": rows[:5],
-                "section_key": section_key,
-                "year": year,
-            },
-            "message": f"导入成功，共 {len(rows)} 行",
-        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"文件解析失败: {str(e)}")
+    target_year = year or datetime.now().year
+    result = _import_section_sheet(ws, model, village_id, target_year, db)
+    safe_commit(db)
+    return success_response(
+        data={**result, "section_key": section_key, "year": target_year},
+        message=f"导入成功 {result['imported']} 行" + (f"，{result['failed']} 行失败" if result["failed"] else ""),
+    )
 
 
 @router.post("/{village_id}/sections/import-all")
@@ -1009,27 +1223,42 @@ async def import_all_sections_data(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """导入帮扶村所有区块数据（Excel）"""
+    """导入帮扶村所有区块数据（按工作表名匹配板块，真实写库）"""
     _get_village_or_404(db, village_id, current_user)
     try:
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(await file.read()))
-        sheets_imported = len(wb.sheetnames)
-        total_rows = sum(max(0, ws.max_row - 1) for ws in [wb[s] for s in wb.sheetnames])
-        return {
-            "code": 200,
-            "success": True,
-            "data": {
-                "sheets": sheets_imported,
-                "sections": [{"name": s, "rows": max(0, wb[s].max_row - 1)} for s in wb.sheetnames],
-                "imported": total_rows,
-                "failed": 0,
-                "year": year,
-            },
-            "message": f"导入成功，共 {sheets_imported} 个工作表，{total_rows} 行数据",
-        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"文件解析失败: {str(e)}")
+    # 工作表名 → 板块键：兼容 section_key（population）与模型表名/中文名
+    sheet_alias: Dict[str, str] = {}
+    for key, model in _SECTION_MODEL.items():
+        sheet_alias[key] = key
+        sheet_alias[model.__tablename__] = key
+        sheet_alias[key.replace("-", "_")] = key
+    target_year = year or datetime.now().year
+    sections = []
+    total_imported = 0
+    total_failed = 0
+    for name in wb.sheetnames:
+        key = sheet_alias.get(name.strip().lower()) or sheet_alias.get(name.strip())
+        if key is None:
+            continue  # 未识别的工作表跳过，不误报
+        result = _import_section_sheet(wb[name], _SECTION_MODEL[key], village_id, target_year, db)
+        sections.append({"name": name, "section_key": key, **result})
+        total_imported += result["imported"]
+        total_failed += result["failed"]
+    safe_commit(db)
+    return success_response(
+        data={
+            "sheets": len(sections),
+            "sections": sections,
+            "imported": total_imported,
+            "failed": total_failed,
+            "year": target_year,
+        },
+        message=f"导入成功 {total_imported} 行" + (f"，{total_failed} 行失败" if total_failed else ""),
+    )
 
 
 # ── 转移支付资金 ──

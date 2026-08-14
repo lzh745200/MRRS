@@ -20,10 +20,25 @@ from app.schemas.rural_work import (
     RuralWorkCreate,
     RuralWorkUpdate,
 )
+from app.services.approval_workflow_service import (
+    ApprovalWorkflowService,
+    submit_entity_change_approval,
+)
 from app.services.rural_work_service import RuralWorkService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/rural-works", tags=["乡村工作"])
+
+
+def _apply_rural_work_approval_result(db, task) -> None:
+    """审批终态回写乡村工作（注册到 ApprovalWorkflowService）
+
+    乡村工作无 pending 状态门，审批通过后无字段需回写；保留处理器接口便于后续扩展。
+    """
+    _ = (db, task)
+
+
+ApprovalWorkflowService.register_entity_apply_handler("rural_work", _apply_rural_work_approval_result)
 
 
 def _parse_query_date(val: Optional[str]) -> Optional[datetime]:
@@ -79,7 +94,7 @@ async def list_rural_works(
 async def get_statistics(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """获取乡村工作统计数据"""
     service = RuralWorkService(db)
-    stats = service.get_statistics()
+    stats = service.get_statistics(current_user=current_user)
     return ResponseModel(code=200, data=stats.model_dump(), message="success")
 
 
@@ -87,7 +102,7 @@ async def get_statistics(db: Session = Depends(get_db), current_user: User = Dep
 async def get_villages_for_select(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """获取村庄列表（用于下拉选择）"""
     service = RuralWorkService(db)
-    villages = service.get_villages_for_select()
+    villages = service.get_villages_for_select(current_user=current_user)
     return ResponseModel(code=200, data=villages, message="success")
 
 
@@ -105,6 +120,7 @@ async def generate_work_report(
         year=year,
         start_date=_parse_query_date(start_date),
         end_date=_parse_query_date(end_date),
+        current_user=current_user,
     )
     return ResponseModel(code=200, data=report, message="success")
 
@@ -125,7 +141,7 @@ async def get_rural_work(
 ):
     """获取单个乡村工作详情"""
     service = RuralWorkService(db)
-    work = service.get_rural_work_by_id(work_id)
+    work = service.get_rural_work_by_id(work_id, current_user=current_user)
     if not work:
         raise NotFoundException("工作不存在")
     return ResponseModel(code=200, data=work, message="success")
@@ -140,6 +156,19 @@ async def create_rural_work(
     """创建乡村工作"""
     service = RuralWorkService(db)
     work = service.create_rural_work(data, current_user.id)
+    # 数据变更自动创建审批任务（Requirement 3.2）：乡村工作新增进入待审批板块
+    work_id = work.get("id")
+    approval_task_id = None
+    if work_id:
+        approval_task_id = submit_entity_change_approval(
+            db,
+            entity_type="rural_work",
+            entity_id=work_id,
+            submitter_id=current_user.id,
+            title=f"乡村工作新增：{work.get('name') or f'#{work_id}'}",
+            change_data=work,
+        )
+    work["approval_task_id"] = approval_task_id
     return ResponseModel(code=200, data=work, message="创建成功")
 
 
@@ -152,9 +181,21 @@ async def update_rural_work(
 ):
     """更新乡村工作"""
     service = RuralWorkService(db)
-    work = service.update_rural_work(work_id, data, current_user.id)
+    old = service.get_rural_work_by_id(work_id, current_user=current_user)
+    work = service.update_rural_work(work_id, data, current_user.id, current_user=current_user)
     if not work:
         raise NotFoundException("工作不存在")
+    # 数据变更自动创建审批任务：乡村工作修改进入待审批板块（含变更对比）
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="rural_work",
+        entity_id=work_id,
+        submitter_id=current_user.id,
+        title=f"乡村工作变更：{work.get('name') or f'#{work_id}'}",
+        change_data=work,
+        original_data=old,
+    )
+    work["approval_task_id"] = approval_task_id
     return ResponseModel(code=200, data=work, message="更新成功")
 
 
@@ -166,9 +207,20 @@ async def delete_rural_work(
 ):
     """删除乡村工作"""
     service = RuralWorkService(db)
-    result = service.delete_rural_work(work_id, current_user.id)
+    old = service.get_rural_work_by_id(work_id, current_user=current_user)
+    result = service.delete_rural_work(work_id, current_user.id, current_user=current_user)
     if not result:
         raise NotFoundException("工作不存在")
+    # 数据变更自动创建审批任务：乡村工作删除进入待审批板块
+    submit_entity_change_approval(
+        db,
+        entity_type="rural_work",
+        entity_id=work_id,
+        submitter_id=current_user.id,
+        title=f"乡村工作删除：{(old or {}).get('name') or f'#{work_id}'}",
+        change_data={"deleted": True, "name": (old or {}).get("name")},
+        original_data=old,
+    )
     return ResponseModel(code=200, message="删除成功")
 
 
@@ -186,7 +238,7 @@ async def batch_delete_rural_works(
     if not ids:
         return ResponseModel(code=200, data={"deleted": 0}, message="无待删除记录")
     service = RuralWorkService(db)
-    deleted = service.batch_delete(ids)
+    deleted = service.batch_delete(ids, current_user=current_user)
 
     # 批量记录工作日志
     try:

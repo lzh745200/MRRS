@@ -206,7 +206,7 @@ describe('挂载与加载', () => {
     const wrapper = mountComp()
     await flushPromises()
     expect(logError).toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('加载预算数据失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
     expect((wrapper.vm as any).loading).toBe(false)
   })
 
@@ -440,7 +440,7 @@ describe('删除预算', () => {
     fundApiMock.deleteBudget.mockRejectedValueOnce(new Error('net'))
     await (wrapper.vm as any).handleDeleteBudget(budgetRow)
     expect(logError).toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('删除预算失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
   })
 })
 

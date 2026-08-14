@@ -1,6 +1,6 @@
 """TDD: 异步导出服务 — 实例方法 API."""
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 
 
@@ -66,7 +66,7 @@ class TestEstimateRecordCount:
 
 
 class TestExportSync:
-    """同步导出方法 — 返回 (content, filename, count)."""
+    """同步导出方法 — 真实查库，返回 (content, filename, count)."""
 
     def _svc(self, db=None):
         from app.services.async_export_service import AsyncExportService
@@ -76,94 +76,97 @@ class TestExportSync:
         assert isinstance(result, tuple), f"Expected tuple, got {type(result)}"
         assert len(result) == 3, f"Expected tuple of 3, got {len(result)}"
 
-    def test_export_supported_villages_sync(self):
-        svc = self._svc()
-        with patch("app.services.async_export_service.ExcelExportService") as MockSvc:
-            instance = MockSvc.return_value
-            instance.export_village_list.return_value = b"excel data"
-            content, filename, count = svc.export_supported_villages_sync({"items": [{"name": "test"}]})
-            assert content == b"excel data"
-            assert isinstance(filename, str)
-            assert count == 1
-            instance.export_village_list.assert_called_once_with([{"name": "test"}])
-
+    @patch("app.services.async_export_service._fetch_village_records", return_value=[{"name": "test"}])
     @patch("app.services.async_export_service.ExcelExportService")
-    def test_export_report_sync_supported_villages(self, MockSvc):
+    def test_export_supported_villages_sync(self, MockSvc, _mock_fetch):
+        svc = self._svc()
+        instance = MockSvc.return_value
+        instance.export_village_list.return_value = b"excel data"
+        content, filename, count = svc.export_supported_villages_sync(MagicMock(), None, {"keyword": "x"})
+        self._assert_is_tuple3((content, filename, count))
+        assert content == b"excel data"
+        assert isinstance(filename, str)
+        assert count == 1
+        instance.export_village_list.assert_called_once_with([{"name": "test"}])
+
+    @patch("app.services.async_export_service._fetch_village_records", return_value=[{"name": "a"}, {"name": "b"}])
+    @patch("app.services.async_export_service.ExcelExportService")
+    def test_export_report_sync_supported_villages(self, MockSvc, _mock_fetch):
         svc = self._svc()
         instance = MockSvc.return_value
         instance.export_village_list.return_value = b"data"
-        content, filename, count = svc.export_report_sync("supported_villages", {"items": [1, 2]})
+        content, filename, count = svc.export_report_sync(
+            "supported_villages", {"keyword": "x"}, MagicMock(), None
+        )
         assert content == b"data"
         assert count == 2
 
+    @patch("app.services.async_export_service._fetch_fund_records", return_value=[{"ID": 1}])
     @patch("app.services.async_export_service.ExcelExportService")
-    def test_export_report_sync_funds(self, MockSvc):
+    def test_export_report_sync_funds(self, MockSvc, _mock_fetch):
         svc = self._svc()
         instance = MockSvc.return_value
         instance.export_fund_list.return_value = b"data"
-        content, _, count = svc.export_report_sync("funds", {"items": ["f1"]})
+        content, _, count = svc.export_report_sync("funds", {}, MagicMock(), None)
         assert content == b"data"
         assert count == 1
 
+    @patch("app.services.async_export_service._fetch_project_records", return_value=[{"ID": 1}])
     @patch("app.services.async_export_service.ExcelExportService")
-    def test_export_report_sync_projects(self, MockSvc):
+    def test_export_report_sync_projects(self, MockSvc, _mock_fetch):
         svc = self._svc()
         instance = MockSvc.return_value
         instance.export_project_list.return_value = b"data"
-        content, _, count = svc.export_report_sync("projects", {"items": ["p1"]})
+        content, _, count = svc.export_report_sync("projects", {}, MagicMock(), None)
         assert content == b"data"
         assert count == 1
 
+    @patch("app.services.async_export_service._fetch_school_records", return_value=[{"ID": 1}])
     @patch("app.services.async_export_service.ExcelExportService")
-    def test_export_report_sync_schools(self, MockSvc):
+    def test_export_report_sync_schools(self, MockSvc, _mock_fetch):
         svc = self._svc()
         instance = MockSvc.return_value
         instance.export_school_list.return_value = b"data"
-        content, _, count = svc.export_report_sync("schools", {"items": ["s1"]})
+        content, _, count = svc.export_report_sync("schools", {}, MagicMock(), None)
         assert content == b"data"
         assert count == 1
 
-    @patch("app.services.async_export_service.ExcelExportService")
-    def test_export_report_sync_comprehensive(self, MockSvc):
+    @patch("app.services.async_export_service._build_comprehensive_workbook", return_value=b"data")
+    def test_export_report_sync_comprehensive(self, _mock_build):
         svc = self._svc()
-        instance = MockSvc.return_value
-        instance.export_comprehensive_report.return_value = b"data"
-        params = {
-            "summary": {"total": 100},
-            "village_data": [{"v": 1}],
-            "project_data": [{"p": 2}],
-            "fund_data": [{"f": 3}],
-        }
-        content, _, count = svc.export_report_sync("comprehensive", params)
+        content, _, count = svc.export_report_sync("comprehensive", {}, MagicMock(), None)
         assert content == b"data"
-        assert count == 1
+        assert count == 0
 
+    @patch("app.services.async_export_service._fetch_village_records", return_value=[{"ID": 1}])
     @patch("app.services.async_export_service.ExcelExportService")
-    def test_export_report_sync_default_fallback(self, MockSvc):
+    def test_export_report_sync_default_fallback(self, MockSvc, _mock_fetch):
         svc = self._svc()
         instance = MockSvc.return_value
         instance.export_village_list.return_value = b"data"
-        content, _, count = svc.export_report_sync("unknown_type", {"items": ["x"]})
+        content, _, count = svc.export_report_sync("unknown_type", {}, MagicMock(), None)
         assert content == b"data"
         assert count == 1
 
+    @patch("app.services.async_export_service._fetch_village_records", return_value=[])
     @patch("app.services.async_export_service.ExcelExportService")
-    def test_export_report_sync_default_when_items_missing(self, MockSvc):
+    def test_export_report_sync_default_when_items_missing(self, MockSvc, _mock_fetch):
         svc = self._svc()
         instance = MockSvc.return_value
         instance.export_village_list.return_value = b"data"
-        content, _, count = svc.export_report_sync("unknown_type", {})
+        content, _, count = svc.export_report_sync("unknown_type", {}, MagicMock(), None)
         assert content == b"data"
         assert count == 0
 
 
 class TestExportAsync:
-    """异步导出任务启动 — 实例方法."""
+    """异步导出任务启动 — 实例方法（提交任务队列）."""
 
+    @patch("app.services.async_export_service.task_queue.submit", new_callable=AsyncMock)
     @patch("app.services.async_export_service.AsyncExportService.estimate_record_count")
     @patch("app.services.async_export_service._uuid")
     @patch("app.services.async_export_service.datetime")
-    def test_export_supported_villages_async(self, mock_dt, mock_uuid, mock_est):
+    def test_export_supported_villages_async(self, mock_dt, mock_uuid, mock_est, mock_submit):
         # Ensure all lazy models are loaded to avoid mapper resolution errors
         import app.models
         for _name in app.models.__all__:
@@ -180,7 +183,9 @@ class TestExportAsync:
 
         db = MagicMock()
         svc = AsyncExportService(db)
-        task = svc.export_supported_villages_async(1, {"filter": "test"})
+        import asyncio
+
+        task = asyncio.run(svc.export_supported_villages_async(1, {"filter": "test"}))
 
         assert isinstance(task, ExportTask)
         assert task.task_id == "task-uuid-123"
@@ -193,6 +198,7 @@ class TestExportAsync:
         db.add.assert_called_once_with(task)
         db.commit.assert_called_once()
         db.refresh.assert_called_once_with(task)
+        mock_submit.assert_called_once()
 
 
 class TestGetExportTask:

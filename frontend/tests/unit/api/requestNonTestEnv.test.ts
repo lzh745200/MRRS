@@ -254,10 +254,11 @@ describe('api/request — 非测试环境网络自动重试', () => {
     expect(mockInst.request).toHaveBeenCalledWith(config)
   })
 
-  it('ERR_NETWORK 已重试过 → 不再重试并提示网络失败', async () => {
+  it('ERR_NETWORK 已重试过 → 不再重试并挂载网络失败消息', async () => {
     const config = makeConfig({ _networkRetried: true })
     const error = { code: 'ERR_NETWORK', message: 'NetworkError', config }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(mockElMessage.error).toHaveBeenCalledWith('网络连接失败，请检查服务是否启动')
+    expect(error.userMessage).toBe('网络连接失败，请检查服务是否启动')
+    expect(mockElMessage.error).not.toHaveBeenCalled()
   })
 })

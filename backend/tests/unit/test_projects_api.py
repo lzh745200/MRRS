@@ -511,7 +511,9 @@ class TestProjectsAPI:
         q.scalar.return_value = 500.0
         resp = client.get("/api/v1/projects/stats")
         assert resp.status_code == 200
-        assert resp.json()["total"] == 8 and resp.json()["total_budget"] == 3000.0
+        # 统一 envelope：{code:200, data:{total,total_budget,...}}
+        body = resp.json()["data"]
+        assert body["total"] == 8 and body["total_budget"] == 3000.0
 
     def test_export_projects_xlsx(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)

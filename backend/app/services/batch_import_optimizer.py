@@ -56,6 +56,29 @@ def read_excel_fast(file_content: bytes) -> Tuple[List[str], List[Dict[str, Any]
     return rows, headers
 
 
+def read_excel_raw(file_content: bytes) -> List[List[Any]]:
+    """pandas 快速读取全部原始行（header=None，不做任何表头假设）。
+
+    供 ExcelImporterService.parse_excel 使用：官方模板的表头不在第 1 行
+    （前 5 行为装饰标题区），表头探测与列名映射由调用方完成。
+
+    Returns:
+        行列表，每行为单元格值列表（空值为 None，与 openpyxl values_only 一致）
+    """
+    import pandas as pd
+    from io import BytesIO
+
+    df = pd.read_excel(
+        BytesIO(file_content),
+        engine="openpyxl",
+        header=None,
+        dtype=object,
+        keep_default_na=False,
+    )
+    # keep_default_na=False 会把空单元格读成 ""，统一回 None 与 openpyxl 对齐
+    return [[(None if v == "" else v) for v in row] for row in df.values.tolist()]
+
+
 def _read_excel_fallback(file_content: bytes) -> Tuple[List[str], List[Dict[str, Any]]]:
     """openpyxl 回退读取（pandas 不可用时）"""
     from io import BytesIO

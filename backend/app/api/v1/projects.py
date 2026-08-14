@@ -42,6 +42,10 @@ from app.services.audit_enhancement_service import AuditEnhancementService
 from app.models.audit import AuditAction
 from app.utils.db_error_handler import handle_db_errors_async
 from app.services.work_log_service import write_work_log
+from app.services.approval_workflow_service import (
+    ApprovalWorkflowService,
+    submit_entity_change_approval,
+)
 from .deps import ADMIN_ROLES
 
 logger = logging.getLogger(__name__)
@@ -90,6 +94,21 @@ def _project_to_diff_dict(p: Project) -> dict:
         "delay_reason": p.delay_reason,
         "remarks": p.remarks,
     }
+
+
+def _apply_project_approval_result(db: Session, task) -> None:
+    """审批终态回写项目状态（注册到 ApprovalWorkflowService）
+
+    - 通过：pending 项目 → approved（待审批板块与项目板块闭环）
+    """
+    if task.status != "approved":
+        return
+    project = db.query(Project).filter(Project.id == task.entity_id).first()
+    if project and project.status == ProjectStatus.PENDING.value:
+        project.status = ProjectStatus.APPROVED.value
+
+
+ApprovalWorkflowService.register_entity_apply_handler("project", _apply_project_approval_result)
 
 
 # ==================== 权限 & 工具 ====================
@@ -497,7 +516,7 @@ async def get_project_stats(
     """
     返回各状态项目数量和预算汇总，供前端统计卡片一次调用获取。
     """
-    rows = (
+    rows_q = (
         db.query(
             Project.status,
             func.count(Project.id),
@@ -505,9 +524,9 @@ async def get_project_stats(
         )
         .filter(Project.status != ProjectStatus.CANCELLED.value)
         .filter(Project.is_active == True)  # noqa: E712
-        .group_by(Project.status)
-        .all()
     )
+    rows_q = apply_scope_filter(rows_q, current_user, Project, db=db)
+    rows = rows_q.group_by(Project.status).all()
 
     stats = ProjectStatsResponse()
     for row_status, count, budget_sum in rows:
@@ -516,15 +535,16 @@ async def get_project_stats(
         if row_status and hasattr(stats, row_status):
             setattr(stats, row_status, count)
 
-    invested = (
+    invested_q = (
         db.query(func.coalesce(func.sum(Project.invested_amount), 0))
         .filter(Project.status != ProjectStatus.CANCELLED.value)
         .filter(Project.is_active == True)  # noqa: E712
-        .scalar()
     )
+    invested_q = apply_scope_filter(invested_q, current_user, Project, db=db)
+    invested = invested_q.scalar()
     stats.total_invested = float(invested)
 
-    return stats
+    return success_response(data=stats.model_dump(), message="项目统计概览")
 
 
 # ==================== 导出 ====================
@@ -543,6 +563,7 @@ async def export_projects(
         Project.status != ProjectStatus.CANCELLED.value,
         Project.is_active == True,  # noqa: E712
     )
+    query = apply_scope_filter(query, current_user, Project, db=db)
     if keyword:
         query = query.filter(Project.name.contains(keyword))
     if project_type:
@@ -872,6 +893,16 @@ async def create_project(
     safe_commit(db)
     db.refresh(project)
 
+    # 数据变更自动创建审批任务（Requirement 3.2）：项目新增进入待审批板块
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="project",
+        entity_id=project.id,
+        submitter_id=getattr(current_user, "id", None),
+        title=f"项目新增：{project.name or project.code}",
+        change_data=_project_to_diff_dict(project),
+    )
+
     try:
         from app.api.v1.data.data.dashboard import invalidate_dashboard_cache
 
@@ -879,7 +910,11 @@ async def create_project(
     except Exception:
         logger.debug("仪表盘缓存失效失败")
     logger.info(f"项目创建成功: id={project.id}, name={project.name}")
-    return success_response(data={"id": project.id, "name": project.name, "code": project.code}, message="创建成功")
+    return success_response(
+        data={"id": project.id, "name": project.name, "code": project.code,
+              "approval_task_id": approval_task_id},
+        message="创建成功",
+    )
 
 
 # ── 项目更新辅助函数 ──
@@ -1029,7 +1064,22 @@ async def update_project(
     db.refresh(project)
     _invalidate_project_cache()
 
-    return success_response(data=_project_to_dict(project), message="更新成功")
+    # 数据变更自动创建审批任务（Requirement 3.2）：项目修改进入待审批板块（含变更对比）
+    approval_task_id = None
+    if changed_fields:
+        approval_task_id = submit_entity_change_approval(
+            db,
+            entity_type="project",
+            entity_id=project.id,
+            submitter_id=getattr(current_user, "id", None),
+            title=f"项目变更：{project.name or project.code}",
+            change_data=_project_to_diff_dict(project),
+            original_data=old_project_data,
+        )
+
+    data = _project_to_dict(project)
+    data["approval_task_id"] = approval_task_id
+    return success_response(data=data, message="更新成功")
 
 
 @router.delete("/{project_id}", summary="删除项目")
@@ -1102,13 +1152,26 @@ async def delete_project(
 
     safe_commit(db)
 
+    # 数据变更自动创建审批任务：项目删除进入待审批板块（含删除前快照）
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="project",
+        entity_id=project_id,
+        submitter_id=getattr(current_user, "id", None),
+        title=f"项目删除：{project.name or project.code}",
+        change_data={"deleted": True, "name": project.name, "code": getattr(project, "code", None),
+                     "status": ProjectStatus.CANCELLED.value},
+        original_data=old_project_data,
+    )
+
     try:
         from app.api.v1.data.data.dashboard import invalidate_dashboard_cache
         invalidate_dashboard_cache()
     except Exception:
         logger.debug("仪表盘缓存失效失败")
 
-    return success_response(message="删除成功")
+    return success_response(data={"id": project_id, "approval_task_id": approval_task_id},
+                            message="删除成功")
 
 
 @router.get("/{project_id}/history/changes", summary="获取项目变更历史")
@@ -1167,10 +1230,42 @@ async def create_project_fund(
             purpose=data.purpose,
             organization_id=project.organization_id,
         )
+        fund.created_by = getattr(current_user, "id", None)
         db.add(fund)
         safe_commit(db)
         db.refresh(fund)
-        return success_response(data={"id": fund.id}, message="经费添加成功")
+
+        # 经费数据变更自动创建审批任务：与经费板块行为一致，进入待审批板块
+        approval_task_id = submit_entity_change_approval(
+            db,
+            entity_type="fund",
+            entity_id=fund.id,
+            submitter_id=getattr(current_user, "id", None),
+            title=f"经费新增：{fund.name or f'#{fund.id}'}（项目：{project.name}）",
+            change_data={
+                "name": fund.name,
+                "amount": float(fund.amount) if fund.amount is not None else 0,
+                "project_id": project_id,
+                "project_name": project.name,
+                "purpose": fund.purpose,
+                "source": fund.source,
+                "status": fund.status or "pending",
+            },
+        )
+        write_work_log(
+            db,
+            "fund",
+            "create",
+            fund.id,
+            fund.name or "",
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", "系统"),
+            detail=f"项目经费: {project.name}",
+        )
+        return success_response(
+            data={"id": fund.id, "approval_task_id": approval_task_id},
+            message="经费添加成功",
+        )
     except Exception as e:
         db.rollback()
         logger.error(f"添加经费失败: project_id={project_id}, error={e}", exc_info=True)
@@ -1230,7 +1325,7 @@ async def create_project_task(
         db.add(task)
         safe_commit(db)
         db.refresh(task)
-        return _task_to_dict(task)
+        return success_response(data=_task_to_dict(task), message="创建成功")
     except Exception as e:
         db.rollback()
         logger.error(f"创建任务失败: project_id={project_id}, error={e}", exc_info=True)
@@ -1261,7 +1356,7 @@ async def update_project_task(
                 setattr(task, key, value)
 
         safe_commit(db)
-        return _task_to_dict(task)
+        return success_response(data=_task_to_dict(task), message="更新成功")
     except HTTPException:
         raise
     except Exception as e:
@@ -1787,12 +1882,10 @@ async def import_projects(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"数据提交失败: {e}")
 
-    return {
-        "success": True,
-        "imported": created,
-        "failed": failed,
-        "errors": errors[:20],
-    }
+    return success_response(
+        data={"imported": created, "failed": failed, "errors": errors[:20]},
+        message=f"导入完成：成功 {created} 条，失败 {failed} 条",
+    )
 
 
 # ==================== 项目文件管理 ====================
@@ -1875,7 +1968,7 @@ async def upload_project_files(
         uploaded.append(_file_to_dict(pf))
 
     safe_commit(db)
-    return {"success": True, "files": uploaded}
+    return success_response(data={"files": uploaded}, message=f"上传成功 {len(uploaded)} 个文件")
 
 
 @router.get("/{project_id}/files", summary="获取项目文件列表")
@@ -1925,7 +2018,7 @@ async def delete_project_file(
 
     db.delete(pf)
     safe_commit(db)
-    return {"success": True}
+    return success_response(message="文件删除成功")
 
 
 @router.get("/{project_id}/files/{file_id}/download", summary="下载项目文件")

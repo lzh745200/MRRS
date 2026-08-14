@@ -245,7 +245,7 @@ async def _import_entities(
         from app.core.database import SessionLocal
         dry_db = SessionLocal()
         try:
-            dry_importer = ExcelImporterService(dry_db)
+            dry_importer = ExcelImporterService(dry_db, current_user=current_user)
             result = await dry_importer.import_data_async(
                 file_bytes=file_bytes,
                 filename=file.filename or "",
@@ -257,7 +257,7 @@ async def _import_entities(
         finally:
             dry_db.close()
     else:
-        importer = ExcelImporterService(db)
+        importer = ExcelImporterService(db, current_user=current_user)
         result = await importer.import_data_async(
             file_bytes=file_bytes,
             filename=file.filename or "",
@@ -506,7 +506,7 @@ async def preview_import_data(
         raise HTTPException(status_code=400, detail=error_msg)
 
     try:
-        importer = ExcelImporterService(db)
+        importer = ExcelImporterService(db, current_user=current_user)
         rows, _headers = importer.parse_excel(file_content, entity_type=entity_type)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Excel文件解析失败: {str(e)}")
@@ -566,7 +566,7 @@ async def get_import_history(
     - 返回当前用户的导入历史记录
     - 支持分页查询
     """
-    importer = ExcelImporterService(db)
+    importer = ExcelImporterService(db, current_user=current_user)
     histories, total = importer.get_import_history(user_id=current_user.id, page=page, page_size=page_size)
 
     items_list = [ImportHistoryResponse.model_validate(h).model_dump(mode="json") for h in histories]
@@ -586,7 +586,7 @@ async def get_import_history_detail(
 
     - 返回指定ID的导入历史记录详情
     """
-    importer = ExcelImporterService(db)
+    importer = ExcelImporterService(db, current_user=current_user)
     history = importer.get_import_history_by_id(history_id)
 
     if not history:

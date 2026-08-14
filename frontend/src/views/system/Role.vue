@@ -193,6 +193,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, ElTree } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { useDesensitize } from '@/composables/useDesensitize'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { get, post, put, del } from '@/api/request'
 
 interface RoleItem {
@@ -522,10 +523,10 @@ async function loadPermissions() {
       })
     }
     menuTreeData.value = tree
-  } catch {
+  } catch (error) {
     // 加载失败使用空树
     menuTreeData.value = []
-    ElMessage.error('加载权限菜单失败，请稍后重试')
+    ElMessage.error(getErrorMessage(error, '加载权限菜单失败，请稍后重试'))
   }
 }
 
@@ -564,9 +565,9 @@ async function loadRoles() {
 
     tableData.value = rolesWithUserCount
     pagination.total = tableData.value.length
-  } catch {
+  } catch (error) {
     tableData.value = []
-    ElMessage.error('加载角色列表失败，请稍后重试')
+    ElMessage.error(getErrorMessage(error, '加载角色列表失败，请稍后重试'))
   }
 }
 

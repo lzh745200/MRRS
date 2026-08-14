@@ -590,15 +590,11 @@ async function handleExport() {
   try {
     await exportSupportedVillages({
       year: new Date().getFullYear(),
-      filters: {
-        keyword: filters.keyword || undefined,
-        department: filters.department || undefined,
-        county: filters.county || undefined,
-        isRevitalizationTier: filters.isRevitalizationTier || undefined,
-        isThreeRegions: filters.isThreeRegions,
-        isEthnicArea: filters.isEthnicArea,
-        isKeyCounty: filters.isKeyCounty,
-      },
+      keyword: filters.keyword || undefined,
+      department: filters.department || undefined,
+      county: filters.county || undefined,
+      is_revitalization_tier:
+        filters.isRevitalizationTier == null ? undefined : filters.isRevitalizationTier,
     })
 
     // 导出成功 — 浏览器已确认

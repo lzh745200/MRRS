@@ -7,10 +7,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const { ElMessage, confirmMock, mockGetApprovalHistory, mockPost } = vi.hoisted(() => ({
+const { ElMessage, confirmMock, mockGetMyTasks, mockPost } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   confirmMock: vi.fn(),
-  mockGetApprovalHistory: vi.fn(),
+  mockGetMyTasks: vi.fn(),
   mockPost: vi.fn(),
 }))
 
@@ -19,7 +19,10 @@ vi.mock('element-plus', () => ({
   ElMessageBox: { confirm: confirmMock },
 }))
 
-vi.mock('@/api/approval', () => ({ getApprovalHistory: mockGetApprovalHistory }))
+vi.mock('@/api/approval', () => ({
+  getMyTasks: mockGetMyTasks,
+  formatEntityType: (t: string) => ({ fund: '经费' }[t] || t),
+}))
 
 vi.mock('@/api/request', () => ({
   post: mockPost,
@@ -80,7 +83,7 @@ const findBtn = (wrapper: any, text: string) => {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockGetApprovalHistory.mockResolvedValue(apps)
+  mockGetMyTasks.mockResolvedValue({ items: apps, total: 4 })
   mockPost.mockResolvedValue({})
   confirmMock.mockResolvedValue('confirm')
 })
@@ -90,7 +93,7 @@ describe('挂载与统计', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(mockGetApprovalHistory).toHaveBeenCalledWith({})
+    expect(mockGetMyTasks).toHaveBeenCalledWith({ skip: 0, limit: 500 })
     expect(vm.applications).toHaveLength(4)
     expect(vm.stats.total).toBe(4)
     expect(vm.stats.pending).toBe(1)
@@ -115,9 +118,9 @@ describe('挂载与统计', () => {
     const vm = wrapper.vm as any
     vm.filters.status = 'pending'
     await vm.loadData()
-    expect(mockGetApprovalHistory).toHaveBeenCalledWith({ status: 'pending' })
+    expect(mockGetMyTasks).toHaveBeenCalledWith({ status: 'pending', skip: 0, limit: 500 })
 
-    mockGetApprovalHistory.mockRejectedValue(new Error('net'))
+    mockGetMyTasks.mockRejectedValue(new Error('net'))
     await vm.loadData()
     expect(vm.applications).toEqual([])
     expect(vm.loading).toBe(false)
@@ -134,10 +137,10 @@ describe('挂载与统计', () => {
     expect(vm.filters.status).toBe('')
     expect(vm.filters.dateRange).toBeNull()
 
-    const base = mockGetApprovalHistory.mock.calls.length
+    const base = mockGetMyTasks.mock.calls.length
     await findBtn(wrapper, '查询').trigger('click')
     await flushPromises()
-    expect(mockGetApprovalHistory.mock.calls.length).toBe(base + 1)
+    expect(mockGetMyTasks.mock.calls.length).toBe(base + 1)
   })
 })
 
@@ -181,7 +184,7 @@ describe('撤回与重新提交', () => {
     )
     expect(mockPost).toHaveBeenCalledWith('/approval/tasks/1/withdraw')
     expect(ElMessage.success).toHaveBeenCalledWith('已撤回')
-    expect(mockGetApprovalHistory).toHaveBeenCalled()
+    expect(mockGetMyTasks).toHaveBeenCalled()
 
     confirmMock.mockRejectedValueOnce(new Error('cancel'))
     await vm.handleWithdraw(apps[0])
@@ -208,7 +211,7 @@ describe('撤回与重新提交', () => {
     expect(confirmMock).toHaveBeenCalledWith('确认重新提交「该申请」？', '重新提交')
     expect(mockPost).toHaveBeenCalledWith('/approval/tasks/3/resubmit')
     expect(ElMessage.success).toHaveBeenCalledWith('已重新提交')
-    expect(mockGetApprovalHistory).toHaveBeenCalled()
+    expect(mockGetMyTasks).toHaveBeenCalled()
 
     confirmMock.mockRejectedValueOnce(new Error('cancel'))
     await vm.handleResubmit(apps[2])

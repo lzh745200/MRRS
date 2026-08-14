@@ -154,11 +154,11 @@
       <template #footer>
         <el-button @click="detailDialogVisible = false">关闭</el-button>
         <el-button
-          v-if="currentTask?.entity_type === 'rural_work'"
+          v-if="navigableEntity(currentTask)"
           type="primary"
           @click="handleViewEntity(currentTask!)"
         >
-          查看工作详情
+          查看{{ formatEntityType(currentTask!.entity_type) }}详情
         </el-button>
       </template>
     </el-dialog>
@@ -171,7 +171,7 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search, View } from '@element-plus/icons-vue'
 import {
-  getApprovalHistory,
+  getTasksHistory,
   getTaskDiff,
   formatApprovalStatus,
   formatEntityType,
@@ -200,19 +200,26 @@ const taskDiff = ref<TaskDiff | null>(null)
 
 // ==================== 计算属性 ====================
 
+/** 可跳转的业务实体类型 */
+function navigableEntity(task: any): boolean {
+  return ['rural_work', 'fund', 'project', 'school', 'supported_village'].includes(
+    task?.entity_type
+  )
+}
+
 const diffTableData = computed(() => {
   if (!taskDiff.value) return []
 
   const { original_data, change_data, diff_fields } = taskDiff.value
-  const allFields = new Set([
-    ...Object.keys(original_data || {}),
-    ...Object.keys(change_data || {}),
-  ])
+  // 兼容旧接口返回 changed/original 键名
+  const original = original_data ?? (taskDiff.value as any).original ?? {}
+  const changed = change_data ?? (taskDiff.value as any).changed ?? {}
+  const allFields = new Set([...Object.keys(original || {}), ...Object.keys(changed || {})])
 
   return Array.from(allFields).map((field) => ({
     field,
-    original: original_data?.[field],
-    new: change_data?.[field],
+    original: original?.[field],
+    new: changed?.[field],
     changed: diff_fields?.includes(field),
   }))
 })
@@ -220,23 +227,20 @@ const diffTableData = computed(() => {
 // ==================== 方法 ====================
 
 /**
- * 加载审批历史
+ * 加载审批历史（任务维度：管理员看全部，普通用户仅看自己提交的）
  */
 async function loadHistory() {
   loading.value = true
   try {
     const skip = (page.value - 1) * pageSize.value
-    historyList.value = await getApprovalHistory({
+    const result = await getTasksHistory({
       entity_type: filterForm.value.entity_type,
       status: filterForm.value.status,
       skip,
       limit: pageSize.value,
     })
-    // 注意：实际API可能需要返回total，这里简化处理
-    total.value =
-      historyList.value.length >= pageSize.value
-        ? page.value * pageSize.value + 1
-        : (page.value - 1) * pageSize.value + historyList.value.length
+    historyList.value = result.items
+    total.value = result.total
   } catch (error) {
     ElMessage.error('加载审批历史失败')
   } finally {
@@ -283,12 +287,21 @@ async function handleViewDetail(task: any) {
  * 跳转到实体详情
  */
 function handleViewEntity(task: any) {
+  const detailRoutes: Record<string, string> = {
+    fund: `/funds/${task.entity_id}`,
+    project: `/projects/${task.entity_id}`,
+    school: `/schools/${task.entity_id}`,
+    supported_village: `/supported-villages/${task.entity_id}`,
+  }
   if (task.entity_type === 'rural_work') {
     detailDialogVisible.value = false
     pushSafe({
       path: '/rural-works',
       query: { id: task.entity_id, action: 'view' },
     })
+  } else if (detailRoutes[task.entity_type]) {
+    detailDialogVisible.value = false
+    pushSafe(detailRoutes[task.entity_type])
   }
 }
 

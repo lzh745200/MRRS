@@ -11,7 +11,7 @@ const { ElMessage, pushSafeMock, requestMock } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   pushSafeMock: vi.fn(),
   requestMock: {
-    apiRequest: vi.fn(),
+    requestGet: vi.fn(),
     post: vi.fn(),
     downloadBlob: vi.fn(),
     parseContentDisposition: vi.fn(),
@@ -25,8 +25,8 @@ vi.mock('@/composables/useRouterSafe', () => ({
 }))
 
 vi.mock('@/api/request', () => ({
+  default: { get: requestMock.requestGet },
   post: requestMock.post,
-  apiRequest: requestMock.apiRequest,
   downloadBlob: requestMock.downloadBlob,
   parseContentDisposition: requestMock.parseContentDisposition,
   getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
@@ -114,7 +114,7 @@ function mountComp() {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  requestMock.apiRequest.mockResolvedValue({ data: new Blob(['x']), headers: {} })
+  requestMock.requestGet.mockResolvedValue({ data: new Blob(['x']), headers: {} })
   requestMock.parseContentDisposition.mockReturnValue('项目导入模板.xlsx')
   requestMock.downloadBlob.mockReturnValue(undefined)
   requestMock.post.mockResolvedValue({
@@ -214,19 +214,17 @@ describe('downloadTemplate', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     await vm.downloadTemplate()
-    expect(requestMock.apiRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        method: 'GET',
-        url: '/import/template',
-        params: { entity_type: 'project' },
-      })
-    )
+    // 使用裸 axios 实例（default export）请求 Blob，便于读取响应头文件名
+    expect(requestMock.requestGet).toHaveBeenCalledWith('/import/template', {
+      params: { entity_type: 'project' },
+      responseType: 'blob',
+    })
     expect(requestMock.downloadBlob).toHaveBeenCalled()
     expect(vm.downloading).toBe(false)
   })
 
   it('失败 → 错误提示', async () => {
-    requestMock.apiRequest.mockRejectedValue(new Error('net'))
+    requestMock.requestGet.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
     await (wrapper.vm as any).downloadTemplate()
@@ -239,11 +237,11 @@ describe('downloadTemplate', () => {
     const btn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('下载导入模板'))
     await btn!.trigger('click')
     await flushPromises()
-    expect(requestMock.apiRequest).toHaveBeenCalled()
+    expect(requestMock.requestGet).toHaveBeenCalled()
   })
 
-  it('下载模板 resp 无 data → || resp 兜底', async () => {
-    requestMock.apiRequest.mockResolvedValue({ headers: {} })
+  it('下载模板 resp 无 data → Blob 兜底（resp.data 缺失）', async () => {
+    requestMock.requestGet.mockResolvedValue({ headers: {} })
     const wrapper = mountComp()
     await flushPromises()
     await (wrapper.vm as any).downloadTemplate()

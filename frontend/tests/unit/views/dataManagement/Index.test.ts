@@ -148,7 +148,7 @@ describe('挂载与统计加载', () => {
     mockGet.mockRejectedValue(new Error('net'))
     wrapper = mountComp()
     await flushPromises()
-    expect(ElMessage.error).toHaveBeenCalledWith('加载统计数据失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
     expect((wrapper.vm as any).stats.villageCount).toBe(0)
   })
 })

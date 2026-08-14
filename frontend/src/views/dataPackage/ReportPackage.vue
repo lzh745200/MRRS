@@ -133,6 +133,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { ref, reactive, computed, onErrorCaptured } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -359,7 +360,7 @@ async function handleOneClickReport() {
       ElMessage.error('数据包生成失败')
     }
   } catch (e: any) {
-    ElMessage.error('一键上报失败：' + (e?.message || '请稍后重试'))
+    ElMessage.error('一键上报失败：' + getErrorMessage(e, '请稍后重试'))
   } finally {
     oneClickLoading.value = false
   }

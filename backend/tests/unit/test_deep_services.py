@@ -10,7 +10,8 @@ def test_ds01(real_db_session):
 def test_ds02(real_db_session):
     from app.api.v1.supported_village import _process_import_row,_FIELD_NAMES
     vals=["ds2_v","d","u","GZ","QN","LB","JL",None,None,None,None,None,None,None,None,None]
-    ok,err=_process_import_row(tuple(vals),_FIELD_NAMES,real_db_session,2);assert ok
+    col_map={name:i for i,name in enumerate(_FIELD_NAMES)}
+    ok,err=_process_import_row(tuple(vals),col_map,real_db_session,2);assert ok
 def test_ds03(real_db_session):
     from app.api.v1.supported_village import _get_village_or_404;from fastapi import HTTPException
     try:_get_village_or_404(real_db_session,99999)

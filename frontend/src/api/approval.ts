@@ -40,8 +40,13 @@ export interface ApprovalTask {
   priority: number
   submitter_id?: number
   submitter_name?: string
+  current_approver_id?: number
+  reviewer_name?: string
+  opinion?: string
   created_at: string
   completed_at?: string
+  /** 变更数据摘要（待审批板块展示经费等业务信息） */
+  change_data?: Record<string, any>
 }
 
 /** 审批记录 */
@@ -97,7 +102,7 @@ export async function getWorkflows(params?: {
   limit?: number
 }): Promise<ApprovalWorkflow[]> {
   const response = await get<any>('/approval/workflows', params)
-  return response
+  return Array.isArray(response) ? response : response?.items || response?.data || []
 }
 
 /**
@@ -212,6 +217,22 @@ export async function getAllTasks(params?: {
 }
 
 /**
+ * 获取待审批任务列表（含总数，供分页）
+ */
+export async function getPendingTasksWithTotal(params?: {
+  skip?: number
+  limit?: number
+}): Promise<{ items: ApprovalTask[]; total: number }> {
+  const response = await get<any>('/approval/tasks/pending', params)
+  const items = Array.isArray(response)
+    ? response
+    : response?.items ||
+      (Array.isArray(response?.data) ? response.data : response?.data?.items) ||
+      []
+  return { items, total: Number(response?.total ?? items.length) || items.length }
+}
+
+/**
  * 获取待审批任务列表
  */
 export async function getPendingTasks(params?: {
@@ -220,6 +241,36 @@ export async function getPendingTasks(params?: {
 }): Promise<ApprovalTask[]> {
   const response = await get<any>('/approval/tasks/pending', params)
   return Array.isArray(response) ? response : response?.items || response?.data || []
+}
+
+/**
+ * 获取我的申请列表（当前用户提交的审批任务，含 total）
+ */
+export async function getMyTasks(params?: {
+  status?: string
+  date_from?: string
+  date_to?: string
+  skip?: number
+  limit?: number
+}): Promise<{ items: ApprovalTask[]; total: number }> {
+  const response = await get<any>('/approval/tasks/mine', params)
+  const items = Array.isArray(response) ? response : response?.items || response?.data || []
+  return { items, total: Number(response?.total ?? items.length) || items.length }
+}
+
+/**
+ * 获取审批任务历史列表（管理员全部/普通用户仅自己提交的，含 total）
+ */
+export async function getTasksHistory(params?: {
+  entity_type?: string
+  status?: string
+  completed?: boolean
+  skip?: number
+  limit?: number
+}): Promise<{ items: ApprovalTask[]; total: number }> {
+  const response = await get<any>('/approval/tasks/history', params)
+  const items = Array.isArray(response) ? response : response?.items || response?.data || []
+  return { items, total: Number(response?.total ?? items.length) || items.length }
 }
 
 /**
@@ -233,7 +284,12 @@ export async function batchApprove(
     task_ids: taskIds,
     opinion,
   })
-  return response
+  // 注意：envelope 顶层 success:true 会遮蔽内层 data.success（响应拦截器跳过同名键复制），
+  // 必须从 response.data 读取真实结果数组。
+  const payload = response?.data ?? response ?? {}
+  const success = Array.isArray(payload.success) ? payload.success : []
+  const failed = Array.isArray(payload.failed) ? payload.failed : []
+  return { success, failed }
 }
 
 /**

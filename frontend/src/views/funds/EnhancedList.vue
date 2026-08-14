@@ -297,7 +297,7 @@
         <el-button size="small" text @click="clearSelection">取消选择</el-button>
       </div>
       <div v-if="error && tableData.length === 0" class="error-placeholder">
-        <el-result icon="error" title="数据加载失败" sub-title="请稍后重试">
+        <el-result icon="error" title="数据加载失败" :sub-title="errorMsg || '请稍后重试'">
           <template #extra>
             <el-button type="primary" :loading="loading" @click="fetchData">重试</el-button>
           </template>
@@ -447,6 +447,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -488,6 +489,7 @@ const { pushSafe } = useRouterSafe()
 const tableData = ref<any[]>([])
 const loading = ref(false)
 const error = ref(false)
+const errorMsg = ref('')
 const exporting = ref(false)
 const approving = ref<Record<number, boolean>>({})
 const allocating = ref<Record<number, boolean>>({})
@@ -665,6 +667,7 @@ function formatAmount(val: any) {
 async function fetchData() {
   loading.value = true
   error.value = false
+  errorMsg.value = ''
   try {
     const response = await apiRequest({
       method: 'GET',
@@ -686,7 +689,8 @@ async function fetchData() {
   } catch (e) {
     error.value = true
     logger.error('加载数据失败:', e)
-    ElMessage.error('数据加载失败，请稍后重试')
+    // 内联错误态展示真实原因（不再弹全局提示）
+    errorMsg.value = getErrorMessage(e, '数据加载失败，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -762,9 +766,9 @@ async function handleExport() {
       type: filterForm.type || undefined,
       status: filterForm.status || undefined,
     })
-    // 导出成功 — 浏览器已确认
-  } catch {
-    ElMessage.error('导出失败')
+    // 导出成功 — 浏览器已确认（下载完成）
+  } catch (e) {
+    ElMessage.error(getErrorMessage(e, '导出失败'))
   } finally {
     exporting.value = false
   }
@@ -872,9 +876,9 @@ async function handleBatchExport() {
   exporting.value = true
   try {
     await fundApi.exportList({})
-    // 导出成功 — 浏览器已确认
-  } catch {
-    ElMessage.error('导出失败')
+    // 导出成功 — 浏览器已确认（下载完成）
+  } catch (e) {
+    ElMessage.error(getErrorMessage(e, '导出失败'))
   } finally {
     exporting.value = false
   }

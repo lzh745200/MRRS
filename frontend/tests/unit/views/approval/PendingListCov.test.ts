@@ -61,7 +61,7 @@ vi.mock('@/composables/useRouterSafe', () => ({
 }))
 
 vi.mock('@/api/approval', () => ({
-  getPendingTasks: mockGetPendingTasks,
+  getPendingTasksWithTotal: mockGetPendingTasks,
   approveTask: mockApproveTask,
   rejectTask: mockRejectTask,
   batchApprove: mockBatchApprove,
@@ -184,7 +184,7 @@ function findBtns(wrapper: any, text: string) {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockGetPendingTasks.mockResolvedValue(makeTasks())
+  mockGetPendingTasks.mockResolvedValue({ items: makeTasks(), total: 2 })
   mockApproveTask.mockResolvedValue({})
   mockRejectTask.mockResolvedValue({})
   mockBatchApprove.mockResolvedValue({ success: [1, 2], failed: [] })
@@ -208,8 +208,9 @@ describe('挂载与统计渲染', () => {
     await flushPromises()
     const vm = wrapper.vm as any
 
-    expect(mockGetPendingTasks).toHaveBeenCalledWith({ limit: 100 })
+    expect(mockGetPendingTasks).toHaveBeenCalledWith({ skip: 0, limit: 20 })
     expect(vm.tasks).toHaveLength(2)
+    expect(vm.total).toBe(2)
     expect(vm.loading).toBe(false)
     expect(vm.highPriorityCount).toBe(1)
     expect(vm.todayCount).toBe(1)
@@ -308,7 +309,7 @@ describe('工具函数与计算属性', () => {
 })
 
 describe('导航与详情', () => {
-  it('handleViewDetail：rural_work 跳路由；其他类型打开变更对比', async () => {
+  it('handleViewDetail：rural_work 跳路由；业务实体跳详情页；其他类型打开变更对比', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -319,7 +320,14 @@ describe('导航与详情', () => {
       query: { id: 5, action: 'view' },
     })
 
-    await vm.handleViewDetail({ id: 2, entity_type: 'project', entity_id: 8 })
+    // project/fund/school/supported_village → 跳对应业务详情页
+    vm.handleViewDetail({ id: 2, entity_type: 'project', entity_id: 8 })
+    expect(pushSafeMock).toHaveBeenCalledWith('/projects/8')
+    vm.handleViewDetail({ id: 33, entity_type: 'fund', entity_id: 9 })
+    expect(pushSafeMock).toHaveBeenCalledWith('/funds/9')
+
+    // 其他实体类型 → 打开变更对比
+    await vm.handleViewDetail({ id: 2, entity_type: 'data_change', entity_id: 8 })
     expect(mockGetTaskDiff).toHaveBeenCalledWith(2)
     expect(vm.diffDialogVisible).toBe(true)
     expect(vm.taskDiff).not.toBeNull()
@@ -477,7 +485,7 @@ describe('审批通过与拒绝', () => {
 })
 
 describe('快速通过与批量审批', () => {
-  it('handleQuickApprove：标题有/无两侧的确认文案；确认与取消', async () => {
+  it('handleQuickApprove：优先标准审批；无权限回退单机自动审批；标题兜底与取消', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -488,8 +496,15 @@ describe('快速通过与批量审批', () => {
       '快速审批',
       expect.objectContaining({ type: 'info' })
     )
-    expect(mockAutoApproveSingleTask).toHaveBeenCalledWith(11, '单机版快速审批通过')
+    // 优先走标准审批 approveTask
+    expect(mockApproveTask).toHaveBeenCalledWith(11, '快速审批通过')
+    expect(mockAutoApproveSingleTask).not.toHaveBeenCalled()
     expect(ElMessage.success).toHaveBeenCalledWith('审批通过')
+
+    // 标准审批失败（如非当前审批人）→ 回退单机版自动审批
+    mockApproveTask.mockRejectedValueOnce({ response: { data: { detail: '无权限' } } })
+    await vm.handleQuickApprove(rowB)
+    expect(mockAutoApproveSingleTask).toHaveBeenCalledWith(22, '单机版快速审批通过')
 
     await vm.handleQuickApprove(rowB) // 无标题 → formatEntityType+#id 兜底
     expect(confirmMock).toHaveBeenCalledWith(
@@ -504,7 +519,7 @@ describe('快速通过与批量审批', () => {
   })
 
   it('handleAutoApproveAll：空任务早退；按钮点击成功；取消', async () => {
-    mockGetPendingTasks.mockResolvedValueOnce([])
+    mockGetPendingTasks.mockResolvedValueOnce({ items: [], total: 0 })
     const w1 = mountComp()
     await flushPromises()
     await (w1.vm as any).handleAutoApproveAll() // 空 → 早退
@@ -565,7 +580,7 @@ describe('快速通过与批量审批', () => {
 })
 
 describe('操作列按钮真实点击', () => {
-  it('详情/编辑/快速通过/拒绝（内联 row 参数箭头与 编辑 v-if）', async () => {
+  it('详情/对比/编辑/快速通过/拒绝（内联 row 参数箭头与 编辑 v-if）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -577,9 +592,12 @@ describe('操作列按钮真实点击', () => {
     // 编辑按钮仅 rural_work 行（rowA）存在
     expect(byText('编辑').length).toBe(1)
 
-    await byText('详情')[1].trigger('click') // rowB project → 变更对比
+    await byText('详情')[1].trigger('click') // rowB project → 跳项目详情页
+    expect(pushSafeMock).toHaveBeenCalledWith('/projects/8')
+
+    await byText('对比')[0].trigger('click') // rowA → 打开变更对比
     await flushPromises()
-    expect(mockGetTaskDiff).toHaveBeenCalledWith(22)
+    expect(mockGetTaskDiff).toHaveBeenCalledWith(11)
     expect(vm.diffDialogVisible).toBe(true)
 
     await byText('编辑')[0].trigger('click') // rowA rural_work → 跳编辑
@@ -588,9 +606,9 @@ describe('操作列按钮真实点击', () => {
       query: { id: 5, action: 'edit' },
     })
 
-    await byText('快速通过')[2].trigger('click') // rowC
+    await byText('快速通过')[2].trigger('click') // rowC → 标准审批
     await flushPromises()
-    expect(mockAutoApproveSingleTask).toHaveBeenCalledWith(33, '单机版快速审批通过')
+    expect(mockApproveTask).toHaveBeenCalledWith(33, '快速审批通过')
 
     await byText('拒绝')[0].trigger('click') // rowA
     expect(vm.rejectDialogVisible).toBe(true)
@@ -655,7 +673,7 @@ describe('转交审批（v1.8.0）', () => {
 
   it('confirmTransfer 成功 → transferTask + 关闭 + 刷新', async () => {
     mockTransferTask.mockResolvedValue({})
-    mockGetPendingTasks.mockResolvedValue([])
+    mockGetPendingTasks.mockResolvedValue({ items: [], total: 0 })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any

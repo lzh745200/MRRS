@@ -30,8 +30,33 @@ logger = logging.getLogger(__name__)
 class ApprovalWorkflowService:
     """审批工作流服务 —— 管理审批流程、任务、记录的完整生命周期"""
 
+    # 实体变更回写处理器注册表：{entity_type: callable(db, task)}
+    # 业务模块（如 funds.py）在模块导入时注册，审批终态（通过/驳回）时回写业务实体状态，
+    # 使「待审批任务板块」与「经费管理等业务板块」形成闭环。
+    _ENTITY_APPLY_HANDLERS: Dict[str, Any] = {}
+
     def __init__(self, db: Session):
         self.db = db
+
+    @classmethod
+    def register_entity_apply_handler(cls, entity_type: str, handler) -> None:
+        """注册实体变更回写处理器（幂等，重复注册覆盖）"""
+        cls._ENTITY_APPLY_HANDLERS[entity_type] = handler
+
+    def apply_entity_change(self, task: "ApprovalTask") -> None:
+        """审批终态回写业务实体（非致命：失败仅记录日志，不阻断审批）"""
+        handler = self._ENTITY_APPLY_HANDLERS.get(task.entity_type)
+        if not handler:
+            return
+        try:
+            handler(self.db, task)
+        except Exception:  # pragma: no cover - 防御分支
+            logger.warning(
+                "审批回写实体失败 entity_type=%s entity_id=%s",
+                task.entity_type,
+                task.entity_id,
+                exc_info=True,
+            )
 
     # ══════════════════════════════════════════════════════════════
     #  Workflow CRUD
@@ -191,13 +216,19 @@ class ApprovalWorkflowService:
             return None
 
         first_node = workflow.nodes[0]
+        approver_id = first_node.approver_id
+        # role 类型节点：approver_id 存的是角色标识，需解析为具体用户
+        # （单机版：解析为管理员；无管理员时保持未分配，由待审批板块兜底可见）
+        if getattr(first_node, "approver_type", "user") == "role":
+            approver_id = self._resolve_role_approver_id(first_node.approver_id)
+
         task = ApprovalTask(
             workflow_id=workflow.id,
             entity_type=entity_type,
             entity_id=entity_id,
             submitter_id=submitter_id,
             current_level=1,
-            current_approver_id=first_node.approver_id,
+            current_approver_id=approver_id,
             status=ApprovalStatus.PENDING.value,
             change_data=change_data,
             original_data=original_data,
@@ -207,7 +238,13 @@ class ApprovalWorkflowService:
         safe_commit(self.db)
         self.db.refresh(task)
 
-        # ── 审批消息推送 ──
+        # ── 审批消息推送（审批人未分配时跳过，避免 user_id=None 违反外键约束）──
+        if task.current_approver_id is None:
+            logger.warning(
+                "审批任务 %s 未分配审批人，跳过消息推送（entity=%s:%s）",
+                task.id, entity_type, entity_id,
+            )
+            return task
         try:
             from app.models.message import Message
             msg = Message(
@@ -227,6 +264,35 @@ class ApprovalWorkflowService:
 
         return task
 
+    @staticmethod
+    def _resolve_role_approver_id(role_identifier: Any) -> Optional[int]:
+        """将 role 类型审批节点的角色标识解析为具体用户 ID（单机版：任意管理员）。
+
+        解析失败返回 None（任务保持未分配，待审批板块仍可见，管理员可用单机版路径审批）。
+        """
+        try:
+            from app.core.constants import normalize_role
+
+            role = normalize_role(str(role_identifier or ""))
+            from app.models.user import User as UserModel
+
+            from app.core.database import SessionLocal
+
+            session = SessionLocal()
+            try:
+                if role in ("admin", "super_admin"):
+                    user = (
+                        session.query(UserModel)
+                        .filter(UserModel.role.in_(("admin", "super_admin")))
+                        .first()
+                    )
+                    return user.id if user else None
+            finally:
+                session.close()
+        except Exception:
+            logger.warning("解析角色审批人失败 role=%s", role_identifier, exc_info=True)
+        return None
+
     def get_task(self, task_id: int) -> Optional[ApprovalTask]:
         """获取审批任务"""
         return (
@@ -236,20 +302,111 @@ class ApprovalWorkflowService:
             .first()
         )
 
-    def get_pending_tasks(self, approver_id: int, skip: int = 0, limit: int = 100) -> List[ApprovalTask]:
-        """获取待审批任务列表"""
-        return (
+    def get_pending_tasks(
+        self,
+        approver_id: int,
+        skip: int = 0,
+        limit: int = 100,
+        include_all: bool = False,
+    ) -> List[ApprovalTask]:
+        """获取待审批任务列表
+
+        include_all=True（单机版管理员视角）：返回所有 pending 任务；
+        否则返回「分配给当前用户 OR 当前用户提交」的 pending 任务，
+        保证普通用户既能看到待自己审批的，也能看到自己提交待审的申请。
+        """
+        from sqlalchemy import or_
+
+        query = (
             self.db.query(ApprovalTask)
-            .options(joinedload(ApprovalTask.workflow))
-            .filter(
-                ApprovalTask.current_approver_id == approver_id,
-                ApprovalTask.status == ApprovalStatus.PENDING.value,
+            .options(joinedload(ApprovalTask.workflow), joinedload(ApprovalTask.submitter))
+            .filter(ApprovalTask.status == ApprovalStatus.PENDING.value)
+        )
+        if not include_all:
+            query = query.filter(
+                or_(
+                    ApprovalTask.current_approver_id == approver_id,
+                    ApprovalTask.submitter_id == approver_id,
+                )
             )
-            .order_by(desc(ApprovalTask.priority), desc(ApprovalTask.created_at))
+        return (
+            query.order_by(desc(ApprovalTask.priority), desc(ApprovalTask.created_at))
             .offset(skip)
             .limit(limit)
             .all()
         )
+
+    def count_pending_tasks(self, approver_id: int, include_all: bool = False) -> int:
+        """统计待审批任务总数（与 get_pending_tasks 同口径，供分页使用）"""
+        from sqlalchemy import or_
+
+        query = self.db.query(ApprovalTask).filter(
+            ApprovalTask.status == ApprovalStatus.PENDING.value
+        )
+        if not include_all:
+            query = query.filter(
+                or_(
+                    ApprovalTask.current_approver_id == approver_id,
+                    ApprovalTask.submitter_id == approver_id,
+                )
+            )
+        return query.count()
+
+    def get_tasks_with_count(
+        self,
+        entity_type: Optional[str] = None,
+        status: Optional[str] = None,
+        submitter_id: Optional[int] = None,
+        completed: Optional[bool] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        """获取审批任务列表（含总数），供审批历史/我的申请页使用
+
+        completed=True → 仅返回非 pending 任务（已办结）;
+        completed=False → 仅返回 pending 任务。
+        date_from/date_to: 提交时间范围过滤（ISO 日期，如 2026-08-01）。
+        """
+        query = self.db.query(ApprovalTask).options(
+            joinedload(ApprovalTask.workflow),
+            joinedload(ApprovalTask.submitter),
+            joinedload(ApprovalTask.current_approver),
+            joinedload(ApprovalTask.records),
+        )
+        if entity_type:
+            query = query.filter(ApprovalTask.entity_type == entity_type)
+        if status:
+            query = query.filter(ApprovalTask.status == status)
+        if completed is not None:
+            if completed:
+                query = query.filter(ApprovalTask.status != ApprovalStatus.PENDING.value)
+            else:
+                query = query.filter(ApprovalTask.status == ApprovalStatus.PENDING.value)
+        if submitter_id is not None:
+            query = query.filter(ApprovalTask.submitter_id == submitter_id)
+        if date_from:
+            try:
+                start_dt = datetime.fromisoformat(date_from)
+                query = query.filter(ApprovalTask.created_at >= start_dt)
+            except ValueError:
+                logger.warning("忽略非法 date_from: %s", date_from)
+        if date_to:
+            try:
+                end_dt = datetime.fromisoformat(date_to)
+                query = query.filter(ApprovalTask.created_at <= end_dt)
+            except ValueError:
+                logger.warning("忽略非法 date_to: %s", date_to)
+
+        total = query.count()
+        items = (
+            query.order_by(desc(ApprovalTask.created_at))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        return {"items": items, "total": total}
 
     def get_all_tasks_with_count(
         self,
@@ -318,6 +475,8 @@ class ApprovalWorkflowService:
             # 所有级别通过
             task.status = ApprovalStatus.APPROVED.value
             task.completed_at = datetime.now(timezone.utc)
+            # 审批通过后执行数据变更（Requirement 3.6）：回写业务实体状态
+            self.apply_entity_change(task)
 
         safe_commit(self.db)
         self.db.refresh(task)
@@ -349,6 +508,8 @@ class ApprovalWorkflowService:
 
         task.status = ApprovalStatus.REJECTED.value
         task.completed_at = datetime.now(timezone.utc)
+        # 驳回回写业务实体状态（如经费：pending → rejected）
+        self.apply_entity_change(task)
 
         safe_commit(self.db)
         self.db.refresh(task)
@@ -494,19 +655,33 @@ class ApprovalWorkflowService:
                 failed.append({"id": tid, "reason": str(e)})
         return {"success": success, "failed": failed}
 
-    def auto_approve_all_pending(self, approver_id: int) -> Dict[str, int]:
-        """自动通过所有待审批任务（单机版操作）"""
+    def auto_approve_all_pending(self, approver_id: int) -> Dict[str, Any]:
+        """自动通过所有待审批任务（单机版操作）
+
+        每个任务独立事务：单个失败不影响其余任务（避免一次 commit 失败 500 全流程）。
+        """
         pending = (
             self.db.query(ApprovalTask)
             .filter(ApprovalTask.status == ApprovalStatus.PENDING.value)
             .all()
         )
         approved = 0
+        failed = 0
         for task in pending:
-            result = self.approve_task(task.id, approver_id, "自动批量审批", standalone=True)
-            if result and result.status == ApprovalStatus.APPROVED.value:
-                approved += 1
-        return {"total_pending": len(pending), "approved": approved}
+            try:
+                result = self.approve_task(task.id, approver_id, "自动批量审批", standalone=True)
+                if result and result.status == ApprovalStatus.APPROVED.value:
+                    approved += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                failed += 1
+                try:
+                    self.db.rollback()
+                except Exception:  # pragma: no cover - 防御分支
+                    pass
+                logger.warning("自动批量审批失败 task_id=%s: %s", task.id, e)
+        return {"total_pending": len(pending), "approved": approved, "failed": failed}
 
     # ══════════════════════════════════════════════════════════════
     #  History & Diff
@@ -541,14 +716,90 @@ class ApprovalWorkflowService:
         return query.order_by(desc(ApprovalRecord.created_at)).offset(skip).limit(limit).all()
 
     def get_task_diff(self, task_id: int) -> Optional[Dict[str, Any]]:
-        """获取任务的变更对比"""
+        """获取任务的变更对比
+
+        返回两种键名以兼容新旧调用方：
+        - change_data / original_data / diff_fields（前端 PendingList/History 使用）
+        - changed / original（旧调用方与历史测试使用）
+        """
         task = self.get_task(task_id)
         if not task:
             return None
+
+        change_data = task.change_data or {}
+        original_data = task.original_data or {}
+        if not isinstance(change_data, dict):
+            change_data = {}
+        if not isinstance(original_data, dict):
+            original_data = {}
+
+        # 计算实际变化的字段（原值与新值不相等）
+        diff_fields = sorted(
+            {
+                key
+                for key in set(original_data) | set(change_data)
+                if original_data.get(key) != change_data.get(key)
+            }
+        )
         return {
-            "changed": task.change_data or {},
-            "original": task.original_data or {},
+            "changed": change_data,
+            "original": original_data,
+            "change_data": change_data,
+            "original_data": original_data,
+            "diff_fields": diff_fields,
             "task_id": task.id,
             "entity_type": task.entity_type,
             "entity_id": task.entity_id,
         }
+
+
+def submit_entity_change_approval(
+    db: Session,
+    *,
+    entity_type: str,
+    entity_id: int,
+    submitter_id: Optional[int],
+    title: str = "",
+    change_data: Optional[Dict] = None,
+    original_data: Optional[Dict] = None,
+    priority: int = 0,
+) -> Optional[int]:
+    """业务模块通用入口：数据变更自动创建审批任务（Requirement 3.2）。
+
+    各业务板块（项目/学校/帮扶村/乡村工作/政策等）在数据变更落库后调用本函数，
+    使变更进入「待审批任务板块」。无活跃工作流时自动创建默认单节点流程（单机版）。
+
+    失败仅记录日志，不阻断业务操作。返回审批任务 ID（未创建时返回 None）。
+    """
+    try:
+        service = ApprovalWorkflowService(db)
+        task = service.submit_approval(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            submitter_id=submitter_id,
+            change_data=change_data,
+            original_data=original_data,
+            title=title,
+        )
+        if not task:
+            service.ensure_default_workflow(entity_type, user_id=submitter_id)
+            task = service.submit_approval(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                submitter_id=submitter_id,
+                change_data=change_data,
+                original_data=original_data,
+                title=title,
+            )
+        if task and priority:
+            task.priority = priority
+            safe_commit(db)
+        return task.id if task else None
+    except Exception:
+        logger.warning(
+            "创建审批任务失败 entity_type=%s entity_id=%s",
+            entity_type,
+            entity_id,
+            exc_info=True,
+        )
+        return None

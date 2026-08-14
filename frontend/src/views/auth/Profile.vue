@@ -285,6 +285,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElForm } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { useUserStore } from '@/stores/user'
 
@@ -530,7 +531,7 @@ const handleAvatarChange = async (file: { raw?: File }) => {
 
       ElMessage.success('头像上传成功')
     } catch (error) {
-      ElMessage.error('头像上传失败，请稍后重试')
+      ElMessage.error(getErrorMessage(error, '头像上传失败，请稍后重试'))
     } finally {
       uploadingAvatar.value = false
     }

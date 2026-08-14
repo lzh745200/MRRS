@@ -742,8 +742,9 @@ class TestImportSectionData:
         import openpyxl
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.append(["年份", "项目", "数值"])
-        ws.append([2025, "收入", 100])
+        # 表头使用模型列注释标签（VillagePopulation: 总户数/总人数）
+        ws.append(["总户数", "总人数"])
+        ws.append([120, 560])
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -752,18 +753,38 @@ class TestImportSectionData:
         v = _make_mock_village(1)
         q.first.return_value = v
 
-        resp = client.post("/api/v1/supported-villages/1/sections/import", files={
-            "file": ("test.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        })
+        resp = client.post(
+            "/api/v1/supported-villages/1/sections/import?section_key=population&year=2025",
+            files={"file": ("test.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
         assert resp.status_code == 200
-        assert resp.json()["data"]["rows"] == 1
+        assert resp.json()["data"]["imported"] == 1
+        assert resp.json()["data"]["failed"] == 0
+
+    def test_unknown_section_key(self, client, mock_db):
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["总户数"])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        q = mock_db.query.return_value
+        q.first.return_value = _make_mock_village(1)
+
+        resp = client.post(
+            "/api/v1/supported-villages/1/sections/import?section_key=nope",
+            files={"file": ("test.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 400
 
     def test_parse_error(self, client, mock_db):
         q = mock_db.query.return_value
         v = _make_mock_village(1)
         q.first.return_value = v
 
-        resp = client.post("/api/v1/supported-villages/1/sections/import", files={
+        resp = client.post("/api/v1/supported-villages/1/sections/import?section_key=population", files={
             "file": ("test.xlsx", b"garbage", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         })
         assert resp.status_code == 400

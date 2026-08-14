@@ -146,7 +146,7 @@
         v-if="loadError && !tableData.length"
         icon="error"
         title="数据加载失败"
-        sub-title="请稍后重试"
+        :sub-title="loadErrorMsg || '请稍后重试'"
       >
         <template #extra>
           <el-button type="primary" @click="fetchData">重试</el-button>
@@ -265,6 +265,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { AuthStorage } from '@/utils/authStorage'
 import { useUploadHeaders } from '@/composables/useUploadHeaders'
 
@@ -283,6 +284,7 @@ const { ds } = useDesensitize()
 const tableData = ref<any[]>([])
 const loading = ref(false)
 const loadError = ref(false)
+const loadErrorMsg = ref('')
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -493,6 +495,7 @@ watch(tableData, () => {
 async function fetchData() {
   loading.value = true
   loadError.value = false
+  loadErrorMsg.value = ''
   try {
     const response = await apiRequest({
       method: 'GET',
@@ -514,7 +517,8 @@ async function fetchData() {
     tableData.value = [] // 防御：确保表格数据始终为数组，避免 Element Plus TypeError: e is not iterable
     total.value = 0
     loadError.value = true
-    ElMessage.error('数据加载失败，请稍后重试')
+    // 内联错误态展示真实原因（不再弹全局提示）
+    loadErrorMsg.value = getErrorMessage(e, '数据加载失败，请稍后重试')
   } finally {
     loading.value = false
   }

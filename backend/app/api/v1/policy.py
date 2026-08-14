@@ -23,10 +23,26 @@ from ...models.policy import Policy, PolicyCategory, PolicyFavorite
 from app.core.transaction import safe_commit
 from app.api.v1.deps import require_manager_role
 from app.services.work_log_service import write_work_log
+from app.services.approval_workflow_service import (
+    ApprovalWorkflowService,
+    submit_entity_change_approval,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/policies", tags=["政策法规"])
+
+
+def _apply_policy_approval_result(db: Session, task) -> None:
+    """审批终态回写政策（注册到 ApprovalWorkflowService）
+
+    政策发布/归档为管理员的直接操作（已即时生效），审批任务为审计留痕；
+    此处保留处理器接口，便于后续将发布动作改为审批门控。
+    """
+    _ = (db, task)
+
+
+ApprovalWorkflowService.register_entity_apply_handler("policy", _apply_policy_approval_result)
 
 # ==================== 辅助函数 ====================
 
@@ -127,6 +143,8 @@ def _policy_to_frontend(policy: Policy) -> Dict[str, Any]:
         "document_number": policy.code,
         # 附件（URL 形式，供前端展示/下载）
         "attachment_urls": _attachment_urls_of(policy),
+        # 附件文件类型（下载时拼接扩展名用）
+        "file_type": policy.file_type,
         # 统计
         "view_count": policy.view_count or 0,
         "download_count": policy.download_count or 0,
@@ -218,21 +236,23 @@ async def get_categories(
         if is_active is not None:
             query = query.filter(PolicyCategory.is_active == is_active)
         cats = query.order_by(PolicyCategory.sort_order, PolicyCategory.id).all()
-        # 如果有分类数据，按后端结构返回
+        # 有分类数据时同样返回统一 envelope（此前裸列表与信封混用，前端需兼容两种结构）
         if cats:
-            return [
-                {
-                    "id": c.id,
-                    "name": c.name,
-                    "code": c.code,
-                    "parent_id": c.parent_id,
-                    "description": c.description,
-                    "sort_order": c.sort_order,
-                    "is_active": c.is_active,
-                    "created_at": c.created_at.isoformat() if c.created_at else None,
-                }
-                for c in cats
-            ]
+            return success_response(
+                data=[
+                    {
+                        "id": c.id,
+                        "name": c.name,
+                        "code": c.code,
+                        "parent_id": c.parent_id,
+                        "description": c.description,
+                        "sort_order": c.sort_order,
+                        "is_active": c.is_active,
+                        "created_at": c.created_at.isoformat() if c.created_at else None,
+                    }
+                    for c in cats
+                ]
+            )
     except (ValueError, TypeError, AttributeError) as e:
         logger.warning(f"查询分类表失败: {e}")
 
@@ -618,6 +638,47 @@ def _build_policies_pdf(policies_list: List[Policy]) -> bytes:
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
     story.append(table)
+
+    # ── 政策正文：每条政策一节，输出完整内容而非仅清单 ──
+    detail_title_style = ParagraphStyle(
+        "PdfDetailTitle", parent=styles["Heading2"], fontName=_FONT, fontSize=13,
+        spaceBefore=14, spaceAfter=4,
+    )
+    detail_meta_style = ParagraphStyle(
+        "PdfDetailMeta", parent=styles["Normal"], fontName=_FONT, fontSize=9,
+        textColor=colors.grey, spaceAfter=4,
+    )
+    detail_body_style = ParagraphStyle(
+        "PdfDetailBody", parent=styles["Normal"], fontName=_FONT, fontSize=10,
+        leading=16, firstLineIndent=20,
+    )
+    for idx, p in enumerate(policies_list, 1):
+        story.append(Paragraph(f"{idx}. {p.title or '未命名政策'}", detail_title_style))
+        meta_parts = []
+        if p.code:
+            meta_parts.append(f"文号：{p.code}")
+        if p.issuing_authority:
+            meta_parts.append(f"发布机关：{p.issuing_authority}")
+        if p.issue_date:
+            meta_parts.append(f"发布日期：{p.issue_date.strftime('%Y-%m-%d')}")
+        if p.effective_date:
+            meta_parts.append(f"生效日期：{p.effective_date.strftime('%Y-%m-%d')}")
+        if meta_parts:
+            story.append(Paragraph("　　".join(meta_parts), detail_meta_style))
+        content = (p.content or "").strip()
+        if content:
+            import re as _re
+            # 去 HTML 标签（正文可能为富文本），按段落输出
+            plain = _re.sub(r"<[^>]+>", "\n", content)
+            for para in plain.splitlines():
+                para = para.strip()
+                if para:
+                    story.append(Paragraph(para, detail_body_style))
+        else:
+            story.append(Paragraph("（暂无正文内容）", detail_meta_style))
+        if p.file_path:
+            story.append(Paragraph("※ 该政策含附件原文，请在系统详情页下载查看。", detail_meta_style))
+
     story.append(Spacer(1, 8))
     story.append(Paragraph("— 帮扶管理信息系统自动导出 —", foot_style))
 
@@ -1277,7 +1338,17 @@ async def publish_policy(
     setattr(policy, "status", "active")
     safe_commit(db)
     await cache_manager.delete("policies:list")
-    return success_response(message="发布成功")
+    # 数据变更自动创建审批任务（Requirement 3.2）：政策发布进入待审批板块（审计留痕）
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="policy",
+        entity_id=policy_id,
+        submitter_id=current_user.id,
+        title=f"政策发布：{policy.title}",
+        change_data={"title": policy.title, "status": "active"},
+    )
+    return success_response(data={"id": policy_id, "approval_task_id": approval_task_id},
+                            message="发布成功")
 
 
 @router.post("/{policy_id}/archive")
@@ -1295,7 +1366,17 @@ async def archive_policy(
     setattr(policy, "status", "invalid")
     safe_commit(db)
     await cache_manager.delete("policies:list")
-    return success_response(message="归档成功")
+    # 数据变更自动创建审批任务（Requirement 3.2）：政策归档进入待审批板块（审计留痕）
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="policy",
+        entity_id=policy_id,
+        submitter_id=current_user.id,
+        title=f"政策归档：{policy.title}",
+        change_data={"title": policy.title, "status": "invalid"},
+    )
+    return success_response(data={"id": policy_id, "approval_task_id": approval_task_id},
+                            message="归档成功")
 
 
 # ==================== 收藏API ====================

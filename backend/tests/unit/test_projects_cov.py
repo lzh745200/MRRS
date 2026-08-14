@@ -224,7 +224,8 @@ class TestUpdateProjectTask:
         data = TaskUpdate(due_date="2026-03-01")
         with patch.object(pj, "safe_commit"), patch.object(pj, "check_record_access"):
             result = await pj.update_project_task(1, 5, data, _user(), db)
-        assert result["due_date"] == "2026-03-01"
+        # 统一 envelope：任务数据在 data 键内
+        assert result["data"]["due_date"] == "2026-03-01"
 
     async def test_http_exception_passthrough(self):
         project = SimpleNamespace(id=1, created_by=1)

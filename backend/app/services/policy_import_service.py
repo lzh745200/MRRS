@@ -49,16 +49,37 @@ async def import_policies_from_excel(
             "已发布": "active",
             "已归档": "invalid",
             "已过期": "invalid",
+            # 与导入模板状态列说明一致（excel_template_service.POLICY_FIELDS）
+            "现行有效": "active",
+            "已修订": "active",
+            "即将实施": "draft",
+            "已废止": "invalid",
         }
+
+        # 模板布局：标题区(1-5行) + 表头行 + 示例行 + 数据行；
+        # 同时兼容用户自制"第1行表头"文件 → 自动探测表头行
+        header_row = _find_header_row(ws, "政策标题")
+        data_start = header_row + 1
 
         imported = 0
         errors: List[Dict[str, Any]] = []
         error_rows: List[int] = []
 
-        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        for row_idx, row in enumerate(
+            ws.iter_rows(min_row=data_start, values_only=True), start=data_start
+        ):
             if not row or len(row) < 2:
                 continue
+            # 跳过模板示例行（行尾合并单元格标注"← 示例行（导入时自动跳过）"）与说明/页脚行
+            if any(
+                isinstance(c, str) and ("示例行" in c or "填写说明" in c or "帮扶管理信息系统 v" in c)
+                for c in row
+            ):
+                continue
             if not row[1]:
+                # 整行为空（预格式化空行/分隔区）→ 静默跳过，不误报错误
+                if all(c is None or (isinstance(c, str) and not c.strip()) for c in row):
+                    continue
                 errors.append({"row": row_idx, "title": "", "error": "政策标题不能为空"})
                 error_rows.append(row_idx)
                 continue
@@ -89,6 +110,19 @@ async def import_policies_from_excel(
         db.rollback()
         logger.error(f"导入政策失败: {e}")
         raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+
+
+def _find_header_row(ws, required_label: str, max_scan: int = 10) -> int:
+    """在前 max_scan 行内探测表头行（含"序号"与 required_label 列标签）。
+
+    官方模板表头在第 6 行（前 5 行为装饰标题区）；
+    用户自制文件通常第 1 行即表头。探测失败时回退为 1（保持旧行为）。
+    """
+    for idx, row in enumerate(ws.iter_rows(min_row=1, max_row=max_scan, values_only=True), start=1):
+        cells = [str(c).lstrip("*").strip() for c in row if c is not None]
+        if required_label in cells and "序号" in cells:
+            return idx
+    return 1
 
 
 def _process_policy_row(row, row_idx, level_map, status_map, db) -> Dict[str, Any]:

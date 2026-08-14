@@ -290,7 +290,8 @@ import { Download, Upload, Loading, Bell } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
-import { post, apiRequest, downloadBlob, parseContentDisposition } from '@/api/request'
+import { post, downloadBlob, parseContentDisposition } from '@/api/request'
+import request from '@/api/request'
 
 interface ProjectData {
   rowIndex: number
@@ -352,17 +353,16 @@ function clearFileList() {
 const downloadTemplate = async () => {
   downloading.value = true
   try {
-    const resp: any = await apiRequest({
-      method: 'GET',
-      url: '/import/template',
+    // 使用裸 axios 实例：Blob 下载需要 AxiosResponse 的 headers 解析文件名
+    const resp = await request.get('/import/template', {
       params: { entity_type: 'project' },
       responseType: 'blob',
     })
     const filename = parseContentDisposition(
-      resp.headers as Record<string, string>,
+      (resp.headers || {}) as Record<string, string>,
       '项目导入模板.xlsx'
     )
-    downloadBlob(new Blob([resp.data || resp]), filename)
+    downloadBlob(new Blob([resp.data]), filename)
     // 模板下载成功 — 浏览器已确认
   } catch {
     ElMessage.error('模板下载失败，请重试')

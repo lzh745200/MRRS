@@ -218,7 +218,7 @@ describe('挂载与数据加载', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.tableData).toEqual([])
-    expect(ElMessage.error).toHaveBeenCalledWith('加载角色列表失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
   })
 
   it('loadRoles：响应缺 data → 空表兜底', async () => {
@@ -272,7 +272,7 @@ describe('挂载与数据加载', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.menuTreeData).toEqual([])
-    expect(ElMessage.error).toHaveBeenCalledWith('加载权限菜单失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
   })
 
   it('loadPermissions：响应缺 categories → 空树兜底（|| {} 分支），不报错', async () => {

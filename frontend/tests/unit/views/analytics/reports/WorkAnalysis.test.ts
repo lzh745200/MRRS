@@ -271,7 +271,7 @@ describe('WorkAnalysis.vue (analytics/reports)', () => {
     const wrapper = mountPage()
     await flushPromises()
 
-    expect(ElMessage.error).toHaveBeenCalledWith('加载数据失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('接口异常')
     wrapper.unmount()
   })
 

@@ -104,6 +104,12 @@
             </el-link>
           </template>
         </el-table-column>
+        <el-table-column label="业务摘要" min-width="220">
+          <template #default="{ row }">
+            <span v-if="entitySummary(row)" class="entity-summary">{{ entitySummary(row) }}</span>
+            <span v-else class="entity-summary muted">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="类型" width="100">
           <template #default="{ row }">
             {{ formatEntityType(row.entity_type) }}
@@ -132,12 +138,16 @@
             >
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button-group>
               <el-button size="small" @click="handleViewDetail(row)">
                 <el-icon><View /></el-icon>
                 详情
+              </el-button>
+              <el-button size="small" @click="handleViewDiff(row)">
+                <el-icon><Document /></el-icon>
+                对比
               </el-button>
               <el-button
                 v-if="row.entity_type === 'rural_work'"
@@ -164,6 +174,19 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页 -->
+      <el-pagination
+        v-if="total > pageSize"
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        class="pagination"
+        :total="total"
+        :page-sizes="[10, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="handleSizeChange"
+        @current-change="loadTasks"
+      />
     </el-card>
 
     <!-- 审批对话框 -->
@@ -271,9 +294,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Check, Close, View, Edit, Switch } from '@element-plus/icons-vue'
+import { Refresh, Check, Close, View, Edit, Switch, Document } from '@element-plus/icons-vue'
 import {
-  getPendingTasks,
+  getPendingTasksWithTotal,
   approveTask,
   rejectTask,
   batchApprove,
@@ -293,6 +316,9 @@ const loading = ref(false)
 const submitting = ref(false)
 const autoApproving = ref(false)
 const tasks = ref<ApprovalTask[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
 const selectedTasks = ref<ApprovalTask[]>([])
 const currentTask = ref<ApprovalTask | null>(null)
 
@@ -359,28 +385,70 @@ const diffTableData = computed(() => {
   if (!taskDiff.value) return []
 
   const { original_data, change_data, diff_fields } = taskDiff.value
-  const allFields = new Set([
-    ...Object.keys(original_data || {}),
-    ...Object.keys(change_data || {}),
-  ])
+  // 兼容旧接口返回 changed/original 键名
+  const original = original_data ?? (taskDiff.value as any).original ?? {}
+  const changed = change_data ?? (taskDiff.value as any).changed ?? {}
+  const allFields = new Set([...Object.keys(original || {}), ...Object.keys(changed || {})])
 
   return Array.from(allFields).map((field) => ({
     field,
-    original: original_data?.[field],
-    new: change_data?.[field],
+    original: original?.[field],
+    new: changed?.[field],
     changed: diff_fields?.includes(field),
   }))
 })
 
+/**
+ * 从审批任务变更数据中提取业务摘要（经费名称/金额等）
+ */
+function entitySummary(task: any): string {
+  const cd = task?.change_data
+  if (!cd || typeof cd !== 'object') return ''
+  if (task?.entity_type === 'fund') {
+    const parts: string[] = []
+    if (cd.name) parts.push(String(cd.name))
+    if (cd.amount != null) parts.push(`¥${Number(cd.amount).toLocaleString('zh-CN')}`)
+    if (cd.applicant) parts.push(`申请人: ${cd.applicant}`)
+    if (cd.status) parts.push(`状态: ${cd.status}`)
+    return parts.join(' · ')
+  }
+  if (task?.entity_type === 'project') {
+    const parts: string[] = []
+    if (cd.name || cd.project_name) parts.push(String(cd.name || cd.project_name))
+    if (cd.budget != null) parts.push(`预算: ¥${Number(cd.budget).toLocaleString('zh-CN')}`)
+    return parts.join(' · ')
+  }
+  if (cd.name) return String(cd.name)
+  return ''
+}
+
 // ==================== 方法 ====================
 
 /**
- * 加载待审批任务
+ * 加载待审批任务（分页）
  */
 async function loadTasks() {
   loading.value = true
   try {
-    tasks.value = await getPendingTasks({ limit: 100 })
+    const result: any = await getPendingTasksWithTotal({
+      skip: (page.value - 1) * pageSize.value,
+      limit: pageSize.value,
+    })
+    // 兼容直接返回数组的旧形态
+    const items = Array.isArray(result)
+      ? result
+      : result?.items || (Array.isArray(result?.data) ? result.data : [])
+    const resultTotal = Number(result?.total ?? items.length) || items.length
+    tasks.value = Array.isArray(items) ? items : []
+    total.value = resultTotal
+    // 删除/审批后当前页可能为空，自动回退到最后一页
+    if (tasks.value.length === 0 && page.value > 1) {
+      page.value = Math.max(1, Math.ceil(resultTotal / pageSize.value) || 1)
+      if (page.value > 1) {
+        await loadTasks()
+        return
+      }
+    }
   } catch (error) {
     ElMessage.error('加载任务列表失败')
   } finally {
@@ -395,20 +463,33 @@ function handleSelectionChange(selection: any[]) {
   selectedTasks.value = selection
 }
 
+function handleSizeChange() {
+  page.value = 1
+  loadTasks()
+}
+
 import { useRouterSafe } from '@/composables/useRouterSafe'
 const { pushSafe } = useRouterSafe()
 
 // ... existing code ...
 
 /**
- * 查看详情
+ * 查看详情：经费/项目/学校/帮扶村跳转对应业务页面，其余展示变更对比
  */
 function handleViewDetail(task: any) {
+  const detailRoutes: Record<string, string> = {
+    fund: `/funds/${task.entity_id}`,
+    project: `/projects/${task.entity_id}`,
+    school: `/schools/${task.entity_id}`,
+    supported_village: `/supported-villages/${task.entity_id}`,
+  }
   if (task.entity_type === 'rural_work') {
     pushSafe({
       path: '/rural-works',
       query: { id: task.entity_id, action: 'view' },
     })
+  } else if (detailRoutes[task.entity_type]) {
+    pushSafe(detailRoutes[task.entity_type])
   } else {
     handleViewDiff(task)
   }
@@ -545,7 +626,7 @@ async function confirmReject() {
 }
 
 /**
- * 单机版快速审批单个任务
+ * 快速通过：优先走标准审批（校验当前审批人），无权限时回退到单机版自动审批
  */
 async function handleQuickApprove(task: any) {
   try {
@@ -554,11 +635,23 @@ async function handleQuickApprove(task: any) {
       '快速审批',
       { type: 'info', confirmButtonText: '确认通过', cancelButtonText: '取消' }
     )
-    await autoApproveSingleTask(task.id, '单机版快速审批通过')
+    try {
+      await approveTask(task.id, '快速审批通过')
+    } catch {
+      await autoApproveSingleTask(task.id, '单机版快速审批通过')
+    }
     ElMessage.success('审批通过')
     loadTasks()
-  } catch {
-    // 用户取消
+  } catch (e: any) {
+    // 用户取消（ElMessageBox 拒绝值为 'cancel' 字符串或 Error('cancel')）
+    const isCancel =
+      e === 'cancel' ||
+      e?.message === 'cancel' ||
+      e?.toString?.() === 'cancel' ||
+      String(e?.message ?? '').includes('cancel')
+    if (!isCancel) {
+      ElMessage.error(e?.response?.data?.detail || '审批失败')
+    }
   }
 }
 
@@ -580,8 +673,18 @@ async function handleAutoApproveAll() {
     )
 
     autoApproving.value = true
-    const result = await autoApproveAll('单机版一键批量审批通过')
-    ElMessage.success(`批量审批完成：成功 ${result.success.length}，失败 ${result.failed.length}`)
+    const result: any = await autoApproveAll('单机版一键批量审批通过')
+    // 兼容两种返回结构：{total_pending, approved, failed} 与 {success, failed}
+    const approvedCount =
+      result?.approved ?? (Array.isArray(result?.success) ? result.success.length : 0)
+    const failedCount = Array.isArray(result?.failed)
+      ? result.failed.length
+      : typeof result?.failed === 'number'
+        ? result.failed
+        : 0
+    ElMessage.success(
+      `批量审批完成：成功 ${approvedCount}${failedCount ? `，失败 ${failedCount}` : ''}`
+    )
     loadTasks()
   } catch {
     // 用户取消
@@ -673,6 +776,20 @@ onMounted(() => {
     .el-button {
       padding: 5px 8px;
     }
+  }
+
+  .entity-summary {
+    color: #1b4332;
+    font-size: 13px;
+
+    &.muted {
+      color: #c0c4cc;
+    }
+  }
+
+  .pagination {
+    margin-top: 16px;
+    justify-content: flex-end;
   }
 }
 

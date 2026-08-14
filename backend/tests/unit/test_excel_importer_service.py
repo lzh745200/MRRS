@@ -93,18 +93,18 @@ class TestParseExcel:
         with patch(
             "app.services.excel_importer_service._HAS_PANDAS_FAST_READ", True
         ), patch(
-            "app.services.excel_importer_service._pandas_read",
-            return_value=([{"a": 1}], ["a"]),
+            "app.services.excel_importer_service._pandas_read_raw",
+            return_value=[["定点帮扶村", "各部门各单位"], ["测试村", "测试部门"]],
         ):
             rows, headers = service.parse_excel(b"dummy", "supported_village")
-            assert rows == [{"a": 1}]
-            assert headers == ["a"]
+            assert rows == [{"village_name": "测试村", "department": "测试部门"}]
+            assert headers == ["定点帮扶村", "各部门各单位"]
 
     def test_pandas_fast_path_fallback(self, service):
         with patch(
             "app.services.excel_importer_service._HAS_PANDAS_FAST_READ", True
         ), patch(
-            "app.services.excel_importer_service._pandas_read",
+            "app.services.excel_importer_service._pandas_read_raw",
             side_effect=Exception("fail"),
         ), patch.object(
             service, "validator"

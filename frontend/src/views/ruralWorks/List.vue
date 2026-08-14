@@ -262,6 +262,7 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { Search, Plus, Download } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -506,11 +507,7 @@ async function handleSave() {
     await fetchData()
   } catch (error: any) {
     logger.error('保存失败', error)
-    const msg =
-      error?.response?.data?.detail ||
-      error?.response?.data?.message ||
-      error?.message ||
-      '保存失败，请稍后重试'
+    const msg = getErrorMessage(error, '保存失败，请稍后重试')
     ElMessage.error(msg)
   } finally {
     saving.value = false

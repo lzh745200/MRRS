@@ -106,6 +106,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
@@ -170,7 +171,7 @@ const loadParentOptions = async () => {
     )
   } catch (error) {
     logger.error('加载上级组织失败:', error)
-    ElMessage.error('加载上级组织失败，请稍后重试')
+    ElMessage.error(getErrorMessage(error, '加载上级组织失败，请稍后重试'))
   }
 }
 

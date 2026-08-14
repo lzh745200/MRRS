@@ -1,6 +1,6 @@
 """Tests for async_export API endpoints."""
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -98,7 +98,7 @@ class TestExportVillages:
         mock_svc = MagicMock()
         mock_task = MagicMock()
         mock_task.task_id = "async-task-123"
-        mock_svc.export_supported_villages_async.return_value = mock_task
+        mock_svc.export_supported_villages_async = AsyncMock(return_value=mock_task)
         mock_svc.estimate_record_count.return_value = 6000
 
         with patch("app.api.v1.import_export.async_export.AsyncExportService", return_value=mock_svc):
@@ -121,7 +121,7 @@ class TestExportVillages:
         mock_svc.should_use_async.return_value = True
         mock_task = MagicMock()
         mock_task.task_id = "async-task-456"
-        mock_svc.export_supported_villages_async.return_value = mock_task
+        mock_svc.export_supported_villages_async = AsyncMock(return_value=mock_task)
         mock_svc.estimate_record_count.return_value = 6000
 
         with patch("app.api.v1.import_export.async_export.AsyncExportService", return_value=mock_svc):

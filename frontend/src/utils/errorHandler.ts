@@ -8,6 +8,12 @@ import { ElMessage } from 'element-plus'
 import { notify } from '@/utils/notify'
 import { getEventBus } from '@/composables/useEventBus'
 
+// getErrorMessage 拆分到独立零依赖模块（@/utils/getErrorMessage），
+// 此处 re-export 保持向后兼容。
+import { getErrorMessage } from '@/utils/getErrorMessage'
+
+export { getErrorMessage }
+
 // ==================== 错误类型枚举 ====================
 
 export enum ErrorType {
@@ -379,6 +385,27 @@ export function handleImportError(error: any): boolean {
   return handleApiError(error, '导入失败')
 }
 
+/**
+ * getErrorMessage 位于 @/utils/getErrorMessage（零依赖），
+ * 本文件通过顶部的 `export { getErrorMessage }` re-export 保持兼容。
+ */
+
+// ── 全局错误兜底（未捕获 Promise 拒绝）提示去重 ──
+
+let _lastGlobalToast = { key: '', at: 0 }
+const GLOBAL_TOAST_DEDUPE_MS = 2000
+
+/** 全局兜底提示：同类消息短窗口内只显示一次（防止并发请求失败刷屏） */
+function showGlobalErrorToast(message: string): void {
+  const now = Date.now()
+  if (_lastGlobalToast.key === message && now - _lastGlobalToast.at < GLOBAL_TOAST_DEDUPE_MS) {
+    return
+  }
+  _lastGlobalToast = { key: message, at: now }
+  // grouping: true — 相同文案合并显示（带计数角标）
+  ElMessage({ message, type: 'error', grouping: true })
+}
+
 export function setupGlobalErrorHandler() {
   // ── 同步未捕获异常 ──
   window.onerror = (message, source, lineno, colno, error) => {
@@ -403,13 +430,41 @@ export function setupGlobalErrorHandler() {
   }
 
   // ── 未处理 Promise rejection ──
+  // 兜底提示策略（2026-08-14）：
+  // 拦截器已不再对业务错误弹全局提示，页面捕获并自行提示的失败不会到达这里；
+  // 到达这里的都是"无人处理"的失败 → 显示单条提示（去重合并），保证每个失败最多一条。
   window.addEventListener('unhandledrejection', (event) => {
     const reason = event.reason
+
+    // 页面明确要求静默（silent 配置）
+    if (reason?.__silent) {
+      event.preventDefault()
+      return
+    }
+
+    // 请求取消不是错误
+    if (reason?.__CANCEL__ || reason?.code === 'ERR_CANCELED') {
+      event.preventDefault()
+      return
+    }
+
     if (reason?.message?.includes('Failed to fetch dynamically imported module')) {
       // ChunkLoadError → ErrorBoundary 已处理，仅记录
       console.warn('[UnhandledRejection] ChunkLoadError:', reason.message)
     } else if (reason?.response?.status === 401) {
+      // 401 已由拦截器处理（提示 + 跳转），避免重复提示
       console.warn('[UnhandledRejection] 401 — token may be expired')
+    } else if (typeof reason?.userMessage === 'string' && reason.userMessage) {
+      // 拦截器已解析出用户可读消息 → 单条兜底提示
+      showGlobalErrorToast(reason.userMessage)
+    } else if (
+      reason?.response ||
+      reason?.request ||
+      reason?.code === 'ERR_NETWORK' ||
+      reason?.code === 'ECONNABORTED'
+    ) {
+      // 其他网络/HTTP 错误（拦截器未覆盖的形态）→ 通用提示
+      showGlobalErrorToast('请求失败，请稍后重试')
     } else {
       logger.error('[Unhandled Promise Rejection]', reason)
     }
@@ -427,4 +482,5 @@ export default {
   handleLoadError,
   handleExportError,
   handleImportError,
+  getErrorMessage,
 }

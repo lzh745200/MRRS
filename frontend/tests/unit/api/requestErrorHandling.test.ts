@@ -228,38 +228,43 @@ describe('api/request — 拦截器未覆盖分支', () => {
       expect(mockInst.request).toHaveBeenCalledWith(config)
     })
 
-    it('403 + CSRF 已重试过 → 提示安全校验过期', async () => {
+    it('403 + CSRF 已重试过 → 挂载安全校验过期消息', async () => {
       const config = makeConfig({ method: 'POST', url: '/secure', _csrfRetried: true })
       const error = { response: { status: 403, data: { detail: 'csrf invalid' } }, config }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.error).toHaveBeenCalledWith('安全校验已过期，请重试（CSRF）')
+      expect(error.userMessage).toBe('安全校验已过期，请重试（CSRF）')
+      expect(mockElMessage.error).not.toHaveBeenCalled()
     })
 
-    it('403 非 CSRF → 显示服务端 detail', async () => {
+    it('403 非 CSRF → 挂载服务端 detail', async () => {
       const error = {
         response: { status: 403, data: { detail: '无操作权限' } },
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.error).toHaveBeenCalledWith('无操作权限')
+      expect(error.userMessage).toBe('无操作权限')
+      expect(mockElMessage.error).not.toHaveBeenCalled()
     })
 
     it('403 非 CSRF 且无 detail → 默认权限提示', async () => {
       const error = { response: { status: 403, data: {} }, config: makeConfig() }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.error).toHaveBeenCalledWith('权限不足，无法执行此操作')
+      expect(error.userMessage).toBe('权限不足，无法执行此操作')
+      expect(mockElMessage.error).not.toHaveBeenCalled()
     })
 
-    it('404 → warning 提示资源不存在（带 URL 兜底）', async () => {
+    it('404 → 挂载资源不存在消息', async () => {
       const error = { response: { status: 404, data: {} }, config: makeConfig({ url: '/missing' }) }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('请求的资源不存在: /missing')
+      expect(error.userMessage).toBe('请求的资源不存在')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
-    it('500 → 服务器错误提示', async () => {
+    it('500 → 挂载服务器错误消息', async () => {
       const error = { response: { status: 500, data: {} }, config: makeConfig() }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.error).toHaveBeenCalledWith('服务器错误，请稍后重试')
+      expect(error.userMessage).toBe('服务器错误，请稍后重试')
+      expect(mockElMessage.error).not.toHaveBeenCalled()
     })
 
     it('422 数组 detail → 提取首条字段错误', async () => {
@@ -271,31 +276,35 @@ describe('api/request — 拦截器未覆盖分支', () => {
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('body.name: 必填')
+      expect(error.userMessage).toBe('body.name: 必填')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
-    it('422 字符串 detail → 直接展示', async () => {
+    it('422 字符串 detail → 挂载 detail', async () => {
       const error = {
         response: { status: 422, data: { detail: '数据格式错误' } },
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('数据格式错误')
+      expect(error.userMessage).toBe('数据格式错误')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
     it('422 无 detail → 默认校验失败提示', async () => {
       const error = { response: { status: 422, data: {} }, config: makeConfig() }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('输入数据校验失败')
+      expect(error.userMessage).toBe('输入数据校验失败')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
-    it('400 带 detail → warning 展示', async () => {
+    it('400 带 detail → 挂载 detail', async () => {
       const error = {
         response: { status: 400, data: { detail: '参数错误' } },
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('参数错误')
+      expect(error.userMessage).toBe('参数错误')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
   })
 
@@ -313,14 +322,15 @@ describe('api/request — 拦截器未覆盖分支', () => {
       expect(result).toBe(mockData)
     })
 
-    it('网络错误且无离线 mock → 提示网络失败', async () => {
+    it('网络错误且无离线 mock → 挂载网络失败消息', async () => {
       const error = {
         code: 'ERR_NETWORK',
         message: 'NetworkError',
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.error).toHaveBeenCalledWith('网络连接失败，请检查服务是否启动')
+      expect(error.userMessage).toBe('网络连接失败，请检查服务是否启动')
+      expect(mockElMessage.error).not.toHaveBeenCalled()
     })
 
     it('未知错误 → console.error 记录', async () => {
@@ -450,22 +460,25 @@ describe('api/request — 拦截器未覆盖分支', () => {
       expect(mockAuthStorage.clear).toHaveBeenCalled()
     })
 
-    it('404 无 config → 使用空 URL 兜底提示', async () => {
+    it('404 无 config → 挂载资源不存在消息', async () => {
       const error = { response: { status: 404, data: {} } }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('请求的资源不存在: ')
+      expect(error.userMessage).toBe('请求的资源不存在')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
-    it('404 带 detail → 展示 detail', async () => {
+    it('404 带 detail → 挂载 detail', async () => {
       const error = { response: { status: 404, data: { detail: '记录已删除' } }, config: makeConfig() }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('记录已删除')
+      expect(error.userMessage).toBe('记录已删除')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
-    it('404 带 message → 展示 message', async () => {
+    it('404 带 message → 挂载 message', async () => {
       const error = { response: { status: 404, data: { message: '资源被移除' } }, config: makeConfig() }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('资源被移除')
+      expect(error.userMessage).toBe('资源被移除')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
     it('422 detail 为空数组 → 默认校验失败提示', async () => {
@@ -474,7 +487,8 @@ describe('api/request — 拦截器未覆盖分支', () => {
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('输入数据校验失败')
+      expect(error.userMessage).toBe('输入数据校验失败')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
     it('422 detail 首条无 loc → 仅展示 msg', async () => {
@@ -483,7 +497,8 @@ describe('api/request — 拦截器未覆盖分支', () => {
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith(': 必填')
+      expect(error.userMessage).toBe(': 必填')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
     it('422 detail 首条无 msg 但含 message → 展示 message', async () => {
@@ -492,25 +507,28 @@ describe('api/request — 拦截器未覆盖分支', () => {
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('name: 非法值')
+      expect(error.userMessage).toBe('name: 非法值')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
-    it('400 detail 为对象 → JSON 序列化展示', async () => {
+    it('400 detail 为对象 → 挂载通用请求失败消息', async () => {
       const error = {
         response: { status: 400, data: { detail: { field: 'x' } } },
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith(JSON.stringify({ field: 'x' }))
+      expect(error.userMessage).toBe('请求失败 (400)')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
-    it('400 无 detail 但带 message → 展示 message', async () => {
+    it('400 无 detail 但带 message → 挂载 message', async () => {
       const error = {
         response: { status: 400, data: { message: '请求被拒绝' } },
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(mockElMessage.warning).toHaveBeenCalledWith('请求被拒绝')
+      expect(error.userMessage).toBe('请求被拒绝')
+      expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
     it('离线模式命中 mock 且 config 无 method/url → 使用 GET 兜底', async () => {

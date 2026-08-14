@@ -87,8 +87,9 @@ async def export_data(
     current_user: User = Depends(get_current_user),
 ):
     """
+    导出增量数据包（ZIP格式，无加密）
+    """
     require_admin(current_user, error_message="仅管理员可执行数据同步操作")
-导出增量数据包（ZIP格式，无加密）"""
     try:
         since_time = None
         if since:
@@ -117,8 +118,9 @@ async def export_encrypted_data(
     current_user: User = Depends(get_current_user),
 ):
     """
+    导出加密数据包（.rrs格式，JSON body）
+    """
     require_admin(current_user, error_message="仅管理员可执行数据同步操作")
-导出加密数据包（.rrs格式，JSON body）"""
     try:
         export_type = body.export_type
         password = body.password
@@ -274,8 +276,9 @@ async def resolve_conflict(
     current_user: User = Depends(get_current_user),
 ):
     """
+    解决冲突
+    """
     require_admin(current_user, error_message="仅管理员可执行数据同步操作")
-解决冲突"""
     try:
         result = await data_sync_service.resolve_conflict(
             conflict_id=conflict_id,

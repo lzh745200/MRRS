@@ -189,7 +189,7 @@ class DataSyncService:
                     "message": "数据导出成功",
                 }
 
-                self.logger.info("data_exported", details=result)
+                self.logger.info("data_exported: %s", result)
                 return result
 
         except Exception as e:
@@ -350,7 +350,7 @@ class DataSyncService:
                 result["sync_log_id"] = sync_log.id
                 result["message"] = "数据导入成功"
 
-                self.logger.info("data_imported", details=result)
+                self.logger.info("data_imported: %s", result)
                 return result
 
         except Exception as e:
@@ -659,7 +659,7 @@ class DataSyncService:
                     "message": "数据导出成功",
                 }
 
-                self.logger.info("encrypted_data_exported", details=result)
+                self.logger.info("encrypted_data_exported: %s", result)
                 return result
 
         except Exception as e:
@@ -769,7 +769,7 @@ class DataSyncService:
                 result["sync_log_id"] = sync_log.id
                 result["message"] = "数据导入成功"
 
-                self.logger.info("encrypted_data_imported", details=result)
+                self.logger.info("encrypted_data_imported: %s", result)
                 return result
 
         except Exception as e:

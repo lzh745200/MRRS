@@ -182,7 +182,7 @@ class TestPolicyAPI:
         mock_db.query.return_value.order_by.return_value.all.return_value = [sample_category]
         resp = client.get("/api/v1/policies/categories")
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert isinstance(data, list) and data[0]["name"] == "乡村振兴"
 
     def test_get_categories_empty(self, client, mock_db, admin_user):

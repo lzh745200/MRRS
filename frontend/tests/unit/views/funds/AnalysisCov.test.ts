@@ -263,11 +263,12 @@ describe('数据加载分支', () => {
     apiMultiDimension.mockResolvedValueOnce(null)
     await vm.loadDimensionStats()
     expect(vm.dimensionData).toEqual([{ label: '保留' }])
-    // 异常 → 日志 + 提示
+    // 异常 → 日志 + 内联错误态（不再弹全局提示）
     apiMultiDimension.mockRejectedValueOnce(new Error('net'))
     await vm.loadDimensionStats()
     expect(logError).toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('加载统计数据失败，请稍后重试')
+    expect(vm.loadError.dimension).toBe('net')
+    expect(ElMessage.error).not.toHaveBeenCalled()
   })
 
   it('loadFundStatsByType：success=false 不更新；department 非空透传；异常提示', async () => {
@@ -283,7 +284,8 @@ describe('数据加载分支', () => {
     expect(apiStatsByType).toHaveBeenCalledWith(expect.objectContaining({ department: '某部' }))
     apiStatsByType.mockRejectedValueOnce(new Error('net'))
     await vm.loadFundStatsByType()
-    expect(ElMessage.error).toHaveBeenCalledWith('加载经费分类统计失败，请稍后重试')
+    expect(logError).toHaveBeenCalled()
+    expect(ElMessage.error).not.toHaveBeenCalled()
   })
 
   it('loadYearlyTrend：data 缺省置空；res 为空不变；异常提示', async () => {
@@ -299,7 +301,8 @@ describe('数据加载分支', () => {
     expect(vm.yearlyTrend).toEqual([{ year: 2020 }])
     apiYearlyComparison.mockRejectedValueOnce(new Error('net'))
     await vm.loadYearlyTrend()
-    expect(ElMessage.error).toHaveBeenCalledWith('加载年度趋势数据失败，请稍后重试')
+    expect(vm.loadError.trend).toBe('net')
+    expect(ElMessage.error).not.toHaveBeenCalled()
   })
 })
 

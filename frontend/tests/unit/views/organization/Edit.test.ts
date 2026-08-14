@@ -162,7 +162,7 @@ describe('创建模式', () => {
     const wrapper = mountComp()
     await flushPromises()
     expect(logError).toHaveBeenCalledWith('加载上级组织失败:', expect.any(Error))
-    expect(ElMessage.error).toHaveBeenCalledWith('加载上级组织失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('down')
     wrapper.unmount()
   })
 

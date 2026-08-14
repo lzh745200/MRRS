@@ -252,7 +252,7 @@ describe('挂载与模式', () => {
     wrapper = mountComp()
     await flushPromises()
     expect(logError).toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('数据加载失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('boom')
     expect((wrapper.vm as any).loading).toBe(false)
   })
 
@@ -472,7 +472,7 @@ describe('文件队列与删除', () => {
     expect(vm.pendingFiles.photo).toEqual([])
     expect(vm.pendingFiles.implementation).toEqual([])
     expect(logError).toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('部分文件上传失败（research），请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('up-fail')
     await flushPromises()
     expect(fetchMock).toHaveBeenCalledWith('/dl/s', expect.any(Object)) // photo 缩略图
   })
@@ -672,7 +672,7 @@ describe('handleSave / handleSaveAndContinue / resetForm / handleCancel', () => 
     vm.projectFormRef = { validate: (cb: any) => cb(true) }
     await vm.handleSave('projectFormRef')
     await flushPromises()
-    expect(ElMessage.error).toHaveBeenCalledWith('保存失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('db')
   })
 
   it('handleSaveAndContinue：成功 → 重置表单并滚动到顶部', async () => {
@@ -714,7 +714,7 @@ describe('handleSave / handleSaveAndContinue / resetForm / handleCancel', () => 
     vm.projectFormRef = { validate: (cb: any) => cb(true), resetFields: vi.fn() }
     await vm.handleSaveAndContinue()
     await flushPromises()
-    expect(ElMessage.error).toHaveBeenCalledWith('保存失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('db')
 
     vm.projectFormRef = undefined
     await vm.handleSaveAndContinue()
@@ -996,7 +996,7 @@ describe('模板交互（v-model 与内联处理器）', () => {
     const vm = wrapper.vm as any
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false } as any)
     await vm.handleDownloadFile({ id: 1, download_url: '/dl/1' })
-    expect(ElMessage.error).toHaveBeenCalledWith('文件下载失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('Download failed')
     fetchMock.mockRestore()
   })
 

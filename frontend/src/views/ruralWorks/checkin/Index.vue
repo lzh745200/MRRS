@@ -143,11 +143,13 @@ async function doCheckin() {
     content.value = ''
     await loadSummary()
   } catch (e: any) {
-    if (e?.detail === '今天已完成驻村打卡') {
+    // axios 将后端 HTTPException.detail 放在 e.response.data.detail
+    const detail = e?.response?.data?.detail || e?.detail
+    if (detail === '今天已完成驻村打卡') {
       ElMessage.info('今天已完成驻村打卡')
       checkedToday.value = true
     } else {
-      ElMessage.error(e?.detail || '打卡失败')
+      ElMessage.error(detail || '打卡失败')
     }
   } finally {
     checking.value = false

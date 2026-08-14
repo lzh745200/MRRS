@@ -177,6 +177,10 @@ class LocalTaskQueue:
         task = Task(func, args, kwargs, name=name, priority=priority)
         self._tasks[task.id] = task
 
+        # 队列未启动时自动启动 worker（自愈：应用未显式调用 start() 也能执行任务）
+        if self._queue is None:
+            await self.start()
+
         if self._queue is not None:
             await self._queue.put(task)
 

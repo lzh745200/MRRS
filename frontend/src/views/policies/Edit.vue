@@ -161,7 +161,7 @@
             </el-button>
             <template #tip>
               <div class="el-upload__tip">
-                支持上传 jpg/png/pdf/doc/docx 文件，单个文件不超过 10MB
+                支持上传 jpg/png/pdf/doc/docx/pptx 文件，单个文件不超过 50MB
               </div>
             </template>
           </el-upload>
@@ -325,6 +325,8 @@ const handleUploadSuccess = (response: any, _file: UploadFile) => {
   const url = response?.data?.url ?? response?.url
   if (url) {
     formData.attachment_urls.push(url)
+    // 关键：回填 file.url，否则点"移除"无法从 attachment_urls 中删除该附件
+    ;(_file as any).url = url
   }
   ElMessage.success('上传成功')
 }
@@ -340,6 +342,7 @@ const handleUploadRemove = (file: UploadFile) => {
 }
 
 // 上传前检查（同步等待 CSRF token 就绪，避免原生 XHR 上传被 403 拦截）
+// 限制与后端 /policies/{id}/upload、/files/upload 对齐：pdf/doc/docx/pptx/jpg/png，≤50MB
 const beforeUpload = async (file: File) => {
   const allowedTypes = [
     'image/jpeg',
@@ -347,16 +350,17 @@ const beforeUpload = async (file: File) => {
     'application/pdf',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   ]
-  const maxSize = 10 * 1024 * 1024 // 10MB
+  const maxSize = 50 * 1024 * 1024 // 50MB（与后端一致）
 
   if (!allowedTypes.includes(file.type)) {
-    ElMessage.error('只能上传 jpg/png/pdf/doc/docx 文件!')
+    ElMessage.error('只能上传 jpg/png/pdf/doc/docx/pptx 文件!')
     return false
   }
 
   if (file.size > maxSize) {
-    ElMessage.error('文件大小不能超过 10MB!')
+    ElMessage.error('文件大小不能超过 50MB!')
     return false
   }
 

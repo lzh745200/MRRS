@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # 尝试导入 pandas 加速模块（可选依赖）
 try:
-    from app.services.batch_import_optimizer import read_excel_fast as _pandas_read
+    from app.services.batch_import_optimizer import read_excel_raw as _pandas_read_raw
     _HAS_PANDAS_FAST_READ = True
 except ImportError:  # pragma: no cover
     _HAS_PANDAS_FAST_READ = False
@@ -119,6 +119,8 @@ class ExcelImporterService:
 
         优先使用 pandas 加速读取（比 openpyxl 快 3-5 倍），
         pandas 不可用时自动回退到 openpyxl 逐行模式。
+        两条路径统一做：表头行自动探测（兼容官方模板第1-5行装饰标题区）、
+        中文列名 → 英文字段映射、示例行跳过。
 
         Args:
             file_content: Excel文件的字节内容
@@ -127,59 +129,96 @@ class ExcelImporterService:
         Returns:
             Tuple[List[Dict], List[str]]: (解析后的数据行列表, 表头列表)
         """
-        # 快速路径：pandas 向量化读取
-        if _HAS_PANDAS_FAST_READ:
-            try:
-                return _pandas_read(file_content)
-            except Exception as e:
-                logger.warning("pandas 快速读取失败，回退到 openpyxl: %s", e)
-
-        # 回退路径：openpyxl 逐行读取
-        wb = load_workbook(filename=BytesIO(file_content), data_only=True)
-        ws = wb.active
-
-        rows = []
-        headers = []
-        header_mapping = {}
-
         # 根据实体类型选择验证器
         if entity_type == "supported_village":
             header_parser = self.validator.parse_excel_headers
             example_markers = ["某某部门", "示例部门"]
+            known_fields = set(self.validator.COLUMN_MAPPING.values())
         else:
             entity_validator = EntityImportValidator(entity_type)
             header_parser = entity_validator.parse_excel_headers
             example_markers = ["某某村", "示例名称", "某某希望小学", "某某帮扶单位"]
+            known_fields = set(entity_validator.get_column_mapping().values())
 
-        for row_idx, row in enumerate(ws.iter_rows(values_only=True), 1):
-            if row_idx == 1:
-                # 解析表头
-                headers = [str(cell).strip() if cell else "" for cell in row]
-                header_mapping = header_parser(headers)
+        def _parse_headers(candidate: List[str]) -> Dict[int, str]:
+            """中文标签映射 + 英文字段名恒等映射（兼容机器生成的英文表头）"""
+            mapping = header_parser(candidate)
+            for idx, h in enumerate(candidate):
+                if idx not in mapping and h in known_fields:
+                    mapping[idx] = h
+            return mapping
+
+        # 读取全部原始行（pandas 快速路径 / openpyxl 回退，均不带表头假设）
+        raw_rows = self._read_raw_rows(file_content)
+
+        # 表头行自动探测：前 10 行内第一个能映射 ≥2 列的行
+        headers, header_mapping, header_idx = self._detect_header_row(raw_rows, _parse_headers)
+
+        rows = []
+        for row in raw_rows[header_idx + 1:]:
+            if self._is_skippable_row(row, example_markers):
                 continue
-
-            # 跳过示例数据行（第2行）
-            if row_idx == self.EXAMPLE_ROW_INDEX:
-                first_value = row[0] if len(row) > 0 else None
-                if first_value and str(first_value).strip() in example_markers:
-                    continue
-
-            # 检查是否为空行
-            if all(cell is None or (isinstance(cell, str) and not cell.strip()) for cell in row):
-                continue
-
-            # 将行数据转换为字典
-            row_data = {}
-            for col_idx, cell_value in enumerate(row):
-                if col_idx in header_mapping:
-                    field_name = header_mapping[col_idx]
-                    row_data[field_name] = cell_value
-
+            row_data = self._row_to_dict(row, headers, header_mapping)
             if row_data:
                 rows.append(row_data)
 
-        wb.close()
         return rows, headers
+
+    @staticmethod
+    def _read_raw_rows(file_content: bytes) -> List[list]:
+        """读取全部原始行：pandas 快速路径优先，失败回退 openpyxl（均不带表头假设）"""
+        if _HAS_PANDAS_FAST_READ:
+            try:
+                return _pandas_read_raw(file_content)
+            except Exception as e:
+                logger.warning("pandas 快速读取失败，回退到 openpyxl: %s", e)
+        wb = load_workbook(filename=BytesIO(file_content), data_only=True)
+        ws = wb.active
+        raw_rows = [list(row) for row in ws.iter_rows(values_only=True)]
+        wb.close()
+        return raw_rows
+
+    @staticmethod
+    def _detect_header_row(raw_rows: List[list], parse_headers_fn) -> Tuple[List[str], Dict[int, str], int]:
+        """表头行自动探测：前 10 行内第一个能映射 ≥2 列的行；未识别则假定第 1 行"""
+        for idx, row in enumerate(raw_rows[:10]):
+            candidate = [str(cell).strip() if cell is not None else "" for cell in row]
+            mapping = parse_headers_fn(candidate)
+            if len(mapping) >= 2:
+                return candidate, mapping, idx
+        # 未识别到表头：保持旧行为（假定第 1 行为表头）
+        headers = [str(c).strip() if c is not None else "" for c in (raw_rows[0] if raw_rows else [])]
+        return headers, parse_headers_fn(headers), 0
+
+    @staticmethod
+    def _is_skippable_row(row: list, example_markers: List[str]) -> bool:
+        """示例行/填写说明/页脚/空行 跳过"""
+        first_value = row[0] if len(row) > 0 else None
+        if first_value and str(first_value).strip() in example_markers:
+            return True
+        if any(
+            isinstance(c, str) and ("示例行" in c or "填写说明" in c or "帮扶管理信息系统 v" in c)
+            for c in row
+        ):
+            return True
+        return all(cell is None or (isinstance(cell, str) and not cell.strip()) for cell in row)
+
+    @staticmethod
+    def _row_to_dict(row: list, headers: List[str], header_mapping: Dict[int, str]) -> Dict[str, Any]:
+        """按表头映射将行数据转换为英文字段名字典"""
+        if not header_mapping:
+            # 完全未识别的表头：回退为原始表头键（旧 pandas 快读路径行为，
+            # 交由下游校验器报"必填字段缺失"而不是静默丢弃）
+            return {
+                headers[col_idx]: cell_value
+                for col_idx, cell_value in enumerate(row)
+                if col_idx < len(headers) and headers[col_idx]
+            }
+        return {
+            header_mapping[col_idx]: cell_value
+            for col_idx, cell_value in enumerate(row)
+            if col_idx in header_mapping
+        }
 
     def import_data(
         self,
@@ -508,6 +547,10 @@ class ExcelImporterService:
                 filtered_data[bool_field] = False
 
         village = SupportedVillage(**filtered_data)
+        # 归属字段：与手工创建一致，保证导入者在数据权限范围内可见/可编辑
+        if self.current_user is not None:
+            village.organization_id = getattr(self.current_user, "organization_id", None)
+            village.created_by = getattr(self.current_user, "id", None)
         self.db.add(village)
         self.db.flush()  # 获取ID
         return village

@@ -278,7 +278,7 @@ describe('Profile.vue', () => {
     const w = await mountComp()
     const vm = w.vm as any
     await vm.handleAvatarChange({ raw: { name: 'a.png' } })
-    expect(ElMessage.error).toHaveBeenCalledWith('头像上传失败，请稍后重试')
+    expect(ElMessage.error).toHaveBeenCalledWith('upload failed')
     expect(vm.uploadingAvatar).toBe(false)
   })
 

@@ -22,6 +22,7 @@
             range-separator="至"
             start-placeholder="开始"
             end-placeholder="结束"
+            value-format="YYYY-MM-DD"
             style="width: 260px"
           />
         </el-form-item>
@@ -58,7 +59,9 @@
         <el-table-column prop="title" label="申请标题" min-width="200" />
         <el-table-column prop="type" label="类型" width="120">
           <template #default="{ row }">
-            <el-tag size="small">{{ row.type || '通用' }}</el-tag>
+            <el-tag size="small">
+              {{ formatEntityType(row.type || row.entity_type) || '通用' }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
@@ -101,7 +104,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getApprovalHistory, type ApprovalTask } from '@/api/approval'
+import { getMyTasks, formatEntityType, type ApprovalTask } from '@/api/approval'
 import { post } from '@/api/request'
 
 const loading = ref(false)
@@ -143,8 +146,13 @@ async function loadData() {
   try {
     const params: Record<string, any> = {}
     if (filters.status) params.status = filters.status
-    // 使用审批历史接口，当前用户的提交记录由后端根据 token 过滤
-    applications.value = await getApprovalHistory(params)
+    if (filters.dateRange?.length === 2) {
+      params.date_from = filters.dateRange[0]
+      params.date_to = filters.dateRange[1]
+    }
+    // 使用「我的申请」任务接口：后端按当前用户过滤提交记录，id 即任务ID
+    const result = await getMyTasks({ ...params, skip: 0, limit: 500 })
+    applications.value = result.items
   } catch {
     applications.value = []
   } finally {

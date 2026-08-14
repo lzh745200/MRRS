@@ -49,6 +49,9 @@ async def export_supported_villages(
     department: Optional[str] = Query(None, description="部门筛选"),
     support_unit: Optional[str] = Query(None, description="帮扶单位筛选"),
     tiered_level: Optional[str] = Query(None, description="梯次等级筛选: 示范级 / 达标级 / 基础级"),
+    keyword: Optional[str] = Query(None, description="村名关键字筛选"),
+    county: Optional[str] = Query(None, description="县/市筛选"),
+    is_revitalization_tier: Optional[bool] = Query(None, description="是否振兴梯队"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -58,14 +61,15 @@ async def export_supported_villages(
     if format not in ("xlsx", "csv"):
         raise HTTPException(status_code=400, detail=f"不支持的导出格式: {format}")
 
-    svc = SupportedVillageExportService(db)
+    svc = SupportedVillageExportService(db, current_user=current_user)
     mod_list = [m.strip() for m in modules.split(",") if m.strip()] if modules else None
     vid_list = _parse_id_list(village_ids, "帮扶村ID列表")
 
     content, filename, stats = svc.export(
         year=year, modules=mod_list, format=format,
         village_ids=vid_list, department=department, support_unit=support_unit,
-        tiered_level=tiered_level,
+        tiered_level=tiered_level, keyword=keyword, county=county,
+        is_revitalization_tier=is_revitalization_tier,
     )
     content_type = (
         "text/csv; charset=utf-8" if format == "csv"
@@ -92,7 +96,7 @@ async def preview_export(
     """预览导出数据——返回行数统计，不生成文件。"""
     from app.services.supported_village_export_service import SupportedVillageExportService
 
-    svc = SupportedVillageExportService(db)
+    svc = SupportedVillageExportService(db, current_user=current_user)
     mod_list = [m.strip() for m in modules.split(",") if m.strip()] if modules else None
     vid_list = _parse_id_list(village_ids, "帮扶村ID列表")
 

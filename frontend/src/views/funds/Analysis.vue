@@ -29,12 +29,22 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch"
+          <el-button type="primary" :loading="loading.dimension" @click="handleSearch"
             ><el-icon><Search /></el-icon>查询</el-button
           >
-          <el-button @click="handleExportStats"
-            ><el-icon><Download /></el-icon>导出统计</el-button
+          <el-tooltip
+            :content="hasDimensionData ? '导出统计明细为 CSV 文件' : '暂无统计数据可导出'"
+            placement="top"
           >
+            <span>
+              <el-button
+                :disabled="!hasDimensionData"
+                :loading="exporting"
+                @click="handleExportStats"
+                ><el-icon><Download /></el-icon>导出统计</el-button
+              >
+            </span>
+          </el-tooltip>
         </el-form-item>
       </el-form>
     </el-card>
@@ -77,13 +87,25 @@
       <el-col :span="12">
         <el-card class="chart-card">
           <template #header><span class="title">分布图</span></template>
-          <BaseChart :option="pieChartOption" height="300px" />
+          <el-skeleton v-if="loading.dimension" :rows="6" animated />
+          <ChartErrorState
+            v-else-if="loadError.dimension"
+            :message="loadError.dimension"
+            @retry="loadDimensionStats"
+          />
+          <BaseChart v-else :option="pieChartOption" height="300px" />
         </el-card>
       </el-col>
       <el-col :span="12">
         <el-card class="chart-card">
           <template #header><span class="title">利用率分析</span></template>
-          <BaseChart :option="barChartOption" height="300px" />
+          <el-skeleton v-if="loading.dimension" :rows="6" animated />
+          <ChartErrorState
+            v-else-if="loadError.dimension"
+            :message="loadError.dimension"
+            @retry="loadDimensionStats"
+          />
+          <BaseChart v-else :option="barChartOption" height="300px" />
         </el-card>
       </el-col>
     </el-row>
@@ -93,15 +115,31 @@
       <el-col :span="12">
         <el-card class="chart-card">
           <template #header><span class="title">年度经费趋势</span></template>
-          <BaseChart v-if="yearlyTrendAreaOption" :option="yearlyTrendAreaOption" height="300px" />
+          <el-skeleton v-if="loading.trend" :rows="6" animated />
+          <ChartErrorState
+            v-else-if="loadError.trend"
+            :message="loadError.trend"
+            @retry="loadYearlyTrend"
+          />
+          <BaseChart
+            v-else-if="yearlyTrendAreaOption"
+            :option="yearlyTrendAreaOption"
+            height="300px"
+          />
           <el-empty v-else description="暂无年度趋势数据" />
         </el-card>
       </el-col>
       <el-col :span="12">
         <el-card class="chart-card">
           <template #header><span class="title">利用率趋势</span></template>
+          <el-skeleton v-if="loading.trend" :rows="6" animated />
+          <ChartErrorState
+            v-else-if="loadError.trend"
+            :message="loadError.trend"
+            @retry="loadYearlyTrend"
+          />
           <BaseChart
-            v-if="utilizationTrendOption"
+            v-else-if="utilizationTrendOption"
             :option="utilizationTrendOption"
             height="300px"
           />
@@ -121,8 +159,26 @@
 
     <!-- 统计明细表格 -->
     <el-card class="ranking-card">
-      <template #header><span class="title">统计明细</span></template>
-      <el-table :data="dimensionData" stripe border>
+      <template #header>
+        <div class="ranking-header">
+          <span class="title">统计明细</span>
+          <el-button
+            v-if="loadError.dimension && !hasDimensionData"
+            size="small"
+            type="primary"
+            link
+            @click="loadDimensionStats"
+          >
+            重新加载
+          </el-button>
+        </div>
+      </template>
+      <el-skeleton v-if="loading.dimension" :rows="5" animated />
+      <el-empty
+        v-else-if="loadError.dimension && !hasDimensionData"
+        :description="loadError.dimension"
+      />
+      <el-table v-else :data="dimensionData" stripe border>
         <el-table-column type="index" label="序号" width="70" align="center" />
         <el-table-column prop="label" label="分组" min-width="160" />
         <el-table-column prop="count" label="记录数" width="100" align="center" />
@@ -169,11 +225,13 @@
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
 import { chartColorPrimary, chartColor } from '@/utils/chartColors'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Search, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import BaseChart from '@/components/common/BaseChart.vue'
+import ChartErrorState from '@/components/common/ChartErrorState.vue'
 import YearlyComparisonChart from '@/components/funds/YearlyComparisonChart.vue'
 import type { EChartsOption } from 'echarts'
 import { useFundsStore } from '@/stores/funds'
@@ -207,6 +265,11 @@ const fundStatsByType = ref<Record<string, FundStatistics>>({})
 // 年度趋势数据
 const yearlyTrend = ref<YearlyFundSummary[]>([])
 
+// 加载/错误状态（内联展示，不再弹全局提示）
+const loading = reactive({ dimension: false, trend: false })
+const loadError = reactive({ dimension: '', trend: '' })
+const exporting = ref(false)
+
 const summary = computed(() => {
   const total = Number(fundsStore.totalFunds) || 0
   const used = Number(fundsStore.usedFunds) || 0
@@ -214,6 +277,11 @@ const summary = computed(() => {
   const rate = total > 0 ? parseFloat(((used / total) * 100).toFixed(2)) : 0
   return { total, used, remain, rate }
 })
+
+// 统计明细是否有数据（对 dimensionData 为 null/非数组的防御）
+const hasDimensionData = computed(
+  () => Array.isArray(dimensionData.value) && dimensionData.value.length > 0
+)
 
 // 饼图
 const pieChartOption = computed<EChartsOption>(() => {
@@ -245,6 +313,7 @@ const pieChartOption = computed<EChartsOption>(() => {
           itemStyle: {
             shadowBlur: 10,
             shadowOffsetX: 0,
+            shadowOffsetY: 0,
             shadowColor: 'rgba(0,0,0,0.5)',
           },
         },
@@ -284,7 +353,7 @@ const barChartOption = computed<EChartsOption>(() => {
 
 // 年度经费趋势面积图
 const yearlyTrendAreaOption = computed<EChartsOption | null>(() => {
-  const data = yearlyTrend.value
+  const data = yearlyTrend.value ?? []
   if (!data.length) return null
   const years = data.map((d) => `${d.year}年`)
   const totals = data.map(
@@ -328,7 +397,7 @@ const yearlyTrendAreaOption = computed<EChartsOption | null>(() => {
 
 // 利用率趋势折线图
 const utilizationTrendOption = computed<EChartsOption | null>(() => {
-  const data = yearlyTrend.value
+  const data = yearlyTrend.value ?? []
   if (!data.length) return null
   const years = data.map((d) => `${d.year}年`)
   const rates = data.map((d) => Number(d.utilization_rate) || 0)
@@ -356,8 +425,10 @@ const utilizationTrendOption = computed<EChartsOption | null>(() => {
   }
 })
 
-// 加载多维度统计
+// 加载多维度统计（内联错误态 + 可重试，不再弹全局提示）
 const loadDimensionStats = async () => {
+  loading.dimension = true
+  loadError.dimension = ''
   try {
     const params: Record<string, any> = {
       group_by: dimension.value,
@@ -370,13 +441,18 @@ const loadDimensionStats = async () => {
     const res = await fundApi.statisticsMultiDimension(params)
     if (res?.success) {
       dimensionData.value = res.data || []
+    } else if (!(dimensionData.value ?? []).length) {
+      loadError.dimension = res?.message || '暂无统计数据'
     }
   } catch (error) {
     logger.error('加载统计数据失败:', error)
-    ElMessage.error('加载统计数据失败，请稍后重试')
+    loadError.dimension = getErrorMessage(error, '加载统计数据失败，请稍后重试')
+  } finally {
+    loading.dimension = false
   }
 }
 
+// 加载经费分类统计（辅助数据，失败静默——仅记录日志）
 const loadFundStatsByType = async () => {
   try {
     const res = await getFundStatisticsByType({
@@ -389,11 +465,13 @@ const loadFundStatsByType = async () => {
     }
   } catch (error) {
     logger.error('加载经费分类统计失败:', error)
-    ElMessage.error('加载经费分类统计失败，请稍后重试')
   }
 }
 
+// 加载年度趋势（内联错误态 + 可重试，不再弹全局提示）
 const loadYearlyTrend = async () => {
+  loading.trend = true
+  loadError.trend = ''
   try {
     const res = await getYearlyFundComparison({
       year_start: filterForm.yearStart,
@@ -402,10 +480,14 @@ const loadYearlyTrend = async () => {
     })
     if (res?.success) {
       yearlyTrend.value = res.data || []
+    } else if (!(yearlyTrend.value ?? []).length) {
+      loadError.trend = res?.message || '暂无年度趋势数据'
     }
   } catch (error) {
     logger.error('加载年度趋势数据失败:', error)
-    ElMessage.error('加载年度趋势数据失败，请稍后重试')
+    loadError.trend = getErrorMessage(error, '加载年度趋势数据失败，请稍后重试')
+  } finally {
+    loading.trend = false
   }
 }
 
@@ -423,19 +505,23 @@ const handleSearch = () => {
 }
 
 function handleExportStats() {
-  if (!dimensionData.value.length) {
+  if (!(dimensionData.value ?? []).length) {
     ElMessage.warning('没有可导出的数据')
     return
   }
-  exportUtil.exportToCSV(dimensionData.value, '经费统计分析', {
-    label: '分组',
-    count: '记录数',
-    total_amount: '总金额(万元)',
-    total_allocated: '已拨付(万元)',
-    total_used: '已使用(万元)',
-    utilization_rate: '利用率(%)',
-  })
-  // 导出成功 — 浏览器已确认
+  exporting.value = true
+  try {
+    exportUtil.exportToCSV(dimensionData.value, '经费统计分析', {
+      label: '分组',
+      count: '记录数',
+      total_amount: '总金额(万元)',
+      total_allocated: '已拨付(万元)',
+      total_used: '已使用(万元)',
+      utilization_rate: '利用率(%)',
+    })
+  } finally {
+    exporting.value = false
+  }
 }
 
 onMounted(() => {
@@ -469,6 +555,12 @@ onMounted(() => {
   font-size: 16px;
   font-weight: bold;
   color: #fff;
+}
+
+.ranking-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .stat-box {

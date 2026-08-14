@@ -39,9 +39,164 @@ from app.utils.upload_helper import save_upload_file, get_attachment_response, d
 from app.models.fund import Fund, FundAttachment
 from app.models.fund_history import FundFieldChange, FundStatusHistory, FundOperationLog
 from app.models.user import User
+from app.services.approval_workflow_service import ApprovalWorkflowService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/funds", tags=["经费管理"])
+
+
+# ============================================================================
+# 审批闭环集成：经费操作自动创建审批任务；审批终态回写经费状态
+# ============================================================================
+
+# 审批任务中需要保存的经费摘要字段（供待审批板块展示经费信息）
+_FUND_SUMMARY_FIELDS = (
+    "name", "code", "amount", "planned_amount", "approved_amount",
+    "fund_type", "type", "fund_source", "purpose", "status",
+    "applicant", "project_name", "village_id", "school_id", "date",
+)
+
+
+def _fund_summary(fund: Fund, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """从经费对象提取摘要（JSON 可序列化），供审批任务 change_data 使用"""
+    summary = {}
+    for field in _FUND_SUMMARY_FIELDS:
+        val = getattr(fund, field, None)
+        if val is None:
+            continue
+        summary[field] = _safe_val(val)
+    if extra:
+        summary.update({k: _safe_val(v) for k, v in extra.items() if v is not None})
+    return summary
+
+
+def _submit_fund_approval_task(
+    db: Session,
+    fund: Fund,
+    user: User,
+    *,
+    change_data: Optional[Dict[str, Any]] = None,
+    original_data: Optional[Dict[str, Any]] = None,
+    title: Optional[str] = None,
+) -> Optional[int]:
+    """创建经费审批任务（非致命：失败不阻断经费业务，仅记录日志）
+
+    返回审批任务ID；无活跃工作流时自动创建默认单节点流程（单机版）。
+    """
+    try:
+        service = ApprovalWorkflowService(db)
+        task = service.submit_approval(
+            entity_type="fund",
+            entity_id=fund.id,
+            submitter_id=user.id,
+            change_data=change_data if change_data is not None else _fund_summary(fund),
+            original_data=original_data,
+            title=title or f"经费申请：{fund.name or fund.code or f'#{fund.id}'}",
+        )
+        if not task:
+            service.ensure_default_workflow("fund", user_id=user.id)
+            task = service.submit_approval(
+                entity_type="fund",
+                entity_id=fund.id,
+                submitter_id=user.id,
+                change_data=change_data if change_data is not None else _fund_summary(fund),
+                original_data=original_data,
+                title=title or f"经费申请：{fund.name or fund.code or f'#{fund.id}'}",
+            )
+        return task.id if task else None
+    except Exception:  # pragma: no cover - 防御分支
+        logger.warning("创建经费审批任务失败 fund_id=%s", fund.id, exc_info=True)
+        return None
+
+
+def _resolve_fund_approval_tasks(
+    db: Session,
+    fund: Fund,
+    action: str,
+    operator: User,
+) -> int:
+    """在经费板块直接审批时，同步完结关联的审批任务（闭环另一方向）。
+
+    返回完结的任务数；失败仅记录日志，不影响经费状态流转。
+    """
+    from app.models.approval import ApprovalStatus as _AS
+    from app.models.approval import ApprovalTask as _AT
+
+    try:
+        tasks = (
+            db.query(_AT)
+            .filter(
+                _AT.entity_type == "fund",
+                _AT.entity_id == fund.id,
+                _AT.status == _AS.PENDING.value,
+            )
+            .all()
+        )
+        service = ApprovalWorkflowService(db)
+        count = 0
+        for task in tasks:
+            if action == "approve":
+                # 单机版：直接通过所有级别
+                while task and task.status == _AS.PENDING.value:
+                    task = service.approve_task(
+                        task.id, operator.id, "经费板块直接审批通过", standalone=True
+                    )
+                if task and task.status == _AS.APPROVED.value:
+                    count += 1
+            else:
+                task = service.reject_task(
+                    task.id, operator.id, "经费板块直接驳回", standalone=True
+                )
+                if task and task.status == _AS.REJECTED.value:
+                    count += 1
+        return count
+    except Exception:  # pragma: no cover - 防御分支
+        logger.warning("同步经费审批任务失败 fund_id=%s action=%s", fund.id, action, exc_info=True)
+        return 0
+
+
+def _apply_fund_approval_result(db: Session, task) -> None:
+    """审批终态回写经费状态（注册到 ApprovalWorkflowService）
+
+    - 通过：pending → approved（记录审批人/审批时间/状态历史）
+    - 驳回：pending → rejected
+    """
+    if task.status not in ("approved", "rejected"):
+        return
+    fund = db.query(Fund).filter(Fund.id == task.entity_id).first()
+    if not fund:
+        return
+    from_status = fund.status
+    if from_status != "pending":
+        return
+    if task.status == "approved":
+        fund.status = "approved"
+        fund.approval_date = datetime.now(timezone.utc)
+        approver_name = None
+        if getattr(task, "current_approver", None):
+            approver_name = (
+                task.current_approver.full_name or task.current_approver.username
+            )
+        if not approver_name and getattr(task, "current_approver_id", None):
+            approver = db.query(User).filter(User.id == task.current_approver_id).first()
+            if approver:
+                approver_name = approver.full_name or approver.username
+        fund.approved_by = approver_name
+    elif task.status == "rejected":
+        fund.status = "rejected"
+    # 状态变更历史落库（与审批记录同事务提交，保证审计闭环）
+    db.add(FundStatusHistory(
+        fund_id=fund.id,
+        from_status=from_status,
+        to_status=fund.status,
+        operator_id=getattr(task, "current_approver_id", None),
+        operator_name=getattr(fund, "approved_by", None),
+        remark=f"审批任务 #{task.id} {'通过' if task.status == 'approved' else '驳回'}",
+        operation_time=datetime.now(timezone.utc),
+    ))
+
+
+ApprovalWorkflowService.register_entity_apply_handler("fund", _apply_fund_approval_result)
 
 
 # ============================================================================
@@ -346,7 +501,16 @@ def create_fund(
     fund = FundService(db).create_fund_for_user(
         data, current_user.id, current_user.organization_id,
     )
-    return success_response(data={"id": fund.id}, message="创建成功")
+    # 数据变更自动创建审批任务（Requirement 3.2）：经费新增进入待审批板块
+    approval_task_id = _submit_fund_approval_task(
+        db, fund, current_user,
+        change_data=_fund_summary(fund, {"created_by": current_user.id}),
+        title=f"经费新增：{fund.name or fund.code or f'#{fund.id}'}",
+    )
+    return success_response(
+        data={"id": fund.id, "approval_task_id": approval_task_id},
+        message="创建成功",
+    )
 
 
 @router.post("/apply", status_code=status.HTTP_201_CREATED)
@@ -362,7 +526,18 @@ def apply_fund(
         status="pending",
         applicant=current_user.full_name or current_user.username,
     )
-    return success_response(data={"id": fund.id}, message="申请已提交，等待审批")
+    # 经费申请自动创建审批任务：待审批板块立即可见该经费
+    approval_task_id = _submit_fund_approval_task(
+        db, fund, current_user,
+        change_data=_fund_summary(
+            fund, {"applicant": current_user.full_name or current_user.username}
+        ),
+        title=f"经费申请：{fund.name or fund.code or f'#{fund.id}'}（{current_user.full_name or current_user.username}）",
+    )
+    return success_response(
+        data={"id": fund.id, "approval_task_id": approval_task_id},
+        message="申请已提交，等待审批",
+    )
 
 
 @router.put("/{fund_id}")
@@ -380,8 +555,12 @@ def update_fund(
     if fund.status not in ["pending", "planned", "rejected"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前状态不允许修改")
 
+    # 变更前快照（用于审批任务变更对比 original_data）
+    original_snapshot = _fund_to_dict(fund)
+
     # exclude_unset: 仅排除客户端未发送的字段，显式传 null 的字段会设为 None（清空）
     changed_by_name = getattr(current_user, "full_name", None) or current_user.username
+    changed_fields: Dict[str, Any] = {}
     for key, value in data.model_dump(exclude_unset=True).items():
         if hasattr(fund, key):
             new_value = _parse_date_value(key, value)
@@ -396,11 +575,25 @@ def update_fund(
                     changed_by=current_user.id,
                     changed_by_name=changed_by_name,
                 ))
+                changed_fields[key] = new_value
             setattr(fund, key, new_value)
         else:  # pragma: no cover —— FundUpdate schema 字段在 Fund 模型上全部存在，防御分支不可达
             logger.warning("update_fund: skipping unknown field '%s' on Fund(id=%d)", key, fund_id)
 
     safe_commit(db)
+
+    # 数据变更自动创建审批任务（Requirement 3.2）：经费修改进入待审批板块（含变更对比）
+    if changed_fields:
+        approval_task_id = _submit_fund_approval_task(
+            db, fund, current_user,
+            change_data=_fund_summary(fund, changed_fields),
+            original_data=original_snapshot,
+            title=f"经费变更：{fund.name or fund.code or f'#{fund.id}'}",
+        )
+        return success_response(
+            data={"id": fund.id, "approval_task_id": approval_task_id},
+            message="更新成功",
+        )
     return success_response(message="更新成功")
 
 
@@ -664,7 +857,9 @@ def approve_fund(fund_id: int, current_user: User = Depends(get_current_user), d
                        operator=current_user,
                        approved_by=current_user.full_name or current_user.username,
                        approval_date=datetime.now(timezone.utc))
-    return success_response(message="审批通过")
+    # 同步完结待审批板块中的关联审批任务（闭环）
+    resolved = _resolve_fund_approval_tasks(db, fund, "approve", current_user)
+    return success_response(data={"fund_id": fund.id, "resolved_tasks": resolved}, message="审批通过")
 
 
 @router.post("/{fund_id}/reject")
@@ -674,7 +869,9 @@ def reject_fund(fund_id: int, current_user: User = Depends(get_current_user), db
     _transition_status(db, fund, "rejected", ["pending", "planned"],
                        operator=current_user,
                        approved_by=current_user.full_name or current_user.username)
-    return success_response(message="审批驳回")
+    # 同步驳回待审批板块中的关联审批任务（闭环）
+    resolved = _resolve_fund_approval_tasks(db, fund, "reject", current_user)
+    return success_response(data={"fund_id": fund.id, "resolved_tasks": resolved}, message="审批驳回")
 
 
 @router.post("/{fund_id}/allocate")

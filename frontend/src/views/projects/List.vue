@@ -231,6 +231,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -439,8 +440,8 @@ const handleExport = async () => {
       status: filterForm.status || undefined,
     })
     ElMessage.success('导出成功')
-  } catch {
-    ElMessage.error('导出失败，请稍后重试')
+  } catch (e) {
+    ElMessage.error(getErrorMessage(e, '导出失败，请稍后重试'))
   }
 }
 

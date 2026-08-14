@@ -467,7 +467,8 @@ async function handleDelete(row: any) {
     const response = await del(
       `/organizations/${row.id}?confirm_password=${encodeURIComponent(confirmPassword)}`
     )
-    ElMessage.success(response.data?.message || '组织已删除')
+    // del() 已自动解包（返回 res.data），message 在顶层
+    ElMessage.success((response as any)?.message || '组织已删除')
     currentPage.value = 1
     await fetchDataWithSort()
     fetchStats()

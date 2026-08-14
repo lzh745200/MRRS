@@ -61,8 +61,9 @@ DATA_FONT = Font(name="SimSun", size=10)
 class SupportedVillageExportService:
     """帮扶村数据导出服务"""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, current_user=None):
         self.db = db
+        self.current_user = current_user
 
     def _query_villages(
         self,
@@ -71,6 +72,9 @@ class SupportedVillageExportService:
         department: Optional[str] = None,
         support_unit: Optional[str] = None,
         tiered_level: Optional[str] = None,
+        keyword: Optional[str] = None,
+        county: Optional[str] = None,
+        is_revitalization_tier: Optional[bool] = None,
     ) -> List[Any]:
         """查询要导出的帮扶村列表。
 
@@ -83,7 +87,17 @@ class SupportedVillageExportService:
         """
         from app.models.supported_village import SupportedVillage
 
-        query = self.db.query(SupportedVillage)
+        # 仅导出未软删记录，且按当前用户数据权限过滤（与列表接口一致）
+        query = self.db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
+        if self.current_user is not None:
+            from app.core.data_scope_adapter import apply_scope_filter
+            query = apply_scope_filter(query, self.current_user, SupportedVillage, db=self.db)
+        if keyword:
+            query = query.filter(SupportedVillage.village_name.contains(keyword))
+        if county:
+            query = query.filter(SupportedVillage.county == county)
+        if is_revitalization_tier is not None:
+            query = query.filter(SupportedVillage.is_revitalization_tier.is_(is_revitalization_tier))
         if village_ids:
             query = query.filter(SupportedVillage.id.in_(village_ids))
         if department:
@@ -338,12 +352,17 @@ class SupportedVillageExportService:
         department: Optional[str] = None,
         support_unit: Optional[str] = None,
         tiered_level: Optional[str] = None,
+        keyword: Optional[str] = None,
+        county: Optional[str] = None,
+        is_revitalization_tier: Optional[bool] = None,
     ) -> Tuple[bytes, str, Dict[str, Any]]:
         """导出帮扶村数据，返回 (文件内容, 文件名, 统计信息)。"""
         villages = self._query_villages(
             year=year, village_ids=village_ids,
             department=department, support_unit=support_unit,
             tiered_level=tiered_level,
+            keyword=keyword, county=county,
+            is_revitalization_tier=is_revitalization_tier,
         )
         data = self._collect_export_data(villages, modules=modules, year=year)
         statistics = self._generate_statistics(data)

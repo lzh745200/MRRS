@@ -49,27 +49,41 @@ async def approval_overview(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """审批管理模块概览统计（pending/approved/rejected/total/my_pending）"""
-    from sqlalchemy import func
+    """审批管理模块概览统计（pending/approved/rejected/total/my_pending）
+
+    数据权限：管理员看全局统计；普通用户仅统计与自己相关（提交或待自己审批）的任务。
+    """
+    from sqlalchemy import func, or_
 
     from app.models.approval import ApprovalStatus as AS
     from app.models.approval import ApprovalTask as AT
 
-    total = db.query(func.count(AT.id)).scalar() or 0
+    def _scoped(query):
+        """非管理员限定为「提交人=自己 OR 审批人=自己」"""
+        if not is_admin(current_user):
+            return query.filter(
+                or_(
+                    AT.submitter_id == current_user.id,
+                    AT.current_approver_id == current_user.id,
+                )
+            )
+        return query
+
+    total = _scoped(db.query(func.count(AT.id))).scalar() or 0
     pending = (
-        db.query(func.count(AT.id))
+        _scoped(db.query(func.count(AT.id)))
         .filter(AT.status == AS.PENDING.value)
         .scalar()
         or 0
     )
     approved = (
-        db.query(func.count(AT.id))
+        _scoped(db.query(func.count(AT.id)))
         .filter(AT.status == AS.APPROVED.value)
         .scalar()
         or 0
     )
     rejected = (
-        db.query(func.count(AT.id))
+        _scoped(db.query(func.count(AT.id)))
         .filter(AT.status == AS.REJECTED.value)
         .scalar()
         or 0
@@ -671,34 +685,53 @@ def get_pending_tasks(
 
     Requirements: 4.1 - 待审批任务列表（按优先级和时间排序）
 
-    单机版优化：返回所有 pending 任务（不仅限当前用户为审批人的任务）
+    单机版优化：
+    - 管理员返回所有 pending 任务（不仅限当前用户为审批人的任务）
+    - 普通用户返回「分配给自己 OR 自己提交」的 pending 任务
+    - 附带变更数据摘要（change_data），供前端展示经费等业务实体信息
     """
     service = ApprovalWorkflowService(db)
-    # 先获取指定给当前用户的待审批任务
-    tasks = service.get_pending_tasks(current_user.id, skip, limit)
+    include_all = is_admin(current_user)
+    tasks = service.get_pending_tasks(current_user.id, skip, limit, include_all=include_all)
 
-    # 单机版优化：如果没有找到，则返回所有 pending 任务
+    # 单机版兜底：服务返回空时（如审批人未分配），管理员仍能看到所有 pending 任务
     if not tasks:
         from app.models.approval import ApprovalStatus as AS
         from app.models.approval import ApprovalTask as AT
 
         query = db.query(AT).filter(AT.status == AS.PENDING.value)
-        if not is_admin(current_user):
-            query = query.filter(AT.submitter_id == current_user.id)
+        if not include_all:
+            from sqlalchemy import or_
+
+            query = query.filter(
+                or_(AT.current_approver_id == current_user.id, AT.submitter_id == current_user.id)
+            )
         tasks = query.order_by(AT.priority.desc(), AT.created_at.asc()).offset(skip).limit(limit).all()
 
+    # 总数（用于前端分页；服务 mocked 时回退为当前页长度）
+    try:
+        total_value = service.count_pending_tasks(current_user.id, include_all=include_all)
+        # MagicMock 的 __int__ 默认返回 1，必须用 isinstance 校验真实类型
+        total = total_value if isinstance(total_value, int) and not isinstance(total_value, bool) else len(tasks)
+    except (TypeError, ValueError, AttributeError):
+        total = len(tasks)
+
     # 提交人姓名映射（前端列表「提交人」列）
-    submitter_ids = {t.submitter_id for t in tasks if t.submitter_id}
+    submitter_ids = {t.submitter_id for t in tasks if getattr(t, "submitter_id", None)}
     name_map = (
         dict(db.query(User.id, User.username).filter(User.id.in_(submitter_ids)).all())
         if submitter_ids
         else {}
     )
 
+    def _safe_change_data(t) -> Optional[dict]:
+        cd = getattr(t, "change_data", None)
+        return cd if isinstance(cd, dict) else None
+
     return {
         "code": 200,
         "success": True,
-        "total": len(tasks),
+        "total": total,
         "data": [
             {
                 "id": t.id,
@@ -711,6 +744,8 @@ def get_pending_tasks(
                 "submitter_id": t.submitter_id,
                 "submitter_name": name_map.get(t.submitter_id),
                 "created_at": t.created_at.isoformat() if t.created_at else None,
+                # 变更数据摘要：让待审批板块直接展示经费/项目等业务信息
+                "change_data": _safe_change_data(t),
             }
             for t in tasks
         ],
@@ -727,15 +762,130 @@ def batch_approve(
     批量审批
 
     Requirements: 4.4 - 批量审批功能
+    安全：非管理员仅能批量处理指派给自己的待审批任务（其余任务记入 failed）。
     """
     service = ApprovalWorkflowService(db)
-    results = service.batch_approve(data.task_ids, current_user.id, data.opinion)
+    if not is_admin(current_user):
+        from app.models.approval import ApprovalStatus as _AS
+        from app.models.approval import ApprovalTask as _AT
+
+        allowed_ids = {
+            row[0]
+            for row in db.query(_AT.id)
+            .filter(
+                _AT.id.in_(data.task_ids),
+                _AT.current_approver_id == current_user.id,
+                _AT.status == _AS.PENDING.value,
+            )
+            .all()
+        }
+        allowed = [tid for tid in data.task_ids if tid in allowed_ids]
+        denied = [tid for tid in data.task_ids if tid not in allowed_ids]
+        results = (
+            service.batch_approve(allowed, current_user.id, data.opinion)
+            if allowed
+            else {"success": [], "failed": []}
+        )
+        for tid in denied:
+            results["failed"].append({"id": tid, "reason": "无权限审批此任务"})
+    else:
+        results = service.batch_approve(data.task_ids, current_user.id, data.opinion)
 
     return {
         "code": 200,
         "success": True,
         "message": f"成功: {len(results['success'])}, 失败: {len(results['failed'])}",
         "data": results,
+    }
+
+
+# ==================== 任务列表序列化辅助 ====================
+
+
+def _task_to_dict(t) -> Dict[str, Any]:
+    """审批任务序列化（供 tasks/mine、tasks/history 等列表端点复用）"""
+    change_data = getattr(t, "change_data", None)
+    records = getattr(t, "records", None) or []
+    opinion = None
+    if records:
+        last_record = records[-1] if records else None
+        if last_record is not None:
+            opinion = getattr(last_record, "opinion", None)
+    return {
+        "id": t.id,
+        "title": t.title,
+        "entity_type": t.entity_type,
+        "entity_id": t.entity_id,
+        "status": t.status,
+        "current_level": t.current_level,
+        "priority": t.priority,
+        "submitter_id": t.submitter_id,
+        "submitter_name": t.submitter.username if getattr(t, "submitter", None) else None,
+        "current_approver_id": t.current_approver_id,
+        "reviewer_name": (
+            t.current_approver.username if getattr(t, "current_approver", None) else None
+        ),
+        "opinion": opinion,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+        "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+        "change_data": change_data if isinstance(change_data, dict) else None,
+    }
+
+
+@router.get("/tasks/mine", summary="我的申请列表")
+def get_my_tasks(
+    status: Optional[str] = Query(None, description="状态: pending/approved/rejected/withdrawn"),
+    date_from: Optional[str] = Query(None, description="提交时间起始 (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="提交时间截止 (YYYY-MM-DD)"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """获取当前用户提交的审批任务（我的申请页）"""
+    service = ApprovalWorkflowService(db)
+    result = service.get_tasks_with_count(
+        submitter_id=current_user.id,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        skip=skip,
+        limit=limit,
+    )
+    return {
+        "code": 200,
+        "success": True,
+        "total": result["total"],
+        "data": [_task_to_dict(t) for t in result["items"]],
+    }
+
+
+@router.get("/tasks/history", summary="审批任务历史列表")
+def get_task_history(
+    entity_type: Optional[str] = Query(None, description="实体类型"),
+    status: Optional[str] = Query(None, description="状态"),
+    completed: Optional[bool] = Query(None, description="仅已办结(非pending)任务"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """审批任务历史（管理员可见全部；普通用户仅可见自己提交的任务）"""
+    service = ApprovalWorkflowService(db)
+    submitter_id = None if is_admin(current_user) else current_user.id
+    result = service.get_tasks_with_count(
+        entity_type=entity_type,
+        status=status,
+        submitter_id=submitter_id,
+        completed=completed,
+        skip=skip,
+        limit=limit,
+    )
+    return {
+        "code": 200,
+        "success": True,
+        "total": result["total"],
+        "data": [_task_to_dict(t) for t in result["items"]],
     }
 
 

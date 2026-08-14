@@ -284,7 +284,8 @@ describe('挂载与初始化', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     expect(logError).toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalledWith('数据加载失败，请稍后重试')
+    expect(vm.loadErrorMsg).toBe('net')
+    expect(ElMessage.error).not.toHaveBeenCalled()
     expect(vm.loadError).toBe(true)
     expect(vm.tableData).toEqual([])
     await nextTick()

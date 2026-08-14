@@ -135,20 +135,20 @@ export const fundLifecycleApi = {
     const res = await post(`${BASE}/phases/${projectId}/advance`, {
       remarks,
     })
-    return res.data
+    return res
   },
 
   async rollbackPhase(projectId: number, remarks?: string) {
     const res = await post(`${BASE}/phases/${projectId}/rollback`, {
       remarks,
     })
-    return res.data
+    return res
   },
 
   // ========== 阶段1 - 论证立项 ==========
   async initiate(projectId: number) {
     const res = await post(`${BASE}/initiate/${projectId}`)
-    return res.data
+    return res
   },
 
   async getReportTemplate(projectId: number) {
@@ -159,7 +159,7 @@ export const fundLifecycleApi = {
   // ========== 阶段2 - 汇总审核 ==========
   async lockBudget(projectId: number) {
     const res = await post(`${BASE}/budget-lock/${projectId}`)
-    return res.data
+    return res
   },
 
   async complianceCheck(projectId: number) {
@@ -175,7 +175,7 @@ export const fundLifecycleApi = {
   // ========== 阶段3 - 计划下达与资金拨付 ==========
   async quotaLock(fundId: number) {
     const res = await post(`${BASE}/quota-lock/${fundId}`)
-    return res.data
+    return res
   },
 
   async allocationPlan(projectId: number) {
@@ -309,14 +309,14 @@ export const fundLifecycleApi = {
 
   async detectAnomalies(projectId: number) {
     const res = await post(`${BASE}/anomalies/detect/${projectId}`)
-    return res.data
+    return res
   },
 
   async resolveAnomaly(id: number, resolution: string) {
     const res = await post(`${BASE}/anomalies/${id}/resolve`, {
       resolution,
     })
-    return res.data
+    return res
   },
 
   async getInspectionClues(projectId: number) {
@@ -327,7 +327,7 @@ export const fundLifecycleApi = {
   // ========== 阶段7 - 决算与绩效 ==========
   async createSettlement(projectId: number, data?: Record<string, any>) {
     const res = await post(`${BASE}/settlement/${projectId}`, data || {})
-    return res.data
+    return res
   },
 
   async updateSettlement(id: number, data: Record<string, any>) {

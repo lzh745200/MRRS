@@ -10,14 +10,14 @@ import { nextTick } from 'vue'
 
 const {
   ElMessage,
-  mockGetApprovalHistory,
+  mockGetTasksHistory,
   mockGetTaskDiff,
   formatApprovalStatus,
   formatEntityType,
   pushSafeMock,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
-  mockGetApprovalHistory: vi.fn(),
+  mockGetTasksHistory: vi.fn(),
   mockGetTaskDiff: vi.fn(),
   formatApprovalStatus: vi.fn((s: string) => ({ text: `状态${s}`, type: 'info' })),
   formatEntityType: vi.fn((t: string) => `类型${t}`),
@@ -31,7 +31,7 @@ vi.mock('@/composables/useRouterSafe', () => ({
 }))
 
 vi.mock('@/api/approval', () => ({
-  getApprovalHistory: mockGetApprovalHistory,
+  getTasksHistory: mockGetTasksHistory,
   getTaskDiff: mockGetTaskDiff,
   formatApprovalStatus,
   formatEntityType,
@@ -129,7 +129,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   formatApprovalStatus.mockImplementation((s: string) => ({ text: `状态${s}`, type: 'info' }))
   formatEntityType.mockImplementation((t: string) => `类型${t}`)
-  mockGetApprovalHistory.mockResolvedValue([taskA, taskB, taskC])
+  mockGetTasksHistory.mockResolvedValue({ items: [taskA, taskB, taskC], total: 3 })
   mockGetTaskDiff.mockResolvedValue({
     original_data: { name: '旧' },
     change_data: { name: '新' },
@@ -138,11 +138,11 @@ beforeEach(() => {
 })
 
 describe('挂载与加载', () => {
-  it('onMounted：加载历史（短页 total 计算）；模板渲染', async () => {
+  it('onMounted：加载历史（total 来自后端）；模板渲染', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(mockGetApprovalHistory).toHaveBeenCalledWith({
+    expect(mockGetTasksHistory).toHaveBeenCalledWith({
       entity_type: undefined,
       status: undefined,
       skip: 0,
@@ -160,19 +160,15 @@ describe('挂载与加载', () => {
     expect(text).toContain('详情')
   })
 
-  it('满页 total 计算；失败 → 错误提示', async () => {
+  it('total 由后端返回；失败 → 错误提示', async () => {
     const list = Array.from({ length: 20 }, (_, i) => ({ ...taskA, id: i + 1 }))
-    mockGetApprovalHistory.mockResolvedValue(list)
+    mockGetTasksHistory.mockResolvedValue({ items: list, total: 55 })
     let wrapper = mountComp()
     await flushPromises()
     let vm = wrapper.vm as any
-    expect(vm.total).toBe(21) // page=1 → 1*20+1
+    expect(vm.total).toBe(55)
 
-    vm.page = 2
-    await vm.loadHistory()
-    expect(vm.total).toBe(41)
-
-    mockGetApprovalHistory.mockRejectedValue(new Error('net'))
+    mockGetTasksHistory.mockRejectedValue(new Error('net'))
     wrapper = mountComp()
     await flushPromises()
     vm = wrapper.vm as any
@@ -188,7 +184,7 @@ describe('挂载与加载', () => {
     await findBtn(wrapper, '搜索').trigger('click')
     await flushPromises()
     expect(vm.page).toBe(1)
-    expect(mockGetApprovalHistory).toHaveBeenCalledWith(
+    expect(mockGetTasksHistory).toHaveBeenCalledWith(
       expect.objectContaining({ skip: 0 })
     )
 
@@ -204,10 +200,10 @@ describe('挂载与加载', () => {
   it('刷新按钮（header）触发 loadHistory', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    const base = mockGetApprovalHistory.mock.calls.length
+    const base = mockGetTasksHistory.mock.calls.length
     await findBtn(wrapper, '刷新').trigger('click')
     await flushPromises()
-    expect(mockGetApprovalHistory.mock.calls.length).toBe(base + 1)
+    expect(mockGetTasksHistory.mock.calls.length).toBe(base + 1)
   })
 })
 
@@ -224,11 +220,11 @@ describe('分页', () => {
     expect(vm.pageSize).toBe(50)
     pg[0].vm.$emit('size-change', 50)
     await flushPromises()
-    expect(mockGetApprovalHistory).toHaveBeenCalledWith(expect.objectContaining({ skip: 50 }))
+    expect(mockGetTasksHistory).toHaveBeenCalledWith(expect.objectContaining({ skip: 50 }))
     pg[0].vm.$emit('update:currentPage', 3)
     pg[0].vm.$emit('current-change', 3)
     await flushPromises()
-    expect(mockGetApprovalHistory).toHaveBeenCalledWith(expect.objectContaining({ skip: 100 }))
+    expect(mockGetTasksHistory).toHaveBeenCalledWith(expect.objectContaining({ skip: 100 }))
   })
 })
 
@@ -298,22 +294,28 @@ describe('详情与 diff', () => {
     expect(vm.detailDialogVisible).toBe(false)
   })
 
-  it('handleViewEntity：rural_work 跳转并关闭；其他类型无操作；「查看工作详情」按钮', async () => {
+  it('handleViewEntity：rural_work 跳转并关闭；fund 等类型也跳转；其他类型无操作', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.currentTask = taskA
     vm.detailDialogVisible = true
     await nextTick()
-    await findBtn(wrapper, '查看工作详情').trigger('click')
+    await findBtn(wrapper, '查看类型rural_work详情').trigger('click')
     expect(pushSafeMock).toHaveBeenCalledWith({
       path: '/rural-works',
       query: { id: 5, action: 'view' },
     })
     expect(vm.detailDialogVisible).toBe(false)
 
-    vm.handleViewEntity(taskB) // 非 rural_work → 无操作
-    expect(pushSafeMock.mock.calls.length).toBe(1)
+    // project 类型现在也可跳转实体详情页
+    vm.handleViewEntity(taskB)
+    expect(pushSafeMock).toHaveBeenCalledWith('/projects/8')
+
+    // 非业务实体类型 → 无操作
+    const calls = pushSafeMock.mock.calls.length
+    vm.handleViewEntity({ entity_type: 'data_change', entity_id: 99 })
+    expect(pushSafeMock.mock.calls.length).toBe(calls)
   })
 
   it('formatDateTime 两侧', async () => {

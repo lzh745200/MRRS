@@ -169,6 +169,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { chartColor, chartColorPrimary, chartPalette } from '@/utils/chartColors'
 
 import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount, markRaw } from 'vue'
@@ -327,7 +328,7 @@ async function loadData() {
   } catch (e) {
     logger.error('加载工作数据失败:', e)
     allData.value = []
-    ElMessage.error('加载数据失败，请稍后重试')
+    ElMessage.error(getErrorMessage(e, '加载数据失败，请稍后重试'))
   } finally {
     loading.value = false
   }

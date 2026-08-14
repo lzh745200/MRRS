@@ -374,16 +374,26 @@ describe('api/funds', () => {
   })
 
   describe('exportList', () => {
-    it('调用 GET /funds/export with blob responseType', async () => {
+    it('调用 GET /export/funds（真实文件导出端点）with blob responseType', async () => {
       mockGet.mockResolvedValue({ data: new Blob(['test']) })
       await fundApi.exportList({ type: 'project' })
-      // 源码会自动附加 format: 'csv'（默认 CSV 格式下载）
-      expect(mockGet).toHaveBeenCalledWith('/funds/export', {
-        params: { type: 'project', format: 'csv' },
+      // 修复 2026-08-14：旧实现请求 /funds/export（返回 JSON），导出的是 JSON 文本；
+      // 现改为 /export/funds 真实 xlsx 导出，参数映射 search→keyword / type→fund_type
+      expect(mockGet).toHaveBeenCalledWith('/export/funds', {
+        params: { keyword: undefined, fund_type: 'project', status: undefined, format: 'xlsx' },
         responseType: 'blob',
       })
       // 下载流程经 downloadBlobAsFile → downloadBlob 触发
       expect(mockDownloadBlob).toHaveBeenCalled()
+    })
+
+    it('csv 格式显式指定', async () => {
+      mockGet.mockResolvedValue({ data: new Blob(['test']) })
+      await fundApi.exportList({ search: '桥' }, 'csv')
+      expect(mockGet).toHaveBeenCalledWith('/export/funds', {
+        params: { keyword: '桥', fund_type: undefined, status: undefined, format: 'csv' },
+        responseType: 'blob',
+      })
     })
   })
 })

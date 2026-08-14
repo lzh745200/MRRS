@@ -159,16 +159,31 @@ class RuralWorkService:
         return items, total
 
     # ── Backward-compat aliases (tests expect these method names) ──
-    def get_rural_work_by_id(self, work_id: int) -> Optional[Dict[str, Any]]:
+    def get_rural_work_by_id(
+        self, work_id: int, current_user: Any = None
+    ) -> Optional[Dict[str, Any]]:
         work = self.db.query(RuralWork).filter(RuralWork.id == work_id).first()
         if not work:
             return None
+        # 数据隔离：非管理员只能读取自己创建的记录
+        if current_user is not None and not is_admin(current_user):
+            if work.created_by != getattr(current_user, "id", None):
+                return None
         return self._to_dict(work)
 
-    def delete_rural_work(self, work_id: int, user_id: Optional[int] = None) -> bool:
+    def delete_rural_work(
+        self,
+        work_id: int,
+        user_id: Optional[int] = None,
+        current_user: Any = None,
+    ) -> bool:
         work = self.db.query(RuralWork).filter(RuralWork.id == work_id).first()
         if not work:
             return False
+        # 数据隔离：非管理员只能删除自己创建的记录
+        if current_user is not None and not is_admin(current_user):
+            if work.created_by != getattr(current_user, "id", None):
+                return False
         work_name = work.name
         self.db.delete(work)
         safe_commit(self.db)
@@ -231,6 +246,7 @@ class RuralWorkService:
         work_id: int,
         data: Any = None,
         user_id: Optional[int] = None,
+        current_user: Any = None,
         **kwargs: Any,
     ) -> Optional[Dict[str, Any]]:
         """更新乡村工作记录。
@@ -244,6 +260,11 @@ class RuralWorkService:
         work = self.db.query(RuralWork).filter(RuralWork.id == work_id).first()
         if not work:
             return None
+
+        # 数据隔离：非管理员只能更新自己创建的记录
+        if current_user is not None and not is_admin(current_user):
+            if work.created_by != getattr(current_user, "id", None):
+                return None
 
         # 合并来源：Pydantic data（仅显式设置的字段）+ kwargs
         updates: Dict[str, Any] = {}
@@ -280,9 +301,11 @@ class RuralWorkService:
 
         return self._to_dict(work)
 
-    def get_statistics(self) -> RuralWorkStatistics:
+    def get_statistics(self, current_user: Any = None) -> RuralWorkStatistics:
         """获取乡村工作统计数据，返回 RuralWorkStatistics schema 实例。"""
         base = self.db.query(RuralWork)
+        if current_user is not None and not is_admin(current_user):
+            base = base.filter(RuralWork.created_by == getattr(current_user, "id", None))
         total = base.count()
         planned = base.filter(RuralWork.status == WorkStatus.planned).count()
         in_progress = base.filter(RuralWork.status == WorkStatus.in_progress).count()
@@ -308,25 +331,27 @@ class RuralWorkService:
             completion_rate=completion_rate,
         )
 
-    def get_villages_for_select(self) -> List[Dict[str, Any]]:
+    def get_villages_for_select(self, current_user: Any = None) -> List[Dict[str, Any]]:
         """获取村庄列表（用于下拉选择）。
 
         系统真实村庄数据在 supported_villages 表；villages 表为 RuralWork 外键目标。
         本方法从帮扶村表读取并独立事务 upsert 到 villages 表（按名称），
-        保证下拉有真实数据且外键一致。
+        保证下拉有真实数据且外键一致。非管理员按数据权限过滤村庄。
         """
+        from app.core.data_scope_adapter import apply_scope_filter
         from app.core.database import SessionLocal
         from app.models.supported_village import SupportedVillage
         from app.models.village import Village
 
         db = SessionLocal()
         try:
-            svs = (
+            sv_query = (
                 db.query(SupportedVillage)
                 .filter(SupportedVillage.is_active.is_(True))
-                .order_by(SupportedVillage.village_name.asc())
-                .all()
             )
+            if current_user is not None:
+                sv_query = apply_scope_filter(sv_query, current_user, SupportedVillage, db=db)
+            svs = sv_query.order_by(SupportedVillage.village_name.asc()).all()
             existing = {v.name: v.id for v in db.query(Village).all()}
             rows: List[Dict[str, Any]] = []
             for sv in svs:
@@ -357,9 +382,12 @@ class RuralWorkService:
         year: Optional[int] = None,
         start_date: Optional[Any] = None,
         end_date: Optional[Any] = None,
+        current_user: Any = None,
     ) -> Dict[str, Any]:
         """生成工作报告汇总数据。"""
         query = self.db.query(RuralWork)
+        if current_user is not None and not is_admin(current_user):
+            query = query.filter(RuralWork.created_by == getattr(current_user, "id", None))
         if year:
             query = query.filter(extract("year", RuralWork.start_date) == year)
         if start_date:
@@ -409,15 +437,17 @@ class RuralWorkService:
         )
         return [int(r.year) for r in rows if r.year is not None]
 
-    def batch_delete(self, ids: List[int]) -> int:
-        """批量删除乡村工作，返回实际删除条数。"""
+    def batch_delete(self, ids: List[int], current_user: Any = None) -> int:
+        """批量删除乡村工作，返回实际删除条数。
+
+        数据隔离：非管理员只能删除自己创建的记录。
+        """
         if not ids:
             return 0
-        deleted = (
-            self.db.query(RuralWork)
-            .filter(RuralWork.id.in_(list(ids)))
-            .delete(synchronize_session=False)
-        )
+        query = self.db.query(RuralWork).filter(RuralWork.id.in_(list(ids)))
+        if current_user is not None and not is_admin(current_user):
+            query = query.filter(RuralWork.created_by == getattr(current_user, "id", None))
+        deleted = query.delete(synchronize_session=False)
         safe_commit(self.db)
         return int(deleted or 0)
 

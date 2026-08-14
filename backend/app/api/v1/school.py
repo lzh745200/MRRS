@@ -43,8 +43,42 @@ from app.api.v1.deps import enforce_admin_include_deleted, build_viewable_becaus
 from app.core.unified_data_scope import OrgScopeFilter, get_org_scope
 from app.core.transaction import safe_commit
 from ...services.work_log_service import write_work_log
+from app.services.approval_workflow_service import (
+    ApprovalWorkflowService,
+    submit_entity_change_approval,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_school_approval_result(db: Session, task) -> None:
+    """审批终态回写学校（注册到 ApprovalWorkflowService）
+
+    学校无 pending 状态门，审批通过后无字段需回写；保留处理器接口便于后续扩展。
+    """
+    _ = (db, task)
+
+
+def _apply_scholarship_approval_result(db: Session, task) -> None:
+    """审批终态回写资助学生状态（注册到 ApprovalWorkflowService）
+
+    - 通过：pending 资助记录 → approved
+    """
+    if task.status != "approved":
+        return
+    student = (
+        db.query(ScholarshipStudent)
+        .filter(ScholarshipStudent.id == task.entity_id)
+        .first()
+    )
+    if student and student.status == ScholarshipStatus.PENDING:
+        student.status = ScholarshipStatus.APPROVED
+
+
+ApprovalWorkflowService.register_entity_apply_handler("school", _apply_school_approval_result)
+ApprovalWorkflowService.register_entity_apply_handler(
+    "scholarship_student", _apply_scholarship_approval_result
+)
 
 
 def _fmt_row_error(row_idx: int, exc: Exception, hint: str, record_ident: str = "?") -> str:
@@ -727,7 +761,22 @@ async def create_school(
     except Exception:
         logger.debug("仪表盘缓存失效失败")
 
-    return success_response(data=school.to_dict(), message="创建成功")
+    # 数据变更自动创建审批任务（Requirement 3.2）：学校新增进入待审批板块
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="school",
+        entity_id=school.id,
+        submitter_id=current_user.id,
+        title=f"学校新增：{school.name}",
+        change_data={"name": school.name, "code": school.code,
+                     "district": school.district,
+                     "type": school.type.value if isinstance(school.type, SchoolType) else school.type,
+                     "support_status": school.support_status.value
+                     if isinstance(school.support_status, SupportStatus) else school.support_status},
+    )
+    data = school.to_dict()
+    data["approval_task_id"] = approval_task_id
+    return success_response(data=data, message="创建成功")
 
 
 @router.put("/{school_id}")
@@ -768,6 +817,15 @@ async def update_school(
     if "support_status" in update_data and update_data["support_status"]:
         update_data["support_status"] = SupportStatus(update_data["support_status"])
 
+    # 变更前快照（供审批任务变更对比 original_data）
+    old_data = {
+        "name": school.name,
+        "code": school.code,
+        "district": school.district,
+        "support_status": school.support_status.value
+        if isinstance(school.support_status, SupportStatus) else school.support_status,
+    }
+
     for key, value in update_data.items():
         setattr(school, key, value)
 
@@ -793,7 +851,21 @@ async def update_school(
     except Exception:
         logger.debug("仪表盘缓存失效失败")
 
-    return success_response(data=school.to_dict(), message="更新成功")
+    # 数据变更自动创建审批任务（Requirement 3.2）：学校修改进入待审批板块
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="school",
+        entity_id=school.id,
+        submitter_id=current_user.id,
+        title=f"学校变更：{school.name}",
+        change_data={"name": school.name, "code": school.code, "district": school.district,
+                     "support_status": school.support_status.value
+                     if isinstance(school.support_status, SupportStatus) else school.support_status},
+        original_data=old_data,
+    )
+    data = school.to_dict()
+    data["approval_task_id"] = approval_task_id
+    return success_response(data=data, message="更新成功")
 
 
 @router.delete("/{school_id}")
@@ -837,7 +909,18 @@ async def delete_school(
     except Exception:
         logger.debug("仪表盘缓存失效失败")
 
-    return success_response(message="删除成功")
+    # 数据变更自动创建审批任务：学校删除进入待审批板块
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="school",
+        entity_id=school.id,
+        submitter_id=current_user.id,
+        title=f"学校删除：{school.name}",
+        change_data={"deleted": True, "name": school.name, "code": school.code},
+        original_data={"name": school.name, "code": school.code, "district": school.district},
+    )
+    return success_response(data={"id": school.id, "approval_task_id": approval_task_id},
+                            message="删除成功")
 
 
 # ==================== 学校附件管理 ====================
@@ -1087,7 +1170,26 @@ async def create_scholarship_student(
     db.add(student)
     safe_commit(db)
     db.refresh(student)
-    return success_response(data=student.to_dict(), message="创建成功")
+    # 数据变更自动创建审批任务：待审批的资助记录进入待审批板块
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="scholarship_student",
+        entity_id=student.id,
+        submitter_id=current_user.id,
+        title=f"资助申请：{student.student_name or f'#{student.id}'}",
+        change_data={
+            "student_name": student.student_name,
+            "grade": student.grade,
+            "year": student.year,
+            "amount": float(student.amount) if student.amount is not None else 0,
+            "status": student.status.value
+            if isinstance(student.status, ScholarshipStatus) else student.status,
+            "school_id": school_id,
+        },
+    )
+    data = student.to_dict()
+    data["approval_task_id"] = approval_task_id
+    return success_response(data=data, message="创建成功")
 
 
 @router.put("/{school_id}/scholarship-students/{student_id}")
@@ -1111,13 +1213,32 @@ async def update_scholarship_student(
     if not stu:
         raise AppError.not_found("资助学生记录")
     update_data = data.model_dump(exclude_unset=True)
+    old_status = (
+        stu.status.value if isinstance(stu.status, ScholarshipStatus) else stu.status
+    )
     if "status" in update_data and update_data["status"]:
         update_data["status"] = ScholarshipStatus(update_data["status"])
     for key, val in update_data.items():
         setattr(stu, key, val)
     safe_commit(db)
     db.refresh(stu)
-    return success_response(data=stu.to_dict(), message="更新成功")
+    # 状态/信息变更自动创建审批任务：资助审核进入待审批板块（审计闭环）
+    new_status = (
+        stu.status.value if isinstance(stu.status, ScholarshipStatus) else stu.status
+    )
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="scholarship_student",
+        entity_id=stu.id,
+        submitter_id=current_user.id,
+        title=f"资助变更：{stu.student_name or f'#{stu.id}'}",
+        change_data={"student_name": stu.student_name, "status": new_status,
+                     "amount": float(stu.amount) if stu.amount is not None else 0},
+        original_data={"student_name": stu.student_name, "status": old_status},
+    )
+    data = stu.to_dict()
+    data["approval_task_id"] = approval_task_id
+    return success_response(data=data, message="更新成功")
 
 
 @router.delete("/{school_id}/scholarship-students/{student_id}")

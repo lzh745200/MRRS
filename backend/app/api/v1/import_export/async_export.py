@@ -128,10 +128,12 @@ async def export_reports(
         if params.options:
             query_params["options"] = params.options
 
-        # 使用 export_report_sync 按 report_type 分发导出
+        # 使用 export_report_sync 按 report_type 分发导出（真实查库）
         content, filename, count = service.export_report_sync(
             report_type=params.report_type,
             query_params=query_params,
+            db=db,
+            user=current_user,
         )
         # URL 编码文件名,避免 latin-1 编码错误
         encoded_filename = quote(filename)
@@ -170,7 +172,9 @@ async def export_villages(
     should_async = force_async or service.should_use_async("supported_village", query_params)
 
     if should_async:  # 异步导出
-        task = service.export_supported_villages_async(user_id=current_user.id, query_params=query_params)
+        task = await service.export_supported_villages_async(
+            user_id=current_user.id, query_params=query_params
+        )
 
         return ExportRequestResponse(
             mode="async",
@@ -179,8 +183,10 @@ async def export_villages(
             message="导出任务已创建，请稍后查询导出状态",
         )
     else:
-        # 同步导出
-        content, filename, count = service.export_supported_villages_sync(query_params)
+        # 同步导出（真实查库）
+        content, filename, count = service.export_supported_villages_sync(
+            db, current_user, query_params
+        )
 
         # URL 编码文件名,避免 latin-1 编码错误
         encoded_filename = quote(filename)

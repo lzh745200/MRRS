@@ -35,7 +35,11 @@
         <el-table-column v-if="activeTab === 'pending'" type="selection" width="45" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="title" label="审批标题" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="workflow_name" label="流程" width="140" show-overflow-tooltip />
+        <el-table-column prop="entity_type" label="类型" width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-tag size="small">{{ entityTypeLabel(row.entity_type) }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)" size="small">{{
@@ -109,6 +113,18 @@ function statusType(status: string): 'success' | 'warning' | 'danger' | 'info' |
   return map[status] || 'primary'
 }
 
+function entityTypeLabel(t?: string) {
+  const map: Record<string, string> = {
+    supported_village: '帮扶村',
+    project: '项目',
+    fund: '经费',
+    school: '学校',
+    rural_work: '乡村工作',
+    assessment: '考核复核',
+  }
+  return map[t || ''] || t || '通用'
+}
+
 function statusLabel(status: string) {
   const map: Record<string, string> = {
     pending: '待审批',
@@ -123,22 +139,25 @@ function statusLabel(status: string) {
 async function loadTasks() {
   loading.value = true
   try {
-    // 后端：/approval/tasks/all（管理员全部）与 /approval/tasks/pending（待审批），
-    // 分页参数为 skip/limit
-    const url = activeTab.value === 'pending' ? '/approval/tasks/pending' : '/approval/tasks/all'
+    // 后端：/approval/tasks/pending（待审批）、/approval/tasks/mine（我发起的）、
+    // /approval/tasks/history?completed=true（已办结），分页参数均为 skip/limit
+    let url = '/approval/tasks/pending'
+    if (activeTab.value === 'initiated') url = '/approval/tasks/mine'
+    else if (activeTab.value === 'completed') url = '/approval/tasks/history'
     const params: Record<string, unknown> = {
       skip: (page.value - 1) * pageSize.value,
       limit: pageSize.value,
     }
     if (activeTab.value === 'completed') {
-      params.status = 'completed'
+      params.completed = true
     }
     const res: any = await get(url, params)
-    // get() 已解包：items 提升到顶层
-    const data = res?.data ?? res
-    const list = data?.items || data?.data?.items || (Array.isArray(data) ? data : [])
+    // get() 已解包：envelope 的 data 数组被提升为顶层 items，total 在顶层
+    const list = Array.isArray(res)
+      ? res
+      : res?.items || (Array.isArray(res?.data) ? res.data : res?.data?.items) || []
     tasks.value = Array.isArray(list) ? list : []
-    total.value = data?.total ?? tasks.value.length
+    total.value = Number(res?.total ?? tasks.value.length) || tasks.value.length
   } catch (e: unknown) {
     ElMessage.error(e instanceof Error ? e.message : '加载审批任务失败')
   } finally {
@@ -149,8 +168,8 @@ async function loadTasks() {
 async function loadPendingCount() {
   try {
     const res: any = await get('/approval/tasks/pending', { skip: 0, limit: 1 })
-    const data = res?.data ?? res
-    pendingCount.value = data?.total ?? 0
+    // total 在信封顶层（未被解包成 data）
+    pendingCount.value = Number(res?.total ?? 0) || 0
   } catch {
     pendingCount.value = 0
   }

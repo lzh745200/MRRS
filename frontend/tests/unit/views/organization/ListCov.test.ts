@@ -652,7 +652,8 @@ describe('删除组织全分支', () => {
     await flushPromises()
     const vm = wrapper.vm as any
 
-    mockDel.mockResolvedValueOnce({ data: { message: '已停用' } })
+    // del() 已自动解包（返回 res.data），message 在顶层
+    mockDel.mockResolvedValueOnce({ message: '已停用' })
     await vm.handleDelete(orgRow1)
     expect(ElMessage.success).toHaveBeenCalledWith('已停用')
     expect(vm.currentPage).toBe(1)

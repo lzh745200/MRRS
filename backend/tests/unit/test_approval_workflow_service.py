@@ -768,7 +768,7 @@ class TestAutoApproveAllPending:
         mock_query = make_mock_query(mock_db, [])
         mock_query.all.return_value = []
         result = svc.auto_approve_all_pending(1)
-        assert result == {"total_pending": 0, "approved": 0}
+        assert result == {"total_pending": 0, "approved": 0, "failed": 0}
 
     def test_some_approved(self, svc, mock_db):
         tasks = [MagicMock(id=1), MagicMock(id=2), MagicMock(id=3)]
@@ -787,7 +787,7 @@ class TestAutoApproveAllPending:
             approved_task,  # task 3 -> approved
         ]):
             result = svc.auto_approve_all_pending(1)
-            assert result == {"total_pending": 3, "approved": 2}
+            assert result == {"total_pending": 3, "approved": 2, "failed": 1}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -864,13 +864,16 @@ class TestGetTaskDiff:
 
         with patch.object(svc, "get_task", return_value=mock_task):
             result = svc.get_task_diff(5)
-            assert result == {
-                "changed": {"name": "new"},
-                "original": {"name": "old"},
-                "task_id": 5,
-                "entity_type": "fund",
-                "entity_id": 10,
-            }
+            # 新契约：change_data/original_data/diff_fields（前端使用）
+            assert result["change_data"] == {"name": "new"}
+            assert result["original_data"] == {"name": "old"}
+            assert result["diff_fields"] == ["name"]
+            # 旧契约：changed/original 保留向后兼容
+            assert result["changed"] == {"name": "new"}
+            assert result["original"] == {"name": "old"}
+            assert result["task_id"] == 5
+            assert result["entity_type"] == "fund"
+            assert result["entity_id"] == 10
 
     def test_with_none_data(self, svc, mock_db):
         mock_task = MagicMock()
@@ -882,10 +885,11 @@ class TestGetTaskDiff:
 
         with patch.object(svc, "get_task", return_value=mock_task):
             result = svc.get_task_diff(5)
-            assert result == {
-                "changed": {},
-                "original": {},
-                "task_id": 5,
-                "entity_type": "fund",
-                "entity_id": 10,
-            }
+            assert result["changed"] == {}
+            assert result["original"] == {}
+            assert result["change_data"] == {}
+            assert result["original_data"] == {}
+            assert result["diff_fields"] == []
+            assert result["task_id"] == 5
+            assert result["entity_type"] == "fund"
+            assert result["entity_id"] == 10
