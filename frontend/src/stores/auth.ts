@@ -30,6 +30,7 @@ interface LoginPayload {
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(AuthStorage.getToken() || '')
+  const refreshToken = ref(AuthStorage.getRefreshToken() || '')
   const user = ref<UserInfo | null>(AuthStorage.getUser())
   const error = ref('')
 
@@ -89,11 +90,12 @@ export const useAuthStore = defineStore('auth', () => {
     return result
   })
 
-  function persistAuth(t: string, u: UserInfo, refreshToken?: string) {
+  function persistAuth(t: string, u: UserInfo, rt?: string) {
     token.value = t
+    refreshToken.value = rt || ''
     user.value = u
     _setCachedToken(t)
-    AuthStorage.setAuthData({ token: t, user: u, refreshToken })
+    AuthStorage.setAuthData({ token: t, user: u, refreshToken: rt })
     // 预取 CSRF token：避免首次 POST/PUT/DELETE 请求因懒加载失败而返回 403
     prefetchCsrfToken().catch(() => {
       // 预取失败不阻断登录流程，后续请求会自动重试获取
@@ -102,15 +104,17 @@ export const useAuthStore = defineStore('auth', () => {
 
   function logout() {
     token.value = ''
+    refreshToken.value = ''
     user.value = null
     error.value = ''
     _setCachedToken(null)
     AuthStorage.clear()
   }
 
-  /** 当前认证数据（供"记住登录"持久化） */
+  /** 当前认证数据（供"记住登录"持久化，含刷新令牌） */
   function getAuthData(): AuthData | null {
-    return { token: token.value, user: user.value as AuthData['user'], refreshToken: undefined }
+    if (!user.value) return null
+    return { token: token.value, user: user.value, refreshToken: refreshToken.value || undefined }
   }
 
   /**
@@ -138,7 +142,13 @@ export const useAuthStore = defineStore('auth', () => {
 
         // 正常登录成功
         if (res.data) {
-          persistAuth(res.data.access_token, res.data.user, res.data.refresh_token)
+          // 注意：refresh_token 位于信封顶层（后端 success_response 的 kwargs），
+          // 而非 data 内 —— 取错位置会导致会话无法续期、记住登录失效
+          persistAuth(
+            res.data.access_token,
+            res.data.user,
+            (res as unknown as { refresh_token?: string }).refresh_token
+          )
           // 登录后立即预加载菜单 — 避免侧边栏渲染时 loaded=false 导致闪烁或泄露
           // 使用 try-catch 防止菜单加载失败影响登录流程
           try {

@@ -187,7 +187,8 @@ class TestGetOrganizationTree:
         q.all.return_value = [parent, child]
         resp = client_admin.get("/api/v1/organizations/tree")
         assert resp.status_code == 200
-        data = resp.json()
+        # 统一 envelope：{code:200, data:[...]}
+        data = resp.json()["data"]
         assert len(data) == 1
         assert data[0]["name"] == "根组织"
         assert len(data[0]["children"]) == 1
@@ -200,17 +201,17 @@ class TestGetOrganizationTree:
     def test_tree_level_number(self, client_admin, mock_db):
         mock_db.query.return_value.all.return_value = [_make_mock_org(1, level="level_3")]
         resp = client_admin.get("/api/v1/organizations/tree")
-        assert resp.json()[0]["level"] == 3
+        assert resp.json()["data"][0]["level"] == 3
 
     def test_tree_level_fallback(self, client_admin, mock_db):
         mock_db.query.return_value.all.return_value = [_make_mock_org(1, level="invalid")]
         resp = client_admin.get("/api/v1/organizations/tree")
-        assert resp.json()[0]["level"] == 0
+        assert resp.json()["data"][0]["level"] == 0
 
     def test_tree_level_parse_error(self, client_admin, mock_db):
         mock_db.query.return_value.all.return_value = [_make_mock_org(1, level="level_abc")]
         resp = client_admin.get("/api/v1/organizations/tree")
-        assert resp.json()[0]["level"] == 0
+        assert resp.json()["data"][0]["level"] == 0
 
     def test_tree_cycle_detected(self, client_admin, mock_db):
         a = _make_mock_org(1, name="A", parent_id=2)
@@ -225,8 +226,8 @@ class TestGetOrganizationTree:
         resp = client_admin.get("/api/v1/organizations/tree")
         assert resp.status_code == 200
         # orphan should still appear as child-less node
-        assert len(resp.json()) == 1
-        assert resp.json()[0]["name"] == "孤立子"
+        assert len(resp.json()["data"]) == 1
+        assert resp.json()["data"][0]["name"] == "孤立子"
 
     def test_tree_exception(self, client_admin, mock_db):
         mock_db.query.side_effect = Exception("Tree error")

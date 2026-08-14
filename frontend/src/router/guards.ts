@@ -14,13 +14,24 @@ router.beforeEach(async (to, _from, next) => {
   document.title = (to.meta?.title as string) || '帮扶管理信息系统'
 
   // 公开路由直接放行
-  if (to.meta?.noAuth === true || whiteList.includes(to.path)) {
+  if (to.meta?.noAuth === true) {
+    next()
+    return
+  }
+
+  const token = AuthStorage.getToken()
+
+  // 已登录（含"记住登录"持久令牌）访问登录/注册页 → 直接进入工作台，实现免登录
+  if (whiteList.includes(to.path)) {
+    if (token) {
+      next('/dashboard')
+      return
+    }
     next()
     return
   }
 
   // 未登录 → 登录页
-  const token = AuthStorage.getToken()
   if (!token) {
     next(`/login?redirect=${to.path}`)
     return

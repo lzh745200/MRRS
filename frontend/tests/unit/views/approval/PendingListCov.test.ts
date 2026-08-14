@@ -372,33 +372,6 @@ describe('导航与详情', () => {
 })
 
 describe('审批通过与拒绝', () => {
-  it('confirmApprove：空任务早退；成功；失败 detail/默认 兜底', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-
-    await vm.confirmApprove() // currentTask 为 null → 早退
-    expect(mockApproveTask).not.toHaveBeenCalled()
-
-    vm.currentTask = { id: 7 }
-    vm.approveForm = { opinion: '同意' }
-    const base = mockGetPendingTasks.mock.calls.length
-    await vm.confirmApprove()
-    expect(mockApproveTask).toHaveBeenCalledWith(7, '同意')
-    expect(ElMessage.success).toHaveBeenCalledWith('审批通过')
-    expect(vm.approveDialogVisible).toBe(false)
-    expect(mockGetPendingTasks.mock.calls.length).toBe(base + 1)
-
-    mockApproveTask.mockRejectedValueOnce({ response: { data: { detail: 'D-详情' } } })
-    await vm.confirmApprove()
-    expect(ElMessage.error).toHaveBeenCalledWith('D-详情')
-
-    mockApproveTask.mockRejectedValueOnce(new Error('x'))
-    await vm.confirmApprove()
-    expect(ElMessage.error).toHaveBeenCalledWith('操作失败')
-    expect(vm.submitting).toBe(false)
-  })
-
   it('handleReject 初始化状态；confirmReject 全分支', async () => {
     const wrapper = mountComp()
     await flushPromises()
@@ -431,53 +404,42 @@ describe('审批通过与拒绝', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('操作失败')
   })
 
-  it('对话框交互：两个意见输入 v-model、两个取消内联点击、确认按钮点击、三个对话框 v-model', async () => {
+  it('对话框交互：拒绝原因输入 v-model、两个取消内联点击、确认拒绝按钮、三个对话框 v-model', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
 
+    // 仅剩拒绝原因一个输入框（审批对话框已移除，快速通过不弹窗）
     const inputs = wrapper.findAllComponents({ name: 'ElInput' })
-    inputs[0].vm.$emit('update:modelValue', '审批意见X')
-    inputs[1].vm.$emit('update:modelValue', '拒绝原因Y')
-    expect(vm.approveForm.opinion).toBe('审批意见X')
+    inputs[0].vm.$emit('update:modelValue', '拒绝原因Y')
     expect(vm.rejectForm.opinion).toBe('拒绝原因Y')
 
-    // 三个「取消」按钮：[0] 审批对话框，[1] 拒绝对话框，[2] 转交对话框（v1.8.0）
-    vm.approveDialogVisible = true
+    // 两个「取消」按钮：[0] 拒绝对话框，[1] 转交对话框
     vm.rejectDialogVisible = true
     vm.transferDialogVisible = true
     const cancels = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '取消')
-    expect(cancels.length).toBe(3)
+    expect(cancels.length).toBe(2)
     await cancels[0].trigger('click')
-    expect(vm.approveDialogVisible).toBe(false)
-    await cancels[1].trigger('click')
     expect(vm.rejectDialogVisible).toBe(false)
-    await cancels[2].trigger('click')
+    await cancels[1].trigger('click')
     expect(vm.transferDialogVisible).toBe(false)
 
-    // 确认通过 / 确认拒绝 按钮真实点击
-    vm.currentTask = { id: 7 }
-    await findBtns(wrapper, '确认通过')[0].trigger('click')
-    await flushPromises()
-    expect(mockApproveTask).toHaveBeenCalledWith(7, '审批意见X')
-
+    // 确认拒绝按钮真实点击
     vm.rejectDialogVisible = true
+    vm.currentTask = { id: 7 }
     await findBtns(wrapper, '确认拒绝')[0].trigger('click')
     await flushPromises()
     expect(mockRejectTask).toHaveBeenCalledWith(7, '拒绝原因Y')
 
-    // 四个对话框 v-model 同步（审批/拒绝/diff/转交——v1.8.0 新增转交）
+    // 三个对话框 v-model 同步（拒绝/diff/转交）
     const dialogs = wrapper.findAllComponents({ name: 'ElDialog' })
-    expect(dialogs.length).toBe(4)
-    vm.approveDialogVisible = true
+    expect(dialogs.length).toBe(3)
     vm.rejectDialogVisible = true
     vm.diffDialogVisible = true
     vm.transferDialogVisible = true
     dialogs[0].vm.$emit('update:modelValue', false)
     dialogs[1].vm.$emit('update:modelValue', false)
     dialogs[2].vm.$emit('update:modelValue', false)
-    dialogs[3].vm.$emit('update:modelValue', false)
-    expect(vm.approveDialogVisible).toBe(false)
     expect(vm.rejectDialogVisible).toBe(false)
     expect(vm.diffDialogVisible).toBe(false)
     expect(vm.transferDialogVisible).toBe(false)
@@ -830,5 +792,210 @@ describe('筛选条件（类型/提交时间）', () => {
     await flushPromises()
     // 列 stub 样本行均无 submitter_name → 回退 '-'
     expect(wrapper.text()).toContain('-')
+  })
+})
+
+describe('分页（total > pageSize）', () => {
+  it('分页渲染 + v-model 双向同步 + size-change/current-change 事件', async () => {
+    mockGetPendingTasks.mockResolvedValue({ items: makeTasks(), total: 200 })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const pg = wrapper.findComponent({ name: 'ElPagination' })
+    expect(pg.exists()).toBe(true)
+    // v-model:current-page / v-model:page-size
+    pg.vm.$emit('update:currentPage', 2)
+    expect(vm.page).toBe(2)
+    pg.vm.$emit('update:pageSize', 50)
+    expect(vm.pageSize).toBe(50)
+    // size-change → handleSizeChange：页码归 1 并重载
+    pg.vm.$emit('size-change', 50)
+    await flushPromises()
+    expect(vm.page).toBe(1)
+    expect(mockGetPendingTasks).toHaveBeenCalledWith({ skip: 0, limit: 50 })
+    // current-change → loadTasks（重渲染后需重新获取分页组件实例）
+    const pg2 = wrapper.findComponent({ name: 'ElPagination' })
+    pg2.vm.$emit('update:currentPage', 3)
+    expect(vm.page).toBe(3)
+    pg2.vm.$emit('current-change', 3)
+    await flushPromises()
+    expect(mockGetPendingTasks).toHaveBeenCalledWith({ skip: 100, limit: 50 })
+  })
+})
+
+describe('entitySummary 业务摘要', () => {
+  it('fund/project/其他类型全分支与空值兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // !cd / cd 非对象 → ''
+    expect(vm.entitySummary(null)).toBe('')
+    expect(vm.entitySummary({})).toBe('')
+    expect(vm.entitySummary({ change_data: '文本' })).toBe('')
+    // fund：name/amount/applicant/status 全字段拼接
+    expect(
+      vm.entitySummary({
+        entity_type: 'fund',
+        change_data: { name: '办公经费', amount: 12000, applicant: '张三', status: 'pending' },
+      })
+    ).toBe('办公经费 · ¥12,000 · 申请人: 张三 · 状态: pending')
+    // fund：缺省字段跳过；全缺 → ''
+    expect(vm.entitySummary({ entity_type: 'fund', change_data: { amount: 5 } })).toBe('¥5')
+    expect(vm.entitySummary({ entity_type: 'fund', change_data: {} })).toBe('')
+    // project：name 优先 / project_name 兜底 / budget 拼接
+    expect(
+      vm.entitySummary({ entity_type: 'project', change_data: { name: '修路', budget: 50000 } })
+    ).toBe('修路 · 预算: ¥50,000')
+    expect(vm.entitySummary({ entity_type: 'project', change_data: { project_name: '桥梁' } })).toBe(
+      '桥梁'
+    )
+    expect(vm.entitySummary({ entity_type: 'project', change_data: {} })).toBe('')
+    // 其他类型：cd.name 回退；无 name → ''
+    expect(vm.entitySummary({ entity_type: 'school', change_data: { name: '中心小学' } })).toBe(
+      '中心小学'
+    )
+    expect(vm.entitySummary({ entity_type: 'school', change_data: {} })).toBe('')
+  })
+
+  it('模板：业务摘要列 entitySummary(row) 非空/空两侧渲染', async () => {
+    // rowC（fund）注入 change_data → entitySummary 非空 → v-if 真侧
+    ;(rowC as any).change_data = { name: '经费X', amount: 1000 }
+    try {
+      const wrapper = mountComp()
+      await flushPromises()
+      const summary = wrapper.findAll('.entity-summary').find((s) => s.text().includes('经费X'))
+      expect(summary, '经费摘要').toBeTruthy()
+      expect(summary!.text()).toContain('¥1,000')
+      // rowA/rowB 无 change_data → v-else muted '-'
+      expect(wrapper.findAll('.entity-summary.muted').length).toBeGreaterThan(0)
+    } finally {
+      delete (rowC as any).change_data
+    }
+  })
+})
+
+describe('loadTasks 结果兼容链与页码回退', () => {
+  it('直接数组形态（旧接口）：total 缺失 → items.length', async () => {
+    mockGetPendingTasks.mockResolvedValue([{ id: 1, title: 'T' }])
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.tasks).toEqual([{ id: 1, title: 'T' }])
+    expect(vm.total).toBe(1)
+  })
+
+  it('data 数组形态 / 空对象 / items 非数组兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // result.data 为数组 → 取之
+    mockGetPendingTasks.mockResolvedValueOnce({ data: [{ id: 2 }] })
+    await vm.loadTasks()
+    expect(vm.tasks).toEqual([{ id: 2 }])
+    expect(vm.total).toBe(1)
+    // 空对象 → items 兜底 []，total 0
+    mockGetPendingTasks.mockResolvedValueOnce({})
+    await vm.loadTasks()
+    expect(vm.tasks).toEqual([])
+    expect(vm.total).toBe(0)
+    // items 非数组 → tasks 置 []，total 仍取后端值
+    mockGetPendingTasks.mockResolvedValueOnce({ items: { bad: 1 }, total: 5 })
+    await vm.loadTasks()
+    expect(vm.tasks).toEqual([])
+    expect(vm.total).toBe(5)
+  })
+
+  it('当前页为空且 page>1 → 自动回退页码并重载；回退到第 1 页则停止', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // page=2 空页，total=30 → 重算仍为第 2 页 → 递归重载拿到数据
+    vm.page = 2
+    mockGetPendingTasks.mockResolvedValueOnce({ items: [], total: 30 })
+    mockGetPendingTasks.mockResolvedValueOnce({ items: [{ id: 9 }], total: 30 })
+    await vm.loadTasks()
+    expect(vm.page).toBe(2)
+    expect(vm.tasks).toEqual([{ id: 9 }])
+    expect(mockGetPendingTasks).toHaveBeenLastCalledWith({ skip: 20, limit: 20 })
+
+    // page=2 空页，total=20 → 回退到第 1 页 → 不再重载
+    vm.page = 2
+    mockGetPendingTasks.mockResolvedValueOnce({ items: [], total: 20 })
+    const base = mockGetPendingTasks.mock.calls.length
+    await vm.loadTasks()
+    expect(vm.page).toBe(1)
+    expect(mockGetPendingTasks.mock.calls.length).toBe(base + 1)
+
+    // total=0 → Math.ceil(0)=0 → ||1 兜底回退到第 1 页
+    vm.page = 3
+    mockGetPendingTasks.mockResolvedValueOnce({ items: [], total: 0 })
+    await vm.loadTasks()
+    expect(vm.page).toBe(1)
+  })
+})
+
+describe('diffTableData 假值兜底', () => {
+  it('original/changed 为假值（0 或空串）→ Object.keys(||{}) 兜底为空表', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.taskDiff = { original_data: 0, change_data: '', diff_fields: undefined }
+    expect(vm.diffTableData).toEqual([])
+  })
+})
+
+describe('快速通过 isCancel 判定', () => {
+  it('取消值全形态静默；非取消错误 → detail/兜底提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // e === 'cancel'（字符串拒绝值）→ 静默
+    confirmMock.mockRejectedValueOnce('cancel')
+    await vm.handleQuickApprove(rowA)
+    expect(ElMessage.error).not.toHaveBeenCalled()
+
+    // e?.toString() === 'cancel'（无 message 的对象）→ 静默
+    confirmMock.mockRejectedValueOnce({ toString: () => 'cancel' })
+    await vm.handleQuickApprove(rowA)
+    expect(ElMessage.error).not.toHaveBeenCalled()
+
+    // message 包含 cancel（如 'cancelled'）→ 静默
+    confirmMock.mockRejectedValueOnce(new Error('用户 cancelled 操作'))
+    await vm.handleQuickApprove(rowA)
+    expect(ElMessage.error).not.toHaveBeenCalled()
+
+    // 非取消错误：标准审批失败后单机审批也失败 → detail 提示
+    mockApproveTask.mockRejectedValueOnce(new Error('forbidden'))
+    mockAutoApproveSingleTask.mockRejectedValueOnce({ response: { data: { detail: 'D-单机失败' } } })
+    await vm.handleQuickApprove(rowA)
+    expect(ElMessage.error).toHaveBeenCalledWith('D-单机失败')
+
+    // 无 detail 且 e 无 message（?? '' 与 includes 假侧）→ 兜底文案
+    mockApproveTask.mockRejectedValueOnce(new Error('forbidden'))
+    mockAutoApproveSingleTask.mockRejectedValueOnce({})
+    await vm.handleQuickApprove(rowA)
+    expect(ElMessage.error).toHaveBeenCalledWith('审批失败')
+  })
+
+  it('handleAutoApproveAll：approved 数字形态 / failed 数字形态 / 全缺省兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // approved 为数字 + failed 为数字
+    mockAutoApproveAll.mockResolvedValueOnce({ approved: 3, failed: 2 })
+    await vm.handleAutoApproveAll()
+    expect(ElMessage.success).toHaveBeenCalledWith('批量审批完成：成功 3，失败 2')
+
+    // 全缺省：success 非数组 → approvedCount 0；failed 缺省 → 0 → 不拼接失败文案
+    mockAutoApproveAll.mockResolvedValueOnce({})
+    await vm.handleAutoApproveAll()
+    expect(ElMessage.success).toHaveBeenCalledWith('批量审批完成：成功 0')
+
+    // approved 数字 + failed 缺省
+    mockAutoApproveAll.mockResolvedValueOnce({ approved: 1 })
+    await vm.handleAutoApproveAll()
+    expect(ElMessage.success).toHaveBeenCalledWith('批量审批完成：成功 1')
   })
 })

@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockGet, mockPost, mockPut, mockDelete, mockApiRequest, mockDownloadBlob } = vi.hoisted(() => ({
-  mockGet: vi.fn(),
-  mockPost: vi.fn(),
-  mockPut: vi.fn(),
-  mockDelete: vi.fn(),
-  mockApiRequest: vi.fn(),
-  mockDownloadBlob: vi.fn(),
-}))
+const { mockGet, mockPost, mockPut, mockDelete, mockApiRequest, mockDownloadBlob } = vi.hoisted(
+  () => ({
+    mockGet: vi.fn(),
+    mockPost: vi.fn(),
+    mockPut: vi.fn(),
+    mockDelete: vi.fn(),
+    mockApiRequest: vi.fn(),
+    mockDownloadBlob: vi.fn(),
+  })
+)
 
 // src/api/funds.ts 实际 import：
 //   import { get, post, put, del, apiRequest } from '@/api/request'  // 命名辅助，返回已解包的 envelope body
@@ -32,7 +34,8 @@ vi.mock('@/api/request', () => ({
     put: (url: string, data?: any) => mockPut(url, data),
     delete: (url: string) => mockDelete(url),
   },
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import { fundApi } from '@/api/funds'
 
@@ -143,25 +146,12 @@ describe('api/funds', () => {
   })
 
   describe('统计', () => {
-    it('statisticsOverview 调用 GET /funds/statistics/overview', async () => {
-      mockGet.mockResolvedValue({ data: {} })
-      await fundApi.statisticsOverview()
-      expect(mockGet).toHaveBeenCalledWith('/funds/statistics/overview')
-    })
-
-    it('statisticsOverview 带 year 参数走携带分支', async () => {
-      mockGet.mockResolvedValue({ data: {} })
-      await fundApi.statisticsOverview(2024)
-      expect(mockGet).toHaveBeenCalledWith('/funds/statistics/overview', { params: { year: 2024 } })
-    })
-
     it('statisticsMultiDimension 带 params', async () => {
       mockGet.mockResolvedValue({ data: {} })
       await fundApi.statisticsMultiDimension({ year: 2024 })
-      expect(mockGet).toHaveBeenCalledWith(
-        '/funds/statistics/multi-dimension',
-        { params: { year: 2024 } },
-      )
+      expect(mockGet).toHaveBeenCalledWith('/funds/statistics/multi-dimension', {
+        params: { year: 2024 },
+      })
     })
   })
 
@@ -199,7 +189,9 @@ describe('api/funds', () => {
     it('downloadAttachment 调用 blob GET 并触发下载', async () => {
       mockGet.mockResolvedValue({ data: new Blob(['x']) })
       await fundApi.downloadAttachment(5, '发票.pdf')
-      expect(mockGet).toHaveBeenCalledWith('/funds/attachments/5/download', { responseType: 'blob' })
+      expect(mockGet).toHaveBeenCalledWith('/funds/attachments/5/download', {
+        responseType: 'blob',
+      })
       expect(mockDownloadBlob).toHaveBeenCalled()
     })
 
@@ -259,7 +251,12 @@ describe('api/funds', () => {
 
     it('createBudget 调用 POST /fund-budgets', async () => {
       mockPost.mockResolvedValue({ data: {} })
-      await fundApi.createBudget({ year: 2024, category: 'project', budget_amount: 1000, used_amount: 200 })
+      await fundApi.createBudget({
+        year: 2024,
+        category: 'project',
+        budget_amount: 1000,
+        used_amount: 200,
+      })
       expect(mockPost).toHaveBeenCalled()
     })
 
@@ -343,7 +340,10 @@ describe('api/funds', () => {
     it('createTransaction 调用 POST 并附带 budget_id', async () => {
       mockPost.mockResolvedValue({ data: { id: 1 } })
       await fundApi.createTransaction(9, { amount: 100 })
-      expect(mockPost).toHaveBeenCalledWith('/fund-budgets/transactions', { amount: 100, budget_id: 9 })
+      expect(mockPost).toHaveBeenCalledWith('/fund-budgets/transactions', {
+        amount: 100,
+        budget_id: 9,
+      })
     })
 
     it('deleteTransaction 调用 DELETE /fund-budgets/transactions/{id}', async () => {

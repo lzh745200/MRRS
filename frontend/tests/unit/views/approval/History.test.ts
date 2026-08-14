@@ -325,6 +325,25 @@ describe('详情与 diff', () => {
     expect(vm.formatDateTime('')).toBe('-')
     expect(vm.formatDateTime('2024-06-01T10:00:00')).not.toBe('-')
   })
+
+  it('diffTableData：旧键名 original/changed 回退；original/changed 为假值时 ||{} 兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 旧接口键名 original/changed（无 original_data/change_data）→ ?? 中段回退
+    vm.taskDiff = {
+      original: { name: '旧', keep: 'x' },
+      changed: { name: '新' },
+      diff_fields: ['name'],
+    }
+    expect(vm.diffTableData).toEqual([
+      { field: 'name', original: '旧', new: '新', changed: true },
+      { field: 'keep', original: 'x', new: undefined, changed: false },
+    ])
+    // original/changed 为假值（非 nullish，如 0/''）→ Object.keys(original || {}) 的 ||{} 兜底
+    vm.taskDiff = { original_data: 0, change_data: '', diff_fields: undefined }
+    expect(vm.diffTableData).toEqual([])
+  })
 })
 
 describe('表单 v-model', () => {

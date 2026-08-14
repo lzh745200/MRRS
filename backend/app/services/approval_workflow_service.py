@@ -179,7 +179,8 @@ class ApprovalWorkflowService:
         return self.create_workflow(
             name=f"{entity_type}默认审批流程",
             entity_type=entity_type,
-            nodes=[{"name": "直接审批", "approver_type": "user", "approver_id": user_id, "timeout_hours": 48}],
+            # 默认节点不指定审批人：单机模式下任何登录用户均可审批（approve_task 放行未分配任务）
+            nodes=[{"name": "直接审批", "approver_type": "user", "approver_id": None, "timeout_hours": 48}],
             description="系统自动创建的默认审批流程",
             created_by=user_id,
         )
@@ -450,7 +451,9 @@ class ApprovalWorkflowService:
         if not task or task.status != ApprovalStatus.PENDING.value:
             return None
 
-        if not standalone and task.current_approver_id != approver_id:
+        # 单机模式语义：standalone=True 跳过审批人校验；
+        # 未分配审批人（current_approver_id=None）的任务任何登录用户均可审批
+        if not standalone and task.current_approver_id not in (None, approver_id):
             return None
 
         # 创建审批记录
@@ -494,7 +497,8 @@ class ApprovalWorkflowService:
         if not task or task.status != ApprovalStatus.PENDING.value:
             return None
 
-        if not standalone and task.current_approver_id != approver_id:
+        # 未分配审批人的任务任何登录用户均可驳回（单机模式语义）
+        if not standalone and task.current_approver_id not in (None, approver_id):
             return None
 
         record = ApprovalRecord(
@@ -555,6 +559,16 @@ class ApprovalWorkflowService:
         if workflow_nodes:
             task.current_approver_id = workflow_nodes[0].approver_id
 
+        # 记录「重新提交」动作，使审批意见读取不再显示旧的驳回原因
+        record = ApprovalRecord(
+            task_id=task.id,
+            level=1,
+            approver_id=submitter_id,
+            action="resubmit",
+            opinion=None,
+        )
+        self.db.add(record)
+
         safe_commit(self.db)
         self.db.refresh(task)
         return task
@@ -610,12 +624,16 @@ class ApprovalWorkflowService:
         approver_id: int,
         transfer_to_id: int,
         reason: str = "",
+        standalone: bool = False,
     ) -> Optional[ApprovalTask]:
-        """转交审批任务给其他审批人"""
+        """转交审批任务给其他审批人
+
+        standalone=True（管理员）或任务未分配审批人时跳过审批人校验。
+        """
         task = self.get_task(task_id)
         if not task or task.status != ApprovalStatus.PENDING.value:
             return None
-        if task.current_approver_id != approver_id:
+        if not standalone and task.current_approver_id not in (None, approver_id):
             return None
 
         record = ApprovalRecord(

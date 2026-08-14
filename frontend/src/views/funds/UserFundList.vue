@@ -444,9 +444,9 @@ const stats = computed(() => {
 
 async function loadFundStats() {
   try {
-    const res = await get('/funds/statistics/overview')
+    const res: any = await get('/funds/statistics/overview')
     // data 显式为 null 表示"无统计"→ 不覆盖已有值（避免 serverFundStats 变成 {data:null}）
-    const d = res.data === null ? null : res.data || res
+    const d = res?.data === null ? null : res?.data ?? res
     if (d) serverFundStats.value = d
   } catch {
     /* 统计加载失败不阻塞主流程 */
@@ -476,7 +476,8 @@ async function fetchData() {
         status: filterForm.status || undefined,
       },
     })
-    const resData = response.data
+    // 防御：apiRequest 已解包；信封保留 data 键，裸数据直接使用
+    const resData = (response as any)?.data ?? response
     tableData.value =
       resData?.items || resData?.data?.items || (Array.isArray(resData) ? resData : [])
     total.value = resData?.total || resData?.data?.total || tableData.value.length

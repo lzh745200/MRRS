@@ -446,9 +446,16 @@ def transfer_task(
     转交审批
 
     Requirements: 3.7 - 支持审批转交
+    管理员可代为转交任意待审批任务；普通用户仅能转交指派给自己（或未分配）的任务。
     """
     service = ApprovalWorkflowService(db)
-    task = service.transfer_task(task_id, current_user.id, data.transfer_to_id, data.reason)
+    task = service.transfer_task(
+        task_id,
+        current_user.id,
+        data.transfer_to_id,
+        data.reason,
+        standalone=is_admin(current_user),
+    )
 
     if not task:
         raise HTTPException(status_code=400, detail="无法转交该任务，请检查任务状态或目标用户")
@@ -486,19 +493,27 @@ def withdraw_task(
     }
 
 
+class ResubmitRequest(BaseModel):
+    """重新提交请求（可选携带更新后的变更数据）"""
+
+    change_data: Optional[Dict[str, Any]] = Field(None, description="更新后的变更数据")
+
+
 @router.post("/tasks/{task_id}/resubmit", summary="重新提交审批")
 def resubmit_task(
     task_id: int,
+    data: Optional[ResubmitRequest] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    驳回后重新提交审批
+    驳回后重新提交审批（可携带更新后的变更数据）
 
     Requirements: 3.8 - 支持驳回后重新提交
     """
     service = ApprovalWorkflowService(db)
-    task = service.resubmit_approval(task_id, current_user.id)
+    change_data = data.change_data if data else None
+    task = service.resubmit_approval(task_id, current_user.id, change_data=change_data)
 
     if not task:
         raise HTTPException(status_code=400, detail="无法重新提交，请检查任务状态或提交人权限")

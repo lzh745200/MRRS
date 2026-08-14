@@ -384,3 +384,37 @@ describe('历史形态收尾', () => {
     wrapper.unmount()
   })
 })
+
+describe('导出结果卡片', () => {
+  it('total_records ?? 0 与 exported_at 三元两侧；「重新下载数据包」内联点击', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // total_records 缺省 → ?? 0；exported_at 缺省 → '-'
+    vm.exportResult = { package_name: 'pkg_r.rrs', size: 2048 }
+    await nextTick()
+    const card = wrapper.find('.export-result')
+    expect(card.exists()).toBe(true)
+    expect(card.text()).toContain('0')
+    expect(card.text()).toContain('-')
+    expect(card.text()).toContain('2.00 KB')
+    // 行内 @click="handleDownloadByName(exportResult.package_name)"
+    await findBtn(wrapper, '重新下载数据包').trigger('click')
+    await flushPromises()
+    expect(mockDownloadExportPackage).toHaveBeenCalledWith('pkg_r.rrs')
+
+    // total_records / exported_at 有值侧
+    vm.exportResult = {
+      package_name: 'pkg_s.rrs',
+      total_records: 7,
+      exported_at: '2024-06-01T10:00:00',
+      size: 100,
+    }
+    await nextTick()
+    const text2 = wrapper.find('.export-result').text()
+    expect(text2).toContain('7')
+    expect(text2).toContain('2024/') // formatDate(exported_at) 真侧
+    expect(text2).toContain('100 B')
+    wrapper.unmount()
+  })
+})

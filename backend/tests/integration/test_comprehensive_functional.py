@@ -166,8 +166,8 @@ class TestFundsComprehensive:
         assert resp.status_code in (200, 201, 404, 500)  # API may vary
 
     def test_fund_export(self, client, admin_headers):
-        """经费导出"""
-        resp = client.get("/api/v1/funds/export", headers=admin_headers)
+        """经费导出（真实文件导出端点）"""
+        resp = client.get("/api/v1/export/funds", headers=admin_headers)
         # 200 或 204（无数据）
         assert resp.status_code in (200, 204, 404)
 

@@ -118,9 +118,27 @@ const statistics = reactive({
   },
 })
 
-// 层级配置
-const militaryLevels: LevelConfig[] = (getLevelOptions as any)('military')
-const localLevels: LevelConfig[] = (getLevelOptions as any)('local')
+// 层级配置（异步加载：接口返回全部层级，前端按「专项/地方」拆分）
+const militaryLevels = ref<LevelConfig[]>([])
+const localLevels = ref<LevelConfig[]>([])
+
+const loadLevels = async () => {
+  try {
+    const res: any = await getLevelOptions()
+    // 兼容信封（items）/裸数组/data 数组三种形态
+    let list: any = []
+    if (Array.isArray(res)) list = res
+    else if (res?.items) list = res.items
+    else if (Array.isArray(res?.data)) list = res.data
+    const items: LevelConfig[] = Array.isArray(list) ? list : []
+    militaryLevels.value = items.filter((l) => l.value === 'military')
+    localLevels.value = items.filter((l) => l.value !== 'military')
+  } catch {
+    // 层级加载失败静默，使用空列表
+    militaryLevels.value = []
+    localLevels.value = []
+  }
+}
 
 // 加载统计数据
 const loadStatistics = async () => {
@@ -169,6 +187,7 @@ const handleViewLocal = () => {
 // 初始化
 onMounted(() => {
   loadStatistics()
+  loadLevels()
 })
 </script>
 

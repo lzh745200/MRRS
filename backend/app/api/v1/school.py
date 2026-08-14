@@ -299,8 +299,18 @@ async def import_schools_excel(
                 errors.append(_fmt_row_error(row_idx, e, str(e),
                                              row[1] if row and len(row) > 1 else "?"))
         safe_commit(db)
+        # 数据变更自动创建审批任务：学校批量导入进入待审批板块（审计留痕）
+        approval_task_id = submit_entity_change_approval(
+            db,
+            entity_type="school",
+            entity_id=0,
+            submitter_id=current_user.id,
+            title=f"学校批量导入：成功 {imported} 所，失败 {len(errors)} 所",
+            change_data={"imported": imported, "failed": len(errors), "errors": errors[:20]},
+        )
         return success_response(
-            data={"imported": imported, "failed": len(errors), "errors": errors},
+            data={"imported": imported, "failed": len(errors), "errors": errors,
+                  "approval_task_id": approval_task_id},
             message=f"成功导入 {imported} 所学校",
         )
     except Exception as e:
@@ -353,8 +363,18 @@ async def import_scholarship_students(
                 errors.append(_fmt_row_error(row_idx, e, str(e),
                                              row[0] if row and len(row) > 0 else "?"))
         safe_commit(db)
+        # 数据变更自动创建审批任务：资助学生批量导入进入待审批板块（审计留痕）
+        approval_task_id = submit_entity_change_approval(
+            db,
+            entity_type="scholarship_student",
+            entity_id=0,
+            submitter_id=current_user.id,
+            title=f"资助学生批量导入：成功 {imported} 名，失败 {len(errors)} 名",
+            change_data={"imported": imported, "failed": len(errors), "errors": errors[:20]},
+        )
         return success_response(
-            data={"imported": imported, "failed": len(errors), "errors": errors},
+            data={"imported": imported, "failed": len(errors), "errors": errors,
+                  "approval_task_id": approval_task_id},
             message=f"成功导入 {imported} 名资助学生",
         )
     finally:
@@ -504,23 +524,23 @@ async def get_school_statistics(
 @router.get("/options/types")
 async def get_type_options():
     """获取学校类型选项"""
-    return [
+    return success_response(data=[
         {"value": "primary", "label": "小学"},
         {"value": "middle", "label": "初中"},
         {"value": "high", "label": "高中"},
         {"value": "vocational", "label": "职业学校"},
         {"value": "other", "label": "其他"},
-    ]
+    ])
 
 
 @router.get("/options/statuses")
 async def get_status_options():
     """获取帮扶状态选项"""
-    return [
+    return success_response(data=[
         {"value": "active", "label": "帮扶中"},
         {"value": "inactive", "label": "未帮扶"},
         {"value": "completed", "label": "已完成"},
-    ]
+    ])
 
 
 # ==================== 附件管理API（静态路由，放在动态路由之前）====================
@@ -1066,7 +1086,19 @@ async def create_project(
     db.add(project)
     safe_commit(db)
     db.refresh(project)
-    return success_response(data=project.to_dict(), message="创建成功")
+    # 数据变更自动创建审批任务：学校帮扶项目新增进入待审批板块
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="school_project",
+        entity_id=project.id,
+        submitter_id=current_user.id,
+        title=f"学校帮扶项目新增：{project.name or f'#{project.id}'}",
+        change_data={"school_id": school_id, "name": project.name,
+                     "phase": project.phase.value if isinstance(project.phase, ProjectPhase) else project.phase},
+    )
+    data_out = project.to_dict()
+    data_out["approval_task_id"] = approval_task_id
+    return success_response(data=data_out, message="创建成功")
 
 
 @router.put("/{school_id}/projects/{project_id}")
@@ -1084,6 +1116,7 @@ async def update_project(
     )
     if not project:
         raise AppError.not_found("项目")
+    old_phase = project.phase.value if isinstance(project.phase, ProjectPhase) else project.phase
     update_data = data.model_dump(exclude_unset=True)
     if "phase" in update_data and update_data["phase"]:
         update_data["phase"] = ProjectPhase(update_data["phase"])
@@ -1091,7 +1124,20 @@ async def update_project(
         setattr(project, key, val)
     safe_commit(db)
     db.refresh(project)
-    return success_response(data=project.to_dict(), message="更新成功")
+    # 数据变更自动创建审批任务：学校帮扶项目变更进入待审批板块
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="school_project",
+        entity_id=project.id,
+        submitter_id=current_user.id,
+        title=f"学校帮扶项目变更：{project.name or f'#{project.id}'}",
+        change_data={"school_id": school_id, "name": project.name,
+                     "phase": project.phase.value if isinstance(project.phase, ProjectPhase) else project.phase},
+        original_data={"school_id": school_id, "name": project.name, "phase": old_phase},
+    )
+    data_out = project.to_dict()
+    data_out["approval_task_id"] = approval_task_id
+    return success_response(data=data_out, message="更新成功")
 
 
 @router.delete("/{school_id}/projects/{project_id}")
@@ -1110,7 +1156,17 @@ async def delete_project(
         raise AppError.not_found("项目")
     db.delete(project)
     safe_commit(db)
-    return success_response(message="删除成功")
+    # 数据变更自动创建审批任务：学校帮扶项目删除进入待审批板块
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="school_project",
+        entity_id=project.id,
+        submitter_id=current_user.id,
+        title=f"学校帮扶项目删除：{project.name or f'#{project.id}'}",
+        change_data={"deleted": True, "school_id": school_id, "name": project.name},
+    )
+    return success_response(data={"id": project_id, "approval_task_id": approval_task_id},
+                            message="删除成功")
 
 
 # ==================== 资助学生 CRUD ====================
@@ -1320,8 +1376,18 @@ async def import_school_scholarship_students(
                 errors.append(_fmt_row_error(row_idx, e, str(e),
                                              row[0] if row and len(row) > 0 else "?"))
         safe_commit(db)
+        # 数据变更自动创建审批任务：学校资助学生批量导入进入待审批板块（审计留痕）
+        approval_task_id = submit_entity_change_approval(
+            db,
+            entity_type="scholarship_student",
+            entity_id=0,
+            submitter_id=current_user.id,
+            title=f"资助学生批量导入（学校#{school_id}）：成功 {imported} 名",
+            change_data={"school_id": school_id, "imported": imported,
+                         "failed": len(errors), "errors": errors[:20]},
+        )
         return success_response(
-            data={"imported": imported, "errors": errors},
+            data={"imported": imported, "errors": errors, "approval_task_id": approval_task_id},
             message=f"成功导入 {imported} 名资助学生",
         )
     finally:

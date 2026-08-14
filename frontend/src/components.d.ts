@@ -25,6 +25,7 @@ declare module 'vue' {
     CommonBatchOperationBar: typeof import('./components/common/BatchOperationBar.vue')['default']
     CommonBreadcrumb: typeof import('./components/common/Breadcrumb.vue')['default']
     CommonChangeHistoryDialog: typeof import('./components/common/ChangeHistoryDialog.vue')['default']
+    CommonChartErrorState: typeof import('./components/common/ChartErrorState.vue')['default']
     CommonDataTable: typeof import('./components/common/DataTable.vue')['default']
     CommonErrorBoundary: typeof import('./components/common/ErrorBoundary.vue')['default']
     CommonExportButton: typeof import('./components/common/ExportButton.vue')['default']

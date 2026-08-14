@@ -308,10 +308,10 @@ async def get_category_tree(current_user=Depends(get_current_user), db: Session 
                 cat_map[cat.parent_id]["children"].append(node)
             else:
                 tree.append(node)
-        return tree
+        return success_response(data=tree)
     except (ValueError, TypeError, KeyError) as e:
         logger.warning(f"获取分类树失败: {e}")
-        return []
+        return success_response(data=[])
 
 
 @router.post("/categories")
@@ -456,7 +456,22 @@ async def import_policies(
     """
     require_manager_role(current_user)
     from ...services.policy_import_service import import_policies_from_excel
-    return await import_policies_from_excel(file, db, current_user)
+
+    result = await import_policies_from_excel(file, db, current_user)
+    # 数据变更自动创建审批任务：政策批量导入进入待审批板块（审计留痕）
+    imported = (result or {}).get("imported", 0) if isinstance(result, dict) else 0
+    failed = (result or {}).get("failed", len((result or {}).get("errors", []))) if isinstance(result, dict) else 0
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="policy",
+        entity_id=0,
+        submitter_id=current_user.id,
+        title=f"政策批量导入：成功 {imported} 条，失败 {failed} 条",
+        change_data={"imported": imported, "failed": failed},
+    )
+    if isinstance(result, dict):
+        result["approval_task_id"] = approval_task_id
+    return result
 
 
 # 保留旧路径做兼容
@@ -811,23 +826,23 @@ async def get_policy_types(db: Session = Depends(get_db)):
 @router.get("/options/levels")
 async def get_level_options():
     """获取政策级别选项"""
-    return [
+    return success_response(data=[
         {"value": "national", "label": "国家级"},
         {"value": "provincial", "label": "省级"},
         {"value": "municipal", "label": "市级"},
         {"value": "county", "label": "县级"},
         {"value": "military", "label": "专项"},
-    ]
+    ])
 
 
 @router.get("/options/statuses")
 async def get_status_options():
     """获取政策状态选项"""
-    return [
+    return success_response(data=[
         {"value": "active", "label": "有效"},
         {"value": "invalid", "label": "失效"},
         {"value": "draft", "label": "草稿"},
-    ]
+    ])
 
 
 # ==================== 文件上传与预览 API ====================
@@ -996,7 +1011,19 @@ async def batch_delete_policies(data: dict, current_user=Depends(get_current_use
     deleted = db.query(Policy).filter(Policy.id.in_(ids)).delete(synchronize_session=False)
     safe_commit(db)
     await cache_manager.delete("policies:list")
-    return success_response(message=f"成功删除{deleted}条政策", data={"deleted": deleted})
+    # 数据变更自动创建审批任务：政策批量删除进入待审批板块（审计留痕）
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="policy",
+        entity_id=0,
+        submitter_id=current_user.id,
+        title=f"政策批量删除：{deleted} 条",
+        change_data={"deleted": True, "deleted_count": deleted, "ids": ids},
+    )
+    return success_response(
+        message=f"成功删除{deleted}条政策",
+        data={"deleted": deleted, "approval_task_id": approval_task_id},
+    )
 
 
 # ==================== 政策CRUD API ====================
@@ -1024,8 +1051,15 @@ async def get_policies(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取政策列表 —— 兼容前端 skip/limit 和旧 page/page_size 参数"""
-    _cache_key = "policies:list"
+    """获取政策列表 —— 兼容前端 skip/limit 和旧 page/page_size 参数
+
+    数据权限：已发布(active)政策为公共参考数据全员可见；
+    草稿/失效政策仅创建人（或管理员）可见。
+    """
+    from app.core.permission_utils import is_admin
+
+    _is_admin = is_admin(current_user)
+    _cache_key = f"policies:list:{current_user.id if not _is_admin else 'admin'}"
     _no_filter = not any([category, organization_level, search, order_by, year, document_code, keyword, level, status])
     _is_default_page = skip in (None, 0) and limit in (None, 20) and page is None
     if _no_filter and _is_default_page:
@@ -1034,6 +1068,17 @@ async def get_policies(
             return cached
 
     query = db.query(Policy).filter(Policy.is_active == True)  # noqa: E712
+
+    # 数据权限：已发布政策公共可见；其余仅本人（管理员全量）
+    if not _is_admin:
+        from sqlalchemy import or_
+
+        query = query.filter(
+            or_(
+                Policy.status == "active",
+                Policy.created_by == current_user.id,
+            )
+        )
 
     # 关键字搜索
     kw = search or keyword
@@ -1099,16 +1144,26 @@ async def get_related_policies(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取相关政策"""
+    """获取相关政策（仅展示已发布政策或本人创建的政策）"""
+    from app.core.permission_utils import is_admin
+    from sqlalchemy import or_
+
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
 
     query = db.query(Policy).filter(Policy.id != policy_id)
+    if not is_admin(current_user):
+        query = query.filter(
+            or_(
+                Policy.status == "active",
+                Policy.created_by == current_user.id,
+            )
+        )
     if policy.category:
         query = query.filter(Policy.category == policy.category)
     related = query.order_by(Policy.created_at.desc()).limit(limit).all()
-    return [_policy_to_frontend(p) for p in related]
+    return success_response(data=[_policy_to_frontend(p) for p in related])
 
 
 @router.get("/search")
@@ -1119,9 +1174,25 @@ async def search_policies(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """全文检索帮扶政策（FTS5 + 关键词高亮）"""
+    """全文检索帮扶政策（FTS5 + 关键词高亮）
+
+    数据权限：非管理员仅能看到已发布(active)政策或本人创建的政策。
+    """
+    from app.core.permission_utils import is_admin
     from app.services.policy_fts_service import search_policies_fts
+
     results = search_policies_fts(db, q, limit=limit, offset=offset)
+    if not is_admin(current_user):
+        if results:
+            ids = [r["id"] for r in results]
+            visible = {
+                pid
+                for pid, status, creator in db.query(
+                    Policy.id, Policy.status, Policy.created_by
+                ).filter(Policy.id.in_(ids)).all()
+                if status == "active" or creator == current_user.id
+            }
+            results = [r for r in results if r["id"] in visible]
     return ok_list(results, len(results), query=q)
 
 
@@ -1131,10 +1202,19 @@ async def get_policy(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取政策详情"""
+    """获取政策详情
+
+    数据权限：已发布(active)政策公共可见；草稿/失效政策仅创建人或管理员可见。
+    """
+    from app.core.permission_utils import is_admin
+
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
+
+    if not is_admin(current_user):
+        if policy.status != "active" and policy.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="无权访问该政策")
 
     current_count = policy.view_count or 0
     setattr(policy, "view_count", current_count + 1)
@@ -1441,9 +1521,9 @@ async def get_user_favorites(
     favorites = db.query(PolicyFavorite).filter(PolicyFavorite.user_id == user_id).all()
     policy_ids = [f.policy_id for f in favorites]
     if not policy_ids:
-        return []
+        return success_response(data=[])
     items = db.query(Policy).filter(Policy.id.in_(policy_ids)).all()
-    return [_policy_to_frontend(p) for p in items]
+    return success_response(data=[_policy_to_frontend(p) for p in items])
 
 
 def _attachment_urls_of(policy: Policy) -> list:

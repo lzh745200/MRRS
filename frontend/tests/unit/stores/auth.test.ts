@@ -31,6 +31,7 @@ vi.mock('@/utils/authStorage', () => ({
   AuthStorage: {
     getToken: () => mockAuthStorageGetToken(),
     getUser: () => mockAuthStorageGetUser(),
+    getRefreshToken: () => '',
     setAuthData: (...args: any[]) => mockAuthStorageSetAuthData(...args),
     setUser: (...args: any[]) => mockAuthStorageSetUser(...args),
     clear: (...args: any[]) => mockAuthStorageClear(...args),
@@ -203,9 +204,10 @@ describe('useAuthStore', () => {
   describe('login', () => {
     const successPayload = {
       code: 200,
+      // 真实后端信封：refresh_token 在顶层，data 内只有 access_token/user
+      refresh_token: 'ref456',
       data: {
         access_token: 'tok123',
-        refresh_token: 'ref456',
         token_type: 'bearer',
         user: { id: 1, username: 'alice' },
       },
@@ -433,8 +435,32 @@ describe('useAuthStore', () => {
     })
   })
 
-  it('getAuthData 无认证数据时返回 token 空字符串 + user null', () => {
+  it('getAuthData 无认证数据时返回 null', () => {
     const store = useAuthStore()
-    expect(store.getAuthData()).toEqual({ token: '', user: null, refreshToken: undefined })
+    expect(store.getAuthData()).toBeNull()
+  })
+})
+
+
+describe('login — refresh_token 缺省分支', () => {
+  it('响应无 refresh_token 时 refreshToken 置空字符串', async () => {
+    mockApiRequest.mockResolvedValueOnce({
+      code: 200,
+      data: {
+        access_token: 'tok-no-rt',
+        token_type: 'bearer',
+        user: { id: 2, username: 'bob' },
+      },
+    })
+    const store = useAuthStore()
+    const result = await store.login('bob', 'pwd')
+    expect(result.status).toBe('success')
+    expect(store.token).toBe('tok-no-rt')
+    // persistAuth(rt=undefined) → 内部 refreshToken 置空，getAuthData 暴露为 undefined
+    expect(store.getAuthData()).toEqual({
+      token: 'tok-no-rt',
+      user: { id: 2, username: 'bob' },
+      refreshToken: undefined,
+    })
   })
 })

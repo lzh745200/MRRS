@@ -126,6 +126,26 @@ describe('挂载与统计', () => {
     expect(vm.loading).toBe(false)
   })
 
+  it('loadData：dateRange 长度为 2 → 携带 date_from/date_to', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.filters.dateRange = ['2024-01-01', '2024-06-30']
+    await vm.loadData()
+    expect(mockGetMyTasks).toHaveBeenCalledWith({
+      date_from: '2024-01-01',
+      date_to: '2024-06-30',
+      skip: 0,
+      limit: 500,
+    })
+
+    // 长度非 2 → 不携带日期参数
+    mockGetMyTasks.mockClear()
+    vm.filters.dateRange = ['2024-01-01']
+    await vm.loadData()
+    expect(mockGetMyTasks).toHaveBeenCalledWith({ skip: 0, limit: 500 })
+  })
+
   it('resetFilters 清空并重载；「查询」「重置」按钮', async () => {
     const wrapper = mountComp()
     await flushPromises()

@@ -893,3 +893,157 @@ class TestGetTaskDiff:
             assert result["task_id"] == 5
             assert result["entity_type"] == "fund"
             assert result["entity_id"] == 10
+
+
+# ══════════════════════════════════════════════════════════════
+# 单机模式：未分配审批人任务处理（2026-08-14 修复）
+# ══════════════════════════════════════════════════════════════
+
+
+class TestUnassignedTaskActions:
+    def test_approve_unassigned_allowed(self, svc, mock_db):
+        mock_node = MagicMock()
+        mock_node.level = 1
+        mock_node.approver_id = None
+        mock_wf = MagicMock()
+        mock_wf.nodes = [mock_node]
+
+        mock_task = MagicMock()
+        mock_task.id = 1
+        mock_task.status = ApprovalStatus.PENDING.value
+        mock_task.current_level = 1
+        mock_task.current_approver_id = None
+        mock_task.workflow = mock_wf
+        mock_db.add = MagicMock()
+        mock_db.commit = MagicMock()
+        mock_db.refresh = MagicMock()
+
+        with patch.object(svc, "get_task", return_value=mock_task):
+            result = svc.approve_task(1, 10)  # 非审批人、非 standalone
+            assert result is not None
+            assert result.status == ApprovalStatus.APPROVED.value
+
+    def test_reject_unassigned_allowed(self, svc, mock_db):
+        mock_task = MagicMock()
+        mock_task.id = 1
+        mock_task.status = ApprovalStatus.PENDING.value
+        mock_task.current_level = 1
+        mock_task.current_approver_id = None
+        mock_db.add = MagicMock()
+        mock_db.commit = MagicMock()
+        mock_db.refresh = MagicMock()
+
+        with patch.object(svc, "get_task", return_value=mock_task):
+            result = svc.reject_task(1, 10, opinion="驳回")
+            assert result is not None
+            assert result.status == ApprovalStatus.REJECTED.value
+
+    def test_transfer_unassigned_allowed(self, svc, mock_db):
+        mock_task = MagicMock()
+        mock_task.id = 1
+        mock_task.status = ApprovalStatus.PENDING.value
+        mock_task.current_level = 1
+        mock_task.current_approver_id = None
+        mock_db.add = MagicMock()
+        mock_db.commit = MagicMock()
+        mock_db.refresh = MagicMock()
+
+        with patch.object(svc, "get_task", return_value=mock_task):
+            result = svc.transfer_task(1, 10, 20, reason="代转")
+            assert result is not None
+            assert result.current_approver_id == 20
+
+    def test_transfer_standalone_admin_override(self, svc, mock_db):
+        mock_task = MagicMock()
+        mock_task.id = 1
+        mock_task.status = ApprovalStatus.PENDING.value
+        mock_task.current_level = 1
+        mock_task.current_approver_id = 99
+        mock_db.add = MagicMock()
+        mock_db.commit = MagicMock()
+        mock_db.refresh = MagicMock()
+
+        with patch.object(svc, "get_task", return_value=mock_task):
+            result = svc.transfer_task(1, 10, 20, reason="管理员代转", standalone=True)
+            assert result is not None
+            assert result.current_approver_id == 20
+
+
+class TestResubmitRecord:
+    def test_resubmit_adds_resubmit_record(self, svc, mock_db):
+        nodes = [MagicMock(level=1, approver_id=50)]
+        mock_wf = MagicMock()
+        mock_wf.nodes = nodes
+
+        mock_task = MagicMock()
+        mock_task.id = 3
+        mock_task.status = ApprovalStatus.REJECTED.value
+        mock_task.submitter_id = 100
+        mock_task.workflow = mock_wf
+        mock_db.add = MagicMock()
+        mock_db.commit = MagicMock()
+        mock_db.refresh = MagicMock()
+
+        with patch.object(svc, "get_task", return_value=mock_task):
+            result = svc.resubmit_approval(3, 100)
+            assert result is not None
+            # 记录「重新提交」动作，使审批意见不再显示旧驳回原因
+            records = [call.args[0] for call in mock_db.add.call_args_list]
+            assert len(records) == 1
+            assert records[0].action == "resubmit"
+            assert records[0].opinion is None
+
+
+class TestDefaultWorkflowUnassigned:
+    def test_default_workflow_node_has_no_approver(self, svc, mock_db):
+        make_mock_query(mock_db, [])
+        mock_db.add = MagicMock()
+        mock_db.flush = MagicMock()
+        mock_db.commit = MagicMock()
+        mock_db.refresh = MagicMock()
+
+        result = svc.ensure_default_workflow("fund", user_id=42)
+
+        assert result is not None
+        # 默认节点不指定审批人：单机模式下任何登录用户均可审批
+        nodes = [call.args[0] for call in mock_db.add.call_args_list]
+        node = [n for n in nodes if hasattr(n, "approver_id") and n.approver_type == "user"]
+        assert len(node) == 1
+        assert node[0].approver_id is None
+
+
+class TestResolveRoleApprover:
+    def test_admin_role_resolves_to_admin_user(self, svc):
+        from app.services.approval_workflow_service import ApprovalWorkflowService
+
+        user = MagicMock()
+        user.id = 7
+        session = MagicMock()
+        session.query.return_value.filter.return_value.first.return_value = user
+        session.close = MagicMock()
+        with patch("app.core.database.SessionLocal", return_value=session):
+            result = ApprovalWorkflowService._resolve_role_approver_id("admin")
+        assert result == 7
+
+    def test_no_admin_user_returns_none(self, svc):
+        from app.services.approval_workflow_service import ApprovalWorkflowService
+
+        session = MagicMock()
+        session.query.return_value.filter.return_value.first.return_value = None
+        session.close = MagicMock()
+        with patch("app.core.database.SessionLocal", return_value=session):
+            assert ApprovalWorkflowService._resolve_role_approver_id("admin") is None
+
+    def test_non_admin_role_returns_none(self, svc):
+        from app.services.approval_workflow_service import ApprovalWorkflowService
+
+        session = MagicMock()
+        session.close = MagicMock()
+        with patch("app.core.database.SessionLocal", return_value=session):
+            assert ApprovalWorkflowService._resolve_role_approver_id("user") is None
+
+    def test_session_error_returns_none(self, svc):
+        from app.services.approval_workflow_service import ApprovalWorkflowService
+
+        with patch("app.core.database.SessionLocal", side_effect=RuntimeError("boom")):
+            assert ApprovalWorkflowService._resolve_role_approver_id("admin") is None

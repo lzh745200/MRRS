@@ -231,6 +231,24 @@ describe('CheckinWorkbench.vue（驻村工作台）', () => {
     w.unmount()
   })
 
+  it('打卡失败：axios 形态 e.response.data.detail（重复 → info；其他 → error）', async () => {
+    mocks.post.mockRejectedValue({ response: { data: { detail: '今天已完成驻村打卡' } } })
+    const w = mountComp()
+    await flushPromises()
+    const vm = w.vm as any
+    vm.location = '己村'
+    await vm.doCheckin()
+    expect(mocks.message.info).toHaveBeenCalledWith('今天已完成驻村打卡')
+    expect(vm.checkedToday).toBe(true)
+
+    mocks.post.mockRejectedValue({ response: { data: { detail: '网络异常' } } })
+    vm.checkedToday = false
+    vm.location = '庚村'
+    await vm.doCheckin()
+    expect(mocks.message.error).toHaveBeenCalledWith('网络异常')
+    w.unmount()
+  })
+
   it('loadSummary 在月份为空时直接返回', async () => {
     const w = mountComp()
     await flushPromises()

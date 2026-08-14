@@ -155,7 +155,10 @@ async def create_rural_work(
 ):
     """创建乡村工作"""
     service = RuralWorkService(db)
-    work = service.create_rural_work(data, current_user.id)
+    work = service.create_rural_work(
+        data, current_user.id,
+        organization_id=getattr(current_user, "organization_id", None),
+    )
     # 数据变更自动创建审批任务（Requirement 3.2）：乡村工作新增进入待审批板块
     work_id = work.get("id")
     approval_task_id = None
@@ -252,4 +255,17 @@ async def batch_delete_rural_works(
     except Exception:
         logger.debug("记录工作日志失败")
 
-    return ResponseModel(code=200, data={"deleted": deleted}, message=f"成功删除{deleted}条记录")
+    # 数据变更自动创建审批任务：批量删除进入待审批板块（审计留痕）
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="rural_work",
+        entity_id=0,
+        submitter_id=current_user.id,
+        title=f"乡村工作批量删除：{deleted} 条",
+        change_data={"deleted": True, "deleted_count": deleted, "ids": ids},
+    )
+
+    return ResponseModel(
+        code=200, data={"deleted": deleted, "approval_task_id": approval_task_id},
+        message=f"成功删除{deleted}条记录",
+    )

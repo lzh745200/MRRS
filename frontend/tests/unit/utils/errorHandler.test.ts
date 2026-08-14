@@ -483,3 +483,88 @@ describe('utils/errorHandler', () => {
     })
   })
 })
+
+
+describe('setupGlobalErrorHandler — unhandledrejection 兜底与去重', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function captureRejectionHandler(): any {
+    let captured: any = null
+    const spy = vi
+      .spyOn(window, 'addEventListener')
+      .mockImplementation((type: any, fn: any) => {
+        if (type === 'unhandledrejection') captured = fn
+      })
+    setupGlobalErrorHandler()
+    spy.mockRestore()
+    return captured
+  }
+
+  it('__silent / __CANCEL__ / ERR_CANCELED → 仅 preventDefault 不提示', () => {
+    const handler = captureRejectionHandler()
+    for (const reason of [{ __silent: true }, { __CANCEL__: true }, { code: 'ERR_CANCELED' }]) {
+      const preventDefault = vi.fn()
+      handler({ reason, preventDefault })
+      expect(preventDefault).toHaveBeenCalled()
+    }
+    expect(elMessageMock).not.toHaveBeenCalled()
+  })
+
+  it('userMessage 存在 → 单条兜底提示；同类消息 2s 窗口内去重', () => {
+    const handler = captureRejectionHandler()
+    const evt = () => ({ reason: { userMessage: '权限不足-dedupe' }, preventDefault: vi.fn() })
+    handler(evt())
+    handler(evt())
+    expect(elMessageMock).toHaveBeenCalledTimes(1)
+    expect(elMessageMock).toHaveBeenCalledWith({
+      message: '权限不足-dedupe',
+      type: 'error',
+      grouping: true,
+    })
+    // 不同消息不去重
+    handler({ reason: { userMessage: '网络超时-diff' }, preventDefault: vi.fn() })
+    expect(elMessageMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('无 userMessage 的 HTTP/网络错误 → 通用提示', () => {
+    const handler = captureRejectionHandler()
+    for (const reason of [
+      { response: { status: 500 } },
+      { request: {} },
+      { code: 'ERR_NETWORK' },
+      { code: 'ECONNABORTED' },
+    ]) {
+      handler({ reason, preventDefault: vi.fn() })
+    }
+    // 4 次均为同一通用文案，但去重窗口内只提示 1 次
+    expect(elMessageMock).toHaveBeenCalledWith({
+      message: '请求失败，请稍后重试',
+      type: 'error',
+      grouping: true,
+    })
+  })
+
+  it('ChunkLoadError 与 401 → 仅记录日志不提示', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const handler = captureRejectionHandler()
+    handler({
+      reason: { message: 'Failed to fetch dynamically imported module' },
+      preventDefault: vi.fn(),
+    })
+    handler({ reason: { response: { status: 401 } }, preventDefault: vi.fn() })
+    expect(warnSpy).toHaveBeenCalledTimes(2)
+    expect(elMessageMock).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
+
+  it('其他未识别 rejection → logger.error 记录', () => {
+    const handler = captureRejectionHandler()
+    const reason = new Error('boom-unclassified')
+    const preventDefault = vi.fn()
+    handler({ reason, preventDefault })
+    expect(loggerMock.error).toHaveBeenCalledWith('[Unhandled Promise Rejection]', reason)
+    expect(preventDefault).toHaveBeenCalled()
+  })
+})

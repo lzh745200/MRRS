@@ -109,14 +109,16 @@ class TestEndpoints:
         svc.batch_delete.return_value = 2
         with patch("app.services.work_log_service.write_work_log") as m_log:
             result = await rw.batch_delete_rural_works({"ids": [1, 2]}, MagicMock(), _user())
-        assert result.data == {"deleted": 2}
+        # 批量删除同时生成审批留痕任务（approval_task_id 字段）
+        assert result.data["deleted"] == 2
+        assert "approval_task_id" in result.data
         m_log.assert_called_once()
 
     async def test_batch_delete_worklog_exception_degrades(self, svc):
         svc.batch_delete.return_value = 1
         with patch("app.services.work_log_service.write_work_log", side_effect=RuntimeError("boom")):
             result = await rw.batch_delete_rural_works({"ids": [1]}, MagicMock(), _user())
-        assert result.data == {"deleted": 1}
+        assert result.data["deleted"] == 1
 
     async def test_batch_delete_non_dict_payload(self, svc):
         result = await rw.batch_delete_rural_works([], MagicMock(), _user())

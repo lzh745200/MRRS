@@ -353,7 +353,8 @@ async function fetchData() {
         is_active: true,
       },
     })
-    const resData = response.data
+    // 防御：apiRequest 已解包；信封保留 data 键，裸数据直接使用
+    const resData = (response as any)?.data ?? response
     tableData.value =
       resData?.items || resData?.data?.items || (Array.isArray(resData) ? resData : [])
     total.value = resData?.total || resData?.data?.total || tableData.value.length

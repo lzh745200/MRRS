@@ -82,10 +82,10 @@ docker compose -f docker-compose.yml -f docker/docker-compose.e2e.yml --profile 
 - ✅ 修复 `test_comprehensive_coverage.py` 中 `SCHEMA_FILES` 列表引用不存在的 schema 模块（`rbac`/`approval`/`audit`/`effectiveness`）→ 更新为实际存在的模块
 - ✅ 修复前端 `smoke.test.ts` 中 Vite 动态导入警告（添加 `.ts` 文件扩展名 + `@vite-ignore` 注释）
 
-**已知预存测试错误**（非本次修复引入）：
-- `test_import_export_history_service_full` + `test_token_blacklist_service_full`（16 errors）
-- `test_chart.py` 导入错误（matplotlib 未安装）
-- `test_batch_operations.py` "Unknown table: projects"（batch_service.py 表查找问题）
+**历史上的已知预存测试错误已全部修复**（2026-08-14 复核，全部通过）：
+- ✅ `test_import_export_history_service_full` + `test_token_blacklist_service_full`（原 16 errors）→ 已修复，86 项相关测试全部通过
+- ✅ `test_chart.py` 导入错误（matplotlib 未安装）→ 已解决
+- ✅ `test_batch_operations.py` "Unknown table: projects" → 已修复
 
 ### 构建
 

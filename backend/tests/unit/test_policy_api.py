@@ -206,14 +206,15 @@ class TestPolicyAPI:
         mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [sample_category]
         resp = client.get("/api/v1/policies/categories/tree")
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
+        # 统一 envelope：{code:200, data:[...]}
+        assert len(resp.json()["data"]) == 1
 
     def test_get_category_tree_empty(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
         mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
         resp = client.get("/api/v1/policies/categories/tree")
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["data"] == []
 
     def test_create_category(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
@@ -386,13 +387,14 @@ class TestPolicyAPI:
         _setup_client(client, mock_db, admin_user)
         resp = client.get("/api/v1/policies/options/levels")
         assert resp.status_code == 200
-        assert len(resp.json()) == 5
+        # 统一 envelope：{code:200, data:[...]}
+        assert len(resp.json()["data"]) == 5
 
     def test_get_status_options(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
         resp = client.get("/api/v1/policies/options/statuses")
         assert resp.status_code == 200
-        assert resp.json()[0]["value"] == "active"
+        assert resp.json()["data"][0]["value"] == "active"
 
     def test_upload_policy_file(self, client, mock_db, admin_user, sample_policy):
         _setup_client(client, mock_db, admin_user)
@@ -751,14 +753,15 @@ class TestPolicyAPI:
         mock_db.query.side_effect = side_effect
         resp = client.get("/api/v1/policies/user/1/favorites")
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
+        # 统一 envelope：{code:200, data:[...]}
+        assert len(resp.json()["data"]) == 1
 
     def test_get_user_favorites_empty(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
         mock_db.query.return_value.all.return_value = []
         resp = client.get("/api/v1/policies/user/1/favorites")
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["data"] == []
 
     def test_get_related_policies(self, client, mock_db, admin_user, sample_policy):
         _setup_client(client, mock_db, admin_user)
@@ -774,7 +777,8 @@ class TestPolicyAPI:
         mock_db.query.side_effect = side_effect
         resp = client.get("/api/v1/policies/1/related")
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
+        # 统一 envelope：{code:200, data:[...]}
+        assert len(resp.json()["data"]) == 1
 
     def test_get_related_policies_not_found(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)

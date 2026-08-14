@@ -15,7 +15,6 @@ const {
   logError,
   fundsState,
   apiMultiDimension,
-  apiStatsByType,
   apiYearlyComparison,
   exportCsvMock,
   refreshMock,
@@ -25,7 +24,6 @@ const {
     logError: vi.fn(),
     fundsState: { totalFunds: 1000, usedFunds: 600, fetchFunds: vi.fn() },
     apiMultiDimension: vi.fn(),
-    apiStatsByType: vi.fn(),
     apiYearlyComparison: vi.fn(),
     exportCsvMock: vi.fn(),
     refreshMock: vi.fn(),
@@ -49,7 +47,6 @@ vi.mock('@/api/funds', () => ({
 }))
 
 vi.mock('@/api/fundStatistics', () => ({
-  getFundStatisticsByType: apiStatsByType,
   getYearlyFundComparison: apiYearlyComparison,
 }))
 
@@ -77,13 +74,33 @@ vi.mock('@/components/funds/YearlyComparisonChart.vue', () => ({
 import Analysis from '@/views/funds/Analysis.vue'
 
 const dimRows = [
-  { label: '2023年', count: 5, total_amount: 1234.5, total_allocated: 1000, total_used: 800, utilization_rate: 95 },
-  { label: '2024年', count: 2, total_amount: 600, total_allocated: 500, total_used: 300, utilization_rate: 60 },
+  {
+    label: '2023年',
+    count: 5,
+    total_amount: 1234.5,
+    total_allocated: 1000,
+    total_used: 800,
+    utilization_rate: 95,
+  },
+  {
+    label: '2024年',
+    count: 2,
+    total_amount: 600,
+    total_allocated: 500,
+    total_used: 300,
+    utilization_rate: 60,
+  },
 ]
 
 const trendRows = [
   { year: 2023, total_actual: 100, utilization_rate: 80 },
-  { year: 2024, total_actual: null, total_military: 30, total_local: 20, utilization_rate: undefined },
+  {
+    year: 2024,
+    total_actual: null,
+    total_military: 30,
+    total_local: 20,
+    utilization_rate: undefined,
+  },
 ]
 
 function mountComp() {
@@ -104,9 +121,29 @@ function mountComp() {
             '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /><slot :row="rowC" /></div>',
           data() {
             return {
-              rowA: { label: '2023年', count: 5, total_amount: 1234.5, total_allocated: 1000.25, total_used: 800.5, utilization_rate: 95 },
-              rowB: { label: '2024年', count: 2, total_allocated: 500, total_used: 100, utilization_rate: 65 },
-              rowC: { label: '2025年', count: 1, total_amount: 200, total_allocated: 150, total_used: 50, utilization_rate: 40 },
+              rowA: {
+                label: '2023年',
+                count: 5,
+                total_amount: 1234.5,
+                total_allocated: 1000.25,
+                total_used: 800.5,
+                utilization_rate: 95,
+              },
+              rowB: {
+                label: '2024年',
+                count: 2,
+                total_allocated: 500,
+                total_used: 100,
+                utilization_rate: 65,
+              },
+              rowC: {
+                label: '2025年',
+                count: 1,
+                total_amount: 200,
+                total_allocated: 150,
+                total_used: 50,
+                utilization_rate: 40,
+              },
             }
           },
         },
@@ -120,7 +157,6 @@ beforeEach(() => {
   fundsState.totalFunds = 1000
   fundsState.usedFunds = 600
   apiMultiDimension.mockResolvedValue({ success: true, data: [...dimRows] })
-  apiStatsByType.mockResolvedValue({ success: true, data: { project: { total: 100 } } })
   apiYearlyComparison.mockResolvedValue({ success: true, data: [...trendRows] })
 })
 
@@ -129,7 +165,7 @@ afterEach(() => {
 })
 
 describe('挂载与初始加载', () => {
-  it('onMounted：拉取经费列表与三路统计，成功分支写入数据', async () => {
+  it('onMounted：拉取经费列表与两路统计，成功分支写入数据', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -143,11 +179,7 @@ describe('挂载与初始加载', () => {
       })
     )
     expect(vm.dimensionData).toHaveLength(2)
-    expect(vm.fundStatsByType).toEqual({ project: { total: 100 } })
     expect(vm.yearlyTrend).toHaveLength(2)
-    expect(apiStatsByType).toHaveBeenCalledWith(
-      expect.objectContaining({ department: undefined })
-    )
   })
 
   it('summary：正常使用率、total 为 0、非数字兜底三分支', async () => {
@@ -271,23 +303,6 @@ describe('数据加载分支', () => {
     expect(ElMessage.error).not.toHaveBeenCalled()
   })
 
-  it('loadFundStatsByType：success=false 不更新；department 非空透传；异常提示', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    vm.fundStatsByType = { keep: 1 }
-    apiStatsByType.mockResolvedValueOnce({ success: false })
-    await vm.loadFundStatsByType()
-    expect(vm.fundStatsByType).toEqual({ keep: 1 })
-    vm.filterForm.department = '某部'
-    await vm.loadFundStatsByType()
-    expect(apiStatsByType).toHaveBeenCalledWith(expect.objectContaining({ department: '某部' }))
-    apiStatsByType.mockRejectedValueOnce(new Error('net'))
-    await vm.loadFundStatsByType()
-    expect(logError).toHaveBeenCalled()
-    expect(ElMessage.error).not.toHaveBeenCalled()
-  })
-
   it('loadYearlyTrend：data 缺省置空；res 为空不变；异常提示', async () => {
     const wrapper = mountComp()
     await flushPromises()
@@ -337,18 +352,16 @@ describe('维度切换与查询', () => {
     expect(apiMultiDimension).toHaveBeenCalled()
   })
 
-  it('handleSearch：三路重载 + yearlyChartRef 有/无两侧；查询按钮点击', async () => {
+  it('handleSearch：两路重载 + yearlyChartRef 有/无两侧；查询按钮点击', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     apiMultiDimension.mockClear()
-    apiStatsByType.mockClear()
     apiYearlyComparison.mockClear()
     const btn = wrapper.findAll('el-button-stub').find((b) => b.text().includes('查询'))
     await btn!.trigger('click')
     await flushPromises()
     expect(apiMultiDimension).toHaveBeenCalled()
-    expect(apiStatsByType).toHaveBeenCalled()
     expect(apiYearlyComparison).toHaveBeenCalled()
     expect(refreshMock).toHaveBeenCalled()
     // ref 为空 → 可选链跳过
@@ -442,5 +455,91 @@ describe('模板渲染', () => {
     expect(wrapper.text()).toContain('60%')
     expect(vm.yearOptions[0]).toBe(2000)
     expect(wrapper.find('.yearly-chart-stub').exists()).toBe(true)
+  })
+})
+
+describe('内联错误态与防御分支收尾', () => {
+  it('统计明细：loadError.dimension 且 !hasDimensionData → el-empty 描述 + 重新加载按钮', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.dimensionData = []
+    vm.loadError.dimension = '维度加载失败'
+    await nextTick()
+    // v-else-if 区域渲染 el-empty（description 透传）
+    const empties = wrapper.findAll('el-empty-stub')
+    expect(empties.some((e) => e.attributes('description') === '维度加载失败')).toBe(true)
+    // header 的「重新加载」按钮（v-if 真侧）→ 点击触发 loadDimensionStats
+    const reloadBtn = wrapper
+      .findAll('el-button-stub')
+      .find((b) => b.text().includes('重新加载'))
+    expect(reloadBtn, '重新加载').toBeTruthy()
+    apiMultiDimension.mockClear()
+    await reloadBtn!.trigger('click')
+    await flushPromises()
+    expect(apiMultiDimension).toHaveBeenCalled()
+  })
+
+  it('loadDimensionStats：success 为假 → message / 兜底文案 / 已有数据不覆盖', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 无数据 + message → 用后端 message
+    vm.dimensionData = []
+    apiMultiDimension.mockResolvedValueOnce({ success: false, message: '维度统计失败' })
+    await vm.loadDimensionStats()
+    expect(vm.loadError.dimension).toBe('维度统计失败')
+    // dimensionData 为 null（?? [] 侧）+ 无 message → 兜底文案
+    vm.dimensionData = null
+    apiMultiDimension.mockResolvedValueOnce({ success: false })
+    await vm.loadDimensionStats()
+    expect(vm.loadError.dimension).toBe('暂无统计数据')
+    // 已有数据 + success false → else-if 假侧，不设置错误
+    vm.loadError.dimension = ''
+    vm.dimensionData = [...dimRows]
+    apiMultiDimension.mockResolvedValueOnce({ success: false })
+    await vm.loadDimensionStats()
+    expect(vm.loadError.dimension).toBe('')
+    expect(vm.dimensionData).toEqual(dimRows)
+  })
+
+  it('loadYearlyTrend：success 为假 → message / 兜底文案 / 已有数据不覆盖', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.yearlyTrend = []
+    apiYearlyComparison.mockResolvedValueOnce({ success: false, message: '趋势加载失败' })
+    await vm.loadYearlyTrend()
+    expect(vm.loadError.trend).toBe('趋势加载失败')
+    // yearlyTrend 为 null（?? [] 侧）+ 无 message → 兜底文案
+    vm.yearlyTrend = null
+    apiYearlyComparison.mockResolvedValueOnce({ success: false })
+    await vm.loadYearlyTrend()
+    expect(vm.loadError.trend).toBe('暂无年度趋势数据')
+    // 已有数据 → else-if 假侧
+    vm.loadError.trend = ''
+    vm.yearlyTrend = [{ year: 2024 }]
+    apiYearlyComparison.mockResolvedValueOnce({ success: false })
+    await vm.loadYearlyTrend()
+    expect(vm.loadError.trend).toBe('')
+  })
+
+  it('yearlyTrend 为 null → 两个趋势 computed 的 ?? [] 侧 → null', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.yearlyTrend = null
+    expect(vm.yearlyTrendAreaOption).toBeNull()
+    expect(vm.utilizationTrendOption).toBeNull()
+  })
+
+  it('handleExportStats：dimensionData 为 null → ?? [] → 无数据警告', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.dimensionData = null
+    vm.handleExportStats()
+    expect(ElMessage.warning).toHaveBeenCalledWith('没有可导出的数据')
+    expect(exportCsvMock).not.toHaveBeenCalled()
   })
 })

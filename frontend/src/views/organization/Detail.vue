@@ -266,8 +266,9 @@ const loadData = async () => {
 
   loading.value = true
   try {
-    const res = await getOrganizationDetail(id as number)
-    const data = res.data?.data || res.data
+    const res: any = await getOrganizationDetail(id as number)
+    // 防御：兼容双层信封 data.data 与单层 data 两种形态
+    const data = res?.data?.data ?? res?.data ?? res
     Object.assign(detail, data)
   } catch (error) {
     logger.error('加载组织信息失败:', error)

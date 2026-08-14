@@ -236,12 +236,7 @@ import YearlyComparisonChart from '@/components/funds/YearlyComparisonChart.vue'
 import type { EChartsOption } from 'echarts'
 import { useFundsStore } from '@/stores/funds'
 import { fundApi } from '@/api/funds'
-import {
-  getFundStatisticsByType,
-  getYearlyFundComparison,
-  type FundStatistics,
-  type YearlyFundSummary,
-} from '@/api/fundStatistics'
+import { getYearlyFundComparison, type YearlyFundSummary } from '@/api/fundStatistics'
 import { exportUtil } from '@/utils/exportUtil'
 
 const fundsStore = useFundsStore()
@@ -261,7 +256,6 @@ const filterForm = reactive({
 
 // 多维度统计数据
 const dimensionData = ref<any[]>([])
-const fundStatsByType = ref<Record<string, FundStatistics>>({})
 // 年度趋势数据
 const yearlyTrend = ref<YearlyFundSummary[]>([])
 
@@ -452,22 +446,6 @@ const loadDimensionStats = async () => {
   }
 }
 
-// 加载经费分类统计（辅助数据，失败静默——仅记录日志）
-const loadFundStatsByType = async () => {
-  try {
-    const res = await getFundStatisticsByType({
-      year_start: filterForm.yearStart,
-      year_end: filterForm.yearEnd,
-      department: filterForm.department || undefined,
-    })
-    if (res.success) {
-      fundStatsByType.value = res.data
-    }
-  } catch (error) {
-    logger.error('加载经费分类统计失败:', error)
-  }
-}
-
 // 加载年度趋势（内联错误态 + 可重试，不再弹全局提示）
 const loadYearlyTrend = async () => {
   loading.trend = true
@@ -499,7 +477,6 @@ function handleDimensionChange() {
 
 const handleSearch = () => {
   loadDimensionStats()
-  loadFundStatsByType()
   loadYearlyTrend()
   yearlyChartRef.value?.refresh()
 }
@@ -527,7 +504,6 @@ function handleExportStats() {
 onMounted(() => {
   fundsStore.fetchFunds()
   loadDimensionStats()
-  loadFundStatsByType()
   loadYearlyTrend()
 })
 </script>

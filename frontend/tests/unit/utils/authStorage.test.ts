@@ -204,12 +204,12 @@ describe('utils/authStorage', () => {
   })
 
   describe('记住登录（自动登录持久化）', () => {
-    it('persistForAutoLogin 写入 localStorage（仅 token+user，不持久化 refresh token）', () => {
+    it('persistForAutoLogin 写入 localStorage（token+user+refresh token，供免登录静默续期）', () => {
       AuthStorage.persistForAutoLogin({ token: 'persist-t', user: USER, refreshToken: 'persist-r' })
       expect(localStorage.getItem('auth_persist_token')).toBe('persist-t')
       expect(localStorage.getItem('auth_persist_user')).toContain('admin')
-      // 安全设计：refresh token 属长期凭据，不持久化到 localStorage（防 XSS 窃取）
-      expect(localStorage.getItem('auth_persist_refresh')).toBeNull()
+      // 2026-08-14：持久化 refresh token（30 天轮换续期），修复"记住登录"隔天失效问题
+      expect(localStorage.getItem('auth_persist_refresh')).toBe('persist-r')
     })
 
     it('persistForAutoLogin 无 refreshToken 时不写入', () => {
@@ -217,9 +217,14 @@ describe('utils/authStorage', () => {
       expect(localStorage.getItem('auth_persist_refresh')).toBeNull()
     })
 
+    it('getRefreshToken 回退持久刷新令牌', () => {
+      AuthStorage.persistForAutoLogin({ token: 't3', user: USER, refreshToken: 'persist-rt' })
+      expect(AuthStorage.getRefreshToken()).toBe('persist-rt')
+    })
+
     it('hasPersistedAuth 判断', () => {
       expect(AuthStorage.hasPersistedAuth()).toBe(false)
-      AuthStorage.persistForAutoLogin({ token: 't3', user: USER })
+      AuthStorage.persistForAutoLogin({ token: 't4', user: USER })
       expect(AuthStorage.hasPersistedAuth()).toBe(true)
     })
 
@@ -231,18 +236,19 @@ describe('utils/authStorage', () => {
     it('getUser 回退持久用户（含损坏 JSON 兜底）', () => {
       localStorage.setItem('auth_persist_user', '{bad json')
       expect(AuthStorage.getUser()).toBeNull()
-      AuthStorage.persistForAutoLogin({ token: 't4', user: USER })
+      AuthStorage.persistForAutoLogin({ token: 't5', user: USER })
       expect(AuthStorage.getUser()).toMatchObject({ username: 'admin' })
     })
 
     it('clearPersisted 清除持久数据', () => {
-      AuthStorage.persistForAutoLogin({ token: 't5', user: USER })
+      AuthStorage.persistForAutoLogin({ token: 't6', user: USER, refreshToken: 'rt' })
       AuthStorage.clearPersisted()
       expect(AuthStorage.hasPersistedAuth()).toBe(false)
+      expect(localStorage.getItem('auth_persist_refresh')).toBeNull()
     })
 
     it('clear 同时清除记住登录持久数据（退出登录彻底失效）', () => {
-      AuthStorage.persistForAutoLogin({ token: 't6', user: USER })
+      AuthStorage.persistForAutoLogin({ token: 't7', user: USER, refreshToken: 'rt' })
       AuthStorage.setToken('session-t')
       AuthStorage.clear()
       expect(AuthStorage.hasPersistedAuth()).toBe(false)

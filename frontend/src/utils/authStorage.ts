@@ -110,9 +110,14 @@ export class AuthStorage {
 
   /**
    * 获取刷新令牌
+   * 优先 sessionStorage；"记住登录"开启时回退到 localStorage 的持久刷新令牌，
+   * 使 access token 过期后仍可静默续期（自动登录）。
    */
   static getRefreshToken(): string | null {
-    return sessionStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+    return (
+      sessionStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) ||
+      localStorage.getItem(STORAGE_KEYS.PERSIST_REFRESH)
+    )
   }
 
   /**
@@ -143,15 +148,19 @@ export class AuthStorage {
   }
 
   /**
-   * 记住登录：将认证数据持久化到 localStorage（供"本机自动登录"使用）
+   * 记住登录：将认证数据持久化到 localStorage（供"本机自动登录"使用）。
    * 默认关闭——由登录页"记住登录"勾选显式开启。
-   * 安全设计：仅持久化 access token（8h 有效）与用户信息；refresh token 属长期凭据
-   * （30 天），裸存 localStorage 会被任意脚本读取（XSS 窃取面），故不持久化——
-   * 过期后需重新登录，换取更小的凭据暴露面。
+   *
+   * 同时持久化 refresh token（30 天有效，每次续期轮换）：access token 过期后
+   * 请求层会自动用持久刷新令牌静默续期，实现"下次开机免输密码"。
+   * 退出登录（logout → AuthStorage.clear）会彻底清除，不留残余凭据。
    */
   static persistForAutoLogin(data: AuthData): void {
     localStorage.setItem(STORAGE_KEYS.PERSIST_TOKEN, data.token)
     localStorage.setItem(STORAGE_KEYS.PERSIST_USER, JSON.stringify(data.user))
+    if (data.refreshToken) {
+      localStorage.setItem(STORAGE_KEYS.PERSIST_REFRESH, data.refreshToken)
+    }
   }
 
   /** 清除记住登录的持久数据 */

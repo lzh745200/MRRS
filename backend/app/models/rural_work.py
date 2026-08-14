@@ -59,6 +59,10 @@ class RuralWork(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True,
+        comment="所属组织ID（数据权限隔离；历史数据为空时按创建人过滤）",
+    )
 
     village = relationship("Village", backref="rural_works")
     creator = relationship("User", foreign_keys=[created_by], backref="created_rural_works")

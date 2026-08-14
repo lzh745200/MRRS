@@ -401,9 +401,11 @@ async function loadData() {
       // 后端 enforce_admin_include_deleted 依赖会兜底降级非管理员的请求
       include_deleted: showDeletedOnly.value ? true : undefined,
     } as any)
-    tableData.value = (response as any)?.data?.items || (response as any)?.items
+    // 防御：兼容信封（data.items）与裸分页（items）两种形态
+    tableData.value =
+      (response as any)?.data?.items ?? (response as any)?.items ?? []
     pagination.total =
-      (response as any)?.data?.total || (response as any)?.total || tableData.value.length
+      (response as any)?.data?.total ?? (response as any)?.total ?? tableData.value.length
   } catch (error) {
     tableData.value = []
     pagination.total = 0

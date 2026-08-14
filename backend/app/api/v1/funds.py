@@ -439,21 +439,6 @@ def list_funds(
     )
 
 
-@router.get("/export")
-def export_funds(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    limit: int = Query(5000, ge=1, le=50000, description="最大导出条数"),
-):
-    """导出经费数据（带分页上限，防止内存溢出；排除软删记录）"""
-    stmt = select(Fund).where(Fund.is_active == True).order_by(Fund.id.desc()).limit(limit)  # noqa: E712
-    stmt = apply_scope_filter(stmt, current_user, Fund, db=db)
-    funds = db.execute(stmt).scalars().all()
-    return success_response(
-        data={"items": [_fund_to_dict(f) for f in funds], "total_exported": len(funds), "limit": limit},
-    )
-
-
 @router.get("/{fund_id}")
 def get_fund(
     fund_id: int,

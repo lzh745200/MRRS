@@ -182,3 +182,13 @@ describe('router guards', () => {
     expect(next).toHaveBeenCalledWith()
   })
 })
+
+
+describe('router guards — 免登录直达', () => {
+  it('已登录（持久令牌）访问白名单路径 → 重定向工作台', async () => {
+    mockGetToken.mockReturnValue('persisted-tok')
+    const next = vi.fn()
+    await guard({ path: '/login', meta: {} }, { path: '/from' }, next)
+    expect(next).toHaveBeenCalledWith('/dashboard')
+  })
+})

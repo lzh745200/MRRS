@@ -111,7 +111,7 @@
 
             <label class="remember-me">
               <input v-model="rememberMe" type="checkbox" />
-              <span>记住登录（本机自动登录，下次开机免输密码）</span>
+              <span>记住登录</span>
             </label>
           </template>
         </form>
@@ -349,6 +349,7 @@ const handleLogin = async () => {
     try {
       const success = await authStore.verifyTwoFactorLogin(tempToken.value, totpCode.value)
       if (success) {
+        applyRememberLogin()
         navigateAfterLogin()
         return
       }
@@ -382,15 +383,7 @@ const handleLogin = async () => {
     }
 
     if (result.status === 'success') {
-      // 记住登录：持久化令牌供本机自动登录（默认关闭）
-      if (rememberMe.value) {
-        const authData = authStore.getAuthData?.()
-        if (authData) {
-          AuthStorage.persistForAutoLogin(authData)
-        }
-      } else {
-        AuthStorage.clearPersisted()
-      }
+      applyRememberLogin()
       navigateAfterLogin()
       return
     }
@@ -400,6 +393,21 @@ const handleLogin = async () => {
     errorMsg.value = '登录系统异常: ' + (err.message || '未知错误')
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * 记住登录：勾选时持久化认证数据（含刷新令牌，供本机自动登录/静默续期），
+ * 未勾选时清除历史持久数据。
+ */
+const applyRememberLogin = () => {
+  if (rememberMe.value) {
+    const authData = authStore.getAuthData?.()
+    if (authData) {
+      AuthStorage.persistForAutoLogin(authData)
+    }
+  } else {
+    AuthStorage.clearPersisted()
   }
 }
 

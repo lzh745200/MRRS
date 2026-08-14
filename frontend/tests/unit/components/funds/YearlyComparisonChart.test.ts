@@ -17,8 +17,10 @@ vi.mock('@/utils/echarts', () => ({
 }))
 
 const mockGet = vi.hoisted(() => vi.fn())
-vi.mock('@/api/request', () => ({ get: mockGet,
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+vi.mock('@/api/request', () => ({
+  get: mockGet,
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 const stubs = {
   'el-card': {
@@ -30,6 +32,15 @@ const stubs = {
     name: 'ElEmpty',
     props: ['description'],
     template: '<div class="el-empty" />',
+  },
+  'el-skeleton': {
+    name: 'ElSkeleton',
+    template: '<div class="el-skeleton" />',
+  },
+  // 覆盖全局 true-stub：转发 click 事件，使 ChartErrorState 的重试按钮可点击
+  'el-button': {
+    name: 'ElButton',
+    template: '<button class="el-button-stub" @click="$emit(\'click\')"><slot /></button>',
   },
 }
 
@@ -80,14 +91,26 @@ describe('funds/YearlyComparisonChart.vue', () => {
     expect(wrapper.find('.el-empty').exists()).toBe(true)
   })
 
-  it('handles API failure with empty chart', async () => {
+  it('handles API failure with inline error state and retry', async () => {
     mockGet.mockRejectedValue(new Error('network'))
     const wrapper = mount(YearlyComparisonChart, {
       props: { department: '' },
       global: { stubs },
     })
     await flushPromises()
-    expect(wrapper.find('.el-empty').exists()).toBe(true)
+    // 2026-08-14：失败不再静默空白 → 内联错误态 + 重试
+    expect(wrapper.find('.chart-error-state').exists()).toBe(true)
+    expect(wrapper.find('.el-empty').exists()).toBe(false)
+
+    // 点击重试 → 重新加载并恢复
+    mockGet.mockResolvedValue({ data: [{ year: 2024, total_actual: 10 }] })
+    const retryBtn = wrapper.find('.chart-error-state .el-button-stub')
+    expect(retryBtn.exists()).toBe(true)
+    await retryBtn.trigger('click')
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 450)) // ChartErrorState 复位延时
+    expect(wrapper.findComponent(BaseChart).exists()).toBe(true)
+    expect(wrapper.find('.chart-error-state').exists()).toBe(false)
   })
 
   it('falls back to [] when API returns null', async () => {
@@ -99,9 +122,12 @@ describe('funds/YearlyComparisonChart.vue', () => {
 
   it('only sends defined query params', async () => {
     mockGet.mockResolvedValue({ data: [] })
-    const wrapper = mount(YearlyComparisonChart, { global: { stubs } })
+    mount(YearlyComparisonChart, { global: { stubs } })
     await flushPromises()
-    expect(mockGet).toHaveBeenCalledWith('/funds/supported-village/statistics/yearly-comparison', {})
+    expect(mockGet).toHaveBeenCalledWith(
+      '/funds/supported-village/statistics/yearly-comparison',
+      {}
+    )
   })
 
   it('reloads when watched props change and exposes refresh', async () => {

@@ -125,12 +125,6 @@ export const fundApi = {
   },
 
   // ========== 统计 ==========
-  async statisticsOverview(year?: number) {
-    const response = year
-      ? await get(`${FUNDS_BASE}/statistics/overview`, { year })
-      : await get(`${FUNDS_BASE}/statistics/overview`)
-    return response.data
-  },
   async statisticsMultiDimension(params?: Record<string, string | number | boolean>) {
     // 注意：get() 已自动解包（返回 res.data）。此处必须原样返回，
     // 不能再次取 .data —— 否则会得到裸数组，调用方 .success 守卫永远为 false，

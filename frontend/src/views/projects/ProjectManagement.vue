@@ -245,8 +245,9 @@ const loadProjects = async () => {
       keyword: filterForm.search || undefined,
       status: filterForm.status || undefined,
     })
-    projects.value = response?.data?.items || []
-    pagination.total = response?.data?.total || 0
+    // 防御：兼容信封（data.items）与裸分页（items）两种形态
+    projects.value = (response as any)?.data?.items ?? (response as any)?.items ?? []
+    pagination.total = (response as any)?.data?.total ?? (response as any)?.total ?? 0
   } catch (error) {
     ElMessage.error('加载项目列表失败')
   } finally {

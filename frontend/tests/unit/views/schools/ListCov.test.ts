@@ -306,6 +306,19 @@ describe('挂载与初始化', () => {
     expect(wrapper.find('.el-table-stub').exists()).toBe(true)
   })
 
+  it('el-result：loadErrorMsg 为空 → sub-title 兜底「请稍后重试」', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.tableData = []
+    vm.loadError = true
+    vm.loadErrorMsg = ''
+    await nextTick()
+    const result = wrapper.find('.el-result-stub')
+    expect(result.exists()).toBe(true)
+    expect(result.attributes('sub-title')).toBe('请稍后重试')
+  })
+
   it('stats computed：服务端字段 ?? 回退与本地兜底全分支', async () => {
     const wrapper = mountComp()
     await flushPromises()

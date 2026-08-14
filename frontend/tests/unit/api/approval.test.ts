@@ -32,6 +32,9 @@ import {
   withdrawTask,
   getAllTasks,
   getPendingTasks,
+  getPendingTasksWithTotal,
+  getMyTasks,
+  getTasksHistory,
   batchApprove,
   getTaskDiff,
   getApprovalHistory,
@@ -334,5 +337,64 @@ describe('响应形态补充', () => {
     ;(mockGet as any).mockResolvedValue({})
     const r = await getApprovalHistory()
     expect(r).toEqual([])
+  })
+})
+
+
+describe('api/approval — 响应形态兼容分支', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('getWorkflows：{items} / {data} / null 三形态', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ items: [{ id: 1 }] })
+    expect(await getWorkflows()).toEqual([{ id: 1 }])
+    ;(mockGet as any).mockResolvedValueOnce({ data: [{ id: 2 }] })
+    expect(await getWorkflows()).toEqual([{ id: 2 }])
+    ;(mockGet as any).mockResolvedValueOnce(null)
+    expect(await getWorkflows()).toEqual([])
+  })
+
+  it('getPendingTasksWithTotal：数组 / items+total / data数组 / data.items / 空 全形态', async () => {
+    ;(mockGet as any).mockResolvedValueOnce([{ id: 1 }, { id: 2 }])
+    expect(await getPendingTasksWithTotal()).toEqual({ items: [{ id: 1 }, { id: 2 }], total: 2 })
+    ;(mockGet as any).mockResolvedValueOnce({ items: [{ id: 3 }], total: 9 })
+    expect(await getPendingTasksWithTotal()).toEqual({ items: [{ id: 3 }], total: 9 })
+    ;(mockGet as any).mockResolvedValueOnce({ data: [{ id: 4 }] })
+    expect(await getPendingTasksWithTotal()).toEqual({ items: [{ id: 4 }], total: 1 })
+    ;(mockGet as any).mockResolvedValueOnce({ data: { items: [{ id: 5 }] } })
+    expect(await getPendingTasksWithTotal()).toEqual({ items: [{ id: 5 }], total: 1 })
+    ;(mockGet as any).mockResolvedValueOnce(null)
+    expect(await getPendingTasksWithTotal()).toEqual({ items: [], total: 0 })
+  })
+
+  it('getMyTasks / getTasksHistory：items 与空兜底', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ items: [{ id: 7 }], total: 3 })
+    expect(await getMyTasks({ status: 'pending' })).toEqual({ items: [{ id: 7 }], total: 3 })
+    ;(mockGet as any).mockResolvedValueOnce(null)
+    expect(await getMyTasks()).toEqual({ items: [], total: 0 })
+    ;(mockGet as any).mockResolvedValueOnce({ data: [{ id: 8 }] })
+    expect(await getTasksHistory({ completed: true })).toEqual({ items: [{ id: 8 }], total: 1 })
+    ;(mockGet as any).mockResolvedValueOnce(undefined)
+    expect(await getTasksHistory()).toEqual({ items: [], total: 0 })
+  })
+
+  it('batchApprove：优先读 data 内层；success/failed 非数组与空响应兜底', async () => {
+    ;(mockPost as any).mockResolvedValueOnce({
+      success: true,
+      data: { success: [{ id: 1 }], failed: [{ id: 2, error: 'x' }] },
+    })
+    expect(await batchApprove([1, 2], '同意')).toEqual({
+      success: [{ id: 1 }],
+      failed: [{ id: 2, error: 'x' }],
+    })
+    // 无 data 时回退顶层
+    ;(mockPost as any).mockResolvedValueOnce({ success: [{ id: 3 }], failed: [] })
+    expect(await batchApprove([3])).toEqual({ success: [{ id: 3 }], failed: [] })
+    // 非数组与空响应
+    ;(mockPost as any).mockResolvedValueOnce({ data: { success: 'bad', failed: null } })
+    expect(await batchApprove([4])).toEqual({ success: [], failed: [] })
+    ;(mockPost as any).mockResolvedValueOnce(null)
+    expect(await batchApprove([5])).toEqual({ success: [], failed: [] })
   })
 })

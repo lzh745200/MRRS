@@ -508,10 +508,11 @@ async function fetchData() {
         support_status: filterForm.status || undefined,
       },
     })
-    const res = response
-    const inner = res.data || res
-    tableData.value = inner.items || (Array.isArray(inner) ? inner : [])
-    total.value = inner.total || tableData.value.length
+    const res: any = response
+    // 防御：信封保留 data 键，裸分页对象直接使用
+    const inner = res?.data ?? res
+    tableData.value = inner?.items ?? (Array.isArray(inner) ? inner : [])
+    total.value = inner?.total ?? tableData.value.length
   } catch (e) {
     logger.error('加载数据失败:', e)
     tableData.value = [] // 防御：确保表格数据始终为数组，避免 Element Plus TypeError: e is not iterable

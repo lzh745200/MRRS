@@ -279,7 +279,7 @@ async def get_organization_tree(
             org_map[org.id] = _org_to_tree_node(org, org_dict)
 
         tree = _build_org_tree(organizations, org_map)
-        return tree
+        return success_response(data=tree)
     except Exception as e:  # pragma: no cover
         logger.error(f"获取组织树失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"获取组织树失败: {str(e)}")

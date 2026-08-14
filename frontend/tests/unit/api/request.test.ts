@@ -32,6 +32,9 @@ const {
     setToken: vi.fn(),
     setRefreshToken: vi.fn(),
     setAuthData: vi.fn(),
+    getUser: vi.fn(() => null),
+    hasPersistedAuth: vi.fn(() => false),
+    persistForAutoLogin: vi.fn(),
     clear: vi.fn(() => {
       authState.token = ''
     }),
@@ -709,6 +712,8 @@ describe('api/request — 401 与 refresh 续期', () => {
     const p1 = handlers.responseR(errorA)
     const errorB = { response: { status: 401, data: {} }, config: makeConfig({ url: '/b' }) }
     const p2 = handlers.responseR(errorB)
+    // 拦截器在发起 refresh 前会先 await _ensureCsrfToken()，需冲刷微任务后断言
+    await new Promise((r) => setTimeout(r, 0))
     expect(mockAxiosPost).toHaveBeenCalledTimes(1)
     resolveRefresh({ data: { data: { access_token: 'T2' } } })
     await expect(p1).resolves.toBe('ok')
@@ -730,6 +735,8 @@ describe('api/request — 401 与 refresh 续期', () => {
     const p1 = handlers.responseR(errorA)
     const errorB = { response: { status: 401, data: {} }, config: makeConfig({ url: '/d' }) }
     const p2 = handlers.responseR(errorB)
+    // 拦截器在发起 refresh 前会先 await _ensureCsrfToken()，需冲刷微任务后断言
+    await new Promise((r) => setTimeout(r, 0))
     expect(mockAxiosPost).toHaveBeenCalledTimes(1)
     rejectRefresh(new Error('refresh boom'))
     await expect(p1).rejects.toThrow('refresh boom')

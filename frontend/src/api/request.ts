@@ -371,16 +371,24 @@ request.interceptors.response.use(
         originalRequest._retry = true
 
         try {
-          // 调用 refresh 端点（用裸 axios 避免触发自身拦截器）
+          // 调用 refresh 端点（用裸 axios 避免触发自身拦截器）。
+          // 注意：/auth/refresh 不在后端 CSRF 豁免列表，必须手动携带
+          // X-CSRF-Token 头，否则会 403 导致续期失败（修复 2026-08-14）。
+          const csrf = await _ensureCsrfToken()
+          const refreshHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+          if (csrf) {
+            refreshHeaders[_CSRF_HEADER_NAME] = csrf
+          }
           const refreshRes = await axios.post(
             (import.meta.env.VITE_API_BASE_URL || '/api/v1') + '/auth/refresh',
             { token: refreshToken },
-            { headers: { 'Content-Type': 'application/json' }, withCredentials: true }
+            { headers: refreshHeaders, withCredentials: true }
           )
 
           const refreshData = refreshRes.data
           const newAccessToken = refreshData?.data?.access_token
-          const newRefreshToken = refreshData?.refresh_token
+          // 后端信封 {code, data:{access_token, refresh_token}}；兼容裸返回
+          const newRefreshToken = refreshData?.data?.refresh_token || refreshData?.refresh_token
 
           if (!newAccessToken) {
             throw new Error('Refresh response missing access_token')
@@ -391,6 +399,17 @@ request.interceptors.response.use(
           AuthStorage.setToken(newAccessToken)
           if (newRefreshToken) {
             AuthStorage.setRefreshToken(newRefreshToken)
+          }
+          // 记住登录（自动登录）开启时：同步更新持久令牌，保持免登录长期有效
+          if (AuthStorage.hasPersistedAuth()) {
+            const persistedUser = AuthStorage.getUser()
+            if (persistedUser) {
+              AuthStorage.persistForAutoLogin({
+                token: newAccessToken,
+                user: persistedUser,
+                refreshToken: newRefreshToken,
+              })
+            }
           }
 
           // 通知所有排队请求使用新 token 重试

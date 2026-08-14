@@ -76,11 +76,6 @@ class TestFundsAPI:
         response = client.get("/api/v1/funds/budget")
         assert response.status_code in [200, 401, 403]
 
-    def test_funds_export(self, client):
-        """测试导出资金"""
-        response = client.get("/api/v1/funds/export")
-        assert response.status_code in [200, 401, 403]
-
     def test_funds_import(self, client):
         """测试导入资金"""
         response = client.post("/api/v1/funds/import", json={})

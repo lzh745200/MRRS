@@ -1882,8 +1882,19 @@ async def import_projects(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"数据提交失败: {e}")
 
+    # 数据变更自动创建审批任务：批量导入进入待审批板块（审计留痕，entity_id=0 表示批量操作）
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="project",
+        entity_id=0,
+        submitter_id=getattr(current_user, "id", None),
+        title=f"项目批量导入：成功 {created} 条，失败 {failed} 条",
+        change_data={"imported": created, "failed": failed, "errors": errors[:20]},
+    )
+
     return success_response(
-        data={"imported": created, "failed": failed, "errors": errors[:20]},
+        data={"imported": created, "failed": failed, "errors": errors[:20],
+              "approval_task_id": approval_task_id},
         message=f"导入完成：成功 {created} 条，失败 {failed} 条",
     )
 

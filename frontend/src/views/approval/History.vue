@@ -202,8 +202,11 @@ const taskDiff = ref<TaskDiff | null>(null)
 
 /** 可跳转的业务实体类型 */
 function navigableEntity(task: any): boolean {
-  return ['rural_work', 'fund', 'project', 'school', 'supported_village'].includes(
-    task?.entity_type
+  // 批量操作任务（entity_id=0）无实体详情页
+  return (
+    ['rural_work', 'fund', 'project', 'school', 'supported_village'].includes(
+      task?.entity_type
+    ) && Number(task?.entity_id) > 0
   )
 }
 
@@ -299,7 +302,7 @@ function handleViewEntity(task: any) {
       path: '/rural-works',
       query: { id: task.entity_id, action: 'view' },
     })
-  } else if (detailRoutes[task.entity_type]) {
+  } else if (detailRoutes[task.entity_type] && Number(task.entity_id) > 0) {
     detailDialogVisible.value = false
     pushSafe(detailRoutes[task.entity_type])
   }

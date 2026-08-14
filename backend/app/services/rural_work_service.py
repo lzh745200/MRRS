@@ -27,6 +27,68 @@ def _safe_enum_value(val: Any) -> Any:
     return val.value if val and hasattr(val, "value") else val
 
 
+def _apply_work_scope(query, current_user: Any, db: Any):
+    """乡村工作数据权限过滤（与 apply_scope_filter 语义一致，兼容历史数据）
+
+    - 管理员：不过滤
+    - 部门范围（OWN_DEPT）：本组织 + 下级组织；organization_id 为空的历史记录按创建人可见
+    - 仅本人（OWN）：按 created_by 过滤
+    """
+    from sqlalchemy import and_, or_
+
+    from app.core.data_permission import DataScope, get_data_scope
+
+    if current_user is None or is_admin(current_user):
+        return query
+
+    user_data_scope = getattr(current_user, "data_scope", None)
+    owner_id = getattr(current_user, "id", None)
+    if user_data_scope == "self":
+        return query.filter(RuralWork.created_by == owner_id)
+
+    scope = get_data_scope(current_user)
+    if scope == DataScope.ALL:
+        return query
+
+    org_id = getattr(current_user, "organization_id", None) or getattr(current_user, "org_id", None)
+    if scope == DataScope.OWN_DEPT and org_id:
+        from app.core.unified_data_scope import _get_org_subtree
+
+        org_ids, _names = _get_org_subtree(db, org_id)
+        org_ids = org_ids if org_ids else [org_id]
+        return query.filter(
+            or_(
+                RuralWork.organization_id.in_(org_ids),
+                and_(RuralWork.organization_id.is_(None), RuralWork.created_by == owner_id),
+            )
+        )
+
+    return query.filter(RuralWork.created_by == owner_id)
+
+
+def _can_access_work(work, current_user: Any, db: Any) -> bool:
+    """单条乡村工作记录访问校验（与 _apply_work_scope 同口径）"""
+    if current_user is None or is_admin(current_user):
+        return True
+    owner_id = getattr(current_user, "id", None)
+    if work.created_by == owner_id:
+        return True
+    user_data_scope = getattr(current_user, "data_scope", None)
+    if user_data_scope == "self":
+        return False
+    from app.core.data_permission import DataScope, get_data_scope
+
+    if get_data_scope(current_user) == DataScope.OWN_DEPT:
+        org_id = getattr(current_user, "organization_id", None) or getattr(current_user, "org_id", None)
+        if org_id and work.organization_id:
+            from app.core.unified_data_scope import _get_org_subtree
+
+            org_ids, _names = _get_org_subtree(db, org_id)
+            if work.organization_id in (org_ids if org_ids else [org_id]):
+                return True
+    return False
+
+
 def _to_work_type(val: Any) -> WorkType:
     """将任意输入转换为 WorkType 枚举，空值/非法值回退到默认值。"""
     if isinstance(val, WorkType):
@@ -115,8 +177,8 @@ class RuralWorkService:
         """获取乡村工作列表（含筛选及数据权限）"""
         query = self.db.query(RuralWork)
 
-        if current_user is not None and not is_admin(current_user):
-            query = query.filter(RuralWork.created_by == getattr(current_user, "id", None))
+        # 数据权限隔离：管理员全量；部门范围含下级组织；仅本人按创建人
+        query = _apply_work_scope(query, current_user, self.db)
 
         if status:
             query = query.filter(RuralWork.status == status)
@@ -165,10 +227,9 @@ class RuralWorkService:
         work = self.db.query(RuralWork).filter(RuralWork.id == work_id).first()
         if not work:
             return None
-        # 数据隔离：非管理员只能读取自己创建的记录
-        if current_user is not None and not is_admin(current_user):
-            if work.created_by != getattr(current_user, "id", None):
-                return None
+        # 数据隔离：非管理员只能读取本组织或自己创建的记录
+        if not _can_access_work(work, current_user, self.db):
+            return None
         return self._to_dict(work)
 
     def delete_rural_work(
@@ -180,10 +241,9 @@ class RuralWorkService:
         work = self.db.query(RuralWork).filter(RuralWork.id == work_id).first()
         if not work:
             return False
-        # 数据隔离：非管理员只能删除自己创建的记录
-        if current_user is not None and not is_admin(current_user):
-            if work.created_by != getattr(current_user, "id", None):
-                return False
+        # 数据隔离：非管理员只能删除本组织或自己创建的记录
+        if not _can_access_work(work, current_user, self.db):
+            return False
         work_name = work.name
         self.db.delete(work)
         safe_commit(self.db)
@@ -197,12 +257,18 @@ class RuralWorkService:
                 logger.debug("记录工作日志失败")
         return True
 
-    def create_rural_work(self, data: Any, user_id: Optional[int] = None) -> Dict[str, Any]:
+    def create_rural_work(
+        self,
+        data: Any,
+        user_id: Optional[int] = None,
+        organization_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """基于 RuralWorkCreate schema 创建乡村工作记录。
 
         Args:
             data: RuralWorkCreate schema 实例（或字典）。
             user_id: 创建人ID，写入 created_by/updated_by 并记录审计日志。
+            organization_id: 所属组织ID（数据权限隔离）。
 
         Returns:
             创建后的工作记录字典（与路由期望的 ``work.model_dump()`` 契约一致，
@@ -225,6 +291,7 @@ class RuralWorkService:
             progress=payload.get("progress") or 0,
             created_by=user_id,
             updated_by=user_id,
+            organization_id=organization_id,
         )
         self.db.add(work)
         safe_commit(self.db)
@@ -261,10 +328,9 @@ class RuralWorkService:
         if not work:
             return None
 
-        # 数据隔离：非管理员只能更新自己创建的记录
-        if current_user is not None and not is_admin(current_user):
-            if work.created_by != getattr(current_user, "id", None):
-                return None
+        # 数据隔离：非管理员只能更新本组织或自己创建的记录
+        if not _can_access_work(work, current_user, self.db):
+            return None
 
         # 合并来源：Pydantic data（仅显式设置的字段）+ kwargs
         updates: Dict[str, Any] = {}
@@ -303,9 +369,7 @@ class RuralWorkService:
 
     def get_statistics(self, current_user: Any = None) -> RuralWorkStatistics:
         """获取乡村工作统计数据，返回 RuralWorkStatistics schema 实例。"""
-        base = self.db.query(RuralWork)
-        if current_user is not None and not is_admin(current_user):
-            base = base.filter(RuralWork.created_by == getattr(current_user, "id", None))
+        base = _apply_work_scope(self.db.query(RuralWork), current_user, self.db)
         total = base.count()
         planned = base.filter(RuralWork.status == WorkStatus.planned).count()
         in_progress = base.filter(RuralWork.status == WorkStatus.in_progress).count()
@@ -385,9 +449,7 @@ class RuralWorkService:
         current_user: Any = None,
     ) -> Dict[str, Any]:
         """生成工作报告汇总数据。"""
-        query = self.db.query(RuralWork)
-        if current_user is not None and not is_admin(current_user):
-            query = query.filter(RuralWork.created_by == getattr(current_user, "id", None))
+        query = _apply_work_scope(self.db.query(RuralWork), current_user, self.db)
         if year:
             query = query.filter(extract("year", RuralWork.start_date) == year)
         if start_date:
@@ -440,13 +502,15 @@ class RuralWorkService:
     def batch_delete(self, ids: List[int], current_user: Any = None) -> int:
         """批量删除乡村工作，返回实际删除条数。
 
-        数据隔离：非管理员只能删除自己创建的记录。
+        数据隔离：非管理员只能删除本组织或自己创建的记录。
         """
         if not ids:
             return 0
-        query = self.db.query(RuralWork).filter(RuralWork.id.in_(list(ids)))
-        if current_user is not None and not is_admin(current_user):
-            query = query.filter(RuralWork.created_by == getattr(current_user, "id", None))
+        query = _apply_work_scope(
+            self.db.query(RuralWork).filter(RuralWork.id.in_(list(ids))),
+            current_user,
+            self.db,
+        )
         deleted = query.delete(synchronize_session=False)
         safe_commit(self.db)
         return int(deleted or 0)

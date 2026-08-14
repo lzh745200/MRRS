@@ -544,8 +544,9 @@ const stats = computed(() => {
 
 async function loadStats() {
   try {
-    const res = await get('/funds/statistics/overview')
-    const d = res.data || res
+    const res: any = await get('/funds/statistics/overview')
+    // 防御：兼容信封/裸数据两种形态（信封保留 data 键，裸数据直接使用）
+    const d = res?.data ?? res
     if (d && d.total_amount !== undefined) serverStats.value = d
   } catch {
     /* 统计加载失败不阻塞主流程 */
@@ -682,7 +683,8 @@ async function fetchData() {
         school_id: filterForm.school_id || undefined,
       },
     })
-    const resData = response.data
+    // 防御：apiRequest 已解包；信封保留 data 键，裸数据直接使用
+    const resData = (response as any)?.data ?? response
     tableData.value =
       resData?.items || resData?.data?.items || (Array.isArray(resData) ? resData : [])
     total.value = resData?.total || resData?.data?.total || tableData.value.length

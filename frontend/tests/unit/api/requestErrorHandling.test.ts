@@ -29,6 +29,9 @@ const {
     getRefreshToken: vi.fn(() => authState.refreshToken),
     setToken: vi.fn(),
     setRefreshToken: vi.fn(),
+    getUser: vi.fn(() => null),
+    hasPersistedAuth: vi.fn(() => false),
+    persistForAutoLogin: vi.fn(),
     clear: vi.fn(() => {
       authState.token = ''
     }),
@@ -412,6 +415,8 @@ describe('api/request — 拦截器未覆盖分支', () => {
       // _isRefreshing 已为 true，第二个 401 进入队列
       const errorB = { response: { status: 401, data: {} }, config: makeConfig({ url: '/b' }) }
       const p2 = handlers.responseR(errorB)
+      // 拦截器在发起 refresh 前会先 await _ensureCsrfToken()，需冲刷微任务后断言
+      await new Promise((r) => setTimeout(r, 0))
       expect(mockAxiosPost).toHaveBeenCalledTimes(1)
 
       rejectRefresh(new Error('refresh boom'))
@@ -433,6 +438,8 @@ describe('api/request — 拦截器未覆盖分支', () => {
       const p1 = handlers.responseR(errorA)
       const errorB = { response: { status: 401, data: {} }, config: makeConfig({ url: '/b' }) }
       const p2 = handlers.responseR(errorB)
+      // 拦截器在发起 refresh 前会先 await _ensureCsrfToken()，需冲刷微任务后断言
+      await new Promise((r) => setTimeout(r, 0))
       // 排队期间只触发一次 refresh
       expect(mockAxiosPost).toHaveBeenCalledTimes(1)
 
@@ -556,6 +563,128 @@ describe('api/request — 拦截器未覆盖分支', () => {
       cancelRequest('/dupx')
       expect(getPendingRequestCount()).toBe(0)
       expect(capturedCancels[0]).toHaveBeenCalled()
+    })
+  })
+})
+
+
+describe('responseR — Blob 错误体 / silent / 超时网络分支（覆盖率补全）', () => {
+  const blobError = (body: string, status = 400) => {
+    // jsdom 的 Blob 未必实现 .text()，实例级补桩（保持 instanceof Blob 为真）
+    const blob = new Blob([body], { type: 'application/json' })
+    ;(blob as any).text = async () => body
+    return {
+      response: { status, data: blob },
+      config: makeConfig(),
+    }
+  }
+
+  it('Blob 响应体含 detail → userMessage 取 detail', async () => {
+    const error = blobError(JSON.stringify({ detail: 'blob详情' }))
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('blob详情')
+  })
+
+  it('Blob 响应体含 message → userMessage 取 message', async () => {
+    const error = blobError(JSON.stringify({ message: 'blob消息' }))
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('blob消息')
+  })
+
+  it('Blob 无 detail/message → 按状态码兜底', async () => {
+    const error = blobError(JSON.stringify({ other: 1 }), 400)
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('请求失败 (400)')
+  })
+
+  it('Blob 非法 JSON → catch 后按状态码兜底', async () => {
+    const error = blobError('not-json', 404)
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('请求的资源不存在')
+  })
+
+  it('silent 配置 → 错误挂载 __silent 标记（跳过全局兜底）', async () => {
+    const error = {
+      response: { status: 500, data: {} },
+      config: makeConfig({ silent: true }),
+    }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect((error as any).__silent).toBe(true)
+  })
+
+  it('ECONNABORTED / 超时 message → 请求超时提示', async () => {
+    const error = { code: 'ECONNABORTED', config: makeConfig() }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('请求超时，请重试')
+    // _buildUserMessage 内层分支：带 response 但无 status + 超时 message
+    const error2 = {
+      message: 'timeout of 30000ms exceeded',
+      response: { data: {} },
+      config: makeConfig(),
+    }
+    await expect(handlers.responseR(error2)).rejects.toBe(error2)
+    expect(error2.userMessage).toBe('请求超时，请重试')
+  })
+
+  it('ERR_NETWORK / NetworkError message → 网络连接失败提示', async () => {
+    const error = { code: 'ERR_NETWORK', config: makeConfig() }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('网络连接失败，请检查服务是否启动')
+    // _buildUserMessage 内层分支：带 response 但无 status + NetworkError message
+    const error2 = {
+      message: 'NetworkError when attempting to fetch',
+      response: { data: {} },
+      config: makeConfig(),
+    }
+    await expect(handlers.responseR(error2)).rejects.toBe(error2)
+    expect(error2.userMessage).toBe('网络连接失败，请检查服务是否启动')
+  })
+
+  it('无 status 有 message → 直接使用 error.message', async () => {
+    const error = { message: '自定义异常信息', config: makeConfig() }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('自定义异常信息')
+  })
+
+  it('422 + detail 数组 → 首条 loc.msg 拼装；空数组 → 校验失败兜底', async () => {
+    const error = {
+      response: {
+        status: 422,
+        data: { detail: [{ loc: ['body', 'name'], msg: 'field required' }] },
+      },
+      config: makeConfig(),
+    }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('body.name: field required')
+    const error2 = {
+      response: { status: 422, data: { detail: [{ msg: '仅msg无loc' }] } },
+      config: makeConfig(),
+    }
+    await expect(handlers.responseR(error2)).rejects.toBe(error2)
+    expect(error2.userMessage).toBe(': 仅msg无loc')
+    const error3 = {
+      response: { status: 422, data: { detail: '字符串detail' } },
+      config: makeConfig(),
+    }
+    await expect(handlers.responseR(error3)).rejects.toBe(error3)
+    expect(error3.userMessage).toBe('字符串detail')
+  })
+
+  it('refresh 成功且已开启免登录 → 同步更新持久令牌', async () => {
+    authState.refreshToken = 'refresh-1'
+    mockAuthStorage.hasPersistedAuth.mockReturnValueOnce(true)
+    mockAuthStorage.getUser.mockReturnValueOnce({ id: 1, username: 'alice' })
+    mockAxiosPost.mockResolvedValueOnce({
+      data: { data: { access_token: 'new-access' }, refresh_token: 'new-refresh' },
+    })
+    mockInst.request.mockResolvedValueOnce('retry-ok')
+    const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data' }) }
+    const result = await handlers.responseR(error)
+    expect(result).toBe('retry-ok')
+    expect(mockAuthStorage.persistForAutoLogin).toHaveBeenCalledWith({
+      token: 'new-access',
+      user: { id: 1, username: 'alice' },
+      refreshToken: 'new-refresh',
     })
   })
 })

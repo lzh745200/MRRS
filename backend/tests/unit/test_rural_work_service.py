@@ -491,3 +491,112 @@ class TestRuralWorkService:
         code = RuralWorkService._generate_code()
         assert code.startswith("RW-")
         assert len(code) == 11  # "RW-" + 8 hex chars
+
+
+# ---------------------------------------------------------------------------
+# 数据权限（2026-08-14）：_apply_work_scope / _can_access_work
+# ---------------------------------------------------------------------------
+
+def _make_user(role="user", organization_id=5, data_scope=None, uid=7):
+    user = MagicMock()
+    user.id = uid
+    user.role = role
+    user.is_superuser = False
+    user.organization_id = organization_id
+    user.org_id = organization_id
+    if data_scope is not None:
+        user.data_scope = data_scope
+    return user
+
+
+@pytest.fixture
+def rural_svc():
+    from app.services.rural_work_service import RuralWorkService
+    return RuralWorkService(db=MagicMock())
+
+
+class TestWorkScope:
+    def test_admin_not_filtered(self, rural_svc):
+        from app.services.rural_work_service import _apply_work_scope
+
+        q = MagicMock()
+        assert _apply_work_scope(q, _make_user(role="admin"), rural_svc.db) is q
+
+    def test_none_user_not_filtered(self, rural_svc):
+        from app.services.rural_work_service import _apply_work_scope
+
+        q = MagicMock()
+        assert _apply_work_scope(q, None, rural_svc.db) is q
+
+    def test_self_scope_filters_by_owner(self, rural_svc):
+        from app.services.rural_work_service import _apply_work_scope
+
+        q = MagicMock()
+        result = _apply_work_scope(q, _make_user(data_scope="self"), rural_svc.db)
+        assert result is q.filter.return_value
+        assert q.filter.call_count == 1
+
+    def test_own_dept_filters_by_org_with_legacy_fallback(self, rural_svc):
+        from app.services.rural_work_service import _apply_work_scope
+
+        # 遗留角色 manager：is_admin=False 但 get_data_scope 归一化为 OWN_DEPT
+        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([5, 6], ["a", "b"])):
+            q = MagicMock()
+            result = _apply_work_scope(q, _make_user(role="manager"), rural_svc.db)
+            assert result is q.filter.return_value
+            assert q.filter.call_count == 1
+
+    def test_own_scope_without_org_filters_by_owner(self, rural_svc):
+        from app.services.rural_work_service import _apply_work_scope
+
+        q = MagicMock()
+        result = _apply_work_scope(q, _make_user(organization_id=None), rural_svc.db)
+        assert result is q.filter.return_value
+        assert q.filter.call_count == 1
+
+
+class TestCanAccessWork:
+    def test_admin_always_allowed(self, rural_svc):
+        from app.services.rural_work_service import _can_access_work
+
+        work = _make_mock_work(organization_id=99, created_by=99)
+        assert _can_access_work(work, _make_user(role="admin"), rural_svc.db) is True
+
+    def test_none_user_allowed(self, rural_svc):
+        from app.services.rural_work_service import _can_access_work
+
+        work = _make_mock_work(organization_id=99, created_by=99)
+        assert _can_access_work(work, None, rural_svc.db) is True
+
+    def test_owner_allowed(self, rural_svc):
+        from app.services.rural_work_service import _can_access_work
+
+        work = _make_mock_work(created_by=7)
+        assert _can_access_work(work, _make_user(uid=7), rural_svc.db) is True
+
+    def test_self_scope_denies_others(self, rural_svc):
+        from app.services.rural_work_service import _can_access_work
+
+        work = _make_mock_work(created_by=99, organization_id=5)
+        assert _can_access_work(work, _make_user(data_scope="self"), rural_svc.db) is False
+
+    def test_same_org_allowed(self, rural_svc):
+        from app.services.rural_work_service import _can_access_work
+
+        work = _make_mock_work(created_by=99, organization_id=6)
+        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([5, 6], ["a", "b"])):
+            assert _can_access_work(work, _make_user(role="manager"), rural_svc.db) is True
+
+    def test_other_org_denied(self, rural_svc):
+        from app.services.rural_work_service import _can_access_work
+
+        work = _make_mock_work(created_by=99, organization_id=8)
+        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([5, 6], ["a", "b"])):
+            assert _can_access_work(work, _make_user(role="manager"), rural_svc.db) is False
+
+    def test_no_org_legacy_row_denied_for_stranger(self, rural_svc):
+        from app.services.rural_work_service import _can_access_work
+
+        work = _make_mock_work(created_by=99, organization_id=None)
+        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([5, 6], ["a", "b"])):
+            assert _can_access_work(work, _make_user(role="manager"), rural_svc.db) is False

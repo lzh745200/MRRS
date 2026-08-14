@@ -386,53 +386,6 @@ class TestListFunds:
 
 
 # ============================================================================
-# 2. export_funds — GET /api/v1/funds/export
-# ============================================================================
-
-
-class TestExportFunds:
-    def test_export_funds_empty(self, client, mock_db):
-        """Export returns empty data."""
-        mock_db.execute.return_value = _exec_with_scalars_unique_all([])
-
-        resp = client.get("/api/v1/funds/export")
-        assert resp.status_code == 200
-        data = resp.json()["data"]
-        assert data["total_exported"] == 0
-        assert data["limit"] == 5000
-
-    def test_export_funds_with_items(self, client, mock_db):
-        """Export returns fund data."""
-        fund1 = FundMock(1)
-        fund1.project = None
-        fund1.village = None
-        mock_db.execute.return_value = _exec_with_scalars_unique_all([fund1])
-
-        resp = client.get("/api/v1/funds/export")
-        assert resp.status_code == 200
-        assert resp.json()["data"]["total_exported"] == 1
-
-    def test_export_funds_with_custom_limit(self, client, mock_db):
-        """Export with custom limit."""
-        mock_db.execute.return_value = _exec_with_scalars_unique_all([])
-
-        resp = client.get("/api/v1/funds/export?limit=100")
-        assert resp.status_code == 200
-
-    def test_export_funds_limit_boundary_min(self, client, mock_db):
-        """Export with minimum limit."""
-        mock_db.execute.return_value = _exec_with_scalars_unique_all([])
-        resp = client.get("/api/v1/funds/export?limit=1")
-        assert resp.status_code == 200
-
-    def test_export_funds_limit_boundary_max(self, client, mock_db):
-        """Export with maximum limit."""
-        mock_db.execute.return_value = _exec_with_scalars_unique_all([])
-        resp = client.get("/api/v1/funds/export?limit=50000")
-        assert resp.status_code == 200
-
-
-# ============================================================================
 # 3. get_fund — GET /api/v1/funds/{fund_id}
 # ============================================================================
 
@@ -1670,18 +1623,6 @@ class TestPaginationValidation:
     def test_page_size_over_max_rejected(self, client, mock_db):
         """page_size=201 is rejected (>200 max)."""
         resp = client.get("/api/v1/funds?page_size=201")
-        assert resp.status_code == 422
-
-
-class TestExportValidation:
-    def test_export_limit_zero_rejected(self, client, mock_db):
-        """Export limit=0 rejected."""
-        resp = client.get("/api/v1/funds/export?limit=0")
-        assert resp.status_code == 422
-
-    def test_export_limit_over_max_rejected(self, client, mock_db):
-        """Export limit=50001 rejected."""
-        resp = client.get("/api/v1/funds/export?limit=50001")
         assert resp.status_code == 422
 
 

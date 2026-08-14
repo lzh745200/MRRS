@@ -356,8 +356,9 @@ const loadData = async () => {
       params.include_cancelled = true
     }
     const res = await projectApi.list(params)
-    projectList.value = (res as any)?.data?.items || (res as any)?.items || []
-    pagination.total = (res as any)?.data?.total || (res as any)?.total || 0
+    // 防御：兼容信封（data.items）与裸分页（items）两种形态
+    projectList.value = (res as any)?.data?.items ?? (res as any)?.items ?? []
+    pagination.total = (res as any)?.data?.total ?? (res as any)?.total ?? 0
   } catch (e) {
     logger.error('[Projects] loadData failed:', e)
     ElMessage.error('加载项目列表失败')

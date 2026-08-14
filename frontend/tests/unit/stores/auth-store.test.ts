@@ -16,14 +16,17 @@ vi.mock('@/utils/authStorage', () => {
   const storage: any = {
     getToken: vi.fn(),
     getUser: vi.fn(),
+    getRefreshToken: vi.fn(),
     setToken: vi.fn(),
     setUser: vi.fn(),
+    setRefreshToken: vi.fn(),
     setAuthData: vi.fn(),
     clear: vi.fn(),
   }
   // Default returns
   storage.getToken.mockReturnValue('')
   storage.getUser.mockReturnValue(null)
+  storage.getRefreshToken.mockReturnValue('')
   return { AuthStorage: storage }
 })
 
@@ -104,9 +107,11 @@ describe('stores/auth', () => {
 
   describe('login', () => {
     it('成功: persistAuth + return success', async () => {
+      // 真实后端信封：refresh_token 位于顶层（data 内只有 access_token/user）
       ;(apiRequest as any).mockResolvedValue({
         code: 200,
-        data: { access_token: 'A', user: { id: 1, username: 'u' }, refresh_token: 'R' },
+        data: { access_token: 'A', user: { id: 1, username: 'u' } },
+        refresh_token: 'R',
       })
       const s = useAuthStore()
       const r = await s.login('u', 'p')

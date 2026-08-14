@@ -130,6 +130,31 @@ class ApprovalReminderService:
         finally:
             db.close()
 
+    def _resolve_reminder_recipient(self, db, approval_task):  # pragma: no cover
+        """解析审批提醒接收人：current_approver_id → 节点审批人 → 提交人 → None。"""
+        if approval_task.current_approver_id:
+            return approval_task.current_approver_id
+        # 回退1：按当前级别查工作流节点上的审批人（approver_type=user 时 approver_id 即用户ID）
+        try:
+            from app.models.approval import ApprovalNode
+
+            node = (
+                db.query(ApprovalNode)
+                .filter(
+                    ApprovalNode.workflow_id == approval_task.workflow_id,
+                    ApprovalNode.level == (approval_task.current_level or 1),
+                )
+                .first()
+            )
+            if node and node.approver_type == "user" and node.approver_id:
+                return node.approver_id
+        except Exception:
+            logger.debug("按节点解析审批人失败", exc_info=True)
+        # 回退2：通知提交人
+        if approval_task.submitter_id:
+            return approval_task.submitter_id
+        return None
+
     def _create_reminder_message(self, db, approval_task, level: str):  # pragma: no cover
         """创建提醒消息（幂等——与 reminder_orchestrator 共用 type:entity_id 去重键，
         避免双服务并存时同一审批生成重复消息）"""
@@ -149,6 +174,12 @@ class ApprovalReminderService:
         if existing:
             return
 
+        # messages.user_id 为 NOT NULL：无法确定接收人时跳过，避免整批提醒提交失败
+        user_id = self._resolve_reminder_recipient(db, approval_task)
+        if not user_id:
+            logger.warning("审批提醒无法确定接收人，跳过 task_id=%s", approval_task.id)
+            return
+
         if level == "overdue":
             title = f"审批超时提醒 - #{approval_task.id}"
             content = f"审批任务 #{approval_task.id}（{approval_task.title or '无标题'}）已超过48小时未处理，请尽快审批。"
@@ -157,7 +188,7 @@ class ApprovalReminderService:
             content = f"审批任务 #{approval_task.id}（{approval_task.title or '无标题'}）已超过36小时未处理，请及时审批以免超时。"
 
         message = Message(
-            user_id=approval_task.current_approver_id,
+            user_id=user_id,
             title=title,
             content=content,
             message_type=msg_type,
@@ -200,6 +231,10 @@ class ApprovalReminderService:
                         Message.message_type == "project_deadline",
                     ).first()
                     if not existing:
+                        # messages.user_id 为 NOT NULL：无归属人时跳过，避免整批提交失败
+                        if not getattr(proj, "created_by", None):
+                            logger.warning("项目截止提醒无法确定接收人，跳过 project_id=%s", proj.id)
+                            continue
                         is_overdue = proj.end_date < now.date() if hasattr(proj.end_date, 'year') else False
                         title = f"项目{'已逾期' if is_overdue else '即将到期'} - {proj.name or proj.id}"
                         status_text = '已逾期请尽快处理' if is_overdue else '即将到期请注意'
@@ -233,6 +268,10 @@ class ApprovalReminderService:
                         Message.message_type == "todo_overdue",
                     ).first()
                     if not existing:
+                        # messages.user_id 为 NOT NULL：无归属人时跳过，避免整批提交失败
+                        if not getattr(todo, "user_id", None):
+                            logger.warning("待办逾期提醒无法确定接收人，跳过 todo_id=%s", todo.id)
+                            continue
                         db.add(Message(
                             user_id=todo.user_id,
                             title=f"待办已逾期 - {todo.title or todo.id}",

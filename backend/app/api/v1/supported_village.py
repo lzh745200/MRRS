@@ -608,8 +608,18 @@ async def import_villages(
             errors.append(f"第{row_idx}行: {str(e)}")
     safe_commit(db)
     await _invalidate_village_cache()
+    # 数据变更自动创建审批任务：批量导入进入待审批板块（审计留痕）
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="supported_village",
+        entity_id=0,
+        submitter_id=current_user.id,
+        title=f"帮扶村批量导入：成功 {imported} 条，跳过 {len(errors)} 条",
+        change_data={"imported": imported, "failed": len(errors), "errors": errors[:20]},
+    )
     return success_response(
-        data={"imported": imported, "failed": len(errors), "errors": errors},
+        data={"imported": imported, "failed": len(errors), "errors": errors,
+              "approval_task_id": approval_task_id},
         message=f"成功导入 {imported} 条记录" + (f"，{len(errors)} 条跳过" if errors else ""),
     )
 
@@ -629,12 +639,24 @@ async def batch_delete_villages(
     deleted_count = query.update({"is_active": False}, synchronize_session=False)
     safe_commit(db)
     await _invalidate_village_cache()
+    # 数据变更自动创建审批任务：批量删除进入待审批板块（审计留痕）
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="supported_village",
+        entity_id=0,
+        submitter_id=current_user.id,
+        title=f"帮扶村批量删除：{deleted_count} 条",
+        change_data={"deleted": True, "deleted_count": deleted_count, "ids": data.ids},
+    )
     # 单机防丢失：批量删除后触发一次即时备份
     if deleted_count:
         from app.services.immediate_backup import trigger_immediate_backup
 
         trigger_immediate_backup(description=f"批量删除帮扶村{deleted_count}条后备份", delay=1.0)
-    return success_response(message=f"已删除 {deleted_count} 条记录")
+    return success_response(
+        data={"deleted": deleted_count, "approval_task_id": approval_task_id},
+        message=f"已删除 {deleted_count} 条记录",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1290,7 +1312,7 @@ async def get_transition_funding(
             items = json.loads(village.transition_fund_items)
         except (json.JSONDecodeError, TypeError):
             items = []
-    return {"data": items, "success": True}
+    return success_response(data=items)
 
 
 @router.post("/{village_id}/transition-funding")

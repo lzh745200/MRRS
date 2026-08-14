@@ -6,7 +6,6 @@ from fastapi import APIRouter
 
 from .analytics import router as analytics_router
 from .dashboard import router as dashboard_router
-from .dashboard_trends import router as dashboard_trends_router
 from .data_packages import router as data_packages_router
 from .data_quality import router as data_quality_router
 from .data_reports import router as data_reports_router
@@ -21,7 +20,6 @@ router.include_router(reports_router)
 router.include_router(data_reports_router)
 router.include_router(data_packages_router)
 router.include_router(dashboard_router)
-router.include_router(dashboard_trends_router)
 router.include_router(data_quality_router, prefix="/data-quality")
 
 __all__ = ["router"]

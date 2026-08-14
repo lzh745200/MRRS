@@ -726,6 +726,39 @@ describe('handleSave / handleSaveAndContinue / resetForm / handleCancel', () => 
     expect(ElMessage.warning).toHaveBeenCalledWith('请完善必填信息')
   })
 
+  it('handleSave：新建返回无 id → saveErrorMessage 为空走「保存失败，请稍后重试」兜底', async () => {
+    delete routeParams.id
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // create 成功但响应无 id → saveProjectData 直接 return false（不设置 saveErrorMessage）
+    api.create.mockResolvedValueOnce({})
+    vm.projectFormRef = { validate: (cb: any) => cb(true) }
+    await vm.handleSave('projectFormRef')
+    await flushPromises()
+    expect(api.create).toHaveBeenCalled()
+    expect(logWarn).toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalledWith('保存失败，请稍后重试')
+    expect(vm.saveErrorMessage).toBe('')
+    expect(ElMessage.success).not.toHaveBeenCalledWith(expect.stringContaining('成功'))
+  })
+
+  it('handleSaveAndContinue：新建返回无 id → 错误兜底且不重置表单', async () => {
+    delete routeParams.id
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    api.create.mockResolvedValueOnce({ data: {} }) // data 内仍无 id
+    const resetFields = vi.fn()
+    vm.projectFormRef = { validate: (cb: any) => cb(true), resetFields }
+    await vm.handleSaveAndContinue()
+    await flushPromises()
+    expect(ElMessage.error).toHaveBeenCalledWith('保存失败，请稍后重试')
+    expect(vm.saveErrorMessage).toBe('')
+    expect(resetFields).not.toHaveBeenCalled()
+    expect(scrollToMock).not.toHaveBeenCalled()
+  })
+
   it('resetForm：formRef 为空 → 跳过重置字段不报错', async () => {
     const wrapper = mountComp()
     await flushPromises()

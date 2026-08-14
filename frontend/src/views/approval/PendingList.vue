@@ -189,26 +189,6 @@
       />
     </el-card>
 
-    <!-- 审批对话框 -->
-    <el-dialog v-model="approveDialogVisible" title="审批确认" width="500px">
-      <el-form :model="approveForm" label-width="80px">
-        <el-form-item label="审批意见">
-          <el-input
-            v-model="approveForm.opinion"
-            type="textarea"
-            :rows="4"
-            placeholder="请输入审批意见（可选）"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="approveDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="confirmApprove">
-          确认通过
-        </el-button>
-      </template>
-    </el-dialog>
-
     <!-- 拒绝对话框 -->
     <el-dialog v-model="rejectDialogVisible" title="拒绝确认" width="500px">
       <el-form :model="rejectForm" label-width="80px">
@@ -323,13 +303,11 @@ const selectedTasks = ref<ApprovalTask[]>([])
 const currentTask = ref<ApprovalTask | null>(null)
 
 // 对话框
-const approveDialogVisible = ref(false)
 const rejectDialogVisible = ref(false)
 const diffDialogVisible = ref(false)
 const transferDialogVisible = ref(false)
 
 // 表单
-const approveForm = ref({ opinion: '' })
 const rejectForm = ref({ opinion: '' })
 const transferForm = ref({ transferToId: undefined as number | undefined, reason: '' })
 const candidateUsers = ref<Array<{ id: number; username: string; role?: string }>>([])
@@ -488,7 +466,8 @@ function handleViewDetail(task: any) {
       path: '/rural-works',
       query: { id: task.entity_id, action: 'view' },
     })
-  } else if (detailRoutes[task.entity_type]) {
+  } else if (detailRoutes[task.entity_type] && Number(task.entity_id) > 0) {
+    // 批量操作任务（entity_id=0）无实体详情页 → 展示变更对比
     pushSafe(detailRoutes[task.entity_type])
   } else {
     handleViewDiff(task)
@@ -518,34 +497,6 @@ async function handleViewDiff(task: any) {
     taskDiff.value = await getTaskDiff(task.id)
   } catch (error) {
     ElMessage.error('加载变更对比失败')
-  }
-}
-
-/**
- * 审批通过
- */
-// function handleApprove(task: ApprovalTask) {
-//   currentTask.value = task;
-//   approveForm.value = { opinion: "" };
-//   approveDialogVisible.value = true;
-// }
-
-/**
- * 确认通过
- */
-async function confirmApprove() {
-  if (!currentTask.value) return
-
-  submitting.value = true
-  try {
-    await approveTask(currentTask.value.id, approveForm.value.opinion)
-    ElMessage.success('审批通过')
-    approveDialogVisible.value = false
-    loadTasks()
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '操作失败')
-  } finally {
-    submitting.value = false
   }
 }
 

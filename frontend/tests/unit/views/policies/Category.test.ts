@@ -6,12 +6,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const { pushSafeMock, policyStore, logError } = vi.hoisted(() => ({
+const { pushSafeMock, policyStore, logError, mockGetLevelOptions } = vi.hoisted(() => ({
   pushSafeMock: vi.fn(),
   policyStore: {
     fetchStatistics: vi.fn(),
   },
   logError: vi.fn(),
+  mockGetLevelOptions: vi.fn(),
 }))
 
 vi.mock('@/composables/useRouterSafe', () => ({
@@ -20,15 +21,9 @@ vi.mock('@/composables/useRouterSafe', () => ({
 
 vi.mock('@/stores/policy', () => ({ usePolicyStore: () => policyStore }))
 
+// 真实接口形态：返回全部层级（Promise），前端按「专项/地方」拆分
 vi.mock('@/api/policy', () => ({
-  getLevelOptions: (cat: string) =>
-    cat === 'military'
-      ? [
-          { value: 'national', label: '国家级' },
-          { value: 'province', label: '省级' },
-          { value: 'city', label: '市级' },
-        ]
-      : [{ value: 'county', label: '县级' }],
+  getLevelOptions: mockGetLevelOptions,
 }))
 
 vi.mock('@/utils/logger', () => ({
@@ -36,6 +31,14 @@ vi.mock('@/utils/logger', () => ({
 }))
 
 import Category from '@/views/policies/Category.vue'
+
+const allLevels = [
+  { value: 'national', label: '国家级' },
+  { value: 'provincial', label: '省级' },
+  { value: 'municipal', label: '市级' },
+  { value: 'county', label: '县级' },
+  { value: 'military', label: '专项' },
+]
 
 const stats = {
   military: {
@@ -70,6 +73,7 @@ function mountComp() {
 beforeEach(() => {
   vi.resetAllMocks()
   policyStore.fetchStatistics.mockResolvedValue(stats)
+  mockGetLevelOptions.mockResolvedValue(allLevels)
 })
 
 afterEach(() => {
@@ -95,14 +99,36 @@ describe('挂载与统计', () => {
     expect((wrapper.vm as any).loading).toBe(false)
   })
 
-  it('层级配置初始化', async () => {
+  it('层级配置初始化（全部层级按专项/地方拆分）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.militaryLevels).toHaveLength(3)
-    expect(vm.militaryLevels[0].value).toBe('national')
-    expect(vm.localLevels).toHaveLength(1)
-    expect(vm.localLevels[0].value).toBe('county')
+    expect(vm.militaryLevels).toHaveLength(1)
+    expect(vm.militaryLevels[0].value).toBe('military')
+    expect(vm.localLevels).toHaveLength(4)
+    expect(vm.localLevels[0].value).toBe('national')
+    expect(vm.localLevels[3].value).toBe('county')
+  })
+
+  it('层级响应形态：信封 items / data 数组 / 加载失败空列表', async () => {
+    // 信封 items 形态
+    mockGetLevelOptions.mockResolvedValueOnce({ items: [{ value: 'military', label: '专项' }] })
+    let wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).militaryLevels).toHaveLength(1)
+
+    // data 数组形态
+    mockGetLevelOptions.mockResolvedValueOnce({ data: [{ value: 'county', label: '县级' }] })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).localLevels).toHaveLength(1)
+
+    // 加载失败 → 空列表
+    mockGetLevelOptions.mockRejectedValueOnce(new Error('net'))
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).militaryLevels).toEqual([])
+    expect((wrapper.vm as any).localLevels).toEqual([])
   })
 })
 
@@ -144,7 +170,7 @@ describe('导航操作', () => {
     await cards[0].trigger('click')
     expect(pushSafeMock).toHaveBeenCalledWith({
       path: '/policies',
-      query: { category: 'military', level: 'national' },
+      query: { category: 'military', level: 'military' },
     })
 
     pushSafeMock.mockClear()
