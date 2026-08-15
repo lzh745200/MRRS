@@ -24,9 +24,9 @@ def test_run_reminder_scans_creates_messages():
     ctx.__enter__.return_value = mock_db
 
     scan_results = [
-        [{"type": "approval_overtime", "entity_id": 5, "title": "审批A", "elapsed_hours": 50}],
-        [{"type": "deadline_warning", "entity_id": 3, "title": "项目B", "end_date": "2026-09-01", "days_left": 2}],
-        [{"type": "budget_warning", "entity_id": 9, "title": "经费C", "ratio": 90.5}],
+        [{"type": "approval_overtime", "entity_id": 5, "title": "审批A", "elapsed_hours": 50, "user_id": 1}],
+        [{"type": "deadline_warning", "entity_id": 3, "title": "项目B", "end_date": "2026-09-01", "days_left": 2, "user_id": 2}],
+        [{"type": "budget_warning", "entity_id": 9, "title": "经费C", "ratio": 90.5, "user_id": 1}],
     ]
 
     with patch("app.services.reminder_orchestrator.get_db_context", return_value=ctx):
@@ -38,6 +38,30 @@ def test_run_reminder_scans_creates_messages():
     assert len(created) == 3
     # Message 添加 3 次
     assert mock_db.add.call_count == 3
+
+
+def test_run_reminder_scans_skips_recipient_unknown():
+    """user_id 缺失的提醒跳过而不影响整批（messages.user_id NOT NULL 防护）"""
+    from app.services.reminder_orchestrator import run_reminder_scans
+
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.filter.return_value.first.return_value = None
+    ctx = MagicMock()
+    ctx.__enter__.return_value = mock_db
+
+    scan_results = [
+        [{"type": "approval_overtime", "entity_id": 5, "title": "无接收人"}],  # user_id 缺失
+        [{"type": "deadline_warning", "entity_id": 3, "title": "有接收人", "user_id": 2}],
+    ]
+
+    with patch("app.services.reminder_orchestrator.get_db_context", return_value=ctx):
+        with patch("app.core.transaction.safe_commit"):
+            with patch("app.services.reminder_engine.scan_overtime_approvals", return_value=scan_results[0]):
+                with patch("app.services.reminder_engine.scan_deadline_warnings", return_value=scan_results[1]):
+                    with patch("app.services.reminder_engine.scan_budget_warnings", return_value=[]):
+                        created = run_reminder_scans()
+    assert len(created) == 1
+    assert mock_db.add.call_count == 1
 
 
 def test_run_reminder_scans_dedupe():

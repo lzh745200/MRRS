@@ -53,12 +53,22 @@ def run_reminder_scans() -> List[Dict[str, Any]]:
                     )
                     if exists:
                         continue
+                    # messages.user_id 为 NOT NULL：无法确定接收人的提醒跳过，
+                    # 避免单条坏数据导致整批提醒提交失败（修复 2026-08-15）
+                    user_id = r.get("user_id")
+                    if not user_id:
+                        logger.warning(
+                            "提醒无法确定接收人，跳过 type=%s entity_id=%s",
+                            r.get("type"),
+                            r.get("entity_id"),
+                        )
+                        continue
                     msg = Message(
                         message_type=msg_type,
                         title=r.get("title", "系统提醒"),
                         content=_format_reminder(r),
                         link=link,
-                        user_id=r.get("user_id"),
+                        user_id=user_id,
                     )
                     db.add(msg)
                     created.append(r)
@@ -67,6 +77,8 @@ def run_reminder_scans() -> List[Dict[str, Any]]:
             safe_commit(db)
     except Exception as e:
         logger.error("提醒扫描失败: %s", e, exc_info=True)
+        # 提交失败 → 本批提醒全部未落库，返回空列表（防止上层误报"新增 N 条"）
+        return []
     return created
 
 

@@ -82,6 +82,8 @@ def scan_deadline_warnings(db: Session, days_threshold: int = 7) -> List[Dict[st
             "end_date": str(p.end_date) if p.end_date else "",
             "days_left": days_left,
             "severity": "danger" if days_left < 0 else ("warning" if days_left <= 3 else "info"),
+            # 项目归属人（无归属时由 orchestrator 跳过，避免 messages.user_id NOT NULL 崩溃）
+            "user_id": getattr(p, "created_by", None),
         })
     return results
 
@@ -107,6 +109,8 @@ def scan_budget_warnings(
                 "title": getattr(f, "name", "") or f"经费 #{f.id}",
                 "ratio": round(ratio * 100, 1),
                 "severity": "danger" if ratio >= danger_threshold else "warning",
+                # 经费归属人（无归属时由 orchestrator 跳过，避免 messages.user_id NOT NULL 崩溃）
+                "user_id": getattr(f, "created_by", None),
             })
     return results
 
