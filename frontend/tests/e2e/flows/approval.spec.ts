@@ -13,19 +13,10 @@
 
 import { test, expect, Page } from '@playwright/test';
 
-// 测试配置
-const TEST_USER = {
-  username: process.env.TEST_USERNAME || 'admin',
-  password: process.env.TEST_PASSWORD || 'Admin@202507!',
-};
-
-// 登录辅助函数
+// 登录辅助函数（storageState 已注入认证态，仅确认落在首页）
 async function login(page: Page) {
-  await page.goto('/login');
-  await page.locator('input[placeholder*="用户名"], input[type="text"]').first().fill(TEST_USER.username);
-  await page.locator('input[type="password"]').fill(TEST_USER.password);
-  await page.locator('button[type="submit"], button:has-text("登录")').click();
-  await expect(page).toHaveURL(/\/(dashboard|home|$)/, { timeout: 10000 });
+  await page.goto('/')
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 10000 });
 }
 
 test.describe('审批流程', () => {
@@ -38,8 +29,9 @@ test.describe('审批流程', () => {
       // 导航到待审批任务页面
       await page.goto('/approval/pending');
 
-      // 验证页面加载
-      await expect(page.locator('text=待审批, text=审批任务, .title:has-text("审批")')).toBeVisible({ timeout: 5000 });
+      // 验证页面加载（PendingList 页头为 span.title「待审批任务」；
+      // 不得用 text=a, text=b 混合写法——text= 引擎会把整串当文本匹配）
+      await expect(page.locator('.title:has-text("待审批")')).toBeVisible({ timeout: 5000 });
     });
 
     test('待审批页面显示统计信息', async ({ page }) => {
@@ -56,8 +48,8 @@ test.describe('审批流程', () => {
     test('待审批任务列表正确显示', async ({ page }) => {
       await page.goto('/approval/pending');
 
-      // 验证任务列表表格存在
-      const taskTable = page.locator('.el-table, table');
+      // 验证任务列表表格存在（el-table 内部会渲染多个原生 table，取 .el-table 首个避免严格模式冲突）
+      const taskTable = page.locator('.el-table').first();
       await expect(taskTable).toBeVisible({ timeout: 5000 });
 
       // 验证表格有列头
@@ -86,8 +78,8 @@ test.describe('审批流程', () => {
       // 等待表格加载
       await page.waitForLoadState('networkidle');
 
-      // 验证优先级列存在
-      const priorityColumn = page.locator('th:has-text("优先级"), .el-table__header:has-text("优先级")');
+      // 验证优先级列存在（页面可能有多张表，取首个匹配）
+      const priorityColumn = page.locator('th:has-text("优先级")').first();
       if (await priorityColumn.isVisible()) {
         // 验证高优先级标签
         const highPriorityTags = page.locator('.el-tag--danger, .el-tag:has-text("高")');
@@ -131,15 +123,16 @@ test.describe('审批流程', () => {
       // 等待任务列表加载
       await page.waitForLoadState('networkidle');
 
-      // 查找通过按钮
-      const approveButton = page.locator('button:has-text("通过"), button:has-text("同意")').first();
+      // 查找行内通过按钮（限定表格行，避免匹配页头禁用的「批量通过/一键全部通过」；
+      // 无待审批数据时整段跳过）
+      const approveButton = page.locator('.el-table__row button:has-text("通过")').first();
 
       if (await approveButton.isVisible()) {
         await approveButton.click();
 
         // 验证审批对话框出现
         const dialog = page.locator('.el-dialog, [role="dialog"]');
-        await expect(dialog).toBeVisible({ timeout: 3000 });
+        await expect(dialog.first()).toBeVisible({ timeout: 3000 });
       }
     });
 
@@ -148,7 +141,7 @@ test.describe('审批流程', () => {
 
       await page.waitForLoadState('networkidle');
 
-      const approveButton = page.locator('button:has-text("通过"), button:has-text("同意")').first();
+      const approveButton = page.locator('.el-table__row button:has-text("通过")').first();
 
       if (await approveButton.isVisible()) {
         await approveButton.click();
@@ -169,7 +162,7 @@ test.describe('审批流程', () => {
 
       await page.waitForLoadState('networkidle');
 
-      const approveButton = page.locator('button:has-text("通过"), button:has-text("同意")').first();
+      const approveButton = page.locator('.el-table__row button:has-text("通过")').first();
 
       if (await approveButton.isVisible()) {
         await approveButton.click();
@@ -385,8 +378,8 @@ test.describe('审批流程', () => {
 
       await page.waitForLoadState('networkidle');
 
-      // 查找复选框
-      const checkboxes = page.locator('.el-checkbox, input[type="checkbox"]');
+      // 查找表格行内复选框（限定行作用域，避免命中筛选区等其它复选框）
+      const checkboxes = page.locator('.el-table__row .el-checkbox');
       const count = await checkboxes.count();
 
       if (count > 1) {
@@ -403,8 +396,8 @@ test.describe('审批流程', () => {
 
       await page.waitForLoadState('networkidle');
 
-      // 查找批量通过按钮
-      const batchApproveButton = page.locator('button:has-text("批量通过"), button:has-text("批量审批")');
+      // 查找批量通过按钮（取首个，防止并列匹配多个按钮）
+      const batchApproveButton = page.locator('button:has-text("批量通过")').first();
 
       if (await batchApproveButton.isVisible()) {
         // 验证按钮显示选中数量
@@ -463,14 +456,14 @@ test.describe('审批流程', () => {
       await page.goto('/approval/history');
 
       // 验证页面加载
-      await expect(page.locator('text=审批历史, text=历史记录, .title:has-text("历史")')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('.title:has-text("审批历史")')).toBeVisible({ timeout: 5000 });
     });
 
     test('审批历史列表正确显示', async ({ page }) => {
       await page.goto('/approval/history');
 
-      // 验证历史列表表格存在
-      const historyTable = page.locator('.el-table, table');
+      // 验证历史列表表格存在（el-table 内部含多个原生 table，取首个避免严格模式冲突）
+      const historyTable = page.locator('.el-table').first();
       await expect(historyTable).toBeVisible({ timeout: 5000 });
     });
 

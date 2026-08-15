@@ -60,7 +60,7 @@ test.describe('导航正确性', () => {
   test('不存在的路由显示 404 页面', async ({ page }) => {
     await navigateTo(page, '/this-page-does-not-exist')
     // 应显示 404 页面或 NotFound 组件
-    const has404 = await page.locator('text=404, text=页面不存在, text=找不到').first().isVisible().catch(() => false)
+    const has404 = await page.locator('text=/404|页面不存在|找不到/').first().isVisible().catch(() => false)
     expect(has404).toBeTruthy()
   })
 

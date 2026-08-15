@@ -9,19 +9,10 @@
 
 import { test, expect } from '@playwright/test';
 
-// 测试配置
-const TEST_USER = {
-  username: process.env.TEST_USERNAME || 'admin',
-  password: process.env.TEST_PASSWORD || 'Admin@202507!',
-};
-
-// 登录辅助函数
+// 登录辅助函数（storageState 已注入认证态，仅确认落在首页）
 async function login(page: any) {
-  await page.goto('/login');
-  await page.locator('input[placeholder*="用户名"], input[type="text"]').first().fill(TEST_USER.username);
-  await page.locator('input[type="password"]').fill(TEST_USER.password);
-  await page.locator('button[type="submit"], button:has-text("登录")').click();
-  await expect(page).toHaveURL(/\/(dashboard|home|$)/, { timeout: 10000 });
+  await page.goto('/');
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 10000 });
 }
 
 test.describe('表单提交流程', () => {

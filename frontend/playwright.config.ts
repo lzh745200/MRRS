@@ -24,9 +24,13 @@ export default defineConfig({
   /* 报告器 */
   reporter: process.env.CI ? 'github' : 'html',
 
+  /* 全局前置：API 登录一次生成 storageState，避免 UI 登录触发限流 */
+  globalSetup: './tests/e2e/global-setup.ts',
+
   /* 全局配置 */
   use: {
     baseURL: 'http://127.0.0.1:5173',
+    storageState: './tests/e2e/.auth/admin.json',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     locale: 'zh-CN',

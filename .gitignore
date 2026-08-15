@@ -328,3 +328,10 @@ frontend/vitest.config.ts.timestamp-*
 
 # vitest 临时配置
 frontend/vitest.*.mjs
+
+# E2E 认证态（global-setup 生成，含令牌，勿入库）
+frontend/tests/e2e/.auth/
+
+# E2E 运行产物
+frontend/test-results/
+frontend/playwright-report/

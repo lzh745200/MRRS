@@ -14,19 +14,10 @@ import { test, expect, Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// 测试配置
-const TEST_USER = {
-  username: process.env.TEST_USERNAME || 'admin',
-  password: process.env.TEST_PASSWORD || 'Admin@202507!',
-};
-
-// 登录辅助函数
+// 登录辅助函数（storageState 已注入认证态，仅确认落在首页）
 async function login(page: Page) {
-  await page.goto('/login');
-  await page.locator('input[placeholder*="用户名"], input[type="text"]').first().fill(TEST_USER.username);
-  await page.locator('input[type="password"]').fill(TEST_USER.password);
-  await page.locator('button[type="submit"], button:has-text("登录")').click();
-  await expect(page).toHaveURL(/\/(dashboard|home|$)/, { timeout: 10000 });
+  await page.goto('/');
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 10000 });
 }
 
 test.describe('数据导入导出流程', () => {
@@ -40,7 +31,7 @@ test.describe('数据导入导出流程', () => {
       await page.goto('/import');
 
       // 验证页面加载 - 检查标题或关键元素
-      await expect(page.locator('text=数据导入, text=导入数据, .title:has-text("导入")')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('text=数据导入').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('可以下载导入模板', async ({ page }) => {
@@ -103,7 +94,7 @@ test.describe('数据导入导出流程', () => {
       if (await modeSelector.first().isVisible()) {
         // 验证有增量和全量两种模式
         const incrementalOption = page.locator('text=增量, label:has-text("增量")');
-        const fullOption = page.locator('text=全量, text=覆盖, label:has-text("全量")');
+        const fullOption = page.locator('label:has-text("全量")').first();
 
         // 至少有一种模式可见
         const hasIncrementalOrFull = await incrementalOption.isVisible() || await fullOption.isVisible();
@@ -274,7 +265,7 @@ test.describe('数据导入导出流程', () => {
             await page.waitForTimeout(1000);
 
             // 验证显示任务ID或状态
-            const taskStatus = page.locator('text=任务ID, text=处理中, text=等待中, [class*="status"]');
+            const taskStatus = page.locator('text=任务ID').or(page.locator('[class*="status"]')).first();
             // 可能显示任务状态
           }
         }

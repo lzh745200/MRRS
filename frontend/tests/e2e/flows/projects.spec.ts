@@ -80,10 +80,11 @@ test.describe('帮扶项目管理', () => {
     await navigateTo(page, '/projects')
     await page.waitForLoadState('networkidle').catch(() => {})
 
-    // 勾选表头全选框
+    // 勾选表头全选框（el-checkbox 可见框体为伪元素渲染，原生区域持续"不稳定"，
+    // force 跳过稳定性检查）
     const selectAll = page.locator('.el-table__header .el-checkbox')
     if (await selectAll.isVisible()) {
-      await selectAll.click()
+      await selectAll.click({ force: true })
       // 如果有数据，批量操作栏应显示
       const hasRows = await page.locator('.el-table__row').count()
       if (hasRows > 0) {

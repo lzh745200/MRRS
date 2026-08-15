@@ -81,7 +81,9 @@ test.describe('经费管理', () => {
 
     const selectAll = page.locator('.el-table__header .el-checkbox')
     if (await selectAll.isVisible()) {
-      await selectAll.click()
+      // el-checkbox 的可见框体由 ::after 伪元素渲染，原生可点击区可能持续"不稳定"，
+      // force 跳过稳定性检查（语义仍是用户点击表头全选）
+      await selectAll.click({ force: true })
       const hasRows = await page.locator('.el-table__row').count()
       if (hasRows > 0) {
         await expect(page.locator('.batch-toolbar')).toBeVisible({ timeout: 3000 })

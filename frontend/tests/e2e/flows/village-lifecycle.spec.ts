@@ -37,7 +37,7 @@ test.describe('Village Lifecycle', () => {
     const firstRow = page.locator('table tbody tr').first()
     if (await firstRow.isVisible()) {
       await firstRow.click()
-      const yearlyLink = page.locator('text=年度概览, text=年度数据')
+      const yearlyLink = page.locator('text=/年度概览|年度数据/').first()
       if (await yearlyLink.first().isVisible()) {
         await yearlyLink.first().click()
         await page.waitForTimeout(1500)

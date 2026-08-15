@@ -15,6 +15,9 @@ const TEST_USER = {
   password: process.env.TEST_PASSWORD || 'Admin@202507!',
 };
 
+// 本文件测试登录表单本身，必须覆盖全局 storageState，以未认证态运行
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe('登录流程', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/login');
@@ -58,8 +61,8 @@ test.describe('登录流程', () => {
     // 点击登录按钮
     await page.locator('button[type="submit"], button:has-text("登录")').click();
 
-    // 验证显示验证错误
-    await expect(page.locator('.el-form-item__error, .validation-error')).toBeVisible({ timeout: 3000 });
+    // 验证显示验证错误（登录页使用 .error-banner 展示非表单校验错误）
+    await expect(page.locator('.error-banner, .el-form-item__error, .validation-error').first()).toBeVisible({ timeout: 3000 });
   });
 
   test('空密码显示验证错误', async ({ page }) => {
@@ -69,8 +72,8 @@ test.describe('登录流程', () => {
     // 点击登录按钮
     await page.locator('button[type="submit"], button:has-text("登录")').click();
 
-    // 验证显示验证错误
-    await expect(page.locator('.el-form-item__error, .validation-error')).toBeVisible({ timeout: 3000 });
+    // 验证显示验证错误（登录页使用 .error-banner 展示非表单校验错误）
+    await expect(page.locator('.error-banner, .el-form-item__error, .validation-error').first()).toBeVisible({ timeout: 3000 });
   });
 
   test('密码输入框支持显示/隐藏切换', async ({ page }) => {
@@ -98,7 +101,7 @@ test.describe('登录流程', () => {
     await expect(page).toHaveURL(/\/(dashboard|home|$)/, { timeout: 10000 });
 
     // 查找并点击登出按钮
-    const logoutButton = page.locator('text=退出, text=登出, [aria-label*="logout"]');
+    const logoutButton = page.locator('text=/退出|登出/').first();
     if (await logoutButton.isVisible()) {
       await logoutButton.click();
       // 验证返回登录页

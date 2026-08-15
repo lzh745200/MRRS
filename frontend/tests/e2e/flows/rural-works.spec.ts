@@ -21,15 +21,10 @@ const testWork = {
   target: '完成E2E测试验证'
 }
 
-// 辅助函数：登录
+// 辅助函数：确认已认证（storageState 已注入认证态，无需 UI 登录）
 async function login(page: Page) {
-  await page.goto(`${BASE_URL}/login`)
-  await page.fill('input[placeholder*="用户名"]', 'admin')
-  await page.fill('input[placeholder*="密码"]', process.env.TEST_PASSWORD || 'Admin@202507!')
-  await page.click('button[type="submit"]')
-
-  // 等待登录成功并跳转
-  await page.waitForURL(/.*(?!login).*/, { timeout: 10000 })
+  await page.goto(`${BASE_URL}/`)
+  await page.waitForURL(/\/(dashboard|home|$)/, { timeout: 10000 })
 }
 
 // 辅助函数：导航到乡村工作页面

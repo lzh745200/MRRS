@@ -12,19 +12,10 @@
 
 import { test, expect, Page } from '@playwright/test';
 
-// 测试配置
-const TEST_USER = {
-  username: process.env.TEST_USERNAME || 'admin',
-  password: process.env.TEST_PASSWORD || 'Admin@202507!',
-};
-
-// 登录辅助函数
+// 登录辅助函数（storageState 已注入认证态，仅确认落在首页）
 async function login(page: Page) {
-  await page.goto('/login');
-  await page.locator('input[placeholder*="用户名"], input[type="text"]').first().fill(TEST_USER.username);
-  await page.locator('input[type="password"]').fill(TEST_USER.password);
-  await page.locator('button[type="submit"], button:has-text("登录")').click();
-  await expect(page).toHaveURL(/\/(dashboard|home|$)/, { timeout: 10000 });
+  await page.goto('/');
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 10000 });
 }
 
 test.describe('消息通知系统', () => {
@@ -38,7 +29,7 @@ test.describe('消息通知系统', () => {
       await page.goto('/messages');
 
       // 验证页面加载
-      await expect(page.locator('text=消息中心, text=消息列表, .title:has-text("消息")')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('text=消息中心').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('消息中心显示未读数量', async ({ page }) => {
@@ -345,7 +336,7 @@ test.describe('消息通知系统', () => {
       await page.goto('/notifications/settings');
 
       // 验证页面加载
-      await expect(page.locator('text=通知设置, text=通知偏好, .title:has-text("通知")')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('text=通知设置').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('通知设置显示各类开关', async ({ page }) => {
