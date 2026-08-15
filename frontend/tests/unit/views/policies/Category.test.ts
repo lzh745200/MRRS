@@ -129,6 +129,13 @@ describe('挂载与统计', () => {
     await flushPromises()
     expect((wrapper.vm as any).militaryLevels).toEqual([])
     expect((wrapper.vm as any).localLevels).toEqual([])
+
+    // items 非数组 → Array.isArray(list) 假侧兜底空列表
+    mockGetLevelOptions.mockResolvedValueOnce({ items: { bad: 1 } })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).militaryLevels).toEqual([])
+    expect((wrapper.vm as any).localLevels).toEqual([])
   })
 })
 

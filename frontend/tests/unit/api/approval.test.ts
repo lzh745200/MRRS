@@ -398,3 +398,20 @@ describe('api/approval — 响应形态兼容分支', () => {
     expect(await batchApprove([5])).toEqual({ success: [], failed: [] })
   })
 })
+
+
+describe('api/approval — 剩余形态分支补全', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('getMyTasks：{data:[...]} 形态', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ data: [{ id: 11 }] })
+    expect(await getMyTasks()).toEqual({ items: [{ id: 11 }], total: 1 })
+  })
+
+  it('getTasksHistory：{items, total} 形态', async () => {
+    ;(mockGet as any).mockResolvedValueOnce({ items: [{ id: 12 }], total: 5 })
+    expect(await getTasksHistory()).toEqual({ items: [{ id: 12 }], total: 5 })
+  })
+})

@@ -120,6 +120,32 @@ describe('funds/YearlyComparisonChart.vue', () => {
     expect(wrapper.find('.el-empty').exists()).toBe(true)
   })
 
+  it('bare array response（裸数组旧形态）→ 正常渲染图表', async () => {
+    mockGet.mockResolvedValue([{ year: 2025, total_actual: 88 }])
+    const wrapper = mount(YearlyComparisonChart, { global: { stubs } })
+    await flushPromises()
+    const baseChart = wrapper.findComponent(BaseChart)
+    expect(baseChart.exists()).toBe(true)
+    const option = baseChart.props('option') as any
+    expect(option.xAxis.data).toEqual(['2025'])
+    expect(option.series[0].data).toEqual([88])
+  })
+
+  it('explicit failure success:false → 内联错误态（message 有/无两侧）', async () => {
+    mockGet.mockResolvedValue({ success: false, message: '年度对比失败' })
+    const wrapper = mount(YearlyComparisonChart, { global: { stubs } })
+    await flushPromises()
+    expect((wrapper.vm as any).loadError).toBe('年度对比失败')
+    expect(wrapper.find('.chart-error-state').exists()).toBe(true)
+    expect(wrapper.findComponent(BaseChart).exists()).toBe(false)
+
+    // 无 message → 兜底文案
+    mockGet.mockResolvedValue({ success: false })
+    await (wrapper.vm as any).refresh()
+    await flushPromises()
+    expect((wrapper.vm as any).loadError).toBe('暂无年度对比数据')
+  })
+
   it('only sends defined query params', async () => {
     mockGet.mockResolvedValue({ data: [] })
     mount(YearlyComparisonChart, { global: { stubs } })

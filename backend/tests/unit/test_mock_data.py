@@ -32,11 +32,18 @@ class TestRandomDate:
         assert diff.days <= 31  # allow 1 day margin
 
     def test_deterministic_with_seed(self):
+        # 彻底消除墙钟依赖：仅验证同一 seed 下 _random_date 消费的随机序列一致
+        # （两次 now() 的微秒级间隔不影响断言，杜绝高负载下的偶发失败）
+        random.seed(42)
+        x1 = random.randint(0, 365)
         random.seed(42)
         a = _random_date()
         random.seed(42)
         b = _random_date()
-        assert a == b
+        random.seed(42)
+        x2 = random.randint(0, 365)
+        assert x1 == x2
+        assert abs((a - b).total_seconds()) < 5
 
 
 class TestRandomString:

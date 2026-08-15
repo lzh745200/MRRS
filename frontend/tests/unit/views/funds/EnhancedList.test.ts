@@ -294,6 +294,15 @@ describe('挂载与初始化', () => {
     await flushPromises()
     expect((wrapper.vm as any).tableData).toHaveLength(1)
   })
+
+  it('fetchData：响应无 data 包装（?? response 侧）→ 直接使用裸响应', async () => {
+    mockApiRequest.mockResolvedValue({ items: [sampleFund, sampleFund2], total: 2 })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.tableData).toHaveLength(2)
+    expect(vm.total).toBe(2)
+  })
 })
 
 describe('统计卡片 computed', () => {

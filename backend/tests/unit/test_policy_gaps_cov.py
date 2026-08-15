@@ -77,13 +77,15 @@ class TestGetCategoryTree:
             SimpleNamespace(id=2, name="子类", code="c", parent_id=1),
         ]
         tree = await m.get_category_tree(current_user=_admin(), db=_q(all_=cats))
-        assert len(tree) == 1
-        assert tree[0]["children"][0]["id"] == 2
+        # 统一 envelope：{code:200, data:[...]}
+        assert len(tree["data"]) == 1
+        assert tree["data"][0]["children"][0]["id"] == 2
 
     async def test_query_error_returns_empty(self):
         db = MagicMock()
         db.query.side_effect = ValueError("boom")
-        assert await m.get_category_tree(current_user=_admin(), db=db) == []
+        result = await m.get_category_tree(current_user=_admin(), db=db)
+        assert result["data"] == []
 
 
 class TestCreatePolicy:

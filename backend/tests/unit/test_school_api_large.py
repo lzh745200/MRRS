@@ -155,7 +155,8 @@ class TestStaticEndpoints:
     def test_get_type_options(self, client):
         resp = client.get(P("/schools/options/types"))
         assert resp.status_code == 200
-        data = resp.json()
+        # 统一 envelope：{code:200, data:[...]}
+        data = resp.json()["data"]
         assert isinstance(data, list)
         labels = {d["label"] for d in data}
         assert "小学" in labels
@@ -163,7 +164,7 @@ class TestStaticEndpoints:
     def test_get_status_options(self, client):
         resp = client.get(P("/schools/options/statuses"))
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()["data"]
         assert isinstance(data, list)
         labels = {d["label"] for d in data}
         assert "帮扶中" in labels

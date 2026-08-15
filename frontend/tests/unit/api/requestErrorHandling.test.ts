@@ -688,3 +688,57 @@ describe('responseR — Blob 错误体 / silent / 超时网络分支（覆盖率
     })
   })
 })
+
+
+describe('responseR — 消息提取残余分支（覆盖率补全 II）', () => {
+  const blobError = (body: string, status = 400) => {
+    const blob = new Blob([body], { type: 'application/json' })
+    ;(blob as any).text = async () => body
+    return {
+      response: { status, data: blob },
+      config: makeConfig(),
+    }
+  }
+
+  it('Blob detail 为非字符串（如对象）→ 忽略并走状态兜底', async () => {
+    const error = blobError(JSON.stringify({ detail: { nested: 1 } }), 400)
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('请求失败 (400)')
+  })
+
+  it('Blob message 为非字符串 → 忽略并走状态兜底', async () => {
+    const error = blobError(JSON.stringify({ message: 123 }), 400)
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('请求失败 (400)')
+  })
+
+  it('422 detail 数组元素用 message 键（无 msg）→ 取 message', async () => {
+    const error = {
+      response: {
+        status: 422,
+        data: { detail: [{ loc: ['query', 'year'], message: 'field required' }] },
+      },
+      config: makeConfig(),
+    }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('query.year: field required')
+  })
+
+  it('带 response 无 status + ERR_NETWORK → 网络连接失败', async () => {
+    const error = { code: 'ERR_NETWORK', response: { data: {} }, config: makeConfig() }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('网络连接失败，请检查服务是否启动')
+  })
+
+  it('带 response 无 status + 普通 message → 透传 message', async () => {
+    const error = { message: '业务自定义错误', response: { data: {} }, config: makeConfig() }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('业务自定义错误')
+  })
+
+  it('带 response 无 status 无任何信息 → 操作失败兜底', async () => {
+    const error = { response: { data: {} }, config: makeConfig() }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('操作失败')
+  })
+})

@@ -47,6 +47,15 @@ ApprovalWorkflowService.register_entity_apply_handler("policy", _apply_policy_ap
 # ==================== 辅助函数 ====================
 
 
+async def _invalidate_policy_list_cache():
+    """清空政策列表缓存（含按用户隔离的缓存键 policies:list:{user_id}）"""
+    await cache_manager.delete("policies:list")
+    try:
+        await cache_manager.delete_by_prefix("policies:list:")
+    except Exception:
+        logger.debug("清空政策列表前缀缓存失败", exc_info=True)
+
+
 def _level_display_map() -> Dict[str, str]:
     return {
         "national": "国家级",
@@ -1010,7 +1019,7 @@ async def batch_delete_policies(data: dict, current_user=Depends(get_current_use
 
     deleted = db.query(Policy).filter(Policy.id.in_(ids)).delete(synchronize_session=False)
     safe_commit(db)
-    await cache_manager.delete("policies:list")
+    await _invalidate_policy_list_cache()
     # 数据变更自动创建审批任务：政策批量删除进入待审批板块（审计留痕）
     approval_task_id = submit_entity_change_approval(
         db,
@@ -1265,7 +1274,7 @@ async def create_policy(  # noqa: C901
         db.add(policy)
         safe_commit(db)
         db.refresh(policy)
-        await cache_manager.delete("policies:list")
+        await _invalidate_policy_list_cache()
         # FTS 索引同步（先确保 FTS 表存在，避免首条记录静默丢失索引）
         from app.services.policy_fts_service import ensure_fts_table, sync_policy_to_fts
         try:
@@ -1350,7 +1359,7 @@ async def update_policy(
 
         safe_commit(db)
         db.refresh(policy)
-        await cache_manager.delete("policies:list")
+        await _invalidate_policy_list_cache()
         # FTS 索引同步（先确保 FTS 表存在，避免首条记录静默丢失索引）
         from app.services.policy_fts_service import ensure_fts_table, sync_policy_to_fts
         try:
@@ -1390,7 +1399,7 @@ async def delete_policy(
 
     policy.is_active = False
     safe_commit(db)
-    await cache_manager.delete("policies:list")
+    await _invalidate_policy_list_cache()
     # FTS 索引同步
     from app.services.policy_fts_service import remove_policy_from_fts
     remove_policy_from_fts(db, policy_id)
@@ -1417,7 +1426,7 @@ async def publish_policy(
 
     setattr(policy, "status", "active")
     safe_commit(db)
-    await cache_manager.delete("policies:list")
+    await _invalidate_policy_list_cache()
     # 数据变更自动创建审批任务（Requirement 3.2）：政策发布进入待审批板块（审计留痕）
     approval_task_id = submit_entity_change_approval(
         db,
@@ -1445,7 +1454,7 @@ async def archive_policy(
 
     setattr(policy, "status", "invalid")
     safe_commit(db)
-    await cache_manager.delete("policies:list")
+    await _invalidate_policy_list_cache()
     # 数据变更自动创建审批任务（Requirement 3.2）：政策归档进入待审批板块（审计留痕）
     approval_task_id = submit_entity_change_approval(
         db,

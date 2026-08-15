@@ -610,3 +610,15 @@ describe('projects/Import.vue 文件名校验兜底', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('请上传.xlsx或.xls格式的文件')
   })
 })
+
+
+describe('downloadTemplate — 响应无 headers 字段的兜底分支', () => {
+  it('resp.headers 为 undefined → 以 {} 解析文件名并使用默认文件名', async () => {
+    requestMock.requestGet.mockResolvedValueOnce({ data: new Blob(['x']) })
+    const wrapper = mountComp()
+    await flushPromises()
+    await (wrapper.vm as any).downloadTemplate()
+    expect(requestMock.parseContentDisposition).toHaveBeenCalledWith({}, '项目导入模板.xlsx')
+    expect(requestMock.downloadBlob).toHaveBeenCalled()
+  })
+})

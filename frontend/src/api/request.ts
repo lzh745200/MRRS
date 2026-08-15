@@ -230,7 +230,7 @@ async function _buildUserMessage(error: any): Promise<string> {
     }
     return serverMsg || '输入数据校验失败'
   }
-  if (status === 403) return serverMsg || '权限不足，无法执行此操作'
+  // 注：401/403 由响应拦截器先行处理（登录过期/CSRF 重试），不会到达本函数
   if (status === 404) return serverMsg || '请求的资源不存在'
   if (status >= 500) return serverMsg || '服务器错误，请稍后重试'
   if (status) return serverMsg || `请求失败 (${status})`

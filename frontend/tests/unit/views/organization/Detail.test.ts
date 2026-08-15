@@ -209,6 +209,17 @@ describe('挂载与详情加载', () => {
     wrapper.unmount()
   })
 
+  it('详情响应裸对象形态（无 data 包装 → ?? res 侧）', async () => {
+    mockGetDetail.mockResolvedValue({ id: 11, name: '裸单位', org_type: 'custom' })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.detail.name).toBe('裸单位')
+    expect(vm.detail.id).toBe(11)
+    expect(vm.loading).toBe(false)
+    wrapper.unmount()
+  })
+
   it('主卡组织类型 support_unit → 帮扶单位标签；子组织 department → 部门单位标签', async () => {
     mockGetDetail.mockResolvedValue({
       data: {
