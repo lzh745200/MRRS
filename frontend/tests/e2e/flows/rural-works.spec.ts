@@ -25,7 +25,7 @@ const testWork = {
 async function login(page: Page) {
   await page.goto(`${BASE_URL}/login`)
   await page.fill('input[placeholder*="用户名"]', 'admin')
-  await page.fill('input[placeholder*="密码"]', 'admin123')
+  await page.fill('input[placeholder*="密码"]', process.env.TEST_PASSWORD || 'Admin@202507!')
   await page.click('button[type="submit"]')
 
   // 等待登录成功并跳转
@@ -398,7 +398,7 @@ test.describe('API 健康检查', () => {
     const loginResponse = await request.post(`${API_URL}/auth/login`, {
       form: {
         username: 'admin',
-        password: 'admin123'
+        password: process.env.TEST_PASSWORD || 'Admin@202507!'
       }
     })
 

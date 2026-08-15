@@ -52,7 +52,10 @@ export default defineConfig({
       env: {
         ...process.env,
         // E2E 使用独立测试数据库，避免污染生产数据（备份自 rural_revitalization.db）
-        DATABASE_URL: 'sqlite:///C:/military-Rural%20Revitalization-system/backend/data/e2e_test.db',
+        // 注意：必须用相对路径（由后端 config.py 解析到动态数据目录）。
+        // 绝对路径中的空格若写成 %20，SQLAlchemy 不会解码，会在 C:\ 下创建
+        // 名为 "military-Rural%20Revitalization-system" 的幻影目录并新建空库。
+        DATABASE_URL: 'sqlite:///./data/e2e_test.db',
       },
     },
     {

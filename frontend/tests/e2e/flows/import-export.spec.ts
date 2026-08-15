@@ -17,7 +17,7 @@ import * as path from 'path';
 // 测试配置
 const TEST_USER = {
   username: process.env.TEST_USERNAME || 'admin',
-  password: process.env.TEST_PASSWORD || 'admin123',
+  password: process.env.TEST_PASSWORD || 'Admin@202507!',
 };
 
 // 登录辅助函数

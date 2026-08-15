@@ -15,7 +15,7 @@ test.describe('核心业务流', () => {
     // 登录
     await page.goto(`${BASE}/login`);
     await page.fill('input[placeholder*="用户名"]', 'admin');
-    await page.fill('input[type="password"]', 'admin123');
+    await page.fill('input[type="password"]', process.env.TEST_PASSWORD || 'Admin@202507!');
     await page.click('button:has-text("登录")');
     await page.waitForURL('**/dashboard', { timeout: 10000 });
   });
