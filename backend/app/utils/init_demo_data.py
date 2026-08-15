@@ -186,7 +186,7 @@ def seed(db: Session) -> None:
         ))
     db.flush()
 
-    # ── 乡村工作（8 条，village_id 关联 villages 表）──
+    # ── 乡村工作（6 条，village_id 关联 villages 表）──
     from app.models.village import Village as LegacyVillage
 
     legacy_villages = []
@@ -245,7 +245,7 @@ def seed(db: Session) -> None:
     db.flush()
 
     safe_commit(db)
-    logger.info("演示数据初始化完成：6村/6项目/12经费/5预算/6合同/6政策/8乡村工作/4审批任务")
+    logger.info("演示数据初始化完成：6村/6项目/12经费/5预算/6合同/6政策/6乡村工作/4审批任务")
 
 
 def main() -> None:
