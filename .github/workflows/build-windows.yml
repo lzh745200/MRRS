@@ -16,7 +16,9 @@ env:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 后端全量 pytest（1.2万+）+ 前端 vitest（6.4k+）合计已超 30 分钟预算，
+    # 2026-08-15 三次运行均在前端步骤进行中被 30min 超时掐断（结论记为 cancelled）
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
