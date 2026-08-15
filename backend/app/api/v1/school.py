@@ -1354,9 +1354,24 @@ async def import_school_scholarship_students(
             if not row or len(row) < 2 or not row[0]:
                 continue
             try:
+                _sname = str(row[0]).strip()
+                _sgrade = str(row[1]).strip() if len(row) > 1 and row[1] else None
+                # 重复学生去重：同校同姓名同年级已有记录则跳过并提示
+                _dup = (
+                    db.query(ScholarshipStudent)
+                    .filter(
+                        ScholarshipStudent.school_id == school_id,
+                        ScholarshipStudent.student_name == _sname,
+                        ScholarshipStudent.grade == _sgrade,
+                    )
+                    .first()
+                )
+                if _dup:
+                    errors.append(f"第{row_idx}行: 学生 {_sname}（{_sgrade or '年级未知'}）已存在，跳过")
+                    continue
                 stu = ScholarshipStudent(
                     school_id=school_id,
-                    student_name=str(row[0]),
+                    student_name=_sname,
                     grade=str(row[1]) if len(row) > 1 and row[1] else None,
                     year=int(row[2]) if len(row) > 2 and row[2] else None,
                     amount=float(row[3]) if len(row) > 3 and row[3] else 0,

@@ -1,6 +1,11 @@
 /**
  * views/system/MapTileManager.vue 覆盖率攻坚
  * 覆盖：状态加载、下载/清理确认、预设区域、缩放级别数据
+ *
+ * 后端契约（backend/app/api/v1/offline_map.py）：
+ * - GET  /offline-map/status   → { success, data: { total_tiles, total_size_mb, zoom_levels } }
+ * - POST /offline-map/download → { success, data: { region } }  （无 downloaded/failed 计数）
+ * - DELETE /offline-map/clear  → { success, message }           （整体清理，无 data 键）
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
@@ -37,6 +42,11 @@ const coverageData = {
   total_size_mb: 500,
   zoom_levels: { '4': 100, '8': 300, '12': 600 },
 }
+
+// 与后端 download 端点 region 构造一致（默认表单值）
+const DEFAULT_REGION = '24.5,103.6-29.2,109.5@4-12'
+// 与后端 clear 端点返回的 message 一致
+const CLEAR_MESSAGE = '瓦片缓存已清理'
 
 async function mountComp() {
   const w = mount(MapTileManager, {
@@ -90,11 +100,8 @@ async function mountComp() {
 beforeEach(() => {
   vi.clearAllMocks()
   mockGetMapStatus.mockResolvedValue({ success: true, data: coverageData })
-  mockDownloadTiles.mockResolvedValue({
-    success: true,
-    data: { downloaded: 10, failed: 2 },
-  })
-  mockClearTiles.mockResolvedValue({ success: true, data: { deleted_count: 1000 } })
+  mockDownloadTiles.mockResolvedValue({ success: true, data: { region: DEFAULT_REGION } })
+  mockClearTiles.mockResolvedValue({ success: true, message: CLEAR_MESSAGE })
   ElMessageBox.confirm.mockResolvedValue('confirm')
 })
 
@@ -136,9 +143,31 @@ describe('MapTileManager.vue', () => {
     const w = await mountComp()
     const vm = w.vm as any
     await vm.handleDownload()
-    expect(ElMessageBox.confirm).toHaveBeenCalled()
+    expect(ElMessageBox.confirm).toHaveBeenCalledWith(
+      '下载瓦片可能需要较长时间,确定要继续吗?',
+      '确认下载',
+      expect.objectContaining({ type: 'warning' })
+    )
     expect(mockDownloadTiles).toHaveBeenCalledWith(vm.downloadForm)
-    expect(ElMessage.success).toHaveBeenCalledWith('下载完成! 成功 10 个, 失败 2 个')
+    expect(ElMessage.success).toHaveBeenCalledWith(`下载完成! 区域 ${DEFAULT_REGION}`)
+    expect(vm.downloading).toBe(false)
+  })
+
+  it('handleDownload：成功但 data 无 region → 默认区域文案', async () => {
+    mockDownloadTiles.mockResolvedValue({ success: true })
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.handleDownload()
+    expect(ElMessage.success).toHaveBeenCalledWith('下载完成! 区域 已记录')
+    expect(vm.downloading).toBe(false)
+  })
+
+  it('handleDownload：success=false → 不提示成功', async () => {
+    mockDownloadTiles.mockResolvedValue({ success: false })
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.handleDownload()
+    expect(ElMessage.success).not.toHaveBeenCalled()
     expect(vm.downloading).toBe(false)
   })
 
@@ -171,9 +200,29 @@ describe('MapTileManager.vue', () => {
     const w = await mountComp()
     const vm = w.vm as any
     await vm.handleClearLevel(8)
-    expect(ElMessageBox.confirm).toHaveBeenCalled()
+    expect(ElMessageBox.confirm).toHaveBeenCalledWith(
+      '系统当前为整体瓦片缓存清理（不区分缩放级别）。确定要继续吗?',
+      '确认清理',
+      expect.objectContaining({ type: 'warning' })
+    )
     expect(mockClearTiles).toHaveBeenCalled()
-    expect(ElMessage.success).toHaveBeenCalledWith('已清理 1000 个瓦片')
+    expect(ElMessage.success).toHaveBeenCalledWith(CLEAR_MESSAGE)
+  })
+
+  it('handleClearLevel：成功但无 message → 默认清理文案', async () => {
+    mockClearTiles.mockResolvedValue({ success: true })
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.handleClearLevel(8)
+    expect(ElMessage.success).toHaveBeenCalledWith(CLEAR_MESSAGE)
+  })
+
+  it('handleClearLevel：success=false → 不提示成功', async () => {
+    mockClearTiles.mockResolvedValue({ success: false })
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.handleClearLevel(8)
+    expect(ElMessage.success).not.toHaveBeenCalled()
   })
 
   it('handleClearLevel：用户取消 → 无操作', async () => {
@@ -204,9 +253,29 @@ describe('MapTileManager.vue', () => {
     const w = await mountComp()
     const vm = w.vm as any
     await vm.handleClearAll()
-    expect(ElMessageBox.confirm).toHaveBeenCalled()
+    expect(ElMessageBox.confirm).toHaveBeenCalledWith(
+      '确定要清理所有瓦片吗?',
+      '确认清理',
+      expect.objectContaining({ type: 'warning' })
+    )
     expect(mockClearTiles).toHaveBeenCalled()
-    expect(ElMessage.success).toHaveBeenCalledWith('已清理 1000 个瓦片')
+    expect(ElMessage.success).toHaveBeenCalledWith(CLEAR_MESSAGE)
+  })
+
+  it('handleClearAll：成功但无 message → 默认清理文案', async () => {
+    mockClearTiles.mockResolvedValue({ success: true })
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.handleClearAll()
+    expect(ElMessage.success).toHaveBeenCalledWith(CLEAR_MESSAGE)
+  })
+
+  it('handleClearAll：success=false → 不提示成功', async () => {
+    mockClearTiles.mockResolvedValue({ success: false })
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.handleClearAll()
+    expect(ElMessage.success).not.toHaveBeenCalled()
   })
 
   it('handleClearAll：用户取消 → 无操作', async () => {
@@ -215,6 +284,14 @@ describe('MapTileManager.vue', () => {
     const vm = w.vm as any
     await vm.handleClearAll()
     expect(mockClearTiles).not.toHaveBeenCalled()
+  })
+
+  it('handleClearAll：失败 → 错误提示', async () => {
+    mockClearTiles.mockRejectedValue(new Error('clear all failed'))
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.handleClearAll()
+    expect(ElMessage.error).toHaveBeenCalledWith('clear all failed')
   })
 
   it('handleClearAll：失败无 message → 默认文案', async () => {
@@ -299,6 +376,6 @@ describe('MapTileManager.vue', () => {
     expect(rowBtns.length).toBeGreaterThan(0)
     await rowBtns[0].trigger('click')
     expect(mockClearTiles).toHaveBeenCalled()
-    expect(ElMessage.success).toHaveBeenCalledWith('已清理 1000 个瓦片')
+    expect(ElMessage.success).toHaveBeenCalledWith(CLEAR_MESSAGE)
   })
 })

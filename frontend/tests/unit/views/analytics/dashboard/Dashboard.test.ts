@@ -294,7 +294,7 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
     await nextTick()
 
     expect(drillDown).toHaveBeenCalledWith({
-      dimension: 'region',
+      dimension: 'province',
       value: '三区三州',
       targetDimension: 'department',
     })

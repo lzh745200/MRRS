@@ -50,7 +50,13 @@ const categories = [
 ]
 
 const articleRows = [
-  { id: 1, title: '如何导入数据', category: '使用指南', tags: ['导入', '数据'], summary: '导入步骤' },
+  {
+    id: 1,
+    title: '如何导入数据',
+    category: '使用指南',
+    tags: ['导入', '数据'],
+    summary: '导入步骤',
+  },
   { id: 2, title: '常见问题解答', category: 'FAQ', tags: [], summary: 'FAQ' },
   { id: 3, title: '无标签文章', category: '', tags: undefined, summary: '' },
 ]
@@ -134,9 +140,17 @@ beforeEach(() => {
   mockGetCategories.mockResolvedValue({ data: { categories } })
   mockGetArticles.mockResolvedValue({ data: { items: articleRows, total: 3 } })
   mockGetArticle.mockResolvedValue({
-    data: { id: 1, title: '如何导入数据', category: '使用指南', content: '<p>正文内容</p>', tags: ['导入'] },
+    data: {
+      id: 1,
+      title: '如何导入数据',
+      category: '使用指南',
+      content: '<p>正文内容</p>',
+      tags: ['导入'],
+    },
   })
-  mockSearch.mockResolvedValue({ data: { items: [{ id: 9, title: '命中', snippet: '搜索片段', category: 'guide' }], total: 1 } })
+  mockSearch.mockResolvedValue({
+    data: { items: [{ id: 9, title: '命中', snippet: '搜索片段', category: 'guide' }], total: 1 },
+  })
   mockGetSystemInfo.mockResolvedValue({ data: systemInfo })
 })
 
@@ -202,7 +216,9 @@ describe('挂载加载', () => {
   })
 
   it('系统信息无 contact → contact 可选链空侧；失败静默', async () => {
-    mockGetSystemInfo.mockResolvedValueOnce({ data: { name: 'x', short_name: 'x', version: '1', description: 'd', features: [] } })
+    mockGetSystemInfo.mockResolvedValueOnce({
+      data: { name: 'x', short_name: 'x', version: '1', description: 'd', features: [] },
+    })
     let wrapper = mountComp()
     await flushPromises()
     expect(wrapper.find('.system-info-card').exists()).toBe(true)
@@ -235,7 +251,9 @@ describe('分类选择与列表', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    const catItem = wrapper.findAll('.category-item').find((c: any) => c.text().includes('使用指南'))
+    const catItem = wrapper
+      .findAll('.category-item')
+      .find((c: any) => c.text().includes('使用指南'))
     await catItem.trigger('click')
     await flushPromises()
     expect(vm.activeCategory).toBe('guide')
@@ -266,7 +284,9 @@ describe('分类选择与列表', () => {
     await vm.viewArticle({})
     expect(mockGetArticle).not.toHaveBeenCalled()
 
-    mockGetArticle.mockResolvedValueOnce({ data: { id: 2, title: '无内容', category: 'FAQ', content: '', tags: [] } })
+    mockGetArticle.mockResolvedValueOnce({
+      data: { id: 2, title: '无内容', category: 'FAQ', content: '', tags: [] },
+    })
     await vm.viewArticle({ id: 2 })
     expect(vm.viewMode).toBe('detail')
     await nextTick()
@@ -343,7 +363,9 @@ describe('搜索', () => {
   })
 
   it('items 命中但 total=0 → 「未找到相关文档」空态', async () => {
-    mockSearch.mockResolvedValueOnce({ data: { items: [{ id: 8, title: 't', snippet: 's', category: 'c' }], total: 0 } })
+    mockSearch.mockResolvedValueOnce({
+      data: { items: [{ id: 8, title: 't', snippet: 's', category: 'c' }], total: 0 },
+    })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -392,7 +414,8 @@ describe('工具函数', () => {
     expect(vm.highlightKeyword('')).toBe('')
     vm.searchQuery = '导入'
     const out = vm.highlightKeyword('如何导入数据')
-    expect(out).toContain('<span style="background:#fff3cd')
+    // 高亮使用 class（内联 style 会被 sanitizeHtml 的白名单剥离）
+    expect(out).toContain('<span class="search-highlight">')
     expect(out).toContain('导入')
     expect(vm.highlightKeyword('')).toBe('') // 有查询 + snippet 空 → sanitize('') 兜底
     vm.searchQuery = 'a.b' // 正则特殊字符转义

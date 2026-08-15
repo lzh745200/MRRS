@@ -19,13 +19,20 @@ class OrganizationCodeService:
         self.db = db
         self._codes = {}
 
-    def generate_code(self, org_name: str, parent_code: Optional[str] = None) -> str:
-        """生成组织编码"""
+    def generate_code(
+        self,
+        org_name: str = "",
+        parent_code: Optional[str] = None,
+        prefix: Optional[str] = None,
+    ) -> str:
+        """生成组织编码；提供 prefix 时返回 ``PREFIX-XXXXXXXX`` 形态"""
         import hashlib
         import secrets
 
         base = f"{org_name}:{parent_code or ''}:{secrets.token_hex(4)}"
         code = hashlib.sha256(base.encode()).hexdigest()[:8].upper()
+        if prefix:
+            code = f"{prefix}-{code}"
         # 防止碰撞：如果已存在则在末尾添加随机字符
         original_code = code
         attempts = 0

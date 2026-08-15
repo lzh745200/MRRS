@@ -67,7 +67,8 @@
           </template>
         </el-table-column>
         <el-table-column prop="amount" label="金额（万元）" width="120" align="center" />
-        <el-table-column prop="usedAmount" label="已使用（万元）" width="120" align="center" />
+        <!-- 数据键为 used_amount（见 loadReportData 映射），勿改成 usedAmount 否则列空白 -->
+        <el-table-column prop="used_amount" label="已使用（万元）" width="120" align="center" />
         <el-table-column prop="balance" label="余额（万元）" width="120" align="center" />
         <el-table-column prop="usageRate" label="使用率" width="100" align="center">
           <template #default="{ row }"> {{ row.usageRate }}% </template>

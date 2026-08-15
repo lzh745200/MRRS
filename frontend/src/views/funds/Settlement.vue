@@ -80,7 +80,7 @@
                 type="primary"
                 size="small"
                 class="ml-2"
-                @click="showApproveDialog = true"
+                @click="openApproveDialog"
               >
                 审批决算
               </el-button>
@@ -253,6 +253,15 @@ const approveForm = reactive({
   performance_level: '',
   audit_opinion: '',
 })
+
+// 打开审批弹窗前重置表单，避免残留上次评分/意见
+function openApproveDialog() {
+  approveForm.performance_score = 80
+  approveForm.performance_level = ''
+  approveForm.audit_opinion = ''
+  approveFormRef.value?.clearValidate?.()
+  showApproveDialog.value = true
+}
 
 const approveRules = {
   performance_score: [

@@ -1,6 +1,7 @@
 /**
  * views/system/Role.vue 覆盖率攻坚（statements/branches/functions/lines 四指标 100%）
- * 覆盖：加载（角色列表/权限树全兜底分支）、搜索/重置/分页 v-model、
+ * 覆盖：加载（角色列表 bare/envelope 双形态 + 空列表 + 全兜底分支、权限树全兜底分支）、
+ * 搜索/重置/分页 v-model、
  * 新增/编辑/提交（validate 三分支 + isEdit 两侧 + 失败）、用户列表对话框
  * （三种响应形态 + 异常 + 空态 v-if 两侧）、删除（有关联/无关联/取消/失败）、
  * 权限配置（checkAll/uncheckAll、savePermissions 四分支）、
@@ -67,7 +68,8 @@ const permissionsPayload = {
 }
 
 function defaultGetImpl(url: string) {
-  if (url === '/rbac/roles') return Promise.resolve({ data: { data: [roleAdmin, roleViewer] } })
+  // loadRoles 现读取 res?.data || res?.items || [] —— bare 形态下 res.data 即角色数组
+  if (url === '/rbac/roles') return Promise.resolve({ data: [roleAdmin, roleViewer], total: 2 })
   if (url === '/rbac/permissions') return Promise.resolve(permissionsPayload)
   if (url === '/rbac/roles/r1/users') return Promise.resolve({ data: roleUsersR1 })
   if (url === '/rbac/roles/r2/users') return Promise.resolve({ data: [] })
@@ -221,7 +223,7 @@ describe('挂载与数据加载', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('net')
   })
 
-  it('loadRoles：响应缺 data → 空表兜底', async () => {
+  it('loadRoles：响应缺 data 与 items → 空表兜底（|| [] 末段）', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/rbac/roles') return Promise.resolve({})
       return defaultGetImpl(url)
@@ -229,6 +231,45 @@ describe('挂载与数据加载', () => {
     const wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).tableData).toEqual([])
+  })
+
+  it('loadRoles：envelope 形态响应 { items } → 取 items 作为角色列表', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/rbac/roles') return Promise.resolve({ items: [roleAdmin] })
+      return defaultGetImpl(url)
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.tableData).toEqual([
+      {
+        id: 'r1',
+        name: '系统管理员',
+        code: '系统管理员',
+        description: '最高权限',
+        userCount: 1,
+        createTime: '2024-01-01',
+        status: 'active',
+      },
+    ])
+    expect(vm.pagination.total).toBe(1)
+  })
+
+  it('loadRoles：bare 空数组 → 空表且不调用用户数接口', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/rbac/roles') return Promise.resolve({ data: [], total: 0 })
+      return defaultGetImpl(url)
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.tableData).toEqual([])
+    expect(vm.pagination.total).toBe(0)
+    const userCountCalls = mockGet.mock.calls.filter(
+      ([url]) =>
+        typeof url === 'string' && url.startsWith('/rbac/roles/') && url.endsWith('/users')
+    )
+    expect(userCountCalls).toHaveLength(0)
   })
 
   it('角色用户数接口失败 → userCount 兜底 0', async () => {

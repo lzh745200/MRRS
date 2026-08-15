@@ -385,11 +385,13 @@
 
       <el-main id="main-content" class="layout-content" role="main" aria-label="主内容区">
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <CommonErrorBoundary :key="route.path">
-              <component :is="Component" v-if="Component" />
-            </CommonErrorBoundary>
-          </transition>
+          <!-- 注意：此处曾用 <transition name="fade" mode="out-in"> 包裹，但其子组件
+               ErrorBoundary 根节点是 display:contents（无盒模型），opacity 过渡不产生
+               transitionend，out-in 模式下旧节点永不完成离场 → 客户端路由切换后主内容区
+               永久空白。淡入淡出为纯装饰，移除以根治；不要再加回 transition 包装。 -->
+          <CommonErrorBoundary :key="route.path">
+            <component :is="Component" v-if="Component" />
+          </CommonErrorBoundary>
         </router-view>
       </el-main>
 
@@ -508,10 +510,17 @@ onUnmounted(() => {
 })
 
 // ── 自动锁屏（单机共用电脑，无操作 N 分钟回登录页）──
+// 锁屏只结束当前会话；不调用 logout()（否则会清除"记住登录"持久凭据，
+// 导致下次开机免登录失效 —— 修复 2026-08-15）
 useAutoLockModule({
   onLock: () => {
-    authStore.logout()
-    window.location.href = '/login'
+    authStore.lockSession()
+    // 携带当前路由：解锁重新登录后恢复到锁屏前页面
+    const _rp =
+      route.fullPath && route.fullPath !== '/login'
+        ? `?redirect=${encodeURIComponent(route.fullPath)}`
+        : ''
+    window.location.href = `/login${_rp}`
   },
 })
 
@@ -1049,16 +1058,8 @@ function handleCommand(command: string) {
 }
 
 /* ===================================================================
-   过渡动画
+   过渡动画（仅保留标题区 fade-title；主内容区 fade 已移除，见模板注释）
    =================================================================== */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.18s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
 
 /* ===================================================================
    WCAG 跳过链接

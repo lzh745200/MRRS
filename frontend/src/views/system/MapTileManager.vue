@@ -28,10 +28,8 @@
           <el-table-column prop="level" label="缩放级别" width="120" />
           <el-table-column prop="count" label="瓦片数量" />
           <el-table-column label="操作" width="150">
-            <template #default="{ row }">
-              <el-button type="danger" size="small" @click="handleClearLevel(row.level)">
-                清理
-              </el-button>
+            <template #default>
+              <el-button type="danger" size="small" @click="handleClearLevel()"> 清理 </el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -197,9 +195,8 @@ const handleDownload = async () => {
     const response = await downloadTiles(downloadForm.value)
 
     if (response.success) {
-      ElMessage.success(
-        `下载完成! 成功 ${response.data.downloaded} 个, 失败 ${response.data.failed} 个`
-      )
+      // 后端返回 {success, data:{region}}（无 downloaded/failed 计数）
+      ElMessage.success(`下载完成! 区域 ${response.data?.region || '已记录'}`)
       await loadStatus()
     }
   } catch (error: any) {
@@ -211,17 +208,23 @@ const handleDownload = async () => {
   }
 }
 
-const handleClearLevel = async (level: number) => {
+const handleClearLevel = async () => {
   try {
-    await ElMessageBox.confirm(`确定要清理缩放级别 ${level} 的所有瓦片吗?`, '确认清理', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
+    // 后端 /offline-map/clear 为整体清理（不支持按缩放级别），提示语如实说明
+    await ElMessageBox.confirm(
+      `系统当前为整体瓦片缓存清理（不区分缩放级别）。确定要继续吗?`,
+      '确认清理',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
 
     const response = await clearTiles()
     if (response.success) {
-      ElMessage.success(`已清理 ${response.data.deleted_count} 个瓦片`)
+      // 后端返回 {success:true, message}（无 data 键）
+      ElMessage.success(response.message || '瓦片缓存已清理')
       await loadStatus()
     }
   } catch (error: any) {
@@ -241,7 +244,7 @@ const handleClearAll = async () => {
 
     const response = await clearTiles()
     if (response.success) {
-      ElMessage.success(`已清理 ${response.data.deleted_count} 个瓦片`)
+      ElMessage.success(response.message || '瓦片缓存已清理')
       await loadStatus()
     }
   } catch (error: any) {

@@ -127,10 +127,15 @@
         <el-form-item label="规则类型" prop="rule_type">
           <el-select v-model="formData.rule_type" placeholder="选择规则类型" style="width: 100%">
             <el-option label="非空检查" value="required" />
+            <el-option label="正数" value="positive" />
+            <el-option label="非负数" value="non_negative" />
+            <el-option label="日期格式" value="date_format" />
+            <el-option label="最大长度" value="max_length" />
+            <el-option label="最小长度" value="min_length" />
             <el-option label="数值范围" value="range" />
             <el-option label="正则匹配" value="regex" />
-            <el-option label="唯一性" value="unique" />
-            <el-option label="自定义" value="custom" />
+            <el-option label="枚举值" value="enum_values" />
+            <el-option label="跨字段逻辑" value="cross_field" />
           </el-select>
         </el-form-item>
         <el-form-item label="规则参数" prop="params">
@@ -275,10 +280,15 @@ function moduleLabel(m: string): string {
 function ruleTypeLabel(t: string): string {
   const map: Record<string, string> = {
     required: '非空检查',
+    positive: '正数',
+    non_negative: '非负数',
+    date_format: '日期格式',
+    max_length: '最大长度',
+    min_length: '最小长度',
     range: '数值范围',
     regex: '正则匹配',
-    unique: '唯一性',
-    custom: '自定义',
+    enum_values: '枚举值',
+    cross_field: '跨字段逻辑',
   }
   return map[t] || t
 }

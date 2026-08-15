@@ -10,9 +10,6 @@
         <el-button type="primary" @click="openApplyDialog">
           <el-icon><EditPen /></el-icon>提交经费申请
         </el-button>
-        <el-button v-if="canOperate" type="success" @click="openCreateDialog">
-          <el-icon><Plus /></el-icon>新增经费记录
-        </el-button>
         <el-button @click="pushSafe('/approval/my')">
           <el-icon><Tickets /></el-icon>我的申请
         </el-button>
@@ -322,7 +319,7 @@ import { logger } from '@/utils/logger'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
-import { EditPen, Search, Tickets, Plus } from '@element-plus/icons-vue'
+import { EditPen, Search, Tickets } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { get, post, put, del, apiRequest } from '@/api/request'
@@ -370,10 +367,10 @@ const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
 
-// 新增/编辑/申请弹窗状态
-type DialogMode = 'create' | 'edit' | 'apply'
+// 申请/编辑弹窗状态
+type DialogMode = 'edit' | 'apply'
 const dialogVisible = ref(false)
-const dialogMode = ref<DialogMode>('create')
+const dialogMode = ref<DialogMode>('apply')
 const editingId = ref<number | null>(null)
 const submitting = ref(false)
 const dialogFormRef = ref<FormInstance>()
@@ -399,16 +396,8 @@ const dialogRules: FormRules = {
   amount: [{ required: true, message: '请输入金额', trigger: 'blur' }],
 }
 
-const dialogTitle = computed(() => {
-  if (dialogMode.value === 'apply') return '提交经费申请'
-  if (dialogMode.value === 'edit') return '编辑经费记录'
-  return '新增经费记录'
-})
-const submitButtonText = computed(() => {
-  if (dialogMode.value === 'apply') return '提交申请'
-  if (dialogMode.value === 'edit') return '保存修改'
-  return '确认新增'
-})
+const dialogTitle = computed(() => (dialogMode.value === 'apply' ? '提交经费申请' : '编辑经费记录'))
+const submitButtonText = computed(() => (dialogMode.value === 'apply' ? '提交申请' : '保存修改'))
 
 const filterForm = reactive({
   keyword: '',
@@ -518,14 +507,6 @@ function openApplyDialog() {
   dialogVisible.value = true
 }
 
-// 新增经费记录
-function openCreateDialog() {
-  dialogMode.value = 'create'
-  editingId.value = null
-  resetDialogForm()
-  dialogVisible.value = true
-}
-
 // 编辑经费记录
 function openEditDialog(row: any) {
   dialogMode.value = 'edit'
@@ -582,9 +563,6 @@ async function handleSubmitDialog() {
       } else if (dialogMode.value === 'edit' && editingId.value) {
         await put(`/funds/${editingId.value}`, payload)
         ElMessage.success('经费记录已更新')
-      } else {
-        await post('/funds', payload)
-        ElMessage.success('经费记录已新增')
       }
       dialogVisible.value = false
       currentPage.value = 1

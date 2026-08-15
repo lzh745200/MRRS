@@ -56,21 +56,22 @@ describe('api/import', () => {
     expect(url).toBe('/import/entities')
     expect(formData).toBeInstanceOf(FormData)
     expect(formData.get('file')).toBe(file)
-    expect(formData.get('entity_type')).toBe('supported_village')
-    expect(formData.get('mode')).toBe('incremental')
+    // entity_type/mode 通过 Query 参数传递（后端 Query 校验），不放入 FormData
+    expect(formData.get('entity_type')).toBeNull()
+    expect(config.params).toEqual({ entity_type: 'supported_village', mode: 'incremental' })
     expect(config.headers['Content-Type']).toBe('multipart/form-data')
     expect(config.timeout).toBe(120000)
     expect(result.success).toBe(true)
   })
 
-  it('importVillages mode=overwrite', async () => {
+  it('importVillages mode=full', async () => {
     mocks.post.mockResolvedValueOnce({
       success: true, total_rows: 5, success_rows: 5, failed_rows: 0, skipped_rows: 0,
     })
     const file = new File(['test'], 'data.xlsx')
-    await importVillages(file, 'overwrite')
-    const formData = mocks.post.mock.calls[0][1]
-    expect(formData.get('mode')).toBe('overwrite')
+    await importVillages(file, 'full')
+    const config = mocks.post.mock.calls[0][2]
+    expect(config.params).toEqual({ entity_type: 'supported_village', mode: 'full' })
   })
 
   it('getImportHistory 默认 page=1, pageSize=10', async () => {

@@ -132,16 +132,6 @@
               value-format="YYYY-MM-DD"
             />
           </el-form-item>
-          <el-form-item label="预计完成率" prop="estimatedCompletionRate">
-            <el-input-number
-              v-model="projectForm.estimatedCompletionRate"
-              :min="0"
-              :max="100"
-              :step="1"
-              placeholder="请输入预计完成率"
-            />
-            <span class="input-suffix">%</span>
-          </el-form-item>
         </div>
 
         <div class="form-row">
@@ -696,7 +686,6 @@ const projectForm = reactive({
   fundUsageProgress: 0,
   startDate: '',
   endDate: '',
-  estimatedCompletionRate: 0,
   completionRate: 0,
   responsiblePerson: '',
   contactPhone: '',
@@ -1071,7 +1060,6 @@ async function loadProjectData() {
         : 0,
       startDate: data.start_date ? String(data.start_date) : '',
       endDate: data.end_date ? String(data.end_date) : '',
-      estimatedCompletionRate: data.progress || 0,
       completionRate: data.progress || 0,
       responsiblePerson: data.responsible_person || '',
       contactPhone: data.contact_phone || '',
@@ -1176,6 +1164,8 @@ async function saveProjectData(): Promise<number | string | false> {
         ...commonPayload,
         code: code,
         village_id: projectForm.villageId ? Number(projectForm.villageId) : undefined,
+        // 新建同样提交进度（此前仅编辑提交，且后端创建模型缺该字段 → 进度始终为0）
+        progress: projectForm.completionRate,
       })
       projectId = (result as any)?.id || (result as any)?.data?.id
       if (!projectId) {

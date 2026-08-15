@@ -1555,7 +1555,7 @@ async def approve_settlement(
         SettlementStatus.DRAFT.value,
     ):
         raise HTTPException(status_code=400, detail="当前状态不可审批，请检查决算状态")
-    if s.status == SettlementStatus.APPROVED.value:
+    if s.status == SettlementStatus.APPROVED.value:  # pragma: no cover - 幂等守卫已排除 APPROVED，防御性冗余分支
         raise HTTPException(status_code=400, detail="该决算已审批通过")
 
     s.status = SettlementStatus.APPROVED.value

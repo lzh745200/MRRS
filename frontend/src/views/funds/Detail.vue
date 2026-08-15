@@ -807,6 +807,8 @@ async function handleUploadAttachment(options: any) {
     })
     ElMessage.success('上传成功')
     await loadAttachments()
+    // 后端会落 attachment_upload 操作日志，同步重载操作日志 tab
+    await loadOperationLogs()
   } catch {
     ElMessage.error('上传失败')
   } finally {
@@ -848,6 +850,8 @@ async function deleteAttachment(row: any) {
     await fundApi.deleteAttachment(row.id)
     // 成功静默：删除成功仅刷新
     await loadAttachments()
+    // 后端会落 attachment_delete 操作日志，同步重载操作日志 tab
+    await loadOperationLogs()
   } catch {
     ElMessage.error('删除失败')
   }
@@ -1080,6 +1084,8 @@ async function submitWorkflow() {
     })
     wfDialogVisible.value = false
     await loadFundDetail()
+    // 工作流流转会落状态历史/操作日志/审批流节点，四个日志 tab 必须同步重载
+    await loadAllHistory()
   } catch (e: any) {
     const d = e?.response?.data?.detail
     ElMessage.error(typeof d === 'string' ? d : '操作失败')
@@ -1174,6 +1180,8 @@ const handleSubmit = async () => {
       // 成功静默：保存成功仅刷新
       isEdit.value = false
       await loadFundDetail()
+      // 编辑会落字段变更（FundFieldChange）与操作日志，修改记录/操作日志 tab 同步重载
+      await loadAllHistory()
     }
   } catch (error: any) {
     if (!error?.fields) {

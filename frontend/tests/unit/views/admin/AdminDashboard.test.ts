@@ -50,9 +50,11 @@ import { useUserStore } from '@/stores/user'
 /** 完整的管理端统计数据（覆盖所有 v-for / 非空分支） */
 const fullStats = {
   total_users: 42,
-  active_today: 7,
-  total_records: 1024,
-  uptime: '99天',
+  total_population: 7,
+  total_villages: 100,
+  total_projects: 400,
+  total_funds: 500,
+  total_schools: 24,
   system_status: [
     { name: 'API服务', status: 'online', statusText: '正常' },
     { name: '数据库', status: 'offline', statusText: '异常' },
@@ -146,8 +148,9 @@ describe('数据加载', () => {
     expect(mockGet).toHaveBeenCalledWith('/dashboard/stats')
     expect(vm.adminStats[0].value).toBe(42)
     expect(vm.adminStats[1].value).toBe(7)
+    // 数据记录 = 帮扶村100 + 项目400 + 经费500 + 学校24
     expect(vm.adminStats[2].value).toBe(1024)
-    expect(vm.adminStats[3].value).toBe('99天')
+    expect(vm.adminStats[3].value).toBe('100 村 / 400 项目')
     expect(vm.systemStatus).toHaveLength(2)
     expect(vm.recentLogins).toHaveLength(2)
     expect(vm.auditLogs).toHaveLength(2)
@@ -178,12 +181,23 @@ describe('数据加载', () => {
     expect(wrapper.text()).toContain('暂无待处理事项')
   })
 
-  it('envelope 嵌套格式 res.data.data 也能解析', async () => {
-    mockGet.mockResolvedValue({ data: { data: { total_users: 88 } } })
+  it('envelope 格式（拦截器展开后）也能解析', async () => {
+    // get() 返回的是拦截器展开后的信封：code/message 保留，payload 字段提升到顶层
+    mockGet.mockResolvedValue({ code: 200, data: { total_users: 88 }, message: '成功' })
     const wrapper = mountDashboard()
     await flushPromises()
 
     expect((wrapper.vm as any).adminStats[0].value).toBe(88)
+  })
+
+  it('裸 payload（无信封包装）也能解析', async () => {
+    mockGet.mockResolvedValue({ total_users: 66, total_villages: 3, total_projects: 4 })
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.adminStats[0].value).toBe(66)
+    expect(vm.adminStats[3].value).toBe('3 村 / 4 项目')
   })
 
   it('加载失败：记录日志且页面保持默认态', async () => {
@@ -285,7 +299,20 @@ describe('loadAdminData 兜底分支补全', () => {
     expect(vm.logSize).toBe(0)
   })
 
-  it('res.data 为 null → || {} 兜底，统计归零', async () => {
+  it('total_projects 缺失 → ?? 0；storage 空对象 → || 兜底', async () => {
+    mockGet.mockResolvedValue({ data: { total_villages: 5, storage: {} } })
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.adminStats[3].value).toBe('5 村 / 0 项目')
+    expect(vm.storageUsed).toBe(0)
+    expect(vm.storageTotal).toBe(1)
+    expect(vm.dbSize).toBe(0)
+    expect(vm.backupSize).toBe(0)
+    expect(vm.logSize).toBe(0)
+  })
+
+  it('res.data 为 null → ?? res 兜底，统计归零', async () => {
     mockGet.mockResolvedValue({ data: null })
     const wrapper = mountDashboard()
     await flushPromises()
@@ -293,5 +320,16 @@ describe('loadAdminData 兜底分支补全', () => {
     expect(vm.adminStats[0].value).toBe(0)
     expect(vm.adminStats[1].value).toBe(0)
     expect(vm.adminStats[2].value).toBe(0)
+  })
+
+  it('res 为 null（后端无数据返回 None）→ ?? {} 兜底，统计归零', async () => {
+    mockGet.mockResolvedValue(null)
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.adminStats[0].value).toBe(0)
+    expect(vm.adminStats[1].value).toBe(0)
+    expect(vm.adminStats[2].value).toBe(0)
+    expect(vm.adminStats[3].value).toBe('--')
   })
 })

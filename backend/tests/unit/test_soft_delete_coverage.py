@@ -14,6 +14,12 @@
 import pytest
 from unittest.mock import Mock
 
+from app.core.security import hash_password
+
+# 批量删除二次确认测试密码（模块级计算一次）
+_BATCH_PW = "Smoke@123456"
+_BATCH_PW_HASH = hash_password(_BATCH_PW)
+
 
 def _make_user(role="admin", is_superuser=False, org_id=1):
     """构造用户 Mock。"""
@@ -27,6 +33,7 @@ def _make_user(role="admin", is_superuser=False, org_id=1):
     user.permissions_list = ["*"]
     user.failed_login_count = 0
     user.locked_until = None
+    user.hashed_password = _BATCH_PW_HASH
     return user
 
 
@@ -90,7 +97,7 @@ class TestBatchDeleteCoverage:
 
             resp = client.post(
                 "/api/v1/supported-villages/batch-delete",
-                json={"ids": [vid1, vid2]},
+                json={"ids": [vid1, vid2], "confirm_password": _BATCH_PW},
             )
             assert resp.status_code == 200, (
                 f"批量删除应返回 200，实际 {resp.status_code}"
@@ -131,7 +138,7 @@ class TestBatchDeleteCoverage:
 
             resp = client.post(
                 "/api/v1/supported-villages/batch-delete",
-                json={"ids": [vid1]},
+                json={"ids": [vid1], "confirm_password": _BATCH_PW},
             )
             # 不应报错（数据隔离过滤后 0 条匹配），但 deleted_count=0
             assert resp.status_code == 200, (

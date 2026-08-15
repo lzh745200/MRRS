@@ -121,10 +121,10 @@
             style="width: 130px"
             @change="handleSearch"
           >
-            <el-option label="新建" value="new" />
-            <el-option label="调查中" value="investigating" />
+            <el-option label="待处理" value="open" />
+            <el-option label="处理中" value="in_progress" />
             <el-option label="已解决" value="resolved" />
-            <el-option label="已关闭" value="closed" />
+            <el-option label="已忽略" value="ignored" />
           </el-select>
         </el-form-item>
         <el-form-item label="来源">
@@ -146,13 +146,13 @@
       <!-- 表格 -->
       <el-table v-loading="tableLoading" :data="tableData" stripe border>
         <el-table-column prop="id" label="ID" width="70" align="center" />
-        <el-table-column prop="reported_at" label="时间" width="170">
+        <el-table-column prop="createdAt" label="时间" width="170">
           <template #default="{ row }">
-            {{ formatTime(row.reported_at) }}
+            {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
         <el-table-column prop="source" label="来源" width="140" show-overflow-tooltip />
-        <el-table-column prop="error_type" label="错误类型" width="140" show-overflow-tooltip />
+        <el-table-column prop="errorType" label="错误类型" width="140" show-overflow-tooltip />
         <el-table-column prop="message" label="错误信息" min-width="220" show-overflow-tooltip />
         <el-table-column prop="severity" label="严重程度" width="100" align="center">
           <template #default="{ row }">
@@ -199,7 +199,7 @@
         <el-descriptions :column="2" border>
           <el-descriptions-item label="ID">{{ detail.id }}</el-descriptions-item>
           <el-descriptions-item label="来源">{{ detail.source }}</el-descriptions-item>
-          <el-descriptions-item label="错误类型">{{ detail.error_type }}</el-descriptions-item>
+          <el-descriptions-item label="错误类型">{{ detail.errorType }}</el-descriptions-item>
           <el-descriptions-item label="严重程度">
             <el-tag :type="severityTagType(detail.severity)" size="small">
               {{ severityLabel(detail.severity) }}
@@ -214,19 +214,19 @@
             detail.reporter || '系统'
           }}</el-descriptions-item>
           <el-descriptions-item label="上报时间">{{
-            formatTime(detail.reported_at)
+            formatTime(detail.createdAt)
           }}</el-descriptions-item>
           <el-descriptions-item label="解决时间">{{
-            formatTime(detail.resolved_at) || '--'
+            formatTime(detail.resolvedAt) || '--'
           }}</el-descriptions-item>
           <el-descriptions-item label="错误信息" :span="2">
             <div class="detail-message">{{ detail.message }}</div>
           </el-descriptions-item>
-          <el-descriptions-item v-if="detail.stack_trace" label="堆栈跟踪" :span="2">
+          <el-descriptions-item v-if="detail.stackTrace" label="堆栈跟踪" :span="2">
             <el-input
               type="textarea"
               :rows="6"
-              :model-value="detail.stack_trace"
+              :model-value="detail.stackTrace"
               readonly
               class="stack-trace-input"
             />
@@ -234,8 +234,8 @@
           <el-descriptions-item v-if="detail.context" label="上下文数据" :span="2">
             <pre class="context-json">{{ JSON.stringify(detail.context, null, 2) }}</pre>
           </el-descriptions-item>
-          <el-descriptions-item v-if="detail.resolution_note" label="解决备注" :span="2">
-            {{ detail.resolution_note }}
+          <el-descriptions-item v-if="detail.resolutionNote" label="解决备注" :span="2">
+            {{ detail.resolutionNote }}
           </el-descriptions-item>
         </el-descriptions>
 
@@ -244,9 +244,9 @@
         <el-form :model="updateForm" label-width="80px" class="update-form">
           <el-form-item label="状态">
             <el-select v-model="updateForm.status" placeholder="请选择状态" style="width: 200px">
-              <el-option label="新建" value="new" />
-              <el-option label="调查中" value="investigating" />
+              <el-option label="处理中" value="in_progress" />
               <el-option label="已解决" value="resolved" />
+              <el-option label="已忽略" value="ignored" />
             </el-select>
           </el-form-item>
           <el-form-item label="解决备注">
@@ -372,9 +372,10 @@ async function showDetail(reportId: number) {
     const res = await errorReportApi.getReport(reportId)
     if (res.success && res.data) {
       detail.value = res.data
-      // 初始化更新表单
+      // 初始化更新表单（后端 to_dict 为 camelCase 键名；兼容旧 snake_case 响应）
       updateForm.status = res.data.status
-      updateForm.resolution_note = res.data.resolution_note || ''
+      updateForm.resolution_note =
+        res.data.resolutionNote || (res.data as any).resolution_note || ''
     }
   } catch (e: any) {
     ElMessage.error('加载错误详情失败')
@@ -387,7 +388,7 @@ async function showDetail(reportId: number) {
 // ==================== 状态更新 ====================
 const updateLoading = ref(false)
 const updateForm = reactive({
-  status: 'new',
+  status: 'resolved',
   resolution_note: '',
 })
 
@@ -445,20 +446,20 @@ function severityTagType(severity: string): TagType {
 
 function statusLabel(status: string): string {
   const map: Record<string, string> = {
-    new: '新建',
-    investigating: '调查中',
+    open: '待处理',
+    in_progress: '处理中',
     resolved: '已解决',
-    closed: '已关闭',
+    ignored: '已忽略',
   }
   return map[status] || status
 }
 
 function statusTagType(status: string): TagType {
   const map: Record<string, TagType> = {
-    new: 'info',
-    investigating: 'warning',
+    open: 'warning',
+    in_progress: 'primary',
     resolved: 'success',
-    closed: 'info',
+    ignored: 'info',
   }
   return map[status] || 'info'
 }

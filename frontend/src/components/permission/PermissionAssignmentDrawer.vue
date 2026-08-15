@@ -217,7 +217,9 @@ async function savePermissions() {
     })
     if (!visible.value) return // 抽屉已关闭，中止后续操作
 
-    const data = res.data || {}
+    // 后端 /rbac/save-permissions 裸返回 {success, granted, revoked, skipped, failed, message}
+    // （无 envelope data 键），res 即结果对象
+    const data = res || {}
     if (!data.success) {
       const detail = data.message || data.detail || '权限保存失败'
       ElMessage.error(String(detail))

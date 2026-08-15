@@ -134,3 +134,38 @@ def test_evaluate_requires_admin():
         assert resp.status_code == 403
     finally:
         app.dependency_overrides.clear()
+
+
+def test_evaluate_reuses_existing_pending_review_task():
+    """幂等：同村同年度已有待处理复核任务时复用，不重复创建"""
+    from app.main import app
+    from app.core.database import get_db
+    from app.core.security import get_current_user
+
+    mock_db = MagicMock()
+    existing = SimpleNamespace(id=77, change_data={"year": 2026})
+    mock_db.query.return_value.filter.return_value.all.return_value = [existing]
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[get_current_user] = lambda: _superuser()
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        with patch(
+            "app.services.effectiveness_service.EffectivenessService.evaluate_village",
+            return_value={"status": "ok", "total_score": 90.0},
+        ):
+            with patch(
+                "app.services.approval_workflow_service.ApprovalWorkflowService.submit_approval"
+            ) as mk_submit:
+                resp = client.post(
+                    "/api/v1/effectiveness/evaluate",
+                    json={"village_id": 3, "year": 2026},
+                    headers={"X-Internal-Backup": "k"},
+                )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["review_task_id"] == 77
+        assert data["review_status"] == "pending_review"
+        mk_submit.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()

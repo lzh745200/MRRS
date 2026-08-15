@@ -68,13 +68,34 @@ const historyRows = [
   },
 ]
 
-const previewData = {
+// 后端预览响应形状：{total_rows, rows:[{data, has_error}], invalid_rows}，视图 handlePreview 会归一化
+const previewResponse = {
+  total_rows: 12,
+  invalid_rows: 2,
+  rows: [
+    { data: { 村名: '甲村', 县市: '都匀市' }, has_error: false },
+    { data: { 村名: '乙村', 县市: '荔波县' }, has_error: true },
+  ],
+}
+
+// handlePreview 归一化后的 previewData 形状（rows 取自 r.data，columns 为 data 键并集）
+const normalizedPreview = {
   rows: [
     { 村名: '甲村', 县市: '都匀市' },
     { 村名: '乙村', 县市: '荔波县' },
   ],
   total: 12,
   columns: ['村名', '县市'],
+  invalid_rows: 2,
+}
+
+const successResult = {
+  success: true,
+  total_rows: 10,
+  success_rows: 8,
+  failed_rows: 1,
+  skipped_rows: 1,
+  errors: [{ row_number: 3, field_name: '村名', message: '为空' }],
 }
 
 const stubs = {
@@ -142,15 +163,8 @@ const file = new File(['x'], 'data.xlsx', {
 beforeEach(() => {
   vi.clearAllMocks()
   mockGetImportHistory.mockResolvedValue({ items: historyRows, total: 2 })
-  mockPreviewImportData.mockResolvedValue(previewData)
-  mockImportEntities.mockResolvedValue({
-    success: true,
-    total_rows: 10,
-    success_rows: 8,
-    failed_rows: 1,
-    skipped_rows: 1,
-    errors: [{ row_number: 3, field_name: '村名', message: '为空' }],
-  })
+  mockPreviewImportData.mockResolvedValue(previewResponse)
+  mockImportEntities.mockResolvedValue(successResult)
   mockDownloadTemplate.mockResolvedValue(undefined)
 })
 
@@ -258,7 +272,7 @@ describe('文件选择 / 预览 / 重置', () => {
     const clearFiles = vi.fn()
     vm.uploadRef = { clearFiles }
     vm.selectedFile = file
-    vm.previewData = previewData
+    vm.previewData = normalizedPreview
     vm.importResult = { success: true }
     vm.handleReset()
     expect(clearFiles).toHaveBeenCalled()
@@ -270,7 +284,7 @@ describe('文件选择 / 预览 / 重置', () => {
     expect(() => vm.handleReset()).not.toThrow()
   })
 
-  it('handlePreview：无文件早退；成功设置 previewData（total>10 显示提示）', async () => {
+  it('handlePreview：无文件早退；成功归一化 {total_rows,rows:[{data}]} → {rows,total,columns,invalid_rows}', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -280,7 +294,7 @@ describe('文件选择 / 预览 / 重置', () => {
     vm.handleFileChange({ raw: file })
     await vm.handlePreview()
     expect(mockPreviewImportData).toHaveBeenCalledWith(file, 'supported_village')
-    expect(vm.previewData).toEqual(previewData)
+    expect(vm.previewData).toEqual(normalizedPreview)
     expect(vm.previewing).toBe(false)
     await nextTick()
     expect(wrapper.text()).toContain('共 12 条数据')
@@ -288,7 +302,10 @@ describe('文件选择 / 预览 / 重置', () => {
   })
 
   it('handlePreview：total<=10 不显示提示；错误 detail/message/默认三分支', async () => {
-    mockPreviewImportData.mockResolvedValueOnce({ rows: [], total: 5, columns: [] })
+    mockPreviewImportData.mockResolvedValueOnce({
+      total_rows: 5,
+      rows: [{ data: { 村名: '甲村' } }],
+    })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -296,6 +313,12 @@ describe('文件选择 / 预览 / 重置', () => {
     await vm.handlePreview()
     await nextTick()
     expect(wrapper.text()).not.toContain('仅显示前 10 条')
+    expect(vm.previewData).toEqual({
+      rows: [{ 村名: '甲村' }],
+      total: 5,
+      columns: ['村名'],
+      invalid_rows: 0, // 后端未返回 invalid_rows → ?? 0 兜底
+    })
 
     mockPreviewImportData.mockRejectedValueOnce({ response: { data: { detail: '格式错误' } } })
     await vm.handlePreview()
@@ -309,6 +332,30 @@ describe('文件选择 / 预览 / 重置', () => {
     await vm.handlePreview()
     expect(ElMessage.error).toHaveBeenLastCalledWith('数据预览失败，请检查文件格式')
     expect(vm.previewing).toBe(false)
+  })
+
+  it('handlePreview 归一化兜底：rows 非数组、行无 data、total_rows 缺省', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.handleFileChange({ raw: file })
+
+    // rows 非数组 → rawRows=[]，total 走 rawRows.length，invalid_rows 兜底 0
+    mockPreviewImportData.mockResolvedValueOnce({ rows: 'not-an-array' })
+    await vm.handlePreview()
+    expect(vm.previewData).toEqual({ rows: [], total: 0, columns: [], invalid_rows: 0 })
+
+    // 行无 data 字段 → r?.data ?? r 回退到原始行；columns 跳过无 data 行
+    mockPreviewImportData.mockResolvedValueOnce({
+      rows: [{ data: { 村名: '甲村' } }, { 村名: '乙村' }],
+    })
+    await vm.handlePreview()
+    expect(vm.previewData).toEqual({
+      rows: [{ 村名: '甲村' }, { 村名: '乙村' }],
+      total: 2, // total_rows 缺省 → rawRows.length
+      columns: ['村名'],
+      invalid_rows: 0,
+    })
   })
 })
 
@@ -327,21 +374,22 @@ describe('确认导入', () => {
     expect(mockImportEntities).not.toHaveBeenCalled()
   })
 
-  it('导入成功：success 提示、调用参数（mode/entityType）、重置并刷新历史', async () => {
+  it('导入成功：success 提示、调用参数（mode/entityType）、清空文件/预览但保留 importResult、刷新历史', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.handleFileChange({ raw: file })
-    vm.previewData = previewData
+    vm.previewData = normalizedPreview
     vm.importForm.entityType = 'project'
-    vm.importForm.mode = 'overwrite'
+    vm.importForm.mode = 'full'
     await nextTick() // 等待 disabled 绑定重渲染后再点击
     const before = mockGetImportHistory.mock.calls.length
     await findBtn(wrapper, '确认导入').trigger('click')
     await flushPromises()
-    expect(mockImportEntities).toHaveBeenCalledWith(file, 'project', 'overwrite')
+    expect(mockImportEntities).toHaveBeenCalledWith(file, 'project', 'full')
     expect(ElMessage.success).toHaveBeenCalledWith('导入完成：8 条成功')
     expect(mockGetImportHistory.mock.calls.length).toBe(before + 1) // loadHistory
+    expect(vm.importResult).toEqual(successResult) // 关键：结果保留展示，不再被 handleReset 清掉
     expect(vm.selectedFile).toBeNull()
     expect(vm.previewData).toBeNull()
     expect(vm.importing).toBe(false)
@@ -352,13 +400,13 @@ describe('确认导入', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.selectedFile = file
-    vm.previewData = previewData
+    vm.previewData = normalizedPreview
     mockImportEntities.mockResolvedValueOnce({ success: false, errors: [] })
     await vm.handleImport()
     expect(ElMessage.error).toHaveBeenLastCalledWith('导入失败：0 个错误')
 
-    vm.selectedFile = file // handleReset 已清空，重新设置
-    vm.previewData = previewData
+    vm.selectedFile = file // handleImport 已清空文件与预览，重新设置
+    vm.previewData = normalizedPreview
     mockImportEntities.mockResolvedValueOnce({
       success: false,
       errors: [{ row_number: 1 }, { row_number: 2 }, { row_number: 3 }],
@@ -373,19 +421,19 @@ describe('确认导入', () => {
     const vm = wrapper.vm as any
 
     vm.selectedFile = file
-    vm.previewData = previewData
+    vm.previewData = normalizedPreview
     mockImportEntities.mockRejectedValueOnce({ response: { data: { detail: '服务繁忙' } } })
     await vm.handleImport()
     expect(ElMessage.error).toHaveBeenLastCalledWith('服务繁忙')
 
     vm.selectedFile = file
-    vm.previewData = previewData
+    vm.previewData = normalizedPreview
     mockImportEntities.mockRejectedValueOnce({ message: '超时' })
     await vm.handleImport()
     expect(ElMessage.error).toHaveBeenLastCalledWith('超时')
 
     vm.selectedFile = file
-    vm.previewData = previewData
+    vm.previewData = normalizedPreview
     mockImportEntities.mockRejectedValueOnce({})
     await vm.handleImport()
     expect(ElMessage.error).toHaveBeenLastCalledWith('导入失败')
@@ -452,7 +500,7 @@ describe('状态映射工具', () => {
     select.vm.$emit('update:modelValue', 'fund')
     expect(vm.importForm.entityType).toBe('fund')
     const radioGroup = wrapper.findComponent({ name: 'ElRadioGroup' })
-    radioGroup.vm.$emit('update:modelValue', 'overwrite')
-    expect(vm.importForm.mode).toBe('overwrite')
+    radioGroup.vm.$emit('update:modelValue', 'full')
+    expect(vm.importForm.mode).toBe('full')
   })
 })

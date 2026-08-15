@@ -284,7 +284,9 @@ async def get_environment_info(current_user=Depends(get_current_user)):
 async def get_version_info():
     """获取当前系统版本及发布信息"""
     return {
+        "code": 200,
         "success": True,
+        "message": "成功",
         "data": {
             "version": getattr(settings, "PROJECT_VERSION", "1.1.0"),
             "name": "帮扶管理信息系统",

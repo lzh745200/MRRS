@@ -46,6 +46,9 @@ def _handle_db_exception(func_name: str, db: Session | None, exc: Exception) -> 
 
     if isinstance(exc, OperationalError):
         logger.error(f"Database operational error in {func_name}: {exc}")
+        _op_msg = str(exc).lower()
+        if "disk" in _op_msg or "full" in _op_msg:
+            raise HTTPException(status_code=503, detail="磁盘空间不足，请清理后重试")
         raise HTTPException(status_code=503, detail="数据库操作失败，请稍后重试")
 
     if isinstance(exc, (HTTPException, BusinessError)):

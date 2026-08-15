@@ -100,20 +100,15 @@
             {{ scope.row.scores?.social ?? '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="项目完成" width="100" align="right">
+        <el-table-column label="生态" width="90" align="right">
           <template #default="scope">
-            {{ scope.row.scores?.project_completion ?? '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="资金执行" width="100" align="right">
-          <template #default="scope">
-            {{ scope.row.scores?.fund_execution ?? '-' }}
+            {{ scope.row.scores?.ecological ?? '-' }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="100" fixed="right" align="center">
           <template #default="scope">
             <el-button type="primary" link size="small" @click="goToEvaluate(scope.row.village_id)">
-              评估
+              {{ isAdmin ? '评估' : '查看' }}
             </el-button>
           </template>
         </el-table-column>
@@ -123,12 +118,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { Loading, Search } from '@element-plus/icons-vue'
 import { getRankings } from '@/api/effectiveness'
+import { useUserStore } from '@/stores/user'
 
 const { pushSafe } = useRouterSafe()
+const userStore = useUserStore()
+// 仅管理员可发起评估；其余角色（viewer/user）入口降级为"查看"
+const isAdmin = computed(
+  () =>
+    ['admin', 'super_admin'].includes(userStore.currentUser?.role || '') ||
+    !!userStore.currentUser?.is_superuser
+)
 
 const currentYear = new Date().getFullYear()
 const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i)
@@ -229,13 +232,13 @@ onMounted(() => {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-text-primary);
 }
 
 .page-desc {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .filter-card {
@@ -243,7 +246,7 @@ onMounted(() => {
   border-radius: 8px;
   padding: 16px 20px 4px;
   margin-bottom: 20px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border);
 }
 
 .state-container {
@@ -252,14 +255,14 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   padding: 80px 0;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .table-card {
   background: white;
   border-radius: 8px;
   padding: 20px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border);
 }
 
 .rank-badge {
@@ -271,22 +274,22 @@ onMounted(() => {
   border-radius: 50%;
   font-weight: 700;
   font-size: 13px;
-  background: #f0f0f0;
-  color: #666;
+  background: var(--color-border-lighter);
+  color: var(--color-text-secondary);
 }
 
 .rank-gold {
-  background: linear-gradient(135deg, #f6d365, #fda085);
+  background: linear-gradient(135deg, var(--color-warning-lighter), var(--color-warning));
   color: #fff;
 }
 
 .rank-silver {
-  background: linear-gradient(135deg, #a1c4fd, #c2e9fb);
+  background: linear-gradient(135deg, var(--color-border), var(--color-text-secondary));
   color: #fff;
 }
 
 .rank-bronze {
-  background: linear-gradient(135deg, #fbc2eb, #a6c1ee);
+  background: linear-gradient(135deg, var(--color-danger-lighter), var(--color-danger));
   color: #fff;
 }
 
@@ -299,21 +302,21 @@ onMounted(() => {
 .score-bar {
   flex: 1;
   height: 8px;
-  background: #f0f0f0;
+  background: var(--color-border-lighter);
   border-radius: 4px;
   overflow: hidden;
 }
 
 .score-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #2d6a4f, #40916c);
+  background: linear-gradient(90deg, var(--color-success-dark), var(--color-success));
   border-radius: 4px;
   transition: width 0.5s ease;
 }
 
 .score-text {
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-text-primary);
   min-width: 42px;
   text-align: right;
   font-size: 13px;

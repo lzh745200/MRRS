@@ -6,21 +6,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const { ElMessage, confirmMock, lifecycleApi, pushSafeMock, routeBox, formValidateMock } = vi.hoisted(() => ({
-  ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
-  confirmMock: vi.fn(),
-  formValidateMock: vi.fn(() => Promise.resolve(true)),
-  lifecycleApi: {
-    listContracts: vi.fn(),
-    createContract: vi.fn(),
-    createContractPayment: vi.fn(),
-    deleteContract: vi.fn(),
-    listContractAttachments: vi.fn(),
-    uploadContractAttachment: vi.fn(),
-  },
-  pushSafeMock: vi.fn(),
-  routeBox: { query: {} as Record<string, any> },
-}))
+const { ElMessage, confirmMock, lifecycleApi, pushSafeMock, routeBox, formValidateMock, formClearValidateMock } =
+  vi.hoisted(() => ({
+    ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+    confirmMock: vi.fn(),
+    formValidateMock: vi.fn(() => Promise.resolve(true)),
+    formClearValidateMock: vi.fn(),
+    lifecycleApi: {
+      listContracts: vi.fn(),
+      createContract: vi.fn(),
+      createContractPayment: vi.fn(),
+      deleteContract: vi.fn(),
+      listContractAttachments: vi.fn(),
+      uploadContractAttachment: vi.fn(),
+    },
+    pushSafeMock: vi.fn(),
+    routeBox: { query: {} as Record<string, any> },
+  }))
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeBox,
@@ -89,8 +91,7 @@ function mountComp(query: Record<string, any> = {}) {
         },
         'el-card': { template: '<div class="el-card-stub"><slot /></div>' },
         'el-table': {
-          template:
-            '<div class="el-table-stub"><slot name="empty" /><slot name="default" /></div>',
+          template: '<div class="el-table-stub"><slot name="empty" /><slot name="default" /></div>',
         },
         'el-table-column': {
           name: 'ElTableColumn',
@@ -108,7 +109,7 @@ function mountComp(query: Record<string, any> = {}) {
         'el-form': {
           name: 'ElForm',
           template: '<div class="el-form-stub"><slot /></div>',
-          methods: { validate: formValidateMock },
+          methods: { validate: formValidateMock, clearValidate: formClearValidateMock },
         },
         'el-upload': {
           name: 'ElUpload',
@@ -116,16 +117,14 @@ function mountComp(query: Record<string, any> = {}) {
         },
         'el-form-item': { template: '<div class="el-form-item-stub"><slot /></div>' },
         'el-input': {
-          template:
-            '<div class="el-input-stub" @click="$emit(\'update:modelValue\', \'V\')" />',
+          template: '<div class="el-input-stub" @click="$emit(\'update:modelValue\', \'V\')" />',
         },
         'el-input-number': {
-          template:
-            '<div class="el-input-number-stub" @click="$emit(\'update:modelValue\', 5)" />',
+          template: '<div class="el-input-number-stub" @click="$emit(\'update:modelValue\', 5)" />',
         },
         'el-select': {
           template:
-            '<div class="el-select-stub" @click="$emit(\'update:modelValue\', \'draft\'); $emit(\'change\', \'draft\')"><slot /></div>',
+            "<div class=\"el-select-stub\" @click=\"$emit('update:modelValue', 'draft'); $emit('change', 'draft')\"><slot /></div>",
         },
         'el-option': { template: '<div class="el-option-stub" />' },
         'el-date-picker': {
@@ -199,7 +198,7 @@ describe('挂载与列表加载', () => {
   })
 
   it('onMounted 带 project_id 查询参数', async () => {
-    const wrapper = mountWithQuery({})
+    mountWithQuery({})
     await flushPromises()
     expect(lifecycleApi.listContracts).toHaveBeenCalledWith(
       expect.objectContaining({ project_id: 7 })
@@ -241,9 +240,7 @@ describe('挂载与列表加载', () => {
     lifecycleApi.listContracts.mockClear()
     await wrapper.find('.el-pagination-stub').trigger('click')
     await flushPromises()
-    expect(lifecycleApi.listContracts).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 3 })
-    )
+    expect(lifecycleApi.listContracts).toHaveBeenCalledWith(expect.objectContaining({ page: 3 }))
   })
 
   it('页头返回 → pushSafe /funds', async () => {
@@ -286,7 +283,9 @@ describe('新建合同', () => {
     const vm = wrapper.vm as any
     vm.contractForm.contract_no = 'HT-X'
     vm.contractForm.contract_name = '新合同'
-    lifecycleApi.createContract.mockRejectedValueOnce({ response: { data: { detail: '编号重复' } } })
+    lifecycleApi.createContract.mockRejectedValueOnce({
+      response: { data: { detail: '编号重复' } },
+    })
     await vm.handleCreateContract()
     expect(ElMessage.error).toHaveBeenCalledWith('编号重复')
 
@@ -300,6 +299,15 @@ describe('新建合同', () => {
     await flushPromises()
     const btn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('新建合同'))
     await btn!.trigger('click')
+    expect((wrapper.vm as any).showCreateDialog).toBe(true)
+  })
+
+  it('打开新建对话框时调用 clearValidate 清空校验状态', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const btn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('新建合同'))
+    await btn!.trigger('click')
+    expect(formClearValidateMock).toHaveBeenCalled()
     expect((wrapper.vm as any).showCreateDialog).toBe(true)
   })
 })
@@ -347,7 +355,9 @@ describe('登记付款', () => {
     vm.currentContractId = 1
     vm.paymentForm.amount = 10
     vm.paymentForm.payment_date = '2024-01-01'
-    lifecycleApi.createContractPayment.mockRejectedValueOnce({ response: { data: { detail: '超预算' } } })
+    lifecycleApi.createContractPayment.mockRejectedValueOnce({
+      response: { data: { detail: '超预算' } },
+    })
     await vm.handleCreatePayment()
     expect(ElMessage.error).toHaveBeenCalledWith('超预算')
 
@@ -535,14 +545,17 @@ describe('合同附件', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.currentContractId = 1
-    lifecycleApi.uploadContractAttachment.mockResolvedValue({
-      items: [{ url: '/u/b.pdf', file_size: 2048 }],
+    lifecycleApi.uploadContractAttachment.mockResolvedValue({ url: '/u/b.pdf' })
+    // 登记接口不回完整列表，成功后应重拉列表上屏
+    lifecycleApi.listContractAttachments.mockResolvedValue({
+      items: [{ url: '/u/b.pdf', file_name: 'b.pdf', file_size: 2048 }],
     })
     await vm.handleUploadSuccess({ data: { url: '/u/b.pdf', file_name: 'b.pdf' } })
     expect(lifecycleApi.uploadContractAttachment).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ url: '/u/b.pdf' })
     )
+    expect(lifecycleApi.listContractAttachments).toHaveBeenCalledWith(1)
     expect(ElMessage.success).toHaveBeenCalledWith('附件上传成功')
     expect(vm.attachmentList[0].file_size).toBe(2048)
   })
@@ -556,14 +569,29 @@ describe('合同附件', () => {
     expect(lifecycleApi.uploadContractAttachment).not.toHaveBeenCalled()
   })
 
-  it('handleUploadSuccess: 关联失败走兜底提示', async () => {
+  it('handleUploadSuccess: 关联失败报错且不刷新列表', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.currentContractId = 1
     lifecycleApi.uploadContractAttachment.mockRejectedValue(new Error('net'))
     await vm.handleUploadSuccess({ data: { url: '/u/c.pdf', file_name: 'c.pdf' } })
-    expect(ElMessage.success).toHaveBeenCalledWith('文件已上传')
+    // 失败必须明确报错，禁止假成功
+    expect(ElMessage.error).toHaveBeenCalledWith('附件登记失败，请重试')
+    expect(ElMessage.success).not.toHaveBeenCalled()
+  })
+
+  it('handleUploadSuccess: 关联失败带 detail 响应 → 提示具体 detail', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentContractId = 1
+    lifecycleApi.uploadContractAttachment.mockRejectedValue({
+      response: { data: { detail: '附件超过大小限制' } },
+    })
+    await vm.handleUploadSuccess({ data: { url: '/u/d.pdf', file_name: 'd.pdf' } })
+    expect(ElMessage.error).toHaveBeenCalledWith('附件超过大小限制')
+    expect(ElMessage.success).not.toHaveBeenCalled()
   })
 
   it('handleUploadError 提示上传失败', async () => {
@@ -582,7 +610,10 @@ describe('合同附件', () => {
       blob: vi.fn().mockResolvedValue(new Blob(['pdf'])),
     } as any)
     await (wrapper.vm as any).openAttachment({ url: '/uploads/a.pdf', file_name: 'a.pdf' })
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/uploads/a.pdf'), expect.anything())
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/uploads/a.pdf'),
+      expect.anything()
+    )
     expect(openSpy).toHaveBeenCalledWith(expect.stringMatching(/^blob:/), '_blank')
     openSpy.mockRestore()
     fetchMock.mockRestore()
@@ -606,7 +637,10 @@ describe('合同附件', () => {
       blob: vi.fn().mockResolvedValue(new Blob(['pdf'])),
     } as any)
     await (wrapper.vm as any).downloadAttachment({ url: '/uploads/a.pdf', file_name: '合同.pdf' })
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/uploads/a.pdf'), expect.anything())
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/uploads/a.pdf'),
+      expect.anything()
+    )
     expect(clickSpy).toHaveBeenCalled()
     clickSpy.mockRestore()
     fetchMock.mockRestore()
@@ -631,10 +665,9 @@ describe('合同附件', () => {
       blob: vi.fn().mockResolvedValue(new Blob(['x'])),
     } as any)
     await (wrapper.vm as any).openAttachment({ url: '/uploads/a.pdf' })
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/uploads/a.pdf'),
-      { headers: undefined }
-    )
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/uploads/a.pdf'), {
+      headers: undefined,
+    })
     fetchMock.mockRestore()
     tokenSpy.mockRestore()
   })
@@ -649,10 +682,9 @@ describe('合同附件', () => {
       blob: vi.fn().mockResolvedValue(new Blob(['x'])),
     } as any)
     await (wrapper.vm as any).openAttachment({ url: '/uploads/a.pdf' })
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/uploads/a.pdf'),
-      { headers: { Authorization: 'Bearer token123' } }
-    )
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/uploads/a.pdf'), {
+      headers: { Authorization: 'Bearer token123' },
+    })
     fetchMock.mockRestore()
     tokenSpy.mockRestore()
   })
@@ -665,7 +697,6 @@ describe('合同附件', () => {
     await vm.handleCreateContract()
     expect(lifecycleApi.createContract).not.toHaveBeenCalled()
   })
-
 
   it('附件对话框渲染并触发按钮事件(openAttachment/showPaymentDialog)', async () => {
     const wrapper = mountComp()
@@ -680,9 +711,7 @@ describe('合同附件', () => {
       await openBtns[0].trigger('click')
     }
     // 下载按钮模板箭头（认证 fetch 触发下载）
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {})
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       blob: vi.fn().mockResolvedValue(new Blob(['x'])),
@@ -703,7 +732,6 @@ describe('合同附件', () => {
     expect(vm.paymentDialogVisible).toBe(true)
     wrapper.unmount()
   })
-
 
   it('beforeUpload 合法文件通过 + formatSize 全分支', async () => {
     const wrapper = mountComp()
@@ -740,24 +768,23 @@ describe('合同附件', () => {
     wrapper.unmount()
   })
 
-
-  it('handleUploadSuccess 分支: 无 file_name / 空 items 保留原列表', async () => {
+  it('handleUploadSuccess 分支: 登记成功后重拉列表覆盖原数据', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.currentContractId = 1
     vm.attachmentList = [{ url: '/u/old.pdf', file_size: 10 }]
-    // 响应无 items → 保留原列表
-    lifecycleApi.uploadContractAttachment.mockResolvedValue({})
+    // 登记响应无 items（只回 url/file_name）→ 列表来自重拉的 listContractAttachments
+    lifecycleApi.uploadContractAttachment.mockResolvedValue({ url: '/u/new.pdf' })
+    lifecycleApi.listContractAttachments.mockResolvedValue({
+      items: [{ url: '/u/new.pdf', file_size: 5 }],
+    })
     await vm.handleUploadSuccess({ data: { url: '/u/new.pdf' } })
     expect(ElMessage.success).toHaveBeenCalledWith('附件上传成功')
-    expect(vm.attachmentList.length).toBeGreaterThan(0)
-    // 响应 data.items 形态
-    lifecycleApi.uploadContractAttachment.mockResolvedValue({ data: { items: [{ url: '/u/x.pdf', file_size: 5 }] } })
-    await vm.handleUploadSuccess({ data: { url: '/u/x.pdf', file_name: 'x.pdf' } })
+    expect(vm.attachmentList.length).toBe(1)
     expect(vm.attachmentList[0].file_size).toBe(5)
-    // items 元素无 file_size → 空字符串(378 空值分支)
-    lifecycleApi.uploadContractAttachment.mockResolvedValue({ data: { items: [{ url: '/u/y.pdf' }] } })
+    // 重拉结果 file_size/fileSize 均空 → 空字符串（reload 空值分支）
+    lifecycleApi.listContractAttachments.mockResolvedValue({ items: [{ url: '/u/y.pdf' }] })
     await vm.handleUploadSuccess({ data: { url: '/u/y.pdf', file_name: 'y.pdf' } })
     expect(vm.attachmentList[0].file_size).toBe('')
     wrapper.unmount()
@@ -783,7 +810,9 @@ describe('合同附件', () => {
     await vm.showAttachmentDialog({ id: 5, contract_name: '数组形态' })
     expect(vm.attachmentList).toEqual([])
     // file_size 直接非空(337 真分支)
-    lifecycleApi.listContractAttachments.mockResolvedValue({ items: [{ url: '/u/f.pdf', file_size: 11 }] })
+    lifecycleApi.listContractAttachments.mockResolvedValue({
+      items: [{ url: '/u/f.pdf', file_size: 11 }],
+    })
     await vm.showAttachmentDialog({ id: 6, contract_no: 'HT-006' })
     expect(vm.attachmentList[0].file_size).toBe(11)
     // file_size 与 fileSize 均空 → 空字符串(337 空值分支)

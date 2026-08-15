@@ -858,7 +858,8 @@ const handleRegionClick = async (params: { name: string }) => {
   try {
     drillDownTitle.value = `${params.name} - 详细数据`
     drillDownData.value = await drillDown({
-      dimension: 'region',
+      // 后端钻取维度为 province（非 region）
+      dimension: 'province',
       value: params.name,
       targetDimension: 'department',
     })

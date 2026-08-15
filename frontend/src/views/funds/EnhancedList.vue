@@ -745,6 +745,7 @@ async function handleDelete(row: any) {
     currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     fetchData()
     loadStats()
+    loadYearOverview() // 年度总览卡与流程步骤条同步刷新
   } catch (e: any) {
     const detail = e?.response?.data?.detail || e?.message || '删除失败'
     ElMessage.error(`删除失败: ${detail}`)
@@ -790,6 +791,7 @@ async function quickApprove(row: any) {
     currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     fetchData()
     loadStats()
+    loadYearOverview() // 年度总览卡与流程步骤条同步刷新
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '审批失败')
   } finally {
@@ -809,6 +811,7 @@ async function quickAllocate(row: any) {
     currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     fetchData()
     loadStats()
+    loadYearOverview() // 年度总览卡与流程步骤条同步刷新
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '拨付失败')
   } finally {
@@ -870,6 +873,7 @@ async function handleBatchDelete() {
     currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     fetchData()
     loadStats()
+    loadYearOverview() // 年度总览卡与流程步骤条同步刷新
   } finally {
     batchDeleting.value = false
   }

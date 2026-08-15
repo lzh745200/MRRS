@@ -8,16 +8,25 @@ import { nextTick } from 'vue'
 
 enableAutoUnmount(afterEach)
 
-const { mockPush, mockPushSafe, mockLogin, mockVerify2FA, ElMessage, mockApiRequest, logError } =
-  vi.hoisted(() => ({
-    mockPush: vi.fn(() => Promise.resolve()),
-    mockPushSafe: vi.fn(() => Promise.resolve()),
-    mockLogin: vi.fn(),
-    mockVerify2FA: vi.fn(),
-    ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
-    mockApiRequest: vi.fn(),
-    logError: vi.fn(),
-  }))
+const {
+  mockPush,
+  mockPushSafe,
+  mockLogin,
+  mockVerify2FA,
+  ElMessage,
+  mockApiRequest,
+  mockPost,
+  logError,
+} = vi.hoisted(() => ({
+  mockPush: vi.fn(() => Promise.resolve()),
+  mockPushSafe: vi.fn(() => Promise.resolve()),
+  mockLogin: vi.fn(),
+  mockVerify2FA: vi.fn(),
+  ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+  mockApiRequest: vi.fn(),
+  mockPost: vi.fn(),
+  logError: vi.fn(),
+}))
 let redirectQuery: string | undefined = undefined
 
 const authState = vi.hoisted(() => ({ error: '', mustChangePassword: false }))
@@ -50,7 +59,7 @@ vi.mock('@/stores/auth', () => ({
 vi.mock('@/api/request', () => ({
   apiRequest: mockApiRequest,
   get: vi.fn(),
-  post: vi.fn(),
+  post: mockPost,
   put: vi.fn(),
   del: vi.fn(),
   getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
@@ -92,6 +101,7 @@ beforeEach(() => {
   mockLogin.mockResolvedValue({ status: 'success' })
   mockVerify2FA.mockResolvedValue(true)
   mockApiRequest.mockResolvedValue({ success: true })
+  mockPost.mockResolvedValue({ success: true })
 })
 
 describe('LoginEnhanced.vue', () => {
@@ -427,17 +437,27 @@ describe('LoginEnhanced.vue', () => {
     const w = await mountComp()
     const vm = w.vm as any
     await vm.handlePermissionImport()
-    expect(mockApiRequest).not.toHaveBeenCalled()
+    expect(mockPost).not.toHaveBeenCalled()
   })
 
   it('权限包导入：预览成功 + 确认成功', async () => {
-    mockApiRequest
+    mockPost
       .mockResolvedValueOnce({ success: true, file_name: 'pkg.zip', message: '预览通过' })
       .mockResolvedValueOnce({ success: true, message: '应用完成' })
     const w = await mountComp()
     const vm = w.vm as any
-    vm.permissionFile = { name: 'pkg.zip' }
+    const file = new File(['zip-bytes'], 'pkg.zip', { type: 'application/zip' })
+    vm.permissionFile = file
     await vm.handlePermissionImport()
+    // 导入调用：post('/permission-packages/import', formData) — FormData 原样作为第 2 参，无手动 multipart Content-Type
+    expect(mockPost).toHaveBeenCalledWith('/permission-packages/import', expect.any(FormData))
+    const importCall = mockPost.mock.calls[0]
+    expect(importCall).toHaveLength(2) // (url, formData) — 没有额外的 headers 参数
+    expect((importCall[1] as FormData).get('file')).toBe(file)
+    // 确认调用：post('/permission-packages/confirm/{file_name}', { overwrite_existing: true })
+    expect(mockPost).toHaveBeenCalledWith('/permission-packages/confirm/pkg.zip', {
+      overwrite_existing: true,
+    })
     expect(ElMessage.success).toHaveBeenCalledWith('权限包已导入,请重新登录查看权限')
     expect(vm.permissionImportVisible).toBe(false)
     expect(vm.permissionFile).toBeNull()
@@ -445,7 +465,7 @@ describe('LoginEnhanced.vue', () => {
   })
 
   it('权限包导入：预览成功（code=200）但确认失败', async () => {
-    mockApiRequest
+    mockPost
       .mockResolvedValueOnce({ code: 200, file_name: 'pkg.zip' })
       .mockResolvedValueOnce({ success: false, message: '覆盖失败' })
     const w = await mountComp()
@@ -456,7 +476,7 @@ describe('LoginEnhanced.vue', () => {
   })
 
   it('权限包导入：预览失败 → 展示预览错误', async () => {
-    mockApiRequest.mockResolvedValueOnce({ success: false, message: '文件损坏' })
+    mockPost.mockResolvedValueOnce({ success: false, message: '文件损坏' })
     const w = await mountComp()
     const vm = w.vm as any
     vm.permissionFile = { name: 'pkg.zip' }
@@ -464,8 +484,17 @@ describe('LoginEnhanced.vue', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('文件损坏')
   })
 
+  it('权限包导入：预览失败仅带 detail → 展示 detail', async () => {
+    mockPost.mockResolvedValueOnce({ success: false, detail: '压缩包结构不合法' })
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.permissionFile = { name: 'pkg.zip' }
+    await vm.handlePermissionImport()
+    expect(ElMessage.error).toHaveBeenCalledWith('压缩包结构不合法')
+  })
+
   it('权限包导入：无 file_name → 展示默认成功信息分支', async () => {
-    mockApiRequest.mockResolvedValueOnce({ success: true, message: '预览通过' })
+    mockPost.mockResolvedValueOnce({ success: true, message: '预览通过' })
     const w = await mountComp()
     const vm = w.vm as any
     vm.permissionFile = { name: 'pkg.zip' }
@@ -474,7 +503,7 @@ describe('LoginEnhanced.vue', () => {
   })
 
   it('权限包导入：接口异常 → 记录日志并提示', async () => {
-    mockApiRequest.mockRejectedValue({ message: 'timeout' })
+    mockPost.mockRejectedValue({ message: 'timeout' })
     const w = await mountComp()
     const vm = w.vm as any
     vm.permissionFile = { name: 'pkg.zip' }
@@ -484,7 +513,7 @@ describe('LoginEnhanced.vue', () => {
   })
 
   it('权限包导入：接口异常带 detail → 优先 detail', async () => {
-    mockApiRequest.mockRejectedValue({ response: { data: { detail: '服务端拒绝' } } })
+    mockPost.mockRejectedValue({ response: { data: { detail: '服务端拒绝' } } })
     const w = await mountComp()
     const vm = w.vm as any
     vm.permissionFile = { name: 'pkg.zip' }
@@ -493,7 +522,7 @@ describe('LoginEnhanced.vue', () => {
   })
 
   it('权限包导入：预览响应为 undefined → 默认失败分支', async () => {
-    mockApiRequest.mockResolvedValueOnce(undefined)
+    mockPost.mockResolvedValueOnce(undefined)
     const w = await mountComp()
     const vm = w.vm as any
     vm.permissionFile = { name: 'pkg.zip' }
@@ -502,7 +531,7 @@ describe('LoginEnhanced.vue', () => {
   })
 
   it('权限包导入：确认接口 code=200 → 导入成功', async () => {
-    mockApiRequest
+    mockPost
       .mockResolvedValueOnce({ success: true, file_name: 'pkg.zip' })
       .mockResolvedValueOnce({ code: 200, message: 'ok' })
     const w = await mountComp()
@@ -513,7 +542,7 @@ describe('LoginEnhanced.vue', () => {
   })
 
   it('权限包导入：确认响应为空 → 默认失败文案', async () => {
-    mockApiRequest
+    mockPost
       .mockResolvedValueOnce({ success: true, file_name: 'pkg.zip' })
       .mockResolvedValueOnce(undefined)
     const w = await mountComp()
@@ -524,7 +553,7 @@ describe('LoginEnhanced.vue', () => {
   })
 
   it('权限包导入：确认失败仅带 detail → 展示 detail', async () => {
-    mockApiRequest
+    mockPost
       .mockResolvedValueOnce({ success: true, file_name: 'pkg.zip' })
       .mockResolvedValueOnce({ success: false, detail: '版本冲突' })
     const w = await mountComp()
@@ -535,7 +564,7 @@ describe('LoginEnhanced.vue', () => {
   })
 
   it('权限包导入：异常无 message → 默认文案', async () => {
-    mockApiRequest.mockRejectedValue({})
+    mockPost.mockRejectedValue({})
     const w = await mountComp()
     const vm = w.vm as any
     vm.permissionFile = { name: 'pkg.zip' }

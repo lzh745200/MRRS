@@ -485,7 +485,11 @@ const saveProfile = async () => {
 
     saving.value = true
 
-    const updatedData = await userStore.updateUserProfile({ ...profileForm })
+    // 后端 ProfileUpdate 期望 full_name 字段（前端表单使用 name）
+    const updatedData = await userStore.updateUserProfile({
+      ...profileForm,
+      full_name: profileForm.name,
+    })
     Object.assign(userInfo, updatedData)
     editing.value = false
     ElMessage.success('个人资料保存成功')

@@ -265,8 +265,14 @@
             <h4>查询结果</h4>
             <div class="nlp-answer">
               <el-alert
-                :title="nlpResult.answer || nlpResult.result || JSON.stringify(nlpResult)"
-                type="info"
+                :title="
+                  nlpResult.explanation ||
+                  nlpResult.answer ||
+                  nlpResult.error ||
+                  nlpResult.result ||
+                  JSON.stringify(nlpResult)
+                "
+                :type="nlpResult.success === false ? 'error' : 'info'"
                 :closable="false"
                 show-icon
               />
@@ -325,7 +331,7 @@ const fundForecastResult = ref<any>(null)
 const fundForecastItems = ref<any[]>([])
 
 // --- 异常检测 ---
-const anomalyForm = reactive({ method: 'statistical', contamination: 5 })
+const anomalyForm = reactive({ method: 'zscore', contamination: 5 })
 const anomalyInput = ref('')
 const anomalyLoading = ref(false)
 const anomalyResult = ref<any>(null)
@@ -402,10 +408,14 @@ async function runForecastIncome() {
     const response = await forecastIncome(forecastYears.value)
     const data = response?.data ?? response
     forecastResult.value = data?.data || data
-    const pred = forecastResult.value?.predictions || forecastResult.value?.predicted || []
-    forecastItems.value = Array.isArray(pred)
-      ? pred
-      : Object.entries(pred).map(([k, v]) => ({ label: k, value: v }))
+    // 后端返回 {historical:[...], forecast:[{year, avg_per_capita_income, ...}]}
+    const fc = forecastResult.value?.forecast
+    forecastItems.value = Array.isArray(fc)
+      ? fc.map((f: any) => ({
+          year: f.year,
+          value: `人均 ${f.avg_per_capita_income ?? '-'} / 集体 ${f.avg_collective_income ?? '-'}`,
+        }))
+      : []
     ElMessage.success('预测完成')
   } catch {
     ElMessage.error('预测失败')
@@ -421,10 +431,14 @@ async function runForecastFunds() {
     const response = await forecastFunds()
     const data = response?.data ?? response
     fundForecastResult.value = data?.data || data
-    const pred = fundForecastResult.value?.predictions || fundForecastResult.value || {}
-    fundForecastItems.value = Array.isArray(pred)
-      ? pred
-      : Object.entries(pred).map(([k, v]) => ({ label: k, value: v }))
+    // 后端返回 {current:{usage_rate}, projected_year_end_usage_rate, risk_label, ...}
+    const r = fundForecastResult.value || {}
+    const pct = (v: any) => (v == null ? '-' : `${Math.round(Number(v) * 100)}%`)
+    fundForecastItems.value = [
+      { label: '当年使用率', value: pct(r.current?.usage_rate) },
+      { label: '预计年末使用率', value: pct(r.projected_year_end_usage_rate) },
+      { label: '风险评估', value: r.risk_label || r.risk_level || '-' },
+    ]
     ElMessage.success('预测完成')
   } catch {
     ElMessage.error('预测失败')
@@ -462,10 +476,20 @@ async function runAnomalyDetection() {
       contamination: anomalyForm.contamination / 100,
     })
     const data = response?.data ?? response
-    anomalyResult.value = data?.data || data
+    // 后端裸返回异常记录数组（非 envelope）；归一化为 {anomalies, anomaly_count}
+    const raw = Array.isArray(data) ? data : data?.anomalies || data?.data?.anomalies || []
+    anomalyResult.value = {
+      anomalies: (Array.isArray(raw) ? raw : []).map((r: any) => ({
+        ...r,
+        is_anomaly: true,
+      })),
+      anomaly_count: Array.isArray(raw) ? raw.length : 0,
+    }
     if (anomalyResult.value?.anomalies?.length) {
       const first = anomalyResult.value.anomalies[0]
       anomalyColumns.value = Object.keys(first).filter((k) => k !== 'is_anomaly')
+    } else {
+      anomalyColumns.value = []
     }
     ElMessage.success(`检测完成：发现 ${anomalyResult.value?.anomaly_count ?? 'N/A'} 个异常`)
   } catch {
@@ -520,8 +544,9 @@ async function runNlpQuery() {
   nlpResult.value = null
   try {
     const response = await nlpQuery(nlpForm.query.trim())
-    const data = response?.data ?? response
-    nlpResult.value = data?.data || data
+    // 后端裸返回 {success, data, explanation, sql, query} 或 {success:false, error}
+    const body = response?.success !== undefined ? response : response?.data
+    nlpResult.value = body
     nlpHistory.value.unshift(nlpForm.query.trim())
     if (nlpHistory.value.length > 10) nlpHistory.value.pop()
     ElMessage.success('查询完成')

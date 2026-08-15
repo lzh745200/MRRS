@@ -29,7 +29,7 @@ export default defineConfig({
 
   /* 全局配置 */
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://127.0.0.1:15173',
     storageState: './tests/e2e/.auth/admin.json',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
@@ -46,11 +46,14 @@ export default defineConfig({
   ],
 
   /* 自动启动 dev server + 后端 */
+  /* 注意端口隔离：E2E 固定使用 18000/15173，避免与本机已安装运行的
+     生产实例（默认占用 8000）或本地 dev server（5173）冲突——否则
+     global-setup 的登录请求会打到生产库，出现 401/空页面等诡异失败。 */
   webServer: [
     {
-      command: 'python -m uvicorn app.main:app --port 8000',
+      command: 'python -m uvicorn app.main:app --port 18000',
       cwd: '../backend',
-      url: 'http://127.0.0.1:8000/api/v1/health',
+      url: 'http://127.0.0.1:18000/api/v1/health',
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
       env: {
@@ -63,10 +66,15 @@ export default defineConfig({
       },
     },
     {
-      command: 'npm run dev',
-      url: 'http://127.0.0.1:5173',
+      command: 'npm run dev -- --port 15173 --strictPort',
+      url: 'http://127.0.0.1:15173',
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
+      env: {
+        ...process.env,
+        // 让 Vite 代理指向 E2E 后端（18000）而非默认 8000
+        E2E_BACKEND_URL: 'http://127.0.0.1:18000',
+      },
     },
   ],
 })

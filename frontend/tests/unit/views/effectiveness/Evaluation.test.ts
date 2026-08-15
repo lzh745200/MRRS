@@ -1,9 +1,9 @@
 /**
- * views/effectiveness/Evaluation.vue 覆盖率攻坚（四指标 100%）
- * 覆盖：flatResult（null/result 存在/过滤字段）、flatCompareResult、fieldLabel（映射+兜底）、
- * formatValue（null/百分比/金额/数字/字符串）、loadVillages（data/裸对象、name 兜底、失败）、
- * handleEvaluate（无村庄警告/成功/失败）、handleCompare（无村庄/同年警告/成功/失败）、
- * onMounted（无查询参数/带参数自动评估）、模板：评估按钮、对比按钮、结果与对比卡。
+ * views/effectiveness/Evaluation.vue 测试（按后端 /effectiveness 真实响应契约）
+ * 覆盖：村庄加载（多形态/失败提示）、onMounted（无参/带参 GET 报告/404 引导）、
+ * reportItems/indicatorItems/compareItems（真实契约渲染与兜底）、handleFormChange 清空残留、
+ * handleEvaluate（守卫/成功/失败 userMessage 透传）、handleCompare（守卫/成功/失败）、
+ * 角色显隐（admin 见「开始评估」、viewer 隐藏）。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -14,13 +14,17 @@ const {
   mockApiRequest,
   mockEvaluateVillage,
   mockCompareEvaluations,
+  mockGetReport,
   routeQuery,
+  mockUserStore,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   mockApiRequest: vi.fn(),
   mockEvaluateVillage: vi.fn(),
   mockCompareEvaluations: vi.fn(),
+  mockGetReport: vi.fn(),
   routeQuery: {} as Record<string, any>,
+  mockUserStore: { currentUser: { role: 'admin' } as any },
 }))
 
 vi.mock('element-plus', () => ({ ElMessage }))
@@ -30,10 +34,12 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ resolve: () => ({ name: 'X', matched: [1] }) }),
 }))
 
+vi.mock('@/stores/user', () => ({ useUserStore: () => mockUserStore }))
+
 vi.mock('@/api/effectiveness', () => ({
   evaluateVillage: mockEvaluateVillage,
   compareEvaluations: mockCompareEvaluations,
-  getEvaluationReport: vi.fn(),
+  getEvaluationReport: mockGetReport,
   getRankings: vi.fn(),
 }))
 
@@ -43,33 +49,43 @@ vi.mock('@/api/request', () => ({
   post: vi.fn(),
   put: vi.fn(),
   del: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import Evaluation from '@/views/effectiveness/Evaluation.vue'
 
-const villages = [
-  { id: 1, name: '甲村' },
-  { id: 2, village_name: '乙村' },
-  { id: 3 },
-]
-
-const evalResult = {
+// 后端 _eval_to_dict 真实契约形态
+const report = {
+  village_id: 1,
+  year: 2025,
+  economic_score: 85.2,
+  social_score: 76.5,
+  ecological_score: 66.7,
   total_score: 90.5,
-  economic: 85.2,
-  level: '优秀',
-  per_capita_income: 18000,
-  total_funds: 500000,
-  growth_rate: 0.12,
-  project_completion_rate: 0.95,
-  village_id: 99,
+  rank: 3,
+  grade: 'excellent',
+  indicators: {
+    per_capita_income: 18000,
+    income_growth_rate: 12.5,
+    infrastructure_count: 2,
+    industry_count: 3,
+    data_complete: true,
+  },
+  evaluated_at: '2025-12-31T10:00:00',
   village_name: '甲村',
 }
 
-const compareResult = {
-  total_score: 80,
-  economic: 70,
-  per_capita_income: 12000,
+// 后端 compare_evaluations 真实契约：三层嵌套 {year1_data, year2_data, delta}
+const compareData = {
+  village_id: 1,
+  year1: 2024,
+  year2: 2025,
+  year1_data: { total_score: 80 },
+  year2_data: { total_score: 90.5 },
+  delta: { total_score: 10.5, economic_score: -2.0, social_score: 0, ecological_score: 5.5 },
 }
+
+const villages = [{ id: 1, name: '甲村' }, { id: 2, village_name: '乙村' }, { id: 3 }]
 
 function mountComp() {
   return mount(Evaluation, {
@@ -84,7 +100,7 @@ function mountComp() {
         'el-select': {
           name: 'ElSelect',
           template: '<div class="el-select-stub"><slot /></div>',
-          emits: ['update:modelValue'],
+          emits: ['update:modelValue', 'change'],
         },
         'el-option': { name: 'ElOption', template: '<div class="el-option-stub"><slot /></div>' },
         'el-descriptions': {
@@ -113,13 +129,15 @@ const findBtn = (wrapper: any, text: string) => {
 beforeEach(() => {
   vi.resetAllMocks()
   Object.keys(routeQuery).forEach((k) => delete routeQuery[k])
+  mockUserStore.currentUser = { role: 'admin' }
   mockApiRequest.mockResolvedValue({ data: { items: villages } })
-  mockEvaluateVillage.mockResolvedValue({ data: evalResult })
-  mockCompareEvaluations.mockResolvedValue({ data: compareResult })
+  mockEvaluateVillage.mockResolvedValue({ data: report })
+  mockCompareEvaluations.mockResolvedValue({ data: compareData })
+  mockGetReport.mockResolvedValue({ data: report })
 })
 
 describe('挂载与村庄加载', () => {
-  it('onMounted：加载村庄选项（name 兜底链）；无查询参数不自动评估', async () => {
+  it('onMounted：加载村庄选项（name 兜底链）；无查询参数不评估也不拉报告', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -132,28 +150,26 @@ describe('挂载与村庄加载', () => {
       { id: 3, name: 'ID:3' },
     ])
     expect(mockEvaluateVillage).not.toHaveBeenCalled()
+    expect(mockGetReport).not.toHaveBeenCalled()
     expect(wrapper.find('.el-empty-stub').exists()).toBe(true)
   })
 
-  it('loadVillages：裸对象/数组/嵌套形态；失败 → 空选项', async () => {
+  it('loadVillages：裸对象/数组/嵌套形态；失败 → 空选项 + 错误提示', async () => {
     mockApiRequest.mockResolvedValue({ items: villages })
     let wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).villageOptions).toHaveLength(3)
 
-    // data 直接为数组 → Array.isArray 真侧
     mockApiRequest.mockResolvedValue({ data: villages })
     wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).villageOptions).toHaveLength(3)
 
-    // inner 无 items 且非数组 → [] 兜底
     mockApiRequest.mockResolvedValue({ data: {} })
     wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).villageOptions).toEqual([])
 
-    // response 为 null → ?. 短路
     mockApiRequest.mockResolvedValue(null)
     wrapper = mountComp()
     await flushPromises()
@@ -163,18 +179,79 @@ describe('挂载与村庄加载', () => {
     wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).villageOptions).toEqual([])
+    expect(ElMessage.error).toHaveBeenCalledWith('村庄列表加载失败，请刷新重试')
   })
 
-  it('onMounted 带查询参数 → 自动评估', async () => {
-    routeQuery.villageId = '5'
-    routeQuery.year = '2024'
+  it('onMounted 带查询参数 → 先 GET 已有报告（不触发写操作）', async () => {
+    routeQuery.villageId = '1'
+    routeQuery.year = '2025'
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.evalForm.villageId).toBe(5)
-    expect(vm.evalForm.year).toBe(2024)
-    expect(mockEvaluateVillage).toHaveBeenCalledWith({ village_id: 5, year: 2024 })
-    expect(vm.evaluationResult).toEqual(evalResult)
+    expect(vm.evalForm.villageId).toBe(1)
+    expect(vm.evalForm.year).toBe(2025)
+    expect(mockGetReport).toHaveBeenCalledWith(1, 2025)
+    expect(mockEvaluateVillage).not.toHaveBeenCalled()
+    expect(vm.evaluationResult).toEqual(report)
+    // 报告按真实契约渲染：等级映射、排名整数、指标明细
+    const text = wrapper.text()
+    expect(text).toContain('2025年度')
+    expect(text).toContain('甲村')
+    expect(text).toContain('90.5')
+    expect(text).toContain('优秀')
+    expect(text).toContain('第 3 名')
+    expect(text).toContain('18000')
+    expect(text).toContain('12.5%')
+  })
+
+  it('onMounted 带参数但报告 404 → info 引导，不报错', async () => {
+    routeQuery.villageId = '5'
+    mockGetReport.mockRejectedValue({ response: { status: 404 } })
+    mountComp()
+    await flushPromises()
+    expect(ElMessage.info).toHaveBeenCalledWith('该年度尚未评估，可点击"开始评估"')
+    expect(mockEvaluateVillage).not.toHaveBeenCalled()
+  })
+
+  it('报告加载非 404 失败 → error 提示（userMessage 优先）', async () => {
+    routeQuery.villageId = '5'
+    mockGetReport.mockRejectedValue({ response: { status: 500 }, userMessage: '服务异常' })
+    mountComp()
+    await flushPromises()
+    expect(ElMessage.error).toHaveBeenCalledWith('服务异常')
+  })
+
+  it('loadExistingReport：响应无 .data 包装（裸对象）→ 直接采用', async () => {
+    routeQuery.villageId = '1'
+    mockGetReport.mockResolvedValue(report) // 裸响应（后端直接返回报告对象）
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).evaluationResult).toEqual(report)
+  })
+
+  it('loadExistingReport 非 404 失败且无 userMessage → 兜底文案', async () => {
+    routeQuery.villageId = '5'
+    mockGetReport.mockRejectedValue({ response: { status: 500 } })
+    mountComp()
+    await flushPromises()
+    expect(ElMessage.error).toHaveBeenCalledWith('评估报告加载失败')
+  })
+
+  it('loadExistingReport 404 + 非管理员 → 联系管理员文案', async () => {
+    mockUserStore.currentUser = { role: 'viewer' }
+    routeQuery.villageId = '5'
+    mockGetReport.mockRejectedValue({ response: { status: 404 } })
+    mountComp()
+    await flushPromises()
+    expect(ElMessage.info).toHaveBeenCalledWith('该年度尚未评估，请联系管理员评估')
+  })
+
+  it('loadVillages 失败带 userMessage → 透传业务文案', async () => {
+    mockApiRequest.mockRejectedValue({ userMessage: '网络异常' })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).villageOptions).toEqual([])
+    expect(ElMessage.error).toHaveBeenCalledWith('网络异常')
   })
 })
 
@@ -189,38 +266,35 @@ describe('handleEvaluate', () => {
     expect(mockEvaluateVillage).not.toHaveBeenCalled()
   })
 
-  it('成功：response?.data 形态；评估按钮点击触发', async () => {
+  it('成功：评估按钮点击触发，报告渲染且对比结果清空', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.evalForm.villageId = 1
     vm.evalForm.year = 2025
+    vm.compareResult = compareData
     await findBtn(wrapper, '开始评估').trigger('click')
     await flushPromises()
     expect(mockEvaluateVillage).toHaveBeenCalledWith({ village_id: 1, year: 2025 })
-    expect(vm.evaluationResult).toEqual(evalResult)
+    expect(vm.evaluationResult).toEqual(report)
     expect(vm.compareResult).toBeNull()
     expect(ElMessage.success).toHaveBeenCalledWith('评估完成')
     expect(vm.evaluating).toBe(false)
-    // 模板：评估报告卡渲染（descriptions + 标签）
     expect(wrapper.text()).toContain('2025年度')
-    expect(wrapper.text()).toContain('总分')
   })
 
-  it('成功：response 裸对象形态（?? 兜底）；评估中 loading 态', async () => {
-    mockEvaluateVillage.mockResolvedValue(evalResult)
+  it('失败 → 透传后端 userMessage', async () => {
+    mockEvaluateVillage.mockRejectedValue({ userMessage: '需要管理员权限' })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.evalForm.villageId = 2
-    vm.evaluating = true
-    await nextTick()
-    expect(wrapper.text()).toContain('正在评估中')
+    vm.evalForm.villageId = 1
     await vm.handleEvaluate()
-    expect(vm.evaluationResult).toEqual(evalResult)
+    expect(ElMessage.error).toHaveBeenCalledWith('需要管理员权限')
+    expect(vm.evaluating).toBe(false)
   })
 
-  it('失败 → error 提示，finally 复位', async () => {
+  it('失败且无 userMessage → 兜底文案', async () => {
     mockEvaluateVillage.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
@@ -228,6 +302,28 @@ describe('handleEvaluate', () => {
     vm.evalForm.villageId = 1
     await vm.handleEvaluate()
     expect(ElMessage.error).toHaveBeenCalledWith('评估失败')
+  })
+
+  it('成功但响应无 .data 包装（裸对象）→ 直接采用', async () => {
+    mockEvaluateVillage.mockResolvedValue(report) // 裸响应
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.evalForm.villageId = 1
+    await vm.handleEvaluate()
+    expect(vm.evaluationResult).toEqual(report)
+    expect(ElMessage.success).toHaveBeenCalledWith('评估完成')
+    expect(vm.evaluating).toBe(false)
+  })
+
+  it('失败带 response.data.detail（无 userMessage）→ 透传 detail', async () => {
+    mockEvaluateVillage.mockRejectedValue({ response: { data: { detail: '权限不足' } } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.evalForm.villageId = 1
+    await vm.handleEvaluate()
+    expect(ElMessage.error).toHaveBeenCalledWith('权限不足')
     expect(vm.evaluating).toBe(false)
   })
 })
@@ -239,7 +335,7 @@ describe('handleCompare', () => {
     const vm = wrapper.vm as any
     vm.evalForm.villageId = 0
     await vm.handleCompare()
-    expect(ElMessage.warning).toHaveBeenCalledWith('请先完成评估')
+    expect(ElMessage.warning).toHaveBeenCalledWith('请先选择村庄')
 
     vm.evalForm.villageId = 1
     vm.compareForm.year1 = 2025
@@ -249,25 +345,77 @@ describe('handleCompare', () => {
     expect(mockCompareEvaluations).not.toHaveBeenCalled()
   })
 
-  it('成功：数据加载 + 提示；「对比」按钮点击', async () => {
+  it('成功：delta 按真实契约渲染（含正负号）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.evalForm.villageId = 1
     vm.compareForm.year1 = 2024
     vm.compareForm.year2 = 2025
-    vm.evaluationResult = evalResult // 对比区块 v-if 依赖
+    vm.evaluationResult = report // 对比区块 v-if 依赖
     await nextTick()
     await findBtn(wrapper, '对比').trigger('click')
     await flushPromises()
     expect(mockCompareEvaluations).toHaveBeenCalledWith(1, 2024, 2025)
-    expect(vm.compareResult).toEqual(compareResult)
-    expect(ElMessage.success).toHaveBeenCalledWith('对比完成')
+    expect(vm.compareResult).toEqual(compareData)
     expect(vm.comparing).toBe(false)
-    expect(wrapper.text()).toContain('人均收入')
+    const text = wrapper.text()
+    expect(text).toContain('+10.5')
+    expect(text).toContain('-2')
+    expect(text).toContain('80.0')
+    expect(text).toContain('2024 年总分')
   })
 
-  it('失败 → error 提示', async () => {
+  it('失败 → 透传业务错误（缺少年度数据）；成功后旧对比结果先清空', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.evalForm.villageId = 1
+    vm.compareResult = compareData
+    mockCompareEvaluations.mockRejectedValue({ userMessage: '缺少 2024 年的评估数据，无法对比' })
+    await vm.handleCompare()
+    expect(ElMessage.error).toHaveBeenCalledWith('缺少 2024 年的评估数据，无法对比')
+    expect(vm.compareResult).toBeNull() // 失败不留旧结果
+    expect(vm.comparing).toBe(false)
+  })
+
+  it('成功：裸响应（无 .data）且 delta 含 null → 差值渲染为 -', async () => {
+    const bareCompare = {
+      year1: 2024,
+      year2: 2025,
+      // 无 year1_data/year2_data，delta 部分为 null
+      delta: { total_score: null, economic_score: null, social_score: 0, ecological_score: null },
+    }
+    mockCompareEvaluations.mockResolvedValue(bareCompare) // 裸响应
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.evalForm.villageId = 1
+    vm.compareForm.year1 = 2024
+    vm.compareForm.year2 = 2025
+    vm.evaluationResult = report // 对比区块 v-if 依赖
+    await nextTick()
+    await vm.handleCompare()
+    expect(mockCompareEvaluations).toHaveBeenCalledWith(1, 2024, 2025)
+    expect(vm.compareResult).toEqual(bareCompare)
+    expect(vm.compareItems).toHaveLength(6)
+    expect(vm.compareItems.map((i: any) => i.value)).toEqual(['-', '-', '-', '-', '0', '-'])
+    expect(wrapper.text()).toContain('2024 年总分')
+    expect(wrapper.text()).toContain('2025 年总分')
+  })
+
+  it('失败带 response.data.detail（无 userMessage）→ 透传 detail', async () => {
+    mockCompareEvaluations.mockRejectedValue({ response: { data: { detail: '对比数据缺失' } } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.evalForm.villageId = 1
+    await vm.handleCompare()
+    expect(ElMessage.error).toHaveBeenCalledWith('对比数据缺失')
+    expect(vm.comparing).toBe(false)
+  })
+
+  it('失败无任何信息 → 兜底文案', async () => {
     mockCompareEvaluations.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
@@ -276,108 +424,142 @@ describe('handleCompare', () => {
     await vm.handleCompare()
     expect(ElMessage.error).toHaveBeenCalledWith('对比失败')
     expect(vm.comparing).toBe(false)
-
-    // response 无 data → ?? 兜底
-    mockCompareEvaluations.mockResolvedValue(compareResult)
-    await vm.handleCompare()
-    expect(vm.compareResult).toEqual(compareResult)
   })
 })
 
-describe('计算属性与格式化', () => {
-  it('flatResult：null / result 嵌套 / 过滤排除字段', async () => {
+describe('计算属性与残留清理', () => {
+  it('reportItems/indicatorItems 兜底：rank/indicators 缺失', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.flatResult).toEqual({})
-
-    vm.evaluationResult = { result: { total_score: 1 } }
-    expect(vm.flatResult).toEqual({ total_score: 1 })
-
-    vm.evaluationResult = { ...evalResult }
-    const flat = vm.flatResult
-    expect(flat.village_id).toBeUndefined()
-    expect(flat.village_name).toBeUndefined()
-    expect(flat.total_score).toBe(90.5)
-  })
-
-  it('flatCompareResult：null / 非空', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    expect(vm.flatCompareResult).toEqual({})
-    vm.compareResult = compareResult
-    expect(vm.flatCompareResult).toEqual(compareResult)
-  })
-
-  it('fieldLabel：映射与下划线替换兜底', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    expect(vm.fieldLabel('total_score')).toBe('总分')
-    expect(vm.fieldLabel('economic')).toBe('经济得分')
-    expect(vm.fieldLabel('social')).toBe('社会得分')
-    expect(vm.fieldLabel('project_completion')).toBe('项目完成率')
-    expect(vm.fieldLabel('fund_execution')).toBe('资金执行率')
-    expect(vm.fieldLabel('level')).toBe('等级')
-    expect(vm.fieldLabel('rank')).toBe('排名')
-    expect(vm.fieldLabel('per_capita_income')).toBe('人均收入')
-    expect(vm.fieldLabel('collective_income')).toBe('集体收入')
-    expect(vm.fieldLabel('total_projects')).toBe('项目总数')
-    expect(vm.fieldLabel('completed_projects')).toBe('已完成项目')
-    expect(vm.fieldLabel('project_completion_rate')).toBe('项目完成率')
-    expect(vm.fieldLabel('total_funds')).toBe('资金总额')
-    expect(vm.fieldLabel('growth_rate')).toBe('增长率')
-    expect(vm.fieldLabel('score')).toBe('得分')
-    expect(vm.fieldLabel('custom_key')).toBe('custom key')
-  })
-
-  it('formatValue：null/百分比/金额/数字/字符串', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    expect(vm.formatValue('x', null)).toBe('-')
-    expect(vm.formatValue('growth_rate', 0.12)).toBe('12.0%')
-    expect(vm.formatValue('percent_x', 0.5)).toBe('50.0%')
-    expect(vm.formatValue('per_capita_income', 18000)).toBe('18,000')
-    expect(vm.formatValue('total_funds', 500000)).toBe('500,000')
-    expect(vm.formatValue('amount_x', 1234)).toBe('1,234')
-    expect(vm.formatValue('total_score', 90.5)).toBe('90.5')
-    expect(vm.formatValue('level', '优秀')).toBe('优秀')
-  })
-
-  it('结果卡与对比结果卡模板渲染（descriptions 值）', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    vm.evaluationResult = evalResult
-    vm.compareResult = compareResult
+    expect(vm.reportItems).toEqual([])
+    expect(vm.indicatorItems).toEqual([])
+    vm.evaluationResult = {
+      village_id: 1,
+      year: 2025,
+      total_score: null,
+      rank: null,
+      grade: null,
+      indicators: null,
+      evaluated_at: 'not-a-date',
+    }
     await nextTick()
     const text = wrapper.text()
-    expect(text).toContain('90.5')
-    expect(text).toContain('12.0%')
-    expect(text).toContain('18,000')
-    expect(text).toContain('85.2')
-    expect(text).toContain('80.0')
-    expect(text).not.toContain('选择两个不同年度进行对比分析') // 对比结果已展示
+    expect(text).not.toContain('第') // rank null → '-'
+    expect(text).toContain('not-a-date') // 非法日期原样输出
+    expect(vm.indicatorItems).toEqual([])
   })
-})
 
-describe('表单 v-model', () => {
-  it('村庄/年度/对比年度 select 同步', async () => {
+  it('compareItems：无 delta → 空；切换村庄/年度清空结果', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.evaluationResult = evalResult // 对比表单 v-if 依赖
+    expect(vm.compareItems).toEqual([])
+    vm.compareResult = { village_id: 1 }
+    expect(vm.compareItems).toEqual([])
+
+    vm.evaluationResult = report
+    vm.compareResult = compareData
+    vm.handleFormChange()
+    expect(vm.evaluationResult).toBeNull()
+    expect(vm.compareResult).toBeNull()
+  })
+
+  it('select change 事件触发清空（模板绑定）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.evaluationResult = report
     await nextTick()
     const selects = wrapper.findAllComponents({ name: 'ElSelect' })
-    selects[0].vm.$emit('update:modelValue', 7)
-    expect(vm.evalForm.villageId).toBe(7)
-    selects[1].vm.$emit('update:modelValue', 2023)
-    expect(vm.evalForm.year).toBe(2023)
-    selects[2].vm.$emit('update:modelValue', 2022)
-    expect(vm.compareForm.year1).toBe(2022)
-    selects[3].vm.$emit('update:modelValue', 2026)
-    expect(vm.compareForm.year2).toBe(2026)
+    selects[0].vm.$emit('update:modelValue', 2)
+    selects[0].vm.$emit('change', 2)
+    expect(vm.evalForm.villageId).toBe(2)
+    expect(vm.evaluationResult).toBeNull()
+  })
+
+  it('reportItems/indicatorItems 兜底：year/evaluated_at/指标字段全 null + 未知等级', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.evaluationResult = {
+      village_id: 1,
+      year: null,
+      total_score: null,
+      grade: 'unknown', // 未映射等级 → 原样输出
+      rank: 5,
+      indicators: {
+        per_capita_income: null,
+        income_growth_rate: null,
+        infrastructure_count: null,
+        industry_count: null,
+        data_complete: false,
+      },
+      evaluated_at: null,
+    }
+    await nextTick()
+    const ri = vm.reportItems
+    expect(ri.find((i: any) => i.label === '评估年度').value).toBe('-')
+    expect(ri.find((i: any) => i.label === '等级').value).toBe('unknown')
+    expect(ri.find((i: any) => i.label === '评估时间').value).toBe('-')
+    expect(vm.indicatorItems.map((i: any) => i.value)).toEqual([
+      '-',
+      '-',
+      '-',
+      '-',
+      '未录入（按基线评估）',
+    ])
+  })
+
+  it('v-model 双向绑定：年度/对比年度选择器更新表单值', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.evaluationResult = report // 展开对比区块（额外渲染两个对比年度选择器）
+    await nextTick()
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    expect(selects).toHaveLength(4) // 村庄/年度 + 对比年1/年2
+    selects[1].vm.$emit('update:modelValue', 2024)
+    expect(vm.evalForm.year).toBe(2024)
+    selects[2].vm.$emit('update:modelValue', 2023)
+    expect(vm.compareForm.year1).toBe(2023)
+    selects[3].vm.$emit('update:modelValue', 2024)
+    expect(vm.compareForm.year2).toBe(2024)
+  })
+})
+
+describe('角色显隐', () => {
+  it('viewer 不渲染「开始评估」按钮，空态提示变化', async () => {
+    mockUserStore.currentUser = { role: 'viewer' }
+    const wrapper = mountComp()
+    await flushPromises()
+    const btns = wrapper.findAll('el-button-stub')
+    expect(btns.some((b: any) => b.text().includes('开始评估'))).toBe(false)
+    expect((wrapper.vm as any).emptyHint).toBe('选择村庄和年度查看评估报告')
+  })
+
+  it('admin 渲染「开始评估」按钮', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(findBtn(wrapper, '开始评估')).toBeTruthy()
+  })
+
+  it('currentUser 为空 → 非管理员视图（无评估按钮）', async () => {
+    mockUserStore.currentUser = null
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.isAdmin).toBe(false)
+    expect(vm.emptyHint).toBe('选择村庄和年度查看评估报告')
+    const btns = wrapper.findAll('el-button-stub')
+    expect(btns.some((b: any) => b.text().includes('开始评估'))).toBe(false)
+  })
+
+  it('非 admin/super_admin 但 is_superuser=true → 视为管理员', async () => {
+    mockUserStore.currentUser = { role: 'user', is_superuser: true }
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).isAdmin).toBe(true)
+    expect(findBtn(wrapper, '开始评估')).toBeTruthy()
   })
 })

@@ -96,6 +96,8 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = u
     _setCachedToken(t)
     AuthStorage.setAuthData({ token: t, user: u, refreshToken: rt })
+    // 登录成功 → 解除锁屏标记（自动登录恢复时同样生效）
+    unlockSession()
     // 预取 CSRF token：避免首次 POST/PUT/DELETE 请求因懒加载失败而返回 403
     prefetchCsrfToken().catch(() => {
       // 预取失败不阻断登录流程，后续请求会自动重试获取
@@ -109,6 +111,33 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = ''
     _setCachedToken(null)
     AuthStorage.clear()
+  }
+
+  /**
+   * 锁屏（自动/手动）：仅结束当前会话，保留"记住登录"持久凭据。
+   * 同时写入会话级锁标记，防止路由守卫凭持久令牌自动跳回工作台。
+   */
+  function lockSession() {
+    token.value = ''
+    refreshToken.value = ''
+    user.value = null
+    error.value = ''
+    _setCachedToken(null)
+    AuthStorage.clearSession()
+    try {
+      sessionStorage.setItem('auto_lock_active', '1')
+    } catch {
+      /* 静默 */
+    }
+  }
+
+  /** 登录/自动登录成功后解除锁屏标记 */
+  function unlockSession() {
+    try {
+      sessionStorage.removeItem('auto_lock_active')
+    } catch {
+      /* 静默 */
+    }
   }
 
   /** 当前认证数据（供"记住登录"持久化，含刷新令牌） */
@@ -143,10 +172,18 @@ export const useAuthStore = defineStore('auth', () => {
         // 正常登录成功
         if (res.data) {
           // 注意：refresh_token 位于信封顶层（后端 success_response 的 kwargs），
-          // 而非 data 内 —— 取错位置会导致会话无法续期、记住登录失效
+          // 而非 data 内 —— 取错位置会导致会话无法续期、记住登录失效。
+          // must_change_password 同样位于信封顶层 —— 未合并将导致强制改密失效。
+          const user = {
+            ...(res.data.user as Record<string, unknown>),
+            must_change_password:
+              (res as unknown as { must_change_password?: boolean }).must_change_password ??
+              (res.data.user as { must_change_password?: boolean })?.must_change_password ??
+              false,
+          } as UserInfo
           persistAuth(
             res.data.access_token,
-            res.data.user,
+            user,
             (res as unknown as { refresh_token?: string }).refresh_token
           )
           // 登录后立即预加载菜单 — 避免侧边栏渲染时 loaded=false 导致闪烁或泄露
@@ -182,7 +219,15 @@ export const useAuthStore = defineStore('auth', () => {
       const res = await verifyLoginTwoFactor(tempToken, code)
 
       if (res.code === 200 && res.data) {
-        persistAuth(res.data.access_token, res.data.user, res.refresh_token)
+        // must_change_password 在信封顶层，需合并进用户对象以触发强制改密
+        const user = {
+          ...(res.data.user as Record<string, unknown>),
+          must_change_password:
+            (res as unknown as { must_change_password?: boolean }).must_change_password ??
+            (res.data.user as { must_change_password?: boolean })?.must_change_password ??
+            false,
+        } as UserInfo
+        persistAuth(res.data.access_token, user, res.refresh_token)
         useMenuStore().fetchMenus()
         return true
       }
@@ -224,6 +269,7 @@ export const useAuthStore = defineStore('auth', () => {
     canViewDeleted,
     modulePermissions,
     logout,
+    lockSession,
     login,
     verifyTwoFactorLogin,
     fetchUser,

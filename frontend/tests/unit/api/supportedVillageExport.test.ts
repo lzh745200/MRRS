@@ -107,7 +107,9 @@ describe('api/supportedVillage (named)', () => {
   })
   it('batchDeleteSupportedVillages POST ids', () => {
     batchDeleteSupportedVillages([1, 2, 3])
-    expect(mockPost).toHaveBeenCalledWith('/supported-villages/batch-delete', { ids: [1, 2, 3] })
+    expect(mockPost).toHaveBeenCalledWith('/supported-villages/batch-delete', { ids: [1, 2, 3], confirm_password: '' })
+    batchDeleteSupportedVillages([4], 'pw')
+    expect(mockPost).toHaveBeenCalledWith('/supported-villages/batch-delete', { ids: [4], confirm_password: 'pw' })
   })
 
   it('importSupportedVillages POST FormData', () => {

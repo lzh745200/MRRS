@@ -489,6 +489,10 @@ async function handleLockBudget() {
   try {
     const res = await fundLifecycleApi.lockBudget(projectId.value)
     ElMessage.success(res.message || '预算基线已锁定')
+    // 锁定推进阶段状态（步骤条/标签），必须同步重载
+    await loadPhases()
+    // 拨付计划仅在已加载过时刷新（阶段2尚未生成计划，无谓请求会误报“加载失败”）
+    if (allocationItems.value.length) await loadAllocationPlan()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || '锁定失败')
   } finally {

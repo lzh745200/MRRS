@@ -247,6 +247,28 @@ describe('utils/authStorage', () => {
       expect(localStorage.getItem('auth_persist_refresh')).toBeNull()
     })
 
+    it('clearSession 仅清会话，保留记住登录持久凭据（锁屏场景）', () => {
+      AuthStorage.persistForAutoLogin({
+        token: 'persist-keep',
+        user: USER,
+        refreshToken: 'rt-keep',
+      })
+      AuthStorage.setToken('session-t')
+      AuthStorage.setUser(USER)
+      AuthStorage.setRefreshToken('session-rt')
+      AuthStorage.clearSession()
+      // 会话清空
+      expect(AuthStorage.getToken()).toBe('persist-keep') // 回退到持久令牌
+      expect(sessionStorage.getItem('auth_token')).toBeNull()
+      expect(sessionStorage.getItem('auth_user')).toBeNull()
+      expect(sessionStorage.getItem('refresh_token')).toBeNull()
+      // 持久数据保留（记住登录不被锁屏破坏）
+      expect(localStorage.getItem('auth_persist_token')).toBe('persist-keep')
+      expect(localStorage.getItem('auth_persist_refresh')).toBe('rt-keep')
+      expect(AuthStorage.hasPersistedAuth()).toBe(true)
+      AuthStorage.clearPersisted()
+    })
+
     it('clear 同时清除记住登录持久数据（退出登录彻底失效）', () => {
       AuthStorage.persistForAutoLogin({ token: 't7', user: USER, refreshToken: 'rt' })
       AuthStorage.setToken('session-t')

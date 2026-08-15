@@ -19,7 +19,7 @@
           <el-option label="已完成" value="completed" />
           <el-option label="已终止" value="terminated" />
         </el-select>
-        <el-button type="primary" @click="showCreateDialog = true">新建合同</el-button>
+        <el-button type="primary" @click="openCreateDialog">新建合同</el-button>
       </div>
 
       <el-table v-loading="loading" :data="contracts" size="default" class="mt-3">
@@ -236,6 +236,24 @@ const contractForm = reactive({
 
 const contractFormRef = ref<FormInstance | null>(null)
 
+// 新建合同：每次打开都重置表单，避免残留上次输入
+function openCreateDialog() {
+  Object.assign(contractForm, {
+    contract_no: '',
+    contract_name: '',
+    party_a: '',
+    party_b: '',
+    contract_amount: 0,
+    sign_date: '',
+    deadline: '',
+    remarks: '',
+    project_id: projectId,
+    fund_id: undefined,
+  })
+  contractFormRef.value?.clearValidate?.()
+  showCreateDialog.value = true
+}
+
 const contractRules: FormRules = {
   contract_no: [{ required: true, message: '请填写合同编号', trigger: 'blur' }],
   contract_name: [{ required: true, message: '请填写合同名称', trigger: 'blur' }],
@@ -329,13 +347,9 @@ async function handleDeleteContract(id: number) {
 }
 
 // ========== 合同附件 ==========
-async function showAttachmentDialog(contract: any) {
-  currentContractId.value = contract.id
-  currentContractName.value = contract.contract_name || contract.contract_no || ''
-  attachmentDialogVisible.value = true
-  attachmentList.value = []
+async function reloadContractAttachments() {
   try {
-    const res: any = await fundLifecycleApi.listContractAttachments(contract.id)
+    const res: any = await fundLifecycleApi.listContractAttachments(currentContractId.value)
     attachmentList.value = (res?.items ?? res?.data?.items ?? []).map((a: any) => ({
       ...a,
       file_size: a.file_size ?? a.fileSize ?? '',
@@ -343,6 +357,14 @@ async function showAttachmentDialog(contract: any) {
   } catch {
     /* 附件列表加载失败不阻塞 */
   }
+}
+
+async function showAttachmentDialog(contract: any) {
+  currentContractId.value = contract.id
+  currentContractName.value = contract.contract_name || contract.contract_no || ''
+  attachmentDialogVisible.value = true
+  attachmentList.value = []
+  await reloadContractAttachments()
 }
 
 async function beforeUpload(file: File) {
@@ -373,18 +395,15 @@ async function handleUploadSuccess(response: any) {
     return
   }
   try {
-    const res: any = await fundLifecycleApi.uploadContractAttachment(currentContractId.value, {
+    await fundLifecycleApi.uploadContractAttachment(currentContractId.value, {
       url,
       file_name: data.file_name || '',
     })
-    const items = (res?.items ?? res?.data?.items ?? []).map((a: any) => ({
-      ...a,
-      file_size: a.file_size ?? '',
-    }))
-    attachmentList.value = items.length ? items : [...attachmentList.value]
+    // 登记接口只回 {url, file_name} 不回完整列表，成功后必须重拉附件列表上屏
+    await reloadContractAttachments()
     ElMessage.success('附件上传成功')
-  } catch {
-    ElMessage.success('文件已上传')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '附件登记失败，请重试')
   }
 }
 

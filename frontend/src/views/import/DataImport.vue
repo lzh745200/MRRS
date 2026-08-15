@@ -57,7 +57,7 @@
         <el-form-item label="导入模式">
           <el-radio-group v-model="importForm.mode">
             <el-radio value="incremental">增量导入（不覆盖已有数据）</el-radio>
-            <el-radio value="overwrite">全量覆盖（删除旧数据后导入）</el-radio>
+            <el-radio value="full">全量覆盖（删除旧数据后导入）</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="选择文件">
@@ -257,6 +257,7 @@ const previewData = ref<{
   rows: any[]
   total: number
   columns: string[]
+  invalid_rows?: number
 } | null>(null)
 
 async function handlePreview() {
@@ -265,7 +266,17 @@ async function handlePreview() {
   previewData.value = null
   try {
     const result = await previewImportData(selectedFile.value, importForm.value.entityType)
-    previewData.value = result
+    // 后端返回 {total_rows, rows:[{data:{...}, has_error}], ...}，归一化为预览结构
+    const rawRows = Array.isArray(result?.rows) ? result.rows : []
+    const columns = Array.from(
+      new Set(rawRows.flatMap((r: any) => Object.keys(r?.data || {})))
+    ).slice(0, 20)
+    previewData.value = {
+      rows: rawRows.map((r: any) => r?.data ?? r),
+      total: result?.total_rows ?? rawRows.length,
+      columns,
+      invalid_rows: result?.invalid_rows ?? 0,
+    }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e?.message || '数据预览失败，请检查文件格式')
   } finally {
@@ -296,7 +307,10 @@ async function handleImport() {
     } else {
       ElMessage.error(`导入失败：${result.errors?.length || 0} 个错误`)
     }
-    handleReset()
+    // 清空文件与预览，但保留导入结果展示（此前 handleReset 会把结果一并清掉）
+    uploadRef.value?.clearFiles()
+    selectedFile.value = null
+    previewData.value = null
     loadHistory()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e?.message || '导入失败')

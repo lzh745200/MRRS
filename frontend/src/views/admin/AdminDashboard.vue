@@ -231,7 +231,7 @@ const currentDate = new Date().toLocaleDateString('zh-CN', {
 
 const adminStats = ref([
   { label: '用户总数', value: 0, icon: UserFilled, trend: '', trendClass: 'stable' },
-  { label: '今日活跃', value: 0, icon: CircleCheck, trend: '', trendClass: 'stable' },
+  { label: '覆盖人口', value: 0, icon: CircleCheck, trend: '', trendClass: 'stable' },
   { label: '数据记录', value: 0, icon: DataAnalysis, trend: '', trendClass: 'stable' },
   {
     label: '系统运行',
@@ -276,14 +276,21 @@ function formatSize(bytes: number): string {
 
 async function loadAdminData() {
   try {
-    const res = await get('/dashboard/stats')
-    const data = res.data?.data || res.data || {}
+    const res: any = await get('/dashboard/stats')
+    // 后端返回 {code, data:{total_users,total_villages,total_projects,total_funds,...}, message}
+    // 无数据时返回 null
+    const data = res?.data ?? res ?? {}
 
-    adminStats.value[0].value = data.total_users || 0
-    adminStats.value[1].value = data.active_today || 0
-    adminStats.value[2].value = data.total_records || 0
-    if (data.uptime) {
-      adminStats.value[3].value = data.uptime
+    adminStats.value[0].value = Number(data.total_users) || 0
+    // 今日活跃后端未提供 → 用覆盖人口展示（卡片文案保持不变会误导，改用有数据支撑的字段）
+    adminStats.value[1].value = Number(data.total_population) || 0
+    adminStats.value[2].value =
+      Number(data.total_villages || 0) +
+      Number(data.total_projects || 0) +
+      Number(data.total_funds || 0) +
+      Number(data.total_schools || 0)
+    if (data.total_villages !== undefined) {
+      adminStats.value[3].value = `${data.total_villages} 村 / ${data.total_projects ?? 0} 项目`
     }
 
     if (data.system_status && Array.isArray(data.system_status)) {

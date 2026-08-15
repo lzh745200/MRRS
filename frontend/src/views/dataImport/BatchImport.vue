@@ -171,7 +171,7 @@
                 <span>增量导入</span>
                 <span class="mode-hint">仅新增，不影响已有数据</span>
               </el-radio>
-              <el-radio value="overwrite">
+              <el-radio value="full">
                 <span>全量覆盖</span>
                 <span class="mode-hint">清空后重新导入</span>
               </el-radio>

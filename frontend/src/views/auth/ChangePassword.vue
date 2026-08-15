@@ -153,7 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed } from 'vue'
+import { ref, reactive, watch, computed, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox, ElForm } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { WarningFilled, Lock, Check, Warning } from '@element-plus/icons-vue'
@@ -180,6 +180,16 @@ const passwordForm = reactive({
 
 // 状态变量
 const loading = ref(false)
+
+// 改密成功后的跳转定时器句柄（卸载时清理，避免定时器泄漏/测试环境拆除后触发）
+let redirectTimer: ReturnType<typeof setTimeout> | null = null
+
+onBeforeUnmount(() => {
+  if (redirectTimer !== null) {
+    clearTimeout(redirectTimer)
+    redirectTimer = null
+  }
+})
 const newPasswordError = ref('')
 const showPasswordHint = ref(false)
 
@@ -327,7 +337,7 @@ const handleChangePassword = async () => {
     ElMessage.success('密码修改成功，请使用新密码重新登录')
 
     // 4. 硬跳转登录页（用极短延迟让 ElMessage 渲染一帧，冻结机制保证期间无 401）
-    setTimeout(() => {
+    redirectTimer = setTimeout(() => {
       window.location.href = '/login'
     }, 100)
   } catch (error: any) {

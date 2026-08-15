@@ -45,20 +45,38 @@ async def evaluate_village(
         raise HTTPException(status_code=400, detail=result["error"])
 
     # 年度考核闭环：评估完成后提交"复核"审批任务（若配置了 assessment 工作流）
+    # 幂等：同村同年度已有待处理复核任务时复用，避免重复评估刷出重复任务
     review_task_id = None
     try:
+        from app.models.approval import ApprovalTask, ApprovalStatus
         from app.services.approval_workflow_service import ApprovalWorkflowService
 
-        svc = ApprovalWorkflowService(db)
-        task = svc.submit_approval(
-            entity_type="assessment",
-            entity_id=request.village_id,
-            submitter_id=current_user.id,
-            title=f"年度考核复核-村{request.village_id}-{request.year}年",
-            change_data={"year": request.year, "score": result.get("total_score")},
+        existing_tasks = (
+            db.query(ApprovalTask)
+            .filter(
+                ApprovalTask.entity_type == "assessment",
+                ApprovalTask.entity_id == request.village_id,
+                ApprovalTask.status == ApprovalStatus.PENDING.value,
+            )
+            .all()
         )
-        if task:
-            review_task_id = task.id
+        existing = next(
+            (t for t in existing_tasks if (t.change_data or {}).get("year") == request.year),
+            None,
+        )
+        if existing is not None:
+            review_task_id = existing.id
+        else:
+            svc = ApprovalWorkflowService(db)
+            task = svc.submit_approval(
+                entity_type="assessment",
+                entity_id=request.village_id,
+                submitter_id=current_user.id,
+                title=f"年度考核复核-村{request.village_id}-{request.year}年",
+                change_data={"year": request.year, "score": result.get("total_score")},
+            )
+            if task:
+                review_task_id = task.id
     except Exception:
         # 复核任务创建失败不阻断评估
         review_task_id = None
@@ -83,12 +101,12 @@ async def get_evaluation_report(
         current_user, SupportedVillage, db=db
     ).first()
     if not village:
-        raise HTTPException(status_code=404, detail="评估报告不存在")
+        raise HTTPException(status_code=404, detail="村庄不存在或无权限查看")
 
     report = EffectivenessService.get_evaluation_report(db=db, village_id=village_id, year=year)
 
     if not report:
-        raise HTTPException(status_code=404, detail="评估报告不存在")
+        raise HTTPException(status_code=404, detail="该村庄此年度尚未评估")
 
     return report
 
@@ -107,7 +125,7 @@ async def compare_evaluations(
         current_user, SupportedVillage, db=db
     ).first()
     if not village:
-        raise HTTPException(status_code=404, detail="评估报告不存在")
+        raise HTTPException(status_code=404, detail="村庄不存在或无权限查看")
 
     comparison = EffectivenessService.compare_evaluations(db=db, village_id=village_id, year1=year1, year2=year2)
 
@@ -128,12 +146,21 @@ async def get_rankings(
     from app.models.effectiveness import EffectivenessEvaluation
 
     query = (
-        db.query(EffectivenessEvaluation, SupportedVillage.village_name)
+        db.query(
+            EffectivenessEvaluation,
+            SupportedVillage.village_name,
+            SupportedVillage.support_unit,
+        )
         .join(SupportedVillage, EffectivenessEvaluation.village_id == SupportedVillage.id)
         .filter(EffectivenessEvaluation.year == year)
     )
     query = apply_scope_filter(query, current_user, SupportedVillage, db=db)
-    evaluations = query.order_by(EffectivenessEvaluation.rank).limit(limit).all()
+    # rank 允许 NULL：SQLite 中 NULL 排最前，显式把 NULL 沉底再按 rank 升序
+    evaluations = (
+        query.order_by(EffectivenessEvaluation.rank.is_(None), EffectivenessEvaluation.rank)
+        .limit(limit)
+        .all()
+    )
 
     return success_response(data={
         "year": year,
@@ -142,6 +169,7 @@ async def get_rankings(
                 "rank": eval.rank,
                 "village_id": eval.village_id,
                 "village_name": village_name,
+                "support_unit": support_unit,
                 "total_score": eval.total_score,
                 "grade": eval.grade,
                 # 前端 Rankings.vue 分项得分列（economic/social/...）
@@ -151,6 +179,6 @@ async def get_rankings(
                     "ecological": eval.ecological_score,
                 },
             }
-            for eval, village_name in evaluations
+            for eval, village_name, support_unit in evaluations
         ],
     })

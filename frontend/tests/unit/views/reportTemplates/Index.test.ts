@@ -1,4 +1,4 @@
-﻿/**
+/**
  * views/reportTemplates/Index.vue 覆盖率攻坚（四指标 100%）
  * 覆盖：moduleIcon/moduleLabel 映射与兜底、formatDate、parseFields（无/JSON 数组/非数组/对象字段/异常回退）、
  * displayTemplates（类型/搜索/模块过滤）、loadTemplates（数组/data/items/null/失败）、
@@ -843,14 +843,49 @@ describe('模板字段组合补充', () => {
     mockGet.mockRejectedValueOnce(new Error('x'))
     await vm.loadModuleFieldsForFill('village')
     expect(vm.fillFields).toEqual([])
-    // selectedFields 提交
+    // selectedFields 提交：labelMap 无匹配时 excel_header 回退为 key
     vm.newTemplate.name = 'T'
     vm.newTemplate.type = 'export'
     vm.newTemplate.module = 'village'
     vm.newTemplate.selectedFields = ['a', 'b']
-    vm.formRef = { validate: vi.fn(() => Promise.resolve()) }
+    vm.createFormRef = { validate: vi.fn(() => Promise.resolve()) }
     await vm.handleCreate()
-    expect(mockPost).toHaveBeenCalledWith('/report-templates', expect.objectContaining({ fields: '["a","b"]' }))
+    expect(mockPost).toHaveBeenCalledWith(
+      '/report-templates',
+      expect.objectContaining({
+        fields: JSON.stringify([
+          { excel_col: 'A', excel_header: 'a', db_field: 'a', required: true },
+          { excel_col: 'B', excel_header: 'b', db_field: 'b', required: false },
+        ]),
+      })
+    )
+  })
+
+  it('selectedFields 提交：availableFields 有 label → excel_header 用 label，映射顺序与 required 正确', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.newTemplate.name = '带标签模板'
+    vm.newTemplate.type = 'import'
+    vm.newTemplate.module = 'school'
+    vm.availableFields = [
+      { key: 'name', label: '学校名称' },
+      { key: 'county', label: '所在县' },
+      { key: 'principal', label: '校长' },
+    ]
+    // 乱序选择 → 映射顺序以 selectedFields 为准（excel_col 按索引递增）
+    vm.newTemplate.selectedFields = ['principal', 'name']
+    vm.createFormRef = { validate: vi.fn(() => Promise.resolve()) }
+    await vm.handleCreate()
+    expect(mockPost).toHaveBeenCalledWith(
+      '/report-templates',
+      expect.objectContaining({
+        fields: JSON.stringify([
+          { excel_col: 'A', excel_header: '校长', db_field: 'principal', required: true },
+          { excel_col: 'B', excel_header: '学校名称', db_field: 'name', required: false },
+        ]),
+      })
+    )
   })
 })
 

@@ -240,6 +240,16 @@ describe('审批决算', () => {
     expect(lifecycleApi.approveSettlement).not.toHaveBeenCalled()
   })
 
+  it('validate 拒绝 → catch 兜底 false，不审批', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    validateMock.mockRejectedValueOnce(new Error('invalid'))
+    await vm.handleApprove()
+    expect(lifecycleApi.approveSettlement).not.toHaveBeenCalled()
+    expect(vm.loading).toBe(false)
+  })
+
   it('审批成功 → 提示 + 关弹窗 + 刷新', async () => {
     const wrapper = mountComp()
     await flushPromises()
@@ -296,6 +306,35 @@ describe('审批决算', () => {
     await confirm!.trigger('click')
     await flushPromises()
     expect(lifecycleApi.approveSettlement).toHaveBeenCalled()
+  })
+})
+
+describe('openApproveDialog', () => {
+  it('表单实例存在 → 重置表单、调用 clearValidate、打开弹窗', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const clearValidate = vi.fn()
+    vm.approveFormRef = { clearValidate }
+    // 先污染表单，验证重置逻辑
+    vm.approveForm.performance_score = 55
+    vm.approveForm.performance_level = 'C'
+    vm.approveForm.audit_opinion = '旧意见'
+    vm.openApproveDialog()
+    expect(vm.approveForm.performance_score).toBe(80)
+    expect(vm.approveForm.performance_level).toBe('')
+    expect(vm.approveForm.audit_opinion).toBe('')
+    expect(clearValidate).toHaveBeenCalledTimes(1)
+    expect(vm.showApproveDialog).toBe(true)
+  })
+
+  it('表单实例为 null → 可选链短路，不抛错仍打开弹窗', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.approveFormRef = null
+    expect(() => vm.openApproveDialog()).not.toThrow()
+    expect(vm.showApproveDialog).toBe(true)
   })
 })
 

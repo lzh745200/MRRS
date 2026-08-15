@@ -119,7 +119,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { get, post } from '@/api/request'
+import { get, post, put } from '@/api/request'
 
 interface SubordinateInstance {
   id: number
@@ -219,7 +219,8 @@ async function handleToggleLicense(row: SubordinateInstance) {
   const action = newStatus === 'active' ? '授权' : '撤销授权'
   try {
     await ElMessageBox.confirm(`确认${action}该下级单位？`, '提示', { type: 'warning' })
-    await post(`/subordinates/${row.id}`, { license_status: newStatus })
+    // 后端授权/撤销接口为 PUT /subordinates/{id}（POST 会 405 静默失败）
+    await put(`/subordinates/${row.id}`, { license_status: newStatus })
     ElMessage.success(`${action}成功`)
     page.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     await loadData()

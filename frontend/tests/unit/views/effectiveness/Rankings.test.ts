@@ -1,17 +1,20 @@
 /**
  * views/effectiveness/Rankings.vue 覆盖率攻坚（四指标 100%）
  * 覆盖：rankClass 四分支、scorePercent 钳制、formatScore（null/数字）、levelLabel 映射+兜底、
+ * 角色显隐（admin「评估」/ viewer「查看」）、生态列渲染（后端真实契约 scores.ecological）、
  * levelTagType 全分支、goToEvaluate 跳转、fetchRankings（items/数组/失败）、handleSearch、
  * 模板：年度/数量 select @change、查询按钮、加载/错误/空三态、表格行。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { nextTick } from 'vue'
 
-const { mockGetRankings, pushSafeMock } = vi.hoisted(() => ({
+const { mockGetRankings, pushSafeMock, mockUserStore } = vi.hoisted(() => ({
   mockGetRankings: vi.fn(),
   pushSafeMock: vi.fn(),
+  mockUserStore: { currentUser: { role: 'admin' } as any },
 }))
+
+vi.mock('@/stores/user', () => ({ useUserStore: () => mockUserStore }))
 
 vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: pushSafeMock }),
@@ -26,16 +29,96 @@ vi.mock('@/api/effectiveness', () => ({
 import Rankings from '@/views/effectiveness/Rankings.vue'
 
 const rows = [
-  { rank: 1, village_id: 1, village_name: '甲村', support_unit: '单位A', total_score: 95.4, level: 'excellent', scores: { economic: 90, social: 80, project_completion: 70, fund_execution: 60 } },
-  { rank: 2, village_id: 2, village_name: '乙村', support_unit: '单位B', total_score: 88.2, level: 'good', scores: { economic: 85, social: 75, project_completion: 65, fund_execution: 55 } },
-  { rank: 3, village_id: 3, village_name: '丙村', support_unit: '单位C', total_score: 70.0, level: 'average', scores: { economic: 70, social: 60, project_completion: 50, fund_execution: 40 } },
-  { rank: 4, village_id: 4, name: '丁村', support_unit: '单位D', total_score: 55.1, level: 'poor', scores: { economic: 50, social: 40, project_completion: 30, fund_execution: 20 } },
-  { rank: 5, village_id: 5, village_name: '戊村', support_unit: '单位E', total_score: 45.0, level: 'A', scores: { economic: 40, social: 30, project_completion: 20, fund_execution: 10 } },
-  { rank: 6, village_id: 6, village_name: '己村', support_unit: '单位F', total_score: 40.0, level: 'B', scores: { economic: 30, social: 20, project_completion: 10, fund_execution: 5 } },
-  { rank: 7, village_id: 7, village_name: '庚村', support_unit: '单位G', total_score: 35.0, level: 'C', scores: { economic: 20, social: 10, project_completion: 5, fund_execution: 2 } },
-  { rank: 8, village_id: 8, village_name: '辛村', support_unit: '单位H', total_score: 30.0, level: 'D', scores: { economic: 10, social: 5, project_completion: 2, fund_execution: 1 } },
-  { rank: 9, village_id: 9, village_name: '壬村', support_unit: '单位I', total_score: 25.0, level: 'weird', scores: {} },
-  { rank: 10, village_id: 10, village_name: '癸村', support_unit: '单位J', total_score: null, level: '', scores: {} },
+  {
+    rank: 1,
+    village_id: 1,
+    village_name: '甲村',
+    support_unit: '单位A',
+    total_score: 95.4,
+    level: 'excellent',
+    scores: { economic: 90, social: 80, ecological: 70 },
+  },
+  {
+    rank: 2,
+    village_id: 2,
+    village_name: '乙村',
+    support_unit: '单位B',
+    total_score: 88.2,
+    level: 'good',
+    scores: { economic: 85, social: 75, ecological: 65 },
+  },
+  {
+    rank: 3,
+    village_id: 3,
+    village_name: '丙村',
+    support_unit: '单位C',
+    total_score: 70.0,
+    level: 'average',
+    scores: { economic: 70, social: 60, ecological: 50 },
+  },
+  {
+    rank: 4,
+    village_id: 4,
+    name: '丁村',
+    support_unit: '单位D',
+    total_score: 55.1,
+    level: 'poor',
+    scores: { economic: 50, social: 40, ecological: 30 },
+  },
+  {
+    rank: 5,
+    village_id: 5,
+    village_name: '戊村',
+    support_unit: '单位E',
+    total_score: 45.0,
+    level: 'A',
+    scores: { economic: 40, social: 30, ecological: 20 },
+  },
+  {
+    rank: 6,
+    village_id: 6,
+    village_name: '己村',
+    support_unit: '单位F',
+    total_score: 40.0,
+    level: 'B',
+    scores: { economic: 30, social: 20, ecological: 10 },
+  },
+  {
+    rank: 7,
+    village_id: 7,
+    village_name: '庚村',
+    support_unit: '单位G',
+    total_score: 35.0,
+    level: 'C',
+    scores: { economic: 20, social: 10, ecological: 5 },
+  },
+  {
+    rank: 8,
+    village_id: 8,
+    village_name: '辛村',
+    support_unit: '单位H',
+    total_score: 30.0,
+    level: 'D',
+    scores: { economic: 10, social: 5, ecological: 2 },
+  },
+  {
+    rank: 9,
+    village_id: 9,
+    village_name: '壬村',
+    support_unit: '单位I',
+    total_score: 25.0,
+    level: 'weird',
+    scores: {},
+  },
+  {
+    rank: 10,
+    village_id: 10,
+    village_name: '癸村',
+    support_unit: '单位J',
+    total_score: null,
+    level: '',
+    scores: {},
+  },
   { rank: 11, village_id: 11, support_unit: '单位K', total_score: 15.0, level: 'poor', scores: {} },
 ]
 
@@ -61,7 +144,19 @@ function mountComp() {
           template:
             '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /><slot :row="rowC" /><slot :row="rowD" /><slot :row="rowE" /><slot :row="rowF" /><slot :row="rowG" /><slot :row="rowH" /><slot :row="rowI" /><slot :row="rowJ" /><slot :row="rowK" /></div>',
           data() {
-            return { rowA: rows[0], rowB: rows[1], rowC: rows[2], rowD: rows[3], rowE: rows[4], rowF: rows[5], rowG: rows[6], rowH: rows[7], rowI: rows[8], rowJ: rows[9], rowK: rows[10] }
+            return {
+              rowA: rows[0],
+              rowB: rows[1],
+              rowC: rows[2],
+              rowD: rows[3],
+              rowE: rows[4],
+              rowF: rows[5],
+              rowG: rows[6],
+              rowH: rows[7],
+              rowI: rows[8],
+              rowJ: rows[9],
+              rowK: rows[10],
+            }
           },
         },
         'el-tag': { name: 'ElTag', template: '<span class="el-tag-stub"><slot /></span>' },
@@ -84,6 +179,7 @@ const findBtn = (wrapper: any, text: string) => {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mockUserStore.currentUser = { role: 'admin' }
   mockGetRankings.mockResolvedValue({ data: { items: rows } })
 })
 
@@ -109,6 +205,7 @@ describe('挂载与加载', () => {
     expect(text).toContain('D级')
     expect(text).toContain('weird') // 未知等级原样
     expect(text).toContain('-') // total_score null → formatScore '-'
+    expect(text).toContain('70') // 生态列渲染 scores.ecological（后端真实契约）
   })
 
   it('数组形态；加载失败 → 错误态 + 重新加载按钮；非数组非 items → [] 兜底', async () => {
@@ -266,6 +363,51 @@ describe('模板交互', () => {
       `/effectiveness/evaluate?villageId=1&year=${vm.filterForm.year}`
     )
   })
+
+  it('viewer 角色入口降级为「查看」（不可发起评估）', async () => {
+    mockUserStore.currentUser = { role: 'viewer' }
+    const wrapper = mountComp()
+    await flushPromises()
+    // 操作列不再有「评估」按钮，仅「查看」
+    const btns = wrapper.findAll('el-button-stub')
+    expect(btns.some((b: any) => b.text().trim() === '评估')).toBe(false)
+    expect(btns.some((b: any) => b.text().includes('查看'))).toBe(true)
+  })
+})
+
+describe('isAdmin 权限计算', () => {
+  it('非管理员角色 + is_superuser=true → isAdmin=true（操作列显示「评估」）', async () => {
+    mockUserStore.currentUser = { role: 'user', is_superuser: true }
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.isAdmin).toBe(true)
+    const btns = wrapper.findAll('el-button-stub')
+    expect(btns.some((b: any) => b.text().trim() === '评估')).toBe(true)
+    await findBtn(wrapper, '评估').trigger('click')
+    expect(pushSafeMock).toHaveBeenCalledWith(
+      `/effectiveness/evaluate?villageId=1&year=${vm.filterForm.year}`
+    )
+  })
+
+  it('currentUser 无 role 且非超管 → isAdmin=false（显示「查看」）', async () => {
+    mockUserStore.currentUser = {} as any
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).isAdmin).toBe(false)
+    const btns = wrapper.findAll('el-button-stub')
+    expect(btns.some((b: any) => b.text().trim() === '评估')).toBe(false)
+    expect(btns.some((b: any) => b.text().includes('查看'))).toBe(true)
+  })
+
+  it('currentUser 为 null → isAdmin=false', async () => {
+    mockUserStore.currentUser = null as any
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).isAdmin).toBe(false)
+    const btns = wrapper.findAll('el-button-stub')
+    expect(btns.some((b: any) => b.text().trim() === '评估')).toBe(false)
+  })
 })
 
 describe('排名响应别名兼容', () => {
@@ -273,7 +415,9 @@ describe('排名响应别名兼容', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    mockGetRankings.mockResolvedValue({ items: [{ id: 1, grade: 'A', support_unit_name: '某旅', scores: { x: 1 } }] })
+    mockGetRankings.mockResolvedValue({
+      items: [{ id: 1, grade: 'A', support_unit_name: '某旅', scores: { x: 1 } }],
+    })
     await vm.fetchRankings()
     expect(vm.rankings[0].level).toBe('A')
     expect(vm.rankings[0].support_unit).toBe('某旅')

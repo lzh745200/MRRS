@@ -165,13 +165,16 @@ class TestImportSchoolScholarshipStudents:
     async def test_generic_error_row(self):
         rows = [["h", "h"], ("学生甲", "一年级")]
         content = _xlsx_bytes(rows)
+        _db = MagicMock()
+        # 重复学生去重查询：无重复 → first() 返回 None，继续走构造分支触发 boom
+        _db.query.return_value.filter.return_value.first.return_value = None
         with (
             patch.object(sch, "_get_school_and_check_permission"),
             patch.object(sch, "safe_commit"),
             patch.object(sch, "ScholarshipStudent", side_effect=RuntimeError("boom")),
         ):
             result = await sch.import_school_scholarship_students(
-                1, UploadFile(file=BytesIO(content), filename="t.xlsx"), _user(), MagicMock())
+                1, UploadFile(file=BytesIO(content), filename="t.xlsx"), _user(), _db)
         assert result["data"]["imported"] == 0
         assert any("boom" in e for e in result["data"]["errors"])
 

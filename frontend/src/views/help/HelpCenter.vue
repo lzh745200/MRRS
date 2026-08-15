@@ -362,15 +362,14 @@ function clearSearch() {
 }
 
 function highlightKeyword(snippet: string): string {
-  if (!searchQuery.value) return sanitizeHtml(snippet || '')
   // 先清理输入，防止 XSS
   const safe = sanitizeHtml(snippet || '')
+  if (!searchQuery.value) return safe
   const escaped = searchQuery.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // 注意：高亮必须用 class 而非内联 style —— sanitizeHtml 的 ALLOWED_ATTR 不含 style，
+  // 内联样式会在第二次 sanitize 时被剥离导致高亮失效（class 在白名单内可保留）
   return sanitizeHtml(
-    safe.replace(
-      new RegExp(`(${escaped})`, 'gi'),
-      '<span style="background:#fff3cd;padding:0 2px;border-radius:2px">$1</span>'
-    )
+    safe.replace(new RegExp(`(${escaped})`, 'gi'), '<span class="search-highlight">$1</span>')
   )
 }
 
@@ -446,6 +445,12 @@ onMounted(() => {
 .search-snippet {
   font-size: 13px;
   color: var(--color-info);
+
+  :deep(.search-highlight) {
+    background: #fff3cd;
+    padding: 0 2px;
+    border-radius: 2px;
+  }
 }
 
 .section-header {
@@ -576,6 +581,8 @@ onMounted(() => {
   line-height: 1.8;
   color: #303133;
   font-size: 14px;
+  /* 兜底分支渲染纯文本时保留换行（主渲染路径为 articleSections 分段） */
+  white-space: pre-line;
 
   :deep(h2),
   :deep(h3) {

@@ -191,4 +191,24 @@ describe('router guards — 免登录直达', () => {
     await guard({ path: '/login', meta: {} }, { path: '/from' }, next)
     expect(next).toHaveBeenCalledWith('/dashboard')
   })
+
+  it('锁屏标记存在时访问白名单路径 → 不自动跳回工作台', async () => {
+    mockGetToken.mockReturnValue('persisted-tok')
+    const spy = vi.spyOn(sessionStorage, 'getItem').mockReturnValue('1')
+    const next = vi.fn()
+    await guard({ path: '/login', meta: {} }, { path: '/from' }, next)
+    expect(next).toHaveBeenCalledWith()
+    spy.mockRestore()
+  })
+
+  it('锁屏标记读取异常（sessionStorage 不可用）→ 按未锁定处理并跳转工作台', async () => {
+    mockGetToken.mockReturnValue('persisted-tok')
+    const spy = vi.spyOn(sessionStorage, 'getItem').mockImplementation(() => {
+      throw new Error('storage denied')
+    })
+    const next = vi.fn()
+    await guard({ path: '/login', meta: {} }, { path: '/from' }, next)
+    expect(next).toHaveBeenCalledWith('/dashboard')
+    spy.mockRestore()
+  })
 })

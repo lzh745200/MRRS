@@ -95,14 +95,50 @@ const qualityStats = ref({
 // 加载统计数据
 async function loadStats() {
   try {
-    // Use /dashboard/stats for real aggregate statistics
+    // 帮扶村总数来自 /dashboard/stats 聚合统计
     const res = await get('/dashboard/stats')
     const data = res?.data ?? res ?? {}
+    const villageCount = Number(data.total_villages ?? data.villageCount ?? 0) || 0
+
+    // 本月导入/导出/备份数分别从各自真实端点统计（后端 /dashboard/stats 不返回这些字段）
+    const now = new Date()
+    const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    let monthlyImports = 0
+    let monthlyExports = 0
+    let backupCount = 0
+    try {
+      // 注意: /import/history 与 /audit/exports 的 page_size 上限为 100，
+      // 传 200 会触发 422 导致统计恒为 0
+      const hist: any = await get('/import/history', { page: 1, page_size: 100 })
+      const items = hist?.items || hist?.data?.items || (Array.isArray(hist?.data) ? hist.data : [])
+      monthlyImports = (Array.isArray(items) ? items : []).filter((r: any) =>
+        String(r.createdAt || r.created_at || '').startsWith(monthPrefix)
+      ).length
+    } catch {
+      /* 统计失败保持 0 */
+    }
+    try {
+      const exp: any = await get('/audit/exports', { page: 1, page_size: 100 })
+      const items = exp?.items || exp?.data?.items || (Array.isArray(exp?.data) ? exp.data : [])
+      monthlyExports = (Array.isArray(items) ? items : []).filter((r: any) =>
+        String(r.createdAt || r.created_at || '').startsWith(monthPrefix)
+      ).length
+    } catch {
+      /* 统计失败保持 0 */
+    }
+    try {
+      const bk: any = await get('/system/backup', { page: 1, page_size: 1000 })
+      const items = bk?.items || bk?.data?.items || (Array.isArray(bk?.data) ? bk.data : [])
+      backupCount = Array.isArray(items) ? items.length : Number(bk?.total ?? 0) || 0
+    } catch {
+      /* 统计失败保持 0 */
+    }
+
     stats.value = {
-      villageCount: data.total_villages ?? data.villageCount ?? 0,
-      monthlyImports: data.monthly_imports ?? data.monthlyImports ?? 0,
-      monthlyExports: data.monthly_exports ?? data.monthlyExports ?? 0,
-      backupCount: data.backup_count ?? data.backupCount ?? 0,
+      villageCount,
+      monthlyImports,
+      monthlyExports,
+      backupCount,
     }
     // 加载帮扶村数据用于质量统计
     const villageRes = await apiRequest({

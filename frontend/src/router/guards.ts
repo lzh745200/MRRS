@@ -21,9 +21,16 @@ router.beforeEach(async (to, _from, next) => {
 
   const token = AuthStorage.getToken()
 
-  // 已登录（含"记住登录"持久令牌）访问登录/注册页 → 直接进入工作台，实现免登录
+  // 已登录（含"记住登录"持久令牌）访问登录/注册页 → 直接进入工作台，实现免登录；
+  // 但锁屏标记存在时（自动/手动锁屏）必须重新输入密码，不允许自动跳回。
   if (whiteList.includes(to.path)) {
-    if (token) {
+    let locked = false
+    try {
+      locked = sessionStorage.getItem('auto_lock_active') === '1'
+    } catch {
+      /* 静默 */
+    }
+    if (token && !locked) {
       next('/dashboard')
       return
     }

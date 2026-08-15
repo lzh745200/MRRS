@@ -59,10 +59,8 @@
           <el-col :span="12">
             <el-form-item label="导出格式">
               <el-radio-group v-model="exportForm.format">
+                <!-- 同步导出仅支持 Excel；PDF/Word 请使用下方「官方报表导出」区 -->
                 <el-radio-button value="xlsx">Excel</el-radio-button>
-                <el-radio-button value="pdf">PDF</el-radio-button>
-                <el-radio-button value="docx">Word</el-radio-button>
-                <el-radio-button value="csv">CSV</el-radio-button>
               </el-radio-group>
             </el-form-item>
           </el-col>

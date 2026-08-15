@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.8.1"
+    PROJECT_VERSION: str = "1.8.2"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -93,10 +93,10 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY_DERIVATION: str = "pbkdf2"
 
     # 数据库连接池配置
-    # 注意：以下连接池参数仅在使用 PostgreSQL/MySQL 等数据库时生效。
-    # SQLite 使用 StaticPool，这些参数会被忽略。
-    DB_POOL_SIZE: int = 20
-    DB_MAX_OVERFLOW: int = 10
+    # SQLite 走 QueuePool（见 core/database.py），WAL 模式支持多读者并发；
+    # 压测表明 30 连接（20+10）在 50+ 并发时排队耗尽，扩大至 60 以留余量。
+    DB_POOL_SIZE: int = 40
+    DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 3600
     DB_POOL_PRE_PING: bool = True

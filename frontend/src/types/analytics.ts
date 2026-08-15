@@ -344,7 +344,7 @@ export interface AggregateQuery {
  * 钻取查询参数
  */
 export interface DrillDownQuery {
-  dimension: 'department' | 'support_unit' | 'region' | 'year'
+  dimension: 'department' | 'support_unit' | 'region' | 'year' | 'province'
   value: string
   targetDimension: 'department' | 'support_unit' | 'region' | 'year'
   filters?: Record<string, unknown>

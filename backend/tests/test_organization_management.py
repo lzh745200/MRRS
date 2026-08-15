@@ -105,6 +105,37 @@ class TestOrganizationManagement:
         db.delete(org)
         db.commit()
 
+    def test_create_organization_auto_generates_code(
+        self, client: TestClient, admin_token_headers: dict, db: Session
+    ):
+        """不传编码时后端必须自动生成唯一编码（前端表单提示"留空自动生成"）"""
+        from app.models.organization import Organization
+
+        created_ids = []
+        codes = []
+        try:
+            for name in ("自动编码组织A", "自动编码组织B"):
+                response = client.post(
+                    "/api/v1/organizations",
+                    json={"name": name, "org_type": "department", "is_active": True},
+                    headers=admin_token_headers,
+                )
+                assert response.status_code == 200, response.text
+                body = response.json()
+                assert body["code"], f"新增组织 {name} 的编码不应为空"
+                assert body["code"].startswith("ORG")
+                created_ids.append(body["id"])
+                codes.append(body["code"])
+            # 两次生成的编码必须不同（唯一约束）
+            assert len(set(codes)) == 2
+        finally:
+            # 结束当前事务快照，确保能看到 API 会话已提交的数据
+            db.rollback()
+            db.query(Organization).filter(Organization.id.in_(created_ids)).delete(
+                synchronize_session=False
+            )
+            db.commit()
+
     def test_update_organization(
         self, client: TestClient, admin_token_headers: dict, db: Session
     ):

@@ -12,8 +12,8 @@ import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
 
 // ==================== 类型定义 ====================
 
-/** 导入模式 */
-export type ImportMode = 'incremental' | 'overwrite'
+/** 导入模式（后端 /import/entities 支持 incremental / full） */
+export type ImportMode = 'incremental' | 'full'
 
 /** 导入结果 */
 export interface ImportResult {
@@ -49,6 +49,25 @@ export interface ImportHistory {
 interface ImportHistoryResponse {
   items: ImportHistory[]
   total: number
+}
+
+/** 预览行（后端 /import/preview 返回） */
+export interface ImportPreviewRow {
+  row_number: number
+  data: Record<string, any>
+  has_error: boolean
+  errors: ImportError[]
+  is_duplicate_in_db: boolean
+}
+
+/** 导入预览响应（后端 /import/preview 返回，裸格式非信封） */
+export interface ImportPreviewResponse {
+  total_rows: number
+  valid_rows: number
+  invalid_rows: number
+  duplicate_in_db_rows: number
+  rows: ImportPreviewRow[]
+  warnings: string[]
 }
 
 // ==================== API函数 ====================
@@ -105,11 +124,12 @@ export async function importEntities(
 ): Promise<ImportResult> {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('entity_type', entityType)
-  formData.append('mode', mode)
 
+  // 后端 /import/entities 通过 Query 参数接收 entity_type/mode（非 FormData 字段），
+  // 放入 FormData 会导致类型选择器与覆盖模式失效
   const response = await post('/import/entities', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    params: { entity_type: entityType, mode },
     timeout: 120000,
   })
   return response
@@ -123,13 +143,14 @@ export const importVillages = (file: File, mode?: ImportMode) =>
 export async function previewImportData(
   file: File,
   entityType: string
-): Promise<{ rows: any[]; total: number; columns: string[] }> {
+): Promise<ImportPreviewResponse> {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('entity_type', entityType)
 
+  // 后端 /import/preview 通过 Query 参数接收 entity_type
   const response = await post('/import/preview', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    params: { entity_type: entityType },
     timeout: 60000,
   })
   return response

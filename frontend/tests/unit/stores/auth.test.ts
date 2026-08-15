@@ -35,6 +35,7 @@ vi.mock('@/utils/authStorage', () => ({
     setAuthData: (...args: any[]) => mockAuthStorageSetAuthData(...args),
     setUser: (...args: any[]) => mockAuthStorageSetUser(...args),
     clear: (...args: any[]) => mockAuthStorageClear(...args),
+    clearSession: vi.fn(),
   },
 }))
 
@@ -457,10 +458,82 @@ describe('login — refresh_token 缺省分支', () => {
     expect(result.status).toBe('success')
     expect(store.token).toBe('tok-no-rt')
     // persistAuth(rt=undefined) → 内部 refreshToken 置空，getAuthData 暴露为 undefined
+    // 登录时合并信封顶层 must_change_password（缺省 false）以触发强制改密
     expect(store.getAuthData()).toEqual({
       token: 'tok-no-rt',
-      user: { id: 2, username: 'bob' },
+      user: { id: 2, username: 'bob', must_change_password: false },
       refreshToken: undefined,
     })
+  })
+
+  it('响应含顶层 must_change_password=true 时合并进用户（强制改密）', async () => {
+    mockApiRequest.mockResolvedValueOnce({
+      code: 200,
+      must_change_password: true,
+      data: {
+        access_token: 'tok-mcp',
+        token_type: 'bearer',
+        user: { id: 3, username: 'carol' },
+      },
+    })
+    const store = useAuthStore()
+    const result = await store.login('carol', 'pwd')
+    expect(result.status).toBe('success')
+    expect(store.mustChangePassword).toBe(true)
+  })
+})
+
+describe('lockSession / unlockSession（锁屏会话）', () => {
+  it('lockSession：清空会话状态并写入锁屏标记', () => {
+    const store = useAuthStore()
+    store.token = 'A'
+    store.user = { id: 1 } as any
+    store.error = 'e'
+    store.lockSession()
+    expect(store.token).toBe('')
+    expect(store.user).toBeNull()
+    expect(store.error).toBe('')
+    expect(mockSetCachedToken).toHaveBeenCalledWith(null)
+    expect(sessionStorage.getItem('auto_lock_active')).toBe('1')
+  })
+
+  it('lockSession：sessionStorage.setItem 抛异常时静默', () => {
+    const store = useAuthStore()
+    const spy = vi.spyOn(sessionStorage, 'setItem').mockImplementation(() => {
+      throw new Error('storage denied')
+    })
+    try {
+      expect(() => store.lockSession()).not.toThrow()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('unlockSession：登录成功时移除锁屏标记', async () => {
+    sessionStorage.setItem('auto_lock_active', '1')
+    mockApiRequest.mockResolvedValueOnce({
+      code: 200,
+      data: { access_token: 'tok-u', user: { id: 9, username: 'u9' } },
+    })
+    const store = useAuthStore()
+    await store.login('u9', 'p')
+    expect(sessionStorage.getItem('auto_lock_active')).toBeNull()
+  })
+
+  it('unlockSession：sessionStorage.removeItem 抛异常时静默', async () => {
+    const spy = vi.spyOn(sessionStorage, 'removeItem').mockImplementation(() => {
+      throw new Error('storage denied')
+    })
+    mockApiRequest.mockResolvedValueOnce({
+      code: 200,
+      data: { access_token: 'tok-u2', user: { id: 10, username: 'u10' } },
+    })
+    try {
+      const store = useAuthStore()
+      const result = await store.login('u10', 'p')
+      expect(result.status).toBe('success')
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

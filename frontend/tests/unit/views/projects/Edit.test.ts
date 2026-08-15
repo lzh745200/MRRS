@@ -69,8 +69,10 @@ vi.mock('@/utils/logger', () => ({
 
 vi.mock('@/api/projects', () => ({ projectApi: api }))
 
-vi.mock('@/api/request', () => ({ get: getMock,
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+vi.mock('@/api/request', () => ({
+  get: getMock,
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/authStorage', () => ({
   AuthStorage: { getToken: getTokenMock },
@@ -144,7 +146,12 @@ beforeEach(() => {
   vi.resetAllMocks()
   routeParams.id = '7'
   getMock.mockResolvedValue({
-    data: { items: [{ id: 1, name: '幸福村', county: '某县' }, { id: 2, name: '平安村' }] },
+    data: {
+      items: [
+        { id: 1, name: '幸福村', county: '某县' },
+        { id: 2, name: '平安村' },
+      ],
+    },
   })
   api.getById.mockResolvedValue(fullProject)
   api.update.mockResolvedValue({})
@@ -852,7 +859,8 @@ describe('模板交互（v-model 与内联处理器）', () => {
     expect(vm.projectForm.endDate).toBe('2024-06-01')
 
     const numbers = wrapper.findAllComponents({ name: 'ElInputNumber' })
-    expect(numbers.length).toBe(5)
+    // 死的“预计完成率”输入框已移除，实际完成率等共 4 个 ElInputNumber
+    expect(numbers.length).toBe(4)
     for (const c of numbers) c.vm.$emit('update:modelValue', 66)
     expect(vm.projectForm.fundAmount).toBe(66)
 
@@ -1039,9 +1047,7 @@ describe('模板交互（v-model 与内联处理器）', () => {
     const vm = wrapper.vm as any
     vm.uploadedFiles.photo = [{ id: 1, filename: 'p.jpg', download_url: '/dl/p' }]
     await nextTick()
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {})
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       blob: vi.fn().mockResolvedValue(new Blob(['x'])),
@@ -1072,9 +1078,7 @@ describe('模板交互（v-model 与内联处理器）', () => {
     // 非 photo 类别走 v-else 文件列表分支
     vm.uploadedFiles.research = [{ id: 2, filename: 'r.pdf', download_url: '/dl/r' }]
     await nextTick()
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {})
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       blob: vi.fn().mockResolvedValue(new Blob(['x'])),
@@ -1101,9 +1105,7 @@ describe('模板交互（v-model 与内联处理器）', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    const clickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {})
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       blob: vi.fn().mockResolvedValue(new Blob(['x'])),

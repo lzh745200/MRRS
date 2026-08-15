@@ -11,15 +11,20 @@ test.describe('Village Lifecycle', () => {
 
   test('should navigate to village list', async ({ page }) => {
     await navigateTo(page, '/supported-villages')
-    await expect(page.locator('text=帮扶村管理').or(page.locator('table'))).toBeVisible({ timeout: 10000 })
+    // “帮扶村管理”同时出现在主导航与面包屑中，改用列表页根类 + el-table 的稳定类名定位
+    await expect(page.locator('.supported-village-list .el-table')).toBeVisible({ timeout: 10000 })
   })
 
   test('should open create village form', async ({ page }) => {
     await navigateTo(page, '/supported-villages')
-    const addBtn = page.locator('button:has-text("新增"), button:has-text("添加"), .el-button:has-text("新增")')
+    const addBtn = page.locator(
+      'button:has-text("新增"), button:has-text("添加"), .el-button:has-text("新增")'
+    )
     if (await addBtn.isVisible()) {
       await addBtn.first().click()
-      await expect(page.locator('.el-dialog, .el-drawer, form').first()).toBeVisible({ timeout: 5000 })
+      await expect(page.locator('.el-dialog, .el-drawer, form').first()).toBeVisible({
+        timeout: 5000,
+      })
     }
   })
 

@@ -51,7 +51,8 @@ vi.mock('@/api/request', () => ({
   put: mockPut,
   del: mockDel,
   apiRequest: mockApiRequest,
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/api/supportedVillage', () => ({
   getSupportedVillages: getSupportedVillagesMock,
@@ -76,8 +77,24 @@ vi.mock('@/utils/logger', () => ({
 import UserFundList from '@/views/funds/UserFundList.vue'
 
 const sampleFunds = [
-  { id: 1, name: '修路经费', type: 'project', amount: 100, status: 'pending', date: '2024-01-01', created_by: 1 },
-  { id: 2, name: '助学经费', type: 'education', amount: 50, status: 'allocated', date: '2024-01-02', created_by: 1 },
+  {
+    id: 1,
+    name: '修路经费',
+    type: 'project',
+    amount: 100,
+    status: 'pending',
+    date: '2024-01-01',
+    created_by: 1,
+  },
+  {
+    id: 2,
+    name: '助学经费',
+    type: 'education',
+    amount: 50,
+    status: 'allocated',
+    date: '2024-01-02',
+    created_by: 1,
+  },
 ]
 
 // 注入表格列模板的三行样本：分别命中各 || 链的左/中/右三段
@@ -127,7 +144,12 @@ const rowC = {
 function defaultGetImpl(url: string) {
   if (url === '/funds/statistics/overview') {
     return Promise.resolve({
-      data: { total_amount: 1000, total_allocated: 600, by_status: { pending: { count: 3 } }, total_count: 9 },
+      data: {
+        total_amount: 1000,
+        total_allocated: 600,
+        by_status: { pending: { count: 3 } },
+        total_count: 9,
+      },
     })
   }
   return Promise.resolve({ data: {} })
@@ -145,7 +167,8 @@ function mountComp() {
           name: 'ElDialog',
           props: ['modelValue', 'title'],
           emits: ['update:modelValue', 'close'],
-          template: '<div v-if="modelValue" class="el-dialog-stub"><slot /><slot name="footer" /></div>',
+          template:
+            '<div v-if="modelValue" class="el-dialog-stub"><slot /><slot name="footer" /></div>',
         },
         'el-table-column': {
           name: 'ElTableColumn',
@@ -182,8 +205,22 @@ beforeEach(() => {
   mockPost.mockResolvedValue({ data: {} })
   mockPut.mockResolvedValue({ data: {} })
   mockDel.mockResolvedValue({ data: {} })
-  getSupportedVillagesMock.mockResolvedValue({ data: { items: [{ id: 3, village_name: '幸福村' }, { id: 5, name: '星光村' }] } })
-  schoolsListMock.mockResolvedValue({ data: { items: [{ id: 4, school_name: '希望小学' }, { id: 6, name: '育才中学' }] } })
+  getSupportedVillagesMock.mockResolvedValue({
+    data: {
+      items: [
+        { id: 3, village_name: '幸福村' },
+        { id: 5, name: '星光村' },
+      ],
+    },
+  })
+  schoolsListMock.mockResolvedValue({
+    data: {
+      items: [
+        { id: 4, school_name: '希望小学' },
+        { id: 6, name: '育才中学' },
+      ],
+    },
+  })
   confirmMock.mockResolvedValue(undefined)
 })
 
@@ -212,8 +249,9 @@ describe('挂载与初始化', () => {
     expect(vm.schoolOptions).toHaveLength(2)
     expect(vm.villageLoading).toBe(false)
     expect(vm.schoolLoading).toBe(false)
-    // 管理员可见“新增经费记录”
-    expect(wrapper.text()).toContain('新增经费记录')
+    // 申请入口统一为“提交经费申请”（重复的“新增经费记录”按钮已移除）
+    expect(wrapper.text()).toContain('提交经费申请')
+    expect(wrapper.text()).not.toContain('新增经费记录')
     wrapper.unmount()
   })
 
@@ -224,7 +262,7 @@ describe('挂载与初始化', () => {
     const vm = wrapper.vm as any
     expect(vm.isManager).toBe(false)
     expect(vm.canOperate).toBe(true)
-    expect(wrapper.text()).toContain('新增经费记录')
+    expect(wrapper.text()).toContain('提交经费申请')
     // canEdit/canDelete 直调覆盖各臂
     expect(vm.canEdit({ created_by: 2, status: 'pending' })).toBe(true)
     expect(vm.canEdit({ created_by: 2, status: 'rejected' })).toBe(true)
@@ -475,7 +513,9 @@ describe('弹窗三模式', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     // 申请
-    const applyBtn = wrapper.findAll('el-button-stub').find((b) => b.text().includes('提交经费申请'))!
+    const applyBtn = wrapper
+      .findAll('el-button-stub')
+      .find((b) => b.text().includes('提交经费申请'))!
     vm.dialogFormRef = mockFormRef()
     await applyBtn.trigger('click')
     await nextTick()
@@ -484,14 +524,10 @@ describe('弹窗三模式', () => {
     expect(vm.submitButtonText).toBe('提交申请')
     expect(vm.editingId).toBeNull()
     expect(vm.dialogVisible).toBe(true)
-    // 新增（管理员）
-    const createBtn = wrapper.findAll('el-button-stub').find((b) => b.text().includes('新增经费记录'))!
-    vm.dialogFormRef = mockFormRef()
-    await createBtn.trigger('click')
-    await nextTick()
-    expect(vm.dialogMode).toBe('create')
-    expect(vm.dialogTitle).toBe('新增经费记录')
-    expect(vm.submitButtonText).toBe('确认新增')
+    // “新增经费记录”重复按钮已移除，页面上不应再出现
+    expect(wrapper.findAll('el-button-stub').some((b) => b.text().includes('新增经费记录'))).toBe(
+      false
+    )
     wrapper.unmount()
   })
 
@@ -522,7 +558,7 @@ describe('弹窗三模式', () => {
   it('弹窗内 v-model 控件全量触发 + 取消按钮 + dialog v-model/close', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    await openDialogWithMockRef(wrapper, () => (wrapper.vm as any).openCreateDialog())
+    await openDialogWithMockRef(wrapper, () => (wrapper.vm as any).openApplyDialog())
     const vm = wrapper.vm as any
     // 表单控件 v-model
     const inputs = wrapper.findAllComponents({ name: 'ElInput' })
@@ -613,7 +649,7 @@ describe('handleSubmitDialog', () => {
     wrapper.unmount()
   })
 
-  it('编辑模式（含 editingId 为空时落 create 分支）与新增模式', async () => {
+  it('编辑模式（含 editingId 为空时不发请求）与申请模式最小 payload', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = await openDialogWithMockRef(wrapper, () => (wrapper.vm as any).openEditDialog(rowA))
@@ -623,26 +659,33 @@ describe('handleSubmitDialog', () => {
     await flushPromises()
     expect(mockPut).toHaveBeenCalledWith(
       '/funds/1',
-      expect.objectContaining({ name: '修路经费', fund_source: 'military', village_id: 3, school_id: 4 })
+      expect.objectContaining({
+        name: '修路经费',
+        fund_source: 'military',
+        village_id: 3,
+        school_id: 4,
+      })
     )
     expect(ElMessage.success).toHaveBeenCalledWith('经费记录已更新')
-    // edit 模式但 editingId 为 null → 落入 else 分支（新增）
+    // edit 模式但 editingId 为 null → 不匹配任何分支，不发请求（新增入口已并入“提交经费申请”）
     vm.dialogMode = 'edit'
     vm.editingId = null
     vm.dialogFormRef = mockFormRef()
+    mockPost.mockClear()
+    mockPut.mockClear()
     await vm.handleSubmitDialog()
     await flushPromises()
-    expect(mockPost).toHaveBeenCalledWith('/funds', expect.objectContaining({ name: '修路经费' }))
-    expect(ElMessage.success).toHaveBeenCalledWith('经费记录已新增')
-    // 新增模式：openCreateDialog 重置表单后最小 payload（|| undefined 与 if 假侧）
-    vm.openCreateDialog()
+    expect(mockPost).not.toHaveBeenCalled()
+    expect(mockPut).not.toHaveBeenCalled()
+    // 申请模式：openApplyDialog 重置表单后最小 payload（|| undefined 与 if 假侧）
+    vm.openApplyDialog()
     vm.dialogForm.name = '最小记录'
     vm.dialogForm.type = 'other'
     vm.dialogFormRef = mockFormRef()
     mockPost.mockClear()
     await vm.handleSubmitDialog()
     await flushPromises()
-    expect(mockPost).toHaveBeenCalledWith('/funds', {
+    expect(mockPost).toHaveBeenCalledWith('/funds/apply', {
       name: '最小记录',
       type: 'other',
       amount: 0,
@@ -650,6 +693,7 @@ describe('handleSubmitDialog', () => {
       purpose: undefined,
       remarks: undefined,
       date: undefined,
+      status: 'pending',
     })
     wrapper.unmount()
   })
@@ -657,7 +701,7 @@ describe('handleSubmitDialog', () => {
   it('提交失败三种错误形态（detail/message/默认）', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    const vm = await openDialogWithMockRef(wrapper, () => (wrapper.vm as any).openCreateDialog())
+    const vm = await openDialogWithMockRef(wrapper, () => (wrapper.vm as any).openApplyDialog())
     vm.dialogForm.name = 'x'
     // detail
     vm.dialogFormRef = mockFormRef()
@@ -686,7 +730,9 @@ describe('村校选项加载分支', () => {
     const vm = wrapper.vm as any
     expect(vm.villageOptions[0].village_name).toBe('幸福村')
     // 嵌套
-    getSupportedVillagesMock.mockResolvedValueOnce({ data: { data: { items: [{ id: 7, name: '嵌套村' }] } } })
+    getSupportedVillagesMock.mockResolvedValueOnce({
+      data: { data: { items: [{ id: 7, name: '嵌套村' }] } },
+    })
     await vm.loadVillageOptions()
     expect(vm.villageOptions[0].name).toBe('嵌套村')
     // 裸数组（res.data || res 右侧：data 为数组本身仍走 res.data 真值）
@@ -709,7 +755,9 @@ describe('村校选项加载分支', () => {
     expect(vm.villageLoading).toBe(false)
     expect(vm.schoolLoading).toBe(false)
     // 学校嵌套形态
-    schoolsListMock.mockResolvedValueOnce({ data: { data: { items: [{ id: 10, name: '嵌套校' }] } } })
+    schoolsListMock.mockResolvedValueOnce({
+      data: { data: { items: [{ id: 10, name: '嵌套校' }] } },
+    })
     await vm.loadSchoolOptions()
     expect(vm.schoolOptions[0].name).toBe('嵌套校')
     // 学校：无 data 字段 → res.data || res 右侧
@@ -738,7 +786,9 @@ describe('handleDelete', () => {
     mockApiRequest.mockClear()
     await vm.handleDelete(row)
     await flushPromises()
-    expect(confirmMock).toHaveBeenCalledWith('确定要删除经费记录「待删经费」吗？', '删除确认', { type: 'warning' })
+    expect(confirmMock).toHaveBeenCalledWith('确定要删除经费记录「待删经费」吗？', '删除确认', {
+      type: 'warning',
+    })
     expect(mockDel).toHaveBeenCalledWith('/funds/9')
     expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
     expect(mockApiRequest).toHaveBeenCalled()

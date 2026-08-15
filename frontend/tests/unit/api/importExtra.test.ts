@@ -61,7 +61,7 @@ describe('api/import — downloadImportTemplateAndSave', () => {
 describe('api/import — importEntities', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('默认 entity_type=supported_village / mode=incremental，透传返回值', async () => {
+  it('默认 entity_type=supported_village / mode=incremental 走 Query 参数，透传返回值', async () => {
     const body = { success: true, total_rows: 10, success_rows: 9, failed_rows: 1, skipped_rows: 0 }
     mockPost.mockResolvedValueOnce(body)
     const file = new File(['x'], 'data.xlsx')
@@ -70,26 +70,27 @@ describe('api/import — importEntities', () => {
     expect(url).toBe('/import/entities')
     expect(fd).toBeInstanceOf(FormData)
     expect(fd.get('file')).toBe(file)
-    expect(fd.get('entity_type')).toBe('supported_village')
-    expect(fd.get('mode')).toBe('incremental')
+    // entity_type/mode 经 Query 参数传递（后端 Query 接收），不写入 FormData
+    expect(fd.get('entity_type')).toBeNull()
+    expect(fd.get('mode')).toBeNull()
+    expect(config.params).toEqual({ entity_type: 'supported_village', mode: 'incremental' })
     expect(config.headers['Content-Type']).toBe('multipart/form-data')
     expect(config.timeout).toBe(120000)
     expect(result).toBe(body)
   })
 
-  it('自定义 entityType / mode 写入 FormData', async () => {
+  it('自定义 entityType / mode 写入 Query 参数（后端仅支持 incremental/full）', async () => {
     mockPost.mockResolvedValueOnce({ success: true })
-    await importEntities(new File(['x'], 'p.xlsx'), 'project', 'overwrite')
-    const fd = mockPost.mock.calls[0][1] as FormData
-    expect(fd.get('entity_type')).toBe('project')
-    expect(fd.get('mode')).toBe('overwrite')
+    await importEntities(new File(['x'], 'p.xlsx'), 'project', 'full')
+    const config = mockPost.mock.calls[0][2]
+    expect(config.params).toEqual({ entity_type: 'project', mode: 'full' })
   })
 })
 
 describe('api/import — previewImportData', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('POST /import/preview FormData（timeout 60000）并透传返回值', async () => {
+  it('POST /import/preview FormData（timeout 60000，entity_type 走 Query）并透传返回值', async () => {
     const body = { rows: [{ a: 1 }], total: 1, columns: ['a'] }
     mockPost.mockResolvedValueOnce(body)
     const file = new File(['x'], 'preview.xlsx')
@@ -97,7 +98,8 @@ describe('api/import — previewImportData', () => {
     const [url, fd, config] = mockPost.mock.calls[0]
     expect(url).toBe('/import/preview')
     expect(fd.get('file')).toBe(file)
-    expect(fd.get('entity_type')).toBe('school')
+    expect(fd.get('entity_type')).toBeNull()
+    expect(config.params).toEqual({ entity_type: 'school' })
     expect(config.headers['Content-Type']).toBe('multipart/form-data')
     expect(config.timeout).toBe(60000)
     expect(result).toBe(body)

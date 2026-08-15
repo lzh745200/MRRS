@@ -8,8 +8,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, hash_password
 from app.main import app
+
+# 批量删除二次确认测试密码（模块级只算一次哈希，避免每次调用 bcrypt 拖慢测试）
+_BATCH_DELETE_PASSWORD = "Smoke@123456"
+_BATCH_DELETE_HASH = hash_password(_BATCH_DELETE_PASSWORD)
 
 
 # Disable camel-to-snake middleware for tests (models use camelCase field names)
@@ -60,6 +64,7 @@ def admin_user():
     u.organization_id = 1
     u.is_active = True
     u.department = "测试部"
+    u.hashed_password = _BATCH_DELETE_HASH
     return u
 
 
@@ -388,8 +393,18 @@ class TestBatchDelete:
     def test_success(self, client, mock_db):
         q = mock_db.query.return_value
         q.delete.return_value = 2
-        resp = client.post("/api/v1/supported-villages/batch-delete", json={"ids": [1, 2]})
+        resp = client.post("/api/v1/supported-villages/batch-delete",
+                           json={"ids": [1, 2], "confirm_password": _BATCH_DELETE_PASSWORD})
         assert resp.status_code == 200
+
+    def test_missing_password_rejected(self, client, mock_db):
+        resp = client.post("/api/v1/supported-villages/batch-delete", json={"ids": [1, 2]})
+        assert resp.status_code == 400
+
+    def test_wrong_password_rejected(self, client, mock_db):
+        resp = client.post("/api/v1/supported-villages/batch-delete",
+                           json={"ids": [1, 2], "confirm_password": "wrong-pass"})
+        assert resp.status_code == 400
 
 
 # ---------------------------------------------------------------------------

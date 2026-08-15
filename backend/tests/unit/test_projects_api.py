@@ -286,6 +286,53 @@ class TestProjectsAPI:
             })
         assert resp.status_code == 201 and resp.json()["data"]["name"] == "新建项目"
 
+    @patch("app.api.v1.projects.get_client_ip", return_value="127.0.0.1")
+    def test_create_project_with_progress(self, mock_ip, client, mock_db, admin_user):
+        """回归：创建时提交的 progress 必须落库（此前 ProjectCreate 无该字段，进度始终为0）"""
+        _setup_client(client, mock_db, admin_user)
+        with patch("app.api.v1.projects.AuditLogService") as mock_al, \
+             patch("app.api.v1.projects.AuditEnhancementService") as mock_ae, \
+             patch("app.api.v1.projects.write_work_log"):
+            mock_al.return_value.log = AsyncMock()
+            mock_ae.create_audit_log.return_value = MagicMock()
+            mock_ae.record_changes.return_value = None
+            mock_db.query.return_value.filter.return_value.first.return_value = None
+            resp = client.post("/api/v1/projects", json={
+                "name": "带进度的项目", "progress": 45,
+                "start_date": "2026-03-01", "end_date": "2026-10-31",
+            })
+        assert resp.status_code == 201
+        # 落库对象带有真实进度（db.add 会被项目/审批任务等多次调用，取 Project 实例）
+        added_projects = [c[0][0] for c in mock_db.add.call_args_list if isinstance(c[0][0], Project)]
+        assert added_projects and added_projects[0].progress == 45
+        # 创建 Diff 留痕记录真实进度（历史项目情况完整记录）
+        new_dict = mock_ae.record_changes.call_args[0][3]
+        assert new_dict["progress"] == 45
+
+    @patch("app.api.v1.projects.get_client_ip", return_value="127.0.0.1")
+    def test_create_project_default_progress_zero(self, mock_ip, client, mock_db, admin_user):
+        """不传 progress 时默认为 0"""
+        _setup_client(client, mock_db, admin_user)
+        with patch("app.api.v1.projects.AuditLogService") as mock_al, \
+             patch("app.api.v1.projects.AuditEnhancementService") as mock_ae, \
+             patch("app.api.v1.projects.write_work_log"):
+            mock_al.return_value.log = AsyncMock()
+            mock_ae.create_audit_log.return_value = MagicMock()
+            mock_ae.record_changes.return_value = None
+            mock_db.query.return_value.filter.return_value.first.return_value = None
+            resp = client.post("/api/v1/projects", json={"name": "默认进度项目"})
+        assert resp.status_code == 201
+        added_projects = [c[0][0] for c in mock_db.add.call_args_list if isinstance(c[0][0], Project)]
+        assert added_projects and added_projects[0].progress == 0
+
+    def test_create_project_progress_out_of_range(self, client, mock_db, admin_user):
+        """progress 越界（<0 或 >100）应返回 422"""
+        _setup_client(client, mock_db, admin_user)
+        for bad in (-1, 101):
+            resp = client.post("/api/v1/projects", json={"name": "越界进度", "progress": bad})
+            assert resp.status_code == 422
+
+
     def test_create_project_duplicate_code(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
         existing = MagicMock(); existing.code = "PRJ-EXISTING"

@@ -533,8 +533,9 @@ async function loadPermissions() {
 /** 加载角色列表 */
 async function loadRoles() {
   try {
-    const res = await get('/rbac/roles')
-    const roles = res.data?.data || []
+    const res: any = await get('/rbac/roles')
+    // 后端返回 {success:true, data:[...], total} —— res.data 即角色数组
+    const roles = res?.data || res?.items || []
 
     // 并行加载每个角色的用户数
     const rolesWithUserCount = await Promise.all(

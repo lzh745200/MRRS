@@ -256,6 +256,15 @@ describe('推进/退回', () => {
     await wrapper.vm.handleRollback()
     expect(ElMessage.error).toHaveBeenCalledWith('不可退回')
   })
+
+  it('handleRollback 取消：不提示错误、loading 复位', async () => {
+    confirmMock.mockRejectedValue('cancel')
+    const wrapper = mountComp()
+    await flushPromises()
+    await wrapper.vm.handleRollback()
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(wrapper.vm.loading).toBe(false)
+  })
 })
 
 describe('阶段1-2 处理器', () => {
@@ -286,6 +295,20 @@ describe('阶段1-2 处理器', () => {
     api.lockBudget.mockRejectedValue({ response: { data: { detail: '锁定受限' } } })
     await wrapper.vm.handleLockBudget()
     expect(ElMessage.error).toHaveBeenCalledWith('锁定受限')
+  })
+
+  it('handleLockBudget：allocationItems 非空时刷新拨付计划（覆盖 495 行真分支）', async () => {
+    api.lockBudget.mockResolvedValue({ message: '预算基线已锁定' })
+    api.allocationPlan.mockResolvedValue({ items: [{ fund_id: 1, fund_name: '经费A' }] })
+    const wrapper = mountComp()
+    await flushPromises()
+    // 先手动加载拨付计划，使 allocationItems 非空
+    await wrapper.vm.loadAllocationPlan()
+    expect(wrapper.vm.allocationItems).toHaveLength(1)
+    await wrapper.vm.handleLockBudget()
+    // 锁定成功后应再次刷新拨付计划（1 次手动 + 1 次锁定后刷新）
+    expect(api.allocationPlan).toHaveBeenCalledTimes(2)
+    expect(api.allocationPlan).toHaveBeenLastCalledWith('1')
   })
 
   it('handleComplianceCheck 成功（含问题表三分支）与失败', async () => {

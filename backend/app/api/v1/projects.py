@@ -157,6 +157,7 @@ class ProjectCreate(BaseModel):
     village_id: Optional[int] = Field(None, ge=1, description="帮扶村ID")
     description: Optional[str] = Field(None, description="项目描述")
     budget: Optional[float] = Field(None, ge=0, description="预算金额(万元)")
+    progress: Optional[int] = Field(None, ge=0, le=100, description="进度 0-100")
     start_date: Optional[str] = Field(None, description="开始日期 YYYY-MM-DD")
     end_date: Optional[str] = Field(None, description="结束日期 YYYY-MM-DD")
     responsible_unit: Optional[str] = Field(None, max_length=200, description="负责单位")
@@ -810,6 +811,7 @@ async def create_project(
         village_id=data.village_id,
         description=data.description,
         budget=(Decimal(str(data.budget)) if data.budget is not None else Decimal("0")),
+        progress=data.progress if data.progress is not None else 0,
         start_date=date.fromisoformat(data.start_date) if data.start_date else None,
         end_date=date.fromisoformat(data.end_date) if data.end_date else None,
         responsible_unit=data.responsible_unit,

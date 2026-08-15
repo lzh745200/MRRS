@@ -66,6 +66,7 @@ ApprovalWorkflowService.register_entity_apply_handler("supported_village", _appl
 
 class BatchDeleteRequest(BaseModel):
     ids: List[int]
+    confirm_password: Optional[str] = ""
 
 
 class YearCopyRequest(BaseModel):
@@ -376,6 +377,16 @@ def _process_import_row(
         values[field_name] = val
     if not values.get("village_name"):
         return False, f"第{row_idx}行: 帮扶村名称不能为空"
+    # 字段长度校验（与手工创建 schema 对齐，防止超长数据绕过校验入库）
+    _import_max_lengths = {
+        "village_name": 200, "sequence_no": 50, "department": 100,
+        "support_unit": 200, "province": 50, "city": 50, "county": 50,
+        "township": 50, "support_contact": 50, "support_contact_phone": 20,
+    }
+    for _f, _max in _import_max_lengths.items():
+        _v = values.get(_f)
+        if isinstance(_v, str) and len(_v) > _max:
+            return False, f"第{row_idx}行: 字段 '{_f}' 长度超过 {_max} 字符限制（实际 {len(_v)} 字符）"
     existing = db.query(SupportedVillage).filter(
         SupportedVillage.village_name == values["village_name"],
         SupportedVillage.county == values.get("county"),
@@ -630,9 +641,15 @@ async def batch_delete_villages(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """批量软删帮扶村（仅可删除当前用户有权访问的记录）"""
+    """批量软删帮扶村（仅可删除当前用户有权访问的记录，二次密码确认防误删）"""
     if not data.ids:
         raise HTTPException(status_code=400, detail="请提供要删除的ID列表")
+    # 二次确认：校验当前用户密码（单机共用电脑防误删，与组织删除对齐）
+    from app.core.security import verify_password
+    if not data.confirm_password or not verify_password(
+        data.confirm_password, getattr(current_user, "hashed_password", "") or ""
+    ):
+        raise HTTPException(status_code=400, detail="二次确认失败：密码不正确")
     query = db.query(SupportedVillage).filter(SupportedVillage.id.in_(data.ids))
     # 数据权限过滤：仅允许操作本组织/本人创建的记录，防止跨组织批量删除
     query = apply_scope_filter(query, current_user, SupportedVillage, db=db)

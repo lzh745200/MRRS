@@ -6,8 +6,9 @@
 
 import logging
 import os
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -27,6 +28,33 @@ from app.services.permission_package_service import PermissionPackageService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/permission-packages", tags=["权限配置包"])
+
+
+def _optional_current_user(authorization: Optional[str] = Header(None)) -> Optional[User]:
+    """可选认证：未登录时返回 None（登录前离线导入权限包场景）。
+
+    与 get_current_user 不同，本依赖不抛 401，供全新系统登录前导入权限包使用。
+    """
+    token = None
+    if authorization:
+        parts = authorization.split(" ", 1)
+        token = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else parts[0]
+    if not token:
+        return None
+    try:
+        from app.core.security import decode_token
+        from app.core.database import SessionLocal
+
+        payload = decode_token(token)
+        if not payload or not payload.get("sub"):
+            return None
+        db = SessionLocal()
+        try:
+            return db.query(User).filter(User.username == payload["sub"]).first()
+        finally:
+            db.close()
+    except HTTPException:
+        return None
 
 
 @router.post("/export", response_model=PermissionPackageExportResult, summary="导出权限配置包")
@@ -92,7 +120,7 @@ def download_permission_package(
 @router.post("/import", response_model=PermissionPackageImportResult, summary="导入权限配置包（验证预览）")
 async def import_permission_package(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -136,7 +164,7 @@ async def import_permission_package(
 def confirm_import_permission_package(
     file_name: str,
     body: PermissionPackageConfirmRequest = PermissionPackageConfirmRequest(),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(_optional_current_user),
     db: Session = Depends(get_db),
     request: Request = None,
 ):
@@ -150,7 +178,7 @@ def confirm_import_permission_package(
     （管理员在其他机器导出,新机器导入后获得页面访问权限）。
     未登录调用时仅允许本机来源(127.0.0.1/::1),防止远程未授权导入。
     """
-    if not is_admin(current_user):
+    if not current_user or not is_admin(current_user):
         # 登录前离线导入: 仅允许本机来源（桌面应用场景）
         client_host = request.client.host if request and request.client else ""
         if client_host not in ("127.0.0.1", "::1", "localhost"):

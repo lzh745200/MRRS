@@ -117,9 +117,14 @@ describe('stores/auth', () => {
       const r = await s.login('u', 'p')
       expect(r.status).toBe('success')
       expect(s.token).toBe('A')
-      expect(s.user).toEqual({ id: 1, username: 'u' })
+      // must_change_password 位于信封顶层，缺省时合并 false 以触发强制改密流程
+      expect(s.user).toEqual({ id: 1, username: 'u', must_change_password: false })
       expect(_setCachedToken).toHaveBeenCalledWith('A')
-      expect(AuthStorage.setAuthData).toHaveBeenCalledWith({ token: 'A', user: { id: 1, username: 'u' }, refreshToken: 'R' })
+      expect(AuthStorage.setAuthData).toHaveBeenCalledWith({
+        token: 'A',
+        user: { id: 1, username: 'u', must_change_password: false },
+        refreshToken: 'R',
+      })
     })
 
     it('code !== 200: error + return error status', async () => {

@@ -28,10 +28,11 @@ export function useAutoLock(opts: AutoLockOptions = {}) {
   const lockNow =
     opts.onLock ??
     (() => {
-      // 默认行为: 清会话 + 跳登录页
+      // 默认行为: 结束会话（保留"记住登录"持久凭据）+ 锁屏标记 + 跳登录页
       try {
         const { AuthStorage } = require('@/utils/authStorage')
-        AuthStorage.clear()
+        AuthStorage.clearSession()
+        window.sessionStorage.setItem('auto_lock_active', '1')
       } catch {
         /* 静默 */
       }

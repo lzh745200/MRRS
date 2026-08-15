@@ -962,6 +962,13 @@ async def preview_policy_file(
                 media_type="application/octet-stream",
                 filename=os.path.basename(policy.file_path),
             )
+        except Exception as _conv_err:  # 损坏/非法文档转换失败 → 回退下载而非 500
+            logger.warning("政策附件 doc/docx 转换失败，回退下载: %s (%s)", policy.file_path, _conv_err)
+            return FileResponse(
+                path=policy.file_path,
+                media_type="application/octet-stream",
+                filename=os.path.basename(policy.file_path),
+            )
     else:
         # 其他类型直接下载
         return FileResponse(

@@ -5,7 +5,7 @@
  * 场景：
  * 1. 服务状态检查 - available / 自定义状态 / 无 services / 失败
  * 2. 数据分析 - 成功（嵌套 flatten）/失败 / flattenObject 各分支
- * 3. 趋势预测 - predictions 数组 / 对象 / 空 / 失败（收入 + 经费）
+ * 3. 趋势预测 - forecast 数组 / envelope 内层 / 字段缺失回退 / 非数组 / 失败（收入 + 经费）
  * 4. 异常检测 - 空输入演示数据 / JSON 数组 / 非数组 JSON / 非法 JSON / 失败
  * 5. 智能推荐 - 项目推荐（无ID/数组/非数组/失败）/ 系统推荐
  * 6. NLP 查询 - 空查询 / 成功 / 历史记录（>10 截断 / 点击回填）/ 失败 / 回车触发
@@ -56,7 +56,8 @@ import InteractiveResult from '@/views/ai/InteractiveResult.vue'
 const stubs = {
   'el-icon': { template: '<i><slot/></i>' },
   'el-button': {
-    template: '<button class="el-btn" :disabled="disabled" @click="$emit(\'click\')"><slot/></button>',
+    template:
+      '<button class="el-btn" :disabled="disabled" @click="$emit(\'click\')"><slot/></button>',
     props: ['type', 'disabled', 'loading'],
     emits: ['click'],
   },
@@ -127,8 +128,12 @@ const stubs = {
   'el-descriptions': { template: '<div><slot/></div>', props: ['column', 'border'] },
   'el-descriptions-item': { template: '<div><slot/></div>', props: ['label'] },
   'el-divider': { template: '<hr/>' },
-  'el-empty': { template: '<div class="el-empty-stub"></div>', props: ['description', 'imageSize'] },
+  'el-empty': {
+    template: '<div class="el-empty-stub"></div>',
+    props: ['description', 'imageSize'],
+  },
   'el-alert': {
+    name: 'el-alert',
     template: '<div class="el-alert-stub">{{ title }}</div>',
     props: ['title', 'type', 'closable', 'showIcon'],
   },
@@ -152,7 +157,9 @@ async function clickButton(wrapper: any, text: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockGetStatus.mockResolvedValue({ data: { services: { local_analysis: { status: 'available' } } } })
+  mockGetStatus.mockResolvedValue({
+    data: { services: { local_analysis: { status: 'available' } } },
+  })
 })
 
 describe('服务状态检查', () => {
@@ -279,9 +286,11 @@ describe('数据分析', () => {
 })
 
 describe('趋势预测', () => {
-  it('收入预测成功：predictions 数组直接渲染', async () => {
+  it('收入预测成功：forecast 数组映射为 {year, value}', async () => {
     mockForecastIncome.mockResolvedValue({
-      data: { predictions: [{ year: 2026, value: 123.4 }] },
+      data: {
+        forecast: [{ year: 2026, avg_per_capita_income: 12.34, avg_collective_income: 5.6 }],
+      },
     })
     const wrapper = mountAI()
     await flushPromises()
@@ -289,26 +298,61 @@ describe('趋势预测', () => {
     await clickButton(wrapper, '预测')
 
     expect(mockForecastIncome).toHaveBeenCalledWith(2)
-    expect((wrapper.vm as any).forecastItems).toEqual([{ year: 2026, value: 123.4 }])
-    expect(wrapper.text()).toContain('2026: 123.4')
+    expect((wrapper.vm as any).forecastItems).toEqual([
+      { year: 2026, value: '人均 12.34 / 集体 5.6' },
+    ])
+    expect(wrapper.text()).toContain('2026: 人均 12.34 / 集体 5.6')
     expect(mockMessage.success).toHaveBeenCalledWith('预测完成')
   })
 
-  it('收入预测成功：predicted 对象转为条目数组', async () => {
-    mockForecastIncome.mockResolvedValue({ data: { predicted: { '2027年': 555 } } })
+  it('收入预测成功：envelope 内层 data.data.forecast 也能解析', async () => {
+    mockForecastIncome.mockResolvedValue({
+      data: {
+        data: {
+          forecast: [{ year: 2027, avg_per_capita_income: 100, avg_collective_income: 200 }],
+        },
+      },
+    })
     const wrapper = mountAI()
     await flushPromises()
 
     await clickButton(wrapper, '预测')
-    expect((wrapper.vm as any).forecastItems).toEqual([{ label: '2027年', value: 555 }])
-    expect(wrapper.text()).toContain('2027年: 555')
+    expect((wrapper.vm as any).forecastItems).toEqual([
+      { year: 2027, value: '人均 100 / 集体 200' },
+    ])
   })
 
-  it('收入预测成功：无 predictions/predicted 时为空数组', async () => {
+  it('收入预测成功：字段缺失时回退 "-"', async () => {
+    mockForecastIncome.mockResolvedValue({
+      data: {
+        forecast: [
+          { year: 2028, avg_per_capita_income: null, avg_collective_income: 20 },
+          { year: 2029, avg_per_capita_income: 10, avg_collective_income: null },
+        ],
+      },
+    })
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '预测')
+    expect((wrapper.vm as any).forecastItems).toEqual([
+      { year: 2028, value: '人均 - / 集体 20' },
+      { year: 2029, value: '人均 10 / 集体 -' },
+    ])
+  })
+
+  it('收入预测成功：forecast 缺失或非数组时为空数组', async () => {
     mockForecastIncome.mockResolvedValue({ data: {} })
     const wrapper = mountAI()
     await flushPromises()
 
+    await clickButton(wrapper, '预测')
+    expect((wrapper.vm as any).forecastItems).toEqual([])
+
+    // forecast 为对象（非数组）时同样回退空数组
+    mockForecastIncome.mockResolvedValue({
+      data: { forecast: { year: 2030, avg_per_capita_income: 1 } },
+    })
     await clickButton(wrapper, '预测')
     expect((wrapper.vm as any).forecastItems).toEqual([])
   })
@@ -332,25 +376,59 @@ describe('趋势预测', () => {
     expect((wrapper.vm as any).forecastYears).toBe(5)
   })
 
-  it('经费预测成功：predictions 数组', async () => {
+  it('经费预测成功：使用率与风险标签映射为 {label, value}', async () => {
     mockForecastFunds.mockResolvedValue({
-      data: { predictions: [{ year: 2026, value: '80%' }] },
+      data: {
+        current: { usage_rate: 0.8 },
+        projected_year_end_usage_rate: 0.95,
+        risk_label: '中风险',
+      },
     })
     const wrapper = mountAI()
     await flushPromises()
 
     await clickButton(wrapper, '执行预测')
-    expect((wrapper.vm as any).fundForecastItems).toEqual([{ year: 2026, value: '80%' }])
-    expect(wrapper.text()).toContain('2026: 80%')
+    expect((wrapper.vm as any).fundForecastItems).toEqual([
+      { label: '当年使用率', value: '80%' },
+      { label: '预计年末使用率', value: '95%' },
+      { label: '风险评估', value: '中风险' },
+    ])
+    expect(wrapper.text()).toContain('当年使用率: 80%')
+    expect(wrapper.text()).toContain('预计年末使用率: 95%')
   })
 
-  it('经费预测成功：返回对象整体作为预测源', async () => {
-    mockForecastFunds.mockResolvedValue({ '2028年': '90%' })
+  it('经费预测成功：envelope 内层 + risk_level 回退', async () => {
+    mockForecastFunds.mockResolvedValue({
+      data: {
+        data: {
+          current: { usage_rate: 0.5 },
+          projected_year_end_usage_rate: 0.7,
+          risk_level: '高',
+        },
+      },
+    })
     const wrapper = mountAI()
     await flushPromises()
 
     await clickButton(wrapper, '执行预测')
-    expect((wrapper.vm as any).fundForecastItems).toEqual([{ label: '2028年', value: '90%' }])
+    expect((wrapper.vm as any).fundForecastItems).toEqual([
+      { label: '当年使用率', value: '50%' },
+      { label: '预计年末使用率', value: '70%' },
+      { label: '风险评估', value: '高' },
+    ])
+  })
+
+  it('经费预测：字段缺失时回退 "-"（裸响应）', async () => {
+    mockForecastFunds.mockResolvedValue({ projected_year_end_usage_rate: 0.4 })
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '执行预测')
+    expect((wrapper.vm as any).fundForecastItems).toEqual([
+      { label: '当年使用率', value: '-' },
+      { label: '预计年末使用率', value: '40%' },
+      { label: '风险评估', value: '-' },
+    ])
   })
 
   it('经费预测失败：提示错误', async () => {
@@ -383,12 +461,14 @@ describe('异常检测', () => {
     const payload = mockDetectAnomalies.mock.calls[0][0]
     expect(payload.data).toHaveLength(20)
     expect(payload.value_field).toBe('value')
-    expect(payload.method).toBe('statistical')
+    expect(payload.method).toBe('zscore')
     expect(payload.contamination).toBe(0.05)
 
     const vm = wrapper.vm as any
+    // 视图把每个记录归一化为 is_anomaly: true，并基于 raw 长度重算 anomaly_count
+    expect(vm.anomalyResult.anomaly_count).toBe(2)
     expect(vm.anomalyColumns).toEqual(['index', 'value'])
-    expect(mockMessage.success).toHaveBeenCalledWith('检测完成：发现 1 个异常')
+    expect(mockMessage.success).toHaveBeenCalledWith('检测完成：发现 2 个异常')
     expect(wrapper.text()).toContain('异常检测结果')
   })
 
@@ -403,7 +483,7 @@ describe('异常检测', () => {
 
     const payload = mockDetectAnomalies.mock.calls[0][0]
     expect(payload.data).toEqual([{ value: 10 }, { value: 20 }])
-    // 无异常时渲染 el-empty，成功消息使用 ?? 'N/A' 分支前值
+    // 无异常时渲染 el-empty，anomaly_count 由视图按 raw 长度计算
     expect(mockMessage.success).toHaveBeenCalledWith('检测完成：发现 0 个异常')
     expect(wrapper.find('.el-empty-stub').exists()).toBe(true)
   })
@@ -417,8 +497,8 @@ describe('异常检测', () => {
 
     await clickButton(wrapper, '检测异常')
     expect(mockDetectAnomalies.mock.calls[0][0].data).toEqual([{ value: 7 }])
-    // anomaly_count 缺省时消息显示 N/A
-    expect(mockMessage.success).toHaveBeenCalledWith('检测完成：发现 N/A 个异常')
+    // 无 anomalies 字段时归一化为空数组，anomaly_count = 0
+    expect(mockMessage.success).toHaveBeenCalledWith('检测完成：发现 0 个异常')
   })
 
   it('非法 JSON 输入：提示格式错误并中断', async () => {
@@ -441,6 +521,45 @@ describe('异常检测', () => {
 
     await clickButton(wrapper, '检测异常')
     expect(mockMessage.error).toHaveBeenCalledWith('异常检测失败')
+  })
+
+  it('检测成功：裸数组响应直接归一化', async () => {
+    mockDetectAnomalies.mockResolvedValue([{ index: 1, value: 5 }])
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '检测异常')
+    const vm = wrapper.vm as any
+    expect(vm.anomalyResult.anomalies).toEqual([{ index: 1, value: 5, is_anomaly: true }])
+    expect(vm.anomalyResult.anomaly_count).toBe(1)
+    expect(vm.anomalyColumns).toEqual(['index', 'value'])
+    expect(mockMessage.success).toHaveBeenCalledWith('检测完成：发现 1 个异常')
+  })
+
+  it('检测成功：data.data.anomalies 嵌套位置也能解析', async () => {
+    mockDetectAnomalies.mockResolvedValue({
+      data: { data: { anomalies: [{ index: 2, value: 7 }] } },
+    })
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '检测异常')
+    const vm = wrapper.vm as any
+    expect(vm.anomalyResult.anomaly_count).toBe(1)
+    expect(vm.anomalyResult.anomalies[0]).toEqual({ index: 2, value: 7, is_anomaly: true })
+  })
+
+  it('检测成功：anomalies 非数组时置空', async () => {
+    mockDetectAnomalies.mockResolvedValue({ data: { anomalies: 'not-array' } })
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '检测异常')
+    const vm = wrapper.vm as any
+    expect(vm.anomalyResult.anomalies).toEqual([])
+    expect(vm.anomalyResult.anomaly_count).toBe(0)
+    expect(vm.anomalyColumns).toEqual([])
+    expect(wrapper.find('.el-empty-stub').exists()).toBe(true)
   })
 
   it('检测方式 el-select 与敏感度 el-slider v-model 更新', async () => {
@@ -468,6 +587,22 @@ describe('异常检测', () => {
     // 第二个输入框是异常检测数据输入
     await inputs[1].setValue('[{"value":1}]')
     expect((wrapper.vm as any).anomalyInput).toBe('[{"value":1}]')
+  })
+
+  it('异常检测：anomaly_count 为 undefined → ?? N/A 兜底', async () => {
+    // 用 Proxy 数组伪造 Array.isArray=true 但 length=undefined，使 anomaly_count 为 undefined
+    const fakeArr: any = new Proxy([], {
+      get(target: any, prop: any) {
+        if (prop === 'length') return undefined
+        return target[prop]
+      },
+    })
+    mockDetectAnomalies.mockResolvedValue(fakeArr)
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '检测异常')
+    expect(mockMessage.success).toHaveBeenCalledWith('检测完成：发现 N/A 个异常')
   })
 })
 
@@ -505,6 +640,16 @@ describe('智能推荐', () => {
 
     await clickButton(wrapper, '推荐项目')
     expect((wrapper.vm as any).recommendResults).toEqual([])
+  })
+
+  it('推荐成功：无 score 字段时不渲染评分标签', async () => {
+    mockRecommendProjects.mockResolvedValue([{ name: '无评分项目' }])
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '推荐项目')
+    expect(wrapper.text()).toContain('无评分项目')
+    expect(wrapper.find('.rec-item .el-tag-stub').exists()).toBe(false)
   })
 
   it('推荐成功：响应本身为数组（|| data 分支）', async () => {
@@ -656,6 +801,63 @@ describe('NLP 查询', () => {
     expect(mockMessage.error).toHaveBeenCalledWith('查询失败')
     expect(vm.nlpLoading).toBe(false)
   })
+
+  it('查询成功：响应自带 success 字段时直接作为结果（裸响应分支）', async () => {
+    mockNlpQuery.mockResolvedValue({
+      success: true,
+      data: { answer: '原始答案' },
+      explanation: '解释说明文字',
+    })
+    const wrapper = mountAI()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.nlpForm.query = '裸响应查询'
+
+    await vm.runNlpQuery()
+    // body = response 本身（response.success !== undefined）
+    expect(vm.nlpResult).toEqual({
+      success: true,
+      data: { answer: '原始答案' },
+      explanation: '解释说明文字',
+    })
+    expect(wrapper.find('.el-alert-stub').text()).toContain('解释说明文字')
+    expect(wrapper.findComponent({ name: 'el-alert' }).props('type')).toBe('info')
+  })
+
+  it('查询失败响应：error 字段渲染且 alert 类型为 error', async () => {
+    mockNlpQuery.mockResolvedValue({ success: false, error: '无法解析该查询' })
+    const wrapper = mountAI()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.nlpForm.query = '无法解析的问题'
+
+    await vm.runNlpQuery()
+    expect(vm.nlpResult.error).toBe('无法解析该查询')
+    expect(wrapper.find('.el-alert-stub').text()).toContain('无法解析该查询')
+    expect(wrapper.findComponent({ name: 'el-alert' }).props('type')).toBe('error')
+  })
+
+  it('标题回退链：result 字段渲染', async () => {
+    mockNlpQuery.mockResolvedValue({ data: { result: '结果回退文本' } })
+    const wrapper = mountAI()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.nlpForm.query = '结果回退查询'
+
+    await vm.runNlpQuery()
+    expect(wrapper.find('.el-alert-stub').text()).toContain('结果回退文本')
+  })
+
+  it('标题回退链：全部缺失时 JSON.stringify 兜底', async () => {
+    mockNlpQuery.mockResolvedValue({ data: { foo: 'bar' } })
+    const wrapper = mountAI()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.nlpForm.query = '兜底查询'
+
+    await vm.runNlpQuery()
+    expect(wrapper.find('.el-alert-stub').text()).toContain('"foo":"bar"')
+  })
 })
 
 // ==================== 分支覆盖率补测 ====================
@@ -690,27 +892,33 @@ describe('分支补测：script 零分支', () => {
     expect(mockMessage.success).toHaveBeenCalledWith('分析完成')
   })
 
-  it('收入预测：响应无 data 包装时回退 response 本身（403 ?? 右侧）', async () => {
-    mockForecastIncome.mockResolvedValue({ predictions: [{ year: 2031, value: 42 }] })
+  it('收入预测：响应无 data 包装时回退 response 本身', async () => {
+    mockForecastIncome.mockResolvedValue({
+      forecast: [{ year: 2031, avg_per_capita_income: 42, avg_collective_income: 3 }],
+    })
     const wrapper = mountAI()
     await flushPromises()
 
     await clickButton(wrapper, '预测')
-    expect((wrapper.vm as any).forecastItems).toEqual([{ year: 2031, value: 42 }])
-    expect(wrapper.text()).toContain('2031: 42')
+    expect((wrapper.vm as any).forecastItems).toEqual([{ year: 2031, value: '人均 42 / 集体 3' }])
+    expect(wrapper.text()).toContain('2031: 人均 42 / 集体 3')
   })
 
-  it('经费预测：响应为 null 时预测源回退空对象（424 || {} 右侧）', async () => {
+  it('经费预测：响应为 null 时预测源回退空对象，全部显示 "-"', async () => {
     mockForecastFunds.mockResolvedValue(null)
     const wrapper = mountAI()
     await flushPromises()
 
     await clickButton(wrapper, '执行预测')
-    expect((wrapper.vm as any).fundForecastItems).toEqual([])
+    expect((wrapper.vm as any).fundForecastItems).toEqual([
+      { label: '当年使用率', value: '-' },
+      { label: '预计年末使用率', value: '-' },
+      { label: '风险评估', value: '-' },
+    ])
     expect(mockMessage.success).toHaveBeenCalledWith('预测完成')
   })
 
-  it('异常检测：响应无 data 包装时回退 response 本身（464 ?? 右侧）', async () => {
+  it('异常检测：响应无 data 包装时回退 response 本身，按 raw 长度重算计数', async () => {
     mockDetectAnomalies.mockResolvedValue({
       anomalies: [{ index: 1, value: 5, is_anomaly: false }],
       anomaly_count: 0,
@@ -720,9 +928,10 @@ describe('分支补测：script 零分支', () => {
 
     await clickButton(wrapper, '检测异常')
     const vm = wrapper.vm as any
-    expect(vm.anomalyResult.anomaly_count).toBe(0)
+    expect(vm.anomalyResult.anomaly_count).toBe(1)
+    expect(vm.anomalyResult.anomalies[0].is_anomaly).toBe(true)
     expect(vm.anomalyColumns).toEqual(['index', 'value'])
-    expect(mockMessage.success).toHaveBeenCalledWith('检测完成：发现 0 个异常')
+    expect(mockMessage.success).toHaveBeenCalledWith('检测完成：发现 1 个异常')
   })
 
   it('项目推荐：data.data.items 嵌套时取内层 items（488 首操作数为真）', async () => {
@@ -815,5 +1024,15 @@ describe('分支补测：template 零分支', () => {
     await clickButton(wrapper, '获取系统建议')
     expect(wrapper.text()).toContain('info')
     expect(wrapper.text()).toContain('字符串建议')
+  })
+
+  it('收入预测项 year 缺失时回退 label（81 || 右侧）', async () => {
+    const wrapper = mountAI()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.forecastResult = { forecast: [] }
+    vm.forecastItems = [{ label: '2026年', value: '人均 10 / 集体 20' }]
+    await nextTick()
+    expect(wrapper.text()).toContain('2026年: 人均 10 / 集体 20')
   })
 })

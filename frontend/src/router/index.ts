@@ -522,6 +522,9 @@ export const routes: RouteRecordRaw[] = [
       { path: '/data-management/backup', redirect: '/system/backup', meta: { title: '数据备份' } },
       { path: '/data-management/logs', redirect: '/system/audit', meta: { title: '操作日志' } },
       { path: '/data-import/batch', redirect: '/data-package' },
+      // 更早版本的旧入口：保持旧链接/旧书签可用
+      { path: '/statistics', redirect: '/data-analysis' },
+      { path: '/system/logs', redirect: '/system/audit', meta: { title: '操作日志' } },
       {
         path: '/data-package/receive',
         name: 'DataPackageReceive',

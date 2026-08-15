@@ -16,8 +16,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export const AUTH_FILE = path.join(__dirname, '.auth', 'admin.json')
 
-const API_BASE = process.env.E2E_API_URL || 'http://127.0.0.1:8000/api/v1'
-const WEB_ORIGIN = process.env.E2E_BASE_URL || 'http://127.0.0.1:5173'
+const API_BASE = process.env.E2E_API_URL || 'http://127.0.0.1:18000/api/v1'
+const WEB_ORIGIN = process.env.E2E_BASE_URL || 'http://127.0.0.1:15173'
 
 export default async function globalSetup() {
   const username = process.env.TEST_USERNAME || 'admin'

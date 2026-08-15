@@ -24,12 +24,15 @@ test.describe('导航正确性', () => {
   test('帮扶项目管理导航正确', async ({ page }) => {
     await navigateTo(page, '/projects')
     await expect(page).toHaveURL(/\/projects/)
-    await expect(page.locator('.el-table, .project-list, .el-empty')).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('.el-table, .project-list, .el-empty')).toBeVisible({
+      timeout: 10000,
+    })
   })
 
   test('帮扶村管理导航正确', async ({ page }) => {
     await navigateTo(page, '/villages')
-    await expect(page).toHaveURL(/\/villages/)
+    // 旧路由 /villages 重定向到 /supported-villages
+    await expect(page).toHaveURL(/\/supported-villages/)
   })
 
   test('经费管理导航正确', async ({ page }) => {
@@ -47,9 +50,10 @@ test.describe('导航正确性', () => {
     await expect(page).toHaveURL(/\/data-analysis/)
   })
 
-  test('旧路由 /organizations 重定向到 /system/users-orgs', async ({ page }) => {
+  test('组织机构页面导航正确', async ({ page }) => {
+    // /organizations 是现行有效路由（组织机构列表页），并非旧路由
     await navigateTo(page, '/organizations')
-    await expect(page).toHaveURL(/\/system\/users-orgs/)
+    await expect(page).toHaveURL(/\/organizations/)
   })
 
   test('旧路由 /system/logs 重定向到 /system/audit', async ({ page }) => {
@@ -60,7 +64,11 @@ test.describe('导航正确性', () => {
   test('不存在的路由显示 404 页面', async ({ page }) => {
     await navigateTo(page, '/this-page-does-not-exist')
     // 应显示 404 页面或 NotFound 组件
-    const has404 = await page.locator('text=/404|页面不存在|找不到/').first().isVisible().catch(() => false)
+    const has404 = await page
+      .locator('text=/404|页面不存在|找不到/')
+      .first()
+      .isVisible()
+      .catch(() => false)
     expect(has404).toBeTruthy()
   })
 

@@ -122,7 +122,7 @@ function setupDefaultMocks() {
     }
     return Promise.resolve({})
   })
-  mockPost.mockResolvedValue({ data: { success: true, granted: [], revoked: [], skipped: [], failed: [] } })
+  mockPost.mockResolvedValue({ success: true, granted: [], revoked: [], skipped: [], failed: [] })
   mockPut.mockResolvedValue({})
 }
 
@@ -297,7 +297,11 @@ describe('PermissionAssignmentDrawer.vue', () => {
 
   it('保存权限成功：完整成功消息 + emit saved', async () => {
     mockPost.mockResolvedValue({
-      data: { success: true, granted: ['a'], revoked: ['b'], skipped: ['c'], failed: [] },
+      success: true,
+      granted: ['a'],
+      revoked: ['b'],
+      skipped: ['c'],
+      failed: [],
     })
     const wrapper = mountDrawer({ user })
     await flushPromises()
@@ -316,7 +320,8 @@ describe('PermissionAssignmentDrawer.vue', () => {
 
   it('保存权限成功：granted/revoked/skipped 缺省时默认空数组', async () => {
     mockPost.mockResolvedValue({
-      data: { success: true, failed: [] },
+      success: true,
+      failed: [],
     })
     const wrapper = mountDrawer({ user })
     await flushPromises()
@@ -328,7 +333,11 @@ describe('PermissionAssignmentDrawer.vue', () => {
 
   it('保存权限部分失败：warning 消息', async () => {
     mockPost.mockResolvedValue({
-      data: { success: true, granted: [], revoked: [], skipped: [], failed: ['x', 'y'] },
+      success: true,
+      granted: [],
+      revoked: [],
+      skipped: [],
+      failed: ['x', 'y'],
     })
     const wrapper = mountDrawer({ user })
     await flushPromises()
@@ -338,19 +347,19 @@ describe('PermissionAssignmentDrawer.vue', () => {
   })
 
   it('保存权限 success=false：error 消息（message/detail/默认）', async () => {
-    mockPost.mockResolvedValueOnce({ data: { success: false, message: '保存失败msg' } })
+    mockPost.mockResolvedValueOnce({ success: false, message: '保存失败msg' })
     const wrapper = mountDrawer({ user })
     await flushPromises()
     await btn(wrapper, '保存权限')!.trigger('click')
     await flushPromises()
     expect(mockMessage.error).toHaveBeenCalledWith('保存失败msg')
 
-    mockPost.mockResolvedValueOnce({ data: { success: false, detail: '保存失败detail' } })
+    mockPost.mockResolvedValueOnce({ success: false, detail: '保存失败detail' })
     await btn(wrapper, '保存权限')!.trigger('click')
     await flushPromises()
     expect(mockMessage.error).toHaveBeenCalledWith('保存失败detail')
 
-    mockPost.mockResolvedValueOnce({ data: { success: false } })
+    mockPost.mockResolvedValueOnce({ success: false })
     await btn(wrapper, '保存权限')!.trigger('click')
     await flushPromises()
     expect(mockMessage.error).toHaveBeenCalledWith('权限保存失败')
@@ -381,7 +390,7 @@ describe('PermissionAssignmentDrawer.vue', () => {
     const p = (wrapper.vm as any).$.setupState.savePermissions()
     await flushPromises()
     await wrapper.setProps({ modelValue: false })
-    resolvePost({ data: { success: true, granted: ['a'], failed: [] } })
+    resolvePost({ success: true, granted: ['a'], failed: [] })
     await p
     await flushPromises()
 
@@ -531,17 +540,22 @@ describe('PermissionAssignmentDrawer.vue', () => {
     expect((wrapper.vm as any).currentPermissions).toEqual([])
   })
 
-  it('保存权限：res 无 data 字段 → res.data || {} 兜底 + 默认错误提示', async () => {
+  it('保存权限：res 为假值/空对象 → res || {} 兜底 + 默认错误提示', async () => {
     mockPost.mockResolvedValueOnce({})
     const wrapper = mountDrawer({ user })
     await flushPromises()
     await btn(wrapper, '保存权限')!.trigger('click')
     await flushPromises()
     expect(mockMessage.error).toHaveBeenCalledWith('权限保存失败')
+
+    mockPost.mockResolvedValueOnce(null)
+    await btn(wrapper, '保存权限')!.trigger('click')
+    await flushPromises()
+    expect(mockMessage.error).toHaveBeenCalledWith('权限保存失败')
   })
 
   it('保存权限成功：failed 字段缺失 → data.failed || [] 兜底', async () => {
-    mockPost.mockResolvedValueOnce({ data: { success: true, granted: [], revoked: [], skipped: [] } })
+    mockPost.mockResolvedValueOnce({ success: true, granted: [], revoked: [], skipped: [] })
     const wrapper = mountDrawer({ user })
     await flushPromises()
     await btn(wrapper, '保存权限')!.trigger('click')

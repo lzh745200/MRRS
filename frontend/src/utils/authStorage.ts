@@ -176,6 +176,16 @@ export class AuthStorage {
   }
 
   /**
+   * 仅清除当前会话（sessionStorage），保留"记住登录"的持久凭据。
+   * 用于自动/手动锁屏：结束会话但不破坏下次开机免登录。
+   */
+  static clearSession(): void {
+    sessionStorage.removeItem(STORAGE_KEYS.TOKEN)
+    sessionStorage.removeItem(STORAGE_KEYS.USER)
+    sessionStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
+  }
+
+  /**
    * 清除所有认证数据（含记住登录的持久数据——退出登录必须彻底清除）
    */
   static clear(): void {

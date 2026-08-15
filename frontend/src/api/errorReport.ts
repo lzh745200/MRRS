@@ -7,20 +7,21 @@ import { get, post, put } from '@/api/request'
 
 // ==================== 类型定义 ====================
 
-/** 错误报告 */
+/** 错误报告（后端 to_dict 返回 camelCase 键名） */
 export interface ErrorReport {
   id: number
   source: string
-  error_type: string
+  errorType: string
   message: string
-  stack_trace?: string
+  stackTrace?: string
   context?: Record<string, any>
   severity: 'info' | 'warning' | 'error' | 'critical'
   status: string
   reporter?: string
-  reported_at: string
-  resolved_at?: string
-  resolution_note?: string
+  createdAt: string
+  updatedAt?: string
+  resolvedAt?: string
+  resolutionNote?: string
 }
 
 /** 错误报告列表响应 */

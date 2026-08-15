@@ -59,7 +59,9 @@ class School(Base):
     name = Column(String(200), nullable=False, comment="学校名称")
     code = Column(String(50), unique=True, comment="学校编码")
     type = Column(
-        SQLEnum(SchoolType, native_enum=False),
+        # validate_strings=False：写入由 Pydantic schema 校验，读取端容忍
+        # 历史脏数据/手工修复数据（此前单条非法枚举值会令整个列表端点 500）
+        SQLEnum(SchoolType, native_enum=False, validate_strings=False),
         default=SchoolType.PRIMARY,
         comment="学校类型",
     )
@@ -80,7 +82,7 @@ class School(Base):
 
     # 帮扶信息
     support_status = Column(
-        SQLEnum(SupportStatus, native_enum=False),
+        SQLEnum(SupportStatus, native_enum=False, validate_strings=False),
         default=SupportStatus.INACTIVE,
         comment="帮扶状态",
     )

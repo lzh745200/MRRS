@@ -1,8 +1,9 @@
 /**
  * views/dataManagement/Index.vue 覆盖率攻坚（四指标 100%）
- * 覆盖：loadStats 成功（snake_case/camelCase 两种形态、village 数据有效/无效、
- * totalRecords=0 分支）、失败（logger.error + ElMessage.error）、
- * handleImportComplete/handleExportComplete/handleBackupComplete 三事件、
+ * 覆盖：loadStats 四指标来自真实端点（dashboard/stats + import/history +
+ * audit/exports + system/backup，本月过滤）、village 数据质量统计、
+ * 失败（logger.error + ElMessage.error）、
+ * handleImportComplete/handleExportComplete 两事件、
  * 模板：el-tabs v-model、四个 tab-pane、el-statistic 渲染。
  * 说明：el-tab-pane 使用空 stub，子组件（Import/Export/Backup/Quality Section）不挂载，
  * 避免加载真实 API 模块（各子组件有独立测试文件覆盖）。
@@ -34,6 +35,45 @@ const villages = [
   { id: 1, department: '作战处', village_name: '甲村', county: '都匀市' },
   { id: 2, department: '', village_name: '乙村', county: '' },
 ]
+
+function currentMonthPrefix(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** 按真实端点契约配置 mockGet（列表端点 resolve { items, total }，/dashboard/stats resolve data 负载） */
+function setupEndpoints(overrides: Record<string, unknown> = {}) {
+  const mp = currentMonthPrefix()
+  const defaults: Record<string, unknown> = {
+    '/dashboard/stats': { total_villages: 120 },
+    '/import/history': {
+      items: [
+        { id: 1, file_name: 'a.xlsx', createdAt: `${mp}-05T10:00:00` },
+        { id: 2, file_name: 'b.xlsx', created_at: `${mp}-20T09:30:00` },
+        { id: 3, file_name: 'c.xlsx', createdAt: '2020-01-01T10:00:00' },
+      ],
+      total: 3,
+    },
+    '/audit/exports': {
+      items: [
+        { id: 1, export_type: 'village', created_at: `${mp}-03T10:00:00` },
+        { id: 2, export_type: 'fund', created_at: `${mp}-18T10:00:00` },
+        { id: 3, export_type: 'school', created_at: '2020-01-05T10:00:00' },
+      ],
+      total: 3,
+    },
+    '/system/backup': {
+      items: [
+        { backup_id: 1, file_name: 'backup_1.db' },
+        { backup_id: 2, file_name: 'backup_2.db' },
+        { backup_id: 3, file_name: 'backup_3.db' },
+      ],
+      total: 3,
+    },
+  }
+  const merged = { ...defaults, ...overrides }
+  mockGet.mockImplementation((url: string) => Promise.resolve(merged[url]))
+}
 
 function mountComp() {
   return mount(Index, {
@@ -69,14 +109,7 @@ function mountComp() {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockGet.mockResolvedValue({
-    data: {
-      total_villages: 120,
-      monthly_imports: 5,
-      monthly_exports: 3,
-      backup_count: 8,
-    },
-  })
+  setupEndpoints()
   mockApiRequest.mockResolvedValue({ data: { items: villages } })
 })
 
@@ -86,14 +119,18 @@ describe('挂载与统计加载', () => {
     await flushPromises()
     const vm = wrapper.vm as any
 
+    // 四指标端点调用契约（注意 import/history 与 audit/exports 上限 100）
     expect(mockGet).toHaveBeenCalledWith('/dashboard/stats')
+    expect(mockGet).toHaveBeenCalledWith('/import/history', { page: 1, page_size: 100 })
+    expect(mockGet).toHaveBeenCalledWith('/audit/exports', { page: 1, page_size: 100 })
+    expect(mockGet).toHaveBeenCalledWith('/system/backup', { page: 1, page_size: 1000 })
     expect(mockApiRequest).toHaveBeenCalledWith(
       expect.objectContaining({ url: '/supported-villages', method: 'GET' })
     )
     expect(vm.stats.villageCount).toBe(120)
-    expect(vm.stats.monthlyImports).toBe(5)
-    expect(vm.stats.monthlyExports).toBe(3)
-    expect(vm.stats.backupCount).toBe(8)
+    expect(vm.stats.monthlyImports).toBe(2)
+    expect(vm.stats.monthlyExports).toBe(2)
+    expect(vm.stats.backupCount).toBe(3)
     expect(vm.qualityStats.totalRecords).toBe(2)
     expect(vm.qualityStats.validRecords).toBe(1)
     expect(vm.qualityStats.invalidRecords).toBe(1)
@@ -102,26 +139,29 @@ describe('挂载与统计加载', () => {
 
     const text = wrapper.text()
     expect(text).toContain('帮扶村总数:120')
-    expect(text).toContain('本月导入:5次')
-    expect(text).toContain('本月导出:3次')
-    expect(text).toContain('备份数量:8')
+    expect(text).toContain('本月导入:2次')
+    expect(text).toContain('本月导出:2次')
+    expect(text).toContain('备份数量:3')
     expect(text).toContain('数据导入')
     expect(text).toContain('数据导出')
     expect(text).toContain('数据备份')
     expect(text).toContain('数据质量')
   })
 
-  it('camelCase 数据 / village 数据缺失 items → 兜底', async () => {
-    mockGet.mockResolvedValue({
-      data: { villageCount: 10, monthlyImports: 1, monthlyExports: 2, backupCount: 0 },
+  it('camelCase villageCount / 子端点空 body / village 数据缺失 items → 兜底', async () => {
+    setupEndpoints({
+      '/dashboard/stats': { villageCount: 10 },
+      '/import/history': {},
+      '/audit/exports': {},
+      '/system/backup': {},
     })
     mockApiRequest.mockResolvedValue({ data: {} })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.stats.villageCount).toBe(10)
-    expect(vm.stats.monthlyImports).toBe(1)
-    expect(vm.stats.monthlyExports).toBe(2)
+    expect(vm.stats.monthlyImports).toBe(0)
+    expect(vm.stats.monthlyExports).toBe(0)
     expect(vm.stats.backupCount).toBe(0)
     expect(vm.qualityStats.totalRecords).toBe(0)
     expect(vm.qualityStats.completenessRate).toBe(0)
@@ -162,12 +202,12 @@ describe('事件处理', () => {
     vm.handleImportComplete()
     await flushPromises()
     expect(ElMessage.success).toHaveBeenCalledWith('数据导入完成')
-    expect(mockGet.mock.calls.length).toBe(base + 1)
+    expect(mockGet.mock.calls.length).toBe(base + 4)
 
     vm.handleExportComplete()
     await flushPromises()
     expect(ElMessage.success).toHaveBeenCalledWith('数据导出完成')
-    expect(mockGet.mock.calls.length).toBe(base + 2)
+    expect(mockGet.mock.calls.length).toBe(base + 8)
   })
 })
 

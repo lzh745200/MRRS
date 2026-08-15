@@ -695,7 +695,17 @@ async function handleCreate() {
       description: newTemplate.description || undefined,
     }
     if (newTemplate.selectedFields.length > 0) {
-      payload.fields = JSON.stringify(newTemplate.selectedFields)
+      // 后端 fields 期望字段映射对象数组 [{excel_col, excel_header, db_field, required}]，
+      // 仅发送 key 数组会导致下载/填报解析时 field.get 崩溃（500）
+      const labelMap = new Map(availableFields.value.map((f) => [f.key, f.label]))
+      payload.fields = JSON.stringify(
+        newTemplate.selectedFields.map((key: string, i: number) => ({
+          excel_col: String.fromCharCode(65 + i),
+          excel_header: labelMap.get(key) || key,
+          db_field: key,
+          required: i === 0,
+        }))
+      )
     }
     await post('/report-templates', payload)
     ElMessage.success('模板创建成功')

@@ -137,17 +137,34 @@ function formatTime(t: string) {
 async function loadLogs() {
   loading.value = true
   try {
+    // 操作日志数据源为审计日志 /audit/logs（字段 action/resourceType/username/createdAt）
     const params: Record<string, unknown> = { page: page.value, page_size: pageSize.value }
-    if (filters.value.keyword) params.keyword = filters.value.keyword
-    if (filters.value.module) params.module = filters.value.module
+    if (filters.value.module) params.resource_type = filters.value.module
     if (filters.value.dateRange) {
       params.start_date = filters.value.dateRange[0]
       params.end_date = filters.value.dateRange[1]
     }
-    const res = await get('/work-logs', params)
-    const data = res.data || res
-    logs.value = data.items || []
-    total.value = data.total || 0
+    const res: any = await get('/audit/logs', params)
+    const data = res?.data ?? res
+    const items = data?.items ?? (Array.isArray(data) ? data : [])
+    const kw = filters.value.keyword.trim().toLowerCase()
+    logs.value = (Array.isArray(items) ? items : [])
+      .filter(
+        (log: any) =>
+          !kw ||
+          String(log.action || '')
+            .toLowerCase()
+            .includes(kw)
+      )
+      .map((log: any) => ({
+        id: log.id,
+        module: log.resourceType || log.resource_type || '',
+        action: log.action || '',
+        content: log.requestPath || log.request_path || log.errorMessage || '',
+        username: log.username || '',
+        createdAt: log.createdAt || log.created_at || '',
+      }))
+    total.value = Number(data?.total ?? logs.value.length) || logs.value.length
   } catch (e: unknown) {
     ElMessage.error(e instanceof Error ? e.message : '加载日志失败')
   } finally {

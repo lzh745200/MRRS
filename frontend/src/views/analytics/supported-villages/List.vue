@@ -266,7 +266,7 @@ import { logger } from '@/utils/logger'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Plus, Download, Upload, Delete } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -402,8 +402,7 @@ async function loadData() {
       include_deleted: showDeletedOnly.value ? true : undefined,
     } as any)
     // 防御：兼容信封（data.items）与裸分页（items）两种形态
-    tableData.value =
-      (response as any)?.data?.items ?? (response as any)?.items ?? []
+    tableData.value = (response as any)?.data?.items ?? (response as any)?.items ?? []
     pagination.total =
       (response as any)?.data?.total ?? (response as any)?.total ?? tableData.value.length
   } catch (error) {
@@ -533,10 +532,27 @@ function handleSelectionChange(rows: SupportedVillage[]) {
 // 批量删除
 async function handleBatchDelete() {
   if (selectedRows.value.length === 0) return
+  // 二次密码确认（单机共用电脑防误删，与后端二次校验对齐）
+  let confirmPassword = ''
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `批量删除 ${selectedRows.value.length} 条记录需二次确认，请输入登录密码：`,
+      '二次确认',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        inputType: 'password',
+        inputValidator: (v: string) => (v ? true : '密码不能为空'),
+      }
+    )
+    confirmPassword = value || ''
+  } catch {
+    return // 用户取消
+  }
   batchDeleting.value = true
   try {
     const ids = selectedRows.value.map((row) => row.id)
-    const result = (await batchDeleteSupportedVillages(ids)) as any
+    const result = (await batchDeleteSupportedVillages(ids, confirmPassword)) as any
     // 乐观更新：立即从表格数据中移除已删除行
     const idSet = new Set(ids)
     tableData.value = tableData.value.filter((item) => !idSet.has(item.id))

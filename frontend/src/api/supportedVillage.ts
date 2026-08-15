@@ -10,8 +10,8 @@ export const createSupportedVillage = (data: any) => post('/supported-villages',
 export const updateSupportedVillage = (id: number, data: any) =>
   put('/supported-villages/' + id, data)
 export const deleteSupportedVillage = (id: number) => del('/supported-villages/' + id)
-export const batchDeleteSupportedVillages = (ids: number[]) =>
-  post('/supported-villages/batch-delete', { ids })
+export const batchDeleteSupportedVillages = (ids: number[], confirmPassword?: string) =>
+  post('/supported-villages/batch-delete', { ids, confirm_password: confirmPassword || '' })
 
 // ── Import / export ──
 export const importSupportedVillages = (file: File) => {

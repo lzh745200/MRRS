@@ -44,6 +44,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/approval", tags=["审批管理"])
 
 
+def _notify_submitter(db: Session, task, title: str, content: str) -> None:
+    """审批结果通知申请人（提交人≠审批人时同样通知；消息落库失败不阻断审批）"""
+    try:
+        submitter_id = getattr(task, "submitter_id", None)
+        if not submitter_id:
+            return
+        msg = Message(
+            user_id=submitter_id,
+            message_type="approval",
+            title=title,
+            content=content,
+            is_read=False,
+        )
+        db.add(msg)
+        safe_commit(db)
+    except Exception:  # pragma: no cover - 通知失败不阻断业务
+        db.rollback()
+        logger.warning("审批结果通知写入失败（非致命）", exc_info=True)
+
+
 @router.get("")
 async def approval_overview(
     current_user: User = Depends(get_current_user),
@@ -392,6 +412,9 @@ def approve_task(
     if not task:
         raise HTTPException(status_code=403, detail="无权限审批此任务或任务不存在")
 
+    _notify_submitter(db, task, "审批通过", f"您提交的「{task.title or task.entity_type}」已审批通过。"
+                      + (f"审批意见：{data.opinion}" if data.opinion else ""))
+
     return {
         "code": 200,
         "success": True,
@@ -426,6 +449,8 @@ def reject_task(
 
     if not task:
         raise HTTPException(status_code=403, detail="无权限拒绝此任务或任务不存在")
+
+    _notify_submitter(db, task, "审批驳回", f"您提交的「{task.title or task.entity_type}」已被驳回。驳回原因：{data.opinion}")
 
     return {
         "code": 200,

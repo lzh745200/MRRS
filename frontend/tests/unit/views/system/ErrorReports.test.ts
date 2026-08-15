@@ -1,6 +1,12 @@
 /**
  * views/system/ErrorReports.vue 覆盖率攻坚
  * 覆盖：统计/列表加载、筛选/分页、详情弹窗、状态更新、工具函数
+ *
+ * 契约要点（与 ErrorReports.vue 当前实现一致）：
+ * - 状态值：open / in_progress / resolved / ignored
+ * - 列表/详情字段为 camelCase：createdAt / errorType / stackTrace / resolvedAt / resolutionNote
+ * - showDetail 读取 res.data.resolutionNote || res.data.resolution_note
+ * - updateForm 默认 status 为 'resolved'
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
@@ -42,8 +48,8 @@ const listData = {
   success: true,
   data: {
     items: [
-      { id: 1, source: 'frontend', error_type: 'TypeError', message: 'msg1', severity: 'critical', status: 'new', reported_at: '2024-01-01T10:00:00Z' },
-      { id: 2, source: 'backend', error_type: 'ValueError', message: 'msg2', severity: 'warning', status: 'resolved', reported_at: '2024-01-02T10:00:00Z' },
+      { id: 1, source: 'frontend', errorType: 'TypeError', message: 'msg1', severity: 'critical', status: 'open', createdAt: '2024-01-01T10:00:00Z' },
+      { id: 2, source: 'backend', errorType: 'ValueError', message: 'msg2', severity: 'warning', status: 'in_progress', createdAt: '2024-01-02T10:00:00Z' },
     ],
     total: 2,
   },
@@ -54,16 +60,16 @@ const detailData = {
   data: {
     id: 1,
     source: 'frontend',
-    error_type: 'TypeError',
+    errorType: 'TypeError',
     message: 'msg1',
     severity: 'critical',
-    status: 'new',
+    status: 'open',
     reporter: 'admin',
-    reported_at: '2024-01-01T10:00:00Z',
-    resolved_at: '2024-01-03T10:00:00Z',
-    stack_trace: 'at fn (file.js:1:1)',
+    createdAt: '2024-01-01T10:00:00Z',
+    resolvedAt: '2024-01-03T10:00:00Z',
+    stackTrace: 'at fn (file.js:1:1)',
     context: { user: 'admin' },
-    resolution_note: '已修复',
+    resolutionNote: '已修复',
   },
 }
 
@@ -107,8 +113,8 @@ async function mountComp() {
           template: '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /></div>',
           data() {
             return {
-              rowA: { id: 1, reported_at: '2024-01-01T10:00:00Z', source: 'frontend', error_type: 'TypeError', message: 'msg1', severity: 'critical', status: 'new' },
-              rowB: { id: 2, reported_at: 'not-a-date', source: 'backend', error_type: 'ValueError', message: 'msg2', severity: 'unknown-sev', status: 'unknown-status' },
+              rowA: { id: 1, createdAt: '2024-01-01T10:00:00Z', source: 'frontend', errorType: 'TypeError', message: 'msg1', severity: 'critical', status: 'open' },
+              rowB: { id: 2, createdAt: 'not-a-date', source: 'backend', errorType: 'ValueError', message: 'msg2', severity: 'unknown-sev', status: 'unknown-status' },
             }
           },
         },
@@ -154,6 +160,12 @@ describe('ErrorReports.vue', () => {
     expect(vm.tableData.length).toBe(2)
     expect(vm.tableTotal).toBe(2)
     expect(vm.stats.open).toBe(4)
+    // 列表数据为 camelCase 字段
+    expect(vm.tableData[0].errorType).toBe('TypeError')
+    expect(vm.tableData[0].createdAt).toBe('2024-01-01T10:00:00Z')
+    // 更新表单默认值：status = resolved
+    expect(vm.updateForm.status).toBe('resolved')
+    expect(vm.updateForm.resolution_note).toBe('')
   })
 
   it('加载统计失败 → 错误提示', async () => {
@@ -161,6 +173,20 @@ describe('ErrorReports.vue', () => {
     const w = await mountComp()
     expect(ElMessage.error).toHaveBeenCalledWith('加载错误统计失败')
     expect((w.vm as any).statsLoading).toBe(false)
+  })
+
+  it('loadStats：success=false → 不更新统计', async () => {
+    errorReportApi.getStats.mockResolvedValue({ success: false, data: null })
+    const w = await mountComp()
+    const vm = w.vm as any
+    expect(vm.stats.total).toBe(0)
+    expect(vm.stats.open).toBe(0)
+  })
+
+  it('loadStats：success=true 但 data 为空 → 不更新统计', async () => {
+    errorReportApi.getStats.mockResolvedValue({ success: true, data: null })
+    const w = await mountComp()
+    expect((w.vm as any).stats.total).toBe(0)
   })
 
   it('加载列表失败 → 清空并提示', async () => {
@@ -171,15 +197,22 @@ describe('ErrorReports.vue', () => {
     expect((w.vm as any).tableTotal).toBe(0)
   })
 
+  it('loadTableData：success=false → 列表保持为空', async () => {
+    errorReportApi.listReports.mockResolvedValue({ success: false, data: null })
+    const w = await mountComp()
+    expect((w.vm as any).tableData).toEqual([])
+    expect((w.vm as any).tableTotal).toBe(0)
+  })
+
   it('handleSearch / handleReset / handlePageSizeChange', async () => {
     const w = await mountComp()
     const vm = w.vm as any
     vm.filters.severity = 'critical'
-    vm.filters.status = 'new'
+    vm.filters.status = 'open'
     vm.filters.source = 'front'
     await vm.handleSearch()
     expect(errorReportApi.listReports).toHaveBeenLastCalledWith(
-      expect.objectContaining({ severity: 'critical', status: 'new', source: 'front' })
+      expect.objectContaining({ severity: 'critical', status: 'open', source: 'front' })
     )
     await vm.handleReset()
     expect(vm.filters.severity).toBeUndefined()
@@ -195,7 +228,12 @@ describe('ErrorReports.vue', () => {
     await vm.showDetail(1)
     expect(errorReportApi.getReport).toHaveBeenCalledWith(1)
     expect(vm.detail?.id).toBe(1)
-    expect(vm.updateForm.status).toBe('new')
+    // 详情字段为 camelCase
+    expect(vm.detail?.errorType).toBe('TypeError')
+    expect(vm.detail?.stackTrace).toBe('at fn (file.js:1:1)')
+    expect(vm.detail?.resolvedAt).toBe('2024-01-03T10:00:00Z')
+    expect(vm.detail?.resolutionNote).toBe('已修复')
+    expect(vm.updateForm.status).toBe('open')
     expect(vm.updateForm.resolution_note).toBe('已修复')
     expect(vm.detailLoading).toBe(false)
   })
@@ -209,10 +247,31 @@ describe('ErrorReports.vue', () => {
     expect(vm.detailVisible).toBe(false)
   })
 
-  it('showDetail：无 reporter/resolved_at → 兜底渲染', async () => {
+  it('showDetail：success=false → 不填充详情', async () => {
+    errorReportApi.getReport.mockResolvedValue({ success: false, data: null })
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.showDetail(9)
+    expect(vm.detail).toBeNull()
+    expect(vm.detailLoading).toBe(false)
+  })
+
+  it('showDetail：resolutionNote 缺失 → 回退 resolution_note', async () => {
     errorReportApi.getReport.mockResolvedValue({
       success: true,
-      data: { id: 3, source: 'x', error_type: 'y', message: 'm', severity: 'info', status: 'new', reported_at: '2024-01-01T10:00:00Z' },
+      data: { id: 4, source: 's', errorType: 'E', message: 'm', severity: 'info', status: 'ignored', createdAt: '2024-01-01T10:00:00Z', resolution_note: 'snake 备注' },
+    })
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.showDetail(4)
+    expect(vm.updateForm.resolution_note).toBe('snake 备注')
+    expect(vm.updateForm.status).toBe('ignored')
+  })
+
+  it('showDetail：无 reporter/resolvedAt → 兜底渲染', async () => {
+    errorReportApi.getReport.mockResolvedValue({
+      success: true,
+      data: { id: 3, source: 'x', errorType: 'y', message: 'm', severity: 'info', status: 'open', createdAt: '2024-01-01T10:00:00Z' },
     })
     const w = await mountComp()
     const vm = w.vm as any
@@ -224,7 +283,7 @@ describe('ErrorReports.vue', () => {
     errorReportApi.updateReport.mockResolvedValue({ success: true })
     await vm.handleUpdateStatus()
     expect(errorReportApi.updateReport).toHaveBeenCalledWith(3, {
-      status: 'new',
+      status: 'open',
       resolution_note: undefined,
     })
   })
@@ -261,7 +320,7 @@ describe('ErrorReports.vue', () => {
     await vm.showDetail(1)
     await vm.handleUpdateStatus()
     expect(errorReportApi.updateReport).toHaveBeenCalledWith(1, {
-      status: 'new',
+      status: 'open',
       resolution_note: '已修复',
     })
     expect(ElMessage.success).toHaveBeenCalledWith('状态更新成功')
@@ -329,15 +388,16 @@ describe('ErrorReports.vue', () => {
     expect(vm.severityTagType('warning')).toBe('warning')
     expect(vm.severityTagType('info')).toBe('info')
     expect(vm.severityTagType('other')).toBe('info')
-    expect(vm.statusLabel('new')).toBe('新建')
-    expect(vm.statusLabel('investigating')).toBe('调查中')
+    // 状态：open / in_progress / resolved / ignored
+    expect(vm.statusLabel('open')).toBe('待处理')
+    expect(vm.statusLabel('in_progress')).toBe('处理中')
     expect(vm.statusLabel('resolved')).toBe('已解决')
-    expect(vm.statusLabel('closed')).toBe('已关闭')
+    expect(vm.statusLabel('ignored')).toBe('已忽略')
     expect(vm.statusLabel('x')).toBe('x')
-    expect(vm.statusTagType('new')).toBe('info')
-    expect(vm.statusTagType('investigating')).toBe('warning')
+    expect(vm.statusTagType('open')).toBe('warning')
+    expect(vm.statusTagType('in_progress')).toBe('primary')
     expect(vm.statusTagType('resolved')).toBe('success')
-    expect(vm.statusTagType('closed')).toBe('info')
+    expect(vm.statusTagType('ignored')).toBe('info')
     expect(vm.statusTagType('y')).toBe('info')
     expect(vm.formatTime(undefined)).toBe('')
     expect(vm.formatTime('2024-01-01T10:00:00Z')).toContain('2024-01-01')
@@ -350,8 +410,8 @@ describe('ErrorReports.vue', () => {
     const selects = w.findAll('.el-select-stub')
     await selects[0].setValue('critical')
     expect(vm.filters.severity).toBe('critical')
-    await selects[1].setValue('investigating')
-    expect(vm.filters.status).toBe('investigating')
+    await selects[1].setValue('in_progress')
+    expect(vm.filters.status).toBe('in_progress')
     const inputs = w.findAll('input')
     await inputs[0].setValue('backend')
     expect(vm.filters.source).toBe('backend')
@@ -360,7 +420,7 @@ describe('ErrorReports.vue', () => {
       .find((b) => b.text().includes('查询'))
     await searchBtn!.trigger('click')
     expect(errorReportApi.listReports).toHaveBeenLastCalledWith(
-      expect.objectContaining({ severity: 'critical', status: 'investigating', source: 'backend' })
+      expect.objectContaining({ severity: 'critical', status: 'in_progress', source: 'backend' })
     )
   })
 

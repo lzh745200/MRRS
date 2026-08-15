@@ -139,7 +139,7 @@ class TestRankings:
         q.filter.return_value = q
         q.order_by.return_value = q
         q.limit.return_value = q
-        q.all.return_value = [(ev, "幸福村")]
+        q.all.return_value = [(ev, "幸福村", "县帮扶集团")]
         db.query.return_value = q
 
         resp = c.get(f"{BASE}/rankings?year=2026&limit=20")
@@ -148,3 +148,5 @@ class TestRankings:
         assert data["year"] == 2026
         assert data["rankings"][0]["village_name"] == "幸福村"
         assert data["rankings"][0]["grade"] == "A"
+        # 契约：rankings 必须带帮扶单位（前端"帮扶单位"列依赖）
+        assert data["rankings"][0]["support_unit"] == "县帮扶集团"

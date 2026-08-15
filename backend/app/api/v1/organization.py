@@ -555,6 +555,16 @@ async def create_organization(
 
     org = Organization(**org_data)
     db.add(org)
+    db.flush()  # 先获取自增 id，供自动生成编码使用
+    if not org.code:
+        # 前端表单提示"留空自动生成"：按自增 id 生成唯一编码（id 唯一故编码唯一）
+        if org.id is not None:
+            org.code = f"ORG{org.id:06d}"
+        else:
+            # db.flush 未回填自增 id 的兜底（测试替身等场景）：随机后缀保证编码非空唯一
+            import secrets
+
+            org.code = f"ORG{secrets.token_hex(3).upper()}"
     safe_commit(db)
     db.refresh(org)
     try:

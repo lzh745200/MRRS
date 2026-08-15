@@ -39,15 +39,19 @@
         <el-table-column prop="village_name" label="村庄名称" min-width="120" />
         <el-table-column prop="province" label="省份" width="100" />
         <el-table-column prop="county" label="县市" width="120" />
-        <el-table-column prop="town" label="乡镇" width="120" />
+        <el-table-column prop="township" label="乡镇" width="120" />
+        <el-table-column
+          prop="support_unit"
+          label="帮扶单位"
+          min-width="160"
+          show-overflow-tooltip
+        />
         <el-table-column prop="is_revitalization_tier" label="振兴梯队" width="100">
           <template #default="{ row }">
             <el-tag v-if="row.is_revitalization_tier" type="success">是</el-tag>
             <el-tag v-else type="info">否</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="population" label="人口" width="80" />
-        <el-table-column prop="annual_income" label="年人均收入(元)" width="130" />
       </el-table>
     </el-card>
   </div>
@@ -63,10 +67,9 @@ interface Village {
   village_name: string
   province: string
   county: string
-  town: string
+  township: string
+  support_unit: string
   is_revitalization_tier: boolean
-  population: number
-  annual_income: number
 }
 
 const loading = ref(false)
@@ -80,20 +83,16 @@ const statCards = computed(() => [
     suffix: '个',
   },
   {
-    key: 'pop',
-    label: '覆盖人口',
-    value: tableData.value.reduce((s, v) => s + (v.population || 0), 0),
-    suffix: '人',
+    key: 'townships',
+    label: '覆盖乡镇',
+    value: new Set(tableData.value.map((v) => v.township).filter(Boolean)).size,
+    suffix: '个',
   },
   {
-    key: 'income',
-    label: '人均收入均值',
-    value: tableData.value.length
-      ? Math.round(
-          tableData.value.reduce((s, v) => s + (v.annual_income || 0), 0) / tableData.value.length
-        )
-      : 0,
-    suffix: '元',
+    key: 'counties',
+    label: '覆盖县市',
+    value: new Set(tableData.value.map((v) => v.county).filter(Boolean)).size,
+    suffix: '个',
   },
   {
     key: 'provinces',
@@ -155,7 +154,7 @@ onMounted(async () => {
   try {
     const res = await get<{ code: number; data: Village[]; total?: number }>(
       '/supported-villages',
-      { limit: 200 }
+      { page: 1, page_size: 200 }
     )
     // 后端 ok_list 信封 → 拦截器把 items 提升到顶层，res.data 是 {items,total} 对象
     const payload: any = res

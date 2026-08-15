@@ -189,7 +189,7 @@ import { User, Lock, Key, View, Hide, UploadFilled } from '@element-plus/icons-v
 import { AuthStorage } from '@/utils/authStorage'
 import { logger } from '@/utils/logger'
 import type { UploadFile, UploadUserFile } from 'element-plus'
-import { apiRequest } from '@/api/request'
+import { post } from '@/api/request'
 
 const router = useRouter()
 const { pushSafe } = useRouterSafe()
@@ -238,22 +238,18 @@ async function handlePermissionImport() {
   try {
     const formData = new FormData()
     formData.append('file', permissionFile.value)
-    const res = await apiRequest({
-      method: 'POST',
-      url: '/permission-packages/import',
-      data: formData,
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    // 使用 post() 封装（内部会为 FormData 正确处理 multipart boundary；
+    // 直接 apiRequest + 手动 Content-Type 会导致 boundary 缺失）
+    const res: any = await post('/permission-packages/import', formData)
     const body: any = res || {}
     const success = body.success === true || body.code === 200
     const message = body.message || body.detail || '权限包导入完成'
     if (success && body.file_name) {
       // 预览验证通过 → 确认导入
-      const confirmRes = await apiRequest({
-        method: 'POST',
-        url: `/permission-packages/confirm/${encodeURIComponent(body.file_name)}`,
-        data: { overwrite_existing: true },
-      })
+      const confirmRes: any = await post(
+        `/permission-packages/confirm/${encodeURIComponent(body.file_name)}`,
+        { overwrite_existing: true }
+      )
       const confirmBody: any = confirmRes || {}
       if (confirmBody.success === true || confirmBody.code === 200) {
         ElMessage.success('权限包已导入,请重新登录查看权限')
