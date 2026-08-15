@@ -99,6 +99,30 @@ describe('KpiCards 补充覆盖', () => {
     wrapper.unmount()
   })
 
+  it('loadStats 连续失败 → 最多重试 3 次后放弃（retryCount 上限分支）', async () => {
+    vi.useFakeTimers()
+    mockGet.mockRejectedValue(new Error('persistent down'))
+    const wrapper = mountKpi()
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(2000)
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledTimes(2)
+    vi.advanceTimersByTime(2000)
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledTimes(3)
+    vi.advanceTimersByTime(2000)
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledTimes(4)
+    // 第 4 次失败后 retryCount=3，不再调度新定时器
+    vi.advanceTimersByTime(20000)
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledTimes(4)
+    expect(wrapper.find('.kpi-error').exists()).toBe(true)
+    vi.useRealTimers()
+    wrapper.unmount()
+  })
+
   it('fmt/fmtFunds/fmtPop：undefined → --；人口 ≥1万 → 万 单位', () => {
     const wrapper = mountKpi()
     const vm = wrapper.vm as any

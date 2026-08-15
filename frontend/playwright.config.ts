@@ -19,7 +19,9 @@ export default defineConfig({
   /* 并行与重试 */
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // 本地与 CI 一致地串行执行：E2E 共享同一 SQLite 测试库，
+  // 多 worker 并行会互相修改数据导致断言随机漂移（failures 每次运行都不同）
+  workers: 1,
 
   /* 报告器 */
   reporter: process.env.CI ? 'github' : 'html',

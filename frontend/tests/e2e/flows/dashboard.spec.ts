@@ -28,7 +28,8 @@ test.describe('工作台 Dashboard', () => {
     await navigateTo(page, '/dashboard')
     // 统计卡片区域
     const statsGrid = page.locator('.stats-grid, .stat-card').first()
-    await expect(statsGrid).toBeVisible({ timeout: 10000 })
+    // KPI 卡片在路由跳转取消请求后最多 3 次×2s 重试，放宽至 20s
+    await expect(statsGrid).toBeVisible({ timeout: 20000 })
     // 至少有3个统计卡片
     const cardCount = await page.locator('.stat-card').count()
     expect(cardCount).toBeGreaterThanOrEqual(3)
@@ -71,7 +72,7 @@ test.describe('工作台 Dashboard', () => {
       .locator('.stat-card')
       .filter({ hasText: '帮扶经费' })
       .locator('.stat-value')
-    await expect(fundKpiValue).toBeVisible({ timeout: 10000 })
+    await expect(fundKpiValue).toBeVisible({ timeout: 20000 })
   })
 
   test('近期动态展示', async ({ page }) => {

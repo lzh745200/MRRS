@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import {
   OfficeBuilding,
   Folder,
@@ -102,7 +102,8 @@ const stats = ref<DashboardStats>({
 })
 const loading = ref(true)
 const error = ref(false)
-const retried = ref(false)
+const retryCount = ref(0)
+let retryTimer: ReturnType<typeof setTimeout> | null = null
 
 function fmt(v: number | undefined): string {
   return v != null ? v.toLocaleString() : '--'
@@ -199,14 +200,17 @@ async function loadStats() {
         total_population: d.total_population ?? 0,
         total_funds: d.total_funds ?? 0,
       }
+      error.value = false
+      retryCount.value = 0
     }
   } catch (e) {
     logger.error('KPI 统计数据加载失败', e)
     error.value = true
-    // 后端可能仍在冷启动: 2 秒后自动重试一次,避免首次打开即报错
-    if (!retried.value) {
-      retried.value = true
-      setTimeout(() => {
+    // 失败（含路由导航取消请求的 CanceledError/后端冷启动）自动重试：
+    // 最多 3 次、2s 间隔，成功即复位计数；卸载时清理定时器避免泄漏
+    if (retryCount.value < 3) {
+      retryCount.value += 1
+      retryTimer = setTimeout(() => {
         if (error.value) loadStats()
       }, 2000)
     }
@@ -217,6 +221,13 @@ async function loadStats() {
 
 onMounted(async () => {
   await loadStats()
+})
+
+onBeforeUnmount(() => {
+  if (retryTimer !== null) {
+    clearTimeout(retryTimer)
+    retryTimer = null
+  }
 })
 </script>
 
