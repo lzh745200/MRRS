@@ -415,3 +415,17 @@ describe('api/approval — 剩余形态分支补全', () => {
     expect(await getTasksHistory()).toEqual({ items: [{ id: 12 }], total: 5 })
   })
 })
+
+
+describe('api/approval — 裸数组形态补全', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('getMyTasks / getTasksHistory：直接返回数组', async () => {
+    ;(mockGet as any).mockResolvedValueOnce([{ id: 21 }])
+    expect(await getMyTasks()).toEqual({ items: [{ id: 21 }], total: 1 })
+    ;(mockGet as any).mockResolvedValueOnce([{ id: 22 }])
+    expect(await getTasksHistory()).toEqual({ items: [{ id: 22 }], total: 1 })
+  })
+})

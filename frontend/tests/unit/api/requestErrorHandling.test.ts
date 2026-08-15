@@ -742,3 +742,15 @@ describe('responseR — 消息提取残余分支（覆盖率补全 II）', () =>
     expect(error.userMessage).toBe('操作失败')
   })
 })
+
+
+describe('responseR — 422 数组元素 msg/message 全缺省', () => {
+  it('detail 首元素无 msg/message → 仅 loc 前缀', async () => {
+    const error = {
+      response: { status: 422, data: { detail: [{ loc: ['body', 'amount'] }] } },
+      config: makeConfig(),
+    }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('body.amount:')
+  })
+})
