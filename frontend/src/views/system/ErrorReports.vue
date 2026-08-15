@@ -522,15 +522,15 @@ onMounted(() => {
 }
 
 .stat-card--warning {
-  border-top: 3px solid #e6a23c;
+  border-top: 3px solid var(--color-warning);
 }
 
 .stat-card--danger {
-  border-top: 3px solid #f56c6c;
+  border-top: 3px solid var(--color-danger);
 }
 
 .stat-card--success {
-  border-top: 3px solid #67c23a;
+  border-top: 3px solid var(--color-success);
 }
 
 .stat-label {
@@ -546,15 +546,15 @@ onMounted(() => {
 }
 
 .stat-card--warning .stat-value {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .stat-card--danger .stat-value {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .stat-card--success .stat-value {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 /* 分类统计 */

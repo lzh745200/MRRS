@@ -446,7 +446,7 @@ async function loadFundStats() {
   try {
     const res: any = await get('/funds/statistics/overview')
     // data 显式为 null 表示"无统计"→ 不覆盖已有值（避免 serverFundStats 变成 {data:null}）
-    const d = res?.data === null ? null : res?.data ?? res
+    const d = res?.data === null ? null : (res?.data ?? res)
     if (d) serverFundStats.value = d
   } catch {
     /* 统计加载失败不阻塞主流程 */
@@ -747,7 +747,7 @@ onMounted(() => {
   color: #2d6a4f;
 }
 .text-warning {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 .filter-card {
   background: white;

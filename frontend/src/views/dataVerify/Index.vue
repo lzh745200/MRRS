@@ -148,7 +148,11 @@
           <template #default="{ row }">
             <el-progress
               :percentage="row.completeness"
-              :color="row.completeness >= 80 ? '#40916c' : '#f56c6c'"
+              :color="
+                row.completeness >= 80
+                  ? cssVarValue('--color-primary-light-1', '#40916c')
+                  : chartColor('danger')
+              "
               :stroke-width="6"
             />
           </template>
@@ -208,7 +212,7 @@
         <span style="color: #40916c"
           >通过 <b>{{ batchResult.passed }}</b> 条</span
         >，
-        <span style="color: #f56c6c"
+        <span style="color: var(--color-danger)"
           >未通过 <b>{{ batchResult.failed }}</b> 条</span
         >
       </div>
@@ -244,6 +248,7 @@ import { logger } from '@/utils/logger'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { post, apiRequest } from '@/api/request'
+import { chartColor, cssVarValue } from '@/utils/chartColors'
 
 const loading = ref(false)
 const batchChecking = ref(false)
@@ -526,10 +531,10 @@ onMounted(() => {
   color: #40916c;
 }
 .stat-value.text-danger {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 .stat-value.text-warning {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 .stat-label {
   font-size: 14px;

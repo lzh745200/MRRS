@@ -204,9 +204,8 @@ const taskDiff = ref<TaskDiff | null>(null)
 function navigableEntity(task: any): boolean {
   // 批量操作任务（entity_id=0）无实体详情页
   return (
-    ['rural_work', 'fund', 'project', 'school', 'supported_village'].includes(
-      task?.entity_type
-    ) && Number(task?.entity_id) > 0
+    ['rural_work', 'fund', 'project', 'school', 'supported_village'].includes(task?.entity_type) &&
+    Number(task?.entity_id) > 0
   )
 }
 
@@ -359,7 +358,7 @@ onMounted(() => {
     }
 
     .diff-new {
-      color: #67c23a;
+      color: var(--color-success);
     }
   }
 }

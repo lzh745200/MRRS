@@ -215,6 +215,7 @@ import { ArrowLeft, Plus } from '@element-plus/icons-vue'
 import { fundApi } from '@/api/funds'
 import BaseChart from '@/components/common/BaseChart.vue'
 import echarts from '@/utils/echarts'
+import { chartColor } from '@/utils/chartColors'
 import { GaugeChart } from 'echarts/charts'
 import type { EChartsOption } from 'echarts'
 
@@ -395,8 +396,8 @@ const usageRateClass = computed(() => {
 })
 
 function getProgressColor(rate: number) {
-  if (rate >= 90) return '#f56c6c'
-  if (rate >= 70) return '#e6a23c'
+  if (rate >= 90) return chartColor('danger')
+  if (rate >= 70) return chartColor('warning')
   return '#40916c'
 }
 
@@ -554,10 +555,10 @@ onMounted(() => loadBudgets())
   color: var(--color-primary);
 }
 .text-warning {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 .text-danger {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 .text-success-text {
   color: #40916c;

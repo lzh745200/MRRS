@@ -422,10 +422,10 @@ onMounted(() => {
   color: #1b4332;
 }
 .stat-card.warning .stat-value {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 .stat-card.danger .stat-value {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 .stat-label {
   font-size: 13px;

@@ -219,7 +219,7 @@ onMounted(() => {
   font-size: 24px;
 
   &.military {
-    color: #f56c6c;
+    color: var(--color-danger);
   }
 
   &.local {
@@ -274,7 +274,7 @@ onMounted(() => {
   height: 48px;
   background: rgba(245, 108, 108, 0.2);
   border-radius: 8px;
-  color: #f56c6c;
+  color: var(--color-danger);
   font-size: 24px;
   margin-right: 16px;
 }

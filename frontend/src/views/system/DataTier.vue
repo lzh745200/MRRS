@@ -560,11 +560,11 @@ onMounted(() => {
 }
 
 .tier-card.tier-hot {
-  border-left-color: #f56c6c;
+  border-left-color: var(--color-danger);
 }
 
 .tier-card.tier-warm {
-  border-left-color: #e6a23c;
+  border-left-color: var(--color-warning);
 }
 
 .tier-card.tier-cold {
@@ -625,11 +625,11 @@ onMounted(() => {
 }
 
 .bar-fill.bar-hot {
-  background: #f56c6c;
+  background: var(--color-danger);
 }
 
 .bar-fill.bar-warm {
-  background: #e6a23c;
+  background: var(--color-warning);
 }
 
 .bar-fill.bar-cold {
@@ -671,7 +671,7 @@ onMounted(() => {
 
 /* Cleanup */
 .cleanup-section {
-  border-left: 4px solid #f56c6c;
+  border-left: 4px solid var(--color-danger);
 }
 
 .cleanup-controls {

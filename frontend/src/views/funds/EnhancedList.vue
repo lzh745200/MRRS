@@ -354,10 +354,10 @@
               :stroke-width="4"
               :color="
                 scope.row.health_score >= 80
-                  ? '#67c23a'
+                  ? chartColor('success')
                   : scope.row.health_score >= 60
-                    ? '#e6a23c'
-                    : '#f56c6c'
+                    ? chartColor('warning')
+                    : chartColor('danger')
               "
             />
             <span v-else class="text-muted">--</span>
@@ -474,6 +474,7 @@ import { getSupportedVillages } from '@/api/supportedVillage'
 import { schoolsApi } from '@/api/schools'
 import { downloadImportTemplateAndSave } from '@/api/import'
 import { getFundTypeLabel, getFundStatusLabel } from '@/config/enums'
+import { chartColor } from '@/utils/chartColors'
 
 const phaseLabels: Record<number, string> = {
   1: '论证立项',

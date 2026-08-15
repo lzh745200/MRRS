@@ -18,7 +18,7 @@
     <!-- 统计卡片 -->
     <div v-if="!statsError" class="stats-row">
       <div class="stat-item" :class="statLoading ? 'stat-loading' : ''">
-        <div class="stat-value" style="color: #67c23a">
+        <div class="stat-value" style="color: var(--color-success)">
           {{ statLoading ? '-' : stats.positive }}
         </div>
         <div class="stat-label">正面舆情</div>
@@ -30,13 +30,13 @@
         <div class="stat-label">中性舆情</div>
       </div>
       <div class="stat-item">
-        <div class="stat-value" style="color: #f56c6c">
+        <div class="stat-value" style="color: var(--color-danger)">
           {{ statLoading ? '-' : stats.negative }}
         </div>
         <div class="stat-label">负面舆情</div>
       </div>
       <div class="stat-item">
-        <div class="stat-value" style="color: #e6a23c">
+        <div class="stat-value" style="color: var(--color-warning)">
           {{ statLoading ? '-' : stats.alerts }}
         </div>
         <div class="stat-label">预警信息</div>

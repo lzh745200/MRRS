@@ -262,9 +262,9 @@ describe('挂载与初始加载', () => {
     // 服务端统计优先（?? 左侧全覆盖）
     expect(vm.statsCards).toEqual([
       { label: '工作总数', value: 10, color: 'var(--color-primary)' },
-      { label: '进行中', value: 3, color: '#e6a23c' },
-      { label: '已完成', value: 5, color: '#67c23a' },
-      { label: '已延期', value: 2, color: '#f56c6c' },
+      { label: '进行中', value: 3, color: 'var(--color-warning)' },
+      { label: '已完成', value: 5, color: 'var(--color-success)' },
+      { label: '已延期', value: 2, color: 'var(--color-danger)' },
     ])
     expect(wrapper.text()).toContain('工作总数')
 

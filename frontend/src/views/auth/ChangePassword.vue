@@ -424,7 +424,7 @@ watch(
   display: inline-block;
   margin-left: 12px;
   font-size: 13px;
-  color: #e6a23c;
+  color: var(--color-warning);
   line-height: 40px;
 }
 
@@ -482,11 +482,11 @@ watch(
 }
 
 .hint-list li.valid {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .hint-list li.valid .hint-check {
-  color: #67c23a;
+  color: var(--color-success);
   font-weight: bold;
 }
 
@@ -531,15 +531,15 @@ watch(
 }
 
 .level-1 {
-  background-color: #f56c6c;
+  background-color: var(--color-danger);
 }
 
 .level-2 {
-  background-color: #e6a23c;
+  background-color: var(--color-warning);
 }
 
 .level-3 {
-  background-color: #67c23a;
+  background-color: var(--color-success);
 }
 
 .level-count-0 {
@@ -578,15 +578,15 @@ watch(
 }
 
 .text-1 {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .text-2 {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .text-3 {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .form-actions {
@@ -631,7 +631,7 @@ watch(
   content: '•';
   position: absolute;
   left: 0;
-  color: #f56c6c;
+  color: var(--color-danger);
   font-size: 16px;
 }
 

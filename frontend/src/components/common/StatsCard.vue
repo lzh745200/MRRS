@@ -100,11 +100,11 @@ const trendText = computed(() => {
 }
 
 .stats-card__trend--up {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .stats-card__trend--down {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .stats-card--primary .stats-card__icon {

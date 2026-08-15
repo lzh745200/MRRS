@@ -368,7 +368,7 @@ const goToLogin = () => {
 }
 .result-icon-success {
   font-size: 56px;
-  color: #67c23a;
+  color: var(--color-success);
   margin-bottom: 12px;
 }
 .result-subtitle {
@@ -391,7 +391,7 @@ const goToLogin = () => {
   font-weight: 700;
   letter-spacing: 3px;
   font-family: 'Courier New', monospace;
-  color: #e6a23c;
+  color: var(--color-warning);
   user-select: all;
 }
 .password-tip {

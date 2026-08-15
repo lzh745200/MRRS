@@ -239,6 +239,7 @@ import { useDesensitize } from '@/composables/useDesensitize'
 import { ElMessage, ElMessageBox, ElTable } from 'element-plus'
 import { Plus, Download, Search, Upload, TrendCharts } from '@element-plus/icons-vue'
 import { projectApi, type Project } from '@/api/projects'
+import { chartColor } from '@/utils/chartColors'
 
 const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
@@ -320,8 +321,8 @@ const getStatusText = (status: string) => {
 
 const getProgressColor = (progress: number) => {
   if (progress >= 80) return '#40916c'
-  if (progress >= 50) return '#e6a23c'
-  return '#f56c6c'
+  if (progress >= 50) return chartColor('warning')
+  return chartColor('danger')
 }
 
 // 加载统计数据（一次调用获取所有统计）
@@ -582,10 +583,10 @@ onMounted(() => {
   color: var(--color-primary);
 }
 .stat-value.text-success {
-  color: #67c23a;
+  color: var(--color-success);
 }
 .stat-value.text-warning {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .stat-label {

@@ -750,7 +750,7 @@ onMounted(() => {
   }
 
   .diff-new {
-    color: #67c23a;
+    color: var(--color-success);
   }
 }
 </style>

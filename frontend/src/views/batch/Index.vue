@@ -529,7 +529,7 @@ function handleReset() {
 }
 
 .error-item {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-size: 13px;
   padding: 2px 0;
 }

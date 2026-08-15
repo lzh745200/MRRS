@@ -169,13 +169,13 @@ function exportCSV() {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .stat-card.success {
-  border-left: 4px solid #67c23a;
+  border-left: 4px solid var(--color-success);
 }
 .stat-card.warning {
-  border-left: 4px solid #e6a23c;
+  border-left: 4px solid var(--color-warning);
 }
 .stat-card.danger {
-  border-left: 4px solid #f56c6c;
+  border-left: 4px solid var(--color-danger);
 }
 .stat-val {
   font-size: 28px;

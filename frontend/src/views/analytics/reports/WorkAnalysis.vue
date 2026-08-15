@@ -248,7 +248,7 @@ const statsCards = computed(() => {
       label: '进行中',
       value: inProgress,
       icon: markRaw(Refresh),
-      color: '#e6a23c',
+      color: 'var(--color-warning)',
       bgColor: 'rgba(230,162,60,0.1)',
       trend: `占比 ${total > 0 ? Math.round((inProgress / total) * 100) : 0}%`,
       trendType: 'neutral',
@@ -257,7 +257,7 @@ const statsCards = computed(() => {
       label: '已完成',
       value: completed,
       icon: markRaw(Select),
-      color: '#67c23a',
+      color: 'var(--color-success)',
       bgColor: 'rgba(103,194,58,0.1)',
       trend: `完成率 ${total > 0 ? Math.round((completed / total) * 100) : 0}%`,
       trendType: 'up',
@@ -418,7 +418,12 @@ function updateCharts() {
               statusCounts.completed,
               statusCounts.delayed,
             ],
-            backgroundColor: ['#909399', '#E6A23C', '#67C23A', '#F56C6C'],
+            backgroundColor: [
+              chartColor('info'),
+              chartColor('warning'),
+              chartColor('success'),
+              chartColor('danger'),
+            ],
             borderRadius: 6,
             maxBarThickness: 50,
           },
@@ -678,11 +683,11 @@ onBeforeUnmount(() => {
 }
 
 .stat-trend.up {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .stat-trend.down {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .stat-trend.neutral {

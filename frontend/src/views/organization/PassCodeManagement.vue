@@ -605,7 +605,7 @@ onMounted(() => {
     .result-tip {
       margin-top: 10px;
       font-size: 12px;
-      color: #e6a23c;
+      color: var(--color-warning);
     }
   }
 

@@ -466,7 +466,7 @@ onMounted(() => {
 }
 
 .todo-deadline--overdue {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-weight: 600;
 }
 

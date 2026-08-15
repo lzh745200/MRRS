@@ -251,13 +251,13 @@ onMounted(() => {
   font-size: 13px;
 }
 .stat-pending .stat-num {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 .stat-approved .stat-num {
-  color: #67c23a;
+  color: var(--color-success);
 }
 .stat-rejected .stat-num {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 .entry-row {
   display: grid;

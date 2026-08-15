@@ -345,7 +345,7 @@ const activeGroups = ref(['core'])
   &.backup {
     background: #fdf6ec;
     border-color: #f5dab1;
-    color: #e6a23c;
+    color: var(--color-warning);
     &:hover {
       background: #faf0e0;
     }
@@ -353,7 +353,7 @@ const activeGroups = ref(['core'])
   &.restore {
     background: #fef0f0;
     border-color: #fbc4c4;
-    color: #f56c6c;
+    color: var(--color-danger);
     &:hover {
       background: #fde2e2;
     }

@@ -272,7 +272,7 @@
           </template>
         </el-result>
         <div v-if="importResult.errors && importResult.errors.length > 0" style="margin-top: 20px">
-          <h4 style="margin-bottom: 8px; color: #f56c6c">失败记录</h4>
+          <h4 style="margin-bottom: 8px; color: var(--color-danger)">失败记录</h4>
           <el-table :data="importResult.errors" border size="small" max-height="200">
             <el-table-column prop="row" label="行号" width="80" align="center" />
             <el-table-column prop="name" label="项目名称" width="200" />
@@ -723,7 +723,7 @@ const handleReset = () => {
   font-weight: 500;
 }
 .required-mark {
-  color: #f56c6c;
+  color: var(--color-danger);
   margin-right: 2px;
 }
 

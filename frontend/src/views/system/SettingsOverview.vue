@@ -668,13 +668,13 @@ onMounted(() => {
   background: transparent;
 }
 .status-card.level-green::before {
-  background: #67c23a;
+  background: var(--color-success);
 }
 .status-card.level-yellow::before {
-  background: #e6a23c;
+  background: var(--color-warning);
 }
 .status-card.level-red::before {
-  background: #f56c6c;
+  background: var(--color-danger);
 }
 .status-card.level-gray::before {
   background: #c0c4cc;
@@ -696,15 +696,15 @@ onMounted(() => {
   flex: none;
 }
 .dot-green {
-  background: #67c23a;
+  background: var(--color-success);
   animation: dot-pulse-green 2.4s infinite;
 }
 .dot-yellow {
-  background: #e6a23c;
+  background: var(--color-warning);
   animation: dot-pulse-yellow 2.4s infinite;
 }
 .dot-red {
-  background: #f56c6c;
+  background: var(--color-danger);
   animation: dot-pulse-red 1.6s infinite;
 }
 .dot-gray {

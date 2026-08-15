@@ -346,9 +346,9 @@ const statsCards = computed(() => {
   if (s) {
     return [
       { label: '工作总数', value: s.total ?? 0, color: 'var(--color-primary)' },
-      { label: '进行中', value: s.in_progress ?? 0, color: '#e6a23c' },
-      { label: '已完成', value: s.completed ?? 0, color: '#67c23a' },
-      { label: '已延期', value: s.delayed ?? 0, color: '#f56c6c' },
+      { label: '进行中', value: s.in_progress ?? 0, color: 'var(--color-warning)' },
+      { label: '已完成', value: s.completed ?? 0, color: 'var(--color-success)' },
+      { label: '已延期', value: s.delayed ?? 0, color: 'var(--color-danger)' },
     ]
   }
   const data = dataSource.value
@@ -357,17 +357,17 @@ const statsCards = computed(() => {
     {
       label: '进行中',
       value: data.filter((d: any) => d.status === 'in_progress').length,
-      color: '#e6a23c',
+      color: 'var(--color-warning)',
     },
     {
       label: '已完成',
       value: data.filter((d: any) => d.status === 'completed').length,
-      color: '#67c23a',
+      color: 'var(--color-success)',
     },
     {
       label: '已延期',
       value: data.filter((d: any) => d.status === 'delayed').length,
-      color: '#f56c6c',
+      color: 'var(--color-danger)',
     },
   ]
 })

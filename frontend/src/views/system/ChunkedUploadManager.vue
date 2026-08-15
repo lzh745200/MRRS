@@ -433,7 +433,7 @@ onUnmounted(() => {
   transition: background 0.3s;
 }
 .chunk-bar.chunk-done {
-  background: #67c23a;
+  background: var(--color-success);
 }
 .chunk-bar.chunk-current {
   background: var(--color-primary);
@@ -452,7 +452,7 @@ onUnmounted(() => {
   }
 }
 .result-card {
-  border-left: 4px solid #67c23a;
+  border-left: 4px solid var(--color-success);
 }
 .actions-card {
   text-align: center;

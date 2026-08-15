@@ -73,10 +73,10 @@
         <el-table-column prop="name" label="包名" min-width="200" sortable />
         <el-table-column label="状态" width="120" align="center">
           <template #default="{ row }">
-            <el-icon v-if="row.installed" color="#67c23a" :size="20">
+            <el-icon v-if="row.installed" color="var(--color-success)" :size="20">
               <SuccessFilled />
             </el-icon>
-            <el-icon v-else color="#f56c6c" :size="20">
+            <el-icon v-else color="var(--color-danger)" :size="20">
               <CircleCloseFilled />
             </el-icon>
           </template>
@@ -100,7 +100,7 @@
     <el-card v-if="missingPackages.length > 0" class="warning-card">
       <template #header>
         <div class="card-header">
-          <span style="color: #f56c6c">缺失依赖</span>
+          <span style="color: var(--color-danger)">缺失依赖</span>
           <el-tag type="danger">{{ missingPackages.length }} 个包缺失</el-tag>
         </div>
       </template>
@@ -242,15 +242,15 @@ onMounted(() => {
   margin: 0 auto;
 }
 .health-gauge.healthy {
-  border-color: #67c23a;
+  border-color: var(--color-success);
   background: #f0f9eb;
 }
 .health-gauge.warning {
-  border-color: #e6a23c;
+  border-color: var(--color-warning);
   background: #fdf6ec;
 }
 .health-gauge.danger {
-  border-color: #f56c6c;
+  border-color: var(--color-danger);
   background: #fef0f0;
 }
 .gauge-score {
@@ -272,7 +272,7 @@ onMounted(() => {
   align-items: center;
 }
 .warning-card {
-  border-left: 4px solid #f56c6c;
+  border-left: 4px solid var(--color-danger);
 }
 .missing-list {
   display: flex;
@@ -296,7 +296,7 @@ onMounted(() => {
   display: block;
   padding: 8px;
   background: #303133;
-  color: #67c23a;
+  color: var(--color-success);
   border-radius: 4px;
   font-size: 13px;
   overflow-x: auto;

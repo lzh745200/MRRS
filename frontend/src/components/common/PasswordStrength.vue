@@ -56,16 +56,16 @@ const text = computed(() => {
 
 .strength-weak {
   background-color: #fef0f0;
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .strength-medium {
   background-color: #fdf6ec;
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .strength-strong {
   background-color: var(--color-primary-light-8);
-  color: #67c23a;
+  color: var(--color-success);
 }
 </style>

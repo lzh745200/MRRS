@@ -44,7 +44,7 @@
               <el-table-column prop="total" label="合计(万)" align="right" />
               <el-table-column prop="growth" label="增长率" width="100">
                 <template #default="{ row }">
-                  <span :style="{ color: row.growth >= 0 ? '#40916c' : '#f56c6c' }"
+                  <span :style="{ color: row.growth >= 0 ? '#40916c' : 'var(--color-danger)' }"
                     >{{ row.growth >= 0 ? '+' : '' }}{{ row.growth }}%</span
                   >
                 </template>
@@ -327,7 +327,7 @@ onBeforeUnmount(() => {
   color: #40916c;
 }
 .stat-value.text-warning {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 .stat-label {
   font-size: 14px;

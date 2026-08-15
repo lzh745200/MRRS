@@ -16,9 +16,9 @@ defineProps<{ online?: boolean }>()
   border-radius: 50%;
 }
 .online {
-  background: #67c23a;
+  background: var(--color-success);
 }
 .offline {
-  background: #f56c6c;
+  background: var(--color-danger);
 }
 </style>

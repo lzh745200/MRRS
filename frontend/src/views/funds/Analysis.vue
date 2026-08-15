@@ -337,7 +337,12 @@ const barChartOption = computed<EChartsOption>(() => {
         type: 'bar',
         data: rates.length ? rates : [0],
         itemStyle: {
-          color: (p: any) => (p.value >= 90 ? '#67c23a' : p.value >= 60 ? '#e6a23c' : '#f56c6c'),
+          color: (p: any) =>
+            p.value >= 90
+              ? chartColor('success')
+              : p.value >= 60
+                ? chartColor('warning')
+                : chartColor('danger'),
         },
         label: { show: true, position: 'right', formatter: '{c}%' },
       },

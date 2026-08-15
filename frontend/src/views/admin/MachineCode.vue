@@ -93,7 +93,7 @@
         <div style="font-size: 16px; margin-top: 10px">
           用户名：<strong>{{ generatedPassword.username }}</strong
           ><br />
-          初始密码：<strong style="font-size: 20px; color: #e6a23c">{{
+          初始密码：<strong style="font-size: 20px; color: var(--color-warning)">{{
             generatedPassword.initial_password
           }}</strong>
           <el-button type="text" @click="copyToClipboard(generatedPassword.initial_password)">
@@ -151,7 +151,7 @@
           <strong>密码已重置：</strong>
         </template>
         <div style="font-size: 16px; margin-top: 10px">
-          新密码：<strong style="font-size: 20px; color: #e6a23c">{{
+          新密码：<strong style="font-size: 20px; color: var(--color-warning)">{{
             resetResult.new_password
           }}</strong>
           <el-button type="text" @click="copyToClipboard(resetResult.new_password)">

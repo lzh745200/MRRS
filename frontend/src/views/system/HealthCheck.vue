@@ -150,6 +150,7 @@ import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { FirstAidKit, Timer, Download, Loading } from '@element-plus/icons-vue'
 import { get } from '@/api/request'
+import { chartColor } from '@/utils/chartColors'
 
 // ── 类型定义 ──
 
@@ -249,9 +250,9 @@ const scorePercent = computed(() => Math.round((passedCount.value / items.length
 const scoreColor = computed(() => {
   if (checking.value) return '#2d6a4f'
   const p = scorePercent.value
-  if (p >= 80) return '#67c23a'
-  if (p >= 50) return '#e6a23c'
-  return '#f56c6c'
+  if (p >= 80) return chartColor('success')
+  if (p >= 50) return chartColor('warning')
+  return chartColor('danger')
 })
 
 const verdict = computed<{ text: string; cls: string }>(() => {
@@ -695,13 +696,13 @@ function exportReport(): void {
   font-weight: 600;
 }
 .verdict-good {
-  color: #67c23a;
+  color: var(--color-success);
 }
 .verdict-warn {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 .verdict-bad {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 .verdict-running {
   color: #2d6a4f;
@@ -731,13 +732,13 @@ function exportReport(): void {
   box-shadow: 0 10px 22px rgba(27, 67, 50, 0.12);
 }
 .check-card.status-success {
-  border-left-color: #67c23a;
+  border-left-color: var(--color-success);
 }
 .check-card.status-warning {
-  border-left-color: #e6a23c;
+  border-left-color: var(--color-warning);
 }
 .check-card.status-error {
-  border-left-color: #f56c6c;
+  border-left-color: var(--color-danger);
 }
 .check-top {
   display: flex;

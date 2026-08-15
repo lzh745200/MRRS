@@ -315,10 +315,10 @@
             :percentage="healthData.health_score"
             :color="
               healthData.health_score >= 80
-                ? '#67c23a'
+                ? chartColor('success')
                 : healthData.health_score >= 60
-                  ? '#e6a23c'
-                  : '#f56c6c'
+                  ? chartColor('warning')
+                  : chartColor('danger')
             "
             :width="120"
           />
@@ -352,6 +352,7 @@ import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { fundLifecycleApi } from '@/api/fundLifecycle'
 import type { PhaseInfo, HealthScore } from '@/api/fundLifecycle'
+import { chartColor } from '@/utils/chartColors'
 import { projectsApi } from '@/api/projects'
 
 const route = useRoute()

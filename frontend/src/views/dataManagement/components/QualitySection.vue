@@ -444,13 +444,13 @@ async function handleAutoFix() {
 
     &.success {
       :deep(.el-statistic__number) {
-        color: #67c23a;
+        color: var(--color-success);
       }
     }
 
     &.warning {
       :deep(.el-statistic__number) {
-        color: #e6a23c;
+        color: var(--color-warning);
       }
     }
   }
@@ -477,7 +477,7 @@ async function handleAutoFix() {
   }
 
   .text-danger {
-    color: #f56c6c;
+    color: var(--color-danger);
     font-weight: 600;
   }
 }

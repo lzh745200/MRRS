@@ -243,7 +243,7 @@ import echarts from '@/utils/echarts'
 import { get, apiRequest } from '@/api/request'
 import { useConfigStore } from '@/stores/config'
 import { logger } from '@/utils/logger'
-import { chartColorPrimary } from '@/utils/chartColors'
+import { chartColor, chartColorPrimary } from '@/utils/chartColors'
 
 // ── Types ──
 interface SnapshotData {
@@ -822,7 +822,7 @@ function buildChart() {
         type: 'line',
         yAxisIndex: 0,
         data: avgTimes,
-        lineStyle: { color: '#67c23a' },
+        lineStyle: { color: chartColor('success') },
         symbol: 'circle',
         symbolSize: 4,
       },
@@ -831,7 +831,7 @@ function buildChart() {
         type: 'line',
         yAxisIndex: 1,
         data: errorRates,
-        lineStyle: { color: '#f56c6c' },
+        lineStyle: { color: chartColor('danger') },
         symbol: 'diamond',
         symbolSize: 4,
       },
@@ -943,13 +943,13 @@ watch(healthExpanded, (val) => {
   flex-shrink: 0;
 }
 .health-badge.score-good {
-  border-color: #67c23a;
+  border-color: var(--color-success);
 }
 .health-badge.score-warning {
-  border-color: #e6a23c;
+  border-color: var(--color-warning);
 }
 .health-badge.score-danger {
-  border-color: #f56c6c;
+  border-color: var(--color-danger);
 }
 .health-score-num {
   font-size: 18px;
@@ -961,13 +961,13 @@ watch(healthExpanded, (val) => {
   color: var(--color-text-secondary);
 }
 .score-good .health-score-num {
-  color: #67c23a;
+  color: var(--color-success);
 }
 .score-warning .health-score-num {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 .score-danger .health-score-num {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 /* ═══ Primary Metric Cards ═══ */
@@ -999,13 +999,13 @@ watch(healthExpanded, (val) => {
   transform: translateY(-2px);
 }
 .primary-card.status-normal {
-  border-top: 4px solid #67c23a;
+  border-top: 4px solid var(--color-success);
 }
 .primary-card.status-warning {
-  border-top: 4px solid #e6a23c;
+  border-top: 4px solid var(--color-warning);
 }
 .primary-card.status-danger {
-  border-top: 4px solid #f56c6c;
+  border-top: 4px solid var(--color-danger);
 }
 .primary-card.card-error {
   border-top-color: #c0c4cc;
@@ -1066,13 +1066,13 @@ watch(healthExpanded, (val) => {
   transition: width 0.6s ease;
 }
 .bar-normal {
-  background: linear-gradient(90deg, #67c23a, #85ce61);
+  background: linear-gradient(90deg, var(--color-success), var(--color-success-light));
 }
 .bar-warning {
-  background: linear-gradient(90deg, #e6a23c, #ebb563);
+  background: linear-gradient(90deg, var(--color-warning), var(--color-warning-light));
 }
 .bar-danger {
-  background: linear-gradient(90deg, #f56c6c, #f78989);
+  background: linear-gradient(90deg, var(--color-danger), var(--color-danger-light));
 }
 
 .primary-card-detail {
@@ -1243,10 +1243,10 @@ watch(healthExpanded, (val) => {
   color: var(--color-primary);
 }
 .log-warn .log-level {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 .log-error .log-level {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 .log-message {
   color: var(--color-text-regular);
@@ -1314,7 +1314,7 @@ watch(healthExpanded, (val) => {
   flex-shrink: 0;
 }
 .check-item :deep(.el-icon svg) {
-  color: #67c23a;
+  color: var(--color-success);
 }
 .check-name {
   flex-shrink: 0;

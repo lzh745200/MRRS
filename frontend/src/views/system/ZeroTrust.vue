@@ -117,7 +117,10 @@
                 title="高危事件"
                 :value="eventStats.high_severity_count"
                 :value-style="{
-                  color: eventStats.high_severity_count > 0 ? '#f56c6c' : '#67c23a',
+                  color:
+                    eventStats.high_severity_count > 0
+                      ? 'var(--color-danger)'
+                      : 'var(--color-success)',
                 }"
               />
             </el-card>
@@ -790,29 +793,29 @@ onMounted(() => {
         transition: all 0.3s;
 
         &.score-red {
-          border-color: #f56c6c;
+          border-color: var(--color-danger);
           background: #fef0f0;
 
           .score-number {
-            color: #f56c6c;
+            color: var(--color-danger);
           }
         }
 
         &.score-yellow {
-          border-color: #e6a23c;
+          border-color: var(--color-warning);
           background: #fdf6ec;
 
           .score-number {
-            color: #e6a23c;
+            color: var(--color-warning);
           }
         }
 
         &.score-green {
-          border-color: #67c23a;
+          border-color: var(--color-success);
           background: #f0f9eb;
 
           .score-number {
-            color: #67c23a;
+            color: var(--color-success);
           }
         }
 
@@ -872,7 +875,7 @@ onMounted(() => {
           color: #606266;
 
           .el-icon {
-            color: #67c23a;
+            color: var(--color-success);
             margin-top: 2px;
             flex-shrink: 0;
           }
@@ -883,17 +886,17 @@ onMounted(() => {
 }
 
 .score-text-red {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-weight: 600;
 }
 
 .score-text-yellow {
-  color: #e6a23c;
+  color: var(--color-warning);
   font-weight: 600;
 }
 
 .score-text-green {
-  color: #67c23a;
+  color: var(--color-success);
   font-weight: 600;
 }
 

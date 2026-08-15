@@ -277,6 +277,7 @@ import { logger } from '@/utils/logger'
 import { projectsApi } from '@/api/projects'
 import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
 import { AuthStorage } from '@/utils/authStorage'
+import { chartColor } from '@/utils/chartColors'
 import FilePreview from '@/components/FilePreview.vue'
 
 const route = useRoute()
@@ -334,8 +335,8 @@ const statusText = computed(
 const progressColor = computed(() => {
   const p = project.value?.progress ?? 0
   if (p >= 80) return '#40916c'
-  if (p >= 50) return '#e6a23c'
-  return '#f56c6c'
+  if (p >= 50) return chartColor('warning')
+  return chartColor('danger')
 })
 
 // 任务完成进度与状态分布
@@ -349,8 +350,8 @@ const taskProgressPercent = computed(() =>
 const taskProgressColor = computed(() => {
   const p = taskProgressPercent.value
   if (p >= 80) return '#40916c'
-  if (p >= 50) return '#e6a23c'
-  return '#f56c6c'
+  if (p >= 50) return chartColor('warning')
+  return chartColor('danger')
 })
 const taskStatusCounts = computed(() => {
   const counts = { pending: 0, in_progress: 0, completed: 0 }

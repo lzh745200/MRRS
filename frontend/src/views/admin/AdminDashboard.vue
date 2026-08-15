@@ -641,7 +641,7 @@ onMounted(() => {
 }
 
 .pending-count {
-  background: #f56c6c;
+  background: var(--color-danger);
   color: white;
   padding: 2px 8px;
   border-radius: 10px;
@@ -663,11 +663,11 @@ onMounted(() => {
 }
 
 .pending-item.high {
-  border-left-color: #f56c6c;
+  border-left-color: var(--color-danger);
 }
 
 .pending-item.medium {
-  border-left-color: #e6a23c;
+  border-left-color: var(--color-warning);
 }
 
 .pending-item.low {

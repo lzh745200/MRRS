@@ -97,7 +97,7 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
   min-width: 16px;
   height: 16px;
   border-radius: 8px;
-  background: #f56c6c;
+  background: var(--color-danger);
   color: #fff;
   font-size: 10px;
   display: flex;

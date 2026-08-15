@@ -309,7 +309,7 @@ onMounted(() => {
   align-items: center;
 }
 .missing-card {
-  border-left: 4px solid #f56c6c;
+  border-left: 4px solid var(--color-danger);
 }
 .missing-keys-section {
   margin-top: 16px;
@@ -328,7 +328,7 @@ onMounted(() => {
   cursor: pointer;
 }
 .missing-value {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-style: italic;
 }
 .table-card {

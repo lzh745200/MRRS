@@ -128,11 +128,11 @@ const displayProjects = computed(() => props.projects.slice(0, props.maxDisplay)
 }
 .project-status.completed {
   background: #f0f9eb;
-  color: #67c23a;
+  color: var(--color-success);
 }
 .project-status.delayed {
   background: #fef0f0;
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 .progress-meta {
   display: flex;

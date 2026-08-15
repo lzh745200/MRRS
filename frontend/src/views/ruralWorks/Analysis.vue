@@ -83,7 +83,7 @@
       <div class="indicator-card military-card">
         <div class="indicator-header">
           <span class="indicator-title">平均完成率</span>
-          <span class="indicator-icon" style="background-color: #67c23a">
+          <span class="indicator-icon" style="background-color: var(--color-success)">
             <el-icon><Select /></el-icon>
           </span>
         </div>
@@ -104,7 +104,7 @@
       <div class="indicator-card military-card">
         <div class="indicator-header">
           <span class="indicator-title">平均延期率</span>
-          <span class="indicator-icon" style="background-color: #f56c6c">
+          <span class="indicator-icon" style="background-color: var(--color-danger)">
             <el-icon><Warning /></el-icon>
           </span>
         </div>
@@ -125,7 +125,7 @@
       <div class="indicator-card military-card">
         <div class="indicator-header">
           <span class="indicator-title">总投入资金</span>
-          <span class="indicator-icon" style="background-color: #e6a23c">
+          <span class="indicator-icon" style="background-color: var(--color-warning)">
             <el-icon><Money /></el-icon>
           </span>
         </div>
@@ -1271,11 +1271,11 @@ const getQualityScoreClass = (score: number) => {
     }
 
     .export-button {
-      background-color: #67c23a;
+      background-color: var(--color-success);
       color: white;
 
       &:hover {
-        background-color: #85ce61;
+        background-color: var(--color-success-light);
       }
     }
   }
@@ -1342,11 +1342,11 @@ const getQualityScoreClass = (score: number) => {
         font-weight: 600;
 
         &.positive {
-          color: #67c23a;
+          color: var(--color-success);
         }
 
         &.negative {
-          color: #f56c6c;
+          color: var(--color-danger);
         }
       }
     }

@@ -86,7 +86,7 @@
           >
             <span
               :style="{
-                color: count === 0 ? '#e6a23c' : '#1b4332',
+                color: count === 0 ? 'var(--color-warning)' : '#1b4332',
                 fontWeight: '600',
               }"
             >
@@ -402,6 +402,6 @@ function resetForm() {
   color: #1b4332;
 }
 .error-fallback {
-  border: 1px solid #e6a23c;
+  border: 1px solid var(--color-warning);
 }
 </style>

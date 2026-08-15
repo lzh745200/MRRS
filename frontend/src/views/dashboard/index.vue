@@ -464,7 +464,7 @@ function handleRestore() {
 }
 .layout-saved {
   font-size: 12px;
-  color: #67c23a;
+  color: var(--color-success);
   margin-right: 8px;
   display: inline-flex;
   align-items: center;

@@ -272,7 +272,7 @@ onMounted(() => {
 .license-text {
   font-family: monospace;
   font-weight: 600;
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 /* ── 页脚 ── */

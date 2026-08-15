@@ -24,7 +24,7 @@
         </el-col>
         <el-col :span="8">
           <el-card shadow="hover" class="action-card" @click="resetConfig">
-            <el-icon :size="32" color="#e6a23c"><RefreshRight /></el-icon>
+            <el-icon :size="32" color="var(--color-warning)"><RefreshRight /></el-icon>
             <h4>重置默认</h4>
             <p>恢复系统配置为出厂默认值</p>
           </el-card>
@@ -60,7 +60,7 @@
         <el-table-column prop="key" label="配置项" width="200" />
         <el-table-column prop="value" label="配置值" min-width="300">
           <template #default="{ row }">
-            <span v-if="row.sensitive" style="color: #f56c6c">********</span>
+            <span v-if="row.sensitive" style="color: var(--color-danger)">********</span>
             <span v-else>{{ row.value }}</span>
           </template>
         </el-table-column>

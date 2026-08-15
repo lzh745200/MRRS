@@ -683,7 +683,7 @@ const redirectToList = () => {
     padding: 20px;
     .error-item {
       margin-bottom: 10px;
-      color: #f56c6c;
+      color: var(--color-danger);
     }
     .error-actions {
       margin-top: 20px;
@@ -752,7 +752,7 @@ const redirectToList = () => {
     margin-top: 40px;
   }
   .failure-reason {
-    color: #f56c6c;
+    color: var(--color-danger);
     margin-bottom: 30px;
   }
 }

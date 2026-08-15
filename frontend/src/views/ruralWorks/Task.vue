@@ -173,7 +173,7 @@
                     <el-dropdown-item v-if="scope.row.status !== 'cancelled'" command="progress"
                       >查看进度</el-dropdown-item
                     >
-                    <el-dropdown-item command="delete" divided style="color: #f56c6c"
+                    <el-dropdown-item command="delete" divided style="color: var(--color-danger)"
                       >删除任务</el-dropdown-item
                     >
                   </el-dropdown-menu>
@@ -1563,12 +1563,12 @@ const formatDateTime = (dateTimeString: string) => {
   }
 
   .deadline-warning {
-    color: #e6a23c;
+    color: var(--color-warning);
     font-weight: 500;
   }
 
   .deadline-overdue {
-    color: #f56c6c;
+    color: var(--color-danger);
     font-weight: 600;
   }
 
