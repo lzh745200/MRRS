@@ -100,7 +100,7 @@
             复制密码
           </el-button>
           <br />
-          <span style="color: #909399; font-size: 14px">
+          <span style="color: var(--color-info); font-size: 14px">
             请将此密码安全地告知用户，用户首次登录后需要修改密码
           </span>
         </div>
@@ -158,7 +158,9 @@
             复制密码
           </el-button>
           <br />
-          <span style="color: #909399; font-size: 14px"> 请使用新密码登录并及时修改 </span>
+          <span style="color: var(--color-info); font-size: 14px">
+            请使用新密码登录并及时修改
+          </span>
         </div>
       </el-alert>
     </el-card>
@@ -293,7 +295,7 @@ onMounted(() => {
 
   .description {
     margin: 0;
-    color: #909399;
+    color: var(--color-info);
     font-size: 14px;
   }
 }

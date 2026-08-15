@@ -460,7 +460,7 @@ onMounted(() => {
   background: var(--color-warning-lightest);
 }
 .stat-card.info .stat-icon {
-  color: #909399;
+  color: var(--color-info);
   background: #f4f4f5;
 }
 .stat-icon {

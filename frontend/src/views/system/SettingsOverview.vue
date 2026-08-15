@@ -623,7 +623,7 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 }
 .card-header {
   display: flex;
@@ -712,35 +712,35 @@ onMounted(() => {
 }
 @keyframes dot-pulse-green {
   0% {
-    box-shadow: 0 0 0 0 rgba(103, 194, 58, 0.45);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 45%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 7px rgba(103, 194, 58, 0);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-success) 0%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(103, 194, 58, 0);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 0%, transparent);
   }
 }
 @keyframes dot-pulse-yellow {
   0% {
-    box-shadow: 0 0 0 0 rgba(230, 162, 60, 0.45);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-warning) 45%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 7px rgba(230, 162, 60, 0);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-warning) 0%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(230, 162, 60, 0);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-warning) 0%, transparent);
   }
 }
 @keyframes dot-pulse-red {
   0% {
-    box-shadow: 0 0 0 0 rgba(245, 108, 108, 0.5);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 50%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 7px rgba(245, 108, 108, 0);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-danger) 0%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(245, 108, 108, 0);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 0%, transparent);
   }
 }
 .status-label {
@@ -756,7 +756,7 @@ onMounted(() => {
 }
 .status-detail {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
   line-height: 1.5;
 }
 
@@ -827,7 +827,7 @@ onMounted(() => {
 .resource-id {
   margin-left: 4px;
   font-family: monospace;
-  color: #909399;
+  color: var(--color-info);
 }
 
 /* ── 版本信息 ── */
@@ -847,7 +847,7 @@ onMounted(() => {
 .version-build {
   font-size: 12px;
   font-family: monospace;
-  color: #909399;
+  color: var(--color-info);
 }
 .version-copyright {
   font-size: 12px;

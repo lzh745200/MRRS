@@ -573,13 +573,13 @@ onMounted(() => {
 
 .tier-size {
   margin-top: 8px;
-  color: #909399;
+  color: var(--color-info);
   font-size: 14px;
 }
 
 .stat-suffix {
   font-size: 14px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 /* Bar charts */

@@ -445,7 +445,7 @@ onMounted(() => {
 
 .search-snippet {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 .section-header {
@@ -509,7 +509,7 @@ onMounted(() => {
 
 .article-count {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 .pagination {

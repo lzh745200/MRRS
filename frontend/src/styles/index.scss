@@ -210,7 +210,7 @@ body {
 /* ── 密码输入框可见性切换图标 ── */
 .el-input .el-input__password {
   cursor: pointer;
-  color: var(--el-text-color-secondary, #909399);
+  color: var(--el-text-color-secondary, var(--color-info));
   font-size: 14px;
 }
 .el-input .el-input__password:hover {

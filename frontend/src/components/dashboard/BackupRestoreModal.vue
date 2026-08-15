@@ -39,7 +39,7 @@
         :limit="1"
         :on-change="onFileChange"
       >
-        <el-icon style="font-size: 48px; color: #909399">
+        <el-icon style="font-size: 48px; color: var(--color-info)">
           <UploadFilled />
         </el-icon>
         <div class="el-upload__text">将备份文件拖到此处，或<em>点击上传</em></div>

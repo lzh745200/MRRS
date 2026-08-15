@@ -21,7 +21,7 @@
           >
             <el-icon :size="32" color="var(--color-primary)"><Document /></el-icon>
             <h4 style="margin: 12px 0 4px">{{ tpl.label }}模板</h4>
-            <p style="color: #909399; font-size: 12px; margin-bottom: 16px">
+            <p style="color: var(--color-info); font-size: 12px; margin-bottom: 16px">
               {{ tpl.desc }}
             </p>
             <el-button
@@ -115,7 +115,7 @@
         </el-table>
         <p
           v-if="previewData.total > 10"
-          style="text-align: center; color: #909399; margin-top: 8px"
+          style="text-align: center; color: var(--color-info); margin-top: 8px"
         >
           （仅显示前 10 条，共 {{ previewData.total }} 条）
         </p>
@@ -347,7 +347,7 @@ onMounted(loadHistory)
   font-size: 20px;
 }
 .page-desc {
-  color: #909399;
+  color: var(--color-info);
   font-size: 13px;
   margin: 0;
 }
@@ -367,7 +367,7 @@ onMounted(loadHistory)
   margin: 4px 0;
 }
 .upload-hint {
-  color: #909399;
+  color: var(--color-info);
   font-size: 12px;
 }
 </style>

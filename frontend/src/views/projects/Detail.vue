@@ -635,7 +635,7 @@ onMounted(() => {
   }
 
   .history-by {
-    color: #909399;
+    color: var(--color-info);
     font-size: 12px;
   }
 }

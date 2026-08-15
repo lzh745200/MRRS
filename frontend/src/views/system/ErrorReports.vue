@@ -518,7 +518,7 @@ onMounted(() => {
 }
 
 .stat-card--default {
-  border-top: 3px solid #909399;
+  border-top: 3px solid var(--color-info);
 }
 
 .stat-card--warning {
@@ -535,7 +535,7 @@ onMounted(() => {
 
 .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--color-info);
   margin-bottom: 8px;
 }
 

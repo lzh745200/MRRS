@@ -449,7 +449,7 @@ onMounted(() => {
 }
 
 .text-muted {
-  color: #909399;
+  color: var(--color-info);
 }
 
 .pass-code-input-wrapper {

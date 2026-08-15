@@ -648,7 +648,7 @@ onUnmounted(() => {
 
 .last-updated {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 /* ── Stats Row ── */
@@ -666,7 +666,7 @@ onUnmounted(() => {
 
 .stat-label {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-info);
   margin-bottom: 6px;
 }
 
@@ -694,7 +694,7 @@ onUnmounted(() => {
 
 .stat-sub {
   font-size: 11px;
-  color: #909399;
+  color: var(--color-info);
   margin-top: 4px;
 }
 

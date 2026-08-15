@@ -240,7 +240,7 @@ onMounted(() => {
 }
 .app-name-en {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-info);
   letter-spacing: 0.5px;
   margin: 0 0 12px;
 }

@@ -787,7 +787,7 @@ const initTrendChart = () => {
     if (ctx) {
       ctx.clearRect(0, 0, trendChart.value.width, trendChart.value.height)
       ctx.font = '16px Arial'
-      ctx.fillStyle = '#909399'
+      ctx.fillStyle = chartColor('info')
       ctx.textAlign = 'center'
       ctx.fillText(
         '暂无数据，请先录入乡村工作数据',

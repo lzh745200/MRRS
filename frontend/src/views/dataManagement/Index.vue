@@ -163,7 +163,7 @@ onMounted(() => {
     .subtitle {
       margin-left: 12px;
       font-size: 14px;
-      color: #909399;
+      color: var(--color-info);
     }
   }
 }

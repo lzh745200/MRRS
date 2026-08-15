@@ -582,7 +582,7 @@ onMounted(() => {
   .form-tip {
     margin-left: 10px;
     font-size: 12px;
-    color: #909399;
+    color: var(--color-info);
   }
 
   .generated-result {

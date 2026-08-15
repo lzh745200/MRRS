@@ -1089,7 +1089,7 @@ onMounted(() => {
 
 .overview-hint {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
   margin-top: 4px;
 }
 

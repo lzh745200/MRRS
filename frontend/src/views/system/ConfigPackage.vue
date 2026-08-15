@@ -310,12 +310,12 @@ applyTheme(currentTheme.value)
   font-size: 16px;
 }
 .action-card p {
-  color: #909399;
+  color: var(--color-info);
   font-size: 13px;
   margin: 0;
 }
 .theme-hint {
-  color: #909399;
+  color: var(--color-info);
   font-size: 13px;
   margin-top: 8px;
 }

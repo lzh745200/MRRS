@@ -1307,7 +1307,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #f0f9eb;
+  background: var(--color-success-lightest);
   border: 1px solid #b3e19d;
   border-radius: 8px;
   padding: 16px 24px;
@@ -1378,7 +1378,7 @@ onUnmounted(() => {
 
 /* 文本样式 */
 .text-muted {
-  color: #909399;
+  color: var(--color-info);
 }
 .text-primary {
   color: #1b4332;

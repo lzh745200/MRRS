@@ -249,7 +249,7 @@ const statsCards = computed(() => {
       value: inProgress,
       icon: markRaw(Refresh),
       color: 'var(--color-warning)',
-      bgColor: 'rgba(230,162,60,0.1)',
+      bgColor: 'color-mix(in srgb, var(--color-warning) 10%, transparent)',
       trend: `占比 ${total > 0 ? Math.round((inProgress / total) * 100) : 0}%`,
       trendType: 'neutral',
     },
@@ -258,7 +258,7 @@ const statsCards = computed(() => {
       value: completed,
       icon: markRaw(Select),
       color: 'var(--color-success)',
-      bgColor: 'rgba(103,194,58,0.1)',
+      bgColor: 'color-mix(in srgb, var(--color-success) 10%, transparent)',
       trend: `完成率 ${total > 0 ? Math.round((completed / total) * 100) : 0}%`,
       trendType: 'up',
     },
@@ -611,7 +611,7 @@ onBeforeUnmount(() => {
 
 .page-desc {
   font-size: 14px;
-  color: #909399;
+  color: var(--color-info);
   margin: 0;
 }
 
@@ -673,7 +673,7 @@ onBeforeUnmount(() => {
 
 .stat-label {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-info);
   margin-top: 2px;
 }
 
@@ -691,7 +691,7 @@ onBeforeUnmount(() => {
 }
 
 .stat-trend.neutral {
-  color: #909399;
+  color: var(--color-info);
 }
 
 /* 图表卡片 */

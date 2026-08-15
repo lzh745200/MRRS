@@ -590,7 +590,7 @@ checkStatus()
 
 .card-desc {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-info);
   margin-bottom: 12px;
 }
 
@@ -627,6 +627,6 @@ checkStatus()
 .hint-text {
   margin-left: 12px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 }
 </style>

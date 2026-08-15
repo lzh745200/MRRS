@@ -243,15 +243,15 @@ onMounted(() => {
 }
 .health-gauge.healthy {
   border-color: var(--color-success);
-  background: #f0f9eb;
+  background: var(--color-success-lightest);
 }
 .health-gauge.warning {
   border-color: var(--color-warning);
-  background: #fdf6ec;
+  background: var(--color-warning-lightest);
 }
 .health-gauge.danger {
   border-color: var(--color-danger);
-  background: #fef0f0;
+  background: var(--color-danger-lightest);
 }
 .gauge-score {
   font-size: 28px;
@@ -260,7 +260,7 @@ onMounted(() => {
 }
 .gauge-label {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 }
 .card-header {
   display: flex;

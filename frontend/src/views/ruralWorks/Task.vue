@@ -1478,7 +1478,7 @@ const formatDateTime = (dateTimeString: string) => {
 
   .page-subtitle {
     font-size: 14px;
-    color: #909399;
+    color: var(--color-info);
     margin: 0;
   }
 
@@ -1671,7 +1671,7 @@ const formatDateTime = (dateTimeString: string) => {
             }
 
             .history-time {
-              color: #909399;
+              color: var(--color-info);
               font-size: 14px;
             }
           }
@@ -1681,12 +1681,12 @@ const formatDateTime = (dateTimeString: string) => {
             font-weight: 500;
 
             .history-old-progress {
-              color: #909399;
+              color: var(--color-info);
             }
 
             .history-arrow {
               margin: 0 5px;
-              color: #909399;
+              color: var(--color-info);
             }
 
             .history-new-progress {
@@ -1715,7 +1715,7 @@ const formatDateTime = (dateTimeString: string) => {
 
     .no-history {
       text-align: center;
-      color: #909399;
+      color: var(--color-info);
       padding: 30px;
       font-style: italic;
     }

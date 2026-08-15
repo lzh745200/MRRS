@@ -191,7 +191,7 @@ onMounted(loadLogs)
   font-size: 13px;
 }
 .log-module {
-  color: #909399;
+  color: var(--color-info);
   min-width: 60px;
 }
 .log-content {

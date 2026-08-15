@@ -127,18 +127,18 @@ const displayProjects = computed(() => props.projects.slice(0, props.maxDisplay)
   color: var(--color-primary);
 }
 .project-status.completed {
-  background: #f0f9eb;
+  background: var(--color-success-lightest);
   color: var(--color-success);
 }
 .project-status.delayed {
-  background: #fef0f0;
+  background: var(--color-danger-lightest);
   color: var(--color-danger);
 }
 .progress-meta {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
   margin-top: 4px;
 }
 .empty-state {

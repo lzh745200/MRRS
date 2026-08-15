@@ -1223,13 +1223,13 @@ onMounted(() => {
 
 .machine-code-preview {
   margin-left: 10px;
-  color: #909399;
+  color: var(--color-info);
   font-size: 12px;
 }
 
 .form-item-tip {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
   line-height: 1.4;
   margin-top: 4px;
 }

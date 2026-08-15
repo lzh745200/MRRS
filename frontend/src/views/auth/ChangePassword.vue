@@ -574,7 +574,7 @@ watch(
 }
 
 .text-0 {
-  color: #909399;
+  color: var(--color-info);
 }
 
 .text-1 {

@@ -55,12 +55,12 @@ const text = computed(() => {
 }
 
 .strength-weak {
-  background-color: #fef0f0;
+  background-color: var(--color-danger-lightest);
   color: var(--color-danger);
 }
 
 .strength-medium {
-  background-color: #fdf6ec;
+  background-color: var(--color-warning-lightest);
   color: var(--color-warning);
 }
 

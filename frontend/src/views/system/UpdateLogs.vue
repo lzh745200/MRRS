@@ -46,7 +46,9 @@
             :key="log.id"
             :timestamp="formatDate(log.created_at)"
             placement="top"
-            :color="log.version === latestLog?.version ? 'var(--color-primary)' : '#909399'"
+            :color="
+              log.version === latestLog?.version ? 'var(--color-primary)' : 'var(--color-info)'
+            "
           >
             <el-card shadow="hover" class="timeline-item-card">
               <div class="log-header">
@@ -244,7 +246,7 @@ onMounted(() => {
   .page-desc {
     margin: 0;
     font-size: 13px;
-    color: #909399;
+    color: var(--color-info);
   }
   .header-actions {
     display: flex;
@@ -277,7 +279,7 @@ onMounted(() => {
       display: flex;
       gap: 20px;
       font-size: 12px;
-      color: #909399;
+      color: var(--color-info);
     }
   }
 }
@@ -301,7 +303,7 @@ onMounted(() => {
     margin-bottom: 8px;
     .log-author {
       font-size: 12px;
-      color: #909399;
+      color: var(--color-info);
       flex: 1;
     }
   }

@@ -923,7 +923,7 @@ watch(healthExpanded, (val) => {
 }
 .last-updated {
   font-size: 0.8rem;
-  color: var(--color-text-secondary, #909399);
+  color: var(--color-text-secondary, var(--color-info));
   white-space: nowrap;
   display: inline-flex;
   align-items: center;

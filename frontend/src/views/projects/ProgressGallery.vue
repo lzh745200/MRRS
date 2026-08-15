@@ -396,7 +396,7 @@ onUnmounted(() => {
         align-items: center;
         padding: 8px 12px 4px;
         font-size: 12px;
-        color: #909399;
+        color: var(--color-info);
 
         .photo-name {
           overflow: hidden;

@@ -210,7 +210,7 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
   font-size: 14px;
 }
 .field-label {
-  color: #909399;
+  color: var(--color-info);
 }
 .field-value {
   color: #303133;
@@ -225,7 +225,7 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
 .empty-state {
   text-align: center;
   padding: 40px;
-  color: #909399;
+  color: var(--color-info);
 }
 .empty-icon {
   font-size: 32px;

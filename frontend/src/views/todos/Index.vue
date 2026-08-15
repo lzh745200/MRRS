@@ -431,7 +431,7 @@ onMounted(() => {
 
 .todo-item.completed .todo-title {
   text-decoration: line-through;
-  color: #909399;
+  color: var(--color-info);
 }
 
 .todo-checkbox {
@@ -456,7 +456,7 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 .todo-deadline {
@@ -472,7 +472,7 @@ onMounted(() => {
 
 .todo-desc {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-info);
   margin-top: 4px;
   white-space: nowrap;
   overflow: hidden;

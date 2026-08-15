@@ -213,7 +213,7 @@ function deleteEvent() {
   padding: 4px;
 }
 .calendar-day:hover {
-  background: #f0f9eb;
+  background: var(--color-success-lightest);
   border-radius: 4px;
 }
 .day-num {

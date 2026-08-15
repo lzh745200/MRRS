@@ -370,7 +370,7 @@ onMounted(() => {
 }
 .mini-stat-label {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-info);
   margin-top: 4px;
 }
 </style>

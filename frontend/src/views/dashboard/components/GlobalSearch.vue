@@ -257,7 +257,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 24px 20px;
-  color: #909399;
+  color: var(--color-info);
   font-size: 14px;
   justify-content: center;
 }
@@ -276,7 +276,7 @@ onUnmounted(() => {
   padding: 8px 16px 4px;
   font-size: 12px;
   font-weight: 600;
-  color: #909399;
+  color: var(--color-info);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -301,7 +301,7 @@ onUnmounted(() => {
 
 .item-icon {
   font-size: 16px;
-  color: #909399;
+  color: var(--color-info);
   flex-shrink: 0;
 }
 
@@ -320,7 +320,7 @@ onUnmounted(() => {
 
 .item-subtitle {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -345,7 +345,7 @@ onUnmounted(() => {
   align-items: center;
   padding: 8px 16px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
   border-top: 1px solid #f5f7fa;
   .hint {
     font-size: 11px;

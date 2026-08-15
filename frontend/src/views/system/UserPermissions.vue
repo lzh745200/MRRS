@@ -1009,7 +1009,7 @@ onMounted(() => {
 
 /* 通用 */
 .text-muted {
-  color: #909399;
+  color: var(--color-info);
   font-size: 13px;
 }
 

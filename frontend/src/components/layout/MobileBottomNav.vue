@@ -76,7 +76,7 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
   border: none;
   padding: 4px 12px;
   cursor: pointer;
-  color: #909399;
+  color: var(--color-info);
   transition: color 0.2s;
   position: relative;
 }

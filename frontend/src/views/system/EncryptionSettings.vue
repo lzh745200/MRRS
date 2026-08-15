@@ -359,7 +359,7 @@ onMounted(() => {
 
     .description {
       margin: 0;
-      color: #909399;
+      color: var(--color-info);
       font-size: 14px;
     }
   }

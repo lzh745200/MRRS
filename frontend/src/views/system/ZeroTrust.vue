@@ -740,7 +740,7 @@ onMounted(() => {
 
       .description {
         margin: 0;
-        color: #909399;
+        color: var(--color-info);
         font-size: 14px;
       }
     }
@@ -762,7 +762,7 @@ onMounted(() => {
 
 .enabled-hint {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 .loading-placeholder {
@@ -794,7 +794,7 @@ onMounted(() => {
 
         &.score-red {
           border-color: var(--color-danger);
-          background: #fef0f0;
+          background: var(--color-danger-lightest);
 
           .score-number {
             color: var(--color-danger);
@@ -803,7 +803,7 @@ onMounted(() => {
 
         &.score-yellow {
           border-color: var(--color-warning);
-          background: #fdf6ec;
+          background: var(--color-warning-lightest);
 
           .score-number {
             color: var(--color-warning);
@@ -812,7 +812,7 @@ onMounted(() => {
 
         &.score-green {
           border-color: var(--color-success);
-          background: #f0f9eb;
+          background: var(--color-success-lightest);
 
           .score-number {
             color: var(--color-success);
@@ -827,7 +827,7 @@ onMounted(() => {
 
         .score-label {
           font-size: 12px;
-          color: #909399;
+          color: var(--color-info);
           margin-top: 4px;
         }
       }
@@ -839,7 +839,7 @@ onMounted(() => {
 
         .assessed-time {
           font-size: 13px;
-          color: #909399;
+          color: var(--color-info);
         }
       }
     }
@@ -975,7 +975,7 @@ onMounted(() => {
         font-size: 14px;
 
         &.evaluated-time {
-          color: #909399;
+          color: var(--color-info);
           font-size: 12px;
           margin-top: 8px;
         }

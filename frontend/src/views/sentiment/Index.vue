@@ -24,7 +24,7 @@
         <div class="stat-label">正面舆情</div>
       </div>
       <div class="stat-item">
-        <div class="stat-value" style="color: #909399">
+        <div class="stat-value" style="color: var(--color-info)">
           {{ statLoading ? '-' : stats.neutral }}
         </div>
         <div class="stat-label">中性舆情</div>
@@ -455,7 +455,7 @@ onMounted(() => {
 
 .kw-count {
   font-size: 10px;
-  color: #909399;
+  color: var(--color-info);
   margin-left: 2px;
 }
 
@@ -482,7 +482,7 @@ onMounted(() => {
 
 .alert-source {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 .alert-time {

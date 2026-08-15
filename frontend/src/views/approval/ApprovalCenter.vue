@@ -283,7 +283,7 @@ onMounted(() => {
   gap: 12px;
   margin-bottom: 12px;
   padding: 8px 12px;
-  background: #f0f9eb;
+  background: var(--color-success-lightest);
   border-radius: 4px;
 }
 </style>

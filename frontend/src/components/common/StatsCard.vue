@@ -75,7 +75,7 @@ const trendText = computed(() => {
 
 .stats-card__title {
   font-size: 14px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 .stats-card__icon {
@@ -91,7 +91,7 @@ const trendText = computed(() => {
 
 .stats-card__subtitle {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 .stats-card__trend {

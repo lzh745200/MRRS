@@ -359,7 +359,7 @@ function handleRestore() {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 
   .el-icon {
     font-size: 13px;
@@ -475,7 +475,7 @@ function handleRestore() {
 }
 .layout-hint {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
   margin: 0 0 10px;
   padding-left: 2px;
 }
@@ -485,7 +485,7 @@ function handleRestore() {
   transform: scale(1.03);
 }
 .drag-handle {
-  color: #909399;
+  color: var(--color-info);
 }
 
 .slide-enter-active,

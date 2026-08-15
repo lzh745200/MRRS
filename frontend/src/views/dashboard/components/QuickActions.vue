@@ -343,7 +343,7 @@ const activeGroups = ref(['core'])
     }
   }
   &.backup {
-    background: #fdf6ec;
+    background: var(--color-warning-lightest);
     border-color: #f5dab1;
     color: var(--color-warning);
     &:hover {
@@ -351,7 +351,7 @@ const activeGroups = ref(['core'])
     }
   }
   &.restore {
-    background: #fef0f0;
+    background: var(--color-danger-lightest);
     border-color: #fbc4c4;
     color: var(--color-danger);
     &:hover {

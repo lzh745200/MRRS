@@ -194,7 +194,7 @@ function resetForm() {
 }
 .activity-time {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 }
 .empty-state {
   padding: 20px 0;

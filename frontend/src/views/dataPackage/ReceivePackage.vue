@@ -38,7 +38,7 @@
           :on-change="handleLocalFileChange"
           drag
         >
-          <el-icon style="font-size: 36px; color: #909399"><UploadFilled /></el-icon>
+          <el-icon style="font-size: 36px; color: var(--color-info)"><UploadFilled /></el-icon>
           <div style="margin-top: 8px">拖放或点击选择数据包ZIP文件</div>
         </el-upload>
       </template>

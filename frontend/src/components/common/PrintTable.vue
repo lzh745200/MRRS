@@ -236,7 +236,7 @@ const handleClose = () => {
 .print-footer {
   margin-top: 20px;
   text-align: right;
-  color: #909399;
+  color: var(--color-info);
   font-size: 12px;
 }
 

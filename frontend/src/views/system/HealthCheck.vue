@@ -669,11 +669,11 @@ function exportReport(): void {
   font-style: normal;
   font-size: 16px;
   font-weight: 500;
-  color: #909399;
+  color: var(--color-info);
 }
 .score-label {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-info);
   margin-top: 2px;
 }
 .score-info {
@@ -755,16 +755,16 @@ function exportReport(): void {
   justify-content: center;
   font-size: 20px;
   background: #f5f7fa;
-  color: #909399;
+  color: var(--color-info);
 }
 .status-success .check-icon {
-  background: #f0f9eb;
+  background: var(--color-success-lightest);
 }
 .status-warning .check-icon {
-  background: #fdf6ec;
+  background: var(--color-warning-lightest);
 }
 .status-error .check-icon {
-  background: #fef0f0;
+  background: var(--color-danger-lightest);
 }
 .check-heading {
   min-width: 0;
@@ -776,7 +776,7 @@ function exportReport(): void {
 }
 .check-desc {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
   margin-top: 4px;
   line-height: 1.5;
 }
@@ -800,7 +800,7 @@ function exportReport(): void {
 }
 .detail-pending,
 .detail-running {
-  color: #909399;
+  color: var(--color-info);
 }
 
 /* ── 入场动画 ── */

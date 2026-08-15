@@ -760,7 +760,7 @@
         <img v-if="previewType === 'image'" :src="previewUrl" alt="预览" class="preview-image" />
         <iframe v-else-if="previewType === 'pdf'" :src="previewUrl" class="preview-pdf" />
         <div v-else class="preview-unsupported">
-          <el-icon :size="48" color="#909399"><Document /></el-icon>
+          <el-icon :size="48" color="var(--color-info)"><Document /></el-icon>
           <p>该文件类型不支持在线预览，请下载后查看</p>
           <el-button type="primary" @click="handleDownload(previewAttachment!)">
             下载文件
@@ -1332,7 +1332,7 @@ onMounted(() => {
 
 .upload-tip {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
   margin-top: 4px;
 }
 
@@ -1380,7 +1380,7 @@ onMounted(() => {
 
 .file-size {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
   flex-shrink: 0;
 }
 
@@ -1422,6 +1422,6 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  color: #909399;
+  color: var(--color-info);
 }
 </style>

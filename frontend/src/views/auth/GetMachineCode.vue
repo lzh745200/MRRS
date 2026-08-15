@@ -401,7 +401,7 @@ const copyAllInfo = () => {
 
 .hint {
   font-size: 13px;
-  color: #909399;
+  color: var(--color-info);
   margin: 8px 0 0 0;
   line-height: 1.5;
 }

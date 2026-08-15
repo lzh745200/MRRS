@@ -238,16 +238,16 @@ onMounted(() => {
   align-items: center;
   padding: 16px;
   margin-bottom: 16px;
-  background: rgba(245, 108, 108, 0.1);
-  border: 1px solid rgba(245, 108, 108, 0.3);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.3s ease;
 
   &:hover {
-    background: rgba(245, 108, 108, 0.2);
+    background: color-mix(in srgb, var(--color-danger) 20%, transparent);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(245, 108, 108, 0.2);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--color-danger) 20%, transparent);
   }
 
   &.local {
@@ -272,7 +272,7 @@ onMounted(() => {
   justify-content: center;
   width: 48px;
   height: 48px;
-  background: rgba(245, 108, 108, 0.2);
+  background: color-mix(in srgb, var(--color-danger) 20%, transparent);
   border-radius: 8px;
   color: var(--color-danger);
   font-size: 24px;

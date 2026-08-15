@@ -336,6 +336,6 @@ onMounted(() => {
 .empty-hint {
   padding: 40px;
   text-align: center;
-  color: #909399;
+  color: var(--color-info);
 }
 </style>
