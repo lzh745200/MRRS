@@ -182,7 +182,7 @@
       <el-table v-loading="loadingHistory" :data="exportHistory" stripe>
         <el-table-column prop="report_type" label="报表类型" width="150">
           <template #default="{ row }">
-            {{ getReportTypeName(row.report_type) }}
+            {{ getReportTypeName(row.export_type || row.report_type) }}
           </template>
         </el-table-column>
         <el-table-column prop="file_name" label="文件名" min-width="200" />

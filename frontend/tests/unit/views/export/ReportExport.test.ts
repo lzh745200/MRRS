@@ -60,9 +60,9 @@ vi.mock('@/utils/logger', () => ({
 import ReportExport from '@/views/export/ReportExport.vue'
 
 const historyRows = [
-  { task_id: 't1', report_type: 'village_summary', file_name: '报表1.xlsx', file_size: 2048, status: 'completed', created_at: '2024-06-01T00:00:00' },
+  { task_id: 't1', export_type: 'village_summary', file_name: '报表1.xlsx', file_size: 2048, status: 'completed', created_at: '2024-06-01T00:00:00' },
   { task_id: 't2', report_type: 'annual_summary', file_name: '报表2.xlsx', file_size: 0, status: 'processing' },
-  { task_id: 't3', report_type: 'mystery', file_name: '报表3.xlsx', file_size: 1024, status: 'failed', created_at: '2024-06-02T00:00:00' },
+  { task_id: 't3', export_type: 'mystery', file_name: '报表3.xlsx', file_size: 1024, status: 'failed', created_at: '2024-06-02T00:00:00' },
 ]
 
 const stubs = {
