@@ -51,7 +51,8 @@ export default defineConfig({
      global-setup 的登录请求会打到生产库，出现 401/空页面等诡异失败。 */
   webServer: [
     {
-      command: 'python -m uvicorn app.main:app --port 18000',
+      // 使用项目 venv 的 Python（系统 PATH 可能指向无依赖的全局 Python）
+      command: '.venv\\Scripts\\python -m uvicorn app.main:app --port 18000',
       cwd: '../backend',
       url: 'http://127.0.0.1:18000/api/v1/health',
       reuseExistingServer: !process.env.CI,
