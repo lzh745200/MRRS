@@ -84,7 +84,6 @@ hiddenimports = [
 
     # 认证和安全
     'jwt',
-    'jwt.jwt',
     'jwt.exceptions',
     'passlib.context',
     'passlib.handlers.bcrypt',
