@@ -828,6 +828,42 @@ describe('接收记录 tab（仅管理员）', () => {
     wrapper.unmount()
   })
 
+  it('loadReceived：res 嵌套 data 与空值兜底（items/total 双链）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // res = { data: { items, total } } → res.data.items / res.data.total 兜底
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/data-packages/received') {
+        return Promise.resolve({ data: { items: [recv1], total: 9 } })
+      }
+      return defaultGetRouter(url)
+    })
+    await vm.loadReceived()
+    expect(vm.receivedItems).toHaveLength(1)
+    expect(vm.receivedTotal).toBe(9)
+
+    // res = {} → [] 与 items.length 兜底
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/data-packages/received') return Promise.resolve({})
+      return defaultGetRouter(url)
+    })
+    await vm.loadReceived()
+    expect(vm.receivedItems).toEqual([])
+    expect(vm.receivedTotal).toBe(0)
+
+    // res = null → 同样走 [] 与 items.length 兜底（?. 短路）
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/data-packages/received') return Promise.resolve(null)
+      return defaultGetRouter(url)
+    })
+    await vm.loadReceived()
+    expect(vm.receivedItems).toEqual([])
+    expect(vm.receivedTotal).toBe(0)
+    wrapper.unmount()
+  })
+
   it('非管理员：loadReceived 早退不请求', async () => {
     authState.isAdmin = false
     const wrapper = mountComp()
@@ -885,6 +921,41 @@ describe('接收记录 tab（仅管理员）', () => {
     await vm.previewReceived(recv1)
     expect(ElMessage.error).toHaveBeenCalledWith('加载预览数据失败')
     expect(logError).toHaveBeenCalledWith('[ReceivePackage] 接收记录预览失败:', expect.any(Error))
+    wrapper.unmount()
+  })
+
+  it('previewReceived/handleReceivedDownload 剩余兜底分支', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // previewReceived：data 为 null → []；imported_at 空 → created_at 兜底
+    mockGet.mockImplementation((url: string) => {
+      if (/\/preview$/.test(url)) return Promise.resolve(null)
+      return defaultGetRouter(url)
+    })
+    await vm.previewReceived({ id: 1, imported_at: undefined, created_at: '2024-05-01T00:00:00' })
+    expect(vm.previewData).toEqual([])
+    expect(vm.currentReport.created_at).toBe('2024-05-01T00:00:00')
+
+    // previewReceived：data 为无 data 字段对象 → []
+    mockGet.mockImplementation((url: string) => {
+      if (/\/preview$/.test(url)) return Promise.resolve({ foo: 1 })
+      return defaultGetRouter(url)
+    })
+    await vm.previewReceived({ id: 2, imported_at: null, created_at: '2024-06-01T00:00:00' })
+    expect(vm.previewData).toEqual([])
+    expect(vm.currentReport.created_at).toBe('2024-06-01T00:00:00')
+
+    // handleReceivedDownload 成功：无 file_name / package_code → 'package'
+    mockApiRequest.mockImplementation((config: any) => {
+      if (config?.url?.endsWith('/download')) return Promise.resolve(new Blob(['x']))
+      return defaultApiRouter(config)
+    })
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    await vm.handleReceivedDownload({ id: 3 })
+    expect(ElMessage.success).toHaveBeenCalledWith('下载已开始')
+    clickSpy.mockRestore()
     wrapper.unmount()
   })
 

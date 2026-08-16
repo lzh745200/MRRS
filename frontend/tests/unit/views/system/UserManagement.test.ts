@@ -1472,3 +1472,221 @@ describe('org_id 跳转筛选分支', () => {
     routeQuery.query = {}
   })
 })
+
+describe('权限包列 packNameMap', () => {
+  it('loadPackNameMap 失败 → 降级为空映射', async () => {
+    listPacksMock.mockRejectedValue(new Error('net'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.packNameMap).toEqual({})
+    wrapper.unmount()
+  })
+
+  it('权限包列模板：命中名称 / 未知包 / 角色默认', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('基础包') // rowA permission_pack_id=1 命中
+    expect(text).toContain('未知包') // rowB permission_pack_id=999 未命中
+    expect(text).toContain('角色默认') // rowC 无 permission_pack_id
+    wrapper.unmount()
+  })
+})
+
+describe('菜单权限配置', () => {
+  it('handleMenuPermission 成功：拉取配置/菜单树并勾选', async () => {
+    const setChecked = vi.fn()
+    const getChecked = vi.fn(() => ['a', 'b'])
+    const wrapper = mountComp({
+      'el-tree': {
+        name: 'ElTree',
+        template: '<div class="el-tree-stub"><slot /></div>',
+        methods: {
+          setCheckedKeys: (...args: any[]) => setChecked(...args),
+          getCheckedKeys: getChecked,
+        },
+      },
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/menus/user-menus/1') return Promise.resolve({ data: { menu_keys: ['a', 'b'] } })
+      if (url === '/menus/all') return Promise.resolve({ data: menuTreeSample })
+      return defaultGetImpl(url)
+    })
+    await vm.handleMenuPermission({ id: 1, username: 'admin' })
+    expect(mockGet).toHaveBeenCalledWith('/menus/user-menus/1')
+    expect(mockGet).toHaveBeenCalledWith('/menus/all')
+    expect(vm.menuPermTree).toEqual(menuTreeSample)
+    expect(vm.menuPermLoading).toBe(false)
+    expect(setChecked).toHaveBeenCalledWith(['a', 'b'])
+    wrapper.unmount()
+  })
+
+  it('handleMenuPermission 失败：detail 文案与兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/menus/')) return Promise.reject({ response: { data: { detail: '无权限' } } })
+      return defaultGetImpl(url)
+    })
+    await vm.handleMenuPermission({ id: 1 })
+    expect(ElMessage.error).toHaveBeenCalledWith('无权限')
+    expect(vm.menuPermLoading).toBe(false)
+
+    ElMessage.error.mockClear()
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/menus/')) return Promise.reject(new Error('net'))
+      return defaultGetImpl(url)
+    })
+    await vm.handleMenuPermission({ id: 2 })
+    expect(ElMessage.error).toHaveBeenCalledWith('加载菜单权限配置失败')
+    expect(logError).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('flattenMenuKeys / updateMenuPermAllState / toggleMenuPermAll 全分支', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // flattenMenuKeys
+    expect(vm.flattenMenuKeys(menuTreeSample)).toEqual(['a', 'b', 'b1'])
+    expect(vm.flattenMenuKeys([])).toEqual([])
+
+    // updateMenuPermAllState：全选 / 半选 / 空选 / 无树
+    vm.menuPermTree = menuTreeSample
+    vm.menuPermTreeRef = { getCheckedKeys: () => ['a', 'b', 'b1'] }
+    vm.updateMenuPermAllState()
+    expect(vm.menuPermAllChecked).toBe(true)
+    expect(vm.menuPermIndeterminate).toBe(false)
+
+    vm.menuPermTreeRef = { getCheckedKeys: () => ['a'] }
+    vm.updateMenuPermAllState()
+    expect(vm.menuPermAllChecked).toBe(false)
+    expect(vm.menuPermIndeterminate).toBe(true)
+
+    vm.menuPermTreeRef = { getCheckedKeys: () => [] }
+    vm.updateMenuPermAllState()
+    expect(vm.menuPermAllChecked).toBe(false)
+    expect(vm.menuPermIndeterminate).toBe(false)
+
+    vm.menuPermTreeRef = null
+    expect(() => vm.updateMenuPermAllState()).not.toThrow()
+
+    // toggleMenuPermAll：全选 / 清空 / 无树
+    const setChecked = vi.fn()
+    vm.menuPermTreeRef = { setCheckedKeys: setChecked, getCheckedKeys: () => [] }
+    vm.toggleMenuPermAll(true)
+    expect(setChecked).toHaveBeenCalledWith(['a', 'b', 'b1'])
+    vm.toggleMenuPermAll(false)
+    expect(setChecked).toHaveBeenCalledWith([])
+    vm.menuPermTreeRef = null
+    expect(() => vm.toggleMenuPermAll(true)).not.toThrow()
+    wrapper.unmount()
+  })
+
+  it('saveMenuPermission：早退 / 成功 / 失败', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 无 menuPermUser → 早退
+    await vm.saveMenuPermission()
+    expect(mockPut).not.toHaveBeenCalled()
+
+    // 无树 → 早退
+    vm.menuPermUser = { id: 1 }
+    vm.menuPermTreeRef = null
+    await vm.saveMenuPermission()
+    expect(mockPut).not.toHaveBeenCalled()
+
+    // 成功
+    vm.menuPermTreeRef = { getCheckedKeys: () => ['a', 'b'] }
+    await vm.saveMenuPermission()
+    expect(mockPut).toHaveBeenCalledWith('/menus/user-menus/1', { menu_keys: ['a', 'b'] })
+    expect(ElMessage.success).toHaveBeenCalledWith('菜单权限已保存')
+    expect(vm.menuPermDialogVisible).toBe(false)
+
+    // 失败：detail 与兜底（await 后模板 ref 会被重绑，需重新注入 mock 树）
+    vm.menuPermTreeRef = { getCheckedKeys: () => ['a', 'b'] }
+    mockPut.mockRejectedValueOnce({ response: { data: { detail: '保存失败原因' } } })
+    await vm.saveMenuPermission()
+    expect(ElMessage.error).toHaveBeenCalledWith('保存失败原因')
+    vm.menuPermTreeRef = { getCheckedKeys: () => ['a', 'b'] }
+    mockPut.mockRejectedValueOnce(new Error('net'))
+    await vm.saveMenuPermission()
+    expect(ElMessage.error).toHaveBeenCalledWith('保存菜单权限失败')
+    expect(vm.menuPermSaving).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('点击「菜单权限」按钮触发 handleMenuPermission', async () => {
+    const setChecked = vi.fn()
+    const wrapper = mountComp({
+      'el-tree': {
+        name: 'ElTree',
+        template: '<div class="el-tree-stub"><slot /></div>',
+        methods: {
+          setCheckedKeys: setChecked,
+          getCheckedKeys: () => ['a'],
+        },
+      },
+    })
+    await flushPromises()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/menus/user-menus/1') return Promise.resolve({ data: { menu_keys: ['a'] } })
+      if (url === '/menus/all') return Promise.resolve({ data: menuTreeSample })
+      return defaultGetImpl(url)
+    })
+    const btn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('菜单权限'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledWith('/menus/user-menus/1')
+    expect(setChecked).toHaveBeenCalledWith(['a'])
+    wrapper.unmount()
+  })
+
+  it('handleMenuPermission：cfg/menu 稀疏形态与空值兜底', async () => {
+    const setChecked = vi.fn()
+    const wrapper = mountComp({
+      'el-tree': {
+        name: 'ElTree',
+        template: '<div class="el-tree-stub"><slot /></div>',
+        methods: { setCheckedKeys: setChecked, getCheckedKeys: () => [] },
+      },
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // 1) cfgRes 无 data（裸空对象）+ menuRes 裸数组 → cfg/menu_keys/menuData 兜底
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/menus/user-menus/1') return Promise.resolve({})
+      if (url === '/menus/all') return Promise.resolve(menuTreeSample)
+      return defaultGetImpl(url)
+    })
+    await vm.handleMenuPermission({ id: 1, username: 'admin' })
+    expect(vm.menuPermTree).toEqual(menuTreeSample)
+
+    // 2) cfgRes 与 menuRes 均为 null → ?? 兜底到 {} / []
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/menus/user-menus/2') return Promise.resolve(null)
+      if (url === '/menus/all') return Promise.resolve(null)
+      return defaultGetImpl(url)
+    })
+    await vm.handleMenuPermission({ id: 2, username: 'u2' })
+    expect(vm.menuPermTree).toEqual([])
+
+    // 3) menuRes 为非数组对象 → menuPermTree 三元 false 置空
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/menus/user-menus/1') return Promise.resolve({ data: {} })
+      if (url === '/menus/all') return Promise.resolve({ foo: 1 })
+      return defaultGetImpl(url)
+    })
+    await vm.handleMenuPermission({ id: 1, username: 'admin' })
+    expect(vm.menuPermTree).toEqual([])
+    wrapper.unmount()
+  })
+})
+
