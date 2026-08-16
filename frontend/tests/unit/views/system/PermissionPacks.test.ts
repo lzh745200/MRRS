@@ -565,10 +565,12 @@ describe('模板内联处理器（按钮/输入/开关）', () => {
     await flushPromises()
     expect(vm.bindingPack).toEqual(packA)
 
-    // 取消按钮（绑定对话框）→ bindDialogVisible = false
+    // 取消按钮：绑定对话框 + 编辑对话框（覆盖 line 79/121 两个 onClick 内联处理器）
     const cancelBtns = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '取消')
     await cancelBtns[1].trigger('click')
     expect(vm.bindDialogVisible).toBe(false)
+    await cancelBtns[0].trigger('click')
+    expect(vm.editDialogVisible).toBe(false)
 
     // 删除按钮 → handleDelete(row)
     const delBtns = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '删除')
