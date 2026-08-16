@@ -35,7 +35,7 @@ class TestUserManagement:
         user_data = {
             "username": "test_user_001_x",
             "full_name": "测试用户001",
-            "password": "Test123456",
+            "password": "Test@1234567",
             "email": "test001@example.com",
             "role": "operator",
         }
@@ -52,7 +52,7 @@ class TestUserManagement:
         user_data = {
             "username": "test_user_002_x",
             "full_name": "测试用户002",
-            "password": "Test123456",
+            "password": "Test@1234567",
             "organization_id": 1,
             "role": "operator",
         }
@@ -69,7 +69,7 @@ class TestUserManagement:
         user_data = {
             "username": "admin",
             "full_name": "重复用户",
-            "password": "Test123456",
+            "password": "Test@1234567",
             "role": "operator",
         }
         response = client.post(
@@ -161,7 +161,7 @@ class TestUserManagement:
         user_data = {
             "username": "test_user_008",
             "full_name": "测试用户008",
-            "password": "Test123456",
+            "password": "Test@1234567",
             "role": "operator",
         }
         response = client.post(

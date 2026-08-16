@@ -373,7 +373,7 @@ class TestCreateUser:
         _override_db(client, mock_db)
         with patch("app.api.v1.auth.users.require_admin") as mock_req:
             mock_req.return_value = None
-            response = client.post(f"{self.prefix}", json={"username": "existing", "password": "Str0ng!Pass"})
+            response = client.post(f"{self.prefix}", json={"username": "existing", "password": "Str0ng!Pass1"})
             assert response.status_code == 400
         _clear_overrides(client, get_db, get_current_user)
 
@@ -390,7 +390,7 @@ class TestCreateUser:
         _override_db(client, mock_db)
         with patch("app.api.v1.auth.users.require_admin") as mock_req:
             mock_req.return_value = None
-            response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass", "email": "used@example.com"})
+            response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass1", "email": "used@example.com"})
             assert response.status_code == 400
         _clear_overrides(client, get_db, get_current_user)
 
@@ -402,8 +402,20 @@ class TestCreateUser:
             mock_req.return_value = None
             with patch("app.models.organization.Organization") as mock_org_cls:
                 mock_org_cls.query.filter.return_value.first.return_value = None
-                response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass", "organization_id": 999})
+                response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass1", "organization_id": 999})
                 assert response.status_code == 400
+        _clear_overrides(client, get_db, get_current_user)
+
+    def test_weak_password_rejected(self, client):
+        """密码策略一致性：管理员创建用户同样受 PasswordPolicy 约束"""
+        _setup_admin_user(client)
+        mock_db = _make_mock_db(user_list=[])
+        _override_db(client, mock_db)
+        with patch("app.api.v1.auth.users.require_admin") as mock_req:
+            mock_req.return_value = None
+            response = client.post(f"{self.prefix}", json={"username": "weakpwd", "password": "weak"})
+            assert response.status_code == 400
+            assert "密码" in response.json()["detail"]
         _clear_overrides(client, get_db, get_current_user)
 
     def test_invalid_role(self, client):
@@ -412,7 +424,7 @@ class TestCreateUser:
         _override_db(client, mock_db)
         with patch("app.api.v1.auth.users.require_admin") as mock_req:
             mock_req.return_value = None
-            response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass", "role": "nonexistent_role"})
+            response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass1", "role": "nonexistent_role"})
             assert response.status_code == 400
         _clear_overrides(client, get_db, get_current_user)
 
@@ -422,7 +434,7 @@ class TestCreateUser:
         _override_db(client, mock_db)
         with patch("app.api.v1.auth.users.require_admin") as mock_req:
             mock_req.return_value = None
-            response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass", "data_scope": "invalid_scope"})
+            response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass1", "data_scope": "invalid_scope"})
             assert response.status_code == 400
         _clear_overrides(client, get_db, get_current_user)
 
@@ -443,7 +455,7 @@ class TestCreateUser:
                             return org_query
                         return user_query
                     mock_db.query.side_effect = query_side_effect
-                    response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass", "full_name": "New", "organization_id": 1})
+                    response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass1", "full_name": "New", "organization_id": 1})
                     assert response.status_code == 200
         _clear_overrides(client, get_db, get_current_user)
 
@@ -454,7 +466,7 @@ class TestCreateUser:
         with patch("app.api.v1.auth.users.require_admin") as mock_req:
             mock_req.return_value = None
             with patch("app.api.v1.auth.users.get_password_hash", return_value="hashed"):
-                response = client.post(f"{self.prefix}", json={"username": "newuser2", "password": "Str0ng!Pass", "permissions": "read,write", "is_active": False})
+                response = client.post(f"{self.prefix}", json={"username": "newuser2", "password": "Str0ng!Pass1", "permissions": "read,write", "is_active": False})
                 assert response.status_code == 200
                 assert "待审核" in response.json()["message"]
         _clear_overrides(client, get_db, get_current_user)
@@ -466,7 +478,7 @@ class TestCreateUser:
         with patch("app.api.v1.auth.users.require_admin") as mock_req:
             mock_req.return_value = None
             with patch("app.api.v1.auth.users.get_password_hash", return_value="hashed"):
-                response = client.post(f"{self.prefix}", json={"username": "newuser3", "password": "Str0ng!Pass", "is_active": False})
+                response = client.post(f"{self.prefix}", json={"username": "newuser3", "password": "Str0ng!Pass1", "is_active": False})
                 assert response.status_code == 200
                 assert "待审核" in response.json()["message"]
         _clear_overrides(client, get_db, get_current_user)

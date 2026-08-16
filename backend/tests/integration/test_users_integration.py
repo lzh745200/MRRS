@@ -125,7 +125,7 @@ class TestUserCreate:
     def test_admin_create_user(self, client, admin_user, admin_headers):
         resp = client.post("/api/v1/users", headers=admin_headers, json={
             "username": "createduser",
-            "password": "Created@123",
+            "password": "Created@1234",
             "email": "created@example.com",
             "full_name": "创建用户",
             "role": "operator",

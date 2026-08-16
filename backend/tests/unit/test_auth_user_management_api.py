@@ -228,7 +228,7 @@ class TestCreateUserManagement:
             with patch("app.api.v1.auth.user_management.is_superuser", return_value=False):
                 response = client.post(
                     f"{self.prefix}",
-                    json={"username": "newuser2", "password": "Str0ngPass1", "organization_id": 1},
+                    json={"username": "newuser2", "password": "Str0ng!Pass1", "organization_id": 1},
                 )
                 assert response.status_code == 200
 

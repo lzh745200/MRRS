@@ -469,6 +469,14 @@ async def create_user(
     if data_scope not in VALID_SCOPES:
         raise HTTPException(status_code=400, detail=f"无效的数据范围: {data_scope}")
 
+    # 密码策略校验：与 admin-reset-password / change-password 保持一致
+    # （此前管理员可绕过策略设置任意弱口令，E2E 回归发现的不一致）
+    from app.core.security import PasswordPolicy
+
+    is_valid, policy_msg = PasswordPolicy.validate(data.password, username=data.username)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=policy_msg)
+
     # 处理权限：将逗号分隔的权限转换为JSON数组保存到allowed_permissions
     allowed_perms = data.allowed_permissions
     if not allowed_perms and data.permissions:

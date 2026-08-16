@@ -209,6 +209,14 @@ async def create_user(
 
     # 生成或使用提供的密码
     password = user_data.password or generate_password()
+    # 密码策略一致性：管理员显式指定密码时同样受 PasswordPolicy 约束
+    # （自动生成的密码已满足策略；与 reset-password / POST /users 对齐）
+    if user_data.password:
+        from app.core.security import PasswordPolicy
+
+        is_valid_pwd, pwd_msg = PasswordPolicy.validate(user_data.password, username=user_data.username)
+        if not is_valid_pwd:
+            raise HTTPException(status_code=400, detail=pwd_msg)
 
     # 创建用户（角色归一化：兼容历史角色值）
     from app.core.constants import normalize_role
