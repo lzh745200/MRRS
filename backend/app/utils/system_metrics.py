@@ -119,7 +119,7 @@ class SystemMetrics:
             system_memory_available_bytes.set(mem.available)
             system_memory_usage_percent.set(mem.percent)
 
-            # 进程内��
+            # 进程内存
             process_mem = self.process.memory_info()
             process_memory_rss_bytes.set(process_mem.rss)
             process_memory_vms_bytes.set(process_mem.vms)

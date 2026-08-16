@@ -24,6 +24,11 @@
       <el-step title="生成导出" />
     </el-steps>
 
+    <!-- 非管理员仅导出本人录入数据（后端 export_scope=self） -->
+    <el-alert v-if="!isAdmin" type="info" show-icon :closable="false" class="self-scope-alert"
+      >仅导出您本人录入的数据</el-alert
+    >
+
     <!-- 步骤1：选择数据范围 -->
     <el-card v-if="currentStep === 0">
       <el-form label-width="120px" style="max-width: 600px">
@@ -139,9 +144,14 @@ import { ref, reactive, computed, onErrorCaptured } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Cpu } from '@element-plus/icons-vue'
 import { post, apiRequest } from '@/api/request'
+import { useAuthStore } from '@/stores/auth'
 import { DATA_TYPES, DATA_TYPE_LABELS } from '@/constants/dataTypes'
 
 defineOptions({ name: 'ReportPackage' })
+
+const authStore = useAuthStore()
+// 非管理员导出走后端 export_scope=self（仅本人录入数据），前端仅做提示
+const isAdmin = computed(() => authStore.isAdmin)
 
 const currentStep = ref(0)
 const previewing = ref(false)
@@ -279,86 +289,53 @@ async function downloadPackage() {
   }
 }
 
-/** 一键上报：使用默认配置自动完成 预览 → 生成 → 下载 */
+/** 一键上报：使用默认配置自动完成 生成 → 下载 */
 async function handleOneClickReport() {
   if (!validateForm()) return
 
   oneClickLoading.value = true
   try {
-    // 尝试使用一键上报接口
-    try {
-      const response = await post('/data-packages/one-click-report', {
-        year: form.year,
-        data_types: form.dataTypes,
-        remarks: form.remarks || `一键上报 ${form.year}年度数据`,
-      })
-
-      // 检查响应类型：可能是文件流或 JSON
-      // apiRequest 已解包：responseType:'blob' 时 response 即 Blob，否则为响应体对象
-      const isBlobResp = response instanceof Blob
-      const data = isBlobResp ? null : (response?.data ?? response)
-      if (isBlobResp) {
-        // 直接下载文件流
-        const url = URL.createObjectURL(response)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `上报数据包_${form.year}.zip`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-      } else if (data?.download_url) {
-        // JSON 响应带下载链接
-        const dlRes = await apiRequest({
-          method: 'GET',
-          url: data.download_url,
-          responseType: 'blob',
-        })
-        // dlRes 已是 Blob 本身（apiRequest responseType:'blob' 直接返回）
-        const blob = new Blob([dlRes as BlobPart])
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = data.file_name || `上报数据包_${form.year}.zip`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-      }
-
-      ElMessage.success('数据包已生成并开始下载')
-      currentStep.value = 2
-      return
-    } catch {
-      // 一键接口不可用时，回退到分步流程
-      logger.warn('[ReportPackage] one-click-report 接口不可用，回退到分步流程')
-    }
-
-    // 回退流程：预览 → 生成 → 下载
-    const previewResult = await post('/data-packages/preview', {
+    const response = await post('/data-packages/one-click-report', {
       year: form.year,
       data_types: form.dataTypes,
-    }).catch((): any => null)
-
-    if (previewResult) {
-      previewCounts.value = previewResult?.counts || previewResult?.data?.counts || {}
-    }
-
-    const { data: genResult } = await post('/data-packages', {
-      year: form.year,
-      data_types: form.dataTypes,
-      type: 'report',
       remarks: form.remarks || `一键上报 ${form.year}年度数据`,
     })
 
-    packageId.value = genResult?.id || genResult?.data?.id || ''
-    if (packageId.value) {
-      currentStep.value = 2
-      ElMessage.success('数据包生成成功，开始下载...')
-      await downloadPackage()
-    } else {
-      ElMessage.error('数据包生成失败')
+    // 检查响应类型：可能是文件流或 JSON
+    // apiRequest 已解包：responseType:'blob' 时 response 即 Blob，否则为响应体对象
+    const isBlobResp = response instanceof Blob
+    const data = isBlobResp ? null : (response?.data ?? response)
+    if (isBlobResp) {
+      // 直接下载文件流
+      const url = URL.createObjectURL(response)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `上报数据包_${form.year}.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } else if (data?.download_url) {
+      // JSON 响应带下载链接
+      const dlRes = await apiRequest({
+        method: 'GET',
+        url: data.download_url,
+        responseType: 'blob',
+      })
+      // dlRes 已是 Blob 本身（apiRequest responseType:'blob' 直接返回）
+      const blob = new Blob([dlRes as BlobPart])
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = data.file_name || `上报数据包_${form.year}.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
     }
+
+    ElMessage.success('数据包已生成并开始下载')
+    currentStep.value = 2
   } catch (e: any) {
     ElMessage.error('一键上报失败：' + getErrorMessage(e, '请稍后重试'))
   } finally {
@@ -403,5 +380,8 @@ function resetForm() {
 }
 .error-fallback {
   border: 1px solid var(--color-warning);
+}
+.self-scope-alert {
+  margin-bottom: 16px;
 }
 </style>

@@ -192,7 +192,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Refresh, Upload, Download, Delete } from '@element-plus/icons-vue'
 import { usePolicyStore } from '@/stores/policy'
 import { useAuthStore } from '@/stores/auth'
-import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import {
   getCategoryLabel,
   getLevelLabel as _getLevelLabel,
@@ -244,22 +243,9 @@ const handleSelectionChange = (rows: any[]) => {
   selectedIds.value = rows.map((r) => r.id)
 }
 
-// 权限检查
-const canEdit = computed(() => {
-  const user = authStore.user
-  if (!user) return false
-  if (user.is_superuser) return true
-  const role = normalizeRole(user.role)
-  return ADMIN_ROLES.includes(role)
-})
-
-const canDelete = computed(() => {
-  const user = authStore.user
-  if (!user) return false
-  if (user.is_superuser) return true
-  const role = normalizeRole(user.role)
-  return ADMIN_ROLES.includes(role)
-})
+// 权限检查（2026-08-15）：政策法规对普通用户与管理员完全一致，全部可增删改
+const canEdit = computed(() => !!authStore.user)
+const canDelete = computed(() => !!authStore.user)
 
 // 层级选项（根据分类动态变化）——getLevelOptions 返回 Promise，必须异步填充
 const levelOptions = ref<Array<{ value: string; label: string }>>([])

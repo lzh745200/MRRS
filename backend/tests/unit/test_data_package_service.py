@@ -390,7 +390,7 @@ class TestDataPackageService:
         service.db.refresh.side_effect = lambda pkg: setattr(pkg, 'id', 42)
         real_manifest = DataPackageManifest(version="1.0", data_types=["villages"], record_counts={"villages": 2}, org_code="ORG001")
         with patch("app.services.data_package_service.PackageStatusEnum") as mock_enum:
-            mock_enum.validated = RealPSE.VALIDATED
+            mock_enum.VALIDATED = RealPSE.VALIDATED
             with patch.object(service, "validate_package") as mock_validate:
                 mock_validate.return_value.is_valid = True
                 mock_validate.return_value.manifest = real_manifest

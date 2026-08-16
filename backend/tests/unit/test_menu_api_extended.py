@@ -46,6 +46,8 @@ def _make_user(
 
     # allowed_menus is the raw DB column (JSON string or None)
     user.allowed_menus = allowed_menus
+    # permission_pack_id 默认未绑定（真实 User 模型的默认值为 None）
+    user.permission_pack_id = None
 
     # allowed_menus_list mirrors the real property on models.user.User
     if not allowed_menus:
@@ -130,7 +132,8 @@ class TestGetAccessibleMenus:
         assert isinstance(body["data"], list)
 
     def test_custom_source_when_allowed_menus_set(self, menus_app, client):
-        """When the user has a custom allowed_menus list the source is 'user'."""
+        """When the user has a custom allowed_menus list the source is 'user'.
+        2026-08-15：政策法规/数据分析公开模块强制并入自定义配置。"""
         user = _make_user(user_id=5, username="custom", role="viewer",
                           allowed_menus='["dashboard"]')
         _set_user(menus_app, user)
@@ -139,11 +142,13 @@ class TestGetAccessibleMenus:
         body = resp.json()
         assert body["success"] is True
         assert body["source"] == "user"
-        assert len(body["data"]) == 1
-        assert body["data"][0]["key"] == "dashboard"
+        keys = [m["key"] for m in body["data"]]
+        assert "dashboard" in keys
+        assert "policies" in keys          # 公开模块强制可见
+        assert "analytics" in keys         # 公开模块强制可见
 
-    def test_empty_allowed_menus_list_returns_no_menus(self, menus_app, client):
-        """allowed_menus = '[]' → user gets zero menus."""
+    def test_empty_allowed_menus_list_still_has_public_modules(self, menus_app, client):
+        """allowed_menus = '[]' → 仅公开模块（政策法规/数据分析）。"""
         user = _make_user(user_id=6, username="empty", role="viewer",
                           allowed_menus="[]")
         _set_user(menus_app, user)
@@ -152,7 +157,10 @@ class TestGetAccessibleMenus:
         body = resp.json()
         assert body["success"] is True
         assert body["source"] == "user"
-        assert body["data"] == []
+        keys = [m["key"] for m in body["data"]]
+        assert "dashboard" not in keys
+        assert "policies" in keys
+        assert "analytics" in keys
 
     def test_role_default_for_admin_includes_many_keys(self, menus_app, client, admin_user):
         """An admin with no custom menus gets a large set from role defaults."""
@@ -663,24 +671,28 @@ class TestHelperFunctions:
         assert "funds-lifecycle" in viewer_keys
         assert "funds-settlement" in viewer_keys
 
-    def test_get_user_accessible_uses_custom_over_role(self):
-        from app.api.v1.menus import _get_user_accessible_menu_keys
+    def test_get_user_accessible_uses_custom_over_role(self, mock_db):
+        from app.api.v1.menus import _get_user_accessible_menu_keys, _PUBLIC_ACCESS_KEYS
         user = _make_user(role="admin", allowed_menus='["dashboard"]')
-        keys = _get_user_accessible_menu_keys(user)
-        assert keys == {"dashboard"}
+        keys = _get_user_accessible_menu_keys(user, mock_db)
+        # 用户配置优先，但政策法规/数据分析公开模块强制并入（2026-08-15）
+        assert keys == {"dashboard"} | _PUBLIC_ACCESS_KEYS
 
-    def test_get_user_accessible_falls_back_to_role(self):
+    def test_get_user_accessible_falls_back_to_role(self, mock_db):
         from app.api.v1.menus import _get_user_accessible_menu_keys
         user = _make_user(role="viewer", allowed_menus=None)
-        keys = _get_user_accessible_menu_keys(user)
+        keys = _get_user_accessible_menu_keys(user, mock_db)
         assert "dashboard" in keys
         assert "system" not in keys
+        # 政策法规/数据分析对 viewer 同样可见
+        assert "policies" in keys
+        assert "analytics" in keys
 
-    def test_get_user_accessible_empty_list_means_no_menus(self):
-        from app.api.v1.menus import _get_user_accessible_menu_keys
+    def test_get_user_accessible_empty_list_still_has_public(self, mock_db):
+        from app.api.v1.menus import _get_user_accessible_menu_keys, _PUBLIC_ACCESS_KEYS
         user = _make_user(role="admin", allowed_menus="[]")
-        keys = _get_user_accessible_menu_keys(user)
-        assert keys == set()
+        keys = _get_user_accessible_menu_keys(user, mock_db)
+        assert keys == _PUBLIC_ACCESS_KEYS
 
     def test_lru_cache_on_role_defaults(self):
         """_get_role_default_menu_keys is cached — same role returns same object."""

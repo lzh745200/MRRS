@@ -200,6 +200,6 @@ class PasswordEncryptionService:
         salt = bytes.fromhex(salt_hex)
         decrypted_data = PasswordEncryptionService.decrypt_data(encrypted_data, password, salt, iterations)
 
-        # 写入解密���件
+        # 写入解密文件
         with open(output_path, "wb") as f:
             f.write(decrypted_data)

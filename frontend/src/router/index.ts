@@ -565,6 +565,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '用户管理', roles: ['admin', 'super_admin'] },
       },
       {
+        path: '/system/permission-packs',
+        name: 'SystemPermissionPacks',
+        component: () => retryImport(() => import('@/views/system/PermissionPacks.vue')),
+        meta: { title: '权限包管理', roles: ['admin', 'super_admin'] },
+      },
+      {
         path: '/system/roles',
         redirect: '/system/users',
         meta: { title: '角色管理 (已合并到用户管理)' },

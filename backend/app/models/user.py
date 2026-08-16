@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import (
     Boolean,
@@ -17,6 +18,7 @@ from app.models.base import Base
 from app.models.two_factor_auth import TwoFactorAuth  # noqa: F401
 
 from .organization import Organization  # noqa: F401 - relationship 字符串引用注册
+from .permission_pack import PermissionPack  # noqa: F401 - FK 字符串引用注册（permission_packs.id）
 
 """用户模型"""
 
@@ -67,6 +69,12 @@ class User(Base):
     machine_binding_required = Column(Boolean, default=False, comment="是否强制机器码绑定")
     allowed_permissions = Column(Text, default="", comment="白名单权限(JSON数组)，为空则使用角色默认权限")
     allowed_menus = Column(Text, nullable=True, comment="用户可见菜单key列表(JSON数组)，NULL表示继承角色默认菜单，空数组[]表示无菜单")
+    permission_pack_id = Column(
+        Integer,
+        ForeignKey("permission_packs.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="绑定的权限包ID，NULL表示未绑定（菜单解析优先级：allowed_menus > 权限包 > 角色默认）",
+    )
     token_version = Column(Integer, default=0, comment="Token版本号，递增后旧token全部失效")
     must_change_password = Column(Boolean, default=False, comment="是否必须修改密码")
     failed_login_count = Column(Integer, default=0, comment="连续登录失败次数")
@@ -80,6 +88,11 @@ class User(Base):
     projects = relationship("Project", back_populates="creator", foreign_keys="[Project.created_by]")
     organization = relationship("Organization", foreign_keys=[organization_id], lazy="select")
     two_factor_auth = relationship("TwoFactorAuth", back_populates="user", uselist=False)
+
+    @property
+    def org_id(self) -> Optional[int]:
+        """兼容旧接口别名：数据上报/数据包接收等模块使用 org_id 读取所属组织"""
+        return self.organization_id
 
     @property
     def permissions_list(self) -> list:

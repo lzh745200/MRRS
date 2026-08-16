@@ -24,6 +24,7 @@ export interface AuthData {
     organization_name?: string
     must_change_password?: boolean
     is_superuser?: boolean
+    permission_pack_id?: number | null
   }
   refreshToken?: string
 }

@@ -27,6 +27,16 @@ def require_manager_role(current_user) -> None:
         raise HTTPException(status_code=403, detail="权限不足，仅管理员或管理角色可执行此操作")
 
 
+def require_policy_operator_role(current_user) -> None:
+    """政策法规模块操作权限：放行全部已认证角色（admin/user/viewer 均可）。
+
+    产品要求（2026-08-15）：普通用户的政策法规功能与管理员完全一致，
+    增删改查全部可用；数据隔离由 filter_by_data_scope 保障。
+    """
+    # 已通过 get_current_user 认证即放行；显式保留函数便于未来收紧策略
+    return None
+
+
 def require_funds_operator_role(current_user) -> None:
     """经费管理操作权限：放行 user 及以上角色（viewer 保持只读）。
 

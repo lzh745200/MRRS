@@ -12,17 +12,22 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
 // vi.mock 工厂提升求值，引用对象须先放入 vi.hoisted 初始化
-const { ElMessage, postMock, apiRequestMock, logError, logWarn } = vi.hoisted(() => {
+const { ElMessage, postMock, apiRequestMock, logError, logWarn, authState } = vi.hoisted(() => {
   return {
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
     postMock: vi.fn(),
     apiRequestMock: vi.fn(),
     logError: vi.fn(),
     logWarn: vi.fn(),
+    authState: { isAdmin: true },
   }
 })
 
 vi.mock('element-plus', () => ({ ElMessage }))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authState,
+}))
 
 vi.mock('@/api/request', () => ({
   post: postMock,
@@ -65,6 +70,7 @@ function spyAnchorClick() {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  authState.isAdmin = true
   postMock.mockResolvedValue({ counts: { villages: 3, projects: 5 } })
   apiRequestMock.mockResolvedValue('blob-content')
 })
@@ -371,79 +377,30 @@ describe('一键上报', () => {
     expect(vm.currentStep).toBe(2)
   })
 
-  it('一键接口不可用 → 回退分步流程：预览嵌套 counts + 生成 id 直取 + 自动下载', async () => {
-    const clickSpy = spyAnchorClick()
-    postMock.mockImplementation((url: string) => {
-      if (url === '/data-packages/one-click-report') return Promise.reject(new Error('404'))
-      if (url === '/data-packages/preview') return Promise.resolve({ data: { counts: { villages: 2 } } })
-      if (url === '/data-packages') return Promise.resolve({ data: { id: 'pkg-r1' } })
-      return Promise.resolve({})
-    })
+  it('一键接口失败 → 直接提示失败（无 POST /data-packages 死回退）：Error message 与默认文案两级', async () => {
     const wrapper = mountComp()
     const vm = wrapper.vm as any
+    postMock.mockRejectedValue(new Error('接口炸了'))
     await vm.handleOneClickReport()
-    expect(logWarn).toHaveBeenCalled()
-    expect(vm.previewCounts).toEqual({ villages: 2 })
-    expect(vm.packageId).toBe('pkg-r1')
-    expect(vm.currentStep).toBe(2)
-    expect(ElMessage.success).toHaveBeenCalledWith('数据包生成成功，开始下载...')
-    expect(clickSpy).toHaveBeenCalled()
-    expect(vm.oneClickLoading).toBe(false)
-  })
-
-  it('回退流程：预览失败（null 跳过）+ 生成 data.data.id 嵌套取值', async () => {
-    spyAnchorClick()
-    postMock.mockImplementation((url: string) => {
-      if (url === '/data-packages/one-click-report') return Promise.reject(new Error('404'))
-      if (url === '/data-packages/preview') return Promise.reject(new Error('preview-down'))
-      if (url === '/data-packages') return Promise.resolve({ data: { data: { id: 'pkg-r2' } } })
-      return Promise.resolve({})
-    })
-    const wrapper = mountComp()
-    const vm = wrapper.vm as any
-    await vm.handleOneClickReport()
-    expect(vm.previewCounts).toEqual({}) // previewResult 为 null → 不写入
-    expect(vm.packageId).toBe('pkg-r2')
-    expect(vm.currentStep).toBe(2)
-  })
-
-  it('回退流程：预览空对象（|| {} 兜底）+ 生成无 id → 提示生成失败', async () => {
-    postMock.mockImplementation((url: string) => {
-      if (url === '/data-packages/one-click-report') return Promise.reject(new Error('404'))
-      if (url === '/data-packages/preview') return Promise.resolve({})
-      if (url === '/data-packages') return Promise.resolve({ data: {} })
-      return Promise.resolve({})
-    })
-    const wrapper = mountComp()
-    const vm = wrapper.vm as any
-    await vm.handleOneClickReport()
-    expect(vm.previewCounts).toEqual({})
-    expect(vm.packageId).toBe('')
-    expect(ElMessage.error).toHaveBeenCalledWith('数据包生成失败')
+    expect(ElMessage.error).toHaveBeenCalledWith('一键上报失败：接口炸了')
     expect(vm.currentStep).toBe(0)
-  })
 
-  it('回退流程生成接口抛错 → 外层 catch：Error message 与默认文案两级', async () => {
-    const wrapper = mountComp()
-    const vm = wrapper.vm as any
-    postMock.mockImplementation((url: string) => {
-      if (url === '/data-packages/one-click-report') return Promise.reject(new Error('404'))
-      if (url === '/data-packages/preview') return Promise.resolve({ counts: {} })
-      if (url === '/data-packages') return Promise.reject(new Error('生成接口炸了'))
-      return Promise.resolve({})
-    })
-    await vm.handleOneClickReport()
-    expect(ElMessage.error).toHaveBeenCalledWith('一键上报失败：生成接口炸了')
-
-    postMock.mockImplementation((url: string) => {
-      if (url === '/data-packages/one-click-report') return Promise.reject(new Error('404'))
-      if (url === '/data-packages/preview') return Promise.resolve({ counts: {} })
-      if (url === '/data-packages') return Promise.reject({})
-      return Promise.resolve({})
-    })
+    postMock.mockRejectedValue({})
     await vm.handleOneClickReport()
     expect(ElMessage.error).toHaveBeenCalledWith('一键上报失败：请稍后重试')
     expect(vm.oneClickLoading).toBe(false)
+  })
+
+  it('非管理员 → 显示「仅导出您本人录入的数据」提示；管理员 → 隐藏', async () => {
+    authState.isAdmin = false
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(wrapper.text()).toContain('仅导出您本人录入的数据')
+
+    authState.isAdmin = true
+    const wrapper2 = mountComp()
+    await flushPromises()
+    expect(wrapper2.text()).not.toContain('仅导出您本人录入的数据')
   })
 
   it('一键上报校验失败 → 直接返回', async () => {

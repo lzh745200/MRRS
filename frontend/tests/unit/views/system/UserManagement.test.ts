@@ -26,6 +26,7 @@ const {
   normalizeMock,
   clipWrite,
   routeQuery,
+  listPacksMock,
 } = vi.hoisted(() => {
   return {
     authState: { isAdmin: true },
@@ -43,6 +44,7 @@ const {
     normalizeMock: vi.fn(),
     clipWrite: vi.fn(),
     routeQuery: { query: {} as Record<string, any> },
+    listPacksMock: vi.fn(),
   }
 })
 
@@ -58,6 +60,10 @@ vi.mock('@/api/request', () => ({
   del: mockDel,
   apiRequest: mockApiRequest,
   getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+
+vi.mock('@/api/permissionPack', () => ({
+  listPermissionPacks: listPacksMock,
+}))
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeQuery,
@@ -111,6 +117,11 @@ const sampleUser = {
   organization_name: '总部',
 }
 
+const menuTreeSample = [
+  { key: 'a', label: '菜单A' },
+  { key: 'b', label: '菜单B', children: [{ key: 'b1', label: '子B1' }] },
+]
+
 function defaultGetImpl(url: string) {
   if (url === '/organizations/tree') {
     return Promise.resolve({ data: [{ id: 1, name: '总部', children: [] }] })
@@ -133,7 +144,7 @@ function defaultGetImpl(url: string) {
   return Promise.resolve({ data: {} })
 }
 
-function mountComp() {
+function mountComp(extraStubs: Record<string, any> = {}) {
   // setup.ts 的全局 el-* stub 默认不渲染插槽，需 renderStubDefaultSlot；
   // 具名插槽（header/footer/dropdown/append）与作用域插槽（表格行）需自定义 stub。
   return mount(UserManagement, {
@@ -161,11 +172,12 @@ function mountComp() {
         // 注入两行样本数据，覆盖 machine_code 有/无、is_active 真/假、organization_name 空值等模板两侧分支
         'el-table-column': {
           name: 'ElTableColumn',
-          template: '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /></div>',
+          template: '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /><slot :row="rowC" /></div>',
           data() {
             return {
               rowA: {
                 id: 1,
+                permission_pack_id: 1,
                 username: 'admin',
                 full_name: '张三',
                 role: 'admin',
@@ -183,6 +195,7 @@ function mountComp() {
               },
               rowB: {
                 id: 2,
+                permission_pack_id: 999,
                 username: 'op',
                 full_name: '李四',
                 role: 'viewer',
@@ -198,9 +211,27 @@ function mountComp() {
                 user_agent: 'Firefox',
                 created_at: null,
               },
+              rowC: {
+                id: 3,
+                username: 'u3',
+                full_name: '王五',
+                role: 'user',
+                data_scope: 'self',
+                organization_name: '',
+                department: '',
+                phone: '',
+                machine_code: '',
+                last_login: '',
+                is_active: true,
+                session_id: 's3',
+                ip_address: '3.3.3.3',
+                user_agent: 'Safari',
+                created_at: null,
+              },
             }
           },
         },
+        ...extraStubs,
       },
     },
   })
@@ -210,6 +241,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   authState.isAdmin = true
   mockGet.mockImplementation(defaultGetImpl)
+  listPacksMock.mockResolvedValue([{ id: 1, name: '基础包' }])
   mockApiRequest.mockResolvedValue({ items: [sampleUser], total: 1 })
   mockPost.mockResolvedValue({ data: {} })
   mockPut.mockResolvedValue({ data: {} })

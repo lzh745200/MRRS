@@ -293,31 +293,31 @@ describe('权限 computed 全分支', () => {
     expect(vm.canDelete).toBe(true)
   })
 
-  it('role editor → 不归一化为 admin（与后端 normalize_role 一致），canEdit/canDelete 均 false', async () => {
+  it('role editor → 任意已认证角色均可编辑（2026-08-15 政策法规全角色放开）', async () => {
     authState.user = { role: 'editor' }
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.canEdit).toBe(false)
-    expect(vm.canDelete).toBe(false)
+    expect(vm.canEdit).toBe(true)
+    expect(vm.canDelete).toBe(true)
   })
 
-  it('role viewer → 均 false（|| 全假侧）', async () => {
+  it('role viewer → 均 true（普通用户与管理员完全一致）', async () => {
     authState.user = { role: 'viewer' }
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.canEdit).toBe(false)
-    expect(vm.canDelete).toBe(false)
+    expect(vm.canEdit).toBe(true)
+    expect(vm.canDelete).toBe(true)
   })
 
-  it('user 无 role 字段 → (user.role || "") 空串侧', async () => {
+  it('user 无 role 字段 → 已认证即 true', async () => {
     authState.user = {}
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.canEdit).toBe(false)
-    expect(vm.canDelete).toBe(false)
+    expect(vm.canEdit).toBe(true)
+    expect(vm.canDelete).toBe(true)
   })
 })
 

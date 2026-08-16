@@ -5,6 +5,21 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.8.3] - 2026-08-16
+
+### 新增
+
+- ✨ **权限包管理**：管理员可将一组菜单打包为「权限包」并绑定一批普通用户（仅限 user/viewer，admin/super_admin 拒绝绑定），改包即全员生效。菜单可见性三级优先级：个人菜单配置 > 绑定权限包 > 角色默认；未绑定用户行为与历史完全一致。入口：系统管理 → 权限包管理（admin/super_admin）；用户管理列表新增「权限包」列
+- ✨ **数据上报与接收闭环补强**：非管理员导出一键上报包仅含本人录入数据（管理员维持全组织，manifest 记录 export_scope/exported_by_name，旧格式包兼容）；新增字段级自动校验纠正（必填/枚举/手机号/日期/数值——自动 trim、手机号去分隔符、日期归一 ISO、数字字符串转数值；行分级 ok/corrected/rejected，rejected 不入库并注明原因）；数据包导入与确认入库限 admin/super_admin；新增「接收记录」视图（包编号/来源组织/上报人/大小/校验结果/状态，仅管理员）
+
+### 修复（权限包控制与数据上报链路验证回归）
+
+- 🐛 **User 模型缺少 org_id 别名**：数据上报（/data-reports）与数据包接收（/data-packages/import）大量使用 `current_user.org_id`，但模型仅有 organization_id，导致上报创建报"用户未关联组织"、接收报"未指定目标组织ID"、一键上报组织归属回退错误。现新增 `org_id` property 兼容别名，上报/接收全链路组织归属正确
+- 🐛 **数据包导入 AttributeError: validated**：`import_package` 结果构造误用 `PackageStatusEnum.validated`（枚举成员实为大写 VALIDATED），管理员上传接收数据包必现 500。已修正为大写成员
+- 🐛 **数据包编码同秒冲突**：`_generate_package_code` 使用秒级时间戳，同一组织同一秒内两次导出/接收撞 `data_packages.package_code` 唯一约束 → 500。现改为毫秒级时间戳 + 4 位随机后缀
+- 🐛 **上报编码同秒冲突**：`_generate_report_code` 同为秒级时间戳，同一秒内创建两条上报撞 `data_reports.report_code` 唯一约束 → 500。同样改为毫秒 + 随机后缀
+- ✅ **链路验证 25/25 通过**（隔离库双账号实测）：权限包 CRUD/绑定/解绑/非法key拦截/菜单收敛（7项）；下级录入→一键上报→列表可见→管理员上传接收→自动校验→预览→确认导入（导出=导入记录数）→数据保存可查→字段级自动纠正（trim修复入库/缺必填拒绝跳过）→第二包逐一接收（11项）；上报创建/提交/上级收到/待处理/审批通过/驳回流/下级状态查询（7项）
+
 ## [1.8.2] - 2026-08-15
 
 ### 修复

@@ -132,6 +132,13 @@ export const MENU_CONFIG: MenuItem[] = [
         icon: 'User',
       },
       {
+        key: 'system-permission-packs',
+        label: '权限包管理',
+        path: '/system/permission-packs',
+        icon: 'Lock',
+        roles: ['super_admin', 'admin'],
+      },
+      {
         key: 'machine-code',
         label: '机器码管理',
         path: '/admin/machine-code',

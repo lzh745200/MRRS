@@ -19,7 +19,7 @@ from app.core.database import get_db
 from app.core.exceptions import BusinessError, NotFoundException
 from app.core.response import success_response
 from app.core.security import get_current_user
-from app.core.permission_utils import get_org_with_fallback
+from app.core.permission_utils import get_org_with_fallback, is_admin, require_admin
 from app.models.import_export_history import OperationResult
 from app.models.data_package import PackageType
 from app.schemas.data_package import (DataPackageConfirmRequest,
@@ -37,6 +37,7 @@ from app.services.import_export_history_service import \
 from app.core.transaction import safe_commit
 from app.services.organization_permission_service import \
     OrganizationPermissionService
+from app.services.work_log_service import write_work_log
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,33 @@ def _get_first_active_org(db: Session) -> Optional[int]:
 
     first_org = db.query(Organization).filter(Organization.is_active == True).first()  # noqa: E712
     return first_org.id if first_org else None
+
+
+def _export_owner_scope(current_user) -> Optional[int]:
+    """导出范围：非管理员仅导出本人录入（created_by）的记录；管理员返回 None（全组织，行为不变）"""
+    return None if is_admin(current_user) else getattr(current_user, "id", None)
+
+
+def _user_display_name(current_user) -> str:
+    """用户显示名（full_name 优先，回退 username；非字符串属性忽略）"""
+    for attr in ("full_name", "username"):
+        value = getattr(current_user, attr, None)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+def _safe_write_work_log(db: Session, action: str, entity_id, entity_name: str, current_user, detail: str = ""):
+    """写数据包审计日志（日志失败不阻断主流程）"""
+    try:
+        write_work_log(
+            db, "data_package", action, entity_id, entity_name,
+            user_id=getattr(current_user, "id", None),
+            username=_user_display_name(current_user),
+            detail=detail,
+        )
+    except Exception as e:
+        logger.warning(f"记录数据包审计日志失败: {e}")
 
 
 class OneClickReportRequest(BaseModel):
@@ -133,6 +161,8 @@ async def one_click_report(
             export_by=current_user.id,
             description=desc,
             package_type=PackageType.report,
+            owner_id=_export_owner_scope(current_user),
+            exported_by_name=_user_display_name(current_user),
         )
 
         duration_ms = int((time.time() - start_time) * 1000)
@@ -153,6 +183,13 @@ async def one_click_report(
             )
         except Exception as e:
             logger.warning(f"记录一键上报历史失败: {e}")
+
+        # 审计日志
+        _safe_write_work_log(
+            service.db, "export", result.package_id,
+            result.file_name or result.package_code, current_user,
+            detail=f"一键上报，记录数: {sum(result.manifest.record_counts.values()) if result.manifest else 0}",
+        )
 
         # 直接返回文件流
         file_path = getattr(result, "file_path", None)
@@ -222,6 +259,73 @@ async def list_data_packages(
         page=page,
         page_size=page_size,
         items=[DataPackageResponse.model_validate(pkg) for pkg in packages],
+    )
+
+
+def _received_package_to_dict(package) -> dict:
+    """接收记录序列化（manifest/data_types 字段缺失容忍）"""
+    import json as _json
+
+    manifest = package.manifest if isinstance(package.manifest, dict) else {}
+    data_types = package.data_types
+    if isinstance(data_types, str):
+        try:
+            data_types = _json.loads(data_types)
+        except (ValueError, TypeError):
+            data_types = [data_types]
+
+    importer = getattr(package, "importer", None)
+    imported_by_name = None
+    if importer is not None:
+        imported_by_name = getattr(importer, "full_name", None) or getattr(importer, "username", None)
+
+    return {
+        "id": package.id,
+        "package_code": package.package_code,
+        "file_name": package.file_name,
+        "file_size": package.file_size or 0,
+        "record_count": package.record_count or 0,
+        "data_types": data_types or [],
+        "status": getattr(package.status, "value", package.status),
+        "created_at": package.created_at.isoformat() if package.created_at else None,
+        "imported_at": package.imported_at.isoformat() if package.imported_at else None,
+        "imported_by": imported_by_name,
+        "org_code": manifest.get("org_code"),
+        "org_name": manifest.get("org_name"),
+        "export_scope": manifest.get("export_scope"),
+        "exported_by_name": manifest.get("exported_by_name"),
+        "validation_summary": manifest.get("validation_summary"),
+    }
+
+
+@router.get("/received")
+async def list_received_packages(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """获取已接收的上报数据包列表（仅管理员，按创建时间倒序分页）"""
+    require_admin(current_user, error_message="仅管理员可查看接收记录")
+
+    from app.models.data_package import DataPackage
+
+    query = (
+        db.query(DataPackage)
+        .filter(DataPackage.type == "report")
+        .order_by(DataPackage.created_at.desc(), DataPackage.id.desc())
+    )
+    total = query.count()
+    packages = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    return success_response(
+        data={
+            "items": [_received_package_to_dict(pkg) for pkg in packages],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        },
+        message="成功",
     )
 
 
@@ -316,6 +420,8 @@ async def export_data_package(
             package_type=data.type,
             incremental=data.incremental,
             since_sync_version=data.since_sync_version if data.incremental else None,
+            owner_id=_export_owner_scope(current_user),
+            exported_by_name=_user_display_name(current_user),
         )
 
         duration_ms = int((time.time() - start_time) * 1000)
@@ -336,6 +442,13 @@ async def export_data_package(
             )
         except Exception as e:
             logger.warning(f"记录导出历史失败: {e}")
+
+        # 审计日志
+        _safe_write_work_log(
+            service.db, "export", result.package_id,
+            result.file_name or result.package_code, current_user,
+            detail=f"导出数据包，记录数: {sum(result.manifest.record_counts.values()) if result.manifest else 0}",
+        )
 
         return result
 
@@ -358,7 +471,9 @@ async def import_data_package(
     history_service: ImportExportHistoryService = Depends(get_history_service),
     permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
-    """导入数据包"""
+    """导入数据包（仅管理员可接收）"""
+    require_admin(current_user, error_message="仅管理员可接收数据包")
+
     # 验证文件
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="未选择文件")
@@ -429,6 +544,13 @@ async def import_data_package(
             user_agent=request.headers.get("User-Agent") if request else None,
             result=op_result,
             error_message=error_msg,
+        )
+
+        # 审计日志
+        _safe_write_work_log(
+            service.db, "import", result.package_id,
+            file.filename or result.package_code, current_user,
+            detail=f"接收数据包，校验{'通过' if result.validation.is_valid else '未通过'}",
         )
 
         return result
@@ -684,7 +806,9 @@ async def confirm_import(
     history_service: ImportExportHistoryService = Depends(get_history_service),
     permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
-    """确认导入数据"""
+    """确认导入数据（仅管理员可操作）"""
+    require_admin(current_user, error_message="仅管理员可接收数据包")
+
     package = service.get_package(package_id)
     if not package:
         raise NotFoundException("数据包不存在")
@@ -723,6 +847,13 @@ async def confirm_import(
                 "error_counts": result.error_counts,
             },
             ip_address=get_client_ip(request),
+        )
+
+        # 审计日志
+        _safe_write_work_log(
+            service.db, "confirm", package_id,
+            package.file_name or package.package_code, current_user,
+            detail=f"确认导入，成功 {total_imported} 条，跳过 {sum(result.skipped_counts.values())} 条",
         )
 
         return result

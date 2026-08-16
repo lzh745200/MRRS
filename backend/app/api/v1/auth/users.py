@@ -286,6 +286,7 @@ async def list_users(
                 "last_login": u.last_login.isoformat() if u.last_login else None,
                 "created_at": u.created_at.isoformat() if u.created_at else None,
                 "machine_code": machine_codes.get(u.id),
+                "permission_pack_id": u.permission_pack_id,
             }
             for u in users
         ],

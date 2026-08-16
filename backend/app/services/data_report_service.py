@@ -6,6 +6,7 @@ Data Report Service
 import logging
 from datetime import timezone, datetime
 from typing import Dict, List, Optional
+import uuid
 
 from sqlalchemy.orm import Session
 
@@ -470,9 +471,10 @@ class DataReportService:
         return any(a.id == superior_org_id for a in ancestors)
 
     def _generate_report_code(self, org_code: str) -> str:
-        """生成上报编码"""
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        return f"RPT-{org_code}-{timestamp}"
+        """生成上报编码（毫秒级时间戳 + 4位随机后缀，避免同一秒内多次创建撞唯一约束）"""
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")[:-3]
+        suffix = uuid.uuid4().hex[:4]
+        return f"RPT-{org_code}-{timestamp}-{suffix}"
 
     def _notify_submission(self, report: DataReport) -> None:
         """通知上级单位有新上报"""

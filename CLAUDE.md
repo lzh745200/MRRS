@@ -108,7 +108,7 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
 - 项目完全离线运行，安装包内置所有运行时
 - Schema 权威来源: `backend/app/models/` 和 Alembic 迁移；`database/init.sql` 已删除
 - `.env` 文件不纳入版本控制
-- 版本号在 `backend/app/core/config.py` → `Settings.PROJECT_VERSION`（当前 1.8.2）
+- 版本号在 `backend/app/core/config.py` → `Settings.PROJECT_VERSION`（当前 1.8.3）
 - 数据库: `backend/data/rural_revitalization.db`
 - 生产部署前清除测试数据: `DELETE FROM supported_villages; DELETE FROM schools;`
 - **`SupportedVillage.is_revitalization_tier`** 是 Boolean（是否振兴梯队），原来的 `revitalization_tier` (String) 和 `tiered_development_level` (String) 已删除

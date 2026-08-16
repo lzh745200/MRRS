@@ -47,6 +47,7 @@ def _make_user(**kwargs):
     user.allowed_permissions = kwargs.get("allowed_permissions", "")
     user.token_version_safe = kwargs.get("token_version_safe", 1)
     user.organization = kwargs.get("organization", None)
+    user.permission_pack_id = kwargs.get("permission_pack_id", None)
     user.revoke_all_tokens = Mock()
     user.last_login = kwargs.get("last_login", datetime.now(timezone.utc))
     return user

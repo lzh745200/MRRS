@@ -33,7 +33,8 @@ describe('config/menu-config', () => {
   it('getAllMenuKeys 返回全部 key 且无重复', () => {
     const keys = getAllMenuKeys()
     expect(new Set(keys).size).toBe(keys.length)
-    expect(keys).toHaveLength(54)
+    expect(keys).toHaveLength(55)
+    expect(keys).toContain('system-permission-packs')
     expect(keys).toContain('dashboard')
     expect(keys).toContain('system-overview')
     expect(keys).toContain('batch-import')
@@ -76,9 +77,10 @@ describe('config/menu-config', () => {
     expect(approval.roles).toEqual(['admin', 'super_admin'])
   })
 
-  it('system-security 含 19 个子项且角色受限', () => {
+  it('system-security 含 20 个子项且角色受限', () => {
     const sys = MENU_CONFIG.find((m) => m.key === 'system-security')!
-    expect(sys.children).toHaveLength(19)
+    expect(sys.children).toHaveLength(20)
+    expect((sys.children || []).some((c) => c.key === 'system-permission-packs')).toBe(true)
     expect(sys.roles).toEqual(['admin', 'super_admin'])
     for (const child of sys.children!) {
       expect(child.key).toBeTruthy()

@@ -228,7 +228,7 @@ class OrganizationPermissionService:
         user_org_id = self.get_user_organization_id(user=user)
 
         if user_org_id is None:
-            # 未绑定组��的普通用户无法管理任何组织
+            # 未绑定组织的普通用户无法管理任何组织
             return False
 
         if user_org_id == org_id:

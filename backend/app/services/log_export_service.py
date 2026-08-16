@@ -300,7 +300,7 @@ class LogExportService:
                 shutil.rmtree(report_dir, ignore_errors=True)
                 logger.debug(f"临时目录已清理: {report_dir}")
         except Exception as e:
-            logger.warning(f"清理临时��件失败: {e}")
+            logger.warning(f"清理临时文件失败: {e}")
 
     def list_reports(self, limit: int = 10) -> List[Dict]:
         """列出所有错误报告"""

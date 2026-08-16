@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import shutil
+import uuid
 import zipfile
 from datetime import timezone, datetime
 from decimal import Decimal
@@ -41,6 +42,7 @@ from app.schemas.data_package import (
     PackageStatusEnum,
 )
 from app.services.organization_service import OrganizationService
+from app.services.package_record_validator import validate_records
 from app.core.transaction import safe_commit
 
 # 支持的数据包版本
@@ -110,8 +112,14 @@ class DataPackageService:
         incremental: bool = False,
         since_sync_version: Optional[int] = None,
         since_time: Optional[datetime] = None,
+        owner_id: Optional[int] = None,
+        exported_by_name: Optional[str] = None,
     ) -> DataPackageExportResult:
-        """导出数据包（incremental=True 时按 sync_version 或 updated_at 时间过滤变更记录）"""
+        """导出数据包（incremental=True 时按 sync_version 或 updated_at 时间过滤变更记录）
+
+        owner_id 非 None 时仅导出该用户本人录入（created_by）的记录，
+        manifest 标记 export_scope=self；为 None 时导出全组织（export_scope=org）。
+        """
         org = self.org_service.get_organization(org_id)
         if not org:
             raise BusinessError(f"组织不存在: {org_id}")
@@ -127,6 +135,7 @@ class DataPackageService:
                     org_id, model,
                     since_sync_version=since_sync_version if incremental else None,
                     since_time=since_time if incremental else None,
+                    owner_id=owner_id,
                 )
                 data_dict[data_type] = records
                 record_counts[data_type] = len(records)
@@ -146,6 +155,8 @@ class DataPackageService:
             compression="zip",
             incremental=incremental,
             base_package_id=None,
+            export_scope="self" if owner_id is not None else "org",
+            exported_by_name=exported_by_name,
         )
 
         file_name = f"{package_code}.zip"
@@ -179,13 +190,20 @@ class DataPackageService:
         self, org_id: int, model: Any,
         since_sync_version: Optional[int] = None,
         since_time: Optional[datetime] = None,
+        owner_id: Optional[int] = None,
     ) -> List[Dict]:
-        """导出指定类型的数据（增量模式: 按 sync_version 或 updated_at 时间过滤）"""
+        """导出指定类型的数据（增量模式: 按 sync_version 或 updated_at 时间过滤）
+
+        owner_id 非 None 且模型有 created_by 列时，仅导出该用户本人录入的记录。
+        """
         query = self.db.query(model)
         if hasattr(model, "org_id"):
             query = query.filter(model.org_id == org_id)
         elif hasattr(model, "organization_id"):
             query = query.filter(model.organization_id == org_id)
+
+        if owner_id is not None and hasattr(model, "created_by"):
+            query = query.filter(model.created_by == owner_id)
 
         if since_sync_version is not None and hasattr(model, "sync_version"):
             query = query.filter(model.sync_version > since_sync_version)
@@ -250,6 +268,8 @@ class DataPackageService:
         manifest_dict = None
         if validation.manifest:
             manifest_dict = json.loads(json.dumps(validation.manifest.model_dump(), cls=CustomJSONEncoder))
+            # 校验摘要随包记录落库（additive），供 /received 接收记录展示
+            manifest_dict["validation_summary"] = validation.warnings
 
         package = DataPackage(
             package_code=package_code, org_id=org_id, file_path=permanent_path,
@@ -265,7 +285,7 @@ class DataPackageService:
 
         return DataPackageImportResult(
             package_id=package.id, package_code=package_code,
-            status=PackageStatusEnum.validated, manifest=validation.manifest,
+            status=PackageStatusEnum.VALIDATED, manifest=validation.manifest,
             preview=preview, validation=validation,
         )
 
@@ -317,6 +337,8 @@ class DataPackageService:
                             actual_count = len(data)
                             if actual_count != expected_count:
                                 warnings.append(f"{data_type}: 记录数不匹配 (期望: {expected_count}, 实际: {actual_count})")
+                            # 字段级校验：摘要写入 warnings（additive，不影响 errors 语义）
+                            warnings.extend(self._field_validation_warnings(data_type, data))
                         except json.JSONDecodeError as e:
                             errors.append(DataPackageValidationError(
                                 field=data_type,
@@ -332,6 +354,21 @@ class DataPackageService:
         return DataPackageValidationResult(
             is_valid=len(errors) == 0, errors=errors, warnings=warnings, manifest=manifest
         )
+
+    @staticmethod
+    def _field_validation_warnings(data_type: str, data: Any, max_detail: int = 5) -> List[str]:
+        """字段级校验摘要（各类型 ok/corrected/rejected 计数 + 前 N 条问题明细）"""
+        if not isinstance(data, list) or data_type not in DATA_TYPE_MODELS:
+            return []
+        fv = validate_records(data_type, data)
+        lines = [
+            f"{data_type}: 字段校验 通过{len(fv['ok'])}条/纠正{len(fv['corrected'])}条/拒绝{len(fv['rejected'])}条"
+        ]
+        for item in fv["rejected"][:max_detail]:
+            lines.append(f"{data_type} 第{item['row'] + 1}行 校验未通过: {'；'.join(item['reasons'])}")
+        for item in fv["corrected"][:max_detail]:
+            lines.append(f"{data_type} 第{item['row'] + 1}行 已自动纠正: {'；'.join(item['fixes'])}")
+        return lines
 
     async def preview_package_data(self, package_id: int) -> List[DataPackagePreviewData]:
         """预览导入的数据 (同步方法)"""
@@ -408,10 +445,24 @@ class DataPackageService:
                         records = json.loads(data_content)
                         model = DATA_TYPE_MODELS[data_type]
 
+                        # 字段级校验：ok + corrected(纠正后数据) 进 upsert，rejected 跳过并记录明细
+                        fv = validate_records(data_type, records)
+                        accepted = fv["ok"] + [c["data"] for c in fv["corrected"]]
+                        rejected = fv["rejected"]
+                        for item in rejected:
+                            errors.append(DataPackageValidationError(
+                                field=data_type,
+                                message=f"第{item['row'] + 1}行校验未通过: {'；'.join(item['reasons'])}",
+                                row=item["row"] + 1,
+                                data_type=data_type,
+                            ))
+
                         # 🚀 调用批量 Upsert 方法
-                        imp, skip, errs = self._bulk_upsert_records(model, records, resolved_org_id, overwrite_existing)
+                        imp, skip, errs = self._bulk_upsert_records(
+                            model, accepted, resolved_org_id, overwrite_existing
+                        )
                         imported_counts[data_type] = imp
-                        skipped_counts[data_type] = skip
+                        skipped_counts[data_type] = skip + len(rejected)
                         error_counts[data_type] = len(errs)
                         errors.extend(errs)
 
@@ -491,6 +542,13 @@ class DataPackageService:
 
         if not clean_records:
             return 0, 0, errors
+
+        # 键集合归一：批量 INSERT 以首行键集合编译 SQL，字段不一致的记录
+        # （如字段级校验纠正后补齐的字段）会丢失非首行独有的键，统一补齐 None。
+        all_keys = set()
+        for r in clean_records:
+            all_keys.update(r.keys())
+        clean_records = [{k: r.get(k) for k in all_keys} for r in clean_records]
 
         stmt = self._build_upsert_statement(model, clean_records, pk_name, overwrite)
 
@@ -714,9 +772,11 @@ class DataPackageService:
     # ========================================================================
 
     def _generate_package_code(self, org_code: str, prefix: str) -> str:
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        # 毫秒级时间戳 + 4位随机后缀：同一组织同一秒内多次导出/接收不再撞唯一约束
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")[:-3]
+        suffix = uuid.uuid4().hex[:4]
         safe_org_code = org_code if org_code else "UNKNOWN"
-        return f"{prefix}-{safe_org_code}-{timestamp}"
+        return f"{prefix}-{safe_org_code}-{timestamp}-{suffix}"
 
     def _calculate_checksum(self, file_path: str) -> str:
         sha256_hash = hashlib.sha256()

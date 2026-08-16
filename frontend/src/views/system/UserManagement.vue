@@ -124,6 +124,14 @@
             {{ getDataScopeName(row.data_scope) }}
           </template>
         </el-table-column>
+        <el-table-column label="权限包" width="130">
+          <template #default="{ row }">
+            <el-tag v-if="row.permission_pack_id" type="warning" size="small">
+              {{ packNameMap[row.permission_pack_id] || '未知包' }}
+            </el-tag>
+            <span v-else class="role-default-text">角色默认</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="organization_name" label="所属组织" min-width="140">
           <template #default="{ row }">
             {{ row.organization_name || '-' }}
@@ -431,6 +439,7 @@ function handleTabChange(_tab: any) {
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Plus, Key, ArrowDown } from '@element-plus/icons-vue'
 import { get, post, put, del, apiRequest } from '@/api/request'
+import { listPermissionPacks } from '@/api/permissionPack'
 import { useAuthStore } from '@/stores/auth'
 import { useDesensitize } from '@/composables/useDesensitize'
 import PermissionAssignmentDrawer from '@/components/permission/PermissionAssignmentDrawer.vue'
@@ -467,6 +476,7 @@ interface User {
   machine_code?: string
   machine_binding_required?: boolean
   allowed_permissions?: string
+  permission_pack_id?: number | null
 }
 
 const loading = ref(false)
@@ -686,6 +696,22 @@ const loadData = async () => {
     ElMessage.error('加载用户数据失败')
   } finally {
     loading.value = false
+  }
+}
+
+// 权限包 id → 名称映射（用户列表"权限包"列展示用；加载失败静默降级为空映射）
+const packNameMap = ref<Record<number, string>>({})
+
+const loadPackNameMap = async () => {
+  try {
+    const packs = await listPermissionPacks()
+    const map: Record<number, string> = {}
+    for (const p of packs) {
+      map[p.id] = p.name
+    }
+    packNameMap.value = map
+  } catch {
+    packNameMap.value = {}
   }
 }
 
@@ -1147,6 +1173,7 @@ onMounted(() => {
   loadOrgTree()
   loadPendingCount()
   fetchRoles()
+  loadPackNameMap()
 })
 </script>
 
@@ -1182,6 +1209,11 @@ onMounted(() => {
 
 .pending-badge :deep(.el-badge__content) {
   top: 4px;
+}
+
+.role-default-text {
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
 .header-actions {

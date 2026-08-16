@@ -117,32 +117,35 @@ class TestSupportedVillageIsolation:
 
 
 class TestPolicyWritePermission:
-    """政策写操作：非管理员应返回 403"""
+    """政策写操作（2026-08-15 产品要求）：普通用户与管理员完全一致，均可增删改。
 
-    def test_non_admin_cannot_create_policy(self, org2_user_client):
-        """普通用户不能创建政策"""
+    权限放开后，数据隔离仍由数据范围/组织隔离保障（本类不再断言 403，
+    而是断言普通用户可正常发起政策写操作）。"""
+
+    def test_non_admin_can_create_policy(self, org2_user_client):
+        """普通用户可以创建政策（产品要求：政策法规全角色可用）"""
         resp = org2_user_client.post("/api/v1/policies", json={
-            "title": "测试政策",
+            "title": "普通用户创建的政策",
             "content": "内容",
             "category": "local",
             "level": "national",
         })
-        assert resp.status_code == 403, (
-            f"普通用户创建政策应返回 403，实际 {resp.status_code} — 写操作鉴权缺失!"
+        assert resp.status_code in (200, 201), (
+            f"普通用户创建政策应成功，实际 {resp.status_code}: {resp.text[:200]}"
         )
 
-    def test_non_admin_cannot_delete_policy(self, org2_user_client):
-        """普通用户不能删除政策"""
+    def test_non_admin_can_delete_policy(self, org2_user_client):
+        """普通用户可以删除政策（不存在时 404 而非 403 权限拦截）"""
         resp = org2_user_client.delete("/api/v1/policies/99999")
-        assert resp.status_code == 403, (
-            f"普通用户删除政策应返回 403，实际 {resp.status_code} — 写操作鉴权缺失!"
+        assert resp.status_code != 403, (
+            f"普通用户删除政策不应被 403 拦截，实际 {resp.status_code}"
         )
 
-    def test_non_admin_cannot_batch_delete_policies(self, org2_user_client):
-        """普通用户不能批量删除政策"""
+    def test_non_admin_can_batch_delete_policies(self, org2_user_client):
+        """普通用户可以批量删除政策"""
         resp = org2_user_client.post("/api/v1/policies/batch-delete", json={"ids": [1, 2, 3]})
-        assert resp.status_code == 403, (
-            f"普通用户批量删除应返回 403，实际 {resp.status_code} — 写操作鉴权缺失!"
+        assert resp.status_code != 403, (
+            f"普通用户批量删除不应被 403 拦截，实际 {resp.status_code}"
         )
 
 

@@ -2027,7 +2027,7 @@ class TestPolicy:
         data = PolicyCreateRequest(title="Test Policy", content="Content")
         with patch("app.api.v1.policy.Policy", return_value=mock_policy), \
              patch("app.api.v1.policy.safe_commit"), \
-             patch("app.api.v1.policy.require_manager_role"), \
+             patch("app.api.v1.policy.require_policy_operator_role"), \
              patch("app.services.policy_fts_service.sync_policy_to_fts"), \
              patch("app.api.v1.policy.write_work_log", side_effect=Exception("fail")), \
              patch("app.api.v1.policy._policy_to_frontend", return_value={"id": 1}):
@@ -2044,7 +2044,7 @@ class TestPolicy:
         db.query.return_value.filter.return_value.first.return_value = mock_policy
         data = PolicyUpdateRequest(title="Updated")
         with patch("app.api.v1.policy.safe_commit"), \
-             patch("app.api.v1.policy.require_manager_role"), \
+             patch("app.api.v1.policy.require_policy_operator_role"), \
              patch("app.api.v1.policy.cache_manager") as cm, \
              patch("app.services.policy_fts_service.sync_policy_to_fts"), \
              patch("app.api.v1.policy.write_work_log", side_effect=Exception("fail")), \

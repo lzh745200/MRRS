@@ -3,7 +3,7 @@ from app.core.permission_utils import is_superuser, is_admin, require_admin
 # -*- coding: utf-8 -*-
 """
 机器码和通行码管理 API
-用于单机版系统的用户注册和机器���管理
+用于单机版系统的用户注册和机器码管理
 """
 
 import logging

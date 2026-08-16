@@ -15,13 +15,15 @@ import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 
 // vi.mock 工厂提升求值，引用对象须先放入 vi.hoisted 初始化
-const { ElMessage, confirmMock, mockPost, mockApiRequest, logError } = vi.hoisted(() => {
+const { ElMessage, confirmMock, mockPost, mockApiRequest, mockGet, logError, authState } = vi.hoisted(() => {
   return {
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
     confirmMock: vi.fn(),
     mockPost: vi.fn(),
     mockApiRequest: vi.fn(),
+    mockGet: vi.fn(),
     logError: vi.fn(),
+    authState: { isAdmin: true },
   }
 })
 
@@ -30,8 +32,12 @@ vi.mock('element-plus', () => ({
   ElMessageBox: { confirm: confirmMock },
 }))
 
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authState,
+}))
+
 vi.mock('@/api/request', () => ({
-  get: vi.fn(),
+  get: (...args: any[]) => mockGet(...args),
   post: (...args: any[]) => mockPost(...args),
   put: vi.fn(),
   del: vi.fn(),
@@ -123,6 +129,40 @@ function defaultPostRouter(url: string): Promise<any> {
   return Promise.resolve({})
 }
 
+// 接收记录样本：覆盖 validation_summary 解析 / 文件大小格式化 / 校验结果展示
+const recv1 = {
+  id: 11,
+  package_code: 'PKG-R1',
+  org_name: '单位甲',
+  org_code: null,
+  exported_by_name: '张三',
+  file_name: 'a.zip',
+  file_size: 2048,
+  record_count: 3,
+  status: 'validated',
+  imported_at: '2024-01-01T02:00:00',
+  validation_summary: ['通过2条/纠正1条/拒绝0条', '字段X校验未通过'],
+}
+const recv2 = {
+  id: 12,
+  package_code: 'PKG-R2',
+  org_name: null,
+  org_code: 'ORG-2',
+  exported_by_name: null,
+  file_name: null,
+  file_size: 5000000,
+  record_count: null,
+  status: 'pending',
+  created_at: '2024-02-01T02:00:00',
+  validation_summary: ['字段Y已自动纠正'],
+}
+
+function defaultGetRouter(url: string): Promise<any> {
+  if (url === '/data-packages/received') return Promise.resolve({ items: [recv1, recv2], total: 2 })
+  if (/^\/data-packages\/\d+\/preview$/.test(url)) return Promise.resolve(previewArray)
+  return Promise.resolve({})
+}
+
 function mountComp(extraStubs: Record<string, any> = {}, pinia?: any) {
   // el-dialog 需 footer 具名插槽 + v-model/close；el-table-column 注入 4 行样本；
   // el-result 需 #extra 插槽（错误回退卡）；el-upload 需 clearFiles 方法（模板 ref 调用）
@@ -172,8 +212,10 @@ async function clickBtn(wrapper: any, text: string, index = 0) {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  authState.isAdmin = true
   mockApiRequest.mockImplementation(defaultApiRouter)
   mockPost.mockImplementation(defaultPostRouter)
+  mockGet.mockImplementation(defaultGetRouter)
   confirmMock.mockResolvedValue('confirm')
 })
 
@@ -465,8 +507,9 @@ describe('预览对话框', () => {
     expect(wrapper.text()).toContain('单位甲')
     expect(wrapper.text()).toContain('PKG-A')
     // getDataTypeLabel 已知 + 未知回退（stub 未声明 props，label 落在 attrs 上）
+    // 前两个页签为页面级「上报列表/接收记录」，其余为预览数据类型页签
     const tabLabels = wrapper.findAll('el-tab-pane-stub').map((t: any) => t.attributes('label'))
-    expect(tabLabels).toEqual(['村庄数据 (2)', 'unknown_type (0)'])
+    expect(tabLabels).toEqual(['上报列表', '接收记录', '村庄数据 (2)', 'unknown_type (0)'])
     // getColumnLabel 已知 + 未知回退（列 label 同为 attr）
     const colLabels = wrapper
       .findAll('.el-table-column-stub')
@@ -734,3 +777,273 @@ describe('分页与错误边界', () => {
     wrapper.unmount()
   })
 })
+
+describe('接收记录 tab（仅管理员）', () => {
+  it('parseValidationSummary / classifyWarningLine / formatFileSize 全分支', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // parseValidationSummary：非数组 / 匹配 / 无匹配
+    expect(vm.parseValidationSummary(null)).toBeNull()
+    expect(vm.parseValidationSummary('not-array')).toBeNull()
+    expect(vm.parseValidationSummary(['通过2条/纠正1条/拒绝0条'])).toEqual({ ok: 2, corrected: 1, rejected: 0 })
+    expect(vm.parseValidationSummary(['无匹配行'])).toBeNull()
+    // classifyWarningLine 三态
+    expect(vm.classifyWarningLine('某字段校验未通过')).toBe('rejected')
+    expect(vm.classifyWarningLine('某字段已自动纠正')).toBe('corrected')
+    expect(vm.classifyWarningLine('通过3条/纠正0条/拒绝0条')).toBe('summary')
+    // formatFileSize 四档
+    expect(vm.formatFileSize(undefined)).toBe('-')
+    expect(vm.formatFileSize(0)).toBe('-')
+    expect(vm.formatFileSize(500)).toBe('500B')
+    expect(vm.formatFileSize(2048)).toBe('2.0KB')
+    expect(vm.formatFileSize(5000000)).toBe('4.77MB')
+    wrapper.unmount()
+  })
+
+  it('loadReceived 成功解析 _vs；handleTabChange 触发加载；非管理员早退', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.loadReceived()
+    expect(mockGet).toHaveBeenCalledWith('/data-packages/received', { page: 1, page_size: 20 })
+    expect(vm.receivedItems).toHaveLength(2)
+    expect(vm.receivedItems[0]._vs).toEqual({ ok: 2, corrected: 1, rejected: 0 })
+    expect(vm.receivedItems[1]._vs).toBeNull()
+    expect(vm.receivedTotal).toBe(2)
+    expect(vm.receivedLoading).toBe(false)
+
+    // handleTabChange('received') 触发加载
+    mockGet.mockClear()
+    vm.handleTabChange('received')
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledWith('/data-packages/received', expect.anything())
+
+    // handleTabChange('reports') 不触发
+    mockGet.mockClear()
+    vm.handleTabChange('reports')
+    await flushPromises()
+    expect(mockGet).not.toHaveBeenCalled()
+
+    wrapper.unmount()
+  })
+
+  it('非管理员：loadReceived 早退不请求', async () => {
+    authState.isAdmin = false
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGet.mockClear()
+    await vm.loadReceived()
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(vm.receivedItems).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('loadReceived 失败 → 提示并置空', async () => {
+    mockGet.mockRejectedValue(new Error('net'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.loadReceived()
+    expect(ElMessage.error).toHaveBeenCalledWith('加载接收记录失败')
+    expect(vm.receivedItems).toEqual([])
+    expect(vm.receivedTotal).toBe(0)
+    expect(vm.receivedLoading).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('previewReceived 成功（数组/嵌套）与失败', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 数组直返
+    await vm.previewReceived(recv1)
+    expect(mockGet).toHaveBeenCalledWith('/data-packages/11/preview')
+    expect(vm.previewData).toEqual(previewArray)
+    expect(vm.currentReport.source_org_name).toBe('单位甲')
+    expect(vm.currentReport.package_code).toBe('PKG-R1')
+    expect(vm.currentReport.record_count).toBe(3)
+    expect(vm.currentReport.created_at).toBe('2024-01-01T02:00:00')
+    expect(vm.validationWarnings).toEqual(recv1.validation_summary)
+    expect(vm.showPreviewDialog).toBe(true)
+
+    // 嵌套 data.data 形态
+    mockGet.mockImplementation((url: string) => {
+      if (/\/preview$/.test(url)) return Promise.resolve({ data: previewArray })
+      return defaultGetRouter(url)
+    })
+    await vm.previewReceived({ id: 99, validation_summary: 'not-array' } as any)
+    expect(vm.previewData).toEqual(previewArray)
+    expect(vm.validationWarnings).toEqual([]) // 非数组 → []
+
+    // 失败
+    mockGet.mockImplementation((url: string) => {
+      if (/\/preview$/.test(url)) return Promise.reject(new Error('down'))
+      return defaultGetRouter(url)
+    })
+    await vm.previewReceived(recv1)
+    expect(ElMessage.error).toHaveBeenCalledWith('加载预览数据失败')
+    expect(logError).toHaveBeenCalledWith('[ReceivePackage] 接收记录预览失败:', expect.any(Error))
+    wrapper.unmount()
+  })
+
+  it('handleReceivedDownload 成功与失败', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockApiRequest.mockImplementation((config: any) => {
+      if (config?.url?.endsWith('/download')) return Promise.resolve(new Blob(['x']))
+      return defaultApiRouter(config)
+    })
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    await vm.handleReceivedDownload({ id: 11, file_name: 'a.zip' })
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'GET', url: '/data-packages/11/download' })
+    )
+    expect(ElMessage.success).toHaveBeenCalledWith('下载已开始')
+    // 文件名缺省 → package_code / package 兜底
+    await vm.handleReceivedDownload({ id: 12, package_code: 'PKG-R2' })
+    expect(ElMessage.success).toHaveBeenCalledWith('下载已开始')
+    clickSpy.mockRestore()
+
+    // 失败
+    mockApiRequest.mockImplementation((config: any) => {
+      if (config?.url?.endsWith('/download')) return Promise.reject(new Error('net'))
+      return defaultApiRouter(config)
+    })
+    await vm.handleReceivedDownload({ id: 13 })
+    expect(ElMessage.error).toHaveBeenCalledWith('下载失败')
+    wrapper.unmount()
+  })
+
+  it('handleLocalFileChange：validation.warnings 写入字段校验报告', async () => {
+    mockPost.mockResolvedValue({ package_id: 1, validation: { warnings: ['字段X校验未通过'] } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleLocalFileChange(new File(['x'], 'pkg.zip'))
+    expect(vm.validationWarnings).toEqual(['字段X校验未通过'])
+    wrapper.unmount()
+  })
+
+  it('接收记录列模板渲染 + 预览/下载/分页/tab 事件', async () => {
+    const receivedColStub = {
+      'el-table-column': {
+        name: 'ElTableColumn',
+        template:
+          '<div class="el-table-column-stub"><slot :row="r1" /><slot :row="r2" /><slot :row="r3" /></div>',
+        data() {
+          return {
+            r1: {
+              id: 11,
+              source_org_id: 1,
+              source_org_name: '单位甲',
+              package_code: 'PKG-R1',
+              data_types: ['villages'],
+              record_count: 3,
+              status: 'validated',
+              submitted_at: '2024-01-01T02:00:00',
+              created_at: '2024-01-01T01:00:00',
+              org_name: '单位甲',
+              org_code: null,
+              exported_by_name: '张三',
+              file_name: 'a.zip',
+              file_size: 2048,
+              imported_at: '2024-01-01T02:00:00',
+              _vs: { ok: 2, corrected: 1, rejected: 0 },
+            },
+            r2: {
+              id: 12,
+              source_org_id: 2,
+              package_code: 'PKG-R2',
+              data_types: '[]',
+              record_count: null,
+              status: 'pending',
+              submitted_at: null,
+              created_at: '2024-02-01T02:00:00',
+              org_name: null,
+              org_code: 'ORG-2',
+              exported_by_name: null,
+              file_name: null,
+              file_size: 5000000,
+              imported_at: null,
+              _vs: null,
+            },
+            r3: {
+              id: 13,
+              source_org_id: 3,
+              data_types: [],
+              record_count: 0,
+              status: 'weird',
+              file_size: 500,
+              _vs: undefined,
+            },
+          }
+        },
+      },
+    }
+    const wrapper = mountComp(receivedColStub)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.loadReceived() // 填充 receivedTotal>0 → 分页渲染
+    await nextTick()
+
+    const text = wrapper.text()
+    // 校验结果列：_vs 有值 → 通过/纠正/拒绝
+    expect(text).toContain('通过2')
+    expect(text).toContain('纠正1')
+    expect(text).toContain('拒绝0')
+    // 文件大小格式化三档
+    expect(text).toContain('2.0KB')
+    expect(text).toContain('4.77MB')
+    expect(text).toContain('500B')
+    // 来源组织 org_code 兜底
+    expect(text).toContain('ORG-2')
+
+    // 接收记录 预览 按钮（仅 validated 行）：报告列表 3 + 接收记录 1
+    const previewBtns = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '预览')
+    expect(previewBtns.length).toBe(4)
+    await previewBtns[3].trigger('click')
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledWith('/data-packages/11/preview')
+    expect(vm.showPreviewDialog).toBe(true)
+
+    // 接收记录 下载 按钮：报告列表 3 + 接收记录 3，取最后一个
+    mockApiRequest.mockImplementation((config: any) => {
+      if (config?.url?.endsWith('/download')) return Promise.resolve(new Blob(['x']))
+      return defaultApiRouter(config)
+    })
+    const dlBtns = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '下载')
+    expect(dlBtns.length).toBe(6)
+    await dlBtns[5].trigger('click')
+    await flushPromises()
+    expect(ElMessage.success).toHaveBeenCalledWith('下载已开始')
+
+    // 接收记录分页 v-model + size/current change（第二个 el-pagination）
+    const pagers = wrapper.findAllComponents({ name: 'ElPagination' })
+    expect(pagers.length).toBe(2)
+    pagers[1].vm.$emit('update:currentPage', 2)
+    pagers[1].vm.$emit('update:pageSize', 50)
+    await nextTick()
+    expect(vm.receivedPagination.page).toBe(2)
+    expect(vm.receivedPagination.pageSize).toBe(50)
+    mockGet.mockClear()
+    pagers[1].vm.$emit('size-change', 50)
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledWith('/data-packages/received', expect.anything())
+
+    // el-tabs v-model + tab-change
+    const tabs = wrapper.findComponent({ name: 'ElTabs' })
+    tabs.vm.$emit('update:modelValue', 'received')
+    await nextTick()
+    expect(vm.activeTab).toBe('received')
+    mockGet.mockClear()
+    tabs.vm.$emit('tab-change', 'received')
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledWith('/data-packages/received', expect.anything())
+
+    wrapper.unmount()
+  })
+})
+

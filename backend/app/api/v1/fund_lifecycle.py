@@ -2273,8 +2273,6 @@ def _settlement_to_dict(s: FundSettlement) -> dict:
         "created_at": s.created_at.isoformat() if s.created_at else None,
     }
 
-# ==================== ��ͬ�����ϱ� ====================
-
 
 # ==================== 合同附件上报 ====================
 

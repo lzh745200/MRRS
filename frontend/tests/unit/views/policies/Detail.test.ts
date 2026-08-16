@@ -208,7 +208,7 @@ describe('canEdit 权限', () => {
     expect((wrapper.vm as any).canEdit).toBe(false)
   })
 
-  it('is_superuser → true；admin 角色 → true；user 角色 → false', async () => {
+  it('is_superuser → true；admin 角色 → true；user 角色 → true（2026-08-15 全角色放开）', async () => {
     authState.user = { is_superuser: false, role: 'admin' }
     const wrapper = mountComp()
     await flushPromises()
@@ -217,7 +217,7 @@ describe('canEdit 权限', () => {
     authState.user = { is_superuser: false, role: 'user' }
     const w2 = mountComp()
     await flushPromises()
-    expect((w2.vm as any).canEdit).toBe(false)
+    expect((w2.vm as any).canEdit).toBe(true)
   })
 })
 

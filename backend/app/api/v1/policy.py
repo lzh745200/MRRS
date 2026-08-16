@@ -21,7 +21,7 @@ from ...core.response import ok_list, success_response
 from ...core.security import get_current_user
 from ...models.policy import Policy, PolicyCategory, PolicyFavorite
 from app.core.transaction import safe_commit
-from app.api.v1.deps import require_manager_role
+from app.api.v1.deps import require_policy_operator_role
 from app.services.work_log_service import write_work_log
 from app.services.approval_workflow_service import (
     ApprovalWorkflowService,
@@ -330,7 +330,7 @@ async def create_category(
     db: Session = Depends(get_db),
 ):
     """创建政策分类"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     if data.code:
         existing = db.query(PolicyCategory).filter(PolicyCategory.code == data.code).first()
         if existing:
@@ -354,7 +354,7 @@ async def update_category(
     db: Session = Depends(get_db),
 ):
     """更新政策分类"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     category = db.query(PolicyCategory).filter(PolicyCategory.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="分类不存在")
@@ -376,7 +376,7 @@ async def delete_category(
     db: Session = Depends(get_db),
 ):
     """删除政策分类"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     category = db.query(PolicyCategory).filter(PolicyCategory.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="分类不存在")
@@ -463,7 +463,7 @@ async def import_policies(
     前端调用 POST /policies/import
     返回格式: { imported: int, errors: list }
     """
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     from ...services.policy_import_service import import_policies_from_excel
 
     result = await import_policies_from_excel(file, db, current_user)
@@ -493,7 +493,7 @@ async def import_policies_excel(
     db: Session = Depends(get_db),
 ):
     """从 Excel 导入政策（旧路径兼容）"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     return await import_policies(file=file, current_user=current_user, db=db)
 
 
@@ -865,7 +865,7 @@ async def upload_policy_file(
     db: Session = Depends(get_db),
 ):
     """上传政策附件文件（支持 pdf/doc/docx/pptx）"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     import os
 
     from app.core.config import settings
@@ -1008,7 +1008,7 @@ async def download_policy_file(
 @router.post("/batch-delete")
 async def batch_delete_policies(data: dict, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """批量删除政策"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     raw_ids = data.get("ids", [])
     if not raw_ids:
         raise HTTPException(status_code=400, detail="未提供要删除的ID")
@@ -1246,7 +1246,7 @@ async def create_policy(  # noqa: C901
     db: Session = Depends(get_db),
 ):
     """创建政策"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     try:
         issue_date = None
         effective_date = None
@@ -1335,7 +1335,7 @@ async def update_policy(
     db: Session = Depends(get_db),
 ):
     """更新政策"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
@@ -1399,7 +1399,7 @@ async def delete_policy(
     db: Session = Depends(get_db),
 ):
     """删除政策（软删除）"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
@@ -1426,7 +1426,7 @@ async def publish_policy(
     db: Session = Depends(get_db),
 ):
     """发布政策"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
@@ -1454,7 +1454,7 @@ async def archive_policy(
     db: Session = Depends(get_db),
 ):
     """归档政策"""
-    require_manager_role(current_user)
+    require_policy_operator_role(current_user)
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")

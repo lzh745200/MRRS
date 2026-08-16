@@ -247,7 +247,7 @@ def cache_key(*args, **kwargs) -> str:
             # 对于复杂对象，使用哈希
             key_parts.append(hashlib.md5(json.dumps(arg, sort_keys=True).encode(), usedforsecurity=False).hexdigest())
 
-    # 添加关��字参数
+    # 添加关键字参数
     if kwargs:
         sorted_kwargs = sorted(kwargs.items())
         raw = hashlib.md5(json.dumps(sorted_kwargs, sort_keys=True).encode(), usedforsecurity=False)

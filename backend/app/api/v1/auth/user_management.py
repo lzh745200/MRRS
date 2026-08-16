@@ -393,7 +393,7 @@ async def assign_role(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    # 更��角色字段和权限
+    # 更新角色字段和权限
     user.role = role_code
     user.is_superuser = role_code in (UserRole.ADMIN, UserRole.SUPER_ADMIN)
 

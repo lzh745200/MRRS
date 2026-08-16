@@ -75,6 +75,7 @@ _MODULE_MAP = {
     "ErrorReport": ".error_report",
     "OrgModulePolicy": ".org_module_policy",
     "SubordinateInstance": ".subordinate_registry",
+    "PermissionPack": ".permission_pack",
 }
 
 import sys as _sys

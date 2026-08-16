@@ -124,20 +124,13 @@ import {
 } from '@/api/policy'
 import { downloadBlob } from '@/api/request'
 import { useAuthStore } from '@/stores/auth'
-import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 
 const route = useRoute()
 const { pushSafe } = useRouterSafe()
 
-// 政策写操作（编辑/发布/归档）仅管理员可见，与 List.vue canEdit 规则一致
+// 政策写操作（2026-08-15）：普通用户与管理员完全一致，均可编辑/发布/归档
 const authStore = useAuthStore()
-const canEdit = computed(() => {
-  const user = authStore.user
-  if (!user) return false
-  if (user.is_superuser) return true
-  const role = normalizeRole(user.role)
-  return ADMIN_ROLES.includes(role)
-})
+const canEdit = computed(() => !!authStore.user)
 const policy = ref<Policy | null>(null)
 // 净化后内容（v-html 渲染前必须 sanitize，防 XSS）
 const sanitizedPolicyContent = computed(() =>

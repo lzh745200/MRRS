@@ -29,6 +29,7 @@ from app.core.security import (
     ROLE_SUPER_ADMIN,
 )
 from app.models.user import User
+from app.models.permission_pack import PermissionPack
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
 
@@ -375,6 +376,12 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "roles": ["admin", "super_admin"],
             },
             {
+                "key": "system-permission-packs",
+                "label": "权限包管理",
+                "path": "/system/permission-packs",
+                "roles": ["admin", "super_admin"],
+            },
+            {
                 "key": "tasks",
                 "label": "后台任务",
                 "path": "/system/tasks",
@@ -494,14 +501,54 @@ def _get_role_default_menu_keys(role: str) -> frozenset[str]:
     return frozenset(role_menu_keys)
 
 
-def _get_user_accessible_menu_keys(user: User) -> set[str]:
-    """获取用户实际可见的菜单key集合"""
+def _get_user_bound_pack(user: User, db: Session) -> PermissionPack | None:
+    """获取用户绑定的启用中权限包（未绑定/已停用/包不存在时返回 None）"""
+    pack_id = getattr(user, "permission_pack_id", None)
+    # 防御：仅接受真实 int（Mock 用户/脏数据直接跳过，回落角色默认）
+    if not isinstance(pack_id, int) or isinstance(pack_id, bool) or pack_id <= 0:
+        return None
+    return (
+        db.query(PermissionPack)
+        .filter(PermissionPack.id == pack_id, PermissionPack.is_active.is_(True))
+        .first()
+    )
+
+
+# 全角色公开模块（2026-08-15 产品要求）：
+# 政策法规与数据分析对普通用户（user/viewer）与管理员完全一致，
+# 不受用户级 allowed_menus / 权限包 / 角色默认配置的裁剪。
+_PUBLIC_ACCESS_KEYS: frozenset[str] = frozenset({
+    "policies",                    # 政策法规
+    "helpData",                    # 数据分析的父级（帮扶数据管理）
+    "data-analysis",               # 数据统计分析
+    "analytics",                   # 数据分析
+    "analytics-dashboard",         # 分析仪表盘
+    "analytics-map",               # 地图可视化
+    "work-analysis",               # 工作分析
+})
+
+
+def _get_user_accessible_menu_keys(user: User, db: Session) -> set[str]:
+    """获取用户实际可见的菜单key集合
+
+    优先级：用户级 allowed_menus 配置 > 绑定的启用中权限包 > 角色默认。
+    之后无条件并入 _PUBLIC_ACCESS_KEYS（政策法规/数据分析全角色公开）。
+    """
     allowed = user.allowed_menus_list
     if allowed is not None:
         # 用户级别配置优先
-        return set(allowed)
-    # 否则继承角色默认
-    return set(_get_role_default_menu_keys(user.role))
+        keys = set(allowed)
+    else:
+        # 其次：绑定的启用中权限包（菜单套餐）
+        pack = _get_user_bound_pack(user, db)
+        if pack is not None:
+            keys = set(pack.menu_keys_list)
+        else:
+            # 否则继承角色默认
+            keys = set(_get_role_default_menu_keys(user.role))
+    # 公开模块强制并入，保证普通用户政策法规/数据分析与管理员一致
+    keys |= _PUBLIC_ACCESS_KEYS
+    return keys
 
 
 def _filter_menu_tree(menus: list[dict[str, Any]], allowed_keys: set[str]) -> list[dict[str, Any]]:
@@ -562,18 +609,25 @@ class MenuItemResponse(BaseModel):
 )
 async def get_accessible_menus(
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> dict:
     """
     返回当前登录用户可访问的完整菜单树。
 
     过滤逻辑：
-    1. 用户设置了 allowed_menus -> 使用用户配置
-    2. 用户未设置 -> 使用角色默认菜单
-    3. 子菜单同时受 roles 字段约束
+    1. 用户设置了 allowed_menus -> 使用用户配置（source="user"）
+    2. 用户绑定了启用中的权限包 -> 使用权限包菜单（source="pack"）
+    3. 用户未设置 -> 使用角色默认菜单（source="role"）
+    4. 子菜单同时受 roles 字段约束
     """
-    allowed_keys = _get_user_accessible_menu_keys(current_user)
+    allowed_keys = _get_user_accessible_menu_keys(current_user, db)
     accessible_menus = _filter_menu_tree(MENU_DEFINITIONS, allowed_keys)
-    source = "user" if current_user.allowed_menus_list is not None else "role"
+    if current_user.allowed_menus_list is not None:
+        source = "user"
+    elif _get_user_bound_pack(current_user, db) is not None:
+        source = "pack"
+    else:
+        source = "role"
     logger.debug(
         "菜单查询: user=%s role=%s source=%s keys=%s",
         current_user.username, current_user.role, source, sorted(allowed_keys),

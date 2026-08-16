@@ -95,6 +95,8 @@ class DataPackageManifest(BaseModel):
     dependencies: List[str] = Field(default_factory=list)  # 依赖的其他数据包
     incremental: bool = False  # 是否增量更新
     base_package_id: Optional[int] = None  # 基础包ID（增量更新时）
+    export_scope: Optional[str] = None  # 导出范围: self(仅本人录入)/org(全组织)，旧包无此字段
+    exported_by_name: Optional[str] = None  # 导出人姓名，旧包无此字段
     changes: Optional[Dict[str, Any]] = None  # 变更记录（增量更新时）
     created_at: Optional[datetime] = None
 
