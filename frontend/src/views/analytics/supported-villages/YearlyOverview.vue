@@ -149,6 +149,7 @@ import {
 import type { YearlyDataSummary } from '@/types/analytics'
 import SectionDataForm from './components/SectionDataForm.vue'
 import echarts from '@/utils/echarts'
+import { getYearOptions } from '@/utils/yearOptions'
 
 const route = useRoute()
 const { pushSafe } = useRouterSafe()
@@ -162,13 +163,8 @@ const sectionImporting = ref('')
 const selectedYear = ref(new Date().getFullYear())
 const yearlyData = ref<YearlyDataSummary | null>(null)
 
-const availableYears = computed(() => {
-  const years: number[] = []
-  for (let y = 2017; y <= new Date().getFullYear() + 1; y++) {
-    years.push(y)
-  }
-  return years.reverse()
-})
+// 可选年份：2017 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const availableYears = computed(() => getYearOptions({ start: 2017 }))
 
 // 弹窗
 const editDialogVisible = ref(false)

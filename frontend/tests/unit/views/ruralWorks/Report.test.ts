@@ -252,11 +252,14 @@ describe('字典与模板', () => {
     expect(wrapper.find('.el-empty-stub').exists()).toBe(true)
   })
 
-  it('yearOptions 生成', async () => {
+  it('yearOptions 生成（滚动窗口：当前年-10 ~ 当前年+10）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.yearOptions).toHaveLength(10)
-    expect(vm.yearOptions[0]).toBe(new Date().getFullYear())
+    const cur = new Date().getFullYear()
+    expect(vm.yearOptions).toHaveLength(21)
+    expect(vm.yearOptions[0]).toBe(cur + 10)
+    expect(vm.yearOptions[vm.yearOptions.length - 1]).toBe(cur - 10)
+    expect(vm.yearOptions).toContain(cur)
   })
 })

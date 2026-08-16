@@ -448,6 +448,7 @@
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
+import { getYearOptions } from '@/utils/yearOptions'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -556,12 +557,8 @@ async function loadStats() {
 
 // ========== 年度经费总览 ==========
 const overviewYear = ref(new Date().getFullYear())
-const yearOptions = computed(() => {
-  const now = new Date().getFullYear()
-  const options: number[] = []
-  for (let y = now + 1; y >= now - 9; y--) options.push(y)
-  return options
-})
+// 年份范围：当前年-9 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const yearOptions = computed(() => getYearOptions({ start: new Date().getFullYear() - 9 }))
 const overview = reactive({
   budgetTotal: '0.00',
   budgetExecuted: '0.00',

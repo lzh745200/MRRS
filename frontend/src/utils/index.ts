@@ -6,6 +6,8 @@ export { logger } from './logger'
 export { default as request } from '@/api/request'
 export { exportUtil } from './exportUtil'
 export { copyToClipboard } from './clipboard'
+export { getYearOptions, DEFAULT_START_YEAR, FUTURE_YEAR_SPAN } from './yearOptions'
+export type { YearOptionsConfig } from './yearOptions'
 
 /** 格式化工具集 */
 export const format = {

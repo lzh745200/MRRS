@@ -1,7 +1,7 @@
 # ============================================================
 # docker-compose.yml - 帮扶管理信息系统
 # 适用于: 麒麟 ARM64 / Ubuntu ARM64 / Docker Compose V2
-# 版本: v1.8.3
+# 版本: v1.9.0
 # ============================================================
 # 注意: Docker Compose V2 已废弃 version 字段，此处不再声明
 
@@ -18,9 +18,9 @@ services:
       dockerfile: docker/Dockerfile
       target: runtime  # 使用 runtime 阶段运行
       args:
-        - BUILD_VERSION=1.8.3
+        - BUILD_VERSION=1.9.0
         - BUILD_DATE=${BUILD_DATE:-now}
-    image: assistance-system:${TAG:-arm64}-${VERSION:-1.8.3}
+    image: assistance-system:${TAG:-arm64}-${VERSION:-1.9.0}
     container_name: assistance-system
     restart: unless-stopped
 
@@ -31,7 +31,7 @@ services:
 
     # 环境变量
     environment:
-      - PROJECT_VERSION=1.8.3
+      - PROJECT_VERSION=1.9.0
       - DATABASE_URL=sqlite:///./data/rural_revitalization.db
       - SECRET_KEY=${SECRET_KEY:?必须设置 SECRET_KEY 环境变量}
       - DEBUG=${DEBUG:-false}

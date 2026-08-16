@@ -72,6 +72,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
+import { getYearOptions } from '@/utils/yearOptions'
 
 const props = defineProps<{
   initialData?: Record<string, any>
@@ -83,13 +84,8 @@ const emit = defineEmits<{
 
 const formRef = ref<FormInstance>()
 const currentYear = new Date().getFullYear()
-const yearOptions = computed(() => {
-  const years: number[] = []
-  for (let y = currentYear; y >= currentYear - 10; y--) {
-    years.push(y)
-  }
-  return years
-})
+// 数据年份范围：当前年-10 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const yearOptions = computed(() => getYearOptions({ start: currentYear - 10 }))
 
 const formData = reactive<Record<string, any>>({
   year: props.initialData?.year ?? currentYear,

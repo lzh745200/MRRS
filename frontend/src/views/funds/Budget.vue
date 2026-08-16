@@ -211,6 +211,7 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
+import { getYearOptions } from '@/utils/yearOptions'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
 import { fundApi } from '@/api/funds'
 import BaseChart from '@/components/common/BaseChart.vue'
@@ -238,7 +239,8 @@ interface BudgetRow {
 const { pushSafe } = useRouterSafe()
 
 const currentYear = new Date().getFullYear()
-const yearOptions = Array.from({ length: currentYear - 2000 + 2 }, (_, i) => 2000 + i)
+// 预算年度范围：2000 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const yearOptions = getYearOptions({ descending: false })
 const selectedYear = ref(currentYear)
 const loading = ref(false)
 const saving = ref(false)

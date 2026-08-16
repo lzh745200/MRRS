@@ -773,6 +773,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getYearOptions } from '@/utils/yearOptions'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -965,13 +966,8 @@ const formRules = computed(() => {
 })
 const saving = ref(false)
 const selectedYear = ref(props.initialYear || new Date().getFullYear())
-const availableYears = (() => {
-  const years: number[] = []
-  for (let y = 2017; y <= new Date().getFullYear() + 1; y++) {
-    years.push(y)
-  }
-  return years.reverse()
-})()
+// 可选年份：2017 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const availableYears = getYearOptions({ start: 2017 })
 
 // 动态表单数据 — 根据 sectionKey 使用对应字段
 const formData = reactive<Record<string, any>>({})

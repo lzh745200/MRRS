@@ -306,13 +306,14 @@ describe('挂载与初始加载', () => {
     yearsResult = []
     const w2 = mountComp()
     await flushPromises()
-    expect((w2.vm as any).yearOptions).toHaveLength(6)
-    expect((w2.vm as any).yearOptions[0]).toBe(CUR_YEAR)
+    // 默认兜底为滚动窗口（当前年-5 ~ 当前年+10，共 16 项）
+    expect((w2.vm as any).yearOptions).toHaveLength(16)
+    expect((w2.vm as any).yearOptions[0]).toBe(CUR_YEAR + 10)
 
     yearsError = new Error('years')
     const w3 = mountComp()
     await flushPromises()
-    expect((w3.vm as any).yearOptions).toHaveLength(6)
+    expect((w3.vm as any).yearOptions).toHaveLength(16)
   })
 
   it('村庄列表加载失败 → 空数组并记录日志', async () => {

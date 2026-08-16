@@ -263,6 +263,7 @@ import { ref, computed, onMounted, reactive } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
+import { getYearOptions } from '@/utils/yearOptions'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { Search, Plus, Download } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -611,7 +612,8 @@ async function loadYears() {
 
 function generateDefaultYears(): number[] {
   const current = new Date().getFullYear()
-  return Array.from({ length: 6 }, (_, i) => current - i)
+  // 默认年份范围：当前年-5 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+  return getYearOptions({ start: current - 5 })
 }
 
 async function loadVillages() {

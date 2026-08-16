@@ -596,6 +596,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getYearOptions } from '@/utils/yearOptions'
 
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -700,7 +701,8 @@ const saving = ref(false)
 const copying = ref(false)
 const currentYear = new Date().getFullYear()
 const selectedYear = ref(currentYear)
-const availableYears = Array.from({ length: currentYear - 2000 + 2 }, (_, i) => currentYear + 1 - i)
+// 可选年份：2000 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const availableYears = getYearOptions()
 
 const formData = reactive({
   population: {

@@ -238,12 +238,14 @@ import { useFundsStore } from '@/stores/funds'
 import { fundApi } from '@/api/funds'
 import { getYearlyFundComparison, type YearlyFundSummary } from '@/api/fundStatistics'
 import { exportUtil } from '@/utils/exportUtil'
+import { getYearOptions } from '@/utils/yearOptions'
 
 const fundsStore = useFundsStore()
 const yearlyChartRef = ref()
 
 const currentYear = new Date().getFullYear()
-const yearOptions = Array.from({ length: currentYear - 2000 + 2 }, (_, i) => 2000 + i)
+// 年份范围：2000 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const yearOptions = getYearOptions({ descending: false })
 
 const dimension = ref<string>('period')
 

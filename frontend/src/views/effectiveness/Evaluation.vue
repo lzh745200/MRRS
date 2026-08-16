@@ -129,6 +129,7 @@ import { Loading, DataAnalysis } from '@element-plus/icons-vue'
 import { evaluateVillage, compareEvaluations, getEvaluationReport } from '@/api/effectiveness'
 import { apiRequest } from '@/api/request'
 import { useUserStore } from '@/stores/user'
+import { getYearOptions } from '@/utils/yearOptions'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -140,7 +141,8 @@ const isAdmin = computed(
 )
 
 const currentYear = new Date().getFullYear()
-const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i)
+// 年份范围：当前年-4 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const yearOptions = getYearOptions({ start: currentYear - 4 })
 
 const evalForm = reactive({
   villageId: 0,

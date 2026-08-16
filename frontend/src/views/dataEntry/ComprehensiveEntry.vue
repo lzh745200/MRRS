@@ -656,7 +656,7 @@
                   ><el-input-number
                     v-model="honor.year"
                     :min="2000"
-                    :max="2030"
+                    :max="2099"
                     :controls="false" /></el-form-item
               ></el-col>
               <el-col :span="4"

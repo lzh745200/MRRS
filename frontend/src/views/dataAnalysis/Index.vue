@@ -133,6 +133,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getYearOptions } from '@/utils/yearOptions'
 
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
@@ -153,7 +154,8 @@ const categoryStats = ref<any[]>([])
 const regionStats = ref<any[]>([])
 
 const currentYear = new Date().getFullYear()
-const yearOptions = Array.from({ length: currentYear - 2000 + 2 }, (_, i) => 2000 + i)
+// 对比年份范围：2000 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const yearOptions = getYearOptions({ descending: false })
 const compareYearA = ref(currentYear - 1)
 const compareYearB = ref(currentYear)
 // 后端返回按年份聚合的指标：{ years: string[], villages: {}, investment: {}, income: {} }

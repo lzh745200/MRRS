@@ -312,6 +312,7 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
+import { getYearOptions } from '@/utils/yearOptions'
 
 /**
  * 帮扶村表单组件
@@ -393,15 +394,8 @@ const transitionLocalTotal = computed(() =>
   transitionFundingRows.value.reduce((s, r) => s + (r.localInvestment || 0), 0)
 )
 
-// 可选年度范围：2021 ~ 当前年份+1
-const availableFundingYears = computed(() => {
-  const currentYear = new Date().getFullYear()
-  const years: number[] = []
-  for (let y = 2021; y <= currentYear + 1; y++) {
-    years.push(y)
-  }
-  return years
-})
+// 可选年度范围：2021 ~ 当前年份+10（滚动窗口，见 utils/yearOptions）
+const availableFundingYears = computed(() => getYearOptions({ start: 2021, descending: false }))
 
 const selectedFundingYear = ref(new Date().getFullYear())
 const currentMilitaryInput = ref(0)

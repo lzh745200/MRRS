@@ -142,6 +142,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { getYearOptions } from '@/utils/yearOptions'
 
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
@@ -185,7 +186,8 @@ const statusTagType = (status: string): 'primary' | 'success' | 'warning' | 'inf
 
 const currentYear = new Date().getFullYear()
 const yearOptions = computed(() => {
-  const years = new Set<number>([currentYear])
+  // 滚动窗口（当前年 ~ 当前年+10）∪ 学生数据年份，倒序合并
+  const years = new Set<number>(getYearOptions({ start: currentYear }))
   students.value.forEach((s) => {
     if (s.year) years.add(Number(s.year))
   })

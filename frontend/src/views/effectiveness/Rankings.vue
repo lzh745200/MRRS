@@ -123,6 +123,7 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 import { Loading, Search } from '@element-plus/icons-vue'
 import { getRankings } from '@/api/effectiveness'
 import { useUserStore } from '@/stores/user'
+import { getYearOptions } from '@/utils/yearOptions'
 
 const { pushSafe } = useRouterSafe()
 const userStore = useUserStore()
@@ -134,7 +135,8 @@ const isAdmin = computed(
 )
 
 const currentYear = new Date().getFullYear()
-const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i)
+// 年份范围：当前年-4 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const yearOptions = getYearOptions({ start: currentYear - 4 })
 
 const filterForm = reactive({
   year: currentYear,

@@ -5,6 +5,21 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.9.0] - 2026-08-16
+
+### 新增
+
+- ✨ **年份滚动窗口共享工具**：新增 `frontend/src/utils/yearOptions.ts`（`getYearOptions()`），可选年份上限 = 当前年份 + 10，随系统时钟自动后移，年份选择永不过期，保证系统可以一直使用下去；配套 7 项单元测试（含模拟 2031 年时钟滚动验证）
+
+### 变更
+
+- ♻️ **解除全系统年份选择限制**：全站约 14 处年份下拉框此前以「当前年 + 1」为上限（2026 年只能选到 2027 年），现统一改用滚动窗口工具——帮扶村表单（2021 起）/板块数据表单与年度总览（2017 起）/年度数据表单/数据分析年度对比/经费预算/经费分析/经费列表年度总览/分类经费表单/驻村工作报表与列表/成效排名与评估/奖学金学生（滚动窗口 ∪ 数据年份）。`el-input-number`（2000~2099）与 `el-date-picker type="year"`（原生无限制）本已无撞墙问题，保持不变；后端 schema 无年份范围校验，无需改动
+
+### 修复
+
+- 🐛 **版本号统一至 1.9.0**：version.txt（唯一数据源）经 `scripts/sync_version.py` 同步到 config.py / 根 package.json / frontend/package.json / .env.example / frontend/.env.example，并手动补齐脚本未覆盖处：根目录 `.env`（运行时版本接口覆盖源）、electron/main.js 兜底、build.ps1、docker-compose.yml（BUILD_VERSION/镜像 tag/PROJECT_VERSION）、README 徽章与描述、根与前端 package-lock.json、CLAUDE.md / AGENTS.md / docs 各文档当前版本声明。同时修复既有版本漂移：frontend/package-lock.json（1.8.2）、根 package-lock.json（1.8.1）与 package.json（1.8.3）失同步、README 正文 v1.8.1 与徽章 1.8.3 不一致。历史 changelog/测试报告/版本痕迹注释按惯例保留不改写
+- 🐛 **荣誉年份硬编码上限 2030**：综合录入页荣誉表彰年份输入框 `:max="2030"`，2030 年后表彰无法录入。已改为 2099（与同页起始/结束年份输入框一致）
+
 ## [1.8.3] - 2026-08-16
 
 ### 新增

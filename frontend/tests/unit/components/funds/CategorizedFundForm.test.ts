@@ -75,9 +75,11 @@ describe('funds/CategorizedFundForm.vue', () => {
     const currentYear = new Date().getFullYear()
     const wrapper = mount(CategorizedFundForm, { global: { stubs } })
     const options = wrapper.findAll('option')
-    expect(options.length).toBe(11)
-    expect(options[0].attributes('value')).toBe(String(currentYear))
-    expect(options[10].attributes('value')).toBe(String(currentYear - 10))
+    // 滚动窗口：当前年-10 ~ 当前年+10，共 21 项，降序
+    expect(options.length).toBe(21)
+    expect(options[0].attributes('value')).toBe(String(currentYear + 10))
+    expect(options[10].attributes('value')).toBe(String(currentYear))
+    expect(options[20].attributes('value')).toBe(String(currentYear - 10))
 
     const inputs = wrapper.findAll('.el-input-number')
     expect((inputs[0].element as HTMLInputElement).value).toBe('0')

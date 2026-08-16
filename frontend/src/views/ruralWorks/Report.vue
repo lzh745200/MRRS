@@ -74,9 +74,11 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { get } from '@/api/request'
+import { getYearOptions } from '@/utils/yearOptions'
 
 const currentYear = new Date().getFullYear()
-const yearOptions = Array.from({ length: 10 }, (_, i) => currentYear - i)
+// 年份范围：当前年-10 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
+const yearOptions = getYearOptions({ start: currentYear - 10 })
 const filterForm = ref({
   year: currentYear,
   dateRange: null as string[] | null,
