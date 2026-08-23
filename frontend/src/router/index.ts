@@ -149,12 +149,6 @@ export const routes: RouteRecordRaw[] = [
         component: () => retryImport(() => import('@/views/projects/ProgressGallery.vue')),
         meta: { title: '项目进度' },
       },
-      {
-        path: '/projects/management',
-        name: 'ProjectManagement',
-        component: () => retryImport(() => import('@/views/projects/ProjectManagement.vue')),
-        meta: { title: '项目管控' },
-      },
       // ── 帮扶村 ── （含旧路径重定向）
       { path: '/villages', redirect: '/supported-villages' },
       {
@@ -716,9 +710,7 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: '/system/user-permissions',
-        name: 'SystemUserPermissions',
-        component: () => retryImport(() => import('@/views/system/UserPermissions.vue')),
-        meta: { title: '用户权限管理', roles: ['admin', 'super_admin'] },
+        redirect: '/system/permission-packs',
       },
       {
         path: '/system/secrets',

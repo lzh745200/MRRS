@@ -117,6 +117,7 @@ function mountComp() {
         },
         'el-dialog': {
           name: 'ElDialog',
+          props: ['title', 'modelValue'],
           template: '<div class="el-dialog-stub"><slot /><slot name="footer" /></div>',
           emits: ['update:modelValue'],
         },
@@ -432,9 +433,9 @@ describe('UserManagement.vue 菜单权限配置', () => {
     const vm = wrapper.vm as any
     await vm.handleMenuPermission({ id: 7 })
     await nextTick()
-    // 页面有多个对话框（用户编辑 + 菜单权限），取最后一个
+    // 页面有多个对话框（用户编辑 + 菜单权限），按标题精确定位
     const dialogs = wrapper.findAllComponents({ name: 'ElDialog' })
-    const dialog = dialogs[dialogs.length - 1]
+    const dialog = dialogs.find((d) => d.props('title') === '菜单权限配置')!
     dialog.vm.$emit('update:modelValue', false)
     await nextTick()
     expect(vm.menuPermDialogVisible).toBe(false)

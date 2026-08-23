@@ -365,16 +365,6 @@ describe('UpdateLogs.vue', () => {
 })
 
 // --- UserPermissions ---
-describe('UserPermissions.vue', () => {
-  it('渲染', async () => {
-    const { default: Comp } = await import('@/views/system/UserPermissions.vue')
-    const w = mount(Comp)
-    await flushPromises()
-    expect(w.exists()).toBe(true)
-  })
-})
-
-// --- ZeroTrust ---
 describe('ZeroTrust.vue', () => {
   it('渲染', async () => {
     const { default: Comp } = await import('@/views/system/ZeroTrust.vue')

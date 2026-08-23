@@ -751,8 +751,7 @@ function handleImport() {
             return `${i + 1}. 第 ${row} 行：${msg}`
           })
           .join('<br/>')
-        const more =
-          result.errors.length > 10 ? `<br/>… 共 ${result.errors.length} 条失败` : ''
+        const more = result.errors.length > 10 ? `<br/>… 共 ${result.errors.length} 条失败` : ''
         ElMessageBox.alert(detail + more, '导入失败明细', {
           dangerouslyUseHTMLString: true,
           type: 'warning',

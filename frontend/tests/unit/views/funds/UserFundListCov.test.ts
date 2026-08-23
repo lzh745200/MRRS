@@ -410,7 +410,7 @@ describe('筛选与分页', () => {
     expect(vm.currentPage).toBe(1)
     expect(mockApiRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        params: expect.objectContaining({ search: '修路', type: 'project', status: 'pending' }),
+        params: expect.objectContaining({ keyword: '修路', fund_type: 'project', status: 'pending' }),
       })
     )
     // 搜索按钮
@@ -437,7 +437,7 @@ describe('筛选与分页', () => {
     // 空筛选时参数为 undefined（|| 右侧）
     expect(mockApiRequest).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        params: expect.objectContaining({ search: undefined, type: undefined, status: undefined }),
+        params: expect.objectContaining({ keyword: undefined, fund_type: undefined, status: undefined }),
       })
     )
     wrapper.unmount()

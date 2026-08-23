@@ -143,7 +143,6 @@ describe('System view imports', () => {
     ['Monitoring', '@/views/system/MonitoringDashboard.vue'],
     ['Menu', '@/views/system/Menu.vue'],
     ['Update Logs', '@/views/system/UpdateLogs.vue'],
-    ['User Permissions', '@/views/system/UserPermissions.vue'],
     ['Feedback', '@/views/system/Feedback.vue'],
     ['Env Check', '@/views/system/EnvCheck.vue'],
     ['Error Reports', '@/views/system/ErrorReports.vue'],
@@ -172,11 +171,9 @@ describe('System view imports', () => {
 describe('Data and workflow view imports', () => {
   const dataViews = [
     ['Data Management', '@/views/dataManagement/Index.vue'],
-    ['Data Management Overview', '@/views/dataManagement/Overview.vue'],
     ['Data Package List', '@/views/dataPackage/List.vue'],
     ['Data Sync Export', '@/views/dataSync/Export.vue'],
     ['Data Sync Import', '@/views/dataSync/Import.vue'],
-    ['Data Verify Index', '@/views/dataVerify/Index.vue'],
     ['Data Analysis Index', '@/views/dataAnalysis/Index.vue'],
     ['Data Entry', '@/views/dataEntry/ComprehensiveEntry.vue'],
     ['Data Import', '@/views/import/DataImport.vue'],
@@ -187,7 +184,6 @@ describe('Data and workflow view imports', () => {
     ['Approval History', '@/views/approval/History.vue'],
     ['Effectiveness Eval', '@/views/effectiveness/Evaluation.vue'],
     ['Effectiveness Rankings', '@/views/effectiveness/Rankings.vue'],
-    ['Report List', '@/views/report/List.vue'],
     ['Report Templates', '@/views/reportTemplates/Index.vue'],
     ['Todos', '@/views/todos/Index.vue'],
     ['Message Center', '@/views/message/MessageCenter.vue'],

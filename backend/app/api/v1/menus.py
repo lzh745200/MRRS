@@ -153,7 +153,7 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
             {
                 "key": "batch-import",
                 "label": "数据批量导入",
-                "path": "/data-import/batch",
+                "path": "/data-package",
                 "roles": ["admin", "super_admin"],
             },
             {
@@ -258,7 +258,7 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
             {
                 "key": "user-backup",
                 "label": "用户数据备份",
-                "path": "/data-management/user-backup",
+                "path": "/data-management/backup",
                 "roles": ["admin", "super_admin"],
             },
             {

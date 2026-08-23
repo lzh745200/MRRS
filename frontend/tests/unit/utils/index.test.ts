@@ -192,24 +192,6 @@ describe('挂载与统计加载', () => {
   })
 })
 
-describe('事件处理', () => {
-  it('导入/导出 complete 事件：刷新统计 + 提示', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    const base = mockGet.mock.calls.length
-
-    vm.handleImportComplete()
-    await flushPromises()
-    expect(ElMessage.success).toHaveBeenCalledWith('数据导入完成')
-    expect(mockGet.mock.calls.length).toBe(base + 4)
-
-    vm.handleExportComplete()
-    await flushPromises()
-    expect(ElMessage.success).toHaveBeenCalledWith('数据导出完成')
-    expect(mockGet.mock.calls.length).toBe(base + 8)
-  })
-})
 
 describe('el-tabs 交互', () => {
   it('v-model 切换 activeTab；tab-change 事件', async () => {

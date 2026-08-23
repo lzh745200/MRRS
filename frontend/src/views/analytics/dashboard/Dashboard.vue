@@ -78,12 +78,14 @@
               <span class="data-unit">个</span>
             </div>
             <div class="stat-trend" :class="`stat-trend--${dirOf(kpiTrends.villages)}`">
-            <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.villages)}`">
-              <i class='trend-tag__arrow'>{{ arrowOf(kpiTrends.villages) }}</i>
-              <template v-if="kpiTrends.villages !== 0">{{ Math.abs(kpiTrends.villages) }}%</template>
-              <template v-else>持平</template>
-            </span>
-            <span class="trend-label">较上月</span>
+              <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.villages)}`">
+                <i class="trend-tag__arrow">{{ arrowOf(kpiTrends.villages) }}</i>
+                <template v-if="kpiTrends.villages !== 0"
+                  >{{ Math.abs(kpiTrends.villages) }}%</template
+                >
+                <template v-else>持平</template>
+              </span>
+              <span class="trend-label">较上月</span>
             </div>
           </div>
           <div ref="sparkVillagesRef" class="stat-sparkline"></div>
@@ -104,12 +106,14 @@
               </span>
             </div>
             <div class="stat-trend" :class="`stat-trend--${dirOf(kpiTrends.population)}`">
-            <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.population)}`">
-              <i class='trend-tag__arrow'>{{ arrowOf(kpiTrends.population) }}</i>
-              <template v-if="kpiTrends.population !== 0">{{ Math.abs(kpiTrends.population) }}%</template>
-              <template v-else>持平</template>
-            </span>
-            <span class="trend-label">较去年</span>
+              <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.population)}`">
+                <i class="trend-tag__arrow">{{ arrowOf(kpiTrends.population) }}</i>
+                <template v-if="kpiTrends.population !== 0"
+                  >{{ Math.abs(kpiTrends.population) }}%</template
+                >
+                <template v-else>持平</template>
+              </span>
+              <span class="trend-label">较去年</span>
             </div>
           </div>
           <div ref="sparkPopulationRef" class="stat-sparkline"></div>
@@ -131,12 +135,12 @@
               <span class="data-unit">万元</span>
             </div>
             <div class="stat-trend" :class="`stat-trend--${dirOf(kpiTrends.income)}`">
-            <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.income)}`">
-              <i class='trend-tag__arrow'>{{ arrowOf(kpiTrends.income) }}</i>
-              <template v-if="kpiTrends.income !== 0">{{ Math.abs(kpiTrends.income) }}%</template>
-              <template v-else>持平</template>
-            </span>
-            <span class="trend-label">较去年</span>
+              <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.income)}`">
+                <i class="trend-tag__arrow">{{ arrowOf(kpiTrends.income) }}</i>
+                <template v-if="kpiTrends.income !== 0">{{ Math.abs(kpiTrends.income) }}%</template>
+                <template v-else>持平</template>
+              </span>
+              <span class="trend-label">较去年</span>
             </div>
           </div>
           <div ref="sparkIncomeRef" class="stat-sparkline"></div>
@@ -158,12 +162,14 @@
               <span class="data-unit">万元</span>
             </div>
             <div class="stat-trend" :class="`stat-trend--${dirOf(kpiTrends.investment)}`">
-            <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.investment)}`">
-              <i class='trend-tag__arrow'>{{ arrowOf(kpiTrends.investment) }}</i>
-              <template v-if="kpiTrends.investment !== 0">{{ Math.abs(kpiTrends.investment) }}%</template>
-              <template v-else>持平</template>
-            </span>
-            <span class="trend-label">较上月</span>
+              <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.investment)}`">
+                <i class="trend-tag__arrow">{{ arrowOf(kpiTrends.investment) }}</i>
+                <template v-if="kpiTrends.investment !== 0"
+                  >{{ Math.abs(kpiTrends.investment) }}%</template
+                >
+                <template v-else>持平</template>
+              </span>
+              <span class="trend-label">较上月</span>
             </div>
           </div>
           <div ref="sparkInvestmentRef" class="stat-sparkline"></div>
@@ -306,10 +312,7 @@ const sparkReal = ref<Record<'villages' | 'population' | 'income' | 'investment'
 
 async function fetchKpiTrends() {
   try {
-    const [statsRes, yearlyRes] = await Promise.all([
-      getDashboardStats(false),
-      getYearlyTrends(5),
-    ])
+    const [statsRes, yearlyRes] = await Promise.all([getDashboardStats(false), getYearlyTrends(5)])
     const t = (statsRes as any)?.trends ?? {}
     kpiTrends.value = {
       villages: t.villages ?? 0,
@@ -336,7 +339,6 @@ const takeSeries = (arr: number[]): number[] => {
   const a = (arr || []).filter((n) => Number.isFinite(n))
   return a.length ? a : [0]
 }
-
 
 // =========================================================================
 // 图表引用
@@ -711,7 +713,6 @@ const updateCharts = async () => {
 // =========================================================================
 
 const updateSparklines = () => {
-
   const sparkData = [
     {
       chart: sparkVillagesChart,

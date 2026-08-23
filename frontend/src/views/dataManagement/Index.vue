@@ -28,14 +28,26 @@
 
     <!-- 功能模块选项卡 -->
     <el-tabs v-model="activeTab" type="border-card" class="main-tabs">
-      <!-- 数据导入 -->
+      <!-- 数据导入（统一入口：/data-sync/import） -->
       <el-tab-pane label="数据导入" name="import">
-        <ImportSection @import-complete="handleImportComplete" />
+        <el-card shadow="never" class="redirect-card">
+          <el-empty description="数据导入已统一至「数据同步 · 导入」（支持预览与校验）">
+            <el-button type="primary" @click="pushSafe('/data-sync/import')"
+              >前往数据导入</el-button
+            >
+          </el-empty>
+        </el-card>
       </el-tab-pane>
 
-      <!-- 数据导出 -->
+      <!-- 数据导出（统一入口：/data-sync/export） -->
       <el-tab-pane label="数据导出" name="export">
-        <ExportSection @export-complete="handleExportComplete" />
+        <el-card shadow="never" class="redirect-card">
+          <el-empty description="数据导出已统一至「数据同步 · 导出」（支持加密与异步任务）">
+            <el-button type="primary" @click="pushSafe('/data-sync/export')"
+              >前往数据导出</el-button
+            >
+          </el-empty>
+        </el-card>
       </el-tab-pane>
 
       <!-- 数据备份（已整合至系统管理 → 备份管理，此处跳转避免功能重复） -->
@@ -67,8 +79,6 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 const { pushSafe } = useRouterSafe()
 
 // 异步加载子组件
-const ImportSection = defineAsyncComponent(() => import('./components/ImportSection.vue'))
-const ExportSection = defineAsyncComponent(() => import('./components/ExportSection.vue'))
 const QualitySection = defineAsyncComponent(() => import('./components/QualitySection.vue'))
 
 // 备份管理已整合至系统管理，跳转避免重复
@@ -166,15 +176,6 @@ async function loadStats() {
 }
 
 // 事件处理
-function handleImportComplete() {
-  loadStats()
-  ElMessage.success('数据导入完成')
-}
-
-function handleExportComplete() {
-  loadStats()
-  ElMessage.success('数据导出完成')
-}
 
 onMounted(() => {
   loadStats()

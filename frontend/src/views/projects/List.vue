@@ -10,7 +10,7 @@
         <el-button type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建项目
         </el-button>
-        <el-button @click="pushSafe('/data-import/batch')">
+        <el-button @click="pushSafe('/data-package')">
           <el-icon><Upload /></el-icon>批量导入
         </el-button>
         <el-button @click="handleExport">

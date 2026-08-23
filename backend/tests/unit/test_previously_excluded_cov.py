@@ -532,17 +532,20 @@ class TestVillageTemplates:
 # ---------------------------------------------------------------------------
 
 class TestMessagesExtended:
-    """Tests for app.api.v1.messages_extended module."""
+    """messages_extended 冗余模块已于 v1.10.0 移除（W8-016）：防止误回归。"""
 
-    def test_module_import(self):
-        """Module can be imported."""
-        import app.api.v1.messages_extended as mod
-        assert mod is not None
+    def test_module_removed(self):
+        import importlib.util
+        import sys
 
-    def test_router_exists(self):
-        """Module has a router."""
-        import app.api.v1.messages_extended as mod
-        assert hasattr(mod, "router") or hasattr(mod, "messages_extended_router") or True
+        spec = importlib.util.find_spec("app.api.v1.messages_extended")
+        assert spec is None, "messages_extended 不应再存在"
+        assert "app.api.v1.messages_extended" not in sys.modules
+
+    def test_router_not_registered(self):
+        from app.api.v1 import _BUSINESS_MODULES
+
+        assert "messages_extended" not in _BUSINESS_MODULES
 
 
 # ---------------------------------------------------------------------------

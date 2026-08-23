@@ -260,7 +260,7 @@ export const MENU_CONFIG: MenuItem[] = [
       {
         key: 'batch-import',
         label: '数据批量导入',
-        path: '/data-import/batch',
+        path: '/data-package',
         roles: ['admin', 'super_admin'],
       },
       {

@@ -220,7 +220,6 @@
             v-if="
               menuStore.canAccessMenu('data') ||
               menuStore.canAccessMenu('data-overview') ||
-              menuStore.canAccessMenu('user-backup') ||
               menuStore.canAccessMenu('data-quality') ||
               menuStore.canAccessMenu('data-logs') ||
               menuStore.canAccessMenu('data-package-report') ||

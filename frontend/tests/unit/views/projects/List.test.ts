@@ -377,7 +377,7 @@ describe('导航与 CRUD', () => {
     const btns = wrapper.findAll('.el-button-stub')
     const batch = btns.find((b) => b.text().includes('批量导入'))
     await batch!.trigger('click')
-    expect(pushSafeMock).toHaveBeenCalledWith('/data-import/batch')
+    expect(pushSafeMock).toHaveBeenCalledWith('/data-package')
     const stats = btns.find((b) => b.text().includes('数据统计'))
     await stats!.trigger('click')
     expect(pushSafeMock).toHaveBeenCalledWith('/data-analysis')

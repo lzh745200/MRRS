@@ -351,22 +351,6 @@ describe('内部端点失败（单项保持 0，流程继续）', () => {
 })
 
 describe('事件处理', () => {
-  it('import/export complete 事件：刷新统计（4 个 get 调用）+ 成功提示', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    const base = mockGet.mock.calls.length
-
-    vm.handleImportComplete()
-    await flushPromises()
-    expect(ElMessage.success).toHaveBeenCalledWith('数据导入完成')
-    expect(mockGet.mock.calls.length).toBe(base + 4)
-
-    vm.handleExportComplete()
-    await flushPromises()
-    expect(ElMessage.success).toHaveBeenCalledWith('数据导出完成')
-    expect(mockGet.mock.calls.length).toBe(base + 8)
-  })
 })
 
 describe('el-tabs 交互', () => {

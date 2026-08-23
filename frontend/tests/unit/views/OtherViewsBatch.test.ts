@@ -127,11 +127,6 @@ describe('projects/List.vue', () => {
 describe('projects/ProgressGallery.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/views/projects/ProgressGallery.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
 })
-describe('projects/ProjectManagement.vue', () => {
-  it('渲染', async () => { const { default: C } = await import('@/views/projects/ProjectManagement.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
-})
-
-// --- Organization ---
 describe('organization/Detail.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/views/organization/Detail.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
 })
@@ -243,12 +238,6 @@ describe('dataEntry/ComprehensiveEntry.vue', () => {
 describe('dataManagement/Index.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/views/dataManagement/Index.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
 })
-describe('dataManagement/Overview.vue', () => {
-  it('渲染', async () => { const { default: C } = await import('@/views/dataManagement/Overview.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
-})
-describe('dataVerify/Index.vue', () => {
-  it('渲染', async () => { const { default: C } = await import('@/views/dataVerify/Index.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
-})
 describe('dataVerify/RulesManagement.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/views/dataVerify/RulesManagement.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
 })
@@ -278,9 +267,6 @@ describe('message/MessageCenter.vue', () => {
 })
 describe('NotFound.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/views/NotFound.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
-})
-describe('report/List.vue', () => {
-  it('渲染', async () => { const { default: C } = await import('@/views/report/List.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
 })
 describe('reportTemplates/Index.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/views/reportTemplates/Index.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })

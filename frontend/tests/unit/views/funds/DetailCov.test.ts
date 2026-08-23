@@ -635,8 +635,15 @@ describe('工作流', () => {
     }
     vm.wfForm.opinion = '同意'
     await run('approve', approveMock, { opinion: '同意' })
-    vm.wfForm.opinion = '' // opinion || undefined 右臂
-    await run('reject', rejectMock, { opinion: undefined })
+    vm.wfForm.opinion = '' // 驳回原因必填：空意见被拦截，不发起请求
+    vm.wfAction = 'reject'
+    vm.wfDialogTitle = 'reject'
+    rejectMock.mockClear()
+    await vm.submitWorkflow()
+    expect(rejectMock).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalledWith('驳回时必须填写驳回原因')
+    vm.wfForm.opinion = '资料不全，退回补充'
+    await run('reject', rejectMock, { opinion: '资料不全，退回补充' })
 
     vm.wfForm.allocated_amount = 70
     vm.wfForm.allocation_method = '银行转账'

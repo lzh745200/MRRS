@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick, KeepAlive, h, defineComponent } from 'vue'
+import { ElMessageBox } from 'element-plus'
 
 // vi.mock 工厂提升求值，引用对象须先放入 vi.hoisted 初始化（TDZ）
 const {
@@ -57,6 +58,7 @@ vi.mock('@/composables/useDesensitize', () => ({
 
 vi.mock('element-plus', () => ({
   ElMessage,
+  ElMessageBox: { alert: vi.fn() },
 }))
 
 vi.mock('@/api/request', () => ({
@@ -658,8 +660,8 @@ describe('导入 / 模板下载', () => {
     vm.onImportSuccess({ imported: 3 }) // message 缺失 → 缺省文案
     expect(ElMessage.success).toHaveBeenCalledWith('成功导入 3 所学校')
 
-    vm.onImportSuccess({ errors: ['a', 'b'] }) // errors → warning；imported 缺失 → 0
-    expect(ElMessage.warning).toHaveBeenCalledWith('2 条数据导入失败')
+    vm.onImportSuccess({ errors: ['a', 'b'] }) // errors → 明细弹窗（ElMessageBox.alert）；imported 缺失 → 0
+    expect(ElMessageBox.alert).toHaveBeenCalledTimes(1)
     expect(ElMessage.success).toHaveBeenCalledWith('成功导入 0 所学校')
 
     vm.onImportSuccess(null) // 全 ?. 兜底
