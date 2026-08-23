@@ -747,7 +747,7 @@ class TestDataQuality:
     async def test_clean_data(self):
         from app.api.v1.data_quality import clean_data, CleanDataRequest
         user = _make_user(is_superuser=True)
-        req = CleanDataRequest(records=[{"a": 1}], cleaning_rules={"strip": True})
+        req = CleanDataRequest(records=[{"a": 1}], cleaning_rules={"trim_whitespace": True})
         with patch("app.api.v1.data_quality.DataCleaningService") as svc:
             svc.clean_dataset.return_value = [{"a": 1}]
             result = await clean_data(req, current_user=user)
@@ -851,59 +851,8 @@ class TestMessagesEndpoints:
 
 
 # ===================================================================
-# 10. messages_extended.py  (8 lines)
+# 10. messages_extended.py —— 模块已并入 messages.py（W1 重构），原覆盖用例随模块移除
 # ===================================================================
-
-
-class TestMessagesExtended:
-
-    async def test_send_message_log_fail(self):
-        from app.api.v1.messages_extended import send_message, SendMessageRequest
-        db = _mock_db()
-        user = _make_user()
-        req = SendMessageRequest(receiver_id=2, message_type="system", title="Hi", content="Hello")
-        mock_msg = MagicMock()
-        mock_msg.id = 1
-        mock_msg.created_at = datetime.now()
-        mock_svc = MagicMock()
-        mock_svc.send_message.return_value = mock_msg
-        with patch("app.api.v1.messages_extended.MessageService", return_value=mock_svc), \
-             patch("app.api.v1.messages_extended.write_work_log", side_effect=Exception("fail")):
-            result = await send_message(req, current_user=user, db=db)
-            assert result["data"]["message_id"] == 1
-
-    async def test_mark_read_log_fail(self):
-        from app.api.v1.messages_extended import mark_as_read
-        db = _mock_db()
-        user = _make_user()
-        mock_svc = MagicMock()
-        mock_svc.mark_as_read.return_value = 1
-        with patch("app.api.v1.messages_extended.MessageService", return_value=mock_svc), \
-             patch("app.api.v1.messages_extended.write_work_log", side_effect=Exception("fail")):
-            result = await mark_as_read(1, current_user=user, db=db)
-            assert result["message"] == "已标记为已读"
-
-    async def test_mark_all_read_log_fail(self):
-        from app.api.v1.messages_extended import mark_all_as_read
-        db = _mock_db()
-        user = _make_user()
-        mock_svc = MagicMock()
-        mock_svc.mark_all_as_read.return_value = 3
-        with patch("app.api.v1.messages_extended.MessageService", return_value=mock_svc), \
-             patch("app.api.v1.messages_extended.write_work_log", side_effect=Exception("fail")):
-            result = await mark_all_as_read(current_user=user, db=db)
-            assert result["data"]["marked_count"] == 3
-
-    async def test_delete_message_log_fail(self):
-        from app.api.v1.messages_extended import delete_message
-        db = _mock_db()
-        user = _make_user()
-        mock_svc = MagicMock()
-        mock_svc.delete_messages.return_value = 1
-        with patch("app.api.v1.messages_extended.MessageService", return_value=mock_svc), \
-             patch("app.api.v1.messages_extended.write_work_log", side_effect=Exception("fail")):
-            result = await delete_message(1, current_user=user, db=db)
-            assert result["message"] == "消息已删除"
 
 
 # ===================================================================
@@ -2002,7 +1951,7 @@ class TestMenus:
             return q
 
         db.query.side_effect = query_side_effect
-        data = UserMenuUpdate(menu_ids=[1, 2], mode="set")
+        data = UserMenuUpdate(menu_keys=["dashboard", "projects"])
         with patch("app.api.v1.menus.safe_commit"), \
              patch("app.api.v1.menus.write_work_log", side_effect=Exception("fail")), \
              patch("app.api.v1.menus._is_admin", return_value=True):

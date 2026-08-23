@@ -101,17 +101,25 @@ class TestImport:
 
 
 class TestConfirm:
+    @staticmethod
+    def _body(**kw):
+        return SimpleNamespace(overwrite_existing=False, mode=None, **kw)
+
     def test_file_missing_404(self, svc, tmp_path):
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
             with pytest.raises(HTTPException) as exc_info:
-                pp.confirm_import_permission_package("missing.zip", SimpleNamespace(overwrite_existing=False, mode=None), _admin(), MagicMock())
+                pp.confirm_import_permission_package(
+                    "missing.zip", self._body(), _admin(), MagicMock()
+                )
         assert exc_info.value.status_code == 404
 
     def test_success(self, svc, tmp_path):
         (tmp_path / "pkg.zip").write_bytes(b"PK")
         svc.confirm_import.return_value = {"success": True}
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
-            resp = pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=True, mode=None), _admin(), MagicMock())
+            resp = pp.confirm_import_permission_package(
+                "pkg.zip", SimpleNamespace(overwrite_existing=True, mode=None), _admin(), MagicMock()
+            )
         assert resp.status_code == 200
         assert not (tmp_path / "pkg.zip").exists()  # 成功后清理
 
@@ -120,7 +128,9 @@ class TestConfirm:
         svc.confirm_import.return_value = {"success": False, "message": "校验失败"}
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
             with pytest.raises(HTTPException) as exc_info:
-                pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=False, mode=None), _admin(), MagicMock())
+                pp.confirm_import_permission_package(
+                    "pkg.zip", self._body(), _admin(), MagicMock()
+                )
         assert exc_info.value.status_code == 500
 
     def test_service_raises_still_cleans_up(self, svc, tmp_path):
@@ -128,7 +138,9 @@ class TestConfirm:
         svc.confirm_import.side_effect = RuntimeError("crash")
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
             with pytest.raises(RuntimeError):
-                pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=False, mode=None), _admin(), MagicMock())
+                pp.confirm_import_permission_package(
+                    "pkg.zip", self._body(), _admin(), MagicMock()
+                )
         assert not (tmp_path / "pkg.zip").exists()
 
     def test_cleanup_oserror_degrades(self, svc, tmp_path):
@@ -138,6 +150,7 @@ class TestConfirm:
             patch("app.utils.paths.get_uploads_path", return_value=tmp_path),
             patch.object(pp.os, "unlink", side_effect=OSError("locked")),
         ):
-            resp = pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=False, mode=None), _admin(), MagicMock())
+            resp = pp.confirm_import_permission_package(
+                "pkg.zip", SimpleNamespace(overwrite_existing=True, mode=None), _admin(), MagicMock()
+            )
         assert resp.status_code == 200
-

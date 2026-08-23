@@ -64,27 +64,38 @@ class TestVerifyPassCode:
         assert record.status == "pending"
         mock_commit.assert_not_called()
 
-    def test_hmac_self_verify_cross_machine_creates_local_record(self):
-        # 跨机器场景：数据库无任何记录（first 恒为 None）→ HMAC 自验证通过
-        # → 在本机创建绑定当前机器码的记录并返回
-        machine_code = "B" + "0" * 63
-        pass_code = MachineCodeService.generate_pass_code(machine_code)
+    def test_hmac_self_verify_cross_machine_creates_local_record(self, monkeypatch):
+        # 目标机数据库无任何记录（first 均为 None），HMAC 自验证通过后
+        # → 在本机创建绑定到当前机器的记录
+        # W1-T6 fail-closed：需显式配置密钥后才允许自验证
+        monkeypatch.setenv("PASS_CODE_SECRET", "unit-test-secret")
+        import importlib
 
-        db = MagicMock()
-        q = db.query.return_value
-        q.filter.return_value = q
-        q.first.side_effect = [None, None, None]  # 三个查询分支均未命中
+        from app.services import machine_code_service as mcs
 
-        svc = MachineCodeService(db)
+        importlib.reload(mcs)
+        try:
+            machine_code = "B" + "0" * 63
+            pass_code = mcs.MachineCodeService.generate_pass_code(machine_code)
 
-        with patch(f"{_MOD}.safe_commit") as mock_commit:
-            result = svc.verify_pass_code(pass_code, machine_code)
+            db = MagicMock()
+            q = db.query.return_value
+            q.filter.return_value = q
+            q.first.side_effect = [None, None, None]  # 三次查询均返回未找到
 
-        assert result is not None
-        assert result.machine_code == machine_code
-        assert result.status == "pending"
-        db.add.assert_called_once()
-        mock_commit.assert_called()
+            svc = mcs.MachineCodeService(db)
+
+            with patch(f"{_MOD}.safe_commit") as mock_commit:
+                result = svc.verify_pass_code(pass_code, machine_code)
+
+            assert result is not None
+            assert result.machine_code == machine_code
+            assert result.status == "pending"
+            db.add.assert_called_once()
+            mock_commit.assert_called()
+        finally:
+            monkeypatch.delenv("PASS_CODE_SECRET", raising=False)
+            importlib.reload(mcs)
 
     def test_hmac_self_verify_rejects_wrong_machine(self):
         # 错误机器码 → HMAC 不匹配 → 返回 None（"通行码无效或已被使用"）
@@ -101,14 +112,25 @@ class TestVerifyPassCode:
 
         assert result is None
 
-    def test_hmac_accepts_input_without_dashes(self):
-        # 用户输入去掉连字符的通行码 → 归一化后仍匹配
-        machine_code = "C" + "0" * 63
-        pass_code = MachineCodeService.generate_pass_code(machine_code)
+    def test_hmac_accepts_input_without_dashes(self, monkeypatch):
+        # 用户输入去掉连字符的通行码 应 与一致机器码匹配
+        # W1-T6 fail-closed：需显式配置密钥后才允许自验证
+        monkeypatch.setenv("PASS_CODE_SECRET", "unit-test-secret")
+        import importlib
 
-        assert MachineCodeService.verify_pass_code_hmac(
-            pass_code.replace("-", ""), machine_code
-        ) is True
+        from app.services import machine_code_service as mcs
+
+        importlib.reload(mcs)
+        try:
+            machine_code = "C" + "0" * 63
+            pass_code = mcs.MachineCodeService.generate_pass_code(machine_code)
+
+            assert mcs.MachineCodeService.verify_pass_code_hmac(
+                pass_code.replace("-", ""), machine_code
+            ) is True
+        finally:
+            monkeypatch.delenv("PASS_CODE_SECRET", raising=False)
+            importlib.reload(mcs)
 
     def test_generate_pass_code_deterministic(self):
         # 确定性：同一机器码两次生成结果一致（跨机器可重算验证的前提）
