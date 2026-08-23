@@ -268,8 +268,8 @@ class TestFundStatistics:
         )
         d = fs.to_dict()
         assert d["fund_type"] == "infra"
-        assert d["military_investment"] == 100.12
-        assert d["total_investment"] == 200.46
+        assert d["military_investment"] == 100.123
+        assert d["total_investment"] == 200.456
         assert d["utilization_rate"] == 0.0
 
 
@@ -287,7 +287,7 @@ class TestYearlyFundSummary:
         ys = YearlyFundSummary(year=2024, total_military=50.123)
         d = ys.to_dict()
         assert d["year"] == 2024
-        assert d["total_military"] == 50.12
+        assert d["total_military"] == 50.123
         assert d["by_type"] == {}
 
     def test_to_dict_with_by_type(self):
@@ -295,7 +295,7 @@ class TestYearlyFundSummary:
         ys = YearlyFundSummary(year=2024, total_actual=30.456)
         ys.by_type["edu"] = fs
         d = ys.to_dict()
-        assert d["by_type"]["edu"]["total_investment"] == 30.46
+        assert d["by_type"]["edu"]["total_investment"] == 30.456
 
     def test_to_dict_by_type_non_dataclass(self):
         ys = YearlyFundSummary(year=2024)

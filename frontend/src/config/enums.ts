@@ -8,10 +8,13 @@ export const FUND_TYPES = {
 } as const
 export const FUND_STATUS = {
   pending: '待审批',
+  planned: '已计划',
   approved: '已审批',
   allocated: '已拨付',
   in_use: '使用中',
   completed: '已完成',
+  audited: '已审计',
+  rejected: '已驳回',
   cancelled: '已取消',
 } as const
 export const PROJECT_STATUS = {

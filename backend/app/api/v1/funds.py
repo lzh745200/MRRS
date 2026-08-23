@@ -22,7 +22,7 @@ from decimal import Decimal
 from app.utils.helpers import FUND_MONEY_FIELDS, quantize_money
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -115,6 +115,7 @@ def _resolve_fund_approval_tasks(
     fund: Fund,
     action: str,
     operator: User,
+    reason: Optional[str] = None,
 ) -> int:
     """在经费板块直接审批时，同步完结关联的审批任务（闭环另一方向）。
 
@@ -146,7 +147,8 @@ def _resolve_fund_approval_tasks(
                     count += 1
             else:
                 task = service.reject_task(
-                    task.id, operator.id, "经费板块直接驳回", standalone=True
+                    task.id, operator.id, f"经费板块直接驳回：{reason}" if reason else "经费板块直接驳回",
+                    standalone=True,
                 )
                 if task and task.status == _AS.REJECTED.value:
                     count += 1
@@ -851,14 +853,23 @@ def approve_fund(fund_id: int, current_user: User = Depends(get_current_user), d
 
 
 @router.post("/{fund_id}/reject")
-def reject_fund(fund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def reject_fund(
+    fund_id: int,
+    opinion: Optional[str] = Body(None, embed=True),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     require_funds_operator_role(current_user)
     fund = _get_fund_or_404(db, fund_id, current_user)
+    reason = (opinion or "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="驳回原因不能为空")
     _transition_status(db, fund, "rejected", ["pending", "planned"],
                        operator=current_user,
+                       remark=reason,
                        approved_by=current_user.full_name or current_user.username)
     # 同步驳回待审批板块中的关联审批任务（闭环）
-    resolved = _resolve_fund_approval_tasks(db, fund, "reject", current_user)
+    resolved = _resolve_fund_approval_tasks(db, fund, "reject", current_user, reason=reason)
     return success_response(data={"fund_id": fund.id, "resolved_tasks": resolved}, message="审批驳回")
 
 

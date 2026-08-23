@@ -32,6 +32,15 @@ class CleanDataRequest(BaseModel):
     cleaning_rules: dict
 
 
+SUPPORTED_CLEANING_RULES = {
+    "deduplicate",
+    "standardize",
+    "fill_missing",
+    "trim_whitespace",
+    "normalize_empty",
+}
+
+
 @router.post("/validate")
 async def validate_data(
     request: ValidateDataRequest,
@@ -69,15 +78,27 @@ async def clean_data(request: CleanDataRequest, current_user: User = Depends(get
     需要管理员权限
     """
     if not current_user.is_superuser:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
+    unknown_rules = set(request.cleaning_rules) - SUPPORTED_CLEANING_RULES
+    if unknown_rules:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的清洗规则: {sorted(unknown_rules)}，允许的规则: {sorted(SUPPORTED_CLEANING_RULES)}",
+        )
+
+    import copy
+
+    originals = copy.deepcopy(request.records)
     cleaned_records = DataCleaningService.clean_dataset(records=request.records, cleaning_rules=request.cleaning_rules)
+    changed_count = sum(
+        1 for before, after in zip(originals, cleaned_records) if before != after
+    )
 
     return success_response(data={
         "original_count": len(request.records),
         "cleaned_count": len(cleaned_records),
+        "changed_count": changed_count,
         "cleaned_records": cleaned_records,
     })
 

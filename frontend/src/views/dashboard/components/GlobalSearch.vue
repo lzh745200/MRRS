@@ -77,6 +77,7 @@ import {
   Document,
   Tickets,
   School,
+  Money,
   UserFilled,
 } from '@element-plus/icons-vue'
 import { globalSearch, SEARCH_TYPE_LABELS, type SearchItem } from '@/api/search'
@@ -87,7 +88,7 @@ withDefaults(
     placeholder?: string
   }>(),
   {
-    placeholder: '搜索帮扶村、项目、学校、政策…',
+    placeholder: '搜索帮扶村、项目、学校、政策、经费…',
   }
 )
 
@@ -114,13 +115,14 @@ const iconMap: Record<string, any> = {
   project: Document,
   policy: Tickets,
   school: School,
+  fund: Money,
   user: UserFilled,
 }
 
 // 按类型分组结果
 const groupedResults = computed(() => {
   const groups: { type: SearchItem['type']; label: string; items: SearchItem[] }[] = []
-  const typeOrder: SearchItem['type'][] = ['village', 'project', 'school', 'policy', 'user']
+  const typeOrder: SearchItem['type'][] = ['village', 'project', 'school', 'policy', 'fund', 'user']
   for (const type of typeOrder) {
     const items = results.value.filter((r) => r.type === type)
     if (items.length > 0) {

@@ -84,6 +84,7 @@ class TestGenerateReport:
     def test_generate_statistics(self, client):
         c, db, _ = client
         q = MagicMock()
+        q.filter.return_value = q
         q.count.return_value = 42
         db.query.return_value = q
 

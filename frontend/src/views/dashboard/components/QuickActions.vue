@@ -120,7 +120,7 @@
             <el-icon class="btn-icon"><ChatDotRound /></el-icon
             ><span class="btn-text">消息中心</span>
           </button>
-          <button class="action-btn secondary" @click="pushSafe('/funds')">
+          <button class="action-btn secondary" @click="pushSafe('/funds/lifecycle')">
             <el-icon class="btn-icon"><Refresh /></el-icon><span class="btn-text">资金周期</span>
           </button>
           <button class="action-btn secondary" @click="pushSafe('/funds/contract')">
@@ -142,7 +142,7 @@
             <el-icon class="btn-icon"><DataAnalysis /></el-icon
             ><span class="btn-text">经费报表</span>
           </button>
-          <button class="action-btn secondary" @click="pushSafe('/funds')">
+          <button class="action-btn secondary" @click="pushSafe('/funds/settlement')">
             <el-icon class="btn-icon"><CreditCard /></el-icon><span class="btn-text">经费结算</span>
           </button>
         </div>

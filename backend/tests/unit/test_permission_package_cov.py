@@ -34,7 +34,7 @@ def svc():
 class TestExport:
     def test_success(self, svc):
         svc.export_package.return_value = {"success": True, "file": "x.zip"}
-        body = SimpleNamespace(password="p", description="d")
+        body = SimpleNamespace(password="p", description="d", role_names=None)
         resp = pp.export_permission_package(body, _admin(), MagicMock())
         assert resp.status_code == 200
 
@@ -83,7 +83,9 @@ class TestImport:
             with pytest.raises(HTTPException) as exc_info:
                 await pp.import_permission_package(_req(), file, _admin(), MagicMock())
         assert exc_info.value.status_code == 500
-        assert "bad zip" in exc_info.value.detail
+        # W1-T8：内部异常细节不再直出，统一为通用文案
+        assert "导入预览失败" in exc_info.value.detail
+        assert "bad zip" not in exc_info.value.detail
         assert not (tmp_path / "pkg.zip").exists()  # 异常时文件已清理
 
     async def test_exception_cleanup_oserror_degrades(self, svc, tmp_path):
@@ -102,14 +104,14 @@ class TestConfirm:
     def test_file_missing_404(self, svc, tmp_path):
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
             with pytest.raises(HTTPException) as exc_info:
-                pp.confirm_import_permission_package("missing.zip", SimpleNamespace(overwrite_existing=False), _admin(), MagicMock())
+                pp.confirm_import_permission_package("missing.zip", SimpleNamespace(overwrite_existing=False, mode=None), _admin(), MagicMock())
         assert exc_info.value.status_code == 404
 
     def test_success(self, svc, tmp_path):
         (tmp_path / "pkg.zip").write_bytes(b"PK")
         svc.confirm_import.return_value = {"success": True}
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
-            resp = pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=True), _admin(), MagicMock())
+            resp = pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=True, mode=None), _admin(), MagicMock())
         assert resp.status_code == 200
         assert not (tmp_path / "pkg.zip").exists()  # 成功后清理
 
@@ -118,7 +120,7 @@ class TestConfirm:
         svc.confirm_import.return_value = {"success": False, "message": "校验失败"}
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
             with pytest.raises(HTTPException) as exc_info:
-                pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=False), _admin(), MagicMock())
+                pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=False, mode=None), _admin(), MagicMock())
         assert exc_info.value.status_code == 500
 
     def test_service_raises_still_cleans_up(self, svc, tmp_path):
@@ -126,7 +128,7 @@ class TestConfirm:
         svc.confirm_import.side_effect = RuntimeError("crash")
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
             with pytest.raises(RuntimeError):
-                pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=False), _admin(), MagicMock())
+                pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=False, mode=None), _admin(), MagicMock())
         assert not (tmp_path / "pkg.zip").exists()
 
     def test_cleanup_oserror_degrades(self, svc, tmp_path):
@@ -136,6 +138,6 @@ class TestConfirm:
             patch("app.utils.paths.get_uploads_path", return_value=tmp_path),
             patch.object(pp.os, "unlink", side_effect=OSError("locked")),
         ):
-            resp = pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=False), _admin(), MagicMock())
+            resp = pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=False, mode=None), _admin(), MagicMock())
         assert resp.status_code == 200
 

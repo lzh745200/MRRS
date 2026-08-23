@@ -77,11 +77,13 @@
               </span>
               <span class="data-unit">个</span>
             </div>
-            <div class="stat-trend stat-trend--up">
-              <span class="trend-tag trend-tag--up">
-                <i class="trend-tag__arrow">↗</i> {{ kpiTrends.villages }}%
-              </span>
-              <span class="trend-label">较上年</span>
+            <div class="stat-trend" :class="`stat-trend--${dirOf(kpiTrends.villages)}`">
+            <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.villages)}`">
+              <i class='trend-tag__arrow'>{{ arrowOf(kpiTrends.villages) }}</i>
+              <template v-if="kpiTrends.villages !== 0">{{ Math.abs(kpiTrends.villages) }}%</template>
+              <template v-else>持平</template>
+            </span>
+            <span class="trend-label">较上月</span>
             </div>
           </div>
           <div ref="sparkVillagesRef" class="stat-sparkline"></div>
@@ -101,11 +103,13 @@
                 {{ formatNumber(statistics.population?.totalPopulation || 0) }}
               </span>
             </div>
-            <div class="stat-trend stat-trend--up">
-              <span class="trend-tag trend-tag--up">
-                <i class="trend-tag__arrow">↗</i> {{ kpiTrends.population }}%
-              </span>
-              <span class="trend-label">较上年</span>
+            <div class="stat-trend" :class="`stat-trend--${dirOf(kpiTrends.population)}`">
+            <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.population)}`">
+              <i class='trend-tag__arrow'>{{ arrowOf(kpiTrends.population) }}</i>
+              <template v-if="kpiTrends.population !== 0">{{ Math.abs(kpiTrends.population) }}%</template>
+              <template v-else>持平</template>
+            </span>
+            <span class="trend-label">较去年</span>
             </div>
           </div>
           <div ref="sparkPopulationRef" class="stat-sparkline"></div>
@@ -126,11 +130,13 @@
               </span>
               <span class="data-unit">万元</span>
             </div>
-            <div class="stat-trend stat-trend--up">
-              <span class="trend-tag trend-tag--up">
-                <i class="trend-tag__arrow">↗</i> {{ kpiTrends.income }}%
-              </span>
-              <span class="trend-label">较上年</span>
+            <div class="stat-trend" :class="`stat-trend--${dirOf(kpiTrends.income)}`">
+            <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.income)}`">
+              <i class='trend-tag__arrow'>{{ arrowOf(kpiTrends.income) }}</i>
+              <template v-if="kpiTrends.income !== 0">{{ Math.abs(kpiTrends.income) }}%</template>
+              <template v-else>持平</template>
+            </span>
+            <span class="trend-label">较去年</span>
             </div>
           </div>
           <div ref="sparkIncomeRef" class="stat-sparkline"></div>
@@ -151,11 +157,13 @@
               </span>
               <span class="data-unit">万元</span>
             </div>
-            <div class="stat-trend stat-trend--up">
-              <span class="trend-tag trend-tag--up">
-                <i class="trend-tag__arrow">↗</i> {{ kpiTrends.investment }}%
-              </span>
-              <span class="trend-label">较上年</span>
+            <div class="stat-trend" :class="`stat-trend--${dirOf(kpiTrends.investment)}`">
+            <span class="trend-tag" :class="`trend-tag--${dirOf(kpiTrends.investment)}`">
+              <i class='trend-tag__arrow'>{{ arrowOf(kpiTrends.investment) }}</i>
+              <template v-if="kpiTrends.investment !== 0">{{ Math.abs(kpiTrends.investment) }}%</template>
+              <template v-else>持平</template>
+            </span>
+            <span class="trend-label">较上月</span>
             </div>
           </div>
           <div ref="sparkInvestmentRef" class="stat-sparkline"></div>
@@ -215,7 +223,7 @@ import echarts from '@/utils/echarts'
 import { getCurrentTheme } from '@/utils/echarts-theme'
 import SystemStatus from '@/components/business/SystemStatus.vue'
 import { getSummaryStatistics, getFilterOptions, drillDown } from '@/api/analytics'
-import { getKpiTrends, getYearlyTrends } from '@/api/dashboard'
+import { getDashboardStats, getYearlyTrends } from '@/api/dashboard'
 import type { SummaryStatistics, FilterOptions, DrillDownResult } from '@/types/analytics'
 
 // =========================================================================
@@ -285,14 +293,35 @@ interface KpiTrends {
 
 const kpiTrends = ref<KpiTrends>({ villages: 0, population: 0, income: 0, investment: 0 })
 
+type TrendDir = 'up' | 'down' | 'flat'
+const dirOf = (v?: number): TrendDir => ((v ?? 0) > 0 ? 'up' : (v ?? 0) < 0 ? 'down' : 'flat')
+const arrowOf = (v?: number): string => ((v ?? 0) > 0 ? '↑' : (v ?? 0) < 0 ? '↓' : '→')
+
+const sparkReal = ref<Record<'villages' | 'population' | 'income' | 'investment', number[]>>({
+  villages: [],
+  population: [],
+  income: [],
+  investment: [],
+})
+
 async function fetchKpiTrends() {
   try {
-    const data = (await getKpiTrends()) as any
+    const [statsRes, yearlyRes] = await Promise.all([
+      getDashboardStats(false),
+      getYearlyTrends(5),
+    ])
+    const t = (statsRes as any)?.trends ?? {}
     kpiTrends.value = {
-      villages: data.villages ?? 0,
-      population: data.population ?? 0,
-      income: data.income ?? 0,
-      investment: data.investment ?? 0,
+      villages: t.villages ?? 0,
+      population: t.population_yoy ?? 0,
+      income: t.income_yoy ?? 0,
+      investment: t.funds ?? 0,
+    }
+    sparkReal.value = {
+      villages: (yearlyRes as any)?.villages ?? [],
+      population: (yearlyRes as any)?.population ?? [],
+      income: (yearlyRes as any)?.income ?? [],
+      investment: ((yearlyRes as any)?.trends ?? []).map((r: any) => r?.total_actual ?? 0),
     }
   } catch (e) {
     logger.warn('KPI趋势获取失败，使用默认值', e)
@@ -300,22 +329,14 @@ async function fetchKpiTrends() {
 }
 
 // =========================================================================
-// Sparkline 微型趋势图数据（模拟历史数据）
+// Sparkline 微型趋势图数据（真实近 5 年年度序列，取自 /dashboard/yearly-trends）
 // =========================================================================
 
-const generateSparkData = (baseValue: number, points: number): number[] => {
-  const data: number[] = []
-  if (baseValue <= 0) return Array(points).fill(0)
-  let val = Math.max(baseValue * 0.6, 1)
-  for (let i = 0; i < points; i++) {
-    const trend = (baseValue - val) / (points - i)
-    val = Math.max(val * 0.85, val + trend)
-    data.push(Math.round(val * 100) / 100)
-  }
-  // 确保最后一个点接近当前值
-  data[data.length - 1] = baseValue
-  return data
+const takeSeries = (arr: number[]): number[] => {
+  const a = (arr || []).filter((n) => Number.isFinite(n))
+  return a.length ? a : [0]
 }
+
 
 // =========================================================================
 // 图表引用
@@ -690,27 +711,26 @@ const updateCharts = async () => {
 // =========================================================================
 
 const updateSparklines = () => {
-  const points = 8 // 8 个数据点
 
   const sparkData = [
     {
       chart: sparkVillagesChart,
-      data: generateSparkData(statistics.value.villages.totalVillages || 0, points),
+      data: takeSeries(sparkReal.value.villages),
       config: SPARK_CONFIGS.villages,
     },
     {
       chart: sparkPopulationChart,
-      data: generateSparkData(statistics.value.population.totalPopulation / 100 || 0, points),
+      data: takeSeries(sparkReal.value.population),
       config: SPARK_CONFIGS.population,
     },
     {
       chart: sparkIncomeChart,
-      data: generateSparkData(statistics.value.income.avgPerCapitaIncome || 0, points),
+      data: takeSeries(sparkReal.value.income),
       config: SPARK_CONFIGS.income,
     },
     {
       chart: sparkInvestmentChart,
-      data: generateSparkData(totalInvestment.value || 0, points),
+      data: takeSeries(sparkReal.value.investment),
       config: SPARK_CONFIGS.investment,
     },
   ]
@@ -944,5 +964,32 @@ onUnmounted(() => {
 
 .stat-row {
   margin-bottom: 0;
+}
+
+.stat-trend--up {
+  color: $color-success;
+}
+
+.stat-trend--down {
+  color: $color-danger;
+}
+
+.stat-trend--flat {
+  color: $color-info;
+}
+
+.trend-tag--up {
+  color: $color-success;
+  background: var(--color-success-lightest);
+}
+
+.trend-tag--down {
+  color: $color-danger;
+  background: var(--color-danger-lightest);
+}
+
+.trend-tag--flat {
+  color: $color-info;
+  background: var(--color-info-lightest);
 }
 </style>

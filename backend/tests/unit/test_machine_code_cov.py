@@ -6,6 +6,7 @@
 """
 
 import os
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -68,7 +69,7 @@ class TestResetPasswordNoTempFile:
                             with patch("tempfile.mkstemp") as mock_mkstemp:
                                 with patch.object(os, "chmod") as mock_chmod:
                                     result = await reset_password_with_machine_code(
-                                        MagicMock(),
+                                        SimpleNamespace(client=SimpleNamespace(host="127.0.0.1")),
                                         username="testuser",
                                         machine_code="MC001",
                                         verification_code="VC001",

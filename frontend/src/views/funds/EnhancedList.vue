@@ -239,6 +239,7 @@
             <el-option label="使用中" value="in_use" />
             <el-option label="已完成" value="completed" />
             <el-option label="已审计" value="audited" />
+            <el-option label="已驳回" value="rejected" />
           </el-select>
         </el-form-item>
         <el-form-item label="帮扶村">

@@ -37,7 +37,7 @@
                 <template v-if="card.trend !== 0">{{ Math.abs(card.trend) }}%</template>
                 <template v-else>持平</template>
               </span>
-              <span class="trend-label">较上月</span>
+              <span class="trend-label">{{ card.trendLabel || '较上月' }}</span>
             </div>
           </div>
         </div>
@@ -91,7 +91,18 @@ const props = withDefaults(defineProps<Props>(), {
     funds: 0,
   }),
 })
-const trends = computed(() => props.trends)
+const fetchedTrends = ref<KpiTrends>({
+  villages: 0,
+  projects: 0,
+  schools: 0,
+  population: 0,
+  funds: 0,
+})
+const trends = computed<KpiTrends>(() => {
+  const p = props.trends
+  const hasExplicit = p && Object.values(p).some((v) => v !== 0)
+  return hasExplicit ? p : fetchedTrends.value
+})
 
 const stats = ref<DashboardStats>({
   total_villages: 0,
@@ -177,6 +188,7 @@ const cards = computed(() => [
     formatted: fmtPop(stats.value.total_population),
     unit: undefined,
     trend: trends.value.population,
+    trendLabel: '较去年',
     route: '/supported-villages',
   },
 ])
@@ -199,6 +211,14 @@ async function loadStats() {
         total_schools: d.total_schools ?? 0,
         total_population: d.total_population ?? 0,
         total_funds: d.total_funds ?? 0,
+      }
+      const t = (d as Record<string, any>).trends ?? {}
+      fetchedTrends.value = {
+        villages: t.villages ?? 0,
+        projects: t.projects ?? 0,
+        schools: t.schools ?? 0,
+        population: t.population_yoy ?? 0,
+        funds: t.funds ?? 0,
       }
       error.value = false
       retryCount.value = 0

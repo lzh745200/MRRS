@@ -1069,6 +1069,10 @@ async function submitWorkflow() {
     }
     const fn = apiMap[wfAction.value]
     if (!fn) return
+    if (wfAction.value === 'reject' && !wfForm.opinion.trim()) {
+      ElMessage.warning('驳回时必须填写驳回原因')
+      return
+    }
     await fn(fundData.id, {
       opinion: wfForm.opinion || undefined,
       allocated_amount: wfAction.value === 'allocate' ? wfForm.allocated_amount : undefined,

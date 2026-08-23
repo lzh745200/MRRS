@@ -138,6 +138,7 @@ class TestFilterVillagesDataIsolation:
         ]
         # filter_by_data_scope 对非 admin 调用 query.filter(...) → 返回 filtered_q
         base_q.filter.return_value = filtered_q
+        filtered_q.filter.return_value = filtered_q
         db.query.return_value = base_q
 
         org_a_user = _make_org_a_user()
@@ -158,6 +159,7 @@ class TestFilterVillagesDataIsolation:
         filtered_q.count.return_value = 0
         filtered_q.offset.return_value.limit.return_value.all.return_value = []
         base_q.filter.return_value = filtered_q
+        filtered_q.filter.return_value = filtered_q
         db.query.return_value = base_q
 
         svc = AnalyticsService(db)
@@ -237,6 +239,7 @@ class TestFetchReportDataIsolation:
         filtered_q = MagicMock()
         filtered_q.limit.return_value.all.return_value = []
         base_q.filter.return_value = filtered_q
+        filtered_q.filter.return_value = filtered_q
         db.query.return_value = base_q
 
         org_a_user = _make_org_a_user()
@@ -256,6 +259,7 @@ class TestFetchReportDataIsolation:
         filtered_q = MagicMock()
         filtered_q.limit.return_value.all.return_value = []
         base_q.filter.return_value = filtered_q
+        filtered_q.filter.return_value = filtered_q
         db.query.return_value = base_q
 
         svc = ReportService(db=db)

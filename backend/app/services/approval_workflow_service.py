@@ -253,6 +253,7 @@ class ApprovalWorkflowService:
                 title=f"新的审批任务: {title or entity_type}",
                 content=f"您有一个待审批的{entity_type}申请需要处理（任务ID: {task.id}）",
                 message_type="approval",
+                link="/approval/pending",
                 is_read=False,
             )
             self.db.add(msg)

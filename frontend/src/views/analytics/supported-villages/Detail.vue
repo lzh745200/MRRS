@@ -204,15 +204,12 @@ async function openChangeHistory() {
     const items = res?.items || res?.data?.items || res || []
     // 后端结构 {timestamp, username, action, changes[]} → 弹窗结构 {time, action, user}
     changeHistory.value = Array.isArray(items)
-      ? items.map((item: any) => {
-          const fieldCount = Array.isArray(item?.changes) ? item.changes.length : 0
-          const actionText = item.action || 'update'
-          return {
-            time: item.timestamp || item.time || '',
-            action: fieldCount ? `${actionText}（${fieldCount} 个字段）` : actionText,
-            user: item.username || item.user || '未知用户',
-          }
-        })
+      ? items.map((item: any) => ({
+          time: item.timestamp || item.time || '',
+          action: item.action || 'update',
+          user: item.username || item.user || '未知用户',
+          changes: Array.isArray(item?.changes) ? item.changes : [],
+        }))
       : []
   } catch {
     ElMessage.error('加载变更历史失败')

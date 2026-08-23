@@ -2,9 +2,6 @@
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
-from app.core.security import get_current_user
 from app.models.export_task import ExportStatus
 
 BASE = "/api/v1/async-export"
@@ -68,7 +65,8 @@ class TestExportReports:
             )
 
         assert resp.status_code == 500
-        assert "Export failed" in resp.json()["detail"]
+        # W1-T8：内部异常细节不再直出，统一为通用文案
+        assert "报表导出失败" in resp.json()["detail"]
 
 
 class TestExportVillages:

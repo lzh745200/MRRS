@@ -272,7 +272,7 @@ import { useUploadHeaders } from '@/composables/useUploadHeaders'
 import { ref, reactive, computed, onMounted, onActivated, onUnmounted, watch, nextTick } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Download, Upload, Search } from '@element-plus/icons-vue'
 import { del, apiRequest } from '@/api/request'
 import { schoolApi } from '@/api/schools'
@@ -595,10 +595,27 @@ function beforeImportUpload(file: any) {
 }
 
 function onImportSuccess(response: any) {
-  const msg = response?.message || `成功导入 ${response?.imported || 0} 所学校`
+  // 信封兼容：{code,data,message} 或裸数据
+  const body = response?.data ?? response ?? {}
+  const payload = body?.data ?? body
+  const msg = payload?.message || body?.message || `成功导入 ${payload?.imported || 0} 所学校`
   ElMessage.success(msg)
-  if (response?.errors?.length) {
-    ElMessage.warning(`${response.errors.length} 条数据导入失败`)
+  const importErrors = payload?.errors ?? body?.errors ?? []
+  if (importErrors.length) {
+    const detail = importErrors
+      .slice(0, 10)
+      .map((e: any, i: number) => {
+        const row = e?.row ?? e?.row_index ?? i + 1
+        const m = e?.error ?? e?.message ?? JSON.stringify(e)
+        return `${i + 1}. 第 ${row} 行：${m}`
+      })
+      .join('<br/>')
+    const more = importErrors.length > 10 ? `<br/>… 共 ${importErrors.length} 条失败` : ''
+    ElMessageBox.alert(detail + more, '导入失败明细', {
+      dangerouslyUseHTMLString: true,
+      type: 'warning',
+      confirmButtonText: '知道了',
+    })
   }
   showImportDialog.value = false
   currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见

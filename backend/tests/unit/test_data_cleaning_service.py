@@ -266,3 +266,57 @@ class TestCleanDataset:
         assert result[0]["email"] == "a@b.com"
         assert result[1]["name"] == "未知"
         assert result[1]["phone"] == "13900139002"
+
+
+class TestTrimAndNormalizeRules:
+    def test_trim_whitespace_strips_all_string_fields(self):
+        records = [{"name": "  张三 ", "note": "x\n"}]
+        result = DataCleaningService.clean_dataset(records, {"trim_whitespace": True})
+        assert result[0]["name"] == "张三"
+        assert result[0]["note"] == "x"
+
+    def test_normalize_empty_placeholders_become_none(self):
+        records = [
+            {"phone": "-", "email": "N/A", "addr": "无", "name": "张三"},
+            {"phone": "  ", "email": "null", "addr": "keep", "name": "李四"},
+        ]
+        result = DataCleaningService.clean_dataset(records, {"normalize_empty": True})
+        assert result[0]["phone"] is None
+        assert result[0]["email"] is None
+        assert result[0]["addr"] is None
+        assert result[1]["phone"] is None
+        assert result[1]["email"] is None
+        assert result[1]["addr"] == "keep"
+
+    def test_unknown_rule_key_rejected_with_400(self):
+        import asyncio
+
+        import pytest
+        from fastapi import HTTPException
+
+        from app.api.v1.data_quality import CleanDataRequest, clean_data
+
+        request = CleanDataRequest(
+            records=[{"a": " b "}],
+            cleaning_rules={"trim_whitespace": True, "no_such_rule": True},
+        )
+        admin = type("U", (), {"is_superuser": True})()
+        with pytest.raises(HTTPException) as ei:
+            asyncio.run(clean_data(request, current_user=admin))
+        assert ei.value.status_code == 400
+        assert "no_such_rule" in ei.value.detail
+
+    def test_trim_and_normalize_via_endpoint(self):
+        import asyncio
+
+        from app.api.v1.data_quality import CleanDataRequest, clean_data
+
+        request = CleanDataRequest(
+            records=[{"a": " x ", "b": "-"}],
+            cleaning_rules={"trim_whitespace": True, "normalize_empty": True},
+        )
+        admin = type("U", (), {"is_superuser": True})()
+        resp = asyncio.run(clean_data(request, current_user=admin))
+        assert resp["data"]["changed_count"] == 1
+        assert resp["data"]["cleaned_records"][0]["a"] == "x"
+        assert resp["data"]["cleaned_records"][0]["b"] is None

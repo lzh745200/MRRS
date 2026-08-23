@@ -271,4 +271,19 @@ class DataCleaningService:
 
                 records = DataCleaningService.fill_missing_values(records, field_name, strategy, default_value)
 
+        # 空白裁剪：所有字符串字段去除首尾空白
+        if cleaning_rules.get("trim_whitespace"):
+            for record in records:
+                for key, value in list(record.items()):
+                    if isinstance(value, str):
+                        record[key] = value.strip()
+
+        # 空值规范化：空白串与常见占位符统一置 None
+        if cleaning_rules.get("normalize_empty"):
+            placeholders = {"", "-", "--", "无", "N/A", "n/a", "null", "None", "未知"}
+            for record in records:
+                for key, value in list(record.items()):
+                    if isinstance(value, str) and value.strip() in placeholders:
+                        record[key] = None
+
         return records

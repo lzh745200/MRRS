@@ -77,13 +77,13 @@ vi.mock('@/api/analytics', () => ({
 }))
 
 vi.mock('@/api/dashboard', () => ({
-  getKpiTrends: vi.fn(),
+  getDashboardStats: vi.fn(),
   getYearlyTrends: vi.fn(),
 }))
 
 import Dashboard from '@/views/analytics/dashboard/Dashboard.vue'
 import { getSummaryStatistics, getFilterOptions, drillDown } from '@/api/analytics'
-import { getKpiTrends, getYearlyTrends } from '@/api/dashboard'
+import { getDashboardStats, getYearlyTrends } from '@/api/dashboard'
 
 // ==================== Helpers ====================
 
@@ -146,11 +146,8 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
       years: [],
     } as any)
     vi.mocked(getSummaryStatistics).mockResolvedValue(fullStats() as any)
-    vi.mocked(getKpiTrends).mockResolvedValue({
-      villages: 5,
-      population: 6,
-      income: 7,
-      investment: 8,
+    vi.mocked(getDashboardStats).mockResolvedValue({
+      trends: { villages: 5, population_yoy: 6, income_yoy: 7, funds: -8 },
     })
     vi.mocked(getYearlyTrends).mockResolvedValue({
       years: [2020, 2021],
@@ -172,7 +169,7 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
     expect(getSummaryStatistics).toHaveBeenCalledWith(
       expect.objectContaining({ year: new Date().getFullYear() })
     )
-    expect(getKpiTrends).toHaveBeenCalledTimes(1)
+    expect(getDashboardStats).toHaveBeenCalledTimes(1)
     expect(getYearlyTrends).toHaveBeenCalled()
 
     // KPI 数值渲染：toLocaleString 分支 + formatNumber >= 10000 → '万' 分支
@@ -180,9 +177,12 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
     expect(wrapper.text()).toContain('12.3万')
     expect(wrapper.text()).toContain('1.23') // avgPerCapitaIncome.toFixed(2)
     expect(wrapper.text()).toContain('12.0万') // totalInvestment=120000 → formatNumber '万'
-    // KPI 环比趋势
+    // KPI 环比趋势（真实方向：投资 -8 → down 样式与 ↓ 箭头）
     expect(wrapper.text()).toContain('5%')
     expect(wrapper.text()).toContain('8%')
+    const downTag = wrapper.find('.trend-tag--down')
+    expect(downTag.exists()).toBe(true)
+    expect(downTag.text()).toContain('↓')
     // 部门筛选 v-for 渲染
     expect(wrapper.text()).toContain('教育部')
     expect(wrapper.text()).toContain('卫健委')
@@ -268,11 +268,11 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
   })
 
   it('KPI 趋势获取失败使用默认值 0', async () => {
-    vi.mocked(getKpiTrends).mockRejectedValue(new Error('KPI失败'))
+    vi.mocked(getDashboardStats).mockRejectedValue(new Error('KPI失败'))
     const wrapper = mountDashboard()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('0%')
+    expect(wrapper.text()).toContain('持平')
     wrapper.unmount()
   })
 
@@ -356,12 +356,12 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
 
   describe('分支补满：?? 兜底与 initCharts 重复初始化', () => {
     it('KPI 趋势接口字段缺失时使用 ?? 0 兜底', async () => {
-      vi.mocked(getKpiTrends).mockResolvedValue({} as any)
+      vi.mocked(getDashboardStats).mockResolvedValue({} as any)
       const wrapper = mountDashboard()
       await flushPromises()
 
       // villages/population/income/investment 均走 ?? 0 → 0%
-      expect(wrapper.text()).toContain('0%')
+      expect(wrapper.text()).toContain('持平')
       wrapper.unmount()
     })
 

@@ -31,19 +31,20 @@ describe('api/search', () => {
     expect(r).toBe(body)
   })
 
-  it('SEARCH_TYPE_LABELS 覆盖全部 5 类', () => {
+  it('SEARCH_TYPE_LABELS 覆盖全部 6 类', () => {
     expect(SEARCH_TYPE_LABELS).toEqual({
       village: '帮扶村',
       project: '项目',
       policy: '政策法规',
       school: '学校',
+      fund: '经费',
       user: '用户',
     })
   })
 
-  it('SEARCH_TYPE_ICONS 覆盖全部 5 类', () => {
+  it('SEARCH_TYPE_ICONS 覆盖全部 6 类', () => {
     expect(Object.keys(SEARCH_TYPE_ICONS).sort()).toEqual(
-      ['policy', 'project', 'school', 'user', 'village'].sort()
+      ['fund', 'policy', 'project', 'school', 'user', 'village'].sort()
     )
   })
 })

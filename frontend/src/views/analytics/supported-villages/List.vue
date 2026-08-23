@@ -416,6 +416,7 @@ async function loadData() {
       keyword: filters.keyword || undefined,
       department: filters.department || undefined,
       county: filters.county || undefined,
+      year_start: filters.yearStart || undefined,
       is_revitalization_tier: filters.isRevitalizationTier || undefined,
       is_three_regions: filters.isThreeRegions || undefined,
       is_ethnic_area: filters.isEthnicArea || undefined,
@@ -742,6 +743,21 @@ function handleImport() {
       ElMessage.success(`导入成功：${result.imported}条，失败：${result.failed}条`)
       if (result.errors && result.errors.length > 0) {
         logger.error('导入错误:', result.errors)
+        const detail = result.errors
+          .slice(0, 10)
+          .map((e: any, i: number) => {
+            const row = e?.row ?? e?.row_index ?? i + 1
+            const msg = e?.error ?? e?.message ?? JSON.stringify(e)
+            return `${i + 1}. 第 ${row} 行：${msg}`
+          })
+          .join('<br/>')
+        const more =
+          result.errors.length > 10 ? `<br/>… 共 ${result.errors.length} 条失败` : ''
+        ElMessageBox.alert(detail + more, '导入失败明细', {
+          dangerouslyUseHTMLString: true,
+          type: 'warning',
+          confirmButtonText: '知道了',
+        })
         ElMessage.warning(`有${result.errors.length}条数据导入失败，请检查数据格式`)
       }
       pagination.page = 1

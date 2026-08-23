@@ -35,7 +35,7 @@ class TestNonAdminForbidden:
         # 非 zip 文件在权限检查前返回 400,证明非管理员可达(不再 403)
         file = SimpleNamespace(filename="pkg.tar")
         with pytest.raises(HTTPException) as exc_info:
-            await pp.import_permission_package(file, _non_admin(), MagicMock())
+            await pp.import_permission_package(MagicMock(), file, _non_admin(), MagicMock())
         assert exc_info.value.status_code == 400
         assert "zip" in exc_info.value.detail
 

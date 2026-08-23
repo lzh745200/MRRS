@@ -1046,13 +1046,22 @@ class TestApproveFund:
 
 class TestRejectFund:
     def test_reject_fund_success(self, client, mock_db):
-        """Reject a pending fund."""
+        """Reject a pending fund（009 起驳回理由必填）."""
+        fund = FundMock(1, status="pending")
+        mock_db.execute.return_value = _exec_with_scalar_one_or_none(fund)
+
+        resp = client.post("/api/v1/funds/1/reject", json={"opinion": "材料不齐"})
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "审批驳回"
+
+    def test_reject_fund_requires_opinion(self, client, mock_db):
+        """缺少驳回意见 → 400（009 驳回理由必填）。"""
         fund = FundMock(1, status="pending")
         mock_db.execute.return_value = _exec_with_scalar_one_or_none(fund)
 
         resp = client.post("/api/v1/funds/1/reject")
-        assert resp.status_code == 200
-        assert resp.json()["message"] == "审批驳回"
+        assert resp.status_code == 400
+        assert "原因" in resp.json()["detail"] or "意见" in resp.json()["detail"]
 
     def test_reject_fund_illegal_transition(self, client, mock_db):
         """Cannot reject non-pending/planned funds."""
@@ -1229,14 +1238,18 @@ class TestFundHistoryStatus:
         fund = FundMock(1)
         mock_db.execute.return_value = _exec_with_scalar_one_or_none(fund)
 
-        hist1 = SimpleObj(id=1, fund_id=1, from_status="pending", to_status="approved",
-                           operator_id=1, operator_name="管理员",
-                           operation_time=datetime(2025, 6, 16, tzinfo=timezone.utc),
-                           remark="审批通过")
-        hist2 = SimpleObj(id=2, fund_id=1, from_status="approved", to_status="allocated",
-                           operator_id=1, operator_name="管理员",
-                           operation_time=datetime(2025, 6, 17, tzinfo=timezone.utc),
-                           remark="已拨付")
+        hist1 = SimpleObj(
+            id=1, fund_id=1, from_status="pending", to_status="approved",
+            operator_id=1, operator_name="管理员",
+            operation_time=datetime(2025, 6, 16, tzinfo=timezone.utc),
+            remark="审批通过",
+        )
+        hist2 = SimpleObj(
+            id=2, fund_id=1, from_status="approved", to_status="allocated",
+            operator_id=1, operator_name="管理员",
+            operation_time=datetime(2025, 6, 17, tzinfo=timezone.utc),
+            remark="已拨付",
+        )
 
         chain = MagicMock()
         chain.all.return_value = [hist1, hist2]
@@ -1731,7 +1744,7 @@ class TestTransitionStatus:
         fund = FundMock(1, status="pending", approved_by=None)
         mock_db.execute.return_value = _exec_with_scalar_one_or_none(fund)
 
-        resp = client.post("/api/v1/funds/1/reject")
+        resp = client.post("/api/v1/funds/1/reject", json={"opinion": "不予通过"})
         assert resp.status_code == 200
         assert fund.status == "rejected"
         assert fund.approved_by == "管理员"

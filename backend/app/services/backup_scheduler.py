@@ -226,7 +226,7 @@ async def anomaly_detection_job():
                     message_type="system",
                     title=f"资金异常检测提醒：发现 {total_new} 条新异常",
                     content=f"定时异常检测（{datetime.now().strftime('%Y-%m-%d')}）发现 {total_new} 条新资金异常，请及时处理。",
-                    link="/funds/anomalies",
+                    link="/funds/anomaly",
                 )
                 logger.info("资金异常检测完成，发现 %d 条新异常", total_new)
             else:

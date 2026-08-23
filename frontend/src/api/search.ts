@@ -10,7 +10,7 @@ import { get } from '@/api/request'
 /** 搜索结果项（与后端 SearchItem 模型 1:1 对齐） */
 export interface SearchItem {
   id: number
-  type: 'village' | 'project' | 'policy' | 'school' | 'user'
+  type: 'village' | 'project' | 'policy' | 'school' | 'fund' | 'user'
   title: string
   subtitle?: string | null
   link: string
@@ -38,6 +38,7 @@ export const SEARCH_TYPE_LABELS: Record<SearchItem['type'], string> = {
   project: '项目',
   policy: '政策法规',
   school: '学校',
+  fund: '经费',
   user: '用户',
 }
 
@@ -47,5 +48,6 @@ export const SEARCH_TYPE_ICONS: Record<SearchItem['type'], string> = {
   project: 'Document',
   policy: 'Tickets',
   school: 'School',
+  fund: 'Money',
   user: 'UserFilled',
 }

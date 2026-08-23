@@ -459,8 +459,8 @@ async function fetchData() {
       params: {
         page: currentPage.value,
         page_size: pageSize.value,
-        search: filterForm.keyword || undefined,
-        type: filterForm.type || undefined,
+        keyword: filterForm.keyword || undefined,
+        fund_type: filterForm.type || undefined,
         status: filterForm.status || undefined,
       },
     })

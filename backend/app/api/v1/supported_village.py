@@ -13,6 +13,7 @@ import openpyxl
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -424,6 +425,8 @@ async def list_villages(
     is_three_regions: Optional[bool] = None,
     is_ethnic_area: Optional[bool] = None,
     is_key_county: Optional[bool] = None,
+    year_start: Optional[int] = None,
+    with_summary: bool = Query(False),
     isRevitalizationTier: Optional[bool] = None,  # 兼容旧参数名
     include_deleted: bool = Depends(enforce_admin_include_deleted),
     current_user: User = Depends(get_current_user),
@@ -443,7 +446,8 @@ async def list_villages(
         _cache = await get_cache_service()
         try:
             _key_data = json.dumps(
-                [keyword, department, county, tier, is_three_regions, is_ethnic_area, is_key_county, include_deleted],
+                [keyword, department, county, tier, is_three_regions, is_ethnic_area,
+                 is_key_county, include_deleted, year_start, with_summary],
                 default=str,
             ).encode()
             _org_id = getattr(current_user, "organization_id", None) or 0
@@ -474,6 +478,8 @@ async def list_villages(
         query = query.filter(SupportedVillage.department == department)
     if county:
         query = query.filter(SupportedVillage.county == county)
+    if year_start is not None:
+        query = query.filter(func.strftime("%Y", SupportedVillage.created_at) == str(year_start))
     # 兼容旧 camelCase 参数名（新代码统一 snake_case）
     if tier is not None:
         query = query.filter(SupportedVillage.is_revitalization_tier == bool(tier))
@@ -483,6 +489,24 @@ async def list_villages(
         query = query.filter(SupportedVillage.is_ethnic_area == bool(is_ethnic_area))
     if is_key_county is not None:
         query = query.filter(SupportedVillage.is_key_county == bool(is_key_county))
+
+    summary = None
+    if with_summary:
+        agg = (
+            query.with_entities(
+                func.count(SupportedVillage.id),
+                func.coalesce(func.sum(SupportedVillage.transition_fund_military_total), 0),
+                func.coalesce(func.sum(SupportedVillage.transition_fund_local_total), 0),
+                func.count(func.distinct(SupportedVillage.county)),
+                func.count(func.distinct(SupportedVillage.department)),
+            ).first()
+        )
+        summary = {
+            "total": int(agg[0] or 0),
+            "total_investment": round(float(agg[1] or 0) + float(agg[2] or 0), 4),
+            "county_count": int(agg[3] or 0),
+            "department_count": int(agg[4] or 0),
+        }
 
     total = query.count()
     # Model-level lazy="selectin" on SupportedVillage relationships prevents
@@ -504,6 +528,7 @@ async def list_villages(
         total=total,
         page=page,
         page_size=page_size,
+        **({"summary": summary} if summary is not None else {}),
     )
     if _ckey is not None:
         await _cache.set(_ckey, result, ttl=120)
@@ -540,6 +565,18 @@ async def get_filter_options(
         data={
             "departments": [d[0] for d in departments if d[0]],
             "counties": [c[0] for c in counties if c[0]],
+            "years": sorted(
+                {
+                    int(row[0])
+                    for row in base_query.with_entities(
+                        func.substr(SupportedVillage.created_at, 1, 4)
+                    )
+                    .distinct()
+                    .all()
+                    if row and row[0] and str(row[0]).isdigit()
+                },
+                reverse=True,
+            ),
         }
     )
 
