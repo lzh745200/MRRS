@@ -146,9 +146,10 @@ class AIServiceManager:
 
         today = date.today()
 
-        # 逾期项目：end_date < today 且 status 不是 completed/cancelled（受数据权限约束）
+        # 逾期项目：end_date < today 且 status 不是 completed/cancelled（受数据权限约束，软删项目排除）
         overdue_query = filter_by_data_scope(
             db.query(Project).filter(
+                Project.is_active == True,  # noqa: E712
                 Project.end_date < today,
                 Project.status.notin_(["completed", "cancelled"]),
             ),
@@ -168,9 +169,13 @@ class AIServiceManager:
             for p in overdue
         ]
 
-        # 预算超支项目：actual_cost > budget 且 budget > 0（受数据权限约束）
+        # 预算超支项目：actual_cost > budget 且 budget > 0（受数据权限约束，软删项目排除）
         over_budget_query = filter_by_data_scope(
-            db.query(Project).filter(Project.budget > 0, Project.actual_cost > Project.budget),
+            db.query(Project).filter(
+                Project.is_active == True,  # noqa: E712
+                Project.budget > 0,
+                Project.actual_cost > Project.budget,
+            ),
             Project,
             user,
             db=db,

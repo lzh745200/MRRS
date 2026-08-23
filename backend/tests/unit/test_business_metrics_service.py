@@ -53,6 +53,7 @@ class TestGetFundApprovalMetrics:
 
     def test_cache_miss_with_approvals(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.filter.return_value.count.side_effect = [20, 15, 10, 5]
         mock_query.filter.return_value.scalar.return_value = 2.5
         result = service.get_fund_approval_metrics(mock_db)
@@ -65,6 +66,7 @@ class TestGetFundApprovalMetrics:
 
     def test_no_decided_approvals_returns_zero_rate(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.filter.return_value.count.side_effect = [5, 0, 0, 3]
         mock_query.filter.return_value.scalar.return_value = None
         result = service.get_fund_approval_metrics(mock_db)
@@ -82,6 +84,7 @@ class TestGetFundUtilizationMetrics:
 
     def test_cache_miss_with_data(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.group_by.return_value.all.return_value = [("completed", 5, 50000.0)]
         mock_query.scalar.side_effect = [10, 100000.0]
         result = service.get_fund_utilization_metrics(mock_db)
@@ -93,6 +96,7 @@ class TestGetFundUtilizationMetrics:
 
     def test_no_total_amount_returns_zero_rate(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.group_by.return_value.all.return_value = []
         mock_query.scalar.side_effect = [0, 0]
         result = service.get_fund_utilization_metrics(mock_db)
@@ -102,6 +106,7 @@ class TestGetFundUtilizationMetrics:
 
     def test_status_distribution_missing_completed(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.group_by.return_value.all.return_value = [("pending", 3, 30000.0)]
         mock_query.scalar.side_effect = [3, 30000.0]
         result = service.get_fund_utilization_metrics(mock_db)
@@ -111,6 +116,7 @@ class TestGetFundUtilizationMetrics:
 
     def test_null_amount_handled(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.group_by.return_value.all.return_value = [("completed", 2, None)]
         mock_query.scalar.side_effect = [2, 0]
         result = service.get_fund_utilization_metrics(mock_db)
@@ -127,6 +133,7 @@ class TestGetDataReportMetrics:
 
     def test_cache_miss_with_data(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.filter.return_value.count.side_effect = [10, 8, 6]
         result = service.get_data_report_metrics(mock_db)
         assert result["expected_reports"] == 10
@@ -137,6 +144,7 @@ class TestGetDataReportMetrics:
 
     def test_no_expected_reports_returns_zero(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.filter.return_value.count.side_effect = [0, 0, 0]
         result = service.get_data_report_metrics(mock_db)
         assert result["expected_reports"] == 0
@@ -145,6 +153,7 @@ class TestGetDataReportMetrics:
 
     def test_no_completed_reports_returns_zero_on_time_rate(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.filter.return_value.count.side_effect = [5, 0, 0]
         result = service.get_data_report_metrics(mock_db)
         assert result["report_completion_rate"] == 0
@@ -161,6 +170,7 @@ class TestGetUserActivityMetrics:
 
     def test_cache_miss_with_data(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_active_query = MagicMock()
         mock_active_query.filter.return_value.distinct.return_value.count.return_value = 8
         mock_db.query.side_effect = [mock_active_query, mock_query, mock_query]
@@ -174,6 +184,7 @@ class TestGetUserActivityMetrics:
 
     def test_no_total_users_returns_zero_rate(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_active_query = MagicMock()
         mock_active_query.filter.return_value.distinct.return_value.count.return_value = 0
         mock_db.query.side_effect = [mock_active_query, mock_query, mock_query]
@@ -193,6 +204,7 @@ class TestGetSystemErrorMetrics:
 
     def test_cache_miss_with_data(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.filter.return_value.count.side_effect = [200, 10]
         result = service.get_system_error_metrics(mock_db)
         assert result["total_requests_24h"] == 200
@@ -201,6 +213,7 @@ class TestGetSystemErrorMetrics:
 
     def test_no_requests_returns_zero_rate(self, service, mock_db):
         mock_query = mock_db.query.return_value
+        mock_query.filter.return_value = mock_query
         mock_query.filter.return_value.count.side_effect = [0, 0]
         result = service.get_system_error_metrics(mock_db)
         assert result["total_requests_24h"] == 0

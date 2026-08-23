@@ -36,22 +36,26 @@ class RecommendationService:
         from app.models.project import Project
         from app.models.supported_village import SupportedVillage
 
-        # 获取村庄信息（受数据权限约束）
+        # 获取村庄信息（受数据权限约束，软删村排除）
         village_query = filter_by_data_scope(
-            db.query(SupportedVillage).filter(SupportedVillage.id == village_id),
+            db.query(SupportedVillage).filter(
+                SupportedVillage.id == village_id,
+                SupportedVillage.is_active.is_(True),
+            ),
             SupportedVillage, user, db=db,
         )
         village = village_query.first()
         if not village:
             return []
 
-        # 查询相似村庄的成功项目（受数据权限约束）
+        # 查询相似村庄的成功项目（受数据权限约束，软删村排除）
         similar_villages_query = filter_by_data_scope(
             db.query(SupportedVillage).filter(
                 and_(
                     SupportedVillage.id != village_id,
                     SupportedVillage.province == village.province,
                     SupportedVillage.city == village.city,
+                    SupportedVillage.is_active.is_(True),
                 )
             ),
             SupportedVillage,
@@ -65,13 +69,14 @@ class RecommendationService:
 
         similar_village_ids = [v.id for v in similar_villages]
 
-        # 查询这些村庄的成功项目（受数据权限约束）
+        # 查询这些村庄的成功项目（受数据权限约束，软删项目排除）
         successful_projects_query = filter_by_data_scope(
             db.query(Project).filter(
                 and_(
                     Project.village_id.in_(similar_village_ids),
                     Project.status == "completed",
                     Project.progress >= 90,
+                    Project.is_active == True,  # noqa: E712
                 )
             ),
             Project,
@@ -154,9 +159,12 @@ class RecommendationService:
         if not village_ids:
             return {"allocations": [], "error": "村庄列表为空"}
 
-        # 获取村庄信息（受数据权限约束）
+        # 获取村庄信息（受数据权限约束，软删村排除）
         villages = filter_by_data_scope(
-            db.query(SupportedVillage).filter(SupportedVillage.id.in_(village_ids)),
+            db.query(SupportedVillage).filter(
+                SupportedVillage.id.in_(village_ids),
+                SupportedVillage.is_active.is_(True),
+            ),
             SupportedVillage, user, db=db,
         ).all()
 
@@ -280,9 +288,12 @@ class RecommendationService:
         from app.models.policy import Policy
         from app.models.supported_village import SupportedVillage
 
-        # 获取村庄信息（受数据权限约束）
+        # 获取村庄信息（受数据权限约束，软删村排除）
         village = filter_by_data_scope(
-            db.query(SupportedVillage).filter(SupportedVillage.id == village_id),
+            db.query(SupportedVillage).filter(
+                SupportedVillage.id == village_id,
+                SupportedVillage.is_active.is_(True),
+            ),
             SupportedVillage, user, db=db,
         ).first()
         if not village:

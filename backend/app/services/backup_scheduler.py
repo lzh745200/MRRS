@@ -195,7 +195,14 @@ async def anomaly_detection_job():
             from app.services.fund_anomaly_detector import detect_anomalies
             from app.services.message_service import MessageService
 
-            active_projects = db.query(Project).filter(Project.status.in_(["active", "approved"])).all()
+            active_projects = (
+                db.query(Project)
+                .filter(
+                    Project.is_active == True,  # noqa: E712
+                    Project.status.in_(["active", "approved"]),
+                )
+                .all()
+            )
             total_new = 0
             for project in active_projects:
                 try:

@@ -123,9 +123,10 @@ class BusinessMetricsService:
         if cached:
             return cached
 
-        # 各状态资金统计
+        # 各状态资金统计（软删经费排除）
         status_counts = (
             db.query(Fund.status, func.count(Fund.id).label("count"), func.sum(Fund.amount).label("total_amount"))
+            .filter(Fund.is_active == True)  # noqa: E712
             .group_by(Fund.status)
             .all()
         )
@@ -135,8 +136,8 @@ class BusinessMetricsService:
             status_distribution[status] = {"count": count, "amount": float(amount or 0)}
 
         # 总资金数
-        total_funds = db.query(func.count(Fund.id)).scalar() or 0
-        total_amount = db.query(func.sum(Fund.amount)).scalar() or 0
+        total_funds = db.query(func.count(Fund.id)).filter(Fund.is_active == True).scalar() or 0  # noqa: E712
+        total_amount = db.query(func.sum(Fund.amount)).filter(Fund.is_active == True).scalar() or 0  # noqa: E712
 
         # 已完成资金
         completed_funds = status_distribution.get(FundStatus.COMPLETED, {}).get("count", 0)

@@ -150,8 +150,12 @@ class AnomalyDetectionService:
 
         since = datetime.now(timezone.utc) - timedelta(days=days)
 
-        # 查询最近的资金记录
-        funds = db.query(Fund).filter(Fund.allocation_date >= since).all()
+        # 查询最近的资金记录（软删经费排除）
+        funds = (
+            db.query(Fund)
+            .filter(Fund.is_active == True, Fund.allocation_date >= since)  # noqa: E712
+            .all()
+        )
 
         if not funds:
             return []
@@ -192,8 +196,12 @@ class AnomalyDetectionService:
         """
         from app.models.project import Project
 
-        # 查询进行中的项目
-        projects = db.query(Project).filter(Project.status == "in_progress").all()
+        # 查询进行中的项目（软删项目排除）
+        projects = (
+            db.query(Project)
+            .filter(Project.is_active == True, Project.status == "in_progress")  # noqa: E712
+            .all()
+        )
 
         anomalies = []
 
