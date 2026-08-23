@@ -43,6 +43,10 @@
           <button class="action-btn primary" @click="pushSafe('/effectiveness')">
             <el-icon class="btn-icon"><Aim /></el-icon><span class="btn-text">帮扶成效</span>
           </button>
+          <button class="action-btn primary" @click="pushSafe('/data-analysis')">
+            <el-icon class="btn-icon"><DataAnalysis /></el-icon
+            ><span class="btn-text">数据分析</span>
+          </button>
           <button class="action-btn primary" @click="pushSafe('/projects/create')">
             <el-icon class="btn-icon"><Plus /></el-icon><span class="btn-text">新建项目</span>
           </button>

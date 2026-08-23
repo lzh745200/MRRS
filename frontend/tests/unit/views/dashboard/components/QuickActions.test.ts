@@ -66,6 +66,7 @@ const CORE_PATHS = [
   '/funds/user',
   '/rural-works',
   '/effectiveness',
+  '/data-analysis',
   '/projects/create',
   '/schools/create',
 ]
@@ -125,7 +126,7 @@ describe('dashboard/components/QuickActions.vue', () => {
   it('管理员模式下渲染全部动作组并点击每个按钮跳转对应路由', async () => {
     const w = mountQA({ isManager: true, isAdmin: true, backingUp: false })
     const btns = w.findAll('button.action-btn')
-    expect(btns.length).toBe(44)
+    expect(btns.length).toBe(45)
 
     for (const b of btns) {
       await b.trigger('click')
@@ -137,7 +138,7 @@ describe('dashboard/components/QuickActions.vue', () => {
   it('普通用户模式只显示核心与审批两组，且备份/恢复按钮隐藏', async () => {
     const w = mountQA({ isManager: false, isAdmin: false, backingUp: true })
     const btns = w.findAll('button.action-btn')
-    expect(btns.length).toBe(22)
+    expect(btns.length).toBe(23)
 
     expect(w.text()).not.toContain('一键备份')
     expect(w.text()).not.toContain('恢复数据')
@@ -262,6 +263,6 @@ describe('dashboard/components/QuickActions.vue', () => {
     const collapse = w.findComponent({ name: 'ElCollapse' })
     collapse.vm.$emit('update:modelValue', [])
     await flushPromises()
-    expect(w.findAll('button.action-btn').length).toBe(22)
+    expect(w.findAll('button.action-btn').length).toBe(23)
   })
 })

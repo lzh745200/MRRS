@@ -193,7 +193,11 @@
           </div>
 
           <el-sub-menu
-            v-if="menuStore.canAccessMenu('data') || menuStore.canAccessMenu('data-overview')"
+            v-if="
+              menuStore.canAccessMenu('analytics') ||
+              menuStore.canAccessMenu('data') ||
+              menuStore.canAccessMenu('data-overview')
+            "
             index="data-group"
             popper-class="aside-popper"
           >
