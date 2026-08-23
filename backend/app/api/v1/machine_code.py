@@ -126,12 +126,28 @@ class OrganizationPassCodeListResponse(BaseModel):
 
 # ==================== API 端点 ====================
 
+_LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
+
+
+def _client_is_loopback(request: Request) -> bool:
+    """判断请求是否来自本机回环地址。
+
+    基于 ``request.client.host``（TCP 对端地址）判定，不读取
+    ``X-Forwarded-For`` 等可伪造头。离线单机部署下后端绑定 127.0.0.1，
+    正常流量恒为本机；该门禁用于防止未来配置变更后公开面扩大。
+    """
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None) if client else None
+    return host in _LOOPBACK_HOSTS
+
 
 @router.get("/get-machine-code")
-async def get_machine_code():
+async def get_machine_code(request: Request):
     """获取当前机器的机器码和校验码
 
     公开接口，用于用户获取机器码以提交给管理员。
+    安全基线（W1-T1）：校验码仅对本机（loopback）请求返回，
+    防止远程探测方自助取得密码重置凭证。
     """
     try:
         service = MachineCodeService()
@@ -139,20 +155,22 @@ async def get_machine_code():
         # 获取机器码
         machine_code = service.get_machine_code()
 
-        # 生成校验码（用于验证）
-        verification_code = service.generate_verification_code(machine_code)
-
         # 获取机器信息
         machine_info = service.get_machine_info()
+
+        data = {
+            "machine_code": machine_code,
+            "machine_info": machine_info,
+        }
+
+        # 校验码仅限本机请求获取
+        if _client_is_loopback(request):
+            data["verification_code"] = service.generate_verification_code(machine_code)
 
         return {
             "code": 200,
             "success": True,
-            "data": {
-                "machine_code": machine_code,
-                "verification_code": verification_code,
-                "machine_info": machine_info,
-            },
+            "data": data,
             "message": "机器码获取成功",
         }
     except Exception as e:  # pragma: no cover
@@ -370,12 +388,22 @@ async def reset_password_with_machine_code(
 ):
     """使用机器码重置用户密码
 
-    公开接口，用于用户忘记密码时重置。
+    公开接口，用于用户忘记密码时重置（破窗恢复通道）。
+
+    安全基线（W1-T1 / ADR-0008）：
+    - 仅允许本机（loopback）请求——离线单机部署下即"操作者在机器前"
+    - 管理员/superuser 账号排除，防止静默提权（管理员走管理端重置流程）
+    - 限流真实生效；每次成功重置写审计日志
     """
-    # 速率限制：每IP每分钟最多5次
+    # 速率限制：每IP每分钟最多5次（关键字传参，历史缺陷为位置传参绑定错误）
     client_ip = get_client_ip(request)
-    if not await check_rate_limit(f"reset_pwd:{client_ip}", limit=5, window=60):
+    if not await check_rate_limit(key=f"reset_pwd:{client_ip}", limit=5, window=60):
         raise HTTPException(status_code=429, detail="操作过于频繁，请稍后再试")
+
+    # 仅限本机操作（基于 TCP 对端地址，不信任可伪造头）
+    if not _client_is_loopback(request):
+        raise HTTPException(status_code=403, detail="密码重置仅允许在本机操作")
+
     try:
         service = MachineCodeService()
 
@@ -393,6 +421,16 @@ async def reset_password_with_machine_code(
         if not user:
             raise HTTPException(status_code=404, detail="用户不存在")
 
+        # 管理员账号禁止公开自助重置，防止攻击者静默接管最高权限
+        # 注：is_superuser 用 ``is True`` 严格判定，避免 Mock/异常对象真值误判
+        _role = str(getattr(user, "role", "") or "").lower()
+        if _role in ("admin", "super_admin") or getattr(user, "is_superuser", False) is True:
+            logger.warning("拒绝通过公开通道重置管理员账号: %s", username)
+            raise HTTPException(
+                status_code=403,
+                detail="管理员账号不支持自助重置，请联系超级管理员通过管理端处理",
+            )
+
         # 生成密码学安全的随机密码（不返回明文，仅通过安全渠道告知用户）
         from app.core.security import generate_password as gen_pwd
         new_password = gen_pwd(length=16, exclude_ambiguous=True)
@@ -407,10 +445,19 @@ async def reset_password_with_machine_code(
 
         db.commit()
 
+        # 审计留痕（军事合规要求：破窗恢复必须可追溯）
+        try:
+            write_work_log(
+                db, "user", "reset_password_by_machine", user.id,
+                f"通过机器码验证重置用户密码: {username}",
+            )
+        except Exception:  # pragma: no cover
+            logger.debug("记录密码重置审计日志失败", exc_info=True)
+
         # 离线单机环境：新密码通过 HTTP 响应返回（仅 localhost 可访问），
         # 不再写入系统临时目录——明文落盘于 %TEMP% 且 Windows 无权限限制，
         # 存在泄密风险（军标审计不合格）。
-        logger.info("用户 %s 密码已通过机器码验证重置，新密码仅在本次响应中返回", username)
+        logger.info("用户 %s 密码已通过机器码验证重置（本机操作），新密码仅在本次响应中返回", username)
         return {
             "code": 200,
             "success": True,

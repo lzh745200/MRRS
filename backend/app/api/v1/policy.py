@@ -925,7 +925,12 @@ async def preview_policy_file(
 
     if not policy.file_path or not os.path.exists(policy.file_path):
         # 没有附件，返回正文内容作HTML预览
-        html = f"<html><body><h1>{policy.title}</h1><div>{policy.content or '无内容'}</div></body></html>"
+        # 安全基线（W1-T4）：用户可控的 title/content 必须 HTML 转义，防存储型 XSS
+        import html as _html
+
+        safe_title = _html.escape(policy.title or "")
+        safe_content = _html.escape(policy.content or "无内容")
+        html = f"<html><body><h1>{safe_title}</h1><div>{safe_content}</div></body></html>"
         return StreamingResponse(
             io.BytesIO(html.encode("utf-8")),
             media_type="text/html",
@@ -947,9 +952,11 @@ async def preview_policy_file(
             with open(policy.file_path, "rb") as f:
                 result = mammoth.convert_to_html(f)
             html_style = "body{font-family:SimSun,serif;padding:20px;max-width:800px;margin:0 auto}"
+            # W1-T4：title 为用户可控输入，转义；mammoth 产物保持原样
+            safe_title = __import__("html").escape(policy.title or "")
             html = (
                 f"<html><head><meta charset='utf-8'><style>{html_style}</style></head>"
-                f"<body><h2>{policy.title}</h2>{result.value}</body></html>"
+                f"<body><h2>{safe_title}</h2>{result.value}</body></html>"
             )
             return StreamingResponse(
                 io.BytesIO(html.encode("utf-8")),

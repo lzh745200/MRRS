@@ -323,6 +323,27 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # W1-T5（ADR-0001）：认证唯一出口收口——吊销与类型校验。
+    # 历史缺陷：本链路不查黑名单，登出/强制下线后的 token 直到自然过期前仍可用。
+    _jti = payload.get("jti")
+    if _jti:
+        from app.core.token_blacklist import is_blacklisted
+
+        if is_blacklisted(_jti):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="令牌已被吊销，请重新登录",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    _token_type = payload.get("type")
+    if _token_type is not None and _token_type != "access":
+        # refresh 等其他类型令牌不得充当 access（无 type 的历史令牌放行兼容）
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="令牌类型不匹配",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     username: str = payload.get("sub")
     if username is None:
         raise HTTPException(
@@ -343,8 +364,18 @@ async def get_current_user(
                 detail="用户不存在",
             )
         # 验证 token_version：支持强制下线所有会话
+        # W1-T5 fail-closed：用户版本 >0 而 token 缺版本声明（旧版遗留/伪造）
+        # 时拒绝，防止版本吊销机制被无声明令牌绕过
+        current_version = getattr(user, "token_version_safe", 0) or 0
         token_version = payload.get("token_version")
-        if token_version is not None and int(token_version) != (getattr(user, "token_version_safe", 0) or 0):
+        if token_version is None:
+            if current_version > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="令牌已失效（缺少版本声明），请重新登录",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        elif int(token_version) != current_version:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="令牌已失效（版本不匹配），请重新登录",
@@ -505,29 +536,35 @@ def _cleanup_expired_rate_keys(now: float, max_window: int = 300) -> None:
 
 
 async def check_rate_limit(
-    request=None,
     key: str = None,
+    *,
+    request=None,
     limit: int = 60,
     window: int = 60,
-    **kwargs
 ) -> bool:
     """速率限制检查。
 
-    优先使用 slowapi 中间件；当 slowapi 不可用时，使用内置内存速率限制器。
     内置限制器采用滑动窗口算法，默认 60次/分钟。
 
+    安全约定（fail-closed）：
+    - ``key`` 是唯一的首个位置/关键字参数——历史上曾因位置传参绑定到
+      ``request`` 形参导致限流静默失效（W1-T1），现已收紧签名防止复发。
+    - 缺失 ``key`` 时抛出 ``ValueError`` 拒绝放行，绝不静默允许。
+
     Args:
-        request: FastAPI Request（slowapi 兼容参数）
-        key: 速率限制键（通常为 IP 或用户名）
+        key: 速率限制键（通常为 IP 或用户名），必填
+        request: FastAPI Request（兼容旧式关键字传参，当前实现未使用）
         limit: 窗口内最大请求数
         window: 时间窗口（秒）
 
     Returns:
         bool: True=允许请求，False=速率超限
+
+    Raises:
+        ValueError: key 缺失或非字符串
     """
-    if key is None:
-        # 无键时放行（调用方需提供有意义的键）
-        return True
+    if not key or not isinstance(key, str):
+        raise ValueError("check_rate_limit requires a non-empty string key")
 
     now = time.monotonic()
     with _rate_limit_lock:

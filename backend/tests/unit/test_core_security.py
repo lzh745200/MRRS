@@ -311,7 +311,11 @@ class TestGetCurrentUser:
             assert "令牌已失效" in exc.value.detail
 
     @pytest.mark.asyncio
-    async def test_token_version_none_continues(self):
+    async def test_token_version_none_rejected_when_user_versioned(self):
+        """W1-T5 fail-closed：用户已带版本而 token 缺版本声明 → 拒绝。
+
+        历史行为是放行（fail-open），正是强制下线/改密吊销被绕过的缺口；
+        依据 ADR-0001 收紧为拒绝。"""
         mock_user = MagicMock()
         mock_user.username = "admin"
         mock_user.token_version_safe = 2
@@ -328,9 +332,34 @@ class TestGetCurrentUser:
         mock_db.query.return_value = mock_query
 
         with patch("app.core.database.SessionLocal", return_value=mock_db):
+            with pytest.raises(HTTPException) as exc:
+                await get_current_user(credentials=creds)
+            assert exc.value.status_code == 401
+            assert "令牌已失效" in exc.value.detail
+
+    @pytest.mark.asyncio
+    async def test_token_version_none_ok_for_unversioned_user(self):
+        """版本为 0 的用户接受无声明 token（历史遗留兼容）。"""
+        mock_user = MagicMock()
+        mock_user.username = "admin"
+        mock_user.token_version_safe = 0
+
+        token = create_access_token({"sub": "admin"})
+        creds = MagicMock()
+        creds.credentials = token
+
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_filter = MagicMock()
+        mock_filter.first.return_value = mock_user
+        mock_query.filter.return_value = mock_filter
+        mock_db.query.return_value = mock_query
+
+        with patch("app.core.database.SessionLocal", return_value=mock_db):
             user = await get_current_user(credentials=creds)
             assert user is mock_user
             mock_db.close.assert_called_once()
+
 
     @pytest.mark.asyncio
     async def test_successful_auth(self):
@@ -518,9 +547,10 @@ class TestSanitizeInput:
 
 class TestCheckRateLimit:
     @pytest.mark.asyncio
-    async def test_key_is_none_returns_true(self):
-        result = await check_rate_limit(key=None)
-        assert result is True
+    async def test_key_is_none_fails_closed(self):
+        """W1-T1：缺 key 必须抛错拒绝，而非静默放行（历史缺陷）。"""
+        with pytest.raises(ValueError):
+            await check_rate_limit(key=None)
 
     @pytest.mark.asyncio
     async def test_under_limit(self):

@@ -1,4 +1,4 @@
-"""app.api.v1.permission_package 覆盖率攻坚测试
+﻿"""app.api.v1.permission_package 覆盖率攻坚测试
 
 覆盖 4 个端点全部分支：
 - export：成功 / 失败 500 / body 为 None
@@ -18,6 +18,11 @@ import app.api.v1.permission_package as pp
 
 def _admin():
     return SimpleNamespace(id=1, username="admin", role="admin", is_superuser=True)
+
+
+def _req():
+    """W1-T2 新签名所需的 Request 桩（loopback 地址）。"""
+    return SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
 
 
 @pytest.fixture
@@ -60,14 +65,14 @@ class TestImport:
     async def test_not_zip_400(self):
         file = SimpleNamespace(filename="data.txt")
         with pytest.raises(HTTPException) as exc_info:
-            await pp.import_permission_package(file, _admin(), MagicMock())
+            await pp.import_permission_package(_req(), file, _admin(), MagicMock())
         assert exc_info.value.status_code == 400
 
     async def test_success(self, svc, tmp_path):
         svc.import_package.return_value = {"success": True, "preview": {}}
         file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=b"PK"))
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
-            resp = await pp.import_permission_package(file, _admin(), MagicMock())
+            resp = await pp.import_permission_package(_req(), file, _admin(), MagicMock())
         assert resp.status_code == 200
         assert (tmp_path / "pkg.zip").exists()
 
@@ -76,7 +81,7 @@ class TestImport:
         file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=b"PK"))
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
             with pytest.raises(HTTPException) as exc_info:
-                await pp.import_permission_package(file, _admin(), MagicMock())
+                await pp.import_permission_package(_req(), file, _admin(), MagicMock())
         assert exc_info.value.status_code == 500
         assert "bad zip" in exc_info.value.detail
         assert not (tmp_path / "pkg.zip").exists()  # 异常时文件已清理
@@ -89,7 +94,7 @@ class TestImport:
             patch.object(pp.os, "unlink", side_effect=OSError("locked")),
             pytest.raises(HTTPException) as exc_info,
         ):
-            await pp.import_permission_package(file, _admin(), MagicMock())
+            await pp.import_permission_package(_req(), file, _admin(), MagicMock())
         assert exc_info.value.status_code == 500
 
 
@@ -133,3 +138,4 @@ class TestConfirm:
         ):
             resp = pp.confirm_import_permission_package("pkg.zip", SimpleNamespace(overwrite_existing=False), _admin(), MagicMock())
         assert resp.status_code == 200
+

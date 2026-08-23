@@ -240,3 +240,17 @@ python scripts/audit_static_assets.py --verbose
 **根因**: Windows 环境下 `wmic` 命令生成的机器码可能因进程重启、系统更新或权限变化而不一致，导致机器码+通行码双重匹配失败。
 
 **修复**: `machine_code_service.py` 新增第三级回退逻辑，仅凭通行码匹配 `status=pending` 的记录并自动更新 `machine_code` 绑定。
+
+## Agent skills
+
+### Issue tracker
+
+本地 markdown 工单：`.scratch/<wave>/<NNN>-slug.md`，一票一文件。见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+默认五标签（needs-triage / needs-info / ready-for-agent / ready-for-human / wontfix）+ severity 前缀。见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+single-context：根目录 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。

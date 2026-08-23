@@ -504,28 +504,28 @@ class TestAdminEndpoints:
         assert exc_info.value.status_code == 404
 
     async def test_revoke_user_session(self):
+        """W1-T5 新语义：递增 token_version 实现强制下线，恒 200。"""
         from app.api.v1.system.admin import revoke_user_session
         db = _mock_db()
         user = _make_user()
         target = _make_user(uid=5, username="target")
+        target.token_version = 0
         db.query.return_value.filter.return_value.first.return_value = target
-        with patch("app.core.token_manager.revoke_token") as revoke:
-            revoke.return_value = True
-            result = await revoke_user_session(5, "sess-123", db=db, current_user=user)
-            assert result["code"] == 200
-            revoke.assert_called_once_with("sess-123", reason="admin_force_logout")
+        result = await revoke_user_session(5, "sess-123", db=db, current_user=user)
+        assert result["code"] == 200
+        assert target.token_version == 1, "必须递增 token_version"
 
-    async def test_revoke_user_session_invalid_token(self):
+    async def test_revoke_user_session_invalid_token_still_ok(self):
+        """session_id 非 JWT（单机模式常态）不再导致 400——版本递增即完成下线。"""
         from app.api.v1.system.admin import revoke_user_session
         db = _mock_db()
         user = _make_user()
         target = _make_user(uid=5, username="target")
+        target.token_version = 3
         db.query.return_value.filter.return_value.first.return_value = target
-        with patch("app.core.token_manager.revoke_token") as revoke:
-            revoke.return_value = False
-            with pytest.raises(HTTPException) as exc_info:
-                await revoke_user_session(5, "sess-456", db=db, current_user=user)
-            assert exc_info.value.status_code == 400
+        result = await revoke_user_session(5, "sess-456", db=db, current_user=user)
+        assert result["code"] == 200
+        assert target.token_version == 4
 
     async def test_reset_user_two_factor_with_tfa(self):
         from app.api.v1.system.admin import reset_user_two_factor

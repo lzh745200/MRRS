@@ -125,9 +125,15 @@ class ValidateRulesRequest(BaseModel):
 @router.post("/validate-rules", summary="自定义规则校验（下拉+与或非组合）")
 async def validate_rules(  # noqa: C901 - 规则引擎分支多属正常
     request: ValidateRulesRequest,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """按用户组合的规则（字段/操作符/值/与或非）校验模块数据，返回不满足的记录"""
+    """按用户组合的规则（字段/操作符/值/与或非）校验模块数据，返回不满足的记录
+
+    安全基线（W1-T3）：需认证；查询经 filter_by_data_scope 组织隔离，
+    防止跨组织枚举业务记录。
+    """
+    from app.core.data_permission import filter_by_data_scope
     from app.models.supported_village import SupportedVillage
     from app.models.fund import Fund
     from app.models.project import Project
@@ -145,7 +151,8 @@ async def validate_rules(  # noqa: C901 - 规则引擎分支多属正常
         raise HTTPException(status_code=400, detail=f"不支持的模块: {request.entity_type}")
 
     model, label_field = model_map[request.entity_type]
-    records = db.query(model).filter(getattr(model, "is_active", True) == True).all()  # noqa: E712
+    query = db.query(model).filter(getattr(model, "is_active", True) == True)  # noqa: E712
+    records = filter_by_data_scope(query, model, current_user, db=db).all()
 
     def _match(record, rule: ValidateRuleItem) -> bool:
         value = getattr(record, rule.field, None)

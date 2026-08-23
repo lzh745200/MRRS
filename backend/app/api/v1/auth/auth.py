@@ -546,6 +546,19 @@ async def logout(
     except Exception as e:
         logger.debug("吊销 refresh_token 失败，body 可能为空或非 JSON: %s", e)
 
+    # W1-T5（ADR-0001）：递增 token_version 使该用户全部现存 JWT（含
+    # 未随请求提交的其他会话/被窃 refresh token）立即失效。
+    try:
+        if username:
+            _svc_user = UserService(db).get_user_by_username(username)
+            if _svc_user is not None:
+                setattr(_svc_user, "token_version",
+                        (getattr(_svc_user, "token_version", 0) or 0) + 1)
+                db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning("登出递增 token_version 失败（不影响本次登出）: %s", e)
+
     # 记录登出审计日志
     if user_id and username:
         client_ip = get_client_ip(request)

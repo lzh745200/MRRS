@@ -1,8 +1,26 @@
-"""data_quality API 覆盖率补充：validate_rules 全分支 + validate_data 分支（CI --cov-fail-under 门禁）"""
+﻿"""data_quality API 覆盖率补充：validate_rules 全分支 + validate_data 分支（CI --cov-fail-under 门禁）"""
 from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
+
+
+@pytest.fixture(autouse=True)
+def _authed_super_admin():
+    """本文件聚焦规则引擎分支覆盖；认证/隔离行为由
+    tests/unit/api/test_data_quality_auth_scope.py 覆盖。"""
+    from app.api.v1.deps import get_current_active_user
+    from app.main import app
+
+    _user = Mock(id=1, username="admin", role="super_admin", is_superuser=True,
+                 is_active=True, permissions_list=["*"], organization_id=1)
+    original = app.dependency_overrides.get(get_current_active_user)
+    app.dependency_overrides[get_current_active_user] = lambda: _user
+    yield
+    if original:
+        app.dependency_overrides[get_current_active_user] = original
+    else:
+        app.dependency_overrides.pop(get_current_active_user, None)
 
 
 class TestValidateRules:
@@ -32,7 +50,8 @@ class TestValidateRules:
         """eq/ne/contains/gt/lt/not_empty/is_empty/未知 operator 全分支"""
         from app.models.supported_village import SupportedVillage
 
-        db = next(client.app.dependency_overrides[list(client.app.dependency_overrides.keys())[0]]())
+        from app.core.database import get_db as _get_db
+        db = next(client.app.dependency_overrides[_get_db]())
         db.add(SupportedVillage(village_name="示范村", province="贵州", transition_fund_military_total=1200))
         db.commit()
 
@@ -65,7 +84,8 @@ class TestValidateRules:
         """logic=and/or 组合分支（复用 conftest client：CSRF 已禁用）"""
         from app.models.supported_village import SupportedVillage
 
-        db = next(client.app.dependency_overrides[list(client.app.dependency_overrides.keys())[0]]())
+        from app.core.database import get_db as _get_db
+        db = next(client.app.dependency_overrides[_get_db]())
         db.add(SupportedVillage(village_name="甲村", transition_fund_military_total=500))
         db.add(SupportedVillage(village_name="乙村", transition_fund_military_total=3000))
         db.commit()
@@ -107,7 +127,8 @@ class TestValidateRules:
         """failed 列表包含不满足记录（含 record_id/label/matched）"""
         from app.models.supported_village import SupportedVillage
 
-        db = next(client.app.dependency_overrides[list(client.app.dependency_overrides.keys())[0]]())
+        from app.core.database import get_db as _get_db
+        db = next(client.app.dependency_overrides[_get_db]())
         db.add(SupportedVillage(village_name="不匹配村"))
         db.commit()
         resp = self._call(client, entity_type="village",
@@ -175,3 +196,4 @@ class TestValidateDataBranches:
             assert resp.json()["data"]["issues"][0]["field"] == "field_a"
         finally:
             ValidationEngine.validate_with_db_rules = original
+

@@ -377,6 +377,13 @@ class TestGenerateInitialPassword:
 # ---------------------------------------------------------------------------
 
 class TestResetPasswordWithMachineCode:
+    @pytest.fixture(autouse=True)
+    def _loopback(self):
+        """本类聚焦业务逻辑；loopback 门禁行为由
+        tests/unit/api/test_machine_code_reset_security.py 覆盖。"""
+        with patch("app.api.v1.machine_code._client_is_loopback", return_value=True):
+            yield
+
     def test_rate_limited(self, client_admin):
         with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=False)):
             with patch("app.api.v1.machine_code.get_client_ip", return_value="127.0.0.1"):
