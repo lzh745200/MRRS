@@ -322,3 +322,16 @@ help:
 	@echo "  ./scripts/build-deb.sh amd64      # 构建 amd64"
 	@echo "  ./scripts/build-deb.sh arm64      # 构建 arm64"
 	@echo "  ./scripts/build-deb.sh all        # 构建双架构"
+
+# 独立版 DEB (amd64)：与 kylin 同源 Dockerfile，平台改 amd64（无 QEMU，速度快）
+# 用法：make build-deb-standalone-amd64 VERSION=1.10.0
+build-deb-standalone-amd64:
+	@mkdir -p $(KYLIN_OUTPUT_DIR)
+	docker buildx build \
+		--platform linux/amd64 \
+		--build-arg VERSION=$(VERSION) \
+		-t $(APP_NAME)-kylin:$(VERSION)-amd64 \
+		-f docker/Dockerfile.kylin-amd64 \
+		--output type=local,dest=$(KYLIN_OUTPUT_DIR) \
+		--progress=plain \
+		. 2>&1

@@ -1,0 +1,233 @@
+﻿# ============================================================
+# 帮扶管理信息系统 - 麒麟 V10 ARM64 一体化单机版
+# 无 Electron，纯 FastAPI 后端 + 系统浏览器
+# ============================================================
+# 构建方式:
+#   docker buildx build --platform linux/amd64 \
+#     --build-arg VERSION=1.2.0 \
+#     --target output \
+#     -t assistance-management-kylin:1.2.0 \
+#     -f docker/Dockerfile.kylin-standalone \
+#     --output type=local,dest=dist/deb/kylin .
+# ============================================================
+
+# ── Stage 1: 构建前端 (Vue 3 + Vite) ──
+FROM --platform=linux/amd64 node:22-bookworm AS frontend-builder
+
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+WORKDIR /build
+
+# 先复制依赖文件（利用 Docker 层缓存）
+COPY frontend/package.json frontend/package-lock.json* ./frontend/
+RUN cd frontend && npm install --legacy-peer-deps --no-fund --no-audit > /tmp/npm-install.log 2>&1; \
+    code=$?; tail -20 /tmp/npm-install.log; \
+    if [ $code -ne 0 ]; then echo "ERROR: npm install 失败 (exit code $code)"; exit 1; fi
+
+# 复制前端源码并构建
+COPY frontend/ ./frontend/
+RUN cd frontend && npm run build > /tmp/npm-build.log 2>&1; \
+    code=$?; tail -20 /tmp/npm-build.log; \
+    if [ $code -ne 0 ]; then echo "ERROR: npm run build 失败 (exit code $code)"; exit 1; fi
+
+# 验证构建产物
+RUN test -f frontend/dist/index.html || (echo "ERROR: 前端构建失败，index.html 不存在" && exit 1)
+
+
+# ── Stage 2: 构建后端 (PyInstaller ARM64) ──
+# 关键：使用 buster (Debian 10, GLIBC 2.28) 而非 bookworm (GLIBC 2.36)
+# 麒麟 V10 Server GLIBC=2.28, Desktop GLIBC=2.31
+# PyInstaller 不打包 libc，二进制动态链接构建系统的 GLIBC
+# 必须在最低 GLIBC 上构建以保证向前兼容（PyInstaller 官方文档要求）
+FROM --platform=linux/amd64 python:3.11-slim-buster AS backend-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+
+# Buster 已 EOL，apt 源需重定向到 archive.debian.org
+RUN echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list
+
+# 安装编译依赖（ARM64 原生编译需要）
+RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    libffi-dev \
+    libssl-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    libmagic1 \
+    libsqlite3-0 \
+    libgomp1 \
+    file \
+    patchelf \
+    binutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# 验证 GLIBC 版本（必须 <= 2.28 以兼容麒麟 V10）
+RUN ldd --version | head -1 && \
+    GLIBC_VER=$(ldd --version | head -1 | grep -oP '\d+\.\d+' | tail -1) && \
+    echo "构建环境 GLIBC 版本: $GLIBC_VER" && \
+    if [ "$(echo "$GLIBC_VER > 2.28" | bc)" = "1" ]; then \
+        echo "ERROR: GLIBC 版本 $GLIBC_VER > 2.28，不兼容麒麟 V10！请检查 Docker 基础镜像。" && exit 1; \
+    fi && \
+    echo "OK: GLIBC 版本兼容麒麟 V10"
+
+WORKDIR /build
+
+# 生成 ARM64 专用 requirements（排除无 ARM64 wheel 或单机版不需要的包）
+COPY backend/requirements.txt .
+RUN grep -v -E '^(prophet|cmdstanpy|stanio|scikit-learn|scipy|Scrapy|Twisted|matplotlib|redis|hiredis|selenium|python-magic-bin|pywin32-ctypes|Automat|constantly|hyperlink|incremental|itemadapter|itemloaders|parsel|Protego|PyDispatcher|queuelib|service-identity|sgmllib3k|tldextract|w3lib|zope|cssselect)' \
+    requirements.txt > requirements-arm64.txt && \
+    echo "python-magic==0.4.27" >> requirements-arm64.txt && \
+    echo "--- ARM64 requirements ---" && \
+    wc -l requirements-arm64.txt
+
+# 安装 Python 依赖（使用默认 PyPI + 重试机制确保可靠性）
+RUN pip install --retries 3 --timeout 120 \
+    -r requirements-arm64.txt pyinstaller > /tmp/pip-install.log 2>&1; \
+    code=$?; tail -20 /tmp/pip-install.log; \
+    if [ $code -ne 0 ]; then echo "ERROR: pip install 失败 (exit code $code)"; exit 1; fi
+
+# 复制后端源码
+COPY backend/ .
+
+# 诊断：确认关键文件存在（避免 PyInstaller 因找不到文件而失败）
+RUN echo "=== 诊断 alembic 目录 ===" && \
+    ls -la alembic/ && \
+    echo "=== 诊断 alembic.ini ===" && \
+    test -f alembic.ini && echo "OK: alembic.ini 存在" || (echo "ERROR: alembic.ini 不存在" && exit 1) && \
+    echo "=== 诊断 script.py.mako ===" && \
+    test -f alembic/script.py.mako && echo "OK: script.py.mako 存在" || (echo "ERROR: script.py.mako 不存在" && exit 1) && \
+    echo "=== 诊断 app 目录 ===" && \
+    test -d app && echo "OK: app 目录存在" || (echo "ERROR: app 目录不存在" && exit 1) && \
+    echo "=== 诊断 start.py ===" && \
+    test -f start.py && echo "OK: start.py 存在" || (echo "ERROR: start.py 不存在" && exit 1) && \
+    echo "=== 所有关键文件检查通过 ==="
+
+# PyInstaller 打包
+RUN pyinstaller --clean --noconfirm backend_linux_arm64_standalone.spec > /tmp/pyinstaller.log 2>&1; \
+    code=$?; tail -30 /tmp/pyinstaller.log; \
+    if [ $code -ne 0 ]; then echo "ERROR: PyInstaller 打包失败 (exit code $code)"; exit 1; fi
+
+# 验证打包产物
+RUN test -d dist/assistance-management-backend || (echo "ERROR: PyInstaller 打包失败" && exit 1) && \
+    echo "=== 后端打包产物 ===" && \
+    du -sh dist/assistance-management-backend && \
+    echo "=== 验证 alembic 数据文件已打包 ===" && \
+    (test -f dist/assistance-management-backend/alembic/script.py.mako && echo "OK: mako 模板已打包" || echo "WARN: mako 模板未找到") && \
+    (test -f dist/assistance-management-backend/alembic.ini && echo "OK: alembic.ini 已打包" || echo "WARN: alembic.ini 未找到") && \
+    echo "后端打包成功"
+
+# 关键验证：检查 PyInstaller 打包的 libpython3.11.so 不依赖高于 2.28 的 GLIBC
+# 这是之前在麒麟 V10 上崩溃的根本原因
+RUN echo "=== GLIBC 兼容性验证 ===" && \
+    LIBPYTHON=$(find dist/assistance-management-backend -name "libpython3.*.so*" | head -1) && \
+    if [ -z "$LIBPYTHON" ]; then echo "WARN: 未找到 libpython 共享库"; exit 0; fi && \
+    echo "检查: $LIBPYTHON" && \
+    MAX_GLIBC=$(objdump -T "$LIBPYTHON" 2>/dev/null | grep -oP 'GLIBC_\K\d+\.\d+' | sort -V | tail -1) && \
+    echo "libpython 最高 GLIBC 要求: $MAX_GLIBC" && \
+    if [ "$(echo "$MAX_GLIBC > 2.28" | bc)" = "1" ]; then \
+        echo "ERROR: libpython 要求 GLIBC_$MAX_GLIBC > 2.28，不兼容麒麟 V10！" && exit 1; \
+    fi && \
+    echo "OK: libpython GLIBC 要求 <= 2.28，兼容麒麟 V10" && \
+    echo "=== GLIBC 验证通过 ==="
+
+
+# ── Stage 3: 组装 DEB 包 ──
+FROM --platform=linux/amd64 debian:buster-slim AS deb-package
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Buster 已 EOL，apt 源需重定向到 archive.debian.org
+RUN echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list
+
+RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --no-install-recommends \
+    dpkg-dev \
+    fakeroot \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG VERSION=1.2.0
+WORKDIR /package
+
+# 创建目录结构
+RUN mkdir -p \
+    opt/assistance-management-system/backend \
+    opt/assistance-management-system/frontend \
+    opt/assistance-management-system/config \
+    opt/assistance-management-system/scripts \
+    opt/assistance-management-system/systemd \
+    opt/assistance-management-system/desktop \
+    opt/assistance-management-system/polkit \
+    opt/assistance-management-system/icons \
+    usr/share/pixmaps \
+    usr/share/icons/hicolor/512x512/apps \
+    var/lib/assistance-management-system/database \
+    var/lib/assistance-management-system/uploads \
+    var/lib/assistance-management-system/exports \
+    var/lib/assistance-management-system/cache \
+    var/lib/assistance-management-system/backups \
+    var/log/assistance-management-system \
+    DEBIAN
+
+# 复制构建产物
+COPY --from=frontend-builder /build/frontend/dist/ ./opt/assistance-management-system/frontend/
+COPY --from=backend-builder /build/dist/assistance-management-backend/ ./opt/assistance-management-system/backend/
+
+# 复制部署配置
+COPY deploy/kylin/config/kylin.env ./opt/assistance-management-system/config/
+COPY deploy/kylin/scripts/start-kylin.sh ./opt/assistance-management-system/scripts/
+COPY deploy/kylin/systemd/assistance-management-system.service ./opt/assistance-management-system/systemd/
+COPY deploy/kylin/desktop/assistance-management-system.desktop ./opt/assistance-management-system/desktop/
+COPY deploy/kylin/polkit/49-assistance-management-system.rules ./opt/assistance-management-system/polkit/
+
+# 复制应用图标（桌面快捷方式与开始菜单图标使用）
+COPY resources/icons/app-circle-256.png ./opt/assistance-management-system/icons/app-circle-256.png
+# 同时安装到系统图标目录，供 .desktop 菜单项与桌面快捷方式引用
+COPY resources/icons/app-circle-256.png ./usr/share/pixmaps/assistance-management-system.png
+COPY resources/icons/app-circle-256.png ./usr/share/icons/hicolor/512x512/apps/assistance-management-system.png
+
+# 复制 DEBIAN 控制脚本
+COPY deploy/kylin/DEBIAN/postinst ./DEBIAN/
+COPY deploy/kylin/DEBIAN/prerm ./DEBIAN/
+COPY deploy/kylin/DEBIAN/postrm ./DEBIAN/
+
+# 设置权限
+RUN chmod 755 DEBIAN/postinst DEBIAN/prerm DEBIAN/postrm && \
+    chmod 755 opt/assistance-management-system/scripts/start-kylin.sh && \
+    chmod 755 opt/assistance-management-system/backend/assistance-management-backend 2>/dev/null || true
+
+# 生成 DEBIAN/control — 无外部依赖（完全自包含，libmagic/libsqlite3 已打包进后端）
+RUN echo "Package: assistance-management-system" > DEBIAN/control && \
+    echo "Version: ${VERSION}" >> DEBIAN/control && \
+    echo "Architecture: arm64" >> DEBIAN/control && \
+    echo "Maintainer: Assistance Management Information Team" >> DEBIAN/control && \
+    echo "Section: admin" >> DEBIAN/control && \
+    echo "Priority: optional" >> DEBIAN/control && \
+    echo "Installed-Size: $(du -sk opt/ | cut -f1)" >> DEBIAN/control && \
+    echo "Depends: " >> DEBIAN/control && \
+    echo "Recommends: firefox-esr | chromium | chromium-browser" >> DEBIAN/control && \
+    echo "Description: 全面推进乡村振兴工作综合管理平台" >> DEBIAN/control && \
+    echo " 完全单机版，适用于麒麟 V10 ARM64 系统。" >> DEBIAN/control && \
+    echo " 集成村庄管理、项目跟踪、资金监管、数据分析等功能。" >> DEBIAN/control && \
+    echo " 无外部依赖，安装即用。" >> DEBIAN/control
+
+# 构建 DEB 包
+RUN mkdir -p /output && \
+    dpkg-deb --build --root-owner-group . /output/assistance-management-system_${VERSION}_amd64.deb && \
+    echo "=== DEB 包构建完成 ===" && \
+    ls -lh /output/*.deb && \
+    echo "=== 验证 DEB 包结构 ===" && \
+    dpkg-deb -I /output/assistance-management-system_${VERSION}_amd64.deb && \
+    echo "=== 验证关键文件存在 ===" && \
+    dpkg-deb -c /output/assistance-management-system_${VERSION}_amd64.deb | grep -E "assistance-management-backend$|start-kylin.sh|\.desktop|\.service|kylin.env|polkit" | head -10 && \
+    echo "=== 验证图标与桌面快捷方式 ===" && \
+    dpkg-deb -c /output/assistance-management-system_${VERSION}_amd64.deb | grep -E "icons/app-circle-256.png|usr/share/pixmaps/assistance|usr/share/icons/hicolor/512x512/apps/assistance" && \
+    echo "=== DEB 包验证通过 ==="
+
+
+# ── Stage 4: 输出层（仅导出 DEB 文件）──
+FROM scratch AS output
+COPY --from=deb-package /output/*.deb /output/
+
