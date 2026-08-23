@@ -319,18 +319,32 @@ def _try_restore_from_backup(db_path: str):
         except Exception as e:
             print(f"[ERROR] 从备份恢复失败: {e}")
 
-    # 无备份或备份恢复失败：删除损坏文件，让应用启动时自动创建空库
-    print("[INFO] 无可用备份，将删除损坏数据库并自动创建空库")
-    try:
-        os.remove(db_path)
-        # 同时删除 SQLite WAL/SHM 文件
-        for suffix in ('-wal', '-shm'):
-            wal_path = db_path + suffix
-            if os.path.exists(wal_path):
-                os.remove(wal_path)
-        print("[OK] 损坏数据库已删除，应用启动时将自动创建新数据库")
-    except Exception as e:
-        print(f"[ERROR] 删除损坏数据库失败: {e}, 请手动删除: {db_path}")
+    # 无备份或备份恢复失败（W1-T7）：默认**保留现场**、停止启动等待人工介入。
+    # 历史行为是直接删除现库自动建空库——WAL 活动下 integrity_check 可能误报，
+    # 该路径等于不可逆数据丢失（军事场景数据无价）。
+    # 显式设置 ALLOW_DB_RESET=1 时才允许自动删除重建（逃生门）。
+    if os.environ.get("ALLOW_DB_RESET", "").strip() == "1":
+        print("[INFO] ALLOW_DB_RESET=1：将删除损坏数据库并自动创建空库")
+        try:
+            os.remove(db_path)
+            # 同时删除 SQLite WAL/SHM 文件
+            for suffix in ('-wal', '-shm'):
+                wal_path = db_path + suffix
+                if os.path.exists(wal_path):
+                    os.remove(wal_path)
+            print("[OK] 损坏数据库已删除，应用启动时将自动创建新数据库")
+        except Exception as e:
+            print(f"[ERROR] 删除损坏数据库失败: {e}, 请手动删除: {db_path}")
+        return
+
+    print("=" * 64)
+    print("[FATAL] 数据库完整性检查失败且无可用备份，启动已停止。")
+    print(f"        损坏现场已保留: {db_path}（含 .corrupted 副本），未做任何删除。")
+    print("        请人工介入：")
+    print("          1) 检查磁盘/文件系统健康后重新启动重试")
+    print("          2) 如确认废弃该数据库，设置环境变量 ALLOW_DB_RESET=1 后重启")
+    print("=" * 64)
+    raise SystemExit(1)
 
 
 def _setup_fallback_connection_reset_handler():
