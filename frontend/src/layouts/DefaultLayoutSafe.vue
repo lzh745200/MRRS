@@ -285,9 +285,6 @@
             <el-menu-item v-if="menuStore.canAccessMenu('audit')" index="/system/audit"
               ><span>审计管理</span></el-menu-item
             >
-            <el-menu-item v-if="menuStore.canAccessMenu('backup')" index="/system/backup"
-              ><span>备份管理</span></el-menu-item
-            >
             <el-menu-item v-if="menuStore.canAccessMenu('system-config')" index="/system/config"
               ><span>系统配置</span></el-menu-item
             >
@@ -298,6 +295,14 @@
               ><span>帮助文档</span></el-menu-item
             >
           </el-sub-menu>
+
+          <!-- 备份管理：独立顶级入口（普通用户只读可见，不依赖 admin-only 的 system 组） -->
+          <el-menu-item v-if="menuStore.canAccessMenu('backup')" index="/system/backup">
+            <el-icon><FolderOpened /></el-icon>
+            <template #title>
+              <span class="menu-title-text">备份管理</span>
+            </template>
+          </el-menu-item>
 
           <el-menu-item v-if="menuStore.canAccessMenu('messages')" index="/message">
             <el-icon><Message /></el-icon>
@@ -422,6 +427,7 @@ import MobileBottomNav from '@/components/layout/MobileBottomNav.vue'
 import {
   HomeFilled,
   Folder,
+  FolderOpened,
   Money,
   Location,
   DataAnalysis,

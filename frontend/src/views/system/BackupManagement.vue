@@ -88,8 +88,11 @@
           <span class="title">系统备份管理</span>
           <div class="header-actions">
             <el-button :loading="loading" @click="refreshAll">刷新</el-button>
-            <el-button type="success" @click="importDialogVisible = true"> 导入备份包 </el-button>
-            <el-button type="primary" @click="handleCreateBackup"> 创建备份 </el-button>
+            <template v-if="canOperateBackup">
+              <el-button type="success" @click="importDialogVisible = true"> 导入备份包 </el-button>
+              <el-button type="primary" @click="handleCreateBackup"> 创建备份 </el-button>
+            </template>
+            <el-tag v-else type="info" size="small">只读模式（普通用户）</el-tag>
           </div>
         </div>
       </template>
@@ -141,9 +144,12 @@
         </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="handleDownload(row)"> 下载 </el-button>
-            <el-button size="small" type="warning" @click="handleRestore(row)"> 恢复 </el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)"> 删除 </el-button>
+            <template v-if="canOperateBackup">
+              <el-button size="small" type="primary" @click="handleDownload(row)"> 下载 </el-button>
+              <el-button size="small" type="warning" @click="handleRestore(row)"> 恢复 </el-button>
+              <el-button size="small" type="danger" @click="handleDelete(row)"> 删除 </el-button>
+            </template>
+            <span v-else class="readonly-hint">—</span>
           </template>
         </el-table-column>
       </el-table>
@@ -193,7 +199,7 @@
             placeholder="保留最近 N 份备份"
           />
         </el-form-item>
-        <el-form-item>
+        <el-form-item v-if="canOperateBackup">
           <el-button type="primary" :loading="savingSchedule" @click="saveSchedule">
             保存计划
           </el-button>
@@ -314,6 +320,19 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post, put, del } from '@/api/request'
 import { uploadRestoreBackup } from '@/api/backup'
 import { AuthStorage } from '@/utils/authStorage'
+
+// 普通用户只读：仅 admin/super_admin 可执行备份写操作（后端 require_admin 双重把关）。
+// 无用户信息时保持按钮可见（后端权限兜底），兼容未注入用户态的旧测试场景。
+const canOperateBackup = computed(() => {
+  try {
+    const user: any = typeof AuthStorage.getUser === 'function' ? AuthStorage.getUser() : null
+    if (!user) return true
+    const role = user.role || ''
+    return ['admin', 'super_admin'].includes(role) || !!user.is_superuser
+  } catch {
+    return true
+  }
+})
 
 const loading = ref(false)
 const creating = ref(false)

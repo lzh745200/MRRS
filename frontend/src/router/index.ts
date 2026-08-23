@@ -596,7 +596,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/system/backup',
         name: 'SystemBackup',
         component: () => retryImport(() => import('@/views/system/BackupManagement.vue')),
-        meta: { title: '备份管理', roles: ['admin', 'super_admin'] },
+        meta: { title: '备份管理', roles: ['admin', 'super_admin', 'user'] },
       },
       {
         path: '/system/cache',

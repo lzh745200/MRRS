@@ -331,7 +331,8 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "key": "backup",
                 "label": "备份管理",
                 "path": "/system/backup",
-                "roles": ["admin", "super_admin"],
+                # 普通用户只读可见（2026-08 产品要求）；写操作仍由后端 require_admin 把关
+                "roles": ["admin", "super_admin", "user"],
             },
             {
                 "key": "cache",
