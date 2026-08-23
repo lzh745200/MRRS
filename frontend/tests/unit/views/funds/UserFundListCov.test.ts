@@ -240,8 +240,8 @@ describe('挂载与初始化', () => {
     expect(vm.total).toBe(2)
     expect(vm.loading).toBe(false)
     // 服务端统计形态
-    expect(vm.stats.totalAmount).toBe('1,000.00')
-    expect(vm.stats.allocatedAmount).toBe('600.00')
+    expect(vm.stats.totalAmount).toBe('1,000')
+    expect(vm.stats.allocatedAmount).toBe('600')
     expect(vm.stats.pendingCount).toBe(3)
     expect(vm.stats.totalCount).toBe(9)
     // 村/校选项
@@ -340,8 +340,8 @@ describe('统计回退与加载分支', () => {
     ]
     vm.total = 0
     await nextTick()
-    expect(vm.stats.totalAmount).toBe('150.00')
-    expect(vm.stats.allocatedAmount).toBe('150.00')
+    expect(vm.stats.totalAmount).toBe('150')
+    expect(vm.stats.allocatedAmount).toBe('150')
     expect(vm.stats.pendingCount).toBe(1)
     expect(vm.stats.totalCount).toBe(3) // total=0 回退 list.length
     wrapper.unmount()
@@ -360,7 +360,7 @@ describe('统计回退与加载分支', () => {
       { status: 'audited' }, // amount 缺失 → Number(undefined)=NaN → || 0
     ]
     await nextTick()
-    expect(vm.stats.allocatedAmount).toBe('100.00')
+    expect(vm.stats.allocatedAmount).toBe('100')
     wrapper.unmount()
   })
 
@@ -375,7 +375,7 @@ describe('统计回退与加载分支', () => {
     // 空对象 → 各 ?? 回退
     mockGet.mockImplementationOnce(() => Promise.resolve({ data: {} }))
     await vm.loadFundStats()
-    expect(vm.stats.totalAmount).toBe('0.00')
+    expect(vm.stats.totalAmount).toBe('0')
     expect(vm.stats.pendingCount).toBe(0)
     expect(vm.stats.totalCount).toBe(vm.total)
     // data 为 null → 不覆盖
@@ -454,7 +454,7 @@ describe('表格列模板', () => {
     expect(text).toContain('weird_type')
     // 金额格式化与 NaN 回退
     expect(text).toContain('1,234.50')
-    expect(text).toContain('0.00')
+    expect(text).toContain('0')
     // 项目名三段：project_name / project / '-'
     expect(text).toContain('道路项目')
     expect(text).toContain('村项目')

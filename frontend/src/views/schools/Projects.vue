@@ -92,7 +92,7 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="预算(万元)">
-              <el-input-number v-model="form.budget" :min="0" :precision="2" style="width: 100%" />
+              <el-input-number v-model="form.budget" :min="0" :precision="4" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -100,7 +100,7 @@
               <el-input-number
                 v-model="form.actual_cost"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 style="width: 100%"
               />
             </el-form-item>

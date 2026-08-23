@@ -60,7 +60,7 @@
               <div class="progress-head">
                 <span class="progress-name">{{ row.category }}</span>
                 <span class="progress-amounts">
-                  {{ row.used.toFixed(2) }} / {{ row.budget.toFixed(2) }} 万元
+                  {{ format.formatMoney4(row.used) }} / {{ format.formatMoney4(row.budget) }} 万元
                   <span
                     class="progress-rate"
                     :style="{ color: getProgressColor(getUsageRate(row)) }"
@@ -91,18 +91,18 @@
           <el-table-column prop="category" label="预算类别" width="160" />
           <el-table-column prop="budget" label="预算金额(万元)" width="140" align="right">
             <template #default="{ row }">
-              <span class="amount-text">{{ row.budget.toFixed(2) }}</span>
+              <span class="amount-text">{{ format.formatMoney4(row.budget) }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="used" label="已使用(万元)" width="140" align="right">
             <template #default="{ row }">
-              {{ row.used.toFixed(2) }}
+              {{ format.formatMoney4(row.used) }}
             </template>
           </el-table-column>
           <el-table-column label="剩余(万元)" width="140" align="right">
             <template #default="{ row }">
               <span :class="{ 'text-danger': row.budget - row.used < 0 }">
-                {{ (row.budget - row.used).toFixed(2) }}
+                {{ format.formatMoney4(row.budget - row.used) }}
               </span>
             </template>
           </el-table-column>
@@ -174,7 +174,7 @@
               <el-input-number
                 v-model="form.budget_amount"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 style="width: 100%"
               />
             </el-form-item>
@@ -184,7 +184,7 @@
               <el-input-number
                 v-model="form.used_amount"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 style="width: 100%"
               />
             </el-form-item>
@@ -210,6 +210,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { logger } from '@/utils/logger'
+import { format } from '@/utils'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { getYearOptions } from '@/utils/yearOptions'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
@@ -383,9 +384,9 @@ const summary = computed(() => {
   const totalRemaining = totalBudget - totalUsed
   const usageRate = totalBudget > 0 ? Math.round((totalUsed / totalBudget) * 100) : 0
   return {
-    totalBudget: totalBudget.toFixed(2),
-    totalUsed: totalUsed.toFixed(2),
-    totalRemaining: totalRemaining.toFixed(2),
+    totalBudget: format.formatMoney4(totalBudget),
+    totalUsed: format.formatMoney4(totalUsed),
+    totalRemaining: format.formatMoney4(totalRemaining),
     usageRate,
   }
 })
@@ -464,18 +465,18 @@ function getSummary({ columns, data }: { columns: unknown[]; data: BudgetRow[] }
       return
     }
     if (index === 1) {
-      sums[index] = data.reduce((s: number, r) => s + (r.budget || 0), 0).toFixed(2)
+      sums[index] = format.formatMoney4(data.reduce((s: number, r) => s + (r.budget || 0), 0))
       return
     }
     if (index === 2) {
-      sums[index] = data.reduce((s: number, r) => s + (r.used || 0), 0).toFixed(2)
+      sums[index] = format.formatMoney4(data.reduce((s: number, r) => s + (r.used || 0), 0))
       return
     }
     if (index === 3) {
-      sums[index] = (
+      sums[index] = format.formatMoney4(
         data.reduce((s: number, r) => s + (r.budget || 0), 0) -
-        data.reduce((s: number, r) => s + (r.used || 0), 0)
-      ).toFixed(2)
+          data.reduce((s: number, r) => s + (r.used || 0), 0)
+      )
       return
     }
     sums[index] = ''

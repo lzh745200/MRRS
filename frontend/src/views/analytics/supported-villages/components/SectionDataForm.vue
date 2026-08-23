@@ -200,7 +200,7 @@
               <el-input-number
                 v-model="formData.collectiveIncome"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -242,7 +242,7 @@
               <el-input-number
                 v-model="formData.investment"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -252,7 +252,7 @@
               <el-input-number
                 v-model="formData.plannedInvestment"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -297,7 +297,7 @@
               <el-input-number
                 v-model="formData.investment"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -307,7 +307,7 @@
               <el-input-number
                 v-model="formData.plannedInvestment"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -368,7 +368,7 @@
               <el-input-number
                 v-model="formData.investment"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -378,7 +378,7 @@
               <el-input-number
                 v-model="formData.plannedInvestment"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -435,7 +435,7 @@
               <el-input-number
                 v-model="formData.investment"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -445,7 +445,7 @@
               <el-input-number
                 v-model="formData.plannedInvestment"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -478,7 +478,7 @@
               <el-input-number
                 v-model="formData.villageProductsPurchase"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -488,7 +488,7 @@
               <el-input-number
                 v-model="formData.otherProductsPurchase"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -557,7 +557,7 @@
               <el-input-number
                 v-model="formData.investment"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>
@@ -642,7 +642,7 @@
               <el-input-number
                 v-model="formData.collectiveIncomeAmount"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 class="input-full-width"
               />
             </el-form-item>

@@ -167,7 +167,8 @@
             <el-input-number
               v-model="projectForm.fundAmount"
               :min="0"
-              :step="0.01"
+              :precision="4"
+              :step="0.0001"
               placeholder="请输入资金投入"
               :prefix-icon="Wallet"
             />
@@ -186,7 +187,8 @@
             <el-input-number
               v-model="projectForm.allocatedFund"
               :min="0"
-              :step="0.01"
+              :precision="4"
+              :step="0.0001"
               placeholder="请输入已拨付资金"
               :prefix-icon="Wallet"
             />

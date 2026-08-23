@@ -310,8 +310,8 @@ describe('统计卡片 computed', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.stats.totalAmount).toBe('500.00')
-    expect(vm.stats.allocatedAmount).toBe('300.00')
+    expect(vm.stats.totalAmount).toBe('500')
+    expect(vm.stats.allocatedAmount).toBe('300')
     expect(vm.stats.pendingCount).toBe(3)
     expect(vm.stats.plannedCount).toBe(2)
     expect(vm.stats.totalCount).toBe(10)
@@ -328,8 +328,8 @@ describe('统计卡片 computed', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.stats.totalAmount).toBe('300.50')
-    expect(vm.stats.allocatedAmount).toBe('200.00')
+    expect(vm.stats.totalAmount).toBe('300.5')
+    expect(vm.stats.allocatedAmount).toBe('200')
     expect(vm.stats.pendingCount).toBe(1)
     expect(vm.stats.plannedCount).toBe(0)
     expect(vm.stats.totalCount).toBe(2)
@@ -341,13 +341,13 @@ describe('formatAmount', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.formatAmount(1234567.8)).toBe('1,234,567.80')
+    expect(vm.formatAmount(1234567.8)).toBe('1,234,567.8')
   })
   it('NaN → 0.00', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.formatAmount('abc')).toBe('0.00')
+    expect(vm.formatAmount('abc')).toBe('0')
   })
 })
 
@@ -813,8 +813,8 @@ describe('补缺：stats computed 分支', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.stats.totalAmount).toBe('500.00')
-    expect(vm.stats.allocatedAmount).toBe('300.00')
+    expect(vm.stats.totalAmount).toBe('500')
+    expect(vm.stats.allocatedAmount).toBe('300')
     expect(vm.stats.pendingCount).toBe(0)
     expect(vm.stats.plannedCount).toBe(0)
     expect(vm.stats.totalCount).toBe(vm.total)
@@ -828,7 +828,7 @@ describe('补缺：stats computed 分支', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.stats.totalAmount).toBe('0.00')
+    expect(vm.stats.totalAmount).toBe('0')
     expect(vm.stats.totalCount).toBe(vm.total)
   })
 
@@ -851,8 +851,8 @@ describe('补缺：stats computed 分支', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.stats.totalAmount).toBe('300.50')
-    expect(vm.stats.allocatedAmount).toBe('200.00')
+    expect(vm.stats.totalAmount).toBe('300.5')
+    expect(vm.stats.allocatedAmount).toBe('200')
     expect(vm.stats.totalCount).toBe(4)
   })
 

@@ -122,7 +122,7 @@
             <div class="stat-label">平均人均收入</div>
             <div class="stat-value">
               <span class="data-number data-number--lg">
-                {{ (statistics.income?.avgPerCapitaIncome || 0).toFixed(2) }}
+                {{ format.formatMoney4(statistics.income?.avgPerCapitaIncome) }}
               </span>
               <span class="data-unit">万元</span>
             </div>
@@ -207,6 +207,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { format } from '@/utils'
 
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { Download, OfficeBuilding, User, Money, TrendCharts, Close } from '@element-plus/icons-vue'

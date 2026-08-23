@@ -76,7 +76,7 @@ describe('format', () => {
 
   describe('formatCurrency', () => {
     it('格式化货币值', () => {
-      expect(format.formatCurrency(12345.678)).toMatch(/12.*345.*68.*元/)
+      expect(format.formatCurrency(12345.678)).toMatch(/12.*345.*678.*元/)
     })
 
     it('自定义单位', () => {

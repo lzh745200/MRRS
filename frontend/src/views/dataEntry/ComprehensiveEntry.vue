@@ -238,7 +238,7 @@
                 <el-input-number
                   v-model="formData.committeeInfo.collectiveIncomeAmount"
                   :min="0"
-                  :precision="2"
+                  :precision="4"
                   :controls="false"
                   placeholder="请输入村集体收入"
                 />
@@ -295,7 +295,7 @@
                   ><el-input-number
                     v-model="getPopData(yr).collectiveEconomyIncome"
                     :min="0"
-                    :precision="2"
+                    :precision="4"
                     :controls="false" /></el-form-item
               ></el-col>
             </el-row>
@@ -325,7 +325,7 @@
                   ><el-input-number
                     v-model="getInvestData(yr).militaryInvestment"
                     :min="0"
-                    :precision="2"
+                    :precision="4"
                     :controls="false" /></el-form-item
               ></el-col>
               <el-col :span="6"
@@ -333,7 +333,7 @@
                   ><el-input-number
                     v-model="getInvestData(yr).localInvestment"
                     :min="0"
-                    :precision="2"
+                    :precision="4"
                     :controls="false" /></el-form-item
               ></el-col>
               <el-col :span="6"
@@ -355,13 +355,15 @@
           <div class="auto-calc">
             <el-descriptions title="投入汇总（自动计算）" :column="4" border>
               <el-descriptions-item label="专项投入合计"
-                >{{ totalMilitaryInvest.toFixed(2) }}万</el-descriptions-item
+                >{{ format.formatMoney4(totalMilitaryInvest) }}万</el-descriptions-item
               >
               <el-descriptions-item label="地方投入合计"
-                >{{ totalLocalInvest.toFixed(2) }}万</el-descriptions-item
+                >{{ format.formatMoney4(totalLocalInvest) }}万</el-descriptions-item
               >
               <el-descriptions-item label="总投入"
-                >{{ (totalMilitaryInvest + totalLocalInvest).toFixed(2) }}万</el-descriptions-item
+                >{{
+                  format.formatMoney4(totalMilitaryInvest + totalLocalInvest)
+                }}万</el-descriptions-item
               >
               <el-descriptions-item label="到村总人次">{{ totalVisits }}</el-descriptions-item>
             </el-descriptions>
@@ -380,7 +382,7 @@
                     ><el-input-number
                       v-model="formData.industryHelp.investment"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       :controls="false" /></el-form-item
                 ></el-col>
                 <el-col :span="10"
@@ -422,7 +424,7 @@
                     ><el-input-number
                       v-model="formData.infrastructureHelp.investment"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       :controls="false" /></el-form-item
                 ></el-col>
                 <el-col :span="10"
@@ -464,7 +466,7 @@
                     ><el-input-number
                       v-model="formData.partyBuildingHelp.investment"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       :controls="false" /></el-form-item
                 ></el-col>
                 <el-col :span="10"
@@ -497,7 +499,7 @@
                     ><el-input-number
                       v-model="formData.medicalHelp.investment"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       :controls="false" /></el-form-item
                 ></el-col>
                 <el-col :span="10"
@@ -539,7 +541,7 @@
                     ><el-input-number
                       v-model="formData.consumptionHelp.purchaseAmount"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       :controls="false" /></el-form-item
                 ></el-col>
                 <el-col :span="10"
@@ -553,7 +555,7 @@
                     ><el-input-number
                       v-model="formData.consumptionHelp.salesAmount"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       :controls="false" /></el-form-item
                 ></el-col>
               </el-row>
@@ -596,7 +598,7 @@
                     ><el-input-number
                       v-model="formData.educationHelp.investment"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       :controls="false" /></el-form-item
                 ></el-col>
                 <el-col :span="10"
@@ -762,6 +764,7 @@
 </template>
 
 <script setup lang="ts">
+import { format } from '@/utils'
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

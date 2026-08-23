@@ -99,7 +99,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="资助金额(元)" prop="amount">
-              <el-input-number v-model="form.amount" :min="0" :precision="2" style="width: 100%" />
+              <el-input-number v-model="form.amount" :min="0" :precision="4" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>

@@ -279,8 +279,9 @@ describe('utils/index.ts 统一导出', () => {
   })
 
   describe('format.formatCurrency', () => {
-    it('千分位 + 默认单位元 + 两位小数', () => {
-      expect(format.formatCurrency(1234567.891)).toBe('1,234,567.89元')
+    it('千分位 + 默认单位元 + 最多4位小数去尾零', () => {
+      expect(format.formatCurrency(1234567.891)).toBe('1,234,567.891元')
+      expect(format.formatCurrency(1234567.89)).toBe('1,234,567.89元')
     })
 
     it('自定义单位', () => {

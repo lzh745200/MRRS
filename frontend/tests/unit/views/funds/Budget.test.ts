@@ -239,9 +239,9 @@ describe('summary 与颜色函数', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.summary.totalBudget).toBe('150.00')
-    expect(vm.summary.totalUsed).toBe('105.00')
-    expect(vm.summary.totalRemaining).toBe('45.00')
+    expect(vm.summary.totalBudget).toBe('150')
+    expect(vm.summary.totalUsed).toBe('105')
+    expect(vm.summary.totalRemaining).toBe('45')
     expect(vm.summary.usageRate).toBe(70)
     expect(vm.usageRateClass).toBe('text-warning')
 
@@ -260,7 +260,7 @@ describe('summary 与颜色函数', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.summary.totalBudget).toBe('0.00')
+    expect(vm.summary.totalBudget).toBe('0')
     expect(vm.summary.usageRate).toBe(0)
   })
 
@@ -271,13 +271,13 @@ describe('summary 与颜色函数', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.summary.totalBudget).toBe('0.00')
-    expect(vm.summary.totalUsed).toBe('0.00')
+    expect(vm.summary.totalBudget).toBe('0')
+    expect(vm.summary.totalUsed).toBe('0')
     expect(vm.gaugeOption.series[0].data[0].value).toBe(0)
     const sums = vm.getSummary({ columns: [1, 2, 3, 4], data: vm.budgetData })
-    expect(sums[1]).toBe('0.00')
-    expect(sums[2]).toBe('0.00')
-    expect(sums[3]).toBe('0.00')
+    expect(sums[1]).toBe('0')
+    expect(sums[2]).toBe('0')
+    expect(sums[3]).toBe('0')
   })
 
   it('getProgressColor 三分支', async () => {
@@ -313,9 +313,9 @@ describe('summary 与颜色函数', () => {
     const data = vm.budgetData
     const sums = vm.getSummary({ columns: [1, 2, 3, 4, 5], data })
     expect(sums[0]).toBe('合计')
-    expect(sums[1]).toBe('150.00')
-    expect(sums[2]).toBe('105.00')
-    expect(sums[3]).toBe('45.00')
+    expect(sums[1]).toBe('150')
+    expect(sums[2]).toBe('105')
+    expect(sums[3]).toBe('45')
     expect(sums[4]).toBe('')
   })
 })

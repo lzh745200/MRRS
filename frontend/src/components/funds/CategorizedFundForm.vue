@@ -23,7 +23,7 @@
             <el-input-number
               v-model="formData.totalAmount"
               :min="0"
-              :precision="2"
+              :precision="4"
               style="width: 100%"
             />
           </el-form-item>
@@ -33,7 +33,7 @@
             <el-input-number
               v-model="formData.usedAmount"
               :min="0"
-              :precision="2"
+              :precision="4"
               style="width: 100%"
             />
           </el-form-item>
@@ -43,7 +43,7 @@
             <el-input-number
               v-model="formData.remainingAmount"
               :min="0"
-              :precision="2"
+              :precision="4"
               disabled
               style="width: 100%"
             />

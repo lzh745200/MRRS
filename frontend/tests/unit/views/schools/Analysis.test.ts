@@ -120,7 +120,7 @@ describe('schools/Analysis.vue', () => {
     await flushPromises()
 
     const vm = wrapper.vm as any
-    expect(vm.budget).toBe('10.00')
+    expect(vm.budget).toBe('10')
     expect(vm.scholarshipAmount).toContain('50,000')
   })
 

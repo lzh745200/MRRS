@@ -121,7 +121,7 @@
         <div class="stat-label">已完成</div>
       </div>
       <div class="stat-item">
-        <div class="stat-value text-warning">{{ stats.totalBudget }}万</div>
+        <div class="stat-value text-warning">{{ format.formatMoney4(stats.totalBudget) }}万</div>
         <div class="stat-label">总预算</div>
       </div>
     </div>
@@ -231,6 +231,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { format } from '@/utils'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { ref, reactive, computed, onMounted } from 'vue'
@@ -333,7 +334,7 @@ const loadStats = async () => {
     stats.total = s?.total ?? 0
     stats.inProgress = s?.in_progress ?? 0
     stats.completed = s?.completed ?? 0
-    stats.totalBudget = Math.round(s?.total_budget ?? 0)
+    stats.totalBudget = Number(s?.total_budget ?? 0)
   } catch {
     // 统计加载失败不阻塞主流程
   }

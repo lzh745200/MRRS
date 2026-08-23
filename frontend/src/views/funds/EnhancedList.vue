@@ -656,10 +656,9 @@ async function loadYearOverview() {
 
 function formatAmount(val: any) {
   const num = Number(val)
-  if (isNaN(num)) return '0.00'
+  if (isNaN(num)) return '0'
   return num.toLocaleString('zh-CN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 4,
   })
 }
 

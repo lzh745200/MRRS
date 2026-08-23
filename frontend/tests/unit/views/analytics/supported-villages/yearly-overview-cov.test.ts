@@ -119,7 +119,7 @@ describe('YearlyOverview.vue 加载与板块统计', () => {
     expect(vm.sections).toHaveLength(11)
     expect(vm.sections[0].stats).toHaveLength(3) // population
     expect(vm.sections[0].stats[0].value).toBe(100)
-    expect(vm.sections[1].stats[0].value).toBe('1.20') // income toFixed
+    expect(vm.sections[1].stats[0].value).toBe('1.2') // income toFixed
     expect(vm.sections[10].stats[0].value).toBe(2) // committee members
     expect(vm.loading).toBe(false)
   })
@@ -155,7 +155,7 @@ describe('YearlyOverview.vue 加载与板块统计', () => {
     const vm = wrapper.vm as any
     const committee = vm.sections.find((s: any) => s.key === 'committee')
     expect(committee.stats[0].value).toBe(0)
-    expect(committee.stats[1].value).toBe('0.00')
+    expect(committee.stats[1].value).toBe('0')
   })
 
   it('employment/education 板块字段缺失：0 兜底', async () => {
@@ -167,7 +167,7 @@ describe('YearlyOverview.vue 加载与板块统计', () => {
     expect(employment.stats[0].value).toBe(0)
     expect(employment.stats[1].value).toBe(0)
     const education = vm.sections.find((s: any) => s.key === 'education')
-    expect(education.stats[0].value).toBe('0.00')
+    expect(education.stats[0].value).toBe('0')
     expect(education.stats[1].value).toBe(0)
   })
 
@@ -181,13 +181,13 @@ describe('YearlyOverview.vue 加载与板块统计', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     const party = vm.sections.find((s: any) => s.key === 'party_building')
-    expect(party.stats[0].value).toBe('0.00')
+    expect(party.stats[0].value).toBe('0')
     expect(party.stats[1].value).toBe(0)
     const medical = vm.sections.find((s: any) => s.key === 'medical')
-    expect(medical.stats[0].value).toBe('0.00')
+    expect(medical.stats[0].value).toBe('0')
     expect(medical.stats[1].value).toBe(0)
     const consumption = vm.sections.find((s: any) => s.key === 'consumption')
-    expect(consumption.stats[0].value).toBe('0.00')
+    expect(consumption.stats[0].value).toBe('0')
   })
 
   it('force/industry/infrastructure 板块字段缺失：0 兜底', async () => {
@@ -203,9 +203,9 @@ describe('YearlyOverview.vue 加载与板块统计', () => {
     expect(force.stats[0].value).toBe(0)
     expect(force.stats[1].value).toBe(0)
     const industry = vm.sections.find((s: any) => s.key === 'industry')
-    expect(industry.stats[0].value).toBe('0.00')
+    expect(industry.stats[0].value).toBe('0')
     const infra = vm.sections.find((s: any) => s.key === 'infrastructure')
-    expect(infra.stats[0].value).toBe('0.00')
+    expect(infra.stats[0].value).toBe('0')
   })
 
   it('population/income 板块字段缺失：0 兜底', async () => {
@@ -216,7 +216,7 @@ describe('YearlyOverview.vue 加载与板块统计', () => {
     const population = vm.sections.find((s: any) => s.key === 'population')
     expect(population.stats.map((x: any) => x.value)).toEqual([0, 0, 0])
     const income = vm.sections.find((s: any) => s.key === 'income')
-    expect(income.stats.map((x: any) => x.value)).toEqual(['0.00', '0.00'])
+    expect(income.stats.map((x: any) => x.value)).toEqual(['0', '0'])
   })
 
   it('无年度数据：各板块 stats 为空数组', async () => {

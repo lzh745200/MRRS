@@ -263,6 +263,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { format } from '@/utils'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -370,7 +371,7 @@ const kpiStats = computed(() => {
   const departments = new Set(data.map((row: any) => row.department).filter(Boolean))
   return {
     totalVillages: (pagination as any)?.data?.total || (pagination as any)?.total || data.length,
-    totalInvestment: totalInvestment.toFixed(2),
+    totalInvestment: format.formatMoney4(totalInvestment),
     countyCount: counties.size || filterOptions.value.counties.length,
     departmentCount: departments.size || filterOptions.value.departments.length,
   }

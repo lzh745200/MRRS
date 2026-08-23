@@ -476,7 +476,7 @@
                     ><el-input-number
                       v-model="formData.amount"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       style="width: 100%" /></el-form-item
                 ></el-col>
                 <el-col :span="8"
@@ -484,7 +484,7 @@
                     ><el-input-number
                       v-model="formData.planned_amount"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       style="width: 100%" /></el-form-item
                 ></el-col>
                 <el-col :span="8"
@@ -492,7 +492,7 @@
                     ><el-input-number
                       v-model="formData.approved_amount"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       style="width: 100%" /></el-form-item
                 ></el-col>
               </el-row>
@@ -502,7 +502,7 @@
                     ><el-input-number
                       v-model="formData.allocated_amount"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       style="width: 100%" /></el-form-item
                 ></el-col>
                 <el-col :span="8"
@@ -510,7 +510,7 @@
                     ><el-input-number
                       v-model="formData.used_amount"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       style="width: 100%" /></el-form-item
                 ></el-col>
                 <el-col :span="8"
@@ -518,7 +518,7 @@
                     ><el-input-number
                       v-model="formData.remaining_amount"
                       :min="0"
-                      :precision="2"
+                      :precision="4"
                       style="width: 100%" /></el-form-item
                 ></el-col>
               </el-row>
@@ -615,7 +615,7 @@
           ><el-input-number
             v-model="wfForm.allocated_amount"
             :min="0"
-            :precision="2"
+            :precision="4"
             style="width: 100%"
         /></el-form-item>
         <el-form-item v-if="wfAction === 'allocate'" label="拨付方式"
@@ -992,10 +992,9 @@ const getStatusText = (s: string) =>
   '-'
 const formatMoney = (v: any) =>
   v == null
-    ? '0.00'
+    ? '0'
     : Number(v).toLocaleString('zh-CN', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        maximumFractionDigits: 4,
       })
 const formatDateTime = (d?: string | null) => {
   if (!d) return '-'

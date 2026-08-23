@@ -101,7 +101,7 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item label="金额(万元)" prop="amount" required
-          ><el-input-number v-model="form.amount" :min="0.01" :precision="2"
+          ><el-input-number v-model="form.amount" :min="0.01" :precision="4"
         /></el-form-item>
         <el-form-item label="付款账户" prop="payer_account"
           ><el-input v-model="form.payer_account"

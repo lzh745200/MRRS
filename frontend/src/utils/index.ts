@@ -45,8 +45,15 @@ export const format = {
     return format.formatDateTime(date, 'YYYY-MM-DD HH:mm:ss')
   },
 
-  /** 格式化货币 */
+  /** 格式化货币（最多4位小数，自动去尾零） */
   formatCurrency(value: number, unit = '元'): string {
-    return value.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + unit
+    return value.toLocaleString('zh-CN', { maximumFractionDigits: 4 }) + unit
+  },
+
+  /** 格式化金额(万元)：最多4位小数、千分位、自动去尾零 */
+  formatMoney4(value: number | string | null | undefined): string {
+    const n = Number(value ?? 0)
+    if (!Number.isFinite(n)) return '0'
+    return n.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
   },
 }

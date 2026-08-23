@@ -218,7 +218,7 @@
               <el-input-number
                 v-model="dialogForm.amount"
                 :min="0"
-                :precision="2"
+                :precision="4"
                 :step="1"
                 style="width: 100%"
               />
@@ -444,10 +444,9 @@ async function loadFundStats() {
 
 function formatAmount(val: any) {
   const num = Number(val)
-  if (isNaN(num)) return '0.00'
+  if (isNaN(num)) return '0'
   return num.toLocaleString('zh-CN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 4,
   })
 }
 

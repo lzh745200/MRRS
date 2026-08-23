@@ -106,7 +106,7 @@
           ><el-input v-model="contractForm.party_b"
         /></el-form-item>
         <el-form-item label="合同金额" prop="contract_amount"
-          ><el-input-number v-model="contractForm.contract_amount" :min="0" :precision="2"
+          ><el-input-number v-model="contractForm.contract_amount" :min="0" :precision="4"
         /></el-form-item>
         <el-form-item label="签订日期" prop="sign_date"
           ><el-date-picker v-model="contractForm.sign_date" type="date" value-format="YYYY-MM-DD"
@@ -128,7 +128,7 @@
     <el-dialog v-model="paymentDialogVisible" title="登记合同付款" width="500px">
       <el-form :model="paymentForm" label-width="100px">
         <el-form-item label="付款金额" required
-          ><el-input-number v-model="paymentForm.amount" :min="0.01" :precision="2"
+          ><el-input-number v-model="paymentForm.amount" :min="0.01" :precision="4"
         /></el-form-item>
         <el-form-item label="付款日期" required
           ><el-date-picker v-model="paymentForm.payment_date" type="date" value-format="YYYY-MM-DD"

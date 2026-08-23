@@ -244,8 +244,8 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
     const wrapper = mountDashboard()
     await flushPromises()
 
-    // formatNumber(0) → toLocaleString 分支；收入 (0).toFixed(2)
-    expect(wrapper.text()).toContain('0.00')
+    // formatNumber(0) → toLocaleString 分支；收入 formatMoney4(0) 去尾零
+    expect(wrapper.text()).toContain('0')
     wrapper.unmount()
   })
 
@@ -254,7 +254,7 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
     const wrapper = mountDashboard()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('0.00')
+    expect(wrapper.text()).toContain('0')
     wrapper.unmount()
   })
 

@@ -171,7 +171,7 @@
             <el-input-number
               v-model="formData.income.collectiveIncome"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -209,7 +209,7 @@
             <el-input-number
               v-model="formData.industry.investment"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -219,7 +219,7 @@
             <el-input-number
               v-model="formData.industry.plannedInvestment"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -272,7 +272,7 @@
             <el-input-number
               v-model="formData.infrastructure.investment"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -282,7 +282,7 @@
             <el-input-number
               v-model="formData.infrastructure.plannedInvestment"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -347,7 +347,7 @@
             <el-input-number
               v-model="formData.partyBuilding.investment"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -357,7 +357,7 @@
             <el-input-number
               v-model="formData.partyBuilding.plannedInvestment"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -410,7 +410,7 @@
             <el-input-number
               v-model="formData.medical.investment"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -420,7 +420,7 @@
             <el-input-number
               v-model="formData.medical.plannedInvestment"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -455,7 +455,7 @@
             <el-input-number
               v-model="formData.consumption.villageProductsPurchase"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -465,7 +465,7 @@
             <el-input-number
               v-model="formData.consumption.otherProductsPurchase"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>
@@ -530,7 +530,7 @@
             <el-input-number
               v-model="formData.education.investment"
               :min="0"
-              :precision="2"
+              :precision="4"
               class="input-fixed-width"
             />
           </el-form-item>

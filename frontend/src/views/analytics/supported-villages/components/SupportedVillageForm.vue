@@ -194,7 +194,7 @@
           <el-input-number
             v-model="currentMilitaryInput"
             :min="0"
-            :precision="2"
+            :precision="4"
             :controls="true"
             controls-position="right"
             style="width: 100%"
@@ -207,7 +207,7 @@
           <el-input-number
             v-model="currentLocalInput"
             :min="0"
-            :precision="2"
+            :precision="4"
             :controls="true"
             controls-position="right"
             style="width: 100%"
@@ -246,18 +246,18 @@
         </el-table-column>
         <el-table-column label="专项投入（万元）" align="right">
           <template #default="{ row }">
-            <span class="funding-number">{{ (row.militaryInvestment || 0).toFixed(2) }}</span>
+            <span class="funding-number">{{ format.formatMoney4(row.militaryInvestment) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="地方投入（万元）" align="right">
           <template #default="{ row }">
-            <span class="funding-number">{{ (row.localInvestment || 0).toFixed(2) }}</span>
+            <span class="funding-number">{{ format.formatMoney4(row.localInvestment) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="年度合计（万元）" width="150" align="right">
           <template #default="{ row }">
             <span class="funding-number funding-number--total">
-              {{ ((row.militaryInvestment || 0) + (row.localInvestment || 0)).toFixed(2) }}
+              {{ format.formatMoney4((row.militaryInvestment || 0) + (row.localInvestment || 0)) }}
             </span>
           </template>
         </el-table-column>
@@ -288,10 +288,10 @@
       <!-- 合计行 -->
       <el-descriptions v-if="transitionFundingRows.length > 0" :column="2" border size="small">
         <el-descriptions-item label="专项合计（万元）" align="right">
-          <strong>{{ transitionMilitaryTotal.toFixed(2) }}</strong>
+          <strong>{{ format.formatMoney4(transitionMilitaryTotal) }}</strong>
         </el-descriptions-item>
         <el-descriptions-item label="地方合计（万元）" align="right">
-          <strong>{{ transitionLocalTotal.toFixed(2) }}</strong>
+          <strong>{{ format.formatMoney4(transitionLocalTotal) }}</strong>
         </el-descriptions-item>
       </el-descriptions>
     </div>
@@ -312,6 +312,7 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
+import { format } from '@/utils'
 import { getYearOptions } from '@/utils/yearOptions'
 
 /**

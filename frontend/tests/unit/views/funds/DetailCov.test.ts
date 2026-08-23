@@ -434,7 +434,7 @@ describe('页面模式与数据加载', () => {
     await flushPromises()
     let text = wrapper.text()
     expect(text).toContain('无')
-    expect(text).toContain('0.00 万元')
+    expect(text).toContain('0 万元')
     expect(text).toContain('政府') // source 臂
     wrapper.unmount()
 
@@ -929,8 +929,8 @@ describe('辅助函数', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.formatMoney(null)).toBe('0.00')
-    expect(vm.formatMoney(1234.5)).toBe('1,234.50')
+    expect(vm.formatMoney(null)).toBe('0')
+    expect(vm.formatMoney(1234.5)).toBe('1,234.5')
 
     expect(vm.formatDateTime(null)).toBe('-')
     expect(vm.formatDateTime('')).toBe('-')

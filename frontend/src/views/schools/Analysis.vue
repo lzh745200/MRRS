@@ -52,6 +52,7 @@ import { ElMessage } from 'element-plus'
 import BaseChart from '@/components/common/BaseChart.vue'
 import StatsCard from '@/components/common/StatsCard.vue'
 import { schoolsApi } from '@/api/schools'
+import { format } from '@/utils'
 
 const stats = ref({
   total_schools: 0,
@@ -68,7 +69,7 @@ const stats = ref({
 const statusDist = ref<Record<string, number>>({})
 const regionDist = ref<Record<string, number>>({})
 
-const budget = computed(() => ((stats.value.project_total_budget || 0) / 10000).toFixed(2))
+const budget = computed(() => format.formatMoney4((stats.value.project_total_budget || 0) / 10000))
 const scholarshipAmount = computed(() =>
   Number(stats.value.scholarship_total_amount || 0).toLocaleString('zh-CN')
 )

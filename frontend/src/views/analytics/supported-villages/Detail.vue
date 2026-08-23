@@ -142,7 +142,7 @@
             <el-col :span="6">
               <div class="stat-card">
                 <div class="stat-value">
-                  {{ yearlyData?.income?.perCapitaIncome?.toFixed(2) || '0.00' }}
+                  {{ format.formatMoney4(yearlyData?.income?.perCapitaIncome) }}
                 </div>
                 <div class="stat-label">人均收入(万元)</div>
               </div>
@@ -150,14 +150,14 @@
             <el-col :span="6">
               <div class="stat-card">
                 <div class="stat-value">
-                  {{ yearlyData?.income?.collectiveIncome?.toFixed(2) || '0.00' }}
+                  {{ format.formatMoney4(yearlyData?.income?.collectiveIncome) }}
                 </div>
                 <div class="stat-label">集体收入(万元)</div>
               </div>
             </el-col>
             <el-col :span="6">
               <div class="stat-card">
-                <div class="stat-value">{{ totalInvestment.toFixed(2) }}</div>
+                <div class="stat-value">{{ format.formatMoney4(totalInvestment) }}</div>
                 <div class="stat-label">帮扶投入(万元)</div>
               </div>
             </el-col>
@@ -189,6 +189,7 @@ import { ElMessage } from 'element-plus'
 import ChangeHistoryDialog from '@/components/common/ChangeHistoryDialog.vue'
 import { getChangeHistory } from '@/api/supportedVillage'
 import { logger } from '@/utils/logger'
+import { format } from '@/utils'
 import echarts from '@/utils/echarts'
 
 const changeHistoryVisible = ref(false)

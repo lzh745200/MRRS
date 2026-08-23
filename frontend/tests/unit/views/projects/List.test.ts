@@ -191,7 +191,7 @@ describe('挂载与加载', () => {
     expect(vm.stats.total).toBe(10)
     expect(vm.stats.inProgress).toBe(5)
     expect(vm.stats.completed).toBe(3)
-    expect(vm.stats.totalBudget).toBe(124)
+    expect(vm.stats.totalBudget).toBe(123.6)
   })
 
   it('getStats 数据扁平格式', async () => {

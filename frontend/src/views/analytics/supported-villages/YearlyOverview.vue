@@ -150,6 +150,7 @@ import type { YearlyDataSummary } from '@/types/analytics'
 import SectionDataForm from './components/SectionDataForm.vue'
 import echarts from '@/utils/echarts'
 import { getYearOptions } from '@/utils/yearOptions'
+import { format } from '@/utils'
 
 const route = useRoute()
 const { pushSafe } = useRouterSafe()
@@ -197,11 +198,11 @@ const sections = computed(() => {
         ? [
             {
               label: '人均收入(万)',
-              value: (d.income.perCapitaIncome ?? 0).toFixed(2),
+              value: format.formatMoney4(d.income.perCapitaIncome),
             },
             {
               label: '集体收入(万)',
-              value: (d.income.collectiveIncome ?? 0).toFixed(2),
+              value: format.formatMoney4(d.income.collectiveIncome),
             },
           ]
         : [],
@@ -231,7 +232,7 @@ const sections = computed(() => {
         ? [
             {
               label: '当年投入(万)',
-              value: (d.industry.investment ?? 0).toFixed(2),
+              value: format.formatMoney4(d.industry.investment),
             },
           ]
         : [],
@@ -244,7 +245,7 @@ const sections = computed(() => {
         ? [
             {
               label: '当年投入(万)',
-              value: (d.infrastructure.investment ?? 0).toFixed(2),
+              value: format.formatMoney4(d.infrastructure.investment),
             },
           ]
         : [],
@@ -257,7 +258,7 @@ const sections = computed(() => {
         ? [
             {
               label: '投入(万)',
-              value: (d['party-building'].investment ?? 0).toFixed(2),
+              value: format.formatMoney4(d['party-building'].investment),
             },
             {
               label: '联建活动(次)',
@@ -274,7 +275,7 @@ const sections = computed(() => {
         ? [
             {
               label: '投入(万)',
-              value: (d.medical.investment ?? 0).toFixed(2),
+              value: format.formatMoney4(d.medical.investment),
             },
             {
               label: '巡诊(人次)',
@@ -291,7 +292,7 @@ const sections = computed(() => {
         ? [
             {
               label: '采购产品(万)',
-              value: (d.consumption.villageProductsPurchase ?? 0).toFixed(2),
+              value: format.formatMoney4(d.consumption.villageProductsPurchase),
             },
           ]
         : [],
@@ -321,7 +322,7 @@ const sections = computed(() => {
         ? [
             {
               label: '投入(万)',
-              value: (d.education.investment ?? 0).toFixed(2),
+              value: format.formatMoney4(d.education.investment),
             },
             {
               label: '资助学生(人)',
@@ -342,7 +343,7 @@ const sections = computed(() => {
             },
             {
               label: '集体收入(万)',
-              value: (d.committee.collectiveIncomeAmount ?? 0).toFixed(2),
+              value: format.formatMoney4(d.committee.collectiveIncomeAmount),
             },
           ]
         : [],
@@ -413,7 +414,7 @@ function renderTrendChart() {
         formatter: (params: any) => {
           const list = Array.isArray(params) ? params : [params]
           const lines = list.map(
-            (p: any) => `${p.marker}${p.seriesName}：${Number(p.value ?? 0).toFixed(2)} 万元`
+            (p: any) => `${p.marker}${p.seriesName}：${format.formatMoney4(p.value)} 万元`
           )
           return `${list[0]?.axisValue ?? ''}<br/>${lines.join('<br/>')}`
         },
@@ -486,7 +487,7 @@ function renderPieChart() {
       tooltip: {
         trigger: 'item',
         formatter: (p: any) =>
-          `${p.marker}${p.name}<br/>投入：${Number(p.value).toFixed(2)} 万元（${p.percent}%）`,
+          `${p.marker}${p.name}<br/>投入：${format.formatMoney4(p.value)} 万元（${p.percent}%）`,
       },
       legend: { bottom: 0 },
       color: ['#1b4332', '#2d6a4f', '#40916c', '#52b788', '#95d5b2'],
