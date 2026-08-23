@@ -91,9 +91,9 @@ class Project(Base):
         comment="负责单位ID",
     )
 
-    budget = Column(Numeric(15, 2), default=0, comment="预算金额")
-    actual_cost = Column(Numeric(15, 2), default=0, comment="实际花费")
-    invested_amount = Column(Numeric(15, 2), default=0, comment="已投资金额")
+    budget = Column(Numeric(15, 4), default=0, comment="预算金额(万元)")
+    actual_cost = Column(Numeric(15, 4), default=0, comment="实际花费(万元)")
+    invested_amount = Column(Numeric(15, 4), default=0, comment="已投资金额(万元)")
 
     start_date = Column(Date, nullable=True, comment="开始日期")
     end_date = Column(Date, nullable=True, comment="结束日期")
@@ -135,7 +135,7 @@ class Project(Base):
     remarks = Column(Text, nullable=True, comment="备注")
 
     # 经费管理扩展 —— 论证立项阶段经济指标
-    total_budget_estimate = Column(Numeric(15, 2), nullable=True, comment="经费总预算估算(万元)")
+    total_budget_estimate = Column(Numeric(15, 4), nullable=True, comment="经费总预算估算(万元)")
     fund_source_category = Column(Text, nullable=True, comment="资金来源分类(JSON)")
     expected_economic_benefit = Column(Text, nullable=True, comment="预期经济效益量化指标")
     expected_military_benefit = Column(Text, nullable=True, comment="预期效益量化指标")

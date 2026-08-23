@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.fund import Fund
 from app.core.transaction import safe_commit
+from app.utils.helpers import FUND_MONEY_FIELDS, quantize_money_fields
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,7 @@ class FundService:
         from datetime import datetime as _dt
 
         fund_dict = data.model_dump(exclude_none=True)
+        quantize_money_fields(fund_dict, FUND_MONEY_FIELDS)
 
         # 自动生成 code（如未提供），格式：FUND-YYYYMMDD-XXXX
         if not fund_dict.get("code"):
@@ -267,8 +269,10 @@ class FundStatistics:
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         for k in ["military_investment", "local_investment", "planned_investment",
-                  "total_investment", "utilization_rate"]:
-            data[k] = round(data[k], 2)
+                  "total_investment"]:
+            data[k] = round(data[k], 4)
+        # 利用率为百分比，保持2位
+        data["utilization_rate"] = round(data["utilization_rate"], 2)
         return data
 
 
@@ -286,8 +290,10 @@ class YearlyFundSummary:
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         for k in ["total_military", "total_local", "total_planned",
-                  "total_actual", "utilization_rate"]:
-            data[k] = round(data[k], 2)
+                  "total_actual"]:
+            data[k] = round(data[k], 4)
+        # 利用率为百分比，保持2位
+        data["utilization_rate"] = round(data["utilization_rate"], 2)
 
         # 递归转换 by_type
         data["by_type"] = {

@@ -28,7 +28,7 @@ class FeeStandard(Base):
         comment="费用类别: equipment/meeting/travel/consulting/other",
     )
     name = Column(String(200), nullable=False, comment="标准名称")
-    upper_limit = Column(Numeric(15, 2), nullable=False, comment="标准上限金额(万元)")
+    upper_limit = Column(Numeric(15, 4), nullable=False, comment="标准上限金额(万元)")
     unit = Column(String(50), default="万元", comment="计量单位")
     region = Column(String(100), nullable=True, comment="适用地区(空=全国)")
     industry = Column(String(100), nullable=True, comment="适用行业(空=通用)")

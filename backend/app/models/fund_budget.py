@@ -35,8 +35,8 @@ class FundBudget(Base):
         nullable=False,
         comment="预算科目: infrastructure/education/industry/medical/party_building/consumption/employment/other",
     )
-    budget_amount = Column(Numeric(15, 2), default=0, comment="预算金额(万元)")
-    executed_amount = Column(Numeric(15, 2), default=0, comment="已执行金额(万元)")
+    budget_amount = Column(Numeric(15, 4), default=0, comment="预算金额(万元)")
+    executed_amount = Column(Numeric(15, 4), default=0, comment="已执行金额(万元)")
     village_id = Column(
         Integer,
         ForeignKey("supported_villages.id", ondelete="CASCADE"),
@@ -114,7 +114,7 @@ class FundTransaction(Base):
         comment="关联预算ID",
     )
 
-    amount = Column(Numeric(15, 2), nullable=False, comment="金额(万元)")
+    amount = Column(Numeric(15, 4), nullable=False, comment="金额(万元)")
     category = Column(String(100), nullable=True, comment="支出科目")
     purpose = Column(Text, nullable=False, comment="用途说明")
     transaction_date = Column(Date, nullable=False, comment="支出日期")

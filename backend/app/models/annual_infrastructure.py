@@ -33,9 +33,9 @@ class AnnualInfrastructure(BaseModel):
     )
     year = Column(Integer, nullable=False, comment="年份")
 
-    infrastructure_investment_2025 = Column(Numeric(15, 2), default=0, comment="基础设施投入_2025")
-    infrastructure_investment_2026 = Column(Numeric(15, 2), default=0, comment="基础设施投入_2026")
-    infrastructure_investment_total = Column(Numeric(15, 2), default=0, comment="基础设施投入总计")
+    infrastructure_investment_2025 = Column(Numeric(15, 4), default=0, comment="基础设施投入_2025")
+    infrastructure_investment_2026 = Column(Numeric(15, 4), default=0, comment="基础设施投入_2026")
+    infrastructure_investment_total = Column(Numeric(15, 4), default=0, comment="基础设施投入总计")
 
     road_km_2025 = Column(Float, default=0, comment="乡村道路公里_2025")
     housing_renovations_2025 = Column(Integer, default=0, comment="住房改造_2025")

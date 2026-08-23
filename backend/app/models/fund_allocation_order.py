@@ -47,8 +47,8 @@ class FundAllocationOrder(Base):
     )
     order_no = Column(String(100), unique=True, nullable=False, comment="拨款指令编号")
     source_document = Column(String(200), nullable=True, comment="指标文编号")
-    total_amount = Column(Numeric(15, 2), nullable=False, comment="拨款总金额(万元)")
-    allocated_amount = Column(Numeric(15, 2), default=0, comment="已分配金额(万元)")
+    total_amount = Column(Numeric(15, 4), nullable=False, comment="拨款总金额(万元)")
+    allocated_amount = Column(Numeric(15, 4), default=0, comment="已分配金额(万元)")
     target_organization_id = Column(
         Integer,
         ForeignKey("organizations.id", ondelete="CASCADE"),
@@ -100,7 +100,7 @@ class AllocationOrderItem(Base):
         comment="接收单位ID",
     )
     organization_name = Column(String(200), nullable=True, comment="接收单位名称")
-    amount = Column(Numeric(15, 2), nullable=False, comment="分配金额(万元)")
+    amount = Column(Numeric(15, 4), nullable=False, comment="分配金额(万元)")
     account = Column(String(200), nullable=True, comment="接收账户")
     status = Column(String(20), default="pending", comment="状态: pending/transferred/confirmed")
     transferred_at = Column(DateTime(timezone=True), nullable=True, comment="划转时间")

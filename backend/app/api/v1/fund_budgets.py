@@ -20,6 +20,7 @@ from app.models.fund_budget import FundBudget, FundTransaction, check_budget_ale
 from app.api.v1.deps import require_funds_operator_role as _require_manager
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
+from app.utils.helpers import BUDGET_MONEY_FIELDS, quantize_money, quantize_money_fields
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/fund-budgets", tags=["经费预算"])
@@ -155,6 +156,7 @@ async def create_budget(
         used = payload.pop("used_amount")
         if used is not None:
             payload["executed_amount"] = used
+    quantize_money_fields(payload, BUDGET_MONEY_FIELDS)
     budget = FundBudget(
         **payload,
         created_by=getattr(current_user, "id", None),
@@ -188,6 +190,7 @@ async def update_budget(
         used = update_data.pop("used_amount")
         if used is not None:
             update_data["executed_amount"] = used
+    quantize_money_fields(update_data, BUDGET_MONEY_FIELDS)
 
     for key, value in update_data.items():
         setattr(budget, key, value)
@@ -268,16 +271,16 @@ async def get_budget_summary(
 
     return success_response(data={
         "year": target_year,
-        "total_budget": round(total_budget, 2),
-        "total_executed": round(total_executed, 2),
-        "total_remaining": round(total_budget - total_executed, 2),
+        "total_budget": round(total_budget, 4),
+        "total_executed": round(total_executed, 4),
+        "total_remaining": round(total_budget - total_executed, 4),
         "execution_rate": (round(total_executed / total_budget * 100, 2) if total_budget > 0 else 0),
         "by_category": [
             {
                 "category": cat,
-                "budget": round(v["budget"], 2),
-                "executed": round(v["executed"], 2),
-                "remaining": round(v["budget"] - v["executed"], 2),
+                "budget": round(v["budget"], 4),
+                "executed": round(v["executed"], 4),
+                "remaining": round(v["budget"] - v["executed"], 4),
                 "rate": (round(v["executed"] / v["budget"] * 100, 2) if v["budget"] > 0 else 0),
             }
             for cat, v in by_category.items()
@@ -325,8 +328,11 @@ async def create_transaction(
 ):
     """创建经费使用明细（仅管理角色）"""
     _require_manager(current_user)
+    tx_amount = quantize_money(data.amount)
+    payload = data.model_dump()
+    payload["amount"] = tx_amount
     transaction = FundTransaction(
-        **data.model_dump(),
+        **payload,
         created_by=getattr(current_user, "id", None),
     )
     db.add(transaction)
@@ -335,14 +341,20 @@ async def create_transaction(
     if data.budget_id:
         budget = db.query(FundBudget).filter(FundBudget.id == data.budget_id).first()
         if budget:
-            budget.executed_amount = float(budget.executed_amount or 0) + data.amount
+            budget.executed_amount = quantize_money(
+                float(budget.executed_amount or 0) + float(tx_amount)
+            )
 
     # 如果关联了 Fund，自动更新 Fund.used_amount 和 remaining_amount
     if data.fund_id:
         fund = db.query(Fund).filter(Fund.id == data.fund_id).first()
         if fund:
-            fund.used_amount = float(fund.used_amount or 0) + data.amount
-            fund.remaining_amount = float(fund.allocated_amount or 0) - float(fund.used_amount or 0)
+            fund.used_amount = quantize_money(
+                float(fund.used_amount or 0) + float(tx_amount)
+            )
+            fund.remaining_amount = quantize_money(
+                float(fund.allocated_amount or 0) - float(fund.used_amount or 0)
+            )
 
     safe_commit(db)
     db.refresh(transaction)

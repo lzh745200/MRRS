@@ -19,6 +19,7 @@ import logging
 import mimetypes
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from app.utils.helpers import FUND_MONEY_FIELDS, quantize_money
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -549,6 +550,8 @@ def update_fund(
     for key, value in data.model_dump(exclude_unset=True).items():
         if hasattr(fund, key):
             new_value = _parse_date_value(key, value)
+            if key in FUND_MONEY_FIELDS and new_value is not None:
+                new_value = quantize_money(new_value)
             old_value = getattr(fund, key)
             # 字段级变更留痕：仅在实际值发生变化时记录
             if _safe_val(old_value) != _safe_val(new_value):
@@ -662,7 +665,7 @@ def fund_statistics_overview(
         "allocated_amount": float(row.allocated_amount or 0),
         "budget_total": budget_total,
         "budget_executed": budget_executed,
-        "budget_remaining": round(budget_total - budget_executed, 2),
+        "budget_remaining": round(budget_total - budget_executed, 4),
         "usage_rate": round((budget_executed / budget_total * 100), 1) if budget_total > 0 else 0,
     })
 
@@ -742,9 +745,9 @@ def fund_statistics_multi_dimension(
         result.append({
             "label": label,
             "count": r.count,
-            "total_amount": round(total_amt, 2),
-            "total_allocated": round(float(r.total_allocated or 0), 2),
-            "total_used": round(used_amt, 2),
+            "total_amount": round(total_amt, 4),
+            "total_allocated": round(float(r.total_allocated or 0), 4),
+            "total_used": round(used_amt, 4),
             "utilization_rate": round((used_amt / total_amt * 100), 1) if total_amt > 0 else 0,
         })
 

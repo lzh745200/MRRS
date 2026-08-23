@@ -25,9 +25,9 @@ class AnnualIndustry(BaseModel):
     )
     year = Column(Integer, nullable=False, comment="年份")
 
-    industry_investment_2025 = Column(Numeric(15, 2), default=0, comment="产业投入_2025")
-    industry_investment_2026 = Column(Numeric(15, 2), default=0, comment="产业投入_2026")
-    industry_investment_total = Column(Numeric(15, 2), default=0, comment="产业投入合计")
+    industry_investment_2025 = Column(Numeric(15, 4), default=0, comment="产业投入_2025")
+    industry_investment_2026 = Column(Numeric(15, 4), default=0, comment="产业投入_2026")
+    industry_investment_total = Column(Numeric(15, 4), default=0, comment="产业投入合计")
 
     industry_2025_planting_and_breeding = Column(Integer, default=0, comment="2025年种植养殖")
     industry_2025_workshops = Column(Integer, default=0, comment="2025年帮扶车间")

@@ -7,7 +7,6 @@ import mimetypes
 import os
 import uuid as _uuid
 from datetime import date, datetime
-from decimal import Decimal
 from io import BytesIO
 from typing import List, Optional
 from urllib.parse import quote
@@ -41,6 +40,7 @@ from app.models.supported_village import SupportedVillage
 from app.services.audit_enhancement_service import AuditEnhancementService
 from app.models.audit import AuditAction
 from app.utils.db_error_handler import handle_db_errors_async
+from app.utils.helpers import quantize_money
 from app.services.work_log_service import write_work_log
 from app.services.approval_workflow_service import (
     ApprovalWorkflowService,
@@ -810,7 +810,7 @@ async def create_project(
         type=data.type,
         village_id=data.village_id,
         description=data.description,
-        budget=(Decimal(str(data.budget)) if data.budget is not None else Decimal("0")),
+        budget=quantize_money(data.budget),
         progress=data.progress if data.progress is not None else 0,
         start_date=date.fromisoformat(data.start_date) if data.start_date else None,
         end_date=date.fromisoformat(data.end_date) if data.end_date else None,
@@ -928,7 +928,9 @@ def _convert_update_fields(update_data: dict) -> dict:
         if date_field in update_data and update_data[date_field]:
             update_data[date_field] = date.fromisoformat(update_data[date_field])
     if "budget" in update_data and update_data["budget"] is not None:
-        update_data["budget"] = Decimal(str(update_data["budget"]))
+        update_data["budget"] = quantize_money(update_data["budget"])
+    if "invested_amount" in update_data and update_data["invested_amount"] is not None:
+        update_data["invested_amount"] = quantize_money(update_data["invested_amount"])
     return update_data
 
 
@@ -1791,8 +1793,8 @@ def _build_import_project(db: Session, data: dict, current_user) -> Project:
         status=proj_status,
         description=data.get("description"),
         objectives=data.get("objectives"),
-        budget=(Decimal(str(budget_val)) if budget_val is not None else Decimal("0")),
-        invested_amount=(Decimal(str(invested_val)) if invested_val is not None else Decimal("0")),
+        budget=quantize_money(budget_val),
+        invested_amount=quantize_money(invested_val),
         progress=int(float(progress_val)) if progress_val is not None else 0,
         start_date=(date.fromisoformat(str(data["start_date"])[:10]) if data.get("start_date") else None),
         end_date=(date.fromisoformat(str(data["end_date"])[:10]) if data.get("end_date") else None),

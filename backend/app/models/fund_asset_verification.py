@@ -43,9 +43,9 @@ class FundAssetVerification(Base):
         nullable=True,
         comment="关联决算ID",
     )
-    total_paid = Column(Numeric(15, 2), default=0, comment="已付款总额(万元)")
-    asset_value = Column(Numeric(15, 2), default=0, comment="转固资产价值(万元)")
-    difference = Column(Numeric(15, 2), default=0, comment="差额(万元)")
+    total_paid = Column(Numeric(15, 4), default=0, comment="已付款总额(万元)")
+    asset_value = Column(Numeric(15, 4), default=0, comment="转固资产价值(万元)")
+    difference = Column(Numeric(15, 4), default=0, comment="差额(万元)")
     difference_rate = Column(Numeric(5, 2), default=0, comment="差异率(%)")
     status = Column(String(20), default="pending", comment="校验状态: pending/passed/failed/waived")
     verified_by = Column(String(50), nullable=True, comment="校验人")

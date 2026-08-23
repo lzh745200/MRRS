@@ -153,8 +153,8 @@ async def get_statistics(
         completed=completed,
         rejected=status_counts.get("rejected", 0),
         by_category=category_counts,
-        total_budget=round(total_budget, 2),
-        total_actual_cost=round(total_actual, 2),
+        total_budget=round(total_budget, 4),
+        total_actual_cost=round(total_actual, 4),
         completion_rate=round(completed / total * 100, 1) if total > 0 else 0,
     )
     return ResponseModel(code=200, data=stats.model_dump(), message="success")

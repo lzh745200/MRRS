@@ -5,6 +5,7 @@ import json
 import secrets
 import string
 from datetime import date, datetime
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
 
 
@@ -115,3 +116,37 @@ def deep_merge(base: Dict, update: Dict) -> Dict:
         else:
             result[key] = value
     return result
+
+
+# 金额统一保留4位小数（四舍五入），全系统金额字段口径
+MONEY_PLACES = Decimal("0.0001")
+
+# Fund 模型的金额字段（万元）
+FUND_MONEY_FIELDS = frozenset({
+    "amount", "planned_amount", "approved_amount",
+    "allocated_amount", "used_amount", "remaining_amount",
+})
+
+# FundBudget / BudgetRecord 的金额字段（万元）
+BUDGET_MONEY_FIELDS = frozenset({"budget_amount", "executed_amount", "used_amount"})
+
+
+def quantize_money(value: Any) -> Decimal:
+    """将金额量化为4位小数（ROUND_HALF_UP 四舍五入）。
+
+    None/非法输入返回 Decimal("0")，便于直接用于列默认值。
+    """
+    if value is None:
+        return Decimal("0")
+    try:
+        return Decimal(str(value)).quantize(MONEY_PLACES, rounding=ROUND_HALF_UP)
+    except Exception:
+        return Decimal("0")
+
+
+def quantize_money_fields(payload: Dict[str, Any], fields: Any = FUND_MONEY_FIELDS) -> Dict[str, Any]:
+    """就地量化字典中指定的金额字段（值为 None 时跳过）。"""
+    for key in fields:
+        if key in payload and payload[key] is not None:
+            payload[key] = quantize_money(payload[key])
+    return payload

@@ -179,7 +179,7 @@ class BudgetBaseline(Base):
     )
     snapshot_year = Column(Integer, nullable=False, comment="快照年度")
     category = Column(String(100), nullable=True, comment="预算科目")
-    baseline_amount = Column(Numeric(15, 2), default=0, comment="基线金额(万元)")
+    baseline_amount = Column(Numeric(15, 4), default=0, comment="基线金额(万元)")
     locked_at = Column(DateTime(timezone=True), nullable=True, comment="锁定时间")
     locked_by = Column(String(50), nullable=True, comment="锁定人")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -215,7 +215,7 @@ class FundTransferVoucher(Base):
     )
     voucher_no = Column(String(100), unique=True, nullable=False, comment="凭证编号")
     direction = Column(String(30), nullable=False, comment="划转方向")
-    amount = Column(Numeric(15, 2), nullable=False, comment="划转金额(万元)")
+    amount = Column(Numeric(15, 4), nullable=False, comment="划转金额(万元)")
     payer_account = Column(String(200), nullable=True, comment="付款账户")
     payee_account = Column(String(200), nullable=True, comment="收款账户")
     transfer_date = Column(Date, nullable=True, comment="划转日期")
@@ -266,8 +266,8 @@ class FundContract(Base):
     contract_name = Column(String(300), nullable=False, comment="合同名称")
     party_a = Column(String(200), nullable=True, comment="甲方")
     party_b = Column(String(200), nullable=True, comment="乙方")
-    contract_amount = Column(Numeric(15, 2), default=0, comment="合同金额(万元)")
-    paid_amount = Column(Numeric(15, 2), default=0, comment="已付金额(万元)")
+    contract_amount = Column(Numeric(15, 4), default=0, comment="合同金额(万元)")
+    paid_amount = Column(Numeric(15, 4), default=0, comment="已付金额(万元)")
     payment_progress = Column(Numeric(5, 2), default=0, comment="付款进度(%)")
     sign_date = Column(Date, nullable=True, comment="签订日期")
     deadline = Column(Date, nullable=True, comment="截止日期")
@@ -299,7 +299,7 @@ class FundContractPayment(Base):
         comment="合同ID",
     )
     payment_no = Column(String(100), nullable=True, comment="付款编号")
-    amount = Column(Numeric(15, 2), nullable=False, comment="付款金额(万元)")
+    amount = Column(Numeric(15, 4), nullable=False, comment="付款金额(万元)")
     payment_date = Column(Date, nullable=False, comment="付款日期")
     purpose = Column(Text, nullable=True, comment="用途说明")
     voucher_no = Column(String(100), nullable=True, comment="凭证编号")
@@ -386,9 +386,9 @@ class FundSettlement(Base):
         comment="关联经费ID",
     )
     settlement_no = Column(String(100), unique=True, nullable=True, comment="决算编号")
-    total_budget = Column(Numeric(15, 2), default=0, comment="总预算(万元)")
-    total_spent = Column(Numeric(15, 2), default=0, comment="总支出(万元)")
-    total_remaining = Column(Numeric(15, 2), default=0, comment="总结余(万元)")
+    total_budget = Column(Numeric(15, 4), default=0, comment="总预算(万元)")
+    total_spent = Column(Numeric(15, 4), default=0, comment="总支出(万元)")
+    total_remaining = Column(Numeric(15, 4), default=0, comment="总结余(万元)")
     settlement_date = Column(Date, nullable=True, comment="决算日期")
     status = Column(String(20), default=SettlementStatus.DRAFT.value, comment="决算状态")
     auditor = Column(String(50), nullable=True, comment="审核人")
@@ -402,7 +402,7 @@ class FundSettlement(Base):
 
     # 资产联动校验字段
     asset_verified = Column(Boolean, default=False, comment="资产是否已校验")
-    asset_value = Column(Numeric(15, 2), nullable=True, comment="转固资产价值(万元)")
+    asset_value = Column(Numeric(15, 4), nullable=True, comment="转固资产价值(万元)")
 
     def __repr__(self):
         return f"<FundSettlement(id={self.id}, project={self.project_id}, status={self.status})>"
@@ -433,8 +433,8 @@ class BudgetVersion(Base):
         comment="项目ID",
     )
     version = Column(Integer, nullable=False, comment="版本号")
-    planned_amount = Column(Numeric(15, 2), default=0, comment="计划金额(万元)")
-    approved_amount = Column(Numeric(15, 2), nullable=True, comment="批准金额(万元)")
+    planned_amount = Column(Numeric(15, 4), default=0, comment="计划金额(万元)")
+    approved_amount = Column(Numeric(15, 4), nullable=True, comment="批准金额(万元)")
     change_reason = Column(Text, nullable=True, comment="变更原因")
     change_type = Column(String(30), default="initial", comment="变更类型: initial/adjust/approve")
     status = Column(String(20), default="draft", comment="状态: draft/submitted/approved/rejected")

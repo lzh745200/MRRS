@@ -30,7 +30,7 @@ class InspectionRule(Base):
         comment="规则类别: overspend/deviation/idle/duplicate/large_cash/contract_split/single_source",
     )
     description = Column(Text, nullable=True, comment="规则描述")
-    threshold_value = Column(Numeric(15, 2), nullable=True, comment="阈值")
+    threshold_value = Column(Numeric(15, 4), nullable=True, comment="阈值")
     threshold_unit = Column(String(30), default="万元", comment="阈值单位")
     severity = Column(String(20), default="warning", comment="默认严重程度: info/warning/danger")
     is_active = Column(Boolean, default=True, comment="是否启用")
