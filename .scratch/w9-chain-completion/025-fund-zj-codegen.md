@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: ["w12-system-compliance/044-backup-unify-truth-source.md"]
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -13,3 +13,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] 并发创建唯一性（同毫秒随机后缀策略若需）
 - [ ] 手输编号不被覆盖
 - [ ] ADR-0011 落稿
+
+## Resolution（v1.10.0 续批）
+ZJ+年份+6位流水(flush后id序,手输不覆盖)+2测试

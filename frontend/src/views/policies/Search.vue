@@ -100,6 +100,12 @@
             <el-link @click="handleViewDetail(scope.row.id)">{{ scope.row.title }}</el-link>
           </template>
         </el-table-column>
+        <el-table-column label="命中摘要" min-width="260">
+          <template #default="scope">
+            <span v-if="scope.row.snippet" class="fts-snippet" v-html="scope.row.snippet" />
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="categoryName" label="分类" width="120" />
         <el-table-column prop="department" label="发布部门" width="150" />
         <el-table-column prop="publishDate" label="发布日期" width="120" />
@@ -214,13 +220,36 @@ const loadData = async () => {
     if (searchForm.keyword) searchParts.push(searchForm.keyword)
     const searchStr = searchParts.join(' ') || undefined
 
+    // 全文关键词 → FTS5 检索（BM25 排序 + 高亮摘要）；否则回退结构化列表
+    if (searchStr) {
+      const offset = (pagination.currentPage - 1) * pagination.pageSize
+      const ftsRes = await apiRequest({
+        method: 'GET',
+        url: '/policies/search',
+        params: { q: searchStr, limit: pagination.pageSize, offset },
+      })
+      const fdata = ftsRes.data || ftsRes
+      const fitems = fdata?.items || (Array.isArray(fdata) ? fdata : [])
+      pagination.total = fdata?.total || fitems.length
+      tableData.value = fitems.map((item: any) => ({
+        id: item.id,
+        title: item.title,
+        snippet: item.snippet || '',
+        categoryName: '',
+        department: '',
+        publishDate: '',
+        status: '',
+      }))
+      loading.value = false
+      return
+    }
+
     const res = await apiRequest({
       method: 'GET',
       url: '/policies',
       params: {
         page: pagination.currentPage,
         page_size: pagination.pageSize,
-        search: searchStr,
         category: searchForm.category || undefined,
         status: searchForm.status || undefined,
       },
@@ -231,6 +260,7 @@ const loadData = async () => {
     tableData.value = items.map((item: any) => ({
       id: item.id,
       title: item.title,
+      snippet: '',
       category: item.category,
       categoryName: item.category_name || item.category,
       department: item.department || item.issuing_authority || '',
@@ -335,5 +365,12 @@ onMounted(async () => {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+.fts-snippet :deep(mark) {
+  background: var(--color-warning-lightest);
+  color: var(--color-danger);
+  padding: 0 2px;
+  border-radius: 2px;
 }
 </style>

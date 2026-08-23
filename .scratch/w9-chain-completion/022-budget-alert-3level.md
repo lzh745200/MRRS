@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: ["w12-system-compliance/044-backup-unify-truth-source.md"]
 blocked-by: ["w7-defect-fixes/010-fund-status-enum-source-expand.md"]
 ---
@@ -13,3 +13,6 @@ blocked-by: ["w7-defect-fixes/010-fund-status-enum-source-expand.md"]
 - [ ] 100% 后 createTransaction 返回 4xx 且不入库
 - [ ] Budget 预警条三态样式 vitest
 - [ ] ADR-0009 落稿
+
+## Resolution（v1.10.0 续批）
+三级阈值80/90/100+100%拦截+alerts分档critical/info+4测试

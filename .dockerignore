@@ -3,13 +3,13 @@
 .gitignore
 .gitattributes
 
-# Node.js (递归排除所有层级)
+# Node.js (?????????????
 **/node_modules/
 **/npm-debug.log*
 **/yarn-debug.log*
 **/yarn-error.log*
 
-# Python (递归排除所有常见大目录)
+# Python (?????????????????)
 **/venv/
 **/.venv/
 **/env/
@@ -22,14 +22,14 @@
 **/*.egg
 **/*.so
 
-# 构建输出 (递归排除)
+# ?????? (??????)
 **/dist/
 **/build/
 **/*.deb
 **/*.dmg
 **/*.exe
 
-# 明确排除 backend 内的大目录（重点）
+# ?????? backend ??????????????
 backend/venv/
 backend/.venv/
 backend/data/
@@ -43,7 +43,7 @@ backend/*.pb
 backend/dist/
 backend/build/
 
-# 明确排除 frontend 和 electron 的大目录
+# ?????? frontend ??electron ??????
 frontend/dist/
 frontend/node_modules/
 frontend/.cache/
@@ -51,9 +51,9 @@ frontend/build/
 electron/dist/
 electron/node_modules/
 
-# 根目录下的大目录
+# ????????????
 dist/
-build/
+# build/  # W6: deb-complete ??? build/?? assistance-backend ??????2026-08-24 ????
 node_modules/
 logs/
 data/
@@ -61,14 +61,14 @@ backups/
 postgres-data/
 redis-data/
 
-# 日志和临时文件
+# ???????????
 *.log
 *.tmp
 *.temp
 *.bak
 *.backup
 
-# 压缩包
+# ?????
 *.zip
 *.rar
 *.7z
@@ -76,41 +76,41 @@ redis-data/
 *.tgz
 *.iso
 
-# IDE 配置
+# IDE ???
 .vscode/
 .idea/
 *.swp
 *.swo
 *.iml
 
-# OS 文件
+# OS ???
 .DS_Store
 Thumbs.db
 ehthumbs.db
 
-# 环境变量
+# ??????
 .env
 .env.local
 .env.*.local
 
-# Docker 相关
+# Docker ???
 Dockerfile*
 .dockerignore
 docker-compose.yml
 
-# 文档（通常不需要）
+# ??????????????
 README.md
 LICENSE
 CHANGELOG.md
 *.md
 
-# 测试
+# ???
 tests/
 test/
 coverage/
 .nyc_output/
 
-# 其他大文件
+# ????????
 *.pkl
 *.h5
 *.pb
@@ -119,3 +119,5 @@ coverage/
 *.db
 *.sqlite3
 *.sqlite
+
+!build/

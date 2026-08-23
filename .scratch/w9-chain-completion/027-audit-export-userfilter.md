@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: ["w12-system-compliance/049-audit-capacity-governance.md"]
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] 三种格式下载成功（vitest blob 断言）
 - [ ] 按用户名筛选生效（pytest user_id 链路）
 - [ ] 5000 条上限提示文案
+
+## Resolution（v1.10.0 续批）
+OperationLogs/AuditManagement双页导出Excel接线(blob下载)

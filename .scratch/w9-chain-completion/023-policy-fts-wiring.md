@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] 搜索命中返回高亮片段渲染（vitest）
 - [ ] 空结果 el-empty
 - [ ] FTS 索引同步既有 pytest 保持绿
+
+## Resolution（v1.10.0 续批）
+Search.vue接FTS5端点+snippet高亮列(mark样式)

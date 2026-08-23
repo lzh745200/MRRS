@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>操作日志</span>
-          <el-button size="small" @click="handleExport">导出Excel</el-button>
+          <el-button size="small" :loading="exporting" @click="handleExport">导出Excel</el-button>
         </div>
       </template>
 
@@ -82,7 +82,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { get } from '@/api/request'
+import { get, apiRequest } from '@/api/request'
+import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
+import { logger } from '@/utils/logger'
 
 interface WorkLog {
   id: number
@@ -177,8 +179,32 @@ function handlePageChange(p: number) {
   loadLogs()
 }
 
-function handleExport() {
-  ElMessage.info('导出功能开发中')
+const exporting = ref(false)
+
+async function handleExport() {
+  exporting.value = true
+  try {
+    await downloadBlobAsFile(
+      () =>
+        apiRequest({
+          method: 'GET',
+          url: '/audit/logs/export',
+          params: {
+            format: 'excel',
+            start_date: filters.value.dateRange?.[0] || undefined,
+            end_date: filters.value.dateRange?.[1] || undefined,
+          },
+          responseType: 'blob',
+        }),
+      { fallbackFileName: `操作日志_${new Date().toISOString().slice(0, 10)}.xlsx` },
+    )
+    ElMessage.success('导出成功')
+  } catch (e) {
+    logger.error('导出失败:', e)
+    ElMessage.error('导出失败，请稍后重试')
+  } finally {
+    exporting.value = false
+  }
 }
 
 onMounted(loadLogs)

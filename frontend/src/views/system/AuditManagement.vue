@@ -82,6 +82,7 @@
             <div class="filter-item filter-item-btn">
               <el-button type="primary" @click="handleSearch">查询</el-button>
               <el-button @click="handleReset">重置</el-button>
+              <el-button :loading="exporting" @click="handleExportExcel">导出Excel</el-button>
             </div>
           </div>
 
@@ -187,6 +188,9 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { auditApi } from '@/api/audit'
+import { apiRequest } from '@/api/request'
+import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
+import { logger } from '@/utils/logger'
 
 const activeTab = ref('operations')
 const loading = ref(false)
@@ -334,6 +338,34 @@ async function loadAlerts() {
     }))
   } catch {
     alerts.value = []
+  }
+}
+
+const exporting = ref(false)
+
+async function handleExportExcel() {
+  exporting.value = true
+  try {
+    const res = await apiRequest({
+      method: 'GET',
+      url: '/audit/logs/export',
+      params: {
+        format: 'excel',
+        start_date: filters.dateRange?.[0] || undefined,
+        end_date: filters.dateRange?.[1] || undefined,
+        action: filters.action || undefined,
+      },
+      responseType: 'blob',
+    })
+    await downloadBlobAsFile(res as any, {
+      fallbackFileName: `审计日志_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    })
+    ElMessage.success('导出成功')
+  } catch (e) {
+    logger.error('审计日志导出失败:', e)
+    ElMessage.error('导出失败，请稍后重试')
+  } finally {
+    exporting.value = false
   }
 }
 
