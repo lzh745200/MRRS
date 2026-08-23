@@ -27,7 +27,7 @@ BASE = "/api/v1/statistics"
 
 def _q(**kw):
     q = MagicMock()
-    for attr in ("filter", "order_by", "offset", "limit", "group_by", "with_entities"):
+    for attr in ("filter", "order_by", "offset", "limit", "group_by", "with_entities", "join"):
         getattr(q, attr).return_value = q
     q.count.return_value = kw.get("count", 0)
     q.scalar.return_value = kw.get("scalar")

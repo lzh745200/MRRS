@@ -455,14 +455,14 @@ async def get_yearly_trends(
             # 人均收入(该年可用列, 无则 0)
             income_list.append(round(_avg_per_capita_income(db, data_scope, year=y), 2))
 
-            # 经费: 计划投入/实际投入 + 项目数
+            # 经费: 计划投入/实际投入 + 项目数（软删经费排除）
             fund_row = (
                 db.query(
                     func.coalesce(func.sum(Fund.planned_amount), 0),
                     func.coalesce(func.sum(Fund.allocated_amount), 0),
                     func.count(Fund.id),
                 )
-                .filter(Fund.year == y)
+                .filter(Fund.year == y, Fund.is_active == True)  # noqa: E712
                 .first()
             )
             trends_list.append({
@@ -592,7 +592,8 @@ def _fetch_project_activities() -> list:
     sess = SessionLocal()
     items = []
     try:
-        for p in sess.query(Project).order_by(Project.updated_at.desc()).limit(5).all():
+        query = sess.query(Project).filter(Project.is_active == True)  # noqa: E712
+        for p in query.order_by(Project.updated_at.desc()).limit(5).all():
             action = "更新了" if p.updated_at != p.created_at else "创建了"
             items.append({
                 "id": f"project_{p.id}", "type": "project", "action": action,
@@ -612,7 +613,8 @@ def _fetch_fund_activities() -> list:
     items = []
     try:
         status_label_map = {"approved": "审批通过", "allocated": "已拨付", "pending": "待审批", "planned": "已规划"}
-        for f in sess.query(Fund).order_by(Fund.updated_at.desc()).limit(5).all():
+        fund_query = sess.query(Fund).filter(Fund.is_active == True)  # noqa: E712
+        for f in fund_query.order_by(Fund.updated_at.desc()).limit(5).all():
             items.append({
                 "id": f"fund_{f.id}", "type": "fund",
                 "action": status_label_map.get(f.status, "更新了"),

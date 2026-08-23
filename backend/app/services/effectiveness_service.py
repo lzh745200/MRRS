@@ -151,7 +151,14 @@ class EffectivenessService:
         """
         from app.models.supported_village import SupportedVillage
 
-        village = db.query(SupportedVillage).filter(SupportedVillage.id == village_id).first()
+        village = (
+            db.query(SupportedVillage)
+            .filter(
+                SupportedVillage.id == village_id,
+                SupportedVillage.is_active == True,  # noqa: E712
+            )
+            .first()
+        )
         if not village:
             return {"error": f"村庄 {village_id} 不存在"}
 

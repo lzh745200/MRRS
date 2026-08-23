@@ -123,17 +123,30 @@ async def get_summary(current_user=Depends(get_current_user), db: Session = Depe
         from app.models.supported_village import SupportedVillage as SVModel
         villages_count = db.query(SVModel).filter(SVModel.is_active.is_(True)).count()
         schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
-        projects_count = db.query(Project).count()
-        funds_count = db.query(Fund).count()
+        projects_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
+        funds_count = db.query(Fund).filter(Fund.is_active == True).count()  # noqa: E712
 
-        funds_total = db.query(Fund.amount).filter(Fund.status == "approved").all()
+        funds_total = (
+            db.query(Fund.amount)
+            .filter(Fund.status == "approved", Fund.is_active == True)  # noqa: E712
+            .all()
+        )
         funds_sum = sum(f[0] for f in funds_total) if funds_total else 0
 
-        projects_by_status = db.query(Project.status, func.count(Project.id)).group_by(Project.status).all()
+        projects_by_status = (
+            db.query(Project.status, func.count(Project.id))
+            .filter(Project.is_active == True)  # noqa: E712
+            .group_by(Project.status)
+            .all()
+        )
         projects_status_dist = {status: count for status, count in projects_by_status}
 
-        active_projects = db.query(Project).filter(Project.status == "active").count()
-        completed_projects = db.query(Project).filter(Project.status == "completed").count()
+        active_projects = db.query(Project).filter(
+            Project.is_active == True, Project.status == "active"  # noqa: E712
+        ).count()
+        completed_projects = db.query(Project).filter(
+            Project.is_active == True, Project.status == "completed"  # noqa: E712
+        ).count()
 
         result = {
             "total_users": users_count,
@@ -175,12 +188,17 @@ async def _get_overview_impl(db: Session):
     from app.models.supported_village import SupportedVillage
 
     villages_count = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count()
-    projects_count = db.query(Project).count()
+    projects_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
     schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
-    funds_count = db.query(Fund).count()
+    funds_count = db.query(Fund).filter(Fund.is_active == True).count()  # noqa: E712
     users_count = db.query(User).filter(User.is_active == True).count()  # noqa: E712
 
-    funds_total = db.query(func.sum(Fund.amount)).filter(Fund.status == "approved").scalar() or 0
+    funds_total = (
+        db.query(func.sum(Fund.amount))
+        .filter(Fund.status == "approved", Fund.is_active == True)  # noqa: E712
+        .scalar()
+        or 0
+    )
 
     # 各模块最后更新时间
     def _last_update(model):
@@ -213,7 +231,7 @@ async def _get_overview_impl(db: Session):
     from app.models.supported_village import VillageIncome as VI
     from app.models.supported_village import VillagePopulation as VP
 
-    sv_count = db.query(SV).count()
+    sv_count = db.query(SV).filter(SV.is_active.is_(True)).count()  # noqa: E712
     completeness = _calc_village_completeness(db, SV, VP, VI, sv_count) if sv_count > 0 else 0
 
     # 数据健康评分 (0-100) — 综合考虑各模块数据量和完整率
@@ -300,12 +318,13 @@ async def get_villages_distribution(current_user=Depends(get_current_user), db: 
 
         by_status = (
             db.query(SupportedVillage.transition_status, func.count(SupportedVillage.id))
+            .filter(SupportedVillage.is_active.is_(True))
             .group_by(SupportedVillage.transition_status)
             .all()
         )
         status_data = [{"name": status or "未分类", "value": count} for status, count in by_status]
 
-        # 人口最多的村庄：取每个村最新年人口（避免 N+1）
+        # 人口最多的村庄：取每个村最新年人口（避免 N+1）；软删村排除
         pop_subq = (
             db.query(
                 VillagePopulation.supported_village_id,
@@ -324,6 +343,7 @@ async def get_villages_distribution(current_user=Depends(get_current_user), db: 
                     VillagePopulation.year == pop_subq.c.max_year,
                 ),
             )
+            .filter(SupportedVillage.is_active.is_(True))
             .order_by(VillagePopulation.total_population.desc())
             .limit(10)
             .all()
@@ -332,6 +352,7 @@ async def get_villages_distribution(current_user=Depends(get_current_user), db: 
 
         by_province = (
             db.query(SupportedVillage.province, func.count(SupportedVillage.id))
+            .filter(SupportedVillage.is_active.is_(True))
             .group_by(SupportedVillage.province)
             .all()
         )
@@ -348,18 +369,43 @@ async def get_villages_distribution(current_user=Depends(get_current_user), db: 
 @router.get("/projects/statistics")
 async def get_projects_statistics(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
-        by_status = db.query(Project.status, func.count(Project.id)).group_by(Project.status).all()
+        by_status = (
+            db.query(Project.status, func.count(Project.id))
+            .filter(Project.is_active == True)  # noqa: E712
+            .group_by(Project.status)
+            .all()
+        )
         status_data = [{"name": status, "value": count} for status, count in by_status]
 
-        by_type = db.query(Project.type, func.count(Project.id)).group_by(Project.type).all()
+        by_type = (
+            db.query(Project.type, func.count(Project.id))
+            .filter(Project.is_active == True)  # noqa: E712
+            .group_by(Project.type)
+            .all()
+        )
         type_data = [{"name": ptype or "未分类", "value": count} for ptype, count in by_type if ptype]
 
-        budget_sum = db.query(func.sum(Project.budget)).scalar() or 0
-        invested_sum = db.query(func.sum(Project.invested_amount)).scalar() or 0
+        budget_sum = (
+            db.query(func.sum(Project.budget)).filter(Project.is_active == True).scalar() or 0  # noqa: E712
+        )
+        invested_sum = (
+            db.query(func.sum(Project.invested_amount))
+            .filter(Project.is_active == True)  # noqa: E712
+            .scalar()
+            or 0
+        )
 
-        avg_progress = db.query(func.avg(Project.progress)).scalar() or 0
+        avg_progress = (
+            db.query(func.avg(Project.progress)).filter(Project.is_active == True).scalar() or 0  # noqa: E712
+        )
 
-        recent_projects = db.query(Project).order_by(Project.created_at.desc()).limit(5).all()
+        recent_projects = (
+            db.query(Project)
+            .filter(Project.is_active == True)  # noqa: E712
+            .order_by(Project.created_at.desc())
+            .limit(5)
+            .all()
+        )
         recent_data = [
             {"id": p.id, "name": p.name, "status": p.status, "progress": p.progress, "budget": p.budget}
             for p in recent_projects
@@ -381,7 +427,7 @@ async def get_projects_statistics(current_user=Depends(get_current_user), db: Se
 @router.get("/funds/statistics")
 async def get_funds_statistics(year: int = None, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
-        query = db.query(Fund)
+        query = db.query(Fund).filter(Fund.is_active == True)  # noqa: E712
 
         if year:
             query = query.filter(func.strftime("%Y", Fund.date) == str(year))
@@ -392,7 +438,12 @@ async def get_funds_statistics(year: int = None, current_user=Depends(get_curren
         ]
 
         total_amount = query.with_entities(func.sum(Fund.amount)).scalar() or 0
-        approved_amount = db.query(func.sum(Fund.amount)).filter(Fund.status == "approved").scalar() or 0
+        approved_amount = (
+            db.query(func.sum(Fund.amount))
+            .filter(Fund.status == "approved", Fund.is_active == True)  # noqa: E712
+            .scalar()
+            or 0
+        )
 
         monthly_stats = (
             db.query(
@@ -400,7 +451,7 @@ async def get_funds_statistics(year: int = None, current_user=Depends(get_curren
                 func.count(Fund.id).label("count"),
                 func.sum(Fund.amount).label("amount"),
             )
-            .filter(Fund.date.isnot(None))
+            .filter(Fund.date.isnot(None), Fund.is_active == True)  # noqa: E712
             .group_by("month")
             .order_by("month")
             .limit(12)
@@ -425,14 +476,25 @@ async def get_funds_statistics(year: int = None, current_user=Depends(get_curren
 @router.get("/schools/statistics")
 async def get_schools_statistics(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
-        by_type = db.query(School.type, func.count(School.id)).group_by(School.type).all()
+        by_type = (
+            db.query(School.type, func.count(School.id))
+            .filter(School.is_active == True)  # noqa: E712
+            .group_by(School.type)
+            .all()
+        )
         type_data = [{"name": stype or "未分类", "value": count} for stype, count in by_type if stype]
 
-        total_students = db.query(func.sum(School.student_count)).scalar() or 0
-        total_teachers = db.query(func.sum(School.teacher_count)).scalar() or 0
+        total_students = (
+            db.query(func.sum(School.student_count)).filter(School.is_active == True).scalar() or 0  # noqa: E712
+        )
+        total_teachers = (
+            db.query(func.sum(School.teacher_count)).filter(School.is_active == True).scalar() or 0  # noqa: E712
+        )
 
         supports_by_type = (
             db.query(SchoolSupport.support_type, func.count(SchoolSupport.id))
+            .join(School, SchoolSupport.school_id == School.id)
+            .filter(School.is_active == True)  # noqa: E712
             .group_by(SchoolSupport.support_type)
             .all()
         )
@@ -440,7 +502,11 @@ async def get_schools_statistics(current_user=Depends(get_current_user), db: Ses
 
         total_support_amount = (
             db.query(func.sum(SchoolSupport.amount))
-            .filter(SchoolSupport.amount.isnot(None))
+            .join(School, SchoolSupport.school_id == School.id)
+            .filter(
+                SchoolSupport.amount.isnot(None),
+                School.is_active == True,  # noqa: E712
+            )
             .scalar()
             or 0
         )
@@ -481,13 +547,30 @@ async def _get_analysis_data_impl(db: Session):
                                               SupportedVillage, SupportFunding,
                                               VillageIncome, VillagePopulation)
 
-    # --- 概览统计 ---
-    total_villages = db.query(SupportedVillage).count()
-    active_projects = db.query(Project).filter(Project.status.in_(["in_progress", "approved", "active"])).count()
+    # --- 概览统计（软删村/项目不参与统计） ---
+    total_villages = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count()
+    active_projects = (
+        db.query(Project)
+        .filter(
+            Project.is_active == True,  # noqa: E712
+            Project.status.in_(["in_progress", "approved", "active"]),
+        )
+        .count()
+    )
 
     # 总投入资金
-    mil_total = db.query(func.coalesce(func.sum(SupportedVillage.transition_fund_military_total), 0)).scalar() or 0
-    loc_total = db.query(func.coalesce(func.sum(SupportedVillage.transition_fund_local_total), 0)).scalar() or 0
+    mil_total = (
+        db.query(func.coalesce(func.sum(SupportedVillage.transition_fund_military_total), 0))
+        .filter(SupportedVillage.is_active.is_(True))
+        .scalar()
+        or 0
+    )
+    loc_total = (
+        db.query(func.coalesce(func.sum(SupportedVillage.transition_fund_local_total), 0))
+        .filter(SupportedVillage.is_active.is_(True))
+        .scalar()
+        or 0
+    )
     total_investment = float(mil_total) + float(loc_total)
 
     # 数据完整率 — 基于关键字段实际填写率
@@ -505,13 +588,21 @@ async def _get_analysis_data_impl(db: Session):
 
     if has_villages and has_funding_data:
         # 单次 GROUP BY 查询替代 5 次循环 × 2 次聚合 = 10 次查询
+        # 仅统计未软删村的支持资金（join 村过滤）
         yearly_data = (
             db.query(
                 SupportFunding.year.label("yr"),
                 func.coalesce(func.sum(SupportFunding.military_investment), 0).label("mil"),
                 func.coalesce(func.sum(SupportFunding.local_investment), 0).label("loc"),
             )
-            .filter(SupportFunding.year.in_(years))
+            .join(
+                SupportedVillage,
+                SupportFunding.supported_village_id == SupportedVillage.id,
+            )
+            .filter(
+                SupportFunding.year.in_(years),
+                SupportedVillage.is_active.is_(True),
+            )
             .group_by(SupportFunding.year)
             .all()
         )
@@ -537,11 +628,16 @@ async def _get_analysis_data_impl(db: Session):
     ]
     total_cat_inv = 0
     for cat_name, model, inv_field in cat_models:
-        # 合并 count + sum 为单次查询（减少 50% 查询数）
-        result = db.query(
-            func.count(1).label("cnt"),
-            func.coalesce(func.sum(getattr(model, inv_field)), 0).label("inv"),
-        ).first()
+        # 合并 count + sum 为单次查询（减少 50% 查询数）；join 村表排除软删村数据
+        result = (
+            db.query(
+                func.count(1).label("cnt"),
+                func.coalesce(func.sum(getattr(model, inv_field)), 0).label("inv"),
+            )
+            .join(SupportedVillage, model.supported_village_id == SupportedVillage.id)
+            .filter(SupportedVillage.is_active.is_(True))
+            .first()
+        )
         cnt = (result.cnt if result else 0) or 0
         inv = float(result.inv if result else 0) or 0.0
         total_cat_inv += inv
@@ -549,11 +645,16 @@ async def _get_analysis_data_impl(db: Session):
             {"category": cat_name, "count": cnt, "investment": round(inv, 2), "beneficiaries": 0, "ratio": 0}
         )
 
-    # 消费帮扶（合并 count + sum）
-    cons_result = db.query(
-        func.count(1).label("cnt"),
-        func.coalesce(func.sum(ConsumptionSupport.village_products_purchase), 0).label("inv"),
-    ).first()
+    # 消费帮扶（合并 count + sum；排除软删村）
+    cons_result = (
+        db.query(
+            func.count(1).label("cnt"),
+            func.coalesce(func.sum(ConsumptionSupport.village_products_purchase), 0).label("inv"),
+        )
+        .join(SupportedVillage, ConsumptionSupport.supported_village_id == SupportedVillage.id)
+        .filter(SupportedVillage.is_active.is_(True))
+        .first()
+    )
     cons_cnt = (cons_result.cnt if cons_result else 0) or 0
     cons_inv = float(cons_result.inv if cons_result else 0) or 0.0
     total_cat_inv += cons_inv
@@ -561,11 +662,16 @@ async def _get_analysis_data_impl(db: Session):
         {"category": "消费帮扶", "count": cons_cnt, "investment": round(cons_inv, 2), "beneficiaries": 0, "ratio": 0}
     )
 
-    # 就业帮扶（合并 count + sum）
-    emp_result = db.query(
-        func.count(1).label("cnt"),
-        func.coalesce(func.sum(EmploymentSupport.trained_population), 0).label("ben"),
-    ).first()
+    # 就业帮扶（合并 count + sum；排除软删村）
+    emp_result = (
+        db.query(
+            func.count(1).label("cnt"),
+            func.coalesce(func.sum(EmploymentSupport.trained_population), 0).label("ben"),
+        )
+        .join(SupportedVillage, EmploymentSupport.supported_village_id == SupportedVillage.id)
+        .filter(SupportedVillage.is_active.is_(True))
+        .first()
+    )
     emp_cnt = (emp_result.cnt if emp_result else 0) or 0
     emp_ben = (emp_result.ben if emp_result else 0) or 0
     cat_stats.append({"category": "就业帮扶", "count": emp_cnt, "investment": 0, "beneficiaries": int(emp_ben), "ratio": 0})
@@ -584,7 +690,11 @@ async def _get_analysis_data_impl(db: Session):
             func.coalesce(func.sum(SupportedVillage.transition_fund_military_total), 0),
             func.coalesce(func.sum(SupportedVillage.transition_fund_local_total), 0),
         )
-        .filter(SupportedVillage.county.isnot(None), SupportedVillage.county != "")
+        .filter(
+            SupportedVillage.county.isnot(None),
+            SupportedVillage.county != "",
+            SupportedVillage.is_active.is_(True),
+        )
         .group_by(SupportedVillage.county)
         .all()
     )
@@ -601,9 +711,11 @@ async def _get_analysis_data_impl(db: Session):
 
     # --- 年度关键指标对比（按年份聚合，供前端年度对比图/描述展示） ---
     yearly_comparison = {"years": [], "villages": {}, "investment": {}, "income": {}}
-    # 各年有数据的帮扶村数（以人口数据为准）
+    # 各年有数据的帮扶村数（以人口数据为准；软删村排除）
     pop_rows = (
         db.query(VillagePopulation.year, func.count(func.distinct(VillagePopulation.supported_village_id)))
+        .join(SupportedVillage, VillagePopulation.supported_village_id == SupportedVillage.id)
+        .filter(SupportedVillage.is_active.is_(True))
         .group_by(VillagePopulation.year)
         .all()
     )
@@ -617,6 +729,8 @@ async def _get_analysis_data_impl(db: Session):
             func.coalesce(func.sum(SupportFunding.military_investment), 0)
             + func.coalesce(func.sum(SupportFunding.local_investment), 0),
         )
+        .join(SupportedVillage, SupportFunding.supported_village_id == SupportedVillage.id)
+        .filter(SupportedVillage.is_active.is_(True))
         .group_by(SupportFunding.year)
         .all()
     )
@@ -665,16 +779,29 @@ async def get_dashboard_data(current_user=Depends(get_current_user), db: Session
         summary = {
             "total_users": db.query(User).count(),
             "total_villages": db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count(),
-            "total_schools": db.query(School).count(),
-            "total_projects": db.query(Project).count(),
-            "active_projects": db.query(Project).filter(Project.status == "active").count(),
-            "total_funds": db.query(Fund).count(),
+            "total_schools": db.query(School).filter(School.is_active == True).count(),  # noqa: E712
+            "total_projects": db.query(Project).filter(Project.is_active == True).count(),  # noqa: E712
+            "active_projects": db.query(Project).filter(
+                Project.is_active == True, Project.status == "active"  # noqa: E712
+            ).count(),
+            "total_funds": db.query(Fund).filter(Fund.is_active == True).count(),  # noqa: E712
         }
 
-        funds_total = db.query(func.sum(Fund.amount)).filter(Fund.status == "approved").scalar() or 0
+        funds_total = (
+            db.query(func.sum(Fund.amount))
+            .filter(Fund.status == "approved", Fund.is_active == True)  # noqa: E712
+            .scalar()
+            or 0
+        )
         summary["approved_funds"] = funds_total
 
-        recent_activities = db.query(Project).order_by(Project.updated_at.desc()).limit(5).all()
+        recent_activities = (
+            db.query(Project)
+            .filter(Project.is_active == True)  # noqa: E712
+            .order_by(Project.updated_at.desc())
+            .limit(5)
+            .all()
+        )
         summary["recent_projects"] = [
             {
                 "id": p.id,
@@ -686,7 +813,12 @@ async def get_dashboard_data(current_user=Depends(get_current_user), db: Session
             for p in recent_activities
         ]
 
-        projects_by_status = db.query(Project.status, func.count(Project.id)).group_by(Project.status).all()
+        projects_by_status = (
+            db.query(Project.status, func.count(Project.id))
+            .filter(Project.is_active == True)  # noqa: E712
+            .group_by(Project.status)
+            .all()
+        )
         summary["projects_chart"] = [{"name": status, "value": count} for status, count in projects_by_status]
 
         # 写入缓存

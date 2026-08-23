@@ -153,8 +153,19 @@ async def kpi_precalculate_job():
             from app.core.cache import get_cache_service
             from app.core.constants import ANALYTICS_CACHE_PREFIX
 
-            total_villages = db.query(sa_func.count(SupportedVillage.id)).scalar() or 0
-            rows = db.query(Project.status, sa_func.count(Project.id)).group_by(Project.status).all()
+            total_villages = (
+                db.query(sa_func.count(SupportedVillage.id))
+                .filter(SupportedVillage.is_active.is_(True))
+                .scalar()
+                or 0
+            )
+            # 软删项目不参与 KPI 统计（与 /analytics/kpi-summary 口径一致）
+            rows = (
+                db.query(Project.status, sa_func.count(Project.id))
+                .filter(Project.is_active == True)  # noqa: E712
+                .group_by(Project.status)
+                .all()
+            )
             counts = {status: cnt for status, cnt in rows}
             total_projects = sum(counts.values())
             completed_projects = counts.get("completed", 0)

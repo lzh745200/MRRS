@@ -238,9 +238,19 @@ async def get_kpi_summary(
     from app.models.project import Project
     from app.models.supported_village import SupportedVillage
 
-    total_villages = db.query(sa_func.count(SupportedVillage.id)).scalar() or 0
-    # 一次 GROUP BY 查询替代原来的 3 次独立 COUNT
-    rows = db.query(Project.status, sa_func.count(Project.id)).group_by(Project.status).all()
+    total_villages = (
+        db.query(sa_func.count(SupportedVillage.id))
+        .filter(SupportedVillage.is_active.is_(True))
+        .scalar()
+        or 0
+    )
+    # 一次 GROUP BY 查询替代原来的 3 次独立 COUNT（软删项目排除）
+    rows = (
+        db.query(Project.status, sa_func.count(Project.id))
+        .filter(Project.is_active == True)  # noqa: E712
+        .group_by(Project.status)
+        .all()
+    )
     counts = {status: cnt for status, cnt in rows}
     total_projects = sum(counts.values())
     completed_projects = counts.get("completed", 0)

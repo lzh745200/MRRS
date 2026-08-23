@@ -36,6 +36,7 @@ class AnalyticsService:
                     SupportedVillage.province,
                     func.count(SupportedVillage.id).label("count"),
                 )
+                .filter(SupportedVillage.is_active.is_(True))
                 .group_by(SupportedVillage.province)
                 .order_by(func.count(SupportedVillage.id).desc())
                 .all()
@@ -48,6 +49,7 @@ class AnalyticsService:
                     SupportedVillage.is_revitalization_tier,
                     func.count(SupportedVillage.id).label("count"),
                 )
+                .filter(SupportedVillage.is_active.is_(True))
                 .group_by(SupportedVillage.is_revitalization_tier)
                 .all()
             )
@@ -61,7 +63,12 @@ class AnalyticsService:
                 for row in tier_result
             ]
 
-            total_villages = db.query(func.count(SupportedVillage.id)).scalar() or 0
+            total_villages = (
+                db.query(func.count(SupportedVillage.id))
+                .filter(SupportedVillage.is_active.is_(True))
+                .scalar()
+                or 0
+            )
 
             return {
                 "total_villages": total_villages,
@@ -79,23 +86,25 @@ class AnalyticsService:
     def get_village_analysis(self, db: Session) -> Dict[str, Any]:
         """获取帮扶村分析数据"""
         try:
-            # 投资统计
+            # 投资统计（软删村排除）
             investment_result = db.execute(text("""
                 SELECT
                     SUM(transition_fund_military_total + transition_fund_local_total) as total_investment,
                     AVG(transition_fund_military_total + transition_fund_local_total) as avg_investment,
                     MAX(transition_fund_military_total + transition_fund_local_total) as max_investment
                 FROM supported_villages
+                WHERE is_active = 1
             """))
             investment_row = investment_result.fetchone()
 
             # 人口统计
             population_result = db.execute(text("""
                 SELECT
-                    SUM(total_population) as total_population,
-                    SUM(resident_population) as total_resident,
-                    AVG(resident_population * 100.0 / total_population) as avg_resident_rate
+                    SUM(vp.total_population) as total_population,
+                    SUM(vp.resident_population) as total_resident,
+                    AVG(vp.resident_population * 100.0 / vp.total_population) as avg_resident_rate
                 FROM village_populations vp
+                JOIN supported_villages sv ON sv.id = vp.supported_village_id AND sv.is_active = 1
                 WHERE vp.year = (
                     SELECT MAX(year) FROM village_populations
                 )
@@ -105,9 +114,10 @@ class AnalyticsService:
             # 收入统计
             income_result = db.execute(text("""
                 SELECT
-                    AVG(per_capita_income) as avg_per_capita_income,
-                    AVG(county_per_capita_income) as avg_county_income
+                    AVG(vi.per_capita_income) as avg_per_capita_income,
+                    AVG(vi.county_per_capita_income) as avg_county_income
                 FROM village_incomes vi
+                JOIN supported_villages sv ON sv.id = vi.supported_village_id AND sv.is_active = 1
                 WHERE vi.year = (
                     SELECT MAX(year) FROM village_incomes
                 )
@@ -120,17 +130,20 @@ class AnalyticsService:
                     investment_category,
                     SUM(investment) as total_amount
                 FROM (
-                    SELECT '道路' as investment_category, SUM(road_km * 1000000) as investment
-                    FROM infrastructure_improvements
-                    WHERE year = (SELECT MAX(year) FROM infrastructure_improvements)
+                    SELECT '道路' as investment_category, SUM(ii.road_km * 1000000) as investment
+                    FROM infrastructure_improvements ii
+                    JOIN supported_villages sv ON sv.id = ii.supported_village_id AND sv.is_active = 1
+                    WHERE ii.year = (SELECT MAX(year) FROM infrastructure_improvements)
                     UNION ALL
                     SELECT '住房改造' as investment_category, SUM(housing_renovation) as investment
-                    FROM infrastructure_improvements
-                    WHERE year = (SELECT MAX(year) FROM infrastructure_improvements)
+                    FROM infrastructure_improvements ii2
+                    JOIN supported_villages sv2 ON sv2.id = ii2.supported_village_id AND sv2.is_active = 1
+                    WHERE ii2.year = (SELECT MAX(year) FROM infrastructure_improvements)
                     UNION ALL
                     SELECT '文化设施' as investment_category, SUM(cultural_plaza + library_cafe) as investment
-                    FROM infrastructure_improvements
-                    WHERE year = (SELECT MAX(year) FROM infrastructure_improvements)
+                    FROM infrastructure_improvements ii3
+                    JOIN supported_villages sv3 ON sv3.id = ii3.supported_village_id AND sv3.is_active = 1
+                    WHERE ii3.year = (SELECT MAX(year) FROM infrastructure_improvements)
                 ) infra
                 GROUP BY investment_category
             """))
@@ -173,11 +186,13 @@ class AnalyticsService:
                     SUM(vp.transition_fund_local_total) as local_funding,
                     COUNT(vp.id) as village_count
                 FROM supported_villages vp
-                WHERE vp.id IN (
+                WHERE vp.is_active = 1
+                  AND vp.id IN (
                     SELECT DISTINCT sv.id
                     FROM supported_villages sv
                     JOIN village_populations vp_pop ON sv.id = vp_pop.supported_village_id
                     WHERE vp_pop.year BETWEEN :start_year AND :end_year
+                      AND sv.is_active = 1
                 )
                 GROUP BY vp.year
                 ORDER BY vp.year
@@ -223,6 +238,7 @@ class AnalyticsService:
                         THEN 1 ELSE 0 END
                     ) as demo_villages
                 FROM supported_villages
+                WHERE is_active = 1
             """))
             village_row = village_result.fetchone()
 
@@ -233,24 +249,28 @@ class AnalyticsService:
                     SUM(investment) as amount
                 FROM industry_support
                 WHERE year = (SELECT MAX(year) FROM industry_support)
+                  AND supported_village_id IN (SELECT id FROM supported_villages WHERE is_active = 1)
                 UNION ALL
                 SELECT
                     '基础设施' as category,
                     SUM(investment) as amount
                 FROM infrastructure_improvements
                 WHERE year = (SELECT MAX(year) FROM infrastructure_improvements)
+                  AND supported_village_id IN (SELECT id FROM supported_villages WHERE is_active = 1)
                 UNION ALL
                 SELECT
                     '医疗帮扶' as category,
                     SUM(investment) as amount
                 FROM medical_support
                 WHERE year = (SELECT MAX(year) FROM medical_support)
+                  AND supported_village_id IN (SELECT id FROM supported_villages WHERE is_active = 1)
                 UNION ALL
                 SELECT
                     '教育帮扶' as category,
                     SUM(investment) as amount
                 FROM education_support
                 WHERE year = (SELECT MAX(year) FROM education_support)
+                  AND supported_village_id IN (SELECT id FROM supported_villages WHERE is_active = 1)
             """))
             categories = [{"category": row[0], "amount": float(row[1]) if row[1] else 0} for row in category_result]
 
@@ -282,7 +302,8 @@ class AnalyticsService:
                     FROM supported_villages vp
                     JOIN village_incomes vi ON vp.id = vi.supported_village_id
                     JOIN village_populations vp_pop ON vp.id = vp_pop.supported_village_id
-                    WHERE vi.year = (SELECT MAX(year) FROM village_incomes)
+                    WHERE vp.is_active = 1
+                      AND vi.year = (SELECT MAX(year) FROM village_incomes)
                       AND vp_pop.year = (SELECT MAX(year) FROM village_populations)
                     GROUP BY province
                     ORDER BY total_investment DESC
@@ -296,7 +317,8 @@ class AnalyticsService:
                         AVG(vi.per_capita_income) as avg_income
                     FROM supported_villages vp
                     JOIN village_incomes vi ON vp.id = vi.supported_village_id
-                    WHERE vi.year = (SELECT MAX(year) FROM village_incomes)
+                    WHERE vp.is_active = 1
+                      AND vi.year = (SELECT MAX(year) FROM village_incomes)
                     GROUP BY vp.is_revitalization_tier
                     ORDER BY avg_income DESC
                 """))
@@ -375,8 +397,8 @@ class AnalyticsService:
         return query.filter(model.year == latest)
 
     def _build_village_query(self, filters, db):
-        """构建帮扶村查询并返回子查询和总数"""
-        village_query = db.query(SupportedVillage)
+        """构建帮扶村查询并返回子查询和总数（软删村统一排除）"""
+        village_query = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
         if filters:
             if filters.get("department"):
                 village_query = village_query.filter(SupportedVillage.department == filters["department"])
@@ -517,9 +539,16 @@ class AnalyticsService:
             value = query_params.get("value")
 
             if dimension == "province":
-                villages = db.query(SupportedVillage).filter(SupportedVillage.province == value).all()
+                villages = (
+                    db.query(SupportedVillage)
+                    .filter(
+                        SupportedVillage.province == value,
+                        SupportedVillage.is_active.is_(True),
+                    )
+                    .all()
+                )
             else:
-                villages = db.query(SupportedVillage).all()
+                villages = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).all()
 
             items = [{"id": v.id, "name": v.village_name, "province": v.province} for v in villages]
             return {
@@ -541,7 +570,14 @@ class AnalyticsService:
         """帮扶村对比（同步，供 reports 路由使用）"""
         try:
             db = self.db
-            villages = db.query(SupportedVillage).filter(SupportedVillage.id.in_(village_ids)).all()
+            villages = (
+                db.query(SupportedVillage)
+                .filter(
+                    SupportedVillage.id.in_(village_ids),
+                    SupportedVillage.is_active.is_(True),
+                )
+                .all()
+            )
             items = [{"id": v.id, "name": v.village_name, "province": v.province} for v in villages]
             return {"villages": items, "year": year, "metrics": metrics or []}
         except Exception as e:
@@ -565,13 +601,28 @@ class AnalyticsService:
         """获取筛选选项（同步，供 reports 路由使用）"""
         try:
             db = self.db
-            provinces = db.query(SupportedVillage.province).distinct().all()
+            provinces = (
+                db.query(SupportedVillage.province)
+                .filter(SupportedVillage.is_active.is_(True))
+                .distinct()
+                .all()
+            )
             province_list = [p[0] for p in provinces if p[0]]
 
-            is_tier_list = db.query(SupportedVillage.is_revitalization_tier).distinct().all()
+            is_tier_list = (
+                db.query(SupportedVillage.is_revitalization_tier)
+                .filter(SupportedVillage.is_active.is_(True))
+                .distinct()
+                .all()
+            )
             tier_list = ["是" if t[0] else "否" for t in is_tier_list]
 
-            departments = db.query(SupportedVillage.department).distinct().all()
+            departments = (
+                db.query(SupportedVillage.department)
+                .filter(SupportedVillage.is_active.is_(True))
+                .distinct()
+                .all()
+            )
             dept_list = [d[0] for d in departments if d[0]]
 
             return {
@@ -606,7 +657,7 @@ class AnalyticsService:
             from app.core.data_permission import filter_by_data_scope
 
             db = self.db
-            query = db.query(SupportedVillage)
+            query = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
             # 数据权限过滤（参照 villages.py:50 范式）
             query = filter_by_data_scope(query, SupportedVillage, user, db=db)
 

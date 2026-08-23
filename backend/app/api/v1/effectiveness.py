@@ -97,7 +97,10 @@ async def get_evaluation_report(
 ):
     """获取评估报告"""
     village = apply_scope_filter(
-        db.query(SupportedVillage).filter(SupportedVillage.id == village_id),
+        db.query(SupportedVillage).filter(
+            SupportedVillage.id == village_id,
+            SupportedVillage.is_active == True,  # noqa: E712
+        ),
         current_user, SupportedVillage, db=db
     ).first()
     if not village:
@@ -121,7 +124,10 @@ async def compare_evaluations(
 ):
     """对比两年的评估结果"""
     village = apply_scope_filter(
-        db.query(SupportedVillage).filter(SupportedVillage.id == village_id),
+        db.query(SupportedVillage).filter(
+            SupportedVillage.id == village_id,
+            SupportedVillage.is_active == True,  # noqa: E712
+        ),
         current_user, SupportedVillage, db=db
     ).first()
     if not village:
@@ -152,7 +158,10 @@ async def get_rankings(
             SupportedVillage.support_unit,
         )
         .join(SupportedVillage, EffectivenessEvaluation.village_id == SupportedVillage.id)
-        .filter(EffectivenessEvaluation.year == year)
+        .filter(
+            EffectivenessEvaluation.year == year,
+            SupportedVillage.is_active == True,  # noqa: E712 软删村不进排名
+        )
     )
     query = apply_scope_filter(query, current_user, SupportedVillage, db=db)
     # rank 允许 NULL：SQLite 中 NULL 排最前，显式把 NULL 沉底再按 rank 升序
