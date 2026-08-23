@@ -25,7 +25,10 @@ logger = logging.getLogger(__name__)
 
 # 通行码 HMAC 密钥：用于跨机器自验证（管理员在 A 机为 B 机生成通行码，
 # B 机注册时无需共享数据库，仅凭 HMAC(machine_code) 即可独立验证）。
-# 可通过环境变量 PASS_CODE_SECRET 覆盖；未配置时使用内置默认值。
+# 安全基线（W1-T6 / ADR-0004）：内置默认值仅保证历史行为可计算，
+# 但自验证路径在未显式配置密钥时一律拒绝（fail-closed）——
+# 否则拿到源码者可离线伪造合法通行码绕过整个授权体系。
+_PASS_CODE_SECRET_EXPLICIT = bool(os.environ.get("PASS_CODE_SECRET"))
 _PASS_CODE_SECRET = os.environ.get(
     "PASS_CODE_SECRET",
     "bumofu-assistance-passcode-v1",
@@ -304,6 +307,14 @@ class MachineCodeService:
         Returns:
             bool: 是否匹配
         """
+        # W1-T6 fail-closed：密钥为源码内置默认值时拒绝自验证——
+        # 该默认值随安装包分发，不构成秘密；继续放行等于允许离线伪造授权。
+        if not _PASS_CODE_SECRET_EXPLICIT:
+            logger.warning(
+                "通行码 HMAC 自验证被拒绝：未显式配置 PASS_CODE_SECRET "
+                "（fail-closed，见 ADR-0004）。请由管理员预录入通行码。"
+            )
+            return False
         expected = MachineCodeService.generate_pass_code(machine_code)
         # 兼容用户去掉连字符的输入
         normalized_input = (pass_code or "").strip().replace("-", "").lower()
@@ -496,6 +507,17 @@ class MachineCodeService:
             old_machine_code = record.machine_code[:16] if record.machine_code else "None"
             record.machine_code = machine_code
             safe_commit(self.db)
+            # W1-T6：静默改绑属敏感操作，必须留痕可追溯
+            try:
+                from app.services.work_log_service import write_work_log
+
+                write_work_log(
+                    self.db, "machine_code", "passcode_fallback_rebind",
+                    getattr(record, "id", None),
+                    f"通行码回退验证改绑机器码: {old_machine_code}... -> {machine_code[:16]}...",
+                )
+            except Exception:  # pragma: no cover
+                logger.debug("记录通行码回退改绑审计失败", exc_info=True)
             logger.info(
                 "通行码回退验证成功（机器码已更新）: pass_code=%s..., "
                 "old_machine_code=%s..., new_machine_code=%s...",
