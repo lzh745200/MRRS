@@ -76,7 +76,7 @@ async def get_system_info(current_user=Depends(get_current_user), db: Session = 
 
     user_count = db.query(User).count()
     org_count = db.query(Organization).count()
-    project_count = db.query(Project).count()
+    project_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
     village_count = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count()
 
     # 注意：本端点带 response_model=SystemInfo，由 Pydantic 序列化顶层字段，
@@ -438,16 +438,29 @@ async def revoke_user_session(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """强制登出用户（将 token 加入黑名单）"""
+    """强制登出用户（使其全部现存 token 立即失效）"""
     require_admin(current_user, error_message="仅管理员可强制登出用户")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    from app.core.token_manager import revoke_token
+    # W1-T5（ADR-0001）：单机模式会话列表为空，session_id 并非真实 JWT，
+    # 历史实现将其传入 jwt.decode 必然失败 → 接口恒 400。
+    # 可靠的强制下线 = 递增 token_version（get_current_user 版本校验拦截）；
+    # 若调用方传入真实 JWT 则额外按 jti 吊销（向前兼容）。
+    try:
+        setattr(user, "token_version", (getattr(user, "token_version", 0) or 0) + 1)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error("强制下线失败（token_version 递增）: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="强制登出失败，请稍后重试")
 
-    if not revoke_token(session_id, reason="admin_force_logout"):
-        raise HTTPException(status_code=400, detail="无效的会话 Token，无法强制登出")
+    if session_id and session_id.count(".") == 2:
+        from app.core.token_manager import revoke_token
+
+        revoke_token(session_id, reason="admin_force_logout")
+
     logger.info("管理员 %s 强制登出用户 %s (session: %s)", current_user.username, user.username, session_id)
     return success_response(message=f"已强制登出用户 {user.username}")
 

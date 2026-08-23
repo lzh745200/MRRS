@@ -135,7 +135,7 @@ def _fetch_fund_records(db: Session, user: Any, params: Dict) -> List[Dict[str, 
     from app.core.data_permission import filter_by_data_scope
     from app.models.fund import Fund
 
-    query = db.query(Fund)
+    query = db.query(Fund).filter(Fund.is_active == True)  # noqa: E712
     if user is not None:
         query = filter_by_data_scope(query, Fund, user, db=db)
 
@@ -168,7 +168,7 @@ def _fetch_project_records(db: Session, user: Any, params: Dict) -> List[Dict[st
     from app.core.data_permission import filter_by_data_scope
     from app.models.project import Project
 
-    query = db.query(Project)
+    query = db.query(Project).filter(Project.is_active == True)  # noqa: E712
     if user is not None:
         query = filter_by_data_scope(query, Project, user, db=db)
 
@@ -201,7 +201,7 @@ def _fetch_school_records(db: Session, user: Any, params: Dict) -> List[Dict[str
     from app.core.data_permission import filter_by_data_scope
     from app.models.school import School
 
-    query = db.query(School)
+    query = db.query(School).filter(School.is_active == True)  # noqa: E712
     if user is not None:
         query = filter_by_data_scope(query, School, user, db=db)
 
@@ -257,10 +257,14 @@ def _build_comprehensive_workbook(db: Session, user: Any) -> bytes:
     if user is not None:
         village_q = filter_by_data_scope(village_q, SupportedVillage, user, db=db)
     villages_count = village_q.count()
-    schools_count = db.query(School).count()
-    projects_count = db.query(Project).count()
-    funds_count = db.query(Fund).count()
-    funds_sum = db.query(sql_func.coalesce(sql_func.sum(Fund.amount), 0)).scalar()
+    schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
+    projects_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
+    funds_count = db.query(Fund).filter(Fund.is_active == True).count()  # noqa: E712
+    funds_sum = (
+        db.query(sql_func.coalesce(sql_func.sum(Fund.amount), 0))
+        .filter(Fund.is_active == True)  # noqa: E712
+        .scalar()
+    )
 
     summary = {
         "用户总数": users_count,
@@ -290,7 +294,7 @@ def _build_comprehensive_workbook(db: Session, user: Any) -> bytes:
             "预算": p.budget or 0,
             "进度": f"{p.progress or 0}%",
         }
-        for p in db.query(Project).limit(100).all()
+        for p in db.query(Project).filter(Project.is_active == True).limit(100).all()  # noqa: E712
     ]
     fund_data = [
         {
@@ -300,7 +304,7 @@ def _build_comprehensive_workbook(db: Session, user: Any) -> bytes:
             "状态": f.status,
             "使用日期": _format_datetime(f.date),
         }
-        for f in db.query(Fund).limit(100).all()
+        for f in db.query(Fund).filter(Fund.is_active == True).limit(100).all()  # noqa: E712
     ]
 
     return ExcelExportService().export_comprehensive_report(

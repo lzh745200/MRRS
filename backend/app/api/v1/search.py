@@ -38,10 +38,11 @@ def _append_village_results(items: List, q: str, each: int, db: Session, current
             org_field="organization_id",
             db=db,
         ).filter(
+            SupportedVillage.is_active.is_(True),
             or_(
                 SupportedVillage.village_name.ilike(f"%{q}%"),
                 SupportedVillage.county.ilike(f"%{q}%"),
-            )
+            ),
         )
         for r in village_q.limit(each).all():
             items.append(
@@ -67,10 +68,11 @@ def _append_project_results(items: List, q: str, each: int, db: Session, current
             org_field="organization_id",
             db=db,
         ).filter(
+            Project.is_active == True,  # noqa: E712
             or_(
                 Project.name.ilike(f"%{q}%"),
                 Project.code.ilike(f"%{q}%"),
-            )
+            ),
         )
         for r in project_q.limit(each).all():
             items.append(
@@ -124,7 +126,7 @@ def _append_school_results(items: List, q: str, each: int, db: Session, current_
             current_user,
             org_field="organization_id",
             db=db,
-        ).filter(School.name.ilike(f"%{q}%"))
+        ).filter(School.is_active == True, School.name.ilike(f"%{q}%"))  # noqa: E712
         for r in school_q.limit(each).all():
             items.append(
                 SearchItem(
@@ -149,11 +151,12 @@ def _append_fund_results(items: List, q: str, each: int, db: Session, current_us
             org_field="organization_id",
             db=db,
         ).filter(
+            Fund.is_active == True,  # noqa: E712
             or_(
                 Fund.name.ilike(f"%{q}%"),
                 Fund.code.ilike(f"%{q}%"),
                 Fund.project_name.ilike(f"%{q}%"),
-            )
+            ),
         )
         for r in fund_q.limit(each).all():
             items.append(

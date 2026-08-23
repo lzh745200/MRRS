@@ -671,9 +671,11 @@ async def generate_report(
             },
         }
 
-        # 如果是综合报表，查询帮扶村汇总数据
+        # 如果是综合报表，查询帮扶村汇总数据（软删村排除）
         if request.report_type == "comprehensive":
-            villages_query = service.db.query(SupportedVillage)
+            villages_query = service.db.query(SupportedVillage).filter(
+                SupportedVillage.is_active.is_(True)
+            )
             if request.village_ids:
                 villages_query = villages_query.filter(SupportedVillage.id.in_(request.village_ids))
             villages = villages_query.limit(100).all()
@@ -692,7 +694,11 @@ async def generate_report(
         # 如果是汇总统计报表
         if request.report_type == "statistics":
             report_data["statistics"] = {
-                "total_villages": service.db.query(SupportedVillage).count(),
+                "total_villages": (
+                    service.db.query(SupportedVillage)
+                    .filter(SupportedVillage.is_active.is_(True))
+                    .count()
+                ),
             }
 
         return success_response(data=report_data, message="报表生成成功")

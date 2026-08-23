@@ -69,7 +69,11 @@ def scan_deadline_warnings(db: Session, days_threshold: int = 7) -> List[Dict[st
     deadline = now + timedelta(days=days_threshold)
     projects = (
         db.query(Project)
-        .filter(Project.end_date.isnot(None), Project.end_date <= deadline)
+        .filter(
+            Project.is_active == True,  # noqa: E712 软删项目不提醒
+            Project.end_date.isnot(None),
+            Project.end_date <= deadline,
+        )
         .all()
     )
     results = []

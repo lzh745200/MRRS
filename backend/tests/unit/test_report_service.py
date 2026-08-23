@@ -255,7 +255,7 @@ class TestReportService:
             is_revitalization_tier=False,
             updated_at=datetime(2025, 6, 1, 10, 0, 0),
         )
-        mock_db.query.return_value.limit.return_value.all.return_value = [mock_village]
+        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = [mock_village]
         # 传入 admin user 使 filter_by_data_scope 跳过过滤（保持 mock 链不变）
         admin_user = MagicMock()
         admin_user.is_superuser = True
@@ -269,7 +269,7 @@ class TestReportService:
 
     @pytest.mark.asyncio
     async def test_fetch_report_data_no_query_params(self, svc, mock_db):
-        mock_db.query.return_value.limit.return_value.all.return_value = []
+        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = []
         result = await svc._fetch_report_data()
         assert result == []
 
@@ -289,7 +289,7 @@ class TestReportService:
             updated_at=None,
             id=5,
         )
-        mock_db.query.return_value.limit.return_value.all.return_value = [mock_village]
+        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = [mock_village]
         # 传入 admin user 使 filter_by_data_scope 跳过过滤（保持 mock 链不变）
         admin_user = MagicMock()
         admin_user.is_superuser = True

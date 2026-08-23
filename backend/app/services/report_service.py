@@ -342,7 +342,7 @@ class ReportService:
             from app.core.data_permission import filter_by_data_scope
             from app.models.supported_village import SupportedVillage
 
-            query = self.db.query(SupportedVillage)
+            query = self.db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
             # 数据权限过滤（参照 villages.py:50 范式）
             query = filter_by_data_scope(query, SupportedVillage, user, db=self.db)
             rows = query.limit(100).all()

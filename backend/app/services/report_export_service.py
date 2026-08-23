@@ -162,7 +162,7 @@ class ReportExportService:
                     func.coalesce(func.sum(Project.budget), 0),
                     func.coalesce(func.sum(Project.actual_cost), 0),
                 )
-                .filter(year_col == year)
+                .filter(year_col == year, Project.is_active == True)  # noqa: E712
                 .group_by(Project.status)
                 .order_by(Project.status)
                 .all()

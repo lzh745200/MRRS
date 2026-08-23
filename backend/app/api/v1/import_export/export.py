@@ -194,7 +194,7 @@ async def export_projects(
     db: Session = Depends(get_db),
 ):
     require_admin(current_user, error_message="仅管理员可导出数据")
-    query = db.query(Project)
+    query = db.query(Project).filter(Project.is_active == True)  # noqa: E712
 
     if keyword:
         query = query.filter(Project.name.contains(keyword))
@@ -277,11 +277,15 @@ async def export_comprehensive_report(
     village_q = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
     village_q = filter_by_data_scope(village_q, SupportedVillage, current_user, db=db)
     villages_count = village_q.count()
-    schools_count = db.query(School).count()
-    projects_count = db.query(Project).count()
+    schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
+    projects_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
     from sqlalchemy import func as sql_func
-    funds_count = db.query(Fund).count()
-    funds_sum = db.query(sql_func.coalesce(sql_func.sum(Fund.amount), 0)).scalar()
+    funds_count = db.query(Fund).filter(Fund.is_active == True).count()  # noqa: E712
+    funds_sum = (
+        db.query(sql_func.coalesce(sql_func.sum(Fund.amount), 0))
+        .filter(Fund.is_active == True)  # noqa: E712
+        .scalar()
+    )
 
     summary = {
         "用户总数": users_count,
