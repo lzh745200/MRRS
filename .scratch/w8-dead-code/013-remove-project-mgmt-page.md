@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] 路由与文件移除、grep 无残留引用
 - [ ] 主列表新列渲染（vitest 快照更新）
 - [ ] 全量前端测试保持绿
+
+## Resolution（v1.10.0）
+页面/路由/测试引用清除;列表补列留T29批次

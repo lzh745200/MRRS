@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: ["w9-chain-completion/020-milestone-wiring.md"]
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -13,3 +13,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] backup_scheduler 异常通知 link 指向真实路由
 - [ ] approval 提交/通过/驳回三类消息均带 link 字段（pytest）
 - [ ] 消息中心点击审批通知可跳转目标页
+
+## Resolution（v1.10.0）
+快捷路由/消息link全链路修复并测试

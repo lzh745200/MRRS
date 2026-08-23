@@ -5,6 +5,44 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.10.0] - 2026-08-24
+
+### 修复（工单002-012，用户可感知缺陷）
+
+- 🐛 **工作台快捷入口**：「资金周期」「经费结算」不再跳回经费总览，直达 /funds/lifecycle 与 /funds/settlement
+- 🐛 **KPI 环比诚实化**：工作台五卡接入后端 trends 真实环比（人口卡标注"较去年"）；分析仪表板此前将 kpi-trends 绝对值误当百分比展示的假数据根治，负增长显示红色↓箭头、零增长显示"持平"；sparkline 由模拟数据改为真实近5年年度序列
+- 🐛 **全局搜索找回资金结果**：fund 类型在前端类型/标签/图标/分组排序全面接线，占位文案补充"经费"
+- 🐛 **帮扶村列表年份筛选复活**：前后端贯通（year_start 参数 + filter-options 返回 years）
+- 🐛 **变更历史字段级明细**：时间线展示"谁在何时把什么字段从 A 改为 B"（old_value→new_value）
+- 🐛 **导入错误明细可见**：帮扶村/学校两处导入失败弹窗展示行级错误清单（前10条+总数），学校侧修正信封层级读取
+- 🐛 **经费申请页过滤失效**：search/type 参数对齐后端 keyword/fund_type
+- 🐛 **经费驳回必填**：前端空意见拦截 + 后端 reject 接收 opinion（400 fail-closed）并写入状态历史与关联审批任务
+- 🐛 **数据质量"自动修复"假成功根治**：新增 trim_whitespace/normalize_empty 两规则真实现；未知规则键返回400；响应增加 changed_count（实际修正记录数）口径
+- 🐛 **消息链接修复**：资金异常通知 link 改指真实路由 /funds/anomaly；审批通过/驳回通知携带实体详情链接可直接跳转；新待审任务指向 /approval/pending
+- 🐛 **总览状态中文裸露根治**：FUND_STATUS 枚举扩至九态（补 planned/audited/rejected），筛选下拉同步
+
+### 变更（工单013-019，冗余清理）
+
+- ♻️ 删除冗余视图7个：projects/ProjectManagement.vue（含路由）、dataImport/BatchImport.vue、dataVerify/Index.vue、dataManagement/Overview.vue、report/List.vue、ImportSection.vue、ExportSection.vue、system/UserPermissions.vue（路由重定向至权限包管理）
+- ♻️ 数据管理页导入/导出页签改为统一入口跳转卡（/data-sync/import、/data-sync/export），与备份页签同款处理
+- ♻️ 后端注销并移除 messages_extended.py 冗余模块（前端零引用）；_BUSINESS_MODULES 精确保留 encryption/search/menus/permission_package
+- ♻️ menus.py 清除 user-backup 死键；menu-config 与侧边栏双轨同步（batch-import 指向 /data-package）
+- ♻️ 帮扶村列表新增 with_summary 聚合：总数/累计投入/覆盖县市/参与部门全量真实统计，不再按当前页计算
+
+### 新增
+
+- ✨ 帮扶村列表 KPI 卡片基于服务端聚合（with_summary=1），翻页数值稳定
+
+### 测试
+
+- ✅ 归零15个既有失败测试（权限包签名对齐/mock自环链/金额4位小数断言/loopback桩/报表信封链）
+- ✅ 新增：清洗规则4用例、搜索6类断言、Dashboard 负向箭头断言、村列表128用例回归绿
+- ✅ 全量门禁：后端 pytest 12442+ 通过 / flake8 0 错；前端 vitest 6475/6475 通过 / eslint --max-warnings=0 / vue-tsc 0 错
+
+### 发布
+
+- 🔖 版本号 v1.9.0 → v1.10.0（version.txt → sync_version.py 全链路 + 手工补点8处）
+
 ## [1.9.0] - 2026-08-16
 
 ### 新增

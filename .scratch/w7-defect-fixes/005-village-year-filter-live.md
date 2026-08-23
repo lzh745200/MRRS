@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -11,3 +11,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 **Acceptance criteria:**
 - [ ] 选择年份后请求携带参数且结果过滤（vitest+pytest 各一）
 - [ ] 年份下拉有真实数据源非空
+
+## Resolution（v1.10.0）
+year_start前后端贯通+years下拉

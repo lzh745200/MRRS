@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: []
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] PageHeader 下拉含大屏入口（vitest）
 - [ ] menu-config 与 DefaultLayoutSafe 无指向已重定向路径的项
 - [ ] menus.py 死键删除后权限包回归绿
+
+## Resolution（v1.10.0）
+menu-config/layout/menus三处同步+大屏入口留T051后续确认

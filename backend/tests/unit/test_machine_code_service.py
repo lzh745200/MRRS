@@ -3,6 +3,7 @@
 覆盖: app/services/machine_code_service.py
 """
 import pytest
+from unittest.mock import patch
 from unittest.mock import MagicMock
 from app.services.machine_code_service import MachineCodeService
 
@@ -101,21 +102,20 @@ class TestGetMachineInfo:
 
 class TestGetMachineCode:
     def test_returns_string(self, mcs):
-        # Test with cached value set to avoid subprocess call
-        MachineCodeService._cached_machine_code = "deadbeefcafe12340011aabbccdd9988"
-        code = MachineCodeService.get_machine_code()
-        assert isinstance(code, str)
-        assert len(code) == 32
-        MachineCodeService._cached_machine_code = None  # cleanup
+        # patch 类属性，测试结束自动恢复（防跨测试缓存污染）
+        with patch.object(MachineCodeService, "_cached_machine_code",
+                          "deadbeefcafe12340011aabbccdd9988"):
+            code = MachineCodeService.get_machine_code()
+            assert isinstance(code, str)
+            assert len(code) == 32
 
     def test_cached_second_call(self, mcs):
-        MachineCodeService._cached_machine_code = "aaaabbbbccccddddeeeeffff00001111"
-        code = MachineCodeService.get_machine_code()
-        assert code == "aaaabbbbccccddddeeeeffff00001111"
-        # Verify second call returns same cached value
-        code2 = MachineCodeService.get_machine_code()
-        assert code2 == code
-        MachineCodeService._cached_machine_code = None  # cleanup
+        with patch.object(MachineCodeService, "_cached_machine_code",
+                          "aaaabbbbccccddddeeeeffff00001111"):
+            code = MachineCodeService.get_machine_code()
+            assert code == "aaaabbbbccccddddeeeeffff00001111"
+            code2 = MachineCodeService.get_machine_code()
+            assert code2 == code
 
 
 class TestGeneratePassCode:

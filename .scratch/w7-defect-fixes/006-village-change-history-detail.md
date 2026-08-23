@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -11,3 +11,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 **Acceptance criteria:**
 - [ ] 字段级 old/new 以时间线节点展示（vitest）
 - [ ] 无 changes 时回退摘要文案不报错
+
+## Resolution（v1.10.0）
+ChangeHistoryDialog字段级渲染重写

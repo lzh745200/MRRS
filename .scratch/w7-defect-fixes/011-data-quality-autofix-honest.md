@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] trim/normalize 规则产生真实数据变更（pytest）
 - [ ] 未知规则键返回 400 明确报错而非静默忽略
 - [ ] 前端成功文案与实际 processed 数一致（vitest）
+
+## Resolution（v1.10.0）
+trim/normalize真实现+400白名单+changed_count

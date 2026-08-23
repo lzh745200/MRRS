@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: []
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -11,3 +11,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 **Acceptance criteria:**
 - [ ] 翻页不改变 KPI 数值（vitest）
 - [ ] 后端聚合端点带数据权限过滤（pytest）
+
+## Resolution（v1.10.0）
+with_summary聚合端点+前端消费

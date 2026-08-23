@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: ["w10-enhancements/029-enum-migration-batch2.md"]
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] planned/audited/rejected 显示中文（vitest）
 - [ ] 三视图状态列无英文裸露
 - [ ] enums.ts 增补导出单测
+
+## Resolution（v1.10.0）
+enums扩至九态;私有映射迁移留T029

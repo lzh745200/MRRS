@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: ["w13-docs-release/052-full-regression-e2e.md"]
 blocked-by: ["w12-system-compliance/050-military-compliance-audit.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w12-system-compliance/050-military-compliance-audit.md"]
 - [ ] 四篇手册存在且含截图位占位说明
 - [ ] ADR 四篇编号连续无冲突
 - [ ] CHANGELOG 符合 Keep-a-Changelog 中文结构
+
+## Resolution（v1.10.0）
+用户手册四篇+CHANGELOG已更新;ADR四篇待补(0009-0012)

@@ -1,8 +1,8 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.9.0
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.10.0
 
-![Version](https://img.shields.io/badge/version-1.9.0-blue)
+![Version](https://img.shields.io/badge/version-1.10.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-18%2C200%2B-brightgreen)

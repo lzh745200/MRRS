@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w7-defect-fixes/009-fund-reject-reason-required.md"]
 ---
@@ -13,3 +13,6 @@ blocked-by: ["w7-defect-fixes/009-fund-reject-reason-required.md"]
 - [ ] PendingList 批量驳回走新端点（vitest）
 - [ ] ApprovalCenter 路由/文件/菜单引用零残留
 - [ ] 既有批量通过不受影响
+
+## Resolution（v1.10.0）
+主体=ApprovalCenter删除延后;batch-reject原子端点留后续(见019豁免清单)

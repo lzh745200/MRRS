@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] fund 结果在搜索下拉按分组渲染（vitest）
 - [ ] typeOrder 包含 fund
 - [ ] placeholder 与实际支持实体一致
+
+## Resolution（v1.10.0）
+fund六类接线+search.test更新

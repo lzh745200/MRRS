@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -13,3 +13,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] DataImport 上传具备 onUploadProgress 进度条（vitest）
 - [ ] dataManagement 页签跳转可用
 - [ ] 前端全量回归绿
+
+## Resolution（v1.10.0）
+7孤儿视图+2区段组件删除,tab改跳转卡,进度条移植因request封装限制未做(记录)

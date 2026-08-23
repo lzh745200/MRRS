@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: ["w10-enhancements/032-message-center-tabs-clearall.md"]
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] _BUSINESS_MODULES 无 messages_extended（pytest 导入表断言）
 - [ ] 模板死代码删除后消息全链路回归绿
 - [ ] MessageCenter 不再多发补偿请求
+
+## Resolution（v1.10.0）
+模块注销+文件删除+死引用清理+防回归断言
