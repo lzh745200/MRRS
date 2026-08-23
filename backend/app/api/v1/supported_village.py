@@ -69,6 +69,11 @@ class BatchDeleteRequest(BaseModel):
     confirm_password: Optional[str] = ""
 
 
+class PurgeRequest(BaseModel):
+    """彻底删除（回收站清空单条）— 二次密码确认防误删"""
+    confirm_password: str = ""
+
+
 class YearCopyRequest(BaseModel):
     fromYear: int
     toYear: int
@@ -809,6 +814,132 @@ async def delete_village(
     )
     return success_response(data={"id": village.id, "approval_task_id": approval_task_id},
                             message="删除成功")
+
+
+# ── 回收站：恢复 / 彻底删除（仅管理员） ──
+
+
+def _require_village_in_recycle_bin(village: SupportedVillage) -> None:
+    if village.is_active:
+        raise HTTPException(status_code=400, detail="该记录不在回收站中")
+
+
+@router.get("/{village_id}/purge/preview")
+async def preview_purge_village(
+    village_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """彻底删除预览：返回将级联删除的关联数据统计（仅管理员）"""
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user)
+    village = _get_village_or_404(db, village_id, current_user)
+    _require_village_in_recycle_bin(village)
+    from app.services.village_cascade_delete_service import VillageCascadeDeleteService
+
+    refs = VillageCascadeDeleteService(db).check_village_references(village_id)
+    return success_response(
+        data={
+            "id": village.id,
+            "village_name": village.village_name,
+            **refs,
+        },
+    )
+
+
+@router.post("/{village_id}/restore")
+async def restore_village(
+    village_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """从回收站恢复软删帮扶村（is_active 置回 True，仅管理员）"""
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user)
+    village = _get_village_or_404(db, village_id, current_user)
+    _require_village_in_recycle_bin(village)
+    old_snapshot = _village_to_diff_dict(village)
+    village.is_active = True
+    safe_commit(db)
+    await _invalidate_village_cache()
+    _record_village_change(
+        db, AuditAction.UPDATE, current_user, village,
+        old_data=old_snapshot, new_data=_village_to_diff_dict(village),
+        detail=f"从回收站恢复帮扶村: {village.village_name}",
+    )
+    approval_task_id = submit_entity_change_approval(
+        db,
+        entity_type="supported_village",
+        entity_id=village.id,
+        submitter_id=current_user.id,
+        title=f"帮扶村恢复：{village.village_name}",
+        change_data={"restored": True, "village_name": village.village_name},
+    )
+    return success_response(
+        data={"id": village.id, "approval_task_id": approval_task_id},
+        message="恢复成功",
+    )
+
+
+@router.post("/{village_id}/purge")
+async def purge_village(
+    village_id: int,
+    data: PurgeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """彻底删除回收站中的帮扶村：物理删除并级联清除全部子表数据（仅管理员 + 密码确认）"""
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user)
+    # 二次密码确认（与批量软删一致，防误删）
+    from app.core.security import verify_password
+
+    if not data.confirm_password or not verify_password(
+        data.confirm_password, getattr(current_user, "hashed_password", "") or ""
+    ):
+        raise HTTPException(status_code=400, detail="二次确认失败：密码不正确")
+    village = _get_village_or_404(db, village_id, current_user)
+    _require_village_in_recycle_bin(village)
+    village_name = village.village_name
+    from app.services.village_cascade_delete_service import VillageCascadeDeleteService
+
+    stats = VillageCascadeDeleteService(db).delete_village_cascade(village_id)
+    if not stats.get("success"):
+        raise HTTPException(status_code=404, detail=stats.get("message", "彻底删除失败"))
+    await _invalidate_village_cache()
+    # 审计留痕（村庄本体已物理删除，仅写操作日志）
+    from app.utils.audit_logger import AuditLogger
+
+    AuditLogger.log(
+        action="village_purge",
+        user_id=current_user.id,
+        username=current_user.username,
+        resource_type="supported_village",
+        resource_id=village_id,
+        details={
+            "village_name": village_name,
+            "deleted_records": stats.get("deleted_records"),
+            "cascade_details": stats.get("details"),
+        },
+    )
+    # 单机防丢失：彻底删除后触发一次即时备份
+    from app.services.immediate_backup import trigger_immediate_backup
+
+    trigger_immediate_backup(
+        description=f"彻底删除帮扶村[{village_name}]及{stats.get('deleted_records', 0)}条关联数据后备份",
+        delay=1.0,
+    )
+    return success_response(
+        data={
+            "id": village_id,
+            "deleted_records": stats.get("deleted_records", 0),
+            "details": stats.get("details", {}),
+        },
+        message=f"已彻底删除 [{village_name}] 及 {stats.get('deleted_records', 0)} 条关联数据",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
