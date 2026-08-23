@@ -417,6 +417,33 @@
       </template>
     </el-dialog>
 
+    <!-- 导出权限包：角色选择对话框 -->
+    <el-dialog v-model="permExportDialogVisible" title="导出权限包" width="520px">
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
+        不勾选任何角色将导出全部权限配置；勾选后仅导出所选角色及其用户绑定。
+      </el-alert>
+      <div v-loading="permRolesLoading" style="max-height: 320px; overflow: auto">
+        <el-checkbox-group v-model="permExportRoleNames">
+          <el-checkbox v-for="r in permExportRoleOptions" :key="r.name" :value="r.name">
+            {{ r.label || r.name }}
+          </el-checkbox>
+        </el-checkbox-group>
+        <div v-if="!permRolesLoading && permExportRoleOptions.length === 0" class="empty-hint">
+          未检测到自定义 RBAC 角色，可直接导出基础配置。
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="permExportDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="exportingPermPackage"
+          @click="doExportPermissionPackage"
+        >
+          导出
+        </el-button>
+      </template>
+    </el-dialog>
+
     <!-- ========== 角色管理 Tab ========== -->
     <div v-if="activeTab === 'roles'" class="role-section">
       <RoleManagement />
@@ -1058,14 +1085,45 @@ const exportingPermPackage = ref(false)
 const importingPermPackage = ref(false)
 
 const handlePermPackageCommand = (command: string) => {
-  if (command === 'export') handleExportPermissionPackage()
+  if (command === 'export') openPermExportDialog()
   else if (command === 'import') handleImportPermissionPackage()
 }
 
-const handleExportPermissionPackage = async () => {
+// ── 导出：角色选择对话框（P1 选择性导出） ──
+const permExportDialogVisible = ref(false)
+const permRolesLoading = ref(false)
+const permExportRoleOptions = ref<{ name: string; label?: string }[]>([])
+const permExportRoleNames = ref<string[]>([])
+
+async function openPermExportDialog() {
+  permExportDialogVisible.value = true
+  permExportRoleNames.value = []
+  if (permExportRoleOptions.value.length > 0) return
+  permRolesLoading.value = true
+  try {
+    const res: any = await get('/rbac/roles', { limit: 200 })
+    const data = res?.data || res || {}
+    const roles = Array.isArray(data) ? data : data.data || data.items || []
+    permExportRoleOptions.value = roles.map((r: any) => ({
+      name: r.name,
+      label: r.label || r.description || r.name,
+    }))
+  } catch {
+    // 角色列表获取失败不阻断导出，仍可全量导出
+    permExportRoleOptions.value = []
+  } finally {
+    permRolesLoading.value = false
+  }
+}
+
+const doExportPermissionPackage = async () => {
   exportingPermPackage.value = true
   try {
-    const res = await post('/permission-packages/export', {})
+    const payload: Record<string, unknown> = {}
+    if (permExportRoleNames.value.length > 0) {
+      payload.role_names = permExportRoleNames.value
+    }
+    const res = await post('/permission-packages/export', payload)
     const data = res.data || res
     if (data.file_name) {
       const downloadUrl = `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/permission-packages/download/${data.file_name}`
@@ -1076,6 +1134,7 @@ const handleExportPermissionPackage = async () => {
       a.click()
       document.body.removeChild(a)
       ElMessage.success(`权限包导出成功 (${data.role_count} 个角色, ${data.user_count} 个用户)`)
+      permExportDialogVisible.value = false
     }
   } catch (err: any) {
     ElMessage.error(err?.response?.data?.detail || '导出失败')
@@ -1120,13 +1179,26 @@ const handleImportPermissionPackage = () => {
         const p = result.preview || {}
         let msg = `将导入 ${p.role_count || 0} 个角色, ${p.user_legacy_count || 0} 个用户权限`
         if (p.warnings?.length) msg += `\n警告: ${p.warnings.join('; ')}`
-        await ElMessageBox.confirm(msg, '确认导入权限包', {
-          type: 'info',
-          confirmButtonText: '确认导入',
-          cancelButtonText: '取消',
+        // 选择导入模式：确定=合并（保留本机其他配置）；取消=完全替换；关闭=放弃
+        msg +=
+          '\n\n【合并导入】保留本机已有权限，仅追加包内配置\n【覆盖导入】清空本机现有配置后按包内容重建'
+        let mode: 'merge' | 'overwrite' | null = null
+        await ElMessageBox.confirm(msg, '选择导入模式', {
+          type: 'warning',
+          distinguishCancelAndClose: true,
+          confirmButtonText: '合并导入',
+          cancelButtonText: '覆盖导入',
         })
+          .then(() => {
+            mode = 'merge'
+          })
+          .catch(async (action: any) => {
+            if (action === 'cancel') mode = 'overwrite'
+          })
+        if (!mode) return // 用户关闭 → 放弃导入
         const cRes = await post(`/permission-packages/confirm/${encodeURIComponent(file.name)}`, {
-          overwrite_existing: true,
+          overwrite_existing: mode === 'overwrite',
+          mode,
         })
         ElMessage.success(cRes.data?.message || cRes.message || '导入完成')
         pagination.page = 1 // 重置到第1页，确保新建/编辑后的数据可见

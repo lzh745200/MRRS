@@ -18,6 +18,9 @@ class PermissionPackageExportRequest(BaseModel):
     """导出权限配置包请求"""
     password: Optional[str] = Field(None, description="导出包加密密码（可选，为空则不加密）")
     description: Optional[str] = Field(None, description="导出说明")
+    role_names: Optional[List[str]] = Field(
+        None, description="选择性导出：仅包含这些角色（含其用户绑定）。为空/None 导出全部"
+    )
 
 
 class PermissionPackageManifest(BaseModel):
@@ -74,7 +77,10 @@ class PermissionPackageImportResult(BaseModel):
 
 class PermissionPackageConfirmRequest(BaseModel):
     """确认导入请求"""
-    overwrite_existing: bool = Field(True, description="是否覆盖已有配置")
+    overwrite_existing: bool = Field(True, description="是否覆盖已有配置（mirror 模式）")
+    mode: Optional[str] = Field(
+        None, description="导入模式：overwrite=完全替换（默认），merge=合并（保留目标机既有配置）"
+    )
 
 
 class PermissionPackageConfirmResult(BaseModel):

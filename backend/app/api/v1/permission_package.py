@@ -107,6 +107,7 @@ def export_permission_package(
     result = service.export_package(
         password=body.password if body else None,
         description=body.description if body else None,
+        role_names=body.role_names if body else None,
     )
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("message", "导出失败"))
@@ -237,7 +238,11 @@ def confirm_import_permission_package(
 
     service = PermissionPackageService(db)
     try:
-        result = service.confirm_import(file_path, overwrite_existing=body.overwrite_existing)
+        result = service.confirm_import(
+            file_path,
+            overwrite_existing=body.overwrite_existing,
+            mode=body.mode,
+        )
     finally:
         # Clean up the uploaded file after import (success or failure)
         try:

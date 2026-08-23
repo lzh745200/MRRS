@@ -942,11 +942,10 @@ describe('权限包导入导出', () => {
     const vm = wrapper.vm as any
     vm.handlePermPackageCommand('export')
     await flushPromises()
-    expect(mockPost).toHaveBeenCalledWith('/permission-packages/export', {})
-    const createSpy = vi.spyOn(document, 'createElement')
+    // P1：导出先打开角色选择对话框，不再立即发起导出请求
+    expect(vm.permExportDialogVisible).toBe(true)
+    expect(mockGet).toHaveBeenCalledWith('/rbac/roles', { limit: 200 })
     vm.handlePermPackageCommand('import')
-    expect(createSpy).toHaveBeenCalledWith('input')
-    createSpy.mockRestore()
     vm.handlePermPackageCommand('unknown') // 无分支 → 不报错
   })
 
@@ -955,29 +954,50 @@ describe('权限包导入导出', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
+    mockGet.mockResolvedValueOnce({ data: { data: [] } })
+    await vm.openPermExportDialog()
     mockPost.mockResolvedValueOnce({
       data: { file_name: 'pkg.zip', role_count: 2, user_count: 3 },
     })
-    await vm.handleExportPermissionPackage()
+    await vm.doExportPermissionPackage()
     expect(clickSpy).toHaveBeenCalled()
     expect(ElMessage.success).toHaveBeenCalledWith('权限包导出成功 (2 个角色, 3 个用户)')
     expect(vm.exportingPermPackage).toBe(false)
+    expect(vm.permExportDialogVisible).toBe(false)
     clickSpy.mockRestore()
   })
 
-  it('导出：无 file_name → 不下载不提示；失败 → detail 与兜底', async () => {
+  it('导出：勾选角色时携带 role_names；无 file_name 不下载；失败提示', async () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    mockPost.mockResolvedValueOnce({ data: {} })
-    await vm.handleExportPermissionPackage()
+    mockGet.mockResolvedValueOnce({
+      data: { data: [{ name: 'village_officer' }, { name: 'auditor' }] },
+    })
+    await vm.openPermExportDialog()
+    vm.permExportRoleNames = ['village_officer']
+    mockPost.mockResolvedValueOnce({ data: {} }) // 无 file_name → 不下载
+    await vm.doExportPermissionPackage()
     expect(clickSpy).not.toHaveBeenCalled()
+
+    // 带选择导出：body 应包含 role_names
+    clickSpy.mockClear()
+    mockPost.mockResolvedValueOnce({
+      data: { file_name: 'partial.zip', role_count: 1, user_count: 1 },
+    })
+    await vm.doExportPermissionPackage()
+    expect(mockPost).toHaveBeenLastCalledWith('/permission-packages/export', {
+      role_names: ['village_officer'],
+    })
+    expect(clickSpy).toHaveBeenCalled()
+
+    // 失败 → detail 与兜底
     mockPost.mockRejectedValueOnce({ response: { data: { detail: '无权限' } } })
-    await vm.handleExportPermissionPackage()
+    await vm.doExportPermissionPackage()
     expect(ElMessage.error).toHaveBeenCalledWith('无权限')
     mockPost.mockRejectedValueOnce(new Error('net'))
-    await vm.handleExportPermissionPackage()
+    await vm.doExportPermissionPackage()
     expect(ElMessage.error).toHaveBeenCalledWith('导出失败')
     clickSpy.mockRestore()
   })
@@ -1049,12 +1069,12 @@ describe('权限包导入导出', () => {
     await flushPromises()
     expect(confirmMock).toHaveBeenCalledWith(
       expect.stringContaining('警告: 角色X已存在'),
-      '确认导入权限包',
-      expect.objectContaining({ confirmButtonText: '确认导入' })
+      '选择导入模式',
+      expect.objectContaining({ confirmButtonText: '合并导入' })
     )
     expect(mockPost).toHaveBeenCalledWith(
       `/permission-packages/confirm/${encodeURIComponent('我的权限包.zip')}`,
-      { overwrite_existing: true }
+      { overwrite_existing: false, mode: 'merge' }
     )
     expect(ElMessage.success).toHaveBeenCalledWith('导入完成，共 2 角色')
     expect(vm.importingPermPackage).toBe(false)
@@ -1080,7 +1100,7 @@ describe('权限包导入导出', () => {
     await flushPromises()
     expect(confirmMock).toHaveBeenCalledWith(
       expect.stringContaining('将导入 0 个角色, 0 个用户权限'),
-      '确认导入权限包',
+      '选择导入模式',
       expect.any(Object)
     )
     expect(ElMessage.success).toHaveBeenCalledWith('导入完成')
@@ -1112,14 +1132,14 @@ describe('权限包导入导出', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    // 第一次：confirm 拒绝 'cancel' → 静默
+    // 第一次：confirm 关闭（'close'）→ 放弃导入，静默返回
     mockPost.mockImplementation((url: string) => {
       if (url === '/permission-packages/import') {
         return Promise.resolve({ data: { success: true, preview: {} } })
       }
       return Promise.resolve({ data: {} })
     })
-    confirmMock.mockRejectedValueOnce('cancel')
+    confirmMock.mockRejectedValueOnce('close')
     vm.handleImportPermissionPackage()
     const file = new File(['zip'], 'p.zip')
     Object.defineProperty(inputs[0], 'files', { value: [file], configurable: true })
@@ -1243,13 +1263,14 @@ describe('模板 v-model 处理器（函数覆盖）', () => {
     expect(vm.pagination.page).toBe(2)
     expect(vm.pagination.size).toBe(20)
 
-    // 三个对话框 + 权限抽屉的 v-model
+    // 四个对话框（用户/重置密码/菜单权限/导出权限包）+ 权限抽屉的 v-model
     const dialogs = wrapper.findAllComponents({ name: 'ElDialog' })
-    expect(dialogs.length).toBe(3)
+    expect(dialogs.length).toBe(4)
     for (const d of dialogs) d.vm.$emit('update:modelValue', false)
     expect(vm.dialogVisible).toBe(false)
     expect(vm.resetPwdDialogVisible).toBe(false)
     expect(vm.menuPermDialogVisible).toBe(false)
+    expect(vm.permExportDialogVisible).toBe(false)
     const drawer = wrapper.findComponent({ name: 'PermissionAssignmentDrawer' })
     drawer.vm.$emit('update:modelValue', true)
     expect(vm.permDrawerVisible).toBe(true)
@@ -1292,9 +1313,9 @@ describe('行操作与内联点击处理器（函数覆盖）', () => {
     await flushPromises()
     expect(mockDel).toHaveBeenCalledWith('/users/1')
 
-    // 两个“取消”按钮分别关闭两个对话框（两条内联赋值箭头）
+    // 三个“取消”按钮分别关闭三个对话框（两条内联赋值箭头 + 新增导出对话框）
     const cancels = wrapper.findAll('el-button-stub').filter((b) => b.text().trim() === '取消')
-    expect(cancels.length).toBe(3)
+    expect(cancels.length).toBe(4)
     vm.dialogVisible = true
     vm.resetPwdDialogVisible = true
     vm.menuPermDialogVisible = true
@@ -1388,7 +1409,11 @@ describe('逻辑或 / 空值合并兜底分支', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     mockPost.mockResolvedValueOnce({ file_name: 'plain.zip', role_count: 1, user_count: 1 })
-    await vm.handleExportPermissionPackage()
+    if (!vm.permExportDialogVisible) {
+      mockGet.mockResolvedValueOnce({ data: { data: [] } })
+      await vm.openPermExportDialog()
+    }
+    await vm.doExportPermissionPackage()
     expect(clickSpy).toHaveBeenCalled()
     expect(ElMessage.success).toHaveBeenCalledWith('权限包导出成功 (1 个角色, 1 个用户)')
     clickSpy.mockRestore()

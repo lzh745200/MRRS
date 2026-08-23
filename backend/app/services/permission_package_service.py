@@ -57,21 +57,27 @@ class PermissionPackageService:
         self,
         password: Optional[str] = None,
         description: Optional[str] = None,
+        role_names: Optional[list] = None,
     ) -> Dict[str, Any]:
         """
-        导出完整权限配置包
+        导出权限配置包
 
         Args:
             password: 可选的加密密码
             description: 导出说明
+            role_names: 选择性导出——仅包含指定角色及其用户绑定；None/空 导出全部
 
         Returns:
             PermissionPackageExportResult 字典
         """
-        # 1. 收集所有 RBAC 角色 + 权限
+        selected_roles = {r for r in (role_names or []) if r}
+
+        # 1. 收集所有 RBAC 角色 + 权限（部分导出时按名称过滤）
         roles = self.db.query(RbacRole).order_by(RbacRole.priority).all()
         roles_data = []
         for role in roles:
+            if selected_roles and role.name not in selected_roles:
+                continue
             role_perms = (
                 self.db.query(RolePermission)
                 .filter(RolePermission.role_id == role.id)
@@ -169,6 +175,37 @@ class PermissionPackageService:
                 "sort_order": getattr(org, "sort_order", 0),
             })
 
+        # 6. 部分导出裁剪：仅保留选中角色及其关联用户的数据
+        if selected_roles:
+            user_roles_data = [
+                ur for ur in user_roles_data
+                if ur.get("role_name") in selected_roles
+            ]
+            scoped_usernames = {
+                ur.get("username") for ur in user_roles_data if ur.get("username")
+            }
+            user_permissions_data = [
+                up for up in user_permissions_data
+                if up.get("username") in scoped_usernames
+            ]
+            user_menus_data = [
+                um for um in user_menus_data
+                if um.get("username") in scoped_usernames
+            ]
+            user_legacy_data = [
+                ul for ul in user_legacy_data
+                if ul.get("username") in scoped_usernames
+            ]
+            scoped_org_keys = {
+                (ul.get("organization_id"), ul.get("organization_code"))
+                for ul in user_legacy_data
+            }
+            organizations_data = [
+                o for o in organizations_data
+                if (o["id"], o["code"]) in scoped_org_keys
+                or any(o["id"] == oid for oid, _ in scoped_org_keys if oid is not None)
+            ]
+
         # 内容级校验和：对数据段规范化序列化后取 SHA-256，
         # 写入 manifest 供导入端校验（ZIP 字节自身无法嵌入自身校验和）
         content_checksum = self._calculate_content_checksum({
@@ -190,6 +227,9 @@ class PermissionPackageService:
             "description": description,
             "content_checksum": content_checksum,
         }
+        if selected_roles:
+            manifest["scope"] = "partial"
+            manifest["selected_roles"] = sorted(selected_roles)
 
         # 生成 ZIP
         from app.utils.paths import get_uploads_path
@@ -365,10 +405,23 @@ class PermissionPackageService:
     # 导入 — 确认阶段
     # ================================================================
 
-    def confirm_import(self, file_path: str, overwrite_existing: bool = True) -> Dict[str, Any]:
-        """确认导入权限配置包（应用阶段 — 完全替换）"""
+    def confirm_import(
+        self,
+        file_path: str,
+        overwrite_existing: bool = True,
+        mode: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """确认导入权限配置包。
+
+        mode: "overwrite"=完全替换（默认，mirror）；"merge"=合并保留目标机既有配置。
+        兼容旧调用：mode 为 None 时按 overwrite_existing 判断。
+        """
         if not os.path.exists(file_path) or not zipfile.is_zipfile(file_path):
             return {"success": False, "errors": ["无效的文件"], "message": "无效的文件"}
+
+        merge_mode = (mode == "merge") or (
+            mode is None and not overwrite_existing
+        )
 
         parsed = self._parse_import_zip(file_path)
         if not parsed:
@@ -381,7 +434,7 @@ class PermissionPackageService:
         stats = self._init_import_stats()
 
         try:
-            if overwrite_existing:
+            if not merge_mode:
                 self._clear_existing_data()
 
             role_id_map, stats, errors = self._import_roles(roles_data, stats, errors)
@@ -391,8 +444,27 @@ class PermissionPackageService:
             stats, errors = self._import_organizations(organizations_data, stats, errors)
             self.db.flush()
 
-            stats, errors = self._import_user_roles(user_roles_data, role_id_map, stats, errors)
-            stats, errors = self._import_user_permissions(user_permissions_data, stats, errors)
+            if merge_mode:
+                existing_bindings = {
+                    (ur.user_id, ur.role_id)
+                    for ur in self.db.query(UserRole).all()
+                }
+                existing_direct = {
+                    (up.user_id, up.permission)
+                    for up in self.db.query(UserPermission).all()
+                }
+            else:
+                existing_bindings = set()
+                existing_direct = set()
+
+            stats, errors = self._import_user_roles(
+                user_roles_data, role_id_map, stats, errors,
+                existing_bindings=existing_bindings,
+            )
+            stats, errors = self._import_user_permissions(
+                user_permissions_data, stats, errors,
+                existing_direct=existing_direct,
+            )
             stats, errors = self._import_user_menus(user_menus_data, stats, errors)
             stats, errors = self._import_user_legacy(user_legacy_data, stats, errors)
 
@@ -550,8 +622,13 @@ class PermissionPackageService:
         stats["roles_created"] += 1
         return role_data["id"], new_role.id
 
-    def _import_user_roles(self, user_roles_data, role_id_map, stats, errors):
-        """导入用户-角色关联（优先 username 匹配用户、role_name 兜底匹配角色）。"""
+    def _import_user_roles(self, user_roles_data, role_id_map, stats, errors,
+                           existing_bindings=None):
+        """导入用户-角色关联（优先 username 匹配用户、role_name 兜底匹配角色）。
+
+        merge 模式下 existing_bindings 非空时，已存在的绑定跳过不重复写入。
+        """
+        existing_bindings = existing_bindings or set()
         for ur_data in user_roles_data:
             try:
                 user = self._resolve_user_by_username_or_id(
@@ -564,6 +641,10 @@ class PermissionPackageService:
                 new_role_id = self._resolve_role_id(ur_data, role_id_map)
                 if new_role_id is None:
                     stats["user_roles_skipped"] = stats.get("user_roles_skipped", 0) + 1
+                    continue
+
+                if (user.id, new_role_id) in existing_bindings:
+                    stats["user_roles_duplicated"] = stats.get("user_roles_duplicated", 0) + 1
                     continue
 
                 self.db.add(UserRole(
@@ -606,8 +687,10 @@ class PermissionPackageService:
         exists = self.db.query(RbacRole).filter(RbacRole.id == old_role_id).first()
         return exists.id if exists else old_role_id
 
-    def _import_user_permissions(self, user_permissions_data, stats, errors):
-        """导入用户直接权限（优先 username 匹配）。"""
+    def _import_user_permissions(self, user_permissions_data, stats, errors,
+                                 existing_direct=None):
+        """导入用户直接权限（优先 username 匹配；merge 模式去重）。"""
+        existing_direct = existing_direct or set()
         for up_data in user_permissions_data:
             try:
                 user = self._resolve_user_by_username_or_id(
@@ -615,6 +698,10 @@ class PermissionPackageService:
                 )
                 if not user:
                     stats["user_permissions_skipped"] = stats.get("user_permissions_skipped", 0) + 1
+                    continue
+                perm = up_data.get("permission", "")
+                if (user.id, perm) in existing_direct:
+                    stats["user_permissions_duplicated"] = stats.get("user_permissions_duplicated", 0) + 1
                     continue
                 self.db.add(UserPermission(
                     user_id=user.id,
