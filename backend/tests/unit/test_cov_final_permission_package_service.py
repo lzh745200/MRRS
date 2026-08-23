@@ -24,8 +24,10 @@ class TestExportPackageOrganizations:
         q.filter.return_value = q
         q.order_by.return_value.all.return_value = []  # RbacRole 列表为空
         org = SimpleNamespace(id=7, name="帮扶办", code="BF001", is_active=True)
-        # all() 调用顺序：UserRole → UserPermission → User → Organization
-        q.all.side_effect = [[], [], [], [org]]
+        # all() 调用顺序（T08 起）：User(id,name) / RbacRole(id,name) /
+        # Organization(id,code) 映射查询 ×3 → UserRole → UserPermission →
+        # User(启用) → Organization(启用)
+        q.all.side_effect = [[], [], [], [], [], [], [org]]
 
         with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
             svc = PermissionPackageService(db)

@@ -87,22 +87,38 @@ class PermissionPackageService:
                 "permissions": [rp.permission for rp in role_perms],
             })
 
-        # 2. 收集用户-角色关联
+        # 2. 收集用户-角色关联（附带 username/role_name，跨机器按名称匹配而非数字ID）
         user_roles = self.db.query(UserRole).all()
+        user_id_to_name = {
+            u.id: u.username
+            for u in self.db.query(User.id, User.username).all()
+        }
+        role_id_to_name = {
+            r.id: r.name for r in self.db.query(RbacRole.id, RbacRole.name).all()
+        }
+        org_id_to_code = {}
+        from app.models.organization import Organization
+
+        for o in self.db.query(Organization.id, Organization.code).all():
+            org_id_to_code[o.id] = o.code
+
         user_roles_data = []
         for ur in user_roles:
             user_roles_data.append({
                 "user_id": ur.user_id,
+                "username": user_id_to_name.get(ur.user_id),
                 "role_id": ur.role_id,
+                "role_name": role_id_to_name.get(ur.role_id),
                 "expires_at": ur.expires_at.isoformat() if ur.expires_at else None,
             })
 
-        # 3. 收集用户直接权限
+        # 3. 收集用户直接权限（附带 username）
         user_permissions = self.db.query(UserPermission).all()
         user_permissions_data = []
         for up in user_permissions:
             user_permissions_data.append({
                 "user_id": up.user_id,
+                "username": user_id_to_name.get(up.user_id),
                 "permission": up.permission,
                 "expires_at": up.expires_at.isoformat() if up.expires_at else None,
             })
@@ -127,7 +143,7 @@ class PermissionPackageService:
                         "username": user.username,
                         "allowed_menus": menus,
                     })
-            # 遗留权限字段
+            # 遗留权限字段（附带组织编码，跨机器按编码恢复归属）
             user_legacy_data.append({
                 "username": user.username,
                 "role": user.role or "user",
@@ -135,10 +151,10 @@ class PermissionPackageService:
                 "data_scope": user.data_scope or "org",
                 "is_superuser": user.is_superuser or False,
                 "organization_id": user.organization_id,
+                "organization_code": org_id_to_code.get(user.organization_id),
             })
 
         # 5. 收集组织信息（用于跨机器迁移时恢复用户-组织关联）
-        from app.models.organization import Organization
         orgs = self.db.query(Organization).filter(Organization.is_active == True).all()  # noqa: E712
         organizations_data = []
         for org in orgs:
@@ -153,6 +169,17 @@ class PermissionPackageService:
                 "sort_order": getattr(org, "sort_order", 0),
             })
 
+        # 内容级校验和：对数据段规范化序列化后取 SHA-256，
+        # 写入 manifest 供导入端校验（ZIP 字节自身无法嵌入自身校验和）
+        content_checksum = self._calculate_content_checksum({
+            "roles": roles_data,
+            "user_roles": user_roles_data,
+            "user_permissions": user_permissions_data,
+            "user_menus": user_menus_data,
+            "user_legacy": user_legacy_data,
+            "organizations": organizations_data,
+        })
+
         # 构建清单
         manifest = {
             "version": CURRENT_VERSION,
@@ -161,6 +188,7 @@ class PermissionPackageService:
             "role_count": len(roles_data),
             "organization_count": len(organizations_data),
             "description": description,
+            "content_checksum": content_checksum,
         }
 
         # 生成 ZIP
@@ -251,6 +279,37 @@ class PermissionPackageService:
 
                 # 读取用户遗留数据用于用户名匹配
                 user_legacy_data = json.loads(zf.read("data/user_legacy.json").decode("utf-8"))
+
+                # 读取全部数据段并做内容校验和强校验（防损坏/篡改）
+                def _read_json(name):
+                    return (
+                        json.loads(zf.read(name).decode("utf-8"))
+                        if name in names else []
+                    )
+
+                segments = {
+                    "roles": roles_data,
+                    "user_roles": _read_json("data/user_roles.json"),
+                    "user_permissions": _read_json("data/user_permissions.json"),
+                    "user_menus": _read_json("data/user_menus.json"),
+                    "user_legacy": user_legacy_data,
+                    "organizations": _read_json("data/organizations.json"),
+                }
+                expected_checksum = manifest.get("content_checksum")
+                if expected_checksum:
+                    actual_checksum = self._calculate_content_checksum(segments)
+                    if actual_checksum != expected_checksum:
+                        errors.append(
+                            "内容校验和不匹配：权限包已损坏或被篡改，拒绝导入"
+                        )
+                        return {
+                            "success": False,
+                            "errors": errors,
+                            "message": "内容校验失败，请重新导出权限包",
+                        }
+                else:
+                    warnings.append("配置包缺少内容校验和（旧版本导出），已跳过完整性校验")
+
                 export_usernames = {u["username"] for u in user_legacy_data}
 
                 # 检查哪些用户在当前系统中存在
@@ -377,6 +436,7 @@ class PermissionPackageService:
         return {
             "roles_created": 0, "roles_updated": 0,
             "user_roles_assigned": 0, "user_permissions_assigned": 0,
+            "user_roles_skipped": 0, "user_permissions_skipped": 0,
             "user_menus_updated": 0, "user_legacy_updated": 0,
             "organizations_created": 0, "organizations_updated": 0,
         }
@@ -491,17 +551,23 @@ class PermissionPackageService:
         return role_data["id"], new_role.id
 
     def _import_user_roles(self, user_roles_data, role_id_map, stats, errors):
-        """导入用户-角色关联。"""
+        """导入用户-角色关联（优先 username 匹配用户、role_name 兜底匹配角色）。"""
         for ur_data in user_roles_data:
             try:
-                old_role_id = ur_data.get("role_id", "")
-                new_role_id = role_id_map.get(old_role_id, old_role_id)
-                user_id = ur_data.get("user_id")
-                existing_user = self.db.query(User).filter(User.id == user_id).first()
-                if not existing_user:
+                user = self._resolve_user_by_username_or_id(
+                    ur_data.get("username"), ur_data.get("user_id")
+                )
+                if not user:
+                    stats["user_roles_skipped"] = stats.get("user_roles_skipped", 0) + 1
                     continue
+
+                new_role_id = self._resolve_role_id(ur_data, role_id_map)
+                if new_role_id is None:
+                    stats["user_roles_skipped"] = stats.get("user_roles_skipped", 0) + 1
+                    continue
+
                 self.db.add(UserRole(
-                    user_id=existing_user.id,
+                    user_id=user.id,
                     role_id=new_role_id,
                     expires_at=(
                         datetime.fromisoformat(ur_data["expires_at"])
@@ -513,16 +579,45 @@ class PermissionPackageService:
                 errors.append(f"用户-角色关联导入失败: {e}")
         return stats, errors
 
+    def _resolve_user_by_username_or_id(self, username, user_id):
+        """跨机器安全匹配：优先 username，回退数字 ID（旧包兼容）。"""
+        if username:
+            user = self.db.query(User).filter(User.username == username).first()
+            if user:
+                return user
+        if user_id is not None:
+            return self.db.query(User).filter(User.id == user_id).first()
+        return None
+
+    def _resolve_role_id(self, ur_data, role_id_map):
+        """角色 ID 解析：优先本次导入建立的映射，其次按 role_name 匹配，
+        最后校验原 ID 在本机是否存在；均未命中时原样回退（与旧版行为一致，
+        由数据库外键约束兜底）。"""
+        old_role_id = ur_data.get("role_id", "")
+        if old_role_id in role_id_map and role_id_map[old_role_id] is not None:
+            return role_id_map[old_role_id]
+        role_name = ur_data.get("role_name")
+        if role_name:
+            by_name = (
+                self.db.query(RbacRole).filter(RbacRole.name == role_name).first()
+            )
+            if by_name:
+                return by_name.id
+        exists = self.db.query(RbacRole).filter(RbacRole.id == old_role_id).first()
+        return exists.id if exists else old_role_id
+
     def _import_user_permissions(self, user_permissions_data, stats, errors):
-        """导入用户直接权限。"""
+        """导入用户直接权限（优先 username 匹配）。"""
         for up_data in user_permissions_data:
             try:
-                user_id = up_data.get("user_id")
-                existing_user = self.db.query(User).filter(User.id == user_id).first()
-                if not existing_user:
+                user = self._resolve_user_by_username_or_id(
+                    up_data.get("username"), up_data.get("user_id")
+                )
+                if not user:
+                    stats["user_permissions_skipped"] = stats.get("user_permissions_skipped", 0) + 1
                     continue
                 self.db.add(UserPermission(
-                    user_id=existing_user.id,
+                    user_id=user.id,
                     permission=up_data.get("permission", ""),
                     expires_at=(
                         datetime.fromisoformat(up_data["expires_at"])
@@ -567,15 +662,29 @@ class PermissionPackageService:
                 user.role = legacy_data.get("role", "user")
                 user.permissions = legacy_data.get("permissions", "")
                 user.data_scope = legacy_data.get("data_scope", "org")
-                # 恢复组织关联（按 ID 直接匹配，不存在则尝试按名称匹配）
+                # 恢复组织关联：优先按组织编码匹配（跨机器稳定），
+                # 回退按导出机原始 ID，均失败则置空（用户可通过界面重新指定）
                 org_id = legacy_data.get("organization_id")
                 if org_id:
                     from app.models.organization import Organization
-                    org = self.db.query(Organization).filter(Organization.id == org_id).first()
+
+                    org = None
+                    org_code = legacy_data.get("organization_code")
+                    if org_code:
+                        org = (
+                            self.db.query(Organization)
+                            .filter(Organization.code == org_code)
+                            .first()
+                        )
+                    if not org:
+                        org = (
+                            self.db.query(Organization)
+                            .filter(Organization.id == org_id)
+                            .first()
+                        )
                     if org:
                         user.organization_id = org.id
                     else:
-                        # 组织 ID 不匹配，置空（用户可通过界面重新指定）
                         user.organization_id = None
                 stats["user_legacy_updated"] += 1
             except Exception as e:  # pragma: no cover
@@ -601,6 +710,8 @@ class PermissionPackageService:
             "organizations_updated": stats["organizations_updated"],
             "user_roles_assigned": stats["user_roles_assigned"],
             "user_permissions_assigned": stats["user_permissions_assigned"],
+            "user_roles_skipped": stats.get("user_roles_skipped", 0),
+            "user_permissions_skipped": stats.get("user_permissions_skipped", 0),
             "user_menus_updated": stats["user_menus_updated"],
             "user_legacy_updated": stats["user_legacy_updated"],
             "errors": errors,
@@ -628,3 +739,9 @@ class PermissionPackageService:
                     break
                 sha256.update(chunk)
         return f"sha256:{sha256.hexdigest()}"
+
+    @staticmethod
+    def _calculate_content_checksum(segments: Dict[str, Any]) -> str:
+        """对包内数据段计算规范化 SHA-256（键排序，稳定序列化）"""
+        canonical = json.dumps(segments, ensure_ascii=False, sort_keys=True, default=str)
+        return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"

@@ -440,9 +440,9 @@ describe('LoginEnhanced.vue', () => {
     expect(mockPost).not.toHaveBeenCalled()
   })
 
-  it('权限包导入：预览成功 + 确认成功', async () => {
+  it('权限包导入：预览成功（saved_file_name 契约字段）+ 确认成功', async () => {
     mockPost
-      .mockResolvedValueOnce({ success: true, file_name: 'pkg.zip', message: '预览通过' })
+      .mockResolvedValueOnce({ success: true, saved_file_name: 'pkg_saved.zip', message: '预览通过' })
       .mockResolvedValueOnce({ success: true, message: '应用完成' })
     const w = await mountComp()
     const vm = w.vm as any
@@ -455,7 +455,7 @@ describe('LoginEnhanced.vue', () => {
     expect(importCall).toHaveLength(2) // (url, formData) — 没有额外的 headers 参数
     expect((importCall[1] as FormData).get('file')).toBe(file)
     // 确认调用：post('/permission-packages/confirm/{file_name}', { overwrite_existing: true })
-    expect(mockPost).toHaveBeenCalledWith('/permission-packages/confirm/pkg.zip', {
+    expect(mockPost).toHaveBeenCalledWith('/permission-packages/confirm/pkg_saved.zip', {
       overwrite_existing: true,
     })
     expect(ElMessage.success).toHaveBeenCalledWith('权限包已导入,请重新登录查看权限')
@@ -464,7 +464,23 @@ describe('LoginEnhanced.vue', () => {
     expect(vm.permissionImporting).toBe(false)
   })
 
-  it('权限包导入：预览成功（code=200）但确认失败', async () => {
+  it('权限包导入：后端未返回文件名时回退本地文件名执行确认（T08 回归）', async () => {
+    mockPost
+      .mockResolvedValueOnce({ success: true, message: '预览通过' }) // 无 saved_file_name/file_name
+      .mockResolvedValueOnce({ success: true, message: '应用完成' })
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.permissionFile = { name: 'local-fallback.zip' }
+    await vm.handlePermissionImport()
+    expect(mockPost).toHaveBeenNthCalledWith(
+      2,
+      '/permission-packages/confirm/local-fallback.zip',
+      { overwrite_existing: true }
+    )
+    expect(ElMessage.success).toHaveBeenCalled()
+  })
+
+  it('权限包导入：预览成功（code=200，file_name 别名）但确认失败', async () => {
     mockPost
       .mockResolvedValueOnce({ code: 200, file_name: 'pkg.zip' })
       .mockResolvedValueOnce({ success: false, message: '覆盖失败' })
@@ -493,13 +509,19 @@ describe('LoginEnhanced.vue', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('压缩包结构不合法')
   })
 
-  it('权限包导入：无 file_name → 展示默认成功信息分支', async () => {
-    mockPost.mockResolvedValueOnce({ success: true, message: '预览通过' })
+  it('权限包导入：无后端文件名 → 回退本地文件名继续确认（T08 修复语义）', async () => {
+    mockPost
+      .mockResolvedValueOnce({ success: true, message: '预览通过' })
+      .mockResolvedValueOnce({ success: true, message: '应用完成' })
     const w = await mountComp()
     const vm = w.vm as any
     vm.permissionFile = { name: 'pkg.zip' }
     await vm.handlePermissionImport()
-    expect(ElMessage.error).toHaveBeenCalledWith('预览通过')
+    // 回退本地文件名执行确认，不再停留在预览
+    expect(mockPost).toHaveBeenNthCalledWith(2, '/permission-packages/confirm/pkg.zip', {
+      overwrite_existing: true,
+    })
+    expect(ElMessage.success).toHaveBeenCalledWith('权限包已导入,请重新登录查看权限')
   })
 
   it('权限包导入：接口异常 → 记录日志并提示', async () => {
@@ -527,7 +549,7 @@ describe('LoginEnhanced.vue', () => {
     const vm = w.vm as any
     vm.permissionFile = { name: 'pkg.zip' }
     await vm.handlePermissionImport()
-    expect(ElMessage.error).toHaveBeenCalledWith('权限包导入完成')
+    expect(ElMessage.error).toHaveBeenCalledWith('权限包验证失败')
   })
 
   it('权限包导入：确认接口 code=200 → 导入成功', async () => {

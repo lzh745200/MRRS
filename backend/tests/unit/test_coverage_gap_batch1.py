@@ -32,7 +32,9 @@ UPLOAD_PATCH = "app.utils.paths.get_uploads_path"
 
 def _query_side_effect_models(empty_roles=True, role_query_result=None):
     """Return a db.query side_effect for PermissionPackageService."""
-    def side_effect(model):
+    def side_effect(*args):
+        model = args[0] if args else None
+        model = args[0] if args else None
         q = MagicMock()
         name = getattr(model, "__name__", "")
         if name == "RbacRole":
@@ -110,7 +112,9 @@ class TestPermissionPackageServiceExport:
         user.is_superuser = True
         user.organization_id = 1
 
-        def side_effect(model):
+        def side_effect(*args):
+            model = args[0] if args else None
+            model = args[0] if args else None
             q = MagicMock()
             name = getattr(model, "__name__", "")
             if name == "RbacRole":
@@ -152,7 +156,9 @@ class TestPermissionPackageServiceExport:
         user.is_superuser = None
         user.organization_id = None
 
-        def side_effect(model):
+        def side_effect(*args):
+            model = args[0] if args else None
+            model = args[0] if args else None
             q = MagicMock()
             if getattr(model, "__name__", "") == "User":
                 q.filter.return_value.all.return_value = [user]
@@ -181,7 +187,9 @@ class TestPermissionPackageServiceExport:
         user.is_superuser = False
         user.organization_id = 1
 
-        def side_effect(model):
+        def side_effect(*args):
+            model = args[0] if args else None
+            model = args[0] if args else None
             q = MagicMock()
             if getattr(model, "__name__", "") == "User":
                 q.filter.return_value.all.return_value = [user]
@@ -210,7 +218,9 @@ class TestPermissionPackageServiceExport:
         user.is_superuser = False
         user.organization_id = None
 
-        def side_effect(model):
+        def side_effect(*args):
+            model = args[0] if args else None
+            model = args[0] if args else None
             q = MagicMock()
             if getattr(model, "__name__", "") == "User":
                 q.filter.return_value.all.return_value = [user]
@@ -365,7 +375,9 @@ class TestPermissionPackageServiceConfirm:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self._make_zip(tmpdir)
 
-            def side_effect(model):
+            def side_effect(*args):
+                model = args[0] if args else None
+                model = args[0] if args else None
                 q = MagicMock()
                 name = getattr(model, "__name__", "")
                 if name == "RbacRole":
@@ -393,7 +405,9 @@ class TestPermissionPackageServiceConfirm:
             existing_role.is_active = True
             existing_role.priority = 100
 
-            def side_effect(model):
+            def side_effect(*args):
+                model = args[0] if args else None
+                model = args[0] if args else None
                 q = MagicMock()
                 name = getattr(model, "__name__", "")
                 if name == "RbacRole":
@@ -429,7 +443,9 @@ class TestPermissionPackageServiceConfirm:
             existing_user.id = 1
             existing_user.username = "alice"
 
-            def side_effect(model):
+            def side_effect(*args):
+                model = args[0] if args else None
+                model = args[0] if args else None
                 q = MagicMock()
                 name = getattr(model, "__name__", "")
                 if name == "User":
@@ -466,7 +482,9 @@ class TestPermissionPackageServiceConfirm:
             existing_user = MagicMock()
             existing_user.id = 1
 
-            def side_effect(model):
+            def side_effect(*args):
+                model = args[0] if args else None
+                model = args[0] if args else None
                 q = MagicMock()
                 name = getattr(model, "__name__", "")
                 if name == "User":
@@ -496,7 +514,9 @@ class TestPermissionPackageServiceConfirm:
             }
             path = self._make_zip(tmpdir, files)
 
-            def side_effect(model):
+            def side_effect(*args):
+                model = args[0] if args else None
+                model = args[0] if args else None
                 q = MagicMock()
                 q.all.return_value = []
                 q.filter.return_value.all.return_value = []
@@ -522,7 +542,9 @@ class TestPermissionPackageServiceConfirm:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self._make_zip(tmpdir)
 
-            def side_effect(model):
+            def side_effect(*args):
+                model = args[0] if args else None
+                model = args[0] if args else None
                 q = MagicMock()
                 name = getattr(model, "__name__", "")
                 if name == "RbacRole":
@@ -550,7 +572,9 @@ class TestPermissionPackageServiceConfirm:
             }
             path = self._make_zip(tmpdir, files)
 
-            def side_effect(model):
+            def side_effect(*args):
+                model = args[0] if args else None
+                model = args[0] if args else None
                 q = MagicMock()
                 q.all.return_value = []
                 q.filter.return_value.all.return_value = []
@@ -1042,7 +1066,9 @@ class TestUpdateLogService:
 
         call_count = [0]
 
-        def side_effect(model):
+        def side_effect(*args):
+            model = args[0] if args else None
+            model = args[0] if args else None
             q = MagicMock()
             if call_count[0] == 0:
                 q.delete.return_value = 5
@@ -1067,7 +1093,9 @@ class TestUpdateLogService:
     def test_sync_version_history(self):
         svc, db = self._make()
 
-        def side_effect(model):
+        def side_effect(*args):
+            model = args[0] if args else None
+            model = args[0] if args else None
             q = MagicMock()
             q.filter.return_value = MagicMock(count=MagicMock(return_value=0))
             return q
@@ -1088,7 +1116,9 @@ class TestUpdateLogService:
     def test_check_and_record_version_change_no_records(self):
         svc, db = self._make()
 
-        def side_effect(model):
+        def side_effect(*args):
+            model = args[0] if args else None
+            model = args[0] if args else None
             q = MagicMock()
             q.order_by.return_value = q
             q.first.return_value = None
@@ -1105,7 +1135,9 @@ class TestUpdateLogService:
         latest = MagicMock()
         latest.version = "0.9.0"
 
-        def side_effect(model):
+        def side_effect(*args):
+            model = args[0] if args else None
+            model = args[0] if args else None
             q = MagicMock()
             q.order_by.return_value = MagicMock(first=MagicMock(return_value=latest))
             q.count.return_value = 1

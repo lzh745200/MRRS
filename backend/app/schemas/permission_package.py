@@ -67,6 +67,9 @@ class PermissionPackageImportResult(BaseModel):
     preview: Optional[PermissionPackagePreview] = None
     errors: List[str] = Field(default_factory=list)
     message: Optional[str] = None
+    # 服务端保存的文件名，供前端两步导入（import → confirm/{file_name}）使用
+    saved_file_name: Optional[str] = None
+    file_name: Optional[str] = None
 
 
 class PermissionPackageConfirmRequest(BaseModel):
@@ -81,6 +84,8 @@ class PermissionPackageConfirmResult(BaseModel):
     roles_updated: int = 0
     user_roles_assigned: int = 0
     user_permissions_assigned: int = 0
+    user_roles_skipped: int = 0
+    user_permissions_skipped: int = 0
     user_menus_updated: int = 0
     user_legacy_updated: int = 0
     errors: List[str] = Field(default_factory=list)

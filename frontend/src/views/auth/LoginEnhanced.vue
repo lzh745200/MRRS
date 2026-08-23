@@ -243,11 +243,13 @@ async function handlePermissionImport() {
     const res: any = await post('/permission-packages/import', formData)
     const body: any = res || {}
     const success = body.success === true || body.code === 200
-    const message = body.message || body.detail || '权限包导入完成'
-    if (success && body.file_name) {
+    // 服务端保存的文件名（saved_file_name 为契约字段；file_name 兼容别名；
+    // 最后回退本地文件名，保证 confirm 步骤始终可执行）
+    const savedFileName = body.saved_file_name || body.file_name || permissionFile.value?.name || ''
+    if (success && savedFileName) {
       // 预览验证通过 → 确认导入
       const confirmRes: any = await post(
-        `/permission-packages/confirm/${encodeURIComponent(body.file_name)}`,
+        `/permission-packages/confirm/${encodeURIComponent(savedFileName)}`,
         { overwrite_existing: true }
       )
       const confirmBody: any = confirmRes || {}
@@ -260,7 +262,7 @@ async function handlePermissionImport() {
         ElMessage.error(confirmBody.message || confirmBody.detail || '权限包应用失败')
       }
     } else {
-      ElMessage.error(message)
+      ElMessage.error(body.message || body.detail || '权限包验证失败')
     }
   } catch (err: any) {
     logger.error('[Login] 导入权限包失败', err)

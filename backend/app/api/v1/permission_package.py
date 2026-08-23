@@ -29,6 +29,38 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/permission-packages", tags=["权限配置包"])
 
+_LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
+
+
+def _client_is_loopback(request: Request) -> bool:
+    """判断请求是否来自本机回环地址（基于 TCP 对端地址，不信任可伪造头）。"""
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None) if client else None
+    return host in _LOOPBACK_HOSTS
+
+
+def _resolve_package_upload_path(file_name: str) -> str:
+    """净化权限包文件名并解析到上传目录内（路径遍历防护）。
+
+    供 /import 与 /confirm 复用：basename 等价校验 + 反斜杠拒绝 +
+    realpath 越界校验。与 download 端点的防护策略保持一致。
+    """
+    if (
+        not file_name
+        or "\\" in file_name
+        or os.path.basename(file_name) != file_name
+        or file_name in (".", "..")
+    ):
+        raise HTTPException(status_code=400, detail="非法文件名")
+    from app.utils.paths import get_uploads_path
+
+    upload_dir = str(get_uploads_path("permission_packages"))
+    real_dir = os.path.realpath(upload_dir)
+    file_path = os.path.realpath(os.path.join(real_dir, file_name))
+    if not file_path.startswith(real_dir + os.sep):
+        raise HTTPException(status_code=400, detail="非法文件路径")
+    return file_path
+
 
 def _optional_current_user(authorization: Optional[str] = Header(None)) -> Optional[User]:
     """可选认证：未登录时返回 None（登录前离线导入权限包场景）。
@@ -119,8 +151,9 @@ def download_permission_package(
 
 @router.post("/import", response_model=PermissionPackageImportResult, summary="导入权限配置包（验证预览）")
 async def import_permission_package(
+    request: Request,
     file: UploadFile = File(...),
-    authorization: Optional[str] = Header(None),
+    current_user: Optional[User] = Depends(_optional_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -130,16 +163,23 @@ async def import_permission_package(
 
     **离线导入场景**: 全新系统在登录前即可导入权限包（管理员在
     其他机器导出,新机器导入后获得页面访问权限）。此步骤仅做
-    验证预览,不写入数据,因此允许未登录调用。
+    验证预览,不写入数据,因此允许未登录调用——但仅限本机来源,
+    与 /confirm 门禁一致（W1-T2）。
     """
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="请上传 .zip 格式的权限配置包文件")
 
+    # 未认证调用仅允许本机（桌面应用场景），防止远程未授权上传
+    if not current_user or not is_admin(current_user):
+        if not _client_is_loopback(request):
+            raise HTTPException(status_code=403, detail="仅允许本机导入权限包")
+
+    # 路径遍历防护：净化文件名并解析到上传目录内
     from app.utils.paths import get_uploads_path
-    # Save to permanent upload dir so confirm step can find it
+
+    file_path = _resolve_package_upload_path(file.filename)
     upload_dir = str(get_uploads_path("permission_packages"))
     os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, file.filename)
 
     with open(file_path, "wb") as f:
         f.write(await file.read())
@@ -148,6 +188,12 @@ async def import_permission_package(
     try:
         service = PermissionPackageService(db)
         result = service.import_package(tmp_path)
+        # 契约：返回服务端保存的文件名，前端两步导入（import → confirm）必需。
+        # 旧版前端缺陷即因响应缺失该字段导致 confirm 永不执行、导入不落库。
+        saved_name = os.path.basename(file_path)
+        if isinstance(result, dict):
+            result["saved_file_name"] = saved_name
+            result["file_name"] = saved_name
         return JSONResponse(content=result)
     except Exception as e:
         logger.error("权限配置包导入预览失败: %s", e, exc_info=True)
@@ -180,13 +226,11 @@ def confirm_import_permission_package(
     """
     if not current_user or not is_admin(current_user):
         # 登录前离线导入: 仅允许本机来源（桌面应用场景）
-        client_host = request.client.host if request and request.client else ""
-        if client_host not in ("127.0.0.1", "::1", "localhost"):
+        if not _client_is_loopback(request):
             raise HTTPException(status_code=403, detail="仅允许本机导入权限包")
-    from app.utils.paths import get_uploads_path
 
-    upload_dir = str(get_uploads_path("permission_packages"))
-    file_path = os.path.join(upload_dir, file_name)
+    # 路径遍历防护：净化 file_name（历史缺陷可致任意文件删除）
+    file_path = _resolve_package_upload_path(file_name)
 
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="导入文件不存在，请先通过 /import 上传")
