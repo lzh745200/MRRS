@@ -197,28 +197,47 @@
                 @click="handleView(row as SupportedVillage)"
                 >查看</el-button
               >
-              <el-button
-                type="primary"
-                link
-                size="small"
-                @click="handleEdit(row as SupportedVillage)"
-                >编辑</el-button
-              >
-              <el-button
-                type="primary"
-                link
-                size="small"
-                @click="handleYearlyData(row as SupportedVillage)"
-                >年度数据</el-button
-              >
-              <el-popconfirm
-                title="确定删除该帮扶村记录吗？"
-                @confirm="handleDelete(row as SupportedVillage)"
-              >
-                <template #reference>
-                  <el-button type="danger" link size="small">删除</el-button>
-                </template>
-              </el-popconfirm>
+              <!-- 回收站模式：仅提供 恢复 / 彻底删除 -->
+              <template v-if="showDeletedOnly">
+                <el-button
+                  type="success"
+                  link
+                  size="small"
+                  @click="handleRestore(row as SupportedVillage)"
+                  >恢复</el-button
+                >
+                <el-button
+                  type="danger"
+                  link
+                  size="small"
+                  @click="handlePurge(row as SupportedVillage)"
+                  >彻底删除</el-button
+                >
+              </template>
+              <template v-else>
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="handleEdit(row as SupportedVillage)"
+                  >编辑</el-button
+                >
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="handleYearlyData(row as SupportedVillage)"
+                  >年度数据</el-button
+                >
+                <el-popconfirm
+                  title="确定删除该帮扶村记录吗？"
+                  @confirm="handleDelete(row as SupportedVillage)"
+                >
+                  <template #reference>
+                    <el-button type="danger" link size="small">删除</el-button>
+                  </template>
+                </el-popconfirm>
+              </template>
             </div>
           </template>
         </el-table-column>
@@ -281,6 +300,9 @@ import {
   exportSupportedVillages,
   downloadImportTemplate,
   getFilterOptions,
+  restoreSupportedVillage,
+  previewPurgeSupportedVillage,
+  purgeSupportedVillage,
 } from '@/api/supportedVillage'
 import type { SupportedVillage, SupportedVillageCreate, VillageFilters } from '@/types/analytics'
 import SupportedVillageForm from './components/SupportedVillageForm.vue'
@@ -522,6 +544,87 @@ async function handleDelete(row: SupportedVillage) {
     loadData()
   } catch (error) {
     ElMessage.error('删除失败')
+  }
+}
+
+// ── 回收站：恢复 / 彻底删除 ──
+
+// 恢复软删记录
+async function handleRestore(row: SupportedVillage) {
+  try {
+    await ElMessageBox.confirm(
+      `确定恢复帮扶村【${row.villageName}】吗？恢复后将重新出现在正常列表中。`,
+      '恢复确认',
+      { confirmButtonText: '确认恢复', cancelButtonText: '取消', type: 'info' }
+    )
+  } catch {
+    return // 用户取消
+  }
+  try {
+    await restoreSupportedVillage(row.id)
+    ElMessage.success('恢复成功')
+    loadData()
+  } catch {
+    ElMessage.error('恢复失败')
+  }
+}
+
+// 彻底删除（物理删除，级联清除子数据 + 密码二次确认）
+async function handlePurge(row: SupportedVillage) {
+  // 先取级联统计用于警示
+  let cascadeHint = ''
+  let totalRefs = 0
+  try {
+    const preview = (await previewPurgeSupportedVillage(row.id)) as any
+    const data = preview?.data || preview || {}
+    totalRefs = Number(data.total_references || 0)
+    const details = data.details || {}
+    const top = Object.entries(details as Record<string, number>)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([k, v]) => `${k} ${v}条`)
+      .join('、')
+    cascadeHint = top ? `（含 ${top} 等）` : ''
+  } catch {
+    // 预览失败不阻断流程
+  }
+  let confirmPassword = ''
+  try {
+    await ElMessageBox.confirm(
+      `彻底删除后【${row.villageName}】及其关联的 ${totalRefs} 条数据将无法恢复${cascadeHint}！此操作不可撤销。`,
+      '彻底删除警告',
+      { confirmButtonText: '继续', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `彻底删除【${row.villageName}】需二次确认，请输入登录密码：`,
+      '二次确认',
+      {
+        confirmButtonText: '确认彻底删除',
+        cancelButtonText: '取消',
+        inputType: 'password',
+        inputValidator: (v: string) => (v ? true : '密码不能为空'),
+      }
+    )
+    confirmPassword = value || ''
+  } catch {
+    return // 用户取消
+  }
+  loading.value = true
+  try {
+    const result = (await purgeSupportedVillage(row.id, confirmPassword)) as any
+    tableData.value = tableData.value.filter((item) => item.id !== row.id)
+    pagination.total = Math.max(0, pagination.total - 1)
+    const removed = result?.data?.deleted_records ?? 0
+    ElMessage.success(`已彻底删除及清理 ${removed} 条关联数据`)
+    loadData()
+  } catch {
+    ElMessage.error('彻底删除失败')
+  } finally {
+    loading.value = false
   }
 }
 

@@ -13,6 +13,15 @@ export const deleteSupportedVillage = (id: number) => del('/supported-villages/'
 export const batchDeleteSupportedVillages = (ids: number[], confirmPassword?: string) =>
   post('/supported-villages/batch-delete', { ids, confirm_password: confirmPassword || '' })
 
+// ── 回收站：恢复 / 彻底删除 ──
+export const restoreSupportedVillage = (id: number) => post(`/supported-villages/${id}/restore`, {})
+export const previewPurgeSupportedVillage = (id: number) =>
+  get(`/supported-villages/${id}/purge/preview`)
+export const purgeSupportedVillage = (id: number, confirmPassword?: string) =>
+  post(`/supported-villages/${id}/purge`, {
+    confirm_password: confirmPassword || '',
+  })
+
 // ── Import / export ──
 export const importSupportedVillages = (file: File) => {
   const fd = new FormData()
