@@ -151,7 +151,7 @@ async def get_todos(
         logger.error(f"获取待办列表失败: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取待办列表失败: {str(e)}",
+            detail="获取待办列表失败，请稍后重试或联系管理员",
         )
 
 
@@ -198,7 +198,7 @@ async def create_todo(
         logger.error(f"创建待办失败: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"创建待办失败: {str(e)}",
+            detail="创建待办失败，请稍后重试或联系管理员",
         )
 
 
@@ -257,7 +257,7 @@ async def update_todo(
         logger.error(f"更新待办失败: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"更新待办失败: {str(e)}",
+            detail="更新待办失败，请稍后重试或联系管理员",
         )
 
 
@@ -299,7 +299,7 @@ async def delete_todo(
         logger.error(f"删除待办失败: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"删除待办失败: {str(e)}",
+            detail="删除待办失败，请稍后重试或联系管理员",
         )
 
 
@@ -346,5 +346,5 @@ async def toggle_todo(
         logger.error(f"切换待办状态失败: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"切换待办状态失败: {str(e)}",
+            detail="切换待办状态失败，请稍后重试或联系管理员",
         )

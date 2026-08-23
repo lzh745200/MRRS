@@ -317,7 +317,7 @@ async def list_templates(
         return ok_list(items=result, total=len(result))
     except Exception as e:
         logger.error("获取报表模板列表失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取模板列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取模板列表失败，请稍后重试或联系管理员")
 
 
 # 合法的模板类型和模块值
@@ -375,7 +375,7 @@ async def create_template(
     except Exception as e:
         db.rollback()
         logger.error("创建报表模板失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"创建模板失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="创建模板失败，请稍后重试或联系管理员")
 
 
 @router.get("/available-fields", summary="获取模块可用字段（字段组合生成模板）")
@@ -420,7 +420,7 @@ async def update_template(
     except Exception as e:
         db.rollback()
         logger.error("更新报表模板失败 (id=%s): %s", template_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"更新模板失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="更新模板失败，请稍后重试或联系管理员")
 
 
 @router.delete("/{template_id}")
@@ -440,7 +440,7 @@ async def delete_template(
     except Exception as e:
         db.rollback()
         logger.error("删除报表模板失败 (id=%s): %s", template_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"删除模板失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="删除模板失败，请稍后重试或联系管理员")
 
 
 @router.get("/{template_id}/download")

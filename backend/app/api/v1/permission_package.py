@@ -204,7 +204,7 @@ async def import_permission_package(
                 os.unlink(file_path)
         except OSError:
             pass
-        raise HTTPException(status_code=500, detail=f"导入预览失败: {e}")
+        raise HTTPException(status_code=500, detail="导入预览失败，请稍后重试或联系管理员")
 
 
 @router.post("/confirm/{file_name}", response_model=PermissionPackageConfirmResult, summary="确认导入权限配置包")

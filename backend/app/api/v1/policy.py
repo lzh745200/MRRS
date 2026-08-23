@@ -1311,7 +1311,7 @@ async def create_policy(  # noqa: C901
     except Exception as e:
         db.rollback()
         logger.error(f"创建政策失败: {e}")
-        raise HTTPException(status_code=500, detail=f"创建政策失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="创建政策失败，请稍后重试或联系管理员")
 
 
 def _coerce_date_fields(update_data: dict) -> None:
@@ -1396,7 +1396,7 @@ async def update_policy(
     except Exception as e:
         db.rollback()
         logger.error(f"更新政策失败 (id={policy_id}): {e}")
-        raise HTTPException(status_code=500, detail=f"更新政策失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="更新政策失败，请稍后重试或联系管理员")
 
 
 @router.delete("/{policy_id}")

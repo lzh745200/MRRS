@@ -1,4 +1,4 @@
-from app.core.permission_utils import is_superuser
+﻿from app.core.permission_utils import is_superuser
 
 """项目管理 API — 完整 CRUD + 任务管理 + 经费关联 + 统计导出 + 模板导入"""
 
@@ -1743,8 +1743,8 @@ async def _parse_import_excel(file: UploadFile):
         content = await file.read()
         wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
         return wb.active
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Excel 解析失败: {e}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Excel 解析失败，请稍后重试或联系管理员")
 
 
 def _detect_import_headers(ws):
@@ -1882,9 +1882,9 @@ async def import_projects(
 
     try:
         safe_commit(db)
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"数据提交失败: {e}")
+        raise HTTPException(status_code=500, detail="数据提交失败，请稍后重试或联系管理员")
 
     # 数据变更自动创建审批任务：批量导入进入待审批板块（审计留痕，entity_id=0 表示批量操作）
     approval_task_id = submit_entity_change_approval(

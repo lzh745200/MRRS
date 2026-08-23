@@ -1,4 +1,4 @@
-"""
+﻿"""
 系统初始化API
 提供系统首次初始化配置和初始化状态检查
 用于帮扶管理信息系统的初始部署设置
@@ -86,7 +86,8 @@ async def check_init_status(db: Session = Depends(get_db)):
             "data": {
                 "initialized": False,
                 "version": getattr(settings, "PROJECT_VERSION", "1.0.0"),
-                "error": str(e),
+                # W1-T8：内部异常细节不出站，仅记录日志
+                "error": "状态检查失败，请查看服务端日志",
             },
         }
 
@@ -184,7 +185,7 @@ async def initialize_system(
         raise
     except Exception as e:
         logger.error("系统初始化失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"系统初始化失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="系统初始化失败，请稍后重试或联系管理员")
 
 
 @router.post("/reset", summary="重置系统初始化状态（仅超级管理员）")
@@ -220,8 +221,8 @@ async def reset_initialization(
             "success": True,
             "message": "系统初始化状态已重置，可重新执行初始化流程",
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"重置失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="重置失败，请稍后重试或联系管理员")
 
 
 @router.get("/checklist", summary="获取初始化前检查清单")

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """system/init.py 覆盖率测试：initialize 分支 + reset 分支"""
 
 from unittest.mock import MagicMock, patch
@@ -96,7 +96,7 @@ async def test_initialize_outer_exception_500():
         with pytest.raises(HTTPException) as exc:
             await mod.initialize_system(request=_req(), db=MagicMock())
     assert exc.value.status_code == 500
-    assert "config table missing" in exc.value.detail
+    assert "系统初始化失败" in exc.value.detail
 
 
 # ---------- reset ----------
@@ -119,4 +119,4 @@ async def test_reset_service_exception_500():
         with pytest.raises(HTTPException) as exc:
             await mod.reset_initialization(confirm="RESET", current_user=MagicMock(), db=MagicMock())
     assert exc.value.status_code == 500
-    assert "write fail" in exc.value.detail
+    assert "重置失败" in exc.value.detail

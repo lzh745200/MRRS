@@ -327,6 +327,27 @@ def _compute_trends(db: Session, data_scope: OrgScopeFilter) -> dict:
         ).scalar() or 0
         trends["funds"] = _pct_change(float(current_funds), float(prev_funds))
 
+        # 人口/人均收入为年度数据，30 天窗口无环比意义——采用最新数据年同比
+        max_pop_year = db.query(func.max(VillagePopulation.year)).scalar()
+        if max_pop_year:
+            cur_pop = (
+                db.query(func.coalesce(func.sum(VillagePopulation.total_population), 0))
+                .filter(VillagePopulation.year == max_pop_year)
+                .scalar()
+                or 0
+            )
+            prev_pop = (
+                db.query(func.coalesce(func.sum(VillagePopulation.total_population), 0))
+                .filter(VillagePopulation.year == max_pop_year - 1)
+                .scalar()
+                or 0
+            )
+            trends["population_yoy"] = _pct_change(float(cur_pop), float(prev_pop))
+
+            cur_income = round(_avg_per_capita_income(db, data_scope, year=max_pop_year), 2)
+            prev_income = round(_avg_per_capita_income(db, data_scope, year=max_pop_year - 1), 2)
+            trends["income_yoy"] = _pct_change(cur_income, prev_income)
+
     except Exception:
         # 趋势接口静默返回空会误导看板决策，升级为 warning 可观测
         logger.warning("趋势计算失败，返回空趋势", exc_info=True)
@@ -740,7 +761,7 @@ async def create_activity(
     except Exception as e:
         logger.error("创建自定义动态失败: %s", e, exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"创建动态失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="创建动态失败，请稍后重试或联系管理员")
 
 
 @router.put("/recent-activities/{activity_id}")
@@ -783,7 +804,7 @@ async def update_activity(
     except Exception as e:
         logger.error("更新自定义动态失败: %s", e, exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"更新动态失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="更新动态失败，请稍后重试或联系管理员")
 
 
 @router.delete("/recent-activities/{activity_id}")
@@ -826,4 +847,4 @@ async def delete_activity(
     except Exception as e:
         logger.error("删除动态失败: %s", e, exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"删除动态失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="删除动态失败，请稍后重试或联系管理员")

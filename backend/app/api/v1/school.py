@@ -1,4 +1,4 @@
-"""
+﻿"""
 学校管理API
 支持完整CRUD、导入导出功能
 """
@@ -313,9 +313,9 @@ async def import_schools_excel(
                   "approval_task_id": approval_task_id},
             message=f"成功导入 {imported} 所学校",
         )
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="导入失败，请稍后重试或联系管理员")
 
 
 # ── 奖学金学生导入 ──

@@ -44,6 +44,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/approval", tags=["审批管理"])
 
 
+_ENTITY_LINK_PREFIXES = {
+    "fund": "/funds/",
+    "project": "/projects/",
+    "school": "/schools/",
+    "supported_village": "/supported-villages/",
+    "rural_work": "/rural-works/list",
+}
+
+
+def _entity_link(task) -> Optional[str]:
+    entity_id = getattr(task, "entity_id", None)
+    prefix = _ENTITY_LINK_PREFIXES.get(getattr(task, "entity_type", ""))
+    if not prefix:
+        return None
+    return f"{prefix}{entity_id}" if prefix.endswith("/") else prefix
+
+
 def _notify_submitter(db: Session, task, title: str, content: str) -> None:
     """审批结果通知申请人（提交人≠审批人时同样通知；消息落库失败不阻断审批）"""
     try:
@@ -55,6 +72,7 @@ def _notify_submitter(db: Session, task, title: str, content: str) -> None:
             message_type="approval",
             title=title,
             content=content,
+            link=_entity_link(task),
             is_read=False,
         )
         db.add(msg)
@@ -998,7 +1016,7 @@ def remind_task(
     except Exception as e:
         db.rollback()
         logger.error(f"创建提醒消息失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"提醒发送失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="提醒发送失败，请稍后重试或联系管理员")
 
     return {"code": 200, "success": True, "message": "提醒已发送"}
 

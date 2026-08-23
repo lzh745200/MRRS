@@ -1,4 +1,4 @@
-"""
+﻿"""
 系统更新日志API
 提供系统版本更新历史的查询、记录和管理功能
 用于帮扶管理信息系统的版本追溯和升级管理
@@ -151,8 +151,8 @@ async def create_update_log(
             "message": f"更新日志 {body.version} 已创建",
             "data": record.to_dict(),
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建更新日志失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="创建更新日志失败，请稍后重试或联系管理员")
 
 
 @router.post("/initialize", summary="初始化版本历史")
@@ -181,8 +181,8 @@ async def initialize_version_history(
             "message": result["message"],
             "data": result,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"初始化版本历史失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="初始化版本历史失败，请稍后重试或联系管理员")
 
 
 @router.post("/sync", summary="同步版本历史")
@@ -210,8 +210,8 @@ async def sync_version_history(
             "message": result["message"],
             "data": result,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"同步版本历史失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="同步版本历史失败，请稍后重试或联系管理员")
 
 
 @router.delete("/{update_id}", summary="删除更新日志")

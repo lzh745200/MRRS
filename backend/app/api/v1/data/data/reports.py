@@ -1,4 +1,4 @@
-"""
+﻿"""
 报表导出API路由
 提供报表导出和订阅管理接口
 Feature: data - analytics - enhancement
@@ -295,8 +295,8 @@ async def compare_years(
             metric_list = [m.strip() for m in metrics.split(",") if m.strip()]
 
         return service.compare_years(village_id, year_list, metric_list)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"参数格式错误：{str(e)}")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="参数格式错误，请稍后重试或联系管理员")
     except Exception as e:
         logger.error("年份对比查询失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")

@@ -151,7 +151,7 @@ async def create_backup(
         raise
     except Exception as e:
         logger.error("创建备份失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"创建备份失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="创建备份失败，请稍后重试或联系管理员")
 
 
 @router.get("", summary="获取备份列表")
@@ -197,7 +197,7 @@ async def list_backups(
         return ok_list(items=items, total=len(items))
     except Exception as e:
         logger.error("获取备份列表失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"获取备份列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取备份列表失败，请稍后重试或联系管理员")
 
 
 @router.get("/stats", summary="获取备份统计")
@@ -231,7 +231,7 @@ async def get_backup_stats(
         }
     except Exception as e:
         logger.error("获取备份统计失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"获取备份统计失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取备份统计失败，请稍后重试或联系管理员")
 
 
 @router.get("/dirs", summary="检测可用备份目标目录（U盘/移动硬盘）")
@@ -264,7 +264,7 @@ async def list_backup_dirs(
         }
     except Exception as e:
         logger.error("检测备份目录失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"检测备份目录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="检测备份目录失败，请稍后重试或联系管理员")
 
 
 @router.put("/target", summary="设置备份目标目录")
@@ -287,7 +287,7 @@ async def set_backup_target(
         raise
     except Exception as e:
         logger.error("设置备份目标失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"设置备份目标失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="设置备份目标失败，请稍后重试或联系管理员")
 
 
 @router.get("/schedule", summary="获取备份计划配置")
@@ -369,7 +369,7 @@ async def delete_backup(
         raise
     except Exception as e:
         logger.error("删除备份失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"删除备份失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="删除备份失败，请稍后重试或联系管理员")
 
 
 @router.get("/download/{filename}", summary="下载备份文件")
@@ -509,7 +509,7 @@ async def verify_backup(
         raise
     except Exception as e:
         logger.error("验证备份失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"验证备份失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="验证备份失败，请稍后重试或联系管理员")
 
 
 @router.post("/restore", summary="从备份恢复系统")
@@ -562,7 +562,7 @@ async def restore_backup(
         raise
     except Exception as e:
         logger.error("恢复备份失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"恢复备份失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="恢复备份失败，请稍后重试或联系管理员")
 
 
 @router.post("/upload-restore", summary="上传备份文件并恢复系统")
@@ -704,4 +704,4 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
         from app.services.backup_service import BackupRestoreError
         if isinstance(e, BackupRestoreError):
             raise HTTPException(status_code=400, detail=str(e))
-        raise HTTPException(status_code=500, detail=f"上传恢复备份失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="上传恢复备份失败，请稍后重试或联系管理员")

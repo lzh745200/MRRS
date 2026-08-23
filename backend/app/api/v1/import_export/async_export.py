@@ -144,7 +144,7 @@ async def export_reports(
         )
     except Exception as e:
         logger.error(f"报表导出失败: {e}")
-        raise HTTPException(status_code=500, detail=f"报表导出失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="报表导出失败，请稍后重试或联系管理员")
 
 
 @router.post("/villages")

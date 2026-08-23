@@ -179,8 +179,8 @@ async def import_control_package_preview(
             )
     except zipfile.BadZipFile:
         return ImportPreviewResponse(valid=False, error="文件损坏：非有效ZIP格式")
-    except json.JSONDecodeError as e:
-        return ImportPreviewResponse(valid=False, error=f"JSON解析失败: {e}")
+    except json.JSONDecodeError:
+        return ImportPreviewResponse(valid=False, error="JSON解析失败：清单文件格式无效")
 
 
 @router.post("/import")
@@ -250,7 +250,7 @@ async def import_control_package(
     except Exception as e:
         db.rollback()
         logger.error("管控配置包导入失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="导入失败，请稍后重试或联系管理员")
 
     content_hash = hashlib.sha256(content).hexdigest()
 

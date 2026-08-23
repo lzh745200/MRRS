@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for app.api.v1.system.admin — 100% coverage
 """
 
@@ -144,7 +144,7 @@ class TestCreateBackup:
 
             resp = auth_client.post("/api/v1/system/admin/backup")
             assert resp.status_code == 500
-            assert "数据库文件不存在" in resp.json()["detail"]
+            assert "备份失败" in resp.json()["detail"]
 
     def test_general_exception(self, auth_client, mock_db):
         from app.core.database import get_db
@@ -278,7 +278,7 @@ class TestRestoreBackup:
 
             resp = auth_client.post("/api/v1/system/admin/restore?filename=bk.db")
             assert resp.status_code == 500
-            assert "备份文件不存在" in resp.json()["detail"]
+            assert "恢复失败" in resp.json()["detail"]
 
     def test_general_exception(self, auth_client, mock_db):
         from app.core.database import get_db

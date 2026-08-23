@@ -1,4 +1,4 @@
-"""帮扶村管理 API 路由"""
+﻿"""帮扶村管理 API 路由"""
 
 # 数据权限过滤已迁移到 app.core.data_scope_adapter.apply_scope_filter()
 # 支持组织树展开（org_children 含下级组织），与 school.py 行为一致
@@ -1374,8 +1374,8 @@ async def import_section_data(
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(await file.read()))
         ws = wb.active
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"文件解析失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="文件解析失败，请稍后重试或联系管理员")
     target_year = year or datetime.now().year
     result = _import_section_sheet(ws, model, village_id, target_year, db)
     safe_commit(db)
@@ -1398,8 +1398,8 @@ async def import_all_sections_data(
     try:
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(await file.read()))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"文件解析失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="文件解析失败，请稍后重试或联系管理员")
     # 工作表名 → 板块键：兼容 section_key（population）与模型表名/中文名
     sheet_alias: Dict[str, str] = {}
     for key, model in _SECTION_MODEL.items():

@@ -162,7 +162,7 @@ async def import_subordinate_report(
         raise
     except Exception as e:
         logger.error("导入下级上报包失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="导入失败，请稍后重试或联系管理员")
 
 
 def _process_status_report(zf: zipfile.ZipFile, db: Session, current_user: User):

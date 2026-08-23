@@ -218,7 +218,7 @@ async def one_click_report(
         import traceback
 
         logger.error(f"一键上报失败: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"生成上报数据包失败: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="生成上报数据包失败，请稍后重试或联系管理员")
 
 
 @router.get("", response_model=DataPackageListResponse)
@@ -458,7 +458,7 @@ async def export_data_package(
         import traceback
 
         logger.error(f"导出数据包失败: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"导出失败: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="导出失败，请稍后重试或联系管理员")
 
 
 @router.post("/import", response_model=DataPackageImportResult)
@@ -571,7 +571,7 @@ async def import_data_package(
         logger.error(f"导入数据包失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"导入失败: {str(e)}"
+            detail="导入失败，请稍后重试或联系管理员"
         )
 
     finally:

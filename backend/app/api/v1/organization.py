@@ -1,4 +1,4 @@
-"""
+﻿"""
 组织管理API
 支持部门单位和帮扶单位的层级管理
 与权限管理集成：组织创建、修改需要管理员权限
@@ -182,7 +182,7 @@ async def get_organizations(
         return result
     except Exception as e:  # pragma: no cover
         logger.error(f"获取组织列表失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取组织列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取组织列表失败，请稍后重试或联系管理员")
 
 
 def _set_no_cache_headers(response: Response):
@@ -282,7 +282,7 @@ async def get_organization_tree(
         return success_response(data=tree)
     except Exception as e:  # pragma: no cover
         logger.error(f"获取组织树失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取组织树失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取组织树失败，请稍后重试或联系管理员")
 
 
 @router.get("/statistics/summary", summary="获取组织统计信息")
@@ -456,7 +456,7 @@ async def get_my_organization(current_user=Depends(get_current_user), db: Sessio
         raise
     except Exception as e:  # pragma: no cover
         logger.error(f"获取当前用户组织失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取当前用户组织失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取当前用户组织失败，请稍后重试或联系管理员")
 
 
 @router.get("/my", response_model=OrganizationResponse)
@@ -479,7 +479,7 @@ async def get_subordinates(
         return query.order_by(Organization.sort_order, Organization.id).all()
     except Exception as e:  # pragma: no cover
         logger.error(f"获取下级组织失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"获取下级组织失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取下级组织失败，请稍后重试或联系管理员")
 
 
 @router.get("/types/options")
@@ -824,9 +824,9 @@ async def batch_update_sort_orders(
         }
     except HTTPException:
         raise
-    except Exception as e:  # pragma: no cover
+    except Exception:  # pragma: no cover
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"批量更新排序失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="批量更新排序失败，请稍后重试或联系管理员")
 
 
 @router.get("/{org_id}/members", summary="获取组织成员列表")

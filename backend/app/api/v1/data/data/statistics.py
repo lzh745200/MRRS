@@ -166,7 +166,7 @@ async def get_summary(current_user=Depends(get_current_user), db: Session = Depe
         return result
     except Exception as e:
         logger.error("系统概览统计查询失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
 
 
 @router.get("/overview")
@@ -178,7 +178,7 @@ async def get_overview(current_user=Depends(get_current_user), db: Session = Dep
         return await _get_overview_impl(db)
     except Exception as e:
         logger.error("数据总览查询失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
 
 
 async def _get_overview_impl(db: Session):
@@ -363,7 +363,7 @@ async def get_villages_distribution(current_user=Depends(get_current_user), db: 
         )
     except Exception as e:
         logger.error("帮扶村分布统计查询失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
 
 
 @router.get("/projects/statistics")
@@ -421,7 +421,7 @@ async def get_projects_statistics(current_user=Depends(get_current_user), db: Se
         })
     except Exception as e:
         logger.error("项目统计查询失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
 
 
 @router.get("/funds/statistics")
@@ -470,7 +470,7 @@ async def get_funds_statistics(year: int = None, current_user=Depends(get_curren
         })
     except Exception as e:
         logger.error("经费统计查询失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
 
 
 @router.get("/schools/statistics")
@@ -520,7 +520,7 @@ async def get_schools_statistics(current_user=Depends(get_current_user), db: Ses
         })
     except Exception as e:
         logger.error("学校统计查询失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
 
 
 @router.get("/analysis")
@@ -533,7 +533,7 @@ async def get_analysis_data(current_user=Depends(get_current_user), db: Session 
         return await _get_analysis_data_impl(db)
     except Exception as e:
         logger.error("分析数据查询失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
 
 
 async def _get_analysis_data_impl(db: Session):
@@ -827,4 +827,4 @@ async def get_dashboard_data(current_user=Depends(get_current_user), db: Session
         return summary
     except Exception as e:
         logger.error("仪表盘数据查询失败: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")

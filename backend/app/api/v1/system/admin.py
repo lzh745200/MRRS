@@ -1,4 +1,4 @@
-"""
+﻿"""
 系统管理员专用API
 提供系统配置、备份恢复、系统监控等功能
 """
@@ -122,8 +122,8 @@ async def create_backup(current_user=Depends(get_current_user), db: Session = De
                 "created_at": datetime.now().isoformat(),
             },
         }
-    except Exception as e:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=f"备份失败: {str(e)}")
+    except Exception:  # pragma: no cover
+        raise HTTPException(status_code=500, detail="备份失败，请稍后重试或联系管理员")
 
 
 @router.get("/backups")
@@ -188,8 +188,8 @@ async def restore_backup(
             raise HTTPException(status_code=404, detail="备份文件不存在")
 
         return {"success": True, "message": "数据库恢复成功"}
-    except Exception as e:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=f"恢复失败: {str(e)}")
+    except Exception:  # pragma: no cover
+        raise HTTPException(status_code=500, detail="恢复失败，请稍后重试或联系管理员")
 
 
 @router.delete("/backups/{filename}")
@@ -213,8 +213,8 @@ async def delete_backup(filename: str, current_user=Depends(get_current_user)):
         return {"success": True, "message": "备份删除成功"}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="备份文件不存在")
-    except Exception as e:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
+    except Exception:  # pragma: no cover
+        raise HTTPException(status_code=500, detail="删除失败，请稍后重试或联系管理员")
 
 
 @router.get("/config")
@@ -294,8 +294,8 @@ async def clear_cache(current_user=Depends(get_current_user)):
             logger.warning("清理 map 缓存失败: %s", e)
 
         return {"success": True, "message": "缓存清理成功"}
-    except Exception as e:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=f"清理失败: {str(e)}")
+    except Exception:  # pragma: no cover
+        raise HTTPException(status_code=500, detail="清理失败，请稍后重试或联系管理员")
 
 
 @router.get("/logs")
@@ -339,8 +339,8 @@ async def get_system_logs(
             page=page,
             page_size=page_size,
         )
-    except Exception as e:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=f"读取日志失败: {str(e)}")
+    except Exception:  # pragma: no cover
+        raise HTTPException(status_code=500, detail="读取日志失败，请稍后重试或联系管理员")
 
 
 @router.post("/db-optimize", summary="一键数据库优化")

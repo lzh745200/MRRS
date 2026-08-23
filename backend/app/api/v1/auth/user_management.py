@@ -342,7 +342,7 @@ async def delete_user(
 
         logger = logging.getLogger(__name__)
         logger.error(f"删除用户失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"删除用户失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="删除用户失败，请稍后重试或联系管理员")
 
 
 @router.post("/{user_id}/reset-password")

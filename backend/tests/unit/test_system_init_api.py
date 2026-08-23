@@ -49,7 +49,8 @@ class TestCheckInitStatus:
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["initialized"] is False
-        assert data["error"] == "DB error"
+        # W1-T8：内部异常细节不出站
+        assert data["error"] == "状态检查失败，请查看服务端日志"
 
 
 class TestInitializeSystem:

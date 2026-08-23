@@ -1,4 +1,4 @@
-"""
+﻿"""
 数据导入API端点
 
 Task 2.6: 实现导入API端点
@@ -384,8 +384,8 @@ async def validate_import_data(
 
     try:
         rows = _parse_excel_rows(file_content, header_parser, example_markers)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Excel文件解析失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Excel文件解析失败，请稍后重试或联系管理员")
 
     if entity_type == "supported_village":
         result = validator.validate_import_data(
@@ -508,8 +508,8 @@ async def preview_import_data(
     try:
         importer = ExcelImporterService(db, current_user=current_user)
         rows, _headers = importer.parse_excel(file_content, entity_type=entity_type)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Excel文件解析失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Excel文件解析失败，请稍后重试或联系管理员")
 
     preview_rows = []
     valid_count = 0

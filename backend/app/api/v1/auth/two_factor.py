@@ -1,4 +1,4 @@
-"""
+﻿"""
 双因素认证API
 """
 
@@ -39,8 +39,8 @@ async def enable_two_factor(current_user: User = Depends(get_current_active_user
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"启用双因素认证失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="启用双因素认证失败，请稍后重试或联系管理员")
 
 
 @router.post("/verify")
@@ -62,8 +62,8 @@ async def verify_and_enable(
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"验证失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="验证失败，请稍后重试或联系管理员")
 
 
 @router.post("/disable")
@@ -74,8 +74,8 @@ async def disable_two_factor(current_user: User = Depends(get_current_active_use
     try:
         TwoFactorService.disable_two_factor(db, current_user)
         return success_response(data={"message": "双因素认证已禁用"}, message="双因素认证已禁用")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"禁用失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="禁用失败，请稍后重试或联系管理员")
 
 
 @router.get("/status")

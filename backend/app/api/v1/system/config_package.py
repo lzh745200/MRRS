@@ -1,4 +1,4 @@
-"""
+﻿"""
 配置包管理 API
 提供系统配置的打包导出、导入和版本管理功能
 用于配置的备份、迁移和多环境同步
@@ -72,7 +72,7 @@ async def list_config_packages(
         }
     except Exception as e:
         logger.error("获取配置包列表失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"获取配置包列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取配置包列表失败，请稍后重试或联系管理员")
 
 
 @router.post("/export", summary="导出当前系统配置为配置包")
@@ -124,7 +124,7 @@ async def export_config_package(
         }
     except Exception as e:
         logger.error("导出配置包失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"导出配置包失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="导出配置包失败，请稍后重试或联系管理员")
 
 
 @router.post("/import", summary="导入配置包")
@@ -144,8 +144,8 @@ async def import_config_package(
         # 解析配置包数据
         try:
             package = json.loads(body.data)
-        except json.JSONDecodeError as e:
-            raise HTTPException(status_code=400, detail=f"配置包数据格式无效: {str(e)}")
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="配置包数据格式无效，请稍后重试或联系管理员")
 
         configs = package.get("configs", {})
         if not configs:
@@ -187,7 +187,7 @@ async def import_config_package(
         raise
     except Exception as e:
         logger.error("导入配置包失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"导入配置包失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="导入配置包失败，请稍后重试或联系管理员")
 
 
 @router.delete("/{package_name}", summary="删除配置包")
@@ -222,4 +222,4 @@ async def delete_config_package(
         raise
     except Exception as e:
         logger.error("删除配置包失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"删除配置包失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="删除配置包失败，请稍后重试或联系管理员")

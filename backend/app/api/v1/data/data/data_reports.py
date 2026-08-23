@@ -1,4 +1,4 @@
-"""
+﻿"""
 Data Report API
 数据上报管理接口
 """
@@ -343,8 +343,8 @@ async def approve_data_report(
             await package_service.confirm_import(
                 package_id=package.id, confirmed_by=current_user.id, overwrite_existing=False
             )
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"导入数据包失败: {str(e)}")
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="导入数据包失败，请稍后重试或联系管理员")
 
     # 更新上报状态
     from datetime import datetime, timezone

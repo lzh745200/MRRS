@@ -59,7 +59,7 @@ async def get_cache_stats(
         )
     except Exception as e:
         logger.error("获取缓存统计失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"获取缓存统计失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取缓存统计失败，请稍后重试或联系管理员")
 
 
 @router.post("/clear", summary="清除全部缓存")
@@ -95,4 +95,4 @@ async def clear_cache(
         )
     except Exception as e:
         logger.error("清除缓存失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"清除缓存失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="清除缓存失败，请稍后重试或联系管理员")

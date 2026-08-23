@@ -1,4 +1,4 @@
-"""
+﻿"""
 dashboard.py 覆盖率攻坚测试（补充 test_data_dashboard_api.py 未覆盖部分）
 
 目标分支：
@@ -535,7 +535,7 @@ class TestActivityCrud:
                 json={"action": "操作", "target": "对象"},
             )
         assert resp.status_code == 500
-        assert "db err" in resp.json()["detail"]
+        assert "创建动态失败" in resp.json()["detail"]
         db.rollback.assert_called_once()
 
     def test_update_custom_activity(self, cov_client):
