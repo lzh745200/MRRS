@@ -467,3 +467,17 @@ Every new feature must verify:
 | PR checks | `.github/workflows/pr-checks.yml` |
 | Nightly CI | `.github/workflows/nightly-full.yml` |
 | WinError 10054 fix | `backend/app/utils/win_proactor_fix.py` |
+
+## W1 安全不变量（2026-08-24，违反即回归）
+
+以下约束由回归测试锁定，改动相关代码前必读（详见 docs/adr/0001/0004/0008）：
+
+1. **认证唯一出口**：\get_current_user\ 已接入黑名单+类型校验；access token 必带 jti；登出递增 token_version。不要绕过 \	oken_manager.validate_token\ 另建校验路径。
+2. **限流签名 fail-closed**：\check_rate_limit(key, *, request, limit, window)\ —— key 为首个参数且必填，缺失抛 ValueError；禁止位置传参字符串到旧 request 位。
+3. **loopback 门禁**：machine-code 校验码/密码重置、permission-packages import/confirm 未认证调用仅限本机（基于 request.client.host，禁读 X-Forwarded-For）。判定函数：各模块 \_client_is_loopback\。
+4. **公开重置排除管理员**：admin/super_admin 账号走管理端通道，公开端点恒 403。
+5. **通行码 HMAC**：\PASS_CODE_SECRET\ 未显式配置时自验证路径拒绝（fail-closed）；回退改绑机器码必须 write_work_log。
+6. **错误细节不出站**：api/v1 响应字段禁止内插异常对象——源码扫描测试 \	ests/unit/api/test_no_error_detail_leak.py\ 会拦截；新 except 分支 detail 用泛化文案 + logger.error(exc_info=True)。
+7. **删库守卫**：start.py integrity 失败默认 SystemExit(1) 保留现场；自动重建需环境变量 ALLOW_DB_RESET=1。
+8. **测试禁令**：禁止对 machine_code_service 等 services 模块 importlib.reload（类对象分裂导致跨文件 patch 失效）；用 monkeypatch.setattr 打模块常量。
+

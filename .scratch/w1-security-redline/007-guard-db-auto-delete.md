@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: []
 blocked-by: []
 ---

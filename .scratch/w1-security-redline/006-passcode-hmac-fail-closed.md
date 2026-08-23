@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-critical]
+labels: [done, severity-critical]
 blocks: []
 blocked-by: ["w1-security-redline/001-fix-public-reset-endpoint.md"]
 ---
