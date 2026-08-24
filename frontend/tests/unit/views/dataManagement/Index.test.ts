@@ -351,6 +351,13 @@ describe('内部端点失败（单项保持 0，流程继续）', () => {
 })
 
 describe('事件处理', () => {
+  it('W8 瘦身后 import/export complete 由子组件自治，父组件不再暴露处理器', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.handleImportComplete).toBeUndefined()
+    expect(vm.handleExportComplete).toBeUndefined()
+  })
 })
 
 describe('el-tabs 交互', () => {

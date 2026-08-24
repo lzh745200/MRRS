@@ -29,7 +29,7 @@ jobs:
       - name: Pre-pull base image (retry for EOL registry)
         run: |
           # python:3.11-slim-buster 涓?EOL 闀滃儚锛屾媺鍙栧彲鑳介棿姝囧け璐ワ紱閲嶈瘯 3 娆?          for i in 1 2 3; do
-            docker pull --platform linux/arm64 python:3.11-slim-buster && break
+            docker pull --platform linux/arm64 mirror.gcr.io/library/python:3.11-slim-buster && break
             echo "pull failed (attempt $i), retrying..."
             sleep 15
           done

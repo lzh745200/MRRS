@@ -1,0 +1,3 @@
+FILE C:\military-Rural Revitalization-system\frontend\src\views\analytics\supported-villages\List.vue
+uncovered statements lines: 
+uncovered branch lines: 

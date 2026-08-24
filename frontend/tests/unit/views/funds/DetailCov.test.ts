@@ -72,6 +72,7 @@ vi.mock('@/api/request', () => ({
   post: mockPost,
   put: mockPut,
   del: mockDel,
+  apiRequest: vi.fn(),
   getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
 
 vi.mock('@/api/funds', () => ({
@@ -1387,5 +1388,99 @@ describe('审批流程可视化（v1.8.0）', () => {
     expect(vm.approvalFlow.currentStatus).toBe('')
     expect(vm.approvalFlow.currentApprover).toBe('')
     expect(vm.approvalFlow.nodes).toEqual([])
+  })
+})
+
+describe('核销登记 submitExpense（W9 经费核销）', () => {
+  async function mountView() {
+    setRoute('/funds/5', '5')
+    const w = mountComp()
+    await flushPromises()
+    return w
+  }
+
+  it('金额缺失/非正 → warning 拦截', async () => {
+    const w = await mountView()
+    const vm = w.vm as any
+    vm.expForm.amount = 0
+    await vm.submitExpense()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请填写报销金额')
+    vm.expForm.amount = -1
+    await vm.submitExpense()
+    expect(ElMessage.warning).toHaveBeenCalledTimes(2)
+    w.unmount()
+  })
+
+  it('用途为空 → warning 拦截', async () => {
+    const w = await mountView()
+    const vm = w.vm as any
+    vm.expForm.amount = 100
+    vm.expForm.purpose = '   '
+    await vm.submitExpense()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请填写用途说明')
+    w.unmount()
+  })
+
+  it('日期为空 → warning 拦截', async () => {
+    const w = await mountView()
+    const vm = w.vm as any
+    vm.expForm.amount = 100
+    vm.expForm.purpose = '材料费'
+    vm.expForm.transaction_date = ''
+    await vm.submitExpense()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请选择报销日期')
+    w.unmount()
+  })
+
+  it('成功：POST 交易 + 通知 + 重置表单 + 刷新明细', async () => {
+    const { apiRequest } = await import('@/api/request')
+    ;(apiRequest as any).mockResolvedValue({ data: { id: 9 } })
+    const w = await mountView()
+    const vm = w.vm as any
+    Object.assign(vm.expForm, {
+      amount: 120.5, purpose: '水泥采购',
+      transaction_date: '2026-08-24', handler: '张三', receipt_number: 'R-1',
+    })
+    await vm.submitExpense()
+    expect(apiRequest).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'POST', url: '/fund-budgets/transactions',
+    }))
+    expect(ElNotification).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }))
+    expect(vm.expDialogVisible).toBe(false)
+    expect(vm.expForm.amount).toBeUndefined()
+    w.unmount()
+  })
+
+  it('失败：后端 detail 字符串透传到 error 提示', async () => {
+    const { apiRequest } = await import('@/api/request')
+    ;(apiRequest as any).mockRejectedValue({ response: { data: { detail: '预算执行将达 102%，禁止核销' } } })
+    const w = await mountView()
+    const vm = w.vm as any
+    Object.assign(vm.expForm, {
+      amount: 50, purpose: '超支测试', transaction_date: '2026-08-24',
+    })
+    await vm.submitExpense()
+    expect(ElMessage.error).toHaveBeenCalledWith('预算执行将达 102%，禁止核销')
+    expect(vm.expSubmitting).toBe(false)
+    w.unmount()
+  })
+})
+describe('loadExpenses 异常兜底（1195-1196）', () => {
+  it('报销明细接口失败 → 记日志并清空列表', async () => {
+    const prev = mockGet.getMockImplementation()
+    mockGet.mockImplementation((url: any) => {
+      if (String(url).includes('/fund-budgets/transactions')) {
+        return Promise.reject(new Error('tx down'))
+      }
+      if (url === '/funds/5') return Promise.resolve({ data: { ...fundDetail } })
+      return Promise.resolve({ data: {} })
+    })
+    setRoute('/funds/5', '5')
+    const w = mountComp()
+    await flushPromises()
+    expect((w.vm as any).expenses).toEqual([])
+    expect(logError).toHaveBeenCalled()
+    if (prev) mockGet.mockImplementation(prev)
+    w.unmount()
   })
 })

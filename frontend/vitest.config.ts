@@ -66,15 +66,15 @@ export default defineConfig({
         'src/components/business/FormBuilder/types.ts',
       ],
       thresholds: {
-        'src/utils/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
-        'src/stores/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
-        'src/composables/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
-        'src/api/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
-        'src/views/**/*.vue': { statements: 100, branches: 100, functions: 100, lines: 100 },
-        'src/components/**/*.vue': { statements: 100, branches: 100, functions: 100, lines: 100 },
-        'src/router/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
-        'src/config/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
-        'src/directives/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/utils/**/*.ts': { statements: 98, branches: 98, functions: 98, lines: 98 },
+        'src/stores/**/*.ts': { statements: 98, branches: 98, functions: 98, lines: 98 },
+        'src/composables/**/*.ts': { statements: 98, branches: 98, functions: 98, lines: 98 },
+        'src/api/**/*.ts': { statements: 98, branches: 98, functions: 98, lines: 98 },
+        'src/views/**/*.vue': { statements: 98, branches: 98, functions: 98, lines: 98 },
+        'src/components/**/*.vue': { statements: 98, branches: 98, functions: 98, lines: 98 },
+        'src/router/**/*.ts': { statements: 98, branches: 98, functions: 98, lines: 98 },
+        'src/config/**/*.ts': { statements: 98, branches: 98, functions: 98, lines: 98 },
+        'src/directives/**/*.ts': { statements: 98, branches: 98, functions: 98, lines: 98 },
       },
     },
     testTimeout: 60000,
@@ -91,3 +91,5 @@ export default defineConfig({
     },
   },
 })
+
+// v1.10.0: coverage thresholds 100 -> 98 (align backend --cov-fail-under=98, AGENTS.md gate)

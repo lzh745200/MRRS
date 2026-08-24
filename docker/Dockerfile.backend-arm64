@@ -10,7 +10,7 @@
 #     .
 # ============================================================
 
-FROM --platform=linux/arm64 python:3.11-slim-buster AS builder
+FROM --platform=linux/arm64 mirror.gcr.io/library/python:3.11-slim-buster AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1

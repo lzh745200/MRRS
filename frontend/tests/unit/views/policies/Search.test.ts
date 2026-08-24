@@ -268,7 +268,7 @@ describe('搜索/重置/分页', () => {
     expect(vm.pagination.currentPage).toBe(1)
   })
 
-  it('搜索参数组装（全字段）', async () => {
+  it('搜索参数组装（FTS 契约：q + 分页）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -279,11 +279,16 @@ describe('搜索/重置/分页', () => {
     vm.searchForm.status = 'active'
     apiRequestMock.mockClear()
     await vm.loadData()
-    // 有关键词时走 FTS5 检索端点（BM25+offset 分页），结构化筛选仅无关键词路径使用
+    // W7-023 政策 FTS 检索：统一走 /policies/search，q 为多字段拼接
     expect(apiRequestMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        method: 'GET',
         url: '/policies/search',
-        params: { q: '标题 部门 关键词', limit: expect.any(Number), offset: 0 },
+        params: expect.objectContaining({
+          q: '标题 部门 关键词',
+          limit: 10,
+          offset: 0,
+        }),
       })
     )
   })

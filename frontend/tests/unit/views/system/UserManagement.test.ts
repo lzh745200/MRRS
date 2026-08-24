@@ -948,6 +948,18 @@ describe('权限包导入导出', () => {
     vm.handlePermPackageCommand('import')
     vm.handlePermPackageCommand('unknown') // 无分支 → 不报错
   })
+  it('导出对话框：/rbac/roles 失败 → 不阻断，可全量导出（覆盖 catch 置空分支）', async () => {
+    const wrapper3 = mountComp()
+    await flushPromises()
+    const vm3 = wrapper3.vm as any
+    mockGet.mockRejectedValueOnce(new Error('roles down'))
+    vm3.handlePermPackageCommand('export')
+    await flushPromises()
+    expect(vm3.permExportDialogVisible).toBe(true)
+    expect(vm3.permExportRoleOptions).toEqual([])
+    expect(vm3.permRolesLoading).toBe(false)
+  })
+
 
   it('导出成功：创建 a 标签触发下载并提示统计', async () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
