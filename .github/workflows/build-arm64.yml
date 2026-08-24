@@ -26,12 +26,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.1.0
 
-      - name: Pre-pull base image (retry for EOL registry)
+      - name: Pre-pull base image (ECR public fallback for EOL buster)
         run: |
-          # python:3.11-slim-buster 涓?EOL 闀滃儚锛屾媺鍙栧彲鑳介棿姝囧け璐ワ紱閲嶈瘯 3 娆?          for i in 1 2 3; do
-            docker pull --platform linux/arm64 mirror.gcr.io/library/python:3.11-slim-buster && break
-            echo "pull failed (attempt $i), retrying..."
+          set -e
+          IMG="public.ecr.aws/docker/library/python:3.11-slim-buster"
+          for i in 1 2 3; do
+            echo "attempt $i: pulling $IMG"
+            if docker pull --platform linux/arm64 "$IMG"; then
+              docker tag "$IMG" python:3.11-slim-buster
+              break
+            fi
             sleep 15
+            if [ "$i" = 3 ]; then
+              # 最终回退：直接尝试 Docker Hub 官方镜像（EOL 标签仍存在，仅匿名限流）
+              docker pull --platform linux/arm64 python:3.11-slim-buster
+            fi
           done
 
       - name: Build backend binary in ARM64 Debian Buster container
@@ -39,6 +48,7 @@ jobs:
           mkdir -p backend/dist
           docker buildx build \
             --platform linux/arm64 \
+            --build-arg BASE_REGISTRY=public.ecr.aws/docker/library \
             --target output \
             -f docker/Dockerfile.backend-arm64 \
             --output type=local,dest=backend/dist \

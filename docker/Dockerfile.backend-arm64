@@ -10,7 +10,9 @@
 #     .
 # ============================================================
 
-FROM --platform=linux/arm64 mirror.gcr.io/library/python:3.11-slim-buster AS builder
+# EOL buster 标签在 Docker Hub 匿名限流下易失败；CI 传入 ECR 公共镜像前缀
+ARG BASE_REGISTRY=public.ecr.aws/docker/library
+FROM --platform=linux/arm64 ${BASE_REGISTRY}/python:3.11-slim-buster AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1

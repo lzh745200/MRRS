@@ -12,7 +12,10 @@
 # ============================================================
 
 # ── Stage 1: 构建前端 (Vue 3 + Vite) ──
-FROM --platform=linux/arm64 node:22-bookworm AS frontend-builder
+# 基础镜像注册表（CI 可传 public.ecr.aws/docker 规避 Docker Hub 匿名限流；EOL buster 标签 ECR 全量保留）
+ARG BASE_REGISTRY=docker.io/library
+
+FROM --platform=linux/arm64 ${BASE_REGISTRY}/node:22-bookworm AS frontend-builder
 
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 WORKDIR /build
@@ -38,7 +41,8 @@ RUN test -f frontend/dist/index.html || (echo "ERROR: 前端构建失败，index
 # 麒麟 V10 Server GLIBC=2.28, Desktop GLIBC=2.31
 # PyInstaller 不打包 libc，二进制动态链接构建系统的 GLIBC
 # 必须在最低 GLIBC 上构建以保证向前兼容（PyInstaller 官方文档要求）
-FROM --platform=linux/arm64 python:3.11-slim-buster AS backend-builder
+ARG BASE_REGISTRY=docker.io/library
+FROM --platform=linux/arm64 ${BASE_REGISTRY}/python:3.11-slim-buster AS backend-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -135,7 +139,8 @@ RUN echo "=== GLIBC 兼容性验证 ===" && \
 
 
 # ── Stage 3: 组装 DEB 包 ──
-FROM --platform=linux/arm64 debian:buster-slim AS deb-package
+ARG BASE_REGISTRY=docker.io/library
+FROM --platform=linux/arm64 ${BASE_REGISTRY}/debian:buster-slim AS deb-package
 
 ENV DEBIAN_FRONTEND=noninteractive
 
