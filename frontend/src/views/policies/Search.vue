@@ -102,6 +102,7 @@
         </el-table-column>
         <el-table-column label="命中摘要" min-width="260">
           <template #default="scope">
+            <!-- eslint-disable-next-line vue/no-v-html --><!-- snippet 已在前端转义后仅放行 <mark> -->
             <span v-if="scope.row.snippet" class="fts-snippet" v-html="scope.row.snippet" />
             <span v-else>—</span>
           </template>
@@ -209,6 +210,11 @@ const loadCategories = async () => {
   }
 }
 
+function sanitizeSnippet(raw: string): string {
+  const esc = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return esc.replace(/&lt;mark&gt;/g, '<mark>').replace(/&lt;\/mark&gt;/g, '</mark>')
+}
+
 // 加载数据
 const loadData = async () => {
   loading.value = true
@@ -234,7 +240,7 @@ const loadData = async () => {
       tableData.value = fitems.map((item: any) => ({
         id: item.id,
         title: item.title,
-        snippet: item.snippet || '',
+        snippet: sanitizeSnippet(item.snippet || ''),
         categoryName: '',
         department: '',
         publishDate: '',

@@ -378,14 +378,21 @@
           <el-tab-pane label="报销核销" name="expenses">
             <div class="expense-toolbar">
               <span class="remain-hint">
-                剩余可用：<b>{{ formatMoney(fundData.remaining_amount ?? (Number(fundData.amount||0) - Number(fundData.used_amount||0))) }}</b> 万元
+                剩余可用：<b>{{
+                  formatMoney(
+                    fundData.remaining_amount ??
+                      Number(fundData.amount || 0) - Number(fundData.used_amount || 0)
+                  )
+                }}</b>
+                万元
               </span>
               <el-button
                 type="primary"
                 size="small"
-                :disabled="!['allocated','in_use','completed'].includes(fundData.status)"
+                :disabled="!['allocated', 'in_use', 'completed'].includes(fundData.status)"
                 @click="expDialogVisible = true"
-              >登记报销</el-button>
+                >登记报销</el-button
+              >
             </div>
             <el-table :data="expenses" size="small" border stripe>
               <el-table-column prop="transaction_date" label="日期" width="110" />
@@ -673,16 +680,36 @@
     <el-dialog v-model="expDialogVisible" title="登记报销" width="480px">
       <el-form label-width="90px">
         <el-form-item label="金额(万元)" required>
-          <el-input-number v-model="expForm.amount" :min="0.0001" :precision="4" style="width: 200px" />
+          <el-input-number
+            v-model="expForm.amount"
+            :min="0.0001"
+            :precision="4"
+            style="width: 200px"
+          />
         </el-form-item>
         <el-form-item label="日期" required>
-          <el-date-picker v-model="expForm.transaction_date" type="date" value-format="YYYY-MM-DD" style="width: 200px" />
+          <el-date-picker
+            v-model="expForm.transaction_date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            style="width: 200px"
+          />
         </el-form-item>
         <el-form-item label="用途" required>
-          <el-input v-model="expForm.purpose" type="textarea" :rows="2" maxlength="200" show-word-limit />
+          <el-input
+            v-model="expForm.purpose"
+            type="textarea"
+            :rows="2"
+            maxlength="200"
+            show-word-limit
+          />
         </el-form-item>
-        <el-form-item label="经办人"><el-input v-model="expForm.handler" style="width: 200px" /></el-form-item>
-        <el-form-item label="票据号"><el-input v-model="expForm.receipt_number" style="width: 200px" /></el-form-item>
+        <el-form-item label="经办人"
+          ><el-input v-model="expForm.handler" style="width: 200px"
+        /></el-form-item>
+        <el-form-item label="票据号"
+          ><el-input v-model="expForm.receipt_number" style="width: 200px"
+        /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="expDialogVisible = false">取消</el-button>
@@ -1163,7 +1190,7 @@ async function loadExpenses() {
       params: { fund_id: fundData.id, page_size: 100 },
     })
     const data = (res as any)?.data ?? res
-    expenses.value = Array.isArray(data) ? data : data?.items ?? []
+    expenses.value = Array.isArray(data) ? data : (data?.items ?? [])
   } catch (e) {
     logger.error('报销明细加载失败:', e)
     expenses.value = []

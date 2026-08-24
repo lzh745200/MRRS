@@ -505,6 +505,38 @@ async def get_current_user_info(
     }
 
 
+def _bump_token_version(db: Session, username):
+    """W1-T5 (ADR-0001): bump token_version so all existing JWTs die immediately."""
+    try:
+        if not username:
+            return
+        _svc_user = UserService(db).get_user_by_username(username)
+        if _svc_user is None:
+            return
+        setattr(_svc_user, "token_version",
+                (getattr(_svc_user, "token_version", 0) or 0) + 1)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning("bump token_version failed on logout: %s", e)
+
+
+def _audit_logout(request: Request, user_id, username):
+    """Write logout audit log."""
+    if not (user_id and username):
+        return
+    client_ip = get_client_ip(request)
+    from app.utils.audit_logger import AuditAction
+
+    AuditLogger.log(
+        action=AuditAction.LOGOUT,
+        user_id=user_id,
+        username=username,
+        ip_address=client_ip,
+        user_agent=request.headers.get("user-agent"),
+    )
+
+
 @router.post("/logout", response_model=dict)
 async def logout(
     request: Request,
@@ -548,29 +580,8 @@ async def logout(
 
     # W1-T5（ADR-0001）：递增 token_version 使该用户全部现存 JWT（含
     # 未随请求提交的其他会话/被窃 refresh token）立即失效。
-    try:
-        if username:
-            _svc_user = UserService(db).get_user_by_username(username)
-            if _svc_user is not None:
-                setattr(_svc_user, "token_version",
-                        (getattr(_svc_user, "token_version", 0) or 0) + 1)
-                db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.warning("登出递增 token_version 失败（不影响本次登出）: %s", e)
-
-    # 记录登出审计日志
-    if user_id and username:
-        client_ip = get_client_ip(request)
-        from app.utils.audit_logger import AuditAction
-
-        AuditLogger.log(
-            action=AuditAction.LOGOUT,
-            user_id=user_id,
-            username=username,
-            ip_address=client_ip,
-            user_agent=request.headers.get("user-agent"),
-        )
+    _bump_token_version(db, username)
+    _audit_logout(request, user_id, username)
 
     return {"code": 200, "message": "登出成功"}
 

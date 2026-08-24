@@ -202,7 +202,7 @@ def _validate_numeric(
     return num, None, corrected
 
 
-def validate_records(data_type: str, records: List[Dict]) -> Dict[str, list]:
+def validate_records(data_type: str, records: List[Dict]) -> Dict[str, list]:  # noqa: C901
     """对某个数据类型的记录列表做字段级校验与自动纠正。
 
     Args:

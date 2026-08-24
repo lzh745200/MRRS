@@ -196,7 +196,7 @@ async function handleExport() {
           },
           responseType: 'blob',
         }),
-      { fallbackFileName: `操作日志_${new Date().toISOString().slice(0, 10)}.xlsx` },
+      { fallbackFileName: `操作日志_${new Date().toISOString().slice(0, 10)}.xlsx` }
     )
     ElMessage.success('导出成功')
   } catch (e) {

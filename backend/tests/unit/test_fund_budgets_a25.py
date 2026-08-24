@@ -4,6 +4,7 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.api.v1 import fund_budgets as fb
@@ -45,6 +46,7 @@ class TestGetTransactionsFilters:
 
 class TestCreateTransactionLinks:
     async def test_updates_budget_and_fund(self):
+        """核销联动：预算 executed 与 Fund used/remaining 同步更新（额度内）。"""
         data = fb.TransactionCreate(
             amount=5000.0, purpose="修路", transaction_date=date(2025, 6, 15),
             budget_id=1, fund_id=2,
@@ -52,6 +54,7 @@ class TestCreateTransactionLinks:
         q_budget = MagicMock()
         budget = MagicMock()
         budget.executed_amount = 100.0
+        budget.budget_amount = 10000.0  # 核销后 51%，未触发 ADR-0009 禁止线
         q_budget.filter.return_value = q_budget
         q_budget.first.return_value = budget
 
@@ -68,11 +71,32 @@ class TestCreateTransactionLinks:
         with patch.object(fb, "write_work_log"):
             tx = await fb.create_transaction(data=data, current_user=_user(), db=db)
 
-        assert budget.executed_amount == 5100.0
-        assert fund.used_amount == 5200.0
-        assert fund.remaining_amount == 1000.0 - 5200.0
+        assert float(budget.executed_amount) == 5100.0
+        assert float(fund.used_amount) == 5200.0
+        assert float(fund.remaining_amount) == 1000.0 - 5200.0
         db.add.assert_called()
         assert tx is not None
+
+    async def test_overspend_blocked_at_danger_line(self):
+        """ADR-0009：核销导致执行率超 100% → 400 拒绝。"""
+        data = fb.TransactionCreate(
+            amount=5000.0, purpose="超支核销", transaction_date=date(2025, 6, 15),
+            budget_id=1,
+        )
+        q_budget = MagicMock()
+        budget = MagicMock()
+        budget.executed_amount = 100.0
+        budget.budget_amount = 5000.0  # 核销后 102% → 阻断
+        q_budget.filter.return_value = q_budget
+        q_budget.first.return_value = budget
+
+        db = MagicMock()
+        db.query.side_effect = [q_budget]
+
+        with pytest.raises(HTTPException) as exc_info:
+            await fb.create_transaction(data=data, current_user=_user(), db=db)
+        assert exc_info.value.status_code == 400
+        assert "禁止核销" in str(exc_info.value.detail)
 
 
 class TestDeleteTransactionFundLink:
