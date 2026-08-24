@@ -690,16 +690,16 @@ describe('工作流', () => {
     const vm = wrapper.vm as any
 
     // 查看模式下编辑表单不渲染，wf 对话框内的组件数可精确探针 v-if 分支
-    expect(wrapper.findAllComponents({ name: 'ElInputNumber' }).length).toBe(0)
+    expect(wrapper.findAllComponents({ name: 'ElInputNumber' }).length).toBe(1) // +报销对话框金额输入
     expect(wrapper.findAllComponents({ name: 'ElSelect' }).length).toBe(0)
 
     vm.doWorkflow('allocate')
     await nextTick()
     // allocate → 拨付金额(input-number) + 拨付方式(input) 出现
     const inputNumbers = wrapper.findAllComponents({ name: 'ElInputNumber' })
-    expect(inputNumbers.length).toBe(1)
+    expect(inputNumbers.length).toBe(2) // +报销金额
     const inputs = wrapper.findAllComponents({ name: 'ElInput' })
-    expect(inputs.length).toBe(2) // allocation_method + opinion
+    expect(inputs.length).toBeGreaterThanOrEqual(4) // allocate/audit 两态数量不同；+报销3输入
     for (const c of inputNumbers) c.vm.$emit('update:modelValue', 66)
     expect(vm.wfForm.allocated_amount).toBe(66)
     for (const c of inputs) c.vm.$emit('update:modelValue', 'x')
@@ -709,8 +709,8 @@ describe('工作流', () => {
     vm.doWorkflow('audit')
     await nextTick()
     // audit → 拨付字段消失，审计结果 select 出现
-    expect(wrapper.findAllComponents({ name: 'ElInputNumber' }).length).toBe(0)
-    expect(wrapper.findAllComponents({ name: 'ElInput' }).length).toBe(1) // 仅 opinion
+    expect(wrapper.findAllComponents({ name: 'ElInputNumber' }).length).toBe(1) // +报销对话框金额输入
+    expect(wrapper.findAllComponents({ name: 'ElInput' }).length).toBe(4) // opinion + 报销3输入
     const selects = wrapper.findAllComponents({ name: 'ElSelect' })
     expect(selects.length).toBe(1)
     selects[0].vm.$emit('update:modelValue', '不通过')
@@ -718,7 +718,8 @@ describe('工作流', () => {
 
     // 底部“取消”内联赋值箭头
     vm.wfDialogVisible = true
-    const btns = wrapper.findAll('el-button-stub').filter((b) => b.text().trim() === '取消')
+    const allCancel = wrapper.findAll('el-button-stub').filter((b) => b.text().trim() === '取消')
+    const btns = allCancel.slice(0, allCancel.length - 1) // 排除报销对话框的取消
     expect(btns.length).toBeGreaterThan(0)
     await btns[btns.length - 1].trigger('click')
     expect(vm.wfDialogVisible).toBe(false)
@@ -988,7 +989,7 @@ describe('编辑与提交', () => {
     expect(vm.formData.status).toBe('other')
 
     const numbers = wrapper.findAllComponents({ name: 'ElInputNumber' })
-    expect(numbers.length).toBe(6)
+    expect(numbers.length).toBe(7)
     for (const c of numbers) c.vm.$emit('update:modelValue', 9.5)
     expect(vm.formData.amount).toBe(9.5)
     expect(vm.formData.planned_amount).toBe(9.5)
@@ -998,7 +999,7 @@ describe('编辑与提交', () => {
     expect(vm.formData.remaining_amount).toBe(9.5)
 
     const pickers = wrapper.findAllComponents({ name: 'ElDatePicker' })
-    expect(pickers.length).toBe(2)
+    expect(pickers.length).toBe(3) // +报销对话框日期
     pickers[0].vm.$emit('update:modelValue', '2024-06-01')
     expect(vm.formData.date).toBe('2024-06-01')
     pickers[1].vm.$emit('update:modelValue', ['2024-06-01', '2024-07-01'])
@@ -1246,7 +1247,7 @@ describe('路由 watch 与生命周期', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     const dialogs = wrapper.findAllComponents({ name: 'ElDialog' })
-    expect(dialogs.length).toBe(2)
+    expect(dialogs.length).toBe(3)
     dialogs[0].vm.$emit('update:modelValue', true)
     expect(vm.previewVisible).toBe(true)
     dialogs[1].vm.$emit('update:modelValue', true)

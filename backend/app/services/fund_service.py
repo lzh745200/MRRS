@@ -150,15 +150,10 @@ class FundService:
         :param auto_commit: 是否自动提交。设为 False 时调用方须自行提交，
                           返回的 Fund.id 在当前事务内有效但未持久化。
         """
-        import uuid as _uuid
-        from datetime import datetime as _dt
-
         fund_dict = data.model_dump(exclude_none=True)
         quantize_money_fields(fund_dict, FUND_MONEY_FIELDS)
 
-        # 自动生成 code（如未提供），格式：FUND-YYYYMMDD-XXXX
-        if not fund_dict.get("code"):
-            fund_dict["code"] = f"FUND-{_dt.now().strftime('%Y%m%d')}-{_uuid.uuid4().hex[:4].upper()}"
+        # code 留空时在 flush 取到 id 后按 ZJ+年份+6位流水 生成（见下方 _ensure_zj_code）
 
         # 兼容前端可能传 type 字段 — 同时设置 Fund.type（经费大类）和 Fund.fund_type（经费类型详细）
         if "type" in fund_dict:
@@ -180,11 +175,27 @@ class FundService:
         if auto_commit:
             safe_commit(self.db)
             self.db.refresh(fund)
+            self._ensure_zj_code(fund)
+            safe_commit(self.db)
             logger.info("Fund %s created by user %d", fund.id, created_by)
         else:
             self.db.flush()
+            self._ensure_zj_code(fund)
             logger.info("Fund %s created by user %d (flushed, not committed)", fund.id, created_by)
         return fund
+
+    @staticmethod
+    def _ensure_zj_code(fund: "Fund") -> None:
+        """编号规则 ADR-0011：ZJ + 年份 + 6 位流水（取自自增 id，id 唯一故编号唯一）。"""
+        import datetime as _datetime
+
+        if getattr(fund, "code", None):
+            return
+        year = _datetime.date.today().year
+        try:
+            fund.code = f"ZJ{year}{int(fund.id):06d}"
+        except (TypeError, ValueError):
+            return
 
     def update_fund(self, fund_id: int, *, auto_commit: bool = True, **kwargs) -> Optional[Fund]:
         """更新经费记录。"""

@@ -205,3 +205,35 @@ class TestDeleteTransaction:
         mock_db.first.return_value = None
         resp = client.delete("/fund-budgets/transactions/999")
         assert resp.status_code == 404
+
+
+class TestThreeLevelAlertThresholds:
+    """ADR-0009：80 提醒 / 90 警告 / 100 禁止。"""
+
+    def _alerts_for(self, executed):
+        from unittest.mock import MagicMock
+
+        from app.models.fund_budget import check_budget_alerts
+
+        b = MagicMock()
+        b.id = 1
+        b.year = 2026
+        b.category = "产业"
+        b.budget_amount = 100
+        b.executed_amount = executed
+        return check_budget_alerts([b])
+
+    def test_80_info(self):
+        alerts = self._alerts_for(85)
+        assert alerts and alerts[0]["level"] == "info"
+
+    def test_90_critical(self):
+        alerts = self._alerts_for(93)
+        assert alerts and alerts[0]["level"] == "critical"
+
+    def test_100_danger(self):
+        alerts = self._alerts_for(102)
+        assert alerts and alerts[0]["level"] == "danger"
+
+    def test_below_80_silent(self):
+        assert self._alerts_for(50) == []

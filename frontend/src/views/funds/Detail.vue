@@ -374,6 +374,28 @@
               </div>
             </div>
           </el-tab-pane>
+
+          <el-tab-pane label="报销核销" name="expenses">
+            <div class="expense-toolbar">
+              <span class="remain-hint">
+                剩余可用：<b>{{ formatMoney(fundData.remaining_amount ?? (Number(fundData.amount||0) - Number(fundData.used_amount||0))) }}</b> 万元
+              </span>
+              <el-button
+                type="primary"
+                size="small"
+                :disabled="!['allocated','in_use','completed'].includes(fundData.status)"
+                @click="expDialogVisible = true"
+              >登记报销</el-button>
+            </div>
+            <el-table :data="expenses" size="small" border stripe>
+              <el-table-column prop="transaction_date" label="日期" width="110" />
+              <el-table-column prop="amount" label="金额(万元)" width="120" align="right" />
+              <el-table-column prop="purpose" label="用途" min-width="180" show-overflow-tooltip />
+              <el-table-column prop="handler" label="经办人" width="100" />
+              <el-table-column prop="receipt_number" label="票据号" width="120" />
+            </el-table>
+            <el-empty v-if="!expenses.length && !loadingExpenses" description="暂无报销记录" />
+          </el-tab-pane>
         </el-tabs>
       </template>
 
@@ -647,6 +669,26 @@
         <el-button type="primary" :loading="wfSubmitting" @click="submitWorkflow">确认</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="expDialogVisible" title="登记报销" width="480px">
+      <el-form label-width="90px">
+        <el-form-item label="金额(万元)" required>
+          <el-input-number v-model="expForm.amount" :min="0.0001" :precision="4" style="width: 200px" />
+        </el-form-item>
+        <el-form-item label="日期" required>
+          <el-date-picker v-model="expForm.transaction_date" type="date" value-format="YYYY-MM-DD" style="width: 200px" />
+        </el-form-item>
+        <el-form-item label="用途" required>
+          <el-input v-model="expForm.purpose" type="textarea" :rows="2" maxlength="200" show-word-limit />
+        </el-form-item>
+        <el-form-item label="经办人"><el-input v-model="expForm.handler" style="width: 200px" /></el-form-item>
+        <el-form-item label="票据号"><el-input v-model="expForm.receipt_number" style="width: 200px" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="expDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="expSubmitting" @click="submitExpense">提交</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -660,7 +702,7 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { ArrowLeft, Edit, Delete, Loading, Upload } from '@element-plus/icons-vue'
-import { get, post, put, del } from '@/api/request'
+import { get, post, put, del, apiRequest } from '@/api/request'
 import { fundApi } from '@/api/funds'
 
 const { pushSafe } = useRouterSafe()
@@ -1098,6 +1140,77 @@ async function submitWorkflow() {
 }
 
 // CRUD
+// ── 报销核销（T021）：明细列表 + 录入，自动累计剩余可用 ──
+const expenses = ref<any[]>([])
+const loadingExpenses = ref(false)
+const expDialogVisible = ref(false)
+const expSubmitting = ref(false)
+const expForm = reactive({
+  amount: undefined as number | undefined,
+  transaction_date: '',
+  purpose: '',
+  handler: '',
+  receipt_number: '',
+})
+
+async function loadExpenses() {
+  if (isCreate.value) return
+  loadingExpenses.value = true
+  try {
+    const res = await apiRequest({
+      method: 'GET',
+      url: '/fund-budgets/transactions',
+      params: { fund_id: fundData.id, page_size: 100 },
+    })
+    const data = (res as any)?.data ?? res
+    expenses.value = Array.isArray(data) ? data : data?.items ?? []
+  } catch (e) {
+    logger.error('报销明细加载失败:', e)
+    expenses.value = []
+  } finally {
+    loadingExpenses.value = false
+  }
+}
+
+async function submitExpense() {
+  if (!expForm.amount || expForm.amount <= 0) {
+    ElMessage.warning('请填写报销金额')
+    return
+  }
+  if (!expForm.purpose.trim()) {
+    ElMessage.warning('请填写用途说明')
+    return
+  }
+  if (!expForm.transaction_date) {
+    ElMessage.warning('请选择报销日期')
+    return
+  }
+  expSubmitting.value = true
+  try {
+    await apiRequest({
+      method: 'POST',
+      url: '/fund-budgets/transactions',
+      data: { ...expForm, fund_id: fundData.id },
+    })
+    ElNotification({ title: '报销登记', message: '报销登记成功', type: 'success' })
+    expDialogVisible.value = false
+    Object.assign(expForm, {
+      amount: undefined,
+      transaction_date: '',
+      purpose: '',
+      handler: '',
+      receipt_number: '',
+    })
+    await loadExpenses()
+    await loadFundDetail()
+  } catch (e: any) {
+    const d = e?.response?.data?.detail
+    ElMessage.error(typeof d === 'string' ? d : '报销登记失败')
+  } finally {
+    expSubmitting.value = false
+  }
+}
+
 const loadFundDetail = async () => {
   if (isCreate.value) {
     loading.value = false
@@ -1118,6 +1231,7 @@ const loadFundDetail = async () => {
   } catch {
     ElMessage.error('加载经费详情失败')
     pushSafe('/funds')
+    await loadExpenses()
   } finally {
     loading.value = false
   }

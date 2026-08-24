@@ -318,3 +318,49 @@ class TestFundTypes:
         expected = {"transition", "industry", "infrastructure",
                     "party_building", "medical", "education"}
         assert set(FUND_TYPES.keys()) == expected
+
+
+class TestZjCodegen:
+    """ADR-0011：code 留空自动生成 ZJ+年份+6位流水；手输编号不覆盖。"""
+
+    def _svc(self):
+        from unittest.mock import MagicMock, patch
+
+        from app.services.fund_service import FundService
+
+        db = MagicMock()
+        captured = {}
+
+        db.refresh.side_effect = lambda o: setattr(o, "id", 123)
+        return FundService(db), patch
+
+    def test_auto_zj_format(self):
+        import datetime
+
+        svc, _ = self._svc()
+
+        class D:
+            code = None
+            name = "测试经费"
+
+            def model_dump(self, exclude_none=True):
+                return {"name": "测试经费"}
+
+        with patch("app.services.fund_service.safe_commit"):
+            fund = svc.create_fund_for_user(D(), created_by=1)
+        year = datetime.date.today().year
+        assert fund.code == f"ZJ{year}000123"
+
+    def test_manual_code_preserved(self):
+        svc, _ = self._svc()
+
+        class D:
+            code = "MY-001"
+            name = "手输编号"
+
+            def model_dump(self, exclude_none=True):
+                return {"code": "MY-001", "name": "手输编号"}
+
+        with patch("app.services.fund_service.safe_commit"):
+            fund = svc.create_fund_for_user(D(), created_by=1)
+        assert fund.code == "MY-001"

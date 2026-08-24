@@ -142,8 +142,9 @@ class FundTransaction(Base):
 
 # ==================== 预算预警逻辑 ====================
 
-BUDGET_WARNING_THRESHOLD = 0.80  # 80% 黄色预警
-BUDGET_DANGER_THRESHOLD = 0.95  # 95% 红色预警
+BUDGET_WARNING_THRESHOLD = 0.80  # 80% 提醒（黄）
+BUDGET_CRITICAL_THRESHOLD = 0.90  # 90% 警告（橙，ADR-0009）
+BUDGET_DANGER_THRESHOLD = 1.00  # 100% 禁止线（红）
 
 
 def check_budget_alerts(budgets: list) -> list:
@@ -172,7 +173,18 @@ def check_budget_alerts(budgets: list) -> list:
                     "category": b.category,
                     "level": "danger",
                     "execution_rate": round(rate * 100, 1),
-                    "message": f"{b.year}年「{b.category}」预算使用率已达 {round(rate * 100, 1)}%，请注意控制支出",
+                    "message": f"{b.year}年「{b.category}」预算使用率已达 {round(rate * 100, 1)}%，已禁止继续核销（ADR-0009）",
+                }
+            )
+        elif rate >= BUDGET_CRITICAL_THRESHOLD:
+            alerts.append(
+                {
+                    "budget_id": b.id,
+                    "year": b.year,
+                    "category": b.category,
+                    "level": "critical",
+                    "execution_rate": round(rate * 100, 1),
+                    "message": f"{b.year}年「{b.category}」预算使用率已达 {round(rate * 100, 1)}%，接近禁止线，请严控支出",
                 }
             )
         elif rate >= BUDGET_WARNING_THRESHOLD:
@@ -181,7 +193,7 @@ def check_budget_alerts(budgets: list) -> list:
                     "budget_id": b.id,
                     "year": b.year,
                     "category": b.category,
-                    "level": "warning",
+                    "level": "info",
                     "execution_rate": round(rate * 100, 1),
                     "message": f"{b.year}年「{b.category}」预算使用率已达 {round(rate * 100, 1)}%",
                 }

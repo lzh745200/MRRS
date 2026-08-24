@@ -337,13 +337,20 @@ async def create_transaction(
     )
     db.add(transaction)
 
-    # 如果关联了预算，自动更新已执行金额
+    # 如果关联了预算，自动更新已执行金额；执行率达 100% 后禁止再写入（ADR-0009 三级预警）
     if data.budget_id:
         budget = db.query(FundBudget).filter(FundBudget.id == data.budget_id).first()
         if budget:
-            budget.executed_amount = quantize_money(
+            projected = quantize_money(
                 float(budget.executed_amount or 0) + float(tx_amount)
             )
+            budget_total = float(budget.budget_amount or 0) or None
+            if budget_total and projected > budget_total + 1e-9:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"预算执行将达 {projected}/{budget_total}（超 100%），禁止核销；请先调整预算",
+                )
+            budget.executed_amount = projected
 
     # 如果关联了 Fund，自动更新 Fund.used_amount 和 remaining_amount
     if data.fund_id:
