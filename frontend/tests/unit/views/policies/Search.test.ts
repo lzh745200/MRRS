@@ -143,6 +143,7 @@ describe('挂载与数据加载', () => {
     expect(vm.tableData[0]).toEqual({
       id: '1',
       title: '政策A',
+      snippet: '',
       category: 'military',
       categoryName: '专项政策',
       department: '军委',
@@ -278,13 +279,11 @@ describe('搜索/重置/分页', () => {
     vm.searchForm.status = 'active'
     apiRequestMock.mockClear()
     await vm.loadData()
+    // 有关键词时走 FTS5 检索端点（BM25+offset 分页），结构化筛选仅无关键词路径使用
     expect(apiRequestMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        params: expect.objectContaining({
-          search: '标题 部门 关键词',
-          category: 'military',
-          status: 'active',
-        }),
+        url: '/policies/search',
+        params: { q: '标题 部门 关键词', limit: expect.any(Number), offset: 0 },
       })
     )
   })
