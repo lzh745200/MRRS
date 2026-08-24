@@ -537,6 +537,36 @@ def _audit_logout(request: Request, user_id, username):
     )
 
 
+def _resolve_identity_from_token(db: Session, credentials):
+    """从 Bearer token 解析 (user_id, username)，失败静默（登出尽力而为）。"""
+    if not (credentials and credentials.credentials):
+        return None, None
+    try:
+        payload = token_manager.decode_token(credentials.credentials)
+        username = payload.get("sub") if payload else None
+        if not username:
+            return None, None
+        user = UserService(db).get_user_by_username(username)
+        return (user.id if user else None), username
+    except Exception as e:
+        logger.debug("从 token 获取用户信息失败: %s", e, exc_info=True)
+        return None, None
+
+
+async def _revoke_request_tokens(request: Request, credentials):
+    """吊销请求携带的 access/refresh token（refresh 可选，向后兼容空 body）。"""
+    if credentials and credentials.credentials:
+        token_manager.revoke_token(credentials.credentials)
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            refresh_token = body.get("refresh_token")
+            if refresh_token and isinstance(refresh_token, str):
+                token_manager.revoke_token(refresh_token)
+    except Exception as e:
+        logger.debug("吊销 refresh_token 失败，body 可能为空或非 JSON: %s", e)
+
+
 @router.post("/logout", response_model=dict)
 async def logout(
     request: Request,
@@ -548,35 +578,10 @@ async def logout(
     将当前 access_token 加入黑名单使其立即失效。
     可选在请求体中传递 refresh_token 一并吊销，防止已注销的 refresh_token 被重用。
     """
-    # 获取用户信息用于审计日志
-    user_id = None
-    username = None
-    if credentials and credentials.credentials:
-        try:
-            payload = token_manager.decode_token(credentials.credentials)
-            if payload:
-                username = payload.get("sub")
-                # 从数据库获取用户ID
-                if username:
-                    user_service = UserService(db)
-                    user = user_service.get_user_by_username(username)
-                    if user:
-                        user_id = user.id
-        except Exception as e:
-            logger.debug("从 token 获取用户信息失败: %s", e, exc_info=True)
+    user_id, username = _resolve_identity_from_token(db, credentials)
 
-    # 吊销 Authorization 头中的 access_token
-    if credentials and credentials.credentials:
-        token_manager.revoke_token(credentials.credentials)
-    # 吊销请求体中的 refresh_token（可选，向后兼容空 body）
-    try:
-        body = await request.json()
-        if isinstance(body, dict):
-            refresh_token = body.get("refresh_token")
-            if refresh_token and isinstance(refresh_token, str):
-                token_manager.revoke_token(refresh_token)
-    except Exception as e:
-        logger.debug("吊销 refresh_token 失败，body 可能为空或非 JSON: %s", e)
+    # 吊销本次请求携带的令牌
+    await _revoke_request_tokens(request, credentials)
 
     # W1-T5（ADR-0001）：递增 token_version 使该用户全部现存 JWT（含
     # 未随请求提交的其他会话/被窃 refresh token）立即失效。
