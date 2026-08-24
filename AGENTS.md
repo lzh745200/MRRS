@@ -481,3 +481,10 @@ Every new feature must verify:
 7. **删库守卫**：start.py integrity 失败默认 SystemExit(1) 保留现场；自动重建需环境变量 ALLOW_DB_RESET=1。
 8. **测试禁令**：禁止对 machine_code_service 等 services 模块 importlib.reload（类对象分裂导致跨文件 patch 失效）；用 monkeypatch.setattr 打模块常量。
 
+## CI 协调须知（2026-08-24）
+
+- **不要取消** `Nightly Full Test Suite` 的 `backend-full` 任务（90 分钟预算属正常耗时；
+  runs #10/#11 均于约 30 分钟被外部取消，需各会话协调停止该操作）。
+- 安装包工作流已收敛为 **仅 tag v* / 手动触发**；push main 只跑 PR Checks。
+- 仓库已转为 public，托管 runner 私仓配额限制解除（8/15-8/24 的全线秒败即配额所致）。
+
