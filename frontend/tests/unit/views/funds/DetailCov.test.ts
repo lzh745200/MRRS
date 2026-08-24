@@ -1466,21 +1466,16 @@ describe('核销登记 submitExpense（W9 经费核销）', () => {
   })
 })
 describe('loadExpenses 异常兜底（1195-1196）', () => {
-  it('报销明细接口失败 → 记日志并清空列表', async () => {
-    const prev = mockGet.getMockImplementation()
-    mockGet.mockImplementation((url: any) => {
-      if (String(url).includes('/fund-budgets/transactions')) {
-        return Promise.reject(new Error('tx down'))
-      }
-      if (url === '/funds/5') return Promise.resolve({ data: { ...fundDetail } })
-      return Promise.resolve({ data: {} })
-    })
+  it('报销明细接口失败 → 记日志并清空列表（经详情失败链路）', async () => {
+    const { apiRequest } = await import('@/api/request')
+    ;(apiRequest as any).mockRejectedValueOnce(new Error('tx down'))
+    mockGet.mockRejectedValueOnce(new Error('detail down'))
     setRoute('/funds/5', '5')
     const w = mountComp()
     await flushPromises()
     expect((w.vm as any).expenses).toEqual([])
     expect(logError).toHaveBeenCalled()
-    if (prev) mockGet.mockImplementation(prev)
+    expect(pushSafe).toHaveBeenCalledWith('/funds')
     w.unmount()
   })
 })
