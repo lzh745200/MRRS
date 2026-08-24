@@ -2,9 +2,12 @@ name: Build Windows Installer (x64)
 
 on:
   push:
-    branches: [main]
     tags: ['v*']
   workflow_dispatch:
+
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -16,9 +19,7 @@ env:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
-    # 后端全量 pytest（1.2万+）+ 前端 vitest（6.4k+）合计已超 30 分钟预算，
-    # 2026-08-15 三次运行均在前端步骤进行中被 30min 超时掐断（结论记为 cancelled）
-    timeout-minutes: 60
+    # 鍚庣鍏ㄩ噺 pytest锛?.2涓?锛? 鍓嶇 vitest锛?.4k+锛夊悎璁″凡瓒?30 鍒嗛挓棰勭畻锛?    # 2026-08-15 涓夋杩愯鍧囧湪鍓嶇姝ラ杩涜涓 30min 瓒呮椂鎺愭柇锛堢粨璁鸿涓?cancelled锛?    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,10 +30,8 @@ jobs:
         continue-on-error: true
         run: |
           pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-          # 注意：--dist loadfile 与 pytest-rerunfailures 不兼容（worker 崩溃时
-          # mark_test_pending 在 loadscope 调度器上抛 NotImplementedError），
-          # 使用默认 load 调度器让 rerun 正常生效。
-          cd backend && python -m pytest tests/ -q --tb=short -n auto --cov=app --cov-report=term --cov-fail-under=50 --reruns 3 --reruns-delay 1 --junitxml=test-results.xml
+          # 娉ㄦ剰锛?-dist loadfile 涓?pytest-rerunfailures 涓嶅吋瀹癸紙worker 宕╂簝鏃?          # mark_test_pending 鍦?loadscope 璋冨害鍣ㄤ笂鎶?NotImplementedError锛夛紝
+          # 浣跨敤榛樿 load 璋冨害鍣ㄨ rerun 姝ｅ父鐢熸晥銆?          cd backend && python -m pytest tests/ -q --tb=short -n auto --cov=app --cov-report=term --cov-fail-under=50 --reruns 3 --reruns-delay 1 --junitxml=test-results.xml
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -68,14 +67,13 @@ jobs:
             package-lock.json
             frontend/package-lock.json
 
-      # 3. Python x64（x86/32-bit 已放弃：上游科学计算包不再提供 win32 cp311 wheels）
-      - name: Setup Python
+      # 3. Python x64锛坸86/32-bit 宸叉斁寮冿細涓婃父绉戝璁＄畻鍖呬笉鍐嶆彁渚?win32 cp311 wheels锛?      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
 
-      # 4. 前端依赖缓存 + 构建
+      # 4. 鍓嶇渚濊禆缂撳瓨 + 鏋勫缓
       - name: Cache frontend dependencies
         uses: actions/cache@v4
         with:
@@ -89,8 +87,7 @@ jobs:
         run: |
           cd frontend
           npm ci --legacy-peer-deps --prefer-offline || npm install --legacy-peer-deps
-          # 2>&1 将 stderr 重定向到 stdout，避免 GitHub Actions 在 Windows 上
-          # 将 Vite/Rollup 的进度输出误判为错误并产生 false annotation
+          # 2>&1 灏?stderr 閲嶅畾鍚戝埌 stdout锛岄伩鍏?GitHub Actions 鍦?Windows 涓?          # 灏?Vite/Rollup 鐨勮繘搴﹁緭鍑鸿鍒や负閿欒骞朵骇鐢?false annotation
           npm run build 2>&1
 
       - name: Sync frontend to resources
@@ -107,36 +104,34 @@ jobs:
             exit 1
           }
 
-      # 5. 版本同步 (仅 tag 触发)
+      # 5. 鐗堟湰鍚屾 (浠?tag 瑙﹀彂)
       - name: Sync version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: python scripts/sync_version.py ${{ github.ref_name }}
 
-      # 5b. 生成构建元数据
-      - name: Generate build info
+      # 5b. 鐢熸垚鏋勫缓鍏冩暟鎹?      - name: Generate build info
         shell: bash
         run: python scripts/generate_build_info.py ${{ github.ref_name || 'dev' }}
 
-      # 6. 安装 Python 依赖 + PyInstaller
+      # 6. 瀹夎 Python 渚濊禆 + PyInstaller
       - name: Install Python deps
         shell: bash
         run: |
           set +e
           pip install --upgrade pip cython setuptools wheel
-          # prophet 依赖 cmdstan C++ 编译，单独处理（失败不阻断，系统自动降级离线模式）
-          sed '/^prophet/d;/^cmdstanpy/d;/^stanio/d;/^pytokens/d' backend/requirements.txt > req-core.txt
+          # prophet 渚濊禆 cmdstan C++ 缂栬瘧锛屽崟鐙鐞嗭紙澶辫触涓嶉樆鏂紝绯荤粺鑷姩闄嶇骇绂荤嚎妯″紡锛?          sed '/^prophet/d;/^cmdstanpy/d;/^stanio/d;/^pytokens/d' backend/requirements.txt > req-core.txt
           pip install --prefer-binary -r req-core.txt
           pip install prophet==1.3.0 2>/dev/null || echo "PROPHET_UNAVAILABLE=true" >> $GITHUB_ENV
           pip install -r backend/requirements-build.txt
           exit 0
 
-      # 7. PyInstaller 打包后端
+      # 7. PyInstaller 鎵撳寘鍚庣
       - name: Build backend (PyInstaller)
         shell: bash
         run: cd backend && python -m PyInstaller assistance-backend.spec --clean --noconfirm
 
-      # 8. 验证后端产物
+      # 8. 楠岃瘉鍚庣浜х墿
       - name: Verify backend exe
         shell: pwsh
         run: |
@@ -146,17 +141,17 @@ jobs:
           $size = [math]::Round((Get-Item backend/dist/assistance-backend.exe).Length / 1MB, 1)
           Write-Host "Backend exe size: ${size}MB"
 
-      # 9. 安装 Electron 依赖 (根目录)
+      # 9. 瀹夎 Electron 渚濊禆 (鏍圭洰褰?
       - name: Install Electron deps
         run: npm ci
 
-      # 10. electron-builder 打包
+      # 10. electron-builder 鎵撳寘
       - name: Build installer (electron-builder)
         run: npx electron-builder --win --x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 11. 上传制品
+      # 11. 涓婁紶鍒跺搧
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
@@ -164,7 +159,7 @@ jobs:
           path: dist/electron/*.exe
           retention-days: 30
 
-      # 12. 发布 Release (仅 tag 触发)
+      # 12. 鍙戝竷 Release (浠?tag 瑙﹀彂)
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

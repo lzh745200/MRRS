@@ -2,10 +2,13 @@ name: Build Self-Contained ARM64 Debian Package
 
 on:
   push:
-    branches: [ "main", "master" ]
     tags:
       - 'v*'
   workflow_dispatch:
+
+concurrency:
+  group: build-arm64-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -25,8 +28,7 @@ jobs:
 
       - name: Pre-pull base image (retry for EOL registry)
         run: |
-          # python:3.11-slim-buster 为 EOL 镜像，拉取可能间歇失败；重试 3 次
-          for i in 1 2 3; do
+          # python:3.11-slim-buster 涓?EOL 闀滃儚锛屾媺鍙栧彲鑳介棿姝囧け璐ワ紱閲嶈瘯 3 娆?          for i in 1 2 3; do
             docker pull --platform linux/arm64 python:3.11-slim-buster && break
             echo "pull failed (attempt $i), retrying..."
             sleep 15
@@ -73,7 +75,7 @@ jobs:
 
       - name: Build frontend
         working-directory: ./frontend
-        run: npm run build 2>&1  # 重定向 stderr 避免 GitHub Actions false annotation
+        run: npm run build 2>&1  # 閲嶅畾鍚?stderr 閬垮厤 GitHub Actions false annotation
 
       - name: Upload frontend artifact
         uses: actions/upload-artifact@v4
@@ -188,7 +190,7 @@ jobs:
           set -e
           
           # Find install directory
-          for dir in /opt/assistance-management-system /opt/帮扶管理系统; do
+          for dir in /opt/assistance-management-system /opt/甯壎绠＄悊绯荤粺; do
             if [ -d "$dir" ]; then
               # Ensure backend binary is executable
               if [ -f "$dir/resources/backend/assistance-backend.exe" ]; then
