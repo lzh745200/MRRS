@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+﻿from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -109,14 +109,14 @@ class TestCreateFund:
         assert fund.name == "test"
 
     def test_auto_commit_false(self, svc, db):
-        fund = svc.create_fund(name="test", amount=100, auto_commit=False)
+        svc.create_fund(name="test", amount=100, auto_commit=False)
         db.add.assert_called_once()
         db.commit.assert_not_called()
         db.refresh.assert_not_called()
         db.flush.assert_called_once()
 
     def test_default_auto_commit(self, svc, db):
-        fund = svc.create_fund(name="test")
+        svc.create_fund(name="test")
         db.commit.assert_called_once()
 
 
@@ -354,8 +354,6 @@ class TestZjCodegen:
         from app.services.fund_service import FundService
 
         db = MagicMock()
-        captured = {}
-
         db.refresh.side_effect = lambda o: setattr(o, "id", 123)
         return FundService(db), patch
 

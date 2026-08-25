@@ -38,7 +38,11 @@ class TestApplyFailureClosure:
     def test_apply_failure_marks_task(self, svc):
         """handler 抛异常 → apply_entity_change 返回 False，任务可被标记失败态"""
         task = _mk_task()
-        with patch.object(ApprovalWorkflowService, "_ENTITY_APPLY_HANDLERS", {"fund": lambda db, t: (_ for _ in ()).throw(RuntimeError("boom"))}):
+
+        def _boom(db, t):
+            raise RuntimeError("boom")
+
+        with patch.object(ApprovalWorkflowService, "_ENTITY_APPLY_HANDLERS", {"fund": _boom}):
             ok = svc.apply_entity_change(task)
         assert ok is False
 
