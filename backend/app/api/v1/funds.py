@@ -1395,3 +1395,11 @@ async def upload_fund_attachment(
         detail=f"分类: {category or 'other'}",
     )
     return success_response(data=attachment.to_dict(), message="上传成功")
+
+# ── 回收站：恢复 / 彻底删除（通用工厂挂载） ──
+from app.api.v1.recycle_bin import (  # noqa: E402 —— 路由尾部挂载
+    register_recycle_bin_routes as _register_rb_fund)
+
+_register_rb_fund(
+    router, model=Fund, resource="经费",
+)

@@ -2082,3 +2082,11 @@ async def preview_project_file(
         media_type=mime_type,
         headers={"Content-Disposition": f"inline; filename*=UTF-8''{safe_name}"},
     )
+
+# ── 回收站：恢复 / 彻底删除（通用工厂挂载） ──
+from app.api.v1.recycle_bin import (  # noqa: E402 —— 路由尾部挂载
+    register_recycle_bin_routes as _register_rb_project)
+
+_register_rb_project(
+    router, model=Project, resource="项目",
+)

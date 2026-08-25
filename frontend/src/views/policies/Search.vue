@@ -102,8 +102,13 @@
         </el-table-column>
         <el-table-column label="命中摘要" min-width="260">
           <template #default="scope">
-            <!-- eslint-disable-next-line vue/no-v-html --><!-- snippet 已在前端转义后仅放行 <mark> -->
-            <span v-if="scope.row.snippet" class="fts-snippet" v-html="scope.row.snippet" />
+            <!-- snippet 已由 sanitizeSnippet 转义，此处按 <mark> 分段安全渲染（无 v-html） -->
+            <span v-if="scope.row.snippet" class="fts-snippet">
+              <template v-for="(seg, si) in splitSnippet(scope.row.snippet)" :key="si">
+                <mark v-if="seg.mark">{{ seg.text }}</mark>
+                <template v-else>{{ seg.text }}</template>
+              </template>
+            </span>
             <span v-else>—</span>
           </template>
         </el-table-column>
@@ -213,6 +218,26 @@ const loadCategories = async () => {
 function sanitizeSnippet(raw: string): string {
   const esc = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   return esc.replace(/&lt;mark&gt;/g, '<mark>').replace(/&lt;\/mark&gt;/g, '</mark>')
+}
+
+interface SnippetSeg {
+  text: string
+  mark: boolean
+}
+
+/** 将仅含 <mark> 标记的安全片段拆分为分段，供模板插值渲染（替代 v-html） */
+function splitSnippet(s: string): SnippetSeg[] {
+  const segs: SnippetSeg[] = []
+  const re = /<mark>(.*?)<\/mark>/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) segs.push({ text: s.slice(last, m.index), mark: false })
+    segs.push({ text: m[1], mark: true })
+    last = m.index + m[0].length
+  }
+  if (last < s.length) segs.push({ text: s.slice(last), mark: false })
+  return segs.length > 0 ? segs : [{ text: s, mark: false }]
 }
 
 // 加载数据

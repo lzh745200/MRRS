@@ -33,6 +33,11 @@ export const projectsApi = {
   create: (data: any) => post('/projects', data),
   update: (id: number | string, data: any) => put('/projects/' + id, data),
   delete: (id: number) => del('/projects/' + id),
+  // 回收站：恢复 / 彻底删除
+  restore: (id: number) => post(`/projects/${id}/restore`, {}),
+  purgePreview: (id: number) => get(`/projects/${id}/purge/preview`),
+  purge: (id: number, confirmPassword?: string) =>
+    post(`/projects/${id}/purge`, { confirm_password: confirmPassword || '' }),
   getById: (id: number | string) => get('/projects/' + id),
   getStats: () => get('/projects/stats'),
   exportList: (params?: any) =>
@@ -85,3 +90,9 @@ export const projectsApi = {
 
 // Alias for views that use the singular form
 export const projectApi = projectsApi
+// 回收站：恢复 / 彻底删除（具名导出，供列表页直接使用）
+export const restoreProject = (id: number) => post(`/projects/${id}/restore`, {})
+export const previewPurgeProject = (id: number) => get(`/projects/${id}/purge/preview`)
+export const purgeProject = (id: number, confirmPassword?: string) =>
+  post(`/projects/${id}/purge`, { confirm_password: confirmPassword || '' })
+

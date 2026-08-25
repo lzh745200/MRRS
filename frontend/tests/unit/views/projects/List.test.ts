@@ -13,6 +13,8 @@ const {
   projectApiMock,
   pushSafeMock,
   logError,
+  promptMock,
+  authState,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   confirmMock: vi.fn(),
@@ -21,14 +23,19 @@ const {
     list: vi.fn(),
     delete: vi.fn(),
     exportList: vi.fn(),
+    restore: vi.fn(),
+    purgePreview: vi.fn(),
+    purge: vi.fn(),
   },
   pushSafeMock: vi.fn(),
   logError: vi.fn(),
+  promptMock: vi.fn(),
+  authState: { user: { role: 'admin', id: 1 }, canViewDeleted: true },
 }))
 
 vi.mock('element-plus', () => ({
   ElMessage,
-  ElMessageBox: { confirm: confirmMock },
+  ElMessageBox: { confirm: confirmMock, prompt: promptMock },
   ElTable: {
     name: 'ElTable',
     template:
@@ -41,7 +48,17 @@ vi.mock('element-plus', () => ({
   },
 }))
 
-vi.mock('@/api/projects', () => ({ projectApi: projectApiMock, projectsApi: projectApiMock }))
+vi.mock('@/api/projects', () => ({
+  projectApi: projectApiMock,
+  projectsApi: projectApiMock,
+  restoreProject: projectApiMock.restore,
+  previewPurgeProject: projectApiMock.purgePreview,
+  purgeProject: projectApiMock.purge,
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authState,
+}))
 
 vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: pushSafeMock }),

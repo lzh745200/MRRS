@@ -46,6 +46,32 @@ _ALLOWED_TABLES = frozenset({
 # 敏感表: 禁止导入(防提权/数据篡改)
 _SENSITIVE_TABLES = frozenset({"users", "machine_codes", "audit_logs"})
 
+# ══════════════════════════════════════════════════════════════
+# 年度板块同步表：单一常量源（W2-T1）
+# 键 = 模型 __tablename__（单数真实表名），值 = 中文标签。
+# 历史缺陷：此处曾用复数幽灵名（village_populations 等），
+# 与 supported_village.py 的真实单数 __tablename__ 不一致，
+# 导致 10 张年度数据表静默丢失增量同步。
+# ══════════════════════════════════════════════════════════════
+_SYNC_TABLE_LABELS = {
+    "supported_villages": "帮扶村",
+    "village_population": "人口数据",
+    "village_income": "收入数据",
+    "organizations": "组织",
+    "policies": "政策",
+    "force_investment": "专项投入",
+    "industry_support": "产业帮扶",
+    "infrastructure_improvement": "基础设施",
+    "party_building_support": "党建帮扶",
+    "medical_support": "医疗帮扶",
+    "consumption_support": "消费帮扶",
+    "employment_support": "就业帮扶",
+    "education_support": "教育帮扶",
+}
+
+# 注入白名单纳入年度表（与核心业务表并集）
+_ALLOWED_TABLES = _ALLOWED_TABLES | frozenset(_SYNC_TABLE_LABELS)
+
 
 @dataclass
 class ExportConfig:

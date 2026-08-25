@@ -41,6 +41,9 @@
 - ADR-0006 PyInstaller onedir
 - ADR-0007 前端指令体系启用
 
+- ADR-0009 预算预警三级阈值(80提醒/90警告/100禁止拦截)
+- ADR-0011 经费编号 ZJ+年份+6位流水(flush 后按 id 序，手输不覆盖)
+
 ## 整改工单
 
 `.scratch/w1-security-redline/ … w6-release-eng/`，规则见 `docs/agents/issue-tracker.md`。

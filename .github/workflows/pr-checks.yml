@@ -117,6 +117,9 @@ jobs:
       - uses: actions/setup-node@v5
         with: { node-version: '22' }
       # 版本一致性门禁：sync-version.js --check 检测 13 处版本号漂移
+      # 软删除过滤静态扫描：新增对软删模型的无 is_active 聚合/列表查询即失败
+      - name: Soft-delete filter guard
+        run: python backend/scripts/check_soft_delete_usage.py
       - name: Version consistency check
         run: node scripts/sync-version.js --check
       # 前后端菜单对齐门禁：前端菜单 key/path 与后端 MENU_DEFINITIONS/前端路由一致

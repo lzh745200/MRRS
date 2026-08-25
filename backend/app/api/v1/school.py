@@ -1410,3 +1410,11 @@ async def import_school_scholarship_students(
             os.unlink(tmp_path)
         except FileNotFoundError:
             logger.debug("Temp file already removed: %s", tmp_path)
+
+# ── 回收站：恢复 / 彻底删除（通用工厂挂载） ──
+from app.api.v1.recycle_bin import (  # noqa: E402 —— 路由尾部挂载
+    register_recycle_bin_routes as _register_rb_school)
+
+_register_rb_school(
+    router, model=School, resource="学校",
+)

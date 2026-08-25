@@ -102,6 +102,21 @@
             <el-icon><Search /></el-icon>搜索
           </el-button>
           <el-button @click="handleReset">重置</el-button>
+          <!-- 回收站入口（仅管理员）：查看已软删项目 -->
+          <el-tooltip
+            v-if="canViewDeleted"
+            content="切换显示已软删的项目（管理员可见）"
+            placement="top"
+          >
+            <el-switch
+              v-model="showDeletedOnly"
+              inline-prompt
+              active-text="回收站"
+              inactive-text="正常"
+              style="margin-left: 12px"
+              @change="handleToggleDeleted"
+            />
+          </el-tooltip>
         </el-form-item>
       </el-form>
     </div>
@@ -203,12 +218,19 @@
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleView(row)">查看</el-button>
-            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-            <el-popconfirm title="确定删除该项目吗？" @confirm="handleDelete(row)">
-              <template #reference>
-                <el-button type="danger" link>删除</el-button>
-              </template>
-            </el-popconfirm>
+            <!-- 回收站模式：仅提供 恢复 / 彻底删除 -->
+            <template v-if="showDeletedOnly">
+              <el-button type="success" link @click="handleRestore(row)">恢复</el-button>
+              <el-button type="danger" link @click="handlePurge(row)">彻底删除</el-button>
+            </template>
+            <template v-else>
+              <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+              <el-popconfirm title="确定删除该项目吗？" @confirm="handleDelete(row)">
+                <template #reference>
+                  <el-button type="danger" link>删除</el-button>
+                </template>
+              </el-popconfirm>
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -239,11 +261,19 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { ElMessage, ElMessageBox, ElTable } from 'element-plus'
 import { Plus, Download, Search, Upload, TrendCharts } from '@element-plus/icons-vue'
-import { projectApi, type Project } from '@/api/projects'
+import {
+  projectApi,
+  restoreProject,
+  previewPurgeProject,
+  purgeProject,
+  type Project,
+} from '@/api/projects'
+import { useAuthStore } from '@/stores/auth'
 import { chartColor } from '@/utils/chartColors'
 
 const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
+const authStore = useAuthStore()
 const loading = ref(false)
 const loadError = ref(false)
 const batchDeleting = ref(false)
@@ -357,6 +387,11 @@ const loadData = async () => {
     if (filterForm.status === 'cancelled') {
       params.include_cancelled = true
     }
+    if (showDeletedOnly.value) {
+      // 回收站模式：仅查看已软删项目（后端 include_deleted 管理员收敛）
+      params.include_deleted = true
+      params.include_cancelled = true
+    }
     const res = await projectApi.list(params)
     // 防御：兼容信封（data.items）与裸分页（items）两种形态
     projectList.value = (res as any)?.data?.items ?? (res as any)?.items ?? []
@@ -423,6 +458,89 @@ const handleDelete = async (row: any) => {
     loadStats()
   } catch {
     ElMessage.error('删除失败')
+  }
+}
+
+// ── 回收站：恢复 / 彻底删除（与帮扶村回收站同一交互范式） ──
+const canViewDeleted = computed(() => authStore.canViewDeleted)
+const showDeletedOnly = ref(false)
+
+const handleToggleDeleted = async () => {
+  pagination.page = 1
+  await loadData()
+}
+
+const handleRestore = async (row: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定恢复项目【${row.name}】吗？恢复后将重新出现在正常列表中。`,
+      '恢复确认',
+      { confirmButtonText: '确认恢复', cancelButtonText: '取消', type: 'info' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await restoreProject(row.id)
+    ElMessage.success('恢复成功')
+    loadData()
+  } catch {
+    ElMessage.error('恢复失败')
+  }
+}
+
+const handlePurge = async (row: any) => {
+  let cascadeHint = ''
+  let totalRefs = 0
+  try {
+    const preview = (await previewPurgeProject(row.id)) as any
+    const data = preview?.data || preview || {}
+    totalRefs = Number(data.total_references || 0)
+    const top = Object.entries(data.details || {})
+      .sort((a: any, b: any) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([k, v]) => `${k} ${v}条`)
+      .join('、')
+    cascadeHint = top ? `（含 ${top} 等）` : ''
+  } catch {
+    // 预览失败不阻断流程
+  }
+  try {
+    await ElMessageBox.confirm(
+      `彻底删除后【${row.name}】及其关联的 ${totalRefs} 条数据将无法恢复${cascadeHint}！此操作不可撤销。`,
+      '彻底删除警告',
+      { confirmButtonText: '继续', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  let confirmPassword = ''
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `彻底删除【${row.name}】需二次确认，请输入登录密码：`,
+      '二次确认',
+      {
+        confirmButtonText: '确认彻底删除',
+        cancelButtonText: '取消',
+        inputType: 'password',
+        inputValidator: (v: string) => (v ? true : '密码不能为空'),
+      }
+    )
+    confirmPassword = value || ''
+  } catch {
+    return
+  }
+  loading.value = true
+  try {
+    const result = (await purgeProject(row.id, confirmPassword)) as any
+    projectList.value = projectList.value.filter((item) => item.id !== row.id)
+    pagination.total = Math.max(0, pagination.total - 1)
+    ElMessage.success(`已彻底删除及清理 ${result?.data?.deleted_records ?? 0} 条关联数据`)
+    loadData()
+  } catch {
+    ElMessage.error('彻底删除失败')
+  } finally {
+    loading.value = false
   }
 }
 
