@@ -97,22 +97,20 @@ class DataSyncService:
         except Exception as e:
             self.logger.warning(f"创建同步目录失败: {e}")
 
-        # 支持同步的表
+        # 支持同步的表（W2-T1 单一常量源）：仅保留真实存在于模型元数据的表，
+        # 防止幽灵表名静默丢数据
+        from app.models import Base as _Base
+
         self.syncable_tables = {
-            "supported_villages": "帮扶村",
-            "village_populations": "人口数据",
-            "village_incomes": "收入数据",
-            "organizations": "组织",
-            "policies": "政策",
-            "force_investments": "专项投入",
-            "industry_supports": "产业帮扶",
-            "infrastructure_improvements": "基础设施",
-            "party_building_supports": "党建帮扶",
-            "medical_supports": "医疗帮扶",
-            "consumption_supports": "消费帮扶",
-            "employment_supports": "就业帮扶",
-            "education_supports": "教育帮扶",
+            name: label
+            for name, label in _SYNC_TABLE_LABELS.items()
+            if name in _Base.metadata.tables
         }
+        _missing_meta = set(_SYNC_TABLE_LABELS) - set(self.syncable_tables)
+        if _missing_meta:
+            self.logger.warning(
+                f"同步表配置了但模型元数据缺失（将被忽略）: {sorted(_missing_meta)}"
+            )
 
     @contextmanager
     def _get_db_context(self):
@@ -176,21 +174,22 @@ class DataSyncService:
                     "data": {},
                 }
 
-                # 导出表数据
+                # 导出表数据（W2-T1：单表异常显式上报，不再静默丢表）
                 total_records = 0
-                tables_to_export = config.modules or list(self.syncable_tables.keys())
+                export_errors: Dict[str, str] = {}
+                tables_to_export = [
+                    t for t in (config.modules or list(self.syncable_tables.keys()))
+                    if t in self.syncable_tables
+                ]
 
                 for table_name in tables_to_export:
-                    if table_name not in self.syncable_tables:
-                        continue
-
                     try:
                         records = await self._export_table_data(db, table_name, config.since)
                         export_data["data"][table_name] = records
                         total_records += len(records)
                         self.logger.info(f"表 {table_name} 导出 {len(records)} 条记录")
                     except Exception as e:
-                        self.logger.warning(f"导出表 {table_name} 失败: {str(e)}")
+                        export_errors[table_name] = str(e)
                         export_data["data"][table_name] = []
 
                 # 保存数据包
@@ -206,14 +205,25 @@ class DataSyncService:
                 safe_commit(db, self.logger)
 
                 result = {
-                    "success": True,
+                    "success": not export_errors,
                     "package_name": package_name,
                     "package_path": str(package_path),
                     "total_records": total_records,
                     "exported_at": export_time.isoformat(),
                     "size": package_path.stat().st_size if package_path.exists() else 0,
-                    "message": "数据导出成功",
+                    "message": (
+                        f"数据导出完成，{len(export_errors)} 张表失败"
+                        if export_errors else "数据导出成功"
+                    ),
                 }
+                if export_errors:
+                    result["errors"] = export_errors
+                    # 同步日志标记失败，便于 UI/审计追溯
+                    sync_log.status = "failed"
+                    sync_log.details = {
+                        **(sync_log.details or {}),
+                        "errors": export_errors,
+                    }
 
                 self.logger.info("data_exported: %s", result)
                 return result
@@ -258,8 +268,9 @@ class DataSyncService:
             return records
 
         except Exception as e:
+            # W2-T1：不再吞成空列表——向上传播，由调用方计入 errors 明细
             self.logger.error(f"导出表 {table_name} 数据失败: {str(e)}")
-            return []
+            raise
 
     async def _save_export_package(self, export_data: Dict[str, Any], package_name: str, include_files: bool) -> Path:
         """保存导出数据包"""

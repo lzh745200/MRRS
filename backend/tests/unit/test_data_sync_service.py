@@ -1,4 +1,4 @@
-"""数据同步服务单元测试 (100% coverage)"""
+﻿"""数据同步服务单元测试 (100% coverage)"""
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -101,6 +101,8 @@ class TestDataSyncService:
                             )
                             result = await service.export_incremental(config)
                             assert result["success"] is True
+                            assert "errors" not in result
+                            assert result["success"] is True
                             assert result["total_records"] == 1
 
     @pytest.mark.asyncio
@@ -117,7 +119,8 @@ class TestDataSyncService:
                             from app.services.data_sync_service import ExportConfig
                             config = ExportConfig(modules=["unknown_table"])
                             result = await service.export_incremental(config)
-                            mock_export.assert_not_called()
+                            # W2-T1：未知表被过滤，不产生错误
+                            assert mock_export.assert_not_called() is None
                             assert result["success"] is True
 
     @pytest.mark.asyncio
@@ -136,8 +139,9 @@ class TestDataSyncService:
                             from app.services.data_sync_service import ExportConfig
                             config = ExportConfig(since=None, modules=["supported_villages"])
                             result = await service.export_incremental(config)
-                            assert result["success"] is True
-                            service.logger.warning.assert_called()
+                            # W2-T1 新契约：异常显式上报
+                            assert result["success"] is False
+                            assert "supported_villages" in result["errors"]
 
     @pytest.mark.asyncio
     async def test_export_incremental_general_exception(self, service):
@@ -194,17 +198,19 @@ class TestDataSyncService:
 
     @pytest.mark.asyncio
     async def test_export_table_data_exception(self, service):
+        """W2-T1 新契约：导出异常向上传播，不再吞成空列表。"""
         db = MagicMock()
         db.execute.side_effect = Exception("query fail")
-        records = await service._export_table_data(db, "supported_villages")
-        assert records == []
+        with pytest.raises(Exception, match="query fail"):
+            await service._export_table_data(db, "supported_villages")
 
     @pytest.mark.asyncio
     async def test_export_table_data_invalid_table_name(self, service):
+        """W2-T1 新契约：非法表名异常向上传播。"""
         db = MagicMock()
         with patch.object(service, "_validate_table_name", side_effect=ValueError("invalid")):
-            records = await service._export_table_data(db, "bad table")
-            assert records == []
+            with pytest.raises(ValueError, match="invalid"):
+                await service._export_table_data(db, "bad table")
 
     # ===================== _save_export_package =====================
     @pytest.mark.asyncio
