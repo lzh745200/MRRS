@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-high]
+﻿---
+labels: [done, severity-high]
 blocks: []
 blocked-by: []
 ---
@@ -24,3 +24,6 @@ PUT 接口可直接把 pending 改成 audited 绕过状态机/附件校验/FundS
 ## 审计结论（2026-08-25）
 
 AUDIT-20260825: PARTIAL——PUT 直改 status 绕状态机(funds.py:531-587)；FundStatus 无 REJECTED(models/fund.py:49-57)；setattr 清空已修复
+
+## Resolution
+REJECTED 枚举补齐（models/schemas 双侧，存量字符串值天然兼容无需数据迁移）；batch_update_status 增加状态机白名单校验（FUND_TRANSITIONS，任一记录非法整体拒绝）；PUT pending→audited 已由 _transition_status 白名单拦截。测试 test_fund_service.py 39 项全绿

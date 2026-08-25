@@ -44,8 +44,8 @@ class ImportHistory(Base):
     user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=False,
-        comment="操作用户ID",
+        nullable=True,
+        comment="操作用户ID(用户删除后置空，导入历史作为合规留痕保留)",
     )
     file_name = Column(String(255), nullable=False, comment="上传文件名")
     file_size = Column(Integer, nullable=False, comment="文件大小(字节)")

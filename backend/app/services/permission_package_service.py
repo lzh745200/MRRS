@@ -53,7 +53,7 @@ class PermissionPackageService:
     # 导出
     # ================================================================
 
-    def export_package(
+    def export_package(  # noqa: C901
         self,
         password: Optional[str] = None,
         description: Optional[str] = None,
@@ -301,7 +301,7 @@ class PermissionPackageService:
     # 导入 — 预览阶段
     # ================================================================
 
-    def import_package(
+    def import_package(  # noqa: C901
         self,
         file_path: str,
         password: Optional[str] = None,

@@ -1266,19 +1266,18 @@ class TestPolicyService:
             assert len(result) == 1
 
     def test_increment_view_count_found(self):
+        """W2-T6 原子 UPDATE：命中返回 True 且执行原子递增语句"""
         db = MagicMock()
         svc = self._make_service(db)
-        policy = MagicMock()
-        policy.view_count = 5
-        db.query.return_value.filter.return_value.first.return_value = policy
+        db.query.return_value.filter.return_value.update.return_value = 1
         result = svc.increment_view_count(1)
         assert result is True
-        assert policy.view_count == 6
+        db.query.return_value.filter.return_value.update.assert_called_once()
 
     def test_increment_view_count_not_found(self):
         db = MagicMock()
         svc = self._make_service(db)
-        db.query.return_value.filter.return_value.first.return_value = None
+        db.query.return_value.filter.return_value.update.return_value = 0
         result = svc.increment_view_count(999)
         assert result is False
 

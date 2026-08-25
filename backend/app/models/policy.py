@@ -81,9 +81,9 @@ class PolicyFavorite(Base):
     )
     policy_id = Column(
         Integer,
-        ForeignKey("policies.id", ondelete="SET NULL"),
+        ForeignKey("policies.id", ondelete="CASCADE"),
         nullable=False,
-        comment="政策ID",
+        comment="政策ID(政策删除时收藏行级联清除)",
     )
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="收藏时间")
 

@@ -14,6 +14,12 @@ logger = logging.getLogger(__name__)
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
+# 合规留痕表：删除用户时绝不物理删除其中的记录（W2-T5）。
+# 这些表的外键列已迁移为 nullable（审批留痕/导入历史须保留），
+# 置空即可解除引用；若历史库尚未迁移导致置空失败，跳过并告警，
+# 由人工执行迁移后重试 —— 宁可保留引用也不销毁合规痕迹。
+PRESERVE_AUDIT_TABLES = {"approval_records", "import_histories"}
+
 
 def _safe_ident(name: str) -> str:
     """校验数据库标识符并返回双引号包裹形式，防止 SQL 注入。"""
@@ -104,7 +110,22 @@ class UserCascadeDeleteService:
                     continue
                 col_nullable = nullable_map.get(from_col, True)
 
-                if on_delete == "CASCADE":
+                if tbl in PRESERVE_AUDIT_TABLES:
+                    # 合规留痕表：仅置空，绝不物理删除（列已迁移为可空）
+                    try:
+                        result = db.execute(
+                            text(f"UPDATE {tbl_ident} SET {col_ident} = NULL "
+                                 f"WHERE {col_ident} = :uid"),  # nosec B608
+                            {"uid": user_id},
+                        )
+                        set_null_records += result.rowcount or 0
+                    except Exception:
+                        db.rollback()
+                        logger.error(
+                            "合规留痕表 %s 置空失败（请先执行 alembic 迁移），保留原记录",
+                            tbl, exc_info=True,
+                        )
+                elif on_delete == "CASCADE":
                     result = db.execute(
                         text(f"DELETE FROM {tbl_ident} WHERE {col_ident} = :uid"),  # nosec B608
                         {"uid": user_id},

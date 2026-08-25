@@ -239,8 +239,8 @@ class ApprovalRecord(Base):
     approver_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=False,
-        comment="审批人ID",
+        nullable=True,
+        comment="审批人ID(用户删除后置空，审批留痕保留)",
     )
     action = Column(String(20), nullable=False, comment="审批操作: approve / reject / transfer")
     opinion = Column(Text, nullable=True, comment="审批意见")

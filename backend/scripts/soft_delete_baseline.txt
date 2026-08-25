@@ -19,7 +19,7 @@ app\api\v1\import_export\export.py:326: funds = db.query(Fund).limit(100).all()
 app\api\v1\import_export\import_data.py:432: name[0].strip().lower() for name in db.query(SupportedVillage.village_name).all() if name[0]
 app\api\v1\project_milestones.py:379: projects_map = {p.id: p.name for p in db.query(Project.id, Project.name).filter(Project.id.in_(proje
 app\api\v1\project_milestones.py:435: projects_map = {p.id: p.name for p in db.query(Project.id, Project.name).filter(Project.id.in_(proje
-app\api\v1\projects.py:1782: if db.query(Project).filter(Project.code == code).first():
+app\api\v1\projects.py:1783: if db.query(Project).filter(Project.code == code).first():
 app\api\v1\projects.py:677: query = db.query(Project)
 app\api\v1\projects.py:804: if db.query(Project).filter(Project.code == code).first():
 app\api\v1\school.py:734: existing = db.query(School).filter(School.code == data.code).first()
@@ -42,4 +42,5 @@ app\services\fund_event_handler.py:60: funds = db.query(Fund).filter(Fund.projec
 app\services\fund_health_service.py:148: db.query(Fund)
 app\services\fund_project_linker.py:19: db.query(Project)
 app\services\fund_project_linker.py:30: db.query(Fund)
+app\services\fund_service.py:264: self.db.query(Fund.id, Fund.status)
 app\services\reminder_engine.py:101: funds = db.query(Fund).filter(Fund.amount > 0).all()

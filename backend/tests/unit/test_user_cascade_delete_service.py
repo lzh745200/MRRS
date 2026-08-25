@@ -370,3 +370,98 @@ class TestDeleteUserCascade:
         # 3 行 + 用户本身
         assert result["deleted_records"] >= 4
         assert db.execute(text("SELECT COUNT(*) FROM tbl_cascade")).scalar() == 0
+
+
+# ---------------------------------------------------------------------------
+# W2-T5 合规留痕保护：approval_records / import_histories 绝不物理删除
+# ---------------------------------------------------------------------------
+
+
+class TestAuditTrailPreserved:
+    def test_approval_records_preserved_with_null_approver(self, svc):
+        """删除用户后审批记录保留（approver_id 置空），合规痕迹不销毁"""
+        from app.models.approval import ApprovalRecord, ApprovalTask
+
+        service, db = svc
+        u = User(username="auditor", hashed_password="x")
+        db.add(u)
+        db.commit()
+        task = ApprovalTask(
+            workflow_id=0, entity_type="fund", entity_id=1,
+            submitter_id=u.id, current_level=1,
+        )
+        db.add(task)
+        db.commit()
+        rec = ApprovalRecord(
+            task_id=task.id, level=1, approver_id=u.id, action="approve"
+        )
+        db.add(rec)
+        db.commit()
+        rec_id = rec.id
+
+        result = service.delete_user_cascade(u.id)
+        assert result["success"] is True
+        row = db.query(ApprovalRecord).filter(ApprovalRecord.id == rec_id).first()
+        assert row is not None, "审批留痕被物理删除（违反 W2-T5）"
+        assert row.approver_id is None
+
+    def test_import_histories_preserved_with_null_user(self, svc):
+        """删除用户后导入历史保留（user_id 置空）"""
+        from app.models.import_history import ImportHistory
+
+        service, db = svc
+        u = User(username="importer", hashed_password="x")
+        db.add(u)
+        db.commit()
+        ih = ImportHistory(
+            user_id=u.id, file_name="a.xlsx", file_size=10,
+            entity_type="supported_village",
+        )
+        db.add(ih)
+        db.commit()
+        ih_id = ih.id
+
+        result = service.delete_user_cascade(u.id)
+        assert result["success"] is True
+        row = db.query(ImportHistory).filter(ImportHistory.id == ih_id).first()
+        assert row is not None, "导入历史被物理删除（违反 W2-T5）"
+        assert row.user_id is None
+
+
+class TestPolicyFavoriteCascade:
+    def test_deleting_policy_removes_favorites(self, svc):
+        """W2-T5：删除被收藏的政策成功，收藏行级联清除而非 IntegrityError"""
+        from app.models.policy import Policy, PolicyFavorite
+
+        _service, db = svc
+        # SQLite 默认不启用外键强制，测试级联需显式开启（StaticPool 单连接内生效）
+        db.execute(text("PRAGMA foreign_keys=ON"))
+        u = User(username="fav_user", hashed_password="x")
+        db.add(u)
+        pol = Policy(title="政策A", content="c")
+        db.add(pol)
+        db.commit()
+        fav = PolicyFavorite(user_id=u.id, policy_id=pol.id)
+        db.add(fav)
+        db.commit()
+        fav_id = fav.id
+
+        db.delete(pol)  # ondelete=CASCADE → 收藏行级联清除
+        db.commit()
+        remain = (
+            db.query(PolicyFavorite)
+            .filter(PolicyFavorite.id == fav_id)
+            .count()
+        )
+        assert remain == 0
+
+    def test_favorite_column_is_nullable_contract(self):
+        """模型契约：policy_id 走 CASCADE；ImportHistory.user_id/ApprovalRecord.approver_id 可空"""
+        from app.models.import_history import ImportHistory
+        from app.models.approval import ApprovalRecord
+        from app.models.policy import PolicyFavorite
+
+        fav_fk = list(PolicyFavorite.__table__.c.policy_id.foreign_keys)[0]
+        assert (fav_fk.ondelete or "").upper() == "CASCADE"
+        assert ImportHistory.__table__.c.user_id.nullable is True
+        assert ApprovalRecord.__table__.c.approver_id.nullable is True

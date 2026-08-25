@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 from sqlalchemy import select, func, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.models.fund import Fund
+from app.models.fund import Fund, FundStatus
 from app.core.transaction import safe_commit
 from app.utils.helpers import FUND_MONEY_FIELDS, quantize_money_fields
 
@@ -227,13 +227,51 @@ class FundService:
             self.db.flush()
         return True
 
+    # 经费状态机合法流转表（与 api/v1/funds.py 各端点白名单一致语义）：
+    # pending→planned/approved/rejected；planned→approved/rejected；
+    # approved→allocated/rejected；rejected→pending/planned（重新提交）；
+    # allocated→in_use；in_use→completed；completed→audited。
+    FUND_TRANSITIONS: Dict[str, set] = {
+        "pending": {"planned", "approved", "rejected"},
+        "planned": {"approved", "rejected"},
+        "approved": {"allocated", "rejected"},
+        "rejected": {"pending", "planned"},
+        "allocated": {"in_use"},
+        "in_use": {"completed"},
+        "completed": {"audited"},
+        "audited": set(),
+    }
+
     def batch_update_status(self, fund_ids: List[int], new_status: str, *, auto_commit: bool = True) -> int:
         """
         批量更新经费状态 (用于 .rrs 数据同步或批量审批)。
+
+        带状态机校验：目标状态必须为合法枚举值，且每条记录的
+        当前状态 → 目标状态 流转必须在 FUND_TRANSITIONS 白名单内，
+        任一记录非法即整体拒绝（ValueError），不做部分更新。
+
         优化：使用 SQLAlchemy 2.0 的 bulk update，避免 N+1 循环，性能极高。
         """
         if not fund_ids:
             return 0
+
+        try:
+            FundStatus(new_status)
+        except ValueError:
+            raise ValueError(f"非法经费状态: {new_status}")
+
+        rows = (
+            self.db.query(Fund.id, Fund.status)
+            .filter(Fund.id.in_(fund_ids))
+            .all()
+        )
+        illegal = [
+            (fid, cur) for fid, cur in rows
+            if new_status not in self.FUND_TRANSITIONS.get(cur, set())
+        ]
+        if illegal:
+            sample = ", ".join(f"#{fid}:{cur}→{new_status}" for fid, cur in illegal[:5])
+            raise ValueError(f"批量更新存在非法状态流转（共{len(illegal)}条）：{sample}")
 
         stmt = (
             update(Fund)

@@ -192,12 +192,16 @@ class TestDeleteFund:
 # ---------------------------------------------------------------------------
 
 class TestBatchUpdateStatus:
+    def _mock_rows(self, db, rows):
+        db.query.return_value.filter.return_value.all.return_value = rows
+
     def test_empty_ids(self, svc, db):
         result = svc.batch_update_status([], "active")
         assert result == 0
         db.execute.assert_not_called()
 
     def test_auto_commit(self, svc, db):
+        self._mock_rows(db, [(1, "pending"), (2, "pending"), (3, "pending")])
         mock_result = MagicMock()
         mock_result.rowcount = 3
         db.execute.return_value = mock_result
@@ -206,6 +210,7 @@ class TestBatchUpdateStatus:
         db.commit.assert_called_once()
 
     def test_auto_commit_false(self, svc, db):
+        self._mock_rows(db, [(4, "in_use"), (5, "in_use")])
         mock_result = MagicMock()
         mock_result.rowcount = 2
         db.execute.return_value = mock_result
@@ -213,6 +218,26 @@ class TestBatchUpdateStatus:
         assert result == 2
         db.commit.assert_not_called()
         db.flush.assert_called_once()
+
+    def test_illegal_status_value_rejected(self, svc, db):
+        with pytest.raises(ValueError, match="非法经费状态"):
+            svc.batch_update_status([1], "active")
+        db.execute.assert_not_called()
+
+    def test_illegal_transition_rejected(self, svc, db):
+        """W2-T4：批量流转必须过状态机白名单，任一记录非法即整体拒绝"""
+        self._mock_rows(db, [(1, "audited"), (2, "pending")])
+        with pytest.raises(ValueError, match="非法状态流转"):
+            svc.batch_update_status([1, 2], "approved")
+        db.execute.assert_not_called()
+
+    def test_rejected_is_legal_status_now(self, svc, db):
+        """W2-T4：REJECTED 枚举补齐后，rejected 为合法目标态"""
+        self._mock_rows(db, [(1, "pending")])
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        db.execute.return_value = mock_result
+        assert svc.batch_update_status([1], "rejected") == 1
 
 
 # ---------------------------------------------------------------------------

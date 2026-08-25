@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-high]
+﻿---
+labels: [done, severity-high]
 blocks: []
 blocked-by: []
 ---
@@ -25,3 +25,6 @@ PolicyFavorite.policy_id / ImportHistory.user_id 为 SET NULL + nullable=False �
 ## 审计结论（2026-08-25）
 
 AUDIT-20260825: MISSING——PolicyFavorite/ImportHistory(+ApprovalRecord/Task) 四处 SET NULL×NOT NULL 矛盾；cascade 服务物理删除审计记录(user_cascade_delete_service.py:120-127)
+
+## Resolution
+三处矛盾修复：policy_favorites.policy_id→CASCADE；import_histories.user_id/approval_records.approver_id 列改可空（alembic fk_ondelete_001）；UserCascadeDeleteService 增加 PRESERVE_AUDIT_TABLES 合规留痕保护（绝不物理删除审批/导入历史）。测试 test_user_cascade_delete_service.py 24 项全绿

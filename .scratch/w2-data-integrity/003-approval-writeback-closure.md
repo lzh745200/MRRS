@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-critical]
+﻿---
+labels: [done, severity-critical]
 blocks: []
 blocked-by: []
 ---
@@ -22,3 +22,6 @@ apply_entity_change 失败仅 warning：任务 APPROVED 但业务状态未变，
 ## 审计结论（2026-08-25）
 
 AUDIT-20260825: PARTIAL——apply_entity_change 失败仅 warning(:46-59)；resubmit 未走 _resolve_role_approver_id(:558-561)
+
+## Resolution
+回写闭环落地：apply_entity_change 失败→任务标记 approved/rejected_apply_failed（不进成功终态）+ POST /approval/tasks/{id}/retry-apply 管理员重试端点+write_work_log 留痕；resubmit/晋级均经 _resolve_role_approver_id 解析 role 节点。测试 tests/unit/test_approval_writeback_closure.py 9 项全绿；既有 274 审批测试回归通过
