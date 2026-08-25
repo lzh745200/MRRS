@@ -298,6 +298,22 @@
   --avatar-size-xl: 64px;
 }
 
+// ==================== 弹窗三档 Token（UI v2.0 方案：480/720/960）====================
+
+:root {
+  --dialog-sm: 480px; // 表单单列/确认框
+  --dialog-md: 720px; // 双列表单/详情
+  --dialog-lg: 960px; // 复杂表单+内嵌表格
+}
+
+// ==================== 密度 Token（紧凑档 formalize，锚定 el size=small 实际值）====================
+
+:root {
+  --table-row-height: 36px;   // 紧凑表格行高
+  --control-height: 32px;     // 表单控件高度（small 档）
+  --form-label-width: 100px;  // 表单标签宽第一档（长标签表单用 120）
+}
+
 // ==================== 暗色主题Token ====================
 
 [data-theme="dark"] {

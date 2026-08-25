@@ -78,6 +78,16 @@ $layout-header-height: var(--layout-header-height);
 $layout-sidebar-width: var(--layout-sidebar-width);
 $layout-sidebar-collapsed-width: var(--layout-sidebar-collapsed-width);
 
+// 弹窗三档（UI v2.0：480/720/960）
+$dialog-sm: var(--dialog-sm);
+$dialog-md: var(--dialog-md);
+$dialog-lg: var(--dialog-lg);
+
+// 密度（紧凑档 formalize）
+$table-row-height: var(--table-row-height);
+$control-height: var(--control-height);
+$form-label-width: var(--form-label-width);
+
 // ==================== 主题SCSS变量 ====================
 // 为了方便在组件中使用，提供SCSS变量
 

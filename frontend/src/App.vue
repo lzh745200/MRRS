@@ -1,5 +1,7 @@
 <template>
-  <el-config-provider :locale="zhCn">
+  <!-- UI v2.0 紧凑档 formalize：全局 size=small（与存量 470 处 size="small" 用法对齐，
+       表格行高 36px / 控件 32px，1366×768 首屏信息量提升） -->
+  <el-config-provider :locale="zhCn" size="small">
     <router-view v-slot="{ Component }">
       <template v-if="appError">
         <div class="app-error-boundary">

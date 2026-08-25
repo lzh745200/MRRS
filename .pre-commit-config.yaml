@@ -40,6 +40,14 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      - id: check-hardcoded-styles
+        name: check hardcoded styles (UI v2.0 guard)
+        entry: python scripts/check_hardcoded_styles.py --staged
+        language: system
+        files: ^frontend/src/.*\.vue$
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: flake8
         name: flake8
         entry: python scripts/pre_commit_hooks.py flake8
