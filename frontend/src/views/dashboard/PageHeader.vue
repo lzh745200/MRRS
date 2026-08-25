@@ -37,6 +37,9 @@
             <el-dropdown-item command="layout">
               <el-icon><Grid /></el-icon> 自定义布局
             </el-dropdown-item>
+            <el-dropdown-item command="bigscreen" divided>
+              <el-icon><Monitor /></el-icon> 成效大屏
+            </el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -94,6 +97,10 @@ async function handleBackup() {
 }
 
 function handleMoreCommand(cmd: string) {
+  if (cmd === 'bigscreen') {
+    pushSafe('/bigscreen')
+    return
+  }
   if (cmd === 'layout') {
     emit('toggle-layout')
   }
