@@ -241,12 +241,16 @@ class PolicyService:
         return [self._to_response(p) for p in policies]
 
     def increment_view_count(self, policy_id: int) -> bool:
-        """增加浏览次数"""
-        policy = self.db.query(Policy).filter(Policy.id == policy_id).first()
-        if not policy:
-            return False
+        """增加浏览次数（W2-T6：原子 UPDATE）"""
+        from sqlalchemy import func
 
-        policy.view_count = (policy.view_count or 0) + 1
+        updated = (
+            self.db.query(Policy)
+            .filter(Policy.id == policy_id)
+            .update({Policy.view_count: func.coalesce(Policy.view_count, 0) + 1})
+        )
+        if not updated:
+            return False
         safe_commit(self.db)
         return True
 

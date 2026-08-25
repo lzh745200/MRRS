@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import update
+from sqlalchemy import case, func, update
 from sqlalchemy.orm import Session
 from app.core.transaction import safe_commit
 
@@ -105,9 +105,9 @@ class LockoutService:
     def record_failed(self, user, db: Session) -> int:
         """递增登录失败计数，达到阈值时自动锁定。
 
-        使用读-改-写方式（兼容旧版 SQLite < 3.35，不支持 RETURNING 语法）：
-        - failed_login_count = COALESCE(failed_login_count, 0) + 1
-        - locked_until = 达到阈值时设为 now+lockout，否则保持不变
+        W2-T6 原子化：单条 UPDATE 在 SQL 端完成计数+锁定判定
+        （COALESCE+CASE），并以 RETURNING 取回新计数值，
+        消除 WAL 并发下读-改-写丢更新。
 
         Args:
             user: User ORM 对象
@@ -119,24 +119,34 @@ class LockoutService:
         from app.models.user import User
 
         now = datetime.now(timezone.utc)
-        # 读-改-写：先计算新计数，再用 UPDATE ... WHERE 写入（避免 RETURNING）
-        failed_count = (getattr(user, "failed_login_count", None) or 0) + 1
+
+        # W2-T6：单条原子 UPDATE——计数与锁定判定全部在 SQL 端完成，
+        # 消除 WAL 并发下的读-改-写丢更新（历史 docstring 所述
+        # "旧版 SQLite 不支持 RETURNING" 已不成立，运行时自带 3.4x）。
+        new_count_expr = func.coalesce(User.failed_login_count, 0) + 1
+        stmt = (
+            update(User)
+            .where(User.id == user.id)
+            .values(
+                failed_login_count=new_count_expr,
+                locked_until=case(
+                    (
+                        new_count_expr >= self.max_failed_attempts,
+                        now + timedelta(minutes=self.lockout_minutes),
+                    ),
+                    else_=User.locked_until,
+                ),
+            )
+            .returning(User.failed_login_count)
+        )
+        failed_count = db.execute(stmt).scalar_one()
+        safe_commit(db)
+
         new_locked_until = (
             now + timedelta(minutes=self.lockout_minutes)
             if failed_count >= self.max_failed_attempts
             else getattr(user, "locked_until", None)
         )
-
-        stmt = (
-            update(User)
-            .where(User.id == user.id)
-            .values(
-                failed_login_count=failed_count,
-                locked_until=new_locked_until,
-            )
-        )
-        db.execute(stmt)
-        safe_commit(db)
 
         # 同步 ORM 对象状态，避免后续访问时读到过期值
         user.failed_login_count = failed_count

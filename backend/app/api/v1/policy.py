@@ -998,8 +998,12 @@ async def download_policy_file(
     if not policy.file_path or not os.path.exists(policy.file_path):
         raise HTTPException(status_code=404, detail="附件文件不存在")
 
-    current_count = policy.download_count or 0
-    setattr(policy, "download_count", current_count + 1)
+    # W2-T6：原子递增（UPDATE x=x+1），消除并发读-改-写丢更新
+    from sqlalchemy import func
+
+    db.query(Policy).filter(Policy.id == policy_id).update(
+        {Policy.download_count: func.coalesce(Policy.download_count, 0) + 1}
+    )
     safe_commit(db)
 
     return FileResponse(
@@ -1239,8 +1243,12 @@ async def get_policy(
         if policy.status != "active" and policy.created_by != current_user.id:
             raise HTTPException(status_code=403, detail="无权访问该政策")
 
-    current_count = policy.view_count or 0
-    setattr(policy, "view_count", current_count + 1)
+    # W2-T6：原子递增
+    from sqlalchemy import func
+
+    db.query(Policy).filter(Policy.id == policy_id).update(
+        {Policy.view_count: func.coalesce(Policy.view_count, 0) + 1}
+    )
     safe_commit(db)
 
     return success_response(data=_policy_to_frontend(policy))

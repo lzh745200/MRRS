@@ -142,26 +142,26 @@ class TestPolicyServiceCRUD:
         assert result is False
 
     def test_increment_view_count_found(self):
-        mock_policy = self._make_policy(view_count=5)
-        self.mock_db.query.return_value.filter.return_value.first.return_value = mock_policy
+        """W2-T6：原子 UPDATE 语义（不再依赖 ORM 实例回读）。"""
+        self.mock_db.query.return_value.filter.return_value.update.return_value = 1
 
         result = self.service.increment_view_count(1)
         assert result is True
-        assert mock_policy.view_count == 6
+        self.mock_db.query.return_value.filter.return_value.update.assert_called_once()
         self.mock_db.commit.assert_called_once()
 
     def test_increment_view_count_none_initial(self):
-        mock_policy = self._make_policy(view_count=None)
-        self.mock_db.query.return_value.filter.return_value.first.return_value = mock_policy
+        """COALESCE 兜底 NULL 计数（SQL 端）。"""
+        self.mock_db.query.return_value.filter.return_value.update.return_value = 1
 
         result = self.service.increment_view_count(1)
         assert result is True
-        assert mock_policy.view_count == 1
 
     def test_increment_view_count_not_found(self):
-        self.mock_db.query.return_value.filter.return_value.first.return_value = None
+        self.mock_db.query.return_value.filter.return_value.update.return_value = 0
         result = self.service.increment_view_count(999)
         assert result is False
+        self.mock_db.commit.assert_not_called()
 
     def test_batch_delete(self):
         self.mock_db.query.return_value.filter.return_value.delete.return_value = 3

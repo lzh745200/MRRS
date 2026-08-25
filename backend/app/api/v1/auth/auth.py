@@ -78,16 +78,14 @@ def _handle_failed_login(user, username: str, db, now, client_ip: str, user_agen
     """处理登录失败：递增计数、锁定、审计日志。"""
     failed_count = 0
     try:
-        db.refresh(user)
-        user.failed_login_count = (user.failed_login_count or 0) + 1
-        failed_count = user.failed_login_count
-        if failed_count >= _MAX_FAILED_ATTEMPTS:
-            user.locked_until = now + timedelta(minutes=_LOCKOUT_MINUTES)
-        safe_commit(db)
-        logger.info(f"登录失败: user={username}, failed_count={failed_count}/{_MAX_FAILED_ATTEMPTS}")
+        # W2-T6：经 lockout_service 原子递增（SQL 端 COALESCE+CASE+RETURNING），
+        # 达到阈值自动设置 locked_until，替代此处读-改-写。
+        from app.services.lockout_service import get_lockout_service
+
+        failed_count = get_lockout_service().record_failed(user, db)
         if failed_count >= _MAX_FAILED_ATTEMPTS:
             logger.warning(
-                "账户已锁定: user=%s, 连续失败%d次, 锁定到%s",
+                "账户已锁定: user=%s, 连续失败%d次, 锁定至%s",
                 username, failed_count, now + timedelta(minutes=_LOCKOUT_MINUTES),
             )
     except Exception as e:

@@ -20,6 +20,7 @@
 from sqlalchemy import (
     Boolean,
     Column,
+    DateTime,
     Float,
     ForeignKey,
     Index,
@@ -101,6 +102,7 @@ class SupportedVillage(Base, TimestampMixin):
 
     # 软删标记（与 School/Project 一致，is_active=False 表示已删除）
     is_active = Column(Boolean, default=True, nullable=False, comment="是否启用(软删标记)")
+    deleted_at = Column(DateTime(timezone=True), nullable=True, comment="软删时间(回收站保留期计算依据)")
 
     # 外键
     organization_id = Column(
