@@ -202,7 +202,7 @@ def package_app():
     print("[4/4] 打包应用...")
 
     output_dir = Path("dist/nuitka")
-    version = "1.2.0"
+    version = "1.10.0"
     arch = platform.machine()
 
     # 创建压缩包

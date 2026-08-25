@@ -78,7 +78,7 @@ txt(s, Inches(1.5), Inches(3.5), Inches(10), Inches(0.5), "乡村振兴 · 数�
 s2 = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(4.5), Inches(4.3), Inches(4.333), Inches(0.03))
 s2.fill.solid(); s2.fill.fore_color.rgb = GOLD; s2.line.fill.background()
 txt(s, Inches(1.5), Inches(5.0), Inches(10), Inches(0.5), "Vue 3 + FastAPI + Electron + SQLite | 完全离线单机部署", 16, GRAY, False, PP_ALIGN.CENTER)
-txt(s, Inches(1.5), Inches(5.8), Inches(10), Inches(0.5), "版本 v1.5.0  |  2026年8月", 14, GRAY, False, PP_ALIGN.CENTER)
+txt(s, Inches(1.5), Inches(5.8), Inches(10), Inches(0.5), "版本 v1.10.0  |  2026年8月", 14, GRAY, False, PP_ALIGN.CENTER)
 
 # ═══ Slide 2: 目录 ═══
 s = prs.slides.add_slide(prs.slide_layouts[6])

@@ -107,7 +107,7 @@ add_shape_bg(slide, Inches(4.5), Inches(4.8), Inches(4.333), Inches(0.03), ACCEN
 add_text_box(slide, Inches(1.5), Inches(5.5), Inches(10), Inches(0.5),
              "技术架构：Vue 3 + FastAPI + Electron + SQLite", font_size=16, color=SUBTITLE_GRAY, alignment=PP_ALIGN.CENTER)
 add_text_box(slide, Inches(1.5), Inches(6.2), Inches(10), Inches(0.5),
-             "版本 v1.5.0  |  2026年8月", font_size=14, color=SUBTITLE_GRAY, alignment=PP_ALIGN.CENTER)
+             "版本 v1.10.0  |  2026年8月", font_size=14, color=SUBTITLE_GRAY, alignment=PP_ALIGN.CENTER)
 
 # ════════════════════════════════════════════
 # Slide 2: 系统概述

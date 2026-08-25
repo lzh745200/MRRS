@@ -99,6 +99,7 @@ class School(Base):
     description = Column(Text, comment="学校简介")
     remarks = Column(Text, comment="备注")
     is_active = Column(Boolean, default=True, comment="是否启用")
+    deleted_at = Column(DateTime(timezone=True), nullable=True, comment="软删时间(回收站保留期计算依据)")
 
     # 数据权限字段
     organization_id = Column(

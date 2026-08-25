@@ -143,6 +143,7 @@ class Fund(BaseModel):
 
     # ================= 软删标记 =================
     is_active = Column(Boolean, default=True, nullable=False, comment="是否启用(软删标记)")
+    deleted_at = Column(DateTime(timezone=True), nullable=True, comment="软删时间(回收站保留期计算依据)")
 
     # ================= 数据权限字段 =================
     organization_id = Column(

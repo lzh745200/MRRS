@@ -1,11 +1,11 @@
-﻿﻿; 帮扶管理信息系统 — Windows x86 (32-bit) 安装脚本 (NSIS)
+﻿; 帮扶管理信息系统 — Windows x86 (32-bit) 安装脚本 (NSIS)
 ; 独立 x86 安装包，包含完整运行时
 
 !include "MUI2.nsh"
 
 !define PRODUCT_NAME "帮扶管理信息系统"
 !define PRODUCT_NAME_EN "AssistanceManagementSystem"
-!define PRODUCT_VERSION "1.2.0"
+!define PRODUCT_VERSION "1.10.0"
 !define PRODUCT_PUBLISHER "专项乡村振兴"
 
 SetCompressor /SOLID lzma

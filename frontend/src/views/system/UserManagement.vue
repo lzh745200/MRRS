@@ -432,6 +432,22 @@
           未检测到自定义 RBAC 角色，可直接导出基础配置。
         </div>
       </div>
+      <el-divider style="margin: 12px 0" />
+      <el-form label-width="110px">
+        <el-form-item label="加密密码">
+          <el-input
+            v-model="permExportPassword"
+            type="password"
+            show-password
+            placeholder="可选；设置后导入需输入该密码"
+            clearable
+          />
+        </el-form-item>
+        <el-form-item label="机器码绑定">
+          <el-switch v-model="permBindMachineCode" />
+          <span class="form-hint">开启后仅本机可导入该权限包</span>
+        </el-form-item>
+      </el-form>
       <template #footer>
         <el-button @click="permExportDialogVisible = false">取消</el-button>
         <el-button
@@ -1094,10 +1110,14 @@ const permExportDialogVisible = ref(false)
 const permRolesLoading = ref(false)
 const permExportRoleOptions = ref<{ name: string; label?: string }[]>([])
 const permExportRoleNames = ref<string[]>([])
+const permExportPassword = ref('')
+const permBindMachineCode = ref(false)
 
 async function openPermExportDialog() {
   permExportDialogVisible.value = true
   permExportRoleNames.value = []
+  permExportPassword.value = ''
+  permBindMachineCode.value = false
   if (permExportRoleOptions.value.length > 0) return
   permRolesLoading.value = true
   try {
@@ -1122,6 +1142,12 @@ const doExportPermissionPackage = async () => {
     const payload: Record<string, unknown> = {}
     if (permExportRoleNames.value.length > 0) {
       payload.role_names = permExportRoleNames.value
+    }
+    if (permExportPassword.value) {
+      payload.password = permExportPassword.value
+    }
+    if (permBindMachineCode.value) {
+      payload.bind_machine_code = true
     }
     const res = await post('/permission-packages/export', payload)
     const data = res.data || res
@@ -1175,8 +1201,37 @@ const handleImportPermissionPackage = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       const result = res.data || res
+      // Phase E：加密包需要密码；预览失败且标记加密时提示输入并重传
+      let importPassword = ''
+      if (!result.success && /加密/.test(result.message || '')) {
+        try {
+          const { value } = await ElMessageBox.prompt(
+            '该权限包已加密，请输入导出时设置的密码：',
+            '解密密码',
+            {
+              inputType: 'password',
+              inputValidator: (v: string) => (v ? true : '密码不能为空'),
+            }
+          )
+          importPassword = value || ''
+        } catch {
+          cleanup()
+          return
+        }
+        const fd2 = new FormData()
+        fd2.append('file', file)
+        fd2.append('password', importPassword)
+        const res2 = await post('/permission-packages/import', fd2, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        const merged = res2.data || res2
+        Object.assign(result, merged)
+        if (!result.success) {
+          ElMessage.error(merged.message || result.message || '导入失败')
+          return
+        }
+      }
       if (result.success) {
-        const p = result.preview || {}
         let msg = `将导入 ${p.role_count || 0} 个角色, ${p.user_legacy_count || 0} 个用户权限`
         if (p.warnings?.length) msg += `\n警告: ${p.warnings.join('; ')}`
         // 选择导入模式：确定=合并（保留本机其他配置）；取消=完全替换；关闭=放弃

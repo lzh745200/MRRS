@@ -50,7 +50,7 @@ RUN cd backend && .venv/bin/pyinstaller assistance-backend.spec --clean --noconf
 COPY electron/ electron/
 COPY build/ build/
 
-ARG VERSION=1.2.0
+ARG VERSION=1.10.0
 ARG ARCH=x64
 
 # 仅生成 DEB

@@ -11,7 +11,7 @@ import logging
 import os
 import tempfile
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -907,6 +907,7 @@ async def delete_school(
     )
 
     school.is_active = False
+    school.deleted_at = datetime.now(timezone.utc)
     safe_commit(db)
 
     write_work_log(

@@ -36,6 +36,13 @@ vi.mock('element-plus', () => ({ ElMessage, ElMessageBox: { confirm: vi.fn() } }
 
 vi.mock('@/api/projects', () => ({ projectsApi: projectsApiMock }))
 
+vi.mock('@/api/milestones', () => ({
+  listMilestones: vi.fn().mockResolvedValue([]),
+  createMilestone: vi.fn(),
+  updateMilestone: vi.fn(),
+  deleteMilestone: vi.fn(),
+}))
+
 vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: pushSafeMock }),
   safeRouteParam: (v: any) => Number(v) || v,
@@ -477,7 +484,11 @@ describe('任务 CRUD', () => {
     expect(vm.taskDialogVisible).toBe(true)
 
     projectsApiMock.getTasks.mockClear()
-    await wrapper.find('.el-popconfirm-stub').trigger('click')
+    // 页面存在两个 popconfirm（任务删除 / 里程碑删除）：按 data-test 排除后者
+    const pops = wrapper.findAll('.el-popconfirm-stub').filter(
+      (x) => !x.find('[data-test="ms-delete"]').exists(),
+    )
+    await pops[0].trigger('click')
     await flushPromises()
     expect(projectsApiMock.deleteTask).toHaveBeenCalled()
   })

@@ -21,6 +21,7 @@ class PermissionPackageExportRequest(BaseModel):
     role_names: Optional[List[str]] = Field(
         None, description="选择性导出：仅包含这些角色（含其用户绑定）。为空/None 导出全部"
     )
+    bind_machine_code: bool = Field(False, description="绑定本机机器码（导入时校验）")
 
 
 class PermissionPackageManifest(BaseModel):

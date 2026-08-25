@@ -183,7 +183,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { SYSTEM_VERSION, COPYRIGHT_OWNER } from '@/config/constants'
 import { User, Lock, Key, View, Hide, UploadFilled } from '@element-plus/icons-vue'
 import { AuthStorage } from '@/utils/authStorage'
@@ -242,11 +242,32 @@ async function handlePermissionImport() {
     // 直接 apiRequest + 手动 Content-Type 会导致 boundary 缺失）
     const res: any = await post('/permission-packages/import', formData)
     const body: any = res || {}
-    const success = body.success === true || body.code === 200
-    // 服务端保存的文件名（saved_file_name 为契约字段；file_name 兼容别名；
-    // 最后回退本地文件名，保证 confirm 步骤始终可执行）
-    const savedFileName = body.saved_file_name || body.file_name || permissionFile.value?.name || ''
-    if (success && savedFileName) {
+    // Phase E：加密包重试
+    let _body = body
+    if (
+      (body.success === false || body.code !== 200) &&
+      /加密/.test(body.message || body.detail || '')
+    ) {
+      try {
+        const { value } = await ElMessageBox.prompt(
+          '该权限包已加密，请输入导出时设置的密码：',
+          '解密密码',
+          { inputType: 'password', inputValidator: (v: string) => (v ? true : '密码不能为空') }
+        )
+        const fd2 = new FormData()
+        fd2.append('file', permissionFile.value)
+        fd2.append('password', value || '')
+        const r2: any = await post('/permission-packages/import', fd2)
+        _body = r2 || {}
+      } catch {
+        ElMessage.error('已取消导入')
+        return
+      }
+    }
+    const success2 = _body.success === true || _body.code === 200
+    const savedFileName =
+      _body.saved_file_name || _body.file_name || permissionFile.value?.name || ''
+    if (success2 && savedFileName) {
       // 预览验证通过 → 确认导入
       const confirmRes: any = await post(
         `/permission-packages/confirm/${encodeURIComponent(savedFileName)}`,

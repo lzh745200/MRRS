@@ -21,7 +21,7 @@ const {
   downloadTemplateMock,
   pushSafeMock,
   logError,
-  authStateRB: {} as any,
+  authStateRB,
 } = vi.hoisted(() => ({
   authStateRB: {
     user: { role: 'admin', id: 1 }, canViewDeleted: true,

@@ -8,7 +8,7 @@
 
 !define PRODUCT_NAME "帮扶管理信息系统"
 !define PRODUCT_NAME_EN "AssistanceManagementInformation"
-!define PRODUCT_VERSION "1.2.0"
+!define PRODUCT_VERSION "1.10.0"
 !define PRODUCT_PUBLISHER "Assistance Management Information"
 !define PRODUCT_DIR_REGKEY "Software\${PRODUCT_NAME_EN}"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME_EN}"

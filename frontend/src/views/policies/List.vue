@@ -367,9 +367,13 @@ const handleEdit = (row: any) => {
 // 删除
 const handleDelete = async (row: any) => {
   try {
-    await ElMessageBox.confirm(`确定删除政策"${row.title}"吗？删除后可在管理员回收站中恢复。`, '删除确认', {
-      type: 'warning',
-    })
+    await ElMessageBox.confirm(
+      `确定删除政策"${row.title}"吗？删除后可在管理员回收站中恢复。`,
+      '删除确认',
+      {
+        type: 'warning',
+      }
+    )
     await (policyStore as any).removePolicy(row.id)
     // 成功静默：删除成功仅刷新列表
   } catch (error: any) {

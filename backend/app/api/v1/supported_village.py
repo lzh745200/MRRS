@@ -6,7 +6,7 @@
 import io
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import openpyxl
@@ -695,7 +695,10 @@ async def batch_delete_villages(
     query = db.query(SupportedVillage).filter(SupportedVillage.id.in_(data.ids))
     # 数据权限过滤：仅允许操作本组织/本人创建的记录，防止跨组织批量删除
     query = apply_scope_filter(query, current_user, SupportedVillage, db=db)
-    deleted_count = query.update({"is_active": False}, synchronize_session=False)
+    deleted_count = query.update(
+        {"is_active": False, "deleted_at": datetime.now(timezone.utc)},
+        synchronize_session=False,
+    )
     safe_commit(db)
     await _invalidate_village_cache()
     # 数据变更自动创建审批任务：批量删除进入待审批板块（审计留痕）
@@ -837,6 +840,7 @@ async def delete_village(
     village = _get_village_or_404(db, village_id, current_user)
 
     village.is_active = False
+    village.deleted_at = datetime.now(timezone.utc)
     safe_commit(db)
     await _invalidate_village_cache()
     # 数据变更自动创建审批任务：帮扶村删除进入待审批板块
@@ -899,6 +903,7 @@ async def restore_village(
     _require_village_in_recycle_bin(village)
     old_snapshot = _village_to_diff_dict(village)
     village.is_active = True
+    village.deleted_at = None
     safe_commit(db)
     await _invalidate_village_cache()
     _record_village_change(

@@ -45,7 +45,7 @@ RUN echo "deb https://mirrors.ustc.edu.cn/debian bookworm main contrib non-free 
     echo "deb https://mirrors.ustc.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list
 
 ARG PACKAGE_NAME=military-rural-revitalization-system
-ARG PACKAGE_VERSION=1.0.0
+ARG PACKAGE_VERSION=1.10.0
 ARG PACKAGE_ARCH=arm64
 
 RUN apt-get update && \

@@ -100,6 +100,8 @@ def register_recycle_bin_routes(
         rec = _get_or_404(db, rid)
         _require_in_recycle_bin(rec)
         rec.is_active = True
+        if hasattr(rec, "deleted_at"):
+            rec.deleted_at = None
         from app.core.transaction import safe_commit
 
         safe_commit(db)

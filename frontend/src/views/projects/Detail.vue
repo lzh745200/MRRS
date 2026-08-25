@@ -75,6 +75,59 @@
         </el-tab-pane>
 
         <!-- 任务 -->
+        <el-tab-pane label="里程碑" name="milestones">
+          <div class="ms-toolbar">
+            <span class="ms-progress-hint">
+              完成进度：<b>{{ msProgress.completed }}/{{ msProgress.total }}</b> （{{
+                msProgress.percent
+              }}%）
+            </span>
+            <el-button type="primary" size="small" @click="openMsDialog()">新增里程碑</el-button>
+          </div>
+          <el-table v-loading="msLoading" :data="milestones" size="small" border stripe>
+            <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="planned_date" label="计划日期" width="110" />
+            <el-table-column prop="actual_date" label="实际日期" width="110">
+              <template #default="{ row }">{{ row.actual_date || '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="responsible_person" label="负责人" width="100">
+              <template #default="{ row }">{{ row.responsible_person || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag :type="msStatusTag(row.status)" size="small">{{
+                  msStatusLabel(row.status)
+                }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="150" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  v-if="row.status !== 'completed'"
+                  type="success"
+                  link
+                  size="small"
+                  @click="completeMilestone(row)"
+                  >完成</el-button
+                >
+                <el-button type="primary" link size="small" @click="openMsDialog(row)"
+                  >编辑</el-button
+                >
+                <el-popconfirm title="确认删除该里程碑？" @confirm="removeMilestone(row)">
+                  <template #reference>
+                    <el-button type="danger" link size="small" data-test="ms-delete"
+                      >删除</el-button
+                    >
+                  </template>
+                </el-popconfirm>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty
+            v-if="!milestones.length && !msLoading"
+            description="暂无里程碑，点击右上角新增"
+          />
+        </el-tab-pane>
         <el-tab-pane label="任务" name="tasks">
           <!-- 任务完成进度与状态分布 -->
           <div class="task-progress-summary">
@@ -259,6 +312,36 @@
       </template>
     </el-dialog>
 
+    <el-dialog
+      v-model="msDialogVisible"
+      :title="msForm.id ? '编辑里程碑' : '新增里程碑'"
+      width="480px"
+    >
+      <el-form label-width="90px">
+        <el-form-item label="名称" required>
+          <el-input v-model="msForm.name" maxlength="200" />
+        </el-form-item>
+        <el-form-item label="计划日期" required>
+          <el-date-picker
+            v-model="msForm.planned_date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            style="width: 200px"
+          />
+        </el-form-item>
+        <el-form-item label="负责人"
+          ><el-input v-model="msForm.responsible_person" style="width: 200px"
+        /></el-form-item>
+        <el-form-item label="描述"
+          ><el-input v-model="msForm.description" type="textarea" :rows="2"
+        /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="msDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="msSaving" @click="submitMilestone">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 附件预览（通用组件，复用政策/经费预览策略） -->
     <FilePreview
       v-model="previewVisible"
@@ -269,12 +352,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Edit, Back } from '@element-plus/icons-vue'
 import { logger } from '@/utils/logger'
 import { projectsApi } from '@/api/projects'
+import { listMilestones, createMilestone, updateMilestone, deleteMilestone } from '@/api/milestones'
 import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
 import { AuthStorage } from '@/utils/authStorage'
 import { chartColor } from '@/utils/chartColors'
@@ -553,7 +637,139 @@ async function handleDeleteFile(fileId: number) {
 }
 
 // --- Init ---
-onMounted(() => {
+// ── 里程碑（T020 接线）：CRUD + 完成标记；后端增删改自动回写项目进度 ──
+const milestones = ref<any[]>([])
+const msLoading = ref(false)
+const msDialogVisible = ref(false)
+const msSaving = ref(false)
+const msForm = reactive({
+  id: undefined as number | undefined,
+  name: '',
+  planned_date: '',
+  responsible_person: '',
+  description: '',
+})
+const msProgress = computed(() => {
+  const total = milestones.value.length
+  const completed = milestones.value.filter((m) => m.status === 'completed').length
+  return { total, completed, percent: total ? Math.round((completed / total) * 100) : 0 }
+})
+
+function msStatusLabel(st: string) {
+  const m: Record<string, string> = {
+    pending: '待开始',
+    in_progress: '进行中',
+    completed: '已完成',
+    overdue: '已逾期',
+  }
+  return m[st] || st
+}
+function msStatusTag(st: string) {
+  const m: Record<string, string> = {
+    pending: 'info',
+    in_progress: 'primary',
+    completed: 'success',
+    overdue: 'danger',
+  }
+  return (m[st] || 'info') as any
+}
+
+async function loadMilestones() {
+  const id = safeRouteParam(route.params.id)
+  if (!id) return
+  msLoading.value = true
+  try {
+    const res = await listMilestones(id)
+    const data = (res as any)?.data ?? res
+    milestones.value = Array.isArray(data) ? data : (data?.items ?? [])
+  } catch (e) {
+    logger.error('里程碑加载失败:', e)
+    milestones.value = []
+  } finally {
+    msLoading.value = false
+  }
+}
+
+function openMsDialog(row?: any) {
+  if (row) {
+    Object.assign(msForm, {
+      id: row.id,
+      name: row.name || '',
+      planned_date: row.planned_date || '',
+      responsible_person: row.responsible_person || '',
+      description: row.description || '',
+    })
+  } else {
+    Object.assign(msForm, {
+      id: undefined,
+      name: '',
+      planned_date: '',
+      responsible_person: '',
+      description: '',
+    })
+  }
+  msDialogVisible.value = true
+}
+
+async function submitMilestone() {
+  if (!msForm.name.trim()) {
+    ElMessage.warning('请填写里程碑名称')
+    return
+  }
+  if (!msForm.planned_date) {
+    ElMessage.warning('请选择计划日期')
+    return
+  }
+  msSaving.value = true
+  try {
+    const id = safeRouteParam(route.params.id)
+    const payload = {
+      name: msForm.name.trim(),
+      planned_date: msForm.planned_date,
+      responsible_person: msForm.responsible_person || undefined,
+      description: msForm.description || undefined,
+    }
+    if (msForm.id) await updateMilestone(id!, msForm.id, payload)
+    else await createMilestone(id!, payload as any)
+    ElMessage.success(msForm.id ? '里程碑已更新' : '里程碑已新增')
+    msDialogVisible.value = false
+    await loadMilestones()
+  } catch (e) {
+    logger.error('里程碑保存失败:', e)
+    ElMessage.error('保存失败，请稍后重试')
+  } finally {
+    msSaving.value = false
+  }
+}
+
+async function completeMilestone(row: any) {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    await updateMilestone(safeRouteParam(route.params.id)!, row.id, {
+      status: 'completed',
+      actual_date: today,
+    })
+    ElMessage.success('里程碑已完成，项目进度已联动更新')
+    await loadMilestones()
+  } catch (e) {
+    logger.error('完成里程碑失败:', e)
+    ElMessage.error('操作失败')
+  }
+}
+
+async function removeMilestone(row: any) {
+  try {
+    await deleteMilestone(safeRouteParam(route.params.id)!, row.id)
+    ElMessage.success('里程碑已删除')
+    await loadMilestones()
+  } catch (e) {
+    logger.error('删除里程碑失败:', e)
+    ElMessage.error('删除失败')
+  }
+}
+
+onMounted(async () => {
+  await loadMilestones()
   loadProject()
   loadTasks()
   loadFunds()

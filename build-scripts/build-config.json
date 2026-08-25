@@ -1,7 +1,7 @@
 {
   "app_name": "帮扶管理信息系统",
   "app_name_en": "assistance-management-information-system",
-  "version": "1.5.0",
+  "version": "1.10.0",
   "platforms": ["windows", "linux-arm64", "kylin-arm64"],
   "output_dir": "dist",
   "backend_entry": "assistance-backend.exe",

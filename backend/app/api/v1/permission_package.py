@@ -8,11 +8,11 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Form, Depends, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.core.security import get_current_user
 from app.core.permission_utils import is_admin
 from app.models.user import User
@@ -108,6 +108,7 @@ def export_permission_package(
         password=body.password if body else None,
         description=body.description if body else None,
         role_names=body.role_names if body else None,
+        bind_machine_code=bool(getattr(body, "bind_machine_code", False)) if body else False,
     )
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("message", "导出失败"))
@@ -154,6 +155,7 @@ def download_permission_package(
 async def import_permission_package(
     request: Request,
     file: UploadFile = File(...),
+    password: Optional[str] = Form(None),
     current_user: Optional[User] = Depends(_optional_current_user),
     db: Session = Depends(get_db),
 ):
@@ -188,7 +190,21 @@ async def import_permission_package(
     tmp_path = file_path
     try:
         service = PermissionPackageService(db)
-        result = service.import_package(tmp_path)
+        # Phase E：解密口令 + 本机机器码（用于绑定校验）
+        _machine_code = ""
+        try:
+            from app.services.machine_code_service import MachineCodeService
+
+            _s = SessionLocal()
+            try:
+                _machine_code = MachineCodeService(_s).get_machine_code() or ""
+            finally:
+                _s.close()
+        except Exception:
+            _machine_code = ""
+        result = service.import_package(
+            tmp_path, password=password, current_machine_code=_machine_code
+        )
         # 契约：返回服务端保存的文件名，前端两步导入（import → confirm）必需。
         # 旧版前端缺陷即因响应缺失该字段导致 confirm 永不执行、导入不落库。
         saved_name = os.path.basename(file_path)

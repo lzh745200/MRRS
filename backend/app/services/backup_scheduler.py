@@ -459,6 +459,20 @@ async def _auto_package_with_db(db):
     set_config("last_package_time", datetime.now().isoformat(), "最近自动打包时间")
 
 
+def recycle_retention_job():
+    """回收站保留期策略：清除超过 N 天的软删记录（每日 4:30）"""
+    from app.core.database import SessionLocal
+    from app.services.retention_service import purge_expired_soft_deleted
+
+    db = SessionLocal()
+    try:
+        purge_expired_soft_deleted(db)
+    except Exception as e:
+        logger.error("回收站保留期任务失败: %s", e, exc_info=True)
+    finally:
+        db.close()
+
+
 def start_backup_scheduler():
     """启动后台调度器（仅轻量任务，不含自动备份和 VACUUM）
 
@@ -536,6 +550,7 @@ def start_backup_scheduler():
         _timers.append(t)
 
     _schedule_daily(kpi_precalculate_job, 0, 30, "kpi_precalculate")
+    _schedule_daily(recycle_retention_job, 4, 30, "recycle_retention")
     _schedule_daily(anomaly_detection_job, 1, 0, "anomaly_detection")
     _schedule_daily(auto_backup_job, 2, 0, "auto_backup")
     _schedule_daily(auto_package_job, 3, 0, "auto_package")

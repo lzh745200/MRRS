@@ -404,7 +404,7 @@
       </el-main>
 
       <el-footer class="layout-footer" height="28px">
-        <span>帮扶管理信息系统 v1.5.0</span>
+        <span>帮扶管理信息系统 v1.10.0</span>
       </el-footer>
     </el-container>
     <!-- 移动端底部导航 -->

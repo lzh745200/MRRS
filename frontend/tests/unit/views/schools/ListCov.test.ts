@@ -48,6 +48,11 @@ const {
   }
 })
 
+const authStateRB = { user: { role: 'admin', id: 1 }, canViewDeleted: true }
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authStateRB,
+}))
+
 vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: pushSafeMock }),
 }))

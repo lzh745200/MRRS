@@ -6,7 +6,7 @@ import logging
 import mimetypes
 import os
 import uuid as _uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from io import BytesIO
 from typing import List, Optional
 from urllib.parse import quote
@@ -1110,6 +1110,7 @@ async def delete_project(
 
     project.status = ProjectStatus.CANCELLED.value
     project.is_active = False
+    project.deleted_at = datetime.now(timezone.utc)
 
     audit = AuditLogService(db)
     await audit.log(

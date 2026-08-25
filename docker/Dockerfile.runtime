@@ -21,7 +21,7 @@ FROM python:3.11-slim-bookworm AS runtime
 
 LABEL org.opencontainers.image.title="Assistance Management Information Management System"
 LABEL org.opencontainers.image.description="帮扶管理信息系统 - 离线桌面应用 Web 版"
-LABEL org.opencontainers.image.version="1.4.1"
+LABEL org.opencontainers.image.version="1.10.0"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

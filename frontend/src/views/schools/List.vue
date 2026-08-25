@@ -227,19 +227,11 @@
                   >彻底删除</el-button
                 >
               </template>
-              <template v-else>
-                <el-button type="primary" link size="small" @click="handleView(scope.row)"
-                  >编辑</el-button
-                >
-                <el-button type="primary" link size="small" @click="handleEdit(scope.row)"
-                  >编辑</el-button
-                >
-                <el-popconfirm title="确定删除该学校吗？" @confirm="handleDelete(scope.row)">
-                  <template #reference>
-                    <el-button type="danger" link size="small">删除</el-button>
-                  </template>
-                </el-popconfirm>
-              </template>
+              <el-popconfirm v-else title="确定删除该学校吗？" @confirm="handleDelete(scope.row)">
+                <template #reference>
+                  <el-button type="danger" link size="small">删除</el-button>
+                </template>
+              </el-popconfirm>
             </template>
           </el-table-column>
         </el-table>

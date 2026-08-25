@@ -58,6 +58,7 @@ class PermissionPackageService:
         password: Optional[str] = None,
         description: Optional[str] = None,
         role_names: Optional[list] = None,
+        bind_machine_code: bool = False,
     ) -> Dict[str, Any]:
         """
         导出权限配置包
@@ -231,6 +232,23 @@ class PermissionPackageService:
             manifest["scope"] = "partial"
             manifest["selected_roles"] = sorted(selected_roles)
 
+        # 机器码绑定（可选）：仅允许在指定机器导入
+        if bind_machine_code:
+            code = ""
+            try:
+                from app.services.machine_code_service import MachineCodeService
+                from app.core.database import SessionLocal as _SL
+
+                _s = _SL()
+                try:
+                    code = MachineCodeService(_s).get_machine_code() or ""
+                finally:
+                    _s.close()
+            except Exception:  # pragma: no cover —— 获取失败则不绑定
+                logger.warning("获取本机机器码失败，跳过绑定", exc_info=True)
+            if code:
+                manifest["machine_codes"] = [code]
+
         # 生成 ZIP
         from app.utils.paths import get_uploads_path
 
@@ -251,6 +269,13 @@ class PermissionPackageService:
             zf.writestr("data/organizations.json", json.dumps(organizations_data, ensure_ascii=False, indent=2))
 
         # 计算校验和
+        # 口令加密（Phase E 真实现）：Fernet 整包加密替换文件内容
+        if password:
+            from app.utils.package_crypto import encrypt_bytes
+
+            raw = file_path.read_bytes() if hasattr(file_path, "read_bytes") else open(file_path, "rb").read()
+            with open(file_path, "wb") as _f:
+                _f.write(encrypt_bytes(raw, password))
         checksum = self._calculate_checksum(file_path)
 
         logger.info(
@@ -276,16 +301,49 @@ class PermissionPackageService:
     # 导入 — 预览阶段
     # ================================================================
 
-    def import_package(self, file_path: str) -> Dict[str, Any]:
+    def import_package(
+        self,
+        file_path: str,
+        password: Optional[str] = None,
+        current_machine_code: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         导入权限配置包（预览阶段 — 验证 + 返回预览数据）
 
         Args:
-            file_path: ZIP 文件路径
+            file_path: 包文件路径
+            password: 加密包口令（未加密包忽略）
+            current_machine_code: 本机机器码（用于 manifest.machine_codes 绑定校验）
 
         Returns:
             {"success": bool, "preview": dict | None, "errors": list, "message": str}
         """
+        # Phase E：加密包解密（原地解密为明文 ZIP，供后续 confirm 复用）
+        # Phase E：加密包预读取（读取失败不在此处报错，交由后续通用流程兜底）
+        _raw = b""
+        try:
+            with open(file_path, "rb") as _f:
+                _raw = _f.read()
+        except OSError:
+            _raw = b""
+
+        from app.utils.package_crypto import looks_encrypted
+
+        if _raw and looks_encrypted(_raw):
+            if not password:
+                return {
+                    "success": False,
+                    "errors": ["该权限包已加密，请输入导出时设置的密码"],
+                    "message": "该权限包已加密",
+                }
+            from app.utils.package_crypto import decrypt_bytes
+
+            try:
+                plain = decrypt_bytes(_raw, password)
+            except Exception:
+                return {"success": False, "errors": ["密码错误或包已损坏"], "message": "密码错误"}
+            with open(file_path, "wb") as _f:
+                _f.write(plain)
         errors = []
         warnings = []
 
@@ -313,6 +371,15 @@ class PermissionPackageService:
                 version = manifest.get("version", "unknown")
                 if version != CURRENT_VERSION:
                     warnings.append(f"配置包版本 {version} 与当前版本 {CURRENT_VERSION} 不匹配")
+
+                # Phase E：机器码绑定校验
+                allowed_mc = manifest.get("machine_codes")
+                if allowed_mc and current_machine_code not in allowed_mc:
+                    return {
+                        "success": False,
+                        "errors": ["该权限包已绑定其他机器，本机不在授权清单内"],
+                        "message": "机器码校验失败",
+                    }
 
                 # 读取角色
                 roles_data = json.loads(zf.read("data/roles.json").decode("utf-8"))
@@ -465,8 +532,12 @@ class PermissionPackageService:
                 user_permissions_data, stats, errors,
                 existing_direct=existing_direct,
             )
-            stats, errors = self._import_user_menus(user_menus_data, stats, errors)
-            stats, errors = self._import_user_legacy(user_legacy_data, stats, errors)
+            stats, errors = self._import_user_menus(
+                user_menus_data, stats, errors, merge_mode=merge_mode
+            )
+            stats, errors = self._import_user_legacy(
+                user_legacy_data, stats, errors, merge_mode=merge_mode
+            )
 
             self.db.commit()
             self._log_import_result(stats)
@@ -716,7 +787,7 @@ class PermissionPackageService:
                 errors.append(f"用户权限导入失败: {e}")
         return stats, errors
 
-    def _import_user_menus(self, user_menus_data, stats, errors):
+    def _import_user_menus(self, user_menus_data, stats, errors, merge_mode=False):
         """导入用户菜单覆盖。"""
         for menu_data in user_menus_data:
             username = ""
@@ -727,15 +798,27 @@ class PermissionPackageService:
                 user = self.db.query(User).filter(User.username == username).first()
                 if not user:
                     continue
-                user.allowed_menus = json.dumps(
-                    menu_data.get("allowed_menus", []), ensure_ascii=False
-                )
+                incoming = menu_data.get("allowed_menus", [])
+                if merge_mode and user.allowed_menus:
+                    # merge 语义：菜单取并集，不丢目标机已有项
+                    try:
+                        existing = (
+                            json.loads(user.allowed_menus)
+                            if isinstance(user.allowed_menus, str)
+                            else user.allowed_menus
+                        )
+                    except (json.JSONDecodeError, TypeError):
+                        existing = []
+                    merged = sorted(set(existing or []) | set(incoming or []))
+                    user.allowed_menus = json.dumps(merged, ensure_ascii=False)
+                else:
+                    user.allowed_menus = json.dumps(incoming, ensure_ascii=False)
                 stats["user_menus_updated"] += 1
             except Exception as e:  # pragma: no cover
                 errors.append(f"用户菜单「{username}」导入失败: {e}")
         return stats, errors
 
-    def _import_user_legacy(self, user_legacy_data, stats, errors):
+    def _import_user_legacy(self, user_legacy_data, stats, errors, merge_mode=False):
         """导入遗留权限字段。"""
         for legacy_data in user_legacy_data:
             username = ""
@@ -746,9 +829,18 @@ class PermissionPackageService:
                 user = self.db.query(User).filter(User.username == username).first()
                 if not user:
                     continue
-                user.role = legacy_data.get("role", "user")
-                user.permissions = legacy_data.get("permissions", "")
-                user.data_scope = legacy_data.get("data_scope", "org")
+                if merge_mode:
+                    # merge 语义：目标字段为空/默认时才填充，不覆盖既有配置
+                    if not getattr(user, "permissions", ""):
+                        user.permissions = legacy_data.get("permissions", "")
+                    if getattr(user, "data_scope", "org") in (None, "", "org"):
+                        user.data_scope = legacy_data.get("data_scope", "org")
+                    if (getattr(user, "role", "user") or "user") == "user":
+                        user.role = legacy_data.get("role", "user")
+                else:
+                    user.role = legacy_data.get("role", "user")
+                    user.permissions = legacy_data.get("permissions", "")
+                    user.data_scope = legacy_data.get("data_scope", "org")
                 # 恢复组织关联：优先按组织编码匹配（跨机器稳定），
                 # 回退按导出机原始 ID，均失败则置空（用户可通过界面重新指定）
                 org_id = legacy_data.get("organization_id")

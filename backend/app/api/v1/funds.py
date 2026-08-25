@@ -601,6 +601,7 @@ def delete_fund(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="仅允许删除待审批(pending)状态的经费")
 
     fund.is_active = False
+    fund.deleted_at = datetime.now(timezone.utc)
     safe_commit(db)
     return success_response(message="删除成功")
 
