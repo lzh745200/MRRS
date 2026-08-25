@@ -3,7 +3,7 @@
     <div v-if="$slots.filters" class="list-toolbar__filters">
       <slot name="filters" />
       <el-button
-        v-if="collapsible && filterCount > collapseAfter"
+        v-if="collapsible && (filterCount ?? 0) > collapseAfter"
         link
         type="primary"
         size="small"
@@ -25,33 +25,28 @@
  * ListToolbar 列表工具栏标准件（UI 精细化设计方案 v2.0 · P2 骨架）
  *
  * 契约（T1 列表页模板 · PageHeader 之下、Table 卡片之上）：
- * - slot filters: 筛选控件区（inline 排布，>collapseAfter 个时默认折叠）
- * - slot default/tools: 右侧工具组（新建/导入/导出等）
- * - collapsible: 是否启用筛选折叠（默认 true，方案规则：>3 个筛选项折叠非核心项）
- * - collapseAfter: 折叠阈值（默认 3）
+ * - slot filters: 筛选控件区（inline 排布）
+ * - slot default/tools: 右侧工具组（新建/导入/导出等，唯一主钮右置）
+ * - collapsible + collapseAfter + filterCount:
+ *     方案规则「>3 个筛选项折叠非核心项」——使用方传 filterCount（筛选项总数），
+ *     超过 collapseAfter(3) 时出现展开/收起切换；折叠态由 CSS 类控制非核心项。
  */
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 
-const props = withDefaults(
-  defineProps<{ collapsible?: boolean; collapseAfter?: number }>(),
-  { collapsible: true, collapseAfter: 3 },
+withDefaults(
+  defineProps<{
+    collapsible?: boolean
+    /** 筛选项总数（用于决定是否显示折叠开关） */
+    filterCount?: number
+    collapseAfter?: number
+  }>(),
+  { collapsible: true, filterCount: 0, collapseAfter: 3 },
 )
 
 const expanded = ref(false)
-/** 由使用方在 filters slot 内通过 data-filter 标注数量；缺省按插槽子元素估算交给 CSS 收起 */
-const filterCount = computed(() => {
-  const attr = (getCurrentInstanceAttr() as string) || ''
-  const n = Number(attr)
-  return Number.isFinite(n) && n > 0 ? n : props.collapseAfter + 1
-})
 
-function getCurrentInstanceAttr() {
-  // 由父组件通过 filter-count prop 显式传入更可靠
-  return props.filterCount ?? ''
-}
-
-defineProps<{ filterCount?: number }>()
+defineExpose({ expanded })
 </script>
 
 <style scoped lang="scss">
