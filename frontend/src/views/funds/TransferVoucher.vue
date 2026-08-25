@@ -73,6 +73,15 @@
               @click="handleDelete(row.id)"
               >删除</el-button
             >
+            <el-upload
+              :show-file-list="false"
+              :http-request="(opt: any) => handleVoucherUpload(row.id, opt.file as File)"
+              accept=".pdf,.jpg,.jpeg,.png"
+            >
+              <el-button size="small" type="primary" link :loading="uploadingId === row.id"
+                >凭证上传</el-button
+              >
+            </el-upload>
           </template>
         </el-table-column>
       </el-table>
@@ -130,6 +139,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { fundLifecycleApi } from '@/api/fundLifecycle'
 import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
+import { logger } from '@/utils/logger'
 
 const { pushSafe } = useRouterSafe()
 const route = useRoute()
@@ -161,6 +171,21 @@ const formRules: FormRules = {
   amount: [{ required: true, message: '请填写金额', trigger: 'blur' }],
   payer_account: [{ required: false }],
   payee_account: [{ required: false }],
+}
+
+const uploadingId = ref<number | null>(null)
+
+async function handleVoucherUpload(voucherId: number, file: File) {
+  uploadingId.value = voucherId
+  try {
+    await fundLifecycleApi.uploadVoucherAttachment(voucherId, file)
+    ElMessage.success('凭证附件已上传')
+  } catch (e) {
+    logger.error('凭证附件上传失败:', e)
+    ElMessage.error('上传失败，请稍后重试')
+  } finally {
+    uploadingId.value = null
+  }
 }
 
 async function loadData() {

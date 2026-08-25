@@ -1232,6 +1232,7 @@ const handleImportPermissionPackage = () => {
         }
       }
       if (result.success) {
+        const p = result.preview || {}
         let msg = `将导入 ${p.role_count || 0} 个角色, ${p.user_legacy_count || 0} 个用户权限`
         if (p.warnings?.length) msg += `\n警告: ${p.warnings.join('; ')}`
         // 选择导入模式：确定=合并（保留本机其他配置）；取消=完全替换；关闭=放弃

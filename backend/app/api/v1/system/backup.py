@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.response import ok_list
+from app.core.response import ok_list, success_response
+from app.models.user import User
+from app.core.transaction import safe_commit
 from app.core.security import get_current_user
 from app.core.permission_utils import require_admin
 from app.services.backup_service import BackupService, get_backup_service
@@ -152,6 +154,42 @@ async def create_backup(
     except Exception as e:
         logger.error("创建备份失败: %s", e)
         raise HTTPException(status_code=500, detail="创建备份失败，请稍后重试或联系管理员")
+
+
+@router.post("/request-download", summary="普通用户申请下载备份（通知管理员）")
+async def request_backup_download(
+    body: dict = None,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """普通用户发起备份下载申请 → 站内消息通知全部超管，由管理员线下授权。"""
+    from app.services.message_service import MessageService
+    from sqlalchemy import select as _select
+
+    filename = (body or {}).get("filename", "")
+    reason = (body or {}).get("reason", "")
+    svc = MessageService(db)
+    admin_ids = [
+        row[0]
+        for row in db.execute(
+            _select(User.id).where(
+                User.is_superuser == True, User.is_active == True  # noqa: E712
+            )
+        ).fetchall()
+    ]
+    for uid in admin_ids:
+        svc.send_system_message(
+            receiver_id=uid,
+            title="备份下载申请",
+            content=(
+                f"用户 {getattr(current_user, 'username', '?')} 申请下载备份 "
+                f"{filename or '(未指定)'}。理由：{reason or '未填写'}。"
+                "请评估后线下授权或代为导出。"
+            ),
+            link="/system/backup",
+        )
+    safe_commit(db)
+    return success_response(message="申请已提交，等待管理员处理")
 
 
 @router.get("", summary="获取备份列表")

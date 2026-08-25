@@ -224,6 +224,39 @@ async def get_realtime_stats(
 
 
 @router.get("/kpi-summary")
+def compute_kpi_summary_data(db: Session) -> dict:
+    """KPI 汇总计算唯一实现：端点缓存未命中与每日预计算任务共用，杜绝口径漂移。"""
+    from app.models.project import Project
+    from app.models.supported_village import SupportedVillage
+
+    total_villages = (
+        db.query(sa_func.count(SupportedVillage.id))
+        .filter(SupportedVillage.is_active.is_(True))
+        .scalar()
+        or 0
+    )
+    rows = (
+        db.query(Project.status, sa_func.count(Project.id))
+        .filter(Project.is_active == True)  # noqa: E712
+        .group_by(Project.status)
+        .all()
+    )
+    counts = {status: cnt for status, cnt in rows}
+    total_projects = sum(counts.values())
+    completed_projects = counts.get("completed", 0)
+    approved_projects = counts.get("approved", 0)
+
+    return {
+        "total_villages": total_villages,
+        "total_projects": total_projects,
+        "completed_projects": completed_projects,
+        "approved_projects": approved_projects,
+        "completion_rate": round(completed_projects / total_projects * 100, 1)
+        if total_projects
+        else 0,
+    }
+
+
 @safe_api_call("获取KPI汇总数据")
 async def get_kpi_summary(
     period: str = "month",
@@ -238,32 +271,8 @@ async def get_kpi_summary(
     from app.models.project import Project
     from app.models.supported_village import SupportedVillage
 
-    total_villages = (
-        db.query(sa_func.count(SupportedVillage.id))
-        .filter(SupportedVillage.is_active.is_(True))
-        .scalar()
-        or 0
-    )
-    # 一次 GROUP BY 查询替代原来的 3 次独立 COUNT（软删项目排除）
-    rows = (
-        db.query(Project.status, sa_func.count(Project.id))
-        .filter(Project.is_active == True)  # noqa: E712
-        .group_by(Project.status)
-        .all()
-    )
-    counts = {status: cnt for status, cnt in rows}
-    total_projects = sum(counts.values())
-    completed_projects = counts.get("completed", 0)
-    approved_projects = counts.get("approved", 0)
-
-    data = {
-        "total_villages": total_villages,
-        "total_projects": total_projects,
-        "completed_projects": completed_projects,
-        "approved_projects": approved_projects,
-        "completion_rate": round(completed_projects / total_projects * 100, 1) if total_projects else 0,
-        "period": period,
-    }
+    data = compute_kpi_summary_data(db)
+    data["period"] = period
     await _set_cached(f"kpi_summary_{period}", data)
     return AnalyticsResponse(success=True, data=data, message="KPI数据获取成功")
 

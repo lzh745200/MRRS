@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: ["w10-enhancements/031-gantt-lightweight.md"]
 blocked-by: ["w8-dead-code/013-remove-project-mgmt-page.md"]
 ---
@@ -13,3 +13,6 @@ blocked-by: ["w8-dead-code/013-remove-project-mgmt-page.md"]
 - [ ] 完成标记触发进度联动展示
 - [ ] upcoming/overdue 仪表盘端点冒烟 pytest 已存在则保持绿
 - [ ] 空态 el-empty+去添加指引
+
+## Resolution（v1.10.0 续批2）
+api/milestones.ts + Detail.vue里程碑Tab(CRUD/完成联动/popconfirm隔离) + Detail.test mock对齐; projects198绿/TSC0
