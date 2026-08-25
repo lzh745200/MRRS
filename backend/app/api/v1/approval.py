@@ -38,6 +38,7 @@ from app.models.message import Message
 from app.models.user import User
 from app.services.approval_workflow_service import ApprovalWorkflowService
 from app.core.transaction import safe_commit
+from app.services.work_log_service import write_work_log
 
 logger = logging.getLogger(__name__)
 
@@ -474,6 +475,35 @@ def reject_task(
         "code": 200,
         "success": True,
         "message": "已拒绝",
+        "data": {"task_id": task.id, "status": task.status},
+    }
+
+
+@router.post("/tasks/{task_id}/retry-apply", summary="重试审批终态实体回写")
+def retry_apply_entity_change(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    重试 *_apply_failed 任务的实体回写（管理员可查可修，消除「审批成功但业务状态未变」不一致）
+    """
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    service = ApprovalWorkflowService(db)
+    task = service.retry_apply_entity_change(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或无需重试回写")
+    write_work_log(
+        db, "approval", "retry_apply", task.id,
+        task.title or task.entity_type,
+        user_id=current_user.id, username=current_user.username,
+        detail=f"重试审批回写 → {task.status}",
+    )
+    return {
+        "code": 200,
+        "success": True,
+        "message": "回写重试完成",
         "data": {"task_id": task.id, "status": task.status},
     }
 

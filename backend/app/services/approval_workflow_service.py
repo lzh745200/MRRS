@@ -485,7 +485,11 @@ class ApprovalWorkflowService:
         if next_level <= len(workflow_nodes):
             next_node = workflow_nodes[next_level - 1]
             task.current_level = next_level
-            task.current_approver_id = next_node.approver_id
+            next_approver = next_node.approver_id
+            # role 类型节点：晋级时同样解析为具体用户（与提交流程一致）
+            if getattr(next_node, "approver_type", "user") == "role":
+                next_approver = self._resolve_role_approver_id(next_node.approver_id)
+            task.current_approver_id = next_approver
         else:
             # 所有级别通过
             task.status = ApprovalStatus.APPROVED.value
@@ -527,8 +531,36 @@ class ApprovalWorkflowService:
         task.status = ApprovalStatus.REJECTED.value
         task.completed_at = datetime.now(timezone.utc)
         # 驳回回写业务实体状态（如经费：pending → rejected）
-        self.apply_entity_change(task)
+        if not self.apply_entity_change(task):
+            task.status = ApprovalStatus.REJECTED.value + self.APPLY_FAILED_SUFFIX
 
+        safe_commit(self.db)
+        self.db.refresh(task)
+        return task
+
+    def retry_apply_entity_change(self, task_id: int) -> Optional["ApprovalTask"]:
+        """重试审批终态的实体回写（针对 *_apply_failed 任务）。
+
+        成功则将任务恢复为对应终态（approved/rejected），失败保持失败态返回任务。
+        """
+        task = self.get_task(task_id)
+        if not task:
+            return None
+        if not str(task.status or "").endswith(self.APPLY_FAILED_SUFFIX):
+            return None
+
+        final_status = str(task.status)[: -len(self.APPLY_FAILED_SUFFIX)]
+        if self.apply_entity_change(task):
+            task.status = final_status
+            logger.info(
+                "审批回写重试成功 task=%s entity=%s:%s → %s",
+                task.id, task.entity_type, task.entity_id, final_status,
+            )
+        else:
+            logger.error(
+                "审批回写重试仍失败 task=%s entity=%s:%s",
+                task.id, task.entity_type, task.entity_id,
+            )
         safe_commit(self.db)
         self.db.refresh(task)
         return task
@@ -571,7 +603,12 @@ class ApprovalWorkflowService:
         # 重置到第一级审批人
         workflow_nodes = sorted(task.workflow.nodes, key=lambda n: n.level)
         if workflow_nodes:
-            task.current_approver_id = workflow_nodes[0].approver_id
+            first_node = workflow_nodes[0]
+            approver_id = first_node.approver_id
+            # role 类型节点：重提交时同样需将角色标识解析为具体用户（与提交流程一致）
+            if getattr(first_node, "approver_type", "user") == "role":
+                approver_id = self._resolve_role_approver_id(first_node.approver_id)
+            task.current_approver_id = approver_id
 
         # 记录「重新提交」动作，使审批意见读取不再显示旧的驳回原因
         record = ApprovalRecord(

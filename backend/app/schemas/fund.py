@@ -28,8 +28,10 @@ except Exception:  # noqa: BLE001  # pragma: no cover —— app.models.fund 为
         OTHER = "other"
 
     class FundStatus(str, Enum):  # type: ignore[override]
+        PENDING = "pending"
         PLANNED = "planned"
         APPROVED = "approved"
+        REJECTED = "rejected"
         ALLOCATED = "allocated"
         IN_USE = "in_use"
         COMPLETED = "completed"

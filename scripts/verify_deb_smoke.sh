@@ -24,7 +24,7 @@ ar x "$OLDPWD/$DEB" 2>/dev/null || ar x "$DEB"
 mkdir -p root
 tar xf data.tar.* -C root 2>/dev/null || tar xf data.tar.zst -C root
 
-BIN=$(find root -type f \( -name "assistance-backend*" -o -name "assistance-management-system" \) | head -1)
+BIN=$(find root -type f \( -name "assistance-backend*" -o -name "assistance-management-backend" -o -name "assistance-management-system" \) | head -1)
 if [ -z "$BIN" ]; then
   echo "FAIL: 未找到后端二进制"
   exit 1
@@ -38,9 +38,12 @@ echo "--- glibc 符号版本上限（Kylin V10 = 2.28，不得超过）---"
 if command -v objdump >/dev/null; then
   MAX_GLIBC=$(objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1 | cut -d_ -f2)
   echo "max GLIBC required: $MAX_GLIBC"
-  if [ "$(printf '%s\n2.28\n' "$MAX_GLIBC" | sort -V | head -1)" != "2.28" ]; then
+  HIGHEST=$(printf '%s\n2.28\n' "$MAX_GLIBC" | sort -V | tail -1)
+  if [ "$HIGHEST" != "2.28" ]; then
     echo "FAIL: GLIBC $MAX_GLIBC > 2.28，麒麟 V10 无法运行"
     FAIL=1
+  else
+    echo "glibc 兼容性 OK（≤2.28）"
   fi
 else
   echo "WARN: objdump 不可用，跳过 glibc 检查"

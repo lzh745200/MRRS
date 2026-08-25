@@ -51,6 +51,7 @@ class FundStatus(str, enum.Enum):
     PENDING = "pending"
     PLANNED = "planned"
     APPROVED = "approved"
+    REJECTED = "rejected"
     ALLOCATED = "allocated"
     IN_USE = "in_use"
     COMPLETED = "completed"
