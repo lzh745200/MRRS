@@ -11,3 +11,7 @@ blocked-by: ["w9-chain-completion/027-audit-export-userfilter.md"]
 **Acceptance criteria:**
 - [ ] approve/reject/allocate 操作产生日志（pytest）
 - [ ] tab 数据非空场景 vitest
+
+## 审计结论（2026-08-25）
+
+AUDIT-20260825: 部分完成——rural_tasks 六端点已接入(07b5b017)；work_logs/user_permissions/files 仍缺

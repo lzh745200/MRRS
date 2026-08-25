@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: []
 blocked-by: ["w2-data-integrity/004-fund-state-machine.md"]
 ---
@@ -18,3 +18,7 @@ blocked-by: ["w2-data-integrity/004-fund-state-machine.md"]
 
 ## 涉及文件
 - `backend/app/services/backup_service.py`、`backend/app/services/encryption_service.py`
+
+## Resolution（2026-08-25）
+
+07b5b017：_create_snapshots 复用一致性快照合并 WAL（流式加密部分仍开放）

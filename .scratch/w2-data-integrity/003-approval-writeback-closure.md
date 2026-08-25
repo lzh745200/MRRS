@@ -18,3 +18,7 @@ apply_entity_change 失败仅 warning：任务 APPROVED 但业务状态未变，
 
 ## 涉及文件
 - `backend/app/services/approval_workflow_service.py`
+
+## 审计结论（2026-08-25）
+
+AUDIT-20260825: PARTIAL——apply_entity_change 失败仅 warning(:46-59)；resubmit 未走 _resolve_role_approver_id(:558-561)

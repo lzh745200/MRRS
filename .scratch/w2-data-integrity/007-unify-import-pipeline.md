@@ -19,3 +19,7 @@ blocked-by: []
 
 ## 涉及文件
 - `backend/app/services/data_sync_service.py`
+
+## 审计结论（2026-08-25）
+
+AUDIT-20260825: MISSING——裸 text() 导入绕过 sync_version 事件(data_sync_service.py:459-476)；无 SAVEPOINT

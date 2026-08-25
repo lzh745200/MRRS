@@ -13,3 +13,7 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] watermark 生成与卸载清理断言通过
 - [ ] useMenuPermission 接真实菜单权限或删除
 - [ ] vue-tsc/lint 绿
+
+## 审计结论（2026-08-25）
+
+AUDIT-20260825: PARTIAL——指令+测试资产在，main.ts 注册与 v-permission/v-watermark 接线为 0

@@ -21,3 +21,7 @@ blocked-by: []
 - `backend/app/services/organization_service.py`
 - `backend/app/models/project.py` + 新 alembic 迁移
 - `docs/adr/0003-org-delete-guard.md`
+
+## 审计结论（2026-08-25）
+
+AUDIT-20260825: MISSING——delete_organization 仅查下级组织；Project.organization_id 仍 CASCADE(organization_service.py:333-363 / project.py:87-92)

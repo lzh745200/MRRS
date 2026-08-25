@@ -20,3 +20,7 @@ PUT 接口可直接把 pending 改成 audited 绕过状态机/附件校验/FundS
 
 ## 涉及文件
 - `backend/app/schemas/fund.py`、`backend/app/api/v1/funds.py`、`backend/app/services/fund_service.py`、`backend/app/models/fund.py`
+
+## 审计结论（2026-08-25）
+
+AUDIT-20260825: PARTIAL——PUT 直改 status 绕状态机(funds.py:531-587)；FundStatus 无 REJECTED(models/fund.py:49-57)；setattr 清空已修复

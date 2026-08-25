@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-critical]
+labels: [done, severity-critical]
 blocks: []
 blocked-by: []
 ---
@@ -19,3 +19,7 @@ syncable_tables 用复数表名，真实表名单数 → 交集只有 3 张表�
 
 ## 涉及文件
 - `backend/app/services/data_sync_service.py`
+
+## Resolution（2026-08-25）
+
+facca… commit：单一常量源派生+空表不误报、异常显式上报 success=False+errors

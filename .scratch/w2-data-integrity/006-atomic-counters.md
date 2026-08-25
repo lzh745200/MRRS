@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: []
 blocked-by: []
 ---
@@ -18,3 +18,7 @@ view_count/download_count/failed_login_count 用 Python 读加一再写回，WAL
 
 ## 涉及文件
 - `backend/app/api/v1/policy.py`、`backend/app/services/policy_service.py`、`backend/app/api/v1/auth/auth.py`
+
+## Resolution（2026-08-25）
+
+6148cbf0：policy 计数与登录锁定改 COALESCE/CASE/RETURNING 原子 UPDATE

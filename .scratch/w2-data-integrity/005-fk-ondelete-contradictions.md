@@ -21,3 +21,7 @@ PolicyFavorite.policy_id / ImportHistory.user_id 为 SET NULL + nullable=False �
 ## 涉及文件
 - `backend/app/models/policy.py`、`backend/app/models/import_history.py`
 - `backend/app/services/user_cascade_delete_service.py`
+
+## 审计结论（2026-08-25）
+
+AUDIT-20260825: MISSING——PolicyFavorite/ImportHistory(+ApprovalRecord/Task) 四处 SET NULL×NOT NULL 矛盾；cascade 服务物理删除审计记录(user_cascade_delete_service.py:120-127)

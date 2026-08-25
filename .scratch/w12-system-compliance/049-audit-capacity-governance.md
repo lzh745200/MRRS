@@ -11,3 +11,7 @@ blocked-by: ["w9-chain-completion/027-audit-export-userfilter.md"]
 **Acceptance criteria:**
 - [ ] 体积统计端点或复用 stats（pytest）
 - [ ] UI 展示条数与体积（vitest）
+
+## 审计结论（2026-08-25）
+
+AUDIT-20260825: 并行会话已加 recycle_retention_job(04:30)；audit_logs/api_access_logs/login_attempts 保留期仍缺
