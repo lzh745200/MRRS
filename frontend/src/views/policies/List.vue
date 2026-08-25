@@ -127,6 +127,9 @@
         <el-table-column v-if="canDelete" type="selection" width="50" align="center" />
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="title" label="政策名称" min-width="200" show-overflow-tooltip />
+        <el-table-column label="文号" width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.document_number || row.code || '-' }}</template>
+        </el-table-column>
         <el-table-column prop="category_name" label="政策分类" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="row.category === 'military' ? 'danger' : 'primary'">
@@ -364,7 +367,7 @@ const handleEdit = (row: any) => {
 // 删除
 const handleDelete = async (row: any) => {
   try {
-    await ElMessageBox.confirm(`确定删除政策"${row.title}"吗？此操作不可恢复。`, '删除确认', {
+    await ElMessageBox.confirm(`确定删除政策"${row.title}"吗？删除后可在管理员回收站中恢复。`, '删除确认', {
       type: 'warning',
     })
     await (policyStore as any).removePolicy(row.id)
@@ -381,7 +384,7 @@ const handleBatchDelete = async () => {
   if (selectedIds.value.length === 0) return
   try {
     await ElMessageBox.confirm(
-      `确定删除选中的 ${selectedIds.value.length} 条政策吗？此操作不可恢复。`,
+      `确定删除选中的 ${selectedIds.value.length} 条政策吗？删除后可在管理员回收站中恢复。`,
       '批量删除确认',
       { type: 'warning' }
     )

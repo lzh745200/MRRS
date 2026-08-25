@@ -269,6 +269,22 @@
             <el-icon><Search /></el-icon>搜索
           </el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-form-item>
+            <el-tooltip
+              v-if="canViewDeleted"
+              content="切换显示已软删的经费（管理员可见）"
+              placement="top"
+            >
+              <el-switch
+                v-model="showDeletedOnly"
+                inline-prompt
+                active-text="回收站"
+                inactive-text="正常"
+                style="margin-left: 12px"
+                @change="handleToggleDeleted"
+              />
+            </el-tooltip>
+          </el-form-item>
         </el-form-item>
       </el-form>
     </div>
@@ -415,18 +431,28 @@
               @click="quickAllocate(scope.row)"
               >拨付</el-button
             >
-            <el-popconfirm title="确定删除该经费记录吗？" @confirm="handleDelete(scope.row)">
-              <template #reference>
-                <el-button
-                  type="danger"
-                  link
-                  size="small"
-                  :loading="deleting[scope.row.id]"
-                  :disabled="deleting[scope.row.id]"
-                  >删除</el-button
-                >
-              </template>
-            </el-popconfirm>
+            <template v-if="!showDeletedOnly">
+              <el-popconfirm title="确定删除该经费记录吗？" @confirm="handleDelete(scope.row)">
+                <template #reference>
+                  <el-button
+                    type="danger"
+                    link
+                    size="small"
+                    :loading="deleting[scope.row.id]"
+                    :disabled="deleting[scope.row.id]"
+                    >删除</el-button
+                  >
+                </template>
+              </el-popconfirm>
+            </template>
+            <template v-else>
+              <el-button type="success" link size="small" @click="handleRestore(scope.row)"
+                >恢复</el-button
+              >
+              <el-button type="danger" link size="small" @click="handlePurge(scope.row)"
+                >彻底删除</el-button
+              >
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -472,6 +498,8 @@ import {
 } from '@element-plus/icons-vue'
 import { get, del, apiRequest } from '@/api/request'
 import { fundApi } from '@/api/funds'
+import { restoreFund, previewPurgeFund, purgeFund } from '@/api/fundsRecycle'
+import { useAuthStore } from '@/stores/auth'
 import { getSupportedVillages } from '@/api/supportedVillage'
 import { schoolsApi } from '@/api/schools'
 import { downloadImportTemplateAndSave } from '@/api/import'
@@ -674,6 +702,7 @@ async function fetchData() {
       params: {
         page: currentPage.value,
         page_size: pageSize.value,
+        include_deleted: showDeletedOnly.value || undefined,
         keyword: filterForm.keyword || undefined,
         fund_type: filterForm.type || undefined,
         status: filterForm.status || undefined,
@@ -923,6 +952,75 @@ onMounted(() => {
   loadVillageOptions()
   loadSchoolOptions()
 })
+
+// ── 回收站（Phase C 推广）──
+const authStore = useAuthStore()
+const canViewDeleted = computed(() => authStore.canViewDeleted)
+const showDeletedOnly = ref(false)
+
+function handleToggleDeleted() {
+  currentPage.value = 1
+  fetchData()
+}
+
+async function handleRestore(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定恢复经费【${row.name || row.id}】吗？`, '恢复确认', {
+      confirmButtonText: '确认恢复',
+      cancelButtonText: '取消',
+      type: 'info',
+    })
+  } catch {
+    return
+  }
+  try {
+    await restoreFund(row.id)
+    ElMessage.success('恢复成功')
+    fetchData()
+  } catch {
+    ElMessage.error('恢复失败')
+  }
+}
+
+async function handlePurge(row: any) {
+  let totalRefs = 0
+  try {
+    const pv: any = await previewPurgeFund(row.id)
+    totalRefs = Number((pv?.data || pv)?.total_references || 0)
+  } catch {
+    // 预览失败不阻断流程
+  }
+  try {
+    await ElMessageBox.confirm(
+      `彻底删除后该经费及其关联的 ${totalRefs} 条数据将无法恢复！不可撤销。`,
+      '彻底删除警告',
+      { confirmButtonText: '继续', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  let confirmPassword = ''
+  try {
+    const r = await ElMessageBox.prompt('请输入登录密码以确认彻底删除：', '二次确认', {
+      confirmButtonText: '确认彻底删除',
+      inputType: 'password',
+      inputValidator: (v: string) => (v ? true : '密码不能为空'),
+    })
+    confirmPassword = r.value || ''
+  } catch {
+    return
+  }
+  loading.value = true
+  try {
+    await purgeFund(row.id, confirmPassword)
+    ElMessage.success('已彻底删除')
+    fetchData()
+  } catch {
+    ElMessage.error('彻底删除失败')
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <style scoped>

@@ -21,7 +21,11 @@ const {
   downloadTemplateMock,
   pushSafeMock,
   logError,
+  authStateRB: {} as any,
 } = vi.hoisted(() => ({
+  authStateRB: {
+    user: { role: 'admin', id: 1 }, canViewDeleted: true,
+  },
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   ElNotification: vi.fn(),
   confirmMock: vi.fn(),
@@ -74,6 +78,10 @@ vi.mock('@/api/import', () => ({
 vi.mock('@/config/enums', () => ({
   getFundTypeLabel: (t: string) => `类型_${t}`,
   getFundStatusLabel: (s: string) => `状态_${s}`,
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authStateRB,
 }))
 
 vi.mock('@/composables/useRouterSafe', () => ({

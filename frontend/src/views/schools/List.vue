@@ -137,6 +137,21 @@
           </el-button>
           <el-button @click="handleReset">重置</el-button>
         </el-form-item>
+        <el-form-item>
+          <el-tooltip
+            v-if="canViewDeleted"
+            content="切换显示已软删的学校（管理员可见）"
+            placement="top"
+          >
+            <el-switch
+              v-model="showDeletedOnly"
+              inline-prompt
+              active-text="回收站"
+              inactive-text="正常"
+              @change="handleToggleDeleted"
+            />
+          </el-tooltip>
+        </el-form-item>
       </el-form>
     </div>
 
@@ -204,11 +219,27 @@
               <el-button type="primary" link size="small" @click="handleEdit(scope.row)"
                 >编辑</el-button
               >
-              <el-popconfirm title="确定删除该学校吗？" @confirm="handleDelete(scope.row)">
-                <template #reference>
-                  <el-button type="danger" link size="small">删除</el-button>
-                </template>
-              </el-popconfirm>
+              <template v-if="showDeletedOnly">
+                <el-button type="success" link size="small" @click="handleRestore(scope.row)"
+                  >恢复</el-button
+                >
+                <el-button type="danger" link size="small" @click="handlePurge(scope.row)"
+                  >彻底删除</el-button
+                >
+              </template>
+              <template v-else>
+                <el-button type="primary" link size="small" @click="handleView(scope.row)"
+                  >编辑</el-button
+                >
+                <el-button type="primary" link size="small" @click="handleEdit(scope.row)"
+                  >编辑</el-button
+                >
+                <el-popconfirm title="确定删除该学校吗？" @confirm="handleDelete(scope.row)">
+                  <template #reference>
+                    <el-button type="danger" link size="small">删除</el-button>
+                  </template>
+                </el-popconfirm>
+              </template>
             </template>
           </el-table-column>
         </el-table>
@@ -276,6 +307,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Download, Upload, Search } from '@element-plus/icons-vue'
 import { del, apiRequest } from '@/api/request'
 import { schoolApi } from '@/api/schools'
+import { restoreSchool, previewPurgeSchool, purgeSchool } from '@/api/schoolsRecycle'
+import { useAuthStore } from '@/stores/auth'
 import { downloadImportTemplateAndSave } from '@/api/import'
 import echarts from '@/utils/echarts'
 
@@ -671,6 +704,79 @@ onUnmounted(() => {
   typePieChart?.dispose()
   typePieChart = null
 })
+
+// ── 回收站（Phase C 推广）──
+const authStore = useAuthStore()
+const canViewDeleted = computed(() => authStore.canViewDeleted)
+const showDeletedOnly = ref(false)
+
+async function handleToggleDeleted() {
+  currentPage.value = 1
+  await fetchData()
+}
+
+async function handleRestore(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定恢复学校【${row.name}】吗？`, '恢复确认', {
+      confirmButtonText: '确认恢复',
+      cancelButtonText: '取消',
+      type: 'info',
+    })
+  } catch {
+    return
+  }
+  try {
+    await restoreSchool(row.id)
+    ElMessage.success('恢复成功')
+    fetchData()
+  } catch {
+    ElMessage.error('恢复失败')
+  }
+}
+
+async function handlePurge(row: any) {
+  let totalRefs = 0
+  try {
+    const pv: any = await previewPurgeSchool(row.id)
+    totalRefs = Number((pv?.data || pv)?.total_references || 0)
+  } catch {
+    // 预览失败不阻断流程
+  }
+  try {
+    await ElMessageBox.confirm(
+      `彻底删除后【${row.name}】及其关联的 ${totalRefs} 条数据将无法恢复！不可撤销。`,
+      '彻底删除警告',
+      { confirmButtonText: '继续', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  let confirmPassword = ''
+  try {
+    const r = await ElMessageBox.prompt(
+      `彻底删除【${row.name}】需二次确认，请输入登录密码：`,
+      '二次确认',
+      {
+        confirmButtonText: '确认彻底删除',
+        inputType: 'password',
+        inputValidator: (v: string) => (v ? true : '密码不能为空'),
+      }
+    )
+    confirmPassword = r.value || ''
+  } catch {
+    return
+  }
+  loading.value = true
+  try {
+    const res: any = await purgeSchool(row.id, confirmPassword)
+    ElMessage.success(res?.data?.message || `已清理 ${res?.data?.deleted_records ?? 0} 条关联数据`)
+    fetchData()
+  } catch {
+    ElMessage.error('彻底删除失败')
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <style scoped>

@@ -711,15 +711,18 @@ async function handleFormSubmit(data: SupportedVillageCreate) {
 async function handleExport() {
   exporting.value = true
   try {
+    // 勾选行优先：仅导出所选记录（后端 village_ids 参数）
+    const ids = selectedRows.value.map((r: any) => r.id).filter(Boolean)
     await exportSupportedVillages({
-      year: new Date().getFullYear(),
+      ...(ids.length ? { village_ids: ids } : {}),
+      year: ids.length ? undefined : new Date().getFullYear(),
       keyword: filters.keyword || undefined,
       department: filters.department || undefined,
       county: filters.county || undefined,
       is_revitalization_tier:
         filters.isRevitalizationTier == null ? undefined : filters.isRevitalizationTier,
     })
-
+    if (selectedRows.value.length) selectedRows.value = []
     // 导出成功 — 浏览器已确认
   } catch (error: any) {
     logger.error('导出失败:', error)

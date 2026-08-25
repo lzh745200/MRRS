@@ -95,4 +95,3 @@ export const restoreProject = (id: number) => post(`/projects/${id}/restore`, {}
 export const previewPurgeProject = (id: number) => get(`/projects/${id}/purge/preview`)
 export const purgeProject = (id: number, confirmPassword?: string) =>
   post(`/projects/${id}/purge`, { confirm_password: confirmPassword || '' })
-
