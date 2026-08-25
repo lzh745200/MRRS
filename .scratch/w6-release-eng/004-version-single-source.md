@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-medium]
+﻿---
+labels: [done, severity-medium]
 blocks: []
 blocked-by: []
 ---
@@ -12,3 +12,6 @@ blocked-by: []
 - [ ] sync_version.py 扩展覆盖全部 9 处；根 package.json 为唯一源
 - [ ] build-windows 与 build-arm64 构建起点强制执行 + 一致性校验（不一致 fail）
 - [ ] 本地运行验证全处同步
+
+## Resolution
+sync_version.js 覆盖 13 处目标并作为 CI 静态检查门禁（--check）；v1.10.0 全链一致。残留 installers/*.nsi 硬编码由 W6-T8 删除处置、Makefile fallback 已修

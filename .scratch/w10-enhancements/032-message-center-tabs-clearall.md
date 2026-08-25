@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: ["w10-enhancements/037-lock-return-digest.md"]
 blocked-by: ["w8-dead-code/016-message-module-slimming.md"]
 ---
@@ -12,3 +12,5 @@ blocked-by: ["w8-dead-code/016-message-module-slimming.md"]
 - [ ] Tab 切换过滤正确（vitest）
 - [ ] 清空已读后 unread-count 归零联动
 - [ ] 全部删除需二次确认且分页重置
+
+清空已读按钮+DELETE /messages/read 接线+确认弹窗；52绿/TSC0

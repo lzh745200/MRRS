@@ -241,6 +241,10 @@ jobs:
         run: |
           ls -lh dist/electron/*.deb
           file dist/electron/*.deb
+      - name: DEB smoke (arch + glibc cap)
+        run: |
+          chmod +x scripts/verify_deb_smoke.sh
+          bash scripts/verify_deb_smoke.sh dist/electron/*.deb
           # List contents to verify structure
           dpkg-deb -c dist/electron/*.deb | head -30
 

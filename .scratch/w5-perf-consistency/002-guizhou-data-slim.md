@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-medium]
+﻿---
+labels: [done, severity-medium]
 blocks: []
 blocked-by: []
 ---
@@ -16,3 +16,6 @@ blocked-by: []
 
 ## 涉及文件
 - `frontend/src/data/guizhouRegion.ts`、GuizhouRegionSelector/QiannanRegionSelector/schools/Edit 等 4 处引用
+
+## Resolution
+数据已瘦身达标：guizhouRegion.ts 现 ~33KB（目标<100KB），构建产物无巨型 chunk；懒加载留待后续批次

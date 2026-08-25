@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-medium]
+﻿---
+labels: [done, severity-medium]
 blocks: []
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 - [ ] 勾选导出请求体含 village_ids（vitest）
 - [ ] 政策列表文号列渲染（vitest）
 - [ ] 删除文案不再声称不可恢复
+
+## Resolution
+勾选导出携带 village_ids、政策列表文号列、软删除文案修正（commit beb1fa62）；EnhancedList.test.ts/supportedVillageExport.test.ts 全绿

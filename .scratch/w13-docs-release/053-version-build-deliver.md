@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-high]
+﻿---
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w12-system-compliance/046-wal-safe-restore.md", "w13-docs-release/052-full-regression-e2e.md"]
 ---
@@ -13,3 +13,6 @@ blocked-by: ["w12-system-compliance/046-wal-safe-restore.md", "w13-docs-release/
 - [ ] 两安装包产物存在且体积合理
 - [ ] 升级安装后 %LOCALAPPDATA% 库完好可登录
 - [ ] pr-checks 工作流绿色
+
+## Resolution
+v1.10.0 双平台安装包产出（deliverables/SHA256SUMS-1.10.0.txt 三产物，commit d9efa135/3961eabc）；升级冒烟记录见发布说明

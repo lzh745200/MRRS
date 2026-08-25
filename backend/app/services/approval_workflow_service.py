@@ -43,20 +43,31 @@ class ApprovalWorkflowService:
         """注册实体变更回写处理器（幂等，重复注册覆盖）"""
         cls._ENTITY_APPLY_HANDLERS[entity_type] = handler
 
-    def apply_entity_change(self, task: "ApprovalTask") -> None:
-        """审批终态回写业务实体（非致命：失败仅记录日志，不阻断审批）"""
+    # 审批终态回写失败标记（可查询、可重试，避免「任务成功但业务状态未变」永久不一致）
+    APPLY_FAILED_SUFFIX = "_apply_failed"
+
+    def apply_entity_change(self, task: "ApprovalTask") -> bool:
+        """审批终态回写业务实体。
+
+        Returns:
+            True 回写成功（或无处理器）；False 失败 —— 调用方应将任务标记为
+            ``{final_status}_apply_failed`` 以便查询与重试，而非静默吞掉。
+        """
         handler = self._ENTITY_APPLY_HANDLERS.get(task.entity_type)
         if not handler:
-            return
+            return True
         try:
             handler(self.db, task)
+            return True
         except Exception:  # pragma: no cover - 防御分支
-            logger.warning(
+            self.db.rollback()
+            logger.error(
                 "审批回写实体失败 entity_type=%s entity_id=%s",
                 task.entity_type,
                 task.entity_id,
                 exc_info=True,
             )
+            return False
 
     # ══════════════════════════════════════════════════════════════
     #  Workflow CRUD
@@ -480,7 +491,9 @@ class ApprovalWorkflowService:
             task.status = ApprovalStatus.APPROVED.value
             task.completed_at = datetime.now(timezone.utc)
             # 审批通过后执行数据变更（Requirement 3.6）：回写业务实体状态
-            self.apply_entity_change(task)
+            if not self.apply_entity_change(task):
+                # 回写失败：任务不进入成功终态，标记为可查询/可重试的失败态
+                task.status = ApprovalStatus.APPROVED.value + self.APPLY_FAILED_SUFFIX
 
         safe_commit(self.db)
         self.db.refresh(task)

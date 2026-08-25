@@ -88,6 +88,17 @@ export async function markAllAsRead(): Promise<number> {
 }
 
 /**
+ * 清空（删除）所有已读消息
+ */
+export async function clearReadMessages(): Promise<number> {
+  const response = await apiRequest<{ count: number }>({
+    method: 'DELETE',
+    url: '/messages/read',
+  })
+  return response.count
+}
+
+/**
  * 删除消息
  */
 export async function deleteMessages(messageIds: number[]): Promise<number> {

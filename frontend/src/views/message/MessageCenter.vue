@@ -13,6 +13,10 @@
               <el-icon><Check /></el-icon>
               全部已读
             </el-button>
+            <el-button type="warning" plain @click="handleClearRead">
+              <el-icon><Delete /></el-icon>
+              清空已读
+            </el-button>
             <el-button
               type="danger"
               :disabled="selectedMessages.length === 0"
@@ -230,6 +234,7 @@ import {
   getMessages,
   markAsRead,
   markAllAsRead,
+  clearReadMessages,
   deleteMessages,
   getRecentActivities,
   formatMessageType,
@@ -238,6 +243,7 @@ import {
   type MessageType,
 } from '@/api/message'
 import { get } from '@/api/request'
+import { logger } from '@/utils/logger'
 
 const { pushSafe } = useRouterSafe()
 
@@ -404,6 +410,26 @@ async function handleMarkAllRead() {
     ElMessage.success('已标记')
   } catch (error) {
     ElMessage.error('操作失败')
+  }
+}
+
+async function handleClearRead() {
+  try {
+    await ElMessageBox.confirm('将删除全部已读消息，不可恢复。确认继续？', '清空已读', {
+      type: 'warning',
+      confirmButtonText: '确认清空',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  try {
+    const count = await clearReadMessages()
+    ElMessage.success(`已删除 ${count} 条已读消息`)
+    await loadMessages()
+  } catch (e) {
+    logger.error('清空已读失败:', e)
+    ElMessage.error('操作失败，请稍后重试')
   }
 }
 

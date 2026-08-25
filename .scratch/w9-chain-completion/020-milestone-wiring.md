@@ -1,4 +1,4 @@
----
+﻿---
 labels: [done, severity-high]
 blocks: ["w10-enhancements/031-gantt-lightweight.md"]
 blocked-by: ["w8-dead-code/013-remove-project-mgmt-page.md"]
