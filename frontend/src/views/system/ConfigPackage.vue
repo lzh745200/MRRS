@@ -91,7 +91,7 @@
     <el-dialog
       :model-value="dialogVisible"
       title="编辑配置"
-      width="500px"
+      width="480px"
       @update:model-value="dialogVisible = false"
     >
       <el-form v-if="editRow" :model="editRow" label-width="100px">

@@ -174,7 +174,7 @@
     <el-dialog
       v-model="showIssuesDialog"
       :title="`问题详情 - ${selectedCheck?.name}`"
-      width="700px"
+      width="720px"
     >
       <el-table :data="issueDetails" max-height="400">
         <el-table-column prop="record_id" label="记录ID" width="100" />

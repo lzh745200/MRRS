@@ -50,9 +50,9 @@ def purge_expired_soft_deleted(db, days: int | None = None) -> dict:
     for table, pk in SOFT_DELETE_TABLES:
         # 仅选取已标记软删且超期的 id（deleted_at 为空的旧数据不自动清除，
         # 避免历史数据被意外清空；如需处理请人工执行）
-        rows = db.execute(
+        rows = db.execute(  # nosec B608 - table/pk from code constants, value parameterized
             text(
-                f"SELECT {pk} FROM {table} "
+                f"SELECT {pk} FROM {table} "  # nosec B608
                 f"WHERE is_active = 0 AND deleted_at IS NOT NULL AND deleted_at < :cutoff"
             ),
             {"cutoff": cutoff},

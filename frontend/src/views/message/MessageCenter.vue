@@ -198,7 +198,7 @@
     </el-card>
 
     <!-- 消息详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" :title="currentMessage?.title" width="600px">
+    <el-dialog v-model="detailDialogVisible" :title="currentMessage?.title" width="720px">
       <div v-if="currentMessage" class="message-detail">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="类型">

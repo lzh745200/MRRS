@@ -73,7 +73,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingStudent ? '编辑资助学生' : '新增资助学生'"
-      width="560px"
+      width="480px"
       destroy-on-close
     >
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">

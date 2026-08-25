@@ -636,7 +636,7 @@
     <el-dialog
       v-model="wfDialogVisible"
       :title="wfDialogTitle"
-      width="500px"
+      width="480px"
       :close-on-click-modal="false"
     >
       <el-form label-width="100px">

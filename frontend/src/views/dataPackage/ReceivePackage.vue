@@ -316,7 +316,7 @@
     </el-tabs>
 
     <!-- 预览对话框 -->
-    <el-dialog v-model="showPreviewDialog" title="数据预览" width="900px" destroy-on-close>
+    <el-dialog v-model="showPreviewDialog" title="数据预览" width="960px" destroy-on-close>
       <!-- 字段级校验报告（import 响应 validation.warnings / 接收记录 validation_summary） -->
       <div v-if="validationWarnings.length" class="validation-report">
         <h4>字段校验报告</h4>
@@ -367,7 +367,7 @@
     </el-dialog>
 
     <!-- 拒绝对话框 -->
-    <el-dialog v-model="showRejectDialog" title="拒绝数据包" width="500px">
+    <el-dialog v-model="showRejectDialog" title="拒绝数据包" width="480px">
       <el-form :model="rejectForm" label-width="80px">
         <el-form-item label="拒绝原因" required>
           <el-input

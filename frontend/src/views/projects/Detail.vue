@@ -271,7 +271,7 @@
     <el-dialog
       v-model="taskDialogVisible"
       :title="editingTask ? '编辑任务' : '新建任务'"
-      width="500px"
+      width="480px"
       destroy-on-close
     >
       <el-form :model="taskForm" label-width="80px">

@@ -85,7 +85,7 @@
     </el-card>
 
     <!-- 通行码帮助对话框 -->
-    <el-dialog v-model="helpDialogVisible" title="如何获取通行码？" width="500px">
+    <el-dialog v-model="helpDialogVisible" title="如何获取通行码？" width="480px">
       <div class="help-content">
         <el-steps direction="vertical" :active="3">
           <el-step title="步骤 1：获取机器码">

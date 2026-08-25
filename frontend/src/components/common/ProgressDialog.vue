@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="visible"
     :title="`项目进度汇报 - ${projectName}`"
-    width="600px"
+    width="720px"
     :before-close="handleClose"
     @update:model-value="$emit('update:visible', $event)"
   >

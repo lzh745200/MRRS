@@ -90,7 +90,7 @@
     </el-card>
 
     <!-- 添加更新记录对话框 -->
-    <el-dialog v-model="showAddDialog" title="添加更新记录" width="500px">
+    <el-dialog v-model="showAddDialog" title="添加更新记录" width="480px">
       <el-form :model="newLog" label-width="80px">
         <el-form-item label="版本号" required>
           <el-input v-model="newLog.version" placeholder="如 V1.2.0" />

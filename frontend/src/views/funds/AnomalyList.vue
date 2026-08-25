@@ -106,7 +106,7 @@
     </el-card>
 
     <!-- 处理对话框 -->
-    <el-dialog v-model="resolveDialogVisible" title="处理异常" width="500px">
+    <el-dialog v-model="resolveDialogVisible" title="处理异常" width="480px">
       <p class="anomaly-desc">{{ currentAnomaly?.description }}</p>
       <el-input v-model="resolution" type="textarea" :rows="3" placeholder="请输入处理说明" />
       <template #footer>

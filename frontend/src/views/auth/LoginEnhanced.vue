@@ -130,7 +130,7 @@
         <el-dialog
           v-model="permissionImportVisible"
           title="导入权限配置包"
-          width="520px"
+          width="480px"
           :close-on-click-modal="false"
         >
           <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">

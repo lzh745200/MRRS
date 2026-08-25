@@ -104,7 +104,7 @@
     </el-tabs>
 
     <!-- 新建模板对话框 -->
-    <el-dialog v-model="showCreateDialog" title="新建模板" width="520px" @closed="resetCreateForm">
+    <el-dialog v-model="showCreateDialog" title="新建模板" width="480px" @closed="resetCreateForm">
       <el-form ref="createFormRef" :model="newTemplate" :rules="createRules" label-width="100px">
         <el-form-item label="模板名称" prop="name">
           <el-input
@@ -169,7 +169,7 @@
     </el-dialog>
 
     <!-- 编辑模板对话框 -->
-    <el-dialog v-model="showEditDialog" title="编辑模板" width="520px">
+    <el-dialog v-model="showEditDialog" title="编辑模板" width="480px">
       <el-form
         v-if="editTemplate"
         ref="editFormRef"
@@ -231,7 +231,7 @@
     </el-dialog>
 
     <!-- 预览对话框 -->
-    <el-dialog v-model="showPreviewDialog" title="模板预览" width="600px">
+    <el-dialog v-model="showPreviewDialog" title="模板预览" width="720px">
       <div v-if="previewTemplate" class="preview-content">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="模板名称">{{ previewTemplate.name }}</el-descriptions-item>
@@ -405,7 +405,7 @@
     </el-dialog>
 
     <!-- 导入结果对话框 -->
-    <el-dialog v-model="showImportResult" title="导入结果" width="600px">
+    <el-dialog v-model="showImportResult" title="导入结果" width="720px">
       <div v-if="importResult">
         <el-result v-if="importResult.success" icon="success" :title="importResult.message">
           <template #sub-title>

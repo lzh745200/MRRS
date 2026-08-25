@@ -98,7 +98,7 @@
     </el-card>
 
     <!-- 新建对话框 -->
-    <el-dialog v-model="showCreateDialog" title="新建转账凭证" width="600px">
+    <el-dialog v-model="showCreateDialog" title="新建转账凭证" width="720px">
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">
         <el-form-item label="凭证编号" prop="voucher_no" required
           ><el-input v-model="form.voucher_no"

@@ -147,7 +147,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingItem ? '编辑预算' : '新增预算'"
-      width="520px"
+      width="480px"
       destroy-on-close
     >
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">

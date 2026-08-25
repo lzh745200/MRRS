@@ -99,7 +99,7 @@
     </el-card>
 
     <!-- 详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" title="审批详情" width="800px">
+    <el-dialog v-model="detailDialogVisible" title="审批详情" width="960px">
       <div v-if="currentTask" class="task-detail">
         <!-- 基本信息 -->
         <el-descriptions :column="2" border>

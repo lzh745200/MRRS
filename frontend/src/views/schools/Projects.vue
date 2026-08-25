@@ -69,7 +69,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingProject ? '编辑项目' : '新增项目'"
-      width="600px"
+      width="720px"
       destroy-on-close
     >
       <el-form :model="form" label-width="100px">

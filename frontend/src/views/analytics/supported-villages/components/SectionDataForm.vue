@@ -752,7 +752,7 @@
     <el-dialog
       v-model="previewVisible"
       :title="previewTitle"
-      width="800px"
+      width="960px"
       destroy-on-close
       append-to-body
     >

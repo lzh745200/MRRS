@@ -190,7 +190,7 @@
     </el-card>
 
     <!-- 拒绝对话框 -->
-    <el-dialog v-model="rejectDialogVisible" title="拒绝确认" width="500px">
+    <el-dialog v-model="rejectDialogVisible" title="拒绝确认" width="480px">
       <el-form :model="rejectForm" label-width="80px">
         <el-form-item label="拒绝原因" required>
           <el-input
@@ -208,7 +208,7 @@
     </el-dialog>
 
     <!-- 转交对话框 -->
-    <el-dialog v-model="transferDialogVisible" title="转交审批" width="500px">
+    <el-dialog v-model="transferDialogVisible" title="转交审批" width="480px">
       <el-form :model="transferForm" label-width="80px">
         <el-form-item label="转交对象" required>
           <el-select
@@ -243,7 +243,7 @@
     </el-dialog>
 
     <!-- 变更对比对话框 -->
-    <el-dialog v-model="diffDialogVisible" title="变更对比" width="800px">
+    <el-dialog v-model="diffDialogVisible" title="变更对比" width="960px">
       <div v-if="taskDiff" class="diff-view">
         <el-table :data="diffTableData" border>
           <el-table-column prop="field" label="字段" width="150" />

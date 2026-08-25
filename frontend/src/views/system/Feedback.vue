@@ -63,7 +63,7 @@
     </el-card>
 
     <!-- 反馈详情 -->
-    <el-dialog v-model="detailVisible" title="反馈详情" width="600px">
+    <el-dialog v-model="detailVisible" title="反馈详情" width="720px">
       <el-descriptions :column="1" border>
         <el-descriptions-item label="类型">{{
           typeNameMap[currentItem?.type]

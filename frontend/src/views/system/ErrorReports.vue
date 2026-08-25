@@ -191,7 +191,7 @@
     </el-card>
 
     <!-- 错误详情弹窗 -->
-    <el-dialog v-model="detailVisible" title="错误详情" width="750px" :close-on-click-modal="false">
+    <el-dialog v-model="detailVisible" title="错误详情" width="720px" :close-on-click-modal="false">
       <template v-if="detailLoading">
         <el-skeleton :rows="10" animated />
       </template>

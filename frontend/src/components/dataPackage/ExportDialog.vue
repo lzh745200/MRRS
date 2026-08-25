@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="modelValue"
     title="导出数据包"
-    width="560px"
+    width="480px"
     :close-on-click-modal="false"
     @update:model-value="emit('update:modelValue', $event)"
   >

@@ -251,7 +251,7 @@
     </div>
 
     <!-- 导入对话框 -->
-    <el-dialog v-model="showImportDialog" title="导入帮扶学校数据" width="520px" destroy-on-close>
+    <el-dialog v-model="showImportDialog" title="导入帮扶学校数据" width="480px" destroy-on-close>
       <div class="import-dialog-body">
         <el-alert
           title="请先下载模板，按模板格式填写学校数据后上传"

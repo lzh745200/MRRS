@@ -200,7 +200,7 @@
     <el-dialog
       v-model="taskDialogVisible"
       :title="isEditMode ? '编辑任务' : '新建任务'"
-      width="800px"
+      width="960px"
       class="task-dialog"
     >
       <el-form
@@ -331,7 +331,7 @@
     </el-dialog>
 
     <!-- 任务分配对话框 -->
-    <el-dialog v-model="assignDialogVisible" title="分配任务" width="500px" class="assign-dialog">
+    <el-dialog v-model="assignDialogVisible" title="分配任务" width="480px" class="assign-dialog">
       <el-form
         ref="assignFormRef"
         :model="assignForm"
@@ -379,7 +379,7 @@
     <el-dialog
       v-model="progressDialogVisible"
       title="任务进度"
-      width="700px"
+      width="720px"
       class="progress-dialog"
     >
       <div v-if="currentTaskProgress" class="task-progress-content">
@@ -544,7 +544,7 @@
     <el-dialog
       v-model="batchAssignDialogVisible"
       title="批量分配任务"
-      width="500px"
+      width="480px"
       class="batch-assign-dialog"
     >
       <div class="batch-assign-content">

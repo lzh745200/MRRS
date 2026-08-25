@@ -86,7 +86,7 @@
     </el-card>
 
     <!-- 新建合同对话框 -->
-    <el-dialog v-model="showCreateDialog" title="新建合同" width="600px">
+    <el-dialog v-model="showCreateDialog" title="新建合同" width="720px">
       <el-form
         ref="contractFormRef"
         :model="contractForm"
@@ -125,7 +125,7 @@
     </el-dialog>
 
     <!-- 登记付款对话框 -->
-    <el-dialog v-model="paymentDialogVisible" title="登记合同付款" width="500px">
+    <el-dialog v-model="paymentDialogVisible" title="登记合同付款" width="480px">
       <el-form :model="paymentForm" label-width="100px">
         <el-form-item label="付款金额" required
           ><el-input-number v-model="paymentForm.amount" :min="0.01" :precision="4"
@@ -146,7 +146,7 @@
     <el-dialog
       v-model="attachmentDialogVisible"
       :title="`合同附件 - ${currentContractName}`"
-      width="600px"
+      width="720px"
     >
       <el-upload
         :action="uploadAction"

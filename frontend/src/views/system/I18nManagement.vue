@@ -132,7 +132,7 @@
     </el-card>
 
     <!-- 翻译详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" title="翻译详情" width="500px">
+    <el-dialog v-model="detailDialogVisible" title="翻译详情" width="480px">
       <el-form label-width="80px">
         <el-form-item label="翻译键">
           <el-input :value="detailKey" readonly />

@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     :title="mode === 'backup' ? '数据备份' : '数据恢复'"
-    width="600px"
+    width="720px"
     destroy-on-close
   >
     <!-- 备份模式 -->

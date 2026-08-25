@@ -169,7 +169,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="700px"
+      width="720px"
       :close-on-click-modal="false"
       @close="resetDialogForm"
     >

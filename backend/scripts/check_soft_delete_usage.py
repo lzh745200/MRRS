@@ -73,8 +73,10 @@ def main() -> int:
         for p in sorted(d.rglob("*.py")):
             violations.extend(scan_file(p))
 
+    violations = [v.replace("\\", "/") for v in violations]
+
     if baseline_mode:
-        BASELINE_FILE.write_text("\n".join(sorted(violations)) + "\n", encoding="utf-8")
+        BASELINE_FILE.write_text("\n".join(sorted(v.replace("\\", "/") for v in violations)) + "\n", encoding="utf-8")
         print(f"[baseline] {len(violations)} entries -> {BASELINE_FILE.name}")
         return 0
 

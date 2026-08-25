@@ -36,7 +36,7 @@
     <el-dialog
       :model-value="dialogVisible"
       :title="editingId ? '编辑工作安排' : '添加工作安排'"
-      width="500px"
+      width="480px"
       @update:model-value="closeDialog"
     >
       <el-form :model="form" label-width="100px">

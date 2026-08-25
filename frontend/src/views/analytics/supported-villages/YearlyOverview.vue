@@ -109,7 +109,7 @@
     <el-dialog
       v-model="editDialogVisible"
       :title="`${editSectionTitle} — 数据填写`"
-      width="900px"
+      width="960px"
       destroy-on-close
     >
       <SectionDataForm

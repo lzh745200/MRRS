@@ -244,7 +244,7 @@
     <el-dialog
       v-model="showCreateDialog"
       title="创建后台任务"
-      width="520px"
+      width="480px"
       :close-on-click-modal="false"
       @closed="resetCreateForm"
     >
