@@ -1,5 +1,5 @@
 <template>
-  <div class="supported-village-list">
+  <div v-watermark class="supported-village-list">
     <!-- 搜索筛选区域 -->
     <el-card class="filter-card" shadow="never">
       <el-form :model="filters" inline @submit.prevent>

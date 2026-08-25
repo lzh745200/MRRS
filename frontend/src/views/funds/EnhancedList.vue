@@ -1,5 +1,5 @@
 <template>
-  <div class="fund-list-page">
+  <div v-watermark class="fund-list-page">
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="header-info">

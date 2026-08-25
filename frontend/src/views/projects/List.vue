@@ -1,5 +1,5 @@
 <template>
-  <div class="projects-page">
+  <div v-watermark class="projects-page">
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="header-info">
