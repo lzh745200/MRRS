@@ -129,7 +129,7 @@ function handleMoreCommand(cmd: string) {
 }
 
 .welcome-name {
-  color: #d4af37;
+  color: $badge-gold;
 }
 
 .current-date {

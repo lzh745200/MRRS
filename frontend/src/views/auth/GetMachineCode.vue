@@ -269,7 +269,7 @@ const copyAllInfo = () => {
   justify-content: center;
   width: 80px;
   height: 80px;
-  background: linear-gradient(135deg, #d4af37, #c9a227);
+  background: linear-gradient(135deg, $badge-gold, #c9a227);
   border-radius: 50%;
   margin-bottom: 20px;
   box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);
@@ -315,7 +315,7 @@ const copyAllInfo = () => {
   margin-bottom: 30px;
   padding: 25px;
   background: linear-gradient(135deg, #fff9e6 0%, #fff5d6 100%);
-  border: 2px solid #d4af37;
+  border: 2px solid $badge-gold;
   border-radius: 12px;
 
   h3 {
@@ -447,7 +447,7 @@ const copyAllInfo = () => {
   transition: color 0.3s;
 
   &:hover {
-    color: #d4af37;
+    color: $badge-gold;
   }
 }
 

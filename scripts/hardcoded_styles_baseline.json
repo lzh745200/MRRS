@@ -332,12 +332,9 @@
   "#081c15",
   "rgba(255, 255, 255, 0.95)",
   "rgba(0, 0, 0, 0.3)",
-  "#d4af37",
   "#c9a227",
   "rgba(212, 175, 55, 0.4)",
-  "#d4af37",
   "rgba(255, 255, 255, 0.9)",
-  "#d4af37",
   "rgba(255, 255, 255, 0.5)",
   "rgba(0, 0, 0, 0.06)",
   "#dcdfe6"
@@ -346,18 +343,15 @@
   "#081c15",
   "rgba(255, 255, 255, 0.95)",
   "rgba(0, 0, 0, 0.3)",
-  "#d4af37",
   "#c9a227",
   "rgba(212, 175, 55, 0.4)",
   "#fff9e6",
   "#fff5d6",
-  "#d4af37",
   "rgba(0, 0, 0, 0.1)",
   "#e8f5e9",
   "#c8e6c9",
   "#81c784",
-  "rgba(255, 255, 255, 0.9)",
-  "#d4af37"
+  "rgba(255, 255, 255, 0.9)"
  ],
  "frontend/src/views/auth/LoginEnhanced.vue": [
   "#081c15",
@@ -414,8 +408,6 @@
  ],
  "frontend/src/views/auth/Register.vue": [
   "#081c15",
-  "#d4af37",
-  "#f0e68c",
   "#ffffff",
   "rgba(0, 0, 0, 0.3)",
   "rgba(255, 255, 255, 0.95)"
@@ -486,7 +478,6 @@
  ],
  "frontend/src/views/dashboard/PageHeader.vue": [
   "#1e293b",
-  "#d4af37",
   "#64748b"
  ],
  "frontend/src/views/dashboard/components/GlobalSearch.vue": [

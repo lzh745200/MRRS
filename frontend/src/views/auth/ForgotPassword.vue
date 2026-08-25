@@ -269,7 +269,7 @@ const goToLogin = () => {
   justify-content: center;
   width: 80px;
   height: 80px;
-  background: linear-gradient(135deg, #d4af37, #c9a227);
+  background: linear-gradient(135deg, $badge-gold, #c9a227);
   border-radius: 50%;
   margin-bottom: 20px;
   box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);
@@ -327,7 +327,7 @@ const goToLogin = () => {
   align-items: center;
   padding: 15px 25px;
   background: var(--color-bg-hover);
-  border: 2px solid #d4af37;
+  border: 2px solid $badge-gold;
   border-radius: 8px;
   margin-bottom: 10px;
 }
@@ -352,7 +352,7 @@ const goToLogin = () => {
   transition: color 0.3s;
 
   &:hover {
-    color: #d4af37;
+    color: $badge-gold;
   }
 }
 

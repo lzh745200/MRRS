@@ -46,6 +46,10 @@ CSS_VAR_MAP = {
 # 仅 scss 块可用的 SCSS 变量映射
 SCSS_ONLY_MAP = {
     "#1b4332": "$military-dark",
+    "#d4af37": "$badge-gold",
+    "#e6c158": "$badge-gold-light",
+    "#f0e68c": "$badge-gold-lighter",
+    "#b8960c": "$badge-gold-dark",
 }
 
 # 预编译词边界正则：hex 后不能跟 [0-9a-fA-F]

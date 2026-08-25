@@ -221,8 +221,8 @@ const showPassCodeHelp = () => {
 .register-container {
   --military-dark: #081c15;
   --military-green: $military-dark;
-  --military-gold: #d4af37;
-  --military-gold-light: #f0e68c;
+  --military-gold: $badge-gold;
+  --military-gold-light: $badge-gold-lighter;
   --text-white: #ffffff;
 
   display: flex;
