@@ -375,6 +375,14 @@ async def optimize_database(
     # 解码 URL 编码字符（空格、中文路径等）
     db_path = unquote(db_path)
 
+    # 兼容修正：`sqlite://<posix-abs>` 双斜杠变体在解析时会吞掉绝对路径的
+    # 首个 "/"（如 sqlite:///tmp/x 落入 "://" 分支得到 "tmp/x"）。
+    # 以相对路径不存在而补 "/" 后存在为准，恢复真实绝对路径（Windows 不受影响）。
+    if not os.path.exists(db_path):
+        candidate = "/" + db_path.lstrip("/")
+        if os.path.exists(candidate):
+            db_path = candidate
+
     if not os.path.exists(db_path):
         raise HTTPException(status_code=404, detail="数据库文件不存在")
 

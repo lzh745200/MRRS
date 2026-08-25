@@ -47,21 +47,35 @@ def _ensure_prometheus():
         return True
 
     try:
-        from prometheus_client import Gauge
+        from prometheus_client import Gauge, REGISTRY
         _Gauge = Gauge
 
-        system_cpu_usage_percent = Gauge("system_cpu_usage_percent", "System CPU usage percentage")
-        process_cpu_usage_percent = Gauge("process_cpu_usage_percent", "Process CPU usage percentage")
-        system_memory_total_bytes = Gauge("system_memory_total_bytes", "Total system memory in bytes")
-        system_memory_available_bytes = Gauge("system_memory_available_bytes", "Available system memory in bytes")
-        system_memory_usage_percent = Gauge("system_memory_usage_percent", "System memory usage percentage")
-        process_memory_rss_bytes = Gauge("process_memory_rss_bytes", "Process resident memory size in bytes")
-        process_memory_vms_bytes = Gauge("process_memory_vms_bytes", "Process virtual memory size in bytes")
-        system_disk_total_bytes = Gauge("system_disk_total_bytes", "Total disk space in bytes", ["path"])
-        system_disk_used_bytes = Gauge("system_disk_used_bytes", "Used disk space in bytes", ["path"])
-        system_disk_usage_percent = Gauge("system_disk_usage_percent", "Disk usage percentage", ["path"])
-        process_open_fds = Gauge("process_open_fds", "Number of open file descriptors")
-        process_threads = Gauge("process_threads", "Number of threads")
+        def _safe_gauge(name: str, desc: str, *labels):
+            """幂等注册：模块被 reload/多次导入时先注销同名旧采集器。
+
+            修复 xdist 单 worker 内跨测试文件重复导入导致的
+            "Duplicated timeseries in CollectorRegistry"（CI nightly 实测）。
+            """
+            try:
+                existing = REGISTRY._names_to_collectors.get(name)
+                if existing is not None:
+                    REGISTRY.unregister(existing)
+            except Exception:
+                pass
+            return Gauge(name, desc, *labels)
+
+        system_cpu_usage_percent = _safe_gauge("system_cpu_usage_percent", "System CPU usage percentage")
+        process_cpu_usage_percent = _safe_gauge("process_cpu_usage_percent", "Process CPU usage percentage")
+        system_memory_total_bytes = _safe_gauge("system_memory_total_bytes", "Total system memory in bytes")
+        system_memory_available_bytes = _safe_gauge("system_memory_available_bytes", "Available system memory in bytes")
+        system_memory_usage_percent = _safe_gauge("system_memory_usage_percent", "System memory usage percentage")
+        process_memory_rss_bytes = _safe_gauge("process_memory_rss_bytes", "Process resident memory size in bytes")
+        process_memory_vms_bytes = _safe_gauge("process_memory_vms_bytes", "Process virtual memory size in bytes")
+        system_disk_total_bytes = _safe_gauge("system_disk_total_bytes", "Total disk space in bytes", ["path"])
+        system_disk_used_bytes = _safe_gauge("system_disk_used_bytes", "Used disk space in bytes", ["path"])
+        system_disk_usage_percent = _safe_gauge("system_disk_usage_percent", "Disk usage percentage", ["path"])
+        process_open_fds = _safe_gauge("process_open_fds", "Number of open file descriptors")
+        process_threads = _safe_gauge("process_threads", "Number of threads")
 
         _PROMETHEUS_AVAILABLE = True
         return True

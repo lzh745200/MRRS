@@ -9,7 +9,6 @@
 - _make_exception_handler：各类异常/消息分支 + 默认处理器委托
 """
 import asyncio
-import logging
 import sys
 from unittest.mock import MagicMock
 
@@ -23,6 +22,13 @@ from app.utils.win_proactor_fix import (
     _patch_running_loop,
     _silent_close,
     apply_windows_proactor_fix,
+)
+
+# ProactorEventLoop 仅存在于 Windows；Linux CI 上 asyncio 无此属性
+# （nightly #13 实测 4 失败），整模块跳过非 Windows 平台。
+pytestmark = pytest.mark.skipif(
+    not sys.platform.startswith("win"),
+    reason="Windows-only asyncio.ProactorEventLoop",
 )
 
 
