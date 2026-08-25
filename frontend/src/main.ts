@@ -53,6 +53,12 @@ AuthStorage.migrateFromLocalStorage()
 
 const app = createApp(App)
 
+// ADR-0007（W3-T1/工单042）：启用权限指令与防泄密水印
+import { permission as vPermissionDirective } from './directives/permission'
+import vWatermark from './directives/watermark'
+app.directive('permission', vPermissionDirective)
+app.directive('watermark', vWatermark)
+
 app.use(createPinia())
 app.use(router)
 
