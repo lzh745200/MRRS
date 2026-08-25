@@ -55,7 +55,7 @@ const trendText = computed(() => {
 
 <style scoped>
 .stats-card {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);

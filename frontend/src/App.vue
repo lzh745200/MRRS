@@ -79,7 +79,7 @@ body,
   justify-content: center;
   min-height: 100vh;
   background: #081c15;
-  color: #fff;
+  color: var(--color-text-inverse);
   text-align: center;
 }
 

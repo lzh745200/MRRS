@@ -477,7 +477,7 @@ onMounted(() => {
   align-items: center;
 }
 .table-card {
-  background: #ffffff;
+  background: var(--color-bg-card);
 }
 .form-item-tip {
   font-size: 12px;

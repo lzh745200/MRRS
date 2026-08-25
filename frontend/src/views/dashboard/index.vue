@@ -372,7 +372,7 @@ function handleRestore() {
   flex-wrap: wrap;
   gap: 12px;
   padding: 12px 20px;
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 12px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
@@ -397,7 +397,7 @@ function handleRestore() {
 .chart-panel,
 .quick-panel,
 .info-panel {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 12px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   overflow: hidden;
@@ -421,7 +421,7 @@ function handleRestore() {
 
 // 布局编辑器
 .layout-editor {
-  background: #fff;
+  background: var(--color-bg-card);
   border: 2px solid var(--el-color-primary);
   border-radius: 12px;
   padding: 16px 20px;

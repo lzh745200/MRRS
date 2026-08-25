@@ -225,7 +225,7 @@ onMounted(() => {
   margin: 0 auto 14px;
   border-radius: 14px;
   background: linear-gradient(135deg, #1b4332, var(--color-primary-light-1));
-  color: #ffffff;
+  color: var(--color-text-inverse);
   display: flex;
   align-items: center;
   justify-content: center;

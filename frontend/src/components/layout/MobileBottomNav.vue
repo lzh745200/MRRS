@@ -63,7 +63,7 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
   justify-content: space-around;
   align-items: center;
   height: 56px;
-  background: #fff;
+  background: var(--color-bg-card);
   border-top: 1px solid var(--color-border-light);
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -98,7 +98,7 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
   height: 16px;
   border-radius: 8px;
   background: var(--color-danger);
-  color: #fff;
+  color: var(--color-text-inverse);
   font-size: 10px;
   display: flex;
   align-items: center;

@@ -191,6 +191,7 @@ async def initialize_system(
 @router.post("/reset", summary="重置系统初始化状态（仅超级管理员）")
 async def reset_initialization(
     confirm: str = Query(..., description="输入 'RESET' 确认重置操作"),
+    admin_password: str = Query("", description="当前管理员密码（二次校验，T047）"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -206,6 +207,14 @@ async def reset_initialization(
 
     if confirm != "RESET":
         raise HTTPException(status_code=400, detail="请输入 'RESET' 确认重置操作")
+
+    # T047 加固：confirm 字符串之上增加管理员密码二次校验（fail-closed）
+    from app.core.security import verify_password as _verify_pwd
+
+    if not admin_password or not _verify_pwd(
+        admin_password, getattr(current_user, "hashed_password", "") or ""
+    ):
+        raise HTTPException(status_code=403, detail="管理员密码校验失败")
 
     try:
         svc = SystemConfigService(db)

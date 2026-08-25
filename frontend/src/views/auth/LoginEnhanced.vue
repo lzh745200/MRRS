@@ -623,7 +623,7 @@ const goToMachineCode = () => {
 
 .card-header h2 {
   font-size: 28px;
-  color: #ffffff;
+  color: var(--color-text-inverse);
   margin: 0 0 10px 0;
   font-weight: 600;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -674,7 +674,7 @@ const goToMachineCode = () => {
     background-color 0.3s ease,
     box-shadow 0.3s ease;
   background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  color: var(--color-text-inverse);
   box-sizing: border-box;
 }
 

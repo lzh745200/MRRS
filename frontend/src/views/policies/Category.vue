@@ -230,7 +230,7 @@ onMounted(() => {
 .title {
   font-size: 18px;
   font-weight: bold;
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .level-card {
@@ -286,7 +286,7 @@ onMounted(() => {
 .level-name {
   font-size: 16px;
   font-weight: 500;
-  color: #fff;
+  color: var(--color-text-inverse);
   margin-bottom: 4px;
 }
 

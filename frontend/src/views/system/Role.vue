@@ -586,7 +586,7 @@ onMounted(() => {
 .search-card,
 .table-card {
   margin-bottom: 20px;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border: 1px solid var(--color-border-light);
 }
 
@@ -599,15 +599,15 @@ onMounted(() => {
 .title {
   font-size: 16px;
   font-weight: bold;
-  color: #ffffff;
+  color: var(--color-text-inverse);
 }
 
 :deep(.el-dialog__title) {
-  color: #ffffff;
+  color: var(--color-text-inverse);
 }
 
 :deep(.el-table th.el-table__cell) {
-  color: #ffffff;
+  color: var(--color-text-inverse);
   background-color: transparent;
 }
 
@@ -624,7 +624,7 @@ onMounted(() => {
 }
 
 :deep(.el-tree) {
-  background: #ffffff;
+  background: var(--color-bg-card);
   color: var(--color-text-regular);
 }
 

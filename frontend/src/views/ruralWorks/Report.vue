@@ -164,7 +164,7 @@ function exportCSV() {
   margin-bottom: 20px;
 }
 .stat-card {
-  background: #fff;
+  background: var(--color-bg-card);
   padding: 20px;
   border-radius: 8px;
   text-align: center;
@@ -190,6 +190,6 @@ function exportCSV() {
   margin-top: 4px;
 }
 .table-card {
-  background: #fff;
+  background: var(--color-bg-card);
 }
 </style>

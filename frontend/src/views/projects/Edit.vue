@@ -1472,8 +1472,8 @@ onUnmounted(() => {
 .el-switch {
   --el-switch-on-color: var(--color-primary);
   --el-switch-off-color: #dcdfe6;
-  --el-switch-on-text-color: #ffffff;
-  --el-switch-off-text-color: #ffffff;
+  --el-switch-on-text-color: var(--color-text-inverse);
+  --el-switch-off-text-color: var(--color-text-inverse);
   --el-switch-core-height: 32px;
   --el-switch-button-size: 28px;
 }

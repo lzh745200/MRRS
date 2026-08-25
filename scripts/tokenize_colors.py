@@ -61,6 +61,24 @@ def _hex_re(literal: str) -> re.Pattern:
 CSS_RES = {lit: _hex_re(lit) for lit in CSS_VAR_MAP}
 SCSS_RES = {lit: _hex_re(lit) for lit in SCSS_ONLY_MAP}
 
+# ── 上下文映射（#fff/#ffffff 按 CSS 属性分派，均与 token 值无损）──
+_CTX_RULES: list[tuple[re.Pattern, str]] = [
+    # color: #fff → 反白文字
+    (
+        re.compile(r"(color\s*:\s*)#fff(?:fff)?\b(?![0-9a-fA-F])", re.IGNORECASE),
+        r"\1var(--color-text-inverse)",
+    ),
+    # background(-color): #fff → 卡片底色（--color-bg-card 即 #ffffff）
+    (
+        re.compile(
+            r"(background(?:-color)?\s*:\s*)#fff(?:fff)?\b(?![0-9a-fA-F])",
+            re.IGNORECASE,
+        ),
+        r"\1var(--color-bg-card)",
+    ),
+]
+# 其余上下文（border/box-shadow/渐变内色标等）留人工批次
+
 
 def tokenize_style_body(body: str, is_scss: bool) -> tuple[str, Counter]:
     stats: Counter = Counter()
@@ -81,6 +99,10 @@ def tokenize_style_body(body: str, is_scss: bool) -> tuple[str, Counter]:
                 core, n = rx.subn(SCSS_ONLY_MAP[lit], core)
                 if n:
                     stats[lit] += n
+        for rx, repl in _CTX_RULES:
+            core, n = rx.subn(repl, core)
+            if n:
+                stats["#fff(ctx)"] += n
 
         out_lines.append(core + ("\n" if newline else ""))
     return "".join(out_lines), stats

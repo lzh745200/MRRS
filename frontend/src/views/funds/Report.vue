@@ -354,7 +354,7 @@ onMounted(() => {
 .title {
   font-size: 16px;
   font-weight: bold;
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .report-header {
@@ -363,7 +363,7 @@ onMounted(() => {
 }
 
 .report-header h2 {
-  color: #fff;
+  color: var(--color-text-inverse);
   margin-bottom: 10px;
 }
 
@@ -377,7 +377,7 @@ onMounted(() => {
 }
 
 .report-summary h3 {
-  color: #fff;
+  color: var(--color-text-inverse);
   margin-bottom: 20px;
 }
 
@@ -408,7 +408,7 @@ onMounted(() => {
 :deep(.el-card__header) {
   background: linear-gradient(135deg, var(--color-primary) 0%, #1b4332 100%);
   border-bottom: 1px solid rgba(64, 145, 108, 0.3);
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 :deep(.el-table) {
@@ -418,7 +418,7 @@ onMounted(() => {
 
 :deep(.el-table th.el-table__cell) {
   background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 100%);
-  color: #fff;
+  color: var(--color-text-inverse);
   font-weight: bold;
 }
 </style>

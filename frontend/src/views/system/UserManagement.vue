@@ -1313,7 +1313,7 @@ onMounted(() => {
 .search-card,
 .table-card {
   margin-bottom: 20px;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border: 1px solid var(--color-border-light);
 }
 
@@ -1332,7 +1332,7 @@ onMounted(() => {
 .title {
   font-size: 16px;
   font-weight: bold;
-  color: #ffffff;
+  color: var(--color-text-inverse);
 }
 
 .pending-badge :deep(.el-badge__content) {

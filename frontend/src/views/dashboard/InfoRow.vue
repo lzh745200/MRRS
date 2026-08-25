@@ -137,7 +137,7 @@ onMounted(() => {
 }
 
 .timeline-section {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 12px;
   padding: 20px 24px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -246,7 +246,7 @@ onMounted(() => {
 }
 .tl-save-btn {
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 .tl-cancel-btn {
   background: #e5e7eb;

@@ -445,7 +445,7 @@ watch(
 
 .password-card,
 .security-tips-card {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 12px;
   padding: 24px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
@@ -619,7 +619,7 @@ watch(
 .tips-title {
   font-size: 16px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--color-text-inverse);
 }
 
 .security-tips {

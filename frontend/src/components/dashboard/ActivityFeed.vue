@@ -113,7 +113,7 @@ function resetForm() {
 
 <style scoped>
 .section-card {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 16px;

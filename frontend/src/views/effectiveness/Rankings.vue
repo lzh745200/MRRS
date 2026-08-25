@@ -282,17 +282,17 @@ onMounted(() => {
 
 .rank-gold {
   background: linear-gradient(135deg, var(--color-warning-lighter), var(--color-warning));
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .rank-silver {
   background: linear-gradient(135deg, var(--color-border), var(--color-text-secondary));
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .rank-bronze {
   background: linear-gradient(135deg, var(--color-danger-lighter), var(--color-danger));
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .score-bar-wrapper {

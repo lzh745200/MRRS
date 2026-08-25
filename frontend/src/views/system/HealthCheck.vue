@@ -554,7 +554,7 @@ function exportReport(): void {
 .page-title {
   font-size: 26px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--color-text-inverse);
   margin: 0;
   letter-spacing: 2px;
 }
@@ -579,8 +579,8 @@ function exportReport(): void {
   font-size: 17px;
   font-weight: 600;
   letter-spacing: 4px;
-  background: #ffffff;
-  border-color: #ffffff;
+  background: var(--color-bg-card);
+  border-color: var(--color-text-inverse);
   color: #1b4332;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
   transition:
@@ -639,7 +639,7 @@ function exportReport(): void {
 
 /* ── 空状态 ── */
 .empty-result {
-  background: #ffffff;
+  background: var(--color-bg-card);
   border-radius: 8px;
   padding: 24px 0;
 }

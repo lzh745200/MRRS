@@ -307,7 +307,7 @@ const activeGroups = ref(['core'])
   padding: 8px 10px;
   border: 1px solid #dcdfe6;
   border-radius: 8px;
-  background: #fff;
+  background: var(--color-bg-card);
   cursor: pointer;
   font-size: 13px;
   color: var(--color-text-primary);

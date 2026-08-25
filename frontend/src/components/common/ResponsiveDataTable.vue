@@ -157,7 +157,7 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
   gap: 12px;
 }
 .data-card {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);

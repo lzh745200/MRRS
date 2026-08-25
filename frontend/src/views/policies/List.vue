@@ -611,6 +611,6 @@ onMounted(() => {
 
 :deep(.el-pagination.is-background .el-pager li:not(.disabled).is-active) {
   background-color: var(--color-primary-light-1);
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 </style>

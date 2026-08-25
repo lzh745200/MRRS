@@ -587,7 +587,7 @@ onMounted(() => {
 }
 
 .profile-card {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 12px;
   padding: 24px;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
@@ -671,7 +671,7 @@ onMounted(() => {
 
 .detail-section,
 .security-section {
-  background: #fff;
+  background: var(--color-bg-card);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);

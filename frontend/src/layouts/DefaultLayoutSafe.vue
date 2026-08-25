@@ -725,7 +725,7 @@ function handleCommand(command: string) {
 
   /* 直接设置 Element Plus CSS 变量，从根源解决黑色文字 */
   --el-menu-text-color: rgba(255, 255, 255, 0.82) !important;
-  --el-menu-hover-text-color: #ffffff !important;
+  --el-menu-hover-text-color: var(--color-text-inverse) !important;
   --el-menu-active-color: #d4af37 !important;
   --el-menu-bg-color: transparent !important;
   --el-menu-hover-bg-color: rgba(255, 255, 255, 0.08) !important;
@@ -777,7 +777,7 @@ function handleCommand(command: string) {
 .aside-menu :deep(.el-menu-item:hover) *,
 .aside-menu :deep(.el-sub-menu__title:hover) * {
   background-color: rgba(255, 255, 255, 0.07) !important;
-  color: #ffffff !important;
+  color: var(--color-text-inverse) !important;
 }
 
 /* Active 态 — 金色文字 + 左侧金色指示条 + 微妙背景 */
@@ -846,7 +846,7 @@ function handleCommand(command: string) {
 
 .aside-menu :deep(.el-menu--inline .el-menu-item:hover),
 .aside-menu :deep(.el-menu--inline .el-menu-item:hover) * {
-  color: #ffffff !important;
+  color: var(--color-text-inverse) !important;
   background-color: rgba(255, 255, 255, 0.05) !important;
 }
 
@@ -878,7 +878,7 @@ function handleCommand(command: string) {
 
   /* 弹出菜单 CSS 变量覆盖 */
   --el-menu-text-color: rgba(255, 255, 255, 0.85) !important;
-  --el-menu-hover-text-color: #ffffff !important;
+  --el-menu-hover-text-color: var(--color-text-inverse) !important;
   --el-menu-active-color: #d4af37 !important;
   --el-menu-bg-color: transparent !important;
   --el-menu-hover-bg-color: rgba(255, 255, 255, 0.08) !important;
@@ -905,7 +905,7 @@ function handleCommand(command: string) {
 :deep(.aside-popper .el-menu-item:hover),
 :deep(.aside-popper .el-menu-item:hover) * {
   background-color: rgba(255, 255, 255, 0.07) !important;
-  color: #ffffff !important;
+  color: var(--color-text-inverse) !important;
 }
 
 /* ===================================================================
@@ -1121,7 +1121,7 @@ function handleCommand(command: string) {
 .layout-aside .el-sub-menu__title:hover,
 .layout-aside .el-menu-item:hover span,
 .layout-aside .el-sub-menu__title:hover span {
-  color: #ffffff !important;
+  color: var(--color-text-inverse) !important;
 }
 
 .layout-aside .el-menu-item.is-active,
@@ -1138,7 +1138,7 @@ function handleCommand(command: string) {
 }
 .layout-aside .el-menu--inline .el-menu-item:hover,
 .layout-aside .el-menu--inline .el-menu-item:hover span {
-  color: #ffffff !important;
+  color: var(--color-text-inverse) !important;
 }
 .layout-aside .el-menu--inline .el-menu-item.is-active,
 .layout-aside .el-menu--inline .el-menu-item.is-active span {
@@ -1152,6 +1152,6 @@ function handleCommand(command: string) {
 }
 .aside-popper .el-menu-item:hover,
 .aside-popper .el-menu-item:hover span {
-  color: #ffffff !important;
+  color: var(--color-text-inverse) !important;
 }
 </style>

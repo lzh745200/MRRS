@@ -284,7 +284,7 @@ onMounted(() => {
   margin: 0;
 }
 .toolbar-card {
-  background: #ffffff;
+  background: var(--color-bg-card);
 }
 .toolbar {
   display: flex;
@@ -332,6 +332,6 @@ onMounted(() => {
   font-style: italic;
 }
 .table-card {
-  background: #ffffff;
+  background: var(--color-bg-card);
 }
 </style>

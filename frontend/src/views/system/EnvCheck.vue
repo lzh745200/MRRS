@@ -302,9 +302,9 @@ onMounted(() => {
   overflow-x: auto;
 }
 .deps-card {
-  background: #ffffff;
+  background: var(--color-bg-card);
 }
 .health-card {
-  background: #ffffff;
+  background: var(--color-bg-card);
 }
 </style>

@@ -649,7 +649,7 @@ onMounted(() => {
   position: relative;
   height: 100%;
   padding: 14px 16px;
-  background: #ffffff;
+  background: var(--color-bg-card);
   border: 1px solid var(--color-border-light);
   border-radius: 8px;
   overflow: hidden;

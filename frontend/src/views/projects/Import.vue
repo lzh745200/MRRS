@@ -554,7 +554,7 @@ const redirectToList = () => {
   }
   .import-header {
     background: var(--color-navy);
-    color: #fff;
+    color: var(--color-text-inverse);
     padding: 20px 30px;
   }
   .header-content {
@@ -576,7 +576,7 @@ const redirectToList = () => {
       width: 10px;
       height: 10px;
       border-radius: 50%;
-      background: #fff;
+      background: var(--color-bg-card);
     }
     .divider-line {
       flex: 1;
@@ -592,7 +592,7 @@ const redirectToList = () => {
     margin-bottom: 40px;
   }
   .step-content {
-    background: #fff;
+    background: var(--color-bg-card);
     border-radius: 4px;
     padding: 30px;
     box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
@@ -614,7 +614,7 @@ const redirectToList = () => {
   .military-btn {
     background: linear-gradient(90deg, var(--color-navy), #0066cc);
     border-color: #0066cc;
-    color: #fff;
+    color: var(--color-text-inverse);
     &:hover {
       background: linear-gradient(90deg, #004080, #0073e6);
     }
@@ -632,7 +632,7 @@ const redirectToList = () => {
       height: 36px;
       border-radius: 50%;
       background: #0066cc;
-      color: #fff;
+      color: var(--color-text-inverse);
       display: flex;
       align-items: center;
       justify-content: center;

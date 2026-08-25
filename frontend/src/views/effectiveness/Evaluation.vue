@@ -400,7 +400,7 @@ onMounted(() => {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .header-tags {

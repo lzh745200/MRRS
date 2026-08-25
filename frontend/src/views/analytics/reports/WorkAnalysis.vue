@@ -657,7 +657,7 @@ onBeforeUnmount(() => {
 
 .stat-icon-text {
   font-size: 24px;
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .stat-info {

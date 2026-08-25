@@ -43,7 +43,7 @@ const refresh = () => {
   align-items: center;
   height: 100vh;
   background: linear-gradient(135deg, #0a1929 0%, #1b4332 100%);
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .error-container {
@@ -66,7 +66,7 @@ const refresh = () => {
   font-size: 32px;
   font-weight: bold;
   margin-bottom: 20px;
-  color: #fff;
+  color: var(--color-text-inverse);
 }
 
 .error-description {
