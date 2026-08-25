@@ -198,6 +198,8 @@ config.global.stubs = {
   'el-header': true,
   'el-main': true,
   'el-footer': true,
+  // 保持默认布尔桩：全仓 43 处测试以 el-empty-stub 标签断言；
+  // 描述文本经 attrs 透传，可用 [description="..."] 选择器断言
   'el-empty': true,
   'el-skeleton': true,
   'el-loading': true,

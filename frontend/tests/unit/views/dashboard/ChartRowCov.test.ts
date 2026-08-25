@@ -1,4 +1,4 @@
-/**
+﻿/**
  * views/dashboard/ChartRow.vue 补充覆盖（与 ChartRow.test.ts 合并达四指标 100%）
  *
  * 覆盖：loadData 响应多形状（data.items / data.data / items；funds_allocated / total_funds）、
@@ -175,8 +175,8 @@ describe('ChartRow 数据形状', () => {
     const wrapper2 = mountChart()
     await flushPromises()
     await nextTick()
-    expect(wrapper2.findAll('.chart-state').length).toBe(2)
-    expect(wrapper2.text()).toContain('暂无数据')
+    expect(wrapper2.findAll('.chart-empty').length).toBe(2)
+    expect(wrapper2.find('.chart-empty[description="暂无项目数据"]').exists()).toBe(true)
     expect(mockSetOption).not.toHaveBeenCalled()
     wrapper2.unmount()
   })
@@ -187,8 +187,8 @@ describe('ChartRow 数据形状', () => {
     const wrapper = mountChart()
     await flushPromises()
     await nextTick()
-    expect(wrapper.findAll('.chart-state').length).toBe(1)
-    expect(wrapper.text()).toContain('暂无数据')
+    expect(wrapper.findAll('.chart-empty').length).toBe(1)
+    expect(wrapper.find('.chart-empty[description="暂无经费数据"]').exists()).toBe(true)
     wrapper.unmount()
   })
 

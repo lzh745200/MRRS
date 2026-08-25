@@ -7,7 +7,7 @@
         <span>数据加载失败，请稍后重试</span>
         <el-button size="small" type="primary" @click="loadAndRender">重试</el-button>
       </div>
-      <div v-else-if="!hasProjects" class="chart-state">暂无数据</div>
+      <el-empty v-else-if="!hasProjects" class="chart-empty" description="暂无项目数据" :image-size="72" />
       <div v-else ref="barRef" class="chart-body" />
     </div>
     <div class="chart-card">
@@ -17,7 +17,7 @@
         <span>数据加载失败，请稍后重试</span>
         <el-button size="small" type="primary" @click="loadAndRender">重试</el-button>
       </div>
-      <div v-else-if="!hasFunds" class="chart-state">暂无数据</div>
+      <el-empty v-else-if="!hasFunds" class="chart-empty" description="暂无经费数据" :image-size="72" />
       <div v-else ref="pieRef" class="chart-body" />
     </div>
   </div>
@@ -250,5 +250,17 @@ onUnmounted(() => {
   gap: $spacing-sm;
   color: $color-text-secondary;
   font-size: $font-size-md;
+}
+.chart-empty {
+  height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  :deep(.el-empty__description p) {
+    color: $color-text-secondary;
+    font-size: $font-size-sm;
+  }
 }
 </style>
