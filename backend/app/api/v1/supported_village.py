@@ -1051,6 +1051,38 @@ async def save_yearly_section(
     return success_response(message=f"保存成功: {section}")
 
 
+@router.delete("/{village_id}/yearly/{year}/{section}")
+async def delete_yearly_section(
+    village_id: int,
+    year: int,
+    section: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """删除某板块某年度数据（物理删除 + 审计留痕；T028）"""
+    if section not in _SECTION_MODEL:
+        raise HTTPException(status_code=400, detail=f"未知年度数据板块: {section}")
+    village = _get_village_or_404(db, village_id, current_user)
+    model = _SECTION_MODEL[section]
+    old_data = _get_section_data(db, model, village_id, year)
+    if not old_data:
+        raise HTTPException(status_code=404, detail=f"{section} {year} 年度数据不存在")
+    row = (
+        db.query(model)
+        .filter(model.supported_village_id == village_id, model.year == year)
+        .first()
+    )
+    if row:
+        db.delete(row)
+        safe_commit(db)
+    _record_village_change(
+        db, AuditAction.DELETE, current_user, village,
+        old_data=old_data, new_data=None,
+        detail=f"年度数据删除: {section} {year}年",
+    )
+    return success_response(message=f"已删除: {section} {year}年")
+
+
 @router.get("/{village_id}/change-history")
 async def get_village_change_history(
     village_id: int,

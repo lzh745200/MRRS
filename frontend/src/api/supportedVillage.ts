@@ -60,6 +60,9 @@ export const getYearlyData = (villageId: number, year: number) =>
   get(`/supported-villages/${villageId}/yearly/${year}`)
 export const copyYearData = (villageId: number, fromYear: number, toYear: number) =>
   post(`/supported-villages/${villageId}/yearly/copy`, { fromYear, toYear })
+export const deleteYearlySection = (villageId: number, year: number, section: string) =>
+  del(`/supported-villages/${villageId}/yearly/${year}/${section}`)
+
 export const validateYearlyData = (villageId: number, year: number) =>
   post(`/supported-villages/${villageId}/yearly/${year}/validate`)
 

@@ -55,6 +55,15 @@
           <el-button size="small" @click="handleDownloadTemplate(section.key)"
             ><el-icon><Download /></el-icon>模板</el-button
           >
+          <el-popconfirm
+            v-if="section.stats.length > 0"
+            :title="`确认删除 ${selectedYear} 年「${section.title}」数据？删除后可重新填写恢复（数据不可找回）`"
+            @confirm="deleteSection(section.key)"
+          >
+            <template #reference>
+              <el-button size="small" type="danger" link>删除</el-button>
+            </template>
+          </el-popconfirm>
           <el-upload
             :show-file-list="false"
             :before-upload="() => false"
@@ -120,6 +129,8 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, markRaw } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
+import { logger } from '@/utils/logger'
+import { deleteYearlySection } from '@/api/supportedVillage'
 import {
   ArrowLeft,
   Edit,
@@ -524,6 +535,19 @@ function handleChartResize() {
     incomeTrendChart?.resize()
     investmentPieChart?.resize()
   }, 200)
+}
+
+async function deleteSection(sectionKey: string) {
+  const vid = safeRouteParam(route.params.id)
+  if (!vid) return
+  try {
+    await deleteYearlySection(Number(vid), selectedYear.value, sectionKey)
+    ElMessage.success('已删除')
+    await loadAllData()
+  } catch (e) {
+    logger.error('删除年度板块失败:', e)
+    ElMessage.error('删除失败，请稍后重试')
+  }
 }
 
 async function loadAllData() {

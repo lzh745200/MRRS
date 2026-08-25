@@ -147,38 +147,13 @@ async def kpi_precalculate_job():
     """定时预计算 KPI 统计，写入缓存（每日 00:30）"""
     with get_db_context() as db:
         try:
-            from sqlalchemy import func as sa_func
-            from app.models.project import Project
-            from app.models.supported_village import SupportedVillage
             from app.core.cache import get_cache_service
             from app.core.constants import ANALYTICS_CACHE_PREFIX
 
-            total_villages = (
-                db.query(sa_func.count(SupportedVillage.id))
-                .filter(SupportedVillage.is_active.is_(True))
-                .scalar()
-                or 0
-            )
-            # 软删项目不参与 KPI 统计（与 /analytics/kpi-summary 口径一致）
-            rows = (
-                db.query(Project.status, sa_func.count(Project.id))
-                .filter(Project.is_active == True)  # noqa: E712
-                .group_by(Project.status)
-                .all()
-            )
-            counts = {status: cnt for status, cnt in rows}
-            total_projects = sum(counts.values())
-            completed_projects = counts.get("completed", 0)
-            approved_projects = counts.get("approved", 0)
+            # Phase G：与 /analytics/kpi-summary 端点共用唯一实现，杜绝口径漂移
+            from app.api.v1.data.data.analytics import compute_kpi_summary_data
 
-            data = {
-                "total_villages": total_villages,
-                "total_projects": total_projects,
-                "completed_projects": completed_projects,
-                "approved_projects": approved_projects,
-                "completion_rate": round(completed_projects / total_projects * 100, 1) if total_projects else 0,
-                "period": "month",
-            }
+            data = compute_kpi_summary_data(db)
             cache = await get_cache_service()
             await cache.set(f"{ANALYTICS_CACHE_PREFIX}kpi_summary_month", data, 86400)
             logger.info("KPI 统计预计算完成，已写入缓存")

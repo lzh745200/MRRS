@@ -223,7 +223,6 @@ async def get_realtime_stats(
     return AnalyticsResponse(success=True, data=data, message="实时统计数据获取成功")
 
 
-@router.get("/kpi-summary")
 def compute_kpi_summary_data(db: Session) -> dict:
     """KPI 汇总计算唯一实现：端点缓存未命中与每日预计算任务共用，杜绝口径漂移。"""
     from app.models.project import Project
@@ -257,6 +256,7 @@ def compute_kpi_summary_data(db: Session) -> dict:
     }
 
 
+@router.get("/kpi-summary")
 @safe_api_call("获取KPI汇总数据")
 async def get_kpi_summary(
     period: str = "month",
@@ -267,9 +267,6 @@ async def get_kpi_summary(
     cached = await _get_cached(f"kpi_summary_{period}")
     if cached is not None:
         return AnalyticsResponse(success=True, data=cached, message="KPI数据获取成功")
-
-    from app.models.project import Project
-    from app.models.supported_village import SupportedVillage
 
     data = compute_kpi_summary_data(db)
     data["period"] = period
