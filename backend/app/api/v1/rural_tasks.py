@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.core.permission_utils import is_admin
 from app.core.security import get_current_user
 from app.core.transaction import safe_commit
+from app.services.work_log_service import write_work_log
 from app.interfaces.schemas.responses import ResponseModel
 from app.models.rural_task import RuralTask, TaskStatus
 from app.models.rural_work import RuralWork
@@ -210,6 +211,14 @@ async def create_task(
     safe_commit(db)
     db.refresh(task)
 
+    # W2/048 军规审计：任务创建留痕
+    try:
+        write_work_log(db, "rural_task", "create", task.id,
+                       f"创建驻村工作任务: {task.code} {task.title}",
+                       user_id=current_user.id)
+    except Exception:  # pragma: no cover
+        pass
+
     return ResponseModel(code=200, data=_task_to_response(task), message="创建成功")
 
 
@@ -230,6 +239,14 @@ async def update_task(
 
     safe_commit(db)
     db.refresh(task)
+
+    # W2/048：任务更新留痕
+    try:
+        write_work_log(db, "rural_task", "update", task.id,
+                       f"更新驻村工作任务: {task.code} 字段={','.join(update_data.keys())}",
+                       user_id=current_user.id)
+    except Exception:  # pragma: no cover
+        pass
     return ResponseModel(code=200, data=_task_to_response(task), message="更新成功")
 
 
@@ -243,6 +260,13 @@ async def delete_task(
     task = _get_task_or_403(task_id, current_user, db)
     db.delete(task)
     safe_commit(db)
+    # W2/048：任务删除留痕
+    try:
+        write_work_log(db, "rural_task", "delete", task_id,
+                       f"删除驻村工作任务: {task.code}",
+                       user_id=current_user.id)
+    except Exception:  # pragma: no cover
+        pass
     return ResponseModel(code=200, message="删除成功")
 
 
@@ -265,6 +289,13 @@ async def submit_task(
     task.submitted_by = current_user.id
     task.submitted_at = datetime.now(timezone.utc)
     safe_commit(db)
+    # W2/048：提交审批留痕
+    try:
+        write_work_log(db, "rural_task", "submit", task.id,
+                       f"提交任务审批: {task.code}",
+                       user_id=current_user.id)
+    except Exception:  # pragma: no cover
+        pass
     return ResponseModel(code=200, message="提交成功")
 
 
@@ -291,6 +322,14 @@ async def approve_task(
 
     safe_commit(db)
     action = "批准" if body.approved else "驳回"
+    # W2/048：审批结论留痕（敏感操作必须可追溯）
+    try:
+        write_work_log(db, "rural_task", "approve" if body.approved else "reject",
+                       task.id,
+                       f"{action}任务: {task.code} 意见={body.comment or '无'}",
+                       user_id=current_user.id)
+    except Exception:  # pragma: no cover
+        pass
     return ResponseModel(code=200, message=f"任务已{action}")
 
 
@@ -316,4 +355,11 @@ async def batch_delete_tasks(
         query = query.filter(RuralTask.created_by == current_user.id)
     deleted = query.delete(synchronize_session=False)
     safe_commit(db)
+    # W2/048：批量删除留痕
+    try:
+        write_work_log(db, "rural_task", "batch_delete", 0,
+                       f"批量删除驻村工作任务 {deleted} 条 ids={ids}",
+                       user_id=current_user.id)
+    except Exception:  # pragma: no cover
+        pass
     return ResponseModel(code=200, data={"deleted": deleted}, message=f"成功删除{deleted}条记录")

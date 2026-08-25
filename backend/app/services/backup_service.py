@@ -383,12 +383,20 @@ class BackupService:
             return backup_file_path, None
 
     def _create_snapshots(self):
-        """创建当前状态的快照"""
+        """创建当前状态的快照（W2-T8：DB 快照走 Backup API 合并 WAL）"""
         snapshot_db_path = None
         snapshot_uploads_dir = None
         if os.path.exists(self.database_path):
-            snapshot_db_path = f"{self.database_path}.snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            shutil.copy(self.database_path, snapshot_db_path)
+            # 复用一致性快照（SQLite Backup API 自动合并 -wal；失败内部回退
+            # checkpoint+拷贝）。返回 None 时回退裸拷贝主库文件。
+            try:
+                snapshot_db_path = self._create_consistency_snapshot()
+            except Exception as snap_err:
+                logger.warning("一致性快照异常，回退裸拷贝（可能不含 WAL 内容）: %s", snap_err)
+                snapshot_db_path = None
+            if not snapshot_db_path:
+                snapshot_db_path = f"{self.database_path}.snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                shutil.copy(self.database_path, snapshot_db_path)
         if os.path.exists(self.uploads_dir):
             snapshot_uploads_dir = f"{self.uploads_dir}_snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             shutil.copytree(self.uploads_dir, snapshot_uploads_dir)
