@@ -54,17 +54,13 @@ if not _sys.platform.startswith("win"):
     ]
 
     def pytest_collection_modifyitems(config, items):
-        _root = config.rootpath
         for item in items:
-            try:
-                rel = _os.path.relpath(str(item.fspath), str(_root))
-                rel = rel.replace(_os.sep, "/")
-            except Exception:
-                continue
-            full = f"{rel}::{item.name}"
-            class_node = f"{rel}::{item.parent.name}" if item.parent is not None else ""
+            nid = item.nodeid.replace(_os.sep, "/")
+            # 从 backend 子目录运行时 nodeid 带 backend/ 前缀，统一剥离
+            if nid.startswith("backend/"):
+                nid = nid[len("backend/"):]
             for pref in _WIN_ONLY_NODEID_PREFIXES:
-                if full.startswith(pref) or (class_node and class_node.startswith(pref)):
+                if nid.startswith(pref):
                     item.add_marker(_pytest.mark.skip(
                         reason="Windows 桌面专属行为（Linux CI 跳过）"))
                     break
