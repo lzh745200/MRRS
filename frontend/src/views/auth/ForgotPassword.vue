@@ -224,7 +224,7 @@ const goToLogin = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #081c15 0%, #1b4332 100%);
+  background: linear-gradient(135deg, #081c15 0%, $military-dark 100%);
   position: relative;
   padding: 20px;
   overflow-y: auto;
@@ -281,13 +281,13 @@ const goToLogin = () => {
 
 .card-header h2 {
   font-size: 28px;
-  color: #1b4332;
+  color: $military-dark;
   margin: 0 0 10px 0;
   font-weight: 600;
 }
 
 .card-header p {
-  color: #666;
+  color: var(--color-text-secondary);
   font-size: 15px;
   margin: 0;
 }
@@ -317,7 +317,7 @@ const goToLogin = () => {
 
   p {
     font-size: 16px;
-    color: #606266;
+    color: var(--color-text-regular);
     margin-bottom: 15px;
   }
 }
@@ -326,7 +326,7 @@ const goToLogin = () => {
   display: inline-flex;
   align-items: center;
   padding: 15px 25px;
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
   border: 2px solid #d4af37;
   border-radius: 8px;
   margin-bottom: 10px;
@@ -335,7 +335,7 @@ const goToLogin = () => {
 .password-text {
   font-size: 24px;
   font-weight: bold;
-  color: #1b4332;
+  color: $military-dark;
   letter-spacing: 2px;
   font-family: 'Courier New', monospace;
 }

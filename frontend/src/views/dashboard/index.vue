@@ -380,7 +380,7 @@ function handleRestore() {
 .shortcut-label {
   font-size: 14px;
   font-weight: 700;
-  color: #1b4332;
+  color: $military-dark;
   margin-right: 4px;
 }
 
@@ -410,7 +410,7 @@ function handleRestore() {
   padding: 14px 20px;
   font-size: 15px;
   font-weight: 700;
-  color: #1b4332;
+  color: $military-dark;
   background: linear-gradient(135deg, #f0f4f3, #fff);
   border-bottom: 1px solid #e2e8e4;
 
@@ -432,12 +432,12 @@ function handleRestore() {
   gap: 12px;
   margin-bottom: 12px;
   padding-bottom: 10px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border-light);
 }
 .layout-title {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
   flex: 1;
   display: flex;
   align-items: center;
@@ -453,7 +453,7 @@ function handleRestore() {
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
   border-radius: 8px;
   min-width: 160px;
   cursor: grab;

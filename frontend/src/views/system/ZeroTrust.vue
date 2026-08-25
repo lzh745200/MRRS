@@ -735,7 +735,7 @@ onMounted(() => {
       h2 {
         margin: 0 0 4px 0;
         font-size: 20px;
-        color: #303133;
+        color: var(--color-text-primary);
       }
 
       .description {
@@ -757,7 +757,7 @@ onMounted(() => {
 .section-title {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .enabled-hint {
@@ -850,7 +850,7 @@ onMounted(() => {
       h4 {
         margin: 0 0 10px 0;
         font-size: 15px;
-        color: #303133;
+        color: var(--color-text-primary);
       }
     }
 
@@ -858,7 +858,7 @@ onMounted(() => {
       h4 {
         margin: 0 0 10px 0;
         font-size: 15px;
-        color: #303133;
+        color: var(--color-text-primary);
       }
 
       .recommendation-list {
@@ -872,7 +872,7 @@ onMounted(() => {
           gap: 6px;
           padding: 6px 0;
           font-size: 14px;
-          color: #606266;
+          color: var(--color-text-regular);
 
           .el-icon {
             color: var(--color-success);
@@ -923,7 +923,7 @@ onMounted(() => {
       h4 {
         margin: 0 0 8px 0;
         font-size: 15px;
-        color: #303133;
+        color: var(--color-text-primary);
       }
 
       .tag-list {
@@ -952,7 +952,7 @@ onMounted(() => {
     .json-pre {
       margin: 0;
       padding: 8px;
-      background: #f5f7fa;
+      background: var(--color-bg-hover);
       border-radius: 4px;
       font-size: 12px;
       max-height: 200px;

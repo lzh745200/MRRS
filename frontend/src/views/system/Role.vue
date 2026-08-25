@@ -587,7 +587,7 @@ onMounted(() => {
 .table-card {
   margin-bottom: 20px;
   background: #ffffff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border-light);
 }
 
 .card-header {
@@ -619,13 +619,13 @@ onMounted(() => {
 
 :deep(.el-card__header) {
   padding: 15px 20px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border-light);
   box-sizing: border-box;
 }
 
 :deep(.el-tree) {
   background: #ffffff;
-  color: #606266;
+  color: var(--color-text-regular);
 }
 
 .permission-header {

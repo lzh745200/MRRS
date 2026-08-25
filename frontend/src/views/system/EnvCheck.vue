@@ -227,7 +227,7 @@ onMounted(() => {
 }
 .page-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 .health-gauge {
@@ -284,7 +284,7 @@ onMounted(() => {
   font-family: monospace;
 }
 .fix-command {
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
   padding: 12px;
   border-radius: 4px;
 }
@@ -295,7 +295,7 @@ onMounted(() => {
 .fix-command code {
   display: block;
   padding: 8px;
-  background: #303133;
+  background: var(--color-text-primary);
   color: var(--color-success);
   border-radius: 4px;
   font-size: 13px;

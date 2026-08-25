@@ -131,22 +131,22 @@ function handleClick() {
 }
 
 .kpi-card.theme-success .kpi-card__icon {
-  background: var(--color-success-light-9, #f0f9eb);
+  background: var(--el-color-success-light-9);
   color: var(--color-success);
 }
 
 .kpi-card.theme-warning .kpi-card__icon {
-  background: var(--color-warning-light-9, #fdf6ec);
+  background: var(--el-color-warning-light-9);
   color: var(--color-warning);
 }
 
 .kpi-card.theme-danger .kpi-card__icon {
-  background: var(--color-danger-light-9, #fef0f0);
+  background: var(--el-color-danger-light-9);
   color: var(--color-danger);
 }
 
 .kpi-card.theme-info .kpi-card__icon {
-  background: var(--color-info-light-9, #f4f4f5);
+  background: var(--el-color-info-light-9);
   color: var(--color-info);
 }
 

@@ -444,7 +444,7 @@ onMounted(() => {
 
 .edit-card {
   background: #fff;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
@@ -461,7 +461,7 @@ onMounted(() => {
 }
 
 :deep(.el-form-item__label) {
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 /* 附件区域 */
@@ -477,7 +477,7 @@ onMounted(() => {
 
 .attachment-list {
   margin-top: 12px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border-light);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -487,7 +487,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border-light);
   transition: background 0.2s;
 }
 
@@ -496,7 +496,7 @@ onMounted(() => {
 }
 
 .attachment-item:hover {
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
 }
 
 .att-info {
@@ -519,7 +519,7 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .att-size {

@@ -585,7 +585,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .work-analysis-page {
   padding: 20px;
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
   min-height: 100vh;
 }
 
@@ -718,7 +718,7 @@ onBeforeUnmount(() => {
   margin: 0 0 16px 0;
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
   padding-left: 10px;
   border-left: 3px solid #1b4332;
 }
@@ -747,7 +747,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
   padding-left: 10px;
   border-left: 3px solid #1b4332;
 }

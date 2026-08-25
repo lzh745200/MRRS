@@ -212,7 +212,7 @@ onMounted(loadData)
 }
 .anomaly-desc {
   margin-bottom: 12px;
-  color: #606266;
+  color: var(--color-text-regular);
 }
 .page-title {
   font-size: 18px;

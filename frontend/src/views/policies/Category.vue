@@ -296,7 +296,7 @@ onMounted(() => {
 }
 
 .arrow-icon {
-  color: #666;
+  color: var(--color-text-secondary);
   font-size: 20px;
 }
 

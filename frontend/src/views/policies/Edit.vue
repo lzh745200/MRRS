@@ -447,7 +447,7 @@ onMounted(async () => {
 .title {
   font-size: 18px;
   font-weight: bold;
-  color: #1b4332;
+  color: $military-dark;
 }
 
 .actions {
@@ -460,7 +460,7 @@ onMounted(async () => {
 }
 
 :deep(.el-form-item__label) {
-  color: #1b4332;
+  color: $military-dark;
   font-weight: 500;
 }
 
@@ -470,7 +470,7 @@ onMounted(async () => {
 
 :deep(.el-textarea__inner) {
   background-color: rgba(255, 255, 255, 0.9);
-  color: #1b4332;
+  color: $military-dark;
 }
 
 :deep(.el-select__wrapper),
@@ -483,14 +483,14 @@ onMounted(async () => {
 }
 
 :deep(.el-radio-group) {
-  color: #1b4332;
+  color: $military-dark;
 }
 
 :deep(.el-radio__label) {
-  color: #1b4332;
+  color: $military-dark;
 }
 
 :deep(.el-upload__tip) {
-  color: #666;
+  color: var(--color-text-secondary);
 }
 </style>

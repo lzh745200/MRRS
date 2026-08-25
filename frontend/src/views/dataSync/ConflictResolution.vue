@@ -229,14 +229,14 @@ onMounted(() => {
     .data-panel {
       h4 {
         margin-bottom: 12px;
-        color: #303133;
+        color: var(--color-text-primary);
       }
     }
 
     .conflict-actions {
       margin-top: 20px;
       padding-top: 20px;
-      border-top: 1px solid #ebeef5;
+      border-top: 1px solid var(--color-border-light);
       display: flex;
       justify-content: space-between;
       align-items: center;

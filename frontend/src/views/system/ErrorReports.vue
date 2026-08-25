@@ -500,7 +500,7 @@ onMounted(() => {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 /* 统计卡片 */
@@ -543,7 +543,7 @@ onMounted(() => {
 .stat-value {
   font-size: 32px;
   font-weight: 700;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .stat-card--warning .stat-value {
@@ -623,14 +623,14 @@ onMounted(() => {
   font-family: 'Courier New', Courier, monospace;
   font-size: 12px;
   line-height: 1.5;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-hover);
 }
 
 .context-json {
   margin: 0;
   padding: 12px;
-  background-color: #f5f7fa;
-  border: 1px solid #e4e7ed;
+  background-color: var(--color-bg-hover);
+  border: 1px solid var(--color-border-light);
   border-radius: 4px;
   font-family: 'Courier New', Courier, monospace;
   font-size: 12px;

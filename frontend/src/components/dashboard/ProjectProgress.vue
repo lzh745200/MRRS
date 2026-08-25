@@ -103,7 +103,7 @@ const displayProjects = computed(() => props.projects.slice(0, props.maxDisplay)
 }
 .progress-item {
   padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--color-bg-hover);
 }
 .progress-item:last-child {
   border-bottom: none;

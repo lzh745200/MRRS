@@ -906,7 +906,7 @@ onMounted(loadTemplates)
 }
 .page-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
@@ -935,12 +935,12 @@ onMounted(loadTemplates)
     box-shadow 0.2s;
 }
 .template-item:hover {
-  border-color: #40916c;
+  border-color: var(--color-primary-light-1);
   box-shadow: 0 2px 8px rgba(64, 145, 108, 0.1);
 }
 .t-icon {
   font-size: 32px;
-  color: #2d6a4f;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 .t-info {
@@ -960,7 +960,7 @@ onMounted(loadTemplates)
 .t-info p {
   margin: 0 0 4px;
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 .t-meta {
   font-size: 12px;

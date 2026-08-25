@@ -140,6 +140,6 @@ async function handleAction() {
 }
 .file-info {
   margin-top: 12px;
-  color: #606266;
+  color: var(--color-text-regular);
 }
 </style>

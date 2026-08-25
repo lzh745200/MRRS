@@ -509,7 +509,7 @@ const redirectToList = () => {
 .assistance-management-project-import {
   min-height: 100vh;
   padding: 20px;
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
   position: relative;
   font-family: 'Microsoft YaHei', sans-serif;
   .military-decoration-top,
@@ -608,7 +608,7 @@ const redirectToList = () => {
     padding-left: 20px;
     li {
       margin-bottom: 8px;
-      color: #606266;
+      color: var(--color-text-regular);
     }
   }
   .military-btn {
@@ -647,7 +647,7 @@ const redirectToList = () => {
       margin-bottom: 10px;
     }
     .guideline-content p {
-      color: #606266;
+      color: var(--color-text-regular);
     }
   }
   .next-btn {
@@ -675,7 +675,7 @@ const redirectToList = () => {
     padding: 60px 20px;
     p {
       margin-top: 20px;
-      color: #606266;
+      color: var(--color-text-regular);
       font-size: 16px;
     }
   }
@@ -699,7 +699,7 @@ const redirectToList = () => {
         color: #003366;
       }
       .preview-tip {
-        color: #606266;
+        color: var(--color-text-regular);
       }
     }
     .el-table {
@@ -737,7 +737,7 @@ const redirectToList = () => {
       color: #0066cc;
     }
     .stat-label {
-      color: #606266;
+      color: var(--color-text-regular);
     }
     .stat-divider {
       width: 1px;

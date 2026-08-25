@@ -248,7 +248,7 @@ onMounted(() => {
     h2 {
       margin: 0 0 8px;
       font-size: 22px;
-      color: #303133;
+      color: var(--color-text-primary);
     }
     .description {
       margin: 0;
@@ -268,7 +268,7 @@ onMounted(() => {
 .section-title {
   margin: 0 0 16px;
   font-size: 17px;
-  color: #303133;
+  color: var(--color-text-primary);
   border-bottom: 2px solid var(--color-primary);
   padding-bottom: 8px;
 }
@@ -276,12 +276,12 @@ onMounted(() => {
 .subsection-title {
   margin: 16px 0 8px;
   font-size: 15px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .step-desc {
   margin: 0 0 16px;
-  color: #606266;
+  color: var(--color-text-regular);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -303,7 +303,7 @@ onMounted(() => {
 .secret-info {
   .secret-label {
     margin: 0 0 8px;
-    color: #606266;
+    color: var(--color-text-regular);
     font-size: 13px;
   }
   .secret-display {
@@ -311,7 +311,7 @@ onMounted(() => {
     align-items: center;
     gap: 8px;
     code {
-      background: #f5f7fa;
+      background: var(--color-bg-hover);
       padding: 6px 10px;
       border-radius: 4px;
       font-size: 14px;

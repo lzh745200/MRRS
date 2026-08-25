@@ -807,7 +807,7 @@ onMounted(() => {
 
       .description {
         margin: 0;
-        color: #666;
+        color: var(--color-text-secondary);
         font-size: 14px;
       }
     }
@@ -850,7 +850,7 @@ onMounted(() => {
   .validation-report {
     margin-bottom: 16px;
     padding: 12px;
-    border: 1px solid var(--color-border, #ebeef5);
+    border: 1px solid var(--color-border, var(--color-border-light));
     border-radius: 4px;
 
     h4 {

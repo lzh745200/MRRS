@@ -407,7 +407,7 @@ onUnmounted(() => {
 }
 .page-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 .card-header {
@@ -417,7 +417,7 @@ onUnmounted(() => {
 }
 .progress-text {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 .chunk-progress-bars {
   display: flex;

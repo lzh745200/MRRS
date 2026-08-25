@@ -241,7 +241,7 @@ onMounted(() => {
     margin: 0 0 4px;
     font-size: 20px;
     font-weight: 600;
-    color: #1b4332;
+    color: $military-dark;
   }
   .page-desc {
     margin: 0;
@@ -264,14 +264,14 @@ onMounted(() => {
     gap: 12px;
     .latest-label {
       font-weight: 600;
-      color: #303133;
+      color: var(--color-text-primary);
     }
   }
   .latest-body {
     .latest-desc {
       margin: 0 0 12px;
       font-size: 15px;
-      color: #303133;
+      color: var(--color-text-primary);
       white-space: pre-wrap;
       line-height: 1.6;
     }
@@ -310,7 +310,7 @@ onMounted(() => {
   .log-description {
     margin: 0;
     font-size: 14px;
-    color: #606266;
+    color: var(--color-text-regular);
     white-space: pre-wrap;
     line-height: 1.6;
   }

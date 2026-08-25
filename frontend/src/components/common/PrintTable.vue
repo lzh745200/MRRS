@@ -107,7 +107,7 @@ const handlePrint = () => {
         font-size: 12px;
       }
       .print-table th {
-        background-color: #f0f0f0;
+        background-color: var(--color-bg-hover);
         font-weight: bold;
       }
       .print-header {
@@ -124,7 +124,7 @@ const handlePrint = () => {
         text-align: right;
         margin-top: 20px;
         font-size: 12px;
-        color: #666;
+        color: var(--color-text-secondary);
       }
       @media print {
         body { margin: 0; }
@@ -201,7 +201,7 @@ const handleClose = () => {
 
 .print-header h2 {
   margin: 0;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .print-content {
@@ -224,9 +224,9 @@ const handleClose = () => {
 }
 
 .print-table th {
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-hover);
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .print-table tr:nth-child(even) {

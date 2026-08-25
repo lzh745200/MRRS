@@ -428,7 +428,7 @@ function handleReset() {
 .page-desc {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .config-card {
@@ -436,7 +436,7 @@ function handleReset() {
   border-radius: 8px;
   padding: 20px 20px 4px;
   margin-bottom: 16px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
 }
 
 .input-card {
@@ -444,7 +444,7 @@ function handleReset() {
   border-radius: 8px;
   padding: 16px 20px;
   margin-bottom: 16px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
 }
 
 .input-header {
@@ -458,7 +458,7 @@ function handleReset() {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .input-hint {
@@ -473,7 +473,7 @@ function handleReset() {
 
 .id-count {
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-regular);
 }
 
 .id-empty {
@@ -492,13 +492,13 @@ function handleReset() {
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
 }
 
 .progress-text {
   text-align: center;
   margin-top: 12px;
-  color: #606266;
+  color: var(--color-text-regular);
   font-size: 13px;
 }
 
@@ -514,7 +514,7 @@ function handleReset() {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%);
+  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 100%);
 }
 
 .card-header h3 {

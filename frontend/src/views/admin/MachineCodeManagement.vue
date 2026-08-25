@@ -445,7 +445,7 @@ onMounted(() => {
 .pass-code-text {
   font-family: 'Courier New', monospace;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-regular);
 }
 
 .text-muted {
@@ -473,7 +473,7 @@ onMounted(() => {
     font-weight: 600;
     color: var(--color-primary);
     padding: 20px;
-    background: #f5f7fa;
+    background: var(--color-bg-hover);
     border-radius: 8px;
     margin-bottom: 20px;
     word-break: break-all;

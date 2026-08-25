@@ -230,7 +230,7 @@ onMounted(loadLogs)
   align-items: center;
   gap: 8px;
   padding: 6px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--color-bg-hover);
   font-size: 13px;
 }
 .log-module {
@@ -239,7 +239,7 @@ onMounted(loadLogs)
 }
 .log-content {
   flex: 1;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 .log-user {
   color: var(--color-primary);

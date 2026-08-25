@@ -85,7 +85,7 @@ const trendText = computed(() => {
 .stats-card__value {
   font-size: 28px;
   font-weight: 700;
-  color: #303133;
+  color: var(--color-text-primary);
   margin-bottom: 8px;
 }
 

@@ -320,7 +320,7 @@ onUnmounted(() => {
   font-size: 13px;
 }
 .status-icon-db {
-  color: #2d6a4f;
+  color: var(--color-primary);
   font-size: 13px;
 }
 .status-icon-cpu {

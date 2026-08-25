@@ -798,7 +798,7 @@ onMounted(async () => {
   .project-name {
     margin: 0;
     font-size: 22px;
-    color: #303133;
+    color: var(--color-text-primary);
   }
 }
 
@@ -828,11 +828,11 @@ onMounted(async () => {
     justify-content: space-between;
     margin-bottom: 6px;
     font-size: 13px;
-    color: #606266;
+    color: var(--color-text-regular);
 
     .task-progress-num {
       font-weight: 600;
-      color: #303133;
+      color: var(--color-text-primary);
     }
   }
 
@@ -847,7 +847,7 @@ onMounted(async () => {
   p {
     margin: 4px 0;
     font-size: 13px;
-    color: #606266;
+    color: var(--color-text-regular);
   }
 
   .history-by {

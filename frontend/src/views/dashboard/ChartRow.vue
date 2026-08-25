@@ -231,7 +231,7 @@ onUnmounted(() => {
     width: 4px;
     height: 16px;
     border-radius: 2px;
-    background: linear-gradient(180deg, #1e4d8c, #2d6a4f);
+    background: linear-gradient(180deg, #1e4d8c, var(--color-primary));
   }
 }
 .chart-body {

@@ -924,7 +924,7 @@ function handleCommand(command: string) {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 50%, #1b4332 100%);
+  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 50%, #1b4332 100%);
   border-bottom: 1px solid rgba(212, 175, 55, 0.25);
   flex-shrink: 0;
 }

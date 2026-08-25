@@ -113,7 +113,7 @@ const handlePrint = () => {
         text-align: left;
       }
       .print-table th {
-        background-color: #f0f0f0;
+        background-color: var(--color-bg-hover);
         font-weight: bold;
       }
       .print-header {
@@ -130,7 +130,7 @@ const handlePrint = () => {
         display: flex;
         justify-content: space-between;
         font-size: 12px;
-        color: #666;
+        color: var(--color-text-secondary);
       }
       @media print {
         body { margin: 0; }
@@ -204,14 +204,14 @@ const handlePrint = () => {
 
 .print-header h2 {
   margin: 0 0 8px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .print-info {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-regular);
 }
 
 .print-info p {

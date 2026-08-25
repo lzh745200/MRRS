@@ -9,12 +9,7 @@
   "#081c15"
  ],
  "frontend/src/components/PageHeader.vue": [
-  "#1b4332",
-  "#666"
- ],
- "frontend/src/components/business/DataStatistics.vue": [
-  "#40916c",
-  "#666"
+  "#1b4332"
  ],
  "frontend/src/components/business/SystemStatus.vue": [
   "#ffffff",
@@ -29,7 +24,6 @@
   "#f59e0b",
   "rgba(245, 158, 11, 0.5)",
   "#3b82f6",
-  "#2d6a4f",
   "#6366f1",
   "#8b5cf6",
   "#64748b",
@@ -53,37 +47,26 @@
  "frontend/src/components/common/PageContainer.vue": [
   "#e8e8e8",
   "#1b4332",
-  "#666",
   "rgba(0, 0, 0, 0.06)",
   "rgba(0, 0, 0, 0.06)",
   "#e8e8e8"
  ],
  "frontend/src/components/common/PasswordStrength.vue": [
-  "#f0f0f0",
   "#999"
  ],
  "frontend/src/components/common/PrintDialog.vue": [
   "#000",
   "#000",
-  "#f0f0f0",
   "#000",
-  "#666",
-  "#e8e8e8",
-  "#303133",
-  "#606266"
+  "#e8e8e8"
  ],
  "frontend/src/components/common/PrintTable.vue": [
   "#000",
   "#000",
-  "#f0f0f0",
   "#000",
-  "#666",
   "rgba(0, 0, 0, 0.5)",
   "#e0e0e0",
-  "#303133",
   "#e0e0e0",
-  "#f5f7fa",
-  "#303133",
   "#fafafa"
  ],
  "frontend/src/components/common/ProgressChart.vue": [
@@ -93,7 +76,6 @@
  "frontend/src/components/common/ResponsiveDataTable.vue": [
   "#fff",
   "rgba(0, 0, 0, 0.06)",
-  "#303133",
   "#e8f5e9",
   "#2e7d32",
   "#fce4ec",
@@ -102,7 +84,6 @@
   "#ef6c00",
   "#e3f2fd",
   "#1565c0",
-  "#303133",
   "#eee"
  ],
  "frontend/src/components/common/SkipLink.vue": [
@@ -111,44 +92,31 @@
  "frontend/src/components/common/StatsCard.vue": [
   "#fff",
   "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.1)",
-  "#303133"
+  "rgba(0, 0, 0, 0.1)"
  ],
  "frontend/src/components/common/Skeleton/Skeleton.vue": [
   "#e0e0e0",
   "#f5f5f5",
-  "#f0f0f0",
   "rgba(0, 0, 0, 0.1)",
-  "#f0f0f0",
-  "#fafafa",
-  "#f0f0f0",
-  "#f0f0f0"
+  "#fafafa"
  ],
  "frontend/src/components/dashboard/ActivityFeed.vue": [
   "#fff",
   "rgba(0, 0, 0, 0.06)",
   "#fafafa",
-  "#dcdfe6",
-  "#f5f7fa",
-  "#303133"
- ],
- "frontend/src/components/dashboard/BackupRestoreModal.vue": [
-  "#606266"
+  "#dcdfe6"
  ],
  "frontend/src/components/dashboard/ProjectProgress.vue": [
   "#fff",
   "rgba(0, 0, 0, 0.06)",
-  "#f0f0f0",
   "#ecf5ff"
  ],
  "frontend/src/components/layout/MobileBottomNav.vue": [
   "#fff",
-  "#e4e7ed",
   "#1a3c2a",
   "#fff"
  ],
  "frontend/src/components/map/OfflineMap.vue": [
-  "#e4e7ed",
   "#fafafa"
  ],
  "frontend/src/layouts/DefaultLayoutSafe.vue": [
@@ -198,7 +166,6 @@
   "rgba(255, 255, 255, 0.07)",
   "#ffffff",
   "#1b4332",
-  "#2d6a4f",
   "#1b4332",
   "rgba(212, 175, 55, 0.25)",
   "rgba(255, 255, 255, 0.7)",
@@ -237,8 +204,6 @@
  ],
  "frontend/src/views/admin/AdminDashboard.vue": [
   "#1b4332",
-  "#2d6a4f",
-  "#40916c",
   "rgba(27, 67, 50, 0.3)",
   "#d4af37",
   "#c9a227",
@@ -253,14 +218,11 @@
   "rgba(0, 0, 0, 0.05)",
   "#f1f5f9",
   "#1e293b",
-  "#40916c",
   "#f8fafc",
   "#334155",
   "#10b981",
   "#ef4444",
   "#f8fafc",
-  "#40916c",
-  "#2d6a4f",
   "#1e293b",
   "#94a3b8",
   "#64748b",
@@ -270,7 +232,6 @@
   "#d97706",
   "#fee2e2",
   "#dc2626",
-  "#40916c",
   "#64748b",
   "#94a3b8",
   "#f1f5f9",
@@ -280,51 +241,30 @@
   "#1e293b",
   "#94a3b8",
   "#f1f5f9",
-  "#40916c",
-  "#2d6a4f",
   "#64748b",
   "#64748b",
   "#1e293b",
   "#94a3b8"
  ],
- "frontend/src/views/admin/MachineCode.vue": [
-  "#303133",
-  "#303133"
- ],
  "frontend/src/views/admin/MachineCodeManagement.vue": [
-  "#606266",
-  "#999",
-  "#f5f7fa"
+  "#999"
  ],
  "frontend/src/views/ai/InteractiveResult.vue": [
   "#1b4332",
-  "#666",
   "#1b4332",
-  "#f5f7fa",
-  "#303133",
-  "#f0f0f0",
   "#1b4332"
  ],
  "frontend/src/views/analytics/Assessment.vue": [
-  "#1a3c2a",
-  "#606266"
+  "#1a3c2a"
  ],
  "frontend/src/views/analytics/map/index.vue": [
-  "#f5f7fa",
-  "#e4e7ed",
   "#fef3e6",
-  "#f5dab1",
-  "#606266",
-  "#f0f0f0",
-  "#f5f7fa",
-  "#303133"
+  "#f5dab1"
  ],
  "frontend/src/views/analytics/map/MapVisualization.vue": [
-  "#1a3c2a",
-  "#606266"
+  "#1a3c2a"
  ],
  "frontend/src/views/analytics/reports/WorkAnalysis.vue": [
-  "#f5f7fa",
   "#1b4332",
   "rgba(0, 0, 0, 0.06)",
   "#1b4332",
@@ -332,30 +272,22 @@
   "rgba(0, 0, 0, 0.1)",
   "#fff",
   "rgba(0, 0, 0, 0.06)",
-  "#303133",
   "#1b4332",
   "rgba(0, 0, 0, 0.06)",
-  "#303133",
   "#1b4332"
  ],
  "frontend/src/views/analytics/supported-villages/Detail.vue": [
   "#1b4332",
   "rgba(0, 0, 0, 0.06)",
   "#1b4332",
-  "#f0f0f0",
-  "#606266",
-  "#999",
-  "#606266",
-  "#f5f7fa",
-  "#40916c"
+  "#999"
  ],
  "frontend/src/views/analytics/supported-villages/List.vue": [
   "#f0f9f4",
   "#e8f5e9",
   "#c8e6c9",
   "rgba(64, 145, 108, 0.15)",
-  "#2e7d32",
-  "#606266"
+  "#2e7d32"
  ],
  "frontend/src/views/analytics/supported-villages/YearlyIndex.vue": [
   "#c0c4cc"
@@ -365,27 +297,16 @@
   "rgba(0, 0, 0, 0.06)",
   "rgba(0, 0, 0, 0.1)",
   "#1b4332",
-  "#2d6a4f",
-  "#40916c",
   "#999",
   "#bbb",
-  "#f0f0f0",
-  "#f0f0f0",
   "#1b4332",
   "#999"
  ],
  "frontend/src/views/analytics/supported-villages/components/SectionDataForm.vue": [
-  "#f5f7fa",
-  "#303133",
   "#bbb"
- ],
- "frontend/src/views/analytics/supported-villages/components/SupportedVillageForm.vue": [
-  "#606266",
-  "#1b4332"
  ],
  "frontend/src/views/approval/MyApplications.vue": [
   "#1b4332",
-  "#666",
   "#1b4332",
   "#888"
  ],
@@ -398,38 +319,23 @@
   "#6b7280"
  ],
  "frontend/src/views/approval/PendingList.vue": [
-  "#1b4332",
   "#c0c4cc"
  ],
  "frontend/src/views/auth/ChangePassword.vue": [
-  "#303133",
-  "#606266",
   "#fff",
   "rgba(0, 0, 0, 0.08)",
   "#f8f9fa",
   "#e6f7ff",
-  "#606266",
-  "#ebeef5",
-  "#606266",
-  "#ebeef5",
-  "#ebeef5",
-  "#ffffff",
-  "#606266"
+  "#ffffff"
  ],
  "frontend/src/views/auth/ForgotPassword.vue": [
   "#081c15",
-  "#1b4332",
   "rgba(255, 255, 255, 0.95)",
   "rgba(0, 0, 0, 0.3)",
   "#d4af37",
   "#c9a227",
   "rgba(212, 175, 55, 0.4)",
-  "#1b4332",
-  "#666",
-  "#606266",
-  "#f5f7fa",
   "#d4af37",
-  "#1b4332",
   "rgba(255, 255, 255, 0.9)",
   "#d4af37",
   "rgba(255, 255, 255, 0.5)",
@@ -438,32 +344,18 @@
  ],
  "frontend/src/views/auth/GetMachineCode.vue": [
   "#081c15",
-  "#1b4332",
   "rgba(255, 255, 255, 0.95)",
   "rgba(0, 0, 0, 0.3)",
   "#d4af37",
   "#c9a227",
   "rgba(212, 175, 55, 0.4)",
-  "#1b4332",
-  "#666",
   "#fff9e6",
   "#fff5d6",
   "#d4af37",
-  "#1b4332",
-  "#1b4332",
   "rgba(0, 0, 0, 0.1)",
-  "#303133",
-  "#f5f7fa",
-  "#e4e7ed",
-  "#1b4332",
   "#e8f5e9",
   "#c8e6c9",
   "#81c784",
-  "#303133",
-  "#606266",
-  "#606266",
-  "#1b4332",
-  "#ebeef5",
   "rgba(255, 255, 255, 0.9)",
   "#d4af37"
  ],
@@ -515,55 +407,24 @@
   "rgba(255, 255, 255, 0.2)"
  ],
  "frontend/src/views/auth/Profile.vue": [
-  "#303133",
-  "#606266",
   "#fff",
   "rgba(0, 0, 0, 0.08)",
-  "#f0f0f0",
-  "#f5f7fa",
-  "#303133",
-  "#606266",
-  "#ebeef5",
   "#fff",
-  "rgba(0, 0, 0, 0.08)",
-  "#303133",
-  "#ebeef5",
-  "#ebeef5",
-  "#606266",
-  "#303133",
-  "#ebeef5"
+  "rgba(0, 0, 0, 0.08)"
  ],
  "frontend/src/views/auth/Register.vue": [
   "#081c15",
-  "#1b4332",
   "#d4af37",
   "#f0e68c",
   "#ffffff",
   "rgba(0, 0, 0, 0.3)",
-  "rgba(255, 255, 255, 0.95)",
-  "#606266"
- ],
- "frontend/src/views/auth/TwoFactorSettings.vue": [
-  "#303133",
-  "#303133",
-  "#303133",
-  "#606266",
-  "#606266",
-  "#f5f7fa"
+  "rgba(255, 255, 255, 0.95)"
  ],
  "frontend/src/views/batch/Index.vue": [
   "#1b4332",
-  "#666",
-  "#e4e7ed",
-  "#e4e7ed",
-  "#303133",
-  "#606266",
   "#c0c4cc",
-  "#e4e7ed",
-  "#606266",
   "rgba(0, 0, 0, 0.08)",
-  "#1b4332",
-  "#2d6a4f"
+  "#1b4332"
  ],
  "frontend/src/views/bigscreen/BigScreen.vue": [
   "#0b1e3a",
@@ -587,42 +448,32 @@
   "#fff",
   "rgba(0, 0, 0, 0.04)",
   "#1e293b",
-  "#1e4d8c",
-  "#2d6a4f"
+  "#1e4d8c"
  ],
  "frontend/src/views/dashboard/index.vue": [
   "#fff",
   "rgba(0, 0, 0, 0.06)",
-  "#1b4332",
   "#fff",
   "rgba(0, 0, 0, 0.06)",
-  "#1b4332",
   "#f0f4f3",
   "#fff",
   "#e2e8e4",
-  "#fff",
-  "#ebeef5",
-  "#303133",
-  "#f5f7fa"
+  "#fff"
  ],
  "frontend/src/views/dashboard/InfoRow.vue": [
   "#fff",
   "rgba(0, 0, 0, 0.04)",
   "#1e293b",
   "#1e4d8c",
-  "#2d6a4f",
   "#f1f5f9",
   "#94a3b8",
-  "#2d6a4f",
   "#475569",
   "#94a3b8",
   "#94a3b8",
-  "#2d6a4f",
   "#f0f4f0",
   "#dc2626",
   "#fef2f2",
   "#d1d5db",
-  "#2d6a4f",
   "#fff",
   "#e5e7eb",
   "#374151",
@@ -643,18 +494,12 @@
   "#c0c4cc",
   "#fff",
   "rgba(0, 0, 0, 0.12)",
-  "#ebeef5",
-  "#f5f7fa",
   "#f0f5ff",
-  "#303133",
-  "#c0c4cc",
-  "#f5f7fa"
+  "#c0c4cc"
  ],
  "frontend/src/views/dashboard/components/QuickActions.vue": [
-  "#1b4332",
   "#dcdfe6",
   "#fff",
-  "#303133",
   "#f0f5ff",
   "#ecf5ff",
   "#b3d8ff",
@@ -668,16 +513,12 @@
  ],
  "frontend/src/views/dataAnalysis/Index.vue": [
   "#1b4332",
-  "#666",
   "rgba(0, 0, 0, 0.06)",
   "#1b4332",
-  "#40916c",
-  "#666",
   "#1b4332"
  ],
  "frontend/src/views/dataEntry/ComprehensiveEntry.vue": [
   "#1b4332",
-  "#666",
   "rgba(0, 0, 0, 0.06)",
   "rgba(0, 0, 0, 0.06)",
   "#1b4332",
@@ -685,34 +526,12 @@
   "#fafafa",
   "rgba(0, 0, 0, 0.06)"
  ],
- "frontend/src/views/dataManagement/Index.vue": [
-  "#1b4332"
- ],
- "frontend/src/views/dataPackage/ReceivePackage.vue": [
-  "#666",
-  "#ebeef5"
- ],
  "frontend/src/views/dataPackage/ReportPackage.vue": [
   "#1b4332",
-  "#666",
   "#1b4332"
- ],
- "frontend/src/views/dataSync/ConflictResolution.vue": [
-  "#303133",
-  "#ebeef5"
- ],
- "frontend/src/views/dataSync/Export.vue": [
-  "#303133",
-  "#303133"
- ],
- "frontend/src/views/dataSync/Import.vue": [
-  "#303133",
-  "#303133",
-  "#303133"
  ],
  "frontend/src/views/dataVerify/RulesManagement.vue": [
   "#1b4332",
-  "#666",
   "#ffffff"
  ],
  "frontend/src/views/effectiveness/Evaluation.vue": [
@@ -747,18 +566,10 @@
   "#ccc"
  ],
  "frontend/src/views/export/ReportExport.vue": [
-  "#666",
-  "#1b4332",
-  "#e4e7ed",
-  "#40916c",
   "#f0f9f4",
-  "#40916c",
   "#e8f5e9",
   "#333",
   "#999",
-  "#666",
-  "#e4e7ed",
-  "#f5f7fa",
   "#c0c4cc",
   "#333",
   "#999"
@@ -769,15 +580,10 @@
   "#fff",
   "rgba(64, 145, 108, 0.1)",
   "rgba(64, 145, 108, 0.3)",
-  "#40916c",
   "rgba(255, 255, 255, 0.7)",
-  "#2d6a4f",
   "#1b4332",
   "rgba(64, 145, 108, 0.3)",
   "#fff"
- ],
- "frontend/src/views/funds/AnomalyList.vue": [
-  "#606266"
  ],
  "frontend/src/views/funds/Budget.vue": [
   "#1b4332",
@@ -785,15 +591,10 @@
   "rgba(45, 106, 79, 0.05)",
   "rgba(45, 106, 79, 0.2)",
   "#1b4332",
-  "#666",
-  "#40916c",
-  "#40916c",
   "rgba(0, 0, 0, 0.08)",
   "#1b4332",
-  "#2d6a4f",
   "#1b4332",
   "rgba(45, 106, 79, 0.25)",
-  "#666",
   "#1b4332",
   "rgba(45, 106, 79, 0.15)",
   "#333",
@@ -802,33 +603,20 @@
  ],
  "frontend/src/views/funds/Detail.vue": [
   "#1b4332",
-  "#666",
   "rgba(0, 0, 0, 0.08)",
   "#1b4332",
-  "#2d6a4f",
   "#1b4332",
   "#b3e19d",
-  "#f5f7fa",
   "#999",
-  "#f5f7fa",
-  "#303133",
-  "#666",
   "rgba(0, 0, 0, 0.08)",
-  "#f5f7fa",
   "#1b4332",
   "#1b4332"
  ],
  "frontend/src/views/funds/EnhancedList.vue": [
   "#f0f9f4",
   "#1b4332",
-  "#666",
-  "#666",
-  "#303133",
   "#f7f9fc",
   "#f0f5ff",
-  "#666",
-  "#e4e7ed",
-  "#e4e7ed",
   "#1b4332"
  ],
  "frontend/src/views/funds/Report.vue": [
@@ -841,62 +629,34 @@
   "rgba(64, 145, 108, 0.1)",
   "rgba(64, 145, 108, 0.3)",
   "rgba(255, 255, 255, 0.7)",
-  "#40916c",
-  "#2d6a4f",
   "#1b4332",
   "rgba(64, 145, 108, 0.3)",
   "#fff",
   "rgba(255, 255, 255, 0.9)",
   "#1b4332",
-  "#2d6a4f",
   "#fff"
  ],
  "frontend/src/views/funds/UserFundList.vue": [
   "#1b4332",
-  "#666",
   "rgba(27, 67, 50, 0.08)",
   "rgba(45, 106, 79, 0.05)",
   "rgba(45, 106, 79, 0.2)",
   "#1b4332",
-  "#666",
-  "#40916c",
-  "#2d6a4f",
-  "#e4e7ed",
-  "#e4e7ed",
   "#1b4332"
  ],
  "frontend/src/views/help/HelpCenter.vue": [
-  "#1b4332",
-  "#f0f0f0",
-  "#f5f7fa",
   "#fff3cd",
-  "#f5f7fa",
   "#f2f7f4",
   "#dce8e0",
-  "#1b4332",
   "#2e6b55",
-  "#1b4332",
   "#c9a227",
-  "#303133",
-  "#303133",
-  "#1b4332",
-  "#f5f7fa",
-  "#303133",
   "#e0e0e0"
- ],
- "frontend/src/views/message/MessageCenter.vue": [
-  "#606266",
-  "#1b4332",
-  "#666"
  ],
  "frontend/src/views/organization/Detail.vue": [
   "#1b4332"
  ],
  "frontend/src/views/organization/List.vue": [
   "#1b4332"
- ],
- "frontend/src/views/organization/PassCodeManagement.vue": [
-  "#f5f7fa"
  ],
  "frontend/src/views/policies/Category.vue": [
   "rgba(10, 30, 20, 0.5)",
@@ -908,53 +668,35 @@
   "rgba(45, 106, 79, 0.2)",
   "rgba(45, 106, 79, 0.2)",
   "#fff",
-  "#999",
-  "#666"
- ],
- "frontend/src/views/policies/Detail.vue": [
-  "#e4e7ed"
+  "#999"
  ],
  "frontend/src/views/policies/Edit.vue": [
   "rgba(10, 30, 20, 0.3)",
   "rgba(255, 255, 255, 0.95)",
   "rgba(64, 145, 108, 0.3)",
   "rgba(0, 0, 0, 0.1)",
-  "#1b4332",
-  "#1b4332",
   "rgba(255, 255, 255, 0.9)",
   "rgba(255, 255, 255, 0.9)",
-  "#1b4332",
   "rgba(255, 255, 255, 0.9)",
-  "rgba(255, 255, 255, 0.9)",
-  "#1b4332",
-  "#1b4332",
-  "#666"
+  "rgba(255, 255, 255, 0.9)"
  ],
  "frontend/src/views/policies/List.vue": [
   "rgba(10, 30, 20, 0.3)",
   "rgba(255, 255, 255, 0.95)",
   "rgba(64, 145, 108, 0.3)",
   "rgba(0, 0, 0, 0.1)",
-  "#1b4332",
-  "#1b4332",
   "rgba(255, 255, 255, 0.9)",
   "rgba(255, 255, 255, 0.9)",
   "rgba(255, 255, 255, 0.9)",
   "rgba(255, 255, 255, 0.9)",
   "rgba(64, 145, 108, 0.15)",
-  "#1b4332",
-  "#1b4332",
   "rgba(64, 145, 108, 0.2)",
   "rgba(64, 145, 108, 0.15)",
-  "#1b4332",
-  "#1b4332",
   "rgba(64, 145, 108, 0.05)",
   "rgba(64, 145, 108, 0.1)",
-  "#1b4332",
   "rgba(255, 255, 255, 0.9)",
   "rgba(255, 255, 255, 0.9)",
   "rgba(200, 200, 200, 0.3)",
-  "#40916c",
   "#fff"
  ],
  "frontend/src/views/policies/Search.vue": [
@@ -963,27 +705,18 @@
   "#ccc"
  ],
  "frontend/src/views/projects/Detail.vue": [
-  "#303133",
   "#f8faf9",
-  "#e6ebe8",
-  "#606266",
-  "#303133",
-  "#606266"
+  "#e6ebe8"
  ],
  "frontend/src/views/projects/Edit.vue": [
-  "#f5f7fa",
   "#003366",
-  "#606266",
-  "#ebeef5",
   "#003366",
-  "#f5f7fa",
   "#dcdfe6",
   "#ffffff",
   "#ffffff",
   "rgba(0, 0, 0, 0.1)"
  ],
  "frontend/src/views/projects/Import.vue": [
-  "#f5f7fa",
   "#003366",
   "#0066cc",
   "#003366",
@@ -998,7 +731,6 @@
   "#fff",
   "rgba(0, 0, 0, 0.1)",
   "#003366",
-  "#606266",
   "#003366",
   "#0066cc",
   "#0066cc",
@@ -1008,56 +740,38 @@
   "#0066cc",
   "#fff",
   "#003366",
-  "#606266",
-  "#606266",
   "#003366",
-  "#606266",
   "#0066cc",
-  "#606266",
   "#dcdfe6",
   "#0066cc"
  ],
  "frontend/src/views/projects/List.vue": [
   "#1b4332",
-  "#666",
   "rgba(0, 0, 0, 0.06)",
   "rgba(0, 0, 0, 0.06)",
   "rgba(0, 0, 0, 0.12)",
   "#1b4332",
-  "#666",
-  "rgba(0, 0, 0, 0.06)",
-  "#f0f0f0"
+  "rgba(0, 0, 0, 0.06)"
  ],
  "frontend/src/views/projects/ProgressGallery.vue": [
-  "#303133",
   "#c0c4cc",
-  "#f5f7fa",
-  "#606266",
-  "#303133",
-  "#ebeef5",
   "#c0c4cc"
  ],
  "frontend/src/views/reportTemplates/Index.vue": [
   "#1b4332",
-  "#666",
   "#fafafa",
   "#eee",
-  "#40916c",
   "rgba(64, 145, 108, 0.1)",
-  "#2d6a4f",
   "#1b4332",
-  "#666",
   "#999",
   "#1b4332",
   "#e63946"
  ],
  "frontend/src/views/ruralWorks/Analysis.vue": [
-  "#f5f7fa",
   "#003366",
   "#0055aa",
   "#003366",
   "#003366",
-  "#666",
   "#003366",
   "#0055aa",
   "#003366",
@@ -1070,13 +784,10 @@
   "#0055aa",
   "#003366",
   "rgba(0, 51, 102, 0.2)",
-  "#666",
   "#003366",
   "#999",
-  "#f0f0f0",
   "#003366",
   "#003366",
-  "#f0f0f0",
   "#003366",
   "#f0f9ff",
   "#096dd9",
@@ -1101,96 +812,51 @@
  ],
  "frontend/src/views/ruralWorks/List.vue": [
   "rgba(0, 0, 0, 0.06)",
-  "#1b4332",
-  "#606266"
+  "#1b4332"
  ],
  "frontend/src/views/ruralWorks/Report.vue": [
   "#fff",
   "rgba(0, 0, 0, 0.08)",
-  "#303133",
   "#fff"
  ],
  "frontend/src/views/ruralWorks/Task.vue": [
-  "#f5f7fa",
-  "#1b4332",
-  "rgba(0, 0, 0, 0.06)",
-  "#1b4332",
-  "#1b4332",
-  "#40916c",
   "rgba(0, 0, 0, 0.06)",
   "rgba(0, 0, 0, 0.06)",
-  "#606266",
-  "#f0f0f0",
-  "#1b4332",
-  "#f0f0f0",
-  "#1b4332",
-  "#1b4332",
-  "#f9f9f9",
-  "#1b4332",
-  "#1b4332",
-  "#40916c",
-  "#1b4332"
+  "rgba(0, 0, 0, 0.06)",
+  "#f9f9f9"
  ],
  "frontend/src/views/schools/Detail.vue": [
   "#1b4332",
-  "#666",
   "rgba(0, 0, 0, 0.08)",
   "#1b4332",
-  "#2d6a4f",
-  "#e4e7ed",
   "rgba(27, 67, 50, 0.08)",
   "rgba(45, 106, 79, 0.05)",
   "rgba(45, 106, 79, 0.15)",
   "#1b4332",
-  "#666",
-  "#f5f7fa",
-  "#303133",
-  "#ebeef5",
   "#fafafa",
-  "#2d6a4f",
-  "rgba(45, 106, 79, 0.12)",
-  "#303133"
+  "rgba(45, 106, 79, 0.12)"
  ],
  "frontend/src/views/schools/Edit.vue": [
   "#fff",
-  "#e4e7ed",
   "rgba(0, 0, 0, 0.08)",
-  "#1b4332",
-  "#303133",
-  "#ebeef5",
-  "#ebeef5",
-  "#f5f7fa",
-  "#303133"
+  "#1b4332"
  ],
  "frontend/src/views/schools/List.vue": [
-  "#1b4332",
-  "#666",
-  "#e4e7ed",
-  "#e4e7ed"
+  "#1b4332"
  ],
  "frontend/src/views/schools/Projects.vue": [
   "#1b4332"
  ],
  "frontend/src/views/sentiment/Index.vue": [
   "#1b4332",
-  "#666",
-  "#e4e7ed",
   "rgba(45, 106, 79, 0.5)",
   "rgba(27, 67, 50, 0.12)",
   "#1b4332",
-  "#666",
-  "#e4e7ed",
-  "#f5f7fa",
-  "#e4e7ed",
   "#1b4332",
-  "#666",
-  "#f0f0f0",
-  "#c0c4cc",
-  "#303133"
+  "#c0c4cc"
  ],
  "frontend/src/views/system/About.vue": [
   "#1b4332",
-  "#40916c",
   "#ffffff",
   "rgba(27, 67, 50, 0.25)",
   "#1b4332",
@@ -1200,56 +866,33 @@
  ],
  "frontend/src/views/system/AuditManagement.vue": [
   "#1b4332",
-  "#666",
   "rgba(0, 0, 0, 0.06)",
-  "#1b4332",
-  "#666",
-  "#606266"
+  "#1b4332"
  ],
  "frontend/src/views/system/ChunkedUploadManager.vue": [
   "#1b4332",
-  "#666",
-  "#666",
   "#e0e0e0",
   "#e0e0e0"
  ],
  "frontend/src/views/system/ConfigPackage.vue": [
-  "#1a3c2a",
-  "#606266"
+  "#1a3c2a"
  ],
  "frontend/src/views/system/DataTier.vue": [
   "#ccc",
-  "#606266",
-  "#f0f2f5",
-  "#303133",
-  "#606266"
- ],
- "frontend/src/views/system/EncryptionSettings.vue": [
-  "#303133",
-  "#303133"
+  "#f0f2f5"
  ],
  "frontend/src/views/system/EnvCheck.vue": [
   "#1b4332",
-  "#666",
   "#e0e0e0",
   "#1b4332",
-  "#f5f7fa",
-  "#303133",
   "#ffffff",
   "#ffffff"
  ],
  "frontend/src/views/system/ErrorReports.vue": [
-  "#303133",
-  "#303133",
-  "#c0c4cc",
-  "#f5f7fa",
-  "#f5f7fa",
-  "#e4e7ed"
+  "#c0c4cc"
  ],
  "frontend/src/views/system/HealthCheck.vue": [
   "#1b4332",
-  "#2d6a4f",
-  "#40916c",
   "#1b4332",
   "rgba(255, 255, 255, 0.92)",
   "rgba(0, 0, 0, 0.18)",
@@ -1269,55 +912,30 @@
   "#ffffff",
   "#1b4332",
   "#1b4332",
-  "#2d6a4f",
-  "#e4e7ed",
   "#dcdfe6",
   "rgba(27, 67, 50, 0.12)",
-  "#f5f7fa",
-  "#303133",
-  "#e4e7ed",
-  "#606266",
   "#529b2e",
   "#b88230",
   "#c45656"
  ],
  "frontend/src/views/system/I18nManagement.vue": [
   "#1b4332",
-  "#666",
   "#ffffff",
-  "#303133",
-  "#303133",
   "#ffffff"
  ],
- "frontend/src/views/system/MapTileManager.vue": [
-  "#303133",
-  "#303133",
-  "#303133"
- ],
  "frontend/src/views/system/MonitoringDashboard.vue": [
-  "#303133",
   "#fff",
-  "#e4e7ed",
   "rgba(0, 0, 0, 0.08)",
   "#c0c4cc",
   "#c0c4cc",
-  "#f0f0f0",
   "#fff",
-  "#e4e7ed",
   "rgba(0, 0, 0, 0.06)",
   "#fff",
-  "#e4e7ed",
   "#fff",
   "#f5f5f5",
-  "#fff",
-  "#e4e7ed",
-  "#f5f7fa",
-  "#f0f0f0",
-  "#f5f7fa"
+  "#fff"
  ],
  "frontend/src/views/system/OperationLogs.vue": [
-  "#f0f0f0",
-  "#303133",
   "#c0c4cc"
  ],
  "frontend/src/views/system/PermissionPacks.vue": [
@@ -1325,80 +943,38 @@
  ],
  "frontend/src/views/system/Role.vue": [
   "#ffffff",
-  "#ebeef5",
   "#ffffff",
   "#ffffff",
   "#ffffff",
-  "#ebeef5",
   "#ffffff",
-  "#606266",
   "#eee",
   "#dcdfe6"
  ],
  "frontend/src/views/system/SettingsOverview.vue": [
   "#1b4332",
-  "#666",
   "#1b4332",
   "#ffffff",
-  "#e4e7ed",
   "#c0c4cc",
   "rgba(27, 67, 50, 0.12)",
   "#c0c4cc",
-  "#606266",
   "#1b4332",
-  "#2d6a4f",
-  "#40916c",
-  "#e4e7ed",
-  "#40916c",
   "rgba(45, 106, 79, 0.1)",
-  "#2d6a4f",
-  "#303133",
   "#c0c4cc",
-  "#40916c",
-  "#2d6a4f",
   "#c0c4cc"
  ],
  "frontend/src/views/system/TaskManager.vue": [
-  "#303133",
-  "#303133",
   "#c0c4cc",
   "#c0c4cc"
  ],
- "frontend/src/views/system/UpdateLogs.vue": [
-  "#1b4332",
-  "#303133",
-  "#303133",
-  "#606266"
- ],
  "frontend/src/views/system/UserManagement.vue": [
   "#ffffff",
-  "#ebeef5",
-  "#ffffff",
-  "#ebeef5",
-  "#303133"
- ],
- "frontend/src/views/system/ZeroTrust.vue": [
-  "#303133",
-  "#303133",
-  "#303133",
-  "#303133",
-  "#606266",
-  "#303133",
-  "#f5f7fa"
+  "#ffffff"
  ],
  "frontend/src/views/todos/Index.vue": [
-  "#1b4332",
-  "#666",
-  "#e4e7ed",
-  "#666",
-  "#e4e7ed",
-  "#f0f0f0",
-  "#f5f7fa",
-  "#303133"
+  "#1b4332"
  ],
  "frontend/src/views/work-calendar/Index.vue": [
   "#1a3c2a",
-  "#606266",
   "#d4af37"
  ]
 }

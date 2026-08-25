@@ -610,7 +610,7 @@ onMounted(() => {
 }
 .page-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 .header-right {
@@ -650,7 +650,7 @@ onMounted(() => {
   height: 100%;
   padding: 14px 16px;
   background: #ffffff;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
   border-radius: 8px;
   overflow: hidden;
   transition:
@@ -745,7 +745,7 @@ onMounted(() => {
 }
 .status-label {
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-regular);
 }
 .status-value {
   font-size: 20px;
@@ -770,20 +770,20 @@ onMounted(() => {
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: #2d6a4f;
+  color: var(--color-primary);
   margin-bottom: 10px;
 }
 .nav-group-title::before {
   content: '';
   width: 3px;
   height: 14px;
-  background: #40916c;
+  background: var(--color-primary-light-1);
   border-radius: 2px;
 }
 .nav-item {
   margin-bottom: 10px;
   cursor: pointer;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
   border-radius: 6px;
   transition:
     border-color 0.2s ease,
@@ -791,7 +791,7 @@ onMounted(() => {
     box-shadow 0.2s ease;
 }
 .nav-item:hover {
-  border-color: #40916c;
+  border-color: var(--color-primary-light-1);
   transform: translateX(4px);
   box-shadow: 0 4px 12px rgba(45, 106, 79, 0.1);
 }
@@ -802,13 +802,13 @@ onMounted(() => {
   padding: 10px 12px;
 }
 .nav-icon {
-  color: #2d6a4f;
+  color: var(--color-primary);
   flex: none;
 }
 .nav-item-label {
   flex: 1;
   font-size: 13px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 .nav-arrow {
   flex: none;
@@ -820,7 +820,7 @@ onMounted(() => {
 }
 .nav-item:hover .nav-arrow {
   transform: translateX(3px);
-  color: #40916c;
+  color: var(--color-primary-light-1);
 }
 
 /* ── 审计日志 ── */
@@ -842,7 +842,7 @@ onMounted(() => {
 .version-name {
   font-size: 13px;
   font-weight: 600;
-  color: #2d6a4f;
+  color: var(--color-primary);
 }
 .version-build {
   font-size: 12px;

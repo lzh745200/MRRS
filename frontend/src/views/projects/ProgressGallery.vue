@@ -353,7 +353,7 @@ onUnmounted(() => {
       h2 {
         margin: 0 0 16px 0;
         font-size: 22px;
-        color: #303133;
+        color: var(--color-text-primary);
       }
     }
   }
@@ -387,7 +387,7 @@ onUnmounted(() => {
         height: 180px;
         color: #c0c4cc;
         gap: 8px;
-        background: #f5f7fa;
+        background: var(--color-bg-hover);
       }
 
       .photo-meta {
@@ -403,7 +403,7 @@ onUnmounted(() => {
           text-overflow: ellipsis;
           white-space: nowrap;
           max-width: 140px;
-          color: #606266;
+          color: var(--color-text-regular);
         }
       }
 
@@ -420,7 +420,7 @@ onUnmounted(() => {
 
       h4 {
         margin: 0 0 12px;
-        color: #303133;
+        color: var(--color-text-primary);
       }
 
       .comparison-images {
@@ -440,7 +440,7 @@ onUnmounted(() => {
             width: 100%;
             height: 240px;
             border-radius: 6px;
-            border: 1px solid #ebeef5;
+            border: 1px solid var(--color-border-light);
           }
         }
 

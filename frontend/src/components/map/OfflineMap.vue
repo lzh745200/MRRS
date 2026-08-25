@@ -336,7 +336,7 @@ onUnmounted(() => {
 <style scoped>
 .offline-map-container {
   min-height: 400px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
   border-radius: 4px;
   background: #fafafa;
 }

@@ -286,7 +286,7 @@ onMounted(loadData)
 .preview-frame {
   width: 100%;
   height: 500px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
   border-radius: 4px;
 }
 </style>

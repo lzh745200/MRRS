@@ -618,7 +618,7 @@ onUnmounted(() => {
 .page-title {
   font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
   margin: 0;
 }
 
@@ -673,7 +673,7 @@ onUnmounted(() => {
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .stat-value.highlight {

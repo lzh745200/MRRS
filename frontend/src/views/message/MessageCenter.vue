@@ -579,7 +579,7 @@ onUnmounted(() => {
 }
 
 .message-content {
-  color: #606266;
+  color: var(--color-text-regular);
 }
 
 .message-detail {
@@ -602,13 +602,13 @@ onUnmounted(() => {
 .activity-item {
   .activity-title {
     font-weight: 600;
-    color: #1b4332;
+    color: $military-dark;
   }
 
   .activity-desc {
     margin-top: 4px;
     font-size: 13px;
-    color: #666;
+    color: var(--color-text-secondary);
     line-height: 1.5;
   }
 }

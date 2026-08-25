@@ -404,7 +404,7 @@ onMounted(() => {
 .help-title {
   font-size: 24px;
   font-weight: 600;
-  color: #1b4332;
+  color: $military-dark;
   margin: 0 0 16px;
 }
 
@@ -426,12 +426,12 @@ onMounted(() => {
 
 .search-result-item {
   padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--color-bg-hover);
   cursor: pointer;
   transition: background 0.2s;
 
   &:hover {
-    background: #f5f7fa;
+    background: var(--color-bg-hover);
     padding-left: 8px;
   }
 
@@ -490,7 +490,7 @@ onMounted(() => {
   transition: background 0.2s;
 
   &:hover {
-    background: #f5f7fa;
+    background: var(--color-bg-hover);
   }
 
   &.active {
@@ -543,7 +543,7 @@ onMounted(() => {
 
   .toc-label {
     font-weight: 600;
-    color: #1b4332;
+    color: $military-dark;
   }
 
   .toc-link {
@@ -564,7 +564,7 @@ onMounted(() => {
     margin: 14px 0 8px;
     font-size: 16px;
     font-weight: 600;
-    color: #1b4332;
+    color: $military-dark;
     padding-left: 10px;
     border-left: 3px solid #c9a227;
   }
@@ -572,21 +572,21 @@ onMounted(() => {
   .article-section-line {
     margin: 6px 0;
     line-height: 1.8;
-    color: #303133;
+    color: var(--color-text-primary);
     font-size: 14px;
   }
 }
 
 .article-content {
   line-height: 1.8;
-  color: #303133;
+  color: var(--color-text-primary);
   font-size: 14px;
   /* 兜底分支渲染纯文本时保留换行（主渲染路径为 articleSections 分段） */
   white-space: pre-line;
 
   :deep(h2),
   :deep(h3) {
-    color: #1b4332;
+    color: $military-dark;
     margin: 16px 0 8px;
   }
 
@@ -595,14 +595,14 @@ onMounted(() => {
   }
 
   :deep(code) {
-    background: #f5f7fa;
+    background: var(--color-bg-hover);
     padding: 2px 6px;
     border-radius: 3px;
     font-size: 13px;
   }
 
   :deep(pre) {
-    background: #303133;
+    background: var(--color-text-primary);
     color: #e0e0e0;
     padding: 16px;
     border-radius: 6px;

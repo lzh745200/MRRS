@@ -793,7 +793,7 @@ async function handlePurge(row: any) {
 .page-desc {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .header-actions {
@@ -915,7 +915,7 @@ async function handlePurge(row: any) {
   border-radius: 8px;
   padding: 16px 20px 4px;
   margin-bottom: 20px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
 }
 
 /* 表格区 */
@@ -923,7 +923,7 @@ async function handlePurge(row: any) {
   background: white;
   border-radius: 8px;
   padding: 20px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
 }
 
 .pagination-wrapper {

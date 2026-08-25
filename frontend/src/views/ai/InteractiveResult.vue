@@ -583,7 +583,7 @@ checkStatus()
 .page-desc {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .tab-content {
@@ -603,14 +603,14 @@ checkStatus()
 .result-text {
   margin-top: 12px;
   padding: 12px;
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
   border-radius: 6px;
 }
 
 .result-text p {
   margin: 4px 0;
   font-size: 13px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .card-desc {
@@ -628,7 +628,7 @@ checkStatus()
   align-items: center;
   gap: 8px;
   padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--color-bg-hover);
 }
 
 .rec-name {

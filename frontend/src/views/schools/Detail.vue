@@ -517,7 +517,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   padding: 100px 0;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .loading-icon {
@@ -548,8 +548,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%);
-  border-bottom: 1px solid #e4e7ed;
+  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 100%);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .card-header h3 {
@@ -586,17 +586,17 @@ onMounted(() => {
 
 .scale-label {
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
 :deep(.el-descriptions__label) {
   font-weight: 500;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-hover);
 }
 
 :deep(.el-descriptions__content) {
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 /* 电子资料 */
@@ -611,14 +611,14 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border-light);
   border-radius: 8px;
   transition: all 0.2s;
   background: #fafafa;
 }
 
 .attachment-card:hover {
-  border-color: #2d6a4f;
+  border-color: var(--color-primary);
   box-shadow: 0 2px 8px rgba(45, 106, 79, 0.12);
 }
 
@@ -636,7 +636,7 @@ onMounted(() => {
 
 .att-file-name {
   font-size: 14px;
-  color: #303133;
+  color: var(--color-text-primary);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;

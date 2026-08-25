@@ -521,7 +521,7 @@ function exportReport(): void {
   position: relative;
   overflow: hidden;
   border: none;
-  background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 70%, #40916c 100%);
+  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 70%, var(--color-primary-light-1) 100%);
 }
 .header-card :deep(.el-card__body) {
   position: relative;
@@ -705,12 +705,12 @@ function exportReport(): void {
   color: var(--color-danger);
 }
 .verdict-running {
-  color: #2d6a4f;
+  color: var(--color-primary);
 }
 .score-actions {
   margin-top: 18px;
   padding-top: 16px;
-  border-top: 1px dashed #e4e7ed;
+  border-top: 1px dashed var(--color-border-light);
   text-align: right;
 }
 
@@ -754,7 +754,7 @@ function exportReport(): void {
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
   color: var(--color-info);
 }
 .status-success .check-icon {
@@ -772,7 +772,7 @@ function exportReport(): void {
 .check-title {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 .check-desc {
   font-size: 12px;
@@ -783,10 +783,10 @@ function exportReport(): void {
 .check-detail {
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px dashed #e4e7ed;
+  border-top: 1px dashed var(--color-border-light);
   font-size: 13px;
   line-height: 1.6;
-  color: #606266;
+  color: var(--color-text-regular);
   word-break: break-all;
 }
 .detail-success {

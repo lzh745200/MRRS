@@ -1449,7 +1449,7 @@ const formatDateTime = (dateTimeString: string) => {
 <style lang="scss" scoped>
 .rural-works-task {
   padding: 20px;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-hover);
   min-height: 100vh;
 }
 
@@ -1459,7 +1459,7 @@ const formatDateTime = (dateTimeString: string) => {
   background: white;
   border-radius: 8px;
   padding: 24px 28px 20px;
-  border-left: 4px solid #1b4332;
+  border-left: 4px solid $military-dark;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 
   .page-header-inner {
@@ -1471,7 +1471,7 @@ const formatDateTime = (dateTimeString: string) => {
   .page-title {
     font-size: 22px;
     font-weight: 700;
-    color: #1b4332;
+    color: $military-dark;
     margin: 0;
     letter-spacing: 1px;
   }
@@ -1485,7 +1485,7 @@ const formatDateTime = (dateTimeString: string) => {
   .decoration-line {
     width: 60px;
     height: 3px;
-    background: linear-gradient(90deg, #1b4332, #40916c);
+    background: linear-gradient(90deg, $military-dark, var(--color-primary-light-1));
     margin-top: 12px;
     border-radius: 2px;
   }
@@ -1559,7 +1559,7 @@ const formatDateTime = (dateTimeString: string) => {
   }
 
   .deadline-normal {
-    color: #606266;
+    color: var(--color-text-regular);
   }
 
   .deadline-warning {
@@ -1612,13 +1612,13 @@ const formatDateTime = (dateTimeString: string) => {
     align-items: center;
     margin-bottom: 20px;
     padding-bottom: 15px;
-    border-bottom: 2px solid #f0f0f0;
+    border-bottom: 2px solid var(--color-bg-hover);
 
     .task-title {
       margin: 0;
       font-size: 18px;
       font-weight: 600;
-      color: #1b4332;
+      color: $military-dark;
     }
   }
 
@@ -1629,13 +1629,13 @@ const formatDateTime = (dateTimeString: string) => {
   .task-progress-update {
     margin-bottom: 30px;
     padding-bottom: 20px;
-    border-bottom: 2px solid #f0f0f0;
+    border-bottom: 2px solid var(--color-bg-hover);
 
     .section-title {
       margin-bottom: 15px;
       font-size: 16px;
       font-weight: 600;
-      color: #1b4332;
+      color: $military-dark;
     }
   }
 
@@ -1644,7 +1644,7 @@ const formatDateTime = (dateTimeString: string) => {
       margin-bottom: 15px;
       font-size: 16px;
       font-weight: 600;
-      color: #1b4332;
+      color: $military-dark;
     }
 
     .progress-history-list {
@@ -1667,7 +1667,7 @@ const formatDateTime = (dateTimeString: string) => {
 
             .history-assignee {
               font-weight: 500;
-              color: #1b4332;
+              color: $military-dark;
             }
 
             .history-time {
@@ -1677,7 +1677,7 @@ const formatDateTime = (dateTimeString: string) => {
           }
 
           .history-progress-change {
-            color: #1b4332;
+            color: $military-dark;
             font-weight: 500;
 
             .history-old-progress {
@@ -1690,7 +1690,7 @@ const formatDateTime = (dateTimeString: string) => {
             }
 
             .history-new-progress {
-              color: #40916c;
+              color: var(--color-primary-light-1);
               font-weight: 600;
             }
           }
@@ -1726,7 +1726,7 @@ const formatDateTime = (dateTimeString: string) => {
   .batch-assign-count {
     margin-bottom: 20px;
     font-size: 16px;
-    color: #1b4332;
+    color: $military-dark;
     font-weight: 500;
   }
 }

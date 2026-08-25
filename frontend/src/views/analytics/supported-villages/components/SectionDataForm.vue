@@ -1344,7 +1344,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
   border-radius: 6px;
   transition: background 0.2s;
 }
@@ -1368,7 +1368,7 @@ onMounted(() => {
 
 .file-name {
   font-size: 13px;
-  color: #303133;
+  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

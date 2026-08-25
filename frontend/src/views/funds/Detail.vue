@@ -1415,7 +1415,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 100px 0;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 .loading-icon {
   font-size: 32px;
@@ -1439,7 +1439,7 @@ onUnmounted(() => {
 }
 .card-header {
   padding: 16px 24px;
-  background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%);
+  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 100%);
 }
 .card-header h3 {
   margin: 0;
@@ -1482,7 +1482,7 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 .attachment-item:hover {
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
 }
 .att-name {
   font-size: 13px;
@@ -1494,10 +1494,10 @@ onUnmounted(() => {
 }
 :deep(.el-descriptions__label) {
   font-weight: 500;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-hover);
 }
 :deep(.el-descriptions__content) {
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 /* 时间线样式 */
@@ -1510,7 +1510,7 @@ onUnmounted(() => {
 }
 .timeline-info {
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 /* 标签页样式 */
@@ -1520,7 +1520,7 @@ onUnmounted(() => {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 :deep(.el-tabs--border-card > .el-tabs__header) {
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
   border-radius: 8px 8px 0 0;
 }
 :deep(.el-tabs--border-card > .el-tabs__header .el-tabs__item.is-active) {

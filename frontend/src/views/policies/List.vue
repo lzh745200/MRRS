@@ -543,7 +543,7 @@ onMounted(() => {
 .title {
   font-size: 16px;
   font-weight: bold;
-  color: #1b4332;
+  color: $military-dark;
 }
 
 .actions {
@@ -562,7 +562,7 @@ onMounted(() => {
 }
 
 :deep(.el-form-item__label) {
-  color: #1b4332;
+  color: $military-dark;
   font-weight: 500;
 }
 
@@ -579,19 +579,19 @@ onMounted(() => {
   --el-table-bg-color: rgba(255, 255, 255, 0.9);
   --el-table-tr-bg-color: rgba(255, 255, 255, 0.9);
   --el-table-header-bg-color: rgba(64, 145, 108, 0.15);
-  --el-table-text-color: #1b4332;
-  --el-table-header-text-color: #1b4332;
+  --el-table-text-color: $military-dark;
+  --el-table-header-text-color: $military-dark;
   --el-table-border-color: rgba(64, 145, 108, 0.2);
 }
 
 :deep(.el-table th) {
   background-color: rgba(64, 145, 108, 0.15);
-  color: #1b4332;
+  color: $military-dark;
   font-weight: 600;
 }
 
 :deep(.el-table td) {
-  color: #1b4332;
+  color: $military-dark;
 }
 
 :deep(.el-table--striped .el-table__body tr.el-table__row--striped td) {
@@ -603,14 +603,14 @@ onMounted(() => {
 }
 
 :deep(.el-pagination) {
-  --el-pagination-text-color: #1b4332;
+  --el-pagination-text-color: $military-dark;
   --el-pagination-bg-color: rgba(255, 255, 255, 0.9);
   --el-pagination-button-bg-color: rgba(255, 255, 255, 0.9);
   --el-pagination-button-disabled-bg-color: rgba(200, 200, 200, 0.3);
 }
 
 :deep(.el-pagination.is-background .el-pager li:not(.disabled).is-active) {
-  background-color: #40916c;
+  background-color: var(--color-primary-light-1);
   color: #fff;
 }
 </style>

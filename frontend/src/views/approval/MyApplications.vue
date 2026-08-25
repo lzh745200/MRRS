@@ -212,7 +212,7 @@ onMounted(loadData)
 }
 .page-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 .filter-card {

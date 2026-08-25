@@ -251,7 +251,7 @@ onUnmounted(() => {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
   max-height: 420px;
   overflow-y: auto;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border-light);
 }
 
 .no-result {
@@ -267,7 +267,7 @@ onUnmounted(() => {
 .result-group {
   padding: 4px 0;
   &:not(:last-child) {
-    border-bottom: 1px solid #f5f7fa;
+    border-bottom: 1px solid var(--color-bg-hover);
   }
 }
 
@@ -314,7 +314,7 @@ onUnmounted(() => {
 
 .item-title {
   font-size: 14px;
-  color: #303133;
+  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -348,7 +348,7 @@ onUnmounted(() => {
   padding: 8px 16px;
   font-size: 12px;
   color: var(--color-info);
-  border-top: 1px solid #f5f7fa;
+  border-top: 1px solid var(--color-bg-hover);
   .hint {
     font-size: 11px;
   }

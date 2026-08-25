@@ -898,7 +898,7 @@ watch(healthExpanded, (val) => {
 .monitoring-dashboard {
   padding: 0;
   min-height: 100%;
-  color: var(--color-text-primary, #303133);
+  color: var(--color-text-primary, var(--color-text-primary));
 }
 
 /* ═══ Header ═══ */
@@ -986,7 +986,7 @@ watch(healthExpanded, (val) => {
 .primary-card {
   background: var(--color-bg-card, #fff);
   border-radius: 12px;
-  border: 1px solid var(--color-border-light, #e4e7ed);
+  border: 1px solid var(--color-border-light, var(--color-border-light));
   padding: 20px 24px 16px;
   position: relative;
   overflow: hidden;
@@ -1055,7 +1055,7 @@ watch(healthExpanded, (val) => {
 /* Progress bar */
 .progress-bar-wrap {
   height: 6px;
-  background: var(--color-bg-card-dark, #f0f0f0);
+  background: var(--color-bg-card-dark, var(--color-bg-hover));
   border-radius: 3px;
   margin-bottom: 10px;
   overflow: hidden;
@@ -1117,7 +1117,7 @@ watch(healthExpanded, (val) => {
 .secondary-card {
   background: var(--color-bg-card, #fff);
   border-radius: 10px;
-  border: 1px solid var(--color-border-light, #e4e7ed);
+  border: 1px solid var(--color-border-light, var(--color-border-light));
   padding: 14px 18px;
   display: flex;
   align-items: center;
@@ -1174,7 +1174,7 @@ watch(healthExpanded, (val) => {
 .log-panel {
   background: var(--color-bg-card, #fff);
   border-radius: 12px;
-  border: 1px solid var(--color-border-light, #e4e7ed);
+  border: 1px solid var(--color-border-light, var(--color-border-light));
   overflow: hidden;
 }
 .panel-header {
@@ -1259,7 +1259,7 @@ watch(healthExpanded, (val) => {
 .health-section {
   background: var(--color-bg-card, #fff);
   border-radius: 12px;
-  border: 1px solid var(--color-border-light, #e4e7ed);
+  border: 1px solid var(--color-border-light, var(--color-border-light));
 }
 .health-header {
   display: flex;
@@ -1274,7 +1274,7 @@ watch(healthExpanded, (val) => {
   transition: background 0.15s;
 }
 .health-header:hover {
-  background: var(--color-bg-hover, #f5f7fa);
+  background: var(--color-bg-hover, var(--color-bg-hover));
 }
 .toggle-icon {
   font-size: 12px;
@@ -1291,7 +1291,7 @@ watch(healthExpanded, (val) => {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
   padding: 14px 18px 18px;
-  border-top: 1px solid var(--color-border-lighter, #f0f0f0);
+  border-top: 1px solid var(--color-border-lighter, var(--color-bg-hover));
 }
 .check-group h4 {
   margin: 0 0 8px;
@@ -1308,7 +1308,7 @@ watch(healthExpanded, (val) => {
   font-size: 0.82rem;
 }
 .check-item:nth-child(odd) {
-  background: var(--color-bg-hover, #f5f7fa);
+  background: var(--color-bg-hover, var(--color-bg-hover));
 }
 .check-item :deep(.el-icon) {
   flex-shrink: 0;

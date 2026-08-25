@@ -220,7 +220,7 @@ const showPassCodeHelp = () => {
 <style scoped lang="scss">
 .register-container {
   --military-dark: #081c15;
-  --military-green: #1b4332;
+  --military-green: $military-dark;
   --military-gold: #d4af37;
   --military-gold-light: #f0e68c;
   --text-white: #ffffff;
@@ -289,7 +289,7 @@ const showPassCodeHelp = () => {
   :deep(.el-step__description) {
     p {
       margin: 8px 0;
-      color: #606266;
+      color: var(--color-text-regular);
       line-height: 1.6;
     }
   }

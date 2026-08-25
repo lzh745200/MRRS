@@ -182,7 +182,7 @@ function exportCSV() {
 .stat-val {
   font-size: 28px;
   font-weight: 700;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 .stat-label {
   font-size: 13px;

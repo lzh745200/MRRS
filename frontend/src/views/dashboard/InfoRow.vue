@@ -157,7 +157,7 @@ onMounted(() => {
     width: 4px;
     height: 16px;
     border-radius: 2px;
-    background: linear-gradient(180deg, #1e4d8c, #2d6a4f);
+    background: linear-gradient(180deg, #1e4d8c, var(--color-primary));
   }
 }
 
@@ -187,7 +187,7 @@ onMounted(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #2d6a4f;
+  background: var(--color-primary);
   flex-shrink: 0;
 }
 .tl-text {
@@ -222,7 +222,7 @@ onMounted(() => {
   opacity: 1;
 }
 .tl-edit-btn:hover {
-  color: #2d6a4f;
+  color: var(--color-primary);
   background: #f0f4f0;
 }
 .tl-delete-btn:hover {
@@ -245,7 +245,7 @@ onMounted(() => {
   cursor: pointer;
 }
 .tl-save-btn {
-  background: #2d6a4f;
+  background: var(--color-primary);
   color: #fff;
 }
 .tl-cancel-btn {

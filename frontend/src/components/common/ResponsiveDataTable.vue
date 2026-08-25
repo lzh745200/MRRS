@@ -176,7 +176,7 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
 .card-title {
   font-size: 16px;
   font-weight: 700;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 .card-badge {
   padding: 2px 10px;
@@ -213,7 +213,7 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
   color: var(--color-info);
 }
 .field-value {
-  color: #303133;
+  color: var(--color-text-primary);
   font-weight: 500;
   text-align: right;
 }

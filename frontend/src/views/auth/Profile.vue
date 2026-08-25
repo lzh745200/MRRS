@@ -570,13 +570,13 @@ onMounted(() => {
 .page-title {
   font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
   margin-bottom: 8px;
 }
 
 .page-description {
   font-size: 14px;
-  color: #606266;
+  color: var(--color-text-regular);
   margin: 0;
 }
 
@@ -606,7 +606,7 @@ onMounted(() => {
 
 .user-avatar {
   cursor: pointer;
-  border: 3px solid #f0f0f0;
+  border: 3px solid var(--color-bg-hover);
   transition: border-color 0.3s;
 }
 
@@ -620,7 +620,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-hover);
   border-radius: 50%;
 }
 
@@ -640,13 +640,13 @@ onMounted(() => {
 .user-name {
   font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
   margin-bottom: 8px;
 }
 
 .user-role {
   font-size: 14px;
-  color: #606266;
+  color: var(--color-text-regular);
   margin-bottom: 4px;
 }
 
@@ -661,7 +661,7 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 12px;
   padding-top: 20px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--color-border-light);
 }
 
 .save-cancel-group {
@@ -686,10 +686,10 @@ onMounted(() => {
 .section-title {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
   margin-bottom: 20px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .profile-form {
@@ -720,7 +720,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .security-item:last-child {
@@ -729,19 +729,19 @@ onMounted(() => {
 
 .security-label {
   font-size: 14px;
-  color: #606266;
+  color: var(--color-text-regular);
 }
 
 .security-value {
   font-size: 14px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .security-actions {
   display: flex;
   gap: 12px;
   padding-top: 20px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--color-border-light);
   justify-content: flex-end;
 }
 

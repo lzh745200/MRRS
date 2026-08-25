@@ -316,7 +316,7 @@ onMounted(() => {
     h2 {
       margin: 0 0 8px 0;
       font-size: 24px;
-      color: #303133;
+      color: var(--color-text-primary);
     }
 
     .description {
@@ -336,7 +336,7 @@ onMounted(() => {
 .section-title {
   margin: 0 0 20px 0;
   font-size: 18px;
-  color: #303133;
+  color: var(--color-text-primary);
   border-bottom: 2px solid var(--color-primary);
   padding-bottom: 10px;
 }
@@ -358,7 +358,7 @@ onMounted(() => {
   h4 {
     margin: 0 0 10px 0;
     font-size: 16px;
-    color: #303133;
+    color: var(--color-text-primary);
   }
 }
 </style>

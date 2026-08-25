@@ -64,7 +64,7 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
   align-items: center;
   height: 56px;
   background: #fff;
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid var(--color-border-light);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .nav-btn {

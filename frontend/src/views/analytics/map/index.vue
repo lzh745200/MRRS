@@ -426,8 +426,8 @@ onMounted(loadData)
   gap: 8px;
   flex-wrap: wrap;
   padding: 8px 16px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
+  background: var(--color-bg-hover);
+  border-bottom: 1px solid var(--color-border-light);
 }
 .map-stats {
   display: flex;
@@ -441,7 +441,7 @@ onMounted(loadData)
   background: #fef3e6;
   border-bottom: 1px solid #f5dab1;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-regular);
 }
 
 /* 搜索结果样式 */
@@ -455,16 +455,16 @@ onMounted(loadData)
   gap: 8px;
   padding: 8px 12px;
   cursor: pointer;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--color-bg-hover);
   transition: background 0.2s;
 }
 .search-result-item:hover {
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
 }
 .search-result-item .result-name {
   flex: 1;
   font-size: 13px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 .search-result-item .result-area {
   font-size: 12px;

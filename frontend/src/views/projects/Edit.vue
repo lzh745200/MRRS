@@ -1323,7 +1323,7 @@ onUnmounted(() => {
 .project-edit-container {
   min-height: 100vh;
   padding: 20px;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-hover);
 }
 
 .page-header {
@@ -1373,7 +1373,7 @@ onUnmounted(() => {
 
 .input-suffix {
   margin-left: 8px;
-  color: #606266;
+  color: var(--color-text-regular);
 }
 
 .upload-demo {
@@ -1390,7 +1390,7 @@ onUnmounted(() => {
   margin-top: 30px;
   justify-content: center;
   padding: 20px 0;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--color-border-light);
 }
 
 .form-actions .el-button {
@@ -1445,7 +1445,7 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: bold;
   color: #003366;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-hover);
   padding: 0 20px;
 }
 

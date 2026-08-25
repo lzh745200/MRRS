@@ -604,7 +604,7 @@ onMounted(() => {
 .bar-label {
   width: 60px;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-regular);
   flex-shrink: 0;
 }
 
@@ -639,7 +639,7 @@ onMounted(() => {
 .bar-value {
   width: 60px;
   font-size: 13px;
-  color: #303133;
+  color: var(--color-text-primary);
   text-align: right;
   flex-shrink: 0;
 }
@@ -681,7 +681,7 @@ onMounted(() => {
 
 .cleanup-label {
   margin-right: 16px;
-  color: #606266;
+  color: var(--color-text-regular);
   font-size: 14px;
 }
 </style>

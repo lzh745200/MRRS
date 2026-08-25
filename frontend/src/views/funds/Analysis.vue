@@ -557,7 +557,7 @@ onMounted(() => {
 .stat-value {
   font-size: 32px;
   font-weight: bold;
-  color: #40916c;
+  color: var(--color-primary-light-1);
   margin-bottom: 8px;
 }
 
@@ -567,7 +567,7 @@ onMounted(() => {
 }
 
 :deep(.el-card__header) {
-  background: linear-gradient(135deg, #2d6a4f 0%, #1b4332 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #1b4332 100%);
   border-bottom: 1px solid rgba(64, 145, 108, 0.3);
   color: #fff;
 }

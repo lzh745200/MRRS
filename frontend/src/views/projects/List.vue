@@ -652,7 +652,7 @@ onMounted(() => {
 
 .page-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
@@ -710,7 +710,7 @@ onMounted(() => {
 
 .stat-label {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
@@ -746,7 +746,7 @@ onMounted(() => {
   justify-content: flex-end;
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--color-bg-hover);
 }
 
 @media (max-width: 768px) {

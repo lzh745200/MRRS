@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
 }
 .page-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 .stats-row {
@@ -326,14 +326,14 @@ onBeforeUnmount(() => {
   color: var(--color-primary);
 }
 .stat-value.text-success {
-  color: #40916c;
+  color: var(--color-primary-light-1);
 }
 .stat-value.text-warning {
   color: var(--color-warning);
 }
 .stat-label {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 .analysis-content {

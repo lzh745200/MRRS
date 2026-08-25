@@ -170,7 +170,7 @@ function resetForm() {
   transition: background 0.2s;
 }
 .activity-item:hover {
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
 }
 .activity-icon {
   font-size: 20px;
@@ -190,7 +190,7 @@ function resetForm() {
 .activity-text {
   margin: 0;
   font-size: 14px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 .activity-time {
   font-size: 12px;

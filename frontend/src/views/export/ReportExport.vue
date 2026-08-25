@@ -512,7 +512,7 @@ onMounted(() => {
 
       .description {
         margin: 0;
-        color: #666;
+        color: var(--color-text-secondary);
         font-size: 14px;
       }
     }
@@ -521,7 +521,7 @@ onMounted(() => {
   .section-title {
     font-size: 16px;
     font-weight: 600;
-    color: #1b4332;
+    color: $military-dark;
     margin: 0 0 16px 0;
   }
 
@@ -538,18 +538,18 @@ onMounted(() => {
       display: flex;
       align-items: center;
       padding: 16px;
-      border: 2px solid #e4e7ed;
+      border: 2px solid var(--color-border-light);
       border-radius: 8px;
       cursor: pointer;
       transition: all 0.3s;
 
       &:hover {
-        border-color: #40916c;
+        border-color: var(--color-primary-light-1);
         background-color: #f0f9f4;
       }
 
       &.active {
-        border-color: #40916c;
+        border-color: var(--color-primary-light-1);
         background-color: #e8f5e9;
       }
 
@@ -584,7 +584,7 @@ onMounted(() => {
 
     .section-desc {
       margin: 0 0 16px 0;
-      color: #666;
+      color: var(--color-text-secondary);
       font-size: 14px;
     }
 
@@ -599,12 +599,12 @@ onMounted(() => {
       align-items: center;
       justify-content: space-between;
       padding: 16px;
-      border: 1px solid #e4e7ed;
+      border: 1px solid var(--color-border-light);
       border-radius: 8px;
       transition: all 0.3s;
 
       &:hover {
-        background-color: #f5f7fa;
+        background-color: var(--color-bg-hover);
         border-color: #c0c4cc;
       }
     }

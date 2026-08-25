@@ -330,7 +330,7 @@ onMounted(() => {
 }
 
 .admin-banner {
-  background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 50%, #40916c 100%);
+  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 50%, var(--color-primary-light-1) 100%);
   border-radius: 12px;
   padding: 24px 32px;
   color: white;
@@ -472,7 +472,7 @@ onMounted(() => {
 .text-btn {
   background: none;
   border: none;
-  color: #40916c;
+  color: var(--color-primary-light-1);
   cursor: pointer;
   font-size: 13px;
 }
@@ -535,7 +535,7 @@ onMounted(() => {
 .login-avatar {
   width: 36px;
   height: 36px;
-  background: linear-gradient(135deg, #40916c, #2d6a4f);
+  background: linear-gradient(135deg, var(--color-primary-light-1), var(--color-primary));
   color: white;
   border-radius: 50%;
   display: flex;
@@ -600,7 +600,7 @@ onMounted(() => {
 }
 
 .audit-user {
-  color: #40916c;
+  color: var(--color-primary-light-1);
 }
 
 .audit-target {
@@ -713,7 +713,7 @@ onMounted(() => {
 
 .storage-used {
   height: 100%;
-  background: linear-gradient(90deg, #40916c, #2d6a4f);
+  background: linear-gradient(90deg, var(--color-primary-light-1), var(--color-primary));
   border-radius: 4px;
 }
 

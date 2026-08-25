@@ -1314,7 +1314,7 @@ onMounted(() => {
 .table-card {
   margin-bottom: 20px;
   background: #ffffff;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--color-border-light);
 }
 
 .card-header {
@@ -1356,12 +1356,12 @@ onMounted(() => {
 }
 
 :deep(.el-card__header) {
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-border-light);
   padding: 15px 20px;
 }
 
 :deep(.el-form-item__label) {
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .action-buttons {

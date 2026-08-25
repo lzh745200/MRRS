@@ -730,7 +730,7 @@ onMounted(() => {
   }
 
   .entity-summary {
-    color: #1b4332;
+    color: $military-dark;
     font-size: 13px;
 
     &.muted {

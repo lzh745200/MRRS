@@ -433,7 +433,7 @@ onMounted(() => {
 }
 .page-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 .stats-row {
@@ -461,7 +461,7 @@ onMounted(() => {
 }
 .stat-label {
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
@@ -497,7 +497,7 @@ onMounted(() => {
 
 .filter-label {
   font-size: 14px;
-  color: #606266;
+  color: var(--color-text-regular);
   margin-bottom: 8px;
   font-weight: 500;
   display: block;

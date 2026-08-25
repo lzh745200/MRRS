@@ -618,7 +618,7 @@ function handleCancel() {
   margin-bottom: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: #606266;
+  color: var(--color-text-regular);
   line-height: 1.4;
 }
 
@@ -628,7 +628,7 @@ function handleCancel() {
 
   &--total {
     font-weight: 700;
-    color: #1b4332;
+    color: $military-dark;
   }
 }
 </style>

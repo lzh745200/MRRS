@@ -746,7 +746,7 @@ onBeforeUnmount(() => {
 
 .section-icon {
   font-size: 20px;
-  color: #2d6a4f;
+  color: var(--color-primary);
 }
 
 .section-summary {
@@ -766,7 +766,7 @@ onBeforeUnmount(() => {
 .summary-value {
   font-size: 18px;
   font-weight: 700;
-  color: #40916c;
+  color: var(--color-primary-light-1);
 }
 
 .summary-label {
@@ -784,7 +784,7 @@ onBeforeUnmount(() => {
 .section-card-actions {
   display: flex;
   gap: 8px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--color-bg-hover);
   padding-top: 12px;
 }
 
@@ -799,7 +799,7 @@ onBeforeUnmount(() => {
 
 .chart-card :deep(.el-card__header) {
   padding: 12px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--color-bg-hover);
 }
 
 .chart-card-header {

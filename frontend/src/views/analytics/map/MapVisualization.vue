@@ -179,7 +179,7 @@ onMounted(async () => {
   margin: 0 0 4px 0;
 }
 .page-desc {
-  color: #606266;
+  color: var(--color-text-regular);
   font-size: 14px;
   margin: 0;
 }

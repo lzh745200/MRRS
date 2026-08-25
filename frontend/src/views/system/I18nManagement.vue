@@ -280,7 +280,7 @@ onMounted(() => {
 }
 .page-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 .toolbar-card {
@@ -301,7 +301,7 @@ onMounted(() => {
 }
 .toolbar-label {
   font-weight: 500;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 .card-header {
   display: flex;
@@ -317,7 +317,7 @@ onMounted(() => {
 .missing-keys-section h4 {
   margin: 0 0 8px;
   font-size: 14px;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 .missing-keys-list {
   display: flex;

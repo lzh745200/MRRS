@@ -687,7 +687,7 @@ onMounted(() => {
 .page-desc {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 .header-actions {
   display: flex;
@@ -714,14 +714,14 @@ onMounted(() => {
 }
 .stat-label {
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 .text-success {
-  color: #40916c;
+  color: var(--color-primary-light-1);
 }
 .text-primary {
-  color: #2d6a4f;
+  color: var(--color-primary);
 }
 .text-warning {
   color: var(--color-warning);
@@ -731,13 +731,13 @@ onMounted(() => {
   border-radius: 8px;
   padding: 16px 20px 4px;
   margin-bottom: 20px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
 }
 .table-card {
   background: white;
   border-radius: 8px;
   padding: 20px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
 }
 .amount-text {
   font-weight: 600;

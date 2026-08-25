@@ -217,7 +217,7 @@ const copyAllInfo = () => {
   align-items: center;
   justify-content: center;
   overflow-y: auto;
-  background: linear-gradient(135deg, #081c15 0%, #1b4332 100%);
+  background: linear-gradient(135deg, #081c15 0%, $military-dark 100%);
   position: relative;
   padding: 20px;
   box-sizing: border-box;
@@ -281,13 +281,13 @@ const copyAllInfo = () => {
 
 .card-header h2 {
   font-size: 28px;
-  color: #1b4332;
+  color: $military-dark;
   margin: 0 0 10px 0;
   font-weight: 600;
 }
 
 .card-header p {
-  color: #666;
+  color: var(--color-text-secondary);
   font-size: 15px;
   margin: 0;
 }
@@ -320,7 +320,7 @@ const copyAllInfo = () => {
 
   h3 {
     font-size: 16px;
-    color: #1b4332;
+    color: $military-dark;
     margin: 0 0 15px 0;
     font-weight: 600;
   }
@@ -336,7 +336,7 @@ const copyAllInfo = () => {
 .code-text {
   font-size: 48px;
   font-weight: bold;
-  color: #1b4332;
+  color: $military-dark;
   letter-spacing: 8px;
   font-family: 'Courier New', monospace;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
@@ -347,7 +347,7 @@ const copyAllInfo = () => {
 
   h3 {
     font-size: 16px;
-    color: #303133;
+    color: var(--color-text-primary);
     margin: 0 0 10px 0;
     font-weight: 600;
   }
@@ -358,8 +358,8 @@ const copyAllInfo = () => {
   align-items: center;
   justify-content: center;
   padding: 15px;
-  background: #f5f7fa;
-  border: 1px solid #e4e7ed;
+  background: var(--color-bg-hover);
+  border: 1px solid var(--color-border-light);
   border-radius: 8px;
   overflow-wrap: break-word;
   word-break: break-all;
@@ -367,7 +367,7 @@ const copyAllInfo = () => {
 
 .machine-code-display .code-text {
   font-size: 16px;
-  color: #1b4332;
+  color: $military-dark;
   font-family: 'Courier New', monospace;
   letter-spacing: 1px;
   flex: 1;
@@ -393,7 +393,7 @@ const copyAllInfo = () => {
 
   h3 {
     font-size: 16px;
-    color: #303133;
+    color: var(--color-text-primary);
     margin: 0 0 10px 0;
     font-weight: 600;
   }
@@ -412,7 +412,7 @@ const copyAllInfo = () => {
 
   p {
     margin: 0 0 8px 0;
-    color: #606266;
+    color: var(--color-text-regular);
   }
 
   ol {
@@ -421,17 +421,17 @@ const copyAllInfo = () => {
 
     li {
       margin-bottom: 5px;
-      color: #606266;
+      color: var(--color-text-regular);
     }
   }
 
   strong {
-    color: #1b4332;
+    color: $military-dark;
   }
 }
 
 .card-footer {
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--color-border-light);
   padding-top: 20px;
 }
 

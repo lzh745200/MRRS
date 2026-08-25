@@ -194,7 +194,7 @@ onMounted(() => {
     .title {
       font-size: 20px;
       font-weight: 600;
-      color: #1b4332;
+      color: $military-dark;
     }
 
     .subtitle {

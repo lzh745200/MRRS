@@ -1073,7 +1073,7 @@ async function handlePurge(row: any) {
 .page-desc {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .header-actions {
@@ -1118,7 +1118,7 @@ async function handlePurge(row: any) {
 
 .stat-label {
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
@@ -1150,7 +1150,7 @@ async function handlePurge(row: any) {
 .year-overview-title {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
 }
 
 .year-overview-row {
@@ -1182,7 +1182,7 @@ async function handlePurge(row: any) {
 
 .overview-label {
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
@@ -1208,7 +1208,7 @@ async function handlePurge(row: any) {
   border-radius: 8px;
   padding: 16px 20px 4px;
   margin-bottom: 20px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
 }
 
 /* 表格区 */
@@ -1216,7 +1216,7 @@ async function handlePurge(row: any) {
   background: white;
   border-radius: 8px;
   padding: 20px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
 }
 
 .amount-text {

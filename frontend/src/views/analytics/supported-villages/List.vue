@@ -824,7 +824,7 @@ onMounted(() => {
 
 .kpi-label {
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-regular);
   margin-top: 6px;
 }
 

@@ -1127,7 +1127,7 @@ const getQualityScoreClass = (score: number) => {
 <style lang="scss" scoped>
 .rural-works-analysis {
   padding: 20px;
-  background-color: #f5f7fa;
+  background-color: var(--color-bg-hover);
   min-height: 100vh;
   position: relative;
 
@@ -1161,7 +1161,7 @@ const getQualityScoreClass = (score: number) => {
 
   .page-subtitle {
     font-size: 16px;
-    color: #666;
+    color: var(--color-text-secondary);
     margin-bottom: 20px;
   }
 
@@ -1309,7 +1309,7 @@ const getQualityScoreClass = (score: number) => {
 
       .indicator-title {
         font-size: 16px;
-        color: #666;
+        color: var(--color-text-secondary);
         font-weight: 500;
       }
 
@@ -1380,7 +1380,7 @@ const getQualityScoreClass = (score: number) => {
       align-items: center;
       padding: 0 0 15px 0;
       margin-bottom: 15px;
-      border-bottom: 2px solid #f0f0f0;
+      border-bottom: 2px solid var(--color-bg-hover);
 
       .chart-title {
         margin: 0;
@@ -1420,7 +1420,7 @@ const getQualityScoreClass = (score: number) => {
     align-items: center;
     padding: 0 0 15px 0;
     margin-bottom: 15px;
-    border-bottom: 2px solid #f0f0f0;
+    border-bottom: 2px solid var(--color-bg-hover);
 
     .table-title {
       margin: 0;

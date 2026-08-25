@@ -547,12 +547,12 @@ onMounted(() => loadBudgets())
 
 .stat-label {
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
 .text-success {
-  color: #40916c;
+  color: var(--color-primary-light-1);
 }
 .text-info {
   color: var(--color-primary);
@@ -564,7 +564,7 @@ onMounted(() => loadBudgets())
   color: var(--color-danger);
 }
 .text-success-text {
-  color: #40916c;
+  color: var(--color-primary-light-1);
 }
 
 /* 卡片 */
@@ -578,7 +578,7 @@ onMounted(() => loadBudgets())
 
 .card-header {
   padding: 16px 24px;
-  background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%);
+  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 100%);
 }
 
 .card-header h3 {
@@ -616,7 +616,7 @@ onMounted(() => loadBudgets())
 .gauge-footer {
   text-align: center;
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: -8px;
 }
 

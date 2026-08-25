@@ -420,13 +420,13 @@ watch(
 .page-title {
   font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-text-primary);
   margin-bottom: 8px;
 }
 
 .page-description {
   font-size: 14px;
-  color: #606266;
+  color: var(--color-text-regular);
   margin: 0;
 }
 
@@ -481,7 +481,7 @@ watch(
 
 .hint-list li {
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-regular);
   margin-bottom: 6px;
   transition: color 0.3s;
   line-height: 1.5;
@@ -510,19 +510,19 @@ watch(
   align-items: center;
   gap: 12px;
   padding-top: 12px;
-  border-top: 1px dashed #ebeef5;
+  border-top: 1px dashed var(--color-border-light);
 }
 
 .strength-label {
   font-size: 12px;
-  color: #606266;
+  color: var(--color-text-regular);
   flex-shrink: 0;
 }
 
 .strength-bar {
   flex: 1;
   height: 6px;
-  background-color: #ebeef5;
+  background-color: var(--color-border-light);
   border-radius: 3px;
   overflow: hidden;
   min-width: 120px;
@@ -537,7 +537,7 @@ watch(
 
 .level-0 {
   width: 0;
-  background-color: #ebeef5;
+  background-color: var(--color-border-light);
 }
 
 .level-1 {
@@ -633,7 +633,7 @@ watch(
   padding-left: 20px;
   margin-bottom: 8px;
   font-size: 13px;
-  color: #606266;
+  color: var(--color-text-regular);
   line-height: 1.6;
 }
 

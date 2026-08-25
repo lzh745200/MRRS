@@ -379,7 +379,7 @@ onMounted(() => {
 .page-desc {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .add-card {
@@ -387,7 +387,7 @@ onMounted(() => {
   border-radius: 8px;
   padding: 16px 20px 4px;
   margin-bottom: 16px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
 }
 
 .filter-bar {
@@ -402,13 +402,13 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   padding: 80px 0;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .todo-list {
   background: white;
   border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
   overflow: hidden;
 }
 
@@ -417,7 +417,7 @@ onMounted(() => {
   align-items: flex-start;
   gap: 12px;
   padding: 14px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--color-bg-hover);
   transition: background 0.2s;
 }
 
@@ -426,7 +426,7 @@ onMounted(() => {
 }
 
 .todo-item:hover {
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
 }
 
 .todo-item.completed .todo-title {
@@ -447,7 +447,7 @@ onMounted(() => {
 .todo-title {
   font-size: 15px;
   font-weight: 500;
-  color: #303133;
+  color: var(--color-text-primary);
   margin-bottom: 4px;
 }
 

@@ -24,11 +24,11 @@ defineProps<{
 .stat-value {
   font-size: 28px;
   font-weight: bold;
-  color: #40916c;
+  color: var(--color-primary-light-1);
 }
 .stat-label {
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: 8px;
 }
 </style>

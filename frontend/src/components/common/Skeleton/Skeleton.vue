@@ -226,7 +226,7 @@ function getLineWidth(index: number): string {
     padding: 12px 0;
 
     &:not(:last-child) {
-      border-bottom: 1px solid #f0f0f0;
+      border-bottom: 1px solid var(--color-bg-hover);
     }
   }
 
@@ -292,7 +292,7 @@ function getLineWidth(index: number): string {
   // 表格布局
   &__table {
     width: 100%;
-    border: 1px solid #f0f0f0;
+    border: 1px solid var(--color-bg-hover);
     border-radius: 4px;
     overflow: hidden;
   }
@@ -300,7 +300,7 @@ function getLineWidth(index: number): string {
   &__table-header {
     display: flex;
     background-color: #fafafa;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--color-bg-hover);
 
     .skeleton__table-cell {
       height: 20px;
@@ -310,7 +310,7 @@ function getLineWidth(index: number): string {
 
   &__table-row {
     display: flex;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--color-bg-hover);
 
     &:last-child {
       border-bottom: none;

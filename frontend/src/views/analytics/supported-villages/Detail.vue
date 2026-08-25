@@ -538,7 +538,7 @@ onBeforeUnmount(() => {
   color: #1b4332;
   margin: 0 0 16px 0;
   padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--color-bg-hover);
   display: flex;
   align-items: center;
 }
@@ -557,7 +557,7 @@ onBeforeUnmount(() => {
 
 .section-label {
   font-weight: 500;
-  color: #606266;
+  color: var(--color-text-regular);
   min-width: 80px;
 }
 
@@ -573,13 +573,13 @@ onBeforeUnmount(() => {
 }
 
 .honors-text {
-  color: #606266;
+  color: var(--color-text-regular);
   line-height: 1.6;
   margin: 0;
 }
 
 .stat-card {
-  background: #f5f7fa;
+  background: var(--color-bg-hover);
   padding: 20px;
   border-radius: 8px;
   text-align: center;
@@ -588,7 +588,7 @@ onBeforeUnmount(() => {
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #40916c;
+  color: var(--color-primary-light-1);
 }
 
 .stat-label {

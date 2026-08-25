@@ -279,7 +279,7 @@ const activeGroups = ref(['core'])
     font-size: 14px;
     border-radius: 8px;
     &.is-active {
-      color: #1b4332;
+      color: $military-dark;
     }
   }
   :deep(.el-collapse-item__wrap) {
@@ -310,7 +310,7 @@ const activeGroups = ref(['core'])
   background: #fff;
   cursor: pointer;
   font-size: 13px;
-  color: #303133;
+  color: var(--color-text-primary);
   transition: all 0.15s ease;
   white-space: nowrap;
   &:hover {

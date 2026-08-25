@@ -365,7 +365,7 @@ onMounted(() => {
 .page-desc {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .header-actions {
@@ -382,7 +382,7 @@ onMounted(() => {
 .stat-item {
   flex: 1;
   background: white;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
   border-radius: 8px;
   padding: 16px 20px;
   text-align: center;
@@ -407,14 +407,14 @@ onMounted(() => {
 
 .stat-label {
   font-size: 13px;
-  color: #666;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
 .section-card {
   background: white;
   border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--color-border-light);
   overflow: hidden;
 }
 
@@ -423,8 +423,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
+  background: var(--color-bg-hover);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .section-header h3 {
@@ -439,7 +439,7 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   padding: 40px;
-  color: #666;
+  color: var(--color-text-secondary);
   gap: 8px;
 }
 
@@ -466,7 +466,7 @@ onMounted(() => {
 
 .alert-item {
   padding: 12px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--color-bg-hover);
 }
 
 .alert-item:last-child {
@@ -493,7 +493,7 @@ onMounted(() => {
 
 .alert-title {
   font-size: 14px;
-  color: #303133;
+  color: var(--color-text-primary);
   line-height: 1.5;
 }
 
