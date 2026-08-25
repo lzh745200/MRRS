@@ -1333,7 +1333,7 @@ onUnmounted(() => {
 .page-title {
   font-size: 24px;
   font-weight: bold;
-  color: #003366;
+  color: var(--color-navy);
   margin: 12px 0 0 0;
 }
 
@@ -1444,7 +1444,7 @@ onUnmounted(() => {
 .el-divider__text {
   font-size: 16px;
   font-weight: bold;
-  color: #003366;
+  color: var(--color-navy);
   background-color: var(--color-bg-hover);
   padding: 0 20px;
 }

@@ -42,6 +42,7 @@ CSS_VAR_MAP = {
     "#ebeef5": "var(--color-border-light)",
     "#2d6a4f": "var(--color-primary)",
     "#40916c": "var(--color-primary-light-1)",
+    "#003366": "var(--color-navy)",
 }
 # 仅 scss 块可用的 SCSS 变量映射
 SCSS_ONLY_MAP = {

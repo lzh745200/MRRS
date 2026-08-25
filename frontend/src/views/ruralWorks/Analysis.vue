@@ -1139,7 +1139,7 @@ const getQualityScoreClass = (score: number) => {
     left: 0;
     right: 0;
     height: 5px;
-    background: linear-gradient(90deg, #003366, #0055aa, #003366);
+    background: linear-gradient(90deg, var(--color-navy), #0055aa, var(--color-navy));
   }
 }
 
@@ -1153,7 +1153,7 @@ const getQualityScoreClass = (score: number) => {
   .page-title {
     font-size: 28px;
     font-weight: bold;
-    color: #003366;
+    color: var(--color-navy);
     margin-bottom: 10px;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -1168,14 +1168,14 @@ const getQualityScoreClass = (score: number) => {
   .decoration-line {
     width: 100px;
     height: 3px;
-    background: linear-gradient(90deg, #003366, #0055aa);
+    background: linear-gradient(90deg, var(--color-navy), #0055aa);
     margin: 0 auto;
   }
 }
 
 // 通用类
 .military-border {
-  border: 1px solid #003366;
+  border: 1px solid var(--color-navy);
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 51, 102, 0.15);
 }
@@ -1196,12 +1196,12 @@ const getQualityScoreClass = (score: number) => {
     left: 0;
     width: 4px;
     height: 100%;
-    background: linear-gradient(to bottom, #003366, #0055aa);
+    background: linear-gradient(to bottom, var(--color-navy), #0055aa);
   }
 }
 
 .military-decoration {
-  background: linear-gradient(90deg, #003366, #0055aa);
+  background: linear-gradient(90deg, var(--color-navy), #0055aa);
 }
 
 // 角落装饰
@@ -1209,7 +1209,7 @@ const getQualityScoreClass = (score: number) => {
   position: absolute;
   width: 30px;
   height: 30px;
-  border: 2px solid #003366;
+  border: 2px solid var(--color-navy);
   z-index: 10;
 }
 
@@ -1334,7 +1334,7 @@ const getQualityScoreClass = (score: number) => {
       .indicator-value {
         font-size: 32px;
         font-weight: bold;
-        color: #003366;
+        color: var(--color-navy);
       }
 
       .indicator-change {
@@ -1386,12 +1386,12 @@ const getQualityScoreClass = (score: number) => {
         margin: 0;
         font-size: 18px;
         font-weight: 600;
-        color: #003366;
+        color: var(--color-navy);
       }
 
       .chart-view-trigger {
         cursor: pointer;
-        color: #003366;
+        color: var(--color-navy);
         font-size: 14px;
       }
     }
@@ -1426,7 +1426,7 @@ const getQualityScoreClass = (score: number) => {
       margin: 0;
       font-size: 18px;
       font-weight: 600;
-      color: #003366;
+      color: var(--color-navy);
     }
   }
 

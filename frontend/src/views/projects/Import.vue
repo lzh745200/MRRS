@@ -528,7 +528,7 @@ const redirectToList = () => {
   }
   .decoration-bar {
     height: 4px;
-    background: linear-gradient(90deg, #003366, #0066cc, #003366);
+    background: linear-gradient(90deg, var(--color-navy), #0066cc, var(--color-navy));
   }
   .military-background-decoration {
     position: absolute;
@@ -553,7 +553,7 @@ const redirectToList = () => {
     overflow: hidden;
   }
   .import-header {
-    background: #003366;
+    background: var(--color-navy);
     color: #fff;
     padding: 20px 30px;
   }
@@ -599,7 +599,7 @@ const redirectToList = () => {
   }
   .important-text {
     font-size: 16px;
-    color: #003366;
+    color: var(--color-navy);
     font-weight: bold;
     margin-bottom: 20px;
   }
@@ -612,7 +612,7 @@ const redirectToList = () => {
     }
   }
   .military-btn {
-    background: linear-gradient(90deg, #003366, #0066cc);
+    background: linear-gradient(90deg, var(--color-navy), #0066cc);
     border-color: #0066cc;
     color: #fff;
     &:hover {
@@ -643,7 +643,7 @@ const redirectToList = () => {
     }
     .guideline-content h3 {
       font-size: 16px;
-      color: #003366;
+      color: var(--color-navy);
       margin-bottom: 10px;
     }
     .guideline-content p {
@@ -696,7 +696,7 @@ const redirectToList = () => {
       margin-bottom: 20px;
       h3 {
         font-size: 18px;
-        color: #003366;
+        color: var(--color-navy);
       }
       .preview-tip {
         color: var(--color-text-regular);
