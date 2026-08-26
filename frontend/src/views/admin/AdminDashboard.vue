@@ -323,7 +323,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .admin-dashboard {
   display: flex;
   flex-direction: column;

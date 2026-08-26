@@ -955,7 +955,7 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .analytics-dashboard {
   display: flex;
   flex-direction: column;

@@ -776,7 +776,7 @@ async function handlePurge(row: any) {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .school-mgmt-list-page {
   padding: 20px;
 }

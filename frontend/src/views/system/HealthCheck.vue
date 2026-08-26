@@ -508,7 +508,7 @@ function exportReport(): void {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .health-check-page {
   display: flex;
   flex-direction: column;

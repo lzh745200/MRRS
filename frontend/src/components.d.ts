@@ -12,6 +12,7 @@ declare module 'vue' {
     BusinessDataTableDataTable: typeof import('./components/business/DataTable/DataTable.vue')['default']
     BusinessEmptyStateEmptyState: typeof import('./components/business/EmptyState/EmptyState.vue')['default']
     BusinessFormBuilderFormBuilder: typeof import('./components/business/FormBuilder/FormBuilder.vue')['default']
+    BusinessFundGuidePopover: typeof import('./components/business/FundGuidePopover.vue')['default']
     BusinessKpiCard: typeof import('./components/business/KpiCard.vue')['default']
     BusinessProgressAlbum: typeof import('./components/business/ProgressAlbum.vue')['default']
     BusinessProjectCard: typeof import('./components/business/ProjectCard.vue')['default']
