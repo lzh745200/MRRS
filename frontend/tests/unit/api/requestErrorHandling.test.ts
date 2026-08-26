@@ -157,6 +157,28 @@ describe('api/request — 拦截器未覆盖分支', () => {
       expect(capturedCancels[0]).toHaveBeenCalled()
       expect(capturedCancels[1]).not.toHaveBeenCalled()
     })
+
+    it('W3-T4：POST 不参与去重——同端点并发 POST 均不注册/触发取消', async () => {
+      capturedCancels.length = 0
+      const before = capturedCancels.length
+      const c1 = makeConfig({ method: 'POST', url: '/items', data: { n: 1 } })
+      const c2 = makeConfig({ method: 'POST', url: '/items', data: { n: 2 } })
+      await handlers.request(c1)
+      await handlers.request(c2)
+      // 无 CancelToken 注册、无前序取消
+      expect(capturedCancels.length).toBe(before)
+      expect(c1.cancelToken).toBeUndefined()
+      expect(c2.cancelToken).toBeUndefined()
+    })
+
+    it('W3-T4：PUT/DELETE 同样不参与去重', async () => {
+      capturedCancels.length = 0
+      for (const method of ['PUT', 'DELETE']) {
+        const c = makeConfig({ method, url: '/things/1' })
+        await handlers.request(c)
+        expect(c.cancelToken).toBeUndefined()
+      }
+    })
   })
 
   describe('response interceptor — success 边界', () => {
@@ -362,6 +384,17 @@ describe('api/request — 拦截器未覆盖分支', () => {
         response: { status: 401, data: {} },
         config: makeConfig({ url: '/auth/login' }),
       }
+      await expect(handlers.responseR(error)).rejects.toBe(error)
+      expect(mockAuthStorage.clear).toHaveBeenCalled()
+      expect(mockAxiosPost).not.toHaveBeenCalled()
+    })
+
+    it('W3-T5：已带 _retry 标记再次 401 → 直接登出，不再进入 refresh', async () => {
+      authState.refreshToken = 'refresh-1'
+      mockAxiosPost.mockClear()
+      const originalRequest = makeConfig({ url: '/data' })
+      ;(originalRequest as any)._retry = true
+      const error = { response: { status: 401, data: {} }, config: originalRequest }
       await expect(handlers.responseR(error)).rejects.toBe(error)
       expect(mockAuthStorage.clear).toHaveBeenCalled()
       expect(mockAxiosPost).not.toHaveBeenCalled()
