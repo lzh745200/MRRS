@@ -598,14 +598,14 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   padding: 20px 24px;
   margin-bottom: 20px;
-  border-left: 4px solid #1b4332;
+  border-left: 4px solid var(--color-primary-dark-1);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .page-title {
   font-size: 22px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 0 0 4px 0;
 }
 
@@ -720,7 +720,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: var(--color-text-primary);
   padding-left: 10px;
-  border-left: 3px solid #1b4332;
+  border-left: 3px solid var(--color-primary-dark-1);
 }
 
 .chart-body {
@@ -749,7 +749,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: var(--color-text-primary);
   padding-left: 10px;
-  border-left: 3px solid #1b4332;
+  border-left: 3px solid var(--color-primary-dark-1);
 }
 
 .table-filters {

@@ -331,7 +331,12 @@
     </el-dialog>
 
     <!-- 任务分配对话框 -->
-    <el-dialog v-model="assignDialogVisible" title="分配任务" :width="DIALOG_SM" class="assign-dialog">
+    <el-dialog
+      v-model="assignDialogVisible"
+      title="分配任务"
+      :width="DIALOG_SM"
+      class="assign-dialog"
+    >
       <el-form
         ref="assignFormRef"
         :model="assignForm"

@@ -65,8 +65,8 @@ function handleTabChange(name: string | number) {
 }
 
 .rural-works-tabs :deep(.el-tabs__header) {
-  background: linear-gradient(135deg, #081c15 0%, #1b4332 100%);
-  border-bottom: 2px solid #d4af37;
+  background: linear-gradient(135deg, var(--color-primary-dark-2) 0%, #1b4332 100%);
+  border-bottom: 2px solid var(--color-accent-gold);
   margin: 0;
 }
 
@@ -80,11 +80,11 @@ function handleTabChange(name: string | number) {
 }
 
 .rural-works-tabs :deep(.el-tabs__item:hover) {
-  color: #d4af37;
+  color: var(--color-accent-gold);
 }
 
 .rural-works-tabs :deep(.el-tabs__item.is-active) {
-  color: #d4af37;
+  color: var(--color-accent-gold);
   background: rgba(212, 175, 55, 0.12);
 }
 

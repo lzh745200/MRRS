@@ -331,7 +331,7 @@
               </template>
             </el-table-column>
           </el-table>
-          <EmptyState text="无活跃会话" v-else-if="!sessionsLoading" :size="40" />
+          <EmptyState v-else-if="!sessionsLoading" text="无活跃会话" :size="40" />
         </div>
         <div class="session-actions">
           <el-button type="warning" size="small" :loading="resetting2fa" @click="handleReset2fa">

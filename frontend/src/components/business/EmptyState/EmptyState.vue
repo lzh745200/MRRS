@@ -28,7 +28,7 @@ const props = withDefaults(
     action?: string
     size?: number
   }>(),
-  { type: 'no-data', text: '', action: '', size: 96 },
+  { type: 'no-data', text: '', action: '', size: 96 }
 )
 
 defineEmits<{ (e: 'action'): void }>()

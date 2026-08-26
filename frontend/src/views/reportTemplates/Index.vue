@@ -42,7 +42,10 @@
     <el-tabs v-model="activeTab" type="border-card" @tab-change="onFilterChange">
       <el-tab-pane label="导入模板" name="import">
         <div v-loading="loading" class="template-grid">
-          <EmptyState text="暂无导入模板，点击右上角创建" v-if="displayTemplates.length === 0 && !loading" />
+          <EmptyState
+            v-if="displayTemplates.length === 0 && !loading"
+            text="暂无导入模板，点击右上角创建"
+          />
           <div v-for="t in displayTemplates" :key="t.id" class="template-item">
             <el-icon class="t-icon"><component :is="moduleIcon(t.module)" /></el-icon>
             <div class="t-info">
@@ -70,7 +73,10 @@
       </el-tab-pane>
       <el-tab-pane label="导出模板" name="export">
         <div v-loading="loading" class="template-grid">
-          <EmptyState text="暂无导出模板，点击右上角创建" v-if="displayTemplates.length === 0 && !loading" />
+          <EmptyState
+            v-if="displayTemplates.length === 0 && !loading"
+            text="暂无导出模板，点击右上角创建"
+          />
           <div v-for="t in displayTemplates" :key="t.id" class="template-item">
             <el-icon class="t-icon"><component :is="moduleIcon(t.module)" /></el-icon>
             <div class="t-info">
@@ -98,7 +104,12 @@
     </el-tabs>
 
     <!-- 新建模板对话框 -->
-    <el-dialog v-model="showCreateDialog" title="新建模板" :width="DIALOG_SM" @closed="resetCreateForm">
+    <el-dialog
+      v-model="showCreateDialog"
+      title="新建模板"
+      :width="DIALOG_SM"
+      @closed="resetCreateForm"
+    >
       <el-form ref="createFormRef" :model="newTemplate" :rules="createRules" label-width="100px">
         <el-form-item label="模板名称" prop="name">
           <el-input
@@ -897,7 +908,7 @@ onMounted(loadTemplates)
 .page-title {
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 0 0 4px;
 }
 .page-desc {
@@ -923,7 +934,7 @@ onMounted(loadTemplates)
   align-items: center;
   gap: 16px;
   padding: 16px;
-  background: #fafafa;
+  background: var(--color-bg-hover);
   border-radius: 8px;
   border: 1px solid #eee;
   transition:
@@ -951,7 +962,7 @@ onMounted(loadTemplates)
 .t-info h4 {
   margin: 0;
   font-size: 15px;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .t-info p {
   margin: 0 0 4px;
@@ -960,7 +971,7 @@ onMounted(loadTemplates)
 }
 .t-meta {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 .t-actions {
   display: flex;
@@ -978,7 +989,7 @@ onMounted(loadTemplates)
 .preview-fields h4 {
   margin: 0 0 8px;
   font-size: 14px;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .error-list {

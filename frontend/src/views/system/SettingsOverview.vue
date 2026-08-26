@@ -605,7 +605,7 @@ onMounted(() => {
 .page-title {
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 0 0 4px;
 }
 .page-desc {
@@ -635,7 +635,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 /* ── 健康状态卡片 ── */
@@ -677,7 +677,7 @@ onMounted(() => {
   background: var(--color-danger);
 }
 .status-card.level-gray::before {
-  background: #c0c4cc;
+  background: var(--color-text-placeholder, #c0c4cc);
 }
 .status-card:hover {
   transform: translateY(-3px);
@@ -708,7 +708,7 @@ onMounted(() => {
   animation: dot-pulse-red 1.6s infinite;
 }
 .dot-gray {
-  background: #c0c4cc;
+  background: var(--color-text-placeholder, #c0c4cc);
 }
 @keyframes dot-pulse-green {
   0% {
@@ -750,7 +750,7 @@ onMounted(() => {
 .status-value {
   font-size: 20px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin-bottom: 4px;
   font-variant-numeric: tabular-nums;
 }
@@ -813,7 +813,7 @@ onMounted(() => {
 .nav-arrow {
   flex: none;
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder, #c0c4cc);
   transition:
     transform 0.2s ease,
     color 0.2s ease;
@@ -851,6 +851,6 @@ onMounted(() => {
 }
 .version-copyright {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder, #c0c4cc);
 }
 </style>

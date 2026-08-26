@@ -224,7 +224,7 @@ const goToLogin = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #081c15 0%, $military-dark 100%);
+  background: linear-gradient(135deg, var(--color-primary-dark-2) 0%, $military-dark 100%);
   position: relative;
   padding: 20px;
   overflow-y: auto;
@@ -269,7 +269,7 @@ const goToLogin = () => {
   justify-content: center;
   width: 80px;
   height: 80px;
-  background: linear-gradient(135deg, $badge-gold, #c9a227);
+  background: linear-gradient(135deg, $badge-gold, var(--color-accent-gold));
   border-radius: 50%;
   margin-bottom: 20px;
   box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);
@@ -384,7 +384,7 @@ const goToLogin = () => {
   padding: 16px 20px;
   background: rgba(0, 0, 0, 0.06);
   border-radius: 8px;
-  border: 1px dashed #dcdfe6;
+  border: 1px dashed var(--color-border);
 }
 .password-text {
   font-size: 22px;

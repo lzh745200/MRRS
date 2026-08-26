@@ -224,7 +224,7 @@ onMounted(() => {
   height: 64px;
   margin: 0 auto 14px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #1b4332, var(--color-primary-light-1));
+  background: linear-gradient(135deg, var(--color-primary-dark-1), var(--color-primary-light-1));
   color: var(--color-text-inverse);
   display: flex;
   align-items: center;
@@ -234,7 +234,7 @@ onMounted(() => {
 .app-name {
   font-size: 26px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   letter-spacing: 2px;
   margin: 0 0 6px;
 }
@@ -257,7 +257,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .card-header {
   display: flex;
@@ -279,7 +279,7 @@ onMounted(() => {
 .about-footer {
   text-align: center;
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder, #c0c4cc);
   padding: 4px 0 12px;
 }
 </style>

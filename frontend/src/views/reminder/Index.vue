@@ -24,7 +24,7 @@
         <el-tag v-if="unread > 0" type="danger" size="small">未读 {{ unread }}</el-tag>
       </template>
 
-      <EmptyState text="暂无提醒，一切正常" v-if="!items.length" />
+      <EmptyState v-if="!items.length" text="暂无提醒，一切正常" />
       <div v-else class="reminder-list">
         <div v-for="r in items" :key="r.id" class="reminder-item">
           <el-tag :type="tagType(r.type)" size="small" class="rtype">{{

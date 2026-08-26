@@ -645,7 +645,7 @@ onMounted(() => {
 .permission-tree {
   max-height: 400px;
   overflow-y: auto;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   padding: 10px;
 }

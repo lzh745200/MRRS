@@ -278,8 +278,12 @@
           </template>
         </el-table-column>
       </el-table>
-      <EmptyState text="暂无帮扶经费数据，请选择年度添加" v-else
-        style="margin-bottom: 16px" :size="60" />
+      <EmptyState
+        v-else
+        text="暂无帮扶经费数据，请选择年度添加"
+        style="margin-bottom: 16px"
+        :size="60"
+      />
 
       <!-- 合计行 -->
       <el-descriptions v-if="transitionFundingRows.length > 0" :column="2" border size="small">

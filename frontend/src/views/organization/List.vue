@@ -602,7 +602,7 @@ onMounted(() => {
 .stat-value {
   font-size: 24px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   line-height: 1.2;
 }
 .stat-label {

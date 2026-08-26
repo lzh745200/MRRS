@@ -266,7 +266,7 @@
           </el-table-column>
         </el-table>
       </div>
-      <EmptyState text="加载中..." v-else />
+      <EmptyState v-else text="加载中..." />
     </el-dialog>
   </div>
 </template>
@@ -736,7 +736,7 @@ onMounted(() => {
     font-size: 13px;
 
     &.muted {
-      color: #c0c4cc;
+      color: var(--color-text-placeholder, #c0c4cc);
     }
   }
 

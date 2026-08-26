@@ -58,7 +58,7 @@ const refresh = () => {
 .error-code {
   font-size: 72px;
   font-weight: bold;
-  color: #d4af37;
+  color: var(--color-accent-gold);
   margin-bottom: 20px;
 }
 
@@ -73,7 +73,7 @@ const refresh = () => {
   font-size: 16px;
   line-height: 1.6;
   margin-bottom: 30px;
-  color: #ccc;
+  color: var(--color-text-disabled, var(--color-text-secondary));
 }
 
 .error-actions {

@@ -217,7 +217,7 @@ const copyAllInfo = () => {
   align-items: center;
   justify-content: center;
   overflow-y: auto;
-  background: linear-gradient(135deg, #081c15 0%, $military-dark 100%);
+  background: linear-gradient(135deg, var(--color-primary-dark-2) 0%, $military-dark 100%);
   position: relative;
   padding: 20px;
   box-sizing: border-box;
@@ -269,7 +269,7 @@ const copyAllInfo = () => {
   justify-content: center;
   width: 80px;
   height: 80px;
-  background: linear-gradient(135deg, $badge-gold, #c9a227);
+  background: linear-gradient(135deg, $badge-gold, var(--color-accent-gold));
   border-radius: 50%;
   margin-bottom: 20px;
   box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);

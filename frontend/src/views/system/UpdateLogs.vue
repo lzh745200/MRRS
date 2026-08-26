@@ -75,7 +75,7 @@
         </el-timeline>
       </div>
 
-      <EmptyState text="暂无更新记录" v-else />
+      <EmptyState v-else text="暂无更新记录" />
 
       <!-- 分页 -->
       <div v-if="total > pageSize" class="pagination-wrapper">

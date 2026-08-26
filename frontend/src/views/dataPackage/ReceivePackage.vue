@@ -219,7 +219,7 @@
             </el-table-column>
           </el-table>
 
-          <EmptyState text="暂无数据包" v-if="!loading && reports.length === 0" />
+          <EmptyState v-if="!loading && reports.length === 0" text="暂无数据包" />
 
           <div v-if="total > 0" class="pagination">
             <el-pagination
@@ -295,7 +295,7 @@
             </el-table-column>
           </el-table>
 
-          <EmptyState text="暂无接收记录" v-if="!receivedLoading && receivedItems.length === 0" />
+          <EmptyState v-if="!receivedLoading && receivedItems.length === 0" text="暂无接收记录" />
 
           <div v-if="receivedTotal > 0" class="pagination">
             <el-pagination
@@ -360,7 +360,7 @@
           </el-tab-pane>
         </el-tabs>
       </div>
-      <EmptyState text="暂无预览数据" v-else />
+      <EmptyState v-else text="暂无预览数据" />
     </el-dialog>
 
     <!-- 拒绝对话框 -->

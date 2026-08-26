@@ -385,7 +385,7 @@ onMounted(async () => {
 
 .result-count {
   font-size: 14px;
-  color: #ccc;
+  color: var(--color-text-disabled, var(--color-text-secondary));
 }
 
 .search-form {

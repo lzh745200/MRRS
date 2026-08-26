@@ -200,7 +200,7 @@ function deleteEvent() {
 .page-title {
   font-size: 24px;
   font-weight: 700;
-  color: #1a3c2a;
+  color: var(--color-primary-dark-1);
   margin: 0;
 }
 .page-desc {
@@ -221,7 +221,7 @@ function deleteEvent() {
   font-weight: 600;
 }
 .today .day-num {
-  color: #d4af37;
+  color: var(--color-accent-gold);
   font-weight: 700;
 }
 .events {

@@ -1353,7 +1353,7 @@ const getQualityScoreClass = (score: number) => {
 
     .indicator-description {
       font-size: 14px;
-      color: #999;
+      color: var(--color-text-secondary);
     }
   }
 }
@@ -1458,7 +1458,7 @@ const getQualityScoreClass = (score: number) => {
 
     &.not-evaluated {
       background-color: #f5f5f5;
-      color: #999;
+      color: var(--color-text-secondary);
     }
   }
 }

@@ -2,10 +2,7 @@
   <div class="school-mgmt-list-page">
     <!-- 页面头部 -->
     <!-- 页面头部区（PageHeader 标准件 · T1 契约） -->
-    <PageHeader
-      title="帮扶学校管理"
-      subtitle="管理帮扶学校信息，跟踪教育帮扶进展"
-    >
+    <PageHeader title="帮扶学校管理" subtitle="管理帮扶学校信息，跟踪教育帮扶进展">
       <template #extra>
         <el-button type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新增学校
@@ -251,7 +248,12 @@
     </div>
 
     <!-- 导入对话框 -->
-    <el-dialog v-model="showImportDialog" title="导入帮扶学校数据" :width="DIALOG_SM" destroy-on-close>
+    <el-dialog
+      v-model="showImportDialog"
+      title="导入帮扶学校数据"
+      :width="DIALOG_SM"
+      destroy-on-close
+    >
       <div class="import-dialog-body">
         <el-alert
           title="请先下载模板，按模板格式填写学校数据后上传"
@@ -790,7 +792,7 @@ async function handlePurge(row: any) {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .page-desc {

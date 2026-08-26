@@ -188,7 +188,7 @@
         </div>
       </div>
     </template>
-    <EmptyState type="no-permission" text="无权限访问此页面" v-else />
+    <EmptyState v-else type="no-permission" text="无权限访问此页面" />
   </div>
 </template>
 
@@ -331,7 +331,12 @@ onMounted(() => {
 }
 
 .admin-banner {
-  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 50%, var(--color-primary-light-1) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-dark-1) 0%,
+    var(--color-primary) 50%,
+    var(--color-primary-light-1) 100%
+  );
   border-radius: 12px;
   padding: 24px 32px;
   color: white;
@@ -359,8 +364,8 @@ onMounted(() => {
 }
 
 .action-btn.gold {
-  background: linear-gradient(135deg, #d4af37, #c9a227);
-  color: #1b4332;
+  background: linear-gradient(135deg, var(--color-accent-gold), #c9a227);
+  color: var(--color-primary-dark-1);
   border: none;
   padding: 10px 20px;
   border-radius: 8px;
@@ -413,7 +418,7 @@ onMounted(() => {
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .stat-trend {

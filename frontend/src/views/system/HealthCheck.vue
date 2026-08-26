@@ -521,7 +521,12 @@ function exportReport(): void {
   position: relative;
   overflow: hidden;
   border: none;
-  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 70%, var(--color-primary-light-1) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-dark-1) 0%,
+    var(--color-primary) 70%,
+    var(--color-primary-light-1) 100%
+  );
 }
 .header-card :deep(.el-card__body) {
   position: relative;
@@ -547,7 +552,7 @@ function exportReport(): void {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
@@ -581,7 +586,7 @@ function exportReport(): void {
   letter-spacing: 4px;
   background: var(--color-bg-card);
   border-color: var(--color-text-inverse);
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
   transition:
     transform 0.2s ease,
@@ -593,7 +598,7 @@ function exportReport(): void {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
   background: #d8f3dc;
   border-color: #d8f3dc;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 /* 心电图装饰线 */
@@ -663,7 +668,7 @@ function exportReport(): void {
 .score-num {
   font-size: 34px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .score-num i {
   font-style: normal;
@@ -684,7 +689,7 @@ function exportReport(): void {
 .score-title {
   font-size: 18px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .score-tags {
   display: flex;
@@ -721,7 +726,7 @@ function exportReport(): void {
 .check-card {
   height: 100%;
   border: none;
-  border-left: 4px solid #dcdfe6;
+  border-left: 4px solid var(--color-border);
   border-radius: 8px;
   transition:
     transform 0.2s ease,

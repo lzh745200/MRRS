@@ -175,7 +175,7 @@
                 </div>
               </div>
             </div>
-            <EmptyState text="暂无电子资料" v-else :size="40" />
+            <EmptyState v-else text="暂无电子资料" :size="40" />
           </div>
         </el-form-item>
 
@@ -458,7 +458,7 @@ onMounted(() => {
 .title {
   font-size: 16px;
   font-weight: bold;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 :deep(.el-form-item__label) {

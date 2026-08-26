@@ -47,7 +47,7 @@
         </div>
 
         <!-- Empty state -->
-        <EmptyState text="暂无进度照片，请在附件管理中上传进度照片" v-if="!progressFiles.length" />
+        <EmptyState v-if="!progressFiles.length" text="暂无进度照片，请在附件管理中上传进度照片" />
 
         <!-- Photo gallery -->
         <div v-else class="photo-grid">
@@ -383,7 +383,7 @@ onUnmounted(() => {
         align-items: center;
         justify-content: center;
         height: 180px;
-        color: #c0c4cc;
+        color: var(--color-text-placeholder, #c0c4cc);
         gap: 8px;
         background: var(--color-bg-hover);
       }
@@ -443,7 +443,7 @@ onUnmounted(() => {
         }
 
         .comparison-arrow {
-          color: #c0c4cc;
+          color: var(--color-text-placeholder, #c0c4cc);
           flex-shrink: 0;
         }
       }

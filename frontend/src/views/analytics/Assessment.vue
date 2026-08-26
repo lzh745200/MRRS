@@ -6,7 +6,11 @@
     </div>
 
     <!-- 无数据时显示空状态 -->
-    <EmptyState text="暂无评估数据，请先录入帮扶村年度收入数据" v-if="!loading && !error && scores.length === 0" :size="160" />
+    <EmptyState
+      v-if="!loading && !error && scores.length === 0"
+      text="暂无评估数据，请先录入帮扶村年度收入数据"
+      :size="160"
+    />
 
     <!-- 错误状态 -->
     <el-alert
@@ -207,7 +211,7 @@ onMounted(async () => {
 .page-header h2 {
   font-size: 24px;
   font-weight: 700;
-  color: #1a3c2a;
+  color: var(--color-primary-dark-1);
   margin: 0;
 }
 .page-desc {

@@ -126,7 +126,7 @@
             :option="yearlyTrendAreaOption"
             height="300px"
           />
-          <EmptyState text="暂无年度趋势数据" v-else />
+          <EmptyState v-else text="暂无年度趋势数据" />
         </el-card>
       </el-col>
       <el-col :span="12">
@@ -143,7 +143,7 @@
             :option="utilizationTrendOption"
             height="300px"
           />
-          <EmptyState text="暂无利用率趋势数据" v-else />
+          <EmptyState v-else text="暂无利用率趋势数据" />
         </el-card>
       </el-col>
     </el-row>
@@ -568,7 +568,7 @@ onMounted(() => {
 }
 
 :deep(.el-card__header) {
-  background: linear-gradient(135deg, var(--color-primary) 0%, #1b4332 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark-1) 100%);
   border-bottom: 1px solid rgba(64, 145, 108, 0.3);
   color: var(--color-text-inverse);
 }

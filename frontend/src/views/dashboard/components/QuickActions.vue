@@ -305,7 +305,7 @@ const activeGroups = ref(['core'])
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-bg-card);
   cursor: pointer;
@@ -341,7 +341,7 @@ const activeGroups = ref(['core'])
     }
   }
   &.secondary {
-    background: #fafafa;
+    background: var(--color-bg-hover);
     &:hover {
       background: #f0f2f5;
     }

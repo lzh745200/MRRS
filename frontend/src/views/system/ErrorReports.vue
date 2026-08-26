@@ -191,7 +191,12 @@
     </el-card>
 
     <!-- 错误详情弹窗 -->
-    <el-dialog v-model="detailVisible" title="错误详情" :width="DIALOG_MD" :close-on-click-modal="false">
+    <el-dialog
+      v-model="detailVisible"
+      title="错误详情"
+      :width="DIALOG_MD"
+      :close-on-click-modal="false"
+    >
       <template v-if="detailLoading">
         <el-skeleton :rows="10" animated />
       </template>
@@ -582,7 +587,7 @@ onMounted(() => {
 }
 
 .empty-hint {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder, #c0c4cc);
   font-size: 13px;
 }
 

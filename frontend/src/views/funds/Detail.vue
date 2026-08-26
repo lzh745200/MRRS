@@ -370,7 +370,7 @@
                     </template>
                   </el-table-column>
                 </el-table>
-                <EmptyState text="暂无附件" v-else />
+                <EmptyState v-else text="暂无附件" />
               </div>
             </div>
           </el-tab-pane>
@@ -401,7 +401,7 @@
               <el-table-column prop="handler" label="经办人" width="100" />
               <el-table-column prop="receipt_number" label="票据号" width="120" />
             </el-table>
-            <EmptyState text="暂无报销记录" v-if="!expenses.length && !loadingExpenses" />
+            <EmptyState v-if="!expenses.length && !loadingExpenses" text="暂无报销记录" />
           </el-tab-pane>
         </el-tabs>
       </template>
@@ -1405,7 +1405,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .header-actions {
   display: flex;
@@ -1441,7 +1441,7 @@ onUnmounted(() => {
 }
 .card-header {
   padding: 16px 24px;
-  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 100%);
+  background: linear-gradient(135deg, var(--color-primary-dark-1) 0%, var(--color-primary) 100%);
 }
 .card-header h3 {
   margin: 0;
@@ -1455,7 +1455,7 @@ onUnmounted(() => {
 .amount-text {
   font-size: 16px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .workflow-bar {
   display: flex;
@@ -1492,7 +1492,7 @@ onUnmounted(() => {
 }
 .att-size {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 :deep(.el-descriptions__label) {
   font-weight: 500;
@@ -1527,7 +1527,7 @@ onUnmounted(() => {
 }
 :deep(.el-tabs--border-card > .el-tabs__header .el-tabs__item.is-active) {
   background: white;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 /* 文本样式 */
@@ -1535,7 +1535,7 @@ onUnmounted(() => {
   color: var(--color-info);
 }
 .text-primary {
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   font-weight: 500;
 }
 </style>

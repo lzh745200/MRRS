@@ -220,7 +220,7 @@ const showPassCodeHelp = () => {
 
 <style scoped lang="scss">
 .register-container {
-  --military-dark: #081c15;
+  --military-dark: var(--color-primary-dark-2);
   --military-green: $military-dark;
   --military-gold: $badge-gold;
   --military-gold-light: $badge-gold-lighter;

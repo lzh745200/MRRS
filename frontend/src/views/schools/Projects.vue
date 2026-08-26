@@ -287,6 +287,6 @@ onMounted(() => loadProjects())
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 </style>

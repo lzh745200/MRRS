@@ -149,7 +149,7 @@
             </el-table-column>
           </el-table>
         </div>
-        <EmptyState text="加载中..." v-else :size="60" />
+        <EmptyState v-else text="加载中..." :size="60" />
       </div>
       <template #footer>
         <el-button @click="detailDialogVisible = false">关闭</el-button>

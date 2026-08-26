@@ -428,7 +428,7 @@ onMounted(() => {
 .page-title {
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 0 0 4px;
 }
 .page-desc {
@@ -451,7 +451,7 @@ onMounted(() => {
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .stat-card.warning .stat-value {
   color: var(--color-warning);

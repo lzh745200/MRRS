@@ -82,7 +82,7 @@
               </div>
             </div>
           </div>
-          <EmptyState text="暂无月度数据" v-else />
+          <EmptyState v-else text="暂无月度数据" />
         </el-card>
       </el-col>
     </el-row>

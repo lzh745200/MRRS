@@ -220,7 +220,7 @@ onMounted(() => {
 }
 .page-title {
   margin: 0 0 6px;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   font-size: 22px;
 }
 .page-desc {
@@ -243,7 +243,7 @@ onMounted(() => {
 .stat-num {
   font-size: 30px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .stat-label {
   margin-top: 6px;
@@ -283,7 +283,7 @@ onMounted(() => {
   margin-top: 8px;
   font-size: 16px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .entry-desc {
   margin-top: 4px;

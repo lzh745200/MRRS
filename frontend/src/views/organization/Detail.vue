@@ -104,7 +104,7 @@
             </el-table-column>
             <el-table-column prop="sort_order" label="排序" width="70" align="center" />
           </el-table>
-          <EmptyState text="暂无下属组织" v-else :size="60" />
+          <EmptyState v-else text="暂无下属组织" :size="60" />
         </el-card>
       </el-col>
 
@@ -167,7 +167,7 @@
             style="margin-top: 12px; justify-content: center"
             @current-change="loadMembers"
           />
-          <EmptyState text="暂无成员" v-if="!memberLoading && members.length === 0" :size="40" />
+          <EmptyState v-if="!memberLoading && members.length === 0" text="暂无成员" :size="40" />
         </el-card>
       </el-col>
     </el-row>
@@ -363,7 +363,7 @@ onMounted(() => {
 .mini-stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .mini-stat-label {
   font-size: 13px;

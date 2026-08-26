@@ -2,10 +2,7 @@
   <div v-watermark class="projects-page">
     <!-- 页面头部 -->
     <!-- 页面头部区（PageHeader 标准件 · T1 契约） -->
-    <PageHeader
-      title="帮扶项目管理"
-      subtitle="管理所有乡村振兴帮扶项目，涵盖16个帮扶数据板块"
-    >
+    <PageHeader title="帮扶项目管理" subtitle="管理所有乡村振兴帮扶项目，涵盖16个帮扶数据板块">
       <template #extra>
         <el-button type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建项目
@@ -647,7 +644,7 @@ onMounted(() => {
 .page-title {
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 0 0 4px 0;
 }
 
@@ -696,7 +693,7 @@ onMounted(() => {
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .stat-value.text-primary {

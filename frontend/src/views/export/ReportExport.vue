@@ -563,13 +563,13 @@ onMounted(() => {
 
         .type-name {
           font-weight: 600;
-          color: #333;
+          color: var(--color-text-primary);
           margin-bottom: 4px;
         }
 
         .type-desc {
           font-size: 12px;
-          color: #999;
+          color: var(--color-text-secondary);
         }
       }
     }
@@ -605,7 +605,7 @@ onMounted(() => {
 
       &:hover {
         background-color: var(--color-bg-hover);
-        border-color: #c0c4cc;
+        border-color: var(--color-text-placeholder, #c0c4cc);
       }
     }
 
@@ -622,12 +622,12 @@ onMounted(() => {
 
     .report-name {
       font-weight: 600;
-      color: #333;
+      color: var(--color-text-primary);
       font-size: 15px;
     }
 
     .report-desc {
-      color: #999;
+      color: var(--color-text-secondary);
       font-size: 12px;
       margin-top: 4px;
     }

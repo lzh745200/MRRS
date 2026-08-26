@@ -154,7 +154,7 @@
         </el-table-column>
       </el-table>
 
-      <EmptyState text="暂无备份记录" v-if="!loading && !backupList.length" />
+      <EmptyState v-if="!loading && !backupList.length" text="暂无备份记录" />
     </el-card>
 
     <!-- 备份计划配置 -->

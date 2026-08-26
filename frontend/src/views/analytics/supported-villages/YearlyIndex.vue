@@ -78,7 +78,7 @@ onMounted(loadVillages)
   margin: 0;
 }
 .no-data {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder, #c0c4cc);
   font-size: 13px;
 }
 </style>

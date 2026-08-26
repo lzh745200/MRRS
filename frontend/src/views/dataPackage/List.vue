@@ -151,7 +151,7 @@
           </el-tab-pane>
         </el-tabs>
       </div>
-      <EmptyState text="暂无预览数据" v-else />
+      <EmptyState v-else text="暂无预览数据" />
     </el-dialog>
   </div>
 </template>

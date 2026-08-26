@@ -422,7 +422,7 @@ function handleReset() {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .page-desc {
@@ -478,7 +478,7 @@ function handleReset() {
 
 .id-empty {
   font-size: 13px;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder, #c0c4cc);
 }
 
 .action-bar {
@@ -514,7 +514,7 @@ function handleReset() {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 100%);
+  background: linear-gradient(135deg, var(--color-primary-dark-1) 0%, var(--color-primary) 100%);
 }
 
 .card-header h3 {

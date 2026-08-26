@@ -39,7 +39,7 @@
           <el-tag size="small" type="info" style="margin-right: 8px">{{ item.category }}</el-tag>
           <span class="search-snippet" v-html="highlightKeyword(item.snippet)" />
         </div>
-        <EmptyState type="no-search" text="未找到相关文档" v-if="searchTotal === 0" />
+        <EmptyState v-if="searchTotal === 0" type="no-search" text="未找到相关文档" />
       </el-card>
     </div>
 
@@ -63,7 +63,11 @@
               <el-tag size="small" type="info">{{ cat.count }}</el-tag>
             </div>
           </div>
-          <EmptyState text="暂无分类" v-if="categories.length === 0 && !loadingCategories" :size="40" />
+          <EmptyState
+            v-if="categories.length === 0 && !loadingCategories"
+            text="暂无分类"
+            :size="40"
+          />
         </el-card>
       </div>
 
@@ -121,7 +125,7 @@
             @current-change="loadArticles"
           />
 
-          <EmptyState text="暂无文档" v-if="!loadingArticles && articles.length === 0" />
+          <EmptyState v-if="!loadingArticles && articles.length === 0" text="暂无文档" />
         </el-card>
 
         <!-- 文章详情 -->
@@ -170,7 +174,7 @@
             </div>
             <div v-if="!articleSections.length" class="article-content" v-html="sanitizedContent" />
           </div>
-          <EmptyState type="error" text="文档加载失败" v-else />
+          <EmptyState v-else type="error" text="文档加载失败" />
         </el-card>
 
         <!-- 系统信息 -->
@@ -563,7 +567,7 @@ onMounted(() => {
     font-weight: 600;
     color: $military-dark;
     padding-left: 10px;
-    border-left: 3px solid #c9a227;
+    border-left: 3px solid var(--color-accent-gold);
   }
 
   .article-section-line {

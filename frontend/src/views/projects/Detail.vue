@@ -123,7 +123,7 @@
               </template>
             </el-table-column>
           </el-table>
-          <EmptyState text="暂无里程碑，点击右上角新增" v-if="!milestones.length && !msLoading" />
+          <EmptyState v-if="!milestones.length && !msLoading" text="暂无里程碑，点击右上角新增" />
         </el-tab-pane>
         <el-tab-pane label="任务" name="tasks">
           <!-- 任务完成进度与状态分布 -->
@@ -243,7 +243,7 @@
         <!-- 变更历史 -->
         <el-tab-pane label="变更历史" name="history">
           <div v-loading="historyLoading">
-            <EmptyState text="暂无变更记录" v-if="!history.length" />
+            <EmptyState v-if="!history.length" text="暂无变更记录" />
             <el-timeline v-else>
               <el-timeline-item
                 v-for="(item, idx) in history"

@@ -76,7 +76,7 @@
               />
             </div>
           </div>
-          <EmptyState text="暂无预算数据" v-else-if="!loading" :size="60" />
+          <EmptyState v-else-if="!loading" text="暂无预算数据" :size="60" />
         </div>
       </div>
     </div>
@@ -136,7 +136,10 @@
             </template>
           </el-table-column>
         </el-table>
-        <EmptyState text="暂无预算记录，点击“新增预算”添加" v-if="budgetData.length === 0 && !loading" />
+        <EmptyState
+          v-if="budgetData.length === 0 && !loading"
+          text="暂无预算记录，点击“新增预算”添加"
+        />
       </div>
     </div>
 
@@ -513,7 +516,7 @@ onMounted(() => loadBudgets())
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .header-actions {
@@ -540,7 +543,7 @@ onMounted(() => loadBudgets())
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   line-height: 1.2;
 }
 
@@ -577,7 +580,7 @@ onMounted(() => loadBudgets())
 
 .card-header {
   padding: 16px 24px;
-  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 100%);
+  background: linear-gradient(135deg, var(--color-primary-dark-1) 0%, var(--color-primary) 100%);
 }
 
 .card-header h3 {
@@ -593,7 +596,7 @@ onMounted(() => loadBudgets())
 
 .amount-text {
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 /* 预算执行概览 */
@@ -629,7 +632,7 @@ onMounted(() => loadBudgets())
 .category-progress-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin-bottom: 12px;
 }
 
@@ -659,7 +662,7 @@ onMounted(() => loadBudgets())
 .progress-name {
   font-size: 14px;
   font-weight: 500;
-  color: #333;
+  color: var(--color-text-primary);
 }
 
 .progress-amounts {

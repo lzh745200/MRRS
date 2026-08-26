@@ -215,7 +215,7 @@
         </el-tabs>
       </div>
     </template>
-    <EmptyState type="no-permission" text="无权限访问此页面" v-else />
+    <EmptyState v-else type="no-permission" text="无权限访问此页面" />
   </div>
 </template>
 
@@ -462,7 +462,7 @@ onMounted(() => {
 
 .pass-code-hint {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .pass-code-display {

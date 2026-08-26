@@ -123,7 +123,7 @@
     </el-card>
 
     <!-- 空状态 -->
-    <EmptyState text="点击重新检查按钮开始环境诊断" v-if="!checking && !envData && !checkError" />
+    <EmptyState v-if="!checking && !envData && !checkError" text="点击重新检查按钮开始环境诊断" />
   </div>
 </template>
 
@@ -220,7 +220,7 @@ onMounted(() => {
 .page-title {
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 0 0 4px;
 }
 .page-desc {
@@ -254,7 +254,7 @@ onMounted(() => {
 .gauge-score {
   font-size: 28px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .gauge-label {
   font-size: 12px;

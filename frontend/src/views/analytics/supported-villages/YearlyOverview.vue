@@ -700,7 +700,7 @@ onBeforeUnmount(() => {
 .page-title {
   font-size: 18px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 0;
 }
 
@@ -742,7 +742,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .section-icon {
@@ -772,7 +772,7 @@ onBeforeUnmount(() => {
 
 .summary-label {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .no-data-hint {
@@ -812,12 +812,12 @@ onBeforeUnmount(() => {
 .chart-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .chart-hint {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .chart-box {

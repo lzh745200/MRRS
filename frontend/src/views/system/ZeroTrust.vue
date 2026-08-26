@@ -85,7 +85,7 @@
         </div>
       </div>
 
-      <EmptyState text="暂无信任评估数据" v-else />
+      <EmptyState v-else text="暂无信任评估数据" />
     </el-card>
 
     <!-- 第2部分: 事件统计摘要卡片 -->
@@ -176,7 +176,7 @@
         </div>
       </div>
 
-      <EmptyState text="暂无安全事件统计数据" v-else />
+      <EmptyState v-else text="暂无安全事件统计数据" />
     </el-card>
 
     <!-- 第3部分: 安全策略列表 -->

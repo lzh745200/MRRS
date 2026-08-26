@@ -207,7 +207,7 @@ onMounted(loadData)
 .page-title {
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 0 0 4px;
 }
 .page-desc {
@@ -230,7 +230,7 @@ onMounted(loadData)
 .stat-num {
   font-size: 28px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .stat-label {
   font-size: 13px;

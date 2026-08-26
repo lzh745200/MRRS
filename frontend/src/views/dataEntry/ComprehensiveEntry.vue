@@ -1312,7 +1312,7 @@ async function submitVillageData() {
 .page-title {
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 0 0 4px 0;
 }
 .page-desc {
@@ -1364,7 +1364,7 @@ async function submitVillageData() {
 .form-section-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 24px 0 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid #e8e8e8;
@@ -1381,7 +1381,7 @@ async function submitVillageData() {
 .dynamic-row {
   margin-bottom: 8px;
   padding: 8px;
-  background: #fafafa;
+  background: var(--color-bg-hover);
   border-radius: 4px;
 }
 .dynamic-row-remove-btn {

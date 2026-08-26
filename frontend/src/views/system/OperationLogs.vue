@@ -64,7 +64,7 @@
           </div>
         </el-timeline-item>
       </el-timeline>
-      <EmptyState text="暂无操作日志" v-else-if="!loading" :size="80" />
+      <EmptyState v-else-if="!loading" text="暂无操作日志" :size="80" />
 
       <el-pagination
         v-if="total > pageSize"
@@ -247,7 +247,7 @@ onMounted(loadLogs)
   min-width: 60px;
 }
 .log-time {
-  color: #c0c4cc;
+  color: var(--color-text-placeholder, #c0c4cc);
   font-size: 12px;
 }
 </style>

@@ -41,7 +41,7 @@ withDefaults(
     filterCount?: number
     collapseAfter?: number
   }>(),
-  { collapsible: true, filterCount: 0, collapseAfter: 3 },
+  { collapsible: true, filterCount: 0, collapseAfter: 3 }
 )
 
 const expanded = ref(false)

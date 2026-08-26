@@ -95,7 +95,11 @@
                 <el-option v-for="y in yearOptions" :key="'b' + y" :label="`${y}年`" :value="y" />
               </el-select>
             </div>
-            <EmptyState text="暂无年度数据，请先在帮扶村年度数据管理中录入数据" v-if="!yearlyComparison.years.length" :size="80" />
+            <EmptyState
+              v-if="!yearlyComparison.years.length"
+              text="暂无年度数据，请先在帮扶村年度数据管理中录入数据"
+              :size="80"
+            />
             <template v-else>
               <el-descriptions :column="2" border>
                 <el-descriptions-item :label="`${compareYearA}年帮扶村总数`">{{
@@ -294,7 +298,7 @@ onBeforeUnmount(() => {
 .page-title {
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   margin: 0 0 4px;
 }
 .page-desc {
@@ -317,7 +321,7 @@ onBeforeUnmount(() => {
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .stat-value.text-primary {
   color: var(--color-primary);
@@ -339,7 +343,7 @@ onBeforeUnmount(() => {
 .analysis-content h3 {
   margin: 0 0 16px;
   font-size: 16px;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 .compare-chart {
   width: 100%;

@@ -376,7 +376,7 @@ onMounted(() => {
 
 .description {
   margin: 0;
-  color: #909399;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 </style>

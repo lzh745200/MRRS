@@ -292,7 +292,7 @@ onMounted(() => {
 
 .level-count {
   font-size: 14px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .arrow-icon {

@@ -229,7 +229,7 @@ onUnmounted(() => {
     box-shadow: 0 0 0 1px #dcdfe6;
     transition: box-shadow 0.2s;
     &:hover {
-      box-shadow: 0 0 0 1px #c0c4cc;
+      box-shadow: 0 0 0 1px var(--color-text-placeholder, #c0c4cc);
     }
     &.is-focus {
       box-shadow: 0 0 0 2px var(--color-primary);
@@ -331,7 +331,7 @@ onUnmounted(() => {
 
 .item-arrow {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder, #c0c4cc);
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.15s;

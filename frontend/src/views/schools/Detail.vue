@@ -140,7 +140,7 @@
             </el-table-column>
             <el-table-column prop="budget" label="预算(万元)" width="110" align="right" />
           </el-table>
-          <EmptyState text="暂无助学兴教项目" v-if="relatedProjects.length === 0" :size="60" />
+          <EmptyState v-if="relatedProjects.length === 0" text="暂无助学兴教项目" :size="60" />
         </div>
       </div>
 
@@ -169,7 +169,7 @@
             </el-table-column>
             <el-table-column prop="reason" label="资助原因" min-width="160" show-overflow-tooltip />
           </el-table>
-          <EmptyState text="暂无资助学生" v-if="scholarshipStudents.length === 0" :size="60" />
+          <EmptyState v-if="scholarshipStudents.length === 0" text="暂无资助学生" :size="60" />
         </div>
       </div>
 
@@ -496,7 +496,7 @@ onMounted(() => {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .header-actions {
@@ -541,7 +541,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: linear-gradient(135deg, #1b4332 0%, var(--color-primary) 100%);
+  background: linear-gradient(135deg, var(--color-primary-dark-1) 0%, var(--color-primary) 100%);
   border-bottom: 1px solid var(--color-border-light);
 }
 
@@ -574,7 +574,7 @@ onMounted(() => {
 .scale-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .scale-label {
@@ -607,7 +607,7 @@ onMounted(() => {
   border: 1px solid var(--color-border-light);
   border-radius: 8px;
   transition: all 0.2s;
-  background: #fafafa;
+  background: var(--color-bg-hover);
 }
 
 .attachment-card:hover {

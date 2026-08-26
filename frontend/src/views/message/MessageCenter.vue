@@ -159,7 +159,7 @@
                 </div>
               </el-timeline-item>
             </el-timeline>
-            <EmptyState text="暂无系统动态" v-else />
+            <EmptyState v-else text="暂无系统动态" />
             <div class="activity-actions">
               <el-button size="small" :loading="activitiesLoading" @click="loadActivities"
                 >刷新动态</el-button
@@ -186,7 +186,7 @@
                 </div>
               </el-timeline-item>
             </el-timeline>
-            <EmptyState text="暂无操作记录" v-else />
+            <EmptyState v-else text="暂无操作记录" />
             <div class="activity-actions">
               <el-button size="small" :loading="logsLoading" @click="loadMyLogs"
                 >刷新记录</el-button

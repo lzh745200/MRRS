@@ -175,7 +175,7 @@ onMounted(async () => {
 .page-header h2 {
   font-size: 24px;
   font-weight: 700;
-  color: #1a3c2a;
+  color: var(--color-primary-dark-1);
   margin: 0 0 4px 0;
 }
 .page-desc {

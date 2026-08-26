@@ -67,7 +67,7 @@
       </el-table-column>
     </el-table>
 
-    <EmptyState text="暂无资助学生" v-if="!loading && students.length === 0" />
+    <EmptyState v-if="!loading && students.length === 0" text="暂无资助学生" />
 
     <!-- 新增/编辑对话框 -->
     <el-dialog

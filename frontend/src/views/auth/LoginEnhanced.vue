@@ -478,9 +478,9 @@ const goToMachineCode = () => {
 <style scoped>
 /* 定义变量 */
 .login-page {
-  --military-dark: #081c15;
-  --military-green: #1b4332;
-  --military-gold: #d4af37;
+  --military-dark: var(--color-primary-dark-2);
+  --military-green: var(--color-primary-dark-1);
+  --military-gold: var(--color-accent-gold);
   --military-gold-light: #f0e68c;
   --text-white: #ffffff;
   --text-gray: #a8dadc;
@@ -716,7 +716,7 @@ const goToMachineCode = () => {
 .login-btn {
   width: 100%;
   padding: 16px;
-  background: linear-gradient(135deg, var(--military-gold), #c9a227);
+  background: linear-gradient(135deg, var(--military-gold), var(--color-accent-gold));
   color: var(--military-dark);
   border: none;
   border-radius: 10px;
@@ -748,7 +748,7 @@ const goToMachineCode = () => {
   user-select: none;
 }
 .remember-me input {
-  accent-color: var(--military-gold, #d4af37);
+  accent-color: var(--military-gold, var(--color-accent-gold));
   cursor: pointer;
 }
 

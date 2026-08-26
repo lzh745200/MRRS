@@ -360,7 +360,7 @@ onMounted(() => {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .page-desc {
@@ -402,7 +402,7 @@ onMounted(() => {
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
   line-height: 1.2;
 }
 
@@ -432,7 +432,7 @@ onMounted(() => {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #1b4332;
+  color: var(--color-primary-dark-1);
 }
 
 .section-loading {
@@ -488,7 +488,7 @@ onMounted(() => {
 
 .alert-time {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder, #c0c4cc);
   margin-left: auto;
 }
 

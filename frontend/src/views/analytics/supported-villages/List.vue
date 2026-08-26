@@ -269,7 +269,12 @@
     </el-dialog>
 
     <!-- 年度数据对话框 -->
-    <el-dialog v-model="yearlyDialogVisible" title="年度数据管理" :width="DIALOG_LG" destroy-on-close>
+    <el-dialog
+      v-model="yearlyDialogVisible"
+      title="年度数据管理"
+      :width="DIALOG_LG"
+      destroy-on-close
+    >
       <YearlyDataForm
         v-if="yearlyDialogVisible && currentVillage"
         :village-id="currentVillage.id"

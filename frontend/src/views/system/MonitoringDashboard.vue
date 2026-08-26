@@ -106,8 +106,12 @@
           <el-tag v-if="apiStats.length === 0" type="warning" size="small">无数据</el-tag>
         </div>
         <div ref="chartRef" class="chart-container" />
-        <EmptyState text="暂无 API 统计数据" v-if="apiStats.length === 0"
-          class="chart-empty" :size="48" />
+        <EmptyState
+          v-if="apiStats.length === 0"
+          text="暂无 API 统计数据"
+          class="chart-empty"
+          :size="48"
+        />
       </div>
       <div class="log-panel">
         <div class="panel-header">
@@ -133,7 +137,12 @@
             <span class="log-level">{{ log.level.toUpperCase() }}</span>
             <span class="log-message">{{ log.message }}</span>
           </div>
-          <EmptyState type="no-search" text="暂无匹配日志" v-if="filteredLogs.length === 0" :size="32" />
+          <EmptyState
+            v-if="filteredLogs.length === 0"
+            type="no-search"
+            text="暂无匹配日志"
+            :size="32"
+          />
         </div>
       </div>
     </div>
@@ -1005,7 +1014,7 @@ watch(healthExpanded, (val) => {
   border-top: 4px solid var(--color-danger);
 }
 .primary-card.card-error {
-  border-top-color: #c0c4cc;
+  border-top-color: var(--color-text-placeholder, #c0c4cc);
   opacity: 0.65;
 }
 
@@ -1046,7 +1055,7 @@ watch(healthExpanded, (val) => {
 }
 .value-error {
   font-size: 2.5rem;
-  color: #c0c4cc;
+  color: var(--color-text-placeholder, #c0c4cc);
 }
 
 /* Progress bar */

@@ -7,7 +7,7 @@
         <span>数据加载失败，请稍后重试</span>
         <el-button size="small" type="primary" @click="loadAndRender">重试</el-button>
       </div>
-      <EmptyState text="暂无项目数据" v-else-if="!hasProjects" class="chart-empty" :size="72" />
+      <EmptyState v-else-if="!hasProjects" text="暂无项目数据" class="chart-empty" :size="72" />
       <div v-else ref="barRef" class="chart-body" />
     </div>
     <div class="chart-card">
@@ -17,7 +17,7 @@
         <span>数据加载失败，请稍后重试</span>
         <el-button size="small" type="primary" @click="loadAndRender">重试</el-button>
       </div>
-      <EmptyState text="暂无经费数据" v-else-if="!hasFunds" class="chart-empty" :size="72" />
+      <EmptyState v-else-if="!hasFunds" text="暂无经费数据" class="chart-empty" :size="72" />
       <div v-else ref="pieRef" class="chart-body" />
     </div>
   </div>
