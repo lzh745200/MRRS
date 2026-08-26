@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-low]
+labels: [done, severity-low]
 blocks: []
 blocked-by: ["w9-chain-completion/027-audit-export-userfilter.md"]
 ---
@@ -15,3 +15,6 @@ blocked-by: ["w9-chain-completion/027-audit-export-userfilter.md"]
 ## 审计结论（2026-08-25）
 
 AUDIT-20260825: 部分完成——rural_tasks 六端点已接入(07b5b017)；work_logs/user_permissions/files 仍缺
+
+## Resolution（v1.10.0 续批6）
+_transition_status 单 chokepoint 补写 FundOperationLog(operation_type=status_x+备注)；失败不阻断。3回归用例(写入/无备注省略/异常吞掉)+256流转相关绿

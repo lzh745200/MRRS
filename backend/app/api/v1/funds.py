@@ -838,6 +838,24 @@ def _transition_status(
     ))
     safe_commit(db)
 
+    # T048：状态流转同步写入操作日志（此前仅附件增删两类事件入日志，导致详情页操作日志稀疏）
+    try:
+        db.add(
+            FundOperationLog(
+                fund_id=fund.id,
+                operation_type=f"status_{target_status}",
+                operation_detail=(
+                    f"状态流转 -> {target_status}"
+                    + (f"；备注: {remark}" if remark else "")
+                ),
+                operator_id=getattr(operator, "id", None),
+                operator_name=getattr(operator, "full_name", None) or getattr(operator, "username", ""),
+            )
+        )
+        db.commit()
+    except Exception:  # 日志失败不阻断主流程
+        logger.debug("写入状态流转操作日志失败", exc_info=True)
+
 
 @router.post("/{fund_id}/approve")
 def approve_fund(fund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
