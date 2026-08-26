@@ -424,6 +424,23 @@ class BackupService:
                 except OSError:
                     logger.warning("残留 %s 文件清理失败: %s", suffix, stale_path)
         shutil.copy(backup_db_path, self.database_path)
+
+        # T046：恢复后立即做一致性自检（fail-fast，防止损坏库被静默启用）
+        try:
+            chk = sqlite3.connect(self.database_path)
+            try:
+                row = chk.execute("PRAGMA integrity_check").fetchone()
+                result = (row[0] if row else "unknown")
+            finally:
+                chk.close()
+            if result != "ok":
+                logger.error("恢复后完整性校验未通过: %s", result)
+                return False
+        except Exception as _chk_err:
+            # fail-closed：无法证明健康即视为失败，禁止损坏库被静默启用
+            logger.error("恢复后完整性校验执行异常，按失败处理: %s", _chk_err)
+            return False
+
         return True
 
     def _restore_uploads_from_backup(self, temp_dir: str) -> bool:
