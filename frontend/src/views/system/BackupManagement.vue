@@ -1,5 +1,14 @@
 <template>
   <div class="backup-management">
+    <!-- W12-T045: 磁盘空间不足警告 -->
+    <el-alert
+      v-if="diskSpaceWarning"
+      type="warning"
+      :closable="false"
+      show-icon
+      :title="diskSpaceWarning"
+      style="margin-bottom: 16px"
+    />
     <!-- 自动备份设置 -->
     <el-card class="auto-backup-card">
       <template #header>
@@ -349,6 +358,19 @@ const backupStats = ref<Record<string, any>>({
   scheduleEnabled: false,
 })
 
+// W12-T045: 磁盘空间感知（备份目录 / 数据库目录剩余空间）
+const diskSpace = ref<Record<string, any> | null>(null)
+const diskSpaceWarning = computed(() => {
+  const info = diskSpace.value
+  if (!info) return null
+  const dir = info.backup_dir || info.db_dir
+  if (!dir || dir.sufficient === undefined) return null
+  if (dir.sufficient === false) {
+    return `磁盘剩余空间不足（${dir.free_mb ?? -1}MB < ${info.threshold_mb ?? 500}MB），备份/恢复可能被拒绝`
+  }
+  return null
+})
+
 const createDialogVisible = ref(false)
 const restoreDialogVisible = ref(false)
 const restoreTarget = ref<any>(null)
@@ -541,6 +563,8 @@ async function fetchBackupStats() {
       incrementalBackups: resData?.incrementalBackups ?? 0,
       scheduleEnabled: resData?.scheduleEnabled ?? false,
     }
+    // W12-T045: 磁盘空间感知
+    diskSpace.value = resData?.disk_space ?? null
   } catch {
     // 静默处理
   }
