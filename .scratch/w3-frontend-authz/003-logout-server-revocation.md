@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-high]
+﻿---
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w1-security-redline/005-unify-auth-validation.md"]
 ---
@@ -19,3 +19,6 @@ blocked-by: ["w1-security-redline/005-unify-auth-validation.md"]
 
 ## 涉及文件
 - `frontend/src/stores/auth.ts`、`frontend/src/api/auth.ts`
+
+## Resolution
+完成：logout() 先经 apiRequest POST /auth/logout 携带 refresh_token 吊销（3s 超时、失败静默不阻塞），随后本地清理照常。测试 authLogout.test.ts 2 项（吊销载荷+拒绝不阻塞）

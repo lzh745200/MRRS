@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-high]
+﻿---
+labels: [done, severity-high]
 blocks: []
 blocked-by: []
 ---
@@ -19,3 +19,6 @@ _makeRequestKey 只含 method+url+params，不含 config.data → 同端点两�
 
 ## 涉及文件
 - `frontend/src/api/request.ts`
+
+## Resolution
+完成（方案A）：仅幂等 GET 参与去重取消池；POST/PUT/DELETE 不注册 CancelToken、绝不互相取消，杜绝并发写被静默吞掉。requestErrorHandling/request.test 同步新契约，api+stores 79文件1284用例全绿

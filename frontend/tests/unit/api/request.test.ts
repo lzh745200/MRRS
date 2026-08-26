@@ -1003,9 +1003,11 @@ describe('api/request — cancelRequest 精确匹配', () => {
     expect(getPendingRequestCount()).toBe(0)
   })
 
-  it('cancelAllRequests 清空全部挂起请求', async () => {
+  it('cancelAllRequests 清空全部挂起请求（W3-T4：仅 GET 入池）', async () => {
     await handlers.request(makeConfig({ method: 'GET', url: '/x1' }))
-    await handlers.request(makeConfig({ method: 'POST', url: '/x2' }))
+    await handlers.request(makeConfig({ method: 'GET', url: '/x2' }))
+    // POST 不再参与去重池（防并发写操作被静默取消）
+    await handlers.request(makeConfig({ method: 'POST', url: '/x3' }))
     expect(getPendingRequestCount()).toBe(2)
     cancelAllRequests()
     expect(getPendingRequestCount()).toBe(0)

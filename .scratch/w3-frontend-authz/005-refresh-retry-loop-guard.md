@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-medium]
+﻿---
+labels: [done, severity-medium]
 blocks: []
 blocked-by: []
 ---
@@ -14,3 +14,6 @@ blocked-by: []
 
 ## 涉及文件
 - `frontend/src/api/request.ts`
+
+## Resolution
+完成：401 入口检查 originalRequest._retry——已重试仍 401 直接清认证+登出+拒绝排队请求（_onRefreshFailed），不再进入 refresh 流程。测试覆盖 _retry 分支断言 mockAxiosPost 未被调用
