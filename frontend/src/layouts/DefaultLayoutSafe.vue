@@ -414,6 +414,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
+import { ElNotification } from 'element-plus'
 import { useAutoLock as useAutoLockModule } from '@/composables/useAutoLock'
 import { useRoute } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -529,7 +530,7 @@ onUnmounted(() => {
 })
 
 // ── 自动锁屏（单机共用电脑，无操作 N 分钟回登录页）──
-import { consumeLockDigest, markLockNow } from '@/utils/lockDigest'
+import { consumeLockDigest } from '@/utils/lockDigest'
 // 锁屏只结束当前会话；不调用 logout()（否则会清除"记住登录"持久凭据，
 // 导致下次开机免登录失效 —— 修复 2026-08-15）
 useAutoLockModule({

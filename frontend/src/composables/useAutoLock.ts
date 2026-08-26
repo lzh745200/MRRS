@@ -2,6 +2,7 @@
  * 自动锁屏 composable（改用依赖注入式实现,便于测试与 ESM 兼容）
  */
 import { onMounted, onUnmounted } from 'vue'
+import { markLockNow } from '@/utils/lockDigest'
 
 const STORAGE_KEY = 'auto-lock-minutes'
 const DEFAULT_MINUTES = 15
@@ -33,6 +34,7 @@ export function useAutoLock(opts: AutoLockOptions = {}) {
         const { AuthStorage } = require('@/utils/authStorage')
         AuthStorage.clearSession()
         window.sessionStorage.setItem('auto_lock_active', '1')
+        markLockNow()
       } catch {
         /* 静默 */
       }

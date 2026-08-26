@@ -161,13 +161,18 @@ request.interceptors.request.use(async (config) => {
       config.headers[_CSRF_HEADER_NAME] = token
     }
   }
-  const requestKey = _makeRequestKey(config.method, config.url, config.params)
-  if (pendingRequests.has(requestKey)) {
-    pendingRequests.get(requestKey)!()
+  // ── W3-T4：仅幂等的 GET 参与去重取消 ──
+  // POST/PUT/DELETE 绝不互相取消：此前全方法共用 key 池，同端点两个并发 POST
+  // （body 不同）会被静默 cancel 导致批量操作丢写入。
+  if ((config.method || 'get').toLowerCase() === 'get') {
+    const requestKey = _makeRequestKey(config.method, config.url, config.params)
+    if (pendingRequests.has(requestKey)) {
+      pendingRequests.get(requestKey)!()
+    }
+    config.cancelToken = new axios.CancelToken((cancel) => {
+      pendingRequests.set(requestKey, cancel)
+    })
   }
-  config.cancelToken = new axios.CancelToken((cancel) => {
-    pendingRequests.set(requestKey, cancel)
-  })
   return config
 })
 
@@ -311,6 +316,27 @@ request.interceptors.response.use(
     if (error.response) {
       const { status } = error.response
       if (status === 401) {
+        // W3-T5：已带 _retry 标记的请求再次 401 → refresh 已试过仍失败，
+        // 直接登出，严禁再进入刷新流程（防止无限刷新循环）
+        if (originalRequest && (originalRequest as any)._retry) {
+          _cachedToken = null
+          _isRefreshing = false
+          _onRefreshFailed(new Error('refresh 已重试仍 401'))
+          AuthStorage.clear()
+          if (!_requestFrozen && !_isTestEnv) {
+            ElMessage.error('登录已过期，请重新登录')
+          }
+          if (
+            typeof window !== 'undefined' &&
+            !_isTestEnv &&
+            !_requestFrozen &&
+            !window.location.pathname.startsWith('/login')
+          ) {
+            window.location.href = '/login'
+          }
+          error.userMessage = '登录已过期，请重新登录'
+          return Promise.reject(error)
+        }
         // 系统级处理：登录过期提示 + refresh 续期 / 跳转登录（保留全局提示）
         if (!originalRequest || _isAuthEndpoint(originalRequest.url)) {
           _cachedToken = null

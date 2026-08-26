@@ -105,6 +105,22 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout() {
+    // W3-T3：尽力通知服务端吊销（access 入黑名单 + token_version 递增，
+    // 使被窃 refresh_token 一并失效）。携带 refresh_token 供后端一并吊销；
+    // 网络/后端失败均不阻塞本地清理（登出必须始终可用）。
+    try {
+      const refresh = AuthStorage.getRefreshToken()
+      void apiRequest({
+        method: 'POST',
+        url: '/auth/logout',
+        data: refresh ? { refresh_token: refresh } : {},
+        timeout: 3000,
+      }).catch(() => {
+        /* 吊销失败静默：本地清理照常执行 */
+      })
+    } catch {
+      /* 静默 */
+    }
     token.value = ''
     refreshToken.value = ''
     user.value = null
