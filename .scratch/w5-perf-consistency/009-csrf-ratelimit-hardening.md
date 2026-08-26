@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-medium]
+﻿---
+labels: [done, severity-medium]
 blocks: []
 blocked-by: []
 ---
@@ -18,3 +18,11 @@ blocked-by: []
 
 ## 涉及文件
 - `backend/app/middleware/csrf_middleware.py`、`backend/app/core/security.py`、`machine_code.py:377` 调用点（W1-T1 已修的保持一致）
+## Resolution
+- csrf_middleware.py: HMAC-SHA256 签名验证（cookie=HMAC(raw), header=raw,
+  HMAC(header)==cookie），兼容旧版明文比对（warning 退化路径）
+- generate_csrf_token: {timestamp}.{hex_random} 格式，支持 CSRF_TOKEN_EXPIRY 过期判定
+- get_client_ip: fail-closed 代理透传（TRUSTED_PROXIES 环境变量）
+- auth.py: cookie 存储 signed_token（HMAC 版本）
+- request.ts: 移除 _readCookie 回退（cookie 现存签名版）
+- 测试: 23 用例 + 40 既有 CSRF 用例全绿

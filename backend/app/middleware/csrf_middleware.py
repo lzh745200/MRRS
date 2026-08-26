@@ -136,35 +136,41 @@ def get_client_ip(request: Request) -> str:
     """获取客户端真实 IP（fail-closed 代理透传）
 
     未配置 TRUSTED_PROXIES 时直接返回 request.client.host（直连 IP）；
-    配置后检查 X-Forwarded-For 首段是否在可信列表中，可信时透传，
-    不可信时降级为直连 IP（防止伪造 XFF 绕过限流/审计）。
+    配置后检查直连 IP（request.client.host）是否在可信代理列表中，
+    可信时透传 X-Forwarded-For 首段（真实客户端），不可信时降级为
+    直连 IP（防止伪造 XFF 绕过限流/审计）。
 
     配置示例::
 
         TRUSTED_PROXIES=10.0.0.1,172.16.0.0/12
     """
-    direct_ip = request.client.host if request.client else "unknown"
+    direct_ip = getattr(getattr(request, "client", None), "host", "unknown")
     if not _TRUSTED_PROXIES:
         return direct_ip
 
-    forwarded_for = request.headers.get("x-forwarded-for", "")
-    if not forwarded_for:
-        return direct_ip
-
-    first_hop = forwarded_for.split(",")[0].strip()
+    # 检查直连 IP 是否为可信代理
+    direct_trusted = False
     for trusted in _TRUSTED_PROXIES:
         if "/" in trusted:
-            # CIDR 简化匹配（仅 /8 ~ /32 前缀位数）
             try:
                 import ipaddress
-                if ipaddress.ip_address(first_hop) in ipaddress.ip_network(trusted, strict=False):
-                    return first_hop
+                if ipaddress.ip_address(direct_ip) in ipaddress.ip_network(trusted, strict=False):
+                    direct_trusted = True
+                    break
             except (ValueError, TypeError):
                 pass
-        elif first_hop == trusted:
-            return first_hop
+        elif direct_ip == trusted:
+            direct_trusted = True
+            break
 
-    # 不可信代理，降级直连 IP
+    if not direct_trusted:
+        return direct_ip
+
+    # 直连 IP 可信 → 透传 X-Forwarded-For 首段（真实客户端）
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+
     return direct_ip
 
 

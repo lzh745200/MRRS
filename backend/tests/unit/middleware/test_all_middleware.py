@@ -174,12 +174,16 @@ class TestCamelToSnakeMiddleware:
 
 
 class TestCSRFMiddleware:
-    def test_generate_csrf_token_length(self):
+    def test_generate_csrf_token_format(self):
+        """W5-T009: token 格式为 {timestamp}.{hex_random}"""
         from app.middleware.csrf_middleware import generate_csrf_token
 
         token = generate_csrf_token()
-        assert len(token) == 64
         assert isinstance(token, str)
+        assert "." in token, "token 应包含时间戳.随机数格式"
+        ts_str, hex_part = token.split(".", 1)
+        assert ts_str.isdigit(), "前缀应为数字时间戳"
+        assert len(hex_part) == 48, "随机部分应为48字符hex"
 
     def test_generate_csrf_token_unique(self):
         from app.middleware.csrf_middleware import generate_csrf_token
