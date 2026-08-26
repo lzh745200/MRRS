@@ -587,7 +587,7 @@ onMounted(() => {
 }
 
 .empty-hint {
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-placeholder, var(--color-text-disabled));
   font-size: 13px;
 }
 

@@ -125,7 +125,7 @@
       :title="`角色关联用户 - ${currentRole?.name}`"
       :width="DIALOG_MD"
     >
-      <el-table v-loading="loadingUsers" :data="roleUsers" border stripe>
+      <el-table v-loading="loadingUsers" :data="roleUsers" border>
         <el-table-column type="index" label="序号" width="60" />
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column prop="real_name" label="姓名" min-width="100">

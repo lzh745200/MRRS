@@ -247,7 +247,7 @@ onMounted(loadLogs)
   min-width: 60px;
 }
 .log-time {
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-placeholder, var(--color-text-disabled));
   font-size: 12px;
 }
 </style>

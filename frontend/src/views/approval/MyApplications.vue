@@ -234,7 +234,7 @@ onMounted(loadData)
 }
 .stat-label {
   font-size: 13px;
-  color: #888;
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 .stat-pending .stat-num {

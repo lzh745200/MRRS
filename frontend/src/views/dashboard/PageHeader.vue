@@ -124,7 +124,7 @@ function handleMoreCommand(cmd: string) {
 .welcome-text {
   font-size: 22px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--color-text-primary);
   margin: 0;
 }
 
@@ -134,7 +134,7 @@ function handleMoreCommand(cmd: string) {
 
 .current-date {
   font-size: 14px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   margin: 0;
 }
 

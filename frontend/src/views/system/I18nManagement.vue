@@ -103,7 +103,6 @@
       <el-table
         v-loading="loading"
         :data="filteredTranslations"
-        stripe
         max-height="600"
         empty-text="请选择语言并加载翻译资源"
       >

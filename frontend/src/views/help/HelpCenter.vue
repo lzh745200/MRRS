@@ -85,7 +85,6 @@
           <el-table
             v-loading="loadingArticles"
             :data="articles"
-            stripe
             style="cursor: pointer"
             @row-click="viewArticle"
           >

@@ -478,7 +478,7 @@ function handleReset() {
 
 .id-empty {
   font-size: 13px;
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-placeholder, var(--color-text-disabled));
 }
 
 .action-bar {

@@ -279,7 +279,7 @@ onMounted(() => {
 .about-footer {
   text-align: center;
   font-size: 12px;
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-placeholder, var(--color-text-disabled));
   padding: 4px 0 12px;
 }
 </style>

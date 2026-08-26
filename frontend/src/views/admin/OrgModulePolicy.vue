@@ -32,7 +32,7 @@
         style="margin-bottom: 16px"
       />
 
-      <el-table v-else v-loading="loading" :data="policies" stripe>
+      <el-table v-else v-loading="loading" :data="policies">
         <el-table-column prop="name" label="模块名称" width="140" />
         <el-table-column prop="category" label="分类" width="100">
           <template #default="{ row }">

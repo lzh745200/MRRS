@@ -1388,7 +1388,7 @@ onMounted(() => {
 }
 
 .no-attachment {
-  color: #bbb;
+  color: var(--color-text-placeholder);
   font-size: 13px;
   padding: 12px 0;
 }

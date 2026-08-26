@@ -734,7 +734,7 @@ const redirectToList = () => {
     .stat-value {
       font-size: 36px;
       font-weight: bold;
-      color: #0066cc;
+      color: var(--color-info);
     }
     .stat-label {
       color: var(--color-text-regular);
@@ -758,7 +758,7 @@ const redirectToList = () => {
 }
 .is-loading {
   animation: rotating 2s linear infinite;
-  color: #0066cc;
+  color: var(--color-info);
 }
 @keyframes rotating {
   from {

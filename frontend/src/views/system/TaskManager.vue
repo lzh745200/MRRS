@@ -712,7 +712,7 @@ onUnmounted(() => {
 }
 
 .stat-empty {
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-placeholder, var(--color-text-disabled));
   font-size: 14px;
 }
 
@@ -752,7 +752,7 @@ onUnmounted(() => {
 }
 
 .text-muted {
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-placeholder, var(--color-text-disabled));
 }
 
 /* ── Pagination ── */

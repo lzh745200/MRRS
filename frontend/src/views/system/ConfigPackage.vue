@@ -56,7 +56,7 @@
           <el-icon><Refresh /></el-icon> 刷新
         </el-button>
       </template>
-      <el-table v-loading="loading" :data="configList" border stripe>
+      <el-table v-loading="loading" :data="configList" border>
         <el-table-column prop="key" label="配置项" width="200" />
         <el-table-column prop="value" label="配置值" min-width="300">
           <template #default="{ row }">

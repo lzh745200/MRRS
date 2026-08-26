@@ -69,7 +69,7 @@
         style="width: 300px; margin-bottom: 16px"
       />
 
-      <el-table v-loading="checking" :data="filteredDependencies" stripe max-height="500">
+      <el-table v-loading="checking" :data="filteredDependencies" max-height="500">
         <el-table-column prop="name" label="包名" min-width="200" sortable />
         <el-table-column label="状态" width="120" align="center">
           <template #default="{ row }">

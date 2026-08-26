@@ -145,7 +145,6 @@
             <el-table
               v-if="anomalyResult.anomalies?.length"
               :data="anomalyResult.anomalies"
-              stripe
               size="small"
             >
               <el-table-column type="index" label="#" width="50" />

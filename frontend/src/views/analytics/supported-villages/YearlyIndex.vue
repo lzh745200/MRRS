@@ -5,7 +5,7 @@
       <p class="subtitle">选择一个帮扶村查看其年度数据</p>
     </div>
 
-    <el-table v-loading="loading" :data="villages" stripe @row-click="goYearly">
+    <el-table v-loading="loading" :data="villages" @row-click="goYearly">
       <el-table-column prop="village_name" label="帮扶村" min-width="140" />
       <el-table-column prop="department" label="部门" min-width="100" />
       <el-table-column prop="county" label="所在县" min-width="100" />
@@ -78,7 +78,7 @@ onMounted(loadVillages)
   margin: 0;
 }
 .no-data {
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-placeholder, var(--color-text-disabled));
   font-size: 13px;
 }
 </style>

@@ -56,7 +56,7 @@
           <el-button text type="primary" @click="pushSafe('/approval/pending')">查看全部</el-button>
         </div>
       </template>
-      <el-table v-loading="loading" :data="pendingTasks" stripe empty-text="暂无待审批任务">
+      <el-table v-loading="loading" :data="pendingTasks" empty-text="暂无待审批任务">
         <el-table-column prop="title" label="事项" min-width="220" show-overflow-tooltip />
         <el-table-column label="类型" width="110">
           <template #default="{ row }">
@@ -225,7 +225,7 @@ onMounted(() => {
 }
 .page-desc {
   margin: 0;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 .stats-row {
@@ -247,7 +247,7 @@ onMounted(() => {
 }
 .stat-label {
   margin-top: 6px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 .stat-pending .stat-num {
@@ -287,7 +287,7 @@ onMounted(() => {
 }
 .entry-desc {
   margin-top: 4px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 .card-header {

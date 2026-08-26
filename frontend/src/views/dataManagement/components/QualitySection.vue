@@ -59,7 +59,7 @@
       </template>
 
       <!-- 检查项列表 -->
-      <el-table :data="checkItems" stripe>
+      <el-table :data="checkItems">
         <el-table-column prop="name" label="检查项" min-width="200" />
         <el-table-column prop="description" label="说明" min-width="250" />
         <el-table-column label="状态" width="100">

@@ -146,7 +146,7 @@ onMounted(() => {
 .section-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary);
   margin: 0 0 16px 0;
   display: flex;
   align-items: center;
@@ -171,14 +171,14 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 8px 0;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-lighter);
   &:last-child {
     border-bottom: none;
   }
 }
 .tl-time {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--color-text-placeholder);
   font-family: 'DIN Alternate', monospace;
   white-space: nowrap;
   min-width: 50px;
@@ -192,7 +192,7 @@ onMounted(() => {
 }
 .tl-text {
   font-size: 13px;
-  color: #475569;
+  color: var(--color-text-secondary);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -200,7 +200,7 @@ onMounted(() => {
 }
 .tl-target {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-text-placeholder);
   margin-left: 4px;
 }
 .tl-edit-btn,
@@ -212,7 +212,7 @@ onMounted(() => {
   padding: 2px 6px;
   opacity: 0;
   transition: opacity 0.15s;
-  color: #94a3b8;
+  color: var(--color-text-placeholder);
   border-radius: 4px;
   display: inline-flex;
   align-items: center;
@@ -226,7 +226,7 @@ onMounted(() => {
   background: #f0f4f0;
 }
 .tl-delete-btn:hover {
-  color: #dc2626;
+  color: var(--color-danger);
   background: #fef2f2;
 }
 .tl-edit-input {
@@ -254,7 +254,7 @@ onMounted(() => {
 }
 .tl-empty {
   text-align: center;
-  color: #94a3b8;
+  color: var(--color-text-placeholder);
   font-size: 13px;
   padding: 20px 0;
 }

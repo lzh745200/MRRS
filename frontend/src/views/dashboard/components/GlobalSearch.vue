@@ -331,7 +331,7 @@ onUnmounted(() => {
 
 .item-arrow {
   font-size: 12px;
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-placeholder, var(--color-text-disabled));
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.15s;

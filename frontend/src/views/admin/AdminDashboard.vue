@@ -411,7 +411,7 @@ onMounted(() => {
 }
 
 .stat-label {
-  color: #64748b;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
@@ -427,15 +427,15 @@ onMounted(() => {
 }
 
 .stat-trend.up {
-  color: #10b981;
+  color: var(--color-success);
 }
 
 .stat-trend.down {
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 .stat-trend.stable {
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .admin-main-grid {
@@ -460,7 +460,7 @@ onMounted(() => {
 
 .card-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-lighter);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -469,7 +469,7 @@ onMounted(() => {
 .card-header h3 {
   margin: 0;
   font-size: 15px;
-  color: #1e293b;
+  color: var(--color-text-primary);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -491,7 +491,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   padding: 10px 0;
-  border-bottom: 1px solid #f8fafc;
+  border-bottom: 1px solid var(--color-border-lighter);
 }
 
 .status-item:last-child {
@@ -499,7 +499,7 @@ onMounted(() => {
 }
 
 .status-name {
-  color: #334155;
+  color: var(--color-text-primary);
 }
 
 .status-value {
@@ -531,7 +531,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 10px 0;
-  border-bottom: 1px solid #f8fafc;
+  border-bottom: 1px solid var(--color-border-lighter);
 }
 
 .login-item:last-child {
@@ -559,17 +559,17 @@ onMounted(() => {
 
 .login-name {
   font-size: 14px;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 
 .login-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-text-placeholder);
 }
 
 .login-ip {
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-text-secondary);
 }
 
 .audit-list {
@@ -602,7 +602,7 @@ onMounted(() => {
 
 .audit-action.danger {
   background: #fee2e2;
-  color: #dc2626;
+  color: var(--color-danger);
 }
 
 .audit-user {
@@ -611,11 +611,11 @@ onMounted(() => {
 
 .audit-target {
   flex: 1;
-  color: #64748b;
+  color: var(--color-text-secondary);
 }
 
 .audit-time {
-  color: #94a3b8;
+  color: var(--color-text-placeholder);
   font-size: 12px;
 }
 
@@ -637,7 +637,7 @@ onMounted(() => {
 }
 
 .quick-action:hover {
-  background: #f1f5f9;
+  background: var(--color-border-lighter);
 }
 
 .action-icon {
@@ -650,7 +650,7 @@ onMounted(() => {
 
 .action-label {
   font-size: 12px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .pending-count {
@@ -689,8 +689,8 @@ onMounted(() => {
 
 .pending-type {
   font-size: 12px;
-  color: #64748b;
-  background: #f1f5f9;
+  color: var(--color-text-secondary);
+  background: var(--color-border-lighter);
   padding: 2px 8px;
   border-radius: 4px;
 }
@@ -698,12 +698,12 @@ onMounted(() => {
 .pending-desc {
   flex: 1;
   font-size: 13px;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 
 .pending-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-text-placeholder);
 }
 
 .storage-info {
@@ -712,7 +712,7 @@ onMounted(() => {
 
 .storage-bar {
   height: 8px;
-  background: #f1f5f9;
+  background: var(--color-border-lighter);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -725,7 +725,7 @@ onMounted(() => {
 
 .storage-text {
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-text-secondary);
   margin-top: 8px;
 }
 
@@ -741,11 +741,11 @@ onMounted(() => {
 }
 
 .breakdown-label {
-  color: #64748b;
+  color: var(--color-text-secondary);
 }
 
 .breakdown-value {
-  color: #1e293b;
+  color: var(--color-text-primary);
   font-weight: 500;
 }
 
@@ -760,7 +760,7 @@ onMounted(() => {
 
 .empty-tip {
   text-align: center;
-  color: #94a3b8;
+  color: var(--color-text-placeholder);
   font-size: 13px;
   padding: 20px 0;
 }

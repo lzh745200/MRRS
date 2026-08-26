@@ -760,7 +760,7 @@ onMounted(() => {
     font-size: 13px;
 
     &.muted {
-      color: var(--color-text-placeholder, #c0c4cc);
+      color: var(--color-text-placeholder, var(--color-text-disabled));
     }
   }
 

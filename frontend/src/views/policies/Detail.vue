@@ -80,7 +80,7 @@
     <!-- 相关政策 -->
     <el-card v-if="relatedPolicies.length" class="related-card">
       <template #header><span>相关政策</span></template>
-      <el-table :data="relatedPolicies" stripe size="small">
+      <el-table :data="relatedPolicies" size="small">
         <el-table-column prop="title" label="标题" min-width="200">
           <template #default="{ row }">
             <el-link type="primary" @click="goDetail(row.id)">{{ row.title }}</el-link>

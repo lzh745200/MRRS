@@ -128,7 +128,7 @@
           >
         </div>
         <div class="card-body">
-          <el-table :data="relatedProjects" stripe size="small">
+          <el-table :data="relatedProjects" size="small">
             <el-table-column prop="name" label="项目名称" min-width="180" />
             <el-table-column prop="category" label="类别" width="100" />
             <el-table-column prop="phase" label="阶段" width="100">

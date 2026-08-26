@@ -776,7 +776,7 @@ onBeforeUnmount(() => {
 }
 
 .no-data-hint {
-  color: #bbb;
+  color: var(--color-text-placeholder);
   font-size: 13px;
   display: flex;
   align-items: center;

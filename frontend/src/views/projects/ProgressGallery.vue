@@ -383,7 +383,7 @@ onUnmounted(() => {
         align-items: center;
         justify-content: center;
         height: 180px;
-        color: var(--color-text-placeholder, #c0c4cc);
+        color: var(--color-text-placeholder, var(--color-text-disabled));
         gap: 8px;
         background: var(--color-bg-hover);
       }
@@ -443,7 +443,7 @@ onUnmounted(() => {
         }
 
         .comparison-arrow {
-          color: var(--color-text-placeholder, #c0c4cc);
+          color: var(--color-text-placeholder, var(--color-text-disabled));
           flex-shrink: 0;
         }
       }

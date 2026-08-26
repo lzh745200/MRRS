@@ -359,7 +359,7 @@
           <h4 style="margin: 0 0 8px; font-size: 14px; color: var(--color-primary)">
             数据预览（前 {{ previewResult.parsed_data.length }} 条）
           </h4>
-          <el-table :data="previewResult.parsed_data" border size="small" max-height="220" stripe>
+          <el-table :data="previewResult.parsed_data" border size="small" max-height="220">
             <el-table-column
               v-for="col in previewColumns"
               :key="col"

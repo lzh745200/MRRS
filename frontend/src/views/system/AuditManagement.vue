@@ -11,6 +11,12 @@
         <div class="stat-value">{{ stats.todayOps }}</div>
         <div class="stat-label">今日操作数</div>
       </div>
+      <el-tooltip content="审计日志总条数（军规要求长期保留，不做自动清理）。可使用右上角导出功能归档。" placement="top">
+        <div class="stat-card" style="cursor: help">
+          <div class="stat-value">{{ stats.totalOps.toLocaleString() }}</div>
+          <div class="stat-label">审计总条数</div>
+        </div>
+      </el-tooltip>
       <div class="stat-card">
         <div class="stat-value">{{ stats.activeUsers }}</div>
         <div class="stat-label">活跃用户</div>
@@ -202,6 +208,7 @@ const filters = reactive({
 
 const stats = reactive({
   todayOps: 0,
+  totalOps: 0,
   activeUsers: 0,
   warnings: 0,
   failures: 0,
@@ -270,6 +277,7 @@ const alerts = ref<any[]>([])
 async function loadStats() {
   try {
     const data = await auditApi.getStats()
+    stats.totalOps = data.total_operations ?? 0 // T049 容量治理：审计总条数可见
     stats.todayOps = data.today_operations ?? data.total_operations ?? 0
     stats.activeUsers = data.active_users ?? 0
     stats.failures = data.failed_operations ?? 0

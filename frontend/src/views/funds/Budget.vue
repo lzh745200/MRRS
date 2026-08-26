@@ -667,7 +667,7 @@ onMounted(() => loadBudgets())
 
 .progress-amounts {
   font-size: 12px;
-  color: #888;
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 

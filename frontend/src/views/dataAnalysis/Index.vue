@@ -37,7 +37,7 @@
         <el-tab-pane label="投入分析" name="investment">
           <div class="analysis-content">
             <h3>经费投入趋势</h3>
-            <el-table :data="investmentTrend" stripe border>
+            <el-table :data="investmentTrend" border>
               <el-table-column prop="year" label="年份" width="100" />
               <el-table-column prop="military" label="专项投入(万)" align="right" />
               <el-table-column prop="local" label="地方投入(万)" align="right" />
@@ -56,7 +56,7 @@
         <el-tab-pane label="帮扶分类统计" name="category">
           <div class="analysis-content">
             <h3>各类帮扶项目统计</h3>
-            <el-table :data="categoryStats" stripe border>
+            <el-table :data="categoryStats" border>
               <el-table-column prop="category" label="帮扶类型" min-width="120" />
               <el-table-column prop="count" label="项目数" width="100" align="right" />
               <el-table-column prop="investment" label="投入(万)" width="120" align="right" />
@@ -73,7 +73,7 @@
         <el-tab-pane label="地区分布" name="region">
           <div class="analysis-content">
             <h3>帮扶村地区分布</h3>
-            <el-table :data="regionStats" stripe border>
+            <el-table :data="regionStats" border>
               <el-table-column prop="region" label="地区" min-width="120" />
               <el-table-column prop="villages" label="帮扶村数" width="100" align="right" />
               <el-table-column prop="investment" label="总投入(万)" width="120" align="right" />

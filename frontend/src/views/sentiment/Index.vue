@@ -141,7 +141,7 @@
       <div v-else-if="newsList.length === 0" class="section-empty">
         <EmptyState text="暂无新闻数据" :size="60" />
       </div>
-      <el-table v-else :data="newsList" stripe size="small">
+      <el-table v-else :data="newsList" size="small">
         <el-table-column prop="title" label="标题" min-width="280" show-overflow-tooltip />
         <el-table-column label="情感" width="100" align="center">
           <template #default="scope">
@@ -488,7 +488,7 @@ onMounted(() => {
 
 .alert-time {
   font-size: 12px;
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-placeholder, var(--color-text-disabled));
   margin-left: auto;
 }
 

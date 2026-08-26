@@ -210,7 +210,7 @@
           <el-icon><Close /></el-icon>
         </el-button>
       </div>
-      <el-table :data="drillDownData.items" stripe border max-height="300">
+      <el-table :data="drillDownData.items" border max-height="300">
         <el-table-column prop="name" label="名称" />
         <el-table-column prop="value" label="数量" width="100" align="right" />
         <el-table-column prop="totalPopulation" label="人口" width="100" align="right" />

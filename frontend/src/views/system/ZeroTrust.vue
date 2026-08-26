@@ -384,7 +384,7 @@
         </el-select>
       </div>
 
-      <el-table v-loading="loadingEvents" :data="events" border stripe style="width: 100%">
+      <el-table v-loading="loadingEvents" :data="events" border style="width: 100%">
         <el-table-column
           prop="timestamp"
           label="时间"

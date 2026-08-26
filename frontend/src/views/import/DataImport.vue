@@ -103,7 +103,7 @@
         <el-alert type="info" :closable="false" style="margin-bottom: 12px">
           共 {{ previewData.total }} 条数据，请确认无误后点击"确认导入"
         </el-alert>
-        <el-table :data="previewData.rows.slice(0, 10)" border stripe max-height="300" size="small">
+        <el-table :data="previewData.rows.slice(0, 10)" border max-height="300" size="small">
           <el-table-column
             v-for="col in previewData.columns"
             :key="col"
