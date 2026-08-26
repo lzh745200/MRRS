@@ -113,10 +113,15 @@ async def test_reset_not_admin_403():
 async def test_reset_service_exception_500():
     svc = MagicMock()
     svc.set.side_effect = RuntimeError("write fail")
-    with patch("app.core.permission_utils.is_admin", return_value=True), patch.object(
-        mod, "SystemConfigService", return_value=svc
+    with (
+        patch("app.core.permission_utils.is_admin", return_value=True),
+        patch.object(mod, "SystemConfigService", return_value=svc),
+        patch("app.core.security.verify_password", return_value=True),
     ):
         with pytest.raises(HTTPException) as exc:
-            await mod.reset_initialization(confirm="RESET", current_user=MagicMock(), db=MagicMock())
+            await mod.reset_initialization(
+                confirm="RESET", admin_password="x",
+                current_user=MagicMock(), db=MagicMock(),
+            )
     assert exc.value.status_code == 500
     assert "重置失败" in exc.value.detail

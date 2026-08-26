@@ -549,9 +549,9 @@ class TestBackupSchedulerExtras:
              patch.object(_threading, "Timer", return_value=fake_timer) as mock_timer:
             bs.start_backup_scheduler()
             # 6 daily + 1 interval + 1 weekly = 8 个 timer 创建（含消息清理，v1.8.0）
-            assert mock_timer.call_count == 8
-            assert fake_timer.start.call_count == 8
-            assert len(bs._timers) == 8
+            assert mock_timer.call_count == 9
+            assert fake_timer.start.call_count == 9
+            assert len(bs._timers) == 9
         # 恢复全局状态避免污染其他测试
         with patch.object(bs, "_scheduler_started", True), \
              patch.object(bs, "_timers", []):
@@ -733,7 +733,7 @@ class TestSchedulerJobsTriggered:
              patch.object(bs, "_timers", []), \
              patch.object(_threading, "Timer", CapturingTimer) as mock_timer:
             bs.start_backup_scheduler()
-        assert len(CapturingTimer.instances) == 8  # 含消息清理（v1.8.0）
+        assert len(CapturingTimer.instances) == 9  # 含消息清理（v1.8.0）
         # 找到 name 含 "reminder_scan" 的 timer 并触发其 _job 闭包
         target = next(t for t in CapturingTimer.instances if t.name == "scheduler-reminder_scan")
         with patch.object(bs, "_timers", []):
@@ -768,7 +768,7 @@ class TestSchedulerJobsTriggered:
              patch.object(bs, "_timers", []), \
              patch.object(_threading, "Timer", CapturingTimer):
             bs.start_backup_scheduler()
-        assert len(CapturingTimer.instances) == 8  # 含消息清理（v1.8.0）
+        assert len(CapturingTimer.instances) == 9  # 含消息清理（v1.8.0）
         target = next(t for t in CapturingTimer.instances if t.name == "scheduler-kpi_precalculate")
         with patch.object(bs, "_timers", []), \
              patch("app.services.backup_scheduler.kpi_precalculate_job") as mock_kpi:

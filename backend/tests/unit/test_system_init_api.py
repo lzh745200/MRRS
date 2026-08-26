@@ -94,14 +94,21 @@ class TestResetInitialization:
         assert resp.status_code == 401
 
     def test_requires_confirm_string(self, client_with_mocked_auth):
-        resp = client_with_mocked_auth.post(f"{BASE}/reset?confirm=wrong")
+        resp = client_with_mocked_auth.post(
+            f"{BASE}/reset?confirm=wrong&admin_password=x"
+        )
         assert resp.status_code == 400
         assert "RESET" in resp.json()["detail"]
 
     def test_success(self, client_with_mocked_auth):
         mock_svc = MagicMock()
-        with patch("app.api.v1.system.init.SystemConfigService", return_value=mock_svc):
-            resp = client_with_mocked_auth.post(f"{BASE}/reset?confirm=RESET")
+        with (
+            patch("app.api.v1.system.init.SystemConfigService", return_value=mock_svc),
+            patch("app.core.security.verify_password", return_value=True),
+        ):
+            resp = client_with_mocked_auth.post(
+                f"{BASE}/reset?confirm=RESET&admin_password=Str0ng!Pass"
+            )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
         mock_svc.set.assert_any_call("initialized", "false")

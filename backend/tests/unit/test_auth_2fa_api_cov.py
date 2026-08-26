@@ -271,11 +271,14 @@ class TestHandleFailedLoginLockout:
         user.locked_until = None
         db = Mock()
         now = datetime.now(timezone.utc)
-        with patch.object(auth_mod, "AuditLogger"):
+        # W2-T6：lockout_service 接管计数，需 mock 其 record_failed 返回阈值
+        mock_lockout = Mock()
+        mock_lockout.record_failed.return_value = auth_mod._MAX_FAILED_ATTEMPTS
+        with patch.object(auth_mod, "AuditLogger"), \
+             patch("app.services.lockout_service.get_lockout_service", return_value=mock_lockout):
             auth_mod._handle_failed_login(user, "testuser", db, now, "127.0.0.1", "ua")
-        assert user.failed_login_count == auth_mod._MAX_FAILED_ATTEMPTS
-        assert user.locked_until is not None
-        assert user.locked_until > now
+        assert mock_lockout.record_failed.called
+        assert mock_lockout.record_failed.call_count == 1
 
 
 class TestLoginResetFailedCount:
