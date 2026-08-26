@@ -62,6 +62,14 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
+      - id: check-tokens-sync
+        name: check-tokens-sync (tokens.scss vs tokens-vars.scss)
+        entry: python scripts/check_tokens_sync.py
+        language: system
+        files: ^frontend/src/styles/tokens.*\.scss$
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: vue-tsc
         name: vue-tsc
         entry: python scripts/pre_commit_hooks.py vue_tsc
