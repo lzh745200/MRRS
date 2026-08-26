@@ -19,6 +19,7 @@ import logging
 import mimetypes
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from app.core.money import MoneyField
 from app.utils.helpers import FUND_MONEY_FIELDS, quantize_money
 from typing import Any, Dict, List, Optional
 
@@ -210,12 +211,12 @@ ApprovalWorkflowService.register_entity_apply_handler("fund", _apply_fund_approv
 class FundCreate(BaseModel):
     """创建经费记录"""
     name: Optional[str] = None
-    amount: float = 0
-    planned_amount: float = 0
-    approved_amount: Optional[float] = None
-    allocated_amount: Optional[float] = None
-    used_amount: Optional[float] = None
-    remaining_amount: Optional[float] = None
+    amount: MoneyField = 0
+    planned_amount: MoneyField = 0
+    approved_amount: Optional[MoneyField] = None
+    allocated_amount: Optional[MoneyField] = None
+    used_amount: Optional[MoneyField] = None
+    remaining_amount: Optional[MoneyField] = None
     code: Optional[str] = None
     type: Optional[str] = None
     fund_type: Optional[str] = None
@@ -244,10 +245,10 @@ class FundUpdate(BaseModel):
     name: Optional[str] = None
     amount: Optional[float] = None
     planned_amount: Optional[float] = None
-    approved_amount: Optional[float] = None
-    allocated_amount: Optional[float] = None
-    used_amount: Optional[float] = None
-    remaining_amount: Optional[float] = None
+    approved_amount: Optional[MoneyField] = None
+    allocated_amount: Optional[MoneyField] = None
+    used_amount: Optional[MoneyField] = None
+    remaining_amount: Optional[MoneyField] = None
     code: Optional[str] = None
     type: Optional[str] = None
     fund_type: Optional[str] = None

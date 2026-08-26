@@ -38,9 +38,7 @@
     </div>
 
     <div v-else-if="loadError" class="state-container">
-      <el-empty description="加载失败">
-        <el-button type="primary" @click="fetchRankings">重新加载</el-button>
-      </el-empty>
+      <EmptyState type="error" text="加载失败" action="重新加载" @action="fetchRankings" />
     </div>
 
     <div v-else-if="rankings.length === 0" class="state-container">

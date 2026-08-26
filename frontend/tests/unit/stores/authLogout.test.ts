@@ -5,18 +5,17 @@
  * - 已带 _retry 的请求再次 401 → 直接登出，不再进入 refresh
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
-const { postMock, getMock } = vi.hoisted(() => ({
+const { postMock } = vi.hoisted(() => ({
   postMock: vi.fn(),
-  getMock: vi.fn(),
 }))
 
 vi.mock('@/api/request', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/api/request')>()
   return {
     ...mod,
-    post: postMock,
-    get: getMock,
+    apiRequest: postMock,
   }
 })
 
@@ -25,6 +24,7 @@ import { AuthStorage } from '@/utils/authStorage'
 
 describe('W3-T3 登出服务端吊销', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     vi.clearAllMocks()
     sessionStorage.clear()
     localStorage.clear()
@@ -32,7 +32,7 @@ describe('W3-T3 登出服务端吊销', () => {
 
   it('logout 发起 /auth/logout 吊销并携带 refresh_token，且完成本地清理', () => {
     const store = useAuthStore()
-    AuthStorage.setTokens({ token: 'tk', refreshToken: 'rf' } as any)
+    AuthStorage.setToken('tk'); AuthStorage.setRefreshToken('rf')
     postMock.mockResolvedValue({ code: 200 })
 
     store.logout()
@@ -50,7 +50,7 @@ describe('W3-T3 登出服务端吊销', () => {
 
   it('吊销接口拒绝（Promise reject）不阻塞本地清理、不抛未处理异常', async () => {
     const store = useAuthStore()
-    AuthStorage.setTokens({ token: 'tk', refreshToken: 'rf2' } as any)
+    AuthStorage.setToken('tk'); AuthStorage.setRefreshToken('rf2')
     postMock.mockRejectedValue(new Error('network down'))
 
     expect(() => store.logout()).not.toThrow()

@@ -17,6 +17,7 @@ from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.fund import Fund
 from app.models.fund_budget import FundBudget, FundTransaction, check_budget_alerts
+from app.core.money import MoneyField
 from app.api.v1.deps import require_funds_operator_role as _require_manager
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
@@ -67,7 +68,7 @@ class TransactionCreate(BaseModel):
     project_id: Optional[int] = None
     village_id: Optional[int] = None
     budget_id: Optional[int] = None
-    amount: float = Field(..., gt=0)
+    amount: MoneyField = Field(..., gt=0)
     category: Optional[str] = None
     purpose: str = Field(..., min_length=1, description="用途说明")
     transaction_date: date
@@ -94,7 +95,7 @@ class TransactionResponse(BaseModel):
     project_id: Optional[int] = None
     village_id: Optional[int] = None
     budget_id: Optional[int] = None
-    amount: float
+    amount: MoneyField
     category: Optional[str] = None
     purpose: str
     transaction_date: date

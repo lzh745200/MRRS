@@ -40,6 +40,7 @@ from app.models.supported_village import SupportedVillage
 from app.services.audit_enhancement_service import AuditEnhancementService
 from app.models.audit import AuditAction
 from app.utils.db_error_handler import handle_db_errors_async
+from app.core.money import MoneyField
 from app.utils.helpers import quantize_money
 from app.services.work_log_service import write_work_log
 from app.services.approval_workflow_service import (
@@ -156,7 +157,7 @@ class ProjectCreate(BaseModel):
     type: Optional[str] = Field(None, max_length=50, description="项目类型")
     village_id: Optional[int] = Field(None, ge=1, description="帮扶村ID")
     description: Optional[str] = Field(None, description="项目描述")
-    budget: Optional[float] = Field(None, ge=0, description="预算金额(万元)")
+    budget: Optional[MoneyField] = Field(None, ge=0, description="预算金额(万元)")
     progress: Optional[int] = Field(None, ge=0, le=100, description="进度 0-100")
     start_date: Optional[str] = Field(None, description="开始日期 YYYY-MM-DD")
     end_date: Optional[str] = Field(None, description="结束日期 YYYY-MM-DD")
@@ -208,7 +209,7 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     type: Optional[str] = Field(None, max_length=50)
     description: Optional[str] = None
-    budget: Optional[float] = Field(None, ge=0)
+    budget: Optional[MoneyField] = Field(None, ge=0)
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     progress: Optional[int] = Field(None, ge=0, le=100, description="进度 0-100")

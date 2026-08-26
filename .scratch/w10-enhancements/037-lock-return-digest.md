@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-low]
+labels: [done, severity-low]
 blocks: []
 blocked-by: ["w10-enhancements/032-message-center-tabs-clearall.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w10-enhancements/032-message-center-tabs-clearall.md"]
 - [ ] 增量>0 弹一条摘要（vitest fake timers）
 - [ ] 点击跳转 /message 并清时间戳
 - [ ] 首次登录不误弹
+
+## Resolution（v1.10.0 续批8）
+lockDigest 纯函数(30min窗口/消费即清)+useAutoLock 锁定打点+layout 首次轮询 ElNotification 摘要点击直达消息中心。4用例+486相关绿 TSC0
