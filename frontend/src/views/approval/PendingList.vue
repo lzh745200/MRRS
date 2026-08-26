@@ -545,7 +545,7 @@ async function searchTransferUsers(query: string) {
     const res: any = await listUsers(params)
     const users = Array.isArray(res) ? res : res?.items || res?.data?.items || []
     candidateUsers.value = (users as any[]).filter(
-      (u: any) => u.id !== currentTask.value?.current_approver_id,
+      (u: any) => u.id !== currentTask.value?.current_approver_id
     )
   } catch {
     candidateUsers.value = []

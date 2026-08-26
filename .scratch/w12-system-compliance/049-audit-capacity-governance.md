@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-low]
+labels: [done, severity-low]
 blocks: []
 blocked-by: ["w9-chain-completion/027-audit-export-userfilter.md"]
 ---
@@ -15,3 +15,6 @@ blocked-by: ["w9-chain-completion/027-audit-export-userfilter.md"]
 ## 审计结论（2026-08-25）
 
 AUDIT-20260825: 并行会话已加 recycle_retention_job(04:30)；audit_logs/api_access_logs/login_attempts 保留期仍缺
+
+## Resolution（v1.10.0 续批7）
+审计总条数卡(tooltip 含保留政策与导出归档指引)接入既有 /stats total_operations；22绿 TSC0

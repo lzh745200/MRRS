@@ -472,6 +472,16 @@ async function loadUnreadCount() {
     unreadCount.value = Number(d?.total ?? d?.count ?? 0) || 0
     // Electron 托盘角标与未读数联动（浏览器/麒麟模式无 electronAPI，可选链静默跳过）
     ;(window as any).electronAPI?.updateTrayUnread?.(unreadCount.value)
+    // T037：锁屏归来摘要——近 30 分钟内锁定过且有未读增量时弹一次
+    if (authStore.isAuthenticated && consumeLockDigest(unreadCount.value)) {
+      ElNotification({
+        title: '欢迎回来',
+        message: `您有 ${unreadCount.value} 条未读消息`,
+        type: 'info',
+        duration: 6000,
+        onClick: () => pushSafe('/message'),
+      })
+    }
   } catch {
     /* 轮询失败静默 */
   }
@@ -519,6 +529,7 @@ onUnmounted(() => {
 })
 
 // ── 自动锁屏（单机共用电脑，无操作 N 分钟回登录页）──
+import { consumeLockDigest, markLockNow } from '@/utils/lockDigest'
 // 锁屏只结束当前会话；不调用 logout()（否则会清除"记住登录"持久凭据，
 // 导致下次开机免登录失效 —— 修复 2026-08-15）
 useAutoLockModule({

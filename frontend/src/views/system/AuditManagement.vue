@@ -11,7 +11,10 @@
         <div class="stat-value">{{ stats.todayOps }}</div>
         <div class="stat-label">今日操作数</div>
       </div>
-      <el-tooltip content="审计日志总条数（军规要求长期保留，不做自动清理）。可使用右上角导出功能归档。" placement="top">
+      <el-tooltip
+        content="审计日志总条数（军规要求长期保留，不做自动清理）。可使用右上角导出功能归档。"
+        placement="top"
+      >
         <div class="stat-card" style="cursor: help">
           <div class="stat-value">{{ stats.totalOps.toLocaleString() }}</div>
           <div class="stat-label">审计总条数</div>
