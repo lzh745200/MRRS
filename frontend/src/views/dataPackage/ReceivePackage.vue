@@ -157,7 +157,7 @@
                     {{ getDataTypeLabel(type) }}
                   </el-tag>
                 </template>
-                <span v-else style="color: #999">-</span>
+                <span v-else style="color: var(--color-text-placeholder)">-</span>
               </template>
             </el-table-column>
             <el-table-column label="记录数" width="100">

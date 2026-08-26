@@ -51,7 +51,7 @@ const text = computed(() => {
 
 .strength-none {
   background-color: var(--color-bg-hover);
-  color: #999;
+  color: var(--color-text-placeholder);
 }
 
 .strength-weak {

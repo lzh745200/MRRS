@@ -19,7 +19,7 @@
         >
           <el-button type="primary">选择文件</el-button>
           <template #tip>
-            <div style="font-size: 12px; color: #999; margin-top: 8px">
+            <div style="font-size: 12px; color: var(--color-text-placeholder); margin-top: 8px">
               支持加密数据包（.rrs / 加密 .zip）
             </div>
           </template>

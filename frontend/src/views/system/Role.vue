@@ -146,7 +146,10 @@
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="roleUsers.length === 0" style="text-align: center; padding: 40px; color: #999">
+      <div
+        v-if="roleUsers.length === 0"
+        style="text-align: center; padding: 40px; color: var(--color-text-placeholder)"
+      >
         暂无关联用户
       </div>
       <template #footer>

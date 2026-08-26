@@ -117,7 +117,9 @@
 
             <el-form-item label="应用变更">
               <el-switch v-model="importForm.apply_changes" />
-              <span style="margin-left: 10px; color: #999"> 关闭时仅预览，不实际导入 </span>
+              <span style="margin-left: 10px; color: var(--color-text-placeholder)">
+                关闭时仅预览，不实际导入
+              </span>
             </el-form-item>
 
             <el-form-item>

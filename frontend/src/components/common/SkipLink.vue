@@ -29,7 +29,7 @@ const handleSkip = () => {
 
 .skip-link:focus {
   top: 0;
-  outline: 2px solid #fff;
+  outline: 2px solid var(----color-bg-card);
   outline-offset: 2px;
 }
 </style>

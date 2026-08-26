@@ -60,6 +60,10 @@ vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: pushSafeMock }),
 }))
 
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
+}))
+
 vi.mock('@/api/approval', () => ({
   getPendingTasksWithTotal: mockGetPendingTasks,
   approveTask: mockApproveTask,

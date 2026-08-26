@@ -172,23 +172,24 @@ class TestGetBackupStats:
 # ── get / update backup schedule ─────────────────────────────────────
 
 class TestGetBackupSchedule:
-    def test_disabled(self, client_with_mocked_auth):
+    def test_default_enabled_true(self, client_with_mocked_auth):
         resp = client_with_mocked_auth.get(f"{BASE}/schedule")
         assert resp.status_code == 200
         data = resp.json()["data"]
-        assert data["enabled"] is False
-        assert "禁用" in data["message"]
+        assert data["enabled"] is True
+        assert "禁用" not in data["message"]
 
 
 class TestUpdateBackupSchedule:
-    def test_always_disabled(self, client_with_mocked_auth):
+    def test_update_writes_config(self, client_with_mocked_auth):
         resp = client_with_mocked_auth.put(
             f"{BASE}/schedule",
             json={"enabled": True, "keep_count": 5},
         )
         assert resp.status_code == 200
         data = resp.json()["data"]
-        assert data["enabled"] is False
+        assert data["enabled"] is True
+        assert data["keepCount"] == 5
 
 
 # ── delete_backup ────────────────────────────────────────────────────

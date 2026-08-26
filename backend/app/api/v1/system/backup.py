@@ -18,6 +18,7 @@ from app.core.transaction import safe_commit
 from app.core.security import get_current_user
 from app.core.permission_utils import require_admin
 from app.services.backup_service import BackupService, get_backup_service
+from app.services.system_config_service import get_config, set_config
 
 logger = logging.getLogger(__name__)
 
@@ -333,21 +334,33 @@ async def get_backup_schedule(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """获取自动备份计划配置
+    """获取自动备份计划配置（后端调度为唯一真相源）。
 
-    自动备份已永久禁用（防止生成大文件占用磁盘空间）。
-    备份请通过管理界面手动执行。
+    读取 SystemConfig：auto_backup（默认 true）、backup_retention_days（默认 7）、
+    backup_schedule_cron（默认每日 02:00）。前端设置保存后回读此端点保持一致。
     """
-    return {
-        "success": True,
-        "data": {
-            "enabled": False,
-            "schedule": None,
-            "keepCount": 3,
-            "nextRun": None,
-            "message": "自动备份已禁用。请通过备份管理页面手动创建备份。",
-        },
-    }
+    from datetime import datetime, timedelta
+
+    enabled = get_config("auto_backup", "true") == "true"
+    retention = int(get_config("backup_retention_days", "7") or 7)
+    cron = get_config("backup_schedule_cron", "0 2 * * *")
+
+    # 计算下一次运行时间（基于 cron 的每日 02:00 语义）
+    now = datetime.now()
+    candidate = now.replace(hour=2, minute=0, second=0, microsecond=0)
+    if candidate <= now:
+        candidate += timedelta(days=1)
+    next_run = candidate.isoformat()
+
+    return success_response(
+        data={
+            "enabled": enabled,
+            "schedule": cron,
+            "keepCount": retention,
+            "nextRun": next_run,
+            "message": "自动备份由后端调度统一执行。",
+        }
+    )
 
 
 @router.put("/schedule", summary="更新备份计划配置")
@@ -356,15 +369,26 @@ async def update_backup_schedule(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """更新自动备份计划配置（已弃用——自动备份已永久禁用）
+    """更新自动备份计划配置（写入 SystemConfig，后端调度热生效）。
 
-    自动备份已禁用，此端点保留仅用于前端兼容。
+    唯一真相源为后端 scheduler；Electron 仅触发，不维护策略。
     """
-    return {
-        "success": True,
-        "message": "自动备份已永久禁用以节省磁盘空间。请通过备份管理页面手动创建备份。",
-        "data": {"enabled": False, "schedule": None, "keepCount": 3},
-    }
+    set_config("auto_backup", "true" if body.enabled else "false", "自动备份开关")
+    if body.keep_count is not None:
+        set_config("backup_retention_days", str(int(body.keep_count)), "备份保留天数")
+    if body.schedule is not None:
+        set_config("backup_schedule_cron", body.schedule, "备份调度 Cron")
+
+    enabled = get_config("auto_backup", "true") == "true"
+    retention = int(get_config("backup_retention_days", "7") or 7)
+    return success_response(
+        data={
+            "enabled": enabled,
+            "schedule": get_config("backup_schedule_cron", "0 2 * * *"),
+            "keepCount": retention,
+        },
+        message="备份计划已更新，后端调度将按新策略执行。",
+    )
 
 
 @router.delete("/{filename}", summary="删除指定备份")

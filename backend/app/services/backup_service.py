@@ -12,7 +12,7 @@ import shutil
 import sqlite3
 import tempfile
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -638,6 +638,39 @@ class BackupService:
         if deleted_count > 0:
             safe_commit(self.db)
 
+        return deleted_count
+
+    def cleanup_by_retention_days(self, days: int) -> int:
+        """按保留天数清理旧备份：删除 created_at 早于 (now - days) 的备份记录与文件。
+
+        Args:
+            days: 保留天数（<=0 表示不清理）
+
+        Returns:
+            删除的备份数量
+        """
+        if days <= 0:
+            return 0
+        cutoff = datetime.now() - timedelta(days=days)
+        records = self._query_backup_records()
+        deleted_count = 0
+        for rec in records:
+            rec_time = rec.created_at
+            if isinstance(rec_time, str):
+                try:
+                    rec_time = datetime.fromisoformat(rec_time)
+                except ValueError:
+                    continue
+            if rec_time and rec_time < cutoff:
+                if rec.value and os.path.exists(rec.value):
+                    try:
+                        os.unlink(rec.value)
+                    except (FileNotFoundError, IsADirectoryError, PermissionError):
+                        pass
+                self.db.delete(rec)
+                deleted_count += 1
+        if deleted_count > 0:
+            safe_commit(self.db)
         return deleted_count
 
     def get_backup_size(self) -> int:

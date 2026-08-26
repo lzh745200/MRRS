@@ -154,7 +154,7 @@ function getLineWidth(index: number): string {
 
 <style lang="scss" scoped>
 .skeleton {
-  --skeleton-bg: #e0e0e0;
+  --skeleton-bg: var(--color-border-light);
   --skeleton-highlight: #f5f5f5;
   --skeleton-border-radius: 4px;
 

@@ -429,7 +429,7 @@ onUnmounted(() => {
   width: 12px;
   height: 24px;
   border-radius: 2px;
-  background: #e0e0e0;
+  background: var(--color-border-light);
   transition: background 0.3s;
 }
 .chunk-bar.chunk-done {
@@ -440,7 +440,7 @@ onUnmounted(() => {
   animation: pulse 0.8s infinite;
 }
 .chunk-bar.chunk-pending {
-  background: #e0e0e0;
+  background: var(--color-border-light);
 }
 @keyframes pulse {
   0%,

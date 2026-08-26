@@ -65,7 +65,11 @@ function handleTabChange(name: string | number) {
 }
 
 .rural-works-tabs :deep(.el-tabs__header) {
-  background: linear-gradient(135deg, var(--color-primary-dark-2) 0%, #1b4332 100%);
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-dark-2) 0%,
+    var(----color-primary-dark-1) 100%
+  );
   border-bottom: 2px solid var(--color-accent-gold);
   margin: 0;
 }

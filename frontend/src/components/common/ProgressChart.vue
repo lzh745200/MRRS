@@ -26,11 +26,11 @@ withDefaults(
 .progress-label {
   font-size: 14px;
   margin-bottom: 4px;
-  color: #333;
+  color: var(--color-text-primary);
 }
 .progress-text {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-placeholder);
   margin-top: 2px;
 }
 </style>

@@ -75,14 +75,15 @@ class TestRemindersApi:
 class TestBackupConfig:
 
     @pytest.mark.asyncio
-    async def test_get_backup_schedule_disabled(self):
+    async def test_get_backup_schedule_reads_config(self):
         from app.api.v1.system.backup import get_backup_schedule
 
         db = MagicMock()
         user = MagicMock()
         result = await get_backup_schedule(db=db, current_user=user)
-        assert result["data"]["enabled"] is False
-        assert result["data"]["schedule"] is None
+        # 后端调度为唯一真相源：默认开启、按 cron 每日 02:00
+        assert result["data"]["enabled"] is True
+        assert result["data"]["schedule"] is not None
 
     @pytest.mark.asyncio
     async def test_set_backup_target_success(self):

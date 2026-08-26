@@ -313,7 +313,7 @@
             选择 Excel 文件
           </el-button>
           <template #tip>
-            <div style="font-size: 12px; color: #999; margin-top: 8px">
+            <div style="font-size: 12px; color: var(--color-text-placeholder); margin-top: 8px">
               支持 .xlsx / .xls 格式，文件大小不超过 10MB
             </div>
           </template>
@@ -373,7 +373,7 @@
 
         <!-- 错误列表 -->
         <div v-if="previewResult.errors?.length" style="margin-bottom: 8px">
-          <h4 style="margin: 0 0 8px; font-size: 14px; color: #e63946">
+          <h4 style="margin: 0 0 8px; font-size: 14px; color: var(----color-danger)">
             错误详情（共 {{ previewResult.errors.length }} 条）
           </h4>
           <el-table :data="previewResult.errors" border size="small" max-height="160">
@@ -442,7 +442,7 @@
 
         <!-- 错误详情 -->
         <div v-if="importResult.errors?.length" style="margin-top: 12px">
-          <h4 style="color: #e63946">失败详情</h4>
+          <h4 style="color: var(----color-danger)">失败详情</h4>
           <el-table :data="importResult.errors" border size="small" max-height="180">
             <el-table-column prop="row" label="行号" width="70" />
             <el-table-column prop="message" label="错误信息" />
@@ -996,7 +996,7 @@ onMounted(loadTemplates)
   max-height: 200px;
   overflow-y: auto;
   padding-left: 20px;
-  color: #e63946;
+  color: var(----color-danger);
   font-size: 13px;
 }
 .error-list li {

@@ -98,27 +98,27 @@ $form-label-width: var(--form-label-width);
 // 为了方便在组件中使用，提供SCSS变量
 
 // 绿色系
-$military-darkest: #081c15;
-$military-dark: #1b4332;
-$military-medium: #2d6a4f;
-$military-light: #40916c;
-$military-lighter: #52b788;
-$military-lightest: #74c69d;
+$military-darkest: var(----color-primary-dark-2);
+$military-dark: var(----color-primary-dark-1);
+$military-medium: var(----color-primary);
+$military-light: var(----color-primary-light-1);
+$military-lighter: var(----color-primary-light-2);
+$military-lightest: var(----color-primary-light-3);
 
 // 金色系
-$badge-gold: #d4af37;
+$badge-gold: var(----color-accent-gold);
 $badge-gold-light: #e6c158;
 $badge-gold-lighter: #f0e68c;
 $badge-gold-dark: #b8960c;
 
 // 语义色
-$alert-red: #e63946;
-$success-green: #2ecc71;
-$warning-orange: #f39c12;
+$alert-red: var(----color-danger);
+$success-green: var(----color-success);
+$warning-orange: var(----color-warning);
 $info-blue: #3498db;
 
 // 文字色
-$text-white: #ffffff;
+$text-white: var(----color-bg-card);
 $text-gray: #95a5a6;
 $text-light-gray: #bdc3c7;
 $text-muted: #a8dadc;

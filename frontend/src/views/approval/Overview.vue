@@ -52,7 +52,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span style="font-weight: 600; color: #1b4332">最新待审批任务</span>
+          <span style="font-weight: 600; color: var(----color-primary-dark-1)">最新待审批任务</span>
           <el-button text type="primary" @click="pushSafe('/approval/pending')">查看全部</el-button>
         </div>
       </template>
@@ -80,7 +80,7 @@
     <!-- 单机版快捷操作 -->
     <el-card v-if="stats.pending_count > 0">
       <template #header>
-        <span style="font-weight: 600; color: #1b4332">单机版快捷操作</span>
+        <span style="font-weight: 600; color: var(----color-primary-dark-1)">单机版快捷操作</span>
       </template>
       <el-form label-width="200px">
         <el-form-item label="一键审批所有待处理">

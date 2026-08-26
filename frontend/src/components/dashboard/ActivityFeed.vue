@@ -148,7 +148,7 @@ function resetForm() {
 .activity-select {
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
 }

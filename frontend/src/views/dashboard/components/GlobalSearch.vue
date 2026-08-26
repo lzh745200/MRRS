@@ -226,10 +226,10 @@ onUnmounted(() => {
 .search-input {
   :deep(.el-input__wrapper) {
     border-radius: 20px;
-    box-shadow: 0 0 0 1px #dcdfe6;
+    box-shadow: 0 0 0 1px var(--color-border);
     transition: box-shadow 0.2s;
     &:hover {
-      box-shadow: 0 0 0 1px var(--color-text-placeholder, #c0c4cc);
+      box-shadow: 0 0 0 1px var(--color-text-placeholder, var(----color-text-disabled));
     }
     &.is-focus {
       box-shadow: 0 0 0 2px var(--color-primary);

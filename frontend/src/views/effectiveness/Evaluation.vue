@@ -364,7 +364,7 @@ onMounted(() => {
 }
 
 .form-card {
-  background: var(--color-bg-card, #fff);
+  background: var(--color-bg-card, var(----color-bg-card));
   border-radius: 8px;
   padding: 16px 20px 4px;
   margin-bottom: 20px;
@@ -381,7 +381,7 @@ onMounted(() => {
 }
 
 .result-card {
-  background: var(--color-bg-card, #fff);
+  background: var(--color-bg-card, var(----color-bg-card));
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   margin-bottom: 20px;

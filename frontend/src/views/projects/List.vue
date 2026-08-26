@@ -248,7 +248,7 @@
               </el-popconfirm>
             </template>
           </template>
-          </el-table-column>
+        </el-table-column>
       </el-table>
 
       <GanttView v-else :items="ganttItems" />

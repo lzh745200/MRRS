@@ -246,11 +246,11 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0;
-  background: var(--dash-bg-card, #ffffff);
+  background: var(--dash-bg-card, var(----color-bg-card));
   padding: 10px 16px;
   border-radius: var(--dash-radius-card, 12px);
   box-shadow: var(--dash-card-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.04));
-  border: 1px solid #f1f5f9;
+  border: 1px solid var(----color-border-lighter);
   flex-wrap: wrap;
   user-select: none;
   transition: box-shadow 0.25s ease;
@@ -274,7 +274,7 @@ onUnmounted(() => {
 .status-divider {
   width: 1px;
   height: 20px;
-  background: #e2e8f0;
+  background: var(----color-border-light);
   flex-shrink: 0;
 }
 
@@ -293,12 +293,12 @@ onUnmounted(() => {
   }
 
   &--offline {
-    background: #ef4444;
+    background: var(--color-danger);
     box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
   }
 
   &--syncing {
-    background: #f59e0b;
+    background: var(--color-warning);
     box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
     animation: status-pulse 0.8s ease-in-out infinite;
   }
@@ -332,20 +332,20 @@ onUnmounted(() => {
   font-size: 13px;
 }
 .status-icon-proc {
-  color: #64748b;
+  color: var(----color-text-secondary);
   font-size: 13px;
 }
 
 // ── 标签/值 ──
 .status-label {
-  color: #94a3b8;
+  color: var(----color-border-dark);
   font-size: 11px;
   font-weight: 500;
   margin-right: 2px;
 }
 
 .status-value {
-  color: #475569;
+  color: var(----color-text-regular);
   font-size: 12px;
   font-weight: 600;
 }
@@ -354,7 +354,7 @@ onUnmounted(() => {
 .status-bar {
   width: 36px;
   height: 4px;
-  background: #f1f5f9;
+  background: var(----color-border-lighter);
   border-radius: 2px;
   overflow: hidden;
   margin-left: 4px;
@@ -374,11 +374,11 @@ onUnmounted(() => {
     }
 
     &--warning {
-      background: linear-gradient(90deg, #f59e0b, #fbbf24);
+      background: linear-gradient(90deg, var(--color-warning), #fbbf24);
     }
 
     &--danger {
-      background: linear-gradient(90deg, #ef4444, #f87171);
+      background: linear-gradient(90deg, var(--color-danger), #f87171);
     }
   }
 }
@@ -387,7 +387,7 @@ onUnmounted(() => {
 .refresh-btn {
   margin-left: auto;
   flex-shrink: 0;
-  color: #94a3b8;
+  color: var(----color-border-dark);
 
   &:hover {
     color: #1e4d8c;

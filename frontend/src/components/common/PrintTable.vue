@@ -92,7 +92,7 @@ const handlePrint = () => {
       body {
         font-family: 'Microsoft YaHei', Arial, sans-serif;
         margin: 20px;
-        color: #000;
+        color: var(--color-black);
       }
       .print-table {
         width: 100%;
@@ -101,7 +101,7 @@ const handlePrint = () => {
       }
       .print-table th,
       .print-table td {
-        border: 1px solid #000;
+        border: 1px solid var(--color-black);
         padding: 8px 12px;
         text-align: left;
         font-size: 12px;
@@ -113,7 +113,7 @@ const handlePrint = () => {
       .print-header {
         text-align: center;
         margin-bottom: 20px;
-        border-bottom: 2px solid #000;
+        border-bottom: 2px solid var(--color-black);
         padding-bottom: 10px;
       }
       .print-header h2 {
@@ -193,7 +193,7 @@ const handleClose = () => {
 
 .print-header {
   padding: 20px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--color-border-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -218,7 +218,7 @@ const handleClose = () => {
 
 .print-table th,
 .print-table td {
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--color-border-light);
   padding: 8px 12px;
   text-align: left;
 }

@@ -58,10 +58,14 @@ def _send_backup_reminder(db, title: str, content: str) -> None:
 
 
 async def auto_backup_job():
-    """自动备份任务（支持自定义目标目录与默认加密，按 backup_interval_days 间隔执行）"""
+    """自动备份任务（后端调度唯一真相源）。
+
+    每日 02:00 由 scheduler 触发；按 backup_retention_days（默认 7 天）清理过期备份。
+    Electron 仅负责触发，不维护任何备份策略。
+    """
     with get_db_context() as db:
         try:
-            auto_backup_enabled = get_config("auto_backup", "false")
+            auto_backup_enabled = get_config("auto_backup", "true")
             if auto_backup_enabled != "true":
                 logger.info("自动备份已禁用，跳过")
                 return
@@ -113,10 +117,10 @@ async def auto_backup_job():
                 )
             logger.info("自动备份完成: %s, 大小: %d 字节", backup.file_name, backup.file_size or 0)
 
-            max_count = int(get_config("max_backup_count", "3"))
-            deleted_count = backup_service.cleanup_old_backups(keep_count=max_count)
+            retention_days = int(get_config("backup_retention_days", "7") or 7)
+            deleted_count = backup_service.cleanup_by_retention_days(retention_days)
             if deleted_count > 0:
-                logger.info("清理了 %d 个旧备份", deleted_count)
+                logger.info("按保留 %d 天清理了 %d 个旧备份", retention_days, deleted_count)
 
             # 备份提醒消息：通知管理员备份结果（消息中心「备份提醒」分类）
             try:
@@ -126,7 +130,7 @@ async def auto_backup_job():
                     (
                         f"定时备份已生成：{backup.file_name}"
                         f"（{(backup.file_size or 0) / 1024 / 1024:.1f} MB），"
-                        f"仅保留最近 {max_count} 份。"
+                        f"保留最近 {retention_days} 天。"
                     ),
                 )
             except Exception as msg_err:

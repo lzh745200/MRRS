@@ -159,7 +159,7 @@
       >
         <el-button type="primary">上传附件</el-button>
         <template #tip>
-          <div style="font-size: 12px; color: #999; margin-top: 8px">
+          <div style="font-size: 12px; color: var(--color-text-placeholder); margin-top: 8px">
             支持 pdf / doc / docx / 图片，单个不超过 10MB
           </div>
         </template>

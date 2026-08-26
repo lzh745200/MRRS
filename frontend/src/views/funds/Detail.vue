@@ -277,7 +277,9 @@
                     </div>
                   </el-timeline-item>
                 </el-timeline>
-                <div v-else style="font-size: 13px; color: #999">暂无状态变更记录</div>
+                <div v-else style="font-size: 13px; color: var(--color-text-placeholder)">
+                  暂无状态变更记录
+                </div>
               </div>
             </div>
           </el-tab-pane>
@@ -306,7 +308,9 @@
                     </template>
                   </el-table-column>
                 </el-table>
-                <div v-else style="font-size: 13px; color: #999">暂无字段修改记录</div>
+                <div v-else style="font-size: 13px; color: var(--color-text-placeholder)">
+                  暂无字段修改记录
+                </div>
               </div>
             </div>
           </el-tab-pane>
@@ -334,7 +338,9 @@
                     </template>
                   </el-table-column>
                 </el-table>
-                <div v-else style="font-size: 13px; color: #999">暂无操作日志</div>
+                <div v-else style="font-size: 13px; color: var(--color-text-placeholder)">
+                  暂无操作日志
+                </div>
               </div>
             </div>
           </el-tab-pane>
@@ -355,7 +361,9 @@
                   <el-button type="primary" :loading="uploadingAttachment">
                     <el-icon><Upload /></el-icon>上传附件
                   </el-button>
-                  <span style="margin-left: 12px; font-size: 12px; color: #999">
+                  <span
+                    style="margin-left: 12px; font-size: 12px; color: var(--color-text-placeholder)"
+                  >
                     支持格式：pdf、doc、docx、xls、xlsx、jpg、png、gif、bmp、txt、zip、rar
                   </span>
                 </el-upload>

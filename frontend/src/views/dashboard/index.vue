@@ -411,7 +411,7 @@ function handleRestore() {
   font-size: 15px;
   font-weight: 700;
   color: $military-dark;
-  background: linear-gradient(135deg, #f0f4f3, #fff);
+  background: linear-gradient(135deg, #f0f4f3, var(----color-bg-card));
   border-bottom: 1px solid #e2e8e4;
 
   .el-button {

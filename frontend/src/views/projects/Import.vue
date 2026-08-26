@@ -4,7 +4,7 @@
       <div class="decoration-bar"></div>
     </div>
 
-    <el-card class="import-container" shadow="hover" body-style="padding: 0">
+    <el-card class="import-container" shadow="hover" body- style="padding: 0">
       <div class="import-header">
         <div class="header-content">
           <el-icon class="header-icon" :size="28"><Document /></el-icon>
@@ -543,8 +543,20 @@ const redirectToList = () => {
     width: 100%;
     height: 100%;
     background-image:
-      repeating-linear-gradient(45deg, #000 0, #000 1px, transparent 1px, transparent 10px),
-      repeating-linear-gradient(-45deg, #000 0, #000 1px, transparent 1px, transparent 10px);
+      repeating-linear-gradient(
+        45deg,
+        var(--color-black) 0,
+        var(--color-black) 1px,
+        transparent 1px,
+        transparent 10px
+      ),
+      repeating-linear-gradient(
+        -45deg,
+        var(--color-black) 0,
+        var(--color-black) 1px,
+        transparent 1px,
+        transparent 10px
+      );
   }
   .import-container {
     position: relative;
@@ -581,7 +593,7 @@ const redirectToList = () => {
     .divider-line {
       flex: 1;
       height: 2px;
-      background: linear-gradient(to right, transparent, #fff, transparent);
+      background: linear-gradient(to right, transparent, var(----color-bg-card), transparent);
       margin: 0 15px;
     }
   }
@@ -742,7 +754,7 @@ const redirectToList = () => {
     .stat-divider {
       width: 1px;
       height: 60px;
-      background: #dcdfe6;
+      background: var(--color-border);
     }
   }
   .result-actions {

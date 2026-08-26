@@ -104,7 +104,7 @@
     border-bottom: none;                       // 去除默认分隔线
     font-weight: 600;
     font-size: 16px;
-    color: var(--color-text-primary, #1e293b);
+    color: var(--color-text-primary, var(----color-text-primary));
     background: transparent;
   }
 
@@ -133,7 +133,7 @@
 
   .el-form-item__label {
     font-weight: 500;
-    color: var(--color-text-secondary, #64748b);
+    color: var(--color-text-secondary, var(----color-text-secondary));
     font-size: 13px;
   }
 
@@ -146,22 +146,22 @@
     overflow: hidden;
 
     th.el-table__cell {
-      background-color: #f8fafc;
-      color: var(--color-text-secondary, #64748b);
+      background-color: var(----color-border-extra-light);
+      color: var(--color-text-secondary, var(----color-text-secondary));
       font-weight: 600;
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      border-bottom: 2px solid #e2e8f0;
+      border-bottom: 2px solid var(----color-border-light);
     }
 
     td.el-table__cell {
-      border-bottom: 1px solid #f1f5f9;
+      border-bottom: 1px solid var(----color-border-lighter);
     }
 
     // 行 hover 效果
     .el-table__body tr:hover > td {
-      background-color: #f8fafc;
+      background-color: var(----color-border-extra-light);
     }
   }
 
@@ -175,11 +175,11 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1;
+    background-color: var(----color-border);
     border-radius: 3px;
 
     &:hover {
-      background-color: #94a3b8;
+      background-color: var(----color-border-dark);
     }
   }
 
@@ -227,7 +227,7 @@
   font-family: var(--font-family-base);
   font-size: 0.45em;
   font-weight: 500;
-  color: var(--color-text-secondary, #94a3b8);
+  color: var(--color-text-secondary, var(----color-border-dark));
   margin-left: 2px;
   letter-spacing: 0;
 }
@@ -303,7 +303,7 @@
       width: 4px;
       height: 40px;
       border-radius: 0 4px 4px 0;
-      background: var(--color-border-lighter, #e2e8f0);
+      background: var(--color-border-lighter, var(----color-border-light));
       transition: height 0.3s ease, background 0.3s ease;
     }
 
@@ -321,13 +321,13 @@
       background: linear-gradient(180deg, var(--dash-brand-blue, #1e4d8c), var(--el-color-primary, #3b82f6));
     }
     &.success::before {
-      background: linear-gradient(180deg, var(--dash-brand-green, #2d6a4f), #22c55e);
+      background: linear-gradient(180deg, var(--dash-brand-green, var(----color-primary)), #22c55e);
     }
     &.warning::before {
-      background: linear-gradient(180deg, #f59e0b, #fbbf24);
+      background: linear-gradient(180deg, var(--color-warning), #fbbf24);
     }
     &.danger::before {
-      background: linear-gradient(180deg, #ef4444, #f87171);
+      background: linear-gradient(180deg, var(--color-danger), #f87171);
     }
 
     // 图标容器
@@ -353,15 +353,15 @@
     }
     &.success .stat-icon {
       background: rgba(45, 106, 79, 0.08);
-      color: var(--dash-brand-green, #2d6a4f);
+      color: var(--dash-brand-green, var(----color-primary));
     }
     &.warning .stat-icon {
       background: rgba(245, 158, 11, 0.08);
-      color: #f59e0b;
+      color: var(--color-warning);
     }
     &.danger .stat-icon {
       background: rgba(239, 68, 68, 0.08);
-      color: #ef4444;
+      color: var(--color-danger);
     }
 
     // 内容区
@@ -383,7 +383,7 @@
 
     .stat-label {
       font-size: 13px;
-      color: var(--color-text-secondary, #64748b);
+      color: var(--color-text-secondary, var(----color-text-secondary));
       margin-top: 4px;
       font-weight: 500;
       letter-spacing: 0.02em;
@@ -436,7 +436,7 @@
   .chart-title {
     font-size: 15px;
     font-weight: 600;
-    color: var(--color-text-primary, #1e293b);
+    color: var(--color-text-primary, var(----color-text-primary));
     margin: 0 0 16px 0;
     display: flex;
     align-items: center;
@@ -449,7 +449,7 @@
       width: 4px;
       height: 16px;
       border-radius: 2px;
-      background: linear-gradient(180deg, var(--dash-brand-blue, #1e4d8c), var(--dash-brand-green, #2d6a4f));
+      background: linear-gradient(180deg, var(--dash-brand-blue, #1e4d8c), var(--dash-brand-green, var(----color-primary)));
     }
   }
 
@@ -481,7 +481,7 @@
 
   .page-desc {
     font-size: 14px;
-    color: var(--color-text-secondary, #64748b);
+    color: var(--color-text-secondary, var(----color-text-secondary));
     margin: 0;
     font-weight: 400;
   }
@@ -503,7 +503,7 @@
     padding: 14px 20px;
     border-radius: var(--dash-radius-card);
     box-shadow: var(--dash-card-shadow-sm);
-    border: 1px solid #f1f5f9;
+    border: 1px solid var(----color-border-lighter);
   }
 }
 
@@ -517,7 +517,7 @@
     padding: 20px 24px;
     border-radius: var(--dash-radius-card);
     box-shadow: var(--dash-card-shadow-lg);
-    border: 1px solid #f1f5f9;
+    border: 1px solid var(----color-border-lighter);
 
     .panel-header {
       display: flex;
@@ -529,7 +529,7 @@
         margin: 0;
         font-size: 16px;
         font-weight: 600;
-        color: var(--color-text-primary, #1e293b);
+        color: var(--color-text-primary, var(----color-text-primary));
       }
     }
   }
@@ -581,10 +581,10 @@
     background: var(--dash-bg-card);
 
     .stat-value {
-      color: #f1f5f9;
+      color: var(----color-border-lighter);
     }
     .stat-label {
-      color: #94a3b8;
+      color: var(----color-border-dark);
     }
   }
 
@@ -593,7 +593,7 @@
   }
 
   .chart-title {
-    color: #f1f5f9;
+    color: var(----color-border-lighter);
   }
 
   .filter-card {
@@ -602,12 +602,12 @@
   }
 
   .el-table th.el-table__cell {
-    background-color: #1e293b;
-    color: #94a3b8;
+    background-color: var(----color-text-primary);
+    color: var(----color-border-dark);
     border-bottom-color: #334155;
   }
 
   .el-table td.el-table__cell {
-    border-bottom-color: #1e293b;
+    border-bottom-color: var(----color-text-primary);
   }
 }

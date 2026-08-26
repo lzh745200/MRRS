@@ -520,7 +520,7 @@ onMounted(() => {
 }
 
 .status-value.offline .status-dot {
-  background: #ef4444;
+  background: var(--color-danger);
 }
 
 .login-list {

@@ -98,7 +98,7 @@ const handlePrint = () => {
       body {
         font-family: 'Microsoft YaHei', Arial, sans-serif;
         margin: 20px;
-        color: #000;
+        color: var(--color-black);
         font-size: 12px;
       }
       .print-table {
@@ -108,7 +108,7 @@ const handlePrint = () => {
       }
       .print-table th,
       .print-table td {
-        border: 1px solid #000;
+        border: 1px solid var(--color-black);
         padding: 6px 8px;
         text-align: left;
       }
@@ -119,7 +119,7 @@ const handlePrint = () => {
       .print-header {
         text-align: center;
         margin-bottom: 20px;
-        border-bottom: 2px solid #000;
+        border-bottom: 2px solid var(--color-black);
         padding-bottom: 10px;
       }
       .print-header h2 {

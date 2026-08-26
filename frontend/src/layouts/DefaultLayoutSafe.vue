@@ -936,7 +936,12 @@ function handleCommand(command: string) {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  background: linear-gradient(135deg, $military-dark 0%, var(--color-primary) 50%, $military-dark 100%);
+  background: linear-gradient(
+    135deg,
+    $military-dark 0%,
+    var(--color-primary) 50%,
+    $military-dark 100%
+  );
   border-bottom: 1px solid rgba(212, 175, 55, 0.25);
   flex-shrink: 0;
 }

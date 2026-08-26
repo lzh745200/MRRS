@@ -387,7 +387,7 @@ $breakpoints: (
     left: 0;
     right: 0;
     z-index: 100;
-    background: var(--color-bg-card, #ffffff);
+    background: var(--color-bg-card, var(----color-bg-card));
     box-shadow: var(--shadow-lg, 0 10px 15px rgba(0, 0, 0, 0.1));
     padding: var(--spacing-md, 16px);
   }

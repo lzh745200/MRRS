@@ -329,6 +329,7 @@ import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post, put, del } from '@/api/request'
+import { useBackupSchedule } from '@/composables/useBackupSchedule'
 import { uploadRestoreBackup } from '@/api/backup'
 import { AuthStorage } from '@/utils/authStorage'
 
@@ -499,47 +500,7 @@ function saveAutoBackupConfig() {
 }
 
 // ── Backup schedule configuration ──
-const savingSchedule = ref(false)
-const scheduleConfig = ref({
-  enabled: false,
-  frequency: 'daily' as 'daily' | 'weekly' | 'monthly',
-  backupTime: '02:00',
-  retentionCount: 7,
-})
-
-async function loadScheduleConfig() {
-  try {
-    const res = await get('/system/backup/schedule')
-    const data = res.data?.data ?? res.data ?? res
-    if (data) {
-      scheduleConfig.value = {
-        enabled: data.enabled ?? false,
-        frequency: data.frequency ?? 'daily',
-        backupTime: data.backup_time ?? data.backupTime ?? '02:00',
-        retentionCount: data.retention_count ?? data.retentionCount ?? 7,
-      }
-    }
-  } catch {
-    // Endpoint may not exist yet – keep defaults
-  }
-}
-
-async function saveSchedule() {
-  savingSchedule.value = true
-  try {
-    await put('/system/backup/schedule', {
-      enabled: scheduleConfig.value.enabled,
-      frequency: scheduleConfig.value.frequency,
-      backup_time: scheduleConfig.value.backupTime,
-      retention_count: scheduleConfig.value.retentionCount,
-    })
-    ElMessage.success('备份计划已保存')
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || '保存备份计划失败')
-  } finally {
-    savingSchedule.value = false
-  }
-}
+const { scheduleConfig, savingSchedule, loadScheduleConfig, saveSchedule } = useBackupSchedule()
 
 async function fetchBackupList() {
   try {

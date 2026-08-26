@@ -236,7 +236,7 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 4px solid #e0e0e0;
+  border: 4px solid var(--color-border-light);
   margin: 0 auto;
 }
 .health-gauge.healthy {

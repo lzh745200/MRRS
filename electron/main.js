@@ -13,9 +13,7 @@ let backendProcess = null;
 let tray = null;
 let isQuitting = false;
 let backendRestartCount = 0;
-let backendRestartTimer = null; // 后端自动重启定时器句柄（退出时清理）
-let rendererCrashedOnce = false; // 渲染进程崩溃自动恢复防循环标志
-const MAX_BACKEND_RESTARTS = 3;
+let backendRestartTimer = null; // 后端自动重启定时器句柄（退出时清理�?let rendererCrashedOnce = false; // 渲染进程崩溃自动恢复防循环标�?const MAX_BACKEND_RESTARTS = 3;
 const INTERNAL_BACKUP_KEY = crypto.randomBytes(16).toString('hex');
 const INTERNAL_SHUTDOWN_KEY = crypto.randomBytes(16).toString('hex');
 
@@ -23,9 +21,7 @@ const DEFAULT_BACKEND_PORT = 8000;
 const MAX_PORT_ATTEMPTS = 11;
 let backendPort = DEFAULT_BACKEND_PORT;
 const APP_TITLE = '帮扶管理系统';
-const BACKEND_READY_TIMEOUT = 300000; // 5分钟——PyInstaller打包exe首次启动需提取文件+杀软扫描+初始化数据库（实测可超3分钟）
-const MAX_URL_LOAD_RETRIES = 5;     // 页面加载失败最大重试次数
-const URL_LOAD_RETRY_DELAY = 3000;  // 页面加载重试间隔（毫秒，健康检查等待将覆盖此延时）
+const BACKEND_READY_TIMEOUT = 300000; // 5分钟——PyInstaller打包exe首次启动需提取文件+杀软扫�?初始化数据库（实测可�?分钟�?const MAX_URL_LOAD_RETRIES = 5;     // 页面加载失败最大重试次�?const URL_LOAD_RETRY_DELAY = 3000;  // 页面加载重试间隔（毫秒，健康检查等待将覆盖此延时）
 const AUTO_BACKUP_INTERVAL = 24 * 60 * 60 * 1000;
 const WINDOW_STATE_FILE = path.join(getUserDataPath(), 'window-state.json');
 const SECRETS_FILE = path.join(getUserDataPath(), 'secrets.json');
@@ -82,7 +78,7 @@ function getIconPath() {
   return path.join(__dirname, '..', 'resources', 'icons', 'app-circle-256.png');
 }
 
-// ─── 密钥持久化 ───
+// ─── 密钥持久�?───
 function getOrCreateSecrets() {
   const canEncrypt = safeStorage.isEncryptionAvailable();
   try {
@@ -103,7 +99,7 @@ function getOrCreateSecrets() {
         data = JSON.parse(raw.toString('utf-8'));
       }
       if (data.SECRET_KEY && data.CSRF_SECRET_KEY) {
-        // 确保旧版本密钥文件也有 ENCRYPTION_KEY
+        // 确保旧版本密钥文件也�?ENCRYPTION_KEY
         if (!data.ENCRYPTION_KEY) {
           data.ENCRYPTION_KEY = crypto.randomBytes(32).toString('base64');
           _writeSecrets(data, canEncrypt);
@@ -157,7 +153,7 @@ function writeDiagnosticLog(message) {
   } catch (_) {}
 }
 
-// ─── 端口检测 ───
+// ─── 端口检�?───
 function checkPortInUse(port) {
   return new Promise((resolve) => {
     const net = require('net');
@@ -169,8 +165,7 @@ function checkPortInUse(port) {
 }
 
 async function findAvailablePort(startPort, maxAttempts) {
-  // 不再强杀端口占用进程（可能误杀同机第三方服务），直接顺移探测备用端口
-  for (let i = 0; i < maxAttempts; i++) {
+  // 不再强杀端口占用进程（可能误杀同机第三方服务），直接顺移探测备用端�?  for (let i = 0; i < maxAttempts; i++) {
     const port = startPort + i;
     const inUse = await checkPortInUse(port);
     if (!inUse) return port;
@@ -184,22 +179,20 @@ async function findAvailablePort(startPort, maxAttempts) {
 
 function analyzeStartupError(stderrCapture) {
   const logs = stderrCapture.join('\n').toLowerCase();
-  if (logs.includes('vcruntime') || logs.includes('msvcp')) return '缺少 VC++ 运行时库。';
-  if (logs.includes('address already in use') || logs.includes('eaddrinuse')) return '端口被占用。';
-  if (logs.includes('database') || logs.includes('sqlite')) return '数据库错误。';
-  if (logs.includes('permission denied') || logs.includes('eacces')) return '权限不足。';
-  if (logs.includes('importerror') || logs.includes('modulenotfounderror')) return 'Python 依赖缺失。';
-  if (logs.includes('timeout') || stderrCapture.length === 0) return '启动超时。';
-  return '未知错误，请查看日志。';
+  if (logs.includes('vcruntime') || logs.includes('msvcp')) return '缺少 VC++ 运行时库�?;
+  if (logs.includes('address already in use') || logs.includes('eaddrinuse')) return '端口被占用�?;
+  if (logs.includes('database') || logs.includes('sqlite')) return '数据库错误�?;
+  if (logs.includes('permission denied') || logs.includes('eacces')) return '权限不足�?;
+  if (logs.includes('importerror') || logs.includes('modulenotfounderror')) return 'Python 依赖缺失�?;
+  if (logs.includes('timeout') || stderrCapture.length === 0) return '启动超时�?;
+  return '未知错误，请查看日志�?;
 }
 
 // ─── 后端启动 ───
-// isFirstStart: 首次启动时探测端口；后续重启复用已确定的端口，
-// 避免端口变化导致前端页面（已加载在旧端口）API 请求失败。
-async function startBackend(stderrCapture = null, isFirstStart = false) {
+// isFirstStart: 首次启动时探测端口；后续重启复用已确定的端口�?// 避免端口变化导致前端页面（已加载在旧端口）API 请求失败�?async function startBackend(stderrCapture = null, isFirstStart = false) {
   // 防止重复启动：如果已有后端进程在运行，先终止
   if (backendProcess && !backendProcess.killed) {
-    console.log('[Backend] 后端进程已在运行，跳过重复启动');
+    console.log('[Backend] 后端进程已在运行，跳过重复启�?);
     return backendProcess;
   }
   const exePath = getBackendExePath();
@@ -207,7 +200,7 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
   writeDiagnosticLog(`后端路径: ${exePath}`);
 
   if (!fs.existsSync(exePath)) {
-    const msg = `后端程序不存在:\n${exePath}`;
+    const msg = `后端程序不存�?\n${exePath}`;
     console.error('[Backend]', msg);
     writeDiagnosticLog(msg);
     dialog.showErrorBox('启动失败', msg);
@@ -239,10 +232,9 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
   } else {
     console.log(`[Backend] 重启复用端口 ${backendPort}`);
     writeDiagnosticLog(`重启复用端口: ${backendPort}`);
-    // 检查复用端口是否仍被占用（旧进程可能未完全释放）
-    const stillInUse = await checkPortInUse(backendPort);
+    // 检查复用端口是否仍被占用（旧进程可能未完全释放�?    const stillInUse = await checkPortInUse(backendPort);
     if (stillInUse) {
-      // 端口仍被占用（可能是旧进程尚未退出），等待 2 秒后重试
+      // 端口仍被占用（可能是旧进程尚未退出），等�?2 秒后重试
       await new Promise(r => setTimeout(r, 2000));
     }
   }
@@ -309,21 +301,21 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
     console.error('[Backend] 启动错误:', err);
     writeDiagnosticLog(`启动错误: ${err.message}`);
     let userMsg = err.message;
-    if (err.code === 'ENOENT') userMsg = '后端程序不存在。';
-    else if (err.code === 'EACCES') userMsg = '权限不足，请以管理员身份运行。';
+    if (err.code === 'ENOENT') userMsg = '后端程序不存在�?;
+    else if (err.code === 'EACCES') userMsg = '权限不足，请以管理员身份运行�?;
     dialog.showErrorBox('后端启动失败', userMsg);
   });
 
   proc.on('exit', (code) => {
-    console.log('[Backend] 退出, code:', code);
-    writeDiagnosticLog(`后端退出, code: ${code}`);
+    console.log('[Backend] 退�? code:', code);
+    writeDiagnosticLog(`后端退�? code: ${code}`);
     backendProcess = null;
     if (!isQuitting && code !== 0) {
       if (backendRestartCount < MAX_BACKEND_RESTARTS) {
         backendRestartCount++;
         console.log(`[Backend] 自动重启 (${backendRestartCount}/${MAX_BACKEND_RESTARTS})...`);
         writeDiagnosticLog(`自动重启 ${backendRestartCount}/${MAX_BACKEND_RESTARTS}`);
-        // 保存定时器句柄并在 before-quit 时清理，避免退出竞态下残留进程
+        // 保存定时器句柄并�?before-quit 时清理，避免退出竞态下残留进程
         backendRestartTimer = setTimeout(async () => {
           backendRestartTimer = null;
           if (isQuitting) { console.log('[Backend] 应用正在退出，取消自动重启'); return; }
@@ -333,14 +325,13 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
           // 等待重启的后端就绪后重新加载页面
           try {
             await waitForBackend(restartStderr);
-            // 重启成功后重置重启计数：恢复运行后偶发崩溃不应消耗历史配额
-            backendRestartCount = 0;
+            // 重启成功后重置重启计数：恢复运行后偶发崩溃不应消耗历史配�?            backendRestartCount = 0;
             console.log('[Backend] 重启后端已就绪，重新加载页面');
             writeDiagnosticLog('重启后端已就绪，重新加载页面');
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.loadURL(`http://127.0.0.1:${backendPort}`).catch((err) => {
-                console.error('[Window] 重启后重新加载失败:', err?.message || err);
-                writeDiagnosticLog(`重启后重新加载失败: ${err?.message || err}`);
+                console.error('[Window] 重启后重新加载失�?', err?.message || err);
+                writeDiagnosticLog(`重启后重新加载失�? ${err?.message || err}`);
               });
             }
           } catch (restartErr) {
@@ -351,12 +342,11 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
       } else {
         const logPath = path.join(getUserDataPath(), 'logs', 'app.log');
         // 提示可能原因：安全软件（杀软）可能拦截/终止了后端进程，
-        // 请将安装目录加入白名单；不要将应用安装在系统临时目录。
-        dialog.showErrorBox('后端异常退出',
-          `后端已重启 ${MAX_BACKEND_RESTARTS} 次仍失败。\n\n` +
+        // 请将安装目录加入白名单；不要将应用安装在系统临时目录�?        dialog.showErrorBox('后端异常退�?,
+          `后端已重�?${MAX_BACKEND_RESTARTS} 次仍失败。\n\n` +
           `可能原因：\n` +
-          `1. 安全软件（杀毒/Defender）拦截了后端进程——请将程序安装目录加入白名单\n` +
-          `2. 安装目录位于临时目录（%TEMP%），文件可能被系统清理——请安装到正式目录\n` +
+          `1. 安全软件（杀�?Defender）拦截了后端进程——请将程序安装目录加入白名单\n` +
+          `2. 安装目录位于临时目录�?TEMP%），文件可能被系统清理——请安装到正式目录\n` +
           `3. 数据库文件损坏或磁盘空间不足\n\n` +
           `诊断日志: ${CRASH_LOG_FILE}\n应用日志: ${logPath}`);
       }
@@ -404,26 +394,23 @@ function waitForBackend(stderrCapture = []) {
     const startTime = Date.now();
     let checkCount = 0;
     let lastLogTime = 0;
-    let done = false;  // 防止 resolve 后继续检查
-    function check() {
-      if (done) return;  // 已完成，不再检查
-      const elapsed = Date.now() - startTime;
+    let done = false;  // 防止 resolve 后继续检�?    function check() {
+      if (done) return;  // 已完成，不再检�?      const elapsed = Date.now() - startTime;
       checkCount++;
-      // 每5秒打印一次进度日志
-      if (elapsed - lastLogTime > 5000) {
+      // �?秒打印一次进度日�?      if (elapsed - lastLogTime > 5000) {
         console.log(`[Backend] 等待就绪... ${(elapsed / 1000).toFixed(1)}s`);
         lastLogTime = elapsed;
       }
       if (elapsed > BACKEND_READY_TIMEOUT) {
         done = true;
         const recent = stderrCapture.slice(-10).join('\n');
-        reject(new Error(`后端启动超时 (${(elapsed / 1000).toFixed(0)}秒)\n日志:\n${recent || '无日志'}`));
+        reject(new Error(`后端启动超时 (${(elapsed / 1000).toFixed(0)}�?\n日志:\n${recent || '无日�?}`));
         return;
       }
       const req = http.get(`http://127.0.0.1:${backendPort}/health`, (res) => {
         if (done) return;  // 防止重复处理
         if (res.statusCode === 200) {
-          done = true;  // 标记完成，阻止后续 check
+          done = true;  // 标记完成，阻止后�?check
           console.log(`[Backend] 就绪，耗时 ${(elapsed / 1000).toFixed(1)}s`);
           writeDiagnosticLog(`后端就绪，耗时 ${(elapsed / 1000).toFixed(1)}s`);
           resolve();
@@ -431,31 +418,27 @@ function waitForBackend(stderrCapture = []) {
       });
       req.on('error', () => {
         if (done) return;  // 已完成，忽略错误
-        // 前3次和10秒后打印错误日志
+        // �?次和10秒后打印错误日志
         if (checkCount <= 3 || elapsed > 10000) {
-          console.log(`[Backend] 健康检查失败 (${(elapsed / 1000).toFixed(1)}s)`);
+          console.log(`[Backend] 健康检查失�?(${(elapsed / 1000).toFixed(1)}s)`);
         }
         setTimeout(check, 500);
       });
       req.setTimeout(3000, () => {
-        if (done) return;  // 已完成，不重启检查
-        req.destroy();
+        if (done) return;  // 已完成，不重启检�?        req.destroy();
         setTimeout(check, 500);
       });
     }
-    // 首次检查延迟500ms（比原来1s更快开始探测）
+    // 首次检查延�?00ms（比原来1s更快开始探测）
     setTimeout(check, 500);
   });
 }
 
-// ─── 页面加载（带重试） ───
-// 后端冷启动（PyInstaller 解包 + 杀软扫描）可能长达数分钟，页面重试前
-// 先做 /health 健康检查，后端就绪后再加载，避免盲目重试耗尽次数。
-function waitForBackendReady(timeoutMs) {
+// ─── 页面加载（带重试�?───
+// 后端冷启动（PyInstaller 解包 + 杀软扫描）可能长达数分钟，页面重试�?// 先做 /health 健康检查，后端就绪后再加载，避免盲目重试耗尽次数�?function waitForBackendReady(timeoutMs) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
-    let done = false;  // 防止 resolve 后继续检查
-    function probe() {
+    let done = false;  // 防止 resolve 后继续检�?    function probe() {
       if (done) return;
       if (Date.now() - startTime > timeoutMs) {
         done = true;
@@ -494,8 +477,7 @@ function loadURLWithRetry(win, url, retryCount) {
     const errMsg = err?.message || String(err);
     console.error(`[Window] 加载失败 (重试 ${retryCount + 1}/${MAX_URL_LOAD_RETRIES}):`, errMsg);
     writeDiagnosticLog(`页面加载失败 (${retryCount + 1}/${MAX_URL_LOAD_RETRIES}): ${errMsg}`);
-    // 后端可能仍在冷启动：先等待健康检查通过（每轮最长 60 秒），就绪后再重试加载
-    waitForBackendReady(60000).then(() => {
+    // 后端可能仍在冷启动：先等待健康检查通过（每轮最�?60 秒），就绪后再重试加�?    waitForBackendReady(60000).then(() => {
       if (win && !win.isDestroyed()) {
         console.log(`[Window] 后端已就绪，重新加载页面 (${retryCount + 1}/${MAX_URL_LOAD_RETRIES})`);
         loadURLWithRetry(win, url, retryCount + 1);
@@ -508,7 +490,7 @@ function loadURLWithRetry(win, url, retryCount) {
   });
 }
 
-// ─── 窗口状态 ───
+// ─── 窗口状�?───
 function loadWindowState() {
   try {
     if (fs.existsSync(WINDOW_STATE_FILE)) {
@@ -599,8 +581,7 @@ function createMainWindow() {
       if (remembered === 'quit') { isQuitting = true; return; }
       if (remembered === 'hide') { e.preventDefault(); mainWindow.hide(); return; }
       e.preventDefault();
-      // 首次关闭：询问用户（结果经 confirm-close-behavior IPC 处理，此处仅隐藏等待回答）
-      mainWindow.hide();
+      // 首次关闭：询问用户（结果�?confirm-close-behavior IPC 处理，此处仅隐藏等待回答�?      mainWindow.hide();
       handleCloseBehaviorPrompt(mainWindow);
     }
   });
@@ -616,13 +597,13 @@ function createMainWindow() {
     dialog.showMessageBox({
       type: 'warning',
       title: '页面异常',
-      message: `渲染进程崩溃 (${details.reason})，正在尝试自动恢复...`,
+      message: `渲染进程崩溃 (${details.reason})，正在尝试自动恢�?..`,
     }).catch(() => {});
     setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.loadURL(`http://127.0.0.1:${backendPort}`).catch((err) => {
-          console.error('[Window] 崩溃后重载失败:', err?.message || err);
-          dialog.showErrorBox('页面异常', '自动恢复失败，请重启程序。');
+          console.error('[Window] 崩溃后重载失�?', err?.message || err);
+          dialog.showErrorBox('页面异常', '自动恢复失败，请重启程序�?);
         });
       }
     }, 1500);
@@ -630,9 +611,7 @@ function createMainWindow() {
 }
 
 /**
- * 系统休眠/锁屏恢复处理：探测后端健康后重载页面，
- * 修复睡眠恢复后页面状态（路由/定时器/WebSocket）丢失的问题。
- */
+ * 系统休眠/锁屏恢复处理：探测后端健康后重载页面�? * 修复睡眠恢复后页面状态（路由/定时�?WebSocket）丢失的问题�? */
 function handleSystemResume() {
   console.log('[System] 检测到系统恢复（resume），探测后端健康...');
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -643,7 +622,7 @@ function handleSystemResume() {
         // 后端健康：重载页面恢复前端状态（sessionStorage 登录态在 reload 后保留）
         setTimeout(() => {
           if (mainWindow && !mainWindow.isDestroyed()) {
-            console.log('[System] 后端健康，重载页面恢复状态');
+            console.log('[System] 后端健康，重载页面恢复状�?);
             mainWindow.webContents.reload();
           }
         }, 1000);
@@ -651,7 +630,7 @@ function handleSystemResume() {
         console.warn('[System] 后端状态异常，交由自动重启流程处理');
       }
     });
-    req.on('error', () => { console.warn('[System] 后端探测失败，交由自动重启流程处理'); });
+    req.on('error', () => { console.warn('[System] 后端探测失败，交由自动重启流程处�?); });
     req.on('timeout', () => { req.destroy(); });
   }
 }
@@ -659,8 +638,7 @@ function handleSystemResume() {
 async function restartBackend() {
   await stopBackend();
   const stderr = [];
-  // 手动重启也复用端口
-  backendProcess = await startBackend(stderr, false);
+  // 手动重启也复用端�?  backendProcess = await startBackend(stderr, false);
 }
 
 // ─── 系统托盘 ───
@@ -668,9 +646,7 @@ let trayUnreadCount = 0;
 let trayBaseImage = null; // 原始托盘图标（用于合成角标）
 
 /**
- * 生成带未读角标的托盘图标（nativeImage SVG 合成）。
- * count=0 时恢复原始图标；超过 99 显示 99+。
- */
+ * 生成带未读角标的托盘图标（nativeImage SVG 合成）�? * count=0 时恢复原始图标；超过 99 显示 99+�? */
 function buildBadgeTrayImage(count) {
   if (!trayBaseImage) return null;
   try {
@@ -692,7 +668,7 @@ function buildBadgeTrayImage(count) {
 function updateTrayUnread(count) {
   trayUnreadCount = Math.max(0, Number(count) || 0);
   if (!tray) return;
-  tray.setToolTip(trayUnreadCount > 0 ? `${APP_TITLE}（${trayUnreadCount} 条未读消息）` : APP_TITLE);
+  tray.setToolTip(trayUnreadCount > 0 ? `${APP_TITLE}�?{trayUnreadCount} 条未读消息）` : APP_TITLE);
   try {
     if (trayUnreadCount > 0) {
       const badge = buildBadgeTrayImage(trayUnreadCount);
@@ -700,7 +676,7 @@ function updateTrayUnread(count) {
     } else if (trayBaseImage) {
       tray.setImage(trayBaseImage);
     }
-  } catch (_) { /* 角标更新失败不阻塞 */ }
+  } catch (_) { /* 角标更新失败不阻�?*/ }
 }
 
 function createTray() {
@@ -712,22 +688,22 @@ function createTray() {
   } catch (_) { trayBaseImage = null; }
   tray = new Tray(iconPath);
   const menu = Menu.buildFromTemplate([
-    { label: '显示主窗口', click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } } },
+    { label: '显示主窗�?, click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } } },
     { type: 'separator' },
     { label: '我的待办', click: () => navigateToRoute('/todos') },
     { label: '打开成效大屏', click: () => navigateToRoute('/bigscreen') },
     { type: 'separator' },
-    { label: '立即备份', click: () => { performAutoBackup(); showTrayNotification('备份任务', '执行中...'); } },
+    { label: '立即备份', click: () => { performAutoBackup(); showTrayNotification('备份任务', '执行�?..'); } },
     { label: '重启后端', click: () => { restartBackend(); } },
     { type: 'separator' },
-    { label: '退出', click: () => { isQuitting = true; app.quit(); } },
+    { label: '退�?, click: () => { isQuitting = true; app.quit(); } },
   ]);
   tray.setToolTip(APP_TITLE);
   tray.setContextMenu(menu);
   tray.on('double-click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
 }
 
-/** 托盘/快捷键 → 打开窗口并跳转前端路由 */
+/** 托盘/快捷�?�?打开窗口并跳转前端路�?*/
 function navigateToRoute(route) {
   if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
   if (mainWindow) { mainWindow.webContents.send('app-route', route); }
@@ -749,24 +725,22 @@ function closeBehaviorStore() {
 function handleCloseBehaviorPrompt(win) {
   const remembered = closeBehaviorStore().get();
   if (remembered === 'quit') { isQuitting = true; app.quit(); return; }
-  if (remembered === 'hide') { return; } // 已隐藏
-  dialog.showMessageBox(win, {
+  if (remembered === 'hide') { return; } // 已隐�?  dialog.showMessageBox(win, {
     type: 'question',
     title: '关闭窗口',
-    message: '关闭窗口后程序将最小化到系统托盘继续运行（自动备份、消息提醒仍生效）。',
-    buttons: ['最小化到托盘', '完全退出'],
+    message: '关闭窗口后程序将最小化到系统托盘继续运行（自动备份、消息提醒仍生效）�?,
+    buttons: ['最小化到托�?, '完全退�?],
     defaultId: 0,
     cancelId: 1,
-    checkboxLabel: '记住我的选择，下次不再询问',
+    checkboxLabel: '记住我的选择，下次不再询�?,
     checkboxChecked: false,
   }).then(({ response, checkboxChecked }) => {
     if (checkboxChecked) { closeBehaviorStore().set(response === 0 ? 'hide' : 'quit'); }
-    if (response === 0) { win.show(); win.hide(); } // 保持最小化到托盘
-    else { isQuitting = true; app.quit(); }
+    if (response === 0) { win.show(); win.hide(); } // 保持最小化到托�?    else { isQuitting = true; app.quit(); }
   }).catch(() => {});
 }
 
-// ─── 全局快捷键 ───
+// ─── 全局快捷�?───
 function registerGlobalShortcuts() {
   const { globalShortcut } = require('electron');
   const failedShortcuts = [];
@@ -780,23 +754,22 @@ function registerGlobalShortcuts() {
     let ok = false;
     try { ok = globalShortcut.register(s.accelerator, () => {
       if (s.route) { navigateToRoute(s.route); }
-      else { performAutoBackup(); showTrayNotification('备份任务', '执行中...'); }
+      else { performAutoBackup(); showTrayNotification('备份任务', '执行�?..'); }
     }); } catch (_) { ok = false; }
-    if (ok) { console.log(`[Shortcut] 已注册 ${s.accelerator} (${s.name})`); }
+    if (ok) { console.log(`[Shortcut] 已注�?${s.accelerator} (${s.name})`); }
     else {
       console.warn(`[Shortcut] 注册失败 ${s.accelerator} (${s.name})，可能被其他程序占用`);
-      failedShortcuts.push(`${s.accelerator}（${s.name}）`);
+      failedShortcuts.push(`${s.accelerator}�?{s.name}）`);
     }
   }
-  // 注册失败时给出一次性用户提示（Windows 托盘气泡/系统通知）
-  if (failedShortcuts.length > 0) {
+  // 注册失败时给出一次性用户提示（Windows 托盘气泡/系统通知�?  if (failedShortcuts.length > 0) {
     setTimeout(() => {
       try {
         const { Notification } = require('electron');
         if (Notification.isSupported()) {
           new Notification({
-            title: '全局快捷键部分注册失败',
-            body: `以下快捷键被其他程序占用：${failedShortcuts.join('、')}`,
+            title: '全局快捷键部分注册失�?,
+            body: `以下快捷键被其他程序占用�?{failedShortcuts.join('�?)}`,
           }).show();
         }
       } catch (_) { /* 通知失败静默 */ }
@@ -820,7 +793,7 @@ function startAutoBackup() {
     performAutoBackup();
     setInterval(performAutoBackup, AUTO_BACKUP_INTERVAL);
   }, 5 * 60 * 1000);
-  console.log('[AutoBackup] 已调度');
+  console.log('[AutoBackup] 已调�?);
 }
 
 function performAutoBackup() {
@@ -838,7 +811,6 @@ function performAutoBackup() {
       if (res.statusCode === 200 || res.statusCode === 201) {
         console.log('[AutoBackup] 成功');
         showTrayNotification('备份完成', '自动备份成功');
-        cleanupOldBackups();
       } else console.warn(`[AutoBackup] 状态码 ${res.statusCode}`);
     });
   });
@@ -847,42 +819,12 @@ function performAutoBackup() {
   req.end();
 }
 
-function cleanupOldBackups() {
-  const req = http.get(`http://127.0.0.1:${backendPort}/api/v1/system/backup`, (res) => {
-    let body = '';
-    res.on('data', (chunk) => { body += chunk; });
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(body);
-        // API 返回 envelope 格式: {code:200, data:{items:[...], total:N}}
-        const backups = (parsed && parsed.data && parsed.data.items) ? parsed.data.items : [];
-        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        for (const backup of backups) {
-          const createdAt = new Date(backup.created_at).getTime();
-          if (createdAt < sevenDaysAgo && backup.file_name && backup.file_name.startsWith('backup_')) {
-            const delReq = http.request({
-              hostname: '127.0.0.1',
-              port: backendPort,
-              path: `/api/v1/system/backup/${encodeURIComponent(backup.file_name)}`,
-              method: 'DELETE',
-              timeout: 10000,
-            }, (res) => { if (res.statusCode >= 400) console.warn(`删除 ${backup.file_name} 失败`); });
-            delReq.on('error', (err) => { console.warn(`删除 ${backup.file_name} 错误:`, err.message); });
-            delReq.end();
-            console.log(`[AutoBackup] 删除旧备份: ${backup.file_name}`);
-          }
-        }
-      } catch (e) { console.warn('[AutoBackup] 清理失败:', e.message); }
-    });
-  });
-  req.on('error', (err) => { console.warn('[AutoBackup] 获取列表失败:', err.message); });
-}
 
-// ─── VC++ 检查（Windows，但保留定义） ───
+// ─── VC++ 检查（Windows，但保留定义�?───
 function checkVCRuntime() { return true; }
 async function tryInstallVCRuntime() { return false; }
 
-// ─── IPC 处理器 ───
+// ─── IPC 处理�?───
 function setupIpcHandlers() {
   ipcMain.handle('get-app-version', () => appVersion);
   ipcMain.handle('get-platform', () => process.platform);
@@ -892,7 +834,7 @@ function setupIpcHandlers() {
   ipcMain.on('window-close', () => { if (mainWindow) mainWindow.close(); });
   ipcMain.handle('show-save-dialog', async (_, opts) => {
     if (!mainWindow) return { canceled: true };
-    return dialog.showSaveDialog(mainWindow, opts || { title: '保存文件', filters: [{ name: '所有文件', extensions: ['*'] }] });
+    return dialog.showSaveDialog(mainWindow, opts || { title: '保存文件', filters: [{ name: '所有文�?, extensions: ['*'] }] });
   });
   ipcMain.handle('show-open-dialog', async (_, opts) => {
     if (!mainWindow) return { canceled: true };
@@ -903,7 +845,7 @@ function setupIpcHandlers() {
   ipcMain.on('tray-unread', (_, count) => {
     updateTrayUnread(Number(count) || 0);
   });
-  // 前端路由导航（托盘/快捷键 → 打开窗口并跳转）
+  // 前端路由导航（托�?快捷�?�?打开窗口并跳转）
   ipcMain.on('app-navigate', (_, route) => {
     if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
     const target = typeof route === 'string' ? route : '';
@@ -949,9 +891,7 @@ function setupIpcHandlers() {
     ipcMain.handle('worker-stats', () => workerPool.stats);
   } catch (_) {}
   ipcMain.handle('read-file-chunked', async (_, filePath, chunkSize) => {
-    // 路径白名单：仅允许应用数据目录/安装目录/系统临时目录，
-    // 并显式拒绝密钥文件，防止被注入的渲染进程读取任意文件（如 SECRET_KEY）
-    const os = require('os');
+    // 路径白名单：仅允许应用数据目�?安装目录/系统临时目录�?    // 并显式拒绝密钥文件，防止被注入的渲染进程读取任意文件（如 SECRET_KEY�?    const os = require('os');
     const resolved = path.resolve(String(filePath || ''));
     const allowedRoots = [app.getPath('userData'), app.getAppPath(), os.tmpdir()]
       .map((p) => path.resolve(p));
@@ -979,10 +919,9 @@ function setupIpcHandlers() {
 }
 
 // ─── 应用生命周期 ───
-// 单实例锁必须在 whenReady 注册之前获取：否则第二个实例（如重复双击、安装后
-// 自动启动+手动启动）会绕过锁检查执行 whenReady 回调，同时拉起两个后端进程，
-// 争抢端口与 SQLite 数据库导致闪退/崩溃（生产 crash.log 中 1 秒内两条"后端路径"）。
-const gotLock = app.requestSingleInstanceLock();
+// 单实例锁必须�?whenReady 注册之前获取：否则第二个实例（如重复双击、安装后
+// 自动启动+手动启动）会绕过锁检查执�?whenReady 回调，同时拉起两个后端进程，
+// 争抢端口�?SQLite 数据库导致闪退/崩溃（生�?crash.log �?1 秒内两条"后端路径"）�?const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
@@ -992,15 +931,14 @@ if (!gotLock) {
 }
 
 app.whenReady().then(async () => {
-  // 防御：即使 app.quit() 与 ready 事件存在竞态，未获锁的实例也不启动后端
+  // 防御：即�?app.quit() �?ready 事件存在竞态，未获锁的实例也不启动后端
   if (!gotLock) { app.exit(0); return; }
   console.log('[App] 启动...');
   setupIpcHandlers();
   registerGlobalShortcuts();
 
   const stderrCapture = [];
-  // 首次启动时探测可用端口
-  backendProcess = await startBackend(stderrCapture, true);
+  // 首次启动时探测可用端�?  backendProcess = await startBackend(stderrCapture, true);
 
   let splash = null;
   try {
@@ -1015,7 +953,7 @@ app.whenReady().then(async () => {
   try {
     console.log('[App] 等待后端就绪...');
     await waitForBackend(stderrCapture);
-    console.log('[App] 后端已就绪');
+    console.log('[App] 后端已就�?);
     backendRestartCount = 0;
   } catch (err) {
     console.error('[App] 后端启动失败:', err.message);
@@ -1026,13 +964,13 @@ app.whenReady().then(async () => {
       type: 'error',
       title: '后端启动失败',
       message: `后端启动失败。\n${analysis}\n诊断日志: ${CRASH_LOG_FILE}\n应用日志: ${logPath}`,
-      buttons: ['退出', '查看日志', '重试等待', '继续启动'],
+      buttons: ['退�?, '查看日志', '重试等待', '继续启动'],
       defaultId: 2,
     });
     if (choice === 0) { isQuitting = true; stopBackend(); app.quit(); return; }
     if (choice === 1) {
-      const logs = stderrCapture.join('\n') || '无日志';
-      dialog.showMessageBoxSync({ type: 'info', title: '后端日志', message: '后端输出：', detail: logs.substring(0, 2000) });
+      const logs = stderrCapture.join('\n') || '无日�?;
+      dialog.showMessageBoxSync({ type: 'info', title: '后端日志', message: '后端输出�?, detail: logs.substring(0, 2000) });
       isQuitting = true; stopBackend(); app.quit(); return;
     }
     if (choice === 2) {
@@ -1041,16 +979,14 @@ app.whenReady().then(async () => {
         console.log('[App] 重试等待后端就绪...');
         writeDiagnosticLog('重试等待后端就绪');
         await waitForBackend(stderrCapture);
-        console.log('[App] 重试后端已就绪');
+        console.log('[App] 重试后端已就�?);
         backendRestartCount = 0;
       } catch (retryErr) {
         console.error('[App] 重试后端启动仍然失败:', retryErr.message);
         writeDiagnosticLog(`重试后端启动仍然失败: ${retryErr.message}`);
-        // 仍然继续启动，loadURLWithRetry 会处理重试
-      }
+        // 仍然继续启动，loadURLWithRetry 会处理重�?      }
     }
-    // choice === 3: 继续启动，loadURLWithRetry 会自动重试页面加载
-  }
+    // choice === 3: 继续启动，loadURLWithRetry 会自动重试页面加�?  }
 
   createMainWindow();
   if (splash && !splash.isDestroyed()) { splash.close(); splash = null; }
@@ -1066,12 +1002,12 @@ app.on('before-quit', () => {
 });
 app.on('activate', () => { if (!mainWindow) createMainWindow(); else mainWindow.show(); });
 
-// 系统休眠/锁屏恢复：重载页面恢复前端状态（登录态/路由/定时器）
+// 系统休眠/锁屏恢复：重载页面恢复前端状态（登录�?路由/定时器）
 try {
   const { powerMonitor } = require('electron');
   powerMonitor.on('resume', handleSystemResume);
   powerMonitor.on('unlock', handleSystemResume);
-  console.log('[System] powerMonitor resume/unlock 事件已注册');
+  console.log('[System] powerMonitor resume/unlock 事件已注�?);
 } catch (err) {
   console.warn('[System] powerMonitor 注册失败:', err?.message || err);
 }
@@ -1085,17 +1021,17 @@ if (process.platform === 'win32') {
   app.commandLine.appendSwitch('disable-background-timer-throttling');
 }
 if (process.platform === 'linux' && typeof process.getuid === 'function' && process.getuid() === 0) {
-  console.warn('[Main] root 用户，启用 --no-sandbox');
+  console.warn('[Main] root 用户，启�?--no-sandbox');
   app.commandLine.appendSwitch('no-sandbox');
 }
 
 process.on('uncaughtException', (err) => {
-  console.error('[Main] 未捕获异常:', err);
-  writeDiagnosticLog(`未捕获异常: ${err.message}\n${err.stack || ''}`);
+  console.error('[Main] 未捕获异�?', err);
+  writeDiagnosticLog(`未捕获异�? ${err.message}\n${err.stack || ''}`);
 });
 process.on('unhandledRejection', (reason) => {
   console.error('[Main] 未处理的拒绝:', reason);
   writeDiagnosticLog(`未处理的拒绝: ${String(reason)}`);
 });
 
-console.log('[Main] 主进程加载完成');
+console.log('[Main] 主进程加载完�?);

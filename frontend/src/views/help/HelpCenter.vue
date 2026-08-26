@@ -603,7 +603,7 @@ onMounted(() => {
 
   :deep(pre) {
     background: var(--color-text-primary);
-    color: #e0e0e0;
+    color: var(--color-border-light);
     padding: 16px;
     border-radius: 6px;
     overflow-x: auto;
