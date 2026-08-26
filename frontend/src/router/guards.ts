@@ -10,7 +10,7 @@ const whiteList = ['/login', '/register', '/forgot-password']
 // 强制改密期间允许访问的路由
 const changePasswordWhitelist = ['/change-password', '/logout']
 
-router.beforeEach(async (to, _from, next) => {
+export const routeGuard = async (to: any, _from: any, next: any) => {
   document.title = (to.meta?.title as string) || '帮扶管理信息系统'
 
   // 公开路由直接放行
@@ -77,6 +77,8 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   next()
-})
+}
+
+router.beforeEach(routeGuard)
 
 export default router
