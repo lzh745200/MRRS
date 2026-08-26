@@ -62,13 +62,18 @@ security:
 		python -m bandit -r app/ -f json -o bandit-report.json && \
 		pip-audit -r requirements.txt
 
-# 清理测试产物
+# 清理测试产物（W4-T8：扩展根目录清理）
 clean:
 	@echo ">>> 清理测试产物..."
 	cd backend && rm -rf .pytest_cache htmlcov coverage.xml .coverage __pycache__
 	find backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find backend -type f -name "*.pyc" -delete 2>/dev/null || true
 	cd frontend && rm -rf coverage playwright-report test-results
+	# 根目录 / frontend 遗留物
+	-rm -f vitest-*.log vitest-*.json vitest-*.mjs test.db 2>/dev/null || true
+	-find . -maxdepth 2 -name "vitest-*.log" -delete 2>/dev/null || true
+	-find . -maxdepth 2 -name "vitest-*.json" -delete 2>/dev/null || true
+	-find . -maxdepth 2 -name "test.db" -delete 2>/dev/null || true
 
 # 安装依赖
 install:

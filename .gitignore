@@ -275,6 +275,12 @@ htmlcov/**
 *.test.ts
 *.spec.js
 *.spec.ts
+# 根目录遗留物（W4-T8）
+vitest-*.log
+vitest-*.json
+vitest-*.mjs
+test.db
+data_sync/
 __tests__/**
 test-results/**
 junit.xml
