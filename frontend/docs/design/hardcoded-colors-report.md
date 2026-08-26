@@ -55,3 +55,18 @@
 - **B1（映射直换）**：上表 Top15 字面量机械替换，风险最低、覆盖最大
 - **B2（文件攻坚）**：DefaultLayoutSafe/AdminDashboard/LoginEnhanced 三文件占 172 处，逐文件人工过
 - **B3（长尾抽检）**：剩余按目录批量 + 20% 抽检截图对比
+
+
+## 已知视觉变化（2026-08-26 语义化批次，待设计评审确认）
+
+> commit 9057b434 将灰阶/边框字面量按**语义阶梯**映射（非像素保持），
+> 默认军绿主题下以下取值发生可见偏移（light 主题下值完全一致）：
+
+- #999 / #909399 → ar(--color-text-secondary) = #64748b（更深、偏蓝）
+- #c0c4cc → ar(--color-text-placeholder) = #94a3b8
+- #dcdfe6 → ar(--color-border) = #cbd5e1；#fafafa → ar(--color-bg-hover) = #f0f4f0
+- 认证四页（LoginEnhanced/Register/ForgotPassword/GetMachineCode）改走 token 后，
+  light 主题下跟随主色变蓝，不再恒定军绿
+
+若设计评审判定需回退像素保持，仅需将上述映射反向替换为字面量并收紧基线。
+状态点灰色已采纳 review 建议改用 --color-text-disabled（两主题像素等同）。
