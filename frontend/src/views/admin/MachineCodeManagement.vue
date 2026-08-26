@@ -3,20 +3,18 @@
   <div style="display: contents">
     <template v-if="isAdmin">
       <div class="machine-code-management">
+        <PageHeader title="机器码管理" subtitle="管理授权设备的机器码，控制系统机器绑定访问">
+          <template #extra>
+            <el-button type="primary" @click="showCreateDialog">
+              <el-icon><Plus /></el-icon>
+              录入机器码
+            </el-button>
+          </template>
+        </PageHeader>
         <el-tabs v-model="activeTab">
           <!-- 页签1：机器码管理 -->
           <el-tab-pane label="机器码管理" name="machineCodes">
             <el-card>
-              <template #header>
-                <div class="card-header">
-                  <h2>机器码管理</h2>
-                  <el-button type="primary" @click="showCreateDialog">
-                    <el-icon><Plus /></el-icon>
-                    录入机器码
-                  </el-button>
-                </div>
-              </template>
-
               <!-- 筛选条件 -->
               <el-form :inline="true" :model="queryForm" class="query-form">
                 <el-form-item label="状态">
@@ -222,6 +220,7 @@
 <script setup lang="ts">
 import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { logger } from '@/utils/logger'

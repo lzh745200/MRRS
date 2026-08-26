@@ -471,6 +471,7 @@
 <script setup lang="ts">
 import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import { logger } from '@/utils/logger'
 import { generateRandomPassword } from '@/utils/clipboard'
 

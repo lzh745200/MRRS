@@ -27,25 +27,25 @@
       </template>
     </PageHeader>
 
-      <!-- 统计信息 -->
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <el-statistic title="待审批" :value="tasks.length" />
-        </el-col>
-        <el-col :span="6">
-          <el-statistic
-            title="高优先级"
-            :value="highPriorityCount"
-            value-style="color: var(--color-danger)"
-          />
-        </el-col>
-        <el-col :span="6">
-          <el-statistic title="今日新增" :value="todayCount" />
-        </el-col>
-        <el-col :span="6">
-          <el-statistic title="已选择" :value="selectedTasks.length" />
-        </el-col>
-      </el-row>
+    <!-- 统计信息 -->
+    <el-row :gutter="20">
+      <el-col :span="6">
+        <el-statistic title="待审批" :value="tasks.length" />
+      </el-col>
+      <el-col :span="6">
+        <el-statistic
+          title="高优先级"
+          :value="highPriorityCount"
+          value-style="color: var(--color-danger)"
+        />
+      </el-col>
+      <el-col :span="6">
+        <el-statistic title="今日新增" :value="todayCount" />
+      </el-col>
+      <el-col :span="6">
+        <el-statistic title="已选择" :value="selectedTasks.length" />
+      </el-col>
+    </el-row>
 
     <!-- 筛选条件 -->
     <el-card class="filter-card" shadow="never">
@@ -242,28 +242,48 @@
     </el-dialog>
 
     <!-- 变更对比对话框 -->
-    <el-dialog v-model="diffDialogVisible" title="变更对比" :width="DIALOG_LG">
-      <div v-if="taskDiff" class="diff-view">
-        <el-table :data="diffTableData" border>
-          <el-table-column prop="field" label="字段" width="150" />
-          <el-table-column prop="original" label="原值">
-            <template #default="{ row }">
-              <span :class="{ 'diff-changed': row.changed }">{{ row.original ?? '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="changed" label="新值">
-            <template #default="{ row }">
-              <span
-                :class="{
-                  'diff-changed': row.changed,
-                  'diff-new': row.changed,
-                }"
-              >
-                {{ row.new ?? '-' }}
-              </span>
-            </template>
-          </el-table-column>
-        </el-table>
+    <el-dialog v-model="diffDialogVisible" title="审批详情" :width="DIALOG_LG">
+      <div v-if="taskDiff" class="diff-view detail-split">
+        <!-- 左：申请内容 + 变更 diff（复用既有 diffTableData computed） -->
+        <div class="detail-left">
+          <h4 class="detail-subtitle">变更对比</h4>
+          <el-table :data="diffTableData" border>
+            <el-table-column prop="field" label="字段" width="150" />
+            <el-table-column prop="original" label="旧值">
+              <template #default="{ row }">
+                <span :class="{ 'diff-changed': row.changed }">{{ row.original ?? '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="changed" label="新值">
+              <template #default="{ row }">
+                <span
+                  :class="{
+                    'diff-changed': row.changed,
+                    'diff-new': row.changed,
+                  }"
+                >
+                  {{ row.new ?? '-' }}
+                </span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <!-- 右：审批轨迹时间线（审批历史 + 状态日志聚合） -->
+        <div class="detail-right">
+          <h4 class="detail-subtitle">审批轨迹</h4>
+          <el-timeline v-if="approvalTimeline.length">
+            <el-timeline-item
+              v-for="(node, i) in approvalTimeline"
+              :key="i"
+              :timestamp="node.time"
+              :type="node.type === 'status' ? 'primary' : 'success'"
+            >
+              <div class="tl-action">{{ node.action }}</div>
+              <div class="tl-operator">操作人：{{ node.operator }}</div>
+            </el-timeline-item>
+          </el-timeline>
+          <div v-else class="tl-empty">暂无审批轨迹</div>
+        </div>
       </div>
       <EmptyState v-else text="加载中..." />
     </el-dialog>
@@ -274,6 +294,7 @@
 import { DIALOG_SM, DIALOG_LG } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { buildApprovalTimeline } from '@/utils/approvalTimeline'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Check, Close, View, Edit, Switch, Document } from '@element-plus/icons-vue'
@@ -376,6 +397,25 @@ const diffTableData = computed(() => {
     new: changed?.[field],
     changed: diff_fields?.includes(field),
   }))
+})
+
+// T033：审批轨迹时间线（左 diff / 右 timeline 双栏）。复用既有 diffTableData，不重复实现。
+// 事件源 = 审批历史 + 状态日志聚合（buildApprovalTimeline）。
+const approvalTimeline = computed(() => {
+  const task = currentTask.value
+  const diff = taskDiff.value
+  const history: any[] = []
+  if (task) {
+    history.push({
+      operator: (task as any).submitter_name || (task as any).applicant || '-',
+      action: '提交申请',
+      time: (task as any).created_at || (task as any).submit_time || '',
+      type: 'submit',
+    })
+  }
+  if (diff && (diff as any).history) history.push(...((diff as any).history as any[]))
+  const statusLogs: any[] = (diff && (diff as any).status_logs) || []
+  return buildApprovalTimeline(history, statusLogs)
 })
 
 /**
@@ -712,6 +752,46 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
+.detail-split {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.detail-left {
+  flex: 1 1 55%;
+  min-width: 0;
+}
+.detail-right {
+  flex: 1 1 45%;
+  min-width: 0;
+  border-left: 1px solid var(--color-border-light);
+  padding-left: 20px;
+}
+.detail-subtitle {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.tl-action {
+  font-weight: 500;
+}
+.tl-operator {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+@media (max-width: 768px) {
+  .detail-split {
+    flex-direction: column;
+  }
+  .detail-right {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--color-border-light);
+    padding-top: 16px;
+  }
+}
 .pending-list {
   padding: 20px;
 }

@@ -67,6 +67,7 @@ vi.mock('@/api/permissionPack', () => ({
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeQuery,
+  useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
 }))
 
 vi.mock('@/stores/auth', () => ({

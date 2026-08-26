@@ -27,33 +27,28 @@
       </template>
     </PageHeader>
 
-      <!-- 筛选条件 -->
-      <el-form :model="filterForm" inline>
-        <el-form-item label="消息类型">
-          <el-select
-            v-model="filterForm.message_type"
-            placeholder="全部"
-            clearable
-            @change="handleSearch"
-          >
-            <el-option label="系统通知" value="system" />
-            <el-option label="审批通知" value="approval" />
-            <el-option label="任务提醒" value="task" />
-            <el-option label="备份提醒" value="backup" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select
-            v-model="filterForm.is_read"
-            placeholder="全部"
-            clearable
-            @change="handleSearch"
-          >
-            <el-option label="未读" :value="0" />
-            <el-option label="已读" :value="1" />
-          </el-select>
-        </el-form-item>
-      </el-form>
+    <!-- 筛选条件 -->
+    <el-form :model="filterForm" inline>
+      <el-form-item label="消息类型">
+        <el-select
+          v-model="filterForm.message_type"
+          placeholder="全部"
+          clearable
+          @change="handleSearch"
+        >
+          <el-option label="系统通知" value="system" />
+          <el-option label="审批通知" value="approval" />
+          <el-option label="任务提醒" value="task" />
+          <el-option label="备份提醒" value="backup" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="状态">
+        <el-select v-model="filterForm.is_read" placeholder="全部" clearable @change="handleSearch">
+          <el-option label="未读" :value="0" />
+          <el-option label="已读" :value="1" />
+        </el-select>
+      </el-form-item>
+    </el-form>
 
     <!-- 消息列表 -->
     <el-card class="list-card">

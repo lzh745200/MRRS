@@ -9,7 +9,7 @@ const { routeBox } = vi.hoisted(() => ({
   routeBox: { query: {} as Record<string, any> },
 }))
 
-vi.mock('vue-router', () => ({ useRoute: () => routeBox }))
+vi.mock('vue-router', () => ({ useRoute: () => routeBox, useRouter: () => ({ back: vi.fn(), push: vi.fn() }) }))
 
 vi.mock('@/views/ruralWorks/List.vue', () => ({
   default: { name: 'RuralWorkList', template: '<div class="rw-list" />' },

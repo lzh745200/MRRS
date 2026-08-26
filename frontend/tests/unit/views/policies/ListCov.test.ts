@@ -62,7 +62,7 @@ const {
 vi.mock('vue-router', async () => {
   const { reactive } = await import('vue')
   routeBox.route = reactive({ query: {} as Record<string, any> })
-  return { useRoute: () => routeBox.route }
+  return { useRoute: () => routeBox.route, useRouter: () => ({ back: vi.fn(), push: vi.fn() }) }
 })
 
 vi.mock('@/composables/useRouterSafe', () => ({
