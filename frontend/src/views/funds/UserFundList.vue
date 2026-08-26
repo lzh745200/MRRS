@@ -669,7 +669,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .fund-list-page {
   padding: 20px;
 }

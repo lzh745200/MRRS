@@ -260,7 +260,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .organization-edit {
   padding: 20px;
 }

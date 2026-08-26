@@ -445,7 +445,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .rules-management {
   display: flex;
   flex-direction: column;

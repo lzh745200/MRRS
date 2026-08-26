@@ -494,7 +494,7 @@ watch(selectedYear, () => loadBudgets())
 onMounted(() => loadBudgets())
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .budget-page {
   padding: 20px;
 }

@@ -349,7 +349,7 @@ function statusLabel(status: string): string {
 onMounted(loadHistory)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .data-import-page {
   padding: 16px;
 }

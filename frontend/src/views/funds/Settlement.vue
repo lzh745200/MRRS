@@ -331,7 +331,7 @@ async function handleApprove() {
 onMounted(loadData)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .settlement-container {
   padding: 20px;
 }

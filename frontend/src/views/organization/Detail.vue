@@ -319,7 +319,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .organization-detail {
   padding: 20px;
 }

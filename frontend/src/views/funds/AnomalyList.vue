@@ -192,7 +192,7 @@ async function handleResolve() {
 onMounted(loadData)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .anomaly-container {
   padding: 20px;
 }

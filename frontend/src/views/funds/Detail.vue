@@ -1419,7 +1419,7 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .fund-detail-page {
   padding: 20px;
 }

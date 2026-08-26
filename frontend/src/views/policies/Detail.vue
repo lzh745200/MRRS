@@ -259,7 +259,7 @@ async function handleDownload() {
 onMounted(loadData)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .policy-detail {
   padding: 0;
 }

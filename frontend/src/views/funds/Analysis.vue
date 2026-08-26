@@ -516,7 +516,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .fund-analysis {
   padding: 20px;
 }

@@ -400,7 +400,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .package-version {
   padding: 20px;
 }

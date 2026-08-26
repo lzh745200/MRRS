@@ -605,7 +605,7 @@ onMounted(() => {
 
       &:hover {
         background-color: var(--color-bg-hover);
-        border-color: var(--color-text-placeholder, #c0c4cc);
+        border-color: var(--color-text-placeholder, $color-border);
       }
     }
 

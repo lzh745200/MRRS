@@ -333,7 +333,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .fund-report {
   padding: 20px;
 }

@@ -359,7 +359,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .incremental-update {
   padding: 20px;
 }

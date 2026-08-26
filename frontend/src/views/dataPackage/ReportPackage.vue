@@ -351,7 +351,7 @@ function resetForm() {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .report-package-page {
   display: flex;
   flex-direction: column;

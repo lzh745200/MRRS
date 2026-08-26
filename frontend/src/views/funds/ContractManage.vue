@@ -467,7 +467,7 @@ async function downloadAttachment(row: any) {
 onMounted(loadData)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .contract-container {
   padding: 20px;
 }

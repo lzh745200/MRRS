@@ -356,7 +356,7 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .policy-search {
   padding: 20px;
   background-color: #0a1929;

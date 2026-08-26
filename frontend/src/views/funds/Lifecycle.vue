@@ -613,7 +613,7 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .lifecycle-container {
   padding: 20px;
 }

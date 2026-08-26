@@ -36,7 +36,7 @@ const refresh = () => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .error-page {
   display: flex;
   justify-content: center;

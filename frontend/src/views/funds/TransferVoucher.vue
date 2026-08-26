@@ -274,7 +274,7 @@ async function handleDelete(id: number) {
 onMounted(loadData)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .voucher-container {
   padding: 20px;
 }
