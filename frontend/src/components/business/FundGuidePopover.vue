@@ -6,15 +6,9 @@
       </template>
       <div class="guide-body">
         <div class="guide-title">{{ title }}</div>
-        <div class="guide-section">
-          <span class="guide-label">前置条件</span>{{ precondition }}
-        </div>
-        <div class="guide-section">
-          <span class="guide-label">后续影响</span>{{ impact }}
-        </div>
-        <div class="guide-section">
-          <span class="guide-label">下一步</span>{{ nextStep }}
-        </div>
+        <div class="guide-section"><span class="guide-label">前置条件</span>{{ precondition }}</div>
+        <div class="guide-section"><span class="guide-label">后续影响</span>{{ impact }}</div>
+        <div class="guide-section"><span class="guide-label">下一步</span>{{ nextStep }}</div>
       </div>
     </el-popover>
   </span>

@@ -473,7 +473,10 @@ class TestCsrfFunctions:
     def test_generate_csrf_token_length(self):
         from app.middleware.csrf_middleware import generate_csrf_token
         token = generate_csrf_token()
-        assert len(token) == 64
+        # W5-T009 新格式：{timestamp}.{random_hex(24 bytes -> 48 hex)}
+        ts_str, hex_part = token.split(".", 1)
+        assert ts_str.isdigit()
+        assert len(hex_part) == 48
         assert isinstance(token, str)
 
     def test_generate_csrf_token_unique(self):

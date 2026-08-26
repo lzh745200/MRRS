@@ -27,7 +27,8 @@ from app.core.transaction import safe_commit
 
 logger = logging.getLogger(__name__)
 
-
+# W12-T045: 手动备份 / upload-restore 最低剩余空间阈值（500MB）
+BACKUP_MIN_FREE_MB = 500
 class BackupRestoreError(Exception):
     """备份恢复失败异常"""
 
@@ -185,15 +186,15 @@ class BackupService:
 
     # ── 备份操作 ────────────────────────────────────────────────
 
-    def _ensure_disk_space(self) -> None:
-        """磁盘空间预检（≥150MB；磁盘满载时提前失败，避免写出损坏的 .zip/.bak 文件）"""
+    def _ensure_disk_space(self, min_mb: int = BACKUP_MIN_FREE_MB) -> None:
+        """磁盘空间预检（W12-T045：默认 ≥500MB；磁盘满载时提前失败，避免写出损坏的 .zip/.bak 文件）"""
         try:
             from app.core.database import check_disk_space
 
-            disk = check_disk_space(min_mb=150)
+            disk = check_disk_space(min_mb=min_mb)
             if not disk.get("sufficient", False):
                 raise BackupRestoreError(
-                    f"磁盘剩余空间不足（{disk.get('free_mb', -1)}MB < 150MB），备份已取消"
+                    f"磁盘剩余空间不足（{disk.get('free_mb', -1)}MB < {min_mb}MB），备份已取消"
                 )
         except BackupRestoreError:
             raise
@@ -996,11 +997,35 @@ class BackupService:
                 "total_size_mb": round(total_size / 1024 / 1024, 2),
                 "oldest_backup": (backups[-1].created_at.isoformat() if backups else None),
                 "newest_backup": backups[0].created_at.isoformat() if backups else None,
+                "disk_space": self.get_disk_space_info(),
             }
 
         except Exception as e:
             logger.error(f"获取备份统计失败: {e}")
             return {"status": "error", "message": str(e)}
+
+    def get_disk_space_info(self) -> Dict:
+        """W12-T045: 返回备份目录 / 数据库目录剩余空间（MB）与阈值充足标记"""
+        from app.core.database import check_disk_space
+
+        def _one(path: str) -> Dict:
+            try:
+                d = check_disk_space(min_mb=BACKUP_MIN_FREE_MB, path=path)
+                return {
+                    "path": path,
+                    "free_mb": d.get("free_mb", -1),
+                    "total_mb": d.get("total_mb", -1),
+                    "sufficient": d.get("sufficient", False),
+                }
+            except Exception as _e:  # noqa: BLE001
+                logger.warning("磁盘空间探测失败 path=%s: %s", path, _e)
+                return {"path": path, "free_mb": -1, "total_mb": -1, "sufficient": True}
+
+        return {
+            "backup_dir": _one(self.backup_dir),
+            "db_dir": _one(os.path.dirname(self.database_path or self.backup_dir)),
+            "threshold_mb": BACKUP_MIN_FREE_MB,
+        }
 
 
 def get_backup_service(db: Session = None) -> "BackupService":

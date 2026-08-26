@@ -262,35 +262,39 @@ write_queue = db_coordinator
 SQLiteWriteQueue = SQLiteWriteCoordinator  # 旧类名别名
 
 
-def check_disk_space(min_mb: int = 100) -> dict:
+def check_disk_space(min_mb: int = 100, path: str | None = None) -> dict:
     """
-    检查数据库所在磁盘的剩余空间。
+    检查指定路径所在磁盘的剩余空间（W12-T045：支持自定义 path）。
 
     Args:
         min_mb: 最小所需空间（MB），默认 100MB
+        path: 待检查目录；默认数据库目录
 
     Returns:
         dict: {
             "free_mb": 剩余空间(MB),
             "total_mb": 总空间(MB),
             "sufficient": 是否充足,
-            "path": 数据库目录路径
+            "path": 目录路径
         }
     """
     import shutil
 
-    db_path = Path(DATABASE_URL.replace("sqlite:///", ""))
-    db_dir = db_path.parent
+    if path is None:
+        db_path = Path(DATABASE_URL.replace("sqlite:///", ""))
+        check_dir = db_path.parent
+    else:
+        check_dir = Path(path)
 
     try:
-        usage = shutil.disk_usage(str(db_dir))
+        usage = shutil.disk_usage(str(check_dir))
         free_mb = usage.free // (1024 * 1024)
         total_mb = usage.total // (1024 * 1024)
         return {
             "free_mb": free_mb,
             "total_mb": total_mb,
             "sufficient": free_mb >= min_mb,
-            "path": str(db_dir),
+            "path": str(check_dir),
         }
     except Exception as e:
         logger.error("磁盘空间检查失败: %s", e)
@@ -298,6 +302,6 @@ def check_disk_space(min_mb: int = 100) -> dict:
             "free_mb": -1,
             "total_mb": -1,
             "sufficient": False,
-            "path": str(db_dir),
+            "path": str(check_dir),
             "error": str(e),
         }

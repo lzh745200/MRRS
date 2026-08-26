@@ -619,6 +619,23 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
     """
     require_admin(current_user, error_message="仅超级管理员可上传恢复备份")
 
+    # W12-T045: 上传恢复前本盘容量预检（备份目录所在盘 <500MB 拒绝，避免写出损坏文件）
+    try:
+        from app.core.database import check_disk_space
+        from app.utils.paths import get_backup_path
+
+        disk = check_disk_space(min_mb=500, path=str(get_backup_path()))
+        if not disk.get("sufficient", False):
+            raise HTTPException(
+                status_code=409,
+                detail=f"磁盘剩余空间不足（{disk.get('free_mb', -1)}MB < 500MB），"
+                "无法安全接收并恢复备份包",
+            )
+    except HTTPException:
+        raise
+    except Exception as _disk_err:  # pragma: no cover - 预检失败不阻断上传
+        logger.warning("upload-restore 磁盘预检失败: %s", _disk_err)
+
     # 安全校验：文件名不得包含路径分隔符，防止路径遍历
     original_name = file.filename or "uploaded_backup.zip"
     if "/" in original_name or "\\" in original_name or ".." in original_name:

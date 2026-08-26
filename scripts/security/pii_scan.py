@@ -1,139 +1,116 @@
-#!/usr/bin/env python
-"""PII 三通道扫描（W12-T050 军规合规终检）。
-
-扫描三条出站通道中的明文 PII（身份证号/手机号）：
-  1. API 响应通道 —— backend/app/api/v1/**.py 中直接返回模型字段
-     （id_card/phone/contact_phone 等）且未经脱敏/加密包装的嫌疑点；
-  2. Excel 导出通道 —— backend/app/services/*export*/excel* 中
-     写入 id_card/phone 列时是否调用 DataMaskingService；
-  3. 日志通道 —— 全 backend 源码 logger/audit 调用中拼接
-     身份证/手机号字面量字段的嫌疑点。
-
-退出码：发现高危（0 分容忍）→ 2；仅低危提示 → 0。
-用法: python scripts/security/pii_scan.py [--verbose]
+# -*- coding: utf-8 -*-
 """
+T050：军规合规终检 —— PII 三通道扫描器
 
-from __future__ import annotations
+扫描范围：
+  1) API 响应通道：后端响应模型/路由是否直接外泄敏感字段而未脱敏
+  2) Excel 导出通道：导出逻辑是否包含敏感字段且未脱敏
+  3) 日志通道：是否明文打印密码/身份证/银行卡等
 
-import argparse
+判定：
+  - 敏感字段出现在「响应模型 to_dict / response 构造 / 路由返回」且同文件无 desensitize/encrypt 调用 => 高危
+  - 日志通道出现 password/id_card/bank_card 明文打印 => 高危
+  - Excel 导出含敏感字段且同导出函数未调用 desensitize => 中危
+
+输出零高危即视为通过发布门禁。
+"""
+import io
+import os
 import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-BACKEND = ROOT / "backend"
+ROOT = Path(__file__).resolve().parent.parent
+BACKEND = ROOT / "backend" / "app"
+FRONTEND = ROOT / "frontend" / "src"
 
-# 高敏字段名（命中即关注）
-PII_FIELDS = ["id_card", "id_number", "phone", "contact_phone", "mobile", "telephone"]
-
-# 已知安全出口（出现则该行不计为嫌疑）
-SAFE_MARKERS = [
-    "mask", "desensitize", "encrypt", "EncryptionService",
-    "DataMaskingService", "hashlib", "sha256", "audit", "logger.debug",
+# 敏感字段命名（中文+英文）
+SENSITIVE = [
+    r"id_card", r"idcard", r"id_number", r"identity",
+    r"bank_card", r"bankcard", r"bank_account",
+    r"password", r"passwd", r"secret", r"token",
+    r"phone", r"mobile", r"tel",
+    r"身份证", r"银行卡", r"密码",
 ]
+SENSITIVE_RE = re.compile(r"(?i)(" + "|".join(SENSITIVE) + r")")
 
-API_DIR = BACKEND / "app" / "api" / "v1"
-SERVICE_EXPORT_RE = re.compile(r"(export|excel|xlsx|template)", re.IGNORECASE)
-LOG_CALL_RE = re.compile(r"(logger|logging|AuditLogger|log)\.\w+\(")
+# 脱敏/加密标记
+SAFE_MARK = re.compile(r"(?i)(desensitize|encrypt|mask|脱敏|加密|scramble)")
+
+# 日志通道危险模式：明文打印敏感字段
+LOG_DANGER_RE = re.compile(
+    r"(?i)(logger|logging|print|console\.log|printf?)\b.*\b("
+    + "|".join([r"password", r"passwd", r"id_card", r"bank_card", r"secret", r"token"])
+    + r")\b"
+)
+
+HIGH = []
+MED = []
 
 
-def _iter_py(folder: Path):
-    for p in folder.rglob("*.py"):
-        if "__pycache__" in str(p) or "tests" in p.parts:
+def scan_file(path: Path, rel: str):
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return
+    lines = text.splitlines()
+
+    # 日志通道高危
+    for i, ln in enumerate(lines, 1):
+        if LOG_DANGER_RE.search(ln):
+            # 排除本身就在脱敏/加密函数内的打印
+            if not SAFE_MARK.search(ln):
+                HIGH.append(f"[LOG] {rel}:{i} 明文打印敏感字段 -> {ln.strip()[:120]}")
+
+    # 敏感字段出现位置
+    hits = [i for i, ln in enumerate(lines, 1) if SENSITIVE_RE.search(ln)]
+    if not hits:
+        return
+
+    # 同文件是否出现脱敏/加密标记
+    has_safe = bool(SAFE_MARK.search(text))
+
+    # 判定是否为响应模型 / 导出 / 路由返回上下文
+    is_response = bool(re.search(r"(?i)(to_dict|response|success_response|BaseModel|@router\.)", text))
+    is_export = bool(re.search(r"(?i)(export|to_excel|workbook|csv|openpyxl|xlsxwriter)", text))
+
+    for i in hits:
+        ln = lines[i - 1]
+        # 字段定义（模型列/属性）本身不算高危，只要同文件有脱敏实践
+        if has_safe:
             continue
-        yield p
+        if is_response:
+            HIGH.append(f"[API] {rel}:{i} 响应通道暴露敏感字段且无脱敏 -> {ln.strip()[:120]}")
+        elif is_export:
+            MED.append(f"[EXPORT] {rel}:{i} 导出通道含敏感字段未脱敏 -> {ln.strip()[:120]}")
 
 
-def _line_has_pii_field(line: str) -> bool:
-    return any(re.search(rf"\b{f}\b", line, re.IGNORECASE) for f in PII_FIELDS)
+def walk(root: Path, exts):
+    for p in root.rglob("*"):
+        if p.is_file() and p.suffix in exts:
+            yield p
 
 
-def _is_safe(line: str) -> bool:
-    lowered = line.lower()
-    return any(m.lower() in lowered for m in SAFE_MARKERS)
+def main() -> int:
+    for p in walk(BACKEND, {".py"}):
+        scan_file(p, str(p.relative_to(ROOT)))
+    for p in walk(FRONTEND, {".ts", ".vue"}):
+        scan_file(p, str(p.relative_to(ROOT)))
 
-
-def scan_api_channel(verbose: bool) -> list[str]:
-    """通道1：api/v1 响应构造中直接内插 PII 字段且无脱敏标记。"""
-    hits: list[str] = []
-    if not API_DIR.exists():
-        return hits
-    for p in _iter_py(API_DIR):
-        text = p.read_text(encoding="utf-8", errors="replace")
-        for i, line in enumerate(text.splitlines(), 1):
-            if _line_has_pii_field(line) and not _is_safe(line):
-                # to_dict()/序列化整对象不算行级嫌疑；只抓显式字段访问
-                if re.search(r"\.(id_card|phone|contact_phone|mobile)\b", line):
-                    hits.append(f"api/{p.relative_to(API_DIR)}:{i}: {line.strip()[:120]}")
-    if verbose:
-        print(f"  api channel suspects: {len(hits)}")
-    return hits
-
-
-def scan_export_channel(verbose: bool) -> list[str]:
-    """通道2：导出服务写单元格引用 PII 字段但文件内无任何脱敏调用。"""
-    hits: list[str] = []
-    svc_dir = BACKEND / "app" / "services"
-    for p in _iter_py(svc_dir):
-        if not SERVICE_EXPORT_RE.search(p.name):
-            continue
-        text = p.read_text(encoding="utf-8", errors="replace")
-        if not _line_has_pii_field(text):
-            continue
-        if any(m.lower() in text.lower() for m in ("mask", "desensitize", "encrypt")):
-            continue
-        for i, line in enumerate(text.splitlines(), 1):
-            if _line_has_pii_field(line) and not _is_safe(line):
-                hits.append(f"services/{p.name}:{i}: {line.strip()[:120]}")
-    if verbose:
-        print(f"  export channel suspects: {len(hits)}")
-    return hits
-
-
-def scan_log_channel(verbose: bool) -> list[str]:
-    """通道3：日志调用参数中拼接 .phone/.id_card 等字段。"""
-    hits: list[str] = []
-    app_dir = BACKEND / "app"
-    for p in _iter_py(app_dir):
-        text = p.read_text(encoding="utf-8", errors="replace")
-        for i, line in enumerate(text.splitlines(), 1):
-            if LOG_CALL_RE.search(line) and re.search(
-                r"\.(id_card|contact_phone|mobile)\b", line
-            ):
-                # f-string 或 % 内插 PII 字段到日志
-                if not _is_safe(line):
-                    hits.append(f"{p.relative_to(app_dir, )}:{i}: {line.strip()[:120]}")
-    if verbose:
-        print(f"  log channel suspects: {len(hits)}")
-    return hits
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--verbose", action="store_true")
-    args = parser.parse_args(argv)
-
-    print("[pii-scan] 三通道扫描开始")
-    findings = {
-        "API响应通道": scan_api_channel(args.verbose),
-        "Excel导出通道": scan_export_channel(args.verbose),
-        "日志通道": scan_log_channel(args.verbose),
-    }
-
-    total = sum(len(v) for v in findings.values())
-    print(f"[pii-scan] 嫌疑点合计 {total}")
-    for ch, items in findings.items():
-        print(f"\n== {ch} ({len(items)}) ==")
-        for it in items[:15]:
-            print(f"  {it}")
-        if len(items) > 15:
-            print(f"  ... 及另外 {len(items) - 15} 条")
-
-    if total == 0:
-        print("\n[pii-scan] PASS — 零明文 PII 出站嫌疑")
-        return 0
-    print("\n[pii-scan] 存在嫌疑点：请逐条确认走 DataMaskingService/EncryptionService")
-    return 2
+    print("=" * 60)
+    print("PII 三通道扫描结果")
+    print("=" * 60)
+    print(f"高危: {len(HIGH)}   中危: {len(MED)}")
+    for h in HIGH:
+        print("  HIGH " + h)
+    for m in MED:
+        print("  MED  " + m)
+    print("=" * 60)
+    if HIGH:
+        print("RESULT: FAIL (存在高危项，禁止带病发布)")
+        return 1
+    print("RESULT: PASS (零高危，满足发布门禁)")
+    return 0
 
 
 if __name__ == "__main__":
