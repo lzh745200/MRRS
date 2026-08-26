@@ -267,7 +267,7 @@ async function handleFileSelected(event: Event) {
 onMounted(loadData)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .subordinate-management {
   padding: 20px;
 }

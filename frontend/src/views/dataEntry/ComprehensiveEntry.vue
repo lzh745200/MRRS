@@ -1300,7 +1300,7 @@ async function submitVillageData() {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .comprehensive-entry {
   display: flex;
   flex-direction: column;

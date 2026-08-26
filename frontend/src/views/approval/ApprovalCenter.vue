@@ -268,7 +268,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .approval-center {
   padding: 20px;
 }

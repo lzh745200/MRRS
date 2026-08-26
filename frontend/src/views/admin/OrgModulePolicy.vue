@@ -155,7 +155,7 @@ async function handleSave() {
 onMounted(loadOrgs)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .org-module-policy {
   padding: 20px;
 }

@@ -211,7 +211,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .approval-overview {
   padding: 20px;
 }

@@ -401,7 +401,7 @@ watch(
 )
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .change-password-container {
   min-height: 100vh;
   display: flex;

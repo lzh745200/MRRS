@@ -561,7 +561,7 @@ async function runNlpQuery() {
 checkStatus()
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .ai-interactive-page {
   padding: 20px;
 }

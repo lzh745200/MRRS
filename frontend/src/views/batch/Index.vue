@@ -409,7 +409,7 @@ function handleReset() {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .batch-page {
   padding: 20px;
 }

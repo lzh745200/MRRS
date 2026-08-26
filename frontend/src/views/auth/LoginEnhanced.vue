@@ -475,7 +475,7 @@ const goToMachineCode = () => {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 /* 定义变量 */
 .login-page {
   --military-dark: var(--color-primary-dark-2);

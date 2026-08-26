@@ -284,7 +284,7 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .data-analysis-page {
   display: flex;
   flex-direction: column;

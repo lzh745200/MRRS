@@ -558,7 +558,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .profile-container {
   padding: 20px;
 }

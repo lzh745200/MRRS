@@ -195,7 +195,7 @@ async function handleResubmit(row: any) {
 onMounted(loadData)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .my-applications {
   display: flex;
   flex-direction: column;
