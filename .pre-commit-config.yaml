@@ -48,6 +48,14 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      - id: check-tokens-sync
+        name: check tokens dual-source sync (W11-043 guard)
+        entry: python scripts/check_tokens_sync.py --staged
+        language: system
+        files: ^frontend/src/styles/(tokens|tokens-vars)\.scss$
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: flake8
         name: flake8
         entry: python scripts/pre_commit_hooks.py flake8

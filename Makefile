@@ -39,13 +39,13 @@ coverage:
 	cd backend && python -m pytest --cov=app --cov-report=html --cov-report=xml
 	cd frontend && npm run test:coverage
 
-# 部署前检查
+# 部署前检查（W4-T2：每条命令独立阻断，禁止 || true 吞失败）
 deploy-check:
 	@echo ">>> 运行部署前检查..."
-	# 后端检查
-	cd backend && \
-		python -m pytest tests/ --cov=app --cov-fail-under=98 && \
-		python -m bandit -r app/ -f json -o bandit-report.json || true
+	# 后端：测试（98% 门禁真实阻断）→ flake8 → bandit
+	cd backend && python -m pytest tests/ --cov=app --cov-fail-under=98 -q
+	cd backend && python -m flake8 app/ --max-line-length=120
+	cd backend && python -m bandit -r app/ -ll -f json -o bandit-report.json
 
 	# 前端检查
 	cd frontend && \
