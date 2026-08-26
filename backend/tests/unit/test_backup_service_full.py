@@ -213,8 +213,25 @@ class TestSafeExtractallValueError:
 class TestRestoreEncryptedBackup:
     def _make_zip(self, zip_path, db_content="new_db", upload_content="new_upload"):
         """创建包含数据库和上传文件的 zip。"""
+        import sqlite3 as _sqlite3
+        import tempfile as _tempfile
+
+        # T046 恢复后做 SQLite 完整性自检，必须写入真实 SQLite 库文件
+        _fd, _db_file = _tempfile.mkstemp(suffix=".db")
+        os.close(_fd)
+        _conn = _sqlite3.connect(_db_file)
+        try:
+            _conn.execute("CREATE TABLE IF NOT EXISTS _marker (v TEXT)")
+            _conn.execute("INSERT INTO _marker (v) VALUES (?)", (db_content,))
+            _conn.commit()
+        finally:
+            _conn.close()
+        with open(_db_file, "rb") as _f:
+            _db_bytes = _f.read()
+        os.remove(_db_file)
+
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", db_content)
+            zf.writestr("data/rural_revitalization.db", _db_bytes)
             zf.writestr("uploads/f.txt", upload_content)
 
     def test_restore_encrypted_backup(self, mock_db, tmp_path):
@@ -237,7 +254,13 @@ class TestRestoreEncryptedBackup:
         assert result["success"] is True
         assert result["database_restored"] is True
         assert result["uploads_restored"] is True
-        assert Path(db_path).read_text() == "new_db"
+        # T046：恢复后做完整性自检，必须恢复为真实 SQLite 库
+        _chk = __import__("sqlite3").connect(db_path)
+        try:
+            _row = _chk.execute("SELECT v FROM _marker").fetchone()
+            assert _row[0] == "new_db"
+        finally:
+            _chk.close()
 
     def test_restore_encrypted_no_password_raises(self, mock_db, tmp_path):
         """加密备份但未提供密码 → ValueError。"""
@@ -288,8 +311,23 @@ class TestRestoreEngineDisposeFailure:
         Path(db_path).write_text("orig")
 
         zip_path = os.path.join(bdir, "b.zip")
+        import sqlite3 as _sqlite3
+        import tempfile as _tempfile
+
+        _fd, _db_file = _tempfile.mkstemp(suffix=".db")
+        os.close(_fd)
+        _conn = _sqlite3.connect(_db_file)
+        try:
+            _conn.execute("CREATE TABLE IF NOT EXISTS _marker (v TEXT)")
+            _conn.execute("INSERT INTO _marker (v) VALUES (?)", ("new",))
+            _conn.commit()
+        finally:
+            _conn.close()
+        with open(_db_file, "rb") as _f:
+            _db_bytes = _f.read()
+        os.remove(_db_file)
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", "new")
+            zf.writestr("data/rural_revitalization.db", _db_bytes)
 
         svc = _make_svc(mock_db, bdir, db_path, str(tmp_path / "u"))
 

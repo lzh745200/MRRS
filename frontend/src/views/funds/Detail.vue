@@ -39,6 +39,12 @@
               @click="doWorkflow('approve')"
               >审批通过</el-button
             >
+            <FundGuidePopover
+              title="审批通过"
+              precondition="经费处于「待审批」且申请信息完整、预算合规"
+              impact="通过后进入「已批准」，解锁拨付操作"
+              next-step="点击「拨付」将经费下拨到使用单位账户"
+            />
             <el-button
               v-if="fundData.status === 'pending'"
               type="danger"
@@ -51,24 +57,48 @@
               @click="doWorkflow('allocate')"
               >拨付</el-button
             >
+            <FundGuidePopover
+              title="拨付"
+              precondition="经费已「已批准」"
+              impact="拨付后进入「已拨付」，可开始使用与登记报销"
+              next-step="登记报销或点击「开始使用」启动项目支出"
+            />
             <el-button
               v-if="fundData.status === 'allocated'"
               type="warning"
               @click="doWorkflow('start_use')"
               >开始使用</el-button
             >
+            <FundGuidePopover
+              title="开始使用"
+              precondition="经费已「已拨付」到账"
+              impact="进入「使用中」，可逐笔录销报销"
+              next-step="支出执行完毕后点击「完成使用」"
+            />
             <el-button
               v-if="fundData.status === 'in_use'"
               type="success"
               @click="doWorkflow('complete')"
               >完成使用</el-button
             >
+            <FundGuidePopover
+              title="完成使用"
+              precondition="经费「使用中」且项目支出执行完毕"
+              impact="进入「已完成」，解锁审计"
+              next-step="点击「审计」进行合规审计"
+            />
             <el-button
               v-if="fundData.status === 'completed'"
               type="primary"
               @click="doWorkflow('audit')"
               >审计</el-button
             >
+            <FundGuidePopover
+              title="审计"
+              precondition="经费「已完成」使用"
+              impact="审计通过后进入「已审计」（归档），流程结束"
+              next-step="无，流程闭环"
+            />
           </div>
         </div>
 
@@ -393,6 +423,12 @@
                 @click="expDialogVisible = true"
                 >登记报销</el-button
               >
+              <FundGuidePopover
+                title="登记报销"
+                precondition="经费已「已拨付/使用中/已完成」"
+                impact="记录发票与支出，自动累计剩余可用额度（不影响主状态机）"
+                next-step="持续登记直至支出执行完毕"
+              />
             </div>
             <el-table :data="expenses" size="small" border>
               <el-table-column prop="transaction_date" label="日期" width="110" />
@@ -722,8 +758,10 @@
 <script setup lang="ts">
 import { DIALOG_SM } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import FundGuidePopover from '@/components/business/FundGuidePopover.vue'
 import { logger } from '@/utils/logger'
 import { useAuthStore } from '@/stores/auth'
+import { deriveActiveStep } from '@/utils/fundStep'
 
 import { ref, reactive, computed, onMounted, onUnmounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -777,12 +815,7 @@ const previewUrl = ref('')
 const previewTitle = ref('')
 
 // 审批流程当前步骤索引（el-steps active 语义：已完成步骤数）
-const approvalActiveStep = computed(() => {
-  const nodes = approvalFlow.value.nodes
-  if (!nodes.length) return 0
-  const idx = nodes.findIndex((n: any) => n.current)
-  return idx >= 0 ? idx + 1 : nodes.filter((n: any) => n.reached).length
-})
+const approvalActiveStep = computed(() => deriveActiveStep(approvalFlow.value.nodes as any))
 
 // 加载历史记录
 async function loadStatusHistory() {

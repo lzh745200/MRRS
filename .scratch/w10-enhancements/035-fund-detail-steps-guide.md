@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: []
 blocked-by: ["w7-defect-fixes/009-fund-reject-reason-required.md", "w7-defect-fixes/010-fund-status-enum-source-expand.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w7-defect-fixes/009-fund-reject-reason-required.md", "w7-defect-fi
 - [ ] active 推导与状态机一致（vitest 参数化 7 态）
 - [ ] 五个 popover 内容渲染
 - [ ] 指引文案与 ADR-0009/0011 口径一致
+
+## Resolution (v1.10.0 batch 11)
+T035: Detail.vue adds FundGuidePopover next to 5 workflow actions (approve/allocate/start_use/complete/audit) + reimburse; deriveActiveStep extracted to utils/fundStep for parametrized 7-state test. 7+58 green, TSC0.

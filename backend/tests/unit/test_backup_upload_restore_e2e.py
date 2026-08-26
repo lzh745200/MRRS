@@ -28,8 +28,16 @@ def _make_backup(tmp_path, password=None):
     up_dir = os.path.join(str(tmp_path), "live", "uploads")
     os.makedirs(os.path.dirname(db_path))
     os.makedirs(up_dir)
-    with open(db_path, "w", encoding="utf-8") as f:
-        f.write("DB-v2")
+    # T046：恢复后做 SQLite 完整性自检，必须写入真实 SQLite 库文件
+    import sqlite3 as _sqlite3
+
+    _conn = _sqlite3.connect(db_path)
+    try:
+        _conn.execute("CREATE TABLE IF NOT EXISTS _marker (v TEXT)")
+        _conn.execute("INSERT INTO _marker (v) VALUES (?)", ("DB-v2",))
+        _conn.commit()
+    finally:
+        _conn.close()
     with open(os.path.join(up_dir, "doc.txt"), "w", encoding="utf-8") as f:
         f.write("file-v2")
 
@@ -68,8 +76,12 @@ class TestUploadRestoreE2E:
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["data"]["database_restored"] is True
-        with open(db_path, encoding="utf-8") as f:
-            assert f.read() == "DB-v2"
+        _chk = __import__("sqlite3").connect(db_path)
+        try:
+            _row = _chk.execute("SELECT v FROM _marker").fetchone()
+            assert _row[0] == "DB-v2"
+        finally:
+            _chk.close()
 
     def test_restore_encrypted_backup_with_password(self, client, tmp_path):
         svc, backup_path, db_path, up_dir = _make_backup(tmp_path, password="s3cret!Pass")
@@ -82,8 +94,12 @@ class TestUploadRestoreE2E:
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["data"]["database_restored"] is True
-        with open(db_path, encoding="utf-8") as f:
-            assert f.read() == "DB-v2"
+        _chk = __import__("sqlite3").connect(db_path)
+        try:
+            _row = _chk.execute("SELECT v FROM _marker").fetchone()
+            assert _row[0] == "DB-v2"
+        finally:
+            _chk.close()
         assert os.path.exists(os.path.join(up_dir, "doc.txt"))
 
     def test_restore_encrypted_wrong_password_400(self, client, tmp_path):
@@ -98,8 +114,12 @@ class TestUploadRestoreE2E:
         assert resp.status_code == 400
         assert "密码" in resp.json()["detail"]
         # 原数据未被破坏
-        with open(db_path, encoding="utf-8") as f:
-            assert f.read() == "DB-v2"
+        _chk = __import__("sqlite3").connect(db_path)
+        try:
+            _row = _chk.execute("SELECT v FROM _marker").fetchone()
+            assert _row[0] == "DB-v2"
+        finally:
+            _chk.close()
 
     def test_restore_backup_restore_error_400(self, client, tmp_path):
         """恢复过程中 BackupRestoreError（如加密包内 ZIP 损坏）→ 400 并清理临时文件"""
