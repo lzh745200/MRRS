@@ -438,7 +438,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .school-edit {
   padding: 20px;
 }

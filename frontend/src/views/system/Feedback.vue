@@ -144,7 +144,7 @@ function handleReset() {
 onMounted(() => loadData())
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .feedback-page {
   padding: 20px;
 }

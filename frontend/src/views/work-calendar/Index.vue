@@ -190,7 +190,7 @@ function deleteEvent() {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .page-header {
   display: flex;
   justify-content: space-between;

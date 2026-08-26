@@ -597,7 +597,7 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .task-manager {
   padding: 16px;
 }

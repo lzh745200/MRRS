@@ -334,7 +334,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .school-scholarship-page {
   padding: 20px;
 }

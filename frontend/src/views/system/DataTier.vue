@@ -532,7 +532,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .data-tier-page {
   padding: 20px;
 }

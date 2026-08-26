@@ -392,7 +392,7 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .chunked-upload-page {
   display: flex;
   flex-direction: column;

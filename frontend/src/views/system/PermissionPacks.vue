@@ -357,7 +357,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .permission-packs-page {
   padding: 20px;
 }

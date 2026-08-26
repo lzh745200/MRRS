@@ -268,7 +268,7 @@ async function handleDelete(row: any) {
 onMounted(() => loadProjects())
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .school-projects-page {
   padding: 20px;
 }

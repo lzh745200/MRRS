@@ -130,7 +130,7 @@ async function clearAllCache() {
 onMounted(() => refreshData())
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .cache-page {
   padding: 20px;
 }

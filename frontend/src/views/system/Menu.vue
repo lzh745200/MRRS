@@ -84,7 +84,7 @@ const menuTree = computed<MenuItem[]>(() => {
 const menuCount = computed(() => menuTree.value.length)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .menu-page {
   padding: 20px;
 }

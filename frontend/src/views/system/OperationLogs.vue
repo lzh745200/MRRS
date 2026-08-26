@@ -211,7 +211,7 @@ async function handleExport() {
 onMounted(loadLogs)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .operation-logs {
   padding: 20px;
 }

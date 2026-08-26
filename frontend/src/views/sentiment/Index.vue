@@ -344,7 +344,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .sentiment-page {
   padding: 20px;
 }

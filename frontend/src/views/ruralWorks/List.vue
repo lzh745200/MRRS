@@ -637,7 +637,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .rural-work-list-page {
   padding: 20px;
 }

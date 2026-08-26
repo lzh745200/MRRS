@@ -894,7 +894,7 @@ async function handleConfirmImport() {
 onMounted(loadTemplates)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .report-templates-page {
   display: flex;
   flex-direction: column;

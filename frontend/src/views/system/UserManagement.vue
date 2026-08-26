@@ -1307,7 +1307,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .user-management {
   padding: 20px;
 }

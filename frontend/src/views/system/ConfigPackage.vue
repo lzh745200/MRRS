@@ -282,7 +282,7 @@ loadConfig()
 applyTheme(currentTheme.value)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .page-header {
   margin-bottom: 20px;
 }

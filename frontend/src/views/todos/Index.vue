@@ -361,7 +361,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .todos-page {
   padding: 20px;
 }

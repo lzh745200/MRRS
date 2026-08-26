@@ -900,7 +900,7 @@ watch(healthExpanded, (val) => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .monitoring-dashboard {
   padding: 0;
   min-height: 100%;

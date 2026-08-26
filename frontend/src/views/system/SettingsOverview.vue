@@ -590,7 +590,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .settings-overview-page {
   display: flex;
   flex-direction: column;

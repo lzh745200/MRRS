@@ -54,7 +54,7 @@ function handleTabChange(name: string | number) {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .rural-works-index {
   padding: 16px;
 }

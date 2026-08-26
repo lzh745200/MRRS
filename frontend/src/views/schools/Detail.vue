@@ -474,7 +474,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .school-detail-page {
   padding: 20px;
 }

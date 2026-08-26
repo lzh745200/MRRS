@@ -59,7 +59,7 @@ const config = reactive({
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .email-settings-page {
   padding: 20px;
 }

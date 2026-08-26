@@ -739,7 +739,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .backup-management {
   padding: 20px;
 }

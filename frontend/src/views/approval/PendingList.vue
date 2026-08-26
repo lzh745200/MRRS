@@ -1,35 +1,31 @@
 <template>
   <div class="pending-list">
     <!-- 页面标题 -->
-    <el-card class="header-card">
-      <template #header>
-        <div class="card-header">
-          <span class="title">待审批任务</span>
-          <div class="actions">
-            <el-button :loading="loading" @click="loadTasks">
-              <el-icon><Refresh /></el-icon>
-              刷新
-            </el-button>
-            <el-button
-              type="success"
-              :disabled="tasks.length === 0"
-              :loading="autoApproving"
-              @click="handleAutoApproveAll"
-            >
-              <el-icon><Check /></el-icon>
-              一键全部通过
-            </el-button>
-            <el-button
-              type="primary"
-              :disabled="selectedTasks.length === 0"
-              @click="handleBatchApprove"
-            >
-              <el-icon><Check /></el-icon>
-              批量通过 ({{ selectedTasks.length }})
-            </el-button>
-          </div>
-        </div>
+    <PageHeader title="待审批任务" subtitle="查看并处理待审批的帮扶业务申请">
+      <template #extra>
+        <el-button :loading="loading" @click="loadTasks">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+        <el-button
+          type="success"
+          :disabled="tasks.length === 0"
+          :loading="autoApproving"
+          @click="handleAutoApproveAll"
+        >
+          <el-icon><Check /></el-icon>
+          一键全部通过
+        </el-button>
+        <el-button
+          type="primary"
+          :disabled="selectedTasks.length === 0"
+          @click="handleBatchApprove"
+        >
+          <el-icon><Check /></el-icon>
+          批量通过 ({{ selectedTasks.length }})
+        </el-button>
       </template>
+    </PageHeader>
 
       <!-- 统计信息 -->
       <el-row :gutter="20">

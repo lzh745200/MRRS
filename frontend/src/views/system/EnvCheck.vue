@@ -210,7 +210,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .env-check-page {
   display: flex;
   flex-direction: column;

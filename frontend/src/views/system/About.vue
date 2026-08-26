@@ -202,7 +202,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .about-page {
   padding: 20px;
 }

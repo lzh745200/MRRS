@@ -688,7 +688,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .projects-page {
   height: 100%;
   display: flex;

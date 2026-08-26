@@ -490,7 +490,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .error-reports-page {
   padding: 20px;
 }

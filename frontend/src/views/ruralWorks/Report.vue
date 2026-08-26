@@ -147,7 +147,7 @@ function exportCSV() {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .rural-report-page {
   padding: 20px;
 }

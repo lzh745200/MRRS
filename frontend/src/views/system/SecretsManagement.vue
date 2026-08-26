@@ -330,7 +330,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .secrets-management {
   padding: 16px;
 }

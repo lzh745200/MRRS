@@ -262,7 +262,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .i18n-management {
   display: flex;
   flex-direction: column;

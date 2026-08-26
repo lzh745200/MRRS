@@ -417,7 +417,7 @@ onMounted(() => {
 })
 </script>
 
-<style>
+<style lang="scss">
 /* 全局样式 - 确保 filter-item-wide 保持 300px 宽度 */
 .audit-management-page .filter-item-wide {
   width: 300px;
@@ -430,7 +430,7 @@ onMounted(() => {
 }
 </style>
 
-<style scoped>
+<style lang="scss" scoped>
 .audit-management-page {
   display: flex;
   flex-direction: column;

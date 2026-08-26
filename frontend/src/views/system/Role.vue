@@ -579,7 +579,7 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .role-management {
   padding: 20px;
 }

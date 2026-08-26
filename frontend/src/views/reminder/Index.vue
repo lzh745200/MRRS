@@ -116,7 +116,7 @@ function formatTime(t?: string | null): string {
 onMounted(load)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .reminder-center {
   padding: 20px;
 }

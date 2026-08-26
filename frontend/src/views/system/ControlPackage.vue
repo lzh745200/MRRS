@@ -163,7 +163,7 @@ function resetState() {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .control-package-view {
   padding: 20px;
   max-width: 800px;
