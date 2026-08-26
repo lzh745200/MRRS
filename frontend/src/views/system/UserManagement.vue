@@ -1,5 +1,6 @@
 <template>
   <div class="user-management">
+    <PageHeader title="用户管理" subtitle="管理系统用户、角色与权限分配" />
     <!-- 用户/角色 Tab 切换 -->
     <el-tabs v-model="activeTab" class="user-role-tabs" @tab-change="handleTabChange">
       <el-tab-pane label="用户列表" name="users" />

@@ -1,13 +1,7 @@
 <template>
   <div class="rural-works-task">
     <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="page-header-inner">
-        <h1 class="page-title">任务分配</h1>
-        <p class="page-subtitle">精准分配乡村振兴工作任务，确保高效执行与责任到人</p>
-      </div>
-      <div class="decoration-line"></div>
-    </div>
+    <PageHeader title="任务分配" subtitle="精准分配乡村振兴工作任务，确保高效执行与责任到人" />
 
     <!-- 工具栏：操作 + 筛选一体化 -->
     <div class="toolbar-section">
@@ -607,6 +601,7 @@
 
 <script lang="ts" setup>
 import { DIALOG_LG, DIALOG_MD, DIALOG_SM } from '@/config/dialog'
+import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Upload, Download, ArrowDown, Document } from '@element-plus/icons-vue'

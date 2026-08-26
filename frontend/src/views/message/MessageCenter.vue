@@ -1,37 +1,31 @@
 <template>
   <div class="message-center">
     <!-- 页面标题 -->
-    <el-card class="header-card">
-      <template #header>
-        <div class="card-header">
-          <span class="title">
-            消息中心
-            <el-badge v-if="unreadCount > 0" :value="unreadCount" class="unread-badge" />
-          </span>
-          <div class="actions">
-            <el-button :disabled="unreadCount === 0" @click="handleMarkAllRead">
-              <el-icon><Check /></el-icon>
-              全部已读
-            </el-button>
-            <el-button type="warning" plain @click="handleClearRead">
-              <el-icon><Delete /></el-icon>
-              清空已读
-            </el-button>
-            <el-button
-              type="danger"
-              :disabled="selectedMessages.length === 0"
-              @click="handleBatchDelete"
-            >
-              <el-icon><Delete /></el-icon>
-              删除选中 ({{ selectedMessages.length }})
-            </el-button>
-            <el-button :loading="loading" @click="loadMessages">
-              <el-icon><Refresh /></el-icon>
-              刷新
-            </el-button>
-          </div>
-        </div>
+    <PageHeader title="消息中心" subtitle="集中管理系统通知、审批与任务提醒消息">
+      <template #extra>
+        <el-badge v-if="unreadCount > 0" :value="unreadCount" class="unread-badge" />
+        <el-button :disabled="unreadCount === 0" @click="handleMarkAllRead">
+          <el-icon><Check /></el-icon>
+          全部已读
+        </el-button>
+        <el-button type="warning" plain @click="handleClearRead">
+          <el-icon><Delete /></el-icon>
+          清空已读
+        </el-button>
+        <el-button
+          type="danger"
+          :disabled="selectedMessages.length === 0"
+          @click="handleBatchDelete"
+        >
+          <el-icon><Delete /></el-icon>
+          删除选中 ({{ selectedMessages.length }})
+        </el-button>
+        <el-button :loading="loading" @click="loadMessages">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
       </template>
+    </PageHeader>
 
       <!-- 筛选条件 -->
       <el-form :model="filterForm" inline>
@@ -60,7 +54,6 @@
           </el-select>
         </el-form-item>
       </el-form>
-    </el-card>
 
     <!-- 消息列表 -->
     <el-card class="list-card">
@@ -228,6 +221,7 @@
 <script setup lang="ts">
 import { DIALOG_MD } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage, ElMessageBox } from 'element-plus'

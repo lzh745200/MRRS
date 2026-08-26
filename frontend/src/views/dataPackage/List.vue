@@ -1,28 +1,25 @@
 <template>
   <div class="data-package-list">
-    <el-card class="page-header">
-      <div class="header-content">
-        <h2>数据包管理</h2>
-        <div class="header-actions">
-          <el-button type="primary" @click="showExportDialog = true">
-            <el-icon><Upload /></el-icon>
-            导出数据
-          </el-button>
-          <el-button @click="showImportDialog = true">
-            <el-icon><Download /></el-icon>
-            导入数据
-          </el-button>
-          <el-button type="warning" @click="showEncryptedExportDialog = true">
-            <el-icon><Lock /></el-icon>
-            加密导出
-          </el-button>
-          <el-button type="warning" plain @click="showEncryptedImportDialog = true">
-            <el-icon><Key /></el-icon>
-            加密导入
-          </el-button>
-        </div>
-      </div>
-    </el-card>
+    <PageHeader title="数据包管理" subtitle="管理乡村振兴数据包的导出、导入与加密传输">
+      <template #extra>
+        <el-button type="primary" @click="showExportDialog = true">
+          <el-icon><Upload /></el-icon>
+          导出数据
+        </el-button>
+        <el-button @click="showImportDialog = true">
+          <el-icon><Download /></el-icon>
+          导入数据
+        </el-button>
+        <el-button type="warning" @click="showEncryptedExportDialog = true">
+          <el-icon><Lock /></el-icon>
+          加密导出
+        </el-button>
+        <el-button type="warning" plain @click="showEncryptedImportDialog = true">
+          <el-icon><Key /></el-icon>
+          加密导入
+        </el-button>
+      </template>
+    </PageHeader>
 
     <!-- Filters -->
     <el-card class="filter-card">
@@ -159,6 +156,7 @@
 <script setup lang="ts">
 import { DIALOG_LG } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Upload, Download, Lock, Key } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

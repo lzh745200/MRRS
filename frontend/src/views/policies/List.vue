@@ -1,5 +1,6 @@
 <template>
   <div class="policies-list">
+    <PageHeader title="政策管理" subtitle="查阅与维护乡村振兴帮扶政策，支持分类检索" />
     <!-- 搜索筛选卡片 -->
     <el-card class="search-card">
       <el-form :inline="true" :model="searchForm" @submit.prevent="handleSearch">
@@ -187,6 +188,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'

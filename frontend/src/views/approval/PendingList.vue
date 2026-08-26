@@ -46,7 +46,6 @@
           <el-statistic title="已选择" :value="selectedTasks.length" />
         </el-col>
       </el-row>
-    </el-card>
 
     <!-- 筛选条件 -->
     <el-card class="filter-card" shadow="never">
@@ -274,6 +273,7 @@
 <script setup lang="ts">
 import { DIALOG_SM, DIALOG_LG } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Check, Close, View, Edit, Switch, Document } from '@element-plus/icons-vue'

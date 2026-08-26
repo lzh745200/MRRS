@@ -141,6 +141,13 @@
 
     <!-- 数据表格 -->
     <div class="table-card">
+      <!-- T031：视图切换（表格/甘特） -->
+      <div class="view-switch">
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button value="table">表格</el-radio-button>
+          <el-radio-button value="gantt">甘特图</el-radio-button>
+        </el-radio-group>
+      </div>
       <!-- 批量操作工具栏 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
@@ -181,7 +188,7 @@
         </template>
       </el-result>
       <el-table
-        v-else
+        v-else-if="viewMode === 'table'"
         ref="tableRef"
         v-loading="loading"
         :data="projectList"
@@ -241,8 +248,10 @@
               </el-popconfirm>
             </template>
           </template>
-        </el-table-column>
+          </el-table-column>
       </el-table>
+
+      <GanttView v-else :items="ganttItems" />
 
       <!-- 分页 -->
       <div class="pagination-wrapper">
@@ -280,6 +289,8 @@ import {
 } from '@/api/projects'
 import { useAuthStore } from '@/stores/auth'
 import { chartColor } from '@/utils/chartColors'
+import GanttView from '@/views/projects/GanttView.vue'
+import type { GanttItem } from '@/utils/gantt'
 
 const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
@@ -317,6 +328,18 @@ const pagination = reactive({
 
 // 项目列表数据
 const projectList = ref<Project[]>([])
+
+// T031：视图切换（表格/甘特）
+const viewMode = ref<'table' | 'gantt'>('table')
+const ganttItems = computed<GanttItem[]>(() =>
+  projectList.value.map((p) => ({
+    id: p.id,
+    name: p.name,
+    start: p.start_date || null,
+    end: p.end_date || null,
+    progress: (p as any).progress,
+  }))
+)
 
 // 辅助函数
 const getTypeText = (type: string) => {
@@ -689,6 +712,11 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.view-switch {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
 .projects-page {
   height: 100%;
   display: flex;
