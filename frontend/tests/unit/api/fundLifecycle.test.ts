@@ -165,11 +165,7 @@ describe('api/fundLifecycle (30 methods)', () => {
     expect(mockGet).toHaveBeenCalledWith('/fund-lifecycle/monitoring/deviation/1')
   })
 
-  it('fundFlow GET', async () => {
-    mockGet.mockResolvedValueOnce({ data: { data: { flow: [] } } })
-    await fundLifecycleApi.fundFlow(1)
-    expect(mockGet).toHaveBeenCalledWith('/fund-lifecycle/monitoring/fund-flow/1')
-  })
+  // W8-T019：fundFlow/getFundFlowTree 死 API 已删除，用例同步移除。
 
   it('listAnomalies GET', async () => {
     mockGet.mockResolvedValueOnce({ data: { data: [] } })
@@ -294,12 +290,6 @@ describe('api/fundLifecycle (30 methods)', () => {
     mockGet.mockResolvedValueOnce({ data: { data: { report: {} } } })
     await fundLifecycleApi.getFeasibilityReport(1)
     expect(mockGet).toHaveBeenCalledWith('/fund-lifecycle/feasibility-report/1')
-  })
-
-  it('getFundFlowTree GET', async () => {
-    mockGet.mockResolvedValueOnce({ data: { data: { tree: {} } } })
-    await fundLifecycleApi.getFundFlowTree(1)
-    expect(mockGet).toHaveBeenCalledWith('/fund-lifecycle/monitoring/fund-flow-tree/1')
   })
 })
 

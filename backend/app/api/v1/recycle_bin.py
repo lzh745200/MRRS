@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 class RecyclePurgeRequest(BaseModel):
     confirm_password: str = ""
+    ids: list[int] = []
 
 
 def register_recycle_bin_routes(
@@ -168,4 +169,94 @@ def register_recycle_bin_routes(
                 "details": stats.get("details", {}),
             },
             message=f"已彻底删除并清理 {stats.get('deleted_records', 0)} 条关联数据",
+        )
+
+    # ── 批量恢复 / 批量彻底删除 ──
+
+    @router.post("/batch-restore", summary=f"批量从回收站恢复{resource}")
+    async def batch_restore(
+        body: RecyclePurgeRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        require_admin(current_user)
+        ids = body.__dict__.pop("ids", []) if hasattr(body, "ids") else []
+        if not ids:
+            raise HTTPException(status_code=400, detail="请提供要恢复的 ID 列表")
+        from app.core.transaction import safe_commit
+
+        count = (
+            db.query(model)
+            .filter(
+                model.id.in_(ids),
+                model.is_active == False,  # noqa: E712
+            )
+            .update(
+                {"is_active": True, "deleted_at": None},
+                synchronize_session=False,
+            )
+        )
+        safe_commit(db)
+        if on_changed:
+            await on_changed()
+        return success_response(
+            data={"restored": count},
+            message=f"已恢复 {count} 条{resource}记录",
+        )
+
+    @router.post("/batch-purge", summary=f"批量彻底删除{resource}（级联物理清除）")
+    async def batch_purge(
+        body: RecyclePurgeRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        require_admin(current_user)
+        _verify_password(body, current_user)
+        ids = getattr(body, "ids", [])
+        if not ids:
+            raise HTTPException(status_code=400, detail="请提供要彻底删除的 ID 列表")
+
+        from app.services.cascade_purge_service import CascadePurgeService
+
+        svc = CascadePurgeService(db)
+        total = 0
+        purged_ids = []
+        for rid in ids:
+            rec = (
+                db.query(model)
+                .filter(model.id == rid, model.is_active == False)  # noqa: E712
+                .first()
+            )
+            if not rec:
+                continue
+            stats = svc.purge(table, rid)
+            if stats.get("success"):
+                total += 1
+                purged_ids.append(rid)
+
+        if on_changed:
+            await on_changed()
+
+        from app.utils.audit_logger import AuditLogger
+
+        AuditLogger.log(
+            action=f"{table}_batch_purge",
+            user_id=current_user.id,
+            username=current_user.username,
+            resource_type=table,
+            resource_id=0,
+            details={"purged_count": total, "purged_ids": purged_ids},
+        )
+        try:
+            from app.services.immediate_backup import trigger_immediate_backup
+
+            trigger_immediate_backup(
+                description=f"批量彻底删除{resource} {total} 条后备份", delay=1.0
+            )
+        except Exception:  # pragma: no cover
+            logger.warning("批量彻底删除后备份触发失败", exc_info=True)
+
+        return success_response(
+            data={"purged": total, "ids": purged_ids},
+            message=f"已彻底删除 {total} 条{resource}及关联数据",
         )

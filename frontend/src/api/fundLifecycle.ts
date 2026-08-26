@@ -296,10 +296,8 @@ export const fundLifecycleApi = {
     return res.data || res
   },
 
-  async fundFlow(projectId: number) {
-    const res = await get(`${BASE}/monitoring/fund-flow/${projectId}`)
-    return res.data || res
-  },
+  // W8-T019：fundFlow/getFundFlowTree 已删除（全仓零消费方，后端端点仍在，
+  // 未来接线时按需恢复——见工单豁免清单）。
 
   // ========== 阶段6 - 核查督查 ==========
   async listAnomalies(params?: Record<string, any>) {
@@ -357,12 +355,6 @@ export const fundLifecycleApi = {
 
   async getFeasibilityReport(projectId: number) {
     const res = await get(`${BASE}/feasibility-report/${projectId}`)
-    return res.data || res
-  },
-
-  // ========== 资金流向树 ==========
-  async getFundFlowTree(projectId: number) {
-    const res = await get(`${BASE}/monitoring/fund-flow-tree/${projectId}`)
     return res.data || res
   },
 

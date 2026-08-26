@@ -250,10 +250,7 @@ export const fundApi = {
     const response = await get(`${BUDGETS_BASE}/alerts`)
     return response.data
   },
-  async getBudgetSummary() {
-    const response = await get(`${BUDGETS_BASE}/summary`)
-    return response.data
-  },
+  // W8-T019：getBudgetSummary 已删除（全仓零消费方）。
 
   // ========== 帮扶村/学校经费汇总 ==========
   async getVillageFundSummary(villageId: number, year?: number) {

@@ -863,6 +863,9 @@ class PermissionPackageService:
                         )
                     if org:
                         user.organization_id = org.id
+                    elif merge_mode and getattr(user, "organization_id", None):
+                        # merge 模式：目标机已有组织归属且包内找不到匹配 → 保留原值
+                        pass
                     else:
                         user.organization_id = None
                 stats["user_legacy_updated"] += 1

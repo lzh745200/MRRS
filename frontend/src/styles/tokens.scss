@@ -641,3 +641,13 @@ $gradient-military-dark: linear-gradient(
 );
 $gradient-badge: linear-gradient(135deg, $badge-gold, $badge-gold-light);
 $gradient-title: linear-gradient(45deg, $badge-gold, $text-white);
+
+// T043: align with tokens-vars.scss (guarded by check_tokens_sync)
+$dialog-sm: var(--dialog-sm);
+$dialog-md: var(--dialog-md);
+$dialog-lg: var(--dialog-lg);
+$color-navy: var(--color-navy);
+$color-text-inverse: var(--color-text-inverse);
+$table-row-height: var(--table-row-height);
+$control-height: var(--control-height);
+$form-label-width: var(--form-label-width);

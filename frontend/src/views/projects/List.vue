@@ -143,18 +143,29 @@
       <!-- 批量操作工具栏 -->
       <div v-if="selectedRows.length > 0" class="batch-toolbar">
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
-        <el-button
-          type="danger"
-          size="small"
-          :loading="batchDeleting"
-          :disabled="batchDeleting"
-          @click="handleBatchDelete"
-        >
-          批量删除 ({{ selectedRows.length }})
-        </el-button>
-        <el-button size="small" @click="handleBatchExport">
-          批量导出 ({{ selectedRows.length }})
-        </el-button>
+        <!-- 回收站模式：批量恢复/批量彻底删除 -->
+        <template v-if="showDeletedOnly">
+          <el-button type="success" size="small" @click="handleBatchRestore">
+            批量恢复 ({{ selectedRows.length }})
+          </el-button>
+          <el-button type="danger" size="small" @click="handleBatchPurge">
+            批量彻底删除 ({{ selectedRows.length }})
+          </el-button>
+        </template>
+        <template v-else>
+          <el-button
+            type="danger"
+            size="small"
+            :loading="batchDeleting"
+            :disabled="batchDeleting"
+            @click="handleBatchDelete"
+          >
+            批量删除 ({{ selectedRows.length }})
+          </el-button>
+          <el-button size="small" @click="handleBatchExport">
+            批量导出 ({{ selectedRows.length }})
+          </el-button>
+        </template>
         <el-button size="small" text @click="clearSelection">取消选择</el-button>
       </div>
       <!-- 加载失败占位 -->
@@ -537,6 +548,55 @@ const handlePurge = async (row: any) => {
     loadData()
   } catch {
     ElMessage.error('彻底删除失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleBatchRestore = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `确定批量恢复 ${selectedRows.value.length} 个项目吗？`,
+      '批量恢复确认',
+      { confirmButtonText: '确认恢复', cancelButtonText: '取消', type: 'info' }
+    )
+  } catch {
+    return
+  }
+  try {
+    for (const row of selectedRows.value) {
+      await restoreProject(row.id)
+    }
+    ElMessage.success(`已恢复 ${selectedRows.value.length} 个项目`)
+    clearSelection()
+    loadData()
+  } catch {
+    ElMessage.error('批量恢复失败')
+  }
+}
+
+const handleBatchPurge = async () => {
+  let confirmPassword = ''
+  try {
+    const r = await ElMessageBox.prompt('批量彻底删除需二次确认，请输入登录密码：', '二次确认', {
+      confirmButtonText: '确认',
+      inputType: 'password',
+      inputValidator: (v: string) => (v ? true : '密码不能为空'),
+    })
+    confirmPassword = r.value || ''
+  } catch {
+    return
+  }
+  loading.value = true
+  try {
+    for (const row of selectedRows.value) {
+      await purgeProject(row.id, confirmPassword)
+    }
+    ElMessage.success(`已彻底删除 ${selectedRows.value.length} 个项目及关联数据`)
+    clearSelection()
+    loadData()
+  } catch {
+    ElMessage.error('批量彻底删除失败')
   } finally {
     loading.value = false
   }
