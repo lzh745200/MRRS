@@ -258,7 +258,7 @@
     </el-card>
 
     <!-- 新增/编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="960px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" :width="DIALOG_LG" destroy-on-close>
       <SupportedVillageForm
         v-if="dialogVisible"
         :village="currentVillage"
@@ -269,7 +269,7 @@
     </el-dialog>
 
     <!-- 年度数据对话框 -->
-    <el-dialog v-model="yearlyDialogVisible" title="年度数据管理" width="960px" destroy-on-close>
+    <el-dialog v-model="yearlyDialogVisible" title="年度数据管理" :width="DIALOG_LG" destroy-on-close>
       <YearlyDataForm
         v-if="yearlyDialogVisible && currentVillage"
         :village-id="currentVillage.id"
@@ -281,6 +281,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_LG } from '@/config/dialog'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
 

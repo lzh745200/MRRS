@@ -123,10 +123,7 @@
               </template>
             </el-table-column>
           </el-table>
-          <el-empty
-            v-if="!milestones.length && !msLoading"
-            description="暂无里程碑，点击右上角新增"
-          />
+          <EmptyState text="暂无里程碑，点击右上角新增" v-if="!milestones.length && !msLoading" />
         </el-tab-pane>
         <el-tab-pane label="任务" name="tasks">
           <!-- 任务完成进度与状态分布 -->
@@ -246,7 +243,7 @@
         <!-- 变更历史 -->
         <el-tab-pane label="变更历史" name="history">
           <div v-loading="historyLoading">
-            <el-empty v-if="!history.length" description="暂无变更记录" />
+            <EmptyState text="暂无变更记录" v-if="!history.length" />
             <el-timeline v-else>
               <el-timeline-item
                 v-for="(item, idx) in history"
@@ -271,7 +268,7 @@
     <el-dialog
       v-model="taskDialogVisible"
       :title="editingTask ? '编辑任务' : '新建任务'"
-      width="480px"
+      :width="DIALOG_SM"
       destroy-on-close
     >
       <el-form :model="taskForm" label-width="80px">
@@ -315,7 +312,7 @@
     <el-dialog
       v-model="msDialogVisible"
       :title="msForm.id ? '编辑里程碑' : '新增里程碑'"
-      width="480px"
+      :width="DIALOG_SM"
     >
       <el-form label-width="90px">
         <el-form-item label="名称" required>
@@ -352,6 +349,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'

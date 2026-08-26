@@ -192,7 +192,7 @@
     </el-card>
 
     <!-- 用户编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" :width="DIALOG_MD">
       <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="formData.username" placeholder="请输入用户名" :disabled="isEdit" />
@@ -331,7 +331,7 @@
               </template>
             </el-table-column>
           </el-table>
-          <el-empty v-else-if="!sessionsLoading" description="无活跃会话" :image-size="40" />
+          <EmptyState text="无活跃会话" v-else-if="!sessionsLoading" :size="40" />
         </div>
         <div class="session-actions">
           <el-button type="warning" size="small" :loading="resetting2fa" @click="handleReset2fa">
@@ -347,7 +347,7 @@
     </el-dialog>
 
     <!-- 重置密码对话框 -->
-    <el-dialog v-model="resetPwdDialogVisible" title="重置密码" width="480px">
+    <el-dialog v-model="resetPwdDialogVisible" title="重置密码" :width="DIALOG_SM">
       <el-form :model="resetPwdForm" label-width="100px">
         <el-form-item label="用户名">
           <el-input :value="currentUser?.username" disabled />
@@ -386,7 +386,7 @@
     />
 
     <!-- 菜单权限配置对话框 -->
-    <el-dialog v-model="menuPermDialogVisible" title="菜单权限配置" width="480px">
+    <el-dialog v-model="menuPermDialogVisible" title="菜单权限配置" :width="DIALOG_SM">
       <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
         为「{{ menuPermUser?.username || '' }}」配置可见页面。勾选后该用户仅能看到所选菜单；
         不勾选任何菜单时使用角色默认权限。
@@ -418,7 +418,7 @@
     </el-dialog>
 
     <!-- 导出权限包：角色选择对话框 -->
-    <el-dialog v-model="permExportDialogVisible" title="导出权限包" width="480px">
+    <el-dialog v-model="permExportDialogVisible" title="导出权限包" :width="DIALOG_SM">
       <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
         不勾选任何角色将导出全部权限配置；勾选后仅导出所选角色及其用户绑定。
       </el-alert>
@@ -468,6 +468,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { generateRandomPassword } from '@/utils/clipboard'
 

@@ -7,7 +7,7 @@
         <span>数据加载失败，请稍后重试</span>
         <el-button size="small" type="primary" @click="loadAndRender">重试</el-button>
       </div>
-      <el-empty v-else-if="!hasProjects" class="chart-empty" description="暂无项目数据" :image-size="72" />
+      <EmptyState text="暂无项目数据" v-else-if="!hasProjects" class="chart-empty" :size="72" />
       <div v-else ref="barRef" class="chart-body" />
     </div>
     <div class="chart-card">
@@ -17,13 +17,14 @@
         <span>数据加载失败，请稍后重试</span>
         <el-button size="small" type="primary" @click="loadAndRender">重试</el-button>
       </div>
-      <el-empty v-else-if="!hasFunds" class="chart-empty" description="暂无经费数据" :image-size="72" />
+      <EmptyState text="暂无经费数据" v-else-if="!hasFunds" class="chart-empty" :size="72" />
       <div v-else ref="pieRef" class="chart-body" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import echarts from '@/utils/echarts'
 import { get, apiRequest } from '@/api/request'

@@ -63,7 +63,7 @@
     </el-card>
 
     <!-- 反馈详情 -->
-    <el-dialog v-model="detailVisible" title="反馈详情" width="720px">
+    <el-dialog v-model="detailVisible" title="反馈详情" :width="DIALOG_MD">
       <el-descriptions :column="1" border>
         <el-descriptions-item label="类型">{{
           typeNameMap[currentItem?.type]
@@ -82,6 +82,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_MD } from '@/config/dialog'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { apiRequest } from '@/api/request'

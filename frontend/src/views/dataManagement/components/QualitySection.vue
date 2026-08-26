@@ -96,7 +96,7 @@
     </el-card>
 
     <!-- 自定义规则校验对话框（下拉+操作符+值与或非） -->
-    <el-dialog v-model="showRuleDialog" title="自定义数据校验" width="720px">
+    <el-dialog v-model="showRuleDialog" title="自定义数据校验" :width="DIALOG_MD">
       <el-form label-width="90px">
         <el-form-item label="校验模块">
           <el-select v-model="ruleModule" style="width: 220px">
@@ -174,7 +174,7 @@
     <el-dialog
       v-model="showIssuesDialog"
       :title="`问题详情 - ${selectedCheck?.name}`"
-      width="720px"
+      :width="DIALOG_MD"
     >
       <el-table :data="issueDetails" max-height="400">
         <el-table-column prop="record_id" label="记录ID" width="100" />
@@ -193,6 +193,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_MD } from '@/config/dialog'
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Filter } from '@element-plus/icons-vue'

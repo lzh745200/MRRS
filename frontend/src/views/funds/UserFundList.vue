@@ -169,7 +169,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="720px"
+      :width="DIALOG_MD"
       :close-on-click-modal="false"
       @close="resetDialogForm"
     >
@@ -315,6 +315,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_MD } from '@/config/dialog'
 import { logger } from '@/utils/logger'
 
 import { ref, reactive, computed, onMounted } from 'vue'

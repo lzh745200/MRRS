@@ -188,11 +188,12 @@
         </div>
       </div>
     </template>
-    <el-empty v-else description="无权限访问此页面" />
+    <EmptyState type="no-permission" text="无权限访问此页面" v-else />
   </div>
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 
 import { ref, computed, onMounted } from 'vue'

@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { ElButton, ElSkeleton } from 'element-plus'
 import ChartRow from '@/views/dashboard/ChartRow.vue'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 
 const mockSetOption = vi.fn()
 const mockResize = vi.fn()
@@ -108,10 +109,10 @@ describe('ChartRow.vue', () => {
     const wrapper = mountChartRow()
     await new Promise((r) => setTimeout(r, 200))
     await wrapper.vm.$nextTick()
-    const empties = wrapper.findAll('.chart-empty')
+    const empties = wrapper.findAllComponents(EmptyState)
     expect(empties.length).toBe(2)
-    expect(empties[0].attributes('description')).toBe('暂无项目数据')
-    expect(empties[1].attributes('description')).toBe('暂无经费数据')
+    expect(empties[0].props('text')).toBe('暂无项目数据')
+    expect(empties[1].props('text')).toBe('暂无经费数据')
     expect(mockSetOption).not.toHaveBeenCalled()
   })
 })

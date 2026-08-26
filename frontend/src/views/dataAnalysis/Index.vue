@@ -95,11 +95,7 @@
                 <el-option v-for="y in yearOptions" :key="'b' + y" :label="`${y}年`" :value="y" />
               </el-select>
             </div>
-            <el-empty
-              v-if="!yearlyComparison.years.length"
-              description="暂无年度数据，请先在帮扶村年度数据管理中录入数据"
-              :image-size="80"
-            />
+            <EmptyState text="暂无年度数据，请先在帮扶村年度数据管理中录入数据" v-if="!yearlyComparison.years.length" :size="80" />
             <template v-else>
               <el-descriptions :column="2" border>
                 <el-descriptions-item :label="`${compareYearA}年帮扶村总数`">{{
@@ -132,6 +128,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { getYearOptions } from '@/utils/yearOptions'
 

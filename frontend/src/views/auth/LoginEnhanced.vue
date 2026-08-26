@@ -130,7 +130,7 @@
         <el-dialog
           v-model="permissionImportVisible"
           title="导入权限配置包"
-          width="480px"
+          :width="DIALOG_SM"
           :close-on-click-modal="false"
         >
           <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
@@ -179,6 +179,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'

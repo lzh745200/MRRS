@@ -68,7 +68,7 @@
             <span>加载中...</span>
           </div>
           <div v-else-if="keywords.length === 0" class="section-empty">
-            <el-empty description="暂无数据" :image-size="60" />
+            <EmptyState text="暂无数据" :size="60" />
           </div>
           <div v-else class="keyword-cloud">
             <el-tag
@@ -99,7 +99,7 @@
             <span>加载中...</span>
           </div>
           <div v-else-if="alerts.length === 0" class="section-empty">
-            <el-empty description="暂无预警信息" :image-size="60" />
+            <EmptyState text="暂无预警信息" :size="60" />
           </div>
           <div v-else class="alert-list">
             <div v-for="alert in alerts" :key="alert.id" class="alert-item">
@@ -139,7 +139,7 @@
         <span>加载中...</span>
       </div>
       <div v-else-if="newsList.length === 0" class="section-empty">
-        <el-empty description="暂无新闻数据" :image-size="60" />
+        <EmptyState text="暂无新闻数据" :size="60" />
       </div>
       <el-table v-else :data="newsList" stripe size="small">
         <el-table-column prop="title" label="标题" min-width="280" show-overflow-tooltip />
@@ -168,6 +168,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading, Refresh, DataAnalysis } from '@element-plus/icons-vue'

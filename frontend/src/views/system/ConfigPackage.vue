@@ -91,7 +91,7 @@
     <el-dialog
       :model-value="dialogVisible"
       title="编辑配置"
-      width="480px"
+      :width="DIALOG_SM"
       @update:model-value="dialogVisible = false"
     >
       <el-form v-if="editRow" :model="editRow" label-width="100px">
@@ -111,6 +111,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Upload, RefreshRight, Refresh } from '@element-plus/icons-vue'

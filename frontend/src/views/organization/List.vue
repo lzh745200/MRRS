@@ -152,7 +152,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="640px"
+      :width="DIALOG_MD"
       @close="handleDialogClose"
     >
       <el-form ref="formRef" :model="formData" :rules="formRules" label-width="100px">
@@ -224,6 +224,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_MD } from '@/config/dialog'
 import { logger } from '@/utils/logger'
 
 import { ref, onMounted, computed, nextTick } from 'vue'

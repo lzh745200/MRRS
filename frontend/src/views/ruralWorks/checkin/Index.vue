@@ -82,7 +82,7 @@
               </div>
             </div>
           </div>
-          <el-empty v-else description="暂无月度数据" />
+          <EmptyState text="暂无月度数据" v-else />
         </el-card>
       </el-col>
     </el-row>
@@ -90,6 +90,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { get, post } from '@/api/request'

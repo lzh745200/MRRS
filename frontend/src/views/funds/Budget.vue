@@ -76,7 +76,7 @@
               />
             </div>
           </div>
-          <el-empty v-else-if="!loading" description="暂无预算数据" :image-size="60" />
+          <EmptyState text="暂无预算数据" v-else-if="!loading" :size="60" />
         </div>
       </div>
     </div>
@@ -136,10 +136,7 @@
             </template>
           </el-table-column>
         </el-table>
-        <el-empty
-          v-if="budgetData.length === 0 && !loading"
-          description="暂无预算记录，点击“新增预算”添加"
-        />
+        <EmptyState text="暂无预算记录，点击“新增预算”添加" v-if="budgetData.length === 0 && !loading" />
       </div>
     </div>
 
@@ -147,7 +144,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingItem ? '编辑预算' : '新增预算'"
-      width="480px"
+      :width="DIALOG_SM"
       destroy-on-close
     >
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">
@@ -206,6 +203,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage, type FormInstance } from 'element-plus'

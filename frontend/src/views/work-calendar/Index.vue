@@ -36,7 +36,7 @@
     <el-dialog
       :model-value="dialogVisible"
       :title="editingId ? '编辑工作安排' : '添加工作安排'"
-      width="480px"
+      :width="DIALOG_SM"
       @update:model-value="closeDialog"
     >
       <el-form :model="form" label-width="100px">
@@ -77,6 +77,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 

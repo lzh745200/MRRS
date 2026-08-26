@@ -50,6 +50,7 @@ vi.mock('@/utils/logger', () => ({
 }))
 
 import ChartRow from '@/views/dashboard/ChartRow.vue'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 
 const mockSetOption = chartBox.setOption
 const mockResize = chartBox.resize
@@ -175,8 +176,12 @@ describe('ChartRow 数据形状', () => {
     const wrapper2 = mountChart()
     await flushPromises()
     await nextTick()
-    expect(wrapper2.findAll('.chart-empty').length).toBe(2)
-    expect(wrapper2.find('.chart-empty[description="暂无项目数据"]').exists()).toBe(true)
+    expect(wrapper2.findAllComponents(EmptyState).length).toBe(2)
+    expect(
+      wrapper2
+        .findAllComponents(EmptyState)
+        .some((e) => e.props('text') === '暂无项目数据'),
+    ).toBe(true)
     expect(mockSetOption).not.toHaveBeenCalled()
     wrapper2.unmount()
   })
@@ -187,8 +192,9 @@ describe('ChartRow 数据形状', () => {
     const wrapper = mountChart()
     await flushPromises()
     await nextTick()
-    expect(wrapper.findAll('.chart-empty').length).toBe(1)
-    expect(wrapper.find('.chart-empty[description="暂无经费数据"]').exists()).toBe(true)
+    const covEmpties = wrapper.findAllComponents(EmptyState)
+    expect(covEmpties.length).toBe(1)
+    expect(covEmpties[0].props('text')).toBe('暂无经费数据')
     wrapper.unmount()
   })
 

@@ -175,7 +175,7 @@
                 </div>
               </div>
             </div>
-            <el-empty v-else description="暂无电子资料" :image-size="40" />
+            <EmptyState text="暂无电子资料" v-else :size="40" />
           </div>
         </el-form-item>
 
@@ -189,6 +189,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { AuthStorage } from '@/utils/authStorage'
 import { useUploadHeaders } from '@/composables/useUploadHeaders'

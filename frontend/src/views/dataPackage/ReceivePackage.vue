@@ -25,7 +25,7 @@
         <el-dialog
           v-model="showLocalImport"
           title="从本地导入数据包"
-          width="550px"
+          :width="DIALOG_SM"
           destroy-on-close
           @close="clearLocalImport"
         >
@@ -219,7 +219,7 @@
             </el-table-column>
           </el-table>
 
-          <el-empty v-if="!loading && reports.length === 0" description="暂无数据包" />
+          <EmptyState text="暂无数据包" v-if="!loading && reports.length === 0" />
 
           <div v-if="total > 0" class="pagination">
             <el-pagination
@@ -295,10 +295,7 @@
             </el-table-column>
           </el-table>
 
-          <el-empty
-            v-if="!receivedLoading && receivedItems.length === 0"
-            description="暂无接收记录"
-          />
+          <EmptyState text="暂无接收记录" v-if="!receivedLoading && receivedItems.length === 0" />
 
           <div v-if="receivedTotal > 0" class="pagination">
             <el-pagination
@@ -316,7 +313,7 @@
     </el-tabs>
 
     <!-- 预览对话框 -->
-    <el-dialog v-model="showPreviewDialog" title="数据预览" width="960px" destroy-on-close>
+    <el-dialog v-model="showPreviewDialog" title="数据预览" :width="DIALOG_LG" destroy-on-close>
       <!-- 字段级校验报告（import 响应 validation.warnings / 接收记录 validation_summary） -->
       <div v-if="validationWarnings.length" class="validation-report">
         <h4>字段校验报告</h4>
@@ -363,11 +360,11 @@
           </el-tab-pane>
         </el-tabs>
       </div>
-      <el-empty v-else description="暂无预览数据" />
+      <EmptyState text="暂无预览数据" v-else />
     </el-dialog>
 
     <!-- 拒绝对话框 -->
-    <el-dialog v-model="showRejectDialog" title="拒绝数据包" width="480px">
+    <el-dialog v-model="showRejectDialog" title="拒绝数据包" :width="DIALOG_SM">
       <el-form :model="rejectForm" label-width="80px">
         <el-form-item label="拒绝原因" required>
           <el-input
@@ -395,6 +392,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM, DIALOG_LG } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 
 import { ref, reactive, computed, onMounted, onErrorCaptured } from 'vue'

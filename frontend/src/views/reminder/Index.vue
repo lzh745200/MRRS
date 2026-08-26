@@ -24,7 +24,7 @@
         <el-tag v-if="unread > 0" type="danger" size="small">未读 {{ unread }}</el-tag>
       </template>
 
-      <el-empty v-if="!items.length" description="暂无提醒，一切正常" />
+      <EmptyState text="暂无提醒，一切正常" v-if="!items.length" />
       <div v-else class="reminder-list">
         <div v-for="r in items" :key="r.id" class="reminder-item">
           <el-tag :type="tagType(r.type)" size="small" class="rtype">{{
@@ -45,6 +45,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { RefreshRight } from '@element-plus/icons-vue'

@@ -752,7 +752,7 @@
     <el-dialog
       v-model="previewVisible"
       :title="previewTitle"
-      width="960px"
+      :width="DIALOG_LG"
       destroy-on-close
       append-to-body
     >
@@ -772,6 +772,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_LG } from '@/config/dialog'
 import { logger } from '@/utils/logger'
 import { getYearOptions } from '@/utils/yearOptions'
 

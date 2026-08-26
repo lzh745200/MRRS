@@ -154,7 +154,7 @@
         </el-table-column>
       </el-table>
 
-      <el-empty v-if="!loading && !backupList.length" description="暂无备份记录" />
+      <EmptyState text="暂无备份记录" v-if="!loading && !backupList.length" />
     </el-card>
 
     <!-- 备份计划配置 -->
@@ -208,7 +208,7 @@
     </el-card>
 
     <!-- 创建备份对话框 -->
-    <el-dialog v-model="createDialogVisible" title="创建备份" width="480px">
+    <el-dialog v-model="createDialogVisible" title="创建备份" :width="DIALOG_SM">
       <el-form :model="backupForm" label-width="120px">
         <el-form-item label="备份描述">
           <el-input v-model="backupForm.description" placeholder="请输入备份描述" />
@@ -234,7 +234,7 @@
     </el-dialog>
 
     <!-- 恢复备份确认对话框 -->
-    <el-dialog v-model="restoreDialogVisible" title="恢复备份" width="480px">
+    <el-dialog v-model="restoreDialogVisible" title="恢复备份" :width="DIALOG_SM">
       <el-alert title="警告：恢复备份将覆盖当前所有数据！" type="error" :closable="false" />
       <div style="margin-top: 16px">
         <p><strong>备份文件：</strong>{{ restoreTarget?.file_name }}</p>
@@ -265,7 +265,7 @@
     <el-dialog
       v-model="importDialogVisible"
       title="导入备份包并恢复"
-      width="480px"
+      :width="DIALOG_SM"
       :close-on-click-modal="false"
     >
       <el-alert
@@ -315,6 +315,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post, put, del } from '@/api/request'

@@ -87,7 +87,7 @@
     </el-card>
 
     <!-- 角色编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" :width="DIALOG_MD">
       <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
         <el-form-item label="角色名称" prop="name">
           <el-input v-model="formData.name" placeholder="请输入角色名称" />
@@ -123,7 +123,7 @@
     <el-dialog
       v-model="usersDialogVisible"
       :title="`角色关联用户 - ${currentRole?.name}`"
-      width="720px"
+      :width="DIALOG_MD"
     >
       <el-table v-loading="loadingUsers" :data="roleUsers" border stripe>
         <el-table-column type="index" label="序号" width="60" />
@@ -155,7 +155,7 @@
     </el-dialog>
 
     <!-- 权限配置对话框 -->
-    <el-dialog v-model="permissionDialogVisible" title="权限配置" width="960px">
+    <el-dialog v-model="permissionDialogVisible" title="权限配置" :width="DIALOG_LG">
       <div class="permission-header">
         <span
           >当前角色: <strong>{{ currentRole?.name }}</strong></span
@@ -184,6 +184,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_MD, DIALOG_LG } from '@/config/dialog'
 // ================================================================
 // DEPRECATED: 角色管理功能已集成到 UserManagement.vue 中
 // 通过用户管理页面的"角色/权限"按钮打开 PermissionAssignmentDrawer

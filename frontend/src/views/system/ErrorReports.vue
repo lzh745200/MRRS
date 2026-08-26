@@ -191,7 +191,7 @@
     </el-card>
 
     <!-- 错误详情弹窗 -->
-    <el-dialog v-model="detailVisible" title="错误详情" width="720px" :close-on-click-modal="false">
+    <el-dialog v-model="detailVisible" title="错误详情" :width="DIALOG_MD" :close-on-click-modal="false">
       <template v-if="detailLoading">
         <el-skeleton :rows="10" animated />
       </template>
@@ -269,6 +269,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_MD } from '@/config/dialog'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, View, Warning } from '@element-plus/icons-vue'

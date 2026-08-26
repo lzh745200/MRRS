@@ -6,11 +6,7 @@
     </div>
 
     <!-- 无数据时显示空状态 -->
-    <el-empty
-      v-if="!loading && !error && scores.length === 0"
-      description="暂无评估数据，请先录入帮扶村年度收入数据"
-      :image-size="160"
-    />
+    <EmptyState text="暂无评估数据，请先录入帮扶村年度收入数据" v-if="!loading && !error && scores.length === 0" :size="160" />
 
     <!-- 错误状态 -->
     <el-alert
@@ -80,6 +76,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted } from 'vue'
 import BaseChart from '@/components/common/BaseChart.vue'
 import { get } from '@/api/request'

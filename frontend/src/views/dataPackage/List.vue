@@ -131,7 +131,7 @@
     />
 
     <!-- Preview Dialog -->
-    <el-dialog v-model="showPreviewDialog" title="数据预览" width="960px">
+    <el-dialog v-model="showPreviewDialog" title="数据预览" :width="DIALOG_LG">
       <div v-if="previewData.length" class="preview-content">
         <el-tabs>
           <el-tab-pane
@@ -151,12 +151,14 @@
           </el-tab-pane>
         </el-tabs>
       </div>
-      <el-empty v-else description="暂无预览数据" />
+      <EmptyState text="暂无预览数据" v-else />
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
+import { DIALOG_LG } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Upload, Download, Lock, Key } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

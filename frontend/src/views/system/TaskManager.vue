@@ -244,7 +244,7 @@
     <el-dialog
       v-model="showCreateDialog"
       title="创建后台任务"
-      width="480px"
+      :width="DIALOG_SM"
       :close-on-click-modal="false"
       @closed="resetCreateForm"
     >
@@ -284,6 +284,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, VideoPause, Delete, Plus, Search } from '@element-plus/icons-vue'

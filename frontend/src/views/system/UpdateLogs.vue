@@ -75,7 +75,7 @@
         </el-timeline>
       </div>
 
-      <el-empty v-else description="暂无更新记录" />
+      <EmptyState text="暂无更新记录" v-else />
 
       <!-- 分页 -->
       <div v-if="total > pageSize" class="pagination-wrapper">
@@ -90,7 +90,7 @@
     </el-card>
 
     <!-- 添加更新记录对话框 -->
-    <el-dialog v-model="showAddDialog" title="添加更新记录" width="480px">
+    <el-dialog v-model="showAddDialog" title="添加更新记录" :width="DIALOG_SM">
       <el-form :model="newLog" label-width="80px">
         <el-form-item label="版本号" required>
           <el-input v-model="newLog.version" placeholder="如 V1.2.0" />
@@ -113,6 +113,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { updateLogsApi, type UpdateLog } from '@/api/updateLogs'

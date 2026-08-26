@@ -95,17 +95,14 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty
-        v-if="!loading && rules.length === 0"
-        description="暂无校验规则，点击新增规则创建"
-      />
+      <EmptyState text="暂无校验规则，点击新增规则创建" v-if="!loading && rules.length === 0" />
     </el-card>
 
     <!-- 创建/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="isEditing ? '编辑校验规则' : '新增校验规则'"
-      width="720px"
+      :width="DIALOG_MD"
       @close="resetForm"
     >
       <el-form ref="formRef" :model="formData" :rules="formRules" label-width="100px">
@@ -164,7 +161,7 @@
     </el-dialog>
 
     <!-- 执行校验对话框 -->
-    <el-dialog v-model="runDialogVisible" title="执行校验" width="480px">
+    <el-dialog v-model="runDialogVisible" title="执行校验" :width="DIALOG_SM">
       <el-form label-width="100px">
         <el-form-item label="目标模块">
           <el-select v-model="runModule" placeholder="选择校验目标模块" style="width: 100%">
@@ -215,6 +212,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Plus, Refresh, VideoPlay } from '@element-plus/icons-vue'

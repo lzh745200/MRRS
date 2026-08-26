@@ -44,7 +44,7 @@
     <el-dialog
       v-model="editDialogVisible"
       :title="editingPack ? '编辑权限包' : '新建权限包'"
-      width="640px"
+      :width="DIALOG_MD"
       destroy-on-close
     >
       <el-form label-width="90px">
@@ -85,7 +85,7 @@
     <el-dialog
       v-model="bindDialogVisible"
       :title="bindingPack ? `绑定用户到「${bindingPack.name}」` : '绑定用户'"
-      width="720px"
+      :width="DIALOG_MD"
       destroy-on-close
       @opened="preselectBoundUsers"
     >
@@ -126,6 +126,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_MD } from '@/config/dialog'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'

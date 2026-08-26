@@ -42,10 +42,7 @@
     <el-tabs v-model="activeTab" type="border-card" @tab-change="onFilterChange">
       <el-tab-pane label="导入模板" name="import">
         <div v-loading="loading" class="template-grid">
-          <el-empty
-            v-if="displayTemplates.length === 0 && !loading"
-            description="暂无导入模板，点击右上角创建"
-          />
+          <EmptyState text="暂无导入模板，点击右上角创建" v-if="displayTemplates.length === 0 && !loading" />
           <div v-for="t in displayTemplates" :key="t.id" class="template-item">
             <el-icon class="t-icon"><component :is="moduleIcon(t.module)" /></el-icon>
             <div class="t-info">
@@ -73,10 +70,7 @@
       </el-tab-pane>
       <el-tab-pane label="导出模板" name="export">
         <div v-loading="loading" class="template-grid">
-          <el-empty
-            v-if="displayTemplates.length === 0 && !loading"
-            description="暂无导出模板，点击右上角创建"
-          />
+          <EmptyState text="暂无导出模板，点击右上角创建" v-if="displayTemplates.length === 0 && !loading" />
           <div v-for="t in displayTemplates" :key="t.id" class="template-item">
             <el-icon class="t-icon"><component :is="moduleIcon(t.module)" /></el-icon>
             <div class="t-info">
@@ -104,7 +98,7 @@
     </el-tabs>
 
     <!-- 新建模板对话框 -->
-    <el-dialog v-model="showCreateDialog" title="新建模板" width="480px" @closed="resetCreateForm">
+    <el-dialog v-model="showCreateDialog" title="新建模板" :width="DIALOG_SM" @closed="resetCreateForm">
       <el-form ref="createFormRef" :model="newTemplate" :rules="createRules" label-width="100px">
         <el-form-item label="模板名称" prop="name">
           <el-input
@@ -169,7 +163,7 @@
     </el-dialog>
 
     <!-- 编辑模板对话框 -->
-    <el-dialog v-model="showEditDialog" title="编辑模板" width="480px">
+    <el-dialog v-model="showEditDialog" title="编辑模板" :width="DIALOG_SM">
       <el-form
         v-if="editTemplate"
         ref="editFormRef"
@@ -203,7 +197,7 @@
     <el-dialog
       v-model="showFillDialog"
       :title="`在线填报 — ${fillTemplate?.name || ''}`"
-      width="640px"
+      :width="DIALOG_MD"
     >
       <el-alert
         title="按模板字段填写数据，支持多行记录，填写完成后点击「导出 Excel」保存"
@@ -231,7 +225,7 @@
     </el-dialog>
 
     <!-- 预览对话框 -->
-    <el-dialog v-model="showPreviewDialog" title="模板预览" width="720px">
+    <el-dialog v-model="showPreviewDialog" title="模板预览" :width="DIALOG_MD">
       <div v-if="previewTemplate" class="preview-content">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="模板名称">{{ previewTemplate.name }}</el-descriptions-item>
@@ -279,7 +273,7 @@
     <el-dialog
       v-model="showUploadDialog"
       :title="`上传填报 — ${currentUploadTemplate?.name || ''}`"
-      width="720px"
+      :width="DIALOG_MD"
       @closed="onUploadDialogClosed"
     >
       <!-- 第一步：选择文件和模式 -->
@@ -405,7 +399,7 @@
     </el-dialog>
 
     <!-- 导入结果对话框 -->
-    <el-dialog v-model="showImportResult" title="导入结果" width="720px">
+    <el-dialog v-model="showImportResult" title="导入结果" :width="DIALOG_MD">
       <div v-if="importResult">
         <el-result v-if="importResult.success" icon="success" :title="importResult.message">
           <template #sub-title>
@@ -449,6 +443,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {

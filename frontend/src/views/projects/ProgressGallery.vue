@@ -47,10 +47,7 @@
         </div>
 
         <!-- Empty state -->
-        <el-empty
-          v-if="!progressFiles.length"
-          description="暂无进度照片，请在附件管理中上传进度照片"
-        />
+        <EmptyState text="暂无进度照片，请在附件管理中上传进度照片" v-if="!progressFiles.length" />
 
         <!-- Photo gallery -->
         <div v-else class="photo-grid">
@@ -129,6 +126,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

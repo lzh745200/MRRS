@@ -105,7 +105,7 @@
     </el-card>
 
     <!-- 创建密钥对话框 -->
-    <el-dialog v-model="createDialogVisible" title="创建新密钥" width="480px" destroy-on-close>
+    <el-dialog v-model="createDialogVisible" title="创建新密钥" :width="DIALOG_SM" destroy-on-close>
       <el-form ref="createFormRef" :model="createForm" label-width="100px">
         <el-form-item label="密钥类型">
           <el-select v-model="createForm.key_type" style="width: 100%">
@@ -133,6 +133,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
 import { ref, reactive, onMounted } from 'vue'
 import { Refresh, Key, Warning, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

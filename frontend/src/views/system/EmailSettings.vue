@@ -40,12 +40,13 @@
           <span class="title">邮件发送日志</span>
         </div>
       </template>
-      <el-empty description="邮件日志功能需配置SMTP后生效" />
+      <EmptyState text="邮件日志功能需配置SMTP后生效" />
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { reactive } from 'vue'
 
 // 显示当前配置状态（只读）

@@ -86,7 +86,7 @@
     </el-card>
 
     <!-- 新建合同对话框 -->
-    <el-dialog v-model="showCreateDialog" title="新建合同" width="720px">
+    <el-dialog v-model="showCreateDialog" title="新建合同" :width="DIALOG_MD">
       <el-form
         ref="contractFormRef"
         :model="contractForm"
@@ -125,7 +125,7 @@
     </el-dialog>
 
     <!-- 登记付款对话框 -->
-    <el-dialog v-model="paymentDialogVisible" title="登记合同付款" width="480px">
+    <el-dialog v-model="paymentDialogVisible" title="登记合同付款" :width="DIALOG_SM">
       <el-form :model="paymentForm" label-width="100px">
         <el-form-item label="付款金额" required
           ><el-input-number v-model="paymentForm.amount" :min="0.01" :precision="4"
@@ -146,7 +146,7 @@
     <el-dialog
       v-model="attachmentDialogVisible"
       :title="`合同附件 - ${currentContractName}`"
-      width="720px"
+      :width="DIALOG_MD"
     >
       <el-upload
         :action="uploadAction"
@@ -184,7 +184,7 @@
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty description="暂无附件" :image-size="60" />
+          <EmptyState text="暂无附件" :size="60" />
         </template>
       </el-table>
     </el-dialog>
@@ -192,6 +192,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'

@@ -44,7 +44,7 @@
     </div>
 
     <div v-else-if="rankings.length === 0" class="state-container">
-      <el-empty description="暂无排名数据" />
+      <EmptyState text="暂无排名数据" />
     </div>
 
     <!-- 排名表格 -->
@@ -118,6 +118,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { Loading, Search } from '@element-plus/icons-vue'

@@ -66,11 +66,12 @@
       </el-card>
     </template>
 
-    <el-empty v-if="!loading && !reportData" description='选择年份后点击"生成报告"' />
+    <EmptyState v-if="!loading && !reportData" description='选择年份后点击"生成报告"' />
   </div>
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { get } from '@/api/request'

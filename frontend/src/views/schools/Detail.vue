@@ -140,11 +140,7 @@
             </el-table-column>
             <el-table-column prop="budget" label="预算(万元)" width="110" align="right" />
           </el-table>
-          <el-empty
-            v-if="relatedProjects.length === 0"
-            description="暂无助学兴教项目"
-            :image-size="60"
-          />
+          <EmptyState text="暂无助学兴教项目" v-if="relatedProjects.length === 0" :size="60" />
         </div>
       </div>
 
@@ -173,11 +169,7 @@
             </el-table-column>
             <el-table-column prop="reason" label="资助原因" min-width="160" show-overflow-tooltip />
           </el-table>
-          <el-empty
-            v-if="scholarshipStudents.length === 0"
-            description="暂无资助学生"
-            :image-size="60"
-          />
+          <EmptyState text="暂无资助学生" v-if="scholarshipStudents.length === 0" :size="60" />
         </div>
       </div>
 
@@ -217,6 +209,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { AuthStorage } from '@/utils/authStorage'
 

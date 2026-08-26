@@ -121,7 +121,7 @@
       <h3 class="section-title">导出历史</h3>
       <el-table v-loading="loadingHistory" :data="exportHistory" style="width: 100%">
         <template #empty>
-          <el-empty description="暂无导出记录" />
+          <EmptyState text="暂无导出记录" />
         </template>
         <el-table-column prop="package_name" label="数据包名称" />
         <el-table-column prop="total_records" label="记录数" width="100" />
@@ -147,6 +147,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'

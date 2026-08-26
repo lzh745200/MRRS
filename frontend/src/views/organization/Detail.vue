@@ -104,7 +104,7 @@
             </el-table-column>
             <el-table-column prop="sort_order" label="排序" width="70" align="center" />
           </el-table>
-          <el-empty v-else description="暂无下属组织" :image-size="60" />
+          <EmptyState text="暂无下属组织" v-else :size="60" />
         </el-card>
       </el-col>
 
@@ -167,11 +167,7 @@
             style="margin-top: 12px; justify-content: center"
             @current-change="loadMembers"
           />
-          <el-empty
-            v-if="!memberLoading && members.length === 0"
-            description="暂无成员"
-            :image-size="40"
-          />
+          <EmptyState text="暂无成员" v-if="!memberLoading && members.length === 0" :size="40" />
         </el-card>
       </el-col>
     </el-row>
@@ -179,6 +175,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 
 import { ref, reactive, onMounted } from 'vue'

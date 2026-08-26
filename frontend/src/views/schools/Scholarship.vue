@@ -67,13 +67,13 @@
       </el-table-column>
     </el-table>
 
-    <el-empty v-if="!loading && students.length === 0" description="暂无资助学生" />
+    <EmptyState text="暂无资助学生" v-if="!loading && students.length === 0" />
 
     <!-- 新增/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="editingStudent ? '编辑资助学生' : '新增资助学生'"
-      width="480px"
+      :width="DIALOG_SM"
       destroy-on-close
     >
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">
@@ -141,6 +141,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { getYearOptions } from '@/utils/yearOptions'
 

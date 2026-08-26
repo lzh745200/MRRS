@@ -1,12 +1,12 @@
 <template>
   <div v-watermark class="projects-page">
     <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">帮扶项目管理</h2>
-        <p class="page-desc">管理所有乡村振兴帮扶项目，涵盖16个帮扶数据板块</p>
-      </div>
-      <div class="header-actions">
+    <!-- 页面头部区（PageHeader 标准件 · T1 契约） -->
+    <PageHeader
+      title="帮扶项目管理"
+      subtitle="管理所有乡村振兴帮扶项目，涵盖16个帮扶数据板块"
+    >
+      <template #extra>
         <el-button type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新建项目
         </el-button>
@@ -19,8 +19,8 @@
         <el-button type="success" @click="pushSafe('/data-analysis')">
           <el-icon><TrendCharts /></el-icon>数据统计
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- 搜索筛选 -->
     <div class="filter-card">
@@ -252,6 +252,7 @@
 </template>
 
 <script setup lang="ts">
+import PageHeader from '@/components/common/PageHeader.vue'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
 import { getErrorMessage } from '@/utils/getErrorMessage'

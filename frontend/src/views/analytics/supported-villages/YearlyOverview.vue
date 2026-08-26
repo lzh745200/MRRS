@@ -109,7 +109,7 @@
     <el-dialog
       v-model="editDialogVisible"
       :title="`${editSectionTitle} — 数据填写`"
-      width="960px"
+      :width="DIALOG_LG"
       destroy-on-close
     >
       <SectionDataForm
@@ -126,6 +126,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_LG } from '@/config/dialog'
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, markRaw } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'

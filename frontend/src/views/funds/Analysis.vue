@@ -126,7 +126,7 @@
             :option="yearlyTrendAreaOption"
             height="300px"
           />
-          <el-empty v-else description="暂无年度趋势数据" />
+          <EmptyState text="暂无年度趋势数据" v-else />
         </el-card>
       </el-col>
       <el-col :span="12">
@@ -143,7 +143,7 @@
             :option="utilizationTrendOption"
             height="300px"
           />
-          <el-empty v-else description="暂无利用率趋势数据" />
+          <EmptyState text="暂无利用率趋势数据" v-else />
         </el-card>
       </el-col>
     </el-row>
@@ -223,6 +223,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { chartColorPrimary, chartColor } from '@/utils/chartColors'
 import { getErrorMessage } from '@/utils/getErrorMessage'

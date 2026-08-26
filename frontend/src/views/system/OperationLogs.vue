@@ -64,7 +64,7 @@
           </div>
         </el-timeline-item>
       </el-timeline>
-      <el-empty v-else-if="!loading" description="暂无操作日志" :image-size="80" />
+      <EmptyState text="暂无操作日志" v-else-if="!loading" :size="80" />
 
       <el-pagination
         v-if="total > pageSize"
@@ -80,6 +80,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { get, apiRequest } from '@/api/request'

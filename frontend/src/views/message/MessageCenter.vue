@@ -159,7 +159,7 @@
                 </div>
               </el-timeline-item>
             </el-timeline>
-            <el-empty v-else description="暂无系统动态" />
+            <EmptyState text="暂无系统动态" v-else />
             <div class="activity-actions">
               <el-button size="small" :loading="activitiesLoading" @click="loadActivities"
                 >刷新动态</el-button
@@ -186,7 +186,7 @@
                 </div>
               </el-timeline-item>
             </el-timeline>
-            <el-empty v-else description="暂无操作记录" />
+            <EmptyState text="暂无操作记录" v-else />
             <div class="activity-actions">
               <el-button size="small" :loading="logsLoading" @click="loadMyLogs"
                 >刷新记录</el-button
@@ -198,7 +198,7 @@
     </el-card>
 
     <!-- 消息详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" :title="currentMessage?.title" width="720px">
+    <el-dialog v-model="detailDialogVisible" :title="currentMessage?.title" :width="DIALOG_MD">
       <div v-if="currentMessage" class="message-detail">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="类型">
@@ -226,6 +226,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_MD } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage, ElMessageBox } from 'element-plus'

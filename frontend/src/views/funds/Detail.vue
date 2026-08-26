@@ -370,7 +370,7 @@
                     </template>
                   </el-table-column>
                 </el-table>
-                <el-empty v-else description="暂无附件" />
+                <EmptyState text="暂无附件" v-else />
               </div>
             </div>
           </el-tab-pane>
@@ -401,7 +401,7 @@
               <el-table-column prop="handler" label="经办人" width="100" />
               <el-table-column prop="receipt_number" label="票据号" width="120" />
             </el-table>
-            <el-empty v-if="!expenses.length && !loadingExpenses" description="暂无报销记录" />
+            <EmptyState text="暂无报销记录" v-if="!expenses.length && !loadingExpenses" />
           </el-tab-pane>
         </el-tabs>
       </template>
@@ -636,7 +636,7 @@
     <el-dialog
       v-model="wfDialogVisible"
       :title="wfDialogTitle"
-      width="480px"
+      :width="DIALOG_SM"
       :close-on-click-modal="false"
     >
       <el-form label-width="100px">
@@ -677,7 +677,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="expDialogVisible" title="登记报销" width="480px">
+    <el-dialog v-model="expDialogVisible" title="登记报销" :width="DIALOG_SM">
       <el-form label-width="90px">
         <el-form-item label="金额(万元)" required>
           <el-input-number
@@ -720,6 +720,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { useAuthStore } from '@/stores/auth'
 

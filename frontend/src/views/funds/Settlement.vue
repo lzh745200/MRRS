@@ -139,7 +139,7 @@
       </el-empty>
 
       <!-- 审批对话框 -->
-      <el-dialog v-model="showApproveDialog" title="审批决算" width="480px">
+      <el-dialog v-model="showApproveDialog" title="审批决算" :width="DIALOG_SM">
         <el-form
           ref="approveFormRef"
           :model="approveForm"
@@ -177,6 +177,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, type FormInstance } from 'element-plus'

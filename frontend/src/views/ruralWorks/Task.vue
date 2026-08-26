@@ -200,7 +200,7 @@
     <el-dialog
       v-model="taskDialogVisible"
       :title="isEditMode ? '编辑任务' : '新建任务'"
-      width="960px"
+      :width="DIALOG_LG"
       class="task-dialog"
     >
       <el-form
@@ -331,7 +331,7 @@
     </el-dialog>
 
     <!-- 任务分配对话框 -->
-    <el-dialog v-model="assignDialogVisible" title="分配任务" width="480px" class="assign-dialog">
+    <el-dialog v-model="assignDialogVisible" title="分配任务" :width="DIALOG_SM" class="assign-dialog">
       <el-form
         ref="assignFormRef"
         :model="assignForm"
@@ -379,7 +379,7 @@
     <el-dialog
       v-model="progressDialogVisible"
       title="任务进度"
-      width="720px"
+      :width="DIALOG_MD"
       class="progress-dialog"
     >
       <div v-if="currentTaskProgress" class="task-progress-content">
@@ -544,7 +544,7 @@
     <el-dialog
       v-model="batchAssignDialogVisible"
       title="批量分配任务"
-      width="480px"
+      :width="DIALOG_SM"
       class="batch-assign-dialog"
     >
       <div class="batch-assign-content">
@@ -601,6 +601,7 @@
 </template>
 
 <script lang="ts" setup>
+import { DIALOG_LG, DIALOG_MD, DIALOG_SM } from '@/config/dialog'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Upload, Download, ArrowDown, Document } from '@element-plus/icons-vue'

@@ -39,7 +39,7 @@
           <el-tag size="small" type="info" style="margin-right: 8px">{{ item.category }}</el-tag>
           <span class="search-snippet" v-html="highlightKeyword(item.snippet)" />
         </div>
-        <el-empty v-if="searchTotal === 0" description="未找到相关文档" />
+        <EmptyState type="no-search" text="未找到相关文档" v-if="searchTotal === 0" />
       </el-card>
     </div>
 
@@ -63,11 +63,7 @@
               <el-tag size="small" type="info">{{ cat.count }}</el-tag>
             </div>
           </div>
-          <el-empty
-            v-if="categories.length === 0 && !loadingCategories"
-            description="暂无分类"
-            :image-size="40"
-          />
+          <EmptyState text="暂无分类" v-if="categories.length === 0 && !loadingCategories" :size="40" />
         </el-card>
       </div>
 
@@ -125,7 +121,7 @@
             @current-change="loadArticles"
           />
 
-          <el-empty v-if="!loadingArticles && articles.length === 0" description="暂无文档" />
+          <EmptyState text="暂无文档" v-if="!loadingArticles && articles.length === 0" />
         </el-card>
 
         <!-- 文章详情 -->
@@ -174,7 +170,7 @@
             </div>
             <div v-if="!articleSections.length" class="article-content" v-html="sanitizedContent" />
           </div>
-          <el-empty v-else description="文档加载失败" />
+          <EmptyState type="error" text="文档加载失败" v-else />
         </el-card>
 
         <!-- 系统信息 -->
@@ -212,6 +208,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, ArrowLeft } from '@element-plus/icons-vue'

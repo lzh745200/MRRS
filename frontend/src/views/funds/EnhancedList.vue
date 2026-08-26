@@ -1,12 +1,12 @@
 <template>
   <div v-watermark class="fund-list-page">
     <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">经费管理</h2>
-        <p class="page-desc">管理帮扶经费记录，跟踪资金流向与使用情况</p>
-      </div>
-      <div class="header-actions">
+    <!-- 页面头部区（PageHeader 标准件 · T1 契约） -->
+    <PageHeader
+      title="经费管理"
+      subtitle="管理帮扶经费记录，跟踪资金流向与使用情况"
+    >
+      <template #extra>
         <el-button type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新增经费
         </el-button>
@@ -19,8 +19,8 @@
         <el-button :loading="exporting" :disabled="exporting" @click="handleExport">
           <el-icon><Download /></el-icon>导出
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- 经费管理全流程步骤条 -->
     <el-card class="flow-card">
@@ -329,7 +329,7 @@
         @selection-change="handleSelectionChange"
       >
         <template #empty>
-          <el-empty description="暂无数据" />
+          <EmptyState text="暂无数据" />
         </template>
         <el-table-column type="selection" width="45" />
         <el-table-column type="index" label="序号" width="60" align="center" />
@@ -473,6 +473,8 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { getYearOptions } from '@/utils/yearOptions'

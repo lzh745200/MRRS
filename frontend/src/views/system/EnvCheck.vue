@@ -123,14 +123,12 @@
     </el-card>
 
     <!-- 空状态 -->
-    <el-empty
-      v-if="!checking && !envData && !checkError"
-      description="点击重新检查按钮开始环境诊断"
-    />
+    <EmptyState text="点击重新检查按钮开始环境诊断" v-if="!checking && !envData && !checkError" />
   </div>
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search, SuccessFilled, CircleCloseFilled } from '@element-plus/icons-vue'

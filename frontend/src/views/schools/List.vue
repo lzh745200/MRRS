@@ -1,12 +1,12 @@
 <template>
   <div class="school-mgmt-list-page">
     <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">帮扶学校管理</h2>
-        <p class="page-desc">管理帮扶学校信息，跟踪教育帮扶进展</p>
-      </div>
-      <div class="header-actions">
+    <!-- 页面头部区（PageHeader 标准件 · T1 契约） -->
+    <PageHeader
+      title="帮扶学校管理"
+      subtitle="管理帮扶学校信息，跟踪教育帮扶进展"
+    >
+      <template #extra>
         <el-button type="primary" @click="handleCreate">
           <el-icon><Plus /></el-icon>新增学校
         </el-button>
@@ -19,8 +19,8 @@
         <el-button type="info" plain @click="handleExport">
           <el-icon><Download /></el-icon>导出
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- 统计卡片 -->
     <div class="stats-row">
@@ -170,7 +170,7 @@
       <template v-else>
         <el-table v-loading="loading" :data="tableData" stripe>
           <template #empty>
-            <el-empty description="暂无数据" />
+            <EmptyState text="暂无数据" />
           </template>
           <el-table-column type="index" label="序号" width="60" align="center" />
           <el-table-column prop="name" label="学校名称" min-width="180">
@@ -251,7 +251,7 @@
     </div>
 
     <!-- 导入对话框 -->
-    <el-dialog v-model="showImportDialog" title="导入帮扶学校数据" width="480px" destroy-on-close>
+    <el-dialog v-model="showImportDialog" title="导入帮扶学校数据" :width="DIALOG_SM" destroy-on-close>
       <div class="import-dialog-body">
         <el-alert
           title="请先下载模板，按模板格式填写学校数据后上传"
@@ -287,6 +287,9 @@
 </template>
 
 <script setup lang="ts">
+import PageHeader from '@/components/common/PageHeader.vue'
+import { DIALOG_SM } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { AuthStorage } from '@/utils/authStorage'

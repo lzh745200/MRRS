@@ -69,7 +69,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingProject ? '编辑项目' : '新增项目'"
-      width="720px"
+      :width="DIALOG_MD"
       destroy-on-close
     >
       <el-form :model="form" label-width="100px">
@@ -131,6 +131,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_MD } from '@/config/dialog'
 import { logger } from '@/utils/logger'
 
 import { ref, computed, onMounted } from 'vue'

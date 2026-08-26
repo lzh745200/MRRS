@@ -136,7 +136,7 @@
             <el-dialog
               v-model="createDialogVisible"
               title="录入机器码"
-              width="720px"
+              :width="DIALOG_MD"
               @close="resetCreateForm"
             >
               <el-form
@@ -184,7 +184,7 @@
             </el-dialog>
 
             <!-- 通行码显示对话框 -->
-            <el-dialog v-model="passCodeDialogVisible" title="通行码已生成" width="480px">
+            <el-dialog v-model="passCodeDialogVisible" title="通行码已生成" :width="DIALOG_SM">
               <el-alert type="success" :closable="false" style="margin-bottom: 20px">
                 <template #title>
                   <strong>请将以下通行码提供给用户</strong>
@@ -215,11 +215,13 @@
         </el-tabs>
       </div>
     </template>
-    <el-empty v-else description="无权限访问此页面" />
+    <EmptyState type="no-permission" text="无权限访问此页面" v-else />
   </div>
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { logger } from '@/utils/logger'

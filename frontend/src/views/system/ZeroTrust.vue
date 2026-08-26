@@ -85,7 +85,7 @@
         </div>
       </div>
 
-      <el-empty v-else description="暂无信任评估数据" />
+      <EmptyState text="暂无信任评估数据" v-else />
     </el-card>
 
     <!-- 第2部分: 事件统计摘要卡片 -->
@@ -176,7 +176,7 @@
         </div>
       </div>
 
-      <el-empty v-else description="暂无安全事件统计数据" />
+      <EmptyState text="暂无安全事件统计数据" v-else />
     </el-card>
 
     <!-- 第3部分: 安全策略列表 -->
@@ -424,6 +424,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Check } from '@element-plus/icons-vue'

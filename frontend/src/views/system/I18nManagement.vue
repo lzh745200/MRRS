@@ -132,7 +132,7 @@
     </el-card>
 
     <!-- 翻译详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" title="翻译详情" width="480px">
+    <el-dialog v-model="detailDialogVisible" title="翻译详情" :width="DIALOG_SM">
       <el-form label-width="80px">
         <el-form-item label="翻译键">
           <el-input :value="detailKey" readonly />
@@ -152,6 +152,7 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_SM } from '@/config/dialog'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'

@@ -158,7 +158,7 @@
                 </template>
               </el-table-column>
             </el-table>
-            <el-empty v-else description="未检测到异常数据" :image-size="60" />
+            <EmptyState text="未检测到异常数据" v-else :size="60" />
           </div>
         </div>
       </el-tab-pane>
@@ -299,6 +299,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import { DataAnalysis, Warning, Search } from '@element-plus/icons-vue'

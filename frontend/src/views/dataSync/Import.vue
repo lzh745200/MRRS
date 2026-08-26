@@ -126,7 +126,7 @@
       <h3 class="section-title">导入历史</h3>
       <el-table v-loading="loadingHistory" :data="importHistory" style="width: 100%">
         <template #empty>
-          <el-empty description="暂无导入记录" />
+          <EmptyState text="暂无导入记录" />
         </template>
         <el-table-column prop="package_name" label="数据包名称" />
         <el-table-column prop="total_records" label="总记录数" width="100" />
@@ -163,6 +163,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage } from 'element-plus'

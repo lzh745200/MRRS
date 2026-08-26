@@ -99,7 +99,7 @@
     </el-card>
 
     <!-- 详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" title="审批详情" width="960px">
+    <el-dialog v-model="detailDialogVisible" title="审批详情" :width="DIALOG_LG">
       <div v-if="currentTask" class="task-detail">
         <!-- 基本信息 -->
         <el-descriptions :column="2" border>
@@ -149,7 +149,7 @@
             </el-table-column>
           </el-table>
         </div>
-        <el-empty v-else description="加载中..." :image-size="60" />
+        <EmptyState text="加载中..." v-else :size="60" />
       </div>
       <template #footer>
         <el-button @click="detailDialogVisible = false">关闭</el-button>
@@ -166,6 +166,8 @@
 </template>
 
 <script setup lang="ts">
+import { DIALOG_LG } from '@/config/dialog'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage } from 'element-plus'

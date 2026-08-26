@@ -106,12 +106,8 @@
           <el-tag v-if="apiStats.length === 0" type="warning" size="small">无数据</el-tag>
         </div>
         <div ref="chartRef" class="chart-container" />
-        <el-empty
-          v-if="apiStats.length === 0"
-          description="暂无 API 统计数据"
-          :image-size="48"
-          class="chart-empty"
-        />
+        <EmptyState text="暂无 API 统计数据" v-if="apiStats.length === 0"
+          class="chart-empty" :size="48" />
       </div>
       <div class="log-panel">
         <div class="panel-header">
@@ -137,7 +133,7 @@
             <span class="log-level">{{ log.level.toUpperCase() }}</span>
             <span class="log-message">{{ log.message }}</span>
           </div>
-          <el-empty v-if="filteredLogs.length === 0" description="暂无匹配日志" :image-size="32" />
+          <EmptyState type="no-search" text="暂无匹配日志" v-if="filteredLogs.length === 0" :size="32" />
         </div>
       </div>
     </div>
@@ -221,6 +217,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import type { Component } from 'vue'
 import { ElMessage } from 'element-plus'

@@ -278,12 +278,8 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty
-        v-else
-        description="暂无帮扶经费数据，请选择年度添加"
-        :image-size="60"
-        style="margin-bottom: 16px"
-      />
+      <EmptyState text="暂无帮扶经费数据，请选择年度添加" v-else
+        style="margin-bottom: 16px" :size="60" />
 
       <!-- 合计行 -->
       <el-descriptions v-if="transitionFundingRows.length > 0" :column="2" border size="small">
@@ -310,6 +306,7 @@
 </template>
 
 <script setup lang="ts">
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
