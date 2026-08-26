@@ -286,6 +286,14 @@ def check_disk_space(min_mb: int = 100, path: str | None = None) -> dict:
     else:
         check_dir = Path(path)
 
+    # 目录可能尚未创建（如首次备份前），向上回溯到最近存在的父目录再检查
+    resolved = check_dir
+    while not resolved.exists() and resolved != resolved.parent:
+        resolved = resolved.parent
+    if not resolved.exists():
+        resolved = Path.cwd()
+    check_dir = resolved
+
     try:
         usage = shutil.disk_usage(str(check_dir))
         free_mb = usage.free // (1024 * 1024)
