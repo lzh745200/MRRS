@@ -278,11 +278,7 @@ describe('api/funds', () => {
       expect(mockGet).toHaveBeenCalledWith('/fund-budgets/alerts')
     })
 
-    it('getBudgetSummary 调用 GET /fund-budgets/summary', async () => {
-      mockGet.mockResolvedValue({ data: { summary: {} } })
-      await fundApi.getBudgetSummary()
-      expect(mockGet).toHaveBeenCalledWith('/fund-budgets/summary')
-    })
+    // W8-T019：getBudgetSummary 死 API 已删除，用例同步移除。
 
     it('getVillageFundSummary 带 year', async () => {
       mockGet.mockResolvedValue({ data: { total: 1 } })

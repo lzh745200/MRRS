@@ -722,10 +722,11 @@ async def get_csrf_token(request: Request, response: Response) -> dict:
     token = generate_csrf_token()
     signed_token = sign_csrf_token(token)
 
-    # 同时设置 cookie，确保前端 JS 可通过 document.cookie 读取
+    # W5-T009: cookie 存储 HMAC 签名版本；前端从响应体取 raw token 放 header
+    # 中间件验证: HMAC(header) == cookie
     response.set_cookie(
         key=CSRF_COOKIE_NAME,
-        value=token,  # 存储原始 token
+        value=signed_token,  # 存储 HMAC 签名（W5-T009 升级）
         max_age=CSRF_TOKEN_EXPIRY,
         httponly=False,  # 允许 JS 读取（Double Submit Cookie 模式必需）
         secure=_settings.ENVIRONMENT == "production" and not is_local_request(request),

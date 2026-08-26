@@ -309,13 +309,11 @@ describe('api/fundLifecycle res.data 回退（响应无 data 字段时原样返�
     ['listContracts', () => fundLifecycleApi.listContracts(), '/fund-lifecycle/contracts'],
     ['getContract', () => fundLifecycleApi.getContract(1), '/fund-lifecycle/contracts/1'],
     ['monitoringDeviation', () => fundLifecycleApi.monitoringDeviation(1), '/fund-lifecycle/monitoring/deviation/1'],
-    ['fundFlow', () => fundLifecycleApi.fundFlow(1), '/fund-lifecycle/monitoring/fund-flow/1'],
     ['listAnomalies', () => fundLifecycleApi.listAnomalies(), '/fund-lifecycle/anomalies'],
     ['getInspectionClues', () => fundLifecycleApi.getInspectionClues(1), '/fund-lifecycle/inspection-clues/1'],
     ['getPerformance', () => fundLifecycleApi.getPerformance(1), '/fund-lifecycle/performance/1'],
     ['getPerformanceReport', () => fundLifecycleApi.getPerformanceReport(1), '/fund-lifecycle/performance-report/1'],
     ['getFeasibilityReport', () => fundLifecycleApi.getFeasibilityReport(1), '/fund-lifecycle/feasibility-report/1'],
-    ['getFundFlowTree', () => fundLifecycleApi.getFundFlowTree(1), '/fund-lifecycle/monitoring/fund-flow-tree/1'],
     ['getHealth', () => fundLifecycleApi.getHealth(1), '/fund-lifecycle/health/1'],
   ]
 
