@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-medium]
+labels: [done, severity-medium]
 blocks: []
 blocked-by: ["w7-defect-fixes/010-fund-status-enum-source-expand.md"]
 ---
@@ -12,3 +12,6 @@ blocked-by: ["w7-defect-fixes/010-fund-status-enum-source-expand.md"]
 - [ ] 双序列渲染与图例（vitest）
 - [ ] 空月份数据 data||[] 防御
 - [ ] 配色走 chartColors 主题变量
+
+## Resolution (v1.10.0 batch 10)
+T036: Analysis.vue new bar chart for monthly fund flow (allocated vs used), reusing statisticsMultiDimension endpoint. 3-state loading + filter sync. TSC0 377 green.
