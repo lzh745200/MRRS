@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-high]
+﻿---
+labels: [done, severity-high]
 blocks: []
 blocked-by: []
 ---
@@ -23,3 +23,6 @@ v-permission / v-watermark 从未注册也从未使用——按钮级权限与�
 ## 涉及文件
 - `frontend/src/main.ts`、`frontend/src/directives/*`、系统管理页与敏感列表页
 - `docs/adr/0007-frontend-directives.md`
+
+## Resolution
+收官：main.ts 注册 v-permission/v-watermark；useMenuPermission 接 menuStore.canAccessMenu；UserManagement admin 操作区+funds/projects 回收站开关接 v-permission 双保险；敏感三列表挂水印；ADR-0007 落档 docs/adr/0007-frontend-directives.md

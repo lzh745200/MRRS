@@ -102,6 +102,7 @@
           <!-- 回收站入口（仅管理员）：查看已软删项目 -->
           <el-tooltip
             v-if="canViewDeleted"
+            v-permission="['admin', 'super_admin']"
             content="切换显示已软删的项目（管理员可见）"
             placement="top"
           >

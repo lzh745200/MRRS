@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-high]
+﻿---
+labels: [done, severity-high]
 blocks: []
 blocked-by: []
 ---
@@ -16,3 +16,6 @@ blocked-by: []
 
 ## 涉及文件
 - `.github/workflows/pr-checks.yml`
+
+## Resolution
+完成：移除 pytest 步骤 continue-on-error——--cov-fail-under=98 成为真实阻断信号；--lf 兜底保留为诊断辅助；Codecov 步骤注明展示用不阻塞

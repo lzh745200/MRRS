@@ -64,7 +64,7 @@
               >
             </el-badge>
           </div>
-          <div v-if="isAdmin" class="header-actions">
+          <div v-if="isAdmin" v-permission="['admin', 'super_admin']" class="header-actions">
             <el-button type="primary" @click="handleAdd">
               <el-icon><Plus /></el-icon>
               新增用户

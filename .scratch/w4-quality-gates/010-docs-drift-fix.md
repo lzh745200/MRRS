@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-low]
+﻿---
+labels: [done, severity-low]
 blocks: []
 blocked-by: []
 ---
@@ -16,3 +16,6 @@ blocked-by: []
 
 ## 涉及文件
 - `AGENTS.md`、`CLAUDE.md`
+
+## Resolution
+完成：AGENTS.md 单测命令改 tests/unit/views/... 路径；DB 路径改为 userData/database(Win)/~/.bumofu/data(Linux) 与 electron/main.js 实际一致

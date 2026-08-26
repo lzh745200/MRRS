@@ -1,5 +1,5 @@
----
-labels: [ready-for-agent, severity-high]
+﻿---
+labels: [done, severity-high]
 blocks: ["w12-system-compliance/050-military-compliance-audit.md"]
 blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ---
@@ -17,3 +17,6 @@ blocked-by: ["w0-baseline/001-freeze-baseline.md"]
 ## 审计结论（2026-08-25）
 
 AUDIT-20260825: PARTIAL——指令+测试资产在，main.ts 注册与 v-permission/v-watermark 接线为 0
+
+## Resolution
+同 w3/001 收官（重复工单合并）：指令注册/视图接线/水印/useMenuPermission 真实化/ADR-0007 全部落地

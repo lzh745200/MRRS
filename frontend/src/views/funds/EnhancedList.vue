@@ -269,6 +269,7 @@
           <el-form-item>
             <el-tooltip
               v-if="canViewDeleted"
+              v-permission="['admin', 'super_admin']"
               content="切换显示已软删的经费（管理员可见）"
               placement="top"
             >

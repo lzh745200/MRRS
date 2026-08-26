@@ -27,7 +27,7 @@ python -m bandit -r app/ -ll                            # Security scan
 cd frontend
 npm run dev                                             # Dev server (http://localhost:5173)
 npm run test -- --run                                   # Run all tests (6099, 346 test files)
-npx vitest run src/views/xxx/xxx.test.ts               # Run single test file
+npx vitest run tests/unit/views/xxx/xxx.test.ts        # Run single test file (tests live under tests/unit/)
 npm run lint                                            # ESLint (CI gate, --max-warnings=0)
 npx vue-tsc --noEmit                                    # Type check (CI gate)
 npm run build                                           # Production build
@@ -333,7 +333,7 @@ AuditLogger.log() writes to both Python logging (app.log) AND database (audit_lo
 
 ### Database Path (Packaged Mode)
 
-In packaged (Electron) mode, the SQLite database is stored at `%LOCALAPPDATA%\\bumofu-assistance\\data\\rural_revitalization.db` — NOT the install directory (Program Files requires admin write). Electron main.js injects `DATABASE_URL` env var to backend.exe.
+In packaged (Electron) mode, the SQLite database is stored at Windows: `%APPDATA%/<appName>/database/rural_revitalization.db` (Electron `userData/database/`) / Linux: `~/.bumofu/data/` — NOT the install directory (Program Files requires admin write). Electron main.js injects `DATABASE_URL` env var to backend.exe.
 
 ## Common Frontend Bug Patterns (Fixed 2026-07-05)
 
