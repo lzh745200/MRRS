@@ -677,7 +677,7 @@ onMounted(() => {
   background: var(--color-danger);
 }
 .status-card.level-gray::before {
-  background: var(--color-text-placeholder, #c0c4cc);
+  background: var(--color-text-disabled);
 }
 .status-card:hover {
   transform: translateY(-3px);
@@ -708,7 +708,7 @@ onMounted(() => {
   animation: dot-pulse-red 1.6s infinite;
 }
 .dot-gray {
-  background: var(--color-text-placeholder, #c0c4cc);
+  background: var(--color-text-disabled);
 }
 @keyframes dot-pulse-green {
   0% {
@@ -813,7 +813,7 @@ onMounted(() => {
 .nav-arrow {
   flex: none;
   font-size: 12px;
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-disabled);
   transition:
     transform 0.2s ease,
     color 0.2s ease;
@@ -851,6 +851,6 @@ onMounted(() => {
 }
 .version-copyright {
   font-size: 12px;
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-disabled);
 }
 </style>

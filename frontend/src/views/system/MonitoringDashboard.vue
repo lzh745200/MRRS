@@ -1014,7 +1014,7 @@ watch(healthExpanded, (val) => {
   border-top: 4px solid var(--color-danger);
 }
 .primary-card.card-error {
-  border-top-color: var(--color-text-placeholder, #c0c4cc);
+  border-top-color: var(--color-text-disabled);
   opacity: 0.65;
 }
 
@@ -1055,7 +1055,7 @@ watch(healthExpanded, (val) => {
 }
 .value-error {
   font-size: 2.5rem;
-  color: var(--color-text-placeholder, #c0c4cc);
+  color: var(--color-text-disabled);
 }
 
 /* Progress bar */
