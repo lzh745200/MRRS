@@ -214,7 +214,11 @@
           <el-select
             v-model="transferForm.transferToId"
             filterable
-            placeholder="请选择审批人"
+            remote
+            clearable
+            :remote-method="searchTransferUsers"
+            :loading="transferSearching"
+            placeholder="输入用户名搜索（T034 远程检索，解除200上限）"
             style="width: 100%"
           >
             <el-option
@@ -518,19 +522,39 @@ async function handleTransfer(task: any) {
   currentTask.value = task
   transferForm.value = { transferToId: undefined, reason: '' }
   transferDialogVisible.value = true
+  transferSearching.value = false
   try {
     const res: any = await listUsers({ page_size: 200 })
     const users = Array.isArray(res) ? res : res?.items || res?.data?.items || []
-    // 排除当前审批人自身
+    // 排除当前审批人自己
     candidateUsers.value = (users as any[]).filter((u: any) => u.id !== task.current_approver_id)
   } catch {
     candidateUsers.value = []
   }
 }
 
-/**
- * 确认转交
- */
+/** T034：转交对象远程搜索——按关键词拉取，解除一次性 page_size=200 截断 */
+const transferSearching = ref(false)
+
+async function searchTransferUsers(query: string) {
+  if (!currentTask.value) return
+  transferSearching.value = true
+  try {
+    const params: Record<string, unknown> = { page_size: 50 }
+    if (query && query.trim()) params.keyword = query.trim()
+    const res: any = await listUsers(params)
+    const users = Array.isArray(res) ? res : res?.items || res?.data?.items || []
+    candidateUsers.value = (users as any[]).filter(
+      (u: any) => u.id !== currentTask.value?.current_approver_id,
+    )
+  } catch {
+    candidateUsers.value = []
+  } finally {
+    transferSearching.value = false
+  }
+}
+
+/** 确认转交 */
 async function confirmTransfer() {
   if (!currentTask.value) return
   if (!transferForm.value.transferToId) {
