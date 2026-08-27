@@ -524,7 +524,11 @@ export const routes: RouteRecordRaw[] = [
         path: '/data-package/receive',
         name: 'DataPackageReceive',
         component: () => retryImport(() => import('@/views/dataPackage/ReceivePackage.vue')),
-        meta: { menuKey: 'data-package-receive', title: '接收数据包', roles: ['admin', 'super_admin', 'user'] },
+        meta: {
+          menuKey: 'data-package-receive',
+          title: '接收数据包',
+          roles: ['admin', 'super_admin', 'user'],
+        },
       },
       { path: '/system/config-package', redirect: '/system/config' },
       // ── 数据录入 ──
@@ -563,7 +567,11 @@ export const routes: RouteRecordRaw[] = [
         path: '/system/permission-packs',
         name: 'SystemPermissionPacks',
         component: () => retryImport(() => import('@/views/system/PermissionPacks.vue')),
-        meta: { menuKey: 'system-permission-packs', title: '权限包管理', roles: ['admin', 'super_admin'] },
+        meta: {
+          menuKey: 'system-permission-packs',
+          title: '权限包管理',
+          roles: ['admin', 'super_admin'],
+        },
       },
       {
         path: '/system/roles',

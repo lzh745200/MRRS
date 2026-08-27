@@ -37,7 +37,8 @@ vi.mock('@/api/request', () => ({
   put: mockPut,
   del: mockDel,
   apiRequest: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/authStorage', () => ({
   AuthStorage: { getToken: getTokenMock },
@@ -82,7 +83,9 @@ function defaultGetImpl(url: string) {
   }
   if (url === '/system/backup/schedule') {
     return Promise.resolve({
-      data: { data: { enabled: true, frequency: 'weekly', backup_time: '03:30', retention_count: 10 } },
+      data: {
+        data: { enabled: true, frequency: 'weekly', backup_time: '03:30', retention_count: 10 },
+      },
     })
   }
   return Promise.resolve({ data: {} })
@@ -113,7 +116,8 @@ function mountComp() {
         // 注入两行样本数据，覆盖 backup_type 三元两侧、formatSize/formatTime 不同输入
         'el-table-column': {
           name: 'ElTableColumn',
-          template: '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /></div>',
+          template:
+            '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /></div>',
           data() {
             return {
               rowA: {
@@ -151,7 +155,9 @@ async function clickButton(wrapper: any, text: string, index = 0) {
 /** 第 idx 个 el-dialog-stub 内按文本点击 */
 async function clickDialogButton(wrapper: any, dialogIdx: number, text: string) {
   const dialogs = wrapper.findAll('.el-dialog-stub')
-  const btns = dialogs[dialogIdx].findAll('el-button-stub').filter((b: any) => b.text().includes(text))
+  const btns = dialogs[dialogIdx]
+    .findAll('el-button-stub')
+    .filter((b: any) => b.text().includes(text))
   expect(btns.length).toBeGreaterThan(0)
   await btns[0].trigger('click')
   await flushPromises()
@@ -254,20 +260,39 @@ describe('挂载与数据加载', () => {
     const vm = wrapper.vm as any
     // backupTime / retentionCount camelCase 侧
     mockGet.mockResolvedValueOnce({
-      data: { data: { enabled: false, frequency: 'monthly', backupTime: '01:00', retentionCount: 3 } },
+      data: {
+        data: { enabled: false, frequency: 'monthly', backupTime: '01:00', retentionCount: 3 },
+      },
     })
     await vm.loadScheduleConfig()
-    expect(vm.scheduleConfig).toEqual({ enabled: false, frequency: 'monthly', backupTime: '01:00', retentionCount: 3 })
+    expect(vm.scheduleConfig).toEqual({
+      enabled: false,
+      frequency: 'monthly',
+      backupTime: '01:00',
+      retentionCount: 3,
+    })
     // 空对象 → 全部 ?? 默认值
     mockGet.mockResolvedValueOnce({ data: { data: {} } })
     await vm.loadScheduleConfig()
-    expect(vm.scheduleConfig).toEqual({ enabled: false, frequency: 'daily', backupTime: '02:00', retentionCount: 7 })
+    expect(vm.scheduleConfig).toEqual({
+      enabled: false,
+      frequency: 'daily',
+      backupTime: '02:00',
+      retentionCount: 7,
+    })
     // res.data 直返（无嵌套 data）
-    mockGet.mockResolvedValueOnce({ data: { enabled: true, frequency: 'weekly', backup_time: '04:00', retention_count: 5 } })
+    mockGet.mockResolvedValueOnce({
+      data: { enabled: true, frequency: 'weekly', backup_time: '04:00', retention_count: 5 },
+    })
     await vm.loadScheduleConfig()
     expect(vm.scheduleConfig.backupTime).toBe('04:00')
     // res 直返（axios 已拆包形态）
-    mockGet.mockResolvedValueOnce({ enabled: true, frequency: 'daily', backup_time: '05:00', retention_count: 6 })
+    mockGet.mockResolvedValueOnce({
+      enabled: true,
+      frequency: 'daily',
+      backup_time: '05:00',
+      retention_count: 6,
+    })
     await vm.loadScheduleConfig()
     expect(vm.scheduleConfig.backupTime).toBe('05:00')
     // falsy 数据（0）→ if (data) 为假，保持原值
@@ -295,13 +320,17 @@ describe('挂载与数据加载', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.scheduleConfig = { enabled: true, frequency: 'monthly', backupTime: '06:00', retentionCount: 12 }
+    vm.scheduleConfig = {
+      enabled: true,
+      frequency: 'monthly',
+      backupTime: '06:00',
+      retentionCount: 12,
+    }
     await clickButton(wrapper, '保存计划')
     expect(mockPut).toHaveBeenCalledWith('/system/backup/schedule', {
       enabled: true,
-      frequency: 'monthly',
-      backup_time: '06:00',
-      retention_count: 12,
+      schedule: '00 06 1 * *',
+      keep_count: 12,
     })
     expect(ElMessage.success).toHaveBeenCalledWith('备份计划已保存')
     expect(vm.savingSchedule).toBe(false)
@@ -331,10 +360,17 @@ describe('自动备份设置（localStorage）', () => {
   })
 
   it('合法存储 → 原样载入', async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ enabled: true, frequency: 'weekly', retentionCount: 15 }))
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ enabled: true, frequency: 'weekly', retentionCount: 15 })
+    )
     const wrapper = mountComp()
     await flushPromises()
-    expect((wrapper.vm as any).autoBackupConfig).toEqual({ enabled: true, frequency: 'weekly', retentionCount: 15 })
+    expect((wrapper.vm as any).autoBackupConfig).toEqual({
+      enabled: true,
+      frequency: 'weekly',
+      retentionCount: 15,
+    })
   })
 
   it('非法字段逐项回退：enabled 非布尔 / frequency 非枚举 / retentionCount 非数、越界', async () => {
@@ -372,7 +408,11 @@ describe('自动备份设置（localStorage）', () => {
     localStorage.setItem(STORAGE_KEY, '{broken-json')
     const wrapper = mountComp()
     await flushPromises()
-    expect((wrapper.vm as any).autoBackupConfig).toEqual({ enabled: false, frequency: 'daily', retentionCount: 7 })
+    expect((wrapper.vm as any).autoBackupConfig).toEqual({
+      enabled: false,
+      frequency: 'daily',
+      retentionCount: 7,
+    })
   })
 
   it('watch：修改配置 → 写入 localStorage', async () => {
@@ -406,7 +446,9 @@ describe('自动备份设置（localStorage）', () => {
     vm.autoBackupConfig.frequency = 'monthly'
     await clickButton(wrapper, '保存设置')
     expect(ElMessage.success).toHaveBeenCalledWith('自动备份设置已保存')
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')).toMatchObject({ frequency: 'monthly' })
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')).toMatchObject({
+      frequency: 'monthly',
+    })
   })
 
   it('saveAutoBackupConfig：写入抛错 → 错误提示', async () => {
@@ -534,7 +576,10 @@ describe('创建备份', () => {
     vm.handleCreateBackup()
     vm.backupForm.password = ''
     await vm.confirmCreateBackup()
-    expect(mockPost).toHaveBeenCalledWith('/system/backup', expect.objectContaining({ password: null }))
+    expect(mockPost).toHaveBeenCalledWith(
+      '/system/backup',
+      expect.objectContaining({ password: null })
+    )
   })
 
   it('创建返回 success:false → 不提示不刷新', async () => {
@@ -582,7 +627,11 @@ describe('删除备份', () => {
     const vm = wrapper.vm as any
     mockGet.mockClear()
     await clickButton(wrapper, '删除', 0)
-    expect(confirmMock).toHaveBeenCalledWith(expect.stringContaining('row-a.zip'), '警告', expect.objectContaining({ type: 'warning' }))
+    expect(confirmMock).toHaveBeenCalledWith(
+      expect.stringContaining('row-a.zip'),
+      '警告',
+      expect.objectContaining({ type: 'warning' })
+    )
     expect(mockDel).toHaveBeenCalledWith('/system/backup/row-a.zip')
     expect(ElMessage.success).toHaveBeenCalledWith('已删除')
     expect(mockGet).toHaveBeenCalled()
@@ -648,7 +697,10 @@ describe('恢复备份', () => {
     vm.restoreForm.password = 'pw123'
     vi.useFakeTimers()
     await vm.confirmRestore()
-    expect(mockPost).toHaveBeenCalledWith('/system/backup/restore', { filename: 'enc.zip', password: 'pw123' })
+    expect(mockPost).toHaveBeenCalledWith('/system/backup/restore', {
+      filename: 'enc.zip',
+      password: 'pw123',
+    })
     expect(ElMessage.success).toHaveBeenCalledWith('系统恢复成功，请重新登录')
     expect(vm.restoreDialogVisible).toBe(false)
     expect(vm.restoring).toBe(false)
@@ -663,7 +715,10 @@ describe('恢复备份', () => {
     vm.handleRestore({ file_name: 'plain.zip', is_encrypted: false })
     vi.useFakeTimers()
     await vm.confirmRestore()
-    expect(mockPost).toHaveBeenCalledWith('/system/backup/restore', { filename: 'plain.zip', password: null })
+    expect(mockPost).toHaveBeenCalledWith('/system/backup/restore', {
+      filename: 'plain.zip',
+      password: null,
+    })
     vi.useRealTimers()
   })
 
@@ -730,7 +785,11 @@ describe('下载备份', () => {
   })
 
   it('response.ok 为假 → 抛错并提示下载失败', async () => {
-    fetchMock.mockResolvedValue({ ok: false, status: 404, blob: () => Promise.resolve(new Blob(['x'])) })
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 404,
+      blob: () => Promise.resolve(new Blob(['x'])),
+    })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -847,7 +906,7 @@ describe('模板分支渲染', () => {
       mockGet.mockResolvedValueOnce({})
       mockGet.mockResolvedValueOnce({})
       mockGet.mockRejectedValueOnce(new Error('net'))
-      const wrapper = mountComp()
+      mountComp()
       await flushPromises()
       expect(ElMessage.error).toHaveBeenCalledWith('检测备份目录失败')
     })
@@ -858,7 +917,10 @@ describe('模板分支渲染', () => {
       mockGet.mockResolvedValueOnce({})
       mockGet.mockResolvedValueOnce({ dirs: [], current: 'E:\\bk' })
       mockPut.mockResolvedValueOnce({})
-      mockGet.mockResolvedValueOnce({ dirs: [{ path: 'E:\\bk', type: 'fixed', available: true }], current: 'E:\\bk' })
+      mockGet.mockResolvedValueOnce({
+        dirs: [{ path: 'E:\\bk', type: 'fixed', available: true }],
+        current: 'E:\\bk',
+      })
       const wrapper = mountComp()
       await flushPromises()
       const vm = wrapper.vm as any

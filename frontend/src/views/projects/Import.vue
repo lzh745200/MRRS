@@ -4,7 +4,7 @@
       <div class="decoration-bar"></div>
     </div>
 
-    <el-card class="import-container" shadow="hover" body- style="padding: 0">
+    <el-card class="import-container" shadow="hover" body-style="padding: 0">
       <div class="import-header">
         <div class="header-content">
           <el-icon class="header-icon" :size="28"><Document /></el-icon>

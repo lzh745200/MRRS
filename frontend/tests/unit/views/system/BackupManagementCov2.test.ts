@@ -40,7 +40,8 @@ vi.mock('@/api/request', () => ({
   put: mockPut,
   del: mockDel,
   apiRequest: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/authStorage', () => ({
   AuthStorage: { getToken: getTokenMock },
@@ -360,10 +361,7 @@ describe('导入备份包恢复', () => {
     vm.importFile = null
     await vm.confirmImportRestore()
     expect(ElMessage.warning).toHaveBeenCalledWith('请先选择备份包文件')
-    expect(mockPost).not.toHaveBeenCalledWith(
-      '/system/backup/upload-restore',
-      expect.anything()
-    )
+    expect(mockPost).not.toHaveBeenCalledWith('/system/backup/upload-restore', expect.anything())
     wrapper.unmount()
   })
 

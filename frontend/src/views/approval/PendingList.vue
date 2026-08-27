@@ -36,8 +36,7 @@
         <el-statistic
           title="高优先级"
           :value="highPriorityCount"
-          value-
-          style="color: var(--color-danger)"
+          value-style="color: var(--color-danger)"
         />
       </el-col>
       <el-col :span="6">

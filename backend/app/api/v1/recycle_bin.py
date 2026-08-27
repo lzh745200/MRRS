@@ -100,25 +100,7 @@ def register_recycle_bin_routes(
         require_admin(current_user)
         rec = _get_or_404(db, rid)
         _require_in_recycle_bin(rec)
-        rec.is_active = True
-        if hasattr(rec, "deleted_at"):
-            rec.deleted_at = None
-        from app.core.transaction import safe_commit
-
-        safe_commit(db)
-        if on_changed:
-            await on_changed()
-        from app.utils.audit_logger import AuditLogger
-
-        AuditLogger.log(
-            action=f"{table}_restore",
-            user_id=current_user.id,
-            username=current_user.username,
-            resource_type=table,
-            resource_id=rid,
-            details={"name": getattr(rec, "name", None) or str(rid)},
-        )
-        return success_response(data={"id": rid}, message="恢复成功")
+        return await _restore_record(db, model, resource, table, rid, current_user, on_changed)
 
     @router.post("/{rid}/purge", summary=f"彻底删除{resource}（级联物理清除）")
     async def purge_rec(
@@ -131,45 +113,7 @@ def register_recycle_bin_routes(
         _verify_password(data, current_user)
         rec = _get_or_404(db, rid)
         _require_in_recycle_bin(rec)
-
-        from app.services.cascade_purge_service import CascadePurgeService
-
-        stats = CascadePurgeService(db).purge(table, rid)
-        if not stats.get("success"):
-            raise HTTPException(status_code=404, detail=stats.get("message", "彻底删除失败"))
-        if on_changed:
-            await on_changed()
-
-        from app.utils.audit_logger import AuditLogger
-
-        AuditLogger.log(
-            action=f"{table}_purge",
-            user_id=current_user.id,
-            username=current_user.username,
-            resource_type=table,
-            resource_id=rid,
-            details={
-                "deleted_records": stats.get("deleted_records"),
-                "cascade_details": stats.get("details"),
-            },
-        )
-        try:
-            from app.services.immediate_backup import trigger_immediate_backup
-
-            trigger_immediate_backup(
-                description=f"彻底删除{resource}#{rid}及关联数据后备份", delay=1.0
-            )
-        except Exception:  # pragma: no cover —— 备份失败不阻断删除结果
-            logger.warning("彻底删除后即时备份触发失败", exc_info=True)
-
-        return success_response(
-            data={
-                "id": rid,
-                "deleted_records": stats.get("deleted_records", 0),
-                "details": stats.get("details", {}),
-            },
-            message=f"已彻底删除并清理 {stats.get('deleted_records', 0)} 条关联数据",
-        )
+        return await _purge_record(db, model, resource, table, rid, data, current_user, on_changed)
 
     # ── 批量恢复 / 批量彻底删除 ──
 
@@ -180,29 +124,10 @@ def register_recycle_bin_routes(
         db: Session = Depends(get_db),
     ):
         require_admin(current_user)
-        ids = body.__dict__.pop("ids", []) if hasattr(body, "ids") else []
+        ids = getattr(body, "ids", [])
         if not ids:
             raise HTTPException(status_code=400, detail="请提供要恢复的 ID 列表")
-        from app.core.transaction import safe_commit
-
-        count = (
-            db.query(model)
-            .filter(
-                model.id.in_(ids),
-                model.is_active == False,  # noqa: E712
-            )
-            .update(
-                {"is_active": True, "deleted_at": None},
-                synchronize_session=False,
-            )
-        )
-        safe_commit(db)
-        if on_changed:
-            await on_changed()
-        return success_response(
-            data={"restored": count},
-            message=f"已恢复 {count} 条{resource}记录",
-        )
+        return await _batch_restore_records(db, model, resource, ids, current_user, on_changed)
 
     @router.post("/batch-purge", summary=f"批量彻底删除{resource}（级联物理清除）")
     async def batch_purge(
@@ -215,48 +140,141 @@ def register_recycle_bin_routes(
         ids = getattr(body, "ids", [])
         if not ids:
             raise HTTPException(status_code=400, detail="请提供要彻底删除的 ID 列表")
+        return await _batch_purge_records(db, model, resource, table, ids, current_user, on_changed)
 
-        from app.services.cascade_purge_service import CascadePurgeService
 
-        svc = CascadePurgeService(db)
-        total = 0
-        purged_ids = []
-        for rid in ids:
-            rec = (
-                db.query(model)
-                .filter(model.id == rid, model.is_active == False)  # noqa: E712
-                .first()
-            )
-            if not rec:
-                continue
-            stats = svc.purge(table, rid)
-            if stats.get("success"):
-                total += 1
-                purged_ids.append(rid)
+async def _restore_record(db, model, resource, table, rid, current_user, on_changed):
+    """执行单条恢复（通用）。"""
+    rec = db.query(model).get(rid)
+    if rec is None:
+        raise HTTPException(status_code=404, detail=f"{resource}不存在")
+    rec.is_active = True
+    if hasattr(rec, "deleted_at"):
+        rec.deleted_at = None
+    from app.core.transaction import safe_commit
 
-        if on_changed:
-            await on_changed()
+    safe_commit(db)
+    if on_changed:
+        await on_changed()
+    from app.utils.audit_logger import AuditLogger
 
-        from app.utils.audit_logger import AuditLogger
+    AuditLogger.log(
+        action=f"{table}_restore",
+        user_id=current_user.id,
+        username=current_user.username,
+        resource_type=table,
+        resource_id=rid,
+        details={"name": getattr(rec, "name", None) or str(rid)},
+    )
+    return success_response(data={"id": rid}, message="恢复成功")
 
-        AuditLogger.log(
-            action=f"{table}_batch_purge",
-            user_id=current_user.id,
-            username=current_user.username,
-            resource_type=table,
-            resource_id=0,
-            details={"purged_count": total, "purged_ids": purged_ids},
+
+async def _purge_record(db, model, resource, table, rid, data, current_user, on_changed):
+    """执行单条彻底删除（级联物理清除 + 审计 + 备份）。"""
+    from app.services.cascade_purge_service import CascadePurgeService
+
+    stats = CascadePurgeService(db).purge(table, rid)
+    if not stats.get("success"):
+        raise HTTPException(status_code=404, detail=stats.get("message", "彻底删除失败"))
+    if on_changed:
+        await on_changed()
+
+    from app.utils.audit_logger import AuditLogger
+
+    AuditLogger.log(
+        action=f"{table}_purge",
+        user_id=current_user.id,
+        username=current_user.username,
+        resource_type=table,
+        resource_id=rid,
+        details={
+            "deleted_records": stats.get("deleted_records"),
+            "cascade_details": stats.get("details"),
+        },
+    )
+    try:
+        from app.services.immediate_backup import trigger_immediate_backup
+
+        trigger_immediate_backup(
+            description=f"彻底删除{resource}#{rid}及关联数据后备份", delay=1.0
         )
-        try:
-            from app.services.immediate_backup import trigger_immediate_backup
+    except Exception:  # pragma: no cover —— 备份失败不阻断删除结果
+        logger.warning("彻底删除后即时备份触发失败", exc_info=True)
 
-            trigger_immediate_backup(
-                description=f"批量彻底删除{resource} {total} 条后备份", delay=1.0
-            )
-        except Exception:  # pragma: no cover
-            logger.warning("批量彻底删除后备份触发失败", exc_info=True)
+    return success_response(
+        data={
+            "id": rid,
+            "deleted_records": stats.get("deleted_records", 0),
+            "details": stats.get("details", {}),
+        },
+        message=f"已彻底删除并清理 {stats.get('deleted_records', 0)} 条关联数据",
+    )
 
-        return success_response(
-            data={"purged": total, "ids": purged_ids},
-            message=f"已彻底删除 {total} 条{resource}及关联数据",
+
+async def _batch_restore_records(db, model, resource, ids, current_user, on_changed):
+    """批量恢复（is_active 置 True，清 deleted_at）。"""
+    from app.core.transaction import safe_commit
+
+    count = (
+        db.query(model)
+        .filter(model.id.in_(ids), model.is_active == False)  # noqa: E712
+        .update(
+            {"is_active": True, "deleted_at": None},
+            synchronize_session=False,
         )
+    )
+    safe_commit(db)
+    if on_changed:
+        await on_changed()
+    return success_response(
+        data={"restored": count},
+        message=f"已恢复 {count} 条{resource}记录",
+    )
+
+
+async def _batch_purge_records(db, model, resource, table, ids, current_user, on_changed):
+    """批量彻底删除（逐条级联物理清除 + 审计 + 备份）。"""
+    from app.services.cascade_purge_service import CascadePurgeService
+
+    svc = CascadePurgeService(db)
+    total = 0
+    purged_ids = []
+    for rid in ids:
+        rec = (
+            db.query(model)
+            .filter(model.id == rid, model.is_active == False)  # noqa: E712
+            .first()
+        )
+        if not rec:
+            continue
+        stats = svc.purge(table, rid)
+        if stats.get("success"):
+            total += 1
+            purged_ids.append(rid)
+
+    if on_changed:
+        await on_changed()
+
+    from app.utils.audit_logger import AuditLogger
+
+    AuditLogger.log(
+        action=f"{table}_batch_purge",
+        user_id=current_user.id,
+        username=current_user.username,
+        resource_type=table,
+        resource_id=0,
+        details={"purged_count": total, "purged_ids": purged_ids},
+    )
+    try:
+        from app.services.immediate_backup import trigger_immediate_backup
+
+        trigger_immediate_backup(
+            description=f"批量彻底删除{resource} {total} 条后备份", delay=1.0
+        )
+    except Exception:  # pragma: no cover
+        logger.warning("批量彻底删除后备份触发失败", exc_info=True)
+
+    return success_response(
+        data={"purged": total, "ids": purged_ids},
+        message=f"已彻底删除 {total} 条{resource}及关联数据",
+    )

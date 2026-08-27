@@ -3,7 +3,6 @@
  * 支持 Excel/CSV/PDF 导出
  */
 
-import * as XLSX from '@e965/xlsx'
 import { downloadBlob } from '@/api/request'
 
 /** RFC 4180 兼容 CSV 转义 */
@@ -32,14 +31,17 @@ function exportToCSV(
   downloadBlob(blob, `${filename}.csv`)
 }
 
-/** 导出为 Excel（使用 xlsx 库生成真实 .xlsx 文件） */
-function exportToExcel(
+/** 导出为 Excel（使用 xlsx 库生成真实 .xlsx 文件）
+ *  xlsx 体积较大，改为按需动态导入，避免进入首屏静态依赖图
+ */
+async function exportToExcel(
   data: Record<string, unknown>[],
   filename: string,
   headers?: Record<string, string>
 ) {
   if (!data.length) return
 
+  const XLSX = await import('@e965/xlsx')
   const keys = Object.keys(headers || data[0])
   const headerRow = keys.map((k) => headers?.[k] || k)
   const rows = data.map((row) => keys.map((k) => String(row[k] ?? '')))

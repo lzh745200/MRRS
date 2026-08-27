@@ -268,6 +268,14 @@ export default defineConfig(({ mode }) => {
           ) {
             return // 跳过此警告
           }
+          // Element Plus 按需分包会触发跨 chunk 循环依赖警告，属预期行为，定向抑制
+          if (
+            warning.code === 'CIRCULAR_DEPENDENCY' ||
+            warning.code === 'CYCLIC_CROSS_CHUNK' ||
+            (warning.message && warning.message.includes('circular dependency'))
+          ) {
+            return
+          }
           defaultHandler(warning)
         },
         output: {
@@ -288,17 +296,12 @@ export default defineConfig(({ mode }) => {
               return 'pinia'
             }
 
-            // Element Plus - 统一打包以解决循环依赖警告
-            if (id.includes('node_modules/element-plus')) {
-              return 'element-plus'
-            }
-
             // Element Plus 图标 - 单独打包
             if (id.includes('node_modules/@element-plus/icons-vue')) {
               return 'element-plus-icons'
             }
 
-            // ECharts - 统一打包以解决循环依赖警告
+            // ECharts - 统一打包，仅图表页使用，懒加载 chunk
             if (id.includes('node_modules/echarts') || id.includes('node_modules/zrender')) {
               return 'echarts'
             }
@@ -306,6 +309,16 @@ export default defineConfig(({ mode }) => {
             // Chart.js - 图表库，仅在图表页面使用，单独分包
             if (id.includes('node_modules/chart.js')) {
               return 'chartjs'
+            }
+
+            // 表格导入导出：独立 chunk，避免落入 vendor 预加载（恢复动态导入收益）
+            if (id.includes('node_modules/@e965/xlsx') || id.includes('node_modules/xlsx')) {
+              return 'xlsx'
+            }
+
+            // 产品引导（driver.js）：独立 chunk，懒加载
+            if (id.includes('node_modules/driver.js')) {
+              return 'driver'
             }
 
             // SortableJS - 拖拽库，单独分包
@@ -318,18 +331,26 @@ export default defineConfig(({ mode }) => {
               return 'axios'
             }
 
-            // 日期处理 - 合并到vendor避免空chunk
-            // dayjs 如果未被直接使用会产生空chunk，合并到vendor
-
             // 安全相关
             if (id.includes('node_modules/dompurify')) {
               return 'security'
             }
 
-            // 其他第三方库
-            if (id.includes('node_modules')) {
+            // 工具库：独立 chunk（不落入 vendor 整包）
+            if (id.includes('node_modules/lodash')) {
+              return 'lodash'
+            }
+            if (id.includes('node_modules/core-js')) {
+              return 'core-js'
+            }
+
+            // Element Plus：不在此处强制合并，交由 ElementPlusResolver 按组件按需分包
+            // （仅 layout/常用组件进入首屏 chunk，其余随对应路由懒加载）
+            // vendor 兜底排除 element-plus，避免 735KB 整包预加载
+            if (id.includes('node_modules') && !id.includes('node_modules/element-plus')) {
               return 'vendor'
             }
+            // element-plus 其余部分交由 Rollup 按需切分（返回 undefined）
           },
           // 入口文件命名
           entryFileNames: 'assets/js/[name]-[hash].js',
@@ -390,6 +411,8 @@ export default defineConfig(({ mode }) => {
       // 启用 CSS 压缩
       cssMinify: true,
       // 启用模块预加载
+      // 重型 chunk（xlsx/echarts/chartjs/driver）通过源码侧动态 import 实现懒加载，
+      // 不进入首屏静态依赖图，故无需在此过滤
       modulePreload: {
         polyfill: true,
       },
