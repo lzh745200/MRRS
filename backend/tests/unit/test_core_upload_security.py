@@ -191,8 +191,10 @@ class TestValidateContentSafety:
         ok, msg = validate_content_safety(b"\xff\xfe\x00\x01\x02")
         assert ok is True
 
-    def test_check_macro_false_still_checks_other_patterns(self):
-        ok, msg = validate_content_safety(b"MZtest", check_macro=False)
+    def test_executable_signature_checked_without_macro_param(self):
+        # check_macro 参数已删除（从未实现宏扫描）；
+        # 可执行文件签名拦截始终生效
+        ok, msg = validate_content_safety(b"MZtest")
         assert ok is False
         assert "不允许上传可执行文件" in msg
 

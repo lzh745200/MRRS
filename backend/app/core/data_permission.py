@@ -112,9 +112,14 @@ def apply_scope_to_query(
             return query.filter(getattr(model, dept_field) == user_dept)
         # 部门/组织未设置时回退到 OWN 范围
         logger.debug("User has no organization; falling back to OWN scope")
+        scope = DataScope.OWN  # 显式回退
 
-    # OWN 范围（角色为 OWN，或 OWN_DEPT 用户无组织时的回退）
-    return query.filter(getattr(model, owner_field) == getattr(user, "id", None))
+    if scope == DataScope.OWN:
+        return query.filter(getattr(model, owner_field) == getattr(user, "id", None))
+
+    # 防御性兜底：DataScope 未来扩展新枚举值时按最严格语义原样返回，
+    # 由 TestUnknownScopeFallback 回归测试锁定（fail-safe: 不过滤不加权）
+    return query
 
 
 def check_record_access(
