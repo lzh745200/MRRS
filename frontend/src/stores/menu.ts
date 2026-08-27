@@ -85,20 +85,30 @@ export const useMenuStore = defineStore('menu', () => {
   }
 
   /** 从后端加载当前用户可见菜单，更新 store */
+  // 进行中的请求 Promise：登录后 fire-and-forget 预加载与路由守卫的 await 调用
+  // 必须共享同一 Promise —— 否则守卫的 await 拿到"未加载"假完成，
+  // canAccessMenu 在 loaded=false 时返回 false，登录后立即被弹到 /403。
+  let _inflight: Promise<void> | null = null
+
   async function fetchMenus(): Promise<void> {
-    if (loading.value) return // 防重复调用
+    if (_inflight) return _inflight
     const token = AuthStorage.getToken()
     if (!token) return
     loading.value = true
-    try {
-      const res = await get('/menus/accessible')
-      const data = res.data || res || []
-      setMenus(Array.isArray(data) ? data : [])
-    } catch {
-      // 加载失败：保持 loaded=false 允许下次重试，标记失败状态
-      loading.value = false
-      loadFailed.value = true
-    }
+    _inflight = (async () => {
+      try {
+        const res = await get('/menus/accessible')
+        const data = res.data || res || []
+        setMenus(Array.isArray(data) ? data : [])
+      } catch {
+        // 加载失败：保持 loaded=false 允许下次重试，标记失败状态
+        loading.value = false
+        loadFailed.value = true
+      } finally {
+        _inflight = null
+      }
+    })()
+    return _inflight
   }
 
   /** 加载当前用户所属组织的模块策略 */

@@ -187,11 +187,25 @@ describe('useMenuStore', () => {
       expect(mockGet).not.toHaveBeenCalled()
     })
 
-    it('loading 中防重复调用', async () => {
+    it('并发调用共享同一请求（只发一次 API，双方都等到加载完成）', async () => {
+      // 回归锁定：登录后 fire-and-forget 预加载与路由守卫的 await 必须共享
+      // 同一 in-flight Promise —— 旧实现"loading 中直接 return"导致守卫拿到
+      // loaded=false 的假完成，登录后立即被弹到 /403。
+      let resolveGet!: (v: { data: { key: string; label: string }[] }) => void
+      mockGet.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveGet = resolve
+          })
+      )
       const store = useMenuStore()
-      store.loading = true
-      await store.fetchMenus()
-      expect(mockGet).not.toHaveBeenCalled()
+      const p1 = store.fetchMenus()
+      const p2 = store.fetchMenus()
+      expect(mockGet).toHaveBeenCalledTimes(1) // 去重：只发一次请求
+      resolveGet({ data: [{ key: 'dashboard', label: '工作台' }] })
+      await Promise.all([p1, p2])
+      expect(store.loaded).toBe(true)
+      expect(store.menus).toHaveLength(1)
     })
 
     it('成功（res.data 数组）时写入菜单并更新状态', async () => {

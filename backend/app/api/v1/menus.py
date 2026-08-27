@@ -163,6 +163,12 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "roles": ["admin", "super_admin"],
             },
             {
+                "key": "validation-rules",
+                "label": "校验规则管理",
+                "path": "/data-verify/rules",
+                "roles": ["admin", "super_admin"],
+            },
+            {
                 "key": "data-analysis",
                 "label": "数据统计分析",
                 "path": "/data-analysis",
@@ -235,6 +241,12 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "roles": None,
             },
             {
+                "key": "data-package-version",
+                "label": "版本管理",
+                "path": "/data-package/version",
+                "roles": None,
+            },
+            {
                 "key": "task-package-admin",
                 "label": "任务数据包管理",
                 "path": "/data-package/admin",
@@ -274,6 +286,14 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "roles": ["admin", "super_admin"],
             },
         ],
+    },
+    {
+        "key": "batch-operations",
+        "label": "批量操作",
+        "icon": "Operation",
+        "path": "/batch",
+        "order": 14,
+        "roles": None,
     },
     {
         "key": "system",
@@ -430,6 +450,18 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "path": "/system/error-reports",
                 "roles": ["admin", "super_admin"],
             },
+            {
+                "key": "system-overview",
+                "label": "系统总览",
+                "path": "/system/overview",
+                "roles": ["admin", "super_admin"],
+            },
+            {
+                "key": "admin-dashboard",
+                "label": "管理面板",
+                "path": "/admin/dashboard",
+                "roles": ["admin", "super_admin"],
+            },
         ],
     },
     {
@@ -444,9 +476,22 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "key": "effectiveness",
         "label": "帮扶成效",
         "icon": "TrendCharts",
-        "path": "/effectiveness",
         "order": 111,
         "roles": None,
+        "children": [
+            {
+                "key": "effectiveness-rankings",
+                "label": "成效排名",
+                "path": "/effectiveness/rankings",
+                "roles": None,
+            },
+            {
+                "key": "effectiveness-evaluate",
+                "label": "成效评估",
+                "path": "/effectiveness/evaluate",
+                "roles": None,
+            },
+        ],
     },
     {
         "key": "todos",
