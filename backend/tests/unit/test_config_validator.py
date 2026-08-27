@@ -39,6 +39,7 @@ class TestValidateConfig:
         try:
             import builtins
             real_import = builtins.__import__
+
             def raise_import(name, *args, **kwargs):
                 if name == 'app.core.config':
                     raise ImportError("mock")
@@ -282,6 +283,7 @@ class TestCheckRequiredDirs:
         try:
             import builtins
             real_import = builtins.__import__
+
             def raise_import(name, *args, **kwargs):
                 if name == 'app.core.config':
                     raise ImportError("mock")
@@ -342,14 +344,8 @@ class TestCheckRequiredDirs:
             assert mock_mkdir.call_count == 4
 
 
-# =========== ProductionSettings ===========
-
-class TestProductionSettings:
-    def test_has_model_fields(self):
-        from app.core.config_validator import ProductionSettings
-        ps = ProductionSettings()
-        assert "DATABASE_URL" in ps.model_fields
-        assert "sqlite" in ps.model_fields["DATABASE_URL"].default
+# ProductionSettings 死类（Backward-compat stub，无任何引用）已随死代码清理删除，
+# 其配套用例一并移除（2026-08-27）。
 
 
 # =========== REQUIRED_ENV_VARS ===========

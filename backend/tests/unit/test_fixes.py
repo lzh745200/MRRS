@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 # 修复2: 日期时间验证 (rural_work schema)
 # ============================================================
 
+
 class TestRuralWorkDateValidation:
     """乡村工作日期验证器测试"""
 
@@ -86,6 +87,7 @@ class TestRuralWorkDateValidation:
 # 修复1 & 7: 索引定义 — 无重复，校验逻辑
 # ============================================================
 
+
 class TestIndexDefinitionsNoDuplicates:
     """验证 audit_logs 重复索引已移除"""
 
@@ -115,6 +117,7 @@ class TestIndexDefinitionsNoDuplicates:
 # 修复3: 报表模板列表响应格式
 # ============================================================
 
+
 class TestReportTemplateListFormat:
     """报表模板列表接口返回格式测试"""
 
@@ -137,6 +140,7 @@ class TestReportTemplateListFormat:
 # ============================================================
 # 修复4: 审计日志权限 — super_admin 角色验证
 # ============================================================
+
 
 class TestAuditPermissions:
     """审计日志权限测试"""
@@ -163,6 +167,7 @@ class TestAuditPermissions:
 # 安全修复: CSRF 配置
 # ============================================================
 
+
 class TestSecurityConfig:
     """安全配置测试"""
 
@@ -184,14 +189,12 @@ class TestSecurityConfig:
 # 架构修正: config_validator 匹配 SQLite
 # ============================================================
 
+
 class TestConfigValidator:
     """配置验证器测试"""
 
-    def test_production_settings_sqlite_url(self):
-        """测试默认 DATABASE_URL 为 SQLite"""
-        from app.core.config_validator import ProductionSettings
-
-        assert "sqlite" in ProductionSettings.model_fields["DATABASE_URL"].default
+    # test_production_settings_sqlite_url 已移除：
+    # ProductionSettings 死类（Backward-compat stub，无引用）于 2026-08-27 清理删除。
 
     def test_required_env_vars_minimal(self):
         """测试必需环境变量列表只需 SECRET_KEY"""
@@ -205,6 +208,7 @@ class TestConfigValidator:
 # ============================================================
 # 架构修正: dashboard 模型已在 models/ 目录
 # ============================================================
+
 
 class TestDashboardModel:
     """仪表盘模型测试"""
@@ -232,6 +236,7 @@ class TestDashboardModel:
 # 代码质量: health_service 路径修正
 # ============================================================
 
+
 class TestHealthServicePaths:
     """健康服务路径测试"""
 
@@ -239,7 +244,7 @@ class TestHealthServicePaths:
         """测试默认上传目录为 ./uploads"""
         from app.services.health_service import HealthService
 
-        service = HealthService()
+        HealthService()
         import os as _os
         result = {
             "status": "healthy",
@@ -256,7 +261,7 @@ class TestHealthServicePaths:
         """测试数据库目录从环境变量推导"""
         from app.services.health_service import HealthService
 
-        service = HealthService()
+        HealthService()
         import os as _os
         result = {
             "status": "healthy",
@@ -273,6 +278,7 @@ class TestHealthServicePaths:
 # ============================================================
 # 版本号一致性
 # ============================================================
+
 
 class TestVersionConsistency:
     """版本号一致性测试"""

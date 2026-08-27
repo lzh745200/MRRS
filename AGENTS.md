@@ -14,7 +14,7 @@ FastAPI + Vue 3 + Electron + SQLite. Windows primary, Linux ARM64 (Kylin V10) se
 ```bash
 cd backend
 .venv\\Scripts\\python start.py                          # Start server (http://localhost:8000)
-python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (12101)
+python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (12613)
 python -m pytest tests/unit/test_xxx.py -v              # Run single test file
 python -m flake8 app/ --max-line-length=120             # Lint (CI gate, 0 errors)
 python -m mypy app/ --config-file=mypy.ini --ignore-missing-imports  # Type check (non-blocking)
@@ -26,7 +26,7 @@ python -m bandit -r app/ -ll                            # Security scan
 ```bash
 cd frontend
 npm run dev                                             # Dev server (http://localhost:5173)
-npm run test -- --run                                   # Run all tests (6099, 346 test files)
+npm run test -- --run                                   # Run all tests (6550, 366 test files)
 npx vitest run tests/unit/views/xxx/xxx.test.ts        # Run single test file (tests live under tests/unit/)
 npm run lint                                            # ESLint (CI gate, --max-warnings=0)
 npx vue-tsc --noEmit                                    # Type check (CI gate)

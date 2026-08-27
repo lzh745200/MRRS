@@ -1,15 +1,15 @@
 {
-  "version": "1.5.0",
-  "build": "20260802",
-  "release_date": "2026-08-02",
-  "description": "生产闪退修复、CI 稳定性修复、版本统一与角色精简收敛版本",
+  "version": "1.10.0",
+  "build": "20260827",
+  "release_date": "2026-08-27",
+  "description": "W1 安全不变量收敛 + 测试全绿清零 + 前后端 API 对齐 + 数据隔离审计收官",
   "features": [
-    "Electron 单实例锁时序修复（防止双后端进程闪退）",
-    "后端自动重启计数重置与崩溃诊断增强",
-    "政策法规页面普通用户权限一致（导入/编辑/发布/归档按钮）",
-    "admin 会话列表黑名单计数健壮化（消除 AttributeError 500）",
-    "CI: 移除 --dist loadfile 解决 pytest-xdist + rerunfailures 不兼容",
-    "角色精简（super_admin/admin/user/viewer）前端对齐",
-    "全系统版本号统一为 1.5.0"
+    "W1 安全不变量锁定（认证唯一出口/限流 fail-closed/loopback 门禁/错误细节不出站）",
+    "测试健康清零：后端 12613+ / 前端 6550+ 全部通过，零 skip / xpass / fail",
+    "前后端 API 对齐：4 处 /audit/* 路由 404 修复 + keepCount 字段错位修复",
+    "数据隔离审计：8/8 业务模块确认隔离，四入口语义归一（docs/数据隔离审计矩阵.md）",
+    "前端包体优化：xlsx 懒加载独立 chunk，echarts 1006→682kb",
+    "自动备份链路：后端调度唯一真相源，cron↔友好模型双向转换",
+    "全系统版本号统一为 1.10.0"
   ]
 }

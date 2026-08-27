@@ -104,8 +104,8 @@ data/cache/
 data/offline_tiles/
 data/archives/
 data/*.json
-backend/data/*.json
-backend/data/runtime_secrets.json
+# backend/data 整目录为运行时数据（数据库/缓存/密钥），全部不入库（2026-08-27）
+backend/data/
 exports/
 uploads/
 backups/

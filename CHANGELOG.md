@@ -5,6 +5,25 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.10.1] - 2026-08-27
+
+### 修复（前后端对齐 + 测试健康收官）
+
+- 🐛 **审计日志 4 处 404**：OperationLogs/AuditManagement/dataManagement 调用 `/audit/logs`、`/audit/logs/export`、`/audit/exports` 缺 `/system` 前缀，运行时必 404（对齐度核查工具 `scripts/api_alignment_check.py` 发现）
+- 🐛 **备份计划回显错位**：后端返回驼峰 `keepCount`，前端回退链只读 `keep_count`，界面保存后恒显默认 7 天
+- 🐛 **el-statistic / el-card 破损属性**：PendingList `value-style`、Import `body-style` 属性名断裂导致样式失效
+- 🐛 **useBackupSchedule 测试契约过时**：重写至 cron↔友好模型双向转换契约（含 weekly/缺省分支）
+- 🐛 **磁盘空间测试 3 失败**：psutil 桩改注入 sys.modules；os.statvfs 打桩 create=True；upload_restore 弃 from-import 局部绑定
+- 🐛 **版本号收尾**：backend/version.json 1.5.0 → 1.10.0，至此 6 处版本源全部一致
+
+### 测试与质量
+
+- 前端 6550 通过 / 0 失败（新增 api 层 14 用例：milestones、fundsRecycle、schoolsRecycle、offlineMap），覆盖率门禁恢复绿灯
+- 后端 12613 通过 / 0 失败 / 0 skip / 0 xpass
+- 死代码清理：`config_validator.ProductionSettings`（无引用 Backward-compat stub）
+- 仓库卫生：根目录构建脚本归位 `scripts/docker|legacy/`，3 个 AI 会话转录文档（1MB）移出版本库
+- 数据隔离审计收官：8/8 业务模块确认隔离、0 漏洞（`docs/数据隔离审计矩阵.md`），澄清早期 grep 误报
+
 ## [1.10.0] - 2026-08-24
 
 ### 修复（工单002-012，用户可感知缺陷）

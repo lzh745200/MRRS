@@ -114,12 +114,4 @@ def check_required_dirs(settings=None) -> List[str]:
     return problems
 
 
-# ── Backward-compat stubs ──
-
-class ProductionSettings:
-    """Backward-compat: Settings proxy."""
-    from app.core.config import Settings as _Settings
-    model_fields = {"DATABASE_URL": type("F", (), {"default": "sqlite:///./data/rural_revitalization.db"})}
-
-
 REQUIRED_ENV_VARS = ["SECRET_KEY"]
