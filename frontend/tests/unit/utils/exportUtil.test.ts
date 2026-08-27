@@ -98,13 +98,14 @@ describe('utils/exportUtil', () => {
   })
 
   describe('exportToExcel', () => {
-    it('空数据直接返回', () => {
-      exportUtil.exportToExcel([], 'test')
+    // exportToExcel 为 async（xlsx 按需动态导入），所有断言需 await 等待完成
+    it('空数据直接返回', async () => {
+      await exportUtil.exportToExcel([], 'test')
       expect(downloadBlobMock).not.toHaveBeenCalled()
     })
 
-    it('导出真实 xlsx blob', () => {
-      exportUtil.exportToExcel(
+    it('导出真实 xlsx blob', async () => {
+      await exportUtil.exportToExcel(
         [{ name: '张三', amount: 100 }],
         'funds',
         { name: '名称', amount: '金额' }
@@ -117,15 +118,15 @@ describe('utils/exportUtil', () => {
       expect(blob.size).toBeGreaterThan(0)
     })
 
-    it('无 headers 时使用数据键名', () => {
-      exportUtil.exportToExcel([{ name: '张三' }], 'funds')
+    it('无 headers 时使用数据键名', async () => {
+      await exportUtil.exportToExcel([{ name: '张三' }], 'funds')
       expect(downloadBlobMock).toHaveBeenCalledTimes(1)
       const [blob] = downloadBlobMock.mock.calls[0]
       expect(blob.size).toBeGreaterThan(0)
     })
 
-    it('null 值转为空串', () => {
-      exportUtil.exportToExcel([{ name: null, amount: undefined }] as any, 'f')
+    it('null 值转为空串', async () => {
+      await exportUtil.exportToExcel([{ name: null, amount: undefined }] as any, 'f')
       expect(downloadBlobMock).toHaveBeenCalledTimes(1)
     })
   })
