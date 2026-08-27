@@ -463,6 +463,23 @@ class TestApiResponse:
         assert "meta" in r
 
 
+class TestErrorDetail:
+    """测试 ErrorDetail 数据类"""
+
+    def test_defaults(self):
+        from app.core.response import ErrorDetail
+        ed = ErrorDetail()
+        assert ed.field == ""
+        assert ed.message == ""
+        assert ed.type == ""
+
+    def test_to_dict_full(self):
+        from app.core.response import ErrorDetail
+        ed = ErrorDetail(field="username", message="必填", type="missing")
+        d = ed.to_dict()
+        assert d == {"field": "username", "message": "必填", "type": "missing"}
+
+
 # ═══════════════════════════════════════════════════════════
 #  transaction.py safe_commit 覆盖
 # ═══════════════════════════════════════════════════════════
@@ -507,3 +524,223 @@ class TestSafeCommit:
             safe_commit(db, logger=logger)
         logger.error.assert_called_once()
         db.rollback.assert_called_once()
+
+
+# ═══════════════════════════════════════════════════════════
+#  data_permission.is_admin 完整覆盖（角色归一化矩阵）
+# ═══════════════════════════════════════════════════════════
+
+
+class TestIsAdminFunction:
+    """测试 data_permission.is_admin 角色判断与归一化"""
+
+    @pytest.mark.parametrize(
+        "role,is_superuser,expected",
+        [
+            ("super_admin", False, True),
+            ("super_admin", True, True),
+            ("admin", False, True),
+            ("manager", False, True),          # 废弃角色归一化 → admin
+            ("approval_leader", False, True),  # 废弃角色归一化 → admin
+            ("operator", False, False),        # 废弃角色归一化 → user
+            ("user", False, False),
+            ("viewer", False, False),
+            ("", False, False),
+        ],
+    )
+    def test_role_matrix(self, role, is_superuser, expected):
+        from app.core.data_permission import is_admin
+        user = Mock()
+        user.role = role
+        user.is_superuser = is_superuser
+        assert is_admin(user) is expected
+
+    def test_none_user_returns_false(self):
+        from app.core.data_permission import is_admin
+        assert is_admin(None) is False
+
+    def test_missing_role_attr(self):
+        from app.core.data_permission import is_admin
+        user = Mock(spec=[])
+        user.is_superuser = False
+        assert is_admin(user) is False
+
+    def test_superuser_any_role(self):
+        from app.core.data_permission import is_admin
+        user = Mock()
+        user.role = "viewer"
+        user.is_superuser = True
+        assert is_admin(user) is True
+
+
+class TestDataScopeWithNormalization:
+    """废弃角色的 data_scope 归一化"""
+
+    def test_manager_gets_own_dept(self):
+        from app.core.data_permission import get_data_scope, DataScope
+        user = Mock()
+        user.is_superuser = False
+        user.role = "manager"
+        assert get_data_scope(user) == DataScope.OWN_DEPT
+
+    def test_approval_leader_gets_own_dept(self):
+        from app.core.data_permission import get_data_scope, DataScope
+        user = Mock()
+        user.is_superuser = False
+        user.role = "approval_leader"
+        assert get_data_scope(user) == DataScope.OWN_DEPT
+
+    def test_operator_normalizes_to_user_own(self):
+        from app.core.data_permission import get_data_scope, DataScope
+        user = Mock()
+        user.is_superuser = False
+        user.role = "operator"
+        assert get_data_scope(user) == DataScope.OWN
+
+
+class TestRequireDataPermissionOrgPath:
+    """require_data_permission 组织归属匹配分支"""
+
+    def test_org_match_passes_without_created_by(self):
+        """同组织记录即使非本人创建也放行"""
+        from app.core.data_permission import require_data_permission
+        user = Mock()
+        user.id = 5
+        user.organization_id = 7
+        user.is_superuser = False
+        assert require_data_permission(user, organization_id=7, created_by=None, db=Mock()) is True
+
+    def test_org_mismatch_and_creator_mismatch_raises_403(self):
+        from app.core.data_permission import require_data_permission
+        user = Mock()
+        user.id = 5
+        user.organization_id = 7
+        user.is_superuser = False
+        with pytest.raises(HTTPException) as exc:
+            require_data_permission(user, organization_id=999, created_by=888, db=Mock())
+        assert exc.value.status_code == 403
+
+    def test_none_org_id_ignored(self):
+        """organization_id=None 时跳过组织检查，直接走 403"""
+        from app.core.data_permission import require_data_permission
+        user = Mock()
+        user.id = 5
+        user.organization_id = None
+        user.is_superuser = False
+        with pytest.raises(HTTPException):
+            require_data_permission(user, organization_id=None, created_by=999, db=Mock())
+
+
+class TestCheckRecordAccessEdgeCases:
+    """check_record_access 缺失字段场景"""
+
+    def test_record_without_dept_attr_returns_false_for_admin_dept(self):
+        """admin 访问 organization_id 字段缺失的记录 → 比较结果依赖 getattr 默认值"""
+        from app.core.data_permission import check_record_access
+        user = Mock()
+        user.is_superuser = False
+        user.role = "admin"
+        user.organization_id = 5
+        record = object()  # 无任何属性 → getattr 返回 None != 5
+        assert check_record_access(record, user) is False
+
+    def test_record_without_owner_attr_denies_own_user(self):
+        from app.core.data_permission import check_record_access
+        user = Mock()
+        user.is_superuser = False
+        user.role = "user"
+        user.id = 5
+        record = object()  # 无 created_by 属性 → None != 5
+        assert check_record_access(record, user) is False
+
+
+# ═══════════════════════════════════════════════════════════
+#  deps.py 辅助函数覆盖
+# ═══════════════════════════════════════════════════════════
+
+
+class TestRequireFundsOperatorRole:
+    """经费操作权限：viewer 只读，user 及以上可操作"""
+
+    def test_viewer_denied(self):
+        from app.api.v1.deps import require_funds_operator_role
+        user = Mock()
+        user.role = "viewer"
+        user.is_superuser = False
+        with pytest.raises(HTTPException) as exc:
+            require_funds_operator_role(user)
+        assert exc.value.status_code == 403
+
+    def test_viewer_but_superuser_allowed(self):
+        from app.api.v1.deps import require_funds_operator_role
+        user = Mock()
+        user.role = "viewer"
+        user.is_superuser = True
+        require_funds_operator_role(user)  # 不抛异常
+
+    def test_user_allowed(self):
+        from app.api.v1.deps import require_funds_operator_role
+        user = Mock()
+        user.role = "user"
+        user.is_superuser = False
+        require_funds_operator_role(user)
+
+    def test_operator_normalized_to_user_allowed(self):
+        from app.api.v1.deps import require_funds_operator_role
+        user = Mock()
+        user.role = "operator"  # 废弃角色，归一化为 user
+        user.is_superuser = False
+        require_funds_operator_role(user)
+
+    def test_admin_allowed(self):
+        from app.api.v1.deps import require_funds_operator_role
+        user = Mock()
+        user.role = "admin"
+        user.is_superuser = False
+        require_funds_operator_role(user)
+
+
+class TestBuildViewableBecause:
+    """软删记录可见性元数据生成"""
+
+    def test_none_record_returns_none(self):
+        from app.api.v1.deps import build_viewable_because
+        assert build_viewable_because(Mock(), None) is None
+
+    def test_none_user_returns_none(self):
+        from app.api.v1.deps import build_viewable_because
+        record = Mock()
+        record.is_active = False
+        assert build_viewable_because(None, record) is None
+
+    def test_active_record_returns_none(self):
+        from app.api.v1.deps import build_viewable_because
+        user = Mock()
+        user.is_superuser = True
+        record = Mock()
+        record.is_active = True
+        assert build_viewable_because(user, record) is None
+
+    def test_missing_is_active_treated_as_active(self):
+        from app.api.v1.deps import build_viewable_because
+        user = Mock()
+        record = object()  # 无 is_active 属性 → 默认视为活跃
+        assert build_viewable_because(user, record) is None
+
+    def test_admin_views_soft_deleted_returns_admin(self):
+        from app.api.v1.deps import build_viewable_because
+        user = Mock()
+        user.is_superuser = True
+        user.role = "super_admin"
+        record = Mock()
+        record.is_active = False
+        assert build_viewable_because(user, record) == "admin"
+
+    def test_non_admin_views_soft_deleted_returns_none(self):
+        from app.api.v1.deps import build_viewable_because
+        user = Mock()
+        user.is_superuser = False
+        user.role = "user"
+        record = Mock()
+        record.is_active = False
+        assert build_viewable_because(user, record) is None
