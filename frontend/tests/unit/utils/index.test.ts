@@ -54,7 +54,7 @@ function setupEndpoints(overrides: Record<string, unknown> = {}) {
       ],
       total: 3,
     },
-    '/audit/exports': {
+    '/system/audit/exports': {
       items: [
         { id: 1, export_type: 'village', created_at: `${mp}-03T10:00:00` },
         { id: 2, export_type: 'fund', created_at: `${mp}-18T10:00:00` },
@@ -122,7 +122,7 @@ describe('挂载与统计加载', () => {
     // 四指标端点调用契约（注意 import/history 与 audit/exports 上限 100）
     expect(mockGet).toHaveBeenCalledWith('/dashboard/stats')
     expect(mockGet).toHaveBeenCalledWith('/import/history', { page: 1, page_size: 100 })
-    expect(mockGet).toHaveBeenCalledWith('/audit/exports', { page: 1, page_size: 100 })
+    expect(mockGet).toHaveBeenCalledWith('/system/audit/exports', { page: 1, page_size: 100 })
     expect(mockGet).toHaveBeenCalledWith('/system/backup', { page: 1, page_size: 1000 })
     expect(mockApiRequest).toHaveBeenCalledWith(
       expect.objectContaining({ url: '/supported-villages', method: 'GET' })
@@ -152,7 +152,7 @@ describe('挂载与统计加载', () => {
     setupEndpoints({
       '/dashboard/stats': { villageCount: 10 },
       '/import/history': {},
-      '/audit/exports': {},
+      '/system/audit/exports': {},
       '/system/backup': {},
     })
     mockApiRequest.mockResolvedValue({ data: {} })

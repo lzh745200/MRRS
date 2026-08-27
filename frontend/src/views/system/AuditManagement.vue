@@ -359,7 +359,7 @@ async function handleExportExcel() {
   try {
     const res = await apiRequest({
       method: 'GET',
-      url: '/audit/logs/export',
+      url: '/system/audit/logs/export',
       params: {
         format: 'excel',
         start_date: filters.dateRange?.[0] || undefined,

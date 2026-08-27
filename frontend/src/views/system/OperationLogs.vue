@@ -147,7 +147,7 @@ async function loadLogs() {
       params.start_date = filters.value.dateRange[0]
       params.end_date = filters.value.dateRange[1]
     }
-    const res: any = await get('/audit/logs', params)
+    const res: any = await get('/system/audit/logs', params)
     const data = res?.data ?? res
     const items = data?.items ?? (Array.isArray(data) ? data : [])
     const kw = filters.value.keyword.trim().toLowerCase()
@@ -189,7 +189,7 @@ async function handleExport() {
       () =>
         apiRequest({
           method: 'GET',
-          url: '/audit/logs/export',
+          url: '/system/audit/logs/export',
           params: {
             format: 'excel',
             start_date: filters.value.dateRange?.[0] || undefined,

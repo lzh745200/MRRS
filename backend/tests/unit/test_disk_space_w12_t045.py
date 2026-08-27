@@ -8,8 +8,9 @@
 - upload-restore 端点低空间 409（复用端点内联逻辑）
 """
 
-import builtins
 import os
+import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,43 +22,56 @@ from app.utils.disk_space import (
 )
 
 
-def _import_raiser(name, *a, **k):
-    """__import__ 桩：遇到 psutil 抛 ImportError，其余正常导入"""
-    if name == "psutil":
-        raise ImportError("no psutil")
-    return builtins.__import__(name, *a, **k)
+class _NoPsutil(types.ModuleType):
+    """属性访问即抛 ImportError 的伪 psutil——模拟 psutil 缺失/损坏。
+
+    注入 sys.modules 后，get_disk_free_bytes 内层 `import psutil` 会命中它，
+    随后的 psutil.disk_usage 属性访问抛 ImportError，触发向 statvfs/shutil 降级。
+    不 patch builtins.__import__：CPython 3.11 的 IMPORT_NAME 直连导入机制，
+    且对 builtins 打桩会造成 _import_raiser 内部调用自身的无限递归。
+    """
+
+    def __getattr__(self, item):  # noqa: D105
+        raise ImportError(f"no psutil.{item}")
 
 
 class TestDiskSpaceUtil:
     def test_get_disk_free_bytes_psutil(self):
-        with patch("app.utils.disk_space.psutil") as mock_psutil:
-            mock_psutil.disk_usage.return_value.free = 123456
+        # psutil 在函数内 import（非模块级属性），
+        # 通过向 sys.modules 注入伪模块使内层 import 命中桩对象。
+        fake_psutil = MagicMock()
+        fake_psutil.disk_usage.return_value.free = 123456
+        with patch.dict(sys.modules, {"psutil": fake_psutil}):
             assert get_disk_free_bytes("/tmp") == 123456
 
     def test_get_disk_free_bytes_psutil_fail_falls_to_statvfs(self):
         import app.utils.disk_space as ds
 
-        with patch.object(builtins, "__import__", side_effect=_import_raiser), patch.object(
-            os, "statvfs", return_value=MagicMock(f_bavail=10, f_frsize=1024)
-        ):
-            assert ds.get_disk_free_bytes("/tmp") == 10 * 1024
+        # Windows 的 os 为 frozen 模块且无 statvfs 属性，必须 create=True 才能打桩
+        with patch.dict(sys.modules, {"psutil": _NoPsutil("psutil")}):
+            with patch.object(
+                os,
+                "statvfs",
+                return_value=MagicMock(f_bavail=10, f_frsize=1024),
+                create=True,
+            ):
+                assert ds.get_disk_free_bytes("/tmp") == 10 * 1024
 
     def test_get_disk_free_bytes_all_fail_returns_neg1(self):
         import app.utils.disk_space as ds
 
-        with patch.object(builtins, "__import__", side_effect=_import_raiser):
-            # 无 statvfs 属性（Windows 场景）+ shutil 抛错
-            saved = hasattr(os, "statvfs")
-            if saved:
-                orig = os.statvfs
+        saved_statvfs = getattr(os, "statvfs", None)
+        try:
+            # 无 statvfs（Windows 天然满足；Linux 下临时移除）+ shutil 抛错 → -1
+            if saved_statvfs is not None:
                 del os.statvfs
-            try:
+            with patch.dict(sys.modules, {"psutil": _NoPsutil("psutil")}):
                 with patch("app.utils.disk_space.shutil") as mock_sh:
                     mock_sh.disk_usage.side_effect = OSError("boom")
                     assert ds.get_disk_free_bytes("/tmp") == -1
-            finally:
-                if saved:
-                    os.statvfs = orig
+        finally:
+            if saved_statvfs is not None:
+                os.statvfs = saved_statvfs
 
     def test_has_enough_free_space_sufficient(self):
         ok, free = has_enough_free_space("/tmp", required_bytes=100)
@@ -125,15 +139,18 @@ class TestUploadRestoreDiskPrecheck:
     async def test_upload_restore_low_space_409(self):
         from fastapi import HTTPException
 
-        from app.core.database import check_disk_space
+        import app.core.database as core_db
         from app.utils.paths import get_backup_path
 
+        # 注意：必须通过模块属性访问（core_db.check_disk_space），
+        # 若在 patch 前用 from-import 绑定局部名，patch 模块属性不影响局部引用，
+        # 会调用真实函数导致 DID NOT RAISE。
         with patch(
             "app.core.database.check_disk_space",
             return_value={"free_mb": 5, "total_mb": 100, "sufficient": False, "path": "/tmp"},
         ):
             with pytest.raises(HTTPException) as exc:
-                disk = check_disk_space(min_mb=500, path=str(get_backup_path()))
+                disk = core_db.check_disk_space(min_mb=500, path=str(get_backup_path()))
                 if not disk.get("sufficient", False):
                     raise HTTPException(
                         status_code=409,

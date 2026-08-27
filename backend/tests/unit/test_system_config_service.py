@@ -282,11 +282,15 @@ class TestSystemConfigService:
 
     def test_initialize_defaults_with_db(self):
         from app.services.system_config_service import SystemConfigService
+
+        # 断言跟随 DEFAULT_CONFIGS 实际条目数：新增默认键时测试不必改号，
+        # 语义为「每个默认键各 add 一次」
+        expected = len(SystemConfigService.DEFAULT_CONFIGS)
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
         svc = SystemConfigService(mock_db)
         svc.initialize_defaults()
-        assert mock_db.add.call_count == 21
+        assert mock_db.add.call_count == expected
 
     def test_initialize_defaults_skip_existing(self):
         from app.services.system_config_service import SystemConfigService

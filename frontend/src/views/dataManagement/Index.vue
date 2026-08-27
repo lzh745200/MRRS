@@ -128,7 +128,7 @@ async function loadStats() {
       /* 统计失败保持 0 */
     }
     try {
-      const exp: any = await get('/audit/exports', { page: 1, page_size: 100 })
+      const exp: any = await get('/system/audit/exports', { page: 1, page_size: 100 })
       const items = exp?.items || exp?.data?.items || (Array.isArray(exp?.data) ? exp.data : [])
       monthlyExports = (Array.isArray(items) ? items : []).filter((r: any) =>
         String(r.createdAt || r.created_at || '').startsWith(monthPrefix)

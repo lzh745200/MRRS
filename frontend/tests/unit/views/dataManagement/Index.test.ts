@@ -5,7 +5,7 @@
  *   villageCount   ← get('/dashboard/stats') → data.total_villages（兼容 villageCount）
  *   monthlyImports ← get('/import/history', { page:1, page_size:100 })
  *                    → items 按 createdAt/created_at 的 YYYY-MM 前缀客户端过滤
- *   monthlyExports ← get('/audit/exports', { page:1, page_size:100 })
+ *   monthlyExports ← get('/system/audit/exports', { page:1, page_size:100 })
  *                    → items 同上过滤
  *   backupCount    ← get('/system/backup', { page:1, page_size:1000 }) → items.length
  * 质量统计 ← apiRequest({ method:'GET', url:'/supported-villages', params:{page:1,page_size:200} })
@@ -77,7 +77,7 @@ function mockEndpoints(
       ],
       total: 4,
     },
-    '/audit/exports': {
+    '/system/audit/exports': {
       items: [
         { id: 1, export_type: 'village', created_at: `${monthPrefix}-03T10:00:00` },
         { id: 2, export_type: 'fund', created_at: `${monthPrefix}-18T10:00:00` },
@@ -151,7 +151,7 @@ describe('挂载与统计加载', () => {
     // 端点调用契约
     expect(mockGet).toHaveBeenCalledWith('/dashboard/stats')
     expect(mockGet).toHaveBeenCalledWith('/import/history', { page: 1, page_size: 100 })
-    expect(mockGet).toHaveBeenCalledWith('/audit/exports', { page: 1, page_size: 100 })
+    expect(mockGet).toHaveBeenCalledWith('/system/audit/exports', { page: 1, page_size: 100 })
     expect(mockGet).toHaveBeenCalledWith('/system/backup', { page: 1, page_size: 1000 })
     expect(mockApiRequest).toHaveBeenCalledWith({
       method: 'GET',
@@ -189,7 +189,7 @@ describe('挂载与统计加载', () => {
     mockEndpoints({
       '/dashboard/stats': { villageCount: 10, monthlyImports: 1, monthlyExports: 2, backupCount: 0 },
       '/import/history': {},
-      '/audit/exports': {},
+      '/system/audit/exports': {},
       '/system/backup': {},
     })
     mockApiRequest.mockResolvedValue({ data: {} })
@@ -212,7 +212,7 @@ describe('挂载与统计加载', () => {
       '/import/history': {
         data: { items: [{ id: 1, file_name: 'x.xlsx', createdAt: `${monthPrefix}-09T10:00:00` }] },
       },
-      '/audit/exports': {
+      '/system/audit/exports': {
         data: [{ id: 1, export_type: 'village', created_at: `${monthPrefix}-09T10:00:00` }],
       },
       // data 为数组 → bk.data.items 缺省，走 Array.isArray(bk?.data) ? bk.data 分支
@@ -238,7 +238,7 @@ describe('挂载与统计加载', () => {
       '/import/history': {
         data: [{ id: 1, file_name: 'x.xlsx', createdAt: `${monthPrefix}-09T10:00:00` }],
       },
-      '/audit/exports': { data: [] },
+      '/system/audit/exports': { data: [] },
       '/system/backup': { data: [] },
     })
     const wrapper2 = mountComp()
@@ -255,7 +255,7 @@ describe('挂载与统计加载', () => {
     mockEndpoints({
       '/dashboard/stats': { total_villages: 120 },
       '/import/history': { items: 'not-an-array' },
-      '/audit/exports': { items: 'not-an-array' },
+      '/system/audit/exports': { items: 'not-an-array' },
       '/system/backup': { items: 'not-an-array' },
     })
     const wrapper = mountComp()
@@ -271,7 +271,7 @@ describe('挂载与统计加载', () => {
     mockEndpoints({
       '/dashboard/stats': { total_villages: 7 },
       '/import/history': { items: [] },
-      '/audit/exports': { items: [] },
+      '/system/audit/exports': { items: [] },
       '/system/backup': { items: [] },
     })
     let wrapper = mountComp()
@@ -281,7 +281,7 @@ describe('挂载与统计加载', () => {
     mockEndpoints({
       '/dashboard/stats': null,
       '/import/history': { items: [] },
-      '/audit/exports': { items: [] },
+      '/system/audit/exports': { items: [] },
       '/system/backup': { items: [] },
     })
     wrapper = mountComp()
@@ -292,7 +292,7 @@ describe('挂载与统计加载', () => {
     mockEndpoints({
       '/dashboard/stats': { data: {} },
       '/import/history': { items: [] },
-      '/audit/exports': { items: [] },
+      '/system/audit/exports': { items: [] },
       '/system/backup': { items: [] },
     })
     wrapper = mountComp()
@@ -325,8 +325,8 @@ describe('内部端点失败（单项保持 0，流程继续）', () => {
     expect(ElMessage.error).not.toHaveBeenCalled()
   })
 
-  it('/audit/exports 失败 → monthlyExports 0，其余指标正常', async () => {
-    mockEndpoints({}, ['/audit/exports'])
+  it('/system/audit/exports 失败 → monthlyExports 0，其余指标正常', async () => {
+    mockEndpoints({}, ['/system/audit/exports'])
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any

@@ -17,22 +17,42 @@ describe('useBackupSchedule (T044 唯一真相源)', () => {
     vi.clearAllMocks()
   })
 
-  it('loadScheduleConfig 从后端读取真实配置', async () => {
+  it('loadScheduleConfig 从后端读取真实配置（cron 解析为友好模型）', async () => {
     ;(get as any).mockResolvedValue({
-      data: { data: { enabled: true, keepCount: 7, nextRun: '2026-08-01T02:00:00', schedule: '0 2 * * *' } },
+      data: { data: { enabled: true, keepCount: 7, schedule: '0 2 * * *' } },
     })
     const { scheduleConfig, loadScheduleConfig } = useBackupSchedule()
     await loadScheduleConfig()
     expect(get).toHaveBeenCalledWith('/system/backup/schedule')
     expect(scheduleConfig.value.enabled).toBe(true)
     expect(scheduleConfig.value.retentionCount).toBe(7)
-    expect(scheduleConfig.value.nextRun).toBe('2026-08-01T02:00:00')
+    // cron "0 2 * * *" 解析 → 每日 02:00
+    expect(scheduleConfig.value.frequency).toBe('daily')
+    expect(scheduleConfig.value.backupTime).toBe('02:00')
   })
 
-  it('saveSchedule 写入后回读保持一致', async () => {
+  it('weekly cron 表达式解析为 weekly 频率', async () => {
+    ;(get as any).mockResolvedValue({
+      data: { data: { enabled: false, keepCount: 3, schedule: '30 3 * * 1' } },
+    })
+    const { scheduleConfig, loadScheduleConfig } = useBackupSchedule()
+    await loadScheduleConfig()
+    expect(scheduleConfig.value.frequency).toBe('weekly')
+    expect(scheduleConfig.value.backupTime).toBe('03:30')
+  })
+
+  it('schedule 缺失时回退默认 daily 02:00', async () => {
+    ;(get as any).mockResolvedValue({ data: { data: { enabled: false } } })
+    const { scheduleConfig, loadScheduleConfig } = useBackupSchedule()
+    await loadScheduleConfig()
+    expect(scheduleConfig.value.frequency).toBe('daily')
+    expect(scheduleConfig.value.backupTime).toBe('02:00')
+  })
+
+  it('saveSchedule 写入 cron + keep_count，并回读保持一致', async () => {
     ;(put as any).mockResolvedValue({ data: { success: true } })
     ;(get as any).mockResolvedValue({
-      data: { data: { enabled: false, keepCount: 3, nextRun: null } },
+      data: { data: { enabled: false, keepCount: 3, schedule: '0 2 * * *' } },
     })
     const { scheduleConfig, saveSchedule } = useBackupSchedule()
     scheduleConfig.value.enabled = false
@@ -40,9 +60,11 @@ describe('useBackupSchedule (T044 唯一真相源)', () => {
 
     await saveSchedule()
 
+    // PUT 携带后端契约字段：cron 字符串 + snake_case keep_count
     expect(put).toHaveBeenCalledWith('/system/backup/schedule', {
       enabled: false,
       keep_count: 3,
+      schedule: '00 02 * * *',
     })
     // 保存后必须回读 GET，保证前端与后端一致
     expect(get).toHaveBeenCalled()
