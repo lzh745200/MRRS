@@ -112,12 +112,9 @@ def apply_scope_to_query(
             return query.filter(getattr(model, dept_field) == user_dept)
         # 部门/组织未设置时回退到 OWN 范围
         logger.debug("User has no organization; falling back to OWN scope")
-        scope = DataScope.OWN  # 显式回退
 
-    if scope == DataScope.OWN:
-        return query.filter(getattr(model, owner_field) == getattr(user, "id", None))
-
-    return query
+    # OWN 范围（角色为 OWN，或 OWN_DEPT 用户无组织时的回退）
+    return query.filter(getattr(model, owner_field) == getattr(user, "id", None))
 
 
 def check_record_access(
@@ -143,9 +140,8 @@ def check_record_access(
         return True
     if scope == DataScope.OWN_DEPT:
         return getattr(record, dept_field, None) == getattr(user, dept_field, None)
-    if scope == DataScope.OWN:
-        return getattr(record, owner_field, None) == getattr(user, "id", None)
-    return False
+    # OWN：仅记录创建者本人可见
+    return getattr(record, owner_field, None) == getattr(user, "id", None)
 
 
 def filter_by_data_scope(query, model, user, db=None, org_field="organization_id"):

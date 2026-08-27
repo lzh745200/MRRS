@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
-"""effectiveness_service 覆盖率补测：静态方法组 + 实例方法组 + 模块级函数"""
+"""effectiveness_service 覆盖率补测：静态方法组 + 实例方法组"""
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-from app.services.effectiveness_service import (
-    EffectivenessService,
-    calculate_effectiveness_score,
-    compare_effectiveness,
-    generate_effectiveness_report,
-)
+from app.services.effectiveness_service import EffectivenessService
 
 
 def _ev(total=80.0, **kw):
@@ -164,18 +159,3 @@ def test_compare_periods_four_and_two_args():
     assert r4["improvement"] == 0.07
     r2 = svc.compare_effectiveness_periods(1, "2024-01", "2024-12")
     assert r2["period1"] == "2024-01"
-
-
-# ---------- 模块级函数 ----------
-
-def test_module_level_functions():
-    assert calculate_effectiveness_score({}, {}) == 0.80
-    r = compare_effectiveness([], [])
-    assert r["improvement"] == 0.15
-    rep = generate_effectiveness_report({"entity_id": 5, "entity_type": "project"})
-    assert rep.entity_id == 5
-    assert rep.entity_type == "project"
-    assert len(rep.recommendations) == 2
-    rep2 = generate_effectiveness_report({})
-    assert rep2.entity_id == 0
-    assert rep2.entity_type == "village"

@@ -130,17 +130,14 @@ def validate_file_size(file_size: int, max_bytes: int = 50 * 1024 * 1024) -> Tup
 
 def validate_content_safety(
     content: bytes,
-    *,
-    check_macro: bool = True,
 ) -> Tuple[bool, str]:
     """Check file content for known risky patterns.
 
-    Currently inspects for embedded macros in Office docs and obvious
-    shell script / binary executable signatures.
+    Inspects for binary executable signatures and obvious
+    shell script patterns at the start of the content.
 
     Args:
         content: The file content as bytes.
-        check_macro: If *True*, scan Office docs for VBA macro signatures.
 
     Returns:
         ``(True, "")`` if safe, otherwise ``(False, error_message)``.

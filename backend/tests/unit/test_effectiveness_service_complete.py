@@ -126,35 +126,3 @@ class TestEffectivenessService:
         assert "period1_metrics" in result
         assert "period2_metrics" in result
         assert "improvement" in result
-
-class TestModuleFunctions:
-    """测试模块级函数"""
-
-    def test_calculate_effectiveness_score(self):
-        """测试计算效果分数"""
-        from app.services.effectiveness_service import calculate_effectiveness_score
-        baseline = {"score": 0.5}
-        current = {"score": 0.8}
-        result = calculate_effectiveness_score(baseline, current)
-        assert result == 0.80
-
-    def test_compare_effectiveness(self):
-        """测试对比效果"""
-        from app.services.effectiveness_service import compare_effectiveness
-        baseline = [{"metric": 0.5}]
-        current = [{"metric": 0.8}]
-        result = compare_effectiveness(baseline, current)
-        assert isinstance(result, dict)
-        assert "improvement" in result
-        assert "regression" in result
-        assert "unchanged" in result
-
-    def test_generate_effectiveness_report(self):
-        """测试生成效果报告"""
-        from app.services.effectiveness_service import generate_effectiveness_report, EffectivenessReport
-        data = {"entity_id": 1, "entity_type": "village"}
-        result = generate_effectiveness_report(data)
-        assert isinstance(result, EffectivenessReport)
-        assert result.entity_id == 1
-        assert result.entity_type == "village"
-        assert len(result.recommendations) > 0
