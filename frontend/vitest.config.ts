@@ -12,6 +12,10 @@ export default defineConfig({
     // 多 worker 时各 provider 实例 clean() 互相删除 coverage/.tmp 导致 ENOENT（Windows 复现）
     singleThread: true,
     fileParallelism: false,
+    // 环境级时序 flake 缓解：2026-08-27 同一基线两次全量出现 5 failed → 6550 passed
+    // 零代码变更自发翻转（jsdom 环境复用时序敏感）。retry=1 只对失败文件重试一次；
+    // 确定性回归（真实功能缺陷）重试后仍失败，不会被掩盖。
+    retry: 1,
     setupFiles: ['./src/test/setup.ts'],
     // 排除E2E测试（由Playwright运行）
     exclude: [
