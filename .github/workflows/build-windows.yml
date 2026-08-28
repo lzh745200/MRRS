@@ -154,6 +154,15 @@ jobs:
       - name: Install Electron deps
         run: npm ci
 
+      # 9.5 Electron 主进程语法门禁（防再发 10c56cd0 乱码损坏进入安装包）
+      - name: Syntax check Electron main process
+        shell: bash
+        run: |
+          for f in electron/*.js; do
+            node --check "$f" || { echo "::error::Electron 语法检查失败: $f"; exit 1; }
+          done
+          echo "Electron 语法检查通过 ($(ls electron/*.js | wc -l) 个文件)"
+
       # 10. electron-builder 打包
       - name: Build installer (electron-builder)
         run: npx electron-builder --win --x64

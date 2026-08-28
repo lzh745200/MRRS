@@ -11,12 +11,13 @@
   "homepage": "https://bumofu.com",
   "scripts": {
     "start": "electron .",
-    "build": "npm run build:backend && electron-builder",
+    "check:electron": "node --check electron/main.js && node --check electron/preload.js",
+    "build": "npm run check:electron && npm run build:backend && electron-builder",
     "build:backend": "cd backend && python -m PyInstaller assistance-backend.spec --clean --noconfirm",
     "build:linux": "electron-builder --linux",
     "build:deb": "electron-builder --linux deb",
     "build:arm64": "electron-builder --linux deb --arm64",
-    "build:win": "npm run build:backend && electron-builder --win --x64",
+    "build:win": "npm run check:electron && npm run build:backend && electron-builder --win --x64",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win --mac --linux",
     "postinstall": "electron-builder install-app-deps"

@@ -5,6 +5,38 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.10.2] - 2026-08-29
+
+### 修复（安装包三大问题：Windows 打不开 / 麒麟打不开 / 图标+快捷方式缺失）
+
+- 🐛 **Windows 安装后启动报 `SyntaxError: Unexpected token '}'`（main process 弹窗）**：
+  提交 `10c56cd0` 以 GBK 编码重写 `electron/main.js`（COORDINATION.md §3 明令禁止的
+  PowerShell 写法），吞掉换行与引号——`findAvailablePort` 的 `for(...)` 被并入注释导致
+  178 行孤立 `}`；`startBackend` 函数声明、`MAX_BACKEND_RESTARTS`、`rendererCrashedOnce`
+  等 5 处关键代码被静默注释；10 处字符串未终止。已从 `10c56cd0~1` 整体恢复
+  （经比对该提交对 main.js 的净效果为纯破坏，无需保留的语义改动），`node --check` 通过。
+- 🐛 **麒麟 Electron DEB 打不开**：同一损坏的 main.js 打进 DEB → 主进程启动即崩，随恢复治愈。
+- 🐛 **麒麟 standalone DEB 装完打不开 / 无菜单图标 / 无桌面快捷方式**：
+  `DEBIAN/postinst|prerm|postrm`、`kylin.env`、`*.service`、polkit 规则共 6 个文件为 CRLF
+  （Windows 检出 + 构建无规范化）→ `#!/bin/bash\r` 不可执行 → dpkg 报 post-installation
+  error → 菜单项/快捷方式/图标/服务/数据目录全部未创建。修复：仓库内 6 文件转 LF +
+  `.gitattributes` 锁 `deploy/kylin/** eol=lf` + Dockerfile 打包阶段 `sed -i 's/\r$//'`
+  治本（构建产物与检出环境无关）。
+- 🐛 **麒麟启动脚本硬依赖未打包的 curl**：`start-kylin.sh` 健康检查增加
+  curl→wget→bash /dev/tcp 三级回退（零外部依赖）。
+- 🐛 **麒麟直接启动回退路径权限**：/var/lib 对桌面用户组不可写时降级 `$HOME/.assistance-management-system/`；
+  postinst 数据/日志目录 750→2750（组可写，配合 usermod -aG 已有加组逻辑）。
+- 🐛 **CI 内嵌 postinst 乱码路径**：build-arm64.yml `/opt/甯壎绠＄悊绯荤粺` → `/opt/帮扶管理系统`。
+
+### 预防（杜绝同类问题再发）
+
+- 🔒 CI 语法门禁：build-windows.yml / build-arm64.yml 在 electron-builder 打包前
+  `node --check electron/*.js`，失败即终止构建。
+- 🔒 pre-commit 阶段新增 `electron-syntax-check` hook（改动 electron/*.js 时本地即时拦截）。
+- 🔒 `package.json` 新增 `npm run check:electron`；`build`/`build:win` 前置语法校验。
+- 清理死脚本 `scripts/linux-postinst.sh`（路径错误零引用）；
+  安装指南中不存在的 `build-deb-ubuntu.sh` 引用改为 Docker 构建实际方式。
+
 ## [1.10.1] - 2026-08-27
 
 ### 修复（前后端对齐 + 测试健康收官）

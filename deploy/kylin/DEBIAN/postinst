@@ -56,8 +56,10 @@ fi
 echo "[3/8] 设置权限..."
 chown -R ${APP_NAME}:${APP_NAME} "${DATA_DIR}"
 chown -R ${APP_NAME}:${APP_NAME} "${LOG_DIR}"
-chmod 750 "${DATA_DIR}"
-chmod 750 "${LOG_DIR}"
+# 2750：组可写——桌面用户（加入 ${APP_NAME} 组）直接启动回退路径时
+# 可写 SQLite/日志，否则 _direct_start 降级目录也会失败
+chmod 2750 "${DATA_DIR}"
+chmod 2750 "${LOG_DIR}"
 
 # 后端可执行权限
 if [ -f "${INSTALL_DIR}/backend/assistance-management-backend" ]; then

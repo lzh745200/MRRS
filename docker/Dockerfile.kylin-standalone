@@ -198,8 +198,14 @@ COPY deploy/kylin/DEBIAN/postinst ./DEBIAN/
 COPY deploy/kylin/DEBIAN/prerm ./DEBIAN/
 COPY deploy/kylin/DEBIAN/postrm ./DEBIAN/
 
-# 设置权限
-RUN chmod 755 DEBIAN/postinst DEBIAN/prerm DEBIAN/postrm && \
+# 行尾规范化（治本）：维护脚本/服务/环境文件若混入 CRLF（Windows 检出构建时），
+# `#!/bin/bash\r` 将无法执行 → dpkg postinst 失败 → 菜单/快捷方式/服务/数据目录全部缺失。
+# 此处统一剥离 CR，保证 DEB 内容与构建环境无关。
+RUN find DEBIAN opt/assistance-management-system/scripts opt/assistance-management-system/config \
+        opt/assistance-management-system/systemd opt/assistance-management-system/desktop \
+        opt/assistance-management-system/polkit -type f \
+        -exec sed -i 's/\r$//' {} + && \
+    chmod 755 DEBIAN/postinst DEBIAN/prerm DEBIAN/postrm && \
     chmod 755 opt/assistance-management-system/scripts/start-kylin.sh && \
     chmod 755 opt/assistance-management-system/backend/assistance-management-backend 2>/dev/null || true
 

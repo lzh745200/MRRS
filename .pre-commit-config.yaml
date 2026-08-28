@@ -48,6 +48,14 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      - id: electron-syntax-check
+        name: node --check electron main process (mojibake guard, 10c56cd0 regression)
+        entry: bash -c 'for f in electron/*.js; do node --check "$f" || exit 1; done'
+        language: system
+        files: ^electron/.*\.js$
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: check-tokens-sync
         name: check tokens dual-source sync (W11-043 guard)
         entry: python scripts/check_tokens_sync.py --staged

@@ -27,6 +27,18 @@ notify() {
     fi
 }
 
+# ── 健康检查（零外部依赖：curl/wget 缺失时回退 bash /dev/tcp）──
+health_ok() {
+    if command -v curl &>/dev/null; then
+        curl -sf "$HEALTH_URL" > /dev/null 2>&1
+    elif command -v wget &>/dev/null; then
+        wget -q -O /dev/null "$HEALTH_URL" 2>/dev/null
+    else
+        # bash 内建：/dev/tcp 探测端口可达即可（DEB 未打包 curl，麒麟最小安装常缺失）
+        (exec 3<>"/dev/tcp/127.0.0.1/8000") 2>/dev/null && exec 3>&- 3<&-
+    fi
+}
+
 # ── 直接启动回退函数 ──
 _direct_start() {
     local BACKEND="/opt/assistance-management-system/backend/assistance-management-backend"
@@ -35,13 +47,24 @@ _direct_start() {
         cd /opt/assistance-management-system
         export KYLIN_MODE=true
         export FRONTEND_DIST_PATH=/opt/assistance-management-system/frontend
-        export DATABASE_URL=sqlite:////var/lib/assistance-management-system/database/rural_revitalization.db
-        export UPLOAD_DIR=/var/lib/assistance-management-system/uploads
-        export EXPORT_DIR=/var/lib/assistance-management-system/exports
-        export CACHE_DIR=/var/lib/assistance-management-system/cache
-        export BACKUP_DIR=/var/lib/assistance-management-system/backups
-        export LOG_DIR=/var/log/assistance-management-system
-        export LOG_FILE=/var/log/assistance-management-system/app.log
+        # 数据/日志目录可能归 root 所有且组不可写（postinst 750）——
+        # 桌面用户直接启动时降级到 $HOME，避免 SQLite/日志打开失败导致回退路径也起不来
+        local DATA_DIR=/var/lib/assistance-management-system
+        local LOG_BASE=/var/log/assistance-management-system
+        if ! [ -w "$DATA_DIR" ] || ! [ -w "$LOG_BASE" ]; then
+            DATA_DIR="$HOME/.assistance-management-system"
+            LOG_BASE="$DATA_DIR/logs"
+            mkdir -p "$DATA_DIR/database" "$DATA_DIR/uploads" "$DATA_DIR/exports" \
+                     "$DATA_DIR/cache" "$DATA_DIR/backups" "$LOG_BASE" 2>/dev/null
+            log "系统目录不可写，数据目录降级为: $DATA_DIR"
+        fi
+        export DATABASE_URL="sqlite:///$DATA_DIR/database/rural_revitalization.db"
+        export UPLOAD_DIR="$DATA_DIR/uploads"
+        export EXPORT_DIR="$DATA_DIR/exports"
+        export CACHE_DIR="$DATA_DIR/cache"
+        export BACKUP_DIR="$DATA_DIR/backups"
+        export LOG_DIR="$LOG_BASE"
+        export LOG_FILE="$LOG_BASE/app.log"
         export HOST=127.0.0.1
         export PORT=8000
         exec "$BACKEND"
@@ -83,7 +106,7 @@ fi
 log "等待服务就绪..."
 SERVICE_READY=false
 for i in $(seq 1 $MAX_WAIT); do
-    if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
+    if health_ok; then
         log "服务已就绪（耗时 ${i}s）"
         SERVICE_READY=true
         break

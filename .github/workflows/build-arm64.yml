@@ -85,7 +85,7 @@ jobs:
 
       - name: Build frontend
         working-directory: ./frontend
-        run: npm run build 2>&1  # 閲嶅畾鍚?stderr 閬垮厤 GitHub Actions false annotation
+        run: npm run build 2>&1  # stderr 重定向避免 GitHub Actions 误标失败注释
 
       - name: Upload frontend artifact
         uses: actions/upload-artifact@v4
@@ -165,6 +165,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-electron-arm64-
 
+      - name: Syntax check Electron main process
+        run: |
+          for f in electron/*.js; do
+            node --check "$f" || { echo "::error::Electron 语法检查失败: $f"; exit 1; }
+          done
+          echo "Electron 语法检查通过 ($(ls electron/*.js | wc -l) 个文件)"
+
       - name: Build with electron-builder
         run: |
           echo "=== Pre-build debug ==="
@@ -200,7 +207,8 @@ jobs:
           set -e
           
           # Find install directory
-          for dir in /opt/assistance-management-system /opt/甯壎绠＄悊绯荤粺; do
+          # 第二候选为 package.json productName（帮扶管理系统）的安装目录
+          for dir in /opt/assistance-management-system "/opt/帮扶管理系统"; do
             if [ -d "$dir" ]; then
               # Ensure backend binary is executable
               if [ -f "$dir/resources/backend/assistance-backend.exe" ]; then
