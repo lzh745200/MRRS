@@ -153,7 +153,7 @@ RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --n
     fakeroot \
     && rm -rf /var/lib/apt/lists/*
 
-ARG VERSION=1.2.0
+ARG VERSION=1.10.0
 WORKDIR /package
 
 # 创建目录结构

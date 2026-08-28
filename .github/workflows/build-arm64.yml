@@ -288,6 +288,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Compute DEB version (strip v prefix, dpkg requires digit-leading)
+        id: debver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - name: Build standalone Kylin DEB
         uses: docker/build-push-action@v6
         with:
@@ -296,6 +300,9 @@ jobs:
           platforms: linux/arm64
           outputs: type=local,dest=dist/deb
           push: false
+          # DEB 内嵌版本号与发布 tag 对齐（Dockerfile ARG 默认 1.10.0，tag 触发时覆盖）
+          build-args: |
+            VERSION=${{ steps.debver.outputs.version }}
           # 禁用 --no-cache：QEMU 仿真下 layer 缓存是唯一提速手段（AGENTS.md 铁律）
           cache-from: type=gha
           cache-to: type=gha,mode=max
