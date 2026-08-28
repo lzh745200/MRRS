@@ -302,7 +302,9 @@ jobs:
 
       - name: Verify standalone DEB (no CRLF in maintainer scripts)
         run: |
-          DEB=$(ls dist/deb/*.deb | head -1)
+          # Dockerfile 最后 stage 为 FROM scratch AS output，COPY 保留 /output/ 前缀，
+          # type=local 导出树为 dist/deb/output/*.deb
+          DEB=$(ls dist/deb/output/*.deb | head -1)
           echo "Built: $DEB"
           file "$DEB"
           # 行尾治本验证：DEBIAN 维护脚本不得含 CR（2026-08-27 CRLF 事故回归门禁）
@@ -319,14 +321,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kylin-arm64-standalone-deb
-          path: dist/deb/*.deb
+          path: dist/deb/output/*.deb
           if-no-files-found: error
 
-      - name: Create Release
+      - name: Create Release (standalone DEB)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/deb/*.deb
-          generate_release_notes: true
+          files: dist/deb/output/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
