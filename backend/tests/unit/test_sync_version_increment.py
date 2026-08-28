@@ -1,15 +1,21 @@
-"""回归测试：sync_version 自动递增（增量数据包版本过滤依赖）"""
-from app.core.database import SessionLocal
+"""回归测试：sync_version 自动递增（增量数据包版本过滤依赖）
+
+自建临时 SQLite + Base.metadata.create_all，不依赖外部 test.db 的 schema 新旧
+（曾因外部库缺 deleted_at 列导致 PendingRollbackError，2026-08-29 改造）。
+"""
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.models.base import Base
 from app.models.supported_village import SupportedVillage
 
 
-def test_sync_version_increments_on_update():
-    db = SessionLocal()
+def test_sync_version_increments_on_update(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'sync_ver.db'}")
+    Base.metadata.create_all(bind=engine, tables=[SupportedVillage.__table__])
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    db = factory()
     try:
-        # 先清理 test.db 中可能残留的 sync_ver_test% 行，避免残留数据影响断言
-        db.query(SupportedVillage).filter(SupportedVillage.village_name.like("sync_ver_test%")).delete()
-        db.commit()
-
         v = SupportedVillage(village_name="sync_ver_test")
         db.add(v)
         db.commit()
@@ -23,6 +29,5 @@ def test_sync_version_increments_on_update():
         db.commit()
         assert v.sync_version == 3, f"再次更新后应为 3，实际 {v.sync_version}"
     finally:
-        db.query(SupportedVillage).filter(SupportedVillage.village_name.like("sync_ver_test%")).delete()
-        db.commit()
         db.close()
+        engine.dispose()

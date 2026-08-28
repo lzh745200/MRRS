@@ -528,8 +528,10 @@ def main():
     print(f"\n正在启动后端服务: http://{host}:{port}")
     print(f"API 文档: http://{host}:{port}/docs")
 
-    # ── 麒麟模式：延迟自动打开系统浏览器 ──
-    if os.environ.get("KYLIN_MODE", "false").lower() == "true":
+    # ── 延迟自动打开系统浏览器（显式开关）──
+    # 默认 false：systemd 服务层无 DISPLAY，开浏览器应由桌面启动器
+    # （deploy/kylin/scripts/start-kylin.sh）负责。裸机调试时手动设 true。
+    if os.environ.get("AUTO_OPEN_BROWSER", "false").lower() == "true":
         _auto_open_browser(host, port)
 
     # PyInstaller 环境下必须使用直接引用的 app 对象，
@@ -558,10 +560,11 @@ def main():
 
 
 def _auto_open_browser(host: str, port: int):
-    """麒麟模式：延迟 3 秒后自动打开系统浏览器。
+    """延迟 3 秒后自动打开系统浏览器。
 
     优先使用 webbrowser 标准库，失败时回退到 xdg-open。
-    仅在 KYLIN_MODE=true 时由 main() 调用。
+    仅在 AUTO_OPEN_BROWSER=true 时由 main() 调用（默认关闭，
+    桌面会话由 start-kylin.sh 负责开浏览器，服务层无 DISPLAY 不应尝试）。
     """
     import subprocess
     import threading

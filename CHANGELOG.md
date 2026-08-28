@@ -5,6 +5,28 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.10.3] - 2026-08-29
+
+### 补齐（缺失功能）+ 深度清理（坏文件/死代码）
+
+- ✨ **CI 补建 standalone 麒麟 DEB 流水线**：此前 CI 只构建 Electron DEB，而安装指南
+  推荐的 standalone DEB（无 Electron，后端+Web）只能本地 Docker 自建。新增
+  `standalone-deb` job（buildx+QEMU ARM64，GHA layer 缓存），内置 CRLF 回归门禁
+  （dpkg-deb -R 解包后 grep CR 即失败）与 postinst bash -n 语法校验；两个 DEB
+  均自动附加到 GitHub Release。
+- 🐛 **环境变量三层错序开浏览器**：`kylin.env` 声明的 `AUTO_OPEN_BROWSER` 是死键
+  （start.py 从不读取），实际生效的 `KYLIN_MODE` 让 systemd 服务层（无 DISPLAY）
+  尝试开浏览器。修复：移除 `KYLIN_MODE` 变量（唯一用途即该错层行为），
+  start.py 改读 `AUTO_OPEN_BROWSER`（默认 false，服务层不开浏览器；
+  桌面会话由 start-kylin.sh 负责；裸机调试可手动开启）。
+- 🧹 **坏文件**：全仓 2786 个文本文件 mojibake 字节级扫描（`scripts/scan_mojibake.py`
+  工具入库），唯一真命中为根目录 `.env`（GBK 双重编码，注释吞掉 `HOST=127.0.0.1`
+  等配置行）——已按 `.env.example` 重建实际取值（文件不入库）。
+- 🧹 **死代码**：`error_handler` 四个零引用 backward-compat 别名
+  （BadRequestError/ForbiddenError/ConflictError/ServerError）移除，保留有引用的
+  AppError/NotFoundError；`test_sync_version_increment` 重构为自建临时 SQLite
+  （不再依赖外部 test.db 的 schema 新旧，曾致 PendingRollbackError 误报）。
+
 ## [1.10.2] - 2026-08-29
 
 ### 修复（安装包三大问题：Windows 打不开 / 麒麟打不开 / 图标+快捷方式缺失）

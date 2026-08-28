@@ -45,7 +45,6 @@ _direct_start() {
     if [ -x "$BACKEND" ]; then
         log "直接启动后端二进制（非 systemd 模式）..."
         cd /opt/assistance-management-system
-        export KYLIN_MODE=true
         export FRONTEND_DIST_PATH=/opt/assistance-management-system/frontend
         # 数据/日志目录可能归 root 所有且组不可写（postinst 750）——
         # 桌面用户直接启动时降级到 $HOME，避免 SQLite/日志打开失败导致回退路径也起不来

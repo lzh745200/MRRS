@@ -263,11 +263,70 @@ jobs:
           path: dist/electron/*.deb
           if-no-files-found: error
 
-      - name: Create Release
+      - name: Create Release (Electron DEB)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/electron/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── standalone 麒麟 DEB（无 Electron：后端 + Web，文档推荐装机方式）──
+  # 2026-08-29 补齐：此前 CI 只构建 Electron DEB，而安装指南推荐 standalone DEB，
+  # 用户只能本地 Docker 自行构建。现统一由 CI 构建并附到 Release。
+  standalone-deb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU (ARM64 emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build standalone Kylin DEB
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.kylin-standalone
+          platforms: linux/arm64
+          outputs: type=local,dest=dist/deb
+          push: false
+          # 禁用 --no-cache：QEMU 仿真下 layer 缓存是唯一提速手段（AGENTS.md 铁律）
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify standalone DEB (no CRLF in maintainer scripts)
+        run: |
+          DEB=$(ls dist/deb/*.deb | head -1)
+          echo "Built: $DEB"
+          file "$DEB"
+          # 行尾治本验证：DEBIAN 维护脚本不得含 CR（2026-08-27 CRLF 事故回归门禁）
+          rm -rf /tmp/debchk && mkdir -p /tmp/debchk
+          dpkg-deb -R "$DEB" /tmp/debchk
+          if grep -rl $'\r' /tmp/debchk/DEBIAN/ ; then
+            echo "::error::DEB 维护脚本含 CRLF，将导致 postinst 无法执行"
+            exit 1
+          fi
+          echo "维护脚本 LF 验证通过"
+          bash -n /tmp/debchk/DEBIAN/postinst && echo "postinst 语法通过"
+
+      - name: Upload standalone DEB
+        uses: actions/upload-artifact@v4
+        with:
+          name: kylin-arm64-standalone-deb
+          path: dist/deb/*.deb
+          if-no-files-found: error
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/deb/*.deb
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

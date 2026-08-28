@@ -19,22 +19,16 @@ app_logger = logger  # backward compatibility alias
 # ---------------------------------------------------------------------------
 
 # Backward compat aliases — canonical definitions in app.core.exceptions
+# （仅保留有外部引用的 AppError/NotFoundError；BadRequestError/ForbiddenError/
+#   ConflictError/ServerError 四个别名零引用，2026-08-29 死代码清理移除）
 try:
     from app.core.exceptions import (
         AppError,
         NotFoundError,
-        AuthenticationException as BadRequestError,
-        AuthenticationException as ForbiddenError,
-        AuthenticationException as ConflictError,
-        DatabaseError as ServerError,
     )
 except ImportError:  # pragma: no cover
     AppError = Exception  # type: ignore
     NotFoundError = Exception  # type: ignore
-    BadRequestError = Exception  # type: ignore
-    ForbiddenError = Exception  # type: ignore
-    ConflictError = Exception  # type: ignore
-    ServerError = Exception  # type: ignore
 
 # ---------------------------------------------------------------------------
 # Response builders
