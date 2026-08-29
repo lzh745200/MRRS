@@ -2,7 +2,7 @@
         build-deb build-deb-amd64 build-deb-arm64 build-deb-all \
         docker-build docker-build-amd64 docker-build-arm64 docker-build-all \
         deb-clean \
-        build-kylin build-kylin-arm64 kylin-clean kylin-verify \
+        build-kylin build-kylin-arm64 kylin-clean \
         build-win-x64 build-win-x86 build-win-all
 
 # 默认运行所有测试
@@ -278,11 +278,6 @@ kylin-clean:
 	docker rmi $(APP_NAME)-kylin:$(VERSION) 2>/dev/null || true
 	@echo "清理完成"
 
-# 验证麒麟 DEB 包
-kylin-verify:
-	@echo "=== 验证麒麟 V10 DEB 包 ==="
-	@bash scripts/verify-kylin-deb.sh $(KYLIN_OUTPUT_DIR)/$(APP_NAME)_$(VERSION)_arm64.deb
-
 # 帮助信息
 help:
 	@echo "帮扶管理信息系统 - Makefile"
@@ -319,16 +314,11 @@ help:
 	@echo "  make build-kylin         - 构建麒麟 V10 ARM64 DEB"
 	@echo "  make build-kylin-arm64   - 同上"
 	@echo "  make kylin-clean         - 清理麒麟构建产物"
-	@echo "  make kylin-verify        - 验证麒麟 DEB 包"
 	@echo ""
 	@echo "示例:"
 	@echo "  make build-deb VERSION=1.0.4"
 	@echo "  make build-deb-all VERSION=1.0.5"
 	@echo ""
-	@echo "直接运行构建脚本:"
-	@echo "  ./scripts/build-deb.sh amd64      # 构建 amd64"
-	@echo "  ./scripts/build-deb.sh arm64      # 构建 arm64"
-	@echo "  ./scripts/build-deb.sh all        # 构建双架构"
 
 # 独立版 DEB (amd64)：与 kylin 同源 Dockerfile，平台改 amd64（无 QEMU，速度快）
 # 用法：make build-deb-standalone-amd64 VERSION=1.10.0

@@ -67,64 +67,11 @@ RUN pyinstaller --name=assistance-backend \
     start.py
 
 # ============================================================
-# 阶段 3: 构建 Electron (ARM64 DEB 包)
+# 阶段 3: 组装最终运行镜像（可选，用于在容器内运行整套系统）
 # ============================================================
-FROM node:22-alpine AS electron-builder
-
-# 安装 Electron 构建依赖（Alpine 需要额外包）
-RUN apk add --no-cache \
-    git \
-    python3 \
-    make \
-    g++ \
-    libx11-dev \
-    libxkbfile-dev \
-    libsecret-dev \
-    alpine-sdk \
-    libxcb \
-    libxcb-xinerama0 \
-    libxcb-icccm4 \
-    libxcb-image0 \
-    libxcb-keysyms1 \
-    libxcb-randr0 \
-    libxcb-render-util0 \
-    libxcb-shape0 \
-    libxcb-xfixes0 \
-    libxcb-xkb1 \
-    libxkbcommon \
-    libgtk-3 \
-    libnotify \
-    nss \
-    xdg-utils
-
-WORKDIR /app/electron
-
-# 设置 npm 镜像加速
-RUN npm config set registry https://registry.npmmirror.com
-
-# 复制依赖文件（假设 electron 相关文件在 electron/ 目录，如 package.json）
-COPY electron/package*.json ./
-
-# 删除可能存在的 lock 文件以强制使用新镜像
-RUN rm -f package-lock.json && \
-    npm install --legacy-peer-deps
-
-# 安装 electron-builder（全局安装便于直接调用）
-RUN npm install -g electron-builder
-
-# 复制源码
-COPY electron/ ./
-
-# 设置 Electron 下载镜像环境变量（关键！解决网络问题）
-ENV ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-ENV ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
-
-# 构建 ARM64 DEB 包（显式指定 --linux --arm64，并禁用发布）
-RUN npx electron-builder --linux --arm64 --publish never
-
-# ============================================================
-# 阶段 4: 组装最终运行镜像（可选，用于在容器内运行整套系统）
-# ============================================================
+# 注: 原"阶段3 Electron构建段"已于死代码清理中移除——electron/ 目录无
+# package.json，该阶段从未可构建；Electron 打包由 build-windows.yml 在
+# Windows runner 上用 electron-builder 完成，不经 Docker。W6-T8。
 FROM python:3.11-alpine AS runtime
 
 WORKDIR /app
