@@ -565,7 +565,7 @@ function exportReport(): void {
 }
 .page-desc {
   font-size: 14px;
-  color: var(----color-primary-light-6);
+  color: var(--color-primary-light-6);
   margin: 12px 0 0;
   max-width: 620px;
   line-height: 1.7;
@@ -576,7 +576,7 @@ function exportReport(): void {
   gap: 6px;
   margin-top: 14px;
   font-size: 13px;
-  color: var(----color-primary-light-5);
+  color: var(--color-primary-light-5);
 }
 .start-btn {
   min-width: 160px;
@@ -596,8 +596,8 @@ function exportReport(): void {
 .start-btn:focus {
   transform: translateY(-2px);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
-  background: var(----color-primary-light-6);
-  border-color: var(----color-primary-light-6);
+  background: var(--color-primary-light-6);
+  border-color: var(--color-primary-light-6);
   color: var(--color-primary-dark-1);
 }
 
@@ -617,7 +617,7 @@ function exportReport(): void {
 }
 .ecg-line {
   fill: none;
-  stroke: var(----color-primary-light-4);
+  stroke: var(--color-primary-light-4);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-dasharray: 340;

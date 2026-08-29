@@ -78,14 +78,14 @@ body,
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(----color-primary-dark-2);
+  background: var(--color-primary-dark-2);
   color: var(--color-text-inverse);
   text-align: center;
 }
 
 .error-content h1 {
   font-size: 28px;
-  color: var(----color-accent-gold);
+  color: var(--color-accent-gold);
   margin-bottom: 12px;
 }
 
@@ -97,8 +97,8 @@ body,
 
 .refresh-btn {
   padding: 12px 32px;
-  background: linear-gradient(135deg, var(----color-accent-gold), #c9a227);
-  color: var(----color-primary-dark-2);
+  background: linear-gradient(135deg, var(--color-accent-gold), #c9a227);
+  color: var(--color-primary-dark-2);
   border: none;
   border-radius: 8px;
   font-size: 16px;

@@ -37,7 +37,7 @@ const goBack = () => {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: linear-gradient(135deg, #0a1929 0%, var(----color-primary-dark-1) 100%);
+  background: linear-gradient(135deg, #0a1929 0%, var(--color-primary-dark-1) 100%);
   color: var(--color-text-inverse);
 }
 

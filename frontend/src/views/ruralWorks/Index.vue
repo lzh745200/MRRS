@@ -68,7 +68,7 @@ function handleTabChange(name: string | number) {
   background: linear-gradient(
     135deg,
     var(--color-primary-dark-2) 0%,
-    var(----color-primary-dark-1) 100%
+    var(--color-primary-dark-1) 100%
   );
   border-bottom: 2px solid var(--color-accent-gold);
   margin: 0;

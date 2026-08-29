@@ -478,7 +478,7 @@ const updateCharts = async () => {
         formatter: (params: { marker: string; name: string; value: number; percent: number }) =>
           `${params.marker} ${params.name}<br/>
            <span  style="font-family:'DIN Alternate',monospace;font-size:18px;font-weight:700">${params.value}</span>
-           <span  style="color:var(----color-border-dark)"> (${params.percent}%)</span>`,
+           <span  style="color:var(--color-border-dark)"> (${params.percent}%)</span>`,
       },
       legend: {
         bottom: 0,
@@ -540,7 +540,7 @@ const updateCharts = async () => {
         formatter: (params: { marker: string; name: string; value: number; percent: number }) =>
           `${params.marker} ${params.name}<br/>
            <span  style="font-family:'DIN Alternate',monospace;font-size:18px;font-weight:700">${params.value}万</span>
-           <span  style="color:var(----color-border-dark)"> (${params.percent}%)</span>`,
+           <span  style="color:var(--color-border-dark)"> (${params.percent}%)</span>`,
       },
       legend: {
         bottom: 0,

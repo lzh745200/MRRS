@@ -223,7 +223,7 @@ onMounted(() => {
 }
 .tl-edit-btn:hover {
   color: var(--color-primary);
-  background: var(----color-bg-hover);
+  background: var(--color-bg-hover);
 }
 .tl-delete-btn:hover {
   color: var(--color-danger);

@@ -246,11 +246,11 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0;
-  background: var(--dash-bg-card, var(----color-bg-card));
+  background: var(--dash-bg-card, var(--color-bg-card));
   padding: 10px 16px;
   border-radius: var(--dash-radius-card, 12px);
   box-shadow: var(--dash-card-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.04));
-  border: 1px solid var(----color-border-lighter);
+  border: 1px solid var(--color-border-lighter);
   flex-wrap: wrap;
   user-select: none;
   transition: box-shadow 0.25s ease;
@@ -274,7 +274,7 @@ onUnmounted(() => {
 .status-divider {
   width: 1px;
   height: 20px;
-  background: var(----color-border-light);
+  background: var(--color-border-light);
   flex-shrink: 0;
 }
 
@@ -332,20 +332,20 @@ onUnmounted(() => {
   font-size: 13px;
 }
 .status-icon-proc {
-  color: var(----color-text-secondary);
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
 // ── 标签/值 ──
 .status-label {
-  color: var(----color-border-dark);
+  color: var(--color-border-dark);
   font-size: 11px;
   font-weight: 500;
   margin-right: 2px;
 }
 
 .status-value {
-  color: var(----color-text-regular);
+  color: var(--color-text-regular);
   font-size: 12px;
   font-weight: 600;
 }
@@ -354,7 +354,7 @@ onUnmounted(() => {
 .status-bar {
   width: 36px;
   height: 4px;
-  background: var(----color-border-lighter);
+  background: var(--color-border-lighter);
   border-radius: 2px;
   overflow: hidden;
   margin-left: 4px;
@@ -387,7 +387,7 @@ onUnmounted(() => {
 .refresh-btn {
   margin-left: auto;
   flex-shrink: 0;
-  color: var(----color-border-dark);
+  color: var(--color-border-dark);
 
   &:hover {
     color: #1e4d8c;

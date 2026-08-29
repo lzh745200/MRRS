@@ -593,7 +593,7 @@ const redirectToList = () => {
     .divider-line {
       flex: 1;
       height: 2px;
-      background: linear-gradient(to right, transparent, var(----color-bg-card), transparent);
+      background: linear-gradient(to right, transparent, var(--color-bg-card), transparent);
       margin: 0 15px;
     }
   }

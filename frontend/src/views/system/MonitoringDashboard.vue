@@ -990,7 +990,7 @@ watch(healthExpanded, (val) => {
 }
 
 .primary-card {
-  background: var(--color-bg-card, var(----color-bg-card));
+  background: var(--color-bg-card, var(--color-bg-card));
   border-radius: 12px;
   border: 1px solid var(--color-border-light, var(--color-border-light));
   padding: 20px 24px 16px;
@@ -1121,7 +1121,7 @@ watch(healthExpanded, (val) => {
 }
 
 .secondary-card {
-  background: var(--color-bg-card, var(----color-bg-card));
+  background: var(--color-bg-card, var(--color-bg-card));
   border-radius: 10px;
   border: 1px solid var(--color-border-light, var(--color-border-light));
   padding: 14px 18px;
@@ -1178,7 +1178,7 @@ watch(healthExpanded, (val) => {
 
 .chart-panel,
 .log-panel {
-  background: var(--color-bg-card, var(----color-bg-card));
+  background: var(--color-bg-card, var(--color-bg-card));
   border-radius: 12px;
   border: 1px solid var(--color-border-light, var(--color-border-light));
   overflow: hidden;
@@ -1214,7 +1214,7 @@ watch(healthExpanded, (val) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-card, var(----color-bg-card));
+  background: var(--color-bg-card, var(--color-bg-card));
   border-radius: 0 0 12px 12px;
 }
 
@@ -1263,7 +1263,7 @@ watch(healthExpanded, (val) => {
 
 /* ═══ Health Section ═══ */
 .health-section {
-  background: var(--color-bg-card, var(----color-bg-card));
+  background: var(--color-bg-card, var(--color-bg-card));
   border-radius: 12px;
   border: 1px solid var(--color-border-light, var(--color-border-light));
 }

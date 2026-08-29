@@ -229,7 +229,7 @@ onUnmounted(() => {
     box-shadow: 0 0 0 1px var(--color-border);
     transition: box-shadow 0.2s;
     &:hover {
-      box-shadow: 0 0 0 1px var(--color-text-placeholder, var(----color-text-disabled));
+      box-shadow: 0 0 0 1px var(--color-text-placeholder, var(--color-text-disabled));
     }
     &.is-focus {
       box-shadow: 0 0 0 2px var(--color-primary);

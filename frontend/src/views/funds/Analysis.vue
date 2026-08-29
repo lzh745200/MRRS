@@ -3,7 +3,7 @@
     <!-- 维度切换 Tab -->
     <el-card class="filter-card">
       <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 12px">
-        <span style="font-weight: 600; color: var(----color-primary-dark-1)">分析维度：</span>
+        <span style="font-weight: 600; color: var(--color-primary-dark-1)">分析维度：</span>
         <el-radio-group v-model="dimension" @change="handleDimensionChange">
           <el-radio-button value="period">时间维度</el-radio-button>
           <el-radio-button value="type">类型维度</el-radio-button>

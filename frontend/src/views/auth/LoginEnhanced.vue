@@ -482,7 +482,7 @@ const goToMachineCode = () => {
   --military-green: var(--color-primary-dark-1);
   --military-gold: var(--color-accent-gold);
   --military-gold-light: #f0e68c;
-  --text-white: var(----color-bg-card);
+  --text-white: var(--color-bg-card);
   --text-gray: #a8dadc;
 }
 

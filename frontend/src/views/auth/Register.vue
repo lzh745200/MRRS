@@ -224,7 +224,7 @@ const showPassCodeHelp = () => {
   --military-green: $military-dark;
   --military-gold: $badge-gold;
   --military-gold-light: $badge-gold-lighter;
-  --text-white: var(----color-bg-card);
+  --text-white: var(--color-bg-card);
 
   display: flex;
   justify-content: center;

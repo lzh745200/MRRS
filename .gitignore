@@ -344,3 +344,4 @@ frontend/tests/e2e/.auth/
 # E2E 运行产物
 frontend/test-results/
 frontend/playwright-report/
+.zcode/
