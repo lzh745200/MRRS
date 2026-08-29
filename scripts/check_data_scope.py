@@ -31,9 +31,15 @@ SAFE_PATTERNS = [
     r"check_record_access",
     r"is_admin\s*\(",
     r"is_superuser\s*\(",
+    r"require_admin\(\)",
+    r"Depends\(require_admin",
+    r"require_funds_operator_role",
+    r"check_rate_limit",
     r"_get_\w+_and_check_permission",
     r"_get_\w+_or_404\s*\([^)]*current_user",
     r"getattr\s*\(\s*current_user,\s*['\"]role['\"]",
+    r"current_user\.role\s*(not\s+)?in\s*\(",
+    r"current_user\.role\s*==",
 ]
 
 # 写操作装饰器（需检查权限的端点）

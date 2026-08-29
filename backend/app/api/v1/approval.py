@@ -234,6 +234,8 @@ def create_workflow(
 
     Requirements: 3.1 - 支持配置多级审批流程（最多支持5级）
     """
+    # 审批链定义属系统配置：普通用户重定义审批链可将审批路由给自己，必须管理员
+    require_admin(current_user)
     service = ApprovalWorkflowService(db)
 
     try:
@@ -336,6 +338,8 @@ def update_workflow(
     current_user: User = Depends(get_current_user),
 ):
     """更新审批流程"""
+    # 审批链定义属系统配置，必须管理员（防止重定义审批路由）
+    require_admin(current_user)
     service = ApprovalWorkflowService(db)
 
     try:
@@ -361,6 +365,8 @@ def delete_workflow(
     current_user: User = Depends(get_current_user),
 ):
     """删除审批流程"""
+    # 审批链定义属系统配置，必须管理员（防止破坏审批链完整性）
+    require_admin(current_user)
     service = ApprovalWorkflowService(db)
     success = service.delete_workflow(workflow_id)
 
