@@ -75,7 +75,7 @@ cd frontend && npm install && npm run dev
 - **数据库**: SQLite（`backend/data/rural_revitalization.db`）
 - **认证**: JWT + bcrypt + 机器码绑定 + 通行码验证（三级回退）+ 2FA
 - **缓存**: diskcache + 内存 LRU
-- **任务**: APScheduler（KPI预计算/异常检测/待办提醒/周报）
+- **任务**: threading.Timer 定时调度（备份计划/KPI预计算/异常检测, APScheduler 已移除）
 - **角色体系**: 4 核心角色（super_admin/admin/user/viewer）+ `normalize_role()` 向后兼容
 - **打包**: PyInstaller（x64 + ARM64）+ electron-builder（NSIS 安装包）
 

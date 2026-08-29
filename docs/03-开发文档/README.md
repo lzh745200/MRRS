@@ -29,7 +29,7 @@
 - **前端**：Vue 3 + TypeScript + Vite + Pinia + Element Plus
 - **后端**：FastAPI + SQLAlchemy + Alembic + Pydantic
 - **桌面端**：Electron 壳 + PyInstaller 打包后端
-- **数据库**：SQLite（单机）/ PostgreSQL（服务器）
+- **数据库**：SQLite(离线单机,唯一数据库;跨机数据经加密数据包交换)
 - **缓存**：diskcache + 内存 LRU 双层缓存
 
 详细设计见 `01-架构设计/` 目录下的架构图、类图和时序图。
