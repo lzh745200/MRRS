@@ -108,7 +108,6 @@
           >
             <el-switch
               v-model="showDeletedOnly"
-              inline-prompt
               active-text="回收站"
               inactive-text="正常"
               style="margin-left: 12px"
@@ -278,7 +277,7 @@ import { getErrorMessage } from '@/utils/getErrorMessage'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
-import { ElMessage, ElMessageBox, ElTable } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Download, Search, Upload, TrendCharts } from '@element-plus/icons-vue'
 import {
   projectApi,

@@ -58,7 +58,6 @@
  * Requirements: 16.1, 16.2, 16.3
  */
 
-import { ElRow, ElCol, ElFormItem, ElInput, ElSelect, ElOption } from 'element-plus'
 import { QIANNAN_COUNTIES, DEFAULT_PROVINCE, DEFAULT_PREFECTURE } from '@/data/guizhouRegion'
 
 interface Props {

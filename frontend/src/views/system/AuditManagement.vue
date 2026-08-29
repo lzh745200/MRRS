@@ -97,7 +97,9 @@
 
           <el-table v-loading="loading" :data="auditLogs" stripe style="margin-top: 16px">
             <el-table-column type="index" label="#" width="50" />
-            <el-table-column prop="timestamp" label="时间" width="170" />
+            <el-table-column label="时间" width="170">
+              <template #default="{ row }">{{ fmtTime(row.timestamp) }}</template>
+            </el-table-column>
             <el-table-column prop="user" label="用户" width="100" />
             <el-table-column label="操作" width="100">
               <template #default="{ row }">
@@ -125,7 +127,9 @@
         <el-card shadow="never">
           <el-table :data="loginLogs" stripe>
             <el-table-column type="index" label="#" width="50" />
-            <el-table-column prop="timestamp" label="时间" width="170" />
+            <el-table-column label="时间" width="170">
+              <template #default="{ row }">{{ fmtTime(row.timestamp) }}</template>
+            </el-table-column>
             <el-table-column prop="user" label="用户" width="120" />
             <el-table-column label="类型" width="90">
               <template #default="{ row }">
@@ -152,7 +156,9 @@
         <el-card shadow="never">
           <el-table :data="alerts" stripe>
             <el-table-column type="index" label="#" width="50" />
-            <el-table-column prop="timestamp" label="时间" width="170" />
+            <el-table-column label="时间" width="170">
+              <template #default="{ row }">{{ fmtTime(row.timestamp) }}</template>
+            </el-table-column>
             <el-table-column label="级别" width="90">
               <template #default="{ row }">
                 <el-tag
@@ -216,6 +222,9 @@ const stats = reactive({
   warnings: 0,
   failures: 0,
 })
+
+/** ISO 时间显示格式化：'2026-08-29T04:59:54' → '2026-08-29 04:59:54' */
+const fmtTime = (t?: string): string => (t ? t.replace('T', ' ').slice(0, 19) : '')
 
 const actionTagType = (a: string): 'info' | 'primary' | 'success' | 'warning' | 'danger' => {
   const map: Record<string, 'info' | 'primary' | 'success' | 'warning' | 'danger'> = {
@@ -307,9 +316,9 @@ async function loadAuditLogs() {
       user: item.username || `用户${item.user_id || ''}`,
       action: item.action || '',
       target: item.resource_type ? `${item.resource_type} #${item.resource_id || ''}` : '',
-      detail: item.detail || '',
+      detail: item.error_message || item.request_path || '',
       success: item.status !== 'failed',
-      ip: item.ip_address || '',
+      ip: item.user_ip || '',
     }))
   } catch {
     auditLogs.value = []
@@ -449,7 +458,7 @@ onMounted(() => {
 }
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 16px;
 }
 .stat-card {

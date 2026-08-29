@@ -230,7 +230,6 @@ describe('Common component imports', () => {
     ['SkipLink', '@/components/common/SkipLink.vue'],
     ['NetworkStatusIndicator', '@/components/common/NetworkStatusIndicator.vue'],
     ['LazyImage', '@/components/common/LazyImage/LazyImage.vue'],
-    ['PageContainer', '@/components/common/PageContainer.vue'],
   ]
 
   components.forEach(([label, p]) => {

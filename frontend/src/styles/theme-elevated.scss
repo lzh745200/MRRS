@@ -269,7 +269,118 @@
 }
 
 // ============================================================================
-// 14. 暗色主题兼容：黑底下阴影不可见，改用边框替代
+// 14. el-table 列模板隐藏层防御
+//     EP 官方 el-table.css 含 .el-table .hidden-columns { visibility:hidden }，
+//     但页面手动 `import { ElTable } from 'element-plus'` 会绕过按需样式注入，
+//     导致该测量层可见（列表页表格上方悬浮"编辑/删除"幽灵文字）。
+//     此处按 EP 原规则固化，防御未来再出现的手动导入。
+// ============================================================================
+
+.el-table .hidden-columns {
+  visibility: hidden !important;
+  position: absolute !important;
+  z-index: -1 !important;
+}
+
+// ============================================================================
+// 15. 表格空态：裸文本"暂无数据"升级为图标 + 提示
+// ============================================================================
+
+.el-table__empty-block {
+  min-height: 120px;
+
+  .el-table__empty-text {
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+
+    &::before {
+      content: '';
+      display: block;
+      width: 48px;
+      height: 48px;
+      opacity: 0.45;
+      background-color: var(--color-text-placeholder);
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.2'%3E%3Cpath d='M3 5a2 2 0 0 1 2-2h9l5 5v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z'/%3E%3Cpath d='M14 3v5h5'/%3E%3Cpath d='M8 13h8M8 17h5'/%3E%3C/svg%3E")
+        center / contain no-repeat;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.2'%3E%3Cpath d='M3 5a2 2 0 0 1 2-2h9l5 5v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5z'/%3E%3Cpath d='M14 3v5h5'/%3E%3Cpath d='M8 13h8M8 17h5'/%3E%3C/svg%3E")
+        center / contain no-repeat;
+    }
+  }
+}
+
+// ============================================================================
+// 16. 路由入场动画（安全实现）
+//     历史禁令：不得用 <transition> 包裹 router-view（ErrorBoundary 根节点
+//     display:contents 无盒模型，out-in 模式 transitionend 永不触发 → 白屏）。
+//     此处改用 @keyframes animation：animation 结束不依赖 transitionend 配对，
+//     旧节点直接卸载，无卡死风险。配合布局中已有的 :key="route.path" 重挂载重放。
+// ============================================================================
+
+@keyframes route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+#main-content > *:not(.error-boundary-root),
+// ErrorBoundary 根节点为 display:contents（无盒模型），animation 需作用到其子层
+#main-content > .error-boundary-root > * {
+  animation: route-fade-in 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+// ============================================================================
+// 17. 统计卡入场 stagger（列表页 stats-row 依次浮现，克制 40ms 步进）
+// ============================================================================
+
+@keyframes stat-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.stats-row > * {
+  animation: stat-card-in 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+
+  @for $i from 2 through 8 {
+    &:nth-child(#{$i}) {
+      animation-delay: #{($i - 1) * 40}ms;
+    }
+  }
+}
+
+// ============================================================================
+// 18. 动效弱化偏好：全部关闭（无障碍合规）
+// ============================================================================
+
+@media (prefers-reduced-motion: reduce) {
+  #main-content > *,
+  .stats-row > * {
+    animation: none;
+  }
+
+  .el-card,
+  .el-button {
+    transition: none;
+  }
+}
+
+// ============================================================================
+// 19. 暗色主题兼容：黑底下阴影不可见，改用边框替代
 // ============================================================================
 
 [data-theme='dark'] {

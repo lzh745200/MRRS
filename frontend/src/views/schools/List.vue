@@ -142,7 +142,6 @@
           >
             <el-switch
               v-model="showDeletedOnly"
-              inline-prompt
               active-text="回收站"
               inactive-text="正常"
               @change="handleToggleDeleted"

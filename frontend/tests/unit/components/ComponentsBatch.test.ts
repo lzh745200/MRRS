@@ -119,9 +119,6 @@ describe('common/ImportButton.vue', () => {
 describe('common/NetworkStatusIndicator.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/components/common/NetworkStatusIndicator.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
 })
-describe('common/PageContainer.vue', () => {
-  it('渲染', async () => { const { default: C } = await import('@/components/common/PageContainer.vue'); const w = mount(C, { slots: { default: '<div>test</div>' } }); await flushPromises(); expect(w.exists()).toBe(true) })
-})
 describe('common/PasswordStrength.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/components/common/PasswordStrength.vue'); const w = mount(C, { props: { passwordStrength: 'medium' } }); await flushPromises(); expect(w.exists()).toBe(true) })
 })

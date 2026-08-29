@@ -164,17 +164,17 @@
         <el-table-column v-if="isAdmin" label="操作" width="320" align="center" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons">
-              <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-              <el-button type="warning" size="small" @click="handleResetPassword(row)"
+              <el-button text type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+              <el-button text type="warning" size="small" @click="handleResetPassword(row)"
                 >重置密码</el-button
               >
-              <el-button type="success" size="small" @click="handleRolePermission(row)"
+              <el-button text type="success" size="small" @click="handleRolePermission(row)"
                 >角色/权限</el-button
               >
-              <el-button type="info" size="small" @click="handleMenuPermission(row)"
+              <el-button text type="info" size="small" @click="handleMenuPermission(row)"
                 >菜单权限</el-button
               >
-              <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+              <el-button text type="danger" size="small" @click="handleDelete(row)">删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -639,12 +639,10 @@ const roleOptions = ref<{ value: string; label: string }[]>([
   { value: 'viewer', label: '访客' },
 ])
 
-async function fetchRoles() {
-  // 角色选项固定使用 users.role 体系（4 个实用角色）
-  // 注意：不再用 /rbac/roles（RbacRole 表）覆盖选项——
-  // RBAC 角色是细粒度权限包的补充，与 users.role 是两套体系，
-  // 混用会导致 users.role 存入 RBAC 角色名而使权限判断失效。
-}
+// 角色选项固定使用 users.role 体系（4 个实用角色）。
+// 注意：不再用 /rbac/roles（RbacRole 表）覆盖选项——
+// RBAC 角色是细粒度权限包的补充，与 users.role 是两套体系，
+// 混用会导致 users.role 存入 RBAC 角色名而使权限判断失效。
 
 const dataScopeOptions = [
   { value: 'all', label: '全部数据' },
@@ -1304,7 +1302,6 @@ onMounted(() => {
   loadData()
   loadOrgTree()
   loadPendingCount()
-  fetchRoles()
   loadPackNameMap()
 })
 </script>

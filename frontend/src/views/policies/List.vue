@@ -128,7 +128,7 @@
         <el-table-column v-if="canDelete" type="selection" width="50" align="center" />
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="title" label="政策名称" min-width="200" show-overflow-tooltip />
-        <el-table-column label="文号" width="150" show-overflow-tooltip>
+        <el-table-column label="文号" width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ row.document_number || row.code || '-' }}</template>
         </el-table-column>
         <el-table-column prop="category_name" label="政策分类" width="100" align="center">
@@ -143,12 +143,12 @@
             {{ row.level_name || getLevelLabel(row.category, row.organization_level) }}
           </template>
         </el-table-column>
-        <el-table-column prop="publish_date" label="发布日期" width="120" sortable="custom">
+        <el-table-column prop="publish_date" label="发布日期" width="110" sortable="custom">
           <template #default="{ row }">
             {{ formatDate(row.publish_date) }}
           </template>
         </el-table-column>
-        <el-table-column prop="department" label="发布部门" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="department" label="发布部门" min-width="120" show-overflow-tooltip />
         <el-table-column prop="status" label="状态" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="getStatusTagType(row.status)">
@@ -156,7 +156,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" align="center" fixed="right">
+        <el-table-column label="操作" width="190" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="handleDetail(row)">
               详情
@@ -545,7 +545,8 @@ onMounted(() => {
 .title {
   font-size: 16px;
   font-weight: bold;
-  color: $military-dark;
+  /* el-card__header 全局为深绿底（form-page.scss），标题须用反白 */
+  color: var(--color-text-inverse);
 }
 
 .actions {
