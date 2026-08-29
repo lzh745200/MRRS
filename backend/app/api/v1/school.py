@@ -299,6 +299,15 @@ async def import_schools_excel(
                 errors.append(_fmt_row_error(row_idx, e, str(e),
                                              row[1] if row and len(row) > 1 else "?"))
         safe_commit(db)
+        # 批量导入会新增学校, 必须失效列表缓存(与 create/update/delete 同一模式),
+        # 否则 120s TTL 内列表页看不到导入结果
+        await _invalidate_school_list_cache()
+        try:
+            from app.api.v1.data.data.dashboard import invalidate_dashboard_cache
+
+            invalidate_dashboard_cache()
+        except Exception:
+            logger.debug("仪表盘缓存失效跳过", exc_info=True)
         # 数据变更自动创建审批任务：学校批量导入进入待审批板块（审计留痕）
         approval_task_id = submit_entity_change_approval(
             db,
