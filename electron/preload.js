@@ -47,14 +47,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAutoStart: (enabled) => ipcRenderer.invoke('set-auto-start', enabled),
 
   // ── Worker Thread 任务执行（避免主进程阻塞）──
-  /** �?Worker 线程执行 CPU 密集型任�?*/
+  /** 在 Worker 线程执行 CPU 密集型任务 */
   workerExec: (task, payload, timeout) =>
     ipcRenderer.invoke('worker-exec', task, payload, timeout),
-  /** 获取 Worker 线程池状�?*/
+  /** 获取 Worker 线程池状态 */
   workerStats: () => ipcRenderer.invoke('worker-stats'),
 
-  // ── 大数据流式传�?──
-  /** 分块读取大文件，避免序列化阻�?IPC */
+  // ── 大数据流式传输 ──
+  /** 分块读取大文件，避免序列化阻塞 IPC */
   readFileChunked: (filePath, chunkSize) =>
     ipcRenderer.invoke('read-file-chunked', filePath, chunkSize),
 });

@@ -111,6 +111,12 @@ hiddenimports = [
     'pandas.io.excel',
     'numpy.core._multiarray_umath',
 
+    # PDF 导出（reportlab 在 report_service 内函数级延迟导入,
+    # 自动探测可能遗漏; 缺失时桌面端 PDF 导出降级为 501）
+    'reportlab',
+    'reportlab.pdfgen',
+    'reportlab.lib.pagesizes',
+
     # 文件处理
     'PIL.Image',
 

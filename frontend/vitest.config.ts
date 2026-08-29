@@ -28,6 +28,10 @@ export default defineConfig({
     ],
     include: [
       '**/tests/unit/**/*.test.ts',
+      // 根级 tests/*.test.ts 与 property-based 测试此前从未被执行（include 未覆盖,
+      // 虚假信心来源）——纳入执行并纳入 CI
+      '**/tests/*.test.ts',
+      '**/tests/property/**/*.test.ts',
       '**/src/**/__tests__/**/*.spec.ts'
     ],
     coverage: {

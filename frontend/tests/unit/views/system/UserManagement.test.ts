@@ -318,11 +318,11 @@ describe('挂载与初始化', () => {
     expect((wrapper.vm as any).orgTreeOptions).toEqual([])
   })
 
-  it('fetchRoles：固定 users.role 体系 4 角色，不再请求 /rbac/roles 覆盖', async () => {
+  it('roleOptions：固定 users.role 体系 4 角色，不再请求 /rbac/roles 覆盖', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    await vm.fetchRoles()
+    // fetchRoles 死函数已移除: roleOptions 为静态数组, 角色体系固定
     expect(mockGet).not.toHaveBeenCalledWith('/rbac/roles', expect.anything())
     expect(vm.roleOptions).toEqual([
       { value: 'super_admin', label: '超级管理员' },
@@ -1341,13 +1341,14 @@ describe('行操作与内联点击处理器（函数覆盖）', () => {
 })
 
 describe('逻辑或 / 空值合并兜底分支', () => {
-  it('fetchRoles：外部接口数据不影响固定角色选项', async () => {
+  it('roleOptions：外部接口数据不影响固定角色选项', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/rbac/roles') return Promise.resolve(null)
       return defaultGetImpl(url)
     })
     const wrapper = mountComp()
     await flushPromises()
+    // roleOptions 为静态数组, 不依赖任何接口数据
     expect((wrapper.vm as any).roleOptions).toHaveLength(4)
   })
 

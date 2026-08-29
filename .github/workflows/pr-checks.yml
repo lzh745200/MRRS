@@ -53,7 +53,8 @@ jobs:
           cd frontend
           npm ci --legacy-peer-deps
       - run: cd frontend && npx vue-tsc --noEmit 2>&1
-      - run: cd frontend && npm run lint 2>&1
+      # lint:check 为纯检查模式（不带 --fix），CI 必须真实暴露 lint 违规而非自动修复
+      - run: cd frontend && npm run lint:check 2>&1
       # 前端测试带覆盖率报告（vitest run --coverage）
       - run: cd frontend && npx vitest run --coverage 2>&1
       # 上传覆盖率到 Codecov

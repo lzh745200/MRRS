@@ -1,5 +1,9 @@
 <template>
-  <el-dialog :model-value="visible" title="审核" :width="DIALOG_SM" @update:model-value="$emit('close')"
+  <el-dialog
+    :model-value="visible"
+    title="审核"
+    :width="DIALOG_SM"
+    @update:model-value="$emit('close')"
     ><el-form
       ><el-form-item label="审核意见"
         ><el-input v-model="comment" type="textarea" /></el-form-item></el-form

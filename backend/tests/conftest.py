@@ -401,7 +401,13 @@ def client():
         _db_module.SessionLocal = _original_session_local
         db.close()
     except Exception:
-        pass  # skip removed
+        # 失败必须显式暴露：静默吞掉会让 fixture 返回 None, 所有消费方
+        # 测试被悄悄 skip, 呈现"绿但什么都没测"的假象（覆盖率门禁只能
+        # 兜底部分场景）。setup 失败应让相关测试真实 ERROR。
+        import logging
+
+        logging.getLogger(__name__).exception("client fixture setup/teardown failed")
+        raise
 
 
 @pytest.fixture

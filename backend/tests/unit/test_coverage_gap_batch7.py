@@ -23,7 +23,6 @@ import pytest
 from app.core.config import Settings
 from app.core.data_permission import is_admin, require_data_permission
 from app.middleware.camel_to_snake import CamelToSnakeMiddleware, _patch_envelope
-from app.services.package_version_service import PackageVersionService
 
 
 # ---------------------------------------------------------------------------
@@ -349,30 +348,3 @@ class TestMachineCodeThirdFallback:
         assert result is record
         assert record.machine_code == "new-machine-code"
 
-
-# ===========================================================================
-# 8. app/services/package_version_service.py — get_current_version (27-30) /
-#    parse_version 分支 (55, 57, 62-63)
-# ===========================================================================
-
-
-class TestPackageVersionGaps:
-
-    def test_get_current_version_returns_string(self):
-        version = PackageVersionService.get_current_version()
-        assert isinstance(version, str)
-        assert len(version) > 0
-
-    def test_parse_version_tuple_input(self):
-        assert PackageVersionService.parse_version((1, 2, 3)) == (1, 2, 3)
-
-    def test_parse_version_int_input(self):
-        assert PackageVersionService.parse_version(5) == (5,)
-
-    def test_parse_version_str_error_falls_back(self):
-        class BadStr:
-            def __str__(self):
-                raise ValueError("boom")
-
-        obj = BadStr()
-        assert PackageVersionService.parse_version(obj) is obj

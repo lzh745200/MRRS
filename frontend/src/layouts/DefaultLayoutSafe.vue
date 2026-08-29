@@ -7,7 +7,11 @@
     <!-- 侧边栏 — 帮扶管理信息主题，精美分层导航                         -->
     <!-- ============================================================ -->
     <el-aside
-      :width="isCollapsed ? 'var(--layout-sidebar-collapsed-width, 68px)' : 'var(--layout-sidebar-width, 240px)'"
+      :width="
+        isCollapsed
+          ? 'var(--layout-sidebar-collapsed-width, 68px)'
+          : 'var(--layout-sidebar-width, 240px)'
+      "
       class="layout-aside"
       role="navigation"
       aria-label="主导航"

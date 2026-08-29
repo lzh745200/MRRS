@@ -55,7 +55,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v5
         with: { node-version: '22' }
-      - run: cd frontend && npm install --legacy-peer-deps
+      # npm ci 严格按 lockfile 安装（与 pr-checks 一致），保证 nightly 与 PR 结果可复现
+      - run: cd frontend && npm ci --legacy-peer-deps
       - name: Full test + coverage
         run: cd frontend && npx vitest run --coverage --reporter=junit --outputFile=test-results.xml 2>&1
       - name: Upload test results

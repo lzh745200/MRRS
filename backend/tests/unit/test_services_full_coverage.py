@@ -334,7 +334,6 @@ class TestAllServicesImportable:
         'app.services.message_template_service',
         'app.services.message_service',
         'app.services.machine_code_service',
-        'app.services.template_service',
         'app.services.backup_scheduler',
         'app.services.db_maintenance',
         'app.services.async_export_service',

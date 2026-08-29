@@ -29,7 +29,6 @@ from .cache_service import (
     metrics,
 )
 from .rbac_service import Permission, RBACService  # noqa: F401
-from .template_service import TemplateService  # noqa: F401
 
 # 加密服务（为测试兼容性提供别名）
 try:
@@ -69,6 +68,4 @@ __all__ = [
     "ai_service_manager",
     # analytics_service
     "AnalyticsService",
-    # template_service
-    "TemplateService",
 ]

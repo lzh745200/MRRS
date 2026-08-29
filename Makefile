@@ -24,19 +24,21 @@ test-e2e:
 	@echo ">>> E2E 测试请使用: make test-e2e-docker"
 
 # E2E Docker 测试（使用 Docker Compose 启动完整环境运行 E2E）
+# 注意: assistance-system 服务定义于根 docker-compose.yml, 必须一并指定,
+# 否则 overlay 的 depends_on 引用未定义服务直接报错; 不用 || true 掩盖失败
 test-e2e-docker:
 	@echo ">>> 启动 Docker E2E 测试环境..."
-	docker compose -f docker/docker-compose.e2e.yml up -d --wait
+	docker compose -f docker-compose.yml -f docker/docker-compose.e2e.yml --profile e2e up -d --wait
 	@echo ">>> 运行 E2E 测试 (Playwright)..."
-	docker compose -f docker/docker-compose.e2e.yml --profile e2e up --abort-on-container-exit || true
+	docker compose -f docker-compose.yml -f docker/docker-compose.e2e.yml --profile e2e up --abort-on-container-exit
 	@echo ">>> 清理 Docker E2E 环境..."
-	docker compose -f docker/docker-compose.e2e.yml down -v
+	docker compose -f docker-compose.yml -f docker/docker-compose.e2e.yml --profile e2e down -v
 	@echo "✓ E2E Docker 测试完成"
 
-# 生成覆盖率报告
+# 生成覆盖率报告（与 CI 同一 98% 门禁，防止本地报告掩盖达标缺口）
 coverage:
 	@echo ">>> 生成覆盖率报告..."
-	cd backend && python -m pytest --cov=app --cov-report=html --cov-report=xml
+	cd backend && python -m pytest --cov=app --cov-report=html --cov-report=xml --cov-fail-under=98
 	cd frontend && npm run test:coverage
 
 # 部署前检查（W4-T2：每条命令独立阻断，禁止 || true 吞失败）
