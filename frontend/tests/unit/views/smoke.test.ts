@@ -229,8 +229,8 @@ describe('Common component imports', () => {
 
 describe('Store imports', () => {
   const stores = [
-    'auth', 'user', 'project', 'funds', 'policy',
-    'organization', 'rbac', 'menu', 'config',
+    'auth', 'user', 'funds', 'policy',
+    'organization', 'menu', 'config',
     'dataPackage', 'dataReport',
   ]
 

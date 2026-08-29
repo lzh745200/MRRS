@@ -1,5 +1,52 @@
 # 更新日志
 
+## [1.10.1] - 2026-08-29 — 全仓库死代码彻底清理
+
+本批为一次系统性死代码清理:3 个探索代理深扫(后端 import 图两轮比对 + ~800 顶层符号
+引用计数、前端 382 生产文件全量 import 图谱、脚本/CI/docker 引用图谱),每个删除候选
+均经 AST/grep 复核生产代码零引用,分 5 个独立 commit,每阶段门禁全绿。
+
+### 后端(-90 模块 / 孤儿符号 / 死方法)
+- 删除 87 个零引用模块文件 + data/ + interfaces/api/(~12,300 行):core 21、
+  services 21、utils 21、schemas 10、middleware 3、未注册路由 2、垫片 4
+- 删除 6 个零引用模型文件 + EffectivenessIndicator/VersionHistory 两类,
+  新增 alembic dead_models_001 迁移 DROP 8 张表(本地全库验证 0 行)
+- 摘除活模块内孤儿符号 ~60 个(exceptions 11 异常类、response/security/
+  error_handler/query_optimizer 孤儿函数、services 死方法与死类型)
+- PyInstaller spec 移除不存在的 messages_extended;删除陈旧 requirements-lock.txt
+- 依赖精简 31 项(redis/jieba/matplotlib 全家桶/scipy/python-pptx 等,全部验证
+  零 import 含懒加载);当前 venv 卸载全部 24 包后全量 pytest 通过(强验证)
+- 测试同步:删除死模块专测 ~70 文件,混合 harness 摘除死段保留活用例
+
+### 前端(-73 test-only 生产文件 / 68 死测试)
+- 删除 test-only 存活文件 73 个(44 组件、16+4 composables、7 utils、3 stores、
+  4 api、appConfig/rbac/permissions 等)与零引用死文件 10 个
+- 重复实现归并:PageHeader/GlobalSearch 死副本、Skeleton/LazyImage/DataTable 两套
+- 17 个覆盖率 harness 摘除死条目,保留活代码覆盖
+- package.json 移除 fast-check/@types/dompurify/rollup/@commitlint/*/driver.js;
+  删除休眠 commitlint 链与 frontend/scripts 5 个孤儿脚本
+
+### 脚本/基础设施(W6-T8 完成)
+- git rm:test_scripts/、installers/、k8s/、Dockerfile.arm64/.fpm、.qwen/.reasonix、
+  skills-lock.json、environment.yml、根 mypy.ini、根 .bandit、根 tests/ 孤儿部分、
+  scripts/ 孤儿 21 个、resources 死图标 17 个、build-scripts 死文件 4 个
+- docker/Dockerfile 删除从未可构建的 electron-builder 阶段(electron/ 无 package.json)
+- Makefile 删除 kylin-verify 死目标与过期 help 文本
+
+### 文档同步
+- 修正 AGENTS.md 悬空 ADR 引用与测试总数、scripts/README.md 死脚本引用、
+  构建打包指南 NSIS 钩子表、项目结构说明死项标注、system_design.md 历史存档声明
+
+### 规模与验证
+- 净删除 500+ 文件、约 5.5 万行(代码+测试+脚本)
+- 验证:后端 pytest 10102 passed / flake8(CI 口径)0 错误 / bandit 无新增;
+  前端 vitest 300 文件 5759 测试全绿 / vue-tsc / eslint / vite build 全过
+- 已知保留:reminder_engine(被 orchestrator 引用)、get_user_by_id(内部自调用)、
+  EmptyState/StatsCard/BaseChart/utils/index(验证存活)、knip 未使用导出 ~288 项
+  转入工单 .scratch/w6-release-eng/009 分批处理
+- 已知 flaky: recycle_bin 权限矩阵 1 例(限流滑动窗口顺序敏感,单跑通过,与本次无关)
+
+
 所有重要的项目变更都会记录在此文件中。
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),

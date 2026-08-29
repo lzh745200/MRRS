@@ -64,3 +64,4 @@ smmap==5.0.3
 # ============================================================
 # matplotlib>=3.8.0              # Chart generation (requires C++ compiler)
 # playwright>=1.45.0             # E2E browser testing (requires C++ compiler)
+aiosqlite==0.22.1  # 测试专用: test_import_export_history_service_full.py 异步内存引擎
