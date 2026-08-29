@@ -204,23 +204,7 @@ class TestAuditEventLifecycle:
             assert call_args[0][1] == "after_insert"
             assert callable(call_args[0][2])
 
-    def test_teardown_default_models(self):
-        """移除默认模型上的事件监听。"""
-        from app.services.audit_event_handler import teardown_audit_events
-        with patch("app.services.audit_event_handler.event.remove") as mock_remove:
-            teardown_audit_events()
-            # 26 个模型 * 3 个事件 = 78
-            assert mock_remove.call_count == 78
 
-    def test_teardown_custom_models(self):
-        from app.services.audit_event_handler import teardown_audit_events
-        dummy = MagicMock()
-        with patch("app.services.audit_event_handler.event.remove") as mock_remove:
-            teardown_audit_events([dummy])
-            call_args = mock_remove.call_args_list[0]
-            assert call_args[0][0] is dummy
-            assert call_args[0][1] == "after_insert"
-            assert callable(call_args[0][2])
 
 
 # ---------------------------------------------------------------------------

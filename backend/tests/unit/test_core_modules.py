@@ -88,12 +88,6 @@ class TestExceptions:
         exc = ValidationError("test")
         assert "test" in str(exc)
 
-    def test_auth_error(self):
-        """测试认证错误"""
-        from app.core.exceptions import AuthenticationError
-        exc = AuthenticationError("test")
-        assert "test" in str(exc)
-
 class TestLogging:
     """测试日志模块"""
 

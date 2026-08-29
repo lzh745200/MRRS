@@ -4,9 +4,8 @@
 提供帮扶效果评估功能
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-from datetime import timezone, datetime
 
 
 @dataclass
@@ -18,19 +17,6 @@ class EffectivenessMetrics:
     fund_usage_rate: float = 0.0
     satisfaction_score: float = 0.0
     overall_score: float = 0.0
-
-
-@dataclass
-class EffectivenessReport:
-    """效果评估报告"""
-
-    entity_id: int
-    entity_type: str  # village, project, fund
-    period_start: datetime
-    period_end: datetime
-    metrics: EffectivenessMetrics
-    recommendations: List[str] = field(default_factory=list)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EffectivenessService:

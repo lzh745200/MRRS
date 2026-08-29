@@ -578,17 +578,6 @@ class TestBackupSchedulerExtras:
         timer1.cancel.assert_called_once()
         timer2.cancel.assert_called_once()
 
-    def test_get_scheduler_status(self):
-        import app.services.backup_scheduler as bs
-
-        timer = MagicMock()
-        timer.name = "job-x"
-        timer.is_alive.return_value = True
-        with patch.object(bs, "_scheduler_started", True), \
-             patch.object(bs, "_timers", [timer]):
-            status = bs.get_scheduler_status()
-        assert status["running"] is True
-        assert status["jobs"] == [{"id": "job-x", "name": "job-x", "next_run_time": None}]
 
 
 class TestSchedulerJobsTriggered:

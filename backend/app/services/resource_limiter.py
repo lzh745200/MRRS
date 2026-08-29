@@ -167,32 +167,5 @@ def check_rate_limit(key: str, limit: int, window: int) -> bool:
     return _rate_limiter.is_allowed(key)
 
 
-def get_remaining_quota(key: str) -> int:
-    """
-    获取剩余配额
-
-    Args:
-        key: 限制键
-
-    Returns:
-        int: 剩余配额数
-    """
-    stats = _rate_limiter.get_usage_stats(key)
-    quota = _rate_limiter._quotas.get(key)
-    if quota:
-        return max(0, quota.max_requests - stats.total_requests)
-    return -1
-
-
-def reset_rate_limit(key: str):
-    """
-    重置速率限制
-
-    Args:
-        key: 限制键
-    """
-    _rate_limiter.clear_quota(key)
-
-
 # 全局导出实例
 resource_limiter = _rate_limiter

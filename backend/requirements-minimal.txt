@@ -2,7 +2,6 @@
 fastapi==0.136.3
 uvicorn[standard]==0.48.0
 sqlalchemy==2.0.50
-aiosqlite==0.22.1
 alembic==1.13.1
 pydantic==2.13.4
 pydantic-settings==2.14.2
@@ -12,12 +11,9 @@ bcrypt==4.0.1
 python-multipart==0.0.31
 python-dotenv==1.2.2
 email-validator==2.1.1
-bleach==6.3.0
 pillow==12.2.0
 qrcode==7.4.2
-jieba==0.42.1
 # APScheduler 已移除（使用 threading.Timer 替代，见 backup_scheduler.py）
-structlog==25.5.0
 slowapi==0.1.9
 diskcache==5.6.3
 pandas==3.0.3

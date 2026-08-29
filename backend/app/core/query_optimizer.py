@@ -11,31 +11,13 @@ import logging
 import time
 from typing import Any, Callable, List, Optional, Tuple
 
-from sqlalchemy.orm import Query, joinedload, selectinload
+from sqlalchemy.orm import Query
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Eager-loading helpers
 # ---------------------------------------------------------------------------
-
-
-def with_eager_load(query: Query, *relationships: str, strategy: str = "joined") -> Query:
-    """Apply eager-loading options to a SQLAlchemy query.
-
-    Args:
-        query: The query object.
-        *relationships: Dot-separated relationship paths (e.g.
-            ``"user.department"``).
-        strategy: ``"joined"`` or ``"selectin"``.
-
-    Returns:
-        The modified query.
-    """
-    loader = joinedload if strategy == "joined" else selectinload
-    for path in relationships:
-        query = query.options(loader(path))
-    return query
 
 
 def paginate(
@@ -75,16 +57,6 @@ def paginate(
 _slow_query_log: List[dict] = []
 _slow_query_lock = _threading.Lock()
 _slow_threshold_ms: float = 200.0
-
-
-def set_slow_query_threshold(ms: float) -> None:
-    """Set the threshold (in milliseconds) for logging slow queries.
-
-    Args:
-        ms: Threshold value.  Pass 0 to disable logging.
-    """
-    global _slow_threshold_ms
-    _slow_threshold_ms = max(0.0, ms)
 
 
 def track_query(
@@ -136,11 +108,6 @@ def get_slow_queries(limit: int = 50) -> List[dict]:
         )[:limit]
 
 
-def clear_slow_query_log() -> None:
-    """Clear the slow-query history."""
-    _slow_query_log.clear()
-
-
 # ---------------------------------------------------------------------------
 # N+1 query detection
 # ---------------------------------------------------------------------------
@@ -154,17 +121,6 @@ _query_counter = _threading.local()
 def _ensure_counter() -> None:
     if not hasattr(_query_counter, "count"):
         _query_counter.count = 0
-
-
-def increment_thread_query_count(n: int = 1) -> None:
-    """Increment the per-thread query counter by *n*.
-
-    NOTE: This is separate from the request-scoped counter in
-    ``middleware/query_counter.py``.  This thread-local counter is used by
-    ``analyze_n_plus_one`` to count queries within a single decorated call.
-    """
-    _ensure_counter()
-    _query_counter.count += n
 
 
 def get_query_count() -> int:

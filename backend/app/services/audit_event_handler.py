@@ -173,38 +173,3 @@ def setup_audit_events(models: list = None):
 
     logger.info("审计事件监听已启用——%d 个模型", registered)
     return registered
-
-
-def teardown_audit_events(models: list = None):
-    """移除审计事件监听（测试环境使用）。"""
-    if models is None:
-        from app.models.fund import Fund
-        from app.models.fund_budget import FundBudget, FundTransaction
-        from app.models.fund_lifecycle import FundTransferVoucher, FundContract, FundAnomaly
-        from app.models.fund_allocation_order import FundAllocationOrder
-        from app.models.issue_tracking import Feedback
-        from app.models.machine_code import MachineCode
-        from app.models.message import Message
-        from app.models.organization import Organization
-        from app.models.policy import Policy, PolicyCategory
-        from app.models.project import Project
-        from app.models.rbac import RbacRole, UserPermission, UserRole
-        from app.models.rural_task import RuralTask
-        from app.models.school import ScholarshipStudent, School, SchoolProject
-        from app.models.supported_village import SupportedVillage
-        from app.models.todo import Todo
-        from app.models.user import User
-        from app.models.approval import ApprovalTask, ApprovalWorkflow
-
-        models = [Fund, FundAllocationOrder, FundBudget, FundTransaction,
-                  FundTransferVoucher, FundContract, FundAnomaly,
-                  Feedback, MachineCode, Message,
-                  Organization, Policy, PolicyCategory, Project,
-                  RbacRole, RuralTask, ScholarshipStudent,
-                  School, SchoolProject, SupportedVillage, Todo, User,
-                  UserPermission, UserRole, ApprovalTask, ApprovalWorkflow]
-
-    for model in models:
-        event.remove(model, "after_insert", _after_insert)
-        event.remove(model, "after_update", _after_update)
-        event.remove(model, "after_delete", _after_delete)

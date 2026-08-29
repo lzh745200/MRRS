@@ -65,13 +65,6 @@ class PackageValidationError(BusinessError):
         self.errors = errors
 
 
-class PackageVersionUnsupportedError(BusinessError):
-    """数据包版本不支持"""
-    def __init__(self, version: str):
-        super().__init__(f"不支持的数据包版本: {version}")
-        self.version = version
-
-
 class DataPackageService:
     """
     数据包管理服务

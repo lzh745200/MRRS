@@ -13,7 +13,6 @@ import pytest
 from app.services.permission_package_service import PermissionPackageService
 from app.services.query_analyzer_service import QueryAnalyzer
 from app.services.rural_work_service import RuralWorkService, _iso, _safe_enum_value
-from app.services.update_log_service import UpdateLogService, get_update_log_service
 from app.services.organization_code_service import OrganizationCodeService
 from app.services.encrypted_package import (
     create_encrypted_package,
@@ -22,7 +21,6 @@ from app.services.encrypted_package import (
     MAGIC,
     VERSION,
 )
-from app.services.query_analyzer_service import query_analyzer, monitor_query_performance
 
 
 UPLOAD_PATCH = "app.utils.paths.get_uploads_path"
@@ -734,26 +732,6 @@ class TestQueryAnalyzer:
         assert plan is None
 
 
-class TestMonitorQueryPerformance:
-
-    def test_decorator_below_threshold(self):
-        @monitor_query_performance(threshold_ms=10000.0)
-        def fast_func():
-            return "ok"
-        result = fast_func()
-        assert result == "ok"
-
-    def test_decorator_above_threshold(self):
-        before = len(query_analyzer._slow_queries)
-
-        @monitor_query_performance(threshold_ms=0.0)
-        def slow_func():
-            time.sleep(0.01)
-            return "ok"
-
-        result = slow_func()
-        assert result == "ok"
-        assert len(query_analyzer._slow_queries) > before
 
 
 # ---------------------------------------------------------------------------
@@ -955,214 +933,7 @@ class TestRuralWorkHelpers:
 # ---------------------------------------------------------------------------
 
 
-class TestUpdateLogService:
 
-    def _make(self):
-        db = MagicMock()
-        return UpdateLogService(db), db
-
-    def test_record_update(self):
-        svc, db = self._make()
-        log_entry = MagicMock()
-        log_entry.created_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
-        result = svc.record_update("1.0.0", "test desc", "admin")
-        db.add.assert_called_once()
-        db.commit.assert_called_once()
-        db.refresh.assert_called_once()
-
-    def test_get_update_logs_desc(self):
-        svc, db = self._make()
-        q = MagicMock()
-        q.order_by.return_value = q
-        q.offset.return_value = q
-        q.limit.return_value = q
-        q.all.return_value = [MagicMock()]
-        db.query.return_value = q
-        result = svc.get_update_logs(skip=0, limit=10, order_by_desc=True)
-        assert len(result) == 1
-
-    def test_get_update_logs_asc(self):
-        svc, db = self._make()
-        q = MagicMock()
-        q.order_by.return_value = q
-        q.offset.return_value = q
-        q.limit.return_value = q
-        q.all.return_value = []
-        db.query.return_value = q
-        result = svc.get_update_logs(order_by_desc=False)
-        assert result == []
-
-    def test_get_latest_update(self):
-        svc, db = self._make()
-        q = MagicMock()
-        q.order_by.return_value = q
-        q.first.return_value = MagicMock()
-        db.query.return_value = q
-        result = svc.get_latest_update()
-        assert result is not None
-
-    def test_get_latest_update_none(self):
-        svc, db = self._make()
-        q = MagicMock()
-        q.order_by.return_value = q
-        q.first.return_value = None
-        db.query.return_value = q
-        assert svc.get_latest_update() is None
-
-    def test_get_update_by_version(self):
-        svc, db = self._make()
-        q = MagicMock()
-        q.filter.return_value = q
-        q.first.return_value = MagicMock()
-        db.query.return_value = q
-        assert svc.get_update_by_version("1.0.0") is not None
-
-    def test_is_version_recorded_true(self):
-        svc, db = self._make()
-        q = MagicMock()
-        q.filter.return_value = q
-        q.count.return_value = 1
-        db.query.return_value = q
-        assert svc.is_version_recorded("1.0.0") is True
-
-    def test_is_version_recorded_false(self):
-        svc, db = self._make()
-        q = MagicMock()
-        q.filter.return_value = q
-        q.count.return_value = 0
-        db.query.return_value = q
-        assert svc.is_version_recorded("1.0.0") is False
-
-    def test_get_update_count(self):
-        svc, db = self._make()
-        q = MagicMock()
-        q.count.return_value = 5
-        db.query.return_value = q
-        assert svc.get_update_count() == 5
-
-    def test_build_version_description_no_features(self):
-        svc, _ = self._make()
-        d = svc._build_version_description({"description": "test"})
-        assert d == "test"
-
-    def test_build_version_description_with_features(self):
-        svc, _ = self._make()
-        d = svc._build_version_description({"description": "test", "features": ["f1", "f2"]})
-        assert "f1" in d
-        assert "f2" in d
-
-    def test_create_version_entry(self):
-        svc, _ = self._make()
-        entry = svc._create_version_entry(
-            {"version": "1.0.0", "date": "2025-01-01", "description": "test", "features": []},
-            "admin"
-        )
-        assert entry.version == "1.0.0"
-
-    def test_initialize_version_history_force(self):
-        svc, db = self._make()
-
-        call_count = [0]
-
-        def side_effect(*args):
-            model = args[0] if args else None
-            model = args[0] if args else None
-            q = MagicMock()
-            if call_count[0] == 0:
-                q.delete.return_value = 5
-                call_count[0] += 1
-            else:
-                q.count.return_value = 0
-            return q
-
-        db.query.side_effect = side_effect
-        result = svc.initialize_version_history(updated_by="admin", force=True)
-        assert result["status"] == "success"
-        assert result["initialized_count"] > 0
-
-    def test_initialize_version_history_skip(self):
-        svc, db = self._make()
-        q = MagicMock()
-        q.count.return_value = 10
-        db.query.return_value = q
-        result = svc.initialize_version_history()
-        assert result["status"] == "skipped"
-
-    def test_sync_version_history(self):
-        svc, db = self._make()
-
-        def side_effect(*args):
-            model = args[0] if args else None
-            model = args[0] if args else None
-            q = MagicMock()
-            q.filter.return_value = MagicMock(count=MagicMock(return_value=0))
-            return q
-
-        db.query.side_effect = side_effect
-        result = svc.sync_version_history()
-        assert result["status"] == "success"
-        assert result["synced_count"] > 0
-
-    def test_sync_version_history_all_recorded(self):
-        svc, db = self._make()
-        q = MagicMock()
-        q.filter.return_value = MagicMock(count=MagicMock(return_value=1))
-        db.query.return_value = q
-        result = svc.sync_version_history()
-        assert result["synced_count"] == 0
-
-    def test_check_and_record_version_change_no_records(self):
-        svc, db = self._make()
-
-        def side_effect(*args):
-            model = args[0] if args else None
-            model = args[0] if args else None
-            q = MagicMock()
-            q.order_by.return_value = q
-            q.first.return_value = None
-            q.delete.return_value = 0
-            q.count.return_value = 0
-            return q
-
-        db.query.side_effect = side_effect
-        result = svc.check_and_record_version_change("1.0.0")
-        assert result["action"] == "initialize"
-
-    def test_check_and_record_version_change_with_change(self):
-        svc, db = self._make()
-        latest = MagicMock()
-        latest.version = "0.9.0"
-
-        def side_effect(*args):
-            model = args[0] if args else None
-            model = args[0] if args else None
-            q = MagicMock()
-            q.order_by.return_value = MagicMock(first=MagicMock(return_value=latest))
-            q.count.return_value = 1
-            q.filter.return_value = q
-            q.first.return_value = None
-            return q
-
-        db.query.side_effect = side_effect
-        result = svc.check_and_record_version_change("1.0.0")
-        assert result["action"] == "record_change"
-
-    def test_check_and_record_version_change_same_version(self):
-        svc, db = self._make()
-        latest = MagicMock()
-        latest.version = "1.0.0"
-
-        q = MagicMock()
-        q.order_by.return_value = q
-        q.first.return_value = latest
-        db.query.return_value = q
-        result = svc.check_and_record_version_change("1.0.0")
-        assert result is None
-
-    def test_get_update_log_service_factory(self):
-        db = MagicMock()
-        svc = get_update_log_service(db)
-        assert svc.db is db
 
 
 # ---------------------------------------------------------------------------

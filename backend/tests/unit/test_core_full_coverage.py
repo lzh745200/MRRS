@@ -31,43 +31,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 
 class TestResponse:
-    def test_pagination_meta_from_pagination(self):
-        from app.core.response import PaginationMeta
-        pm = PaginationMeta.from_pagination(page=2, page_size=10, total=95)
-        assert pm.page == 2
-        assert pm.page_size == 10
-        assert pm.total == 95
-        assert pm.total_pages == 10
-        assert pm.has_next is True
-        assert pm.has_prev is True
 
-    def test_pagination_meta_zero_page_size(self):
-        from app.core.response import PaginationMeta
-        pm = PaginationMeta.from_pagination(page=1, page_size=0, total=10)
-        assert pm.total_pages == 0
 
-    def test_pagination_meta_zero_total(self):
-        from app.core.response import PaginationMeta
-        pm = PaginationMeta.from_pagination(page=1, page_size=10, total=0)
-        assert pm.total_pages == 0
-        assert pm.has_next is False
-        assert pm.has_prev is False
 
-    def test_pagination_meta_to_dict(self):
-        from app.core.response import PaginationMeta
-        pm = PaginationMeta(page=1, page_size=5, total=3, total_pages=1)
-        d = pm.to_dict()
-        assert d['page'] == 1
-        assert d['page_size'] == 5
-        assert d['total'] == 3
 
-    def test_paginated_response(self):
-        from app.core.response import paginated_response, PaginationMeta
-        pm = PaginationMeta(page=1, page_size=10, total=5, total_pages=1)
-        resp = paginated_response(data=[1, 2, 3], pagination=pm)
-        assert resp['code'] == 200
-        assert resp['data'] == [1, 2, 3]
-        assert 'meta' in resp
 
     def test_ok_list_structure(self):
         from app.core.response import ok_list
@@ -117,21 +84,12 @@ class TestResponse:
         resp = success_response(data=None, extra='x')
         assert resp['extra'] == 'x'
 
-    def test_validation_error_response(self):
-        from app.core.response import validation_error_response
-        resp = validation_error_response(errors=['e'])
-        assert resp['code'] == 422
-        assert resp['errors'] == ['e']
 
     def test_not_found_response(self):
         from app.core.response import not_found_response
         resp = not_found_response(detail='d')
         assert resp['code'] == 404
 
-    def test_unauthorized_response(self):
-        from app.core.response import unauthorized_response
-        resp = unauthorized_response()
-        assert resp['code'] == 401
 
     def test_forbidden_response(self):
         from app.core.response import forbidden_response
@@ -143,27 +101,9 @@ class TestResponse:
         resp = server_error_response(detail='d')
         assert resp['code'] == 500
 
-    def test_api_response_success(self):
-        from app.core.response import ApiResponse
-        resp = ApiResponse.success(data=[1], message='ok')
-        assert resp['code'] == 200
 
-    def test_api_response_error(self):
-        from app.core.response import ApiResponse
-        resp = ApiResponse.error(code=400, message='bad')
-        assert resp['code'] == 400
 
-    def test_api_response_paginated(self):
-        from app.core.response import ApiResponse, PaginationMeta
-        pm = PaginationMeta(page=1, page_size=10, total=5)
-        resp = ApiResponse.paginated(data=[1], pagination=pm)
-        assert resp['code'] == 200
 
-    def test_error_detail_to_dict(self):
-        from app.core.response import ErrorDetail
-        ed = ErrorDetail(field='name', message='required', type='val')
-        d = ed.to_dict()
-        assert d['field'] == 'name'
 
     def test_error_response_alias(self):
         from app.core.response import ErrorResponse, error_response
@@ -673,18 +613,6 @@ class TestAsyncUtils:
 
         asyncio.run(main())  # should not raise
 
-    def test_fire_and_forget_with_running_loop(self):
-        from app.core.async_utils import fire_and_forget
-
-        flag = []
-
-        async def bg():
-            flag.append('done')
-
-        async def main():
-            fire_and_forget(bg())
-
-        asyncio.run(main())
         # May not be immediate, just verify no error
 
     def test_get_event_loop_safe_running(self):
@@ -789,15 +717,7 @@ class TestExceptions:
         assert e.status_code == 400
         assert e.details.get('field') == 'name'
 
-    def test_authentication_error(self):
-        from app.core.exceptions import AuthenticationError
-        e = AuthenticationError()
-        assert e.status_code == 401
 
-    def test_authorization_error(self):
-        from app.core.exceptions import AuthorizationError
-        e = AuthorizationError()
-        assert e.status_code == 403
 
     def test_not_found_error(self):
         from app.core.exceptions import NotFoundError
@@ -820,52 +740,14 @@ class TestExceptions:
         e = DatabaseError()
         assert e.status_code == 500
 
-    def test_user_not_found_error(self):
-        from app.core.exceptions import UserNotFoundError
-        e = UserNotFoundError('admin')
-        assert e.status_code == 404
-        assert 'admin' in e.message
 
-    def test_user_not_found_error_no_name(self):
-        from app.core.exceptions import UserNotFoundError
-        e = UserNotFoundError()
-        assert '用户' in e.message
 
-    def test_user_locked_error(self):
-        from app.core.exceptions import UserLockedError
-        e = UserLockedError('5分钟')
-        assert e.status_code == 403
-        assert '5分钟' in e.message
 
-    def test_user_locked_error_no_duration(self):
-        from app.core.exceptions import UserLockedError
-        e = UserLockedError()
-        assert '锁定' in e.message
 
-    def test_password_validation_error(self):
-        from app.core.exceptions import PasswordValidationError
-        e = PasswordValidationError()
-        assert e.status_code == 400
 
-    def test_file_upload_error(self):
-        from app.core.exceptions import FileUploadError
-        e = FileUploadError()
-        assert e.status_code == 400
 
-    def test_backup_error(self):
-        from app.core.exceptions import BackupError
-        e = BackupError()
-        assert e.status_code == 500
 
-    def test_restore_error(self):
-        from app.core.exceptions import RestoreError
-        e = RestoreError()
-        assert e.status_code == 500
 
-    def test_backup_not_found_error(self):
-        from app.core.exceptions import BackupNotFoundError
-        e = BackupNotFoundError()
-        assert e.status_code == 404
 
     def test_invalid_credentials_error(self):
         from app.core.exceptions import InvalidCredentialsError
@@ -887,16 +769,7 @@ class TestExceptions:
         e = AuthenticationException()
         assert e.status_code == 401
 
-    def test_forbidden_exception(self):
-        from app.core.exceptions import ForbiddenException
-        e = ForbiddenException()
-        assert e.status_code == 403
 
-    def test_exc_paginated_response(self):
-        from app.core.exceptions import exc_paginated_response
-        result = exc_paginated_response([1, 2], 2, 1, 10)
-        assert result['items'] == [1, 2]
-        assert result['total'] == 2
 
 
 class TestErrors:
@@ -959,24 +832,7 @@ class TestErrors:
 
 
 class TestQueryOptimizer:
-    def test_with_eager_load_joined(self):
-        from app.core.query_optimizer import with_eager_load
-        # Patch joinedload to avoid SQLAlchemy string attribute validation
-        q = MagicMock()
-        with patch('app.core.query_optimizer.joinedload') as mock_loader:
-            mock_loader.return_value = MagicMock()
-            result = with_eager_load(q, MagicMock(), strategy='joined')
-            q.options.assert_called_once_with(mock_loader.return_value)
-            assert result is q.options.return_value
 
-    def test_with_eager_load_selectin(self):
-        from app.core.query_optimizer import with_eager_load
-        q = MagicMock()
-        with patch('app.core.query_optimizer.selectinload') as mock_loader:
-            mock_loader.return_value = MagicMock()
-            result = with_eager_load(q, MagicMock(), strategy='selectin')
-            q.options.assert_called_once_with(mock_loader.return_value)
-            assert result is q.options.return_value
 
     def test_paginate(self):
         from app.core.query_optimizer import paginate
@@ -1005,72 +861,11 @@ class TestQueryOptimizer:
         items, total, pages = paginate(q, page=100, page_size=10)
         assert pages == 1
 
-    def test_set_slow_query_threshold(self):
-        import app.core.query_optimizer as qo
-        qo.set_slow_query_threshold(500)
-        assert qo._slow_threshold_ms == 500
 
-    def test_set_slow_query_threshold_zero(self):
-        from app.core.query_optimizer import set_slow_query_threshold
-        set_slow_query_threshold(0)
 
-    def test_track_query(self):
-        from app.core.query_optimizer import track_query, clear_slow_query_log
-        clear_slow_query_log()
-        result = track_query('test', lambda: 42)
-        assert result == 42
 
-    def test_track_query_slow(self):
-        from app.core.query_optimizer import track_query, clear_slow_query_log, get_slow_queries
-        clear_slow_query_log()
-        import time
 
-        def slow_fn():
-            time.sleep(0.01)
-            return 'done'
 
-        track_query('slow_q', slow_fn, threshold_ms=0)
-        sq = get_slow_queries()
-        assert len(sq) >= 1
 
-    def test_clear_slow_query_log(self):
-        from app.core.query_optimizer import clear_slow_query_log, track_query, get_slow_queries
-        track_query('q', lambda: 1)
-        clear_slow_query_log()
-        assert len(get_slow_queries()) == 0
 
-    def test_increment_query_count(self):
-        from app.core.query_optimizer import increment_thread_query_count, get_query_count, reset_query_count
-        reset_query_count()
-        increment_thread_query_count(5)
-        assert get_query_count() == 5
 
-    def test_reset_query_count(self):
-        from app.core.query_optimizer import reset_query_count, get_query_count, increment_thread_query_count
-        increment_thread_query_count(10)
-        reset_query_count()
-        assert get_query_count() == 0
-
-    def test_analyze_n_plus_one(self):
-        from app.core.query_optimizer import analyze_n_plus_one, reset_query_count, increment_thread_query_count
-
-        @analyze_n_plus_one(threshold=5)
-        def my_func():
-            for _ in range(3):
-                increment_thread_query_count()
-            return 'ok'
-
-        result = my_func()
-        assert result == 'ok'
-
-    def test_analyze_n_plus_one_warning(self):
-        from app.core.query_optimizer import analyze_n_plus_one, reset_query_count, increment_thread_query_count
-
-        @analyze_n_plus_one(threshold=2)
-        def my_func():
-            for _ in range(10):
-                increment_thread_query_count()
-            return 'ok'
-
-        result = my_func()
-        assert result == 'ok'

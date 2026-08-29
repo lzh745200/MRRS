@@ -133,63 +133,6 @@ class TestDelay:
         assert elapsed >= 0.01
 
 
-class TestFireAndForget:
-    """fire_and_forget — schedule background task."""
-
-    async def test_schedule_with_running_loop(self):
-        from app.core.async_utils import fire_and_forget
-
-        results = []
-
-        async def record():
-            results.append("done")
-
-        fire_and_forget(record())
-        await asyncio.sleep(0.05)
-        assert "done" in results
-
-    async def test_background_task_error_logged(self):
-        from app.core.async_utils import fire_and_forget
-
-        async def failing():
-            raise ValueError("task error")
-
-        fire_and_forget(failing())
-        await asyncio.sleep(0.05)
-
-    def test_no_running_loop_fallback(self):
-        """When there's no running event loop, fire_and_forget falls back."""
-        from app.core.async_utils import fire_and_forget
-
-        results = []
-
-        async def record():
-            results.append("done")
-
-        # Outside async context — no running loop
-        fire_and_forget(record())
-        assert "done" in results
-
-    def test_no_running_loop_error_logged(self):
-        from app.core.async_utils import fire_and_forget
-
-        async def failing():
-            raise ValueError("fallback error")
-
-        fire_and_forget(failing())
-
-    def test_sync_fallback_asyncio_run_raises(self):
-        """Covers lines 119-120: asyncio.run itself fails in sync fallback."""
-        from app.core import async_utils as m
-
-        async def dummy():
-            pass
-
-        with patch.object(m, "asyncio") as mock_asyncio:
-            mock_asyncio.get_running_loop.side_effect = RuntimeError("no loop")
-            mock_asyncio.run.side_effect = ValueError("run failed")
-
-            m.fire_and_forget(dummy())
 
 
 class TestGetEventLoopSafe:

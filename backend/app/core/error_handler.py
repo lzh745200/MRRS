@@ -5,9 +5,9 @@ registering FastAPI exception handlers.
 """
 
 import logging
-from typing import Any, Callable, Dict, Optional
 
-from fastapi import FastAPI, Request
+from typing import Any, Dict, Optional
+
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
@@ -77,27 +77,11 @@ def not_found_response(
     )
 
 
-def bad_request_response(message: str = "请求参数错误") -> JSONResponse:
-    """Return a standard 400 JSON response."""
-    return JSONResponse(
-        status_code=400,
-        content=error_response(400, message),
-    )
-
-
 def forbidden_response(message: str = "无权访问") -> JSONResponse:
     """Return a standard 403 JSON response."""
     return JSONResponse(
         status_code=403,
         content=error_response(403, message),
-    )
-
-
-def conflict_response(message: str = "数据冲突") -> JSONResponse:
-    """Return a standard 409 JSON response."""
-    return JSONResponse(
-        status_code=409,
-        content=error_response(409, message),
     )
 
 
@@ -114,59 +98,9 @@ def server_error_response(message: str = "服务器内部错误") -> JSONRespons
 # ---------------------------------------------------------------------------
 
 
-def register_handlers(
-    app: FastAPI,
-    *,
-    extra_handlers: Optional[Dict[type[Exception], Callable]] = None,
-) -> None:
-    """Register default and extra exception handlers on a FastAPI app.
-
-    Args:
-        app: The FastAPI application instance.
-        extra_handlers: Optional mapping of exception class -> handler coroutine.
-    """
-    # The main exception handler registration is performed in
-    # :mod:`app.core.exceptions`.  This function serves as a convenience
-    # wrapper that can optionally add extra handlers.
-    try:
-        from app.core.exceptions import register_exception_handlers
-
-        register_exception_handlers(app)
-    except ImportError:  # pragma: no cover
-        logger.debug("app.core.exceptions not found; skipping default handlers")
-        # Register a minimal fallback
-
-        @app.exception_handler(Exception)
-        async def _global_handler(request: Request, exc: Exception) -> JSONResponse:
-            logger.error("Unhandled exception: %s", exc, exc_info=True)
-            return server_error_response()
-
-    if extra_handlers:
-        for exc_class, handler in extra_handlers.items():
-            app.add_exception_handler(exc_class, handler)
-
-
 # ---------------------------------------------------------------------------
 # Convenience: handle known HTTP status subclasses
 # ---------------------------------------------------------------------------
-
-
-def http_status_to_message(status_code: int) -> str:
-    """Return a default Chinese message for common HTTP status codes."""
-    messages = {
-        400: "请求参数错误",
-        401: "未认证",
-        403: "无权访问",
-        404: "资源不存在",
-        405: "不允许的请求方法",
-        409: "数据冲突",
-        422: "请求参数验证失败",
-        429: "请求过于频繁",
-        500: "服务器内部错误",
-        502: "网关错误",
-        503: "服务不可用",
-    }
-    return messages.get(status_code, f"HTTP {status_code}")
 
 
 class BusinessLogicError(AppError):

@@ -28,18 +28,11 @@ class TestResponseModule:
         assert r["code"] == 400
         assert r["success"] is False
 
-    def test_validation_error(self):
-        from app.core.response import validation_error_response
-        r = validation_error_response()
-        assert r["code"] == 422
 
     def test_not_found(self):
         from app.core.response import not_found_response
         assert not_found_response()["code"] == 404
 
-    def test_unauthorized(self):
-        from app.core.response import unauthorized_response
-        assert unauthorized_response()["code"] == 401
 
     def test_forbidden(self):
         from app.core.response import forbidden_response
@@ -60,10 +53,6 @@ class TestResponseModule:
         pm = PaginationMeta.from_pagination(1, 0, 10)
         assert pm.total_pages == 0
 
-    def test_api_response(self):
-        from app.core.response import ApiResponse
-        r = ApiResponse.success(data="ok")
-        assert r["code"] == 200
 
 
 class TestPasswordPolicy:

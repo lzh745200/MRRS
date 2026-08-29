@@ -78,10 +78,9 @@ def test_h11():
 
 
 def test_h12():
-    from app.core.permission_utils import is_admin, check_org_access
+    from app.core.permission_utils import is_admin
 
     assert callable(is_admin)
-    assert callable(check_org_access)
 
 
 def test_h13():

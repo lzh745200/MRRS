@@ -146,19 +146,9 @@ def success_response(
     return resp
 
 
-def validation_error_response(errors: Any = None, message: str = "请求参数验证失败") -> Dict:
-    """生成验证错误响应 (422)"""
-    return error_response(code=422, message=message, errors=errors)
-
-
 def not_found_response(message: str = "资源不存在", detail: Any = None) -> Dict:
     """生成未找到响应 (404)"""
     return error_response(code=404, message=message, detail=detail)
-
-
-def unauthorized_response(message: str = "未授权，请先登录") -> Dict:
-    """生成未授权响应 (401)"""
-    return error_response(code=401, message=message)
 
 
 def forbidden_response(message: str = "无权限访问") -> Dict:
@@ -171,36 +161,5 @@ def server_error_response(message: str = "服务器内部错误", detail: Any = 
     return error_response(code=500, message=message, detail=detail)
 
 
-class ApiResponse:
-    """API 响应工具类"""
-
-    @staticmethod
-    def success(data: Any = None, message: str = "success", **kwargs) -> Dict:
-        return success_response(data=data, message=message, **kwargs)
-
-    @staticmethod
-    def error(code: int = 400, message: str = "error", **kwargs) -> Dict:
-        return error_response(code=code, message=message, **kwargs)
-
-    @staticmethod
-    def paginated(data: List[Any], pagination: PaginationMeta, message: str = "success") -> Dict:
-        return paginated_response(data=data, pagination=pagination, message=message)
-
-
 # 向后兼容别名
 ErrorResponse = error_response
-
-
-@dataclass
-class ErrorDetail:
-    """错误详情数据类"""
-    field: str = ""
-    message: str = ""
-    type: str = ""
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "field": self.field,
-            "message": self.message,
-            "type": self.type,
-        }

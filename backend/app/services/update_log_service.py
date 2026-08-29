@@ -513,8 +513,3 @@ class UpdateLogService:
             }
 
         return None  # 版本未变更
-
-
-def get_update_log_service(db: Session) -> UpdateLogService:
-    """获取更新日志服务实例"""
-    return UpdateLogService(db)

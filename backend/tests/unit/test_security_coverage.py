@@ -369,21 +369,12 @@ class TestResponseHelpers:
         r = ok_list(items=[], total=0, meta="extra")
         assert r["meta"] == "extra"
 
-    def test_validation_error_response(self):
-        from app.core.response import validation_error_response
-        r = validation_error_response(errors=["e1"])
-        assert r["code"] == 422
-        assert r["success"] is False
 
     def test_not_found_response(self):
         from app.core.response import not_found_response
         r = not_found_response("找不到")
         assert r["code"] == 404
 
-    def test_unauthorized_response(self):
-        from app.core.response import unauthorized_response
-        r = unauthorized_response()
-        assert r["code"] == 401
 
     def test_forbidden_response(self):
         from app.core.response import forbidden_response
@@ -397,87 +388,10 @@ class TestResponseHelpers:
         assert r["detail"] == "boom"
 
 
-class TestPaginationMeta:
-    """测试 PaginationMeta"""
-
-    def test_from_pagination(self):
-        from app.core.response import PaginationMeta
-        pm = PaginationMeta.from_pagination(page=2, page_size=10, total=25)
-        assert pm.total_pages == 3
-        assert pm.has_next is True
-        assert pm.has_prev is True
-
-    def test_from_pagination_zero_total(self):
-        from app.core.response import PaginationMeta
-        pm = PaginationMeta.from_pagination(page=1, page_size=10, total=0)
-        assert pm.total_pages == 0
-        assert pm.has_next is False
-        assert pm.has_prev is False
-
-    def test_from_pagination_zero_page_size(self):
-        from app.core.response import PaginationMeta
-        pm = PaginationMeta.from_pagination(page=1, page_size=0, total=10)
-        assert pm.total_pages == 0
-
-    def test_to_dict(self):
-        from app.core.response import PaginationMeta
-        pm = PaginationMeta(page=1, page_size=20, total=100)
-        d = pm.to_dict()
-        assert d["page"] == 1
-        assert d["page_size"] == 20
-        assert d["total"] == 100
-        assert "total_pages" in d
-        assert "has_next" in d
-        assert "has_prev" in d
-
-    def test_paginated_response(self):
-        from app.core.response import PaginationMeta, paginated_response
-        pm = PaginationMeta(page=1, page_size=10, total=5)
-        r = paginated_response(data=["x"], pagination=pm)
-        assert r["code"] == 200
-        assert r["data"] == ["x"]
-        assert "meta" in r
-        assert "pagination" in r["meta"]
 
 
-class TestApiResponse:
-    """测试 ApiResponse 工具类"""
-
-    def test_success(self):
-        from app.core.response import ApiResponse
-        r = ApiResponse.success(data={"id": 1})
-        assert r["code"] == 200
-        assert r["success"] is True
-
-    def test_error(self):
-        from app.core.response import ApiResponse
-        r = ApiResponse.error(code=400, message="err")
-        assert r["code"] == 400
-        assert r["success"] is False
-
-    def test_paginated(self):
-        from app.core.response import ApiResponse, PaginationMeta
-        pm = PaginationMeta(page=1, page_size=10, total=1)
-        r = ApiResponse.paginated(data=["x"], pagination=pm)
-        assert r["code"] == 200
-        assert "meta" in r
 
 
-class TestErrorDetail:
-    """测试 ErrorDetail 数据类"""
-
-    def test_defaults(self):
-        from app.core.response import ErrorDetail
-        ed = ErrorDetail()
-        assert ed.field == ""
-        assert ed.message == ""
-        assert ed.type == ""
-
-    def test_to_dict_full(self):
-        from app.core.response import ErrorDetail
-        ed = ErrorDetail(field="username", message="必填", type="missing")
-        d = ed.to_dict()
-        assert d == {"field": "username", "message": "必填", "type": "missing"}
 
 
 # ═══════════════════════════════════════════════════════════

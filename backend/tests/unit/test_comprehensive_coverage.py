@@ -263,16 +263,8 @@ def test_not_found_response():
     assert result['code'] == 404
 
 
-def test_unauthorized_response():
-    from app.core.response import unauthorized_response
-    result = unauthorized_response()
-    assert result['code'] == 401
 
 
-def test_validation_error_response():
-    from app.core.response import validation_error_response
-    result = validation_error_response(message='invalid')
-    assert result['code'] == 422
 
 
 def test_server_error_response():
@@ -289,12 +281,6 @@ def test_paginated_response():
     assert result['meta']['pagination']['total'] == 25
 
 
-def test_api_response_class():
-    from app.core.response import ApiResponse
-    r = ApiResponse.success(data={'x': 1})
-    assert r['code'] == 200
-    r2 = ApiResponse.error(code=500, message='fail')
-    assert r2['code'] == 500
 
 
 # ══════════════════════════════════════════════════════════════

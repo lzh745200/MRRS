@@ -45,16 +45,6 @@ class ReportStatusError(BusinessError):
         self.expected_status = expected_status
 
 
-class ReportPermissionError(BusinessError):
-    """上报权限错误"""
-
-    def __init__(self, user_id: int, report_id: int, action: str):
-        super().__init__(f"用户 {user_id} 无权{action}上报 {report_id}")
-        self.user_id = user_id
-        self.report_id = report_id
-        self.action = action
-
-
 class NotificationService:
     """通知服务（简化实现）"""
 

@@ -28,15 +28,6 @@ class TestExceptions:
         assert error.current_status == "DRAFT"
         assert error.expected_status == "APPROVED"
 
-    def test_report_permission_error(self):
-        """测试上报权限错误"""
-        from app.services.data_report_service import ReportPermissionError
-
-        error = ReportPermissionError(1, 123, "审批")
-        assert "无权" in str(error)
-        assert error.user_id == 1
-        assert error.report_id == 123
-        assert error.action == "审批"
 
 class TestNotificationService:
     """测试 NotificationService 类"""

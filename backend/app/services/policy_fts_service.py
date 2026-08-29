@@ -3,7 +3,6 @@
 使用 SQLite FTS5 虚拟表实现全文索引，支持 BM25 排序和结果摘要。
 """
 import logging
-import re
 from typing import Any, Dict, List
 
 from sqlalchemy import text
@@ -106,25 +105,6 @@ def search_policies_fts(
         }
         for r in rows
     ]
-
-
-def highlight_keywords(text: str, keyword: str) -> str:
-    """在文本中高亮关键词（<mark> 标签包裹）.
-
-    已包含 <mark> 标记的文本会跳过重复包裹.
-    """
-    if not keyword or not text:
-        return text
-    # 跳过已有 mark 标签的
-    if "<mark>" in text:
-        return text
-    escaped = re.escape(keyword)
-    return re.sub(
-        f"({escaped})",
-        r"<mark>\1</mark>",
-        text,
-        flags=re.IGNORECASE,
-    )
 
 
 def sync_policy_to_fts(db: Session, policy_id: int) -> None:

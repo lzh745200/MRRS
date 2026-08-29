@@ -98,28 +98,6 @@ async def delay(seconds: float) -> None:
     await asyncio.sleep(seconds)
 
 
-def fire_and_forget(coro: Coroutine) -> None:
-    """Schedule a coroutine to run in the background; ignore its result and errors.
-
-    Errors are logged at warning level so they are not silently lost.
-    """
-    async def _wrapper() -> None:
-        try:
-            await coro
-        except Exception:
-            logger.warning("Background task failed", exc_info=True)
-
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(_wrapper())
-    except RuntimeError:
-        # No running event loop – fall back to asyncio.run()
-        try:
-            asyncio.run(_wrapper())
-        except Exception:
-            logger.warning("Background task (sync fallback) failed", exc_info=True)
-
-
 _cached_loop: Optional[asyncio.AbstractEventLoop] = None
 
 

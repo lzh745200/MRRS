@@ -269,26 +269,6 @@ def require_organization(func=None, *, org_param: str = "organization_id"):
     return wrapper
 
 
-def check_org_access(user, target_org_id: int) -> bool:
-    """检查用户是否有权访问目标组织的数据。
-
-    Args:
-        user: 用户对象
-        target_org_id: 目标组织ID
-
-    Returns:
-        bool: 是否有访问权限
-    """
-    if user is None:
-        return False
-
-    if is_admin(user):
-        return True
-
-    user_org_id = get_user_org_id(user)
-    return user_org_id is not None and user_org_id == target_org_id
-
-
 def require_permission(permission: str):
     """权限检查装饰器
 

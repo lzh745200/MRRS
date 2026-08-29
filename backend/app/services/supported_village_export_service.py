@@ -4,7 +4,6 @@
 支持多模块选择性导出（人口、收入、经费、基础设施等），输出 Excel 格式。
 """
 
-import enum
 import io
 import logging
 from datetime import datetime
@@ -15,26 +14,6 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
-
-
-class ExportFormat(str, enum.Enum):
-    XLSX = "xlsx"
-    CSV = "csv"
-
-
-class ExportModule(str, enum.Enum):
-    POPULATION = "population"
-    INCOME = "income"
-    FORCE_INVESTMENT = "force_investment"
-    INDUSTRY_SUPPORT = "industry_support"
-    INFRASTRUCTURE = "infrastructure"
-    PARTY_BUILDING = "party_building"
-    MEDICAL = "medical"
-    CONSUMPTION = "consumption"
-    EMPLOYMENT = "employment"
-    EDUCATION = "education"
-    SUPPORT_FUNDING = "support_funding"
-    COMMITTEE = "committee"
 
 
 MODULE_NAMES = {

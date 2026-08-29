@@ -228,56 +228,6 @@ class TestResourceLimiter:
         assert stats.allowed_requests == 0
         assert stats.denied_requests == 1
 
-class TestGlobalFunctions:
-    """测试全局函数"""
-
-    def test_check_rate_limit(self):
-        """测试检查速率限制"""
-        from app.services.resource_limiter import check_rate_limit
-
-        # 第一个请求应该被允许
-        result = check_rate_limit("global_key", limit=2, window=60)
-        assert result is True
-
-    def test_check_rate_limit_exceeded(self):
-        """测试检查速率限制 - 超出"""
-        from app.services.resource_limiter import check_rate_limit
-
-        key = "limited_key"
-        # 设置限制并超出
-        check_rate_limit(key, limit=1, window=60)
-        check_rate_limit(key, limit=1, window=60)  # 设置配额
-        result = check_rate_limit(key, limit=1, window=60)  # 第3次调用会重新设置但限制是1
-
-    def test_get_remaining_quota_with_quota(self):
-        """测试获取剩余配额 - 有配额"""
-        from app.services.resource_limiter import get_remaining_quota, check_rate_limit
-
-        key = "quota_key"
-        check_rate_limit(key, limit=10, window=60)
-
-        remaining = get_remaining_quota(key)
-        # 已使用1次，剩余9次
-        assert remaining == 9
-
-    def test_get_remaining_quota_no_quota(self):
-        """测试获取剩余配额 - 无配额"""
-        from app.services.resource_limiter import get_remaining_quota
-
-        remaining = get_remaining_quota("no_quota_key")
-        assert remaining == -1
-
-    def test_reset_rate_limit(self):
-        """测试重置速率限制"""
-        from app.services.resource_limiter import reset_rate_limit, check_rate_limit, get_remaining_quota
-
-        key = "reset_key"
-        check_rate_limit(key, limit=5, window=60)
-
-        reset_rate_limit(key)
-
-        remaining = get_remaining_quota(key)
-        assert remaining == -1
 
 class TestGlobalInstance:
     """测试全局实例"""

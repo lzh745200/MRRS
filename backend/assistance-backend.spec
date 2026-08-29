@@ -191,7 +191,6 @@ hiddenimports += [
     'app.api.v1.machine_code',
     'app.api.v1.effectiveness',
     'app.api.v1.sentiment',
-    'app.api.v1.messages_extended',
     'app.api.v1.encryption',
     'app.api.v1.search',
     'app.api.v1.menus',

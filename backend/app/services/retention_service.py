@@ -81,14 +81,3 @@ def purge_expired_soft_deleted(db, days: int | None = None) -> dict:
 
     logger.info("回收站保留期策略执行完成：%s", summary)
     return summary
-
-
-def retention_job():
-    """定时任务入口（每日一次）。"""
-    from app.core.database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        purge_expired_soft_deleted(db)
-    finally:
-        db.close()

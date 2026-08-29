@@ -10,8 +10,8 @@ Fund 业务服务层 (优化版)
 """
 
 import logging
-from dataclasses import dataclass, field, asdict
-from typing import Optional, List, Dict, Any, TYPE_CHECKING
+
+from typing import Optional, List, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.schemas.fund import FundCreate  # noqa: F401 — type hint only
@@ -291,65 +291,6 @@ class FundService:
 # ============================================================================
 # Backward-compat stubs (现代化重构：使用 dataclasses 替代老旧的 class)
 # ============================================================================
-
-def calculate_utilization_rate(actual: float, planned: float) -> float:
-    """经费使用率 = min(实际/计划 * 100, 100)，planned≤0 且 actual>0 时返回100"""
-    if planned <= 0:
-        return 100.0 if actual > 0 else 0.0
-    return min(actual / planned * 100.0, 100.0)
-
-
-def calculate_total_from_yearly_values(values: list) -> float:
-    """年度值列表求和，忽略 None"""
-    return sum(v for v in values if v is not None)
-
-
-@dataclass
-class FundStatistics:
-    """经费统计数据结构 (Dataclass 优化版，自带 __init__ 和 __repr__)"""
-    fund_type: str
-    fund_type_label: str
-    military_investment: float = 0.0
-    local_investment: float = 0.0
-    planned_investment: float = 0.0
-    total_investment: float = 0.0
-    utilization_rate: float = 0.0
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        for k in ["military_investment", "local_investment", "planned_investment",
-                  "total_investment"]:
-            data[k] = round(data[k], 4)
-        # 利用率为百分比，保持2位
-        data["utilization_rate"] = round(data["utilization_rate"], 2)
-        return data
-
-
-@dataclass
-class YearlyFundSummary:
-    """年度经费汇总 (Dataclass 优化版)"""
-    year: int
-    total_military: float = 0.0
-    total_local: float = 0.0
-    total_planned: float = 0.0
-    total_actual: float = 0.0
-    utilization_rate: float = 0.0
-    by_type: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        for k in ["total_military", "total_local", "total_planned",
-                  "total_actual"]:
-            data[k] = round(data[k], 4)
-        # 利用率为百分比，保持2位
-        data["utilization_rate"] = round(data["utilization_rate"], 2)
-
-        # 递归转换 by_type
-        data["by_type"] = {
-            k: v.to_dict() if hasattr(v, "to_dict") else v
-            for k, v in self.by_type.items()
-        }
-        return data
 
 
 FUND_TYPES = {

@@ -68,20 +68,6 @@ class _ValidationError(AppError):
 ValidationError = _ValidationError
 
 
-class AuthenticationError(AppError):
-    """Authentication required."""
-
-    def __init__(self, message: str = "认证失败"):
-        super().__init__(message, 401)
-
-
-class AuthorizationError(AppError):
-    """Insufficient permissions."""
-
-    def __init__(self, message: str = "权限不足"):
-        super().__init__(message, 403)
-
-
 class NotFoundError(AppError):
     """Resource not found."""
 
@@ -104,57 +90,6 @@ class DatabaseError(AppError):
 
     def __init__(self, message: str = "数据库操作失败"):
         super().__init__(message, 500)
-
-
-class UserNotFoundError(AppError):
-    """User not found."""
-
-    def __init__(self, username: str = ""):
-        msg = f"用户({username})不存在" if username else "用户不存在"
-        super().__init__(msg, 404)
-
-
-class UserLockedError(AppError):
-    """Account locked."""
-
-    def __init__(self, duration: str = ""):
-        msg = f"账户已锁定，请{duration}后再试" if duration else "账户已被锁定"
-        super().__init__(msg, 403)
-
-
-class PasswordValidationError(AppError):
-    """Password validation failure."""
-
-    def __init__(self, message: str = "密码验证失败"):
-        super().__init__(message, 400)
-
-
-class FileUploadError(AppError):
-    """File upload error."""
-
-    def __init__(self, message: str = "文件上传失败", details: dict | None = None):
-        super().__init__(message, 400, details=details)
-
-
-class BackupError(AppError):
-    """Backup operation error."""
-
-    def __init__(self, message: str = "备份操作失败"):
-        super().__init__(message, 500)
-
-
-class RestoreError(AppError):
-    """Restore operation error."""
-
-    def __init__(self, message: str = "恢复操作失败"):
-        super().__init__(message, 500)
-
-
-class BackupNotFoundError(AppError):
-    """Backup not found."""
-
-    def __init__(self, message: str = "备份文件不存在"):
-        super().__init__(message, 404)
 
 
 class InvalidCredentialsError(BusinessError):
@@ -181,21 +116,6 @@ class NotFoundException(BusinessError):
 class AuthenticationException(BusinessError):
     def __init__(self, msg="Authentication failed"):
         super().__init__(msg, 401)
-
-
-class ForbiddenException(BusinessError):
-    def __init__(self, msg="Forbidden"):
-        super().__init__(msg, 403)
-
-
-def exc_paginated_response(items: list, total: int, page: int, page_size: int) -> dict:
-    """Build a paginated response dict (backward compat)."""
-    return {
-        "items": items,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    }
 
 
 # ── Exception handlers ──

@@ -6,7 +6,6 @@ filename sanitization.
 """
 
 import logging
-import os
 import re
 from pathlib import Path
 from typing import Optional, Set, Tuple
@@ -166,78 +165,11 @@ def validate_content_safety(
 # ---------------------------------------------------------------------------
 
 
-def full_upload_validation(
-    filename: str,
-    file_size: int,
-    content: bytes,
-    *,
-    mime_type: Optional[str] = None,
-    max_bytes: int = 50 * 1024 * 1024,
-    allowed_extensions: Optional[Set[str]] = None,
-) -> Tuple[bool, str]:
-    """Run all security validations on an uploaded file.
-
-    Args:
-        filename: Original filename.
-        file_size: File size in bytes.
-        content: Raw file bytes.
-        mime_type: Detected MIME type. If *None*, MIME validation is
-            skipped.
-        max_bytes: Maximum allowed size in bytes.
-        allowed_extensions: Optional custom extension set.
-
-    Returns:
-        ``(True, "")`` if the file passes all checks, otherwise
-        ``(False, error_message)``.
-    """
-    # 1. Extension
-    ok, err = validate_extension(filename, allowed_extensions=allowed_extensions)
-    if not ok:
-        return False, err
-
-    # 2. Size
-    ok, err = validate_file_size(file_size, max_bytes=max_bytes)
-    if not ok:
-        return False, err
-
-    # 3. MIME (optional)
-    if mime_type:
-        ok, err = validate_mime_type(mime_type)
-        if not ok:
-            return False, err
-
-    # 4. Content safety
-    ok, err = validate_content_safety(content)
-    if not ok:
-        return False, err
-
-    return True, ""
-
-
 # ---------------------------------------------------------------------------
 # Filename sanitization
 # ---------------------------------------------------------------------------
 
 _SAFE_NAME_RE = re.compile(r"[^a-zA-Z0-9._\-一-鿿]")
-
-
-def sanitize_upload_filename(filename: str) -> str:
-    """Sanitize a user-provided filename for safe storage.
-
-    Args:
-        filename: Original upload filename.
-
-    Returns:
-        A safe filename string (non-ASCII chars preserved, dangerous
-        characters replaced with underscores).
-    """
-    name, ext = os.path.splitext(filename)
-    ext = ext.lower()
-    safe_name = _SAFE_NAME_RE.sub("_", name)
-    safe_name = re.sub(r"_+", "_", safe_name).strip("_")
-    if not safe_name:
-        safe_name = "upload"
-    return f"{safe_name}{ext}"
 
 
 def validate_excel_upload(file):

@@ -30,18 +30,3 @@ class TestPolicyFTSService:
         assert len(result) >= 1
 
 
-class TestKeywordHighlight:
-    def test_highlight_single_match(self):
-        from app.services.policy_fts_service import highlight_keywords
-        result = highlight_keywords("这是军人抚恤优待条例", "抚恤")
-        assert "<mark>" in result
-
-    def test_highlight_multiple_matches(self):
-        from app.services.policy_fts_service import highlight_keywords
-        result = highlight_keywords("乡村振兴 乡村发展 乡村建设", "乡村")
-        assert result.count("<mark>") == 3
-
-    def test_highlight_no_match(self):
-        from app.services.policy_fts_service import highlight_keywords
-        result = highlight_keywords("普通文本", "不存在的词")
-        assert result == "普通文本"

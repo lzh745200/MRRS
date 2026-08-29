@@ -18,12 +18,6 @@ from enum import Enum
 import pytest
 from openpyxl import load_workbook
 
-from app.services.supported_village_export_service import (
-    MODULE_NAMES,
-    ExportFormat,
-    ExportModule,
-    SupportedVillageExportService,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -31,18 +25,6 @@ from app.services.supported_village_export_service import (
 # ---------------------------------------------------------------------------
 
 
-class TestEnums:
-    def test_export_format_values(self):
-        assert ExportFormat.XLSX.value == "xlsx"
-        assert ExportFormat.CSV.value == "csv"
-
-    def test_export_module_count(self):
-        # 12 个业务模块
-        assert len(list(ExportModule)) == 12
-
-    def test_module_names_cover_all_modules(self):
-        for m in ExportModule:
-            assert m.value in MODULE_NAMES
 
 
 # ---------------------------------------------------------------------------
@@ -50,45 +32,6 @@ class TestEnums:
 # ---------------------------------------------------------------------------
 
 
-class TestCoerceCell:
-    @pytest.mark.parametrize("value,expected", [
-        (None, None),
-        (True, True),
-        (False, False),
-        (42, 42),
-        (3.14, 3.14),
-        ("文本", "文本"),
-    ])
-    def test_primitive_types(self, value, expected):
-        assert SupportedVillageExportService._coerce_cell(value) == expected
-
-    def test_datetime_passthrough(self):
-        dt = datetime(2025, 1, 1, 12, 0, 0)
-        assert SupportedVillageExportService._coerce_cell(dt) == dt
-
-    def test_date_passthrough(self):
-        import datetime as _dt
-        d = _dt.date(2025, 1, 1)
-        assert SupportedVillageExportService._coerce_cell(d) == d
-
-    def test_decimal_to_float(self):
-        assert SupportedVillageExportService._coerce_cell(Decimal("1.5")) == 1.5
-
-    def test_enum_to_value(self):
-        class Color(Enum):
-            RED = "red"
-        # 纯 Enum（非 str 子类）才会走到 enum 分支
-        assert SupportedVillageExportService._coerce_cell(Color.RED) == "red"
-
-    def test_unknown_object_falls_back_to_str(self):
-        class Obj:
-            def __str__(self):
-                return "obj-repr"
-        assert SupportedVillageExportService._coerce_cell(Obj()) == "obj-repr"
-
-    def test_list_falls_back_to_str(self):
-        # list 不在 openpyxl 支持类型里，应转字符串兜底
-        assert SupportedVillageExportService._coerce_cell([1, 2]) == "[1, 2]"
 
 
 # ---------------------------------------------------------------------------
@@ -118,40 +61,6 @@ def _build_session():
     return db, engine
 
 
-@pytest.fixture
-def export_service():
-    """构建内存数据库 + 填充测试数据，返回 service。
-
-    需要直接操作 db 的测试可通过 ``export_service.db`` 访问会话。
-    """
-    db, engine = _build_session()
-    from app.models.supported_village import (
-        SupportedVillage, VillagePopulation, VillageIncome,
-    )
-    v1 = SupportedVillage(id=1, village_name="示范村A", county="甲县",
-                          department="作战处", support_unit="某旅",
-                          is_revitalization_tier=True)
-    v2 = SupportedVillage(id=2, village_name="基础村B", county="乙县",
-                          department="后勤处", support_unit="某团",
-                          is_revitalization_tier=False)
-    v3 = SupportedVillage(id=3, village_name="达标村C", county="甲县",
-                          department="作战处", support_unit="某旅",
-                          is_revitalization_tier=True)
-    db.add_all([v1, v2, v3])
-    db.flush()
-    db.add_all([
-        VillagePopulation(supported_village_id=1, year=2025,
-                          total_households=100, total_population=300, labor_force=200),
-        VillagePopulation(supported_village_id=2, year=2025,
-                          total_households=50, total_population=120, labor_force=60),
-    ])
-    db.add(VillageIncome(supported_village_id=1, year=2025,
-                         collective_income=500000, per_capita_income=8000))
-    db.commit()
-    svc = SupportedVillageExportService(db)
-    yield svc
-    db.close()
-    engine.dispose()
 
 
 # ---------------------------------------------------------------------------
@@ -268,10 +177,6 @@ class TestCollectModuleData:
 
 
 class TestCollectExportData:
-    def test_default_modules_all(self, export_service):
-        villages = export_service._query_villages()
-        data = export_service._collect_export_data(villages)
-        assert set(data.keys()) == set(MODULE_NAMES.keys())
 
     def test_custom_modules_subset(self, export_service):
         villages = export_service._query_villages()

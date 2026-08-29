@@ -4,7 +4,6 @@
 
 import json
 from typing import Any, Dict, Optional
-from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
@@ -18,15 +17,6 @@ ConfigKey = str
 
 # 配置值类型
 ConfigValue = str
-
-
-@dataclass
-class ConfigEntry:
-    """配置条目"""
-
-    key: ConfigKey
-    value: ConfigValue
-    description: str = ""
 
 
 # 全局服务实例（可选注入；未注入时全局函数使用独立短会话）
@@ -71,17 +61,6 @@ def delete_config(key: str):
     db = _config_session()
     try:
         SystemConfigService(db).delete(key)
-    finally:
-        db.close()
-
-
-def list_configs() -> Dict[str, str]:
-    """列出所有配置（全局函数）"""
-    if _global_config_service is not None:
-        return _global_config_service.get_all()
-    db = _config_session()
-    try:
-        return SystemConfigService(db).get_all()
     finally:
         db.close()
 

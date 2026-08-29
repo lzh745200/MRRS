@@ -43,12 +43,6 @@ class TestPackageValidationError:
         assert "err1" in str(err)
 
 
-class TestPackageVersionUnsupportedError:
-    async     def test_init(self):
-        from app.services.data_package_service import PackageVersionUnsupportedError
-        err = PackageVersionUnsupportedError("2.0")
-        assert "2.0" in str(err)
-        assert err.version == "2.0"
 
 
 class TestDataPackageService:

@@ -9,9 +9,6 @@ class TestDataIsolationSmoke:
         assert DataScope.ALL in (DataScope.ALL, DataScope.OWN, DataScope.OWN_DEPT)
 
 
-    def test_check_org_access_exists(self):
-        from app.core.permission_utils import check_org_access
-        assert callable(check_org_access)
 
     def test_is_admin_exists(self):
         from app.core.permission_utils import is_admin
@@ -41,7 +38,3 @@ class TestOrganizationDataIsolation:
         result = is_admin(regular_user)
         assert result in (True, False)
 
-    def test_org_access_check_no_user(self):
-        """check_org_access with None user returns False."""
-        from app.core.permission_utils import check_org_access
-        assert check_org_access(None, 1) is False

@@ -550,15 +550,3 @@ def stop_backup_scheduler():
     _timers.clear()
     _scheduler_started = False
     logger.info("调度器已停止")
-
-
-def get_scheduler_status():
-    """获取调度器状态"""
-    return {
-        "running": _scheduler_started,
-        "jobs": [
-            {"id": t.name, "name": t.name, "next_run_time": None}
-            for t in _timers
-            if t.is_alive()
-        ],
-    }

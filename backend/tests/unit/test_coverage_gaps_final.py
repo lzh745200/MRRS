@@ -1257,10 +1257,6 @@ class TestErrorHandler:
         assert resp["code"] == 404
         assert resp["success"] is False
 
-    def test_register_handlers(self):
-        from app.core.error_handler import register_handlers
-        app = MagicMock()
-        register_handlers(app)
 
 
 # ===================================================================

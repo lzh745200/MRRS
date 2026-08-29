@@ -155,26 +155,5 @@ query_analyzer = QueryAnalyzer()
 # 查询性能监控装饰器
 
 
-def monitor_query_performance(threshold_ms: float = 200.0):
-    """查询性能监控装饰器"""
-
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            start_time = time.time()
-
-            try:
-                result = func(*args, **kwargs)
-                return result
-            finally:
-                duration_ms = (time.time() - start_time) * 1000
-
-                if duration_ms > threshold_ms:
-                    query_analyzer.log_slow_query(query=func.__name__, duration_ms=duration_ms, params=kwargs)
-
-        return wrapper
-
-    return decorator
-
-
 # 为测试兼容性添加别名
 QueryAnalyzerService = QueryAnalyzer
