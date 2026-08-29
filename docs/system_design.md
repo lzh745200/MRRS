@@ -1,5 +1,11 @@
 # 帮扶管理信息系统 — Windows x64/x86 离线安装包打包方案（系统设计）
 
+> ⚠️ **历史方案存档（2026-08-29 注）**: 本文描述的是早期 x64/x86 双架构 conda 方案。
+> 现役流水线为 x64 单架构（PyInstaller + electron-builder，无 conda/environment.yml，
+> 见 .github/workflows/build-windows.yml）。文中 environment.yml、x86 matrix、
+> conda 缓存等描述已过时，仅作设计决策参考。
+
+
 > 架构师：高见远（Gao）
 > 版本：1.0
 > 日期：2026-06-24

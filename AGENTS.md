@@ -14,7 +14,7 @@ FastAPI + Vue 3 + Electron + SQLite. Windows primary, Linux ARM64 (Kylin V10) se
 ```bash
 cd backend
 .venv\\Scripts\\python start.py                          # Start server (http://localhost:8000)
-python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (12613)
+python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~10100, 死代码清理后)
 python -m pytest tests/unit/test_xxx.py -v              # Run single test file
 python -m flake8 app/ --max-line-length=120             # Lint (CI gate, 0 errors)
 python -m mypy app/ --config-file=mypy.ini --ignore-missing-imports  # Type check (non-blocking)
@@ -26,7 +26,7 @@ python -m bandit -r app/ -ll                            # Security scan
 ```bash
 cd frontend
 npm run dev                                             # Dev server (http://localhost:5173)
-npm run test -- --run                                   # Run all tests (6550, 366 test files)
+npm run test -- --run                                   # Run all tests (~5759, 300 test files, 死代码清理后)
 npx vitest run tests/unit/views/xxx/xxx.test.ts        # Run single test file (tests live under tests/unit/)
 npm run lint                                            # ESLint (CI gate, --max-warnings=0)
 npx vue-tsc --noEmit                                    # Type check (CI gate)
@@ -470,7 +470,7 @@ Every new feature must verify:
 
 ## W1 安全不变量（2026-08-24，违反即回归）
 
-以下约束由回归测试锁定，改动相关代码前必读（详见 docs/adr/0001/0004/0008）：
+以下约束由回归测试锁定，改动相关代码前必读（安全边界详见 docs/adr/0008 破窗恢复；各条的锁定测试以行内路径为准）：
 
 1. **认证唯一出口**：\get_current_user\ 已接入黑名单+类型校验；access token 必带 jti；登出递增 token_version。不要绕过 \	oken_manager.validate_token\ 另建校验路径。
 2. **限流签名 fail-closed**：\check_rate_limit(key, *, request, limit, window)\ —— key 为首个参数且必填，缺失抛 ValueError；禁止位置传参字符串到旧 request 位。

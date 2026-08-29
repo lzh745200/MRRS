@@ -40,43 +40,6 @@ scripts\stop-all.bat
 
 ---
 
-### 🔧 start-backend.bat - 启动后端服务
-
-**功能**：
-- 自动检测并清理端口 8000 冲突
-- 激活 Python 虚拟环境
-- 启动 FastAPI 后端服务
-
-**使用方法**：
-```bash
-scripts\start-backend.bat
-```
-
-**服务地址**：
-- API: http://localhost:8000
-- 文档: http://localhost:8000/docs
-
----
-
-### 🧹 kill-backend.bat - 清理后端端口
-
-**功能**：
-- 查找占用 8000 端口的进程
-- 强制终止这些进程
-- 验证端口是否已释放
-
-**使用方法**：
-```bash
-scripts\kill-backend.bat
-```
-
-**使用场景**：
-- 后端服务异常退出但端口未释放
-- 出现 "端口已被占用" 错误
-- 需要重启后端服务前清理环境
-
----
-
 ## 常见问题
 
 ### Q: 端口被占用怎么办？
@@ -88,7 +51,7 @@ scripts\kill-backend.bat
 ```
 
 **解决方案**：
-1. 使用 `kill-backend.bat` 清理端口
+1. 使用 `stop-all.bat` 清理（会终止后端进程）
 2. 或使用 `start-all.bat`（会自动清理）
 3. 手动清理：
    ```bash
@@ -149,9 +112,9 @@ scripts\start-all.bat
 ## 开发建议
 
 1. **日常开发**：使用 `start-all.bat` 一键启动
-2. **调试后端**：单独使用 `start-backend.bat`，前端手动启动
+2. **调试后端**：单独运行 `cd backend && .venv\Scripts\python start.py`，前端手动启动
 3. **遇到问题**：先用 `stop-all.bat` 停止，再重新启动
-4. **端口冲突**：使用 `kill-backend.bat` 快速清理
+4. **端口冲突**：使用 `stop-all.bat` 清理后按 `netstat -ano | findstr :8000` 手动确认
 
 ---
 
