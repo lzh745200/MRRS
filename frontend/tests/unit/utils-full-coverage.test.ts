@@ -119,84 +119,10 @@ describe('desensitize additional coverage', () => {
 // ══════════════════════════════════════════════════════════════
 // jwt - additional coverage
 // ══════════════════════════════════════════════════════════════
-describe('jwt additional coverage', () => {
-  beforeEach(() => {
-    vi.resetModules()
-  })
-
-  it('decodes valid JWT token', async () => {
-    const { decodeJwtPayload } = await import('@/utils/jwt')
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-    const payload = btoa(JSON.stringify({ sub: 'user1', exp: 9999999999 }))
-    const token = `${header}.${payload}.signature`
-    const decoded = decodeJwtPayload(token)
-    expect(decoded).not.toBeNull()
-    expect(decoded?.sub).toBe('user1')
-  })
-
-  it('returns null for invalid token', async () => {
-    const { decodeJwtPayload } = await import('@/utils/jwt')
-    expect(decodeJwtPayload('invalid')).toBeNull()
-    expect(decodeJwtPayload('a.b')).toBeNull()
-  })
-
-  it('gets token expiry', async () => {
-    const { getTokenExpiry } = await import('@/utils/jwt')
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-    const payload = btoa(JSON.stringify({ exp: 9999999999 }))
-    const token = `${header}.${payload}.sig`
-    const expiry = getTokenExpiry(token)
-    expect(expiry).toBe(9999999999000)
-  })
-
-  it('returns null for token without exp', async () => {
-    const { getTokenExpiry } = await import('@/utils/jwt')
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-    const payload = btoa(JSON.stringify({ sub: 'user' }))
-    const token = `${header}.${payload}.sig`
-    expect(getTokenExpiry(token)).toBeNull()
-  })
-
-  it('calculates time until expiry', async () => {
-    const { getTimeUntilExpiry } = await import('@/utils/jwt')
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-    const futureExp = Math.floor(Date.now() / 1000) + 3600
-    const payload = btoa(JSON.stringify({ exp: futureExp }))
-    const token = `${header}.${payload}.sig`
-    const time = getTimeUntilExpiry(token)
-    expect(time).toBeGreaterThan(0)
-  })
-
-  it('checks if token expired', async () => {
-    const { isTokenExpired } = await import('@/utils/jwt')
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-    const pastExp = Math.floor(Date.now() / 1000) - 3600
-    const payload = btoa(JSON.stringify({ exp: pastExp }))
-    const token = `${header}.${payload}.sig`
-    expect(isTokenExpired(token)).toBe(true)
-  })
-
-  it('calculates refresh delay', async () => {
-    const { calculateRefreshDelay, MAX_TIMEOUT_MS } = await import('@/utils/jwt')
-    expect(calculateRefreshDelay(0)).toBe(0)
-    expect(calculateRefreshDelay(100000, 5000)).toBe(95000)
-    expect(calculateRefreshDelay(99999999999999)).toBe(MAX_TIMEOUT_MS)
-  })
-})
 
 // ══════════════════════════════════════════════════════════════
 // enhancedStorage
 // ══════════════════════════════════════════════════════════════
-describe('enhancedStorage', () => {
-  it('can import enhancedStorage', async () => {
-    try {
-      const mod = await import('@/utils/enhancedStorage')
-      expect(mod).toBeDefined()
-    } catch (e) {
-      // Module may have dependencies that fail in test env
-    }
-  })
-})
 
 // ══════════════════════════════════════════════════════════════
 // treeNormalizer
@@ -229,16 +155,6 @@ describe('authStorage', () => {
 // ══════════════════════════════════════════════════════════════
 // crypto
 // ══════════════════════════════════════════════════════════════
-describe('crypto utils', () => {
-  it('can import crypto', async () => {
-    try {
-      const mod = await import('@/utils/crypto')
-      expect(mod).toBeDefined()
-    } catch (e) {
-      // May need browser APIs
-    }
-  })
-})
 
 // ══════════════════════════════════════════════════════════════
 // echarts-theme

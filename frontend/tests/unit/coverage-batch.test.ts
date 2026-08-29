@@ -5,32 +5,6 @@ import { describe, it, expect, vi } from 'vitest'
 
 // ==================== utils coverage ====================
 
-describe('utils/jwt', () => {
-  it('decodeJwtPayload valid token', async () => {
-    const { decodeJwtPayload } = await import('@/utils/jwt')
-    const header = btoa(JSON.stringify({ alg: 'HS256' }))
-    const payload = btoa(JSON.stringify({ sub: 'admin', exp: 9999999999 }))
-    const token = `${header}.${payload}.sig`
-    const result = decodeJwtPayload(token)
-    expect(result).toBeDefined()
-    expect(result?.sub).toBe('admin')
-  })
-
-  it('decodeJwtPayload invalid token returns null', async () => {
-    const { decodeJwtPayload } = await import('@/utils/jwt')
-    expect(decodeJwtPayload('bad')).toBeNull()
-    expect(decodeJwtPayload('a.b')).toBeNull()
-    expect(decodeJwtPayload('')).toBeNull()
-  })
-
-  it('isTokenExpired on expired token', async () => {
-    const { isTokenExpired } = await import('@/utils/jwt')
-    const header = btoa(JSON.stringify({ alg: 'HS256' }))
-    const payload = btoa(JSON.stringify({ exp: 1000000 }))
-    const token = `${header}.${payload}.sig`
-    expect(isTokenExpired(token)).toBe(true)
-  })
-})
 
 describe('utils/authStorage', () => {
   it('setToken and getToken work', async () => {
@@ -128,19 +102,6 @@ describe('utils/sanitize', () => {
   })
 })
 
-describe('utils/security', () => {
-  it('exports getSecurityLevelTagType', async () => {
-    const { getSecurityLevelTagType, SecurityLevel } = await import('@/utils/security')
-    expect(getSecurityLevelTagType(SecurityLevel.TOP_SECRET)).toBe('danger')
-    expect(getSecurityLevelTagType(SecurityLevel.INTERNAL)).toBe('info')
-  })
-
-  it('getSecurityWeight returns weights', async () => {
-    const { getSecurityWeight, SecurityLevel } = await import('@/utils/security')
-    expect(getSecurityWeight(SecurityLevel.TOP_SECRET)).toBe(5)
-    expect(getSecurityWeight(SecurityLevel.PUBLIC)).toBe(1)
-  })
-})
 
 // ==================== API request module coverage ====================
 

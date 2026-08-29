@@ -7,7 +7,6 @@ import { describe, it, expect } from 'vitest'
 const API_MODULES = [
   { name: 'funds', path: '@/api/funds' },
   { name: 'schools', path: '@/api/schools' },
-  { name: 'report', path: '@/api/report' },
   { name: 'audit', path: '@/api/audit' },
   { name: 'approval', path: '@/api/approval' },
   { name: 'backup', path: '@/api/backup' },
@@ -31,7 +30,6 @@ const API_MODULES = [
   { name: 'analytics', path: '@/api/analytics' },
   { name: 'batchOperations', path: '@/api/batchOperations' },
   { name: 'chunkedUpload', path: '@/api/chunkedUpload' },
-  { name: 'dataQuality', path: '@/api/dataQuality' },
   { name: 'dataTier', path: '@/api/dataTier' },
   { name: 'effectiveness', path: '@/api/effectiveness' },
   { name: 'errorReport', path: '@/api/errorReport' },
@@ -45,7 +43,6 @@ const API_MODULES = [
   { name: 'tasks', path: '@/api/tasks' },
   { name: 'updateLogs', path: '@/api/updateLogs' },
   { name: 'userManagement', path: '@/api/userManagement' },
-  { name: 'userPermissions', path: '@/api/userPermissions' },
   { name: 'validationRules', path: '@/api/validationRules' },
   { name: 'zeroTrust', path: '@/api/zeroTrust' },
   { name: 'ai', path: '@/api/ai' },

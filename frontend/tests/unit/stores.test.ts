@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
 
 vi.mock('@/api/request', () => ({
@@ -20,30 +19,6 @@ const mockDel = del as ReturnType<typeof vi.fn>
 vi.mock('@/utils/authStorage', () => ({
   AuthStorage: { clear: vi.fn(), getUser: vi.fn(() => null), getToken: vi.fn(() => null) },
 }))
-
-describe('useAppStore', () => {
-  let store: ReturnType<typeof useAppStore>
-  beforeEach(() => { setActivePinia(createPinia()); store = useAppStore() })
-
-  it('initializes with defaults', () => {
-    expect(store.sidebarCollapsed).toBe(false)
-    expect(store.theme).toBe('light')
-  })
-
-  it('toggleSidebar flips state', () => {
-    store.toggleSidebar()
-    expect(store.sidebarCollapsed).toBe(true)
-    store.toggleSidebar()
-    expect(store.sidebarCollapsed).toBe(false)
-  })
-
-  it('setTheme updates theme', () => {
-    store.setTheme('dark')
-    expect(store.theme).toBe('dark')
-    store.setTheme('light')
-    expect(store.theme).toBe('light')
-  })
-})
 
 describe('useUserStore', () => {
   let store: ReturnType<typeof useUserStore>

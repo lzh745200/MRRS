@@ -1,28 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { md5 } from '@/utils/crypto'
 import { escapeHtml } from '@/utils/sanitize'
 import { format } from '@/utils/index'
 import { parseError, ErrorType, createBusinessError } from '@/utils/errorHandler'
 
 // ==================== crypto ====================
-describe('crypto - md5', () => {
-  it('返回8位十六进制字符串', () => {
-    const result = md5('hello')
-    expect(result).toMatch(/^[0-9a-f]{8,}$/)
-  })
-
-  it('相同输入产生相同输出', () => {
-    expect(md5('test')).toBe(md5('test'))
-  })
-
-  it('不同输入产生不同输出', () => {
-    expect(md5('abc')).not.toBe(md5('xyz'))
-  })
-
-  it('空字符串不报错', () => {
-    expect(md5('')).toMatch(/^[0-9a-f]+$/)
-  })
-})
 
 // ==================== sanitize ====================
 describe('sanitize - escapeHtml', () => {

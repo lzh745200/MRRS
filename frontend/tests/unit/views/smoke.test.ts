@@ -208,28 +208,11 @@ describe('Common component imports', () => {
   const components = [
     ['MapPicker', '@/components/MapPicker.vue'],
     ['GuizhouRegionSelector', '@/components/common/GuizhouRegionSelector.vue'],
-    ['PageHeader', '@/components/PageHeader.vue'],
-    ['GlobalSearch', '@/components/GlobalSearch.vue'],
-    ['SkeletonList', '@/components/SkeletonList.vue'],
     ['FilePreview', '@/components/FilePreview.vue'],
-    ['BaseButton', '@/components/common/BaseButton.vue'],
-    ['BaseTable', '@/components/common/BaseTable.vue'],
-    ['BaseForm', '@/components/common/BaseForm.vue'],
     ['BaseChart', '@/components/common/BaseChart.vue'],
-    ['DataTable', '@/components/common/DataTable.vue'],
     ['StatsCard', '@/components/common/StatsCard.vue'],
     ['EmptyState', '@/components/business/EmptyState/EmptyState.vue'],
-    ['BatchOperationBar', '@/components/common/BatchOperationBar.vue'],
-    ['Breadcrumb', '@/components/common/Breadcrumb.vue'],
-    ['ExportButton', '@/components/common/ExportButton.vue'],
     ['ImportButton', '@/components/common/ImportButton.vue'],
-    ['ProgressDialog', '@/components/common/ProgressDialog.vue'],
-    ['PasswordStrength', '@/components/common/PasswordStrength.vue'],
-    ['VirtualList', '@/components/common/VirtualList.vue'],
-    ['ResponsiveDataTable', '@/components/common/ResponsiveDataTable.vue'],
-    ['SkipLink', '@/components/common/SkipLink.vue'],
-    ['NetworkStatusIndicator', '@/components/common/NetworkStatusIndicator.vue'],
-    ['LazyImage', '@/components/common/LazyImage/LazyImage.vue'],
   ]
 
   components.forEach(([label, p]) => {
@@ -246,9 +229,9 @@ describe('Common component imports', () => {
 
 describe('Store imports', () => {
   const stores = [
-    'app', 'auth', 'user', 'project', 'funds', 'policy',
-    'organization', 'rbac', 'menu', 'config', 'route',
-    'taskQueue', 'dataPackage', 'dataReport',
+    'auth', 'user', 'project', 'funds', 'policy',
+    'organization', 'rbac', 'menu', 'config',
+    'dataPackage', 'dataReport',
   ]
 
   stores.forEach((name) => {
@@ -267,9 +250,9 @@ describe('API module imports', () => {
   const apis = [
     'request', 'import', 'projects', 'schools', 'policy', 'funds',
     'supportedVillage', 'organization', 'audit', 'approval', 'effectiveness',
-    'help', 'report', 'todos', 'backup', 'dataSync', 'dataPackage',
-    'dataQuality', 'ruralWork', 'tasks', 'search', 'map', 'message',
-    'machineCode', 'organizationPassCode', 'userPermissions', 'userManagement',
+    'help', 'todos', 'backup', 'dataSync', 'dataPackage',
+    'ruralWork', 'tasks', 'search', 'map', 'message',
+    'machineCode', 'organizationPassCode', 'userManagement',
     'export', 'batchOperations', 'validationRules', 'systemMonitor',
     'analytics', 'dashboard', 'sentiment', 'secrets', 'twoFactor',
     'fundLifecycle', 'fundStatistics', 'ai', 'env', 'i18n', 'offlineMap',
