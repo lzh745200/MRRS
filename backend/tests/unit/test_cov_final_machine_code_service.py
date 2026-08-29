@@ -98,13 +98,14 @@ class TestVerifyPassCode:
 
     def test_hmac_self_verify_rejects_wrong_machine(self):
         # 错误机器码 → HMAC 不匹配 → 返回 None（"通行码无效或已被使用"）
+        # 归一化重试后查询轮次翻倍：原文3次 + 去连字符3次 = 6次 first()
         machine_b = "B" + "0" * 63
         pass_code = MachineCodeService.generate_pass_code(machine_b)
 
         db = MagicMock()
         q = db.query.return_value
         q.filter.return_value = q
-        q.first.side_effect = [None, None, None]
+        q.first.side_effect = [None] * 6
 
         svc = MachineCodeService(db)
         result = svc.verify_pass_code(pass_code, "A" + "0" * 63)

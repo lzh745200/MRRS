@@ -610,8 +610,9 @@ DEFAULT_ADMIN_USERNAME = os.getenv("DEFAULT_ADMIN_USERNAME", "admin").strip() or
 def _seed_default_admin():
     """确保默认管理员账户存在，并在启动时解锁所有被锁定的用户账户。
 
-    首次启动时使用 DEFAULT_ADMIN_PASSWORD 环境变量或默认密码 admin123 创建管理员。
-    must_change_password=True 强制首次登录修改密码。
+    首次启动时使用 DEFAULT_ADMIN_PASSWORD 环境变量；未设置时使用出厂默认
+    密码 Admin@2026（安装包开箱即用）。must_change_password=True 强制首次
+    登录修改密码。
 
     离线单机系统没有远程管理员可以手动解锁账户，因此每次启动时
     自动重置所有用户的锁定状态，确保用户不会因上次会话的失败尝试
@@ -631,25 +632,16 @@ def _seed_default_admin():
 
         admin = db.query(User).filter(User.username == DEFAULT_ADMIN_USERNAME).first()
         if not admin:
-            # 仅在管理员不存在时才生成密码，避免每次重启都生成 admin_pwd_*.txt
+            # 密码来源优先级：
+            #   1. DEFAULT_ADMIN_PASSWORD 环境变量（保密部署可注入随机强密码）
+            #   2. 文档化出厂默认密码 Admin@2026（安装包开箱即用）
+            # 两种来源均强制 must_change_password=True，首次登录必须修改。
             _admin_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "").strip()
             if not _admin_password:
-                from app.core.security import generate_password
-                _admin_password = generate_password(length=16, exclude_ambiguous=True)
-                import hashlib
-                _pw_hash_prefix = hashlib.sha256(_admin_password.encode()).hexdigest()[:8]
-                # 将明文密码写入仅管理员可读的临时文件（不在控制台打印明文）
-                import tempfile as _tempfile
-                fd, _pwd_file = _tempfile.mkstemp(suffix=".txt", prefix="admin_pwd_")
-                with os.fdopen(fd, "w") as _f:
-                    _f.write(f"用户名: admin\n密码: {_admin_password}\n")
-                    _f.write("请立即复制保存！首次登录后须修改密码。\n")
-                if os.name != "nt":  # pragma: no cover
-                    os.chmod(_pwd_file, 0o600)
-                # 日志中仅记录哈希前缀和临时文件路径（安全）
+                _admin_password = "Admin@2026"
                 logger.warning(
-                    "自动生成管理员密码（SHA256前缀: %s），明文已写入临时文件: %s",
-                    _pw_hash_prefix, _pwd_file,
+                    "使用出厂默认密码创建管理员（admin / Admin@2026），"
+                    "首次登录强制修改；保密部署请设置 DEFAULT_ADMIN_PASSWORD 环境变量"
                 )
 
             # 尝试获取顶级组织作为管理员的所属组织

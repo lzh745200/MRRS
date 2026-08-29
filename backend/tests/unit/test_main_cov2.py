@@ -4,7 +4,6 @@
 import importlib
 import os
 import sys
-import tempfile
 from unittest.mock import MagicMock, patch
 
 import app.main as main_mod
@@ -55,10 +54,11 @@ def test_run_alembic_upgrade_exception_swallowed():
         main_mod._run_alembic_upgrade()  # 异常被吞并 warning
 
 
-# ---------- _seed_default_admin：posix chmod（637）+ 组织查询异常（652-653） ----------
+# ---------- _seed_default_admin：出厂默认密码分支 + 组织查询异常（652-653） ----------
 
-def test_seed_default_admin_posix_chmod_and_org_failure():
-    fd, path = tempfile.mkstemp(suffix=".txt", prefix="admin_pwd_test_")
+def test_seed_default_admin_factory_password_and_org_failure():
+    """未设置 DEFAULT_ADMIN_PASSWORD 时使用出厂默认密码 Admin@2026，
+    不再生成临时密码文件（旧行为已移除）；组织查询失败不影响创建。"""
     q_user = MagicMock()
     q_user.filter.return_value = q_user
     q_user.first.return_value = None  # 无管理员 → 走创建分支
@@ -68,24 +68,24 @@ def test_seed_default_admin_posix_chmod_and_org_failure():
     lockout = MagicMock()
     lockout.unlock_expired.return_value = 0
 
-    try:
-        with patch("app.core.database.SessionLocal", return_value=db), patch(
-            "app.services.lockout_service.get_lockout_service", return_value=lockout
-        ), patch.dict(os.environ, {"DEFAULT_ADMIN_PASSWORD": ""}), patch(
-            "tempfile.mkstemp", return_value=(fd, path)
-        ), patch.object(
-            os, "name", "posix"
-        ), patch.object(
-            os, "chmod"
-        ) as chmod:
-            main_mod._seed_default_admin()
-        chmod.assert_called_once_with(path, 0o600)
-        db.add.assert_called_once()
-        db.commit.assert_called_once()
-        db.close.assert_called_once()
-    finally:
-        if os.path.exists(path):
-            os.remove(path)
+    with patch("app.core.database.SessionLocal", return_value=db), patch(
+        "app.services.lockout_service.get_lockout_service", return_value=lockout
+    ), patch.dict(os.environ, {"DEFAULT_ADMIN_PASSWORD": ""}), patch(
+        "tempfile.mkstemp"
+    ) as mkstemp:
+        main_mod._seed_default_admin()
+
+    # 不再生成临时密码文件
+    mkstemp.assert_not_called()
+    # 创建了管理员并提交
+    db.add.assert_called_once()
+    admin = db.add.call_args[0][0]
+    from app.core.security import verify_password
+
+    assert verify_password("Admin@2026", admin.hashed_password)
+    assert admin.must_change_password is True  # 强制首次登录改密
+    db.commit.assert_called_once()
+    db.close.assert_called_once()
 
 
 # ---------- WAL checkpoint 调度异常分支（861-862, 870-871） ----------

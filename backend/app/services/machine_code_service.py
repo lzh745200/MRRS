@@ -414,7 +414,13 @@ class MachineCodeService:
         匹配优先级：
         1. 机器特定通行码：pass_code + machine_code + status=pending
         2. 组织通行码：pass_code + organization_id 非空 + status=pending（不绑定特定机器）
+        3. 仅凭 pass_code 回退（wmic 漂移，自动改绑并留痕）
+        4. HMAC 自验证（跨机器场景，未配置 PASS_CODE_SECRET 时 fail-closed）
         兼容激活中断的边界场景：active 但 user_id 为空。
+
+        输入归一化：先按原文精确匹配（快路径），失败后对存储值与输入同时
+        去除连字符再重试四级匹配——用户手工抄写 32 位格式化通行码时极易
+        漏连字符，此前直接报"通行码无效"造成注册受阻。
 
         Args:
             pass_code: 用户输入的通行码
@@ -432,22 +438,47 @@ class MachineCodeService:
         # 去除首尾空白（防止复制粘贴带入空格导致匹配失败）
         pass_code = (pass_code or "").strip()
 
-        from sqlalchemy import or_
+        # 快路径：原文精确匹配
+        record = self._verify_pass_code_impl(pass_code, machine_code, normalize=False)
+        if record:
+            return record
+
+        # 归一化回退：对存储值与输入同步去连字符后重试四级匹配。
+        # 覆盖两个方向：输入多打了连字符（normalized != 原文）、
+        # 用户全省略连字符而存储值带连字符（normalized == 原文但存储不同）。
+        normalized = pass_code.replace("-", "")
+        if normalized:
+            return self._verify_pass_code_impl(normalized, machine_code, normalize=True)
+
+        logger.warning(
+            "通行码验证失败: pass_code=%s..., machine_code=%s...",
+            pass_code[:16],
+            machine_code[:16],
+        )
+        return None
+
+    def _verify_pass_code_impl(
+        self, pass_code: str, machine_code: str, normalize: bool
+    ) -> Optional[MachineCode]:
+        """四级验证实现。normalize=True 时对库内 pass_code 去连字符后比对。"""
+        from sqlalchemy import or_, func as sa_func
+
+        stored_pc = (
+            sa_func.replace(MachineCode.pass_code, "-", "") if normalize else MachineCode.pass_code
+        )
+        status_ok = or_(
+            MachineCode.status == "pending",
+            and_(MachineCode.status == "active", MachineCode.user_id.is_(None)),
+        )
 
         # 1. 优先匹配机器特定通行码
         record = (
             self.db.query(MachineCode)
             .filter(
                 and_(
-                    MachineCode.pass_code == pass_code,
+                    stored_pc == pass_code,
                     MachineCode.machine_code == machine_code,
-                    or_(
-                        MachineCode.status == "pending",
-                        and_(
-                            MachineCode.status == "active",
-                            MachineCode.user_id.is_(None),
-                        ),
-                    ),
+                    status_ok,
                 )
             )
             .first()
@@ -466,15 +497,9 @@ class MachineCodeService:
             self.db.query(MachineCode)
             .filter(
                 and_(
-                    MachineCode.pass_code == pass_code,
+                    stored_pc == pass_code,
                     MachineCode.organization_id.isnot(None),
-                    or_(
-                        MachineCode.status == "pending",
-                        and_(
-                            MachineCode.status == "active",
-                            MachineCode.user_id.is_(None),
-                        ),
-                    ),
+                    status_ok,
                 )
             )
             .first()
@@ -489,12 +514,12 @@ class MachineCodeService:
 
         # 3. 最终回退：仅凭 pass_code 匹配（不要求 machine_code 一致）
         #    处理场景：wmic 输出不稳定 / 进程重启后机器码重新计算导致不一致
-        #    安全性：仅限 status=pending 且 organization_id 为空（机器通行码）
+        #    安全性：限 status=pending 且 organization_id 为空（机器通行码）
         record = (
             self.db.query(MachineCode)
             .filter(
                 and_(
-                    MachineCode.pass_code == pass_code,
+                    stored_pc == pass_code,
                     MachineCode.organization_id.is_(None),
                     MachineCode.status == "pending",
                 )
@@ -527,15 +552,10 @@ class MachineCodeService:
             )
             return record
 
-        # 4. HMAC 自验证（跨机器场景）：
-        #    管理员在系统 A 为目标机器 B 生成通行码（录入 B 的机器码），
-        #    用户在 B 注册时数据库中没有该记录——此时用 B 的机器码重算
-        #    HMAC 独立验证通行码真伪，验证通过后在本机创建并激活记录。
-        if MachineCodeService.verify_pass_code_hmac(pass_code, machine_code):
+        # 4. HMAC 自验证（跨机器场景）：仅在原文（非归一化）路径尝试，
+        #    HMAC 验证内部已自行做去连字符归一化。
+        if not normalize and MachineCodeService.verify_pass_code_hmac(pass_code, machine_code):
             try:
-                # 在本机数据库创建一条绑定当前机器的记录（供后续登录
-                # verify_user_machine 使用），并立即标记为激活（user 由
-                # 调用方 activate_machine_code 绑定，这里先创建 pending）。
                 record = MachineCode(
                     machine_code=machine_code,
                     pass_code=machine_code[:32],  # 占位：本机记录不以 HMAC 全文存储
@@ -555,7 +575,6 @@ class MachineCodeService:
                 return record
             except Exception as e:  # pragma: no cover
                 logger.warning("HMAC 自验证后创建本地记录失败: %s", e)
-                # 记录创建失败不阻断验证——调用方后续激活会重试
                 return MachineCode(
                     machine_code=machine_code,
                     pass_code=machine_code[:32],
@@ -563,11 +582,6 @@ class MachineCodeService:
                     created_by=None,
                 )
 
-        logger.warning(
-            "通行码验证失败: pass_code=%s..., machine_code=%s...",
-            pass_code[:16],
-            machine_code[:16],
-        )
         return None
 
     def activate_machine_code(self, record: MachineCode, user_id: int) -> None:

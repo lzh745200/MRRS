@@ -807,7 +807,10 @@ async def register_user(
     if not machine_record:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="通行码无效或已被使用，请联系管理员获取新的通行码",
+            detail=(
+                "通行码无效或已被使用。请核对：①通行码需完整输入（连字符可省略）；"
+                "②每个通行码仅可激活一台机器；③跨机器注册请先联系管理员在本机预录入。"
+            ),
         )
 
     user_service = UserService(db)
