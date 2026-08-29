@@ -21,17 +21,10 @@ BACKEND_MENUS = ROOT / "backend" / "app" / "api" / "v1" / "menus.py"
 FRONTEND_MENU_CONFIG = ROOT / "frontend" / "src" / "config" / "menu-config.ts"
 FRONTEND_ROUTER = ROOT / "frontend" / "src" / "router" / "index.ts"
 
-# 已知废弃 key: 页面路由已移除, 配置残留, 后端无需收录
-DEPRECATED_KEYS = {
-    "validation-rules",
-    "batch-operations",
-    "system-overview",
-    "system-security",
-    "data-package-version",
-    "effectiveness-evaluate",
-    "effectiveness-rankings",
-    "admin-dashboard",
-}
+# 历史豁免清单已清零: 此前豁免的废弃键(validation-rules / system-overview /
+# admin-dashboard / system-security 等)现已全部收录进后端 MENU_DEFINITIONS。
+# 新增前端键而不同步后端将直接 FAIL,不再提供豁免通道。
+DEPRECATED_KEYS: set[str] = set()
 
 
 def extract_backend_keys(path: Path) -> set:
@@ -77,6 +70,13 @@ def main() -> int:
         if base not in router_paths and base not in normalized_router:
             if not any(base == r or base.startswith(r + "/") for r in router_paths):
                 errors.append(f"前端菜单 '{key}' 的 path '{path}' 无对应路由")
+
+    # 反向漂移仅提示不阻塞: 后端可为侧边栏预留前端尚未使用的键
+    backend_only = backend_keys - {k for k, _ in frontend_items} - DEPRECATED_KEYS
+    if backend_only:
+        print("[INFO] 仅存在于后端 MENU_DEFINITIONS 的键(预留/遗留, 不阻塞):")
+        for k in sorted(backend_only):
+            print("  -", k)
 
     if errors:
         print("[FAIL] 前后端菜单不一致:")

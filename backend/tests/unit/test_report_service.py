@@ -30,26 +30,6 @@ class TestReportService:
         assert svc.db is mock_db
 
     @pytest.mark.asyncio
-    async def test_get_reports(self, svc):
-        with pytest.raises(NotImplementedError):
-            await svc.get_reports()
-
-    @pytest.mark.asyncio
-    async def test_get_reports_with_user_id(self, svc):
-        with pytest.raises(NotImplementedError):
-            await svc.get_reports(user_id=123)
-
-    @pytest.mark.asyncio
-    async def test_get_report_found(self, svc):
-        with pytest.raises(NotImplementedError):
-            await svc.get_report(1)
-
-    @pytest.mark.asyncio
-    async def test_get_report_not_found(self, svc):
-        with pytest.raises(NotImplementedError):
-            await svc.get_report(999)
-
-    @pytest.mark.asyncio
     async def test_export_to_excel_success(self, svc):
         with patch.object(svc, "_fetch_report_data", new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = [
@@ -275,9 +255,10 @@ class TestReportService:
 
     @pytest.mark.asyncio
     async def test_fetch_report_data_exception(self, svc, mock_db):
+        # 数据层故障必须向上抛出(导出端点将失败),而不是静默返回空报表
         mock_db.query.side_effect = Exception("DB error")
-        result = await svc._fetch_report_data({"year": 2025})
-        assert result == []
+        with pytest.raises(Exception, match="DB error"):
+            await svc._fetch_report_data({"year": 2025})
 
     @pytest.mark.asyncio
     async def test_fetch_report_data_none_values(self, svc, mock_db):

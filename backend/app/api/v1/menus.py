@@ -525,6 +525,15 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "order": 115,
         "roles": None,
     },
+    {
+        # 前端 menu-config.ts 的"系统管理"分组节点(无 path,仅作配置树分组)。
+        # 缺失会导致前端菜单可见性面板回退到静态配置时,保存含该键被 400 拒绝。
+        "key": "system-security",
+        "label": "系统管理",
+        "icon": "Setting",
+        "order": 116,
+        "roles": ["admin", "super_admin"],
+    },
 ]
 
 

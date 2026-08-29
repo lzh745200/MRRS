@@ -460,7 +460,10 @@ async def list_villages(
             _ckey = None
 
     # include_deleted 已由 enforce_admin_include_deleted 依赖收敛：非管理员自动降级为 False
-    query = db.query(SupportedVillage)
+    from sqlalchemy.orm import selectinload
+
+    # organization 关系为 lazy="noload", 列表序列化需读取组织名, 必须显式预加载
+    query = db.query(SupportedVillage).options(selectinload(SupportedVillage.organization))
     # 数据权限过滤（统一使用 data_scope_adapter，支持 org_children 含下级组织）
     query = apply_scope_filter(query, current_user, SupportedVillage, db=db)
 
@@ -1023,6 +1026,7 @@ async def copy_year_data(
         if _copy_section_data(db, model, village_id, data.fromYear, data.toYear):
             copied += 1
     safe_commit(db)
+    await _invalidate_village_cache()
     return success_response(message=f"年度数据复制成功，已复制 {copied} 个数据组")
 
 
@@ -1048,6 +1052,7 @@ async def save_yearly_section(
         old_data=old_data, new_data=_get_section_data(db, model, village_id, year),
         detail=f"年度数据保存: {section} {year}年",
     )
+    await _invalidate_village_cache()
     return success_response(message=f"保存成功: {section}")
 
 
@@ -1080,6 +1085,7 @@ async def delete_yearly_section(
         old_data=old_data, new_data=None,
         detail=f"年度数据删除: {section} {year}年",
     )
+    await _invalidate_village_cache()
     return success_response(message=f"已删除: {section} {year}年")
 
 
@@ -1334,6 +1340,7 @@ async def save_committee_data(
     year = payload.pop("year", None) or datetime.now().year
     _save_section_data(db, VillageCommitteeInfo, village_id, int(year), payload)
     safe_commit(db)
+    await _invalidate_village_cache()
     return {"code": 200, "success": True, "message": "保存成功"}
 
 
@@ -1453,6 +1460,7 @@ async def import_section_data(
     target_year = year or datetime.now().year
     result = _import_section_sheet(ws, model, village_id, target_year, db)
     safe_commit(db)
+    await _invalidate_village_cache()
     return success_response(
         data={**result, "section_key": section_key, "year": target_year},
         message=f"导入成功 {result['imported']} 行" + (f"，{result['failed']} 行失败" if result["failed"] else ""),
@@ -1493,6 +1501,7 @@ async def import_all_sections_data(
         total_imported += result["imported"]
         total_failed += result["failed"]
     safe_commit(db)
+    await _invalidate_village_cache()
     return success_response(
         data={
             "sheets": len(sections),
@@ -1560,6 +1569,7 @@ async def save_transition_funding(
     } for item in data.items]
     village.transition_fund_items = json.dumps(items_json, ensure_ascii=False)
     safe_commit(db)
+    await _invalidate_village_cache()
     return ok_list(items_json, len(items_json), message="转移支付资金已保存")
 
 

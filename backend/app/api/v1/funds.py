@@ -381,6 +381,8 @@ def list_funds(
         selectinload(Fund.project),
         selectinload(Fund.village),
         selectinload(Fund.school),
+        # _fund_to_dict 每行读取 organization.name, 缺此预加载会按行触发 N+1 查询
+        selectinload(Fund.organization),
     )
 
     # 2. 数据权限隔离（统一使用 data_scope_adapter，支持 org_children 含下级组织）

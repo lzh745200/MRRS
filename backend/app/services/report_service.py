@@ -16,42 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 class ReportService:
-    """Service for generating data reports in various formats."""
+    """Service for generating data reports in various formats.
+
+    列表/详情查询由 ``DataReportService`` 承担；本服务只负责文件导出。
+    """
 
     def __init__(self, db: Session):
         self.db = db
-
-    async def get_reports(self, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
-        """List available report templates / recent exports.
-
-        .. warning::
-            此前返回硬编码的 2 条字典（非真实数据），且无任何路由调用本方法
-            （路由层直接使用 ``DataReportService`` / ``db.query`` 查询）。
-            完整实现需查询真实的报表模板/导出记录表，超出本次 BugFix 范围。
-
-        Raises:
-            NotImplementedError: 本方法为硬编码占位，未接入路由。
-        """
-        raise NotImplementedError(
-            "ReportService.get_reports 尚未实现（此前返回硬编码 2 条字典，"
-            "非真实数据，未接入路由）。完整实现需查询报表模板/导出记录表，"
-            "超出本次 BugFix 范围。"
-        )
-
-    async def get_report(self, report_id: int) -> Optional[Dict[str, Any]]:
-        """Get a single report by ID.
-
-        .. warning::
-            此前基于 ``get_reports`` 的硬编码列表查找，非真实数据，且无路由调用。
-
-        Raises:
-            NotImplementedError: 本方法为硬编码占位，未接入路由。
-        """
-        raise NotImplementedError(
-            "ReportService.get_report 尚未实现（此前基于硬编码列表查找，"
-            "非真实数据，未接入路由）。完整实现需查询报表模板/导出记录表，"
-            "超出本次 BugFix 范围。"
-        )
 
     async def export_to_excel(self, query_params: Dict[str, Any] = None, user: Any = None) -> bytes:
         """Generate an Excel report based on query parameters.
@@ -351,9 +322,10 @@ class ReportService:
                  "是" if r.is_revitalization_tier else "否", "", "", r.updated_at.isoformat() if r.updated_at else ""]
                 for i, r in enumerate(rows)
             ]
-        except Exception as e:
-            logger.warning("Failed to fetch report data from DB: %s", e)
-            return []
+        except Exception:
+            # 数据层故障必须让导出端点失败,而不是静默导出空报表误导用户
+            logger.error("Failed to fetch report data from DB", exc_info=True)
+            raise
 
     @staticmethod
     def _empty_excel() -> bytes:
