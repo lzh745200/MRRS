@@ -271,8 +271,9 @@ class TestUploadAndRestore:
         assert svc.restore_backup.call_args.kwargs.get("password") is None  # 未提供密码
         assert list(tmp_path.glob("upload_*")) == []  # 临时文件已清理
 
-    def test_list_reports_is_encrypted(self, bk_client, tmp_path):
+    def test_list_reports_is_encrypted(self, bk_client, tmp_path, monkeypatch):
         """备份列表返回 is_encrypted（加密/明文/读取失败三态）"""
+        monkeypatch.setenv("INTERNAL_BACKUP_KEY", "secret123")
         enc_path = os.path.join(str(tmp_path), "enc.zip")
         plain_path = os.path.join(str(tmp_path), "plain.zip")
         with open(plain_path, "wb") as f:
@@ -299,7 +300,11 @@ class TestUploadAndRestore:
         p, svc = _svc_patch()
         svc.list_backups.return_value = records
         with p:
-            resp = bk_client.get("/api/v1/system/backup")
+            # 列表端点鉴权已改为"内部密钥或 JWT"(JWT 通道不经 dependency_overrides),
+            # 走内部密钥通道模拟 Electron 保留策略清理的读取路径。
+            resp = bk_client.get(
+                "/api/v1/system/backup", headers={"X-Internal-Backup": "secret123"}
+            )
         assert resp.status_code == 200
         by_name = {it["file_name"]: it["is_encrypted"] for it in resp.json()["data"]["items"]}
         assert by_name == {"enc.zip": True, "plain.zip": False, "missing.zip": False}
@@ -418,10 +423,68 @@ class TestUploadAndRestore:
 
 class TestBackupAuthAndCleanupEdge:
     def test_no_credentials_401(self, bk_client, monkeypatch):
-        """内部密钥不匹配且无 Bearer 凭证 → 401（覆盖 73 行）"""
+        """内部密钥不匹配且无 Bearer 凭证 → 401（覆盖 73 行）
+
+        bk_client 默认 override get_current_user, 需临时移除以验证真实无凭证路径。
+        """
+        from app.core.security import get_current_user
+        from app.main import app
+
         monkeypatch.setenv("INTERNAL_BACKUP_KEY", "secret123")
-        resp = bk_client.post("/api/v1/system/backup", json={"description": "x"})
+        saved = app.dependency_overrides.pop(get_current_user, None)
+        try:
+            resp = bk_client.post("/api/v1/system/backup", json={"description": "x"})
+        finally:
+            if saved is not None:
+                app.dependency_overrides[get_current_user] = saved
         assert resp.status_code == 401
+
+    def test_list_delete_401_without_credentials(self, bk_client, monkeypatch):
+        """GET/DELETE 列表/删除端点: 内部密钥不匹配且无 Bearer → 401
+
+        bk_client 默认 override get_current_user 模拟已登录用户, 此处临时
+        移除 override 以验证真实无凭证路径(JWT 通道手动解析)。
+        """
+        from app.core.security import get_current_user
+        from app.main import app
+
+        monkeypatch.setenv("INTERNAL_BACKUP_KEY", "secret123")
+        saved = app.dependency_overrides.pop(get_current_user, None)
+        try:
+            assert bk_client.get("/api/v1/system/backup").status_code == 401
+            assert bk_client.delete("/api/v1/system/backup/whatever.zip").status_code == 401
+        finally:
+            if saved is not None:
+                app.dependency_overrides[get_current_user] = saved
+
+    def test_internal_key_can_list_and_delete(self, bk_client, monkeypatch, tmp_path):
+        """Electron 7 天保留策略: 内部密钥通道可读取列表并删除过期备份(回归锁定)
+
+        回归背景: 清理请求原先无任何凭证, GET/DELETE 恒 401,
+        旧备份无限累积占满磁盘。
+        """
+        monkeypatch.setenv("INTERNAL_BACKUP_KEY", "secret123")
+        headers = {"X-Internal-Backup": "secret123"}
+
+        rec = MagicMock()
+        rec.backup_id = 7
+        rec.file_name = "backup_old.zip"
+        rec.file_path = os.path.join(str(tmp_path), "backup_old.zip")
+        rec.file_size = 1
+        rec.description = "auto"
+        rec.backup_type = "full"
+        rec.created_at.isoformat.return_value = "2024-01-01T00:00:00"
+
+        p, svc = _svc_patch()
+        svc.list_backups.return_value = [rec]
+        svc.delete_backup.return_value = True
+        with p:
+            resp_list = bk_client.get("/api/v1/system/backup", headers=headers)
+            resp_del = bk_client.delete("/api/v1/system/backup/backup_old.zip", headers=headers)
+        assert resp_list.status_code == 200
+        assert [it["file_name"] for it in resp_list.json()["data"]["items"]] == ["backup_old.zip"]
+        assert resp_del.status_code == 200
+        svc.delete_backup.assert_called_once_with(7)
 
     def test_generic_error_cleanup_oserror_degrades(self, bk_client, tmp_path):
         """通用异常清理临时文件时 OSError → 静默跳过仍 500（覆盖 544-545 行）"""

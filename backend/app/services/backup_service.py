@@ -411,22 +411,37 @@ class BackupService:
         if not os.path.exists(backup_db_path):
             return False
         os.makedirs(os.path.dirname(self.database_path), exist_ok=True)
-        # 先释放数据库连接池：Windows 下 SQLite 持有文件句柄，
-        # 不释放直接覆盖可能失败；且释放后残留的 -wal/-shm 可安全删除。
+        # 写协调器独占窗口: 与批量导入等 opt-in 写路径互斥, 避免恢复覆盖期间
+        # 长写事务交错。注: 普通请求的小写事务不经此锁（SQLite 单写者 +
+        # busy_timeout 兜底）, 恢复完成后仍建议重启后端以彻底隔离旧文件句柄。
         try:
-            from app.core.database import engine
+            from app.core.database import engine, db_coordinator
             engine.dispose()
         except Exception as _dispose_err:
             logger.warning("释放连接池失败（不影响恢复）: %s", _dispose_err)
-        # 删除残留的 WAL/SHM 文件，避免旧日志污染恢复后的数据库
-        for suffix in ("-wal", "-shm"):
-            stale_path = f"{self.database_path}{suffix}"
-            if os.path.exists(stale_path):
-                try:
-                    os.unlink(stale_path)
-                except OSError:
-                    logger.warning("残留 %s 文件清理失败: %s", suffix, stale_path)
-        shutil.copy(backup_db_path, self.database_path)
+            db_coordinator = None
+        try:
+            # 删除残留的 WAL/SHM 文件，避免旧日志污染恢复后的数据库
+            for suffix in ("-wal", "-shm"):
+                stale_path = f"{self.database_path}{suffix}"
+                if os.path.exists(stale_path):
+                    try:
+                        os.unlink(stale_path)
+                    except OSError:
+                        logger.warning("残留 %s 文件清理失败: %s", suffix, stale_path)
+            if db_coordinator is not None:
+                with db_coordinator.exclusive_write(timeout=120.0):
+                    shutil.copy(backup_db_path, self.database_path)
+            else:
+                shutil.copy(backup_db_path, self.database_path)
+        finally:
+            # copy 后再次 dispose: 清理恢复窗口期间新建的池连接,
+            # 使后续请求重新打开已替换的数据库文件
+            try:
+                from app.core.database import engine as _engine
+                _engine.dispose()
+            except Exception:
+                pass
 
         # T046：恢复后立即做一致性自检（fail-fast，防止损坏库被静默启用）
         try:

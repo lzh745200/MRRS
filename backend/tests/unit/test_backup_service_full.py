@@ -339,7 +339,9 @@ class TestRestoreEngineDisposeFailure:
 
         assert result["success"] is True
         assert result["database_restored"] is True
-        mock_engine.dispose.assert_called_once()
+        # 2026-08-29 恢复写协调改造后 dispose 两次:
+        # 1) copy 前释放旧句柄; 2) copy 后清理恢复窗口期间新建的池连接
+        assert mock_engine.dispose.call_count == 2
 
 
 # ---------------------------------------------------------------------------

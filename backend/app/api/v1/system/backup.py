@@ -3,9 +3,10 @@
 提供数据库备份的创建、列表、统计、恢复和计划管理功能
 """
 
+import inspect
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
@@ -71,6 +72,40 @@ class BackupScheduleUpdate(BaseModel):
     keep_count: Optional[int] = Field(10, description="保留备份数量")
 
 
+def _internal_backup_key_valid(request: Request) -> bool:
+    """Electron 主进程内部通道: 环境变量密钥匹配即放行。
+
+    密钥由 Electron 启动后端时注入, 仅本机进程持有; 未配置时恒为 False (fail-closed)。
+    """
+    internal_key = os.getenv("INTERNAL_BACKUP_KEY", "")
+    return bool(internal_key) and request.headers.get("X-Internal-Backup", "") == internal_key
+
+
+async def _jwt_user_from_request(request: Request) -> Any:
+    """从 Authorization 头解析当前用户, 无有效 Bearer 凭证抛 401。
+
+    与 FastAPI 依赖注入行为保持一致: 若 get_current_user 存在
+    dependency_overrides (TestClient 注入模拟用户), 优先采用之,
+    否则既有备份 API 测试的鉴权语义将全部失效。
+    """
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    from app.core.security import get_current_user
+
+    override = request.app.dependency_overrides.get(get_current_user) if request.app else None
+    if override is not None:
+        result = override()
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
+    auth = request.headers.get("Authorization", "")
+    scheme, _, token = auth.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=401, detail="未提供认证凭证")
+    return await get_current_user(HTTPAuthorizationCredentials(scheme=scheme, credentials=token))
+
+
 async def _authenticate_backup_request(request: Request) -> str:
     """备份创建鉴权：本机内部密钥 或 管理员 JWT 二选一。
 
@@ -79,22 +114,33 @@ async def _authenticate_backup_request(request: Request) -> str:
 
     Returns: 操作人标识（内部通道返回 "internal-backup"）
     """
-    import os
-
-    internal_key = os.getenv("INTERNAL_BACKUP_KEY", "")
-    if internal_key and request.headers.get("X-Internal-Backup", "") == internal_key:
+    if _internal_backup_key_valid(request):
         return "internal-backup"
-
-    from fastapi.security import HTTPAuthorizationCredentials
-
-    from app.core.security import get_current_user
-
-    auth = request.headers.get("Authorization", "")
-    scheme, _, token = auth.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        raise HTTPException(status_code=401, detail="未提供认证凭证")
-    user = await get_current_user(HTTPAuthorizationCredentials(scheme=scheme, credentials=token))
+    user = await _jwt_user_from_request(request)
     require_admin(user, error_message="仅超级管理员可创建备份")
+    return getattr(user, "username", "unknown")
+
+
+async def _authenticate_backup_read_request(request: Request) -> str:
+    """备份列表读取鉴权：本机内部密钥 或 任意已登录用户（保持原 JWT 语义）。
+
+    Electron 7 天保留策略清理需要免 JWT 读取列表。
+    """
+    if _internal_backup_key_valid(request):
+        return "internal-backup"
+    user = await _jwt_user_from_request(request)
+    return getattr(user, "username", "unknown")
+
+
+async def _authenticate_backup_delete_request(request: Request) -> str:
+    """备份删除鉴权：本机内部密钥 或 管理员 JWT 二选一。
+
+    Electron 7 天保留策略清理需要免 JWT 删除过期备份。
+    """
+    if _internal_backup_key_valid(request):
+        return "internal-backup"
+    user = await _jwt_user_from_request(request)
+    require_admin(user, error_message="仅超级管理员可删除备份")
     return getattr(user, "username", "unknown")
 
 
@@ -195,12 +241,14 @@ async def request_backup_download(
 
 @router.get("", summary="获取备份列表")
 async def list_backups(
+    request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    operator: str = Depends(_authenticate_backup_read_request),
 ):
     """获取所有数据库备份文件列表
 
     按创建时间倒序排列，包含文件名、大小、描述等元信息。
+    已登录用户或本机内部通道（Electron 保留策略清理）可访问。
     """
     try:
         svc = get_backup_service(db)
@@ -394,15 +442,15 @@ async def update_backup_schedule(
 @router.delete("/{filename}", summary="删除指定备份")
 async def delete_backup(
     filename: str,
+    request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    operator: str = Depends(_authenticate_backup_delete_request),
 ):
     """删除指定的备份文件
 
     同时删除磁盘上的备份文件和数据库中的记录。
-    需要管理员权限。
+    需要管理员权限（或本机内部通道）。
     """
-    require_admin(current_user, error_message="仅超级管理员可删除备份")
 
     try:
         svc = get_backup_service(db)
@@ -423,7 +471,7 @@ async def delete_backup(
 
         logger.info(
             "备份已删除: %s，操作人: %s",
-            filename, getattr(current_user, "username", "unknown"),
+            filename, operator,
         )
 
         return {"success": True, "message": f"备份文件 '{filename}' 已删除"}
