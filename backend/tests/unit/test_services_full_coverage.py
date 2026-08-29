@@ -21,151 +21,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 # ══════════════════════════════════════════════════════════════
 
 
-class TestEventBusService:
-    def test_event_priority(self):
-        from app.services.event_bus import EventPriority
-        assert EventPriority.LOW == 1
-        assert EventPriority.HIGH == 10
-
-    def test_domain_event_creation(self):
-        from app.services.event_bus import DomainEvent, EventPriority
-        e = DomainEvent(
-            event_type='test.event',
-            aggregate_id='agg-1',
-            aggregate_type='Test',
-            payload={'key': 'value'},
-        )
-        assert e.event_id is not None
-        assert e.occurred_at is not None
-
-    def test_domain_event_to_dict(self):
-        from app.services.event_bus import DomainEvent
-        e = DomainEvent(
-            event_type='test',
-            aggregate_id='1',
-            aggregate_type='T',
-            payload={'a': 1},
-        )
-        d = e.to_dict()
-        assert d['event_type'] == 'test'
-        assert d['payload'] == {'a': 1}
-
-    def test_event_bus_singleton(self):
-        from app.services.event_bus import EventBus
-        bus1 = EventBus()
-        bus2 = EventBus()
-        assert bus1 is bus2
-
-    def test_event_bus_subscribe(self):
-        from app.services.event_bus import EventBus, EventHandler, DomainEvent
-
-        class MyHandler(EventHandler):
-            def __init__(self):
-                self._types = ['test.event']
-
-            @property
-            def event_types(self):
-                return self._types
-
-            async def handle(self, event):
-                pass
-
-        bus = EventBus()
-        handler = MyHandler()
-        bus.subscribe('test.event', handler)
-        # Should not raise
-
-    def test_event_bus_unsubscribe(self):
-        from app.services.event_bus import EventBus, EventHandler
-
-        class MyHandler(EventHandler):
-            @property
-            def event_types(self):
-                return ['test']
-
-            async def handle(self, event):
-                pass
-
-        bus = EventBus()
-        handler = MyHandler()
-        bus.subscribe('test', handler)
-        bus.unsubscribe('test', handler)
-
-    def test_event_bus_publish_sync(self):
-        from app.services.event_bus import EventBus, DomainEvent
-        bus = EventBus()
-        event = DomainEvent(
-            event_type='test.sync',
-            aggregate_id='1',
-            aggregate_type='T',
-            payload={},
-        )
-        bus.publish_sync(event)
-
-    def test_event_bus_publish_async(self):
-        from app.services.event_bus import EventBus, DomainEvent
-        bus = EventBus()
-        event = DomainEvent(
-            event_type='test.async',
-            aggregate_id='1',
-            aggregate_type='T',
-            payload={},
-        )
-
-        async def main():
-            await bus.publish(event, async_mode=False)
-
-        asyncio.run(main())
-
-    def test_get_event_history(self):
-        from app.services.event_bus import EventBus, DomainEvent
-        bus = EventBus()
-        event = DomainEvent(
-            event_type='test.history',
-            aggregate_id='1',
-            aggregate_type='T',
-            payload={},
-        )
-        bus.publish_sync(event)
-        history = bus.get_event_history(event_type='test.history')
-        assert len(history) >= 1
-
-    def test_get_event_history_by_aggregate(self):
-        from app.services.event_bus import EventBus, DomainEvent
-        bus = EventBus()
-        event = DomainEvent(
-            event_type='test.agg',
-            aggregate_id='agg-special',
-            aggregate_type='T',
-            payload={},
-        )
-        bus.publish_sync(event)
-        history = bus.get_event_history(aggregate_id='agg-special')
-        assert len(history) >= 1
-
-    def test_clear_history(self):
-        from app.services.event_bus import EventBus
-        bus = EventBus()
-        bus.clear_history()
-        assert len(bus.get_event_history()) == 0
-
-    def test_dead_letter_queue(self):
-        from app.services.event_bus import DomainEvent, add_to_dead_letter, get_dead_letter_events
-        event = DomainEvent(
-            event_type='test.dead',
-            aggregate_id='1',
-            aggregate_type='T',
-            payload={},
-        )
-        add_to_dead_letter(event, ValueError('test error'), 'TestHandler')
-        items = get_dead_letter_events()
-        assert any(item['handler'] == 'TestHandler' for item in items)
-
-    def test_system_event_types(self):
-        from app.services.event_bus import SystemEventTypes
-        assert SystemEventTypes.PROJECT_CREATED == 'project.created'
-        assert SystemEventTypes.FUND_ALLOCATED == 'fund.allocated'
-        assert hasattr(SystemEventTypes, 'FUND_TRANSFERRED')
 
 
 # ══════════════════════════════════════════════════════════════
@@ -173,10 +28,6 @@ class TestEventBusService:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestSMCrypto:
-    def test_module_importable(self):
-        import app.services.sm_crypto as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -195,10 +46,6 @@ class TestEncryptionService:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestFieldDiffTracker:
-    def test_module_importable(self):
-        import app.services.field_diff_tracker as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -206,10 +53,6 @@ class TestFieldDiffTracker:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestDataQualityScorer:
-    def test_module_importable(self):
-        import app.services.data_quality_scorer as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -228,10 +71,6 @@ class TestAlertService:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestHealthService:
-    def test_module_importable(self):
-        import app.services.health_service as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -239,10 +78,6 @@ class TestHealthService:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestMetricsService:
-    def test_module_importable(self):
-        import app.services.metrics_service as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -261,10 +96,6 @@ class TestBusinessMetricsService:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestDataMaskingService:
-    def test_module_importable(self):
-        import app.services.data_masking_service as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════

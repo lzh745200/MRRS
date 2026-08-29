@@ -12,7 +12,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from app.api.v1.data_scope import DataScope, get_data_scope
 from app.core.database import get_db
 from app.core.errors import AppError
 from app.core.security import get_current_user
@@ -97,15 +96,12 @@ def admin_user():
 
 @pytest.fixture
 def auth_setup(client, admin_user):
-    """Sets up auth + data_scope overrides."""
+    """Sets up auth override."""
     async def mock_get_current_user():
         return admin_user
 
-    async def mock_get_data_scope():
-        return DataScope(is_admin=True)
 
     client.app.dependency_overrides[get_current_user] = mock_get_current_user
-    client.app.dependency_overrides[get_data_scope] = mock_get_data_scope
     return client
 
 
@@ -391,11 +387,8 @@ class TestGetSchool:
             u.organization_id = 2
             return u
 
-        async def mock_get_data_scope():
-            return DataScope(is_admin=False, org_ids=[2], self_only=True, user_id=2)
 
         client.app.dependency_overrides[get_current_user] = mock_get_current_user
-        client.app.dependency_overrides[get_data_scope] = mock_get_data_scope
         resp = client.get(P(f"/schools/{school.id}"))
         assert resp.status_code in (403, 404)
 
@@ -527,11 +520,8 @@ class TestUpdateSchool:
             u.is_superuser = False
             return u
 
-        async def mock_get_data_scope():
-            return DataScope(is_admin=False, self_only=True, user_id=2)
 
         client.app.dependency_overrides[get_current_user] = mock_get_current_user
-        client.app.dependency_overrides[get_data_scope] = mock_get_data_scope
         resp = client.put(P(f"/schools/{school.id}"), json={"name": "hack"})
         assert resp.status_code in (403, 404)
 
@@ -569,11 +559,8 @@ class TestDeleteSchool:
             u.is_superuser = False
             return u
 
-        async def mock_get_data_scope():
-            return DataScope(is_admin=False, self_only=True, user_id=2)
 
         client.app.dependency_overrides[get_current_user] = mock_get_current_user
-        client.app.dependency_overrides[get_data_scope] = mock_get_data_scope
         resp = client.delete(P(f"/schools/{school.id}"))
         assert resp.status_code in (403, 404)
 

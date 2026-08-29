@@ -1,6 +1,6 @@
 """
 核心模块测试
-覆盖: app/core/exceptions.py, app/core/response.py, app/core/user_info.py, app/core/config.py
+覆盖: app/core/exceptions.py, app/core/response.py, app/core/config.py
 """
 import pytest
 
@@ -313,54 +313,6 @@ class TestApiResponseModel:
     def test_error_response_function(self):
         resp = error_response(code=400, message="bad request")
         assert resp["code"] == 400
-
-# ==================== UserInfo 测试 ====================
-
-from app.core.user_info import UserInfo
-
-class TestUserInfo:
-    def test_attribute_access(self):
-        u = UserInfo(id=1, username="admin", role="admin")
-        assert u.id == 1
-        assert u.username == "admin"
-
-    def test_get_method(self):
-        u = UserInfo(id=1, username="admin")
-        assert u.get("id") == 1
-        assert u.get("missing", "default") == "default"
-
-    def test_getitem(self):
-        u = UserInfo(id=1)
-        assert u["id"] == 1
-
-    def test_getitem_missing_raises_keyerror(self):
-        u = UserInfo(id=1)
-        with pytest.raises(KeyError):
-            _ = u["missing"]
-
-    def test_setitem(self):
-        u = UserInfo(id=1)
-        u["name"] = "test"
-        assert u.name == "test"
-
-    def test_contains(self):
-        u = UserInfo(id=1, username="admin")
-        assert "id" in u
-        assert "missing" not in u
-
-    def test_repr(self):
-        u = UserInfo(id=1, username="admin")
-        r = repr(u)
-        assert "UserInfo" in r
-        assert "admin" in r
-
-    def test_keys_values_items(self):
-        u = UserInfo(id=1, username="admin")
-        assert "id" in u.keys()
-        assert 1 in u.values()
-        items = dict(u.items())
-        assert items["id"] == 1
-        assert items["username"] == "admin"
 
 # ==================== Config 测试 ====================
 

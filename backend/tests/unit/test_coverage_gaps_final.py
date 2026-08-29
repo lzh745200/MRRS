@@ -778,26 +778,6 @@ class TestDataQuality:
 # ===================================================================
 
 
-class TestAuditMiddleware:
-
-    def test_extract_user_identity_bad_token(self):
-        from app.core.audit_middleware import AuditMiddleware
-        request = MagicMock()
-        request.headers = {"Authorization": "Bearer bad-token"}
-        with patch("jwt.decode", side_effect=Exception("bad token")):
-            uid, uname = AuditMiddleware._extract_user_identity(request)
-            assert uid is None
-            assert uname is None
-
-    def test_persist_api_access_log_failure(self):
-        from app.core.audit_middleware import AuditMiddleware
-        request = MagicMock()
-        request.client.host = "127.0.0.1"
-        request.headers = {"user-agent": "test"}
-        request.url.path = "/test"
-        request.method = "GET"
-        with patch("app.core.database.SessionLocal", side_effect=Exception("db fail")):
-            AuditMiddleware._persist_api_access_log(request, 200, 10.0, 1, "admin")
 
 
 # ===================================================================
@@ -1240,25 +1220,6 @@ class TestAPIError:
 # ===================================================================
 
 
-class TestChart:
-
-    def test_chart_generator_no_matplotlib(self):
-        with patch("app.utils.chart.HAS_MATPLOTLIB", False):
-            from app.utils.chart import ChartGenerator
-            gen = ChartGenerator.__new__(ChartGenerator)
-            assert gen is not None
-
-    def test_create_line_chart_no_file(self):
-        # create=True：matplotlib 未安装时模块无 plt 属性（try/except 导入）
-        with patch("app.utils.chart.HAS_MATPLOTLIB", True), \
-             patch("app.utils.chart.plt", create=True):
-            from app.utils.chart import ChartGenerator
-            gen = ChartGenerator()
-            result = gen.create_line_chart(
-                data={"series1": [10, 20, 30]},
-                title="Test", xlabel="X", ylabel="Y",
-            )
-            assert result is None
 
 
 # ===================================================================
@@ -1307,17 +1268,6 @@ class TestErrorHandler:
 # ===================================================================
 
 
-class TestProphetStatus:
-
-    def test_prophet_force_disable(self):
-        import importlib
-        with patch.dict(os.environ, {"PROPHET_UNAVAILABLE": "true"}):
-            import app.core.prophet_status as ps
-            importlib.reload(ps)
-            assert ps.FORCE_DISABLE is True
-            assert ps.PROPHET_AVAILABLE is False
-        with patch.dict(os.environ, {"PROPHET_UNAVAILABLE": "false"}):
-            importlib.reload(ps)
 
 
 # ===================================================================
@@ -1446,13 +1396,6 @@ class TestRuralTasks:
 # ===================================================================
 
 
-class TestPermissions:
-
-    def test_has_permission_reexport(self):
-        from app.core.permissions import has_permission
-        user = _make_user()
-        with patch("app.core.permission_utils.check_permission", return_value=True):
-            assert has_permission(user, "data", "read") is True
 
 
 # ===================================================================
@@ -1657,14 +1600,6 @@ class TestCSRFMiddleware:
 # ===================================================================
 
 
-class TestStructuredLogging:
-
-    def test_context_clear(self):
-        from app.core.structured_logging import _StructuredContext
-        ctx = _StructuredContext()
-        ctx.set(key="val")
-        ctx.clear()
-        assert ctx.get("key") is None
 
 
 # ===================================================================
@@ -1830,14 +1765,6 @@ class TestReports:
 # ===================================================================
 
 
-class TestDataScope:
-
-    def test_filter_no_conditions(self):
-        from app.api.v1.data_scope import DataScope as DS
-        f = DS(is_admin=False, org_ids=[])
-        query = MagicMock()
-        f.filter_by_org_ids(query)
-        query.filter.assert_called()
 
 
 # ===================================================================

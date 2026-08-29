@@ -78,11 +78,6 @@ def test_ds04(real_db_session):
             pass
 
 
-def test_ds05(real_db_session):
-    from app.services.config_package_service import ConfigPackageService
-
-    s = ConfigPackageService(real_db_session)
-    assert s is not None
 
 
 def test_ds06(real_db_session):

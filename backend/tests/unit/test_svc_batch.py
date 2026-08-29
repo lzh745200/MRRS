@@ -1,13 +1,6 @@
 from unittest.mock import MagicMock as M
 
 
-def test_h01():
-    from app.services.data_masking_service import DataMaskingService
-
-    s = DataMaskingService()
-    assert len(s.mask_phone("13700137001")) == 11
-    assert len(s.mask_id_card("330101199006011239")) == 18
-    assert "@" in s.mask_email("user@test.cn")
 
 
 def test_h02():
@@ -24,10 +17,6 @@ def test_h03():
     assert len(c) > 0
 
 
-def test_h04():
-    from app.services.event_bus import EventBus
-
-    assert EventBus() is EventBus()
 
 
 def test_h05():
@@ -131,10 +120,6 @@ def test_h19():
     assert VersionService() is not None
 
 
-def test_h20():
-    from app.services.resource_monitor import ResourceMonitor
-
-    assert ResourceMonitor() is not None
 
 
 def test_h21():
@@ -161,16 +146,8 @@ def test_h25():
     assert QueryAnalyzer() is not None
 
 
-def test_h26():
-    from app.services.pdf_service import PDFReportService
-
-    assert PDFReportService() is not None
 
 
-def test_h27():
-    from app.services.docx_service import DocxReportService
-
-    assert DocxReportService() is not None
 
 
 def test_h28():
@@ -245,7 +222,3 @@ def test_h39():
     assert ApprovalReminderService(M()) is not None
 
 
-def test_h40():
-    from app.services.log_export_service import LogExportService
-
-    assert LogExportService() is not None

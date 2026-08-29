@@ -178,12 +178,6 @@ class TestModelsToDict:
         d = a.to_dict()
         assert d is not None
 
-    def test_effectiveness_to_dict(self):
-        from app.models.effectiveness import EffectivenessIndicator
-        e = EffectivenessIndicator()
-        e.id = 1
-        d = e.to_dict()
-        assert d is not None
 
     def test_report_template_to_dict(self):
         from app.models.report_template import ReportTemplate
@@ -276,12 +270,6 @@ class TestModelsToDict:
         d = t.to_dict()
         assert d is not None
 
-    def test_user_session_to_dict(self):
-        from app.models.user_session import UserSession
-        s = UserSession()
-        s.id = 1
-        d = s.to_dict()
-        assert d is not None
 
     def test_validation_rule_to_dict(self):
         from app.models.validation_rule import ValidationRule
@@ -346,19 +334,7 @@ class TestModelsToDict:
         result = d.to_dict()
         assert result is not None
 
-    def test_data_version_to_dict(self):
-        from app.models.data_version import DataVersion
-        d = DataVersion()
-        d.id = 1
-        result = d.to_dict()
-        assert result is not None
 
-    def test_fee_standard_to_dict(self):
-        from app.models.fee_standard import FeeStandard
-        f = FeeStandard()
-        f.id = 1
-        d = f.to_dict()
-        assert d is not None
 
     def test_annual_income_to_dict(self):
         from app.models.annual_income import AnnualIncome
@@ -388,12 +364,6 @@ class TestModelsToDict:
         d = a.to_dict()
         assert d is not None
 
-    def test_army_unit_to_dict(self):
-        from app.models.army_unit import ArmyUnit
-        a = ArmyUnit()
-        a.id = 1
-        d = a.to_dict()
-        assert d is not None
 
     def test_industry_to_dict(self):
         from app.models.industry import TeaPlantation
@@ -430,12 +400,6 @@ class TestModelsToDict:
         d = i.to_dict()
         assert d is not None
 
-    def test_inspection_rule_to_dict(self):
-        from app.models.inspection_rule import InspectionRule
-        i = InspectionRule()
-        i.id = 1
-        d = i.to_dict()
-        assert d is not None
 
     def test_issue_tracking_to_dict(self):
         from app.models.issue_tracking import Issue
@@ -451,12 +415,6 @@ class TestModelsToDict:
         d = m.to_dict()
         assert d is not None
 
-    def test_package_edit_log_to_dict(self):
-        from app.models.package_edit_log import PackageEditLog
-        p = PackageEditLog()
-        p.id = 1
-        d = p.to_dict()
-        assert d is not None
 
     def test_package_version_to_dict(self):
         from app.models.package_version import PackageVersion
@@ -479,20 +437,10 @@ class TestSchemasImportable:
         'app.schemas.supported_village',
         'app.schemas.permission_package',
         'app.schemas.auth',
-        'app.schemas.activity_log',
-        'app.schemas.army_unit',
-        'app.schemas.audit_log',
-        'app.schemas.common',
-        'app.schemas.data_package_encrypted',
         'app.schemas.data_report',
-        'app.schemas.document',
-        'app.schemas.monitor',
         'app.schemas.organization',
-        'app.schemas.permission',
         'app.schemas.policy',
         'app.schemas.project',
-        'app.schemas.resource',
-        'app.schemas.role',
         'app.schemas.rural_task',
         'app.schemas.school',
         'app.schemas.user',
@@ -503,9 +451,6 @@ class TestSchemasImportable:
         mod = importlib.import_module(module_name)
         assert mod is not None
 
-    def test_common_schemas(self):
-        from app.schemas.common import PaginatedResponse
-        assert PaginatedResponse is not None
 
     def test_auth_schemas(self):
         from app.schemas.auth import LoginRequest
@@ -584,26 +529,20 @@ class TestAllModelsImportable:
         'app.models.system_monitor',
         'app.models.token_blacklist',
         'app.models.two_factor_auth',
-        'app.models.user_session',
         'app.models.validation_rule',
         'app.models.annual_income',
         'app.models.annual_population',
         'app.models.annual_industry',
         'app.models.annual_infrastructure',
-        'app.models.army_unit',
         'app.models.industry',
         'app.models.dashboard',
         'app.models.data_report',
-        'app.models.data_version',
-        'app.models.fee_standard',
         'app.models.fund_allocation_order',
         'app.models.fund_asset_verification',
         'app.models.fund_history',
         'app.models.import_export_history',
-        'app.models.inspection_rule',
         'app.models.issue_tracking',
         'app.models.message_template',
-        'app.models.package_edit_log',
         'app.models.package_version',
         'app.models.project_milestone',
         'app.models.role',

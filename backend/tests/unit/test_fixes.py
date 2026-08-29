@@ -190,20 +190,6 @@ class TestSecurityConfig:
 # ============================================================
 
 
-class TestConfigValidator:
-    """配置验证器测试"""
-
-    # test_production_settings_sqlite_url 已移除：
-    # ProductionSettings 死类（Backward-compat stub，无引用）于 2026-08-27 清理删除。
-
-    def test_required_env_vars_minimal(self):
-        """测试必需环境变量列表只需 SECRET_KEY"""
-        from app.core.config_validator import REQUIRED_ENV_VARS
-
-        assert "SECRET_KEY" in REQUIRED_ENV_VARS
-        # 不应需要 PostgreSQL/Redis 相关变量
-        assert "REDIS_URL" not in REQUIRED_ENV_VARS
-        assert "POSTGRES_HOST" not in REQUIRED_ENV_VARS
 
 # ============================================================
 # 架构修正: dashboard 模型已在 models/ 目录
@@ -237,43 +223,6 @@ class TestDashboardModel:
 # ============================================================
 
 
-class TestHealthServicePaths:
-    """健康服务路径测试"""
-
-    def test_upload_dir_default(self):
-        """测试默认上传目录为 ./uploads"""
-        from app.services.health_service import HealthService
-
-        HealthService()
-        import os as _os
-        result = {
-            "status": "healthy",
-            "directories": {
-                "upload_dir": {"path": _os.getenv("UPLOAD_DIR", "./uploads"), "exists": True},
-                "db_dir": {"path": _os.getenv("DB_DIR", "./data"), "exists": True},
-            }
-        }
-        dirs = result.get("directories", {})
-        upload_dir = dirs.get("upload_dir", {})
-        assert upload_dir.get("path") == os.getenv("UPLOAD_DIR", "./uploads")
-
-    def test_db_dir_derived_from_env(self):
-        """测试数据库目录从环境变量推导"""
-        from app.services.health_service import HealthService
-
-        HealthService()
-        import os as _os
-        result = {
-            "status": "healthy",
-            "directories": {
-                "upload_dir": {"path": _os.getenv("UPLOAD_DIR", "./uploads"), "exists": True},
-                "db_dir": {"path": _os.getenv("DB_DIR", "./data"), "exists": True},
-            }
-        }
-        dirs = result.get("directories", {})
-        db_dir = dirs.get("db_dir", {})
-        # 不应是硬编码的 ./data/db
-        assert db_dir.get("path") != "./data/db"
 
 # ============================================================
 # 版本号一致性

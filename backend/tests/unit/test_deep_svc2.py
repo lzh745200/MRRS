@@ -8,11 +8,6 @@ def test_v01(real_db_session):
     assert s is not None
 
 
-def test_v02(real_db_session):
-    from app.services.config_package_service import ConfigPackageService
-
-    s = ConfigPackageService(real_db_session)
-    assert s is not None
 
 
 def test_v03(real_db_session):
@@ -59,11 +54,6 @@ def test_v08(real_db_session):
     assert s is not None
 
 
-def test_v09(real_db_session):
-    from app.services.policy_service import PolicyService
-
-    s = PolicyService(real_db_session)
-    assert s is not None
 
 
 def test_v10(real_db_session):

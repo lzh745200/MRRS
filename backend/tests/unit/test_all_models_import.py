@@ -45,30 +45,14 @@ class TestAllModelsImport:
 class TestModelClassesImport:
     """测试模型类导入"""
 
-    def test_import_army_unit(self):
-        """测试导入ArmyUnit"""
-        from app.models.army_unit import ArmyUnit
-        assert ArmyUnit is not None
 
-    def test_import_fee_standard(self):
-        """测试导入FeeStandard"""
-        from app.models.fee_standard import FeeStandard
-        assert FeeStandard is not None
 
     def test_import_package_version(self):
         """测试导入PackageVersion"""
         from app.models.package_version import PackageVersion
         assert PackageVersion is not None
 
-    def test_import_package_edit_log(self):
-        """测试导入PackageEditLog"""
-        from app.models.package_edit_log import PackageEditLog
-        assert PackageEditLog is not None
 
-    def test_import_data_version(self):
-        """测试导入DataVersion"""
-        from app.models.data_version import DataVersion
-        assert DataVersion is not None
 
     def test_import_report_template(self):
         """测试导入ReportTemplate"""
@@ -91,10 +75,6 @@ class TestModelClassesImport:
         from app.models.system_monitor import SystemMonitor
         assert SystemMonitor is not None
 
-    def test_import_inspection_rule(self):
-        """测试导入InspectionRule"""
-        from app.models.inspection_rule import InspectionRule
-        assert InspectionRule is not None
 
     def test_import_issue_tracking(self):
         """测试导入IssueTracking"""

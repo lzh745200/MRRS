@@ -108,56 +108,6 @@ class TestLogging:
         logger = logging.getLogger("test")
         assert logger is not None
 
-class TestPermissions:
-    """测试权限模块"""
-
-    def test_permissions_import(self):
-        """测试权限导入"""
-        from app.core import permissions
-        assert permissions is not None
-
-    def test_has_permission(self):
-        """测试检查权限"""
-        from app.core.permissions import has_permission
-        assert callable(has_permission)
-
-    def test_filter_query_by_permission(self):
-        """测试权限查询过滤"""
-        from app.core.permissions import has_permission
-        assert callable(has_permission)
-
-class TestCacheSettings:
-    """测试缓存设置"""
-
-    def test_cache_settings_import(self):
-        """测试缓存设置导入"""
-        from app.core import cache_settings
-        assert cache_settings is not None
-
-class TestCookieSecurity:
-    """测试Cookie安全"""
-
-    def test_cookie_security_import(self):
-        """测试Cookie安全导入"""
-        from app.core import cookie_security
-        assert cookie_security is not None
-
-class TestMiddleware:
-    """测试中间件核心"""
-
-    def test_middleware_import(self):
-        """测试中间件导入"""
-        from app.core import middleware
-        assert middleware is not None
-
-class TestQueryOptimizer:
-    """测试查询优化器"""
-
-    def test_query_optimizer_import(self):
-        """测试查询优化器导入"""
-        from app.core import query_optimizer
-        assert query_optimizer is not None
-
 class TestStaticFiles:
     """测试静态文件"""
 

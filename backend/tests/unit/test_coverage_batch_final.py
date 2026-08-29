@@ -219,16 +219,8 @@ class TestMiddleware:
         mw = SecurityHeadersMiddleware(MagicMock())
         assert mw.app is not None
 
-    def test_audit_middleware(self):
-        from app.core.audit_middleware import AuditMiddleware
-        mw = AuditMiddleware(MagicMock())
-        assert mw.app is not None
 
 
-class TestEvents:
-    def test_exists(self):
-        from app.core.events import event_bus
-        assert event_bus is not None
 
 
 class TestCache:
@@ -237,7 +229,3 @@ class TestCache:
         assert cache_manager is not None
 
 
-class TestFileUtils:
-    def test_extension(self):
-        from app.core.file_utils import file_extension
-        assert file_extension("f.xlsx") == ".xlsx"

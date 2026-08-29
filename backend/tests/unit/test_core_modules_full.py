@@ -91,14 +91,6 @@ class TestCoreSecurity:
         from app.core.security import get_client_ip
         assert callable(get_client_ip)
 
-class TestCoreEvents:
-    """测试核心事件"""
-
-    def test_events_import(self):
-        """测试事件导入"""
-        from app.core import events
-        assert events is not None
-
 class TestCoreLogging:
     """测试核心日志"""
 
@@ -106,14 +98,6 @@ class TestCoreLogging:
         """测试日志导入"""
         from app.core import logging_config
         assert logging_config is not None
-
-class TestCoreMiddleware:
-    """测试核心中间件"""
-
-    def test_middleware_import(self):
-        """测试中间件导入"""
-        from app.core import middleware
-        assert middleware is not None
 
 class TestCoreExceptions:
     """测试核心异常"""

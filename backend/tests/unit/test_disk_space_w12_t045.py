@@ -1,91 +1,14 @@
 """W12-T045 磁盘空间感知测试
 
 覆盖：
-- get_disk_free_bytes: psutil / statvfs / shutil 三路探测（mock 验证逻辑）
-- has_enough_free_space: 阈值判定
 - BackupService.get_disk_space_info: 备份目录 / 数据库目录剩余空间聚合
 - create_backup 低空间拒绝（mock check_disk_space 返回不足）
 - upload-restore 端点低空间 409（复用端点内联逻辑）
 """
 
-import os
-import sys
-import types
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from app.utils.disk_space import (
-    MIN_FREE_BYTES,
-    get_disk_free_bytes,
-    has_enough_free_space,
-)
-
-
-class _NoPsutil(types.ModuleType):
-    """属性访问即抛 ImportError 的伪 psutil——模拟 psutil 缺失/损坏。
-
-    注入 sys.modules 后，get_disk_free_bytes 内层 `import psutil` 会命中它，
-    随后的 psutil.disk_usage 属性访问抛 ImportError，触发向 statvfs/shutil 降级。
-    不 patch builtins.__import__：CPython 3.11 的 IMPORT_NAME 直连导入机制，
-    且对 builtins 打桩会造成 _import_raiser 内部调用自身的无限递归。
-    """
-
-    def __getattr__(self, item):  # noqa: D105
-        raise ImportError(f"no psutil.{item}")
-
-
-class TestDiskSpaceUtil:
-    def test_get_disk_free_bytes_psutil(self):
-        # psutil 在函数内 import（非模块级属性），
-        # 通过向 sys.modules 注入伪模块使内层 import 命中桩对象。
-        fake_psutil = MagicMock()
-        fake_psutil.disk_usage.return_value.free = 123456
-        with patch.dict(sys.modules, {"psutil": fake_psutil}):
-            assert get_disk_free_bytes("/tmp") == 123456
-
-    def test_get_disk_free_bytes_psutil_fail_falls_to_statvfs(self):
-        import app.utils.disk_space as ds
-
-        # Windows 的 os 为 frozen 模块且无 statvfs 属性，必须 create=True 才能打桩
-        with patch.dict(sys.modules, {"psutil": _NoPsutil("psutil")}):
-            with patch.object(
-                os,
-                "statvfs",
-                return_value=MagicMock(f_bavail=10, f_frsize=1024),
-                create=True,
-            ):
-                assert ds.get_disk_free_bytes("/tmp") == 10 * 1024
-
-    def test_get_disk_free_bytes_all_fail_returns_neg1(self):
-        import app.utils.disk_space as ds
-
-        saved_statvfs = getattr(os, "statvfs", None)
-        try:
-            # 无 statvfs（Windows 天然满足；Linux 下临时移除）+ shutil 抛错 → -1
-            if saved_statvfs is not None:
-                del os.statvfs
-            with patch.dict(sys.modules, {"psutil": _NoPsutil("psutil")}):
-                with patch("app.utils.disk_space.shutil") as mock_sh:
-                    mock_sh.disk_usage.side_effect = OSError("boom")
-                    assert ds.get_disk_free_bytes("/tmp") == -1
-        finally:
-            if saved_statvfs is not None:
-                os.statvfs = saved_statvfs
-
-    def test_has_enough_free_space_sufficient(self):
-        ok, free = has_enough_free_space("/tmp", required_bytes=100)
-        # 真实环境要么充足要么未知（-1 保守放行）
-        assert ok is True
-
-    def test_has_enough_free_space_insufficient(self):
-        with patch("app.utils.disk_space.get_disk_free_bytes", return_value=10):
-            ok, free = has_enough_free_space("/tmp", required_bytes=100)
-            assert ok is False
-            assert free == 10
-
-    def test_min_free_bytes_constant(self):
-        assert MIN_FREE_BYTES == 500 * 1024 * 1024
 
 
 @pytest.mark.asyncio

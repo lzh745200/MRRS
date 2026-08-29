@@ -22,76 +22,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 # ══════════════════════════════════════════════════════════════
 
 
-class TestMockData:
-    def test_create_mock_user(self):
-        from app.core.mock_data import create_mock_user
-        user = create_mock_user()
-        assert 'username' in user
-        assert 'phone' in user
-        assert 'email' in user
-
-    def test_create_mock_user_with_name(self):
-        from app.core.mock_data import create_mock_user
-        user = create_mock_user(username='testuser')
-        assert user['username'] == 'testuser'
-
-    def test_create_mock_user_with_role(self):
-        from app.core.mock_data import create_mock_user
-        user = create_mock_user(role='admin')
-        assert user['role'] == 'admin'
-
-    def test_create_mock_users(self):
-        from app.core.mock_data import create_mock_users
-        users = create_mock_users(5)
-        assert len(users) == 5
-
-    def test_create_mock_village(self):
-        from app.core.mock_data import create_mock_village
-        v = create_mock_village()
-        assert 'name' in v
-        assert 'region' in v
-
-    def test_create_mock_village_with_name(self):
-        from app.core.mock_data import create_mock_village
-        v = create_mock_village(name='测试村')
-        assert v['name'] == '测试村'
-
-    def test_create_mock_villages(self):
-        from app.core.mock_data import create_mock_villages
-        vs = create_mock_villages(3)
-        assert len(vs) == 3
-
-    def test_seed_id(self):
-        from app.core.mock_data import seed_id
-        sid = seed_id()
-        assert len(sid) == 12
-
-    def test_random_status(self):
-        from app.core.mock_data import random_status
-        s = random_status()
-        assert isinstance(s, str)
-
-    def test_random_status_custom(self):
-        from app.core.mock_data import random_status
-        s = random_status(['a', 'b'])
-        assert s in ['a', 'b']
-
-    def test_random_amount(self):
-        from app.core.mock_data import random_amount
-        a = random_amount()
-        assert 1000 <= a <= 500000
-
-
-# ══════════════════════════════════════════════════════════════
 # prophet_status
 # ══════════════════════════════════════════════════════════════
 
 
-class TestProphetStatus:
-    def test_is_prophet_available(self):
-        from app.core.prophet_status import is_prophet_available
-        result = is_prophet_available()
-        assert isinstance(result, bool)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -152,88 +86,6 @@ class TestRedisAdapter:
 # cache_settings
 # ══════════════════════════════════════════════════════════════
 
-
-class TestCacheSettings:
-    def test_default_settings(self):
-        from app.core.cache_settings import CacheSettings
-        cs = CacheSettings()
-        assert cs.enabled is True
-        assert cs.backend == 'memory'
-        assert cs.default_ttl == 3600
-
-    def test_from_settings(self):
-        from app.core.cache_settings import CacheSettings
-        cs = CacheSettings.from_settings()
-        assert cs is not None
-
-    def test_get_cache_settings(self):
-        from app.core.cache_settings import get_cache_settings
-        cs = get_cache_settings()
-        assert cs is not None
-
-
-# ══════════════════════════════════════════════════════════════
-# user_info
-# ══════════════════════════════════════════════════════════════
-
-
-class TestUserInfo:
-    def test_attribute_access(self):
-        from app.core.user_info import UserInfo
-        u = UserInfo(id=1, name='test')
-        assert u.id == 1
-        assert u.name == 'test'
-
-    def test_get_method(self):
-        from app.core.user_info import UserInfo
-        u = UserInfo(id=1, name='test')
-        assert u.get('id') == 1
-        assert u.get('missing', 'default') == 'default'
-
-    def test_item_access(self):
-        from app.core.user_info import UserInfo
-        u = UserInfo(id=1)
-        assert u['id'] == 1
-
-    def test_item_access_missing(self):
-        from app.core.user_info import UserInfo
-        u = UserInfo(id=1)
-        with pytest.raises(KeyError):
-            _ = u['missing']
-
-    def test_item_set(self):
-        from app.core.user_info import UserInfo
-        u = UserInfo(id=1)
-        u['name'] = 'test'
-        assert u.name == 'test'
-
-    def test_contains(self):
-        from app.core.user_info import UserInfo
-        u = UserInfo(id=1)
-        assert 'id' in u
-        assert 'missing' not in u
-
-    def test_repr(self):
-        from app.core.user_info import UserInfo
-        u = UserInfo(id=1, name='test')
-        r = repr(u)
-        assert 'UserInfo' in r
-
-    def test_keys(self):
-        from app.core.user_info import UserInfo
-        u = UserInfo(id=1, name='test')
-        assert 'id' in u.keys()
-
-    def test_values(self):
-        from app.core.user_info import UserInfo
-        u = UserInfo(id=1)
-        assert 1 in u.values()
-
-    def test_items(self):
-        from app.core.user_info import UserInfo
-        u = UserInfo(id=1, name='test')
-        items = dict(u.items())
-        assert items['id'] == 1
 
 
 # ══════════════════════════════════════════════════════════════
@@ -366,10 +218,6 @@ class TestMigrationHelper:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestDatabaseIndexes:
-    def test_module_importable(self):
-        import app.core.database_indexes as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -377,10 +225,6 @@ class TestDatabaseIndexes:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestDatabaseRoot:
-    def test_module_importable(self):
-        import app.core.database_root as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -388,10 +232,6 @@ class TestDatabaseRoot:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestDatabaseCompat:
-    def test_module_importable(self):
-        import app.core.database_compat as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -399,10 +239,6 @@ class TestDatabaseCompat:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestStaticFiles:
-    def test_module_importable(self):
-        import app.core.static_files as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -410,10 +246,6 @@ class TestStaticFiles:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestAuditMiddleware:
-    def test_module_importable(self):
-        import app.core.audit_middleware as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -421,10 +253,6 @@ class TestAuditMiddleware:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestMiddleware:
-    def test_module_importable(self):
-        import app.core.middleware as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -432,10 +260,6 @@ class TestMiddleware:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestLogging:
-    def test_module_importable(self):
-        import app.core.logging as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -443,10 +267,6 @@ class TestLogging:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestStructuredLogging:
-    def test_module_importable(self):
-        import app.core.structured_logging as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -454,10 +274,6 @@ class TestStructuredLogging:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestTokenBlacklist:
-    def test_module_importable(self):
-        import app.core.token_blacklist as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -465,10 +281,6 @@ class TestTokenBlacklist:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestTokenManager:
-    def test_module_importable(self):
-        import app.core.token_manager as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -476,10 +288,6 @@ class TestTokenManager:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestPermissions:
-    def test_module_importable(self):
-        import app.core.permissions as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -487,10 +295,6 @@ class TestPermissions:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestPermissionUtils:
-    def test_module_importable(self):
-        import app.core.permission_utils as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -498,10 +302,6 @@ class TestPermissionUtils:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestUploadSecurity:
-    def test_module_importable(self):
-        import app.core.upload_security as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -509,10 +309,6 @@ class TestUploadSecurity:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestFileUpload:
-    def test_module_importable(self):
-        import app.core.file_upload as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -520,10 +316,6 @@ class TestFileUpload:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestDataPermission:
-    def test_module_importable(self):
-        import app.core.data_permission as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -531,10 +323,6 @@ class TestDataPermission:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestUnifiedDataScope:
-    def test_module_importable(self):
-        import app.core.unified_data_scope as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -542,10 +330,6 @@ class TestUnifiedDataScope:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestErrorHandler:
-    def test_module_importable(self):
-        import app.core.error_handler as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -553,10 +337,6 @@ class TestErrorHandler:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestAuthRoot:
-    def test_module_importable(self):
-        import app.core.auth_root as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -564,10 +344,6 @@ class TestAuthRoot:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestAudit:
-    def test_module_importable(self):
-        import app.core.audit as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -575,10 +351,6 @@ class TestAudit:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestLoggingConfig:
-    def test_module_importable(self):
-        import app.core.logging_config as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -586,10 +358,6 @@ class TestLoggingConfig:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestCache:
-    def test_module_importable(self):
-        import app.core.cache as mod
-        assert mod is not None
 
 
 # ══════════════════════════════════════════════════════════════

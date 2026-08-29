@@ -559,65 +559,6 @@ class TestHelpers:
 # ══════════════════════════════════════════════════════════════
 
 
-class TestRetry:
-    def test_retry_on_lock_success(self):
-        from app.utils.retry import retry_on_lock
-
-        @retry_on_lock(max_retries=3, base_delay=0)
-        def my_func():
-            return 'ok'
-
-        assert my_func() == 'ok'
-
-    def test_retry_on_lock_retries(self):
-        from app.utils.retry import retry_on_lock
-        call_count = 0
-
-        @retry_on_lock(max_retries=3, base_delay=0)
-        def my_func():
-            nonlocal call_count
-            call_count += 1
-            if call_count < 2:
-                raise Exception('database is locked')
-            return 'ok'
-
-        assert my_func() == 'ok'
-        assert call_count == 2
-
-    def test_retry_on_lock_all_fail(self):
-        from app.utils.retry import retry_on_lock
-
-        @retry_on_lock(max_retries=2, base_delay=0)
-        def my_func():
-            raise Exception('database is locked')
-
-        with pytest.raises(Exception, match='locked'):
-            my_func()
-
-    def test_retry_on_lock_non_lock_error(self):
-        from app.utils.retry import retry_on_lock
-
-        @retry_on_lock(max_retries=3, base_delay=0)
-        def my_func():
-            raise ValueError('not a lock error')
-
-        with pytest.raises(ValueError):
-            my_func()
-
-    def test_safe_import_success(self):
-        from app.utils.retry import safe_import
-        result = safe_import('os.path')
-        assert result is not None
-
-    def test_safe_import_with_name(self):
-        from app.utils.retry import safe_import
-        result = safe_import('os.path', 'join')
-        assert callable(result)
-
-    def test_safe_import_failure(self):
-        from app.utils.retry import safe_import
-        result = safe_import('nonexistent.module')
-        assert result is None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -725,13 +666,7 @@ class TestPaths:
 
 
 class TestUtilsModulesImportable:
-    def test_date_type_handler_importable(self):
-        import app.utils.date_type_handler as mod
-        assert mod is not None
 
-    def test_file_response_importable(self):
-        import app.utils.file_response as mod
-        assert mod is not None
 
     def test_api_error_importable(self):
         import app.utils.api_error as mod
@@ -741,29 +676,14 @@ class TestUtilsModulesImportable:
         import app.utils.db_error_handler as mod
         assert mod is not None
 
-    def test_cursor_pagination_importable(self):
-        import app.utils.cursor_pagination as mod
-        assert mod is not None
 
     def test_async_executor_importable(self):
         import app.utils.async_executor as mod
         assert mod is not None
 
-    def test_security_enhanced_importable(self):
-        import app.utils.security_enhanced as mod
-        assert mod is not None
 
-    def test_permission_filter_importable(self):
-        import app.utils.permission_filter as mod
-        assert mod is not None
 
-    def test_db_metrics_importable(self):
-        import app.utils.db_metrics as mod
-        assert mod is not None
 
-    def test_system_metrics_importable(self):
-        import app.utils.system_metrics as mod
-        assert mod is not None
 
     def test_upload_helper_importable(self):
         import app.utils.upload_helper as mod
@@ -777,9 +697,6 @@ class TestUtilsModulesImportable:
         import app.utils.input_validator as mod
         assert mod is not None
 
-    def test_scheduler_tasks_importable(self):
-        import app.utils.scheduler_tasks as mod
-        assert mod is not None
 
     def test_win_proactor_fix_importable(self):
         import app.utils.win_proactor_fix as mod
@@ -792,10 +709,4 @@ class TestUtilsModulesImportable:
         except Exception:
             pass  # May need special env
 
-    def test_db_performance_importable(self):
-        import app.utils.db_performance as mod
-        assert mod is not None
 
-    def test_performance_importable(self):
-        import app.utils.performance as mod
-        assert mod is not None

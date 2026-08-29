@@ -1,13 +1,12 @@
 """
 API 依赖测试
 
-测试 app/api/v1/deps.py 和 app/dependencies.py 模块
+测试 app/api/v1/deps.py 模块
 """
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from fastapi import HTTPException
-from app.api.v1.deps import require_manager_role, ADMIN_ROLES
-from app.dependencies import get_db_session
+from app.api.v1.deps import require_manager_role
 
 
 class TestRequireManagerRole:
@@ -44,18 +43,3 @@ class TestRequireManagerRole:
         with pytest.raises(HTTPException) as exc:
             require_manager_role(user)
         assert exc.value.status_code == 403
-
-
-class TestGetDbSession:
-    def test_get_db_session(self):
-        mock_db = MagicMock()
-
-        def mock_get_db():
-            yield mock_db
-
-        with patch("app.dependencies.get_db", side_effect=mock_get_db):
-            gen = get_db_session()
-            session = next(gen)
-            assert session is mock_db
-            with pytest.raises(StopIteration):
-                next(gen)

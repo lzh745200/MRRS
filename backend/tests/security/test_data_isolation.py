@@ -8,9 +8,6 @@ class TestDataIsolationSmoke:
         from app.core.data_permission import DataScope
         assert DataScope.ALL in (DataScope.ALL, DataScope.OWN, DataScope.OWN_DEPT)
 
-    def test_permission_filter_exists(self):
-        from app.utils.permission_filter import PermissionFilter
-        assert PermissionFilter is not None
 
     def test_check_org_access_exists(self):
         from app.core.permission_utils import check_org_access

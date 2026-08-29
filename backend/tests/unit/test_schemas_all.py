@@ -56,80 +56,13 @@ class TestAllSchemasImport:
         success_rate = imported / (imported + len(failed)) if (imported + len(failed)) > 0 else 0
         assert success_rate >= 0.9, f"Only {success_rate:.1%} modules imported. Failed: {failed[:5]}"
 
-class TestArmyUnitSchemas:
-    """测试帮扶单位Schemas"""
 
-    def test_army_unit_schema_import(self):
-        """测试帮扶单位schema导入"""
-        from app.schemas.army_unit import ArmyUnitCreate, ArmyUnitUpdate, ArmyUnitResponse
-        assert ArmyUnitCreate is not None
-        assert ArmyUnitUpdate is not None
-        assert ArmyUnitResponse is not None
 
-class TestAuditLogSchemas:
-    """测试审计日志Schemas"""
 
-    def test_audit_log_schema_import(self):
-        """测试审计日志schema导入"""
-        from app.schemas.audit_log import AuditLogCreate, AuditLogResponse
-        assert AuditLogCreate is not None
-        assert AuditLogResponse is not None
 
-class TestDocumentSchemas:
-    """测试文档Schemas"""
 
-    def test_document_schema_import(self):
-        """测试文档schema导入"""
-        from app.schemas.document import DocumentCreate
-        assert DocumentCreate is not None
 
-class TestDataPackageEncryptedSchemas:
-    """测试加密数据包Schemas"""
 
-    def test_data_package_encrypted_import(self):
-        """测试加密数据包schema导入"""
-        from app.schemas.data_package_encrypted import EncryptedDataPackage
-        assert EncryptedDataPackage is not None
-
-class TestMonitorSchemas:
-    """测试监控Schemas"""
-
-    def test_monitor_schema_import(self):
-        """测试监控schema导入"""
-        from app.schemas.monitor import MonitorCreate, MonitorUpdate, MonitorResponse
-        assert MonitorCreate is not None
-        assert MonitorUpdate is not None
-        assert MonitorResponse is not None
-
-class TestPermissionSchemas:
-    """测试权限Schemas"""
-
-    def test_permission_schema_import(self):
-        """测试权限schema导入"""
-        from app.schemas.permission import PermissionCreate, PermissionUpdate, PermissionResponse
-        assert PermissionCreate is not None
-        assert PermissionUpdate is not None
-        assert PermissionResponse is not None
-
-class TestResourceSchemas:
-    """测试资源Schemas"""
-
-    def test_resource_schema_import(self):
-        """测试资源schema导入"""
-        from app.schemas.resource import ResourceCreate, ResourceUpdate, ResourceResponse
-        assert ResourceCreate is not None
-        assert ResourceUpdate is not None
-        assert ResourceResponse is not None
-
-class TestRoleSchemas:
-    """测试角色Schemas"""
-
-    def test_role_schema_import(self):
-        """测试角色schema导入"""
-        from app.schemas.role import RoleCreate, RoleUpdate, RoleResponse
-        assert RoleCreate is not None
-        assert RoleUpdate is not None
-        assert RoleResponse is not None
 
 class TestSchemaValidation:
     """测试Schema验证"""

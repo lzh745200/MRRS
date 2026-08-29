@@ -1,6 +1,6 @@
 """Issue tracking models."""
 
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
+from sqlalchemy import Column, DateTime, Index, Integer, String, Text
 
 from .base import BaseModel
 
@@ -41,31 +41,6 @@ class Issue(BaseModel):
 
     def __repr__(self):
         return f"<Issue(id={self.id}, title='{self.title}', status='{self.status}', priority='{self.priority}')>"
-
-
-class VersionHistory(BaseModel):
-    """Version history model."""
-
-    __tablename__ = "version_history"
-
-    __table_args__ = (
-        Index("ix_version_history_release_date", "release_date"),
-        Index("ix_version_history_is_stable", "is_stable"),
-    )
-
-    version = Column(String(50), nullable=False, unique=True, index=True, comment="版本号")
-    release_date = Column(DateTime(timezone=True), nullable=False, comment="发布日期")
-    changelog = Column(Text, nullable=False, comment="变更日志")
-    is_stable = Column(Boolean, default=True, comment="是否稳定版本")
-    download_url = Column(String(500), comment="下载链接")
-
-    # Release metadata
-    release_notes = Column(Text, comment="发布说明")
-    breaking_changes = Column(Boolean, default=False, comment="是否有破坏性变更")
-    minimum_version_required = Column(String(50), comment="最低要求版本")
-
-    def __repr__(self):
-        return f"<VersionHistory(version='{self.version}', release_date={self.release_date}, stable={self.is_stable})>"
 
 
 class Feedback(BaseModel):

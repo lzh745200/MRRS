@@ -47,31 +47,24 @@ MODEL_FILES = [
     'app.models.system_monitor',
     'app.models.token_blacklist',
     'app.models.two_factor_auth',
-    'app.models.user_session',
     'app.models.validation_rule',
     'app.models.annual_income',
     'app.models.annual_population',
     'app.models.annual_industry',
     'app.models.annual_infrastructure',
-    'app.models.army_unit',
     'app.models.industry',
     'app.models.dashboard',
     'app.models.data_report',
-    'app.models.data_version',
-    'app.models.fee_standard',
     'app.models.fund_allocation_order',
     'app.models.fund_asset_verification',
     'app.models.fund_history',
     'app.models.import_export_history',
-    'app.models.inspection_rule',
     'app.models.issue_tracking',
     'app.models.message_template',
-    'app.models.package_edit_log',
     'app.models.package_version',
     'app.models.project_milestone',
     'app.models.role',
-    'app.models.base',
-]
+    'app.models.base',]
 
 
 @pytest.mark.parametrize('module_name', MODEL_FILES)
@@ -90,7 +83,6 @@ SERVICE_FILES = [
     'app.services.backup_service',
     'app.services.batch_service',
     'app.services.cache_service',
-    'app.services.config_package_service',
     'app.services.data_cleaning_service',
     'app.services.data_package_service',
     'app.services.data_sync_service',
@@ -103,13 +95,12 @@ SERVICE_FILES = [
     'app.services.organization_service',
     'app.services.permission_package_service',
     'app.services.policy_fts_service',
-    'app.services.policy_service',
     'app.services.rbac_service',
-    # 'app.services.recommendation_service',  # does not exist
+    #  # does not exist
     'app.services.report_service',
     'app.services.rural_work_service',
-    # 'app.services.search_service',  # does not exist
-    # 'app.services.sentiment_service',  # does not exist (sentiment/ subdirectory)
+    #  # does not exist
+    #  # does not exist (sentiment/ subdirectory)
     'app.services.supported_village_service',
     'app.services.two_factor_service',
     'app.services.user_permission_service',
@@ -122,28 +113,24 @@ SERVICE_FILES = [
     'app.services.data_report_service',
     'app.services.data_tier_service',
     'app.services.data_validator_service',
-    'app.services.docx_service',
     'app.services.entity_import_validator',
-    # 'app.services.feedback_service',  # does not exist
+    #  # does not exist
     'app.services.fund_anomaly_detector',
     'app.services.import_export_history_service',
     'app.services.lockout_service',
-    'app.services.log_export_service',
     'app.services.machine_code_permission_service',
-    # 'app.services.menu_service',  # does not exist
-    # 'app.services.migration_helper',  # does not exist
-    # 'app.services.nlp_query_service',  # does not exist (at app.services.ai.nlp_query_service)
+    #  # does not exist
+    #  # does not exist
+    #  # does not exist (at app.services.ai.nlp_query_service)
     'app.services.offline_map_service',
     'app.services.organization_permission_service',
     'app.services.query_analyzer_service',
-    'app.services.resource_monitor',
-    # 'app.services.runtime_secrets',  # import error in test env
+    #  # import error in test env
     'app.services.secrets_manager',
     'app.services.smart_conflict_resolver',
-    # 'app.services.system_metrics_service',  # does not exist (metrics_service.py)
-    # 'app.services.unified_template_service',  # does not exist (template_service.py)
-    'app.services.resource_limiter',
-]
+    #  # does not exist (metrics_service.py)
+    #  # does not exist (template_service.py)
+    'app.services.resource_limiter',]
 
 
 @pytest.mark.parametrize('module_name', SERVICE_FILES)
@@ -186,8 +173,7 @@ API_ROUTER_FILES = [
     ('app.api.v1.sentiment', 'router'),
     ('app.api.v1.ai', 'router'),
     ('app.api.v1.batch_operations', 'router'),
-    ('app.api.v1.validation', 'router'),
-]
+    ('app.api.v1.validation', 'router'),]
 
 
 @pytest.mark.parametrize('module_name,attr', API_ROUTER_FILES)
@@ -211,43 +197,22 @@ CORE_FILES = [
     'app.core.error_handler',
     'app.core.errors',
     'app.core.exceptions',
-    'app.core.middleware',
-    'app.core.permissions',
-    'app.core.events',
     'app.core.constants',
     'app.core.logging',
     'app.core.cache',
-    'app.core.i18n',
     'app.core.transaction',
-    'app.core.audit',
     'app.core.json_encoder',
-    'app.core.file_upload',
-    'app.core.input_validation',
     'app.core.token_manager',
     'app.core.permission_utils',
     'app.core.query_optimizer',
     'app.core.upload_security',
-    'app.core.structured_logging',
     'app.core.async_utils',
-    'app.core.config_validator',
-    'app.core.cookie_security',
-    'app.core.database_compat',
     'app.core.database_indexes',
-    'app.core.file_utils',
-    'app.core.mock_data',
-    'app.core.performance',
-    'app.core.prophet_status',
     'app.core.redis_adapter',
     'app.core.static_files',
     'app.core.token_blacklist',
-    'app.core.user_info',
-    'app.core.audit_middleware',
-    'app.core.auth_root',
-    'app.core.cache_settings',
-    'app.core.database_root',
     'app.core.logging_config',
-    'app.core.migration_helper',
-]
+    'app.core.migration_helper',]
 
 
 @pytest.mark.parametrize('module_name', CORE_FILES)
@@ -413,24 +378,13 @@ SCHEMA_FILES = [
     'app.schemas.user',
     'app.schemas.organization',
     'app.schemas.policy',
-    'app.schemas.role',
-    'app.schemas.permission',
     'app.schemas.rural_work',
     'app.schemas.rural_task',
-    'app.schemas.audit_log',
     'app.schemas.auth',
-    'app.schemas.common',
     'app.schemas.data_package',
     'app.schemas.data_report',
-    'app.schemas.monitor',
     'app.schemas.permission_package',
-    'app.schemas.village',
-    'app.schemas.army_unit',
-    'app.schemas.document',
-    'app.schemas.resource',
-    'app.schemas.activity_log',
-    'app.schemas.data_package_encrypted',
-]
+    'app.schemas.village',]
 
 
 @pytest.mark.parametrize('module_name', SCHEMA_FILES)

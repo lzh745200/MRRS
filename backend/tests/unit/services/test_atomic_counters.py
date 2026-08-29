@@ -57,18 +57,3 @@ class TestLockoutServiceAtomic:
             or "coalesce(User.failed_login_count, 0) + 1" in src
         )
         assert ok, "未找到 SQL 原子递增"
-
-
-class TestPolicyServiceAtomic:
-    def test_increment_view_count_sql_form(self):
-        import inspect
-        from app.services import policy_service
-
-        src = inspect.getsource(policy_service.PolicyService.increment_view_count)
-        assert "view_count = (policy.view_count" not in src, "仍为读-改-写"
-        ok = (
-            "view_count + 1" in src
-            or "view_count + :inc" in src
-            or "coalesce(Policy.view_count, 0) + 1" in src
-        )
-        assert ok, "未找到 SQL 原子递增"

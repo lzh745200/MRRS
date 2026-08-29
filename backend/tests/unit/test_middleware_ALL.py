@@ -1,6 +1,6 @@
 """Tests for app.middleware — Group 1 middleware: 100% coverage target.
 
-Covers: api_version, audit_context, auth, cache_middleware, camel_to_snake,
+Covers: audit_context, auth, camel_to_snake,
 csrf_middleware, rbac, utils, prometheus_middleware
 """
 
@@ -35,71 +35,6 @@ class TestShouldSkipMiddleware:
 
 
 # ==============================================================================
-# app.middleware.api_version – APIVersionMiddleware
-# ==============================================================================
-
-def _make_api_version_app(**kwargs):
-    from starlette.applications import Starlette
-    from starlette.responses import PlainTextResponse
-    from starlette.routing import Route
-    from app.middleware.api_version import APIVersionMiddleware
-
-    async def handler(request):
-        return PlainTextResponse(f"version={request.state.api_version}")
-
-    app = Starlette(routes=[Route("/test", handler)])
-    app.add_middleware(APIVersionMiddleware, **kwargs)
-    return app
-
-
-class TestAPIVersionMiddleware:
-
-    def test_default_version(self):
-        client = TestClient(_make_api_version_app())
-        resp = client.get("/test")
-        assert resp.text == "version=v1"
-        assert resp.headers.get("X-API-Version") == "v1"
-
-    def test_custom_version_via_header(self):
-        client = TestClient(_make_api_version_app())
-        resp = client.get("/test", headers={"X-API-Version": "v2"})
-        assert resp.text == "version=v2"
-        assert resp.headers.get("X-API-Version") == "v2"
-
-    def test_custom_header_name(self):
-        client = TestClient(_make_api_version_app(header_name="X-Custom"))
-        resp = client.get("/test", headers={"X-Custom": "v3"})
-        assert resp.text == "version=v3"
-        assert resp.headers.get("X-Custom") == "v3"
-
-    def test_eos_exception_returns_499(self):
-        from app.middleware.api_version import APIVersionMiddleware
-        from starlette.requests import Request
-        from starlette.responses import JSONResponse
-
-        async def call_next(_request):
-            raise anyio.EndOfStream()
-
-        mw = APIVersionMiddleware(app=MagicMock())
-        request = Request({"type": "http", "method": "GET", "path": "/test", "headers": [], "query_string": b""})
-        response = anyio.run(mw.dispatch, request, call_next)
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 499
-
-
-# ==============================================================================
-# app.middleware.audit_context – AuditContext + module-level functions
-# ==============================================================================
-
-
-@pytest.fixture(autouse=True)
-def _reset_audit_context():
-    """Reset ContextVar state so tests don't leak into each other."""
-    from app.middleware.audit_context import set_current_user, set_request_id
-    set_current_user(None)
-    set_request_id(None)
-
-
 class TestAuditContext:
 
     def test_create_default(self):
@@ -131,6 +66,16 @@ class TestAuditContext:
 
 
 class TestAuditContextFunctions:
+
+    @pytest.fixture(autouse=True)
+    def _clean_contextvars(self):
+        """contextvar 是解释器级状态：前面的测试可能设置过值，先归零。"""
+        from app.middleware.audit_context import set_current_user, set_request_id
+        set_current_user(None)
+        set_request_id(None)
+        yield
+        set_current_user(None)
+        set_request_id(None)
 
     def test_get_current_user_default(self):
         from app.middleware.audit_context import get_current_user
@@ -166,105 +111,6 @@ class TestAuditContextFunctions:
 
 
 # ==============================================================================
-# app.middleware.cache_middleware – CacheMiddleware
-# ==============================================================================
-
-def _make_cache_app(**kwargs):
-    from starlette.applications import Starlette
-    from starlette.responses import PlainTextResponse
-    from starlette.routing import Route
-    from app.middleware.cache_middleware import CacheMiddleware
-
-    async def handler(_request):
-        return PlainTextResponse("ok")
-
-    app = Starlette(routes=[
-        Route("/test", handler, methods=["GET", "POST", "PUT", "DELETE"]),
-        Route("/health", handler),
-        Route("/auth", handler),
-    ])
-    app.add_middleware(CacheMiddleware, **kwargs)
-    return app
-
-
-class TestCacheMiddleware:
-
-    def test_get_normal_path(self):
-        client = TestClient(_make_cache_app())
-        resp = client.get("/test")
-        assert resp.status_code == 200
-
-    def test_non_get_method(self):
-        client = TestClient(_make_cache_app())
-        resp = client.post("/test", json={})
-        assert resp.status_code == 200
-        resp = client.put("/test", json={})
-        assert resp.status_code == 200
-        resp = client.delete("/test")
-        assert resp.status_code == 200
-
-    def test_get_excluded_path(self):
-        client = TestClient(_make_cache_app())
-        resp = client.get("/health")
-        assert resp.status_code == 200
-
-    def test_get_excluded_auth(self):
-        client = TestClient(_make_cache_app())
-        resp = client.get("/auth")
-        assert resp.status_code == 200
-
-    def test_custom_exclude_paths(self):
-        client = TestClient(_make_cache_app(exclude_paths=["/custom"]))
-        resp = client.get("/test")
-        assert resp.status_code == 200
-
-    def test_eos_exception(self):
-        from app.middleware.cache_middleware import CacheMiddleware
-        from starlette.requests import Request
-        from starlette.responses import JSONResponse
-
-        async def call_next(_request):
-            raise anyio.EndOfStream()
-
-        mw = CacheMiddleware(app=MagicMock())
-        request = Request({"type": "http", "method": "GET", "path": "/test", "headers": [], "query_string": b""})
-        response = anyio.run(mw.dispatch, request, call_next)
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 499
-
-    def test_eos_exception_non_get(self):
-        from app.middleware.cache_middleware import CacheMiddleware
-        from starlette.requests import Request
-        from starlette.responses import JSONResponse
-
-        async def call_next(_request):
-            raise anyio.EndOfStream()
-
-        mw = CacheMiddleware(app=MagicMock())
-        request = Request({"type": "http", "method": "POST", "path": "/test", "headers": [], "query_string": b""})
-        response = anyio.run(mw.dispatch, request, call_next)
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 499
-
-    def test_eos_exception_excluded_path(self):
-        from app.middleware.cache_middleware import CacheMiddleware
-        from starlette.requests import Request
-        from starlette.responses import JSONResponse
-
-        async def call_next(_request):
-            raise anyio.EndOfStream()
-
-        mw = CacheMiddleware(app=MagicMock(), exclude_paths=["/test"])
-        request = Request({"type": "http", "method": "GET", "path": "/test", "headers": [], "query_string": b""})
-        response = anyio.run(mw.dispatch, request, call_next)
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == 499
-
-
-# ==============================================================================
-# app.middleware.camel_to_snake – _convert_keys + CamelToSnakeMiddleware
-# ==============================================================================
-
 class TestConvertKeys:
     """Direct tests of the module-level _convert_keys helper."""
 

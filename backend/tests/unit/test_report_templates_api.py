@@ -10,7 +10,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from app.api.v1.data_scope import DataScope, get_data_scope
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import Base
@@ -72,11 +71,7 @@ def auth_setup(client, admin_user):
     async def mock_get_current_user():
         return admin_user
 
-    async def mock_get_data_scope():
-        return DataScope(is_admin=True, self_only=False, user_id=1)
-
     client.app.dependency_overrides[get_current_user] = mock_get_current_user
-    client.app.dependency_overrides[get_data_scope] = mock_get_data_scope
     yield client
 
 

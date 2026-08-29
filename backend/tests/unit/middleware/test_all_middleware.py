@@ -63,33 +63,6 @@ class TestAuditContext:
         assert get_current_user() is None
 
 
-class TestAPIVersionMiddleware:
-    @patch("app.middleware.api_version.anyio")
-    @pytest.mark.asyncio
-    async def test_dispatch_sets_version(self, mock_anyio):
-        from app.middleware.api_version import APIVersionMiddleware
-
-        mock_app = AsyncMock()
-        mock_request = MagicMock()
-        mock_request.headers.get.return_value = "v2"
-        mock_request.state = MagicMock()
-        mock_response = MagicMock()
-        mock_response.headers = {}
-        mock_call_next = AsyncMock(return_value=mock_response)
-
-        mw = APIVersionMiddleware(mock_app)
-        result = await mw.dispatch(mock_request, mock_call_next)
-
-        # dispatch 成功返回 response
-        assert result is mock_response
-
-    def test_init_defaults(self):
-        from app.middleware.api_version import APIVersionMiddleware
-
-        mock_app = MagicMock()
-        mw = APIVersionMiddleware(mock_app)
-        assert mw.default_version == "v1"
-        assert mw.header_name == "X-API-Version"
 
 
 class TestCacheHeadersMiddleware:
@@ -348,12 +321,3 @@ class TestRequestLogger:
         assert _get_user_agent(scope) == ""
 
 
-class TestCacheMiddleware:
-    def test_init_defaults(self):
-        from app.middleware.cache_middleware import CacheMiddleware
-
-        mock_app = MagicMock()
-        mw = CacheMiddleware(mock_app)
-        assert mw.ttl == 300
-        assert "/health" in mw.exclude_paths
-        assert "/auth" in mw.exclude_paths
