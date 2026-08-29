@@ -95,7 +95,7 @@ async def get_latest_update_log(
         return {
             "success": True,
             "data": {
-                "version": getattr(settings, "PROJECT_VERSION", "1.1.0"),
+                "version": getattr(settings, "PROJECT_VERSION", "1.10.0"),
                 "message": "暂无更新记录",
                 "has_records": False,
             },
@@ -255,7 +255,7 @@ async def check_version_change(
     用于启动时自动检测版本变更并记录。
     """
     svc = UpdateLogService(db)
-    current_version = getattr(settings, "PROJECT_VERSION", "1.1.0")
+    current_version = getattr(settings, "PROJECT_VERSION", "1.10.0")
 
     try:
         result = svc.check_and_record_version_change(

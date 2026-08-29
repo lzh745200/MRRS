@@ -7,7 +7,7 @@
     <!-- 侧边栏 — 帮扶管理信息主题，精美分层导航                         -->
     <!-- ============================================================ -->
     <el-aside
-      :width="isCollapsed ? '68px' : '240px'"
+      :width="isCollapsed ? 'var(--layout-sidebar-collapsed-width, 68px)' : 'var(--layout-sidebar-width, 240px)'"
       class="layout-aside"
       role="navigation"
       aria-label="主导航"
@@ -1064,8 +1064,8 @@ function handleCommand(command: string) {
 .layout-content {
   flex: 1;
   overflow: auto;
-  background: #f0f2f5;
-  padding: 20px;
+  background: var(--color-bg-page, #f0f4f0);
+  padding: var(--layout-content-padding, 24px);
 }
 
 /* ===================================================================

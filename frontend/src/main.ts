@@ -5,24 +5,6 @@
  * 如需使用 ElMessage/ElMessageBox 等命令式 API，从 element-plus 单独导入。
  */
 
-// ── 第零层：DOM 级 CSS 注入，确保所有弹出层绝对居中 ──
-//    .el-notification / .el-message 均为 document.body 的直接子元素，
-//    使用 position:fixed + translate(-50%,-50%) 逐个居中于视口。
-//    外观美化（动画/色条/阴影/响应式）由 styles/components/prompt.scss 提供。
-//
-//    注意：top:50%!important 会覆盖 Element Plus 的堆叠 inline top:Npx，
-//    多个同时出现的通知/消息会重叠在视口同一位置。
-//    当前系统 ElNotification 仅有 2 个调用点（errorHandler + BackupManagement），
-//    同时触发的概率极低，此限制可接受。
-const _style = document.createElement('style')
-_style.textContent = `
-  .el-message,.el-message--success,.el-message--error,.el-message--warning,.el-message--info{top:50%!important;left:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;position:fixed!important}
-  .el-notification{top:50%!important;left:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;position:fixed!important;margin:0!important}
-  .el-notification__group{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important}
-  .el-message-box{top:50%!important;left:50%!important;transform:translate(-50%,-50%)!important;position:fixed!important;margin:0!important}
-`
-document.head.appendChild(_style)
-
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
@@ -31,7 +13,15 @@ import './router/guards'
 import { AuthStorage } from '@/utils/authStorage'
 import { setupGlobalErrorHandler } from '@/utils/errorHandler'
 
-// 全局样式（Element Plus 覆盖 + 通知居中 + 组件美化）
+// ── 命令式组件（ElMessage/ElMessageBox/ElNotification）官方样式显式注入 ──
+//    ElementPlusResolver 按需注入只对模板中的组件生效；命令式 API 直接
+//    import 不会触发样式副作用。历史上这三个弹层的官方 CSS 从未进过
+//    构建包（无底色/无排版 = "提示看不清"根因之一），此处显式补齐。
+import 'element-plus/theme-chalk/el-message.css'
+import 'element-plus/theme-chalk/el-message-box.css'
+import 'element-plus/theme-chalk/el-notification.css'
+
+// 全局样式（Element Plus 覆盖 + 组件美化）
 import '@/styles/index.scss'
 // Dashboard 深度视觉主题（注：tokens.scss 通过 vite additionalData 自动注入组件 SCSS 块）
 import '@/styles/dashboard-theme.scss'
@@ -67,10 +57,11 @@ app.use(router)
 // 安装全局错误处理（window.onerror + unhandledrejection）
 setupGlobalErrorHandler()
 
-// ── 全局：ElMessage 默认显示关闭按钮 + 5s 持续时间 ──
-//    Element Plus 2.x 通过 messageDefaults 对象配置全局默认值（非 ElMessage.defaults）。
+// ── 全局：ElMessage 默认关闭按钮 + 5s 时长 + grouping 去重 ──
+//    grouping 使相同文案的多条消息合并为一条角标计数（401 并发重试场景
+//    不再重复弹同文案）。Element Plus 2.x 通过 messageDefaults 配置全局默认。
 import { messageDefaults } from 'element-plus'
-Object.assign(messageDefaults, { showClose: true, duration: 5000 })
+Object.assign(messageDefaults, { showClose: true, duration: 5000, grouping: true })
 
 app.mount('#app')
 

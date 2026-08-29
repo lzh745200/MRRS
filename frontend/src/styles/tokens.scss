@@ -148,6 +148,7 @@
   --radius-sm: 2px;
   --radius-md: 4px;
   --radius-lg: 8px;
+  --radius-lg-plus: 10px;   /* 卡片/弹层常用 10px 档（filter-card/table-card/form-card） */
   --radius-xl: 12px;
   --radius-xxl: 16px;
   --radius-round: 9999px;
@@ -170,6 +171,7 @@
 
   // 组件特定阴影
   --shadow-card: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  --shadow-card-hover: 0 12px 28px -6px rgba(45, 106, 79, 0.22);
   --shadow-dropdown: 0 2px 12px 0 rgba(0, 0, 0, 0.12);
   --shadow-dialog: 0 8px 24px rgba(0, 0, 0, 0.15);
   --shadow-popover: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -264,8 +266,8 @@
 
 :root {
   --layout-header-height: 60px;
-  --layout-sidebar-width: 200px;
-  --layout-sidebar-collapsed-width: 64px;
+  --layout-sidebar-width: 240px;      /* 实际布局值（2026-08-29 与 DefaultLayoutSafe 对齐） */
+  --layout-sidebar-collapsed-width: 68px;
   --layout-footer-height: 48px;
   --layout-content-max-width: 1400px;
   --layout-content-padding: 24px;
@@ -318,7 +320,9 @@
 
 :root {
   --table-row-height: 36px;   // 紧凑表格行高
-  --control-height: 32px;     // 表单控件高度（small 档）
+  --control-height: 32px;     // 默认控件高度（el size=small 实际值）
+  --control-height-sm: 24px;  // 紧凑控件高度
+  --control-height-lg: 40px;  // 大号控件高度（登录页等主行动作）
   --form-label-width: 100px;  // 表单标签宽第一档（长标签表单用 120）
 }
 

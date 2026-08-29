@@ -75,7 +75,7 @@ export default defineConfig(({ mode }) => {
         generateBundle() {
           const versionJson = JSON.stringify(
             {
-              version: process.env.npm_package_version || '1.5.0',
+              version: process.env.npm_package_version || '1.10.0',
               buildTime: new Date().toISOString(),
             },
             null,

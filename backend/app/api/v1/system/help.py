@@ -1047,7 +1047,7 @@ async def get_system_info():
         "data": {
             "name": "帮扶管理信息系统",
             "short_name": "帮扶振兴",
-            "version": getattr(settings, "PROJECT_VERSION", "1.5.0"),
+            "version": getattr(settings, "PROJECT_VERSION", "1.10.0"),
             "description": (
                 "帮扶管理信息系统是面向帮扶乡村工作的综合管理平台，"
                 "实现帮扶村庄、学校、项目、资金的全流程信息化管理，"

@@ -374,7 +374,7 @@ describe('api/request — 拦截器未覆盖分支', () => {
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
       expect(mockAuthStorage.clear).toHaveBeenCalled()
-      expect(mockElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+      expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
       expect(mockAxiosPost).not.toHaveBeenCalled()
     })
 
@@ -432,7 +432,7 @@ describe('api/request — 拦截器未覆盖分支', () => {
         'Refresh response missing access_token'
       )
       expect(mockAuthStorage.clear).toHaveBeenCalled()
-      expect(mockElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+      expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
     })
 
     it('refresh 失败 → 当前请求与排队请求一并拒绝', async () => {

@@ -111,6 +111,43 @@ def update_env_example(version: str):
             print(f"  UPD: {root_env_example.relative_to(PROJECT_ROOT)}")
 
 
+def update_constants_ts(version: str):
+    """frontend/src/config/constants.ts — UI 三处版本显示的唯一数据源
+    （登录页/关于页/设置页）。SYSTEM_VERSION 优先读 VITE_APP_VERSION，
+    此处同步字面量兜底值，保证 .env 缺失时 UI 仍显示正确版本。"""
+    path = PROJECT_ROOT / "frontend" / "src" / "config" / "constants.ts"
+    if not path.exists():
+        return
+    content = path.read_text(encoding="utf-8")
+    new_content = re.sub(
+        r"(SYSTEM_VERSION\s*=\s*import\.meta\.env\.VITE_APP_VERSION \|\|\s*')[^']*(')",
+        rf"\g<1>{version}\g<2>",
+        content,
+    )
+    if new_content != content:
+        path.write_text(new_content, encoding="utf-8")
+        print(f"  UPD: {path.relative_to(PROJECT_ROOT)}")
+
+
+def update_backend_version_json(version: str):
+    """backend/version.json — version_service 读取的构建元数据"""
+    import json as _json
+
+    path = PROJECT_ROOT / "backend" / "version.json"
+    if not path.exists():
+        return
+    try:
+        data = _json.loads(path.read_text(encoding="utf-8"))
+    except (_json.JSONDecodeError, OSError):
+        return
+    if data.get("version") != version:
+        data["version"] = version
+        path.write_text(
+            _json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        print(f"  UPD: {path.relative_to(PROJECT_ROOT)}")
+
+
 def main():
     version = get_version()
     print(f"Syncing version to {version}...")
@@ -118,6 +155,8 @@ def main():
     update_package_json(version)
     update_nsis_scripts(version)
     update_env_example(version)
+    update_constants_ts(version)
+    update_backend_version_json(version)
     print("Done.")
 
 

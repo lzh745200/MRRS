@@ -31,20 +31,20 @@
     font-size: 12pt;
     line-height: 1.6;
     color: var(--color-black);
-    background: var(----color-bg-card);
+    background: var(--color-bg-card);
   }
 
   /* 页眉 */
   .print-header {
     text-align: center;
-    border-bottom: 2px solid var(----color-primary-dark-1);
+    border-bottom: 2px solid var(--color-primary-dark-1);
     padding-bottom: 8pt;
     margin-bottom: 16pt;
 
     .print-header-title {
       font-size: 16pt;
       font-weight: bold;
-      color: var(----color-primary-dark-1);
+      color: var(--color-primary-dark-1);
     }
 
     .print-header-subtitle {
@@ -86,7 +86,7 @@
     padding: 4pt 6pt !important;
     font-size: 10pt !important;
     color: var(--color-black) !important;
-    background: var(----color-bg-card) !important;
+    background: var(--color-bg-card) !important;
   }
 
   th {
@@ -99,7 +99,7 @@
     font-size: 18pt;
     font-weight: bold;
     text-align: center;
-    color: var(----color-primary-dark-1);
+    color: var(--color-primary-dark-1);
     margin-bottom: 12pt;
   }
 
@@ -144,13 +144,13 @@
     .cover-title {
       font-size: 28pt;
       font-weight: bold;
-      color: var(----color-primary-dark-1);
+      color: var(--color-primary-dark-1);
       margin-bottom: 20pt;
     }
 
     .cover-subtitle {
       font-size: 14pt;
-      color: var(----color-primary-light-1);
+      color: var(--color-primary-light-1);
       margin-bottom: 40pt;
     }
 
@@ -170,7 +170,7 @@
       font-weight: bold;
       text-align: center;
       margin-bottom: 20pt;
-      color: var(----color-primary-dark-1);
+      color: var(--color-primary-dark-1);
     }
 
     .toc-item {
@@ -188,7 +188,7 @@
   max-width: 210mm;
   margin: 0 auto;
   padding: 20mm;
-  background: var(----color-bg-card);
+  background: var(--color-bg-card);
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
   min-height: 297mm;
 }

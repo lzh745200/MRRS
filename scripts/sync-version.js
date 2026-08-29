@@ -149,8 +149,8 @@ const TARGETS = [
     },
   },
   {
-    name: "build.ps1 ($Version)",
-    file: "build.ps1",
+    name: "scripts/docker/build.ps1 ($Version)",
+    file: "scripts/docker/build.ps1",
     describe(c) {
       const m = c.match(/\$Version\s*=\s*"([^"]+)"/);
       return m ? m[1] : null;
@@ -160,8 +160,9 @@ const TARGETS = [
     },
   },
   {
-    name: "build-kylin.sh (artifact name)",
-    file: "build-kylin.sh",
+    name: "build-kylin.sh (artifact name, legacy)",
+    file: "scripts/legacy/build-kylin.sh",
+    optional: true,
     describe(c) {
       const m = c.match(/arm64-v(\d+\.\d+\.\d+)\.tar\.gz/);
       return m ? m[1] : null;
@@ -180,6 +181,47 @@ const TARGETS = [
     },
     apply(c, v) {
       return c.replace(/(\$PACKAGE_VERSION\s*=\s*")([^"]+)(")/, `$1${v}$3`);
+    },
+  },
+  {
+    name: "frontend/src/config/constants.ts (SYSTEM_VERSION fallback)",
+    file: "frontend/src/config/constants.ts",
+    describe(c) {
+      const m = c.match(/VITE_APP_VERSION \|\|\s*'([^']+)'/);
+      return m ? m[1] : null;
+    },
+    apply(c, v) {
+      return c.replace(
+        /(VITE_APP_VERSION \|\|\s*')(\d+\.\d+\.\d+)(')/g,
+        `$1${v}$3`,
+      );
+    },
+  },
+  {
+    name: "backend/version.json (version)",
+    file: "backend/version.json",
+    describe(c) {
+      try {
+        return JSON.parse(c).version || null;
+      } catch {
+        return null;
+      }
+    },
+    apply(c, v) {
+      const data = JSON.parse(c);
+      data.version = v;
+      return JSON.stringify(data, null, 2) + "\n";
+    },
+  },
+  {
+    name: "docker/Dockerfile.kylin-standalone (ARG VERSION)",
+    file: "docker/Dockerfile.kylin-standalone",
+    describe(c) {
+      const m = c.match(/ARG VERSION=(\d+\.\d+\.\d+)/);
+      return m ? m[1] : null;
+    },
+    apply(c, v) {
+      return c.replace(/(ARG VERSION=)(\d+\.\d+\.\d+)/, `$1${v}`);
     },
   },
   {

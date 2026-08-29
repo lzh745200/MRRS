@@ -73,6 +73,33 @@ function _isAuthEndpoint(url: string | undefined): boolean {
   )
 }
 
+/**
+ * 会话过期统一出口：提示 + 清理 + 跳转登录。
+ *
+ * 体验约定（修复"提示闪一下看不清"）：
+ * - ElMessage grouping 去重（并发多请求同时 401 只弹一条角标计数）；
+ * - 先 closeAll() 清掉过时提示，再延迟 600ms 整页跳转，保证用户读完整文案。
+ * 四个 401 分支（_retry 再 401 / auth 端点 401 / 无 refresh_token / refresh 失败）
+ * 一律走此函数，行为完全一致。
+ */
+function _handleSessionExpired(error: any): Promise<never> {
+  error.userMessage = '登录已过期，请重新登录'
+  if (!_requestFrozen) {
+    ElMessage.error({ message: '登录已过期，请重新登录', grouping: true })
+  }
+  if (
+    typeof window !== 'undefined' &&
+    !_isTestEnv &&
+    !_requestFrozen &&
+    !window.location.pathname.startsWith('/login')
+  ) {
+    window.setTimeout(() => {
+      window.location.href = '/login'
+    }, 600)
+  }
+  return Promise.reject(error)
+}
+
 // ── CSRF Token 管理（Double Submit Cookie 模式）──
 // 后端开启 CSRF 保护后，POST/PUT/DELETE/PATCH 需在 X-CSRF-Token 头回填 token。
 // token 来源：优先从 csrftoken Cookie 读取；若无则懒加载 GET /auth/csrf-token 获取
@@ -323,37 +350,13 @@ request.interceptors.response.use(
           _isRefreshing = false
           _onRefreshFailed(new Error('refresh 已重试仍 401'))
           AuthStorage.clear()
-          if (!_requestFrozen && !_isTestEnv) {
-            ElMessage.error('登录已过期，请重新登录')
-          }
-          if (
-            typeof window !== 'undefined' &&
-            !_isTestEnv &&
-            !_requestFrozen &&
-            !window.location.pathname.startsWith('/login')
-          ) {
-            window.location.href = '/login'
-          }
-          error.userMessage = '登录已过期，请重新登录'
-          return Promise.reject(error)
+          return _handleSessionExpired(error)
         }
         // 系统级处理：登录过期提示 + refresh 续期 / 跳转登录（保留全局提示）
         if (!originalRequest || _isAuthEndpoint(originalRequest.url)) {
           _cachedToken = null
           AuthStorage.clear()
-          if (!_requestFrozen) {
-            ElMessage.error('登录已过期，请重新登录')
-          }
-          if (
-            typeof window !== 'undefined' &&
-            !_isTestEnv &&
-            !_requestFrozen &&
-            !window.location.pathname.startsWith('/login')
-          ) {
-            window.location.href = '/login'
-          }
-          error.userMessage = '登录已过期，请重新登录'
-          return Promise.reject(error)
+          return _handleSessionExpired(error)
         }
 
         // 检查是否有 refresh_token 可用
@@ -362,19 +365,7 @@ request.interceptors.response.use(
           // 无 refresh_token，直接登出
           _cachedToken = null
           AuthStorage.clear()
-          if (!_requestFrozen) {
-            ElMessage.error('登录已过期，请重新登录')
-          }
-          if (
-            typeof window !== 'undefined' &&
-            !_isTestEnv &&
-            !_requestFrozen &&
-            !window.location.pathname.startsWith('/login')
-          ) {
-            window.location.href = '/login'
-          }
-          error.userMessage = '登录已过期，请重新登录'
-          return Promise.reject(error)
+          return _handleSessionExpired(error)
         }
 
         // 如果已经在刷新中，将当前请求加入队列等待
@@ -449,19 +440,8 @@ request.interceptors.response.use(
           _onRefreshFailed(refreshError)
           _cachedToken = null
           AuthStorage.clear()
-          if (!_requestFrozen) {
-            ElMessage.error('登录已过期，请重新登录')
-          }
-          if (
-            typeof window !== 'undefined' &&
-            !_isTestEnv &&
-            !_requestFrozen &&
-            !window.location.pathname.startsWith('/login')
-          ) {
-            window.location.href = '/login'
-          }
-          error.userMessage = '登录已过期，请重新登录'
-          return Promise.reject(refreshError)
+          // 保留原始 refreshError 作为 rejection 原因（调用方依赖其错误消息）
+          return _handleSessionExpired(refreshError)
           /* c8 ignore next -- finally 分支为 v8 计数伪影（try/catch 必定走到 finally） */
         } finally {
           _isRefreshing = false

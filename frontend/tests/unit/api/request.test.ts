@@ -613,7 +613,7 @@ describe('api/request — 401 与 refresh 续期', () => {
     const error = { response: { status: 401, data: {} } }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
     expect(mockAxiosPost).not.toHaveBeenCalled()
   })
 
@@ -624,7 +624,7 @@ describe('api/request — 401 与 refresh 续期', () => {
     }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
   })
 
   it('401 登录端点 → 不触发 refresh（防无限循环）', async () => {
@@ -686,7 +686,7 @@ describe('api/request — 401 与 refresh 续期', () => {
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data3' }) }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
     expect(mockAxiosPost).not.toHaveBeenCalled()
   })
 
@@ -696,7 +696,7 @@ describe('api/request — 401 与 refresh 续期', () => {
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data4' }) }
     await expect(handlers.responseR(error)).rejects.toThrow('Refresh response missing access_token')
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
   })
 
   it('401 refresh 期间后续 401 排队，成功后统一用新 token 重发', async () => {
@@ -742,7 +742,7 @@ describe('api/request — 401 与 refresh 续期', () => {
     await expect(p1).rejects.toThrow('refresh boom')
     await expect(p2).rejects.toThrow('refresh boom')
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
   })
 })
 
@@ -1120,15 +1120,32 @@ describe('api/request — MODE=development 分支', () => {
   it('401 非登录页 → 跳转 /login', async () => {
     const location: any = { pathname: '/workbench', href: '' }
     vi.stubGlobal('location', location)
+    // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
+    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
     await import('@/api/request')
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data' }) }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(location.href).toBe('/login')
   })
 
+  it('401 跳转延迟 600ms —— 保证提示可读后再整页跳转（专项语义）', async () => {
+    vi.useFakeTimers()
+    const location: any = { pathname: '/workbench', href: '' }
+    vi.stubGlobal('location', location)
+    await import('@/api/request')
+    const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data' }) }
+    const p = handlers.responseR(error)
+    await expect(p).rejects.toBe(error)
+    expect(location.href).toBe('') // 600ms 内不跳转，提示可读
+    await vi.advanceTimersByTimeAsync(600)
+    expect(location.href).toBe('/login')
+    vi.useRealTimers()
+  })
   it('401 已在登录页 → 不跳转', async () => {
     const location: any = { pathname: '/login', href: '' }
     vi.stubGlobal('location', location)
+    // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
+    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
     await import('@/api/request')
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data' }) }
     await expect(handlers.responseR(error)).rejects.toBe(error)
@@ -1138,6 +1155,8 @@ describe('api/request — MODE=development 分支', () => {
   it('401 config.url 为 undefined → _isAuthEndpoint 短路 + 跳转登录页', async () => {
     const location: any = { pathname: '/workbench', href: '' }
     vi.stubGlobal('location', location)
+    // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
+    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
     await import('@/api/request')
     const error = {
       response: { status: 401, data: {} },
@@ -1150,6 +1169,8 @@ describe('api/request — MODE=development 分支', () => {
   it('401 登录端点（有 refresh_token）→ 不 refresh 直接登出并跳转', async () => {
     const location: any = { pathname: '/workbench', href: '' }
     vi.stubGlobal('location', location)
+    // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
+    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
     authState.refreshToken = 'refresh-1'
     await import('@/api/request')
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/auth/login' }) }
@@ -1162,19 +1183,23 @@ describe('api/request — MODE=development 分支', () => {
   it('401 refresh 失败 → 清除认证并跳转登录页', async () => {
     const location: any = { pathname: '/workbench', href: '' }
     vi.stubGlobal('location', location)
+    // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
+    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
     authState.refreshToken = 'refresh-1'
     mockAxiosPost.mockRejectedValueOnce(new Error('refresh down'))
     await import('@/api/request')
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data' }) }
     await expect(handlers.responseR(error)).rejects.toThrow('refresh down')
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
     expect(location.href).toBe('/login')
   })
 
   it('401 请求冻结中 → 不跳转不提示', async () => {
     const location: any = { pathname: '/workbench', href: '' }
     vi.stubGlobal('location', location)
+    // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
+    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
     const m = await import('@/api/request')
     m.freezeRequests()
     try {

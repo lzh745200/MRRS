@@ -70,7 +70,7 @@ async def check_init_status(db: Session = Depends(get_db)):
 
         result = {
             "initialized": is_initialized,
-            "version": getattr(settings, "PROJECT_VERSION", "1.0.0"),
+            "version": getattr(settings, "PROJECT_VERSION", "1.10.0"),
         }
 
         if is_initialized:
@@ -85,7 +85,7 @@ async def check_init_status(db: Session = Depends(get_db)):
             "success": True,
             "data": {
                 "initialized": False,
-                "version": getattr(settings, "PROJECT_VERSION", "1.0.0"),
+                "version": getattr(settings, "PROJECT_VERSION", "1.10.0"),
                 # W1-T8：内部异常细节不出站，仅记录日志
                 "error": "状态检查失败，请查看服务端日志",
             },

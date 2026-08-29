@@ -75,7 +75,7 @@
       margin-left: var(--spacing-sm);
       font-size: var(--font-size-lg);
       font-weight: var(--font-weight-bold);
-      color: var(----color-bg-card);
+      color: var(--color-bg-card);
       white-space: nowrap;
       background: linear-gradient(135deg, var(--color-primary), var(--color-success));
       -webkit-background-clip: text;
@@ -108,7 +108,7 @@
 
         &:hover {
           background-color: rgba(255, 255, 255, 0.08);
-          color: var(----color-bg-card);
+          color: var(--color-bg-card);
         }
 
         .el-icon {
@@ -131,7 +131,7 @@
 
       .el-sub-menu.is-active {
         .el-sub-menu__title {
-          color: var(----color-bg-card);
+          color: var(--color-bg-card);
         }
       }
     }
@@ -220,7 +220,7 @@
         height: 18px;
         padding: 0 5px;
         background-color: var(--color-danger);
-        color: var(----color-bg-card);
+        color: var(--color-bg-card);
         font-size: 11px;
         border-radius: var(--radius-round);
         display: flex;
@@ -302,7 +302,7 @@
     padding: var(--spacing-xl);
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border-radius: var(--radius-xl);
-    color: var(----color-bg-card);
+    color: var(--color-bg-card);
     position: relative;
     overflow: hidden;
 
@@ -510,7 +510,7 @@
 
           &:hover,
           &.is-focus {
-            background-color: var(----color-bg-card);
+            background-color: var(--color-bg-card);
             box-shadow: 0 0 0 2px var(--color-primary-light-7);
           }
         }

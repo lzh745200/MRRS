@@ -2,15 +2,16 @@
  * 系统提示页面统一样式 —— ElMessage / ElNotification / ElMessageBox
  *
  * 设计目标:
- *   1. 居中定位 —— 由 main.ts DOM 注入提供（position:fixed + translate(-50%,-50%)）
- *   2. 外观美化 —— 色条、阴影、渐变、圆角（本文件）
+ *   1. 定位 —— Element Plus 默认顶部居中、多条自动向下堆叠
+ *      （历史居中注入已移除：多条消息字叠字为"看不清"根因之一）
+ *   2. 外观美化 —— 色条、实体底色、阴影、圆角（本文件）
  *   3. 关闭按钮 —— 始终可见，hover 交互反馈
  *   4. 入场动画 —— fade + scale 柔和出现
  *   5. 主题 —— 使用项目 CSS 变量，跟随主题切换
  *
- * 注意: 定位规则在 main.ts 第零层 DOM 注入中，不要在此重复。
- *       .el-notification / .el-message 均为 document.body 的直接子元素。
- *       .el-notification__group 是每个通知的内部内容容器，不是通知的父级包裹层。
+ * 关键约定: 每种类型的底色与文字色必须"实体化"（显式给定，不依赖继承）——
+ *   军绿/暗色页面背景下继承文字色会撞色（"看不清"根因之二）。
+ *   .el-notification / .el-message 均为 document.body 的直接子元素。
  */
 
 :root {
@@ -31,7 +32,7 @@
   border-radius: 10px;
   padding: 14px 20px;
   box-shadow: var(--shadow-dialog, 0 8px 24px rgba(0, 0, 0, 0.15));
-  border: 1px solid var(--el-border-color-lighter, var(----color-border-light));
+  border: 1px solid var(--el-border-color-lighter, var(--color-border-light));
 
   /* 入场动画 */
   animation: promptFadeIn 0.28s var(--animation-prompt-easing);
@@ -43,13 +44,13 @@
   /* 关闭按钮 */
   .el-message__closeBtn {
     font-size: 16px;
-    color: var(--color-text-secondary, var(----color-text-secondary));
+    color: var(--color-text-secondary, var(--color-text-secondary));
     opacity: 0.7;
     transition: opacity 0.2s, color 0.2s;
 
     &:hover {
       opacity: 1;
-      color: var(--color-text-primary, var(----color-text-primary));
+      color: var(--color-text-primary, var(--color-text-primary));
     }
   }
 }
@@ -60,30 +61,48 @@
   font-size: 18px;
 }
 
-/* 类型色条 —— 左侧色带 + 渐变背景（使用 Element Plus 主题变量）
-   ElMessage 和 ElNotification 共享同色渐变，仅 border-left 宽度不同 */
+/* 类型色条 + 实体底色 + 实体文字色（不依赖继承——暗色页面防撞色）
+   ElMessage 和 ElNotification 共享同色渐变，仅 border-left 宽度不同。
+   文字色取各语义色 dark 档保证浅底上高对比；dark/military 主题由
+   tokens 提供的 --el-color-*-light-9 暗色映射自动适配底色。 */
 .el-message--success, .el-notification--success {
   border-left-style: solid;
-  border-left-color: var(--color-success, var(----color-success));
-  background: linear-gradient(135deg, var(--el-color-success-light-9, #f5fdf7) 0%, var(----color-bg-card) 100%);
+  border-left-color: var(--color-success, #40916c);
+  background: linear-gradient(135deg, var(--el-color-success-light-9, #f5fdf7) 0%, var(--color-bg-card, #ffffff) 100%);
+  color: var(--el-color-success-dark-2, var(--color-success-dark, #2d6a4f));
+
+  .el-message__content, .el-notification__title, .el-notification__content { color: inherit; }
+  .el-message__closeBtn, .el-notification__closeBtn { color: inherit; }
 }
 
 .el-message--error, .el-notification--error {
   border-left-style: solid;
-  border-left-color: var(--color-danger, var(----color-danger));
-  background: linear-gradient(135deg, var(--el-color-danger-light-9, #fef6f5) 0%, var(----color-bg-card) 100%);
+  border-left-color: var(--color-danger, #d90429);
+  background: linear-gradient(135deg, var(--el-color-danger-light-9, #fef6f5) 0%, var(--color-bg-card, #ffffff) 100%);
+  color: var(--el-color-danger-dark-2, var(--color-danger-dark, #9b1c24));
+
+  .el-message__content, .el-notification__title, .el-notification__content { color: inherit; }
+  .el-message__closeBtn, .el-notification__closeBtn { color: inherit; }
 }
 
 .el-message--warning, .el-notification--warning {
   border-left-style: solid;
-  border-left-color: var(--color-warning, var(----color-warning));
-  background: linear-gradient(135deg, var(--el-color-warning-light-9, #fefaf3) 0%, var(----color-bg-card) 100%);
+  border-left-color: var(--color-warning, #e9a23b);
+  background: linear-gradient(135deg, var(--el-color-warning-light-9, #fefaf3) 0%, var(--color-bg-card, #ffffff) 100%);
+  color: var(--el-color-warning-dark-2, var(--color-warning-dark, #8a5a00));
+
+  .el-message__content, .el-notification__title, .el-notification__content { color: inherit; }
+  .el-message__closeBtn, .el-notification__closeBtn { color: inherit; }
 }
 
 .el-message--info, .el-notification--info {
   border-left-style: solid;
-  border-left-color: var(--color-info, var(----color-info));
-  background: linear-gradient(135deg, var(--el-color-info-light-9, #f7faf8) 0%, var(----color-bg-card) 100%);
+  border-left-color: var(--color-info, #457b9d);
+  background: linear-gradient(135deg, var(--el-color-info-light-9, #f7faf8) 0%, var(--color-bg-card, #ffffff) 100%);
+  color: var(--el-color-info-dark-2, var(--color-info-dark, #33506b));
+
+  .el-message__content, .el-notification__title, .el-notification__content { color: inherit; }
+  .el-message__closeBtn, .el-notification__closeBtn { color: inherit; }
 }
 
 /* border-left 宽度差异: ElMessage 4px, ElNotification 5px */
@@ -119,7 +138,7 @@
   border-radius: 12px;
   padding: 18px 24px;
   box-shadow: var(--shadow-dialog, 0 8px 24px rgba(0, 0, 0, 0.15));
-  border: 1px solid var(--el-border-color-lighter, var(----color-border-light));
+  border: 1px solid var(--el-border-color-lighter, var(--color-border-light));
 
   /* 入场动画 */
   animation: promptFadeIn 0.32s var(--animation-prompt-easing);
@@ -129,13 +148,13 @@
     top: 16px;
     right: 16px;
     font-size: 18px;
-    color: var(--color-text-secondary, var(----color-text-secondary));
+    color: var(--color-text-secondary, var(--color-text-secondary));
     opacity: 0.7;
     transition: opacity 0.2s, color 0.2s;
 
     &:hover {
       opacity: 1;
-      color: var(--color-text-primary, var(----color-text-primary));
+      color: var(--color-text-primary, var(--color-text-primary));
     }
   }
 
@@ -143,7 +162,7 @@
   .el-notification__title {
     font-weight: 600;
     font-size: 16px;
-    color: var(--color-text-primary, var(----color-text-primary));
+    color: var(--color-text-primary, var(--color-text-primary));
     margin-bottom: 6px;
     padding-right: 24px; /* 为关闭按钮留出空间 */
   }
@@ -151,7 +170,7 @@
   /* 内容 */
   .el-notification__content {
     font-size: 14px;
-    color: var(--color-text-regular, var(----color-text-regular));
+    color: var(--color-text-regular, var(--color-text-regular));
     line-height: 1.6;
   }
 }
@@ -171,8 +190,10 @@
   border-radius: 14px;
   padding-bottom: 0; /* footer 自己处理内边距 */
   box-shadow: var(--shadow-dialog, 0 8px 24px rgba(0, 0, 0, 0.15));
-  border: 1px solid var(--el-border-color-lighter, var(----color-border-light));
-  background: var(----color-bg-card);
+  border: 1px solid var(--el-border-color-lighter, var(--color-border-light));
+  background: var(--color-bg-card, #ffffff);
+  /* 实体文字色锚定：弹窗自带卡片底，内部文字不随外层页面主题文字色漂移 */
+  color: var(--color-text-regular, #303133);
 
   /* 入场动画 */
   animation: promptFadeIn 0.3s var(--animation-prompt-easing);
@@ -185,7 +206,7 @@
     .el-message-box__title {
       font-weight: 700;
       font-size: 17px;
-      color: var(--color-text-primary, var(----color-text-primary));
+      color: var(--color-text-primary, var(--color-text-primary));
     }
 
     /* 右上角关闭按钮 (×) */
@@ -199,12 +220,12 @@
       align-items: center;
       justify-content: center;
       border-radius: 6px;
-      color: var(--color-text-secondary, var(----color-text-secondary));
+      color: var(--color-text-secondary, var(--color-text-secondary));
       transition: background 0.2s, color 0.2s;
 
       &:hover {
-        background: var(--el-bg-color-page, var(----color-bg-hover));
-        color: var(--color-text-primary, var(----color-text-primary));
+        background: var(--el-bg-color-page, var(--color-bg-hover));
+        color: var(--color-text-primary, var(--color-text-primary));
       }
     }
   }
@@ -213,7 +234,7 @@
   .el-message-box__content {
     padding: 16px 24px 8px;
     font-size: 15px;
-    color: var(--color-text-regular, var(----color-text-regular));
+    color: var(--color-text-regular, var(--color-text-regular));
     line-height: 1.7;
   }
 
@@ -324,7 +345,7 @@
 .el-message__closeBtn:focus-visible,
 .el-notification__closeBtn:focus-visible,
 .el-message-box__headerbtn:focus-visible {
-  outline: 2px solid var(--color-primary, var(----color-primary));
+  outline: 2px solid var(--color-primary, var(--color-primary));
   outline-offset: 2px;
   border-radius: 4px;
 }

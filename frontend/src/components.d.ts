@@ -39,7 +39,6 @@ declare module 'vue' {
     CommonLazyImageLazyImage: typeof import('./components/common/LazyImage/LazyImage.vue')['default']
     CommonListToolbar: typeof import('./components/common/ListToolbar.vue')['default']
     CommonNetworkStatusIndicator: typeof import('./components/common/NetworkStatusIndicator.vue')['default']
-    CommonPageContainer: typeof import('./components/common/PageContainer.vue')['default']
     CommonPageHeader: typeof import('./components/common/PageHeader.vue')['default']
     CommonPasswordStrength: typeof import('./components/common/PasswordStrength.vue')['default']
     CommonPrintDialog: typeof import('./components/common/PrintDialog.vue')['default']

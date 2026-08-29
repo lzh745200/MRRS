@@ -216,7 +216,7 @@ describe('api/request — 非测试环境登录跳转', () => {
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/auth/login' }) }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
   })
 
   it('401 无 refresh_token → 清除认证并跳转 /login', async () => {
@@ -232,7 +232,7 @@ describe('api/request — 非测试环境登录跳转', () => {
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data' }) }
     await expect(handlers.responseR(error)).rejects.toThrow('refresh failed')
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith('登录已过期，请重新登录')
+    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
   })
 })
 

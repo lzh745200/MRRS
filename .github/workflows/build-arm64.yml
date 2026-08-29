@@ -172,6 +172,12 @@ jobs:
           done
           echo "Electron 语法检查通过 ($(ls electron/*.js | wc -l) 个文件)"
 
+      # 版本号与发布 tag 对齐（与 build-windows.yml:115 一致）——否则 Electron DEB
+      # 产物永远使用仓库 package.json 的静态版本（历史 DEB 1.10.0 ≠ Setup 1.10.4 根因）
+      - name: Sync version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python scripts/sync_version.py "${GITHUB_REF_NAME#v}"
+
       - name: Build with electron-builder
         run: |
           echo "=== Pre-build debug ==="

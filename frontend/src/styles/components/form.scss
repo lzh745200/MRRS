@@ -1,6 +1,10 @@
 /**
  * 表单布局标准样式
  * 统一表单标签宽度、布局等样式规范
+ *
+ * 使用方式（页面模板挂类即可，全局 scss 不支持 :deep，选择器为普通后代）：
+ *   <el-form class="form-label-md standard-form" ...>
+ * 档位：sm 80px（登录/搜索）· md 100px（标准）· lg 120px（项目/村庄）· xl 140px
  */
 
 // ========== 表单标签宽度标准 ==========
@@ -11,42 +15,23 @@
   --form-label-width-xl: 140px; // 超长标签表单
 }
 
-// 表单标签宽度工具类
+// 表单标签宽度工具类（全局版：普通后代选择器，页面挂类即生效）
 .form-label {
   &-sm {
-    :deep(.el-form-item__label) {
-      width: var(--form-label-width-sm) !important;
-    }
-    :deep(.el-form-item__content) {
-      margin-left: var(--form-label-width-sm) !important;
-    }
+    .el-form-item__label { width: var(--form-label-width-sm); }
+    &.el-form--label-left .el-form-item__label { justify-content: flex-start; }
   }
 
   &-md {
-    :deep(.el-form-item__label) {
-      width: var(--form-label-width-md) !important;
-    }
-    :deep(.el-form-item__content) {
-      margin-left: var(--form-label-width-md) !important;
-    }
+    .el-form-item__label { width: var(--form-label-width-md); }
   }
 
   &-lg {
-    :deep(.el-form-item__label) {
-      width: var(--form-label-width-lg) !important;
-    }
-    :deep(.el-form-item__content) {
-      margin-left: var(--form-label-width-lg) !important;
-    }
+    .el-form-item__label { width: var(--form-label-width-lg); }
   }
 
   &-xl {
-    :deep(.el-form-item__label) {
-      width: var(--form-label-width-xl) !important;
-    }
-    :deep(.el-form-item__content) {
-      margin-left: var(--form-label-width-xl) !important;
-    }
+    .el-form-item__label { width: var(--form-label-width-xl); }
   }
 }
 
@@ -213,13 +198,23 @@
 }
 
 // ========== 搜索表单样式 ==========
+// 与 layout.scss 的 .list-page .search-form（卡片化规范）视觉归一：
+// 卡片底 + 阴影 + gap 布局；list-page 作用域内由后者接管（含 search-btns 右推）。
 .search-form {
-  padding: 16px;
-  background-color: var(--el-fill-color-light);
-  border-radius: var(--el-border-radius-base);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md, 16px);
+  padding: var(--spacing-lg, 24px);
+  background-color: var(--color-bg-card, #ffffff);
+  border-radius: var(--radius-lg, 8px);
+  box-shadow: var(--shadow-sm);
 
   .el-form-item {
     margin-bottom: 0;
-    margin-right: 12px;
+    margin-right: 0;
+  }
+
+  .search-btns {
+    margin-left: auto;
   }
 }
