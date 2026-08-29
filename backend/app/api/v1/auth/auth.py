@@ -125,6 +125,7 @@ async def login(
     client_ip = get_client_ip(request)
     is_allowed = await check_rate_limit(
         key=f"login:{client_ip}",
+        request=request,
         limit=_LOGIN_RATE_LIMIT,
         window=_LOGIN_RATE_WINDOW,
     )
@@ -309,6 +310,7 @@ async def two_factor_verify_login(
     client_ip = get_client_ip(request)
     is_allowed = await check_rate_limit(
         key=f"login:{client_ip}",
+        request=request,
         limit=_LOGIN_RATE_LIMIT,
         window=_LOGIN_RATE_WINDOW,
     )
@@ -607,6 +609,7 @@ async def refresh_token(request: Request, token: str = Body(..., embed=True), db
     client_ip = get_client_ip(request)
     is_allowed = await check_rate_limit(
         key=f"refresh:{client_ip}",
+        request=request,
         limit=_REFRESH_RATE_LIMIT,
         window=_REFRESH_RATE_WINDOW,
     )
@@ -703,6 +706,7 @@ async def get_csrf_token(request: Request, response: Response) -> dict:
     client_ip = get_client_ip(request)
     is_allowed = await check_rate_limit(
         key=f"csrf:{client_ip}",
+        request=request,
         limit=30,
         window=60,
     )
@@ -778,6 +782,7 @@ async def register_user(
     client_ip = get_client_ip(request)
     is_allowed = await check_rate_limit(
         key=f"register:{client_ip}",
+        request=request,
         limit=_REGISTER_RATE_LIMIT,
         window=_REGISTER_RATE_WINDOW,
     )

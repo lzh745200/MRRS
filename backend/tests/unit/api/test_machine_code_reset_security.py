@@ -69,13 +69,23 @@ def _isolate_rate_store():
 
 
 class TestRateLimitSignature:
-    """check_rate_limit 签名收紧：key 为首参，缺 key 必须 fail-closed。"""
+    """check_rate_limit 签名收紧：key 为首参，缺 key/request 必须 fail-closed。"""
+
+    @staticmethod
+    def _req():
+        from types import SimpleNamespace
+
+        return SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
 
     def test_positional_string_binds_to_key(self):
         """位置传参字符串必须绑定到 key（历史 bug：绑到 request 形参静默放行）。"""
-        ok = asyncio.run(core_security.check_rate_limit("w1t1-key", limit=1, window=60))
+        ok = asyncio.run(
+            core_security.check_rate_limit("w1t1-key", request=self._req(), limit=1, window=60)
+        )
         assert ok is True
-        blocked = asyncio.run(core_security.check_rate_limit("w1t1-key", limit=1, window=60))
+        blocked = asyncio.run(
+            core_security.check_rate_limit("w1t1-key", request=self._req(), limit=1, window=60)
+        )
         assert blocked is False
 
     def test_missing_key_fails_closed(self):
@@ -83,9 +93,14 @@ class TestRateLimitSignature:
         with pytest.raises(ValueError):
             asyncio.run(core_security.check_rate_limit())
 
+    def test_missing_request_fails_closed(self):
+        """W1-T2：缺 request 时必须抛错拒绝（2026-08-29 收紧）。"""
+        with pytest.raises(ValueError):
+            asyncio.run(core_security.check_rate_limit(key="w1t1-noreq", limit=5, window=60))
+
     def test_keyword_key_still_works(self):
         ok = asyncio.run(
-            core_security.check_rate_limit(key="w1t1-kw", limit=5, window=60)
+            core_security.check_rate_limit(key="w1t1-kw", request=self._req(), limit=5, window=60)
         )
         assert ok is True
 

@@ -546,6 +546,14 @@ class TestSanitizeInput:
 
 
 class TestCheckRateLimit:
+    """request stub: 当前实现仅校验非 None, 用 SimpleNamespace 模拟 FastAPI Request。"""
+
+    @staticmethod
+    def _req():
+        from types import SimpleNamespace
+
+        return SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+
     @pytest.mark.asyncio
     async def test_key_is_none_fails_closed(self):
         """W1-T1：缺 key 必须抛错拒绝，而非静默放行（历史缺陷）。"""
@@ -553,17 +561,23 @@ class TestCheckRateLimit:
             await check_rate_limit(key=None)
 
     @pytest.mark.asyncio
+    async def test_missing_request_fails_closed(self):
+        """W1-T2：缺 request 必须抛错拒绝（2026-08-29 收紧）。"""
+        with pytest.raises(ValueError):
+            await check_rate_limit(key="no_req_key", limit=5, window=60)
+
+    @pytest.mark.asyncio
     async def test_under_limit(self):
         _rate_limit_store.clear()
-        result = await check_rate_limit(key="test_key", limit=5, window=60)
+        result = await check_rate_limit(key="test_key", request=self._req(), limit=5, window=60)
         assert result is True
 
     @pytest.mark.asyncio
     async def test_over_limit(self):
         _rate_limit_store.clear()
         for _ in range(5):
-            await check_rate_limit(key="limited_key", limit=5, window=60)
-        result = await check_rate_limit(key="limited_key", limit=5, window=60)
+            await check_rate_limit(key="limited_key", request=self._req(), limit=5, window=60)
+        result = await check_rate_limit(key="limited_key", request=self._req(), limit=5, window=60)
         assert result is False
 
     @pytest.mark.asyncio
@@ -571,20 +585,44 @@ class TestCheckRateLimit:
         _rate_limit_store.clear()
         with patch("time.monotonic", side_effect=[100, 100, 100, 100, 100, 300]):
             for _ in range(5):
-                await check_rate_limit(key="expiry_key", limit=5, window=60)
-            result = await check_rate_limit(key="expiry_key", limit=5, window=60)
+                await check_rate_limit(key="expiry_key", request=self._req(), limit=5, window=60)
+            result = await check_rate_limit(
+                key="expiry_key", request=self._req(), limit=5, window=60
+            )
             assert result is True
 
 
 class TestGetClientIP:
-    def test_x_forwarded_for(self):
+    """默认不信任 X-Forwarded-For/X-Real-IP（可伪造, 限流键可被轮换绕过）;
+    仅 TRUST_PROXY_HEADERS=True（可信反代部署）时读取代理头。"""
+
+    @staticmethod
+    def _mkrequest(headers):
         request = MagicMock(spec=Request)
-        request.headers = {"X-Forwarded-For": "1.2.3.4, 5.6.7.8"}
+        request.headers = headers
+        request.client.host = "9.9.9.9"
+        return request
+
+    def test_forwarded_for_ignored_by_default(self):
+        request = self._mkrequest({"X-Forwarded-For": "1.2.3.4, 5.6.7.8"})
+        assert get_client_ip(request) == "9.9.9.9"
+
+    def test_x_real_ip_ignored_by_default(self):
+        request = self._mkrequest({"X-Real-IP": "10.0.0.1"})
+        assert get_client_ip(request) == "9.9.9.9"
+
+    def test_forwarded_for_trusted_when_proxy_enabled(self, monkeypatch):
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "TRUST_PROXY_HEADERS", True)
+        request = self._mkrequest({"X-Forwarded-For": "1.2.3.4, 5.6.7.8"})
         assert get_client_ip(request) == "1.2.3.4"
 
-    def test_x_real_ip(self):
-        request = MagicMock(spec=Request)
-        request.headers = {"X-Real-IP": "10.0.0.1"}
+    def test_x_real_ip_trusted_when_proxy_enabled(self, monkeypatch):
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "TRUST_PROXY_HEADERS", True)
+        request = self._mkrequest({"X-Real-IP": "10.0.0.1"})
         assert get_client_ip(request) == "10.0.0.1"
 
     def test_client_host(self):

@@ -397,7 +397,7 @@ async def reset_password_with_machine_code(
     """
     # 速率限制：每IP每分钟最多5次（关键字传参，历史缺陷为位置传参绑定错误）
     client_ip = get_client_ip(request)
-    if not await check_rate_limit(key=f"reset_pwd:{client_ip}", limit=5, window=60):
+    if not await check_rate_limit(key=f"reset_pwd:{client_ip}", request=request, limit=5, window=60):
         raise HTTPException(status_code=429, detail="操作过于频繁，请稍后再试")
 
     # 仅限本机操作（基于 TCP 对端地址，不信任可伪造头）

@@ -8,7 +8,6 @@
 - _collect_with_psutil 磁盘采集失败回退系统盘（177-181）与整体异常分支（189-190）
 """
 
-import importlib
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -18,17 +17,33 @@ from app.services.resource_monitor import ResourceMonitor, ResourceSnapshot
 
 class TestPsutilImportFallback:
     def test_import_without_psutil(self):
-        # psutil 不可导入时模块仍可加载并使用 fallback（21-24）
-        with patch.dict(sys.modules, {"psutil": None}):
-            importlib.reload(rm)
-            assert rm.PSUTIL_AVAILABLE is False
-            assert rm.psutil is None
-            # fallback 采集路径（90、194-201）
-            snapshot = rm.ResourceMonitor().get_current()
-            assert snapshot.disk_total > 0
-        # 还原模块到正常状态，避免影响同进程其他测试
-        importlib.reload(rm)
-        assert rm.PSUTIL_AVAILABLE is True
+        """psutil 不可导入时模块仍可加载并使用 fallback（21-24）。
+
+        W1 不变量 8: 禁止对 services 子模块 importlib.reload（reload 就地重建
+        类对象, 导致跨文件 patch 失效）。导入分支改在子进程中验证, 零模块状态污染。
+        """
+        import subprocess
+        from pathlib import Path
+
+        code = (
+            "import sys\n"
+            "sys.modules['psutil'] = None\n"
+            "import app.services.resource_monitor as m\n"
+            "assert m.PSUTIL_AVAILABLE is False and m.psutil is None\n"
+            "s = m.ResourceMonitor().get_current()\n"
+            "assert s.disk_total > 0\n"
+            "print('OK')\n"
+        )
+        backend_dir = str(Path(__file__).resolve().parents[2])
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=backend_dir,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 0, f"子进程失败:\n{result.stderr}"
+        assert "OK" in result.stdout
 
 
 class TestGetCurrentFallback:

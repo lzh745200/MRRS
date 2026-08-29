@@ -848,7 +848,17 @@ function performAutoBackup() {
 }
 
 function cleanupOldBackups() {
-  const req = http.get(`http://127.0.0.1:${backendPort}/api/v1/system/backup`, (res) => {
+  // 列表/删除端点接受 X-Internal-Backup 内部密钥(与自动备份 POST 同模式),
+  // 否则 JWT 缺失导致 7 天保留策略永不生效, 备份无限累积。
+  const internalHeaders = { 'X-Internal-Backup': INTERNAL_BACKUP_KEY };
+  const req = http.request({
+    hostname: '127.0.0.1',
+    port: backendPort,
+    path: '/api/v1/system/backup',
+    method: 'GET',
+    headers: internalHeaders,
+    timeout: 10000,
+  }, (res) => {
     let body = '';
     res.on('data', (chunk) => { body += chunk; });
     res.on('end', () => {
@@ -865,6 +875,7 @@ function cleanupOldBackups() {
               port: backendPort,
               path: `/api/v1/system/backup/${encodeURIComponent(backup.file_name)}`,
               method: 'DELETE',
+              headers: internalHeaders,
               timeout: 10000,
             }, (res) => { if (res.statusCode >= 400) console.warn(`删除 ${backup.file_name} 失败`); });
             delReq.on('error', (err) => { console.warn(`删除 ${backup.file_name} 错误:`, err.message); });
@@ -959,7 +970,8 @@ function setupIpcHandlers() {
       (root) => resolved === root || resolved.startsWith(root + path.sep)
     );
     const lower = resolved.toLowerCase();
-    const isSecrets = lower.includes('runtime_secrets.json') || lower.includes('secrets.json');
+    // 与 open-path(:946) 保持一致: master.key 同样在拦截列表
+    const isSecrets = lower.includes('runtime_secrets.json') || lower.includes('secrets.json') || lower.includes('master.key');
     if (!inScope || isSecrets) {
       console.warn(`[IPC] read-file-chunked 拒绝越界路径: ${resolved}`);
       return { error: 'forbidden-path' };

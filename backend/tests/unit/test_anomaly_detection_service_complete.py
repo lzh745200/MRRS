@@ -277,47 +277,38 @@ class TestSklearnImport:
     """测试scikit-learn导入处理"""
 
     def test_sklearn_not_available_path(self):
-        """测试sklearn不可用时代码路径（覆盖22-24行）"""
+        """sklearn 不可用时模块导入仍成功且 SKLEARN_AVAILABLE=False（覆盖22-24行）。
+
+        W1 不变量 8: 禁止对 services 子模块 importlib.reload（reload 就地重建
+        类对象, 且半初始化状态无法可靠还原）。导入分支改在子进程中验证,
+        零模块状态污染。
+        """
+        import subprocess
         import sys
-        import importlib
-        import builtins
+        from pathlib import Path
 
-        # 保存原始模块引用
-        original_module = sys.modules.get('app.services.ai.anomaly_detection_service')
-
-        # 移除目标模块和sklearn相关模块
-        modules_to_remove = [
-            key for key in list(sys.modules.keys())
-            if key == 'app.services.ai.anomaly_detection_service' or key.startswith('sklearn')
-        ]
-        for mod in modules_to_remove:
-            if mod in sys.modules:
-                del sys.modules[mod]
-
-        # 模拟sklearn导入失败
-        original_import = builtins.__import__
-
-        def mock_import(name, globals=None, locals=None, fromlist=(), level=0):
-            if 'sklearn' in name:
-                raise ImportError(f"No module named '{name}'")
-            return original_import(name, globals, locals, fromlist, level)
-
-        # 使用patch来模拟导入失败
-        with patch('builtins.__import__', side_effect=mock_import):
-            with patch('logging.Logger.warning') as mock_warning:
-                try:
-                    # 重新导入模块
-                    import app.services.ai.anomaly_detection_service as ads
-                    importlib.reload(ads)
-                except ImportError:
-                    pass
-
-        # 恢复原始模块
-        if original_module:
-            sys.modules['app.services.ai.anomaly_detection_service'] = original_module
-
-        # 测试通过即表示22-24行已被覆盖（通过导入时的异常处理）
-        assert True
+        code = (
+            "import builtins\n"
+            "_orig_import = builtins.__import__\n"
+            "def _mock_import(name, *args, **kwargs):\n"
+            "    if 'sklearn' in name:\n"
+            "        raise ImportError(f'No module named {name!r}')\n"
+            "    return _orig_import(name, *args, **kwargs)\n"
+            "builtins.__import__ = _mock_import\n"
+            "import app.services.ai.anomaly_detection_service as m\n"
+            "assert m.SKLEARN_AVAILABLE is False\n"
+            "print('OK')\n"
+        )
+        backend_dir = str(Path(__file__).resolve().parents[2])
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=backend_dir,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 0, f"子进程失败:\n{result.stderr}"
+        assert "OK" in result.stdout
 
     def test_sklearn_available_info(self):
         """测试sklearn可用时记录信息日志（覆盖21行）"""

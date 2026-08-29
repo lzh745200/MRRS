@@ -550,10 +550,12 @@ async def check_rate_limit(
     - ``key`` 是唯一的首个位置/关键字参数——历史上曾因位置传参绑定到
       ``request`` 形参导致限流静默失效（W1-T1），现已收紧签名防止复发。
     - 缺失 ``key`` 时抛出 ``ValueError`` 拒绝放行，绝不静默允许。
+    - 缺失 ``request`` 时同样抛 ``ValueError``（W1-T2, 2026-08-29）：
+      request 供来源判定与审计扩展使用，调用方必须显式传入。
 
     Args:
         key: 速率限制键（通常为 IP 或用户名），必填
-        request: FastAPI Request（兼容旧式关键字传参，当前实现未使用）
+        request: FastAPI Request，必填
         limit: 窗口内最大请求数
         window: 时间窗口（秒）
 
@@ -561,10 +563,12 @@ async def check_rate_limit(
         bool: True=允许请求，False=速率超限
 
     Raises:
-        ValueError: key 缺失或非字符串
+        ValueError: key 缺失或非字符串、request 缺失
     """
     if not key or not isinstance(key, str):
         raise ValueError("check_rate_limit requires a non-empty string key")
+    if request is None:
+        raise ValueError("check_rate_limit requires a FastAPI request")
 
     now = time.monotonic()
     with _rate_limit_lock:
@@ -584,13 +588,24 @@ async def check_rate_limit(
 
 
 def get_client_ip(request: Request) -> str:
-    """获取客户端真实 IP"""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip
+    """获取客户端来源 IP。
+
+    默认取 TCP 对端地址（request.client.host），不信任 X-Forwarded-For /
+    X-Real-IP——离线桌面直连场景下这些头可被客户端任意伪造，用于限流键
+    时攻击者可轮换头值绕过限制（与 W1-T3 loopback 门禁同一信任原则）。
+
+    仅当 settings.TRUST_PROXY_HEADERS=True（部署于可信反向代理之后，如
+    Kylin 单机版 nginx）时才读取代理头。
+    """
+    from app.core.config import settings as _settings
+
+    if _settings.TRUST_PROXY_HEADERS:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip
     return request.client.host if request.client else "unknown"
 
 

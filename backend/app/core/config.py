@@ -106,6 +106,10 @@ class Settings(BaseSettings):
     # 服务器配置（默认仅监听本机回环地址，Electron 生产模式会强制注入 HOST=127.0.0.1）
     HOST: str = "127.0.0.1"
     PORT: int = 8000
+    # 是否信任 X-Forwarded-For / X-Real-IP 代理头。
+    # 默认 False：桌面直连场景下这些头可被客户端任意伪造（限流键可被轮换绕过）；
+    # 仅在部署于可信反向代理（如 Kylin 单机版 nginx）之后时置 true。
+    TRUST_PROXY_HEADERS: bool = False
 
     # 本地缓存配置（替代Redis）
     CACHE_DIR: str = "./data/cache"

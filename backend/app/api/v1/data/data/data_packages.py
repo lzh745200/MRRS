@@ -1068,7 +1068,11 @@ async def export_encrypted_package(
             )
         except Exception as hist_err:
             logger.warning(f"记录导出加密历史失败: {hist_err}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        # W1: 错误细节不出站, 仅日志与操作历史保留内部原因
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="导出加密数据包失败，请稍后重试或联系管理员",
+        )
 
 
 class UploadEncryptedPackageRequest(BaseModel):
@@ -1153,7 +1157,11 @@ async def upload_encrypted_package(
         logger.error(f"上传加密数据包失败: {str(e)}", exc_info=True)
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        # W1: 错误细节不出站, 仅日志保留内部原因
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="上传加密数据包失败，请稍后重试或联系管理员",
+        )
 
 
 class DecryptPreviewRequest(BaseModel):
@@ -1181,7 +1189,11 @@ async def decrypt_and_preview_package(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"解密预览失败: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        # W1: 错误细节不出站, 仅日志保留内部原因
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="解密预览失败，请检查密码后重试或联系管理员",
+        )
 
 
 class ConfirmImportRequest(BaseModel):
@@ -1235,7 +1247,11 @@ async def confirm_import_with_conflict_resolution(
             client_ip=client_ip,
             error_message=str(e),
         )
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        # W1: 错误细节不出站, 仅日志与操作历史保留内部原因
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="确认导入失败，请稍后重试或联系管理员",
+        )
 
 
 # ==================== 数据包版本管理 ====================

@@ -1057,7 +1057,8 @@ async def update_project(
         except Exception as evt_err:
             db.rollback()
             logger.error(f"经费阶段联动失败，项目更新已回滚: {evt_err}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"项目更新失败: 经费阶段联动异常 ({evt_err})")
+            # W1: 错误细节不出站, 仅日志保留内部原因
+            raise HTTPException(status_code=500, detail="项目更新失败: 经费阶段联动异常，请稍后重试")
 
     if changed_fields:
         await _log_project_update_audit(
@@ -1724,10 +1725,10 @@ _FUND_SOURCE_MAP = {
 # ── 项目导入辅助函数 ──
 
 
-async def _check_import_rate_limit(user_id: int, client_ip: str) -> None:
+async def _check_import_rate_limit(user_id: int, client_ip: str, request=None) -> None:
     """导入速率限制：每用户每小时最多 5 次"""
     user_key = f"import_projects:{user_id}:{client_ip}"
-    is_allowed = await check_rate_limit(key=user_key, limit=5, window=3600)
+    is_allowed = await check_rate_limit(key=user_key, request=request, limit=5, window=3600)
     if not is_allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -1872,7 +1873,7 @@ async def import_projects(
 ):
     """批量导入帮扶项目数据。"""
     client_ip = get_client_ip(request) if request else "unknown"
-    await _check_import_rate_limit(current_user.id, client_ip)
+    await _check_import_rate_limit(current_user.id, client_ip, request=request)
 
     ws = await _parse_import_excel(file)
     header_row, headers = _detect_import_headers(ws)
