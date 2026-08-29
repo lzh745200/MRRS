@@ -118,6 +118,14 @@ def collect() -> list[dict]:
             print(f"[WARN] 解析失败 {f}: {e}", file=__import__("sys").stderr)
             continue
         if mod:
+            # system/ 子包有父 router(prefix="/system")二层挂载, 完整路径需拼接;
+            # auth/data/import_export/monitoring 子包无父前缀, 不处理
+            rel = f.relative_to(API_DIR)
+            if rel.parts[0] == "system":
+                mod["prefix"] = f"/system{mod['prefix']}"
+                for e in mod["endpoints"]:
+                    if not e["path"].startswith("/system"):
+                        e["path"] = f"/system{e['path']}"
             results.append(mod)
     return results
 

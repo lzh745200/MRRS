@@ -46,9 +46,6 @@
 
 ## 4. 端点清单(自动生成)
 
-<!-- 由 scripts/docs/extract_api_endpoints.py 自动生成, 共 85 个模块 / 764 个端点。
-     业务说明为人工维护部分; 重新生成仅覆盖端点清单, 勿整文件覆盖。 -->
-
 ### ai.py — AI智能分析 `/ai`
 
 | 方法 | 路径 | 说明 | 鉴权 |
@@ -947,72 +944,72 @@
 | GET | `/sync/status` | 获取同步状态 | 登录 |
 | GET | `/sync/dashboard` | 获取同步状态可视化仪表盘数据 | 登录 |
 
-### admin.py — 系统管理 `/admin`
+### admin.py — 系统管理 `/system/admin`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/admin/info` | 获取系统信息 | 管理员/登录 |
-| POST | `/admin/backup` | 创建数据库备份 | 管理员/登录 |
-| GET | `/admin/backups` | 获取备份列表 | 管理员/登录 |
-| POST | `/admin/restore` | 恢复数据库备份 | 管理员/登录 |
-| DELETE | `/admin/backups/{filename}` | 删除备份文件 | 管理员/登录 |
-| GET | `/admin/config` | 获取系统配置（从 system_configs 表读取，回退到默认值） | 管理员/登录 |
-| PUT | `/admin/config` | 更新系统配置（持久化到 system_configs 表） | 管理员/登录 |
-| POST | `/admin/clear-cache` | 清理系统缓存 | 管理员/登录 |
-| GET | `/admin/logs` | 获取系统日志 | 管理员/登录 |
-| POST | `/admin/db-optimize` | 执行 WAL checkpoint + PRAGMA optimize，返回优化前后空间对比 | 管理员/登录 |
-| GET | `/admin/users/{user_id}/sessions` | 查看用户活跃会话（基于 token 黑名单反向推断） | 管理员/登录 |
-| POST | `/admin/users/{user_id}/sessions/{session_id}/revoke` | 强制登出用户（使其全部现存 token 立即失效） | 管理员/登录 |
-| POST | `/admin/users/{user_id}/two-factor/reset` | 重置用户双因素认证 | 管理员/登录 |
+| GET | `/system/admin/info` | 获取系统信息 | 管理员/登录 |
+| POST | `/system/admin/backup` | 创建数据库备份 | 管理员/登录 |
+| GET | `/system/admin/backups` | 获取备份列表 | 管理员/登录 |
+| POST | `/system/admin/restore` | 恢复数据库备份 | 管理员/登录 |
+| DELETE | `/system/admin/backups/{filename}` | 删除备份文件 | 管理员/登录 |
+| GET | `/system/admin/config` | 获取系统配置（从 system_configs 表读取，回退到默认值） | 管理员/登录 |
+| PUT | `/system/admin/config` | 更新系统配置（持久化到 system_configs 表） | 管理员/登录 |
+| POST | `/system/admin/clear-cache` | 清理系统缓存 | 管理员/登录 |
+| GET | `/system/admin/logs` | 获取系统日志 | 管理员/登录 |
+| POST | `/system/admin/db-optimize` | 执行 WAL checkpoint + PRAGMA optimize，返回优化前后空间对比 | 管理员/登录 |
+| GET | `/system/admin/users/{user_id}/sessions` | 查看用户活跃会话（基于 token 黑名单反向推断） | 管理员/登录 |
+| POST | `/system/admin/users/{user_id}/sessions/{session_id}/revoke` | 强制登出用户（使其全部现存 token 立即失效） | 管理员/登录 |
+| POST | `/system/admin/users/{user_id}/two-factor/reset` | 重置用户双因素认证 | 管理员/登录 |
 
-### audit.py — Audit Logs `/audit`
-
-| 方法 | 路径 | 说明 | 鉴权 |
-|------|------|------|------|
-| DELETE | `/audit/logs/batch` | 批量删除审计日志（仅管理员）。 | 登录 |
-| DELETE | `/audit/logs/{log_id}` | 删除单条审计日志 | 登录 |
-| PATCH | `/audit/logs/{log_id}/remark` | 更新审计日志备注 | 登录 |
-| GET | `/audit/logs/export` | 导出审计日志为 JSON / Excel / CSV 格式 | 登录 |
-| GET | `/audit/logs` | get_audit_logs | 登录 |
-| GET | `/audit/logs/{log_id}` | get_audit_log_detail | 登录 |
-| GET | `/audit/stats` | get_audit_stats | 登录 |
-| GET | `/audit/actions` | get_available_actions | 登录/公开 |
-| GET | `/audit/levels` | get_available_levels | 登录/公开 |
-| GET | `/audit/security/events` | get_security_events | 登录 |
-| GET | `/audit/security/stats` | get_security_stats | 登录 |
-| POST | `/audit/security/events/{event_id}/resolve` | resolve_security_event | 登录 |
-| GET | `/audit/login-attempts` | get_login_attempts | 登录 |
-| GET | `/audit/api-access` | get_api_access_logs | 登录 |
-| GET | `/audit/exports` | get_export_logs | 登录 |
-| GET | `/audit/user-activity/{user_id}` | get_user_activity | 登录 |
-
-### backup.py — 备份管理 `/backup`
+### audit.py — Audit Logs `/system/audit`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| POST | `/backup` | 创建系统数据库备份 | 登录/公开 |
-| POST | `/backup/request-download` | 普通用户发起备份下载申请 → 站内消息通知全部超管，由管理员线下授权。 | 登录 |
-| GET | `/backup` | 获取所有数据库备份文件列表 | 登录/公开 |
-| GET | `/backup/stats` | 获取备份统计信息 | 登录 |
-| GET | `/backup/dirs` | 枚举可用的备份目标目录（可移动磁盘/固定盘/网络盘），供前端备份目标选择。 | 登录 |
-| PUT | `/backup/target` | 持久化备份目标目录（写入 SystemConfig） | 登录 |
-| GET | `/backup/schedule` | 获取自动备份计划配置（后端调度为唯一真相源）。 | 登录 |
-| PUT | `/backup/schedule` | 更新自动备份计划配置（写入 SystemConfig，后端调度热生效）。 | 登录 |
-| DELETE | `/backup/{filename}` | 删除指定的备份文件 | 登录/公开 |
-| GET | `/backup/download/{filename}` | 下载指定的备份文件 | 管理员/登录 |
-| GET | `/backup/preview/{filename}` | 读取备份 ZIP 的文件清单与元信息（backup_info.json），供前端预览弹窗使用。 | 管理员/登录 |
-| POST | `/backup/verify/{filename}` | 验证指定备份文件的完整性 | 管理员/登录 |
-| POST | `/backup/restore` | 从指定的备份文件恢复系统数据 | 管理员/登录 |
-| POST | `/backup/upload-restore` | 上传备份 ZIP 文件并立即用于恢复系统数据 | 管理员/登录 |
+| DELETE | `/system/audit/logs/batch` | 批量删除审计日志（仅管理员）。 | 登录 |
+| DELETE | `/system/audit/logs/{log_id}` | 删除单条审计日志 | 登录 |
+| PATCH | `/system/audit/logs/{log_id}/remark` | 更新审计日志备注 | 登录 |
+| GET | `/system/audit/logs/export` | 导出审计日志为 JSON / Excel / CSV 格式 | 登录 |
+| GET | `/system/audit/logs` | get_audit_logs | 登录 |
+| GET | `/system/audit/logs/{log_id}` | get_audit_log_detail | 登录 |
+| GET | `/system/audit/stats` | get_audit_stats | 登录 |
+| GET | `/system/audit/actions` | get_available_actions | 登录/公开 |
+| GET | `/system/audit/levels` | get_available_levels | 登录/公开 |
+| GET | `/system/audit/security/events` | get_security_events | 登录 |
+| GET | `/system/audit/security/stats` | get_security_stats | 登录 |
+| POST | `/system/audit/security/events/{event_id}/resolve` | resolve_security_event | 登录 |
+| GET | `/system/audit/login-attempts` | get_login_attempts | 登录 |
+| GET | `/system/audit/api-access` | get_api_access_logs | 登录 |
+| GET | `/system/audit/exports` | get_export_logs | 登录 |
+| GET | `/system/audit/user-activity/{user_id}` | get_user_activity | 登录 |
 
-### cache.py — 缓存管理 `/cache`
+### backup.py — 备份管理 `/system/backup`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/cache/stats` | 获取缓存的使用统计信息 | 登录 |
-| POST | `/cache/clear` | 清除系统中的所有缓存数据 | 管理员/登录 |
+| POST | `/system/backup` | 创建系统数据库备份 | 登录/公开 |
+| POST | `/system/backup/request-download` | 普通用户发起备份下载申请 → 站内消息通知全部超管，由管理员线下授权。 | 登录 |
+| GET | `/system/backup` | 获取所有数据库备份文件列表 | 登录/公开 |
+| GET | `/system/backup/stats` | 获取备份统计信息 | 登录 |
+| GET | `/system/backup/dirs` | 枚举可用的备份目标目录（可移动磁盘/固定盘/网络盘），供前端备份目标选择。 | 登录 |
+| PUT | `/system/backup/target` | 持久化备份目标目录（写入 SystemConfig） | 登录 |
+| GET | `/system/backup/schedule` | 获取自动备份计划配置（后端调度为唯一真相源）。 | 登录 |
+| PUT | `/system/backup/schedule` | 更新自动备份计划配置（写入 SystemConfig，后端调度热生效）。 | 登录 |
+| DELETE | `/system/backup/{filename}` | 删除指定的备份文件 | 登录/公开 |
+| GET | `/system/backup/download/{filename}` | 下载指定的备份文件 | 管理员/登录 |
+| GET | `/system/backup/preview/{filename}` | 读取备份 ZIP 的文件清单与元信息（backup_info.json），供前端预览弹窗使用。 | 管理员/登录 |
+| POST | `/system/backup/verify/{filename}` | 验证指定备份文件的完整性 | 管理员/登录 |
+| POST | `/system/backup/restore` | 从指定的备份文件恢复系统数据 | 管理员/登录 |
+| POST | `/system/backup/upload-restore` | 上传备份 ZIP 文件并立即用于恢复系统数据 | 管理员/登录 |
 
-### config_package.py — 配置包管理 `/system/config-packages`
+### cache.py — 缓存管理 `/system/cache`
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|------|
+| GET | `/system/cache/stats` | 获取缓存的使用统计信息 | 登录 |
+| POST | `/system/cache/clear` | 清除系统中的所有缓存数据 | 管理员/登录 |
+
+### config_package.py — 配置包管理 `/system/system/config-packages`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
@@ -1021,85 +1018,85 @@
 | POST | `/system/config-packages/import` | 从 JSON 配置包导入系统配置 | 管理员/登录 |
 | DELETE | `/system/config-packages/{package_name}` | 删除指定的配置包记录 | 管理员/登录 |
 
-### env.py — 运行环境 `/env`
+### env.py — 运行环境 `/system/env`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/env/check` | 检查系统运行环境 | 登录 |
+| GET | `/system/env/check` | 检查系统运行环境 | 登录 |
 
-### error_report.py — 错误报告 `/error-reports`
-
-| 方法 | 路径 | 说明 | 鉴权 |
-|------|------|------|------|
-| POST | `/error-reports` | 上报系统错误信息 | 登录 |
-| GET | `/error-reports` | 获取错误报告列表 | 登录 |
-| GET | `/error-reports/stats` | 获取错误报告统计数据 | 登录 |
-| GET | `/error-reports/{report_id}` | 获取指定错误报告的详细信息 | 登录 |
-| PUT | `/error-reports/{report_id}` | 更新错误报告处理状态（仅本人或管理员） | 登录 |
-| POST | `/error-reports/report-exception` | 简化版异常上报接口 | 登录 |
-
-### health.py — 系统健康 `/health`
+### error_report.py — 错误报告 `/system/error-reports`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/health` | System health overview with key metrics. | 登录/公开 |
-| GET | `/health/overview` | System health overview with key metrics. | 登录/公开 |
-| GET | `/health/database` | Check database connectivity and size. | 登录/公开 |
-| GET | `/health/database-health` | 数据库健康详情（自检结果 + 统计），供前端启动后提示 | 登录/公开 |
-| GET | `/health/liveness` | Kubernetes-style liveness probe. | 登录/公开 |
-| GET | `/health/readiness` | Kubernetes-style readiness probe (checks DB). | 登录/公开 |
-| GET | `/health/full` | Comprehensive health report with DB stats, backup status, and performance metrics. | 登录/公开 |
+| POST | `/system/error-reports` | 上报系统错误信息 | 登录 |
+| GET | `/system/error-reports` | 获取错误报告列表 | 登录 |
+| GET | `/system/error-reports/stats` | 获取错误报告统计数据 | 登录 |
+| GET | `/system/error-reports/{report_id}` | 获取指定错误报告的详细信息 | 登录 |
+| PUT | `/system/error-reports/{report_id}` | 更新错误报告处理状态（仅本人或管理员） | 登录 |
+| POST | `/system/error-reports/report-exception` | 简化版异常上报接口 | 登录 |
 
-### help.py — 帮助中心 `/help`
-
-| 方法 | 路径 | 说明 | 鉴权 |
-|------|------|------|------|
-| GET | `/help/categories` | 获取所有帮助文档分类 | 登录/公开 |
-| GET | `/help/articles` | 获取帮助文档列表，支持分类筛选和关键词搜索 | 登录/公开 |
-| GET | `/help/articles/{article_id}` | 获取指定帮助文档的完整内容 | 登录/公开 |
-| GET | `/help/search` | 全文搜索帮助文档 | 登录/公开 |
-| GET | `/help/system-info` | 获取帮扶管理信息系统简介 | 登录/公开 |
-
-### i18n.py — 国际化 `/i18n`
+### health.py — 系统健康 `/system/health`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/i18n/languages` | 获取系统支持的语言列表 | 登录/公开 |
-| GET | `/i18n/translations/{language}` | 获取指定语言的完整或命名空间内的翻译资源 | 登录/公开 |
-| GET | `/i18n/translate` | 获取指定键在目标语言下的翻译文本 | 登录/公开 |
-| GET | `/i18n/missing-keys` | 比较两种语言的翻译资源，找出目标语言中缺失的键 | 登录 |
-| GET | `/i18n/current` | 获取当前用户的语言设置 | 登录 |
+| GET | `/system/health` | System health overview with key metrics. | 登录/公开 |
+| GET | `/system/health/overview` | System health overview with key metrics. | 登录/公开 |
+| GET | `/system/health/database` | Check database connectivity and size. | 登录/公开 |
+| GET | `/system/health/database-health` | 数据库健康详情（自检结果 + 统计），供前端启动后提示 | 登录/公开 |
+| GET | `/system/health/liveness` | Kubernetes-style liveness probe. | 登录/公开 |
+| GET | `/system/health/readiness` | Kubernetes-style readiness probe (checks DB). | 登录/公开 |
+| GET | `/system/health/full` | Comprehensive health report with DB stats, backup status, and performance metrics. | 登录/公开 |
 
-### init.py — 系统初始化 `/init`
-
-| 方法 | 路径 | 说明 | 鉴权 |
-|------|------|------|------|
-| GET | `/init/status` | 检查系统是否已完成初始化 | 登录/公开 |
-| POST | `/init/initialize` | 执行系统首次初始化 | 登录/公开 |
-| POST | `/init/reset` | 重置系统初始化状态 | 登录 |
-| GET | `/init/checklist` | 获取系统初始化前需要准备的资料清单 | 登录/公开 |
-
-### metrics.py — 系统指标 `/metrics`
+### help.py — 帮助中心 `/system/help`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/metrics` | 获取系统运行的综合指标数据 | 登录 |
-| GET | `/metrics/performance` | 获取各关键性能指标的详细数据 | 登录 |
-| GET | `/metrics/database` | 获取数据库相关的指标数据 | 登录 |
-| GET | `/metrics/history` | 获取指定时间范围内的历史监控指标数据 | 登录 |
+| GET | `/system/help/categories` | 获取所有帮助文档分类 | 登录/公开 |
+| GET | `/system/help/articles` | 获取帮助文档列表，支持分类筛选和关键词搜索 | 登录/公开 |
+| GET | `/system/help/articles/{article_id}` | 获取指定帮助文档的完整内容 | 登录/公开 |
+| GET | `/system/help/search` | 全文搜索帮助文档 | 登录/公开 |
+| GET | `/system/help/system-info` | 获取帮扶管理信息系统简介 | 登录/公开 |
 
-### monitor.py — 系统监控 `/monitor`
+### i18n.py — 国际化 `/system/i18n`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/monitor/snapshot` | 获取当前时刻系统运行状态的实时快照 | 登录 |
-| GET | `/monitor/resources` | 获取系统资源使用详细报告 | 登录 |
-| GET | `/monitor/alerts` | 获取当前配置的监控告警规则 | 登录 |
-| GET | `/monitor/alerts/history` | 获取系统告警历史记录 | 登录 |
-| GET | `/monitor/api-stats` | 获取API接口调用统计数据 | 登录 |
-| GET | `/monitor/database-size` | 获取数据库文件大小（用于系统监控面板） | 登录 |
+| GET | `/system/i18n/languages` | 获取系统支持的语言列表 | 登录/公开 |
+| GET | `/system/i18n/translations/{language}` | 获取指定语言的完整或命名空间内的翻译资源 | 登录/公开 |
+| GET | `/system/i18n/translate` | 获取指定键在目标语言下的翻译文本 | 登录/公开 |
+| GET | `/system/i18n/missing-keys` | 比较两种语言的翻译资源，找出目标语言中缺失的键 | 登录 |
+| GET | `/system/i18n/current` | 获取当前用户的语言设置 | 登录 |
 
-### system.py — 系统控制 `/system`
+### init.py — 系统初始化 `/system/init`
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|------|
+| GET | `/system/init/status` | 检查系统是否已完成初始化 | 登录/公开 |
+| POST | `/system/init/initialize` | 执行系统首次初始化 | 登录/公开 |
+| POST | `/system/init/reset` | 重置系统初始化状态 | 登录 |
+| GET | `/system/init/checklist` | 获取系统初始化前需要准备的资料清单 | 登录/公开 |
+
+### metrics.py — 系统指标 `/system/metrics`
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|------|
+| GET | `/system/metrics` | 获取系统运行的综合指标数据 | 登录 |
+| GET | `/system/metrics/performance` | 获取各关键性能指标的详细数据 | 登录 |
+| GET | `/system/metrics/database` | 获取数据库相关的指标数据 | 登录 |
+| GET | `/system/metrics/history` | 获取指定时间范围内的历史监控指标数据 | 登录 |
+
+### monitor.py — 系统监控 `/system/monitor`
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|------|
+| GET | `/system/monitor/snapshot` | 获取当前时刻系统运行状态的实时快照 | 登录 |
+| GET | `/system/monitor/resources` | 获取系统资源使用详细报告 | 登录 |
+| GET | `/system/monitor/alerts` | 获取当前配置的监控告警规则 | 登录 |
+| GET | `/system/monitor/alerts/history` | 获取系统告警历史记录 | 登录 |
+| GET | `/system/monitor/api-stats` | 获取API接口调用统计数据 | 登录 |
+| GET | `/system/monitor/database-size` | 获取数据库文件大小（用于系统监控面板） | 登录 |
+
+### system.py — 系统控制 `/system/system`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
@@ -1110,55 +1107,55 @@
 | GET | `/system/environment` | 获取详细的系统运行环境信息 | 登录 |
 | GET | `/system/version` | 获取当前系统版本及发布信息 | 登录/公开 |
 
-### system_config.py — 系统配置 `/config`
+### system_config.py — 系统配置 `/system/config`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/config` | 获取所有系统配置项的键值对列表 | 登录 |
-| PUT | `/config` | 批量更新多个系统配置项 | 管理员/登录 |
-| GET | `/config/export/json` | 导出所有系统配置为JSON字符串 | 登录 |
-| POST | `/config/import/json` | 从JSON字符串导入系统配置 | 管理员/登录 |
-| GET | `/config/defaults` | 获取系统内建的所有默认配置项 | 登录/公开 |
-| GET | `/config/{key}` | 获取指定配置项的值及其说明 | 登录 |
-| PUT | `/config/{key}` | 更新指定配置项的值 | 管理员/登录 |
-| DELETE | `/config/{key}` | 删除指定配置项 | 管理员/登录 |
+| GET | `/system/config` | 获取所有系统配置项的键值对列表 | 登录 |
+| PUT | `/system/config` | 批量更新多个系统配置项 | 管理员/登录 |
+| GET | `/system/config/export/json` | 导出所有系统配置为JSON字符串 | 登录 |
+| POST | `/system/config/import/json` | 从JSON字符串导入系统配置 | 管理员/登录 |
+| GET | `/system/config/defaults` | 获取系统内建的所有默认配置项 | 登录/公开 |
+| GET | `/system/config/{key}` | 获取指定配置项的值及其说明 | 登录 |
+| PUT | `/system/config/{key}` | 更新指定配置项的值 | 管理员/登录 |
+| DELETE | `/system/config/{key}` | 删除指定配置项 | 管理员/登录 |
 
-### tasks.py — 后台任务 `/tasks`
-
-| 方法 | 路径 | 说明 | 鉴权 |
-|------|------|------|------|
-| GET | `/tasks` | 获取所有后台任务的列表 | 登录 |
-| GET | `/tasks/stats` | 获取后台任务的统计数据 | 登录 |
-| GET | `/tasks/{task_id}` | 获取指定任务的详细信息和执行状态 | 登录 |
-| POST | `/tasks` | 创建并启动一个后台任务 | 登录 |
-| POST | `/tasks/{task_id}/cancel` | 取消指定的后台任务 | 登录 |
-| DELETE | `/tasks/{task_id}` | 删除指定的任务记录 | 登录 |
-| GET | `/tasks/running/count` | 获取当前正在运行中的任务数量 | 登录/公开 |
-
-### update_logs.py — 更新日志 `/update-logs`
+### tasks.py — 后台任务 `/system/tasks`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/update-logs` | 获取系统版本更新日志列表 | 登录 |
-| GET | `/update-logs/latest` | 获取最新的系统更新记录 | 登录 |
-| GET | `/update-logs/{update_id}` | 获取指定更新日志的详细信息 | 登录 |
-| POST | `/update-logs` | 手动创建一条系统更新日志 | 登录 |
-| POST | `/update-logs/initialize` | 初始化版本历史记录 | 登录 |
-| POST | `/update-logs/sync` | 同步版本历史数据 | 登录 |
-| DELETE | `/update-logs/{update_id}` | 删除指定的更新日志记录 | 登录 |
-| GET | `/update-logs/check/version` | 检查当前版本是否与最新记录一致 | 登录 |
+| GET | `/system/tasks` | 获取所有后台任务的列表 | 登录 |
+| GET | `/system/tasks/stats` | 获取后台任务的统计数据 | 登录 |
+| GET | `/system/tasks/{task_id}` | 获取指定任务的详细信息和执行状态 | 登录 |
+| POST | `/system/tasks` | 创建并启动一个后台任务 | 登录 |
+| POST | `/system/tasks/{task_id}/cancel` | 取消指定的后台任务 | 登录 |
+| DELETE | `/system/tasks/{task_id}` | 删除指定的任务记录 | 登录 |
+| GET | `/system/tasks/running/count` | 获取当前正在运行中的任务数量 | 登录/公开 |
 
-### zero_trust.py — 零信任安全 `/zero-trust`
+### update_logs.py — 更新日志 `/system/update-logs`
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/zero-trust/assessment` | 获取当前会话的零信任评估结果 | 登录 |
-| GET | `/zero-trust/policies` | 获取系统配置的零信任安全策略列表 | 登录 |
-| GET | `/zero-trust/policies/{policy_id}` | 获取指定安全策略的详细信息 | 登录 |
-| POST | `/zero-trust/evaluate` | 评估对指定资源的访问请求是否符合零信任策略 | 登录 |
-| GET | `/zero-trust/events` | 获取记录的安全事件列表（从数据库读取，持久化存储） | 登录 |
-| POST | `/zero-trust/events` | 手动记录一个安全事件 | 登录 |
-| GET | `/zero-trust/events/stats` | 获取安全事件的统计分析数据（从数据库读取） | 登录 |
+| GET | `/system/update-logs` | 获取系统版本更新日志列表 | 登录 |
+| GET | `/system/update-logs/latest` | 获取最新的系统更新记录 | 登录 |
+| GET | `/system/update-logs/{update_id}` | 获取指定更新日志的详细信息 | 登录 |
+| POST | `/system/update-logs` | 手动创建一条系统更新日志 | 登录 |
+| POST | `/system/update-logs/initialize` | 初始化版本历史记录 | 登录 |
+| POST | `/system/update-logs/sync` | 同步版本历史数据 | 登录 |
+| DELETE | `/system/update-logs/{update_id}` | 删除指定的更新日志记录 | 登录 |
+| GET | `/system/update-logs/check/version` | 检查当前版本是否与最新记录一致 | 登录 |
+
+### zero_trust.py — 零信任安全 `/system/zero-trust`
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|------|
+| GET | `/system/zero-trust/assessment` | 获取当前会话的零信任评估结果 | 登录 |
+| GET | `/system/zero-trust/policies` | 获取系统配置的零信任安全策略列表 | 登录 |
+| GET | `/system/zero-trust/policies/{policy_id}` | 获取指定安全策略的详细信息 | 登录 |
+| POST | `/system/zero-trust/evaluate` | 评估对指定资源的访问请求是否符合零信任策略 | 登录 |
+| GET | `/system/zero-trust/events` | 获取记录的安全事件列表（从数据库读取，持久化存储） | 登录 |
+| POST | `/system/zero-trust/events` | 手动记录一个安全事件 | 登录 |
+| GET | `/system/zero-trust/events/stats` | 获取安全事件的统计分析数据（从数据库读取） | 登录 |
 
 ### system_health.py — 系统健壮性 `/system-health`
 
@@ -1237,8 +1234,6 @@
 | DELETE | `/work-logs/{log_id}` | 删除工作日志 | 登录 |
 | GET | `/work-logs/calendar` | 获取日历视图数据（按月） | 登录 |
 | GET | `/work-logs/monthly-summary` | 聚合当月工作日志生成月度总结：总条数/打卡天数/分类统计/内容列表 | 登录 |
-
----
 
 ## 5. 维护说明
 
