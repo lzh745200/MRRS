@@ -39,6 +39,8 @@ import '@/styles/dashboard-theme.scss'
 import '@/styles/components/list-page.scss'
 // 表单/详情页统一升级 (Phase 3)
 import '@/styles/components/form-page.scss'
+// 全站精美增强层 (UI v2.0 · U1)：柔和阴影/微交互/focus 光环，置于规范化层之后
+import '@/styles/theme-elevated.scss'
 // 打印样式（A4适配，隐藏非内容区域）
 import '@/styles/print.scss'
 // 无障碍增强（焦点环/skip-link/reduced-motion/high-contrast 主题补全）

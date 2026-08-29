@@ -1,0 +1,290 @@
+/**
+ * 全站精美增强层 (UI v2.0 · U1)
+ *
+ * 定位：在 list-page.scss / form-page.scss 确立的"深军绿表头 + 金色分隔线"品牌基调
+ *       之上做打磨层——多层柔和阴影、hover 微交互、focus 光环、圆角与下拉胶囊化。
+ *
+ * 原则：
+ * 1. 只增强不推翻：不改深绿表头/金线/弹窗头等品牌识别元素
+ * 2. 零 DOM 改动：纯 CSS，131 个视图自动受益，测试零回归
+ * 3. 引入顺序：main.ts 中置于 list-page/form-page 之后（可覆盖其阴影/圆角基值）
+ * 4. 与 dashboard-theme.scss 的 .dashboard-modern 作用域兼容（其特异性更高不冲突）
+ */
+
+// ============================================================================
+// 1. 增强变量层
+// ============================================================================
+
+:root {
+  // 多层柔和阴影体系（取代单层硬阴影）
+  --elev-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --elev-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.07), 0 2px 4px rgba(15, 23, 42, 0.05);
+  --elev-shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.09), 0 4px 8px rgba(15, 23, 42, 0.05);
+  --elev-shadow-hover: 0 10px 28px rgba(15, 23, 42, 0.1), 0 4px 10px rgba(15, 23, 42, 0.06);
+
+  // 统一过渡曲线（与 dashboard-theme 同族，保证手感一致）
+  --elev-transition: 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  // 输入框 focus 光环（主色 12% 扩散）
+  --elev-focus-ring: 0 0 0 3px rgba(45, 106, 79, 0.12);
+
+  // 弹窗/大卡片圆角
+  --elev-radius-dialog: 12px;
+  --elev-radius-popper: 10px;
+}
+
+// ============================================================================
+// 2. 卡片：多层柔和阴影（hover 仅加深阴影，不位移，避免整页重心晃动）
+// ============================================================================
+
+.el-card {
+  box-shadow: var(--elev-shadow-sm);
+  transition: box-shadow var(--elev-transition);
+
+  &:hover {
+    box-shadow: var(--elev-shadow-hover);
+  }
+}
+
+// 可点击卡片（由页面显式声明）才做上浮微交互
+.el-card.is-clickable {
+  cursor: pointer;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+}
+
+// ============================================================================
+// 3. 弹窗：12px 圆角（clip-path 同步）+ 更深层次阴影
+//    注意：overflow 必须保持 visible（防裁剪 teleported popper，见 index.scss 注释）
+// ============================================================================
+
+.el-dialog {
+  border-radius: var(--elev-radius-dialog);
+  clip-path: inset(0 round var(--elev-radius-dialog));
+  box-shadow: var(--elev-shadow-lg);
+
+  &.is-fullscreen {
+    border-radius: 0;
+    clip-path: none;
+  }
+}
+
+// MessageBox（确认框）
+.el-message-box {
+  border-radius: var(--elev-radius-dialog);
+  box-shadow: var(--elev-shadow-lg);
+}
+
+// ============================================================================
+// 4. 输入控件：focus 光环（品牌绿扩散，替代 EP 默认单边高亮）
+// ============================================================================
+
+.el-input__wrapper.is-focus {
+  box-shadow:
+    0 0 0 1px var(--color-primary) inset,
+    var(--elev-focus-ring);
+}
+
+.el-textarea__inner:focus {
+  box-shadow:
+    0 0 0 1px var(--color-primary) inset,
+    var(--elev-focus-ring);
+}
+
+.el-select__wrapper.is-focused {
+  box-shadow:
+    0 0 0 1px var(--color-primary) inset,
+    var(--elev-focus-ring);
+}
+
+// ============================================================================
+// 5. 按钮：主按钮微阴影 + text 按钮 hover 底色
+// ============================================================================
+
+.el-button {
+  transition:
+    all var(--elev-transition),
+    color 0.15s ease;
+
+  &.el-button--primary:not(.is-text):not(.is-link) {
+    box-shadow: 0 1px 3px rgba(45, 106, 79, 0.28);
+
+    &:hover {
+      box-shadow: 0 4px 12px rgba(45, 106, 79, 0.32);
+    }
+  }
+
+  &.is-text:hover {
+    background-color: var(--color-primary-light-9);
+  }
+}
+
+// ============================================================================
+// 6. 下拉/弹出层：圆角 + 大阴影 + 选中项品牌化
+// ============================================================================
+
+.el-popper.is-light {
+  border-radius: var(--elev-radius-popper);
+  box-shadow: var(--elev-shadow-lg);
+}
+
+.el-select-dropdown {
+  border-radius: var(--elev-radius-popper);
+
+  .el-select-dropdown__item {
+    border-radius: 6px;
+    margin: 2px 8px;
+    padding: 0 12px !important;
+    transition: background-color 0.15s ease;
+
+    &.is-hovering {
+      background-color: var(--color-primary-light-9);
+    }
+
+    &.is-selected {
+      color: var(--color-primary);
+      font-weight: 600;
+    }
+  }
+}
+
+// 气泡确认框/tooltip
+.el-popper.is-dark {
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+// ============================================================================
+// 7. 标签：圆润化 + 半粗字重（保留 EP 浅底同色边框）
+// ============================================================================
+
+.el-tag {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+// ============================================================================
+// 8. 分页：页码按钮圆角 + 主色激活（list-page.scss 已定激活色，此处打磨手感）
+// ============================================================================
+
+.el-pagination {
+  .el-pager li {
+    border-radius: 6px;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease;
+
+    &.is-active {
+      font-weight: 600;
+    }
+  }
+
+  .btn-prev,
+  .btn-next {
+    border-radius: 6px;
+  }
+}
+
+// ============================================================================
+// 9. Loading：spinner 品牌化
+// ============================================================================
+
+.el-loading-spinner {
+  .path {
+    stroke: var(--color-primary);
+  }
+
+  .el-loading-text {
+    color: var(--color-primary);
+    font-size: 13px;
+    margin-top: 6px;
+  }
+}
+
+// ============================================================================
+// 10. 消息提示：胶囊化（圆角 + 柔和阴影 + 15px 圆角图标位）
+// ============================================================================
+
+.el-message {
+  border-radius: var(--radius-round);
+  box-shadow: var(--elev-shadow-lg);
+  border: none;
+  padding: 10px 18px;
+}
+
+// ============================================================================
+// 11. 骨架屏：带军绿色调的呼吸渐变
+// ============================================================================
+
+.el-skeleton__item {
+  background: linear-gradient(
+    90deg,
+    var(--color-primary-light-9) 25%,
+    var(--color-primary-light-7) 37%,
+    var(--color-primary-light-9) 63%
+  );
+  background-size: 400% 100%;
+}
+
+// ============================================================================
+// 12. 滚动条：全局统一 6px 细条（收敛 index.scss 的 8px 与 dashboard 的 6px）
+// ============================================================================
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-border-dark);
+}
+
+// ============================================================================
+// 13. Tabs / 面包屑打磨
+// ============================================================================
+
+.el-tabs {
+  .el-tabs__item {
+    transition: color 0.2s ease;
+
+    &.is-active {
+      font-weight: 600;
+    }
+  }
+
+  .el-tabs__active-bar {
+    border-radius: 2px;
+  }
+}
+
+.el-breadcrumb {
+  font-size: 13px;
+}
+
+// ============================================================================
+// 14. 暗色主题兼容：黑底下阴影不可见，改用边框替代
+// ============================================================================
+
+[data-theme='dark'] {
+  .el-card {
+    box-shadow: none;
+    border-color: var(--color-border-light);
+
+    &:hover {
+      box-shadow: none;
+      border-color: var(--color-border);
+    }
+  }
+
+  .el-dialog,
+  .el-message-box {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  }
+}
