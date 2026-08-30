@@ -70,9 +70,9 @@ class TestResetPasswordNoTempFile:
                                 with patch.object(os, "chmod") as mock_chmod:
                                     result = await reset_password_with_machine_code(
                                         SimpleNamespace(client=SimpleNamespace(host="127.0.0.1")),
-                                        username="testuser",
-                                        machine_code="MC001",
-                                        verification_code="VC001",
+                                        data=mc.MachineCodeResetRequest(
+                                            username="testuser", machine_code="MC001", verification_code="VC001"
+                                        ),
                                         db=mock_db,
                                     )
         assert result["code"] == 200

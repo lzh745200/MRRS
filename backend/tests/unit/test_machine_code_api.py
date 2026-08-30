@@ -388,8 +388,8 @@ class TestResetPasswordWithMachineCode:
         with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=False)):
             with patch("app.api.v1.machine_code.get_client_ip", return_value="127.0.0.1"):
                 resp = client_admin.post(
-                    "/api/v1/machine-code/reset-password-with-machine-code"
-                    "?username=testuser&machine_code=MC001&verification_code=VC001",
+                    "/api/v1/machine-code/reset-password-with-machine-code",
+                    json={"username": "testuser", "machine_code": "MC001", "verification_code": "VC001"},
                 )
         assert resp.status_code == 429
 
@@ -400,8 +400,8 @@ class TestResetPasswordWithMachineCode:
                 svc.get_machine_code.return_value = "DIFFERENT_MC"
                 with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
                     resp = client_admin.post(
-                        "/api/v1/machine-code/reset-password-with-machine-code"
-                        "?username=testuser&machine_code=MC001&verification_code=VC001",
+                        "/api/v1/machine-code/reset-password-with-machine-code",
+                        json={"username": "testuser", "machine_code": "MC001", "verification_code": "VC001"},
                     )
         assert resp.status_code == 400
         assert "机器码不匹配" in resp.json()["detail"]
@@ -414,8 +414,8 @@ class TestResetPasswordWithMachineCode:
                 svc.verify_machine_code.return_value = False
                 with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
                     resp = client_admin.post(
-                        "/api/v1/machine-code/reset-password-with-machine-code"
-                        "?username=testuser&machine_code=MC001&verification_code=BAD",
+                        "/api/v1/machine-code/reset-password-with-machine-code",
+                        json={"username": "testuser", "machine_code": "MC001", "verification_code": "BAD"},
                     )
         assert resp.status_code == 400
         assert "校验码不正确" in resp.json()["detail"]
@@ -431,8 +431,8 @@ class TestResetPasswordWithMachineCode:
                 svc.verify_machine_code.return_value = True
                 with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
                     resp = client_admin.post(
-                        "/api/v1/machine-code/reset-password-with-machine-code"
-                        "?username=nouser&machine_code=MC001&verification_code=VC001",
+                        "/api/v1/machine-code/reset-password-with-machine-code",
+                        json={"username": "nouser", "machine_code": "MC001", "verification_code": "VC001"},
                     )
         assert resp.status_code == 404
 
@@ -453,8 +453,8 @@ class TestResetPasswordWithMachineCode:
                 with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
                     with patch("app.core.security.generate_password", return_value="NewPwd123!"):
                         resp = client_admin.post(
-                            "/api/v1/machine-code/reset-password-with-machine-code"
-                            "?username=testuser&machine_code=MC001&verification_code=VC001",
+                            "/api/v1/machine-code/reset-password-with-machine-code",
+                            json={"username": "testuser", "machine_code": "MC001", "verification_code": "VC001"},
                         )
         assert resp.status_code == 200
         assert user.must_change_password is True
@@ -469,8 +469,8 @@ class TestResetPasswordWithMachineCode:
             with patch("app.api.v1.machine_code.get_client_ip", return_value="127.0.0.1"):
                 with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
                     resp = client_admin.post(
-                        "/api/v1/machine-code/reset-password-with-machine-code"
-                        "?username=testuser&machine_code=MC001&verification_code=VC001",
+                        "/api/v1/machine-code/reset-password-with-machine-code",
+                        json={"username": "testuser", "machine_code": "MC001", "verification_code": "VC001"},
                     )
         assert resp.status_code == 500
 
