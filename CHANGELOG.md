@@ -478,11 +478,38 @@
 - 测试隔离：conftest 会话启动清理遗留 test.db，消除跨会话顺序敏感偶发失败
 - 清理误提交的协作者工作区改动与 .reasonix 临时文件，测试套件恢复稳定（后端 12118 / 前端 6273 全过，覆盖率 100%）
 
+## [1.11.2] - 2026-08-30 — 403 权限页根因修复 + 全站弹窗显示修复
+
+### 修复（403 权限页，六类根因）
+- 🐛 **无组织管理员被判"无任何组织权限"**（核心根因）：单机/未绑定组织的管理员
+  访问数据包、增量更新、版本管理、数据上报等组织门禁端点一律 403——
+  `organization_permission_service`/`user_permission_service` 共 7 处
+  仅 superuser 旁路改为 admin 语义（ADR-0002 对齐）；普通用户维持 fail-closed。
+- 🐛 **菜单加载失败窗口期全站 403**：打包版后端冷启动（onedir 8.6s）期间
+  `/menus/accessible` 失败 → 路由守卫把所有带 menuKey 的页面弹到 /403——
+  守卫改为仅"菜单已加载且明确不含该键"才拒绝（菜单是可见性层，真实权限由
+  后端接口兜底）。
+- 🐛 **经费申请页 admin 403**：`funds-user` 菜单键 roles 缺 admin/super_admin。
+- 🐛 **存量旧角色名被 meta.roles 误拒**：守卫校验前先 normalizeRole 归一化
+  （manager/approval_leader→admin，operator→user）。
+- 🐛 **legacy 模型数据范围 500**：`villages` 等无 created_by/organization_id 列的
+  模型在数据范围过滤下 AttributeError→500，改为 fail-closed 空集（ADR-0002）。
+- 🧪 真实库双角色全量 GET 端点巡检：admin 0×403/0×500；新增回归
+  `test_org_less_admin_403_fix.py`（7 用例）+ 前端守卫 3 用例。
+
+### 修复（连带发现的 5 个 500 端点）
+- 🐛 sklearn 随死代码清理移除后 ai 收入预测/趋势预测端点必 500 → numpy polyfit 等价实现
+- 🐛 monitoring 端点统计 `func.case` 误用（SQLAlchemy 2.x 无此函数）→ `case()`
+- 🐛 业务指标拨付率 float/Decimal 混算 TypeError → 统一 float
+- 🐛 cache-stats 调用不存在的 RedisAdapter.get_stats → 适配器补齐统计/健康方法
+
 ## [1.11.1] - 2026-08-30 — Windows 安装器真机修复版
 
 ### 修复
 - 🐛 **安装器真机全部中止（截图故障）**：NSIS 对双引号字符串做 C 风格转义，
-  钩子把 `$INSTDIResourcescredist\...` 中的 ``/`` 转成 CR/VT 传给
+  钩子把 `$INSTDIR
+esourcescredist\...` 中的 `
+`/`` 转成 CR/VT 传给
   PowerShell，Get-FileHash 恒定报错 exit 1，被误判"哈希不匹配"而中止所有
   真机安装。修复：钩子路径反斜杠全部 `\`；校验改为 FileWrite 写出 .ps1 后
   `-File` 执行（不再使用行内 `-Command`）；校验脚本执行后清理。
