@@ -108,7 +108,7 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
 - 项目完全离线运行，安装包内置所有运行时
 - Schema 权威来源: `backend/app/models/` 和 Alembic 迁移；`database/init.sql` 已删除
 - `.env` 文件不纳入版本控制
-- 版本号在 `backend/app/core/config.py` → `Settings.PROJECT_VERSION`（当前 1.11.0）
+- 版本号在 `backend/app/core/config.py` → `Settings.PROJECT_VERSION`（当前 1.11.2）
 - 数据库: `backend/data/rural_revitalization.db`
 - 生产部署前清除测试数据: `DELETE FROM supported_villages; DELETE FROM schools;`
 - **`SupportedVillage.is_revitalization_tier`** 是 Boolean（是否振兴梯队），原来的 `revitalization_tier` (String) 和 `tiered_development_level` (String) 已删除
@@ -190,7 +190,7 @@ PR Checks 和 Nightly 工作流均上传覆盖率到 [Codecov](https://codecov.i
 
 `backend/alembic/versions/012_consolidate_baseline.py` 将早期分散的迁移脚本整合为单一基线迁移，减少 Alembic 迁移链长度，便于新环境初始化。
 
-## 2026-08-30 体检批次（v1.11.0）持久性约定
+## 2026-08-30 体检批次（v1.11.x）持久性约定
 
 - **PII 列已透明加密**（ADR-0005）：`villagers.id_card/phone`、`village_committee_members.phone`、
   `users.phone`、`organizations/projects/rural_works/rural_tasks/schools.contact_phone` 共 9 列
