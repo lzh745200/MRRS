@@ -117,7 +117,8 @@
   ; 询问用户是否删除用户数据目录（含 SQLite 数据库、上传文件、日志等）
   ; deleteAppDataOnUninstall=false（package.json）保留 userData 小文件，
   ; 此处单独询问大文件数据目录 %LOCALAPPDATA%\bumofu-assistance\
-  MessageBox MB_YESNO|MB_ICONQUESTION "是否同时删除用户数据（包含数据库）?$\n$\n位置: $LOCALAPPDATA\bumofu-assistance\" IDNO keep_user_data
+  ; /SD IDNO + MB_DEFBUTTON2（W6-T10）：静默卸载（企业批量部署）默认保留用户数据
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "是否同时删除用户数据（包含数据库）?$\n$\n位置: $LOCALAPPDATA\bumofu-assistance\" /SD IDNO IDNO keep_user_data
     RMDir /r /REBOOTOK "$LOCALAPPDATA\bumofu-assistance"
     DetailPrint "已删除用户数据目录: $LOCALAPPDATA\bumofu-assistance"
   keep_user_data:

@@ -9,6 +9,7 @@
 | **Windows 10/11** | x86_64 | `.exe` | [Windows 部署指南](01-Windows部署/部署指南.md) |
 | **Docker** | 任意 | 镜像 | [Docker 快速开始](03-Docker部署/DOCKER_QUICK_START.md) |
 | **Docker E2E** | 任意 | compose | `make test-e2e-docker` (E2E 测试专用配置) |
+| **升级/回滚（全平台）** | — | — | [离线升级与回滚指南](OFFLINE_UPGRADE.md) |
 
 ## 一键构建 .deb
 

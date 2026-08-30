@@ -17,8 +17,8 @@ jobs:
   backend-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
       # 覆盖率门禁：98%（W4-T1：不再 continue-on-error，失败即红；
@@ -36,7 +36,7 @@ jobs:
           exit 1
       # 上传覆盖率到 Codecov（展示用：fail_ci_if_error=false 且 continue-on-error，
       # 覆盖率阻断由上方 --cov-fail-under 承担，上传抖动不阻塞 PR）
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
           directory: backend
           flags: backend
@@ -46,8 +46,8 @@ jobs:
   frontend-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: '22' }
       - run: |
           cd frontend
@@ -58,7 +58,7 @@ jobs:
       # 前端测试带覆盖率报告（vitest run --coverage）
       - run: cd frontend && npx vitest run --coverage 2>&1
       # 上传覆盖率到 Codecov
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
           directory: frontend
           flags: frontend
@@ -68,8 +68,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
       - run: pip install flake8 mypy bandit
       # flake8 零错误门禁
@@ -84,10 +84,10 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: '22' }
       # 后端依赖漏洞扫描（pip-audit）
       - run: pip install pip-audit pip-licenses
@@ -105,7 +105,7 @@ jobs:
         run: |
           pip-licenses --from=mixed --with-system --with-description --format=csv --output-file=sbom.csv || true
       - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sbom-license-list
           path: sbom.csv
@@ -114,10 +114,10 @@ jobs:
   static-analysis:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: '22' }
       # 版本一致性门禁：sync-version.js --check 检测 13 处版本号漂移
       # 软删除过滤静态扫描：新增对软删模型的无 is_active 聚合/列表查询即失败

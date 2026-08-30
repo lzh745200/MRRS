@@ -127,7 +127,11 @@ function _writeSecrets(secrets, encrypt) {
       const encrypted = safeStorage.encryptString(JSON.stringify(secrets));
       fs.writeFileSync(SECRETS_FILE, encrypted);
     } else {
+      // Linux 无 keyring 场景的明文回落（W6-T11）：收紧为仅属主可读写，
+      // 风险说明见 docs/04-部署文档/02-Linux部署/麒麟V10离线部署完整方案.md
       fs.writeFileSync(SECRETS_FILE, JSON.stringify(secrets), 'utf-8');
+      try { fs.chmodSync(SECRETS_FILE, 0o600); } catch (_) { /* Windows 无 POSIX 权限，忽略 */ }
+      console.warn('[Secrets] safeStorage 不可用，密钥明文写入（已收紧权限 0600）:', SECRETS_FILE);
     }
   } catch (e) { console.error('[Secrets] 写入失败:', e.message); }
 }
