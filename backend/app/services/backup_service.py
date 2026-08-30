@@ -108,9 +108,9 @@ class BackupService:
             url = str(bind.url)
         except Exception:
             url = ""
-        from app.utils.paths import _db_file_from_url
+        from app.utils.paths import db_file_from_url
 
-        candidate = _db_file_from_url(url)
+        candidate = db_file_from_url(url)
         if candidate is None:
             from app.utils.paths import get_database_path
 

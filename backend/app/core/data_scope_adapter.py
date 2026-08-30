@@ -141,7 +141,8 @@ def apply_scope_filter(
         * 部门范围(OWN_DEPT) -> ``model.org_id_field IN (可访问组织IDs)``；
           用户无组织归属时回退到"仅本人"（与 apply_scope_to_query 行为一致）；
         * 仅本人(OWN / data_scope="self") -> ``model.owner_field == user.id``；
-        * 模型缺少对应字段 -> 原样返回（防御性行为，避免运行期崩溃）。
+        * 模型缺少组织字段 -> fail-closed（ADR-0002）：降级为"仅本人"并记
+          error 日志，绝不静默放行全量；连 owner 字段也缺失则抛错拒绝。
     """
     from app.core.data_permission import DataScope, get_data_scope
     from app.core.permission_utils import is_admin
@@ -165,16 +166,17 @@ def apply_scope_filter(
         org_ids = get_accessible_org_ids(user, db=db)
         if org_ids is None:
             return query
-        if org_ids:
-            if _has_field(model, org_id_field):
-                return _apply_org_filter(query, model, org_id_field, org_ids)
-            # fail-closed（ADR-0002）：模型缺组织字段时禁止静默放行全量，
-            # 降级为"仅本人"；连 owner 字段也缺失则抛错拒绝
-            logger.error(
-                "Model %s 缺少组织字段 '%s'，数据范围降级为仅本人(fail-closed)", model, org_id_field
-            )
-        # 无组织归属 -> 回退到"仅本人"（与 apply_scope_to_query 行为一致）
-        logger.debug("User has no organization; falling back to OWN scope")
+        if not org_ids:
+            # 无组织归属 -> 回退到"仅本人"（与 apply_scope_to_query 行为一致）
+            logger.debug("User has no organization; falling back to OWN scope")
+            return _apply_owner_filter(query, model, owner_field, user)
+        if _has_field(model, org_id_field):
+            return _apply_org_filter(query, model, org_id_field, org_ids)
+        # fail-closed（ADR-0002）：模型缺组织字段时禁止静默放行全量，
+        # 降级为"仅本人"；连 owner 字段也缺失则抛错拒绝
+        logger.error(
+            "Model %s 缺少组织字段 '%s'，数据范围降级为仅本人(fail-closed)", model, org_id_field
+        )
         return _apply_owner_filter(query, model, owner_field, user)
 
     # OWN 范围（或 OWN_DEPT 回退）

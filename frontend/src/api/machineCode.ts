@@ -121,7 +121,7 @@ export function resetPasswordWithMachineCode(data: {
   return apiRequest({
     url: '/machine-code/reset-password-with-machine-code',
     method: 'post',
-    params: data,
+    data,
   })
 }
 

@@ -170,8 +170,12 @@ class TestResetRejectsPrivilegedAccounts:
 
     def _post(self, client_admin, username):
         return client_admin.post(
-            "/api/v1/machine-code/reset-password-with-machine-code"
-            f"?username={username}&machine_code=MC001&verification_code=VC001",
+            "/api/v1/machine-code/reset-password-with-machine-code",
+            json={
+                "username": username,
+                "machine_code": "MC001",
+                "verification_code": "VC001",
+            },
         )
 
     def test_admin_role_rejected(self, client_admin, mock_db):
@@ -222,8 +226,12 @@ class TestResetAuditTrail:
 
     def _post(self, client_admin):
         return client_admin.post(
-            "/api/v1/machine-code/reset-password-with-machine-code"
-            "?username=testuser&machine_code=MC001&verification_code=VC001",
+            "/api/v1/machine-code/reset-password-with-machine-code",
+            json={
+                "username": "testuser",
+                "machine_code": "MC001",
+                "verification_code": "VC001",
+            },
         )
 
     def test_success_writes_audit_log(self, client_admin, mock_db):
@@ -262,7 +270,12 @@ class TestFactoryAdminRecovery:
 
     def _post(self, client_admin, username="admin"):
         return client_admin.post(
-            f"{self.URL}?username={username}&machine_code=MC001&verification_code=VC001",
+            self.URL,
+            json={
+                "username": username,
+                "machine_code": "MC001",
+                "verification_code": "VC001",
+            },
         )
 
     @staticmethod

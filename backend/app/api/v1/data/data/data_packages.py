@@ -629,31 +629,35 @@ def _compute_package_diff_stats(service: DataPackageService, file_path: str) -> 
 
     added=本地不存在的记录ID数；modified=本地已存在（将被覆盖/跳过）的ID数；
     deleted 恒为 0 —— 包内不含删除墓碑，物理删除无法从包推断。
+
+    失败语义（fail-loud）：包损坏/查询失败直接抛出，由调用方转为明确错误——
+    绝不返回空统计让管理员把"统计全 0"误读为"无差异"而确认覆盖式导入。
     """
     from sqlalchemy import inspect as sa_inspect
 
     from app.services.data_package_service import DATA_TYPE_MODELS
 
+    # SQLite 历史版本默认变量上限 999，现代版 32766；分块规避两个上限
+    CHUNK_SIZE = 500
+
     stats: Dict[str, Dict[str, int]] = {}
-    try:
-        with zipfile.ZipFile(file_path, "r") as zf:
-            manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
-            for dtype in manifest.get("data_types", []):
-                model = DATA_TYPE_MODELS.get(dtype)
-                data_file = f"data/{dtype}.json"
-                if not model or data_file not in zf.namelist():
-                    continue
-                records = json.loads(zf.read(data_file).decode("utf-8"))
-                pk_name = sa_inspect(model).primary_key[0].name
-                pk_col = getattr(model, pk_name)
-                ids = [r.get(pk_name) for r in records if r.get(pk_name) is not None]
-                existing = 0
-                if ids:
-                    existing = service.db.query(pk_col).filter(pk_col.in_(ids)).count()
-                added = len(ids) - existing
-                stats[dtype] = {"added": added, "modified": existing, "deleted": 0, "total": len(ids)}
-    except Exception as e:
-        logger.error(f"统计包内差异失败({file_path}): {e}", exc_info=True)
+    with zipfile.ZipFile(file_path, "r") as zf:
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        for dtype in manifest.get("data_types", []):
+            model = DATA_TYPE_MODELS.get(dtype)
+            data_file = f"data/{dtype}.json"
+            if not model or data_file not in zf.namelist():
+                continue
+            records = json.loads(zf.read(data_file).decode("utf-8"))
+            pk_name = sa_inspect(model).primary_key[0].name
+            pk_col = getattr(model, pk_name)
+            ids = [r.get(pk_name) for r in records if r.get(pk_name) is not None]
+            existing = 0
+            for start in range(0, len(ids), CHUNK_SIZE):
+                chunk = ids[start:start + CHUNK_SIZE]
+                existing += service.db.query(pk_col).filter(pk_col.in_(chunk)).count()
+            added = len(ids) - existing
+            stats[dtype] = {"added": added, "modified": existing, "deleted": 0, "total": len(ids)}
     return stats
 
 
@@ -854,7 +858,14 @@ async def incremental_import(
     if org_id and not permission_service.can_access_organization(current_user.id, org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权导入该数据包")
 
-    stats = _compute_package_diff_stats(service, package.file_path)
+    try:
+        stats = _compute_package_diff_stats(service, package.file_path)
+    except Exception:
+        logger.error("增量包差异统计失败(package_id=%s, file=%s)", data.package_id, package.file_path, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="差异统计失败，无法预览；数据包可能损坏，请重新导出",
+        )
     summary = _diff_summary(stats)
 
     if not data.apply_changes:
@@ -1532,13 +1543,13 @@ async def list_package_versions(
         .order_by(PackageVersion.created_at.desc(), PackageVersion.id.desc())
         .all()
     )
-    return {
-        "success": True,
-        "data": {
+    return success_response(
+        data={
             "versions": [_package_version_to_dict(v) for v in versions],
             "total": len(versions),
         },
-    }
+        message="获取版本列表成功",
+    )
 
 
 @router.post("/{package_id}/versions", summary="创建数据包版本")
@@ -1586,7 +1597,7 @@ async def create_package_version(
         db, "version", version.id, f"package:{package_id}/v{version_text}",
         current_user, detail="创建数据包版本",
     )
-    return {"success": True, "data": _package_version_to_dict(version)}
+    return success_response(data=_package_version_to_dict(version), message="版本创建成功")
 
 
 @router.get("/{package_id}/versions/compare", summary="对比数据包两个版本")
@@ -1644,9 +1655,8 @@ async def compare_package_versions(
         removed_in_v2[dtype] = sorted(a_added - b_added, key=str)
         modified[dtype] = sorted(set(b.get("modified", []) or []), key=str)
 
-    return {
-        "success": True,
-        "data": {
+    return success_response(
+        data={
             "version1": {"version": v1.version},
             "version2": {"version": v2.version},
             "comparison": {
@@ -1657,7 +1667,8 @@ async def compare_package_versions(
                 }
             },
         },
-    }
+        message="版本对比完成",
+    )
 
 
 @router.get("/{package_id}/versions/{version_id}", summary="获取数据包版本详情")
@@ -1683,7 +1694,7 @@ async def get_package_version(
     )
     if not version:
         raise HTTPException(status_code=404, detail="版本不存在")
-    return {"success": True, "data": _package_version_to_dict(version)}
+    return success_response(data=_package_version_to_dict(version), message="获取版本详情成功")
 
 
 @router.delete("/{package_id}/versions/{version_id}", summary="删除数据包版本")
@@ -1716,4 +1727,4 @@ async def delete_package_version(
         db, "version", version_id, f"package:{package_id}/v{version.version}",
         current_user, detail="删除数据包版本",
     )
-    return {"success": True, "message": "删除成功"}
+    return success_response(message="删除成功")

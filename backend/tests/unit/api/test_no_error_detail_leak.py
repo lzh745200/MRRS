@@ -30,6 +30,19 @@ LEAK_STR_500 = re.compile(
     r'[^)]*detail\s*=\s*str\('
 )
 
+# 2026-08-30 增强: 封堵第三类绕过 —— data={...} 字典值形态
+# success_response(data={"error": str(e)}) 是 kwargs 规则的扫描盲区
+# （评审发现 monitor.py /database-size 曾以该形态把异常文本与服务器路径出站）。
+# 与 LEAK_FSTRING 同口径：内插含 err/exc/error/exception 片段的标识符即命中。
+LEAK_DICT_STR = re.compile(
+    r'["\'](error|message|detail)["\']\s*:\s*str\(\s*'
+    r'[A-Za-z_]*(?:err|exc|error|exception)[A-Za-z_0-9]*\s*\)'
+)
+LEAK_DICT_FSTRING = re.compile(
+    r'["\'](error|message|detail)["\']\s*:\s*f"[^"]*\{\s*(?:str\()?\s*'
+    r'[A-Za-z_]*(?:err|exc|error|exception)[A-Za-z_0-9]*\s*\)?[^"]*\}"'
+)
+
 
 def _py_files():
     return sorted(API_DIR.rglob("*.py"))
@@ -43,7 +56,12 @@ class TestNoExceptionDetailLeak:
             for lineno, line in enumerate(
                 py.read_text(encoding="utf-8", errors="replace").splitlines(), 1
             ):
-                if (LEAK.search(line) or LEAK_FSTRING.search(line)) and "logger." not in line:
+                if (
+                    LEAK.search(line)
+                    or LEAK_FSTRING.search(line)
+                    or LEAK_DICT_STR.search(line)
+                    or LEAK_DICT_FSTRING.search(line)
+                ) and "logger." not in line:
                     rel = py.relative_to(BACKEND_ROOT)
                     offenders.append(f"{rel}:{lineno}: {line.strip()[:120]}")
         assert not offenders, (

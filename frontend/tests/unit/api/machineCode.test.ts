@@ -90,13 +90,13 @@ describe('api/machineCode', () => {
     })
   })
 
-  it('resetPasswordWithMachineCode 用 params 传 data', () => {
+  it('resetPasswordWithMachineCode 用请求体传 data（敏感值不入 URL）', () => {
     const data = { username: 'a', machine_code: 'm', verification_code: 'v' }
     resetPasswordWithMachineCode(data)
     expect(mockApiRequest).toHaveBeenCalledWith({
       url: '/machine-code/reset-password-with-machine-code',
       method: 'post',
-      params: data,
+      data,
     })
   })
 

@@ -184,14 +184,13 @@ const handleResetPassword = async () => {
   resetting.value = true
 
   try {
-    // post() 已自动解包，返回值即为 {code, data, message} 信封体
+    // post() 已自动解包，返回值即为 {code, data, message} 信封体；
+    // 表单走请求体（敏感值不入 URL 查询串，2026-08-30 评审修复）
     const isAdminMode = accountMode.value === 'admin'
     const url = isAdminMode
       ? '/machine-code/recover-admin-factory-password'
       : '/machine-code/reset-password-with-machine-code'
-    const response = await post(url, undefined, {
-      params: resetForm.value,
-    })
+    const response = await post(url, resetForm.value)
 
     const payload = response?.data ?? response
     if (response?.code === 200 && (payload?.new_password || payload?.factory_password)) {

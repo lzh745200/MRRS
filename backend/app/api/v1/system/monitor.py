@@ -7,9 +7,7 @@
 import logging
 import os
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -102,9 +100,10 @@ async def get_monitor_snapshot(current_user=Depends(get_current_user)):
     except ImportError:  # pragma: no cover
         snapshot["status"] = "limited"
         snapshot["message"] = "psutil未安装，仅提供基础监控数据"
-    except Exception as e:
+    except Exception:
+        logger.error("获取监控数据失败", exc_info=True)
         snapshot["status"] = "error"
-        snapshot["message"] = f"获取监控数据失败: {str(e)}"
+        snapshot["message"] = "获取监控数据失败，请查看日志"
 
     return success_response(data=snapshot)
 
@@ -157,7 +156,7 @@ async def get_resource_usage(current_user=Depends(get_current_user)):
             except (OSError, Exception) as e:
                 logger.warning("Failed to read disk partition %s: %s", part.mountpoint, e)
                 disks.append({"mountpoint": part.mountpoint, "device": part.device,
-                              "error": str(e), "available": False})
+                              "error": "读取失败", "available": False})
         resources["disk"] = disks
 
         # 健康评估
@@ -176,9 +175,10 @@ async def get_resource_usage(current_user=Depends(get_current_user)):
     except ImportError:  # pragma: no cover
         resources["status"] = "limited"
         resources["message"] = "psutil未安装，资源监控功能受限"
-    except Exception as e:
+    except Exception:
+        logger.error("获取资源使用详情失败", exc_info=True)
         resources["status"] = "error"
-        resources["message"] = str(e)
+        resources["message"] = "获取资源使用详情失败，请查看日志"
 
     return success_response(data=resources)
 
@@ -327,22 +327,14 @@ async def get_api_statistics(
 @router.get("/database-size", summary="获取数据库文件大小")
 async def get_database_size(current_user=Depends(get_current_user)):
     """获取数据库文件大小（用于系统监控面板）"""
-    from app.core.config import settings
+    from app.utils.paths import get_database_path
     try:
-        db_url = settings.DATABASE_URL
-        if db_url.startswith("sqlite"):
-            parsed = urlparse(db_url) if "://" in db_url else None
-            if parsed and parsed.path:
-                db_path = parsed.path.lstrip("/")
-            else:
-                db_path = db_url.replace("sqlite:///", "")
-            if not os.path.isabs(db_path):
-                db_path = str(Path(db_path).resolve())
-        else:
-            db_path = str(Path("data/rural_revitalization.db").resolve())
+        # 路径解析唯一来源（AGENTS.md 路径双源规则）：禁止在此自行拼 DATABASE_URL
+        db_path = str(get_database_path())
         if not os.path.exists(db_path):
+            logger.error("数据库文件不存在: %s", db_path)
             return success_response(
-                data={"size_bytes": 0, "size_mb": 0, "error": f"数据库文件不存在: {db_path}"},
+                data={"size_bytes": 0, "size_mb": 0, "error": "数据库文件不存在，请查看日志"},
                 success=False,
             )
         size = os.path.getsize(db_path)
@@ -350,10 +342,10 @@ async def get_database_size(current_user=Depends(get_current_user)):
             data={
                 "size_bytes": size,
                 "size_mb": round(size / 1024 / 1024, 2),
-                "path": db_path,
             },
         )
     except PermissionError:
         return success_response(data={"size_bytes": 0, "size_mb": 0, "error": "无权限读取数据库文件"}, success=False)
-    except Exception as e:
-        return success_response(data={"size_bytes": 0, "size_mb": 0, "error": str(e)}, success=False)
+    except Exception:
+        logger.error("获取数据库大小失败", exc_info=True)
+        return success_response(data={"size_bytes": 0, "size_mb": 0, "error": "获取数据库大小失败，请查看日志"}, success=False)

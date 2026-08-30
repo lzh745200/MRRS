@@ -219,10 +219,7 @@ describe('ForgotPassword.vue', () => {
     await vm.handleResetPassword()
     expect(mockPost).toHaveBeenCalledWith(
       '/machine-code/reset-password-with-machine-code',
-      undefined,
-      {
-        params: vm.resetForm,
-      }
+      vm.resetForm
     )
     expect(vm.newPassword).toBe('New#Pass1')
     expect(vm.currentStep).toBe(1)
@@ -347,8 +344,7 @@ describe('ForgotPassword.vue', () => {
     await vm.handleResetPassword()
     expect(mockPost).toHaveBeenCalledWith(
       '/machine-code/recover-admin-factory-password',
-      undefined,
-      { params: vm.resetForm }
+      vm.resetForm
     )
     expect(vm.newPassword).toBe('Admin@2026')
     expect(vm.currentStep).toBe(1)

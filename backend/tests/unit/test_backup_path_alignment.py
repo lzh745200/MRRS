@@ -22,7 +22,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.models.base import Base as ModelBase
 from app.services.backup_service import BackupIncompleteError, BackupService
-from app.utils.paths import _db_file_from_url, get_database_path, get_runtime_uploads_path
+from app.utils.paths import db_file_from_url, get_database_path, get_runtime_uploads_path
 
 
 @pytest.fixture
@@ -41,20 +41,20 @@ def runtime_db(tmp_path, monkeypatch):
 class TestDbFileFromUrl:
     def test_absolute_sqlite_url_resolved(self, tmp_path):
         db_file = tmp_path / "app.db"
-        assert _db_file_from_url(f"sqlite:///{db_file.as_posix()}") == Path(db_file.as_posix())
+        assert db_file_from_url(f"sqlite:///{db_file.as_posix()}") == Path(db_file.as_posix())
 
     def test_relative_url_rejected(self):
-        assert _db_file_from_url("sqlite:///./data/x.db") is None
+        assert db_file_from_url("sqlite:///./data/x.db") is None
 
     def test_memory_db_rejected(self):
-        assert _db_file_from_url("sqlite:///:memory:") is None
+        assert db_file_from_url("sqlite:///:memory:") is None
 
     def test_non_sqlite_rejected(self):
-        assert _db_file_from_url("postgresql://localhost/app") is None
+        assert db_file_from_url("postgresql://localhost/app") is None
 
     def test_query_string_stripped(self, tmp_path):
         db_file = tmp_path / "app.db"
-        res = _db_file_from_url(f"sqlite:///{db_file.as_posix()}?mode=ro")
+        res = db_file_from_url(f"sqlite:///{db_file.as_posix()}?mode=ro")
         if res is not None:  # Windows 盘符 URL 在 POSIX 上按相对路径拒绝
             assert res == Path(db_file.as_posix())
 

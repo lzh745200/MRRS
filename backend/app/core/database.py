@@ -116,6 +116,18 @@ def _set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
         # SQLCipher 的 PRAGMA key 不支持绑定参数，须为字面量；密钥来自本机文件，转义后使用
         safe_key = key.replace("'", "''")
         cursor.execute(f"PRAGMA key = '{safe_key}'")
+        # 密钥正确性自检：PRAGMA key 本身永不报错，错误密钥要等到首条业务查询才抛
+        # "file is not a database"——此处主动读一次 schema，让错误密钥在连接建立时
+        # 即以明确异常失败（fail-fast）
+        try:
+            cursor.execute("SELECT count(*) FROM sqlite_master")
+            cursor.fetchone()
+        except Exception as key_err:
+            cursor.close()
+            raise RuntimeError(
+                "数据库加密密钥校验失败（密钥错误或文件非本系统加密库）: "
+                f"{type(key_err).__name__}"
+            ) from key_err
         logger.info("SQLCipher 数据库加密已启用 (cipher=%s)", cipher_version[0])
 
     # 1. 核心日志与一致性

@@ -86,6 +86,18 @@ class GeneratePasswordRequest(BaseModel):
     verification_code: str
 
 
+class MachineCodeResetRequest(BaseModel):
+    """机器码通道重置请求体。
+
+    username/机器码/校验码一律走请求体（POST Body），避免敏感值落入
+    URL 查询串被访问日志/代理记录（2026-08-30 评审修复）。
+    """
+
+    username: str = Field(..., min_length=1)
+    machine_code: str = Field(..., min_length=1)
+    verification_code: str = Field(..., min_length=1)
+
+
 class VerifyMachineCodeRequest(BaseModel):
     """验证机器码请求"""
 
@@ -382,9 +394,7 @@ async def generate_initial_password(
 @router.post("/reset-password-with-machine-code")
 async def reset_password_with_machine_code(
     request: Request,
-    username: str,
-    machine_code: str,
-    verification_code: str,
+    data: MachineCodeResetRequest,
     db: Session = Depends(get_db),
 ):
     """使用机器码重置用户密码
@@ -395,7 +405,12 @@ async def reset_password_with_machine_code(
     - 仅允许本机（loopback）请求——离线单机部署下即"操作者在机器前"
     - 管理员/superuser 账号排除，防止静默提权（管理员走管理端重置流程）
     - 限流真实生效；每次成功重置写审计日志
+    - username/机器码/校验码走请求体，不入 URL（访问日志不留敏感值）
     """
+    username = data.username
+    machine_code = data.machine_code
+    verification_code = data.verification_code
+
     # 速率限制：每IP每分钟最多5次（关键字传参，历史缺陷为位置传参绑定错误）
     client_ip = get_client_ip(request)
     if not await check_rate_limit(key=f"reset_pwd:{client_ip}", request=request, limit=5, window=60):
@@ -479,9 +494,7 @@ async def reset_password_with_machine_code(
 @router.post("/recover-admin-factory-password")
 async def recover_admin_factory_password(
     request: Request,
-    username: str,
-    machine_code: str,
-    verification_code: str,
+    data: MachineCodeResetRequest,
     db: Session = Depends(get_db),
 ):
     """管理员账号出厂恢复（ADR-0008 扩展，2026-08-30）
@@ -497,8 +510,12 @@ async def recover_admin_factory_password(
 
     安全边界（与 reset-password-with-machine-code 同源的四重边界）：
     限流真实生效；仅限 loopback（TCP 对端地址）；机器码+校验码双验证；
-    write_work_log 审计留痕。
+    write_work_log 审计留痕；敏感参数走请求体不入 URL。
     """
+    username = data.username
+    machine_code = data.machine_code
+    verification_code = data.verification_code
+
     # 速率限制（关键字传参，fail-closed）
     client_ip = get_client_ip(request)
     if not await check_rate_limit(key=f"recover_admin:{client_ip}", request=request, limit=5, window=60):

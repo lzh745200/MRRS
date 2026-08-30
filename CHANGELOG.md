@@ -58,6 +58,37 @@
   形态有真实引用）；顺带修复 W3-T2 menuKeyAlignment 守卫对可选参数
   路由的匹配（14d2b243 引入的存量红测试）。
 
+### 修复（2026-08-30 双轴代码评审批次）
+
+- 🐛 **增量包预览静默全 0**：`_compute_package_diff_stats` 的 `IN` 查询未分块
+  （超 SQLite 变量上限即抛错），且 `except Exception` 吞掉异常返回空统计——
+  管理员会把"统计全 0"误读为"无差异"而确认覆盖式导入。改为分块查询（500/批）+
+  fail-loud，统计失败返回明确 500 错误。
+- 🔒 **错误细节出站收口（W1-6）**：monitor.py 4 处 `str(e)`/服务器路径经响应
+  出站（`data={"error": str(e)}` 形态属既有扫描器盲区），全部泛化文案 +
+  `logger.error(exc_info=True)`；`test_no_error_detail_leak` 补第三类
+  字典值绕过规则。
+- 🔒 **路径双源违规收口**：monitor.py `/database-size` 改用
+  `paths.get_database_path()` 唯一来源，不再自行拼 DATABASE_URL；响应移除
+  服务器路径字段；`paths._db_file_from_url` 提升为公开 `db_file_from_url`
+  （backup_service 跨模块消费不再引用私有符号）。
+- 🔒 **敏感参数不入 URL**：`/machine-code/reset-password-with-machine-code` 与
+  `/recover-admin-factory-password` 的 username/机器码/校验码从 query 改为
+  请求体（Pydantic 模型），前端 ForgotPassword/machineCode.ts 与测试同步
+  ——URL 查询串会被访问日志/代理记录。
+- 🐛 **SQLCipher 错误密钥 fail-fast**：`PRAGMA key` 后主动读 schema 自检，
+  错误密钥在连接建立时以明确异常失败，而非首条业务查询时报
+  "file is not a database"。
+- 🐛 **data_scope_adapter 文档与实现矛盾**：模型缺组织字段的 fail-closed
+  行为（降级仅本人）此前 docstring 仍写"原样返回"，且缺字段路径会误打
+  "User has no organization" 日志误导排查——分支重构 + 文档纠偏。
+- ⚠️ **行为变更（发布说明）**：数据权限 fail-closed（34f7d7f8）后，非管理员
+  且无组织归属的账号可见范围从"全量"收敛为"仅本人"。离线单机默认管理员
+  不受影响；存量无组织普通账号将看到数据范围缩小，属预期安全语义。
+- 🧹 数据包 versions 五端点（列表/创建/对比/详情/删除）由手写
+  `{success, data}` 收敛为 `success_response` 信封（W5-004 收尾），前端
+  拦截器兼容，数据载荷形状不变。
+
 ### 清理（无死代码遗留）
 - 🧹 删除 4 个引用已删源码的死测试（stores/project、stores/rbac、
   useAccessibility）及 8 处指向不存在模块的 `vi.mock`（4 处已删 stores/api +

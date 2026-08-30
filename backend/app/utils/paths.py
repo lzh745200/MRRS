@@ -215,14 +215,14 @@ def get_database_path() -> Path:
             url = settings.DATABASE_URL or ""
         except Exception:
             url = ""
-    candidate = _db_file_from_url(url)
+    candidate = db_file_from_url(url)
     if candidate is not None:
         candidate.parent.mkdir(parents=True, exist_ok=True)
         return candidate
     return get_data_path("rural_revitalization.db")
 
 
-def _db_file_from_url(url: str):
+def db_file_from_url(url: str):
     """从 SQLAlchemy URL 解析本地 SQLite 文件路径。
 
     仅接受指向绝对路径的 sqlite URL；内存库、非 SQLite、相对路径一律返回
