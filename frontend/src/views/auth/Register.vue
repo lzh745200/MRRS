@@ -1,5 +1,6 @@
 <template>
   <div class="register-container">
+    <div class="background-overlay"></div>
     <el-card class="register-card">
       <template #header>
         <div class="card-header">
@@ -220,31 +221,42 @@ const showPassCodeHelp = () => {
 
 <style scoped lang="scss">
 .register-container {
-  --military-dark: var(--color-primary-dark-2);
-  --military-green: $military-dark;
-  --military-gold: $badge-gold;
-  --military-gold-light: $badge-gold-lighter;
-  --text-white: var(--color-bg-card);
-
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
   overflow-y: auto;
-  background: linear-gradient(135deg, var(--military-dark) 0%, var(--military-green) 100%);
+  position: relative;
   padding: 20px;
+  background: linear-gradient(135deg, var(--color-primary-dark-2) 0%, $military-dark 100%);
+}
+
+/* 与登录/忘记密码页一致的照片背景层 */
+.background-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('/images/login-bg/bg1.jpg');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.15;
+  z-index: 0;
 }
 
 .register-card {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 500px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.95);
 
   :deep(.el-card__header) {
-    background: linear-gradient(135deg, var(--military-green) 0%, var(--military-dark) 100%);
-    color: var(--text-white);
+    background: linear-gradient(135deg, $military-dark 0%, var(--color-primary-dark-2) 100%);
+    color: #fff;
     border-radius: 12px 12px 0 0;
   }
 }
@@ -256,14 +268,14 @@ const showPassCodeHelp = () => {
     margin: 0 0 8px 0;
     font-size: 24px;
     font-weight: 600;
-    color: var(--text-white);
+    color: #fff;
   }
 
   .subtitle {
     margin: 0;
     font-size: 14px;
     opacity: 0.9;
-    color: var(--text-white);
+    color: #fff;
   }
 }
 
@@ -274,12 +286,12 @@ const showPassCodeHelp = () => {
   font-size: 14px;
 
   a {
-    color: var(--military-green);
+    color: $military-dark;
     text-decoration: none;
 
     &:hover {
       text-decoration: underline;
-      color: var(--military-gold);
+      color: $badge-gold;
     }
   }
 }
