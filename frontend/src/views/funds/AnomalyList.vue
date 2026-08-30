@@ -13,7 +13,7 @@
             clearable
             size="default"
             style="width: 120px"
-            @change="loadData"
+            @change="handleFilterChange"
           >
             <el-option label="提示" value="info" />
             <el-option label="警告" value="warning" />
@@ -25,7 +25,7 @@
             clearable
             size="default"
             style="width: 140px"
-            @change="loadData"
+            @change="handleFilterChange"
           >
             <el-option label="超支" value="overspend" />
             <el-option label="偏差" value="deviation" />
@@ -39,7 +39,7 @@
             clearable
             size="default"
             style="width: 120px"
-            @change="loadData"
+            @change="handleFilterChange"
           >
             <el-option label="未处理" :value="0" />
             <el-option label="已处理" :value="1" />
@@ -142,6 +142,11 @@ const filters = reactive({
 const resolveDialogVisible = ref(false)
 const currentAnomaly = ref<any>(null)
 const resolution = ref('')
+
+function handleFilterChange() {
+  page.value = 1 // 筛选条件变化必须回到第1页，否则第2页起筛选会得到空表
+  loadData()
+}
 
 async function loadData() {
   loading.value = true

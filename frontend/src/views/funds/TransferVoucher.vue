@@ -13,7 +13,7 @@
             clearable
             size="default"
             style="width: 140px"
-            @change="loadData"
+            @change="handleFilterChange"
           >
             <el-option label="草稿" value="draft" />
             <el-option label="已提交" value="submitted" />
@@ -187,6 +187,11 @@ async function handleVoucherUpload(voucherId: number, file: File) {
   } finally {
     uploadingId.value = null
   }
+}
+
+function handleFilterChange() {
+  page.value = 1 // 筛选条件变化必须回到第1页，否则第2页起筛选会得到空表
+  loadData()
 }
 
 async function loadData() {

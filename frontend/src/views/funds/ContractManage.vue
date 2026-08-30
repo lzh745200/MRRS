@@ -12,7 +12,7 @@
           clearable
           size="default"
           style="width: 140px"
-          @change="loadData"
+          @change="handleFilterChange"
         >
           <el-option label="草稿" value="draft" />
           <el-option label="执行中" value="active" />
@@ -268,6 +268,11 @@ const paymentForm = reactive({
   purpose: '',
   voucher_no: '',
 })
+
+function handleFilterChange() {
+  page.value = 1 // 筛选条件变化必须回到第1页，否则第2页起筛选会得到空表
+  loadData()
+}
 
 async function loadData() {
   loading.value = true
