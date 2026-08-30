@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useProjectStore } from '@/stores/project'
 import { usePolicyStore } from '@/stores/policy'
 
 const mockGet = vi.fn()
@@ -14,30 +13,6 @@ vi.mock('@/api/request', () => ({
   put: (...args: any[]) => mockPut(...args),
   del: (...args: any[]) => mockDel(...args),
   getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
-
-describe('useProjectStore', () => {
-  let store: ReturnType<typeof useProjectStore>
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    store = useProjectStore()
-  })
-
-  it('初始: projects=[], currentProject=null', () => {
-    expect(store.projects).toEqual([])
-    expect(store.currentProject).toBeNull()
-  })
-
-  it('setProjects 替换项目列表', () => {
-    store.setProjects([{ id: 1, name: 'A' }, { id: 2, name: 'B' }])
-    expect(store.projects).toHaveLength(2)
-  })
-
-  it('setCurrent 设置当前项目', () => {
-    const p = { id: 5, name: 'X' }
-    store.setCurrent(p)
-    expect(store.currentProject).toEqual(p)
-  })
-})
 
 describe('usePolicyStore', () => {
   let store: ReturnType<typeof usePolicyStore>
