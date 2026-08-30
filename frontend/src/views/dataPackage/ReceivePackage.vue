@@ -24,6 +24,7 @@
         <!-- 本地文件导入对话框 -->
         <el-dialog
           v-model="showLocalImport"
+          append-to-body
           title="从本地导入数据包"
           :width="DIALOG_SM"
           destroy-on-close
@@ -313,7 +314,13 @@
     </el-tabs>
 
     <!-- 预览对话框 -->
-    <el-dialog v-model="showPreviewDialog" title="数据预览" :width="DIALOG_LG" destroy-on-close>
+    <el-dialog
+      v-model="showPreviewDialog"
+      append-to-body
+      title="数据预览"
+      :width="DIALOG_LG"
+      destroy-on-close
+    >
       <!-- 字段级校验报告（import 响应 validation.warnings / 接收记录 validation_summary） -->
       <div v-if="validationWarnings.length" class="validation-report">
         <h4>字段校验报告</h4>
@@ -364,7 +371,7 @@
     </el-dialog>
 
     <!-- 拒绝对话框 -->
-    <el-dialog v-model="showRejectDialog" title="拒绝数据包" :width="DIALOG_SM">
+    <el-dialog v-model="showRejectDialog" append-to-body title="拒绝数据包" :width="DIALOG_SM">
       <el-form :model="rejectForm" label-width="80px">
         <el-form-item label="拒绝原因" required>
           <el-input

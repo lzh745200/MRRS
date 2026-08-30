@@ -108,6 +108,7 @@
     <!-- 年度数据编辑弹窗（按板块独立填写） -->
     <el-dialog
       v-model="editDialogVisible"
+      append-to-body
       :title="`${editSectionTitle} — 数据填写`"
       :width="DIALOG_LG"
       destroy-on-close

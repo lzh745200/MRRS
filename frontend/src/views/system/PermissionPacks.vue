@@ -43,6 +43,7 @@
     <!-- 新建/编辑对话框 -->
     <el-dialog
       v-model="editDialogVisible"
+      append-to-body
       :title="editingPack ? '编辑权限包' : '新建权限包'"
       :width="DIALOG_MD"
       destroy-on-close
@@ -84,6 +85,7 @@
     <!-- 绑定用户对话框 -->
     <el-dialog
       v-model="bindDialogVisible"
+      append-to-body
       :title="bindingPack ? `绑定用户到「${bindingPack.name}」` : '绑定用户'"
       :width="DIALOG_MD"
       destroy-on-close

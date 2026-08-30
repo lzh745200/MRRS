@@ -101,6 +101,7 @@
     <!-- 创建/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
+      append-to-body
       :title="isEditing ? '编辑校验规则' : '新增校验规则'"
       :width="DIALOG_MD"
       @close="resetForm"
@@ -161,7 +162,7 @@
     </el-dialog>
 
     <!-- 执行校验对话框 -->
-    <el-dialog v-model="runDialogVisible" title="执行校验" :width="DIALOG_SM">
+    <el-dialog v-model="runDialogVisible" append-to-body title="执行校验" :width="DIALOG_SM">
       <el-form label-width="100px">
         <el-form-item label="目标模块">
           <el-select v-model="runModule" placeholder="选择校验目标模块" style="width: 100%">

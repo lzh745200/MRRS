@@ -69,7 +69,7 @@
     </el-card>
 
     <!-- 创建版本对话框 -->
-    <el-dialog v-model="createDialogVisible" title="创建新版本" :width="DIALOG_SM">
+    <el-dialog v-model="createDialogVisible" append-to-body title="创建新版本" :width="DIALOG_SM">
       <el-form :model="versionForm" label-width="100px">
         <el-form-item label="版本号" required>
           <el-input v-model="versionForm.version" placeholder="如: 1.1, 2.0" />
@@ -90,7 +90,7 @@
     </el-dialog>
 
     <!-- 版本详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" title="版本详情" :width="DIALOG_LG">
+    <el-dialog v-model="detailDialogVisible" append-to-body title="版本详情" :width="DIALOG_LG">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="版本号">
           {{ currentVersion.version }}
@@ -149,7 +149,7 @@
     </el-dialog>
 
     <!-- 版本对比对话框 -->
-    <el-dialog v-model="compareDialogVisible" title="版本对比" :width="DIALOG_LG">
+    <el-dialog v-model="compareDialogVisible" append-to-body title="版本对比" :width="DIALOG_LG">
       <el-form :inline="true">
         <el-form-item label="版本1">
           <el-select v-model="compareForm.version1" placeholder="选择版本">

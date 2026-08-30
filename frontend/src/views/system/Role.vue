@@ -87,7 +87,7 @@
     </el-card>
 
     <!-- 角色编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" :width="DIALOG_MD">
+    <el-dialog v-model="dialogVisible" append-to-body :title="dialogTitle" :width="DIALOG_MD">
       <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
         <el-form-item label="角色名称" prop="name">
           <el-input v-model="formData.name" placeholder="请输入角色名称" />
@@ -122,6 +122,7 @@
     <!-- 用户列表对话框 -->
     <el-dialog
       v-model="usersDialogVisible"
+      append-to-body
       :title="`角色关联用户 - ${currentRole?.name}`"
       :width="DIALOG_MD"
     >
@@ -158,7 +159,7 @@
     </el-dialog>
 
     <!-- 权限配置对话框 -->
-    <el-dialog v-model="permissionDialogVisible" title="权限配置" :width="DIALOG_LG">
+    <el-dialog v-model="permissionDialogVisible" append-to-body title="权限配置" :width="DIALOG_LG">
       <div class="permission-header">
         <span
           >当前角色: <strong>{{ currentRole?.name }}</strong></span

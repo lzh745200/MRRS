@@ -577,6 +577,7 @@
     <!-- 图片预览对话框 -->
     <el-dialog
       v-model="previewVisible"
+      append-to-body
       title="图片预览"
       width="80%"
       top="5vh"

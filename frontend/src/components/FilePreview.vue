@@ -1,11 +1,11 @@
 <template>
   <el-dialog
+    append-to-body
     :model-value="modelValue"
     :title="title || fileName || '文件预览'"
     width="80%"
     top="5vh"
     destroy-on-close
-    append-to-body
     @close="handleClose"
   >
     <div v-loading="loading" class="file-preview-body">

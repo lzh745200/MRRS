@@ -72,6 +72,7 @@
     <!-- 新增/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
+      append-to-body
       :title="editingStudent ? '编辑资助学生' : '新增资助学生'"
       :width="DIALOG_SM"
       destroy-on-close

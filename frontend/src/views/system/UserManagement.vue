@@ -193,7 +193,7 @@
     </el-card>
 
     <!-- 用户编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" :width="DIALOG_MD">
+    <el-dialog v-model="dialogVisible" append-to-body :title="dialogTitle" :width="DIALOG_MD">
       <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="formData.username" placeholder="请输入用户名" :disabled="isEdit" />
@@ -348,7 +348,7 @@
     </el-dialog>
 
     <!-- 重置密码对话框 -->
-    <el-dialog v-model="resetPwdDialogVisible" title="重置密码" :width="DIALOG_SM">
+    <el-dialog v-model="resetPwdDialogVisible" append-to-body title="重置密码" :width="DIALOG_SM">
       <el-form :model="resetPwdForm" label-width="100px">
         <el-form-item label="用户名">
           <el-input :value="currentUser?.username" disabled />
@@ -387,7 +387,12 @@
     />
 
     <!-- 菜单权限配置对话框 -->
-    <el-dialog v-model="menuPermDialogVisible" title="菜单权限配置" :width="DIALOG_SM">
+    <el-dialog
+      v-model="menuPermDialogVisible"
+      append-to-body
+      title="菜单权限配置"
+      :width="DIALOG_SM"
+    >
       <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
         为「{{ menuPermUser?.username || '' }}」配置可见页面。勾选后该用户仅能看到所选菜单；
         不勾选任何菜单时使用角色默认权限。
@@ -419,7 +424,12 @@
     </el-dialog>
 
     <!-- 导出权限包：角色选择对话框 -->
-    <el-dialog v-model="permExportDialogVisible" title="导出权限包" :width="DIALOG_SM">
+    <el-dialog
+      v-model="permExportDialogVisible"
+      append-to-body
+      title="导出权限包"
+      :width="DIALOG_SM"
+    >
       <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
         不勾选任何角色将导出全部权限配置；勾选后仅导出所选角色及其用户绑定。
       </el-alert>

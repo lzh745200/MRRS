@@ -243,6 +243,7 @@
     <!-- ── 创建任务对话框 ── -->
     <el-dialog
       v-model="showCreateDialog"
+      append-to-body
       title="创建后台任务"
       :width="DIALOG_SM"
       :close-on-click-modal="false"

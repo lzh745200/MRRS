@@ -139,7 +139,7 @@
       </el-empty>
 
       <!-- 审批对话框 -->
-      <el-dialog v-model="showApproveDialog" title="审批决算" :width="DIALOG_SM">
+      <el-dialog v-model="showApproveDialog" append-to-body title="审批决算" :width="DIALOG_SM">
         <el-form
           ref="approveFormRef"
           :model="approveForm"

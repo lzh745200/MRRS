@@ -146,7 +146,13 @@
     </el-card>
 
     <!-- 查看/编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" :width="DIALOG_MD" destroy-on-close>
+    <el-dialog
+      v-model="dialogVisible"
+      append-to-body
+      :title="dialogTitle"
+      :width="DIALOG_MD"
+      destroy-on-close
+    >
       <el-form
         ref="formRef"
         :model="formData"

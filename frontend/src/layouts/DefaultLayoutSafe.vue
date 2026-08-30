@@ -408,7 +408,7 @@
       </el-main>
 
       <el-footer class="layout-footer" height="28px">
-        <span>帮扶管理信息系统 v1.10.0</span>
+        <span>帮扶管理信息系统 v{{ systemVersion }}</span>
       </el-footer>
     </el-container>
     <!-- 移动端底部导航 -->
@@ -418,6 +418,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
+import { SYSTEM_VERSION as systemVersion } from '@/config/constants'
 import { ElNotification } from 'element-plus'
 import { useAutoLock as useAutoLockModule } from '@/composables/useAutoLock'
 import { useRoute } from 'vue-router'

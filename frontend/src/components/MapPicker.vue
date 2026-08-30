@@ -29,6 +29,7 @@
     </div>
     <el-dialog
       v-model="dialogVisible"
+      append-to-body
       title="在地图上选取坐标 — 点击地图即可选点"
       width="850px"
       destroy-on-close

@@ -133,6 +133,7 @@
             <!-- 录入机器码对话框 -->
             <el-dialog
               v-model="createDialogVisible"
+              append-to-body
               title="录入机器码"
               :width="DIALOG_MD"
               @close="resetCreateForm"
@@ -182,7 +183,12 @@
             </el-dialog>
 
             <!-- 通行码显示对话框 -->
-            <el-dialog v-model="passCodeDialogVisible" title="通行码已生成" :width="DIALOG_SM">
+            <el-dialog
+              v-model="passCodeDialogVisible"
+              append-to-body
+              title="通行码已生成"
+              :width="DIALOG_SM"
+            >
               <el-alert type="success" :closable="false" style="margin-bottom: 20px">
                 <template #title>
                   <strong>请将以下通行码提供给用户</strong>

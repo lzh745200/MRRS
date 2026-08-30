@@ -128,7 +128,7 @@
     />
 
     <!-- Preview Dialog -->
-    <el-dialog v-model="showPreviewDialog" title="数据预览" :width="DIALOG_LG">
+    <el-dialog v-model="showPreviewDialog" append-to-body title="数据预览" :width="DIALOG_LG">
       <div v-if="previewData.length" class="preview-content">
         <el-tabs>
           <el-tab-pane

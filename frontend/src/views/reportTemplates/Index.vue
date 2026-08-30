@@ -106,6 +106,7 @@
     <!-- 新建模板对话框 -->
     <el-dialog
       v-model="showCreateDialog"
+      append-to-body
       title="新建模板"
       :width="DIALOG_SM"
       @closed="resetCreateForm"
@@ -174,7 +175,7 @@
     </el-dialog>
 
     <!-- 编辑模板对话框 -->
-    <el-dialog v-model="showEditDialog" title="编辑模板" :width="DIALOG_SM">
+    <el-dialog v-model="showEditDialog" append-to-body title="编辑模板" :width="DIALOG_SM">
       <el-form
         v-if="editTemplate"
         ref="editFormRef"
@@ -207,6 +208,7 @@
     <!-- 在线填报对话框 -->
     <el-dialog
       v-model="showFillDialog"
+      append-to-body
       :title="`在线填报 — ${fillTemplate?.name || ''}`"
       :width="DIALOG_MD"
     >
@@ -236,7 +238,7 @@
     </el-dialog>
 
     <!-- 预览对话框 -->
-    <el-dialog v-model="showPreviewDialog" title="模板预览" :width="DIALOG_MD">
+    <el-dialog v-model="showPreviewDialog" append-to-body title="模板预览" :width="DIALOG_MD">
       <div v-if="previewTemplate" class="preview-content">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="模板名称">{{ previewTemplate.name }}</el-descriptions-item>
@@ -283,6 +285,7 @@
     <!-- 上传填报对话框（两阶段） -->
     <el-dialog
       v-model="showUploadDialog"
+      append-to-body
       :title="`上传填报 — ${currentUploadTemplate?.name || ''}`"
       :width="DIALOG_MD"
       @closed="onUploadDialogClosed"
@@ -410,7 +413,7 @@
     </el-dialog>
 
     <!-- 导入结果对话框 -->
-    <el-dialog v-model="showImportResult" title="导入结果" :width="DIALOG_MD">
+    <el-dialog v-model="showImportResult" append-to-body title="导入结果" :width="DIALOG_MD">
       <div v-if="importResult">
         <el-result v-if="importResult.success" icon="success" :title="importResult.message">
           <template #sub-title>

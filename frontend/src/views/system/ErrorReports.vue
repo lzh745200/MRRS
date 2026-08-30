@@ -193,6 +193,7 @@
     <!-- 错误详情弹窗 -->
     <el-dialog
       v-model="detailVisible"
+      append-to-body
       title="错误详情"
       :width="DIALOG_MD"
       :close-on-click-modal="false"

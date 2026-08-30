@@ -267,6 +267,7 @@
     <!-- Task Dialog -->
     <el-dialog
       v-model="taskDialogVisible"
+      append-to-body
       :title="editingTask ? '编辑任务' : '新建任务'"
       :width="DIALOG_SM"
       destroy-on-close
@@ -311,6 +312,7 @@
 
     <el-dialog
       v-model="msDialogVisible"
+      append-to-body
       :title="msForm.id ? '编辑里程碑' : '新增里程碑'"
       :width="DIALOG_SM"
     >

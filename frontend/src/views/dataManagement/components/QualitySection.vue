@@ -96,7 +96,7 @@
     </el-card>
 
     <!-- 自定义规则校验对话框（下拉+操作符+值与或非） -->
-    <el-dialog v-model="showRuleDialog" title="自定义数据校验" :width="DIALOG_MD">
+    <el-dialog v-model="showRuleDialog" append-to-body title="自定义数据校验" :width="DIALOG_MD">
       <el-form label-width="90px">
         <el-form-item label="校验模块">
           <el-select v-model="ruleModule" style="width: 220px">
@@ -173,6 +173,7 @@
     <!-- 问题详情对话框 -->
     <el-dialog
       v-model="showIssuesDialog"
+      append-to-body
       :title="`问题详情 - ${selectedCheck?.name}`"
       :width="DIALOG_MD"
     >

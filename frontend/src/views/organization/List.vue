@@ -151,6 +151,7 @@
     <!-- 新增/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
+      append-to-body
       :title="dialogTitle"
       :width="DIALOG_MD"
       @close="handleDialogClose"

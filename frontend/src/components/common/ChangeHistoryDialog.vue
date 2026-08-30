@@ -1,5 +1,6 @@
 <template>
   <el-dialog
+    append-to-body
     :model-value="visible"
     title="变更历史"
     width="680px"

@@ -168,6 +168,7 @@
     <!-- 新增/编辑/申请经费弹窗 -->
     <el-dialog
       v-model="dialogVisible"
+      append-to-body
       :title="dialogTitle"
       :width="DIALOG_MD"
       :close-on-click-modal="false"

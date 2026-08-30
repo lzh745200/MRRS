@@ -34,6 +34,7 @@
 
     <!-- 编辑对话框 -->
     <el-dialog
+      append-to-body
       :model-value="dialogVisible"
       :title="editingId ? '编辑工作安排' : '添加工作安排'"
       :width="DIALOG_SM"

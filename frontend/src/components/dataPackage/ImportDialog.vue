@@ -1,5 +1,6 @@
 <template>
   <el-dialog
+    append-to-body
     :model-value="modelValue"
     title="导入数据包"
     width="480px"

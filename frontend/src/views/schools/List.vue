@@ -249,6 +249,7 @@
     <!-- 导入对话框 -->
     <el-dialog
       v-model="showImportDialog"
+      append-to-body
       title="导入帮扶学校数据"
       :width="DIALOG_SM"
       destroy-on-close

@@ -146,6 +146,7 @@
     <!-- 新增/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
+      append-to-body
       :title="editingItem ? '编辑预算' : '新增预算'"
       :width="DIALOG_SM"
       destroy-on-close

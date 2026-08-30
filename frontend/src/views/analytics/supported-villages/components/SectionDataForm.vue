@@ -751,10 +751,10 @@
     <!-- 文件预览弹窗 -->
     <el-dialog
       v-model="previewVisible"
+      append-to-body
       :title="previewTitle"
       :width="DIALOG_LG"
       destroy-on-close
-      append-to-body
     >
       <div class="preview-container">
         <img v-if="previewType === 'image'" :src="previewUrl" alt="预览" class="preview-image" />

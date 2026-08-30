@@ -254,16 +254,29 @@ body {
      teleported popper 挂载在 body 上，但某些边界计算仍受 overflow 影响。 */
   overflow: visible;
   clip-path: inset(0 round var(--radius-lg, 8px));
+  /* 全局弹窗高度规范（2026-08-30 UI 修复）：flex 列布局 + 视口高度上限，
+     header/footer 恒可见，超长表单在 body 内滚动——按钮不再被顶出屏幕 */
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+  margin-top: 5vh !important;
+  margin-bottom: 24px;
 }
 /* header 视觉（深绿标题栏）由 form-page.scss 单一规范提供，本文件不再覆写底色 */
 .el-dialog__body {
   padding: 24px 20px;
   background-color: var(--color-bg-card);
+  /* 超高内容在 body 滚动，footer 常驻可见 */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .el-dialog__footer {
   padding: 12px 20px;
   border-top: 1px solid var(--color-border-lighter, var(--color-border-lighter));
   background-color: var(--color-bg-card);
+  /* footer 不参与滚动、不被压缩 */
+  flex-shrink: 0;
 }
 
 /* 表格组件精美化 */

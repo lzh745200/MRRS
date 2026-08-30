@@ -663,6 +663,7 @@
       <!-- 附件预览对话框 -->
       <el-dialog
         v-model="previewVisible"
+        append-to-body
         :title="previewTitle"
         width="80%"
         top="5vh"
@@ -679,6 +680,7 @@
     <!-- 工作流操作对话框 -->
     <el-dialog
       v-model="wfDialogVisible"
+      append-to-body
       :title="wfDialogTitle"
       :width="DIALOG_SM"
       :close-on-click-modal="false"
@@ -721,7 +723,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="expDialogVisible" title="登记报销" :width="DIALOG_SM">
+    <el-dialog v-model="expDialogVisible" append-to-body title="登记报销" :width="DIALOG_SM">
       <el-form label-width="90px">
         <el-form-item label="金额(万元)" required>
           <el-input-number

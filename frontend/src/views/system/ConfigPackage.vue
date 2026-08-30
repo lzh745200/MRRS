@@ -89,6 +89,7 @@
 
     <!-- 编辑对话框 -->
     <el-dialog
+      append-to-body
       :model-value="dialogVisible"
       title="编辑配置"
       :width="DIALOG_SM"

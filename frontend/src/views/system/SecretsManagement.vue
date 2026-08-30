@@ -99,7 +99,13 @@
     </el-card>
 
     <!-- 创建密钥对话框 -->
-    <el-dialog v-model="createDialogVisible" title="创建新密钥" :width="DIALOG_SM" destroy-on-close>
+    <el-dialog
+      v-model="createDialogVisible"
+      append-to-body
+      title="创建新密钥"
+      :width="DIALOG_SM"
+      destroy-on-close
+    >
       <el-form ref="createFormRef" :model="createForm" label-width="100px">
         <el-form-item label="密钥类型">
           <el-select v-model="createForm.key_type" style="width: 100%">

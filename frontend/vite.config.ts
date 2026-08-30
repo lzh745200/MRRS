@@ -16,6 +16,7 @@
 import { defineConfig, type PluginOption } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+import { readFileSync } from 'node:fs'
 import viteCompression from 'vite-plugin-compression'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
@@ -69,13 +70,17 @@ export default defineConfig(({ mode }) => {
       spaFallbackPlugin(),
 
       // 构建时自动生成 version.json（供前端版本指纹校验）
+      // 版本单一事实源：直接读 package.json（W6-T4），不再维护硬编码 fallback
       {
         name: 'generate-version-json',
         apply: 'build',
         generateBundle() {
+          const pkgVersion = JSON.parse(
+            readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')
+          ).version as string
           const versionJson = JSON.stringify(
             {
-              version: process.env.npm_package_version || '1.10.0',
+              version: process.env.npm_package_version || pkgVersion,
               buildTime: new Date().toISOString(),
             },
             null,

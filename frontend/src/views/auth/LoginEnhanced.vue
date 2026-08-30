@@ -129,6 +129,7 @@
         <!-- 权限包导入对话框 -->
         <el-dialog
           v-model="permissionImportVisible"
+          append-to-body
           title="导入权限配置包"
           :width="DIALOG_SM"
           :close-on-click-modal="false"

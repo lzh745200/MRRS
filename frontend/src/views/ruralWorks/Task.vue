@@ -193,6 +193,7 @@
     <!-- 创建/编辑任务对话框 -->
     <el-dialog
       v-model="taskDialogVisible"
+      append-to-body
       :title="isEditMode ? '编辑任务' : '新建任务'"
       :width="DIALOG_LG"
       class="task-dialog"
@@ -327,6 +328,7 @@
     <!-- 任务分配对话框 -->
     <el-dialog
       v-model="assignDialogVisible"
+      append-to-body
       title="分配任务"
       :width="DIALOG_SM"
       class="assign-dialog"
@@ -377,6 +379,7 @@
     <!-- 任务进度对话框 -->
     <el-dialog
       v-model="progressDialogVisible"
+      append-to-body
       title="任务进度"
       :width="DIALOG_MD"
       class="progress-dialog"
@@ -542,6 +545,7 @@
     <!-- 批量分配对话框 -->
     <el-dialog
       v-model="batchAssignDialogVisible"
+      append-to-body
       title="批量分配任务"
       :width="DIALOG_SM"
       class="batch-assign-dialog"

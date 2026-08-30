@@ -1,6 +1,7 @@
 <template>
   <el-drawer
     v-model="visible"
+    append-to-body
     :title="`权限配置 - ${user?.username || ''}`"
     size="680px"
     direction="rtl"

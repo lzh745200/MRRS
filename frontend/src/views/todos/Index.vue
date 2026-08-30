@@ -150,7 +150,13 @@
     </div>
 
     <!-- 编辑对话框 -->
-    <el-dialog v-model="editDialogVisible" title="编辑待办事项" :width="DIALOG_SM" destroy-on-close>
+    <el-dialog
+      v-model="editDialogVisible"
+      append-to-body
+      title="编辑待办事项"
+      :width="DIALOG_SM"
+      destroy-on-close
+    >
       <el-form :model="editForm" label-width="80px">
         <el-form-item label="标题">
           <el-input v-model="editForm.title" />

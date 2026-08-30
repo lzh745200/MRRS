@@ -319,16 +319,18 @@
 //     display:contents 无盒模型，out-in 模式 transitionend 永不触发 → 白屏）。
 //     此处改用 @keyframes animation：animation 结束不依赖 transitionend 配对，
 //     旧节点直接卸载，无卡死风险。配合布局中已有的 :key="route.path" 重挂载重放。
+//     ⚠️ 禁用 transform 位移（2026-08-30）：keyframes 带 translateY + fill-mode
+//     both 时，transform 会驻留在页面根元素上，使其成为全部 position:fixed
+//     后代（el-dialog 遮罩层等）的包含块——弹窗被裁切在页面容器内、无法滚动
+//     （真机实测 v1.11.0，动画停驻 from 帧时永久触发）。入场动画只做 opacity。
 // ============================================================================
 
 @keyframes route-fade-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 
@@ -340,16 +342,15 @@
 
 // ============================================================================
 // 17. 统计卡入场 stagger（列表页 stats-row 依次浮现，克制 40ms 步进）
+//     同上：仅 opacity，不带 transform（避免产生包含块困住 fixed 弹层）
 // ============================================================================
 
 @keyframes stat-card-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 

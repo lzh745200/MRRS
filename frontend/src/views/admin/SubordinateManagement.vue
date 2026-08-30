@@ -71,7 +71,7 @@
     </el-card>
 
     <!-- 注册对话框 -->
-    <el-dialog v-model="showRegisterDialog" title="注册下级单位" :width="DIALOG_SM">
+    <el-dialog v-model="showRegisterDialog" append-to-body title="注册下级单位" :width="DIALOG_SM">
       <el-form :model="registerForm" label-width="100px">
         <el-form-item label="组织ID" required>
           <el-input-number v-model="registerForm.organization_id" :min="1" />

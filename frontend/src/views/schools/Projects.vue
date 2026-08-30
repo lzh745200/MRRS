@@ -68,6 +68,7 @@
     <!-- 新增/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
+      append-to-body
       :title="editingProject ? '编辑项目' : '新增项目'"
       :width="DIALOG_MD"
       destroy-on-close

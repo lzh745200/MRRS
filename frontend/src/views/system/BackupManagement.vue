@@ -217,7 +217,7 @@
     </el-card>
 
     <!-- 创建备份对话框 -->
-    <el-dialog v-model="createDialogVisible" title="创建备份" :width="DIALOG_SM">
+    <el-dialog v-model="createDialogVisible" append-to-body title="创建备份" :width="DIALOG_SM">
       <el-form :model="backupForm" label-width="120px">
         <el-form-item label="备份描述">
           <el-input v-model="backupForm.description" placeholder="请输入备份描述" />
@@ -243,7 +243,7 @@
     </el-dialog>
 
     <!-- 恢复备份确认对话框 -->
-    <el-dialog v-model="restoreDialogVisible" title="恢复备份" :width="DIALOG_SM">
+    <el-dialog v-model="restoreDialogVisible" append-to-body title="恢复备份" :width="DIALOG_SM">
       <el-alert title="警告：恢复备份将覆盖当前所有数据！" type="error" :closable="false" />
       <div style="margin-top: 16px">
         <p><strong>备份文件：</strong>{{ restoreTarget?.file_name }}</p>
@@ -273,6 +273,7 @@
     <!-- 导入备份包对话框 -->
     <el-dialog
       v-model="importDialogVisible"
+      append-to-body
       title="导入备份包并恢复"
       :width="DIALOG_SM"
       :close-on-click-modal="false"
