@@ -2,10 +2,12 @@
 Data Package API
 数据包管理接口 - 导入导出功能
 """
+import json
 import logging
 import os
 import tempfile
 import time
+import zipfile
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -622,17 +624,68 @@ def _get_base_package_time(service: DataPackageService, base_package_id: int) ->
     return base_time
 
 
+def _compute_package_diff_stats(service: DataPackageService, file_path: str) -> Dict[str, Dict[str, int]]:
+    """对比包内记录与本地库，产出 {added, modified, deleted, total} 明细。
+
+    added=本地不存在的记录ID数；modified=本地已存在（将被覆盖/跳过）的ID数；
+    deleted 恒为 0 —— 包内不含删除墓碑，物理删除无法从包推断。
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.services.data_package_service import DATA_TYPE_MODELS
+
+    stats: Dict[str, Dict[str, int]] = {}
+    try:
+        with zipfile.ZipFile(file_path, "r") as zf:
+            manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+            for dtype in manifest.get("data_types", []):
+                model = DATA_TYPE_MODELS.get(dtype)
+                data_file = f"data/{dtype}.json"
+                if not model or data_file not in zf.namelist():
+                    continue
+                records = json.loads(zf.read(data_file).decode("utf-8"))
+                pk_name = sa_inspect(model).primary_key[0].name
+                pk_col = getattr(model, pk_name)
+                ids = [r.get(pk_name) for r in records if r.get(pk_name) is not None]
+                existing = 0
+                if ids:
+                    existing = service.db.query(pk_col).filter(pk_col.in_(ids)).count()
+                added = len(ids) - existing
+                stats[dtype] = {"added": added, "modified": existing, "deleted": 0, "total": len(ids)}
+    except Exception as e:
+        logger.error(f"统计包内差异失败({file_path}): {e}", exc_info=True)
+    return stats
+
+
+def _diff_summary(stats: Dict[str, Dict[str, int]]) -> Dict[str, int]:
+    """把 per-type 差异统计折叠成 ChangesSummary 汇总"""
+    summary = {"total_added": 0, "total_modified": 0, "total_deleted": 0}
+    for item in stats.values():
+        summary["total_added"] += item.get("added", 0)
+        summary["total_modified"] += item.get("modified", 0)
+        summary["total_deleted"] += item.get("deleted", 0)
+    return summary
+
+
 @router.post("/incremental/detect-changes", summary="增量变更检测")
 async def incremental_detect_changes(
-    data: IncrementalDetectRequest,
+    base_package_id: int = Query(..., description="基准数据包ID"),
+    org_id: Optional[int] = Query(None, description="组织ID（缺省用当前用户组织）"),
+    data_types: List[str] = Query(default=[], description="数据类型列表"),
     current_user=Depends(get_current_user),
     service: DataPackageService = Depends(get_package_service),
     permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
-    """检测基准包之后各数据类型的变更记录数（按 updated_at 时间基准）"""
+    """检测基准包之后各数据类型的变更记录数
+
+    返回 ChangesSummary 结构：total_added/total_modified/total_deleted 汇总 +
+    by_type 每类型 {added, modified, deleted, total} 明细。
+    统计口径：added=基准时间后新建；deleted=基准时间后软删且基准前已存在；
+    modified=其余变更记录。系统无物理删除墓碑，物理删除无法统计。
+    """
     org_id = get_org_with_fallback(
         current_user=current_user,
-        requested_org_id=data.org_id,
+        requested_org_id=org_id,
         get_first_org_callback=lambda: _get_first_active_org(service.db),
     )
     if not org_id:
@@ -640,13 +693,14 @@ async def incremental_detect_changes(
     if not permission_service.can_access_organization(current_user.id, org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该组织的数据")
 
-    base_time = _get_base_package_time(service, data.base_package_id)
+    base_time = _get_base_package_time(service, base_package_id)
 
     from sqlalchemy import func as sa_func
     from app.services.data_package_service import DATA_TYPE_MODELS
 
-    summary: Dict[str, int] = {}
-    for dtype in data.data_types:
+    by_type: Dict[str, Dict[str, int]] = {}
+    total_added = total_modified = total_deleted = 0
+    for dtype in data_types:
         model = DATA_TYPE_MODELS.get(dtype)
         if not model:
             continue
@@ -655,12 +709,40 @@ async def incremental_detect_changes(
             query = query.filter(model.organization_id == org_id)
         elif hasattr(model, "org_id"):
             query = query.filter(model.org_id == org_id)
-        if hasattr(model, "updated_at"):
-            query = query.filter(model.updated_at > base_time)
-        summary[dtype] = query.scalar() or 0
+        if not hasattr(model, "updated_at"):
+            by_type[dtype] = {"added": 0, "modified": 0, "deleted": 0, "total": 0}
+            continue
 
+        changed = query.filter(model.updated_at > base_time).scalar() or 0
+        added_count = 0
+        if hasattr(model, "created_at"):
+            added_count = query.filter(
+                model.updated_at > base_time, model.created_at > base_time
+            ).scalar() or 0
+        deleted_count = 0
+        if hasattr(model, "is_active") and hasattr(model, "created_at"):
+            deleted_count = query.filter(
+                model.is_active == False,  # noqa: E712
+                model.updated_at > base_time,
+                model.created_at <= base_time,
+            ).scalar() or 0
+        modified_count = max(changed - added_count - deleted_count, 0)
+        by_type[dtype] = {
+            "added": added_count, "modified": modified_count,
+            "deleted": deleted_count, "total": changed,
+        }
+        total_added += added_count
+        total_modified += modified_count
+        total_deleted += deleted_count
+
+    summary = {
+        "total_added": total_added,
+        "total_modified": total_modified,
+        "total_deleted": total_deleted,
+        "by_type": by_type,
+    }
     return success_response(
-        data={"summary": summary, "base_package_id": data.base_package_id},
+        data={"summary": summary, "base_package_id": base_package_id},
         message="变更检测完成",
     )
 
@@ -668,8 +750,10 @@ async def incremental_detect_changes(
 @router.post("/incremental/export", summary="导出增量数据包")
 async def incremental_export(
     data: IncrementalExportRequest,
+    request: Request,
     current_user=Depends(get_current_user),
     service: DataPackageService = Depends(get_package_service),
+    history_service: ImportExportHistoryService = Depends(get_history_service),
     permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
     """基于基准包时间导出增量数据包（仅变更记录），返回下载地址"""
@@ -683,60 +767,179 @@ async def incremental_export(
     if not permission_service.can_access_organization(current_user.id, org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该组织的数据")
 
+    start_time = time.time()
     base_time = _get_base_package_time(service, data.base_package_id)
-    result = await service.export_package(
-        org_id=org_id,
-        data_types=data.data_types,
-        export_by=current_user.id,
-        description=data.description or "增量更新包",
-        incremental=True,
-        since_time=base_time,
-    )
+    try:
+        result = await service.export_package(
+            org_id=org_id,
+            data_types=data.data_types,
+            export_by=current_user.id,
+            description=data.description or "增量更新包",
+            package_type=PackageType.update,
+            incremental=True,
+            since_time=base_time,
+            owner_id=_export_owner_scope(current_user),
+            exported_by_name=_user_display_name(current_user),
+            base_package_id=data.base_package_id,
+        )
 
-    return success_response(
-        data={
-            "package_id": result.package_id,
-            "download_url": f"/api/v1/data-packages/{result.package_id}/download",
-            "filename": result.file_name,
-            "record_counts": result.record_counts,
-            "total_records": result.total_records,
-        },
-        message="增量包导出成功",
-    )
+        # DataPackageExportResult 无 record_counts/total_records 字段，从 manifest 取
+        record_counts = dict(result.manifest.record_counts) if result.manifest else {}
+        total_records = sum(record_counts.values())
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        try:
+            history_service.record_export(
+                package_id=result.package_id,
+                org_id=org_id,
+                user_id=current_user.id,
+                file_name=result.file_name,
+                file_size=result.file_size,
+                record_count=total_records,
+                data_types=data.data_types,
+                duration_ms=duration_ms,
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("User-Agent"),
+            )
+        except Exception as e:
+            logger.warning(f"记录增量导出历史失败: {e}")
+
+        _safe_write_work_log(
+            service.db, "export", result.package_id,
+            result.file_name or result.package_code, current_user,
+            detail=f"导出增量更新包(基准包{data.base_package_id})，记录数: {total_records}",
+        )
+
+        return success_response(
+            data={
+                "package_id": result.package_id,
+                "download_url": f"/api/v1/data-packages/{result.package_id}/download",
+                "filename": result.file_name,
+                "record_counts": record_counts,
+                "total_records": total_records,
+            },
+            message="增量包导出成功",
+        )
+    except BusinessError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"导出增量数据包失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="导出失败，请稍后重试或联系管理员",
+        )
 
 
 @router.post("/incremental/import", summary="导入增量数据包")
 async def incremental_import(
     data: IncrementalImportRequest,
+    request: Request,
     current_user=Depends(get_current_user),
     service: DataPackageService = Depends(get_package_service),
+    history_service: ImportExportHistoryService = Depends(get_history_service),
     permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
-    """导入已存在于服务器上的数据包（增量或全量）"""
+    """导入已存在于服务器上的数据包（增量或全量）
+
+    apply_changes=false 仅预览：统计包内记录与本地库的新增/覆盖数，不写业务表；
+    apply_changes=true（仅管理员）：注册包并确认导入（覆盖式 upsert，保留原始ID）。
+    """
     package = service.get_package(data.package_id)
     if not package:
         raise NotFoundException("数据包不存在")
+    if not package.file_path or not os.path.exists(package.file_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="数据包文件缺失，无法处理")
 
     org_id = getattr(package, "org_id", None)
     if org_id and not permission_service.can_access_organization(current_user.id, org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权导入该数据包")
 
-    result = await service.import_package(
-        file_path=package.file_path,
-        file_name=package.file_name or "package.zip",
-        org_id=org_id or 0,
-        imported_by=current_user.id,
-    )
+    stats = _compute_package_diff_stats(service, package.file_path)
+    summary = _diff_summary(stats)
 
-    return success_response(
-        data={
-            "valid": getattr(result, "is_valid", True),
-            "imported": getattr(result, "imported_count", 0),
-            "applied": bool(data.apply_changes),
-            "message": getattr(result, "message", ""),
-        },
-        message="导入成功" if data.apply_changes else "预览完成",
-    )
+    if not data.apply_changes:
+        return success_response(
+            data={
+                "success": True,
+                "preview_only": True,
+                "stats": stats,
+                "summary": summary,
+            },
+            message="预览完成",
+        )
+
+    require_admin(current_user, error_message="仅管理员可应用增量数据导入")
+
+    start_time = time.time()
+    try:
+        result = await service.import_package(
+            file_path=package.file_path,
+            file_name=package.file_name or "package.zip",
+            org_id=org_id or 0,
+            imported_by=current_user.id,
+        )
+        confirm = await service.confirm_import(
+            package_id=result.package_id,
+            confirmed_by=current_user.id,
+            overwrite_existing=True,
+        )
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        if not confirm.success:
+            _safe_write_work_log(
+                service.db, "import", result.package_id,
+                package.file_name or "", current_user, detail="增量数据导入失败",
+            )
+            return success_response(
+                data={
+                    "success": False,
+                    "preview_only": False,
+                    "stats": stats,
+                    "summary": summary,
+                    "message": "导入失败，数据已回滚，请查看服务端日志",
+                },
+                message="导入失败",
+            )
+
+        try:
+            history_service.record_import(
+                package_id=result.package_id,
+                org_id=org_id or 0,
+                user_id=current_user.id,
+                file_name=package.file_name or "package.zip",
+                record_count=summary["total_added"] + summary["total_modified"],
+                data_types=list(stats.keys()),
+                duration_ms=duration_ms,
+                ip_address=get_client_ip(request),
+                user_agent=request.headers.get("User-Agent"),
+            )
+        except Exception as e:
+            logger.warning(f"记录增量导入历史失败: {e}")
+
+        _safe_write_work_log(
+            service.db, "import", result.package_id,
+            package.file_name or "", current_user,
+            detail=f"应用增量导入：新增{summary['total_added']}，覆盖{summary['total_modified']}",
+        )
+
+        return success_response(
+            data={
+                "success": True,
+                "preview_only": False,
+                "stats": stats,
+                "summary": summary,
+                "package_id": result.package_id,
+            },
+            message="导入成功",
+        )
+    except BusinessError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"增量导入失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="导入失败，请稍后重试或联系管理员",
+        )
 
 
 @router.post("/{package_id}/validate", response_model=DataPackageValidationResult)
@@ -1299,14 +1502,27 @@ def _get_package_or_404(db: Session, package_id: int):
     return package
 
 
+def _ensure_package_org_access(permission_service, current_user, package):
+    """版本管理组织访问校验：管理员直通；未授权一律 404（不泄露数据包存在性）"""
+    if is_admin(current_user):
+        return
+    org_id = getattr(package, "org_id", None)
+    if org_id and not permission_service.can_access_organization(
+        getattr(current_user, "id", None), org_id
+    ):
+        raise HTTPException(status_code=404, detail="数据包不存在")
+
+
 @router.get("/{package_id}/versions", summary="获取数据包版本列表")
 async def list_package_versions(
     package_id: int,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
+    permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
     """获取指定数据包的所有版本"""
-    _get_package_or_404(db, package_id)
+    package = _get_package_or_404(db, package_id)
+    _ensure_package_org_access(permission_service, current_user, package)
 
     from app.models.package_version import PackageVersion
 
@@ -1331,9 +1547,11 @@ async def create_package_version(
     body: PackageVersionCreate,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
+    permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
     """为数据包创建新版本记录"""
     package = _get_package_or_404(db, package_id)
+    _ensure_package_org_access(permission_service, current_user, package)
 
     version_text = (body.version or "").strip()
     if not version_text:
@@ -1364,6 +1582,10 @@ async def create_package_version(
     db.add(version)
     safe_commit(db)
     db.refresh(version)
+    _safe_write_work_log(
+        db, "version", version.id, f"package:{package_id}/v{version_text}",
+        current_user, detail="创建数据包版本",
+    )
     return {"success": True, "data": _package_version_to_dict(version)}
 
 
@@ -1374,9 +1596,13 @@ async def compare_package_versions(
     version2: str = Query(..., description="第二个版本号"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
+    permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
     """对比数据包两个版本的变更差异"""
     from app.models.package_version import PackageVersion
+
+    package = _get_package_or_404(db, package_id)
+    _ensure_package_org_access(permission_service, current_user, package)
 
     v1 = (
         db.query(PackageVersion)
@@ -1440,9 +1666,12 @@ async def get_package_version(
     version_id: int,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
+    permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
     """获取指定版本的详细信息"""
     from app.models.package_version import PackageVersion
+
+    _ensure_package_org_access(permission_service, current_user, _get_package_or_404(db, package_id))
 
     version = (
         db.query(PackageVersion)
@@ -1463,9 +1692,13 @@ async def delete_package_version(
     version_id: int,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
+    permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
     """删除指定版本记录"""
     from app.models.package_version import PackageVersion
+
+    package = _get_package_or_404(db, package_id)
+    _ensure_package_org_access(permission_service, current_user, package)
 
     version = (
         db.query(PackageVersion)
@@ -1479,4 +1712,8 @@ async def delete_package_version(
         raise HTTPException(status_code=404, detail="版本不存在")
     db.delete(version)
     safe_commit(db)
+    _safe_write_work_log(
+        db, "version", version_id, f"package:{package_id}/v{version.version}",
+        current_user, detail="删除数据包版本",
+    )
     return {"success": True, "message": "删除成功"}

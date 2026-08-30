@@ -143,7 +143,7 @@ class TestCompareVersions:
 
     def test_v2_not_found(self, client, mocks):
         _, q, _ = mocks
-        q.first.side_effect = [_version(), None]
+        q.first.side_effect = [_pkg(), _version(), None]
         resp = client.get(f"{BASE}/compare?version1=v1&version2=v2")
         assert resp.status_code == 404
 
@@ -157,7 +157,7 @@ class TestCompareVersions:
             version="v2",
             changes=json.dumps({"villages": {"added": [2, 3], "modified": ["b"]}}),
         )
-        q.first.side_effect = [v1, v2]
+        q.first.side_effect = [_pkg(), v1, v2]
         resp = client.get(f"{BASE}/compare?version1=v1&version2=v2")
         assert resp.status_code == 200
         diff = resp.json()["data"]["comparison"]["differences"]
@@ -169,7 +169,7 @@ class TestCompareVersions:
         _, q, _ = mocks
         v1 = _version(version="v1", changes="not-json")  # 非法 JSON → {}
         v2 = _version(version="v2", changes=None)  # 空 → {}
-        q.first.side_effect = [v1, v2]
+        q.first.side_effect = [_pkg(), v1, v2]
         resp = client.get(f"{BASE}/compare?version1=v1&version2=v2")
         assert resp.status_code == 200
         diff = resp.json()["data"]["comparison"]["differences"]
@@ -180,7 +180,7 @@ class TestCompareVersions:
         _, q, _ = mocks
         v1 = _version(version="v1", changes=json.dumps({"villages": {"added": [1]}}))
         v2 = _version(version="v2", changes=json.dumps({"projects": {"added": [3]}}))
-        q.first.side_effect = [v1, v2]
+        q.first.side_effect = [_pkg(), v1, v2]
         resp = client.get(f"{BASE}/compare?version1=v1&version2=v2")
         assert resp.status_code == 200
         diff = resp.json()["data"]["comparison"]["differences"]

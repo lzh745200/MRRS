@@ -21,6 +21,7 @@ class PackageType(str, Enum):
 
     task = "task"  # 任务包（管理员分发）
     report = "report"  # 上报包（普通用户上报）
+    update = "update"  # 增量更新包（基于基准包导出变更记录）
 
 
 class PackageStatus(str, Enum):

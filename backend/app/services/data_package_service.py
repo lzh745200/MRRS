@@ -107,6 +107,7 @@ class DataPackageService:
         since_time: Optional[datetime] = None,
         owner_id: Optional[int] = None,
         exported_by_name: Optional[str] = None,
+        base_package_id: Optional[int] = None,
     ) -> DataPackageExportResult:
         """导出数据包（incremental=True 时按 sync_version 或 updated_at 时间过滤变更记录）
 
@@ -147,7 +148,7 @@ class DataPackageService:
             encryption="none",
             compression="zip",
             incremental=incremental,
-            base_package_id=None,
+            base_package_id=base_package_id,
             export_scope="self" if owner_id is not None else "org",
             exported_by_name=exported_by_name,
         )
@@ -675,7 +676,6 @@ class DataPackageService:
             return DataPackageImportResult(
                 package_id=package.id, package_code=package.package_code,
                 status=PackageStatusEnum.VALIDATED, manifest=validation_result.manifest,
-                preview_data=None, validation_errors=[],
             )
         except InvalidPasswordError:
             raise BusinessError("密码错误，请检查后重试")
