@@ -1,6 +1,11 @@
 # 更新日志
 
-## [1.10.1] - 2026-08-29 — 全仓库死代码彻底清理
+所有重要的项目变更都会记录在此文件中。
+
+格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
+版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+## [1.10.6] - 2026-08-29 — 全仓库死代码彻底清理(v1.10.5 为清理前基线)
 
 本批为一次系统性死代码清理:3 个探索代理深扫(后端 import 图两轮比对 + ~800 顶层符号
 引用计数、前端 382 生产文件全量 import 图谱、脚本/CI/docker 引用图谱),每个删除候选
@@ -47,10 +52,20 @@
 - 已知 flaky: recycle_bin 权限矩阵 1 例(限流滑动窗口顺序敏感,单跑通过,与本次无关)
 
 
-所有重要的项目变更都会记录在此文件中。
+## [1.10.5] - 2026-08-29 — UI 可读性根治 + 全站精美化
 
-格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
-版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+### 界面
+- 🎨 根治"UI 看不清"：提示可读性修复、全站视觉统一美化、输入框规范化
+- 🧹 NUL 坏文件全清（CodeCheck 失败文件归零）
+
+### 版本链
+- 🔖 版本号随 tag 联动：CI 打包前 sync 脚本把 tag 版本写入 `frontend/.env.production`
+  的 `VITE_APP_VERSION`（vite 构建注入，本地开发回落 `.env`）
+
+## [1.10.4] - 2026-08-29 — CI 修正
+
+- 🐛 fix(ci): standalone-deb 产物路径修正（buildx output 导出树保留 `/output/` 前缀），
+  standalone 麒麟 DEB 产物重新挂载到 GitHub Release
 
 ## [1.10.3] - 2026-08-29
 
