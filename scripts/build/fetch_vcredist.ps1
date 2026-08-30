@@ -57,21 +57,35 @@ foreach ($t in $targets) {
     }
 
     $tmp = "$dest.download"
-    try {
-        Invoke-WebRequest -Uri $url -OutFile $tmp -MaximumRedirection 10 -UseBasicParsing
-        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $tmp).Hash
-        if ($actual -ine $expected) {
-            Remove-Item -LiteralPath $tmp -Force
-            throw ("{0} SHA256 不匹配：期望 {1}，实际 {2}。微软可能已更新短链指向的版本，" +
-                   "请人工确认新版本后更新 {3} 中的钉扎常量") -f $file, $expected, $actual, $HookFile
+    $maxAttempts = 3
+    $downloaded = $false
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            if ($attempt -gt 1) {
+                Write-Host "[..] $file 第 $attempt 次重试（前次网络失败）..."
+                Start-Sleep -Seconds (10 * $attempt)
+            }
+            Invoke-WebRequest -Uri $url -OutFile $tmp -MaximumRedirection 10 `
+                -UseBasicParsing -UserAgent "MRRS-build/1.0"
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $tmp).Hash
+            if ($actual -ine $expected) {
+                Remove-Item -LiteralPath $tmp -Force
+                throw ("{0} SHA256 不匹配：期望 {1}，实际 {2}。微软可能已更新短链指向的版本，" +
+                       "请人工确认新版本后更新 {3} 中的钉扎常量") -f $file, $expected, $actual, $HookFile
+            }
+            New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
+            Move-Item -LiteralPath $tmp -Destination $dest -Force
+            Write-Host "[OK] $file 下载完成并通过 SHA256 校验"
+            $downloaded = $true
+            break
+        } catch {
+            if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force }
+            $_ | Out-String | Write-Host -ForegroundColor Yellow
+            if ($attempt -eq $maxAttempts) { throw }
+            Write-Host "[..] 第 $attempt 次尝试失败，将重试"
         }
-        New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
-        Move-Item -LiteralPath $tmp -Destination $dest -Force
-        Write-Host "[OK] $file 下载完成并通过 SHA256 校验"
-    } catch {
-        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force }
-        throw
     }
+    if (-not $downloaded) { throw "$file 下载失败（已重试 $maxAttempts 次）" }
 }
 
 Write-Host "VC++ Redistributable 就绪: $DestDir"
