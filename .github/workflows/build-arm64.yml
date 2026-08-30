@@ -191,7 +191,7 @@ jobs:
           echo "npm: $(npm -v)"
           echo "electron-builder: $(npx electron-builder --version)"
           echo "=== Files check ==="
-          ls -lh backend/dist/assistance-backend/assistance-backend.exe
+          ls -lh backend/dist/assistance-backend/assistance-backend
           ls -lh backend/dist/assistance-backend/_internal | head -3
           ls -lh frontend/dist/index.html
           ls -lh resources/icons/app-circle-256.png
