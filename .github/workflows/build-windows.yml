@@ -140,15 +140,17 @@ jobs:
         shell: bash
         run: cd backend && python -m PyInstaller assistance-backend.spec --clean --noconfirm
 
-      # 8. 验证后端产物
+      # 8. 验证后端产物（onedir 目录布局，ADR-0006）
       - name: Verify backend exe
         shell: pwsh
         run: |
-          if (-not (Test-Path "backend/dist/assistance-backend.exe")) {
-            throw "backend exe not found: backend/dist/assistance-backend.exe"
+          if (-not (Test-Path "backend/dist/assistance-backend/assistance-backend.exe")) {
+            throw "backend exe not found: backend/dist/assistance-backend/assistance-backend.exe"
           }
-          $size = [math]::Round((Get-Item backend/dist/assistance-backend.exe).Length / 1MB, 1)
+          $size = [math]::Round((Get-Item backend/dist/assistance-backend/assistance-backend.exe).Length / 1MB, 1)
           Write-Host "Backend exe size: ${size}MB"
+          $internal = Get-ChildItem backend/dist/assistance-backend/_internal -Recurse -File | Measure-Object -Property Length -Sum
+          Write-Host ("_internal: {0} files, {1}MB" -f $internal.Count, [math]::Round($internal.Sum / 1MB, 1))
 
       # 9. 安装 Electron 依赖 (根目录)
       - name: Install Electron deps

@@ -71,26 +71,29 @@ COPY backend/ .
 RUN test -f alembic.ini && test -f start.py && test -d app && test -d alembic && \
     echo "关键文件检查通过"
 
-# PyInstaller 打包（使用统一 spec，onefile 模式）
+# PyInstaller 打包（使用统一 spec，onedir 目录模式，ADR-0006）
 RUN pyinstaller --clean --noconfirm assistance-backend.spec > /tmp/pyinstaller.log 2>&1; \
     code=$?; tail -30 /tmp/pyinstaller.log; \
     if [ $code -ne 0 ]; then echo "ERROR: PyInstaller 失败 (exit $code)"; exit 1; fi
 
-# 验证产物
-RUN test -f dist/assistance-backend && \
-    echo "=== 后端二进制 ===" && \
-    ls -lh dist/assistance-backend && \
-    file dist/assistance-backend
+# 验证产物（onedir：可执行文件 + _internal 依赖目录）
+RUN test -d dist/assistance-backend && \
+    test -f dist/assistance-backend/assistance-backend && \
+    test -d dist/assistance-backend/_internal && \
+    echo "=== 后端产物（onedir） ===" && \
+    ls -lh dist/assistance-backend/assistance-backend && \
+    du -sh dist/assistance-backend/_internal && \
+    file dist/assistance-backend/assistance-backend
 
-# GLIBC 兼容性验证
+# GLIBC 兼容性验证（引导器 exe 直接链接 libc，代表性最高）
 RUN echo "=== GLIBC 兼容性验证 ===" && \
-    MAX_GLIBC=$(objdump -T dist/assistance-backend 2>/dev/null | grep -oP 'GLIBC_\K\d+\.\d+' | sort -V | tail -1) && \
+    MAX_GLIBC=$(objdump -T dist/assistance-backend/assistance-backend 2>/dev/null | grep -oP 'GLIBC_\K\d+\.\d+' | sort -V | tail -1) && \
     echo "最高 GLIBC 要求: $MAX_GLIBC" && \
     if [ "$(echo "$MAX_GLIBC > 2.28" | bc)" = "1" ]; then \
         echo "ERROR: GLIBC_$MAX_GLIBC > 2.28 不兼容麒麟 V10" && exit 1; \
     fi && \
     echo "OK: GLIBC <= 2.28 兼容麒麟 V10"
 
-# 输出阶段：只保留二进制文件
+# 输出阶段：保留 onedir 整目录（/assistance-backend/assistance-backend + /assistance-backend/_internal/）
 FROM scratch AS output
 COPY --from=builder /build/dist/assistance-backend /assistance-backend

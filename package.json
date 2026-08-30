@@ -45,8 +45,8 @@
     ],
     "extraResources": [
       {
-        "from": "backend/dist/assistance-backend.exe",
-        "to": "backend/assistance-backend.exe",
+        "from": "backend/dist/assistance-backend",
+        "to": "backend/assistance-backend",
         "filter": [
           "**/*"
         ]

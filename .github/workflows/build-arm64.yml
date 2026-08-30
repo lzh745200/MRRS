@@ -133,12 +133,18 @@ jobs:
 
       - name: Prepare resources for electron-builder
         run: |
-          # Create backend/dist directory and place ARM64 binary
-          # Name it assistance-backend.exe so existing extraResources config picks it up
-          # (Linux doesn't care about .exe extension, it's just a filename)
-          mkdir -p backend/dist
-          cp downloaded/backend/assistance-backend backend/dist/assistance-backend.exe
-          chmod +x backend/dist/assistance-backend.exe
+          # onedir 目录布局（ADR-0006）：extraResources from backend/dist/assistance-backend
+          # upload-artifact v4 上传单目录时目录本身被剥离（内容在 artifact 根），
+          # 因此这里重建 backend/dist/assistance-backend/ 结构
+          mkdir -p backend/dist/assistance-backend
+          cp -r downloaded/backend/. backend/dist/assistance-backend/
+          # 结构守卫：布局不符时立即失败，避免把坏包打进 DEB
+          test -f backend/dist/assistance-backend/assistance-backend || {
+            echo "::error::onedir 产物结构异常（缺少 assistance-backend 主程序）"; ls -R downloaded/backend | head -20; exit 1; }
+          test -d backend/dist/assistance-backend/_internal || {
+            echo "::error::onedir 产物结构异常（缺少 _internal）"; exit 1; }
+          # artifact zip 会丢失 exec 位，这里恢复（postinst 兜底再补一次）
+          chmod +x backend/dist/assistance-backend/assistance-backend
 
           # Place frontend dist
           mkdir -p frontend/dist
@@ -146,8 +152,8 @@ jobs:
 
           # Verify resources
           echo "=== Backend binary ==="
-          file backend/dist/assistance-backend.exe
-          ls -lh backend/dist/assistance-backend.exe
+          file backend/dist/assistance-backend/assistance-backend
+          du -sh backend/dist/assistance-backend/_internal
 
           echo "=== Frontend dist ==="
           ls frontend/dist/ | head -5
