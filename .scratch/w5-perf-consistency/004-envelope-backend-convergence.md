@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: []
 ---
@@ -16,3 +16,15 @@ blocked-by: []
 
 ## 涉及文件
 - `backend/app/api/v1/{approval,auth/rbac,user_permissions,machine_code,todos,rural_tasks,messages,work_logs,organization,project_milestones,validation}.py`
+
+## Resolution（2026-08-30）
+
+**已完成，提交 101ec12c。** 7 个文件 51 处裸 dict 响应收敛为 success_response/ok_list：
+user_permissions(14)、auth/rbac(16)、system/monitor(6)、system/admin(7)、encryption(4)、
+offline_map(3)、approval(1 create-workflow)。前端经 axios 拦截器 data 展开后向后兼容，
+24 个测试文件 490 用例全绿（2 处精确形状断言同步更新）。
+
+遗留（有意保留）：admin.py GET /info（response_model 约束）、help.py/system/backup.py/
+machine_code.py（并行会话在途文件，待后续轮次）、approval.py 其余裸 dict 端点、
+data_packages.py 裸 pydantic 返回与 versions 端点裸 {success,data}（前端+测试依赖现状，
+属 W5-005 前端收敛联动项）。

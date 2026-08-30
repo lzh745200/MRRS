@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: []
 ---
@@ -17,3 +17,12 @@ blocked-by: []
 
 ## 涉及文件
 - `frontend/vite.config.ts`
+
+## Resolution（2026-08-30）
+
+**实测已达标，无需再拆。** 生产构建（npm run build）后首屏脚本集合
+（index + vue-core + vendor + vue-router + pinia + lodash + axios + element-plus-icons，
+即 dist/index.html 引用的全部同步脚本）gzip 合计 **149KB**（brotli 更低），
+远低于 ≤350KB 目标。xlsx（951KB）、echarts（682KB）、chartjs（192KB）、
+guizhou 地区数据（539KB）均已在独立懒加载 chunk。chart.js 整体删除后
+还会再减一个 192KB 懒加载块（归 W11 UI 图表统一工单）。
