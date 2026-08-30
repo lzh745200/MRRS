@@ -9,7 +9,7 @@
 
 ```
 PyInstaller (assistance-backend.spec)
-  └─ backend/dist/assistance-backend.exe   (~85MB, 内含 Python + 全部依赖)
+  └─ backend/dist/assistance-backend/  (onedir, ~85MB 主 exe + _internal 依赖目录, W6-T6)
 electron-builder (package.json build 段)
   ├─ extraResources: assistance-backend.exe → resources/backend/
   ├─ extraResources: frontend/dist         → resources/frontend/
@@ -53,7 +53,7 @@ npx electron-builder --win --x64    # 64 位安装包（主力）
 ### 产物位置
 
 - 安装包：`dist/electron/帮扶管理系统 Setup <version>-x64.exe`（~280MB）
-- 后端 exe：`backend/dist/assistance-backend.exe`（~85MB）
+- 后端 exe：`backend/dist/assistance-backend/assistance-backend.exe`（onedir 布局，W6-T6）
 - 预置数据库：`resources/database/rural_revitalization.db`（打包进安装包，首次运行复制到用户目录）
 
 ### VC++ 运行库策略（双保险 + 供应链校验）
