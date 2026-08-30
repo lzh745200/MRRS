@@ -5,6 +5,43 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+### 修复
+- 🐛 **帮助文档出厂密码文案**：`admin/admin123` 修正为 `admin/Admin@2026`，
+  与 main.py 出厂播种逻辑及测试断言一致。
+- 🐛 **Electron 导航白名单前缀绕过**（W6-T3）：`will-navigate` /
+  `setWindowOpenHandler` 的 `startsWith('http://127.0.0.1')` 前缀判定可被
+  `http://127.0.0.1.evil.com` / userinfo `@` 手法绕过，改为
+  `new URL(url).origin` 精确匹配 + 端口钉扎（12 组绕过用例验证）。
+- 🐛 **stopBackend 误杀风险**（W6-T3）：优雅退出后取消强杀定时器，
+  防止对已退出（PID 可能被系统复用）的进程执行 `taskkill /f /t`；
+  重启端口等待由固定 2s 改为轮询探测释放（上限 10s）。
+- 🐛 **SHA256SUMS 行尾**：CI 生成改 WriteAllText 显式 LF——WriteAllLines
+  在 Windows 写 CRLF 导致 `sha256sum -c` 全部 FAILED（本地 dry-run 实测）。
+
+### 安全（供应链）
+- 🔒 **vcredist 移出 git + SHA256 钉扎**（W6-T2，critical）：37.7MB 官方
+  二进制不再入库；新增 `scripts/build/fetch_vcredist.ps1`（CI 9.6 步与
+  `make fetch-vcredist` 共用，从 aka.ms 官方短链下载并比对钉扎哈希，
+  本地已存在且匹配则跳过）；NSIS 钩子安装期 Get-FileHash 复核，不匹配
+  弹窗中止安装（fail-closed）。钉扎常量唯一维护点：
+  `build-scripts/electron-builder-nsis-hook.nsh` 头部 `!define` 段。
+
+### 构建/完整性
+- ✨ **Release SHA256SUMS 完整性链**（W6-T5）：三个发布产物族独立命名
+  清单（windows-x64 / electron-deb-arm64 / standalone-deb-arm64）随
+  artifact 上传并附 Release；Windows Release 说明附校验指引。
+- ✨ **前端产物同步逐文件哈希校验**：`sync-frontend-dist.{sh,bat}` 由
+  du 字节粗校验（>5% 仅警告）改为逐文件 SHA256 manifest 比对，偏差即
+  exit 1；manifest 落盘供 `audit_static_assets.py --verify-manifest` 复核。
+
+### 清理（无死代码遗留）
+- 🧹 删除 4 个引用已删源码的死测试（stores/project、stores/rbac、
+  useAccessibility）及 8 处指向不存在模块的 `vi.mock`（4 处已删 stores/api +
+  7 文件中的 `@/utils/request`）与 3 处未使用导入；AGENTS.md 版本号引用
+  改为单一事实源表述。
+
 ## [1.10.6] - 2026-08-29 — 全仓库死代码彻底清理(v1.10.5 为清理前基线)
 
 本批为一次系统性死代码清理:3 个探索代理深扫(后端 import 图两轮比对 + ~800 顶层符号
