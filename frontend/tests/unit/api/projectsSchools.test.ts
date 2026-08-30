@@ -5,14 +5,6 @@ const mockPost = vi.fn()
 const mockPut = vi.fn()
 const mockDelete = vi.fn()
 
-vi.mock('@/utils/request', () => ({
-  default: {
-    get: (...args: any[]) => mockGet(...args),
-    post: (...args: any[]) => mockPost(...args),
-    put: (...args: any[]) => mockPut(...args),
-    delete: (...args: any[]) => mockDelete(...args),
-  },
-}))
 vi.mock('@/api/request', () => ({
   default: {
     get: (...args: any[]) => mockGet(...args),
@@ -29,7 +21,8 @@ vi.mock('@/api/request', () => ({
   // @/api/helpers/blobDownload 依赖的两个工具
   parseContentDisposition: vi.fn(),
   downloadBlob: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import { projectsApi, projectApi } from '@/api/projects'
 import { schoolsApi, schoolApi } from '@/api/schools'
@@ -69,7 +62,10 @@ describe('api/projects', () => {
   it('exportList GET blob', async () => {
     mockGet.mockResolvedValueOnce({ data: new Blob(['x']) })
     await projectsApi.exportList({ page: 1 })
-    expect(mockGet).toHaveBeenCalledWith('/projects/export', { params: { page: 1 }, responseType: 'blob' })
+    expect(mockGet).toHaveBeenCalledWith('/projects/export', {
+      params: { page: 1 },
+      responseType: 'blob',
+    })
   })
 
   it('importData POST FormData', () => {

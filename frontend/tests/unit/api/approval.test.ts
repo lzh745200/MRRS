@@ -5,19 +5,13 @@ const mockPost = vi.fn()
 const mockPut = vi.fn()
 const mockDel = vi.fn()
 
-vi.mock('@/utils/request', () => ({
-  get: (...args: any[]) => mockGet(...args),
-  post: (...args: any[]) => mockPost(...args),
-  put: (...args: any[]) => mockPut(...args),
-  del: (...args: any[]) => mockDel(...args),
-}))
-
 vi.mock('@/api/request', () => ({
   get: (...args: any[]) => mockGet(...args),
   post: (...args: any[]) => mockPost(...args),
   put: (...args: any[]) => mockPut(...args),
   del: (...args: any[]) => mockDel(...args),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import {
   createWorkflow,
@@ -74,7 +68,9 @@ describe('api/approval', () => {
       mockGet.mockResolvedValueOnce([])
       await getWorkflows({ entity_type: 'project', skip: 0, limit: 20 })
       expect(mockGet).toHaveBeenCalledWith('/approval/workflows', {
-        entity_type: 'project', skip: 0, limit: 20,
+        entity_type: 'project',
+        skip: 0,
+        limit: 20,
       })
     })
 
@@ -248,7 +244,9 @@ describe('api/approval', () => {
     it('autoApproveAll POST /approval/tasks/auto-approve-all', async () => {
       mockPost.mockResolvedValueOnce({ success: [1, 2], failed: [3] })
       const result = await autoApproveAll()
-      expect(mockPost).toHaveBeenCalledWith('/approval/tasks/auto-approve-all', { opinion: undefined })
+      expect(mockPost).toHaveBeenCalledWith('/approval/tasks/auto-approve-all', {
+        opinion: undefined,
+      })
       expect(result.success).toEqual([1, 2])
     })
 
@@ -317,7 +315,9 @@ describe('列表响应多形态解包', () => {
 })
 
 describe('响应形态补充', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
   it('getPendingTasks 收到 {data:[...]} 信封 → 解包', async () => {
     ;(mockGet as any).mockResolvedValue({ data: [{ task_id: 9 }] })
     const r = await getPendingTasks()
@@ -339,7 +339,6 @@ describe('响应形态补充', () => {
     expect(r).toEqual([])
   })
 })
-
 
 describe('api/approval — 响应形态兼容分支', () => {
   beforeEach(() => {
@@ -399,7 +398,6 @@ describe('api/approval — 响应形态兼容分支', () => {
   })
 })
 
-
 describe('api/approval — 剩余形态分支补全', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -415,7 +413,6 @@ describe('api/approval — 剩余形态分支补全', () => {
     expect(await getTasksHistory()).toEqual({ items: [{ id: 12 }], total: 5 })
   })
 })
-
 
 describe('api/approval — 裸数组形态补全', () => {
   beforeEach(() => {

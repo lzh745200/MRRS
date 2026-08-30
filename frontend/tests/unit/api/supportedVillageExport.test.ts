@@ -7,15 +7,6 @@ const mockDel = vi.fn()
 const mockApiRequest = vi.fn()
 const mockDownloadBlob = vi.fn()
 
-vi.mock('@/utils/request', () => ({
-  default: {
-    get: (...args: any[]) => mockGet(...args),
-    post: (...args: any[]) => mockPost(...args),
-    put: (...args: any[]) => mockPut(...args),
-    delete: (...args: any[]) => mockDel(...args),
-    apiRequest: (...args: any[]) => mockApiRequest(...args),
-  },
-}))
 vi.mock('@/api/request', () => ({
   default: {
     get: (...args: any[]) => mockGet(...args),
@@ -30,7 +21,10 @@ vi.mock('@/api/request', () => ({
   del: (...args: any[]) => mockDel(...args),
   apiRequest: (...args: any[]) => mockApiRequest(...args),
   // 提供真实的 parseContentDisposition 实现，供下载函数解析文件名
-  parseContentDisposition: (headers: Record<string, string> | undefined, fallback = 'download.xlsx') => {
+  parseContentDisposition: (
+    headers: Record<string, string> | undefined,
+    fallback = 'download.xlsx'
+  ) => {
     if (!headers) return fallback
     const cd = headers['content-disposition'] || headers['Content-Disposition'] || ''
     if (!cd) return fallback
@@ -39,7 +33,11 @@ vi.mock('@/api/request', () => ({
       const raw = starMatch[1].trim()
       const idx = raw.indexOf("''")
       if (idx >= 0) {
-        try { return decodeURIComponent(raw.slice(idx + 2)) } catch { /* fallthrough */ }
+        try {
+          return decodeURIComponent(raw.slice(idx + 2))
+        } catch {
+          /* fallthrough */
+        }
       }
     }
     const quotedMatch = cd.match(/filename="?([^";]+)"?/i)
@@ -47,7 +45,8 @@ vi.mock('@/api/request', () => ({
     return fallback
   },
   downloadBlob: (...args: any[]) => mockDownloadBlob(...args),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import {
   getSupportedVillages,
@@ -107,9 +106,15 @@ describe('api/supportedVillage (named)', () => {
   })
   it('batchDeleteSupportedVillages POST ids', () => {
     batchDeleteSupportedVillages([1, 2, 3])
-    expect(mockPost).toHaveBeenCalledWith('/supported-villages/batch-delete', { ids: [1, 2, 3], confirm_password: '' })
+    expect(mockPost).toHaveBeenCalledWith('/supported-villages/batch-delete', {
+      ids: [1, 2, 3],
+      confirm_password: '',
+    })
     batchDeleteSupportedVillages([4], 'pw')
-    expect(mockPost).toHaveBeenCalledWith('/supported-villages/batch-delete', { ids: [4], confirm_password: 'pw' })
+    expect(mockPost).toHaveBeenCalledWith('/supported-villages/batch-delete', {
+      ids: [4],
+      confirm_password: 'pw',
+    })
   })
 
   it('importSupportedVillages POST FormData', () => {
@@ -128,7 +133,9 @@ describe('api/supportedVillage (named)', () => {
       vi.clearAllMocks()
       const realAnchor = (globalThis as any).document.createElement('a')
       realAnchor.click = vi.fn()
-      const realCreate = (globalThis as any).document.createElement.bind((globalThis as any).document)
+      const realCreate = (globalThis as any).document.createElement.bind(
+        (globalThis as any).document
+      )
       ;(globalThis as any).document.createElement = (tag: any) => {
         if (tag === 'a') return realAnchor
         return realCreate(tag)
@@ -159,7 +166,10 @@ describe('api/supportedVillage (named)', () => {
     it('downloadImportTemplate + alias downloadTemplate', async () => {
       mockGet.mockResolvedValueOnce({ data: new Blob(['x']), headers: {} })
       await downloadImportTemplate()
-      expect(mockGet).toHaveBeenCalledWith('/import/template', { params: { entity_type: 'supported_village' }, responseType: 'blob' })
+      expect(mockGet).toHaveBeenCalledWith('/import/template', {
+        params: { entity_type: 'supported_village' },
+        responseType: 'blob',
+      })
       expect(downloadTemplate).toBe(downloadImportTemplate)
     })
   })
@@ -272,7 +282,10 @@ describe('api/export', () => {
   it('exportUsers 无参时 params=undefined', async () => {
     mockGet.mockResolvedValueOnce({ data: new Blob(['x']) })
     await exportUsers()
-    expect(mockGet).toHaveBeenCalledWith('/export/users', { params: undefined, responseType: 'blob' })
+    expect(mockGet).toHaveBeenCalledWith('/export/users', {
+      params: undefined,
+      responseType: 'blob',
+    })
   })
 
   it('exportSchools GET /export/schools blob', async () => {

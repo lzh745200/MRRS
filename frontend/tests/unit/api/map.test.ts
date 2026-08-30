@@ -3,15 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockGet = vi.fn()
 const mockPut = vi.fn()
 
-vi.mock('@/utils/request', () => ({
-  default: { get: (...args: any[]) => mockGet(...args), put: (...args: any[]) => mockPut(...args) },
-}))
-
 vi.mock('@/api/request', () => ({
   default: { get: (...args: any[]) => mockGet(...args), put: (...args: any[]) => mockPut(...args) },
   get: (...args: any[]) => mockGet(...args),
   put: (...args: any[]) => mockPut(...args),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import {
   getMapMarkers,

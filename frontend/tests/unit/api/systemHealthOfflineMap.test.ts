@@ -4,26 +4,14 @@ const mockGet = vi.fn()
 const mockPost = vi.fn()
 const mockDelete = vi.fn()
 
-vi.mock('@/utils/request', () => ({
-  default: {
-    get: (...args: any[]) => mockGet(...args),
-    post: (...args: any[]) => mockPost(...args),
-    delete: (...args: any[]) => mockDelete(...args),
-  },
-}))
-
 vi.mock('@/api/request', () => ({
   get: (...args: any[]) => mockGet(...args),
   post: (...args: any[]) => mockPost(...args),
   del: (...args: any[]) => mockDelete(...args),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
-import {
-  offlineMapApi,
-  clearTiles,
-  downloadTiles,
-  getMapStatus,
-} from '@/api/offlineMap'
+import { offlineMapApi, clearTiles, downloadTiles, getMapStatus } from '@/api/offlineMap'
 
 describe('api/offlineMap', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -41,7 +29,14 @@ describe('api/offlineMap', () => {
     expect(mockDelete).toHaveBeenCalledWith('/offline-map/clear')
   })
   it('downloadTiles POST /offline-map/download with params', () => {
-    downloadTiles({ min_lat: 30, max_lat: 40, min_lon: 110, max_lon: 120, min_zoom: 4, max_zoom: 12 })
+    downloadTiles({
+      min_lat: 30,
+      max_lat: 40,
+      min_lon: 110,
+      max_lon: 120,
+      min_zoom: 4,
+      max_zoom: 12,
+    })
     expect(mockPost).toHaveBeenCalledWith('/offline-map/download', null, {
       params: { min_lat: 30, max_lat: 40, min_lon: 110, max_lon: 120, min_zoom: 4, max_zoom: 12 },
     })

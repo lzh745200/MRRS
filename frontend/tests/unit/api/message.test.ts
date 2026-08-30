@@ -6,15 +6,6 @@ const mockPut = vi.fn()
 const mockDel = vi.fn()
 const mockApiRequest = vi.fn()
 
-vi.mock('@/utils/request', () => ({
-  default: {
-    get: (...args: any[]) => mockGet(...args),
-    post: (...args: any[]) => mockPost(...args),
-    put: (...args: any[]) => mockPut(...args),
-    delete: (...args: any[]) => mockDel(...args),
-    apiRequest: (...args: any[]) => mockApiRequest(...args),
-  },
-}))
 vi.mock('@/api/request', () => ({
   default: {
     get: (...args: any[]) => mockGet(...args),
@@ -27,7 +18,8 @@ vi.mock('@/api/request', () => ({
   put: (...args: any[]) => mockPut(...args),
   del: (...args: any[]) => mockDel(...args),
   apiRequest: (...args: any[]) => mockApiRequest(...args),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import {
   getMessages,

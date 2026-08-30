@@ -2,13 +2,15 @@
  * Comprehensive view smoke tests — verify every Vue view can be imported and mounted.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { createRouter, createWebHistory } from 'vue-router'
-import ElementPlus from 'element-plus'
 
 // Mock dependencies
 vi.mock('@/api/request', () => ({
-  default: { get: vi.fn().mockResolvedValue({ data: {} }), post: vi.fn().mockResolvedValue({ data: {} }), put: vi.fn().mockResolvedValue({ data: {} }), delete: vi.fn().mockResolvedValue({ data: {} }) },
+  default: {
+    get: vi.fn().mockResolvedValue({ data: {} }),
+    post: vi.fn().mockResolvedValue({ data: {} }),
+    put: vi.fn().mockResolvedValue({ data: {} }),
+    delete: vi.fn().mockResolvedValue({ data: {} }),
+  },
   get: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   post: vi.fn().mockResolvedValue({ code: 200 }),
   put: vi.fn().mockResolvedValue({ code: 200 }),
@@ -19,7 +21,8 @@ vi.mock('@/api/request', () => ({
   freezeRequests: vi.fn(),
   unfreezeRequests: vi.fn(),
   cancelAllRequests: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 // src/utils/echarts.ts <-> src/utils/echarts-theme.ts 存在循环导入：
 // echarts.ts 顶层调用 registerMilitaryTheme() 时其 default 导出尚未初始化，
@@ -33,30 +36,65 @@ vi.mock('@/utils/echarts-theme', () => ({
   BADGE_GOLD: '#b8960c',
 }))
 
-vi.mock('@/api/audit', () => ({ auditApi: { getLogs: vi.fn().mockResolvedValue({ items: [], total: 0 }), getStats: vi.fn().mockResolvedValue({}), getLoginAttempts: vi.fn().mockResolvedValue({ items: [] }), getSecurityEvents: vi.fn().mockResolvedValue({ items: [] }), resolveSecurityEvent: vi.fn() } }))
-vi.mock('@/api/effectiveness', () => ({ evaluateVillage: vi.fn(), getRankings: vi.fn().mockResolvedValue({ items: [] }), compareEvaluations: vi.fn() }))
+vi.mock('@/api/audit', () => ({
+  auditApi: {
+    getLogs: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    getStats: vi.fn().mockResolvedValue({}),
+    getLoginAttempts: vi.fn().mockResolvedValue({ items: [] }),
+    getSecurityEvents: vi.fn().mockResolvedValue({ items: [] }),
+    resolveSecurityEvent: vi.fn(),
+  },
+}))
+vi.mock('@/api/effectiveness', () => ({
+  evaluateVillage: vi.fn(),
+  getRankings: vi.fn().mockResolvedValue({ items: [] }),
+  compareEvaluations: vi.fn(),
+}))
 vi.mock('@/api/help', () => ({ getHelpArticles: vi.fn().mockResolvedValue({ items: [] }) }))
-vi.mock('@/api/report', () => ({ reportApi: { generate: vi.fn(), download: vi.fn() } }))
-vi.mock('@/api/funds', () => ({ fundApi: { list: vi.fn().mockResolvedValue({ items: [], total: 0 }) } }))
-vi.mock('@/api/policy', () => ({ getLevelOptions: vi.fn().mockResolvedValue({ data: [] }), getPolicies: vi.fn().mockResolvedValue({ items: [], total: 0 }) }))
+vi.mock('@/api/funds', () => ({
+  fundApi: { list: vi.fn().mockResolvedValue({ items: [], total: 0 }) },
+}))
+vi.mock('@/api/policy', () => ({
+  getLevelOptions: vi.fn().mockResolvedValue({ data: [] }),
+  getPolicies: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+}))
 vi.mock('@/api/import', () => ({ downloadImportTemplateAndSave: vi.fn() }))
 
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ isAdmin: false, isAuthenticated: true, token: 'x', user: { role: 'admin', id: 1, username: 'admin' }, mustChangePassword: false }) }))
-vi.mock('@/stores/user', () => ({ useUserStore: () => ({ currentUser: { id: 1, username: 'admin' }, changePassword: vi.fn() }) }))
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    isAdmin: false,
+    isAuthenticated: true,
+    token: 'x',
+    user: { role: 'admin', id: 1, username: 'admin' },
+    mustChangePassword: false,
+  }),
+}))
+vi.mock('@/stores/user', () => ({
+  useUserStore: () => ({ currentUser: { id: 1, username: 'admin' }, changePassword: vi.fn() }),
+}))
 vi.mock('@/stores/menu', () => ({ useMenuStore: () => ({ canAccessMenu: () => true }) }))
-vi.mock('@/stores/project', () => ({ useProjectStore: () => ({ projects: [], currentProject: null }) }))
-vi.mock('@/stores/policy', () => ({ usePolicyStore: () => ({ policyList: [], total: 0, current: null }) }))
+vi.mock('@/stores/policy', () => ({
+  usePolicyStore: () => ({ policyList: [], total: 0, current: null }),
+}))
 vi.mock('@/stores/funds', () => ({ useFundsStore: () => ({ fundList: [], total: 0 }) }))
 vi.mock('@/stores/organization', () => ({ useOrganizationStore: () => ({ orgs: [], tree: [] }) }))
-vi.mock('@/stores/rbac', () => ({ useRbacStore: () => ({ roles: [], permissions: [], hasPermission: () => true }) }))
 vi.mock('@/stores/config', () => ({ useConfigStore: () => ({ theme: 'light', appName: 'Test' }) }))
-vi.mock('@/stores/app', () => ({ useAppStore: () => ({ sidebarCollapsed: false }) }))
 vi.mock('@/composables/useRouterSafe', () => ({ useRouterSafe: () => ({ pushSafe: vi.fn() }) }))
-vi.mock('@/composables/useDesensitize', () => ({ useDesensitize: () => ({ desensitize: (v: any) => v }) }))
-vi.mock('@/utils/authStorage', () => ({ AuthStorage: { getToken: () => 'x', getUser: () => ({ id: 1 }), clear: vi.fn(), setToken: vi.fn(), setUser: vi.fn() } }))
-vi.mock('@/utils/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() } }))
-
-const router = createRouter({ history: createWebHistory(), routes: [{ path: '/', component: { template: '<div></div>' } }] })
+vi.mock('@/composables/useDesensitize', () => ({
+  useDesensitize: () => ({ desensitize: (v: any) => v }),
+}))
+vi.mock('@/utils/authStorage', () => ({
+  AuthStorage: {
+    getToken: () => 'x',
+    getUser: () => ({ id: 1 }),
+    clear: vi.fn(),
+    setToken: vi.fn(),
+    setUser: vi.fn(),
+  },
+}))
+vi.mock('@/utils/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}))
 
 // ═══════════════════════════════════════════════════════
 // Core views — verify mounting
@@ -229,9 +267,15 @@ describe('Common component imports', () => {
 
 describe('Store imports', () => {
   const stores = [
-    'auth', 'user', 'funds', 'policy',
-    'organization', 'menu', 'config',
-    'dataPackage', 'dataReport',
+    'auth',
+    'user',
+    'funds',
+    'policy',
+    'organization',
+    'menu',
+    'config',
+    'dataPackage',
+    'dataReport',
   ]
 
   stores.forEach((name) => {
@@ -248,15 +292,50 @@ describe('Store imports', () => {
 
 describe('API module imports', () => {
   const apis = [
-    'request', 'import', 'projects', 'schools', 'policy', 'funds',
-    'supportedVillage', 'organization', 'audit', 'approval', 'effectiveness',
-    'help', 'todos', 'backup', 'dataSync', 'dataPackage',
-    'ruralWork', 'tasks', 'search', 'map', 'message',
-    'machineCode', 'organizationPassCode', 'userManagement',
-    'export', 'batchOperations', 'validationRules', 'systemMonitor',
-    'analytics', 'dashboard', 'sentiment', 'secrets', 'twoFactor',
-    'fundLifecycle', 'fundStatistics', 'ai', 'env', 'i18n', 'offlineMap',
-    'errorReport', 'dataTier', 'chunkedUpload', 'updateLogs', 'zeroTrust',
+    'request',
+    'import',
+    'projects',
+    'schools',
+    'policy',
+    'funds',
+    'supportedVillage',
+    'organization',
+    'audit',
+    'approval',
+    'effectiveness',
+    'help',
+    'todos',
+    'backup',
+    'dataSync',
+    'dataPackage',
+    'ruralWork',
+    'tasks',
+    'search',
+    'map',
+    'message',
+    'machineCode',
+    'organizationPassCode',
+    'userManagement',
+    'export',
+    'batchOperations',
+    'validationRules',
+    'systemMonitor',
+    'analytics',
+    'dashboard',
+    'sentiment',
+    'secrets',
+    'twoFactor',
+    'fundLifecycle',
+    'fundStatistics',
+    'ai',
+    'env',
+    'i18n',
+    'offlineMap',
+    'errorReport',
+    'dataTier',
+    'chunkedUpload',
+    'updateLogs',
+    'zeroTrust',
   ]
 
   apis.forEach((name) => {
