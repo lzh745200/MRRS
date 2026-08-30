@@ -62,7 +62,7 @@ npx electron-builder --win --x64    # 64 位安装包（主力）
 |------|------|------|
 | Layer 0 | 构建期下载校验 | `make fetch-vcredist`：官方 URL 下载 + SHA256 钉扎比对，不匹配即构建失败 |
 | Layer 1 | PyInstaller 自动捆绑 | vcruntime140.dll / msvcp140.dll 打包进 backend.exe |
-| Layer 2 | NSIS 钩子校验后静默安装 | 安装前 Get-FileHash 比对钉扎值，不匹配弹窗中止安装；通过则 `vc_redist.x64.exe /install /quiet /norestart` |
+| Layer 2 | NSIS 钩子校验后静默安装 | 安装期三态：哈希匹配→静默安装；确证不匹配→弹窗中止；校验工具（PowerShell）不可用→跳过 redist 安装但不阻断（Layer 1 兜底） |
 
 目标机器无需预装任何 VC++ 运行库。二进制不入库（`.gitignore: resources/vcredist/`），
 URL/SHA256 常量唯一维护点：`electron-builder-nsis-hook.nsh` 文件头 `!define` 段。

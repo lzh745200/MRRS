@@ -257,6 +257,19 @@ Scheduled daily at 2:00 UTC + manual trigger (`workflow_dispatch`). Three jobs:
 - 备份包必须包含 `data/rural_revitalization.db`，缺失即抛 `BackupIncompleteError`（fail-loud）；备份列表每项带 `database_included` 字段
 - 回归测试：`tests/unit/test_backup_path_alignment.py`
 
+### NSIS 钩子字符串转义（Fixed 2026-08-30）
+
+`build-scripts/electron-builder-nsis-hook.nsh` 的双引号字符串做 **C 风格转义**：
+``→CR、`
+`→LF、`	`→TAB、``→VT、`\"`→引号、`\`→反斜杠。路径里的
+`esources`（→CR）、`credist`（→VT）、`	emp`（→TAB）会被静默损坏。
+v1.11.0 安装在真机全部失败的根因：钩子把含未转义 `\` 的路径传给 PowerShell
+做哈希校验，路径损坏→恒定 exit 1→被误判"哈希不匹配"而中止安装。
+规则：**钩子里所有路径反斜杠必须写 `\`**；PS 校验逻辑不用行内 `-Command`
+（多层解析脆弱），改为 FileWrite 写出 .ps1 后 `-File` 执行。校验三态语义
+（0=匹配安装/1=确证篡改中止/3或error=工具不可用跳过 redist 不阻断部署）
+详见工单 `.scratch/w6-release-eng/002-vcredist-ci-download.md` 追记。
+
 ### Pytest Config Conflict (Fixed 2026-07-15)
 
 Previously, both `pytest.ini` and `pyproject.toml` had `[tool.pytest.ini_options]` sections, causing pytest to warn: `WARNING: ignoring pytest config in pyproject.toml!`. Fixed by consolidating all pytest config into `pytest.ini` and removing the `[tool.pytest.ini_options]` section from `pyproject.toml`. The `pyproject.toml` now only retains `[tool.coverage.*]` sections.
