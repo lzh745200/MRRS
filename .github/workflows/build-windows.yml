@@ -166,6 +166,11 @@ jobs:
             Write-Warning "未配置 CSC_LINK secret —— 跳过代码签名。军队白名单场景需要签名，接入方法见 docs/04-部署文档/01-Windows部署/代码签名.md"
             exit 0
           }
+          # 仅在密钥存在时经 GITHUB_ENV 传给 electron-builder——直接写 step env
+          # 会在 secret 缺失时注入空字符串，electron-builder 24.x 会把空串当
+          # 证书路径解析(cwd)导致整个构建失败(v1.11.0 第二次构建失败根因)
+          "CSC_LINK=$env:CSC_LINK" >> $env:GITHUB_ENV
+          "CSC_KEY_PASSWORD=$env:CSC_KEY_PASSWORD" >> $env:GITHUB_ENV
           $cert = Join-Path $env:RUNNER_TEMP "codesign.pfx"
           if (Test-Path $env:CSC_LINK) {
             Copy-Item $env:CSC_LINK $cert
@@ -202,13 +207,12 @@ jobs:
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build/fetch_vcredist.ps1
 
-      # 10. electron-builder 打包（配置了 CSC secrets 时自动签名 installer + uninstaller）
+      # 10. electron-builder 打包（CSC_LINK/CSC_KEY_PASSWORD 由 8.5 步按需写入
+      #     GITHUB_ENV——secret 缺失时不设置，避免空串被当作证书路径）
       - name: Build installer (electron-builder)
         run: npx electron-builder --win --x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       # 10.5 生成产物 SHA256 清单（军队分发完整性链，W6-T5）
       - name: Generate SHA256SUMS
