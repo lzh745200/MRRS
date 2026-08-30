@@ -89,6 +89,19 @@
   `{success, data}` 收敛为 `success_response` 信封（W5-004 收尾），前端
   拦截器兼容，数据载荷形状不变。
 
+### 修复（2026-08-30 v1.11.0 发版构建批次）
+
+- 🐛 **fetch_vcredist 目录先行创建**：CI 全新 checkout 中 resources/vcredist/
+  被 gitignore 不存在，写 .download 临时文件抛 DirectoryNotFoundException
+  （重试亦必然失败）——建目录提前到任何写入之前。
+- 🐛 **CSC 空串不再注入**：secret 缺失时 `${{ secrets.X }}` 展开为空串，
+  electron-builder 24.x 仍按证书路径解析导致构建失败；改为签名步骤在密钥
+  存在时经 GITHUB_ENV 按需导出。
+- 🐛 **Release 资产名校验链断链**：GitHub 剥离资产名中的非 ASCII 字符
+  （中文安装包名上传后变为 Setup.1.11.0.exe），SHA256SUMS 清单与实际资产名
+  不匹配、`sha256sum -c` 无法通过——package.json 显式 ASCII `artifactName`
+  防复发，当前 Release 清单已修正并实测哈希一致（2344aa34…）。
+
 ### 清理（无死代码遗留）
 - 🧹 删除 4 个引用已删源码的死测试（stores/project、stores/rbac、
   useAccessibility）及 8 处指向不存在模块的 `vi.mock`（4 处已删 stores/api +

@@ -1,5 +1,5 @@
 ---
-labels: [in-review, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: [push-to-origin + 一次手动 workflow_dispatch dry-run（外发动作，需仓库负责人执行）]
 ---
@@ -27,6 +27,17 @@ blocked-by: [push-to-origin + 一次手动 workflow_dispatch dry-run（外发动
   仅产物 artifact，安全）；tag 触发会真实发 Release，验证通过后再做。
 
 ## 验收标准
-- [ ] 与 W4-T9/W6-T1/W6-T5 联合验证一次完整 dry-run（fork/手动触发）
-      —— 等待推送 + 手动触发；本地可验证分项已全部通过（见上）
+**dry-run 完成（2026-08-30，以真实 tag 构建达成）**: v1.11.0 标签构建两轮
+迭代后全绿（smoke-test → PyInstaller onedir → vcredist 拉取 → electron-builder
+→ SHA256SUMS → Release 附件），Release 实物验证 `sha256sum -c` 通过。
+过程中实测修复两个管线 bug：① fetch_vcredist 写临时文件前目标目录不存在
+（CI 全新 checkout 被 gitignore）→ 建目录提前；② CSC secret 缺失时空串
+CSC_LINK 被 electron-builder 24.x 当证书路径解析 → 改 GITHUB_ENV 按需导出。
+另发现并处理：GitHub Release 资产名剥离非 ASCII 字符（中文名安装包上传后
+变为 Setup.1.11.0.exe），导致校验清单与资产名不匹配——package.json 显式
+`artifactName: "MRRS-Setup-${version}.${ext}"` 防复发，当前 Release 清单已
+修正为实际资产名并实测哈希一致。
+
+- [x] 与 W4-T9/W6-T1/W6-T5 联合验证一次完整 dry-run（fork/手动触发）
+      —— 以 v1.11.0 真实 tag 构建达成，全绿
 - [x] Release 说明模板含校验和清单与签名验证说明
