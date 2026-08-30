@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布]
+## [1.11.0] - 2026-08-30 — 全面体检修复版（安全红线 + 功能补全）
 
 ### 修复
 - 🐛 **帮助文档出厂密码文案**：`admin/admin123` 修正为 `admin/Admin@2026`，
@@ -63,6 +63,47 @@
   useAccessibility）及 8 处指向不存在模块的 `vi.mock`（4 处已删 stores/api +
   7 文件中的 `@/utils/request`）与 3 处未使用导入；AGENTS.md 版本号引用
   改为单一事实源表述。
+
+### 修复（功能异常，体检批次）
+- 🐛 **资金三列表筛选不重置页码**：AnomalyList/ContractManage/TransferVoucher
+  第 2 页起筛选得到空表——筛选变更统一回第 1 页（全站扫描无同类漏网）。
+- 🐛 **版本管理页请求 404**：`/data-package/version` 路由缺 `:id` 致
+  `GET /data-packages/undefined/versions`；改可选参数 + 无 id 时包选择器
+  （唯一包自动选中）。
+- 🐛 **增量数据包三端点契约断裂**：detect-changes 改查询参数并返回完整
+  ChangesSummary（含软删统计口径）；export 修复 record_counts AttributeError
+  （改为从 manifest 取值）；import 由空操作实现为真实预览/应用
+  （管理员 + confirm_import 覆盖式 upsert + 审计）。
+- 🐛 **fk_ondelete_001 迁移全新库必败**：SQLite 检查器不回传 ondelete 致幂等
+  误判 + 匿名外键按合成名 batch drop 必败——改读建表 DDL 判定 + 影子表重建；
+  完整迁移链从零升级到 head 验证通过。
+
+### 安全（审计红线，体检批次）
+- 🔐 **PII 字段透明加密落地**（W5-T7/ADR-0005）：9 列（身份证/电话类，含
+  users.phone）切确定性 AES-SIV TypeDecorator，等值查询零改写；存量回填迁移
+  `pii_encrypt_001`（幂等，enc.v1: 标记）；SQLCipher 修正为 fail-closed 驱动
+  探测 + 字面量 PRAGMA key（封死绑定参数假加密）。
+- 🔐 **数据权限 fail-closed**（W5-T6/ADR-0002）：get_org_scope 三处"无组织→
+  is_admin=True"改回退仅本人；适配器缺过滤字段禁止静默放行全量
+  （降级仅本人 / 抛 DataScopeFilterError）。
+- 🔐 **组织删除级联守卫**（W2-T2/ADR-0003）：硬删除前检查名下项目/用户
+  （OrganizationInUseError 含计数）；projects 组织外键 CASCADE→SET NULL
+  （org_guard_001 影子表舞步）截断级联删除链。
+- 🔐 **API 响应信封收敛**（W5-T4）：7 文件 51 处裸 dict → success_response/ok_list，
+  前端拦截器展开后向后兼容，24 测试文件 490 用例全绿。
+
+### 补全（缺失功能，体检批次）
+- ✨ **dataPackage 增量更新/版本管理后端补全**：增量检测/导出/导入三端点 +
+  版本 CRUD/对比端点补组织访问校验与审计日志；前端两页撤"开发中"横幅接
+  真实 API（PackageType 新增 update 类型）。
+
+### 修复（体验）
+- 🐛 帮助文档出厂密码文案 `admin/admin123` → `admin/Admin@2026`；
+  注册页视觉对齐登录/忘记密码页。
+
+### 性能（体检批次）
+- ⚡ 首屏脚本 gzip 实测 149KB（≤350KB 目标达成，W5-T1 关闭；xlsx/echarts/
+  chartjs/guizhou 均独立懒加载块）。
 
 ## [1.10.6] - 2026-08-29 — 全仓库死代码彻底清理(v1.10.5 为清理前基线)
 
