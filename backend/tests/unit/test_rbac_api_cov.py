@@ -93,7 +93,14 @@ class TestCheckPermission:
             resp = rbac_client.post("/api/v1/rbac/check", json={"permission": "user:read"})
         assert resp.status_code == 200
         data = resp.json()
-        assert data == {"success": True, "has_permission": True, "permission": "user:read", "user_id": "1"}
+        assert data == {
+            "code": 200,
+            "message": "success",
+            "success": True,
+            "has_permission": True,
+            "permission": "user:read",
+            "user_id": "1",
+        }
         svc.check_permission.assert_awaited_once()
 
 
@@ -133,7 +140,13 @@ class TestUserPermissionsAndRoles:
         with p:
             resp = rbac_client.get("/api/v1/rbac/user/1/roles")
         assert resp.status_code == 200
-        assert resp.json() == {"success": True, "data": [{"name": "管理员"}], "count": 1}
+        assert resp.json() == {
+            "code": 200,
+            "message": "success",
+            "success": True,
+            "data": [{"name": "管理员"}],
+            "count": 1,
+        }
 
     def test_roles_forbidden_for_other(self, rbac_client):
         _as_user(rbac_client, _user(uid=1, role="viewer"))

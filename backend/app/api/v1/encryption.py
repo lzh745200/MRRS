@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.permission_utils import require_admin
+from app.core.response import success_response
 from app.core.security import get_current_user
 from app.models.system_config import SystemConfig
 from app.services.password_encryption_service import PasswordEncryptionService
@@ -104,7 +105,7 @@ async def initialize_encryption(
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
     except Exception:
         logger.debug("记录工作日志失败")
-    return {"success": True, "message": "数据库加密已启用"}
+    return success_response(message="数据库加密已启用")
 
 
 @router.post("/change-password")
@@ -144,7 +145,7 @@ async def change_encryption_password(
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
     except Exception:
         logger.debug("记录工作日志失败")
-    return {"success": True, "message": "加密密码已更新"}
+    return success_response(message="加密密码已更新")
 
 
 @router.get("/status")
@@ -163,7 +164,7 @@ async def get_encryption_status(
         "has_salt": salt is not None and len(salt) > 0,
         "iterations": int(iterations) if iterations else PasswordEncryptionService.DEFAULT_ITERATIONS,
     }
-    return {"success": True, "data": status}
+    return success_response(data=status)
 
 
 @router.post("/disable")
@@ -191,4 +192,4 @@ async def disable_encryption(
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
     except Exception:
         logger.debug("记录工作日志失败")
-    return {"success": True, "message": "数据库加密已禁用"}
+    return success_response(message="数据库加密已禁用")

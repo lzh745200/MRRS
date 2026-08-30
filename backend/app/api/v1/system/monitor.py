@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -105,7 +106,7 @@ async def get_monitor_snapshot(current_user=Depends(get_current_user)):
         snapshot["status"] = "error"
         snapshot["message"] = f"获取监控数据失败: {str(e)}"
 
-    return {"success": True, "data": snapshot}
+    return success_response(data=snapshot)
 
 
 @router.get("/resources", summary="获取资源使用详情")
@@ -179,7 +180,7 @@ async def get_resource_usage(current_user=Depends(get_current_user)):
         resources["status"] = "error"
         resources["message"] = str(e)
 
-    return {"success": True, "data": resources}
+    return success_response(data=resources)
 
 
 @router.get("/alerts", summary="获取告警规则列表")
@@ -235,7 +236,7 @@ async def get_alert_rules(
                   "enabled": False},
                  ]
 
-    return {"success": True, "data": {"rules": rules, "total": len(rules)}}
+    return success_response(data={"rules": rules, "total": len(rules)})
 
 
 @router.get("/alerts/history", summary="获取告警历史记录")
@@ -271,15 +272,7 @@ async def get_alert_history(
         logger.debug("获取告警历史失败: %s", e)
         total = 0
 
-    return {
-        "success": True,
-        "data": {
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        },
-    }
+    return ok_list(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/api-stats", summary="获取API调用统计")
@@ -297,9 +290,8 @@ async def get_api_statistics(
         from app.middleware.metrics_middleware import metrics_store
 
         summary = metrics_store.get_summary()
-        return {
-            "success": True,
-            "data": {
+        return success_response(
+            data={
                 "period_hours": hours,
                 "request_count": summary.get("request_count", 0),
                 "error_count": summary.get("error_count", 0),
@@ -312,12 +304,11 @@ async def get_api_statistics(
                 "slow_requests": summary.get("slow_requests", []),
                 "slow_request_count": summary.get("slow_request_count", 0),
             },
-        }
+        )
     except Exception as e:
         logger.warning("获取 API 统计失败: %s", e)
-        return {
-            "success": True,
-            "data": {
+        return success_response(
+            data={
                 "period_hours": hours,
                 "request_count": 0,
                 "error_count": 0,
@@ -330,7 +321,7 @@ async def get_api_statistics(
                 "slow_requests": [],
                 "slow_request_count": 0,
             },
-        }
+        )
 
 
 @router.get("/database-size", summary="获取数据库文件大小")
@@ -350,20 +341,19 @@ async def get_database_size(current_user=Depends(get_current_user)):
         else:
             db_path = str(Path("data/rural_revitalization.db").resolve())
         if not os.path.exists(db_path):
-            return {
-                "success": False,
-                "data": {"size_bytes": 0, "size_mb": 0, "error": f"数据库文件不存在: {db_path}"},
-            }
+            return success_response(
+                data={"size_bytes": 0, "size_mb": 0, "error": f"数据库文件不存在: {db_path}"},
+                success=False,
+            )
         size = os.path.getsize(db_path)
-        return {
-            "success": True,
-            "data": {
+        return success_response(
+            data={
                 "size_bytes": size,
                 "size_mb": round(size / 1024 / 1024, 2),
                 "path": db_path,
             },
-        }
+        )
     except PermissionError:
-        return {"success": False, "data": {"size_bytes": 0, "size_mb": 0, "error": "无权限读取数据库文件"}}
+        return success_response(data={"size_bytes": 0, "size_mb": 0, "error": "无权限读取数据库文件"}, success=False)
     except Exception as e:
-        return {"success": False, "data": {"size_bytes": 0, "size_mb": 0, "error": str(e)}}
+        return success_response(data={"size_bytes": 0, "size_mb": 0, "error": str(e)}, success=False)

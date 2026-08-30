@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
 from app.core.exceptions import BusinessError
+from app.core.response import success_response
 from app.core.security import require_admin
 from app.services.offline_map_service import offline_map_service
 
@@ -45,7 +46,7 @@ async def get_status():
     """获取离线地图状态"""
     try:
         coverage = await offline_map_service.get_coverage()
-        return {"success": True, "data": coverage}
+        return success_response(data=coverage)
     except Exception as e:
         raise BusinessError(f"获取离线地图状态失败: {str(e)}")
 
@@ -78,7 +79,7 @@ async def download_tiles(
         # 服务按区域标识记录已下载区域，由请求参数构造区域标识（同步方法）
         region = f"{min_lat},{min_lon}-{max_lat},{max_lon}@{min_zoom}-{max_zoom}"
         success = offline_map_service.download_region(region)
-        return {"success": success, "data": {"region": region}}
+        return success_response(data={"region": region}, success=success)
 
     except HTTPException:
         raise
@@ -93,7 +94,7 @@ async def clear_tiles(
     """清理瓦片缓存(管理员功能)，服务层为整体清理，不支持按缩放级别"""
     try:
         offline_map_service.clear_cache()
-        return {"success": True, "message": "瓦片缓存已清理"}
+        return success_response(message="瓦片缓存已清理")
 
     except Exception as e:
         raise BusinessError(f"清理瓦片缓存失败: {str(e)}")

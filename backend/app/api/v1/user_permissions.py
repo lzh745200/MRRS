@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from app.core.response import success_response
 from app.core.security import get_current_user
 from app.models.user import User
 from app.core.permission_utils import is_superuser
@@ -90,15 +91,14 @@ async def assign_user_to_organization(
             is_primary=request.is_primary,
         )
 
-        return {
-            "success": True,
-            "message": "用户已分配到组织",
-            "data": {
+        return success_response(
+            data={
                 "user_id": user_org.user_id,
                 "organization_id": user_org.organization_id,
                 "role": user_org.role,
             },
-        }
+            message="用户已分配到组织",
+        )
     except BusinessLogicError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -127,7 +127,7 @@ async def remove_user_from_organization(
     if not success:
         raise HTTPException(status_code=404, detail="用户组织关联不存在")
 
-    return {"success": True, "message": "用户已从组织中移除"}
+    return success_response(message="用户已从组织中移除")
 
 
 @router.get("/user-organizations/{user_id}")
@@ -151,7 +151,7 @@ async def get_user_organizations(
 
     organizations = service.get_user_organizations(user_id)
 
-    return {"success": True, "data": organizations, "count": len(organizations)}
+    return success_response(data=organizations, count=len(organizations))
 
 
 @router.get("/organization-users/{organization_id}")
@@ -176,7 +176,7 @@ async def get_organization_users(
 
     users = service.get_organization_users(organization_id, include_children)
 
-    return {"success": True, "data": users, "count": len(users)}
+    return success_response(data=users, count=len(users))
 
 
 # ==================== 角色管理 ====================
@@ -214,11 +214,10 @@ async def assign_role_to_user(
             expires_at=expires_at,
         )
 
-        return {
-            "success": True,
-            "message": "角色已分配",
-            "data": {"user_id": user_role.user_id, "role_id": user_role.role_id},
-        }
+        return success_response(
+            data={"user_id": user_role.user_id, "role_id": user_role.role_id},
+            message="角色已分配",
+        )
     except BusinessLogicError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -247,7 +246,7 @@ async def remove_role_from_user(
     if not success:
         raise HTTPException(status_code=404, detail="用户角色关联不存在")
 
-    return {"success": True, "message": "角色已移除"}
+    return success_response(message="角色已移除")
 
 
 @router.get("/user-roles/{user_id}")
@@ -271,7 +270,7 @@ async def get_user_roles(
 
     roles = service.get_user_roles(user_id)
 
-    return {"success": True, "data": roles, "count": len(roles)}
+    return success_response(data=roles, count=len(roles))
 
 
 # ==================== 权限管理 ====================
@@ -309,11 +308,10 @@ async def grant_permission_to_user(
             expires_at=expires_at,
         )
 
-        return {
-            "success": True,
-            "message": "权限已授予",
-            "data": {"user_id": user_perm.user_id, "permission": user_perm.permission},
-        }
+        return success_response(
+            data={"user_id": user_perm.user_id, "permission": user_perm.permission},
+            message="权限已授予",
+        )
     except BusinessLogicError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -342,7 +340,7 @@ async def revoke_permission_from_user(
     if not success:
         raise HTTPException(status_code=404, detail="用户权限不存在")
 
-    return {"success": True, "message": "权限已撤销"}
+    return success_response(message="权限已撤销")
 
 
 @router.get("/user-permissions/{user_id}")
@@ -366,7 +364,7 @@ async def get_user_permissions(
 
     permissions = service.get_user_permissions(user_id)
 
-    return {"success": True, "data": permissions, "count": len(permissions)}
+    return success_response(data=permissions, count=len(permissions))
 
 
 @router.post("/check-permission")
@@ -389,7 +387,7 @@ async def check_user_permission(
 
     has_permission = service.check_user_permission(request.user_id, request.permission)
 
-    return {"success": True, "has_permission": has_permission}
+    return success_response(has_permission=has_permission)
 
 
 # ==================== 组织树管理 ====================
@@ -411,7 +409,7 @@ async def get_organization_tree(
 
     tree = service.get_organization_tree(parent_id, current_user.id)
 
-    return {"success": True, "data": tree}
+    return success_response(data=tree)
 
 
 @router.get("/accessible-organizations")
@@ -423,7 +421,7 @@ async def get_accessible_organizations(db: Session = Depends(get_db), current_us
 
     org_ids = service.get_user_accessible_organizations(current_user.id)
 
-    return {"success": True, "data": org_ids, "count": len(org_ids)}
+    return success_response(data=org_ids, count=len(org_ids))
 
 
 @router.get("")
@@ -439,13 +437,12 @@ async def get_user_permissions_root(
     # 获取用户可访问的组织
     org_ids = service.get_user_accessible_organizations(current_user.id)
 
-    return {
-        "success": True,
-        "data": {
+    return success_response(
+        data={
             "user_id": current_user.id,
             "username": current_user.username,
             "role": current_user.role,
             "accessible_organization_ids": org_ids,
             "organization_id": current_user.organization_id,
         },
-    }
+    )

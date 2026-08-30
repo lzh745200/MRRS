@@ -159,7 +159,7 @@ class TestChangeEncryptionPassword:
 
             result = await change_encryption_password(req, db=mock_db, current_user=admin_user)
 
-        assert result == {"success": True, "message": "加密密码已更新"}
+        assert result == {"code": 200, "success": True, "message": "加密密码已更新"}
         # 写入盐值、迭代次数、验证哈希 3 项配置
         assert svc_inst.set.call_count == 3
         set_keys = {call.args[0] for call in svc_inst.set.call_args_list}

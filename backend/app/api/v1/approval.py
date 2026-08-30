@@ -247,17 +247,15 @@ def create_workflow(
             nodes=nodes,
             created_by=current_user.id,
         )
-        return {
-            "code": 200,
-            "success": True,
-            "message": "创建成功",
-            "data": {
+        return success_response(
+            data={
                 "id": workflow.id,
                 "name": workflow.name,
                 "entity_type": workflow.entity_type,
                 "level_count": len(nodes),
             },
-        }
+            message="创建成功",
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

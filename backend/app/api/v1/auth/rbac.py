@@ -12,6 +12,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.response import success_response
 from app.core.security import get_current_user, require_admin
 from app.models.rbac import RbacRole, RolePermission, UserRole
 from app.models.user import User
@@ -97,12 +98,11 @@ async def check_permission(
         db=db,
     )
 
-    return {
-        "success": True,
-        "has_permission": has_permission,
-        "permission": request.permission,
-        "user_id": current_user_id,
-    }
+    return success_response(
+        has_permission=has_permission,
+        permission=request.permission,
+        user_id=current_user_id,
+    )
 
 
 @router.get("/user/{user_id}/permissions")
@@ -135,7 +135,7 @@ async def get_user_roles(
         raise HTTPException(status_code=403, detail="无权查看其他用户的角色")
 
     roles = await rbac_service.get_user_roles(user_id, db)
-    return {"success": True, "data": roles, "count": len(roles)}
+    return success_response(data=roles, count=len(roles))
 
 
 # ==================== 角色管理 API ====================
@@ -156,11 +156,10 @@ async def create_role(
             is_system=role_data.is_system,
             db=sess,
         )
-    return {
-        "success": True,
-        "role_id": role_id,
-        "message": f"角色 '{role_data.name}' 创建成功",
-    }
+    return success_response(
+        role_id=role_id,
+        message=f"角色 '{role_data.name}' 创建成功",
+    )
 
 
 @router.get("/roles")
@@ -179,7 +178,9 @@ async def list_roles(
         db.query(RbacRole).order_by(RbacRole.priority.asc(), RbacRole.created_at.desc()).offset(skip).limit(limit).all()
     )
 
-    return {"success": True, "data": [r.to_dict() for r in roles], "total": total}
+    # 注意：此处不用 ok_list() —— 前端 Role.vue / PermissionAssignmentDrawer.vue
+    # 以 res.data 直接读取角色数组，包成 {items,...} 会破坏数组语义。
+    return success_response(data=[r.to_dict() for r in roles], total=total)
 
 
 @router.get("/roles/{role_id}")
@@ -197,7 +198,7 @@ async def get_role(
 
     data = role.to_dict()
     data["permissions"] = [p[0] for p in perms]
-    return {"success": True, "data": data}
+    return success_response(data=data)
 
 
 @router.put("/roles/{role_id}")
@@ -232,7 +233,7 @@ async def update_role(
         sess.flush()
         sess.refresh(role)
 
-    return {"success": True, "message": f"角色 '{role.name}' 更新成功"}
+    return success_response(message=f"角色 '{role.name}' 更新成功")
 
 
 @router.delete("/roles/{role_id}")
@@ -251,7 +252,7 @@ async def delete_role(
 
         sess.delete(role)  # cascade 会自动删除关联的 UserRole 和 RolePermission
 
-    return {"success": True, "message": f"角色 '{role.name}' 已删除"}
+    return success_response(message=f"角色 '{role.name}' 已删除")
 
 
 @router.get("/roles/{role_id}/users")
@@ -278,7 +279,7 @@ async def get_role_users(
         }
         for r in rows
     ]
-    return {"success": True, "data": users, "total": len(users)}
+    return success_response(data=users, total=len(users))
 
 
 # ==================== 权限分配 API ====================
@@ -302,11 +303,10 @@ async def assign_role(
 
     if result["success"]:
         status = "已完成分配" if result["newly_granted"] else "角色已存在（无需操作）"
-        return {
-            "success": True,
-            "newly_granted": result["newly_granted"],
-            "message": f"角色分配成功: 用户 {assignment.user_id} -> 角色 {assignment.role_id} — {status}",
-        }
+        return success_response(
+            newly_granted=result["newly_granted"],
+            message=f"角色分配成功: 用户 {assignment.user_id} -> 角色 {assignment.role_id} — {status}",
+        )
     raise HTTPException(status_code=400, detail="角色分配失败")
 
 
@@ -323,10 +323,9 @@ async def revoke_role(
         )
 
     if success:
-        return {
-            "success": True,
-            "message": f"角色撤销成功: 用户 {revoke.user_id} -> 角色 {revoke.role_id}",
-        }
+        return success_response(
+            message=f"角色撤销成功: 用户 {revoke.user_id} -> 角色 {revoke.role_id}",
+        )
     raise HTTPException(status_code=400, detail="角色撤销失败")
 
 
@@ -346,16 +345,15 @@ async def grant_permission(
             db=sess,
         )
 
-    return {
-        "success": True,
-        "granted": result["granted"],
-        "skipped": result["skipped"],
-        "failed": result["failed"],
-        "message": (
+    return success_response(
+        granted=result["granted"],
+        skipped=result["skipped"],
+        failed=result["failed"],
+        message=(
             f"权限授予完成: 新增 {len(result['granted'])}"
             + (f", 跳过(已存在) {len(result['skipped'])}" if result["skipped"] else "")
         ),
-    }
+    )
 
 
 @router.post("/revoke/permission")
@@ -372,12 +370,12 @@ async def revoke_permission(
             db=sess,
         )
 
-    return {
-        "success": len(failed) == 0,
-        "revoked": revoked,
-        "failed": failed,
-        "message": f"权限撤销完成: 成功 {len(revoked)}, 失败 {len(failed)}",
-    }
+    return success_response(
+        success=len(failed) == 0,
+        revoked=revoked,
+        failed=failed,
+        message=f"权限撤销完成: 成功 {len(revoked)}, 失败 {len(failed)}",
+    )
 
 
 @router.post("/save-permissions")
@@ -396,15 +394,15 @@ async def save_permissions(
             db=sess,
         )
 
-    return {
-        "success": True,
+    return success_response(
+        success=True,
         **result,
-        "message": (
+        message=(
             f"权限保存完成: 授予 {len(result['granted'])}"
             + (f", 撤销 {len(result['revoked'])}" if result["revoked"] else "")
             + (f", 跳过(已存在) {len(result['skipped'])}" if result["skipped"] else "")
         ),
-    }
+    )
 
 
 # ==================== 权限列表 API ====================
@@ -431,12 +429,11 @@ async def list_permissions(current_user=Depends(get_current_user)):
             categories[category] = []
         categories[category].append(perm)
 
-    return {
-        "success": True,
-        "data": permissions,
-        "categories": categories,
-        "total": len(permissions),
-    }
+    return success_response(
+        data=permissions,
+        categories=categories,
+        total=len(permissions),
+    )
 
 
 # ==================== 前端组件需要的 API ====================
@@ -490,15 +487,14 @@ async def get_current_user_permissions(
         "admin": Permission.ADMIN_ALL.value in permissions,
     }
 
-    return {
-        "success": True,
-        "data": {
+    return success_response(
+        data={
             "permissions": frontend_permissions,
             "roles": roles,
             "role_names": [role.get("name") for role in roles],
             "is_admin": Permission.ADMIN_ALL.value in permissions,
         },
-    }
+    )
 
 
 @router.get("/frontend/route-permissions")
@@ -524,4 +520,4 @@ async def get_route_permissions(current_user=Depends(get_current_user)):
         "/analytics": ["analytics:read"],
     }
 
-    return {"success": True, "data": route_permissions}
+    return success_response(data=route_permissions)

@@ -113,15 +113,14 @@ async def create_backup(current_user=Depends(get_current_user), db: Session = De
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="数据库文件不存在")
 
-        return {
-            "success": True,
-            "message": "备份创建成功",
-            "data": {
+        return success_response(
+            data={
                 "filename": backup_filename,
                 "size": backup_path.stat().st_size,
                 "created_at": datetime.now().isoformat(),
             },
-        }
+            message="备份创建成功",
+        )
     except Exception:  # pragma: no cover
         raise HTTPException(status_code=500, detail="备份失败，请稍后重试或联系管理员")
 
@@ -187,7 +186,7 @@ async def restore_backup(
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="备份文件不存在")
 
-        return {"success": True, "message": "数据库恢复成功"}
+        return success_response(message="数据库恢复成功")
     except Exception:  # pragma: no cover
         raise HTTPException(status_code=500, detail="恢复失败，请稍后重试或联系管理员")
 
@@ -210,7 +209,7 @@ async def delete_backup(filename: str, current_user=Depends(get_current_user)):
 
     try:
         backup_path.unlink()
-        return {"success": True, "message": "备份删除成功"}
+        return success_response(message="备份删除成功")
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="备份文件不存在")
     except Exception:  # pragma: no cover
@@ -225,9 +224,8 @@ async def get_system_config(current_user=Depends(get_current_user), db: Session 
     from app.services.system_config_service import SystemConfigService
 
     svc = SystemConfigService(db)
-    return {
-        "success": True,
-        "data": {
+    return success_response(
+        data={
             "system_name": svc.get("system_name", "帮扶管理信息系统"),
             # svc.get(key, default) 保留两参数调用契约（兼容 mock）；
             # 额外用 ``or`` 防御配置值显式为 None 时 int(None) 抛 TypeError。
@@ -235,7 +233,7 @@ async def get_system_config(current_user=Depends(get_current_user), db: Session 
             "session_timeout": int(svc.get("session_timeout", "480") or "480"),
             "password_expiry_days": int(svc.get("password_expiry_days", "90") or "90"),
         },
-    }
+    )
 
 
 @router.put("/config")
@@ -265,7 +263,7 @@ async def update_system_config(
     _logging.getLogger(__name__).info(
         f"系统配置已更新，操作人: {getattr(current_user, 'username', None) or '未知用户'}"
     )
-    return {"success": True, "message": "系统配置更新成功"}
+    return success_response(message="系统配置更新成功")
 
 
 @router.post("/clear-cache")
@@ -293,7 +291,7 @@ async def clear_cache(current_user=Depends(get_current_user)):
         except Exception as e:  # pragma: no cover
             logger.warning("清理 map 缓存失败: %s", e)
 
-        return {"success": True, "message": "缓存清理成功"}
+        return success_response(message="缓存清理成功")
     except Exception:  # pragma: no cover
         raise HTTPException(status_code=500, detail="清理失败，请稍后重试或联系管理员")
 
@@ -395,13 +393,12 @@ async def optimize_database(
     size_after = os.path.getsize(db_path)
 
     saved = size_before - size_after
-    return {
-        "success": True,
-        "message": f"优化完成，{'释放' if saved >= 0 else '增加'} {abs(saved) / 1024:.1f} KB",
-        "size_before_kb": round(size_before / 1024, 1),
-        "size_after_kb": round(size_after / 1024, 1),
-        "saved_kb": round(saved / 1024, 1),
-    }
+    return success_response(
+        message=f"优化完成，{'释放' if saved >= 0 else '增加'} {abs(saved) / 1024:.1f} KB",
+        size_before_kb=round(size_before / 1024, 1),
+        size_after_kb=round(size_after / 1024, 1),
+        saved_kb=round(saved / 1024, 1),
+    )
 
 
 # ==================== 用户会话管理 ====================
