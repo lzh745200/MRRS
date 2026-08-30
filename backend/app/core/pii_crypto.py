@@ -17,6 +17,7 @@ PII 字段透明加密（W5-T7 / ADR-0005）
 import base64
 import hashlib
 import logging
+import os
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ def _load_key() -> bytes:
 
             secret = get_or_create_secret(
                 "PII_AESSIV_KEY",
-                generate=lambda: base64.b64encode(base64.urandom(64)).decode(),
+                generate=lambda: base64.b64encode(os.urandom(64)).decode(),
             )
             logger.info("PII 加密密钥已从运行时密钥存储加载")
         except Exception as e:

@@ -141,7 +141,9 @@ class TestSetSqlitePragma:
         cursor.close.assert_called_once()
 
     def test_encryption_key_file_missing(self, tmp_path, monkeypatch):
-        """SQLCipher：密钥文件缺失 → 不执行 PRAGMA key。"""
+        """SQLCipher：密钥文件缺失 → fail-closed 拒绝（不静默假加密，W5-T7）。"""
+        import pytest as _pytest
+
         monkeypatch.setattr(database, "IS_SQLITE", True)
         mock_settings = MagicMock()
         mock_settings.DB_ENCRYPTION_ENABLED = True
@@ -152,14 +154,17 @@ class TestSetSqlitePragma:
         dbapi_connection = MagicMock()
         dbapi_connection.cursor.return_value = cursor
 
-        _set_sqlite_pragma(dbapi_connection, None)
+        with _pytest.raises(RuntimeError, match="未找到数据库加密密钥文件"):
+            _set_sqlite_pragma(dbapi_connection, None)
 
         key_calls = [c for c in cursor.execute.call_args_list if "PRAGMA key" in str(c)]
         assert len(key_calls) == 0
         cursor.close.assert_called_once()
 
     def test_encryption_key_empty(self, tmp_path, monkeypatch):
-        """SQLCipher：密钥文件存在但内容为空白 → strip 后为空，不执行 PRAGMA key。"""
+        """SQLCipher：密钥文件存在但内容为空白 → fail-closed 拒绝（W5-T7）。"""
+        import pytest as _pytest
+
         monkeypatch.setattr(database, "IS_SQLITE", True)
         config_dir = tmp_path / "config"
         config_dir.mkdir()
@@ -174,13 +179,16 @@ class TestSetSqlitePragma:
         dbapi_connection = MagicMock()
         dbapi_connection.cursor.return_value = cursor
 
-        _set_sqlite_pragma(dbapi_connection, None)
+        with _pytest.raises(RuntimeError, match="密钥文件为空"):
+            _set_sqlite_pragma(dbapi_connection, None)
 
         key_calls = [c for c in cursor.execute.call_args_list if "PRAGMA key" in str(c)]
         assert len(key_calls) == 0
 
-    def test_encryption_exception_caught(self, tmp_path, monkeypatch):
-        """SQLCipher：设置密钥时异常 → 被捕获，cursor 仍正常关闭。"""
+    def test_encryption_key_statement_failure_propagates(self, tmp_path, monkeypatch):
+        """SQLCipher：PRAGMA key 执行失败 → 异常上抛（fail-closed，连接不建立）。"""
+        import pytest as _pytest
+
         monkeypatch.setattr(database, "IS_SQLITE", True)
         config_dir = tmp_path / "config"
         config_dir.mkdir()
@@ -196,15 +204,19 @@ class TestSetSqlitePragma:
         def execute_side_effect(stmt, *args):
             if "PRAGMA key" in stmt:
                 raise RuntimeError("SQLCipher not available")
+            probe = MagicMock()
+            probe.fetchone.return_value = ("4.0.0",)  # 探测语句返回驱动版本 → 通过
+            return probe
 
         cursor.execute.side_effect = execute_side_effect
 
         dbapi_connection = MagicMock()
         dbapi_connection.cursor.return_value = cursor
 
-        _set_sqlite_pragma(dbapi_connection, None)
+        with _pytest.raises(RuntimeError, match="SQLCipher not available"):
+            _set_sqlite_pragma(dbapi_connection, None)
 
-        cursor.close.assert_called_once()
+        cursor.close.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
