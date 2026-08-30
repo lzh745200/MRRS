@@ -210,7 +210,7 @@ class TrendPredictionService:
         for i in range(1, periods + 1):
             pred_date = last_date + pd.DateOffset(months=i)
             pred_timestamp = pred_date.timestamp()
-            pred_value = model.predict([[pred_timestamp]])[0]
+            pred_value = slope * pred_timestamp + intercept
 
             predictions.append(
                 {
