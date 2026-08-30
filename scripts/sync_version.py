@@ -9,7 +9,6 @@
 """
 
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -46,7 +45,7 @@ def update_config_py(version: str):
     elif n > 1:
         print(f"  WARN: {path.relative_to(PROJECT_ROOT)} — matched {n} PROJECT_VERSION lines (ambiguous)")
     else:
-        path.write_text(new_content, encoding="utf-8")
+        path.write_text(new_content, encoding="utf-8", newline="\n")
         print(f"  UPD: {path.relative_to(PROJECT_ROOT)}")
 
 
@@ -75,7 +74,7 @@ def update_nsis_scripts(version: str):
             content,
         )
         if new_content != content:
-            nsi.write_text(new_content, encoding="utf-8")
+            nsi.write_text(new_content, encoding="utf-8", newline="\n")
             print(f"  UPD: {nsi.relative_to(PROJECT_ROOT)}")
 
 
@@ -94,7 +93,7 @@ def update_env_example(version: str):
             content,
         )
         if new_content != content:
-            env_path.write_text(new_content, encoding="utf-8")
+            env_path.write_text(new_content, encoding="utf-8", newline="\n")
             print(f"  UPD: {env_path.relative_to(PROJECT_ROOT)}")
 
     # 根 .env.example 的 PROJECT_VERSION（后端运行时读取）
@@ -107,7 +106,7 @@ def update_env_example(version: str):
             content,
         )
         if new_content != content:
-            root_env_example.write_text(new_content, encoding="utf-8")
+            root_env_example.write_text(new_content, encoding="utf-8", newline="\n")
             print(f"  UPD: {root_env_example.relative_to(PROJECT_ROOT)}")
 
 
@@ -125,7 +124,7 @@ def update_constants_ts(version: str):
         content,
     )
     if new_content != content:
-        path.write_text(new_content, encoding="utf-8")
+        path.write_text(new_content, encoding="utf-8", newline="\n")
         print(f"  UPD: {path.relative_to(PROJECT_ROOT)}")
 
 

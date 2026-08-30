@@ -108,7 +108,7 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
 - 项目完全离线运行，安装包内置所有运行时
 - Schema 权威来源: `backend/app/models/` 和 Alembic 迁移；`database/init.sql` 已删除
 - `.env` 文件不纳入版本控制
-- 版本号在 `backend/app/core/config.py` → `Settings.PROJECT_VERSION`（当前 1.10.6）
+- 版本号在 `backend/app/core/config.py` → `Settings.PROJECT_VERSION`（当前 1.11.0）
 - 数据库: `backend/data/rural_revitalization.db`
 - 生产部署前清除测试数据: `DELETE FROM supported_villages; DELETE FROM schools;`
 - **`SupportedVillage.is_revitalization_tier`** 是 Boolean（是否振兴梯队），原来的 `revitalization_tier` (String) 和 `tiered_development_level` (String) 已删除
@@ -189,6 +189,23 @@ PR Checks 和 Nightly 工作流均上传覆盖率到 [Codecov](https://codecov.i
 ### 数据库迁移整合
 
 `backend/alembic/versions/012_consolidate_baseline.py` 将早期分散的迁移脚本整合为单一基线迁移，减少 Alembic 迁移链长度，便于新环境初始化。
+
+## 2026-08-30 体检批次（v1.11.0）持久性约定
+
+- **PII 列已透明加密**（ADR-0005）：`villagers.id_card/phone`、`village_committee_members.phone`、
+  `users.phone`、`organizations/projects/rural_works/rural_tasks/schools.contact_phone` 共 9 列
+  使用 `EncryptedText`（确定性 AES-SIV，密文带 `enc.v1:` 标记）。对这些列**禁止裸 SQL 写入**
+  （绕过 TypeDecorator 会落明文/破坏等值查询）；等值查询直接 `WHERE col = :明文` 即可命中密文。
+  多机离线同步部署必须配置相同 `ENCRYPTION_KEY`（密钥派生见 `app/core/pii_crypto.py`）。
+- **数据权限 fail-closed**（ADR-0002）：`data_scope_adapter` 对缺过滤字段的模型降级"仅本人"
+  或抛 `DataScopeFilterError`，绝不静默放行全量；无组织用户回退仅本人（绝不 is_admin）。
+- **组织硬删除守卫**（ADR-0003）：`organization_service.delete_organization` 检查名下
+  项目/用户（`OrganizationInUseError`）；`projects.organization_id` 外键为 SET NULL。
+- **路径双源收口**：读写数据库用 `paths.get_database_path()`；上传目录消费方统一
+  `paths.get_runtime_uploads_path()`（详见 AGENTS.md "Path Dual-Source Bug"）。
+- **数据包类型**：`PackageType` 含 `update`（增量更新包）；增量端点
+  `/data-packages/incremental/{detect-changes,export,import}` 已实现；
+  版本管理路由为 `/data-package/version/:id?`（无 id 时页面内选择数据包）。
 
 ## 故障排查
 
