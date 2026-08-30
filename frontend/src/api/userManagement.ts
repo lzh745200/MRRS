@@ -149,16 +149,3 @@ export async function listRoles(): Promise<{
 }> {
   return get('/user-management/roles')
 }
-
-// ==================== 分组导出 ====================
-
-export const userManagementApi = {
-  listUsers,
-  createUser,
-  updateUser,
-  deleteUser,
-  resetPassword,
-  assignRole: assignUserRole,
-  generatePassword,
-  listRoles,
-}

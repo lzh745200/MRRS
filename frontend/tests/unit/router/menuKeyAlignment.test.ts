@@ -19,7 +19,13 @@ function flatten(list: any[]): any[] {
 const allRoutes = flatten(routes)
 const routeByPath = new Map<string, any>()
 for (const r of allRoutes) {
-  if (r.path && r.path.startsWith('/')) routeByPath.set(r.path, r)
+  if (r.path && r.path.startsWith('/')) {
+    routeByPath.set(r.path, r)
+    // 可选参数路由（如 /data-package/version/:id?）在不带参数时同样可达，
+    // 菜单 path 按基础路径对齐（14d2b243 版本页加 :id? 后 W3-T2 需感知可选段）
+    const basePath = r.path.replace(/\/:[^/]+\?/g, '')
+    if (basePath !== r.path && !routeByPath.has(basePath)) routeByPath.set(basePath, r)
+  }
 }
 
 function leafMenuItems(items: MenuItem[]): MenuItem[] {

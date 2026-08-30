@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-low]
+labels: [done, severity-low]
 blocks: []
 blocked-by: []
 ---
@@ -27,6 +27,28 @@ blocked-by: []
   eslint/vitest 配置消费, knip 无配置时误报
 - `stores/user.ts` — 生产存活(8 处引用)
 
+**完成（2026-08-30，逐项复核结论）**:
+
+knip 288 项逐一复核（词边界全仓 grep，含 tests/electron），**工单前提纠正**：
+原文"全仓(含测试)零引用"与事实不符——knip 默认未扫 tests，其中 265 项被各自的
+单元测试（tests/unit/api/*.test.ts 等）导入并断言。
+
+处置：
+- **删除 2 项**（真零引用）：`userManagementApi` 分组对象（userManagement.ts）、
+  `EXPORT_FIELDS` 常量（dataTypes.ts，35 行）+ 孤儿段注释。
+- **豁免 265 项**（有引用）：被各自单元测试引用，生产代码零引用。删除需连同
+  测试用例一并移除（死测试面专项，影响 ~40 个测试文件的用例结构，超出本票
+  "删除导出"范围，另行立项）；按验收标准"删除**或**标注豁免理由"记录豁免。
+- **豁免 21 项**（特殊形态且有真实引用）：6 个 `export default`（模块契约）、
+  utils/index.ts 桶文件转出口（底层名字经直接路径使用）、echarts-theme 4 常量
+  （被测试引用）、getErrorMessage/getFileNameFromResponse 等（视图/spec 引用）。
+- **顺带修复存量红测试**：menuKeyAlignment 守卫（W3-T2）因 14d2b243 给
+  /data-package/version 路由加可选 :id? 后精确路径匹配失效——守卫测试改为
+  感知可选参数段（基础路径对齐），守卫意图不变。
+
+门禁：vue-tsc ✓ / eslint src 零警告 ✓ / vite build ✓ / 全量 vitest
+5690 通过 + 上述修复项单跑通过（此前 1 失败即 menuKeyAlignment 存量问题）。
+
 ## 验收标准
-- [ ] 288 个未使用导出逐模块复核后删除或标注豁免理由
-- [ ] 全量门禁绿(vitest/vue-tsc/eslint/build)
+- [x] 288 个未使用导出逐模块复核后删除或标注豁免理由（2 删 + 286 豁免，理由分类记录）
+- [x] 全量门禁绿(vitest/vue-tsc/eslint/build)
