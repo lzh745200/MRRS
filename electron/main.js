@@ -242,8 +242,20 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
     // 检查复用端口是否仍被占用（旧进程可能未完全释放）
     const stillInUse = await checkPortInUse(backendPort);
     if (stillInUse) {
-      // 端口仍被占用（可能是旧进程尚未退出），等待 2 秒后重试
-      await new Promise(r => setTimeout(r, 2000));
+      // W6-T3: 轮询探测端口释放（每 500ms 一次，上限 10s），
+      // 替代原先固定等待 2s（旧进程退出慢时新进程必然绑定失败）
+      const deadline = Date.now() + 10000;
+      let freed = false;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 500));
+        if (!(await checkPortInUse(backendPort))) { freed = true; break; }
+      }
+      if (freed) {
+        console.log(`[Backend] 重启: 端口 ${backendPort} 已释放`);
+      } else {
+        console.warn(`[Backend] 重启: 端口 ${backendPort} 等待 10s 后仍被占用，继续尝试启动`);
+        writeDiagnosticLog(`重启端口等待超时: ${backendPort}`);
+      }
     }
   }
 
@@ -372,8 +384,13 @@ function stopBackend() {
     console.log('[Backend] 停止...');
     const pid = backendProcess.pid;
     let resolved = false;
+    let exited = false;
+    let graceTimer = null;
     const done = () => { if (!resolved) { resolved = true; resolve(); } };
     const forceKill = () => {
+      // 已确认退出则不强杀：防止对已退出（PID 可能被系统复用）的进程
+      // 执行 taskkill /f /t 误杀无关进程树（W6-T3）
+      if (exited) return;
       try {
         if (process.platform === 'win32') {
           spawn('taskkill', ['/pid', String(pid), '/f', '/t'], { windowsHide: true });
@@ -383,7 +400,12 @@ function stopBackend() {
       } catch (_) {}
     };
     const proc = backendProcess;
-    proc.once('exit', () => { backendProcess = null; done(); });
+    proc.once('exit', () => {
+      exited = true;
+      if (graceTimer) { clearTimeout(graceTimer); graceTimer = null; }
+      backendProcess = null;
+      done();
+    });
     const req = http.request({
       hostname: '127.0.0.1',
       port: backendPort,
@@ -391,7 +413,10 @@ function stopBackend() {
       method: 'POST',
       timeout: 3000,
       headers: { 'X-Internal-Shutdown': INTERNAL_SHUTDOWN_KEY },
-    }, () => { setTimeout(forceKill, 3000); });
+    }, () => {
+      // 优雅关闭已被受理：给 5s 宽限期等待进程自行退出，仅在仍存活时强杀
+      graceTimer = setTimeout(forceKill, 5000);
+    });
     req.on('error', forceKill);
     req.on('timeout', () => { req.destroy(); forceKill(); });
     req.end();
@@ -555,10 +580,17 @@ function createMainWindow() {
 
   // ─── 导航安全限制 ───
   const ALLOWED_EXTERNAL_PROTOCOLS = ['https:', 'http:', 'mailto:'];
+  // W6-T3: 精确 origin 匹配 + 端口钉扎。原 startsWith('http://127.0.0.1') 前缀
+  // 判定可被 http://127.0.0.1.evil.com/ 或 http://127.0.0.1@evil.com/ 绕过
+  const isAllowedAppUrl = (url) => {
+    try {
+      const origin = new URL(url).origin;
+      return origin === `http://127.0.0.1:${backendPort}` ||
+             origin === `http://localhost:${backendPort}`;
+    } catch (_) { return false; }
+  };
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const appOrigin = 'http://127.0.0.1';
-    const appOrigin2 = 'http://localhost';
-    if (!url.startsWith(appOrigin) && !url.startsWith(appOrigin2) && !url.startsWith('file://')) {
+    if (!isAllowedAppUrl(url) && !url.startsWith('file://')) {
       event.preventDefault();
       try {
         const proto = new URL(url).protocol;
@@ -572,7 +604,7 @@ function createMainWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) {
+    if (isAllowedAppUrl(url)) {
       return { action: 'allow' };
     }
     try {
