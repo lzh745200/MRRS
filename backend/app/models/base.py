@@ -11,12 +11,38 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, text
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
+from sqlalchemy.types import TypeDecorator
 
 # ── 声明式基类 ──
 Base = declarative_base()
+
+
+class EncryptedText(TypeDecorator):
+    """PII 字段透明加密类型（ADR-0005，确定性 AES-SIV）
+
+    - 写入：明文 → `enc.v1:` 标记密文（确定性，等值查询可直接命中密文）
+    - 读取：密文 → 明文；未标记的历史明文/异常值原样返回
+    - impl 用 String：SQLite 不强制长度，长度仅供 DDL/文档语义
+    """
+
+    impl = String
+    cache_ok = True
+
+    def __init__(self, length: int = 256, **kw):
+        super().__init__(length=length, **kw)
+
+    def process_bind_param(self, value, dialect):
+        from app.core.pii_crypto import encrypt_pii
+
+        return encrypt_pii(value)
+
+    def process_result_value(self, value, dialect):
+        from app.core.pii_crypto import decrypt_pii
+
+        return decrypt_pii(value)
 
 
 def _base_to_dict(self) -> dict:

@@ -11,7 +11,7 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import relationship
 
-from app.models.base import Base
+from app.models.base import Base, EncryptedText
 
 from .rural_work import RuralWork  # noqa: F401 - relationship 字符串引用注册
 from .user import User  # noqa: F401 - relationship 字符串引用注册
@@ -93,7 +93,7 @@ class RuralTask(Base):
     # 责任人
     responsible_unit = Column(String(100), nullable=True)  # 责任单位
     responsible_person = Column(String(50), nullable=True)  # 负责人
-    contact_phone = Column(String(20), nullable=True)
+    contact_phone = Column(EncryptedText(64), nullable=True, comment="联系电话(透明加密, ADR-0005)")
     # 时间
     planned_start = Column(DateTime(timezone=True), nullable=True)
     planned_end = Column(DateTime(timezone=True), nullable=True)

@@ -7,7 +7,7 @@
 from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 
-from .base import Base, TimestampMixin
+from .base import Base, EncryptedText, TimestampMixin
 from .industry import TeaPlantation, CactusFruitPlot  # noqa: F401 用于 back_populates 解析
 
 
@@ -86,8 +86,8 @@ class Villager(Base, TimestampMixin):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     village_id = Column(Integer, ForeignKey("villages.id", ondelete="CASCADE"), nullable=False, comment="所属村庄ID")
     name = Column(String(100), nullable=False, comment="姓名")
-    id_card = Column(String(18), nullable=True, comment="身份证号")
-    phone = Column(String(20), nullable=True, comment="电话")
+    id_card = Column(EncryptedText(64), nullable=True, comment="身份证号(透明加密, ADR-0005)")
+    phone = Column(EncryptedText(64), nullable=True, comment="电话(透明加密, ADR-0005)")
     gender = Column(String(10), nullable=True, comment="性别")
     age = Column(Integer, nullable=True, comment="年龄")
     occupation = Column(String(100), nullable=True, comment="职业")

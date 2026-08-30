@@ -17,7 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, EncryptedText
 
 from .user import User  # noqa: F401 - relationship 字符串引用注册
 
@@ -107,7 +107,7 @@ class Project(Base):
     contact = Column(String(50), nullable=True, comment="联系方式")
     responsible_unit = Column(String(200), nullable=True, comment="负责单位")
     responsible_person = Column(String(50), nullable=True, comment="负责人")
-    contact_phone = Column(String(20), nullable=True, comment="联系电话")
+    contact_phone = Column(EncryptedText(64), nullable=True, comment="联系电话(透明加密, ADR-0005)")
 
     # 资金来源与拨付信息
     fund_source = Column(String(50), nullable=True, comment="资金来源")

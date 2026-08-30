@@ -7,7 +7,7 @@ import enum
 from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import backref, relationship
 
-from .base import BaseModel
+from .base import BaseModel, EncryptedText
 
 
 class OrganizationType(str, enum.Enum):
@@ -56,7 +56,7 @@ class Organization(BaseModel):
     sort_order = Column(Integer, default=0, comment="排序")
     description = Column(Text, nullable=True, comment="描述")
     contact_person = Column(String(50), nullable=True, comment="联系人")
-    contact_phone = Column(String(20), nullable=True, comment="联系电话")
+    contact_phone = Column(EncryptedText(64), nullable=True, comment="联系电话(透明加密, ADR-0005)")
     contact_email = Column(String(100), nullable=True, comment="联系邮箱")
     address = Column(String(200), nullable=True, comment="地址")
     region_code = Column(String(20), nullable=True, comment="行政区划编码（关联 regions.code，用于数据权限前缀匹配）")

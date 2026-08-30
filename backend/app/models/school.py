@@ -9,7 +9,7 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.sql import func
 
-from .base import Base
+from .base import Base, EncryptedText
 
 
 class SchoolLevel(str, enum.Enum):
@@ -92,7 +92,7 @@ class School(Base):
 
     # 联系信息
     principal = Column(String(50), comment="校长姓名")
-    contact_phone = Column(String(20), comment="联系电话")
+    contact_phone = Column(EncryptedText(64), comment="联系电话(透明加密, ADR-0005)")
     email = Column(String(100), comment="邮箱")
 
     # 其他

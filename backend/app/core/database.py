@@ -86,6 +86,38 @@ def _set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
 
     cursor = dbapi_connection.cursor()
 
+    # 0. SQLCipher 加密支持（零信任安全要求，W5-T7）
+    # PRAGMA key 必须是连接的首条语句（先于 journal_mode 等），且普通 sqlite3
+    # 驱动会静默忽略 PRAGMA key 造成"假加密"——启用加密时必须探测到 SQLCipher
+    # 驱动，否则拒绝启动（fail-closed，保留现场优于静默明文）。
+    if getattr(settings, "DB_ENCRYPTION_ENABLED", False):
+        try:
+            cipher_version = cursor.execute("PRAGMA cipher_version").fetchone()
+        except Exception as _probe_err:
+            cipher_version = None
+            logger.warning("SQLCipher 探测异常: %s", _probe_err)
+        if not cipher_version:
+            cursor.close()
+            raise RuntimeError(
+                "DB_ENCRYPTION_ENABLED 已启用，但当前 sqlite3 驱动不支持 SQLCipher"
+                "（PRAGMA key 会被静默忽略导致假加密）。请安装 pysqlcipher3/sqlcipher3，"
+                "或显式关闭 DB_ENCRYPTION_ENABLED。"
+            )
+        # 兼容 PyInstaller 打包后的绝对路径
+        base_dir = Path(getattr(settings, "BASE_DIR", Path(__file__).resolve().parent.parent.parent))
+        key_file = base_dir / "config" / "db.key"
+        if not key_file.exists():
+            cursor.close()
+            raise RuntimeError(f"未找到数据库加密密钥文件: {key_file}（DB_ENCRYPTION_ENABLED 已启用）")
+        key = key_file.read_text(encoding="utf-8").strip()
+        if not key:
+            cursor.close()
+            raise RuntimeError(f"数据库加密密钥文件为空: {key_file}")
+        # SQLCipher 的 PRAGMA key 不支持绑定参数，须为字面量；密钥来自本机文件，转义后使用
+        safe_key = key.replace("'", "''")
+        cursor.execute(f"PRAGMA key = '{safe_key}'")
+        logger.info("SQLCipher 数据库加密已启用 (cipher=%s)", cipher_version[0])
+
     # 1. 核心日志与一致性
     cursor.execute("PRAGMA journal_mode=WAL")         # 启用 WAL 模式，支持并发读写
     cursor.execute("PRAGMA foreign_keys=ON")          # 强制外键约束
@@ -107,23 +139,6 @@ def _set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
 
     # 6. 查询优化器
     cursor.execute("PRAGMA automatic_index=ON")       # 允许自动创建临时索引
-
-    # 7. SQLCipher 加密支持 (零信任安全要求)
-    if getattr(settings, "DB_ENCRYPTION_ENABLED", False):
-        try:
-            # 兼容 PyInstaller 打包后的绝对路径
-            base_dir = Path(getattr(settings, "BASE_DIR", Path(__file__).resolve().parent.parent.parent))
-            key_file = base_dir / "config" / "db.key"
-
-            if key_file.exists():
-                key = key_file.read_text(encoding="utf-8").strip()
-                if key:
-                    cursor.execute("PRAGMA key = ?", [key])
-                    logger.info("SQLCipher 数据库加密已启用")
-            else:
-                logger.warning("未找到数据库加密密钥文件: %s", key_file)
-        except Exception as _enc_err:
-            logger.error("设置 SQLCipher 密钥失败: %s", _enc_err)
 
     cursor.close()
     logger.debug("SQLite PRAGMAs 初始化完成: WAL, cache=%dKB, mmap=%dMB, timeout=10s",

@@ -14,7 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, EncryptedText
 from app.models.two_factor_auth import TwoFactorAuth  # noqa: F401
 
 from .organization import Organization  # noqa: F401 - relationship 字符串引用注册
@@ -46,7 +46,7 @@ class User(Base):
     )
     is_active = Column(Boolean, default=True, comment="是否激活")
     is_superuser = Column(Boolean, default=False, comment="是否超级管理员")
-    phone = Column(String(20), comment="联系电话")
+    phone = Column(EncryptedText(64), comment="联系电话(透明加密, ADR-0005)")
     department = Column(String(100), comment="部门")
     position = Column(String(100), comment="职位")
     avatar = Column(String(255), comment="头像")

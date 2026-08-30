@@ -9,7 +9,7 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import relationship
 
-from app.models.base import Base
+from app.models.base import Base, EncryptedText
 from app.models.village import Village  # noqa: F401 — RuralWork.village relationship target
 
 from .user import User  # noqa: F401 - relationship 字符串引用注册
@@ -49,7 +49,7 @@ class RuralWork(Base):
     )
     village_id = Column(Integer, ForeignKey("villages.id", ondelete="CASCADE"), nullable=True)
     responsible_person = Column(String(50), nullable=True)
-    contact_phone = Column(String(20), nullable=True)
+    contact_phone = Column(EncryptedText(64), nullable=True, comment="联系电话(透明加密, ADR-0005)")
     start_date = Column(DateTime(timezone=True), nullable=True)
     end_date = Column(DateTime(timezone=True), nullable=True)
     description = Column(Text, nullable=True)
