@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 REM ========================================
 REM 前端构建产物同步脚本 (Windows)
 REM 将 frontend/dist/ 复制到 resources/frontend/
-REM 包含完整性校验：文件数量和总大小对比
+REM 包含完整性校验：逐文件 SHA256 manifest 比对（偏差即退出非零）
 REM ========================================
 
 title 前端构建产物同步
@@ -35,12 +35,8 @@ REM 2. 收集源目录文件信息
 echo.
 echo [1/4] 收集源目录文件信息...
 set SRC_COUNT=0
-set SRC_SIZE=0
-for /r "%SRC_DIR%" %%f in (*) do (
-    set /a SRC_COUNT+=1
-    set /a SRC_SIZE+=%%~zf
-)
-echo 源目录: %SRC_COUNT% 个文件, 总大小 %SRC_SIZE% 字节
+for /r "%SRC_DIR%" %%f in (*) do set /a SRC_COUNT+=1
+echo 源目录: %SRC_COUNT% 个文件
 
 REM 3. 强制清理目标目录（解决文件残留和占用问题）
 echo.
@@ -85,37 +81,18 @@ if errorlevel 8 (
 )
 echo [OK] 文件复制完成
 
-REM 5. 完整性校验：对比文件数量和总大小
+REM 5. 完整性校验：逐文件 SHA256 manifest 比对（W6-T5，替代原字节数粗校验）
 echo.
-echo [4/4] 完整性校验...
+echo [4/4] 完整性校验（SHA256 manifest）...
 
-set DST_COUNT=0
-set DST_SIZE=0
-for /r "%DST_DIR%" %%f in (*) do (
-    set /a DST_COUNT+=1
-    set /a DST_SIZE+=%%~zf
-)
-echo 目标目录: !DST_COUNT! 个文件, 总大小 !DST_SIZE! 字节
-
-if not !SRC_COUNT! equ !DST_COUNT! (
-    echo [错误] 文件数量不匹配！
-    echo 源目录: !SRC_COUNT! 个文件
-    echo 目标目录: !DST_COUNT! 个文件
+set "MANIFEST_FILE=%PROJECT_ROOT%\resources\frontend-manifest.sha256"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0verify_frontend_manifest.ps1" -Src "%SRC_DIR%" -Dst "%DST_DIR%" -ManifestPath "%MANIFEST_FILE%"
+if errorlevel 1 (
+    echo [错误] 同步失败：目标目录与源目录内容不一致
     pause
     exit /b 1
 )
-
-REM 允许 5%% 的大小偏差（因为文件系统元数据差异）
-set /a SIZE_DIFF_THRESHOLD=!SRC_SIZE! * 5 / 100
-set /a SIZE_DIFF=!SRC_SIZE! - !DST_SIZE!
-if !SIZE_DIFF! lss 0 set /a SIZE_DIFF=-!SIZE_DIFF!
-
-if !SIZE_DIFF! gtr !SIZE_DIFF_THRESHOLD! (
-    echo [警告] 文件总大小偏差较大: !SIZE_DIFF! 字节（阈值: !SIZE_DIFF_THRESHOLD! 字节）
-    echo 这可能不影响功能，但建议检查
-)
-
-echo [OK] 完整性校验通过 - 文件数量和大小匹配
+echo [OK] manifest 已写入: %MANIFEST_FILE%
 
 REM 6. 验证关键文件
 echo.
@@ -141,11 +118,11 @@ echo.
 echo ========================================
 echo 同步完成！
 echo ========================================
-echo 源: %SRC_COUNT% 个文件, !SRC_SIZE! 字节
-echo 目标: !DST_COUNT! 个文件, !DST_SIZE! 字节
+echo 文件数: %SRC_COUNT%（已逐文件 SHA256 校验一致）
 echo 目标路径: %DST_DIR%
+echo manifest: %MANIFEST_FILE%
 echo.
-echo 建议：运行 python scripts/audit_static_assets.py 检查静态资源完整性
+echo 建议：运行 python scripts/audit_static_assets.py --verify-manifest "%MANIFEST_FILE%" 复核
 echo ========================================
 
 exit /b 0

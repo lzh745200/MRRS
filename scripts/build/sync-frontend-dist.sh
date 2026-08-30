@@ -2,7 +2,7 @@
 # ========================================
 # 前端构建产物同步脚本 (Linux/macOS)
 # 将 frontend/dist/ 复制到 resources/frontend/
-# 包含完整性校验：文件数量和总大小对比
+# 包含完整性校验：逐文件 SHA256 manifest 比对（偏差即退出非零）
 # ========================================
 
 set -euo pipefail
@@ -32,8 +32,7 @@ echo "[OK] 源目录检查通过: $SRC_DIR"
 echo ""
 echo "[1/4] 收集源目录文件信息..."
 SRC_FILE_COUNT=$(find "$SRC_DIR" -type f | wc -l)
-SRC_TOTAL_SIZE=$(du -sb "$SRC_DIR" 2>/dev/null | cut -f1 || du -s "$SRC_DIR" | awk '{print $1}')
-echo "源目录: $SRC_FILE_COUNT 个文件, 总大小 $SRC_TOTAL_SIZE 字节"
+echo "源目录: $SRC_FILE_COUNT 个文件"
 
 # 3. 强制清理目标目录（解决文件残留和占用问题）
 echo ""
@@ -64,32 +63,45 @@ cp -r "$SRC_DIR"/* "$DST_DIR/" 2>/dev/null || {
 }
 echo "[OK] 文件复制完成"
 
-# 5. 完整性校验：对比文件数量和总大小
+# 5. 完整性校验：逐文件 SHA256 manifest 比对（W6-T5，替代原 du 字节数粗校验）
 echo ""
-echo "[4/4] 完整性校验..."
+echo "[4/4] 完整性校验（SHA256 manifest）..."
 
-DST_FILE_COUNT=$(find "$DST_DIR" -type f | wc -l)
-DST_TOTAL_SIZE=$(du -sb "$DST_DIR" 2>/dev/null | cut -f1 || du -s "$DST_DIR" | awk '{print $1}')
-echo "目标目录: $DST_FILE_COUNT 个文件, 总大小 $DST_TOTAL_SIZE 字节"
+MANIFEST_FILE="$PROJECT_ROOT/resources/frontend-manifest.sha256"
+MANIFEST_TMP="$(mktemp)"
+DST_TMP="$(mktemp)"
 
-if [[ "$SRC_FILE_COUNT" -ne "$DST_FILE_COUNT" ]]; then
-    echo "[错误] 文件数量不匹配！"
-    echo "源目录: $SRC_FILE_COUNT 个文件"
-    echo "目标目录: $DST_FILE_COUNT 个文件"
+# 以源目录为准生成 manifest（sha256sum -c 兼容格式：<hash>  <相对路径>）
+# sed 归一化：去掉 GNU sha256sum 的二进制标记(*)与 find 的 ./ 前缀，
+# 使输出与 verify_frontend_manifest.ps1（Windows 路径）格式完全一致
+(
+  cd "$SRC_DIR"
+  find . -type f -print0 | sort -z | xargs -0 sha256sum \
+    | sed -e 's/^\(.\{64\}\) \*\.\//\1  /' -e 's/^\(.\{64\}\)  \.\//\1  /'
+) > "$MANIFEST_TMP"
+
+(
+  cd "$DST_DIR"
+  find . -type f -print0 | sort -z | xargs -0 sha256sum \
+    | sed -e 's/^\(.\{64\}\) \*\.\//\1  /' -e 's/^\(.\{64\}\)  \.\//\1  /'
+) > "$DST_TMP"
+
+SRC_FILE_COUNT=$(wc -l < "$MANIFEST_TMP" | tr -d ' ')
+echo "比对文件数: $SRC_FILE_COUNT"
+
+if ! diff -q "$MANIFEST_TMP" "$DST_TMP" > /dev/null; then
+    echo "[错误] SHA256 manifest 比对失败！以下为差异（< 源 / > 目标）："
+    diff "$MANIFEST_TMP" "$DST_TMP" | head -40
+    rm -f "$MANIFEST_TMP" "$DST_TMP"
+    echo "[错误] 同步失败：目标目录与源目录内容不一致"
     exit 1
 fi
+rm -f "$DST_TMP"
 
-# 允许 5% 的大小偏差（因为文件系统元数据差异可能影响 du 报告）
-SIZE_DIFF=$(( SRC_TOTAL_SIZE - DST_TOTAL_SIZE ))
-SIZE_DIFF=${SIZE_DIFF#-}  # 取绝对值
-SIZE_THRESHOLD=$(( SRC_TOTAL_SIZE * 5 / 100 ))
-
-if [[ "$SIZE_DIFF" -gt "$SIZE_THRESHOLD" ]]; then
-    echo "[警告] 文件总大小偏差较大: ${SIZE_DIFF} 字节（阈值: ${SIZE_THRESHOLD} 字节）"
-    echo "这可能不影响功能，但建议检查"
-fi
-
-echo "[OK] 完整性校验通过 - 文件数量和大小匹配"
+# manifest 落盘，供 scripts/audit_static_assets.py --verify-manifest 复核
+mv "$MANIFEST_TMP" "$MANIFEST_FILE"
+echo "[OK] 完整性校验通过 - $SRC_FILE_COUNT 个文件逐文件 SHA256 一致"
+echo "[OK] manifest 已写入: $MANIFEST_FILE"
 
 # 6. 验证关键文件
 echo ""
@@ -114,11 +126,11 @@ echo ""
 echo "========================================"
 echo "同步完成！"
 echo "========================================"
-echo "源: $SRC_FILE_COUNT 个文件, $SRC_TOTAL_SIZE 字节"
-echo "目标: $DST_FILE_COUNT 个文件, $DST_TOTAL_SIZE 字节"
+echo "文件数: $SRC_FILE_COUNT（已逐文件 SHA256 校验一致）"
 echo "目标路径: $DST_DIR"
+echo "manifest: $MANIFEST_FILE"
 echo ""
-echo "建议：运行 python scripts/audit_static_assets.py 检查静态资源完整性"
+echo "建议：运行 python scripts/audit_static_assets.py --verify-manifest $MANIFEST_FILE 复核"
 echo "========================================"
 
 exit 0

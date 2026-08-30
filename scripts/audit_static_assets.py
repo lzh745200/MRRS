@@ -10,11 +10,13 @@
 
 使用方法：
     python scripts/audit_static_assets.py [--dir resources/frontend] [--verbose]
+    python scripts/audit_static_assets.py --verify-manifest resources/frontend-manifest.sha256
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import sys
@@ -298,6 +300,68 @@ def audit(frontend_dir: str, verbose: bool = False, quick: bool = False) -> int:
         return 1
 
 
+def verify_manifest(frontend_dir: str, manifest_path: str) -> int:
+    """W6-T5: 逐文件 SHA256 manifest 复核（与 sync-frontend-dist 落盘的 manifest 配套）。
+
+    manifest 格式为 sha256sum -c 兼容行：`<64位小写hex>  <POSIX 相对路径>`。
+    任一 文件缺失 / 哈希不匹配 / 目录多出文件 均以 exit 1 退出。
+    """
+    print("=" * 60)
+    print("SHA256 Manifest 复核（W6-T5 完整性链）")
+    print("=" * 60)
+    print(f"目录: {frontend_dir}")
+    print(f"manifest: {manifest_path}")
+
+    if not os.path.isfile(manifest_path):
+        print("[FATAL] manifest 文件不存在")
+        return 2
+
+    with open(manifest_path, encoding="utf-8") as f:
+        entries: dict[str, str] = {}
+        for line in f:
+            line = line.rstrip("\n")
+            if not line.strip():
+                continue
+            hash_part, _, path_part = line.partition("  ")
+            if len(hash_part) != 64 or not path_part:
+                print(f"[FATAL] manifest 行格式非法: {line[:80]}")
+                return 2
+            entries[path_part.replace("\\", "/")] = hash_part.lower()
+
+    actual_files: set[str] = set()
+    for root, _dirs, files in os.walk(frontend_dir):
+        for name in files:
+            full = os.path.join(root, name)
+            actual_files.add(os.path.relpath(full, frontend_dir).replace("\\", "/"))
+
+    errors: list[str] = []
+    for rel, expected in entries.items():
+        full = os.path.join(frontend_dir, *rel.split("/"))
+        if not os.path.isfile(full):
+            errors.append(f"缺失文件: {rel}")
+            continue
+        h = hashlib.sha256()
+        with open(full, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                h.update(chunk)
+        if h.hexdigest().lower() != expected:
+            errors.append(f"哈希不匹配: {rel} (期望 {expected[:12]}…, 实际 {h.hexdigest()[:12]}…)")
+
+    for rel in sorted(actual_files - set(entries)):
+        errors.append(f"多出文件（不在 manifest 中）: {rel}")
+
+    print(f"manifest 条目: {len(entries)}, 实际文件: {len(actual_files)}")
+    if errors:
+        print(f"[错误] 发现 {len(errors)} 处不一致：")
+        for e in errors[:40]:
+            print(f"  ✗ {e}")
+        if len(errors) > 40:
+            print(f"  ... 以及另外 {len(errors) - 40} 处")
+        return 1
+    print("✅ 全部文件 SHA256 与 manifest 一致")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="静态资源断链审计 — 验证所有引用的文件是否存在",
@@ -324,6 +388,13 @@ def main():
         action="store_true",
         help="快速模式：仅校验 index.html 直接引用的资源，跳过 JS 动态 import 扫描（适合启动时校验）",
     )
+    parser.add_argument(
+        "--verify-manifest",
+        default=None,
+        metavar="PATH",
+        help="W6-T5: 逐文件 SHA256 manifest 复核模式（manifest 由 sync-frontend-dist 落盘），"
+             "任一缺失/哈希不匹配/多出文件均退出非零",
+    )
     args = parser.parse_args()
 
     # 自动探测前端目录
@@ -345,6 +416,9 @@ def main():
             print("[FATAL] 未找到包含 index.html 的前端目录")
             print(f"尝试过的路径: {candidates}")
             sys.exit(2)
+
+    if args.verify_manifest:
+        sys.exit(verify_manifest(frontend_dir, args.verify_manifest))
 
     exit_code = audit(frontend_dir, verbose=args.verbose, quick=args.quick)
     sys.exit(exit_code)

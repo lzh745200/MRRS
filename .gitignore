@@ -71,6 +71,7 @@ backend/build_x64/
 backend/build_x86/
 backend/dist/
 resources/frontend/
+resources/frontend-manifest.sha256
 resources/frontend-old/
 resources/frontend_corrupted/
 resources/vcredist/
