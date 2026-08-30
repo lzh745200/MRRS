@@ -34,6 +34,7 @@
   "build": {
     "appId": "com.bumofu.assistance",
     "productName": "帮扶管理系统",
+    "artifactName": "MRRS-Setup-${version}.${ext}",
     "directories": {
       "output": "dist/electron"
     },
