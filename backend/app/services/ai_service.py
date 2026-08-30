@@ -400,7 +400,6 @@ class AIServiceManager:
             user: 当前用户，用于数据权限过滤。
         """
         import numpy as np
-        from sklearn.linear_model import LinearRegression
 
         from app.core.data_permission import filter_by_data_scope
         from app.models.supported_village import SupportedVillage, VillageIncome
@@ -438,13 +437,14 @@ class AIServiceManager:
         pci_values = np.array([float(r[1] or 0) for r in rows])
         ci_values = np.array([float(r[2] or 0) for r in rows])
 
-        # 拟合人均收入
-        pci_model = LinearRegression().fit(years, pci_values)
-        pci_r2 = float(pci_model.score(years, pci_values))
-
-        # 拟合集体收入
-        ci_model = LinearRegression().fit(years, ci_values)
-        ci_r2 = float(ci_model.score(years, ci_values))
+        def _linear_fit(x: "np.ndarray", y: "np.ndarray", future_x: "np.ndarray"):
+            """最小二乘一次拟合（替代死代码清理移除的 sklearn.LinearRegression）"""
+            slope, intercept = np.polyfit(x.ravel(), y, 1)
+            fitted = slope * x.ravel() + intercept
+            ss_res = float(np.sum((y - fitted) ** 2))
+            ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+            r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+            return r2, slope * future_x.ravel() + intercept
 
         historical = [
             {
@@ -458,8 +458,8 @@ class AIServiceManager:
 
         last_year = int(rows[-1][0])
         future_years = np.array(range(last_year + 1, last_year + 1 + forecast_years), dtype=float).reshape(-1, 1)
-        pci_forecast = pci_model.predict(future_years)
-        ci_forecast = ci_model.predict(future_years)
+        pci_r2, pci_forecast = _linear_fit(years, pci_values, future_years)
+        ci_r2, ci_forecast = _linear_fit(years, ci_values, future_years)
 
         forecast = [
             {

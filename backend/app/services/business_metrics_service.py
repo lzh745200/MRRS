@@ -143,8 +143,8 @@ class BusinessMetricsService:
         completed_funds = status_distribution.get(FundStatus.COMPLETED, {}).get("count", 0)
         completed_amount = status_distribution.get(FundStatus.COMPLETED, {}).get("amount", 0)
 
-        # 拨付率
-        allocation_rate = (completed_amount / total_amount * 100) if total_amount > 0 else 0
+        # 拨付率（金额列是 Numeric/Decimal，混合运算前统一转 float，防 float/Decimal TypeError）
+        allocation_rate = (float(completed_amount) / float(total_amount) * 100) if float(total_amount) > 0 else 0
 
         metrics = {
             "total_funds": total_funds,

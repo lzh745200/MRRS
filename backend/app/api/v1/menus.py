@@ -95,7 +95,8 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "path": "/funds/user",
         "icon": "Money",
         "order": 6,
-        "roles": ["user", "viewer"],
+        # 管理员可查看用户经费申请（此前 admin 被菜单门禁 403）
+        "roles": ["admin", "super_admin", "user", "viewer"],
     },
     {
         "key": "funds-lifecycle",

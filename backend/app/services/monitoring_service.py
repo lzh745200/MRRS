@@ -11,7 +11,7 @@ from datetime import timezone, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import psutil
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.async_utils import create_background_task
@@ -103,7 +103,7 @@ class MonitoringService:
                 APIMetric.endpoint,
                 func.count(APIMetric.id).label("total_requests"),
                 func.avg(APIMetric.response_time_ms).label("avg_response_time"),
-                func.sum(func.case((APIMetric.status_code >= 400, 1), else_=0)).label("error_count"),
+                func.sum(case((APIMetric.status_code >= 400, 1), else_=0)).label("error_count"),
             )
             .filter(APIMetric.timestamp >= since)
             .group_by(APIMetric.endpoint)

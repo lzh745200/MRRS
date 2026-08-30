@@ -11,7 +11,7 @@ from typing import Any, List, Optional, Set
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BusinessError
-from app.core.permission_utils import is_superuser
+from app.core.permission_utils import is_admin, is_superuser
 from app.models.organization import Organization
 from app.models.user import User
 from app.services.organization_service import OrganizationService
@@ -111,11 +111,14 @@ class OrganizationPermissionService:
         user_org_id = self.get_user_organization_id(user=user)
 
         if user_org_id is None:
-            # 未绑定组织的普通用户无法访问任何组织
-            if not is_superuser(user):
+            # 未绑定组织的普通用户无法访问任何组织；
+            # 管理员（admin/super_admin，ADR-0002 语义）组织级访问不受限 ——
+            # 单机/未绑定组织的管理员此前被误判为无任何组织权限，
+            # 导致数据包/数据上报等组织门禁端点一律 403。
+            if not is_admin(user):
                 return []
 
-            # 超级管理员可以访问所有组织
+            # 管理员可以访问所有组织
             query = self.db.query(Organization.id)
             if not include_inactive:
                 query = query.filter(Organization.is_active == True)  # noqa: E712
@@ -228,8 +231,8 @@ class OrganizationPermissionService:
         user_org_id = self.get_user_organization_id(user=user)
 
         if user_org_id is None:
-            # 未绑定组织的普通用户无法管理任何组织
-            return False
+            # 未绑定组织的普通用户无法管理任何组织；管理员不受组织绑定限制（ADR-0002）
+            return is_admin(user)
 
         if user_org_id == org_id:
             # 不能管理自己所属的组织
@@ -265,8 +268,8 @@ class OrganizationPermissionService:
         user_org_id = self.get_user_organization_id(user=user)
 
         if user_org_id is None:
-            # 未绑定组织的普通用户无法创建组织
-            return False
+            # 未绑定组织的普通用户无法创建组织；管理员不受组织绑定限制（ADR-0002）
+            return is_admin(user)
 
         # 用户可以在自己组织或下级组织下创建子组织
         accessible_orgs = self.get_accessible_organization_set(user_id or user.id)
@@ -351,8 +354,8 @@ class OrganizationPermissionService:
         user_org_id = self.get_user_organization_id(user=user)
 
         if user_org_id is None:
-            # 未绑定组织的普通用户不是任何组织的上级
-            return False
+            # 未绑定组织的普通用户不是任何组织的上级；管理员不受组织绑定限制（ADR-0002）
+            return is_admin(user)
 
         # 获取目标组织的所有上级
         target_org = self.org_service.get_organization(target_org_id)

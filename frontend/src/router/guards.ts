@@ -3,7 +3,7 @@
  */
 import router from './index'
 import { AuthStorage } from '@/utils/authStorage'
-import { ADMIN_ROLES } from '@/utils/roleAccess'
+import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import { useMenuStore } from '@/stores/menu'
 
 const whiteList = ['/login', '/register', '/forgot-password']
@@ -51,10 +51,10 @@ export const routeGuard = async (to: any, _from: any, next: any) => {
     return
   }
 
-  // 角色权限检查：meta.roles 非空时校验用户角色
+  // 角色权限检查：meta.roles 非空时校验用户角色（存量旧角色名先归一化）
   const requiredRoles = to.meta?.roles as string[] | undefined
   if (requiredRoles && requiredRoles.length > 0) {
-    const userRole = user?.role || ''
+    const userRole = normalizeRole(user?.role)
     const hasAccess = ADMIN_ROLES.includes(userRole) || requiredRoles.includes(userRole)
     if (!hasAccess) {
       next('/403')
@@ -70,7 +70,10 @@ export const routeGuard = async (to: any, _from: any, next: any) => {
     if (!menuStore.loaded) {
       await menuStore.fetchMenus()
     }
-    if (!menuStore.canAccessMenu(menuKey)) {
+    // 仅在菜单已加载且明确不含该键时才 403。
+    // 菜单加载失败（打包版后端冷启动期/接口异常）时不阻断导航：
+    // 菜单只是可见性层，真实权限由后端接口兜底，否则启动窗口期全站被弹到 /403。
+    if (menuStore.loaded && !menuStore.canAccessMenu(menuKey)) {
       next('/403')
       return
     }

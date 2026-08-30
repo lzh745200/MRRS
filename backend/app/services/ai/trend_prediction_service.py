@@ -200,11 +200,8 @@ class TrendPredictionService:
         X = df["timestamp"].values.reshape(-1, 1)
         y = df[value_field].values
 
-        # 简单线性回归
-        from sklearn.linear_model import LinearRegression
-
-        model = LinearRegression()
-        model.fit(X, y)
+        # 最小二乘一次拟合（替代死代码清理移除的 sklearn.LinearRegression）
+        slope, intercept = np.polyfit(X.ravel(), y, 1)
 
         # 预测
         last_date = pd.to_datetime(df[date_field].iloc[-1])
@@ -227,8 +224,8 @@ class TrendPredictionService:
             "confidence_intervals": [],
             "method": "linear_regression",
             "model_params": {
-                "coefficient": float(model.coef_[0]),
-                "intercept": float(model.intercept_),
+                "coefficient": float(slope),
+                "intercept": float(intercept),
             },
         }
 

@@ -14,7 +14,7 @@ from app.models.organization import Organization
 from app.models.user_organization import UserOrganization
 from app.models.rbac import RbacRole, UserRole, RolePermission, UserPermission
 from app.core.error_handler import BusinessLogicError
-from app.core.permission_utils import is_superuser
+from app.core.permission_utils import is_admin, is_superuser
 from app.core.transaction import safe_commit
 
 
@@ -459,6 +459,10 @@ class UserPermissionService:
         if is_superuser(user):
             return True
 
+        # 未绑定组织的管理员不受组织限制（ADR-0002，单机模式）
+        if is_admin(user) and user.organization_id is None:
+            return True
+
         # 如果没有指定目标组织，检查用户是否有组织
         if target_org_id is None:
             return user.organization_id is not None
@@ -501,8 +505,8 @@ class UserPermissionService:
             if not user:
                 return []
 
-            # 超级管理员可以看到所有组织
-            if not is_superuser(user):
+            # 超级管理员/管理员（未绑定组织时）可以看到所有组织（ADR-0002）
+            if not is_superuser(user) and not (is_admin(user) and user.organization_id is None):
                 # 根据数据范围过滤
                 if user.data_scope == "org":
                     # 只能看到自己的组织
@@ -565,8 +569,8 @@ class UserPermissionService:
         if not user:
             return []
 
-        # 超级管理员可以访问所有组织
-        if user.is_superuser or is_superuser(user):
+        # 超级管理员/管理员（未绑定组织时）可以访问所有组织（ADR-0002）
+        if is_superuser(user) or (is_admin(user) and user.organization_id is None):
             all_orgs = self.db.query(Organization.id).filter(Organization.is_active == True).all()  # noqa: E712
             return [org.id for org in all_orgs]
 

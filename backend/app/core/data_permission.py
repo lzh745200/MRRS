@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Any
 
 from fastapi import HTTPException
+from sqlalchemy import false as sa_false
 
 from app.core.permission_utils import is_superuser
 from app.core.constants import normalize_role, ROLE_SUPER_ADMIN, ROLE_ADMIN
@@ -108,14 +109,25 @@ def apply_scope_to_query(
         # 使用 dept_field 参数（调用者传入，通常为 organization_id）
         # 从 User 模型上读取同名属性（organization_id）
         user_dept = getattr(user, dept_field, None)
-        if user_dept is not None:
+        if user_dept is not None and hasattr(model, dept_field):
             return query.filter(getattr(model, dept_field) == user_dept)
-        # 部门/组织未设置时回退到 OWN 范围
-        logger.debug("User has no organization; falling back to OWN scope")
+        # 部门/组织未设置，或模型缺组织列时回退到 OWN 范围（ADR-0002）
+        logger.debug(
+            "User has no organization or model lacks %s; falling back to OWN scope", dept_field
+        )
         scope = DataScope.OWN  # 显式回退
 
     if scope == DataScope.OWN:
-        return query.filter(getattr(model, owner_field) == getattr(user, "id", None))
+        owner_col = getattr(model, owner_field, None)
+        if owner_col is None:
+            # fail-closed（ADR-0002）：模型连 owner 字段都没有时无法安全限定，
+            # 返回空集而非 AttributeError→500（如 legacy villages 表）
+            logger.warning(
+                "Model %s lacks owner field '%s'; data scope fail-closed to empty set",
+                getattr(model, "__name__", model), owner_field,
+            )
+            return query.filter(sa_false())
+        return query.filter(owner_col == getattr(user, "id", None))
 
     # 防御性兜底：DataScope 未来扩展新枚举值时按最严格语义原样返回，
     # 由 TestUnknownScopeFallback 回归测试锁定（fail-safe: 不过滤不加权）
