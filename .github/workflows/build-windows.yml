@@ -152,6 +152,38 @@ jobs:
           $internal = Get-ChildItem backend/dist/assistance-backend/_internal -Recurse -File | Measure-Object -Property Length -Sum
           Write-Host ("_internal: {0} files, {1}MB" -f $internal.Count, [math]::Round($internal.Sum / 1MB, 1))
 
+      # 8.5 后端 exe 签名（W6-T1，可选）：仓库 secrets 配置 CSC_LINK / CSC_KEY_PASSWORD
+      # 后自动启用；未配置则显式 WARNING 跳过（不影响构建）。第 10 步 electron-builder
+      # 会用同一对密钥自动签名安装包与卸载器。接入与验证方法见
+      # docs/04-部署文档/01-Windows部署/代码签名.md
+      - name: Sign backend exe (optional, W6-T1)
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CSC_LINK)) {
+            Write-Warning "未配置 CSC_LINK secret —— 跳过代码签名。军队白名单场景需要签名，接入方法见 docs/04-部署文档/01-Windows部署/代码签名.md"
+            exit 0
+          }
+          $cert = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          if (Test-Path $env:CSC_LINK) {
+            Copy-Item $env:CSC_LINK $cert
+          } else {
+            # electron-builder 惯例：CSC_LINK 也可以是 base64 编码的 PFX
+            [IO.File]::WriteAllBytes($cert, [Convert]::FromBase64String($env:CSC_LINK))
+          }
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw "未找到 signtool.exe（Windows SDK）" }
+          $target = "backend/dist/assistance-backend/assistance-backend.exe"
+          & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $cert /p $env:CSC_KEY_PASSWORD $target
+          if ($LASTEXITCODE -ne 0) { throw "signtool sign 失败 (exit $LASTEXITCODE)" }
+          & $signtool.FullName verify /pa /all $target
+          if ($LASTEXITCODE -ne 0) { throw "signtool verify 失败 (exit $LASTEXITCODE)" }
+          Remove-Item $cert -Force
+          Write-Host "后端 exe 已签名并通过验证"
+
       # 9. 安装 Electron 依赖 (根目录)
       - name: Install Electron deps
         run: npm ci
@@ -170,11 +202,13 @@ jobs:
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build/fetch_vcredist.ps1
 
-      # 10. electron-builder 打包
+      # 10. electron-builder 打包（配置了 CSC secrets 时自动签名 installer + uninstaller）
       - name: Build installer (electron-builder)
         run: npx electron-builder --win --x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       # 10.5 生成产物 SHA256 清单（军队分发完整性链，W6-T5）
       - name: Generate SHA256SUMS
