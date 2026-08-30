@@ -1,18 +1,31 @@
 <template>
   <div class="package-version">
-    <el-alert
-      title="该功能正在开发中"
-      description="数据包版本管理的后端接口尚未实现，当前页面操作暂不可用。如有紧急需求请联系开发团队。"
-      type="warning"
-      :closable="false"
-      show-icon
-      style="margin-bottom: 16px"
-    />
+    <!-- 菜单直入（无 :id）时先选择数据包 -->
+    <el-card v-if="!packageId" style="margin-bottom: 16px">
+      <el-form inline>
+        <el-form-item label="选择数据包">
+          <el-select
+            v-model="selectedPackageId"
+            placeholder="请选择要管理版本的数据包"
+            style="width: 360px"
+            @change="handlePackageSelected"
+          >
+            <el-option
+              v-for="pkg in selectablePackages"
+              :key="pkg.id"
+              :label="`${pkg.package_code} - ${pkg.description || '无描述'}`"
+              :value="pkg.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <el-card>
       <template #header>
         <div class="card-header">
           <span>数据包版本管理</span>
-          <el-button type="primary" disabled @click="handleCreateVersion"> 创建新版本 </el-button>
+          <el-button type="primary" @click="handleCreateVersion"> 创建新版本 </el-button>
         </div>
       </template>
 
@@ -49,9 +62,7 @@
             >
               对比
             </el-button>
-            <el-button size="small" type="danger" disabled @click="handleDelete(row.id)">
-              删除
-            </el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row.id)"> 删除 </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -161,7 +172,7 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" disabled @click="doCompare">对比</el-button>
+          <el-button type="primary" @click="doCompare">对比</el-button>
         </el-form-item>
       </el-form>
 
@@ -213,7 +224,37 @@ import { handleApiError } from '@/utils/errorHandler'
 import { format } from '@/utils'
 
 const route = useRoute()
-const packageId = ref(route.params.id)
+// 路由为 /data-package/version/:id?，菜单直入时无 id → 显示包选择器；列表页可带 id 深链
+const packageId = ref<string | number | ''>(
+  (route.params.id as string | undefined) || (route.query.package_id as string | undefined) || ''
+)
+
+interface PackageOption {
+  id: number | string
+  package_code: string
+  description: string
+}
+
+const selectablePackages = ref<PackageOption[]>([])
+const selectedPackageId = ref<string | number | ''>('')
+
+const handlePackageSelected = (id: string | number) => {
+  packageId.value = id
+  fetchVersionList()
+}
+
+const fetchSelectablePackages = async () => {
+  try {
+    const res: any = await get('/data-packages')
+    const items = res?.items || res?.data?.items || []
+    selectablePackages.value = Array.isArray(items) ? items : []
+    if (!packageId.value && selectablePackages.value.length === 1) {
+      handlePackageSelected(selectablePackages.value[0].id)
+    }
+  } catch {
+    // 选择列表加载失败不阻塞页面
+  }
+}
 
 interface VersionChanges {
   [dataType: string]: {
@@ -270,6 +311,7 @@ const compareResult = ref<CompareResult | null>(null)
 
 // 获取版本列表
 const fetchVersionList = async () => {
+  if (!packageId.value) return // 未选择数据包时等待选择器
   try {
     const response: any = await get(`/data-packages/${packageId.value}/versions`)
     // 后端裸返回 {versions, total}
@@ -396,7 +438,11 @@ const getChangeCount = (
 const formatTime = (time: string | undefined) => format.formatDateTimeLocale(time || '')
 
 onMounted(() => {
-  fetchVersionList()
+  if (packageId.value) {
+    fetchVersionList()
+  } else {
+    fetchSelectablePackages()
+  }
 })
 </script>
 

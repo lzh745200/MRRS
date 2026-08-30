@@ -32,7 +32,7 @@ const {
   mockDel: vi.fn(),
   mockApiRequest: vi.fn(),
   handleError: vi.fn(),
-  routeBox: { params: { id: '42' } },
+  routeBox: { params: { id: '42' }, query: {} },
   formatMock: vi.fn((t: string) => `FT:${t}`),
 }))
 
@@ -51,7 +51,8 @@ vi.mock('@/api/request', () => ({
   del: (...args: any[]) => mockDel(...args),
   apiRequest: (...args: any[]) => mockApiRequest(...args),
   put: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/errorHandler', () => ({
   handleApiError: (...args: any[]) => handleError(...args),
@@ -80,7 +81,13 @@ const v2 = {
   created_at: '2024-02-01T00:00:00',
   changes: {},
 }
-const v3 = { id: 3, version: '2.0', description: '', created_at: '2024-03-01T00:00:00', changes: undefined }
+const v3 = {
+  id: 3,
+  version: '2.0',
+  description: '',
+  created_at: '2024-03-01T00:00:00',
+  changes: undefined,
+}
 
 const comparison = {
   version1: { version: '1.0' },
@@ -93,7 +100,10 @@ const comparison = {
 }
 
 const stubs = {
-  'el-card': { name: 'ElCard', template: '<div class="el-card-stub"><slot name="header" /><slot /></div>' },
+  'el-card': {
+    name: 'ElCard',
+    template: '<div class="el-card-stub"><slot name="header" /><slot /></div>',
+  },
   'el-alert': {
     name: 'ElAlert',
     props: ['title', 'description'],
@@ -104,7 +114,11 @@ const stubs = {
     props: ['disabled', 'loading'],
     template: '<button class="el-button-stub"><slot /></button>',
   },
-  'el-table': { name: 'ElTable', template: '<div class="el-table-stub"><slot /></div>', props: ['data'] },
+  'el-table': {
+    name: 'ElTable',
+    template: '<div class="el-table-stub"><slot /></div>',
+    props: ['data'],
+  },
   'el-table-column': {
     name: 'ElTableColumn',
     props: ['prop', 'label'],
@@ -124,14 +138,22 @@ const stubs = {
   'el-form': { name: 'ElForm', template: '<div class="el-form-stub"><slot /></div>' },
   'el-form-item': { name: 'ElFormItem', template: '<div class="el-form-item-stub"><slot /></div>' },
   'el-input': { name: 'ElInput', template: '<div class="el-input-stub"><slot /></div>' },
-  'el-descriptions': { name: 'ElDescriptions', template: '<div class="el-descriptions-stub"><slot /></div>' },
+  'el-descriptions': {
+    name: 'ElDescriptions',
+    template: '<div class="el-descriptions-stub"><slot /></div>',
+  },
   'el-descriptions-item': {
     name: 'ElDescriptionsItem',
     props: ['label'],
     template: '<div class="el-descriptions-item-stub">{{ label }}<slot /></div>',
   },
   'el-divider': { name: 'ElDivider', template: '<div class="el-divider-stub"><slot /></div>' },
-  'el-tabs': { name: 'ElTabs', props: ['modelValue'], template: '<div class="el-tabs-stub"><slot /></div>', emits: ['update:modelValue'] },
+  'el-tabs': {
+    name: 'ElTabs',
+    props: ['modelValue'],
+    template: '<div class="el-tabs-stub"><slot /></div>',
+    emits: ['update:modelValue'],
+  },
   'el-tab-pane': {
     name: 'ElTabPane',
     props: ['label', 'name'],
@@ -465,6 +487,44 @@ describe('版本非数组', () => {
     ;(mockGet as any).mockResolvedValue({ versions: { bad: true } })
     await (wrapper.vm as any).fetchVersionList()
     expect((wrapper.vm as any).versionList).toEqual([])
+    wrapper.unmount()
+  })
+})
+
+describe('无路由参数 → 包选择器路径', () => {
+  it('菜单直入无 :id 时加载包列表；选择后拉取对应版本', async () => {
+    routeBox.params = {}
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/data-packages') {
+        return Promise.resolve({ items: [{ id: 7, package_code: 'PKG7', description: 'd7' }] })
+      }
+      if (url.includes('/versions')) {
+        return Promise.resolve({ success: true, data: { versions: [v1], total: 1 } })
+      }
+      return Promise.resolve({})
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledWith('/data-packages')
+
+    const vm = wrapper.vm as any
+    // 只有一个可选包 → 自动选中并拉取版本
+    expect(vm.packageId).toBe(7)
+    expect(mockGet).toHaveBeenCalledWith('/data-packages/7/versions')
+    expect(vm.versionList).toHaveLength(1)
+    routeBox.params = { id: '42' }
+    wrapper.unmount()
+  })
+
+  it('fetchVersionList 在未选择包时直接返回，不发请求', async () => {
+    routeBox.params = {}
+    mockGet.mockClear()
+    const wrapper = mountComp()
+    await flushPromises()
+    mockGet.mockClear()
+    await (wrapper.vm as any).fetchVersionList()
+    expect(mockGet).not.toHaveBeenCalled()
+    routeBox.params = { id: '42' }
     wrapper.unmount()
   })
 })

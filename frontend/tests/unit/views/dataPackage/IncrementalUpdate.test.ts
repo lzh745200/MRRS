@@ -30,7 +30,8 @@ vi.mock('@/api/request', () => ({
   del: vi.fn(),
   apiRequest: vi.fn(),
   default: {},
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/errorHandler', () => ({
   handleApiError: (...args: any[]) => handleError(...args),
@@ -58,7 +59,10 @@ const changesSummary = {
 }
 
 const stubs = {
-  'el-card': { name: 'ElCard', template: '<div class="el-card-stub"><slot name="header" /><slot /></div>' },
+  'el-card': {
+    name: 'ElCard',
+    template: '<div class="el-card-stub"><slot name="header" /><slot /></div>',
+  },
   'el-alert': {
     name: 'ElAlert',
     props: ['title', 'description'],
@@ -99,14 +103,21 @@ const stubs = {
   'el-input': { name: 'ElInput', template: '<div class="el-input-stub"><slot /></div>' },
   'el-button': { name: 'ElButton', template: '<button class="el-button-stub"><slot /></button>' },
   'el-tag': { name: 'ElTag', template: '<span class="el-tag-stub"><slot /></span>' },
-  'el-descriptions': { name: 'ElDescriptions', template: '<div class="el-descriptions-stub"><slot /></div>' },
+  'el-descriptions': {
+    name: 'ElDescriptions',
+    template: '<div class="el-descriptions-stub"><slot /></div>',
+  },
   'el-descriptions-item': {
     name: 'ElDescriptionsItem',
     props: ['label'],
     template: '<div class="el-descriptions-item-stub">{{ label }}<slot /></div>',
   },
   'el-divider': { name: 'ElDivider', template: '<div class="el-divider-stub"><slot /></div>' },
-  'el-table': { name: 'ElTable', template: '<div class="el-table-stub"><slot /></div>', props: ['data'] },
+  'el-table': {
+    name: 'ElTable',
+    template: '<div class="el-table-stub"><slot /></div>',
+    props: ['data'],
+  },
   'el-table-column': {
     name: 'ElTableColumn',
     props: ['prop', 'label'],
@@ -127,8 +138,15 @@ beforeEach(() => {
     data: { items: [basePkg, basePkg2, updPkg, updPkg2] },
   })
   mockPost.mockResolvedValue({ success: true, data: {} })
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(new Blob(['x'])) }))
-  vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:mock'), revokeObjectURL: vi.fn() })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(new Blob(['x'])) })
+  )
+  vi.stubGlobal('URL', {
+    ...URL,
+    createObjectURL: vi.fn(() => 'blob:mock'),
+    revokeObjectURL: vi.fn(),
+  })
 })
 
 afterEach(() => {
@@ -189,6 +207,8 @@ describe('检测变更', () => {
         data_types: ['villages', 'projects', 'funds', 'schools'],
         base_package_id: 1,
       },
+      // 数组序列化为重复键，FastAPI Query(List[str]) 才能接收
+      paramsSerializer: { indexes: null },
     })
     expect(vm.changesSummary).toEqual(changesSummary)
     expect(ElMessage.success).toHaveBeenCalledWith('变更检测完成')

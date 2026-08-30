@@ -455,7 +455,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { menuKey: 'data-package-report', title: '数据上报' },
       },
       {
-        path: '/data-package/version',
+        path: '/data-package/version/:id?',
         name: 'DataPackageVersion',
         component: () => retryImport(() => import('@/views/dataPackage/PackageVersion.vue')),
         meta: { menuKey: 'data-package-version', title: '版本管理' },

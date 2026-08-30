@@ -1,13 +1,5 @@
 <template>
   <div class="incremental-update">
-    <el-alert
-      title="该功能正在开发中"
-      description="增量更新功能的后端接口尚未实现，当前页面操作暂不可用。如有紧急需求请联系开发团队。"
-      type="warning"
-      :closable="false"
-      show-icon
-      style="margin-bottom: 16px"
-    />
     <el-card>
       <template #header>
         <div class="card-header">
@@ -61,8 +53,8 @@
             </el-form-item>
 
             <el-form-item>
-              <el-button type="primary" disabled @click="handleDetectChanges"> 检测变更 </el-button>
-              <el-button type="success" disabled @click="handleExport"> 导出增量包 </el-button>
+              <el-button type="primary" @click="handleDetectChanges"> 检测变更 </el-button>
+              <el-button type="success" @click="handleExport"> 导出增量包 </el-button>
             </el-form-item>
           </el-form>
 
@@ -123,7 +115,7 @@
             </el-form-item>
 
             <el-form-item>
-              <el-button type="primary" disabled @click="handleImport">
+              <el-button type="primary" @click="handleImport">
                 {{ importForm.apply_changes ? '导入增量包' : '预览变更' }}
               </el-button>
             </el-form-item>
@@ -255,6 +247,8 @@ const handleDetectChanges = async () => {
         data_types: exportForm.value.data_types,
         base_package_id: exportForm.value.base_package_id,
       },
+      // 数组序列化为重复键（data_types=a&data_types=b），FastAPI Query(List[str]) 才能接收
+      paramsSerializer: { indexes: null },
     })
 
     const result = response?.data ?? response
