@@ -22,6 +22,11 @@ $RepoRoot = (Resolve-Path (Join-Path (Join-Path $PSScriptRoot '..') '..')).Path
 $HookFile = Join-Path (Join-Path $RepoRoot 'build-scripts') 'electron-builder-nsis-hook.nsh'
 $DestDir  = Join-Path (Join-Path $RepoRoot 'resources') 'vcredist'
 
+# 目标目录必须先于任何写入存在：CI 全新 checkout 中 resources/vcredist/ 被
+# gitignore 而不存在，Invoke-WebRequest -OutFile 写临时文件会抛
+# DirectoryNotFoundException（v1.11.0 构建失败根因，2026-08-30）
+New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
+
 if (-not (Test-Path -LiteralPath $HookFile)) {
     throw "钉扎常量源文件不存在: $HookFile"
 }
