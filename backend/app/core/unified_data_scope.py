@@ -294,6 +294,16 @@ async def get_org_scope(
 
     org_id = getattr(current_user, "organization_id", None)
 
+    def _no_org_self_only() -> OrgScopeFilter:
+        """无组织归属 fail-closed（ADR-0002）：回退"仅本人"，绝不 is_admin 放行全量"""
+        return OrgScopeFilter(
+            is_admin=False,
+            org_ids=[],
+            org_names=[],
+            self_only=True,
+            user_id=getattr(current_user, "id", None),
+        )
+
     # Self only
     if user_data_scope == "self":
         return OrgScopeFilter(
@@ -310,8 +320,7 @@ async def get_org_scope(
             dept = getattr(current_user, "department", None)
             if dept:
                 return OrgScopeFilter(is_admin=False, org_names=[dept], org_ids=[])
-            # No org assigned — standalone mode: allow all
-            return OrgScopeFilter(is_admin=True)
+            return _no_org_self_only()
         org = db.query(Organization).filter(Organization.id == org_id).first()
         org_names = [org.name] if org else []
         return OrgScopeFilter(is_admin=False, org_names=org_names, org_ids=[org_id])
@@ -321,13 +330,13 @@ async def get_org_scope(
         dept = getattr(current_user, "department", None)
         if dept:
             return OrgScopeFilter(is_admin=False, org_names=[dept], org_ids=[])
-        return OrgScopeFilter(is_admin=True)
+        return _no_org_self_only()
 
     org_ids, org_names = _get_org_subtree(db, org_id)
     if not org_names:
         dept = getattr(current_user, "department", None)
         if dept:
             return OrgScopeFilter(is_admin=False, org_names=[dept], org_ids=org_ids)
-        return OrgScopeFilter(is_admin=True)
+        return _no_org_self_only()
 
     return OrgScopeFilter(is_admin=False, org_names=org_names, org_ids=org_ids)

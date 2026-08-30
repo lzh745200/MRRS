@@ -151,15 +151,21 @@ class TestApplyScopeFilter:
         assert result is not stmt
         assert "WHERE" in str(result)
 
-    def test_model_without_org_field_returns_query(self):
-        q = MagicMock()
-        assert apply_scope_filter(q, MANAGER, BareModel) is q
-        q.filter.assert_not_called()
+    def test_model_without_any_scope_field_raises(self):
+        """缺组织+缺 owner 字段 fail-closed（ADR-0002）：抛错拒绝，绝不静默放行全量"""
+        from app.core.data_scope_adapter import DataScopeFilterError
 
-    def test_model_without_owner_field_returns_query(self):
         q = MagicMock()
-        assert apply_scope_filter(q, VIEWER, OrgOnlyModel) is q
-        q.filter.assert_not_called()
+        with pytest.raises(DataScopeFilterError):
+            apply_scope_filter(q, MANAGER, BareModel)
+
+    def test_model_without_owner_field_raises(self):
+        """缺 owner 字段 fail-closed（ADR-0002）：抛 DataScopeFilterError 拒绝放行"""
+        from app.core.data_scope_adapter import DataScopeFilterError
+
+        q = MagicMock()
+        with pytest.raises(DataScopeFilterError):
+            apply_scope_filter(q, VIEWER, OrgOnlyModel)
 
     def test_custom_field_names(self):
         q = MagicMock()

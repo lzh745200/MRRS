@@ -49,6 +49,24 @@ class OrganizationCodeDuplicateError(BusinessError):
         self.code = code
 
 
+class OrganizationInUseError(BusinessError):
+    """组织仍被业务数据引用，禁止硬删除（W2-T2 / ADR-0003）"""
+
+    def __init__(self, org_id: int, project_count: int, user_count: int):
+        parts = []
+        if project_count:
+            parts.append(f"{project_count} 个项目")
+        if user_count:
+            parts.append(f"{user_count} 个用户")
+        detail = "、".join(parts) if parts else "业务数据"
+        super().__init__(
+            f"组织仍被引用（{detail}），无法删除。请先迁移或清理名下数据。"
+        )
+        self.org_id = org_id
+        self.project_count = project_count
+        self.user_count = user_count
+
+
 class OrganizationService:
     """
     组织单位管理服务
@@ -356,6 +374,23 @@ class OrganizationService:
 
         if subordinate_count > 0:
             raise OrganizationHasSubordinatesError(org_id, subordinate_count)
+
+        # 硬删除前检查名下业务数据（W2-T2 / ADR-0003）：
+        # DB 级 ondelete=CASCADE 会让 org 的硬删连带物理删除项目→资金/合同/凭证，
+        # 必须在应用层拒绝并列出引用计数，要求先迁移。
+        from app.models.project import Project
+        from app.models.user import User
+
+        project_count = self.db.query(Project).filter(
+            Project.organization_id == org_id,
+            Project.is_active == True  # noqa: E712 -- SQLAlchemy boolean filter
+        ).count()
+        user_count = self.db.query(User).filter(
+            User.organization_id == org_id,
+            User.is_active == True  # noqa: E712
+        ).count()
+        if project_count or user_count:
+            raise OrganizationInUseError(org_id, project_count, user_count)
 
         self.db.delete(org)
         safe_commit(self.db)

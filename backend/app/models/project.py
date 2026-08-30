@@ -86,7 +86,7 @@ class Project(Base):
     )
     organization_id = Column(
         Integer,
-        ForeignKey("organizations.id", ondelete="CASCADE"),
+        ForeignKey("organizations.id", ondelete="SET NULL"),
         nullable=True,
         comment="负责单位ID",
     )

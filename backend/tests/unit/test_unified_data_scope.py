@@ -357,16 +357,20 @@ class TestGetOrgScope:
         assert ds.org_names == ["某部"]
         assert ds.org_ids == []
 
-    async def test_org_scope_no_org_id_no_dept_standalone(self):
+    async def test_org_scope_no_org_id_no_dept_fail_closed(self):
+        """scope=org 但无组织无部门 → fail-closed 仅本人（ADR-0002）"""
         from app.core.unified_data_scope import get_org_scope
         user = MagicMock()
         user.role = "user"
         user.data_scope = "org"
         user.organization_id = None
         user.department = None
+        user.id = 11
         with patch("app.core.unified_data_scope.is_superuser", return_value=False):
             ds = await get_org_scope(current_user=user, db=None)
-        assert ds.is_admin is True
+        assert ds.is_admin is False
+        assert ds.self_only is True
+        assert ds.user_id == 11
 
     async def test_org_scope_with_org_id(self):
         from app.core.unified_data_scope import get_org_scope
@@ -411,16 +415,21 @@ class TestGetOrgScope:
         assert ds.org_names == ["某部"]
         assert ds.org_ids == []
 
-    async def test_org_children_no_org_id_no_dept_standalone(self):
+    async def test_org_children_no_org_id_no_dept_fail_closed(self):
+        """无组织无部门 fail-closed（ADR-0002）：回退仅本人，绝不放行全量"""
         from app.core.unified_data_scope import get_org_scope
         user = MagicMock()
         user.role = "user"
         user.data_scope = "org_children"
         user.organization_id = None
         user.department = None
+        user.id = 7
         with patch("app.core.unified_data_scope.is_superuser", return_value=False):
             ds = await get_org_scope(current_user=user, db=None)
-        assert ds.is_admin is True
+        assert ds.is_admin is False
+        assert ds.self_only is True
+        assert ds.user_id == 7
+        assert ds.org_ids == []
 
     async def test_org_children_with_subtree(self):
         from app.core.unified_data_scope import get_org_scope
@@ -451,15 +460,19 @@ class TestGetOrgScope:
         assert ds.org_names == ["DeptFallback"]
         assert ds.org_ids == [1]
 
-    async def test_org_children_empty_names_no_dept_standalone(self):
+    async def test_org_children_empty_names_no_dept_fail_closed(self):
+        """组织树为空且无部门 → fail-closed 仅本人（ADR-0002）"""
         from app.core.unified_data_scope import get_org_scope
         user = MagicMock()
         user.role = "user"
         user.data_scope = "org_children"
         user.organization_id = 1
         user.department = None
+        user.id = 9
         mock_db = MagicMock()
         with patch("app.core.unified_data_scope.is_superuser", return_value=False):
             with patch("app.core.unified_data_scope._get_org_subtree", return_value=([1], [])):
                 ds = await get_org_scope(current_user=user, db=mock_db)
-        assert ds.is_admin is True
+        assert ds.is_admin is False
+        assert ds.self_only is True
+        assert ds.user_id == 9

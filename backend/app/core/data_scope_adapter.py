@@ -51,6 +51,10 @@ from sqlalchemy import Select
 logger = logging.getLogger(__name__)
 
 
+class DataScopeFilterError(RuntimeError):
+    """模型缺少数据范围过滤字段且无法安全降级时抛出（fail-closed, ADR-0002）"""
+
+
 def get_accessible_org_ids(user: Any, db: Any = None) -> Optional[List[int]]:
     """计算用户可访问的组织 ID 列表（统一权限计算入口）。
 
@@ -162,9 +166,16 @@ def apply_scope_filter(
         if org_ids is None:
             return query
         if org_ids:
-            return _apply_org_filter(query, model, org_id_field, org_ids)
+            if _has_field(model, org_id_field):
+                return _apply_org_filter(query, model, org_id_field, org_ids)
+            # fail-closed（ADR-0002）：模型缺组织字段时禁止静默放行全量，
+            # 降级为"仅本人"；连 owner 字段也缺失则抛错拒绝
+            logger.error(
+                "Model %s 缺少组织字段 '%s'，数据范围降级为仅本人(fail-closed)", model, org_id_field
+            )
         # 无组织归属 -> 回退到"仅本人"（与 apply_scope_to_query 行为一致）
         logger.debug("User has no organization; falling back to OWN scope")
+        return _apply_owner_filter(query, model, owner_field, user)
 
     # OWN 范围（或 OWN_DEPT 回退）
     return _apply_owner_filter(query, model, owner_field, user)
@@ -179,23 +190,32 @@ def _is_select(query: Any) -> bool:
     return isinstance(query, Select)
 
 
+def _has_field(model: Any, field: str) -> bool:
+    return getattr(model, field, None) is not None
+
+
 def _apply_org_filter(query: Any, model: Any, org_id_field: str, org_ids: List[int]) -> Any:
-    """按组织 ID 列表过滤（IN 条件）。"""
+    """按组织 ID 列表过滤（IN 条件）。调用方须先用 _has_field 确认字段存在。"""
     org_field = getattr(model, org_id_field, None)
     if org_field is None:
-        logger.warning("Model %s has no field '%s'; data scope filter skipped", model, org_id_field)
-        return query
+        # 不可达：apply_scope_filter 已做 _has_field 前置检查（fail-closed 降级）
+        raise DataScopeFilterError(f"Model {model.__name__} 缺少组织字段 '{org_id_field}'")
     if _is_select(query):
         return query.where(org_field.in_(org_ids))
     return query.filter(org_field.in_(org_ids))
 
 
 def _apply_owner_filter(query: Any, model: Any, owner_field: str, user: Any) -> Any:
-    """按所有者过滤（仅本人创建的数据）。"""
+    """按所有者过滤（仅本人创建的数据）。
+
+    模型缺少 owner 字段时 fail-closed 抛错（ADR-0002）——绝不允许静默放行全量。
+    """
     owner_col = getattr(model, owner_field, None)
     if owner_col is None:
-        logger.warning("Model %s has no field '%s'; data scope filter skipped", model, owner_field)
-        return query
+        raise DataScopeFilterError(
+            f"Model {getattr(model, '__name__', model)} 缺少数据范围过滤字段 "
+            f"'{owner_field}'，无法安全限定数据范围（fail-closed, ADR-0002）"
+        )
     user_id = getattr(user, "id", None)
     if _is_select(query):
         return query.where(owner_col == user_id)
