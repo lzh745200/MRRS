@@ -3,7 +3,7 @@
         docker-build docker-build-amd64 docker-build-arm64 docker-build-all \
         deb-clean \
         build-kylin build-kylin-arm64 kylin-clean \
-        build-win-x64 build-win-x86 build-win-all
+        build-win-x64 build-win-x86 build-win-all fetch-vcredist
 
 # 默认运行所有测试
 test: test-backend test-frontend
@@ -117,8 +117,14 @@ win-installer: electron-build
 WIN_OUTPUT_DIR := dist/electron
 SYNC_FRONTEND := mkdir -p resources/frontend && cp -rf frontend/dist/* resources/frontend/
 
+# 拉取 VC++ Redistributable（官方 URL + SHA256 钉扎；已存在且匹配则跳过）
+# 二进制不入库（.gitignore: resources/vcredist/），新 clone 后由本目标补齐
+fetch-vcredist:
+	@echo ">>> 拉取/校验 VC++ Redistributable (SHA256 钉扎)..."
+	@powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build/fetch_vcredist.ps1
+
 # 构建 Windows x64 离线安装包
-build-win-x64:
+build-win-x64: fetch-vcredist
 	@echo "=== 构建 Windows x64 离线安装包 ==="
 	@echo ">>> 构建前端..."
 	cd frontend && npm run build
@@ -134,7 +140,7 @@ build-win-x64:
 	@ls -lh $(WIN_OUTPUT_DIR)/*.exe 2>/dev/null || echo "  检查输出目录: $(WIN_OUTPUT_DIR)"
 
 # 构建 Windows x86 离线安装包（需 32-bit Python 3.11）
-build-win-x86:
+build-win-x86: fetch-vcredist
 	@echo "=== 构建 Windows x86 离线安装包 ==="
 	@echo ">>> 构建前端..."
 	cd frontend && npm run build

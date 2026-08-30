@@ -22,12 +22,17 @@ electron-builder (package.json build 段)
 
 | 文件 | 用途 |
 |------|------|
-| `electron-builder-nsis-hook.nsh` | electron-builder NSIS 钩子：VC++ 静默安装 + 进程终止 + 卸载数据清理 |
+| `electron-builder-nsis-hook.nsh` | electron-builder NSIS 钩子：VC++ SHA256 校验 + 静默安装 + 进程终止 + 卸载数据清理；同时是 URL/SHA256 钉扎常量的单一事实源 |
+| `../scripts/build/fetch_vcredist.ps1` | 从官方 URL 下载 vc_redist 并按钉扎 SHA256 校验（CI 与本地构建共用） |
 | `build-config.json` | 构建元数据（架构、入口、版本等） |
 
 ### 本地构建步骤
 
 ```bash
+# 0. 拉取 VC++ Redistributable（二进制不入库，新 clone 必须先执行；
+#    已存在且哈希匹配时自动跳过）
+make fetch-vcredist
+
 # 1. 前端构建并同步到 resources/frontend
 cd frontend && npm run build
 mkdir -p ../resources/frontend && cp -rf dist/* ../resources/frontend/
@@ -51,14 +56,16 @@ npx electron-builder --win --x64    # 64 位安装包（主力）
 - 后端 exe：`backend/dist/assistance-backend.exe`（~85MB）
 - 预置数据库：`resources/database/rural_revitalization.db`（打包进安装包，首次运行复制到用户目录）
 
-### VC++ 运行库策略（双保险）
+### VC++ 运行库策略（双保险 + 供应链校验）
 
 | 层级 | 机制 | 说明 |
 |------|------|------|
+| Layer 0 | 构建期下载校验 | `make fetch-vcredist`：官方 URL 下载 + SHA256 钉扎比对，不匹配即构建失败 |
 | Layer 1 | PyInstaller 自动捆绑 | vcruntime140.dll / msvcp140.dll 打包进 backend.exe |
-| Layer 2 | NSIS 钩子静默安装 | `vc_redist.x64.exe /install /quiet /norestart`（失败不阻断） |
+| Layer 2 | NSIS 钩子校验后静默安装 | 安装前 Get-FileHash 比对钉扎值，不匹配弹窗中止安装；通过则 `vc_redist.x64.exe /install /quiet /norestart` |
 
-目标机器无需预装任何 VC++ 运行库。
+目标机器无需预装任何 VC++ 运行库。二进制不入库（`.gitignore: resources/vcredist/`），
+URL/SHA256 常量唯一维护点：`electron-builder-nsis-hook.nsh` 文件头 `!define` 段。
 
 ### 数据目录（非安装目录）
 

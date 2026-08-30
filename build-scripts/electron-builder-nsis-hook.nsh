@@ -4,8 +4,9 @@
 ; 通过 package.json build.nsis.include 注入到 electron-builder 生成的 NSIS
 ; 安装脚本中，实现以下功能：
 ;   1. 安装前终止旧进程（升级覆盖安装场景，避免文件占用）
-;   2. 静默安装 VC++ Redistributable（双保险 Layer 2；Layer 1 由 PyInstaller
-;      自动捆绑 vcruntime140.dll 等核心 DLL，因此本步骤失败不阻断安装）
+;   2. 校验并静默安装 VC++ Redistributable（双保险 Layer 2；Layer 1 由
+;      PyInstaller 自动捆绑 vcruntime140.dll 等核心 DLL）——SHA256 与钉扎值
+;      不匹配时弹窗中止安装（防安装包损坏/被篡改）
 ;   3. 创建桌面快捷方式（使用圆形图标）
 ;   4. 卸载前终止运行进程（避免卸载时文件占用导致失败）
 ;   5. 卸载时询问是否删除 %LOCALAPPDATA%\bumofu-assistance\ 用户数据目录
@@ -19,6 +20,28 @@
 ; ============================================================================
 
 ; ----------------------------------------------------------------------------
+; VC++ Redistributable 供应链钉扎（单一事实源）
+; ----------------------------------------------------------------------------
+; 下方 URL/SHA256 同时被 scripts/build/fetch_vcredist.ps1 解析（构建期下载
+; 校验）与本钩子使用（安装期校验），修改任一常量必须同步两处语义：
+;   - 构建期：从 URL 下载后哈希不匹配 → 构建失败
+;   - 安装期：内置二进制哈希不匹配 → 弹窗中止安装
+; 微软会在 aka.ms 短链上原地更新二进制版本，届时构建期校验将失败——这是
+; 有意的供应链防线；人工确认新版本无异常后更新此处的 SHA256 即可恢复。
+!ifndef VCREDIST_X64_URL
+!define VCREDIST_X64_URL "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+!endif
+!ifndef VCREDIST_X64_SHA256
+!define VCREDIST_X64_SHA256 "CC0FF0EB1DC3F5188AE6300FAEF32BF5BEEBA4BDD6E8E445A9184072096B713B"
+!endif
+!ifndef VCREDIST_X86_URL
+!define VCREDIST_X86_URL "https://aka.ms/vs/17/release/vc_redist.x86.exe"
+!endif
+!ifndef VCREDIST_X86_SHA256
+!define VCREDIST_X86_SHA256 "0C09F2611660441084CE0DF425C51C11E147E6447963C3690F97E0B25C55ED64"
+!endif
+
+; ----------------------------------------------------------------------------
 ; 安装钩子：终止旧进程 + 静默安装 VC++ + 创建桌面快捷方式
 ; ----------------------------------------------------------------------------
 !macro customInstall
@@ -27,20 +50,35 @@
   nsExec::Exec 'taskkill /F /IM "帮扶管理系统.exe" /IM "assistance-backend.exe"'
   Pop $0
 
-  ; 静默安装 VC++ Redistributable（双保险 Layer 2）
+  ; 静默安装 VC++ Redistributable（双保险 Layer 2，先校验 SHA256）
   ; 根据实际存在的安装器文件判断架构（CI 仅放置匹配架构的 vc_redist）
+  ; 校验：PowerShell Get-FileHash 比对文件头钉扎值，不匹配 = 安装包损坏或
+  ; 被篡改 → 弹窗并中止安装（W6-T2 安全要求，fail-closed）。
   ; /install /quiet /norestart = 静默安装、不重启、无 UI
-  ; 安装失败不阻断 —— PyInstaller 已捆绑核心 vcruntime DLL（Layer 1 兜底）
   IfFileExists "$INSTDIR\resources\vcredist\vc_redist.x64.exe" 0 try_x86_redist
+    DetailPrint "正在校验 VC++ Redistributable (x64) 完整性..."
+    nsExec::Exec "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if((Get-FileHash -Algorithm SHA256 -LiteralPath '$INSTDIR\resources\vcredist\vc_redist.x64.exe').Hash -ieq '${VCREDIST_X64_SHA256}'){exit 0}else{exit 1}\""
+    Pop $0
+    StrCmp $0 "0" vcredist_x64_ok vcredist_hash_fail
+  vcredist_x64_ok:
     DetailPrint "正在安装 VC++ Redistributable (x64)..."
     nsExec::Exec '"$INSTDIR\resources\vcredist\vc_redist.x64.exe" /install /quiet /norestart'
     Pop $0
     Goto vcredist_done
   try_x86_redist:
   IfFileExists "$INSTDIR\resources\vcredist\vc_redist.x86.exe" 0 vcredist_done
+    DetailPrint "正在校验 VC++ Redistributable (x86) 完整性..."
+    nsExec::Exec "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if((Get-FileHash -Algorithm SHA256 -LiteralPath '$INSTDIR\resources\vcredist\vc_redist.x86.exe').Hash -ieq '${VCREDIST_X86_SHA256}'){exit 0}else{exit 1}\""
+    Pop $0
+    StrCmp $0 "0" vcredist_x86_ok vcredist_hash_fail
+  vcredist_x86_ok:
     DetailPrint "正在安装 VC++ Redistributable (x86)..."
     nsExec::Exec '"$INSTDIR\resources\vcredist\vc_redist.x86.exe" /install /quiet /norestart'
     Pop $0
+    Goto vcredist_done
+  vcredist_hash_fail:
+    MessageBox MB_ICONSTOP "VC++ Redistributable 完整性校验失败（SHA256 不匹配）。$\n$\n安装包可能已损坏或被篡改，安装已中止。请从官方渠道重新获取安装包。"
+    Abort
   vcredist_done:
 
   ; ─── 创建桌面快捷方式（圆形图标）───

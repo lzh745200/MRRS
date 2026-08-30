@@ -163,6 +163,11 @@ jobs:
           done
           echo "Electron 语法检查通过 ($(ls electron/*.js | wc -l) 个文件)"
 
+      # 9.6 下载 VC++ Redistributable（已移出 git，改官方 URL 拉取 + SHA256 钉扎校验）
+      - name: Fetch VC++ Redistributable (pinned SHA256)
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build/fetch_vcredist.ps1
+
       # 10. electron-builder 打包
       - name: Build installer (electron-builder)
         run: npx electron-builder --win --x64
