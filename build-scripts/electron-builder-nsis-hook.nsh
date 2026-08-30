@@ -29,13 +29,13 @@
 ; 微软会在 aka.ms 短链上原地更新二进制版本，届时构建期校验将失败——这是
 ; 有意的供应链防线；人工确认新版本无异常后更新此处的 SHA256 即可恢复。
 !ifndef VCREDIST_X64_URL
-!define VCREDIST_X64_URL "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+!define VCREDIST_X64_URL "https://download.visualstudio.microsoft.com/download/pr/9d270333-8b7b-4f96-9458-6fcdb2ec0b25/CC0FF0EB1DC3F5188AE6300FAEF32BF5BEEBA4BDD6E8E445A9184072096B713B/VC_redist.x64.exe"
 !endif
 !ifndef VCREDIST_X64_SHA256
 !define VCREDIST_X64_SHA256 "CC0FF0EB1DC3F5188AE6300FAEF32BF5BEEBA4BDD6E8E445A9184072096B713B"
 !endif
 !ifndef VCREDIST_X86_URL
-!define VCREDIST_X86_URL "https://aka.ms/vs/17/release/vc_redist.x86.exe"
+!define VCREDIST_X86_URL "https://download.visualstudio.microsoft.com/download/pr/9d270333-8b7b-4f96-9458-6fcdb2ec0b25/0C09F2611660441084CE0DF425C51C11E147E6447963C3690F97E0B25C55ED64/VC_redist.x86.exe"
 !endif
 !ifndef VCREDIST_X86_SHA256
 !define VCREDIST_X86_SHA256 "0C09F2611660441084CE0DF425C51C11E147E6447963C3690F97E0B25C55ED64"
