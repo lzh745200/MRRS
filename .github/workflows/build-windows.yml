@@ -184,8 +184,9 @@ jobs:
             "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLower(), $_.Name
           }
           $sums = Join-Path $PWD "dist/electron/SHA256SUMS-windows-x64.txt"
-          # UTF-8 无 BOM，保持 sha256sum -c 兼容（文件名含中文）
-          [IO.File]::WriteAllLines($sums, $lines, (New-Object Text.UTF8Encoding($false)))
+          # UTF-8 无 BOM + LF 行尾：WriteAllLines 在 Windows 会写 CRLF，
+          # 导致 sha256sum -c 解析文件名带 \r 全部 FAILED（本地 dry-run 实测）
+          [IO.File]::WriteAllText($sums, ($lines -join "`n") + "`n", (New-Object Text.UTF8Encoding($false)))
           Get-Content $sums
 
       # 11. 上传制品
