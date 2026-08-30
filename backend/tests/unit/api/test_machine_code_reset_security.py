@@ -249,3 +249,138 @@ class TestResetAuditTrail:
             resp = self._post(client_admin)
         assert resp.status_code == 200
         assert resp.json()["data"]["new_password"] == "NewPwd123!"
+
+
+class TestFactoryAdminRecovery:
+    """管理员出厂恢复端点（ADR-0008 扩展 2026-08-30）的安全边界。
+
+    仅"从未激活"的管理员账号可恢复（must_change_password=True 且
+    login_attempts 无成功登录记录）；重置目标为文档化出厂密码。
+    """
+
+    URL = "/api/v1/machine-code/recover-admin-factory-password"
+
+    def _post(self, client_admin, username="admin"):
+        return client_admin.post(
+            f"{self.URL}?username={username}&machine_code=MC001&verification_code=VC001",
+        )
+
+    @staticmethod
+    def _admin_user(must_change=True):
+        u = MagicMock()
+        u.id = 1
+        u.username = "admin"
+        u.role = "admin"
+        u.is_superuser = True
+        u.must_change_password = must_change
+        return u
+
+    def test_never_activated_admin_recovers_to_factory_password(self, client_admin, mock_db):
+        """从未激活的管理员：重置为出厂密码 + 清除锁定 + 审计留痕。"""
+        user = self._admin_user()
+        mock_db.query.return_value.first.return_value = user
+
+        with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)), \
+             patch("app.api.v1.machine_code.MachineCodeService", return_value=_make_service()), \
+             patch("app.api.v1.machine_code._client_is_loopback", return_value=True), \
+             patch("app.api.v1.machine_code.get_password_hash", return_value="$2b$12$hashed"), \
+             patch("app.api.v1.machine_code.safe_commit") as safe_commit_mock, \
+             patch("app.services.lockout_service.get_lockout_service") as gls, \
+             patch("app.api.v1.machine_code.write_work_log") as wwl:
+            resp = self._post(client_admin)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["data"]["factory_password"] == "Admin@2026"
+        assert user.hashed_password == "$2b$12$hashed"
+        assert user.must_change_password is True
+        assert safe_commit_mock.called, "必须经 safe_commit 提交"
+        assert gls.return_value.clear.called, "必须清除锁定状态"
+        assert wwl.called, "必须 write_work_log 留痕"
+
+    def test_activated_admin_without_must_change_rejected(self, client_admin, mock_db):
+        """已激活（完成过首登改密）的管理员恒 403，防静默接管。"""
+        user = self._admin_user(must_change=False)
+        mock_db.query.return_value.first.return_value = user
+
+        with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)), \
+             patch("app.api.v1.machine_code.MachineCodeService", return_value=_make_service()), \
+             patch("app.api.v1.machine_code._client_is_loopback", return_value=True):
+            resp = self._post(client_admin)
+
+        assert resp.status_code == 403
+
+    def test_admin_with_successful_login_history_rejected(self, client_admin, mock_db):
+        """存在成功登录记录即视为已激活，恒 403。"""
+        user = self._admin_user(must_change=True)
+        mock_db.query.return_value.first.return_value = user
+        mock_db.query.return_value.count.return_value = 1
+
+        with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)), \
+             patch("app.api.v1.machine_code.MachineCodeService", return_value=_make_service()), \
+             patch("app.api.v1.machine_code._client_is_loopback", return_value=True):
+            resp = self._post(client_admin)
+
+        assert resp.status_code == 403
+
+    def test_non_admin_user_directed_to_normal_channel(self, client_admin, mock_db):
+        """普通账号不可用本端点，指向既有自助重置通道。"""
+        user = MagicMock()
+        user.role = "user"
+        user.is_superuser = False
+        user.must_change_password = True
+        mock_db.query.return_value.first.return_value = user
+
+        with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)), \
+             patch("app.api.v1.machine_code.MachineCodeService", return_value=_make_service()), \
+             patch("app.api.v1.machine_code._client_is_loopback", return_value=True):
+            resp = self._post(client_admin, "zhangsan")
+
+        assert resp.status_code == 400
+        assert "重置密码" in resp.json()["detail"]
+
+    def test_unknown_user_404(self, client_admin, mock_db):
+        mock_db.query.return_value.first.return_value = None
+
+        with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)), \
+             patch("app.api.v1.machine_code.MachineCodeService", return_value=_make_service()), \
+             patch("app.api.v1.machine_code._client_is_loopback", return_value=True):
+            resp = self._post(client_admin, "ghost")
+
+        assert resp.status_code == 404
+
+    def test_machine_code_mismatch_rejected(self, client_admin, mock_db):
+        mock_db.query.return_value.first.return_value = self._admin_user()
+
+        with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)), \
+             patch("app.api.v1.machine_code.MachineCodeService",
+                   return_value=_make_service(machine_code="OTHER")), \
+             patch("app.api.v1.machine_code._client_is_loopback", return_value=True):
+            resp = self._post(client_admin)
+
+        assert resp.status_code == 400
+
+    def test_bad_verification_code_rejected(self, client_admin, mock_db):
+        mock_db.query.return_value.first.return_value = self._admin_user()
+
+        with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)), \
+             patch("app.api.v1.machine_code.MachineCodeService",
+                   return_value=_make_service(verify_ok=False)), \
+             patch("app.api.v1.machine_code._client_is_loopback", return_value=True):
+            resp = self._post(client_admin)
+
+        assert resp.status_code == 400
+
+    def test_remote_request_rejected(self, client_admin):
+        """非 loopback 来源直接拒绝（TestClient 默认 host 非本机）。"""
+        with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)), \
+             patch("app.api.v1.machine_code.MachineCodeService", return_value=_make_service()):
+            resp = self._post(client_admin)
+
+        assert resp.status_code == 403
+
+    def test_rate_limited_429(self, client_admin):
+        with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=False)):
+            resp = self._post(client_admin)
+
+        assert resp.status_code == 429

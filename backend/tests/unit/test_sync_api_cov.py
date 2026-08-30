@@ -94,7 +94,7 @@ class TestSyncDashboard:
         else:
             uploads.glob.side_effect = lambda pat: [f1] if pat == "*.zip" else []
         return [
-            patch("app.utils.paths.get_uploads_path", return_value=uploads),
+            patch("app.utils.paths.get_runtime_uploads_path", return_value=uploads),
             patch("app.core.database.check_disk_space", return_value={"ok": True, "free_mb": 5000}),
         ]
 

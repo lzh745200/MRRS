@@ -241,9 +241,12 @@ async def _import_entities(
     file_bytes = await file.read()
 
     if dry_run:
-        # 仅校验模式：使用独立 DB 会话执行导入后丢弃，确保无数据泄露
+        # 仅校验模式：独立 DB 会话 + 屏蔽提交，执行完毕统一回滚。
+        # 历史缺陷：导入服务内部 safe_commit 会真实落库，导致"仅校验"
+        # 实际写入了数据（会话关闭无法撤销已提交事务）。
         from app.core.database import SessionLocal
         dry_db = SessionLocal()
+        dry_db.commit = lambda: None  # 屏蔽会话内一切提交（含 safe_commit）
         try:
             dry_importer = ExcelImporterService(dry_db, current_user=current_user)
             result = await dry_importer.import_data_async(
@@ -255,6 +258,10 @@ async def _import_entities(
                 entity_type=entity_type,
             )
         finally:
+            try:
+                dry_db.rollback()
+            except Exception:  # pragma: no cover
+                pass
             dry_db.close()
     else:
         importer = ExcelImporterService(db, current_user=current_user)

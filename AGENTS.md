@@ -248,6 +248,15 @@ Scheduled daily at 2:00 UTC + manual trigger (`workflow_dispatch`). Three jobs:
 
 ## Known Issues & Fixes
 
+### Path Dual-Source Bug (Fixed 2026-08-30)
+
+`app/utils/paths.py` 的路径推断与运行时 `DATABASE_URL`/`UPLOAD_DIR`（Electron 注入）是两个不同来源。历史缺陷：BackupService 等消费方按静态规则推断路径，打包环境下备份的是陈旧错误文件、恢复写回错误位置却提示成功。修复后规则：
+
+- **任何读写数据库文件的代码必须以会话绑定引擎或 `DATABASE_URL` 为准**：用 `paths.get_database_path()`（已改为 env → settings → 静态推断的解析链）或 `BackupService._resolve_database_path()`，禁止自行拼接 `<app_data_dir>/data/rural_revitalization.db`
+- **上传目录消费方（备份/权限包/统计）必须用 `paths.get_runtime_uploads_path()`**，与 `files.py` 写入、`static_files.py` 服务保持同一目录
+- 备份包必须包含 `data/rural_revitalization.db`，缺失即抛 `BackupIncompleteError`（fail-loud）；备份列表每项带 `database_included` 字段
+- 回归测试：`tests/unit/test_backup_path_alignment.py`
+
 ### Pytest Config Conflict (Fixed 2026-07-15)
 
 Previously, both `pytest.ini` and `pyproject.toml` had `[tool.pytest.ini_options]` sections, causing pytest to warn: `WARNING: ignoring pytest config in pyproject.toml!`. Fixed by consolidating all pytest config into `pytest.ini` and removing the `[tool.pytest.ini_options]` section from `pyproject.toml`. The `pyproject.toml` now only retains `[tool.coverage.*]` sections.
@@ -475,11 +484,13 @@ Every new feature must verify:
 1. **认证唯一出口**：\get_current_user\ 已接入黑名单+类型校验；access token 必带 jti；登出递增 token_version。不要绕过 \	oken_manager.validate_token\ 另建校验路径。
 2. **限流签名 fail-closed**：\check_rate_limit(key, *, request, limit, window)\ —— key 为首个参数且必填，缺失抛 ValueError；禁止位置传参字符串到旧 request 位。
 3. **loopback 门禁**：machine-code 校验码/密码重置、permission-packages import/confirm 未认证调用仅限本机（基于 request.client.host，禁读 X-Forwarded-For）。判定函数：各模块 \_client_is_loopback\。
-4. **公开重置排除管理员**：admin/super_admin 账号走管理端通道，公开端点恒 403。
+4. **公开重置排除管理员**：admin/super_admin 账号走管理端通道，公开端点恒 403。唯一例外是出厂恢复端点 `/machine-code/recover-admin-factory-password`（ADR-0008 扩展）：仅作用于"从未激活"的管理员账号（must_change_password=True 且零成功登录记录），重置为 `constants.FACTORY_ADMIN_PASSWORD`（单一来源，种子逻辑共用）；禁止放宽前置条件或让已激活账号可用。
 5. **通行码 HMAC**：\PASS_CODE_SECRET\ 未显式配置时自验证路径拒绝（fail-closed）；回退改绑机器码必须 write_work_log。
 6. **错误细节不出站**：api/v1 响应字段禁止内插异常对象——源码扫描测试 \	ests/unit/api/test_no_error_detail_leak.py\ 会拦截；新 except 分支 detail 用泛化文案 + logger.error(exc_info=True)。
 7. **删库守卫**：start.py integrity 失败默认 SystemExit(1) 保留现场；自动重建需环境变量 ALLOW_DB_RESET=1。
 8. **测试禁令**：禁止对 machine_code_service 等 services 模块 importlib.reload（类对象分裂导致跨文件 patch 失效）；用 monkeypatch.setattr 打模块常量。
+9. **PII 列加密红线**（2026-08-30，ADR-0005）：9 个 PII 列（身份证/电话类）为 `EncryptedText`
+   确定性加密列；裸 SQL 写入这些列会绕过加解密，禁止；等值查询按明文绑定参数即可命中密文。
 
 ## CI 协调须知（2026-08-24）
 

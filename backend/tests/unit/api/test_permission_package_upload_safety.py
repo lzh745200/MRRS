@@ -33,7 +33,9 @@ def env():
     app.dependency_overrides[get_db] = lambda: db
     tc = TestClient(app, raise_server_exceptions=False)
     with patch("app.utils.paths.get_uploads_path",
-               side_effect=lambda *a: upload_dir):
+               side_effect=lambda *a: upload_dir), \
+         patch("app.utils.paths.get_runtime_uploads_path",
+               side_effect=lambda *a: upload_dir if not a else os.path.join(upload_dir, *a)):
         yield tc, db, upload_dir
     app.dependency_overrides = _original
     # 清理测试上传目录

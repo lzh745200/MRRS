@@ -39,6 +39,7 @@ from starlette.types import Scope
 
 from app.core.audit_middleware import AuditMiddleware
 from app.core.config import settings
+from app.core.constants import FACTORY_ADMIN_PASSWORD, FACTORY_ADMIN_USERNAME
 from app.core.exceptions import register_exception_handlers
 from app.core.logging_config import init_logging
 from app.core.security import SecurityHeadersMiddleware, hash_password
@@ -604,7 +605,9 @@ def _sqlite_col_spec(col):
 
 
 # 默认管理员用户名（可通过环境变量配置）
-DEFAULT_ADMIN_USERNAME = os.getenv("DEFAULT_ADMIN_USERNAME", "admin").strip() or "admin"
+DEFAULT_ADMIN_USERNAME = (
+    os.getenv("DEFAULT_ADMIN_USERNAME", "").strip() or FACTORY_ADMIN_USERNAME
+)
 
 
 def _seed_default_admin():
@@ -638,10 +641,11 @@ def _seed_default_admin():
             # 两种来源均强制 must_change_password=True，首次登录必须修改。
             _admin_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "").strip()
             if not _admin_password:
-                _admin_password = "Admin@2026"
+                _admin_password = FACTORY_ADMIN_PASSWORD
                 logger.warning(
-                    "使用出厂默认密码创建管理员（admin / Admin@2026），"
-                    "首次登录强制修改；保密部署请设置 DEFAULT_ADMIN_PASSWORD 环境变量"
+                    "使用出厂默认密码创建管理员（admin / %s），"
+                    "首次登录强制修改；保密部署请设置 DEFAULT_ADMIN_PASSWORD 环境变量",
+                    FACTORY_ADMIN_PASSWORD,
                 )
 
             # 尝试获取顶级组织作为管理员的所属组织
@@ -670,7 +674,8 @@ def _seed_default_admin():
             db.add(admin)
             safe_commit(db)
             logger.info(
-                "默认管理员账户已创建 (用户名: admin, 请通过 DEFAULT_ADMIN_PASSWORD 环境变量设置强密码，首次登录须修改密码)",
+                "默认管理员账户已创建 (用户名: %s, 请通过 DEFAULT_ADMIN_PASSWORD 环境变量设置强密码，首次登录须修改密码)",
+                DEFAULT_ADMIN_USERNAME,
             )
         else:
             logger.info("管理员账户已存在，跳过创建")

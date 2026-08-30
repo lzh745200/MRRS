@@ -18,12 +18,35 @@ from app.models.user import User
 from app.core.transaction import safe_commit
 from app.core.security import get_current_user
 from app.core.permission_utils import require_admin
-from app.services.backup_service import BackupService, get_backup_service
+from app.services.backup_service import (
+    BackupIncompleteError,
+    BackupService,
+    get_backup_service,
+)
 from app.services.system_config_service import get_config, set_config
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/backup", tags=["备份管理"])
+
+_ZIP_DB_MEMBER = "data/rural_revitalization.db"
+
+
+def _check_database_included(file_path: str, is_encrypted: bool):
+    """检查备份包内是否真实包含数据库文件。
+
+    返回 True/False；加密包无法直接读取（创建时已强制完整性校验，视为
+    True）；文件不可读等异常时返回 None（未知）。前端可据此提示无效备份。
+    """
+    if is_encrypted:
+        return True
+    try:
+        import zipfile
+
+        with zipfile.ZipFile(file_path, "r") as _zf:
+            return _ZIP_DB_MEMBER in _zf.namelist()
+    except Exception:
+        return None
 
 
 # ==================== Pydantic 模型 ====================
@@ -198,6 +221,10 @@ async def create_backup(
         }
     except HTTPException:
         raise
+    except BackupIncompleteError as e:
+        logger.error("备份不完整被中止: %s", e.message)
+        # W1-T8 不变量：异常细节不出站，仅记日志
+        raise HTTPException(status_code=500, detail="备份失败：备份完整性校验未通过，请稍后重试或联系管理员")
     except Exception as e:
         logger.error("创建备份失败: %s", e)
         raise HTTPException(status_code=500, detail="创建备份失败，请稍后重试或联系管理员")
@@ -279,6 +306,7 @@ async def list_backups(
                 "created_at": r.created_at.isoformat(),
                 "backup_type": r.backup_type,
                 "is_encrypted": is_encrypted,
+                "database_included": _check_database_included(r.file_path, is_encrypted),
             })
 
         return ok_list(items=items, total=len(items))

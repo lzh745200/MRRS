@@ -18,7 +18,10 @@ const { mockPushSafe, ElMessage, logError, mockGet, mockPost, clipWrite } = vi.h
 }))
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn(() => Promise.resolve()), resolve: vi.fn(() => ({ name: 'x', matched: [{ path: '/x' }] })) }),
+  useRouter: () => ({
+    push: vi.fn(() => Promise.resolve()),
+    resolve: vi.fn(() => ({ name: 'x', matched: [{ path: '/x' }] })),
+  }),
   useRoute: () => ({ params: {}, query: {} }),
 }))
 
@@ -33,7 +36,8 @@ vi.mock('@/api/request', () => ({
   put: vi.fn(),
   del: vi.fn(),
   apiRequest: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/logger', () => ({
   logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), log: vi.fn() },
@@ -73,6 +77,11 @@ async function mountComp() {
           template: '<div class="el-alert-stub"><slot /><slot name="title" /></div>',
         },
         'el-icon': { name: 'ElIcon', template: '<span><slot /></span>' },
+        'el-radio-group': {
+          name: 'ElRadioGroup',
+          template: '<div class="el-radio-group-stub"><slot /></div>',
+        },
+        'el-radio': { name: 'ElRadio', template: '<label class="el-radio-stub"><slot /></label>' },
       },
     },
   })
@@ -208,9 +217,13 @@ describe('ForgotPassword.vue', () => {
     vm.resetForm.machine_code = 'mc'
     vm.resetForm.verification_code = '1234'
     await vm.handleResetPassword()
-    expect(mockPost).toHaveBeenCalledWith('/machine-code/reset-password-with-machine-code', undefined, {
-      params: vm.resetForm,
-    })
+    expect(mockPost).toHaveBeenCalledWith(
+      '/machine-code/reset-password-with-machine-code',
+      undefined,
+      {
+        params: vm.resetForm,
+      }
+    )
     expect(vm.newPassword).toBe('New#Pass1')
     expect(vm.currentStep).toBe(1)
     expect(ElMessage.success).toHaveBeenCalledWith('密码重置成功')
@@ -321,5 +334,49 @@ describe('ForgotPassword.vue', () => {
     expect(mockPushSafe).toHaveBeenCalledWith('/login')
     vm.goToLogin()
     expect(mockPushSafe).toHaveBeenCalledWith('/login')
+  })
+
+  it('管理员出厂恢复：切换模式后请求新端点并展示出厂密码', async () => {
+    mockPost.mockResolvedValue({ code: 200, data: { factory_password: 'Admin@2026' } })
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.accountMode = 'admin'
+    vm.resetForm.username = 'admin'
+    vm.resetForm.machine_code = 'mc'
+    vm.resetForm.verification_code = '1234'
+    await vm.handleResetPassword()
+    expect(mockPost).toHaveBeenCalledWith(
+      '/machine-code/recover-admin-factory-password',
+      undefined,
+      { params: vm.resetForm }
+    )
+    expect(vm.newPassword).toBe('Admin@2026')
+    expect(vm.currentStep).toBe(1)
+    expect(ElMessage.success).toHaveBeenCalledWith('出厂密码已恢复')
+  })
+
+  it('管理员出厂恢复：请求失败 → 不附加切换提示', async () => {
+    mockPost.mockRejectedValue({ response: { data: { detail: '校验码不正确' } } })
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.accountMode = 'admin'
+    vm.resetForm.username = 'admin'
+    vm.resetForm.machine_code = 'mc'
+    vm.resetForm.verification_code = '1234'
+    await vm.handleResetPassword()
+    expect(ElMessage.error).toHaveBeenCalledWith('校验码不正确')
+  })
+
+  it('普通通道被管理员拒绝 → 错误提示附带切换出厂恢复的引导', async () => {
+    mockPost.mockRejectedValue({
+      response: { data: { detail: '管理员账号不支持普通自助重置' } },
+    })
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.resetForm.username = 'admin'
+    vm.resetForm.machine_code = 'mc'
+    vm.resetForm.verification_code = '1234'
+    await vm.handleResetPassword()
+    expect(ElMessage.error).toHaveBeenCalledWith(expect.stringContaining('恢复出厂密码'))
   })
 })

@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.core.constants import ADMIN_ROLES, FACTORY_ADMIN_PASSWORD
 from app.core.database import get_db
 from app.core.response import ok_list
 from app.core.security import check_rate_limit, get_client_ip, get_current_user, get_password_hash
@@ -428,7 +429,10 @@ async def reset_password_with_machine_code(
             logger.warning("拒绝通过公开通道重置管理员账号: %s", username)
             raise HTTPException(
                 status_code=403,
-                detail="管理员账号不支持自助重置，请联系超级管理员通过管理端处理",
+                detail=(
+                    "管理员账号不支持普通自助重置；若该账号从未登录过，"
+                    "请使用「管理员账号（恢复出厂密码）」通道，否则联系其他超级管理员"
+                ),
             )
 
         # 生成密码学安全的随机密码（不返回明文，仅通过安全渠道告知用户）
@@ -470,6 +474,119 @@ async def reset_password_with_machine_code(
         db.rollback()
         logger.error(f"重置密码失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="重置密码失败，请稍后重试或联系管理员")
+
+
+@router.post("/recover-admin-factory-password")
+async def recover_admin_factory_password(
+    request: Request,
+    username: str,
+    machine_code: str,
+    verification_code: str,
+    db: Session = Depends(get_db),
+):
+    """管理员账号出厂恢复（ADR-0008 扩展，2026-08-30）
+
+    离线单机部署的兜底通道：历史版本（≤v1.10.4）种子管理员时曾随机生成密码
+    且仅写入易失日志，导致安装后无人能登录。本端点将"从未激活"的管理员账号
+    重置为文档化出厂密码（不再产生无人知晓的随机密码）。
+
+    前置条件（必须同时满足，否则拒绝）：
+    - 目标账号是管理员级（role ∈ ADMIN_ROLES 或 is_superuser）
+    - must_change_password 仍为 True，且 login_attempts 中该用户名从未有过
+      成功登录——即账号自种子以来从未被访问过（已激活账号不可被本端点触碰）
+
+    安全边界（与 reset-password-with-machine-code 同源的四重边界）：
+    限流真实生效；仅限 loopback（TCP 对端地址）；机器码+校验码双验证；
+    write_work_log 审计留痕。
+    """
+    # 速率限制（关键字传参，fail-closed）
+    client_ip = get_client_ip(request)
+    if not await check_rate_limit(key=f"recover_admin:{client_ip}", request=request, limit=5, window=60):
+        raise HTTPException(status_code=429, detail="操作过于频繁，请稍后再试")
+
+    # 仅限本机操作
+    if not _client_is_loopback(request):
+        raise HTTPException(status_code=403, detail="出厂恢复仅允许在本机操作")
+
+    try:
+        service = MachineCodeService()
+
+        # 验证机器码与本机一致
+        if service.get_machine_code() != machine_code:
+            raise HTTPException(status_code=400, detail="机器码不匹配")
+
+        # 验证校验码
+        if not service.verify_machine_code(machine_code, verification_code):
+            raise HTTPException(status_code=400, detail="校验码不正确")
+
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+
+        # 本端点只服务管理员级账号；普通账号走既有自助重置通道
+        _role = str(getattr(user, "role", "") or "").lower()
+        _is_admin_class = _role in ADMIN_ROLES or getattr(user, "is_superuser", False) is True
+        if not _is_admin_class:
+            raise HTTPException(
+                status_code=400,
+                detail="普通账号请使用「使用机器码重置密码」通道",
+            )
+
+        # 窄前置条件：账号必须从未被访问过（未完成过首次登录改密且无成功登录记录）
+        if not user.must_change_password:
+            raise HTTPException(
+                status_code=403,
+                detail="该管理员账号已激活过，无法出厂恢复；请直接使用已有密码登录",
+            )
+        from app.models.audit import LoginAttempt
+
+        _success_count = (
+            db.query(LoginAttempt)
+            .filter(LoginAttempt.username == username, LoginAttempt.success.is_(True))
+            .count()
+        )
+        if _success_count > 0:
+            logger.warning("拒绝出厂恢复（存在成功登录记录）: %s", username)
+            raise HTTPException(
+                status_code=403,
+                detail="该管理员账号已激活过，无法出厂恢复；请直接使用已有密码登录",
+            )
+
+        # 重置为文档化出厂密码（单一来源 constants.FACTORY_ADMIN_PASSWORD），
+        # 首登强制改密——彻底杜绝"无人知晓的随机密码"再次出现
+        user.hashed_password = get_password_hash(FACTORY_ADMIN_PASSWORD)
+        user.must_change_password = True
+
+        from app.services.lockout_service import get_lockout_service
+
+        get_lockout_service().clear(user, db)
+
+        safe_commit(db)
+
+        try:
+            write_work_log(
+                db, "user", "recover_admin_factory_password", user.id,
+                f"管理员账号出厂恢复（从未激活状态）: {username}",
+            )
+        except Exception:  # pragma: no cover
+            logger.debug("记录出厂恢复审计日志失败", exc_info=True)
+
+        logger.warning(
+            "管理员账号 %s 已通过本机出厂恢复通道重置为出厂密码（从未激活状态，首登强制改密）",
+            username,
+        )
+        return {
+            "code": 200,
+            "success": True,
+            "data": {"username": username, "factory_password": FACTORY_ADMIN_PASSWORD},
+            "message": "已恢复出厂密码，请立即登录并修改",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:  # pragma: no cover
+        db.rollback()
+        logger.error(f"管理员出厂恢复失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="出厂恢复失败，请稍后重试")
 
 
 @router.get("/machine-info")

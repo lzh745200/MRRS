@@ -39,6 +39,14 @@ class BackupRestoreError(Exception):
         super().__init__(message)
 
 
+class BackupIncompleteError(Exception):
+    """备份包不完整异常（如未包含数据库文件），视为备份失败"""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
 class BackupRecord:
     """备份记录"""
 
@@ -75,14 +83,15 @@ class BackupService:
             self.backup_dir = str(get_backup_path())
         else:
             self.backup_dir = backup_dir
-        # 数据库路径使用统一的路径工具模块
-        from app.utils.paths import get_database_path
+        # 数据库路径：优先取当前会话实际绑定的引擎 URL（唯一可信来源），
+        # 兜底 get_database_path()（其自身已按 DATABASE_URL 环境变量解析）。
+        # 历史缺陷：仅按静态规则推断，打包 + Electron 注入环境下与真实
+        # 在用库分叉，导致备份的是陈旧文件、恢复写回错误位置。
+        self.database_path = str(self._resolve_database_path())
+        # 上传目录同样使用运行时解析（与 files.py 写入目录一致）
+        from app.utils.paths import get_runtime_uploads_path
 
-        self.database_path = str(get_database_path().absolute())
-        # 上传目录也使用动态路径
-        from app.utils.paths import get_uploads_path
-
-        self.uploads_dir = str(get_uploads_path())
+        self.uploads_dir = str(get_runtime_uploads_path())
 
         # 确保备份目录存在
         os.makedirs(self.backup_dir, exist_ok=True)
@@ -91,6 +100,22 @@ class BackupService:
         self.incremental_enabled = os.getenv("INCREMENTAL_BACKUP_ENABLED", "true").lower() == "true"
         self.compression_level = int(os.getenv("BACKUP_COMPRESSION_LEVEL", "6"))  # 0-9
         self.last_backup_manifest = self._load_last_manifest()
+
+    def _resolve_database_path(self) -> Path:
+        """解析当前会话实际绑定的 SQLite 文件路径；无法解析时走路径工具兜底。"""
+        try:
+            bind = self.db.get_bind()
+            url = str(bind.url)
+        except Exception:
+            url = ""
+        from app.utils.paths import _db_file_from_url
+
+        candidate = _db_file_from_url(url)
+        if candidate is None:
+            from app.utils.paths import get_database_path
+
+            candidate = get_database_path()
+        return candidate.absolute()
 
     def _validate_path(self, file_path: str) -> bool:
         """
@@ -306,8 +331,11 @@ class BackupService:
             备份记录
         """
         # 生成备份文件名（毫秒级时间戳，避免同秒两次备份互相覆盖）
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file_name = f"backup_{timestamp}_{int(datetime.now().timestamp() * 1000) % 1000:03d}.zip"
+        # 时间戳取值统一来自同一次 now()，杜绝秒与毫秒跨秒错位
+        now = datetime.now()
+        timestamp = now.strftime("%Y%m%d_%H%M%S")
+        millisecond = now.microsecond // 1000
+        backup_file_name = f"backup_{timestamp}_{millisecond:03d}.zip"
         backup_file_path = os.path.join(self.backup_dir, backup_file_name)
 
         self._ensure_disk_space()
@@ -319,6 +347,22 @@ class BackupService:
             backup_file_path, snapshot_path, timestamp, description, include_uploads
         )
 
+        # 完整性校验：备份包必须包含数据库文件，否则视为备份失败（fail-loud，
+        # 杜绝"备份成功"假象——历史上曾静默产出不含数据库的空包）
+        try:
+            with zipfile.ZipFile(backup_file_path, "r") as _zf:
+                _has_db = "data/rural_revitalization.db" in _zf.namelist()
+        except Exception:
+            _has_db = False
+        if not _has_db:
+            try:
+                os.remove(backup_file_path)
+            except OSError:
+                pass
+            raise BackupIncompleteError(
+                f"备份未能包含数据库文件（database_path={self.database_path}），已中止并删除半成品"
+            )
+
         # ── 加密（可选） ──
         if password:
             self._encrypt_file(backup_file_path, password)
@@ -327,8 +371,9 @@ class BackupService:
         # 获取文件大小
         file_size = os.path.getsize(backup_file_path)
 
-        # 保存备份记录到数据库
-        config_key = f"backup_{timestamp}"
+        # 保存备份记录到数据库（key 携带毫秒后缀，与文件名同源，
+        # 修复同秒两次备份触发 system_configs 唯一键冲突的 500）
+        config_key = f"backup_{timestamp}_{millisecond:03d}"
         config = SystemConfig(key=config_key, value=backup_file_path, description=f"备份: {description}")
         self.db.add(config)
 

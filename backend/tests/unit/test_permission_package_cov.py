@@ -48,7 +48,7 @@ class TestExport:
 
 class TestDownload:
     def test_not_found_404(self, tmp_path):
-        with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
             with pytest.raises(HTTPException) as exc_info:
                 pp.download_permission_package("missing.zip", _admin())
         assert exc_info.value.status_code == 404
@@ -56,7 +56,7 @@ class TestDownload:
     def test_success(self, tmp_path):
         f = tmp_path / "pkg.zip"
         f.write_bytes(b"PK")
-        with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
             resp = pp.download_permission_package("pkg.zip", _admin())
         assert resp.media_type == "application/zip"
 
@@ -71,7 +71,7 @@ class TestImport:
     async def test_success(self, svc, tmp_path):
         svc.import_package.return_value = {"success": True, "preview": {}}
         file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=b"PK"))
-        with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
             resp = await pp.import_permission_package(_req(), file, _admin(), MagicMock())
         assert resp.status_code == 200
         assert (tmp_path / "pkg.zip").exists()
@@ -79,7 +79,7 @@ class TestImport:
     async def test_exception_cleanup_500(self, svc, tmp_path):
         svc.import_package.side_effect = RuntimeError("bad zip")
         file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=b"PK"))
-        with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
             with pytest.raises(HTTPException) as exc_info:
                 await pp.import_permission_package(_req(), file, _admin(), MagicMock())
         assert exc_info.value.status_code == 500
@@ -92,7 +92,7 @@ class TestImport:
         svc.import_package.side_effect = RuntimeError("bad zip")
         file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=b"PK"))
         with (
-            patch("app.utils.paths.get_uploads_path", return_value=tmp_path),
+            patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path),
             patch.object(pp.os, "unlink", side_effect=OSError("locked")),
             pytest.raises(HTTPException) as exc_info,
         ):
@@ -106,7 +106,7 @@ class TestConfirm:
         return SimpleNamespace(overwrite_existing=False, mode=None, **kw)
 
     def test_file_missing_404(self, svc, tmp_path):
-        with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
             with pytest.raises(HTTPException) as exc_info:
                 pp.confirm_import_permission_package(
                     "missing.zip", self._body(), _admin(), MagicMock()
@@ -116,7 +116,7 @@ class TestConfirm:
     def test_success(self, svc, tmp_path):
         (tmp_path / "pkg.zip").write_bytes(b"PK")
         svc.confirm_import.return_value = {"success": True}
-        with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
             resp = pp.confirm_import_permission_package(
                 "pkg.zip", SimpleNamespace(overwrite_existing=True, mode=None), _admin(), MagicMock()
             )
@@ -126,7 +126,7 @@ class TestConfirm:
     def test_failure_500(self, svc, tmp_path):
         (tmp_path / "pkg.zip").write_bytes(b"PK")
         svc.confirm_import.return_value = {"success": False, "message": "校验失败"}
-        with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
             with pytest.raises(HTTPException) as exc_info:
                 pp.confirm_import_permission_package(
                     "pkg.zip", self._body(), _admin(), MagicMock()
@@ -136,7 +136,7 @@ class TestConfirm:
     def test_service_raises_still_cleans_up(self, svc, tmp_path):
         (tmp_path / "pkg.zip").write_bytes(b"PK")
         svc.confirm_import.side_effect = RuntimeError("crash")
-        with patch("app.utils.paths.get_uploads_path", return_value=tmp_path):
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
             with pytest.raises(RuntimeError):
                 pp.confirm_import_permission_package(
                     "pkg.zip", self._body(), _admin(), MagicMock()
@@ -147,7 +147,7 @@ class TestConfirm:
         (tmp_path / "pkg.zip").write_bytes(b"PK")
         svc.confirm_import.return_value = {"success": True}
         with (
-            patch("app.utils.paths.get_uploads_path", return_value=tmp_path),
+            patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path),
             patch.object(pp.os, "unlink", side_effect=OSError("locked")),
         ):
             resp = pp.confirm_import_permission_package(

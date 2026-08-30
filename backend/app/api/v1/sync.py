@@ -127,8 +127,8 @@ async def get_sync_dashboard(
         })
 
     # ── 5. 数据包文件统计 ──
-    from app.utils.paths import get_uploads_path
-    uploads_dir = get_uploads_path()
+    from app.utils.paths import get_runtime_uploads_path
+    uploads_dir = get_runtime_uploads_path()
     package_stats = {
         "total_packages": 0,
         "total_size_mb": 0,

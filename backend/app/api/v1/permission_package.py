@@ -52,9 +52,9 @@ def _resolve_package_upload_path(file_name: str) -> str:
         or file_name in (".", "..")
     ):
         raise HTTPException(status_code=400, detail="非法文件名")
-    from app.utils.paths import get_uploads_path
+    from app.utils.paths import get_runtime_uploads_path
 
-    upload_dir = str(get_uploads_path("permission_packages"))
+    upload_dir = str(get_runtime_uploads_path("permission_packages"))
     real_dir = os.path.realpath(upload_dir)
     file_path = os.path.realpath(os.path.join(real_dir, file_name))
     if not file_path.startswith(real_dir + os.sep):
@@ -126,9 +126,9 @@ def download_permission_package(
     """
     if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
-    from app.utils.paths import get_uploads_path
+    from app.utils.paths import get_runtime_uploads_path
 
-    upload_dir = str(get_uploads_path("permission_packages"))
+    upload_dir = str(get_runtime_uploads_path("permission_packages"))
     # 路径遍历防护: 仅允许合法文件名(不允许 ../ 或绝对路径)
     safe_name = os.path.basename(file_name)
     if safe_name != file_name:
@@ -178,10 +178,10 @@ async def import_permission_package(
             raise HTTPException(status_code=403, detail="仅允许本机导入权限包")
 
     # 路径遍历防护：净化文件名并解析到上传目录内
-    from app.utils.paths import get_uploads_path
+    from app.utils.paths import get_runtime_uploads_path
 
     file_path = _resolve_package_upload_path(file.filename)
-    upload_dir = str(get_uploads_path("permission_packages"))
+    upload_dir = str(get_runtime_uploads_path("permission_packages"))
     os.makedirs(upload_dir, exist_ok=True)
 
     with open(file_path, "wb") as f:

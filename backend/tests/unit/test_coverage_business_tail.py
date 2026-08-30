@@ -572,12 +572,13 @@ class TestPermissionPackageTail:
         import app.api.v1.permission_package as pp
         from app.api.v1.permission_package import download_permission_package
 
-        def _fake_realpath(p):
+        def _fake_realpath(p, strict=False):
             if str(p).endswith("foo.zip"):
                 return "/outside/foo.zip"
             return "/uploads/pp"
 
-        with patch("app.utils.paths.get_uploads_path", return_value="/uploads/pp"):
+        # 源码已迁移 get_uploads_path → get_runtime_uploads_path（W6 路径双源收口）
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value="/uploads/pp"):
             with patch.object(pp.os.path, "realpath", side_effect=_fake_realpath):
                 with pytest.raises(HTTPException) as exc_info:
                     download_permission_package("foo.zip", _admin_user())

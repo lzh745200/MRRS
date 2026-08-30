@@ -54,6 +54,16 @@
               />
               <div class="form-hint">校验码可在"获取机器码"页面查看</div>
             </el-form-item>
+
+            <el-form-item label="账号类型">
+              <el-radio-group v-model="accountMode">
+                <el-radio value="user">普通账号（重置为新密码）</el-radio>
+                <el-radio value="admin">管理员账号（恢复出厂密码）</el-radio>
+              </el-radio-group>
+              <div v-if="accountMode === 'admin'" class="form-hint">
+                仅适用于从未登录过的管理员账号：恢复为出厂密码后请立即登录并修改
+              </div>
+            </el-form-item>
           </el-form>
 
           <div class="action-buttons">
@@ -73,15 +83,21 @@
         <div v-if="currentStep === 1" class="step-content success-content">
           <div class="reset-result">
             <el-icon class="result-icon-success"><CircleCheckFilled /></el-icon>
-            <h3>密码重置成功</h3>
-            <p class="result-subtitle">您的新密码是：</p>
+            <h3>{{ accountMode === 'admin' ? '出厂密码已恢复' : '密码重置成功' }}</h3>
+            <p class="result-subtitle">
+              {{ accountMode === 'admin' ? '出厂密码是：' : '您的新密码是：' }}
+            </p>
             <div class="password-box">
               <span class="password-text">{{ newPassword }}</span>
               <el-button type="primary" size="small" @click="copyPassword"> 复制密码 </el-button>
             </div>
             <el-alert type="warning" :closable="false" class="password-tip">
               <template #title>
-                <strong>重要提示：此密码仅显示一次，请立即复制保存</strong>
+                <strong>{{
+                  accountMode === 'admin'
+                    ? '登录后请立即修改出厂密码'
+                    : '重要提示：此密码仅显示一次，请立即复制保存'
+                }}</strong>
               </template>
               <div>登录后请尽快修改密码</div>
             </el-alert>
@@ -115,6 +131,8 @@ const currentStep = ref(0)
 const resetting = ref(false)
 const loadingMachineCode = ref(false)
 const newPassword = ref('')
+// user: 普通账号自助重置（生成新密码）；admin: 管理员出厂恢复（仅限从未激活账号）
+const accountMode = ref<'user' | 'admin'>('user')
 
 const resetForm = ref({
   username: '',
@@ -167,15 +185,19 @@ const handleResetPassword = async () => {
 
   try {
     // post() 已自动解包，返回值即为 {code, data, message} 信封体
-    const response = await post('/machine-code/reset-password-with-machine-code', undefined, {
+    const isAdminMode = accountMode.value === 'admin'
+    const url = isAdminMode
+      ? '/machine-code/recover-admin-factory-password'
+      : '/machine-code/reset-password-with-machine-code'
+    const response = await post(url, undefined, {
       params: resetForm.value,
     })
 
     const payload = response?.data ?? response
-    if (response?.code === 200 && payload?.new_password) {
-      newPassword.value = payload.new_password
+    if (response?.code === 200 && (payload?.new_password || payload?.factory_password)) {
+      newPassword.value = payload.new_password ?? payload.factory_password
       currentStep.value = 1
-      ElMessage.success('密码重置成功')
+      ElMessage.success(isAdminMode ? '出厂密码已恢复' : '密码重置成功')
     } else if (response?.code === 200) {
       // 后端返回成功但未携带密码（兼容旧版）
       currentStep.value = 1
@@ -187,11 +209,15 @@ const handleResetPassword = async () => {
     }
   } catch (error: any) {
     logger.error('[ForgotPassword] 重置密码失败', error)
-    const msg =
+    let msg =
       error?.response?.data?.detail ||
       error?.response?.data?.message ||
       error?.message ||
       '重置密码失败，请检查网络连接'
+    // 管理员在普通通道被拒时，引导切换到出厂恢复模式
+    if (accountMode.value === 'user' && String(msg).includes('管理员')) {
+      msg = `${msg}（若是管理员账号，请将账号类型切换为「管理员账号（恢复出厂密码）」）`
+    }
     ElMessage.error(msg)
   } finally {
     resetting.value = false

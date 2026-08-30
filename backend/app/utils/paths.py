@@ -193,10 +193,88 @@ def get_database_path() -> Path:
     """
     获取数据库文件路径
 
+    解析优先级（2026-08-30 路径双源修复，详见 ADR-0008 关联工单）：
+    1. DATABASE_URL 环境变量（Electron 启动时注入，指向真实在用的数据库）
+    2. settings.DATABASE_URL（覆盖 .env 文件配置的场景）
+    3. 传统推断：<app_data_dir>/data/rural_revitalization.db（兜底，行为与
+       旧版本一致）
+
+    历史缺陷：本函数只做静态推断，而应用实际使用的库由 DATABASE_URL 决定，
+    打包 + Electron 注入环境下两者分叉，导致备份/恢复/健康检查/维护任务
+    全部作用在一个陈旧的错误文件上。
+
     返回:
         Path: 数据库文件的完整路径
     """
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        try:
+            # 延迟导入避免循环依赖；Settings 首次构造期间可能尚未就绪，静默跳过
+            from app.core.config import settings
+
+            url = settings.DATABASE_URL or ""
+        except Exception:
+            url = ""
+    candidate = _db_file_from_url(url)
+    if candidate is not None:
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        return candidate
     return get_data_path("rural_revitalization.db")
+
+
+def _db_file_from_url(url: str):
+    """从 SQLAlchemy URL 解析本地 SQLite 文件路径。
+
+    仅接受指向绝对路径的 sqlite URL；内存库、非 SQLite、相对路径一律返回
+    None，由调用方走兜底逻辑。
+    """
+    if not url or not url.startswith("sqlite"):
+        return None
+    prefix = "sqlite:///"
+    if not url.startswith(prefix):
+        return None
+    raw = url[len(prefix):]
+    raw = raw.split("?", 1)[0]
+    if not raw or ":memory:" in raw:
+        return None
+    from urllib.parse import unquote
+
+    path = Path(unquote(raw))
+    if not path.is_absolute():
+        return None
+    return path
+
+
+def get_runtime_uploads_path(sub_path: str = "") -> Path:
+    """
+    获取运行时上传根目录（与 files.py 写入、static_files.py 服务的目录一致）
+
+    解析优先级与 get_database_path 相同：UPLOAD_DIR 环境变量 →
+    settings.UPLOAD_DIR（须为绝对路径）→ 传统推断 get_uploads_path()。
+    备份/统计/权限包等跨模块消费方必须使用本函数，避免路径双源分叉。
+    """
+    upload_dir = os.environ.get("UPLOAD_DIR", "")
+    if not upload_dir:
+        try:
+            from app.core.config import settings
+
+            upload_dir = settings.UPLOAD_DIR or ""
+        except Exception:
+            upload_dir = ""
+    if upload_dir:
+        path = Path(upload_dir)
+        if path.is_absolute():
+            base = path
+        else:
+            base = get_uploads_path()
+    else:
+        base = get_uploads_path()
+    if sub_path:
+        result = _safe_join(base, sub_path)
+        if result.parent != base:
+            result.parent.mkdir(parents=True, exist_ok=True)
+        return result
+    return base
 
 
 def get_log_path(sub_path: str = "") -> Path:

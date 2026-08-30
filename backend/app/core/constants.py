@@ -16,6 +16,14 @@ MAX_PAGE_SIZE = 100
 # Nginx 非标准状态码：客户端在服务器完成响应前关闭了连接
 HTTP_CLIENT_CLOSED_REQUEST = 499
 
+# ── 出厂凭据 ──
+# 默认管理员出厂密码（单一来源）：main.py 种子逻辑与 machine_code.py 破窗恢复
+# 端点共同引用。保密部署可通过 DEFAULT_ADMIN_PASSWORD 环境变量覆盖种子值，
+# 但出厂恢复端点固定重置为本常量（首登强制改密，不构成弱口令驻留）。
+FACTORY_ADMIN_USERNAME = "admin"
+FACTORY_ADMIN_PASSWORD = "Admin@2026"
+
+
 # ── 角色常量 ──
 ROLE_SUPER_ADMIN = "super_admin"
 ROLE_ADMIN = "admin"

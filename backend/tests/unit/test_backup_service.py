@@ -13,6 +13,7 @@ import pytest
 
 from app.models.system_config import SystemConfig
 from app.services.backup_service import (
+    BackupIncompleteError,
     BackupRecord,
     BackupRestoreError,
     BackupService,
@@ -24,6 +25,7 @@ def _make_svc(mock_db, backup_dir, db_path, uploads_dir, incremental="true", lev
     with patch("os.makedirs"), \
          patch("app.utils.paths.get_database_path", return_value=Path(db_path)), \
          patch("app.utils.paths.get_uploads_path", return_value=Path(uploads_dir)), \
+         patch("app.utils.paths.get_runtime_uploads_path", return_value=Path(uploads_dir)), \
          patch("os.getenv") as mock_getenv:
         mock_getenv.side_effect = lambda k, d=None: {
             "INCREMENTAL_BACKUP_ENABLED": incremental,
@@ -125,7 +127,8 @@ class TestCreateBackup:
         assert result is not None
         assert result.file_size > 0
 
-    def test_backup_without_db(self, mock_db, tmp_path):
+    def test_backup_without_db_fails_loud(self, mock_db, tmp_path):
+        """2026-08-30 起，备份包不含数据库即视为失败（fail-loud），不再静默成功。"""
         bdir = str(tmp_path / "backups")
         db_path = str(tmp_path / "no_exist" / "db.db")
         up_dir = str(tmp_path / "uploads")
@@ -133,8 +136,9 @@ class TestCreateBackup:
         os.makedirs(up_dir)
         Path(os.path.join(up_dir, "f.txt")).write_text("up")
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
-        result = svc.create_backup()
-        assert result is not None
+        with pytest.raises(BackupIncompleteError):
+            svc.create_backup()
+        assert list(Path(bdir).glob("*.zip")) == []
 
     def test_backup_without_uploads(self, mock_db, tmp_path):
         bdir = str(tmp_path / "backups")
