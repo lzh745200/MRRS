@@ -36,6 +36,28 @@
   du 字节粗校验（>5% 仅警告）改为逐文件 SHA256 manifest 比对，偏差即
   exit 1；manifest 落盘供 `audit_static_assets.py --verify-manifest` 复核。
 
+### 构建/完整性（续，2026-08-30 第二批）
+- ✨ **PyInstaller onefile → onedir**（W6-T6/ADR-0006）：冷启动实测 32.3s →
+  8.6s（~3.8 倍）；消除 %TEMP% 自解压的杀软误报画像；datas 摘除 app/ 源码
+  目录与死依赖（aiosqlite/jieba/bs4/prometheus_client），hiddenimports 删除
+  54 条 collect 覆盖的手写路由；全消费方适配（extraResources/main.js/CI/
+  ARM64 Dockerfile）；本地完整 NSIS 构建（227MB）+ 打包应用冒烟
+  （登录/列表/导出全 200）。
+- 🔒 **Actions 全量 pin 到 commit SHA**（W6-T7）：4 个 workflow 57 处 uses
+  实时解析上游 SHA 固定，消除 tag 漂移的供应链风险。
+- ✨ **代码签名管线就绪**（W6-T1 管线侧）：CSC secrets 配置即自动签名
+  （后端 exe signtool + 安装包/卸载器 electron-builder），未配置显式
+  WARNING 跳过；接入与验签文档 docs/04-部署文档/01-Windows部署/代码签名.md。
+- 📝 **离线升级与回滚指南**（W6-T10）：备份→SHA256/签名校验→覆盖安装→
+  alembic 迁移→回滚路径；NSIS 卸载静默默认保留用户数据（/SD IDNO）。
+- 🔐 **secrets.json 明文回落收紧**（W6-T11）：safeStorage 不可用时 0600
+  权限 + 风险文档标注。
+- 🧹 **前端未使用导出复核收口**（W9-T1）：288 项逐项复核，删除 2 项真死
+  代码（userManagementApi/EXPORT_FIELDS），286 项按验收标准标注豁免
+  （265 项被各自单元测试引用——纠正工单"含测试零引用"前提；21 项特殊
+  形态有真实引用）；顺带修复 W3-T2 menuKeyAlignment 守卫对可选参数
+  路由的匹配（14d2b243 引入的存量红测试）。
+
 ### 清理（无死代码遗留）
 - 🧹 删除 4 个引用已删源码的死测试（stores/project、stores/rbac、
   useAccessibility）及 8 处指向不存在模块的 `vi.mock`（4 处已删 stores/api +
