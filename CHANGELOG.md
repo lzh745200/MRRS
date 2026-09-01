@@ -478,6 +478,33 @@
 - 测试隔离：conftest 会话启动清理遗留 test.db，消除跨会话顺序敏感偶发失败
 - 清理误提交的协作者工作区改动与 .reasonix 临时文件，测试套件恢复稳定（后端 12118 / 前端 6273 全过，覆盖率 100%）
 
+## [1.11.3] - 2026-08-31 — 麒麟版后端启动 ModuleNotFoundError 根治
+
+### 修复（致命，Kylin 真机）
+- 🐛 **冻结包内 47 个业务路由模块全部缺失**：`app/api/v1/__init__.py` 此前用
+  `importlib.import_module(f'app.api.v1.{name}')` 动态加载业务路由——PyInstaller
+  静态分析无法跟踪 f-string 动态导入，且 Linux Docker 构建时
+  `collect_submodules('app')` 依赖的包导入链在收集阶段被 walk_packages 静默跳过，
+  打包产物缺 organization/policy/projects 等 47 个模块 → 后端"部分启动"，
+  前端业务页面全量报错。**根改为静态导入**：打包收集 100% 确定，任一路由
+  损坏启动即快速失败（终结"静默降级为残缺 API"的故障模式）。
+- 🐛 **两个 spec 同源修复**：统一 spec 补 `sys.path` 插入使 collect 与 CWD 无关、
+  移除已删除依赖 sklearn 的 hiddenimports 与陈旧 excludes；standalone spec
+  补 `collect_submodules('app')`（其此前完全缺失，standalone DEB 同样受影响）。
+- 🐛 **ARM64 postinst**：补 onedir 后端主程序 chmod（旧脚本只找 onefile .exe 路径）；
+  chrome-sandbox 补 chown root:root + 4755（非 root 用户启动必需）。
+- 🐛 **deb Depends 声明**：补 Electron 运行库依赖（libnss3/libgbm1/libasound2 等
+  16 项），麒麟安装时缺失依赖明确报错而非启动后崩溃。
+
+### 增强（国产平台兼容）
+- ✨ Linux 平台禁用硬件加速 + disable-dev-shm-usage：规避麒麟/飞腾 GPU 驱动
+  白屏/花屏类问题（管理界面无需 GPU 渲染）。
+
+### 验证
+- ✅ 本机 PyInstaller 实包验证：启动冻结 exe，此前缺失的 organizations/policies/
+  projects/data-packages/incremental 等路由全部存在（401/403=存在需鉴权）
+- ✅ 后端全量回归全绿；YAML/JSON 门禁通过
+
 ## [1.11.2] - 2026-08-30 — 403 权限页根因修复 + 全站弹窗显示修复
 
 ### 修复（403 权限页，六类根因）

@@ -98,6 +98,12 @@ hiddenimports = [
 hiddenimports += collect_submodules('uvicorn')
 hiddenimports += collect_submodules('sqlalchemy')
 
+# app.* 全量收集（v1.11.3）：业务路由此前动态 importlib 加载，静态分析不可见，
+# 打包后 ModuleNotFoundError（Kylin 403 事故）；统一 spec 同步修复
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+hiddenimports += collect_submodules('app')
+
 a = Analysis(
     ['start.py'],
     pathex=[backend_dir],

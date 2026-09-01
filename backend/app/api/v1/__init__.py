@@ -2,11 +2,13 @@
 API v1 路由模块
 注册所有业务路由
 
-注意：子模块包使用显式静态导入确保 PyInstaller 能正确打包；
-业务模块使用 importlib 动态导入，保持代码简洁。
+全部使用静态导入（v1.11.3 事故修复）：
+此前业务模块经 importlib.import_module(f'app.api.v1.{name}') 动态加载，
+PyInstaller 静态分析无法跟踪 f-string 动态导入，冻结包内 47 个业务路由
+全部缺失（Kylin 真机 403/接口全挂的根因）。静态导入 100% 被打包收集，
+且任何路由模块损坏会在启动时快速失败，而非静默降级为残缺 API。
 """
 
-import importlib
 import logging
 
 from fastapi import APIRouter
@@ -26,140 +28,120 @@ if not logger.handlers:
 
 api_v1_router = APIRouter(prefix="/api/v1")
 
-# ==================== 显式静态导入所有路由模块 ====================
-# 使用静态导入而非动态导入，确保 PyInstaller 能正确收集所有模块
+# ==================== 子模块包 ====================
+from app.api.v1.auth import router as auth_router  # noqa: E402
+from app.api.v1.data import router as data_router  # noqa: E402
+from app.api.v1.import_export import router as import_export_router  # noqa: E402
+from app.api.v1.system import router as system_router  # noqa: E402
+from app.api.v1.monitoring import (  # noqa: E402
+    metrics as monitoring_metrics_module,
+    secrets as monitoring_secrets_module,
+    data_tier as monitoring_data_tier_module,
+)
+from app.api.v1.messages import notifications_router  # noqa: E402
+from app.api.v1.reminders import router as reminders_router  # noqa: E402
 
-# ---- 子模块包 ----
-try:
-    from app.api.v1.auth import router as auth_router
-    api_v1_router.include_router(auth_router)
-    logger.debug("已加载路由: auth")
-except Exception as e:
-    logger.warning("加载 auth 路由失败: %s", e, exc_info=True)
+# system 子模块（system/__init__ 已含这些路由；此处直挂保持 /api/v1/* 历史表面）
+from app.api.v1.system import health as system_health_module  # noqa: E402
+from app.api.v1.system import env as system_env_module  # noqa: E402
+from app.api.v1.system import config_package as system_config_package_module  # noqa: E402
 
-try:
-    from app.api.v1.data import router as data_router
-    api_v1_router.include_router(data_router)
-    logger.debug("已加载路由: data")
-except Exception as e:
-    logger.warning("加载 data 路由失败: %s", e, exc_info=True)
+# ==================== 业务模块（静态导入，顺序敏感） ====================
+# 注册顺序 = FastAPI 路由匹配优先级。supported_village_export 必须先于
+# supported_village：后者的 /{village_id} 动态路由会把 "export" 当 int 解析（422）。
+from app.api.v1 import (  # noqa: E402
+    organization,
+    policy,
+    projects,
+    school,
+    supported_village_export,  # 必须先于 supported_village（见上）
+    supported_village,
+    rural_works,
+    rural_tasks,
+    villages,
+    village_templates,
+    validation,
+    report_templates,
+    approval,
+    messages,
+    feedback,
+    todos,
+    ai,
+    map,
+    project_milestones,
+    funds,
+    fund_budgets,
+    fund_lifecycle,
+    work_logs,
+    assessment,
+    system_health,
+    performance,
+    monitoring_legacy,
+    data_quality,
+    ai_enhanced,
+    data_sync,
+    offline_map,
+    batch_operations,
+    sync,
+    user_permissions,
+    machine_code,
+    effectiveness,
+    sentiment,
+    encryption,
+    search,
+    menus,
+    permission_package,
+    org_module_policy,
+    subordinate_registry,
+    control_package,
+    subordinate_reports,
+    files,
+    permission_packs,
+)
 
-try:
-    from app.api.v1.import_export import router as import_export_router
-    api_v1_router.include_router(import_export_router)
-    logger.debug("已加载路由: import_export")
-except Exception as e:
-    logger.warning("加载 import_export 路由失败: %s", e, exc_info=True)
+# ==================== 按序注册 ====================
+api_v1_router.include_router(auth_router)
+logger.debug("已加载路由: auth")
+api_v1_router.include_router(data_router)
+logger.debug("已加载路由: data")
+api_v1_router.include_router(import_export_router)
+logger.debug("已加载路由: import_export")
+api_v1_router.include_router(system_router)
+logger.debug("已加载路由: system")
 
-try:
-    from app.api.v1.system import router as system_router
-    api_v1_router.include_router(system_router)
-    logger.debug("已加载路由: system")
-except Exception as e:
-    logger.warning("加载 system 路由失败: %s", e, exc_info=True)
+# system 子模块直挂（历史表面，勿删）
+api_v1_router.include_router(system_health_module.router)
+api_v1_router.include_router(system_env_module.router)
+api_v1_router.include_router(system_config_package_module.router)
 
-# ---- System 子模块 ----
-try:
-    from app.api.v1.system import health as system_health_module
-    if hasattr(system_health_module, 'router'):
-        api_v1_router.include_router(system_health_module.router)
-        logger.debug("已加载路由: system.health")
-except Exception as e:
-    logger.warning("加载 system.health 路由失败: %s", e, exc_info=True)
+api_v1_router.include_router(monitoring_metrics_module.router)
+api_v1_router.include_router(monitoring_secrets_module.router)
+api_v1_router.include_router(monitoring_data_tier_module.router)
+api_v1_router.include_router(notifications_router)
+api_v1_router.include_router(reminders_router)
 
-try:
-    from app.api.v1.system import env as system_env_module
-    if hasattr(system_env_module, 'router'):
-        api_v1_router.include_router(system_env_module.router)
-        logger.debug("已加载路由: system.env")
-except Exception as e:
-    logger.warning("加载 system.env 路由失败: %s", e, exc_info=True)
-
-try:
-    from app.api.v1.system import config_package as system_config_package_module
-    if hasattr(system_config_package_module, 'router'):
-        api_v1_router.include_router(system_config_package_module.router)
-        logger.debug("已加载路由: system.config_package")
-except Exception as e:
-    logger.warning("加载 system.config_package 路由失败: %s", e, exc_info=True)
-
-try:
-    from app.api.v1.monitoring import metrics as monitoring_metrics_module
-    if hasattr(monitoring_metrics_module, 'router'):
-        api_v1_router.include_router(monitoring_metrics_module.router)
-        logger.debug("已加载路由: monitoring.metrics")
-except Exception as e:
-    logger.warning("加载 monitoring.metrics 路由失败: %s", e, exc_info=True)
-
-try:
-    from app.api.v1.monitoring import secrets as monitoring_secrets_module
-    if hasattr(monitoring_secrets_module, 'router'):
-        api_v1_router.include_router(monitoring_secrets_module.router)
-        logger.debug("已加载路由: monitoring.secrets")
-except Exception as e:
-    logger.warning("加载 monitoring.secrets 路由失败: %s", e, exc_info=True)
-
-try:
-    from app.api.v1.monitoring import data_tier as monitoring_data_tier_module
-    if hasattr(monitoring_data_tier_module, 'router'):
-        api_v1_router.include_router(monitoring_data_tier_module.router)
-        logger.debug("已加载路由: monitoring.data_tier")
-except Exception as e:
-    logger.warning("加载 monitoring.data_tier 路由失败: %s", e, exc_info=True)
-
-try:
-    from app.api.v1.messages import notifications_router
-    api_v1_router.include_router(notifications_router)
-    logger.debug("已加载路由: notifications")
-except Exception as e:
-    logger.warning("加载 notifications 路由失败: %s", e, exc_info=True)
-
-try:
-    from app.api.v1.reminders import router as reminders_router
-    api_v1_router.include_router(reminders_router)
-    logger.debug("已加载路由: reminders")
-except Exception as e:  # pragma: no cover - 防御性分支：reminders 模块随包安装必然存在
-    logger.warning("加载 reminders 路由失败: %s", e, exc_info=True)
-
-# ---- 业务模块 ----
-# 使用列表而非 dict（key==value 无需 dict 映射）
+# 业务模块：按上方静态导入顺序逐一注册
 _BUSINESS_MODULES = [
-    'organization', 'policy', 'projects', 'school',
-    # supported_village_export 必须先于 supported_village 注册：
-    # 后者的 /{village_id} 动态路由会把 "export" 当 int 解析（422），
-    # 静态导出路由需先匹配（FastAPI 按注册顺序匹配）
-    'supported_village_export', 'supported_village',  # 帮扶村核心模块：CRUD+10板块年度数据+导入导出，已完整实现
-    'rural_works', 'rural_tasks',
-    'villages', 'village_templates', 'validation', 'report_templates', 'approval',
-    'messages', 'feedback', 'todos', 'ai', 'map', 'project_milestones',
-    'funds', 'fund_budgets', 'fund_lifecycle', 'work_logs', 'assessment',
-    'system_health', 'performance', 'monitoring_legacy', 'data_quality',
-    'ai_enhanced', 'data_sync', 'offline_map', 'batch_operations', 'sync',
-    'user_permissions', 'machine_code', 'effectiveness', 'sentiment',
-    'encryption', 'search', 'menus', 'permission_package',
-    'org_module_policy', 'subordinate_registry', 'control_package',
-    'subordinate_reports', 'files', 'permission_packs',
+    organization, policy, projects, school,
+    supported_village_export, supported_village,
+    rural_works, rural_tasks,
+    villages, village_templates, validation, report_templates, approval,
+    messages, feedback, todos, ai, map, project_milestones,
+    funds, fund_budgets, fund_lifecycle, work_logs, assessment,
+    system_health, performance, monitoring_legacy, data_quality,
+    ai_enhanced, data_sync, offline_map, batch_operations, sync,
+    user_permissions, machine_code, effectiveness, sentiment,
+    encryption, search, menus, permission_package,
+    org_module_policy, subordinate_registry, control_package,
+    subordinate_reports, files, permission_packs,
 ]
 
-_loaded_count = 0
-_failed_modules = []
+for _mod in _BUSINESS_MODULES:
+    api_v1_router.include_router(_mod.router)
 
-for _route_name in _BUSINESS_MODULES:
-    try:
-        _mod = importlib.import_module(f'app.api.v1.{_route_name}')
-        if hasattr(_mod, 'router'):
-            api_v1_router.include_router(_mod.router)
-            _loaded_count += 1
-            logger.debug("已加载路由: %s", _route_name)
-        else:
-            logger.warning("模块 %s 中未找到 router 对象", _route_name)
-            _failed_modules.append(_route_name)
-    except Exception as e:
-        _failed_modules.append(_route_name)
-        logger.warning("加载 %s 路由失败: %s", _route_name, e, exc_info=True)
-
-logger.info("路由加载完成: 成功 %d/%d 个", _loaded_count, len(_BUSINESS_MODULES))
-if _failed_modules:
-    logger.warning("以下路由模块加载失败: %s", ", ".join(_failed_modules))
+logger.info(
+    "路由加载完成: 静态注册 %d 个业务模块 + 子模块包（快速失败模式：任一模块损坏即启动中止）",
+    len(_BUSINESS_MODULES),
+)
 
 __all__ = ["api_v1_router"]

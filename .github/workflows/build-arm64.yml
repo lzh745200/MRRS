@@ -223,13 +223,22 @@ jobs:
           # 第二候选为 package.json productName（帮扶管理系统）的安装目录
           for dir in /opt/assistance-management-system "/opt/帮扶管理系统"; do
             if [ -d "$dir" ]; then
-              # Ensure backend binary is executable
+              # PyInstaller onedir 后端（ADR-0006）：backend/assistance-backend/{主程序,_internal/}
+              if [ -f "$dir/resources/backend/assistance-backend/assistance-backend" ]; then
+                chmod +x "$dir/resources/backend/assistance-backend/assistance-backend"
+              fi
+              # 兼容 onefile 旧布局
               if [ -f "$dir/resources/backend/assistance-backend.exe" ]; then
                 chmod +x "$dir/resources/backend/assistance-backend.exe"
               fi
               # Ensure main binary is executable
               if [ -f "$dir/assistance-management-system" ]; then
                 chmod +x "$dir/assistance-management-system"
+              fi
+              # Chromium SUID 沙箱（非 root 启动必需；dpkg 归档可能丢失 4755 权限）
+              if [ -f "$dir/chrome-sandbox" ]; then
+                chown root:root "$dir/chrome-sandbox" || true
+                chmod 4755 "$dir/chrome-sandbox" || true
               fi
             fi
           done

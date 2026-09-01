@@ -1,6 +1,6 @@
 {
   "name": "Assistance-Management-Information-System",
-  "version": "1.11.2",
+  "version": "1.11.3",
   "private": true,
   "description": "帮扶管理系统 - 贵州省版 Standalone桌面应用",
   "main": "electron/main.js",
@@ -113,6 +113,24 @@
       "executableName": "assistance-management-system",
       "category": "Office",
       "maintainer": "开发团队 <dev@bumofu.com>",
+      "depends": [
+        "libnss3",
+        "libnspr4",
+        "libatk1.0-0",
+        "libatk-bridge2.0-0",
+        "libcups2",
+        "libdrm2",
+        "libxkbcommon0",
+        "libgbm1",
+        "libasound2",
+        "libxcomposite1",
+        "libxdamage1",
+        "libxfixes3",
+        "libxrandr2",
+        "libgtk-3-0",
+        "libpango-1.0-0",
+        "libcairo2"
+      ],
       "synopsis": "帮扶管理系统",
       "description": "帮扶管理系统 - 贵州省版 乡村振兴",
       "desktop": {

@@ -27,6 +27,12 @@ from PyInstaller.utils.hooks import collect_submodules
 # SPEC 是 PyInstaller 在解析 spec 文件时自动注入的变量，表示 spec 文件的完整路径
 backend_dir = os.path.dirname(os.path.abspath(SPEC))          # backend 目录
 project_root = os.path.dirname(backend_dir)                  # 项目根目录
+
+# sys.path 确定性（v1.11.3 事故修复）：Docker 构建 CWD=/build 与 spec 目录不一致时，
+# collect_submodules('app') 需要 import app 才能枚举子模块——不插入路径会静默返回
+# 空列表，47 个动态业务路由全部缺失（Kylin 真机 403 事故根因）
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 resources_dir = os.path.join(project_root, 'resources')
 
 # ========== 数据文件列表 ==========
@@ -122,9 +128,6 @@ hiddenimports = [
     # 文件处理
     'PIL.Image',
 
-    # AI功能
-    'sklearn.linear_model',
-    'sklearn.preprocessing',
 ]
 
 # Windows 平台特定隐藏导入
@@ -143,11 +146,6 @@ excludes = [
     'notebook', 'spyder', 'pylint',
     'docx', 'apscheduler',
     # 注意：mammoth 不再排除（policy.py 用于 .docx → HTML 转换，是运行时依赖）
-    'app.api.v1.users',           # 旧路径，已不存在
-    'app.api.v1.user_management', # 旧路径
-    'app.api.v1.rbac',            # 旧路径
-    'app.api.v1.analytics',       # 旧路径
-    'app.api.v1.statistics',      # 旧路径
 ]
 
 # ========== Analysis 阶段 ==========

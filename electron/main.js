@@ -1135,6 +1135,15 @@ if (process.platform === 'linux' && typeof process.getuid === 'function' && proc
   console.warn('[Main] root 用户，启用 --no-sandbox');
   app.commandLine.appendSwitch('no-sandbox');
 }
+if (process.platform === 'linux') {
+  // 麒麟/飞腾等国产平台 GPU 驱动兼容性差：硬件加速常导致白屏/花屏（管理界面无需 GPU 渲染）
+  console.warn('[Main] Linux 平台禁用硬件加速（国产化 GPU 兼容）');
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-software-rasterizer');
+  // 共享内存受限环境（容器/低配机）防崩溃
+  app.commandLine.appendSwitch('disable-dev-shm-usage');
+}
 
 process.on('uncaughtException', (err) => {
   console.error('[Main] 未捕获异常:', err);
