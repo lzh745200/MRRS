@@ -11,6 +11,7 @@ datas 使用目录收集方式（非 glob），避免 PyInstaller 6.21 glob 解�
 """
 
 import os
+import sys
 import glob
 from PyInstaller.utils.hooks import collect_submodules
 
