@@ -17,7 +17,8 @@ def test_pandas_fast_read_import_fallback():
 
     m = types.ModuleType("excel_importer_cov_exec")
     m.__file__ = mod.__file__
-    src = open(mod.__file__, encoding="utf-8").read()
+    with open(mod.__file__, encoding="utf-8") as _f:
+        src = _f.read()
     with patch.dict(
         sys.modules,
         {"app.services.batch_import_optimizer": None, "excel_importer_cov_exec": m},

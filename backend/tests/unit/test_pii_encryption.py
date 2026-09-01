@@ -90,7 +90,8 @@ def test_db_file_has_no_plaintext(db):
     session.add(User(username="u1", hashed_password="x", phone=PHONE))
     session.commit()
     session.close()  # 确保 WAL 落盘
-    raw = open(db_path, "rb").read()
+    with open(db_path, "rb") as _f:
+        raw = _f.read()
     assert PHONE.encode() not in raw, "DB 文件中出现明文手机号"
     assert b"enc.v1:" in raw, "DB 文件中未见密文标记"
 

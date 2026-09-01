@@ -32,8 +32,6 @@ class TestCommitteeLegacyRoute:
     """遗留 committee 路由：成员保存 + 按年隔离。"""
 
     def test_members_saved_and_year_isolated(self, auth_client):
-        if auth_client is None:
-            pytest.skip("client fixture unavailable")
         vid = _create_village(auth_client)
 
         r1 = auth_client.post(
@@ -89,8 +87,6 @@ class TestChangeHistoryFieldDetails:
     """变更历史：字段级明细必须落库（record_changes 补 commit 修复验证）。"""
 
     def test_update_produces_field_level_changes(self, auth_client):
-        if auth_client is None:
-            pytest.skip("client fixture unavailable")
         vid = _create_village(auth_client, name="变更前村名")
 
         r = auth_client.put(
@@ -121,8 +117,6 @@ class TestLatestYear:
     """列表返回 latest_year（列表页「最近年度」列数据源）。"""
 
     def test_list_contains_latest_year(self, auth_client):
-        if auth_client is None:
-            pytest.skip("client fixture unavailable")
         vid = _create_village(auth_client)
 
         r = auth_client.post(

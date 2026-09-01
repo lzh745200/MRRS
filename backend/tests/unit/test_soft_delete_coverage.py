@@ -71,8 +71,6 @@ class TestBatchDeleteCoverage:
 
     def test_batch_delete_empty_ids_returns_400(self, client):
         """批量删除空 ID 列表应返回 400。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         admin = _make_user(role="admin", org_id=1)
         original = _set_user(client, admin)
@@ -86,8 +84,6 @@ class TestBatchDeleteCoverage:
 
     def test_batch_delete_valid_ids(self, client):
         """批量删除有效 ID 应成功。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         admin = _make_user(role="admin", org_id=1)
         original = _set_user(client, admin)
@@ -120,8 +116,6 @@ class TestBatchDeleteCoverage:
         使用 role="user"（OWN 数据域：仅本人记录），确保跨组织记录被过滤。
         admin 角色的数据域为 OWN_DEPT，在某些配置下可能包含跨组织记录。
         """
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         from app.core.security import get_current_user
 
@@ -164,8 +158,6 @@ class TestDeleteEdgeCases:
 
     def test_delete_nonexistent_returns_404(self, client):
         """删除不存在的帮扶村应返回 404。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         admin = _make_user(role="admin", org_id=1)
         original = _set_user(client, admin)
@@ -179,8 +171,6 @@ class TestDeleteEdgeCases:
 
     def test_delete_cross_org_returns_403(self, client):
         """跨组织删除应返回 403（数据隔离）。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         from app.core.security import get_current_user
 
@@ -204,8 +194,6 @@ class TestDeleteEdgeCases:
 
     def test_delete_then_detail_shows_viewable_because(self, client):
         """软删后管理员查看详情应包含 viewableBecause='admin'。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         admin = _make_user(role="admin", org_id=1)
         original = _set_user(client, admin)
@@ -233,8 +221,6 @@ class TestDetailEdgeCases:
 
     def test_detail_nonexistent_returns_404(self, client):
         """查看不存在的帮扶村详情应返回 404。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         admin = _make_user(role="admin", org_id=1)
         original = _set_user(client, admin)
@@ -248,8 +234,6 @@ class TestDetailEdgeCases:
 
     def test_detail_cross_org_returns_403(self, client):
         """跨组织查看详情应返回 403（区分"不存在"与"越权"）。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         from app.core.security import get_current_user
 
@@ -274,8 +258,6 @@ class TestDetailEdgeCases:
 
     def test_detail_active_record_viewable_because_none(self, client):
         """未软删记录的详情 viewableBecause 应为 null。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         admin = _make_user(role="admin", org_id=1)
         original = _set_user(client, admin)

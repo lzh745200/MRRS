@@ -184,8 +184,6 @@ class TestContentChecksum:
 class TestImportApiContract:
     def test_import_response_carries_saved_file_name(self, client):
         """登录页两步导入依赖 saved_file_name/file_name 字段（旧缺陷回归）。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
         admin = Mock(id=1, username="admin", role="super_admin", is_superuser=True,
                      is_active=True, permissions_list=["*"], organization_id=1)
         from app.api.v1 import permission_package as pp_module

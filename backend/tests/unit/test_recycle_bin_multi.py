@@ -81,8 +81,6 @@ class TestRecycleBinLifecycle:
     @pytest.mark.parametrize("resource", list(RESOURCES))
     def test_restore_roundtrip(self, client, resource, ):
         """创建→软删→恢复→默认可见。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
         admin = _admin()
         original = _set_user(client, admin)
         try:
@@ -106,8 +104,6 @@ class TestRecycleBinLifecycle:
 
     @pytest.mark.parametrize("resource", list(RESOURCES))
     def test_purge_requires_correct_password_and_cascades(self, client, resource):
-        if client is None:
-            pytest.skip("client fixture unavailable")
         admin = _admin()
         original = _set_user(client, admin)
         try:
@@ -151,8 +147,6 @@ class TestRecycleBinLifecycle:
 
     @pytest.mark.parametrize("resource", list(RESOURCES))
     def test_non_admin_forbidden(self, client, resource):
-        if client is None:
-            pytest.skip("client fixture unavailable")
         admin = _admin()
         regular = _regular()
 
@@ -181,8 +175,6 @@ class TestRecycleBinLifecycle:
 
     @pytest.mark.parametrize("resource", list(RESOURCES))
     def test_active_record_rejected(self, client, resource):
-        if client is None:
-            pytest.skip("client fixture unavailable")
         admin = _admin()
         original = _set_user(client, admin)
         try:

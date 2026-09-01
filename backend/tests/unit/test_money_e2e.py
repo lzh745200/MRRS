@@ -22,8 +22,6 @@ def _make_admin():
 class TestMoneyRoundTrip:
     def test_project_budget_4_decimals_roundtrip(self, client):
         """创建项目 budget=1.23456 → 存储量化为 1.2346 → 详情读回一致。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
         from app.core.security import get_current_user
 
         admin = _make_admin()
@@ -49,8 +47,6 @@ class TestMoneyRoundTrip:
 
     def test_fund_amount_4_decimals_roundtrip(self, client):
         """经费 amount=2.00025 → HALF_UP 进位为 2.0003。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
         from app.core.security import get_current_user
 
         admin = _make_admin()

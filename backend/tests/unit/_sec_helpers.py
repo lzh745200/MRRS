@@ -7,4 +7,5 @@ _REPO = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.
 
 
 def _read(rel):
-    return _io.open(_os.path.join(_REPO, rel), encoding="utf-8", errors="replace").read()
+    with _io.open(_os.path.join(_REPO, rel), encoding="utf-8", errors="replace") as f:
+        return f.read()

@@ -213,8 +213,6 @@ class TestIncludeDeletedApiRegression:
     @pytest.mark.parametrize("endpoint", SOFT_DELETE_ENDPOINTS)
     def test_admin_include_deleted_returns_200(self, client, endpoint):
         """管理员请求 include_deleted=true 应返回 200，不报错。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         admin = _make_user("admin", is_superuser=False)
         admin.id = 1
@@ -235,8 +233,6 @@ class TestIncludeDeletedApiRegression:
     @pytest.mark.parametrize("endpoint", SOFT_DELETE_ENDPOINTS)
     def test_non_admin_include_deleted_silently_ignored(self, client, endpoint):
         """非管理员请求 include_deleted=true 应静默降级（200），不含软删记录。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         regular = _make_user("user", is_superuser=False)
         regular.id = 2
@@ -268,8 +264,6 @@ class TestIncludeDeletedApiRegression:
     @pytest.mark.parametrize("endpoint", SOFT_DELETE_ENDPOINTS)
     def test_default_excludes_deleted(self, client, endpoint):
         """不带 include_deleted 参数时，所有端点默认隐藏软删记录。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         admin = _make_user("admin", is_superuser=False)
         admin.id = 1
@@ -312,8 +306,6 @@ class TestIncludeDeletedApiRegression:
         双重参数化：5 个非管理员角色 × 4 个端点 = 20 组合，
         确保 enforce_admin_include_deleted 依赖在所有端点都正确接入。
         """
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         user = _make_user(role, is_superuser=is_superuser)
         user.id = 99
@@ -344,8 +336,6 @@ class TestViewableBecauseApiIntegration:
 
     def test_admin_detail_of_active_record_has_no_viewable_because(self, client):
         """管理员查看未软删的帮扶村详情时，viewableBecause 应为 None（不存在或 null）。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         admin = _make_user("admin", is_superuser=False)
         admin.id = 1

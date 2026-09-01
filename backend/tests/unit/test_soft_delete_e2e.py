@@ -68,8 +68,6 @@ class TestSoftDeleteE2E:
 
     def test_full_soft_delete_lifecycle(self, client):
         """完整软删生命周期：创建→软删→管理员可见→普通用户不可见。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         from app.core.security import get_current_user
 
@@ -233,8 +231,6 @@ class TestSoftDeleteE2EFunds:
 
     def test_admin_funds_soft_delete_lifecycle(self, client):
         """管理员经费软删流程：创建→软删→include_deleted 可见→默认不可见。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
 
         from app.core.security import get_current_user
 

@@ -74,8 +74,6 @@ def _soft_delete(client, village_id):
 
 class TestRestoreLifecycle:
     def test_restore_roundtrip(self, client):
-        if client is None:
-            pytest.skip("client fixture unavailable")
         admin = _make_admin()
         original = _set_user(client, admin)
         try:
@@ -99,8 +97,6 @@ class TestRestoreLifecycle:
             _restore_overrides(client, original)
 
     def test_restore_active_record_rejected(self, client):
-        if client is None:
-            pytest.skip("client fixture unavailable")
         admin = _make_admin()
         original = _set_user(client, admin)
         try:
@@ -113,8 +109,6 @@ class TestRestoreLifecycle:
 
 class TestPurgeLifecycle:
     def test_purge_requires_correct_password(self, client):
-        if client is None:
-            pytest.skip("client fixture unavailable")
         admin = _make_admin()
         original = _set_user(client, admin)
         try:
@@ -135,8 +129,6 @@ class TestPurgeLifecycle:
             _restore_overrides(client, original)
 
     def test_purge_cascades_and_removes_village(self, client):
-        if client is None:
-            pytest.skip("client fixture unavailable")
         from app.core.database import get_db
 
         admin = _make_admin()
@@ -175,8 +167,6 @@ class TestPurgeLifecycle:
             _restore_overrides(client, original)
 
     def test_purge_active_record_rejected(self, client):
-        if client is None:
-            pytest.skip("client fixture unavailable")
         admin = _make_admin()
         original = _set_user(client, admin)
         try:
@@ -197,8 +187,6 @@ class TestRecycleBinPermissionMatrix:
         ("post", "/api/v1/supported-villages/{vid}/purge"),
     ])
     def test_non_admin_forbidden(self, client, method, path):
-        if client is None:
-            pytest.skip("client fixture unavailable")
         admin = _make_admin()
         regular = _make_regular()
 

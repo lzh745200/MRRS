@@ -23,8 +23,6 @@ BASE = "/api/v1"
 
 class TestBatchOperations:
     def test_batch_restore(self, client):
-        if client is None:
-            pytest.skip()
         admin = _admin()
         from app.core.security import get_current_user
         original = client.app.dependency_overrides.copy()
@@ -53,8 +51,6 @@ class TestBatchOperations:
             client.app.dependency_overrides = original
 
     def test_batch_purge(self, client):
-        if client is None:
-            pytest.skip()
         admin = _admin()
         from app.core.security import get_current_user
         original = client.app.dependency_overrides.copy()
@@ -93,8 +89,6 @@ class TestBatchOperations:
             client.app.dependency_overrides = original
 
     def test_batch_purge_non_admin_403(self, client):
-        if client is None:
-            pytest.skip()
         regular = type("U", (), {})()
         regular.id = 99; regular.username = "u"; regular.role = "user"
         regular.is_superuser = False; regular.is_active = True

@@ -15,8 +15,6 @@ from unittest.mock import Mock
 @pytest.fixture
 def org1_admin_client(client):
     """org=1 的管理员客户端"""
-    if client is None:
-        pytest.skip("client fixture unavailable")
     from app.core.security import get_current_user
 
     user = Mock()
@@ -37,8 +35,6 @@ def org1_admin_client(client):
 @pytest.fixture
 def org2_user_client(client):
     """org=2 的普通用户客户端（非管理员）"""
-    if client is None:
-        pytest.skip("client fixture unavailable")
     from app.core.security import get_current_user
 
     user = Mock()
@@ -338,8 +334,6 @@ class TestIncludeDeletedAdminEnforcement:
 
     def test_admin_can_pass_include_deleted(self, client):
         """管理员传入 include_deleted=true 不应被拒绝（HTTP 200）。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
         from app.core.security import get_current_user
 
         admin = Mock()
@@ -364,8 +358,6 @@ class TestIncludeDeletedAdminEnforcement:
 
     def test_non_admin_include_deleted_silently_ignored(self, client):
         """非管理员传入 include_deleted=true 应被静默降级（仍返回 200，但不包含软删记录）。"""
-        if client is None:
-            pytest.skip("client fixture unavailable")
         from app.core.security import get_current_user
 
         regular = Mock()
