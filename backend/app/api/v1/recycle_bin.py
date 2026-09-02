@@ -145,7 +145,7 @@ def register_recycle_bin_routes(
 
 async def _restore_record(db, model, resource, table, rid, current_user, on_changed):
     """执行单条恢复（通用）。"""
-    rec = db.query(model).get(rid)
+    rec = db.get(model, rid)
     if rec is None:
         raise HTTPException(status_code=404, detail=f"{resource}不存在")
     rec.is_active = True

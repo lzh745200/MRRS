@@ -201,7 +201,12 @@ class TrendPredictionService:
         y = df[value_field].values
 
         # 最小二乘一次拟合（替代死代码清理移除的 sklearn.LinearRegression）
-        slope, intercept = np.polyfit(X.ravel(), y, 1)
+        # 样本不足时 polyfit 发出病态条件警告属预期降级路径，局部抑制；
+        # 不按类别过滤 —— RankWarning 在 numpy 2.x 已移入 exceptions 且跨版本不稳
+        import warnings as _warnings
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("ignore")
+            slope, intercept = np.polyfit(X.ravel(), y, 1)
 
         # 预测
         last_date = pd.to_datetime(df[date_field].iloc[-1])

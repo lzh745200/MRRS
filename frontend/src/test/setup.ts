@@ -140,6 +140,16 @@ if (typeof URL.revokeObjectURL === 'undefined') {
 
 // Mock Element Plus components/directives for testing
 import { config } from '@vue/test-utils'
+import { createRouter, createWebHistory } from 'vue-router'
+
+// 全局 stub router：组件树中的 useRouter/useRoute 注入不再告警
+// （2026-08-30 警告治理：此前 445 条 "injection Symbol(router) not found"）。
+// 各测试如自行传入真实 router，会覆盖此 stub 的 provide，行为不变。
+const stubRouter = createRouter({
+  history: createWebHistory(),
+  routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
+})
+config.global.plugins = [stubRouter]
 
 // Stub all Element Plus components globally
 config.global.stubs = {

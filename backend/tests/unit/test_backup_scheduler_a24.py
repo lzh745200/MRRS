@@ -71,6 +71,7 @@ class TestDailyJobClosure:
         count_before = len(FakeTimer.instances)
 
         with patch("app.services.backup_scheduler.threading.Timer", FakeTimer), \
+             patch("app.services.backup_scheduler.kpi_precalculate_job"), \
              patch("asyncio.new_event_loop") as mock_new_loop, \
              patch("asyncio.set_event_loop") as mock_set_loop:
             daily.callback()
@@ -108,6 +109,7 @@ class TestWeeklySchedule:
         count_before = len(FakeTimer.instances)
 
         with patch("app.services.backup_scheduler.threading.Timer", FakeTimer), \
+             patch("app.services.backup_scheduler.weekly_report_job"), \
              patch("asyncio.new_event_loop") as mock_new_loop, \
              patch("asyncio.set_event_loop"):
             weekly.callback()

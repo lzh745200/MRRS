@@ -166,7 +166,7 @@ async def export_villages(
     service = AsyncExportService(db)
 
     # 转换筛选参数
-    query_params = filters.dict(exclude_none=True) if filters else {}
+    query_params = filters.model_dump(exclude_none=True) if filters else {}
 
     # 判断是否使用异步导出
     should_async = force_async or service.should_use_async("supported_village", query_params)

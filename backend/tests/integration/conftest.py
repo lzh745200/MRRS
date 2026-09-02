@@ -172,7 +172,18 @@ def setup_database():
     import app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    # SQLite 默认不强制外键，但 SQLAlchemy drop_all 仍会尝试排序；
+    # permission_packs ↔ users 存在 FK 环无法排序（SAWarning），SQLite 实际
+    # 删除不受影响 —— 每个集成测试 teardown 都会触发一次，窄域抑制。
+    # （治本需给模型 FK 加 use_alter=True，属 schema 变更，不在测试层做）
+    import warnings as _warnings
+    from sqlalchemy.exc import SAWarning as _SAWarning
+    from sqlalchemy import text as _text
+    with engine.connect() as _conn:
+        _conn.execute(_text("PRAGMA foreign_keys = OFF"))
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("ignore", _SAWarning)
+        Base.metadata.drop_all(bind=engine)
     fastapi_app.dependency_overrides.clear()
     # 恢复被替换的全局数据库对象，并快照恢复本 conftest 设置的测试环境变量
     import app.core.database as _db_mod

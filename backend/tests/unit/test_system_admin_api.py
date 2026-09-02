@@ -3,7 +3,7 @@ Tests for app.api.v1.system.admin — 100% coverage
 """
 
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import AsyncMock, patch, MagicMock, mock_open
 
 import pytest
 
@@ -415,9 +415,10 @@ class TestSystemConfig:
 class TestClearCache:
     def test_success(self, auth_client):
         with patch("app.core.cache.cache_manager") as cm:
+            cm.clear = AsyncMock()
             resp = auth_client.post("/api/v1/system/admin/clear-cache")
             assert resp.status_code == 200
-            cm.clear.assert_called_once()
+            cm.clear.assert_awaited_once()
 
     def test_with_dashboard_and_map_cache(self, auth_client):
         fake_dashboard = MagicMock()
@@ -430,8 +431,10 @@ class TestClearCache:
                  "app.api.v1.data.data.dashboard": fake_dashboard,
                  "app.api.v1.map": fake_map,
              }):
+            cm.clear = AsyncMock()
             resp = auth_client.post("/api/v1/system/admin/clear-cache")
             assert resp.status_code == 200
+            cm.clear.assert_awaited_once()
             fake_dashboard.invalidate_dashboard_cache.assert_called_once()
             fake_map.invalidate_map_cache.assert_called_once()
 
@@ -446,14 +449,16 @@ class TestClearCache:
                  "app.api.v1.data.data.dashboard": fake_dashboard,
                  "app.api.v1.map": fake_map,
              }):
+            cm.clear = AsyncMock()
             resp = auth_client.post("/api/v1/system/admin/clear-cache")
             assert resp.status_code == 200
+            cm.clear.assert_awaited_once()
             fake_dashboard.invalidate_dashboard_cache.assert_called_once()
             fake_map.invalidate_map_cache.assert_called_once()
 
     def test_general_exception(self, auth_client):
         with patch("app.core.cache.cache_manager") as cm:
-            cm.clear.side_effect = Exception("cache error")
+            cm.clear = AsyncMock(side_effect=Exception("cache error"))
             resp = auth_client.post("/api/v1/system/admin/clear-cache")
             assert resp.status_code == 500
             assert "清理失败" in resp.json()["detail"]

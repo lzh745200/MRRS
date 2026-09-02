@@ -274,7 +274,8 @@ async def clear_cache(current_user=Depends(get_current_user)):
     try:
         from app.core.cache import cache_manager
 
-        cache_manager.clear()
+        # CacheManager.clear 是 async 协程包装 —— 不 await 等于缓存从未清理
+        await cache_manager.clear()
 
         # 清除各模块独立的 diskcache 实例
         try:
@@ -292,7 +293,8 @@ async def clear_cache(current_user=Depends(get_current_user)):
             logger.warning("清理 map 缓存失败: %s", e)
 
         return success_response(message="缓存清理成功")
-    except Exception:  # pragma: no cover
+    except Exception:
+        logger.exception("缓存清理失败")
         raise HTTPException(status_code=500, detail="清理失败，请稍后重试或联系管理员")
 
 
