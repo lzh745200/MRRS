@@ -92,6 +92,13 @@ class Settings(BaseSettings):
     # 密钥派生方式: "pbkdf2" (PBKDF2-SHA256, 200000迭代, 推荐) | "raw" (直接使用密钥)
     ENCRYPTION_KEY_DERIVATION: str = "pbkdf2"
 
+    # 通行码 HMAC 自验证密钥（跨机器注册，ADR-0004 / W1 不变量 #5）。
+    # 留空 = 跨机器自验证禁用（fail-closed）：管理员必须在目标机器本机预录入通行码。
+    # 多实例部署若需“管理员在 A 机为 B 机签发通行码、用户在 B 机自助注册”，
+    # 必须在所有实例配置同一密钥。与 ENCRYPTION_KEY 不同，此密钥不可每机自动生成
+    # （跨机验证要求共享同一秘密），故仅提供配置入口，缺失时启动告警而不自动派生。
+    PASS_CODE_SECRET: str = ""
+
     # 数据库连接池配置
     # SQLite 走 QueuePool（见 core/database.py），WAL 模式支持多读者并发；
     # 压测表明 30 连接（20+10）在 50+ 并发时排队耗尽，扩大至 60 以留余量。
@@ -293,6 +300,21 @@ class Settings(BaseSettings):
 
             logging.getLogger(__name__).error(f"加载加密密钥失败: {e}，回退到环境变量")
 
+    def _warn_missing_pass_code_secret(self) -> None:
+        """ADR-0004：生产环境未配置 PASS_CODE_SECRET → 跨机器通行码 HMAC 自验证 fail-closed。
+
+        此密钥不可像 ENCRYPTION_KEY 那样每机自动生成（跨机验证要求多实例共享同一秘密），
+        故仅告警提示部署方按需显式配置；单机部署（管理员在本机预录入通行码）可忽略。
+        """
+        if self.ENVIRONMENT == "production" and not self.PASS_CODE_SECRET:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "PASS_CODE_SECRET 未配置：跨机器通行码 HMAC 自验证已禁用（fail-closed，ADR-0004）。"
+                "单机部署可忽略；若需管理员在 A 机为 B 机签发通行码、用户在 B 机自助注册，"
+                "请在所有实例统一配置同一 PASS_CODE_SECRET。"
+            )
+
     def model_post_init(self, __context) -> None:
         """模型初始化后的钩子"""
         if self.USE_ENCRYPTED_SECRETS:
@@ -327,6 +349,8 @@ class Settings(BaseSettings):
                     "重启后历史密文可能无法解密，请尽快通过环境变量或 .env 配置 ENCRYPTION_KEY",
                     exc,
                 )
+
+        self._warn_missing_pass_code_secret()
 
         # 动态设置数据目录路径（解决 Windows 安装版权限问题）
         # 首先获取默认数据目录，供后续使用

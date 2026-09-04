@@ -51,6 +51,8 @@ class TestSetupStaticFiles:
             return_value="/tmp/uploads",
         ), patch("os.makedirs"), patch(
             "app.core.static_files.find_frontend_dir", return_value="/tmp/frontend"
+        ), patch(
+            "app.core.static_files.StaticFiles", return_value=MagicMock()
         ):
             mock_settings.UPLOAD_DIR = "/tmp/uploads"
             from app.core.static_files import setup_static_files

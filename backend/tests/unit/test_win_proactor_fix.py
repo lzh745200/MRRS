@@ -24,12 +24,29 @@ from app.utils.win_proactor_fix import (
     apply_windows_proactor_fix,
 )
 
-# ProactorEventLoop 仅存在于 Windows；Linux CI 上 asyncio 无此属性
-# （nightly #13 实测 4 失败），整模块跳过非 Windows 平台。
-pytestmark = pytest.mark.skipif(
-    not sys.platform.startswith("win"),
-    reason="Windows-only asyncio.ProactorEventLoop",
-)
+# ─────────────────────────────────────────────────────────────
+# 跨平台支撑：非 Windows 注入 asyncio.ProactorEventLoop 替身
+# ─────────────────────────────────────────────────────────────
+# 被测的 _patch_event_loop_policy 在函数体内执行
+#     class _PatchedProactorEventLoop(asyncio.ProactorEventLoop): ...
+# 而 asyncio.ProactorEventLoop 仅 Windows 导出，Linux 上取该属性即 AttributeError
+# ——这正是历史上「整模块 skip」所掩盖的 4 个失败用例的根因。此处不再 skip，而是
+# 在非 Windows 平台注入一个 SelectorEventLoop 子类顶替：它同样支持无参构造、
+# set/get_exception_handler、close，覆盖被测代码与断言用到的全部契约。于是整个
+# 模块可在 Linux CI 上真实执行，win_proactor_fix.py 的函数体在 Linux 也计入覆盖率，
+# 满足 .coveragerc 的 fail_under=100（而非用 skip 把不可达行藏起来）。
+@pytest.fixture(autouse=True)
+def _stub_proactor_loop_off_windows(monkeypatch):
+    if hasattr(asyncio, "ProactorEventLoop"):
+        yield
+        return
+
+    class _StubProactorEventLoop(asyncio.SelectorEventLoop):
+        """Linux 替身：无参构造 + 异常处理器 API，与 ProactorEventLoop 契约一致。"""
+
+    # raising=False：属性本不存在，monkeypatch 撤销时会将其删除，恢复原状
+    monkeypatch.setattr(asyncio, "ProactorEventLoop", _StubProactorEventLoop, raising=False)
+    yield
 
 
 # ─────────────────────────────────────────────────────────────

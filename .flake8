@@ -19,6 +19,11 @@ exclude =
 per-file-ignores =
     tests/*:S101,B011
     */tests/*:S101,B011
+    # 入口模块 app/main.py 必须在 import fastapi/uvicorn 之前执行裸调用
+    # apply_windows_proactor_fix()（替换全局 EventLoopPolicy），这正是 E402 的
+    # 判定点。pre-push 钩子从仓库根跑 backend/app/，故此处按根相对路径同步豁免
+    # （与 backend/.flake8 的 app/main.py: E402 保持双口径一致）。
+    backend/app/main.py:E402
 # 复杂度与文档
 # max-complexity 必须与 CI 一致：pr-checks.yml 的 lint 任务用 --max-complexity=16。
 # 曾在此写 15 造成双口径——backend/app 下有 6 个函数正好是 16，过 CI 却过不了本

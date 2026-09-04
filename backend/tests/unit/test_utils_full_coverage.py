@@ -2,7 +2,7 @@
 Comprehensive tests for app.utils modules to achieve 100% coverage.
 Covers: pagination, common, helpers, retry, paths, date_type_handler,
 file_response, api_error, db_error_handler, cursor_pagination,
-async_executor, security_enhanced, permission_filter, db_metrics,
+security_enhanced, permission_filter, db_metrics,
 system_metrics, upload_helper, audit_logger.
 """
 import base64
@@ -675,15 +675,6 @@ class TestUtilsModulesImportable:
     def test_db_error_handler_importable(self):
         import app.utils.db_error_handler as mod
         assert mod is not None
-
-
-    def test_async_executor_importable(self):
-        import app.utils.async_executor as mod
-        assert mod is not None
-
-
-
-
 
     def test_upload_helper_importable(self):
         import app.utils.upload_helper as mod

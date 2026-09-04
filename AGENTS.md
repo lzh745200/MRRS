@@ -14,7 +14,7 @@ FastAPI + Vue 3 + Electron + SQLite. Windows primary, Linux ARM64 (Kylin V10) se
 ```bash
 cd backend
 .venv\Scripts\python start.py                           # Start server (http://localhost:8000)
-python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~10674, 死代码清理后)
+python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~10670, 死代码清理后)
 python -m pytest tests/unit/test_xxx.py -v              # Run single test file
 # 必须带 --max-complexity=16：CI 的 lint 任务用这个组合，缺了它 C901 复杂度回归
 # 只在 CI 变红、本地静默放过（2026-09-04 已因此漏过 2 处）
@@ -28,7 +28,7 @@ python -m bandit -r app/ -ll                            # Security scan
 ```bash
 cd frontend
 npm run dev                                             # Dev server (http://localhost:5173)
-npm run test -- --run                                   # Run all tests (~6033, 300 test files, 死代码清理后)
+npm run test -- --run                                   # Run all tests (~6029, 300 test files, 死代码清理后)
 npx vitest run tests/unit/views/xxx/xxx.test.ts        # Run single test file (tests live under tests/unit/)
 npm run lint                                            # ESLint --fix (改文件, 本地用, --max-warnings=0)
 npm run lint:check                                      # ESLint 纯检查 (CI gate, 不带 --fix)

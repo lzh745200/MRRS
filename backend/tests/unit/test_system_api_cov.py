@@ -13,8 +13,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import sys
-
 import app.api.v1.system.system as sy
 
 
@@ -79,26 +77,30 @@ class TestShutdownRestart:
             func()
         m_exit.assert_called_once_with(0)
 
-    @pytest.mark.skipif(
-        sys.platform.startswith("linux"),
-        reason="xdist worker 内重启延迟回调逃逸 patch 上下文触发真实 os._exit，"
-               "曾致 CI gw3 崩溃（nightly #13 实测）；Windows 本地验证通过",
-    )
     async def test_restart_trigger_and_task(self):
         bg = MagicMock()
         with patch("app.core.cache.cache_manager", MagicMock()):
             result = await sy.restart_system(bg, 0, _admin())
         assert result["success"] is True
         func = bg.add_task.call_args.args[0]
+        # 显式钉死 win32 分支：_restart 内 `if sys.platform == "win32"` 走
+        # subprocess.Popen，否则（Linux）走 os.execv —— 而 os.execv 会**替换当前
+        # 进程镜像**，在 xdist worker 内即 gw3 崩溃（nightly #13 的真因，此前被整条
+        # skipif 掩盖：它 patch 了 Popen/_exit 却漏了 execv）。这里把 platform 钉成
+        # win32 走 Popen 分支，并**额外** patch os.execv 兜底：即便平台判断意外落空，
+        # 真实 execv 也绝不会执行。
         with (
             patch.object(sy.time, "sleep"),
             patch("app.core.cache.cache_manager") as m_cm,
+            patch.object(sy.sys, "platform", "win32"),
             patch("subprocess.Popen") as m_popen,
+            patch.object(sy.os, "execv") as m_execv,
             patch.object(sy.os, "_exit") as m_exit,
         ):
             m_cm.close.side_effect = RuntimeError("close boom")
             func()
         m_popen.assert_called_once()
+        m_execv.assert_not_called()
         m_exit.assert_called_once_with(0)
 
 

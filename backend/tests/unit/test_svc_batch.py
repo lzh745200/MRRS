@@ -209,10 +209,12 @@ def test_h37():
     assert FundAnomalyDetector(M()) is not None
 
 
-def test_h38():
+def test_h38(tmp_path):
     from app.services.chunked_upload_service import ChunkedUploadService
 
-    assert ChunkedUploadService(M()) is not None
+    assert ChunkedUploadService(
+        temp_dir=str(tmp_path / "chunks"), final_dir=str(tmp_path / "files")
+    ) is not None
 
 
 def test_h39():

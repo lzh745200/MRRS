@@ -272,8 +272,9 @@ class TestAtomicWriteJson:
                 _atomic_write_json(dest, {"key": "value"})
         assert not dest.exists()
 
-    def test_chmod_skipped_on_windows(self, tmp_path):
+    def test_chmod_skipped_on_windows(self, tmp_path, monkeypatch):
         dest = tmp_path / "secrets.json"
+        monkeypatch.setattr("os.name", "nt")
         with patch("app.utils.runtime_secrets.os.chmod") as mock_chmod:
             _atomic_write_json(dest, {"key": "value"})
             mock_chmod.assert_not_called()

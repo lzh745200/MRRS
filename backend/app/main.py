@@ -21,14 +21,19 @@ if sys.stderr is None:  # pragma: no cover — PyInstaller windowed EXE 专有�
     sys.stderr = open(os.devnull, 'w')
 
 # ── 关键修复：Windows ProactorEventLoop ConnectionResetError ──
-# 必须在 import fastapi/uvicorn 之前应用，因为 uvicorn 会在启动时创建事件循环。
-# 修复采用三层纵深防御：
+# 必须在 import fastapi/uvicorn 之前应用：本修复会替换全局 EventLoopPolicy，
+# 需赶在任何事件循环被创建之前。三层纵深防御：
 #   Layer 1: Monkey-patch _ProactorBasePipeTransport._call_connection_lost
 #   Layer 2: 替换全局 EventLoopPolicy，所有新 loop 自动继承异常处理器
 #   Layer 3: 对当前运行时 loop 设置异常处理器
-if sys.platform == "win32":
-    from app.utils.win_proactor_fix import apply_windows_proactor_fix
-    apply_windows_proactor_fix()
+# 无条件调用：apply_windows_proactor_fix() 自身首句即判 sys.platform != "win32"
+# 并返回 False，故外层再包 `if sys.platform == "win32"` 纯属冗余，且会让下面两行
+# 在 Linux 上永不执行（不可覆盖，击穿 .coveragerc 的 fail_under=100）。
+# 这行裸调用位于框架 import 之前，是 app/main.py 在 .flake8 里带 E402
+# per-file-ignore 的原因（入口模块的 bootstrap 必须先于框架导入）。
+from app.utils.win_proactor_fix import apply_windows_proactor_fix
+
+apply_windows_proactor_fix()
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware

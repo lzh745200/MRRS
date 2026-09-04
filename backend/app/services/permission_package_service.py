@@ -250,9 +250,13 @@ class PermissionPackageService:
                 manifest["machine_codes"] = [code]
 
         # 生成 ZIP
-        from app.utils.paths import get_uploads_path
+        # 必须用 get_runtime_uploads_path：download/import/confirm 三个端点都用它解析目录，
+        # 而它优先读 UPLOAD_DIR 环境变量（Electron 打包时由 main.js 注入 userData/uploads）。
+        # 此前这里用静态的 get_uploads_path（只推 <app_data_dir>/uploads，无视 UPLOAD_DIR），
+        # 打包环境下写读分叉 —— 导出接口返回 success 但下载恒 404「文件不存在或已被清理」。
+        from app.utils.paths import get_runtime_uploads_path
 
-        upload_dir = str(get_uploads_path("permission_packages"))
+        upload_dir = str(get_runtime_uploads_path("permission_packages"))
         os.makedirs(upload_dir, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

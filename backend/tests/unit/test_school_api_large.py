@@ -640,17 +640,16 @@ class TestDownloadAttachment:
         resp = auth_setup.get(P("/schools/attachments/99999/download"))
         assert resp.status_code in (404, 500)
 
-    @patch("app.api.v1.school.settings")
-    @patch("app.api.v1.school.os.path.exists", return_value=False)
-    def test_download_file_not_exists(self, mock_exists, mock_settings, auth_setup, school, db_session):
-        mock_settings.UPLOAD_DIR = r"C:\nonexistent"
+    def test_download_file_not_exists(self, auth_setup, school, db_session, tmp_path):
         att = SchoolAttachment(
             school_id=school.id, file_name="missing.pdf",
-            file_path=r"C:\nonexistent\file.pdf", file_size=100,
+            file_path=str(tmp_path / "missing.pdf"), file_size=100,
         )
         db_session.add(att)
         db_session.commit()
-        resp = auth_setup.get(P(f"/schools/attachments/{att.id}/download"))
+        with patch("app.api.v1.school.settings") as mock_settings:
+            mock_settings.UPLOAD_DIR = str(tmp_path)
+            resp = auth_setup.get(P(f"/schools/attachments/{att.id}/download"))
         assert resp.status_code in (404, 500)
 
     def test_download_invalid_path(self, auth_setup, school, db_session):
@@ -951,56 +950,56 @@ class TestImportScholarshipStudents:
 
 
 class TestValidateFilePath:
-    def test_relative_path_absolutized(self):
+    def test_relative_path_absolutized(self, tmp_path, monkeypatch):
+        """相对路径经 abspath 归一到 UPLOAD_DIR 下并放行（覆盖 isabs=False → abspath 分支）。"""
         from app.api.v1.school import _validate_file_path
+        (tmp_path / "test.txt").write_text("x", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
         with patch("app.api.v1.school.settings") as mock_settings:
-            mock_settings.UPLOAD_DIR = r"C:\uploads"
-            with patch("app.api.v1.school.os.path.isabs", return_value=False):
-                with patch("app.api.v1.school.os.path.abspath", return_value=r"C:\uploads\test.txt"):
-                    with patch("app.api.v1.school.os.path.exists", return_value=True):
-                        result = _validate_file_path("test.txt")
-                        assert result == r"C:\uploads\test.txt"
+            mock_settings.UPLOAD_DIR = str(tmp_path)
+            result = _validate_file_path("test.txt")
+        assert result == os.path.abspath("test.txt")
+        assert os.path.isabs(result)
 
-    def test_path_outside_allowed(self):
+    def test_path_outside_allowed(self, tmp_path):
+        """UPLOAD_DIR 之外的路径 → 403（覆盖 forbidden 分支）。"""
         from app.api.v1.school import _validate_file_path
+        upload = tmp_path / "uploads"
+        upload.mkdir()
+        outside = tmp_path / "evil.exe"
+        outside.write_text("x", encoding="utf-8")
         with patch("app.api.v1.school.settings") as mock_settings:
-            mock_settings.UPLOAD_DIR = r"C:\uploads"
-            with patch("app.api.v1.school.os.path.isabs", return_value=True):
-                with patch("app.api.v1.school.os.path.normpath", side_effect=lambda x: x):
-                    with pytest.raises(AppError) as exc:
-                        _validate_file_path(r"C:\Windows\system32\evil.exe")
-                    assert exc.value.status_code == 403
+            mock_settings.UPLOAD_DIR = str(upload)
+            with pytest.raises(AppError) as exc:
+                _validate_file_path(str(outside))
+            assert exc.value.status_code == 403
 
-    def test_path_not_exist(self):
+    def test_path_not_exist(self, tmp_path):
+        """UPLOAD_DIR 内但文件不存在 → 404（覆盖 not_found 分支）。"""
         from app.api.v1.school import _validate_file_path
         with patch("app.api.v1.school.settings") as mock_settings:
-            mock_settings.UPLOAD_DIR = r"C:\uploads"
-            with patch("app.api.v1.school.os.path.isabs", return_value=True):
-                with patch("app.api.v1.school.os.path.normpath", side_effect=lambda x: x):
-                    with patch("app.api.v1.school.os.path.exists", return_value=False):
-                        with pytest.raises(AppError) as exc:
-                            _validate_file_path(r"C:\uploads\nonexistent.pdf")
-                        assert exc.value.status_code == 404
+            mock_settings.UPLOAD_DIR = str(tmp_path)
+            with pytest.raises(AppError) as exc:
+                _validate_file_path(str(tmp_path / "nonexistent.pdf"))
+            assert exc.value.status_code == 404
 
-    def test_valid_path_returned(self):
+    def test_valid_path_returned(self, tmp_path):
+        """UPLOAD_DIR 内的合法存在文件 → 原样返回（isabs=True 时不再 abspath）。"""
         from app.api.v1.school import _validate_file_path
+        valid = tmp_path / "valid.pdf"
+        valid.write_text("x", encoding="utf-8")
         with patch("app.api.v1.school.settings") as mock_settings:
-            mock_settings.UPLOAD_DIR = r"C:\uploads"
-            with patch("app.api.v1.school.os.path.isabs", return_value=True):
-                with patch("app.api.v1.school.os.path.normpath", side_effect=lambda x: x):
-                    with patch("app.api.v1.school.os.path.exists", return_value=True):
-                        result = _validate_file_path(r"C:\uploads\valid.pdf")
-                        assert result == r"C:\uploads\valid.pdf"
+            mock_settings.UPLOAD_DIR = str(tmp_path)
+            result = _validate_file_path(str(valid))
+        assert result == str(valid)
 
-    def test_path_exactly_base(self):
+    def test_path_exactly_base(self, tmp_path):
+        """路径恰为 UPLOAD_DIR 本身 → 放行（覆盖 _norm_file == _norm_base 分支）。"""
         from app.api.v1.school import _validate_file_path
         with patch("app.api.v1.school.settings") as mock_settings:
-            mock_settings.UPLOAD_DIR = r"C:\uploads"
-            with patch("app.api.v1.school.os.path.isabs", return_value=True):
-                with patch("app.api.v1.school.os.path.normpath", side_effect=lambda x: x):
-                    with patch("app.api.v1.school.os.path.exists", return_value=True):
-                        result = _validate_file_path(r"C:\uploads")
-                        assert result == r"C:\uploads"
+            mock_settings.UPLOAD_DIR = str(tmp_path)
+            result = _validate_file_path(str(tmp_path))
+        assert result == str(tmp_path)
 
 
 # ══════════════════════════════════════════════════════════════

@@ -125,6 +125,22 @@ class TestModelPostInit:
         s = Settings(ENVIRONMENT="production", DB_ECHO=False)
         assert s.DB_ECHO is False
 
+    def test_production_pass_code_secret_missing_warns(self, caplog):
+        """生产环境未配置 PASS_CODE_SECRET → 跨机器自验证 fail-closed 告警（ADR-0004）。"""
+        with caplog.at_level("WARNING", logger="app.core.config"):
+            Settings(ENVIRONMENT="production", PASS_CODE_SECRET="")
+        assert any(
+            "PASS_CODE_SECRET" in r.message and "fail-closed" in r.message
+            for r in caplog.records
+        )
+
+    def test_production_pass_code_secret_set_no_warn(self, caplog):
+        """生产环境已配置 PASS_CODE_SECRET → 不触发 fail-closed 告警。"""
+        with caplog.at_level("WARNING", logger="app.core.config"):
+            s = Settings(ENVIRONMENT="production", PASS_CODE_SECRET="shared-secret-x")
+        assert s.PASS_CODE_SECRET == "shared-secret-x"
+        assert not any("PASS_CODE_SECRET 未配置" in r.message for r in caplog.records)
+
     def test_frozen_log_dir_uses_data_dir(self, monkeypatch):
         """sys.frozen=True 时 LOG_DIR/LOG_FILE 放到数据目录下。"""
         monkeypatch.setattr(sys, "frozen", True, raising=False)

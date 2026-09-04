@@ -158,6 +158,10 @@ backend/*_result*.txt
 backend/_*.py
 backend/_*.bat
 logs/*.log.*
+# MagicMock 伪路径泄漏防护：Path(MagicMock).__fspath__ → 相对路径 "MagicMock/mock/<id>"
+# 被 mkdir 真实创建于 backend/ 下（根因 test_svc_batch.py::test_h38 已修，此处防御性忽略）
+backend/MagicMock/
+backend/mock_leak_trace.log
 
 # ===== Frontend temp scripts & outputs =====
 frontend/*_output.txt

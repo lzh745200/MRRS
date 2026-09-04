@@ -213,6 +213,26 @@ class TestMainHelpers:
 
 class TestDriveDetect:
 
+    @pytest.fixture(autouse=True)
+    def _stub_windll_off_windows(self, monkeypatch):
+        """非 Windows 平台注入 ctypes.windll 替身。
+
+        本类的 Windows 专属用例 patch ``ctypes.windll.kernel32.GetDriveTypeW``，
+        而 ctypes.windll 仅 Windows 导出，Linux 上解析该 patch 目标即 AttributeError
+        ——这正是历史上整类被 Linux skip 的唯一原因，进而让 drive_detect.py 的 Windows
+        分支（_drive_type_windows 函数体 + list_backup_dirs 的盘符枚举）在 Linux 上永不
+        被覆盖、击穿 .coveragerc 的 fail_under=100。注入替身后这些用例在 Linux CI 上也能
+        真实执行并覆盖代码（而非用 skip 把不可达行藏起来）。Windows 上 hasattr 为真 → no-op。
+        """
+        import ctypes
+
+        if hasattr(ctypes, "windll"):
+            yield
+            return
+        # raising=False：属性本不存在，monkeypatch 撤销时将其删除，恢复原状
+        monkeypatch.setattr(ctypes, "windll", MagicMock(), raising=False)
+        yield
+
     def test_drive_type_windows_removable(self):
         with patch("platform.system", return_value="Windows"), \
              patch("ctypes.windll.kernel32.GetDriveTypeW", return_value=2):

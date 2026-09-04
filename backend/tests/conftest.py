@@ -41,6 +41,28 @@ _os.environ["BUMOFU_BACKEND_DIR_OVERRIDE"] = str(_APP_DATA_ROOT)
 
 _os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 _os.environ["LOG_FILE"] = (_APP_DATA_ROOT / "logs" / "app.log").as_posix()
+
+# ── 前端构建产物桩：让 main.py 的前端服务分支在 Linux CI 上也能执行 ──
+# 机制：app/core/static_files.find_frontend_dir() 的首选项即 FRONTEND_DIST_PATH 环境变量。
+# frontend/dist 与 resources/frontend 均为 gitignore 的构建产物，Linux CI 的后端作业不构建
+# 前端 → 二者皆不存在 → main.py 的 `if _frontend_dir:` 整块（约 50 行：/assets /images
+# /static 三处挂载 + favicon / version.json / SPA fallback 三个端点）在导入期被整体跳过、
+# 永不执行 → 击穿 .coveragerc 的 fail_under=100（这正是 ubuntu 上 backend-test 覆盖率门禁
+# 恒红的最大单一缺口）。此处在任何 app.* 导入之前落地一个最小可用 dist，使导入期走 IF 分支、
+# 端点完成注册、各分支随后可被测试命中。刻意不写 favicon.ico —— 让导入期 _favicon_path 为
+# None，覆盖 favicon 的 404 默认分支；test_favicon_with_file 再设 m._favicon_path 覆盖 200 分支。
+# 与开发者本机（真实 dist 存在 → 同样走 IF 分支）行为一致，故 Windows/Linux 覆盖率口径统一。
+_FRONTEND_DIST = _APP_DATA_ROOT / "frontend_dist"
+for _dist_sub in ("assets", "images", "static"):
+    (_FRONTEND_DIST / _dist_sub).mkdir(parents=True, exist_ok=True)
+(_FRONTEND_DIST / "index.html").write_text(
+    "<!DOCTYPE html><html><head><title>test</title></head>"
+    "<body><div id='app'></div></body></html>",
+    encoding="utf-8",
+)
+(_FRONTEND_DIST / "version.json").write_text('{"version":"test"}', encoding="utf-8")
+_os.environ["FRONTEND_DIST_PATH"] = str(_FRONTEND_DIST)
+
 # ── 关键修复：无头测试环境强制 matplotlib 使用 Agg 后端 ──
 # 默认后端（如 TkAgg）会在测试期间初始化 tkinter 资源，解释器关闭时
 # 触发 "main thread is not in main loop" 的 ResourceWarning。
@@ -72,56 +94,6 @@ from pathlib import Path
 from unittest.mock import Mock
 import os
 
-# ── [任务#29 临时排障] MagicMock 伪路径泄漏 spy（定位后移除）──
-# 根因机制：Python 3.11 unittest/mock.py 给 MagicMock 配置了 __fspath__ 默认
-# 返回值 f"{type(self).__name__}/{self._extract_mock_name()}/{id(self)}"，即
-# 'MagicMock/mock/<id>' —— 全部是合法路径字符。于是 os.makedirs(mock) 不会抛
-# TypeError，而是静默在 CWD（backend/）下创建 backend/MagicMock/mock/<id>/。
-# 此 spy 包装 os.makedirs / os.mkdir / Path.mkdir，一旦路径含 "MagicMock"
-# 就把完整调用栈写入 backend/mock_leak_trace.log 以精确定位泄漏测试。
-import traceback as _leak_tb
-
-_LEAK_LOG = str(Path(__file__).parent.parent / "mock_leak_trace.log")
-_leak_orig_makedirs = os.makedirs
-_leak_orig_os_mkdir = os.mkdir
-_leak_orig_path_mkdir = Path.mkdir
-
-
-def _leak_record(tag, path):
-    try:
-        s = str(path)
-    except Exception:
-        return
-    if "MagicMock" not in s:
-        return
-    entry = f"\n=== [{tag}] path={s!r} ===\n" + "".join(_leak_tb.format_stack())
-    try:
-        with open(_LEAK_LOG, "a", encoding="utf-8") as f:
-            f.write(entry)
-    except Exception:
-        pass
-
-
-def _leak_makedirs(name, mode=0o777, exist_ok=False, **kwargs):
-    _leak_record("os.makedirs", name)
-    return _leak_orig_makedirs(name, mode=mode, exist_ok=exist_ok, **kwargs)
-
-
-def _leak_os_mkdir(path, mode=0o777, *, dir_fd=None):
-    _leak_record("os.mkdir", path)
-    return _leak_orig_os_mkdir(path, mode, dir_fd=dir_fd)
-
-
-def _leak_path_mkdir(self, mode=0o777, parents=False, exist_ok=False):
-    _leak_record("Path.mkdir", self)
-    return _leak_orig_path_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
-
-
-os.makedirs = _leak_makedirs
-os.mkdir = _leak_os_mkdir
-Path.mkdir = _leak_path_mkdir
-# ── [任务#29 临时排障] spy 结束 ──
-
 
 # ── 根因修复：移除超过 Windows 环境变量长度限制（32767 字符）的超长变量 ──
 # WorkBuddy 桌面端会注入 ACC_PRODUCT_CONFIG_V3（~288KB）等超长环境变量。
@@ -146,6 +118,27 @@ def _strip_oversized_env_vars():
 def _honor_real_backend_dir_marker(request, monkeypatch):
     if request.node.get_closest_marker("real_backend_dir"):
         monkeypatch.delenv("BUMOFU_BACKEND_DIR_OVERRIDE", raising=False)
+
+
+# ── 根因修复：每个测试结束后 join 残留的 immediate-backup daemon 线程 ──
+# 机制：purge / 批量删除 / 导入等端点成功后调用 trigger_immediate_backup(delay=1.0)，
+# 派生名为 "immediate-backup" 的 daemon 线程；该线程 sleep 1s 后经 get_db_context()
+# → SessionLocal() 落到 client fixture 指向的**同一条 in-memory StaticPool 连接**
+# （conftest 把 app.core.database.SessionLocal 也改指测试内存库）。若线程在 delay 窗口内
+# 残留到下一个测试，会与下一个测试的会话并发访问同一连接，破坏 SQLite 单连接的事务状态
+# —— 曾致 recycle_bin purge 测试偶发 "记录不存在" 400 与 AuditLog ObjectDeletedError 500
+# （隔离运行恒过、全量 xdist 分布下偶发；删除 async_executor 后收集顺序变化才暴露）。
+# 这里在每个测试 teardown join 该线程，杜绝跨测试污染。test_immediate_backup.py 用
+# FakeThread 打桩、不派生真实线程，故不受影响；immediate_backup.py 主体覆盖率由其保证。
+import threading as _threading
+
+
+@pytest.fixture(autouse=True)
+def _join_immediate_backup_threads():
+    yield
+    for _t in _threading.enumerate():
+        if _t.name == "immediate-backup" and _t.is_alive():
+            _t.join(timeout=10)
 
 
 # ── 根因修复：会话启动时强制导入全部模型子模块，确保 SQLAlchemy mapper 注册表完整 ──

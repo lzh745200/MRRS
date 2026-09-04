@@ -66,7 +66,7 @@ class TestBackupServiceInit:
     def test_with_default_backup_dir(self, mock_db):
         with patch("app.utils.paths.get_backup_path", return_value=Path("/def/bk")):
             svc = BackupService(db=mock_db)
-            assert svc.backup_dir == "\\def\\bk"
+            assert svc.backup_dir == str(Path("/def/bk"))
 
     def test_env_disabled_incremental(self, mock_db):
         svc = _make_svc(mock_db, "/b", "/d/db", "/u", incremental="false")

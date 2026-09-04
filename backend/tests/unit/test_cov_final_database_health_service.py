@@ -5,7 +5,6 @@
 - 76-78：读取配置异常 → 回退默认路径
 """
 
-from pathlib import Path
 from unittest.mock import patch
 
 from app.services.database_health_service import DatabaseHealthService
@@ -18,12 +17,13 @@ class _BrokenSettings:
 
 
 class TestGetDbPath:
-    def test_absolute_sqlite_path_returned_as_is(self):
+    def test_absolute_sqlite_path_returned_as_is(self, tmp_path):
         svc = DatabaseHealthService()
+        abs_db = tmp_path / "health.db"
         with patch("app.core.config.settings") as mock_settings:
-            mock_settings.DATABASE_URL = "sqlite:///C:/abs/path/health.db"
+            mock_settings.DATABASE_URL = f"sqlite:///{abs_db.as_posix()}"
             result = svc._get_db_path()
-        assert result == Path("C:/abs/path/health.db")
+        assert result == abs_db
 
     def test_config_exception_falls_back_to_default(self):
         svc = DatabaseHealthService()

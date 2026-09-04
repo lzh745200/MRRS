@@ -7,7 +7,6 @@
 import hashlib
 import hmac
 import logging
-import os
 import platform
 import secrets
 import subprocess
@@ -16,8 +15,10 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import and_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.machine_code import MachineCode
 from app.core.transaction import safe_commit
 
@@ -28,11 +29,11 @@ logger = logging.getLogger(__name__)
 # 安全基线（W1-T6 / ADR-0004）：内置默认值仅保证历史行为可计算，
 # 但自验证路径在未显式配置密钥时一律拒绝（fail-closed）——
 # 否则拿到源码者可离线伪造合法通行码绕过整个授权体系。
-_PASS_CODE_SECRET_EXPLICIT = bool(os.environ.get("PASS_CODE_SECRET"))
-_PASS_CODE_SECRET = os.environ.get(
-    "PASS_CODE_SECRET",
-    "bumofu-assistance-passcode-v1",
-).encode("utf-8")
+# 密钥来源 settings.PASS_CODE_SECRET：pydantic 合并真实环境变量与 .env，
+# 打包模式 Electron 注入的环境变量同样被读取（此前直读 os.environ，.env 配置无效）。
+# 注：模块属性名保持不变——W1-T6 回归测试直接 monkeypatch 这两个属性。
+_PASS_CODE_SECRET_EXPLICIT = bool(settings.PASS_CODE_SECRET)
+_PASS_CODE_SECRET = (settings.PASS_CODE_SECRET or "bumofu-assistance-passcode-v1").encode("utf-8")
 
 
 class MachineCodeService:
@@ -369,7 +370,13 @@ class MachineCodeService:
             existing.created_by = created_by
             existing.description = description or existing.description
 
-            safe_commit(self.db)
+            try:
+                safe_commit(self.db)
+            except IntegrityError as e:
+                # 手动指定的通行码与另一条记录冲突（pass_code UNIQUE）：
+                # 历史缺陷 → 冒泡为未处理 500。改抛业务 ValueError（API 层转 400），
+                # 让管理员看到可操作的提示而非“服务器错误”。safe_commit 已回滚会话。
+                raise ValueError("该通行码已被其他机器码记录占用，请更换一个通行码") from e
             self.db.refresh(existing)
 
             logger.info(
@@ -395,7 +402,12 @@ class MachineCodeService:
         )
 
         self.db.add(record)
-        safe_commit(self.db)
+        try:
+            safe_commit(self.db)
+        except IntegrityError as e:
+            # 机器码此处必不冲突（existing 为 None 才走本分支），冲突只可能来自
+            # 手动指定的 pass_code 与另一条记录重复（pass_code UNIQUE）→ 转业务 400。
+            raise ValueError("该通行码已被其他机器码记录占用，请更换一个通行码") from e
         self.db.refresh(record)
 
         logger.info(
@@ -531,7 +543,19 @@ class MachineCodeService:
             # 自动更新机器码绑定到当前机器，后续登录走第一优先级
             old_machine_code = record.machine_code[:16] if record.machine_code else "None"
             record.machine_code = machine_code
-            safe_commit(self.db)
+            try:
+                safe_commit(self.db)
+            except IntegrityError:
+                # 目标机器码已被另一条记录占用（machine_code UNIQUE 冲突）。
+                # 历史缺陷：未捕获 → 冒泡为未处理 500，注册页只显示“服务器错误”。
+                # 现回滚改绑并按验证失败处理（调用方得到干净的 400，可提示联系管理员）。
+                # 改绑未发生，故不写改绑审计。
+                self.db.rollback()
+                logger.warning(
+                    "通行码回退改绑失败：机器码 %s... 已被其他记录占用，放弃改绑（返回验证失败）",
+                    machine_code[:16],
+                )
+                return None
             # W1-T6：静默改绑属敏感操作，必须留痕可追溯
             try:
                 from app.services.work_log_service import write_work_log

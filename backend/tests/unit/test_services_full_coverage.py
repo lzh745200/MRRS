@@ -310,14 +310,8 @@ class TestMainApp:
 
 
 # ════════════════════════════════════════════════════════════
-# Interfaces tests
+# Interfaces tests — 已移除（2026-09-04 死代码清扫）
 # ════════════════════════════════════════════════════════════
-
-
-class TestInterfaces:
-    def test_interfaces_importable(self):
-        try:
-            import app.interfaces.api.v1 as mod
-            assert mod is not None
-        except Exception:
-            pass
+# 原 TestInterfaces.test_interfaces_importable 对 app.interfaces.api.v1 做
+# try/except: pass 式导入断言，而该子包从未存在（app/interfaces/ 下只有
+# schemas/），导入恒失败被静默吞掉 —— 永久空转的死测试分支，予以删除。

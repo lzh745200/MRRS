@@ -495,7 +495,8 @@ function handleTabChange(_tab: any) {
 }
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Plus, Key, ArrowDown } from '@element-plus/icons-vue'
-import { get, post, put, del, apiRequest } from '@/api/request'
+import request, { get, post, put, del, apiRequest } from '@/api/request'
+import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
 import { listPermissionPacks } from '@/api/permissionPack'
 import { useAuthStore } from '@/stores/auth'
 import { useDesensitize } from '@/composables/useDesensitize'
@@ -1163,19 +1164,23 @@ const doExportPermissionPackage = async () => {
     }
     const res = await post('/permission-packages/export', payload)
     const data = res.data || res
-    if (data.file_name) {
-      const downloadUrl = `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/permission-packages/download/${data.file_name}`
-      const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = data.file_name
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      ElMessage.success(`权限包导出成功 (${data.role_count} 个角色, ${data.user_count} 个用户)`)
-      permExportDialogVisible.value = false
+    if (!data.file_name) {
+      throw new Error('导出响应缺少 file_name')
     }
+    // 必须走带 Authorization 拦截器的 axios 实例：/permission-packages/download
+    // 依赖 get_current_user，裸 <a> 导航不带认证头会恒 401（表现为“提示成功却没有文件”）。
+    // await 下载真正完成后才提示成功；失败会抛出并由下方 catch 提示真实原因。
+    await downloadBlobAsFile(
+      () =>
+        request.get(`/permission-packages/download/${encodeURIComponent(data.file_name)}`, {
+          responseType: 'blob',
+        }),
+      { fallbackFileName: data.file_name }
+    )
+    ElMessage.success(`权限包导出成功 (${data.role_count} 个角色, ${data.user_count} 个用户)`)
+    permExportDialogVisible.value = false
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.detail || '导出失败')
+    ElMessage.error(err?.userMessage || err?.response?.data?.detail || err?.message || '导出失败')
   } finally {
     exportingPermPackage.value = false
   }

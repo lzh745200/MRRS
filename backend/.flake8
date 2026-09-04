@@ -6,3 +6,10 @@ extend-ignore = E203
 # 复杂度阈值内置于此，门禁不再依赖调用方记得显式传 --max-complexity=16；
 # 仓库根 .flake8 同步为 16，两处口径必须一致。
 max-complexity = 16
+# E402(module level import not at top of file)仅对入口模块 app/main.py 放行：
+# main.py 必须在 import fastapi/uvicorn 之前执行一行裸调用
+# apply_windows_proactor_fix()（替换全局 EventLoopPolicy，需赶在任何事件循环
+# 创建前），而“顶层非 import 语句后再出现 import”正是 E402 的判定点。
+# 豁免仅限该文件该码，其它文件的错位 import 仍会被拦截。
+per-file-ignores =
+    app/main.py: E402

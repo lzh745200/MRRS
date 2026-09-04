@@ -250,7 +250,6 @@ describe('Common component imports', () => {
     ['BaseChart', '@/components/common/BaseChart.vue'],
     ['StatsCard', '@/components/common/StatsCard.vue'],
     ['EmptyState', '@/components/business/EmptyState/EmptyState.vue'],
-    ['ImportButton', '@/components/common/ImportButton.vue'],
   ]
 
   components.forEach(([label, p]) => {

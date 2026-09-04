@@ -28,6 +28,8 @@ const {
   routeQuery,
   listPacksMock,
   promptMock,
+  mockDownloadBlobAsFile,
+  mockRequestGet,
 } = vi.hoisted(() => {
   return {
     authState: { isAdmin: true },
@@ -47,6 +49,12 @@ const {
     clipWrite: vi.fn(),
     routeQuery: { query: {} as Record<string, any> },
     listPacksMock: vi.fn(),
+    // 忠实镜像真实 helper：downloadBlobAsFile 内部会 await requestFn()（blobDownload.ts:108），
+    // 故 mock 也调用传入的取数 thunk，覆盖组件里 () => request.get(...) 的下载请求体。
+    mockDownloadBlobAsFile: vi.fn(async (requestFn: any) => {
+      if (typeof requestFn === 'function') await requestFn()
+    }),
+    mockRequestGet: vi.fn(),
   }
 })
 
@@ -56,6 +64,7 @@ vi.mock('element-plus', () => ({
 }))
 
 vi.mock('@/api/request', () => ({
+  default: { get: mockRequestGet },
   get: mockGet,
   post: mockPost,
   put: mockPut,
@@ -65,6 +74,13 @@ vi.mock('@/api/request', () => ({
 
 vi.mock('@/api/permissionPack', () => ({
   listPermissionPacks: listPacksMock,
+}))
+
+// 权限包导出改走 downloadBlobAsFile（带 Authorization 拦截器的 axios 实例下载 blob），
+// 不再手工创建 <a> 并 click。按 AGENTS.md 测试约定 #5，mock 该 helper 并断言其被调用，
+// 而非 spy DOM anchor click（jsdom 下 createObjectURL/click 行为不可靠）。
+vi.mock('@/api/helpers/blobDownload', () => ({
+  downloadBlobAsFile: mockDownloadBlobAsFile,
 }))
 
 vi.mock('vue-router', () => ({
@@ -965,8 +981,7 @@ describe('权限包导入导出', () => {
   })
 
 
-  it('导出成功：创建 a 标签触发下载并提示统计', async () => {
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  it('导出成功：走 downloadBlobAsFile 触发下载并提示统计', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -976,15 +991,15 @@ describe('权限包导入导出', () => {
       data: { file_name: 'pkg.zip', role_count: 2, user_count: 3 },
     })
     await vm.doExportPermissionPackage()
-    expect(clickSpy).toHaveBeenCalled()
+    expect(mockDownloadBlobAsFile).toHaveBeenCalledWith(expect.any(Function), {
+      fallbackFileName: 'pkg.zip',
+    })
     expect(ElMessage.success).toHaveBeenCalledWith('权限包导出成功 (2 个角色, 3 个用户)')
     expect(vm.exportingPermPackage).toBe(false)
     expect(vm.permExportDialogVisible).toBe(false)
-    clickSpy.mockRestore()
   })
 
   it('导出：勾选角色时携带 role_names；无 file_name 不下载；失败提示', async () => {
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -995,10 +1010,10 @@ describe('权限包导入导出', () => {
     vm.permExportRoleNames = ['village_officer']
     mockPost.mockResolvedValueOnce({ data: {} }) // 无 file_name → 不下载
     await vm.doExportPermissionPackage()
-    expect(clickSpy).not.toHaveBeenCalled()
+    expect(mockDownloadBlobAsFile).not.toHaveBeenCalled()
 
     // 带选择导出：body 应包含 role_names
-    clickSpy.mockClear()
+    mockDownloadBlobAsFile.mockClear()
     mockPost.mockResolvedValueOnce({
       data: { file_name: 'partial.zip', role_count: 1, user_count: 1 },
     })
@@ -1006,16 +1021,22 @@ describe('权限包导入导出', () => {
     expect(mockPost).toHaveBeenLastCalledWith('/permission-packages/export', {
       role_names: ['village_officer'],
     })
-    expect(clickSpy).toHaveBeenCalled()
+    expect(mockDownloadBlobAsFile).toHaveBeenCalledWith(expect.any(Function), {
+      fallbackFileName: 'partial.zip',
+    })
 
     // 失败 → detail 与兜底
     mockPost.mockRejectedValueOnce({ response: { data: { detail: '无权限' } } })
     await vm.doExportPermissionPackage()
     expect(ElMessage.error).toHaveBeenCalledWith('无权限')
+    // 抛出普通 Error 时透出真实 message（不再是笼统“导出失败”）
     mockPost.mockRejectedValueOnce(new Error('net'))
     await vm.doExportPermissionPackage()
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
+    // 无任何可提取信息时才回退通用文案
+    mockPost.mockRejectedValueOnce({})
+    await vm.doExportPermissionPackage()
     expect(ElMessage.error).toHaveBeenCalledWith('导出失败')
-    clickSpy.mockRestore()
   })
 
   /** 捕获组件创建的 file input 元素 */
@@ -1421,7 +1442,6 @@ describe('逻辑或 / 空值合并兜底分支', () => {
   })
 
   it('导出：响应无 .data 包装 → res 本体兜底', async () => {
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -1431,9 +1451,10 @@ describe('逻辑或 / 空值合并兜底分支', () => {
       await vm.openPermExportDialog()
     }
     await vm.doExportPermissionPackage()
-    expect(clickSpy).toHaveBeenCalled()
+    expect(mockDownloadBlobAsFile).toHaveBeenCalledWith(expect.any(Function), {
+      fallbackFileName: 'plain.zip',
+    })
     expect(ElMessage.success).toHaveBeenCalledWith('权限包导出成功 (1 个角色, 1 个用户)')
-    clickSpy.mockRestore()
   })
 
   it('导入：无 .data 包装 / success 无 message / 异常无任何字段', async () => {
@@ -1913,7 +1934,6 @@ describe('openPermExportDialog 角色响应形态与缓存', () => {
   })
 
   it('导出：加密密码 + 机器码绑定 → payload 携带 password/bind_machine_code（branch@1158/@1161 真侧）', async () => {
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -1927,10 +1947,11 @@ describe('openPermExportDialog 角色响应形态与缓存', () => {
       password: 'secret',
       bind_machine_code: true,
     })
-    expect(clickSpy).toHaveBeenCalled()
+    expect(mockDownloadBlobAsFile).toHaveBeenCalledWith(expect.any(Function), {
+      fallbackFileName: 'enc.zip',
+    })
     expect(ElMessage.success).toHaveBeenCalledWith('权限包导出成功 (0 个角色, 0 个用户)')
     expect(vm.exportingPermPackage).toBe(false)
-    clickSpy.mockRestore()
   })
 })
 
