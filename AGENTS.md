@@ -226,7 +226,19 @@ make build-kylin        # Kylin V10 standalone (no Electron, pure web)
 
 ### PR Checks (`.github/workflows/pr-checks.yml`)
 
-Triggered on every PR. Runs backend tests, frontend tests, flake8, and uploads coverage to Codecov.
+Triggered on `push` to main、每个指向 main 的 PR、以及 `workflow_dispatch`。
+（`push` 触发器 2026-09-04 才补上——此前直接推 main 不会跑任何 CI，因为
+build-* 只在 tag `v*` 触发、nightly 只在定时触发，main 实际处于无门禁状态。）
+
+五个 job 承载的门禁：
+
+| Job | 门禁 |
+|-----|------|
+| `backend-test` | pytest 全量 + 覆盖率（阈值由 `backend/.coveragerc` `fail_under` 单一承载） |
+| `frontend-check` | `vue-tsc --noEmit`、`npm run lint:check`、`vitest run --coverage` |
+| `lint` | flake8（`--max-line-length=120 --count --max-complexity=16`）、mypy（非阻断）、bandit `-ll` |
+| `security` | pip-audit（非阻断）、`npm audit --audit-level=high`（阻断）、SBOM 许可证清单 |
+| `static-analysis` | 软删过滤扫描、版本一致性、前后端菜单对齐、后端综合安全审计 |
 
 ### Nightly Full (`.github/workflows/nightly-full.yml`)
 

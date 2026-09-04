@@ -1,10 +1,17 @@
 name: PR Checks
 
 on:
+  # push 到 main 同样必须过门禁：build-* 只在 tag v* 触发、nightly 只在定时触发，
+  # 此处若不写 push，直接推 main 将没有任何 CI 运行 —— 而 AGENTS.md 早已声称
+  # “push main 只跑 PR Checks”，配置与文档长期不符，main 实际处于无门禁状态。
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
 
+# 并发组按 github.ref 区分：push 为 refs/heads/main、PR 为 refs/pull/N/merge，
+# 二者互不取消。
 concurrency:
   group: pr-checks-${{ github.ref }}
   cancel-in-progress: true
