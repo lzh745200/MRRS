@@ -85,8 +85,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Node 24（勿改回 22）：Node22 的 V8 在全量 299 文件跨分片合并覆盖率时有幻影——
+      # 同一 .vue（典型 src/views/auth/LoginEnhanced.vue）被多个测试文件重编译后，合并出
+      # count-0 的模板内联 v-model 处理器 / import 访问器（funcs 88.23%、未覆盖行 82/183），
+      # 使 src/views 阈值跌到 99.91% 而门禁变红；隔离单跑恒 100%、maxWorkers:1 无效。
+      # Node24 的 V8 无此幻影（WSL 全量实测 299 文件 100%，且本地开发即 Node 24.18）。
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with: { node-version: '22' }
+        with: { node-version: '24' }
       - run: |
           cd frontend
           npm ci --legacy-peer-deps
@@ -129,7 +134,9 @@ jobs:
           echo "===== vitest hard-failure signal ====="
           grep -nE "ERROR: Coverage|does not meet|heap out of memory|FATAL ERROR|Reached heap limit|Allocation failed|Failed Tests|FAIL |AssertionError|Cannot find module|ENOENT|Test Files +[0-9]+ failed|Tests +[0-9]+ failed" "$LOG" | head -25 | sed 's/^/::error::/' || true
           echo "===== coverage rows below 100 ====="
-          grep -E "\.vue|\.ts |All files" "$LOG" | grep -vE "\| *100 *\| *100 *\| *100 *\| *100" | head -25 | sed 's/^/::error::/' || true
+          # 仅匹配覆盖率表格行(token 后跟可选空白再跟 `|`)，排除 `List.test.ts (63 tests)`
+          # 这类通过用例结果行(含 `.ts ` 但无 `|`)——旧模式会刷屏挤掉真因(annotations 上限 ~10)。
+          grep -E "(\.vue|\.ts|All files)[[:space:]]*\|" "$LOG" | grep -vE "\|[[:space:]]*100[[:space:]]*\|[[:space:]]*100[[:space:]]*\|[[:space:]]*100[[:space:]]*\|[[:space:]]*100" | head -30 | sed 's/^/::error::/' || true
           exit 1
       - name: Upload vitest log
         if: failure()

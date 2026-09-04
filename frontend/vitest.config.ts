@@ -8,16 +8,20 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     pool: 'threads',
-    // ── 两个相互独立的覆盖率缺陷，需各自修复、缺一不可，勿因修了一个就删另一个 ──
-    // (A) 多 worker v8 采集幻影：并发 worker 各自采集同一 .vue 的覆盖率后合并，合并会漏计
-    //     模板内联处理器与模块级 import 行，使个别文件（典型 src/views/auth/LoginEnhanced.vue）
-    //     在全量并行跑出现 funcs/lines <100%（实测 funcs 88.23%、未覆盖行 82/183），
-    //     但隔离单跑恒 100%（已实测 56 tests 全过、四项 100）。压到单 worker → 单一采集上下文 →
-    //     无跨 worker 合并 → 确定性 100%。注意：必须用 maxWorkers:1 而非 poolOptions.threads.singleThread
-    //     —— singleThread 让所有文件共享同一模块注册表，本仓库 49 个视图测试在模块顶层调用
-    //     enableAutoUnmount（全局单例，二次调用即抛），singleThread 下必崩；maxWorkers:1 走正常
-    //     threads 池、保留 isolate:true 默认的“每文件全新模块环境”，只把并发 worker 数压到 1。
-    //     本项与下方 (B) 无关：(B) 即使单 worker 也会发生，故 maxWorkers:1 不能替代补丁。
+    // ── 两个相互独立的覆盖率缺陷，需各自处置、缺一不可 ──
+    // (A) v8 跨分片合并幻影：全量 299 文件跑时，同一 .vue（典型 src/views/auth/LoginEnhanced.vue）
+    //     被多个测试文件分别重编译，各文件产出的覆盖率分片合并后产生 count-0 的模板内联 v-model
+    //     处理器 / import 访问器（实测 funcs 88.23%、未覆盖行 82/183），使 src/views 阈值跌到 99.91%；
+    //     隔离单跑（或仅 3 个引用文件同跑）恒 100%。这是 **Node 版本相关** 的 V8 缺陷：Node22 复现、
+    //     Node24 无此幻影（WSL 全量实测 Node24=100%、Node22=88.23%；本地开发 Node 24.18 亦 100%）。
+    //     真正的修复是 **CI 用 Node 24**（见 .github/workflows/pr-checks.yml、nightly-full.yml 的 frontend
+    //     job，已附"勿改回 22"注释）。注意：maxWorkers:1 **不能** 修此幻影——合并发生在"每文件一个分片"
+    //     层面，单 worker 仍产出 299 个分片再合并（旧注释误称单 worker 即确定性 100%，实测 Linux/Node22
+    //     仍 88.23%）。保留 maxWorkers:1/minWorkers:1 仅为压低单 worker 累积 v8 采集的内存峰值；不可改用
+    //     poolOptions.threads.singleThread——singleThread 让所有文件共享同一模块注册表，本仓库 49 个视图
+    //     测试在模块顶层调用 enableAutoUnmount（全局单例，二次调用即抛），singleThread 下必崩。
+    //     本项与下方 (B) 无关：(B) 与 Node 版本无关（#9758 官方确认与 provider/pool/worker 数均无关），
+    //     故 Node 升级不能替代补丁。
     maxWorkers: 1,
     minWorkers: 1,
     // (B) .tmp 分片读回 ENOENT 竞态（vitest-dev/vitest#9758，已 closed not_planned）：v8/istanbul

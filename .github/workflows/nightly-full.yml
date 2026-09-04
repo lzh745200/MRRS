@@ -55,8 +55,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Node 24（勿改回 22）：Node22 的 V8 跨分片合并覆盖率有幻影，使 src/views/auth/
+      # LoginEnhanced.vue 全量跑 funcs 跌到 88.23%（未覆盖行 82/183）、阈值 99.91% 变红；
+      # 隔离单跑恒 100%、maxWorkers:1 无效。Node24 无此幻影（与 pr-checks frontend-check 同步）。
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with: { node-version: '22' }
+        with: { node-version: '24' }
       # npm ci 严格按 lockfile 安装（与 pr-checks 一致），保证 nightly 与 PR 结果可复现
       - run: cd frontend && npm ci --legacy-peer-deps
       - name: Full test + coverage
