@@ -64,7 +64,47 @@ jobs:
       # lint:check 为纯检查模式（不带 --fix），CI 必须真实暴露 lint 违规而非自动修复
       - run: cd frontend && npm run lint:check 2>&1
       # 前端测试带覆盖率报告（vitest run --coverage）
-      - run: cd frontend && npx vitest run --coverage 2>&1
+      # 显式幂等执行 #9758 分片镜像补丁：npm ci 的 postinstall 理论上已执行，但缓存/顺序
+      # 不确定时在此兜底，确保 Linux runner 上补丁一定就位（脚本幂等，重复执行无副作用）。
+      # 输出 tee 到 runner.temp 日志并开 pipefail：失败时下方诊断步骤上传 artifact + 提炼
+      # ::error::。Linux 专有失败在本地 Windows 无法复现、job 日志又需 admin（403），
+      # artifact 是唯一可下载的完整证据通道。
+      - name: Frontend tests + coverage
+        run: |
+          cd frontend
+          node scripts/patch-vitest-coverage.cjs
+          LOG="$RUNNER_TEMP/vitest-coverage.log"
+          # 先落环境快照：maxWorkers:1 让单 worker 累积 299 文件 v8 覆盖率，内存峰值高，
+          # 7GB runner 上可能 OOM（exit 1）。artifact 里有 node 版本/内存/堆上限才能区分
+          # OOM 崩溃 vs 真实断言/阈值失败。
+          {
+            echo "===== ENV SNAPSHOT ====="
+            echo "node: $(node -v)  npm: $(npm -v)"
+            echo "os: $(uname -a)"
+            echo "nproc: $(nproc)"
+            free -m 2>/dev/null || echo "(free unavailable)"
+            echo "node heap limit (MB): $(node -e 'console.log(Math.round(require("v8").getHeapStatistics().heap_size_limit/1048576))')"
+            echo "ulimit -v: $(ulimit -v)"
+            echo "========================"
+          } > "$LOG"
+          set -o pipefail
+          npx vitest run --coverage 2>&1 | tee -a "$LOG"
+      - name: Report vitest failure
+        if: failure()
+        run: |
+          echo "===== coverage threshold / ENOENT / FAIL / OOM summary ====="
+          grep -nE "ERROR: Coverage|does not meet|ENOENT|FAIL |Error:|AssertionError|Cannot find|failed|FATAL ERROR|heap out of memory|Allocation failed|Reached heap limit|aborting|✓|×" "$RUNNER_TEMP/vitest-coverage.log" | tail -140 | sed 's/^/::error::/' || true
+          echo "===== tail ====="
+          tail -60 "$RUNNER_TEMP/vitest-coverage.log" | sed 's/^/::error::/' || true
+          exit 1
+      - name: Upload vitest log
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: vitest-coverage-log
+          path: ${{ runner.temp }}/vitest-coverage.log
+          if-no-files-found: ignore
+          retention-days: 7
       # 上传覆盖率到 Codecov
       - uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
