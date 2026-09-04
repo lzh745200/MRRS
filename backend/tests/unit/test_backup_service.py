@@ -63,10 +63,13 @@ class TestBackupServiceInit:
         assert svc.backup_dir == "/tmp/bk"
         assert svc.incremental_enabled is True
 
-    def test_with_default_backup_dir(self, mock_db):
-        with patch("app.utils.paths.get_backup_path", return_value=Path("/def/bk")):
+    def test_with_default_backup_dir(self, mock_db, tmp_path):
+        # 必须落在 tmp_path 下：BackupService.__init__ 会对默认备份目录真实
+        # os.makedirs，指向根目录"/def"在 Linux CI 上直接 PermissionError。
+        target = tmp_path / "def" / "bk"
+        with patch("app.utils.paths.get_backup_path", return_value=target):
             svc = BackupService(db=mock_db)
-            assert svc.backup_dir == str(Path("/def/bk"))
+            assert svc.backup_dir == str(target)
 
     def test_env_disabled_incremental(self, mock_db):
         svc = _make_svc(mock_db, "/b", "/d/db", "/u", incremental="false")
