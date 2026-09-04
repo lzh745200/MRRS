@@ -8,6 +8,7 @@
 db 使用 MagicMock 链式 mock；safe_commit 在模块命名空间打 patch。
 """
 
+import platform
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -162,3 +163,54 @@ class TestDeleteOrganizationPassCode:
 
         db.delete.assert_called_once_with(record)
         mock_commit.assert_called_once_with(db)
+
+
+class TestCollectWmicInfoParsing:
+    def test_parses_and_filters_placeholder_values(self, monkeypatch):
+        """wmic 采集的解析与占位过滤（machine_code_service.py 92-95 行）。
+
+        真 Windows 环境由 get_machine_code() 间接走真实 wmic 覆盖；Linux CI 上
+        整个 Windows 分支被 platform 守卫 + pragma 提前返回、92-94 永不执行 →
+        fail_under=100 门禁恒缺 3 行（2026-09-05 PR Checks 实测）。此处 mock
+        Popen/communicate，双平台确定性锁定解析语义：
+        - ProcessorId（skip=None）：取最后一行非空值；
+        - baseboard SerialNumber：值 == "To be filled by O.E.M." 占位 → 丢弃；
+        - diskdrive SerialNumber：正常值保留。
+        """
+        monkeypatch.setattr(platform, "system", lambda: "Windows")
+
+        fake_proc = MagicMock()
+        fake_proc.communicate.side_effect = [
+            ("ProcessorId\n BFEBFBFF000806EC\n", ""),
+            ("SerialNumber\n To be filled by O.E.M.\n", ""),
+            ("SerialNumber\n WD-WX11A80D1234\n", ""),
+        ]
+        with patch(
+            f"{_MOD}.subprocess.Popen", return_value=fake_proc
+        ) as mock_popen:
+            info = MachineCodeService._collect_wmic_info()
+
+        assert mock_popen.call_count == 3
+        assert info == ["BFEBFBFF000806EC", "WD-WX11A80D1234"]
+
+    def test_communicate_timeout_is_2s_and_blank_output_skipped(self, monkeypatch):
+        """communicate 必须 2 秒超时；空输出行（val 为空）不得进入 info。"""
+        monkeypatch.setattr(platform, "system", lambda: "Windows")
+
+        fake_proc = MagicMock()
+        fake_proc.communicate.side_effect = [
+            # ProcessorId：纯空白输出 → strip 后 val 为空 → 跳过
+            ("   \n", ""),
+            # baseboard：占位值 → 上一用例已验丢弃，此处验空白跳过同样生效
+            ("SerialNumber\n To be filled by O.E.M.\n", ""),
+            # diskdrive：正常值
+            ("SerialNumber\n DISK-SER\n", ""),
+        ]
+        with patch(
+            f"{_MOD}.subprocess.Popen", return_value=fake_proc
+        ) as mock_popen:
+            info = MachineCodeService._collect_wmic_info()
+
+        assert mock_popen.call_count == 3
+        assert fake_proc.communicate.call_args_list[0].kwargs.get("timeout") == 2
+        assert info == ["DISK-SER"]

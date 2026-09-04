@@ -151,6 +151,20 @@ class TestGetAppDataDir:
         assert result == fake_home / ".bumofu"
         assert result.exists()
 
+    def test_project_backend_dir_env_override_direct(self, monkeypatch, tmp_path):
+        """BUMOFU_BACKEND_DIR_OVERRIDE 在调用时生效（W1 不变量 #11 的机制本体）。
+
+        Windows 开发路径 get_app_data_dir() 走 else 分支间接覆盖 override 行；
+        Linux 生产路径 get_app_data_dir 提前返回 ~/.bumofu、根本不经过
+        get_project_backend_dir —— CI(Linux) 上 override 分支恒缺 1 行导致
+        fail_under=100 门禁红（2026-09-05 PR Checks 实测）。此处直接调用锁定。
+        """
+        monkeypatch.setenv("BUMOFU_BACKEND_DIR_OVERRIDE", str(tmp_path))
+        assert get_project_backend_dir() == tmp_path
+        # 未设置时回退到仓库 backend 目录（.name == "backend"）
+        monkeypatch.delenv("BUMOFU_BACKEND_DIR_OVERRIDE")
+        assert get_project_backend_dir().name == "backend"
+
     def test_bundled_linux_uses_home(self, monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "frozen", True, raising=False)
         monkeypatch.setattr(sys, "_MEIPASS", "/fake", raising=False)
