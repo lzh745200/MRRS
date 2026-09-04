@@ -272,12 +272,23 @@ class TestAtomicWriteJson:
                 _atomic_write_json(dest, {"key": "value"})
         assert not dest.exists()
 
-    def test_chmod_skipped_on_windows(self, tmp_path, monkeypatch):
+    def test_chmod_platform_semantics(self, tmp_path):
+        """POSIX：写入后 chmod 0o600；Windows：不做 chmod（权限由 ACL 管理）。
+
+        刻意不改 os.name——monkeypatch os.name='nt' 会让 pathlib.Path 工厂
+        （含 _atomic_write_json 首行 Path(path) 与 pytest 失败报告期的
+        Path(cwd)）在 Linux 上实例化 WindowsPath → NotImplementedError，
+        连 repr_failure 都会炸成 INTERNALERROR 拖垮整个 xdist worker
+        （2026-09-05 PR Checks 实测）。分支语义按宿主平台各自原生验证。
+        """
         dest = tmp_path / "secrets.json"
-        monkeypatch.setattr("os.name", "nt")
-        with patch("app.utils.runtime_secrets.os.chmod") as mock_chmod:
+        with patch("os.chmod") as mock_chmod:
             _atomic_write_json(dest, {"key": "value"})
+        assert json.loads(dest.read_text(encoding="utf-8")) == {"key": "value"}
+        if os.name == "nt":
             mock_chmod.assert_not_called()
+        else:
+            mock_chmod.assert_called_once_with(dest, 0o600)
 
     def test_os_replace_failure_cleans_up_temp(self, tmp_path):
         dest = tmp_path / "secrets.json"
