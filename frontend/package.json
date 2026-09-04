@@ -16,7 +16,8 @@
     "lint": "eslint src --ext .vue,.ts,.tsx --fix --max-warnings=0",
     "lint:check": "eslint src --ext .vue,.ts,.tsx --max-warnings=0",
     "type-check": "vue-tsc --noEmit",
-    "prepare": "python scripts/pre_commit_hooks.py install || true"
+    "prepare": "python scripts/pre_commit_hooks.py install || true",
+    "postinstall": "node scripts/patch-vitest-coverage.cjs"
   },
   "lint-staged": {
     "*.{vue,ts,tsx}": [

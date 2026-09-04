@@ -8,9 +8,27 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     pool: 'threads',
-    // vitest 3.x 中 singleThread 已废弃，需用 fileParallelism:false 才能真正单 worker；
-    // 多 worker 时各 provider 实例 clean() 互相删除 coverage/.tmp 导致 ENOENT（Windows 复现）
-    singleThread: true,
+    // ── 两个相互独立的覆盖率缺陷，需各自修复、缺一不可，勿因修了一个就删另一个 ──
+    // (A) 多 worker v8 采集幻影：并发 worker 各自采集同一 .vue 的覆盖率后合并，合并会漏计
+    //     模板内联处理器与模块级 import 行，使个别文件（典型 src/views/auth/LoginEnhanced.vue）
+    //     在全量并行跑出现 funcs/lines <100%（实测 funcs 88.23%、未覆盖行 82/183），
+    //     但隔离单跑恒 100%（已实测 56 tests 全过、四项 100）。压到单 worker → 单一采集上下文 →
+    //     无跨 worker 合并 → 确定性 100%。注意：必须用 maxWorkers:1 而非 poolOptions.threads.singleThread
+    //     —— singleThread 让所有文件共享同一模块注册表，本仓库 49 个视图测试在模块顶层调用
+    //     enableAutoUnmount（全局单例，二次调用即抛），singleThread 下必崩；maxWorkers:1 走正常
+    //     threads 池、保留 isolate:true 默认的“每文件全新模块环境”，只把并发 worker 数压到 1。
+    //     本项与下方 (B) 无关：(B) 即使单 worker 也会发生，故 maxWorkers:1 不能替代补丁。
+    maxWorkers: 1,
+    minWorkers: 1,
+    // (B) .tmp 分片读回 ENOENT 竞态（vitest-dev/vitest#9758，已 closed not_planned）：v8/istanbul
+    //     共用的 BaseCoverageProvider 把每个 suite 的覆盖率写入 coverage/.tmp/coverage-N.json
+    //     （写盘成功、promise resolve），但 readCoverageFiles 读回时部分分片已从磁盘消失 → ENOENT
+    //     崩溃、覆盖率门禁变红。官方确认与 provider/pool/worker 数/fileParallelism 均无关
+    //     （singleFork、fileParallelism=false、maxWorkers:1 同样复现），无法用配置规避，4.x 仍在。
+    //     根治见 scripts/patch-vitest-coverage.cjs（postinstall 自动应用）：onAfterSuiteRun 写盘的
+    //     同时把分片 JSON 存入内存镜像 Map，readCoverageFiles 读盘命中 ENOENT 时回退内存镜像并按
+    //     filename 释放，使报告阶段不再依赖分片在磁盘上存活（详见下方 coverage 注释）。
+    // fileParallelism:false + retry:1 用于缓解与此无关的 jsdom 环境复用时序 flake（见下）。
     fileParallelism: false,
     // 环境级时序 flake 缓解：2026-08-27 同一基线两次全量出现 5 failed → 6550 passed
     // 零代码变更自发翻转（jsdom 环境复用时序敏感）。retry=1 只对失败文件重试一次；
@@ -35,8 +53,14 @@ export default defineConfig({
       '**/src/**/__tests__/**/*.spec.ts'
     ],
     coverage: {
+      // provider 保持 v8（istanbul 共用同一 BaseCoverageProvider、同样触发 #9758，切换无收益且阈值口径
+      // 需重新标定，故不改）。.tmp 分片读回 ENOENT 由 scripts/patch-vitest-coverage.cjs（postinstall）根治：
+      // onAfterSuiteRun 写盘的同时把分片 JSON 存入内存镜像 Map，readCoverageFiles 读盘命中 ENOENT 时回退内存镜像并按
+      // filename 释放，使报告/阈值阶段不再依赖分片在磁盘上存活。阈值口径不变（可覆盖集 100%）。
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      // 测试失败时仍生成覆盖率报告（reportOnFailure 默认 false 会在失败时跳过报告）。
+      reportOnFailure: true,
       include: [
         'src/**/*.{ts,vue}',
       ],
