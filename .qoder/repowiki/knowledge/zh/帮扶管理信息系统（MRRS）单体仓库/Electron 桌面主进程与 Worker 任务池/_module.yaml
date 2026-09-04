@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: electron_desktop
+title: Electron 桌面主进程与 Worker 任务池
+scope:
+    - electron/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend
+    - path: build_deploy

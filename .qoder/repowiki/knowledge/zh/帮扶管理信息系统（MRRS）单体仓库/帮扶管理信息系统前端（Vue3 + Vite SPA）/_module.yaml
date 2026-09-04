@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: frontend
+title: 帮扶管理信息系统前端（Vue3 + Vite SPA）
+scope:
+    - frontend/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend
+    - path: scripts_and_tools

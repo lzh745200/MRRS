@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: backend
+title: 帮扶管理信息系统后端服务（FastAPI + SQLAlchemy）
+scope:
+    - backend/
+source_files: []
+depends_on: []
+related_to:
+    - path: build_deploy
+    - path: electron_desktop
+    - path: frontend
+    - path: scripts_and_tools

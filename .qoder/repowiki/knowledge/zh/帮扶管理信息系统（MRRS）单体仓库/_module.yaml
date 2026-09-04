@@ -1,0 +1,31 @@
+schema_version: 1
+module_path: ""
+title: 帮扶管理信息系统（MRRS）单体仓库
+scope:
+    - README.md
+    - CONTRIBUTING.md
+    - .gitignore
+    - Makefile
+    - package.json
+    - package-lock.json
+    - docker-compose.yml
+    - CONTEXT.md
+    - AGENTS.md
+    - CLAUDE.md
+    - .dockerignore
+    - .editorconfig
+    - .env.example
+    - .flake8
+    - .gitattributes
+    - .pre-commit-config.yaml
+    - .prettierrc.json
+    - CHANGELOG.md
+    - COORDINATION.md
+    - LICENSE
+    - pytest_cov_output.txt
+    - pytest_full_output.txt
+    - version.txt
+    - 项目文件结构说明.md
+source_files: []
+depends_on: []
+related_to: []

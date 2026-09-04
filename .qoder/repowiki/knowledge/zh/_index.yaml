@@ -1,0 +1,113 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: main
+nodes_managed: true
+exported_at: "2026-09-04T11:44:40Z"
+modules:
+    "":
+        dir_name: 帮扶管理信息系统（MRRS）单体仓库
+        title: 帮扶管理信息系统（MRRS）单体仓库
+        scope:
+            - README.md
+            - CONTRIBUTING.md
+            - .gitignore
+            - Makefile
+            - package.json
+            - package-lock.json
+            - docker-compose.yml
+            - CONTEXT.md
+            - AGENTS.md
+            - CLAUDE.md
+            - .dockerignore
+            - .editorconfig
+            - .env.example
+            - .flake8
+            - .gitattributes
+            - .pre-commit-config.yaml
+            - .prettierrc.json
+            - CHANGELOG.md
+            - COORDINATION.md
+            - LICENSE
+            - pytest_cov_output.txt
+            - pytest_full_output.txt
+            - version.txt
+            - 项目文件结构说明.md
+        source_files: []
+        children:
+            - backend
+            - build_deploy
+            - docs
+            - electron_desktop
+            - frontend
+            - scripts_and_tools
+        depends_on: []
+        related_to: []
+    backend:
+        dir_name: 帮扶管理信息系统后端服务（FastAPI + SQLAlchemy）
+        title: 帮扶管理信息系统后端服务（FastAPI + SQLAlchemy）
+        scope:
+            - backend/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: build_deploy
+            - path: electron_desktop
+            - path: frontend
+            - path: scripts_and_tools
+    build_deploy:
+        dir_name: 麒麟桌面版与容器化构建部署
+        title: 麒麟桌面版与容器化构建部署
+        scope:
+            - deploy/
+            - docker/
+            - build-scripts/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend
+            - path: electron_desktop
+    docs:
+        dir_name: 项目文档中心与演示材料
+        title: 项目文档中心与演示材料
+        scope:
+            - docs/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    electron_desktop:
+        dir_name: Electron 桌面主进程与 Worker 任务池
+        title: Electron 桌面主进程与 Worker 任务池
+        scope:
+            - electron/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend
+            - path: build_deploy
+    frontend:
+        dir_name: 帮扶管理信息系统前端（Vue3 + Vite SPA）
+        title: 帮扶管理信息系统前端（Vue3 + Vite SPA）
+        scope:
+            - frontend/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend
+            - path: scripts_and_tools
+    scripts_and_tools:
+        dir_name: 项目运维与质量门禁脚本集
+        title: 项目运维与质量门禁脚本集
+        scope:
+            - scripts/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend
+            - path: frontend

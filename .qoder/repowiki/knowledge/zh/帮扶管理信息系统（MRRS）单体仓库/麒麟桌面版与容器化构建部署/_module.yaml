@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: build_deploy
+title: 麒麟桌面版与容器化构建部署
+scope:
+    - deploy/
+    - docker/
+    - build-scripts/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend
+    - path: electron_desktop
