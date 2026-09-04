@@ -55,10 +55,14 @@ jobs:
       - name: Report backend failure
         if: failure()
         run: |
-          echo "===== FAILED / ERROR / coverage summary ====="
-          grep -nE "FAILED|ERROR|Coverage failure|Required test coverage|fail-under|fail_under|^TOTAL| TOTAL |assert|Error|failed|error" "$RUNNER_TEMP/pytest.log" | tail -160 | sed 's/^/::error::/' || true
-          echo "===== tail ====="
-          tail -60 "$RUNNER_TEMP/pytest.log" | sed 's/^/::error::/' || true
+          LOG="$RUNNER_TEMP/pytest.log"
+          # 关键信号优先(annotation 上限 ~10 条，GitHub 保留最先发出的)：
+          # 先出 term-missing 表里覆盖率 <100% 的文件行——它直接带 Missing 列(未覆盖行号)，
+          # 即 4 处缺口的精确位置；避免再用裸 "error" 匹配到 api_error.py 等 100% 文件刷屏。
+          echo "===== files with MISSING coverage (<100%, 带 Missing 行号) ====="
+          grep -E "\.py " "$LOG" | grep -vE " 100%| 100\.00%" | head -20 | sed 's/^/::error::/' || true
+          echo "===== coverage failure / test failures ====="
+          grep -nE "Coverage failure|Required test coverage|^TOTAL|FAILED|ERROR: " "$LOG" | head -20 | sed 's/^/::error::/' || true
           exit 1
       - name: Upload pytest log
         if: failure()
@@ -118,10 +122,14 @@ jobs:
       - name: Report vitest failure
         if: failure()
         run: |
-          echo "===== coverage threshold / ENOENT / FAIL / OOM summary ====="
-          grep -nE "ERROR: Coverage|does not meet|ENOENT|FAIL |Error:|AssertionError|Cannot find|failed|FATAL ERROR|heap out of memory|Allocation failed|Reached heap limit|aborting|✓|×" "$RUNNER_TEMP/vitest-coverage.log" | tail -140 | sed 's/^/::error::/' || true
-          echo "===== tail ====="
-          tail -60 "$RUNNER_TEMP/vitest-coverage.log" | sed 's/^/::error::/' || true
+          LOG="$RUNNER_TEMP/vitest-coverage.log"
+          # 关键信号优先(annotation 上限 ~10 条，保留最先发出的)：先出硬失败信号
+          # (覆盖率阈值不达 / OOM / ENOENT / 失败用例标记 / Test Files N failed 汇总)，
+          # 不再匹配 ✓(299 行通过用例会刷屏挤掉真因)。
+          echo "===== vitest hard-failure signal ====="
+          grep -nE "ERROR: Coverage|does not meet|heap out of memory|FATAL ERROR|Reached heap limit|Allocation failed|Failed Tests|FAIL |AssertionError|Cannot find module|ENOENT|Test Files +[0-9]+ failed|Tests +[0-9]+ failed" "$LOG" | head -25 | sed 's/^/::error::/' || true
+          echo "===== coverage rows below 100 ====="
+          grep -E "\.vue|\.ts |All files" "$LOG" | grep -vE "\| *100 *\| *100 *\| *100 *\| *100" | head -25 | sed 's/^/::error::/' || true
           exit 1
       - name: Upload vitest log
         if: failure()
