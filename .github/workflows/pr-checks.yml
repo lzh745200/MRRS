@@ -34,14 +34,40 @@ jobs:
       # 注意：--dist loadfile 与 pytest-rerunfailures 不兼容（worker 崩溃时
       # mark_test_pending 在 loadscope 调度器上抛 NotImplementedError），
       # 使用默认 load 调度器让 rerun 正常生效。
-      - run: cd backend && python -m pytest tests/ -q --tb=line -n auto --cov=app --cov-report=xml --reruns 2 --reruns-delay 1
-      # 失败时重跑失败用例（--lf）打印具体测试名与断言，用 ::error:: 前缀写入注解
-      # （诊断辅助，非唯一失败信号——上方 pytest 步骤已真实阻断）
-      - name: Report failed tests
+      # 输出 tee 到 runner.temp 日志并开 pipefail；加 --cov-report=term-missing 让未覆盖
+      # 行可见。失败时下方步骤提炼 ::error:: + upload-artifact——因为原"Report failed
+      # tests"用 --lf --no-cov 重跑，无法复现覆盖率不达标(fail_under=100)这类失败，
+      # 届时只会看到进度点而看不到真因；artifact 是公开仓库可下载的完整证据通道。
+      - name: Backend tests + coverage
+        run: |
+          cd backend
+          LOG="$RUNNER_TEMP/pytest.log"
+          {
+            echo "===== ENV SNAPSHOT ====="
+            python --version
+            echo "os: $(uname -a)"
+            echo "nproc: $(nproc)"
+            free -m 2>/dev/null || echo "(free unavailable)"
+            echo "========================"
+          } > "$LOG"
+          set -o pipefail
+          python -m pytest tests/ -q --tb=line -n auto --cov=app --cov-report=xml --cov-report=term-missing --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
+      - name: Report backend failure
         if: failure()
         run: |
-          cd backend && python -m pytest tests/ -q --tb=short -n 0 --lf --no-cov 2>&1 | tail -60 | sed 's/^/::error::/' 
+          echo "===== FAILED / ERROR / coverage summary ====="
+          grep -nE "FAILED|ERROR|Coverage failure|Required test coverage|fail-under|fail_under|^TOTAL| TOTAL |assert|Error|failed|error" "$RUNNER_TEMP/pytest.log" | tail -160 | sed 's/^/::error::/' || true
+          echo "===== tail ====="
+          tail -60 "$RUNNER_TEMP/pytest.log" | sed 's/^/::error::/' || true
           exit 1
+      - name: Upload pytest log
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pytest-log
+          path: ${{ runner.temp }}/pytest.log
+          if-no-files-found: ignore
+          retention-days: 7
       # 上传覆盖率到 Codecov（展示用：fail_ci_if_error=false 且 continue-on-error，
       # 覆盖率阻断由上方 pytest-cov 读取 .coveragerc fail_under 承担，上传抖动不阻塞 PR）
       - uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
