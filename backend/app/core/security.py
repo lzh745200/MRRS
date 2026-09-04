@@ -82,7 +82,11 @@ try:
     from app.core.config import settings as _settings
     SECRET_KEY = _settings.SECRET_KEY or _ensure_secret_key()
     ALGORITHM = getattr(_settings, "ALGORITHM", "HS256")
-except Exception as _settings_err:
+except Exception as _settings_err:  # pragma: no cover
+    # 不可达防御：仅在模块导入期 app.core.config 导入失败时执行。
+    # 运行/测试进程中 config 恒可导入；强制触发需 reload 本模块，
+    # 会替换 get_current_user 单例身份（全 app 依赖与 dependency_overrides
+    # 均按对象身份绑定），风险高于收益，故声明豁免。
     logger.warning("Failed to load settings for SECRET_KEY, falling back to env vars: %s", _settings_err)
     SECRET_KEY = _ensure_secret_key()
     ALGORITHM = "HS256"
@@ -395,13 +399,17 @@ def sanitize_input(value: str) -> str:
     """清理用户输入，移除危险字符。
 
     Args:
-        value: 原始输入
+        value: 原始输入（非字符串的真值输入会被转为 str 后再净化）
 
     Returns:
-        清理后的字符串
+        清理后的字符串（恒为 str 类型）
     """
-    if not value or not isinstance(value, str):
-        return value or ""
+    if not value:
+        return ""
+    if not isinstance(value, str):
+        # 历史缺陷：非 str 输入经 `value or ""` 原样透传（如 int），
+        # 违反返回类型契约；先转 str 再走净化逻辑。
+        value = str(value)
     # 移除常见 SQL 注入字符
     sanitized = value.replace("'", "''")
     sanitized = sanitized.replace(";", "")

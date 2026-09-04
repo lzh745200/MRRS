@@ -283,6 +283,7 @@ class TestSklearnImport:
         类对象, 且半初始化状态无法可靠还原）。导入分支改在子进程中验证,
         零模块状态污染。
         """
+        import os
         import subprocess
         import sys
         from pathlib import Path
@@ -300,11 +301,19 @@ class TestSklearnImport:
             "print('OK')\n"
         )
         backend_dir = str(Path(__file__).resolve().parents[2])
+        # 编码必须两侧对齐：父进程显式 UTF-8 解码 + errors="replace" 兜底，
+        # 子进程经 PYTHONIOENCODING 也以 UTF-8 输出。仅 text=True 会让父进程按
+        # Windows 控制台代码页（GBK）解码，子进程输出含非 GBK 字节时 reader
+        # 线程抛 UnicodeDecodeError，被 pytest 计为 warning。
+        child_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
         result = subprocess.run(
             [sys.executable, "-c", code],
             cwd=backend_dir,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=child_env,
             timeout=120,
         )
         assert result.returncode == 0, f"子进程失败:\n{result.stderr}"

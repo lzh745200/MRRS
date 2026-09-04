@@ -2,3 +2,7 @@
 max-line-length = 120
 # E203: whitespace before ':' — false positive for Python slice syntax (Black-recommended style)
 extend-ignore = E203
+# CI 的 lint 任务执行 `cd backend && flake8 app/`，生效的是本文件（而非仓库根 .flake8）。
+# 复杂度阈值内置于此，门禁不再依赖调用方记得显式传 --max-complexity=16；
+# 仓库根 .flake8 同步为 16，两处口径必须一致。
+max-complexity = 16

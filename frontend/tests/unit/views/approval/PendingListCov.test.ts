@@ -144,7 +144,7 @@ const rowC = {
   created_at: '',
 }
 
-function mountComp() {
+function mountComp(extraStubs: Record<string, any> = {}) {
   // setup.ts 全局 el-* stub 默认不渲染插槽，需 renderStubDefaultSlot；
   // 具名插槽（card header / dialog footer）与作用域插槽（表格行）需自定义 stub
   return mount(PendingList, {
@@ -177,6 +177,8 @@ function mountComp() {
           name: 'ElButtonGroup',
           template: '<div class="el-button-group-stub"><slot /></div>',
         },
+        // 局部额外 stub 放末尾，可覆盖上方同名默认 stub
+        ...extraStubs,
       },
     },
   })
@@ -1001,5 +1003,162 @@ describe('快速通过 isCancel 判定', () => {
     mockAutoApproveAll.mockResolvedValueOnce({ approved: 1 })
     await vm.handleAutoApproveAll()
     expect(ElMessage.success).toHaveBeenCalledWith('批量审批完成：成功 1')
+  })
+})
+
+describe('转交对象远程搜索 searchTransferUsers（T034，funcs@575 / stmts@575-591）', () => {
+  beforeEach(() => {
+    mockListUsers.mockReset()
+  })
+
+  it('无当前任务 → 直接返回，不发起请求、不进入 searching', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentTask = null
+    await vm.searchTransferUsers('abc')
+    expect(mockListUsers).not.toHaveBeenCalled()
+    expect(vm.transferSearching).toBe(false)
+  })
+
+  it('带关键词 → keyword 去首尾空格；items 形态；排除当前审批人；finally 复位', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentTask = { id: 9, current_approver_id: 1 }
+    mockListUsers.mockResolvedValue({
+      items: [
+        { id: 1, username: '自己' },
+        { id: 2, username: '张三' },
+      ],
+    })
+    await vm.searchTransferUsers('  张三  ')
+    expect(mockListUsers).toHaveBeenCalledWith({ page_size: 50, keyword: '张三' })
+    expect(vm.candidateUsers).toEqual([{ id: 2, username: '张三' }])
+    expect(vm.transferSearching).toBe(false)
+  })
+
+  it('空串/纯空白关键词 → 不携带 keyword（page_size 单键，branch@580 假侧）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentTask = { id: 9, current_approver_id: 1 }
+    mockListUsers.mockResolvedValue([]) // 数组形态 → Array.isArray 真侧
+    await vm.searchTransferUsers('   ')
+    expect(mockListUsers).toHaveBeenCalledWith({ page_size: 50 })
+    expect(vm.candidateUsers).toEqual([])
+    await vm.searchTransferUsers('')
+    expect(mockListUsers).toHaveBeenLastCalledWith({ page_size: 50 })
+  })
+
+  it('响应形态兜底：data.items 深取 / 空对象 / null → 候选为空', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentTask = { id: 9, current_approver_id: 1 }
+
+    mockListUsers.mockResolvedValueOnce({ data: { items: [{ id: 7, username: '庚' }] } })
+    await vm.searchTransferUsers('x')
+    expect(vm.candidateUsers).toEqual([{ id: 7, username: '庚' }])
+
+    mockListUsers.mockResolvedValueOnce({})
+    await vm.searchTransferUsers('x')
+    expect(vm.candidateUsers).toEqual([])
+
+    mockListUsers.mockResolvedValueOnce(null)
+    await vm.searchTransferUsers('x')
+    expect(vm.candidateUsers).toEqual([])
+  })
+
+  it('请求失败 → 候选清空且 searching 复位（catch + finally）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentTask = { id: 9, current_approver_id: 1 }
+    mockListUsers.mockRejectedValue(new Error('net'))
+    await vm.searchTransferUsers('x')
+    expect(vm.candidateUsers).toEqual([])
+    expect(vm.transferSearching).toBe(false)
+  })
+})
+
+describe('审批轨迹时间线 approvalTimeline（T033，branch@279/@416）', () => {
+  // 全局 el-timeline-item: true 的默认 stub 不声明 props，无法稳定读取 type；
+  // 此处用局部 stub 把 type/timestamp 落到 data-* 上，避免与 el-button type="primary" 混淆。
+  const timelineStubs = {
+    'el-timeline': { template: '<div class="el-timeline-stub"><slot /></div>' },
+    'el-timeline-item': {
+      props: ['timestamp', 'type'],
+      template:
+        '<div class="el-timeline-item-stub" :data-type="type" :data-ts="timestamp"><slot /></div>',
+    },
+  }
+
+  function types(wrapper: any) {
+    return wrapper.findAll('.el-timeline-item-stub').map((n: any) => n.attributes('data-type'))
+  }
+
+  it('diff 含 history + status_logs → 合并倒序；模板 type 三元两侧（status→primary / 其余→success）', async () => {
+    const wrapper = mountComp(timelineStubs)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentTask = {
+      id: 2,
+      submitter_name: '张三',
+      created_at: '2024-01-01T00:00:00Z',
+    }
+    vm.taskDiff = {
+      original_data: { name: 'A' },
+      change_data: { name: 'B' },
+      diff_fields: ['name'],
+      history: [{ operator: '李四', action: '审批通过', created_at: '2024-01-02T00:00:00Z' }],
+      status_logs: [{ operator: '系统', action: '状态变更', created_at: '2024-01-03T00:00:00Z' }],
+    }
+    await nextTick()
+
+    const tl = vm.approvalTimeline
+    expect(tl).toHaveLength(3)
+    // 时间倒序：status_logs(01-03) → history(01-02) → submit(01-01)
+    expect(tl[0].type).toBe('status')
+    expect(tl[1].type).toBe('history')
+    expect(tl[2].type).toBe('submit')
+    expect(tl[2].operator).toBe('张三')
+
+    // branch@279 两侧：status → primary，submit/history → success
+    expect(types(wrapper)).toEqual(['primary', 'success', 'success'])
+    expect(wrapper.text()).toContain('操作人：李四')
+    expect(wrapper.find('.tl-empty').exists()).toBe(false)
+  })
+
+  it('diff 存在但无 history/status_logs → 仅提交节点（branch@416 假侧、branch@417 || [] 兜底）', async () => {
+    const wrapper = mountComp(timelineStubs)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentTask = { id: 2, applicant: '王五', submit_time: '2024-02-01T00:00:00Z' }
+    vm.taskDiff = { task_id: 2, original_data: {}, change_data: {}, diff_fields: [] }
+    await nextTick()
+
+    expect(vm.approvalTimeline).toHaveLength(1)
+    expect(vm.approvalTimeline[0]).toEqual({
+      operator: '王五',
+      action: '提交申请',
+      time: '2024-02-01T00:00:00Z',
+      type: 'submit',
+    })
+    expect(types(wrapper)).toEqual(['success'])
+  })
+
+  it('无 taskDiff → 详情区走 EmptyState 分支，时间线整块不渲染（空轨迹）', async () => {
+    const wrapper = mountComp(timelineStubs)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.currentTask = null
+    vm.taskDiff = null
+    await nextTick()
+    expect(vm.approvalTimeline).toEqual([])
+    expect(wrapper.findAll('.el-timeline-item-stub')).toHaveLength(0)
+    // taskDiff 为 null 时 v-if="taskDiff" 假侧：详情双栏与 .tl-empty 均不渲染
+    expect(wrapper.find('.detail-split').exists()).toBe(false)
+    expect(wrapper.find('.tl-empty').exists()).toBe(false)
   })
 })

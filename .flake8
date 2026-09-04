@@ -13,12 +13,15 @@ exclude =
     build,
     dist,
     artifacts,
-    backend/build
+    backend/build,
     scripts/archive,
 # 测试文件允许 assert (S101)、魔术字面量等
 per-file-ignores =
     tests/*:S101,B011
     */tests/*:S101,B011
 # 复杂度与文档
-max-complexity = 15
+# max-complexity 必须与 CI 一致：pr-checks.yml 的 lint 任务用 --max-complexity=16。
+# 曾在此写 15 造成双口径——backend/app 下有 6 个函数正好是 16，过 CI 却过不了本
+# 配置，从仓库根跑的 flake8（含 pre-push 钩子）在与 CI 不同的判据上变红，掩盖真实信号。
+max-complexity = 16
 docstring-convention = google

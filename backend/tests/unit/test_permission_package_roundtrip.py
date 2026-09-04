@@ -207,8 +207,8 @@ class TestImportApiContract:
             files={"file": ("pkg_contract.zip", buf, "application/zip")},
         )
         client.app.dependency_overrides = original
-        if resp.status_code in (401, 403):
-            pytest.skip(f"认证环境不可用: {resp.status_code}")
+        # admin（super_admin）已通过 _optional_current_user override 注入，鉴权必然通过；
+        # 移除运行时 skip 以免掩盖真实鉴权回归（原 latent skip 永不触发）。
         assert resp.status_code == 200, resp.text[:300]
         body = resp.json().get("data") or resp.json()
         assert body.get("saved_file_name"), "必须返回 saved_file_name"

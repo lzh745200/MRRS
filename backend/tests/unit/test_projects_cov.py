@@ -151,6 +151,11 @@ class TestUpdateHelpers:
         assert out["budget"] == Decimal("100.5")
         assert out["start_date"] == date(2026, 1, 1)
 
+    def test_convert_invested_amount_to_decimal(self):
+        # 覆盖 projects.py:934 —— invested_amount 金额量化
+        out = pj._convert_update_fields({"invested_amount": 250.75})
+        assert out["invested_amount"] == Decimal("250.75")
+
     def test_apply_changes_unknown_field_skipped(self):
         project = SimpleNamespace(name="旧名")
         changed = pj._apply_project_changes(project, {"unknown_field": 1, "name": "新名"})

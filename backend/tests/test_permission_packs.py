@@ -12,7 +12,7 @@
 """
 
 import json
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -143,6 +143,27 @@ class TestPackCRUD:
         assert data["menu_keys"] == ["dashboard"]
         assert data["is_active"] is False
 
+    def test_update_pack_description(self, ctx):
+        # 覆盖 permission_packs.py:168 —— 更新 description 字段
+        client, _ = ctx
+        pack = _create_pack(client)
+        resp = client.put(
+            f"/api/v1/permission-packs/{pack['id']}",
+            json={"description": "新描述"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["description"] == "新描述"
+
+    def test_log_failure_does_not_block(self, ctx):
+        # 覆盖 permission_packs.py:106-107 —— write_work_log 抛异常时降级为 debug 日志，不阻断主流程
+        client, _ = ctx
+        with patch(
+            "app.api.v1.permission_packs.write_work_log",
+            side_effect=Exception("log boom"),
+        ):
+            pack = _create_pack(client, name="pack-log")
+        assert pack["name"] == "pack-log"
+
     def test_update_duplicate_name_rejected(self, ctx):
         client, _ = ctx
         _create_pack(client, name="pack-a")
@@ -250,6 +271,17 @@ class TestBindUnbind:
         assert resp.json()["data"]["unbound_user_ids"] == [u1.id]
         db.expire_all()
         assert db.get(type(u1), u1.id).permission_pack_id is None
+
+    def test_unbind_missing_user_rejected(self, ctx):
+        # 覆盖 permission_packs.py:271 —— 解绑不存在的用户 → 400
+        client, _ = ctx
+        pack = _create_pack(client)
+        resp = client.post(
+            f"/api/v1/permission-packs/{pack['id']}/unbind-users",
+            json={"user_ids": [999999]},
+        )
+        assert resp.status_code == 400
+        assert "用户不存在" in resp.json()["detail"]
 
     def test_delete_with_bound_users_rejected_then_ok(self, ctx):
         client, db = ctx

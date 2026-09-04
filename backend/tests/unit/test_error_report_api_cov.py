@@ -212,6 +212,21 @@ class TestUpdateErrorReport:
             resp = er_client.put(f"{BASE}/99", json={"status": "resolved"})
         assert resp.status_code == 404
 
+    def test_non_owner_non_admin_403(self, er_client):
+        # 覆盖 error_report.py:204 —— 记录归属他人且当前用户非管理员 → 403
+        from app.main import app
+
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id=5, username="other", role="user"
+        )
+        rec = ErrorReport(source="s", error_type="t", message="m", status="open")
+        rec.id = 1
+        rec.user_id = 999  # 归属他人
+        sess = _db_with([_q(first=rec)])
+        with _sess_patch(sess):
+            resp = er_client.put(f"{BASE}/1", json={"status": "resolved"})
+        assert resp.status_code == 403
+
     def test_commit_failure_500(self, er_client):
         rec = ErrorReport(source="s", error_type="t", message="m", status="open")
         rec.id = 1

@@ -13,10 +13,12 @@ FastAPI + Vue 3 + Electron + SQLite. Windows primary, Linux ARM64 (Kylin V10) se
 
 ```bash
 cd backend
-.venv\\Scripts\\python start.py                          # Start server (http://localhost:8000)
-python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~10100, 死代码清理后)
+.venv\Scripts\python start.py                           # Start server (http://localhost:8000)
+python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~10674, 死代码清理后)
 python -m pytest tests/unit/test_xxx.py -v              # Run single test file
-python -m flake8 app/ --max-line-length=120             # Lint (CI gate, 0 errors)
+# 必须带 --max-complexity=16：CI 的 lint 任务用这个组合，缺了它 C901 复杂度回归
+# 只在 CI 变红、本地静默放过（2026-09-04 已因此漏过 2 处）
+python -m flake8 app/ --max-line-length=120 --count --max-complexity=16   # Lint (CI gate, 0 errors)
 python -m mypy app/ --config-file=mypy.ini --ignore-missing-imports  # Type check (non-blocking)
 python -m bandit -r app/ -ll                            # Security scan
 ```
@@ -26,9 +28,11 @@ python -m bandit -r app/ -ll                            # Security scan
 ```bash
 cd frontend
 npm run dev                                             # Dev server (http://localhost:5173)
-npm run test -- --run                                   # Run all tests (~5759, 300 test files, 死代码清理后)
+npm run test -- --run                                   # Run all tests (~6033, 300 test files, 死代码清理后)
 npx vitest run tests/unit/views/xxx/xxx.test.ts        # Run single test file (tests live under tests/unit/)
-npm run lint                                            # ESLint (CI gate, --max-warnings=0)
+npm run lint                                            # ESLint --fix (改文件, 本地用, --max-warnings=0)
+npm run lint:check                                      # ESLint 纯检查 (CI gate, 不带 --fix)
+npx vitest run --coverage                               # Coverage gate (CI 用, 12 组 glob 阈值全 100)
 npx vue-tsc --noEmit                                    # Type check (CI gate)
 npm run build                                           # Production build
 npx lint-staged                                         # Lint only git-staged *.vue/*.ts/*.tsx files
@@ -122,15 +126,15 @@ All routes use lazy loading: `component: () => import('@/views/xxx/List.vue')`
 
 ### Backend Coverage
 
-- Minimum: 98% (CI gate via `--cov-fail-under=98`)
-- Local target: 98% (Makefile)
-- Nightly: 98% (`.github/workflows/nightly-full.yml`)
+- Minimum: 100% (可覆盖集口径，单一事实源 `backend/.coveragerc` `fail_under=100`; Makefile / CI 已不内联 `--cov-fail-under`,命令行参数会屏蔽配置文件口径)
+- Local target: 100% (同一 `.coveragerc`)
+- Nightly: 100% (同一 `.coveragerc`,`.github/workflows/nightly-full.yml`)
 - Test env vars: `ENVIRONMENT=test`, `SECRET_KEY=test-secret-key-for-ci`
 
 ### Frontend Coverage
 
 - Vitest with V8 coverage provider
-- Coverage thresholds in `vitest.config.ts`
+- Coverage thresholds in `vitest.config.ts`: 12 组 glob 阈值（statements/branches/functions/lines 全部 100）
 
 ### Codecov Integration
 
@@ -260,12 +264,11 @@ Scheduled daily at 2:00 UTC + manual trigger (`workflow_dispatch`). Three jobs:
 ### NSIS 钩子字符串转义（Fixed 2026-08-30）
 
 `build-scripts/electron-builder-nsis-hook.nsh` 的双引号字符串做 **C 风格转义**：
-``→CR、`
-`→LF、`	`→TAB、``→VT、`\"`→引号、`\`→反斜杠。路径里的
-`esources`（→CR）、`credist`（→VT）、`	emp`（→TAB）会被静默损坏。
+`\r`→CR、`\n`→LF、`\t`→TAB、`\v`→VT、`\"`→引号、`\\`→反斜杠。因此路径里的
+`\resources`（`\r`→CR）、`\credist`（`\v`→VT）、`\temp`（`\t`→TAB）会被静默损坏。
 v1.11.0 安装在真机全部失败的根因：钩子把含未转义 `\` 的路径传给 PowerShell
 做哈希校验，路径损坏→恒定 exit 1→被误判"哈希不匹配"而中止安装。
-规则：**钩子里所有路径反斜杠必须写 `\`**；PS 校验逻辑不用行内 `-Command`
+规则：**钩子里所有路径反斜杠必须写 `\\`**；PS 校验逻辑不用行内 `-Command`
 （多层解析脆弱），改为 FileWrite 写出 .ps1 后 `-File` 执行。校验三态语义
 （0=匹配安装/1=确证篡改中止/3或error=工具不可用跳过 redist 不阻断部署）
 详见工单 `.scratch/w6-release-eng/002-vcredist-ci-download.md` 追记。
@@ -356,6 +359,40 @@ AuditLogger.log() writes to both Python logging (app.log) AND database (audit_lo
 ### Database Path (Packaged Mode)
 
 In packaged (Electron) mode, the SQLite database is stored at Windows: `%APPDATA%/<appName>/database/rural_revitalization.db` (Electron `userData/database/`) / Linux: `~/.bumofu/data/` — NOT the install directory (Program Files requires admin write). Electron main.js injects `DATABASE_URL` env var to backend.exe.
+
+### Cross-Platform System Paths & Async Blocking (Fixed 2026-09-03)
+
+两条由「监控快照在麒麟上崩溃」工单牵出的系统性规则（双平台 Windows x64 + Linux ARM64/麒麟 V10 是硬要求）：
+
+1. **系统盘/磁盘路径禁止硬编码 `"C:\\"` 回退**：取磁盘用量的地方一律写
+   `os.environ.get("SystemDrive") or os.path.abspath(os.sep)` —— Windows 得系统盘（如 `C:`），
+   其它平台得文件系统根 `/`。**Why**：`os.environ.get("SystemDrive", "C:\\")` 在 Linux/麒麟上
+   `SystemDrive` 未设置 → 回退到 Windows 字面量 `"C:\\"` → `psutil/shutil.disk_usage("C:\\")`
+   抛 `FileNotFoundError`。曾同时存在于 4 处（复制粘贴扩散）：`system/monitor.py`、
+   `system/metrics.py`(×2)、`system/health.py`、`services/monitoring_service.py`，全部已修。
+   单块磁盘读取失败也**不得**拖垮整份监控快照——`monitor.py` 把磁盘读取单独 `try/except`
+   降级为 warning，CPU/内存/网络照常上报。锁定测试：
+   `tests/unit/test_system_monitor_api.py::TestGetMonitorSnapshot::test_disk_*`（3 条）。
+   注：`machine_code_service._collect_wmic_info` 的 `wmic` 已用 `platform.system() != "Windows"`
+   守卫（Linux 回退 MAC+主机名），无需改。
+
+2. **`async def` 端点内禁止阻塞事件循环**：`psutil.cpu_percent(interval>0)` 是**阻塞采样**
+   （内部 `sleep(interval)`），在 async 端点里直接调用会冻结整个事件循环，拖慢所有并发请求。
+   规则：用 `from starlette.concurrency import run_in_threadpool` 卸载——
+   `await run_in_threadpool(psutil.cpu_percent, interval=0.3)`；若阻塞藏在同步 service 方法里
+   （如 `MonitoringService.get_resource_stats` 内含 `interval=1`），在 async 调用点整体卸载
+   `await run_in_threadpool(MonitoringService.get_resource_stats)`，**不要改同步方法签名**
+   （其它同步调用方如告警调度不受影响）。**不要**改用 `cpu_percent(interval=None)` 规避——
+   它首次调用返回 `0.0`、其后返回"距上次调用"的均值，会造成"CPU 0%"误导性新问题。
+   已修 5 处：`monitor.py`(×2)、`metrics.py`(×2)、`monitoring_legacy.py`(×1)。
+   `system.py` 的 `time.sleep` 在 `background_tasks.add_task` 的同步函数里（线程池执行，不阻塞
+   事件循环），是关机/重启的刻意延迟，**属正确用法，勿改**。
+
+3. **无认证诊断端点只出异常类名**：`/health/full`（无 `Depends`）的 `db_error` 曾存 `str(e)`
+   （sqlite3 连接错误原文可含数据库绝对路径）→ 改 `type(e).__name__`，原文仅进
+   `logger.error(exc_info=True)`。与 W1 不变量 #6 的 `/health` `error_type` 同理。
+   `metrics.py` 资源采集失败的 `message` 也曾内插 `str(e)`（非 HTTPException detail，
+   泄露扫描器看不见）→ 改泛化文案「获取资源指标失败，请查看日志」。
 
 ## Common Frontend Bug Patterns (Fixed 2026-07-05)
 
@@ -494,16 +531,63 @@ Every new feature must verify:
 
 以下约束由回归测试锁定，改动相关代码前必读（安全边界详见 docs/adr/0008 破窗恢复；各条的锁定测试以行内路径为准）：
 
-1. **认证唯一出口**：\get_current_user\ 已接入黑名单+类型校验；access token 必带 jti；登出递增 token_version。不要绕过 \	oken_manager.validate_token\ 另建校验路径。
-2. **限流签名 fail-closed**：\check_rate_limit(key, *, request, limit, window)\ —— key 为首个参数且必填，缺失抛 ValueError；禁止位置传参字符串到旧 request 位。
-3. **loopback 门禁**：machine-code 校验码/密码重置、permission-packages import/confirm 未认证调用仅限本机（基于 request.client.host，禁读 X-Forwarded-For）。判定函数：各模块 \_client_is_loopback\。
+1. **认证唯一出口**：`get_current_user` 已接入黑名单+类型校验；access token 必带 jti；登出递增 token_version。不要绕过 `token_manager.validate_token` 另建校验路径。
+2. **限流签名 fail-closed**：`check_rate_limit(key, *, request, limit, window)` —— key 为首个参数且必填，缺失抛 ValueError；禁止位置传参字符串到旧 request 位。
+3. **loopback 门禁**：machine-code 校验码/密码重置、permission-packages import/confirm 未认证调用仅限本机（基于 request.client.host，禁读 X-Forwarded-For）。判定函数：各模块 `_client_is_loopback`。
 4. **公开重置排除管理员**：admin/super_admin 账号走管理端通道，公开端点恒 403。唯一例外是出厂恢复端点 `/machine-code/recover-admin-factory-password`（ADR-0008 扩展）：仅作用于"从未激活"的管理员账号（must_change_password=True 且零成功登录记录），重置为 `constants.FACTORY_ADMIN_PASSWORD`（单一来源，种子逻辑共用）；禁止放宽前置条件或让已激活账号可用。
-5. **通行码 HMAC**：\PASS_CODE_SECRET\ 未显式配置时自验证路径拒绝（fail-closed）；回退改绑机器码必须 write_work_log。
-6. **错误细节不出站**：api/v1 响应字段禁止内插异常对象——源码扫描测试 \	ests/unit/api/test_no_error_detail_leak.py\ 会拦截；新 except 分支 detail 用泛化文案 + logger.error(exc_info=True)。
+5. **通行码 HMAC**：`PASS_CODE_SECRET` 未显式配置时自验证路径拒绝（fail-closed）；回退改绑机器码必须 write_work_log。
+6. **错误细节不出站**：响应字段禁止内插异常对象——源码扫描测试
+   `tests/unit/api/test_no_error_detail_leak.py` 会拦截；新 except 分支 detail 用泛化
+   文案 + `logger.error(exc_info=True)`。
+   **扫描范围（2026-09-03 扩面）**：`api/v1` 之外还覆盖 `app/services`、`app/utils`、
+   `app/core`。扩面动因：`permission_package_service.confirm_import` 曾在 service 层
+   生成异常原文、由 API 层 `detail=result.get("message")` 转发出站，只扫 api/v1 的
+   字面内插**结构上看不见这条间接路径**。
+   三层新规则的精确口径：只禁直接构造 `HTTPException` 时把异常变量（裸 `e/exc/ex/err`
+   或含 `err/exc/error/exception` 片段的标识符如 `error_msg`）内插进 `detail`；
+   f-string 形态任意状态码都禁，`detail=str(...)` 形态**仅禁 500**——沿用既有
+   `LEAK_STR_500` 对 400 级 `str(e)` 的刻意放行（那类多为 ValueError 业务文案，
+   属预期用户可见消息，api/v1 下现存 23 处即此类）。
+   **刻意不扫** service 返回字典里的 `"message":`/`"errors":`：实测宽口径下有 20 处
+   命中，多为面向导入用户的行级校验反馈（含行号/字段/格式原因），一刀切泛化会损害
+   可用性。这类需按调用链逐点判定是否真的出站，**不适用源码扫描**——改这块时请人工
+   确认该 message 会不会被 API 层塞进 `detail` 或 `JSONResponse`。
+   另：无认证端点（如 `/health`）只出异常**类名**，不出原文（原文可含数据库绝对路径
+   与 SQL 片段）；`main.py` 的 `_migration_status` 键名为 `error_type` 即此意，
+   勿改回可承载自由文本的名字。
 7. **删库守卫**：start.py integrity 失败默认 SystemExit(1) 保留现场；自动重建需环境变量 ALLOW_DB_RESET=1。
 8. **测试禁令**：禁止对 machine_code_service 等 services 模块 importlib.reload（类对象分裂导致跨文件 patch 失效）；用 monkeypatch.setattr 打模块常量。
 9. **PII 列加密红线**（2026-08-30，ADR-0005）：9 个 PII 列（身份证/电话类）为 `EncryptedText`
    确定性加密列；裸 SQL 写入这些列会绕过加解密，禁止；等值查询按明文绑定参数即可命中密文。
+10. **数据隔离参数 fail-closed**（2026-09-03）：接收 `current_user` 并据此施加
+    `apply_scope_filter` / `filter_by_data_scope` 的内部函数，`current_user` **必须是
+    必填位置参数**，禁止给 `None` 默认值再写 `if current_user is not None`。
+    **Why**：带 `None` 默认值时，任何新调用方漏传即**静默跳过隔离、返回跨组织数据**，
+    与 W5-006 fail-closed 方向相反且无告警。改必填后漏传在调用点直接 TypeError。
+    已按此修正 `statistics._get_analysis_data_impl`；锁定测试见
+    `tests/unit/test_statistics_api_cov.py::test_current_user_is_mandatory_fail_closed`。
+11. **测试数据目录隔离**（2026-09-03）：`tests/conftest.py` 在任何 `app.*` 导入之前设
+    `BUMOFU_BACKEND_DIR_OVERRIDE` 指向会话临时根。
+    **Why**：`config.py` 的 Settings 在**构造期**就把 `DATABASE_URL`/`CACHE_DIR`/
+    `UPLOAD_DIR`/`EXPORT_DIR` 的相对默认值归一到 `_get_default_data_dir()` 下，该函数
+    最终调用 `paths.get_app_data_dir()` → `get_project_backend_dir()`；隔离动作晚于
+    config 导入就无效（曾导致测试写 `backend/data/` 与 `backend/logs/app.log`，
+    单次全量跑 app.log 涨到 4.8MB）。`LOG_FILE` 不经该漏斗（仅 `sys.frozen` 时重写），
+    故另用 `LOG_DIR`/`LOG_FILE` env 覆盖。
+    **必须用 env 而非替换模块属性**：替换属性会让此后所有
+    `from app.utils.paths import get_project_backend_dir` 的测试模块把名字冻结成替身，
+    与被还原的模块属性分叉。
+    专测路径解析逻辑的测试用 `pytest.mark.real_backend_dir` 整模块豁免（标记已在
+    `pytest.ini` 注册，因 `addopts` 带 `--strict-markers`）。
+12. **section key 映射唯一归属 API 层**（2026-09-03）：帮扶村年度板块的前端内部键用
+    下划线（`force_investment`/`party_building`），后端 `_SECTION_MODEL` 与
+    `/yearly/{year}/{section}` 路由用连字符。映射**只在 `src/api/supportedVillage.ts`
+    的 API 函数内**经 `resolveSectionApiKey` 完成（保存/删除/导入三条路径），视图层
+    直接传内部键即可，不要在调用点各自映射。
+    **Why**：导入路径曾漏映射 → 这两个板块导入恒 400「未知板块标识」。
+    `resolveSectionApiKey` 幂等，历史调用点的重复映射无害。
+    **附件路径有意不映射**：后端不按 `_SECTION_MODEL` 校验附件的 section，改动会使
+    既有附件记录失配。
 
 ## CI 协调须知（2026-08-24）
 

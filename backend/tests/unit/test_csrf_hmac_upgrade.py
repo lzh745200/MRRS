@@ -258,3 +258,24 @@ class TestGetClientIp:
     def test_no_xff_header(self):
         with patch.object(_mw, "_TRUSTED_PROXIES", ["10.0.0.1"]):
             assert get_client_ip(self._req(client_host="10.0.0.1")) == "10.0.0.1"
+
+    def test_cidr_trusted_proxy_forwards(self):
+        """CIDR 网段匹配：直连 IP 落在可信网段内 → 透传 XFF 首段。"""
+        with patch.object(_mw, "_TRUSTED_PROXIES", ["10.0.0.0/8"]):
+            assert get_client_ip(
+                self._req(client_host="10.1.2.3", xff="1.2.3.4")
+            ) == "1.2.3.4"
+
+    def test_cidr_not_matched_falls_back(self):
+        """CIDR 网段不匹配：直连 IP 不在可信网段 → 降级为直连 IP。"""
+        with patch.object(_mw, "_TRUSTED_PROXIES", ["10.0.0.0/8"]):
+            assert get_client_ip(
+                self._req(client_host="192.168.1.1", xff="5.6.7.8")
+            ) == "192.168.1.1"
+
+    def test_cidr_invalid_direct_ip_swallowed(self):
+        """直连 IP 非法时 ipaddress 抛 ValueError 被吞掉，降级为直连 IP。"""
+        with patch.object(_mw, "_TRUSTED_PROXIES", ["10.0.0.0/8"]):
+            assert get_client_ip(
+                self._req(client_host="not-an-ip", xff="5.6.7.8")
+            ) == "not-an-ip"

@@ -165,7 +165,9 @@ class MonitoringService:
         try:
             cpu_percent = psutil.cpu_percent(interval=1)
             memory = psutil.virtual_memory()
-            disk = psutil.disk_usage(os.environ.get("SystemDrive", "C:\\"))
+            # 跨平台磁盘路径：Windows 取 SystemDrive，其它平台取文件系统根 "/"
+            # （曾硬编码回退 "C:\\"，在 Linux/麒麟上抛 FileNotFoundError 使整份统计变空）
+            disk = psutil.disk_usage(os.environ.get("SystemDrive") or os.path.abspath(os.sep))
 
             return {
                 "cpu_percent": cpu_percent,
@@ -177,7 +179,7 @@ class MonitoringService:
                 "disk_total_gb": round(disk.total / 1024 / 1024 / 1024, 2),
             }
         except Exception as e:
-            logger.error(f"获取资源统计失败: {e}")
+            logger.error(f"获取资源统计失败: {e}", exc_info=True)
             return {}
 
     @staticmethod

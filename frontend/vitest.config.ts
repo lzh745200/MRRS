@@ -69,20 +69,25 @@ export default defineConfig({
         'src/types/models.ts',
         'src/types/organization.ts',
         'src/types/policy.ts',
-        'src/components/business/ChartCard/types.ts',
-        'src/components/business/DataTable/types.ts',
-        'src/components/business/FormBuilder/types.ts',
       ],
+      // 门禁值取自 2026-09-03 全量实测（301 个测试文件全绿，262 个被度量源文件）：
+      // 下列每个分组的 statements / branches / functions / lines 均为 100.00%
+      // （合计 60478 stmts、17823 branches、3507 funcs，miss 全为 0），故统一按 100 设门禁。
+      // 末尾三个分组（constants / data / layouts）此前不在任何 glob 内、不受门禁约束，
+      // 一并纳入以消除绕过缺口。
       thresholds: {
-        'src/utils/**/*.ts': { statements: 90, branches: 90, functions: 90, lines: 90 },
-        'src/stores/**/*.ts': { statements: 90, branches: 90, functions: 90, lines: 90 },
-        'src/composables/**/*.ts': { statements: 90, branches: 90, functions: 90, lines: 90 },
-        'src/api/**/*.ts': { statements: 90, branches: 90, functions: 90, lines: 90 },
-        'src/views/**/*.vue': { statements: 90, branches: 90, functions: 90, lines: 90 },
-        'src/components/**/*.vue': { statements: 90, branches: 90, functions: 90, lines: 90 },
-        'src/router/**/*.ts': { statements: 90, branches: 90, functions: 90, lines: 90 },
-        'src/config/**/*.ts': { statements: 90, branches: 90, functions: 90, lines: 90 },
-        'src/directives/**/*.ts': { statements: 90, branches: 90, functions: 90, lines: 90 },
+        'src/utils/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/stores/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/composables/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/api/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/views/**/*.vue': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/components/**/*.vue': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/router/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/config/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/directives/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/constants/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/data/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/layouts/**/*.vue': { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
     testTimeout: 60000,
@@ -100,4 +105,11 @@ export default defineConfig({
   },
 })
 
-// v1.10.0: coverage thresholds 100 -> 98 (align backend --cov-fail-under=98, AGENTS.md gate)
+// 覆盖率门禁变更史（此注释必须与上方 thresholds 的实际数值保持一致）：
+//   v1.10.0  由 100 下调至 98（对齐 backend --cov-fail-under=98 与 AGENTS.md 门禁）
+//   后续      再次下调至 90（源码快速扩张期，测试补齐滞后的临时放宽）
+//   v1.11.4  可覆盖集补齐至 100%（任务#19：补测 708 处 stmts / 128 处 branches / 86 处
+//            functions 缺口 → miss 全为 0），9 个分组门禁由 90 回升至 100，并纳入此前
+//            未被任何 glob 约束的 src/constants、src/data、src/layouts 三个分组。
+//            新增源文件若引入未覆盖分支将直接使 CI 失败，这是预期行为，
+//            如需临时放宽必须在此登记理由与回收期限，禁止静默下调数值。

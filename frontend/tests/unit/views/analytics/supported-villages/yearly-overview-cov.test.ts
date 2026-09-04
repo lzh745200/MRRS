@@ -16,7 +16,10 @@ const mocks = vi.hoisted(() => ({
   importSectionData: vi.fn(),
   downloadAllTemplates: vi.fn(),
   importAllSectionsData: vi.fn(),
+  deleteYearlySection: vi.fn(),
   pushSafe: vi.fn(),
+  // 委托为可覆盖的 mock，以便临时让 vid 为空（branch@544 真侧）
+  safeRouteParam: vi.fn((p: unknown) => p ?? 1),
   setOption: vi.fn(),
   resize: vi.fn(),
   dispose: vi.fn(),
@@ -31,11 +34,14 @@ vi.mock('@/api/supportedVillage', () => ({
   importSectionData: (...a: any[]) => mocks.importSectionData(...a),
   downloadAllTemplates: (...a: any[]) => mocks.downloadAllTemplates(...a),
   importAllSectionsData: (...a: any[]) => mocks.importAllSectionsData(...a),
+  deleteYearlySection: (...a: any[]) => mocks.deleteYearlySection(...a),
+  resolveSectionApiKey: (k: string) =>
+    (({ force_investment: 'force-investment', party_building: 'party-building' } as any)[k] ?? k),
 }))
 
 vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: mocks.pushSafe }),
-  safeRouteParam: (p: unknown) => p ?? 1,
+  safeRouteParam: (...a: any[]) => mocks.safeRouteParam(...a),
 }))
 
 vi.mock('vue-router', () => ({
@@ -81,7 +87,7 @@ const fullData = {
   committee: { members: [{ name: 'a' }, { name: 'b' }], collectiveIncomeAmount: 5 },
 }
 
-function mountComp() {
+function mountComp(extraStubs: Record<string, any> = {}) {
   return mount(YearlyOverview as any, {
     global: {
       stubs: {
@@ -90,6 +96,8 @@ function mountComp() {
         'el-row': { template: '<div class="el-row-stub"><slot /></div>' },
         'el-col': { template: '<div class="el-col-stub"><slot /></div>' },
         'el-icon': { template: '<span class="icon-stub"><slot /></span>' },
+        // 局部额外 stub 放末尾，可覆盖上方同名默认 stub
+        ...extraStubs,
       },
     },
   })
@@ -553,5 +561,91 @@ describe('YearlyOverview.vue 交互与生命周期', () => {
     await nextTick()
     wrapper.unmount()
     expect(mocks.dispose).toHaveBeenCalled()
+  })
+})
+
+describe('YearlyOverview.vue deleteSection 板块 key 映射（H4）', () => {
+  beforeEach(() => {
+    mocks.deleteYearlySection.mockResolvedValue({})
+  })
+
+  it('删除「力量投入」时下划线 key force_investment 转为连字符 force-investment 传后端', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = st(wrapper)
+    await vm.deleteSection('force_investment')
+    expect(mocks.deleteYearlySection).toHaveBeenCalledWith(
+      1,
+      vm.selectedYear,
+      'force-investment'
+    )
+  })
+
+  it('删除「党建帮扶」时下划线 key party_building 转为连字符 party-building 传后端', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = st(wrapper)
+    await vm.deleteSection('party_building')
+    expect(mocks.deleteYearlySection).toHaveBeenCalledWith(1, vm.selectedYear, 'party-building')
+  })
+
+  it('删除单单词板块（population）key 原样透传', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = st(wrapper)
+    await vm.deleteSection('population')
+    expect(mocks.deleteYearlySection).toHaveBeenCalledWith(1, vm.selectedYear, 'population')
+  })
+
+  it('删除失败时提示错误且不抛出', async () => {
+    mocks.deleteYearlySection.mockRejectedValueOnce(new Error('400'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = st(wrapper)
+    await vm.deleteSection('force_investment')
+    expect(mocks.ElMessage.error).toHaveBeenCalled()
+  })
+
+  // branch@544 真侧：safeRouteParam 返回空值时直接 return
+  it('vid 为空 → deleteSection 提前返回，不调用删除接口', async () => {
+    mocks.deleteYearlySection.mockResolvedValue({})
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = st(wrapper)
+    // 挂载完成后再注入一次空返回值，避免影响 loadAllData 中的 villageId 解析
+    mocks.safeRouteParam.mockReturnValueOnce('')
+    await vm.deleteSection('population')
+    expect(mocks.deleteYearlySection).not.toHaveBeenCalled()
+    expect(mocks.ElMessage.success).not.toHaveBeenCalled()
+    expect(mocks.ElMessage.error).not.toHaveBeenCalled()
+  })
+
+  // funcs@61：el-popconfirm 的 @confirm="deleteSection(section.key)" 内联产物
+  it('模板 el-popconfirm 确认 → 转发到 deleteSection(section.key)', async () => {
+    mocks.deleteYearlySection.mockResolvedValue({})
+    const wrapper = mountComp({
+      'el-popconfirm': {
+        emits: ['confirm'],
+        template:
+          '<span class="el-popconfirm-stub">' +
+          '<button type="button" class="pc-confirm" @click="$emit(\'confirm\')">del</button>' +
+          '<slot name="reference" /></span>',
+      },
+      'el-button': { template: '<button class="el-button-stub"><slot /></button>' },
+      'el-upload': { template: '<div class="el-upload-stub"><slot /></div>' },
+    })
+    await flushPromises()
+    const vm = st(wrapper)
+    const confirms = wrapper.findAll('.pc-confirm')
+    // 仅 stats.length > 0 的板块才渲染删除气泡
+    expect(confirms.length).toBeGreaterThan(0)
+    await confirms[0].trigger('click')
+    await flushPromises()
+    expect(mocks.deleteYearlySection).toHaveBeenCalledTimes(1)
+    const [vid, year, key] = mocks.deleteYearlySection.mock.calls[0]
+    expect(vid).toBe(1)
+    expect(year).toBe(vm.selectedYear)
+    expect(typeof key).toBe('string')
+    expect(key.length).toBeGreaterThan(0)
   })
 })

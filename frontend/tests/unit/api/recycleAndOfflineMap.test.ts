@@ -59,6 +59,30 @@ describe('api/schoolsRecycle', () => {
     await purgeSchool(3, 'pw')
     expect(mockPost).toHaveBeenCalledWith('/schools/3/purge', { confirm_password: 'pw' })
   })
+
+  /**
+   * `confirmPassword || ''` 的假侧。
+   * 上方用例只传了真值密码；省略参数 / 空串 / 显式 undefined 三种写法
+   * 都必须归一为 `confirm_password: ''`，而不是把 undefined 传给后端
+   * （JSON 序列化会直接丢字段，导致后端 422）。
+   */
+  it('purgeSchool 缺省密码 → confirm_password 为空串', async () => {
+    await purgeSchool(3)
+    expect(mockPost).toHaveBeenCalledWith('/schools/3/purge', { confirm_password: '' })
+  })
+
+  it('purgeSchool 显式 undefined / 空串 → 同样归一为空串', async () => {
+    await purgeSchool(3, undefined)
+    expect(mockPost).toHaveBeenLastCalledWith('/schools/3/purge', { confirm_password: '' })
+
+    await purgeSchool(3, '')
+    expect(mockPost).toHaveBeenLastCalledWith('/schools/3/purge', { confirm_password: '' })
+    // 两次调用均携带完整 payload 形状
+    expect(mockPost).toHaveBeenCalledTimes(2)
+    mockPost.mock.calls.forEach(([, body]) => {
+      expect(Object.keys(body as object)).toEqual(['confirm_password'])
+    })
+  })
 })
 
 describe('api/offlineMap', () => {

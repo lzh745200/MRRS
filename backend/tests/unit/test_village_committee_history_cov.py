@@ -69,12 +69,22 @@ class TestCommitteeLegacyRoute:
         assert c2024["overview"] == "2024年概况"
         assert len(c2024["members"]) == 1
         assert c2024["members"][0]["name"] == "张三"
+        # H2c：退役军人标记必须真实落库（旧 bug：中间件把 isVeteran→is_veteran，
+        # 硬编码读 isVeteran 恒取不到 → is_veteran 静默落库 False，本测试原为假绿灯）
+        assert c2024["members"][0]["isVeteran"] is True, (
+            "2024 张三 提交 isVeteran:True 应落库为 True，实际 "
+            f"{c2024['members'][0].get('isVeteran')!r}"
+        )
 
         g2025 = auth_client.get(f"/api/v1/supported-villages/{vid}/yearly/2025")
         c2025 = g2025.json()["data"]["committee"]
         assert c2025 is not None, "2025 年 committee 应存在"
         assert c2025["overview"] == "2025年概况"
         assert len(c2025["members"]) == 2
+        # H2c：2025 两名成员提交 isVeteran:False，落库应为 False（双向验证）
+        assert all(mm["isVeteran"] is False for mm in c2025["members"]), (
+            f"2025 成员 isVeteran 应均为 False: {[mm.get('isVeteran') for mm in c2025['members']]}"
+        )
 
         # 再查 2024，确认未被 2025 年保存覆盖（旧 bug：跨年覆盖）
         g2024b = auth_client.get(f"/api/v1/supported-villages/{vid}/yearly/2024")

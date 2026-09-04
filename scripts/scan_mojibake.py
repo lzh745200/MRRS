@@ -47,6 +47,7 @@ for root, dirs, files in os.walk('.'):
         p = os.path.join(root, f)
         if os.path.getsize(p) > 2_000_000:
             continue
+        text = None  # 每轮显式复位：解码失败时绝不能沿用上一个文件的内容
         try:
             raw = open(p, 'rb').read()
             if b'\x00' in raw and ext in SRC_EXTS:
@@ -58,13 +59,15 @@ for root, dirs, files in os.walk('.'):
             # 非UTF-8 检查同样限定源码文本类扩展；.coverage/.db-shm 等运行时产物豁免
             if ext in SRC_EXTS and ext not in NON_UTF8_EXEMPT:
                 non_utf8.append(p)
-                if CHECK_MODE:
-                    continue
+            if CHECK_MODE:
+                continue
+        if text is None:
+            continue  # 解码/读取失败，无内容可做 mojibake 统计
         scanned += 1
         count = sum(1 for c in text if c in SUSPECT)
         if count >= 8:  # 阈值：偶发单字可能是正常词（如"锛"在日文），密集命中才是双编
             lines = text.split('\n')
-            first = next(i + 1 for i, l in enumerate(lines) if sum(c in SUSPECT for c in l) >= 3)
+            first = next((i + 1 for i, l in enumerate(lines) if sum(c in SUSPECT for c in l) >= 3), 0)
             hits.append((p, count, first))
 
 print(f'scanned {scanned} text files')

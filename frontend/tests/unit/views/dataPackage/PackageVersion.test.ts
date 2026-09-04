@@ -168,9 +168,9 @@ const stubs = {
   'el-option': { name: 'ElOption', template: '<div />' },
 }
 
-function mountComp() {
+function mountComp(extraStubs: Record<string, any> = {}) {
   return mount(PackageVersion, {
-    global: { renderStubDefaultSlot: true, stubs },
+    global: { renderStubDefaultSlot: true, stubs: { ...stubs, ...extraStubs } },
   })
 }
 
@@ -525,6 +525,146 @@ describe('无路由参数 → 包选择器路径', () => {
     await (wrapper.vm as any).fetchVersionList()
     expect(mockGet).not.toHaveBeenCalled()
     routeBox.params = { id: '42' }
+    wrapper.unmount()
+  })
+
+  it('el-select v-model 写回 selectedPackageId，change 转发 handlePackageSelected', async () => {
+    routeBox.params = {}
+    routeBox.query = {}
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/data-packages') {
+        // 返回 2 个包：length === 1 的自动选中会让 el-card v-if="!packageId" 卸载选择器，
+        // 从而无法触发 v-model 的 update:modelValue 内联产物。
+        return Promise.resolve({
+          items: [
+            { id: 7, package_code: 'PKG7', description: 'd7' },
+            { id: 8, package_code: 'PKG8', description: '' },
+          ],
+        })
+      }
+      if (url.includes('/versions')) {
+        return Promise.resolve({ success: true, data: { versions: [v1] } })
+      }
+      return Promise.resolve({})
+    })
+    const wrapper = mountComp({
+      // 默认 el-select stub 不会 emit update:modelValue / change，
+      // 导致 <el-select v-model="selectedPackageId" @change="handlePackageSelected"> 的
+      // 编译产物 onUpdate:modelValue._cache@8 与 change handler 永不执行；此处提供两个独立按钮分别触发。
+      'el-select': {
+        name: 'ElSelect',
+        props: ['modelValue'],
+        emits: ['update:modelValue', 'change'],
+        template:
+          '<div class="el-select-stub">' +
+          "<button type=\"button\" class=\"sel-model\" @click=\"$emit('update:modelValue', 7)\">m</button>" +
+          "<button type=\"button\" class=\"sel-change\" @click=\"$emit('change', 7)\">c</button>" +
+          '<slot /></div>',
+      },
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.selectablePackages).toHaveLength(2)
+
+    // 覆盖 onUpdate:modelValue@8：v-model 把选中值写回 selectedPackageId
+    await wrapper.find('.sel-model').trigger('click')
+    await flushPromises()
+    expect(vm.selectedPackageId).toBe(7)
+
+    // 覆盖 @change="handlePackageSelected"：写入 packageId 并拉取版本
+    mockGet.mockClear()
+    await wrapper.find('.sel-change').trigger('click')
+    await flushPromises()
+    expect(vm.packageId).toBe(7)
+    expect(mockGet).toHaveBeenCalledWith('/data-packages/7/versions')
+
+    routeBox.params = { id: '42' }
+    wrapper.unmount()
+  })
+})
+
+describe('fetchSelectablePackages 响应形态与异常', () => {
+  it('items 非数组（branch@250 假侧）→ 选择列表兜底为空', async () => {
+    routeBox.params = {}
+    mockGet.mockResolvedValueOnce({ items: 'not-an-array' })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.selectablePackages).toEqual([])
+    routeBox.params = { id: '42' }
+    wrapper.unmount()
+  })
+
+  it('res 全缺省 → items 走 || 兜底为空数组', async () => {
+    routeBox.params = {}
+    mockGet.mockResolvedValueOnce(null)
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).selectablePackages).toEqual([])
+    routeBox.params = { id: '42' }
+    wrapper.unmount()
+  })
+
+  it('data.items 形态（branch@249 第二操作数）→ 正常取到列表', async () => {
+    routeBox.params = {}
+    mockGet.mockResolvedValueOnce({
+      data: { items: [{ id: 9, package_code: 'PKG9' }, { id: 10, package_code: 'PKG10' }] },
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.selectablePackages.map((p: any) => p.id)).toEqual([9, 10])
+    // 多于 1 个 → 不触发自动选中
+    expect(vm.packageId).toBe('')
+    routeBox.params = { id: '42' }
+    wrapper.unmount()
+  })
+
+  it('接口异常（branch@254 / stmts@256）→ 静默不抛出且不阻塞页面', async () => {
+    routeBox.params = {}
+    mockGet.mockRejectedValueOnce(new Error('net'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.selectablePackages).toEqual([])
+    // 选择列表失败不应产生任何用户级错误提示（源码注释：不阻塞页面）
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    // 手动再次调用同样吞掉异常
+    mockGet.mockRejectedValueOnce(new Error('net'))
+    await expect(vm.fetchSelectablePackages()).resolves.toBeUndefined()
+    routeBox.params = { id: '42' }
+    wrapper.unmount()
+  })
+})
+
+describe('fetchVersionList 响应形态兜底', () => {
+  it('裸返回 {versions} → 直接采用', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    mockGet.mockResolvedValueOnce({ versions: [v2] })
+    await (wrapper.vm as any).fetchVersionList()
+    expect((wrapper.vm as any).versionList).toEqual([v2])
+    wrapper.unmount()
+  })
+
+  it('versions 非数组（branch@319 假侧）→ 兜底为空', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    mockGet.mockResolvedValueOnce({ versions: 'bad' })
+    await (wrapper.vm as any).fetchVersionList()
+    expect((wrapper.vm as any).versionList).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('响应为空对象 → || 链兜底为空数组', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    mockGet.mockResolvedValueOnce({})
+    await (wrapper.vm as any).fetchVersionList()
+    expect((wrapper.vm as any).versionList).toEqual([])
+    mockGet.mockResolvedValueOnce(null)
+    await (wrapper.vm as any).fetchVersionList()
+    expect((wrapper.vm as any).versionList).toEqual([])
     wrapper.unmount()
   })
 })

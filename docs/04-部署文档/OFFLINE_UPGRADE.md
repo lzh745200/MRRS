@@ -27,10 +27,15 @@
 
 1. 从 GitHub Releases（或内部下发渠道）获取新版安装包与配套
    `SHA256SUMS-*.txt`：
-   - Windows x64：`帮扶管理系统 Setup <版本>-x64.exe` +
+   - Windows x64：`MRRS-Setup-<版本>.exe`（如 `MRRS-Setup-1.11.4.exe`）+
      `SHA256SUMS-windows-x64.txt`
-   - 麒麟 ARM64：`*.deb` + `SHA256SUMS-electron-deb-arm64.txt` /
+   - 麒麟 ARM64：Electron 版 `MRRS-Setup-<版本>.deb`、standalone 版
+     `assistance-management-system_<版本>_arm64.deb` +
+     `SHA256SUMS-electron-deb-arm64.txt` /
      `SHA256SUMS-standalone-deb-arm64.txt`
+
+   > 文件名由 `package.json` 的 `build.artifactName`（`MRRS-Setup-${version}.${ext}`）
+   > 决定，不是产品显示名「帮扶管理系统」。
 2. 放入同一目录后校验完整性（**任何 FAILED 都必须停止升级**）：
 
    ```bash
@@ -70,8 +75,18 @@ sudo systemctl restart assistance-system
 ## 四、数据兼容说明
 
 - 新版 → 旧库：首次启动自动迁移（Alembic），正常情况无需人工干预。
-- 迁移失败不阻断启动：系统自动降级为"自动补列"兜底逻辑并在日志告警。
-  若日志出现 `Alembic upgrade 失败`，功能仍可用，但应记录日志并反馈。
+- **迁移失败的后果按环境分流**（`app/main.py` 的 `_run_alembic_upgrade`）：
+  - **生产环境（安装包默认，`ENVIRONMENT=production`）：迁移失败会中止启动**
+    （fail-loud），日志先记 `ERROR` 完整异常栈、再记 `CRITICAL`
+    `生产环境迁移失败——中止启动…`。这是有意设计：避免带着漂移的 schema 长期运行
+    造成不可见的数据风险。**代价是升级现场可能表现为"应用起不来"**，此时必须
+    取 `%LOCALAPPDATA%\bumofu-assistance\logs\app.log` 排查，不要反复重装。
+  - **开发/测试环境**：保持启动韧性，记 `ERROR` 后降级为"自动补列"兜底并附
+    `WARNING`，应用仍可用但 schema 可能落后 head。
+- **快速判据（无需翻日志）**：后端起来后访问 `/health`，看 `migration` 子对象——
+  `at_head: true` 表示已达目标版本；`false` 表示未达，`head` 是目标 revision、
+  `error_type` 是失败异常类名（该端点无需认证，故只出类名不出异常原文，
+  完整细节在 app.log）。
 - **旧版 → 新库（降级）**：Alembic 迁移是**前向**的，旧版程序遇到新版库结构
   可能不兼容 —— 因此回滚必须连同数据库一起回退（见下节）。
 

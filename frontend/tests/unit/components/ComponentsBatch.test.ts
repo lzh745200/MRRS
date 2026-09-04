@@ -97,6 +97,50 @@ describe('common/GuizhouRegionSelector.vue', () => {
 })
 describe('common/ImportButton.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/components/common/ImportButton.vue'); const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true) })
+
+  /**
+   * `@click="$emit('import')"` 内联处理器。
+   * 上方“渲染”用例只挂载不点击，且全局 el-button 默认桩不转发 click，
+   * 故该处理器此前从未执行（函数覆盖率缺口）。
+   * 这里用带原生 click 透传的桩驱动，验证事件名与 loading 透传契约。
+   */
+  const ElButtonStub = {
+    name: 'ElButton',
+    props: ['loading'],
+    template:
+      '<button class="el-button-stub" :data-loading="String(!!loading)"><slot /></button>',
+  }
+
+  async function mountBtn(props: Record<string, unknown> = {}) {
+    const { default: C } = await import('@/components/common/ImportButton.vue')
+    return mount(C, {
+      props,
+      global: { stubs: { 'el-button': ElButtonStub } },
+    })
+  }
+
+  it('点击 → 发出 import 事件（内联 $emit 处理器）', async () => {
+    const w = await mountBtn()
+    await w.find('.el-button-stub').trigger('click')
+    expect(w.emitted('import')).toHaveLength(1)
+    // 事件无负载，不能意外携带 click 参数
+    expect(w.emitted('import')![0]).toEqual([])
+    expect(w.text()).toContain('导入')
+  })
+
+  it('多次点击 → 每次都发（不去重）；loading 透传 el-button', async () => {
+    const w = await mountBtn({ loading: true })
+    expect(w.find('.el-button-stub').attributes('data-loading')).toBe('true')
+    await w.find('.el-button-stub').trigger('click')
+    await w.find('.el-button-stub').trigger('click')
+    expect(w.emitted('import')).toHaveLength(2)
+
+    // loading 缺省 → falsy（父级未传时不卡在加载态）
+    const idle = await mountBtn()
+    expect(idle.find('.el-button-stub').attributes('data-loading')).toBe('false')
+    await idle.find('.el-button-stub').trigger('click')
+    expect(idle.emitted('import')).toHaveLength(1)
+  })
 })
 describe('common/StatsCard.vue', () => {
   it('渲染', async () => { const { default: C } = await import('@/components/common/StatsCard.vue'); const w = mount(C, { props: { title: 'Test', value: 100 } }); expect(w.exists()).toBe(true) })

@@ -37,7 +37,10 @@ from app.models.supported_village import SupportedVillage
 from app.models.village import Village
 
 API_PREFIX = "/api/v1"
-P = lambda p: f"{API_PREFIX}/report-templates{p}"
+
+
+def P(p):
+    return f"{API_PREFIX}/report-templates{p}"
 
 
 # ── 端点测试用的真实 SQLite fixtures（与 test_report_templates_api.py 同模式）──
@@ -436,3 +439,24 @@ class TestToBool:
         assert rt._to_bool("true") is True
         assert rt._to_bool(1) is True
         assert rt._to_bool("否") is False
+
+
+# ── get_available_fields 端点（384-385）──
+
+
+class TestGetAvailableFields:
+    def test_known_module_returns_fields(self, auth_setup):
+        """覆盖 384-385: 已知模块返回字段列表。"""
+        resp = auth_setup.get(P("/available-fields?module=village"))
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["code"] == 200
+        assert body["success"] is True
+        keys = [f["key"] for f in body["data"]]
+        assert "village_name" in keys
+
+    def test_unknown_module_returns_empty(self, auth_setup):
+        """覆盖 384: MODULE_FIELDS.get 未命中返回 []。"""
+        resp = auth_setup.get(P("/available-fields?module=__nope__"))
+        assert resp.status_code == 200
+        assert resp.json()["data"] == []

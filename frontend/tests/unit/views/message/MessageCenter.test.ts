@@ -21,10 +21,12 @@ const {
   mockMarkAsRead,
   mockMarkAllAsRead,
   mockDeleteMessages,
+  mockClearReadMessages,
   mockPushSafe,
   mockGet,
   mockRecentActivities,
   mockUnreadCount,
+  logError,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   confirmMock: vi.fn(),
@@ -32,10 +34,12 @@ const {
   mockMarkAsRead: vi.fn(),
   mockMarkAllAsRead: vi.fn(),
   mockDeleteMessages: vi.fn(),
+  mockClearReadMessages: vi.fn(),
   mockPushSafe: vi.fn(),
   mockGet: vi.fn(),
   mockRecentActivities: vi.fn(),
   mockUnreadCount: vi.fn(),
+  logError: vi.fn(),
 }))
 
 vi.mock('@/api/request', () => ({
@@ -53,11 +57,17 @@ vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: mockPushSafe }),
 }))
 
+// handleClearRead 的 catch 分支使用 logger.error，需隔离真实 logger 的 console 副作用
+vi.mock('@/utils/logger', () => ({
+  logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}))
+
 vi.mock('@/api/message', () => ({
   getMessages: (...args: any[]) => mockGetMessages(...args),
   markAsRead: (...args: any[]) => mockMarkAsRead(...args),
   markAllAsRead: (...args: any[]) => mockMarkAllAsRead(...args),
   deleteMessages: (...args: any[]) => mockDeleteMessages(...args),
+  clearReadMessages: (...args: any[]) => mockClearReadMessages(...args),
   getRecentActivities: (...args: any[]) => mockRecentActivities(...args),
   getUnreadCount: (...args: any[]) => mockUnreadCount(...args),
   formatMessageType: (type: string) => {
@@ -146,6 +156,8 @@ beforeEach(() => {
   mockMarkAsRead.mockResolvedValue(1)
   mockMarkAllAsRead.mockResolvedValue(3)
   mockDeleteMessages.mockResolvedValue({})
+  // clearReadMessages 返回解包后的 body（此处 body 直接是数量）
+  mockClearReadMessages.mockResolvedValue(2)
   confirmMock.mockResolvedValue('confirm')
 })
 
@@ -378,6 +390,51 @@ describe('批量操作', () => {
     vm.handleSelectionChange([msg1, msg2])
     await nextTick()
     expect(wrapper.text()).toContain('删除选中 (2)')
+    wrapper.unmount()
+  })
+
+  // ---- handleClearRead（funcs@412 / stmts@412-430）----
+
+  it('「清空已读」按钮 → handleClearRead 成功：确认文案 + 条数提示 + 刷新列表', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    mockGetMessages.mockClear()
+    await clickBtn(wrapper, '清空已读')
+    expect(confirmMock).toHaveBeenCalledWith('将删除全部已读消息，不可恢复。确认继续？', '清空已读', {
+      type: 'warning',
+      confirmButtonText: '确认清空',
+      cancelButtonText: '取消',
+    })
+    expect(mockClearReadMessages).toHaveBeenCalledTimes(1)
+    expect(ElMessage.success).toHaveBeenCalledWith('已删除 2 条已读消息')
+    expect(mockGetMessages).toHaveBeenCalledTimes(1) // 成功后 loadMessages 刷新
+    expect(logError).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('handleClearRead：用户取消确认 → 静默返回，不调用清空接口', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    confirmMock.mockRejectedValueOnce('cancel')
+    await vm.handleClearRead()
+    expect(mockClearReadMessages).not.toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('handleClearRead：清空接口失败 → logger.error + 错误提示，且不刷新', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const err = new Error('boom')
+    mockClearReadMessages.mockRejectedValueOnce(err)
+    mockGetMessages.mockClear()
+    await vm.handleClearRead()
+    expect(logError).toHaveBeenCalledWith('清空已读失败:', err)
+    expect(ElMessage.error).toHaveBeenCalledWith('操作失败，请稍后重试')
+    expect(mockGetMessages).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

@@ -101,6 +101,17 @@ describe('PageHeader 补充覆盖', () => {
     wrapper.unmount()
   })
 
+  // branch@100 真侧 + stmts@101-103：bigscreen 命令走 pushSafe 并提前 return
+  it('handleMoreCommand：bigscreen → pushSafe(/bigscreen) 且提前返回（不 emit toggle-layout）', async () => {
+    const wrapper = mountHeader()
+    const vm = wrapper.vm as any
+    vm.handleMoreCommand('bigscreen')
+    expect(mockPushSafe).toHaveBeenCalledWith('/bigscreen')
+    expect(mockPushSafe).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('toggle-layout')).toBeFalsy()
+    wrapper.unmount()
+  })
+
   it('新建项目/数据分析按钮 → pushSafe 导航', async () => {
     const wrapper = mountHeader()
     await wrapper.find('[data-test="btn-new-project"]').trigger('click')

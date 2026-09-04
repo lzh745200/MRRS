@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import openpyxl
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -42,7 +42,7 @@ from app.core.data_permission import check_record_access
 from app.core.data_scope_adapter import apply_scope_filter
 from app.api.v1.deps import enforce_admin_include_deleted, build_viewable_because
 from app.schemas.supported_village import SupportedVillageCreate, SupportedVillageUpdate
-from app.core.transaction import safe_commit
+from app.core.transaction import safe_commit, savepoint
 from app.services.approval_workflow_service import (
     ApprovalWorkflowService,
     submit_entity_change_approval,
@@ -76,8 +76,19 @@ class PurgeRequest(BaseModel):
 
 
 class YearCopyRequest(BaseModel):
-    fromYear: int
-    toYear: int
+    """年度数据复制请求。
+
+    H2d（功能恒 422 修复）：字段名为 camelCase(fromYear/toYear)且必填，但
+    CamelToSnakeMiddleware 会把请求体键名转为 from_year/to_year，Pydantic 找
+    不到必填 camelCase 字段 → POST /yearly/copy 恒抛 422，年度复制 100% 不可用。
+    照搬 TransitionFundingItem(H2b) 样板：populate_by_name + AliasChoices 同时
+    兼容中间件转换后的 snake_case 与未经中间件的 camelCase。
+    """
+
+    model_config = {"populate_by_name": True}
+
+    fromYear: int = Field(validation_alias=AliasChoices("fromYear", "from_year"))
+    toYear: int = Field(validation_alias=AliasChoices("toYear", "to_year"))
 
 
 class YearlySectionData(BaseModel):
@@ -168,6 +179,11 @@ _BOOL_IMPORT_FIELDS = frozenset({
     "is_cross_city", "is_cross_unit_cooperation", "is_in_overall_plan",
 })
 
+
+class _ImportRowRejected(Exception):
+    """M6：导入行业务性拒绝（重名/校验失败）——用于触发 SAVEPOINT 回滚该行。"""
+
+
 # 年度数据辅助函数中需要跳过的元数据列
 _SKIP_COLUMNS = frozenset({"id", "supported_village_id", "year", "created_at", "updated_at"})
 
@@ -249,6 +265,14 @@ def _save_section_data(db: Session, model: Any, village_id: int, year: int, data
     for key, value in snake_data.items():
         if hasattr(row, key):
             setattr(row, key, value)
+        else:
+            # H6：未知字段不再静默跳过——显式记录 warning，避免 schema/模型字段漂移
+            # 导致"以为保存成功实际未落库"（如旧 VillageIncome.total_income 幽灵字段）
+            logger.warning(
+                "_save_section_data: 字段 '%s' 在 %s 模型上不存在，已跳过"
+                "（village_id=%s, year=%s）",
+                key, getattr(model, "__name__", model), village_id, year,
+            )
     if members_data is not None and model is VillageCommitteeInfo:
         # 新建行需先 flush 拿到主键，成员才能正确外键关联
         if row.id is None:
@@ -259,17 +283,23 @@ def _save_section_data(db: Session, model: Any, village_id: int, year: int, data
         ).delete()
         for m in members_data:
             if isinstance(m, dict):
+                # H2c：CamelToSnakeMiddleware 会递归转换数组内键名
+                # （isVeteran→is_veteran），原代码硬编码读 camelCase 的 isVeteran
+                # 恒取不到 → 退役军人标记静默落库 False。与顶层字段一致，对成员
+                # 子表键先做 to_snake_case 归一化，再读 snake_case（保留 camelCase 兜底
+                # 以兼容未经中间件的直接调用）。
+                nm = {}
+                for k, v in m.items():
+                    nk = StringHelper.to_snake_case(k) if hasattr(k, "upper") else k
+                    nm[nk] = v
                 member = VillageCommitteeMember(
                     committee_info_id=row.id,
                     supported_village_id=village_id,
-                    name=m.get("name", ""),
-                    position=m.get("position", ""),
-                    phone=m.get("phone", ""),
-                    is_veteran=(
-                        m.get("isVeteran", False) if isinstance(m.get("isVeteran"), bool)
-                        else m.get("isVeteran", False)
-                    ),
-                    remark=m.get("remark", ""),
+                    name=nm.get("name", ""),
+                    position=nm.get("position", ""),
+                    phone=nm.get("phone", ""),
+                    is_veteran=bool(nm.get("is_veteran", nm.get("isVeteran", False))),
+                    remark=nm.get("remark", ""),
                 )
                 db.add(member)
     return row
@@ -495,20 +525,29 @@ async def list_villages(
 
     summary = None
     if with_summary:
+        # H1：KPI「总投入」口径改为 SupportedVillage.transition_fund_military_total +
+        # transition_fund_local_total 求和——这是录入表单 save_transition_funding 的唯一
+        # 写入目标；此前误读从未被任何生产路径写入的 SupportFunding 子表，导致
+        # summary["total_investment"] 恒为 0。复用已应用 apply_scope_filter(数据隔离) +
+        # is_active==True 过滤的 query，一并消除原 fund_agg 全局无隔离求和的越权隐患。
+        fund_agg = (
+            query.with_entities(
+                func.coalesce(func.sum(SupportedVillage.transition_fund_military_total), 0),
+                func.coalesce(func.sum(SupportedVillage.transition_fund_local_total), 0),
+            ).first()
+        )
         agg = (
             query.with_entities(
                 func.count(SupportedVillage.id),
-                func.coalesce(func.sum(SupportedVillage.transition_fund_military_total), 0),
-                func.coalesce(func.sum(SupportedVillage.transition_fund_local_total), 0),
                 func.count(func.distinct(SupportedVillage.county)),
                 func.count(func.distinct(SupportedVillage.department)),
             ).first()
         )
         summary = {
             "total": int(agg[0] or 0),
-            "total_investment": round(float(agg[1] or 0) + float(agg[2] or 0), 4),
-            "county_count": int(agg[3] or 0),
-            "department_count": int(agg[4] or 0),
+            "total_investment": round(float(fund_agg[0] or 0) + float(fund_agg[1] or 0), 4),
+            "county_count": int(agg[1] or 0),
+            "department_count": int(agg[2] or 0),
         }
 
     total = query.count()
@@ -531,7 +570,7 @@ async def list_villages(
         total=total,
         page=page,
         page_size=page_size,
-        **({"summary": summary} if summary is not None else {}),
+        extra={"summary": summary} if summary is not None else None,
     )
     if _ckey is not None:
         await _cache.set(_ckey, result, ttl=120)
@@ -655,13 +694,20 @@ async def import_villages(
         ):
             continue
         try:
-            success, error_msg = _process_import_row(row, col_map, db, row_idx, current_user)
-            if success:
-                imported += 1
-            else:
-                errors.append(error_msg)
+            # M6：每行包裹 SAVEPOINT（app.core.transaction.savepoint）——某行 db.add 后
+            # 抛异常时仅回滚该行的脏对象，不随最终 safe_commit 落库产生半条数据。
+            with savepoint(db):
+                success, error_msg = _process_import_row(row, col_map, db, row_idx, current_user)
+                if not success:
+                    # 业务性跳过（重名/名称为空/超长）：主动抛出行内异常触发 SAVEPOINT 回滚
+                    raise _ImportRowRejected(error_msg or f"第{row_idx}行: 校验失败")
+            imported += 1
         except Exception as e:
-            errors.append(f"第{row_idx}行: {str(e)}")
+            # savepoint 已将原始异常包装为 DatabaseError(raise ... from e)；
+            # 取 __cause__ 还原可读的行内错误信息，避免消息嵌套重复
+            cause = getattr(e, "__cause__", None) or e
+            msg = str(cause)
+            errors.append(msg if msg.startswith("第") else f"第{row_idx}行: {msg}")
     safe_commit(db)
     await _invalidate_village_cache()
     # 数据变更自动创建审批任务：批量导入进入待审批板块（审计留痕）
@@ -810,8 +856,17 @@ async def update_village(
         )
 
     for key, value in update_dict.items():
-        if hasattr(village, key) and key != "id":
+        if key == "id":
+            continue
+        if hasattr(village, key):
             setattr(village, key, value)
+        else:
+            # H6：未知字段不再静默跳过——显式记录 warning，防止字段漂移导致数据未落库
+            logger.warning(
+                "update_village: 字段 '%s' 在 SupportedVillage 模型上不存在，已跳过"
+                "（village_id=%s）",
+                key, village_id,
+            )
     safe_commit(db)
     await _invalidate_village_cache()
     _record_village_change(
@@ -1518,10 +1573,28 @@ async def import_all_sections_data(
 
 
 class TransitionFundingItem(BaseModel):
+    """转移支付资金年度明细项。
+
+    H2b（关键根因修复）：字段名为 camelCase，但 CamelToSnakeMiddleware 会把请求体
+    键名 `militaryInvestment` 转为 `military_investment`，导致原字段名无法命中、
+    静默回落为 0——这正是"经费保存成功但总额重置为 0"的真正根因。通过
+    validation_alias=AliasChoices(camelCase, snake_case) + populate_by_name，同时兼容
+    中间件转换后的 snake_case 与未经中间件的 camelCase 两种输入；序列化输出仍以
+    字段名(camelCase)为准，保持与 GET /transition-funding 及前端的向后兼容。
+    """
+
+    model_config = {"populate_by_name": True}
+
     year: int
-    militaryInvestment: float = 0
-    localInvestment: float = 0
-    totalInvestment: float = 0
+    militaryInvestment: float = Field(
+        0, validation_alias=AliasChoices("militaryInvestment", "military_investment")
+    )
+    localInvestment: float = Field(
+        0, validation_alias=AliasChoices("localInvestment", "local_investment")
+    )
+    totalInvestment: float = Field(
+        0, validation_alias=AliasChoices("totalInvestment", "total_investment")
+    )
     remarks: Optional[str] = None
 
 
@@ -1553,11 +1626,46 @@ async def save_transition_funding(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """保存转移支付资金数据"""
+    """保存转移支付资金数据
+
+    H2（后端兜底，与前端任务#5 语义对齐）：
+    - 空 items 代表"用户主动清空经费"的合法意图（前端已通过 fundingLoadFailed
+      标志拦截"加载失败导致的异常空提交"），因此允许覆盖为 0，尊重用户意图；
+    - 但当检测到"原有非零经费总额被空 items 覆盖为 0"时，调用 write_work_log()
+      记录审计日志用于追溯（满足军事合规"写操作留痕"），作为异常/直接 API
+      调用场景的兜底防线。
+    """
     village = _get_village_or_404(db, village_id, current_user)
+    # 记录覆盖前原有总额，用于"非零→零"清空审计判定
+    prev_military = float(village.transition_fund_military_total or 0)
+    prev_local = float(village.transition_fund_local_total or 0)
     # Sum up military and local totals from the submitted items
     military = sum(item.militaryInvestment for item in data.items)
     local = sum(item.localInvestment for item in data.items)
+
+    # H2：空 items 将把原有非零经费清零——尊重用户主动清空意图，但写审计日志留痕追溯
+    if not data.items and (prev_military != 0 or prev_local != 0):
+        from app.services.work_log_service import write_work_log
+
+        logger.warning(
+            "save_transition_funding: village_id=%s 原有经费(专项=%s, 地方=%s)被空 items 清零，"
+            "已按用户主动清空处理并写审计日志",
+            village_id, prev_military, prev_local,
+        )
+        write_work_log(
+            db,
+            log_type="supported_village",
+            action="update",
+            entity_id=village_id,
+            entity_name=village.village_name,
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", ""),
+            detail=(
+                "转移支付资金清空：原专项投入 %.4f 万元、原地方投入 %.4f 万元 → 0"
+                % (prev_military, prev_local)
+            ),
+        )
+
     village.transition_fund_military_total = military
     village.transition_fund_local_total = local
     # Store per-year breakdown as JSON for retrieval

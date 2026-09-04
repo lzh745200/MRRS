@@ -60,8 +60,8 @@
     <!-- 政策正文 -->
     <el-card v-if="policy?.content" class="content-card">
       <template #header><span>政策内容</span></template>
-      <!-- 已净化（sanitizedPolicyContent 经 sanitizeHtml）：v-html 渲染安全 -->
-      <!-- eslint-disable-next-line vue/no-v-html -->
+      <!-- 已净化（sanitizedPolicyContent 经 sanitizeHtml）：v-html 渲染安全。
+           vue/no-v-html 豁免统一登记在 .eslintrc.cjs 的 overrides，此处不再重复内联 disable -->
       <div class="policy-content" v-html="sanitizedPolicyContent"></div>
     </el-card>
 

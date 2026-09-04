@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
+from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,8 @@ async def get_monitor_snapshot(current_user=Depends(get_current_user)):
 
         snapshot["host"] = platform.node()
 
-        # CPU
-        snapshot["cpu_usage"] = psutil.cpu_percent(interval=0.3)
+        # CPU（interval>0 为阻塞采样，async 端点卸载到线程池，避免冻结事件循环 0.3s）
+        snapshot["cpu_usage"] = await run_in_threadpool(psutil.cpu_percent, interval=0.3)
         snapshot["cpu_count"] = psutil.cpu_count()
 
         # 内存
@@ -78,12 +79,19 @@ async def get_monitor_snapshot(current_user=Depends(get_current_user)):
         snapshot["memory_used_mb"] = round(memory.used / (1024 * 1024), 2)
         snapshot["memory_total_mb"] = round(memory.total / (1024 * 1024), 2)
 
-        # 磁盘
-        import os
-        disk = psutil.disk_usage(os.environ.get("SystemDrive", "C:\\"))
-        snapshot["disk_usage"] = disk.percent
-        snapshot["disk_used_gb"] = round(disk.used / (1024 ** 3), 2)
-        snapshot["disk_total_gb"] = round(disk.total / (1024 ** 3), 2)
+        # 磁盘（跨平台：Windows 取 SystemDrive，其它平台取文件系统根 "/"）
+        # 历史缺陷：曾硬编码回退 "C:\\"，在 Linux/麒麟上 SystemDrive 未设置 →
+        # psutil.disk_usage("C:\\") 抛 FileNotFoundError，被外层 except 吞成整快照
+        # status=error（丢失 CPU/内存/网络并刷 ERROR 日志）。
+        disk_path = os.environ.get("SystemDrive") or os.path.abspath(os.sep)
+        try:
+            disk = psutil.disk_usage(disk_path)
+            snapshot["disk_usage"] = disk.percent
+            snapshot["disk_used_gb"] = round(disk.used / (1024 ** 3), 2)
+            snapshot["disk_total_gb"] = round(disk.total / (1024 ** 3), 2)
+        except Exception:
+            # 单块磁盘读取失败不应拖垮整份快照：降级为 warning，其余指标照常上报
+            logger.warning("磁盘使用率读取失败（path=%s）", disk_path, exc_info=True)
 
         # 网络
         net_io = psutil.net_io_counters()
@@ -119,9 +127,10 @@ async def get_resource_usage(current_user=Depends(get_current_user)):
     try:
         import psutil
 
-        # CPU详细信息
+        # CPU详细信息（interval>0 为阻塞采样，async 端点卸载到线程池，避免冻结事件循环 0.2s）
+        cpu_percent = await run_in_threadpool(psutil.cpu_percent, interval=0.2)
         resources["cpu"] = {
-            "percent": psutil.cpu_percent(interval=0.2),
+            "percent": cpu_percent,
             "count_logical": psutil.cpu_count(),
             "count_physical": psutil.cpu_count(logical=False),
             "freq_current_mhz": psutil.cpu_freq().current if psutil.cpu_freq() else None,

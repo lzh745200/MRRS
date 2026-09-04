@@ -387,3 +387,35 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
     })
   })
 })
+
+describe('Dashboard.vue KPI 趋势工具函数（branch@303/@304/@339）', () => {
+  it('dirOf / arrowOf：正 / 负 / 零 / undefined 四态（含 ?? 0 右侧）', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(vm.dirOf(3)).toBe('up')
+    expect(vm.dirOf(-2)).toBe('down')
+    expect(vm.dirOf(0)).toBe('flat')
+    expect(vm.dirOf(undefined)).toBe('flat')
+    expect(vm.dirOf()).toBe('flat')
+
+    expect(vm.arrowOf(3)).toBe('↑')
+    expect(vm.arrowOf(-2)).toBe('↓')
+    expect(vm.arrowOf(0)).toBe('→')
+    expect(vm.arrowOf(undefined)).toBe('→')
+    wrapper.unmount()
+  })
+
+  it('takeSeries：非有限值过滤 / 全空回退 [0] / arr 缺省走 || []', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(vm.takeSeries([1, NaN, 2, Infinity])).toEqual([1, 2])
+    expect(vm.takeSeries([])).toEqual([0]) // a.length 假侧
+    expect(vm.takeSeries([NaN])).toEqual([0])
+    expect(vm.takeSeries(undefined as any)).toEqual([0]) // arr || [] 右侧
+    wrapper.unmount()
+  })
+})

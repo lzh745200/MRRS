@@ -8,7 +8,7 @@
 
 import sqlite3
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -103,3 +103,26 @@ class TestDbOptimize:
         with self._engine("sqlite"):
             resp = client.post(f"{BASE}/db-optimize")
         assert resp.status_code == 404
+
+    def test_posix_double_slash_leading_slash_recovery(self, client):
+        """覆盖 admin.py:381-384 —— 'sqlite://<abs>' 吞首 '/' 后的兼容恢复。
+
+        构造 db_path 为「盘根相对路径」：相对 CWD 不存在（不触发 386 的 404），
+        但前置 '/' 后解析为当前盘绝对路径存在 → 恢复为 candidate 并优化成功。
+        """
+        import os
+
+        target = os.path.join(os.getcwd(), "cov384_admin.db")
+        sqlite3.connect(target).close()  # 创建真实 SQLite 文件
+        try:
+            # 相对盘根的路径（正斜杠形式，与 POSIX 解析产物一致）
+            rel = os.path.relpath(target, os.path.abspath(os.sep)).replace(os.sep, "/")
+            assert not os.path.exists(rel), "前置失败：相对 CWD 的路径不应存在"
+            assert os.path.exists("/" + rel), "前置失败：前置 / 后的盘根绝对路径应存在"
+            with self._engine(f"sqlite://{rel}"):
+                resp = client.post(f"{BASE}/db-optimize")
+            assert resp.status_code == 200
+            assert resp.json()["success"] is True
+        finally:
+            if os.path.exists(target):
+                os.remove(target)

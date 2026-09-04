@@ -21,12 +21,13 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      # 覆盖率门禁：98%（W4-T1：不再 continue-on-error，失败即红；
-      # --cov-fail-under=98 为真实阻断信号）
+      # 覆盖率门禁：阈值统一由 backend/.coveragerc 的 fail_under 单一承载
+      # (不再内联 --cov-fail-under，命令行参数会屏蔽配置文件口径)；
+      # pytest-cov 读取 .coveragerc fail_under 并在未达标时真实阻断(失败即红)。
       # 注意：--dist loadfile 与 pytest-rerunfailures 不兼容（worker 崩溃时
       # mark_test_pending 在 loadscope 调度器上抛 NotImplementedError），
       # 使用默认 load 调度器让 rerun 正常生效。
-      - run: cd backend && python -m pytest tests/ -q --tb=line -n auto --cov=app --cov-report=xml --cov-fail-under=98 --reruns 2 --reruns-delay 1
+      - run: cd backend && python -m pytest tests/ -q --tb=line -n auto --cov=app --cov-report=xml --reruns 2 --reruns-delay 1
       # 失败时重跑失败用例（--lf）打印具体测试名与断言，用 ::error:: 前缀写入注解
       # （诊断辅助，非唯一失败信号——上方 pytest 步骤已真实阻断）
       - name: Report failed tests
@@ -35,7 +36,7 @@ jobs:
           cd backend && python -m pytest tests/ -q --tb=short -n 0 --lf --no-cov 2>&1 | tail -60 | sed 's/^/::error::/' 
           exit 1
       # 上传覆盖率到 Codecov（展示用：fail_ci_if_error=false 且 continue-on-error，
-      # 覆盖率阻断由上方 --cov-fail-under 承担，上传抖动不阻塞 PR）
+      # 覆盖率阻断由上方 pytest-cov 读取 .coveragerc fail_under 承担，上传抖动不阻塞 PR）
       - uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
           directory: backend

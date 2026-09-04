@@ -61,8 +61,8 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && python -m pytest tests/ -v          # 后端测试（10045 passed）
-cd frontend && npm test -- --run                  # 前端测试（5686 passed，296 个测试文件）
+cd backend && python -m pytest tests/ -v          # 后端测试（~10228 passed）
+cd frontend && npm test -- --run                  # 前端测试（~6030 passed，301 个测试文件）
 cd backend && python -m flake8 app/ --max-line-length=120
 cd frontend && npm run lint && npm run typecheck
 

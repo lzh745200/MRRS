@@ -39,7 +39,11 @@ function parseCron(schedule?: string | null): { frequency: Frequency; backupTime
 }
 
 function toCron(frequency: Frequency, backupTime: string): string {
-  const [h = '2', m = '0'] = (backupTime || '02:00').split(':')
+  // 小时位不给解构默认值：String.prototype.split 恒返回至少 1 个元素且元素必为
+  // 字符串，故下标 0 永不为 undefined，原来的 `h = '2'` 是不可达死代码（任务#28 删除）。
+  // 分钟位的 `m = '0'` 必须保留：backupTime 形如 '3'（无冒号）时 split 只得 ['3']，
+  // m 为 undefined，该默认值真实生效（见 useBackupSchedule.test.ts「backupTime 无冒号」）。
+  const [h, m = '0'] = (backupTime || '02:00').split(':')
   const hour = String(h).padStart(2, '0')
   const minute = String(m).padStart(2, '0')
   if (frequency === 'weekly') return `${minute} ${hour} * * 1`

@@ -273,13 +273,19 @@ def require_permission(permission: str):
     """权限检查装饰器
 
     Args:
-        permission: 所需权限标识，如 "villages:write"
+        permission: 所需权限标识，"resource:action" 格式，如 "villages:write"
 
     Usage:
         @require_permission("villages:write")
         def create_village(...):
             ...
     """
+    # 拆分 "resource:action" 完整权限串后再传入 check_permission。
+    # 历史缺陷：整串作为 resource、action="" 传入会拼出尾冒号
+    # （required="villages:write:"），与用户标准权限格式 "villages:write"
+    # 永不匹配，普通用户持有正确权限也恒 403。
+    resource, _, action = permission.partition(":")
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -296,7 +302,7 @@ def require_permission(permission: str):
                     detail="未提供用户认证信息",
                 )
 
-            if not check_permission(current_user, permission, ""):
+            if not check_permission(current_user, resource, action):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"缺少权限: {permission}",

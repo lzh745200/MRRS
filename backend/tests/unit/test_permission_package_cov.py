@@ -70,7 +70,7 @@ class TestImport:
 
     async def test_success(self, svc, tmp_path):
         svc.import_package.return_value = {"success": True, "preview": {}}
-        file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=b"PK"))
+        file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(side_effect=[b"PK", b""]))
         with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
             resp = await pp.import_permission_package(_req(), file, _admin(), MagicMock())
         assert resp.status_code == 200
@@ -78,7 +78,7 @@ class TestImport:
 
     async def test_exception_cleanup_500(self, svc, tmp_path):
         svc.import_package.side_effect = RuntimeError("bad zip")
-        file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=b"PK"))
+        file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(side_effect=[b"PK", b""]))
         with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
             with pytest.raises(HTTPException) as exc_info:
                 await pp.import_permission_package(_req(), file, _admin(), MagicMock())
@@ -90,7 +90,7 @@ class TestImport:
 
     async def test_exception_cleanup_oserror_degrades(self, svc, tmp_path):
         svc.import_package.side_effect = RuntimeError("bad zip")
-        file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=b"PK"))
+        file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(side_effect=[b"PK", b""]))
         with (
             patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path),
             patch.object(pp.os, "unlink", side_effect=OSError("locked")),
@@ -98,6 +98,75 @@ class TestImport:
         ):
             await pp.import_permission_package(_req(), file, _admin(), MagicMock())
         assert exc_info.value.status_code == 500
+
+    async def test_oversize_413_and_cleanup(self, svc, tmp_path):
+        """覆盖 210-211（超限 413）与 213-216（BaseException 清理后重抛）"""
+        file = SimpleNamespace(
+            filename="pkg.zip",
+            read=AsyncMock(side_effect=[b"PK\x03\x04", b"moredata", b""]),
+        )
+        with (
+            patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path),
+            patch.object(pp, "_MAX_PACKAGE_UPLOAD_BYTES", 8),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await pp.import_permission_package(_req(), file, _admin(), MagicMock())
+        assert exc_info.value.status_code == 413
+        assert not (tmp_path / "pkg.zip").exists()  # 零磁盘残留
+
+    async def test_encrypted_package_writeback(self, svc, tmp_path):
+        """覆盖 245-247 —— 加密包预览成功后内存明文写回保存路径"""
+        svc.import_package.return_value = {
+            "success": True, "preview": {}, "_decrypted_bytes": b"PLAINTEXT",
+        }
+        file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(side_effect=[b"PK", b""]))
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
+            resp = await pp.import_permission_package(_req(), file, _admin(), MagicMock())
+        assert resp.status_code == 200
+        assert (tmp_path / "pkg.zip").read_bytes() == b"PLAINTEXT"
+
+    async def test_machine_code_failure_degrades(self, svc, tmp_path):
+        """覆盖 230-231 —— 机器码获取失败 → 空串降级，导入继续"""
+        svc.import_package.return_value = {"success": True, "preview": {}}
+        file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(side_effect=[b"PK", b""]))
+        with (
+            patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path),
+            patch.object(pp, "SessionLocal", side_effect=Exception("db down")),
+        ):
+            resp = await pp.import_permission_package(_req(), file, _admin(), MagicMock())
+        assert resp.status_code == 200
+        assert svc.import_package.call_args.kwargs.get("current_machine_code") == ""
+
+    async def test_http_exception_cleanup(self, svc, tmp_path):
+        """覆盖 255-257 —— service 抛 HTTPException 时清理文件并透传状态码"""
+        svc.import_package.side_effect = HTTPException(status_code=422, detail="校验失败")
+        file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(side_effect=[b"PK", b""]))
+        with patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path):
+            with pytest.raises(HTTPException) as exc_info:
+                await pp.import_permission_package(_req(), file, _admin(), MagicMock())
+        assert exc_info.value.status_code == 422
+        assert not (tmp_path / "pkg.zip").exists()
+
+
+class TestResolveUploadPath:
+    def test_realpath_escape_rejected_400(self, tmp_path):
+        """覆盖 74 —— basename 校验通过但 realpath 后逃逸目录（符号链接场景）→ 400"""
+        calls = {"n": 0}
+
+        def fake_realpath(_p):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return str(tmp_path)            # real_dir
+            return "C:/Windows/evil.zip"        # file_path 逃逸
+
+        with (
+            patch("app.utils.paths.get_runtime_uploads_path", return_value=tmp_path),
+            patch.object(pp.os.path, "realpath", side_effect=fake_realpath),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                pp._resolve_package_upload_path("pkg.zip")
+        assert exc_info.value.status_code == 400
+        assert "非法文件路径" in exc_info.value.detail
 
 
 class TestConfirm:

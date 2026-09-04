@@ -13,7 +13,6 @@ declare module 'vue' {
     CommonBaseChart: typeof import('./components/common/BaseChart.vue')['default']
     CommonChangeHistoryDialog: typeof import('./components/common/ChangeHistoryDialog.vue')['default']
     CommonChartErrorState: typeof import('./components/common/ChartErrorState.vue')['default']
-    CommonDataTable: typeof import('./components/common/DataTable.vue')['default']
     CommonErrorBoundary: typeof import('./components/common/ErrorBoundary.vue')['default']
     CommonGuizhouRegionSelector: typeof import('./components/common/GuizhouRegionSelector.vue')['default']
     CommonImportButton: typeof import('./components/common/ImportButton.vue')['default']

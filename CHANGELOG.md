@@ -5,6 +5,228 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.11.4] - 2026-09-04 — 异常细节出站收口 + 板块导入 400 根治 + 帮扶村经费持久化修复 + 测试数据目录隔离
+
+### 安全
+- 🔒 **异常细节出站收口（W1 不变量 #6 / W1-T8），共 4 处**：
+  - `permission_package_service.confirm_import` 兜底把 `str(e)` 放进 `message`，
+    经 API 层 `detail=result.get("message")` 直达 HTTP 500，可泄露 SQLAlchemy
+    错误文本、表名与服务器路径 → 改泛化文案，原文仅进服务端日志。
+  - 同文件 JSON 解析分支把 `JSONDecodeError` 原文（含出错位置与文档片段，可反推
+    包内结构）经 `errors[]` 出站 → 改泛化文案。
+  - `db_error_handler` 的 IntegrityError 兜底把 `str(exc.orig)` 经 HTTP 400
+    `detail` 出站，内含表名/列名（如 `NOT NULL constraint failed users.xxx`），
+    正是 W1-T8 点名的 schema 泄露；同函数 catch-all 500 的 `str(exc)[:100]`
+    一并收口（上面 UNIQUE/FK/Operational/SQLAlchemy 各分支早已泛化，唯漏这两处）。
+  - `policy_import_service` 导入兜底 500 `detail` 内插 `str(e)` → 泛化 + 补
+    `exc_info=True`（原 `logger.error` 缺栈，排障拿不到 traceback）。
+- 🔒 **泄露扫描器扩面到 `services/`、`utils/`、`core/`**：上述第一处之所以能长期
+  存活，正是因为文本产生在 service 层、出站动作在 api 层，而旧扫描器只扫
+  `app/api/v1` 的字面内插，结构上看不见这条间接路径。新规则精确口径：只禁这三层
+  直接构造 `HTTPException` 时把异常变量内插进 `detail`（f-string 任意状态码；
+  `str()` 形态仅禁 500，沿用既有 `LEAK_STR_500` 对 400 业务文案的刻意放行）。
+  **刻意不扫** service 返回字典里的 `message:`/`errors:` —— 实测该口径下有 20 处
+  命中，多为面向导入用户的行级校验反馈（含行号/字段/格式原因），一刀切泛化会
+  损害可用性，需按调用链逐点判定，不适用源码扫描。
+- 🔒 **`/health` 不再回传迁移异常原文**：该端点无需认证，原 `migration.error`
+  存的是 `f"{type(e).__name__}: {e}"`，可泄露数据库绝对路径与 SQL 片段。改为只出
+  异常类名（键更名 `error_type`，避免后来者误以为它是可读消息而重新放宽），
+  完整细节仅进 `logger.error(exc_info=True)`。
+- 🔒 **分析统计接口数据隔离改 fail-closed**：`_get_analysis_data_impl` 的
+  `current_user` 由带 `None` 默认值改为必填位置参数（对齐 W5-006）。原写法下
+  `_scoped()` 内 `if current_user is not None` 意味着任何新调用方漏传即**静默跳过
+  隔离、返回跨组织聚合数据**；改必填后漏传在调用点直接 TypeError。
+
+### 修复
+- 🐛 **帮扶村年度板块导入恒 400**：`force_investment` / `party_building` 两个板块
+  的内部下划线键被原样透传给后端 `section_key`，而 `_SECTION_MODEL` 的键是连字符
+  （`force-investment` / `party-building`）→ 查不到模型 → 400「未知板块标识」。
+  上一轮已为删除路径套上 `resolveSectionApiKey`，导入这条漏了。现将 section key
+  映射统一下沉到 API 层（保存/删除/导入三条路径），调用方无法再各自忘记；
+  `resolveSectionApiKey` 幂等，既有调用点的重复调用无害。
+  附件路径**有意不映射**：后端不按 `_SECTION_MODEL` 校验附件的 section，改动会
+  使既有附件记录失配。
+- 🐛 **学校回收站恢复/彻底删除后停在空页**（AGENTS.md 前端 BUG 模式 #3）：
+  `handleRestore` / `handlePurge` 在 `fetchData()` 前未重置分页，而同文件新建/编辑
+  等处理器都有 `currentPage.value = 1`。用户停在第 2 页及以后时，操作改变了结果集
+  长度 → 刷出空页，看似"操作没生效"。
+- 🐛 **截断/损坏权限包导致未分类 500**：`package_crypto._parse_header` 无长度校验，
+  以魔术头 `BKPKGv2\x00` 开头但不足 `_HEADER_LEN` 的上传文件会让 `struct.unpack`
+  抛 `struct.error`；该异常发生在 `decrypt_bytes` 的 try 块**之前**，逃过
+  `InvalidToken` 归一化 → 改为入口长度守卫抛 `InvalidToken`，调用方按既有的
+  「密码错误或包已损坏」语义处理。上传截断文件即可触发。
+- 🐛 `saveSectionData` 与 `saveYearlySectionData` 是完全重复的实现（同一 URL），
+  改为委托调用，既消除重复又自动获得下沉后的映射，避免两处各自漂移。
+- 🐛 **监控快照在麒麟/Linux 上整份崩溃并刷 ERROR 日志**：`system/monitor.py` 的
+  `get_monitor_snapshot` 用 `psutil.disk_usage(os.environ.get("SystemDrive", "C:\\"))`
+  取磁盘，非 Windows 平台 `SystemDrive` 未设置 → 回退到 Windows 字面量 `"C:\\"` →
+  `psutil` 抛 `FileNotFoundError: [Errno 2] ... 'C:\\'`，被外层 `except` 吞成整快照
+  `status=error`，连带丢失 CPU/内存/网络指标并持续刷「获取监控数据失败」ERROR。
+  改为跨平台解析磁盘路径（Windows 取 `SystemDrive`，其它平台取 `os.path.abspath(os.sep)`
+  即文件系统根 `/`），并把磁盘读取单独 `try/except` 降级为 warning —— 单块磁盘读取
+  失败不再拖垮整份快照。直接违反双平台（麒麟 V10）要求的硬缺陷。
+- 🐛 **注册页把后端 400 报文吞成 "Request failed with status code 400"**：
+  `Register.vue` 的 catch 只读 `error.response?.data?.detail`，但注册失败多走
+  `BizValidationError` → `AppError` handler 返回 `{code,message,success}` 信封
+  （**无 `detail` 字段**），取值落空后回退到 axios 默认英文原文，用户看不到
+  「密码不能包含用户名」「通行码无效或已被使用」这类可操作提示。改为对齐
+  `ForgotPassword.vue` 既有约定：`userMessage`（拦截器已算好）→ `data.detail` →
+  `data.message` → `error.message` → 兜底文案。附带补全前端密码校验器与后端
+  `PasswordPolicy` 的一致性——原校验器注释声称「与后端保持一致」却漏了末条
+  「密码不能包含用户名」，现补上，使该场景在客户端即被内联拦截，无需服务端往返。
+- ⚡ **异步端点阻塞事件循环收口（性能），共 5 处**：`psutil.cpu_percent(interval>0)` 是
+  阻塞采样（内部 `sleep(interval)`），却在 `async def` 端点里直接调用，每次请求冻结整个
+  事件循环 0.2–1s，拖慢所有并发请求（麒麟多用户下尤甚）。改用
+  `starlette.concurrency.run_in_threadpool` 卸载到线程池，保留真实采样语义：
+  `system/monitor.py` 的 `get_monitor_snapshot`(0.3s)/`get_resource_usage`(0.2s)、
+  `system/metrics.py` 的 `get_system_metrics`(0.5s)/`get_performance_metrics`(0.3s)、
+  `monitoring_legacy.py` 的 `get_resource_stats`（经同步 `MonitoringService.get_resource_stats`
+  内含 `interval=1` 阻塞 1s，在 async 调用点整体卸载，不改同步方法签名以免影响告警调度）。
+  **刻意不用** `cpu_percent(interval=None)` 规避——它首次返回 0.0、其后返回"距上次调用"均值，
+  会造成"CPU 0%"误导性新问题。`system.py` 关机/重启的 `time.sleep` 在 `background_tasks`
+  同步函数里（线程池执行），属正确用法，未动。
+- 🐛 **跨平台磁盘路径同源缺陷一并扫清**：监控快照工单里的 `os.environ.get("SystemDrive", "C:\\")`
+  硬编码回退是复制粘贴扩散的，除 `monitor.py` 外还存在于 `system/metrics.py`(×2，另含 `disk_usage("/")`
+  统一为跨平台表达式)、`system/health.py`(`shutil.disk_usage`，Linux 上被 try 吞成 `disk_free_gb`
+  恒 None，健康面板永远无磁盘剩余)、`services/monitoring_service.py`(Linux 上整份资源统计被吞成空)。
+  四处统一为 `os.environ.get("SystemDrive") or os.path.abspath(os.sep)`，并记入 AGENTS.md 工程不变量。
+- 🔒 **无认证/非 HTTPException 路径的错误细节出站收口，共 2 处**：`system/health.py` 的
+  `/health/full`（无 `Depends`，未认证）把 `str(e)` 存进 `db_error` 出站，sqlite3 连接错误原文
+  可含数据库绝对路径 → 改 `type(e).__name__`，原文仅进日志（与 W1 #6 的 `/health` `error_type` 同理）；
+  `system/metrics.py` 资源采集失败的 `message` 曾内插 `str(e)`——因不是 HTTPException 的 `detail`，
+  泄露扫描器结构上看不见 → 改泛化文案「获取资源指标失败，请查看日志」。
+- 🐛 **转移支付经费保存成功但金额静默清零（H2b，关键根因）**：
+  `TransitionFundingItem` 字段名为 camelCase（`militaryInvestment`/
+  `localInvestment`/`totalInvestment`），但 `CamelToSnakeMiddleware` 会把请求体
+  键名转为 snake_case，Pydantic 字段名无法命中、静默回落默认值 0——这正是
+  “经费保存成功但总额重置为 0”的真正根因（默认值掩盖了校验失败，无任何报错）。
+  修复：三字段加 `validation_alias=AliasChoices(camelCase, snake_case)` +
+  `populate_by_name`，同时兼容中间件转换后的 snake_case 与未经中间件的
+  camelCase 输入；序列化输出仍以字段名（camelCase）为准，保持与
+  GET /transition-funding 及前端的向后兼容。
+- 🐛 **两委成员「退役军人」标记恒 False（H2c）**：`_save_section_data` 处理
+  village_committee 成员子表时硬编码读 camelCase 的 `isVeteran`，而中间件会
+  递归转换数组内键名（`isVeteran`→`is_veteran`）→ 恒取不到、静默落库 False。
+  修复：成员键先做 `to_snake_case` 归一化，再读 snake_case（保留 camelCase
+  兜底以兼容未经中间件的直接调用），
+  `is_veteran=bool(nm.get("is_veteran", nm.get("isVeteran", False)))`。
+- 🐛 **年度数据复制功能恒 422（H2d）**：`YearCopyRequest` 必填字段为 camelCase
+  （`fromYear`/`toYear`），经中间件转换后请求体键变 `from_year`/`to_year`，
+  Pydantic 找不到必填 camelCase 字段 → `POST /{village_id}/yearly/copy` 恒
+  抽 422，年度复制 100% 不可用。修复：照搬 H2b 样板，
+  `AliasChoices("fromYear", "from_year")` 双别名兼容。
+
+### 测试与工程
+- 🧪 **测试不再写开发者真实数据目录**：`tests/conftest.py` 在任何 `app.*` 导入之前
+  设 `BUMOFU_BACKEND_DIR_OVERRIDE` 指向会话临时根。依据：`config.py` 的 Settings
+  在**构造期**就把 `DATABASE_URL`/`CACHE_DIR`/`UPLOAD_DIR`/`EXPORT_DIR` 的相对默认
+  值统一归一到 `_get_default_data_dir()` 下，而该函数最终调用
+  `paths.get_app_data_dir()` → `get_project_backend_dir()`，故一个 env 即可收口全部。
+  `LOG_FILE` 不经该漏斗（`config.py` 仅在 `sys.frozen` 时重写它，测试态保持相对
+  `./logs/app.log`），单独用 `LOG_DIR`/`LOG_FILE` env 覆盖。
+  此前测试会写 `backend/data/`（缓存库、`test_integration.db`）与
+  `backend/logs/app.log`（单次全量跑从 293KB 涨到 4.8MB）。
+  **用 env 而非替换模块属性**：替换属性会让此后所有
+  `from app.utils.paths import get_project_backend_dir` 的测试模块把名字冻结成替身，
+  与后来被还原的模块属性分叉（实测导致 `test_paths.py` 两处断言失败）。
+  专测路径解析逻辑的 `test_paths.py` 以 `real_backend_dir` 标记整模块豁免
+  （已在 `pytest.ini` 注册，因 `addopts` 带 `--strict-markers`）。
+- 🧪 新增回归测试：`handleRestore`/`handlePurge` 分页重置（这两个处理器此前
+  **完全无测试**，正是缺陷存活的原因；已反向验证撤掉修复后测试确实变红）、
+  板块导入映射（断言收到 `force-investment` 而非 `force_investment`）、
+  截断包 `InvalidToken`（4 组参数化）、`/health` 迁移状态形状与「只记异常类名」、
+  `_get_analysis_data_impl` 漏传 `current_user` 必抛 TypeError。
+- 🧪 本次两处缺陷的回归测试：`test_system_monitor_api.py` 补 3 条（磁盘读取抛
+  `FileNotFoundError` 时整快照仍 `healthy` 且 CPU 指标不丢、Windows 取 `SystemDrive`、
+  无 `SystemDrive` 时回退到 `os.path.abspath(os.sep)`——在 Linux CI 上可与旧硬编码
+  `"C:\\"` 区分）；`Register.test.ts` 补 3 条（400 信封只有 `message` 时展示后端文案
+  且不暴露 axios 原文、`userMessage` 优先、密码含用户名客户端即拒绝）。
+- 🧪 **修全量跑唯一 warning**：`test_anomaly_detection_service_complete.py` 的
+  `subprocess.run(text=True)` 未指定 encoding，Windows 下父进程按控制台代码页 GBK
+  解码子进程输出，reader 线程抛 `UnicodeDecodeError: 'gbk' codec can't decode
+  byte 0xaa` → 父进程显式 `encoding="utf-8", errors="replace"`，子进程
+  `PYTHONIOENCODING=utf-8`，两侧对齐才确定性消除（只改一侧仍可能因代码页复发）。
+- 🧪 按前端测试约定 #1 补齐 mock 导出：`SchoolsViewsBatch.test.ts` 补
+  `@/api/request` 的 `default`（`schoolsRecycle.ts` 与 `List.vue` 都 import 了它），
+  `Import.test.ts` 补 `apiRequest`/`get`/`put`/`del`（`src/api/import.ts` 实际
+  import 了 `apiRequest`）。此前靠上层 mock 侥幸未触发。
+- 🔧 `backend/app/__init__.py` 的 `__version__` 自 1.10.0 起未随发版更新（经 grep
+  确认无任何消费方），同步到 1.11.4 并注明单一事实源。
+
+## [1.11.3] - 2026-08-31 — 麒麟版后端启动 ModuleNotFoundError 根治
+
+### 修复（致命，Kylin 真机）
+- 🐛 **冻结包内 47 个业务路由模块全部缺失**：`app/api/v1/__init__.py` 此前用
+  `importlib.import_module(f'app.api.v1.{name}')` 动态加载业务路由——PyInstaller
+  静态分析无法跟踪 f-string 动态导入，且 Linux Docker 构建时
+  `collect_submodules('app')` 依赖的包导入链在收集阶段被 walk_packages 静默跳过，
+  打包产物缺 organization/policy/projects 等 47 个模块 → 后端"部分启动"，
+  前端业务页面全量报错。**根改为静态导入**：打包收集 100% 确定，任一路由
+  损坏启动即快速失败（终结"静默降级为残缺 API"的故障模式）。
+- 🐛 **两个 spec 同源修复**：统一 spec 补 `sys.path` 插入使 collect 与 CWD 无关、
+  移除已删除依赖 sklearn 的 hiddenimports 与陈旧 excludes；standalone spec
+  补 `collect_submodules('app')`（其此前完全缺失，standalone DEB 同样受影响）。
+- 🐛 **ARM64 postinst**：补 onedir 后端主程序 chmod（旧脚本只找 onefile .exe 路径）；
+  chrome-sandbox 补 chown root:root + 4755（非 root 用户启动必需）。
+- 🐛 **deb Depends 声明**：补 Electron 运行库依赖（libnss3/libgbm1/libasound2 等
+  16 项），麒麟安装时缺失依赖明确报错而非启动后崩溃。
+
+### 增强（国产平台兼容）
+- ✨ Linux 平台禁用硬件加速 + disable-dev-shm-usage：规避麒麟/飞腾 GPU 驱动
+  白屏/花屏类问题（管理界面无需 GPU 渲染）。
+
+### 验证
+- ✅ 本机 PyInstaller 实包验证：启动冻结 exe，此前缺失的 organizations/policies/
+  projects/data-packages/incremental 等路由全部存在（401/403=存在需鉴权）
+- ✅ 后端全量回归全绿；YAML/JSON 门禁通过
+
+## [1.11.2] - 2026-08-30 — 403 权限页根因修复 + 全站弹窗显示修复
+
+### 修复（403 权限页，六类根因）
+- 🐛 **无组织管理员被判"无任何组织权限"**（核心根因）：单机/未绑定组织的管理员
+  访问数据包、增量更新、版本管理、数据上报等组织门禁端点一律 403——
+  `organization_permission_service`/`user_permission_service` 共 7 处
+  仅 superuser 旁路改为 admin 语义（ADR-0002 对齐）；普通用户维持 fail-closed。
+- 🐛 **菜单加载失败窗口期全站 403**：打包版后端冷启动（onedir 8.6s）期间
+  `/menus/accessible` 失败 → 路由守卫把所有带 menuKey 的页面弹到 /403——
+  守卫改为仅"菜单已加载且明确不含该键"才拒绝（菜单是可见性层，真实权限由
+  后端接口兜底）。
+- 🐛 **经费申请页 admin 403**：`funds-user` 菜单键 roles 缺 admin/super_admin。
+- 🐛 **存量旧角色名被 meta.roles 误拒**：守卫校验前先 normalizeRole 归一化
+  （manager/approval_leader→admin，operator→user）。
+- 🐛 **legacy 模型数据范围 500**：`villages` 等无 created_by/organization_id 列的
+  模型在数据范围过滤下 AttributeError→500，改为 fail-closed 空集（ADR-0002）。
+- 🧪 真实库双角色全量 GET 端点巡检：admin 0×403/0×500；新增回归
+  `test_org_less_admin_403_fix.py`（7 用例）+ 前端守卫 3 用例。
+
+### 修复（连带发现的 5 个 500 端点）
+- 🐛 sklearn 随死代码清理移除后 ai 收入预测/趋势预测端点必 500 → numpy polyfit 等价实现
+- 🐛 monitoring 端点统计 `func.case` 误用（SQLAlchemy 2.x 无此函数）→ `case()`
+- 🐛 业务指标拨付率 float/Decimal 混算 TypeError → 统一 float
+- 🐛 cache-stats 调用不存在的 RedisAdapter.get_stats → 适配器补齐统计/健康方法
+
+## [1.11.1] - 2026-08-30 — Windows 安装器真机修复版
+
+### 修复
+- 🐛 **安装器真机全部中止（截图故障）**：NSIS 对双引号字符串做 C 风格转义，
+  钩子把 `$INSTDIR
+esourcescredist\...` 中的 `
+`/`` 转成 CR/VT 传给
+  PowerShell，Get-FileHash 恒定报错 exit 1，被误判"哈希不匹配"而中止所有
+  真机安装。修复：钩子路径反斜杠全部 `\`；校验改为 FileWrite 写出 .ps1 后
+  `-File` 执行（不再使用行内 `-Command`）；校验脚本执行后清理。
+- 🐛 **校验三态语义**：0=匹配静默安装；1=确证不匹配弹窗中止（真实篡改信号）；
+  3 或 error=校验工具不可用（无 PowerShell/被安全软件阻断）→ 跳过 redist
+  安装但不阻断部署（应用由 Layer 1 内置运行时 DLL 兜底，不执行无法校验的
+  二进制）。初版将"工具不可用"与"确认篡改"混为一谈，是假阳性根因之一。
+- 📝 文档同步：AGENTS.md 新增 NSIS 转义铁律 Known Issue；工单 002 追记复盘；
+  打包指南/OFFLINE_UPGRADE/build-scripts README 校验语义更新。
+
+### 验证
+- 本机全链路实测：静默安装 exit 0 → 哈希校验通过 → redist 静默执行 →
+  桌面快捷方式创建（perMachine 公共桌面）→ 静默卸载 exit 0 零残留；
+  makensis 编译通过；CI 全流水线（见 v1.11.1 tag 构建）。
+
 ## [1.11.0] - 2026-08-30 — 全面体检修复版（安全红线 + 功能补全）
 
 ### 修复
@@ -477,80 +699,6 @@
 - 监控面板 `Promise.allSettled` 解构错位修复（4 变量取 5 个 promise），系统日志面板恢复展示后端真实日志（/system/admin/logs）
 - 测试隔离：conftest 会话启动清理遗留 test.db，消除跨会话顺序敏感偶发失败
 - 清理误提交的协作者工作区改动与 .reasonix 临时文件，测试套件恢复稳定（后端 12118 / 前端 6273 全过，覆盖率 100%）
-
-## [1.11.3] - 2026-08-31 — 麒麟版后端启动 ModuleNotFoundError 根治
-
-### 修复（致命，Kylin 真机）
-- 🐛 **冻结包内 47 个业务路由模块全部缺失**：`app/api/v1/__init__.py` 此前用
-  `importlib.import_module(f'app.api.v1.{name}')` 动态加载业务路由——PyInstaller
-  静态分析无法跟踪 f-string 动态导入，且 Linux Docker 构建时
-  `collect_submodules('app')` 依赖的包导入链在收集阶段被 walk_packages 静默跳过，
-  打包产物缺 organization/policy/projects 等 47 个模块 → 后端"部分启动"，
-  前端业务页面全量报错。**根改为静态导入**：打包收集 100% 确定，任一路由
-  损坏启动即快速失败（终结"静默降级为残缺 API"的故障模式）。
-- 🐛 **两个 spec 同源修复**：统一 spec 补 `sys.path` 插入使 collect 与 CWD 无关、
-  移除已删除依赖 sklearn 的 hiddenimports 与陈旧 excludes；standalone spec
-  补 `collect_submodules('app')`（其此前完全缺失，standalone DEB 同样受影响）。
-- 🐛 **ARM64 postinst**：补 onedir 后端主程序 chmod（旧脚本只找 onefile .exe 路径）；
-  chrome-sandbox 补 chown root:root + 4755（非 root 用户启动必需）。
-- 🐛 **deb Depends 声明**：补 Electron 运行库依赖（libnss3/libgbm1/libasound2 等
-  16 项），麒麟安装时缺失依赖明确报错而非启动后崩溃。
-
-### 增强（国产平台兼容）
-- ✨ Linux 平台禁用硬件加速 + disable-dev-shm-usage：规避麒麟/飞腾 GPU 驱动
-  白屏/花屏类问题（管理界面无需 GPU 渲染）。
-
-### 验证
-- ✅ 本机 PyInstaller 实包验证：启动冻结 exe，此前缺失的 organizations/policies/
-  projects/data-packages/incremental 等路由全部存在（401/403=存在需鉴权）
-- ✅ 后端全量回归全绿；YAML/JSON 门禁通过
-
-## [1.11.2] - 2026-08-30 — 403 权限页根因修复 + 全站弹窗显示修复
-
-### 修复（403 权限页，六类根因）
-- 🐛 **无组织管理员被判"无任何组织权限"**（核心根因）：单机/未绑定组织的管理员
-  访问数据包、增量更新、版本管理、数据上报等组织门禁端点一律 403——
-  `organization_permission_service`/`user_permission_service` 共 7 处
-  仅 superuser 旁路改为 admin 语义（ADR-0002 对齐）；普通用户维持 fail-closed。
-- 🐛 **菜单加载失败窗口期全站 403**：打包版后端冷启动（onedir 8.6s）期间
-  `/menus/accessible` 失败 → 路由守卫把所有带 menuKey 的页面弹到 /403——
-  守卫改为仅"菜单已加载且明确不含该键"才拒绝（菜单是可见性层，真实权限由
-  后端接口兜底）。
-- 🐛 **经费申请页 admin 403**：`funds-user` 菜单键 roles 缺 admin/super_admin。
-- 🐛 **存量旧角色名被 meta.roles 误拒**：守卫校验前先 normalizeRole 归一化
-  （manager/approval_leader→admin，operator→user）。
-- 🐛 **legacy 模型数据范围 500**：`villages` 等无 created_by/organization_id 列的
-  模型在数据范围过滤下 AttributeError→500，改为 fail-closed 空集（ADR-0002）。
-- 🧪 真实库双角色全量 GET 端点巡检：admin 0×403/0×500；新增回归
-  `test_org_less_admin_403_fix.py`（7 用例）+ 前端守卫 3 用例。
-
-### 修复（连带发现的 5 个 500 端点）
-- 🐛 sklearn 随死代码清理移除后 ai 收入预测/趋势预测端点必 500 → numpy polyfit 等价实现
-- 🐛 monitoring 端点统计 `func.case` 误用（SQLAlchemy 2.x 无此函数）→ `case()`
-- 🐛 业务指标拨付率 float/Decimal 混算 TypeError → 统一 float
-- 🐛 cache-stats 调用不存在的 RedisAdapter.get_stats → 适配器补齐统计/健康方法
-
-## [1.11.1] - 2026-08-30 — Windows 安装器真机修复版
-
-### 修复
-- 🐛 **安装器真机全部中止（截图故障）**：NSIS 对双引号字符串做 C 风格转义，
-  钩子把 `$INSTDIR
-esourcescredist\...` 中的 `
-`/`` 转成 CR/VT 传给
-  PowerShell，Get-FileHash 恒定报错 exit 1，被误判"哈希不匹配"而中止所有
-  真机安装。修复：钩子路径反斜杠全部 `\`；校验改为 FileWrite 写出 .ps1 后
-  `-File` 执行（不再使用行内 `-Command`）；校验脚本执行后清理。
-- 🐛 **校验三态语义**：0=匹配静默安装；1=确证不匹配弹窗中止（真实篡改信号）；
-  3 或 error=校验工具不可用（无 PowerShell/被安全软件阻断）→ 跳过 redist
-  安装但不阻断部署（应用由 Layer 1 内置运行时 DLL 兜底，不执行无法校验的
-  二进制）。初版将"工具不可用"与"确认篡改"混为一谈，是假阳性根因之一。
-- 📝 文档同步：AGENTS.md 新增 NSIS 转义铁律 Known Issue；工单 002 追记复盘；
-  打包指南/OFFLINE_UPGRADE/build-scripts README 校验语义更新。
-
-### 验证
-- 本机全链路实测：静默安装 exit 0 → 哈希校验通过 → redist 静默执行 →
-  桌面快捷方式创建（perMachine 公共桌面）→ 静默卸载 exit 0 零残留；
-  makensis 编译通过；CI 全流水线（见 v1.11.1 tag 构建）。
 
 ## [未发布] - 2026-08-09 备份恢复完整链路 + 深度审计
 

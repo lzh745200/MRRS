@@ -42,7 +42,10 @@ def _handle_db_exception(func_name: str, db: Session | None, exc: Exception) -> 
             raise HTTPException(status_code=409, detail="数据已存在，请检查唯一性约束")
         if "FOREIGN KEY constraint failed" in error_msg:
             raise HTTPException(status_code=400, detail="关联数据不存在或已被删除")
-        raise HTTPException(status_code=400, detail=f"数据完整性错误: {error_msg[:100]}")
+        # 兜底：error_msg 是 str(exc.orig) 原文，含表名/列名（如 NOT NULL constraint
+        # failed users.xxx），出站即泄露 schema（W1-T8）。完整文本已由上方
+        # logger.error 记录，此处只回泛化文案。
+        raise HTTPException(status_code=400, detail="数据完整性错误，请检查提交的数据")
 
     if isinstance(exc, OperationalError):
         logger.error(f"Database operational error in {func_name}: {exc}")
@@ -59,7 +62,9 @@ def _handle_db_exception(func_name: str, db: Session | None, exc: Exception) -> 
         raise HTTPException(status_code=500, detail="数据库错误，请联系管理员")
 
     logger.error(f"Unexpected error in {func_name}: {exc}", exc_info=True)
-    raise HTTPException(status_code=500, detail=f"操作失败: {str(exc)[:100]}")
+    # 兜底分支同样不得出站异常原文（上面各分支已泛化，此处曾遗漏）；
+    # 完整细节已由上一行 logger.error(exc_info=True) 留痕。
+    raise HTTPException(status_code=500, detail="操作失败，请稍后重试或联系管理员")
 
 
 def handle_db_errors(func: F) -> F:

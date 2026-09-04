@@ -1,17 +1,63 @@
-# coverage.py 配置 — 报告口径（source 由 CI/命令行 --cov=app 指定，此处不设 [run] 避免路径过滤失真）
-# 目的：将"100% 覆盖率"定义为"可覆盖集 100%"，豁免真正不可执行的行
+# ════════════════════════════════════════════════════════════════════
+# coverage.py 单一事实源 (Single Source of Truth) —— 后端覆盖率口径唯一配置
+# ────────────────────────────────────────────────────────────────────
+# 为什么是本文件而不是 pyproject.toml：
+#   coverage.py 的配置发现顺序为 .coveragerc → setup.cfg → tox.ini →
+#   pyproject.toml，只采用【第一个发现】的文件。历史上本仓 .coveragerc 仅含
+#   [report] exclude_lines、pyproject.toml 含 precision/fail_under，导致
+#   pyproject 那两条是【死配置】(从不生效)；真实门禁靠 Makefile / CI 命令行
+#   --cov-fail-under=98 + precision 默认 0 的整数四舍五入 (真实 97.99475%
+#   被显示为 98%) 假过线。
+#   现已统一：全部口径集中在本文件；pyproject.toml 的 [tool.coverage.*] 已
+#   删除并留指针注释；Makefile / .github/workflows/pr-checks.yml 不再内联
+#   --cov-fail-under (命令行会屏蔽本文件 fail_under)，门禁阈值只在此维护。
+#
+# 覆盖率语义：100% = “可覆盖集 100%”
+#   即所有未被 exclude_lines 命中、未标 `# pragma: no cover` 的可执行行，
+#   都必须被测试覆盖。豁免仅限【真正不可执行】的行 (可选依赖互斥分支、
+#   抽象契约、脚本入口守卫等)，且每处豁免须带注释理由。禁止用 skip 掩盖。
+#
+# precision=2：报告保留两位小数，杜绝 99.5%~99.99% 被四舍五入假显示为 100%。
+#
+# fail_under=100 依赖关系 (全局 source=app)：
+#   #20 (app/api、app/core) 与 #21 (app/services、app/utils、app/models、
+#   app/schemas) 需共同达成可覆盖集 100%，#30 做全量终态验证。任一子集未
+#   达标，全局门禁即红 —— 这是真实缺口信号，非误报。
+# ════════════════════════════════════════════════════════════════════
+
+[run]
+source = app
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */.venv/*
 
 [report]
+precision = 2
+show_missing = True
+skip_covered = False
+fail_under = 100
 exclude_lines =
-    # 标准豁免（coverage 默认已含 pragma: no cover）
+    # 标准豁免 (coverage 默认已含 pragma: no cover，此处显式声明)
     pragma: no cover
     # 仅类型检查期执行的导入
     if TYPE_CHECKING:
     # 脚本入口守卫
     if __name__ == .__main__.:
-    # 抽象方法体
+    # 抽象方法体 (契约占位，子类实现)
     @(abc\.)?abstractmethod
     # 调试表示方法
     def __repr__
     # 接口契约占位
     raise NotImplementedError
+    # 防御性断言兜底 (正常路径不可达)
+    raise AssertionError
+    # typing.Protocol 定义体
+    class .*\bProtocol\):
+    # 存根省略号
+    \.\.\.
+
+[html]
+directory = htmlcov

@@ -83,6 +83,75 @@ class TestGetMonitorSnapshot:
             assert data["data"]["status"] == "error"
             assert "获取监控数据失败" in data["data"]["message"]
 
+    def test_disk_usage_failure_degrades_gracefully(self, client_with_mocked_auth):
+        """磁盘读取失败（复现 Linux 上误用 'C:\\' 的 FileNotFoundError）不再拖垮整快照。
+
+        旧行为：disk_usage 抛错被外层 except 吞成 status=error，丢失 CPU/内存/网络并刷 ERROR。
+        新行为：磁盘单独 try/except 降级，其余指标照常上报，status 仍 healthy。
+        """
+        psutil = _make_psutil()
+
+        def _boom(path):
+            raise FileNotFoundError(2, "No such file or directory", path)
+
+        psutil.disk_usage = _boom
+        with patch.dict("sys.modules", {"psutil": psutil, "platform": MagicMock()}):
+            resp = client_with_mocked_auth.get("/api/v1/system/monitor/snapshot")
+            assert resp.status_code == 200
+            data = resp.json()["data"]
+            assert data["status"] == "healthy"
+            assert data["cpu_usage"] == 35.0
+            assert "disk_usage" not in data
+
+    def test_disk_path_prefers_systemdrive(self, client_with_mocked_auth, monkeypatch):
+        """Windows：磁盘路径取 SystemDrive 环境变量，而非硬编码 'C:\\'。"""
+        monkeypatch.setenv("SystemDrive", "Z:")
+        psutil = _make_psutil()
+        seen = {}
+
+        def _rec(path):
+            seen["path"] = path
+            d = MagicMock()
+            d.percent = 60.0
+            d.used = 100 * 1024 ** 3
+            d.total = 250 * 1024 ** 3
+            d.free = 150 * 1024 ** 3
+            return d
+
+        psutil.disk_usage = _rec
+        with patch.dict("sys.modules", {"psutil": psutil, "platform": MagicMock()}):
+            resp = client_with_mocked_auth.get("/api/v1/system/monitor/snapshot")
+            assert resp.status_code == 200
+            assert seen["path"] == "Z:"
+
+    def test_disk_path_falls_back_to_fs_root_without_systemdrive(
+        self, client_with_mocked_auth, monkeypatch
+    ):
+        """非 Windows（SystemDrive 未设置）：回退到文件系统根，绝不硬编码 'C:\\'。
+
+        在 Linux CI 上 os.path.abspath(os.sep) == "/"，可与旧硬编码 "C:\\" 区分。
+        """
+        monkeypatch.delenv("SystemDrive", raising=False)
+        import os as _os
+
+        psutil = _make_psutil()
+        seen = {}
+
+        def _rec(path):
+            seen["path"] = path
+            d = MagicMock()
+            d.percent = 60.0
+            d.used = 100 * 1024 ** 3
+            d.total = 250 * 1024 ** 3
+            d.free = 150 * 1024 ** 3
+            return d
+
+        psutil.disk_usage = _rec
+        with patch.dict("sys.modules", {"psutil": psutil, "platform": MagicMock()}):
+            resp = client_with_mocked_auth.get("/api/v1/system/monitor/snapshot")
+            assert resp.status_code == 200
+            assert seen["path"] == _os.path.abspath(_os.sep)
+
 
 class TestGetResourceUsage:
     def test_success(self, client_with_mocked_auth):

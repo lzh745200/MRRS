@@ -134,7 +134,9 @@ async def health_full():
             finally:
                 conn.close()
         except Exception as e:
-            result["db_error"] = str(e)
+            # 无认证端点：db_error 只出异常类名，原文（可含数据库绝对路径）仅进日志
+            logger.error("健康检查读取数据库统计失败", exc_info=True)
+            result["db_error"] = type(e).__name__
 
     # ── Backup status ──
     backup_dir = str(get_backup_path())
@@ -150,7 +152,9 @@ async def health_full():
     # ── System resources ──
     try:
         import shutil
-        disk = shutil.disk_usage(os.environ.get("SystemDrive", "C:\\"))
+        # 跨平台磁盘路径：Windows 取 SystemDrive，其它平台取文件系统根 "/"
+        # （曾硬编码回退 "C:\\"，在 Linux/麒麟上抛错使 disk_free_gb 恒为 None）
+        disk = shutil.disk_usage(os.environ.get("SystemDrive") or os.path.abspath(os.sep))
         result["disk_free_gb"] = round(disk.free / 1024**3, 1)
     except Exception:
         result["disk_free_gb"] = None

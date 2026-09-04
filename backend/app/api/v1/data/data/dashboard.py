@@ -844,6 +844,10 @@ async def delete_activity(
             except Exception:
                 logger.debug("清除仪表盘活动缓存失败")
         return success_response(message="删除成功")
+    except HTTPException:
+        # 权限拒绝（403）等业务异常必须原样抛出，不能被下面的
+        # except Exception 吞掉转 500，否则丢失权限拒绝语义（与 update_activity 对称）
+        raise
     except Exception as e:
         logger.error("删除动态失败: %s", e, exc_info=True)
         db.rollback()

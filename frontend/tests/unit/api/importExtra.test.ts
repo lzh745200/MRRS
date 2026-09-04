@@ -109,31 +109,53 @@ describe('api/import — previewImportData', () => {
 describe('api/import — validateImport', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('带文件 → POST /import/validate FormData（含 entity_type）', async () => {
-    mockPost.mockResolvedValueOnce({ valid: true })
+  const summaryBody = {
+    is_valid: true,
+    total_rows: 10,
+    valid_rows: 10,
+    invalid_rows: 0,
+    error_count: 0,
+    warning_count: 0,
+    errors_by_type: {},
+    errors_by_field: {},
+    warnings: [],
+    first_errors: [],
+  }
+
+  it('M4: entity_type 走 Query 参数（不写入 FormData），对齐后端 ValidationSummaryResponse', async () => {
+    mockPost.mockResolvedValueOnce(summaryBody)
     const file = new File(['x'], 'v.xlsx')
     const result = await validateImport({ file, entity_type: 'school' })
     const [url, fd, config] = mockPost.mock.calls[0]
     expect(url).toBe('/import/validate')
     expect(fd).toBeInstanceOf(FormData)
     expect(fd.get('file')).toBe(file)
-    expect(fd.get('entity_type')).toBe('school')
+    // entity_type 绝不放入 FormData（后端 Query 参数，放入会恒回退 supported_village 验证器）
+    expect(fd.get('entity_type')).toBeNull()
+    expect(config.params).toEqual({ entity_type: 'school' })
     expect(config.headers['Content-Type']).toBe('multipart/form-data')
     expect(config.timeout).toBe(120000)
-    expect(result).toEqual({ valid: true })
+    // 返回类型对齐后端真实字段（is_valid / first_errors / errors_by_field）
+    expect(result.is_valid).toBe(true)
+    expect(result.errors_by_field).toEqual({})
+    expect(result.first_errors).toEqual([])
   })
 
-  it('带文件但无 entity_type → FormData 不含 entity_type', async () => {
-    mockPost.mockResolvedValueOnce({ valid: false, errors: [] })
+  it('M4: 无 entity_type → params 为空对象（后端用默认 supported_village）', async () => {
+    mockPost.mockResolvedValueOnce(summaryBody)
     await validateImport({ file: new File(['x'], 'v.xlsx') })
-    const fd = mockPost.mock.calls[0][1] as FormData
+    const [, fd, config] = mockPost.mock.calls[0]
     expect(fd.get('entity_type')).toBeNull()
+    expect(config.params).toEqual({})
   })
 
-  it('不带文件 → POST /import/validate 原始 data 对象', async () => {
-    mockPost.mockResolvedValueOnce({ valid: true })
-    const result = await validateImport({ entity_type: 'fund' })
-    expect(mockPost).toHaveBeenCalledWith('/import/validate', { entity_type: 'fund' })
-    expect(result).toEqual({ valid: true })
+  it('M4: 不带文件 → 仍走 multipart FormData（后端 file 必填） + params', async () => {
+    mockPost.mockResolvedValueOnce(summaryBody)
+    await validateImport({ entity_type: 'fund' })
+    const [url, fd, config] = mockPost.mock.calls[0]
+    expect(url).toBe('/import/validate')
+    expect(fd).toBeInstanceOf(FormData)
+    expect(fd.get('file')).toBeNull()
+    expect(config.params).toEqual({ entity_type: 'fund' })
   })
 })

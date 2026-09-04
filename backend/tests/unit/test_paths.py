@@ -10,9 +10,11 @@ from pathlib import Path
 
 import pytest
 
+from app.utils import paths as paths_module
 from app.utils.paths import (
     PathTraversalError,
     _safe_join,
+    db_file_from_url,
     get_app_data_dir,
     get_backup_directory,
     get_backup_path,
@@ -20,10 +22,24 @@ from app.utils.paths import (
     get_database_path,
     get_data_path,
     get_log_path,
+    get_project_backend_dir,
+    get_runtime_uploads_path,
     get_uploads_path,
     is_bundled,
     is_linux,
 )
+
+
+# 本模块专测 paths.py 的解析逻辑：多处断言 get_app_data_dir() 等于真实的
+# get_project_backend_dir()（或断言其 .name == "backend"）。conftest 的
+# _isolate_app_data_dir autouse fixture 会把该函数 patch 成会话临时目录，
+# 与这些断言直接冲突，故整模块豁免。需要临时目录的测试在下方各自 monkeypatch。
+pytestmark = pytest.mark.real_backend_dir
+
+
+def _backend_dir_url(path: Path) -> str:
+    """把本地绝对路径转成 sqlite:/// URL（Windows 反斜杠转正斜杠）。"""
+    return "sqlite:///" + str(path).replace("\\", "/")
 
 
 # ── 公共 fixture：每次测试前清理"打包态"属性 ──
@@ -99,17 +115,32 @@ class TestPlatformHelpers:
 # get_app_data_dir —— 所有平台/环境分支
 # ─────────────────────────────────────────────────────────────
 class TestGetAppDataDir:
-    def test_dev_windows_uses_cwd(self, monkeypatch, tmp_path):
+    def test_dev_windows_uses_backend_dir(self, monkeypatch, tmp_path):
+        """开发环境（Windows、非打包）数据根 = get_project_backend_dir()，与 CWD 无关。"""
         monkeypatch.setattr(platform, "system", lambda: "Windows")
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(paths_module, "get_project_backend_dir", lambda: tmp_path)
+        # 即便 chdir 到别处，也应返回被 patch 的 backend 根（tmp_path），证明不依赖 CWD
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
         result = get_app_data_dir()
         assert result == tmp_path
 
-    def test_dev_linux_with_dev_mode_uses_cwd(self, monkeypatch, tmp_path):
+    def test_dev_linux_with_dev_mode_uses_backend_dir(self, monkeypatch, tmp_path):
         monkeypatch.setattr(platform, "system", lambda: "Linux")
         monkeypatch.setenv("BUMOFU_DEV_MODE", "1")
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(paths_module, "get_project_backend_dir", lambda: tmp_path)
         assert get_app_data_dir() == tmp_path
+
+    def test_dev_uses_real_backend_dir_not_cwd(self, monkeypatch, tmp_path):
+        """核心回归（任务#6 风险1）：dev 分支返回真实 get_project_backend_dir()，
+        即使 chdir 到 tmp_path 也不变——证明数据根不再受 CWD 影响。"""
+        monkeypatch.setattr(platform, "system", lambda: "Windows")
+        real_backend = get_project_backend_dir()
+        monkeypatch.chdir(tmp_path)
+        result = get_app_data_dir()
+        assert result == real_backend
+        assert result != tmp_path
 
     def test_prod_linux_without_dev_mode_uses_home(self, monkeypatch, tmp_path):
         monkeypatch.setattr(platform, "system", lambda: "Linux")
@@ -163,10 +194,15 @@ class TestGetAppDataDir:
         assert result == fake_home / ".bumofu"
 
     def test_directory_is_created(self, monkeypatch, tmp_path):
-        """无论走哪个分支，最终目录必须存在。"""
+        """无论走哪个分支，最终目录必须存在（此处验证 dev 分支会 mkdir）。"""
         monkeypatch.setattr(platform, "system", lambda: "Windows")
-        monkeypatch.chdir(tmp_path)
+        fake_backend = tmp_path / "backend_root"
+        monkeypatch.setattr(
+            paths_module, "get_project_backend_dir", lambda: fake_backend
+        )
+        assert not fake_backend.exists()
         result = get_app_data_dir()
+        assert result == fake_backend
         assert result.exists()
         assert result.is_dir()
 
@@ -175,9 +211,18 @@ class TestGetAppDataDir:
 # 通用辅助：在 dev mode 下测试各路径函数
 # ─────────────────────────────────────────────────────────────
 def _setup_dev_mode(monkeypatch, tmp_path):
-    """统一设置 dev mode（Windows 开发环境 + cwd=tmp_path）。"""
+    """统一设置 dev mode（Windows 开发环境 + 数据根隔离到 tmp_path）。
+
+    任务#16：paths.py 已把开发/测试分支的数据根从 ``Path.cwd()`` 改为
+    ``get_project_backend_dir()``（基于 ``__file__`` 的固定 backend 目录，与
+    CWD 无关）。因此单纯 ``monkeypatch.chdir(tmp_path)`` 不再影响返回值，反而
+    会让测试写入真实 backend/data、backend/uploads 目录，破坏逐用例文件系统
+    隔离并污染其他测试（test_recycle_bin 全量顺序运行偶发失败的根因之一）。
+    改为显式 monkeypatch ``get_project_backend_dir`` 返回 ``tmp_path``：既恢复
+    逐用例隔离（所有派生路径落在 tmp_path 内），又保留原有 tmp_path 断言语义。
+    """
     monkeypatch.setattr(platform, "system", lambda: "Windows")
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(paths_module, "get_project_backend_dir", lambda: tmp_path)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -400,3 +445,141 @@ class TestGetLogPath:
         _setup_dev_mode(monkeypatch, tmp_path)
         with pytest.raises(PathTraversalError):
             get_log_path("../../escape")
+
+
+# ─────────────────────────────────────────
+# get_project_backend_dir —— 任务#6 新增的 CWD-无关固定根（覆盖率补充）
+# ─────────────────────────────────────────
+class TestGetProjectBackendDir:
+    def test_returns_backend_dir_from_file_location(self):
+        """基于 paths.py 的 __file__ 上溯三级 = backend 根目录。"""
+        result = get_project_backend_dir()
+        assert result == Path(paths_module.__file__).resolve().parents[2]
+        assert result.name == "backend"
+        assert (result / "app" / "utils" / "paths.py").exists()
+
+    def test_is_cwd_independent(self, monkeypatch, tmp_path):
+        """核心回归：无论 CWD 在哪，都返回固定 backend 目录（任务#6 风险1修复）。"""
+        expected = get_project_backend_dir()
+        monkeypatch.chdir(tmp_path)
+        assert get_project_backend_dir() == expected
+        assert get_project_backend_dir() != tmp_path
+
+
+# ─────────────────────────────────────────
+# db_file_from_url —— 所有分支（覆盖率补充）
+# ─────────────────────────────────────────
+class TestDbFileFromUrl:
+    def test_empty_returns_none(self):
+        assert db_file_from_url("") is None
+
+    def test_non_sqlite_returns_none(self):
+        assert db_file_from_url("postgresql://localhost/x") is None
+
+    def test_sqlite_without_triple_slash_returns_none(self):
+        # 以 sqlite 开头但不是 sqlite:/// 前缀
+        assert db_file_from_url("sqlite://x") is None
+
+    def test_memory_returns_none(self):
+        assert db_file_from_url("sqlite:///:memory:") is None
+
+    def test_empty_raw_returns_none(self):
+        assert db_file_from_url("sqlite:///") is None
+
+    def test_relative_returns_none(self):
+        assert db_file_from_url("sqlite:///./test.db") is None
+
+    def test_absolute_returns_path(self, tmp_path):
+        target = tmp_path / "x.db"
+        assert db_file_from_url(_backend_dir_url(target)) == target
+
+    def test_query_string_stripped(self, tmp_path):
+        target = tmp_path / "x.db"
+        url = _backend_dir_url(target) + "?check_same_thread=false"
+        assert db_file_from_url(url) == target
+
+    def test_url_encoded_path_decoded(self, tmp_path):
+        from urllib.parse import quote
+
+        target = tmp_path / "my db.sqlite"
+        url = "sqlite:///" + quote(str(target).replace("\\", "/"))
+        assert db_file_from_url(url) == target
+
+
+# ─────────────────────────────────────────
+# get_database_path —— env / settings / 异常兑底分支（覆盖率补充）
+# ─────────────────────────────────────────
+class TestGetDatabasePathBranches:
+    def test_env_absolute_url_used(self, monkeypatch, tmp_path):
+        dbfile = tmp_path / "envdb.sqlite"
+        monkeypatch.setenv("DATABASE_URL", _backend_dir_url(dbfile))
+        result = get_database_path()
+        assert result == dbfile
+        assert result.parent.exists()
+
+    def test_settings_url_used_when_env_empty(self, monkeypatch, tmp_path):
+        from app.core.config import settings
+
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        dbfile = tmp_path / "settings.sqlite"
+        monkeypatch.setattr(
+            settings, "DATABASE_URL", _backend_dir_url(dbfile), raising=False
+        )
+        assert get_database_path() == dbfile
+
+    def test_settings_import_error_falls_back(self, monkeypatch, tmp_path):
+        """DATABASE_URL env 为空 + settings 导入报错 → 兑底传统推断路径。"""
+        _setup_dev_mode(monkeypatch, tmp_path)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        # sys.modules 中置 None 会使 ``from app.core.config import settings`` 抛 ImportError
+        monkeypatch.setitem(sys.modules, "app.core.config", None)
+        result = get_database_path()
+        assert result == (tmp_path / "data" / "rural_revitalization.db").resolve()
+
+
+# ─────────────────────────────────────────
+# get_runtime_uploads_path —— env / settings / 兑底 / 子路径分支（覆盖率补充）
+# ─────────────────────────────────────────
+class TestGetRuntimeUploadsPath:
+    def test_env_absolute_used(self, monkeypatch, tmp_path):
+        up = tmp_path / "envuploads"
+        monkeypatch.setenv("UPLOAD_DIR", str(up))
+        assert get_runtime_uploads_path() == up
+
+    def test_env_relative_falls_back_to_uploads(self, monkeypatch, tmp_path):
+        _setup_dev_mode(monkeypatch, tmp_path)
+        monkeypatch.setenv("UPLOAD_DIR", "relative_uploads")
+        assert get_runtime_uploads_path() == tmp_path / "uploads"
+
+    def test_no_env_uses_settings_absolute(self, monkeypatch, tmp_path):
+        from app.core.config import settings
+
+        monkeypatch.delenv("UPLOAD_DIR", raising=False)
+        up = tmp_path / "setuploads"
+        monkeypatch.setattr(settings, "UPLOAD_DIR", str(up), raising=False)
+        assert get_runtime_uploads_path() == up
+
+    def test_settings_import_error_falls_back(self, monkeypatch, tmp_path):
+        _setup_dev_mode(monkeypatch, tmp_path)
+        monkeypatch.delenv("UPLOAD_DIR", raising=False)
+        monkeypatch.setitem(sys.modules, "app.core.config", None)
+        assert get_runtime_uploads_path() == tmp_path / "uploads"
+
+    def test_sub_path_flat_no_extra_mkdir(self, monkeypatch, tmp_path):
+        up = tmp_path / "envuploads_flat"
+        monkeypatch.setenv("UPLOAD_DIR", str(up))
+        result = get_runtime_uploads_path("avatar.png")
+        assert result == (up / "avatar.png").resolve()
+
+    def test_sub_path_nested_creates_parent(self, monkeypatch, tmp_path):
+        up = tmp_path / "envuploads_nested"
+        monkeypatch.setenv("UPLOAD_DIR", str(up))
+        result = get_runtime_uploads_path("users/1/avatar.png")
+        assert result == (up / "users" / "1" / "avatar.png").resolve()
+        assert result.parent.exists()
+
+    def test_sub_path_traversal_raises(self, monkeypatch, tmp_path):
+        up = tmp_path / "envuploads_trav"
+        monkeypatch.setenv("UPLOAD_DIR", str(up))
+        with pytest.raises(PathTraversalError):
+            get_runtime_uploads_path("../escape")

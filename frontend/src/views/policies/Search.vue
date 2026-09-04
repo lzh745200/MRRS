@@ -259,9 +259,17 @@ const loadData = async () => {
         url: '/policies/search',
         params: { q: searchStr, limit: pagination.pageSize, offset },
       })
+      // apiRequest 已解包一层（返回 axios 的 res.data）；这里再兜一层是为兼容
+      // 「后端信封 {data:{…}}」与「裸 body」两种形态。
+      //
+      // fdata 恒为非 nullish：ftsRes 若为 null/undefined，上一行 `ftsRes.data` 就已抛
+      // TypeError 并被外层 catch 接住；ftsRes 若是 ''/0/false 之类假值，`|| ftsRes`
+      // 得到的仍是该假值本身（假 ≠ nullish，且原始值取属性会自动装箱、不抛错）。
+      // 因此原先 `fdata?.items` / `fdata?.total` 的短路侧永不可达，任务#28 删除该死防御。
+      // 下方结构化列表路径（`res.data || res`）同理。
       const fdata = ftsRes.data || ftsRes
-      const fitems = fdata?.items || (Array.isArray(fdata) ? fdata : [])
-      pagination.total = fdata?.total || fitems.length
+      const fitems = fdata.items || (Array.isArray(fdata) ? fdata : [])
+      pagination.total = fdata.total || fitems.length
       tableData.value = fitems.map((item: any) => ({
         id: item.id,
         title: item.title,
@@ -285,8 +293,9 @@ const loadData = async () => {
         status: searchForm.status || undefined,
       },
     })
+    // 解包与兜底同上 FTS 路径：data 恒非 nullish，`?.` 短路侧不可达（任务#28 删除）
     const data = res.data || res
-    const items = data?.items || (Array.isArray(data) ? data : [])
+    const items = data.items || (Array.isArray(data) ? data : [])
 
     tableData.value = items.map((item: any) => ({
       id: item.id,
@@ -300,7 +309,7 @@ const loadData = async () => {
       createTime: item.created_at,
       updateTime: item.updated_at,
     }))
-    pagination.total = data?.total || items.length
+    pagination.total = data.total || items.length
   } catch (error) {
     logger.error('加载政策数据失败:', error)
     ElMessage.error('加载政策数据失败')

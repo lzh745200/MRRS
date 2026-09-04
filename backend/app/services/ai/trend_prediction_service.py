@@ -20,8 +20,10 @@ _PROPHET_TIMEOUT = 10
 try:
     from prophet import Prophet
 
-    PROPHET_AVAILABLE = True
-    logger.info("Prophet 已加载，趋势预测功能可用")
+    # 可选依赖 prophet 的“成功导入”分支：仅在环境安装了 prophet 时执行，
+    # 与下方 ImportError 分支互斥；CI/测试环境未安装 prophet，故对称豁免。
+    PROPHET_AVAILABLE = True  # pragma: no cover
+    logger.info("Prophet 已加载，趋势预测功能可用")  # pragma: no cover
 except ImportError as e:  # pragma: no cover
     PROPHET_AVAILABLE = False  # pragma: no cover
     logger.warning(f"Prophet未安装,趋势预测功能将受限: {e}")  # pragma: no cover

@@ -1,6 +1,6 @@
 {
   "name": "Assistance-Management-Information-System",
-  "version": "1.11.3",
+  "version": "1.11.4",
   "private": true,
   "description": "帮扶管理系统 - 贵州省版 Standalone桌面应用",
   "main": "electron/main.js",

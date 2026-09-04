@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 import os
 import struct
@@ -6,7 +7,7 @@ import tempfile
 import time
 import zipfile
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -232,6 +233,72 @@ class TestPermissionPackageServiceExport:
             result = svc.export_package()
             assert result["success"] is True
 
+    def test_export_with_organizations_and_machine_bind(self):
+        """覆盖 org_id→code 映射（列查询 line 110）+ 机器码绑定成功分支（237-250）。"""
+        svc, db = self._make()
+
+        org_row = MagicMock()   # 列查询 (Organization.id, Organization.code) 返回行
+        org_row.id = 1
+        org_row.code = "ORG-1"
+
+        user = MagicMock()
+        user.username = "alice"
+        user.is_active = True
+        user.allowed_menus = None
+        user.role = "admin"
+        user.permissions = ""
+        user.data_scope = "org"
+        user.is_superuser = False
+        user.organization_id = 1
+
+        def side_effect(*args):
+            model = args[0] if args else None
+            q = MagicMock()
+            name = getattr(model, "__name__", "")
+            cls_name = getattr(getattr(model, "class_", None), "__name__", "")
+            if name == "User":                      # 模型查询 User(is_active)
+                q.filter.return_value.all.return_value = [user]
+            elif name == "" and cls_name == "Organization":
+                q.all.return_value = [org_row]      # 列查询 → org_id_to_code
+            elif name == "":                        # 其它列查询（User/RbacRole）
+                q.all.return_value = []
+            else:
+                q.order_by.return_value.all.return_value = []
+                q.all.return_value = []
+                q.filter.return_value.all.return_value = []
+            return q
+
+        db.query.side_effect = side_effect
+
+        with patch(UPLOAD_PATCH) as mock_path, \
+             patch("app.core.database.SessionLocal") as mock_sl, \
+             patch("app.services.machine_code_service.MachineCodeService") as mock_mcs:
+            mock_path.return_value = tempfile.mkdtemp()
+            mock_sl.return_value = MagicMock()
+            mock_mcs.return_value.get_machine_code.return_value = "MC-TEST-123"
+            result = svc.export_package(bind_machine_code=True)
+
+        assert result["success"] is True
+        with zipfile.ZipFile(result["file_path"]) as zf:
+            manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        assert manifest["machine_codes"] == ["MC-TEST-123"]
+
+    def test_export_machine_code_fetch_failure_degrades(self):
+        """机器码获取失败时降级：不绑定 machine_codes（覆盖 except 分支 247-248）。"""
+        svc, db = self._make()
+        db.query.side_effect = _query_side_effect_models()
+        with patch(UPLOAD_PATCH) as mock_path, \
+             patch("app.core.database.SessionLocal") as mock_sl, \
+             patch("app.services.machine_code_service.MachineCodeService") as mock_mcs:
+            mock_path.return_value = tempfile.mkdtemp()
+            mock_sl.return_value = MagicMock()
+            mock_mcs.return_value.get_machine_code.side_effect = RuntimeError("no mc")
+            result = svc.export_package(bind_machine_code=True)
+        assert result["success"] is True
+        with zipfile.ZipFile(result["file_path"]) as zf:
+            manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        assert "machine_codes" not in manifest
+
 
 # ---------------------------------------------------------------------------
 # 2. PermissionPackageService — Import Preview
@@ -251,7 +318,10 @@ class TestPermissionPackageServiceImport:
             "data/user_roles.json": [],
             "data/user_permissions.json": [],
             "data/user_menus.json": [],
-            "data/user_legacy.json": [{"username": "alice", "role": "admin", "permissions": "", "data_scope": "org", "is_superuser": False}],
+            "data/user_legacy.json": [
+                {"username": "alice", "role": "admin", "permissions": "",
+                 "data_scope": "org", "is_superuser": False},
+            ],
         }
         path = os.path.join(tmpdir, "test.zip")
         with zipfile.ZipFile(path, "w") as zf:
@@ -310,6 +380,10 @@ class TestPermissionPackageServiceImport:
             assert any("不存在" in w for w in result["preview"]["warnings"])
 
     def test_import_invalid_json(self):
+        """manifest.json 非法 → 固定用户态文案，不泄露 JSON 解码器细节（安全红线）。
+
+        JSONDecodeError 文本含出错位置与文档片段，可反推包内结构，禁止出站。
+        """
         svc, _ = self._make()
         with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as f:
             path = f.name
@@ -320,19 +394,111 @@ class TestPermissionPackageServiceImport:
                 zf.writestr("data/user_legacy.json", "[]")
             result = svc.import_package(path)
             assert result["success"] is False
-            assert "JSON" in result["message"]
+            assert result["message"] == "文件内容格式错误"
+            # 不泄露解码器细节（安全红线）
+            assert "column" not in result["message"]
+            assert "char" not in result["errors"][0]
         finally:
             os.unlink(path)
 
     def test_import_general_exception(self):
+        """通用异常分支：内存解密重构后走 io.BytesIO(working) 流。
+
+        mock 目标与新流对齐：真实临时文件保证 open() 读到非空字节（跳过
+        “文件不存在”早退）；looks_encrypted=False 跳过解密；is_zipfile=True
+        跳过“非 ZIP”早退；zipfile.ZipFile(BytesIO) 抛异常→通用分支。
+        安全要求：回传固定用户态文案，不泄露内部异常文本 'boom'。
+        """
         svc, _ = self._make()
-        with patch("os.path.exists", return_value=True), \
-             patch("zipfile.is_zipfile", return_value=True), \
-             patch("zipfile.ZipFile") as mock_zf:
-            mock_zf.side_effect = Exception("boom")
-            result = svc.import_package("/fake.zip")
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as f:
+            f.write(b"non-empty-dummy-bytes")
+            path = f.name
+        try:
+            with patch("app.utils.package_crypto.looks_encrypted", return_value=False), \
+                 patch("zipfile.is_zipfile", return_value=True), \
+                 patch("zipfile.ZipFile") as mock_zf:
+                mock_zf.side_effect = Exception("boom")
+                result = svc.import_package(path)
             assert result["success"] is False
-            assert "boom" in result["message"]
+            assert result["message"] == "文件解析错误"
+            # 不泄露内部异常文本（安全红线）
+            assert "boom" not in result["message"]
+            assert "boom" not in result["errors"][0]
+        finally:
+            os.unlink(path)
+
+    def _make_encrypted_zip(self, password, files=None):
+        """构建真实加密权限包（走 package_crypto.encrypt_bytes）。"""
+        from app.utils.package_crypto import encrypt_bytes
+        files = files or {
+            "manifest.json": {"version": "1.0", "export_time": "2025-01-01"},
+            "data/roles.json": [],
+            "data/user_legacy.json": [],
+        }
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            for name, content in files.items():
+                zf.writestr(name, json.dumps(content, ensure_ascii=False))
+        token = encrypt_bytes(buf.getvalue(), password)
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as f:
+            f.write(token)
+            return f.name
+
+    def test_import_encrypted_without_password(self):
+        """加密包未提供密码 → 拒绝（覆盖 340-345）。"""
+        svc, _ = self._make()
+        path = self._make_encrypted_zip("secret")
+        try:
+            result = svc.import_package(path)
+            assert result["success"] is False
+            assert result["message"] == "该权限包已加密"
+        finally:
+            os.unlink(path)
+
+    def test_import_encrypted_wrong_password(self):
+        """加密包密码错误 → 拒绝且不泄露异常文本（覆盖 346/349-350）。"""
+        svc, _ = self._make()
+        path = self._make_encrypted_zip("secret")
+        try:
+            result = svc.import_package(path, password="wrong")
+            assert result["success"] is False
+            assert result["message"] == "密码错误"
+        finally:
+            os.unlink(path)
+
+    def test_import_encrypted_success_returns_decrypted_bytes(self):
+        """M3：加密包内存解密成功，明文经 _decrypted_bytes 交回，磁盘仍为密文。"""
+        svc, db = self._make()
+        db.query.return_value.filter.return_value.all.return_value = []
+        path = self._make_encrypted_zip("secret")
+        try:
+            result = svc.import_package(path, password="secret")
+            assert result["success"] is True
+            assert "_decrypted_bytes" in result
+            assert result["_decrypted_bytes"][:2] == b"PK"
+            # M3 安全红线：明文未落盘，磁盘文件仍是密文
+            from app.utils.package_crypto import looks_encrypted
+            with open(path, "rb") as f:
+                assert looks_encrypted(f.read()) is True
+        finally:
+            os.unlink(path)
+
+    def test_import_machine_code_mismatch(self):
+        """机器码绑定校验失败 → 拒绝导入（覆盖 379-385）。"""
+        svc, _ = self._make()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            files = {
+                "manifest.json": {
+                    "version": "1.0", "export_time": "2025-01-01",
+                    "machine_codes": ["OTHER-MACHINE"],
+                },
+                "data/roles.json": [],
+                "data/user_legacy.json": [],
+            }
+            path = self._make_zip(tmpdir, files)
+            result = svc.import_package(path, current_machine_code="LOCAL-MACHINE")
+            assert result["success"] is False
+            assert result["message"] == "机器码校验失败"
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +515,11 @@ class TestPermissionPackageServiceConfirm:
     def _make_zip(self, tmpdir, files=None):
         files = files or {
             "manifest.json": {"version": "1.0", "export_time": "2025-01-01"},
-            "data/roles.json": [{"id": "r1", "name": "newrole", "description": "d", "is_system": False, "is_active": True, "priority": 100, "permissions": ["read"]}],
+            "data/roles.json": [
+                {"id": "r1", "name": "newrole", "description": "d",
+                 "is_system": False, "is_active": True, "priority": 100,
+                 "permissions": ["read"]},
+            ],
             "data/user_roles.json": [],
             "data/user_permissions.json": [],
             "data/user_menus.json": [],
@@ -431,7 +601,10 @@ class TestPermissionPackageServiceConfirm:
                 "data/user_roles.json": [{"role_id": "r1", "user_id": 1, "expires_at": None}],
                 "data/user_permissions.json": [{"user_id": 1, "permission": "write", "expires_at": None}],
                 "data/user_menus.json": [{"username": "alice", "allowed_menus": ["m1"]}],
-                "data/user_legacy.json": [{"username": "alice", "role": "admin", "permissions": "r", "data_scope": "all", "is_superuser": False}],
+                "data/user_legacy.json": [
+                    {"username": "alice", "role": "admin", "permissions": "r",
+                     "data_scope": "all", "is_superuser": False},
+                ],
             }
             path = self._make_zip(tmpdir, files)
 
@@ -506,13 +679,14 @@ class TestPermissionPackageServiceConfirm:
                 "data/user_roles.json": [{"role_id": "r1", "user_id": 999}],
                 "data/user_permissions.json": [{"user_id": 999, "permission": "p"}],
                 "data/user_menus.json": [{"username": "ghost", "allowed_menus": []}],
-                "data/user_legacy.json": [{"username": "ghost", "role": "admin", "permissions": "", "data_scope": "org", "is_superuser": False}],
+                "data/user_legacy.json": [
+                    {"username": "ghost", "role": "admin", "permissions": "",
+                     "data_scope": "org", "is_superuser": False},
+                ],
             }
             path = self._make_zip(tmpdir, files)
 
             def side_effect(*args):
-                model = args[0] if args else None
-                model = args[0] if args else None
                 q = MagicMock()
                 q.all.return_value = []
                 q.filter.return_value.all.return_value = []
@@ -524,13 +698,21 @@ class TestPermissionPackageServiceConfirm:
             assert result["success"] is True
 
     def test_confirm_general_exception_rollback(self):
+        """通用异常分支：回滚 + 固定用户态文案，不泄露内部异常文本（安全红线）。
+
+        异常原文经 API 层 result.get("message") 直达 HTTPException detail，
+        会暴露 SQLAlchemy 错误/表名/服务器路径，故禁止出站。
+        """
         svc, db = self._make()
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self._make_zip(tmpdir)
             db.query.side_effect = Exception("db error")
             result = svc.confirm_import(path)
             assert result["success"] is False
-            assert "db error" in result["message"]
+            assert result["message"] == "导入失败，请稍后重试或联系管理员"
+            # 不泄露内部异常文本（安全红线）
+            assert "db error" not in result["message"]
+            assert "db error" not in result["errors"][0]
             db.rollback.assert_called_once()
 
     def test_confirm_role_import_error(self):
@@ -569,8 +751,6 @@ class TestPermissionPackageServiceConfirm:
             path = self._make_zip(tmpdir, files)
 
             def side_effect(*args):
-                model = args[0] if args else None
-                model = args[0] if args else None
                 q = MagicMock()
                 q.all.return_value = []
                 q.filter.return_value.all.return_value = []
@@ -578,6 +758,38 @@ class TestPermissionPackageServiceConfirm:
                 return q
 
             db.query.side_effect = side_effect
+            result = svc.confirm_import(path, overwrite_existing=False)
+            assert result["success"] is True
+
+    def test_confirm_rejects_tampered_checksum(self):
+        """S4：确认阶段复验内容校验和，篡改包拒绝落库且不触发破坏性清空。"""
+        svc, db = self._make()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            files = {
+                "manifest.json": {
+                    "version": "1.0", "export_time": "2025-01-01",
+                    "content_checksum": "sha256:" + "0" * 64,
+                },
+                "data/roles.json": [{"id": "r1", "name": "newrole", "permissions": ["read"]}],
+                "data/user_legacy.json": [],
+            }
+            path = self._make_zip(tmpdir, files)
+            result = svc.confirm_import(path)
+            assert result["success"] is False
+            assert result["integrity_failed"] is True
+            # 破坏性清空 (_clear_existing_data → db.execute) 绝不能在校验失败后运行
+            db.execute.assert_not_called()
+
+    def test_confirm_without_manifest_skips_checksum(self):
+        """无 manifest.json 的包：_verify_content_checksum 直接放行（覆盖 969）。"""
+        svc, db = self._make()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            files = {
+                "data/roles.json": [],
+                "data/user_legacy.json": [],
+            }
+            path = self._make_zip(tmpdir, files)
+            db.query.side_effect = _query_side_effect_models()
             result = svc.confirm_import(path, overwrite_existing=False)
             assert result["success"] is True
 
@@ -601,6 +813,117 @@ class TestPermissionPackageServiceChecksum:
             assert cs == f"sha256:{expected}"
         finally:
             os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# 4b. PermissionPackageService — 辅助方法分支
+# ---------------------------------------------------------------------------
+
+
+class TestPermissionPackageServiceHelpers:
+    """覆盖 _resolve_*/_import_user_* 辅助方法分支（内存解密重构后遗漏路径）。"""
+
+    def _make(self):
+        db = MagicMock()
+        return PermissionPackageService(db), db
+
+    def test_resolve_user_by_id_fallback(self):
+        """username 缺失时回退按 user_id 匹配（覆盖 768-769）。"""
+        svc, db = self._make()
+        user = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = user
+        assert svc._resolve_user_by_username_or_id(None, 5) is user
+
+    def test_resolve_user_returns_none_when_no_key(self):
+        """username 与 user_id 均缺失 → 无法匹配，返回 None（覆盖 770）。"""
+        svc, db = self._make()
+        assert svc._resolve_user_by_username_or_id(None, None) is None
+        db.query.assert_not_called()
+
+    def test_import_user_roles_skips_when_role_id_none(self):
+        """角色无法解析（new_role_id=None）→ 跳过计数（覆盖 741-742）。"""
+        svc, db = self._make()
+        user = MagicMock()
+        user.id = 1
+        # first() 序列：1) 解析用户→user  2) 解析角色 exists→None
+        db.query.return_value.filter.return_value.first.side_effect = [user, None]
+        stats = svc._init_import_stats()
+        errors = []
+        ur_data = [{"username": "alice", "user_id": None, "role_id": None, "role_name": None}]
+        stats, errors = svc._import_user_roles(ur_data, {}, stats, errors)
+        assert stats["user_roles_skipped"] == 1
+        assert errors == []
+
+    def test_resolve_role_id_by_name(self):
+        """role_id_map 未命中时按 role_name 匹配角色（覆盖 780-785）。"""
+        svc, db = self._make()
+        by_name = MagicMock()
+        by_name.id = 55
+        db.query.return_value.filter.return_value.first.return_value = by_name
+        result = svc._resolve_role_id({"role_id": "old-x", "role_name": "editor"}, {})
+        assert result == 55
+
+    def test_import_user_menus_merge_union(self):
+        """merge 模式菜单取并集，不丢目标机已有项（覆盖 830-841）。"""
+        svc, db = self._make()
+        user = MagicMock()
+        user.allowed_menus = '["m1","m2"]'
+        db.query.return_value.filter.return_value.first.return_value = user
+        stats = svc._init_import_stats()
+        errors = []
+        menu_data = [{"username": "alice", "allowed_menus": ["m2", "m3"]}]
+        stats, errors = svc._import_user_menus(menu_data, stats, errors, merge_mode=True)
+        assert stats["user_menus_updated"] == 1
+        assert json.loads(user.allowed_menus) == ["m1", "m2", "m3"]
+
+    def test_import_user_menus_merge_invalid_existing_json(self):
+        """merge 模式既有菜单非法 JSON → 视为空集（覆盖 838-839）。"""
+        svc, db = self._make()
+        user = MagicMock()
+        user.allowed_menus = "not-json{{{"
+        db.query.return_value.filter.return_value.first.return_value = user
+        stats = svc._init_import_stats()
+        errors = []
+        menu_data = [{"username": "alice", "allowed_menus": ["m9"]}]
+        stats, errors = svc._import_user_menus(menu_data, stats, errors, merge_mode=True)
+        assert json.loads(user.allowed_menus) == ["m9"]
+
+    def test_import_user_legacy_org_matched_by_code(self):
+        """遗留字段：按组织编码匹配恢复归属（覆盖 880-884/892-893）。"""
+        svc, db = self._make()
+        user = MagicMock()
+        user.organization_id = None
+        org = MagicMock()
+        org.id = 9
+        # first() 序列：1) 用户→user  2) 组织(按 code)→org
+        db.query.return_value.filter.return_value.first.side_effect = [user, org]
+        stats = svc._init_import_stats()
+        errors = []
+        legacy = [{
+            "username": "alice", "role": "admin", "permissions": "",
+            "data_scope": "org", "is_superuser": False,
+            "organization_id": 3, "organization_code": "ORG-3",
+        }]
+        stats, errors = svc._import_user_legacy(legacy, stats, errors, merge_mode=False)
+        assert user.organization_id == 9
+
+    def test_import_user_legacy_merge_keeps_org_when_unmatched(self):
+        """merge 模式包内无匹配组织 → 保留目标机原归属（覆盖 894-895）。"""
+        svc, db = self._make()
+        user = MagicMock()
+        user.organization_id = 7
+        user.permissions = "existing"
+        user.data_scope = "all"
+        user.role = "admin"
+        # first() 序列：1) 用户→user  2) 组织(按 code)→None  3) 组织(按 id)→None
+        db.query.return_value.filter.return_value.first.side_effect = [user, None, None]
+        stats = svc._init_import_stats()
+        errors = []
+        legacy = [{
+            "username": "alice", "organization_id": 3, "organization_code": "ORG-3",
+        }]
+        stats, errors = svc._import_user_legacy(legacy, stats, errors, merge_mode=True)
+        assert user.organization_id == 7
 
 
 # ---------------------------------------------------------------------------
@@ -730,8 +1053,6 @@ class TestQueryAnalyzer:
         db.execute.side_effect = Exception("error")
         plan = qa.analyze_query_plan(db, "bad query")
         assert plan is None
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -892,7 +1213,7 @@ class TestRuralWorkService:
         work.status = None
         work.village_id = 1
         db.query.return_value.filter.return_value.first.return_value = work
-        result = svc.update_rural_work(1, name="Updated", nonexistent_field="x")
+        svc.update_rural_work(1, name="Updated", nonexistent_field="x")
         assert work.name == "Updated"
         db.commit.assert_called_once()
 
@@ -931,9 +1252,6 @@ class TestRuralWorkHelpers:
 # ---------------------------------------------------------------------------
 # 7. UpdateLogService
 # ---------------------------------------------------------------------------
-
-
-
 
 
 # ---------------------------------------------------------------------------

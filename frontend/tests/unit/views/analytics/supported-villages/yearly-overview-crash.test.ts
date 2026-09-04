@@ -29,6 +29,9 @@ vi.mock('@/api/supportedVillage', () => ({
   saveCommitteeData: vi.fn(),
   getTransitionFunding: vi.fn(),
   saveTransitionFunding: vi.fn(),
+  deleteYearlySection: vi.fn(),
+  resolveSectionApiKey: (k: string) =>
+    (({ force_investment: 'force-investment', party_building: 'party-building' } as any)[k] ?? k),
 }))
 
 import { getSupportedVillage, getYearlyData } from '@/api/supportedVillage'

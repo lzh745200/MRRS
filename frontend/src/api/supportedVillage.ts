@@ -55,13 +55,31 @@ export const getFilterOptions = () => get('/supported-villages/filter-options')
 export const getChangeHistory = (villageId: number) =>
   get(`/supported-villages/${villageId}/change-history`)
 
+// ── Section key mapping（单一映射源）──
+// 前端内部 prop key 用下划线（force_investment/party_building），
+// 后端 _SECTION_MODEL 与 /yearly/{year}/{section} 路由用连字符（force-investment/party-building）。
+// 映射统一在本文件的 API 函数内完成（保存/删除/导入），调用方直接传内部 key 即可，
+// 不必各自记得映射 —— 历史上导入路径漏映射，导致这两个板块导入恒返回 400
+// 「未知板块标识: force_investment」。resolveSectionApiKey 幂等，重复调用无害。
+// 单单词 key（population、income、industry 等）两侧一致，映射原样返回。
+// 附件路径（getSectionAttachments/uploadSectionAttachment/deleteSectionAttachment）
+// 有意不映射：后端不按 _SECTION_MODEL 校验附件的 section，改动会使既有附件记录失配。
+export const SECTION_KEY_OVERRIDE: Record<string, string> = {
+  force_investment: 'force-investment',
+  party_building: 'party-building',
+}
+/** 内部 section key → 后端 API section key（连字符）。未知 key 原样返回；幂等。 */
+export function resolveSectionApiKey(sectionKey: string): string {
+  return SECTION_KEY_OVERRIDE[sectionKey] ?? sectionKey
+}
+
 // ── Yearly data ──
 export const getYearlyData = (villageId: number, year: number) =>
   get(`/supported-villages/${villageId}/yearly/${year}`)
 export const copyYearData = (villageId: number, fromYear: number, toYear: number) =>
   post(`/supported-villages/${villageId}/yearly/copy`, { fromYear, toYear })
 export const deleteYearlySection = (villageId: number, year: number, section: string) =>
-  del(`/supported-villages/${villageId}/yearly/${year}/${section}`)
+  del(`/supported-villages/${villageId}/yearly/${year}/${resolveSectionApiKey(section)}`)
 
 export const validateYearlyData = (villageId: number, year: number) =>
   post(`/supported-villages/${villageId}/yearly/${year}/validate`)
@@ -71,7 +89,7 @@ export const saveYearlySectionData = (
   year: number,
   section: string,
   data: any
-) => post(`/supported-villages/${villageId}/yearly/${year}/${section}`, data)
+) => post(`/supported-villages/${villageId}/yearly/${year}/${resolveSectionApiKey(section)}`, data)
 
 // Backward compat aliases
 export const saveIncomeData = (v: number, y: number, d: any) =>
@@ -101,7 +119,7 @@ export const getSectionAttachments = async (villageId: number, section: string) 
   return res.items || res.data || []
 }
 export const saveSectionData = (villageId: number, year: number, section: string, data: any) =>
-  post(`/supported-villages/${villageId}/yearly/${year}/${section}`, data)
+  saveYearlySectionData(villageId, year, section, data)
 export const saveCommitteeData = (villageId: number, data: any) =>
   post(`/supported-villages/${villageId}/committee`, data)
 export const uploadSectionAttachment = (villageId: number, section: string, file: File) => {
@@ -135,7 +153,7 @@ export const importSectionData = (
   return apiRequest({
     method: 'POST',
     url: `/supported-villages/${villageId}/sections/import`,
-    params: { year, section_key: sectionKey },
+    params: { year, section_key: resolveSectionApiKey(sectionKey) },
     data: fd,
     headers: { 'Content-Type': 'multipart/form-data' },
   })

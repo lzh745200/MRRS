@@ -16,6 +16,7 @@ const {
   ElMessage,
   mockApiRequest,
   mockPost,
+  promptMock,
   logError,
 } = vi.hoisted(() => ({
   mockPush: vi.fn(() => Promise.resolve()),
@@ -25,6 +26,8 @@ const {
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   mockApiRequest: vi.fn(),
   mockPost: vi.fn(),
+  // 默认实现内置，beforeEach 的 clearAllMocks 不会抹除（仅 clear 调用记录）
+  promptMock: vi.fn(() => Promise.resolve({ value: 'pw' })),
   logError: vi.fn(),
 }))
 let redirectQuery: string | undefined = undefined
@@ -80,7 +83,7 @@ vi.mock('@/utils/authStorage', () => ({
 
 vi.mock('element-plus', () => ({
   ElMessage,
-  ElMessageBox: { confirm: vi.fn(() => Promise.resolve('confirm')), alert: vi.fn() },
+  ElMessageBox: { confirm: vi.fn(() => Promise.resolve('confirm')), alert: vi.fn(), prompt: promptMock },
   ElNotification: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }))
 
@@ -592,6 +595,98 @@ describe('LoginEnhanced.vue', () => {
     vm.permissionFile = { name: 'pkg.zip' }
     await vm.handlePermissionImport()
     expect(ElMessage.error).toHaveBeenCalledWith('导入权限包失败,请检查文件')
+  })
+
+  // ---- Phase E：加密包密码重试（stmts@253-268 / funcs@257 / branch@252,@271）----
+
+  it('加密包：提示输密 → 重传带 password → 确认导入成功（含 inputValidator 两侧）', async () => {
+    mockPost
+      .mockResolvedValueOnce({ success: false, message: '该权限包已加密' })
+      .mockResolvedValueOnce({ success: true, saved_file_name: 'dec.zip' })
+      .mockResolvedValueOnce({ success: true, message: '应用完成' })
+    const w = await mountComp()
+    const vm = w.vm as any
+    const file = new File(['zip'], 'pkg.zip', { type: 'application/zip' })
+    vm.permissionFile = file
+    await vm.handlePermissionImport()
+
+    expect(promptMock).toHaveBeenCalledWith(
+      '该权限包已加密，请输入导出时设置的密码：',
+      '解密密码',
+      { inputType: 'password', inputValidator: expect.any(Function) }
+    )
+    // funcs@257：inputValidator 非空 → true，空串 → 错误文案
+    const validator = promptMock.mock.calls[0][2].inputValidator as (v: string) => true | string
+    expect(validator('abc')).toBe(true)
+    expect(validator('')).toBe('密码不能为空')
+
+    // 重传：同一接口第二次调用，FormData 同时携带 file 与 password
+    expect(mockPost).toHaveBeenNthCalledWith(2, '/permission-packages/import', expect.any(FormData))
+    const fd2 = mockPost.mock.calls[1][1] as FormData
+    expect(fd2.get('file')).toBe(file)
+    expect(fd2.get('password')).toBe('pw')
+    expect(mockPost).toHaveBeenNthCalledWith(3, '/permission-packages/confirm/dec.zip', {
+      overwrite_existing: true,
+    })
+    expect(ElMessage.success).toHaveBeenCalledWith('权限包已导入,请重新登录查看权限')
+    expect(vm.permissionImporting).toBe(false)
+  })
+
+  it('加密包：prompt 取消 → 「已取消导入」并提前返回（不重传、finally 复位）', async () => {
+    promptMock.mockRejectedValueOnce('cancel')
+    // branch@252 另一侧：success 缺省但 code !== 200，且仅带 detail
+    mockPost.mockResolvedValueOnce({ code: 500, detail: '加密包需要密码' })
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.permissionFile = { name: 'pkg.zip' }
+    await vm.handlePermissionImport()
+    expect(ElMessage.error).toHaveBeenCalledWith('已取消导入')
+    expect(mockPost).toHaveBeenCalledTimes(1)
+    expect(vm.permissionImporting).toBe(false)
+  })
+
+  it('加密包：prompt 返回空 value → password 以空串上传（branch@261 || 假侧），重传仍失败则提示', async () => {
+    promptMock.mockResolvedValueOnce({ value: undefined })
+    mockPost
+      .mockResolvedValueOnce({ success: false, message: '已加密' })
+      .mockResolvedValueOnce({ success: false, message: '密码错误' })
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.permissionFile = { name: 'pkg.zip' }
+    await vm.handlePermissionImport()
+    expect((mockPost.mock.calls[1][1] as FormData).get('password')).toBe('')
+    // 任务#28 缺陷1修复：else 分支改读 _body（加密包重传后的响应），
+    // 因此展示的是重传返回的真实错误「密码错误」，而不再误显首次的「已加密」。
+    expect(ElMessage.error).toHaveBeenCalledWith('密码错误')
+    expect(ElMessage.success).not.toHaveBeenCalled()
+  })
+
+  it('加密包：重传响应为 null → _body 走 `r2 || {}` 右侧兜底（branch@263）', async () => {
+    mockPost
+      .mockResolvedValueOnce({ success: false, message: '已加密' })
+      .mockResolvedValueOnce(null) // r2 为 falsy → _body = {}
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.permissionFile = { name: 'pkg.zip' }
+    await vm.handlePermissionImport()
+    // _body = {} → success2 为假，即使 savedFileName 有值也不发确认请求
+    expect(mockPost).toHaveBeenCalledTimes(2)
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    // 任务#28 缺陷1修复：else 分支读重传后的 _body；此处 _body = {}（r2 为 null 的兜底），
+    // message/detail 均缺，故落到第三操作数「权限包验证失败」（不再误显首次的「已加密」）。
+    expect(ElMessage.error).toHaveBeenCalledWith('权限包验证失败')
+    expect(vm.permissionImporting).toBe(false)
+  })
+
+  it('branch@271 末尾兜底：无 saved_file_name/file_name 且 permissionFile 无 name → 空串走验证失败分支', async () => {
+    mockPost.mockResolvedValueOnce({ success: true }) // 无任何文件名字段
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.permissionFile = {} // name 缺省 → ?. 后为 undefined → || '' 兜底
+    await vm.handlePermissionImport()
+    // savedFileName 为空 → success2 && savedFileName 假侧，不发确认请求
+    expect(mockPost).toHaveBeenCalledTimes(1)
+    expect(ElMessage.error).toHaveBeenCalledWith('权限包验证失败')
   })
 
   it('机器码验证输入框渲染（showMachineCodeInput）', async () => {

@@ -278,4 +278,30 @@ describe('OfflineMap.vue', () => {
     zrHandler({ target: null })
     expect(mockChart.convertFromPixel).not.toHaveBeenCalled()
   })
+
+  /**
+   * `initChart()` 开头的 `if (!chartRef.value || !geoJson) return` 守卫真侧。
+   *
+   * onMounted 里先赋值 geoJson、再 `await nextTick()`、最后才 initChart。
+   * 若用户在该 await 窗口内就导航离开（快速切页/关闭弹窗），
+   * 组件已卸载且模板 ref 被 Vue 置 null，此时必须早退：
+   * 否则会给已脱离文档的 DOM 创建 echarts 实例（内存泄漏 + resize 监听泄漏）。
+   */
+  it('挂载后立即卸载 → initChart 守卫早退，不创建 echarts 实例', async () => {
+    const wrapper = mountMap({ geoJsonData: geo })
+    // 不 await 任何微任务，直接卸载：onMounted 仍挂在 `await nextTick()` 上
+    wrapper.unmount()
+    await flushPromises()
+
+    expect(mockEcharts.init).not.toHaveBeenCalled()
+    expect(mockEcharts.registerMap).not.toHaveBeenCalled()
+    expect(mockChart.setOption).not.toHaveBeenCalled()
+  })
+
+  it('未传 geoJsonData 时在动态导入期间卸载 → 同样早退（geoJson 已赋值但 ref 已置 null）', async () => {
+    const wrapper = mountMap()
+    wrapper.unmount()
+    await flushPromises()
+    expect(mockEcharts.init).not.toHaveBeenCalled()
+  })
 })

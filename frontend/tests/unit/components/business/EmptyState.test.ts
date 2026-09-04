@@ -55,4 +55,27 @@ describe('EmptyState 空态标准件', () => {
     const w = mountComp()
     expect(w.find('.el-button-stub').exists()).toBe(false)
   })
+
+  /**
+   * `props.text || DEFAULT_TEXT[props.type] || '暂无数据'` 的最后一档兜底。
+   * 上方四种 type 均能命中字典，末位 `|| '暂无数据'` 永不执行。
+   * 真实场景：调用方传入未来新增的 type 枚举值（前后端枚举漂移），
+   * 字典缺键时必须回落通用文案而不是渲染 undefined。
+   */
+  it('字典缺键的未知 type → 回落最终兜底文案', () => {
+    const w = mountComp({ type: 'not-in-dict' })
+    expect(w.find('.el-empty-stub').attributes('data-desc')).toBe('暂无数据')
+    // data-type 仍如实透传，便于样式/埋点按原始 type 区分
+    expect(w.find('.empty-state').attributes('data-type')).toBe('not-in-dict')
+  })
+
+  it('未知 type 但显式传 text → text 优先于兜底', () => {
+    const w = mountComp({ type: 'not-in-dict', text: '自定义' })
+    expect(w.find('.el-empty-stub').attributes('data-desc')).toBe('自定义')
+  })
+
+  it('size 透传 el-empty image-size，缺省 96', () => {
+    expect(mountComp({ size: 160 }).findComponent({ name: 'ElEmpty' }).props('imageSize')).toBe(160)
+    expect(mountComp().findComponent({ name: 'ElEmpty' }).props('imageSize')).toBe(96)
+  })
 })

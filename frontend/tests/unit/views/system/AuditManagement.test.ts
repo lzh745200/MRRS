@@ -8,9 +8,12 @@ import { nextTick } from 'vue'
 
 enableAutoUnmount(afterEach)
 
-const { ElMessage, ElMessageBox, auditApi } = vi.hoisted(() => ({
+const { ElMessage, ElMessageBox, auditApi, apiRequestMock, downloadBlobAsFileMock, logError } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   ElMessageBox: { confirm: vi.fn(), alert: vi.fn(), prompt: vi.fn() },
+  apiRequestMock: vi.fn(),
+  downloadBlobAsFileMock: vi.fn(),
+  logError: vi.fn(),
   auditApi: {
     getStats: vi.fn(),
     getLogs: vi.fn(),
@@ -22,6 +25,29 @@ const { ElMessage, ElMessageBox, auditApi } = vi.hoisted(() => ({
 
 vi.mock('@/api/audit', () => ({
   auditApi,
+}))
+
+// handleExportExcel 走 apiRequest + downloadBlobAsFile（L3 收敛后的 blob 下载契约）
+vi.mock('@/api/request', () => ({
+  get: vi.fn(),
+  post: vi.fn(),
+  put: vi.fn(),
+  del: vi.fn(),
+  apiRequest: apiRequestMock,
+  default: { get: vi.fn(), post: vi.fn() },
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
+
+vi.mock('@/api/helpers/blobDownload', () => ({
+  downloadBlobAsFile: downloadBlobAsFileMock,
+  parseContentDisposition: vi.fn(),
+  downloadBlob: vi.fn(),
+  parseFileName: vi.fn(),
+  getFileNameFromResponse: vi.fn(),
+}))
+
+vi.mock('@/utils/logger', () => ({
+  logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }))
 
 vi.mock('element-plus', () => ({
@@ -137,6 +163,8 @@ beforeEach(() => {
   auditApi.getSecurityEvents.mockResolvedValue(alertsData)
   auditApi.resolveSecurityEvent.mockResolvedValue({})
   ElMessageBox.prompt.mockResolvedValue({ value: '已处理' })
+  apiRequestMock.mockResolvedValue({ data: new Blob(['x']), headers: {} })
+  downloadBlobAsFileMock.mockResolvedValue(undefined)
 })
 
 describe('AuditManagement.vue', () => {
@@ -384,5 +412,86 @@ describe('AuditManagement.vue', () => {
     await handleBtns[0].trigger('click')
     expect(ElMessageBox.prompt).toHaveBeenCalled()
     expect(auditApi.resolveSecurityEvent).toHaveBeenCalled()
+  })
+
+  // fmtTime 真侧（branch@227）：模板里三处列都传 row.timestamp，而列桩样本无该字段，
+  // 因此只覆盖了 t 为 undefined 的假侧；此处补齐有值侧的替换与截断语义。
+  it('fmtTime：ISO 时间 → 空格分隔并截到秒；空值/undefined → 空串', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    expect(vm.fmtTime('2026-08-29T04:59:54')).toBe('2026-08-29 04:59:54')
+    expect(vm.fmtTime('2026-08-29T04:59:54.123456')).toBe('2026-08-29 04:59:54')
+    expect(vm.fmtTime('2026-08-29')).toBe('2026-08-29')
+    expect(vm.fmtTime('')).toBe('')
+    expect(vm.fmtTime(undefined)).toBe('')
+  })
+
+  // handleExportExcel（funcs@366 / stmts@366-389）
+  it('handleExportExcel 成功：apiRequest 以 blob 拉取 → downloadBlobAsFile → 成功提示，finally 释放 exporting', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    const blobRes = { data: new Blob(['audit']), headers: {} }
+    apiRequestMock.mockClear()
+    apiRequestMock.mockResolvedValueOnce(blobRes)
+    await vm.handleExportExcel()
+    expect(apiRequestMock).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/system/audit/logs/export',
+      params: {
+        format: 'excel',
+        start_date: undefined,
+        end_date: undefined,
+        action: undefined,
+      },
+      responseType: 'blob',
+    })
+    expect(downloadBlobAsFileMock).toHaveBeenCalledTimes(1)
+    const [res, opts] = downloadBlobAsFileMock.mock.calls[0]
+    expect(res).toBe(blobRes)
+    expect(opts.fallbackFileName).toBe(`审计日志_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    expect(ElMessage.success).toHaveBeenCalledWith('导出成功')
+    expect(vm.exporting).toBe(false)
+    expect(logError).not.toHaveBeenCalled()
+  })
+
+  it('handleExportExcel：带日期区间与动作筛选 → params 携带 start_date/end_date/action', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.filters.dateRange = ['2026-01-01', '2026-01-31']
+    vm.filters.action = 'login'
+    apiRequestMock.mockClear()
+    await vm.handleExportExcel()
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({
+          format: 'excel',
+          start_date: '2026-01-01',
+          end_date: '2026-01-31',
+          action: 'login',
+        }),
+      })
+    )
+    expect(ElMessage.success).toHaveBeenCalledWith('导出成功')
+  })
+
+  it('handleExportExcel 失败：apiRequest reject → 日志 + 错误提示，finally 仍释放 exporting', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    apiRequestMock.mockRejectedValueOnce(new Error('net'))
+    await vm.handleExportExcel()
+    expect(downloadBlobAsFileMock).not.toHaveBeenCalled()
+    expect(logError).toHaveBeenCalledWith('审计日志导出失败:', expect.any(Error))
+    expect(ElMessage.error).toHaveBeenCalledWith('导出失败，请稍后重试')
+    expect(vm.exporting).toBe(false)
+    expect(ElMessage.success).not.toHaveBeenCalled()
+  })
+
+  it('handleExportExcel 失败：downloadBlobAsFile reject → 同样走 catch', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    downloadBlobAsFileMock.mockRejectedValueOnce(new Error('save failed'))
+    await vm.handleExportExcel()
+    expect(ElMessage.error).toHaveBeenCalledWith('导出失败，请稍后重试')
+    expect(vm.exporting).toBe(false)
   })
 })

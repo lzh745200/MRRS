@@ -36,9 +36,9 @@ const appVersion = (() => {
     const pkgPath = app.isPackaged
       ? path.join(process.resourcesPath, '..', 'package.json')
       : path.join(__dirname, '..', 'package.json');
-    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version || '1.10.0';
+    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version || '1.11.4';
   } catch (_) {
-    return '1.10.0';
+    return '1.11.4';
   }
 })();
 
@@ -372,7 +372,10 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
           `可能原因：\n` +
           `1. 安全软件（杀毒/Defender）拦截了后端进程——请将程序安装目录加入白名单\n` +
           `2. 安装目录位于临时目录（%TEMP%），文件可能被系统清理——请安装到正式目录\n` +
-          `3. 数据库文件损坏或磁盘空间不足\n\n` +
+          `3. 数据库文件损坏或磁盘空间不足\n` +
+          `4. 升级后数据库迁移失败（生产环境迁移失败会主动中止启动，避免带着\n` +
+          `   漂移的表结构运行）——请在应用日志中查找 CRITICAL 行\n` +
+          `   “生产环境迁移失败”，并按回滚流程连数据库一起回退\n\n` +
           `诊断日志: ${CRASH_LOG_FILE}\n应用日志: ${logPath}`);
       }
     }

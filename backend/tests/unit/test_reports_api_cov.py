@@ -99,6 +99,58 @@ class TestGenerateReport:
         assert resp.status_code == 500
 
 
+class TestGenerateReportSubscriptionFallback:
+    """覆盖 reports.py:643-659 —— 订阅场景回填报表类型/年份/村 ID"""
+
+    def _sub(self, village_ids):
+        return SimpleNamespace(
+            id=7, report_type="statistics", year=2025, village_ids=village_ids
+        )
+
+    def test_subscription_params_backfilled_from_json(self, client):
+        # 643-657：订阅读取 report_type/year，village_ids JSON 字符串解析为列表
+        c, db, _ = client
+        q_sub = MagicMock()
+        q_sub.filter.return_value = q_sub
+        q_sub.first.return_value = self._sub('[1, 2]')
+        q_stat = MagicMock()
+        q_stat.filter.return_value = q_stat
+        q_stat.count.return_value = 9
+        db.query = MagicMock(side_effect=[q_sub, q_stat])
+
+        resp = c.post(
+            f"{BASE}/generate",
+            json={"report_type": "summary", "subscription_id": 7},
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["report_type"] == "statistics"  # 从订阅回填
+        assert data["parameters"]["year"] == 2025
+        assert data["parameters"]["village_ids"] == [1, 2]
+        assert data["statistics"]["total_villages"] == 9
+
+    def test_subscription_village_ids_parse_failure_keeps_none(self, client):
+        # 658-659：village_ids 非法 JSON → 静默保持未设置
+        c, db, _ = client
+        q_sub = MagicMock()
+        q_sub.filter.return_value = q_sub
+        q_sub.first.return_value = self._sub('not-json{')
+        q_stat = MagicMock()
+        q_stat.filter.return_value = q_stat
+        q_stat.count.return_value = 3
+        db.query = MagicMock(side_effect=[q_sub, q_stat])
+
+        resp = c.post(
+            f"{BASE}/generate",
+            json={"report_type": "summary", "subscription_id": 7},
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["report_type"] == "statistics"
+        assert data["parameters"]["village_ids"] is None  # 解析失败保持 None
+        assert data["statistics"]["total_villages"] == 3
+
+
 class TestDownloadGeneratedReport:
     def _sub(self):
         return SimpleNamespace(id=7, name="年度报表", report_type="comprehensive", year=2025)

@@ -10,7 +10,6 @@
 
 参考安全基线：AGENTS.md → "软删除模式" 章节。
 """
-import pytest
 from unittest.mock import Mock
 
 
@@ -83,18 +82,15 @@ class TestSoftDeleteE2E:
                 "province": "贵州省",
                 "county": "测试县",
             })
-            if resp_create.status_code not in (200, 201):
-                pytest.skip(
-                    f"创建帮扶村失败: {resp_create.status_code} "
-                    f"{resp_create.text[:200]}"
-                )
+            assert resp_create.status_code in (200, 201), (
+                f"前置条件失败：创建帮扶村应成功，实际 {resp_create.status_code} "
+                f"{resp_create.text[:200]}"
+            )
             village_id = (
                 resp_create.json().get("data", {}).get("id")
                 or resp_create.json().get("id")
             )
-            if not village_id:
-                pytest.skip("无法获取帮扶村ID")
-            assert village_id, "创建后应返回有效的 village_id"
+            assert village_id, f"前置条件失败：无法获取帮扶村ID，响应 {resp_create.text[:200]}"
 
             # ── 阶段 2：验证未软删时管理员可见 ──
             resp_list_before = client.get(
@@ -247,17 +243,15 @@ class TestSoftDeleteE2EFunds:
                 "fund_type": "support",
                 "fund_source": "military",
             })
-            if resp_create.status_code not in (200, 201):
-                pytest.skip(
-                    f"创建经费失败: {resp_create.status_code} "
-                    f"{resp_create.text[:200]}"
-                )
+            assert resp_create.status_code in (200, 201), (
+                f"前置条件失败：创建经费应成功，实际 {resp_create.status_code} "
+                f"{resp_create.text[:200]}"
+            )
             fund_id = (
                 resp_create.json().get("data", {}).get("id")
                 or resp_create.json().get("id")
             )
-            if not fund_id:
-                pytest.skip("无法获取经费ID")
+            assert fund_id, f"前置条件失败：无法获取经费ID，响应 {resp_create.text[:200]}"
 
             # 软删
             resp_delete = client.delete(f"/api/v1/funds/{fund_id}")

@@ -175,28 +175,50 @@ export async function getImportHistory(
 }
 
 /**
- * 验证导入数据（不执行导入）
- * @param data 验证参数
- * @returns 验证结果
+ * 校验摘要响应（对齐后端 ValidationSummaryResponse）
+ *
+ * 后端 /import/validate 实际返回字段为 is_valid / first_errors / errors_by_field 等，
+ * 而非 { valid, errors, total_rows }（旧声明导致调用方读 result.valid/result.errors 恒 undefined）。
  */
-export async function validateImport(data: { file?: File; entity_type?: string }): Promise<{
-  valid: boolean
-  errors?: Array<{ row: number; field: string; message: string }>
-  total_rows?: number
-}> {
+export interface ValidationSummary {
+  is_valid: boolean
+  total_rows: number
+  valid_rows: number
+  invalid_rows: number
+  error_count: number
+  warning_count: number
+  errors_by_type: Record<string, number>
+  errors_by_field: Record<string, number>
+  warnings: string[]
+  first_errors: Array<Record<string, any>>
+}
+
+/**
+ * 验证导入数据（不执行导入）
+ * @param data 验证参数（file 为后端必填的 UploadFile；entity_type 走 Query 参数）
+ * @returns 后端 ValidationSummaryResponse
+ */
+export async function validateImport(data: {
+  file?: File
+  entity_type?: string
+}): Promise<ValidationSummary> {
+  const formData = new FormData()
   if (data.file) {
-    const formData = new FormData()
     formData.append('file', data.file)
-    if (data.entity_type) {
-      formData.append('entity_type', data.entity_type)
-    }
-    const response = await post('/import/validate', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000,
-    })
-    return response
   }
-  const response = await post('/import/validate', data)
+
+  // 后端 validate_import_data 的 entity_type 是 Query 参数（非 FormData 字段），
+  // 放入 FormData 会恒回退默认 supported_village，用帮扶村验证器校验资金/学校文件 → 结果失真
+  const params: Record<string, string> = {}
+  if (data.entity_type) {
+    params.entity_type = data.entity_type
+  }
+
+  const response = await post('/import/validate', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params,
+    timeout: 120000,
+  })
   return response
 }
 

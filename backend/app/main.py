@@ -55,6 +55,15 @@ env = os.getenv("ENV", "dev")
 init_logging()
 logger = logging.getLogger("assistance_management")
 
+# ── 迁移状态（任务#6 风险6·静默失败放大修复）──
+# 供 /health 端点与启动日志明确暴露“迁移是否达到 head”，不再静默吞掉。
+#   at_head:   None=尚未检测 / True=已达 head / False=未达 head（迁移失败或落后）
+#   head:      脚本目录的目标 head 版本号（仅读文件，不连数据库）
+#   error_type: 最近一次迁移失败的异常类名（成功时为 None）。
+#              只存类名而非异常原文 —— /health 无需认证，原文可能含数据库
+#              绝对路径与 SQL 片段；完整细节由 logger.error(exc_info=True) 留痕。
+_migration_status: dict = {"at_head": None, "head": None, "error_type": None}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
@@ -227,14 +236,29 @@ REQUIRED_PACKAGES = [
 # /health 等非API路由必须在 SPA catch-all 之前注册
 @app.get("/health", summary="健康检查", tags=["系统"])
 def health():
-    """健康检查端点"""
+    """健康检查端点
+
+    除版本/构建信息外，明确暴露数据库迁移是否已达 head（任务#6 风险6）。
+    迁移失败时应用仍可启动（自动补列兜底），故顶层 status 保持 "ok"
+    不影响可用性；但在 migration 子对象中如实回报 at_head=False 与异常类名，
+    使 schema 漂移对监控/运维可见，不再静默。
+
+    本端点无需认证，故只出异常类名（error_type），不出异常原文 ——
+    原文可能含数据库绝对路径与 SQL 片段，完整细节见服务端日志。
+    """
     from app.core.build_info import get_build_info
 
     info = get_build_info()
+    at_head = _migration_status.get("at_head")
     return {
         "status": "ok",
         "version": info.get("version", "unknown"),
         "git_hash": info.get("git_hash", "unknown"),
+        "migration": {
+            "at_head": at_head,
+            "head": _migration_status.get("head"),
+            "error_type": _migration_status.get("error_type"),
+        },
     }
 
 
@@ -410,14 +434,24 @@ def _init_database_tables():
 
 
 def _run_alembic_upgrade():
-    """编程式执行 alembic upgrade head，失败时仅记录警告（自动补列兜底）。
+    """编程式执行 alembic upgrade head。
+
+    失败处理（任务#6 风险6·静默失败放大修复）：
+    - 不再用 warning 静默吞掉异常：记录 ERROR 级日志 + 完整异常栈（exc_info）。
+    - 通过模块级 _migration_status 暴露“迁移未达 head”状态，/health 与启动日志可见。
+    - 生产环境（ENVIRONMENT=production）迁移失败直接抛出，中止启动（fail-loud），
+      避免带着漂移的 schema 长期运行导致不可见的数据风险（如风险3的孤儿临时表
+      使数据库永久停在旧版本）；开发/测试环境保持启动韧性：记录错误后回退
+      到自动补列兜底，不崩溃。
 
     优化：如果数据库表已存在但 alembic_version 表不存在（如 create_all 新建），
-    直接 stamp 到 head，避免重放全部 28 个迁移文件。
+    直接 stamp 到 head，避免重放全部历史迁移。
     """
+    is_production = settings.ENVIRONMENT == "production"
     try:
         from alembic import command as alembic_command
         from alembic.config import Config as AlembicConfig
+        from alembic.script import ScriptDirectory
         from sqlalchemy import inspect as sa_inspect
 
         alembic_ini = Path(__file__).resolve().parent.parent / "alembic.ini"
@@ -427,6 +461,12 @@ def _run_alembic_upgrade():
         cfg = AlembicConfig(str(alembic_ini))
         cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
         cfg.set_main_option("script_location", str(alembic_ini.parent / "alembic"))
+
+        # 记录目标 head 版本号（仅读脚本目录，不连数据库），供健康检查暴露
+        try:
+            _migration_status["head"] = ScriptDirectory.from_config(cfg).get_current_head()
+        except Exception:  # pragma: no cover - head 推断失败不阻断迁移
+            _migration_status["head"] = None
 
         # 检查是否需要 stamp（表已存在但无 alembic_version 表）
         from app.core.database import engine
@@ -443,8 +483,28 @@ def _run_alembic_upgrade():
         else:
             alembic_command.upgrade(cfg, "head")
             logger.info("Alembic upgrade head 完成")
+        _migration_status["at_head"] = True
+        _migration_status["error_type"] = None
     except Exception as e:
-        logger.warning("Alembic upgrade 失败（将由自动补列兜底）: %s", e)
+        _migration_status["at_head"] = False
+        # 只记类名：_migration_status 经无认证的 /health 出站，异常原文可能含
+        # 数据库绝对路径与 SQL 片段。原文仅进服务端日志（下方 exc_info=True）。
+        _migration_status["error_type"] = type(e).__name__
+        logger.error(
+            "Alembic upgrade 失败，数据库 schema 未达 head（目标 head=%s）：%s",
+            _migration_status.get("head"),
+            e,
+            exc_info=True,
+        )
+        if is_production:
+            logger.critical(
+                "生产环境迁移失败——中止启动以避免 schema 漂移导致不可见的数据风险。"
+                "请排查数据库迁移状态（alembic current / alembic heads）后重试。"
+            )
+            raise
+        logger.warning(
+            "开发/测试环境：保持启动韧性，迁移失败降级为自动补列兜底（schema 可能落后 head）"
+        )
 
 
 def _migrate_missing_columns(engine, model_base):

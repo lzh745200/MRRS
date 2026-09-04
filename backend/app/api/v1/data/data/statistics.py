@@ -530,13 +530,71 @@ async def get_analysis_data(current_user=Depends(get_current_user), db: Session 
     返回投入趋势、帮扶分类统计、地区分布等
     """
     try:
-        return await _get_analysis_data_impl(db)
+        return await _get_analysis_data_impl(db, current_user)
     except Exception as e:
         logger.error("分析数据查询失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
 
 
-async def _get_analysis_data_impl(db: Session):
+def _aggregate_transition_fund_items(items_rows):
+    """按年度聚合 ``SupportedVillage.transition_fund_items`` 明细 JSON。
+
+    H3 权威经费源：与列表 KPI、年度对比同源，消除历史上读空的 SupportFunding
+    子表导致趋势图恒空白的缺陷。逐行容错——单个村的脏 JSON 静默跳过，不拖垮
+    整份分析聚合。
+
+    Returns:
+        (year_mil, year_loc) 两个 ``{年份: 金额}`` 字典。
+    """
+    year_mil = {}
+    year_loc = {}
+    for row in items_rows:
+        items_json = row[0] if isinstance(row, (tuple, list)) else row
+        if not items_json:
+            continue
+        try:
+            parsed = json.loads(items_json)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(parsed, list):
+            continue
+        for it in parsed:
+            if not isinstance(it, dict):
+                continue
+            try:
+                yr = int(it.get("year"))
+            except (TypeError, ValueError):
+                continue
+            year_mil[yr] = year_mil.get(yr, 0.0) + float(it.get("militaryInvestment") or 0)
+            year_loc[yr] = year_loc.get(yr, 0.0) + float(it.get("localInvestment") or 0)
+    return year_mil, year_loc
+
+
+def _build_investment_trend(year_mil, year_loc, total_villages, total_investment):
+    """构造 2021-2025 投入趋势列表。
+
+    仅在「有帮扶村且有经费数据」时输出——没有帮扶村时趋势图没有实际意义。
+    has_funding_data 基于权威经费源（汇总列或明细 JSON）。
+    """
+    has_funding_data = total_investment > 0 or bool(year_mil) or bool(year_loc)
+    if not (total_villages > 0 and has_funding_data):
+        return []
+
+    trend = []
+    prev_total = 0
+    for yr in (2021, 2022, 2023, 2024, 2025):
+        mil_f = year_mil.get(yr, 0.0)
+        loc_f = year_loc.get(yr, 0.0)
+        yr_total = mil_f + loc_f
+        growth = round((yr_total - prev_total) / max(prev_total, 1) * 100, 1) if prev_total > 0 else 0
+        trend.append(
+            {"year": str(yr), "military": mil_f, "local": loc_f, "total": yr_total, "growth": growth}
+        )
+        prev_total = yr_total if yr_total > 0 else prev_total
+    return trend
+
+
+async def _get_analysis_data_impl(db: Session, current_user):
     from app.models.supported_village import (ConsumptionSupport,
                                               EducationSupport,
                                               EmploymentSupport,
@@ -544,11 +602,22 @@ async def _get_analysis_data_impl(db: Session):
                                               InfrastructureImprovement,
                                               MedicalSupport,
                                               PartyBuildingSupport,
-                                              SupportedVillage, SupportFunding,
+                                              SupportedVillage,
                                               VillageIncome, VillagePopulation)
+    from app.core.data_scope_adapter import apply_scope_filter
+
+    def _scoped(q):
+        """H3：经费相关查询统一附加数据隔离。
+
+        current_user 为必填位置参数（fail-closed，对齐 W5-006）：漏传即在调用点
+        抛 TypeError，而非静默跳过隔离返回跨组织数据。
+        """
+        return apply_scope_filter(q, current_user, SupportedVillage, db=db)
 
     # --- 概览统计（软删村/项目不参与统计） ---
-    total_villages = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count()
+    total_villages = _scoped(
+        db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
+    ).count()
     active_projects = (
         db.query(Project)
         .filter(
@@ -558,16 +627,20 @@ async def _get_analysis_data_impl(db: Session):
         .count()
     )
 
-    # 总投入资金
+    # 总投入资金（H3：附加数据隔离，与列表 KPI(H1) 同源同口径）
     mil_total = (
-        db.query(func.coalesce(func.sum(SupportedVillage.transition_fund_military_total), 0))
-        .filter(SupportedVillage.is_active.is_(True))
+        _scoped(
+            db.query(func.coalesce(func.sum(SupportedVillage.transition_fund_military_total), 0))
+            .filter(SupportedVillage.is_active.is_(True))
+        )
         .scalar()
         or 0
     )
     loc_total = (
-        db.query(func.coalesce(func.sum(SupportedVillage.transition_fund_local_total), 0))
-        .filter(SupportedVillage.is_active.is_(True))
+        _scoped(
+            db.query(func.coalesce(func.sum(SupportedVillage.transition_fund_local_total), 0))
+            .filter(SupportedVillage.is_active.is_(True))
+        )
         .scalar()
         or 0
     )
@@ -577,44 +650,20 @@ async def _get_analysis_data_impl(db: Session):
     completeness = _calc_village_completeness(db, SupportedVillage, VillagePopulation, VillageIncome, total_villages)
 
     # --- 投入趋势 (2021-2025) ---
-    investment_trend = []
-    years = [2021, 2022, 2023, 2024, 2025]
-    prev_total = 0
-
-    # 只有在有帮扶村数据时才显示投入趋势
-    # 因为没有帮扶村的话，投入趋势数据没有实际意义
-    has_villages = total_villages > 0
-    has_funding_data = db.query(SupportFunding).count() > 0
-
-    if has_villages and has_funding_data:
-        # 单次 GROUP BY 查询替代 5 次循环 × 2 次聚合 = 10 次查询
-        # 仅统计未软删村的支持资金（join 村过滤）
-        yearly_data = (
-            db.query(
-                SupportFunding.year.label("yr"),
-                func.coalesce(func.sum(SupportFunding.military_investment), 0).label("mil"),
-                func.coalesce(func.sum(SupportFunding.local_investment), 0).label("loc"),
-            )
-            .join(
-                SupportedVillage,
-                SupportFunding.supported_village_id == SupportedVillage.id,
-            )
-            .filter(
-                SupportFunding.year.in_(years),
-                SupportedVillage.is_active.is_(True),
-            )
-            .group_by(SupportFunding.year)
-            .all()
+    # H3：经费口径统一到权威源 SupportedVillage.transition_fund_items(按年度明细 JSON)
+    # 及 transition_fund_* 汇总列，消除与列表 KPI(H1) 的同源分裂——此前 has_funding_data
+    # 与趋势图读取从未被生产路径写入的 SupportFunding 子表，导致趋势图恒空白。
+    items_rows = (
+        _scoped(
+            db.query(SupportedVillage.transition_fund_items)
+            .filter(SupportedVillage.is_active.is_(True))
         )
-        year_map = {r.yr: (float(r.mil or 0), float(r.loc or 0)) for r in yearly_data}
-        for yr in years:
-            mil_f, loc_f = year_map.get(yr, (0.0, 0.0))
-            yr_total = mil_f + loc_f
-            growth = round((yr_total - prev_total) / max(prev_total, 1) * 100, 1) if prev_total > 0 else 0
-            investment_trend.append(
-                {"year": str(yr), "military": mil_f, "local": loc_f, "total": yr_total, "growth": growth}
-            )
-            prev_total = yr_total if yr_total > 0 else prev_total
+        .all()
+    )
+    year_mil, year_loc = _aggregate_transition_fund_items(items_rows)
+    investment_trend = _build_investment_trend(
+        year_mil, year_loc, total_villages, total_investment
+    )
 
     # --- 帮扶分类统计 ---
     # 从各帮扶子表统计
@@ -722,20 +771,10 @@ async def _get_analysis_data_impl(db: Session):
     for yr, cnt in pop_rows:
         yearly_comparison["years"].append(str(yr))
         yearly_comparison["villages"][str(yr)] = cnt
-    # 各年投入（万元）
-    inv_rows = (
-        db.query(
-            SupportFunding.year,
-            func.coalesce(func.sum(SupportFunding.military_investment), 0)
-            + func.coalesce(func.sum(SupportFunding.local_investment), 0),
-        )
-        .join(SupportedVillage, SupportFunding.supported_village_id == SupportedVillage.id)
-        .filter(SupportedVillage.is_active.is_(True))
-        .group_by(SupportFunding.year)
-        .all()
-    )
-    for yr, amt in inv_rows:
-        yearly_comparison["investment"][str(yr)] = round(float(amt), 2)
+    # 各年投入（万元）——H3：复用 transition_fund_items 明细聚合的 year_mil/year_loc，
+    # 与投入趋势、列表 KPI 保持同一权威口径（不再读空的 SupportFunding 子表）。
+    for yr in sorted(set(year_mil) | set(year_loc)):
+        yearly_comparison["investment"][str(yr)] = round(year_mil.get(yr, 0.0) + year_loc.get(yr, 0.0), 2)
     # 各年人均收入均值（万元）
     inc_rows = (
         db.query(VillageIncome.year, func.avg(VillageIncome.per_capita_income))

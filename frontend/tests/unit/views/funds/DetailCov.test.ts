@@ -251,7 +251,7 @@ function setRoute(path: string, id?: string) {
   routeHolder.current = reactive({ params: id ? { id } : {}, path })
 }
 
-function mountComp() {
+function mountComp(extraStubs: Record<string, any> = {}) {
   // setup.ts 的全局 el-* stub 默认不渲染插槽，需 renderStubDefaultSlot；
   // 具名插槽（footer/reference）与作用域插槽（表格行）需自定义 stub。
   return mount(Detail, {
@@ -283,6 +283,8 @@ function mountComp() {
             return { rowX, rowY }
           },
         },
+        // 局部额外 stub 放末尾，可覆盖上方同名默认 stub
+        ...extraStubs,
       },
     },
   })
@@ -1476,6 +1478,161 @@ describe('loadExpenses 异常兜底（1195-1196）', () => {
     expect((w.vm as any).expenses).toEqual([])
     expect(logError).toHaveBeenCalled()
     expect(pushSafe).toHaveBeenCalledWith('/funds')
+    w.unmount()
+  })
+})
+
+describe('报销登记剩余分支（branch@1229/@1238/@1280）', () => {
+  async function mountView() {
+    setRoute('/funds/5', '5')
+    const w = mountComp()
+    await flushPromises()
+    return w
+  }
+
+  it('branch@1229 真侧：创建态 loadExpenses 直接返回，不请求交易明细', async () => {
+    const { apiRequest } = await import('@/api/request')
+    setRoute('/funds/create')
+    const w = mountComp()
+    await flushPromises()
+    const vm = w.vm as any
+    expect(vm.isCreate).toBe(true)
+    ;(apiRequest as any).mockClear()
+    await vm.loadExpenses()
+    const txCalls = (apiRequest as any).mock.calls.filter(
+      (c: any[]) => c[0]?.url === '/fund-budgets/transactions'
+    )
+    expect(txCalls).toHaveLength(0)
+    expect(vm.loadingExpenses).toBe(false)
+    expect(vm.expenses).toEqual([])
+    w.unmount()
+  })
+
+  it('branch@1238 三形态：裸数组 → 直接采用；{data:{}} → items ?? []；{data:{items}}', async () => {
+    const { apiRequest } = await import('@/api/request')
+    const w = await mountView()
+    const vm = w.vm as any
+
+    ;(apiRequest as any).mockResolvedValueOnce([{ id: 1 }, { id: 2 }])
+    await vm.loadExpenses()
+    expect(vm.expenses).toEqual([{ id: 1 }, { id: 2 }])
+
+    ;(apiRequest as any).mockResolvedValueOnce({ data: {} })
+    await vm.loadExpenses()
+    expect(vm.expenses).toEqual([])
+
+    ;(apiRequest as any).mockResolvedValueOnce({ data: { items: [{ id: 3 }] } })
+    await vm.loadExpenses()
+    expect(vm.expenses).toEqual([{ id: 3 }])
+
+    // res.data 缺省时回退 res 本体（?? 右侧）
+    ;(apiRequest as any).mockResolvedValueOnce({ items: [{ id: 4 }] })
+    await vm.loadExpenses()
+    expect(vm.expenses).toEqual([{ id: 4 }])
+    w.unmount()
+  })
+
+  it('branch@1280 假侧：detail 非字符串 / 无 response → 兜底「报销登记失败」', async () => {
+    const { apiRequest } = await import('@/api/request')
+    const w = await mountView()
+    const vm = w.vm as any
+    Object.assign(vm.expForm, {
+      amount: 10,
+      purpose: '材料费',
+      transaction_date: '2026-08-24',
+    })
+
+    ;(apiRequest as any).mockRejectedValueOnce({ response: { data: { detail: { code: 500 } } } })
+    await vm.submitExpense()
+    expect(ElMessage.error).toHaveBeenCalledWith('报销登记失败')
+
+    ;(apiRequest as any).mockRejectedValueOnce(new Error('boom'))
+    await vm.submitExpense()
+    expect(ElMessage.error).toHaveBeenCalledTimes(2)
+    expect(vm.expSubmitting).toBe(false)
+    w.unmount()
+  })
+})
+
+describe('报销登记对话框模板产物（onClick@431/@761、onUpdate:modelValue@726/@738）', () => {
+  // 默认 el-dialog / el-date-picker stub 不会 emit update:modelValue，
+  // 导致 v-model 编译产物 onUpdate:modelValue@726/@738 永不执行；
+  // 此处提供可 emit 的局部 stub，并用 title 定位到「登记报销」对话框。
+  const expDialogStubs = {
+    'el-dialog': {
+      name: 'ElDialog',
+      props: { modelValue: { type: Boolean, default: false }, title: { type: String, default: '' } },
+      emits: ['update:modelValue'],
+      template:
+        '<div class="el-dialog-stub" :data-title="title">' +
+        '<button type="button" class="dlg-close" @click="$emit(\'update:modelValue\', false)">x</button>' +
+        '<slot /><slot name="footer" /></div>',
+    },
+    'el-date-picker': {
+      name: 'ElDatePicker',
+      props: { modelValue: { type: String, default: '' } },
+      emits: ['update:modelValue'],
+      template:
+        '<div class="el-date-picker-stub" @click="$emit(\'update:modelValue\', \'2026-09-01\')" />',
+    },
+  }
+
+  async function mountExp() {
+    setRoute('/funds/5', '5')
+    const w = mountComp(expDialogStubs)
+    await flushPromises()
+    return w
+  }
+
+  function expDialog(w: any) {
+    const d = w
+      .findAll('.el-dialog-stub')
+      .find((n: any) => n.attributes('data-title') === '登记报销')
+    expect(d, '登记报销对话框').toBeTruthy()
+    return d
+  }
+
+  it('「登记报销」按钮点击 → expDialogVisible = true（onClick@431）', async () => {
+    const w = await mountExp()
+    const vm = w.vm as any
+    vm.fundData.status = 'in_use' // 使 :disabled 为假，否则 VTU 不会派发 click
+    await nextTick()
+    const btn = w.findAll('el-button-stub').find((b: any) => b.text().trim() === '登记报销')!
+    expect(btn, '登记报销按钮').toBeTruthy()
+    await btn.trigger('click')
+    expect(vm.expDialogVisible).toBe(true)
+    w.unmount()
+  })
+
+  it('对话框 v-model 回写（onUpdate:modelValue@726）与 footer「取消」（onClick@761）', async () => {
+    const w = await mountExp()
+    const vm = w.vm as any
+    vm.expDialogVisible = true
+    await nextTick()
+
+    // 关闭按钮 → 编译产物 onUpdate:modelValue 将 expDialogVisible 置回 false
+    await expDialog(w).find('.dlg-close').trigger('click')
+    expect(vm.expDialogVisible).toBe(false)
+
+    vm.expDialogVisible = true
+    await nextTick()
+    const cancel = expDialog(w)
+      .findAll('el-button-stub')
+      .find((b: any) => b.text().trim() === '取消')!
+    expect(cancel, '报销对话框取消按钮').toBeTruthy()
+    await cancel.trigger('click')
+    expect(vm.expDialogVisible).toBe(false)
+    w.unmount()
+  })
+
+  it('日期选择器 v-model 回写 expForm.transaction_date（onUpdate:modelValue@738）', async () => {
+    const w = await mountExp()
+    const vm = w.vm as any
+    vm.expDialogVisible = true
+    await nextTick()
+    expect(vm.expForm.transaction_date).toBe('')
+    await expDialog(w).find('.el-date-picker-stub').trigger('click')
+    expect(vm.expForm.transaction_date).toBe('2026-09-01')
     w.unmount()
   })
 })

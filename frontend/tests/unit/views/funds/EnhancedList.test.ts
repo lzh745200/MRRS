@@ -22,6 +22,10 @@ const {
   pushSafeMock,
   logError,
   authStateRB,
+  promptMock,
+  restoreFundMock,
+  previewPurgeFundMock,
+  purgeFundMock,
 } = vi.hoisted(() => ({
   authStateRB: {
     user: { role: 'admin', id: 1 }, canViewDeleted: true,
@@ -29,6 +33,10 @@ const {
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   ElNotification: vi.fn(),
   confirmMock: vi.fn(),
+  promptMock: vi.fn(),
+  restoreFundMock: vi.fn(),
+  previewPurgeFundMock: vi.fn(),
+  purgeFundMock: vi.fn(),
   mockGet: vi.fn(),
   mockDel: vi.fn(),
   mockApiRequest: vi.fn(),
@@ -47,7 +55,15 @@ const {
 vi.mock('element-plus', () => ({
   ElMessage,
   ElNotification,
-  ElMessageBox: { confirm: confirmMock },
+  ElMessageBox: { confirm: confirmMock, prompt: promptMock },
+}))
+
+// 回收站（Phase C）三接口；不 mock 则会落到真实的 @/api/request 桩上，无法精确断言入参
+vi.mock('@/api/fundsRecycle', () => ({
+  restoreFund: restoreFundMock,
+  previewPurgeFund: previewPurgeFundMock,
+  purgeFund: purgeFundMock,
+  request: { get: vi.fn(), post: vi.fn() },
 }))
 
 vi.mock('@/api/request', () => ({
@@ -205,6 +221,15 @@ function mountComp() {
           template:
             '<div class="el-popconfirm-stub" @click="$emit(\'confirm\')"><slot name="reference" /></div>',
         },
+        // 默认桩不会 emit update:modelValue，导致 v-model 编译产物
+        // onUpdate:modelValue@277 永远不被执行；此处提供可 emit 的桩。
+        'el-switch': {
+          props: { modelValue: { type: Boolean, default: false } },
+          emits: ['update:modelValue', 'change'],
+          template:
+            '<button type="button" class="el-switch-stub" :data-on="String(modelValue)"' +
+            ' @click="$emit(\'update:modelValue\', !modelValue); $emit(\'change\', !modelValue)"><slot /></button>',
+        },
         'el-progress': { template: '<div class="el-progress-stub" />' },
         'el-result': { template: '<div class="el-result-stub"><slot name="extra" /></div>' },
         'el-empty': { template: '<div class="el-empty-stub" />' },
@@ -225,6 +250,10 @@ beforeEach(() => {
   schoolsListMock.mockResolvedValue({ data: { items: [{ id: 1, school_name: '校A' }] } })
   downloadTemplateMock.mockResolvedValue({})
   confirmMock.mockResolvedValue(undefined)
+  promptMock.mockResolvedValue({ value: 'pw' })
+  restoreFundMock.mockResolvedValue({})
+  previewPurgeFundMock.mockResolvedValue({ data: { total_references: 0 } })
+  purgeFundMock.mockResolvedValue({})
 })
 
 afterEach(() => {
@@ -1180,5 +1209,257 @@ describe('经费流程步骤条（v1.8.0）', () => {
     expect(ElNotification).toHaveBeenCalledWith(
       expect.objectContaining({ message: '经费「66」已拨付到账' })
     )
+  })
+})
+
+// ─────────────────────────────────────────────
+// 回收站（Phase C 推广）：handleToggleDeleted@960 / handleRestore@965 / handlePurge@984
+// stmts@960-1022；onUpdate:modelValue@277；onClick@446/@449；branch@272 (canViewDeleted)
+// ─────────────────────────────────────────────
+describe('回收站（Phase C）', () => {
+  it('canViewDeleted=true → el-switch 可见；点击开关 → v-model 翻转 + handleToggleDeleted 重置页码并携带 include_deleted', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.canViewDeleted).toBe(true)
+    const sw = wrapper.find('.el-switch-stub')
+    expect(sw.exists()).toBe(true)
+    expect(sw.attributes('data-on')).toBe('false')
+
+    vm.currentPage = 5
+    const before = mockApiRequest.mock.calls.length
+    await sw.trigger('click')
+    await flushPromises()
+
+    expect(vm.showDeletedOnly).toBe(true)
+    expect(vm.currentPage).toBe(1)
+    expect(mockApiRequest.mock.calls.length).toBeGreaterThan(before)
+    // fetchData params 中 include_deleted 为 true
+    const lastParams = mockApiRequest.mock.calls.at(-1)?.[0]?.params
+    expect(lastParams?.include_deleted).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('canViewDeleted=false → el-switch 不渲染（v-if 假侧）', async () => {
+    authStateRB.canViewDeleted = false
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.canViewDeleted).toBe(false)
+    expect(wrapper.find('.el-switch-stub').exists()).toBe(false)
+    wrapper.unmount()
+    authStateRB.canViewDeleted = true // 恢复给其他用例
+  })
+
+  it('showDeletedOnly=true → 操作列渲染「恢复/彻底删除」而非 el-popconfirm（v-else 侧）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 默认（假侧）：el-popconfirm 可见，没有恢复按钮
+    expect(wrapper.find('.el-popconfirm-stub').exists()).toBe(true)
+
+    vm.showDeletedOnly = true
+    await nextTick()
+    // v-else 侧：恢复/彻底删除 出现，popconfirm 被排除
+    const texts = wrapper.findAll('.el-button-stub').map((b) => b.text())
+    expect(texts.filter((t) => t.includes('恢复')).length).toBeGreaterThan(0)
+    expect(texts.filter((t) => t.includes('彻底删除')).length).toBeGreaterThan(0)
+    expect(wrapper.find('.el-popconfirm-stub').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('onClick@446/@449：点击「恢复」「彻底删除」按钮转发到对应 handler', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.showDeletedOnly = true
+    await nextTick()
+
+    const restoreBtn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('恢复'))
+    const purgeBtn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('彻底删除'))
+    expect(restoreBtn).toBeTruthy()
+    expect(purgeBtn).toBeTruthy()
+
+    await restoreBtn!.trigger('click')
+    await flushPromises()
+    // handleRestore: confirm → restoreFund(rowA.id = 1)
+    expect(confirmMock).toHaveBeenCalledWith(
+      '确定恢复经费【测试经费】吗？', '恢复确认', expect.anything()
+    )
+    expect(restoreFundMock).toHaveBeenCalledWith(1)
+
+    await purgeBtn!.trigger('click')
+    await flushPromises()
+    // handlePurge: preview → confirm
+    expect(previewPurgeFundMock).toHaveBeenCalledWith(1)
+    expect(confirmMock).toHaveBeenCalledWith(
+      expect.stringContaining('彻底删除后该经费及其关联的 0 条数据将无法恢复'),
+      '彻底删除警告', expect.anything()
+    )
+    wrapper.unmount()
+  })
+
+  describe('handleRestore', () => {
+    it('确认 → restoreFund(id) + 成功提示 + 刷新', async () => {
+      const wrapper = mountComp()
+      await flushPromises()
+      const vm = wrapper.vm as any
+      const before = mockApiRequest.mock.calls.length
+      await vm.handleRestore({ id: 9, name: '经费X' })
+      await flushPromises()
+      expect(confirmMock).toHaveBeenCalledWith(
+        '确定恢复经费【经费X】吗？', '恢复确认',
+        expect.objectContaining({ confirmButtonText: '确认恢复', type: 'info' })
+      )
+      expect(restoreFundMock).toHaveBeenCalledWith(9)
+      expect(ElMessage.success).toHaveBeenCalledWith('恢复成功')
+      expect(mockApiRequest.mock.calls.length).toBeGreaterThan(before)
+      wrapper.unmount()
+    })
+
+    it('row.name 为空 → 回退 row.id 拼接确认文案', async () => {
+      const wrapper = mountComp()
+      await flushPromises()
+      await (wrapper.vm as any).handleRestore({ id: 42, name: '' })
+      await flushPromises()
+      expect(confirmMock).toHaveBeenCalledWith(
+        '确定恢复经费【42】吗？', '恢复确认', expect.anything()
+      )
+      wrapper.unmount()
+    })
+
+    it('取消确认 → 直接 return，不调用 restoreFund', async () => {
+      confirmMock.mockRejectedValueOnce('cancel')
+      const wrapper = mountComp()
+      await flushPromises()
+      await (wrapper.vm as any).handleRestore({ id: 9, name: 'X' })
+      await flushPromises()
+      expect(restoreFundMock).not.toHaveBeenCalled()
+      expect(ElMessage.success).not.toHaveBeenCalled()
+      wrapper.unmount()
+    })
+
+    it('restoreFund 失败 → 错误提示「恢复失败」', async () => {
+      restoreFundMock.mockRejectedValueOnce(new Error('boom'))
+      const wrapper = mountComp()
+      await flushPromises()
+      await (wrapper.vm as any).handleRestore({ id: 9, name: 'X' })
+      await flushPromises()
+      expect(ElMessage.error).toHaveBeenCalledWith('恢复失败')
+      wrapper.unmount()
+    })
+  })
+
+  describe('handlePurge', () => {
+    it('预览 data.total_references → 警告文案 → prompt 密码 → purgeFund', async () => {
+      previewPurgeFundMock.mockResolvedValueOnce({ data: { total_references: 5 } })
+      const wrapper = mountComp()
+      await flushPromises()
+      const vm = wrapper.vm as any
+      const before = mockApiRequest.mock.calls.length
+      await vm.handlePurge({ id: 3, name: '经费Y' })
+      await flushPromises()
+      expect(previewPurgeFundMock).toHaveBeenCalledWith(3)
+      expect(confirmMock).toHaveBeenCalledWith(
+        '彻底删除后该经费及其关联的 5 条数据将无法恢复！不可撤销。',
+        '彻底删除警告', expect.objectContaining({ confirmButtonText: '继续', type: 'warning' })
+      )
+      expect(promptMock).toHaveBeenCalledWith(
+        '请输入登录密码以确认彻底删除：', '二次确认',
+        expect.objectContaining({ confirmButtonText: '确认彻底删除', inputType: 'password' })
+      )
+      expect(purgeFundMock).toHaveBeenCalledWith(3, 'pw')
+      expect(ElMessage.success).toHaveBeenCalledWith('已彻底删除')
+      expect(mockApiRequest.mock.calls.length).toBeGreaterThan(before)
+      expect(vm.loading).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('预览无 data 包装 → 直接取 pv.total_references', async () => {
+      previewPurgeFundMock.mockResolvedValueOnce({ total_references: 2 })
+      const wrapper = mountComp()
+      await flushPromises()
+      await (wrapper.vm as any).handlePurge({ id: 3, name: 'A' })
+      await flushPromises()
+      expect(confirmMock).toHaveBeenCalledWith(
+        expect.stringContaining('关联的 2 条数据'), '彻底删除警告', expect.anything()
+      )
+      wrapper.unmount()
+    })
+
+    it('预览失败 → 静默异常，totalRefs=0 仍继续', async () => {
+      previewPurgeFundMock.mockRejectedValueOnce(new Error('down'))
+      const wrapper = mountComp()
+      await flushPromises()
+      await (wrapper.vm as any).handlePurge({ id: 3, name: 'A' })
+      await flushPromises()
+      expect(confirmMock).toHaveBeenCalledWith(
+        expect.stringContaining('关联的 0 条数据'), '彻底删除警告', expect.anything()
+      )
+      expect(purgeFundMock).toHaveBeenCalledWith(3, 'pw')
+      wrapper.unmount()
+    })
+
+    it('prompt value 为空 → confirmPassword 回退空串', async () => {
+      promptMock.mockResolvedValueOnce({ value: undefined })
+      const wrapper = mountComp()
+      await flushPromises()
+      await (wrapper.vm as any).handlePurge({ id: 3, name: 'A' })
+      await flushPromises()
+      expect(purgeFundMock).toHaveBeenCalledWith(3, '')
+      wrapper.unmount()
+    })
+
+    it('inputValidator：空密码 → 错误文案；非空 → true', async () => {
+      const wrapper = mountComp()
+      await flushPromises()
+      await (wrapper.vm as any).handlePurge({ id: 3, name: 'A' })
+      await flushPromises()
+      const opts = promptMock.mock.calls[0][2]
+      expect(typeof opts.inputValidator).toBe('function')
+      expect(opts.inputValidator('')).toBe('密码不能为空')
+      expect(opts.inputValidator('abc')).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('警告确认取消 → 不调用 prompt / purgeFund', async () => {
+      confirmMock.mockRejectedValueOnce('cancel')
+      const wrapper = mountComp()
+      await flushPromises()
+      const vm = wrapper.vm as any
+      await vm.handlePurge({ id: 3, name: 'A' })
+      await flushPromises()
+      expect(promptMock).not.toHaveBeenCalled()
+      expect(purgeFundMock).not.toHaveBeenCalled()
+      expect(vm.loading).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('密码确认取消 → 不调用 purgeFund', async () => {
+      promptMock.mockRejectedValueOnce('cancel')
+      const wrapper = mountComp()
+      await flushPromises()
+      const vm = wrapper.vm as any
+      await vm.handlePurge({ id: 3, name: 'A' })
+      await flushPromises()
+      expect(confirmMock).toHaveBeenCalledTimes(1)
+      expect(purgeFundMock).not.toHaveBeenCalled()
+      expect(vm.loading).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('purgeFund 失败 → 错误提示，finally 释放 loading', async () => {
+      purgeFundMock.mockRejectedValueOnce(new Error('fail'))
+      const wrapper = mountComp()
+      await flushPromises()
+      const vm = wrapper.vm as any
+      const before = mockApiRequest.mock.calls.length
+      await vm.handlePurge({ id: 3, name: 'A' })
+      await flushPromises()
+      expect(ElMessage.error).toHaveBeenCalledWith('彻底删除失败')
+      expect(vm.loading).toBe(false)
+      expect(mockApiRequest.mock.calls.length).toBe(before) // 失败不刷新
+      wrapper.unmount()
+    })
   })
 })

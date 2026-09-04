@@ -366,9 +366,11 @@ class TestGetStatistics:
         tasks = [
             _make_mock_task(1, status=TaskStatus.draft, category=TaskCategory.infrastructure, budget=10, actual_cost=5),
             _make_mock_task(2, status=TaskStatus.completed, category=TaskCategory.industry, budget=20, actual_cost=18),
-            _make_mock_task(3, status=TaskStatus.completed, category=TaskCategory.infrastructure, budget=30, actual_cost=30),
+            _make_mock_task(3, status=TaskStatus.completed, category=TaskCategory.infrastructure,
+                            budget=30, actual_cost=30),
             _make_mock_task(4, status=TaskStatus.in_progress, category=TaskCategory.education, budget=5, actual_cost=2),
-            _make_mock_task(5, status=TaskStatus.pending_approval, category=TaskCategory.other, budget=0, actual_cost=0),
+            _make_mock_task(5, status=TaskStatus.pending_approval, category=TaskCategory.other,
+                            budget=0, actual_cost=0),
         ]
         q = mock_db.query.return_value
         q.all.return_value = tasks
@@ -839,3 +841,21 @@ class TestBatchDelete:
         resp = client.post("/api/v1/rural-tasks/batch-delete", json={"ids": [9999, 9998]})
         assert resp.status_code == 200
         assert resp.json()["data"]["deleted"] == 0
+
+    def test_batch_delete_ids_not_list_422(self, client, mock_db):
+        """覆盖 rural_tasks.py:345 —— ids 非数组 → 422。"""
+        resp = client.post("/api/v1/rural-tasks/batch-delete", json={"ids": "notalist"})
+        assert resp.status_code == 422
+        assert "ids 必须是数组" in resp.json()["detail"]
+
+    def test_batch_delete_ids_invalid_element_422(self, client, mock_db):
+        """覆盖 rural_tasks.py:349 —— ids 含非正整数(0) → 422。"""
+        resp = client.post("/api/v1/rural-tasks/batch-delete", json={"ids": [0]})
+        assert resp.status_code == 422
+        assert "只能包含正整数" in resp.json()["detail"]
+
+    def test_batch_delete_ids_bool_element_422(self, client, mock_db):
+        """覆盖 rural_tasks.py:349 —— bool 不是合法 id → 422。"""
+        resp = client.post("/api/v1/rural-tasks/batch-delete", json={"ids": [True]})
+        assert resp.status_code == 422
+        assert "只能包含正整数" in resp.json()["detail"]

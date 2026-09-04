@@ -292,6 +292,7 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { post, downloadBlob, parseContentDisposition } from '@/api/request'
 import request from '@/api/request'
+import { importEntities } from '@/api/import'
 
 interface ProjectData {
   rowIndex: number
@@ -450,18 +451,14 @@ const confirmImport = async () => {
   importLoading.value = true
   try {
     const file = fileList.value[0] as any
-    const formData = new FormData()
-    formData.append('file', file.raw || file)
-    formData.append('entity_type', 'project')
-    formData.append('mode', 'incremental')
-
-    const resp: any = await post('/import/entities', formData, {
-      timeout: 120000,
-    })
-    const response = resp
+    // S3 修复：后端 /import/entities 的 entity_type/mode 是 Query 参数，绝不塞进 FormData。
+    // 复用 api/import.ts 的 importEntities 确保 entity_type='project' 走 params，
+    // 避免项目导入文件被帮扶村解析器误解析（字段错位、写错表 → 数据损坏）。
+    const response: any = await importEntities(file.raw || file, 'project', 'incremental')
 
     importResult.value = {
-      success: true,
+      // M5 修复：success 取后端真实返回值，避免全部行失败时仍进入“成功”分支误导用户。
+      success: Boolean(response?.success),
       failure: (Number(response?.failed_rows) || 0) > 0,
       successCount: Number(response?.success_rows) || 0,
       failureCount: Number(response?.failed_rows) || 0,

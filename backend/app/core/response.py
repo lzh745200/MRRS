@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -66,6 +66,7 @@ def ok_list(
     page: int = 1,
     page_size: int = 20,
     message: str = "成功",
+    extra: Optional[Dict] = None,
     **kwargs,
 ) -> Dict:
     """
@@ -73,14 +74,25 @@ def ok_list(
 
     前端 _unwrapList 据此取 data.items / data.total。
     所有业务列表接口应使用本函数，避免 bare {total,page,page_size,items} 与 envelope 混用。
+
+    extra: 需要并入 data 的附加字段（如 summary 统计）。
+    注意：不要用 **kwargs 传附加数据 —— success_response 会把它们放到响应顶层
+    而非 data 内，前端读 data.summary 将得到 undefined（2026-09-02 修复）。
     """
+    data: Dict = {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+    if extra:
+        # 类型守卫：extra 契约为 Dict（并入 data 层，如 summary 统计）。
+        # 传入非 dict 时忽略，避免 data.update(非dict) 抛 ValueError → 500
+        # （ok_list 回归修复：原新增 extra 形参未做类型校验）。
+        if isinstance(extra, dict):
+            data.update(extra)
     return success_response(
-        data={
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        },
+        data=data,
         message=message,
         **kwargs,
     )

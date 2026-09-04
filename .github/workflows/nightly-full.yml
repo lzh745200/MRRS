@@ -21,12 +21,14 @@ jobs:
         run: |
           cd backend
           # 2026-08-24：改用 xdist 并行（对齐 PR Checks 已验证配方），
-          # 全量 1.2 万用例 + 98% 覆盖率门禁约 15-20 分钟完成；
-          # 单进程模式需 60-90 分钟，曾三次被外部协调取消（runs #10/#11/#12）。
+          # 全量约 15-20 分钟完成；单进程模式需 60-90 分钟，
+          # 曾三次被外部协调取消（runs #10/#11/#12）。
+          # 覆盖率门禁：阈值统一由 backend/.coveragerc 的 fail_under=100 单一承载
+          # （2026-09-04 对齐 #21：移除内联 --cov-fail-under=98——命令行参数会
+          #  屏蔽配置文件口径，此前 nightly 实际跑的是 98 旧门禁）
           python -m pytest tests/ -q --tb=line \
             -n auto \
             --cov=app --cov-report=html --cov-report=json --cov-report=xml \
-            --cov-fail-under=98 \
             --reruns 2 --reruns-delay 1 \
             --durations=20 \
             --junitxml=test-results.xml

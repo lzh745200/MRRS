@@ -12,7 +12,7 @@ test: test-backend test-frontend
 # 后端测试
 test-backend:
 	@echo ">>> 运行后端测试..."
-	cd backend && python -m pytest tests/ -v --tb=short --cov=app --cov-fail-under=98
+	cd backend && python -m pytest tests/ -v --tb=short --cov=app
 
 # 前端测试
 test-frontend:
@@ -35,25 +35,26 @@ test-e2e-docker:
 	docker compose -f docker-compose.yml -f docker/docker-compose.e2e.yml --profile e2e down -v
 	@echo "✓ E2E Docker 测试完成"
 
-# 生成覆盖率报告（与 CI 同一 98% 门禁，防止本地报告掩盖达标缺口）
+# 生成覆盖率报告（门禁阈值统一由 backend/.coveragerc 的 fail_under 承载，
+# 此处不再内联 --cov-fail-under，以免命令行参数屏蔽单一事实源配置）
 coverage:
 	@echo ">>> 生成覆盖率报告..."
-	cd backend && python -m pytest --cov=app --cov-report=html --cov-report=xml --cov-fail-under=98
+	cd backend && python -m pytest --cov=app --cov-report=html --cov-report=xml
 	cd frontend && npm run test:coverage
 
 # 部署前检查（W4-T2：每条命令独立阻断，禁止 || true 吞失败）
 deploy-check:
 	@echo ">>> 运行部署前检查..."
-	# 后端：测试（98% 门禁真实阻断）→ flake8 → bandit
-	cd backend && python -m pytest tests/ --cov=app --cov-fail-under=98 -q
-	cd backend && python -m flake8 app/ --max-line-length=120
+	# 后端：测试（覆盖率门禁阈值由 backend/.coveragerc fail_under 单一承载，真实阻断）→ flake8 → bandit
+	cd backend && python -m pytest tests/ --cov=app -q
+	cd backend && python -m flake8 app/ --max-line-length=120 --count --max-complexity=16
 	cd backend && python -m bandit -r app/ -ll -f json -o bandit-report.json
 
-	# 前端检查
+	# 前端检查（与 CI 等价：纯检查不带 --fix，覆盖率走阈值门禁）
 	cd frontend && \
-		npm run lint && \
+		npm run lint:check && \
 		npm run type-check && \
-		npm run test
+		npm run test:coverage
 
 	@echo "✓ 部署前检查通过"
 

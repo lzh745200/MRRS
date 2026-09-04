@@ -247,7 +247,7 @@
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
-          :total="(pagination as any)?.data?.total || (pagination as any)?.total"
+          :total="pagination.total"
           :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
           @size-change="handleSizeChange"
@@ -332,6 +332,13 @@ const loading = ref(false)
 const exporting = ref(false)
 const batchDeleting = ref(false)
 const tableData = ref<SupportedVillage[]>([])
+// 后端 with_summary 聚合结果（全量口径：总数/总投入/覆盖县市/参与部门）
+const serverSummary = ref<{
+  total?: number
+  total_investment?: number
+  county_count?: number
+  department_count?: number
+} | null>(null)
 const selectedRows = ref<SupportedVillage[]>([])
 const tableRef = ref()
 const dialogVisible = ref(false)
@@ -368,6 +375,10 @@ const filterOptions = ref<{
 })
 
 // 分页
+// pagination 恒为 { page, pageSize, total } 三键的 reactive 对象：本文件只写这三个键，
+// 也从不整体替换该对象，因此不存在 .data 信封层。此前模板与 kpiStats 里的
+// `(pagination as any)?.data?.total || ...` 左侧永为 undefined、`?.` 的 nullish 侧
+// 亦永不可达（pagination 是 const 且恒真），属死防御，任务#28 已删除。
 const pagination = reactive({
   page: 1,
   pageSize: 20,
@@ -390,9 +401,21 @@ const dialogTitle = computed(() => {
   return titles[dialogMode.value]
 })
 
-// KPI 统计（基于当前已加载数据）
+// KPI 统计：优先使用后端 summary（全量口径，含年度经费聚合）。
+// 历史缺陷（2026-09-02 修复）：旧实现基于"当前页"行数据现算，且读取列表行
+// 不存在的 totalInvestment 等字段（投入在年度经费表），导致总投入恒为 0。
 const kpiStats = computed(() => {
+  const summary = serverSummary.value
   const data = tableData.value || []
+  if (summary) {
+    return {
+      totalVillages: summary.total ?? 0,
+      totalInvestment: format.formatMoney4(summary.total_investment || 0),
+      countyCount: summary.county_count || 0,
+      departmentCount: summary.department_count || 0,
+    }
+  }
+  // 回退：后端未返回 summary 时基于当前页现算（兼容旧接口）
   const totalInvestment = data.reduce((sum, row: any) => {
     const inv =
       (row.totalInvestment || 0) +
@@ -404,7 +427,7 @@ const kpiStats = computed(() => {
   const counties = new Set(data.map((row: any) => row.county || row.regionScope).filter(Boolean))
   const departments = new Set(data.map((row: any) => row.department).filter(Boolean))
   return {
-    totalVillages: (pagination as any)?.data?.total || (pagination as any)?.total || data.length,
+    totalVillages: pagination.total || data.length,
     totalInvestment: format.formatMoney4(totalInvestment),
     countyCount: counties.size || filterOptions.value.counties.length,
     departmentCount: departments.size || filterOptions.value.departments.length,
@@ -436,11 +459,14 @@ async function loadData() {
       // 回收站模式：管理员开启时附加 include_deleted=true
       // 后端 enforce_admin_include_deleted 依赖会兜底降级非管理员的请求
       include_deleted: showDeletedOnly.value ? true : undefined,
+      // KPI 全量统计（总数/总投入/覆盖县市/参与部门）由后端聚合返回
+      with_summary: true,
     } as any)
     // 防御：兼容信封（data.items）与裸分页（items）两种形态
     tableData.value = (response as any)?.data?.items ?? (response as any)?.items ?? []
     pagination.total =
       (response as any)?.data?.total ?? (response as any)?.total ?? tableData.value.length
+    serverSummary.value = (response as any)?.data?.summary ?? (response as any)?.summary ?? null
   } catch (error) {
     tableData.value = []
     pagination.total = 0
@@ -479,6 +505,9 @@ function handleSearch() {
 
 // 重置
 function handleReset() {
+  // 必须覆盖模板绑定的全部 8 个筛选项。此前漏掉 yearStart（年份下拉：模板
+  // v-model="filters.yearStart"、loadData 的 year_start），导致点「重置」后年份
+  // 筛选仍然生效，列表结果与用户预期不符。
   Object.assign(filters, {
     keyword: '',
     department: undefined,
@@ -487,6 +516,7 @@ function handleReset() {
     isThreeRegions: undefined,
     isEthnicArea: undefined,
     isKeyCounty: undefined,
+    yearStart: undefined,
   })
   pagination.page = 1
   loadData()
@@ -576,6 +606,8 @@ async function handleRestore(row: SupportedVillage) {
   try {
     await restoreSupportedVillage(row.id)
     ElMessage.success('恢复成功')
+    // 重置到第 1 页再刷新，确保恢复的记录可见（AGENTS.md 模式 c）
+    pagination.page = 1
     loadData()
   } catch {
     ElMessage.error('恢复失败')
@@ -633,6 +665,8 @@ async function handlePurge(row: SupportedVillage) {
     pagination.total = Math.max(0, pagination.total - 1)
     const removed = result?.data?.deleted_records ?? 0
     ElMessage.success(`已彻底删除及清理 ${removed} 条关联数据`)
+    // 重置到第 1 页再刷新，确保列表数据可见（AGENTS.md 模式 c）
+    pagination.page = 1
     loadData()
   } catch {
     ElMessage.error('彻底删除失败')
@@ -691,10 +725,16 @@ async function handleBatchDelete() {
 async function handleFormSubmit(data: SupportedVillageCreate) {
   logger.info('收到表单提交事件，数据:', data)
   try {
+    // 私有过渡字段 _transitionFundingItems 只在 create 路径有意义
+    // （SupportedVillageForm 仅在 mode==='create' 时把它附进 payload），
+    // 故统一在入口处摘除后 delete，保证任何分支都不会把内部状态透传给持久化 API。
+    // 此前只有 create 分支 delete，edit 分支原样透传给 updateSupportedVillage；
+    // 现与 Detail.vue 的 handleFormSubmit 写法一致。
+    const fundingItems = (data as any)._transitionFundingItems
+    delete (data as any)._transitionFundingItems
+
     if (dialogMode.value === 'create') {
       logger.info('创建帮扶村...')
-      const fundingItems = (data as any)._transitionFundingItems
-      delete (data as any)._transitionFundingItems
       const created = (await createSupportedVillage(data)) as any
       const villageId = created?.data?.id || created?.id
       if (fundingItems?.length && villageId) {

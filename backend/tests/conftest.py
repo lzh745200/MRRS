@@ -6,12 +6,41 @@
 # ── 关键修复：强制 UTF-8 编码，消除 Windows 控制台 GBK 导致的 UnicodeEncodeError ──
 import os as _os
 _os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-# ── 关键修复：测试数据库隔离必须在任何 app 模块导入之前生效 ──
-# app/core/database.py 在模块级用 settings.DATABASE_URL 创建全局 engine，
-# 若此处不提前设置，engine 会绑定真实开发库（data/rural_revitalization.db），
-# 直接连 SessionLocal 的测试将读写真实库 —— 并发 pytest 进程曾因此把开发库写坏
-# （btreeInitPage 页损坏 / database disk image is malformed）。
+# ── 关键修复：全部 app 数据目录必须在任何 app 模块导入之前重定向到会话临时根 ──
+# 机制：app/core/config.py 的 Settings 在构造期（首次 import 时）把 DATABASE_URL /
+# CACHE_DIR / UPLOAD_DIR / EXPORT_DIR 的相对默认值统一归一为 _get_default_data_dir()
+# 下的绝对路径，而该函数最终调用 paths.get_app_data_dir() → get_project_backend_dir()。
+# 因此只要在任何 app.* 导入之前替换 get_project_backend_dir，即可一次收口上述全部路径。
+#
+# 历史缺陷：替换若放在函数级 fixture 里就太晚 —— Settings 已在 import 期把真实
+# backend/data 固化进 settings.*，于是缓存库、集成测试库、备份/恢复全都写在开发者
+# 真目录（现场证据：backend/data/ 里的 rural_revitalization.db.bak_*、
+# rural_revitalization_recovered.db、test_integration.db、cache/*/cache.db，
+# logs/app.log 单次全量跑涨到 4.8MB；以及下方注释记录的“并发 pytest 进程曾因此
+# 把开发库写坏：btreeInitPage 页损坏 / database disk image is malformed”）。
+#
+# 唯一不经该漏斗的是日志文件：config.py 仅在 sys.frozen 时才重写 LOG_DIR/LOG_FILE，
+# 开发/测试态 LOG_FILE 保持相对 "./logs/app.log"（按 CWD 解析到 backend/logs/）。
+# 这里**只**覆盖 LOG_FILE（logging handler 实际读取的字段），刻意不设 LOG_DIR ——
+# 一旦设了 LOG_DIR，config.py 的 `if self.LOG_DIR.startswith("./")` 就判定为假，
+# 整个 sys.frozen 分支被短路；那是打包后应用真正走的路径，且
+# tests/unit/test_config_core.py::test_frozen_log_dir_uses_data_dir 专门覆盖它
+# （断言 LOG_DIR 以 "/logs" 结尾、不含反斜杠）。路径统一用 as_posix() 输出正斜杠，
+# 与 config.py 的 `.replace("\\", "/")` 归一口径一致。
+import tempfile as _tempfile
+from pathlib import Path as _Path
+
+_APP_DATA_ROOT = _Path(_tempfile.mkdtemp(prefix="bumofu_pytest_appdata_"))
+(_APP_DATA_ROOT / "logs").mkdir(parents=True, exist_ok=True)
+
+# 用 env 覆盖而非替换模块属性：paths.get_project_backend_dir() 在调用时读取本变量，
+# 因此 `from app.utils.paths import get_project_backend_dir` 的直接绑定名与模块属性
+# 始终一致。替换属性的做法会让测试模块把名字冻结成替身，与后来被还原的模块属性
+# 分叉（实测导致 test_paths.py 两处断言失败）。
+_os.environ["BUMOFU_BACKEND_DIR_OVERRIDE"] = str(_APP_DATA_ROOT)
+
 _os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+_os.environ["LOG_FILE"] = (_APP_DATA_ROOT / "logs" / "app.log").as_posix()
 # ── 关键修复：无头测试环境强制 matplotlib 使用 Agg 后端 ──
 # 默认后端（如 TkAgg）会在测试期间初始化 tkinter 资源，解释器关闭时
 # 触发 "main thread is not in main loop" 的 ResourceWarning。
@@ -43,6 +72,56 @@ from pathlib import Path
 from unittest.mock import Mock
 import os
 
+# ── [任务#29 临时排障] MagicMock 伪路径泄漏 spy（定位后移除）──
+# 根因机制：Python 3.11 unittest/mock.py 给 MagicMock 配置了 __fspath__ 默认
+# 返回值 f"{type(self).__name__}/{self._extract_mock_name()}/{id(self)}"，即
+# 'MagicMock/mock/<id>' —— 全部是合法路径字符。于是 os.makedirs(mock) 不会抛
+# TypeError，而是静默在 CWD（backend/）下创建 backend/MagicMock/mock/<id>/。
+# 此 spy 包装 os.makedirs / os.mkdir / Path.mkdir，一旦路径含 "MagicMock"
+# 就把完整调用栈写入 backend/mock_leak_trace.log 以精确定位泄漏测试。
+import traceback as _leak_tb
+
+_LEAK_LOG = str(Path(__file__).parent.parent / "mock_leak_trace.log")
+_leak_orig_makedirs = os.makedirs
+_leak_orig_os_mkdir = os.mkdir
+_leak_orig_path_mkdir = Path.mkdir
+
+
+def _leak_record(tag, path):
+    try:
+        s = str(path)
+    except Exception:
+        return
+    if "MagicMock" not in s:
+        return
+    entry = f"\n=== [{tag}] path={s!r} ===\n" + "".join(_leak_tb.format_stack())
+    try:
+        with open(_LEAK_LOG, "a", encoding="utf-8") as f:
+            f.write(entry)
+    except Exception:
+        pass
+
+
+def _leak_makedirs(name, mode=0o777, exist_ok=False, **kwargs):
+    _leak_record("os.makedirs", name)
+    return _leak_orig_makedirs(name, mode=mode, exist_ok=exist_ok, **kwargs)
+
+
+def _leak_os_mkdir(path, mode=0o777, *, dir_fd=None):
+    _leak_record("os.mkdir", path)
+    return _leak_orig_os_mkdir(path, mode, dir_fd=dir_fd)
+
+
+def _leak_path_mkdir(self, mode=0o777, parents=False, exist_ok=False):
+    _leak_record("Path.mkdir", self)
+    return _leak_orig_path_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
+
+
+os.makedirs = _leak_makedirs
+os.mkdir = _leak_os_mkdir
+Path.mkdir = _leak_path_mkdir
+# ── [任务#29 临时排障] spy 结束 ──
+
 
 # ── 根因修复：移除超过 Windows 环境变量长度限制（32767 字符）的超长变量 ──
 # WorkBuddy 桌面端会注入 ACC_PRODUCT_CONFIG_V3（~288KB）等超长环境变量。
@@ -56,6 +135,17 @@ def _strip_oversized_env_vars():
     for _key in [k for k, v in list(os.environ.items()) if len(v) > _WIN_ENV_LIMIT]:
         del os.environ[_key]
     yield
+
+
+# ── real_backend_dir 豁免：为专测路径解析逻辑的测试临时移除数据目录覆盖 ──
+# 模块级已设 BUMOFU_BACKEND_DIR_OVERRIDE 把全部数据目录指向会话临时根（见本文件
+# 顶部），但 tests/unit/test_paths.py 断言 get_app_data_dir() == 真实的
+# get_project_backend_dir() 以及其 .name == "backend"，必须看到未被覆盖的、
+# 由 __file__ 推断出的真实值。monkeypatch.delenv 会在测试结束后自动还原。
+@pytest.fixture(autouse=True)
+def _honor_real_backend_dir_marker(request, monkeypatch):
+    if request.node.get_closest_marker("real_backend_dir"):
+        monkeypatch.delenv("BUMOFU_BACKEND_DIR_OVERRIDE", raising=False)
 
 
 # ── 根因修复：会话启动时强制导入全部模型子模块，确保 SQLAlchemy mapper 注册表完整 ──

@@ -92,12 +92,12 @@ class TestSupportedVillageIsolation:
                 "province": "贵州省",
                 "county": "测试县",
             })
-            # 创建可能因 schema 差异失败，跳过而非报错
-            if resp.status_code not in (200, 201):
-                pytest.skip(f"创建帮扶村失败: {resp.status_code} {resp.text[:200]}")
+            # 前置资源创建失败必须显式 FAIL（禁止静默 skip 掩盖缺陷）
+            assert resp.status_code in (200, 201), (
+                f"前置条件失败：创建帮扶村应成功，实际 {resp.status_code} {resp.text[:200]}"
+            )
             village_id = resp.json().get("data", {}).get("id")
-            if not village_id:
-                pytest.skip("无法获取帮扶村ID")
+            assert village_id, f"前置条件失败：无法获取帮扶村ID，响应 {resp.text[:200]}"
 
             # org2 普通用户尝试访问 → 应 403（跨组织）
             client.app.dependency_overrides[get_current_user] = lambda: org2_user
@@ -207,12 +207,12 @@ class TestProjectSubEndpointIsolation:
                 "name": "隔离测试项目",
                 "type": "infrastructure",
             })
-            if resp.status_code not in (200, 201):
-                pytest.skip(f"创建项目失败: {resp.status_code} {resp.text[:200]}")
+            assert resp.status_code in (200, 201), (
+                f"前置条件失败：创建项目应成功，实际 {resp.status_code} {resp.text[:200]}"
+            )
             data = resp.json()
             project_id = data.get("id") or data.get("data", {}).get("id")
-            if not project_id:
-                pytest.skip("无法获取项目ID")
+            assert project_id, f"前置条件失败：无法获取项目ID，响应 {resp.text[:200]}"
 
             # org2 用户访问项目经费 → 应 403
             client.app.dependency_overrides[get_current_user] = lambda: org2_user

@@ -87,5 +87,38 @@ describe('BackupManagement 磁盘空间警告', () => {
     expect(wrapper.find('el-alert').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  // diskSpaceWarning 分支矩阵：branch@367(@368/@369/@371×2)
+  it('diskSpaceWarning：db_dir 回退 / 无目录 / sufficient 缺省 / ?? 兜底 / 空间充足', async () => {
+    mockGet.mockResolvedValue({ data: { data: {} } })
+    const wrapper = mount(BackupManagement, { attachTo: document.body })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // diskSpace 为 null → branch@367 真侧
+    expect(vm.diskSpace).toBeNull()
+    expect(vm.diskSpaceWarning).toBeNull()
+
+    // 无 backup_dir 时回退 db_dir（branch@368 第二操作数），且 threshold_mb 显式提供
+    vm.diskSpace = { threshold_mb: 200, db_dir: { path: '/db', free_mb: 10, sufficient: false } }
+    expect(vm.diskSpaceWarning).toBe('磁盘剩余空间不足（10MB < 200MB），备份/恢复可能被拒绝')
+
+    // 两个目录均缺省 → !dir 真侧
+    vm.diskSpace = { threshold_mb: 200 }
+    expect(vm.diskSpaceWarning).toBeNull()
+
+    // dir.sufficient === undefined → branch@369 第二操作数真侧
+    vm.diskSpace = { backup_dir: { path: '/bak', free_mb: 10 } }
+    expect(vm.diskSpaceWarning).toBeNull()
+
+    // free_mb 与 threshold_mb 均缺省 → branch@371 两个 ?? 右侧（-1 / 500）
+    vm.diskSpace = { backup_dir: { path: '/bak', sufficient: false } }
+    expect(vm.diskSpaceWarning).toBe('磁盘剩余空间不足（-1MB < 500MB），备份/恢复可能被拒绝')
+
+    // sufficient === true → 末尾 return null
+    vm.diskSpace = { backup_dir: { path: '/bak', free_mb: 999, sufficient: true } }
+    expect(vm.diskSpaceWarning).toBeNull()
+    wrapper.unmount()
+  })
 })
 

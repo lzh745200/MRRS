@@ -4,8 +4,6 @@
 """
 from decimal import Decimal
 
-import pytest
-
 
 def _make_admin():
     u = type("U", (), {})()
@@ -58,8 +56,8 @@ class TestMoneyRoundTrip:
                 "amount": 2.00025,
                 "status": "pending",
             })
-            if resp.status_code in (403, 401):
-                pytest.skip(f"权限环境不可用: {resp.status_code}")
+            # admin 为超级管理员且已 override get_current_user，鉴权必然满足；
+            # 移除运行时 skip 以免掩盖真实鉴权回归（原 latent skip 永不触发）。
             assert resp.status_code in (200, 201), resp.text[:200]
             fid = (resp.json().get("data") or {}).get("id")
 

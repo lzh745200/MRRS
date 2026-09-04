@@ -42,6 +42,24 @@ def _db_with(queries):
     return db
 
 
+# _get_analysis_data_impl 的 current_user 为必填位置参数（fail-closed，W5-006）
+_SCOPE_USER = SimpleNamespace(
+    id=1, username="root", role="super_admin", is_superuser=True, organization_id=1
+)
+
+
+def _patch_scope():
+    """把 apply_scope_filter 打成「原样返回 query」的替身。
+
+    既避免它干扰 _db_with 排序好的 side_effect 查询链，又保留 call_count
+    以便断言数据隔离确实被挂载到每一条经费查询上。
+    """
+    return patch(
+        "app.core.data_scope_adapter.apply_scope_filter",
+        side_effect=lambda q, *a, **k: q,
+    )
+
+
 @pytest.fixture
 def st_client():
     from app.main import app
@@ -130,7 +148,10 @@ class TestCalcVillageCompleteness:
 
 class TestOverviewImpl:
     async def test_full_path(self):
-        logs = [SimpleNamespace(id=1, action="创建", resource_type="项目", username="root", user_id=1, created_at="2026-07-25 01:00:00")]
+        logs = [SimpleNamespace(
+            id=1, action="创建", resource_type="项目", username="root",
+            user_id=1, created_at="2026-07-25 01:00:00",
+        )]
         db = _db_with([
             _q(count=2),                 # villages
             _q(count=3),                 # projects
@@ -191,11 +212,11 @@ class TestAnalysisDataImpl:
             # _calc_village_completeness（7 个查询：4字段+坐标+人口+收入）
             _q(scalar=2), _q(scalar=2), _q(scalar=2), _q(scalar=2),
             _q(scalar=2), _q(scalar=2), _q(scalar=2),
-            _q(count=1),                 # has_funding_data
-            _q(all=[                     # yearly_data
-                SimpleNamespace(yr=2021, mil=10.0, loc=5.0),
-                SimpleNamespace(yr=2022, mil=20.0, loc=10.0),
-            ]),
+            # H3：items_rows —— 经费口径改为解析 transition_fund_items(JSON)
+            _q(all=[(
+                '[{"year":2021,"militaryInvestment":10,"localInvestment":5},'
+                '{"year":2022,"militaryInvestment":20,"localInvestment":10}]',
+            )]),
             # 5 个帮扶分类 count+sum
             _q(first=SimpleNamespace(cnt=1, inv=100.0)),
             _q(first=SimpleNamespace(cnt=2, inv=200.0)),
@@ -205,12 +226,14 @@ class TestAnalysisDataImpl:
             _q(first=SimpleNamespace(cnt=1, inv=400.0)),   # 消费帮扶
             _q(first=SimpleNamespace(cnt=1, ben=80.0)),    # 就业帮扶
             _q(all=[("甲县", 2, 100.0, 50.0)]),            # county_data
-            # 年度对比：各村人口年份 / 投入年份 / 收入年份（v1.8.0）
+            # 年度对比：各村人口年份 / 收入年份（投入改由 items JSON 聚合，H3）
             _q(all=[(2024, 2), (2025, 3)]),                # pop_rows
-            _q(all=[(2024, 100.0), (2025, 150.0)]),        # inv_rows
             _q(all=[(2024, 1.2), (2025, 1.5)]),            # inc_rows
         ])
-        result = await st._get_analysis_data_impl(db)
+        with _patch_scope() as scope:
+            result = await st._get_analysis_data_impl(db, _SCOPE_USER)
+        # fail-closed 回归：4 条经费查询（村数/军投入/地方投入/年度明细）均须挂隔离
+        assert scope.call_count == 4
         ov = result["overview"]
         assert ov["total_villages"] == 2
         assert ov["total_investment"] == 150.0
@@ -234,11 +257,11 @@ class TestAnalysisDataImpl:
         assert result["region_stats"] == [
             {"region": "甲县", "villages": 2, "investment": 150.0, "avgIncome": 0}
         ]
-        # 年度对比（v1.8.0）
+        # 年度对比（v1.8.0）——投入口径改为 transition_fund_items 聚合（H3）
         yc = result["yearly_comparison"]
         assert yc["years"] == ["2024", "2025"]
         assert yc["villages"] == {"2024": 2, "2025": 3}
-        assert yc["investment"] == {"2024": 100.0, "2025": 150.0}
+        assert yc["investment"] == {"2021": 15.0, "2022": 30.0}
         assert yc["income"] == {"2024": 1.2, "2025": 1.5}
 
     async def test_empty_villages_path(self):
@@ -248,7 +271,7 @@ class TestAnalysisDataImpl:
             _q(count=0),                 # active_projects
             _q(scalar=0),                # mil_total
             _q(scalar=0),                # loc_total
-            _q(count=0),                 # has_funding_data
+            _q(all=[]),                  # items_rows（H3：经费明细 JSON）
             # 5 个帮扶分类
             _q(first=SimpleNamespace(cnt=0, inv=0.0)),
             _q(first=SimpleNamespace(cnt=0, inv=0.0)),
@@ -259,16 +282,74 @@ class TestAnalysisDataImpl:
             _q(first=SimpleNamespace(cnt=0, ben=0.0)),   # 就业
             _q(all=[]),                  # county_data
             _q(all=[]),                  # pop_rows（年度对比，v1.8.0）
-            _q(all=[]),                  # inv_rows
             _q(all=[]),                  # inc_rows
         ])
-        result = await st._get_analysis_data_impl(db)
+        with _patch_scope():
+            result = await st._get_analysis_data_impl(db, _SCOPE_USER)
         assert result["overview"]["completeness"] == 0
         assert result["investment_trend"] == []
         assert all(c["ratio"] == 0 for c in result["category_stats"])  # total_cat_inv=0 跳过占比
         assert result["region_stats"] == []
         # 年度对比空数据兜底
         assert result["yearly_comparison"] == {"years": [], "villages": {}, "investment": {}, "income": {}}
+
+    async def test_items_json_defensive_branches(self):
+        """覆盖 610/613-614/616/619/622-623 —— transition_fund_items JSON 解析全防御分支。
+
+        依次构造：空值(None/空串)、非法JSON(str/int)、合法JSON但非list、
+        list内非dict项、year不可转int(str/None)，均须静默跳过不抛异常；
+        夹杂一条合法行验证正常聚合不被坏行干扰。
+        """
+        db = _db_with([
+            _q(count=2),                 # total_villages
+            _q(count=0),                 # active_projects
+            _q(scalar=0),                # mil_total
+            _q(scalar=0),                # loc_total
+            # _calc_village_completeness 7 个查询
+            _q(scalar=2), _q(scalar=2), _q(scalar=2), _q(scalar=2),
+            _q(scalar=2), _q(scalar=2), _q(scalar=2),
+            # items_rows：坏行 + 好行
+            _q(all=[
+                (None,),                # 610：空值跳过
+                ("",),                  # 610：空串跳过
+                ("not-json{",),          # 613-614：ValueError
+                (12345,),                # 613-614：TypeError
+                ('{"year": 2021}',),     # 616：合法JSON但非list
+                ('["abc", 3]',),         # 619：list内非dict项
+                ('[{"year": "xyz"}]',),  # 622-623：int("xyz") ValueError
+                ('[{"year": null}]',),   # 622-623：int(None) TypeError
+                ('[{"year": 2021, "militaryInvestment": 10, "localInvestment": 5}]',),  # 合法行
+            ]),
+            # 7 个帮扶分类查询
+            _q(first=SimpleNamespace(cnt=0, inv=0.0)),
+            _q(first=SimpleNamespace(cnt=0, inv=0.0)),
+            _q(first=SimpleNamespace(cnt=0, inv=0.0)),
+            _q(first=SimpleNamespace(cnt=0, inv=0.0)),
+            _q(first=SimpleNamespace(cnt=0, inv=0.0)),
+            _q(first=SimpleNamespace(cnt=0, inv=0.0)),   # 消费
+            _q(first=SimpleNamespace(cnt=0, ben=0.0)),   # 就业
+            _q(all=[]),                  # county_data
+            _q(all=[]),                  # pop_rows
+            _q(all=[]),                  # inc_rows
+        ])
+        with _patch_scope():
+            result = await st._get_analysis_data_impl(db, _SCOPE_USER)
+        # 坏行全部被跳过，仅合法 2021 行参与聚合：total=10+5=15
+        trend = result["investment_trend"]
+        assert len(trend) == 5
+        assert trend[0] == {"year": "2021", "military": 10.0, "local": 5.0, "total": 15.0, "growth": 0}
+        assert trend[1]["total"] == 0.0
+
+    async def test_current_user_is_mandatory_fail_closed(self):
+        """fail-closed 回归（W5-006）：漏传 current_user 必须直接 TypeError。
+
+        历史缺陷：current_user 曾带 None 默认值，_scoped 内 `if current_user is
+        not None` 使漏传时静默跳过隔离、返回跨组织聚合数据。改为必填位置参数后，
+        漏传在调用点即失败，不会静默放行。
+        """
+        db = _db_with([])
+        with pytest.raises(TypeError):
+            await st._get_analysis_data_impl(db)
 
 
 # ==================== 端点 500 与缓存命中 ====================

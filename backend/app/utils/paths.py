@@ -65,6 +65,37 @@ def is_linux() -> bool:
     return platform.system() == "Linux"
 
 
+def get_project_backend_dir() -> Path:
+    """基于模块文件位置推断 backend 项目根目录（与 CWD 无关）。
+
+    本文件位于 ``backend/app/utils/paths.py``，因此向上三级父目录即 backend
+    根目录：
+
+        parents[0] = backend/app/utils
+        parents[1] = backend/app
+        parents[2] = backend      ← 返回此目录
+
+    历史缺陷（任务#6 风险1·数据消失直接诱因）：开发环境曾用 ``Path.cwd()``
+    作为数据根目录，导致实际读写哪个数据库完全取决于启动时的工作目录。标准
+    命令 ``cd backend; python start.py``（start.py 内部会 chdir 到 backend）
+    指向正确的 ``backend/data/rural_revitalization.db``；但若经 uvicorn /
+    alembic / pytest 等入口从项目根启动，CWD=项目根 → 解析到陈旧的
+    ``<root>/data/rural_revitalization.db``（数据更少）→ 用户观感“数据消失”。
+    改为基于 ``__file__`` 推断后，无论从哪个 CWD 启动，开发环境都稳定指向
+    backend 目录。
+
+    ``BUMOFU_BACKEND_DIR_OVERRIDE`` 可显式覆盖该推断结果，供测试与特殊部署
+    重定向全部数据目录（本模块所有 dev 分支路径都由本函数派生）。必须是
+    **调用时**读取而非导入时绑定：若改用「替换模块属性」的方式覆盖，此后所有
+    ``from app.utils.paths import get_project_backend_dir`` 的模块会把名字冻结
+    成替身，与后来被还原的模块属性分叉。未设置时行为与既往完全一致。
+    """
+    override = os.environ.get("BUMOFU_BACKEND_DIR_OVERRIDE", "")
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parents[2]
+
+
 def get_app_data_dir() -> Path:
     """
     获取应用数据目录
@@ -84,8 +115,10 @@ def get_app_data_dir() -> Path:
             else:
                 data_dir = Path.home() / ".bumofu"
     else:
-        # 开发环境：使用项目目录
-        data_dir = Path.cwd()
+        # 开发/测试环境：基于项目结构固定指向 backend 目录，不依赖 CWD。
+        # 打包模式（Electron 注入绝对 DATABASE_URL）与 Linux 生产模式在上面
+        # 分支已提前返回，不受此处影响。
+        data_dir = get_project_backend_dir()
 
     # 确保目录存在
     data_dir.mkdir(parents=True, exist_ok=True)

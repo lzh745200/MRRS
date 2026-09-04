@@ -5,6 +5,7 @@
 """
 
 import logging
+import os
 import platform
 import sys
 from datetime import datetime, timezone, timedelta
@@ -13,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 from app.core.database import engine
 
 from app.core.database import get_db
@@ -59,9 +61,12 @@ async def get_system_metrics(current_user=Depends(get_current_user)):
     try:
         import psutil
 
-        cpu = psutil.cpu_percent(interval=0.5)
+        # cpu_percent(interval>0) 是阻塞采样，async 端点里必须卸载到线程池，
+        # 否则每次调用冻结事件循环 0.5s，拖慢所有并发请求
+        cpu = await run_in_threadpool(psutil.cpu_percent, interval=0.5)
         memory = psutil.virtual_memory()
-        disk = psutil.disk_usage("/")
+        # 跨平台磁盘路径：Windows 取 SystemDrive，其它平台取文件系统根 "/"
+        disk = psutil.disk_usage(os.environ.get("SystemDrive") or os.path.abspath(os.sep))
 
         metrics["resources"] = {
             "cpu_percent": cpu,
@@ -78,10 +83,11 @@ async def get_system_metrics(current_user=Depends(get_current_user)):
             "status": "unavailable",
             "message": "psutil 未安装，资源指标不可用",
         }
-    except Exception as e:
+    except Exception:
+        logger.error("获取资源指标失败", exc_info=True)
         metrics["resources"] = {
             "status": "error",
-            "message": f"获取资源指标失败: {str(e)}",
+            "message": "获取资源指标失败，请查看日志",
         }
 
     # 系统运行时间
@@ -156,8 +162,8 @@ async def get_performance_metrics(current_user=Depends(get_current_user)):
     try:
         import psutil
 
-        # CPU指标
-        cpu_percent = psutil.cpu_percent(interval=0.3)
+        # CPU指标（interval>0 为阻塞采样，async 端点卸载到线程池，避免冻结事件循环 0.3s）
+        cpu_percent = await run_in_threadpool(psutil.cpu_percent, interval=0.3)
         indicators.append({
             "name": "CPU使用率",
             "key": "cpu_usage",
@@ -178,8 +184,8 @@ async def get_performance_metrics(current_user=Depends(get_current_user)):
             "status": "warning" if memory.percent > 85 else "critical" if memory.percent > 95 else "normal",
         })
 
-        # 磁盘指标
-        disk = psutil.disk_usage("/")
+        # 磁盘指标（跨平台路径：Windows 取 SystemDrive，其它平台取文件系统根）
+        disk = psutil.disk_usage(os.environ.get("SystemDrive") or os.path.abspath(os.sep))
         indicators.append({
             "name": "磁盘使用率",
             "key": "disk_usage",

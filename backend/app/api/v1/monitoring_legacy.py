@@ -6,6 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.core.response import success_response
@@ -85,5 +86,7 @@ async def get_resource_stats(current_user: User = Depends(get_current_active_use
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
-    stats = MonitoringService.get_resource_stats()
+    # get_resource_stats 内部 psutil.cpu_percent(interval=1) 阻塞 1 秒，
+    # async 端点直接调用会冻结事件循环 → 卸载到线程池（同步方法签名不变）
+    stats = await run_in_threadpool(MonitoringService.get_resource_stats)
     return success_response(data=stats)

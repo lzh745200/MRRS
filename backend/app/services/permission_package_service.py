@@ -318,7 +318,6 @@ class PermissionPackageService:
         Returns:
             {"success": bool, "preview": dict | None, "errors": list, "message": str}
         """
-        # Phase E：加密包解密（原地解密为明文 ZIP，供后续 confirm 复用）
         # Phase E：加密包预读取（读取失败不在此处报错，交由后续通用流程兜底）
         _raw = b""
         try:
@@ -327,34 +326,38 @@ class PermissionPackageService:
         except OSError:
             _raw = b""
 
-        from app.utils.package_crypto import looks_encrypted
+        if not _raw:
+            return {"success": False, "errors": ["文件不存在"], "message": "文件不存在"}
 
-        if _raw and looks_encrypted(_raw):
+        from app.utils.package_crypto import looks_encrypted, decrypt_bytes
+
+        # M3：解密全程在内存进行，绝不将明文写回磁盘（避免预览失败后明文残留）。
+        # 预览成功且为加密包时，明文经 _decrypted_bytes 交回 API 层，由其在成功
+        # 路径持久化供 /confirm 复用；任何失败路径 API 直接删文件，零磁盘残留。
+        working = _raw
+        was_encrypted = False
+        if looks_encrypted(_raw):
             if not password:
                 return {
                     "success": False,
                     "errors": ["该权限包已加密，请输入导出时设置的密码"],
                     "message": "该权限包已加密",
                 }
-            from app.utils.package_crypto import decrypt_bytes
-
             try:
-                plain = decrypt_bytes(_raw, password)
+                working = decrypt_bytes(_raw, password)
+                was_encrypted = True
             except Exception:
                 return {"success": False, "errors": ["密码错误或包已损坏"], "message": "密码错误"}
-            with open(file_path, "wb") as _f:
-                _f.write(plain)
         errors = []
         warnings = []
 
-        if not os.path.exists(file_path):
-            return {"success": False, "errors": ["文件不存在"], "message": "文件不存在"}
+        import io as _io
 
-        if not zipfile.is_zipfile(file_path):
+        if not zipfile.is_zipfile(_io.BytesIO(working)):
             return {"success": False, "errors": ["不是有效的 ZIP 文件"], "message": "不是有效的 ZIP 文件"}
 
         try:
-            with zipfile.ZipFile(file_path, "r") as zf:
+            with zipfile.ZipFile(_io.BytesIO(working), "r") as zf:
                 names = zf.namelist()
 
                 # 验证必要文件
@@ -455,18 +458,25 @@ class PermissionPackageService:
                     "warnings": warnings,
                 }
 
-            return {
+            result = {
                 "success": True,
                 "preview": preview,
                 "errors": [],
                 "message": f"验证通过。将导入 {len(roles_data)} 个角色，更新 {len(existing_usernames)} 个用户权限",
             }
+            if was_encrypted:
+                # M3：交回明文供 API 层在成功路径持久化（service 不落明文盘）
+                result["_decrypted_bytes"] = working
+            return result
 
-        except json.JSONDecodeError as e:
-            return {"success": False, "errors": [f"JSON 解析错误: {e}"], "message": f"JSON 解析错误: {e}"}
-        except Exception as e:  # pragma: no cover
-            logger.error("权限配置包预览失败: %s", e, exc_info=True)
-            return {"success": False, "errors": [str(e)], "message": f"预览失败: {e}"}
+        except json.JSONDecodeError:
+            # 安全：JSONDecodeError 文本含出错位置与文档片段，可泄露包内结构，不出站
+            logger.error("权限配置包 JSON 解析失败", exc_info=True)
+            return {"success": False, "errors": ["文件内容格式错误"], "message": "文件内容格式错误"}
+        except Exception:
+            # 安全：不向用户回传内部异常文本（可能泄露路径/栈信息），仅服务端日志留痕
+            logger.error("权限配置包预览失败", exc_info=True)
+            return {"success": False, "errors": ["文件解析错误"], "message": "文件解析错误"}
 
     # ================================================================
     # 导入 — 确认阶段
@@ -496,6 +506,26 @@ class PermissionPackageService:
 
         roles_data, user_roles_data, user_permissions_data, \
             user_menus_data, user_legacy_data, organizations_data = parsed
+
+        # S4：确认阶段复验内容校验和（与预览同一算法），不匹配则拒绝落库。
+        # 必须在 _clear_existing_data() 破坏性清空既有权限之前完成，杜绝
+        # 绕过预览直接 POST /confirm/{file_name} 把篡改数据落库的红线缺陷。
+        integrity_error = self._verify_content_checksum(file_path, {
+            "roles": roles_data,
+            "user_roles": user_roles_data,
+            "user_permissions": user_permissions_data,
+            "user_menus": user_menus_data,
+            "user_legacy": user_legacy_data,
+            "organizations": organizations_data,
+        })
+        if integrity_error is not None:
+            logger.warning("权限包确认导入校验和不匹配，拒绝落库: %s", file_path)
+            return {
+                "success": False,
+                "errors": [integrity_error],
+                "message": "内容校验失败，权限包已损坏或被篡改，拒绝导入",
+                "integrity_failed": True,
+            }
 
         errors = []
         stats = self._init_import_stats()
@@ -542,10 +572,12 @@ class PermissionPackageService:
             self.db.commit()
             self._log_import_result(stats)
             return self._build_import_response(stats, errors)
-        except Exception as e:  # pragma: no cover
+        except Exception:
             self.db.rollback()
-            logger.error("权限配置包导入失败: %s", e, exc_info=True)
-            return {"success": False, "errors": [str(e)], "message": f"导入失败: {e}"}
+            # 安全：异常原文经 API 层 result.get("message") 直达 HTTPException detail，
+            # 会泄露 SQLAlchemy 错误/表名/服务器路径，故只回泛化文案（W1 不变量 #6）
+            logger.error("权限配置包导入失败", exc_info=True)
+            return {"success": False, "errors": ["导入失败"], "message": "导入失败，请稍后重试或联系管理员"}
 
     def _parse_import_zip(self, file_path: str):
         """解析 ZIP 导入包，返回各数据段。"""
@@ -927,3 +959,26 @@ class PermissionPackageService:
         """对包内数据段计算规范化 SHA-256（键排序，稳定序列化）"""
         canonical = json.dumps(segments, ensure_ascii=False, sort_keys=True, default=str)
         return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+
+    def _verify_content_checksum(self, file_path: str, segments: Dict[str, Any]) -> Optional[str]:
+        """S4：复验包内容校验和（与预览阶段同一算法）。
+
+        Returns:
+            * ``None``  -- 校验通过，或旧版包无 ``content_checksum``（跳过完整性校验，
+              与预览阶段一致，不阻断导入）；
+            * ``str``   -- 校验和不匹配时返回错误描述（调用方据此拒绝落库）。
+        """
+        try:
+            with zipfile.ZipFile(file_path, "r") as zf:
+                if "manifest.json" not in zf.namelist():
+                    return None
+                manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        except Exception:  # pragma: no cover - 解析失败交由调用方其它校验兜底
+            return None
+        expected = manifest.get("content_checksum")
+        if not expected:
+            return None
+        actual = self._calculate_content_checksum(segments)
+        if actual != expected:
+            return "内容校验和不匹配：权限包已损坏或被篡改"
+        return None

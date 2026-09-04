@@ -1,33 +1,10 @@
-# 覆盖率配置
-# 注意：pytest 配置已统一在 pytest.ini 中，避免配置冲突警告
-[tool.coverage.run]
-source = ["app"]
-omit = [
-    "*/tests/*",
-    "*/test_*.py",
-    "*/__pycache__/*",
-    "*/venv/*",
-    "*/.venv/*",
-]
-
-[tool.coverage.report]
-precision = 2
-show_missing = true
-skip_covered = false
-fail_under = 100  # 100% 覆盖率门禁（可覆盖集：pragma 豁免真正不可执行的行）
-
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
-    "# pragma: no cover",
-    "\\.\\.\",  # Ellipsis in stubs",
-]
-
-[tool.coverage.html]
-directory = "htmlcov"
+# 覆盖率配置已【统一迁移】至 backend/.coveragerc（单一事实源）。
+#
+# 原因：coverage.py 的配置发现顺序为 .coveragerc → setup.cfg → tox.ini →
+# pyproject.toml，只采用第一个发现的文件。此前本文件含 [tool.coverage.run]
+# (source/omit) 与 [tool.coverage.report] (precision=2 / fail_under=100)，
+# 但因 .coveragerc 存在，这些配置【从不生效】(死配置)，导致门禁口径分裂。
+# 现将 [run] + [report] + [html] 完整口径集中在 .coveragerc 维护，此处不再
+# 保留任何 [tool.coverage.*] 段，避免再次产生“看似生效实则被屏蔽”的陷阱。
+#
+# pytest 配置统一在 pytest.ini。

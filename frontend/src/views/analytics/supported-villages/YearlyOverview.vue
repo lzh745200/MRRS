@@ -132,7 +132,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, markRaw } f
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
 import { logger } from '@/utils/logger'
-import { deleteYearlySection } from '@/api/supportedVillage'
+import { deleteYearlySection, resolveSectionApiKey } from '@/api/supportedVillage'
 import {
   ArrowLeft,
   Edit,
@@ -543,7 +543,9 @@ async function deleteSection(sectionKey: string) {
   const vid = safeRouteParam(route.params.id)
   if (!vid) return
   try {
-    await deleteYearlySection(Number(vid), selectedYear.value, sectionKey)
+    // section.key 内部用下划线（force_investment/party_building），后端 _SECTION_MODEL 用连字符，
+    // 透传前必须经统一映射转换，否则删除这两个板块会报 400「未知年度数据板块」。
+    await deleteYearlySection(Number(vid), selectedYear.value, resolveSectionApiKey(sectionKey))
     ElMessage.success('已删除')
     await loadAllData()
   } catch (e) {

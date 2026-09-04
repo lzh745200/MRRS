@@ -222,6 +222,35 @@ describe('api/supportedVillage — 衔接资金/导入导出', () => {
     expect(result).toEqual({ success_rows: 10 })
   })
 
+  it('importSectionData 把内部下划线 section key 映射为后端连字符（回归：曾恒 400）', async () => {
+    // 缺陷复现：后端 _SECTION_MODEL 键为 force-investment/party-building，
+    // 旧实现原样透传 force_investment → 400「未知板块标识: force_investment」
+    mockApiRequest.mockResolvedValue({ imported: 1 })
+    const file = new File(['x'], 'force.xlsx')
+
+    await importSectionData(1, 2024, 'force_investment', file)
+    expect(mockApiRequest.mock.calls[0][0].params).toEqual({
+      year: 2024,
+      section_key: 'force-investment',
+    })
+
+    await importSectionData(1, 2024, 'party_building', file)
+    expect(mockApiRequest.mock.calls[1][0].params).toEqual({
+      year: 2024,
+      section_key: 'party-building',
+    })
+  })
+
+  it('section key 映射对连字符与单单词键幂等', async () => {
+    mockPost.mockResolvedValue({ ok: 1 })
+    // 已是连字符（别名 saveForceInvestmentData 的传法）不得被二次改写
+    await saveYearlySectionData(1, 2024, 'force-investment', { x: 1 })
+    expect(mockPost).toHaveBeenCalledWith('/supported-villages/1/yearly/2024/force-investment', { x: 1 })
+    // 单单词键两侧一致，原样透传
+    await saveSectionData(1, 2024, 'population', { x: 2 })
+    expect(mockPost).toHaveBeenCalledWith('/supported-villages/1/yearly/2024/population', { x: 2 })
+  })
+
   it('downloadAllTemplates 走 request.get blob 并触发 downloadBlob（解析文件名）', async () => {
     mockGet.mockResolvedValueOnce({
       data: new Blob(['x']),

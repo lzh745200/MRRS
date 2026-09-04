@@ -108,8 +108,9 @@ async def import_policies_from_excel(
         }
     except Exception as e:
         db.rollback()
-        logger.error(f"导入政策失败: {e}")
-        raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
+        # 完整栈仅进服务端日志；detail 不得内插异常原文（W1 不变量 #6）
+        logger.error(f"导入政策失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="导入失败，请稍后重试或联系管理员")
 
 
 def _find_header_row(ws, required_label: str, max_scan: int = 10) -> int:

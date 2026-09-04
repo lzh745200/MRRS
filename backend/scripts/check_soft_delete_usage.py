@@ -15,12 +15,17 @@
     python scripts/check_soft_delete_usage.py            # 对比基线，新增即失败
     python scripts/check_soft_delete_usage.py --baseline # 重新生成基线文件
 
-基线：scripts/soft_delete_baseline.txt（每行一条 `相对路径:行号`）。
+基线：scripts/soft_delete_baseline.txt（每行一条 `相对路径:行号: 代码`）。
+行号仅供人阅读定位；**比对键是 `相对路径 + 归一化代码`，忽略行号、按出现
+次数计数**——因此无关编辑造成的行号漂移不会误报，而新增的未过滤查询（新键
+或同键次数增加）依旧拦下。扫描中不再命中的基线条目会以 STALE 报告，表示该
+豁免点已被修复，应跑 `--baseline` 收敛基线（棘轮只紧不松）。
 历史遗留的豁免点收敛完毕后基线应趋于空文件。
 """
 
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parent.parent
@@ -66,6 +71,19 @@ def scan_file(path: Path) -> list:
     return hits
 
 
+def _entry_key(entry: str) -> str:
+    """比对键 = 相对路径 + 归一化代码片段（**忽略行号**）。
+
+    行号会随无关编辑漂移：曾用整串精确匹配，一次普通重构就让 6 个代码
+    毫无变化的既有豁免点被误报为「新增违规」，门禁恒红，反而淹没了真实
+    信号。改按 路径+代码 计数后，漂移不再误报，而真正新增的未过滤查询
+    （新键，或同一键出现次数增加）依旧会被拦下——棘轮能力不减。
+    """
+    parts = entry.split(":", 2)
+    code = parts[2].strip() if len(parts) == 3 else ""
+    return f"{parts[0]}::{code}"
+
+
 def main() -> int:
     baseline_mode = "--baseline" in sys.argv
     violations = []
@@ -76,23 +94,40 @@ def main() -> int:
     violations = [v.replace("\\", "/") for v in violations]
 
     if baseline_mode:
-        BASELINE_FILE.write_text("\n".join(sorted(v.replace("\\", "/") for v in violations)) + "\n", encoding="utf-8")
+        BASELINE_FILE.write_text("\n".join(sorted(violations)) + "\n", encoding="utf-8")
         print(f"[baseline] {len(violations)} entries -> {BASELINE_FILE.name}")
         return 0
 
-    known = set()
+    known = []
     if BASELINE_FILE.exists():
-        known = {
+        known = [
             l.strip() for l in BASELINE_FILE.read_text(encoding="utf-8").splitlines() if l.strip()
-        }
-    new = [v for v in violations if v.split(":")[0] + ":" + v.split(":")[1] not in
-           {k.rsplit(":", 1)[0] for k in known} or v not in known]
-    # 以“整条匹配”为准：不在基线中的即视为新增
-    new = [v for v in violations if v not in known]
+        ]
+
+    known_counts = Counter(_entry_key(k) for k in known)
+    seen = Counter()
+    new = []
+    for v in violations:
+        k = _entry_key(v)
+        seen[k] += 1
+        if seen[k] > known_counts.get(k, 0):
+            new.append(v)
+
+    # 基线中已不再命中的条目 = 豁免点已被修复，属进展（不失败），
+    # 但必须显式暴露，否则会永久留在基线里让棘轮松掉。
+    stale = [
+        e for e in known
+        if known_counts[_entry_key(e)] > seen.get(_entry_key(e), 0)
+    ]
 
     print(f"[scan] total={len(violations)} baseline={len(known)} NEW={len(new)}")
     for v in new:
         print("NEW VIOLATION:", v)
+    if stale:
+        print(f"[stale] {len(stale)} 条基线豁免点已不再命中（已修复），"
+              f"建议 --baseline 收敛基线：")
+        for e in stale:
+            print("STALE BASELINE:", e)
     return 1 if new else 0
 
 

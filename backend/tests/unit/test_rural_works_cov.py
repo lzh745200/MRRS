@@ -123,3 +123,11 @@ class TestEndpoints:
     async def test_batch_delete_non_dict_payload(self, svc):
         result = await rw.batch_delete_rural_works([], MagicMock(), _user())
         assert result.data == {"deleted": 0}
+
+
+class TestApplyRuralWorkApprovalResult:
+    def test_noop_handler_returns_none(self):
+        # 覆盖 rural_works.py:38 —— 审批终态回写 no-op 处理器（乡村工作无字段需回写）
+        db = MagicMock()
+        task = MagicMock()
+        assert rw._apply_rural_work_approval_result(db, task) is None

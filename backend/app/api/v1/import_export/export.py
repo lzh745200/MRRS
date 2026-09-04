@@ -156,7 +156,10 @@ async def export_schools(
     db: Session = Depends(get_db),
 ):
     require_admin(current_user, error_message="仅管理员可导出数据")
-    query = db.query(School)
+    # M1: 过滤软删记录（与列表页口径一致，避免已删学校出现在导出文件）
+    query = db.query(School).filter(School.is_active == True)  # noqa: E712
+    # S2: 数据隔离红线——按组织范围过滤，防止部门级管理员(OWN_DEPT)跨组织导出
+    query = filter_by_data_scope(query, School, current_user, db=db)
 
     if keyword:
         query = query.filter(School.name.contains(keyword))
@@ -195,6 +198,8 @@ async def export_projects(
 ):
     require_admin(current_user, error_message="仅管理员可导出数据")
     query = db.query(Project).filter(Project.is_active == True)  # noqa: E712
+    # S2: 数据隔离红线——按组织范围过滤，防止部门级管理员(OWN_DEPT)跨组织导出
+    query = filter_by_data_scope(query, Project, current_user, db=db)
 
     if keyword:
         query = query.filter(Project.name.contains(keyword))
@@ -235,7 +240,10 @@ async def export_funds(
     db: Session = Depends(get_db),
 ):
     require_admin(current_user, error_message="仅管理员可导出数据")
-    query = db.query(Fund)
+    # M1: 过滤软删记录（与列表页口径一致，避免已删资金出现在导出文件）
+    query = db.query(Fund).filter(Fund.is_active == True)  # noqa: E712
+    # S2: 数据隔离红线——按组织范围过滤，防止部门级管理员(OWN_DEPT)跨组织导出
+    query = filter_by_data_scope(query, Fund, current_user, db=db)
 
     if keyword:
         query = query.filter(Fund.name.contains(keyword))

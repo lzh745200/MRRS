@@ -351,11 +351,11 @@ class TestViewableBecauseApiIntegration:
                 "province": "贵州省",
                 "county": "测试县",
             })
-            if resp.status_code not in (200, 201):
-                pytest.skip(f"创建帮扶村失败: {resp.status_code} {resp.text[:200]}")
+            assert resp.status_code in (200, 201), (
+                f"前置条件失败：创建帮扶村应成功，实际 {resp.status_code} {resp.text[:200]}"
+            )
             village_id = resp.json().get("data", {}).get("id") or resp.json().get("id")
-            if not village_id:
-                pytest.skip("无法获取帮扶村ID")
+            assert village_id, f"前置条件失败：无法获取帮扶村ID，响应 {resp.text[:200]}"
 
             # 查看详情 → 未软删 → viewableBecause 应为 None 或不存在
             detail = client.get(f"/api/v1/supported-villages/{village_id}")

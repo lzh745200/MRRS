@@ -11,7 +11,6 @@
 
 参考：AGENTS.md → "软删除模式" → "Cross-org access returns 403 (not 404)"
 """
-import pytest
 from unittest.mock import Mock
 
 from app.core.security import hash_password
@@ -52,17 +51,17 @@ def _restore(client, original):
 
 
 def _create_village(client, name="覆盖率测试村"):
-    """创建帮扶村并返回 ID，失败时 pytest.skip。"""
+    """创建帮扶村并返回 ID；前置创建失败即 FAIL（禁止静默 skip 掩盖缺陷）。"""
     resp = client.post("/api/v1/supported-villages", json={
         "village_name": name,
         "province": "贵州省",
         "county": "测试县",
     })
-    if resp.status_code not in (200, 201):
-        pytest.skip(f"创建帮扶村失败: {resp.status_code} {resp.text[:200]}")
+    assert resp.status_code in (200, 201), (
+        f"前置条件失败：创建帮扶村应成功，实际 {resp.status_code} {resp.text[:200]}"
+    )
     village_id = resp.json().get("data", {}).get("id") or resp.json().get("id")
-    if not village_id:
-        pytest.skip("无法获取帮扶村ID")
+    assert village_id, f"前置条件失败：无法获取帮扶村ID，响应 {resp.text[:200]}"
     return village_id
 
 

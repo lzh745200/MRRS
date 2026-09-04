@@ -70,3 +70,79 @@ describe('api/milestones', () => {
     expect(r).toEqual({ total: 0, completed: 0, progress_percent: 0 })
   })
 })
+
+/**
+ * milestoneProgress 的 `(items as any)?.items ?? []` 兜底链。
+ * 上方用例只走了数组、`{items:[...]}`、空数组三种形态；
+ * 可选链短路侧与 `?? []` 侧（非数组且无 items 键）尚未触达。
+ * 这些形态在真实后端上确实会出现：项目无里程碑时部分接口返回 `{}`/`null`。
+ */
+describe('api/milestones milestoneProgress 非数组入参兜底', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('items 为 null → 可选链短路 + `?? []` → 0%', async () => {
+    mockGet.mockResolvedValue(null as any)
+    expect(await milestoneProgress(5)).toEqual({
+      total: 0,
+      completed: 0,
+      progress_percent: 0,
+    })
+  })
+
+  it('items 为 undefined → 同样回落 0%', async () => {
+    mockGet.mockResolvedValue(undefined as any)
+    expect(await milestoneProgress(7)).toEqual({
+      total: 0,
+      completed: 0,
+      progress_percent: 0,
+    })
+  })
+
+  it('items 为不含 items 键的对象 → `?? []` 侧生效', async () => {
+    // 后端异常负载（如 {detail: '...'}）不能让前端抛 TypeError
+    mockGet.mockResolvedValue({ detail: 'Not Found' } as any)
+    expect(await milestoneProgress(5)).toEqual({
+      total: 0,
+      completed: 0,
+      progress_percent: 0,
+    })
+  })
+
+  it('items 为 { items: null } → 嵌套 nullish 仍回落空数组', async () => {
+    mockGet.mockResolvedValue({ items: null } as any)
+    expect(await milestoneProgress(5)).toEqual({
+      total: 0,
+      completed: 0,
+      progress_percent: 0,
+    })
+  })
+
+  it('items 为 { items: [...] } 但无 completed → 0%（不误入四舍五入分支）', async () => {
+    mockGet.mockResolvedValue({ items: [{ status: 'pending' }, { status: 'overdue' }] } as any)
+    expect(await milestoneProgress(5)).toEqual({
+      total: 2,
+      completed: 0,
+      progress_percent: 0,
+    })
+  })
+
+  it('四舍五入边界：1/8 = 12.5% → 13；1/4 = 25% → 25', async () => {
+    mockGet.mockResolvedValue(
+      Array.from({ length: 8 }, (_, i) => ({ status: i === 0 ? 'completed' : 'pending' })) as any
+    )
+    expect(await milestoneProgress(5)).toEqual({
+      total: 8,
+      completed: 1,
+      progress_percent: 13,
+    })
+
+    mockGet.mockResolvedValue(
+      Array.from({ length: 4 }, (_, i) => ({ status: i === 0 ? 'completed' : 'pending' })) as any
+    )
+    expect(await milestoneProgress(5)).toEqual({
+      total: 4,
+      completed: 1,
+      progress_percent: 25,
+    })
+  })
+})

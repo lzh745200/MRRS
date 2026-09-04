@@ -1,6 +1,6 @@
 # API 接口文档
 
-> **版本**:v1.10.0  **更新日期**:2026-08-29
+> **版本**:v1.11.4  **更新日期**:2026-09-04
 > **定位**:系统全部 HTTP 接口的清单与调用约定——**端点清单由脚本从源码自动提取**(与代码 100% 同步),业务导读人工维护。
 > **适用读者**:前后端开发者、联调与集成人员。零基础请先读《需求规格说明书》§3 理解业务流程。
 > **互动文档**:后端启动后(DEBUG 模式)访问 `http://127.0.0.1:8000/docs` 可在线调试(OpenAPI)。
@@ -9,7 +9,7 @@
 
 ## 1. 快速统计
 
-- **85 个路由模块 / 764 个端点**(含 auth/data/system 等子包)
+- **85 个路由模块 / 765 个端点**(含 auth/data/system 等子包)
 - 全部业务接口位于 `/api/v1` 前缀之下(下文路径均省略此前缀)
 
 ## 2. 统一调用约定(必读)
@@ -530,6 +530,7 @@
 | POST | `/machine-code/verify-machine-code` | 验证机器码和校验码是否匹配 | 含校验码 |
 | POST | `/machine-code/generate-initial-password` | 为用户生成初始登录密码 | 登录/含校验码 |
 | POST | `/machine-code/reset-password-with-machine-code` | 使用机器码重置用户密码 | 仅本机/含校验码 |
+| POST | `/machine-code/recover-admin-factory-password` | 管理员账号出厂恢复（ADR-0008：仅限从未激活的管理员账号重置为文档化出厂密码；限流/loopback/机器码+校验码/审计四重边界） | 仅本机/含校验码 |
 | GET | `/machine-code/machine-info` | 获取当前机器的详细信息（需要登录） | 登录 |
 | GET | `/machine-code/organization/{org_id}/verification-code` | 获取组织的校验码 | 登录/含校验码 |
 | POST | `/machine-code/organization/create` | 管理员输入校验码+选择组织→生成通行码 | 登录/含校验码 |

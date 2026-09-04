@@ -271,6 +271,51 @@ describe('utils/index.ts 统一导出', () => {
     })
   })
 
+  /**
+   * formatMoney4：金额（万元）格式化，入参容忍 number|string|null|undefined。
+   * 重点覆盖 `!Number.isFinite(n)` 的真侧——脏数据（非数字字符串）与
+   * 非有限数（Infinity/NaN）必须回落 '0' 而不是渲染出 'NaN'/'∞'。
+   */
+  describe('format.formatMoney4', () => {
+    it('千分位 + 最多4位小数去尾零', () => {
+      expect(format.formatMoney4(1234567.891)).toBe('1,234,567.891')
+      expect(format.formatMoney4(1234.5)).toBe('1,234.5')
+      expect(format.formatMoney4(100)).toBe('100')
+      // 第5位小数被四舍五入到第4位
+      expect(format.formatMoney4(0.123456)).toBe('0.1235')
+    })
+
+    it('数字字符串先转数再格式化', () => {
+      expect(format.formatMoney4('1234.5')).toBe('1,234.5')
+      expect(format.formatMoney4('0')).toBe('0')
+    })
+
+    it('null/undefined 经 `?? 0` 归零（有限侧）', () => {
+      expect(format.formatMoney4(null)).toBe('0')
+      expect(format.formatMoney4(undefined)).toBe('0')
+      // 空串不走 `?? 0`（'' 非 nullish），但 Number('') === 0 仍属有限侧
+      expect(format.formatMoney4('')).toBe('0')
+    })
+
+    it('非数字字符串 → Number() 得 NaN → 非有限分支回落 "0"', () => {
+      // 后端导入脏数据/空单元格时常见，绝不能把 'NaN' 渲染到表格
+      expect(format.formatMoney4('abc')).toBe('0')
+      expect(format.formatMoney4('1,234')).toBe('0')
+      expect(format.formatMoney4('暂无')).toBe('0')
+    })
+
+    it('Infinity / -Infinity / NaN → 非有限分支回落 "0"', () => {
+      expect(format.formatMoney4(Infinity)).toBe('0')
+      expect(format.formatMoney4(-Infinity)).toBe('0')
+      expect(format.formatMoney4(NaN)).toBe('0')
+    })
+
+    it('0 与负值正常格式化（不误入非有限分支）', () => {
+      expect(format.formatMoney4(0)).toBe('0')
+      expect(format.formatMoney4(-1234.5)).toBe('-1,234.5')
+    })
+  })
+
   describe('re-exports 断言', () => {
     it('logger 是 logger 实例', () => {
       expect(typeof logger.debug).toBe('function')

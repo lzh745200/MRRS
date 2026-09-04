@@ -75,10 +75,14 @@ class SupportedVillageUpdate(BaseModel):
 
 
 class VillagePopulationCreate(BaseModel):
-    """创建人口数据"""
+    """创建人口数据
+
+    H6：字段严格对齐 VillagePopulation 模型列（原 `households` 在模型上不存在，
+    会被 `_save_section_data` 静默丢弃，实际列为 `total_households`）。
+    """
 
     total_population: Optional[int] = Field(None, ge=0, description="总人数")
-    households: Optional[int] = Field(None, ge=0, description="总户数")
+    total_households: Optional[int] = Field(None, ge=0, description="总户数")
     labor_force: Optional[int] = Field(None, ge=0, description="劳动力")
     migrant_workers: Optional[int] = Field(None, ge=0, description="外出务工人数")
     poverty_population: Optional[int] = Field(None, ge=0, description="脱贫人口")
@@ -86,10 +90,10 @@ class VillagePopulationCreate(BaseModel):
 
 
 class VillagePopulationUpdate(BaseModel):
-    """更新人口数据"""
+    """更新人口数据（字段对齐 VillagePopulation 模型列，见 VillagePopulationCreate）"""
 
     total_population: Optional[int] = Field(None, ge=0, description="总人数")
-    households: Optional[int] = Field(None, ge=0, description="总户数")
+    total_households: Optional[int] = Field(None, ge=0, description="总户数")
     labor_force: Optional[int] = Field(None, ge=0, description="劳动力")
     migrant_workers: Optional[int] = Field(None, ge=0, description="外出务工人数")
     poverty_population: Optional[int] = Field(None, ge=0, description="脱贫人口")
@@ -97,19 +101,25 @@ class VillagePopulationUpdate(BaseModel):
 
 
 class VillageIncomeCreate(BaseModel):
-    """创建收入数据"""
+    """创建收入数据
 
-    per_capita_income: Optional[float] = Field(None, ge=0, description="人均纯收入")
-    collective_income: Optional[float] = Field(None, ge=0, description="村集体收入")
-    total_income: Optional[float] = Field(None, ge=0, description="总收入")
+    H6：字段严格对齐 VillageIncome 模型列。原 `total_income` 在模型上不存在
+    （模型仅有 per_capita_income / county_per_capita_income / collective_income），
+    写入时会被静默丢弃，造成"以为保存成功实际未落库"。此处移除该幽灵字段并补齐
+    county_per_capita_income，保持与模型单一事实源一致。
+    """
+
+    per_capita_income: Optional[float] = Field(None, ge=0, description="村人均纯收入(万元)")
+    county_per_capita_income: Optional[float] = Field(None, ge=0, description="县区人均纯收入(万元)")
+    collective_income: Optional[float] = Field(None, ge=0, description="村集体收入(万元)")
 
 
 class VillageIncomeUpdate(BaseModel):
-    """更新收入数据"""
+    """更新收入数据（字段对齐 VillageIncome 模型列，见 VillageIncomeCreate）"""
 
-    per_capita_income: Optional[float] = Field(None, ge=0, description="人均纯收入")
-    collective_income: Optional[float] = Field(None, ge=0, description="村集体收入")
-    total_income: Optional[float] = Field(None, ge=0, description="总收入")
+    per_capita_income: Optional[float] = Field(None, ge=0, description="村人均纯收入(万元)")
+    county_per_capita_income: Optional[float] = Field(None, ge=0, description="县区人均纯收入(万元)")
+    collective_income: Optional[float] = Field(None, ge=0, description="村集体收入(万元)")
 
 
 class AggregateQuery(BaseModel):

@@ -385,7 +385,8 @@ class TestFetchActivities:
         updated_same = created
         updated_later = datetime(2026, 7, 20, 8, 0)
         p1 = SimpleNamespace(id=1, name="项目甲", responsible_person="李四", updated_at=updated_same, created_at=created)
-        p2 = SimpleNamespace(id=2, name=None, responsible_person=None, leader="王五", updated_at=updated_later, created_at=created)
+        p2 = SimpleNamespace(id=2, name=None, responsible_person=None, leader="王五",
+                             updated_at=updated_later, created_at=created)
         sess = _sess_with([_q(all=[p1, p2])])
         with patch.object(dash, "SessionLocal", return_value=sess):
             items = dash._fetch_project_activities()
@@ -625,6 +626,32 @@ class TestActivityCrud:
         resp = cov_client.delete("/api/v1/dashboard/recent-activities/project_1")
         assert resp.status_code == 500
         db.rollback.assert_called_once()
+
+    def test_update_custom_activity_forbidden_403(self, cov_client):
+        # 覆盖 dashboard.py:786 —— 非本人且非管理员更新自定义动态 → 403
+        cov_client.app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id=2, username="other", name="其他", role="user", is_superuser=False
+        )
+        activity = SimpleNamespace(id=3, type="project", action="旧", target="旧", user="owner_name")
+        db = _db_with_queries([_q(first=activity)])
+        _override_db(cov_client, db)
+        resp = cov_client.put("/api/v1/dashboard/recent-activities/custom_3", json={"action": "新"})
+        assert resp.status_code == 403
+
+    def test_delete_custom_activity_forbidden(self, cov_client):
+        # 覆盖 dashboard.py:826 —— 非本人且非管理员删除自定义动态 → 403。
+        # 缺陷已修复：delete_activity 补上了 except HTTPException: raise
+        # （与 update_activity 对称），403 不再被 except Exception 吞掉转 500，
+        # 权限拒绝语义保留。
+        cov_client.app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id=2, username="other", name="其他", role="user", is_superuser=False
+        )
+        activity = SimpleNamespace(id=7, user="owner_name")
+        db = _db_with_queries([_q(first=activity)])
+        _override_db(cov_client, db)
+        resp = cov_client.delete("/api/v1/dashboard/recent-activities/custom_7")
+        assert resp.status_code == 403
+        db.delete.assert_not_called()  # 403 时不应物理删除
 
 
 # ==================== 缓存读写与兜底分支补盲 ====================

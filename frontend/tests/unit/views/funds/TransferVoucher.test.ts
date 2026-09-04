@@ -5,16 +5,19 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { nextTick } from 'vue'
 
-const { ElMessage, confirmMock, lifecycleApi, pushSafeMock, routeBox, formValidateMock } = vi.hoisted(() => ({
+const { ElMessage, confirmMock, lifecycleApi, pushSafeMock, routeBox, formValidateMock, logError } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   confirmMock: vi.fn(),
   formValidateMock: vi.fn(() => Promise.resolve(true)),
+  logError: vi.fn(),
   lifecycleApi: {
     listTransferVouchers: vi.fn(),
     createTransferVoucher: vi.fn(),
     confirmTransferVoucher: vi.fn(),
     deleteTransferVoucher: vi.fn(),
+    uploadVoucherAttachment: vi.fn(),
   },
   pushSafeMock: vi.fn(),
   routeBox: { query: {} as Record<string, any> },
@@ -25,6 +28,11 @@ vi.mock('vue-router', () => ({ useRoute: () => routeBox }))
 vi.mock('element-plus', () => ({ ElMessage, ElMessageBox: { confirm: confirmMock } }))
 
 vi.mock('@/api/fundLifecycle', () => ({ fundLifecycleApi: lifecycleApi }))
+
+// handleVoucherUpload 的 catch 分支使用 logger.error，隔离真实 logger 的 console 副作用
+vi.mock('@/utils/logger', () => ({
+  logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}))
 
 vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: pushSafeMock }),
@@ -131,6 +139,20 @@ function mountComp() {
             '<div class="el-pagination-stub" @click="$emit(\'current-change\'); $emit(\'update:currentPage\', 2)" />',
         },
         'el-tag': { template: '<span class="el-tag-stub"><slot /></span>' },
+        // 全局 el-upload: true 的默认 stub 不会回调 http-request，导致模板内的
+        // (opt) => handleVoucherUpload(row.id, opt.file) 箭头函数永不执行；
+        // 此处提供可主动触发 httpRequest 的 stub。
+        'el-upload': {
+          name: 'ElUpload',
+          props: ['httpRequest', 'showFileList', 'accept'],
+          template:
+            '<div class="el-upload-stub">' +
+            '<button type="button" class="fire-upload" @click="httpRequest({ file: fakeFile })">up</button>' +
+            '<slot /></div>',
+          data() {
+            return { fakeFile: new File(['pdf-bytes'], 'voucher.pdf', { type: 'application/pdf' }) }
+          },
+        },
         'el-dialog': {
           template:
             '<div class="el-dialog-stub" @click="$emit(\'update:modelValue\', false)"><slot /><slot name="footer" /></div>',
@@ -151,6 +173,7 @@ beforeEach(() => {
   lifecycleApi.createTransferVoucher.mockResolvedValue({})
   lifecycleApi.confirmTransferVoucher.mockResolvedValue({})
   lifecycleApi.deleteTransferVoucher.mockResolvedValue({})
+  lifecycleApi.uploadVoucherAttachment.mockResolvedValue({})
   confirmMock.mockResolvedValue(undefined)
 })
 
@@ -440,6 +463,52 @@ describe('模板分支与 v-model', () => {
     vm.formRef = null
     await vm.handleCreate()
     expect(lifecycleApi.createTransferVoucher).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+describe('凭证附件上传（funcs@179 handleVoucherUpload / funcs@78 http-request 箭头）', () => {
+  it('el-upload http-request → handleVoucherUpload 成功：上传中态 + 成功提示 + 复位', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // 挂起一次上传，以便观察 uploadingId 中间态
+    lifecycleApi.uploadVoucherAttachment.mockImplementationOnce(() => new Promise(() => {}))
+    const fire = wrapper.findAll('.fire-upload')[0]
+    expect(fire).toBeTruthy()
+    await fire.trigger('click')
+    await nextTick()
+    expect(vm.uploadingId).toBe(1) // rowA.id
+
+    lifecycleApi.uploadVoucherAttachment.mockResolvedValueOnce({})
+    await vm.handleVoucherUpload(1, new File(['x'], 'v.pdf'))
+    await flushPromises()
+
+    expect(lifecycleApi.uploadVoucherAttachment).toHaveBeenCalledTimes(2)
+    const [vid, file] = lifecycleApi.uploadVoucherAttachment.mock.calls[0]
+    expect(vid).toBe(1)
+    expect(file).toBeInstanceOf(File)
+    expect((file as File).name).toBe('voucher.pdf')
+    expect(ElMessage.success).toHaveBeenCalledWith('凭证附件已上传')
+    expect(vm.uploadingId).toBeNull() // finally 复位
+    expect(logError).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('handleVoucherUpload 失败 → logger.error + 错误提示 + uploadingId 复位', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const err = new Error('net')
+    lifecycleApi.uploadVoucherAttachment.mockRejectedValueOnce(err)
+    const f = new File(['x'], 'bad.pdf')
+    await vm.handleVoucherUpload(7, f)
+    expect(lifecycleApi.uploadVoucherAttachment).toHaveBeenCalledWith(7, f)
+    expect(logError).toHaveBeenCalledWith('凭证附件上传失败:', err)
+    expect(ElMessage.error).toHaveBeenCalledWith('上传失败，请稍后重试')
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(vm.uploadingId).toBeNull()
     wrapper.unmount()
   })
 })

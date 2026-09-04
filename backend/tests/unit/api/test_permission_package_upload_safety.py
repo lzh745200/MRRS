@@ -25,10 +25,17 @@ def _no_camel_to_snake():
 
 
 @pytest.fixture
-def env():
-    """返回 (TestClient, mock_db, upload_dir)，并隔离上传目录。"""
+def env(tmp_path):
+    """返回 (TestClient, mock_db, upload_dir)，并隔离上传目录。
+
+    upload_dir 取自 tmp_path 而非 os.getcwd()：后者会在仓库工作目录建
+    `.pp_test_uploads`（未被 .gitignore 覆盖），且原先的手工清理只对顶层名字
+    调 os.unlink —— 遇到 `permission_packages` 这类子目录抛 OSError 被静默吞掉，
+    随后 os.rmdir 又因目录非空失败被吞，导致 `pkg.zip` 长期残留在仓库里、
+    可能被 git add -A 带进提交。tmp_path 由 pytest 自动回收，两个问题一并消失。
+    """
     db = MagicMock()
-    upload_dir = os.path.join(os.path.realpath(os.getcwd()), ".pp_test_uploads")
+    upload_dir = str(tmp_path / "pp_test_uploads")
     _original = app.dependency_overrides.copy()
     app.dependency_overrides[get_db] = lambda: db
     tc = TestClient(app, raise_server_exceptions=False)
@@ -38,17 +45,6 @@ def env():
                side_effect=lambda *a: upload_dir if not a else os.path.join(upload_dir, *a)):
         yield tc, db, upload_dir
     app.dependency_overrides = _original
-    # 清理测试上传目录
-    if os.path.isdir(upload_dir):
-        for name in os.listdir(upload_dir):
-            try:
-                os.unlink(os.path.join(upload_dir, name))
-            except OSError:
-                pass
-        try:
-            os.rmdir(upload_dir)
-        except OSError:
-            pass
 
 
 class TestImportAuthGate:

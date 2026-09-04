@@ -147,6 +147,21 @@ describe('Register.vue', () => {
     expect(cb).toHaveBeenCalledWith()
   })
 
+  it('validatePassword：密码包含用户名 → 拒绝（与后端 PasswordPolicy 末条一致）', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    // 复现截图场景：强度全过，但密码 Ptrw7221137@ 含用户名 PTRW
+    vm.registerForm.username = 'PTRW'
+    const cb = vi.fn()
+    vm.validatePassword(null, 'Ptrw7221137@', cb)
+    expect(cb).toHaveBeenCalledWith(new Error('密码不能包含用户名'))
+    cb.mockClear()
+    // 反向：不含用户名 → 通过
+    vm.registerForm.username = 'zhangsan'
+    vm.validatePassword(null, 'Ab1!abcdefghijk', cb)
+    expect(cb).toHaveBeenCalledWith()
+  })
+
   it('validateConfirmPassword 校验器：各分支', async () => {
     const w = await mountComp()
     const vm = w.vm as any
@@ -234,6 +249,30 @@ describe('Register.vue', () => {
     await (w.vm as any).handleRegister()
     expect(logError).toHaveBeenCalled()
     expect(ElMessage.error).toHaveBeenCalledWith('通行码无效')
+  })
+
+  it('handleRegister：400 信封只有 message（BizValidationError）→ 展示后端文案，不暴露 axios 原文', async () => {
+    // 复现截图缺陷：AppError handler 返回 {code,message,success}（无 detail），
+    // error.message 是 axios 默认英文原文，旧代码会把它直接抛给用户。
+    mockApiRequest.mockRejectedValue({
+      response: { status: 400, data: { code: 400, message: '密码不能包含用户名', success: false } },
+      message: 'Request failed with status code 400',
+    })
+    const w = await mountComp()
+    await (w.vm as any).handleRegister()
+    expect(ElMessage.error).toHaveBeenCalledWith('密码不能包含用户名')
+    expect(ElMessage.error).not.toHaveBeenCalledWith('Request failed with status code 400')
+  })
+
+  it('handleRegister：拦截器已算好 userMessage → 优先展示 userMessage', async () => {
+    mockApiRequest.mockRejectedValue({
+      userMessage: '通行码无效或已被使用',
+      response: { status: 400, data: { code: 400, message: '原始信封文案', success: false } },
+      message: 'Request failed with status code 400',
+    })
+    const w = await mountComp()
+    await (w.vm as any).handleRegister()
+    expect(ElMessage.error).toHaveBeenCalledWith('通行码无效或已被使用')
   })
 
   it('handleRegister：接口失败 → 默认文案', async () => {

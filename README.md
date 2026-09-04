@@ -1,20 +1,21 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.11.2
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.11.4
 
-![Version](https://img.shields.io/badge/version-1.11.2-blue)
+![Version](https://img.shields.io/badge/version-1.11.4-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-18%2C200%2B-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-99.86%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-16%2C250%2B-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **12,109 passed**, 0 失败 |
-| 前端测试 | **6,120 passed**, 351 文件, 0 失败 |
-| 后端覆盖率 | **99.86%**（门禁 98%） |
+| 后端测试 | **10,228 passed**, 0 失败（死代码清理后基线） |
+| 前端测试 | **6,030 passed**, 0 失败 |
+| 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
+| 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
 | Flake8 | 0 错误, 0 警告 |
 | ESLint | 0 错误, 0 警告 |
 | Bandit (安全) | 0 高危 |
@@ -25,7 +26,7 @@
 | Sass | 1.101.0（modern-compiler API） |
 | 角色体系 | 4 核心角色 (super_admin/admin/user/viewer) |
 
-> **上次全量验证**: 2026-08-09 — 后端 12,109 + 前端 6,120 测试全部通过，零 lint 错误，零安全告警
+> **上次全量验证**: 2026-09-04 — 后端 10,228 + 前端 6,030 测试全部通过，覆盖率门禁（后端 fail_under=100 / 前端 12 组 ×100）绿灯，零 lint 错误，零安全告警
 
 ## 快速开始
 
@@ -94,10 +95,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端单元测试 | pytest | 12,109 | API/Service/Core/Model/Utils 全覆盖 |
+| 后端单元测试 | pytest | 10,228 | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,120 | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 6,030 | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 12 流程 | Login/Dashboard/Projects/Approval/Funds |
 | 性能测试 | Locust | 配置可用 | 负载测试 |
 | 属性测试 | fast-check | 多组 | 组件属性验证 |
@@ -147,7 +148,7 @@ make build-kylin                       # 麒麟 V10 ARM64 DEB
 
 | 流水线 | 触发条件 | 内容 |
 |--------|---------|------|
-| **PR Checks** | Pull Request | 后端测试(50%覆盖门禁) + 前端测试 + flake8 + npm audit + SBOM |
+| **PR Checks** | Pull Request | 后端测试 + 覆盖率门禁（`.coveragerc` fail_under=100）+ 前端测试（12 组 ×100）+ flake8 + npm audit + SBOM |
 | **Nightly Full** | 每日凌晨2:00 UTC | 全量测试 + 覆盖率报告 + Codecov + JUnit 报告 |
 | **Build Windows** | Push main / tag v* | PyInstaller + electron-builder NSIS |
 | **Build ARM64** | Push main / tag v* | Docker Buildx QEMU + electron-builder DEB |

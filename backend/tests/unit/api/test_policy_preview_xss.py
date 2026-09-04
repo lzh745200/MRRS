@@ -110,3 +110,30 @@ class TestPreviewXssEscaping:
         assert "<b>evil</b>" not in resp.text
         assert "&lt;b&gt;evil&lt;/b&gt;" in resp.text
         assert "<p>转换后的正文</p>" in resp.text, "mammoth 产物不应被二次转义"
+
+    def test_mammoth_conversion_failure_falls_back_to_download(self, client, tmp_path):
+        """覆盖 policy.py:972-974 —— docx 转换抛非-ImportError 异常时回退下载而非 500。"""
+        tc, db = client
+        docx = tmp_path / "broken.docx"
+        docx.write_bytes(b"PK\x03\x04 not-a-real-docx")
+        policy = _policy_with(title="t", content="c", file_path=str(docx))
+        policy.file_type = "docx"
+        db.query.return_value.filter.return_value.first.return_value = policy
+
+        fake_mammoth = MagicMock()
+        fake_mammoth.convert_to_html.side_effect = RuntimeError("损坏文档")
+
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *a, **kw):
+            if name == "mammoth":
+                return fake_mammoth
+            return real_import(name, *a, **kw)
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            resp = tc.get("/api/v1/policies/1/preview")
+
+        assert resp.status_code == 200
+        # 回退为下载（octet-stream + attachment）
+        assert "attachment" in resp.headers.get("content-disposition", "")

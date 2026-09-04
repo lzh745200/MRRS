@@ -49,6 +49,8 @@ vi.mock('@/api/supportedVillage', () => ({
   uploadSectionAttachment: (...a: any[]) => mocks.uploadSectionAttachment(...a),
   getSectionAttachments: (...a: any[]) => mocks.getSectionAttachments(...a),
   deleteSectionAttachment: (...a: any[]) => mocks.deleteSectionAttachment(...a),
+  resolveSectionApiKey: (k: string) =>
+    (({ force_investment: 'force-investment', party_building: 'party-building' } as any)[k] ?? k),
 }))
 
 vi.mock('@/utils/logger', () => ({ logger: mocks.logger }))

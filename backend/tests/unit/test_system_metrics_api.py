@@ -78,6 +78,26 @@ class TestGetSystemMetrics:
             if saved:
                 sys.modules["psutil"] = saved
 
+    def test_psutil_error_message_is_generic(self, auth_client):
+        """资源采集异常时 message 必须泛化，绝不内插 str(e)（W1 不变量 #6）。
+
+        旧实现 f"获取资源指标失败: {str(e)}" 会把异常原文（可含数据库/服务器路径）
+        经响应 message 出站；此测试用含敏感路径的异常消息锁定其不再泄露。
+        """
+        saved = sys.modules.get("psutil")
+        mock_ps = MagicMock()
+        mock_ps.cpu_percent.side_effect = Exception("敏感原文 C:\\secret\\rural_revitalization.db")
+        sys.modules["psutil"] = mock_ps
+        try:
+            resp = auth_client.get("/api/v1/system/metrics")
+            msg = resp.json()["data"]["resources"]["message"]
+            assert msg == "获取资源指标失败，请查看日志"
+            assert "敏感原文" not in msg
+            assert "rural_revitalization.db" not in msg
+        finally:
+            if saved:
+                sys.modules["psutil"] = saved
+
     def test_uptime_and_process_error(self, auth_client):
         import psutil as real_psutil
         saved = sys.modules["psutil"]

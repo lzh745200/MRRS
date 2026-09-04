@@ -23,6 +23,8 @@ vi.mock('@/api/supportedVillage', () => ({
   uploadSectionAttachment: vi.fn(),
   getSectionAttachments: vi.fn(),
   deleteSectionAttachment: vi.fn(),
+  resolveSectionApiKey: (k: string) =>
+    (({ force_investment: 'force-investment', party_building: 'party-building' } as any)[k] ?? k),
 }))
 
 import { getSectionAttachments } from '@/api/supportedVillage'

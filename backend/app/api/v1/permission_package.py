@@ -31,6 +31,55 @@ router = APIRouter(prefix="/permission-packages", tags=["权限配置包"])
 
 _LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
 
+# M2：上传分块大小与防御性上限（对齐 AGENTS.md Backup Upload-Restore 约定）
+_PACKAGE_CHUNK_SIZE = 8 * 1024 * 1024           # 8MB
+_MAX_PACKAGE_UPLOAD_BYTES = 512 * 1024 * 1024   # 512MB
+
+
+def _safe_unlink(path: str) -> None:
+    """尽力删除文件，忽略不存在/权限错误（用于所有拒绝路径的零磁盘残留清理）。"""
+    try:
+        if path and os.path.exists(path):
+            os.unlink(path)
+    except OSError:
+        pass
+
+
+async def _stream_package_to_disk(file: UploadFile, file_path: str) -> None:
+    """8MB 分块流式落盘权限包；任何异常都先清理残留再原样抛出。
+
+    M2：旧写法 ``f.write(await file.read())`` 将整包一次读入内存，超大包会
+    耗尽内存。超上限抛 413；落盘失败/超限均保证零磁盘残留。
+    """
+    total = 0
+    try:
+        with open(file_path, "wb") as f:
+            while True:
+                chunk = await file.read(_PACKAGE_CHUNK_SIZE)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > _MAX_PACKAGE_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="权限包超过大小限制（512MB）")
+                f.write(chunk)
+    except BaseException:
+        _safe_unlink(file_path)
+        raise
+
+
+def _resolve_local_machine_code() -> str:
+    """取本机机器码用于权限包绑定校验；任何失败降级为空串（不阻断预览）。"""
+    try:
+        from app.services.machine_code_service import MachineCodeService
+
+        session = SessionLocal()
+        try:
+            return MachineCodeService(session).get_machine_code() or ""
+        finally:
+            session.close()
+    except Exception:
+        return ""
+
 
 def _client_is_loopback(request: Request) -> bool:
     """判断请求是否来自本机回环地址（基于 TCP 对端地址，不信任可伪造头）。"""
@@ -184,42 +233,44 @@ async def import_permission_package(
     upload_dir = str(get_runtime_uploads_path("permission_packages"))
     os.makedirs(upload_dir, exist_ok=True)
 
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
+    # M2：8MB 分块流式落盘 + 大小上限（防 OOM），对齐 backup upload-restore 约定。
+    # 超限/落盘失败由 helper 内部清理残留后原样抛出（零磁盘残留）。
+    await _stream_package_to_disk(file, file_path)
 
-    tmp_path = file_path
     try:
         service = PermissionPackageService(db)
         # Phase E：解密口令 + 本机机器码（用于绑定校验）
-        _machine_code = ""
-        try:
-            from app.services.machine_code_service import MachineCodeService
-
-            _s = SessionLocal()
-            try:
-                _machine_code = MachineCodeService(_s).get_machine_code() or ""
-            finally:
-                _s.close()
-        except Exception:
-            _machine_code = ""
+        _machine_code = _resolve_local_machine_code()
         result = service.import_package(
-            tmp_path, password=password, current_machine_code=_machine_code
+            file_path, password=password, current_machine_code=_machine_code
         )
+        # M3：service 不落明文盘；加密包预览成功时经 _decrypted_bytes 交回内存明文
+        decrypted = result.pop("_decrypted_bytes", None) if isinstance(result, dict) else None
+
+        # S4(b)：预览 success:false（校验和不匹配/机器码不符/密码错误等）→ 删除上传
+        # 文件，所有拒绝路径零磁盘残留，杜绝绕过预览直接 POST /confirm/{file_name}。
+        if not (isinstance(result, dict) and result.get("success")):
+            _safe_unlink(file_path)
+            return JSONResponse(content=result)
+
+        # 预览成功且为加密包：将内存明文写回保存路径，供 /confirm 两步导入复用
+        if decrypted is not None:
+            with open(file_path, "wb") as f:
+                f.write(decrypted)
+
         # 契约：返回服务端保存的文件名，前端两步导入（import → confirm）必需。
         # 旧版前端缺陷即因响应缺失该字段导致 confirm 永不执行、导入不落库。
         saved_name = os.path.basename(file_path)
-        if isinstance(result, dict):
-            result["saved_file_name"] = saved_name
-            result["file_name"] = saved_name
+        result["saved_file_name"] = saved_name
+        result["file_name"] = saved_name
         return JSONResponse(content=result)
+    except HTTPException:
+        _safe_unlink(file_path)
+        raise
     except Exception as e:
         logger.error("权限配置包导入预览失败: %s", e, exc_info=True)
         # Clean up on error since confirm won't need it
-        try:
-            if os.path.exists(file_path):
-                os.unlink(file_path)
-        except OSError:
-            pass
+        _safe_unlink(file_path)
         raise HTTPException(status_code=500, detail="导入预览失败，请稍后重试或联系管理员")
 
 
@@ -268,6 +319,9 @@ def confirm_import_permission_package(
             pass
 
     if not result.get("success"):
+        # S4：完整性校验失败属用户可纠正的错误 → 400（区别于服务端 500）
+        if result.get("integrity_failed"):
+            raise HTTPException(status_code=400, detail=result.get("message", "内容校验失败"))
         raise HTTPException(status_code=500, detail=result.get("message", "导入失败"))
 
     return JSONResponse(content=result)

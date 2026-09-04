@@ -27,12 +27,14 @@ const {
   clipWrite,
   routeQuery,
   listPacksMock,
+  promptMock,
 } = vi.hoisted(() => {
   return {
     authState: { isAdmin: true },
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
     confirmMock: vi.fn(),
     alertMock: vi.fn(),
+    promptMock: vi.fn(),
     mockGet: vi.fn(),
     mockPost: vi.fn(),
     mockPut: vi.fn(),
@@ -50,7 +52,7 @@ const {
 
 vi.mock('element-plus', () => ({
   ElMessage,
-  ElMessageBox: { confirm: confirmMock, alert: alertMock },
+  ElMessageBox: { confirm: confirmMock, alert: alertMock, prompt: promptMock },
 }))
 
 vi.mock('@/api/request', () => ({
@@ -249,6 +251,7 @@ beforeEach(() => {
   mockDel.mockResolvedValue({ data: {} })
   confirmMock.mockResolvedValue(undefined)
   alertMock.mockResolvedValue(undefined)
+  promptMock.mockResolvedValue({ value: 'pw' })
   clipWrite.mockResolvedValue(undefined)
   genPwdMock.mockReturnValue('Gen#Pass1')
   normalizeMock.mockImplementation((nodes: any) => nodes)
@@ -1726,6 +1729,420 @@ describe('菜单权限配置', () => {
     await vm.handleMenuPermission({ id: 1, username: 'admin' })
     expect(vm.menuPermTree).toEqual([])
     wrapper.unmount()
+  })
+})
+
+// ─────────────────────────────────────────────
+// 权限包导出对话框与加密包导入（Phase E）深度分支
+// 缺口：funcs inputValidator@1225 / onClick@463 / onUpdate:modelValue@437
+//       stmts@1159-1163, 1219-1245
+//       branch@439, 1133, 1137×2, 1138×2, 1158, 1161, 1218, 1264, 1278
+// ─────────────────────────────────────────────
+
+/** 捕获组件创建的 file input 元素（与上方 captureInputs 同构，供本 describe 内复用） */
+function captureFileInputs() {
+  const inputs: HTMLInputElement[] = []
+  const orig = document.createElement.bind(document)
+  const spy = vi.spyOn(document, 'createElement').mockImplementation((tag: any, opts?: any) => {
+    const el = orig(tag, opts)
+    if (String(tag).toLowerCase() === 'input') inputs.push(el as HTMLInputElement)
+    return el
+  })
+  return { inputs, spy }
+}
+
+/**
+ * 导出权限包对话框需要真实渲染插槽：
+ * - el-dialog 桩带上 title，便于在多个对话框中定位「导出权限包」
+ * - el-button 桩可 emit click（覆盖 footer 取消按钮的内联 onClick@463）
+ * - el-checkbox-group 桩可 emit update:modelValue（覆盖 v-model 产物 onUpdate:modelValue@437）
+ * - el-checkbox 桩渲染默认插槽（覆盖 {{ r.label || r.name }} 两侧）
+ */
+const permDialogStubs = {
+  'el-dialog': {
+    props: { modelValue: { type: Boolean, default: false }, title: { type: String, default: '' } },
+    emits: ['update:modelValue'],
+    template: '<div class="el-dialog-stub" :data-title="title"><slot /><slot name="footer" /></div>',
+  },
+  'el-button': {
+    template: '<button class="el-button-stub" @click="$emit(\'click\')"><slot /></button>',
+    emits: ['click'],
+  },
+  'el-checkbox-group': {
+    props: { modelValue: { type: Array, default: () => [] } },
+    emits: ['update:modelValue'],
+    template:
+      '<div class="el-checkbox-group-stub" @click="$emit(\'update:modelValue\', [\'village_officer\'])"><slot /></div>',
+  },
+  'el-checkbox': {
+    props: { value: { type: [String, Number, Boolean], default: '' } },
+    template: '<label class="el-checkbox-stub" :data-value="String(value)"><slot /></label>',
+  },
+  'el-alert': { template: '<div class="el-alert-stub"><slot /></div>' },
+  'el-divider': { template: '<hr class="el-divider-stub" />' },
+}
+
+function findPermDialog(wrapper: any) {
+  return wrapper
+    .findAll('.el-dialog-stub')
+    .find((d: any) => d.attributes('data-title') === '导出权限包')
+}
+
+describe('权限包导出对话框（模板分支）', () => {
+  it('onUpdate:modelValue@437：勾选角色组 emit → permExportRoleNames 回写', async () => {
+    const wrapper = mountComp(permDialogStubs)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.permExportDialogVisible = true
+    vm.permExportRoleNames = []
+    await nextTick()
+    const dlg = findPermDialog(wrapper)
+    expect(dlg).toBeTruthy()
+    const group = dlg!.find('.el-checkbox-group-stub')
+    expect(group.exists()).toBe(true)
+    await group.trigger('click')
+    expect(vm.permExportRoleNames).toEqual(['village_officer'])
+  })
+
+  it('onClick@463：footer「取消」按钮 → 关闭导出对话框', async () => {
+    const wrapper = mountComp(permDialogStubs)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.permExportDialogVisible = true
+    await nextTick()
+    const dlg = findPermDialog(wrapper)!
+    const cancelBtn = dlg.findAll('.el-button-stub').find((b: any) => b.text() === '取消')
+    expect(cancelBtn).toBeTruthy()
+    await cancelBtn!.trigger('click')
+    expect(vm.permExportDialogVisible).toBe(false)
+    // 另一个按钮为「导出」，存在但本用例不触发
+    expect(dlg.findAll('.el-button-stub').some((b: any) => b.text() === '导出')).toBe(true)
+  })
+
+  it('branch@439：角色有 label → 渲染 label；无 label 也无 name → 回退侧（空文本）', async () => {
+    const wrapper = mountComp(permDialogStubs)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 第一项有 label；第二项 name/label/description 均缺失 → option.label 为 undefined
+    mockGet.mockImplementation((url: string) =>
+      url === '/rbac/roles'
+        ? Promise.resolve({ data: { items: [{ name: 'a', label: '角色A' }, {}] } })
+        : defaultGetImpl(url)
+    )
+    await vm.openPermExportDialog()
+    await nextTick()
+    const dlg = findPermDialog(wrapper)!
+    const boxes = dlg.findAll('.el-checkbox-stub')
+    expect(boxes).toHaveLength(2)
+    expect(boxes[0].text()).toBe('角色A')
+    expect(boxes[0].attributes('data-value')).toBe('a')
+    // r.label 为 undefined → || r.name 也为 undefined → 渲染空
+    expect(boxes[1].text()).toBe('')
+    // 非空选项 → empty-hint 不渲染
+    expect(dlg.find('.empty-hint').exists()).toBe(false)
+  })
+
+  it('角色列表为空 → empty-hint 渲染（length === 0 真侧）', async () => {
+    const wrapper = mountComp(permDialogStubs)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGet.mockImplementation((url: string) =>
+      url === '/rbac/roles' ? Promise.resolve({ data: { items: [] } }) : defaultGetImpl(url)
+    )
+    await vm.openPermExportDialog()
+    await nextTick()
+    const dlg = findPermDialog(wrapper)!
+    expect(vm.permExportRoleOptions).toEqual([])
+    expect(vm.permRolesLoading).toBe(false)
+    expect(dlg.find('.empty-hint').exists()).toBe(true)
+  })
+})
+
+describe('openPermExportDialog 角色响应形态与缓存', () => {
+  it('branch@1133 真侧：选项已缓存 → 直接 return，不重复请求，且重置表单', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const rolesCalls = () => mockGet.mock.calls.filter((c) => c[0] === '/rbac/roles').length
+    await vm.openPermExportDialog() // defaultGetImpl → {data:{items:[自定义角色]}}
+    expect(vm.permExportRoleOptions).toEqual([{ name: '自定义角色', label: '自定义角色' }])
+    const afterFirst = rolesCalls()
+    expect(afterFirst).toBe(1)
+
+    // 第二次打开：length > 0 → 提前 return
+    vm.permExportPassword = 'x'
+    vm.permBindMachineCode = true
+    vm.permExportRoleNames = ['自定义角色']
+    await vm.openPermExportDialog()
+    expect(rolesCalls()).toBe(afterFirst) // 未新增请求
+    expect(vm.permExportDialogVisible).toBe(true)
+    expect(vm.permExportPassword).toBe('')
+    expect(vm.permBindMachineCode).toBe(false)
+    expect(vm.permExportRoleNames).toEqual([])
+    expect(vm.permExportRoleOptions).toEqual([{ name: '自定义角色', label: '自定义角色' }])
+  })
+
+  it('branch@1137/@1138：res 为 null / 裸数组 / data.items / data.data / 空对象 五种形态', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const load = async (res: any) => {
+      vm.permExportRoleOptions = [] // 清空缓存以绕过 branch@1133 的提前 return
+      mockGet.mockImplementation((url: string) =>
+        url === '/rbac/roles' ? Promise.resolve(res) : defaultGetImpl(url)
+      )
+      await vm.openPermExportDialog()
+      return vm.permExportRoleOptions
+    }
+
+    // res 为 null：res?.data → undefined；|| res → null；|| {} → {} → data.data/items 均缺 → []
+    expect(await load(null)).toEqual([])
+    // res 为裸数组：res?.data → undefined；|| res → 数组 → Array.isArray 真侧
+    expect(await load([{ name: 'x', description: '描述X' }])).toEqual([{ name: 'x', label: '描述X' }])
+    // res.data 为数组：res?.data 真侧 + Array.isArray 真侧
+    expect(await load({ data: [{ name: 'y', label: 'Y' }] })).toEqual([{ name: 'y', label: 'Y' }])
+    // res.data.items
+    expect(await load({ data: { items: [{ name: 'z' }] } })).toEqual([{ name: 'z', label: 'z' }])
+    // res.data.data 优先于 items
+    expect(await load({ data: { data: [{ name: 'd' }], items: [{ name: 'i' }] } })).toEqual([
+      { name: 'd', label: 'd' },
+    ])
+    // res 无 data 且非数组 → || res 真侧；data.data/items 均缺 → []
+    expect(await load({ foo: 1 })).toEqual([])
+    expect(vm.permRolesLoading).toBe(false)
+  })
+
+  it('导出：加密密码 + 机器码绑定 → payload 携带 password/bind_machine_code（branch@1158/@1161 真侧）', async () => {
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.openPermExportDialog()
+    vm.permExportRoleNames = []
+    vm.permExportPassword = 'secret'
+    vm.permBindMachineCode = true
+    mockPost.mockResolvedValueOnce({ data: { file_name: 'enc.zip', role_count: 0, user_count: 0 } })
+    await vm.doExportPermissionPackage()
+    expect(mockPost).toHaveBeenLastCalledWith('/permission-packages/export', {
+      password: 'secret',
+      bind_machine_code: true,
+    })
+    expect(clickSpy).toHaveBeenCalled()
+    expect(ElMessage.success).toHaveBeenCalledWith('权限包导出成功 (0 个角色, 0 个用户)')
+    expect(vm.exportingPermPackage).toBe(false)
+    clickSpy.mockRestore()
+  })
+})
+
+describe('加密权限包导入（Phase E）', () => {
+  const ENC_MSG = '该权限包已加密，请输入导出时设置的密码'
+
+  /** 构造 import 桩：首次返回加密提示，第二次返回 merged */
+  function stubImport(first: any, second: any, confirmRes: any = { data: { message: 'ok' } }) {
+    let n = 0
+    const seen: FormData[] = []
+    mockPost.mockImplementation((url: string, body?: any) => {
+      if (url === '/permission-packages/import') {
+        if (body instanceof FormData) seen.push(body)
+        n += 1
+        return Promise.resolve(n === 1 ? first : second)
+      }
+      if (url.startsWith('/permission-packages/confirm/')) return Promise.resolve(confirmRes)
+      return Promise.resolve({ data: {} })
+    })
+    return { seen, importCalls: () => n }
+  }
+
+  async function fireImport(
+    vm: any,
+    inputs: HTMLInputElement[],
+    idx: number,
+    fileName = 'enc.zip'
+  ) {
+    const file = new File(['zip'], fileName, { type: 'application/zip' })
+    Object.defineProperty(inputs[idx], 'files', { value: [file], configurable: true })
+    inputs[idx].dispatchEvent(new Event('change'))
+    await flushPromises()
+    return file
+  }
+
+  it('branch@1218 真侧：预览失败且含「加密」→ prompt 密码 → 带 password 重传 → 合并结果后继续确认', async () => {
+    const { inputs, spy } = captureFileInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const h = stubImport(
+      { data: { success: false, message: ENC_MSG } },
+      { data: { success: true, preview: { role_count: 1, user_legacy_count: 2 } } }
+    )
+    vm.handleImportPermissionPackage()
+    await fireImport(vm, inputs, 0)
+
+    expect(h.importCalls()).toBe(2)
+    expect(promptMock).toHaveBeenCalledWith(
+      '该权限包已加密，请输入导出时设置的密码：',
+      '解密密码',
+      expect.objectContaining({ inputType: 'password' })
+    )
+    // 第二次上传的 FormData 携带密码
+    expect(h.seen).toHaveLength(2)
+    expect(h.seen[1].get('password')).toBe('pw')
+    expect(h.seen[1].get('file')).toBeInstanceOf(File)
+    // Object.assign(result, merged) 后 success 为真 → 进入确认流程
+    expect(confirmMock).toHaveBeenCalledWith(
+      expect.stringContaining('将导入 1 个角色, 2 个用户权限'),
+      '选择导入模式',
+      expect.objectContaining({ confirmButtonText: '合并导入', cancelButtonText: '覆盖导入' })
+    )
+    expect(mockPost).toHaveBeenCalledWith(
+      `/permission-packages/confirm/${encodeURIComponent('enc.zip')}`,
+      { overwrite_existing: false, mode: 'merge' }
+    )
+    expect(ElMessage.success).toHaveBeenCalledWith('ok')
+    expect(vm.importingPermPackage).toBe(false) // finally cleanup
+    spy.mockRestore()
+  })
+
+  it('funcs@1225 inputValidator：空密码 → 「密码不能为空」；非空 → true；value 缺失 → 密码回退空串', async () => {
+    const { inputs, spy } = captureFileInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const h = stubImport(
+      { data: { success: false, message: ENC_MSG } },
+      { data: { success: true } }
+    )
+    promptMock.mockResolvedValueOnce({ value: undefined }) // → importPassword = ''
+    vm.handleImportPermissionPackage()
+    await fireImport(vm, inputs, 0)
+
+    const opts = promptMock.mock.calls[0][2]
+    expect(typeof opts.inputValidator).toBe('function')
+    expect(opts.inputValidator('')).toBe('密码不能为空')
+    expect(opts.inputValidator('   ')).toBe(true) // 仅判 falsy，空白串视为已输入
+    expect(opts.inputValidator('pw')).toBe(true)
+    expect(h.seen[1].get('password')).toBe('')
+    spy.mockRestore()
+  })
+
+  it('prompt 取消 → cleanup 并 return，不重传也不确认', async () => {
+    const { inputs, spy } = captureFileInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const h = stubImport({ data: { success: false, message: ENC_MSG } }, { data: { success: true } })
+    promptMock.mockRejectedValueOnce('cancel')
+    vm.handleImportPermissionPackage()
+    await fireImport(vm, inputs, 0)
+    expect(h.importCalls()).toBe(1) // 未重传
+    expect(confirmMock).not.toHaveBeenCalled()
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(vm.importingPermPackage).toBe(false)
+    spy.mockRestore()
+  })
+
+  it('重传后仍 success=false → 优先 merged.message，否则回退 result.message', async () => {
+    const { inputs, spy } = captureFileInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // a) merged.message 存在 → 取左侧
+    stubImport(
+      { data: { success: false, message: ENC_MSG } },
+      { data: { success: false, message: '密码错误' } }
+    )
+    vm.handleImportPermissionPackage()
+    await fireImport(vm, inputs, 0)
+    expect(ElMessage.error).toHaveBeenCalledWith('密码错误')
+    expect(confirmMock).not.toHaveBeenCalled()
+
+    // b) merged 无 message 键 → Object.assign 保留了 result.message（即加密提示）
+    ElMessage.error.mockClear()
+    stubImport({ data: { success: false, message: ENC_MSG } }, { data: { success: false } })
+    vm.handleImportPermissionPackage()
+    await fireImport(vm, inputs, 1)
+    expect(ElMessage.error).toHaveBeenCalledWith(ENC_MSG)
+    spy.mockRestore()
+  })
+
+  it('branch@1239 右侧：res2 无 data 信封 → merged 即 res2 本体', async () => {
+    const { inputs, spy } = captureFileInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 重传响应不带 data 信封（res2.data 为 undefined）→ `res2.data || res2` 取右侧
+    stubImport({ data: { success: false, message: ENC_MSG } }, { success: false, message: '包已损坏' })
+    vm.handleImportPermissionPackage()
+    await fireImport(vm, inputs, 0)
+    expect(ElMessage.error).toHaveBeenCalledWith('包已损坏')
+    expect(confirmMock).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('branch@1242 第三操作数：merged.message 为空串 → 覆盖后回退「导入失败」', async () => {
+    const { inputs, spy } = captureFileInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 进入本分支的前提是 /加密/.test(result.message) 为真，但 merged 可以带一个空的
+    // message 键：Object.assign(result, merged) 会用 '' 覆盖原有的加密提示，
+    // 此时 merged.message 与 result.message 同时为假 → 第三操作数可达。
+    stubImport({ data: { success: false, message: ENC_MSG } }, { data: { success: false, message: '' } })
+    vm.handleImportPermissionPackage()
+    await fireImport(vm, inputs, 0)
+    expect(ElMessage.error).toHaveBeenCalledWith('导入失败')
+    expect(confirmMock).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('branch@1218 假侧：success=false 但 message 不含「加密」→ 不弹密码框，直接报错', async () => {
+    const { inputs, spy } = captureFileInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const h = stubImport({ data: { success: false, message: '文件损坏' } }, { data: {} })
+    vm.handleImportPermissionPackage()
+    await fireImport(vm, inputs, 0)
+    expect(promptMock).not.toHaveBeenCalled()
+    expect(h.importCalls()).toBe(1)
+    expect(ElMessage.error).toHaveBeenCalledWith('文件损坏')
+    spy.mockRestore()
+  })
+
+  it('branch@1264：confirm 以 cancel 拒绝 → mode=overwrite → overwrite_existing 为真', async () => {
+    const { inputs, spy } = captureFileInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    stubImport({ data: { success: true, preview: {} } }, { data: {} }, {})
+    confirmMock.mockRejectedValueOnce('cancel')
+    vm.handleImportPermissionPackage()
+    await fireImport(vm, inputs, 0, 'ow.zip')
+    expect(mockPost).toHaveBeenCalledWith(
+      `/permission-packages/confirm/${encodeURIComponent('ow.zip')}`,
+      { overwrite_existing: true, mode: 'overwrite' }
+    )
+    expect(ElMessage.success).toHaveBeenCalledWith('导入完成') // cRes 无 data/message → 兑底
+    spy.mockRestore()
+  })
+
+  it('branch@1278：异常为字符串 cancel → 静默 return，不弹错误', async () => {
+    const { inputs, spy } = captureFileInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockPost.mockImplementation((url: string) =>
+      url === '/permission-packages/import'
+        ? Promise.reject('cancel')
+        : Promise.resolve({ data: {} })
+    )
+    vm.handleImportPermissionPackage()
+    await fireImport(vm, inputs, 0)
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(vm.importingPermPackage).toBe(false) // finally 仍 cleanup
+    spy.mockRestore()
   })
 })
 

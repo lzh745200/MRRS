@@ -77,9 +77,18 @@ async function mountComp() {
           template: '<div class="el-alert-stub"><slot /><slot name="title" /></div>',
         },
         'el-icon': { name: 'ElIcon', template: '<span><slot /></span>' },
+        // 默认 stub 不会 emit update:modelValue，导致
+        // <el-radio-group v-model="accountMode"> 的编译产物 onUpdate:modelValue@59 永不执行；
+        // 此处提供可主动 emit 的按钮。
         'el-radio-group': {
           name: 'ElRadioGroup',
-          template: '<div class="el-radio-group-stub"><slot /></div>',
+          props: ['modelValue'],
+          emits: ['update:modelValue'],
+          template:
+            '<div class="el-radio-group-stub">' +
+            '<button type="button" class="rg-admin" @click="$emit(\'update:modelValue\', \'admin\')">a</button>' +
+            '<button type="button" class="rg-user" @click="$emit(\'update:modelValue\', \'user\')">u</button>' +
+            '<slot /></div>',
         },
         'el-radio': { name: 'ElRadio', template: '<label class="el-radio-stub"><slot /></label>' },
       },
@@ -331,6 +340,23 @@ describe('ForgotPassword.vue', () => {
     expect(mockPushSafe).toHaveBeenCalledWith('/login')
     vm.goToLogin()
     expect(mockPushSafe).toHaveBeenCalledWith('/login')
+  })
+
+  it('el-radio-group v-model 写回 accountMode 并联动 admin 提示', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    expect(vm.accountMode).toBe('user')
+    expect(w.text()).not.toContain('仅适用于从未登录过的管理员账号')
+
+    await w.find('.rg-admin').trigger('click')
+    await nextTick()
+    expect(vm.accountMode).toBe('admin')
+    expect(w.text()).toContain('仅适用于从未登录过的管理员账号')
+
+    await w.find('.rg-user').trigger('click')
+    await nextTick()
+    expect(vm.accountMode).toBe('user')
+    expect(w.text()).not.toContain('仅适用于从未登录过的管理员账号')
   })
 
   it('管理员出厂恢复：切换模式后请求新端点并展示出厂密码', async () => {

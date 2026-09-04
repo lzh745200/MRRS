@@ -796,6 +796,7 @@ import {
   uploadSectionAttachment,
   getSectionAttachments,
   deleteSectionAttachment,
+  resolveSectionApiKey,
 } from '@/api/supportedVillage'
 interface SectionAttachment {
   id: number
@@ -1006,15 +1007,10 @@ function addCommitteeMember() {
   })
 }
 
-// 仅非对称映射：内部 prop key (snake_case) → 后端 API 响应 key (kebab-case)
-// 单单词 key（population、income 等）各约定间不变，无需显式映射
-const _SECTION_KEY_OVERRIDE: Record<string, string> = {
-  force_investment: 'force-investment',
-  party_building: 'party-building',
-}
-function resolveApiKey(sectionKey: string): string {
-  return _SECTION_KEY_OVERRIDE[sectionKey] ?? sectionKey
-}
+// section key 映射统一由 @/api/supportedVillage 提供（单一映射源），
+// 与 YearlyOverview 删除路径复用同一份 resolveSectionApiKey，避免两套硬编码。
+// 内部 prop key (snake_case) → 后端 API key (kebab-case)：force_investment/party_building。
+const resolveApiKey = resolveSectionApiKey
 
 // 各板块默认数据
 function getDefaultFormData(key: string): Record<string, any> {

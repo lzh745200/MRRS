@@ -340,10 +340,30 @@ class TestProjectsAPI:
         ):
             mock_db.query.return_value = q
             resp = client.get(
-                "/api/v1/projects?keyword=test&project_type=infra&status=draft&village_id=1&sort_by=name&sort_order=asc&include_cancelled=true"
+                "/api/v1/projects?keyword=test&project_type=infra&status=draft"
+                "&village_id=1&sort_by=name&sort_order=asc&include_cancelled=true"
             )
         assert resp.status_code == 200
         assert resp.json()["data"]["total"] == 0
+
+    def test_list_projects_region_and_year_filters(self, client, mock_db, admin_user):
+        # 覆盖 projects.py:712-713(region join SupportedVillage) 与 715-717(year strftime)
+        _setup_client(client, mock_db, admin_user)
+        q = MagicMock()
+        q.options.return_value = q
+        q.filter.return_value = q
+        q.join.return_value = q
+        q.order_by.return_value = q
+        q.offset.return_value.limit.return_value.all.return_value = []
+        q.count.return_value = 0
+        mock_db.query.return_value = q
+        with patch("sqlalchemy.orm.selectinload"), patch(
+            "app.api.v1.projects.apply_scope_filter", return_value=q
+        ):
+            resp = client.get("/api/v1/projects?region=%E6%9F%90%E5%8E%BF&year=2026")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["total"] == 0
+        q.join.assert_called()
 
     def test_get_project_detail(self, client, mock_db, admin_user, sample_project):
         _setup_client(client, mock_db, admin_user)

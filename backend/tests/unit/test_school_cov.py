@@ -120,6 +120,26 @@ class TestImportSchoolsExcel:
         assert result["data"]["failed"] == 1
         assert "boom" in result["data"]["errors"][0]
 
+    async def test_cache_invalidation_degrades(self):
+        """覆盖 school.py:703-704（列表缓存清理失败降级）与 309-310（仪表盘缓存失效降级）"""
+        good = (0, "学校甲", "CODE1", "小学", "贵州", "黔南", "都匀", "地址",
+                "300", "20", "帮扶中", "单位", "校长", "电话")
+        content = _xlsx_bytes([["h"] * 14, good])
+        cache_mgr = MagicMock()
+        cache_mgr.delete_by_prefix = AsyncMock(side_effect=Exception("cache down"))
+        with (
+            patch.object(sch, "safe_commit"),
+            patch.object(sch, "School", return_value=SimpleNamespace()),
+            patch("app.core.cache.cache_manager", cache_mgr),
+            patch("app.api.v1.data.data.dashboard.invalidate_dashboard_cache",
+                  side_effect=Exception("dash boom")),
+            patch.object(sch, "submit_entity_change_approval", return_value=77),
+        ):
+            result = await sch.import_schools_excel(
+                UploadFile(file=BytesIO(content), filename="t.xlsx"), _user(), MagicMock())
+        assert result["data"]["imported"] == 1
+        assert result["data"]["failed"] == 0
+
     async def test_commit_failure_500(self):
         content = _xlsx_bytes([["h"], (0, "学校甲")])
         with (
@@ -130,6 +150,22 @@ class TestImportSchoolsExcel:
                 UploadFile(file=BytesIO(content), filename="t.xlsx"), _user(), MagicMock())
         assert exc_info.value.status_code == 500
         assert "导入失败" in exc_info.value.detail
+
+
+# ==================== 审批回写 no-op / 非 approved 早退 ====================
+
+
+class TestApprovalApplyHandlers:
+    def test_school_noop_handler(self):
+        # 覆盖 school.py:59 —— 学校审批回写 no-op 处理器
+        assert sch._apply_school_approval_result(MagicMock(), MagicMock()) is None
+
+    def test_scholarship_not_approved_early_return(self):
+        # 覆盖 school.py:68 —— task.status != approved 时直接返回（不查库）
+        db = MagicMock()
+        task = SimpleNamespace(status="rejected", entity_id=1)
+        assert sch._apply_scholarship_approval_result(db, task) is None
+        db.query.assert_not_called()
 
 
 # ==================== import_scholarship_students ====================
@@ -177,6 +213,25 @@ class TestImportSchoolScholarshipStudents:
                 1, UploadFile(file=BytesIO(content), filename="t.xlsx"), _user(), _db)
         assert result["data"]["imported"] == 0
         assert any("boom" in e for e in result["data"]["errors"])
+
+    async def test_duplicate_student_skipped(self):
+        """覆盖 school.py:1380-1381 —— 同校同名同年级学生重复导入 → 记错误并跳过"""
+        rows = [["h", "h"], ("学生乙", "二年级")]
+        content = _xlsx_bytes(rows)
+        _db = MagicMock()
+        # 去重查询命中已有记录 → 跳过
+        _db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(id=5)
+        with (
+            patch.object(sch, "_get_school_and_check_permission"),
+            patch.object(sch, "safe_commit"),
+        ):
+            result = await sch.import_school_scholarship_students(
+                1, UploadFile(file=BytesIO(content), filename="t.xlsx"), _user(), _db)
+        assert result["data"]["imported"] == 0
+        assert any("已存在，跳过" in e for e in result["data"]["errors"])
+        # 学生行未入库：db.add 仅被审批留痕(ApprovalTask/Message)调用
+        added = [str(c.args[0]) for c in _db.add.call_args_list]
+        assert not any("ScholarshipStudent" in a for a in added)
 
 
 # ==================== list_schools 缓存分支 ====================

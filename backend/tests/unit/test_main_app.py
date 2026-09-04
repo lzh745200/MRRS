@@ -48,6 +48,45 @@ class TestHealthRoute:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
 
+    def test_health_exposes_migration_state(self, client):
+        """迁移未达 head 必须对监控可见（任务#6 风险6：不再静默吞掉）。"""
+        with patch.dict(
+            "app.main._migration_status",
+            {"at_head": False, "head": "rev_head", "error_type": "OperationalError"},
+        ):
+            resp = client.get("/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        # 顶层 status 仍为 ok（迁移失败不致命，自动补列兜底）
+        assert body["status"] == "ok"
+        assert body["migration"] == {
+            "at_head": False,
+            "head": "rev_head",
+            "error_type": "OperationalError",
+        }
+
+    def test_migration_failure_records_only_exception_class_name(self):
+        """/health 无需认证，故迁移失败只记异常类名，不得记异常原文。
+
+        原文可能含数据库绝对路径与 SQL 片段；完整细节由 logger.error(exc_info=True)
+        留在服务端日志。
+        """
+        from app.main import _migration_status, _run_alembic_upgrade
+
+        sensitive = "unable to open database file: C:/secret/rural_revitalization.db"
+        with patch.dict(
+            _migration_status, {"at_head": None, "head": None, "error_type": None}
+        ), patch("alembic.command.upgrade", side_effect=RuntimeError(sensitive)), \
+                patch("alembic.command.stamp", side_effect=RuntimeError(sensitive)):
+            _run_alembic_upgrade()
+
+            # 断言必须在 with 块内：patch.dict 退出时会还原字典内容
+            assert _migration_status["at_head"] is False
+            assert _migration_status["error_type"] == "RuntimeError"
+            # 异常原文与其中的敏感路径均不得进入可出站的状态字典
+            assert sensitive not in _migration_status["error_type"]
+            assert "secret" not in str(_migration_status)
+
 
 class TestShutdownRoute:
     def test_from_non_local_forbidden(self, client):

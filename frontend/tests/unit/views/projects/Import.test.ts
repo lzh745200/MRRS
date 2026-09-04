@@ -13,6 +13,12 @@ const { ElMessage, pushSafeMock, requestMock } = vi.hoisted(() => ({
   requestMock: {
     requestGet: vi.fn(),
     post: vi.fn(),
+    // src/api/import.ts 实际 import 了 apiRequest（AGENTS 前端测试约定 #1：
+    // mock 必须覆盖源模块 import 的全部具名导出），缺失时相关路径会直接抛错
+    apiRequest: vi.fn(),
+    get: vi.fn(),
+    put: vi.fn(),
+    del: vi.fn(),
     downloadBlob: vi.fn(),
     parseContentDisposition: vi.fn(),
   },
@@ -27,6 +33,10 @@ vi.mock('@/composables/useRouterSafe', () => ({
 vi.mock('@/api/request', () => ({
   default: { get: requestMock.requestGet },
   post: requestMock.post,
+  apiRequest: requestMock.apiRequest,
+  get: requestMock.get,
+  put: requestMock.put,
+  del: requestMock.del,
   downloadBlob: requestMock.downloadBlob,
   parseContentDisposition: requestMock.parseContentDisposition,
   getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
@@ -433,8 +443,26 @@ describe('handleUpload', () => {
 })
 
 describe('confirmImport', () => {
+  it('S3: entity_type=project 走 Query 参数（不塞进 FormData），复用 importEntities', async () => {
+    requestMock.post.mockResolvedValue({ success: true, success_rows: 1, failed_rows: 0, total_rows: 1 })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fileList = [{ raw: new File(['x'], 'd.xlsx') }]
+    await vm.confirmImport()
+    // importEntities 内部调用被 mock 的 post，验证参数位置契约
+    const [url, fd, config] = requestMock.post.mock.calls[0]
+    expect(url).toBe('/import/entities')
+    expect(fd).toBeInstanceOf(FormData)
+    // entity_type/mode 绝不写入 FormData（后端读不到会恒回退 supported_village）
+    expect(fd.get('entity_type')).toBeNull()
+    expect(fd.get('mode')).toBeNull()
+    // 通过 Query 参数传递，确保走项目解析器而非帮扶村解析器
+    expect(config.params).toEqual({ entity_type: 'project', mode: 'incremental' })
+  })
+
   it('导入成功（有失败行）→ 步骤 4 + 结果', async () => {
-    requestMock.post.mockResolvedValue({ success_rows: 2, failed_rows: 1, total_rows: 3 })
+    requestMock.post.mockResolvedValue({ success: true, success_rows: 2, failed_rows: 1, total_rows: 3 })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -451,8 +479,32 @@ describe('confirmImport', () => {
     expect(vm.importLoading).toBe(false)
   })
 
+  it('M5: 后端 success=false → importResult.success=false（不硬编码 true）', async () => {
+    // 全部行导入失败但 HTTP 200：后端返回 success:false，界面必须进入失败分支
+    requestMock.post.mockResolvedValue({ success: false, success_rows: 0, failed_rows: 3, total_rows: 3 })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fileList = [{ raw: new File(['x'], 'd.xlsx') }]
+    await vm.confirmImport()
+    expect(vm.currentStep).toBe(4)
+    expect(vm.importResult.success).toBe(false)
+    expect(vm.importResult.failure).toBe(true)
+    expect(vm.importResult.failureCount).toBe(3)
+  })
+
+  it('M5: 后端响应缺失 success 字段 → Boolean(undefined)=false', async () => {
+    requestMock.post.mockResolvedValue({ success_rows: 1, failed_rows: 0, total_rows: 1 })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fileList = [{ raw: new File(['x'], 'd.xlsx') }]
+    await vm.confirmImport()
+    expect(vm.importResult.success).toBe(false)
+  })
+
   it('导入成功无失败行/无计数 → || 0 兜底', async () => {
-    requestMock.post.mockResolvedValue({})
+    requestMock.post.mockResolvedValue({ success: true })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -468,7 +520,7 @@ describe('confirmImport', () => {
   })
 
   it('confirmImport 时 file 无 raw → || file 兜底', async () => {
-    requestMock.post.mockResolvedValue({ success_rows: 1, failed_rows: 0, total_rows: 1 })
+    requestMock.post.mockResolvedValue({ success: true, success_rows: 1, failed_rows: 0, total_rows: 1 })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -507,7 +559,7 @@ describe('confirmImport', () => {
   })
 
   it('确认导入按钮 → confirmImport', async () => {
-    requestMock.post.mockResolvedValue({ success_rows: 1, failed_rows: 0, total_rows: 1 })
+    requestMock.post.mockResolvedValue({ success: true, success_rows: 1, failed_rows: 0, total_rows: 1 })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any

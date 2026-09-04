@@ -171,6 +171,16 @@
     <!-- 帮扶经费（独立区域，不受 form disabled 影响）-->
     <el-divider content-position="left">帮扶经费</el-divider>
     <div class="funding-section" :class="{ 'funding-section--disabled': mode === 'view' }">
+      <!-- 经费加载失败提示：区别于"暂无数据"，避免用户误以为经费为 0 -->
+      <el-alert
+        v-if="fundingLoadFailed"
+        type="warning"
+        show-icon
+        :closable="false"
+        title="经费数据加载失败"
+        description="为避免覆盖已保存经费，本次保存不会更新帮扶经费。请重新打开编辑页重试。"
+        style="margin-bottom: 12px"
+      />
       <!-- 单行紧凑布局：选择年度 + 专项投入 + 地方投入 + 按钮 -->
       <el-row :gutter="12" style="margin-bottom: 16px" align="bottom">
         <el-col :span="5">
@@ -389,6 +399,12 @@ const transitionFundingRows = ref<
   }>
 >([])
 
+// 经费加载失败标志：区分"确实无数据(空)"与"加载失败(错误)"。
+// 编辑弹窗打开时若 GET /transition-funding 因网络抖动/500/数据范围 404 等瞬时原因失败，
+// transitionFundingRows 会停留在空数组；若此时用户只改了村基本信息就保存，
+// handleSubmit 会用空 items 覆盖已有经费（真实数据丢失）。此标志用于阻止该覆盖。
+const fundingLoadFailed = ref(false)
+
 const transitionMilitaryTotal = computed(() =>
   transitionFundingRows.value.reduce((s, r) => s + (r.militaryInvestment || 0), 0)
 )
@@ -477,6 +493,8 @@ function editFundingYear(year: number) {
 
 async function loadTransitionFunding() {
   if (!props.village?.id) return
+  // 每次加载前重置失败标志，避免上一次状态残留
+  fundingLoadFailed.value = false
   try {
     const resp = await getTransitionFunding(props.village.id)
     const items = (resp as any)?.data || resp || []
@@ -487,8 +505,11 @@ async function loadTransitionFunding() {
         localInvestment: Number(item.localInvestment || 0),
       }))
       .sort((a: { year: number }, b: { year: number }) => a.year - b.year)
-  } catch {
-    /* 无数据时保持默认值 */
+  } catch (err) {
+    // 加载失败 ≠ 无数据：置失败标志，阻止 handleSubmit 用空 items 覆盖已保存经费
+    fundingLoadFailed.value = true
+    transitionFundingRows.value = []
+    logger.error('[SupportedVillageForm] 加载过渡期经费失败', err)
   }
 }
 
@@ -556,6 +577,16 @@ async function handleSubmit() {
   if (!formRef.value) return
   try {
     await formRef.value.validate()
+
+    // 经费加载失败保护（前端第一道防线，后端另有“空 items 不覆盖”兑底，两者互补）：
+    // 加载失败时 rows 为空，若照常规重算总额并提交会用 0 覆盖已保存经费。
+    // 此时仅提交村基本信息（保留 watch 填入的原总额），跳过年度经费保存。
+    if (fundingLoadFailed.value) {
+      ElMessage.warning('经费数据未成功加载，为避免覆盖已保存经费，本次不更新经费，请重新打开编辑')
+      emit('submit', { ...formData })
+      return
+    }
+
     // 同步更新总额字段
     formData.transitionFundMilitaryTotal = transitionMilitaryTotal.value
     formData.transitionFundLocalTotal = transitionLocalTotal.value

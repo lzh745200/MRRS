@@ -139,6 +139,20 @@ import { Refresh, Key, Warning, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { secretsApi, type KeyVersion, type SecretsStatus } from '@/api/secrets'
 
+/**
+ * el-table 作用域插槽回传的行类型（表格边界）。
+ *
+ * Element Plus 内部把 row 声明为 `Record<PropertyKey, any>`（DefaultRow），
+ * 且该类型未从包根导出；其行泛型约束 `T extends Record<PropertyKey, any>`
+ * 要求 symbol 索引签名，业务对象类型均不满足，泛型必然回退——
+ * 已实测：将 KeyVersion 写成 interface 或 type alias 都无法让模板侧 row 拿到真实类型。
+ *
+ * 故用 `Partial<KeyVersion>` 作为边界类型：它比 `any` 精确（本组件读取的
+ * is_active / revoked_at / created_at / version_id 均获得真实类型），
+ * 取代原先散落在 4 个函数上的 any + eslint-disable。
+ */
+type VersionRow = Partial<KeyVersion>
+
 // ==================== 响应式状态 ====================
 
 const loadingStatus = ref(false)
@@ -254,11 +268,13 @@ function openCreateDialog() {
   createDialogVisible.value = true
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleRevoke(row: any) {
+async function handleRevoke(row: VersionRow) {
+  // 数据源为 versions: Ref<KeyVersion[]>，version_id 必然存在；
+  // 边界类型只能给出 string | undefined，故在此收窄一次。
+  const versionId = row.version_id as string
   try {
     await ElMessageBox.confirm(
-      `确定撤销密钥版本 ${row.version_id} 吗？撤销后该密钥将无法使用。`,
+      `确定撤销密钥版本 ${versionId} 吗？撤销后该密钥将无法使用。`,
       '确认撤销',
       {
         confirmButtonText: '确定',
@@ -270,9 +286,9 @@ async function handleRevoke(row: any) {
     return
   }
 
-  revokingId.value = row.version_id
+  revokingId.value = versionId
   try {
-    const res = await secretsApi.revokeSecret(row.version_id)
+    const res = await secretsApi.revokeSecret(versionId)
     ElMessage.success(res.message ?? '密钥已撤销')
     await refreshAll()
   } catch (e: unknown) {
@@ -309,21 +325,18 @@ async function handleCleanup() {
 
 // ==================== 工具函数 ====================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatTime(ts?: any): string {
+function formatTime(ts?: number): string {
   if (!ts) return '-'
   return new Date(Number(ts) * 1000).toLocaleString('zh-CN')
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getStatusType(row: any): 'success' | 'warning' | 'danger' | 'info' {
+function getStatusType(row: VersionRow): 'success' | 'warning' | 'danger' | 'info' {
   if (row.is_active) return 'success'
   if (row.revoked_at) return 'danger'
   return 'warning'
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getStatusText(row: any): string {
+function getStatusText(row: VersionRow): string {
   if (row.is_active) return '活跃'
   if (row.revoked_at) return '已撤销'
   return '已过期'

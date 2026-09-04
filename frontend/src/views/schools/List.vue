@@ -294,7 +294,6 @@ import { DIALOG_SM } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
-import { AuthStorage } from '@/utils/authStorage'
 import { useUploadHeaders } from '@/composables/useUploadHeaders'
 
 import { ref, reactive, computed, onMounted, onActivated, onUnmounted, watch, nextTick } from 'vue'
@@ -303,6 +302,8 @@ import { useDesensitize } from '@/composables/useDesensitize'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Download, Upload, Search } from '@element-plus/icons-vue'
 import { del, apiRequest } from '@/api/request'
+import request from '@/api/request'
+import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
 import { schoolApi } from '@/api/schools'
 import { restoreSchool, previewPurgeSchool, purgeSchool } from '@/api/schoolsRecycle'
 import { useAuthStore } from '@/stores/auth'
@@ -660,20 +661,11 @@ function onImportError() {
 async function handleExport() {
   ElMessage.success('正在导出学校数据...')
   try {
-    const token = AuthStorage.getToken() || ''
-    const resp = await fetch(`${baseUrl}/schools/export/excel`, {
-      headers: { Authorization: token ? `Bearer ${token}` : '' },
+    // L3 修复：收敛到统一的 downloadBlobAsFile，从响应头 Content-Disposition 解析真实文件名
+    // （而非硬编码 'schools.xlsx'）；裸 axios 实例自动携带 Bearer token。
+    await downloadBlobAsFile(() => request.get('/schools/export/excel', { responseType: 'blob' }), {
+      fallbackFileName: 'schools.xlsx',
     })
-    if (!resp.ok) throw new Error('export failed')
-    const blob = await resp.blob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'schools.xlsx'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
     // 导出成功 — 浏览器已确认
   } catch {
     ElMessage.error('导出失败')
@@ -725,6 +717,7 @@ async function handleRestore(row: any) {
   try {
     await restoreSchool(row.id)
     ElMessage.success('恢复成功')
+    currentPage.value = 1 // 重置到第1页：结果集长度已变，停留原页可能是空页
     fetchData()
   } catch {
     ElMessage.error('恢复失败')
@@ -767,6 +760,7 @@ async function handlePurge(row: any) {
   try {
     const res: any = await purgeSchool(row.id, confirmPassword)
     ElMessage.success(res?.data?.message || `已清理 ${res?.data?.deleted_records ?? 0} 条关联数据`)
+    currentPage.value = 1 // 重置到第1页：结果集长度已变，停留原页可能是空页
     fetchData()
   } catch {
     ElMessage.error('彻底删除失败')

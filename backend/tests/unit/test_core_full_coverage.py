@@ -45,8 +45,23 @@ class TestResponse:
 
     def test_ok_list_with_kwargs(self):
         from app.core.response import ok_list
+        # extra 已成为保留的 Dict 形参；非保留 kwarg 仍落到响应顶层
+        result = ok_list(items=[], total=0, foo='val')
+        assert result['foo'] == 'val'
+
+    def test_ok_list_with_extra_dict(self):
+        from app.core.response import ok_list
+        # extra 为 Dict 时并入 data 层（H1 summary 注入契约）
+        result = ok_list(items=[], total=0, extra={'summary': {'total_investment': 150.0}})
+        assert result['data']['summary'] == {'total_investment': 150.0}
+
+    def test_ok_list_with_non_dict_extra_ignored(self):
+        from app.core.response import ok_list
+        # 回归守卫：extra 传入非 dict 时被忽略，不再 data.update 崩溃(ValueError)
         result = ok_list(items=[], total=0, extra='val')
-        assert result['extra'] == 'val'
+        assert result['code'] == 200
+        assert result['data']['items'] == []
+        assert 'summary' not in result['data']
 
     def test_error_response(self):
         from app.core.response import error_response

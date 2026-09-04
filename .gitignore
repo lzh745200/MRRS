@@ -27,6 +27,8 @@ __pycache__/
 .pytest_cache/
 .hypothesis/
 .coverage
+.coverage.*
+.coverage_*
 htmlcov/
 coverage.xml
 *.cover
@@ -38,6 +40,8 @@ backend/test_*.txt
 backend/final_verify.txt
 backend/verify_output.txt
 verify_output.txt
+/pytest_*output*.txt
+backend/*_baseline.txt
 
 # Virtual environments
 **/.venv*/
@@ -217,6 +221,8 @@ backend/logs/
 # ===== AI 工具目录（停止跟踪后补充）=====
 .agents/
 .context/
+# 本地会话标题状态（desktop-topic-title*.json），机器本地元数据，非项目内容
+.reasonix/
 
 # ===== PyInstaller 临时构建产物 =====
 backend/dist/

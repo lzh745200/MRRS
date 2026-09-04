@@ -155,9 +155,15 @@ const validatePassword = (_rule: any, value: any, callback: any) => {
   if (!/[!@#$%^&*()+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) errors.push('包含特殊字符')
   if (errors.length > 0) {
     callback(new Error(`密码需要：${errors.join('、')}`))
-  } else {
-    callback()
+    return
   }
+  // 与后端 PasswordPolicy.validate 末条一致：密码不得包含用户名（用户名不含空格，等价整名包含）
+  const uname = registerForm.username?.trim().toLowerCase()
+  if (uname && value.toLowerCase().includes(uname)) {
+    callback(new Error('密码不能包含用户名'))
+    return
+  }
+  callback()
 }
 
 // 验证密码一致性
@@ -212,7 +218,15 @@ const handleRegister = async () => {
     }, 1500)
   } catch (error: any) {
     logger.error('注册失败', error)
-    const message = error.response?.data?.detail || error.message || '注册失败，请稍后重试'
+    // 后端 BizValidationError 走 AppError handler 返回 {code,message,success} 信封（无 detail），
+    // 拦截器已把可读文案算进 error.userMessage；此处按 userMessage→detail→message→兜底 取值，
+    // 避免直接把 axios 原文 "Request failed with status code 400" 抛给用户。
+    const message =
+      error.userMessage ||
+      error.response?.data?.detail ||
+      error.response?.data?.message ||
+      error.message ||
+      '注册失败，请稍后重试'
     ElMessage.error(message)
   } finally {
     loading.value = false

@@ -29,6 +29,7 @@ def _make_user(**kwargs):
 
 def _setup_admin_user(client):
     user = _make_user(id=1, username="admin", role="admin", is_superuser=True)
+
     async def mock_gcu():
         return user
     client.app.dependency_overrides[get_current_user] = mock_gcu
@@ -37,6 +38,7 @@ def _setup_admin_user(client):
 
 def _setup_regular_user(client):
     user = _make_user(id=2, username="operator", role="operator", is_superuser=False)
+
     async def mock_gcu():
         return user
     client.app.dependency_overrides[get_current_user] = mock_gcu
@@ -126,6 +128,7 @@ class TestListUsersManagement:
         mock_db, base_query = _make_mock_db()
         base_query.count.return_value = 1
         base_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [user]
+
         def filter_side(*args, **kwargs):
             return base_query
         base_query.filter = filter_side
@@ -231,6 +234,21 @@ class TestCreateUserManagement:
                     json={"username": "newuser2", "password": "Str0ng!Pass1", "organization_id": 1},
                 )
                 assert response.status_code == 200
+
+    def test_create_provided_password_fails_policy_400(self, client):
+        # 覆盖 user_management.py:219 —— 管理员显式指定密码但不符合 PasswordPolicy
+        # "abcdefghijkl1!" 满足 min_length=12 校验，但缺少大写字母 → 策略拒绝
+        _setup_admin_user(client)
+        mock_db, base_query = _make_mock_db()
+        base_query.filter.return_value.first.return_value = None
+        _override_db(client, mock_db)
+
+        response = client.post(
+            f"{self.prefix}",
+            json={"username": "newuser3", "password": "abcdefghijkl1!", "organization_id": 1},
+        )
+        assert response.status_code == 400
+        assert "大写字母" in response.text
 
     def test_create_admin_role_sets_superuser(self, client):
         _setup_admin_user(client)

@@ -285,7 +285,10 @@ async function handlePermissionImport() {
         ElMessage.error(confirmBody.message || confirmBody.detail || '权限包应用失败')
       }
     } else {
-      ElMessage.error(body.message || body.detail || '权限包验证失败')
+      // 读 _body（加密包重传后的响应）而非首次 body：重传失败（如密码错误）时
+      // 应展示重传返回的真实错误，而不是首次那句「该权限包已加密」误导排查。
+      // 非加密路径下 _body === body（第 248 行初始化），行为完全不变。
+      ElMessage.error(_body.message || _body.detail || '权限包验证失败')
     }
   } catch (err: any) {
     logger.error('[Login] 导入权限包失败', err)

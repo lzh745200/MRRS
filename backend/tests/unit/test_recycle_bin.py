@@ -12,6 +12,29 @@ import pytest
 from app.models.project import Project
 
 
+@pytest.fixture(autouse=True)
+def _isolate_runtime_paths(monkeypatch, tmp_path):
+    """任务#16：回收站用例的逐用例文件系统隔离。
+
+    背景：paths.py 已将开发/测试分支数据根从 ``Path.cwd()`` 改为
+    ``get_project_backend_dir()``（固定指向真实 backend/）。回收站链路
+    （创建/软删/恢复/彻底删除）伴随审计、快照、上传等副作用，若其中
+    任何写操作落到真实 backend/data、backend/uploads，在全量顺序运行时
+    会与其它用例产生跨用例写入干扰（test_restore_roundtrip 偶发失败的
+    根因）。本 fixture 显式把数据根与 UPLOAD_DIR 重定向到逐用例独立的
+    tmp_path，确保回收站测试绝不读写真实 backend 数据目录，也不受其
+    它用例遗留的真实目录状态影响。
+
+    数据库隔离已由 conftest 的 ``client`` fixture（sqlite:///:memory:）保证，
+    此处只补齐文件系统隔离，不覆盖 DATABASE_URL 以免干扰内存库 override。
+    """
+    from app.utils import paths as paths_module
+
+    monkeypatch.setattr(paths_module, "get_project_backend_dir", lambda: tmp_path)
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+    yield
+
+
 def _make_admin():
     user = type("U", (), {})()
     user.id = 1
