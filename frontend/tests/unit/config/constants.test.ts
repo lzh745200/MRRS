@@ -34,14 +34,14 @@ describe('config/constants SYSTEM_VERSION 来源优先级', () => {
     vi.stubEnv('VITE_APP_VERSION', '')
     vi.resetModules()
     const mod = await import('@/config/constants')
-    expect(mod.SYSTEM_VERSION).toBe('1.11.4')
+    expect(mod.SYSTEM_VERSION).toBe('1.11.5')
   })
 
   it('VITE_APP_VERSION 完全缺失时同样回落兜底版本', async () => {
     vi.stubEnv('VITE_APP_VERSION', undefined)
     vi.resetModules()
     const mod = await import('@/config/constants')
-    expect(mod.SYSTEM_VERSION).toBe('1.11.4')
+    expect(mod.SYSTEM_VERSION).toBe('1.11.5')
     // 兜底分支不影响其他常量
     expect(mod.COPYRIGHT_OWNER).toBe('梁正辉')
     expect(mod.SYSTEM_NAME).toBe('帮扶管理信息系统')

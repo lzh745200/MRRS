@@ -36,9 +36,9 @@ const appVersion = (() => {
     const pkgPath = app.isPackaged
       ? path.join(process.resourcesPath, '..', 'package.json')
       : path.join(__dirname, '..', 'package.json');
-    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version || '1.11.4';
+    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version || '1.11.5';
   } catch (_) {
-    return '1.11.4';
+    return '1.11.5';
   }
 })();
 
