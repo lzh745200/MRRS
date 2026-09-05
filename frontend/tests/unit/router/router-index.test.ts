@@ -47,6 +47,17 @@ vi.mock('chart.js/auto', () => ({
   },
 }))
 
+// LoginEnhanced.vue 由专属测试 tests/unit/views/auth/LoginEnhanced.test.ts 单一引用覆盖
+// （覆盖率合并不变量：每个被 100% 阈值锁定的 .vue 全仓只允许一个测试文件触碰，含 bare
+// import）。本文件为覆盖 router/index.ts 的懒加载语句，会真实执行全部懒加载组件函数与
+// push('/login')——若真实加载 LoginEnhanced，本 worker isolate 会留下不含渲染分支的
+// fnMap 分片，与专属测试的 19 函数分片在满量按 id 合并时错位 → functions 88.23%
+// （Linux CI 实测与 Node 版本无关）。用桩替换：懒加载函数本体仍被执行（router 语句
+// 覆盖不受影响），但不再触碰 LoginEnhanced 真实模块。
+vi.mock('@/views/auth/LoginEnhanced.vue', () => ({
+  default: { name: 'LoginEnhancedCoverageStub' },
+}))
+
 import router, { routes } from '@/router'
 
 // ==================== Helpers ====================
