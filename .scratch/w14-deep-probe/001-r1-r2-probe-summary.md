@@ -154,4 +154,14 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   password purge。与「回收站可恢复 + 审计留痕」设计一致，非缺陷。
 - 结论：R12 无新增缺陷、无代码改动。
 
+## R13（8016, 导入模板/预览/校验管线）— 无功能缺陷
+- 模板下载 GET /import/template?entity_type= 五种实体（supported_village 9277B/
+  project 8646B/fund 8491B/school 8646B/policy 8369B）均 200 xlsx。
+- 空模板预览 POST /import/preview（multipart）→ 结构化结果 total 0 行 200；
+- 无效文件（junk.xlsx）：预览 → 400 清晰文案（非 500）；导入 /import/entities →
+  200 信封 + error_count=1 + 行级 errors（IMPORT_999，内容为文件级解析原因——
+  按项目既定策略属面向用户的导入反馈，不出 HTTPException detail）；
+- /import/history 200。
+- 结论：R13 无新增缺陷、无代码改动。
+
 
