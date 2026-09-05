@@ -150,20 +150,29 @@ class TestDownloadExport:
         resp = test_client.get(self.URL + "/invalid<package>")
         assert resp.status_code == 400
 
-    def test_not_found(self, client, tmp_path, monkeypatch):
-        test_client, db = client
-        monkeypatch.chdir(tmp_path)
+    def _bind_sync_dir(self, monkeypatch, tmp_path):
+        """把端点与服务的 sync_dir 一起指到 tmp_path（路径同源接缝）。
+
+        2026-09-05 前：下载端点用相对 Path("data_sync")，测试以 monkeypatch.chdir
+        绑定；端点改用 data_sync_service.sync_dir 后必须 patch 同一属性。
+        """
+        from app.services.data_sync_service import data_sync_service
+
         sync_dir = tmp_path / "data_sync"
         sync_dir.mkdir(parents=True)
+        monkeypatch.setattr(data_sync_service, "sync_dir", sync_dir)
+        return sync_dir
+
+    def test_not_found(self, client, tmp_path, monkeypatch):
+        test_client, db = client
+        self._bind_sync_dir(monkeypatch, tmp_path)
         resp = test_client.get(self.URL + "/nonexistent")
         assert resp.status_code == 400
         assert "失败" in resp.json()["message"]
 
     def test_download_zip(self, client, tmp_path, monkeypatch):
         test_client, db = client
-        monkeypatch.chdir(tmp_path)
-        sync_dir = tmp_path / "data_sync"
-        sync_dir.mkdir(parents=True)
+        sync_dir = self._bind_sync_dir(monkeypatch, tmp_path)
         (sync_dir / "test_package.zip").write_bytes(b"zip content")
         resp = test_client.get(self.URL + "/test_package")
         assert resp.status_code == 200
@@ -171,9 +180,7 @@ class TestDownloadExport:
 
     def test_download_rrs(self, client, tmp_path, monkeypatch):
         test_client, db = client
-        monkeypatch.chdir(tmp_path)
-        sync_dir = tmp_path / "data_sync"
-        sync_dir.mkdir(parents=True)
+        sync_dir = self._bind_sync_dir(monkeypatch, tmp_path)
         (sync_dir / "test_package.rrs").write_bytes(b"rrs content")
         resp = test_client.get(self.URL + "/test_package")
         assert resp.status_code == 200

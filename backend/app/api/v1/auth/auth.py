@@ -843,8 +843,11 @@ async def register_user(
         # 创建新用户（create_user 期望 dict；model_dump 转换 pydantic 对象）
         user = user_service.create_user(user_create.model_dump())
 
-        # 激活机器码（绑定到用户）
-        machine_service.activate_machine_code(machine_record, user.id)
+        # 激活机器码（绑定到用户；组织通行码记录的 machine_code 是占位串，
+        # 必须改绑为注册机器的真实机器码，否则登录侧机器校验恒拒绝）
+        machine_service.activate_machine_code(
+            machine_record, user.id, current_machine_code=current_machine_code
+        )
 
         # 如果通行码关联了组织，自动绑定用户到该组织
         if machine_record.organization_id:

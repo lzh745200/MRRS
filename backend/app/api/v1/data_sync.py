@@ -166,7 +166,11 @@ async def download_export_package(
     if not re.match(r"^[a-zA-Z0-9_\-\.]+$", package_name):
         raise HTTPException(status_code=400, detail="无效的数据包名称")
     try:
-        base_dir = Path("data_sync").resolve()
+        # 与 DataSyncService.sync_dir 同源（get_app_data_dir()/data_sync）。
+        # 历史缺陷：相对路径 Path("data_sync") 依赖进程工作目录——开发态碰巧
+        # 重合可过测试，打包/Electron 注入环境下与导出写入目录分叉 → 下载恒
+        # 400/404（路径双源，同备份模块 2026-08-30 的病根）。
+        base_dir = data_sync_service.sync_dir.resolve()
         # 尝试 .zip 格式
         package_path = (base_dir / f"{package_name}.zip").resolve()
         if not package_path.exists():

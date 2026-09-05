@@ -208,6 +208,32 @@ class TestMachineCodeServiceDB:
         assert record.user_id == 1
         assert db.commit.called
 
+    def test_activate_rebinds_placeholder_machine_code(self):
+        """组织通行码注册：激活时必须把占位 machine_code 改绑为注册机真实机器码。
+
+        2026-09-05 探针实测缺陷：组织通行码记录的 machine_code 是占位串
+        ORG-<org>-<rand>，不改绑则登录侧 verify_user_machine 的
+        "记录.machine_code == 当前机器码"恒 False——注册成功却永远登录不了。
+        """
+        db = MagicMock()
+        svc = self._make_service(db)
+        record = MagicMock()
+        record.machine_code = "ORG-3-abc123def456"
+        svc.activate_machine_code(record, 42, current_machine_code="f" * 32)
+        assert record.machine_code == "f" * 32
+        assert record.status == "active"
+        assert record.user_id == 42
+
+    def test_activate_without_rebind_keeps_machine_code(self):
+        """不传 current_machine_code（旧调用方）：machine_code 原样保留。"""
+        db = MagicMock()
+        svc = self._make_service(db)
+        record = MagicMock()
+        record.machine_code = "m" * 32
+        svc.activate_machine_code(record, 7)
+        assert record.machine_code == "m" * 32
+        assert record.status == "active"
+
     def test_revoke_no_db(self):
         svc = self._make_service(db=None)
         with pytest.raises(ValueError):

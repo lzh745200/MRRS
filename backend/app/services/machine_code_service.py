@@ -616,12 +616,20 @@ class MachineCodeService:
 
         return None
 
-    def activate_machine_code(self, record: MachineCode, user_id: int) -> None:
+    def activate_machine_code(
+        self, record: MachineCode, user_id: int, current_machine_code: Optional[str] = None
+    ) -> None:
         """激活机器码（绑定到用户）
 
         Args:
             record: 机器码记录
             user_id: 用户ID
+            current_machine_code: 当前机器的真实机器码。组织通行码记录的
+                machine_code 字段是占位串（ORG-<org_id>-<random>，本机无法匹配），
+                激活时必须改绑为注册机器的真实机器码，否则登录侧
+                verify_user_machine 的"记录.machine_code == 当前机器码"比对
+                恒 False——注册成功却永远登录不了（2026-09-05 探针实测）。
+                机器特定通行码记录改写为同值，无副作用。
 
         Raises:
             ValueError: 数据库会话未初始化
@@ -629,13 +637,18 @@ class MachineCodeService:
         if not self.db:
             raise ValueError("数据库会话未初始化")
 
+        if current_machine_code:
+            record.machine_code = current_machine_code
         record.status = "active"
         record.user_id = user_id
         record.activated_at = datetime.now(timezone.utc)
 
         safe_commit(self.db)
 
-        logger.info(f"机器码已激活: machine_code={record.machine_code[:16]}..., " f"user_id={user_id}")
+        logger.info(
+            f"机器码已激活: machine_code={record.machine_code[:16]}..., "
+            f"user_id={user_id}, 改绑={bool(current_machine_code)}"
+        )
 
     def revoke_machine_code(self, machine_code_id: int) -> bool:
         """撤销机器码
