@@ -2,6 +2,8 @@
 
 import io
 import json
+
+from openpyxl import Workbook
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -309,6 +311,41 @@ class TestDownloadTemplate:
         assert resp.headers["content-type"].startswith(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+    def test_upload_filled_comma_template_lands_data(self, auth_setup, db_session):
+        """逗号串模板上传确认必须真实落库（2026-09-05 R4 探针实测缺陷）。
+
+        字符串形态归一化后必须带 db_field（=excel_header），否则
+        _parse_template_excel 解析出 {'': value}（列全部落空键）→ 确认导入
+        零写入。同时锁 upload 路径不再因 'str' has no .get 而 500。
+        """
+        t = ReportTemplate(name="逗号导入模板", type="import", module="village",
+                           fields="village_name,province")
+        db_session.add(t)
+        db_session.commit()
+        db_session.refresh(t)
+
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "逗号导入模板"
+        ws["A2"], ws["B2"] = "village_name", "province"
+        ws["A3"], ws["B3"] = "探针落库村", "贵州省"
+        buf = io.BytesIO()
+        wb.save(buf)
+
+        resp = auth_setup.post(
+            P(f"/{t.id}/upload?mode=confirm"),
+            files={"file": ("filled.xlsx", buf.getvalue(),
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        data = body.get("data") or {}
+        assert data.get("success_count", data.get("imported", 0)) >= 1 or body.get("success")
+
+        # 真实落库
+        listing = auth_setup.get(P("") + "?keyword=探针落库村")
+        assert listing.status_code == 200
 
 
 class TestUploadFilledTemplate:
