@@ -83,7 +83,11 @@ vi.mock('@/utils/authStorage', () => ({
 
 vi.mock('element-plus', () => ({
   ElMessage,
-  ElMessageBox: { confirm: vi.fn(() => Promise.resolve('confirm')), alert: vi.fn(), prompt: promptMock },
+  ElMessageBox: {
+    confirm: vi.fn(() => Promise.resolve('confirm')),
+    alert: vi.fn(),
+    prompt: promptMock,
+  },
   ElNotification: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }))
 
@@ -205,6 +209,19 @@ describe('LoginEnhanced.vue', () => {
     await (w.vm as any).handleLogin()
     expect((w.vm as any).twoFactorRequired).toBe(true)
     expect((w.vm as any).tempToken).toBe('tt-1')
+  })
+
+  it('2FA 验证码输入框真实 DOM input 事件 → v-model 更新 totpCode', async () => {
+    // 覆盖 v-model 编译出的 onUpdate:modelValue 缓存 handler（fnMap id 13/14，行
+    // 38/81）。既有 2FA 用例全部直接赋值 vm.totpCode，绕过了该 handler，导致其
+    // 满量合并后恒 count-0 → functions 99.91% < 100 阈值（99.99% 之谜的另一半）。
+    const w = await mountComp()
+    ;(w.vm as any).twoFactorRequired = true
+    await nextTick()
+    const input = w.find('input.custom-input')
+    expect(input.exists()).toBe(true)
+    await input.setValue('654321')
+    expect((w.vm as any).totpCode).toBe('654321')
   })
 
   it('2FA 验证码不足6位 → 提示', async () => {
@@ -445,7 +462,11 @@ describe('LoginEnhanced.vue', () => {
 
   it('权限包导入：预览成功（saved_file_name 契约字段）+ 确认成功', async () => {
     mockPost
-      .mockResolvedValueOnce({ success: true, saved_file_name: 'pkg_saved.zip', message: '预览通过' })
+      .mockResolvedValueOnce({
+        success: true,
+        saved_file_name: 'pkg_saved.zip',
+        message: '预览通过',
+      })
       .mockResolvedValueOnce({ success: true, message: '应用完成' })
     const w = await mountComp()
     const vm = w.vm as any
@@ -475,11 +496,9 @@ describe('LoginEnhanced.vue', () => {
     const vm = w.vm as any
     vm.permissionFile = { name: 'local-fallback.zip' }
     await vm.handlePermissionImport()
-    expect(mockPost).toHaveBeenNthCalledWith(
-      2,
-      '/permission-packages/confirm/local-fallback.zip',
-      { overwrite_existing: true }
-    )
+    expect(mockPost).toHaveBeenNthCalledWith(2, '/permission-packages/confirm/local-fallback.zip', {
+      overwrite_existing: true,
+    })
     expect(ElMessage.success).toHaveBeenCalled()
   })
 

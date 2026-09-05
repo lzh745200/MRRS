@@ -17,11 +17,15 @@ export default defineConfig({
     //     得到 17 函数分片；渲染全分支的专属测试得到 19 函数分片；v8 函数 id 为 worker 内从 1 起
     //     的相对序号。istanbul 在满量规模把各 worker 分片**按 id** 合并，两份长度不同的 fnMap 中
     //     相同处理器的 id 错位 → 计数落到错误函数上 → 2 个内联处理器 count-0 → 88.23%（15/17）。
-    //     实测历程：先移除 AuthViewsBatch.test.ts 的冗余深挂载（曾以为是唯一冲突源）→ CI 仍
-    //     88.23%；再移除 smoke.test.ts 里对 LoginEnhanced 的 **bare import**（同样产 17 函数分片）
-    //     → 本地全量 --coverage 与 Linux CI 双双转绿。结论：**凡是被覆盖率门槛锁定的 .vue，
-    //     全仓只允许一个测试文件引用它（含 bare import 与 mount）**；两个文件引用（无论是否渲染、
-    //     桩是否一致）都会在满量按 id 合并时按此机制损坏 functions。
+    //     实测历程（每步都在 Linux CI 复测，Windows/Node25 恒绿——OS 间 v8 函数 id 顺序差异，
+    //     本地绿不代表放行）：① 移除 AuthViewsBatch.test.ts 冗余深挂载 → CI 仍 88.23%；
+    //     ② 再移除 smoke.test.ts 的 bare import → CI 仍 88.23%；③ 桩替换 router-index.test.ts
+    //     的懒加载执行 + push('/login') → CI 仍 88.23%；④ 桩替换 promptContract.test.ts 的
+    //     `await import('@/main')`（真实 App 挂载会解析 /login 并执行该组件）→ WSL/Node22 全量
+    //     --coverage 的模块加载标记降为 1 次、functions/branches 100%。
+    //     结论：**凡是被覆盖率门槛锁定的 .vue，全仓只允许一个测试文件执行它**（含 bare import、
+    //     mount、路由 chunk 加载、import('@/main') 整应用挂载）；第二处引用无论是否渲染都会在
+    //     满量按 id 合并时损坏 functions。
     //     此项与 Node 版本无关：曾被误诊为"Node22 V8 幻影"并把 CI 升到 24，但 Node24 的 CI 复现
     //     完全相同的 88.23%（f42ae680），证伪该说法；maxWorkers:1 也**不能**修——合并发生在
     //     "每文件一个分片"层面，单 worker 仍产出 299 个分片再按 id 合并。保留 maxWorkers:1/
@@ -39,6 +43,10 @@ export default defineConfig({
     //     根治见 scripts/patch-vitest-coverage.cjs（postinstall 自动应用）：onAfterSuiteRun 写盘的
     //     同时把分片 JSON 存入内存镜像 Map，readCoverageFiles 读盘命中 ENOENT 时回退内存镜像并按
     //     filename 释放，使报告阶段不再依赖分片在磁盘上存活（详见下方 coverage 注释）。
+    //     2026-09-05 扩展（写侧竞态）：clean() 的 rm(.tmp) 与 worker 并发回调的 onAfterSuiteRun
+    //     交错时，writeFile 落在"目录已删、mkdir 未建"窗口内同样抛 ENOENT → Unhandled Rejection
+    //     崩掉报告阶段（读侧镜像存在但该写 promise 无任何 catch）。补丁 SITE3：写失败时
+    //     mkdir 重建目录重写一次，仍失败则放弃磁盘分片（内存镜像仍是权威数据源，读侧回退）。
     // fileParallelism:false + retry:1 用于缓解与此无关的 jsdom 环境复用时序 flake（见下）。
     fileParallelism: false,
     // 环境级时序 flake 缓解：2026-08-27 同一基线两次全量出现 5 failed → 6550 passed
