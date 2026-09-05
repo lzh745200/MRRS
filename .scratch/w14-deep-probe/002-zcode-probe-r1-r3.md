@@ -62,3 +62,19 @@
   `name`（非 full_name）；报表订阅挂 /reports/subscriptions（data 包无额外
   前缀）；政策/学校/项目/工作日志(日历+月度总结)/通知偏好全链 200。
 - 探针 40/40 全绿；回归 215+709 passed；CI #76 五 job 全绿。
+
+## 本会话 R5：乡村工作台/奖学金导入/增量三端点/地图坐标/update-logs/消息推送联动
+- 🐛 **奖学金导入全链坏死**（阻断级，无测试覆盖致长期存活）：按
+  ScholarshipStudent(name/student_id/school_name) 构造，真实列是
+  student_name + 必填 school_id FK → 每行必抛 TypeError → imported=0。
+  修复 `dbc4319b`：学校名查 School 解析 school_id、学号并入 remarks；
+  `f8643835` 学校解析补 is_active 过滤（软删扫描门禁 + 语义）。
+- 🐛 **乡村工作悬挂 village_id → 500**：FK 目标是遗留 villages 表（前端
+  下拉由 /rural-works/villages 按名称 upsert 同步），悬挂 id 触发未处理
+  IntegrityError。修复：服务层 _validate_village_id（create/update）+
+  路由 ValueError→400 带指引。
+- 契约核验（非缺陷）：增量三端点（detect-changes/试运行 import）、地图
+  坐标写入与 200 越界 400、update-logs 挂 /system（空库 latest 404）、
+  审批提交 → 未读数联动、奖学金按列位置解析（B 列姓名起）。
+- 探针 32/32 全绿；锁定测试 test_r5_probe_locks 5 用例（真实内存库）；
+  回归 334+89 passed；CI #79 五 job 全绿。
