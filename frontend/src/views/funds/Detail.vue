@@ -376,10 +376,9 @@
                       <el-icon><Upload /></el-icon>上传附件
                     </el-button>
                   </el-upload>
-                  <span
-                    style="font-size: 12px; color: var(--color-text-placeholder)"
-                  >
-                    分类选择「合同/分配令」等可满足拨付/审批文档要求；支持 pdf、doc、xls、jpg、png 等
+                  <span style="font-size: 12px; color: var(--color-text-placeholder)">
+                    分类选择「合同/分配令」等可满足拨付/审批文档要求；支持 pdf、doc、xls、jpg、png
+                    等
                   </span>
                 </div>
 
