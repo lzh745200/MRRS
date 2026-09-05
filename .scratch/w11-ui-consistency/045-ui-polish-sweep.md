@@ -22,6 +22,14 @@ blocked-by: []
    `views/ruralWorks/Analysis.vue:303` 仍在用 chart.js → 移植到 BaseChart/echarts
    （仓库其余图表已全部 echarts），随后 `package.json` 删除 chart.js 依赖
    （构建产物将少一个 192KB 懒加载块）。
+   **侦察数据（2026-08-31 实测）**：chart.js 使用点共 10 个 Chart 实例——
+   `views/analytics/reports/WorkAnalysis.vue`（798 行）：import :186；实例 :371/:408/:463（类型/状态/趋势）。
+   `views/ruralWorks/Analysis.vue`（1529 行）：import :303；实例 :611/:653/:692/:739/:801/:869/:909
+   （饼/柱/环/条/趋势/村排名/质量分析）。移植注意：均用 `Chart from 'chart.js/auto'`，
+   数据源为组件内聚合函数，echarts 侧走 BaseChart.vue 统一主题；两视图各自在
+   onUnmounted 有 destroy 逻辑需同步移除。package.json 移除 chart.js 后构建产物
+   预计减少 ~192KB 懒加载块。
+
 3. **仪表盘图表颜色令牌化**：`views/analytics/dashboard/Dashboard.vue`（32 处 hex 在
    echarts option 中，含轴色 #e2e8f0/#1e293b/#64748b——暗色主题下刺眼）、
    `views/dashboard/ChartRow.vue`(16)、`views/ruralWorks/Analysis.vue`(24)、
