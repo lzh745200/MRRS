@@ -164,4 +164,17 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
 - /import/history 200。
 - 结论：R13 无新增缺陷、无代码改动。
 
+## R14（8017, 经费状态机链）— 发现并修复前端缺陷（commit cba24f8）
+- 后端守卫验证正确：申请→(需附件)审批→(需 contract+allocation_order 类别文档)
+  拨付→使用→完成→审计；非法流转恒 400「状态流转非法：当前状态 X，不允许变更为
+  Y」；缺文档 400 提示含缺失类别中文名。
+- 🐛 缺陷（前端）：funds/Detail.vue 上传 category 放 FormData（后端参数为 Query）
+  → 恒落 other；界面无类别选择 → 真实用户无法满足拨付文档要求（拨付按钮死路）。
+  复现关键证据：category 经 query（?category=contract）上传后 allocate 200
+  「经费已拨付」；FormData 上传恒 other。
+- 修复：Detail.vue 统一 CATEGORY_LABELS + 「文档分类」下拉（默认 other）+
+  category 经 axios params(query) 提交；DetailCov 适配与新增用例（65 passed）；
+  vue-tsc 0。
+- 结论：R14 后端状态机无缺陷；前端上传链路缺陷已修复。
+
 
