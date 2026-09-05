@@ -9,19 +9,25 @@ export default defineConfig({
     environment: 'jsdom',
     pool: 'threads',
     // ── 两个相互独立的覆盖率缺陷，需各自处置、缺一不可 ──
-    // (A) v8 跨分片合并幻影：全量 299 文件跑时，同一 .vue（典型 src/views/auth/LoginEnhanced.vue）
-    //     被多个测试文件分别重编译，各文件产出的覆盖率分片合并后产生 count-0 的模板内联 v-model
-    //     处理器 / import 访问器（实测 funcs 88.23%、未覆盖行 82/183），使 src/views 阈值跌到 99.91%；
-    //     隔离单跑（或仅 3 个引用文件同跑）恒 100%。这是 **Node 版本相关** 的 V8 缺陷：Node22 复现、
-    //     Node24 无此幻影（WSL 全量实测 Node24=100%、Node22=88.23%；本地开发 Node 24.18 亦 100%）。
-    //     真正的修复是 **CI 用 Node 24**（见 .github/workflows/pr-checks.yml、nightly-full.yml 的 frontend
-    //     job，已附"勿改回 22"注释）。注意：maxWorkers:1 **不能** 修此幻影——合并发生在"每文件一个分片"
-    //     层面，单 worker 仍产出 299 个分片再合并（旧注释误称单 worker 即确定性 100%，实测 Linux/Node22
-    //     仍 88.23%）。保留 maxWorkers:1/minWorkers:1 仅为压低单 worker 累积 v8 采集的内存峰值；不可改用
-    //     poolOptions.threads.singleThread——singleThread 让所有文件共享同一模块注册表，本仓库 49 个视图
-    //     测试在模块顶层调用 enableAutoUnmount（全局单例，二次调用即抛），singleThread 下必崩。
-    //     本项与下方 (B) 无关：(B) 与 Node 版本无关（#9758 官方确认与 provider/pool/worker 数均无关），
-    //     故 Node 升级不能替代补丁。
+    // (A) istanbul 按函数 id 合并"冲突的 v8 fnMap"导致 functions 跌穿阈值（与 Node 版本无关）。
+    //     症状：全量 299 文件跑时 src/views/auth/LoginEnhanced.vue 的 functions 跌到 88.23%
+    //     （未覆盖行 82/183），使 src/views glob 阈值跌到 99.91%<100 而门禁变红；隔离单跑恒 100%。
+    //     真因：同一个 .vue 被两个测试文件以**不同的 ElDialog 桩**深挂载——专属测试
+    //     LoginEnhanced.test.ts 的桩渲染 footer 插槽（19 函数 fnMap，全覆盖），而批量测试
+    //     AuthViewsBatch.test.ts 曾 bare mount 且桩为无 footer 的 `<div><slot/></div>`，footer
+    //     取消按钮的 onClick 处理器从未被创建 → 17 函数 fnMap，且相同处理器的函数 id 相对 19 函数
+    //     版**错位**。istanbul 在满量规模按 id 合并这两份冲突 fnMap 时，以 17 函数版为基、专属测试
+    //     的计数落到错位 id 上，2 个内联处理器最终 count-0 → 88.23%（15/17）。
+    //     修复：移除 AuthViewsBatch.test.ts 里那段冗余 bare 渲染（专属测试已 19/19 覆盖，bare 渲染
+    //     不贡献任何独有覆盖，只产出冲突分片）。**规则：每个 .vue 只应被一个测试文件深挂载**——
+    //     多个深挂载若用不同的桩会产出冲突 fnMap，在满量合并时按 id 损坏覆盖率。
+    //     此项与 Node 版本无关：曾被误诊为"Node22 V8 幻影"并把 CI 升到 24，但 Node24 的 CI 复现
+    //     完全相同的 88.23%（f42ae680），证伪该说法；maxWorkers:1 也**不能**修——合并发生在
+    //     "每文件一个分片"层面，单 worker 仍产出 299 个分片再按 id 合并。保留 maxWorkers:1/
+    //     minWorkers:1 仅为压低单 worker 累积 v8 采集的内存峰值；不可改用 poolOptions.threads.
+    //     singleThread——singleThread 让所有文件共享同一模块注册表，本仓库 49 个视图测试在模块
+    //     顶层调用 enableAutoUnmount（全局单例，二次调用即抛），singleThread 下必崩。
+    //     本项与下方 (B) 无关：(B) 是分片读回 ENOENT 竞态，由补丁根治，与此处 fnMap 冲突无涉。
     maxWorkers: 1,
     minWorkers: 1,
     // (B) .tmp 分片读回 ENOENT 竞态（vitest-dev/vitest#9758，已 closed not_planned）：v8/istanbul

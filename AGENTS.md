@@ -476,6 +476,8 @@ The 2026-07 coverage sprint introduced **244 failing tests** written against ass
 4. **Never mock `@/utils/request`** — the module does not exist.
 5. **Blob downloads** go through `downloadBlobAsFile`: mock `downloadBlob` and assert it received `(Blob, filename)` instead of spying on DOM anchor clicks.
 
+> **One deep-mount test per `.vue` (coverage-merge invariant)**: A `.vue` may be deep-mounted (`mount()`) by **only ONE** test file. Two test files mounting the same component with **divergent child stubs** (e.g. one `ElDialog` stub renders the `footer` slot, another is `<div><slot/></div>` without it) produce conflicting v8 function maps whose handler ids **shift**; at full 299-shard scale istanbul merges those maps **by id** and lands counts on the wrong handlers → `functions` drops below the 100% threshold. This red-gated `src/views/auth/LoginEnhanced.vue` at **88.23%** for weeks and was repeatedly **misdiagnosed as a Node-version "V8 phantom"** (CI was bumped 22→24; Node24 reproduced the identical 88.23%, disproving it). The real fix was removing the redundant bare render in `tests/unit/views/auth/AuthViewsBatch.test.ts` (the dedicated `LoginEnhanced.test.ts` already covers 19/19). **Bare import-only** (`await import()` without `mount()`, e.g. `smoke.test.ts`) is harmless — it yields an empty fnMap. `maxWorkers:1` does NOT fix this (merge happens at the per-file-shard level). Full mechanism: `frontend/vitest.config.ts` comment **(A)**.
+
 ### Backend (pytest)
 
 6. **List endpoints return the `ok_list()` envelope**: assert `resp.json()["data"]["total"]`, never `resp.json()["total"]`.

@@ -85,13 +85,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      # Node 24（勿改回 22）：Node22 的 V8 在全量 299 文件跨分片合并覆盖率时有幻影——
-      # 同一 .vue（典型 src/views/auth/LoginEnhanced.vue）被多个测试文件重编译后，合并出
-      # count-0 的模板内联 v-model 处理器 / import 访问器（funcs 88.23%、未覆盖行 82/183），
-      # 使 src/views 阈值跌到 99.91% 而门禁变红；隔离单跑恒 100%、maxWorkers:1 无效。
-      # Node24 的 V8 无此幻影（WSL 全量实测 299 文件 100%，且本地开发即 Node 24.18）。
+      # Node 22（与仓库其余 CI 一致）。注意：src/views/auth/LoginEnhanced.vue 全量跑 functions
+      # 跌到 88.23% 曾长期被误诊为"Node22 V8 跨分片合并幻影"并据此把此处升到 24，但 Node24 的 CI
+      # 复现完全相同的 88.23%（f42ae680）——与 Node 版本无关。真因是 istanbul 按函数 id 合并冲突的
+      # v8 fnMap：该 .vue 曾被两个测试文件以不同 ElDialog 桩深挂载，AuthViewsBatch 的无 footer 桩少
+      # 生成 onClick 处理器 → 17 函数 fnMap 与专属测试的 19 函数 fnMap id 错位，满量 299 分片合并后
+      # 2 个内联处理器 count-0。修复=移除 AuthViewsBatch.test.ts 里那段冗余 bare 渲染（每个 .vue 只
+      # 由一个测试深挂载）。详见 frontend/vitest.config.ts 注释 (A)。
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with: { node-version: '24' }
+        with: { node-version: '22' }
       - run: |
           cd frontend
           npm ci --legacy-peer-deps

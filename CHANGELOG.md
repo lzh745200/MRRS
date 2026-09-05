@@ -5,6 +5,26 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.11.5] - 2026-09-05 — 通行码注册大小写归一化 + 功能全链路探针验证 + 覆盖率根因修正收尾
+
+### 修复
+- 🐛 **大写输入的通行码被误拒（注册提示「通行码无效或已被使用」）**：通行码为
+  小写十六进制（自动生成）或纯数字（手动 4 位），但 `verify_pass_code` 与库内列
+  按 SQLite 二进制比较，用户以大写输入（图片 OCR、手动录入习惯、第三方工具转写）
+  时本属同一通行码却被判无效。现入参统一 `.strip().lower()`，库内列经
+  `func.lower` 归一比较（去连字符路径同样生效），四级匹配（机器码/组织码/漂移
+  回退/HMAC）全部大小写不敏感。回归测试 `test_machine_code_passcode_case_insensitive.py`
+  用真实 SQLite 断言 SQL 语义（Mock 链无法证明 `func.lower` 行为）；HTTP 全链路
+  探针复验：自动通行码注册、连字符去连字符、手动 4 位码、复用拒绝、错误码拒绝、
+  权限包导出/下载/导入预览/加密往返均通过。
+
+### 工程
+- 🔧 **前端覆盖率 88.23% 门禁红因的最终定论与根治**：`LoginEnhanced.vue` 全量跑
+  functions 88.23% 与 Node 版本无关（Node24 CI 复现完全一致），真因是同一 `.vue`
+  被两个测试文件以不同 ElDialog 桩深挂载 → istanbul 按函数 id 合并冲突的 v8 fnMap。
+  移除 `AuthViewsBatch.test.ts` 冗余 bare 渲染，CI Node 回归 22（与仓库其余一致），
+  `vitest.config.ts`/`AGENTS.md` 注释更正为「每个 .vue 只由一个测试文件深挂载」规则。
+
 ## [1.11.4] - 2026-09-04 — 异常细节出站收口 + 板块导入 400 根治 + 帮扶村经费持久化修复 + 测试数据目录隔离
 
 ### 安全

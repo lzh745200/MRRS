@@ -433,6 +433,9 @@ class MachineCodeService:
         输入归一化：先按原文精确匹配（快路径），失败后对存储值与输入同时
         去除连字符再重试四级匹配——用户手工抄写 32 位格式化通行码时极易
         漏连字符，此前直接报"通行码无效"造成注册受阻。
+        大小写归一化：通行码为小写十六进制（自动生成）或纯数字（手动 4 位），
+        大写输入（图片 OCR、手动录入习惯、第三方工具转写）属于同一通行码，
+        输入统一转小写后再匹配（对存储值同样做小写归一比较）。
 
         Args:
             pass_code: 用户输入的通行码
@@ -447,8 +450,8 @@ class MachineCodeService:
         if not self.db:
             raise ValueError("数据库会话未初始化")
 
-        # 去除首尾空白（防止复制粘贴带入空格导致匹配失败）
-        pass_code = (pass_code or "").strip()
+        # 去除首尾空白 + 转小写（防止复制粘贴带入空格/大小写不一致导致匹配失败）
+        pass_code = (pass_code or "").strip().lower()
 
         # 快路径：原文精确匹配
         record = self._verify_pass_code_impl(pass_code, machine_code, normalize=False)
@@ -472,12 +475,17 @@ class MachineCodeService:
     def _verify_pass_code_impl(
         self, pass_code: str, machine_code: str, normalize: bool
     ) -> Optional[MachineCode]:
-        """四级验证实现。normalize=True 时对库内 pass_code 去连字符后比对。"""
+        """四级验证实现。normalize=True 时对库内 pass_code 去连字符后比对。
+
+        大小写：pass_code 入参已在 verify_pass_code 转小写；此处对库内列
+        统一 func.lower 后比较（hex 通行码不区分大小写，接受用户大写输入）。
+        """
         from sqlalchemy import or_, func as sa_func
 
-        stored_pc = (
-            sa_func.replace(MachineCode.pass_code, "-", "") if normalize else MachineCode.pass_code
-        )
+        stored_raw = MachineCode.pass_code
+        if normalize:
+            stored_raw = sa_func.replace(stored_raw, "-", "")
+        stored_pc = sa_func.lower(stored_raw)
         status_ok = or_(
             MachineCode.status == "pending",
             and_(MachineCode.status == "active", MachineCode.user_id.is_(None)),
