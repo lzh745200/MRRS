@@ -120,4 +120,14 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   → 400 正确），非缺陷；经费回收站仅对可删（pending）记录有意义。
 - 学校/村庄恢复闭环全部 PASS（schools 恢复回默认列表、purge preview 级联统计 0）。
 
+## R10（8013, 数据包回环）— 无功能缺陷
+- 全链验证：POST /data-packages/export（org 绑定 + path=/1/ 后）200 生成 package
+  （EXP-ORG-MAIN-…zip）→ GET download 200（416B）→ POST /import 200 建接收包
+  （status=validated）→ GET preview 200 → POST confirm 200（imported_counts {} 空包
+  语义正确：dev 数据未归属组织）→ list/received 均 200；全程无 5xx。
+- 一次 403「无权限访问组织数据」溯源为探针直插组织缺 path（组织树按
+  path LIKE 计算层级，根组织 path=/1/）→ 服务语义正确，非缺陷；one-click-report
+  走 get_org 回退不受影响（200 zip）。
+- 结论：R10 无新增缺陷、无代码改动。
+
 
