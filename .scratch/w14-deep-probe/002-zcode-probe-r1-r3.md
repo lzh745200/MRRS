@@ -50,3 +50,15 @@
 - #69-73 红→绿轨迹：lint(prettier 漏跑, `090e377`) → security(npm audit
   postcss-selector-parser DoS, `f3f6e8c`) → coverage(463 行, `ec82653`)。
 - #74 五 job 全绿（backend-test/frontend-check/lint/security/static-analysis）。
+
+## 本会话 R4：政策/学校/项目/工作日志/通知/2FA/资料/报表订阅/模板上传确认
+- 🐛 **模板上传确认链两缺陷**（R2 病根的第三/四处消费点）：upload→
+  _parse_template_excel 直接 field.get('db_field') — 字符串形态 500；且缺
+  db_field 时解析出 {'': value} → 确认导入**零写入**（静默丢数据，比 500
+  更隐蔽）。修复 `542b7959`：提取 _normalize_template_fields 共享 helper
+  （下载/上传两消费点统一），字符串形态 excel_header=db_field=该串，dict
+  形态缺 db_field 以 excel_header 兜底；锁定测试=逗号模板 confirm 真实落库。
+- 契约核验（非缺陷）：2FA verify 字段名 `token`（非 code）；/users/me 返回
+  `name`（非 full_name）；报表订阅挂 /reports/subscriptions（data 包无额外
+  前缀）；政策/学校/项目/工作日志(日历+月度总结)/通知偏好全链 200。
+- 探针 40/40 全绿；回归 215+709 passed；CI #76 五 job 全绿。
