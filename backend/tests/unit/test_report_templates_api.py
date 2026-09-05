@@ -266,6 +266,33 @@ class TestDownloadTemplate:
         resp = auth_setup.get(P(f"/{t.id}/download"))
         assert resp.status_code == 200
 
+    def test_download_comma_string_fields(self, auth_setup, db_session):
+        """逗号分隔字符串形态的 fields 不得 500（2026-09-05 探针实测缺陷）。
+
+        创建端点 fields: Optional[str] 允许任意字符串；下载端点此前假定
+        dict 数组直接 .get，逗号字符串形态 → AttributeError → 500。
+        """
+        t = ReportTemplate(name="逗号字段模板", type="import", module="village",
+                           fields="村名,所属县市,联系人")
+        db_session.add(t)
+        db_session.commit()
+        db_session.refresh(t)
+        resp = auth_setup.get(P(f"/{t.id}/download"))
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    def test_download_plain_string_list_fields(self, auth_setup, db_session):
+        """纯字符串数组形态同样归一化为表头，不再 500。"""
+        t = ReportTemplate(name="字符串数组模板", type="import", module="village",
+                           fields=json.dumps(["村名", "所属县市"], ensure_ascii=False))
+        db_session.add(t)
+        db_session.commit()
+        db_session.refresh(t)
+        resp = auth_setup.get(P(f"/{t.id}/download"))
+        assert resp.status_code == 200
+
 
 class TestUploadFilledTemplate:
     @pytest.fixture

@@ -454,7 +454,17 @@ async def download_template(
     if not t:
         raise HTTPException(status_code=404, detail="模板不存在")
 
-    fields = safe_json_loads(t.fields, default=[])
+    # fields 历史形态有三种：dict 数组（含 excel_header）、纯字符串数组、
+    # 逗号分隔字符串（创建端点 fields: Optional[str] 均允许）。2026-09-05
+    # 探针实测：逗号字符串形态在下载端点直接 AttributeError('str' has no .get)
+    # → 500。统一归一化为 dict 数组，杜绝用户可触发的 500。
+    raw_fields = safe_json_loads(t.fields, default=[])
+    if isinstance(raw_fields, str):
+        raw_fields = [h.strip() for h in raw_fields.split(",") if h.strip()]
+    fields = [
+        f if isinstance(f, dict) else {"excel_header": str(f)}
+        for f in (raw_fields or [])
+    ]
     wb = Workbook()
     ws = wb.active
     ws.title = t.name[:31]  # Excel sheet name max 31 chars
