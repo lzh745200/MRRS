@@ -58,3 +58,19 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   随 v1.11.5 发布，CI 5/5 绿）；R2–R4 无新增缺陷。
 - 隔离实例与产物每次探测后清理；工作区 git 0 残留；记录同步提交入库。
 
+## R5（8008, 写路径探针）— 无后端缺陷
+- todos 全链（create id=2 裸对象返回 → detail → patch toggle completed=true →
+  put 改名 → delete 200 → get 404）PASS；注意该接口返回裸对象无信封（前端按
+  unwrap 读取，契约一致）。
+- 错误上报：POST /system/error-reports 建 report_id=1 + 列表可见 PASS。
+- 提醒：POST /reminders/scan 200（新增 0 条，无到期数据属预期）；列表 200。
+- 消息：mark-read 空表 422 属契约（min_length=1，前端只传真实 id）；mark-all-read
+  200（18 条已读）；unread-count 归 0；本轮无未读可测单条标记。
+- 通知偏好：GET 嵌套+扁平双结构（扁平为端点附加字段）；PUT 契约=扁平字段
+  （UpdateNotificationPreferencesRequest），service 落模型真实列
+  （email_approval 等 9 列）；R5c 精确验证 flip False → flat/nest 双 False →
+  restore True 全 PASS。早期误报源于探针按嵌套载荷 PUT（未知字段被忽略），非缺陷。
+- 搜索 GET /search?q=学校 → 200 空结果（无匹配数据）。
+- 结论：R5 无新增缺陷、无代码改动。
+
+
