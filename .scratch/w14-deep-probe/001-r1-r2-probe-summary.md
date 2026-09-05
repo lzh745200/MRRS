@@ -189,4 +189,13 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
 - 附件列表（income/population/industry/infrastructure 四板块）200。
 - 结论：R15 路由顺序缺陷已修复。
 
+## R16（8019, 机器码自助重置通道）— 无功能缺陷
+- loopback 机器码含 verification_code；verify-machine-code 正确对 200 is_valid=true；
+  错误码 200 data.is_valid=false（信封语义正确，探针首次断言误读）。
+- 公开重置安全基线全验证：管理员被拒 403（含「恢复出厂密码」引导）；普通用户全链：
+  重置 → 返回 16 位强随机新密码（仅响应返回）→ 旧密码登录 401 → 新密码登录 200
+  （提示「首次登录请修改密码」must_change_password 置位）；操作前须 CSRF
+  （cookie+raw header，公开端点同受保护）。
+- 结论：R16 无新增缺陷、无代码改动。
+
 
