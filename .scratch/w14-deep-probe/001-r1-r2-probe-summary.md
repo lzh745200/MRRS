@@ -1,4 +1,4 @@
-# 001 深度逐模块 HTTP 探针 R1/R2 — 注册 refresh 契约修复 + 业务模块全通过
+# 001 深度逐模块 HTTP 探针 R1–R4 — 注册 refresh 契约修复 + 业务/辅助模块全通过
 
 - 状态: done
 - 波次: w14-deep-probe
@@ -32,3 +32,29 @@
 ## 备注
 - 探针均用 VACUUM INTO 克隆 dev 库 + 重设 admin 密码，端口 8004/8005 隔离实例，
   完成后产物与进程全部清理；工作区 git 0 残留。
+
+## R3（8006, GET 扫测）— 无 5xx
+消息/未读计数/提醒/系统配置/审计日志/登录尝试/导出审计/异步任务/反馈/数据包/同步状态
+等全部正常返回；数个 404 为路径猜测噪音（docs 未暴露 OpenAPI，无法自动发现）。
+
+## R4（8007, 前端 API 层收割真实端点 GET 大扫，~90 个）— 0 失败
+覆盖：messages/notifications-preferences/reminders/audit(logs+login-attempts+exports)/
+data-packages/import-history/search/help(categories,articles,system-info)/todos/
+system-tasks(+stats+running-count)/backup/machine-code(admin-list,machine-info,org-list)/
+map(config,county-coords,regions,tile-info,distances)/offline-map-status/sentiment/
+effectiveness/approval(workflows+tasks all/pending/mine/history)/data-tier(stats,summary,
+archives)/secrets(versions,status)/zero-trust(assessment,policies,events,stats)/validation/
+error-reports(+stats)/i18n(languages,current)/update-logs(+latest+check-version)/env-check/
+data-sync-logs/经费统计(summary,utilization-rate)/supported-villages(export modules+formats,
+filter-options,templates-all)/policies(options levels+statuses,categories+tree,statistics)/
+projects-stats/organizations(tree,subordinates,types-options,statistics)/schools(statistics,
+options)/user-management-roles/system-monitor(snapshot,database-size,resources,alerts,
+alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,years)/work-logs。
+- 全部真实端点 200；guess-404 仅 3 处（/dashboard、/reports/analytics、
+  /organizations/my-organization——前端另有拼接/子前缀）。
+
+## 总结（R1–R4）
+- 唯一发现的业务缺陷：注册响应缺 refresh_token → 已在 R1 修复（commit 63e7b1b，
+  随 v1.11.5 发布，CI 5/5 绿）；R2–R4 无新增缺陷。
+- 隔离实例与产物每次探测后清理；工作区 git 0 残留；记录同步提交入库。
+
