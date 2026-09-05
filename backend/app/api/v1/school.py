@@ -363,10 +363,12 @@ async def import_scholarship_students(
                 school_row = None
                 if school_name:
                     school_row = (
-                        db.query(School).filter(School.name == school_name).first()
+                        db.query(School)
+                        .filter(School.name == school_name, School.is_active == True)  # noqa: E712
+                        .first()
                     )
                     if not school_row:
-                        raise ValueError(f"学校不存在: {school_name}（请先在学校管理中创建）")
+                        raise ValueError(f"学校不存在或已停用: {school_name}（请先在学校管理中创建）")
                 student_id_no = str(row[2]).strip() if len(row) > 2 and row[2] else None
                 remark_parts = []
                 if student_id_no:

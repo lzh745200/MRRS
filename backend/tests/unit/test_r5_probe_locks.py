@@ -167,3 +167,22 @@ class TestRuralWorkVillageGuard:
         row = db_session.query(RuralWork).filter_by(name="锁定合法工作").first()
         assert row is not None
         assert row.village_id == v.id
+
+    def test_update_with_dangling_village_id_400(self, auth_setup, db_session):
+        """更新路径同样校验：悬挂 village_id → 400（覆盖 update 路由 ValueError 分支）。"""
+        from app.models.rural_work import RuralWork
+
+        work = RuralWork(name="锁定待更新工作")
+        db_session.add(work)
+        db_session.commit()
+
+        resp = auth_setup.put(
+            f"/api/v1/rural-works/{work.id}",
+            json={"village_id": 424242},
+        )
+        assert resp.status_code == 400, resp.text[:300]
+        assert "村庄不存在" in str(resp.json())
+
+        db_session.expire_all()
+        row = db_session.query(RuralWork).filter_by(id=work.id).first()
+        assert row.village_id is None, "校验失败时不得部分写入"
