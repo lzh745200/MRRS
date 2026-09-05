@@ -574,6 +574,9 @@ async def create_organization(
         logger.debug("记录工作日志失败", exc_info=True)
     await cache_manager.delete("orgs:list")
     _invalidate_dashboard_cache_safe()
+    # 注意：本端点声明了 response_model=OrganizationResponse（裸形态 + Pydantic
+    # 序列化）；不能改包 success_response 信封 —— response_model 会校验响应
+    # 结构导致 500。前端 Edit.vue 不消费返回体，保持原形态。
     return org
 
 
