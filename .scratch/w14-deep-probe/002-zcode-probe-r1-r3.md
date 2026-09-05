@@ -92,3 +92,16 @@
   BUMOFU_BACKEND_DIR_OVERRIDE=临时目录 实现隔离，否则 data_sync/backups
   写入项目目录。SSE 后端无实现（消息实时性为前端轮询），报表订阅无生成端点
   （仅 create/list/detail）——两项记为观察项非缺陷。
+
+## 本会话 R7：前后端契约交叉核对 + 帮助文档/考核评估/成效评估长尾
+- **契约核对（程序化）**：导出后端 797 条路由，正则通配匹配前端 334 个去重
+  API 调用路径 → **0 处真实断裂**。4 条疑似均为误报：3 条 `${qs}` 查询串
+  模板被当路径段（/secrets/* 后端路由实际存在）+ 1 条 blobDownload.ts 的
+  注释示例（/data/download）。
+- **零产品缺陷**（探针 15/15 全绿）：帮助文档 30 篇（列表/详情抽样/搜索/
+  分类过滤）；考核评估（村庄得分/异常/趋势预测/村对比 village_ids 逗号
+  传参）；成效评估（双年 evaluate→report(year)→compare(year1,year2)→
+  rankings(year)）。
+- ⚠️ 契约形态观察（非缺陷，前端已适配）：部分端点返回 {success,data} 无
+  code 信封（如 /system/help/articles）；effectiveness 系列年份均为必填
+  Query。
