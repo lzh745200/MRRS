@@ -108,4 +108,16 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   budget_id 过滤列表 count=1 → DELETE 200 全通过。
 - 结论：R8 无新增缺陷、无代码改动。
 
+## R9（8012, 回收站闭环）— 发现并修复真实缺陷（commit 5469ff7）
+- 🐛 **恢复项目后仍不可见**：项目软删把 status 置 cancelled 作回收标记，通用
+  recycle_bin.restore 只回置 is_active/deleted_at → 默认列表（status!=cancelled）
+  过滤 → 「恢复成功却看不见」（HTTP 实测：restore 200 后 status=cancelled、
+  默认列表无）。修复：单条/批量恢复统一清除 cancelled 标记还原 planned
+  （_reset_cancelled_status_marker，其它模型 no-op）；recycle_bin 模块覆盖率 100%，
+  37 passed；HTTP 复验 restore 后 status=planned 且默认列表可见。
+- purge 二次确认需真实密码（守卫生效）：传 Admin@12345 后彻底删除成功且记录消失；
+- 经费删除守卫「仅允许删除 pending 状态经费」属状态机设计（dev 经费均非 pending
+  → 400 正确），非缺陷；经费回收站仅对可删（pending）记录有意义。
+- 学校/村庄恢复闭环全部 PASS（schools 恢复回默认列表、purge preview 级联统计 0）。
+
 
