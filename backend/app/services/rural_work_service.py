@@ -261,6 +261,24 @@ class RuralWorkService:
                 logger.debug("记录工作日志失败")
         return True
 
+    def _validate_village_id(self, village_id: Optional[int]) -> None:
+        """校验 village_id 在 FK 目标表 villages 中存在。
+
+        RuralWork.village_id 的外键指向遗留 villages 表（非 supported_villages）；
+        传入不存在的 id 时 INSERT 触发 FOREIGN KEY constraint failed → 未处理
+        IntegrityError → 500（2026-09-05 R5 探针实测）。提前校验转为 ValueError，
+        由路由层转 400。
+        """
+        if not village_id:
+            return
+        from app.models.village import Village
+
+        if not self.db.query(Village.id).filter(Village.id == village_id).first():
+            raise ValueError(
+                f"所选村庄不存在（village_id={village_id}）。"
+                "请从「乡村振兴工作台」的村庄下拉中选择（下拉数据来自帮扶村自动同步）。"
+            )
+
     def create_rural_work(
         self,
         data: Any,
@@ -279,6 +297,8 @@ class RuralWorkService:
             即一个可被 ``ResponseModel(data=...)`` 直接序列化的 dict）。
         """
         payload = data.model_dump() if hasattr(data, "model_dump") else dict(data)
+
+        self._validate_village_id(payload.get("village_id"))
 
         work = RuralWork(
             code=self._generate_code(),
@@ -344,6 +364,9 @@ class RuralWorkService:
             else:
                 updates.update(dict(data))
         updates.update(kwargs)
+
+        if "village_id" in updates:
+            self._validate_village_id(updates.get("village_id"))
 
         for key, value in updates.items():
             if key not in _WRITABLE_FIELDS:

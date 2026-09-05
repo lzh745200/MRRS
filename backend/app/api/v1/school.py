@@ -353,14 +353,32 @@ async def import_scholarship_students(
             if not row or len(row) < 2 or not row[1]:
                 continue
             try:
+                # 2026-09-05 R5 探针修复：旧实现按 ScholarshipStudent(name=...,
+                # student_id=..., school_name=...) 构造，但模型列是 student_name
+                # 且 school_id 为必填 FK（无 student_id/school_name 列）——每行必
+                # 抛 TypeError，导入功能全链坏死。按真实模型映射：学校名查
+                # School 表解析 school_id（查不到记行错误）；学号无对应列，
+                # 并入 remarks 留痕。
+                school_name = str(row[5]).strip() if len(row) > 5 and row[5] else None
+                school_row = None
+                if school_name:
+                    school_row = (
+                        db.query(School).filter(School.name == school_name).first()
+                    )
+                    if not school_row:
+                        raise ValueError(f"学校不存在: {school_name}（请先在学校管理中创建）")
+                student_id_no = str(row[2]).strip() if len(row) > 2 and row[2] else None
+                remark_parts = []
+                if student_id_no:
+                    remark_parts.append(f"学号: {student_id_no}")
                 stu = ScholarshipStudent(
-                    name=str(row[1]),
-                    student_id=str(row[2]) if len(row) > 2 and row[2] else None,
+                    student_name=str(row[1]).strip(),
+                    school_id=school_row.id if school_row else None,
                     year=int(row[3]) if len(row) > 3 and row[3] else None,
                     amount=float(row[4]) if len(row) > 4 and row[4] else 0.0,
-                    school_name=str(row[5]) if len(row) > 5 and row[5] else None,
                     grade=str(row[6]) if len(row) > 6 and row[6] else None,
                     reason=str(row[7]) if len(row) > 7 and row[7] else None,
+                    remarks="；".join(remark_parts) or None,
                     status=_parse_scholarship_status(row),
                 )
                 db.add(stu)

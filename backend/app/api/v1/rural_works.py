@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -155,10 +155,14 @@ async def create_rural_work(
 ):
     """创建乡村工作"""
     service = RuralWorkService(db)
-    work = service.create_rural_work(
-        data, current_user.id,
-        organization_id=getattr(current_user, "organization_id", None),
-    )
+    try:
+        work = service.create_rural_work(
+            data, current_user.id,
+            organization_id=getattr(current_user, "organization_id", None),
+        )
+    except ValueError as e:
+        # 悬挂 village_id 等 业务校验失败 → 400（避免 IntegrityError 裸 500）
+        raise HTTPException(status_code=400, detail=str(e))
     # 数据变更自动创建审批任务（Requirement 3.2）：乡村工作新增进入待审批板块
     work_id = work.get("id")
     approval_task_id = None
@@ -185,7 +189,10 @@ async def update_rural_work(
     """更新乡村工作"""
     service = RuralWorkService(db)
     old = service.get_rural_work_by_id(work_id, current_user=current_user)
-    work = service.update_rural_work(work_id, data, current_user.id, current_user=current_user)
+    try:
+        work = service.update_rural_work(work_id, data, current_user.id, current_user=current_user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not work:
         raise NotFoundException("工作不存在")
     # 数据变更自动创建审批任务：乡村工作修改进入待审批板块（含变更对比）
