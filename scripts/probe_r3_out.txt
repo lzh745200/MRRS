@@ -1,2 +1,0 @@
-[PASS] admin-login 
-[FAIL] openapi-discovery paths=0
