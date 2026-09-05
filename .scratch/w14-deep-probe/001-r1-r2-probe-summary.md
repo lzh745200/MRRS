@@ -86,4 +86,18 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   在该模块不成立，仅记录不修。
 - 结论：R6 无新增缺陷、无代码改动。
 
+## R7（8010, 项目/里程碑链）— 无功能缺陷
+- 项目全链：POST 创建（201，自动编号 PRJ-20260905-XXXXXX + approval_task_id）→ 详情
+  → PUT 更新 budget/status → stats → 列表 → DELETE。
+- 软删语义澄清：项目 DELETE 同时置 is_active=False **且 status='cancelled'**；列表
+  默认过滤 cancelled（include_cancelled）+ 过滤 is_active（include_deleted），故回收站
+  视图需双传 include_deleted=true&include_cancelled=true（实测双传后 total=9 含全部
+  软删行；只传 include_deleted 仍 6）。前端 projects/List.vue 回收站分支本就双传
+  （代码 420-425 行）→ 前后端语义一致，非缺陷。
+- 里程碑链：POST /projects/{id}/milestones（Date 序列 YYYY-MM-DD）创建 → 列表 →
+  PUT status=completed/actual_date → DELETE 全通过（create 为裸对象响应，信封解析
+  属探针误读）。
+- 日期契约：项目 start_date 等要求 YYYY-MM-DD（自定义校验，422 文案清晰）。
+- 结论：R7 无新增缺陷、无代码改动。
+
 
