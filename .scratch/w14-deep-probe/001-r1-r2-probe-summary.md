@@ -73,4 +73,17 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
 - 搜索 GET /search?q=学校 → 200 空结果（无匹配数据）。
 - 结论：R5 无新增缺陷、无代码改动。
 
+## R6（8009, 学校/乡村工作写路径 + PII + 软删除）— 无功能缺陷
+- 学校全链：POST /schools 创建（信封 data.id=1）→ 详情 → PUT 更新 student_count 150
+  → 列表 1 条 → DELETE 软删 → 默认列表 0 → admin ?include_deleted=true 可见且
+  is_active=false/is_deleted=true。
+- PII 加密端到端：contact_phone 写入后 DB 原文为 enc.v1: 前缀密文；详情接口读回
+  明文一致（EncryptedText 透明加解密验证通过）。
+- 乡村工作全链：POST /rural-works 创建（RW-890BDB65 编号自动生成）→ PUT progress/
+  status（in_progress）→ 按 status 过滤列表 → DELETE → GET 404。
+- 观察（无功能影响）：schools 序列化给 is_deleted/is_active（snake），未提供
+  isDeleted（camel）；全前端无该字段消费者（grep 0 命中），AGENTS「双键」表述
+  在该模块不成立，仅记录不修。
+- 结论：R6 无新增缺陷、无代码改动。
+
 
