@@ -1,4 +1,4 @@
-﻿"""帮扶村管理 API 路由"""
+"""帮扶村管理 API 路由"""
 
 # 数据权限过滤已迁移到 app.core.data_scope_adapter.apply_scope_filter()
 # 支持组织树展开（org_children 含下级组织），与 school.py 行为一致
@@ -1085,79 +1085,6 @@ async def copy_year_data(
     return success_response(message=f"年度数据复制成功，已复制 {copied} 个数据组")
 
 
-@router.post("/{village_id}/yearly/{year}/{section}")
-async def save_yearly_section(
-    village_id: int,
-    year: int,
-    section: str,
-    data: YearlySectionData,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """保存帮扶村某年度某个section的数据"""
-    if section not in _SECTION_MODEL:
-        raise HTTPException(status_code=400, detail=f"未知的数据分类: {section}")
-    village = _get_village_or_404(db, village_id, current_user)
-    model = _SECTION_MODEL[section]
-    old_data = _get_section_data(db, model, village_id, year)
-    _save_section_data(db, model, village_id, year, data.model_dump())
-    safe_commit(db)
-    _record_village_change(
-        db, AuditAction.UPDATE, current_user, village,
-        old_data=old_data, new_data=_get_section_data(db, model, village_id, year),
-        detail=f"年度数据保存: {section} {year}年",
-    )
-    await _invalidate_village_cache()
-    return success_response(message=f"保存成功: {section}")
-
-
-@router.delete("/{village_id}/yearly/{year}/{section}")
-async def delete_yearly_section(
-    village_id: int,
-    year: int,
-    section: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """删除某板块某年度数据（物理删除 + 审计留痕；T028）"""
-    if section not in _SECTION_MODEL:
-        raise HTTPException(status_code=400, detail=f"未知年度数据板块: {section}")
-    village = _get_village_or_404(db, village_id, current_user)
-    model = _SECTION_MODEL[section]
-    old_data = _get_section_data(db, model, village_id, year)
-    if not old_data:
-        raise HTTPException(status_code=404, detail=f"{section} {year} 年度数据不存在")
-    row = (
-        db.query(model)
-        .filter(model.supported_village_id == village_id, model.year == year)
-        .first()
-    )
-    if row:
-        db.delete(row)
-        safe_commit(db)
-    _record_village_change(
-        db, AuditAction.DELETE, current_user, village,
-        old_data=old_data, new_data=None,
-        detail=f"年度数据删除: {section} {year}年",
-    )
-    await _invalidate_village_cache()
-    return success_response(message=f"已删除: {section} {year}年")
-
-
-@router.get("/{village_id}/change-history")
-async def get_village_change_history(
-    village_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """获取帮扶村字段级变更历史（时间倒序）"""
-    _get_village_or_404(db, village_id, current_user)
-    from app.services.audit_enhancement_service import AuditEnhancementService
-
-    history = AuditEnhancementService.get_change_history(db, "supported_village", str(village_id), limit=100)
-    return ok_list(history, len(history))
-
-
 @router.post("/{village_id}/yearly/{year}/validate")
 async def validate_yearly_data(
     village_id: int,
@@ -1172,6 +1099,9 @@ async def validate_yearly_data(
     - 数值合理性（人均收入≥0）
     - 同比变动超 ±50% 预警
         返回错误列表 + 修正建议。
+
+    注意：本端点必须注册在动态段 POST /{village_id}/yearly/{year}/{section} 之前，
+    否则 '/validate' 会被当作 section 参数被保存端点吞掉（2026-09-05 路由顺序修复）。
     """
     _get_village_or_404(db, village_id, current_user)
     errors = []
@@ -1243,6 +1173,79 @@ async def validate_yearly_data(
             "warnings": warnings,
         }
     )
+
+
+@router.post("/{village_id}/yearly/{year}/{section}")
+async def save_yearly_section(
+    village_id: int,
+    year: int,
+    section: str,
+    data: YearlySectionData,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """保存帮扶村某年度某个section的数据"""
+    if section not in _SECTION_MODEL:
+        raise HTTPException(status_code=400, detail=f"未知的数据分类: {section}")
+    village = _get_village_or_404(db, village_id, current_user)
+    model = _SECTION_MODEL[section]
+    old_data = _get_section_data(db, model, village_id, year)
+    _save_section_data(db, model, village_id, year, data.model_dump())
+    safe_commit(db)
+    _record_village_change(
+        db, AuditAction.UPDATE, current_user, village,
+        old_data=old_data, new_data=_get_section_data(db, model, village_id, year),
+        detail=f"年度数据保存: {section} {year}年",
+    )
+    await _invalidate_village_cache()
+    return success_response(message=f"保存成功: {section}")
+
+
+@router.delete("/{village_id}/yearly/{year}/{section}")
+async def delete_yearly_section(
+    village_id: int,
+    year: int,
+    section: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """删除某板块某年度数据（物理删除 + 审计留痕；T028）"""
+    if section not in _SECTION_MODEL:
+        raise HTTPException(status_code=400, detail=f"未知年度数据板块: {section}")
+    village = _get_village_or_404(db, village_id, current_user)
+    model = _SECTION_MODEL[section]
+    old_data = _get_section_data(db, model, village_id, year)
+    if not old_data:
+        raise HTTPException(status_code=404, detail=f"{section} {year} 年度数据不存在")
+    row = (
+        db.query(model)
+        .filter(model.supported_village_id == village_id, model.year == year)
+        .first()
+    )
+    if row:
+        db.delete(row)
+        safe_commit(db)
+    _record_village_change(
+        db, AuditAction.DELETE, current_user, village,
+        old_data=old_data, new_data=None,
+        detail=f"年度数据删除: {section} {year}年",
+    )
+    await _invalidate_village_cache()
+    return success_response(message=f"已删除: {section} {year}年")
+
+
+@router.get("/{village_id}/change-history")
+async def get_village_change_history(
+    village_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """获取帮扶村字段级变更历史（时间倒序）"""
+    _get_village_or_404(db, village_id, current_user)
+    from app.services.audit_enhancement_service import AuditEnhancementService
+
+    history = AuditEnhancementService.get_change_history(db, "supported_village", str(village_id), limit=100)
+    return ok_list(history, len(history))
 
 
 # ── 区块附件管理 ──

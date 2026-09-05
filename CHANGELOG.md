@@ -8,6 +8,15 @@
 ## [1.11.5] - 2026-09-05 — 通行码注册大小写归一化 + 功能全链路探针验证 + 覆盖率根因修正收尾
 
 ### 修复
+- 🐛 **帮扶村年度数据「校验」端点被动态段吞掉（恒 400 未知数据分类）**：路由注册顺序
+  缺陷——`POST /supported-villages/{village_id}/yearly/{year}/validate` 声明在动态段
+  `POST …/yearly/{year}/{section}` 之后，FastAPI 按注册顺序匹配 → `/validate` 恒被
+  当作 section 落入保存端点（R15 隔离实例实测 400「未知的数据分类: validate」；
+  前端 validateYearlyData 即此路径，年度完整性校验功能实际不可用）。修复：
+  `validate_yearly_data` 端点整块前移到动态段之前注册（含注释警示），并删除原位。
+  回归：村庄 API 相关 108 passed；HTTP 复验 validate 200 返回
+  {valid:false, errors:[板块缺失…], warnings}（真实校验结果），section 保存端点
+  不受影响。
 - 🐛 **经费拨付被文档要求锁死（前端上传缺陷）**：经费「拨付」前置要求附件类别
   合同(contract)/分配令(allocation_order)，但经费详情附件上传把 category 塞进
   FormData（后端该参数为 Query）→ 恒落 other；且界面无类别选择 → 真实用户即使
