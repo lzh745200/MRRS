@@ -293,6 +293,23 @@ class TestDownloadTemplate:
         resp = auth_setup.get(P(f"/{t.id}/download"))
         assert resp.status_code == 200
 
+    def test_download_json_quoted_string_fields(self, auth_setup, db_session):
+        """JSON 引号字符串形态（'"村名,所属县市"'）→ str 分支归一化为两个表头。
+
+        safe_json_loads 对逗号裸串自行切列表，但 JSON 引号串会原样返回 str——
+        归一化的 isinstance(str) 分支仅此形态可达（覆盖率锁定）。
+        """
+        t = ReportTemplate(name="JSON引号串模板", type="import", module="village",
+                           fields=json.dumps("村名,所属县市", ensure_ascii=False))
+        db_session.add(t)
+        db_session.commit()
+        db_session.refresh(t)
+        resp = auth_setup.get(P(f"/{t.id}/download"))
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
 
 class TestUploadFilledTemplate:
     @pytest.fixture
