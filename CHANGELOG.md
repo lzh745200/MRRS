@@ -8,6 +8,15 @@
 ## [1.11.5] - 2026-09-05 — 通行码注册大小写归一化 + 功能全链路探针验证 + 覆盖率根因修正收尾
 
 ### 修复
+- 🐛 **经费拨付被文档要求锁死（前端上传缺陷）**：经费「拨付」前置要求附件类别
+  合同(contract)/分配令(allocation_order)，但经费详情附件上传把 category 塞进
+  FormData（后端该参数为 Query）→ 恒落 other；且界面无类别选择 → 真实用户即使
+  上传了合同也恒报「缺少必需文档: 合同, 分配令」（R14 隔离实例 HTTP 复现：
+  仅 category 以 query 传参后 allocate 才 200「经费已拨付」）。修复：
+  `funds/Detail.vue` 附件上传前新增「文档分类」下拉（合同/发票/收据/报告/分配令/
+  其他，与后端 `_transition_status` 必需文档键共用同一 CATEGORY_LABELS），category
+  改经 axios query 参数提交；回归：DetailCov 新增分类选择上传用例 + 调整组件计数
+  断言（65 passed），vue-tsc 0。
 - 🐛 **回收站恢复项目后仍不可见（真实缺陷）**：项目软删时 `status` 被置为
   `cancelled` 作回收站标记（projects.py delete 流程），而 `recycle_bin` 通用工厂的
   restore 只回置 `is_active/deleted_at` —— 恢复后的项目仍被默认列表

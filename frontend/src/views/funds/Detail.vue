@@ -352,21 +352,36 @@
                 <h3>相关附件</h3>
               </div>
               <div class="card-body">
-                <el-upload
-                  :show-file-list="false"
-                  :before-upload="handleBeforeUpload"
-                  :http-request="handleUploadAttachment"
-                  multiple
-                >
-                  <el-button type="primary" :loading="uploadingAttachment">
-                    <el-icon><Upload /></el-icon>上传附件
-                  </el-button>
-                  <span
-                    style="margin-left: 12px; font-size: 12px; color: var(--color-text-placeholder)"
+                <div class="upload-bar" style="display: flex; align-items: center; gap: 8px">
+                  <el-select
+                    v-model="uploadCategory"
+                    size="default"
+                    style="width: 140px"
+                    data-test="upload-category"
                   >
-                    支持格式：pdf、doc、docx、xls、xlsx、jpg、png、gif、bmp、txt、zip、rar
+                    <el-option
+                      v-for="opt in uploadCategories"
+                      :key="opt.value"
+                      :label="opt.label"
+                      :value="opt.value"
+                    />
+                  </el-select>
+                  <el-upload
+                    :show-file-list="false"
+                    :before-upload="handleBeforeUpload"
+                    :http-request="handleUploadAttachment"
+                    multiple
+                  >
+                    <el-button type="primary" :loading="uploadingAttachment">
+                      <el-icon><Upload /></el-icon>上传附件
+                    </el-button>
+                  </el-upload>
+                  <span
+                    style="font-size: 12px; color: var(--color-text-placeholder)"
+                  >
+                    分类选择「合同/分配令」等可满足拨付/审批文档要求；支持 pdf、doc、xls、jpg、png 等
                   </span>
-                </el-upload>
+                </div>
 
                 <el-table
                   v-if="attachments.length"
@@ -813,6 +828,20 @@ const canEditFund = computed(() => {
   return fundData.created_by === authStore.user?.id && editableStatuses.includes(fundData.status)
 })
 
+// 附件分类（与后端 _transition_status 必需文档键一致：contract/allocation_order/
+// invoice/receipt/report/other）。上传时经 query 参数 category 提交（后端该参数
+// 为 Query 而非 Form 字段——2026-09-05 修复前前端把 category 塞 FormData，被忽略
+// 落成 other，导致「已传合同仍提示缺少必需文档: 合同, 分配令」）。
+const CATEGORY_LABELS: Record<string, string> = {
+  contract: '合同',
+  invoice: '发票',
+  receipt: '收据',
+  report: '报告',
+  allocation_order: '分配令',
+  other: '其他',
+}
+const uploadCategories = Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label }))
+
 // 历史记录数据
 const activeTab = ref('basic')
 const statusHistory = ref<any[]>([])
@@ -820,6 +849,7 @@ const fieldChanges = ref<any[]>([])
 const operationLogs = ref<any[]>([])
 const attachments = ref<any[]>([])
 const uploadingAttachment = ref(false)
+const uploadCategory = ref('other')
 const previewVisible = ref(false)
 const previewUrl = ref('')
 const previewTitle = ref('')
@@ -915,9 +945,11 @@ async function handleUploadAttachment(options: any) {
   try {
     const formData = new FormData()
     formData.append('file', options.file)
-    formData.append('category', 'other')
     await post(`/funds/${fundData.id}/attachments`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      // 后端附件分类参数为 Query（见 upload_fund_attachment 签名），
+      // 放在 formData 会被忽略并落成 other —— 必须经 params 传递。
+      params: { category: uploadCategory.value },
     })
     ElMessage.success('上传成功')
     await loadAttachments()
@@ -972,15 +1004,7 @@ async function deleteAttachment(row: any) {
 }
 
 function getCategoryLabel(cat: string) {
-  const labels: Record<string, string> = {
-    contract: '合同',
-    invoice: '发票',
-    receipt: '收据',
-    report: '报告',
-    allocation_order: '分配令',
-    other: '其他',
-  }
-  return labels[cat] || cat || '其他'
+  return CATEGORY_LABELS[cat] || cat || '其他'
 }
 
 function formatFileSize(bytes: number) {

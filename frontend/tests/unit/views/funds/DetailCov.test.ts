@@ -694,7 +694,8 @@ describe('工作流', () => {
 
     // 查看模式下编辑表单不渲染，wf 对话框内的组件数可精确探针 v-if 分支
     expect(wrapper.findAllComponents({ name: 'ElInputNumber' }).length).toBe(1) // +报销对话框金额输入
-    expect(wrapper.findAllComponents({ name: 'ElSelect' }).length).toBe(0)
+    // 附件管理页签新增「文档分类」选择器（funds/Detail.vue 附件上传），常驻 1 个
+    expect(wrapper.findAllComponents({ name: 'ElSelect' }).length).toBe(1)
 
     vm.doWorkflow('allocate')
     await nextTick()
@@ -715,8 +716,10 @@ describe('工作流', () => {
     expect(wrapper.findAllComponents({ name: 'ElInputNumber' }).length).toBe(1) // +报销对话框金额输入
     expect(wrapper.findAllComponents({ name: 'ElInput' }).length).toBe(4) // opinion + 报销3输入
     const selects = wrapper.findAllComponents({ name: 'ElSelect' })
-    expect(selects.length).toBe(1)
-    selects[0].vm.$emit('update:modelValue', '不通过')
+    expect(selects.length).toBeGreaterThanOrEqual(2) // 附件分类 + 审计结果
+    // wf 对话框在附件分类之后渲染 → 最后一个 ElSelect 即审计结果下拉
+    const auditSelect = selects[selects.length - 1]
+    await auditSelect.vm.$emit('update:modelValue', '不通过')
     expect(vm.wfForm.audit_result).toBe('不通过')
 
     // 底部“取消”内联赋值箭头
@@ -748,11 +751,38 @@ describe('附件管理', () => {
     expect(mockPost).toHaveBeenCalledWith(
       '/funds/5/attachments',
       expect.any(FormData),
-      expect.objectContaining({ headers: { 'Content-Type': 'multipart/form-data' } })
+      expect.objectContaining({
+        headers: { 'Content-Type': 'multipart/form-data' },
+        // 附件分类参数必须走 query（后端 Query 契约；放 FormData 会被忽略落成 other）
+        params: { category: 'other' },
+      })
     )
     expect(ElMessage.success).toHaveBeenCalledWith('上传成功')
     expect(listAttachments).toHaveBeenCalledWith(5)
     expect(vm.uploadingAttachment).toBe(false)
+  })
+
+  it('上传：选择「合同/分配令」分类 → category 以 query 参数提交', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.activeTab = 'attachments'
+    await flushPromises()
+    const allSelects = wrapper.findAllComponents({ name: 'ElSelect' })
+    expect(allSelects.length).toBeGreaterThan(0)
+    const select =
+      allSelects.find((c: any) => c.props('modelValue') === 'other') ??
+      allSelects[allSelects.length - 1]
+    await select.vm.$emit('update:modelValue', 'contract')
+    expect(vm.uploadCategory).toBe('contract')
+    listAttachments.mockClear()
+    await vm.handleUploadAttachment({ file: new File(['x'], 'contract.pdf') })
+    expect(mockPost).toHaveBeenCalledWith(
+      '/funds/5/attachments',
+      expect.any(FormData),
+      expect.objectContaining({ params: { category: 'contract' } })
+    )
+    expect(vm.uploadCategory).toBe('contract')
   })
 
   it('上传：无 id 早退；失败提示且 finally 复位', async () => {
