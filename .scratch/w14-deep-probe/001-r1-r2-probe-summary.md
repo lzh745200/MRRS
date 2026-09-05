@@ -141,4 +141,17 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   planned——单机版审批回写语义，与前端流程一致）。
 - 结论：R11 无新增缺陷、无代码改动。
 
+## R12（8015, 系统配置/配置包/批量操作）— 无功能缺陷
+- 系统配置：GET /system/config（4 键）→ /export/json（200 json）→ /defaults 200；
+  PUT 键更新无目标键可测（配置集小，跳过）。
+- 配置包：GET /system/config-packages（空列表 200）→ POST …/export 200（JSON
+  2572B，内容为配置快照）→ 列表可见。
+- 批量恢复：项目软删 2 条 → POST /projects/batch-restore {ids} → 「已恢复 2 条」、
+  默认列表可见（cancelled 标记随 R9 修复一并清除）。
+- 村庄批量删除语义澄清：POST /supported-villages/batch-delete（带 confirm_password
+  密码二次确认，缺密码 400 守卫正确）= 软删（is_active=0/deleted_at）+ 生成
+  「帮扶村批量删除：N 条」审批任务（approval_task_id）；彻底清除走审批/回收站
+  password purge。与「回收站可恢复 + 审计留痕」设计一致，非缺陷。
+- 结论：R12 无新增缺陷、无代码改动。
+
 
