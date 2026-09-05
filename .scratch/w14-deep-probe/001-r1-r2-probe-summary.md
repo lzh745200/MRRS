@@ -177,4 +177,16 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   vue-tsc 0。
 - 结论：R14 后端状态机无缺陷；前端上传链路缺陷已修复。
 
+## R15（8018, 帮扶村年度板块）— 发现并修复路由顺序缺陷（commit 42f8669）
+- yearly 读取/复制通过：GET …/yearly/2025 200（10 板块含 force-investment 等）；
+  POST yearly/copy 2025→2026「已复制 6 个数据组」；GET 2026 含全部板块。
+- 🐛 POST …/yearly/{year}/validate 恒 400「未知的数据分类: validate」——路由顺序：
+  动态段 …/{year}/{section}（保存）先注册于 /validate，FastAPI 匹配把 validate 当
+  section；前端 validateYearlyData 即此 URL → 年度校验功能不可用。
+  修复：validate_yearly_data 整块前移注册 + 顺序警示注释；村庄 API 测试 108
+  passed；HTTP 复验 validate 200 → {valid:false, errors:[板块未录入…], warnings}
+  真实语义；section 保存端点无回归。
+- 附件列表（income/population/industry/infrastructure 四板块）200。
+- 结论：R15 路由顺序缺陷已修复。
+
 
