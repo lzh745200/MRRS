@@ -100,4 +100,12 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
 - 日期契约：项目 start_date 等要求 YYYY-MM-DD（自定义校验，422 文案清晰）。
 - 结论：R7 无新增缺陷、无代码改动。
 
+## R8（8011, 经费预算链）— 无功能缺陷
+- 预算全链：POST /fund-budgets 创建（裸 BudgetResponse，http 200 id=7）→ 按
+  year+category 过滤列表命中 → summary → alerts → PUT used_amount=25000（前端兼容
+  字段→executed_amount=25000.0 生效）→ DELETE → 列表不可见。
+- 预算流水：POST /fund-budgets/transactions（amount=5000,purpose,date）→ GET 按
+  budget_id 过滤列表 count=1 → DELETE 200 全通过。
+- 结论：R8 无新增缺陷、无代码改动。
+
 
