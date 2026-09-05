@@ -856,8 +856,14 @@ async def register_user(
                 machine_record.organization_id,
             )
 
-        # 创建访问令牌
-        access_token = token_manager.create_access_token(user.username)
+        # 创建双 Token（注册即登录语义：LoginResponse 契约与 /auth/login 对齐，
+        # 带可轮换 refresh_token，否则新用户「记住登录」持久化 refresh 分支恒缺失）
+        tokens = token_manager.create_token_pair(
+            user.username,
+            extra_claims={"token_version": user.token_version_safe},
+        )
+        access_token = tokens["access_token"]
+        refresh_token_str = tokens["refresh_token"]
 
         user_info = UserInfo(
             id=user.id,
@@ -877,6 +883,7 @@ async def register_user(
             code=200,
             data=LoginData(access_token=access_token, token_type="bearer", user=user_info),
             message="注册成功",
+            refresh_token=refresh_token_str,
         )
 
     except (HTTPException, UserAlreadyExistsError, BizValidationError):

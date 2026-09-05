@@ -787,13 +787,17 @@ class TestRegister:
         mock_usr_svc.return_value = usr_instance
 
         with patch("app.api.v1.auth.auth.token_manager") as mock_tm:
-            mock_tm.create_access_token.return_value = "new_at"
+            mock_tm.create_token_pair.return_value = {"access_token": "new_at", "refresh_token": "new_rt"}
             response = client.post(
                 f"{self.prefix}/register",
                 json={"username": "newuser", "password": "Str0ng!Passw0rd", "pass_code": "validcode"},
             )
             assert response.status_code == 200
-            assert response.json()["data"]["access_token"] == "new_at"
+            body = response.json()
+            assert body["data"]["access_token"] == "new_at"
+            # 注册即登录契约：必须返回可轮换 refresh_token（记住登录持久化依赖）
+            assert body["refresh_token"] == "new_rt"
+            mock_tm.create_token_pair.assert_called_once()
 
     @patch("app.api.v1.auth.auth.check_rate_limit", new_callable=AsyncMock)
     @patch("app.api.v1.auth.auth.get_client_ip", return_value="127.0.0.1")
@@ -816,12 +820,19 @@ class TestRegister:
         mock_usr_svc.return_value = usr_instance
 
         with patch("app.api.v1.auth.auth.token_manager") as mock_tm:
-            mock_tm.create_access_token.return_value = "new_at"
+            mock_tm.create_token_pair.return_value = {"access_token": "new_at", "refresh_token": "new_rt"}
             response = client.post(
                 f"{self.prefix}/register",
-                json={"username": "newuser2", "password": "Str0ng!Passw0rd", "pass_code": "validcode", "full_name": "New User", "email": "new@example.com"},
+                json={
+                    "username": "newuser2",
+                    "password": "Str0ng!Passw0rd",
+                    "pass_code": "validcode",
+                    "full_name": "New User",
+                    "email": "new@example.com",
+                },
             )
             assert response.status_code == 200
+            assert response.json()["refresh_token"] == "new_rt"
 
 
 class TestVerifyToken:

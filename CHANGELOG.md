@@ -8,6 +8,13 @@
 ## [1.11.5] - 2026-09-05 — 通行码注册大小写归一化 + 功能全链路探针验证 + 覆盖率根因修正收尾
 
 ### 修复
+- 🐛 **注册响应缺失 refresh_token（与 LoginResponse「注册即登录」契约不一致）**：
+  `/auth/register` 返回 access token 却不发 refresh，前端「记住登录」持久化 refresh
+  分支对注册会话恒缺失、API 契约与 `/auth/login` 不对齐。改为注册时签发双 token
+  （`create_token_pair` + `token_version` 声明，与登录一致），响应顶层带可轮换的
+  `refresh_token`；旧 refresh 重用仍被 401 拒绝（轮换防重放不变）。回归断言补入
+  `test_auth_auth_api.py` 两条注册成功用例，HTTP 全链路复验：注册→刷新→旧码重用
+  401→新 access 可用均通过。
 - 🐛 **大写输入的通行码被误拒（注册提示「通行码无效或已被使用」）**：通行码为
   小写十六进制（自动生成）或纯数字（手动 4 位），但 `verify_pass_code` 与库内列
   按 SQLite 二进制比较，用户以大写输入（图片 OCR、手动录入习惯、第三方工具转写）
