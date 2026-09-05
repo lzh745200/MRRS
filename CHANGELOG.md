@@ -8,6 +8,15 @@
 ## [1.11.5] - 2026-09-05 — 通行码注册大小写归一化 + 功能全链路探针验证 + 覆盖率根因修正收尾
 
 ### 修复
+- 🐛 **回收站恢复项目后仍不可见（真实缺陷）**：项目软删时 `status` 被置为
+  `cancelled` 作回收站标记（projects.py delete 流程），而 `recycle_bin` 通用工厂的
+  restore 只回置 `is_active/deleted_at` —— 恢复后的项目仍被默认列表
+  （`status != cancelled` 过滤）隐藏，表现为「恢复成功却看不见」（R9 隔离实例 HTTP
+  实测复现：restore 200 后详情 status=cancelled、默认列表无此项目）。修复：回收站
+  恢复（单条与批量）统一清除 cancelled 回收标记，还原为 `planned` 可编辑态
+  （其它软删资源无 status/cancelled 标记，helper 为 no-op）。回归：工厂测试新增
+  单条 cancelled→planned、非 cancelled 不受影响、批量恢复清除标记 3 例；
+  recycle_bin 模块覆盖率 100%；HTTP 复验 restore 后 status=planned 且默认列表可见。
 - 🐛 **注册响应缺失 refresh_token（与 LoginResponse「注册即登录」契约不一致）**：
   `/auth/register` 返回 access token 却不发 refresh，前端「记住登录」持久化 refresh
   分支对注册会话恒缺失、API 契约与 `/auth/login` 不对齐。改为注册时签发双 token

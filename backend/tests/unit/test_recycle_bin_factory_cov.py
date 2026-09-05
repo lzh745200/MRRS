@@ -111,6 +111,36 @@ class TestRestore:
         assert rec.deleted_at is None
         on_changed.assert_awaited_once()
 
+    def test_restore_resets_cancelled_status_marker(self):
+        # 项目软删以 status='cancelled' 作回收标记；恢复必须还原为 planned，
+        # 否则默认列表（status != cancelled）过滤 → 「恢复成功却看不见」
+        db = MagicMock()
+        rec = _soft_deleted_rec(name="丙项目", status="cancelled")
+        db.query.return_value.filter.return_value.first.return_value = rec
+        db.get.return_value = rec
+        with (
+            patch("app.core.transaction.safe_commit"),
+            patch("app.utils.audit_logger.AuditLogger"),
+        ):
+            resp = _build(db, _admin()).post("/rec/5/restore")
+        assert resp.status_code == 200
+        assert rec.status == "planned"
+        assert rec.is_active is True
+
+    def test_restore_keeps_non_cancelled_status(self):
+        # 无回收标记的记录不受影响（其它模型 no-op 分支）
+        db = MagicMock()
+        rec = _soft_deleted_rec(name="丁", status="in_progress")
+        db.query.return_value.filter.return_value.first.return_value = rec
+        db.get.return_value = rec
+        with (
+            patch("app.core.transaction.safe_commit"),
+            patch("app.utils.audit_logger.AuditLogger"),
+        ):
+            resp = _build(db, _admin()).post("/rec/6/restore")
+        assert resp.status_code == 200
+        assert rec.status == "in_progress"
+
 
 class TestPurge:
     def test_wrong_password_400(self):
@@ -176,7 +206,9 @@ class TestBatchEndpoints:
     def test_batch_restore_success_with_on_changed(self):
         # 覆盖 recycle_bin.py:228 —— on_changed 回调被 await
         db = MagicMock()
+        rec_cancelled = _soft_deleted_rec(name="批量丙", status="cancelled")
         db.query.return_value.filter.return_value.update.return_value = 2
+        db.query.return_value.filter.return_value.all.return_value = [rec_cancelled]
         on_changed = AsyncMock()
         with patch("app.core.transaction.safe_commit"):
             resp = _build(db, _admin(), on_changed=on_changed).post(
@@ -185,6 +217,8 @@ class TestBatchEndpoints:
         assert resp.status_code == 200
         assert resp.json()["data"]["restored"] == 2
         on_changed.assert_awaited_once()
+        # 批量恢复同样清除 cancelled 回收标记
+        assert rec_cancelled.status == "planned"
 
     def test_batch_purge_missing_skipped_and_on_changed(self):
         # 覆盖 recycle_bin.py:249（不存在记录 continue）与 256（on_changed await）

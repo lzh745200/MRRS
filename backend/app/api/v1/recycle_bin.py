@@ -31,6 +31,21 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
+# 回收站「状态标记」语义（2026-09-05 修复）：
+# projects.py 软删项目时会把 status 置为 cancelled 作为回收站标记（同时 is_active=False），
+# 而项目列表默认按 status != cancelled 过滤 —— 若恢复只回置 is_active/deleted_at，
+# 恢复后的项目仍被默认列表过滤，表现为「恢复成功却看不见」。
+# 因此恢复时把 cancelled 标记还原为 planned（可编辑初始态），供用户后续改回真实进度状态。
+# 其它软删资源（村庄/学校/经费）无 status 列或不用 cancelled 作标记，helper 对它们为 no-op。
+_CANCELLED_STATUS = "cancelled"
+_PLANNED_STATUS = "planned"
+
+
+def _reset_cancelled_status_marker(rec) -> None:
+    """恢复记录时清除回收站 cancelled 状态标记（无标记则 no-op）。"""
+    if getattr(rec, "status", None) == _CANCELLED_STATUS:
+        rec.status = _PLANNED_STATUS
+
 
 class RecyclePurgeRequest(BaseModel):
     confirm_password: str = ""
@@ -151,6 +166,7 @@ async def _restore_record(db, model, resource, table, rid, current_user, on_chan
     rec.is_active = True
     if hasattr(rec, "deleted_at"):
         rec.deleted_at = None
+    _reset_cancelled_status_marker(rec)
     from app.core.transaction import safe_commit
 
     safe_commit(db)
@@ -212,7 +228,7 @@ async def _purge_record(db, model, resource, table, rid, data, current_user, on_
 
 
 async def _batch_restore_records(db, model, resource, ids, current_user, on_changed):
-    """批量恢复（is_active 置 True，清 deleted_at）。"""
+    """批量恢复（is_active 置 True，清 deleted_at，清除 cancelled 回收标记）。"""
     from app.core.transaction import safe_commit
 
     count = (
@@ -224,6 +240,10 @@ async def _batch_restore_records(db, model, resource, ids, current_user, on_chan
         )
     )
     safe_commit(db)
+    if count:
+        for rec in db.query(model).filter(model.id.in_(ids)).all():
+            _reset_cancelled_status_marker(rec)
+        safe_commit(db)
     if on_changed:
         await on_changed()
     return success_response(
