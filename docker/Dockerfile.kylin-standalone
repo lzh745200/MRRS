@@ -22,6 +22,11 @@ WORKDIR /build
 
 # 先复制依赖文件（利用 Docker 层缓存）
 COPY frontend/package.json frontend/package-lock.json* ./frontend/
+# postinstall 钩子（package.json）会执行 scripts/patch-vitest-coverage.cjs——只复制
+# package.json 的层里该文件不存在 → MODULE_NOT_FOUND 使 npm install 直接失败
+# （v1.11.5 ARM64 构建实测）。安装期就位脚本文件，补丁自身幂等（找到目标文件
+# 才动，找不到仅告警），不破坏层缓存语义。
+COPY frontend/scripts/patch-vitest-coverage.cjs ./frontend/scripts/
 RUN cd frontend && npm install --legacy-peer-deps --no-fund --no-audit > /tmp/npm-install.log 2>&1; \
     code=$?; tail -20 /tmp/npm-install.log; \
     if [ $code -ne 0 ]; then echo "ERROR: npm install 失败 (exit code $code)"; exit 1; fi
