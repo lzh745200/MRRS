@@ -130,4 +130,15 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   走 get_org 回退不受影响（200 zip）。
 - 结论：R10 无新增缺陷、无代码改动。
 
+## R11（8014, 审批流程链）— 无功能缺陷
+- 概览 GET /approval（root）200；项目创建自动生成审批任务（project 新增任务
+  id7/8，entity_type=project/entity_id 关联）；GET /approval/tasks/all 与
+  /tasks/pending 返回任务列表（data 为数组而非 items —— 探针首轮解析误读）。
+- 通过：POST /approval/tasks/7/approve {opinion} → 200 approved（overview
+  approved_count=1）；拒绝：字段契约为 opinion（comment 被忽略→400「驳回必须填写
+  原因」守卫正确）→ 200 rejected（rejected_count=1）；pending_count 同步递减。
+- 注意：项目新建审批后的实体状态为 draft（创建流程落 draft，通过后不自动改
+  planned——单机版审批回写语义，与前端流程一致）。
+- 结论：R11 无新增缺陷、无代码改动。
+
 
