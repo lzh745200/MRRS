@@ -12,15 +12,16 @@ export default defineConfig({
     // (A) istanbul 按函数 id 合并"冲突的 v8 fnMap"导致 functions 跌穿阈值（与 Node 版本无关）。
     //     症状：全量 299 文件跑时 src/views/auth/LoginEnhanced.vue 的 functions 跌到 88.23%
     //     （未覆盖行 82/183），使 src/views glob 阈值跌到 99.91%<100 而门禁变红；隔离单跑恒 100%。
-    //     真因：同一个 .vue 被两个测试文件以**不同的 ElDialog 桩**深挂载——专属测试
-    //     LoginEnhanced.test.ts 的桩渲染 footer 插槽（19 函数 fnMap，全覆盖），而批量测试
-    //     AuthViewsBatch.test.ts 曾 bare mount 且桩为无 footer 的 `<div><slot/></div>`，footer
-    //     取消按钮的 onClick 处理器从未被创建 → 17 函数 fnMap，且相同处理器的函数 id 相对 19 函数
-    //     版**错位**。istanbul 在满量规模按 id 合并这两份冲突 fnMap 时，以 17 函数版为基、专属测试
-    //     的计数落到错位 id 上，2 个内联处理器最终 count-0 → 88.23%（15/17）。
-    //     修复：移除 AuthViewsBatch.test.ts 里那段冗余 bare 渲染（专属测试已 19/19 覆盖，bare 渲染
-    //     不贡献任何独有覆盖，只产出冲突分片）。**规则：每个 .vue 只应被一个测试文件深挂载**——
-    //     多个深挂载若用不同的桩会产出冲突 fnMap，在满量合并时按 id 损坏覆盖率。
+    //     机制：vitest 每个测试文件在独立 worker isolate 里执行，凡 import 过该 .vue 的文件都会
+    //     产出一份**局部** v8 fnMap——只 import 不渲染（bare import）时模板内联处理器从未创建，
+    //     得到 17 函数分片；渲染全分支的专属测试得到 19 函数分片；v8 函数 id 为 worker 内从 1 起
+    //     的相对序号。istanbul 在满量规模把各 worker 分片**按 id** 合并，两份长度不同的 fnMap 中
+    //     相同处理器的 id 错位 → 计数落到错误函数上 → 2 个内联处理器 count-0 → 88.23%（15/17）。
+    //     实测历程：先移除 AuthViewsBatch.test.ts 的冗余深挂载（曾以为是唯一冲突源）→ CI 仍
+    //     88.23%；再移除 smoke.test.ts 里对 LoginEnhanced 的 **bare import**（同样产 17 函数分片）
+    //     → 本地全量 --coverage 与 Linux CI 双双转绿。结论：**凡是被覆盖率门槛锁定的 .vue，
+    //     全仓只允许一个测试文件引用它（含 bare import 与 mount）**；两个文件引用（无论是否渲染、
+    //     桩是否一致）都会在满量按 id 合并时按此机制损坏 functions。
     //     此项与 Node 版本无关：曾被误诊为"Node22 V8 幻影"并把 CI 升到 24，但 Node24 的 CI 复现
     //     完全相同的 88.23%（f42ae680），证伪该说法；maxWorkers:1 也**不能**修——合并发生在
     //     "每文件一个分片"层面，单 worker 仍产出 299 个分片再按 id 合并。保留 maxWorkers:1/

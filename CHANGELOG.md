@@ -19,11 +19,16 @@
   权限包导出/下载/导入预览/加密往返均通过。
 
 ### 工程
-- 🔧 **前端覆盖率 88.23% 门禁红因的最终定论与根治**：`LoginEnhanced.vue` 全量跑
-  functions 88.23% 与 Node 版本无关（Node24 CI 复现完全一致），真因是同一 `.vue`
-  被两个测试文件以不同 ElDialog 桩深挂载 → istanbul 按函数 id 合并冲突的 v8 fnMap。
-  移除 `AuthViewsBatch.test.ts` 冗余 bare 渲染，CI Node 回归 22（与仓库其余一致），
-  `vitest.config.ts`/`AGENTS.md` 注释更正为「每个 .vue 只由一个测试文件深挂载」规则。
+- 🔧 **前端覆盖率 88.23% 门禁红因的最终定论与根治（含 CI 红→绿的完整实测链条）**：
+  `LoginEnhanced.vue` 全量跑 functions 88.23%（行 82/183）与 Node 版本无关（Node24 CI
+  复现完全一致）。真因是**凡引用该 `.vue` 的每个测试文件都会在各自 worker isolate 产出
+  一份函数 id 从 1 起算的局部 v8 fnMap**——只 import 不渲染（bare import）得到 17 函数
+  分片，渲染全分支的专属测试得到 19 函数分片，istanbul 满量按 id 合并时错位 → 2 个内联
+  处理器 count-0。实测链条：移除 `AuthViewsBatch.test.ts` 冗余深挂载后 Linux CI **仍**
+  88.23%（证伪「仅深挂载冲突」）；再移除 `smoke.test.ts` 里对 LoginEnhanced 的 bare
+  import 后本地 `--coverage` 与 Linux CI 双双转绿。规则更正为**每个被 100% 阈值锁定的
+  `.vue` 全仓只允许一个测试文件引用（含 bare import）**，`vitest.config.ts` 注释 (A) 与
+  `AGENTS.md` 不变量同步更正。CI Node 已回归 22（与仓库其余一致）。
 
 ## [1.11.4] - 2026-09-04 — 异常细节出站收口 + 板块导入 400 根治 + 帮扶村经费持久化修复 + 测试数据目录隔离
 

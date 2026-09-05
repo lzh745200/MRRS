@@ -104,7 +104,13 @@ describe('Core view smoke tests', () => {
   const views = [
     { name: 'NotFound', path: '@/views/NotFound.vue' },
     { name: 'ChangePassword', path: '@/views/auth/ChangePassword.vue' },
-    { name: 'LoginEnhanced', path: '@/views/auth/LoginEnhanced.vue' },
+    // LoginEnhanced.vue 刻意不在此 bare import：每个引用它的测试文件都会在各自
+    // worker isolate 里产出一份 v8 fnMap 分片；LoginEnhanced.test.ts 渲染全分支
+    // 得到 19 函数 fnMap，而此处只 import 不渲染 footer 的 bare import 得到
+    // 17 函数 fnMap，满量 299 文件按 id 合并时函数错位 → functions 88.23% 跌破
+    // src/views 100% 阈值（Linux CI 实测：移除 AuthViewsBatch 深挂载后仍复现，
+    // 证伪「仅深挂载冲突」；凡是第二个文件触碰该 .vue 即复现）。专属测试
+    // LoginEnhanced.test.ts 已覆盖 19/19，import 可挂载性由路由懒加载保证。
     { name: 'Register', path: '@/views/auth/Register.vue' },
     { name: 'ForgotPassword', path: '@/views/auth/ForgotPassword.vue' },
     { name: 'Profile', path: '@/views/auth/Profile.vue' },
