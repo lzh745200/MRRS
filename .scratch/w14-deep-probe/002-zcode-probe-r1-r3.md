@@ -78,3 +78,17 @@
   审批提交 → 未读数联动、奖学金按列位置解析（B 列姓名起）。
 - 探针 32/32 全绿；锁定测试 test_r5_probe_locks 5 用例（真实内存库）；
   回归 334+89 passed；CI #79 五 job 全绿。
+
+## 本会话 R6：合同链/转账凭证链/数据同步冲突解决/subordinate 级联
+- **零产品缺陷**（探针 30/30 全绿）：
+  - 合同链：创建→列表→详情→更新→重复编号 400→付款登记→明细可见。
+  - 转账凭证链：创建（预算余额校验内）→ 超额 400 → 确认 → 附件 → 划转台账。
+  - 数据同步冲突：导出→skip 导入→本地修改制造差异→manual 重导入→冲突列表
+    →resolve-conflict(取本地) 全链通（strategy 为 Form 字段）。
+  - subordinate 级联：allow_subordinate_generation=True 通行码生成/列表标记/
+    注册→登录（含 R1 改绑修复回归）全通。
+- ⚠️ 排查教训：并行会话已将 get_app_data_dir() dev 分支改为固定指向 backend
+  （修"CWD 决定数据目录"问题），探针必须用官方接缝
+  BUMOFU_BACKEND_DIR_OVERRIDE=临时目录 实现隔离，否则 data_sync/backups
+  写入项目目录。SSE 后端无实现（消息实时性为前端轮询），报表订阅无生成端点
+  （仅 create/list/detail）——两项记为观察项非缺陷。
