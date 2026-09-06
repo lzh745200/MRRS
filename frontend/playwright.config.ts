@@ -38,12 +38,15 @@ export default defineConfig({
     locale: 'zh-CN',
   },
 
-  /* 浏览器 */
+  /* 浏览器：Windows 用系统 Edge 内核（免下载浏览器包）；Linux CI 用
+     playwright chromium（workflow 里 npx playwright install chromium） */
   projects: [
     {
       name: 'chromium',
-      // 使用系统 Edge 内核（避免下载 Playwright chromium 浏览器包）
-      use: { ...devices['Desktop Chrome'], channel: 'msedge' },
+      use:
+        process.platform === 'win32'
+          ? { ...devices['Desktop Chrome'], channel: 'msedge' }
+          : { ...devices['Desktop Chrome'] },
     },
   ],
 
@@ -53,8 +56,12 @@ export default defineConfig({
      global-setup 的登录请求会打到生产库，出现 401/空页面等诡异失败。 */
   webServer: [
     {
-      // 使用项目 venv 的 Python（系统 PATH 可能指向无依赖的全局 Python）
-      command: '.venv\\Scripts\\python -m uvicorn app.main:app --port 18000',
+      // Windows 用项目 venv 的 Python（系统 PATH 可能指向无依赖的全局 Python）；
+      // Linux CI 依赖已装入系统 Python（workflow 先 pip install requirements）
+      command:
+        process.platform === 'win32'
+          ? '.venv\\Scripts\\python -m uvicorn app.main:app --port 18000'
+          : 'python -m uvicorn app.main:app --port 18000',
       cwd: '../backend',
       url: 'http://127.0.0.1:18000/api/v1/health',
       reuseExistingServer: !process.env.CI,

@@ -222,3 +222,34 @@ jobs:
       # 后端综合安全审计：裸 db.commit()、跨组织删除、缺 ok_list/write_work_log/filter_by_data_scope
       - name: Backend comprehensive security audit
         run: python scripts/security_audit.py --verbose
+
+  # E2E 浏览器套件（Playwright，150 用例）：真实起后端(18000)+前端(15173)，
+  # 独立 e2e_test.db。此前长期无 CI 执行导致选择器/密码腐化四周无人发现
+  # （2026-09-06 R8 复活），纳入门禁防再腐化。Linux 用 chromium（config 按
+  # 平台切换，Windows 本地用系统 Edge）。
+  e2e-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: '3.11' }
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with: { node-version: '22' }
+      # 后端依赖（webServer 直接 python -m uvicorn 启动，无 venv）
+      - run: pip install -r backend/requirements.txt
+      # 前端依赖 + Playwright chromium 浏览器（config 在 Linux 用 chromium）
+      - run: |
+          cd frontend
+          npm ci --legacy-peer-deps
+          npx playwright install chromium --with-deps
+      - name: E2E tests (Playwright)
+        run: |
+          cd frontend
+          npx playwright test --reporter=line
+      - name: Upload E2E report on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 7
