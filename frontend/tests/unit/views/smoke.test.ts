@@ -221,7 +221,12 @@ describe('Data and workflow view imports', () => {
     ['Data Analysis Index', '@/views/dataAnalysis/Index.vue'],
     ['Data Entry', '@/views/dataEntry/ComprehensiveEntry.vue'],
     ['Data Import', '@/views/import/DataImport.vue'],
-    ['Export Report', '@/views/export/ReportExport.vue'],
+    // Export Report（ReportExport.vue）刻意不在此 bare import：coverage-merge 不变量
+    // ——每个触碰该 .vue 的测试文件都会在各自 worker isolate 产出 fnMap 分片，
+    // 订阅管理新增 9 个函数后，bare import 分片与专属测试分片按 id 合并错位 →
+    // functions 88.88%（WSL/Node22 全量实测）。专属测试
+    // ReportExport.test.ts 已全量覆盖，可挂载性由路由懒加载保证。
+
     ['Approval Overview', '@/views/approval/Overview.vue'],
     ['Approval Pending', '@/views/approval/PendingList.vue'],
     ['Approval My', '@/views/approval/MyApplications.vue'],

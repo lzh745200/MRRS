@@ -491,7 +491,8 @@ function openSubscriptionDialog() {
 }
 
 function handleFreqChange() {
-  subForm.send_day = subForm.frequency === 'weekly' ? 1 : 1
+  // 切频次时重置 send_day 到该频次的默认档（weekly=周一1；monthly/quarterly=1 号）
+  subForm.send_day = 1
 }
 
 async function loadSubscriptions() {

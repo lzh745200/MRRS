@@ -7,6 +7,25 @@
 
 ## [1.12.0] - 2026-09-06 — 🎨 UI 全面优化：字体统一 + 40px 舒适密度 + 布局标准化 + 认证页统一
 
+### 功能
+- ✨ **报表订阅闭环（工单 003 方案 A+B 落地）**：此前订阅可创建但无任何消费方
+  （无调度、无生成、前端无 UI），创建后静默无产出。现补齐：
+  - 调度分发：`subscription_dispatch_job` 每 15 分钟扫描到期订阅，按频次
+    （每天/每周/每月/每季度 + 发送日/发送时间）自动生成报表并落盘
+    （output_dir 或运行时 uploads/subscription_reports），站内消息送达；
+  - 纯函数 `next_run_at` 四频次语义（月末 31 号按月钳制 28/29、weekly 周一..周日、
+    跨年安全），31 个确定性测试（含闰年边界），杜绝墙钟敏感分支（CI#84 教训）；
+  - 手动生成：`POST /reports/subscriptions/{id}/generate-now`（属主或管理员），
+    与调度共用同一生成函数，行为一致；
+  - 前端「报表导出中心」新增订阅管理卡片（列表/上次与下次生成时间/启停开关/
+    立即生成/删除确认/四频次新建表单）；
+  - `report_subscriptions.last_sent_at` 迁移（subscription_last_sent_001），
+    serializer 动态计算 `next_send_at`；
+  - 顺带修复 `_run_async_job` 对同步函数抛 TypeError 被吞——
+    **recycle_retention_job（回收站保留期每日清理）此前实际从未执行**；
+  - 验证：后端 138 相关测试 + dispatch 31 + 端点 4，flake8 0，bandit 0；
+    前端 ReportExport 24 测试全过，vue-tsc/lint 0。
+
 ### 字体与排版
 - 中文字体栈统一至 tokens 单一来源（PingFang SC + Microsoft YaHei 入栈），
   删除 index.scss 与 App.vue 两处重复 font-family 声明

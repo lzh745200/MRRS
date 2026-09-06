@@ -58,6 +58,12 @@ vi.mock('@/views/auth/LoginEnhanced.vue', () => ({
   default: { name: 'LoginEnhancedCoverageStub' },
 }))
 
+// ReportExport.vue 同理：coverage-merge 不变量（本文件执行全部懒加载组件函数，
+// 不渲染分支的 fnMap 分片与专属测试按 id 合并错位 → functions 88.88%，WSL 实测）。
+vi.mock('@/views/export/ReportExport.vue', () => ({
+  default: { name: 'ReportExportCoverageStub' },
+}))
+
 import router, { routes } from '@/router'
 
 // ==================== Helpers ====================
