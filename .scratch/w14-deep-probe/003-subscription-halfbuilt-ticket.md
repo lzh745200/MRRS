@@ -53,3 +53,12 @@
 - 验证：后端 138 相关测试过 + flake8 0 + bandit 0；前端 33 面板/主页测试 +
   api 客户端 7 过，vue-tsc/lint 0；WSL/Node22 全量 --coverage
   301 文件 6044 测试全过、12 组 glob 阈值全 100（EXIT 0）。
+
+## w15 探测记录（2026-09-06）
+
+- **R1 探针固化**：tests/probe/probe_r10_subscription.py（23 项检查），
+  已注册进 run_all.py。发现并修复：ReportSubscriptionResponse schema 缺
+  last_sent_at/next_send_at → 详情响应被 response_model 过滤缺键。
+- **R4 回归**：run_all 全量 10 轮 287 项检查 0 失败——订阅改动零回归。
+- R2 边界（越权/禁用/不存在/幂等）已由 pytest(test_subscription_generate_now.py)
+  与 R1 探针双重覆盖；R3 面板 E2E 待 UI 波次（组件测试 24 用例已先行锁定）。
