@@ -702,6 +702,9 @@ class ReportSubscription(Base, TimestampMixin):
     output_dir = Column(String(500), nullable=True, comment="本地输出目录（单机版使用）")
     output_format = Column(String(20), default="pdf", comment="输出格式: pdf/excel")
     is_active = Column(Boolean, default=True, comment="是否启用")
+    last_sent_at = Column(
+        DateTime, nullable=True, comment="最近一次成功生成/送达时间（NULL=从未生成）"
+    )
 
 
 # ══════════════════════════════════════════════════════════════

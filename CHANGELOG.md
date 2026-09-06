@@ -5,6 +5,40 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.0] - 2026-09-06 — 🎨 UI 全面优化：字体统一 + 40px 舒适密度 + 布局标准化 + 认证页统一
+
+### 字体与排版
+- 中文字体栈统一至 tokens 单一来源（PingFang SC + Microsoft YaHei 入栈），
+  删除 index.scss 与 App.vue 两处重复 font-family 声明
+- EP 排版变量显式化：`--el-font-family`/`--el-font-size-base: 14px` 走令牌，
+  输入框与正文同源同渲染
+- 等宽字体统一：BigScreen/SupportedVillageForm 自写栈 → `--font-family-mono`
+
+### 密度与布局
+- 控件密度升 **40px 舒适档**（原 32px 紧凑档）：`--control-height 40/32/48`、
+  `--table-row-height 44px`、`el-config-provider size=large`；
+  codemod 移除 **473 处 size="small"**（剩余 0，sm 档降级 32px 优雅兜底）
+- 圆角阶梯统一：控件 8px（原 6px）
+- 页面级冗余 padding 移除（funds 20px / villages 16px → layout 24px 唯一来源）
+- villages List 补缺失的页头（PageHeader 组件）
+
+### 色彩与组件
+- 语义色 EP 中间档令牌化：success/warning/danger/info 的 light-5/7/8/9
+  补入 tokens（13 处硬编码 hex 替换），主题切换不再走色
+- villages KPI 卡 4 处硬编码 hex → 令牌
+- funds/EnhancedList 嵌套 `el-form-item` 无效标记修复
+- 52 个无 stripe 的 el-table 补加 stripe（斑马纹统一为全站规范）
+
+### 认证页统一
+- Register.vue 背景升级为照片+军绿渐变遮罩（对齐登录），卡片玻璃拟态化，
+  补 600px 响应式断点，新增"单位名称"选填框
+- ChangePassword 修复浅色卡片上 tips-title 误用 inverse 色
+- LoginEnhanced 密码可见性切换补 aria-label（a11y）
+
+### 验证
+- 全量 vitest 5956 passed；vue-tsc 0；eslint 0
+- **全量 Playwright E2E 150/150 passed**
+
 ## [1.11.8] - 2026-09-06 — 🐛 跨机器注册阻断级修复（生产双机实测反馈）：通行码自验证启用 + 组织通行码确定性化
 
 ### 修复
