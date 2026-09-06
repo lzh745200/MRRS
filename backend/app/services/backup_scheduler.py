@@ -477,6 +477,27 @@ async def subscription_dispatch_job():  # pragma: no cover — 并行会话在�
         db.close()
 
 
+def _run_scheduler_job(job_fn):
+    """执行单个调度任务，兼容同步与 async 函数（模块级以便测试）。
+
+    同步函数（如 recycle_retention_job）直接调用即完成；async 函数返回协程后
+    在独立事件循环中执行。2026-09-06 修复前本逻辑对同步函数调
+    run_until_complete(非协程) 抛 TypeError 被 except 吞掉——同步任务实际从未执行。
+    """
+    import asyncio
+
+    try:
+        result = job_fn()
+        if not asyncio.iscoroutine(result):
+            return
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(result)
+        loop.close()
+    except Exception as e:
+        logger.error("定时任务执行失败: %s", e)
+
+
 def start_backup_scheduler():
     """启动后台调度器（仅轻量任务，不含自动备份和 VACUUM）
 
@@ -487,22 +508,8 @@ def start_backup_scheduler():
         logger.info("调度器已在运行，跳过重复启动")
         return
 
-    import asyncio
-
     def _run_async_job(coro_func):
-        try:
-            result = coro_func()
-            # 兼容同步任务（如 recycle_retention_job）：同步函数返回非协程时直接结束，
-            # 不得对非 awaitable 调 run_until_complete（2026-09-06 修复前同步任务
-            # 实际从未执行——TypeError 被 except 吞为「定时任务执行失败」）
-            if not asyncio.iscoroutine(result):
-                return
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(result)
-            loop.close()
-        except Exception as e:
-            logger.error("定时任务执行失败: %s", e)
+        _run_scheduler_job(coro_func)
 
     def _schedule_daily(coro_func, hour, minute, task_name):
         now = datetime.now()

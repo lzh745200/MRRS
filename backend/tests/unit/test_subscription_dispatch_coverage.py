@@ -66,3 +66,40 @@ class TestPeriodStartsAfter:
 
     def test_quarterly_variant(self):
         assert _period_starts_after(datetime(2026, 1, 1), datetime(2026, 6, 1), "weeklyx") is False
+
+
+class TestRunSchedulerJob:
+    """_run_scheduler_job 同步/异步双路径与异常吞并（回收站保留期缺陷回归）。"""
+
+    def test_sync_job_executes_directly(self):
+        from app.services.backup_scheduler import _run_scheduler_job
+
+        calls = []
+        _run_scheduler_job(lambda: calls.append(1))
+        assert calls == [1]
+
+    def test_async_job_executes_in_fresh_loop(self):
+        import asyncio
+
+        from app.services.backup_scheduler import _run_scheduler_job
+
+        calls = []
+
+        async def job():
+            calls.append(2)
+
+        _run_scheduler_job(job)
+        assert calls == [2]
+        # 不残留事件循环
+        try:
+            asyncio.get_event_loop()
+        except RuntimeError:
+            pass
+
+    def test_exception_swallowed_not_raised(self):
+        from app.services.backup_scheduler import _run_scheduler_job
+
+        def bad():
+            raise RuntimeError("boom")
+
+        _run_scheduler_job(bad)  # 不抛即通过（日志留痕由 logger 承担）
