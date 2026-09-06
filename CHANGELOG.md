@@ -5,6 +5,51 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.11.6] - 2026-09-06 — 深度探测循环（9 轮）+ 并发竞态修复 + E2E 套件入 CI 门禁
+
+### 修复（逐模块真实 HTTP 深探实测发现，全部带锁定回归）
+- 🐛 **组织通行码注册后新用户无法登录（阻断级）**：组织通行码记录的
+  `machine_code` 是占位串（`ORG-<org>-<rand>`），`activate_machine_code` 只置
+  active+user_id 不改绑 → 登录侧 `verify_user_machine` 按"记录.machine_code ==
+  当前真实机器码"比对恒 False。修复：激活时改绑为注册机真实机器码。
+- 🐛 **data-sync 数据包下载恒 400/404（路径双源）**：下载端点用相对
+  `Path("data_sync")`，导出服务写 `get_app_data_dir()/data_sync` → 打包环境
+  必分叉。修复：下载改用 `data_sync_service.sync_dir` 同源。
+- 🐛 **报表模板下载/上传确认 500 + 静默零写入**：`fields` 允许任意字符串
+  （逗号串/字符串数组/dict 数组三种历史形态），下载与 `_parse_template_excel`
+  均假定 dict 数组 → `AttributeError` 500；且字符串形态缺 `db_field` 时解析出
+  `{'': value}` → 确认导入零写入（比 500 更隐蔽）。修复：`_normalize_template_fields`
+  统一归一化（下载/上传两消费点共用）。
+- 🐛 **奖学金导入全链坏死（阻断级，无测试覆盖致长期存活）**：按
+  `ScholarshipStudent(name/student_id/school_name)` 构造，真实列是
+  `student_name` + 必填 `school_id` FK → 每行必抛 TypeError、imported 恒 0。
+  修复：按真实列映射（学校名查 School 解析 school_id，学号并入 remarks），
+  学校解析带 `is_active` 过滤。
+- 🐛 **乡村工作悬挂 village_id → 裸 500**：外键目标是遗留 `villages` 表（前端
+  下拉由 `/rural-works/villages` 按名称 upsert 同步），传入不存在 id 触发未处理
+  IntegrityError。修复：服务层前置校验（create/update）+ 路由转 400 带指引。
+- 🐛 **并发备份同毫秒唯一键冲突 → 500**：文件名/config_key 毫秒后缀在并发
+  同毫秒下仍相撞（三并发实测一个 500）。修复：追加 uuid4 短码。
+- 🐛 **通行码注册并发竞态 → 创建 2 个用户**：verify（读 pending）→建用户→
+  activate（写）非原子，双并发注册均通过。修复：`activate_machine_code` 改单条
+  UPDATE 原子认领（rowcount 判定），认领失败删除刚建用户并 400。
+- 🐛 **覆盖率墙钟黑洞（CI #84）**：`/backup/schedule` 的"已过 02:00 则 +1 天"
+  分支内联端点，是否执行取决于测试运行的墙钟 → CI 覆盖率随机差 1 行。
+  修复：提取 `_next_daily_2am` 纯函数 + 三固定时间确定性测试。
+
+### 测试与工程
+- 🧪 **Playwright E2E 套件复活并纳入 CI 门禁**：死代码清理曾误删 `helpers.ts`
+  （8 个 spec 导入即崩）+ global-setup 密码过期 + 首登强制改密未适配（改密
+  PUT 为 CSRF 保护路径需先取 csrf-token 配对）+ 5 个 spec 选择器腐化。
+  修复后 **全量 150/150**；pr-checks 新增 `e2e-test` job（Linux chromium，
+  config 跨平台化——Windows 用系统 Edge/venv），E2E 成为六 job 门禁常驻项。
+- 🧪 **并发探针**（多线程真实 HTTP，12/12）：同记录 10 并发写、审批竞态、
+  并发备份、通行码竞态、并发导入全部符合预期语义。
+- 🧪 **前后端契约交叉核对**：导出后端 797 条路由，正则通配匹配前端 334 个
+  去重调用路径 → **0 处真实断裂**。
+- 📚 帮助文档修正出厂密码描述（Admin@2026）+ 新增管理员出厂恢复通道说明；
+  ADR-0008 扩展章节；AGENTS.md 路径双源规则与覆盖率不变量补记。
+
 ## [1.11.5] - 2026-09-05 — 通行码注册大小写归一化 + 功能全链路探针验证 + 覆盖率根因修正收尾
 
 ### 修复
