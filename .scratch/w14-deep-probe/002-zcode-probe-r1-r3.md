@@ -105,3 +105,17 @@
 - ⚠️ 契约形态观察（非缺陷，前端已适配）：部分端点返回 {success,data} 无
   code 信封（如 /system/help/articles）；effectiveness 系列年份均为必填
   Query。
+
+## 本会话 R8：并发场景探测 + 前端 Playwright E2E 复活
+- 🐛 **并发备份同毫秒唯一键冲突 → 500**：三并发同毫秒创建，毫秒后缀仍相撞
+  （R3 修复未覆盖并发窗口）。修复 `008b2804`：文件名/config_key 追加 uuid4
+  短码（清理为 DB 记录驱动，无文件名解析，安全）。
+- 🐛 **通行码注册并发竞态**：verify(读 pending)→create_user→activate(写)
+  非原子 → 双注册均成功、2 用户共用一条机器码记录。修复：activate 改单条
+  UPDATE 原子认领（rowcount 判定），认领失败删刚建用户 + 400。
+- 🐛 **E2E 套件结构性坏死**：死代码清理(af388677)误删 helpers.ts（8 个
+  spec 导入即崩）+ global-setup 密码过期 + 首登强制改密未适配 + 5 个 spec
+  选择器腐化。修复：恢复 helpers、global-setup 重写（CSRF 配对改密自适应
+  + E2E 专用密码经 TEST_PASSWORD 传递）、语义选择器替换。**全量 150/150**。
+- 并发探针复跑 12/12（同记录 10 并发写/审批竞态/并发备份/注册竞态/并发导入
+  全部符合预期语义）；后端回归 355 passed；CI 保持绿。
