@@ -61,4 +61,8 @@
   last_sent_at/next_send_at → 详情响应被 response_model 过滤缺键。
 - **R4 回归**：run_all 全量 10 轮 287 项检查 0 失败——订阅改动零回归。
 - R2 边界（越权/禁用/不存在/幂等）已由 pytest(test_subscription_generate_now.py)
-  与 R1 探针双重覆盖；R3 面板 E2E 待 UI 波次（组件测试 24 用例已先行锁定）。
+  与 R1 探针双重覆盖。
+- **R3 面板 E2E 完成**：tests/e2e/flows/subscription.spec.ts（4 用例：卡片渲染/
+  新建对话框全交互/立即生成反馈/启停与删除确认三态）——本地与 CI 全量
+  E2E 154/154 passed（要素：每用例唯一订阅名，两次调用时间戳名会让 fill 与
+  断言错位；后端 e2e_test.db 实测创建落库正确）。
