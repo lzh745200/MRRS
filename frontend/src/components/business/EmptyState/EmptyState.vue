@@ -2,7 +2,7 @@
   <div class="empty-state" :data-type="type">
     <el-empty :description="resolvedText" :image-size="size">
       <template v-if="action" #default>
-        <el-button type="primary" size="small" @click="$emit('action')">{{ action }}</el-button>
+        <el-button type="primary" @click="$emit('action')">{{ action }}</el-button>
       </template>
     </el-empty>
   </div>

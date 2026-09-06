@@ -87,7 +87,7 @@
         <el-table-column type="selection" width="55" />
         <el-table-column label="优先级" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.priority > 0 ? 'danger' : 'info'" size="small" effect="dark">
+            <el-tag :type="row.priority > 0 ? 'danger' : 'info'" effect="dark">
               {{ row.priority > 0 ? '高' : '普通' }}
             </el-tag>
           </template>
@@ -117,18 +117,13 @@
         </el-table-column>
         <el-table-column label="当前级别" width="100" align="center">
           <template #default="{ row }">
-            <el-tag size="small">第 {{ row.current_level }} 级</el-tag>
+            <el-tag>第 {{ row.current_level }} 级</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="提交时间" width="180">
           <template #default="{ row }">
             {{ formatDateTime(row.created_at) }}
-            <el-tag
-              v-if="isOverdue(row)"
-              type="danger"
-              size="small"
-              effect="dark"
-              style="margin-left: 4px"
+            <el-tag v-if="isOverdue(row)" type="danger" effect="dark" style="margin-left: 4px"
               >超时</el-tag
             >
           </template>
@@ -136,32 +131,31 @@
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button-group>
-              <el-button size="small" @click="handleViewDetail(row)">
+              <el-button @click="handleViewDetail(row)">
                 <el-icon><View /></el-icon>
                 详情
               </el-button>
-              <el-button size="small" @click="handleViewDiff(row)">
+              <el-button @click="handleViewDiff(row)">
                 <el-icon><Document /></el-icon>
                 对比
               </el-button>
               <el-button
                 v-if="row.entity_type === 'rural_work'"
-                size="small"
                 type="primary"
                 @click="handleEditWork(row)"
               >
                 <el-icon><Edit /></el-icon>
                 编辑
               </el-button>
-              <el-button size="small" type="success" @click="handleQuickApprove(row)">
+              <el-button type="success" @click="handleQuickApprove(row)">
                 <el-icon><Check /></el-icon>
                 快速通过
               </el-button>
-              <el-button size="small" @click="handleTransfer(row)">
+              <el-button @click="handleTransfer(row)">
                 <el-icon><Switch /></el-icon>
                 转交
               </el-button>
-              <el-button size="small" type="danger" @click="handleReject(row)">
+              <el-button type="danger" @click="handleReject(row)">
                 <el-icon><Close /></el-icon>
                 拒绝
               </el-button>

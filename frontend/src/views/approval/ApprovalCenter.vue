@@ -5,7 +5,7 @@
         <div class="card-header">
           <span>审批中心</span>
           <el-badge :value="pendingCount" :hidden="pendingCount === 0" type="danger">
-            <el-tag size="small">待处理</el-tag>
+            <el-tag>待处理</el-tag>
           </el-badge>
         </div>
       </template>
@@ -25,10 +25,10 @@
       <!-- 批量操作栏 -->
       <div v-if="activeTab === 'pending' && selectedIds.length > 0" class="batch-bar">
         <span>已选 {{ selectedIds.length }} 项</span>
-        <el-button size="small" type="success" :loading="batchLoading" @click="handleBatchApprove"
+        <el-button type="success" :loading="batchLoading" @click="handleBatchApprove"
           >批量通过</el-button
         >
-        <el-button size="small" type="danger" @click="handleBatchReject">批量驳回</el-button>
+        <el-button type="danger" @click="handleBatchReject">批量驳回</el-button>
       </div>
 
       <el-table v-loading="loading" :data="tasks" stripe @selection-change="handleSelectionChange">
@@ -37,23 +37,21 @@
         <el-table-column prop="title" label="审批标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="entity_type" label="类型" width="120" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag size="small">{{ entityTypeLabel(row.entity_type) }}</el-tag>
+            <el-tag>{{ entityTypeLabel(row.entity_type) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" size="small">{{
-              statusLabel(row.status)
-            }}</el-tag>
+            <el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="提交时间" width="160" show-overflow-tooltip />
         <el-table-column v-if="activeTab === 'pending'" label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link size="small" type="success" @click="handleApprove(row as ApprovalTask)"
+            <el-button link type="success" @click="handleApprove(row as ApprovalTask)"
               >通过</el-button
             >
-            <el-button link size="small" type="danger" @click="handleReject(row as ApprovalTask)"
+            <el-button link type="danger" @click="handleReject(row as ApprovalTask)"
               >驳回</el-button
             >
           </template>

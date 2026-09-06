@@ -35,15 +35,13 @@
         <el-table-column prop="description" label="版本说明" />
         <el-table-column label="变更统计" width="200">
           <template #default="{ row }">
-            <el-tag type="success" size="small" style="margin-right: 5px">
+            <el-tag type="success" style="margin-right: 5px">
               新增: {{ getChangeCount(row.changes, 'added') }}
             </el-tag>
-            <el-tag type="warning" size="small" style="margin-right: 5px">
+            <el-tag type="warning" style="margin-right: 5px">
               修改: {{ getChangeCount(row.changes, 'modified') }}
             </el-tag>
-            <el-tag type="danger" size="small">
-              删除: {{ getChangeCount(row.changes, 'deleted') }}
-            </el-tag>
+            <el-tag type="danger"> 删除: {{ getChangeCount(row.changes, 'deleted') }} </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="创建时间" width="180">
@@ -53,16 +51,15 @@
         </el-table-column>
         <el-table-column label="操作" width="250">
           <template #default="{ row }">
-            <el-button size="small" @click="handleViewDetail(row as VersionItem)"> 详情 </el-button>
+            <el-button @click="handleViewDetail(row as VersionItem)"> 详情 </el-button>
             <el-button
-              size="small"
               type="primary"
               :disabled="versionList.length < 2"
               @click="handleCompare(row as VersionItem)"
             >
               对比
             </el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row.id)"> 删除 </el-button>
+            <el-button type="danger" @click="handleDelete(row.id)"> 删除 </el-button>
           </template>
         </el-table-column>
       </el-table>

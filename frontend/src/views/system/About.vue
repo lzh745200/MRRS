@@ -24,11 +24,11 @@
             >Assistance Management Information System</el-descriptions-item
           >
           <el-descriptions-item label="版本">
-            <el-tag type="success" size="small">v{{ systemVersion }}</el-tag>
+            <el-tag type="success">v{{ systemVersion }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="技术栈">
             <div class="tag-list">
-              <el-tag v-for="tech in techStack" :key="tech" size="small" effect="plain">
+              <el-tag v-for="tech in techStack" :key="tech" effect="plain">
                 {{ tech }}
               </el-tag>
             </div>
@@ -62,18 +62,12 @@
         <el-descriptions :column="1" border>
           <el-descriptions-item label="许可">
             <span class="license-text">UNLICENSED</span>
-            <el-tag type="warning" size="small" style="margin-left: 8px">内部使用</el-tag>
+            <el-tag type="warning" style="margin-left: 8px">内部使用</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="开发单位">（待补充）</el-descriptions-item>
           <el-descriptions-item label="主要开源组件">
             <div class="tag-list">
-              <el-tag
-                v-for="lib in openSourceLibs"
-                :key="lib"
-                size="small"
-                type="info"
-                effect="plain"
-              >
+              <el-tag v-for="lib in openSourceLibs" :key="lib" type="info" effect="plain">
                 {{ lib }}
               </el-tag>
             </div>
@@ -88,7 +82,7 @@
             <span class="card-title"
               ><el-icon><Cpu /></el-icon> 运行时信息</span
             >
-            <el-button :icon="Refresh" size="small" :loading="envLoading" @click="fetchEnv">
+            <el-button :icon="Refresh" :loading="envLoading" @click="fetchEnv">
               重新检测
             </el-button>
           </div>
@@ -103,7 +97,7 @@
         />
         <el-descriptions :column="1" border>
           <el-descriptions-item label="Python 版本">
-            <el-tag v-if="envData?.system?.python_version" type="primary" size="small">
+            <el-tag v-if="envData?.system?.python_version" type="primary">
               {{ envData.system.python_version }}
             </el-tag>
             <span v-else>-</span>
@@ -112,17 +106,15 @@
             {{ envData?.system?.platform || '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="运行模式">
-            <el-tag :type="envModeTagType" size="small">{{
-              envData?.system?.env_mode || '-'
-            }}</el-tag>
+            <el-tag :type="envModeTagType">{{ envData?.system?.env_mode || '-' }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="依赖完整性">
             <template v-if="envData">
-              <el-tag type="success" size="small">已安装 {{ installedCount }}</el-tag>
-              <el-tag v-if="missingCount > 0" type="danger" size="small" style="margin-left: 8px">
+              <el-tag type="success">已安装 {{ installedCount }}</el-tag>
+              <el-tag v-if="missingCount > 0" type="danger" style="margin-left: 8px">
                 缺失 {{ missingCount }}
               </el-tag>
-              <el-tag v-else type="success" size="small" effect="plain" style="margin-left: 8px">
+              <el-tag v-else type="success" effect="plain" style="margin-left: 8px">
                 无缺失
               </el-tag>
             </template>

@@ -5,10 +5,8 @@
         <div class="card-header">
           <span>下级单位管理</span>
           <div>
-            <el-button size="small" @click="handleImportReport">导入上报包</el-button>
-            <el-button size="small" type="primary" @click="showRegisterDialog = true"
-              >注册下级单位</el-button
-            >
+            <el-button @click="handleImportReport">导入上报包</el-button>
+            <el-button type="primary" @click="showRegisterDialog = true">注册下级单位</el-button>
           </div>
         </div>
       </template>
@@ -24,14 +22,14 @@
         <el-table-column prop="systemVersion" label="版本" width="90" />
         <el-table-column prop="licenseStatus" label="授权状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="licenseTagType(row.licenseStatus)" size="small">{{
+            <el-tag :type="licenseTagType(row.licenseStatus)">{{
               licenseLabel(row.licenseStatus)
             }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="在线状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'online' ? 'success' : 'info'" size="small">{{
+            <el-tag :type="row.status === 'online' ? 'success' : 'info'">{{
               row.status === 'online' ? '在线' : '离线'
             }}</el-tag>
           </template>
@@ -42,17 +40,11 @@
           <template #default="{ row }">
             <el-button
               link
-              size="small"
               type="primary"
               @click="handleGeneratePackage(row as SubordinateInstance)"
               >生成管控包</el-button
             >
-            <el-button
-              link
-              size="small"
-              type="warning"
-              @click="handleToggleLicense(row as SubordinateInstance)"
-            >
+            <el-button link type="warning" @click="handleToggleLicense(row as SubordinateInstance)">
               {{ (row as SubordinateInstance).licenseStatus === 'active' ? '撤销' : '授权' }}
             </el-button>
           </template>

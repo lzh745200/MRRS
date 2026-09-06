@@ -49,10 +49,10 @@
           <div v-if="!section.stats.length" class="no-data-hint">暂无数据</div>
         </div>
         <div class="section-card-actions">
-          <el-button size="small" type="primary" @click="openEditDialog(section.key)"
+          <el-button type="primary" @click="openEditDialog(section.key)"
             ><el-icon><Edit /></el-icon>填写</el-button
           >
-          <el-button size="small" @click="handleDownloadTemplate(section.key)"
+          <el-button @click="handleDownloadTemplate(section.key)"
             ><el-icon><Download /></el-icon>模板</el-button
           >
           <el-popconfirm
@@ -61,7 +61,7 @@
             @confirm="deleteSection(section.key)"
           >
             <template #reference>
-              <el-button size="small" type="danger" link>删除</el-button>
+              <el-button type="danger" link>删除</el-button>
             </template>
           </el-popconfirm>
           <el-upload
@@ -71,7 +71,7 @@
             accept=".xlsx,.xls"
             class="inline-upload"
           >
-            <el-button size="small">
+            <el-button>
               <el-icon><Upload /></el-icon>导入
             </el-button>
           </el-upload>

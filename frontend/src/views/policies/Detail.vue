@@ -5,27 +5,22 @@
         <div class="detail-header">
           <span class="title">{{ policy?.title || '政策详情' }}</span>
           <div class="header-actions">
-            <el-button size="small" @click="goBack">返回</el-button>
-            <el-button v-if="policy && canEdit" size="small" type="primary" @click="goEdit"
-              >编辑</el-button
-            >
+            <el-button @click="goBack">返回</el-button>
+            <el-button v-if="policy && canEdit" type="primary" @click="goEdit">编辑</el-button>
             <el-button
               v-if="canEdit && policy?.status === 'draft'"
-              size="small"
               type="success"
               @click="handlePublish"
               >发布</el-button
             >
             <el-button
               v-if="canEdit && policy?.status === 'active'"
-              size="small"
               type="warning"
               @click="handleArchive"
               >归档</el-button
             >
             <el-button
               v-if="policy"
-              size="small"
               :type="isFavorite ? 'danger' : 'default'"
               @click="toggleFavorite"
             >
@@ -42,7 +37,7 @@
         }}</el-descriptions-item>
         <el-descriptions-item label="级别">{{ getLevelLabel(policy.level) }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="getStatusColor(policy.status) as any" size="small">{{
+          <el-tag :type="getStatusColor(policy.status) as any">{{
             getStatusLabel(policy.status)
           }}</el-tag>
         </el-descriptions-item>
@@ -80,7 +75,7 @@
     <!-- 相关政策 -->
     <el-card v-if="relatedPolicies.length" class="related-card">
       <template #header><span>相关政策</span></template>
-      <el-table :data="relatedPolicies" size="small">
+      <el-table :data="relatedPolicies">
         <el-table-column prop="title" label="标题" min-width="200">
           <template #default="{ row }">
             <el-link type="primary" @click="goDetail(row.id)">{{ row.title }}</el-link>
@@ -91,7 +86,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="getStatusColor(row.status) as any" size="small">{{
+            <el-tag :type="getStatusColor(row.status) as any">{{
               getStatusLabel(row.status)
             }}</el-tag>
           </template>

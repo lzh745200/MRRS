@@ -41,9 +41,7 @@
       <el-table-column prop="category" label="类别" width="100" />
       <el-table-column prop="phase" label="阶段" width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="phaseTagType(row.phase)">{{
-            phaseMap[row.phase] || row.phase
-          }}</el-tag>
+          <el-tag :type="phaseTagType(row.phase)">{{ phaseMap[row.phase] || row.phase }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="budget" label="预算(万元)" width="110" align="right" />
@@ -55,10 +53,10 @@
       </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="openDialog(row)">编辑</el-button>
+          <el-button type="primary" link @click="openDialog(row)">编辑</el-button>
           <el-popconfirm title="确定删除？" @confirm="handleDelete(row)">
             <template #reference>
-              <el-button type="danger" link size="small">删除</el-button>
+              <el-button type="danger" link>删除</el-button>
             </template>
           </el-popconfirm>
         </template>

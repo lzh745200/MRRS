@@ -4,7 +4,7 @@
       <div class="header-left">
         <el-button :icon="ArrowLeft" @click="pushSafe(`/schools/${schoolId}`)">返回详情</el-button>
         <h2 class="page-title">资助学生管理</h2>
-        <el-tag v-if="schoolName" type="primary" size="small">{{ schoolName }}</el-tag>
+        <el-tag v-if="schoolName" type="primary">{{ schoolName }}</el-tag>
       </div>
       <div class="header-actions">
         <el-button @click="handleImport">
@@ -48,7 +48,7 @@
       </el-table-column>
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="statusTagType(row.status)">{{
+          <el-tag :type="statusTagType(row.status)">{{
             statusMap[row.status] || row.status || '待审批'
           }}</el-tag>
         </template>
@@ -57,10 +57,10 @@
       <el-table-column prop="contact_info" label="联系方式" width="130" show-overflow-tooltip />
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="openDialog(row)">编辑</el-button>
+          <el-button type="primary" link @click="openDialog(row)">编辑</el-button>
           <el-popconfirm title="确定删除？" @confirm="handleDelete(row)">
             <template #reference>
-              <el-button type="danger" link size="small">删除</el-button>
+              <el-button type="danger" link>删除</el-button>
             </template>
           </el-popconfirm>
         </template>

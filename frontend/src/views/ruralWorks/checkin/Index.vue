@@ -56,13 +56,12 @@
                 v-model="summaryMonth"
                 type="month"
                 value-format="YYYY-MM"
-                size="small"
                 @change="loadSummary"
               />
             </div>
           </template>
           <div v-if="summary" class="summary-body">
-            <el-descriptions :column="3" border size="small" class="mb">
+            <el-descriptions :column="3" border class="mb">
               <el-descriptions-item label="工作项数">{{ summary.total_logs }}</el-descriptions-item>
               <el-descriptions-item label="打卡天数">{{
                 summary.checkin_days
@@ -78,7 +77,7 @@
               <div v-for="(it, i) in summary.items" :key="i" class="sum-item">
                 <span class="sum-date">{{ it.work_date }}</span>
                 <span class="sum-content">{{ it.content }}</span>
-                <el-tag size="small" type="info">{{ it.category }}</el-tag>
+                <el-tag type="info">{{ it.category }}</el-tag>
               </div>
             </div>
           </div>

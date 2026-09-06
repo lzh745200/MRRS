@@ -119,21 +119,17 @@
       <div class="detail-card">
         <div class="card-header">
           <h3>助学兴教项目</h3>
-          <el-button
-            size="small"
-            type="primary"
-            plain
-            @click="pushSafe(`/schools/${school.id}/projects`)"
+          <el-button type="primary" plain @click="pushSafe(`/schools/${school.id}/projects`)"
             >管理项目</el-button
           >
         </div>
         <div class="card-body">
-          <el-table :data="relatedProjects" size="small">
+          <el-table :data="relatedProjects">
             <el-table-column prop="name" label="项目名称" min-width="180" />
             <el-table-column prop="category" label="类别" width="100" />
             <el-table-column prop="phase" label="阶段" width="100">
               <template #default="{ row }">
-                <el-tag size="small" :type="phaseTagType(row.phase)">{{
+                <el-tag :type="phaseTagType(row.phase)">{{
                   phaseMap[row.phase] || row.phase
                 }}</el-tag>
               </template>
@@ -148,23 +144,19 @@
       <div class="detail-card">
         <div class="card-header">
           <h3>资助学生</h3>
-          <el-button
-            size="small"
-            type="primary"
-            plain
-            @click="pushSafe(`/schools/${school.id}/scholarship`)"
+          <el-button type="primary" plain @click="pushSafe(`/schools/${school.id}/scholarship`)"
             >管理资助学生</el-button
           >
         </div>
         <div class="card-body">
-          <el-table :data="scholarshipStudents" stripe size="small">
+          <el-table :data="scholarshipStudents" stripe>
             <el-table-column prop="student_name" label="学生姓名" width="100" />
             <el-table-column prop="grade" label="年级" width="80" />
             <el-table-column prop="year" label="年度" width="80" />
             <el-table-column prop="amount" label="资助金额(元)" width="120" align="right" />
             <el-table-column prop="status" label="状态" width="90">
               <template #default="{ row }">
-                <el-tag size="small">{{ scholarshipStatusMap[row.status] || row.status }}</el-tag>
+                <el-tag>{{ scholarshipStatusMap[row.status] || row.status }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="reason" label="资助原因" min-width="160" show-overflow-tooltip />
@@ -194,13 +186,11 @@
                   <span v-if="att.created_at"> · {{ att.created_at.split('T')[0] }}</span>
                 </div>
               </div>
-              <el-button type="primary" link size="small" @click="downloadAttachment(att)"
-                >下载</el-button
-              >
+              <el-button type="primary" link @click="downloadAttachment(att)">下载</el-button>
             </div>
           </div>
           <el-empty v-else description="暂无电子资料" :image-size="60">
-            <el-button type="primary" size="small" @click="handleEdit">去上传</el-button>
+            <el-button type="primary" @click="handleEdit">去上传</el-button>
           </el-empty>
         </div>
       </div>

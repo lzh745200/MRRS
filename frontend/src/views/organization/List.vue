@@ -110,14 +110,14 @@
         </el-table-column>
         <el-table-column prop="level" label="层级" width="100">
           <template #default="scope">
-            <el-tag size="small" type="info">{{ formatLevel(scope.row.level) }}</el-tag>
+            <el-tag type="info">{{ formatLevel(scope.row.level) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="contact_person" label="联系人" width="100" show-overflow-tooltip />
         <el-table-column prop="contact_phone" label="联系电话" width="130" show-overflow-tooltip />
         <el-table-column prop="is_active" label="状态" width="80" align="center">
           <template #default="scope">
-            <el-tag :type="scope.row.is_active ? 'success' : 'info'" size="small">
+            <el-tag :type="scope.row.is_active ? 'success' : 'info'">
               {{ scope.row.is_active ? '正常' : '停用' }}
             </el-tag>
           </template>
@@ -125,14 +125,14 @@
         <el-table-column prop="sort_order" label="排序" width="70" align="center" />
         <el-table-column v-if="isAdmin" label="操作" width="260" fixed="right">
           <template #default="scope">
-            <el-button size="small" @click="handleViewDetail(scope.row)">详情</el-button>
-            <el-button size="small" type="primary" @click="handleEdit(scope.row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+            <el-button @click="handleViewDetail(scope.row)">详情</el-button>
+            <el-button type="primary" @click="handleEdit(scope.row)">编辑</el-button>
+            <el-button type="danger" @click="handleDelete(scope.row)">删除</el-button>
           </template>
         </el-table-column>
         <el-table-column v-else label="操作" width="100" fixed="right">
           <template #default="scope">
-            <el-button size="small" @click="handleViewDetail(scope.row)">详情</el-button>
+            <el-button @click="handleViewDetail(scope.row)">详情</el-button>
           </template>
         </el-table-column>
       </el-table>

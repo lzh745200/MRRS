@@ -122,11 +122,7 @@
             type="textarea"
             :rows="2"
           />
-          <el-button
-            type="text"
-            size="small"
-            @click="resetForm.machine_code = machineData?.machine_code || ''"
-          >
+          <el-button type="text" @click="resetForm.machine_code = machineData?.machine_code || ''">
             使用当前机器码
           </el-button>
         </el-form-item>

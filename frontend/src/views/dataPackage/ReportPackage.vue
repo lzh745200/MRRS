@@ -79,7 +79,7 @@
           :closable="false"
           style="margin-bottom: 12px"
         />
-        <el-descriptions :column="2" border size="small">
+        <el-descriptions :column="2" border>
           <el-descriptions-item label="上报年度">{{ form.year }}</el-descriptions-item>
           <el-descriptions-item label="数据类型">{{
             form.dataTypes.map((t) => typeLabels[t] || t).join('、')

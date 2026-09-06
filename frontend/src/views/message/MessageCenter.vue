@@ -67,7 +67,7 @@
             <el-table-column type="selection" width="55" />
             <el-table-column label="类型" width="120">
               <template #default="{ row }">
-                <el-tag :type="formatMessageType(row.message_type).type as any" size="small">
+                <el-tag :type="formatMessageType(row.message_type).type as any">
                   {{ formatMessageType(row.message_type).text }}
                 </el-tag>
               </template>
@@ -93,19 +93,14 @@
             <el-table-column label="操作" width="150" fixed="right">
               <template #default="{ row }">
                 <el-button-group>
-                  <el-button
-                    size="small"
-                    :disabled="row.is_read"
-                    @click.stop="handleMarkRead(row as Message)"
-                  >
+                  <el-button :disabled="row.is_read" @click.stop="handleMarkRead(row as Message)">
                     <el-icon><Check /></el-icon>
                   </el-button>
-                  <el-button size="small" type="danger" @click.stop="handleDelete(row as Message)">
+                  <el-button type="danger" @click.stop="handleDelete(row as Message)">
                     <el-icon><Delete /></el-icon>
                   </el-button>
                   <el-button
                     v-if="row.link"
-                    size="small"
                     type="primary"
                     @click.stop="handleGoToLink(row as Message)"
                   >
@@ -149,9 +144,7 @@
             </el-timeline>
             <EmptyState v-else text="暂无系统动态" />
             <div class="activity-actions">
-              <el-button size="small" :loading="activitiesLoading" @click="loadActivities"
-                >刷新动态</el-button
-              >
+              <el-button :loading="activitiesLoading" @click="loadActivities">刷新动态</el-button>
             </div>
           </div>
         </el-tab-pane>
@@ -176,9 +169,7 @@
             </el-timeline>
             <EmptyState v-else text="暂无操作记录" />
             <div class="activity-actions">
-              <el-button size="small" :loading="logsLoading" @click="loadMyLogs"
-                >刷新记录</el-button
-              >
+              <el-button :loading="logsLoading" @click="loadMyLogs">刷新记录</el-button>
             </div>
           </div>
         </el-tab-pane>
@@ -195,7 +186,7 @@
       <div v-if="currentMessage" class="message-detail">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="类型">
-            <el-tag :type="formatMessageType(currentMessage.message_type).type as any" size="small">
+            <el-tag :type="formatMessageType(currentMessage.message_type).type as any">
               {{ formatMessageType(currentMessage.message_type).text }}
             </el-tag>
           </el-descriptions-item>

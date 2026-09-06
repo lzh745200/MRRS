@@ -148,7 +148,6 @@
           <div class="report-actions">
             <el-button
               type="primary"
-              size="small"
               :loading="officialLoading[report.type + '_word']"
               @click="handleExportOfficial(report.type, 'word')"
             >
@@ -157,7 +156,6 @@
             </el-button>
             <el-button
               type="danger"
-              size="small"
               :loading="officialLoading[report.type + '_pdf']"
               @click="handleExportOfficial(report.type, 'pdf')"
             >
@@ -209,12 +207,11 @@
               v-if="row.status === 'completed'"
               link
               type="primary"
-              size="small"
               @click="downloadExport(row)"
             >
               下载
             </el-button>
-            <el-button v-if="row.status === 'processing'" link type="info" size="small" disabled>
+            <el-button v-if="row.status === 'processing'" link type="info" disabled>
               处理中...
             </el-button>
           </template>

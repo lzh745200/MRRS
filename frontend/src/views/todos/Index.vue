@@ -98,7 +98,7 @@
         <div class="todo-content" @click="handleEdit(todo)">
           <div class="todo-title">{{ todo.title }}</div>
           <div class="todo-meta">
-            <el-tag v-if="todo.priority" :type="priorityTagType(todo.priority)" size="small">
+            <el-tag v-if="todo.priority" :type="priorityTagType(todo.priority)">
               {{ priorityLabel(todo.priority) }}
             </el-tag>
             <span
@@ -108,9 +108,7 @@
             >
               <el-icon><Calendar /></el-icon>
               {{ todo.deadline?.split('T')[0] || todo.deadline }}
-              <el-tag v-if="isOverdue(todo)" type="danger" size="small" style="margin-left: 4px"
-                >已逾期</el-tag
-              >
+              <el-tag v-if="isOverdue(todo)" type="danger" style="margin-left: 4px">已逾期</el-tag>
             </span>
             <span v-if="todo.created_at" class="todo-date">
               创建于 {{ formatDate(todo.created_at) }}
@@ -122,12 +120,12 @@
         </div>
 
         <div class="todo-actions">
-          <el-button type="primary" link size="small" @click="handleEdit(todo)">
+          <el-button type="primary" link @click="handleEdit(todo)">
             <el-icon><Edit /></el-icon>
           </el-button>
           <el-popconfirm title="确定删除该待办事项吗？" @confirm="handleDelete(todo)">
             <template #reference>
-              <el-button type="danger" link size="small">
+              <el-button type="danger" link>
                 <el-icon><Delete /></el-icon>
               </el-button>
             </template>

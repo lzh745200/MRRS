@@ -58,7 +58,7 @@
             <p class="secret-label">或手动输入密钥：</p>
             <div class="secret-display">
               <code>{{ secretKey }}</code>
-              <el-button size="small" text @click="copySecret">复制</el-button>
+              <el-button text @click="copySecret">复制</el-button>
             </div>
           </div>
         </div>
@@ -93,9 +93,7 @@
               {{ code }}
             </el-tag>
           </div>
-          <el-button size="small" style="margin-top: 12px" @click="copyBackupCodes">
-            复制全部恢复码
-          </el-button>
+          <el-button style="margin-top: 12px" @click="copyBackupCodes"> 复制全部恢复码 </el-button>
         </div>
 
         <div style="margin-top: 16px">

@@ -20,7 +20,6 @@
                 v-for="evt in getEvents(data.date)"
                 :key="evt.id"
                 :type="(evt.type || 'primary') as any"
-                size="small"
                 class="event-tag"
                 @click.stop="editEvent(evt)"
               >

@@ -11,16 +11,10 @@
           <span class="health-score-num">{{ healthScore }}</span>
           <span class="health-score-label">分</span>
         </div>
-        <el-button
-          :icon="Refresh"
-          :loading="loading"
-          size="small"
-          type="primary"
-          @click="refreshAll"
-        >
+        <el-button :icon="Refresh" :loading="loading" type="primary" @click="refreshAll">
           刷新
         </el-button>
-        <el-button :icon="Download" size="small" @click="exportData"> 导出 </el-button>
+        <el-button :icon="Download" @click="exportData"> 导出 </el-button>
       </div>
     </div>
 
@@ -39,7 +33,7 @@
             ><el-icon><component :is="card.icon" /></el-icon
           ></span>
           <span class="primary-card-label">{{ card.label }}</span>
-          <el-tag :type="card.tagType" size="small" effect="dark">
+          <el-tag :type="card.tagType" effect="dark">
             {{ card.statusText }}
           </el-tag>
         </div>
@@ -90,7 +84,7 @@
           <span class="secondary-unit">{{ card.unit }}</span>
           <span class="secondary-label">{{ card.label }}</span>
         </div>
-        <el-tag :type="card.tagType" size="small" effect="plain">
+        <el-tag :type="card.tagType" effect="plain">
           {{ card.statusText }}
         </el-tag>
       </div>
@@ -103,7 +97,7 @@
           <span
             ><el-icon><DataAnalysis /></el-icon> API 请求统计（近24小时）</span
           >
-          <el-tag v-if="apiStats.length === 0" type="warning" size="small">无数据</el-tag>
+          <el-tag v-if="apiStats.length === 0" type="warning">无数据</el-tag>
         </div>
         <div ref="chartRef" class="chart-container" />
         <EmptyState
@@ -119,7 +113,7 @@
             ><el-icon><EditPen /></el-icon> 系统日志</span
           >
           <div class="log-filter">
-            <el-radio-group v-model="logLevelFilter" size="small">
+            <el-radio-group v-model="logLevelFilter">
               <el-radio-button value="all">全部</el-radio-button>
               <el-radio-button value="warn">警告</el-radio-button>
               <el-radio-button value="error">错误</el-radio-button>
@@ -156,7 +150,6 @@
         >
         <el-tag
           :type="healthScore >= 80 ? 'success' : healthScore >= 60 ? 'warning' : 'danger'"
-          size="small"
           effect="dark"
           style="margin-left: 12px"
         >
@@ -211,7 +204,7 @@
           </div>
           <div class="check-item">
             <span class="check-name">完整性检查</span>
-            <el-tag :type="dbInfo.integrityOk ? 'success' : 'danger'" size="small">
+            <el-tag :type="dbInfo.integrityOk ? 'success' : 'danger'">
               {{ dbInfo.integrityOk ? '通过' : '失败' }}
             </el-tag>
           </div>

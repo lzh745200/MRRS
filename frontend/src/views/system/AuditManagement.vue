@@ -103,16 +103,14 @@
             <el-table-column prop="user" label="用户" width="100" />
             <el-table-column label="操作" width="100">
               <template #default="{ row }">
-                <el-tag :type="actionTagType(row.action)" size="small">{{
-                  actionName(row.action)
-                }}</el-tag>
+                <el-tag :type="actionTagType(row.action)">{{ actionName(row.action) }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="target" label="操作对象" width="150" />
             <el-table-column prop="detail" label="详情" min-width="200" show-overflow-tooltip />
             <el-table-column label="结果" width="80">
               <template #default="{ row }">
-                <el-tag :type="row.success ? 'success' : 'danger'" size="small">{{
+                <el-tag :type="row.success ? 'success' : 'danger'">{{
                   row.success ? '成功' : '失败'
                 }}</el-tag>
               </template>
@@ -133,7 +131,7 @@
             <el-table-column prop="user" label="用户" width="120" />
             <el-table-column label="类型" width="90">
               <template #default="{ row }">
-                <el-tag :type="row.type === 'login' ? 'success' : 'info'" size="small">{{
+                <el-tag :type="row.type === 'login' ? 'success' : 'info'">{{
                   row.type === 'login' ? '登录' : '登出'
                 }}</el-tag>
               </template>
@@ -142,7 +140,7 @@
             <el-table-column prop="browser" label="浏览器" min-width="150" />
             <el-table-column label="状态" width="80">
               <template #default="{ row }">
-                <el-tag :type="row.success ? 'success' : 'danger'" size="small">{{
+                <el-tag :type="row.success ? 'success' : 'danger'">{{
                   row.success ? '成功' : '失败'
                 }}</el-tag>
               </template>
@@ -165,7 +163,6 @@
                   :type="
                     row.level === 'high' ? 'danger' : row.level === 'medium' ? 'warning' : 'info'
                   "
-                  size="small"
                 >
                   {{ getLevelText(row.level) }}
                 </el-tag>
@@ -175,19 +172,14 @@
             <el-table-column prop="detail" label="详情" min-width="250" show-overflow-tooltip />
             <el-table-column label="状态" width="100">
               <template #default="{ row }">
-                <el-tag :type="row.handled ? 'success' : 'warning'" size="small">{{
+                <el-tag :type="row.handled ? 'success' : 'warning'">{{
                   row.handled ? '已处理' : '待处理'
                 }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="80">
               <template #default="{ row }">
-                <el-button
-                  v-if="!row.handled"
-                  type="primary"
-                  size="small"
-                  link
-                  @click="handleAlert(row)"
+                <el-button v-if="!row.handled" type="primary" link @click="handleAlert(row)"
                   >处理</el-button
                 >
               </template>

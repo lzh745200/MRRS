@@ -47,8 +47,8 @@
             <el-checkbox value="education_supports">教育帮扶</el-checkbox>
           </el-checkbox-group>
           <div class="form-tip">
-            <el-button type="text" size="small" @click="selectAllModules">全选</el-button>
-            <el-button type="text" size="small" @click="clearModules">清空</el-button>
+            <el-button type="text" @click="selectAllModules">全选</el-button>
+            <el-button type="text" @click="clearModules">清空</el-button>
           </div>
         </el-form-item>
 
@@ -138,7 +138,7 @@
         <el-table-column prop="user_name" label="操作人" width="120" />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="handleDownload(row)"> 下载 </el-button>
+            <el-button type="primary" @click="handleDownload(row)"> 下载 </el-button>
           </template>
         </el-table-column>
       </el-table>

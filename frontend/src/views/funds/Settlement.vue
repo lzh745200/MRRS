@@ -78,7 +78,6 @@
               <el-button
                 v-if="settlement.status !== 'approved'"
                 type="primary"
-                size="small"
                 class="ml-2"
                 @click="openApproveDialog"
               >
@@ -122,7 +121,6 @@
                         ? 'warning'
                         : 'danger'
                 "
-                size="small"
                 class="ml-2"
               >
                 {{ settlement.performance_level_label || settlement.performance_level }}

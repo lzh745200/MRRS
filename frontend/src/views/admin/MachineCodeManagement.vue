@@ -52,12 +52,7 @@
                         {{ row.machine_code.substring(0, 16) }}...
                       </span>
                     </el-tooltip>
-                    <el-button
-                      link
-                      type="primary"
-                      size="small"
-                      @click="copyToClipboard(row.machine_code)"
-                    >
+                    <el-button link type="primary" @click="copyToClipboard(row.machine_code)">
                       <el-icon><CopyDocument /></el-icon>
                     </el-button>
                   </template>
@@ -67,19 +62,14 @@
                     <el-tooltip :content="row.pass_code" placement="top">
                       <span class="pass-code-text">{{ row.pass_code }}</span>
                     </el-tooltip>
-                    <el-button
-                      link
-                      type="primary"
-                      size="small"
-                      @click="copyToClipboard(row.pass_code)"
-                    >
+                    <el-button link type="primary" @click="copyToClipboard(row.pass_code)">
                       <el-icon><CopyDocument /></el-icon>
                     </el-button>
                   </template>
                 </el-table-column>
                 <el-table-column prop="status" label="状态" width="100">
                   <template #default="{ row }">
-                    <el-tag :type="getStatusType(row.status)" size="small">
+                    <el-tag :type="getStatusType(row.status)">
                       {{ getStatusText(row.status) }}
                     </el-tag>
                   </template>
@@ -107,7 +97,6 @@
                       v-if="row.status === 'pending' || row.status === 'active'"
                       link
                       type="danger"
-                      size="small"
                       @click="handleRevoke(row as MachineCodeRecord)"
                     >
                       撤销

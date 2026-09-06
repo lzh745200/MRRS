@@ -30,6 +30,20 @@
 
   // 语义色
   --color-success: #2ecc71;
+  /* 语义色 EP 中间档（light-5/7/9，供 --el-color-*-light-* 引用） */
+  --color-success-light-5: #abebc6;
+  --color-success-light-7: #d5f5e3;
+  --color-success-light-9: #f5fdf7;
+  --color-warning-light-5: #fad7a0;
+  --color-warning-light-7: #fdebd0;
+  --color-warning-light-8: #fef5e7;
+  --color-warning-light-9: #fefaf3;
+  --color-danger-light-5: #f5b7b1;
+  --color-danger-light-7: #fadbd8;
+  --color-danger-light-9: #fef6f5;
+  --color-info-light-5: #a8bcc4;
+  --color-info-light-7: #d4dde0;
+  --color-info-light-9: #f4f7f8;
   --color-success-light: #58d68d;
   --color-success-lighter: #82e0aa;
   --color-success-lightest: #eafaf1;
@@ -204,9 +218,9 @@
 :root {
   // 字体族
   --font-family-base:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
-    "Segoe UI Symbol", "Noto Color Emoji";
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", "Helvetica Neue", Arial, "Noto Sans SC", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-family-mono:
     SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
     monospace;
@@ -277,14 +291,14 @@
 
 :root {
   // 按钮尺寸
-  --button-height-sm: 24px;
-  --button-height-md: 32px;
-  --button-height-lg: 40px;
+  --button-height-sm: 32px;
+  --button-height-md: 40px;
+  --button-height-lg: 48px;
 
   // 输入框尺寸
-  --input-height-sm: 24px;
-  --input-height-md: 32px;
-  --input-height-lg: 40px;
+  --input-height-sm: 32px;
+  --input-height-md: 40px;
+  --input-height-lg: 48px;
 
   // 图标尺寸
   --icon-size-xs: 12px;
@@ -319,10 +333,10 @@
 // ==================== 密度 Token（紧凑档 formalize，锚定 el size=small 实际值）====================
 
 :root {
-  --table-row-height: 36px;   // 紧凑表格行高
-  --control-height: 32px;     // 默认控件高度（el size=small 实际值）
-  --control-height-sm: 24px;  // 紧凑控件高度
-  --control-height-lg: 40px;  // 大号控件高度（登录页等主行动作）
+  --table-row-height: 44px;   // 舒适表格行高（UI v2.1 密度升级）
+  --control-height: 40px;     // 默认控件高度（el size=large 实际值）
+  --control-height-sm: 32px;  // 紧凑控件高度（原默认档降级为 sm）
+  --control-height-lg: 48px;  // 大号控件高度（登录页等主行动作）
   --form-label-width: 100px;  // 表单标签宽第一档（长标签表单用 120）
 }
 

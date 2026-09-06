@@ -172,60 +172,40 @@
         <el-table-column prop="regionScope" label="地区范围" width="100" />
         <el-table-column label="地域属性" width="280">
           <template #default="{ row }">
-            <el-tag v-if="row.isThreeRegions" size="small" type="danger">三区三州</el-tag>
-            <el-tag v-if="row.isBorderArea" size="small">边疆地区</el-tag>
-            <el-tag v-if="row.isEthnicArea" size="small" type="info">民族地区</el-tag>
-            <el-tag v-if="row.isRevolutionaryArea" size="small" type="success">革命地区</el-tag>
-            <el-tag v-if="row.isKeyCounty" size="small" type="warning">重点帮扶县</el-tag>
+            <el-tag v-if="row.isThreeRegions" type="danger">三区三州</el-tag>
+            <el-tag v-if="row.isBorderArea">边疆地区</el-tag>
+            <el-tag v-if="row.isEthnicArea" type="info">民族地区</el-tag>
+            <el-tag v-if="row.isRevolutionaryArea" type="success">革命地区</el-tag>
+            <el-tag v-if="row.isKeyCounty" type="warning">重点帮扶县</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="振兴属性" width="180">
           <template #default="{ row }">
-            <el-tag v-if="row.isRevitalizationTier" size="small" type="danger"> 振兴梯队 </el-tag>
-            <el-tag v-if="row.isProvincialDemo" size="small" type="success">省级示范</el-tag>
-            <el-tag v-if="row.isHundredVillageDemo" size="small" type="success">百村示范</el-tag>
+            <el-tag v-if="row.isRevitalizationTier" type="danger"> 振兴梯队 </el-tag>
+            <el-tag v-if="row.isProvincialDemo" type="success">省级示范</el-tag>
+            <el-tag v-if="row.isHundredVillageDemo" type="success">百村示范</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <div class="operation-buttons">
-              <el-button
-                type="primary"
-                link
-                size="small"
-                @click="handleView(row as SupportedVillage)"
+              <el-button type="primary" link @click="handleView(row as SupportedVillage)"
                 >查看</el-button
               >
               <!-- 回收站模式：仅提供 恢复 / 彻底删除 -->
               <template v-if="showDeletedOnly">
-                <el-button
-                  type="success"
-                  link
-                  size="small"
-                  @click="handleRestore(row as SupportedVillage)"
+                <el-button type="success" link @click="handleRestore(row as SupportedVillage)"
                   >恢复</el-button
                 >
-                <el-button
-                  type="danger"
-                  link
-                  size="small"
-                  @click="handlePurge(row as SupportedVillage)"
+                <el-button type="danger" link @click="handlePurge(row as SupportedVillage)"
                   >彻底删除</el-button
                 >
               </template>
               <template v-else>
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  @click="handleEdit(row as SupportedVillage)"
+                <el-button type="primary" link @click="handleEdit(row as SupportedVillage)"
                   >编辑</el-button
                 >
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  @click="handleYearlyData(row as SupportedVillage)"
+                <el-button type="primary" link @click="handleYearlyData(row as SupportedVillage)"
                   >年度数据</el-button
                 >
                 <el-popconfirm
@@ -233,7 +213,7 @@
                   @confirm="handleDelete(row as SupportedVillage)"
                 >
                   <template #reference>
-                    <el-button type="danger" link size="small">删除</el-button>
+                    <el-button type="danger" link>删除</el-button>
                   </template>
                 </el-popconfirm>
               </template>

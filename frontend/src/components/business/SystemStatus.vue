@@ -83,7 +83,6 @@
     <!-- 刷新按钮 -->
     <el-button
       text
-      size="small"
       class="refresh-btn"
       :loading="isRefreshing"
       title="刷新系统状态"

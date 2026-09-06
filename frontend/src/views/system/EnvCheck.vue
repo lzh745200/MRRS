@@ -23,7 +23,7 @@
               {{ systemInfo?.platform || '-' }}
             </el-descriptions-item>
             <el-descriptions-item label="运行模式">
-              <el-tag :type="envModeTagType" size="small">
+              <el-tag :type="envModeTagType">
                 {{ systemInfo?.env_mode || '-' }}
               </el-tag>
             </el-descriptions-item>
@@ -38,20 +38,14 @@
         <div class="card-header">
           <span>依赖包状态</span>
           <div class="header-info">
-            <el-tag type="success" size="small"> 已安装: {{ installedCount }} </el-tag>
-            <el-tag
-              v-if="missingPackages.length > 0"
-              type="danger"
-              size="small"
-              style="margin-left: 8px"
-            >
+            <el-tag type="success"> 已安装: {{ installedCount }} </el-tag>
+            <el-tag v-if="missingPackages.length > 0" type="danger" style="margin-left: 8px">
               缺失: {{ missingPackages.length }}
             </el-tag>
             <el-button
               type="primary"
               :icon="Refresh"
               :loading="checking"
-              size="small"
               style="margin-left: 12px"
               @click="runCheck"
             >
@@ -83,7 +77,7 @@
         </el-table-column>
         <el-table-column label="安装状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.installed ? 'success' : 'danger'" size="small">
+            <el-tag :type="row.installed ? 'success' : 'danger'">
               {{ row.installed ? '已安装' : '缺失' }}
             </el-tag>
           </template>

@@ -187,9 +187,7 @@
             </el-table-column>
             <el-table-column label="操作" width="120">
               <template #default="{ row }">
-                <el-button type="primary" size="small" link @click="handleRestore(row)">
-                  恢复
-                </el-button>
+                <el-button type="primary" link @click="handleRestore(row)"> 恢复 </el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -209,9 +207,7 @@
             </el-table-column>
             <el-table-column label="操作" width="120">
               <template #default="{ row }">
-                <el-button type="primary" size="small" link @click="handleRestore(row)">
-                  恢复
-                </el-button>
+                <el-button type="primary" link @click="handleRestore(row)"> 恢复 </el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -241,7 +237,7 @@
         </el-form-item>
       </el-form>
       <div v-if="tierInfo" class="tier-lookup-result">
-        <el-descriptions :column="3" border size="small">
+        <el-descriptions :column="3" border>
           <el-descriptions-item label="记录日期">
             {{ tierInfo.record_date }}
           </el-descriptions-item>

@@ -51,7 +51,6 @@
                     ? 'danger'
                     : 'info'
               "
-              size="small"
             >
               {{ row.status_label }}
             </el-tag>
@@ -61,16 +60,11 @@
           <template #default="{ row }">
             <el-button
               v-if="row.status === 'draft' || row.status === 'submitted'"
-              size="small"
               type="success"
               @click="handleConfirm(row.id)"
               >确认</el-button
             >
-            <el-button
-              v-if="row.status === 'draft'"
-              size="small"
-              type="danger"
-              @click="handleDelete(row.id)"
+            <el-button v-if="row.status === 'draft'" type="danger" @click="handleDelete(row.id)"
               >删除</el-button
             >
             <el-upload
@@ -78,9 +72,7 @@
               :http-request="(opt: any) => handleVoucherUpload(row.id, opt.file as File)"
               accept=".pdf,.jpg,.jpeg,.png"
             >
-              <el-button size="small" type="primary" link :loading="uploadingId === row.id"
-                >凭证上传</el-button
-              >
+              <el-button type="primary" link :loading="uploadingId === row.id">凭证上传</el-button>
             </el-upload>
           </template>
         </el-table-column>

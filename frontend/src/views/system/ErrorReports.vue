@@ -156,14 +156,14 @@
         <el-table-column prop="message" label="错误信息" min-width="220" show-overflow-tooltip />
         <el-table-column prop="severity" label="严重程度" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="severityTagType(row.severity)" size="small">
+            <el-tag :type="severityTagType(row.severity)">
               {{ severityLabel(row.severity) }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">
+            <el-tag :type="statusTagType(row.status)">
               {{ statusLabel(row.status) }}
             </el-tag>
           </template>
@@ -207,12 +207,12 @@
           <el-descriptions-item label="来源">{{ detail.source }}</el-descriptions-item>
           <el-descriptions-item label="错误类型">{{ detail.errorType }}</el-descriptions-item>
           <el-descriptions-item label="严重程度">
-            <el-tag :type="severityTagType(detail.severity)" size="small">
+            <el-tag :type="severityTagType(detail.severity)">
               {{ severityLabel(detail.severity) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag :type="statusTagType(detail.status)" size="small">
+            <el-tag :type="statusTagType(detail.status)">
               {{ statusLabel(detail.status) }}
             </el-tag>
           </el-descriptions-item>

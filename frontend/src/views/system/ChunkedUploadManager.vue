@@ -35,7 +35,7 @@
           <el-tag :type="sessionStatusType">{{ sessionStatusText }}</el-tag>
         </div>
       </template>
-      <el-descriptions :column="3" border size="small">
+      <el-descriptions :column="3" border>
         <el-descriptions-item label="会话ID" :span="2">
           <code>{{ sessionInfo.session_id }}</code>
         </el-descriptions-item>
@@ -105,7 +105,7 @@
       </template>
       <el-result icon="success" title="文件上传成功" :sub-title="mergeResult.file_name">
         <template #extra>
-          <el-descriptions :column="2" border size="small">
+          <el-descriptions :column="2" border>
             <el-descriptions-item label="文件路径">{{
               mergeResult.file_path
             }}</el-descriptions-item>

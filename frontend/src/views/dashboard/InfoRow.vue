@@ -7,7 +7,7 @@
         <div v-if="loading" class="tl-state">加载中...</div>
         <div v-else-if="error && activities.length === 0" class="tl-state tl-state--error">
           <span>数据加载失败，请稍后重试</span>
-          <el-button size="small" type="primary" @click="loadActivities">重试</el-button>
+          <el-button type="primary" @click="loadActivities">重试</el-button>
         </div>
         <template v-else>
           <div v-for="item in activities" :key="item.id" class="timeline-item">

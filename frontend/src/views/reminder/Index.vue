@@ -21,15 +21,13 @@
     <el-card v-loading="loading">
       <template #header>
         <span>全部提醒（{{ total }}）</span>
-        <el-tag v-if="unread > 0" type="danger" size="small">未读 {{ unread }}</el-tag>
+        <el-tag v-if="unread > 0" type="danger">未读 {{ unread }}</el-tag>
       </template>
 
       <EmptyState v-if="!items.length" text="暂无提醒，一切正常" />
       <div v-else class="reminder-list">
         <div v-for="r in items" :key="r.id" class="reminder-item">
-          <el-tag :type="tagType(r.type)" size="small" class="rtype">{{
-            typeLabel(r.type)
-          }}</el-tag>
+          <el-tag :type="tagType(r.type)" class="rtype">{{ typeLabel(r.type) }}</el-tag>
           <div class="rbody">
             <div class="rtitle">
               <span v-if="!r.is_read" class="dot" />

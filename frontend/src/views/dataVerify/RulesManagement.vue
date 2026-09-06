@@ -62,19 +62,19 @@
         />
         <el-table-column prop="module" label="目标模块" width="120">
           <template #default="{ row }">
-            <el-tag type="primary" size="small">{{ moduleLabel(row.module) }}</el-tag>
+            <el-tag type="primary">{{ moduleLabel(row.module) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="field" label="校验字段" width="140" />
         <el-table-column prop="rule_type" label="规则类型" width="130">
           <template #default="{ row }">
-            <el-tag size="small">{{ ruleTypeLabel(row.rule_type) }}</el-tag>
+            <el-tag>{{ ruleTypeLabel(row.rule_type) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="priority" label="优先级" width="80" align="center" sortable />
         <el-table-column prop="is_active" label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
+            <el-tag :type="row.is_active ? 'success' : 'info'">
               {{ row.is_active ? '启用' : '禁用' }}
             </el-tag>
           </template>
@@ -87,11 +87,9 @@
         />
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="handleEdit(row)">编辑</el-button>
-            <el-button type="success" size="small" link @click="runSingleValidation(row)"
-              >校验</el-button
-            >
-            <el-button type="danger" size="small" link @click="handleDelete(row)">删除</el-button>
+            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+            <el-button type="success" link @click="runSingleValidation(row)">校验</el-button>
+            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

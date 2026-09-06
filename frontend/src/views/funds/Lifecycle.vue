@@ -38,15 +38,10 @@
           />
         </el-steps>
         <div v-if="phases.length" class="phase-actions">
-          <el-button
-            type="warning"
-            size="small"
-            :disabled="currentPhase <= 1"
-            @click="handleRollback"
-          >
+          <el-button type="warning" :disabled="currentPhase <= 1" @click="handleRollback">
             退回上一阶段
           </el-button>
-          <el-button type="primary" size="small" @click="handleAdvance">
+          <el-button type="primary" @click="handleAdvance">
             {{ currentPhaseObj?.status === 'not_started' ? '开始当前阶段' : '推进到下一阶段' }}
           </el-button>
         </div>
@@ -112,7 +107,6 @@
                 v-if="complianceResult.issues?.length"
                 :data="complianceResult.issues"
                 class="mt-3"
-                size="small"
               >
                 <el-table-column prop="fund_name" label="经费名称" width="200" />
                 <el-table-column prop="type" label="问题类型" width="150" />
@@ -127,7 +121,6 @@
                             ? 'warning'
                             : 'info'
                       "
-                      size="small"
                     >
                       {{
                         row.severity === 'danger'
@@ -148,12 +141,7 @@
         <el-tab-pane label="计划下达" name="phase3">
           <div class="phase-content">
             <el-button :loading="loading" @click="loadAllocationPlan">加载拨付计划</el-button>
-            <el-table
-              v-if="allocationItems.length"
-              :data="allocationItems"
-              class="mt-3"
-              size="small"
-            >
+            <el-table v-if="allocationItems.length" :data="allocationItems" class="mt-3">
               <el-table-column prop="fund_name" label="经费名称" width="200" />
               <el-table-column prop="planned_amount" label="计划金额" width="120" />
               <el-table-column prop="approved_amount" label="批准金额" width="120" />
@@ -161,7 +149,7 @@
               <el-table-column prop="baseline_amount" label="基线金额" width="120" />
               <el-table-column label="预算锁定" width="100">
                 <template #default="{ row }">
-                  <el-tag :type="row.budget_locked ? 'success' : 'info'" size="small">
+                  <el-tag :type="row.budget_locked ? 'success' : 'info'">
                     {{ row.budget_locked ? '已锁定' : '未锁定' }}
                   </el-tag>
                 </template>
@@ -170,7 +158,6 @@
                 <template #default="{ row }">
                   <el-button
                     v-if="row.budget_locked"
-                    size="small"
                     type="primary"
                     @click="handleQuotaLock(row.fund_id)"
                   >
@@ -225,7 +212,7 @@
               </el-button>
               <el-button :loading="loading" @click="loadDeviation">偏差分析</el-button>
             </div>
-            <el-table v-if="deviations.length" :data="deviations" class="mt-3" size="small">
+            <el-table v-if="deviations.length" :data="deviations" class="mt-3">
               <el-table-column prop="fund_name" label="经费名称" width="200" />
               <el-table-column prop="project_progress" label="项目进度(%)" width="120" />
               <el-table-column prop="fund_progress" label="资金进度(%)" width="120" />
@@ -240,7 +227,6 @@
                           ? 'warning'
                           : 'success'
                     "
-                    size="small"
                   >
                     {{
                       row.status === 'danger'
@@ -339,7 +325,7 @@
             </div>
           </div>
         </div>
-        <el-button v-else size="small" @click="loadHealth">加载健康度</el-button>
+        <el-button v-else @click="loadHealth">加载健康度</el-button>
       </el-card>
     </template>
   </div>

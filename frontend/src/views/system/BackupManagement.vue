@@ -101,7 +101,7 @@
               <el-button type="success" @click="importDialogVisible = true"> 导入备份包 </el-button>
               <el-button type="primary" @click="handleCreateBackup"> 创建备份 </el-button>
             </template>
-            <el-tag v-else type="info" size="small">只读模式（普通用户）</el-tag>
+            <el-tag v-else type="info">只读模式（普通用户）</el-tag>
           </div>
         </div>
       </template>
@@ -136,7 +136,7 @@
         <el-table-column prop="description" label="描述" min-width="150" />
         <el-table-column prop="backup_type" label="类型" width="80">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.backup_type === 'incremental' ? 'warning' : 'primary'">
+            <el-tag :type="row.backup_type === 'incremental' ? 'warning' : 'primary'">
               {{ row.backup_type === 'incremental' ? '增量' : '完整' }}
             </el-tag>
           </template>
@@ -154,9 +154,9 @@
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <template v-if="canOperateBackup">
-              <el-button size="small" type="primary" @click="handleDownload(row)"> 下载 </el-button>
-              <el-button size="small" type="warning" @click="handleRestore(row)"> 恢复 </el-button>
-              <el-button size="small" type="danger" @click="handleDelete(row)"> 删除 </el-button>
+              <el-button type="primary" @click="handleDownload(row)"> 下载 </el-button>
+              <el-button type="warning" @click="handleRestore(row)"> 恢复 </el-button>
+              <el-button type="danger" @click="handleDelete(row)"> 删除 </el-button>
             </template>
             <span v-else class="readonly-hint">—</span>
           </template>
@@ -171,7 +171,7 @@
       <template #header>
         <div class="card-header">
           <span class="title">备份计划</span>
-          <el-tag :type="scheduleConfig.enabled ? 'success' : 'info'" size="small">
+          <el-tag :type="scheduleConfig.enabled ? 'success' : 'info'">
             {{ scheduleConfig.enabled ? '已启用' : '未启用' }}
           </el-tag>
         </div>

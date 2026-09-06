@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>操作日志</span>
-          <el-button size="small" :loading="exporting" @click="handleExport">导出Excel</el-button>
+          <el-button :loading="exporting" @click="handleExport">导出Excel</el-button>
         </div>
       </template>
 
@@ -54,9 +54,7 @@
           placement="top"
         >
           <div v-for="log in group.items" :key="log.id" class="log-item">
-            <el-tag size="small" :type="actionType(log.action)" class="log-action">{{
-              log.action
-            }}</el-tag>
+            <el-tag :type="actionType(log.action)" class="log-action">{{ log.action }}</el-tag>
             <span class="log-module">{{ log.module }}</span>
             <span class="log-content">{{ log.content }}</span>
             <span class="log-user">{{ log.username || '系统' }}</span>

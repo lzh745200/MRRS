@@ -68,11 +68,9 @@
         </el-table-column>
         <el-table-column label="操作" width="250" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="handleEdit(row as any)">编辑</el-button>
-            <el-button type="success" size="small" @click="handlePermission(row as any)"
-              >权限</el-button
-            >
-            <el-button type="danger" size="small" @click="handleDelete(row as any)">删除</el-button>
+            <el-button type="primary" @click="handleEdit(row as any)">编辑</el-button>
+            <el-button type="success" @click="handlePermission(row as any)">权限</el-button>
+            <el-button type="danger" @click="handleDelete(row as any)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -141,7 +139,7 @@
         </el-table-column>
         <el-table-column prop="is_active" label="状态" width="80">
           <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
+            <el-tag :type="row.is_active ? 'success' : 'info'">
               {{ row.is_active ? '正常' : '禁用' }}
             </el-tag>
           </template>
@@ -165,8 +163,8 @@
           >当前角色: <strong>{{ currentRole?.name }}</strong></span
         >
         <div>
-          <el-button size="small" @click="checkAll">全选</el-button>
-          <el-button size="small" @click="uncheckAll">全不选</el-button>
+          <el-button @click="checkAll">全选</el-button>
+          <el-button @click="uncheckAll">全不选</el-button>
         </div>
       </div>
       <el-tree

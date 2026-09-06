@@ -86,7 +86,6 @@
             <el-button
               v-if="row.is_active"
               type="danger"
-              size="small"
               :loading="revokingId === row.version_id"
               @click="handleRevoke(row)"
             >

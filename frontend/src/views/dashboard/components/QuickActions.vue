@@ -5,7 +5,7 @@
       <el-collapse-item name="core">
         <template #title>
           <span class="group-header">核心业务</span>
-          <el-tag size="small" type="primary" effect="plain">12</el-tag>
+          <el-tag type="primary" effect="plain">12</el-tag>
         </template>
         <div class="action-grid">
           <button class="action-btn primary" @click="pushSafe('/supported-villages')">
@@ -60,7 +60,7 @@
       <el-collapse-item v-if="isManager || isAdmin" name="data">
         <template #title>
           <span class="group-header">数据与分析</span>
-          <el-tag size="small" type="success" effect="plain">11</el-tag>
+          <el-tag type="success" effect="plain">11</el-tag>
         </template>
         <div class="action-grid">
           <button class="action-btn secondary" @click="pushSafe('/data-analysis')">
@@ -107,7 +107,7 @@
       <el-collapse-item name="workflow">
         <template #title>
           <span class="group-header">审批与流程</span>
-          <el-tag size="small" type="warning" effect="plain">11</el-tag>
+          <el-tag type="warning" effect="plain">11</el-tag>
         </template>
         <div class="action-grid">
           <button class="action-btn secondary" @click="pushSafe('/approval')">
@@ -152,7 +152,7 @@
       <el-collapse-item v-if="isManager || isAdmin" name="system">
         <template #title>
           <span class="group-header">系统管理</span>
-          <el-tag size="small" type="danger" effect="plain">10</el-tag>
+          <el-tag type="danger" effect="plain">10</el-tag>
         </template>
         <div class="action-grid">
           <button

@@ -52,20 +52,11 @@
           >
             <el-card shadow="hover" class="timeline-item-card">
               <div class="log-header">
-                <el-tag
-                  :type="log.version === latestLog?.version ? 'primary' : 'info'"
-                  size="small"
-                >
+                <el-tag :type="log.version === latestLog?.version ? 'primary' : 'info'">
                   {{ log.version }}
                 </el-tag>
                 <span class="log-author">{{ log.updated_by || '系统' }}</span>
-                <el-button
-                  v-if="isAdmin"
-                  type="danger"
-                  size="small"
-                  text
-                  @click="handleDelete(log)"
-                >
+                <el-button v-if="isAdmin" type="danger" text @click="handleDelete(log)">
                   删除
                 </el-button>
               </div>

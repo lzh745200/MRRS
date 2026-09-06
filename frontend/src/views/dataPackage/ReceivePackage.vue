@@ -52,7 +52,7 @@
           </template>
 
           <template v-if="localImportStep === 1">
-            <el-descriptions title="数据包信息" :column="1" border size="small">
+            <el-descriptions title="数据包信息" :column="1" border>
               <el-descriptions-item label="文件名">{{
                 localImportInfo.fileName
               }}</el-descriptions-item>
@@ -152,7 +152,6 @@
                   <el-tag
                     v-for="type in parseDataTypes(row.data_types)"
                     :key="type"
-                    size="small"
                     style="margin-right: 4px"
                   >
                     {{ getDataTypeLabel(type) }}
@@ -180,40 +179,20 @@
             </el-table-column>
             <el-table-column label="操作" width="200" fixed="right">
               <template #default="{ row }">
-                <el-button
-                  link
-                  type="primary"
-                  size="small"
-                  @click="handlePreview(row as DataReport)"
-                >
+                <el-button link type="primary" @click="handlePreview(row as DataReport)">
                   预览
                 </el-button>
                 <template
                   v-if="isAdmin && (row.status === 'pending' || row.status === 'submitted')"
                 >
-                  <el-button
-                    link
-                    type="success"
-                    size="small"
-                    @click="handleReceive(row as DataReport)"
-                  >
+                  <el-button link type="success" @click="handleReceive(row as DataReport)">
                     接收
                   </el-button>
-                  <el-button
-                    link
-                    type="danger"
-                    size="small"
-                    @click="handleReject(row as DataReport)"
-                  >
+                  <el-button link type="danger" @click="handleReject(row as DataReport)">
                     拒绝
                   </el-button>
                 </template>
-                <el-button
-                  link
-                  type="primary"
-                  size="small"
-                  @click="handleDownload(row as DataReport)"
-                >
+                <el-button link type="primary" @click="handleDownload(row as DataReport)">
                   下载
                 </el-button>
               </template>
@@ -284,12 +263,11 @@
                   v-if="row.status === 'validated'"
                   link
                   type="primary"
-                  size="small"
                   @click="previewReceived(row)"
                 >
                   预览
                 </el-button>
-                <el-button link type="primary" size="small" @click="handleReceivedDownload(row)">
+                <el-button link type="primary" @click="handleReceivedDownload(row)">
                   下载
                 </el-button>
               </template>
@@ -355,7 +333,7 @@
             :key="preview.data_type"
             :label="`${getDataTypeLabel(preview.data_type)} (${preview.total})`"
           >
-            <el-table :data="preview.sample" size="small" max-height="400">
+            <el-table :data="preview.sample" max-height="400">
               <el-table-column
                 v-for="col in preview.columns"
                 :key="col"

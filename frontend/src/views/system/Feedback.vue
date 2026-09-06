@@ -33,7 +33,7 @@
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="type" label="类型" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="typeTagMap[row.type] || 'info'" size="small">
+            <el-tag :type="typeTagMap[row.type] || 'info'">
               {{ typeNameMap[row.type] || row.type }}
             </el-tag>
           </template>

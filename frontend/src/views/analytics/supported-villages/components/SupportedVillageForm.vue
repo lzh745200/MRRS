@@ -248,7 +248,6 @@
         :data="transitionFundingRows"
         border
         stripe
-        size="small"
         style="margin-bottom: 16px"
       >
         <el-table-column label="年度" width="90" align="center">
@@ -273,16 +272,14 @@
         </el-table-column>
         <el-table-column v-if="mode !== 'view'" label="操作" width="130" align="center">
           <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="editFundingYear(row.year)"
-              >编辑</el-button
-            >
+            <el-button type="primary" link @click="editFundingYear(row.year)">编辑</el-button>
             <el-popconfirm
               title="确定删除该年度经费？"
               width="180"
               @confirm="removeFundingByYear(row.year)"
             >
               <template #reference>
-                <el-button type="danger" size="small" link>删除</el-button>
+                <el-button type="danger" link>删除</el-button>
               </template>
             </el-popconfirm>
           </template>
@@ -296,7 +293,7 @@
       />
 
       <!-- 合计行 -->
-      <el-descriptions v-if="transitionFundingRows.length > 0" :column="2" border size="small">
+      <el-descriptions v-if="transitionFundingRows.length > 0" :column="2" border>
         <el-descriptions-item label="专项合计（万元）" align="right">
           <strong>{{ format.formatMoney4(transitionMilitaryTotal) }}</strong>
         </el-descriptions-item>
@@ -656,7 +653,7 @@ function handleCancel() {
 
 .funding-number {
   font-variant-numeric: tabular-nums;
-  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-family: var(--font-family-mono);
 
   &--total {
     font-weight: 700;

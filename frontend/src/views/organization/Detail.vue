@@ -34,7 +34,7 @@
               <el-tag v-else type="info">{{ detail.org_type || '未设置' }}</el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="层级">
-              <el-tag size="small" type="info">{{ formatLevel(detail.level) }}</el-tag>
+              <el-tag type="info">{{ formatLevel(detail.level) }}</el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="联系人">{{
               ds(detail.contact_person, 'name') || '无'
@@ -85,21 +85,16 @@
             <el-table-column prop="code" label="编码" width="120" />
             <el-table-column prop="org_type" label="类型" width="120">
               <template #default="scope">
-                <el-tag v-if="scope.row.org_type === 'department'" type="primary" size="small"
-                  >部门单位</el-tag
-                >
-                <el-tag
-                  v-else-if="scope.row.org_type === 'support_unit'"
-                  type="success"
-                  size="small"
+                <el-tag v-if="scope.row.org_type === 'department'" type="primary">部门单位</el-tag>
+                <el-tag v-else-if="scope.row.org_type === 'support_unit'" type="success"
                   >帮扶单位</el-tag
                 >
-                <el-tag v-else type="info" size="small">{{ scope.row.org_type || '—' }}</el-tag>
+                <el-tag v-else type="info">{{ scope.row.org_type || '—' }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="level" label="层级" width="100">
               <template #default="scope">
-                <el-tag size="small" type="info">{{ formatLevel(scope.row.level) }}</el-tag>
+                <el-tag type="info">{{ formatLevel(scope.row.level) }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="sort_order" label="排序" width="70" align="center" />
@@ -132,18 +127,13 @@
           <template #header>
             <div class="card-header">
               <span class="title">组织成员</span>
-              <el-tag size="small" type="info">{{ memberTotal }}</el-tag>
-              <el-button
-                size="small"
-                type="primary"
-                style="margin-left: auto"
-                @click="goManageMembers"
-              >
+              <el-tag type="info">{{ memberTotal }}</el-tag>
+              <el-button type="primary" style="margin-left: auto" @click="goManageMembers">
                 分配成员
               </el-button>
             </div>
           </template>
-          <el-table v-loading="memberLoading" :data="members" border size="small">
+          <el-table v-loading="memberLoading" :data="members" border>
             <el-table-column prop="full_name" label="姓名" min-width="80">
               <template #default="scope">
                 {{ ds(scope.row.full_name, 'name') || scope.row.username }}
@@ -151,7 +141,7 @@
             </el-table-column>
             <el-table-column prop="role" label="角色" width="100">
               <template #default="scope">
-                <el-tag size="small" :type="roleTagType(scope.row.role)">
+                <el-tag :type="roleTagType(scope.row.role)">
                   {{ roleLabel(scope.row.role) }}
                 </el-tag>
               </template>

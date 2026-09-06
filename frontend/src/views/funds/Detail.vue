@@ -260,11 +260,11 @@
                   >
                     <div class="timeline-content">
                       <div class="timeline-title">
-                        <el-tag :type="getStatusType(item.from_status)" size="small">{{
+                        <el-tag :type="getStatusType(item.from_status)">{{
                           getStatusText(item.from_status)
                         }}</el-tag>
                         <span style="margin: 0 8px">→</span>
-                        <el-tag :type="getStatusType(item.to_status)" size="small">{{
+                        <el-tag :type="getStatusType(item.to_status)">{{
                           getStatusText(item.to_status)
                         }}</el-tag>
                       </div>
@@ -323,7 +323,7 @@
                 <el-table v-if="operationLogs.length" :data="operationLogs">
                   <el-table-column prop="operation_type" label="操作类型" width="150">
                     <template #default="{ row }">
-                      <el-tag size="small">{{ getOperationTypeLabel(row.operation_type) }}</el-tag>
+                      <el-tag>{{ getOperationTypeLabel(row.operation_type) }}</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column prop="operation_detail" label="详情" show-overflow-tooltip>
@@ -396,7 +396,7 @@
                   />
                   <el-table-column prop="category" label="分类" width="100" align="center">
                     <template #default="{ row }">
-                      <el-tag size="small">{{ getCategoryLabel(row.category) }}</el-tag>
+                      <el-tag>{{ getCategoryLabel(row.category) }}</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column prop="file_size" label="大小" width="100">
@@ -440,7 +440,6 @@
               </span>
               <el-button
                 type="primary"
-                size="small"
                 :disabled="!['allocated', 'in_use', 'completed'].includes(fundData.status)"
                 @click="expDialogVisible = true"
                 >登记报销</el-button
@@ -452,7 +451,7 @@
                 next-step="持续登记直至支出执行完毕"
               />
             </div>
-            <el-table :data="expenses" size="small" border>
+            <el-table :data="expenses" border>
               <el-table-column prop="transaction_date" label="日期" width="110" />
               <el-table-column prop="amount" label="金额(万元)" width="120" align="right" />
               <el-table-column prop="purpose" label="用途" min-width="180" show-overflow-tooltip />

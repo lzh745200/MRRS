@@ -51,8 +51,8 @@
             <div class="t-info">
               <div class="t-name-row">
                 <h4>{{ t.name }}</h4>
-                <el-tag v-if="t.is_active" type="success" size="small" effect="plain">启用</el-tag>
-                <el-tag v-else type="info" size="small" effect="plain">停用</el-tag>
+                <el-tag v-if="t.is_active" type="success" effect="plain">启用</el-tag>
+                <el-tag v-else type="info" effect="plain">停用</el-tag>
               </div>
               <p>{{ t.description || moduleLabel(t.module) }}</p>
               <span class="t-meta"
@@ -82,8 +82,8 @@
             <div class="t-info">
               <div class="t-name-row">
                 <h4>{{ t.name }}</h4>
-                <el-tag v-if="t.is_active" type="success" size="small" effect="plain">启用</el-tag>
-                <el-tag v-else type="info" size="small" effect="plain">停用</el-tag>
+                <el-tag v-if="t.is_active" type="success" effect="plain">启用</el-tag>
+                <el-tag v-else type="info" effect="plain">停用</el-tag>
               </div>
               <p>{{ t.description || moduleLabel(t.module) }}</p>
               <span class="t-meta"
@@ -252,7 +252,7 @@
             </span>
           </el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag :type="previewTemplate.is_active ? 'success' : 'info'" size="small">{{
+            <el-tag :type="previewTemplate.is_active ? 'success' : 'info'">{{
               previewTemplate.is_active ? '启用' : '停用'
             }}</el-tag>
           </el-descriptions-item>
@@ -362,7 +362,7 @@
           <h4 style="margin: 0 0 8px; font-size: 14px; color: var(--color-primary)">
             数据预览（前 {{ previewResult.parsed_data.length }} 条）
           </h4>
-          <el-table :data="previewResult.parsed_data" border size="small" max-height="220">
+          <el-table :data="previewResult.parsed_data" border max-height="220">
             <el-table-column
               v-for="col in previewColumns"
               :key="col"
@@ -379,7 +379,7 @@
           <h4 style="margin: 0 0 8px; font-size: 14px; color: var(--color-danger)">
             错误详情（共 {{ previewResult.errors.length }} 条）
           </h4>
-          <el-table :data="previewResult.errors" border size="small" max-height="160">
+          <el-table :data="previewResult.errors" border max-height="160">
             <el-table-column prop="row" label="位置" width="70" />
             <el-table-column prop="message" label="错误信息" />
           </el-table>
@@ -446,7 +446,7 @@
         <!-- 错误详情 -->
         <div v-if="importResult.errors?.length" style="margin-top: 12px">
           <h4 style="color: var(--color-danger)">失败详情</h4>
-          <el-table :data="importResult.errors" border size="small" max-height="180">
+          <el-table :data="importResult.errors" border max-height="180">
             <el-table-column prop="row" label="行号" width="70" />
             <el-table-column prop="message" label="错误信息" />
           </el-table>

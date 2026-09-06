@@ -4,7 +4,7 @@
       为当前用户配置各功能模块的查看和编辑权限。 无查看权限则模块不可见；仅有查看权限则为只读模式。
     </el-alert>
 
-    <el-table :data="moduleList" border size="small" style="width: 100%">
+    <el-table :data="moduleList" border style="width: 100%">
       <el-table-column label="功能模块" width="160">
         <template #default="{ row }">{{ row.label }}</template>
       </el-table-column>

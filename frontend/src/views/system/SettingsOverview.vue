@@ -10,13 +10,7 @@
         <span v-if="lastUpdated" class="last-updated">
           <el-icon><Clock /></el-icon> 更新于 {{ lastUpdated }}
         </span>
-        <el-button
-          :icon="Refresh"
-          :loading="loading"
-          size="small"
-          type="primary"
-          @click="refreshAll"
-        >
+        <el-button :icon="Refresh" :loading="loading" type="primary" @click="refreshAll">
           刷新
         </el-button>
       </div>
@@ -29,7 +23,7 @@
           <span class="header-title">
             <el-icon><Odometer /></el-icon> 系统健康状态
           </span>
-          <el-tag :type="overallTagType" size="small" effect="dark">{{ overallText }}</el-tag>
+          <el-tag :type="overallTagType" effect="dark">{{ overallText }}</el-tag>
         </div>
       </template>
       <el-row v-loading="loading" :gutter="16" class="health-row">
@@ -93,7 +87,7 @@
           <el-button link type="primary" @click="goTo('/system/audit')">查看全部</el-button>
         </div>
       </template>
-      <el-table v-loading="auditLoading" :data="auditLogs" size="small">
+      <el-table v-loading="auditLoading" :data="auditLogs">
         <el-table-column label="时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
@@ -102,7 +96,7 @@
         </el-table-column>
         <el-table-column label="操作" width="120">
           <template #default="{ row }">
-            <el-tag :type="actionTagType(row.action)" size="small">{{ row.action || '-' }}</el-tag>
+            <el-tag :type="actionTagType(row.action)">{{ row.action || '-' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="资源" min-width="220" show-overflow-tooltip>

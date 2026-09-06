@@ -1,7 +1,7 @@
 <template>
   <div class="chart-error-state">
     <el-alert type="error" :closable="false" show-icon :title="message || '数据加载失败'" />
-    <el-button size="small" type="primary" link :loading="retrying" @click="handleRetry">
+    <el-button type="primary" link :loading="retrying" @click="handleRetry">
       <el-icon style="margin-right: 4px"><RefreshRight /></el-icon>重试
     </el-button>
   </div>

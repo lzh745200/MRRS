@@ -67,7 +67,7 @@
       <div class="id-summary">
         <span v-if="parsedIds.length > 0" class="id-count">
           已识别 <strong>{{ parsedIds.length }}</strong> 个ID：
-          <el-tag v-for="id in parsedIds.slice(0, 10)" :key="id" size="small" style="margin: 2px">
+          <el-tag v-for="id in parsedIds.slice(0, 10)" :key="id" style="margin: 2px">
             {{ id }}
           </el-tag>
           <span v-if="parsedIds.length > 10">... 等{{ parsedIds.length }}项</span>

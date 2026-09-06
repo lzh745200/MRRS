@@ -118,7 +118,6 @@
             {{ selectedYear }}年数据概览
             <el-select
               v-model="selectedYear"
-              size="small"
               style="width: 100px; margin-left: 12px"
               @change="loadYearlyData"
             >

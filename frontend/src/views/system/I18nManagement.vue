@@ -116,13 +116,13 @@
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.value" type="success" size="small">已翻译</el-tag>
-            <el-tag v-else type="danger" size="small">缺失</el-tag>
+            <el-tag v-if="row.value" type="success">已翻译</el-tag>
+            <el-tag v-else type="danger">缺失</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="120" align="center">
           <template #default="{ row }">
-            <el-button size="small" type="primary" link @click="viewTranslationDetail(row.key)">
+            <el-button type="primary" link @click="viewTranslationDetail(row.key)">
               详情
             </el-button>
           </template>

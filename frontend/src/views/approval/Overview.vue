@@ -60,7 +60,7 @@
         <el-table-column prop="title" label="事项" min-width="220" show-overflow-tooltip />
         <el-table-column label="类型" width="110">
           <template #default="{ row }">
-            <el-tag size="small">{{ typeLabel(row.entity_type || row.type) }}</el-tag>
+            <el-tag>{{ typeLabel(row.entity_type || row.type) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="submitter_name" label="申请人" width="110" />
@@ -71,7 +71,7 @@
         </el-table-column>
         <el-table-column label="操作" width="140">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="goApprove(row)">审批</el-button>
+            <el-button type="primary" @click="goApprove(row)">审批</el-button>
           </template>
         </el-table-column>
       </el-table>

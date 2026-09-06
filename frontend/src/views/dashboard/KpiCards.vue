@@ -7,7 +7,7 @@
     </template>
     <div v-else-if="error" class="kpi-error">
       <span class="kpi-error__text">数据加载失败，请稍后重试</span>
-      <el-button size="small" type="primary" @click="loadStats">重试</el-button>
+      <el-button type="primary" @click="loadStats">重试</el-button>
     </div>
     <template v-else>
       <div v-for="(card, i) in cards" :key="i" class="kpi-col">

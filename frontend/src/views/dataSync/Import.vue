@@ -101,7 +101,7 @@
         class="conflicts-section"
       >
         <h4>冲突记录</h4>
-        <el-button type="primary" size="small" @click="showConflicts"> 查看并解决冲突 </el-button>
+        <el-button type="primary" @click="showConflicts"> 查看并解决冲突 </el-button>
       </div>
 
       <!-- 错误列表 -->
@@ -132,12 +132,12 @@
         <el-table-column prop="total_records" label="总记录数" width="100" />
         <el-table-column prop="success_records" label="成功" width="80">
           <template #default="{ row }">
-            <el-tag type="success" size="small">{{ row.success_records }}</el-tag>
+            <el-tag type="success">{{ row.success_records }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="failed_records" label="失败" width="80">
           <template #default="{ row }">
-            <el-tag v-if="row.failed_records > 0" type="danger" size="small">
+            <el-tag v-if="row.failed_records > 0" type="danger">
               {{ row.failed_records }}
             </el-tag>
             <span v-else>0</span>
@@ -145,7 +145,7 @@
         </el-table-column>
         <el-table-column prop="conflicts_count" label="冲突" width="80">
           <template #default="{ row }">
-            <el-tag v-if="row.conflicts_count > 0" type="warning" size="small">
+            <el-tag v-if="row.conflicts_count > 0" type="warning">
               {{ row.conflicts_count }}
             </el-tag>
             <span v-else>0</span>

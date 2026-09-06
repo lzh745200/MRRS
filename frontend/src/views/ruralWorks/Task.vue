@@ -91,7 +91,6 @@
                       ? 'warning'
                       : 'success'
                 "
-                size="small"
                 effect="dark"
                 class="priority-tag"
                 >{{ getPriorityLabel(scope.row.priority).replace('优先级', '') }}</el-tag
@@ -108,7 +107,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="90" align="center">
           <template #default="scope">
-            <el-tag :type="getStatusTagType(scope.row.status)" size="small">{{
+            <el-tag :type="getStatusTagType(scope.row.status)">{{
               getStatusLabel(scope.row.status)
             }}</el-tag>
           </template>
@@ -133,7 +132,6 @@
               <el-tag
                 v-if="isOverdue(scope.row as Task)"
                 type="danger"
-                size="small"
                 effect="dark"
                 style="margin-left: 4px"
                 >过期</el-tag
@@ -144,14 +142,11 @@
         <el-table-column label="操作" width="160" fixed="right" align="center">
           <template #default="scope">
             <div class="action-cell">
-              <el-button link type="primary" size="small" @click="editTask(scope.row as Task)"
-                >编辑</el-button
-              >
+              <el-button link type="primary" @click="editTask(scope.row as Task)">编辑</el-button>
               <el-button
                 v-if="scope.row.status === 'pending'"
                 link
                 type="success"
-                size="small"
                 @click="assignTask(scope.row as Task)"
                 >分配</el-button
               >
@@ -159,7 +154,7 @@
                 trigger="click"
                 @command="(cmd: string) => handleActionCommand(cmd, scope.row as Task)"
               >
-                <el-button link type="info" size="small"
+                <el-button link type="info"
                   >更多<el-icon class="el-icon--right"><ArrowDown /></el-icon
                 ></el-button>
                 <template #dropdown>
@@ -516,7 +511,6 @@
                 <el-tag
                   v-for="(file, fileIndex) in record.attachments"
                   :key="fileIndex"
-                  size="small"
                   type="info"
                 >
                   <el-icon><Document /></el-icon> {{ file.name }}

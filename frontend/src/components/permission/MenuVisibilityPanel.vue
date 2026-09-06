@@ -10,12 +10,8 @@
         当前用户：<strong>{{ username }}</strong>
       </span>
       <el-space>
-        <el-button size="small" :disabled="!isCustomized" @click="resetToDefault">
-          恢复角色默认
-        </el-button>
-        <el-button type="primary" size="small" :loading="saving" @click="saveConfig">
-          保存配置
-        </el-button>
+        <el-button :disabled="!isCustomized" @click="resetToDefault"> 恢复角色默认 </el-button>
+        <el-button type="primary" :loading="saving" @click="saveConfig"> 保存配置 </el-button>
       </el-space>
     </div>
 
@@ -28,7 +24,7 @@
     <!-- 角色默认菜单标签 -->
     <div class="role-default-info">
       <span class="label">角色默认菜单：</span>
-      <el-tag v-for="key in roleDefaultKeys" :key="key" size="small" style="margin: 2px">
+      <el-tag v-for="key in roleDefaultKeys" :key="key" style="margin: 2px">
         {{ getMenuLabel(key) }}
       </el-tag>
     </div>

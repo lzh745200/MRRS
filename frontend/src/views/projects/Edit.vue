@@ -500,11 +500,7 @@
                 >
                   <span class="file-name">{{ pf.name }}</span>
                   <span class="file-size">{{ formatFileSize(pf.size) }}</span>
-                  <el-button
-                    type="danger"
-                    link
-                    size="small"
-                    @click="removePendingFile(cat.value, idx)"
+                  <el-button type="danger" link @click="removePendingFile(cat.value, idx)"
                     >删除</el-button
                   >
                 </div>
@@ -524,12 +520,10 @@
                     <div class="photo-info">
                       <span class="file-name">{{ uf.filename }}</span>
                       <span class="photo-actions">
-                        <el-button type="primary" link size="small" @click="handleDownloadFile(uf)"
+                        <el-button type="primary" link @click="handleDownloadFile(uf)"
                           >下载</el-button
                         >
-                        <el-button type="danger" link size="small" @click="handleDeleteFile(uf)"
-                          >删除</el-button
-                        >
+                        <el-button type="danger" link @click="handleDeleteFile(uf)">删除</el-button>
                       </span>
                     </div>
                   </div>
@@ -543,12 +537,8 @@
                     <span class="file-name">{{ uf.filename }}</span>
                     <span class="file-size">{{ formatFileSize(uf.file_size) }}</span>
                     <span class="file-date">{{ uf.created_at?.slice(0, 10) }}</span>
-                    <el-button type="primary" link size="small" @click="handleDownloadFile(uf)"
-                      >下载</el-button
-                    >
-                    <el-button type="danger" link size="small" @click="handleDeleteFile(uf)"
-                      >删除</el-button
-                    >
+                    <el-button type="primary" link @click="handleDownloadFile(uf)">下载</el-button>
+                    <el-button type="danger" link @click="handleDeleteFile(uf)">删除</el-button>
                   </div>
                 </div>
               </div>

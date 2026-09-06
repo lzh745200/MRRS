@@ -142,7 +142,7 @@
     <div class="table-card">
       <!-- T031：视图切换（表格/甘特） -->
       <div class="view-switch">
-        <el-radio-group v-model="viewMode" size="small">
+        <el-radio-group v-model="viewMode">
           <el-radio-button value="table">表格</el-radio-button>
           <el-radio-button value="gantt">甘特图</el-radio-button>
         </el-radio-group>
@@ -152,28 +152,25 @@
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
         <!-- 回收站模式：批量恢复/批量彻底删除 -->
         <template v-if="showDeletedOnly">
-          <el-button type="success" size="small" @click="handleBatchRestore">
+          <el-button type="success" @click="handleBatchRestore">
             批量恢复 ({{ selectedRows.length }})
           </el-button>
-          <el-button type="danger" size="small" @click="handleBatchPurge">
+          <el-button type="danger" @click="handleBatchPurge">
             批量彻底删除 ({{ selectedRows.length }})
           </el-button>
         </template>
         <template v-else>
           <el-button
             type="danger"
-            size="small"
             :loading="batchDeleting"
             :disabled="batchDeleting"
             @click="handleBatchDelete"
           >
             批量删除 ({{ selectedRows.length }})
           </el-button>
-          <el-button size="small" @click="handleBatchExport">
-            批量导出 ({{ selectedRows.length }})
-          </el-button>
+          <el-button @click="handleBatchExport"> 批量导出 ({{ selectedRows.length }}) </el-button>
         </template>
-        <el-button size="small" text @click="clearSelection">取消选择</el-button>
+        <el-button text @click="clearSelection">取消选择</el-button>
       </div>
       <!-- 加载失败占位 -->
       <el-result

@@ -50,7 +50,6 @@
               <span class="pass-code-text">{{ machineGeneratedPassCode }}</span>
               <el-button
                 type="primary"
-                size="small"
                 :icon="CopyDocument"
                 @click="copyToClipboard(machineGeneratedPassCode, '通行码')"
               >
@@ -131,12 +130,7 @@
           <div class="generated-result">
             <div class="pass-code-display">
               <span class="pass-code-text">{{ generatedPassCode }}</span>
-              <el-button
-                type="primary"
-                size="small"
-                :icon="CopyDocument"
-                @click="handleCopyPassCode"
-              >
+              <el-button type="primary" :icon="CopyDocument" @click="handleCopyPassCode">
                 复制
               </el-button>
             </div>
@@ -198,7 +192,6 @@
               <span>{{ row.pass_code }}</span>
               <el-button
                 type="primary"
-                size="small"
                 text
                 :icon="CopyDocument"
                 @click="handleCopy(row.pass_code)"
@@ -241,7 +234,6 @@
             <el-button
               v-if="row.status === 'pending'"
               type="danger"
-              size="small"
               text
               @click="handleDelete(row as OrganizationPassCodeResponse)"
             >

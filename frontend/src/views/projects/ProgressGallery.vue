@@ -79,9 +79,7 @@
               <span class="photo-date">{{ file.created_at ?? '' }}</span>
             </div>
             <div class="photo-actions">
-              <el-button link type="danger" size="small" @click="handleDelete(file.id)"
-                >删除</el-button
-              >
+              <el-button link type="danger" @click="handleDelete(file.id)">删除</el-button>
             </div>
           </el-card>
         </div>
@@ -96,7 +94,7 @@
               <h4>{{ pair.label }}</h4>
               <div class="comparison-images">
                 <div class="comparison-side">
-                  <el-tag type="info" size="small" class="comparison-label">之前</el-tag>
+                  <el-tag type="info" class="comparison-label">之前</el-tag>
                   <el-image
                     :src="pair.beforeUrl"
                     fit="contain"
@@ -108,7 +106,7 @@
                   <el-icon :size="24"><Right /></el-icon>
                 </div>
                 <div class="comparison-side">
-                  <el-tag type="success" size="small" class="comparison-label">之后</el-tag>
+                  <el-tag type="success" class="comparison-label">之后</el-tag>
                   <el-image
                     :src="pair.afterUrl"
                     fit="contain"

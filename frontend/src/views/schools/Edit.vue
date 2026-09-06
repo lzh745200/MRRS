@@ -147,7 +147,7 @@
               multiple
               :show-file-list="false"
             >
-              <el-button type="primary" plain size="small">
+              <el-button type="primary" plain>
                 <el-icon><Upload /></el-icon>上传资料
               </el-button>
             </el-upload>
@@ -164,12 +164,10 @@
                   <span class="att-size">{{ formatFileSize(att.file_size) }}</span>
                 </div>
                 <div class="att-actions">
-                  <el-button type="primary" link size="small" @click="downloadAttachment(att)"
-                    >下载</el-button
-                  >
+                  <el-button type="primary" link @click="downloadAttachment(att)">下载</el-button>
                   <el-popconfirm title="确定删除该文件？" @confirm="deleteAttachment(att)">
                     <template #reference>
-                      <el-button type="danger" link size="small">删除</el-button>
+                      <el-button type="danger" link>删除</el-button>
                     </template>
                   </el-popconfirm>
                 </div>

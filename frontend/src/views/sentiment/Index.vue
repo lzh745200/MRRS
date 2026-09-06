@@ -90,9 +90,7 @@
         <div class="section-card">
           <div class="section-header">
             <h3>预警信息</h3>
-            <el-tag v-if="alerts.length > 0" type="danger" size="small">
-              {{ alerts.length }}条
-            </el-tag>
+            <el-tag v-if="alerts.length > 0" type="danger"> {{ alerts.length }}条 </el-tag>
           </div>
           <div v-if="alertsLoading" class="section-loading">
             <el-icon class="is-loading"><Loading /></el-icon>
@@ -104,10 +102,7 @@
           <div v-else class="alert-list">
             <div v-for="alert in alerts" :key="alert.id" class="alert-item">
               <div class="alert-header">
-                <el-tag
-                  :type="alert.sentiment_label === 'negative' ? 'danger' : 'warning'"
-                  size="small"
-                >
+                <el-tag :type="alert.sentiment_label === 'negative' ? 'danger' : 'warning'">
                   {{ alert.sentiment_label || '预警' }}
                 </el-tag>
                 <span class="alert-source">{{ alert.source || '未知来源' }}</span>
@@ -141,11 +136,11 @@
       <div v-else-if="newsList.length === 0" class="section-empty">
         <EmptyState text="暂无新闻数据" :size="60" />
       </div>
-      <el-table v-else :data="newsList" size="small">
+      <el-table v-else :data="newsList">
         <el-table-column prop="title" label="标题" min-width="280" show-overflow-tooltip />
         <el-table-column label="情感" width="100" align="center">
           <template #default="scope">
-            <el-tag :type="sentimentTagType(scope.row.sentiment_label)" size="small">
+            <el-tag :type="sentimentTagType(scope.row.sentiment_label)">
               {{ sentimentLabel(scope.row.sentiment_label) }}
             </el-tag>
           </template>
@@ -158,7 +153,7 @@
         </el-table-column>
         <el-table-column label="预警" width="70" align="center">
           <template #default="scope">
-            <el-tag v-if="scope.row.is_alert" type="danger" size="small">预警</el-tag>
+            <el-tag v-if="scope.row.is_alert" type="danger">预警</el-tag>
             <span v-else>-</span>
           </template>
         </el-table-column>

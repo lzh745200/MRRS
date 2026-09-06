@@ -29,7 +29,7 @@
           <el-table-column prop="count" label="瓦片数量" />
           <el-table-column label="操作" width="150">
             <template #default>
-              <el-button type="danger" size="small" @click="handleClearLevel()"> 清理 </el-button>
+              <el-button type="danger" @click="handleClearLevel()"> 清理 </el-button>
             </template>
           </el-table-column>
         </el-table>

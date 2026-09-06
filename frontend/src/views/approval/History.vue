@@ -56,7 +56,7 @@
         </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="formatApprovalStatus(row.status).type" size="small">
+            <el-tag :type="formatApprovalStatus(row.status).type">
               {{ formatApprovalStatus(row.status).text }}
             </el-tag>
           </template>
@@ -76,7 +76,7 @@
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleViewDetail(row)">
+            <el-button @click="handleViewDetail(row)">
               <el-icon><View /></el-icon>
               详情
             </el-button>
@@ -128,7 +128,7 @@
         <!-- 变更对比 -->
         <el-divider content-position="left">变更内容</el-divider>
         <div v-if="taskDiff" class="diff-view">
-          <el-table :data="diffTableData" border size="small">
+          <el-table :data="diffTableData" border>
             <el-table-column prop="field" label="字段" width="150" />
             <el-table-column prop="original" label="原值">
               <template #default="{ row }">

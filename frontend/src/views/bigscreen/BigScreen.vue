@@ -4,7 +4,7 @@
       <h1>帮扶管理信息系统 · 帮扶成效总览大屏</h1>
       <div class="bs-header-right">
         <span class="bs-clock">{{ clock }}</span>
-        <el-button size="small" @click="toggleFullscreen">
+        <el-button @click="toggleFullscreen">
           {{ isFullscreen ? '退出全屏' : '全屏展示' }}
         </el-button>
       </div>
@@ -265,7 +265,7 @@ onUnmounted(() => {
   gap: 12px;
 }
 .bs-clock {
-  font-family: Consolas, monospace;
+  font-family: var(--font-family-mono);
   color: #ffd666;
   font-size: 14px;
 }

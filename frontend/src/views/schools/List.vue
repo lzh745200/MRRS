@@ -176,7 +176,7 @@
           </el-table-column>
           <el-table-column prop="type" label="类型" width="100" align="center">
             <template #default="scope">
-              <el-tag size="small">{{ typeMap[scope.row.type] || scope.row.type || '-' }}</el-tag>
+              <el-tag>{{ typeMap[scope.row.type] || scope.row.type || '-' }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="support_unit" label="帮扶单位" width="140" show-overflow-tooltip />
@@ -192,7 +192,7 @@
           </el-table-column>
           <el-table-column prop="support_status" label="帮扶状态" width="100" align="center">
             <template #default="scope">
-              <el-tag :type="getStatusTagType(scope.row.support_status)" size="small">
+              <el-tag :type="getStatusTagType(scope.row.support_status)">
                 {{ statusMap[scope.row.support_status] || '未帮扶' }}
               </el-tag>
             </template>
@@ -209,23 +209,15 @@
           </el-table-column>
           <el-table-column label="操作" width="200" fixed="right">
             <template #default="scope">
-              <el-button type="primary" link size="small" @click="handleView(scope.row)"
-                >查看</el-button
-              >
-              <el-button type="primary" link size="small" @click="handleEdit(scope.row)"
-                >编辑</el-button
-              >
+              <el-button type="primary" link @click="handleView(scope.row)">查看</el-button>
+              <el-button type="primary" link @click="handleEdit(scope.row)">编辑</el-button>
               <template v-if="showDeletedOnly">
-                <el-button type="success" link size="small" @click="handleRestore(scope.row)"
-                  >恢复</el-button
-                >
-                <el-button type="danger" link size="small" @click="handlePurge(scope.row)"
-                  >彻底删除</el-button
-                >
+                <el-button type="success" link @click="handleRestore(scope.row)">恢复</el-button>
+                <el-button type="danger" link @click="handlePurge(scope.row)">彻底删除</el-button>
               </template>
               <el-popconfirm v-else title="确定删除该学校吗？" @confirm="handleDelete(scope.row)">
                 <template #reference>
-                  <el-button type="danger" link size="small">删除</el-button>
+                  <el-button type="danger" link>删除</el-button>
                 </template>
               </el-popconfirm>
             </template>

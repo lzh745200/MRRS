@@ -36,7 +36,7 @@
           @click="viewArticle(item)"
         >
           <h4>{{ item.title }}</h4>
-          <el-tag size="small" type="info" style="margin-right: 8px">{{ item.category }}</el-tag>
+          <el-tag type="info" style="margin-right: 8px">{{ item.category }}</el-tag>
           <span class="search-snippet" v-html="highlightKeyword(item.snippet)" />
         </div>
         <EmptyState v-if="searchTotal === 0" type="no-search" text="未找到相关文档" />
@@ -60,7 +60,7 @@
               @click="selectCategory(cat.key)"
             >
               <span class="category-name">{{ cat.name }}</span>
-              <el-tag size="small" type="info">{{ cat.count }}</el-tag>
+              <el-tag type="info">{{ cat.count }}</el-tag>
             </div>
           </div>
           <EmptyState
@@ -95,18 +95,12 @@
             </el-table-column>
             <el-table-column prop="category" label="分类" width="120">
               <template #default="{ row }">
-                <el-tag size="small">{{ row.category }}</el-tag>
+                <el-tag>{{ row.category }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="标签" min-width="200">
               <template #default="{ row }">
-                <el-tag
-                  v-for="tag in row.tags"
-                  :key="tag"
-                  size="small"
-                  type="info"
-                  style="margin-right: 4px"
-                >
+                <el-tag v-for="tag in row.tags" :key="tag" type="info" style="margin-right: 4px">
                   {{ tag }}
                 </el-tag>
               </template>
@@ -135,7 +129,7 @@
                 返回列表
               </el-button>
               <span style="flex: 1; text-align: center">{{ articleDetail?.title }}</span>
-              <el-tag size="small">{{ articleDetail?.category }}</el-tag>
+              <el-tag>{{ articleDetail?.category }}</el-tag>
             </div>
           </template>
 
@@ -144,7 +138,6 @@
               <el-tag
                 v-for="tag in articleDetail.tags"
                 :key="tag"
-                size="small"
                 type="info"
                 style="margin-right: 8px"
               >
@@ -181,7 +174,7 @@
           <template #header>
             <span>系统信息</span>
           </template>
-          <el-descriptions :column="2" border size="small">
+          <el-descriptions :column="2" border>
             <el-descriptions-item label="系统名称">{{ systemInfo.name }}</el-descriptions-item>
             <el-descriptions-item label="简称">{{ systemInfo.short_name }}</el-descriptions-item>
             <el-descriptions-item label="版本">{{ systemInfo.version }}</el-descriptions-item>
@@ -196,7 +189,6 @@
               <el-tag
                 v-for="feat in systemInfo.features"
                 :key="feat"
-                size="small"
                 type="success"
                 style="margin-right: 6px; margin-bottom: 4px"
               >

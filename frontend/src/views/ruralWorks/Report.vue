@@ -56,7 +56,7 @@
           <el-table-column prop="type" label="类型" width="100" />
           <el-table-column prop="status" label="状态" width="90">
             <template #default="{ row }">
-              <el-tag :type="statusType(row.status)" size="small">{{ row.status }}</el-tag>
+              <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="village_name" label="帮扶村" width="120" />

@@ -11,7 +11,7 @@
         <el-card class="stat-card success">
           <el-statistic title="有效记录" :value="props.stats.validRecords">
             <template #suffix>
-              <el-tag type="success" size="small"> {{ validRate }}% </el-tag>
+              <el-tag type="success"> {{ validRate }}% </el-tag>
             </template>
           </el-statistic>
         </el-card>
@@ -20,7 +20,7 @@
         <el-card class="stat-card warning">
           <el-statistic title="问题记录" :value="props.stats.invalidRecords">
             <template #suffix>
-              <el-tag type="danger" size="small"> {{ invalidRate }}% </el-tag>
+              <el-tag type="danger"> {{ invalidRate }}% </el-tag>
             </template>
           </el-statistic>
         </el-card>
@@ -68,7 +68,6 @@
               :type="
                 row.status === 'pass' ? 'success' : row.status === 'warning' ? 'warning' : 'danger'
               "
-              size="small"
             >
               {{ getStatusText(row.status) }}
             </el-tag>
@@ -85,7 +84,6 @@
               v-if="row.issues > 0"
               type="primary"
               link
-              size="small"
               @click="handleViewIssues(row as CheckItem)"
             >
               查看详情
@@ -154,12 +152,7 @@
         show-icon
         style="margin-bottom: 12px"
       />
-      <el-table
-        v-if="ruleResult?.failed?.length"
-        :data="ruleResult.failed"
-        max-height="220"
-        size="small"
-      >
+      <el-table v-if="ruleResult?.failed?.length" :data="ruleResult.failed" max-height="220">
         <el-table-column prop="record_id" label="记录ID" width="90" />
         <el-table-column prop="label" label="记录" min-width="150" />
       </el-table>

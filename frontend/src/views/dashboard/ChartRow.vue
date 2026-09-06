@@ -5,7 +5,7 @@
       <el-skeleton v-if="loading" animated :rows="5" class="chart-skeleton" />
       <div v-else-if="error" class="chart-state chart-state--error">
         <span>数据加载失败，请稍后重试</span>
-        <el-button size="small" type="primary" @click="loadAndRender">重试</el-button>
+        <el-button type="primary" @click="loadAndRender">重试</el-button>
       </div>
       <EmptyState v-else-if="!hasProjects" text="暂无项目数据" class="chart-empty" :size="72" />
       <div v-else ref="barRef" class="chart-body" />
@@ -15,7 +15,7 @@
       <el-skeleton v-if="loading" animated :rows="5" class="chart-skeleton" />
       <div v-else-if="error" class="chart-state chart-state--error">
         <span>数据加载失败，请稍后重试</span>
-        <el-button size="small" type="primary" @click="loadAndRender">重试</el-button>
+        <el-button type="primary" @click="loadAndRender">重试</el-button>
       </div>
       <EmptyState v-else-if="!hasFunds" text="暂无经费数据" class="chart-empty" :size="72" />
       <div v-else ref="pieRef" class="chart-body" />

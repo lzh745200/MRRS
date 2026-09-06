@@ -175,7 +175,7 @@
               <h3>数据预览 (共 {{ totalRows }} 条记录)</h3>
               <p class="preview-tip">请确认数据无误后点击确认导入</p>
             </div>
-            <el-table :data="previewData" style="width: 100%" size="small" max-height="400" border>
+            <el-table :data="previewData" style="width: 100%" max-height="400" border>
               <el-table-column
                 prop="rowIndex"
                 label="序号"

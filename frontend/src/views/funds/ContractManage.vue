@@ -51,7 +51,6 @@
                       ? 'danger'
                       : 'info'
               "
-              size="small"
             >
               {{ row.status_label }}
             </el-tag>
@@ -59,13 +58,10 @@
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" plain @click="showAttachmentDialog(row)"
-              >附件</el-button
-            >
-            <el-button size="small" @click="showPaymentDialog(row)">登记付款</el-button>
+            <el-button type="primary" plain @click="showAttachmentDialog(row)">附件</el-button>
+            <el-button @click="showPaymentDialog(row)">登记付款</el-button>
             <el-button
               v-if="row.status === 'draft'"
-              size="small"
               type="danger"
               @click="handleDeleteContract(row.id)"
               >删除</el-button
@@ -170,7 +166,7 @@
           </div>
         </template>
       </el-upload>
-      <el-table :data="attachmentList" size="small" style="margin-top: 12px" max-height="320">
+      <el-table :data="attachmentList" style="margin-top: 12px" max-height="320">
         <el-table-column prop="file_name" label="文件名" min-width="200" show-overflow-tooltip />
         <el-table-column prop="file_size" label="大小" width="100">
           <template #default="{ row }">
@@ -181,12 +177,8 @@
         <el-table-column prop="created_at" label="上传时间" width="140" />
         <el-table-column label="操作" width="130">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openAttachment(row)"
-              >打开</el-button
-            >
-            <el-button link type="primary" size="small" @click="downloadAttachment(row)"
-              >下载</el-button
-            >
+            <el-button link type="primary" @click="openAttachment(row)">打开</el-button>
+            <el-button link type="primary" @click="downloadAttachment(row)">下载</el-button>
           </template>
         </el-table-column>
         <template #empty>

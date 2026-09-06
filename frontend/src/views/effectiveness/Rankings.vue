@@ -83,7 +83,7 @@
         </el-table-column>
         <el-table-column label="等级" width="100" align="center">
           <template #default="scope">
-            <el-tag :type="levelTagType(scope.row.level)" size="small">
+            <el-tag :type="levelTagType(scope.row.level)">
               {{ levelLabel(scope.row.level) }}
             </el-tag>
           </template>
@@ -105,7 +105,7 @@
         </el-table-column>
         <el-table-column label="操作" width="100" fixed="right" align="center">
           <template #default="scope">
-            <el-button type="primary" link size="small" @click="goToEvaluate(scope.row.village_id)">
+            <el-button type="primary" link @click="goToEvaluate(scope.row.village_id)">
               {{ isAdmin ? '评估' : '查看' }}
             </el-button>
           </template>

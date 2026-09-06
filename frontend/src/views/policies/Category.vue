@@ -7,7 +7,7 @@
           <div class="header-left">
             <el-icon class="category-icon military"><Aim /></el-icon>
             <span class="title">专项政策</span>
-            <el-tag type="danger" size="small">{{ statistics.military.total }} 条</el-tag>
+            <el-tag type="danger">{{ statistics.military.total }} 条</el-tag>
           </div>
         </div>
       </template>
@@ -37,7 +37,7 @@
           <div class="header-left">
             <el-icon class="category-icon local"><OfficeBuilding /></el-icon>
             <span class="title">地方政策</span>
-            <el-tag type="primary" size="small">{{ statistics.local.total }} 条</el-tag>
+            <el-tag type="primary">{{ statistics.local.total }} 条</el-tag>
           </div>
         </div>
       </template>

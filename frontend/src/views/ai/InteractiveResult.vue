@@ -5,7 +5,7 @@
         <h2 class="page-title">AI 智能分析</h2>
         <p class="page-desc">利用AI技术进行数据分析、趋势预测、异常检测和智能推荐</p>
       </div>
-      <el-tag :type="serviceStatus === 'available' ? 'success' : 'info'" size="small">
+      <el-tag :type="serviceStatus === 'available' ? 'success' : 'info'">
         {{ serviceStatus === 'available' ? '服务可用' : '加载中...' }}
       </el-tag>
     </div>
@@ -142,16 +142,12 @@
           <div v-if="anomalyResult" class="result-block">
             <el-divider />
             <h4>异常检测结果</h4>
-            <el-table
-              v-if="anomalyResult.anomalies?.length"
-              :data="anomalyResult.anomalies"
-              size="small"
-            >
+            <el-table v-if="anomalyResult.anomalies?.length" :data="anomalyResult.anomalies">
               <el-table-column type="index" label="#" width="50" />
               <el-table-column v-for="col in anomalyColumns" :key="col" :prop="col" :label="col" />
               <el-table-column label="异常" width="80">
                 <template #default="scope">
-                  <el-tag :type="scope.row.is_anomaly ? 'danger' : 'success'" size="small">
+                  <el-tag :type="scope.row.is_anomaly ? 'danger' : 'success'">
                     {{ scope.row.is_anomaly ? '是' : '否' }}
                   </el-tag>
                 </template>
@@ -197,7 +193,7 @@
                 <div v-if="recommendResults.length" class="result-list">
                   <div v-for="(rec, i) in recommendResults" :key="i" class="rec-item">
                     <span class="rec-name">{{ rec.name || rec.title || `推荐${i + 1}` }}</span>
-                    <el-tag v-if="rec.score" size="small" type="success">
+                    <el-tag v-if="rec.score" type="success">
                       {{ Number(rec.score).toFixed(1) }}
                     </el-tag>
                   </div>
@@ -226,7 +222,6 @@
                             ? 'warning'
                             : 'info'
                       "
-                      size="small"
                     >
                       {{ rec.priority || 'info' }}
                     </el-tag>
@@ -284,7 +279,6 @@
             <el-tag
               v-for="(h, i) in nlpHistory"
               :key="i"
-              size="small"
               style="margin: 4px; cursor: pointer"
               @click="nlpForm.query = h"
             >

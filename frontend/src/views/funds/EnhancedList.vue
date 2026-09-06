@@ -293,22 +293,16 @@
         <span class="batch-info">已选择 {{ selectedRows.length }} 项</span>
         <el-button
           type="danger"
-          size="small"
           :loading="batchDeleting"
           :disabled="batchDeleting"
           @click="handleBatchDelete"
         >
           批量删除
         </el-button>
-        <el-button
-          size="small"
-          :loading="exporting"
-          :disabled="exporting"
-          @click="handleBatchExport"
-        >
+        <el-button :loading="exporting" :disabled="exporting" @click="handleBatchExport">
           导出选中
         </el-button>
-        <el-button size="small" text @click="clearSelection">取消选择</el-button>
+        <el-button text @click="clearSelection">取消选择</el-button>
       </div>
       <div v-if="error && tableData.length === 0" class="error-placeholder">
         <el-result icon="error" title="数据加载失败" :sub-title="errorMsg || '请稍后重试'">
@@ -337,7 +331,7 @@
         </el-table-column>
         <el-table-column prop="type" label="类型" width="110" align="center">
           <template #default="scope">
-            <el-tag size="small">{{ getFundTypeLabel(scope.row.type) }}</el-tag>
+            <el-tag>{{ getFundTypeLabel(scope.row.type) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="amount" label="金额(万元)" width="120" align="right">
@@ -352,7 +346,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="scope">
-            <el-tag :type="getStatusType(scope.row.status)" size="small">
+            <el-tag :type="getStatusType(scope.row.status)">
               {{ getFundStatusLabel(scope.row.status) }}
             </el-tag>
           </template>
@@ -379,7 +373,7 @@
         </el-table-column>
         <el-table-column label="阶段" width="110" align="center">
           <template #default="scope">
-            <el-tag v-if="scope.row.lifecycle_phase" size="small" effect="plain">
+            <el-tag v-if="scope.row.lifecycle_phase" effect="plain">
               {{ phaseLabels[scope.row.lifecycle_phase] || `阶段${scope.row.lifecycle_phase}` }}
             </el-tag>
             <span v-else class="text-muted">--</span>
@@ -394,25 +388,19 @@
         </el-table-column>
         <el-table-column label="操作" width="280">
           <template #default="scope">
-            <el-button type="primary" link size="small" @click="handleView(scope.row)"
-              >查看</el-button
-            >
+            <el-button type="primary" link @click="handleView(scope.row)">查看</el-button>
             <el-button
               v-if="scope.row.project_id"
               type="primary"
               link
-              size="small"
               @click="pushSafe('/funds/lifecycle/' + scope.row.project_id)"
               >生命周期</el-button
             >
-            <el-button type="primary" link size="small" @click="handleEdit(scope.row)"
-              >编辑</el-button
-            >
+            <el-button type="primary" link @click="handleEdit(scope.row)">编辑</el-button>
             <el-button
               v-if="scope.row.status === 'pending'"
               type="success"
               link
-              size="small"
               :loading="approving[scope.row.id]"
               :disabled="approving[scope.row.id]"
               @click="quickApprove(scope.row)"
@@ -422,7 +410,6 @@
               v-if="scope.row.status === 'approved'"
               type="warning"
               link
-              size="small"
               :loading="allocating[scope.row.id]"
               :disabled="allocating[scope.row.id]"
               @click="quickAllocate(scope.row)"
@@ -434,7 +421,6 @@
                   <el-button
                     type="danger"
                     link
-                    size="small"
                     :loading="deleting[scope.row.id]"
                     :disabled="deleting[scope.row.id]"
                     >删除</el-button
@@ -443,12 +429,8 @@
               </el-popconfirm>
             </template>
             <template v-else>
-              <el-button type="success" link size="small" @click="handleRestore(scope.row)"
-                >恢复</el-button
-              >
-              <el-button type="danger" link size="small" @click="handlePurge(scope.row)"
-                >彻底删除</el-button
-              >
+              <el-button type="success" link @click="handleRestore(scope.row)">恢复</el-button>
+              <el-button type="danger" link @click="handlePurge(scope.row)">彻底删除</el-button>
             </template>
           </template>
         </el-table-column>

@@ -650,37 +650,37 @@
         </el-row>
         <el-divider content-position="left">村委会成员</el-divider>
         <div class="form-block-gap">
-          <el-button type="primary" size="small" @click="addCommitteeMember">新增成员</el-button>
+          <el-button type="primary" @click="addCommitteeMember">新增成员</el-button>
         </div>
-        <el-table :data="committeeMembers" border size="small" class="form-table-gap">
+        <el-table :data="committeeMembers" border class="form-table-gap">
           <el-table-column label="姓名" min-width="100">
             <template #default="{ row }">
-              <el-input v-model="row.name" size="small" placeholder="姓名" />
+              <el-input v-model="row.name" placeholder="姓名" />
             </template>
           </el-table-column>
           <el-table-column label="职务" min-width="100">
             <template #default="{ row }">
-              <el-input v-model="row.position" size="small" placeholder="职务" />
+              <el-input v-model="row.position" placeholder="职务" />
             </template>
           </el-table-column>
           <el-table-column label="联系方式" min-width="120">
             <template #default="{ row }">
-              <el-input v-model="row.phone" size="small" placeholder="电话" />
+              <el-input v-model="row.phone" placeholder="电话" />
             </template>
           </el-table-column>
           <el-table-column label="退役人员" width="90" align="center">
             <template #default="{ row }">
-              <el-switch v-model="row.isVeteran" size="small" />
+              <el-switch v-model="row.isVeteran" />
             </template>
           </el-table-column>
           <el-table-column label="备注" min-width="120">
             <template #default="{ row }">
-              <el-input v-model="row.remark" size="small" placeholder="备注" />
+              <el-input v-model="row.remark" placeholder="备注" />
             </template>
           </el-table-column>
           <el-table-column label="操作" width="70" align="center">
             <template #default="{ $index }">
-              <el-button type="danger" text size="small" @click="committeeMembers.splice($index, 1)"
+              <el-button type="danger" text @click="committeeMembers.splice($index, 1)"
                 >删除</el-button
               >
             </template>
@@ -724,17 +724,12 @@
                 v-if="isPreviewable(att.fileType)"
                 text
                 type="primary"
-                size="small"
                 @click="handlePreview(att)"
               >
                 预览
               </el-button>
-              <el-button text type="primary" size="small" @click="handleDownload(att)">
-                下载
-              </el-button>
-              <el-button text type="danger" size="small" @click="handleDeleteAttachment(att)">
-                删除
-              </el-button>
+              <el-button text type="primary" @click="handleDownload(att)"> 下载 </el-button>
+              <el-button text type="danger" @click="handleDeleteAttachment(att)"> 删除 </el-button>
             </div>
           </div>
         </div>

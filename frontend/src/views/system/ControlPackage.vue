@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>管控配置包</span>
-          <el-tag type="info" size="small">离线管控</el-tag>
+          <el-tag type="info">离线管控</el-tag>
         </div>
       </template>
 
@@ -37,7 +37,7 @@
       <!-- 预览区域 -->
       <div v-if="preview" class="preview-section">
         <el-divider content-position="left">包内容预览</el-divider>
-        <el-descriptions :column="2" border size="small">
+        <el-descriptions :column="2" border>
           <el-descriptions-item label="包类型">{{
             preview.manifest?.package_type
           }}</el-descriptions-item>

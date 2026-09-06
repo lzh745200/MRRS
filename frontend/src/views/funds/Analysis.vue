@@ -164,7 +164,6 @@
           <span class="title">统计明细</span>
           <el-button
             v-if="loadError.dimension && !hasDimensionData"
-            size="small"
             type="primary"
             link
             @click="loadDimensionStats"

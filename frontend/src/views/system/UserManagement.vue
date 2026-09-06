@@ -60,9 +60,7 @@
               :value="pendingCount"
               class="pending-badge"
             >
-              <el-button type="warning" size="small" @click="showPendingUsers"
-                >待审核用户</el-button
-              >
+              <el-button type="warning" @click="showPendingUsers">待审核用户</el-button>
             </el-badge>
           </div>
           <div v-if="isAdmin" v-permission="['admin', 'super_admin']" class="header-actions">
@@ -95,13 +93,7 @@
       >
         <template #title>
           当前仅显示该组织的成员
-          <el-button
-            link
-            type="primary"
-            size="small"
-            style="margin-left: 8px"
-            @click="clearOrgFilter"
-          >
+          <el-button link type="primary" style="margin-left: 8px" @click="clearOrgFilter">
             清除筛选
           </el-button>
         </template>
@@ -127,7 +119,7 @@
         </el-table-column>
         <el-table-column label="权限包" width="130">
           <template #default="{ row }">
-            <el-tag v-if="row.permission_pack_id" type="warning" size="small">
+            <el-tag v-if="row.permission_pack_id" type="warning">
               {{ packNameMap[row.permission_pack_id] || '未知包' }}
             </el-tag>
             <span v-else class="role-default-text">角色默认</span>
@@ -146,11 +138,11 @@
         </el-table-column>
         <el-table-column prop="machine_code" label="机器码" width="120">
           <template #default="{ row }">
-            <el-tag v-if="row.machine_code" type="success" size="small">
+            <el-tag v-if="row.machine_code" type="success">
               <el-icon><Key /></el-icon>
               已绑定
             </el-tag>
-            <el-tag v-else type="info" size="small">未绑定</el-tag>
+            <el-tag v-else type="info">未绑定</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="last_login" label="最后登录" width="160" />
@@ -164,17 +156,13 @@
         <el-table-column v-if="isAdmin" label="操作" width="320" align="center" fixed="right">
           <template #default="{ row }">
             <div class="action-buttons">
-              <el-button text type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-              <el-button text type="warning" size="small" @click="handleResetPassword(row)"
-                >重置密码</el-button
-              >
-              <el-button text type="success" size="small" @click="handleRolePermission(row)"
+              <el-button text type="primary" @click="handleEdit(row)">编辑</el-button>
+              <el-button text type="warning" @click="handleResetPassword(row)">重置密码</el-button>
+              <el-button text type="success" @click="handleRolePermission(row)"
                 >角色/权限</el-button
               >
-              <el-button text type="info" size="small" @click="handleMenuPermission(row)"
-                >菜单权限</el-button
-              >
-              <el-button text type="danger" size="small" @click="handleDelete(row)">删除</el-button>
+              <el-button text type="info" @click="handleMenuPermission(row)">菜单权限</el-button>
+              <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -305,7 +293,7 @@
       <div v-if="isEdit" class="session-section">
         <el-divider content-position="left">活跃会话</el-divider>
         <div v-loading="sessionsLoading">
-          <el-table v-if="userSessions.length > 0" :data="userSessions" size="small" border>
+          <el-table v-if="userSessions.length > 0" :data="userSessions" border>
             <el-table-column
               prop="session_id"
               label="会话ID"
@@ -323,7 +311,6 @@
               <template #default="{ row }">
                 <el-button
                   type="danger"
-                  size="small"
                   :loading="revokingSession === row.session_id"
                   @click="revokeSession(row)"
                 >
@@ -335,7 +322,7 @@
           <EmptyState v-else-if="!sessionsLoading" text="无活跃会话" :size="40" />
         </div>
         <div class="session-actions">
-          <el-button type="warning" size="small" :loading="resetting2fa" @click="handleReset2fa">
+          <el-button type="warning" :loading="resetting2fa" @click="handleReset2fa">
             重置 2FA
           </el-button>
         </div>

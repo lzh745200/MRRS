@@ -29,14 +29,14 @@
         <el-table-column prop="name" label="路由名称" width="180" />
         <el-table-column label="状态" width="120" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.hidden" type="info" size="small">隐藏</el-tag>
-            <el-tag v-else type="success" size="small">显示</el-tag>
+            <el-tag v-if="row.hidden" type="info">隐藏</el-tag>
+            <el-tag v-else type="success">显示</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="权限" width="120" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.requiresAdmin" type="warning" size="small">管理员</el-tag>
-            <el-tag v-else size="small">所有人</el-tag>
+            <el-tag v-if="row.requiresAdmin" type="warning">管理员</el-tag>
+            <el-tag v-else>所有人</el-tag>
           </template>
         </el-table-column>
       </el-table>

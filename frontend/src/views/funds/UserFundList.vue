@@ -99,7 +99,7 @@
         </el-table-column>
         <el-table-column prop="type" label="类型" width="110" align="center">
           <template #default="scope">
-            <el-tag size="small">{{ getTypeName(scope.row.type) }}</el-tag>
+            <el-tag>{{ getTypeName(scope.row.type) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="amount" label="金额(万元)" width="120" align="right">
@@ -114,7 +114,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="scope">
-            <el-tag :type="getStatusType(scope.row.status)" size="small">
+            <el-tag :type="getStatusType(scope.row.status)">
               {{ getStatusText(scope.row.status) }}
             </el-tag>
           </template>
@@ -129,14 +129,11 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="scope">
-            <el-button type="primary" link size="small" @click="handleView(scope.row)"
-              >查看</el-button
-            >
+            <el-button type="primary" link @click="handleView(scope.row)">查看</el-button>
             <el-button
               v-if="canEdit(scope.row)"
               type="warning"
               link
-              size="small"
               @click="openEditDialog(scope.row)"
               >编辑</el-button
             >
@@ -144,7 +141,6 @@
               v-if="canDelete(scope.row)"
               type="danger"
               link
-              size="small"
               @click="handleDelete(scope.row)"
               >删除</el-button
             >

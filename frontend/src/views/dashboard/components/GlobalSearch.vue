@@ -35,9 +35,7 @@
           <div v-if="group.items.length > 0" class="result-group">
             <div class="group-label">
               {{ group.label }}
-              <el-tag size="small" type="info" effect="plain" round>{{
-                group.items.length
-              }}</el-tag>
+              <el-tag type="info" effect="plain" round>{{ group.items.length }}</el-tag>
             </div>
             <div
               v-for="item in group.items"

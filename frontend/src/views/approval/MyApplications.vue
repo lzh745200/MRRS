@@ -59,16 +59,14 @@
         <el-table-column prop="title" label="申请标题" min-width="200" />
         <el-table-column prop="type" label="类型" width="120">
           <template #default="{ row }">
-            <el-tag size="small">
+            <el-tag>
               {{ formatEntityType(row.type || row.entity_type) || '通用' }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">{{
-              statusLabel(row.status)
-            }}</el-tag>
+            <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="提交时间" width="170">
@@ -82,7 +80,6 @@
               v-if="row.status === 'pending'"
               link
               type="warning"
-              size="small"
               @click="handleWithdraw(row)"
               >撤回</el-button
             >
@@ -90,7 +87,6 @@
               v-if="row.status === 'rejected'"
               link
               type="primary"
-              size="small"
               @click="handleResubmit(row)"
               >重新提交</el-button
             >

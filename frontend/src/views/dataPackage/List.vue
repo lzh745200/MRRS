@@ -64,22 +64,21 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handlePreview(row as DataPackage)">
+            <el-button link type="primary" @click="handlePreview(row as DataPackage)">
               预览
             </el-button>
             <el-button
               v-if="row.status === 'validated'"
               link
               type="success"
-              size="small"
               @click="handleConfirmImport(row as DataPackage)"
             >
               确认导入
             </el-button>
-            <el-button link type="primary" size="small" @click="handleDownload(row as DataPackage)">
+            <el-button link type="primary" @click="handleDownload(row as DataPackage)">
               下载
             </el-button>
-            <el-button link type="danger" size="small" @click="handleDelete(row as DataPackage)">
+            <el-button link type="danger" @click="handleDelete(row as DataPackage)">
               删除
             </el-button>
           </template>
@@ -136,7 +135,7 @@
             :key="preview.data_type"
             :label="`${getDataTypeLabel(preview.data_type)} (${preview.total})`"
           >
-            <el-table :data="preview.sample" size="small" max-height="400">
+            <el-table :data="preview.sample" max-height="400">
               <el-table-column
                 v-for="col in preview.columns"
                 :key="col"

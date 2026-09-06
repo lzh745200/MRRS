@@ -9,27 +9,16 @@
           :value="runningCount.running"
           class="running-badge"
         >
-          <el-tag type="warning" size="small" class="pulse-tag"> 运行中 </el-tag>
+          <el-tag type="warning" class="pulse-tag"> 运行中 </el-tag>
         </el-badge>
       </div>
       <div class="header-right">
         <span v-if="lastUpdated" class="last-updated"> 更新于 {{ lastUpdated }} </span>
-        <el-switch
-          v-model="autoRefresh"
-          active-text="自动刷新"
-          size="small"
-          @change="toggleAutoRefresh"
-        />
-        <el-button
-          :icon="Refresh"
-          :loading="loading"
-          size="small"
-          type="primary"
-          @click="refreshAll"
-        >
+        <el-switch v-model="autoRefresh" active-text="自动刷新" @change="toggleAutoRefresh" />
+        <el-button :icon="Refresh" :loading="loading" type="primary" @click="refreshAll">
           刷新
         </el-button>
-        <el-button :icon="Plus" size="small" type="success" @click="showCreateDialog = true">
+        <el-button :icon="Plus" type="success" @click="showCreateDialog = true">
           创建任务
         </el-button>
       </div>
@@ -80,12 +69,7 @@
         <el-card shadow="hover" class="stat-card">
           <div class="stat-label">任务类型</div>
           <div class="stat-tags">
-            <el-tag
-              v-for="(count, type) in stats.by_type || {}"
-              :key="type"
-              size="small"
-              class="type-tag"
-            >
+            <el-tag v-for="(count, type) in stats.by_type || {}" :key="type" class="type-tag">
               {{ type }}: {{ count }}
             </el-tag>
             <span v-if="!Object.keys(stats.by_type || {}).length" class="stat-empty">--</span>
@@ -104,7 +88,6 @@
               v-model="filterStatus"
               placeholder="状态筛选"
               clearable
-              size="small"
               style="width: 140px"
               @change="handleSearch"
             >
@@ -119,13 +102,12 @@
               v-model="filterType"
               placeholder="任务类型"
               clearable
-              size="small"
               style="width: 180px"
               @clear="handleSearch"
               @keyup.enter="handleSearch"
             />
-            <el-button size="small" :icon="Search" @click="handleSearch">查询</el-button>
-            <el-button size="small" @click="resetFilters">重置</el-button>
+            <el-button :icon="Search" @click="handleSearch">查询</el-button>
+            <el-button @click="resetFilters">重置</el-button>
           </div>
         </div>
       </template>
@@ -145,12 +127,12 @@
         </el-table-column>
         <el-table-column prop="task_type" label="类型" width="120">
           <template #default="{ row }">
-            <el-tag size="small" type="info">{{ row.task_type || '--' }}</el-tag>
+            <el-tag type="info">{{ row.task_type || '--' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">
+            <el-tag :type="statusTagType(row.status)">
               {{ statusLabel(row.status) }}
             </el-tag>
           </template>
@@ -204,7 +186,6 @@
             <el-button
               v-if="row.status === 'pending' || row.status === 'running'"
               type="warning"
-              size="small"
               :icon="VideoPause"
               link
               @click="handleCancel(row as TaskInfo)"
@@ -216,7 +197,6 @@
                 row.status === 'completed' || row.status === 'failed' || row.status === 'cancelled'
               "
               type="danger"
-              size="small"
               :icon="Delete"
               link
               @click="handleDelete(row as TaskInfo)"

@@ -1,7 +1,6 @@
 <template>
-  <!-- UI v2.0 紧凑档 formalize：全局 size=small（与存量 470 处 size="small" 用法对齐，
-       表格行高 36px / 控件 32px，1366×768 首屏信息量提升） -->
-  <el-config-provider :locale="zhCn" size="small">
+  <!-- UI v2.1 舒适档：全局 size=large（40px 控件 / 44px 表格行），密度令牌见 tokens.scss -->
+  <el-config-provider :locale="zhCn" size="large">
     <router-view v-slot="{ Component }">
       <template v-if="appError">
         <div class="app-error-boundary">
@@ -67,7 +66,6 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

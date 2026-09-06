@@ -20,12 +20,7 @@
       <template #header>
         <div class="section-header">
           <span class="section-title">信任评估</span>
-          <el-button
-            :icon="Refresh"
-            size="small"
-            :loading="loadingAssessment"
-            @click="loadAssessment"
-          >
+          <el-button :icon="Refresh" :loading="loadingAssessment" @click="loadAssessment">
             刷新
           </el-button>
         </div>
@@ -55,7 +50,7 @@
         <!-- 评估因子 -->
         <div class="factors-section">
           <h4>评估因子</h4>
-          <el-table :data="assessment.factors" size="small" border style="width: 100%">
+          <el-table :data="assessment.factors" border style="width: 100%">
             <el-table-column prop="factor" label="因子" min-width="140" />
             <el-table-column prop="score" label="评分" width="80" align="center">
               <template #default="{ row }">
@@ -64,7 +59,7 @@
             </el-table-column>
             <el-table-column prop="status" label="状态" width="100" align="center">
               <template #default="{ row }">
-                <el-tag :type="getFactorStatusType(row.status)" size="small">
+                <el-tag :type="getFactorStatusType(row.status)">
                   {{ row.status }}
                 </el-tag>
               </template>
@@ -93,9 +88,7 @@
       <template #header>
         <div class="section-header">
           <span class="section-title">安全事件统计</span>
-          <el-button :icon="Refresh" size="small" :loading="loadingStats" @click="loadStats">
-            刷新
-          </el-button>
+          <el-button :icon="Refresh" :loading="loadingStats" @click="loadStats"> 刷新 </el-button>
         </div>
       </template>
 
@@ -223,12 +216,12 @@
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="policy-expand-detail">
-              <el-descriptions :column="2" border size="small">
+              <el-descriptions :column="2" border>
                 <el-descriptions-item label="描述">
                   {{ row.description || '无' }}
                 </el-descriptions-item>
                 <el-descriptions-item label="类别">
-                  <el-tag size="small">{{ row.category }}</el-tag>
+                  <el-tag>{{ row.category }}</el-tag>
                 </el-descriptions-item>
                 <el-descriptions-item label="条件" :span="2">
                   <pre v-if="row.conditions" class="json-pre">{{
@@ -238,12 +231,7 @@
                 </el-descriptions-item>
                 <el-descriptions-item label="动作" :span="2">
                   <template v-if="row.actions && row.actions.length > 0">
-                    <el-tag
-                      v-for="action in row.actions"
-                      :key="action"
-                      size="small"
-                      style="margin-right: 6px"
-                    >
+                    <el-tag v-for="action in row.actions" :key="action" style="margin-right: 6px">
                       {{ action }}
                     </el-tag>
                   </template>
@@ -256,19 +244,19 @@
         <el-table-column prop="name" label="策略名称" min-width="180" />
         <el-table-column prop="category" label="类别" width="120" align="center">
           <template #default="{ row }">
-            <el-tag size="small">{{ row.category }}</el-tag>
+            <el-tag>{{ row.category }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="severity" label="严重程度" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="getSeverityTagType(row.severity)" size="small">
+            <el-tag :type="getSeverityTagType(row.severity)">
               {{ row.severity }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="enabled" label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
+            <el-tag :type="row.enabled ? 'success' : 'info'">
               {{ row.enabled ? '启用' : '禁用' }}
             </el-tag>
           </template>
@@ -345,9 +333,7 @@
       <template #header>
         <div class="section-header">
           <span class="section-title">最近安全事件</span>
-          <el-button :icon="Refresh" size="small" :loading="loadingEvents" @click="loadEvents">
-            刷新
-          </el-button>
+          <el-button :icon="Refresh" :loading="loadingEvents" @click="loadEvents"> 刷新 </el-button>
         </div>
       </template>
 
@@ -393,13 +379,13 @@
         />
         <el-table-column prop="event_type" label="类型" width="140">
           <template #default="{ row }">
-            <el-tag size="small" type="info">{{ row.event_type }}</el-tag>
+            <el-tag type="info">{{ row.event_type }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="source" label="来源" width="140" />
         <el-table-column prop="severity" label="严重程度" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="getSeverityTagType(row.severity)" size="small">
+            <el-tag :type="getSeverityTagType(row.severity)">
               {{ row.severity }}
             </el-tag>
           </template>

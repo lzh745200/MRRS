@@ -21,7 +21,7 @@
     </div>
     <template v-else>
       <div class="map-toolbar">
-        <el-radio-group v-model="viewMode" size="small">
+        <el-radio-group v-model="viewMode">
           <el-radio-button value="geographic">地理视图</el-radio-button>
           <el-radio-button value="statistical">统计视图</el-radio-button>
         </el-radio-group>
@@ -32,13 +32,12 @@
           <el-input
             v-model="searchKeyword"
             placeholder="搜索村名/学校名/区县..."
-            size="small"
             clearable
             style="width: 240px; margin-left: 16px"
             @keyup.enter="handleSearch"
           >
             <template #append>
-              <el-button size="small" :loading="searching" @click="handleSearch">
+              <el-button :loading="searching" @click="handleSearch">
                 <el-icon><Search /></el-icon>
               </el-button>
             </template>
@@ -59,7 +58,7 @@
                 class="search-result-item"
                 @click="locateSearchResult(item)"
               >
-                <el-tag size="small" :type="item.type === 'village' ? 'success' : 'primary'">
+                <el-tag :type="item.type === 'village' ? 'success' : 'primary'">
                   {{ item.type === 'village' ? '村' : '校' }}
                 </el-tag>
                 <span class="result-name">{{ item.name }}</span>
@@ -72,20 +71,18 @@
           <el-input
             v-model="coordInput"
             placeholder="输入经纬度定位, 如: 26.5,107.5"
-            size="small"
             clearable
             style="width: 260px; margin-left: 8px"
             @keyup.enter="handleLocate"
           >
             <template #append>
-              <el-button size="small" :loading="locating" @click="handleLocate">定位</el-button>
+              <el-button :loading="locating" @click="handleLocate">定位</el-button>
             </template>
           </el-input>
 
           <!-- 路线计算 -->
           <el-button
             v-if="originCoord"
-            size="small"
             type="warning"
             :loading="routeLoading"
             style="margin-left: 8px"
@@ -94,19 +91,14 @@
             <el-icon><Van /></el-icon> 计算到全部帮扶点的路线
           </el-button>
 
-          <el-button
-            v-if="routeResults.length"
-            size="small"
-            style="margin-left: 8px"
-            @click="routeResults = []"
-          >
+          <el-button v-if="routeResults.length" style="margin-left: 8px" @click="routeResults = []">
             清除路线
           </el-button>
         </template>
 
         <span class="map-stats">
-          <el-tag size="small" type="success">村庄 {{ stats.totalVillages }}</el-tag>
-          <el-tag size="small" type="warning">学校 {{ stats.totalSchools }}</el-tag>
+          <el-tag type="success">村庄 {{ stats.totalVillages }}</el-tag>
+          <el-tag type="warning">学校 {{ stats.totalSchools }}</el-tag>
         </span>
       </div>
 

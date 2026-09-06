@@ -36,7 +36,7 @@
         <el-table-column prop="name" label="模块名称" width="140" />
         <el-table-column prop="category" label="分类" width="100">
           <template #default="{ row }">
-            <el-tag size="small" type="info">{{ categoryLabel(row.category) }}</el-tag>
+            <el-tag type="info">{{ categoryLabel(row.category) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="可见性" width="160">
@@ -52,7 +52,7 @@
         </el-table-column>
         <el-table-column label="编辑模式" min-width="200">
           <template #default="{ row }">
-            <el-radio-group v-model="row.edit_mode" size="small">
+            <el-radio-group v-model="row.edit_mode">
               <el-radio-button value="full_edit">完全编辑</el-radio-button>
               <el-radio-button value="read_only">只读</el-radio-button>
               <el-radio-button value="disabled">禁用</el-radio-button>
@@ -61,8 +61,8 @@
         </el-table-column>
         <el-table-column label="状态" width="80">
           <template #default="{ row }">
-            <el-tag v-if="row.is_custom" size="small" type="warning">自定义</el-tag>
-            <el-tag v-else size="small" type="info">默认</el-tag>
+            <el-tag v-if="row.is_custom" type="warning">自定义</el-tag>
+            <el-tag v-else type="info">默认</el-tag>
           </template>
         </el-table-column>
       </el-table>

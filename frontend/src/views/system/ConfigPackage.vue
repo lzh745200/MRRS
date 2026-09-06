@@ -52,7 +52,7 @@
     <el-card>
       <template #header>
         <span>当前系统配置</span>
-        <el-button size="small" style="float: right" @click="loadConfig">
+        <el-button style="float: right" @click="loadConfig">
           <el-icon><Refresh /></el-icon> 刷新
         </el-button>
       </template>
@@ -67,12 +67,8 @@
         <el-table-column prop="description" label="说明" width="200" />
         <el-table-column label="操作" width="160">
           <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="editConfig(row as any)"
-              >编辑</el-button
-            >
-            <el-button size="small" text type="danger" @click="deleteConfig(row as any)"
-              >删除</el-button
-            >
+            <el-button text type="primary" @click="editConfig(row as any)">编辑</el-button>
+            <el-button text type="danger" @click="deleteConfig(row as any)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

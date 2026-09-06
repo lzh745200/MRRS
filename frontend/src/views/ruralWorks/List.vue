@@ -94,7 +94,7 @@
         <el-table-column prop="name" label="工作名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="type" label="工作类型" width="130">
           <template #default="{ row }">
-            <el-tag :type="getTypeTagColor(row.type)" size="small">{{
+            <el-tag :type="getTypeTagColor(row.type)">{{
               typeLabels[row.type] || row.type
             }}</el-tag>
           </template>
@@ -107,7 +107,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusColors[row.status] || 'info'" size="small">{{
+            <el-tag :type="statusColors[row.status] || 'info'">{{
               statusLabels[row.status] || row.status
             }}</el-tag>
           </template>
@@ -125,9 +125,9 @@
         <el-table-column prop="end_date" label="结束日期" width="120" />
         <el-table-column label="操作" width="200" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button size="small" @click="handleView(row)">查看</el-button>
-            <el-button size="small" type="primary" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button @click="handleView(row)">查看</el-button>
+            <el-button type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

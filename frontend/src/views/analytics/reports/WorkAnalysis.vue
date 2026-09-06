@@ -126,7 +126,7 @@
         <el-table-column prop="name" label="工作名称" min-width="200" show-overflow-tooltip />
         <el-table-column prop="typeName" label="工作类型" width="130">
           <template #default="{ row }">
-            <el-tag :type="getTypeTagType(row.type)" size="small">{{ row.typeName }}</el-tag>
+            <el-tag :type="getTypeTagType(row.type)">{{ row.typeName }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="village_name" label="所属村庄" width="120" />
@@ -137,7 +137,7 @@
         </el-table-column>
         <el-table-column prop="statusName" label="状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="getStatusTagType(row.status)" size="small">{{ row.statusName }}</el-tag>
+            <el-tag :type="getStatusTagType(row.status)">{{ row.statusName }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="progress" label="进度" width="140">

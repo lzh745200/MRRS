@@ -158,13 +158,11 @@
         </el-table-column>
         <el-table-column label="操作" width="190" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="handleDetail(row)">
-              详情
-            </el-button>
-            <el-button v-if="canEdit" type="warning" size="small" link @click="handleEdit(row)">
+            <el-button type="primary" link @click="handleDetail(row)"> 详情 </el-button>
+            <el-button v-if="canEdit" type="warning" link @click="handleEdit(row)">
               编辑
             </el-button>
-            <el-button v-if="canDelete" type="danger" size="small" link @click="handleDelete(row)">
+            <el-button v-if="canDelete" type="danger" link @click="handleDelete(row)">
               删除
             </el-button>
           </template>

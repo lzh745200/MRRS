@@ -59,7 +59,6 @@
                     ? 'warning'
                     : 'info'
               "
-              size="small"
             >
               {{ row.severity_label }}
             </el-tag>
@@ -78,7 +77,7 @@
         </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.resolved ? 'success' : 'danger'" size="small">
+            <el-tag :type="row.resolved ? 'success' : 'danger'">
               {{ row.resolved ? '已处理' : '未处理' }}
             </el-tag>
           </template>
@@ -87,7 +86,7 @@
         <el-table-column prop="resolution" label="处理说明" width="200" show-overflow-tooltip />
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="!row.resolved" size="small" type="primary" @click="openResolve(row)"
+            <el-button v-if="!row.resolved" type="primary" @click="openResolve(row)"
               >处理</el-button
             >
           </template>

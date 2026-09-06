@@ -82,9 +82,9 @@
                 msProgress.percent
               }}%）
             </span>
-            <el-button type="primary" size="small" @click="openMsDialog()">新增里程碑</el-button>
+            <el-button type="primary" @click="openMsDialog()">新增里程碑</el-button>
           </div>
-          <el-table v-loading="msLoading" :data="milestones" size="small" border stripe>
+          <el-table v-loading="msLoading" :data="milestones" border stripe>
             <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
             <el-table-column prop="planned_date" label="计划日期" width="110" />
             <el-table-column prop="actual_date" label="实际日期" width="110">
@@ -95,9 +95,7 @@
             </el-table-column>
             <el-table-column label="状态" width="90" align="center">
               <template #default="{ row }">
-                <el-tag :type="msStatusTag(row.status)" size="small">{{
-                  msStatusLabel(row.status)
-                }}</el-tag>
+                <el-tag :type="msStatusTag(row.status)">{{ msStatusLabel(row.status) }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="150" fixed="right">
@@ -106,18 +104,13 @@
                   v-if="row.status !== 'completed'"
                   type="success"
                   link
-                  size="small"
                   @click="completeMilestone(row)"
                   >完成</el-button
                 >
-                <el-button type="primary" link size="small" @click="openMsDialog(row)"
-                  >编辑</el-button
-                >
+                <el-button type="primary" link @click="openMsDialog(row)">编辑</el-button>
                 <el-popconfirm title="确认删除该里程碑？" @confirm="removeMilestone(row)">
                   <template #reference>
-                    <el-button type="danger" link size="small" data-test="ms-delete"
-                      >删除</el-button
-                    >
+                    <el-button type="danger" link data-test="ms-delete">删除</el-button>
                   </template>
                 </el-popconfirm>
               </template>
@@ -140,30 +133,26 @@
               />
             </div>
             <div class="task-status-dist">
-              <el-tag type="info" size="small" effect="plain"
-                >待处理 {{ taskStatusCounts.pending }}</el-tag
-              >
-              <el-tag type="warning" size="small" effect="plain"
+              <el-tag type="info" effect="plain">待处理 {{ taskStatusCounts.pending }}</el-tag>
+              <el-tag type="warning" effect="plain"
                 >进行中 {{ taskStatusCounts.in_progress }}</el-tag
               >
-              <el-tag type="success" size="small" effect="plain"
-                >已完成 {{ taskStatusCounts.completed }}</el-tag
-              >
+              <el-tag type="success" effect="plain">已完成 {{ taskStatusCounts.completed }}</el-tag>
             </div>
           </div>
           <div class="tab-toolbar">
-            <el-button type="primary" size="small" @click="openTaskDialog()">新建任务</el-button>
+            <el-button type="primary" @click="openTaskDialog()">新建任务</el-button>
           </div>
           <el-table v-loading="tasksLoading" :data="tasks" stripe>
             <el-table-column prop="title" label="任务名称" min-width="180" />
             <el-table-column prop="status" label="状态" width="100">
               <template #default="{ row }">
-                <el-tag :type="taskStatusType(row.status)" size="small">{{ row.status }}</el-tag>
+                <el-tag :type="taskStatusType(row.status)">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="priority" label="优先级" width="90">
               <template #default="{ row }">
-                <el-tag :type="priorityType(row.priority)" size="small" effect="plain">{{
+                <el-tag :type="priorityType(row.priority)" effect="plain">{{
                   row.priority ?? '普通'
                 }}</el-tag>
               </template>
@@ -172,12 +161,10 @@
             <el-table-column prop="due_date" label="截止日期" width="120" />
             <el-table-column label="操作" width="140" fixed="right">
               <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="openTaskDialog(row)"
-                  >编辑</el-button
-                >
+                <el-button link type="primary" @click="openTaskDialog(row)">编辑</el-button>
                 <el-popconfirm title="确定删除该任务？" @confirm="handleDeleteTask(row.id)">
                   <template #reference>
-                    <el-button link type="danger" size="small">删除</el-button>
+                    <el-button link type="danger">删除</el-button>
                   </template>
                 </el-popconfirm>
               </template>
@@ -194,7 +181,7 @@
             </el-table-column>
             <el-table-column prop="status" label="状态" width="100">
               <template #default="{ row }">
-                <el-tag size="small">{{ row.status ?? '-' }}</el-tag>
+                <el-tag>{{ row.status ?? '-' }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="type" label="类型" width="120" />
@@ -210,7 +197,7 @@
               :http-request="handleFileUpload"
               multiple
             >
-              <el-button type="primary" size="small">上传附件</el-button>
+              <el-button type="primary">上传附件</el-button>
             </el-upload>
           </div>
           <el-table v-loading="filesLoading" :data="files">
@@ -224,15 +211,11 @@
             <el-table-column prop="created_at" label="上传时间" width="170" />
             <el-table-column label="操作" width="200" fixed="right">
               <template #default="{ row }">
-                <el-button link type="primary" size="small" @click="handlePreviewFile(row)"
-                  >预览</el-button
-                >
-                <el-button link type="primary" size="small" @click="handleDownload(row)"
-                  >下载</el-button
-                >
+                <el-button link type="primary" @click="handlePreviewFile(row)">预览</el-button>
+                <el-button link type="primary" @click="handleDownload(row)">下载</el-button>
                 <el-popconfirm title="确定删除该附件？" @confirm="handleDeleteFile(row.id)">
                   <template #reference>
-                    <el-button link type="danger" size="small">删除</el-button>
+                    <el-button link type="danger">删除</el-button>
                   </template>
                 </el-popconfirm>
               </template>

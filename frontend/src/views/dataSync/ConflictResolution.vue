@@ -53,7 +53,7 @@
                   <el-radio value="use_import">使用导入数据</el-radio>
                   <el-radio value="merge">合并数据</el-radio>
                 </el-radio-group>
-                <el-button type="primary" size="small" @click="resolveConflict(conflict)">
+                <el-button type="primary" @click="resolveConflict(conflict)">
                   解决此冲突
                 </el-button>
               </div>

@@ -89,7 +89,7 @@
             </p>
             <div class="password-box">
               <span class="password-text">{{ newPassword }}</span>
-              <el-button type="primary" size="small" @click="copyPassword"> 复制密码 </el-button>
+              <el-button type="primary" @click="copyPassword"> 复制密码 </el-button>
             </div>
             <el-alert type="warning" :closable="false" class="password-tip">
               <template #title>

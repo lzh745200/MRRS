@@ -12,7 +12,7 @@
           <span v-if="layoutSaved" class="layout-saved"
             ><el-icon><Select /></el-icon> 已保存</span
           >
-          <el-select v-model="layoutPreset" size="small" style="width: 140px" @change="applyPreset">
+          <el-select v-model="layoutPreset" style="width: 140px" @change="applyPreset">
             <el-option label="默认布局" value="default" />
             <el-option label="紧凑模式" value="compact" />
             <el-option label="展开全部" value="expand" />
@@ -20,8 +20,8 @@
             <el-option label="管理模板" value="role_officer" />
             <el-option label="访客模板" value="role_viewer" />
           </el-select>
-          <el-button size="small" text @click="resetLayout">恢复默认</el-button>
-          <el-button size="small" type="primary" @click="showLayoutEditor = false">完成</el-button>
+          <el-button text @click="resetLayout">恢复默认</el-button>
+          <el-button type="primary" @click="showLayoutEditor = false">完成</el-button>
         </div>
         <p class="layout-hint">拖拽排序 · 开关控制可见性</p>
         <div class="layout-sections">
@@ -39,7 +39,7 @@
           >
             <el-icon class="drag-handle"><Rank /></el-icon>
             <span>{{ section.label }}</span>
-            <el-switch v-model="section.visible" size="small" @change="onToggle" />
+            <el-switch v-model="section.visible" @change="onToggle" />
           </div>
         </div>
       </div>
@@ -53,13 +53,7 @@
           数据每 60 秒自动刷新
         </span>
         <el-tooltip content="刷新数据" placement="top">
-          <el-button
-            data-test="btn-refresh-kpi"
-            size="small"
-            circle
-            :icon="Refresh"
-            @click="refreshKpiData"
-          />
+          <el-button data-test="btn-refresh-kpi" circle :icon="Refresh" @click="refreshKpiData" />
         </el-tooltip>
       </div>
       <KpiCards :key="kpiRefreshKey" />
@@ -107,7 +101,7 @@
         <div class="panel-header">
           <el-icon><Grid /></el-icon>
           <span>快捷入口</span>
-          <el-button size="small" text @click="showLayoutEditor = !showLayoutEditor">
+          <el-button text @click="showLayoutEditor = !showLayoutEditor">
             <el-icon><Setting /></el-icon>
           </el-button>
         </div>

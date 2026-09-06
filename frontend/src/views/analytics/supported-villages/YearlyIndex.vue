@@ -11,17 +11,13 @@
       <el-table-column prop="county" label="所在县" min-width="100" />
       <el-table-column label="最近年度" width="120">
         <template #default="{ row }">
-          <el-tag v-if="row.latest_year" size="small" type="success"
-            >{{ row.latest_year }}年</el-tag
-          >
+          <el-tag v-if="row.latest_year" type="success">{{ row.latest_year }}年</el-tag>
           <span v-else class="no-data">暂无</span>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" size="small" link @click.stop="goYearly(row)">
-            查看年度数据 →
-          </el-button>
+          <el-button type="primary" link @click.stop="goYearly(row)"> 查看年度数据 → </el-button>
         </template>
       </el-table-column>
     </el-table>
