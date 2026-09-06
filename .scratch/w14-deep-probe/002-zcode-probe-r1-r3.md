@@ -129,3 +129,15 @@
   分支内联端点，是否执行取决于测试运行的墙钟——本地 02:00 前覆盖、CI(UTC)
   02:00 后缺 1 行 → 门禁随机红。修复 `548d3dc8`：提取 _next_daily_2am
   纯函数 + 三固定时间确定性测试。CI #85 五 job 全绿。
+
+## 本会话 R9：E2E 纳入 CI + 长尾模块扫尾
+- **E2E 纳入门禁**：pr-checks 新增 e2e-test job（Linux chromium，config 跨
+  平台化——Win 用系统 Edge/venv python，Linux 用 chromium/系统 python；
+  后端 webServer 由 workflow pip install 依赖后直启）。**首跑 150 用例
+  一次通过，CI 六 job 全绿**（`28aeb85b`）。
+- **零产品缺陷**（长尾探针 22/22 全绿）：数据质量（/data-quality 挂载前缀
+  特例）、分析五端点、离线地图状态/清理、机器码管理 CRUD（录入/列表/校验/
+  吊销）、**分片上传全链 init→chunk→merge 内容一致**（契约：chunk_size 由
+  服务端决定，客户端须按响应值切片）、通知偏好 PUT/回读。
+- 教训：配置文件做转义敏感的字符串替换时，用行号切片或整体重写，
+  不要用跨行锚点匹配（本次 playwright.config 两处补丁三次才落对）。
