@@ -1006,7 +1006,7 @@ async function handlePurge(row: any) {
 
 <style lang="scss" scoped>
 .fund-list-page {
-  padding: 20px;
+  /* 内边距由 layout 统一提供（24px），页面级不再重复 */
 }
 
 /* 经费管理全流程步骤条 */

@@ -1,5 +1,6 @@
 <template>
   <div v-watermark class="supported-village-list">
+    <PageHeader title="帮扶村管理" subtitle="一村一档，帮扶全过程数据管理" />
     <!-- 搜索筛选区域 -->
     <el-card class="filter-card" shadow="never">
       <el-form :model="filters" inline @submit.prevent>
@@ -272,6 +273,7 @@
 </template>
 
 <script setup lang="ts">
+import PageHeader from '@/components/common/PageHeader.vue'
 import { DIALOG_LG } from '@/config/dialog'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
@@ -824,7 +826,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .supported-village-list {
-  padding: 16px;
+  /* 内边距由 layout 统一提供 */
 }
 
 .filter-card {
