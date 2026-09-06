@@ -124,7 +124,7 @@
     <!-- 导入历史 -->
     <el-card class="import-history">
       <h3 class="section-title">导入历史</h3>
-      <el-table v-loading="loadingHistory" :data="importHistory" style="width: 100%">
+      <el-table stripe v-loading="loadingHistory" :data="importHistory" style="width: 100%">
         <template #empty>
           <EmptyState text="暂无导入记录" />
         </template>

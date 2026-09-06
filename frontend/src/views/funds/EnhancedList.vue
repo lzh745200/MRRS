@@ -266,22 +266,22 @@
             <el-icon><Search /></el-icon>搜索
           </el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-form-item>
-            <el-tooltip
-              v-if="canViewDeleted"
-              v-permission="['admin', 'super_admin']"
-              content="切换显示已软删的经费（管理员可见）"
-              placement="top"
-            >
-              <el-switch
-                v-model="showDeletedOnly"
-                active-text="回收站"
-                inactive-text="正常"
-                style="margin-left: 12px"
-                @change="handleToggleDeleted"
-              />
-            </el-tooltip>
-          </el-form-item>
+        </el-form-item>
+        <el-form-item>
+          <el-tooltip
+            v-if="canViewDeleted"
+            v-permission="['admin', 'super_admin']"
+            content="切换显示已软删的经费（管理员可见）"
+            placement="top"
+          >
+            <el-switch
+              v-model="showDeletedOnly"
+              active-text="回收站"
+              inactive-text="正常"
+              style="margin-left: 12px"
+              @change="handleToggleDeleted"
+            />
+          </el-tooltip>
         </el-form-item>
       </el-form>
     </div>

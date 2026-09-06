@@ -59,7 +59,7 @@
       </template>
 
       <!-- 检查项列表 -->
-      <el-table :data="checkItems">
+      <el-table stripe :data="checkItems">
         <el-table-column prop="name" label="检查项" min-width="200" />
         <el-table-column prop="description" label="说明" min-width="250" />
         <el-table-column label="状态" width="100">
@@ -152,7 +152,7 @@
         show-icon
         style="margin-bottom: 12px"
       />
-      <el-table v-if="ruleResult?.failed?.length" :data="ruleResult.failed" max-height="220">
+      <el-table stripe v-if="ruleResult?.failed?.length" :data="ruleResult.failed" max-height="220">
         <el-table-column prop="record_id" label="记录ID" width="90" />
         <el-table-column prop="label" label="记录" min-width="150" />
       </el-table>
@@ -170,7 +170,7 @@
       :title="`问题详情 - ${selectedCheck?.name}`"
       :width="DIALOG_MD"
     >
-      <el-table :data="issueDetails" max-height="400">
+      <el-table stripe :data="issueDetails" max-height="400">
         <el-table-column prop="record_id" label="记录ID" width="100" />
         <el-table-column prop="field" label="字段" width="120" />
         <el-table-column prop="issue" label="问题描述" />

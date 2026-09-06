@@ -135,7 +135,7 @@
             :key="preview.data_type"
             :label="`${getDataTypeLabel(preview.data_type)} (${preview.total})`"
           >
-            <el-table :data="preview.sample" max-height="400">
+            <el-table stripe :data="preview.sample" max-height="400">
               <el-table-column
                 v-for="col in preview.columns"
                 :key="col"

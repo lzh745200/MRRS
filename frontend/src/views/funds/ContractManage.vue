@@ -22,7 +22,7 @@
         <el-button type="primary" @click="openCreateDialog">新建合同</el-button>
       </div>
 
-      <el-table v-loading="loading" :data="contracts" size="default" class="mt-3">
+      <el-table stripe v-loading="loading" :data="contracts" size="default" class="mt-3">
         <el-table-column prop="contract_no" label="合同编号" width="150" />
         <el-table-column
           prop="contract_name"
@@ -166,7 +166,7 @@
           </div>
         </template>
       </el-upload>
-      <el-table :data="attachmentList" style="margin-top: 12px" max-height="320">
+      <el-table stripe :data="attachmentList" style="margin-top: 12px" max-height="320">
         <el-table-column prop="file_name" label="文件名" min-width="200" show-overflow-tooltip />
         <el-table-column prop="file_size" label="大小" width="100">
           <template #default="{ row }">

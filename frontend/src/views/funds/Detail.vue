@@ -289,7 +289,7 @@
             <div class="detail-card" style="margin-bottom: 0">
               <div class="card-header"><h3>字段修改历史</h3></div>
               <div class="card-body">
-                <el-table v-if="fieldChanges.length" :data="fieldChanges">
+                <el-table stripe v-if="fieldChanges.length" :data="fieldChanges">
                   <el-table-column prop="field_name" label="字段" width="120" />
                   <el-table-column prop="old_value" label="旧值" show-overflow-tooltip>
                     <template #default="{ row }">
@@ -320,7 +320,7 @@
             <div class="detail-card" style="margin-bottom: 0">
               <div class="card-header"><h3>操作日志</h3></div>
               <div class="card-body">
-                <el-table v-if="operationLogs.length" :data="operationLogs">
+                <el-table stripe v-if="operationLogs.length" :data="operationLogs">
                   <el-table-column prop="operation_type" label="操作类型" width="150">
                     <template #default="{ row }">
                       <el-tag>{{ getOperationTypeLabel(row.operation_type) }}</el-tag>
@@ -451,7 +451,7 @@
                 next-step="持续登记直至支出执行完毕"
               />
             </div>
-            <el-table :data="expenses" border>
+            <el-table stripe :data="expenses" border>
               <el-table-column prop="transaction_date" label="日期" width="110" />
               <el-table-column prop="amount" label="金额(万元)" width="120" align="right" />
               <el-table-column prop="purpose" label="用途" min-width="180" show-overflow-tooltip />

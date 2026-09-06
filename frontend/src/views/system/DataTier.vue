@@ -173,7 +173,7 @@
       </template>
       <el-tabs v-model="archiveTab" @tab-change="handleArchiveTabChange">
         <el-tab-pane label="冷归档" name="cold">
-          <el-table :data="coldArchives" style="width: 100%" empty-text="暂无非归档文件">
+          <el-table stripe :data="coldArchives" style="width: 100%" empty-text="暂无非归档文件">
             <el-table-column prop="name" label="文件名" min-width="200" />
             <el-table-column label="大小" width="120">
               <template #default="{ row }">
@@ -193,7 +193,7 @@
           </el-table>
         </el-tab-pane>
         <el-tab-pane label="温归档" name="warm">
-          <el-table :data="warmArchives" style="width: 100%" empty-text="暂无温归档文件">
+          <el-table stripe :data="warmArchives" style="width: 100%" empty-text="暂无温归档文件">
             <el-table-column prop="name" label="文件名" min-width="200" />
             <el-table-column label="大小" width="120">
               <template #default="{ row }">

@@ -838,8 +838,8 @@ onMounted(() => {
 }
 
 .kpi-card {
-  background: linear-gradient(135deg, #f0f9f4 0%, #e8f5e9 100%);
-  border: 1px solid #c8e6c9;
+  background: linear-gradient(135deg, var(--color-primary-light-9) 0%, var(--color-primary-light-8) 100%);
+  border: 1px solid var(--color-primary-light-6);
   border-radius: 8px;
   padding: 20px;
   text-align: center;
@@ -847,13 +847,13 @@ onMounted(() => {
 }
 
 .kpi-card:hover {
-  box-shadow: 0 4px 12px rgba(64, 145, 108, 0.15);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .kpi-value {
   font-size: 28px;
   font-weight: 700;
-  color: #2e7d32;
+  color: var(--color-primary);
 }
 
 .kpi-label {

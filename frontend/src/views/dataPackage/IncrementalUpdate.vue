@@ -78,7 +78,7 @@
 
             <el-divider>按数据类型统计</el-divider>
 
-            <el-table :data="changesByType" style="width: 100%">
+            <el-table stripe :data="changesByType" style="width: 100%">
               <el-table-column prop="type" label="数据类型" />
               <el-table-column prop="added" label="新增" />
               <el-table-column prop="modified" label="修改" />

@@ -241,7 +241,7 @@
         <!-- 左：申请内容 + 变更 diff（复用既有 diffTableData computed） -->
         <div class="detail-left">
           <h4 class="detail-subtitle">变更对比</h4>
-          <el-table :data="diffTableData" border>
+          <el-table stripe :data="diffTableData" border>
             <el-table-column prop="field" label="字段" width="150" />
             <el-table-column prop="original" label="旧值">
               <template #default="{ row }">

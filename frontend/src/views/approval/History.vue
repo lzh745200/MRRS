@@ -128,7 +128,7 @@
         <!-- 变更对比 -->
         <el-divider content-position="left">变更内容</el-divider>
         <div v-if="taskDiff" class="diff-view">
-          <el-table :data="diffTableData" border>
+          <el-table stripe :data="diffTableData" border>
             <el-table-column prop="field" label="字段" width="150" />
             <el-table-column prop="original" label="原值">
               <template #default="{ row }">

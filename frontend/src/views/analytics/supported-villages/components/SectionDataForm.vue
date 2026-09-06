@@ -652,7 +652,7 @@
         <div class="form-block-gap">
           <el-button type="primary" @click="addCommitteeMember">新增成员</el-button>
         </div>
-        <el-table :data="committeeMembers" border class="form-table-gap">
+        <el-table stripe :data="committeeMembers" border class="form-table-gap">
           <el-table-column label="姓名" min-width="100">
             <template #default="{ row }">
               <el-input v-model="row.name" placeholder="姓名" />

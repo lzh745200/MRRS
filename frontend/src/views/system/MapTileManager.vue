@@ -24,7 +24,7 @@
 
       <div v-if="Object.keys(coverage.zoom_levels).length > 0" class="zoom-levels">
         <h4>各级别瓦片数量</h4>
-        <el-table :data="zoomLevelData" style="width: 100%">
+        <el-table stripe :data="zoomLevelData" style="width: 100%">
           <el-table-column prop="level" label="缩放级别" width="120" />
           <el-table-column prop="count" label="瓦片数量" />
           <el-table-column label="操作" width="150">

@@ -119,7 +119,7 @@
     <!-- 导出历史 -->
     <el-card class="export-history">
       <h3 class="section-title">导出历史</h3>
-      <el-table v-loading="loadingHistory" :data="exportHistory" style="width: 100%">
+      <el-table stripe v-loading="loadingHistory" :data="exportHistory" style="width: 100%">
         <template #empty>
           <EmptyState text="暂无导出记录" />
         </template>
