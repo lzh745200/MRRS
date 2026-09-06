@@ -56,7 +56,7 @@
           <el-button text type="primary" @click="pushSafe('/approval/pending')">查看全部</el-button>
         </div>
       </template>
-      <el-table stripe v-loading="loading" :data="pendingTasks" empty-text="暂无待审批任务">
+      <el-table v-loading="loading" stripe :data="pendingTasks" empty-text="暂无待审批任务">
         <el-table-column prop="title" label="事项" min-width="220" show-overflow-tooltip />
         <el-table-column label="类型" width="110">
           <template #default="{ row }">

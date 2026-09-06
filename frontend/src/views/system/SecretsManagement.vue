@@ -66,7 +66,13 @@
         <span>密钥版本列表</span>
       </template>
 
-      <el-table stripe v-loading="loadingVersions" :data="versions" border empty-text="暂无密钥版本">
+      <el-table
+        v-loading="loadingVersions"
+        stripe
+        :data="versions"
+        border
+        empty-text="暂无密钥版本"
+      >
         <el-table-column prop="version_id" label="版本 ID" min-width="200" show-overflow-tooltip />
         <el-table-column label="创建时间" width="200" align="center">
           <template #default="{ row }">

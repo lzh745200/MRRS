@@ -133,7 +133,7 @@
               </el-button>
             </div>
           </template>
-          <el-table stripe v-loading="memberLoading" :data="members" border>
+          <el-table v-loading="memberLoading" stripe :data="members" border>
             <el-table-column prop="full_name" label="姓名" min-width="80">
               <template #default="scope">
                 {{ ds(scope.row.full_name, 'name') || scope.row.username }}

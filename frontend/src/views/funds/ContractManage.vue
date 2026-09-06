@@ -22,7 +22,7 @@
         <el-button type="primary" @click="openCreateDialog">新建合同</el-button>
       </div>
 
-      <el-table stripe v-loading="loading" :data="contracts" size="default" class="mt-3">
+      <el-table v-loading="loading" stripe :data="contracts" size="default" class="mt-3">
         <el-table-column prop="contract_no" label="合同编号" width="150" />
         <el-table-column
           prop="contract_name"

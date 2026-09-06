@@ -452,6 +452,31 @@ def recycle_retention_job():
         db.close()
 
 
+async def subscription_dispatch_job():
+    """报表订阅到期分发（每 15 分钟扫描）：对到期订阅生成报表 + 站内通知。
+
+    工单 003 方案 A：补齐订阅消费方。到期判定与生成逻辑统一在
+    SubscriptionDispatchService，generate-now 端点共用同一函数。
+    """
+    from app.core.database import SessionLocal
+    from app.services.subscription_dispatch_service import SubscriptionDispatchService
+
+    db = SessionLocal()
+    try:
+        stats = await SubscriptionDispatchService().dispatch_due_subscriptions(
+            db, datetime.now()
+        )
+        if stats["dispatched"] or stats["failed"]:
+            logger.info(
+                "订阅分发完成: 生成 %d / 跳过 %d / 失败 %d",
+                stats["dispatched"], stats["skipped"], stats["failed"],
+            )
+    except Exception as e:
+        logger.error("订阅分发任务失败: %s", e, exc_info=True)
+    finally:
+        db.close()
+
+
 def start_backup_scheduler():
     """启动后台调度器（仅轻量任务，不含自动备份和 VACUUM）
 
@@ -466,9 +491,15 @@ def start_backup_scheduler():
 
     def _run_async_job(coro_func):
         try:
+            result = coro_func()
+            # 兼容同步任务（如 recycle_retention_job）：同步函数返回非协程时直接结束，
+            # 不得对非 awaitable 调 run_until_complete（2026-09-06 修复前同步任务
+            # 实际从未执行——TypeError 被 except 吞为「定时任务执行失败」）
+            if not asyncio.iscoroutine(result):
+                return
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(coro_func())
+            loop.run_until_complete(result)
             loop.close()
         except Exception as e:
             logger.error("定时任务执行失败: %s", e)
@@ -537,9 +568,13 @@ def start_backup_scheduler():
     _schedule_interval(reminder_scan_job, 6 * 3600, "reminder_scan")
     _schedule_daily(todo_reminder_job, 8, 0, "todo_reminder")
     _schedule_weekly(weekly_report_job, 0, 6, 30, "weekly_report")
+    _schedule_interval(subscription_dispatch_job, 900, "subscription_dispatch")
 
     _scheduler_started = True
-    logger.info("调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 自动打包 + 消息清理 + 提醒扫描 + 待办提醒 + 周报）")
+    logger.info(
+        "调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 自动打包 + 消息清理"
+        " + 提醒扫描 + 待办提醒 + 周报 + 订阅分发）"
+    )
 
 
 def stop_backup_scheduler():

@@ -5,6 +5,7 @@
  * getReportFileName 已知与未知类型、handleExportOfficial（word/pdf、year 有/无、
  * 名称命中与兜底、detail 与默认）、打印预览、重置、
  * loadHistory（items/缺省/失败）、downloadExport 成败、历史表槽位（状态/时间/操作）。
+ * 订阅管理（工单 003）：列表/新建校验与成功失败/开关/立即生成/删除确认/freqDetail 四频次。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
@@ -21,6 +22,11 @@ const {
   mockFormatFileSize,
   mockExportReportWord,
   mockExportReportPdf,
+  mockListSubscriptions,
+  mockCreateSubscription,
+  mockToggleSubscription,
+  mockDeleteSubscription,
+  mockGenerateSubscriptionNow,
   logError,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
@@ -31,6 +37,11 @@ const {
   mockFormatFileSize: vi.fn((bytes: number) => `${bytes} B`),
   mockExportReportWord: vi.fn(),
   mockExportReportPdf: vi.fn(),
+  mockListSubscriptions: vi.fn(),
+  mockCreateSubscription: vi.fn(),
+  mockToggleSubscription: vi.fn(),
+  mockDeleteSubscription: vi.fn(),
+  mockGenerateSubscriptionNow: vi.fn(),
   logError: vi.fn(),
 }))
 
@@ -51,6 +62,14 @@ vi.mock('@/api/export', () => ({
   formatFileSize: mockFormatFileSize,
   exportReportWord: mockExportReportWord,
   exportReportPdf: mockExportReportPdf,
+}))
+
+vi.mock('@/api/reportSubscription', () => ({
+  listSubscriptions: mockListSubscriptions,
+  createSubscription: mockCreateSubscription,
+  toggleSubscription: mockToggleSubscription,
+  deleteSubscription: mockDeleteSubscription,
+  generateSubscriptionNow: mockGenerateSubscriptionNow,
 }))
 
 vi.mock('@/utils/logger', () => ({
@@ -133,6 +152,7 @@ beforeEach(() => {
   mockExportReportWord.mockResolvedValue(undefined)
   mockExportReportPdf.mockResolvedValue(undefined)
   mockDownloadExportFile.mockResolvedValue(undefined)
+  mockListSubscriptions.mockResolvedValue({ data: { items: [] } })
 })
 
 describe('挂载与历史渲染', () => {
@@ -431,5 +451,166 @@ describe('映射工具', () => {
     expect(vm.getExportStatusType('zzz')).toBe('info')
     expect(vm.formatDate(undefined)).toBe('-')
     expect(vm.formatDate('2024-06-01T10:00:00')).not.toBe('-')
+  })
+})
+
+// ════════════════ 订阅管理（工单 003）════════════════
+
+const subRows = [
+  { id: 1, name: '每月帮扶村汇总', frequency: 'monthly', send_day: 1, send_time: '08:00', is_active: true, last_sent_at: '2026-09-01T08:00:00', next_send_at: '2026-10-01T08:00:00' },
+  { id: 2, name: '每周资金分析', frequency: 'weekly', send_day: 5, send_time: '06:30', is_active: false, last_sent_at: null, next_send_at: null },
+]
+
+describe('订阅列表加载', () => {
+  it('onMounted 加载订阅；items 缺省 → []；失败 → logger.error', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(mockListSubscriptions).toHaveBeenCalledWith({ page: 1, page_size: 50 })
+    const vm = wrapper.vm as any
+    expect(vm.subscriptions).toEqual([])
+
+    mockListSubscriptions.mockResolvedValueOnce({ data: { items: subRows } })
+    await vm.loadSubscriptions()
+    expect(vm.subscriptions).toHaveLength(2)
+    expect(vm.loadingSubs).toBe(false)
+
+    mockListSubscriptions.mockRejectedValueOnce(new Error('net'))
+    await vm.loadSubscriptions()
+    expect(logError).toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalled()
+  })
+
+  it('freqLabel / freqDetail 四频次映射', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.freqLabel('daily')).toBe('每天')
+    expect(vm.freqLabel('weekly')).toBe('每周')
+    expect(vm.freqLabel('monthly')).toBe('每月')
+    expect(vm.freqLabel('quarterly')).toBe('每季度')
+    expect(vm.freqDetail({ frequency: 'daily', send_time: '08:00' })).toBe('每天 08:00')
+    expect(vm.freqDetail({ frequency: 'weekly', send_day: 5, send_time: '06:30' })).toBe('周五 06:30')
+    expect(vm.freqDetail({ frequency: 'monthly', send_day: 1, send_time: '08:00' })).toBe('每月 1 号 08:00')
+    expect(vm.freqDetail({ frequency: 'quarterly', send_day: 15, send_time: '09:00' })).toBe('每季度 15 号 09:00')
+  })
+
+  it('订阅表渲染名称与状态（启用/禁用行）', async () => {
+    mockListSubscriptions.mockResolvedValue({ data: { items: subRows } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('每月帮扶村汇总')
+    expect(text).toContain('每周资金分析')
+    expect(text).toContain('2026-09-01 08:00:00')
+    expect(text).toContain('从未')
+  })
+})
+
+describe('新建订阅', () => {
+  it('openSubscriptionDialog 打开对话框并重置表单；handleFreqChange 重置 send_day', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await findBtn(wrapper, '新建订阅').trigger('click')
+    expect(vm.subDialogVisible).toBe(true)
+    expect(vm.subForm.name).toBe('')
+
+    vm.subForm.frequency = 'weekly'
+    vm.handleFreqChange()
+    expect(vm.subForm.send_day).toBe(1)
+  })
+
+  it('handleCreateSub：空名称警告不提交；成功后关对话框刷新列表', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.subDialogVisible = true
+
+    vm.subForm.name = '   '
+    await vm.handleCreateSub()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请填写订阅名称')
+    expect(mockCreateSubscription).not.toHaveBeenCalled()
+
+    vm.subForm.name = '每月汇总'
+    vm.subForm.frequency = 'monthly'
+    vm.subForm.send_day = 15
+    mockCreateSubscription.mockResolvedValueOnce({ id: 9 })
+    await vm.handleCreateSub()
+    expect(mockCreateSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ name: '每月汇总', frequency: 'monthly', send_day: 15, format: 'xlsx' }),
+    )
+    expect(ElMessage.success).toHaveBeenCalled()
+    expect(vm.subDialogVisible).toBe(false)
+    expect(mockListSubscriptions.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('handleCreateSub：失败 → ElMessage.error', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.subDialogVisible = true
+    vm.subForm.name = 'X'
+    mockCreateSubscription.mockRejectedValueOnce({ response: { data: { detail: '重名' } } })
+    await vm.handleCreateSub()
+    expect(ElMessage.error).toHaveBeenCalledWith('重名')
+    expect(vm.creatingSub).toBe(false)
+  })
+})
+
+describe('订阅操作', () => {
+  it('handleToggleSub：成功刷新列表；失败提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const row = { ...subRows[0] }
+
+    await vm.handleToggleSub(row)
+    expect(mockToggleSubscription).toHaveBeenCalledWith(1)
+    expect(ElMessage.success).toHaveBeenCalledWith('订阅已禁用')
+
+    mockToggleSubscription.mockRejectedValueOnce(new Error('x'))
+    await vm.handleToggleSub(row)
+    expect(ElMessage.error).toHaveBeenCalled()
+  })
+
+  it('handleGenerateNow：成功提示并刷新；失败透出 detail', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const row = { ...subRows[0] }
+
+    mockGenerateSubscriptionNow.mockResolvedValueOnce({ data: { file_name: 'f.xlsx' } })
+    await vm.handleGenerateNow(row)
+    expect(mockGenerateSubscriptionNow).toHaveBeenCalledWith(1)
+    expect(ElMessage.success).toHaveBeenCalled()
+    expect(vm.generatingId).toBe(null)
+
+    mockGenerateSubscriptionNow.mockRejectedValueOnce({ response: { data: { detail: '磁盘不可写' } } })
+    await vm.handleGenerateNow(row)
+    expect(ElMessage.error).toHaveBeenCalledWith('磁盘不可写')
+    expect(vm.generatingId).toBe(null)
+  })
+
+  it('handleDeleteSub：确认后删除；取消不删；失败提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const row = { ...subRows[0] }
+
+    mockDeleteSubscription.mockResolvedValueOnce({})
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValueOnce({})
+    await vm.handleDeleteSub(row)
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(mockDeleteSubscription).toHaveBeenCalledWith(1)
+    expect(ElMessage.success).toHaveBeenCalledWith('订阅已删除')
+
+    confirmSpy.mockRejectedValueOnce('cancel')
+    await vm.handleDeleteSub(row)
+    expect(mockDeleteSubscription).toHaveBeenCalledTimes(1)
+
+    confirmSpy.mockResolvedValueOnce({})
+    mockDeleteSubscription.mockRejectedValueOnce(new Error('x'))
+    await vm.handleDeleteSub(row)
+    expect(ElMessage.error).toHaveBeenCalled()
   })
 })

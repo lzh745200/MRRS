@@ -47,7 +47,7 @@
         </div>
       </div>
 
-      <el-table stripe v-loading="loading" :data="anomalies" size="default" class="mt-3">
+      <el-table v-loading="loading" stripe :data="anomalies" size="default" class="mt-3">
         <el-table-column prop="anomaly_type_label" label="异常类型" width="120" />
         <el-table-column label="严重程度" width="100">
           <template #default="{ row }">

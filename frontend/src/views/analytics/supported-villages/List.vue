@@ -838,7 +838,11 @@ onMounted(() => {
 }
 
 .kpi-card {
-  background: linear-gradient(135deg, var(--color-primary-light-9) 0%, var(--color-primary-light-8) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-light-9) 0%,
+    var(--color-primary-light-8) 100%
+  );
   border: 1px solid var(--color-primary-light-6);
   border-radius: 8px;
   padding: 20px;

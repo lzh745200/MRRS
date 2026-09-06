@@ -87,7 +87,7 @@
           <el-button link type="primary" @click="goTo('/system/audit')">查看全部</el-button>
         </div>
       </template>
-      <el-table stripe v-loading="auditLoading" :data="auditLogs">
+      <el-table v-loading="auditLoading" stripe :data="auditLogs">
         <el-table-column label="时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>

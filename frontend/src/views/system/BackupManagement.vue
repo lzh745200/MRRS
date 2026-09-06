@@ -131,7 +131,7 @@
       </el-descriptions>
 
       <!-- 备份列表 -->
-      <el-table stripe v-loading="loading" :data="backupList" style="width: 100%; margin-top: 20px">
+      <el-table v-loading="loading" stripe :data="backupList" style="width: 100%; margin-top: 20px">
         <el-table-column prop="file_name" label="文件名" min-width="200" />
         <el-table-column prop="description" label="描述" min-width="150" />
         <el-table-column prop="backup_type" label="类型" width="80">

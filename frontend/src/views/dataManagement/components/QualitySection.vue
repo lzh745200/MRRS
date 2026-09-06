@@ -152,7 +152,7 @@
         show-icon
         style="margin-bottom: 12px"
       />
-      <el-table stripe v-if="ruleResult?.failed?.length" :data="ruleResult.failed" max-height="220">
+      <el-table v-if="ruleResult?.failed?.length" stripe :data="ruleResult.failed" max-height="220">
         <el-table-column prop="record_id" label="记录ID" width="90" />
         <el-table-column prop="label" label="记录" min-width="150" />
       </el-table>

@@ -289,7 +289,7 @@
             <div class="detail-card" style="margin-bottom: 0">
               <div class="card-header"><h3>字段修改历史</h3></div>
               <div class="card-body">
-                <el-table stripe v-if="fieldChanges.length" :data="fieldChanges">
+                <el-table v-if="fieldChanges.length" stripe :data="fieldChanges">
                   <el-table-column prop="field_name" label="字段" width="120" />
                   <el-table-column prop="old_value" label="旧值" show-overflow-tooltip>
                     <template #default="{ row }">
@@ -320,7 +320,7 @@
             <div class="detail-card" style="margin-bottom: 0">
               <div class="card-header"><h3>操作日志</h3></div>
               <div class="card-body">
-                <el-table stripe v-if="operationLogs.length" :data="operationLogs">
+                <el-table v-if="operationLogs.length" stripe :data="operationLogs">
                   <el-table-column prop="operation_type" label="操作类型" width="150">
                     <template #default="{ row }">
                       <el-tag>{{ getOperationTypeLabel(row.operation_type) }}</el-tag>

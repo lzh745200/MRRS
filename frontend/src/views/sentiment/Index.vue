@@ -136,7 +136,7 @@
       <div v-else-if="newsList.length === 0" class="section-empty">
         <EmptyState text="暂无新闻数据" :size="60" />
       </div>
-      <el-table stripe v-else :data="newsList">
+      <el-table v-else stripe :data="newsList">
         <el-table-column prop="title" label="标题" min-width="280" show-overflow-tooltip />
         <el-table-column label="情感" width="100" align="center">
           <template #default="scope">

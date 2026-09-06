@@ -142,7 +142,7 @@
           <div v-if="anomalyResult" class="result-block">
             <el-divider />
             <h4>异常检测结果</h4>
-            <el-table stripe v-if="anomalyResult.anomalies?.length" :data="anomalyResult.anomalies">
+            <el-table v-if="anomalyResult.anomalies?.length" stripe :data="anomalyResult.anomalies">
               <el-table-column type="index" label="#" width="50" />
               <el-table-column v-for="col in anomalyColumns" :key="col" :prop="col" :label="col" />
               <el-table-column label="异常" width="80">

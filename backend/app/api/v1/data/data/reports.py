@@ -586,8 +586,69 @@ async def toggle_subscription(
         raise HTTPException(status_code=500, detail="切换订阅状态失败，请稍后重试或联系管理员")
 
 
+@router.post("/subscriptions/{subscription_id}/generate-now")
+async def generate_subscription_now(
+    subscription_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)
+):
+    """立即生成订阅报表（工单 003 方案 B：手动触发，不等调度周期）。
+
+    权限：仅订阅属主或管理员。生成逻辑与调度分发共用
+    SubscriptionDispatchService.generate_for_subscription（落盘 + 站内通知
+    + last_sent_at 更新，两条路径行为一致）。
+    """
+    from app.core.constants import normalize_role
+    from app.core.permission_utils import is_superuser
+    from app.services.subscription_dispatch_service import SubscriptionDispatchService
+
+    try:
+        query = db.query(ReportSubscription).filter(ReportSubscription.id == subscription_id)
+        if not (
+            is_superuser(current_user)
+            or normalize_role(getattr(current_user, "role", "")) in ("admin", "super_admin")
+        ):
+            query = query.filter(ReportSubscription.user_id == current_user.id)
+        subscription = query.first()
+
+        if not subscription:
+            raise HTTPException(status_code=404, detail="订阅不存在")
+
+        if not subscription.is_active:
+            raise HTTPException(status_code=400, detail="订阅已禁用，请先启用后再生成")
+
+        result = await SubscriptionDispatchService().generate_for_subscription(
+            db, subscription, current_user, datetime.now()
+        )
+        return success_response(
+            data={
+                "id": subscription_id,
+                "file_name": result["file_name"],
+                "file_path": result["file_path"],
+                "size": result["size"],
+                "message": "报表已生成并送达站内消息",
+            },
+            message="报表已生成",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("立即生成订阅报表失败: %s", e, exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="生成报表失败，请稍后重试或联系管理员")
+
+
 def _subscription_to_response(subscription: ReportSubscription) -> dict:
     """将订阅模型转换为响应格式"""
+    from app.services.subscription_dispatch_service import next_run_at
+
+    base = subscription.last_sent_at or subscription.created_at
+    next_send_at = None
+    if subscription.is_active and base is not None:
+        try:
+            next_send_at = next_run_at(
+                subscription.frequency, subscription.send_day, subscription.send_time, base
+            )
+        except ValueError:
+            next_send_at = None
     return {
         "id": subscription.id,
         "user_id": subscription.user_id,
@@ -604,8 +665,8 @@ def _subscription_to_response(subscription: ReportSubscription) -> dict:
         "output_dir": subscription.output_dir,
         "output_format": subscription.output_format,
         "is_active": subscription.is_active,
-        "last_sent_at": getattr(subscription, "last_sent_at", None),
-        "next_send_at": getattr(subscription, "next_send_at", None),
+        "last_sent_at": subscription.last_sent_at,
+        "next_send_at": next_send_at,
         "created_at": subscription.created_at,
         "updated_at": subscription.updated_at,
     }

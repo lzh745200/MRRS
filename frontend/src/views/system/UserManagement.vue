@@ -293,7 +293,7 @@
       <div v-if="isEdit" class="session-section">
         <el-divider content-position="left">活跃会话</el-divider>
         <div v-loading="sessionsLoading">
-          <el-table stripe v-if="userSessions.length > 0" :data="userSessions" border>
+          <el-table v-if="userSessions.length > 0" stripe :data="userSessions" border>
             <el-table-column
               prop="session_id"
               label="会话ID"

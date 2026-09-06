@@ -24,7 +24,7 @@
         <el-button type="primary" @click="openCreateDialog">新建凭证</el-button>
       </div>
 
-      <el-table stripe v-loading="loading" :data="vouchers" size="default" class="mt-3">
+      <el-table v-loading="loading" stripe :data="vouchers" size="default" class="mt-3">
         <el-table-column prop="voucher_no" label="凭证编号" width="160" />
         <el-table-column prop="direction_label" label="划转方向" width="120" />
         <el-table-column prop="amount" label="金额(万元)" width="120" />
