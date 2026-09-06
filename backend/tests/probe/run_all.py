@@ -25,6 +25,7 @@ PROBES = [
     ("r7", "probe_r7_help_assessment_effectiveness.py", "帮助文档/考核评估/成效评估"),
     ("r8", "probe_r8_concurrency.py", "并发场景（同记录写/审批竞态/并发备份/注册竞态/并发导入）"),
     ("r9", "probe_r9_quality_analytics_chunked.py", "数据质量/分析/离线地图/机器码管理/分片上传/通知偏好"),
+    ("r10", "probe_r10_subscription.py", "报表订阅全链路（四频次创建/next_send_at/generate-now/dispatch 幂等/边界）"),
 ]
 
 

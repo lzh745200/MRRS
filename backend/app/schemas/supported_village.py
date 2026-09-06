@@ -193,6 +193,8 @@ class ReportSubscriptionResponse(BaseModel):
     format: str = "xlsx"
     frequency: str = "weekly"
     is_active: bool = True
+    last_sent_at: Optional[datetime] = None
+    next_send_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
