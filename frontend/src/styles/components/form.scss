@@ -218,3 +218,69 @@
     margin-left: auto;
   }
 }
+
+// ==================== 认证页统一视觉语言（v2.1，对齐登录页） ====================
+// 注册/忘记密码/修改密码共用：照片背景 + 军绿渐变遮罩 + 玻璃卡片
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #081c15 0%, #1b4332 100%);
+}
+
+.auth-page-bg {
+  position: absolute;
+  inset: 0;
+  background-image: url('/images/login-bg/bg1.jpg');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.35;
+  z-index: 0;
+}
+
+.auth-page-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(8, 28, 21, 0.75) 0%, rgba(27, 67, 50, 0.55) 100%);
+  z-index: 0;
+}
+
+.auth-glass-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 520px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 40px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+
+  .el-form-item__label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .el-input__inner {
+    font-size: 15px;
+  }
+
+  .el-button--primary {
+    height: 44px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+}
+
+@media (max-width: 600px) {
+  .auth-glass-card {
+    padding: 24px 20px;
+    border-radius: 12px;
+  }
+}

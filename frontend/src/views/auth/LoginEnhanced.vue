@@ -81,7 +81,11 @@
                   class="custom-input"
                   autocomplete="current-password"
                 />
-                <span class="toggle-password" @click="showPassword = !showPassword">
+                <span
+                  class="toggle-password"
+                  aria-label="切换密码可见性"
+                  @click="showPassword = !showPassword"
+                >
                   <el-icon v-if="showPassword"><View /></el-icon>
                   <el-icon v-else><Hide /></el-icon>
                 </span>

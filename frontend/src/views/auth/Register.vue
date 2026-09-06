@@ -257,7 +257,24 @@ const showPassCodeHelp = () => {
   overflow-y: auto;
   position: relative;
   padding: 20px;
-  background: linear-gradient(135deg, var(--color-primary-dark-2) 0%, $military-dark 100%);
+  background: linear-gradient(135deg, #081c15 0%, #1b4332 100%);
+}
+
+.background-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: url('/images/login-bg/bg1.jpg');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.35;
+  z-index: 0;
+}
+
+.background-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(8, 28, 21, 0.7) 0%, rgba(27, 67, 50, 0.5) 100%);
 }
 
 /* 与登录/忘记密码页一致的照片背景层 */
@@ -278,10 +295,12 @@ const showPassCodeHelp = () => {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 500px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.95);
+  max-width: 520px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 
   :deep(.el-card__header) {
     background: linear-gradient(135deg, $military-dark 0%, var(--color-primary-dark-2) 100%);
@@ -337,3 +356,5 @@ const showPassCodeHelp = () => {
   }
 }
 </style>
+
+@media (max-width: 600px) { .register-card { padding: 20px 16px; border-radius: 12px; } }
