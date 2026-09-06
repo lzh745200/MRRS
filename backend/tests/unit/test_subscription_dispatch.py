@@ -366,7 +366,7 @@ class TestGenerateForSubscriptionReal:
         monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
         owner = MagicMock(spec=User)
         db = MagicMock()
-        sub = self._make_db_and_sub(tmp_path, output_dir=str(custom))
+        _, sub = self._make_db_and_sub(tmp_path, output_dir=str(custom))
 
         with patch("app.services.report_service.ReportService") as MockReportSvc:
             MockReportSvc.return_value.export_to_excel = AsyncMock(return_value=b"data")
