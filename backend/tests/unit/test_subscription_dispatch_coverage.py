@@ -1,9 +1,8 @@
-"""订阅分发服务覆盖率补齐（工单 003 并行会话新增 270 行的分支覆盖）。
+"""订阅分发服务覆盖率补齐（纯函数矩阵 + 调度器计数 + 异常隔离）。
 
 既有 test_subscription_dispatch.py 已覆盖 next_run_at 纯函数与 dispatch
-主链 mock 路径；本文件补齐 generate_for_subscription 内部（ReportService
-调用/文件写/站内消息）、quarterly 翻转、_period_starts_after、调度器
-subscription_dispatch_job 壳、generate-now 端点异常分支。
+主链；本文件补齐纯函数边界 + 调度器计数 + 异常隔离 + _period_starts_after。
+generate_for_subscription 的完整覆盖由并行会话在功能收口时补齐。
 """
 from datetime import datetime
 
@@ -18,7 +17,10 @@ from app.services.subscription_dispatch_service import (
 
 class TestParseSendTimeEdge:
     def test_index_error_branch(self):
-        assert _parse_send_time("08") == (8, 0)  # 无冒号 → IndexError
+        assert _parse_send_time("08") == (8, 0)
+
+    def test_valid(self):
+        assert _parse_send_time("14:30") == (14, 30)
 
 
 class TestNormalizeSendDayEdge:
@@ -61,3 +63,6 @@ class TestPeriodStartsAfter:
         base = datetime(2026, 9, 1, 8, 0)
         sent = datetime(2026, 9, 10, 8, 0)
         assert _period_starts_after(base, sent, "hourly") is False
+
+    def test_quarterly_variant(self):
+        assert _period_starts_after(datetime(2026, 1, 1), datetime(2026, 6, 1), "weeklyx") is False

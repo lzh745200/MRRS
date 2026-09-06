@@ -5,7 +5,6 @@
  * getReportFileName 已知与未知类型、handleExportOfficial（word/pdf、year 有/无、
  * 名称命中与兜底、detail 与默认）、打印预览、重置、
  * loadHistory（items/缺省/失败）、downloadExport 成败、历史表槽位（状态/时间/操作）。
- * 订阅管理（工单 003）：列表/新建校验与成功失败/开关/立即生成/删除确认/freqDetail 四频次。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
@@ -23,11 +22,6 @@ const {
   mockFormatFileSize,
   mockExportReportWord,
   mockExportReportPdf,
-  mockListSubscriptions,
-  mockCreateSubscription,
-  mockToggleSubscription,
-  mockDeleteSubscription,
-  mockGenerateSubscriptionNow,
   logError,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
@@ -39,11 +33,6 @@ const {
   mockFormatFileSize: vi.fn((bytes: number) => `${bytes} B`),
   mockExportReportWord: vi.fn(),
   mockExportReportPdf: vi.fn(),
-  mockListSubscriptions: vi.fn(),
-  mockCreateSubscription: vi.fn(),
-  mockToggleSubscription: vi.fn(),
-  mockDeleteSubscription: vi.fn(),
-  mockGenerateSubscriptionNow: vi.fn(),
   logError: vi.fn(),
 }))
 
@@ -66,13 +55,6 @@ vi.mock('@/api/export', () => ({
   exportReportPdf: mockExportReportPdf,
 }))
 
-vi.mock('@/api/reportSubscription', () => ({
-  listSubscriptions: mockListSubscriptions,
-  createSubscription: mockCreateSubscription,
-  toggleSubscription: mockToggleSubscription,
-  deleteSubscription: mockDeleteSubscription,
-  generateSubscriptionNow: mockGenerateSubscriptionNow,
-}))
 
 vi.mock('@/utils/logger', () => ({
   logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), log: vi.fn() },
@@ -101,7 +83,13 @@ const stubs = {
     template:
       '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /><slot :row="rowC" /></div>',
     data() {
-      return { rowA: historyRows[0], rowB: historyRows[1], rowC: historyRows[2] }
+      // is_active: 订阅区操作列「立即生成」的 :disabled 依赖它，缺省会让按钮
+      // disabled → trigger('click') 被跳过 → 内联 handler 覆盖缺口
+      return {
+        rowA: { ...historyRows[0], is_active: true },
+        rowB: { ...historyRows[1], is_active: true },
+        rowC: { ...historyRows[2], is_active: true },
+      }
     },
   },
   'el-select': {
@@ -157,6 +145,8 @@ const stubs = {
     template: '<div class="el-form-item-stub"><slot /></div>',
   },
   'el-option': { name: 'ElOption', template: '<div class="el-option-stub"><slot /></div>' },
+  // 面板由专属 SubscriptionPanel.test.ts 单一执行（coverage-merge 不变量）
+  SubscriptionPanel: { name: 'SubscriptionPanel', template: '<div class="subscription-panel-stub" />' },
 }
 
 function mountComp() {
@@ -181,7 +171,6 @@ beforeEach(() => {
   mockExportReportWord.mockResolvedValue(undefined)
   mockExportReportPdf.mockResolvedValue(undefined)
   mockDownloadExportFile.mockResolvedValue(undefined)
-  mockListSubscriptions.mockResolvedValue({ data: { items: [] } })
 })
 
 describe('挂载与历史渲染', () => {
@@ -484,299 +473,5 @@ describe('映射工具', () => {
     expect(vm.getExportStatusType('zzz')).toBe('info')
     expect(vm.formatDate(undefined)).toBe('-')
     expect(vm.formatDate('2024-06-01T10:00:00')).not.toBe('-')
-  })
-})
-
-// ════════════════ 订阅管理（工单 003）════════════════
-
-const subRows = [
-  { id: 1, name: '每月帮扶村汇总', frequency: 'monthly', send_day: 1, send_time: '08:00', is_active: true, last_sent_at: '2026-09-01T08:00:00', next_send_at: '2026-10-01T08:00:00' },
-  { id: 2, name: '每周资金分析', frequency: 'weekly', send_day: 5, send_time: '06:30', is_active: false, last_sent_at: null, next_send_at: null },
-]
-
-describe('订阅列表加载', () => {
-  it('onMounted 加载订阅；items 缺省 → []；失败 → logger.error', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    expect(mockListSubscriptions).toHaveBeenCalledWith({ page: 1, page_size: 50 })
-    const vm = wrapper.vm as any
-    expect(vm.subscriptions).toEqual([])
-
-    mockListSubscriptions.mockResolvedValueOnce({ data: { items: subRows } })
-    await vm.loadSubscriptions()
-    expect(vm.subscriptions).toHaveLength(2)
-    expect(vm.loadingSubs).toBe(false)
-
-    mockListSubscriptions.mockRejectedValueOnce(new Error('net'))
-    await vm.loadSubscriptions()
-    expect(logError).toHaveBeenCalled()
-    expect(ElMessage.error).toHaveBeenCalled()
-  })
-
-  it('freqLabel / freqDetail 四频次映射', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    expect(vm.freqLabel('daily')).toBe('每天')
-    expect(vm.freqLabel('weekly')).toBe('每周')
-    expect(vm.freqLabel('monthly')).toBe('每月')
-    expect(vm.freqLabel('quarterly')).toBe('每季度')
-    expect(vm.freqDetail({ frequency: 'daily', send_time: '08:00' })).toBe('每天 08:00')
-    expect(vm.freqDetail({ frequency: 'weekly', send_day: 5, send_time: '06:30' })).toBe('周五 06:30')
-    expect(vm.freqDetail({ frequency: 'monthly', send_day: 1, send_time: '08:00' })).toBe('每月 1 号 08:00')
-    expect(vm.freqDetail({ frequency: 'quarterly', send_day: 15, send_time: '09:00' })).toBe('每季度 15 号 09:00')
-  })
-
-  it('订阅表数据经 vm 状态渲染（表格桩固定行，改断状态与卡片存在）', async () => {
-    mockListSubscriptions.mockResolvedValue({ data: { items: subRows } })
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    expect(vm.subscriptions).toHaveLength(2)
-    expect(vm.subscriptions[0].last_sent_at).toBe('2026-09-01T08:00:00')
-    expect(vm.subscriptions[1].last_sent_at).toBeNull()
-    // 卡片与操作按钮渲染（两行 × 操作列：立即生成 ×2 + 删除 ×2）
-    expect(wrapper.find('.subscription-management').exists()).toBe(true)
-    expect(wrapper.findAll('.el-button-stub').filter((b: any) => b.text().includes('立即生成')).length).toBeGreaterThanOrEqual(2)
-  })
-})
-
-describe('新建订阅', () => {
-  it('openSubscriptionDialog 打开对话框并重置表单；handleFreqChange 重置 send_day', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    await findBtn(wrapper, '新建订阅').trigger('click')
-    expect(vm.subDialogVisible).toBe(true)
-    expect(vm.subForm.name).toBe('')
-
-    vm.subForm.frequency = 'weekly'
-    vm.handleFreqChange()
-    expect(vm.subForm.send_day).toBe(1)
-  })
-
-  it('handleCreateSub：空名称警告不提交；成功后关对话框刷新列表', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    vm.subDialogVisible = true
-
-    vm.subForm.name = '   '
-    await vm.handleCreateSub()
-    expect(ElMessage.warning).toHaveBeenCalledWith('请填写订阅名称')
-    expect(mockCreateSubscription).not.toHaveBeenCalled()
-
-    vm.subForm.name = '每月汇总'
-    vm.subForm.frequency = 'monthly'
-    vm.subForm.send_day = 15
-    mockCreateSubscription.mockResolvedValueOnce({ id: 9 })
-    await vm.handleCreateSub()
-    expect(mockCreateSubscription).toHaveBeenCalledWith(
-      expect.objectContaining({ name: '每月汇总', frequency: 'monthly', send_day: 15, format: 'xlsx' }),
-    )
-    expect(ElMessage.success).toHaveBeenCalled()
-    expect(vm.subDialogVisible).toBe(false)
-    expect(mockListSubscriptions.mock.calls.length).toBeGreaterThan(1)
-  })
-
-  it('handleCreateSub：失败 → ElMessage.error', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    vm.subDialogVisible = true
-    vm.subForm.name = 'X'
-    mockCreateSubscription.mockRejectedValueOnce({ response: { data: { detail: '重名' } } })
-    await vm.handleCreateSub()
-    expect(ElMessage.error).toHaveBeenCalledWith('重名')
-    expect(vm.creatingSub).toBe(false)
-  })
-})
-
-describe('订阅操作', () => {
-  it('handleToggleSub：成功刷新列表；失败提示', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    const row = { ...subRows[0] }
-
-    await vm.handleToggleSub(row)
-    expect(mockToggleSubscription).toHaveBeenCalledWith(1)
-    expect(ElMessage.success).toHaveBeenCalledWith('订阅已禁用')
-
-    mockToggleSubscription.mockRejectedValueOnce(new Error('x'))
-    await vm.handleToggleSub(row)
-    expect(ElMessage.error).toHaveBeenCalled()
-  })
-
-  it('handleGenerateNow：成功提示并刷新；失败透出 detail', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    const row = { ...subRows[0] }
-
-    mockGenerateSubscriptionNow.mockResolvedValueOnce({ data: { file_name: 'f.xlsx' } })
-    await vm.handleGenerateNow(row)
-    expect(mockGenerateSubscriptionNow).toHaveBeenCalledWith(1)
-    expect(ElMessage.success).toHaveBeenCalled()
-    expect(vm.generatingId).toBe(null)
-
-    mockGenerateSubscriptionNow.mockRejectedValueOnce({ response: { data: { detail: '磁盘不可写' } } })
-    await vm.handleGenerateNow(row)
-    expect(ElMessage.error).toHaveBeenCalledWith('磁盘不可写')
-    expect(vm.generatingId).toBe(null)
-  })
-
-  it('handleDeleteSub：确认后删除；取消不删；失败提示', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    const row = { ...subRows[0] }
-
-    mockDeleteSubscription.mockResolvedValueOnce({})
-    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValueOnce({})
-    await vm.handleDeleteSub(row)
-    expect(confirmSpy).toHaveBeenCalled()
-    expect(mockDeleteSubscription).toHaveBeenCalledWith(1)
-    expect(ElMessage.success).toHaveBeenCalledWith('订阅已删除')
-
-    confirmSpy.mockRejectedValueOnce('cancel')
-    await vm.handleDeleteSub(row)
-    expect(mockDeleteSubscription).toHaveBeenCalledTimes(1)
-
-    confirmSpy.mockResolvedValueOnce({})
-    mockDeleteSubscription.mockRejectedValueOnce(new Error('x'))
-    await vm.handleDeleteSub(row)
-    expect(ElMessage.error).toHaveBeenCalled()
-  })
-})
-
-describe('订阅分支补齐（模板内联 handler + 分支两侧）', () => {
-  it('freqLabel 未知值回落原文；freqDetail send_time 缺省回落 08:00', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    expect(vm.freqLabel('zzz')).toBe('zzz')
-    expect(vm.freqDetail({ frequency: 'daily' })).toBe('每天 08:00')
-  })
-
-  it('handleCreateSub：daily 分支（send_day 置 null）', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    vm.subDialogVisible = true
-    vm.subForm.name = '每日简报'
-    vm.subForm.frequency = 'daily'
-    vm.subForm.send_day = 15
-    mockCreateSubscription.mockResolvedValueOnce({ id: 1 })
-    await vm.handleCreateSub()
-    expect(mockCreateSubscription).toHaveBeenCalledWith(
-      expect.objectContaining({ frequency: 'daily', send_day: null }),
-    )
-  })
-
-  it('handleCreateSub / handleGenerateNow：userMessage 优先与字面量兜底两侧', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    vm.subDialogVisible = true
-    vm.subForm.name = 'X'
-
-    mockCreateSubscription.mockRejectedValueOnce({ userMessage: '限流' })
-    await vm.handleCreateSub()
-    expect(ElMessage.error).toHaveBeenCalledWith('限流')
-
-    mockCreateSubscription.mockRejectedValueOnce(new Error('boom'))
-    await vm.handleCreateSub()
-    expect(ElMessage.error).toHaveBeenCalledWith('创建订阅失败')
-
-    const row = { ...subRows[0] }
-    mockGenerateSubscriptionNow.mockRejectedValueOnce({ userMessage: '生成限流' })
-    await vm.handleGenerateNow(row)
-    expect(ElMessage.error).toHaveBeenCalledWith('生成限流')
-
-    mockGenerateSubscriptionNow.mockRejectedValueOnce(new Error('boom'))
-    await vm.handleGenerateNow(row)
-    expect(ElMessage.error).toHaveBeenCalledWith('生成失败')
-  })
-
-  it('handleToggleSub：is_active=false → 提示「订阅已启用」', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    await vm.handleToggleSub({ ...subRows[1] })
-    expect(ElMessage.success).toHaveBeenCalledWith('订阅已启用')
-  })
-
-  it('handleToggleSub 失败：userMessage 侧', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    mockToggleSubscription.mockRejectedValueOnce({ userMessage: '切换限流' })
-    await vm.handleToggleSub({ ...subRows[0] })
-    expect(ElMessage.error).toHaveBeenCalledWith('切换限流')
-  })
-
-  it('loadSubscriptions：裸列表响应（res 无 data）→ 直接当 body', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    mockListSubscriptions.mockResolvedValueOnce({ items: subRows })
-    await vm.loadSubscriptions()
-    expect(vm.subscriptions).toHaveLength(2)
-    mockListSubscriptions.mockResolvedValueOnce(undefined)
-    await vm.loadSubscriptions()
-    expect(vm.subscriptions).toEqual([])
-  })
-
-  it('模板交互：订阅卡片 刷新/新建 点击、switch onChange、对话框表单 v-model', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-
-    // 订阅卡片「刷新」onClick
-    const subRefresh = wrapper
-      .findAll('.subscription-management .history-header button')
-      .find((b: any) => b.text().includes('刷新'))
-    expect(subRefresh).toBeTruthy()
-    await subRefresh!.trigger('click')
-    await flushPromises()
-    expect(mockListSubscriptions.mock.calls.length).toBeGreaterThanOrEqual(2)
-
-    // 「新建订阅」onClick → 对话框打开
-    await findBtn(wrapper, '新建订阅').trigger('click')
-    expect(vm.subDialogVisible).toBe(true)
-
-    // 对话框内 v-model：名称输入、三个 select、时间选择
-    // 用组件名定位桩（对 class 稳健）：名称输入、类型/频率/日期/格式 select、时间
-    const nameInput = wrapper.find('input.el-input-stub')
-    expect(nameInput).toBeTruthy()
-    await nameInput.setValue('我的订阅')
-    expect(vm.subForm.name).toBe('我的订阅')
-
-    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
-    expect(selects.length).toBeGreaterThanOrEqual(4)
-    await selects[0].vm.$emit('update:modelValue', 'annual_summary')
-    expect(vm.subForm.report_type).toBe('annual_summary')
-    await selects[1].vm.$emit('update:modelValue', 'weekly')
-    expect(vm.subForm.frequency).toBe('weekly')
-    // weekly 时 send_day select 才渲染 → nextTick 后重新定位
-    await nextTick()
-    const daySelect = wrapper.findAllComponents({ name: 'ElSelect' })[2]
-    await daySelect.vm.$emit('update:modelValue', 3)
-    expect(vm.subForm.send_day).toBe(3)
-    const formatSelect = wrapper.findAllComponents({ name: 'ElSelect' })[3]
-    await formatSelect.vm.$emit('update:modelValue', 'pdf')
-    expect(vm.subForm.format).toBe('pdf')
-
-    const timeInput = wrapper.find('input.el-time-select-stub')
-    expect(timeInput).toBeTruthy()
-    await timeInput.setValue('09:30')
-    expect(vm.subForm.send_time).toBe('09:30')
-
-    // 表格内 switch onChange（slot 行为历史行，mock 吸收）
-    const sw = wrapper.findComponent({ name: 'ElSwitch' })
-    expect(sw).toBeTruthy()
-    await sw.vm.$emit('change')
-    await flushPromises()
   })
 })
