@@ -230,7 +230,7 @@ Triggered on `push` to main、每个指向 main 的 PR、以及 `workflow_dispat
 （`push` 触发器 2026-09-04 才补上——此前直接推 main 不会跑任何 CI，因为
 build-* 只在 tag `v*` 触发、nightly 只在定时触发，main 实际处于无门禁状态。）
 
-五个 job 承载的门禁：
+六个 job 承载的门禁：
 
 | Job | 门禁 |
 |-----|------|
@@ -239,6 +239,7 @@ build-* 只在 tag `v*` 触发、nightly 只在定时触发，main 实际处于�
 | `lint` | flake8（`--max-line-length=120 --count --max-complexity=16`）、mypy（非阻断）、bandit `-ll` |
 | `security` | pip-audit（非阻断）、`npm audit --audit-level=high`（阻断）、SBOM 许可证清单 |
 | `static-analysis` | 软删过滤扫描、版本一致性、前后端菜单对齐、后端综合安全审计 |
+| `e2e-test` | Playwright 浏览器套件 150 用例（真实起后端+前端，独立 e2e_test.db；Linux chromium，失败上传报告 artifact） |
 
 ### Nightly Full (`.github/workflows/nightly-full.yml`)
 
