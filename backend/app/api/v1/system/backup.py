@@ -12,6 +12,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from datetime import datetime, timedelta
+
 from app.core.database import get_db
 from app.core.response import ok_list, success_response
 from app.models.user import User
@@ -405,6 +407,19 @@ async def set_backup_target(
         raise HTTPException(status_code=500, detail="设置备份目标失败，请稍后重试或联系管理员")
 
 
+def _next_daily_2am(now: datetime) -> datetime:
+    """计算下一次每日 02:00 运行时间（纯函数，便于双分支确定性测试）。
+
+    2026-09-06 CI 实测：内联在端点里时，"当前时间已过 02:00"分支是否执行
+    取决于测试运行的墙钟——跑在 02:00 前覆盖、之后缺 1 行 → Linux CI 覆盖率
+    门禁随机红。提取为纯函数后用固定时间覆盖两个分支。
+    """
+    candidate = now.replace(hour=2, minute=0, second=0, microsecond=0)
+    if candidate <= now:
+        candidate += timedelta(days=1)
+    return candidate
+
+
 @router.get("/schedule", summary="获取备份计划配置")
 async def get_backup_schedule(
     db: Session = Depends(get_db),
@@ -415,18 +430,14 @@ async def get_backup_schedule(
     读取 SystemConfig：auto_backup（默认 true）、backup_retention_days（默认 7）、
     backup_schedule_cron（默认每日 02:00）。前端设置保存后回读此端点保持一致。
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime
 
     enabled = get_config("auto_backup", "true") == "true"
     retention = int(get_config("backup_retention_days", "7") or 7)
     cron = get_config("backup_schedule_cron", "0 2 * * *")
 
     # 计算下一次运行时间（基于 cron 的每日 02:00 语义）
-    now = datetime.now()
-    candidate = now.replace(hour=2, minute=0, second=0, microsecond=0)
-    if candidate <= now:
-        candidate += timedelta(days=1)
-    next_run = candidate.isoformat()
+    next_run = _next_daily_2am(datetime.now()).isoformat()
 
     return success_response(
         data={

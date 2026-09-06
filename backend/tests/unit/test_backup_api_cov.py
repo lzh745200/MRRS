@@ -511,3 +511,38 @@ class TestBackupAuthAndCleanupEdge:
                 files={"file": ("data.zip", _valid_zip_bytes(), "application/zip")},
             )
         assert resp.status_code == 400
+
+
+# ==================== _next_daily_2am 双分支确定性（CI 时钟依赖黑洞修复）====================
+
+
+class TestNextDaily2am:
+    """提取为纯函数后用固定时间覆盖两个分支，消除墙钟依赖的覆盖率漂移。
+
+    2026-09-06 CI 实测：内联时"当前已过 02:00"分支是否执行取决于测试运行的
+    墙钟（本地 02:00 前跑覆盖、CI UTC 02:00 后跑缺 1 行 → 门禁随机红）。
+    """
+
+    def test_before_2am_returns_same_day(self):
+        from datetime import datetime
+
+        from app.api.v1.system.backup import _next_daily_2am
+
+        result = _next_daily_2am(datetime(2026, 9, 6, 1, 30))
+        assert result == datetime(2026, 9, 6, 2, 0)
+
+    def test_at_2am_returns_next_day(self):
+        from datetime import datetime
+
+        from app.api.v1.system.backup import _next_daily_2am
+
+        result = _next_daily_2am(datetime(2026, 9, 6, 2, 0))
+        assert result == datetime(2026, 9, 7, 2, 0)
+
+    def test_after_2am_returns_next_day(self):
+        from datetime import datetime
+
+        from app.api.v1.system.backup import _next_daily_2am
+
+        result = _next_daily_2am(datetime(2026, 9, 6, 23, 59))
+        assert result == datetime(2026, 9, 7, 2, 0)
