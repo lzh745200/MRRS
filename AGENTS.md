@@ -552,7 +552,7 @@ Every new feature must verify:
 2. **限流签名 fail-closed**：`check_rate_limit(key, *, request, limit, window)` —— key 为首个参数且必填，缺失抛 ValueError；禁止位置传参字符串到旧 request 位。
 3. **loopback 门禁**：machine-code 校验码/密码重置、permission-packages import/confirm 未认证调用仅限本机（基于 request.client.host，禁读 X-Forwarded-For）。判定函数：各模块 `_client_is_loopback`。
 4. **公开重置排除管理员**：admin/super_admin 账号走管理端通道，公开端点恒 403。唯一例外是出厂恢复端点 `/machine-code/recover-admin-factory-password`（ADR-0008 扩展）：仅作用于"从未激活"的管理员账号（must_change_password=True 且零成功登录记录），重置为 `constants.FACTORY_ADMIN_PASSWORD`（单一来源，种子逻辑共用）；禁止放宽前置条件或让已激活账号可用。
-5. **通行码 HMAC**：`PASS_CODE_SECRET` 未显式配置时自验证路径拒绝（fail-closed）；回退改绑机器码必须 write_work_log。
+5. **通行码 HMAC**：`PASS_CODE_SECRET` 未显式配置时使用随安装包分发的内置常量密钥做跨机器 HMAC 自验证（2026-09-06 产品决策，取代 W1-T6 fail-closed——旧决策导致跨机器注册在所有安装实例 100% 失败）。配置 `PASS_CODE_SECRET` 的部署（多机注入同一随机值）强度更高。自注册兜底为管理员事后审计；组织通行码按单位名确定性派生（`generate_org_pass_code`），注册附 `org_name` 跨机器自建组织。
 6. **错误细节不出站**：响应字段禁止内插异常对象——源码扫描测试
    `tests/unit/api/test_no_error_detail_leak.py` 会拦截；新 except 分支 detail 用泛化
    文案 + `logger.error(exc_info=True)`。

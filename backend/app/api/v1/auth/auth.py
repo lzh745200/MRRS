@@ -755,6 +755,7 @@ async def register_user(
     pass_code: str = Body(..., description="通行码（激活码）"),
     full_name: Optional[str] = Body(None, description="姓名"),
     email: Optional[str] = Body(None, description="邮箱"),
+    org_name: Optional[str] = Body(None, description="单位名称（组织通行码跨机器注册时填写）"),
     db: Session = Depends(get_db),
 ) -> Any:
     """用户注册（通过通行码）
@@ -809,12 +810,19 @@ async def register_user(
 
     # 验证通行码（去除首尾空白，防止复制粘贴带入空格）
     machine_record = machine_service.verify_pass_code(pass_code.strip(), current_machine_code)
+    if not machine_record and org_name:
+        # 组织通行码跨机器自验证：下级单位机器本地库无管理员生成的记录，
+        # 凭"通行码 + 单位名称"重算确定性通行码比对，本机自动建组织与记录
+        machine_record = machine_service.self_verify_org_pass_code(
+            pass_code, org_name
+        )
     if not machine_record:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 "通行码无效或已被使用。请核对：①通行码需完整输入（连字符可省略）；"
-                "②每个通行码仅可激活一台机器；③跨机器注册请先联系管理员在本机预录入。"
+                "②每个通行码仅可激活一台机器；③组织通行码跨机器注册请填写单位名称；"
+                "④机器通行码请确认已将注册机器的机器码提供给管理员生成通行码。"
             ),
         )
 

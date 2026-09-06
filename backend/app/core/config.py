@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.11.7"
+    PROJECT_VERSION: str = "1.11.8"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -310,9 +310,10 @@ class Settings(BaseSettings):
             import logging
 
             logging.getLogger(__name__).warning(
-                "PASS_CODE_SECRET 未配置：跨机器通行码 HMAC 自验证已禁用（fail-closed，ADR-0004）。"
-                "单机部署可忽略；若需管理员在 A 机为 B 机签发通行码、用户在 B 机自助注册，"
-                "请在所有实例统一配置同一 PASS_CODE_SECRET。"
+                "PASS_CODE_SECRET 未配置：跨机器通行码使用内置常量密钥自验证"
+                "（2026-09-06 产品决策，取代 fail-closed）。"
+                "如需更高强度（内置常量不可伪造），"
+                "请在所有实例统一配置同一随机 PASS_CODE_SECRET。"
             )
 
     def model_post_init(self, __context) -> None:

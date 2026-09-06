@@ -295,6 +295,24 @@ class MachineCodeService:
         return formatted
 
     @staticmethod
+    def generate_org_pass_code(org_name: str) -> str:
+        """为组织生成确定性通行码（按单位名 HMAC，跨机器可自验证）。
+
+        2026-09-06 修复：组织通行码此前为随机数、仅存于管理员本地库，
+        下级单位在自己机器上注册时 level 2（DB 匹配）永远查不到 → 跨机器
+        注册必败。改为按单位名确定性派生（HMAC-SHA256 截断 32 位，格式同
+        机器通行码）后，任意安装实例凭"单位名称"即可重算验证——
+        注册时附带 org_name 即可完成跨机器组织注册（本机自动建组织）。
+        重复生成同一组织的通行码得到相同值（幂等，可重复下发）。
+        """
+        digest = hmac.new(
+            _PASS_CODE_SECRET,
+            ("ORG:" + (org_name or "").strip()).encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()[:32]
+        return "-".join([digest[i: i + 4] for i in range(0, 32, 4)])
+
+    @staticmethod
     def verify_pass_code_hmac(pass_code: str, machine_code: str) -> bool:
         """独立验证通行码是否匹配指定机器码（HMAC 自验证，不依赖数据库）
 
@@ -308,20 +326,80 @@ class MachineCodeService:
         Returns:
             bool: 是否匹配
         """
-        # W1-T6 fail-closed：密钥为源码内置默认值时拒绝自验证——
-        # 该默认值随安装包分发，不构成秘密；继续放行等于允许离线伪造授权。
-        if not _PASS_CODE_SECRET_EXPLICIT:
-            logger.warning(
-                "通行码 HMAC 自验证被拒绝：未显式配置 PASS_CODE_SECRET "
-                "（fail-closed，见 ADR-0004）。请由管理员预录入通行码。"
-            )
-            return False
+        # 密钥语义（2026-09-06 产品决策，取代 W1-T6 fail-closed）：未配置
+        # PASS_CODE_SECRET 时使用随安装包分发的内置常量密钥。此前该形态
+        # fail-closed 拒绝，导致跨机器注册在所有安装实例上 100% 失败
+        # （管理员在 A 机生成的通行码，用户在 B 机永远无效——R9 生产反馈）。
+        # 已知取舍：内置常量随应用分发，掌握应用者可为自己机器离线计算
+        # 通行码自注册；兜底为管理员事后审计（用户管理可见/可停用）。
         expected = MachineCodeService.generate_pass_code(machine_code)
         # 兼容用户去掉连字符的输入
         normalized_input = (pass_code or "").strip().replace("-", "").lower()
         normalized_expected = expected.replace("-", "").lower()
         # 常量时间比较，避免时序侧信道
         return hmac.compare_digest(normalized_input, normalized_expected)
+
+    def self_verify_org_pass_code(self, pass_code: str, org_name: str):
+        """组织通行码跨机器自验证：凭"通行码 + 单位名称"在本机建组织与记录。
+
+        2026-09-06 新增（配合 generate_org_pass_code 确定性化）：下级单位
+        机器本地库无组织数据，level 2（DB 匹配）永远查不到管理员生成的
+        组织通行码。本方法按单位名重算确定性通行码比对——一致则在本机
+        find-or-create 组织、创建 pending 占位记录并绑定，注册流程随后
+        自动把用户绑定到该组织。
+
+        Returns:
+            Optional[MachineCode]: 匹配返回本机记录（已绑定组织），否则 None
+        """
+        if not self.db:
+            raise ValueError("数据库会话未初始化")
+        org_name_clean = (org_name or "").strip()
+        if not org_name_clean:
+            return None
+        expected = self.generate_org_pass_code(org_name_clean)
+        normalized_input = (pass_code or "").strip().replace("-", "").lower()
+        if not normalized_input or not hmac.compare_digest(
+            normalized_input, expected.replace("-", "").lower()
+        ):
+            return None
+
+        from app.models.organization import Organization
+
+        org = (
+            self.db.query(Organization)
+            .filter(Organization.name == org_name_clean)
+            .first()
+        )
+        if not org:
+            org = Organization(name=org_name_clean)
+            self.db.add(org)
+            safe_commit(self.db)
+            self.db.refresh(org)
+
+        record = (
+            self.db.query(MachineCode)
+            .filter(
+                MachineCode.organization_id == org.id,
+                MachineCode.status == "pending",
+            )
+            .first()
+        )
+        if not record:
+            record = MachineCode(
+                machine_code=f"ORG-{org.id}-{__import__('secrets').token_hex(8)}",
+                pass_code=expected,
+                status="pending",
+                organization_id=org.id,
+                description=f"跨机器组织注册自验证（单位: {org_name_clean}）",
+            )
+            self.db.add(record)
+            safe_commit(self.db)
+            self.db.refresh(record)
+        logger.info(
+            "组织通行码自验证成功（跨机器）: org=%s, record_id=%s",
+            org_name_clean, record.id,
+        )
+        return record
 
     def create_machine_code_record(
         self,
@@ -892,8 +970,40 @@ class MachineCodeService:
         if not self.db:
             raise ValueError("数据库会话未初始化")
 
-        # 生成通行码（随机，不绑定特定机器码）
-        pass_code = self.generate_pass_code(secrets.token_hex(16))
+        # 2026-09-06 修复：通行码由随机数改为按单位名确定性派生
+        # （generate_org_pass_code）——跨机器注册时下级单位机器凭"单位名称"
+        # 即可重算自验证，不再依赖管理员本地库。
+        from app.models.organization import Organization
+
+        org = self.db.query(Organization).filter(Organization.id == organization_id).first()
+        org_name = (org.name if org else "") or ""
+        pass_code = self.generate_org_pass_code(org_name)
+
+        # 幂等复用：同组织已有 pending 记录则重置为确定性通行码（避免
+        # pass_code UNIQUE 冲突与重复记录堆积）
+        existing = (
+            self.db.query(MachineCode)
+            .filter(
+                MachineCode.organization_id == organization_id,
+                MachineCode.status == "pending",
+            )
+            .first()
+        )
+        if existing:
+            existing.pass_code = pass_code
+            existing.allow_subordinate_generation = allow_subordinate
+            existing.user_id = None
+            existing.activated_at = None
+            existing.revoked_at = None
+            existing.created_by = created_by
+            existing.description = description or existing.description
+            safe_commit(self.db)
+            self.db.refresh(existing)
+            logger.info(
+                "管理员重新生成组织通行码(确定性): organization_id=%s, pass_code=%s...",
+                organization_id, pass_code[:16],
+            )
+            return existing
 
         # 生成唯一标识符
         machine_code = f"ORG-{organization_id}-{secrets.token_hex(8)}"

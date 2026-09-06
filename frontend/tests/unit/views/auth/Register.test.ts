@@ -314,9 +314,11 @@ describe('Register.vue', () => {
     expect(vm.registerForm.confirmPassword).toBe('Ab1!abcdefghijk')
     await inputs[3].setValue('PASS-CODE-1')
     expect(vm.registerForm.passCode).toBe('PASS-CODE-1')
-    await inputs[4].setValue('张三')
+    await inputs[4].setValue('探针单位')
+    expect(vm.registerForm.orgName).toBe('探针单位')
+    await inputs[5].setValue('张三')
     expect(vm.registerForm.fullName).toBe('张三')
-    await inputs[5].setValue('a@b.c')
+    await inputs[6].setValue('a@b.c')
     expect(vm.registerForm.email).toBe('a@b.c')
   })
 

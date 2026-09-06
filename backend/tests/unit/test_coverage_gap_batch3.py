@@ -361,6 +361,7 @@ class TestMachineCodeServiceOrgPassCode:
 
     def test_create_org_pass_code_success(self):
         db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
         svc = self._make_service(db)
         record = svc.create_organization_pass_code(1, "1234", True, 1, description="test")
         assert db.add.called

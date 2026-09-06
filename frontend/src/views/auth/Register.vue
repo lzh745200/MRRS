@@ -58,6 +58,14 @@
           </el-input>
         </el-form-item>
 
+        <el-form-item label="单位名称">
+          <el-input
+            v-model="registerForm.orgName"
+            placeholder="组织通行码注册时填写（选填）"
+            clearable
+          />
+        </el-form-item>
+
         <el-form-item label="姓名" prop="fullName">
           <el-input
             v-model="registerForm.fullName"
@@ -139,6 +147,7 @@ const registerForm = reactive({
   passCode: '',
   fullName: '',
   email: '',
+  orgName: '',
 })
 
 // 验证密码强度（与后端 PasswordPolicy 保持一致：≥12位 + 大写 + 小写 + 数字 + 特殊字符）
@@ -209,6 +218,7 @@ const handleRegister = async () => {
         pass_code: registerForm.passCode,
         full_name: registerForm.fullName || registerForm.username,
         email: registerForm.email || undefined,
+        org_name: registerForm.orgName || undefined,
       },
     })
 
