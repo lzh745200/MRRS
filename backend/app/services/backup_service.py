@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import logging
+import uuid
 import os
 import shutil
 import sqlite3
@@ -330,12 +331,13 @@ class BackupService:
         Returns:
             备份记录
         """
-        # 生成备份文件名（毫秒级时间戳，避免同秒两次备份互相覆盖）
-        # 时间戳取值统一来自同一次 now()，杜绝秒与毫秒跨秒错位
+        # 生成备份文件名（毫秒级时间戳 + 短随机后缀：并发同毫秒创建时仅靠
+        # 毫秒仍会互相覆盖并撞 system_configs 唯一键 — 2026-09-06 R8 并发
+        # 探针实测三并发一个 500，故追加 uuid4 短码保证唯一）
         now = datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
-        millisecond = now.microsecond // 1000
-        backup_file_name = f"backup_{timestamp}_{millisecond:03d}.zip"
+        unique_suffix = f"{now.microsecond // 1000:03d}_{uuid.uuid4().hex[:6]}"
+        backup_file_name = f"backup_{timestamp}_{unique_suffix}.zip"
         backup_file_path = os.path.join(self.backup_dir, backup_file_name)
 
         self._ensure_disk_space()
@@ -373,7 +375,7 @@ class BackupService:
 
         # 保存备份记录到数据库（key 携带毫秒后缀，与文件名同源，
         # 修复同秒两次备份触发 system_configs 唯一键冲突的 500）
-        config_key = f"backup_{timestamp}_{millisecond:03d}"
+        config_key = f"backup_{timestamp}_{unique_suffix}"
         config = SystemConfig(key=config_key, value=backup_file_path, description=f"备份: {description}")
         self.db.add(config)
 

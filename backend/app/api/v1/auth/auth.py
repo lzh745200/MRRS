@@ -845,9 +845,18 @@ async def register_user(
 
         # 激活机器码（绑定到用户；组织通行码记录的 machine_code 是占位串，
         # 必须改绑为注册机器的真实机器码，否则登录侧机器校验恒拒绝）
-        machine_service.activate_machine_code(
+        # 原子认领：返回 False 表示通行码已被并发注册抢先激活——
+        # 清理刚创建的用户（create_user 内部已提交，需显式删除）并返回 400
+        claimed = machine_service.activate_machine_code(
             machine_record, user.id, current_machine_code=current_machine_code
         )
+        if not claimed:
+            db.delete(user)
+            safe_commit(db)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="通行码已被使用（可能被并发注册抢先激活），请重新获取通行码",
+            )
 
         # 如果通行码关联了组织，自动绑定用户到该组织
         if machine_record.organization_id:

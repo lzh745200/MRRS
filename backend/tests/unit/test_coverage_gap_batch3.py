@@ -199,13 +199,16 @@ class TestMachineCodeServiceDB:
             svc.activate_machine_code(MagicMock(), 1)
 
     def test_activate_success(self):
+        """2026-09-06 起激活为原子认领：单条 UPDATE + rowcount 判定。"""
         db = MagicMock()
         svc = self._make_service(db)
         record = MagicMock()
         record.machine_code = "a" * 32
+        db.query.return_value.filter.return_value.update.return_value = 1
         svc.activate_machine_code(record, 1)
-        assert record.status == "active"
-        assert record.user_id == 1
+        update_kwargs = db.query.return_value.filter.return_value.update.call_args[0][0]
+        assert update_kwargs["status"] == "active"
+        assert update_kwargs["user_id"] == 1
         assert db.commit.called
 
     def test_activate_rebinds_placeholder_machine_code(self):
@@ -219,10 +222,11 @@ class TestMachineCodeServiceDB:
         svc = self._make_service(db)
         record = MagicMock()
         record.machine_code = "ORG-3-abc123def456"
+        db.query.return_value.filter.return_value.update.return_value = 1
         svc.activate_machine_code(record, 42, current_machine_code="f" * 32)
-        assert record.machine_code == "f" * 32
-        assert record.status == "active"
-        assert record.user_id == 42
+        update_kwargs = db.query.return_value.filter.return_value.update.call_args[0][0]
+        assert update_kwargs["machine_code"] == "f" * 32
+        assert update_kwargs["user_id"] == 42
 
     def test_activate_without_rebind_keeps_machine_code(self):
         """不传 current_machine_code（旧调用方）：machine_code 原样保留。"""
@@ -230,9 +234,20 @@ class TestMachineCodeServiceDB:
         svc = self._make_service(db)
         record = MagicMock()
         record.machine_code = "m" * 32
+        db.query.return_value.filter.return_value.update.return_value = 1
         svc.activate_machine_code(record, 7)
-        assert record.machine_code == "m" * 32
-        assert record.status == "active"
+        update_kwargs = db.query.return_value.filter.return_value.update.call_args[0][0]
+        assert update_kwargs["machine_code"] == "m" * 32
+
+    def test_activate_claim_failure_returns_false(self):
+        """并发竞态：rowcount=0（已被抢先认领）→ 返回 False 且不提交。"""
+        db = MagicMock()
+        svc = self._make_service(db)
+        record = MagicMock()
+        record.machine_code = "m" * 32
+        db.query.return_value.filter.return_value.update.return_value = 0
+        assert svc.activate_machine_code(record, 7) is False
+        assert not db.commit.called
 
     def test_revoke_no_db(self):
         svc = self._make_service(db=None)

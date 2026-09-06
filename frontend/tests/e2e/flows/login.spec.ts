@@ -12,7 +12,7 @@ import { test, expect } from '@playwright/test'
 // 测试配置
 const TEST_USER = {
   username: process.env.TEST_USERNAME || 'admin',
-  password: process.env.TEST_PASSWORD || 'Admin@202507!',
+  password: process.env.TEST_PASSWORD || 'Admin@2026',
 }
 
 // 本文件测试登录表单本身，必须覆盖全局 storageState，以未认证态运行

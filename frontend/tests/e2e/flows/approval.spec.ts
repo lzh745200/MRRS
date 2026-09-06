@@ -31,7 +31,9 @@ test.describe('审批流程', () => {
 
       // 验证页面加载（PendingList 页头为 span.title「待审批任务」；
       // 不得用 text=a, text=b 混合写法——text= 引擎会把整串当文本匹配）
-      await expect(page.locator('.title:has-text("待审批")')).toBeVisible({ timeout: 5000 })
+      await expect(
+        page.getByRole('heading', { name: '待审批任务' })
+      ).toBeVisible({ timeout: 5000 })
     })
 
     test('待审批页面显示统计信息', async ({ page }) => {

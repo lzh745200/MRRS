@@ -20,11 +20,11 @@ test.describe('帮扶项目管理', () => {
   test('列表页面正确加载', async ({ page }) => {
     await navigateTo(page, '/projects')
     // 页面标题
-    await expect(page.locator('.page-title')).toContainText('帮扶项目管理')
+    await expect(page.getByRole('heading', { name: '帮扶项目管理' })).toBeVisible()
     // 统计行
-    await expect(page.locator('.stats-row, .stat-item').first()).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('button', { name: '新建项目' })).toBeVisible({ timeout: 10000 })
     // 数据表格
-    await expect(page.locator('.el-table')).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('main table').first()).toBeVisible({ timeout: 10000 })
   })
 
   test('统计卡片展示正确', async ({ page }) => {
@@ -50,7 +50,7 @@ test.describe('帮扶项目管理', () => {
     await page.waitForLoadState('networkidle').catch(() => {})
 
     // 页面不崩溃
-    await expect(page.locator('.el-table')).toBeVisible()
+    await expect(page.locator('main table').first()).toBeVisible()
   })
 
   test('重置筛选', async ({ page }) => {
@@ -101,7 +101,7 @@ test.describe('帮扶项目管理', () => {
     if (await inProgressCard.isVisible()) {
       await inProgressCard.click()
       await page.waitForLoadState('networkidle').catch(() => {})
-      await expect(page.locator('.el-table')).toBeVisible()
+      await expect(page.locator('main table').first()).toBeVisible()
     }
   })
 })

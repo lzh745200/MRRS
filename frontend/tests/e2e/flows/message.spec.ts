@@ -30,9 +30,9 @@ test.describe('消息通知系统', () => {
 
       // 验证页面加载：断言页面标题元素。侧边栏菜单与顶栏铃铛 tooltip 也含
       // “消息中心”文本，text= 选择器会多处命中，故用页面根类限定作用域
-      await expect(page.locator('.message-center .title')).toContainText('消息中心', {
-        timeout: 10000,
-      })
+      await expect(
+        page.getByRole('heading', { name: '消息中心' })
+      ).toBeVisible({ timeout: 10000 })
     })
 
     test('消息中心显示未读数量', async ({ page }) => {
@@ -52,7 +52,7 @@ test.describe('消息通知系统', () => {
 
       // 验证消息列表表格存在（.el-table 内部含多个原生 table，
       // 全局选择器会多处命中触发 strict mode，故限定页面作用域并取第一个）
-      const messageTable = page.locator('.message-center .el-table').first()
+      const messageTable = page.locator('main table').first()
       await expect(messageTable).toBeVisible({ timeout: 10000 })
 
       // 验证表格有列头

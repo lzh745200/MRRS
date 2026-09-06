@@ -382,7 +382,7 @@ test.describe('API 健康检查', () => {
     const loginResponse = await request.post(`${API_URL}/auth/login`, {
       form: {
         username: 'admin',
-        password: process.env.TEST_PASSWORD || 'Admin@202507!',
+        password: process.env.TEST_PASSWORD || 'Admin@2026',
       },
     })
 

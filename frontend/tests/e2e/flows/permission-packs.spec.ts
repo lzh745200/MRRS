@@ -20,7 +20,7 @@
 import { test, expect, request as playwrightRequest, type APIRequestContext } from '@playwright/test'
 
 const API_BASE = process.env.E2E_API_URL || 'http://127.0.0.1:18000/api/v1'
-const ADMIN = { username: 'admin', password: 'Admin@202507!' }
+const ADMIN = { username: 'admin', password: process.env.TEST_PASSWORD || 'E2e#Probe2026!x' }
 
 // 满足 PasswordPolicy：≥12 位、含大写+小写+数字+特殊字符（@ 在白名单内）
 const PACK_USER_PASSWORD = 'E2EPack@2026'
