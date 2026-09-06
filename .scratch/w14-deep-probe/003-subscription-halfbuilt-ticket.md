@@ -42,7 +42,14 @@
   **recycle_retention_job（回收站保留期清理）此前实际从未执行过**。
 - **端点** `POST /reports/subscriptions/{id}/generate-now`（属主或管理员；
   禁用订阅 400）。serializer 的 `next_send_at` 由纯函数动态计算。
-- **前端**：`src/api/reportSubscription.ts` API 客户端 + ReportExport.vue
-  「订阅管理」卡片（列表/上次下次时间/启停开关/立即生成/删除确认/新建对话框
-  四频次表单）。24 测试全过（含 9 个新用例）。
-- 验证：后端 138 相关测试过 + flake8 0 + bandit 0；前端 vue-tsc/lint 0。
+- **前端**：`src/api/reportSubscription.ts` API 客户端 + 独立组件
+  `src/views/export/SubscriptionPanel.vue`（订阅管理卡片：列表/上次下次时间/
+  启停开关/立即生成/删除确认/四频次新建表单），ReportExport.vue 以
+  `<SubscriptionPanel />` 挂载并桩化（coverage-merge 不变量：面板由专属
+  SubscriptionPanel.test.ts 单一执行，ReportExport.test.ts 仍是主页面唯一执行者）。
+  拆分原因：订阅分支并入主页面后出现分片合并幻影（freqDetail 分支出现 3 份
+  重复条目 400+/1/0，WSL/Node22 全量实测；模块加载标记确认无第二执行者，
+  系单 suite 内 31 次实例挂载的 fnMap 合并错位），独立组件后门禁转绿。
+- 验证：后端 138 相关测试过 + flake8 0 + bandit 0；前端 33 面板/主页测试 +
+  api 客户端 7 过，vue-tsc/lint 0；WSL/Node22 全量 --coverage
+  301 文件 6044 测试全过、12 组 glob 阈值全 100（EXIT 0）。

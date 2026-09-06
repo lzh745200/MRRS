@@ -4,7 +4,7 @@
 任何用例不得依赖 datetime.now()。
 """
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -140,6 +140,7 @@ def _make_sub(
     created_at=datetime(2026, 9, 1, 8, 0),
     is_active=True,
     format="xlsx",
+    output_dir=None,
 ):
     sub = MagicMock()
     sub.id = sub_id
@@ -153,7 +154,7 @@ def _make_sub(
     sub.last_sent_at = last_sent_at
     sub.created_at = created_at
     sub.is_active = is_active
-    sub.output_dir = None
+    sub.output_dir = output_dir
     return sub
 
 
@@ -281,3 +282,98 @@ class TestDispatchDueSubscriptions:
 
         assert stats["failed"] == 1
         db.rollback.assert_called_once()
+
+
+class TestParseSendTimeErrors:
+    def test_non_numeric_time_falls_back(self):
+        # _parse_send_time 的 except 分支：非数字小时/分钟回落 08:00
+        base = _dt("2026-09-06 09:00")
+        assert next_run_at("daily", None, "abc:xy", base) == _dt("2026-09-07 08:00")
+
+
+class TestQuarterlyCatchupYearRollover:
+    def test_q4_missed_rolls_to_next_year_january(self):
+        # base=10 月（季度月）已过 send_day → 追到下一季 1 月且跨年（135-136 行）
+        base = _dt("2026-10-20 10:00")
+        assert next_run_at("quarterly", 15, "08:00", base) == _dt("2027-01-15 08:00")
+
+
+class TestDispatchNoBase:
+    @pytest.mark.asyncio
+    async def test_both_timestamps_none_skipped(self, dispatch_env):
+        service, owner, written = dispatch_env
+        db = MagicMock()
+        sub = _make_sub(last_sent_at=None, created_at=None)
+        db.query.return_value.filter.return_value.all.return_value = [sub]
+
+        stats = await service.dispatch_due_subscriptions(db, datetime(2026, 9, 10, 8, 0))
+
+        assert stats["skipped"] == 1
+        assert written == {}
+
+
+class TestGenerateForSubscriptionReal:
+    """generate_for_subscription 真实执行（不 mock 自身）：导出/落盘/消息/last_sent_at。"""
+
+    def _make_db_and_sub(self, tmp_path, fmt="xlsx", output_dir=None, report_type="comprehensive"):
+        sub = _make_sub(format=fmt, output_dir=output_dir)
+        sub.report_type = report_type
+        sub.year = 2026
+        db = MagicMock()
+        return db, sub
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fmt,method,ext", [("xlsx", "export_to_excel", "xlsx"), ("pdf", "export_to_pdf", "pdf")])
+    async def test_generates_and_delivers(self, monkeypatch, tmp_path, fmt, method, ext):
+        from app.services.subscription_dispatch_service import SubscriptionDispatchService
+        from app.models.user import User
+
+        monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+        owner = MagicMock(spec=User)
+        owner.id = 7
+        db = MagicMock()
+        sub = self._make_db_and_sub(tmp_path, fmt=fmt)[1]
+
+        payload = b"report-bytes"
+        with patch(
+            "app.services.report_service.ReportService",
+        ) as MockReportSvc:
+            instance = MockReportSvc.return_value
+            setattr(instance, method, AsyncMock(return_value=payload))
+            with patch("app.services.message_service.MessageService") as MockMsg:
+                result = await SubscriptionDispatchService().generate_for_subscription(
+                    db, sub, owner, datetime(2026, 9, 10, 8, 0)
+                )
+
+        assert result["size"] == len(payload)
+        assert result["file_name"].endswith(ext)
+        from pathlib import Path
+
+        assert Path(result["file_path"]).read_bytes() == payload
+        # 送达语义：last_sent_at 更新 + 站内消息
+        assert sub.last_sent_at == datetime(2026, 9, 10, 8, 0)
+        MockMsg.return_value.send_system_message.assert_called_once()
+        kwargs = MockMsg.return_value.send_system_message.call_args.kwargs
+        assert kwargs["user_id"] == 7
+        assert "订阅1" in kwargs["title"]
+
+    @pytest.mark.asyncio
+    async def test_custom_output_dir_wins_over_uploads(self, monkeypatch, tmp_path):
+        from app.services.subscription_dispatch_service import SubscriptionDispatchService
+        from app.models.user import User
+
+        custom = tmp_path / "custom_out"
+        monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+        owner = MagicMock(spec=User)
+        db = MagicMock()
+        sub = self._make_db_and_sub(tmp_path, output_dir=str(custom))
+
+        with patch("app.services.report_service.ReportService") as MockReportSvc:
+            MockReportSvc.return_value.export_to_excel = AsyncMock(return_value=b"data")
+            with patch("app.services.message_service.MessageService"):
+                result = await SubscriptionDispatchService().generate_for_subscription(
+                    db, sub, owner, datetime(2026, 9, 10, 8, 0)
+                )
+
+        assert result["file_path"].startswith(str(custom))
+        assert (custom / result["file_name"]).exists()

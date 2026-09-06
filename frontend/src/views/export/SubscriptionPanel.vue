@@ -177,11 +177,12 @@ function freqLabel(f: string) {
 }
 
 function freqDetail(row: any): string {
-  const time = row.send_time || '08:00'
+  const time = row.send_time ?? '08:00'
+  const day = row.send_day ?? 1
   if (row.frequency === 'daily') return `每天 ${time}`
-  if (row.frequency === 'weekly') return `${WEEKDAY_LABELS[(row.send_day || 1) - 1]} ${time}`
-  if (row.frequency === 'monthly') return `每月 ${row.send_day || 1} 号 ${time}`
-  return `每季度 ${row.send_day || 1} 号 ${time}`
+  if (row.frequency === 'weekly') return `${WEEKDAY_LABELS[day - 1]} ${time}`
+  if (row.frequency === 'monthly') return `每月 ${day} 号 ${time}`
+  return `每季度 ${day} 号 ${time}`
 }
 
 function openSubscriptionDialog() {

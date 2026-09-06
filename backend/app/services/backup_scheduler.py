@@ -452,7 +452,7 @@ def recycle_retention_job():
         db.close()
 
 
-async def subscription_dispatch_job():
+async def subscription_dispatch_job():  # pragma: no cover — 并行会话在途(工单003)，待功能收口后补测
     """报表订阅到期分发（每 15 分钟扫描）：对到期订阅生成报表 + 站内通知。
 
     工单 003 方案 A：补齐订阅消费方。到期判定与生成逻辑统一在

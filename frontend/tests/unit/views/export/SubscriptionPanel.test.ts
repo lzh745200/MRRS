@@ -308,6 +308,10 @@ describe('订阅操作', () => {
     mockToggleSubscription.mockRejectedValueOnce({ userMessage: '切换限流' })
     await vm.handleToggleSub({ ...subRows[0] })
     expect(ElMessage.error).toHaveBeenCalledWith('切换限流')
+
+    mockToggleSubscription.mockRejectedValueOnce(new Error('boom'))
+    await vm.handleToggleSub({ ...subRows[0] })
+    expect(ElMessage.error).toHaveBeenCalledWith('切换订阅状态失败')
   })
 
   it('handleGenerateNow：成功提示并刷新；失败 detail / userMessage / 字面量三侧', async () => {
@@ -356,6 +360,11 @@ describe('订阅操作', () => {
     mockDeleteSubscription.mockRejectedValueOnce({ userMessage: '删除限流' })
     await vm.handleDeleteSub(row)
     expect(ElMessage.error).toHaveBeenCalledWith('删除限流')
+
+    ElMessageBox.confirm.mockResolvedValueOnce({})
+    mockDeleteSubscription.mockRejectedValueOnce(new Error('boom'))
+    await vm.handleDeleteSub(row)
+    expect(ElMessage.error).toHaveBeenCalledWith('删除订阅失败')
   })
 })
 
@@ -416,6 +425,13 @@ describe('模板交互（内联 handler 与分支两侧）', () => {
     const daySelect = wrapper.findAllComponents({ name: 'ElSelect' })[2]
     await daySelect.vm.$emit('update:modelValue', 3)
     expect(vm.subForm.send_day).toBe(3)
+    // 切到 monthly：v-if 重建「日期」select（新实例的 _cache handler 也需覆盖）
+    await selects[1].vm.$emit('update:modelValue', 'monthly')
+    expect(vm.subForm.frequency).toBe('monthly')
+    await nextTick()
+    const monthlyDaySelect = wrapper.findAllComponents({ name: 'ElSelect' })[2]
+    await monthlyDaySelect.vm.$emit('update:modelValue', 20)
+    expect(vm.subForm.send_day).toBe(20)
     const formatSelect = wrapper.findAllComponents({ name: 'ElSelect' })[3]
     await formatSelect.vm.$emit('update:modelValue', 'pdf')
     expect(vm.subForm.format).toBe('pdf')
@@ -441,6 +457,7 @@ describe('模板交互（内联 handler 与分支两侧）', () => {
     expect(vm.subDialogVisible).toBe(false)
     await findBtn(wrapper, '新建订阅').trigger('click')
     await nextTick()
+    vm.subForm.name = 'X' // openSubscriptionDialog 会重置名称，置非空走成功分支
     mockCreateSubscription.mockResolvedValueOnce({ id: 1 })
     const createBtn = wrapper
       .findAll('.el-button-stub')

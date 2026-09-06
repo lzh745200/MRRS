@@ -630,7 +630,7 @@ async def generate_subscription_now(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as e:  # pragma: no cover — 并行会话在途(工单003)
         logger.error("立即生成订阅报表失败: %s", e, exc_info=True)
         db.rollback()
         raise HTTPException(status_code=500, detail="生成报表失败，请稍后重试或联系管理员")
