@@ -8,7 +8,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Form, Depends, File, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Form, Depends, File, Header, HTTPException, Request, UploadFile, Body
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -140,7 +140,7 @@ def _optional_current_user(authorization: Optional[str] = Header(None)) -> Optio
 
 @router.post("/export", response_model=PermissionPackageExportResult, summary="导出权限配置包")
 def export_permission_package(
-    body: PermissionPackageExportRequest = None,
+    body: PermissionPackageExportRequest = Body(default_factory=PermissionPackageExportRequest),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -277,7 +277,7 @@ async def import_permission_package(
 @router.post("/confirm/{file_name}", response_model=PermissionPackageConfirmResult, summary="确认导入权限配置包")
 def confirm_import_permission_package(
     file_name: str,
-    body: PermissionPackageConfirmRequest = PermissionPackageConfirmRequest(),
+    body: PermissionPackageConfirmRequest = Body(default_factory=PermissionPackageConfirmRequest),
     current_user: Optional[User] = Depends(_optional_current_user),
     db: Session = Depends(get_db),
     request: Request = None,

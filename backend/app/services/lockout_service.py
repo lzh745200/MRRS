@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import case, func, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.orm import Session
 from app.core.transaction import safe_commit
 
@@ -137,16 +137,23 @@ class LockoutService:
                     else_=User.locked_until,
                 ),
             )
+            .execution_options(synchronize_session=False)  # 2026-09-09：阻止 ORM 自动 RETURNING
         )
         # 2026-09-09 修复：移除 .returning()——SQLite <3.35 不支持 RETURNING
         # 子句，PyInstaller 打包实例捆绑旧版 SQLite 时报 near "RETURNING":
         # syntax error。改为执行 UPDATE 后 refresh ORM 对象读取新值。
         db.execute(stmt)
         safe_commit(db)
-        db.expire(user, ["failed_login_count", "locked_until"])
-        db.refresh(user)
-
-        failed_count = user.failed_login_count or 0
+        try:
+            db.expire(user, ["failed_login_count", "locked_until"])
+            db.refresh(user)
+            failed_count = user.failed_login_count or 0
+        except Exception:
+            # 非 ORM 映射实例（仅携带 id 的代理对象）：退回按 id 查库读回新值
+            row = db.execute(
+                select(User.failed_login_count).where(User.id == user.id)
+            ).first()
+            failed_count = row[0] if row and row[0] else 0
 
         new_locked_until = (
             now + timedelta(minutes=self.lockout_minutes)
