@@ -5,6 +5,10 @@
         build-kylin build-kylin-arm64 kylin-clean \
         build-win-x64 build-win-x86 build-win-all fetch-vcredist
 
+# 后端 Python 解释器：默认使用项目虚拟环境（裸 python 为 managed runtime，
+# 缺少 PyInstaller/pytest 等依赖）；所有调用均在 `cd backend &&` 之后，故用相对路径
+PYTHON ?= .venv/Scripts/python.exe
+
 # 默认运行所有测试
 test: test-backend test-frontend
 	@echo "✓ 所有测试通过"
@@ -12,7 +16,7 @@ test: test-backend test-frontend
 # 后端测试
 test-backend:
 	@echo ">>> 运行后端测试..."
-	cd backend && python -m pytest tests/ -v --tb=short --cov=app
+	cd backend && $(PYTHON) -m pytest tests/ -v --tb=short --cov=app
 
 # 前端测试
 test-frontend:
@@ -39,16 +43,16 @@ test-e2e-docker:
 # 此处不再内联 --cov-fail-under，以免命令行参数屏蔽单一事实源配置）
 coverage:
 	@echo ">>> 生成覆盖率报告..."
-	cd backend && python -m pytest --cov=app --cov-report=html --cov-report=xml
+	cd backend && $(PYTHON) -m pytest --cov=app --cov-report=html --cov-report=xml
 	cd frontend && npm run test:coverage
 
 # 部署前检查（W4-T2：每条命令独立阻断，禁止 || true 吞失败）
 deploy-check:
 	@echo ">>> 运行部署前检查..."
 	# 后端：测试（覆盖率门禁阈值由 backend/.coveragerc fail_under 单一承载，真实阻断）→ flake8 → bandit
-	cd backend && python -m pytest tests/ --cov=app -q
-	cd backend && python -m flake8 app/ --max-line-length=120 --count --max-complexity=16
-	cd backend && python -m bandit -r app/ -ll -f json -o bandit-report.json
+	cd backend && $(PYTHON) -m pytest tests/ --cov=app -q
+	cd backend && $(PYTHON) -m flake8 app/ --max-line-length=120 --count --max-complexity=16
+	cd backend && $(PYTHON) -m bandit -r app/ -ll -f json -o bandit-report.json
 
 	# 前端检查（与 CI 等价：纯检查不带 --fix，覆盖率走阈值门禁）
 	cd frontend && \
@@ -62,7 +66,7 @@ deploy-check:
 security:
 	@echo ">>> 运行安全扫描..."
 	cd backend && \
-		python -m bandit -r app/ -f json -o bandit-report.json && \
+		$(PYTHON) -m bandit -r app/ -f json -o bandit-report.json && \
 		pip-audit -r requirements.txt
 
 # 清理测试产物（W4-T8：扩展根目录清理）
@@ -132,9 +136,9 @@ build-win-x64: fetch-vcredist
 	@echo ">>> 同步前端到 resources/frontend..."
 	@$(SYNC_FRONTEND)
 	@echo ">>> PyInstaller 打包后端..."
-	cd backend && python -m PyInstaller assistance-backend.spec --clean --noconfirm
+	cd backend && $(PYTHON) -m PyInstaller assistance-backend.spec --clean --noconfirm
 	@echo ">>> 验证后端产物..."
-	@test -f backend/dist/assistance-backend.exe && echo "  ✓ backend/dist/assistance-backend.exe" || (echo "  ✗ 后端 exe 未生成" && exit 1)
+	@test -f backend/dist/assistance-backend/assistance-backend.exe && echo "  ✓ backend/dist/assistance-backend/assistance-backend.exe" || (echo "  ✗ 后端 exe 未生成" && exit 1)
 	@echo ">>> electron-builder 打包 (x64)..."
 	npx electron-builder --win --x64
 	@echo "=== x64 安装包构建完成 ==="
@@ -148,9 +152,9 @@ build-win-x86: fetch-vcredist
 	@echo ">>> 同步前端到 resources/frontend..."
 	@$(SYNC_FRONTEND)
 	@echo ">>> PyInstaller 打包后端..."
-	cd backend && python -m PyInstaller assistance-backend.spec --clean --noconfirm
+	cd backend && $(PYTHON) -m PyInstaller assistance-backend.spec --clean --noconfirm
 	@echo ">>> 验证后端产物..."
-	@test -f backend/dist/assistance-backend.exe && echo "  ✓ backend/dist/assistance-backend.exe" || (echo "  ✗ 后端 exe 未生成" && exit 1)
+	@test -f backend/dist/assistance-backend/assistance-backend.exe && echo "  ✓ backend/dist/assistance-backend/assistance-backend.exe" || (echo "  ✗ 后端 exe 未生成" && exit 1)
 	@echo ">>> electron-builder 打包 (ia32)..."
 	npx electron-builder --win --ia32
 	@echo "=== x86 安装包构建完成 ==="
