@@ -137,10 +137,16 @@ class LockoutService:
                     else_=User.locked_until,
                 ),
             )
-            .returning(User.failed_login_count)
         )
-        failed_count = db.execute(stmt).scalar_one()
+        # 2026-09-09 修复：移除 .returning()——SQLite <3.35 不支持 RETURNING
+        # 子句，PyInstaller 打包实例捆绑旧版 SQLite 时报 near "RETURNING":
+        # syntax error。改为执行 UPDATE 后 refresh ORM 对象读取新值。
+        db.execute(stmt)
         safe_commit(db)
+        db.expire(user, ["failed_login_count", "locked_until"])
+        db.refresh(user)
+
+        failed_count = user.failed_login_count or 0
 
         new_locked_until = (
             now + timedelta(minutes=self.lockout_minutes)
