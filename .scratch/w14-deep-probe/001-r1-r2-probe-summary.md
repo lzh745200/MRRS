@@ -210,4 +210,17 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   低于阻断线）；npm ls js-yaml 4.3.2；lint:check 0；**前端全量 vitest
   301 文件 / 6045 用例通过**；CI PR Checks **6/6 success**。
 
+## R18（8020, 跨机器注册新语义）— 发现并修复真实缺陷（commit 25e65658）
+- ✅ 通过：HMAC 自验证注册（内置常量密钥形态）200，记录 active 且绑定用户；
+- 🐛 **同机第二个用户注册必挂**：组织通行码自注册 400「注册失败，请稍后重试」，
+  服务端日志 IntegrityError: UNIQUE constraint failed: machine_codes.machine_code
+  （activate_machine_code 无条件把 org 占位记录改绑为当前机器码，而首用户记录已
+  占用该机器码）。同机多用户（单机版主场景）100% 无法用组织/自验证通行码注册。
+- 修复（machine_code_service.py）：① 激活前探测占用，冲突则保留 ORG-/HMAC- 占位
+  机器码；② HMAC 建记录占用时改用 HMAC-<hex>；③ verify_user_machine 对
+  organization_id 非空或 ORG-/HMAC- 前缀记录放行登录（机器通行码仍严格比对）。
+- 回归：新增 4 例 + 既有 rebind 用例补前提，machine-code 相关 256 passed、
+  flake8 app 0；HTTP 复验：组织自注册 200 → 自动建组织并绑定 → 记录 ORG- 占位
+  active → 该用户登录 200；单位名不符负例返回通行码无效引导（不再兜底 400）。
+
 
