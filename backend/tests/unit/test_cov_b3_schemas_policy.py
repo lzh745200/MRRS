@@ -29,13 +29,9 @@ class TestPolicyResponseCompatProperties:
     def test_publish_date(self):
         assert self._make().publish_date == datetime(2024, 1, 15)
 
-    def test_attachment_urls(self):
-        assert self._make().attachment_urls == "/files/policy1.pdf"
-
     def test_defaults_none(self):
         resp = PolicyResponse(id=2, title="t", content="c")
         assert resp.organization_level is None
         assert resp.department is None
         assert resp.document_number is None
         assert resp.publish_date is None
-        assert resp.attachment_urls is None

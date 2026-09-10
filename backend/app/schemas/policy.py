@@ -131,10 +131,6 @@ class PolicyResponse(BaseModel):
     def publish_date(self) -> Optional[datetime]:
         return self.issue_date
 
-    @property
-    def attachment_urls(self) -> Optional[str]:
-        return self.file_path
-
 
 class PolicyListResponse(BaseModel):
     items: List[PolicyResponse] = Field(default_factory=list)
