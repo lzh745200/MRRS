@@ -198,4 +198,16 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   （cookie+raw header，公开端点同受保护）。
 - 结论：R16 无新增缺陷、无代码改动。
 
+## R17（CI 失败构建修复：security job）— 已修复并全绿（commit 96c7257）
+- 现象：并发会话推送 6c69172/5df0faf 后 PR Checks 失败；逐 job 定位仅
+  **security** 失败（其余五项含新增 e2e-test 全绿），失败步骤为
+  “Frontend dependency audit”（npm audit --audit-level=high 阻断）。
+- 根因：新增高危公告 **GHSA-2883-xcg3-v3hh**（js-yaml 4.0.0–4.3.1，
+  maxTotalMergeKeys 对空合并源不限 CPU）。
+- 修复：npm audit fix --legacy-peer-deps（直连因 vite peer ERESOLVE 失败，
+  CI 亦用 --legacy-peer-deps）→ js-yaml 4.3.2；lockfile 版本字段同步 1.12.0。
+- 验证：npm audit --audit-level=high exit 0（余 3 moderate 为 vitest 链，
+  低于阻断线）；npm ls js-yaml 4.3.2；lint:check 0；**前端全量 vitest
+  301 文件 / 6045 用例通过**；CI PR Checks **6/6 success**。
+
 
