@@ -49,10 +49,12 @@ async function exportToExcel(
 
   const ws = XLSX.utils.aoa_to_sheet([headerRow, ...rows])
   // 列宽（社区版可写入结构属性，提升打印/阅读体验）
+  // 注：rows 由上面 `keys.map(...)` 构造，每行长度恒等于 headerRow 长度且元素均为字符串，
+  // 故此处不需要 `?? ''` 兜底——那是个不可达分支（覆盖率门禁会把它算成未覆盖分支）。
   ws['!cols'] = headerRow.map((h, i) => {
     const maxLen = Math.max(
       String(h).length,
-      ...rows.slice(0, 100).map((r) => String(r[i] ?? '').length),
+      ...rows.slice(0, 100).map((r) => String(r[i]).length),
       8
     )
     return { wch: Math.min(maxLen + 2, 40) }

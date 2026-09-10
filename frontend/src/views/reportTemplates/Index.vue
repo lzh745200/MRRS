@@ -576,8 +576,10 @@ async function handleFillExport() {
   const row = fillFields.value.map((f) => fillRow.value[f.key] ?? '')
   const ws = XLSX.utils.aoa_to_sheet([header, row])
   // 列宽自适应（社区版 SheetJS 仅支持 !cols 等结构属性；填充/字体不支持写入）
+  // row 与 header 同源（都由 fillFields 映射，元素均为字符串），故 row[i] 恒有值，
+  // 不需要 `?? ''` 兜底——那是不可达分支，覆盖率门禁会判为未覆盖。
   ws['!cols'] = header.map((h: string, i: number) => ({
-    wch: Math.min(Math.max(String(h).length, String(row[i] ?? '').length, 10) + 2, 40),
+    wch: Math.min(Math.max(String(h).length, String(row[i]).length, 10) + 2, 40),
   }))
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')

@@ -367,6 +367,30 @@ describe('上传处理', () => {
     expect(vm.formData.attachment_urls).toEqual(['/files/b.pdf'])
   })
 
+  // 覆盖率补全：file.url 缺失时依次回退 response.data.url → response.url
+  it('handleUploadRemove：回退 response.data.url 与 response.url', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.formData.attachment_urls = ['/files/x.pdf', '/files/y.pdf', '/files/z.pdf']
+
+    vm.handleUploadRemove({ response: { data: { url: '/files/x.pdf' } } } as any)
+    expect(vm.formData.attachment_urls).toEqual(['/files/y.pdf', '/files/z.pdf'])
+
+    vm.handleUploadRemove({ response: { url: '/files/y.pdf' } } as any)
+    expect(vm.formData.attachment_urls).toEqual(['/files/z.pdf'])
+  })
+
+  // 覆盖率补全：file.url 为 null（非 undefined）同样走回退链
+  it('handleUploadRemove：url 为 null 时回退响应体', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.formData.attachment_urls = ['/files/n.pdf']
+    vm.handleUploadRemove({ url: null, response: { data: { url: '/files/n.pdf' } } } as any)
+    expect(vm.formData.attachment_urls).toEqual([])
+  })
+
   it('beforeUpload 全分支', async () => {
     const wrapper = mountComp()
     await flushPromises()
@@ -437,10 +461,30 @@ describe('提交', () => {
   it('保存按钮 → handleSubmit', async () => {
     const wrapper = mountComp()
     await flushPromises()
+    const vm = wrapper.vm as any
     const save = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('保存'))
     await save!.trigger('click')
     await flushPromises()
     expect(policyStore.createPolicy).toHaveBeenCalled()
+  })
+
+  // 覆盖率补全：attachment_urls 为空/未定义时提交 `|| []` 兜底
+  it('attachment_urls 为空 → 提交 []', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.formData.attachment_urls = []
+    await vm.handleSubmit()
+    expect(policyStore.createPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({ attachment_urls: [] })
+    )
+
+    policyStore.createPolicy.mockClear()
+    vm.formData.attachment_urls = undefined
+    await vm.handleSubmit()
+    expect(policyStore.createPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({ attachment_urls: [] })
+    )
   })
 })
 
