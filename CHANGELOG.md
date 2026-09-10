@@ -7,6 +7,16 @@
 
 ## [1.12.0] - 2026-09-06 — 🎨 UI 全面优化：字体统一 + 40px 舒适密度 + 布局标准化 + 认证页统一
 
+### 安全
+- 🔒 **前端依赖审计阻断修复（CI `security` job 变红）**：新增公告
+  GHSA-2883-xcg3-v3hh（js-yaml 4.0.0–4.3.1，High，maxTotalMergeKeys 对空合并源
+  不限 CPU）触发 `npm audit --audit-level=high` 非零退出，导致 PR Checks 的
+  security job 失败（其余五 job 全绿）。修复：`npm audit fix --legacy-peer-deps`
+  将 js-yaml 升至 **4.3.2**（dev 传递依赖，eslint 链），同步 lockfile 版本字段
+  1.11.5→1.12.0；复验 `npm audit --audit-level=high` **exit 0**（余 3 个 moderate
+  属 vitest/@vitest/mocker 链，低于阻断线），前端全量 vitest 301 文件/6045 用例
+  通过、lint:check 0。
+
 ### 功能
 - ✨ **报表订阅闭环（工单 003 方案 A+B 落地）**：此前订阅可创建但无任何消费方
   （无调度、无生成、前端无 UI），创建后静默无产出。现补齐：
