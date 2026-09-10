@@ -48,6 +48,18 @@ def _get_username(current_user) -> str:
     return getattr(current_user, "full_name", None) or getattr(current_user, "username", "")
 
 
+def _require_related_exists(db: Session, related_id, model, message: str) -> None:
+    """可选外键关联存在性校验（R21）。
+
+    传了 ID 就必须存在，否则直接 INSERT 会撞 SQLite 外键约束并升级为 500；
+    未传（None）表示"不关联"，放行。
+    """
+    if not related_id:
+        return
+    if db.query(model).filter(model.id == related_id).first() is None:
+        raise HTTPException(status_code=404, detail=message)
+
+
 def _get_project_or_403(project_id: int, current_user, db: Session) -> Project:
     """加载项目并做 404/403 数据权限校验（区分"不存在"与"跨组织"）。
 
@@ -703,8 +715,13 @@ async def create_transfer_voucher(
     if exists:
         raise HTTPException(status_code=400, detail=f"凭证编号 {data.voucher_no} 已存在")
 
+    # R21：同合同创建 —— 关联对象先验存在，避免外键失败升级为 500
+    _require_related_exists(db, data.project_id, Project, "关联项目不存在")
+    _require_related_exists(db, data.fund_id, Fund, "关联经费不存在")
+
     # 预算余额校验：划转金额 ≤ 预算余额
     if data.fund_id:
+        _require_related_exists(db, data.fund_id, Fund, "关联经费不存在")
         fund = db.query(Fund).filter(Fund.id == data.fund_id).first()
         if fund:
             approved = float(fund.approved_amount or fund.planned_amount or fund.amount or 0)
@@ -751,7 +768,10 @@ async def get_transfer_voucher(
     v = db.query(FundTransferVoucher).filter(FundTransferVoucher.id == voucher_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="凭证不存在")
-    _get_project_or_403(v.project_id, current_user, db)
+    # 同合同详情：project_id 可选（前端从菜单进入时无项目上下文），无项目即无
+    # 项目级授权对象，不再恒 400 —— 否则"能创建不能读"，与更新/删除口径矛盾。
+    if v.project_id:
+        _get_project_or_403(v.project_id, current_user, db)
     return success_response(data=_voucher_to_dict(v))
 
 
@@ -994,6 +1014,12 @@ async def create_contract(
     if exists:
         raise HTTPException(status_code=400, detail=f"合同编号 {data.contract_no} 已存在")
 
+    # R21：关联对象必须先验存在。此前直接 INSERT，SQLite 外键约束失败会抛
+    # OperationalError → 前端只看到 500「服务器内部错误」（项目/经费 ID 失效或
+    # 传 0/负数时必现），属于把用户输入错误报成服务端故障。
+    _require_related_exists(db, data.project_id, Project, "关联项目不存在")
+    _require_related_exists(db, data.fund_id, Fund, "关联经费不存在")
+
     contract = FundContract(
         **data.model_dump(),
         created_by=_get_username(current_user),
@@ -1019,7 +1045,14 @@ async def get_contract(
     c = db.query(FundContract).filter(FundContract.id == contract_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="合同不存在")
-    _get_project_or_403(c.project_id, current_user, db)
+    if c.project_id:
+        _get_project_or_403(c.project_id, current_user, db)
+    # 合同允许不挂项目（ContractCreate.project_id 可选，前端从菜单进入合同管理时
+    # 无 project_id 上下文）。历史缺陷：详情端无条件调 _get_project_or_403，导致
+    # 这类合同"创建成功但详情恒 400"，而同一资源的更新/删除/附件却放行 —— 同一资源
+    # 两套口径。此处只在确实挂了项目时才做 404/403 校验。
+    # 顺带修复历史脏数据（附件 JSON 曾被写进 remarks）。
+    _contract_attachments(c, db)
 
     payments = (
         db.query(FundContractPayment)
@@ -2201,7 +2234,9 @@ def _contract_to_dict(c: FundContract) -> dict:
         "deadline": c.deadline.isoformat() if c.deadline else None,
         "status": c.status,
         "status_label": status_labels.get(c.status, c.status),
-        "remarks": c.remarks,
+        # 列表端不做写库修复，但也不能把历史脏数据（remarks 曾被附件 JSON 整体
+        # 覆盖）当"备注"出站 —— 能解析成附件数组即视为无备注。
+        "remarks": None if _parse_attachment_json(c.remarks) else c.remarks,
         "created_by": c.created_by,
         "created_at": c.created_at.isoformat() if c.created_at else None,
     }
@@ -2303,7 +2338,7 @@ async def upload_contract_attachment(
     if not contract:
         raise HTTPException(status_code=404, detail="合同不存在")
 
-    existing = _contract_attachments(contract)
+    existing = _contract_attachments(contract, db)
     existing.append(
         {
             "url": data.url,
@@ -2313,7 +2348,8 @@ async def upload_contract_attachment(
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
     )
-    setattr(contract, "remarks", _json.dumps(existing, ensure_ascii=False) if existing else None)
+    # R21：附件写自己的列，绝不碰 remarks（备注属于用户输入，附件不得覆盖它）
+    contract.attachments_json = _json.dumps(existing, ensure_ascii=False)
     safe_commit(db)
 
     return success_response(
@@ -2335,19 +2371,41 @@ async def list_contract_attachments(
     contract = db.query(FundContract).filter(FundContract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=404, detail="合同不存在")
-    items = _contract_attachments(contract)
+    items = _contract_attachments(contract, db)
     return ok_list(items=items, total=len(items))
 
 
-def _contract_attachments(contract) -> list:
-    """解析合同备注中的附件记录（JSON 数组）"""
-    remarks = getattr(contract, "remarks", None)
-    if not remarks:
+def _contract_attachments(contract, db=None) -> list:
+    """解析合同附件记录（JSON 数组）。
+
+    存储位置是 `attachments_json`。**历史缺陷（R21 修复）**：附件曾直接写进用户
+    可见的 `remarks`（备注）列 —— 上传第一个附件即覆盖用户填写的备注文本，而编辑
+    备注又会把全部附件清空；列表/详情还把这段 JSON 当"备注"出站。
+    这里保留对 `remarks` 的**只读**兼容（老库里的既有数据不能丢），并在拿到 db
+    会话时把它一次性搬迁到新列，同时把 remarks 还原为 NULL，避免 JSON 继续当备注展示。
+    """
+    items = _parse_attachment_json(getattr(contract, "attachments_json", None))
+    if items:
+        return items
+
+    legacy = _parse_attachment_json(getattr(contract, "remarks", None))
+    if legacy and db is not None:
+        contract.attachments_json = _json.dumps(legacy, ensure_ascii=False)
+        # 能解析成附件数组说明 remarks 已被历史缺陷整体覆盖（用户原文不可恢复），
+        # 清空以免继续冒充备注。
+        contract.remarks = None
+        safe_commit(db)
+    return legacy
+
+
+def _parse_attachment_json(raw) -> list:
+    """把 JSON 文本解析为"含 url 的字典"列表；任何非预期形态一律返回空列表。"""
+    if not raw:
         return []
     try:
-        parsed = _json.loads(remarks)
-        if isinstance(parsed, list):
-            return [a for a in parsed if isinstance(a, dict) and "url" in a]
+        parsed = _json.loads(raw)
     except (ValueError, TypeError):
-        pass
+        return []
+    if isinstance(parsed, list):
+        return [a for a in parsed if isinstance(a, dict) and "url" in a]
     return []

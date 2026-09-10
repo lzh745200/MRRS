@@ -38,6 +38,30 @@
   通过、lint:check 0。
 
 ### 修复
+- 🐛 **合同附件覆盖用户备注 / 改备注清空附件（合同管理）**：合同附件此前被
+  序列化成 JSON 整体写进 `fund_contracts.remarks` —— 而 `remarks` 正是用户在
+  「新建合同」表单里填写的**备注**列。R21 探针实证三种后果：① 上传第一个附件即
+  **静默覆盖**用户已填写的备注（`甲方要求分三期付款…` 被 `[{"url": …}]` 取代，
+  原文不可恢复）；② `PUT /contracts/{id}` 传 `remarks`（编辑备注）会**清空全部
+  附件**；③ 合同列表与详情把这段 JSON 当「备注」出站。
+  修复：新增 `fund_contracts.attachments_json` 专列存附件，`remarks` 只存备注；
+  `_contract_attachments` 保留对老数据的**只读**兼容并在读到脏数据时一次性搬迁
+  （附件搬到新列、`remarks` 清空），`_contract_to_dict` 对历史脏数据不再把 JSON
+  当备注返回；迁移脚本 `contract_attachments_001`（含数据搬迁）。
+- 🐛 **合同/划转凭证关联不存在的项目或经费时报 500**：`POST /fund-lifecycle/contracts`
+  与 `POST /fund-lifecycle/transfer-vouchers` 直接 INSERT，未先验关联对象存在性，
+  SQLite 外键约束失败抛 `sqlite3.OperationalError: FOREIGN KEY constraint failed`
+  → 前端只看到「服务器内部错误」（传失效/为 0/负数的 `project_id`/`fund_id` 必现）。
+  修复：新增 `_require_related_exists` 前置校验，返回 404「关联项目不存在 /
+  关联经费不存在」；划转凭证的预算余额校验不再因经费不存在而静默跳过。
+  注：既有测试 `test_fund_not_found` 曾断言 200 —— 那只是内存测试库未启用外键
+  约束造成的假通过，已按真实服务端行为改为 404。
+- 🐛 **无项目合同的详情恒 400（同资源两种口径）**：`ContractCreate.project_id`
+  与 `TransferVoucherCreate.project_id` 均为可选（前端从菜单进入合同管理时
+  `route.query.project_id` 缺失），这类记录**能创建、能更新、能删附件**，但详情端
+  无条件调 `_get_project_or_403` → 恒 400「缺少有效的项目ID，请从经费列表中选择
+  具体项目进入」。修复：仅在确实挂了项目时才做 404/403 校验（合同与划转凭证
+  详情一致处理）。
 - 🐛 **同机第二个用户注册必挂（组织/自验证通行码跨机器注册 100% 失败）**：
   机器码记录 `machine_code` 为 UNIQUE 列，而 `activate_machine_code` 在激活时
   无条件把记录改绑为注册机真实机器码 —— 本机已有首条记录（首用户注册留下）

@@ -271,3 +271,41 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   `rbac_role_permissions` / `permission_packs` 四表均为 0 行 —— RBAC 角色由
   `POST /rbac/roles` **按需创建**，代码中无启动期种子；因此首次导出的包
   `roles:[]` 属**源数据为空**，不是导出丢数据。真正的往返验证已用自建角色证明。
+
+
+## R21（8023, 经费合同 /contracts 全链路）— 发现并修复三处真实缺陷
+- 探针修复前 15/17 → 修复后 **17/17 全绿**（真实 HTTP + 真实 DB 状态校验）。
+- 🐛 **缺陷 1（静默丢数据）：合同附件把用户备注整体覆盖。**
+  `POST /fund-lifecycle/contracts/{id}/attachments` 把附件数组 JSON 写进
+  `fund_contracts.remarks` —— 而 `remarks` 就是「新建合同」表单里的**备注**列。
+  实测：创建时填「甲方要求分三期付款，验收后付尾款」→ 登记 1 个附件后详情与列表
+  的 `remarks` 变成 `[{"url": "/uploads/r21/contract_scan.pdf", ...}]`，**用户原文
+  丢失且不可恢复**；列表接口同样把这段 JSON 当备注出站。
+- 🐛 **缺陷 2（反向清空）：编辑备注会清空全部附件。**
+  `PUT /contracts/{id}` 传 `remarks`（编辑表单的自然行为）后，
+  `GET /contracts/{id}/attachments` 由 1 条变 0 条 —— 附件与备注共用一列，
+  写入即互删。
+- 🐛 **缺陷 3（用户输入错报成服务端故障）：关联项目/经费不存在时报 500。**
+  `POST /contracts`（`project_id: 999999` / `0` / `-5`）与
+  `POST /transfer-vouchers`（`fund_id: 999999`）直接 INSERT，SQLite 外键失败抛
+  `OperationalError: FOREIGN KEY constraint failed` → 500「服务器内部错误」
+  （日志 `app.core.transaction: safe_commit: commit failed` 定位）。
+- 🐛 **缺陷 4（同资源两种口径）：无项目的合同能创建、能更新，详情却恒 400。**
+  `ContractCreate.project_id` 可选（前端从菜单进入合同管理时 `route.query.project_id`
+  缺失，实测创建成功 `project_id=None`），但详情端无条件调 `_get_project_or_403`
+  → 400「缺少有效的项目ID，请从经费列表中选择具体项目进入」；同一资源的
+  PUT/DELETE/附件端却无此校验。划转凭证详情同样问题。
+- 修复：
+  ① 新增 `fund_contracts.attachments_json` 专列（模型 + 迁移
+  `contract_attachments_001` 含脏数据搬迁），附件写自己的列，`remarks` 只存备注；
+  `_contract_attachments` 对老数据只读兼容 + 读到即搬迁（附件入新列、remarks 清空），
+  `_contract_to_dict` 不再把历史 JSON 当备注出站；
+  ② 新增 `_require_related_exists` 前置校验 → 404「关联项目/经费不存在」；
+  ③ 合同/凭证详情仅在确实挂了项目时才做 404/403 校验。
+- 复验（HTTP）：备注上传附件后保持原文（详情 + 列表）、改备注后附件仍在（1 条）、
+  历史脏数据（remarks 整体是附件数组）被识别并搬迁且不再回显 JSON、
+  无项目合同详情 200、坏项目/坏经费 404（不再 500）、不存在合同仍 404。
+- 回归：新增 `tests/unit/test_contract_attachments_r21.py`（23 例）；
+  `test_fund_not_found` 旧断言 200 属"内存测试库未开外键约束"的假通过，已改 404；
+  `app/api/v1/fund_lifecycle.py` 与 `app/models/fund_lifecycle.py` 可覆盖集 100%；
+  flake8 --max-complexity=16 对改动文件 0。

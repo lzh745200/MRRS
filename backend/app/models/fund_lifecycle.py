@@ -273,6 +273,10 @@ class FundContract(Base):
     deadline = Column(Date, nullable=True, comment="截止日期")
     status = Column(String(20), default=ContractStatus.DRAFT.value, comment="合同状态")
     remarks = Column(Text, nullable=True, comment="备注")
+    # 合同附件记录（JSON 数组文本）。2026-09-06 R21 修复：附件曾被写进 remarks
+    # （用户可见的"备注"列）——上传第一个附件即覆盖用户填写的备注，改备注又会清空
+    # 全部附件（探针实证）。附件必须有自己的列，remarks 只存备注。
+    attachments_json = Column(Text, nullable=True, comment="合同附件记录(JSON 数组)")
     created_by = Column(String(50), nullable=True, comment="创建人")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

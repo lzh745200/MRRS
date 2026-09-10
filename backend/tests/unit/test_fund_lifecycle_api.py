@@ -210,6 +210,38 @@ class TestGetPhases:
         resp = client.get(f"/api/v1/fund-lifecycle/phases/{project.id}")
         assert resp.json()["data"]["current_phase"] == 2
 
+    def test_cross_org_forbidden_403(self, client, project, db_session):
+        """跨组织访问项目详情 → _get_project_or_403 数据权限拒绝 → 403（隔离红线）。
+
+        部门级 admin（is_superuser=False）仅能访问本组织项目：project.organization_id=1，
+        用户 organization_id=2 → check_record_access 返回 False → 403。
+        """
+        from app.main import app
+        from app.core.security import get_current_user
+
+        other = Mock()
+        other.id = 999
+        other.username = "other_admin"
+        other.role = "admin"
+        other.is_superuser = False
+        other.is_active = True
+        other.permissions_list = ["read", "write"]
+        other.organization_id = 2  # 与 project.organization_id(1) 不同
+        other.email = "other@test.com"
+        other.full_name = "他组织管理员"
+
+        async def _auth():
+            return other
+
+        _original = app.dependency_overrides.copy()
+        app.dependency_overrides[get_current_user] = _auth
+        try:
+            resp = client.get(f"/api/v1/fund-lifecycle/phases/{project.id}")
+            assert resp.status_code == 403
+            assert "无权访问该组织数据" in resp.text
+        finally:
+            app.dependency_overrides = _original
+
 
 class TestAdvancePhase:
     def test_no_data(self, client, project, phases):
@@ -633,11 +665,16 @@ class TestCreateTransferVoucher:
         assert resp.status_code == 200
 
     def test_fund_not_found(self, client):
+        # R21 修复：fund_id 不存在时必须在 INSERT 前拒绝。
+        # 旧断言是 200 —— 那只是因为测试库（内存 SQLite）默认不启用外键约束，
+        # 真实服务端开了 PRAGMA foreign_keys，同一请求会抛
+        # sqlite3.OperationalError: FOREIGN KEY constraint failed → 500。
         resp = client.post("/api/v1/fund-lifecycle/transfer-vouchers", json={
             "voucher_no": "V004", "direction": "military_to_local",
             "amount": 100.0, "fund_id": 999,
         })
-        assert resp.status_code == 200
+        assert resp.status_code == 404
+        assert "经费不存在" in resp.text
 
     def test_balance_with_existing_transfers(self, client, fund, db_session):
         fund.approved_amount = Decimal("200.00")
