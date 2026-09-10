@@ -17,6 +17,23 @@
   属 vitest/@vitest/mocker 链，低于阻断线），前端全量 vitest 301 文件/6045 用例
   通过、lint:check 0。
 
+### 修复
+- 🐛 **同机第二个用户注册必挂（组织/自验证通行码跨机器注册 100% 失败）**：
+  机器码记录 `machine_code` 为 UNIQUE 列，而 `activate_machine_code` 在激活时
+  无条件把记录改绑为注册机真实机器码 —— 本机已有首条记录（首用户注册留下）
+  占用该机器码时抛 `IntegrityError: UNIQUE constraint failed:
+  machine_codes.machine_code`，被注册兜底捕获 → 用户只看到「注册失败，请稍后重试」
+  （R18 探针实测：组织通行码自注册 400，服务端日志见完整堆栈）。
+  修复（`machine_code_service.py`）：① 激活前探测占用，已被占用则保留该记录的
+  ORG-/HMAC- 占位机器码（仅 status/user_id/activated_at 落库，不再触发 UNIQUE
+  冲突）；② HMAC 自验证建记录时若当前机器码已被占用，改用 `HMAC-<hex>` 占位串
+  建行；③ `verify_user_machine` 对非设备绑定记录（organization_id 非空或
+  ORG-/HMAC- 前缀）放行登录——管理员下发的机器通行码仍严格等值比对。
+  回归：新增 4 例（激活冲突保留占位、ORG- 登录放行、HMAC- 登录放行、HMAC 占用时
+  建占位行），machine-code 相关 256 passed、flake8 app 0；HTTP 复验：组织自注册
+  200 → 自动建组织并绑定 → 记录 active 且机器码为 ORG- 占位 → 该用户可登录；
+  单位名不符的自验证负例返回「通行码无效或已被使用」引导。
+
 ### 功能
 - ✨ **报表订阅闭环（工单 003 方案 A+B 落地）**：此前订阅可创建但无任何消费方
   （无调度、无生成、前端无 UI），创建后静默无产出。现补齐：

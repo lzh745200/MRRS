@@ -84,7 +84,8 @@ class TestVerifyPassCode:
         db = MagicMock()
         q = db.query.return_value
         q.filter.return_value = q
-        q.first.side_effect = [None, None, None]  # 三次查询均返回未找到
+        # 三次验证查询 + 一次「当前机器码是否已被占用」探测查询（2026-09-10 冲突保护）
+        q.first.side_effect = [None, None, None, None]
 
         svc = mcs.MachineCodeService(db)
 
@@ -96,6 +97,38 @@ class TestVerifyPassCode:
         assert result.status == "pending"
         db.add.assert_called_once()
         mock_commit.assert_called()
+
+    def test_hmac_self_verify_creates_placeholder_when_machine_taken(self, monkeypatch):
+        """同机多用户：当前机器码已被占用时，HMAC 自验证记录用 HMAC- 占位串建行。
+
+        2026-09-10 修复：直接 INSERT machine_code=当前机器码 会撞
+        UNIQUE(machine_codes.machine_code) → 第二个自注册用户失败。
+        """
+        monkeypatch.setenv("PASS_CODE_SECRET", "unit-test-secret")
+
+        from app.services import machine_code_service as mcs
+
+        monkeypatch.setattr(mcs, "_PASS_CODE_SECRET", b"unit-test-secret")
+        monkeypatch.setattr(mcs, "_PASS_CODE_SECRET_EXPLICIT", True)
+
+        machine_code = "D" + "0" * 63
+        pass_code = mcs.MachineCodeService.generate_pass_code(machine_code)
+
+        db = MagicMock()
+        q = db.query.return_value
+        q.filter.return_value = q
+        owner = SimpleNamespace(id=1, machine_code=machine_code)
+        # 三次验证查询未命中 → 第四次占用探测命中 owner
+        q.first.side_effect = [None, None, None, owner]
+
+        svc = mcs.MachineCodeService(db)
+        with patch(f"{_MOD}.safe_commit"):
+            result = svc.verify_pass_code(pass_code, machine_code)
+
+        assert result is not None
+        assert result.machine_code.startswith("HMAC-")
+        assert result.status == "pending"
+        db.add.assert_called_once()
 
     def test_hmac_self_verify_rejects_wrong_machine(self):
         # 错误机器码 → HMAC 不匹配 → 返回 None（"通行码无效或已被使用"）

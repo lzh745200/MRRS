@@ -666,8 +666,19 @@ class MachineCodeService:
         #    HMAC 验证内部已自行做去连字符归一化。
         if not normalize and MachineCodeService.verify_pass_code_hmac(pass_code, machine_code):
             try:
+                # 同机多用户：当前机器码可能已被另一条记录占用（UNIQUE），
+                # 此时用 HMAC- 前缀占位串建记录（登录侧对非设备绑定记录放行），
+                # 避免 INSERT 冲突导致 self-service 注册失败。
+                record_machine_code = machine_code
+                owner = (
+                    self.db.query(MachineCode)
+                    .filter(MachineCode.machine_code == machine_code)
+                    .first()
+                )
+                if owner is not None:
+                    record_machine_code = f"HMAC-{secrets.token_hex(8)}"
                 record = MachineCode(
-                    machine_code=machine_code,
+                    machine_code=record_machine_code,
                     pass_code=machine_code[:32],  # 占位：本机记录不以 HMAC 全文存储
                     status="pending",
                     created_by=None,
@@ -678,9 +689,10 @@ class MachineCodeService:
                 self.db.refresh(record)
                 logger.info(
                     "通行码 HMAC 自验证成功（跨机器）: machine_code=%s..., "
-                    "已在本机创建绑定记录 id=%s",
+                    "已在本机创建绑定记录 id=%s, record_machine_code=%s...",
                     machine_code[:16],
                     record.id,
+                    record_machine_code[:16],
                 )
                 return record
             except Exception as e:  # pragma: no cover
@@ -721,6 +733,31 @@ class MachineCodeService:
         if not self.db:
             raise ValueError("数据库会话未初始化")
 
+        # 目标机器码：默认改绑为注册机真实机器码（组织占位串需改绑，见 docstring）。
+        # 冲突保护（2026-09-10 探针实测缺陷）：同一台机器上第二个用户注册时，
+        # 本机已存在一条 machine_code = 当前机器码 的记录（machine_code UNIQUE），
+        # 无条件改写会抛 IntegrityError → 注册兜底 400「注册失败」。
+        # 此时保留记录自身的占位/原机器码，登录侧 verify_user_machine 对
+        # ORG-/HMAC- 前缀的非设备绑定记录放行。
+        target_machine_code = current_machine_code or record.machine_code
+        if current_machine_code:
+            conflict = (
+                self.db.query(MachineCode)
+                .filter(
+                    MachineCode.id != record.id,
+                    MachineCode.machine_code == current_machine_code,
+                )
+                .first()
+            )
+            if conflict is not None:
+                target_machine_code = record.machine_code
+                logger.info(
+                    "激活保留占位机器码（本机已有记录占用 %s...）: record_id=%s, keep=%s...",
+                    current_machine_code[:16],
+                    record.id,
+                    (record.machine_code or "")[:16],
+                )
+
         claimed = (
             self.db.query(MachineCode)
             .filter(
@@ -733,7 +770,7 @@ class MachineCodeService:
             )
             .update(
                 {
-                    "machine_code": current_machine_code or record.machine_code,
+                    "machine_code": target_machine_code,
                     "status": "active",
                     "user_id": user_id,
                     "activated_at": datetime.now(timezone.utc),
@@ -828,6 +865,22 @@ class MachineCodeService:
         if not record:
             # 用户未绑定机器码，允许登录（兼容旧用户）
             logger.info(f"用户未绑定机器码，允许登录: user_id={user_id}")
+            return True
+
+        # 非设备绑定记录放行（2026-09-10）：组织通行码（organization_id 非空）与
+        # 跨机器自验证记录（ORG-/HMAC- 占位机器码）不携带真实本机机器码——同机多用户
+        # 注册时机器码已被首条记录占用，激活只能保留占位串。这类记录按"单位/自服务
+        # 注册"语义放行登录；管理员下发的机器通行码记录仍走严格等值比对。
+        mc_value = getattr(record, "machine_code", None)
+        is_placeholder = isinstance(mc_value, str) and mc_value.startswith(("ORG-", "HMAC-"))
+        org_id = getattr(record, "organization_id", None)
+        if is_placeholder or isinstance(org_id, int):
+            logger.info(
+                "非设备绑定记录放行登录: user_id=%s, record_machine_code=%s..., org_id=%s",
+                user_id,
+                (mc_value or "")[:16],
+                org_id,
+            )
             return True
 
         is_authorized = record.machine_code == current_machine_code

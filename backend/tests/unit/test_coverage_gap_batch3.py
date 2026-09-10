@@ -212,21 +212,44 @@ class TestMachineCodeServiceDB:
         assert db.commit.called
 
     def test_activate_rebinds_placeholder_machine_code(self):
-        """组织通行码注册：激活时必须把占位 machine_code 改绑为注册机真实机器码。
+        """组织通行码注册：本机无其他记录占用当前机器码时，占位 machine_code 改绑真实机器码。
 
         2026-09-05 探针实测缺陷：组织通行码记录的 machine_code 是占位串
         ORG-<org>-<rand>，不改绑则登录侧 verify_user_machine 的
         "记录.machine_code == 当前机器码"恒 False——注册成功却永远登录不了。
+        2026-09-10 追加冲突保护：仅当无其他记录占用当前机器码时才改绑。
         """
         db = MagicMock()
         svc = self._make_service(db)
         record = MagicMock()
         record.machine_code = "ORG-3-abc123def456"
+        # 冲突探测查询：无占用（None）
+        db.query.return_value.filter.return_value.first.return_value = None
         db.query.return_value.filter.return_value.update.return_value = 1
         svc.activate_machine_code(record, 42, current_machine_code="f" * 32)
         update_kwargs = db.query.return_value.filter.return_value.update.call_args[0][0]
         assert update_kwargs["machine_code"] == "f" * 32
         assert update_kwargs["user_id"] == 42
+
+    def test_activate_conflict_keeps_placeholder_machine_code(self):
+        """同机多用户：当前机器码已被另一条记录占用（UNIQUE）时保留占位串，不再改绑。
+
+        2026-09-10 探针实测缺陷：无条件改绑 → IntegrityError
+        UNIQUE constraint failed: machine_codes.machine_code → 注册兜底 400「注册失败」
+        （同机第二个用户用组织通行码注册必挂）。登录侧改为对 ORG-/HMAC- 记录放行。
+        """
+        db = MagicMock()
+        svc = self._make_service(db)
+        record = MagicMock()
+        record.machine_code = "ORG-5-abcdef012345"
+        # 冲突探测查询：已有占用（非 None）
+        db.query.return_value.filter.return_value.first.return_value = object()
+        db.query.return_value.filter.return_value.update.return_value = 1
+        assert svc.activate_machine_code(record, 43, current_machine_code="f" * 32) is True
+        update_kwargs = db.query.return_value.filter.return_value.update.call_args[0][0]
+        assert update_kwargs["machine_code"] == "ORG-5-abcdef012345"
+        assert update_kwargs["user_id"] == 43
+        assert update_kwargs["status"] == "active"
 
     def test_activate_without_rebind_keeps_machine_code(self):
         """不传 current_machine_code（旧调用方）：machine_code 原样保留。"""
@@ -307,6 +330,32 @@ class TestMachineCodeServiceDB:
         db.query.return_value.filter.return_value.first.return_value = mock_record
         svc = self._make_service(db)
         assert svc.verify_user_machine(1, "other_mc") is False
+
+    def test_verify_user_machine_org_placeholder_allowed(self):
+        """组织通行码记录（machine_code=ORG-占位串）非设备绑定 → 放行登录。
+
+        2026-09-10 修复：同机多用户注册时机器码已被首条记录占用，组织记录只能
+        保留占位串；若仍严格等值比对则注册成功却登录不了。
+        """
+        from types import SimpleNamespace
+
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            machine_code="ORG-5-abcdef012345", organization_id=5
+        )
+        svc = self._make_service(db)
+        assert svc.verify_user_machine(1, "real_machine_code") is True
+
+    def test_verify_user_machine_hmac_placeholder_allowed(self):
+        """跨机器 HMAC 自验证记录（machine_code=HMAC-占位串，无组织）→ 放行登录。"""
+        from types import SimpleNamespace
+
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            machine_code="HMAC-0123456789abcdef", organization_id=None
+        )
+        svc = self._make_service(db)
+        assert svc.verify_user_machine(2, "real_machine_code") is True
 
     def test_list_machine_codes_no_db(self):
         svc = self._make_service(db=None)
