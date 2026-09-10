@@ -331,13 +331,14 @@ const handleUploadSuccess = (response: any, _file: UploadFile) => {
   ElMessage.success('上传成功')
 }
 
-// 上传移除处理
+// 上传移除处理（优先 file.url，回退响应体；比较前去除首尾空白以增强健壮性）
 const handleUploadRemove = (file: UploadFile) => {
-  if (file.url) {
-    const index = formData.attachment_urls.indexOf(file.url)
-    if (index > -1) {
-      formData.attachment_urls.splice(index, 1)
-    }
+  const raw = (file as any).url ?? (file as any).response?.data?.url ?? (file as any).response?.url
+  const url = typeof raw === 'string' ? raw.trim() : ''
+  if (!url) return
+  const index = formData.attachment_urls.findIndex((u) => typeof u === 'string' && u.trim() === url)
+  if (index > -1) {
+    formData.attachment_urls.splice(index, 1)
   }
 }
 
@@ -389,7 +390,7 @@ const handleSubmit = async () => {
         document_number: formData.document_number || undefined,
         keywords: formData.keywords || undefined,
         status: formData.status,
-        attachment_urls: formData.attachment_urls?.length ? formData.attachment_urls : undefined,
+        attachment_urls: formData.attachment_urls || [],
       }
 
       if (isEdit.value) {

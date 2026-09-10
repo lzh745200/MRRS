@@ -88,15 +88,30 @@ def _safe_isoformat(val) -> Optional[str]:
 
 
 def _apply_attachments(policy: Policy, urls) -> None:
-    """将前端附件URL列表映射到政策主文件（首附件作为预览/下载主文件）"""
-    if not urls:
-        return
-    clean = [u for u in urls if isinstance(u, str) and u.strip()]
-    if not clean:
-        return
+    """将前端附件URL列表映射到政策附件字段。
+
+    行为：
+    - 全部 clean URL 以 JSON 数组字符串写入 ``policy.attachment_urls``（支持多附件）。
+    - 首个 URL 仍映射到 ``file_path/file_type/file_size``，向后兼容预览/下载主文件。
+    - 当 urls 为空（None / [] / 全空白字符串）时清空全部附件字段，
+      以支持「删除全部附件」的保存。
+    """
+    import json
     import os as _os
 
     from app.core.config import settings
+
+    clean = [u for u in (urls or []) if isinstance(u, str) and u.strip()]
+    if not clean:
+        # 清空分支：删除全部附件
+        policy.attachment_urls = None
+        policy.file_path = None
+        policy.file_type = None
+        policy.file_size = 0
+        return
+
+    # 多附件：完整列表落库
+    policy.attachment_urls = json.dumps(clean, ensure_ascii=False)
 
     first = clean[0]
     # /uploads/xxx → 本地绝对路径
@@ -1558,11 +1573,29 @@ async def get_user_favorites(
 
 
 def _attachment_urls_of(policy: Policy) -> list:
-    """政策附件以 URL 形式输出（/uploads/xxx），供前端展示与下载"""
+    """政策附件以 URL 形式输出（/uploads/xxx），供前端展示与下载。
+
+    优先解析 ``policy.attachment_urls``（JSON 数组字符串，容错非法 JSON/非列表），
+    返回全部 URL；解析为空时回退基于 ``file_path`` 的归一化逻辑（保持
+    ``/uploads/...`` 出站形态）。
+    """
+    import json
+    import os as _os
+
+    raw = getattr(policy, "attachment_urls", None)
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except (ValueError, TypeError):
+            parsed = None
+        if isinstance(parsed, list):
+            urls = [u for u in parsed if isinstance(u, str) and u.strip()]
+            if urls:
+                return urls
+
     fp = getattr(policy, "file_path", None)
     if not fp:
         return []
-    import os as _os
 
     from app.core.config import settings
 

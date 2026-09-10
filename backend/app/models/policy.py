@@ -122,6 +122,7 @@ class Policy(Base):
     file_path = Column(String(500), comment="文件路径")
     file_size = Column(Integer, comment="文件大小")
     file_type = Column(String(50), comment="文件类型")
+    attachment_urls = Column(Text, comment="附件URL列表(JSON数组字符串)")
     # 状态
     status = Column(
         String(20),
