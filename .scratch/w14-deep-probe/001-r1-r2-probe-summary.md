@@ -309,3 +309,52 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   `test_fund_not_found` 旧断言 200 属"内存测试库未开外键约束"的假通过，已改 404；
   `app/api/v1/fund_lifecycle.py` 与 `app/models/fund_lifecycle.py` 可覆盖集 100%；
   flake8 --max-complexity=16 对改动文件 0。
+
+
+## R22（8024, 全端点外键扫射 + RBAC 事务出口）— 发现并修复两类系统性缺陷
+- 做法：先用进程内 schema 内省列出**全部 36 个带 `*_id` 字段的 POST 端点**，
+  再按模型字段类型合成"能过校验的最小 payload"、把每个 `*_id` 一律喂 99999999，
+  最后看谁返回 5xx。这是把 R21 的单点发现（合同关联不存在 → 500）铺成一次
+  系统性排查，而不是逐个模块碰运气。
+- 🔴 **缺陷 1（8 个端点）：关联 ID 不存在 → 500/503。**
+  命中：`/funds`、`/funds/apply`、`/fund-budgets/transactions`、
+  `/fund-lifecycle/allocation-orders`、`/organizations`（parent_id）、
+  `/policies/categories`（parent_id）、`/projects`（village_id，返 **503**）、
+  `/user-management`（organization_id）。
+  日志统一为 `sqlite3.OperationalError: FOREIGN KEY constraint failed`
+  —— 注意 SQLite 把外键冲突报成 **OperationalError** 而非 IntegrityError，
+  所以只 catch IntegrityError 的既有装饰器（`@handle_db_errors`）覆盖不到。
+  修复：`map_db_exception` 抽为单一事实源（`core/exceptions.py`），
+  `@handle_db_errors` 与新增全局 `IntegrityError`/`OperationalError` 处理器共用；
+  非约束类 OperationalError 维持既有 500 语义（不动真实故障的语义）。
+  复验：同一套扫射 **0 个 5xx**，8 个端点全部 400「关联数据不存在或已被删除」。
+- 🔴 **缺陷 2（信息泄露，W1 #6 违规）：事务层把 SQLAlchemy 原文拼进响应体。**
+  继续追"目标不存在却返回 200"的端点时发现：`POST /rbac/grant/permission`
+  与 `/rbac/save-permissions`（user_id=99999999）返回 **500，响应体里带完整
+  INSERT 语句、表名、列名与绑定参数**：
+
+  ```
+  {"code":500,"message":"事务执行失败: (sqlite3.OperationalError) FOREIGN KEY constraint failed
+   [SQL: INSERT INTO rbac_user_permissions (id, user_id, permission, granted_by, expires_at)
+    VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at]
+   [parameters: ('b0b7792e…', 99999999, 'user:read', '1', None)]"}
+  ```
+
+  根因：`app/core/transaction.py` 8 处 `DatabaseError(f"...: {str(e)}")` +
+  `BatchOperation` 3 处。`test_no_error_detail_leak.py` 看不见 —— 它只认
+  `HTTPException(detail=<异常变量>)` 形态，这里是 `DatabaseError(message=…)`。
+  修复：`_transaction_failure`/`_batch_failure` —— 约束类 → 4xx；业务异常
+  （AppError/HTTPException）原样透出但做夹带检测；其余泛化；原文只进日志。
+  复验：grant/save 均 **400「关联数据不存在或已被删除」**（无 SQL）；
+  `/rbac/assign/role` 传不存在角色由 500「事务执行失败: 角色(x)不存在」
+  变为 **404「角色(x)不存在」**（业务文案保住、状态码语义修正）。
+- 未判为缺陷的观察项（记录备查，未改代码）：
+  - `POST /subordinates`（organization_id=99999999）→ 200 且落库一条
+    `organizationId=99999999` 的下级实例 —— 该表无外键，语义上可能是
+    "下级先注册、组织后同步"，属设计选择，未动；
+  - `POST /approval/submit-auto`（entity_id=99999999）→ 200 并生成一条
+    approval_task（自动通过）—— 对不存在实体生成审批任务属边界场景，
+    影响有限，未动；
+  - `POST /control-packages/generate`（organization_id=99999999）→ 200。
+  - 开发库 `rbac_roles` 等 4 张 RBAC 表为空属源数据为空（角色按需创建），
+    非导出丢数据（R20 已用自建角色证明往返）。

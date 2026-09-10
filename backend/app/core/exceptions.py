@@ -1,11 +1,52 @@
 """Exception handlers and custom exceptions."""
 import logging
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError as PydanticValidationError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 logger = logging.getLogger(__name__)
+
+
+# ── 数据库异常 → HTTP 映射（单一事实源） ──
+# `@handle_db_errors` 装饰器（app/utils/db_error_handler.py）与全局异常处理器
+# 共用本映射：同一种数据库错误在两条路径上必须得到同样的状态码与文案，
+# 否则"某个端点忘了加装饰器"就会把用户输入错误暴露成 500。
+#
+# 有装饰器的端点只有一小部分，R22 sweep 实测 8 个未装饰端点（/funds、/funds/apply、
+# /fund-budgets/transactions、/fund-lifecycle/allocation-orders、/organizations、
+# /policies/categories、/projects、/user-management）在传入不存在的关联 ID 时
+# 直接 500/503（日志 `sqlite3.OperationalError: FOREIGN KEY constraint failed`）。
+# 全局处理器是这条规则的兜底：约束类错误 = 用户输入可纠正 → 4xx。
+def map_db_exception(exc: Exception) -> HTTPException | None:
+    """把数据库异常翻译为 HTTPException；不是约束类错误返回 None。
+
+    注意：SQLite 把外键冲突报成 ``OperationalError`` 而非 ``IntegrityError``，
+    所以两类都要看。文案**不得**内插异常原文（W1 #6）：原文含表名/列名与 SQL
+    片段，只进日志。
+    """
+    if isinstance(exc, IntegrityError):
+        raw = str(getattr(exc, "orig", None) or exc)
+        low = raw.lower()
+        if "unique constraint failed" in low or "duplicate key" in low:
+            return HTTPException(status_code=409, detail="数据已存在，请检查唯一性约束")
+        if "foreign key constraint failed" in low:
+            return HTTPException(status_code=400, detail="关联数据不存在或已被删除")
+        return HTTPException(status_code=400, detail="数据完整性错误，请检查提交的数据")
+
+    if isinstance(exc, OperationalError):
+        low = str(getattr(exc, "orig", None) or exc).lower()
+        if "foreign key constraint failed" in low:
+            return HTTPException(status_code=400, detail="关联数据不存在或已被删除")
+        if "unique constraint failed" in low or "duplicate key" in low:
+            return HTTPException(status_code=409, detail="数据已存在，请检查唯一性约束")
+        if "not null constraint failed" in low:
+            return HTTPException(status_code=400, detail="数据完整性错误，请检查提交的数据")
+        if "check constraint failed" in low:
+            return HTTPException(status_code=400, detail="数据完整性错误，请检查提交的数据")
+
+    return None
 
 
 class AppError(Exception):
@@ -134,6 +175,40 @@ def register_exception_handlers(app: FastAPI):
             status_code=422,
             content={"code": 422, "message": "请求参数验证失败", "success": False, "errors": exc.errors()},
         )
+
+    async def _db_constraint_handler(request: Request, exc: Exception):
+        """IntegrityError / OperationalError 的统一出口。
+
+        约束类错误（外键/唯一/NOT NULL/CHECK）映射为 4xx —— 属用户可纠正的输入
+        问题；其余 OperationalError 维持既有 500 语义（真实服务端故障），不改变
+        任何现存行为。
+        同时给出 `message`（信封风格，axios 拦截器读）与 `detail`（HTTPException
+        风格，各视图的 `e.response.data.detail` 读）两个键。
+        """
+        mapped = map_db_exception(exc)
+        if mapped is None:
+            logger.error(
+                "数据库错误 %s %s: %s", request.method, request.url.path, exc, exc_info=True
+            )
+            return JSONResponse(
+                status_code=500,
+                content={"code": 500, "message": "服务器内部错误", "success": False},
+            )
+        logger.error(
+            "数据库约束错误 %s %s: %s", request.method, request.url.path, exc, exc_info=True
+        )
+        return JSONResponse(
+            status_code=mapped.status_code,
+            content={
+                "code": mapped.status_code,
+                "message": mapped.detail,
+                "detail": mapped.detail,
+                "success": False,
+            },
+        )
+
+    app.add_exception_handler(IntegrityError, _db_constraint_handler)
+    app.add_exception_handler(OperationalError, _db_constraint_handler)
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):

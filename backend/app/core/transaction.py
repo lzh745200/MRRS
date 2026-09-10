@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.database import IS_SQLITE
-from app.core.exceptions import DatabaseError
+from app.core.exceptions import AppError, DatabaseError, map_db_exception
 
 # 合法的事务隔离级别白名单
 _VALID_ISOLATION_LEVELS = frozenset(
@@ -45,6 +45,66 @@ def get_db_context():
 logger = logging.getLogger(__name__)
 
 
+_DB_DETAIL_MARKERS = (
+    "[sql:",
+    "[parameters:",
+    "sqlalchemy.exc",
+    "sqlite3.",
+    "sqlstate",
+    "psycopg",
+    "mysql.connector",
+)
+
+
+def _exception_text(exc: Exception) -> str:
+    for attr in ("message", "detail"):
+        val = getattr(exc, attr, None)
+        if isinstance(val, str) and val:
+            return val
+    return str(exc)
+
+
+def _looks_like_db_detail(exc: Exception) -> bool:
+    """文案里是否夹带了 SQLAlchemy/driver 的原文（含 SQL 结构与绑定参数）。"""
+    low = _exception_text(exc).lower()
+    return any(marker in low for marker in _DB_DETAIL_MARKERS)
+
+
+def _transaction_failure(exc: Exception, *, kind: str = "transaction") -> Exception:
+    """把事务内异常翻译成**出站安全**的应用异常（R22）。
+
+    - 约束类错误（外键/唯一/NOT NULL/CHECK）→ 对应 4xx HTTPException（用户输入可纠正）；
+    - 业务异常（`AppError` / `HTTPException`，如 NotFoundError("角色(x)不存在")）→ 原样透出，
+      不能让泛化文案把有价值的业务提示吞掉；
+    - 其余 → 泛化的 DatabaseError(500)。
+
+    ⚠️ **禁止**把 `str(exc)` 内插进出站文案（W1 不变量 #6）：SQLAlchemy 异常原文
+    形如 ``(sqlite3.OperationalError) FOREIGN KEY constraint failed
+    [SQL: INSERT INTO rbac_user_permissions (id, user_id, ...) VALUES (?, ?, ...)]
+    [parameters: ('...', 99999999, ...)]`` —— 出站即泄露表名、列名、SQL 结构与
+    绑定参数。R22 实测：给不存在的用户授权时 `/rbac/grant/permission` 的 500
+    响应体里带着完整 INSERT 语句与参数。原文只进日志（exc_info=True）。
+
+    业务异常透出前也做一次夹带检测：若其文案里已含 SQL/driver 原文（例如某处
+    `BusinessError(f"失败: {e}")`），照样降级为泛化文案。
+    """
+    mapped = map_db_exception(exc)
+    if mapped is not None:
+        logger.error("Transaction failed (constraint), rolled back", exc_info=True)
+        return mapped
+
+    if isinstance(exc, (HTTPException, AppError)) and not _looks_like_db_detail(exc):
+        logger.error("Transaction failed (business), rolled back", exc_info=True)
+        return exc
+
+    logger.error("Transaction failed, rolled back", exc_info=True)
+    if kind == "nested":
+        return DatabaseError("嵌套事务执行失败，请稍后重试或联系管理员")
+    if kind == "savepoint":
+        return DatabaseError("保存点执行失败，请稍后重试或联系管理员")
+    return DatabaseError("事务执行失败，请稍后重试或联系管理员")
+
+
 class TransactionManager:
     """事务管理器"""
 
@@ -69,8 +129,7 @@ class TransactionManager:
             raise
         except Exception as e:
             db.rollback()
-            logger.error(f"Transaction failed and rolled back: {e}")
-            raise DatabaseError(f"事务执行失败: {str(e)}") from e
+            raise _transaction_failure(e) from e
 
     @staticmethod
     def transactional(func: Callable) -> Callable:
@@ -105,14 +164,14 @@ class TransactionManager:
                         return func(session, *args, **kwargs)
                     except Exception as e:
                         session.rollback()
-                        raise DatabaseError(f"事务执行失败: {str(e)}") from e
+                        raise _transaction_failure(e) from e
             else:
                 # 使用现有会话
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
                     db.rollback()
-                    raise DatabaseError(f"事务执行失败: {str(e)}") from e
+                    raise _transaction_failure(e) from e
 
         return wrapper
 
@@ -136,8 +195,7 @@ class TransactionManager:
             return result
         except Exception as e:
             db.rollback()
-            logger.error(f"Transaction failed and rolled back: {e}")
-            raise DatabaseError(f"事务执行失败: {str(e)}") from e
+            raise _transaction_failure(e) from e
 
     @staticmethod
     @contextmanager
@@ -157,8 +215,7 @@ class TransactionManager:
             nested.commit()
         except Exception as e:
             nested.rollback()
-            logger.error(f"Nested transaction failed and rolled back: {e}")
-            raise DatabaseError(f"嵌套事务执行失败: {str(e)}") from e
+            raise _transaction_failure(e, kind="nested") from e
 
     @staticmethod
     @contextmanager
@@ -185,8 +242,7 @@ class TransactionManager:
             sp.commit()
         except Exception as e:
             sp.rollback()
-            logger.error(f"Savepoint failed and rolled back: {e}")
-            raise DatabaseError(f"保存点执行失败: {str(e)}") from e
+            raise _transaction_failure(e, kind="savepoint") from e
 
 
 # 便捷函数
@@ -263,7 +319,7 @@ def _execute_with_existing_session(db: Session, func: Callable, args, kwargs,
         return result
     except Exception as e:
         db.rollback()
-        raise DatabaseError(f"事务执行失败: {str(e)}") from e
+        raise _transaction_failure(e) from e
 
 
 def _execute_with_new_session(
@@ -278,7 +334,7 @@ def _execute_with_new_session(
             return result
         except Exception as e:
             session.rollback()
-            raise DatabaseError(f"事务执行失败: {str(e)}") from e
+            raise _transaction_failure(e) from e
 
 
 def _find_db_session(args, kwargs) -> Optional[Session]:
@@ -355,7 +411,14 @@ def retry_on_deadlock(max_retries: int = 3, delay: float = 0.1):
                             continue
                     raise
 
-            raise DatabaseError(f"事务执行失败（重试{max_retries}次后）: {str(last_exception)}") from last_exception
+            # 出站文案只带重试次数，不带异常原文（W1 #6：SQLAlchemy 原文含 SQL 与参数）
+            logger.error("Transaction failed after %d retries, rolled back", max_retries, exc_info=True)
+            mapped = map_db_exception(last_exception) if last_exception is not None else None
+            if mapped is not None:
+                raise mapped from last_exception
+            raise DatabaseError(
+                f"事务执行失败（重试{max_retries}次后），请稍后重试或联系管理员"
+            ) from last_exception
 
         return wrapper
 
@@ -395,7 +458,7 @@ class BatchOperation:
             return total_inserted
         except Exception as e:
             db.rollback()
-            raise DatabaseError(f"批量插入失败: {str(e)}") from e
+            raise _batch_failure(e, "批量插入") from e
 
     @staticmethod
     def batch_update(db: Session, model_class: type, updates: list[dict], batch_size: int = 1000) -> int:
@@ -424,7 +487,7 @@ class BatchOperation:
             return total_updated
         except Exception as e:
             db.rollback()
-            raise DatabaseError(f"批量更新失败: {str(e)}") from e
+            raise _batch_failure(e, "批量更新") from e
 
     @staticmethod
     def batch_delete(db: Session, model_class: type, ids: list, batch_size: int = 1000) -> int:
@@ -453,4 +516,14 @@ class BatchOperation:
             return total_deleted
         except Exception as e:
             db.rollback()
-            raise DatabaseError(f"批量删除失败: {str(e)}") from e
+            raise _batch_failure(e, "批量删除") from e
+
+
+def _batch_failure(exc: Exception, action: str) -> Exception:
+    """批量操作的出站安全异常（同 `_transaction_failure`：禁止内插异常原文）。"""
+    mapped = map_db_exception(exc)
+    if mapped is not None:
+        logger.error("%s failed (constraint), rolled back", action, exc_info=True)
+        return mapped
+    logger.error("%s failed, rolled back", action, exc_info=True)
+    return DatabaseError(f"{action}失败，请稍后重试或联系管理员")

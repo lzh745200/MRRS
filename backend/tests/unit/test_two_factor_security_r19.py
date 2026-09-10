@@ -15,12 +15,28 @@
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+import inspect
 
 import pytest
 from fastapi import HTTPException
 
 import app.core.security as sec
 from app.services.two_factor_service import TwoFactorService
+
+
+def _call_kwargs(db, token: str) -> dict:
+    """构造调用 `get_current_user` 的关键字参数。
+
+    `get_current_user` 有两种签名并存（并发会话正把它改成
+    `db: Session = Depends(get_db)` 复用请求级 Session）：老版在函数内
+    `SessionLocal()` 自建会话，新版由 FastAPI 注入。这里按实际签名决定是否传
+    `db`，使本文件在两种形态下都成立 —— 不传 `db` 时新版会把 `Depends(...)`
+    对象当成 Session 用（`'Depends' object has no attribute 'query'`）。
+    """
+    kwargs = {"credentials": SimpleNamespace(credentials=token)}
+    if "db" in inspect.signature(sec.get_current_user).parameters:
+        kwargs["db"] = db
+    return kwargs
 
 
 class TestTwoFactorPendingTokenCannotBeUsedAsAccessToken:
@@ -32,15 +48,17 @@ class TestTwoFactorPendingTokenCannotBeUsedAsAccessToken:
             "decode_token",
             MagicMock(return_value={"sub": "admin", "type": "access", "two_factor_pending": True}),
         )
-        session_local = MagicMock()
+        db = MagicMock()
+        session_local = MagicMock(return_value=db)
         monkeypatch.setattr("app.core.database.SessionLocal", session_local)
 
         with pytest.raises(HTTPException) as exc:
-            await sec.get_current_user(credentials=SimpleNamespace(credentials="temp"))
+            await sec.get_current_user(**_call_kwargs(db, "temp"))
 
         assert exc.value.status_code == 401
         assert "二次验证未完成" in exc.value.detail
         # 拒绝必须发生在建库会话之前：既不泄露"用户是否存在"，也不做无用查询
+        db.query.assert_not_called()
         session_local.assert_not_called()
 
     async def test_pending_token_cannot_reach_two_factor_disable(self, monkeypatch):
@@ -50,10 +68,11 @@ class TestTwoFactorPendingTokenCannotBeUsedAsAccessToken:
             "decode_token",
             MagicMock(return_value={"sub": "admin", "type": "access", "two_factor_pending": True}),
         )
-        monkeypatch.setattr("app.core.database.SessionLocal", MagicMock(return_value=MagicMock()))
+        db = MagicMock()
+        monkeypatch.setattr("app.core.database.SessionLocal", MagicMock(return_value=db))
 
         with pytest.raises(HTTPException) as exc:
-            await sec.get_current_user(credentials=SimpleNamespace(credentials="temp"))
+            await sec.get_current_user(**_call_kwargs(db, "temp"))
 
         assert exc.value.status_code == 401
 
@@ -69,7 +88,7 @@ class TestTwoFactorPendingTokenCannotBeUsedAsAccessToken:
             MagicMock(return_value={"sub": "admin", "type": "access", "two_factor_pending": False}),
         )
 
-        result = await sec.get_current_user(credentials=SimpleNamespace(credentials="real"))
+        result = await sec.get_current_user(**_call_kwargs(db, "real"))
 
         assert result is user
 
@@ -83,7 +102,7 @@ class TestTwoFactorPendingTokenCannotBeUsedAsAccessToken:
             sec, "decode_token", MagicMock(return_value={"sub": "admin", "type": "access"})
         )
 
-        result = await sec.get_current_user(credentials=SimpleNamespace(credentials="real"))
+        result = await sec.get_current_user(**_call_kwargs(db, "real"))
 
         assert result is user
 

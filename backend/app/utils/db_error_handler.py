@@ -16,7 +16,7 @@ from sqlalchemy.exc import (
 )
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import BusinessError
+from app.core.exceptions import BusinessError, map_db_exception
 from app.core.transaction import safe_commit
 
 logger = logging.getLogger(__name__)
@@ -35,17 +35,12 @@ def _handle_db_exception(func_name: str, db: Session | None, exc: Exception) -> 
     if db:
         db.rollback()
 
-    if isinstance(exc, IntegrityError):
-        logger.error(f"Database integrity error in {func_name}: {exc}")
-        error_msg = str(exc.orig) if hasattr(exc, "orig") else str(exc)
-        if "UNIQUE constraint failed" in error_msg or "duplicate key" in error_msg.lower():
-            raise HTTPException(status_code=409, detail="数据已存在，请检查唯一性约束")
-        if "FOREIGN KEY constraint failed" in error_msg:
-            raise HTTPException(status_code=400, detail="关联数据不存在或已被删除")
-        # 兜底：error_msg 是 str(exc.orig) 原文，含表名/列名（如 NOT NULL constraint
-        # failed users.xxx），出站即泄露 schema（W1-T8）。完整文本已由上方
-        # logger.error 记录，此处只回泛化文案。
-        raise HTTPException(status_code=400, detail="数据完整性错误，请检查提交的数据")
+    # 约束类错误（唯一/外键/NOT NULL/CHECK）映射集中在 core.exceptions.map_db_exception，
+    # 与全局异常处理器共用同一套状态码与文案（单一事实源，R22）。
+    mapped = map_db_exception(exc)
+    if mapped is not None:
+        logger.error(f"Database constraint error in {func_name}: {exc}")
+        raise mapped
 
     if isinstance(exc, OperationalError):
         logger.error(f"Database operational error in {func_name}: {exc}")

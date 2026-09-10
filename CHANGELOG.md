@@ -5,9 +5,69 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.1] - 2026-09-10 — 🐛 认证会话契约修复 + 帮扶村列表排序根因修复
+
+### 修复
+- 🐛 **认证出口在「直接调用」路径下崩溃（潜在 500）**：`get_current_user` 在 P1-2
+  性能优化（改用 `db: Session = Depends(get_db)` 复用注入会话）后，两个**直接调用**
+  路径不再发生依赖注入，`db` 退化为 `Depends(get_db)` 默认哨兵对象，
+  `db.query(...)` 抛 `AttributeError: 'Depends' object has no attribute 'query'`：
+  1. `app/api/v1/system/backup.py::_jwt_user_from_request` —— Electron 内部通道
+     之外的**合法 JWT 备份请求会直接 500**（内部密钥通道不受影响，故此前未暴露）；
+  2. 单元测试直调（R22 全量套件残留 3 例失败即由此暴露）。
+  修复（`app/core/security.py`）：仅当 `db` **不是真实 Session 实例**时自建
+  `SessionLocal()` 并在 `finally` 关闭；注入路径仍复用注入会话且**不关闭**
+  （生命周期归 `get_db`，避免误关共享连接）。新增回归
+  `tests/unit/test_get_current_user_session_contract_r23.py`（3 例，含备份生产路径）。
+- 🐛 **帮扶村「新建成功却看不到新记录」**：列表端点 `GET /supported-villages`
+  固定 `order_by(SupportedVillage.id)` **升序**，新建记录 id 最大、落在**最后一页**；
+  而前端新建成功后将分页重置到第 1 页 → 新记录不可见。同时前端部门列
+  `sortable="custom"` 会下发 `sort_by`/`sort_order`，但后端从未声明这两个参数，
+  **排序被 FastAPI 静默丢弃**。
+  修复（`app/api/v1/supported_village.py`）：新增 `sort_by`/`sort_order` 查询参数与
+  `_SORTABLE_COLUMNS` 白名单 + `_resolve_village_sort()`（默认 `id` 倒序 = 最新在前，
+  非法列安全回退，与 `projects.py` 既有约定一致）；缓存 key 纳入排序维度避免串味。
+  新增回归 `tests/unit/test_supported_village_sort_r23.py`（4 例）。
+
+### 验证
+- 后端全量：`pytest tests/`（0 failed）。
+- 前端：`vue-tsc --noEmit` 0 错、`vitest run` 全绿。
+
 ## [1.12.0] - 2026-09-06 — 🎨 UI 全面优化：字体统一 + 40px 舒适密度 + 布局标准化 + 认证页统一
 
 ### 安全
+- 🔒 **事务层把 SQLAlchemy 异常原文内插进响应（W1 不变量 #6 违规）**：
+  `app/core/transaction.py` 的 8 处 `raise DatabaseError(f"...: {str(e)}")`
+  （`TransactionManager.transaction` / `transactional` / `run_in_transaction` /
+  `nested_transaction` / `savepoint` / `_execute_with_existing_session` /
+  `_execute_with_new_session` / `retry_on_deadlock`）与 `BatchOperation` 的 3 处
+  批量操作，都把异常原文拼进了出站文案。SQLAlchemy 原文形如
+  `(sqlite3.OperationalError) FOREIGN KEY constraint failed [SQL: INSERT INTO
+  rbac_user_permissions (id, user_id, permission, granted_by, expires_at)
+  VALUES (?, ?, ?, ?, ?)] [parameters: ('b0b7792e…', 99999999, 'user:read', …)]` ——
+  R22 实测 `POST /rbac/grant/permission`（不存在的 user_id）的 **500 响应体里带着
+  完整 SQL 结构、表名、列名与绑定参数**。源码扫描测试
+  `test_no_error_detail_leak.py` 看不见这条路径（它只认
+  `HTTPException(detail=<异常变量>)` 形态，这里是 `DatabaseError(message=…)`）。
+  修复：新增 `_transaction_failure` / `_batch_failure` —— 约束类错误（外键/唯一/
+  NOT NULL/CHECK）映射为 4xx，业务异常（AppError/HTTPException）原样透出
+  （保留「角色(x)不存在」这类有价值提示，但文案里已夹带 SQL 原文的照样降级），
+  其余一律泛化文案，原文只进日志（exc_info=True）。顺带修正：
+  `/rbac/assign/role` 传不存在角色由 500「事务执行失败: 角色(x)不存在」
+  变为 **404「角色(x)不存在」**。
+- 🔒 **8 个端点把「关联 ID 不存在」报成 500/503**：R22 对全部 33 个带 `*_id`
+  字段的 POST 端点做外键扫射，发现 `/funds`、`/funds/apply`、
+  `/fund-budgets/transactions`、`/fund-lifecycle/allocation-orders`、
+  `/organizations`、`/policies/categories`、`/projects`、`/user-management`
+  在传入不存在的关联 ID 时返回 500/503（日志统一为
+  `sqlite3.OperationalError: FOREIGN KEY constraint failed` —— SQLite 把外键冲突
+  报成 OperationalError 而非 IntegrityError）。根因是「直接 INSERT，未先验关联
+  对象存在」，而已有的 `@handle_db_errors` 装饰器只覆盖一小部分端点。
+  修复：`map_db_exception` 抽为**单一事实源**（`core/exceptions.py`），
+  `@handle_db_errors` 与新增的全局 `IntegrityError`/`OperationalError` 处理器共用
+  同一套状态码与文案（外键→400「关联数据不存在或已被删除」、唯一→409、其他完整性
+  →400）；非约束类 OperationalError 维持既有 500 语义，行为不变。
+  复验：同一套扫射 **0 个 5xx**（8 个端点全部 400）。
 - 🔒 **2FA 中间态令牌可当正式令牌用（认证绕过，高危）**：`/auth/login` 在双因素
   挑战分支下发的 `temp_token` 由 `create_token_pair(..., extra_claims=
   {"two_factor_pending": True})` 生成，其 `type` 仍是 `"access"`；而认证唯一出口
