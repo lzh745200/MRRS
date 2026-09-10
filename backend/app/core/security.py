@@ -288,6 +288,20 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # 2FA 中间态令牌不得充当 access（2026-09-06）。
+    # 历史缺陷：`/auth/login` 在 2FA 挑战分支用 create_token_pair 签发 temp_token，
+    # 其 `type` 仍是 "access"、且被当作普通 Bearer 令牌下发；而本链路只校验黑名单与
+    # type，因此"只知道密码、拿不到 TOTP"的攻击者可直接拿 temp_token 调全部业务端点
+    # 读写数据，甚至 POST /two-factor/disable 永久关掉二次验证——2FA 形同虚设。
+    # 该令牌只允许喂给 /auth/two-factor/verify-login（那条链路走 decode_token，
+    # 不经本依赖）。
+    if payload.get("two_factor_pending"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="二次验证未完成，请先完成双因素认证",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     username: str = payload.get("sub")
     if username is None:
         raise HTTPException(

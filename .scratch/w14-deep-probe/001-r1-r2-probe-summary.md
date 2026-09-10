@@ -224,3 +224,31 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   active → 该用户登录 200；单位名不符负例返回通行码无效引导（不再兜底 400）。
 
 
+## R19（8021, 双因素认证全链路）— 发现并修复两处高危真实缺陷
+- 探针 24 项断言，全程真实 HTTP + 真实 DB 校验；修复前 23/24，修复后 **24/24 全绿**。
+- 🔴 **缺陷 1（认证绕过）：2FA 中间态令牌可直接当正式访问令牌用。**
+  `/auth/login` 在 2FA 挑战分支用 `create_token_pair(..., extra_claims=
+  {"two_factor_pending": True})` 签发 `temp_token`，其 `type` 仍是 `"access"`；
+  `get_current_user` 只查黑名单 + token 类型，**不认这个中间态声明**。实测仅凭密码
+  （无需 TOTP）拿 temp_token：`GET /auth/me` 200、`GET /users` 200、`GET /funds`
+  200、`POST /two-factor/disable` **200（二次验证被永久关闭）**。
+  修复：`app/core/security.py` 在读库前拒绝带 `two_factor_pending` 的令牌。
+  复验：四个端点 + disable 全 401（「二次验证未完成，请先完成双因素认证」），
+  status 仍为 enabled=true。
+- 🔴 **缺陷 2（恢复码可无限复用）：`backup_codes` 消费从未落库。**
+  列是裸 `Column(JSON)`，`verify_login` 用 `list.remove(token)` 就地改 ——
+  SQLAlchemy 对裸 JSON 列的就地修改不产生 attribute 事件、不生成 UPDATE，
+  `safe_commit` 静默无效。实测：同一备用码连续两次登录均 200，DB 码数恒为 10。
+  修复：列改 `MutableList.as_mutable(JSON)`。复验：用码后 DB 10 → **9**，
+  该码从库中消失，二次使用 401。
+- 已确认无缺陷项（不误报）：enable 返回 secret/二维码 dataURL/10 个恢复码；
+  错码 verify 400、重复 enable 400、无配置 verify 400、未认证 enable 401；
+  伪造 temp_token 401、普通令牌冒充 temp 401、错验证码 401、temp_token 成功后被
+  吊销 401；正确 TOTP 换取正式双令牌且 `/auth/me` 可用；备用码跨会话计数正确；
+  disable 后登录直通。
+- 探针自身更正：一度误判「2FA 设置页无 UI 入口」——PowerShell 的
+  `-Path "frontend/src/**/*.vue"` 中 `**` 只匹配一层，漏掉了三层深的
+  `views/auth/Profile.vue`；实际入口为「个人中心 → 账户安全 → 绑定MFA →
+  `/profile/two-factor`」，**非缺陷**，未改动任何前端文件。
+- 回归锁定：新增 `backend/tests/unit/test_two_factor_security_r19.py`（8 例，含
+  文件型 SQLite 的真实落盘断言——内存库会掩盖缺陷 2）。

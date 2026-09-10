@@ -8,6 +8,26 @@
 ## [1.12.0] - 2026-09-06 — 🎨 UI 全面优化：字体统一 + 40px 舒适密度 + 布局标准化 + 认证页统一
 
 ### 安全
+- 🔒 **2FA 中间态令牌可当正式令牌用（认证绕过，高危）**：`/auth/login` 在双因素
+  挑战分支下发的 `temp_token` 由 `create_token_pair(..., extra_claims=
+  {"two_factor_pending": True})` 生成，其 `type` 仍是 `"access"`；而认证唯一出口
+  `get_current_user` 只校验黑名单与 token 类型，**未校验该中间态声明**。R19 探针
+  实测：仅凭密码（拿不到 TOTP）取得 temp_token 后，`GET /auth/me`、`GET /users`、
+  `GET /funds`、`GET /two-factor/status` 全部 **200**，`POST /two-factor/disable`
+  也 **200** —— 攻击者既能读写全部业务数据，又能永久关闭受害者的二次验证，
+  2FA 完全形同虚设。修复（`app/core/security.py`）：`get_current_user` 在读库前
+  拒绝任何带 `two_factor_pending` 的令牌（401「二次验证未完成，请先完成双因素
+  认证」）；该令牌只允许喂给 `/auth/two-factor/verify-login`（那条链路走
+  `decode_token`，不经本依赖）。复验：四个端点 + disable 全部 401，2FA 仍为启用态。
+- 🔒 **备用恢复码可无限复用（`backup_codes` 消费从不落库）**：`two_factor_auth.
+  backup_codes` 是裸 `Column(JSON)`，`TwoFactorService.verify_login` 用
+  `list.remove(token)` 就地修改 —— SQLAlchemy 对裸 JSON 列的就地修改不产生
+  attribute 事件、不生成 UPDATE，`safe_commit` 静默无效。R19 探针实测：同一备用码
+  连续两次登录均 **200**，DB 中码数恒为 **10**，与界面明示的「每个恢复码只能使用
+  一次」相悖；泄露一个码即等于永久绕过 2FA。修复
+  （`app/models/two_factor_auth.py`）：列类型改为
+  `MutableList.as_mutable(JSON)`，就地 `remove` 被追踪为脏属性并生成 UPDATE。
+  复验：用码后 DB 由 10 → **9**、该码从库中消失、二次使用 **401**。
 - 🔒 **前端依赖审计阻断修复（CI `security` job 变红）**：新增公告
   GHSA-2883-xcg3-v3hh（js-yaml 4.0.0–4.3.1，High，maxTotalMergeKeys 对空合并源
   不限 CPU）触发 `npm audit --audit-level=high` 非零退出，导致 PR Checks 的

@@ -548,7 +548,17 @@ Every new feature must verify:
 
 以下约束由回归测试锁定，改动相关代码前必读（安全边界详见 docs/adr/0008 破窗恢复；各条的锁定测试以行内路径为准）：
 
-1. **认证唯一出口**：`get_current_user` 已接入黑名单+类型校验；access token 必带 jti；登出递增 token_version。不要绕过 `token_manager.validate_token` 另建校验路径。
+1. **认证唯一出口**：`get_current_user` 已接入黑名单+类型校验+2FA 中间态拒绝；access token 必带 jti；登出递增 token_version。不要绕过 `token_manager.validate_token` 另建校验路径。
+   **2FA 中间态令牌（2026-09-06，R19）**：`/auth/login` 的 2FA 挑战分支用
+   `create_token_pair(extra_claims={"two_factor_pending": True})` 签发 `temp_token`，
+   其 `type` 仍是 `"access"` —— 该令牌**只能**喂给 `/auth/two-factor/verify-login`
+   （那条链路走 `decode_token`，不经本依赖）。`get_current_user` 必须在读库前拒绝任何
+   带 `two_factor_pending` 的令牌：否则仅凭密码（拿不到 TOTP）的攻击者可拿它读写全部
+   业务数据，并 `POST /two-factor/disable` 永久关停受害者的二次验证。锁定测试
+   `tests/unit/test_two_factor_security_r19.py`。
+   同批附带约定：**裸 `Column(JSON)` 的就地修改不会落库**（无 attribute 事件、不生成
+   UPDATE）—— `two_factor_auth.backup_codes` 曾因此让备用恢复码可无限复用（用尽 10 个
+   也不会减少）；需要就地改的 JSON 列必须 `MutableList`/`MutableDict.as_mutable(JSON)`。
 2. **限流签名 fail-closed**：`check_rate_limit(key, *, request, limit, window)` —— key 为首个参数且必填，缺失抛 ValueError；禁止位置传参字符串到旧 request 位。
 3. **loopback 门禁**：machine-code 校验码/密码重置、permission-packages import/confirm 未认证调用仅限本机（基于 request.client.host，禁读 X-Forwarded-For）。判定函数：各模块 `_client_is_loopback`。
 4. **公开重置排除管理员**：admin/super_admin 账号走管理端通道，公开端点恒 403。唯一例外是出厂恢复端点 `/machine-code/recover-admin-factory-password`（ADR-0008 扩展）：仅作用于"从未激活"的管理员账号（must_change_password=True 且零成功登录记录），重置为 `constants.FACTORY_ADMIN_PASSWORD`（单一来源，种子逻辑共用）；禁止放宽前置条件或让已激活账号可用。
