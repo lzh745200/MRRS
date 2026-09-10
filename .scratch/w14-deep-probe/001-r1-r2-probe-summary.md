@@ -252,3 +252,22 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   `/profile/two-factor`」，**非缺陷**，未改动任何前端文件。
 - 回归锁定：新增 `backend/tests/unit/test_two_factor_security_r19.py`（8 例，含
   文件型 SQLite 的真实落盘断言——内存库会掩盖缺陷 2）。
+
+
+## R20（8022, 权限配置包 export→download→import→confirm 往返）— 无功能缺陷
+- 探针 16 项断言全绿，覆盖用户最初投诉的「导出权限包却没有生成」这一条主线。
+- 语义往返（真实 HTTP + 真实磁盘 + 真实 DB 状态）：
+  创建角色 `R20_ROUNDTRIP_ROLE` → 导出（**文件真实落盘** 1375B，与响应
+  `file_size` 一致；ZIP 内 7 个条目，`data/roles.json` 确实含该角色，非空包）
+  → 删除该角色（列表确认为空）→ 上传预览（`role_count:1`）
+  → 确认导入（`roles_created:1`）→ 角色**已恢复**（往返语义成立）。
+- 守护项全部有效：篡改 `data/roles.json` 的包直接 `/confirm` 被 400
+  「内容校验失败」（未预览 + 校验和不匹配双重拦截），注入的 `INJECTED_ROLE`
+  未落库；非 `.zip` 上传 400；下载路径穿越 404；未认证导出 401/403。
+- 确认导入后包文件被清理（`permission_package.py` 的 `finally: os.unlink`），
+  再下载得 404 —— **属设计行为**（源码注释「Clean up the uploaded file after
+  import, success or failure」），非缺陷。
+- 观察项（非缺陷）：开发库与原库的 `rbac_roles` / `rbac_user_roles` /
+  `rbac_role_permissions` / `permission_packs` 四表均为 0 行 —— RBAC 角色由
+  `POST /rbac/roles` **按需创建**，代码中无启动期种子；因此首次导出的包
+  `roles:[]` 属**源数据为空**，不是导出丢数据。真正的往返验证已用自建角色证明。
