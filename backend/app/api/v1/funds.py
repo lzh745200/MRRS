@@ -176,6 +176,10 @@ _FUND_APPROVAL_REMARKS = {
     "pending": "审批任务 #{task_id} 重新提交",
 }
 
+# 只有这三种任务状态会触发经费回写；其余（withdrawn 等）直接跳过，
+# 连经费查询都不做（R22 前的语义保留）。
+_FUND_APPROVAL_TASKS_HANDLED = frozenset(_FUND_APPROVAL_REMARKS)
+
 
 def _apply_fund_approval_result(db: Session, task) -> None:
     """审批终态回写经费状态（注册到 ApprovalWorkflowService）
@@ -191,7 +195,9 @@ def _apply_fund_approval_result(db: Session, task) -> None:
     approved 行）。修复分两处：重新提交时同步回写（服务层调用
     apply_entity_change），以及本函数接受 rejected → approved。
     """
-    fund = db.query(Fund).filter(Fund.id == task.entity_id).first()
+    fund = None
+    if task.status in _FUND_APPROVAL_TASKS_HANDLED:
+        fund = db.query(Fund).filter(Fund.id == task.entity_id).first()
     if not fund:
         return
 

@@ -448,8 +448,10 @@ class TestFundsTail:
             1, 10, "经费板块直接驳回", standalone=True)
 
     def test_apply_fund_approval_result_skips_non_terminal(self):
+        # R23 起 `pending` 是有意义的状态（驳回后重新提交 → 经费回到待审批），
+        # 不再是"跳过"；此处改用真正无关的 withdrawn 验证跳过分支。
         from app.api.v1.funds import _apply_fund_approval_result
-        task = SimpleNamespace(status="pending")
+        task = SimpleNamespace(status="withdrawn")
         assert _apply_fund_approval_result(MagicMock(), task) is None
 
     def test_apply_fund_approval_result_no_fund(self):

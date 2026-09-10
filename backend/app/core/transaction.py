@@ -411,11 +411,10 @@ def retry_on_deadlock(max_retries: int = 3, delay: float = 0.1):
                             continue
                     raise
 
-            # 出站文案只带重试次数，不带异常原文（W1 #6：SQLAlchemy 原文含 SQL 与参数）
+            # 循环结束只剩 max_retries<=0 一种可能（每轮要么 return、要么 continue、
+            # 要么 raise），此时 last_exception 必为 None，因此这里只需泛化文案 +
+            # 重试次数；出站文案仍不带异常原文（W1 #6）。
             logger.error("Transaction failed after %d retries, rolled back", max_retries, exc_info=True)
-            mapped = map_db_exception(last_exception) if last_exception is not None else None
-            if mapped is not None:
-                raise mapped from last_exception
             raise DatabaseError(
                 f"事务执行失败（重试{max_retries}次后），请稍后重试或联系管理员"
             ) from last_exception

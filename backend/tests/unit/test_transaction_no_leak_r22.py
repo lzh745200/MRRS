@@ -176,6 +176,12 @@ class TestTransactionPathsDoNotLeak:
             _boom()
         assert "重试0次后" in ei.value.message
 
+    def test_exception_text_falls_back_to_str(self):
+        """既无 message 也无 detail 的异常回落到 str(exc)（防御分支）。"""
+        from app.core.transaction import _exception_text
+
+        assert _exception_text(RuntimeError("boom")) == "boom"
+
     def test_leaky_original_still_reaches_log(self, caplog):
         import logging
 
