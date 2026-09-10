@@ -103,7 +103,6 @@ SERVICE_FILES = [
     #  # does not exist (sentiment/ subdirectory)
     'app.services.supported_village_service',
     'app.services.two_factor_service',
-    'app.services.user_permission_service',
     'app.services.validation_engine_service',
     'app.services.version_service',
     'app.services.work_log_service',

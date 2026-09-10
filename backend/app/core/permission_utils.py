@@ -38,7 +38,18 @@ def is_superuser(user) -> bool:
 
 
 def is_admin(user) -> bool:
-    """检查用户是否为管理员（包括超级管理员）
+    """检查用户是否为管理员（包括超级管理员）。
+
+    这是全仓**唯一**的管理员判定入口（系统管理层：super_admin / admin）。
+    全仓其它内联判权（menus / permission_packs / control_package / deps）均委托
+    本函数，避免多份实现漂移。
+
+    语义边界（安全基线，见 test_security_data_isolation::test_is_admin_role_matrix）：
+    仅 ``super_admin`` / ``admin``（或其 ``is_superuser=True``）为管理员。
+    历史角色 ``manager`` / ``approval_leader`` **不是**系统管理员——它们只是
+    "管理级业务角色"（经 :func:`normalize_role` 在业务入口归一化后仍可执行管理
+    操作，但不得获得管理员专属能力，如 ``include_deleted`` 查看软删记录、
+    数据范围豁免等）。
 
     Args:
         user: 用户对象

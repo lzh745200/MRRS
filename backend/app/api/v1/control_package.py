@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.core.response import success_response
+from app.core.permission_utils import is_admin
 from app.models.org_module_policy import OrgModulePolicy
 from app.models.user import User
 from app.services.work_log_service import write_work_log
@@ -190,7 +191,7 @@ async def import_control_package(
     current_user: User = Depends(get_current_active_user),
 ):
     """导入并执行管控配置包"""
-    if current_user.role not in ("admin", "super_admin") and not current_user.is_superuser:
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="仅管理员可导入管控配置包")
 
     content = await file.read()

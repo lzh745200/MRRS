@@ -17,6 +17,20 @@ from openpyxl.worksheet.page import PageMargins
 
 from app.services.entity_import_validator import EntityImportValidator
 
+
+def _system_version() -> str:
+    """系统版本号（单一事实源：settings.PROJECT_VERSION，读取失败回落占位）。
+
+    避免在页脚硬编码版本号（历史缺陷：写死 v1.10.0，与真实版本长期不符）。
+    """
+    try:
+        from app.core.config import settings
+
+        return getattr(settings, "PROJECT_VERSION", "") or "1.0.0"
+    except Exception:  # pragma: no cover - 配置不可用时兜底
+        return "1.0.0"
+
+
 # ═══════════════════════════════════════════════════════════════
 # 正式风格颜色常量
 # ═══════════════════════════════════════════════════════════════
@@ -593,7 +607,7 @@ class ExcelTemplateService:
         # 页脚
         footer_row = note_start + len(notes) + 2
         ws.merge_cells(f"A{footer_row}:{max_col}{footer_row}")
-        ws.cell(row=footer_row, column=1).value = "— 帮扶管理信息系统 v1.10.0 —"
+        ws.cell(row=footer_row, column=1).value = f"— 帮扶管理信息系统 v{_system_version()} —"
         ws.cell(row=footer_row, column=1).font = _footer_font
         ws.cell(row=footer_row, column=1).alignment = _center_align
 

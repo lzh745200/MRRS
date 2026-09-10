@@ -1143,50 +1143,6 @@ class TestTodos:
 
 
 # ===================================================================
-# 19. user_permissions.py  (6 lines)
-# ===================================================================
-
-
-class TestUserPermissions:
-
-    async def test_remove_role_no_permission(self):
-        from app.api.v1.user_permissions import remove_role_from_user
-        db = _mock_db()
-        user = _make_user(role="user", is_superuser=False)
-        mock_svc = MagicMock()
-        mock_svc.check_user_permission.return_value = False
-        with patch("app.api.v1.user_permissions.UserPermissionService", return_value=mock_svc):
-            with pytest.raises(HTTPException) as exc_info:
-                await remove_role_from_user(1, 1, db=db, current_user=user)
-            assert exc_info.value.status_code == 403
-
-    async def test_get_user_roles_other_user_no_perm(self):
-        from app.api.v1.user_permissions import get_user_roles
-        db = _mock_db()
-        user = _make_user(role="user", is_superuser=False, uid=1)
-        mock_svc = MagicMock()
-        mock_svc.check_user_permission.return_value = False
-        with patch("app.api.v1.user_permissions.UserPermissionService", return_value=mock_svc):
-            with pytest.raises(HTTPException) as exc_info:
-                await get_user_roles(999, db=db, current_user=user)
-            assert exc_info.value.status_code == 403
-
-    async def test_revoke_permission_no_perm(self):
-        from app.api.v1.user_permissions import revoke_permission_from_user
-        db = _mock_db()
-        user = _make_user(role="user", is_superuser=False)
-        mock_svc = MagicMock()
-        mock_svc.check_user_permission.return_value = False
-        with patch("app.api.v1.user_permissions.UserPermissionService", return_value=mock_svc), \
-             patch("app.api.v1.user_permissions.is_superuser", return_value=False):
-            with pytest.raises(HTTPException) as exc_info:
-                await revoke_permission_from_user(
-                    user_id=1, permission="data:read", db=db, current_user=user
-                )
-            assert exc_info.value.status_code == 403
-
-
-# ===================================================================
 # 20. utils/api_error.py  (5 lines)
 # ===================================================================
 

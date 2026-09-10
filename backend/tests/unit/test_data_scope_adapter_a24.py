@@ -1,4 +1,4 @@
-"""app.core.data_scope_adapter 全覆盖测试（a24，该模块此前无测试文件）
+"""app.core.data_permission 全覆盖测试（a24，该模块此前无测试文件）
 
 覆盖 get_accessible_org_ids / apply_scope_filter 全部角色与范围分支，
 以及 _apply_org_filter / _apply_owner_filter 的 Select/Query 两种风格与缺字段防御分支。
@@ -10,9 +10,9 @@ import pytest
 from sqlalchemy import Column, Integer, select
 from sqlalchemy.orm import declarative_base
 
-import app.core.data_scope_adapter as adapter
+import app.core.data_permission as adapter
 from app.core.data_permission import DataScope
-from app.core.data_scope_adapter import apply_scope_filter, get_accessible_org_ids
+from app.core.data_permission import apply_scope_filter, get_accessible_org_ids
 
 Base = declarative_base()
 
@@ -76,12 +76,12 @@ class TestGetAccessibleOrgIds:
         assert get_accessible_org_ids(MANAGER_ORG_ID_ATTR) == [20]
 
     def test_own_dept_with_db_expands_subtree(self):
-        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([10, 11, 12], ["总部", "分部", "小组"])) as mock_sub:
+        with patch("app.core.data_permission._get_org_subtree", return_value=([10, 11, 12], ["总部", "分部", "小组"])) as mock_sub:
             assert get_accessible_org_ids(MANAGER, db=MagicMock()) == [10, 11, 12]
         mock_sub.assert_called_once()
 
     def test_own_dept_with_db_empty_subtree_falls_back_to_org(self):
-        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([], [])):
+        with patch("app.core.data_permission._get_org_subtree", return_value=([], [])):
             assert get_accessible_org_ids(MANAGER, db=MagicMock()) == [10]
 
     def test_own_dept_without_org_returns_empty(self):
@@ -128,7 +128,7 @@ class TestApplyScopeFilter:
 
     def test_own_dept_applies_org_filter_select(self):
         stmt = select(TinyModel)
-        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([10, 11], ["总部", "分部"])):
+        with patch("app.core.data_permission._get_org_subtree", return_value=([10, 11], ["总部", "分部"])):
             result = apply_scope_filter(stmt, MANAGER, TinyModel, db=MagicMock())
         assert result is not stmt
         assert "WHERE" in str(result)
@@ -153,7 +153,7 @@ class TestApplyScopeFilter:
 
     def test_model_without_any_scope_field_raises(self):
         """缺组织+缺 owner 字段 fail-closed（ADR-0002）：抛错拒绝，绝不静默放行全量"""
-        from app.core.data_scope_adapter import DataScopeFilterError
+        from app.core.data_permission import DataScopeFilterError
 
         q = MagicMock()
         with pytest.raises(DataScopeFilterError):
@@ -161,7 +161,7 @@ class TestApplyScopeFilter:
 
     def test_model_without_owner_field_raises(self):
         """缺 owner 字段 fail-closed（ADR-0002）：抛 DataScopeFilterError 拒绝放行"""
-        from app.core.data_scope_adapter import DataScopeFilterError
+        from app.core.data_permission import DataScopeFilterError
 
         q = MagicMock()
         with pytest.raises(DataScopeFilterError):

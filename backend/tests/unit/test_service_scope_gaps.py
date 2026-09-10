@@ -68,7 +68,7 @@ class TestRuralWorkScope:
         q.filter.return_value.order_by.return_value.all.return_value = []  # line 418 SV（空）
         svc = RuralWorkService(MagicMock())
         with patch("app.core.database.SessionLocal", return_value=fake_db), patch(
-            "app.core.data_scope_adapter.apply_scope_filter",
+            "app.core.data_permission.apply_scope_filter",
             side_effect=lambda query, user, model, db=None: query,
         ):
             rows = svc.get_villages_for_select(

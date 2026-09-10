@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -483,6 +484,9 @@ async def download_template(
     ws = wb.active
     ws.title = t.name[:31]  # Excel sheet name max 31 chars
 
+    col_count = max(len(fields), 1)
+    max_col = get_column_letter(col_count)
+
     # 绿色表头样式
     header_fill = PatternFill(start_color="1B4332", end_color="1B4332", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF", size=11)
@@ -494,23 +498,38 @@ async def download_template(
     )
 
     # 标题行
-    ws.merge_cells(f"A1:{chr(64 + max(len(fields), 1))}1")
+    ws.merge_cells(f"A1:{max_col}1")
     title_cell = ws.cell(row=1, column=1, value=t.name)
     title_cell.font = Font(bold=True, size=14, color="1B4332")
-    title_cell.alignment = Alignment(horizontal="center")
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
 
     # 表头行
     for i, field in enumerate(fields, 1):
         cell = ws.cell(row=2, column=i, value=field.get("excel_header", ""))
         cell.fill = header_fill
         cell.font = header_font
-        cell.alignment = Alignment(horizontal="center")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         cell.border = border
-        ws.column_dimensions[chr(64 + i)].width = 18
+        ws.column_dimensions[get_column_letter(i)].width = 18
         # 必填字段标注
         if field.get("required"):
             note = ws.cell(row=3, column=i, value="(必填)")
             note.font = Font(color="FF0000", size=9)
+            note.alignment = Alignment(horizontal="center")
+    ws.row_dimensions[2].height = 26
+
+    # A4 打印设置 + 页眉页脚（含页码），便于打印后手工填报/归档
+    from app.utils.excel_report_style import setup_print
+
+    setup_print(
+        ws,
+        col_count=col_count,
+        last_row=30,
+        header_row=2,
+        header_left=f"帮扶管理信息系统 · {t.name}",
+        landscape=col_count > 6,
+    )
 
     output = io.BytesIO()
     wb.save(output)

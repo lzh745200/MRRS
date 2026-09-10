@@ -1,6 +1,4 @@
-﻿from app.core.permission_utils import is_superuser
-
-"""项目管理 API — 完整 CRUD + 任务管理 + 经费关联 + 统计导出 + 模板导入"""
+﻿"""项目管理 API — 完整 CRUD + 任务管理 + 经费关联 + 统计导出 + 模板导入"""
 
 import logging
 import mimetypes
@@ -29,7 +27,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.transaction import safe_commit
 from app.core.data_permission import require_data_permission, check_record_access
-from app.core.data_scope_adapter import apply_scope_filter
+from app.core.data_permission import apply_scope_filter
+from app.core.permission_utils import is_admin
 from app.api.v1.deps import enforce_admin_include_deleted, build_viewable_because
 from app.core.errors import AppError
 from app.core.exceptions import NotFoundException
@@ -1099,9 +1098,8 @@ async def delete_project(
     """软删除项目。仅管理员或项目创建者可执行。"""
     project = _get_project_or_404(db, project_id)
 
-    is_admin = getattr(current_user, "role", None) in ("admin", "super_admin")
-    is_creator = getattr(current_user, "id", None) == project.created_by
-    if not (is_admin or is_creator or is_superuser(current_user)):
+    can_delete = is_admin(current_user) or getattr(current_user, "id", None) == project.created_by
+    if not can_delete:
         raise AppError.forbidden("仅管理员或项目创建者可以删除项目")
 
     if project.status == ProjectStatus.CANCELLED.value:

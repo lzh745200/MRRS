@@ -15,7 +15,25 @@ class AuditMiddleware(BaseHTTPMiddleware):
     不影响请求事务）。落库失败仅写 WARNING 日志，绝不破坏业务请求。
     """
 
+    # 无需审计的路径前缀：健康检查 / 指标 / 静态资源 / API 文档。
+    # 这些路径无审计价值，却会对每次请求产生日志 + api_access_logs 落库
+    # （独立 session + 写事务 commit）：既是性能负担（/health 单请求 ~20ms），
+    # 也会让 -wal 文件随请求量快速增长（实测 22MB 未回收）。故直接短路。
+    _SKIP_PREFIXES = (
+        "/health",
+        "/metrics",
+        "/favicon.ico",
+        "/static/",
+        "/uploads/",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    )
+
     async def dispatch(self, request, call_next):
+        if any(request.url.path.startswith(p) for p in self._SKIP_PREFIXES):
+            return await call_next(request)
+
         start = time.monotonic()
         response = await call_next(request)
         duration_ms = int((time.monotonic() - start) * 1000)

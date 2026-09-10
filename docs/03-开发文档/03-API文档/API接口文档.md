@@ -1182,6 +1182,9 @@
 
 ### user_permissions.py — 用户权限管理（旧版，v1.6.0后合并至/rbac） `/user-permissions`
 
+> ⚠️ **已于 2026-09-10 删除**：`api/v1/user_permissions.py` 与 `services/user_permission_service.py`
+> 及注册项均已移除（前端零调用）。下表仅存档，能力请改用 `/rbac/*`。
+
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
 | POST | `/user-permissions/assign-organization` | 将用户分配到组织 | 登录 |

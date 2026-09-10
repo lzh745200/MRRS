@@ -126,12 +126,6 @@ export const MENU_CONFIG: MenuItem[] = [
         icon: 'Monitor',
       },
       {
-        key: 'user-permissions',
-        label: '用户权限管理',
-        path: '/system/user-permissions',
-        icon: 'User',
-      },
-      {
         key: 'system-permission-packs',
         label: '权限包管理',
         path: '/system/permission-packs',

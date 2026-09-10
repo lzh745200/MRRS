@@ -40,7 +40,7 @@ from ...models.school import (
 )
 from ...core.data_permission import require_data_permission
 from app.api.v1.deps import enforce_admin_include_deleted, build_viewable_because
-from app.core.unified_data_scope import OrgScopeFilter, get_org_scope
+from app.core.data_permission import OrgScopeFilter, get_org_scope
 from app.core.transaction import safe_commit
 from ...services.work_log_service import write_work_log
 from app.services.approval_workflow_service import (

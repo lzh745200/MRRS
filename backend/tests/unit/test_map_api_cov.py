@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 import app.api.v1.map as map_mod
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.core.unified_data_scope import get_org_scope
+from app.core.data_permission import get_org_scope
 
 BASE = "/api/v1/map"
 

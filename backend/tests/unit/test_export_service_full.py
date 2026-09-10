@@ -52,15 +52,16 @@ class TestExportOrganizationPassCodes:
         # 默认工作表名
         assert "组织通行证码列表" in wb.sheetnames
         ws = wb.active
-        # 表头
-        headers = [ws.cell(row=1, column=c).value for c in range(1, 7)]
+        # 统一抬头区占 1-4 行，表头在第 5 行
+        assert ws.cell(row=1, column=1).value == "组织通行证码列表"
+        headers = [ws.cell(row=5, column=c).value for c in range(1, 7)]
         assert headers == ["组织名称", "校验码", "通行证码", "允许下级生成", "状态", "创建时间"]
-        # 第一行：allow_subordinate_generation=True → "是"
-        assert ws.cell(row=2, column=1).value == "某部"
-        assert ws.cell(row=2, column=4).value == "是"
+        # 数据自第 6 行起：allow_subordinate_generation=True → "是"
+        assert ws.cell(row=6, column=1).value == "某部"
+        assert ws.cell(row=6, column=4).value == "是"
         # 第二行：allow_subordinate_generation=False → "否"
-        assert ws.cell(row=3, column=4).value == "否"
-        assert ws.cell(row=3, column=5).value == "disabled"
+        assert ws.cell(row=7, column=4).value == "否"
+        assert ws.cell(row=7, column=5).value == "disabled"
 
     def test_custom_filename(self, svc):
         """自定义工作表名。"""
@@ -69,13 +70,13 @@ class TestExportOrganizationPassCodes:
         assert "自定义名" in wb.sheetnames
 
     def test_empty_list(self, svc):
-        """空列表也应能导出（仅表头）。"""
+        """空列表也应能导出（仅抬头 + 表头）。"""
         content = svc.export_organization_pass_codes([])
         wb = load_workbook(BytesIO(content))
         ws = wb.active
-        # 仅表头行
-        assert ws.max_row == 1
-        assert ws.cell(row=1, column=1).value == "组织名称"
+        # 统一抬头区 4 行 + 表头 1 行 = 5 行（无数据行）
+        assert ws.max_row == 5
+        assert ws.cell(row=5, column=1).value == "组织名称"
 
     def test_missing_fields_default_to_empty(self, svc):
         """缺字段的项应回退为空字符串（openpyxl 读回时空串表现为 None）。"""
@@ -83,9 +84,9 @@ class TestExportOrganizationPassCodes:
         content = svc.export_organization_pass_codes(data)
         wb = load_workbook(BytesIO(content))
         ws = wb.active
-        assert ws.cell(row=2, column=1).value == "只有名字"
-        assert ws.cell(row=2, column=2).value in (None, "")  # verification_code 缺失
-        assert ws.cell(row=2, column=4).value == "否"  # allow_subordinate_generation 缺失 → falsy
+        assert ws.cell(row=6, column=1).value == "只有名字"
+        assert ws.cell(row=6, column=2).value in (None, "")  # verification_code 缺失
+        assert ws.cell(row=6, column=4).value == "否"  # allow_subordinate_generation 缺失 → falsy
 
     def test_created_at_alias_created_time(self, svc):
         """源码读 item.get("created_at", "")——确保 created_time 不被读取。"""
@@ -94,7 +95,7 @@ class TestExportOrganizationPassCodes:
         wb = load_workbook(BytesIO(content))
         ws = wb.active
         # created_at 未提供 → 空字符串（读回为 None），不会读取 created_time
-        assert ws.cell(row=2, column=6).value in (None, "")
+        assert ws.cell(row=6, column=6).value in (None, "")
 
 
 # ---------------------------------------------------------------------------
@@ -121,38 +122,37 @@ class TestExportComprehensiveReport:
         wb = load_workbook(BytesIO(content))
         assert set(wb.sheetnames) == {"汇总", "村庄", "项目", "经费"}
 
-        # 汇总 sheet 内容
+        # 汇总 sheet 内容（统一抬头 + 表头后，数据自第 6 行起）
         ws_sum = wb["汇总"]
-        assert ws_sum.cell(row=1, column=1).value == "总村庄数"
-        assert ws_sum.cell(row=1, column=2).value == 3
-        assert ws_sum.cell(row=3, column=1).value == "总经费(元)"
-        # 列宽应被设置
-        assert ws_sum.column_dimensions["A"].width == 20
-        assert ws_sum.column_dimensions["B"].width == 30
+        assert ws_sum.cell(row=1, column=1).value == "帮扶数据综合报表 · 汇总"
+        assert ws_sum.cell(row=5, column=1).value == "统计项"
+        assert ws_sum.cell(row=6, column=1).value == "总村庄数"
+        assert ws_sum.cell(row=6, column=2).value == 3
+        assert ws_sum.cell(row=8, column=1).value == "总经费(元)"
 
-        # 村庄 sheet 表头使用粗体
+        # 村庄 sheet 表头使用粗体（表头位于第 5 行）
         ws_v = wb["村庄"]
-        headers = [ws_v.cell(row=1, column=c).value for c in range(1, 6)]
+        headers = [ws_v.cell(row=5, column=c).value for c in range(1, 6)]
         assert headers == ["ID", "名称", "人口", "项目数", "产业数"]
-        assert ws_v.cell(row=1, column=1).font.bold is True
-        assert ws_v.cell(row=2, column=2).value == "村A"
+        assert ws_v.cell(row=5, column=1).font.bold is True
+        assert ws_v.cell(row=6, column=2).value == "村A"
 
         # 项目 sheet
         ws_p = wb["项目"]
-        assert ws_p.cell(row=2, column=3).value == "进行中"
+        assert ws_p.cell(row=6, column=3).value == "进行中"
 
         # 经费 sheet
         ws_f = wb["经费"]
-        assert ws_f.cell(row=2, column=3).value == 50000
+        assert ws_f.cell(row=6, column=3).value == 50000
 
     def test_empty_data_only_summary_sheet(self, svc):
         """所有业务数据为空时仅创建汇总 sheet。"""
         content = svc.export_comprehensive_report({}, [], [], [])
         wb = load_workbook(BytesIO(content))
         assert wb.sheetnames == ["汇总"]
-        # 空 summary → 汇总 sheet 无数据行（仅 active sheet 存在）
+        # 空 summary → 汇总 sheet 仅抬头区 4 行 + 表头 1 行
         ws = wb.active
-        assert ws.max_row == 1  # 空工作簿默认有 1 行
+        assert ws.max_row == 5
 
     def test_only_village_data(self, svc):
         """只有 village_data 非空 → 仅创建汇总 + 村庄。"""
@@ -197,6 +197,6 @@ class TestExportComprehensiveReport:
         )
         wb = load_workbook(BytesIO(content))
         ws_v = wb["村庄"]
-        # row.get(h, "") → 缺字段为空串（读回为 None）
-        assert ws_v.cell(row=2, column=1).value == 1
-        assert ws_v.cell(row=2, column=2).value in (None, "")
+        # row.get(h, "") → 缺字段为空串（读回为 None）；数据自第 6 行起
+        assert ws_v.cell(row=6, column=1).value == 1
+        assert ws_v.cell(row=6, column=2).value in (None, "")

@@ -192,7 +192,7 @@ class TestPiiCryptoKeyLoading:
 
 class TestApplyOrgFilterFailClosed:
     def test_missing_org_field_raises(self):
-        from app.core.data_scope_adapter import DataScopeFilterError, _apply_org_filter
+        from app.core.data_permission import DataScopeFilterError, _apply_org_filter
 
         class NoOrgModel:
             __name__ = "NoOrgModel"

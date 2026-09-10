@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import jwt
+import pytest
 
 from app.core.audit_middleware import AuditMiddleware
 from app.core.config import settings
@@ -118,3 +119,44 @@ class TestPersistApiAccessLogFailureIsSwallowed:
         assert logged.ip_address is None
         assert logged.endpoint == "/api/v1/funds"
         assert logged.user_agent == "pytest-agent"
+
+
+def _dispatch_request(path: str):
+    """构造 dispatch 所需的最小 request 替身。"""
+    return SimpleNamespace(
+        url=SimpleNamespace(path=path),
+        method="GET",
+        headers={},
+        client=SimpleNamespace(host="127.0.0.1"),
+    )
+
+
+class TestDispatchSkipPrefixes:
+    """dispatch 短路：健康检查/指标/静态资源/文档不落库、不写审计日志。"""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "path",
+        ["/health", "/metrics", "/favicon.ico", "/static/app.js",
+         "/uploads/generic/a.pdf", "/docs", "/openapi.json"],
+    )
+    async def test_skip_paths_short_circuit(self, path):
+        call_next = mock.AsyncMock(return_value=SimpleNamespace(status_code=200))
+        with mock.patch.object(AuditMiddleware, "_persist_api_access_log") as persist:
+            result = await AuditMiddleware(app=None).dispatch(
+                _dispatch_request(path), call_next)
+        call_next.assert_awaited_once()
+        persist.assert_not_called()
+        assert result.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_business_path_is_persisted(self):
+        call_next = mock.AsyncMock(return_value=SimpleNamespace(status_code=200))
+        with mock.patch.object(AuditMiddleware, "_persist_api_access_log") as persist:
+            await AuditMiddleware(app=None).dispatch(
+                _dispatch_request("/api/v1/funds"), call_next)
+        call_next.assert_awaited_once()
+        persist.assert_called_once()
+        # 落库参数应带上真实 path/status
+        assert persist.call_args.kwargs["request"].url.path == "/api/v1/funds"
+        assert persist.call_args.kwargs["response_status"] == 200

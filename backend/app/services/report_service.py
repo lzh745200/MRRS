@@ -36,29 +36,25 @@ class ReportService:
         """
         try:
             import openpyxl
-            from openpyxl.styles import Font, Alignment
+
+            from app.utils.excel_report_style import build_report_sheet, make_subtitle
 
             wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "数据报表"
-
-            # Header
             headers = ["序号", "名称", "省份", "市县", "振兴层级", "年度", "数据值", "更新时间"]
-            for col, header in enumerate(headers, 1):
-                cell = ws.cell(row=1, column=col, value=header)
-                cell.font = Font(bold=True)
-                cell.alignment = Alignment(horizontal="center")
 
-            # Data rows (placeholder for real data queries)
             data_rows = await self._fetch_report_data(query_params, user=user)
-            for row_idx, row_data in enumerate(data_rows, 2):
-                for col_idx, value in enumerate(row_data, 1):
-                    ws.cell(row=row_idx, column=col_idx, value=value)
-
-            # Auto-fit column widths
-            for col in ws.columns:
-                max_length = max((len(str(cell.value or "")) for cell in col), default=0)
-                ws.column_dimensions[col[0].column_letter].width = min(max_length + 2, 40)
+            build_report_sheet(
+                wb,
+                title="帮扶管理信息系统 · 数据报表",
+                headers=headers,
+                rows=data_rows,
+                subtitle=make_subtitle(
+                    year=(query_params or {}).get("year"),
+                    extra=f"共 {len(data_rows)} 条记录",
+                ),
+                sheet_name="数据报表",
+                ws=wb.active,
+            )
 
             output = io.BytesIO()
             wb.save(output)
@@ -72,7 +68,11 @@ class ReportService:
             raise
 
     async def export_to_pdf(self, query_params: Dict[str, Any] = None, user: Any = None) -> bytes:
-        """Generate a PDF report.
+        """Generate a PDF report (platypus + 内置 CID 中文字体).
+
+        修复历史缺陷：旧实现用 ``Helvetica``（canvas）绘制中文 → 导出必乱码。
+        现改用报告样式模块的 ``STSong-Light`` CID 字体，并加入 A4 页面、页眉页脚
+        与「第 X 页 / 共 Y 页」页码，表格为军绿表头 + 交替行底的网格表。
 
         Args:
             query_params: Filters (year, village_ids, report_type, etc.)
@@ -82,47 +82,59 @@ class ReportService:
             PDF file as bytes.
         """
         try:
+            from reportlab.lib import colors
             from reportlab.lib.pagesizes import A4
-            from reportlab.pdfgen import canvas
+            from reportlab.lib.styles import ParagraphStyle
+            from reportlab.lib.units import mm
+            from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+            from app.utils.pdf_report_style import (
+                data_table_style,
+                ensure_cjk_font,
+                make_numbered_canvas,
+                pdf_cell,
+            )
+
+            ensure_cjk_font()
+
+            report_title = "帮扶管理信息系统 - 数据报表"
+            rpt_type = (query_params or {}).get("report_type", "综合报表")
+            headers = ["序号", "名称", "省份", "市县", "振兴层级", "年度", "数据值", "更新时间"]
+            data_rows = await self._fetch_report_data(query_params, user=user)
+
+            title_style = ParagraphStyle(
+                "t", fontName="STSong-Light", fontSize=18, leading=26, alignment=1, spaceAfter=6
+            )
+            meta_style = ParagraphStyle(
+                "m", fontName="STSong-Light", fontSize=10, leading=14, alignment=1, textColor=colors.grey
+            )
+
+            story = [
+                Paragraph(report_title, title_style),
+                Paragraph(
+                    f"报表类型：{rpt_type}    生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                    meta_style,
+                ),
+                Spacer(1, 6 * mm),
+            ]
+
+            table_data = [headers] + [
+                [pdf_cell(c) for c in list(row)[: len(headers)]] for row in data_rows
+            ]
+            table = Table(table_data, repeatRows=1)
+            table.setStyle(TableStyle(data_table_style()))
+            story.append(table)
 
             buffer = io.BytesIO()
-            c = canvas.Canvas(buffer, pagesize=A4)
-            width, height = A4
-
-            # Title
-            c.setFont("Helvetica-Bold", 18)
-            c.drawCentredString(width / 2, height - 50, "帮扶管理信息系统 - 数据报表")
-
-            # Metadata
-            c.setFont("Helvetica", 10)
-            c.drawString(50, height - 80, f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            rpt_type = query_params.get("report_type", "综合报表") if query_params else "综合报表"
-            c.drawString(50, height - 95, f"报表类型: {rpt_type}")
-
-            # Data table header
-            y = height - 130
-            c.setFont("Helvetica-Bold", 11)
-            headers = ["序号", "名称", "省份", "振兴层级"]
-            x_positions = [50, 90, 250, 350]
-            for header, x in zip(headers, x_positions):
-                c.drawString(x, y, header)
-
-            # Data rows
-            c.setFont("Helvetica", 10)
-            y -= 20
-            data_rows = await self._fetch_report_data(query_params, user=user)
-            for idx, row_data in enumerate(data_rows[:50], 1):  # Limit to 50 rows for PDF
-                c.drawString(50, y, str(idx))
-                c.drawString(90, y, str(row_data[1])[:20] if len(row_data) > 1 else "")
-                c.drawString(250, y, str(row_data[2])[:15] if len(row_data) > 2 else "")
-                c.drawString(350, y, str(row_data[3])[:10] if len(row_data) > 3 else "")
-                y -= 18
-                if y < 50:
-                    c.showPage()
-                    c.setFont("Helvetica", 10)
-                    y = height - 50
-
-            c.save()
+            SimpleDocTemplate(
+                buffer,
+                pagesize=A4,
+                leftMargin=15 * mm,
+                rightMargin=15 * mm,
+                topMargin=20 * mm,
+                bottomMargin=18 * mm,
+                title=report_title,
+            ).build(story, canvasmaker=make_numbered_canvas(f"帮扶管理信息系统 - {rpt_type}"))
             buffer.seek(0)
             return buffer.getvalue()
         except ImportError:  # pragma: no cover

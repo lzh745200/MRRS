@@ -36,7 +36,6 @@ from app.services.package_record_validator import (
 from app.services.report_export_service import ReportExportService, _fmt_amount
 from app.services.resource_limiter import check_rate_limit
 from app.services.user_cascade_delete_service import UserCascadeDeleteService
-from app.services.user_permission_service import UserPermissionService
 from app.utils.db_error_handler import _handle_db_exception
 import app.services.system_config_service as scs
 from app.services.data_sync_service import DataSyncService
@@ -182,14 +181,6 @@ class TestMachineCodeVerify:
         svc = MachineCodeService(real_db_session)
         # 全连字符 → strip 后 "---"，normalized 为空 → 453-458 warning + None
         assert svc.verify_pass_code("---", "machine_code_xyz") is None
-
-
-class TestUserPermissionDataScope:
-    def test_admin_without_org_returns_true(self):
-        svc = UserPermissionService(MagicMock())
-        fake_user = SimpleNamespace(role="admin", organization_id=None)
-        with patch.object(svc, "_get_user", return_value=fake_user):
-            assert svc.check_user_data_scope(1) is True  # 463-464
 
 
 class TestExcelImporterEdge:

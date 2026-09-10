@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Font, PatternFill
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class SupportedVillageExportService:
         # 仅导出未软删记录，且按当前用户数据权限过滤（与列表接口一致）
         query = self.db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
         if self.current_user is not None:
-            from app.core.data_scope_adapter import apply_scope_filter
+            from app.core.data_permission import apply_scope_filter
             query = apply_scope_filter(query, self.current_user, SupportedVillage, db=self.db)
         if keyword:
             query = query.filter(SupportedVillage.village_name.contains(keyword))
@@ -273,7 +273,9 @@ class SupportedVillageExportService:
         return str(value)
 
     def _build_excel(self, data: Dict[str, Any], statistics: Dict[str, Any]) -> bytes:
-        """将导出数据构建为 Excel 文件。"""
+        """将导出数据构建为 Excel 文件（统一军绿+金色样式 + A4 打印设置）。"""
+        from app.utils.excel_report_style import build_report_sheet, make_subtitle
+
         wb = Workbook()
         # 删除默认 sheet
         wb.remove(wb.active)
@@ -282,40 +284,28 @@ class SupportedVillageExportService:
             if not rows:
                 continue
             mod_label = MODULE_NAMES.get(mod_name, mod_name)
-            ws = wb.create_sheet(title=mod_label[:31])  # Excel sheet name max 31 chars
-
-            # 标题行
-            if rows:
-                headers = list(rows[0].keys())
-                for col_idx, header in enumerate(headers, 1):
-                    cell = ws.cell(row=1, column=col_idx, value=self._coerce_cell(header))
-                    cell.fill = HEADER_FILL
-                    cell.font = HEADER_FONT
-                    cell.alignment = Alignment(horizontal="center", vertical="center")
-
-                # 数据行
-                for row_idx, row_data in enumerate(rows, 2):
-                    for col_idx, header in enumerate(headers, 1):
-                        cell = ws.cell(
-                            row=row_idx,
-                            column=col_idx,
-                            value=self._coerce_cell(row_data.get(header, "")),
-                        )
-                        cell.font = DATA_FONT
-
-                # 自适应列宽
-                for col_idx, header in enumerate(headers, 1):
-                    max_width = max(len(str(header)), 12)
-                    for row_data in rows[:50]:  # 采样前50行
-                        val = str(row_data.get(header, ""))
-                        max_width = max(max_width, min(len(val), 40))
-                    ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = max_width + 2
+            headers = list(rows[0].keys())
+            matrix = [[row.get(h, "") for h in headers] for row in rows]
+            build_report_sheet(
+                wb,
+                title=f"帮扶村数据导出 · {mod_label}",
+                headers=headers,
+                rows=matrix,
+                subtitle=make_subtitle(extra=f"共 {len(rows)} 条记录"),
+                sheet_name=mod_label[:31],  # Excel sheet name max 31 chars
+            )
 
         # 统计 sheet
-        ws_stats = wb.create_sheet(title="统计信息")
-        for i, (key, val) in enumerate(statistics.items(), 1):
-            ws_stats.cell(row=i, column=1, value=self._coerce_cell(key)).font = Font(bold=True)
-            ws_stats.cell(row=i, column=2, value=self._coerce_cell(val))
+        stat_headers = ["统计项", "数值"]
+        stat_rows = [[k, v] for k, v in statistics.items()]
+        build_report_sheet(
+            wb,
+            title="帮扶村数据导出 · 统计信息",
+            headers=stat_headers,
+            rows=stat_rows,
+            subtitle=make_subtitle(),
+            sheet_name="统计信息",
+        )
 
         output = io.BytesIO()
         wb.save(output)

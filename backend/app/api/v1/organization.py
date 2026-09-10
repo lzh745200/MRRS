@@ -406,9 +406,14 @@ async def export_organizations(
             )
 
         export_service = ExcelExportService()
+        _wm = (
+            f"导出人：{getattr(current_user, 'full_name', None) or getattr(current_user, 'username', '')}"
+            f"  {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        )
         excel_bytes = export_service.export_organizations(
             organizations=export_data,
             filename="组织机构列表",
+            watermark=_wm,
         )
 
         return StreamingResponse(

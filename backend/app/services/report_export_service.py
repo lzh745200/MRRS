@@ -316,15 +316,49 @@ class ReportExportService:
                     yield "paragraph", "暂无数据。"
 
     def export_word(self, report_type: str, data: dict) -> bytes:
-        """导出 Word 文档（python-docx）"""
+        """导出 Word 文档（python-docx）。
+
+        含 A4 页面与页边距、页眉（系统名 + 报表名）、页脚（第 X 页 / 共 Y 页 页码域）、
+        标题区、表头底纹 + 跨页重复。
+        """
         from docx import Document
+        from docx.enum.table import WD_TABLE_ALIGNMENT
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         from docx.oxml.ns import qn
-        from docx.shared import Pt
+        from docx.shared import RGBColor
+        from docx.shared import Cm, Pt
 
         title = data.get("title") or _REPORT_TITLES.get(report_type, "帮扶工作报告")
 
         doc = Document()
+
+        # ── 页面设置：A4 + 页边距 ──
+        section = doc.sections[0]
+        section.page_width = Cm(21.0)
+        section.page_height = Cm(29.7)
+        section.top_margin = Cm(2.54)
+        section.bottom_margin = Cm(2.54)
+        section.left_margin = Cm(2.0)
+        section.right_margin = Cm(2.0)
+
+        # ── 页眉：系统名 + 报表名 ──
+        header_p = section.header.paragraphs[0]
+        header_p.text = f"帮扶管理信息系统 · {title}"
+        header_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in header_p.runs:
+            run.font.size = Pt(9)
+            run.font.color.rgb = RGBColor.from_string("64748B")
+            run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), "宋体")
+
+        # ── 页脚：第 X 页 / 共 Y 页（PAGE / NUMPAGES 域）──
+        footer_p = section.footer.paragraphs[0]
+        footer_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        self._add_text_run(footer_p, "第 ", size=9)
+        self._add_field_run(footer_p, "PAGE", size=9)
+        self._add_text_run(footer_p, " 页 / 共 ", size=9)
+        self._add_field_run(footer_p, "NUMPAGES", size=9)
+        self._add_text_run(footer_p, " 页", size=9)
+
         # 中文字体：正文宋体、标题黑体（仅声明字体名，实际字形由打开方系统提供）
         normal = doc.styles["Normal"]
         normal.font.name = "Times New Roman"
@@ -352,13 +386,25 @@ class ReportExportService:
             else:
                 headers = payload.get("headers") or []
                 rows = payload.get("rows") or []
+                if not headers:
+                    continue
                 table = doc.add_table(rows=len(rows) + 1, cols=len(headers))
                 table.style = "Table Grid"
+                table.alignment = WD_TABLE_ALIGNMENT.CENTER
+                # 表头：军绿底纹 + 白字粗体居中 + 跨页重复
+                hdr_cells = table.rows[0].cells
                 for j, text in enumerate(headers):
-                    table.rows[0].cells[j].text = str(text)
+                    hdr_cells[j].text = str(text)
+                    self._shade_cell(hdr_cells[j], "1B4332")
+                    self._style_paragraph_runs(
+                        hdr_cells[j].paragraphs[0], bold=True, color="FFFFFF", center=True
+                    )
+                self._set_repeat_header(table.rows[0])
+                # 数据行
                 for i, row in enumerate(rows, start=1):
                     for j, cell in enumerate(row):
-                        table.rows[i].cells[j].text = str(cell)
+                        if j < len(headers):
+                            table.rows[i].cells[j].text = str(cell)
 
         if not has_content:
             doc.add_paragraph("本年度暂无相关数据。")
@@ -367,18 +413,102 @@ class ReportExportService:
         doc.save(buf)
         return buf.getvalue()
 
+    # ────────────────────── Word 辅助方法 ──────────────────────
+
+    @staticmethod
+    def _shade_cell(cell, fill_hex: str) -> None:
+        """为单元格添加底纹（w:shd）。"""
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        tc_pr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"), fill_hex)
+        tc_pr.append(shd)
+
+    @staticmethod
+    def _style_paragraph_runs(
+        paragraph, bold: bool = False, color: str = None, center: bool = False, size=None
+    ) -> None:
+        """统一设置段落内 run 的字体/加粗/颜色/对齐。"""
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn
+        from docx.shared import Pt, RGBColor
+
+        if center:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in paragraph.runs:
+            run.font.bold = bold
+            if color:
+                run.font.color.rgb = RGBColor.from_string(color)
+            if size:
+                run.font.size = Pt(size)
+            run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), "黑体")
+
+    @staticmethod
+    def _set_repeat_header(row) -> None:
+        """标记表头行跨页重复（w:tblHeader）。"""
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        tr_pr = row._tr.get_or_add_trPr()
+        tbl_header = OxmlElement("w:tblHeader")
+        tbl_header.set(qn("w:val"), "true")
+        tr_pr.append(tbl_header)
+
+    @staticmethod
+    def _add_text_run(paragraph, text: str, size=None):
+        """向段落追加文本 run（东亚字体宋体）。"""
+        from docx.oxml.ns import qn
+        from docx.shared import Pt
+
+        run = paragraph.add_run(text)
+        if size:
+            run.font.size = Pt(size)
+        run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), "宋体")
+        return run
+
+    @staticmethod
+    def _add_field_run(paragraph, field_code: str, size=None):
+        """向段落插入 Word 域（如 PAGE / NUMPAGES），用于页码。"""
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+        from docx.shared import Pt
+
+        run = paragraph.add_run()
+        fld_begin = OxmlElement("w:fldChar")
+        fld_begin.set(qn("w:fldCharType"), "begin")
+        instr = OxmlElement("w:instrText")
+        instr.set(qn("xml:space"), "preserve")
+        instr.text = f" {field_code} "
+        fld_end = OxmlElement("w:fldChar")
+        fld_end.set(qn("w:fldCharType"), "end")
+        r = run._r
+        r.append(fld_begin)
+        r.append(instr)
+        r.append(fld_end)
+        if size:
+            run.font.size = Pt(size)
+        run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), "宋体")
+        return run
+
     def export_pdf(self, report_type: str, data: dict) -> bytes:
-        """导出 PDF 文档（reportlab，内置 CID 中文字体，无需字体文件）"""
+        """导出 PDF 文档（reportlab，内置 CID 中文字体，无需字体文件）。
+
+        含 A4 页面与页边距、页眉（系统名 · 报表名）、页脚（第 X 页 / 共 Y 页）、
+        军绿表头 + 交替行底的网格表。
+        """
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.units import mm
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
         from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-        if "STSong-Light" not in pdfmetrics.getRegisteredFontNames():
-            pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        from app.utils.pdf_report_style import data_table_style, ensure_cjk_font, make_numbered_canvas
+
+        ensure_cjk_font()
 
         title = data.get("title") or _REPORT_TITLES.get(report_type, "帮扶工作报告")
         title_style = ParagraphStyle(
@@ -411,24 +541,18 @@ class ReportExportService:
             else:
                 headers = [str(h) for h in (payload.get("headers") or [])]
                 rows = [[str(c) for c in row] for row in (payload.get("rows") or [])]
+                if not headers:
+                    continue
                 table = Table([headers, *rows], repeatRows=1)
-                table.setStyle(
-                    TableStyle(
-                        [
-                            ("FONTNAME", (0, 0), (-1, -1), "STSong-Light"),
-                            ("FONTSIZE", (0, 0), (-1, -1), 9),
-                            ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
-                            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-                            ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
-                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                        ]
-                    )
-                )
+                table.setStyle(TableStyle(data_table_style()))
                 story.append(table)
             story.append(Spacer(1, 3 * mm))
 
         if not has_content:
             story.append(Paragraph("本年度暂无相关数据。", body_style))
+
+        # ── 两遍式画布：统一绘制页眉页脚与「共 N 页」──
+        header_text = f"帮扶管理信息系统 · {title}"
 
         buf = BytesIO()
         SimpleDocTemplate(
@@ -437,9 +561,9 @@ class ReportExportService:
             leftMargin=20 * mm,
             rightMargin=20 * mm,
             topMargin=20 * mm,
-            bottomMargin=20 * mm,
+            bottomMargin=18 * mm,
             title=title,
-        ).build(story)
+        ).build(story, canvasmaker=make_numbered_canvas(header_text))
         return buf.getvalue()
 
 

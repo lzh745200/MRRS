@@ -19,6 +19,7 @@ from app.api.v1.deps import get_current_active_user, get_db
 from app.api.v1.menus import MENU_DEFINITIONS, _flatten_menu_keys
 from app.core.response import success_response
 from app.core.transaction import safe_commit
+from app.core.permission_utils import is_admin
 from app.models.permission_pack import PermissionPack
 from app.models.user import User
 from app.schemas.permission_pack import (
@@ -38,8 +39,8 @@ _BINDABLE_ROLES = ("user", "viewer")
 
 
 def _require_admin(user: User) -> None:
-    """权限包全部端点仅管理员可用"""
-    if user.role not in ("admin", "super_admin") and not user.is_superuser:
+    """权限包全部端点仅管理员可用（统一管理员判定，含历史角色归一化）"""
+    if not is_admin(user):
         raise HTTPException(status_code=403, detail="仅管理员可管理权限包")
 
 

@@ -4,7 +4,6 @@ from io import BytesIO
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
 
 
 class ExcelExportService:
@@ -22,39 +21,24 @@ class ExcelExportService:
     _CENTER_ALIGN = Alignment(horizontal="center", vertical="center")
 
     def _create_workbook(self, sheet_name: str, headers: list, rows: list[dict], watermark: str = "") -> Workbook:
-        """创建通用 Excel 工作簿（watermark 追加到页脚，用于审计溯源）"""
+        """创建通用 Excel 工作簿（统一军绿+金色样式 + A4 打印设置）。
+
+        watermark 追加到页脚，用于审计溯源。
+        """
+        from app.utils.excel_report_style import build_report_sheet, make_subtitle
+
         wb = Workbook()
-        ws = wb.active
-        ws.title = sheet_name
-
-        # 写表头
-        for col_idx, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_idx, value=header)
-            cell.font = self._HEADER_FONT_WHITE
-            cell.fill = self._HEADER_FILL
-            cell.alignment = self._CENTER_ALIGN
-            cell.border = self._THIN_BORDER
-
-        # 写数据行
-        for row_idx, row_data in enumerate(rows, 2):
-            for col_idx, header in enumerate(headers, 1):
-                cell = ws.cell(row=row_idx, column=col_idx, value=row_data.get(header, ""))
-                cell.border = self._THIN_BORDER
-                cell.alignment = self._CENTER_ALIGN
-
-        # 自适应列宽
-        for col_idx in range(1, len(headers) + 1):
-            max_length = len(str(headers[col_idx - 1]))
-            for row_idx in range(2, len(rows) + 2):
-                cell_value = str(ws.cell(row=row_idx, column=col_idx).value or "")
-                max_length = max(max_length, len(cell_value))
-            ws.column_dimensions[get_column_letter(col_idx)].width = min(max_length + 4, 40)
-
-        # 审计水印（导出人/时间）写入页脚
-        if watermark:
-            ws.oddFooter.center.text = watermark
-            ws.evenFooter.center.text = watermark
-
+        matrix = [[row.get(h, "") for h in headers] for row in rows]
+        build_report_sheet(
+            wb,
+            title=sheet_name,
+            headers=headers,
+            rows=matrix,
+            subtitle=make_subtitle(extra=f"共 {len(rows)} 条记录"),
+            sheet_name=sheet_name,
+            ws=wb.active,
+            watermark=watermark,
+        )
         return wb
 
     @staticmethod
@@ -64,49 +48,50 @@ class ExcelExportService:
         output.seek(0)
         return output.getvalue()
 
-    def export_user_list(self, data: list[dict]) -> bytes:
+    def export_user_list(self, data: list[dict], watermark: str = "") -> bytes:
         headers = ["ID", "用户名", "邮箱", "姓名", "角色", "状态", "最后登录"]
-        wb = self._create_workbook("用户列表", headers, data)
+        wb = self._create_workbook("用户列表", headers, data, watermark=watermark)
         return self._to_bytes(wb)
 
-    def export_village_list(self, data: list[dict]) -> bytes:
+    def export_village_list(self, data: list[dict], watermark: str = "") -> bytes:
         headers = ["ID", "名称", "编码", "省份", "城市", "区县", "人口", "状态", "创建时间"]
-        wb = self._create_workbook("村庄列表", headers, data)
+        wb = self._create_workbook("村庄列表", headers, data, watermark=watermark)
         return self._to_bytes(wb)
 
-    def export_school_list(self, data: list[dict]) -> bytes:
+    def export_school_list(self, data: list[dict], watermark: str = "") -> bytes:
         headers = ["ID", "名称", "编码", "类型", "城市", "学生数", "教师数", "状态"]
-        wb = self._create_workbook("学校列表", headers, data)
+        wb = self._create_workbook("学校列表", headers, data, watermark=watermark)
         return self._to_bytes(wb)
 
-    def export_project_list(self, data: list[dict]) -> bytes:
+    def export_project_list(self, data: list[dict], watermark: str = "") -> bytes:
         headers = ["ID", "名称", "编码", "类型", "状态", "预算", "进度", "开始日期", "结束日期"]
-        wb = self._create_workbook("项目列表", headers, data)
+        wb = self._create_workbook("项目列表", headers, data, watermark=watermark)
         return self._to_bytes(wb)
 
-    def export_fund_list(self, data: list[dict]) -> bytes:
+    def export_fund_list(self, data: list[dict], watermark: str = "") -> bytes:
         headers = ["ID", "名称", "类型", "金额", "来源", "用途", "状态", "经办人", "使用日期"]
-        wb = self._create_workbook("经费列表", headers, data)
+        wb = self._create_workbook("经费列表", headers, data, watermark=watermark)
         return self._to_bytes(wb)
 
     def export_organizations(
-        self, organizations: list[dict], filename: str = "组织机构列表"
+        self, organizations: list[dict], filename: str = "组织机构列表", watermark: str = ""
     ) -> bytes:
         """导出组织机构列表为 Excel。
 
         Args:
             organizations: 组织记录列表，每项为 dict。
             filename: 工作表名称。
+            watermark: 页脚审计水印（导出人/时间）。
         """
         headers = [
             "名称", "编码", "类型", "层级", "联系人", "联系电话",
             "地址", "描述", "成员数", "状态", "创建时间",
         ]
-        wb = self._create_workbook(filename, headers, organizations)
+        wb = self._create_workbook(filename, headers, organizations, watermark=watermark)
         return self._to_bytes(wb)
 
     def export_organization_pass_codes(
-        self, pass_codes: list[dict], filename: str = "组织通行证码列表"
+        self, pass_codes: list[dict], filename: str = "组织通行证码列表", watermark: str = ""
     ) -> bytes:
         """导出组织通行证码列表为 Excel。
 
@@ -115,6 +100,7 @@ class ExcelExportService:
                 verification_code / pass_code / allow_subordinate_generation /
                 status / created_time 等键。
             filename: 工作表名称（同时用作导出文件名提示）。
+            watermark: 页脚审计水印（导出人/时间）。
         """
         headers = ["组织名称", "校验码", "通行证码", "允许下级生成", "状态", "创建时间"]
         rows = [
@@ -128,7 +114,7 @@ class ExcelExportService:
             }
             for item in pass_codes
         ]
-        wb = self._create_workbook(filename, headers, rows)
+        wb = self._create_workbook(filename, headers, rows, watermark=watermark)
         return self._to_bytes(wb)
 
     def export_comprehensive_report(
@@ -137,51 +123,62 @@ class ExcelExportService:
         village_data: list[dict],
         project_data: list[dict],
         fund_data: list[dict],
+        watermark: str = "",
     ) -> bytes:
-        """导出综合报表（多 sheet）"""
+        """导出综合报表（多 sheet，统一军绿+金色样式 + A4 打印设置）"""
+        from app.utils.excel_report_style import build_report_sheet, make_subtitle
+
         wb = Workbook()
 
         # 汇总 sheet
-        ws_summary = wb.active
-        ws_summary.title = "汇总"
-        for row_idx, (key, value) in enumerate(summary.items(), 1):
-            cell_a = ws_summary.cell(row=row_idx, column=1, value=key)
-            cell_a.font = Font(bold=True)
-            cell_a.border = self._THIN_BORDER
-            cell_b = ws_summary.cell(row=row_idx, column=2, value=value)
-            cell_b.border = self._THIN_BORDER
-        ws_summary.column_dimensions["A"].width = 20
-        ws_summary.column_dimensions["B"].width = 30
+        summary_headers = ["统计项", "数值"]
+        summary_rows = [[k, v] for k, v in summary.items()]
+        build_report_sheet(
+            wb,
+            title="帮扶数据综合报表 · 汇总",
+            headers=summary_headers,
+            rows=summary_rows,
+            subtitle=make_subtitle(),
+            sheet_name="汇总",
+            ws=wb.active,
+            watermark=watermark,
+        )
 
         # 村庄 sheet
         if village_data:
-            ws_v = wb.create_sheet("村庄")
             v_headers = ["ID", "名称", "人口", "项目数", "产业数"]
-            for col_idx, h in enumerate(v_headers, 1):
-                ws_v.cell(row=1, column=col_idx, value=h).font = self._HEADER_FONT
-            for row_idx, row in enumerate(village_data, 2):
-                for col_idx, h in enumerate(v_headers, 1):
-                    ws_v.cell(row=row_idx, column=col_idx, value=row.get(h, ""))
+            build_report_sheet(
+                wb,
+                title="帮扶村统计",
+                headers=v_headers,
+                rows=[[r.get(h, "") for h in v_headers] for r in village_data],
+                sheet_name="村庄",
+                watermark=watermark,
+            )
 
         # 项目 sheet
         if project_data:
-            ws_p = wb.create_sheet("项目")
             p_headers = ["ID", "名称", "状态", "预算", "进度"]
-            for col_idx, h in enumerate(p_headers, 1):
-                ws_p.cell(row=1, column=col_idx, value=h).font = self._HEADER_FONT
-            for row_idx, row in enumerate(project_data, 2):
-                for col_idx, h in enumerate(p_headers, 1):
-                    ws_p.cell(row=row_idx, column=col_idx, value=row.get(h, ""))
+            build_report_sheet(
+                wb,
+                title="帮扶项目统计",
+                headers=p_headers,
+                rows=[[r.get(h, "") for h in p_headers] for r in project_data],
+                sheet_name="项目",
+                watermark=watermark,
+            )
 
         # 经费 sheet
         if fund_data:
-            ws_f = wb.create_sheet("经费")
             f_headers = ["ID", "名称", "金额", "状态", "使用日期"]
-            for col_idx, h in enumerate(f_headers, 1):
-                ws_f.cell(row=1, column=col_idx, value=h).font = self._HEADER_FONT
-            for row_idx, row in enumerate(fund_data, 2):
-                for col_idx, h in enumerate(f_headers, 1):
-                    ws_f.cell(row=row_idx, column=col_idx, value=row.get(h, ""))
+            build_report_sheet(
+                wb,
+                title="帮扶经费统计",
+                headers=f_headers,
+                rows=[[r.get(h, "") for h in f_headers] for r in fund_data],
+                sheet_name="经费",
+                watermark=watermark,
+            )
 
         return self._to_bytes(wb)
 

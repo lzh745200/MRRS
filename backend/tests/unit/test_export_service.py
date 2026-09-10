@@ -63,17 +63,23 @@ class TestExcelExportService:
         assert isinstance(result, bytes)
 
     def test_headers_and_styles_applied(self, export_svc):
-        """Verify headers use bold font and specific fill color."""
+        """Verify 统一抬头/表头样式（军绿底 + 白字粗体）+ A4 打印设置。"""
         headers = ["ID", "名称"]
         rows = [{"ID": 1, "名称": "测试"}]
         wb = export_svc._create_workbook("样式测试", headers, rows)
         ws = wb.active
 
-        # Header should be bold and have fill
-        header_cell = ws.cell(row=1, column=1)
+        # 统一抬头：第 1 行为报表主标题
+        assert ws.cell(row=1, column=1).value == "样式测试"
+        # 表头位于第 5 行，军绿底 + 白字粗体
+        header_cell = ws.cell(row=5, column=1)
+        assert header_cell.value == "ID"
         assert header_cell.font.bold is True
         assert header_cell.font.color is not None
-        assert header_cell.fill.start_color.rgb == "004472C4"
+        assert header_cell.fill.start_color.rgb == "001B4332"
+        # 已套用 A4 打印设置 + 重复表头行
+        assert ws.page_setup.paperSize == 9
+        assert ws.print_title_rows == "$5:$5"
 
     def test_column_auto_width(self, export_svc):
         """Verify that columns have reasonable width after auto-fit."""

@@ -34,7 +34,7 @@ from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.core.transaction import safe_commit
 from app.utils.pagination import keyset_paginate
-from app.core.data_scope_adapter import apply_scope_filter
+from app.core.data_permission import apply_scope_filter
 from app.services.work_log_service import write_work_log
 from app.utils.upload_helper import save_upload_file, get_attachment_response, delete_attachment_file
 
@@ -159,22 +159,49 @@ def _resolve_fund_approval_tasks(
         return 0
 
 
+# 审批任务状态 + 经费当前状态 → 经费目标状态。
+# 键是 (task.status, fund.status)；不在表内表示无需流转（含幂等重复回写）。
+# rejected → approved 是「驳回后重新提交再通过」的必经一步（R23 修复）。
+_FUND_APPROVAL_TARGETS = {
+    ("approved", "pending"): "approved",
+    ("approved", "rejected"): "approved",
+    ("rejected", "pending"): "rejected",
+    ("pending", "rejected"): "pending",
+}
+
+# 状态历史备注（按审批任务状态取词；缺省回落到状态名本身）
+_FUND_APPROVAL_REMARKS = {
+    "approved": "审批任务 #{task_id} 通过",
+    "rejected": "审批任务 #{task_id} 驳回",
+    "pending": "审批任务 #{task_id} 重新提交",
+}
+
+
 def _apply_fund_approval_result(db: Session, task) -> None:
     """审批终态回写经费状态（注册到 ApprovalWorkflowService）
 
-    - 通过：pending → approved（记录审批人/审批时间/状态历史）
+    - 通过：pending / rejected → approved（记录审批人/审批时间/状态历史）
     - 驳回：pending → rejected
+    - 重新提交（任务回到 pending）：rejected → pending
+
+    「驳回 → 重新提交 → 审批通过」是正常可达路径。历史缺陷：本函数要求
+    ``fund.status == "pending"`` 才回写，而重新提交只改任务不改经费（经费仍是
+    rejected），于是最终的审批通过被静默忽略 —— 审批记录显示已通过、经费却永远
+    停在「已驳回」（R23 探针实测：task=approved / fund=rejected / 状态历史无
+    approved 行）。修复分两处：重新提交时同步回写（服务层调用
+    apply_entity_change），以及本函数接受 rejected → approved。
     """
-    if task.status not in ("approved", "rejected"):
-        return
     fund = db.query(Fund).filter(Fund.id == task.entity_id).first()
     if not fund:
         return
+
     from_status = fund.status
-    if from_status != "pending":
+    target_status = _FUND_APPROVAL_TARGETS.get((task.status, from_status))
+    if target_status is None or target_status == from_status:
         return
-    if task.status == "approved":
-        fund.status = "approved"
+
+    fund.status = target_status
+    if target_status == "approved":
         fund.approval_date = datetime.now(timezone.utc)
         approver_name = None
         if getattr(task, "current_approver", None):
@@ -186,16 +213,15 @@ def _apply_fund_approval_result(db: Session, task) -> None:
             if approver:
                 approver_name = approver.full_name or approver.username
         fund.approved_by = approver_name
-    elif task.status == "rejected":
-        fund.status = "rejected"
+
     # 状态变更历史落库（与审批记录同事务提交，保证审计闭环）
     db.add(FundStatusHistory(
         fund_id=fund.id,
         from_status=from_status,
-        to_status=fund.status,
+        to_status=target_status,
         operator_id=getattr(task, "current_approver_id", None),
         operator_name=getattr(fund, "approved_by", None),
-        remark=f"审批任务 #{task.id} {'通过' if task.status == 'approved' else '驳回'}",
+        remark=_FUND_APPROVAL_REMARKS.get(task.status, task.status).format(task_id=task.id),
         operation_time=datetime.now(timezone.utc),
     ))
 

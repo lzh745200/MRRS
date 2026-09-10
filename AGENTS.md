@@ -88,6 +88,16 @@ Frontend stores use `_unwrapList()` / `_unwrapSingle()` to normalize both. The A
 - `organization_id` field is **mandatory** on all queries
 - Use `filter_by_data_scope(query, model, user, db=db)` from `app/core/data_permission.py`
 - Missing this = security vulnerability (military audit will fail)
+- **Single source (2026-09-10)**: `core/data_permission.py` is the ONLY data-scope module —
+  `core/unified_data_scope.py`, `core/data_scope_adapter.py`, `services/village/data_permission.py`
+  were removed and their callers repointed here.
+- **Admin semantics**: `filter_by_data_scope` follows role scope strictly (super_admin→all,
+  admin→OWN_DEPT, others→OWN). A **department-level admin must NOT export cross-org data**
+  (military audit redline S2). `core/permission_utils.is_admin` is the ONLY admin check and
+  covers **super_admin/admin/is_superuser only** — legacy roles `manager`/`approval_leader` are
+  NOT system admins (they get manager-level business ops via `deps.require_manager_role`).
+- **Permission APIs**: `/rbac/*` is the ONLY RBAC entry. The deprecated `/user-permissions/*`
+  API and the dead endpoints `/rbac/frontend/{route,current-user}-permissions` were deleted.
 
 ### Soft Delete Pattern
 

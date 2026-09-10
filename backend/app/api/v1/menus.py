@@ -23,20 +23,12 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import normalize_role
 from app.core.database import get_db
-from app.core.security import (
-    get_current_user,
-    ROLE_ADMIN,
-    ROLE_SUPER_ADMIN,
-)
+from app.core.permission_utils import is_admin as _is_admin  # 唯一管理员判定入口（见 permission_utils.is_admin）
+from app.core.security import get_current_user
 from app.models.user import User
 from app.models.permission_pack import PermissionPack
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
-
-
-def _is_admin(user) -> bool:
-    """检查用户是否为管理员"""
-    return user.role in (ROLE_ADMIN, ROLE_SUPER_ADMIN) or user.is_superuser
 
 
 logger = logging.getLogger(__name__)
@@ -389,12 +381,6 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "key": "update-logs",
                 "label": "更新日志",
                 "path": "/system/update-logs",
-                "roles": ["admin", "super_admin"],
-            },
-            {
-                "key": "user-permissions",
-                "label": "用户权限",
-                "path": "/system/user-permissions",
                 "roles": ["admin", "super_admin"],
             },
             {

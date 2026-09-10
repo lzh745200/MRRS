@@ -91,13 +91,6 @@ def test_v14(real_db_session):
     assert s is not None
 
 
-def test_v15(real_db_session):
-    from app.services.user_permission_service import UserPermissionService
-
-    s = UserPermissionService(real_db_session)
-    assert s is not None
-
-
 def test_v16(real_db_session):
     import openpyxl
 

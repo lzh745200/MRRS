@@ -555,9 +555,8 @@ class TestProjectsAPI:
         assert mock_db.rollback.call_count == 2
 
     @patch("app.api.v1.projects.get_client_ip", return_value="127.0.0.1")
-    @patch("app.api.v1.projects.is_superuser", return_value=True)
     def test_delete_project(
-        self, mock_super, mock_ip, client, mock_db, admin_user, sample_project
+        self, mock_ip, client, mock_db, admin_user, sample_project
     ):
         _setup_client(client, mock_db, admin_user)
         sample_project.status = "draft"

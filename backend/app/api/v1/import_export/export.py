@@ -34,6 +34,12 @@ def format_datetime(dt):
     return str(dt)
 
 
+def _audit_watermark(user) -> str:
+    """导出审计水印（导出人 + 时间），写入 Excel 页脚，用于打印归档溯源。"""
+    name = getattr(user, "full_name", None) or getattr(user, "username", "") or "未知"
+    return f"导出人：{name}  {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+
+
 def _latest_population(v) -> int:
     """取帮扶村最近年度人口（无数据返回 0）"""
     if not v.population_data:
@@ -344,7 +350,9 @@ async def export_comprehensive_report(
     ]
 
     if format == "xlsx":
-        content = export_service.export_comprehensive_report(summary, village_data, project_data, fund_data)
+        content = export_service.export_comprehensive_report(
+            summary, village_data, project_data, fund_data, watermark=_audit_watermark(current_user)
+        )
         filename = f"综合报表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     else:
         raise HTTPException(status_code=400, detail="不支持的导出格式")

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
-from app.core.data_scope_adapter import apply_scope_filter
+from app.core.data_permission import apply_scope_filter
 from app.core.permission_utils import is_admin
 from app.models.user import User
 from app.models.supported_village import SupportedVillage

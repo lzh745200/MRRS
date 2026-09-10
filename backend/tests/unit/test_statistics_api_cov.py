@@ -55,7 +55,7 @@ def _patch_scope():
     以便断言数据隔离确实被挂载到每一条经费查询上。
     """
     return patch(
-        "app.core.data_scope_adapter.apply_scope_filter",
+        "app.core.data_permission.apply_scope_filter",
         side_effect=lambda q, *a, **k: q,
     )
 

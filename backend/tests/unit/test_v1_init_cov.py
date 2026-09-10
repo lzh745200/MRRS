@@ -1,11 +1,11 @@
 """app.api.v1 静态导入架构测试（v1.11.3 Kylin 403 事故回归锁）
 
 事故：业务模块经 f-string 动态 importlib 加载，PyInstaller 静态分析不可见，
-冻结包缺 organization/policy/projects 等 47 个模块 → 后端"部分启动"、
+冻结包缺 organization/policy/projects 等 46 个模块 → 后端"部分启动"、
 前端业务页面全量报错。
 
 锁定的新契约：
-1. 47 个业务模块全部静态导入并注册（数量锁，防菜单键漂移式回退）
+1. 46 个业务模块全部静态导入并注册（数量锁，防菜单键漂移式回退）
 2. 注册顺序不变量：supported_village_export 先于 supported_village
 3. 快速失败：任一路由模块导入失败 → 启动中止（禁止静默降级）
 4. 禁止回退到动态 importlib 加载
@@ -18,7 +18,7 @@ import pytest
 
 PKG = "app.api.v1"
 
-EXPECTED_BUSINESS_MODULE_COUNT = 47
+EXPECTED_BUSINESS_MODULE_COUNT = 46
 
 
 def _fresh_pkg():
@@ -29,7 +29,7 @@ def _fresh_pkg():
 
 
 def test_all_business_modules_statically_registered():
-    """47 个业务模块全部静态导入且带 router（数量锁）"""
+    """46 个业务模块全部静态导入且带 router（数量锁）"""
     pkg = _fresh_pkg()
     assert len(pkg._BUSINESS_MODULES) == EXPECTED_BUSINESS_MODULE_COUNT
     for mod in pkg._BUSINESS_MODULES:

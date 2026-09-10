@@ -56,7 +56,7 @@ def _apply_work_scope(query, current_user: Any, db: Any):
 
     org_id = getattr(current_user, "organization_id", None) or getattr(current_user, "org_id", None)
     if scope == DataScope.OWN_DEPT and org_id:
-        from app.core.unified_data_scope import _get_org_subtree
+        from app.core.data_permission import _get_org_subtree
 
         org_ids, _names = _get_org_subtree(db, org_id)
         org_ids = org_ids if org_ids else [org_id]
@@ -85,7 +85,7 @@ def _can_access_work(work, current_user: Any, db: Any) -> bool:
     if get_data_scope(current_user) == DataScope.OWN_DEPT:
         org_id = getattr(current_user, "organization_id", None) or getattr(current_user, "org_id", None)
         if org_id and work.organization_id:
-            from app.core.unified_data_scope import _get_org_subtree
+            from app.core.data_permission import _get_org_subtree
 
             org_ids, _names = _get_org_subtree(db, org_id)
             if work.organization_id in (org_ids if org_ids else [org_id]):
@@ -429,7 +429,7 @@ class RuralWorkService:
         本方法从帮扶村表读取并独立事务 upsert 到 villages 表（按名称），
         保证下拉有真实数据且外键一致。非管理员按数据权限过滤村庄。
         """
-        from app.core.data_scope_adapter import apply_scope_filter
+        from app.core.data_permission import apply_scope_filter
         from app.core.database import SessionLocal
         from app.models.supported_village import SupportedVillage
         from app.models.village import Village

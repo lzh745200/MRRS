@@ -7,13 +7,14 @@ from fastapi import Depends, HTTPException, Query
 from app.core.database import get_db  # noqa: F401 — 统一从 database.py re-export
 from app.core.security import get_current_user  # noqa: F401 — 真实 JWT 认证实现
 from app.core.permission_utils import is_admin, is_superuser  # noqa: F401 — re-export
+from app.core.constants import ADMIN_ROLES  # noqa: F401 — 单一来源：app.core.constants
 
 # 别名,兼容新代码
 get_current_active_user = get_current_user
 
-# 管理角色列表（可执行创建/编辑/删除操作）
-# 历史角色 manager/approval_leader 已由 constants.normalize_role() 归一化为 admin
-ADMIN_ROLES = ("admin", "super_admin")
+# 管理角色列表（可执行创建/编辑/删除操作）—— 单一来源 app.core.constants.ADMIN_ROLES
+# 注意：manager/approval_leader 是"管理级业务角色"，仅在 require_manager_role 等业务
+# 入口经 normalize_role() 归一化后放行管理操作；is_admin()（系统管理层）不含它们。
 
 
 def require_manager_role(current_user) -> None:

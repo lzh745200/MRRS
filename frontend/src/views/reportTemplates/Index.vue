@@ -575,6 +575,10 @@ async function handleFillExport() {
   const header = fillFields.value.map((f) => f.label || f.key)
   const row = fillFields.value.map((f) => fillRow.value[f.key] ?? '')
   const ws = XLSX.utils.aoa_to_sheet([header, row])
+  // 列宽自适应（社区版 SheetJS 仅支持 !cols 等结构属性；填充/字体不支持写入）
+  ws['!cols'] = header.map((h: string, i: number) => ({
+    wch: Math.min(Math.max(String(h).length, String(row[i] ?? '').length, 10) + 2, 40),
+  }))
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
   XLSX.writeFile(wb, `${fillTemplate.value?.name || '填报'}_填报.xlsx`)

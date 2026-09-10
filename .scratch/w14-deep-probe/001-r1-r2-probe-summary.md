@@ -358,3 +358,36 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   - `POST /control-packages/generate`（organization_id=99999999）→ 200。
   - 开发库 `rbac_roles` 等 4 张 RBAC 表为空属源数据为空（角色按需创建），
     非导出丢数据（R20 已用自建角色证明往返）。
+
+
+## R23（8025, 经费↔审批双向闭环）— 发现并修复一处闭环断裂
+- 探针：20 项主链路断言 + 17 项副链路断言（撤回/重提/转交/批量）+ 1 条定向复现。
+- ✅ 已确认正常（不误报）：经费创建即生成审批任务；任务通过 → 经费
+  `pending → approved` 且状态历史留痕；任务驳回 → `pending → rejected`；
+  经费板块直接审批 → 关联任务被同步完结（`resolved_tasks=1`）；撤回 → 任务
+  withdrawn 而经费保持 pending；撤回后重提 → 任务回 pending；转交 → 审批人变更、
+  转交给不存在用户被拒；批量审批 → 两条任务均 approved 且两笔经费均回写；
+  审批总览/待审批/历史三个列表接口 total 与内容一致（total=10 / n=10）。
+- 🔴 **缺陷：驳回后重新提交再通过，经费永远停在「已驳回」。**
+
+  ```
+  fund=23 task=17  初始   : task=pending  fund=pending
+  驳回             → 200  : task=rejected fund=rejected   ✓
+  重新提交         → 200  : task=pending  fund=rejected   ✗
+  审批通过         → 200  : task=approved fund=rejected   ✗✗
+  状态历史: [('pending','rejected',…)]   ← 无 approved 行
+  ```
+
+  根因两处：① `resubmit_approval` 只改任务不改实体；② `_apply_fund_approval_result`
+  要求 `fund.status == "pending"` 才回写，经费此时是 rejected → 最终通过被**静默
+  忽略**。这条路径在 UI 上完全可达（待审批里点驳回 → 重新提交 → 再点通过），
+  且 `retry_apply_entity_change` 兜不住（回写"成功"了，只是没做事）。
+  修复：① 重提后调用 `apply_entity_change`；② 回写改为显式状态对表
+  `_FUND_APPROVAL_TARGETS`（表外组合不动，幂等重复回写不再重复记历史）。
+  复验：`task/fund` 同步 rejected → pending → approved，
+  历史三段完整 pending→rejected→pending→approved。
+- 附注：`ProjectStatus` / `ScholarshipStatus` 无 rejected 态，project /
+  scholarship_student 回写不存在该路径（已核对枚举）；`withdraw` 只发生在 pending
+  任务上，经费本就 pending，无需回写。
+- 回归：新增 `tests/unit/test_fund_approval_resubmit_r23.py`（14 例，用真实内存
+  SQLite —— conftest 的 `db_session` 是 MagicMock，会把"状态是否真的落库"变成空跑）。

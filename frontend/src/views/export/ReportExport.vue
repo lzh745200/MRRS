@@ -1,5 +1,10 @@
 <template>
   <div class="report-export">
+    <!-- 打印专用页眉页脚（仅 @media print 时显示） -->
+    <div class="print-header">
+      <div class="print-header-title">帮扶管理信息系统 · 报表导出</div>
+      <div class="print-header-subtitle">生成时间：{{ printTime }}</div>
+    </div>
     <el-card class="page-header">
       <div class="header-content">
         <h2>报表导出中心</h2>
@@ -221,6 +226,8 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <div class="print-footer">帮扶管理信息系统 · 报表导出中心</div>
   </div>
 </template>
 
@@ -317,6 +324,8 @@ const selectedType = ref('')
 const exporting = ref(false)
 const loadingHistory = ref(false)
 const exportHistory = ref<any[]>([])
+// 打印页眉页脚生成时间（仅 @media print 时显示）
+const printTime = ref('')
 
 const officialLoading = reactive<Record<string, boolean>>({
   summary_word: false,
@@ -393,6 +402,7 @@ function handlePrintPreview() {
     ElMessage.warning('请先选择报表类型')
     return
   }
+  printTime.value = new Date().toLocaleString('zh-CN')
   window.print()
 }
 
@@ -500,6 +510,19 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
+// 打印专用页眉页脚：屏幕隐藏，打印时显示（样式细节见 styles/print.scss）
+.print-header,
+.print-footer {
+  display: none;
+}
+
+@media print {
+  .print-header,
+  .print-footer {
+    display: block;
+  }
+}
+
 .report-export {
   padding: 20px;
 

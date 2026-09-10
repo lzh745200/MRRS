@@ -469,7 +469,7 @@ async def query_check(
     if data.logic not in ("and", "or"):
         raise HTTPException(status_code=400, detail="logic 仅支持 and（全部满足）/ or（任一满足）")
 
-    from app.core.data_scope_adapter import apply_scope_filter
+    from app.core.data_permission import apply_scope_filter
 
     query = db.query(model)
     query = apply_scope_filter(query, current_user, model, db=db)

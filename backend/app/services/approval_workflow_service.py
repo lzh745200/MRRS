@@ -620,6 +620,11 @@ class ApprovalWorkflowService:
         )
         self.db.add(record)
 
+        # 任务回到 pending 后同步业务实体（R23 修复）：经费被驳回后重新提交时，
+        # 只改任务不改经费会让「任务在审、经费仍显示已驳回」，且最终审批通过还会被
+        # 回写处理器按"非 pending 不回写"静默忽略 —— 审批过了、经费永远停在已驳回。
+        self.apply_entity_change(task)
+
         safe_commit(self.db)
         self.db.refresh(task)
         return task

@@ -8,6 +8,31 @@
 ## [1.12.1] - 2026-09-10 — 🐛 认证会话契约修复 + 帮扶村列表排序根因修复
 
 ### 修复
+- 🐛 **「驳回 → 重新提交 → 审批通过」后经费永远停在「已驳回」（审批闭环断裂）**：
+  R23 探针在真实 HTTP + 真实 DB 上实测：
+
+  ```
+  fund=23 task=17  初始   : task=pending  fund=pending
+  驳回             → 200  : task=rejected fund=rejected   ✓
+  重新提交         → 200  : task=pending  fund=rejected   ✗ 经费没回到待审批
+  审批通过         → 200  : task=approved fund=rejected   ✗✗ 审批过了经费还是已驳回
+  状态历史: [('pending','rejected',…)]   ← 没有 approved 行
+  ```
+
+  根因两处：① `ApprovalWorkflowService.resubmit_approval` 只把任务置回 pending，
+  不动业务实体；② `_apply_fund_approval_result`（`funds.py`）要求
+  `fund.status == "pending"` 才回写，而经费此时是 `rejected` → **最终审批通过被
+  静默忽略**。后果是待审批板块显示已通过、经费板块永远显示已驳回，且**重试机制也
+  救不回来**（`retry_apply_entity_change` 只在 `*_apply_failed` 态可用，而这里回写
+  「成功」了——只是什么都没做）。修复：① `resubmit_approval` 在任务回到 pending 后
+  调用 `apply_entity_change(task)`；② 回写映射改为显式状态对表
+  `_FUND_APPROVAL_TARGETS`：`(approved, pending)`/`(approved, rejected)` → approved、
+  `(rejected, pending)` → rejected、`(pending, rejected)` → pending，表外组合一律
+  不动（幂等重复回写不再重复记历史）。
+  复验：同一序列 `task/fund` 同步为 rejected → pending → approved，
+  状态历史三段完整（pending→rejected→pending→approved）。
+  其他实体处理器不受影响：`ProjectStatus`/`ScholarshipStatus` 没有 rejected 态，
+  project/scholarship 回写无此路径。
 - 🐛 **认证出口在「直接调用」路径下崩溃（潜在 500）**：`get_current_user` 在 P1-2
   性能优化（改用 `db: Session = Depends(get_db)` 复用注入会话）后，两个**直接调用**
   路径不再发生依赖注入，`db` 退化为 `Depends(get_db)` 默认哨兵对象，

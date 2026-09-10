@@ -446,7 +446,11 @@ class TestSafeCommit:
 
 
 class TestIsAdminFunction:
-    """测试 data_permission.is_admin 角色判断与归一化"""
+    """测试 data_permission.is_admin（唯一入口，re-export 自 permission_utils）。
+
+    语义：仅 super_admin / admin / is_superuser 为管理员；历史"管理级业务角色"
+    （manager / approval_leader）**不**归一化为系统管理员（与 SEC 语义一致）。
+    """
 
     @pytest.mark.parametrize(
         "role,is_superuser,expected",
@@ -454,8 +458,8 @@ class TestIsAdminFunction:
             ("super_admin", False, True),
             ("super_admin", True, True),
             ("admin", False, True),
-            ("manager", False, True),          # 废弃角色归一化 → admin
-            ("approval_leader", False, True),  # 废弃角色归一化 → admin
+            ("manager", False, False),         # 管理级业务角色，非系统管理员（is_admin 不归一化）
+            ("approval_leader", False, False), # 管理级业务角色，非系统管理员
             ("operator", False, False),        # 废弃角色归一化 → user
             ("user", False, False),
             ("viewer", False, False),

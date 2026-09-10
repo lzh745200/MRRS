@@ -27,12 +27,18 @@ class DatabaseHealthService:
         self.integrity_check_interval = 86400  # 完整性检查间隔（秒，默认24小时）
         self.quick_check_interval = 3600  # 快速检查间隔（秒，默认1小时）
         self.vacuum_interval = 604800  # VACUUM间隔（秒，默认7天）
+        # WAL checkpoint 间隔（秒，默认1小时）：每小时主动回收 -wal，防止长运行膨胀
+        # （历史上每 6 小时的维护因含 VACUUM 被禁用，导致仅剩每日 3:00 一次 checkpoint）
+        self.wal_checkpoint_interval = 3600
+        # WAL 体积告警阈值（字节，默认 50MB）：超过则记录 WARNING 便于运维察觉
+        self.wal_size_warning_bytes = 50 * 1024 * 1024
 
         # 统计信息
         self.stats = {
             "last_integrity_check": None,
             "last_quick_check": None,
             "last_vacuum": None,
+            "last_wal_checkpoint": None,
             "integrity_errors": 0,
             "slow_queries": 0,
             "lock_timeouts": 0,
@@ -102,6 +108,7 @@ class DatabaseHealthService:
         last_integrity_check = datetime.min
         last_quick_check = datetime.min
         last_vacuum = datetime.min
+        last_wal_checkpoint = datetime.min
 
         while not self._stop_event.is_set():
             try:
@@ -124,6 +131,13 @@ class DatabaseHealthService:
                    (now - last_vacuum).total_seconds() >= self.vacuum_interval:
                     self.vacuum_database()
                     last_vacuum = now
+
+                # WAL checkpoint（每小时一次）— 关闭中跳过；轻量、不生成临时文件，
+                # 主动回收 -wal，防止其随运行时长无限膨胀
+                if not self._stop_event.is_set() and \
+                   (now - last_wal_checkpoint).total_seconds() >= self.wal_checkpoint_interval:
+                    self.checkpoint_wal()
+                    last_wal_checkpoint = now
 
                 # 休眠 — 用 Event.wait 替代 time.sleep，stop 时立即唤醒
                 self._stop_event.wait(60)
@@ -259,6 +273,48 @@ class DatabaseHealthService:
         except Exception as e:
             error_msg = f"数据库VACUUM失败: {e}"
             logger.error(error_msg, exc_info=True)
+            return {"status": "error", "message": error_msg}
+
+    def checkpoint_wal(self) -> Dict:
+        """执行 WAL checkpoint（TRUNCATE）并检查 -wal 体积。
+
+        轻量操作：仅将 WAL 内容写回主库并将 -wal 截断，不生成临时文件，
+        因此可高频（默认每小时）执行，避免长运行导致 -wal 无限膨胀。
+        """
+        try:
+            if not self.db_path.exists():
+                return {"status": "error", "message": "数据库文件不存在"}
+
+            wal_path = Path(str(self.db_path) + "-wal")
+            size_before = wal_path.stat().st_size if wal_path.exists() else 0
+
+            conn = sqlite3.connect(str(self.db_path), timeout=5)
+            cursor = conn.cursor()
+            # TRUNCATE：checkpoint 并将 -wal 截断为 0 字节
+            cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            result = cursor.fetchone()
+            conn.close()
+
+            size_after = wal_path.stat().st_size if wal_path.exists() else 0
+            self.stats["last_wal_checkpoint"] = datetime.now().isoformat()
+
+            if size_after > self.wal_size_warning_bytes:
+                logger.warning(
+                    "WAL 文件偏大: %.2f MB（阈值 %.0f MB），可能存在长事务或持续写入",
+                    size_after / 1024 / 1024,
+                    self.wal_size_warning_bytes / 1024 / 1024,
+                )
+
+            logger.debug("WAL checkpoint 完成: %s → %s 字节", size_before, size_after)
+            return {
+                "status": "ok",
+                "size_before": size_before,
+                "size_after": size_after,
+                "checkpoint_result": result,
+            }
+        except Exception as e:
+            error_msg = f"WAL checkpoint 失败: {e}"
+            logger.warning(error_msg)
             return {"status": "error", "message": error_msg}
 
     def check_indexes(self) -> Dict:

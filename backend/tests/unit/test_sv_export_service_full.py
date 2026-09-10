@@ -58,7 +58,7 @@ class TestQueryVillages:
         user = object()
         svc = SupportedVillageExportService(real_db_session, current_user=user)
         with pytest.MonkeyPatch.context() as mp:
-            import app.core.data_scope_adapter as dsa
+            import app.core.data_permission as dsa
             mp.setattr(dsa, "apply_scope_filter",
                        lambda q, u, m, db=None: q)
             assert len(svc._query_villages()) == 1

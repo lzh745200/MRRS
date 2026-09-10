@@ -650,12 +650,6 @@ export const routes: RouteRecordRaw[] = [
         meta: { menuKey: 'update-logs', title: '更新日志', roles: ['admin', 'super_admin'] },
       },
       {
-        path: '/system/operation-logs',
-        name: 'SystemOperationLogs',
-        component: () => retryImport(() => import('@/views/system/OperationLogs.vue')),
-        meta: { title: '操作日志', roles: ['admin', 'super_admin'] },
-      },
-      {
         path: '/system/i18n',
         name: 'SystemI18n',
         component: () => retryImport(() => import('@/views/system/I18nManagement.vue')),
@@ -716,11 +710,6 @@ export const routes: RouteRecordRaw[] = [
         name: 'SystemZeroTrust',
         component: () => retryImport(() => import('@/views/system/ZeroTrust.vue')),
         meta: { menuKey: 'zero-trust', title: '零信任安全', roles: ['admin', 'super_admin'] },
-      },
-      {
-        path: '/system/user-permissions',
-        meta: { menuKey: 'user-permissions' },
-        redirect: '/system/permission-packs',
       },
       {
         path: '/system/secrets',

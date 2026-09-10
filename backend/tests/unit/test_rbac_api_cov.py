@@ -403,37 +403,3 @@ class TestPermissionLists:
         assert data["success"] is True
         assert isinstance(data["categories"], dict) and data["categories"]
 
-    def test_frontend_current_user_permissions(self, rbac_client):
-        _as_user(rbac_client, _user())
-        _use_db(rbac_client, MagicMock())
-        p, _ = _svc_patch(
-            get_user_permissions={Permission.USER_READ.value, Permission.ADMIN_ALL.value},
-            get_user_roles=[{"name": "管理员"}],
-        )
-        with p:
-            resp = rbac_client.get("/api/v1/rbac/frontend/current-user-permissions")
-        assert resp.status_code == 200
-        data = resp.json()["data"]
-        assert data["permissions"]["user"]["read"] is True
-        assert data["permissions"]["village"]["read"] is False
-        assert data["is_admin"] is True
-        assert data["role_names"] == ["管理员"]
-
-    def test_frontend_current_user_permissions_empty(self, rbac_client):
-        _as_user(rbac_client, _user(role="viewer"))
-        _use_db(rbac_client, MagicMock())
-        p, _ = _svc_patch(get_user_permissions=set(), get_user_roles=[])
-        with p:
-            resp = rbac_client.get("/api/v1/rbac/frontend/current-user-permissions")
-        data = resp.json()["data"]
-        assert data["permissions"]["user"]["read"] is False
-        assert data["is_admin"] is False
-        assert data["role_names"] == []
-
-    def test_route_permissions(self, rbac_client):
-        _as_user(rbac_client, _user())
-        resp = rbac_client.get("/api/v1/rbac/frontend/route-permissions")
-        assert resp.status_code == 200
-        data = resp.json()["data"]
-        assert data["/dashboard"] == ["user:read"]
-        assert "/villages/delete/:id" in data

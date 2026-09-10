@@ -161,7 +161,6 @@
               <el-button text type="success" @click="handleRolePermission(row)"
                 >角色/权限</el-button
               >
-              <el-button text type="info" @click="handleMenuPermission(row)">菜单权限</el-button>
               <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
             </div>
           </template>
@@ -373,43 +372,6 @@
       @saved="handlePermSaved"
     />
 
-    <!-- 菜单权限配置对话框 -->
-    <el-dialog
-      v-model="menuPermDialogVisible"
-      append-to-body
-      title="菜单权限配置"
-      :width="DIALOG_SM"
-    >
-      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
-        为「{{ menuPermUser?.username || '' }}」配置可见页面。勾选后该用户仅能看到所选菜单；
-        不勾选任何菜单时使用角色默认权限。
-      </el-alert>
-      <div v-loading="menuPermLoading" style="min-height: 200px; max-height: 400px; overflow: auto">
-        <el-checkbox
-          :model-value="menuPermAllChecked"
-          :indeterminate="menuPermIndeterminate"
-          @change="toggleMenuPermAll"
-        >
-          全选 / 恢复角色默认
-        </el-checkbox>
-        <el-tree
-          ref="menuPermTreeRef"
-          :data="menuPermTree"
-          show-checkbox
-          node-key="key"
-          :props="{ label: 'label', children: 'children' }"
-          default-expand-all
-          style="margin-top: 8px"
-        />
-      </div>
-      <template #footer>
-        <el-button @click="menuPermDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="menuPermSaving" @click="saveMenuPermission">
-          保存
-        </el-button>
-      </template>
-    </el-dialog>
-
     <!-- 导出权限包：角色选择对话框 -->
     <el-dialog
       v-model="permExportDialogVisible"
@@ -472,7 +434,7 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import { logger } from '@/utils/logger'
 import { generateRandomPassword } from '@/utils/clipboard'
 
-import { ref, reactive, onMounted, computed, nextTick } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import RoleManagement from './Role.vue'
 
@@ -937,96 +899,6 @@ const handleRolePermission = (row: any) => {
 const handlePermSaved = async () => {
   pagination.page = 1 // 重置到第1页，确保新建/编辑后的数据可见
   await Promise.all([loadData(), loadPendingCount()])
-}
-
-// ── 菜单权限配置 ──
-const menuPermDialogVisible = ref(false)
-const menuPermLoading = ref(false)
-const menuPermSaving = ref(false)
-const menuPermUser = ref<any>(null)
-const menuPermTree = ref<any[]>([])
-const menuPermTreeRef = ref<any>(null)
-const menuPermAllChecked = ref(false)
-const menuPermIndeterminate = ref(false)
-
-async function handleMenuPermission(row: any) {
-  menuPermUser.value = row
-  menuPermDialogVisible.value = true
-  menuPermLoading.value = true
-  menuPermAllChecked.value = false
-  menuPermIndeterminate.value = false
-  try {
-    // 拉取用户菜单配置 + 全量菜单树
-    const [cfgRes, menuRes] = await Promise.all([
-      get(`/menus/user-menus/${row.id}`),
-      get('/menus/all'),
-    ])
-    const cfg = (cfgRes as any)?.data ?? cfgRes ?? {}
-    const menuKeys: string[] = cfg.menu_keys || []
-    const menuData = (menuRes as any)?.data ?? menuRes ?? []
-    menuPermTree.value = Array.isArray(menuData) ? menuData : []
-    await nextTick()
-    const tree = menuPermTreeRef.value
-    if (tree) {
-      tree.setCheckedKeys(menuKeys)
-      updateMenuPermAllState()
-    }
-  } catch (e: any) {
-    logger.error('加载菜单权限配置失败', e)
-    ElMessage.error(e?.response?.data?.detail || '加载菜单权限配置失败')
-  } finally {
-    menuPermLoading.value = false
-  }
-}
-
-function updateMenuPermAllState() {
-  const tree = menuPermTreeRef.value
-  if (!tree) return
-  const checked = tree.getCheckedKeys(false)
-  const allKeys = flattenMenuKeys(menuPermTree.value)
-  menuPermAllChecked.value = allKeys.length > 0 && checked.length === allKeys.length
-  menuPermIndeterminate.value = checked.length > 0 && checked.length < allKeys.length
-}
-
-function flattenMenuKeys(items: any[]): string[] {
-  const keys: string[] = []
-  const walk = (list: any[]) => {
-    for (const item of list) {
-      keys.push(item.key)
-      if (item.children?.length) walk(item.children)
-    }
-  }
-  walk(items)
-  return keys
-}
-
-function toggleMenuPermAll(checked: boolean | string | number) {
-  const tree = menuPermTreeRef.value
-  if (!tree) return
-  if (checked) {
-    tree.setCheckedKeys(flattenMenuKeys(menuPermTree.value))
-  } else {
-    tree.setCheckedKeys([])
-  }
-  updateMenuPermAllState()
-}
-
-async function saveMenuPermission() {
-  if (!menuPermUser.value) return
-  const tree = menuPermTreeRef.value
-  if (!tree) return
-  menuPermSaving.value = true
-  try {
-    const checkedKeys = tree.getCheckedKeys(false) as string[]
-    await put(`/menus/user-menus/${menuPermUser.value.id}`, { menu_keys: checkedKeys })
-    ElMessage.success('菜单权限已保存')
-    menuPermDialogVisible.value = false
-  } catch (e: any) {
-    logger.error('保存菜单权限失败', e)
-    ElMessage.error(e?.response?.data?.detail || '保存菜单权限失败')
-  } finally {
-    menuPermSaving.value = false
-  }
 }
 
 // ── 用户会话管理 ──

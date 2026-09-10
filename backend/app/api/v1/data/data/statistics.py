@@ -604,7 +604,7 @@ async def _get_analysis_data_impl(db: Session, current_user):
                                               PartyBuildingSupport,
                                               SupportedVillage,
                                               VillageIncome, VillagePopulation)
-    from app.core.data_scope_adapter import apply_scope_filter
+    from app.core.data_permission import apply_scope_filter
 
     def _scoped(q):
         """H3：经费相关查询统一附加数据隔离。

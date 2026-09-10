@@ -328,8 +328,9 @@ class TestExportWatermark:
             watermark="导出人: admin 2026-08-03",
         )
         ws = wb.active
-        assert ws.oddFooter.center.text == "导出人: admin 2026-08-03"
-        assert ws.evenFooter.center.text == "导出人: admin 2026-08-03"
+        # 页脚 = 审计水印 + 页码域
+        assert "导出人: admin 2026-08-03" in ws.oddFooter.center.text
+        assert "第 &P 页 / 共 &N 页" in ws.oddFooter.center.text
 
     def test_workbook_without_watermark(self):
         from app.services.export_service import ExcelExportService

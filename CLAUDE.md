@@ -197,7 +197,7 @@ PR Checks 和 Nightly 工作流均上传覆盖率到 [Codecov](https://codecov.i
   使用 `EncryptedText`（确定性 AES-SIV，密文带 `enc.v1:` 标记）。对这些列**禁止裸 SQL 写入**
   （绕过 TypeDecorator 会落明文/破坏等值查询）；等值查询直接 `WHERE col = :明文` 即可命中密文。
   多机离线同步部署必须配置相同 `ENCRYPTION_KEY`（密钥派生见 `app/core/pii_crypto.py`）。
-- **数据权限 fail-closed**（ADR-0002）：`data_scope_adapter` 对缺过滤字段的模型降级"仅本人"
+- **数据权限 fail-closed**（ADR-0002）：`core/data_permission`（**唯一**数据范围模块）对缺过滤字段的模型降级"仅本人"
   或抛 `DataScopeFilterError`，绝不静默放行全量；无组织用户回退仅本人（绝不 is_admin）。
 - **组织硬删除守卫**（ADR-0003）：`organization_service.delete_organization` 检查名下
   项目/用户（`OrganizationInUseError`）；`projects.organization_id` 外键为 SET NULL。
@@ -206,6 +206,30 @@ PR Checks 和 Nightly 工作流均上传覆盖率到 [Codecov](https://codecov.i
 - **数据包类型**：`PackageType` 含 `update`（增量更新包）；增量端点
   `/data-packages/incremental/{detect-changes,export,import}` 已实现；
   版本管理路由为 `/data-package/version/:id?`（无 id 时页面内选择数据包）。
+
+## 2026-09-10 权限体系收敛（去重 + 单一来源）
+
+- **数据范围**：4 套并行实现合并为 `core/data_permission` 单一模块；删除
+  `core/unified_data_scope.py`、`core/data_scope_adapter.py`、`services/village/data_permission.py`，
+  约 12 处调用点改指统一入口。**语义**：`filter_by_data_scope`（内部列表/导出，~40 处调用）
+  严格按角色——super_admin→全部、admin→本组织(OWN_DEPT)、其余→仅本人；部门级 admin 导出
+  **不得跨组织**（军事审计红线 S2，`test_import_export_permission_security`）。面向组织树
+  端点（map/dashboard/effectiveness/statistics）的 `apply_scope_filter`/`get_org_scope` 保留
+  admin 全量语义。
+- **is_admin**：`core/permission_utils.is_admin` 为全仓**唯一**管理员判定入口；语义为
+  **仅 super_admin / admin / is_superuser**。历史"管理级业务角色" manager/approval_leader
+  **不**归一化为系统管理员（不获得 include_deleted、跨组织等管理员专属能力）；其"管理操作"
+  由 `deps.require_manager_role`（内部 `normalize_role`）放行。`deps.ADMIN_ROLES` 归并到
+  `core/constants.ADMIN_ROLES` 单一常量源。
+- **权限 API 收敛**：删除废弃的 `/api/v1/user-permissions/*`（`api/v1/user_permissions.py`
+  + `services/user_permission_service.py` + 注册项）与两个前端零调用死端点
+  `/rbac/frontend/route-permissions`、`/rbac/frontend/current-user-permissions`。`/rbac/*`
+  为唯一 RBAC 入口。
+- **菜单**：删除死菜单键 `user-permissions`（后端 `menus.py` + 前端 `menu-config.ts`）；
+  保留三级优先级（`allowed_menus` > 权限包 > 角色默认）。
+- **前端**：删除死路由 `/system/user-permissions`、孤儿页 `OperationLogs.vue`；修正
+  `Menu.vue` 读取不存在的 `meta.requiresAdmin`→改读 `meta.roles`；移除 `UserManagement.vue`
+  中与权限抽屉 Tab「菜单可见性」重复的独立"菜单权限"对话框。
 
 ## 故障排查
 

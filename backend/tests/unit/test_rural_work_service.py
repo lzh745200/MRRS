@@ -540,7 +540,7 @@ class TestWorkScope:
         from app.services.rural_work_service import _apply_work_scope
 
         # 遗留角色 manager：is_admin=False 但 get_data_scope 归一化为 OWN_DEPT
-        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([5, 6], ["a", "b"])):
+        with patch("app.core.data_permission._get_org_subtree", return_value=([5, 6], ["a", "b"])):
             q = MagicMock()
             result = _apply_work_scope(q, _make_user(role="manager"), rural_svc.db)
             assert result is q.filter.return_value
@@ -584,19 +584,19 @@ class TestCanAccessWork:
         from app.services.rural_work_service import _can_access_work
 
         work = _make_mock_work(created_by=99, organization_id=6)
-        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([5, 6], ["a", "b"])):
+        with patch("app.core.data_permission._get_org_subtree", return_value=([5, 6], ["a", "b"])):
             assert _can_access_work(work, _make_user(role="manager"), rural_svc.db) is True
 
     def test_other_org_denied(self, rural_svc):
         from app.services.rural_work_service import _can_access_work
 
         work = _make_mock_work(created_by=99, organization_id=8)
-        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([5, 6], ["a", "b"])):
+        with patch("app.core.data_permission._get_org_subtree", return_value=([5, 6], ["a", "b"])):
             assert _can_access_work(work, _make_user(role="manager"), rural_svc.db) is False
 
     def test_no_org_legacy_row_denied_for_stranger(self, rural_svc):
         from app.services.rural_work_service import _can_access_work
 
         work = _make_mock_work(created_by=99, organization_id=None)
-        with patch("app.core.unified_data_scope._get_org_subtree", return_value=([5, 6], ["a", "b"])):
+        with patch("app.core.data_permission._get_org_subtree", return_value=([5, 6], ["a", "b"])):
             assert _can_access_work(work, _make_user(role="manager"), rural_svc.db) is False

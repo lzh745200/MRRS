@@ -56,6 +56,7 @@ import jwt  # noqa: E402  # PyJWT（替代 python-jose，CVE-2024-33663/33664 �
 from jwt import InvalidTokenError as JWTError  # noqa: E402  # 兼容别名
 from passlib.context import CryptContext  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
+from app.core.database import get_db  # noqa: E402
 
 
 # ── 常量 ──
@@ -246,11 +247,17 @@ def decode_token(token: str) -> Optional[dict]:
 
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
+    db: Session = Depends(get_db),
 ) -> Optional[object]:
     """
     获取当前登录用户（FastAPI 依赖）。
 
     从 Authorization: Bearer <token> 提取 JWT，解码后查询数据库。
+
+    P1-2 性能优化：复用 ``get_db`` 注入的 Session，不再自建连接。FastAPI 的依赖
+    缓存使本依赖与业务端点的 ``Depends(get_db)`` 解析为同一 Session（每请求 1 个
+    DB 连接，而非原来的 2 个），且用户对象始终附着于该 Session，避免 detached
+    语义。Session 生命周期统一由 ``get_db`` 管理（请求结束时关闭）。
     """
     if credentials is None:
         raise HTTPException(
@@ -310,10 +317,21 @@ async def get_current_user(
         )
 
     # 延迟导入避免循环依赖
-    from app.core.database import SessionLocal
     from app.models.user import User
 
-    db = SessionLocal()
+    # 会话获取（P1-2 性能优化 + 直接调用兼容）：
+    # - FastAPI 依赖注入路径：``get_db`` 注入真实 Session，本依赖与业务端点复用同一
+    #   Session（依赖缓存），无需自建连接，也无需在此关闭（生命周期归 ``get_db``）。
+    # - 直接调用路径（如 ``app/api/v1/system/backup.py`` 的内部通道
+    #   ``_jwt_user_from_request``、单元测试直调）：不会发生注入，``db`` 保持为
+    #   ``Depends(get_db)`` 默认哨兵对象（非 Session 实例）。此时必须自建短生命周期
+    #   会话并在结束时关闭，否则 ``db.query`` 抛
+    #   ``AttributeError: 'Depends' object has no attribute 'query'``（历史缺陷）。
+    from app.core.database import SessionLocal
+
+    _owns_session = not isinstance(db, Session)
+    if _owns_session:
+        db = SessionLocal()
     try:
         user = db.query(User).filter(User.username == username).first()
         if user is None:
@@ -351,7 +369,9 @@ async def get_current_user(
             pass
         return user
     finally:
-        db.close()
+        # 仅关闭本依赖自建的会话；注入的会话由 get_db 统一关闭，避免误关共享连接
+        if _owns_session:
+            db.close()
 
 
 async def get_current_active_user(

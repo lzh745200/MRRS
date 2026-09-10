@@ -39,7 +39,7 @@ from app.models.supported_village import (
     VillageCommitteeMember,
 )
 from app.core.data_permission import check_record_access
-from app.core.data_scope_adapter import apply_scope_filter
+from app.core.data_permission import apply_scope_filter
 from app.api.v1.deps import enforce_admin_include_deleted, build_viewable_because
 from app.schemas.supported_village import SupportedVillageCreate, SupportedVillageUpdate
 from app.core.transaction import safe_commit, savepoint
@@ -51,6 +51,41 @@ from app.services.approval_workflow_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/supported-villages", tags=["帮扶村管理"])
+
+
+# ── 列表排序白名单 ──
+# 前端 el-table 以列 prop 名（camelCase）传 sort_by，后端列名为 snake_case；
+# 两者都登记。用白名单而非 getattr(model, name)，避免越界解析到非列属性
+# （如 metadata / relationship）后在 .asc()/.desc() 处抛错。
+_SORTABLE_COLUMNS = {
+    "id": SupportedVillage.id,
+    "sequence_no": SupportedVillage.sequence_no,
+    "sequenceNo": SupportedVillage.sequence_no,
+    "department": SupportedVillage.department,
+    "support_unit": SupportedVillage.support_unit,
+    "supportUnit": SupportedVillage.support_unit,
+    "village_name": SupportedVillage.village_name,
+    "villageName": SupportedVillage.village_name,
+    "county": SupportedVillage.county,
+    "city": SupportedVillage.city,
+    "region_scope": SupportedVillage.region_scope,
+    "regionScope": SupportedVillage.region_scope,
+    "created_at": SupportedVillage.created_at,
+    "createdAt": SupportedVillage.created_at,
+}
+
+
+def _resolve_village_sort(sort_by: Optional[str], sort_order: Optional[str]):
+    """解析列表排序表达式。
+
+    默认（无有效 sort_by）按 ``id`` 倒序——最新创建的记录排在最前。
+    历史缺陷：旧实现固定 ``order_by(SupportedVillage.id)`` 升序，新建记录 id 最大、
+    落在最后一页，而前端新建成功后会重置到第 1 页，导致"提交成功却看不到新记录"。
+    """
+    column = _SORTABLE_COLUMNS.get(sort_by) if sort_by else None
+    if column is None:
+        return SupportedVillage.id.desc()
+    return column.desc() if (sort_order or "").lower() == "desc" else column.asc()
 
 
 def _apply_village_approval_result(db: Session, task) -> None:
@@ -456,6 +491,8 @@ async def list_villages(
     is_ethnic_area: Optional[bool] = None,
     is_key_county: Optional[bool] = None,
     year_start: Optional[int] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = None,
     with_summary: bool = Query(False),
     isRevitalizationTier: Optional[bool] = None,  # 兼容旧参数名
     include_deleted: bool = Depends(enforce_admin_include_deleted),
@@ -477,7 +514,8 @@ async def list_villages(
         try:
             _key_data = json.dumps(
                 [keyword, department, county, tier, is_three_regions, is_ethnic_area,
-                 is_key_county, include_deleted, year_start, with_summary],
+                 is_key_county, include_deleted, year_start, with_summary,
+                 sort_by, sort_order],
                 default=str,
             ).encode()
             _org_id = getattr(current_user, "organization_id", None) or 0
@@ -555,7 +593,7 @@ async def list_villages(
     # N+1 queries when accessing yearly-data backrefs during iteration/serialization.
     items = (
         query
-        .order_by(SupportedVillage.id)
+        .order_by(_resolve_village_sort(sort_by, sort_order))
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()

@@ -50,6 +50,12 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
+// 仅当路由声明了 roles 且全部为管理员级角色时，视为"仅管理员可见"
+const isAdminOnly = (roles?: string[]): boolean =>
+  Array.isArray(roles) &&
+  roles.length > 0 &&
+  roles.every((r) => r === 'admin' || r === 'super_admin')
+
 interface MenuItem {
   path: string
   name: string
@@ -74,7 +80,8 @@ const menuTree = computed<MenuItem[]>(() => {
         title: String(child.meta?.title || ''),
         icon: String(child.meta?.icon || ''),
         hidden: !!child.meta?.hidden,
-        requiresAdmin: !!child.meta?.requiresAdmin,
+        // E1 修复：路由 meta 无 requiresAdmin，应据真实 meta.roles 判定"仅管理员"
+        requiresAdmin: isAdminOnly(child.meta?.roles as string[] | undefined),
         children: undefined,
         hasChildren: false,
       })

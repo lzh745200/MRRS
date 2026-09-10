@@ -275,24 +275,27 @@ class TestDatabaseHealthService:
         with patch.object(service, 'check_integrity') as mock_ci:
             with patch.object(service, 'quick_check') as mock_qc:
                 with patch.object(service, 'vacuum_database') as mock_vd:
-                    service.integrity_check_interval = 0
-                    service.quick_check_interval = 0
-                    service.vacuum_interval = 0
+                    with patch.object(service, 'checkpoint_wal') as mock_wc:
+                        service.integrity_check_interval = 0
+                        service.quick_check_interval = 0
+                        service.vacuum_interval = 0
+                        service.wal_checkpoint_interval = 0
 
-                    # 使用 Event.set() 终止循环（而非 monitoring=False）
-                    service._stop_event.clear()
+                        # 使用 Event.set() 终止循环（而非 monitoring=False）
+                        service._stop_event.clear()
 
-                    def stop_after_one(*args):
-                        service._stop_event.set()
+                        def stop_after_one(*args):
+                            service._stop_event.set()
 
-                    with patch.object(service._stop_event, 'wait',
-                                      side_effect=stop_after_one) as mock_wait:
-                        service._monitor_loop()
+                        with patch.object(service._stop_event, 'wait',
+                                          side_effect=stop_after_one) as mock_wait:
+                            service._monitor_loop()
 
-                    mock_ci.assert_called_once()
-                    mock_qc.assert_called_once()
-                    mock_vd.assert_called_once()
-                    mock_wait.assert_called()
+                        mock_ci.assert_called_once()
+                        mock_qc.assert_called_once()
+                        mock_vd.assert_called_once()
+                        mock_wc.assert_called_once()
+                        mock_wait.assert_called()
 
     def test_monitor_loop_exception_handling(self, service):
         """测试监控循环异常处理"""
@@ -326,23 +329,26 @@ class TestDatabaseHealthService:
         with patch.object(service, 'check_integrity') as mock_ci:
             with patch.object(service, 'quick_check') as mock_qc:
                 with patch.object(service, 'vacuum_database') as mock_vd:
-                    service.integrity_check_interval = 86400
-                    service.quick_check_interval = 3600
-                    service.vacuum_interval = 604800
+                    with patch.object(service, 'checkpoint_wal') as mock_wc:
+                        service.integrity_check_interval = 86400
+                        service.quick_check_interval = 3600
+                        service.vacuum_interval = 604800
+                        service.wal_checkpoint_interval = 3600
 
-                    service._stop_event.clear()
+                        service._stop_event.clear()
 
-                    def stop_after_full_cycle(*args):
-                        # 一轮检查全部跑完后才终止循环，保证三个检查都被触发
-                        service._stop_event.set()
+                        def stop_after_full_cycle(*args):
+                            # 一轮检查全部跑完后才终止循环，保证三个检查都被触发
+                            service._stop_event.set()
 
-                    with patch.object(service._stop_event, 'wait',
-                                      side_effect=stop_after_full_cycle):
-                        service._monitor_loop()
+                        with patch.object(service._stop_event, 'wait',
+                                          side_effect=stop_after_full_cycle):
+                            service._monitor_loop()
 
-                    mock_ci.assert_called_once()
-                    mock_qc.assert_called_once()
-                    mock_vd.assert_called_once()
+                        mock_ci.assert_called_once()
+                        mock_qc.assert_called_once()
+                        mock_vd.assert_called_once()
+                        mock_wc.assert_called_once()
 
 class TestGlobalInstance:
     """测试全局实例"""
@@ -356,3 +362,71 @@ class TestGlobalInstance:
         """测试全局实例是服务类型"""
         from app.services.database_health_service import database_health_service, DatabaseHealthService
         assert isinstance(database_health_service, DatabaseHealthService)
+
+
+class TestCheckpointWal:
+    """WAL checkpoint 与体积告警（P1-3：防止 -wal 无限膨胀）"""
+
+    @pytest.fixture
+    def service(self):
+        from app.services.database_health_service import DatabaseHealthService
+        return DatabaseHealthService()
+
+    @pytest.fixture
+    def temp_db(self, tmp_path):
+        db = tmp_path / "wal.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+        conn.commit()
+        conn.close()
+        return db
+
+    def test_no_db(self, service):
+        """数据库不存在 → error"""
+        with patch.object(service, 'db_path', Path('/nonexistent/wal.db')):
+            result = service.checkpoint_wal()
+        assert result["status"] == "error"
+        assert "不存在" in result["message"]
+
+    def test_ok_without_wal_file(self, service, temp_db):
+        """正常库、无 -wal 文件 → ok 且 size_before/after 均为 0，stats 更新"""
+        with patch.object(service, 'db_path', temp_db):
+            result = service.checkpoint_wal()
+        assert result["status"] == "ok"
+        assert result["size_before"] == 0
+        assert result["size_after"] == 0
+        assert service.stats["last_wal_checkpoint"] is not None
+
+    def test_ok_with_wal_file(self, service, temp_db):
+        """存在 -wal 文件 → ok 且返回前后体积"""
+        wal = Path(str(temp_db) + "-wal")
+        wal.write_bytes(b"x" * 512)
+        with patch.object(service, 'db_path', temp_db):
+            result = service.checkpoint_wal()
+        assert result["status"] == "ok"
+        assert "size_before" in result and "size_after" in result
+
+    def test_warns_when_wal_oversized(self, service, temp_db, caplog):
+        """-wal 超阈值 → 记录 WARNING（此处 mock connect 使 -wal 不被截断）"""
+        wal = Path(str(temp_db) + "-wal")
+        wal.write_bytes(b"x" * 2048)
+        service.wal_size_warning_bytes = 100
+        with patch.object(service, 'db_path', temp_db):
+            with patch('sqlite3.connect') as mock_connect:
+                mock_conn = MagicMock()
+                mock_cursor = MagicMock()
+                mock_cursor.fetchone.return_value = (0, 0, 0)
+                mock_conn.cursor.return_value = mock_cursor
+                mock_connect.return_value = mock_conn
+                with caplog.at_level("WARNING"):
+                    result = service.checkpoint_wal()
+        assert result["status"] == "ok"
+        assert "WAL 文件偏大" in caplog.text
+
+    def test_exception_returns_error(self, service):
+        """底层异常 → 捕获并返回 error"""
+        with patch.object(service, 'db_path', MagicMock(exists=MagicMock(return_value=True))):
+            with patch('sqlite3.connect', side_effect=Exception("DB Error")):
+                result = service.checkpoint_wal()
+        assert result["status"] == "error"
+        assert "失败" in result["message"]

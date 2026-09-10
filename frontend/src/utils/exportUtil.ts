@@ -32,7 +32,8 @@ function exportToCSV(
 }
 
 /** 导出为 Excel（使用 xlsx 库生成真实 .xlsx 文件）
- *  xlsx 体积较大，改为按需动态导入，避免进入首屏静态依赖图
+ *  xlsx 体积较大，改为按需动态导入，避免进入首屏静态依赖图。
+ *  注：社区版 SheetJS 不支持写入单元格填充/字体，仅写入列宽（!cols）等结构属性。
  */
 async function exportToExcel(
   data: Record<string, unknown>[],
@@ -47,6 +48,16 @@ async function exportToExcel(
   const rows = data.map((row) => keys.map((k) => String(row[k] ?? '')))
 
   const ws = XLSX.utils.aoa_to_sheet([headerRow, ...rows])
+  // 列宽（社区版可写入结构属性，提升打印/阅读体验）
+  ws['!cols'] = headerRow.map((h, i) => {
+    const maxLen = Math.max(
+      String(h).length,
+      ...rows.slice(0, 100).map((r) => String(r[i] ?? '').length),
+      8
+    )
+    return { wch: Math.min(maxLen + 2, 40) }
+  })
+
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '数据')
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
@@ -66,7 +77,7 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;')
 }
 
-/** 导出为 PDF（简易实现：生成打印页面） */
+/** 导出为 PDF（简易实现：打开 A4 打印页面，含标题/生成时间/表格边框） */
 function exportToPDF(
   title: string,
   data: Record<string, unknown>[],
@@ -76,7 +87,24 @@ function exportToPDF(
   const keys = Object.keys(headers || data[0])
   const headerRow = keys.map((k) => headers?.[k] || k)
   const rows = data.map((row) => keys.map((k) => escapeHtml(String(row[k] ?? ''))))
-  const html = `<html><head><title>${escapeHtml(title)}</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f2f2f2}</style></head><body><h1>${escapeHtml(title)}</h1><table><tr>${headerRow.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</table></body></html>`
+  const style = `
+    @page { size: A4 landscape; margin: 15mm; }
+    body { font-family: "SimSun","Microsoft YaHei",sans-serif; color:#1e293b; }
+    h1 { text-align:center; font-size:18pt; margin:0 0 4pt; }
+    .meta { text-align:center; font-size:9pt; color:#64748b; margin-bottom:10pt; }
+    table { border-collapse:collapse; width:100%; }
+    th,td { border:1px solid #cbd5e1; padding:4pt 6pt; font-size:9pt; }
+    th { background:#1b4332; color:#fff; font-weight:bold; text-align:center; }
+    tbody tr:nth-child(even) td { background:#e8f0eb; }
+  `
+  const thead = `<tr>${headerRow.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`
+  const tbody = rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')
+  const html =
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>` +
+    `<style>${style}</style></head><body>` +
+    `<h1>${escapeHtml(title)}</h1>` +
+    `<div class="meta">帮扶管理信息系统 · 生成时间：${new Date().toLocaleString('zh-CN')}</div>` +
+    `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table></body></html>`
   const w = window.open('', '_blank')
   if (w) {
     w.document.write(html)

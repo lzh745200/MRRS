@@ -81,7 +81,8 @@ describe('Menu.vue', () => {
       title: '首页',
       icon: 'HomeFilled',
       hidden: false,
-      requiresAdmin: true,
+      // E1：dashboard 路由 meta 无 roles → 非"仅管理员"
+      requiresAdmin: false,
       children: undefined,
       hasChildren: false,
     })
@@ -113,5 +114,16 @@ describe('Menu.vue', () => {
     expect(vm.menuTree.length).toBe(3)
     await nextTick()
     expect(w.exists()).toBe(true)
+  })
+
+  it('meta.roles 全为管理员级 → requiresAdmin 为 true（isAdminOnly 真分支）', async () => {
+    routeChildren = [
+      { path: 'admin-only', name: 'AdminOnly', meta: { title: '仅管理员', roles: ['admin', 'super_admin'] } },
+      { path: 'mixed', name: 'Mixed', meta: { title: '混合角色', roles: ['admin', 'user'] } },
+    ]
+    const w = mount(Menu)
+    const vm = w.vm as any
+    expect(vm.menuTree[0].requiresAdmin).toBe(true) // every → true
+    expect(vm.menuTree[1].requiresAdmin).toBe(false) // 含非管理员角色 → false
   })
 })
