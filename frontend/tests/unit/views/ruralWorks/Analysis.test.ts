@@ -495,6 +495,16 @@ describe('视图与图表切换', () => {
     window.dispatchEvent(new Event('resize'))
     expect(current.some((c) => c.resize.mock.calls.length > 0)).toBe(true)
 
+    // 切到柱状视图 → typeBarChartInstance / statusBarChartInstance 建立，
+    // 再 resize → 覆盖 resizeCharts 中这两条可选链的**非空**分支
+    // （默认饼/环形视图下柱状实例恒为 null，只走到空值分支）
+    vm.handleTypeChartView('bar')
+    vm.handleStatusChartView('bar')
+    await flushPromises()
+    const bars = mockInstances.slice(current.length)
+    window.dispatchEvent(new Event('resize'))
+    expect(bars.filter((c) => c.resize.mock.calls.length > 0).length).toBeGreaterThanOrEqual(2)
+
     // 主动销毁全部实例后再次 resize → 覆盖 resizeCharts 的空值分支
     vm.disposeAllCharts()
     expect(() => vm.resizeCharts()).not.toThrow()

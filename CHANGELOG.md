@@ -105,6 +105,29 @@
   非法列安全回退，与 `projects.py` 既有约定一致）；缓存 key 纳入排序维度避免串味。
   新增回归 `tests/unit/test_supported_village_sort_r23.py`（4 例）。
 
+- 🐞 **CI 全红：`vitest` 半升级（v5 + coverage-v8 v3）打穿 `postinstall` 补丁**：
+  `frontend/package.json` 把 `vitest` 提到 `^5.0.0`，而 `@vitest/coverage-v8` 仍停在
+  `^3.2.7`（peer 不匹配）；更关键的是 `scripts/patch-vitest-coverage.cjs`
+  （根治 vitest-dev/vitest#9758 覆盖率分片 ENOENT 竞态）按 chunk 名
+  `coverage.DfSpMS-b.js` 与两处内部锚点写死 vitest 3.2.7 实现 —— 装到 v5 后
+  chunk 布局变化，补丁 fail-loud 退出（“存在多个 coverage.*.js”），
+  `postinstall` 失败 → `npm ci` / `npm install` 整体失败 → CI 的 `frontend-check` /
+  `security` / `e2e-test` 三个任务全红（同一修复点对应
+  `Process completed with exit code 1`）。处置：`vitest` 回到 `^3.2.7`
+  （与 coverage-v8 同一条版本线、与补丁锚点匹配），lock 重算
+  （只有 vitest 及其传递依赖变动，已逐包核对）。
+- 🐞 **「声明了但永远失败」的 `prepare` 脚本让 Windows 上的装依赖必定失败**：
+  `"prepare": "python scripts/pre_commit_hooks.py install || true"` —— npm 在 Windows 用 cmd.exe
+  执行 scripts，cmd 没有 `true` 命令，`prepare` 以 1 退出（本机实测
+  `npm install` exit=1）；而且 `frontend/scripts/pre_commit_hooks.py` 根本不存在
+  （真身在仓库根 `scripts/pre_commit_hooks.py`，且不认识 `install` 参数）
+  —— 这一行本就是「恒 1 退出」的空操作，只靠 bash 的 `|| true` 掩盖。
+  处置：删除该 `prepare`（钩子安装仍按 CLAUDE.md 记录的
+  `pip install pre-commit && pre-commit install`），装依赖在 cmd / bash 下行为一致。
+- 🐞 **ECharts 迁移后 `ruralWorks/Analysis.vue` 分支覆盖差 2 条（前端门禁 99.98% < 100%）**：
+  `resizeCharts()` 中 `typeBarChartInstance?.resize()` / `statusBarChartInstance?.resize()` 只有空值侧被测到
+  （默认饼/环形视图下柱状实例恒为 null）。回归测试补「切到柱状视图后再
+  resize」路径（`tests/unit/views/ruralWorks/Analysis.test.ts`）。
 ### 验证
 - 后端全量：`pytest tests/`（0 failed）。
 - 前端：`vue-tsc --noEmit` 0 错、`vitest run` 全绿。
