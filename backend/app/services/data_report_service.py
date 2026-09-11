@@ -149,6 +149,9 @@ class DataReportService:
             target_org_id=data.target_org_id,
             status=ReportStatus.DRAFT.value,
             title=data.title,
+            # R29 修复：请求模型把 report_type 列为必填、响应模型也回显，
+            # 但此前从未落库 → 响应恒为空串（调用方传了等于没传）。
+            report_type=(data.report_type or None),
             description=data.description,
             deadline=data.deadline,
             created_by=created_by,

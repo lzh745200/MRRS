@@ -8,6 +8,16 @@
 ## [1.12.1] - 2026-09-10 — 🐛 认证会话契约修复 + 帮扶村列表排序根因修复
 
 ### 修复
+- 🐛 **数据上报的 `report_type` 必填却从不落库（静默丢弃）**：R29 探针实测 ——
+  `POST /api/v1/data-reports` 带 `report_type="monthly"` 创建成功（201），但响应里
+  `report_type` 是**空串**：请求模型 `DataReportCreate.report_type` 是**必填**字段、
+  响应模型 `DataReportResponse` 也回显该字段，可 `data_reports` 表与 `DataReport`
+  模型都没有这一列，`DataReportService.create_report` 也从未读取 ——
+  调用方必须传一个"传了也没用"的值，之后也无从按类型筛选/展示。
+  修复：新增 `data_reports.report_type` 列（模型 + Alembic 迁移
+  `data_report_type_001`，幂等加列）、`create_report` 落库、响应如实回显。
+  回归：`tests/unit/test_data_report_type_r29.py`（6 例：schema 契约、列往返、
+  service 端到端落库）。
 - 🐛 **数据包 `data_types` 双重编码（版本变更摘要键变成单字符）**：R28 探针实测 ——
   `POST /data-packages/{id}/versions` 返回的 `changes` 竟是
 

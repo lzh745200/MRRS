@@ -56,6 +56,10 @@ class DataReport(Base):
     )
     status = Column(String(20), default=ReportStatus.DRAFT.value, nullable=False, comment="状态")
     title = Column(String(200), nullable=True, comment="上报标题")
+    # 上报类型（monthly/annual/...）。R29 修复：请求模型把它列为**必填**、响应模型也
+    # 回显，但模型没有该列且 service 从未使用 → 调用方必须传一个"传了也没用"的值，
+    # 响应里恒为空串（静默丢弃）。
+    report_type = Column(String(50), nullable=True, comment="上报类型")
     description = Column(Text, nullable=True, comment="上报说明")
     comment = Column(Text, nullable=True, comment="审批意见")
     rejection_reason = Column(Text, nullable=True, comment="拒绝原因")

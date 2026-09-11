@@ -470,3 +470,29 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   列表接口不再出现 `"data_types": "["` 形态。
 - 探针自身更正（非缺陷）：`versions/compare` 的查询参数名是 `version1/version2`；
   `incremental/detect-changes` 的 `base_package_id` 是 **query** 参数（不是 JSON 体）。
+
+
+## R29（8029, 数据上报链路）— 发现并修复一处（必填字段从不落库）
+- 探针 28 项断言，修复前 19/21（含 2 项脏数据被误判为通过），修复后 **28/28 全绿**。
+  拓扑：上级单位(1) ← 下级单位(2)；admin 绑定下级并提交上报，上级用户 `parent_admin`
+  执行审批（review 端点按 `current_user.org_id == target_org_id` 校验，属既定业务规则）。
+- 🔴 **缺陷：`report_type` 是必填字段，却从不落库。**
+  实测 `POST /api/v1/data-reports {"title":…, "report_type":"monthly", …}` → 201，
+  但响应 `"report_type": ""`。根因：`DataReportCreate.report_type` **必填**、
+  `DataReportResponse` 也回显该字段，但 `data_reports` 表与 `DataReport` 模型
+  **都没有这一列**，`DataReportService.create_report` 也从未读取它 ——
+  调用方被迫传一个"传了等于没传"的值，事后也无法按类型筛选。
+  修复：加列（模型 + 幂等 Alembic 迁移 `data_report_type_001`）+ `create_report`
+  落库；复验 create/detail/submit/approve 全链路 `report_type` 均为 `"monthly"`。
+- ✅ 已确认正常（不误报）：
+  - 上报创建前置校验（数据包存在、目标组织必须存在、**目标必须是来源的上级**）；
+  - 提交 → 上级审批（通过/驳回）→ 驳回后重新提交 → 撤回的状态机
+    （实测 submitted 状态撤回被正确拒绝 400「当前状态不允许取消」，
+    rejected 状态可撤回）；
+  - 上报包信息 / 内容预览 / 下载（700B 真实包）；
+  - 列表**两个方向**：下级视角 `?direction=submitted` total=3、上级视角
+    `?direction=received` total=3（默认 direction=received，故下级看到 0 属正常）；
+  - 下级上报包生成（registration_report.json / status_report.json 真实 ZIP）；
+  - 下级单位登记列表。
+- 探针自身更正（非缺陷）：`DataReportResponse` / `DataPackageExportResult` 是**裸**
+  响应（无 `data` 信封），解析需兼容两种形态。
