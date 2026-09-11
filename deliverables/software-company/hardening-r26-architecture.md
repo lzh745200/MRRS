@@ -157,6 +157,8 @@ def _find_exemption(content: str, rule: str) -> str | None:
 
 ### 2.2 块 B：前端 vitest 3.2.7 → 5.0.0
 
+> **状态（2026-09-11）：已回滚并暂缓。** 该升级曾以「半成品」形态进入 main：`vitest` 到 `^5.0.0` 而 `@vitest/coverage-v8` 仍在 `^3.2.7`，并且 v5 打包产物使 `frontend/scripts/patch-vitest-coverage.cjs` 锚点失配而 fail-loud（“存在多个 coverage.*.js”）→ postinstall 失败 → `npm ci` 整体失败 → CI 的 frontend-check / security / e2e-test 三任务全红（60cea85f）。现已回到 `vitest ^3.2.7`（与 coverage-v8 同版本线、与补丁锚点匹配），本块作为后续专项：需同步升 `@vitest/coverage-v8`、重定补丁锚点（或确认 v5 真正自治 #9758 后删除补丁）、重标定 12 项覆盖率阈值，并在 Linux CI 上验证分片读回不再出 ENOENT。（依据：frontend/vitest.config.ts 注释 (B)、CHANGELOG 1.12.1 R31 条目、本次 CI 诊断）
+
 **动机**：`npm audit` 报 `GHSA-82fw-gwwq-j7x9`（`@vitest/mocker` 路径穿越，CVSS 5.9，**中危**），唯一修复版本 5.0.0（major）。
 **注意**：CI 的 `npm audit --audit-level=high` **不阻断中危**，故当前 CI 绿地不含此告警；本次升级属**主动硬化**，非阻塞项。
 
