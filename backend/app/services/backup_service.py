@@ -270,9 +270,16 @@ class BackupService:
         self, backup_file_path: str, snapshot_path: Optional[str],
         timestamp: str, description: str, include_uploads: bool,
     ) -> None:
-        """写入备份 zip（异常时删除半成品并清理快照，避免磁盘残留）"""
+        """写入备份 zip（原子落盘，架构评估 A2）。
+
+        先写 ``.part`` 临时文件、成功后 ``os.replace`` 到最终路径——进程在
+        写入中途被杀（断电/强杀，捕获不到异常）时不会在备份目录留下半截
+        zip 被备份列表/cleanup 当作有效备份。异常路径删除 .part 半成品并
+        清理快照，行为与原实现一致。
+        """
+        part_path = backup_file_path + ".part"
         try:
-            with zipfile.ZipFile(backup_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+            with zipfile.ZipFile(part_path, "w", zipfile.ZIP_DEFLATED) as zipf:
                 # 备份数据库（优先一致性快照，回退主库文件）
                 if snapshot_path and os.path.exists(snapshot_path):
                     zipf.write(snapshot_path, "data/rural_revitalization.db")
@@ -302,10 +309,12 @@ class BackupService:
                     "created_at": datetime.now().isoformat(),
                 }
                 zipf.writestr("backup_info.json", str(backup_info))
+            # 原子替换：最终路径要么不存在、要么是完整包
+            os.replace(part_path, backup_file_path)
         except Exception:
-            # 备份写入失败：删除损坏的半成品 zip，避免残留进入备份列表干扰 cleanup_old_backups
+            # 备份写入失败：删除 .part 半成品，避免残留进入备份列表干扰 cleanup_old_backups
             try:
-                os.remove(backup_file_path)
+                os.remove(part_path)
             except OSError:
                 pass
             raise
@@ -316,6 +325,55 @@ class BackupService:
                     os.remove(snapshot_path)
                 except OSError:
                     pass
+
+    def _verify_backup_recovery(self, backup_file_path: str) -> None:
+        """恢复性校验（架构评估 C1）：备份必须"可被还原使用"，而非仅存在。
+
+        此前仅校验 zip 内含数据库条目，无法发现 db 页损坏 / 成员 CRC 错误；
+        "备份成功"但还原时才发现损坏是最坏故障模式（帮扶数据不可再采集）。
+        校验内容：zip 结构 CRC（testzip）+ 库文件 SQLite integrity_check。
+        失败即删包抛 BackupIncompleteError（fail-loud），避免坏备份挤占
+        备份轮换名额造成"最新备份不可用"。
+
+        调用时机：加密之前（明文 zip），故密码备份同样被校验。
+        """
+        try:
+            with zipfile.ZipFile(backup_file_path, "r") as zf:
+                bad_member = zf.testzip()
+                if bad_member is not None:
+                    raise BackupIncompleteError(f"备份包 CRC 校验失败: {bad_member}")
+                db_bytes = zf.read("data/rural_revitalization.db")
+        except zipfile.BadZipFile as exc:
+            raise BackupIncompleteError(f"备份包损坏（非有效 zip）: {exc}") from exc
+        except KeyError as exc:
+            raise BackupIncompleteError("备份包缺少数据库文件") from exc
+
+        fd, verify_db_path = tempfile.mkstemp(suffix=".db", prefix="backup_verify_")
+        os.close(fd)
+        try:
+            with open(verify_db_path, "wb") as f:
+                f.write(db_bytes)
+            conn = sqlite3.connect(verify_db_path)
+            try:
+                try:
+                    check_result = conn.execute("PRAGMA integrity_check").fetchone()[0]
+                except sqlite3.DatabaseError as exc:
+                    # 载荷非 SQLite / 页损坏：转成明确的备份失败，避免裸
+                    # DatabaseError 以 500 形态逃逸（调用方对 BackupIncompleteError
+                    # 有专门的失败语义处理）
+                    raise BackupIncompleteError(
+                        f"备份数据库完整性校验失败: {exc}"
+                    ) from exc
+            finally:
+                conn.close()
+            if check_result != "ok":
+                raise BackupIncompleteError(f"备份数据库完整性校验失败: {check_result}")
+        finally:
+            try:
+                os.remove(verify_db_path)
+            except OSError:
+                pass
+        logger.info("备份恢复性校验通过: %s", os.path.basename(backup_file_path))
 
     def create_backup(
         self, description: str = "手动备份", include_uploads: bool = True,
@@ -364,6 +422,10 @@ class BackupService:
             raise BackupIncompleteError(
                 f"备份未能包含数据库文件（database_path={self.database_path}），已中止并删除半成品"
             )
+
+        # 恢复性校验（架构评估 C1）：zip CRC + SQLite integrity_check——
+        # 备份必须"可被还原使用"；失败删包抛错，避免坏备份进入轮换名单
+        self._verify_backup_recovery(backup_file_path)
 
         # ── 加密（可选） ──
         if password:

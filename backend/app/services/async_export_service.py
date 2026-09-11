@@ -13,6 +13,7 @@ ExportTask 状态（pending → processing → completed/failed）。
 """
 
 import logging
+import os
 import uuid as _uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -361,7 +362,11 @@ def _run_export_task(task_id: str) -> None:
         export_dir = _get_export_dir()
         file_name = task.file_name or f"{task.export_type}_{task_id}.xlsx"
         file_path = export_dir / f"{task_id}_{file_name}"
-        file_path.write_bytes(content)
+        # 原子落盘（架构评估 A2）：先写 .part 临时文件再 replace——进程在写入
+        # 中途被杀时不会留下半截 xlsx 被下载端当作完整文件消费。
+        tmp_path = file_path.with_name(file_path.name + ".part")
+        tmp_path.write_bytes(content)
+        os.replace(tmp_path, file_path)
 
         task.file_path = str(file_path)
         task.file_name = file_name
@@ -385,6 +390,42 @@ def _run_export_task(task_id: str) -> None:
             logger.exception("异步导出任务失败状态回写失败 task_id=%s", task_id)
     finally:
         db.close()
+
+
+def recover_stale_export_tasks(db: Session) -> int:
+    """启动时恢复中断的异步导出任务（架构评估 A1）。
+
+    任务队列是进程内存态（见 task_queue 模块 docstring），应用重启后队列
+    清空，export_tasks 中仍处于 pending/processing 的行将永远无人推进：
+    前端轮询陷入永久等待，且无任何提示。此处统一回写为 failed 并注明
+    原因，让用户可重新发起导出，而不是面对僵尸任务。
+
+    由 app.main lifespan 在启动阶段调用（异常不阻断启动）。
+
+    Returns:
+        回写的任务数量（0 表示无中断任务）。
+    """
+    stale = (
+        db.query(ExportTask)
+        .filter(
+            ExportTask.status.in_(
+                [ExportStatus.PENDING.value, ExportStatus.PROCESSING.value]
+            )
+        )
+        .all()
+    )
+    if not stale:
+        return 0
+    now = datetime.now(timezone.utc)
+    for task in stale:
+        task.status = ExportStatus.FAILED.value
+        task.error_message = "应用重启导致导出任务中断，请重新发起导出"
+        task.completed_at = now
+    safe_commit(db)
+    logger.warning(
+        "已恢复 %d 个中断的异步导出任务（pending/processing → failed）", len(stale)
+    )
+    return len(stale)
 
 
 class AsyncExportService:

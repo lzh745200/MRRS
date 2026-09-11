@@ -8,6 +8,7 @@
 - restore_backup 加密备份检测 + 解密恢复 + engine.dispose 异常 + 临时文件清理 OSError
 """
 import os
+import sqlite3
 import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -18,6 +19,20 @@ from cryptography.fernet import Fernet
 from app.services.backup_service import (
     BackupService,
 )
+
+
+def _make_real_sqlite_db(db_path: str) -> None:
+    """构造真实 SQLite 库文件。
+
+    create_backup 现含恢复性校验（_verify_backup_recovery：zip CRC +
+    integrity_check），库文件必须是有效 SQLite，否则校验会按设计 fail-loud。
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS _t (x TEXT)")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +169,7 @@ class TestCreateBackupWithPassword:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("db content")
+        _make_real_sqlite_db(db_path)
         os.makedirs(up_dir)
         Path(os.path.join(up_dir, "f.txt")).write_text("upload")
 
@@ -172,7 +187,7 @@ class TestCreateBackupWithPassword:
         db_path = str(tmp_path / "data" / "rural_revitalization.db")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("db")
+        _make_real_sqlite_db(db_path)
 
         svc = _make_svc(mock_db, bdir, db_path, str(tmp_path / "u"))
         result = svc.create_backup(description="明文备份")

@@ -101,9 +101,15 @@ jobs:
       # lint:check 为纯检查模式（不带 --fix），CI 必须真实暴露 lint 违规而非自动修复
       - run: cd frontend && npm run lint:check 2>&1
       # 前端测试带覆盖率报告（vitest run --coverage）
-      # 说明：vitest 5 已在 BaseCoverageProvider 内根治 #9758（分片读回 ENOENT 竞态）——
-      # 不再由主进程写分片、以内存 Map 追踪分片文件名、并新增 reportsDirectory 进程锁。
-      # 故本仓的 patch-vitest-coverage.cjs 已删除，无需再显式打补丁。
+      # 说明（2026-09-11 校正）：仓库实际仍为 vitest ^3.2.7 + postinstall 打
+      # patch-vitest-coverage.cjs —— #9758（分片读回 ENOENT 竞态）在 3.x 仍存在，
+      # 由该补丁在内存镜像层根治。曾经尝试升到 vitest 5（以为 v5 已在
+      # BaseCoverageProvider 内自治），但升级未完成：@vitest/coverage-v8 仍在 3.x
+      # 版本线，且 v5 打包产物使补丁锚点失配而 fail-loud（“存在多个
+      # coverage.*.js”）→ postinstall 失败 → npm ci 整体失败 → 本 job 与
+      # security/e2e-test 三任务全红（60cea85f）。现已回到 ^3.2.7。
+      # vitest 5 迁移作为后续专项：需同步升 @vitest/coverage-v8、重定锚点（或
+      # 确认 v5 真正自治 #9758 后删除补丁）并重标定 12 项覆盖率阈值。
       # 输出 tee 到 runner.temp 日志并开 pipefail：失败时下方诊断步骤上传 artifact + 提炼
       # ::error::。Linux 专有失败在本地 Windows 无法复现、job 日志又需 admin（403），
       # artifact 是唯一可下载的完整证据通道。
@@ -222,6 +228,11 @@ jobs:
       # 后端综合安全审计：裸 db.commit()、跨组织删除、缺 ok_list/write_work_log/filter_by_data_scope
       - name: Backend comprehensive security audit
         run: python scripts/security_audit.py --verbose
+      # Alembic 迁移健康门禁：单 head、无分叉（防再发 4c1ea8a0 MultipleHeads 打包启动失败）
+      - name: Alembic migration health check
+        run: |
+          pip install alembic
+          python scripts/check_migrations.py
 
   # E2E 浏览器套件（Playwright，150 用例）：真实起后端(18000)+前端(15173)，
   # 独立 e2e_test.db。此前长期无 CI 执行导致选择器/密码腐化四周无人发现

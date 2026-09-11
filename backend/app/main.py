@@ -75,6 +75,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     """应用生命周期：启动时初始化数据库、种子数据、依赖检查"""
     _init_database_tables()
     _load_token_blacklist()
+    _recover_interrupted_exports()
     _check_and_record_version_change()
     _seed_default_admin()
     _check_required_packages()
@@ -406,6 +407,31 @@ def _load_token_blacklist():
             db.close()
     except Exception as e:
         logger.warning("Token 黑名单加载失败: %s", e)
+
+
+def _recover_interrupted_exports():
+    """启动时恢复中断的异步导出任务（架构评估 A1）。
+
+    任务队列（task_queue）为进程内存态，重启后队列清空；export_tasks 中
+    残留的 pending/processing 行将永远无人推进。此处统一回写为 failed，
+    让用户可重新发起导出。失败仅告警不阻断启动（与既有启动钩子一致）。
+    """
+    try:
+        from app.core.database import SessionLocal
+        from app.services.async_export_service import recover_stale_export_tasks
+
+        db = SessionLocal()
+        try:
+            recovered = recover_stale_export_tasks(db)
+            if recovered:
+                logger.warning(
+                    "启动恢复：已将 %d 个中断导出任务标记为失败（原队列随重启丢失）",
+                    recovered,
+                )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning("导出任务恢复检查失败: %s", e)
 
 
 def _init_database_tables():
