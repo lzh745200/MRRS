@@ -8,6 +8,25 @@
 ## [1.12.1] - 2026-09-10 — 🐛 认证会话契约修复 + 帮扶村列表排序根因修复
 
 ### 修复
+- 🐛 **数据包 `data_types` 双重编码（版本变更摘要键变成单字符）**：R28 探针实测 ——
+  `POST /data-packages/{id}/versions` 返回的 `changes` 竟是
+
+  ```json
+  {"[": {"added": [], "modified": [], "deleted": []},
+   "\"": {"added": [], "modified": [], "deleted": []},
+   "v": {"added": [], "modified": [], "deleted": []}, …}
+  ```
+
+  根因：`DataPackage.data_types` 是 **JSON 列**，而 `export_package` /
+  `import_package` 写入时做了 `json.dumps(data_types)` **双重编码** —— 列里落的
+  是 JSON *字符串*，读出来是 `'["villages", "projects", …]'`。版本变更摘要按可
+  迭代对象遍历该字符串，于是键变成单个字符；把 `data_types` 当数组消费的地方
+  （`/data-reports/{id}` 的包摘要）拿到的也是字符串。
+  修复：两条写入路径直接存列表；读取侧新增 `_normalize_data_types()`
+  归一历史双重编码行（字符串 → 解析 → 列表，解析失败回落单元素列表），
+  `_package_version_changes` 与数据上报包摘要改用它。
+  回归：`tests/unit/test_data_package_data_types_r28.py`（14 例，含列往返与
+  历史脏行读回归一）。
 - 🐛 **通用文件上传：`category` 只认查询参数（表单字段静默失效）+ 全量读入内存**：
   R26 探针实测两处 ——
   ① `POST /files/upload` 带 `category=policies`（**multipart 表单字段**，即

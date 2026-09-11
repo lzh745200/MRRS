@@ -1478,9 +1478,31 @@ class PackageVersionCreate(BaseModel):
     description: Optional[str] = None
 
 
+def _normalize_data_types(raw) -> list:
+    """把 `DataPackage.data_types` 归一为字符串列表。
+
+    历史行可能是**双重编码**的 JSON 字符串（`'["villages", …]'`，R28 修复前
+    `export_package` 写了 `json.dumps(...)` 进 JSON 列）。不归一会让消费方
+    "按可迭代对象遍历字符串"，逐字符产出垃圾键。
+    """
+    import json as _json
+
+    if isinstance(raw, str):
+        try:
+            parsed = _json.loads(raw)
+        except (ValueError, TypeError):
+            parsed = [raw]
+        return [str(x) for x in parsed] if isinstance(parsed, list) else [str(parsed)]
+    if isinstance(raw, (list, tuple)):
+        return [str(x) for x in raw]
+    return []
+
+
 def _package_version_changes(package) -> dict:
     """根据数据包信息生成版本变更摘要（各数据类型空变更结构）"""
-    data_types = package.data_types or ["villages", "projects", "funds", "schools"]
+    data_types = _normalize_data_types(package.data_types) or [
+        "villages", "projects", "funds", "schools",
+    ]
     return {dt: {"added": [], "modified": [], "deleted": []} for dt in data_types}
 
 

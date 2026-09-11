@@ -167,7 +167,11 @@ class DataPackageService:
             file_name=file_name, file_size=file_size, manifest=manifest_dict,
             status=PackageStatus.validated.value, type=package_type.value,
             version=CURRENT_VERSION, checksum=checksum,
-            data_types=json.dumps(data_types, cls=CustomJSONEncoder),
+            # `DataPackage.data_types` 是 JSON 列，**必须直接存列表**。
+            # R28 修复：这里曾 `json.dumps(...)` 双重编码，列里落的是 JSON *字符串*，
+            # 读出来是 `'["villages", …]'` → 消费方按可迭代对象遍历时逐字符处理
+            # （版本变更摘要的键变成 `[`、`"`、`v`… 见 _package_version_changes）。
+            data_types=data_types,
             record_count=sum(record_counts.values()), created_by=export_by,
         )
         self.db.add(package)
@@ -270,7 +274,8 @@ class DataPackageService:
             file_name=file_name, file_size=os.path.getsize(permanent_path),
             manifest=manifest_dict, status=PackageStatus.validated.value,
             version=validation.manifest.version, checksum=self._calculate_checksum(permanent_path),
-            data_types=json.dumps(validation.manifest.data_types, cls=CustomJSONEncoder),
+            # JSON 列直接存列表（R28 修复双重编码，同 export_package）
+            data_types=validation.manifest.data_types,
             record_count=sum(validation.manifest.record_counts.values()), created_by=imported_by,
         )
         self.db.add(package)

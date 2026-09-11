@@ -440,3 +440,33 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
 - 探针自身更正两处（非缺陷）：① 造消息的 INSERT 列名应为 `message_type`；
   ② 通知偏好不是 `site_message_enabled` 这类扁平名，而是 `site_*`/`email_*`
   六字段（用错名字时 Pydantic 静默忽略，属接口契约需按文档传参）。
+
+
+## R28（8028, 数据包 export→download→validate→preview→confirm→版本）— 发现并修复一处
+- 探针 20 项断言，修复前 18/18（含 2 项被误判为"通过"的脏数据），修复后 **20/20 全绿**。
+- ✅ 链路本身正常：预览计数 → 导出（真实 ZIP：`manifest.json` + `data/{villages,
+  projects,funds,schools}.json`）→ 详情 → 下载（933B，合法 ZIP）→ 校验（`is_valid:true`
+  + 每类字段校验统计）→ 内容预览 → **确认导入往返**（imported/skipped/error 计数全 0，
+  记录数一致）→ 历史（export 记录 + duration_ms）→ 版本建/列/详情/删 → 列表 → 删包。
+- 🔴 **缺陷：`data_types` 在 JSON 列里被双重编码，版本变更摘要的键退化成单字符。**
+  实测 `POST /data-packages/{id}/versions` 响应：
+
+  ```json
+  "changes": {"[": {"added": [], "modified": [], "deleted": []},
+              "\"": {"added": [], "modified": [], "deleted": []},
+              "v":  {"added": [], "modified": [], "deleted": []}, …}
+  ```
+
+  根因：`DataPackage.data_types` 是 `Column(JSON)`，而
+  `data_package_service.export_package`（行 170）与 `import_package`（行 273）
+  写入时用 `json.dumps(data_types, cls=CustomJSONEncoder)` —— 存进去的是
+  **JSON 字符串**，读出来是 `'["villages", …]'`；版本摘要
+  `_package_version_changes` 直接 `for dt in package.data_types` → **逐字符**展开。
+  同类消费点：`/data-reports/{id}` 的包摘要 `data_types` 也会是字符串出站。
+  修复：两条写入路径直接存列表；新增 `_normalize_data_types()`
+  （字符串→解析→列表，解析失败回落 `[raw]`，非序列回落 `[]`）供
+  `_package_version_changes` 与数据上报包摘要使用，历史脏行读时自动归一。
+  复验：`changes` 的键恢复为 `['villages','projects','funds','schools']`；
+  列表接口不再出现 `"data_types": "["` 形态。
+- 探针自身更正（非缺陷）：`versions/compare` 的查询参数名是 `version1/version2`；
+  `incremental/detect-changes` 的 `base_package_id` 是 **query** 参数（不是 JSON 体）。

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Data Report API
 数据上报管理接口
 """
@@ -420,13 +420,16 @@ async def preview_data_report(
     # 如果有数据包，获取包内的数据摘要
     package = service.db.query(DataPackage).filter(DataPackage.id == report.package_id).first()
     if package:
+        from app.api.v1.data.data.data_packages import _normalize_data_types
+
         preview_data["package"] = {
             "package_id": package.id,
             "package_code": package.package_code,
             "file_name": package.file_name,
             "file_size": package.file_size,
             "record_count": package.record_count,
-            "data_types": package.data_types or [],
+            # R28：JSON 列可能是历史双重编码字符串，必须归一为列表再出站
+            "data_types": _normalize_data_types(package.data_types),
             "status": package.status.value if hasattr(package.status, "value") else str(package.status),
         }
 
