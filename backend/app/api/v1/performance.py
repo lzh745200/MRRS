@@ -3,6 +3,8 @@
 提供查询性能分析、慢查询日志等功能
 """
 
+# security-audit: exempt work_log — 超管运维端点（清理慢查询/缓存），无业务实体变更
+
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query

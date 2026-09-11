@@ -2,6 +2,8 @@
 数据质量管理API
 """
 
+# security-audit: exempt work_log — 数据质量校验/清洗/去重均在请求内存态变换并回传，不落库
+
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query

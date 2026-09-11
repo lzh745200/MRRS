@@ -8,6 +8,8 @@
 导入/导出 ZIP 功能占用。
 """
 
+# security-audit: exempt data_scope — RBAC 权限包管理域（User.permission_pack_id 聚合与 User.id.in_ 绑定）
+
 import json
 import logging
 

@@ -4,6 +4,8 @@
 提供权限配置包的导出/导入功能，用于离线多机协作场景下的权限同步。
 """
 
+# security-audit: exempt data_scope — 按 username 解码导入者身份（管理员 / 离线本机导入），属身份解码而非组织数据枚举
+
 import logging
 import os
 from typing import Optional
@@ -24,6 +26,7 @@ from app.schemas.permission_package import (
     PermissionPackageImportResult,
 )
 from app.services.permission_package_service import PermissionPackageService
+from app.services.work_log_service import write_work_log
 
 logger = logging.getLogger(__name__)
 
@@ -323,5 +326,16 @@ def confirm_import_permission_package(
         if result.get("integrity_failed"):
             raise HTTPException(status_code=400, detail=result.get("message", "内容校验失败"))
         raise HTTPException(status_code=500, detail=result.get("message", "导入失败"))
+
+    # R26-W07：确认导入（RBAC 权限镜像写入）成功后补记工作日志。审计失败不阻断主流程。
+    try:
+        write_work_log(
+            db, "permission_package", "import", 0,
+            f"确认导入权限配置包 file={file_name}",
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", ""),
+        )
+    except Exception:
+        logger.debug("记录工作日志失败", exc_info=True)
 
     return JSONResponse(content=result)

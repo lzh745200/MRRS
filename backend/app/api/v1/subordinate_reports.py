@@ -4,6 +4,8 @@
 包含：用户注册上报、系统状态心跳、配置应用确认。
 """
 
+# security-audit: exempt data_scope — 部署级上报包，需采集本系统全部注册用户；单机/单单位部署下 organization_id 多为 NULL，加 org 过滤会返回空集破坏功能
+
 import io
 import json
 import logging
@@ -18,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.core.response import success_response
+from app.core.transaction import safe_commit
 from app.models.subordinate_registry import SubordinateInstance
 from app.models.user import User
 from app.services.work_log_service import write_work_log
@@ -182,7 +185,7 @@ def _process_status_report(zf: zipfile.ZipFile, db: Session, current_user: User)
             instance.last_report_at = datetime.now(timezone.utc)
             instance.status = "online"
             instance_updated = True
-            db.commit()
+            safe_commit(db)
 
     try:
         write_work_log(
@@ -218,7 +221,7 @@ def _process_registration_report(zf: zipfile.ZipFile, db: Session, current_user:
             instance.user_count = len(users)
             instance.last_report_at = datetime.now(timezone.utc)
             instance.status = "online"
-            db.commit()
+            safe_commit(db)
 
     try:
         write_work_log(

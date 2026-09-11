@@ -7,6 +7,8 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from app.core.transaction import safe_commit
+
 
 @dataclass
 class EffectivenessMetrics:
@@ -194,7 +196,7 @@ class EffectivenessService:
         for idx, row in enumerate(all_evs, 1):
             if row.rank != idx:
                 row.rank = idx
-        db.commit()
+        safe_commit(db)
 
         result = EffectivenessService._eval_to_dict(ev)
         result["village_name"] = village.village_name

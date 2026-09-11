@@ -3,6 +3,8 @@
 支持用户创建、密码生成、权限分配等功能
 """
 
+# security-audit: exempt data_scope — 管理员用户 CRUD/统计域（身份域），非组织数据枚举
+
 from datetime import datetime
 from typing import Optional
 

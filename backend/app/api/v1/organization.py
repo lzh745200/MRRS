@@ -4,6 +4,8 @@
 与权限管理集成：组织创建、修改需要管理员权限
 """
 
+# security-audit: exempt data_scope — 组织域自身成员管理（按 organization_id 列成员），加数据权限会破坏组织成员维护
+
 import io
 from datetime import datetime
 from typing import Any, List, Optional

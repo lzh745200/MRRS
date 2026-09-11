@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.core.response import ok_list, success_response
+from app.core.transaction import safe_commit
 from app.models.subordinate_registry import SubordinateInstance
 from app.models.user import User
 from app.services.work_log_service import write_work_log
@@ -99,7 +100,7 @@ def register_subordinate(
         created_by=current_user.id,
     )
     db.add(instance)
-    db.commit()
+    safe_commit(db)
     db.refresh(instance)
 
     try:
@@ -141,7 +142,7 @@ def update_subordinate(
     if body.remark is not None:
         instance.remark = body.remark
 
-    db.commit()
+    safe_commit(db)
     db.refresh(instance)
 
     try:
@@ -193,7 +194,7 @@ def delete_subordinate(
         raise HTTPException(status_code=404, detail="下级单位不存在")
 
     db.delete(instance)
-    db.commit()
+    safe_commit(db)
 
     try:
         write_work_log(

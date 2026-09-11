@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
 from app.core.response import success_response
+from app.core.transaction import safe_commit
 from app.models.org_module_policy import (
     MODULE_DEFINITIONS,
     OrgModulePolicy,
@@ -127,7 +128,7 @@ def set_org_policies(
             db.add(policy)
         updated += 1
 
-    db.commit()
+    safe_commit(db)
 
     try:
         write_work_log(
@@ -159,7 +160,7 @@ def reset_org_policy(
     ).first()
     if policy:
         db.delete(policy)
-        db.commit()
+        safe_commit(db)
 
     return success_response(message="已重置为默认策略")
 

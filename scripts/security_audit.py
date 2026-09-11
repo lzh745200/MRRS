@@ -12,14 +12,18 @@
 用法:
   python scripts/security_audit.py [--strict] [--verbose]
   --strict: 发现任何违规即返回非零退出码（CI 模式）
-  --verbose: 打印详细信息
+  --verbose: 打印详细信息（含被豁免项）
+
+受控豁免（见下方 EXEMPTION_RE）:
+  在模块内以顶层注释声明 `# security-audit: exempt <rule> — <reason>` 可将
+  该模块从对应扫描项豁免；理由须 ≥8 字符，否则标记不生效。豁免项不计入
+  total，故 --strict 在真阳性全部修复后退出 0。
 """
 
 import os
 import re
 import sys
 from pathlib import Path
-from collections import defaultdict
 
 # 项目根目录
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -40,6 +44,35 @@ WRITE_OP_MODULES = [
     "rural_tasks", "sentiment", "supported_village", "todos",
     "user_permissions", "validation",
 ]
+
+# ── 受控豁免机制（R26-T01）──────────────────────────────────────────────
+# 豁免指令约定：位于模块文件内任意位置（推荐文件头 docstring 之后 / import 之前），
+# 必须携带【不可为空且 ≥8 字符】的理由，否则标记不生效：
+#     # security-audit: exempt <rule> — <reason>
+# <rule> ∈ {commit, work_log, data_scope}
+#
+# 防滥用硬约束：
+#   1. 理由串必须 ≥8 字符；无理由/空理由的标记【不生效】。
+#   2. --verbose/--strict 下被豁免项仍打印（`exempt: <rel_path> — <reason>`），
+#      保持可见、不可静默。
+#   3. 豁免项【不计入 total】，使 --strict 在真阳性全部修复后可退出 0。
+EXEMPTION_RE = re.compile(
+    r"#\s*security-audit:\s*exempt\s+(commit|work_log|data_scope)\b[^\n]*?[—\-–:]\s*(\S.{7,})"
+)
+
+EXEMPTION_RULES = ("commit", "work_log", "data_scope")
+
+
+def _find_exemption(content: str, rule: str) -> str | None:
+    """返回豁免理由（≥8 字符）；无有效豁免返回 None。
+
+    仅当标记的规则名与 ``rule`` 完全一致时才视为命中——规则名不匹配
+    不会误伤其它扫描项。无理由（或理由 <8 字符）的标记【不生效】。
+    """
+    for m in EXEMPTION_RE.finditer(content):
+        if m.group(1) == rule:
+            return m.group(2).strip()
+    return None
 
 
 def scan_bare_db_commit(verbose=False):
@@ -170,6 +203,14 @@ def scan_missing_write_work_log(verbose=False):
             if not has_write_ops:
                 continue
 
+            # 受控豁免：显式豁免标记（须带 ≥8 字符理由）在 has_work_log 判定【之前】生效。
+            # 豁免项不计入 total，但仍需可见（--verbose/--strict 时打印理由）。
+            exemption = _find_exemption(content, "work_log")
+            if exemption:
+                if verbose:
+                    print(f"  exempt: {rel_path} — {exemption}")
+                break
+
             # 检查是否调用了 write_work_log
             has_work_log = "write_work_log" in content
 
@@ -213,6 +254,14 @@ def scan_missing_data_scope(verbose=False):
                     break
 
             if not has_org_model_query:
+                continue
+
+            # 受控豁免：显式豁免标记（须带 ≥8 字符理由）在 has_data_scope 判定【之前】生效。
+            # 豁免项不计入 total，但仍需可见（--verbose/--strict 时打印理由）。
+            exemption = _find_exemption(content, "data_scope")
+            if exemption:
+                if verbose:
+                    print(f"  exempt: {rel_path} — {exemption}")
                 continue
 
             # 检查是否调用了任何形式的数据权限过滤

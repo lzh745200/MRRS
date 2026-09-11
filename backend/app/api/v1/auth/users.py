@@ -1,3 +1,4 @@
+# security-audit: exempt data_scope — 认证/身份域（本人资料与管理员用户列表/统计），非组织数据枚举
 import logging
 import os
 from typing import Optional

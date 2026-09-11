@@ -17,8 +17,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
+from app.core.data_permission import OrgScopeFilter, _get_org_subtree
 from app.core.response import success_response
-from app.core.permission_utils import is_admin
+from app.core.permission_utils import is_admin, is_superuser
+from app.core.transaction import safe_commit
+from app.models.organization import Organization
 from app.models.org_module_policy import OrgModulePolicy
 from app.models.user import User
 from app.services.work_log_service import write_work_log
@@ -37,6 +40,26 @@ class GenerateControlPackageRequest(BaseModel):
     include_system_config: bool = True
 
 
+def _assert_org_reachable(db: Session, current_user: User, org_id: int) -> None:
+    """目标组织可及性守卫（R26-D01）。
+
+    超管放行；非超管仅允许其组织子树内。复用
+    :class:`~app.core.data_permission.OrgScopeFilter` 的组织子树过滤语义
+    （``filter_by_org_ids``），越权抛 403，防止部门级管理员（``role="admin"``）
+    传入其它组织 id，导出跨组织用户/RBAC/系统配置（跨组织数据外泄）。
+    """
+    if is_superuser(current_user):
+        return
+    user_org_id = getattr(current_user, "organization_id", None)
+    allowed_org_ids = _get_org_subtree(db, user_org_id)[0] if user_org_id is not None else []
+    scope = OrgScopeFilter(is_admin=False, org_ids=allowed_org_ids)
+    reachable = scope.filter_by_org_ids(
+        db.query(Organization).filter(Organization.id == org_id), Organization.id
+    ).first()
+    if reachable is None:
+        raise HTTPException(status_code=403, detail="无权对该组织生成管控配置包")
+
+
 @router.post("/generate")
 def generate_control_package(
     body: GenerateControlPackageRequest,
@@ -48,6 +71,7 @@ def generate_control_package(
         raise HTTPException(status_code=403, detail="仅管理员可生成管控配置包")
 
     org_id = body.organization_id
+    _assert_org_reachable(db, current_user, org_id)
 
     # 1. 模块策略
     policies = db.query(OrgModulePolicy).filter(
@@ -242,7 +266,7 @@ async def import_control_package(
                         db.add(SystemConfig(key=key, value=str(value)))
                     applied_configs += 1
 
-            db.commit()
+            safe_commit(db)
 
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="文件损坏：非有效ZIP格式")

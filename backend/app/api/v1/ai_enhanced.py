@@ -3,6 +3,8 @@ AI增强API
 提供趋势预测、异常检测、智能推荐、自然语言查询等功能
 """
 
+# security-audit: exempt work_log — 只读AI预测/异常检测/推荐/NLP查询端点，全程不落库
+
 from functools import lru_cache
 from typing import Any, Dict, List, Literal
 

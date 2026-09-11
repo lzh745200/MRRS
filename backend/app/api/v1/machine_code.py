@@ -6,6 +6,8 @@ from app.core.permission_utils import is_superuser, is_admin, require_admin
 用于单机版系统的用户注册和机器码管理
 """
 
+# security-audit: exempt data_scope — 按 username/id 定位用户的发码/授权/改密身份端点，非组织数据枚举
+
 import logging
 from datetime import datetime
 from typing import Optional
@@ -462,7 +464,7 @@ async def reset_password_with_machine_code(
         from app.services.lockout_service import get_lockout_service
         get_lockout_service().clear(user, db)
 
-        db.commit()
+        safe_commit(db)
 
         # 审计留痕（军事合规要求：破窗恢复必须可追溯）
         try:

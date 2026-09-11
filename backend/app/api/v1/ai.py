@@ -3,6 +3,8 @@ AI智能分析 API
 提供数据分析、趋势分析、智能推荐等功能
 """
 
+# security-audit: exempt work_log — 只读AI分析端点，POST 仅承载复杂查询体，全程不落库
+
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query

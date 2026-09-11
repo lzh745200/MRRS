@@ -515,7 +515,7 @@ def _bump_token_version(db: Session, username):
             return
         setattr(_svc_user, "token_version",
                 (getattr(_svc_user, "token_version", 0) or 0) + 1)
-        db.commit()
+        safe_commit(db)
     except Exception as e:
         db.rollback()
         logger.warning("bump token_version failed on logout: %s", e)

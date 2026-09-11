@@ -2,6 +2,8 @@
 成效评估API
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,7 +14,10 @@ from app.core.permission_utils import is_admin
 from app.models.user import User
 from app.models.supported_village import SupportedVillage
 from app.services.effectiveness_service import EffectivenessService
+from app.services.work_log_service import write_work_log
 from app.core.response import success_response
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/effectiveness", tags=["成效评估"])
 
@@ -43,6 +48,17 @@ async def evaluate_village(
 
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+
+    # R26-W04：评估落库成功后补记工作日志（审计留痕）。审计失败不阻断主流程。
+    try:
+        write_work_log(
+            db, "effectiveness", "evaluate", request.village_id,
+            f"评估村庄{request.village_id}-{request.year}",
+            user_id=current_user.id,
+            username=getattr(current_user, "username", ""),
+        )
+    except Exception:
+        logger.debug("记录工作日志失败", exc_info=True)
 
     # 年度考核闭环：评估完成后提交"复核"审批任务（若配置了 assessment 工作流）
     # 幂等：同村同年度已有待处理复核任务时复用，避免重复评估刷出重复任务

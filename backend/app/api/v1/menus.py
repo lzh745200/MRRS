@@ -12,6 +12,8 @@
 - 两者必须同步修改
 """
 
+# security-audit: exempt data_scope — 按 User.id 主键定位的用户菜单配置（身份域），非组织数据枚举
+
 import json
 import logging
 from functools import lru_cache

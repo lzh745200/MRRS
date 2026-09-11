@@ -887,7 +887,7 @@ def _transition_status(
                 operator_name=getattr(operator, "full_name", None) or getattr(operator, "username", ""),
             )
         )
-        db.commit()
+        safe_commit(db)
     except Exception:  # 日志失败不阻断主流程
         logger.debug("写入状态流转操作日志失败", exc_info=True)
 

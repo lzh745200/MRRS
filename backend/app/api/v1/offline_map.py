@@ -1,5 +1,7 @@
 """离线地图API路由"""
 
+# security-audit: exempt work_log — 管理员运维端点（地图瓦片缓存下载/清理），无业务实体变更
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 

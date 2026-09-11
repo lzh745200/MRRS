@@ -101,15 +101,15 @@ jobs:
       # lint:check 为纯检查模式（不带 --fix），CI 必须真实暴露 lint 违规而非自动修复
       - run: cd frontend && npm run lint:check 2>&1
       # 前端测试带覆盖率报告（vitest run --coverage）
-      # 显式幂等执行 #9758 分片镜像补丁：npm ci 的 postinstall 理论上已执行，但缓存/顺序
-      # 不确定时在此兜底，确保 Linux runner 上补丁一定就位（脚本幂等，重复执行无副作用）。
+      # 说明：vitest 5 已在 BaseCoverageProvider 内根治 #9758（分片读回 ENOENT 竞态）——
+      # 不再由主进程写分片、以内存 Map 追踪分片文件名、并新增 reportsDirectory 进程锁。
+      # 故本仓的 patch-vitest-coverage.cjs 已删除，无需再显式打补丁。
       # 输出 tee 到 runner.temp 日志并开 pipefail：失败时下方诊断步骤上传 artifact + 提炼
       # ::error::。Linux 专有失败在本地 Windows 无法复现、job 日志又需 admin（403），
       # artifact 是唯一可下载的完整证据通道。
       - name: Frontend tests + coverage
         run: |
           cd frontend
-          node scripts/patch-vitest-coverage.cjs
           LOG="$RUNNER_TEMP/vitest-coverage.log"
           # 先落环境快照：maxWorkers:1 让单 worker 累积 299 文件 v8 覆盖率，内存峰值高，
           # 7GB runner 上可能 OOM（exit 1）。artifact 里有 node 版本/内存/堆上限才能区分

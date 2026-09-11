@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.utils.helpers import safe_json_loads
 
 from app.core.database import get_db
+from app.core.data_permission import filter_by_data_scope
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.supported_village import ReportSubscription
@@ -739,6 +740,10 @@ async def generate_report(
             )
             if request.village_ids:
                 villages_query = villages_query.filter(SupportedVillage.id.in_(request.village_ids))
+            # R26-D10：报表数据须按数据权限隔离，防止跨组织村数据进入报表
+            villages_query = filter_by_data_scope(
+                villages_query, SupportedVillage, current_user, db=service.db
+            )
             villages = villages_query.limit(100).all()
             report_data["villages"] = [
                 {
@@ -754,13 +759,12 @@ async def generate_report(
 
         # 如果是汇总统计报表
         if request.report_type == "statistics":
-            report_data["statistics"] = {
-                "total_villages": (
-                    service.db.query(SupportedVillage)
-                    .filter(SupportedVillage.is_active.is_(True))
-                    .count()
-                ),
-            }
+            # R26-D10：计数查询同样按数据权限隔离
+            stats_query = filter_by_data_scope(
+                service.db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)),
+                SupportedVillage, current_user, db=service.db,
+            )
+            report_data["statistics"] = {"total_villages": stats_query.count()}
 
         return success_response(data=report_data, message="报表生成成功")
 

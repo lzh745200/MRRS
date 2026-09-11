@@ -4,6 +4,8 @@
 用于帮扶管理信息系统的初始部署设置
 """
 
+# security-audit: exempt data_scope — 系统初始化引导，创建首个管理员，无数据权限主体
+
 import logging
 from datetime import datetime, timezone
 from typing import Optional

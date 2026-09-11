@@ -163,6 +163,17 @@ logs/*.log.*
 backend/MagicMock/
 backend/mock_leak_trace.log
 
+# ===== .scratch 探测产物（保留已跟踪的 *.md 记录；忽略自动化会话临时产物）=====
+# 依据：.scratch/** 下已纳入版本控制的文件【全部为 .md】，下列后缀均为并发
+# 会话生成的临时探测产物（日志/快照/脚本/临时库），不入库。规则只作用于未跟踪
+# 文件，已跟踪的 *.md 记录不受影响。
+.scratch/**/*.txt
+.scratch/**/*.json
+.scratch/**/*.py
+.scratch/**/*.log
+.scratch/**/*.db*
+.scratch/**/r25-run/
+
 # ===== Frontend temp scripts & outputs =====
 frontend/*_output.txt
 frontend/*_output2.txt
@@ -173,6 +184,8 @@ frontend/all_batch_output.txt
 frontend/comp_output*.txt
 frontend/vitest_output.txt
 frontend/test_status.txt
+# vitest 5：测试产物（html/json/junit/blob/截图）默认移入 .vitest/
+.vitest/
 
 # ===== Root-level temp files =====
 /_*.py

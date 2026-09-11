@@ -463,7 +463,7 @@ class RuralWorkService:
                     "name": sv.name,
                     "county": getattr(sv, "county", None),
                 })
-            db.commit()
+            safe_commit(db)
         finally:
             db.close()
         return rows

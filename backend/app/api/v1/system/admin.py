@@ -3,6 +3,8 @@
 提供系统配置、备份恢复、系统监控等功能
 """
 
+# security-audit: exempt data_scope — 超级管理员全局系统管理域（用户/项目/村计数、强制下线、2FA 重置），无组织隔离主体
+
 import logging
 import shutil
 from datetime import datetime
@@ -18,6 +20,7 @@ from app.core.database import get_db
 from app.core.permission_utils import require_admin
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
+from app.core.transaction import safe_commit
 from app.models.user import User
 from app.utils.paths import get_backup_directory, get_database_path
 
@@ -457,7 +460,7 @@ async def revoke_user_session(
     # 若调用方传入真实 JWT 则额外按 jti 吊销（向前兼容）。
     try:
         setattr(user, "token_version", (getattr(user, "token_version", 0) or 0) + 1)
-        db.commit()
+        safe_commit(db)
     except Exception as e:
         db.rollback()
         logger.error("强制下线失败（token_version 递增）: %s", e, exc_info=True)
@@ -492,7 +495,7 @@ async def reset_user_two_factor(
         tfa.secret_key = ""
         tfa.backup_codes = None
         tfa.verified_at = None
-        db.commit()
+        safe_commit(db)
         logger.info("管理员 %s 重置用户 %s 的双因素认证", current_user.username, user.username)
         return success_response(message=f"已重置用户 {user.username} 的双因素认证")
 
