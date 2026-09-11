@@ -34,6 +34,22 @@ def _make_svc(mock_db, backup_dir, db_path, uploads_dir, incremental="true", lev
         return BackupService(db=mock_db, backup_dir=backup_dir)
 
 
+def _make_real_sqlite_db(db_path: str) -> None:
+    """构造真实 SQLite 库文件。
+
+    create_backup 现含恢复性校验（_verify_backup_recovery：zip CRC +
+    PRAGMA integrity_check），库文件必须是有效 SQLite，否则校验会按设计
+    fail-loud 抛 BackupIncompleteError —— 纯文本占位夹具不再可用。
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS _t (x TEXT)")
+        conn.execute("INSERT INTO _t (x) VALUES ('seed')")
+        conn.commit()
+    finally:
+        conn.close()
+
+
 class TestBackupRestoreError:
     def test_exception_message(self):
         e = BackupRestoreError("test msg")
@@ -122,7 +138,7 @@ class TestCreateBackup:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("db content")
+        _make_real_sqlite_db(db_path)
         os.makedirs(up_dir)
         Path(os.path.join(up_dir, "f.txt")).write_text("upload")
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
@@ -149,7 +165,7 @@ class TestCreateBackup:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("db")
+        _make_real_sqlite_db(db_path)
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         result = svc.create_backup(include_uploads=False)
         assert result is not None
@@ -160,7 +176,7 @@ class TestCreateBackup:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("db")
+        _make_real_sqlite_db(db_path)
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         with patch.object(svc, "_validate_path", return_value=False):
             result = svc.create_backup()
@@ -172,7 +188,7 @@ class TestCreateBackup:
         up_dir = str(tmp_path / "no_uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("db")
+        _make_real_sqlite_db(db_path)
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         result = svc.create_backup()
         assert result is not None
@@ -229,7 +245,7 @@ class TestRestoreBackup:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("orig")
+        _make_real_sqlite_db(db_path)
         os.makedirs(up_dir)
         Path(os.path.join(up_dir, "f.txt")).write_text("orig")
         zip_path = os.path.join(bdir, "backup.zip")
@@ -711,7 +727,7 @@ class TestCreateIncrementalBackup:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("data")
+        _make_real_sqlite_db(db_path)
         os.makedirs(up_dir)
         svc = _make_svc(mock_db, bdir, db_path, up_dir, incremental="false")
         result = svc.create_incremental_backup()
@@ -1081,7 +1097,7 @@ class TestEdgeCases:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("db")
+        _make_real_sqlite_db(db_path)
         os.makedirs(up_dir)
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         result = svc.create_backup()
@@ -1148,7 +1164,7 @@ class TestEdgeCases:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("db")
+        _make_real_sqlite_db(db_path)
         os.makedirs(up_dir)
         Path(os.path.join(up_dir, "bad.txt")).write_text("evil")
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
