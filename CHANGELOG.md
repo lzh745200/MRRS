@@ -5,7 +5,24 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [1.12.1] - 2026-09-10 — 🐛 认证会话契约修复 + 帮扶村列表排序根因修复
+## [1.12.2] - 2026-09-11 — 🐛 R19–R31 深度探针修复 + 架构评估 P0 加固（导出/备份/迁移门禁）+ CI 前端门禁回归修复
+
+### 加固（架构评估 P0）
+- **A1 导出任务重启自愈**：`recover_stale_export_tasks` 在 lifespan 启动时把
+  pending/processing 僵尸导出任务置为 failed，不再依赖内存队列重启自愈
+  （重启后任务永远停在"进行中"是用户可见的假状态）。
+- **A2 导出/备份原子落盘**：产物先写 `.part` 临时文件、成功后
+  `os.replace` 原子替换；进程中途被杀（断电/强杀，捕获不到异常）
+  不再在导出/备份目录留下半截文件被列表/cleanup 当作有效产物。
+- **C1 备份可恢复性校验**：备份落盘后校验 zip CRC（`testzip`）+
+  库文件 `PRAGMA integrity_check`，不可恢复即 fail-loud 抛
+  `BackupIncompleteError` 并删包 —— "备份成功但还原时才发现损坏"是最坏
+  故障模式（帮扶数据不可再采集）；同步补齐边界覆盖（integrity_check 非 "ok"、
+  校验临时文件删除失败、快照不可用时回退主库）与 8 处测试夹具（纯文本
+  占位库 → 真实 SQLite 库）。
+- **F1 迁移单 head 门禁入 CI**：`scripts/check_migrations.py` 校验 alembic 单 head 并接入
+  pr-checks 的 static-analysis（历史上 MultipleHeads 分叉曾使打包版启动即崩）。
+
 
 ### 修复
 - 🐛 **数据上报的 `report_type` 必填却从不落库（静默丢弃）**：R29 探针实测 ——
@@ -129,8 +146,16 @@
   （默认饼/环形视图下柱状实例恒为 null）。回归测试补「切到柱状视图后再
   resize」路径（`tests/unit/views/ruralWorks/Analysis.test.ts`）。
 ### 验证
-- 后端全量：`pytest tests/`（0 failed）。
-- 前端：`vue-tsc --noEmit` 0 错、`vitest run` 全绿。
+- 后端全量：`pytest tests/ -n auto --cov=app` —— **10926 passed / 0 failed**，
+  覆盖率 **100.00%**（37651 语句 0 missing，`.coveragerc` fail_under=100）。
+- 前端：`vue-tsc --noEmit` 0 错、`eslint --max-warnings=0` 0 错、
+  `vitest run --coverage` **300 文件 / 6026 用例全绿**，12 项覆盖率阈值均 100%。
+- 安装：`npm ci --legacy-peer-deps` 在 Windows（npm 脚本外壳为 cmd）下 exit 0，
+  postinstall 的 vitest #9758 补丁应用成功。
+- 产物：tag `v1.12.2` 触发的 `Build Windows Installer (x64)` 与
+  `Build Self-Contained ARM64 Debian Package` 两个工作流均 **success**，Release 附
+  `MRRS-Setup-1.12.2.exe`（Windows x64）、`MRRS-Setup-1.12.2.deb`（麒麟 ARM64 Electron）、
+  `assistance-management-system_1.12.2_arm64.deb`（麒麟 ARM64 standalone）与 3 份 SHA256SUMS。
 
 ## [1.12.0] - 2026-09-06 — 🎨 UI 全面优化：字体统一 + 40px 舒适密度 + 布局标准化 + 认证页统一
 
