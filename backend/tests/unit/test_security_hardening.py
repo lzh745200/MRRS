@@ -105,8 +105,13 @@ class TestFilesSecurity:
             f = MagicMock()
             f.filename = "x.png"
 
-            async def fake_read():
-                return b"<script>alert(1)</script>"
+            # 忠实模拟 UploadFile.read(size)：分块返回，读到 EOF 返回空。
+            # （R26 起上传改为 8MB 分块流式落盘，read 会带 size 参数且需在
+            #   数据耗尽后返回 b""，否则会一直读到超限。）
+            _chunks = [b"<script>alert(1)</script>", b""]
+
+            async def fake_read(size=-1):
+                return _chunks.pop(0) if _chunks else b""
 
             f.read = fake_read
 

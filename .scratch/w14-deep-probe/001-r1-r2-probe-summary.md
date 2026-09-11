@@ -391,3 +391,34 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   任务上，经费本就 pending，无需回写。
 - 回归：新增 `tests/unit/test_fund_approval_resubmit_r23.py`（14 例，用真实内存
   SQLite —— conftest 的 `db_session` 是 MagicMock，会把"状态是否真的落库"变成空跑）。
+
+
+## R25（8026, 路径参数 ID 全量扫射）— 无 5xx 缺陷
+- 做法：进程内枚举**所有路径参数是资源 ID 的端点**（参数名 `id` 或 `*_id`），
+  逐个把 ID 换成 99999999，按声明的方法（GET/PUT/DELETE/PATCH/POST）真实请求，
+  期望 404/400/403/422，出现 5xx 即缺陷。共 **269 个端点 × 各方法**。
+- 结果：**0 个 5xx**。抽查语义也对：不存在的资源普遍 404；列表型子资源
+  （`/organizations/{id}/children`、`/projects/{id}/milestones`、
+  `/rbac/user/{id}/permissions` 等）返回 200 + 空集合，属列表语义；
+  `/dashboard/recent-activities/{id}` 的 DELETE 幂等 200「删除成功」。
+- 该类别无需改动。
+
+## R26（通用文件上传 /files/upload）— 发现并修复两处
+- 探针 13 项断言，修复前 12/13、修复后 **13/13 全绿**。
+- 🐛 **缺陷 1：`category` 只认查询参数，multipart 表单字段静默失效。**
+  实测：`POST /files/upload` 带表单字段 `category=policies`（el-upload 的
+  `data`/`:data` 天然形态）→ 200，但 URL 是 `/uploads/generic/xxxx.png`，
+  没有 `/policies/` 段。根因：`category: Optional[str] = None` 被 FastAPI 归为
+  **查询参数**，表单字段被忽略且**不报错**——调用方"传了却没生效"。
+  这与 R14「经费附件 category 放 FormData、后端只认 Query」是同一类坑。
+  修复：额外声明 `category_form: Optional[str] = Form(None, alias="category")`
+  并 `category = category or category_form`，两种形态都生效。
+  复验：表单字段 → `/uploads/generic/policies/…`；查询参数 → `/uploads/generic/schools/…`。
+- 🐛 **缺陷 2：整文件读入内存后才判 50MB 上限（OOM 风险）。**
+  `content = await file.read()` 先把请求体全量读进内存，`len(content) >
+  MAX_FILE_SIZE` 才拒绝 —— 传 2GB 文件会先把内存吃满再返回 413。
+  修复：8MB 分块流式落盘 + 滚动大小校验（对齐 backup upload-restore 既有约定），
+  并在超限/扩展名不合规/内容嗅探失败时删除残片（零磁盘残留）。
+- 已确认正常（不误报）：白名单外扩展名 400；`.png` 内容不是 PNG 400（防改名）；
+  `category=../../evil` 被中性化（仍落 generic/，未写穿上传根目录）；
+  未认证 401；无扩展名文件放行；上传后可经 `/uploads/...` 静态访问且内容一致。

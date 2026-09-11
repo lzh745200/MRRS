@@ -8,6 +8,19 @@
 ## [1.12.1] - 2026-09-10 — 🐛 认证会话契约修复 + 帮扶村列表排序根因修复
 
 ### 修复
+- 🐛 **通用文件上传：`category` 只认查询参数（表单字段静默失效）+ 全量读入内存**：
+  R26 探针实测两处 ——
+  ① `POST /files/upload` 带 `category=policies`（**multipart 表单字段**，即
+  el-upload 的 `data`/`:data` 形态）返回 200 但文件落到 `generic/` 而不是
+  `generic/policies/`：`category` 被声明为裸 `Optional[str]`，FastAPI 只当
+  **查询参数**解析，表单字段被忽略且不报错（与 R14「经费附件 category 走 FormData
+  而后端只认 Query」同类）。修复：查询参数与表单字段**都接受**（对外线名均为
+  `category`）。
+  ② `await file.read()` 把整个文件读进内存后才判 50MB 上限 —— 超大文件先把内存
+  吃满再被拒（OOM）。修复：8MB 分块流式落盘 + 滚动大小校验，超限/扩展名不合规/
+  内容嗅探失败一律删除残片（零磁盘残留），对齐 backup upload-restore 既有约定。
+  回归：`tests/unit/test_files_upload_r26.py`（9 例，含跨分块字节完整性、
+  超限零残留、嗅探失败零残留、表单字段路径穿越中性化）。
 - 🐛 **组织创建/更新的非法枚举值报 500（安装包验收发现）**：对刚构建并安装的
   `MRRS-Setup-1.12.1` 实例发真实请求时命中 ——
   `POST /api/v1/organizations {"name":"…","level":"1"}` →
