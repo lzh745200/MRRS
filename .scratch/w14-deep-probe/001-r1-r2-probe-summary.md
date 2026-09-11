@@ -496,3 +496,42 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
   - 下级单位登记列表。
 - 探针自身更正（非缺陷）：`DataReportResponse` / `DataPackageExportResult` 是**裸**
   响应（无 `data` 信封），解析需兼容两种形态。
+
+
+## R29b（安装包验收）— 发现并修复一处**发布级阻断**（打包实例起不来）
+- 触发：R29 修复后按流程重建安装包（PyInstaller + electron-builder）并真机安装。
+  安装成功，但 **Electron 起来后后端反复退出**（自动重启 3/3 后放弃），:
+  8000 无监听。取 `%APPDATA%\Assistance-Management-Information-System\crash.log`：
+
+  ```
+  alembic.script.revision.MultipleHeads: Multiple heads are present for given
+    argument 'head'; data_report_type_001, policy_attachments_001
+  ERROR:    Application startup failed. Exiting.
+  后端退出, code: 3
+  ```
+
+- 根因：本会话新增 R29 迁移 `data_report_type_001` 时把 `down_revision` 接到
+  `contract_attachments_001`，而该版本**已不是 head**（他人的
+  `policy_attachments_001` 接在它之后）→ 迁移图分叉出两个 head →
+  `main.py` 的 `alembic upgrade head` 抛 MultipleHeads → 启动失败；
+  `migrate_missing_columns` 自动补列兜底**救不回来**（异常发生在它之前）。
+  教训：**新增 Alembic 迁移前必须先 `alembic heads` 确认唯一 head 并把它作为
+  `down_revision`**；本地 `pytest` 全绿也检测不到（测试不跑迁移图拓扑）。
+- 修复：`down_revision` 改为当前唯一 head `policy_attachments_001`；
+  `alembic heads` 恢复单 head（`data_report_type_001`）。
+- 门禁：新增 `tests/unit/test_alembic_single_head_r29.py`（3 例）——用 Alembic 官方
+  `ScriptDirectory.get_heads()` 断言全仓唯一 head，并**自证守卫有效**
+  （临时造一个分叉图必须被判出多 head）。
+  注：首版用手写正则解析迁移文件，误报 4 个 head（本仓存在多行/变量形式的
+  `down_revision`），已改为官方 API —— 这类"自己解析工具元数据"的做法不可靠。
+- 复验（重建安装包 → 真机安装 → 启动）：
+  `/health` 200 且 `{"migration":{"at_head":true,"head":"data_report_type_001"}}`；
+  后端进程在、前端首页 200。
+- 最终安装包验收 **23/23 全绿**：
+  - 10 个业务端点（经费/项目/帮扶村/学校/菜单/待办/消息/数据包/政策/当前用户）全 200；
+  - 前端首页与静态资源 200；
+  - **R24 修复点**：非法 `level` → 422「无效的组织层级: 1（允许值：level_1…）」；
+  - **R26 修复点**：`category` 表单字段与查询参数两条路径都落对子目录，
+    上传文件可经 `/uploads/...` 静态访问；
+  - **注册链路**：派生通行码注册 200 → 新用户登录 200（用户最初投诉第 2 条，成品包实证）；
+  - **R28 修复点**：`data_types` 非双重编码、版本变更摘要键为数据类型名。
