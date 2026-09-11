@@ -422,3 +422,21 @@ alerts-history,api-stats)/two-factor-status/rural-works(statistics,villages,year
 - 已确认正常（不误报）：白名单外扩展名 400；`.png` 内容不是 PNG 400（防改名）；
   `category=../../evil` 被中性化（仍落 generic/，未写穿上传根目录）；
   未认证 401；无扩展名文件放行；上传后可经 `/uploads/...` 静态访问且内容一致。
+
+
+## R27（8027, 消息中心 / 待办 / 通知偏好 / 提醒）— 无功能缺陷
+- 探针 27 项断言全绿（真实 HTTP + 直连 DB 校验）。
+- 待办：创建 → 列表可见 → 详情 → `PATCH /todos/{id}/toggle` 两次往返状态复原 →
+  更新 → 删除后列表不含该项；不存在 ID → 404。
+- 消息：列表分页、未读数（含 by_type 分解）、详情（**读取即自动标记已读**，
+  read_at 落库）、`mark-read`（对已读项幂等返回 count=0）、空 `message_ids` → 422
+  （min_length=1）、删除、`mark-all-read`、`stats/summary` 全部正常。
+- 通知偏好：契约为**扁平** `site_system/site_approval/site_task/email_system/
+  email_approval/email_task`（与前端 `NotificationPreference` 一致）；实测翻转
+  `email_task` → 重新 GET 已持久化 → 还原成功；子端点 `/preferences/site-message`、
+  `/preferences/quiet-hours` 均 200。
+- 提醒：`GET /reminders` 聚合视图正常（返回既有预算/截止类提醒），
+  `POST /reminders/scan` 手动扫描 200。
+- 探针自身更正两处（非缺陷）：① 造消息的 INSERT 列名应为 `message_type`；
+  ② 通知偏好不是 `site_message_enabled` 这类扁平名，而是 `site_*`/`email_*`
+  六字段（用错名字时 Pydantic 静默忽略，属接口契约需按文档传参）。
