@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>帮扶管理信息系统 · 运行时架构图 · Archify</title>
+<style>
+  :root{
+    --green:#1B4332; --green-deep:#12301F; --green-soft:#2D6A4F;
+    --gold:#D4AF37; --gold-soft:#E8C766;
+    --zebra:#E8F0EB; --border:#CBD5E1; --line:#94A3B8;
+    --ink:#1E293B; --muted:#64748B; --bg:#F5F8F6; --panel:#FFFFFF;
+    --warn:#B45309; --warn-bg:#FEF3C7; --ok:#15803D; --ok-bg:#DCFCE7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+  #app{display:flex;flex-direction:column;height:100vh}
+
+  /* ── 顶栏 ── */
+  header{background:var(--green);color:#fff;padding:10px 18px;display:flex;align-items:center;gap:14px;flex-shrink:0;box-shadow:0 2px 10px rgba(0,0,0,.15);z-index:20}
+  header .logo{font-size:15px;font-weight:800;color:var(--gold);letter-spacing:.5px;white-space:nowrap}
+  header .sub{font-size:12px;color:#C7D8CF;white-space:nowrap}
+  header .spacer{flex:1}
+  .search-wrap{position:relative}
+  #search{width:220px;padding:7px 30px 7px 12px;border-radius:20px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);color:#fff;font-size:13px;outline:none}
+  #search::placeholder{color:rgba(255,255,255,.6)}
+  #search:focus{background:rgba(255,255,255,.2);border-color:var(--gold)}
+  #search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.7);cursor:pointer;font-size:14px;display:none}
+  .tbtn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);color:#fff;padding:6px 12px;border-radius:8px;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:.15s}
+  .tbtn:hover{background:rgba(255,255,255,.24)}
+  .tbtn.active{background:var(--gold);color:var(--green-deep);border-color:var(--gold);font-weight:700}
+
+  /* ── 主体 ── */
+  #body{flex:1;display:flex;min-height:0}
+  #stage{flex:1;position:relative;overflow:hidden;cursor:grab;background:
+      radial-gradient(circle at 1px 1px, #DCE5DF 1px, transparent 0) 0 0/22px 22px, var(--bg)}
+  #stage.dragging{cursor:grabbing}
+  #svg{width:100%;height:100%;display:block;user-select:none}
+
+  /* ── 图例 ── */
+  .legend{position:absolute;left:14px;bottom:14px;background:rgba(255,255,255,.94);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:11.5px;box-shadow:0 4px 16px rgba(0,0,0,.08);line-height:1.9;z-index:5;backdrop-filter:blur(4px)}
+  .legend b{color:var(--green);display:block;margin-bottom:4px;font-size:11px;letter-spacing:.3px}
+  .legend .row{display:flex;align-items:center;gap:7px;color:var(--muted)}
+  .legend .sw{width:14px;height:10px;border-radius:3px;flex-shrink:0}
+  .legend .dash{width:16px;height:0;border-top:2px dashed var(--line);flex-shrink:0}
+
+  /* ── 缩放控件 ── */
+  .zoom{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:6px;z-index:5}
+  .zoom button{width:36px;height:36px;border-radius:9px;border:1px solid var(--border);background:#fff;font-size:17px;cursor:pointer;color:var(--green);box-shadow:0 2px 8px rgba(0,0,0,.07);transition:.15s;font-weight:600}
+  .zoom button:hover{background:var(--green);color:#fff;border-color:var(--green)}
+
+  /* ── 侧栏详情 ── */
+  #side{width:0;background:var(--panel);border-left:1px solid var(--border);overflow-y:auto;transition:width .22s ease;flex-shrink:0}
+  #side.open{width:330px}
+  #side-inner{width:330px;padding:18px}
+  #side h2{font-size:16px;color:var(--green);margin-bottom:4px}
+  #side .badge{display:inline-block;font-size:11px;padding:2px 9px;border-radius:11px;background:var(--zebra);color:var(--green-soft);font-weight:600;margin-bottom:12px}
+  #side .layer-chip{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:5px;margin:0 0 12px 6px;font-weight:600}
+  #side .desc{font-size:13px;line-height:1.7;color:#334155;margin-bottom:14px}
+  #side .src{font-size:11px;font-family:ui-monospace,Consolas,monospace;background:#F1F5F4;border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--green-soft);word-break:break-all;margin-bottom:14px;cursor:pointer}
+  #side .src:hover{background:var(--green);color:#fff;border-color:var(--green)}
+  #side h3{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px;font-weight:700}
+  .rel{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;font-size:12.5px;cursor:pointer;transition:.12s;background:#fff}
+  .rel:hover{border-color:var(--green);background:var(--zebra)}
+  .rel .arrow{color:var(--gold);font-weight:800;font-size:13px}
+  .rel .nm{flex:1}
+  .rel .kind{font-size:10px;color:var(--muted);text-transform:uppercase}
+  #side .empty{color:var(--muted);font-size:12.5px;font-style:italic}
+
+  /* ── 节点 ── */
+  .node{cursor:pointer}
+  .node .box{stroke-width:1.6;transition:all .15s}
+  .node:hover .box{filter:brightness(1.04) drop-shadow(0 3px 8px rgba(27,67,50,.28));stroke-width:2.4}
+  .node.sel .box{stroke:var(--gold);stroke-width:3}
+  .node.dim{opacity:.16}
+  .node.hit .box{stroke:var(--warn);stroke-width:3}
+  .node .title{font-weight:700;pointer-events:none}
+  .node .role{pointer-events:none}
+  .node .src-badge{cursor:pointer}
+  .grp-label{font-weight:800;letter-spacing:.5px;pointer-events:none}
+  .edge{fill:none;stroke:var(--line);stroke-width:1.5;transition:.15s}
+  .edge.hi{stroke:var(--gold);stroke-width:2.6}
+  .edge.dim{opacity:.08}
+  .edge-label{font-size:9.5px;fill:var(--muted);pointer-events:none}
+  .edge-label.hi{fill:var(--warn);font-weight:700}
+
+  /* ── 面包屑 / 路径条 ── */
+  #crumb{position:absolute;left:14px;top:12px;background:rgba(255,255,255,.94);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--muted);box-shadow:0 2px 8px rgba(0,0,0,.06);z-index:5;max-width:60%}
+  #crumb b{color:var(--green)}
+  #pathbar{position:absolute;left:50%;transform:translateX(-50%);top:12px;background:var(--warn-bg);border:1px solid var(--gold);border-radius:8px;padding:6px 14px;font-size:12.5px;color:var(--warn);box-shadow:0 3px 12px rgba(0,0,0,.1);z-index:6;display:none;max-width:70%}
+  #pathbar b{font-weight:800}
+  #pathbar button{margin-left:10px;background:none;border:none;color:var(--warn);cursor:pointer;font-weight:700;text-decoration:underline;font-size:12px}
+
+  /* ── 提示条 ── */
+  #hint{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;background:rgba(27,67,50,.9);color:#fff;padding:7px 16px;border-radius:20px;font-size:12px;z-index:5;opacity:0;transition:opacity .3s;pointer-events:none}
+  #hint.show{opacity:1}
+
+  @media (max-width:820px){
+    header .sub{display:none} #search{width:140px} #side.open{width:260px} #side-inner{width:260px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="logo">★ 帮扶管理信息系统</span>
+    <span class="sub">运行时架构图 · 单文件可交互 · 数据源自真实代码</span>
+    <div class="spacer"></div>
+    <div class="search-wrap">
+      <input id="search" placeholder="搜索节点…（/）" autocomplete="off">
+      <span id="search-clear">✕</span>
+    </div>
+    <button class="tbtn" id="btn-all">展开全部</button>
+    <button class="tbtn" id="btn-collapse">折叠分层</button>
+    <button class="tbtn" id="btn-path">追踪路径 (R)</button>
+    <button class="tbtn" id="btn-fit">适应屏幕 (F)</button>
+  </header>
+
+  <div id="body">
+    <div id="stage">
+      <div id="crumb">视图：<b>运行时架构</b> · 顶层分组</div>
+      <div id="pathbar"></div>
+      <svg id="svg"></svg>
+      <div class="legend">
+        <b>图层</b>
+        <div class="row"><span class="sw" style="background:#1B4332"></span>前端 / 客户端</div>
+        <div class="row"><span class="sw" style="background:#2D6A4F"></span>API 路由层</div>
+        <div class="row"><span class="sw" style="background:#40916C"></span>服务层</div>
+        <div class="row"><span class="sw" style="background:#74A892"></span>核心 / 中台</div>
+        <div class="row"><span class="sw" style="background:#B08968"></span>数据持久层</div>
+        <div class="row"><span class="sw" style="background:#8D99AE"></span>外部 / 系统服务</div>
+        <div class="row" style="margin-top:4px"><span class="dash"></span>虚线 = 异步 / 事件</div>
+      </div>
+      <div class="zoom">
+        <button id="zin" title="放大">＋</button>
+        <button id="zout" title="缩小">－</button>
+        <button id="zfit" title="适应屏幕">⤢</button>
+      </div>
+      <div id="hint"></div>
+    </div>
+    <aside id="side"><div id="side-inner"></div></aside>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   1. 数据模型（IR）—— 由真实代码结构提取
+   ═══════════════════════════════════════════════════════════════ */
+const LAYERS = {
+  // client 为分组键别名（节点图层键 frontend，分组键 client）
+  client:    {name:'前端 / 客户端', fill:'#1B4332', text:'#FFFFFF', soft:'#D9E7DF'},
+  frontend: {name:'前端 / 客户端', fill:'#1B4332', text:'#FFFFFF', soft:'#D9E7DF'},
+  api:      {name:'API 路由层',    fill:'#2D6A4F', text:'#FFFFFF', soft:'#DCEBE2'},
+  service:  {name:'服务层',        fill:'#40916C', text:'#092016', soft:'#DFF0E6'},
+  core:     {name:'核心 / 中台',   fill:'#74A892', text:'#13261D', soft:'#E6F1EA'},
+  data:     {name:'数据持久层',    fill:'#B08968', text:'#FFFFFF', soft:'#F1E8DF'},
+  ext:      {name:'外部 / 系统服务', fill:'#8D99AE', text:'#FFFFFF', soft:'#E8ECF1'}
+};
+
+// key, 标签, 角色, 图层, 源码锚点, 详细描述, 分组(group 用于折叠)
+const NODES = [
+  // ── 客户端 ──
+  {k:'electron', n:'Electron 主进程', r:'桌面外壳 · 生命周期', l:'frontend', g:'client',
+   src:'electron/main.js',
+   d:'桌面端外壳。负责拉起并守护 PyInstaller 打包的后端 EXE（端口 8000，失败最多重试 11 次）、随机端口回退、后端崩溃自动重启（上限 3 次）、托盘、单实例锁，并通过 safeStorage 加密持久化 SECRET_KEY / CSRF / ENCRYPTION_KEY。'},
+  {k:'vue', n:'Vue 3 SPA', r:'渲染进程 · 前端应用', l:'frontend', g:'client',
+   src:'frontend/src/main.ts',
+   d:'Vue 3 + Element Plus + Pinia 单页应用。经 axios 统一封装（src/api/request.ts）访问 /api/v1；含 camelCase→snake_case 契约、自动锁屏（useAutoLock）、数据脱敏（useDesensitize）等横切能力。'},
+  {k:'axios', n:'API 客户端层', r:'请求封装 · 契约适配', l:'frontend', g:'client',
+   src:'frontend/src/api/request.ts',
+   d:'统一请求入口：注入 JWT、处理 401 刷新/登出、错误信封归一、blob 下载。与后端 CamelToSnakeMiddleware 形成前后端命名契约。'},
+
+  // ── API 层 ──
+  {k:'router', n:'api_v1_router', r:'总路由 · 静态注册 46 模块', l:'api', g:'api',
+   src:'backend/app/api/v1/__init__.py',
+   d:'v1.11.3 事故修复后改为 100% 静态导入（原 importlib 动态导入在 PyInstaller 冻结包中丢失全部 47 路由）。注册顺序即匹配优先级，例如 supported_village_export 必须先于 supported_village。'},
+  {k:'api_auth', n:'auth/*', r:'认证 · RBAC · 2FA', l:'api', g:'api',
+   src:'backend/app/api/v1/auth/auth.py',
+   d:'登录/登出、用户管理、角色权限（rbac）、双因子（two_factor）。身份域端点集中于此，不参与组织数据枚举。'},
+  {k:'api_biz', n:'业务路由（组织/村/项目/经费/政策）', r:'CRUD · 审批 · 统计', l:'api', g:'api',
+   src:'backend/app/api/v1/supported_village.py',
+   d:'组织、帮扶村（含多年度数据）、项目、经费预算/生命周期、政策、学校、农村工作与任务等核心业务面。所有列表走 ok_list 信封，写操作走 safe_commit。'},
+  {k:'api_data', n:'data/*', r:'数据报表 · 分析 · 看板', l:'api', g:'api',
+   src:'backend/app/api/v1/data/data/reports.py',
+   d:'数据报表生成、分析、统计、看板、数据包。R26-D10 起报表村庄枚举与计数按数据权限隔离，防跨组织泄漏。'},
+  {k:'api_ie', n:'import_export/*', r:'导入 · 导出 · 分块上传 · 异步导出', l:'api', g:'api',
+   src:'backend/app/api/v1/import_export/export.py',
+   d:'数据导入/导出入口。导出统一注入 _audit_watermark（导出人+时间）到页脚，满足军事审计溯源；分块上传与异步导出走本地任务队列。'},
+  {k:'api_sys', n:'system/*', r:'备份 · 监控 · 审计 · 运维', l:'api', g:'api',
+   src:'backend/app/api/v1/system/admin.py',
+   d:'系统管理面：备份/恢复、健康与指标、审计、环境配置、缓存、更新日志、错误上报、i18n、零信任。超管全局域。'},
+
+  // ── 服务层 ──
+  {k:'svc_report', n:'报表导出服务', r:'Word / PDF / Excel 统一档案风', l:'service', g:'service',
+   src:'backend/app/services/report_export_service.py',
+   d:'公文 Word/PDF、数据报表、列表、综合报表、帮扶村多模块导出。复用 utils/excel_report_style 与 pdf_report_style：军绿+金档案风、A4、页眉页脚、页码域、重复表头；数据报表 PDF 用 STSong-Light 解决中文乱码。'},
+  {k:'svc_auth', n:'用户 / 角色 / 权限包服务', r:'账户 · RBAC · 通行码', l:'service', g:'service',
+   src:'backend/app/services/user_service.py',
+   d:'用户 CRUD、RBAC、权限包（离线授权）、机器码与通行证码、账户锁定（lockout）、密码加密。'},
+  {k:'svc_ai', n:'AI 服务', r:'分析 · 预测 · 推荐', l:'service', g:'service',
+   src:'backend/app/services/ai_service.py',
+   d:'智能分析、趋势、异常检测、推荐、NLP。只读端点，离线可降级；不落库、不参与写审计。'},
+  {k:'svc_bg', n:'后台调度 / 任务队列', r:'备份 · 提醒 · 报表订阅 · WAL', l:'service', g:'service',
+   src:'backend/app/services/backup_scheduler.py',
+   d:'应用 lifespan 启动：备份调度器（KPI 预计算/异常检测/自动备份/待办提醒/周报）、审批超时提醒（30 分钟）、每日 03:00 WAL checkpoint、本地任务队列（异步导出）。'},
+  {k:'svc_import', n:'导入 / 校验 / 清洗服务', r:'Excel 解析 · 校验 · 去重', l:'service', g:'service',
+   src:'backend/app/services/excel_importer_service.py',
+   d:'Excel 导入解析（含模板字段映射）、实体校验、冲突消解、数据清洗、分块上传聚合。'},
+
+  // ── 核心 / 中台 ──
+  {k:'core_cfg', n:'config / 常量 / 日志', r:'单一配置源 · 版本', l:'core', g:'core',
+   src:'backend/app/core/config.py',
+   d:'Pydantic Settings 单一配置源：PROJECT_VERSION（版本号唯一来源，报表/模板均读此）、数据库、CORS、CSRF、限流、慢请求阈值等。'},
+  {k:'core_db', n:'database / transaction / 索引', r:'会话 · safe_commit · 索引', l:'core', g:'core',
+   src:'backend/app/core/transaction.py',
+   d:'SQLAlchemy 引擎与会话；safe_commit 统一提交（security_audit 强制禁止裸 db.commit）；启动时 Alembic 升级 + 自动补列兜底 + 性能索引创建。'},
+  {k:'core_sec', n:'安全 / 数据权限 / PII', r:'JWT · 数据域 · 加密', l:'core', g:'core',
+   src:'backend/app/core/data_permission.py',
+   d:'数据权限唯一真源：get_data_scope（超管=ALL / admin=OWN_DEPT / 其他=OWN）、filter_by_data_scope（列表/导出，严守军事 S2 导出隔离红线）、apply_scope_filter（组织树端点）。配套 JWT、token 黑名单、PII 加解密、上传安全。'},
+  {k:'core_mw', n:'中间件栈', r:'请求链路 · 审计 · 监控', l:'core', g:'core',
+   src:'backend/app/middleware/request_id.py',
+   d:'执行序：RequestID → 安全头 → CORS → CamelToSnake → CSRF → 请求日志 → 审计 → 指标；另有查询计数、慢请求、响应体大小限制、缓存头。'},
+  {k:'core_audit', n:'审计中台', r:'事件监听 · 变更留痕 · 工作日志', l:'core', g:'core',
+   src:'backend/app/services/audit_event_handler.py',
+   d:'SQLAlchemy 事件监听自动记录全部写操作（26 个模型），生成审计变更与工作日志，支撑军事合规留痕与溯源。'},
+
+  // ── 数据层 ──
+  {k:'db', n:'SQLite（WAL 模式）', r:'本地单机数据库', l:'data', g:'data',
+   src:'backend/app/core/database.py',
+   d:'单机离线数据库，WAL 模式；备份调度器 + 每日 WAL checkpoint 防膨胀；完整性校验（启动 SHA256）与数据库健康监控。'},
+  {k:'models', n:'ORM 模型（50+ 实体）', r:'用户/组织/村/项目/经费…', l:'data', g:'data',
+   src:'backend/app/models/__init__.py',
+   d:'用户、组织、帮扶村、学校、项目、经费（预算/生命周期/资产核验）、政策、审批、消息、审计、报表订阅等 50+ 模型，经 __all__ 懒加载入口注册。'},
+  {k:'files', n:'文件 / 附件存储', r:'分块上传 · 模板 · 导出物', l:'data', g:'data',
+   src:'backend/app/models/file_blob.py',
+   d:'上传附件（分块 CFileBlob）、导入模板、导出产物、离线地图瓦片缓存等本地文件存储。'},
+
+  // ── 外部 / 系统 ──
+  {k:'ext_ai', n:'AI 推理后端', r:'可选 · 离线降级', l:'ext', g:'ext',
+   src:'backend/app/services/ai_service.py',
+   d:'AI 分析外部推理接口；离线环境下禁用并降级（爬虫服务默认关闭）。'},
+  {k:'ext_map', n:'地图瓦片源', r:'离线地图缓存', l:'ext', g:'ext',
+   src:'backend/app/services/offline_map_service.py',
+   d:'离线地图瓦片下载与本地缓存，支持无网环境的乡村地理展示。'},
+  {k:'ext_os', n:'操作系统 / 文件系统', r:'safeStorage · 信号 · 进程', l:'ext', g:'ext',
+   src:'electron/main.js',
+   d:'桌面端与 OS 交互：safeStorage 密钥加密、进程守护、信号关闭、托盘、窗口状态持久化。'}
+];
+
+// from → to, 标签, 是否异步
+const EDGES = [
+  {f:'electron', t:'vue',  lbl:'加载', async:false},
+  {f:'vue', t:'axios',     lbl:'调用', async:false},
+  {f:'axios', t:'router',  lbl:'HTTP /api/v1', async:false},
+
+  {f:'router', t:'api_auth', lbl:'挂载', async:false},
+  {f:'router', t:'api_biz',  lbl:'挂载', async:false},
+  {f:'router', t:'api_data', lbl:'挂载', async:false},
+  {f:'router', t:'api_ie',   lbl:'挂载', async:false},
+  {f:'router', t:'api_sys',  lbl:'挂载', async:false},
+
+  {f:'api_auth', t:'svc_auth',   lbl:'', async:false},
+  {f:'api_biz',  t:'core_mw',    lbl:'中间件链', async:false},
+  {f:'api_data', t:'svc_report', lbl:'生成报表', async:false},
+  {f:'api_ie',   t:'svc_import', lbl:'解析', async:false},
+  {f:'api_ie',   t:'svc_bg',     lbl:'入队/导出', async:true},
+  {f:'api_biz',  t:'svc_auth',   lbl:'', async:false},
+  {f:'api_biz',  t:'svc_ai',     lbl:'分析', async:true},
+
+  {f:'core_mw', t:'core_sec',   lbl:'鉴权/数据域', async:false},
+  {f:'core_mw', t:'core_audit', lbl:'写事件', async:true},
+  {f:'svc_auth',t:'core_sec',   lbl:'', async:false},
+  {f:'svc_auth',t:'core_cfg',   lbl:'', async:false},
+  {f:'svc_report',t:'core_cfg', lbl:'版本号', async:false},
+  {f:'svc_import',t:'core_db',  lbl:'事务', async:false},
+  {f:'svc_ai',  t:'ext_ai',     lbl:'推理', async:true},
+  {f:'svc_bg',  t:'core_db',    lbl:'定时任务', async:true},
+
+  {f:'core_sec',   t:'core_db',  lbl:'', async:false},
+  {f:'core_audit', t:'core_db',  lbl:'留痕', async:false},
+  {f:'core_cfg',   t:'core_db',  lbl:'连接串', async:false},
+  {f:'core_db',    t:'db',       lbl:'ORM', async:false},
+  {f:'core_db',    t:'models',   lbl:'映射', async:false},
+  {f:'svc_import', t:'files',    lbl:'上传', async:false},
+  {f:'svc_report', t:'files',    lbl:'导出物', async:false},
+  {f:'svc_import', t:'ext_map',  lbl:'瓦片', async:true},
+  {f:'electron',   t:'ext_os',   lbl:'进程/密钥', async:false}
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   2. 布局引擎（分层 + 组内纵排）
+   ═══════════════════════════════════════════════════════════════ */
+const GROUP_ORDER = ['client','api','service','core','data','ext'];
+const GROUP_LABEL = {
+  client:'① 客户端层', api:'② API 路由层', service:'③ 服务层',
+  core:'④ 核心 / 中台', data:'⑤ 数据持久层', ext:'⑥ 外部 / 系统'
+};
+const NODE_W = 178, NODE_H = 62, GAP_X = 96, GAP_Y = 26, PAD_TOP = 54, PAD_LEFT = 56;
+
+function computeLayout(){
+  const pos = {};
+  const groupMeta = {};
+  let x = PAD_LEFT;
+  GROUP_ORDER.forEach(g=>{
+    const items = NODES.filter(n=>n.g===g);
+    const colH = items.length * NODE_H + (items.length-1)*GAP_Y;
+    let y = PAD_TOP + 40;
+    items.forEach(n=>{
+      pos[n.k] = {x, y, w:NODE_W, h:NODE_H, node:n};
+      y += NODE_H + GAP_Y;
+    });
+    groupMeta[g] = {x:x-16, y:PAD_TOP, w:NODE_W+32, h:colH+70};
+    x += NODE_W + GAP_X;
+  });
+  return {pos, groupMeta, width:x, height:700};
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   3. 渲染
+   ═══════════════════════════════════════════════════════════════ */
+const svg = document.getElementById('svg');
+const stage = document.getElementById('stage');
+const side = document.getElementById('side');
+const sideInner = document.getElementById('side-inner');
+const NS = 'http://www.w3.org/2000/svg';
+let LAYOUT, transform = {x:0,y:0,k:1};
+let selected = null, pathMode = false, pathStart = null, collapsed = false;
+const adjacency = {};
+
+EDGES.forEach(e=>{
+  (adjacency[e.f] ||= {out:[],in:[]}).out.push(e);
+  (adjacency[e.t] ||= {out:[],in:[]}).in.push(e);
+});
+
+function el(tag, attrs){
+  const e = document.createElementNS(NS, tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+function render(){
+  LAYOUT = computeLayout();
+  const {pos, groupMeta, width, height} = LAYOUT;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.innerHTML = '';
+
+  const show = new Set(NODES.map(n=>n.k));
+
+  // ── 分组底框 ──
+  const gGroups = el('g', {});
+  GROUP_ORDER.forEach(g=>{
+    const m = groupMeta[g], L = LAYERS[g];
+    const gEl = el('g', {class:'group'});
+    gEl.appendChild(el('rect', {x:m.x, y:m.y, width:m.w, height:m.h, rx:14,
+      fill:L.soft, stroke:L.fill, 'stroke-width':1.4, 'stroke-dasharray':'0', opacity:.55}));
+    const t = el('text', {x:m.x+16, y:m.y+26, class:'grp-label', fill:L.fill, 'font-size':13.5});
+    t.textContent = GROUP_LABEL[g];
+    gEl.appendChild(t);
+    gGroups.appendChild(gEl);
+  });
+
+  // ── 边 ──
+  const gEdges = el('g', {});
+  const edgeEls = [];
+  EDGES.forEach((e, i)=>{
+    if(!show.has(e.f) || !show.has(e.t)) return;
+    const a = pos[e.f], b = pos[e.t];
+    const x1 = a.x + a.w, y1 = a.y + a.h/2;
+    const x2 = b.x, y2 = b.y + b.h/2;
+    const mx = (x1+x2)/2;
+    const d = `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+    const p = el('path', {d, class:'edge', 'data-i':i, 'marker-end':'url(#arrow)'});
+    if(e.async) p.setAttribute('stroke-dasharray','6 4');
+    gEdges.appendChild(p);
+    edgeEls.push({el:p, edge:e, i});
+
+    if(e.lbl){
+      const lt = el('text', {x:mx, y:(y1+y2)/2 - 5, class:'edge-label', 'text-anchor':'middle', 'data-i':i});
+      lt.textContent = e.lbl;
+      gEdges.appendChild(lt);
+    }
+  });
+
+  // 箭头 marker
+  const defs = el('defs', {});
+  const marker = el('marker', {id:'arrow', markerWidth:9, markerHeight:9, refX:7, refY:3.2, orient:'auto'});
+  marker.appendChild(el('path', {d:'M0,0 L7,3.2 L0,6.4 Z', fill:'#94A3B8'}));
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+  svg.appendChild(gGroups);
+  svg.appendChild(gEdges);
+
+  // ── 节点 ──
+  const gNodes = el('g', {});
+  NODES.forEach(n=>{
+    if(!show.has(n.k)) return;
+    const p = pos[n.k], L = LAYERS[n.l];
+    const g = el('g', {class:'node', 'data-k':n.k, transform:`translate(${p.x},${p.y})`});
+    g.appendChild(el('rect', {class:'box', x:0, y:0, width:p.w, height:p.h, rx:10,
+      fill:L.fill, stroke:L.fill}));
+    const t1 = el('text', {class:'title', x:12, y:26, fill:L.text, 'font-size':13});
+    t1.textContent = n.n.length>17 ? n.n.slice(0,16)+'…' : n.n;
+    g.appendChild(t1);
+    const t2 = el('text', {class:'role', x:12, y:44, fill:L.text, 'font-size':10.5, opacity:.82});
+    t2.textContent = n.r.length>24 ? n.r.slice(0,23)+'…' : n.r;
+    g.appendChild(t2);
+    // SRC 徽标
+    const bg = el('g', {class:'src-badge', 'data-k':n.k, transform:`translate(${p.w-40},8)`});
+    bg.appendChild(el('rect', {x:0,y:0,width:32,height:16,rx:8,fill:'rgba(255,255,255,.22)',stroke:'rgba(255,255,255,.4)'}));
+    const st = el('text', {x:16, y:11.5, 'text-anchor':'middle', fill:L.text, 'font-size':9, 'font-weight':700});
+    st.textContent = 'SRC';
+    bg.appendChild(st);
+    g.appendChild(bg);
+    gNodes.appendChild(g);
+  });
+  svg.appendChild(gNodes);
+
+  bindEvents(pos, edgeEls);
+  applyTransform();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   4. 交互
+   ═══════════════════════════════════════════════════════════════ */
+function applyTransform(){
+  const inner = [...svg.children].filter(c=>c.tagName!=='defs');
+  inner.forEach(c=>c.setAttribute('transform', `translate(${transform.x},${transform.y}) scale(${transform.k})`));
+}
+
+function bindEvents(pos, edgeEls){
+  svg.querySelectorAll('.node').forEach(g=>{
+    g.addEventListener('click', ev=>{
+      ev.stopPropagation();
+      if(pathMode){ handlePathPick(g.dataset.k); return; }
+      selectNode(g.dataset.k);
+    });
+  });
+  svg.querySelectorAll('.src-badge').forEach(g=>{
+    g.addEventListener('click', ev=>{
+      ev.stopPropagation();
+      const n = NODES.find(x=>x.k===g.dataset.k);
+      showHint('源码锚点 → ' + n.src + '（点击右侧详情卡片可复制路径）');
+      selectNode(g.dataset.k);
+    });
+  });
+  // hover 高亮
+  svg.querySelectorAll('.node').forEach(g=>{
+    g.addEventListener('mouseenter', ()=>highlight(g.dataset.k));
+    g.addEventListener('mouseleave', ()=>highlight(null));
+  });
+  svg._edgeEls = edgeEls;
+}
+
+function highlight(k){
+  const nodes = svg.querySelectorAll('.node');
+  const paths = svg.querySelectorAll('.edge');
+  const labels = svg.querySelectorAll('.edge-label');
+  if(!k){ nodes.forEach(n=>n.classList.remove('dim')); paths.forEach(p=>p.classList.remove('hi','dim')); labels.forEach(l=>l.classList.remove('hi')); return; }
+  const rel = new Set([k]);
+  (adjacency[k]?.out||[]).forEach(e=>rel.add(e.t));
+  (adjacency[k]?.in||[]).forEach(e=>rel.add(e.f));
+  nodes.forEach(n=>n.classList.toggle('dim', !rel.has(n.dataset.k)));
+  paths.forEach(p=>{
+    const e = EDGES[p.dataset.i];
+    const on = e.f===k || e.t===k;
+    p.classList.toggle('hi', on);
+    p.classList.toggle('dim', !rel.has(e.f) && !rel.has(e.t));
+  });
+  labels.forEach(l=>{
+    const e = EDGES[l.dataset.i];
+    l.classList.toggle('hi', e.f===k || e.t===k);
+  });
+}
+
+function selectNode(k){
+  selected = k;
+  svg.querySelectorAll('.node').forEach(g=>g.classList.toggle('sel', g.dataset.k===k));
+  const n = NODES.find(x=>x.k===k); if(!n) return;
+  const L = LAYERS[n.l];
+  const ins = (adjacency[k]?.in||[]).map(e=>NODES.find(x=>x.k===e.f)).filter(Boolean);
+  const outs = (adjacency[k]?.out||[]).map(e=>NODES.find(x=>x.k===e.t)).filter(Boolean);
+
+  const relHtml = (arr, arrow)=>{
+    if(!arr.length) return '<div class="empty">无</div>';
+    return arr.map(x=>`<div class="rel" data-go="${x.k}"><span class="arrow">${arrow}</span><span class="nm">${x.n}</span><span class="kind">${LAYERS[x.l].name.split(' ')[0]}</span></div>`).join('');
+  };
+
+  sideInner.innerHTML = `
+    <h2>${n.n}</h2>
+    <span class="badge">${n.r}</span><span class="layer-chip" style="background:${L.soft};color:${L.fill}">${L.name}</span>
+    <p class="desc">${n.d}</p>
+    <div class="src" data-src="${n.src}" title="点击复制路径">📄 ${n.src}</div>
+    <h3>▲ 上游（谁依赖它）</h3>${relHtml(ins,'◀')}
+    <h3>▼ 下游（它依赖谁）</h3>${relHtml(outs,'▶')}
+  `;
+  side.classList.add('open');
+  sideInner.querySelectorAll('.rel').forEach(r=>{
+    r.addEventListener('click', ()=>selectNode(r.dataset.go));
+  });
+  sideInner.querySelector('.src').addEventListener('click', function(){
+    const s = this.dataset.src;
+    navigator.clipboard?.writeText(s).then(()=>showHint('已复制：'+s)).catch(()=>showHint(s));
+  });
+}
+
+/* ── 路径追踪 ── */
+function togglePath(){
+  pathMode = !pathMode; pathStart = null;
+  document.getElementById('btn-path').classList.toggle('active', pathMode);
+  svg.querySelectorAll('.edge').forEach(p=>p.classList.remove('hi','dim'));
+  if(pathMode){
+    showHint('路径模式：先点起点节点，再点终点节点');
+    document.getElementById('pathbar').style.display='none';
+  } else { clearPath(); }
+}
+function handlePathPick(k){
+  if(!pathStart){
+    pathStart = k;
+    svg.querySelectorAll('.node').forEach(g=>g.classList.toggle('hit', g.dataset.k===k));
+    showHint('起点：'+NODES.find(x=>x.k===k).n+' —— 再点终点');
+    return;
+  }
+  if(k===pathStart) return;
+  const path = findPath(pathStart, k);
+  document.getElementById('pathbar').style.display='block';
+  if(!path){
+    document.getElementById('pathbar').innerHTML = `⚠ 两点间无有向路径：<b>${NODES.find(x=>x.k===pathStart).n}</b> → <b>${NODES.find(x=>x.k===k).n}</b> <button onclick="clearPath()">清除</button>`;
+    return;
+  }
+  const names = path.map(s=>NODES.find(x=>x.k===s).n);
+  document.getElementById('pathbar').innerHTML =
+    `路径（${path.length-1} 跳）：<b>${names.join(' → ')}</b> <button onclick="clearPath()">清除</button>`;
+  // 高亮路径
+  const pathNodes = new Set(path);
+  svg.querySelectorAll('.node').forEach(g=>g.classList.toggle('hit', pathNodes.has(g.dataset.k)));
+  svg.querySelectorAll('.node').forEach(g=>g.classList.toggle('dim', !pathNodes.has(g.dataset.k)));
+  svg.querySelectorAll('.edge').forEach(p=>{
+    const e = EDGES[p.dataset.i];
+    let on = false;
+    for(let i=0;i<path.length-1;i++) if(e.f===path[i] && e.t===path[i+1]) on = true;
+    p.classList.toggle('hi', on);
+    p.classList.toggle('dim', !on);
+  });
+}
+function clearPath(){
+  pathMode=false; pathStart=null;
+  document.getElementById('btn-path').classList.remove('active');
+  document.getElementById('pathbar').style.display='none';
+  svg.querySelectorAll('.node').forEach(n=>n.classList.remove('hit','dim','sel'));
+  svg.querySelectorAll('.edge').forEach(p=>p.classList.remove('hi','dim'));
+}
+function findPath(a, b){
+  const q=[[a]], seen=new Set([a]);
+  while(q.length){
+    const cur = q.shift(), last = cur[cur.length-1];
+    if(last===b) return cur;
+    for(const e of (adjacency[last]?.out||[])){
+      if(!seen.has(e.t)){ seen.add(e.t); q.push([...cur, e.t]); }
+    }
+  }
+  return null;
+}
+
+/* ── 搜索 ── */
+const searchEl = document.getElementById('search');
+const clearEl = document.getElementById('search-clear');
+searchEl.addEventListener('input', ()=>{
+  const q = searchEl.value.trim().toLowerCase();
+  clearEl.style.display = q ? 'block' : 'none';
+  if(!q){
+    svg.querySelectorAll('.node').forEach(n=>n.classList.remove('hit','dim'));
+    return;
+  }
+  let hits = 0;
+  svg.querySelectorAll('.node').forEach(g=>{
+    const n = NODES.find(x=>x.k===g.dataset.k);
+    const ok = (n.n+n.r+n.d+n.src).toLowerCase().includes(q);
+    g.classList.toggle('hit', ok);
+    g.classList.toggle('dim', !ok);
+    if(ok) hits++;
+  });
+  showHint(`匹配 ${hits} 个节点`);
+});
+clearEl.addEventListener('click', ()=>{ searchEl.value=''; searchEl.dispatchEvent(new Event('input')); });
+document.addEventListener('keydown', e=>{
+  if(e.key==='/' && document.activeElement!==searchEl){ e.preventDefault(); searchEl.focus(); }
+  if(e.key.toLowerCase()==='f' && document.activeElement!==searchEl){ fitToScreen(); }
+  if(e.key.toLowerCase()==='r' && document.activeElement!==searchEl){ togglePath(); }
+  if(e.key==='Escape'){ clearPath(); highlight(null); }
+});
+
+/* ── 平移 / 缩放 ── */
+let drag=null;
+stage.addEventListener('mousedown', e=>{
+  if(e.target.closest('.node')||e.target.closest('.src-badge')) return;
+  if(e.target.closest('.legend')||e.target.closest('.zoom')) return;
+  drag = {x:e.clientX, y:e.clientY, tx:transform.x, ty:transform.y};
+  stage.classList.add('dragging');
+});
+window.addEventListener('mousemove', e=>{
+  if(!drag) return;
+  transform.x = drag.tx + (e.clientX-drag.x);
+  transform.y = drag.ty + (e.clientY-drag.y);
+  applyTransform();
+});
+window.addEventListener('mouseup', ()=>{ drag=null; stage.classList.remove('dragging'); });
+stage.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  const mx = e.clientX-r.left, my = e.clientY-r.top;
+  const old = transform.k;
+  const k = Math.min(2.6, Math.max(.35, old * (e.deltaY<0?1.12:0.89)));
+  transform.x = mx - (mx-transform.x)*(k/old);
+  transform.y = my - (my-transform.y)*(k/old);
+  transform.k = k;
+  applyTransform();
+}, {passive:false});
+
+document.getElementById('zin').onclick = ()=>zoomBy(1.18);
+document.getElementById('zout').onclick = ()=>zoomBy(0.85);
+document.getElementById('zfit').onclick = fitToScreen;
+function zoomBy(f){
+  const r = stage.getBoundingClientRect();
+  const mx=r.width/2, my=r.height/2, old=transform.k;
+  const k = Math.min(2.6, Math.max(.35, old*f));
+  transform.x = mx-(mx-transform.x)*(k/old);
+  transform.y = my-(my-transform.y)*(k/old);
+  transform.k = k; applyTransform();
+}
+function fitToScreen(){
+  const r = stage.getBoundingClientRect();
+  const k = Math.min((r.width-60)/LAYOUT.width, (r.height-60)/LAYOUT.height);
+  transform.k = k;
+  transform.x = (r.width - LAYOUT.width*k)/2;
+  transform.y = (r.height - LAYOUT.height*k)/2;
+  applyTransform();
+}
+
+/* ── 顶栏按钮 ── */
+document.getElementById('btn-all').onclick = ()=>{ svg.querySelectorAll('.node').forEach(n=>n.classList.remove('dim')); showHint('已展开全部节点与依赖'); };
+document.getElementById('btn-collapse').onclick = ()=>{
+  collapsed = !collapsed;
+  // 折叠：仅保留各层代表节点（hidden 用隐藏 class 模拟）
+  const keep = new Set(['electron','router','svc_report','core_sec','db','ext_ai']);
+  svg.querySelectorAll('.node').forEach(n=>n.classList.toggle('dim', collapsed && !keep.has(n.dataset.k)));
+  showHint(collapsed ? '已折叠分层，仅显示各层代表节点' : '已恢复完整视图');
+};
+document.getElementById('btn-path').onclick = togglePath;
+document.getElementById('btn-fit').onclick = fitToScreen;
+
+/* ── 提示 ── */
+let hintTimer;
+function showHint(msg){
+  const h = document.getElementById('hint');
+  h.textContent = msg; h.classList.add('show');
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(()=>h.classList.remove('show'), 2600);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   5. 启动
+   ═══════════════════════════════════════════════════════════════ */
+render();
+requestAnimationFrame(fitToScreen);
+sideInner.innerHTML = `
+  <h2>帮扶管理信息系统</h2>
+  <span class="badge">运行时架构 · 单文件</span>
+  <p class="desc">这是从真实代码库提取的运行时架构图。<b>点击任意节点</b>查看职责、源码锚点与上下游依赖；用顶栏搜索、路径追踪与缩放探索整条链路。</p>
+  <h3>怎么用</h3>
+  <div class="rel"><span class="arrow">▶</span><span class="nm">点击节点 → 看详情与依赖</span></div>
+  <div class="rel"><span class="arrow">▶</span><span class="nm">悬停节点 → 高亮上下游</span></div>
+  <div class="rel"><span class="arrow">▶</span><span class="nm">"追踪路径" → 点起点再点终点</span></div>
+  <div class="rel"><span class="arrow">▶</span><span class="nm">搜索框输入文件名/模块名</span></div>
+  <div class="rel"><span class="arrow">▶</span><span class="nm">滚轮缩放，拖拽平移，F 适应屏幕</span></div>
+  <h3>数据来源</h3>
+  <div class="source-note" style="font-size:12px;color:#64748b;line-height:1.7">
+    基于 backend/app（api/core/services/models/middleware）、electron/ 与 frontend/src 的真实目录与关键模块提取。
+  </div>
+`;
+</script>
+</body>
+</html>
