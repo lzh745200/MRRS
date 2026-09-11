@@ -40,12 +40,6 @@ vi.mock('echarts', () => ({
   init: () => ({ setOption: () => {}, on: () => {}, resize: () => {}, dispose: () => {} }),
   graphic: { LinearGradient: class {} },
 }))
-vi.mock('chart.js/auto', () => ({
-  Chart: class {
-    constructor(..._args: any[]) {}
-    destroy() {}
-  },
-}))
 
 // LoginEnhanced.vue 由专属测试 tests/unit/views/auth/LoginEnhanced.test.ts 单一引用覆盖
 // （覆盖率合并不变量：每个被 100% 阈值锁定的 .vue 全仓只允许一个测试文件触碰，含 bare

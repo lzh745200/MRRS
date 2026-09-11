@@ -4,14 +4,14 @@
  * 覆盖目标：src/views/analytics/reports/WorkAnalysis.vue 100% 语句覆盖
  *
  * 测试场景：
- *  1. 挂载加载 — onMounted → loadData → updateCharts（chart.js 全 mock）
+ *  1. 挂载加载 — onMounted → loadData → updateCharts（echarts 全 mock）
  *  2. 统计卡片 — statsCards 计算（有/无数据、延期/无延期分支）
  *  3. 表格过滤 — searchText / filterType / filterStatus 三个 if 分支 + watch
  *  4. filterTable — keyup.enter / clear / select change / 分页事件触发
  *  5. 刷新 — refreshData（按钮 + 日期范围 change）
  *  6. 导出 — 空数据 warning 分支 / CSV 生成下载分支
  *  7. 图表 — updateCharts 三图构建、月度趋势过滤（有/无日期、完成状态）、
- *     destroyCharts 空与非空、onBeforeUnmount
+ *     destroyCharts 空与非空、resizeCharts（含空实例分支）、onBeforeUnmount
  *  8. 辅助函数 — getTypeTagType / getStatusTagType / ds 调用（表格列模板渲染）
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -21,21 +21,28 @@ import { createPinia } from 'pinia'
 
 // ==================== Mocks ====================
 
-vi.mock('chart.js/auto', () => {
-  class MockChart {
-    static instances: MockChart[] = []
-    config: any
-    destroyed = false
-    constructor(_ctx: any, config: any) {
-      this.config = config
-      MockChart.instances.push(this)
+// ECharts mock：init 返回带 setOption/dispose/resize/on 的实例，并记录实例与收到的 option
+const { echartsInit, mockInstances } = vi.hoisted(() => {
+  const instances: any[] = []
+  const init = vi.fn((_el: any) => {
+    const inst: any = {
+      option: null,
+      setOption: vi.fn((opt: any) => {
+        inst.option = opt
+      }),
+      dispose: vi.fn(),
+      resize: vi.fn(),
+      on: vi.fn(),
     }
-    destroy() {
-      this.destroyed = true
-    }
-  }
-  return { Chart: MockChart }
+    instances.push(inst)
+    return inst
+  })
+  return { echartsInit: init, mockInstances: instances }
 })
+
+vi.mock('@/utils/echarts', () => ({
+  default: { init: echartsInit },
+}))
 
 vi.mock('@/api/ruralWork', () => ({
   getRuralWorks: vi.fn(),
@@ -62,10 +69,10 @@ vi.mock('element-plus', async (importOriginal) => {
 import WorkAnalysis from '@/views/analytics/reports/WorkAnalysis.vue'
 import { getRuralWorks } from '@/api/ruralWork'
 import { ElMessage } from 'element-plus'
-import { Chart } from 'chart.js/auto'
 
-// MockChart 静态实例记录（每个用例前重置）
-const chartInstances = () => (Chart as any).instances as any[]
+/** 取某实例收到的 option（series[0].type 匹配） */
+const instancesBySeriesType = (type: string) =>
+  mockInstances.filter((i) => i.option?.series?.[0]?.type === type)
 
 // ==================== Helpers ====================
 
@@ -215,7 +222,7 @@ const findPagination = (wrapper: any) =>
 describe('WorkAnalysis.vue (analytics/reports)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    chartInstances().length = 0
+    mockInstances.length = 0
     vi.mocked(getRuralWorks).mockResolvedValue({ items: makeItems() } as any)
   })
 
@@ -236,8 +243,13 @@ describe('WorkAnalysis.vue (analytics/reports)', () => {
     expect(text).toContain('占比 20%')
     expect(text).toContain('完成率 20%')
 
-    // 三个 Chart.js 图表已创建
-    expect(chartInstances().length).toBe(3)
+    // 三个 ECharts 图表已创建（echarts.init 调用 3 次）
+    expect(echartsInit).toHaveBeenCalledTimes(3)
+    expect(mockInstances.length).toBe(3)
+    // 环形图 + 柱状图 + 折线图
+    expect(instancesBySeriesType('pie').length).toBe(1)
+    expect(instancesBySeriesType('bar').length).toBe(1)
+    expect(instancesBySeriesType('line').length).toBe(1)
 
     // 分页总数经 watch 同步
     expect(findPagination(wrapper).props('total')).toBe(5)
@@ -395,28 +407,42 @@ describe('WorkAnalysis.vue (analytics/reports)', () => {
     wrapper.unmount()
   })
 
-  it('再次刷新时先销毁旧图表实例', async () => {
+  it('再次刷新时先销毁（dispose）旧图表实例', async () => {
     const wrapper = mountPage()
     await flushPromises()
-    const instances = chartInstances()
-    const firstBatch = instances.slice(0, 3)
+    const firstBatch = mockInstances.slice(0, 3)
 
     await wrapper.find('.dp-trigger').trigger('click')
     await flushPromises()
 
-    expect(firstBatch.every((c) => c.destroyed)).toBe(true)
-    expect(instances.length).toBe(6)
+    expect(firstBatch.every((c) => c.dispose.mock.calls.length > 0)).toBe(true)
+    expect(mockInstances.length).toBe(6)
+    wrapper.unmount()
+  })
+
+  it('窗口 resize 触发 resizeCharts（含实例为空的兜底分支）', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const current = mockInstances.slice()
+
+    window.dispatchEvent(new Event('resize'))
+    expect(current.every((c) => c.resize.mock.calls.length > 0)).toBe(true)
+
+    // 销毁全部实例后再次调用 → 覆盖 resizeCharts 的空值分支
+    vm.destroyCharts()
+    expect(() => vm.resizeCharts()).not.toThrow()
     wrapper.unmount()
   })
 
   it('卸载时销毁全部图表', async () => {
     const wrapper = mountPage()
     await flushPromises()
-    const instances = chartInstances()
+    const created = mockInstances.slice()
 
     wrapper.unmount()
 
-    expect(instances.every((c) => c.destroyed)).toBe(true)
+    expect(created.every((c) => c.dispose.mock.calls.length > 0)).toBe(true)
   })
 })
 
@@ -465,11 +491,12 @@ describe('分支补全：进度三元/映射兜底/分页 v-model/导出稀疏�
     } as any)
     const wrapper = mountPage()
     await flushPromises()
-    // updateCharts 会被 watch 多次触发，取首个饼图实例校验（type '' → '其他' 计入）
-    expect(chartInstances().length).toBeGreaterThanOrEqual(3)
-    // 全量跑时其他用例的滞后异步链可能向 instances 追加旧图表，按类型+标签断言而非下标
-    const pies = chartInstances().filter((c: any) => c.config.type === 'doughnut')
-    const hit = pies.some((p: any) => (p.config.data.labels || []).includes('其他'))
+    // updateCharts 会被 watch 多次触发，按 series 类型 + data name 断言而非下标
+    // 全量跑时其他用例的滞后异步链可能向 mockInstances 追加旧图表，故用聚合断言
+    const pies = instancesBySeriesType('pie')
+    const hit = pies.some((p: any) =>
+      (p.option?.series?.[0]?.data || []).some((d: any) => d.name === '其他')
+    )
     expect(hit).toBe(true)
     wrapper.unmount()
   })

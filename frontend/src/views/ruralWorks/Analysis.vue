@@ -162,10 +162,10 @@
         </div>
         <div class="chart-content">
           <div v-if="typeChartView === 'pie'" class="chart-container">
-            <canvas ref="typePieChart" height="300"></canvas>
+            <div ref="typePieChart" style="height: 100%"></div>
           </div>
           <div v-else class="chart-container">
-            <canvas ref="typeBarChart" height="300"></canvas>
+            <div ref="typeBarChart" style="height: 100%"></div>
           </div>
         </div>
       </div>
@@ -184,10 +184,10 @@
         </div>
         <div class="chart-content">
           <div v-if="statusChartView === 'doughnut'" class="chart-container">
-            <canvas ref="statusDoughnutChart" height="300"></canvas>
+            <div ref="statusDoughnutChart" style="height: 100%"></div>
           </div>
           <div v-else class="chart-container">
-            <canvas ref="statusBarChart" height="300"></canvas>
+            <div ref="statusBarChart" style="height: 100%"></div>
           </div>
         </div>
       </div>
@@ -205,7 +205,7 @@
           </el-select>
         </div>
         <div class="chart-content">
-          <canvas ref="trendChart" height="400"></canvas>
+          <div ref="trendChart" style="height: 100%"></div>
         </div>
       </div>
     </div>
@@ -217,7 +217,7 @@
           <h3 class="chart-title">村庄工作量排名</h3>
         </div>
         <div class="chart-content">
-          <canvas ref="villageRankingChart" height="350"></canvas>
+          <div ref="villageRankingChart" style="height: 100%"></div>
         </div>
       </div>
       <div class="chart-card military-card">
@@ -225,7 +225,7 @@
           <h3 class="chart-title">工作完成质量分析</h3>
         </div>
         <div class="chart-content">
-          <canvas ref="qualityAnalysisChart" height="350"></canvas>
+          <div ref="qualityAnalysisChart" style="height: 100%"></div>
         </div>
       </div>
     </div>
@@ -288,7 +288,7 @@ import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { chartColor, chartColorPrimary, chartPalette } from '@/utils/chartColors'
 
-import { ref, onMounted, nextTick, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Refresh,
@@ -299,12 +299,11 @@ import {
   Money,
   ArrowDown,
 } from '@element-plus/icons-vue'
-// 导入Chart.js组件 - Chart.js 4.x使用auto版本自动注册所有组件
-import { Chart } from 'chart.js/auto'
+import echarts from '@/utils/echarts'
 import { getRuralWorks } from '@/api/ruralWork'
 
-// 定义Chart实例类型
-type ChartInstance = InstanceType<typeof Chart> | null
+// 定义 ECharts 实例类型
+type ChartInstance = echarts.ECharts | null
 
 // 状态管理
 const loading = ref(false)
@@ -317,13 +316,13 @@ const trendType = ref('count')
 const dataTableSort = ref('completion')
 
 // 图表引用
-const typePieChart = ref<HTMLCanvasElement | null>(null)
-const typeBarChart = ref<HTMLCanvasElement | null>(null)
-const statusDoughnutChart = ref<HTMLCanvasElement | null>(null)
-const statusBarChart = ref<HTMLCanvasElement | null>(null)
-const trendChart = ref<HTMLCanvasElement | null>(null)
-const villageRankingChart = ref<HTMLCanvasElement | null>(null)
-const qualityAnalysisChart = ref<HTMLCanvasElement | null>(null)
+const typePieChart = ref<HTMLDivElement | null>(null)
+const typeBarChart = ref<HTMLDivElement | null>(null)
+const statusDoughnutChart = ref<HTMLDivElement | null>(null)
+const statusBarChart = ref<HTMLDivElement | null>(null)
+const trendChart = ref<HTMLDivElement | null>(null)
+const villageRankingChart = ref<HTMLDivElement | null>(null)
+const qualityAnalysisChart = ref<HTMLDivElement | null>(null)
 
 // 图表实例 - 使用ChartInstance类型
 let typePieChartInstance: ChartInstance = null
@@ -415,6 +414,12 @@ onMounted(async () => {
   await loadData()
   await nextTick()
   initCharts()
+  window.addEventListener('resize', resizeCharts)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCharts)
+  disposeAllCharts()
 })
 
 // 监听筛选条件变化
@@ -551,7 +556,8 @@ const handleStatusChartView = (view: string) => {
 
 const updateTrendChart = () => {
   if (trendChartInstance) {
-    trendChartInstance.destroy()
+    trendChartInstance.dispose()
+    trendChartInstance = null
   }
   if (trendChart.value) {
     initTrendChart()
@@ -560,6 +566,49 @@ const updateTrendChart = () => {
 
 const updateDataTable = () => {
   // 表格排序已通过计算属性处理
+}
+
+// 销毁全部图表实例（ECharts 用 dispose 释放 canvas 资源，防止内存泄漏）
+const disposeAllCharts = () => {
+  if (typePieChartInstance) {
+    typePieChartInstance.dispose()
+    typePieChartInstance = null
+  }
+  if (typeBarChartInstance) {
+    typeBarChartInstance.dispose()
+    typeBarChartInstance = null
+  }
+  if (statusDoughnutChartInstance) {
+    statusDoughnutChartInstance.dispose()
+    statusDoughnutChartInstance = null
+  }
+  if (statusBarChartInstance) {
+    statusBarChartInstance.dispose()
+    statusBarChartInstance = null
+  }
+  if (trendChartInstance) {
+    trendChartInstance.dispose()
+    trendChartInstance = null
+  }
+  if (villageRankingChartInstance) {
+    villageRankingChartInstance.dispose()
+    villageRankingChartInstance = null
+  }
+  if (qualityAnalysisChartInstance) {
+    qualityAnalysisChartInstance.dispose()
+    qualityAnalysisChartInstance = null
+  }
+}
+
+// 窗口尺寸变化时自适应重绘（ECharts 不自动跟随容器 resize）
+const resizeCharts = () => {
+  typePieChartInstance?.resize()
+  typeBarChartInstance?.resize()
+  statusDoughnutChartInstance?.resize()
+  statusBarChartInstance?.resize()
+  trendChartInstance?.resize()
+  villageRankingChartInstance?.resize()
+  qualityAnalysisChartInstance?.resize()
 }
 
 // 初始化所有图表
@@ -577,13 +626,7 @@ const updateCharts = async () => {
   await nextTick()
 
   // 销毁现有图表
-  if (typePieChartInstance) typePieChartInstance.destroy()
-  if (typeBarChartInstance) typeBarChartInstance.destroy()
-  if (statusDoughnutChartInstance) statusDoughnutChartInstance.destroy()
-  if (statusBarChartInstance) statusBarChartInstance.destroy()
-  if (trendChartInstance) trendChartInstance.destroy()
-  if (villageRankingChartInstance) villageRankingChartInstance.destroy()
-  if (qualityAnalysisChartInstance) qualityAnalysisChartInstance.destroy()
+  disposeAllCharts()
 
   // 重新初始化图表 - 确保图表容器存在
   if (typePieChart.value || typeBarChart.value) {
@@ -608,78 +651,39 @@ const initTypeCharts = () => {
   const typeData = getTypeDistributionData()
 
   if (typeChartView.value === 'pie' && typePieChart.value) {
-    typePieChartInstance = new Chart(typePieChart.value, {
-      type: 'pie',
-      data: {
-        labels: typeData.labels,
-        datasets: [
-          {
-            data: typeData.values,
-            backgroundColor: chartPalette(),
-            borderColor: '#fff',
-            borderWidth: 2,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'right',
-            labels: {
-              font: {
-                family: 'Arial',
-                size: 12,
-              },
-              padding: 20,
-            },
-          },
-          tooltip: {
-            callbacks: {
-              label: function (context: any) {
-                const label = context.label || ''
-                const value = context.raw || 0
-                const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0)
-                const percentage = Math.round((value / total) * 100)
-                return `${label}: ${value} (${percentage}%)`
-              },
-            },
-          },
+    typePieChartInstance = echarts.init(typePieChart.value)
+    typePieChartInstance.setOption({
+      color: chartPalette(),
+      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      legend: { right: 0, top: 'middle', orient: 'vertical', icon: 'circle', itemGap: 20 },
+      series: [
+        {
+          name: '工作类型分布',
+          type: 'pie',
+          radius: '60%',
+          center: ['40%', '50%'],
+          data: typeData.labels.map((name, i) => ({ name, value: typeData.values[i] })),
+          itemStyle: { borderColor: '#fff', borderWidth: 2 },
+          label: { show: false },
         },
-      },
+      ],
     })
   } else if (typeBarChart.value) {
-    typeBarChartInstance = new Chart(typeBarChart.value, {
-      type: 'bar',
-      data: {
-        labels: typeData.labels,
-        datasets: [
-          {
-            label: '工作数量',
-            data: typeData.values,
-            backgroundColor: '#003366',
-            borderRadius: 4,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: false,
-          },
+    typeBarChartInstance = echarts.init(typeBarChart.value)
+    typeBarChartInstance.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: 20, containLabel: true },
+      xAxis: { type: 'category', data: typeData.labels },
+      yAxis: { type: 'value', min: 0, minInterval: 1 },
+      series: [
+        {
+          name: '工作数量',
+          type: 'bar',
+          data: typeData.values,
+          barMaxWidth: 50,
+          itemStyle: { color: '#003366', borderRadius: [4, 4, 0, 0] },
         },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              stepSize: 1,
-            },
-          },
-        },
-      },
+      ],
     })
   }
 }
@@ -687,90 +691,50 @@ const initTypeCharts = () => {
 // 初始化工作状态图表
 const initStatusCharts = () => {
   const statusData = getStatusDistributionData()
+  const statusColors = [
+    chartColor('success'), // 已完成 - 绿色
+    chartColorPrimary(), // 进行中 - 主色
+    chartColor('warning'), // 计划中 - 橙色
+    chartColor('danger'), // 已延期 - 红色
+  ]
 
   if (statusChartView.value === 'doughnut' && statusDoughnutChart.value) {
-    statusDoughnutChartInstance = new Chart(statusDoughnutChart.value, {
-      type: 'doughnut',
-      data: {
-        labels: statusData.labels,
-        datasets: [
-          {
-            data: statusData.values,
-            backgroundColor: [
-              chartColor('success'), // 已完成 - 绿色
-              chartColorPrimary(), // 进行中 - 主色
-              chartColor('warning'), // 计划中 - 橙色
-              chartColor('danger'), // 已延期 - 红色
-            ],
-            borderColor: '#fff',
-            borderWidth: 2,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'right',
-            labels: {
-              font: {
-                family: 'Arial',
-                size: 12,
-              },
-              padding: 20,
-            },
-          },
-          tooltip: {
-            callbacks: {
-              label: function (context: any) {
-                const label = context.label || ''
-                const value = context.raw || 0
-                const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0)
-                const percentage = Math.round((value / total) * 100)
-                return `${label}: ${value} (${percentage}%)`
-              },
-            },
-          },
+    statusDoughnutChartInstance = echarts.init(statusDoughnutChart.value)
+    statusDoughnutChartInstance.setOption({
+      color: statusColors,
+      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      legend: { right: 0, top: 'middle', orient: 'vertical', icon: 'circle', itemGap: 20 },
+      series: [
+        {
+          name: '工作状态分布',
+          type: 'pie',
+          radius: ['45%', '70%'],
+          center: ['40%', '50%'],
+          data: statusData.labels.map((name, i) => ({ name, value: statusData.values[i] })),
+          itemStyle: { borderColor: '#fff', borderWidth: 2 },
+          label: { show: false },
         },
-      },
+      ],
     })
   } else if (statusBarChart.value) {
-    statusBarChartInstance = new Chart(statusBarChart.value, {
-      type: 'bar',
-      data: {
-        labels: statusData.labels,
-        datasets: [
-          {
-            label: '工作数量',
-            data: statusData.values,
-            backgroundColor: [
-              chartColor('success'), // 已完成 - 绿色
-              chartColorPrimary(), // 进行中 - 主色
-              chartColor('warning'), // 计划中 - 橙色
-              chartColor('danger'), // 已延期 - 红色
-            ],
-            borderRadius: 4,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: false,
-          },
+    statusBarChartInstance = echarts.init(statusBarChart.value)
+    statusBarChartInstance.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: 20, containLabel: true },
+      xAxis: { type: 'category', data: statusData.labels },
+      yAxis: { type: 'value', min: 0, minInterval: 1 },
+      series: [
+        {
+          name: '工作数量',
+          type: 'bar',
+          barMaxWidth: 50,
+          itemStyle: { borderRadius: [4, 4, 0, 0] },
+          data: statusData.values.map((value, i) => ({
+            value,
+            itemStyle: { color: statusColors[i % statusColors.length] },
+          })),
         },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              stepSize: 1,
-            },
-          },
-        },
-      },
+      ],
     })
   }
 }
@@ -783,160 +747,108 @@ const initTrendChart = () => {
 
   // 没有真实数据时显示提示
   if (!trendData.hasData || trendData.labels.length === 0) {
-    const ctx = trendChart.value.getContext('2d')
-    if (ctx) {
-      ctx.clearRect(0, 0, trendChart.value.width, trendChart.value.height)
-      ctx.font = '16px Arial'
-      ctx.fillStyle = chartColor('info')
-      ctx.textAlign = 'center'
-      ctx.fillText(
-        '暂无数据，请先录入乡村工作数据',
-        trendChart.value.width / 2,
-        trendChart.value.height / 2
-      )
-    }
+    trendChartInstance = echarts.init(trendChart.value)
+    trendChartInstance.setOption({
+      title: {
+        text: '暂无数据，请先录入乡村工作数据',
+        left: 'center',
+        top: 'center',
+        textStyle: { fontSize: 16, fontWeight: 'normal', color: chartColor('info') },
+      },
+    })
     return
   }
 
-  trendChartInstance = new Chart(trendChart.value, {
-    type: 'line',
-    data: {
-      labels: trendData.labels,
-      datasets: [
-        {
-          label:
-            trendType.value === 'count'
-              ? '工作数量'
-              : trendType.value === 'completion'
-                ? '平均完成率(%)'
-                : '投入资金(万元)',
-          data: trendData.values,
-          borderColor: '#003366',
-          backgroundColor: 'rgba(0, 51, 102, 0.1)',
-          borderWidth: 3,
-          fill: true,
-          tension: 0.4,
-          pointBackgroundColor: '#003366',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 5,
-          pointHoverRadius: 7,
-        },
-      ],
+  trendChartInstance = echarts.init(trendChart.value)
+  trendChartInstance.setOption({
+    color: ['#003366'],
+    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    legend: { top: 0, left: 'center' },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: trendData.labels,
+      axisLine: { lineStyle: { color: '#003366' } },
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-          labels: {
-            font: {
-              family: 'Arial',
-              size: 14,
-              weight: 'bold',
-            },
-          },
-        },
-        tooltip: {
-          mode: 'index',
-          intersect: false,
-        },
+    yAxis: { type: 'value', min: 0 },
+    series: [
+      {
+        name:
+          trendType.value === 'count'
+            ? '工作数量'
+            : trendType.value === 'completion'
+              ? '平均完成率(%)'
+              : '投入资金(万元)',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 10,
+        data: trendData.values,
+        lineStyle: { width: 3, color: '#003366' },
+        itemStyle: { color: '#003366', borderColor: '#fff', borderWidth: 2 },
+        areaStyle: { color: 'rgba(0, 51, 102, 0.1)' },
       },
-      scales: {
-        x: {
-          grid: {
-            display: false,
-          },
-        },
-        y: {
-          beginAtZero: true,
-          grid: {
-            color: 'rgba(0, 0, 0, 0.1)',
-          },
-        },
-      },
-    },
+    ],
   })
 }
 
-// 初始化村庄排名图表
+// 初始化村庄排名图表（横向柱状图）
 const initVillageRankingChart = () => {
   if (!villageRankingChart.value) return
 
   const villageData = getVillageRankingData()
 
-  villageRankingChartInstance = new Chart(villageRankingChart.value, {
-    type: 'bar',
-    data: {
-      labels: villageData.labels,
-      datasets: [
-        {
-          label: '工作数量',
-          data: villageData.values,
-          backgroundColor: '#0055aa',
-          borderRadius: 4,
-        },
-      ],
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: false,
-        },
+  villageRankingChartInstance = echarts.init(villageRankingChart.value)
+  // Chart.js 的 indexAxis:'y' → ECharts 对调 xAxis/yAxis
+  villageRankingChartInstance.setOption({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: 20, containLabel: true },
+    xAxis: { type: 'value', min: 0, minInterval: 1 },
+    yAxis: { type: 'category', data: villageData.labels, inverse: true },
+    series: [
+      {
+        name: '工作数量',
+        type: 'bar',
+        data: villageData.values,
+        barMaxWidth: 24,
+        itemStyle: { color: '#0055aa', borderRadius: [0, 4, 4, 0] },
       },
-      scales: {
-        x: {
-          beginAtZero: true,
-          ticks: {
-            stepSize: 1,
-          },
-        },
-      },
-    },
+    ],
   })
 }
 
-// 初始化质量分析图表
+// 初始化质量分析图表（雷达图）
 const initQualityAnalysisChart = () => {
   if (!qualityAnalysisChart.value) return
 
   const qualityData = getQualityAnalysisData()
 
-  qualityAnalysisChartInstance = new Chart(qualityAnalysisChart.value, {
-    type: 'radar',
-    data: {
-      labels: qualityData.labels,
-      datasets: [
-        {
-          label: '质量评分',
-          data: qualityData.values,
-          backgroundColor: 'rgba(0, 51, 102, 0.2)',
-          borderColor: '#003366',
-          borderWidth: 2,
-          pointBackgroundColor: '#0055aa',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 4,
-        },
-      ],
+  qualityAnalysisChartInstance = echarts.init(qualityAnalysisChart.value)
+  qualityAnalysisChartInstance.setOption({
+    tooltip: { trigger: 'item' },
+    radar: {
+      indicator: qualityData.labels.map((name) => ({ name, max: 5 })),
+      radius: '65%',
+      // 原 Chart.js max:5 + stepSize:1 → 5 等分（0~5 每格 1）
+      splitNumber: 5,
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        r: {
-          beginAtZero: true,
-          max: 5,
-          ticks: {
-            stepSize: 1,
+    series: [
+      {
+        name: '质量评分',
+        type: 'radar',
+        data: [
+          {
+            value: qualityData.values,
+            name: '质量评分',
+            areaStyle: { color: 'rgba(0, 51, 102, 0.2)' },
+            lineStyle: { color: '#003366', width: 2 },
+            itemStyle: { color: '#0055aa', borderColor: '#fff', borderWidth: 2 },
+            symbolSize: 8,
           },
-        },
+        ],
       },
-    },
+    ],
   })
 }
 

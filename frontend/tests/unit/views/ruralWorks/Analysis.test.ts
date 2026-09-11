@@ -1,18 +1,36 @@
 /**
  * views/ruralWorks/Analysis.vue 覆盖率攻坚（四指标 100%）
  * 覆盖：onMounted 加载数据与图表初始化、筛选（村庄/类型）、数据排序、
- * 指标计算、refreshData、exportAnalysis、视图切换、图表数据函数、字典函数全分支。
+ * 指标计算、refreshData、exportAnalysis、视图切换、图表数据函数、字典函数全分支、
+ * ECharts 各图 option 构造（饼/柱/环形/折线/横向 bar/雷达）、resize/dispose 生命周期。
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-const { ElMessage, getRuralWorksMock, logError, chartCtor } = vi.hoisted(() => ({
-  ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
-  getRuralWorksMock: vi.fn(),
-  logError: vi.fn(),
-  chartCtor: vi.fn(),
-}))
+const { ElMessage, getRuralWorksMock, logError, echartsInit, mockInstances } = vi.hoisted(() => {
+  const instances: any[] = []
+  const init = vi.fn((_el: any) => {
+    const inst: any = {
+      option: null,
+      setOption: vi.fn((opt: any) => {
+        inst.option = opt
+      }),
+      dispose: vi.fn(),
+      resize: vi.fn(),
+      on: vi.fn(),
+    }
+    instances.push(inst)
+    return inst
+  })
+  return {
+    ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+    getRuralWorksMock: vi.fn(),
+    logError: vi.fn(),
+    echartsInit: init,
+    mockInstances: instances,
+  }
+})
 
 vi.mock('element-plus', () => ({ ElMessage }))
 
@@ -22,8 +40,8 @@ vi.mock('@/utils/logger', () => ({
   logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }))
 
-vi.mock('chart.js/auto', () => ({
-  Chart: chartCtor,
+vi.mock('@/utils/echarts', () => ({
+  default: { init: echartsInit },
 }))
 
 import Analysis from '@/views/ruralWorks/Analysis.vue'
@@ -67,7 +85,11 @@ const items = [
   },
 ]
 
-let lastChartConfig: any = null
+/** 取最近一次某 series 类型的 option */
+function lastOptionBySeriesType(type: string) {
+  const list = mockInstances.filter((i) => i.option?.series?.[0]?.type === type)
+  return list.length ? list[list.length - 1].option : undefined
+}
 
 function mountComp() {
   return mount(Analysis, {
@@ -113,28 +135,10 @@ function mountComp() {
   })
 }
 
-function makeChart() {
-  return {
-    destroy: vi.fn(),
-    data: { datasets: [{ data: [] }] },
-    getContext: vi.fn().mockReturnValue(null),
-    width: 300,
-    height: 150,
-  }
-}
-
 beforeEach(() => {
-  vi.resetAllMocks()
+  vi.clearAllMocks()
+  mockInstances.length = 0
   getRuralWorksMock.mockResolvedValue({ items })
-  lastChartConfig = null
-  chartCtor.mockImplementation((_el: any, config: any) => {
-    lastChartConfig = config
-    return makeChart()
-  })
-})
-
-afterEach(() => {
-  vi.restoreAllMocks()
 })
 
 describe('挂载与数据加载', () => {
@@ -156,8 +160,9 @@ describe('挂载与数据加载', () => {
       qualityScore: 4.5,
     })
     expect(vm.villages).toEqual(['村A', '村B'])
-    expect(chartCtor).toHaveBeenCalled()
+    expect(echartsInit).toHaveBeenCalled()
     expect(vm.loading).toBe(false)
+    wrapper.unmount()
   })
 
   it('加载失败 → logger + 提示', async () => {
@@ -167,6 +172,7 @@ describe('挂载与数据加载', () => {
     expect(logError).toHaveBeenCalled()
     expect(ElMessage.error).toHaveBeenCalledWith('net')
     expect((wrapper.vm as any).analysisData).toEqual([])
+    wrapper.unmount()
   })
 
   it('响应无 items → 空数组', async () => {
@@ -175,6 +181,7 @@ describe('挂载与数据加载', () => {
     await flushPromises()
     expect((wrapper.vm as any).analysisData).toEqual([])
     expect((wrapper.vm as any).villages).toEqual([])
+    wrapper.unmount()
   })
 
   it('未知类型/状态与缺失字段走兜底', async () => {
@@ -187,6 +194,7 @@ describe('挂载与数据加载', () => {
     expect(row.completionRate).toBe(0)
     expect(row.qualityScore).toBe(0)
     expect(row.startDate).toBe('')
+    wrapper.unmount()
   })
 
   it('item 无 type/status/name 字段 → || 兜底', async () => {
@@ -199,6 +207,7 @@ describe('挂载与数据加载', () => {
     expect(row.type).toBe('')
     expect(row.status).toBe('')
     expect(row.workName).toBe('')
+    wrapper.unmount()
   })
 })
 
@@ -219,6 +228,7 @@ describe('筛选与排序', () => {
     await nextTick()
     expect(vm.filteredData).toHaveLength(1)
     expect(vm.filteredData[0].type).toBe('教育培训')
+    wrapper.unmount()
   })
 
   it('类型筛选全映射', async () => {
@@ -229,6 +239,7 @@ describe('筛选与排序', () => {
     await nextTick()
     expect(vm.filteredData).toHaveLength(1)
     expect(vm.filteredData[0].type).toBe('产业发展')
+    wrapper.unmount()
   })
 
   it('排序三种方式', async () => {
@@ -246,6 +257,7 @@ describe('筛选与排序', () => {
     vm.dataTableSort = 'investment'
     await nextTick()
     expect(vm.sortedAnalysisData).toHaveLength(4)
+    wrapper.unmount()
   })
 })
 
@@ -258,12 +270,14 @@ describe('指标计算', () => {
     expect(vm.averageCompletionRate).toBe(60)
     expect(vm.averageDelayRate).toBe(25)
     expect(vm.totalInvestment).toBe(0)
+    wrapper.unmount()
 
     getRuralWorksMock.mockResolvedValue({ items: [] })
     const w2 = mountComp()
     await flushPromises()
     expect((w2.vm as any).averageCompletionRate).toBe(0)
     expect((w2.vm as any).averageDelayRate).toBe(0)
+    w2.unmount()
   })
 })
 
@@ -275,6 +289,7 @@ describe('刷新与导出', () => {
     await (wrapper.vm as any).refreshData()
     expect(getRuralWorksMock).toHaveBeenCalled()
     expect(ElMessage.success).toHaveBeenCalledWith('数据刷新成功')
+    wrapper.unmount()
   })
 
   it('exportAnalysis 空数据 → warning', async () => {
@@ -283,6 +298,7 @@ describe('刷新与导出', () => {
     await flushPromises()
     await (wrapper.vm as any).exportAnalysis()
     expect(ElMessage.warning).toHaveBeenCalledWith('没有可导出的数据')
+    wrapper.unmount()
   })
 
   it('exportAnalysis 成功 → 生成 CSV', async () => {
@@ -292,6 +308,7 @@ describe('刷新与导出', () => {
     await (wrapper.vm as any).exportAnalysis()
     expect(ElMessage.success).toHaveBeenCalledWith('分析报告导出成功')
     clickSpy.mockRestore()
+    wrapper.unmount()
   })
 
   it('exportAnalysis 字段缺失 → 单元格兜底', async () => {
@@ -304,6 +321,7 @@ describe('刷新与导出', () => {
     await vm.exportAnalysis()
     expect(ElMessage.success).toHaveBeenCalledWith('分析报告导出成功')
     clickSpy.mockRestore()
+    wrapper.unmount()
   })
 
   it('刷新/导出按钮', async () => {
@@ -322,11 +340,12 @@ describe('刷新与导出', () => {
     await flushPromises()
     expect(ElMessage.success).toHaveBeenCalledWith('分析报告导出成功')
     clickSpy.mockRestore()
+    wrapper.unmount()
   })
 })
 
 describe('视图与图表切换', () => {
-  it('视图与图表切换（含柱状图/环形图渲染与 label 回调）', async () => {
+  it('视图与图表切换（含柱状图/环形图渲染与 tooltip 文案）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -351,11 +370,10 @@ describe('视图与图表切换', () => {
     vm.initStatusCharts()
     expect(vm.statusChartView).toBe('doughnut')
 
-    if (lastChartConfig?.options?.plugins?.tooltip?.callbacks?.label) {
-      const cb = lastChartConfig.options.plugins.tooltip.callbacks.label
-      const text = cb({ label: '已完成', raw: 1, dataset: { data: [1, 2] } })
-      expect(text).toContain('已完成')
-    }
+    // 饼/环形图 tooltip 等价文案（标签: 值 (百分比%)）
+    const ring = lastOptionBySeriesType('pie')
+    expect(ring.tooltip.formatter).toBe('{b}: {c} ({d}%)')
+    wrapper.unmount()
   })
 
   it('updateCharts 全量更新（含空数据路径）', async () => {
@@ -366,19 +384,23 @@ describe('视图与图表切换', () => {
     await nextTick()
     await vm.updateCharts()
     await vm.updateCharts()
+    wrapper.unmount()
   })
 
-  it('initTrendChart 无数据 → canvas 绘制提示', async () => {
+  it('initTrendChart 无数据 → title 提示', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.trendChart).toBeTruthy()
-    expect(typeof vm.trendChart.getContext).toBe('function')
     vm.analysisData = []
     await nextTick()
     await vm.initTrendChart()
+    const tip = mockInstances.map((i) => i.option).find((o) => o?.title?.text)
+    expect(tip.title.text).toBe('暂无数据，请先录入乡村工作数据')
+
     await vm.initVillageRankingChart()
     await vm.initQualityAnalysisChart()
+    wrapper.unmount()
   })
 
   it('initTrendChart 图表引用为空 → 直接返回', async () => {
@@ -391,6 +413,7 @@ describe('视图与图表切换', () => {
     await vm.initVillageRankingChart()
     vm.qualityAnalysisChart = null
     await vm.initQualityAnalysisChart()
+    wrapper.unmount()
   })
 
   it('initTrendChart count 类型 → 工作数量标签', async () => {
@@ -399,10 +422,10 @@ describe('视图与图表切换', () => {
     const vm = wrapper.vm as any
     vm.trendType = 'count'
     await vm.initTrendChart()
-    const configs = chartCtor.mock.calls.map((c: any) => c[1])
-    const trend = configs.find((c: any) => c.type === 'line')
+    const trend = lastOptionBySeriesType('line')
     expect(trend).toBeTruthy()
-    expect(trend.data.datasets[0].label).toBe('工作数量')
+    expect(trend.series[0].name).toBe('工作数量')
+    wrapper.unmount()
   })
 
   it('initTrendChart completion 类型 → 平均完成率标签', async () => {
@@ -411,10 +434,10 @@ describe('视图与图表切换', () => {
     const vm = wrapper.vm as any
     vm.trendType = 'completion'
     await vm.initTrendChart()
-    const configs = chartCtor.mock.calls.map((c: any) => c[1])
-    const trend = configs.filter((c: any) => c.type === 'line').pop()
+    const trend = lastOptionBySeriesType('line')
     expect(trend).toBeTruthy()
-    expect(trend.data.datasets[0].label).toBe('平均完成率(%)')
+    expect(trend.series[0].name).toBe('平均完成率(%)')
+    wrapper.unmount()
   })
 
   it('initTrendChart investment 类型 → 投入资金标签', async () => {
@@ -423,32 +446,35 @@ describe('视图与图表切换', () => {
     const vm = wrapper.vm as any
     vm.trendType = 'investment'
     await vm.initTrendChart()
-    const configs = chartCtor.mock.calls.map((c: any) => c[1])
-    const trend = configs.filter((c: any) => c.type === 'line').pop()
+    const trend = lastOptionBySeriesType('line')
     expect(trend).toBeTruthy()
-    expect(trend.data.datasets[0].label).toBe('投入资金(万元)')
+    expect(trend.series[0].name).toBe('投入资金(万元)')
+    wrapper.unmount()
   })
 
-  it('tooltip label 回调空标签/空值分支', async () => {
+  it('村庄排名（横向 bar）与质量分析（雷达）option 构造', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.handleStatusChartView('doughnut')
-    await nextTick()
-    vm.initStatusCharts()
-    const configs = chartCtor.mock.calls.map((c: any) => c[1])
-    const doughnut = configs.find((c: any) => c.type === 'doughnut')
-    const cb = doughnut.options.plugins.tooltip.callbacks.label
-    const text = cb({ label: '', raw: 0, dataset: { data: [1] } })
-    expect(typeof text).toBe('string')
-    vm.handleTypeChartView('pie')
-    await nextTick()
-    vm.initTypeCharts()
-    const configs2 = chartCtor.mock.calls.map((c: any) => c[1])
-    const pie = configs2.find((c: any) => c.type === 'pie')
-    const cb2 = pie.options.plugins.tooltip.callbacks.label
-    const text2 = cb2({ label: '', raw: 0, dataset: { data: [1] } })
-    expect(typeof text2).toBe('string')
+    await vm.initVillageRankingChart()
+    await vm.initQualityAnalysisChart()
+
+    // 横向柱状图：yAxis category + xAxis value（indexAxis:'y' 的等价翻译）
+    const horizontal = mockInstances
+      .map((i) => i.option)
+      .filter((o) => o?.series?.[0]?.type === 'bar' && o?.yAxis?.type === 'category')
+      .pop()
+    expect(horizontal).toBeTruthy()
+    expect(horizontal.yAxis.inverse).toBe(true)
+    expect(horizontal.series[0].itemStyle.color).toBe('#0055aa')
+
+    // 雷达图：indicator 5 维，max 5（保留 Chart.js max/stepSize 语义）
+    const radar = mockInstances.map((i) => i.option).find((o) => o?.series?.[0]?.type === 'radar')
+    expect(radar).toBeTruthy()
+    expect(radar.radar.indicator).toHaveLength(5)
+    expect(radar.radar.indicator[0]).toEqual({ name: '基础设施建设', max: 5 })
+    expect(radar.series[0].data[0].value).toEqual([4.3, 4.5, 4.7, 4.2, 4.1])
+    wrapper.unmount()
   })
 
   it('updateTrendChart / updateDataTable', async () => {
@@ -457,6 +483,25 @@ describe('视图与图表切换', () => {
     const vm = wrapper.vm as any
     await vm.updateTrendChart()
     await vm.updateDataTable()
+    wrapper.unmount()
+  })
+
+  it('window resize 触发 resizeCharts（含已销毁实例的空值分支）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const current = mockInstances.slice()
+
+    window.dispatchEvent(new Event('resize'))
+    expect(current.some((c) => c.resize.mock.calls.length > 0)).toBe(true)
+
+    // 主动销毁全部实例后再次 resize → 覆盖 resizeCharts 的空值分支
+    vm.disposeAllCharts()
+    expect(() => vm.resizeCharts()).not.toThrow()
+
+    // 卸载 → onBeforeUnmount 移除监听并 disposeAllCharts（实例已空 → 假分支）
+    wrapper.unmount()
+    expect(current.every((c) => c.dispose.mock.calls.length > 0)).toBe(true)
   })
 
   it('watch 筛选变化 → 重新加载 + 更新图表', async () => {
@@ -467,6 +512,7 @@ describe('视图与图表切换', () => {
     await nextTick()
     await flushPromises()
     expect(getRuralWorksMock).toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('handleTimeRangeChange/handleVillageChange/handleTypeChange 空实现', async () => {
@@ -476,6 +522,7 @@ describe('视图与图表切换', () => {
     vm.handleTimeRangeChange()
     vm.handleVillageChange()
     vm.handleTypeChange()
+    wrapper.unmount()
   })
 
   it('dropdown 视图切换', async () => {
@@ -486,6 +533,7 @@ describe('视图与图表切换', () => {
     expect((wrapper.vm as any).typeChartView).toBe('bar')
     await dropdowns[1].trigger('click')
     expect((wrapper.vm as any).statusChartView).toBe('bar')
+    wrapper.unmount()
   })
 
   it('筛选/趋势/排序 select v-model', async () => {
@@ -501,6 +549,7 @@ describe('视图与图表切换', () => {
     expect(vm.selectedType).toBe('x')
     expect(vm.trendType).toBe('x')
     expect(vm.dataTableSort).toBe('x')
+    wrapper.unmount()
   })
 })
 
@@ -514,6 +563,7 @@ describe('图表数据函数', () => {
     expect(td.values).toContain(1)
     const sd = vm.getStatusDistributionData()
     expect(sd.labels).toContain('已完成')
+    wrapper.unmount()
   })
 
   it('getTrendData 空数据/有数据/类型切换', async () => {
@@ -541,6 +591,7 @@ describe('图表数据函数', () => {
     vm.trendType = 'investment'
     t = vm.getTrendData()
     expect(t.values).toHaveLength(t.labels.length)
+    wrapper.unmount()
   })
 
   it('getTrendData 无 startDate 行跳过', async () => {
@@ -551,6 +602,7 @@ describe('图表数据函数', () => {
     await nextTick()
     const t = vm.getTrendData()
     expect(t.labels).toEqual(['2024-03'])
+    wrapper.unmount()
   })
 
   it('getTrendData 全部无 startDate → 空月份兜底', async () => {
@@ -562,6 +614,7 @@ describe('图表数据函数', () => {
     const t = vm.getTrendData()
     expect(t.hasData).toBe(false)
     expect(t.labels).toEqual([])
+    wrapper.unmount()
   })
 
   it('getVillageRankingData / getQualityAnalysisData', async () => {
@@ -572,6 +625,7 @@ describe('图表数据函数', () => {
     expect(v.labels).toContain('村A')
     const q = vm.getQualityAnalysisData()
     expect(q.labels).toHaveLength(5)
+    wrapper.unmount()
   })
 })
 
@@ -591,6 +645,7 @@ describe('字典函数', () => {
     expect(vm.getStatusTagType('计划中')).toBe('info')
     expect(vm.getStatusTagType('已延期')).toBe('danger')
     expect(vm.getStatusTagType('x')).toBe('info')
+    wrapper.unmount()
   })
 
   it('getProgressStatus / getQualityScoreClass 全分支', async () => {
@@ -606,6 +661,7 @@ describe('字典函数', () => {
     expect(vm.getQualityScoreClass(3.5)).toBe('average')
     expect(vm.getQualityScoreClass(2)).toBe('poor')
     expect(vm.getQualityScoreClass(0)).toBe('not-evaluated')
+    wrapper.unmount()
   })
 
   it('指标变化正负号渲染（positive/negative 两侧）', async () => {
@@ -624,5 +680,6 @@ describe('字典函数', () => {
     vm.totalWorksChange = -5
     await nextTick()
     expect(vm.totalWorksChange).toBe(-5)
+    wrapper.unmount()
   })
 })

@@ -311,11 +311,6 @@ export default defineConfig(({ mode }) => {
               return 'echarts'
             }
 
-            // Chart.js - 图表库，仅在图表页面使用，单独分包
-            if (id.includes('node_modules/chart.js')) {
-              return 'chartjs'
-            }
-
             // 表格导入导出：独立 chunk，避免落入 vendor 预加载（恢复动态导入收益）
             if (id.includes('node_modules/@e965/xlsx') || id.includes('node_modules/xlsx')) {
               return 'xlsx'
@@ -416,7 +411,7 @@ export default defineConfig(({ mode }) => {
       // 启用 CSS 压缩
       cssMinify: true,
       // 启用模块预加载
-      // 重型 chunk（xlsx/echarts/chartjs/driver）通过源码侧动态 import 实现懒加载，
+      // 重型 chunk（xlsx/echarts/driver）通过源码侧动态 import 实现懒加载，
       // 不进入首屏静态依赖图，故无需在此过滤
       modulePreload: {
         polyfill: true,

@@ -51,7 +51,7 @@
           <h3>工作类型分布</h3>
         </div>
         <div class="chart-body">
-          <canvas ref="typeChartRef" height="300"></canvas>
+          <div ref="typeChartRef" style="height: 100%"></div>
         </div>
       </div>
       <div class="chart-card">
@@ -59,7 +59,7 @@
           <h3>工作状态分布</h3>
         </div>
         <div class="chart-body">
-          <canvas ref="statusChartRef" height="300"></canvas>
+          <div ref="statusChartRef" style="height: 100%"></div>
         </div>
       </div>
     </div>
@@ -70,7 +70,7 @@
           <h3>月度工作完成趋势</h3>
         </div>
         <div class="chart-body">
-          <canvas ref="trendChartRef" height="280"></canvas>
+          <div ref="trendChartRef" style="height: 100%"></div>
         </div>
       </div>
     </div>
@@ -183,7 +183,7 @@ import {
   Select,
   TrendCharts,
 } from '@element-plus/icons-vue'
-import { Chart } from 'chart.js/auto'
+import echarts from '@/utils/echarts'
 import { getRuralWorks } from '@/api/ruralWork'
 
 // 类型映射
@@ -215,12 +215,12 @@ const totalCount = ref(0)
 const allData = ref<any[]>([])
 
 // 图表
-const typeChartRef = ref<HTMLCanvasElement | null>(null)
-const statusChartRef = ref<HTMLCanvasElement | null>(null)
-const trendChartRef = ref<HTMLCanvasElement | null>(null)
-let typeChart: InstanceType<typeof Chart> | null = null
-let statusChart: InstanceType<typeof Chart> | null = null
-let trendChart: InstanceType<typeof Chart> | null = null
+const typeChartRef = ref<HTMLDivElement | null>(null)
+const statusChartRef = ref<HTMLDivElement | null>(null)
+const trendChartRef = ref<HTMLDivElement | null>(null)
+let typeChart: echarts.ECharts | null = null
+let statusChart: echarts.ECharts | null = null
+let trendChart: echarts.ECharts | null = null
 
 // 模拟数据已清除，使用真实API数据
 
@@ -344,53 +344,54 @@ async function refreshData() {
 // 图表
 function destroyCharts() {
   if (typeChart) {
-    typeChart.destroy()
+    typeChart.dispose()
     typeChart = null
   }
   if (statusChart) {
-    statusChart.destroy()
+    statusChart.dispose()
     statusChart = null
   }
   if (trendChart) {
-    trendChart.destroy()
+    trendChart.dispose()
     trendChart = null
   }
+}
+
+/** 窗口尺寸变化时自适应重绘（ECharts 不自动跟随容器 resize） */
+function resizeCharts() {
+  typeChart?.resize()
+  statusChart?.resize()
+  trendChart?.resize()
 }
 
 function updateCharts() {
   destroyCharts()
   const data = allData.value
 
-  // 类型分布 - 饼图
+  // 类型分布 - 环形图
   if (typeChartRef.value) {
     const typeCounts: Record<string, number> = {}
     data.forEach((d) => {
       const label = TYPE_LABELS[d.type] || d.type || '其他'
       typeCounts[label] = (typeCounts[label] || 0) + 1
     })
-    typeChart = new Chart(typeChartRef.value, {
-      type: 'doughnut',
-      data: {
-        labels: Object.keys(typeCounts),
-        datasets: [
-          {
-            data: Object.values(typeCounts),
-            backgroundColor: chartPalette(),
-            borderWidth: 2,
-            borderColor: '#fff',
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'bottom',
-            labels: { padding: 16, usePointStyle: true },
-          },
+    const typeLabels = Object.keys(typeCounts)
+    const typeValues = Object.values(typeCounts)
+    typeChart = echarts.init(typeChartRef.value)
+    typeChart.setOption({
+      color: chartPalette(),
+      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      legend: { bottom: 0, left: 'center', icon: 'circle', itemGap: 16 },
+      series: [
+        {
+          type: 'pie',
+          radius: ['45%', '70%'],
+          center: ['50%', '45%'],
+          data: typeLabels.map((name, i) => ({ name, value: typeValues[i] })),
+          itemStyle: { borderColor: '#fff', borderWidth: 2 },
+          label: { show: false },
         },
-      },
+      ],
     })
   }
 
@@ -405,38 +406,26 @@ function updateCharts() {
     data.forEach((d) => {
       if (statusCounts[d.status] !== undefined) statusCounts[d.status]++
     })
-    statusChart = new Chart(statusChartRef.value, {
-      type: 'bar',
-      data: {
-        labels: ['计划中', '进行中', '已完成', '已延期'],
-        datasets: [
-          {
-            label: '工作数量',
-            data: [
-              statusCounts.planned,
-              statusCounts.in_progress,
-              statusCounts.completed,
-              statusCounts.delayed,
-            ],
-            backgroundColor: [
-              chartColor('info'),
-              chartColor('warning'),
-              chartColor('success'),
-              chartColor('danger'),
-            ],
-            borderRadius: 6,
-            maxBarThickness: 50,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          y: { beginAtZero: true, ticks: { stepSize: 1 } },
+    statusChart = echarts.init(statusChartRef.value)
+    statusChart.setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: 20, containLabel: true },
+      xAxis: { type: 'category', data: ['计划中', '进行中', '已完成', '已延期'] },
+      yAxis: { type: 'value', min: 0, minInterval: 1 },
+      series: [
+        {
+          name: '工作数量',
+          type: 'bar',
+          barMaxWidth: 50,
+          itemStyle: { borderRadius: [6, 6, 0, 0] },
+          data: [
+            { value: statusCounts.planned, itemStyle: { color: chartColor('info') } },
+            { value: statusCounts.in_progress, itemStyle: { color: chartColor('warning') } },
+            { value: statusCounts.completed, itemStyle: { color: chartColor('success') } },
+            { value: statusCounts.delayed, itemStyle: { color: chartColor('danger') } },
+          ],
         },
-      },
+      ],
     })
   }
 
@@ -460,42 +449,39 @@ function updateCharts() {
       newByMonth.push(monthItems.length)
       completedByMonth.push(monthItems.filter((d) => d.status === 'completed').length)
     }
-    trendChart = new Chart(trendChartRef.value, {
-      type: 'line',
-      data: {
-        labels: months,
-        datasets: [
-          {
-            label: '新增工作',
-            data: newByMonth,
-            borderColor: chartColorPrimary(),
-            // 8 位 hex（末两位 1a ≈ 10% 透明度），tokens 主色的同色浅填充
-            backgroundColor: `${chartColorPrimary()}1a`,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 4,
-          },
-          {
-            label: '完成工作',
-            data: completedByMonth,
-            borderColor: chartColor('success'),
-            backgroundColor: `${chartColor('success')}1a`, // 同色 10% 浅填充
-            fill: true,
-            tension: 0.4,
-            pointRadius: 4,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top', labels: { usePointStyle: true } },
+    trendChart = echarts.init(trendChartRef.value)
+    trendChart.setOption({
+      color: [chartColorPrimary(), chartColor('success')],
+      tooltip: { trigger: 'axis' },
+      legend: { top: 0, left: 'center', icon: 'circle' },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
+      xAxis: { type: 'category', boundaryGap: false, data: months },
+      yAxis: { type: 'value', min: 0, minInterval: 1 },
+      series: [
+        {
+          name: '新增工作',
+          type: 'line',
+          smooth: true,
+          symbol: 'circle',
+          symbolSize: 8,
+          data: newByMonth,
+          lineStyle: { width: 3, color: chartColorPrimary() },
+          itemStyle: { color: chartColorPrimary() },
+          // 8 位 hex（末两位 1a ≈ 10% 透明度），tokens 主色的同色浅填充
+          areaStyle: { color: `${chartColorPrimary()}1a` },
         },
-        scales: {
-          y: { beginAtZero: true, ticks: { stepSize: 1 } },
+        {
+          name: '完成工作',
+          type: 'line',
+          smooth: true,
+          symbol: 'circle',
+          symbolSize: 8,
+          data: completedByMonth,
+          lineStyle: { width: 3, color: chartColor('success') },
+          itemStyle: { color: chartColor('success') },
+          areaStyle: { color: `${chartColor('success')}1a` }, // 同色 10% 浅填充
         },
-      },
+      ],
     })
   }
 }
@@ -575,9 +561,11 @@ onMounted(async () => {
   await loadData()
   await nextTick()
   updateCharts()
+  window.addEventListener('resize', resizeCharts)
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCharts)
   destroyCharts()
 })
 </script>
