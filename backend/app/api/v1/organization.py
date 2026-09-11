@@ -1,4 +1,4 @@
-﻿"""
+"""
 组织管理API
 支持部门单位和帮扶单位的层级管理
 与权限管理集成：组织创建、修改需要管理员权限
@@ -28,6 +28,31 @@ from app.services.work_log_service import write_work_log
 from app.core.response import success_response
 
 router = APIRouter(prefix="/organizations", tags=["组织管理"])
+
+
+def _coerce_org_enums(org_data: dict) -> None:
+    """把 org_type / level 从字符串转成枚举，非法值返回 422 而不是 500。
+
+    R24：`OrganizationLevel("1")` 这类非法值此前会抛 ValueError 冒泡成
+    「服务器内部错误」（安装包验收实测 POST /organizations + level="1" → 500）。
+    前端下拉只会给合法值，但接口是公开契约，非法输入属用户可纠正的错误。
+    """
+    if org_data.get("org_type"):
+        try:
+            org_data["org_type"] = OrganizationType(org_data["org_type"])
+        except ValueError:
+            allowed = ", ".join(t.value for t in OrganizationType)
+            raise HTTPException(
+                status_code=422, detail=f"无效的组织类型: {org_data['org_type']}（允许值：{allowed}）"
+            ) from None
+    if org_data.get("level"):
+        try:
+            org_data["level"] = OrganizationLevel(org_data["level"])
+        except ValueError:
+            allowed = ", ".join(level.value for level in OrganizationLevel)
+            raise HTTPException(
+                status_code=422, detail=f"无效的组织层级: {org_data['level']}（允许值：{allowed}）"
+            ) from None
 
 
 def _invalidate_dashboard_cache_safe() -> None:
@@ -535,10 +560,7 @@ async def create_organization(
 
     # 转换枚举类型
     org_data = data.model_dump(exclude_defaults=False)
-    if org_data.get("org_type"):
-        org_data["org_type"] = OrganizationType(org_data["org_type"])
-    if org_data.get("level"):
-        org_data["level"] = OrganizationLevel(org_data["level"])
+    _coerce_org_enums(org_data)
 
     # 确保 is_active 有值
     if "is_active" not in org_data:
@@ -617,10 +639,7 @@ async def update_organization(
         raise HTTPException(status_code=400, detail="不能将组织自身设为上级组织")
 
     # 转换枚举类型
-    if "org_type" in update_data and update_data["org_type"]:
-        update_data["org_type"] = OrganizationType(update_data["org_type"])
-    if "level" in update_data and update_data["level"]:
-        update_data["level"] = OrganizationLevel(update_data["level"])
+    _coerce_org_enums(update_data)
 
     for key, value in update_data.items():
         setattr(org, key, value)

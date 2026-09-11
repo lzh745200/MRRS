@@ -8,6 +8,15 @@
 ## [1.12.1] - 2026-09-10 — 🐛 认证会话契约修复 + 帮扶村列表排序根因修复
 
 ### 修复
+- 🐛 **组织创建/更新的非法枚举值报 500（安装包验收发现）**：对刚构建并安装的
+  `MRRS-Setup-1.12.1` 实例发真实请求时命中 ——
+  `POST /api/v1/organizations {"name":"…","level":"1"}` →
+  `500 {"code":500,"message":"服务器内部错误"}`。根因：创建/更新组织直接
+  `OrganizationLevel(value)` / `OrganizationType(value)`，非法值抛 ValueError
+  冒泡成未处理异常。合法值是 `level_1`…`level_5` /
+  `department|support_unit|other`。修复：抽出 `_coerce_org_enums()` 统一转换，
+  非法值返回 **422** 并列出允许值；创建与更新两条路径共用。
+  回归：`tests/unit/test_organization_enum_validation_r24.py`（4 例）。
 - 🐛 **「驳回 → 重新提交 → 审批通过」后经费永远停在「已驳回」（审批闭环断裂）**：
   R23 探针在真实 HTTP + 真实 DB 上实测：
 
