@@ -75,6 +75,7 @@ _MODULE_MAP = {
     "OrgModulePolicy": ".org_module_policy",
     "SubordinateInstance": ".subordinate_registry",
     "PermissionPack": ".permission_pack",
+    "FileBlob": ".file_blob",
 }
 
 import sys as _sys

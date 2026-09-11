@@ -45,6 +45,9 @@ try:
     _map_cache = _dc.Cache(
         os.path.join(_map_cache_dir, "map"),
         size_limit=10 * 1024 * 1024,  # 10MB
+        # JSON 序列化替代 pickle（CVE-2025-69872 / PYSEC-2026-2447，上游无修复版本）：
+        # 缓存内容为纯 JSON 结构（距离/时长的 dict/list/float），换 JSONDisk 无行为差异。
+        disk=_dc.JSONDisk,
     )
 except ImportError:  # pragma: no cover
     _map_cache = None

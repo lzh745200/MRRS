@@ -1368,8 +1368,9 @@ async def delete_fund_attachment(
     db.add(op_log)
     safe_commit(db)
 
-    # 删除磁盘文件（使用统一工具，放在 commit 之后）
-    delete_attachment_file(file_path)
+    # 删除磁盘文件（使用统一工具，放在 commit 之后；传 db 启用引用计数：
+    # 仍有其它业务引用同一内容时仅递减计数、保留物理文件）
+    delete_attachment_file(file_path, db=db)
 
     write_work_log(
         db, "fund", "delete_attachment", fund_id, file_name,
@@ -1409,10 +1410,11 @@ async def upload_fund_attachment(
     """上传经费附件"""
     _get_fund_or_404(db, fund_id, current_user)
 
-    # 使用统一上传工具
+    # 使用统一上传工具（传 db 启用内容 hash 去重 / FileBlob 引用计数登记）
     file_info = await save_upload_file(
         file=file,
         sub_dir=f"funds/{fund_id}",
+        db=db,
     )
 
     # 保存数据库记录

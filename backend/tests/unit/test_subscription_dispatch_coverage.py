@@ -90,9 +90,11 @@ class TestRunSchedulerJob:
 
         _run_scheduler_job(job)
         assert calls == [2]
-        # 不残留事件循环
+        # 不残留事件循环：改用非弃用的 get_running_loop()（无运行中 loop 时抛 RuntimeError），
+        # 避免 asyncio.get_event_loop() 在无运行 loop 时发出
+        # "There is no current event loop" DeprecationWarning（Python 3.10+）。
         try:
-            asyncio.get_event_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
             pass
 

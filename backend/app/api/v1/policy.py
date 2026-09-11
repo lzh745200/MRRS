@@ -22,6 +22,7 @@ from ...core.security import get_current_user
 from ...models.policy import Policy, PolicyCategory, PolicyFavorite
 from app.core.transaction import safe_commit
 from app.api.v1.deps import require_policy_operator_role
+from app.utils.upload_helper import save_upload_file
 from app.services.work_log_service import write_work_log
 from app.services.approval_workflow_service import (
     ApprovalWorkflowService,
@@ -879,47 +880,41 @@ async def upload_policy_file(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """上传政策附件文件（支持 pdf/doc/docx/pptx）"""
-    require_policy_operator_role(current_user)
-    import os
+    """上传政策附件文件（支持 pdf/doc/docx/pptx）
 
-    from app.core.config import settings
+    落盘逻辑统一收口到 ``app.utils.upload_helper.save_upload_file``
+    （分块流式 + 滚动大小校验 + 路径安全），本函数仅保留政策特有契约：
+    操作员角色校验、DB 字段回写（file_path/file_size/file_type）与返回体形状。
+    """
+    require_policy_operator_role(current_user)
 
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
 
-    # 校验文件类型
-    ext = os.path.splitext(file.filename or "")[1].lower().lstrip(".")
-    allowed = {"pdf", "doc", "docx", "pptx"}
-    if ext not in allowed:
-        raise HTTPException(status_code=400, detail=f"不支持的文件类型，仅支持: {', '.join(allowed)}")
+    # 扩展名（用于回写 file_type，与历史行为一致：存小写扩展名而非 MIME）
+    _orig_name = file.filename or ""
+    ext = _orig_name.rsplit(".", 1)[-1].lower() if "." in _orig_name else ""
+    _ts = int(datetime.now().timestamp())
 
-    content = await file.read()
-    # 限制 50MB
-    if len(content) > 50 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="文件大小超过50MB限制")
-
-    # 存储到 uploads/policies/ 目录
-    upload_dir = os.path.join(settings.UPLOAD_DIR, "policies")
-    os.makedirs(upload_dir, exist_ok=True)
-    safe_name = f"policy_{policy_id}_{int(datetime.now().timestamp())}.{ext}"
-    file_path = os.path.join(upload_dir, safe_name)
-
-    with open(file_path, "wb") as f:
-        f.write(content)
+    file_info = await save_upload_file(
+        file,
+        "policies",
+        allowed_extensions={"pdf", "doc", "docx", "pptx"},
+        name_generator=lambda _orig, _ext: f"policy_{policy_id}_{_ts}.{_ext}",
+    )
 
     # 更新数据库
-    setattr(policy, "file_path", file_path)
-    setattr(policy, "file_size", len(content))
+    setattr(policy, "file_path", file_info["file_path"])
+    setattr(policy, "file_size", file_info["file_size"])
     setattr(policy, "file_type", ext)
     safe_commit(db)
 
     return success_response(
         message="上传成功",
         data={
-            "file_path": file_path,
-            "file_size": len(content),
+            "file_path": file_info["file_path"],
+            "file_size": file_info["file_size"],
             "file_type": ext,
         },
     )

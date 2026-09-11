@@ -50,6 +50,11 @@ try:
     _cache = diskcache.Cache(
         os.path.join(_cache_dir, "dashboard"),
         size_limit=50 * 1024 * 1024,  # 50MB
+        # 用 JSON 序列化替代默认的 pickle（CVE-2025-69872 / PYSEC-2026-2447：
+        # diskcache ≤5.6.3 默认 pickle，能写缓存目录者即可在读取时执行任意代码，
+        # 上游暂无修复版本）。此处缓存内容均为 JSON 可序列化的统计结果，
+        # 换 JSONDisk 行为等价而彻底消除反序列化执行面。
+        disk=diskcache.JSONDisk,
     )
     _CACHE_TTL = 120  # 2 分钟
 except ImportError:  # pragma: no cover —— diskcache 为项目已安装依赖，导入失败分支在当前环境不可执行

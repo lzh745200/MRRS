@@ -460,9 +460,11 @@ async def revoke_user_session(
     # 若调用方传入真实 JWT 则额外按 jti 吊销（向前兼容）。
     try:
         setattr(user, "token_version", (getattr(user, "token_version", 0) or 0) + 1)
+        # safe_commit 失败时已在其内部 rollback（见 app/core/transaction.py），
+        # 此处再调 db.rollback() 属重复回滚（session 幂等无害但语义冗余）——
+        # 移除以免与 safe_commit 的单一回滚职责重叠。
         safe_commit(db)
     except Exception as e:
-        db.rollback()
         logger.error("强制下线失败（token_version 递增）: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="强制登出失败，请稍后重试")
 

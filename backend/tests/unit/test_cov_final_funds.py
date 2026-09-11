@@ -59,4 +59,8 @@ class TestTransitionStatus:
         assert fund.status == "approved"
         assert not hasattr(fund, "bogus_field")
         mock_log.warning.assert_called_once()
-        mock_commit.assert_called_once_with(db)
+        # T048 设计：状态流转与操作日志分两次提交（后者的 except 注释为
+        # "日志失败不阻断主流程"，见 app/api/v1/funds.py），故 safe_commit
+        # 实际被调用两次（状态+历史一次、操作日志一次）。
+        assert mock_commit.call_count == 2
+        mock_commit.assert_any_call(db)

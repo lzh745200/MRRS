@@ -1,24 +1,28 @@
 """
 通用文件上传 API
 提供无业务绑定的文件上传端点，返回可直接访问的 /uploads 静态 URL。
+
+上传校验/落盘逻辑已统一收口到 `app.utils.upload_helper.save_upload_file`
+（分块流式 + 滚动大小校验 + 图片 magic 嗅探 + 路径安全），本模块仅保留
+`/files/upload` 特有的契约：category 查询参数/表单两态兼容、413 状态码、
+图片魔数嗅探、返回体字段与 success_response 包装。
 """
 
 import logging
-import os
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
-from app.core.config import settings
 from app.core.security import get_current_user
 from app.core.response import success_response
+from app.utils.upload_helper import save_upload_file
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/files", tags=["文件上传"])
 
-# 分块落盘粒度（8MB，与备份 upload-restore 约定一致）
+# 分块落盘粒度（8MB，与 backup upload-restore 约定一致）
 _UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
 
 # 允许的文件扩展名（按类别分组）
@@ -32,20 +36,17 @@ _ALLOWED_EXTS = {
 }
 
 
-def _remove_quietly(path: str) -> None:
-    """尽力删除拒绝路径上已写出的文件残片（零磁盘残留）。"""
-    try:
-        if os.path.exists(path):
-            os.remove(path)
-    except OSError:  # pragma: no cover - 删除失败不影响拒绝语义
-        logger.warning("清理上传残片失败: %s", path, exc_info=True)
+def _flatten_allowed_exts() -> set:
+    """展开分组白名单为扁平集合。"""
+    allowed: set = set()
+    for _exts in _ALLOWED_EXTS.values():
+        allowed |= _exts
+    return allowed
 
 
-def _safe_extension(filename: str) -> str:
-    """提取文件扩展名（小写、去点）"""
-    if not filename or "." not in filename:
-        return ""
-    return filename.rsplit(".", 1)[-1].lower()
+def _files_name_generator(_orig_name: str, ext: str) -> str:
+    """`/files/upload` 唯一文件名：``{uuid16}.{ext}``（保留既有命名形态）。"""
+    return f"{uuid.uuid4().hex[:16]}{('.' + ext) if ext else ''}"
 
 
 @router.post("/upload", summary="通用文件上传")
@@ -78,88 +79,41 @@ async def upload_file(
         _cat = category_form
     category = _cat.strip() or None
 
-    # 类型校验（可选扩展名白名单）——先校验再落盘，避免无谓写盘
-    ext = _safe_extension(file.filename or "")
-    if ext:
-        allowed = set()
-        for _exts in _ALLOWED_EXTS.values():
-            allowed |= _exts
-        if ext not in allowed:
-            raise HTTPException(status_code=400, detail=f"不支持的文件类型: .{ext}")
-
-    # 存储目录：uploads/generic[/category]
-    base_upload = os.path.abspath(settings.UPLOAD_DIR)
+    # 存储目录：uploads/generic[/category]（category 逐段白名单化，禁止路径遍历）
     sub_dir = "generic"
     if category:
         clean_category = category.strip().strip("/").replace("\\", "/")
-        # 安全校验：仅允许字母/数字/下划线/连字符/斜杠，禁止路径遍历
         if (
             clean_category
             and ".." not in clean_category.split("/")
             and all(c.isalnum() or c in "-_/" for c in clean_category)
         ):
-            sub_dir = os.path.join(sub_dir, *clean_category.split("/"))
-    upload_dir = os.path.join(base_upload, sub_dir)
-    os.makedirs(upload_dir, exist_ok=True)
+            sub_dir = "/".join(["generic", *clean_category.split("/")])
 
-    # 唯一文件名（保留原始扩展名）
-    unique_name = f"{uuid.uuid4().hex[:16]}{('.' + ext) if ext else ''}"
-    file_path = os.path.join(upload_dir, unique_name)
-
-    # 分块流式落盘 + 滚动大小校验（R26）：此前 `await file.read()` 一次性读全量，
-    # 50MB 上限在**读完之后**才判 —— 超大文件会先把内存吃满再被拒（OOM）。
-    # 对齐 backup upload-restore 的既有约定：8MB 分块 + 超限即删残片。
-    written = 0
-    head = b""
-    try:
-        with open(file_path, "wb") as fh:
-            while True:
-                chunk = await file.read(_UPLOAD_CHUNK_SIZE)
-                if not chunk:
-                    break
-                if not head:
-                    head = chunk[:16]
-                written += len(chunk)
-                if written > settings.MAX_FILE_SIZE:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"文件大小超过限制({settings.MAX_FILE_SIZE // 1048576}MB)",
-                    )
-                fh.write(chunk)
-    except HTTPException:
-        _remove_quietly(file_path)
-        raise
-
-    # 内容嗅探: 图片扩展名必须匹配真实文件头(防改名绕过)
-    _MAGIC = {
-        "jpg": [b"\xff\xd8\xff"],
-        "png": [b"\x89PNG\r\n\x1a\n"],
-        "gif": [b"GIF87a", b"GIF89a"],
-        "bmp": [b"BM"],
-        "webp": [b"RIFF"],
-    }
-    if ext in _MAGIC and not any(head.startswith(magic) for magic in _MAGIC[ext]):
-        _remove_quietly(file_path)
-        raise HTTPException(status_code=400, detail=f"文件内容与扩展名 .{ext} 不匹配")
-
-    # 相对 URL（静态挂载在 /uploads 下）
-    rel_path = os.path.relpath(file_path, base_upload).replace("\\", "/")
-    url = f"/uploads/{rel_path}"
+    file_info = await save_upload_file(
+        file,
+        sub_dir,
+        allowed_extensions=_flatten_allowed_exts(),
+        size_status_code=413,
+        enforce_image_magic=True,
+        chunk_size=_UPLOAD_CHUNK_SIZE,
+        name_generator=_files_name_generator,
+    )
 
     logger.info(
         "文件上传成功: user=%s, file=%s, url=%s, size=%d",
-        getattr(current_user, 'username', 'unknown'),
-        file.filename or unique_name,
-        url,
-        written,
+        getattr(current_user, "username", "unknown"),
+        file_info["file_name"],
+        file_info["url"],
+        file_info["file_size"],
     )
 
     return success_response(
         data={
-            "url": url,
-            "file_name": file.filename or unique_name,
-            "file_size": written,
-            "file_type": file.content_type or "application/octet-stream",
+            "url": file_info["url"],
+            "file_name": file_info["file_name"],
+            "file_size": file_info["file_size"],
+            "file_type": file_info["file_type"],
         },
         message="上传成功",
     )
