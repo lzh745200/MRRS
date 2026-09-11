@@ -16,10 +16,26 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.middleware.utils import should_skip_middleware
+
 logger = logging.getLogger(__name__)
 
 # 查询计数阈值（超过此值记录警告）
 QUERY_COUNT_WARNING_THRESHOLD = 50
+
+# 无需统计查询数的路径前缀：健康检查 / 指标 / 静态资源 / API 文档。
+# 这些路径无 N+1 分析价值，却会为每个请求挂 contextvar 并写 2 个响应头，
+# 属纯开销（P1-1 中间件链精简）。直接短路，不计数、不写头。
+_SKIP_PREFIXES = (
+    "/health",
+    "/metrics",
+    "/favicon.ico",
+    "/static/",
+    "/uploads/",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+)
 
 # 当前请求的查询计数器（SQLAlchemy 事件无 Request 上下文，用 contextvar 桥接）
 _query_counter_ctx: contextvars.ContextVar[Optional[List[int]]] = contextvars.ContextVar(
@@ -45,6 +61,10 @@ class QueryCounterMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        # 健康检查/静态资源/文档等路径跳过计数（P1-1：消除无价值开销）
+        if should_skip_middleware(request.url.path, _SKIP_PREFIXES):
+            return await call_next(request)
+
         start_time = time.time()
 
         # 初始化查询计数器（挂在 request.state 上 + contextvar 供 SQLAlchemy 事件写入）

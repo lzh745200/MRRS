@@ -194,6 +194,12 @@ class Settings(BaseSettings):
     METRICS_PORT: int = 9090
     HEALTH_CHECK_ENABLED: bool = True
 
+    # 慢请求 / 慢 SQL 阈值（毫秒）—— P2-3 可观测性：
+    # 超过阈值即记 WARNING 并进入环形缓冲，供 /metrics/performance-dashboard 暴露。
+    # 可通过环境变量调优（运维排障时可临时下调以捕获长尾）。
+    SLOW_API_MS: float = 500.0
+    SLOW_SQL_MS: float = 200.0
+
     # 告警配置
     ALERT_EMAIL_RECIPIENTS: Optional[List[str]] = None
     SMTP_HOST: Optional[str] = None

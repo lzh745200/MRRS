@@ -62,6 +62,17 @@ async def get_performance_dashboard(
 
     summary = metrics_store.get_summary()
 
+    # 慢请求 / 慢 SQL（P2-3：来自 SlowRequestMiddleware 环形缓冲，阈值可配置）
+    from app.middleware.slow_request_monitor import (
+        get_slow_api_records,
+        get_slow_sql_records,
+        get_slow_stats,
+    )
+
+    slow_api = get_slow_api_records(limit=50)
+    slow_sql = get_slow_sql_records(limit=50)
+    slow_stats = get_slow_stats()
+
     # 数据库统计
     db_stats = {}
     try:
@@ -95,5 +106,8 @@ async def get_performance_dashboard(
         "data": {
             "http_metrics": summary,
             "db_stats": db_stats,
+            "slow_api": slow_api,
+            "slow_sql": slow_sql,
+            "slow_stats": slow_stats,
         }
     }

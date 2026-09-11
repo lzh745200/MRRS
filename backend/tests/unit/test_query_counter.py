@@ -28,6 +28,8 @@ def _make_app():
         routes=[
             Route("/ok", endpoint=ok),
             Route("/many", endpoint=many_queries),
+            Route("/health", endpoint=ok),
+            Route("/static/app.css", endpoint=ok),
         ]
     )
     app.add_middleware(QueryCounterMiddleware)
@@ -66,6 +68,28 @@ class TestQueryCounterMiddleware:
             client.get("/many")
         assert any("慢查询警告" in msg for msg in logged)
         assert any("55" in msg for msg in logged)
+
+
+class TestQueryCounterSkipPrefixes:
+    """P1-1：健康检查/静态资源等路径短路，不计数、不写响应头。"""
+
+    def test_health_path_skips_query_count_headers(self):
+        client = TestClient(_make_app())
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert "X-Query-Count" not in resp.headers
+        assert "X-Response-Time" not in resp.headers
+
+    def test_static_path_skips_query_count_headers(self):
+        client = TestClient(_make_app())
+        resp = client.get("/static/app.css")
+        assert resp.status_code == 200
+        assert "X-Query-Count" not in resp.headers
+
+    def test_business_path_still_counted(self):
+        client = TestClient(_make_app())
+        resp = client.get("/ok")
+        assert "X-Query-Count" in resp.headers
 
 
 class TestIncrementQueryCount:

@@ -126,7 +126,11 @@ app.add_middleware(QueryCounterMiddleware)
 
 # 1a. 慢请求监控中间件（记录超过阈值的 SQL 查询）
 from app.middleware.slow_request_monitor import SlowRequestMiddleware  # noqa: E402
-app.add_middleware(SlowRequestMiddleware)
+app.add_middleware(
+    SlowRequestMiddleware,
+    slow_api_ms=settings.SLOW_API_MS,
+    slow_sql_ms=settings.SLOW_SQL_MS,
+)
 
 app.add_middleware(MetricsMiddleware)
 

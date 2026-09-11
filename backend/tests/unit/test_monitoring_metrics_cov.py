@@ -53,6 +53,12 @@ class TestGetPerformanceDashboard:
         assert result["success"] is True
         data = result["data"]
         assert "http_metrics" in data
+        # P2-3：慢请求/慢 SQL 可观测字段
+        assert "slow_api" in data
+        assert "slow_sql" in data
+        assert "slow_stats" in data
+        assert isinstance(data["slow_api"], list)
+        assert "total_requests" in data["slow_stats"]
         # 白名单 6 张表均统计为 scalar 值
         for table in ("users", "funds", "projects", "supported_villages", "schools", "audit_logs"):
             assert data["db_stats"][table] == 5
