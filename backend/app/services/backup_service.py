@@ -24,7 +24,7 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.system_config import SystemConfig
-from app.core.transaction import safe_commit
+from app.core.transaction import retry_on_deadlock, safe_commit
 
 logger = logging.getLogger(__name__)
 
@@ -375,6 +375,11 @@ class BackupService:
                 pass
         logger.info("备份恢复性校验通过: %s", os.path.basename(backup_file_path))
 
+    # D1（架构评估）：备份是"长事务 + 多表写入"，与用户写操作争抢 SQLite 写锁时
+    # 会以 database is locked 失败（busy_timeout 10s 用尽）。备份失败意味着当天
+    # 没有可用备份，代价高，故此处做锁竞争退避重试（safe_commit 失败已 rollback，
+    # 整个工作单元可安全重跑）。
+    @retry_on_deadlock(max_retries=3, delay=1.0)
     def create_backup(
         self, description: str = "手动备份", include_uploads: bool = True,
         password: str | None = None,
@@ -766,6 +771,8 @@ class BackupService:
 
         return deleted_count
 
+    # D1：保留期清理是批量删除，同样会与在线写入争抢 SQLite 写锁 → 退避重试
+    @retry_on_deadlock(max_retries=3, delay=1.0)
     def cleanup_by_retention_days(self, days: int) -> int:
         """按保留天数清理旧备份：删除 created_at 早于 (now - days) 的备份记录与文件。
 

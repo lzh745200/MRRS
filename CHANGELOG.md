@@ -5,6 +5,36 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布] - 2026-09-12 — D1 写锁竞争退避重试（后端线程）
+
+> 说明：本节内容在 `v1.12.4` 标签之后合入，**不属于 v1.12.4 发布产物**；
+> 下一个版本号统一时并入正式段。
+
+### 修复（架构评估 D1：SQLite 写竞争“观测有余、防护不足”）
+- **根因**：仓库唯一的重试工具 `core/transaction.retry_on_deadlock` **只有测试引用**
+  （事实上的死代码），而 SQLite 单写多读下后台长事务（备份/清理等）
+  与在线写操作争抢写锁时，`busy_timeout=10000` 用尽即报
+  `database is locked` 且**无人重试**。
+- **判定收口**：新增 `is_lock_contention()` 作为唯一判定入口，白名单只认
+  `database is locked` / `database table is locked` / `database schema is locked` /
+  `deadlock` / `lock timeout` / `lock wait timeout` / `sqlite_busy` ——
+  **不再**用宽泛的 `"lock" in text`，避免把 `no such table`、唯一约束冲突
+  这类真实缺陷也拿去重试（重试只会掩盖 bug）。
+- **能力补齐**：`retry_on_deadlock` 升级为**同步 + 协程双形态**（后台作业多为
+  async），退避改为线性 `delay * (attempt + 1)`，并记录重试次数；重试次数耗尽仍抛原异常，
+  `max_retries<=0` 抛不带异常原文的 `DatabaseError`（W1 #6）。
+- **生产在用**：`BackupService.create_backup` 与 `cleanup_by_retention_days`
+  这两条真实长事务写入口挂上退避重试（备份失败=当天无可用备份，代价高）。
+  导出/导入路径**故意不加**整体重试：它们已有明确的失败回写与
+  恢复路径（`recover_stale_export_tasks` / 导入历史），而挨个单元重跑会在
+  部分已提交时产生重复写入 —— 宁可让用户重试，不可静默重复入库。
+- **回归**：新增 `test_lock_contention_retry_v124.py`（15 例）—— 判定白名单真值表
+  （含 `no such table`/唯一约束必须不重试）、同步与协程重试成功/不重试/耗尽/零次四种
+  终态、以及**结构性断言**（两个备份写入口必须仍挂着装饰器、
+  `retry_on_deadlock` 在 `app/` 下必须有生产引用）。
+- **验证**：后端全量 **11024 passed / 0 failed，覆盖率 100.00%**；
+  flake8 0；bandit -ll 0。
+
 ## [1.12.4] - 2026-09-12 — 🛠️ Windows 出包门禁编码缺陷修复 + B1 数据域下沉全量收口
 
 ### 修复（致命：打包卫生门禁在 Windows CI 上必崩，误杀合格构建）

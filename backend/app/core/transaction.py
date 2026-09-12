@@ -376,25 +376,94 @@ def with_transaction(isolation_level: Optional[str] = None, readonly: bool = Fal
 
 
 # 重试装饰器
-def retry_on_deadlock(max_retries: int = 3, delay: float = 0.1):
+def is_lock_contention(exc: BaseException) -> bool:
+    """判定是否为"写锁竞争"类错误（唯一判定入口，供重试逻辑共用）。
+
+    SQLite 在 WAL 下允许单写多读：写事务争抢时 `busy_timeout`（=10s，见
+    `core/database.py`）等待超时后抛 `database is locked`；其他后端对应
+    deadlock / lock wait timeout。这类错误**重试即可**，与语法/约束错误
+    （如 `no such table`、唯一键冲突）性质完全不同 —— 后者重试只会掩盖真实缺陷，
+    因此这里用**白名单文本**而不是宽泛的 `"lock" in text`。
     """
-    死锁重试装饰器
+    text = str(exc).lower()
+    return (
+        "database is locked" in text
+        or "database table is locked" in text
+        or "database schema is locked" in text
+        or "deadlock" in text
+        # 两种措辞都要覆盖："database lock timeout"（既有 test_lock_error_retries）
+        # 与 "Lock wait timeout exceeded"（MySQL 风格，本文件分类器测试锁定）
+        or "lock timeout" in text
+        or "lock wait timeout" in text
+        or "sqlite_busy" in text
+    )
+
+
+def retry_on_deadlock(max_retries: int = 3, delay: float = 0.1):
+    """锁竞争重试装饰器（同步函数与协程函数均支持）。
+
+    背景（架构评估 D1）：SQLite 写并发下偶发 `database is locked`，
+    此前只靠 `busy_timeout` 硬等 10s，超时即失败；而唯一的重试工具
+    `retry_on_deadlock` 只有测试引用（事实上的死代码）。现将其变成
+    **生产在用**的退避重试：
+
+    * 判定收口到 :func:`is_lock_contention`（白名单，不误吞真实错误）；
+    * 线性退避 `delay * (attempt + 1)`：多次争抢时逐步让出写窗口；
+    * 仅重试锁竞争；其他异常立即抛出（保持原有语义，测试已锁定）；
+    * 重试次数耗尽仍抛原异常；`max_retries <= 0` 时抛 :class:`DatabaseError`
+      （出站文案不带异常原文，W1 #6）。
 
     Args:
-        max_retries: 最大重试次数
-        delay: 重试延迟（秒）
+        max_retries: 最大尝试次数（含首次）
+        delay: 首次重试延迟（秒），第 n 次重试等待 `delay * n`
 
-    使用方法:
-        @retry_on_deadlock(max_retries=3)
+    使用方法::
+
+        @retry_on_deadlock(max_retries=3, delay=0.5)
         def update_user(db: Session, user_id: int, data: dict):
-            user = db.query(User).filter(User.id == user_id).first()
-            for key, value in data.items():
-                setattr(user, key, value)
-            return user
+            ...
+
+    注意：被装饰函数应为**完整的工作单元** —— `safe_commit` 在提交失败时会
+    rollback 并抛出，因此重试必须重新执行整个单元，而不是只重试 commit。
     """
+    import asyncio
+    import inspect
     import time
 
     def decorator(func: Callable) -> Callable:
+        def _log_retry(attempt: int, exc: Exception) -> None:
+            logger.warning(
+                "锁竞争重试 %s（%d/%d）: %s",
+                getattr(func, "__qualname__", func),
+                attempt + 1,
+                max_retries,
+                exc,
+            )
+
+        if inspect.iscoroutinefunction(func):
+
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                last_exception = None
+                for attempt in range(max_retries):
+                    try:
+                        return await func(*args, **kwargs)
+                    except SQLAlchemyError as e:
+                        last_exception = e
+                        if is_lock_contention(e) and attempt < max_retries - 1:
+                            _log_retry(attempt, e)
+                            await asyncio.sleep(delay * (attempt + 1))
+                            continue
+                        raise
+                logger.error(
+                    "事务执行失败（重试%d次后），已回滚", max_retries, exc_info=True
+                )
+                raise DatabaseError(
+                    f"事务执行失败（重试{max_retries}次后），请稍后重试或联系管理员"
+                ) from last_exception
+
+            return async_wrapper
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             last_exception = None
@@ -404,11 +473,10 @@ def retry_on_deadlock(max_retries: int = 3, delay: float = 0.1):
                     return func(*args, **kwargs)
                 except SQLAlchemyError as e:
                     last_exception = e
-                    if "deadlock" in str(e).lower() or "lock" in str(e).lower():
-                        if attempt < max_retries - 1:
-                            logger.warning(f"Deadlock detected, retrying ({attempt + 1}/{max_retries})...")
-                            time.sleep(delay)
-                            continue
+                    if is_lock_contention(e) and attempt < max_retries - 1:
+                        _log_retry(attempt, e)
+                        time.sleep(delay * (attempt + 1))
+                        continue
                     raise
 
             # 循环结束只剩 max_retries<=0 一种可能（每轮要么 return、要么 continue、
