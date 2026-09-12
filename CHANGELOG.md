@@ -5,6 +5,54 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.4] - 2026-09-12 — 🛠️ Windows 出包门禁编码缺陷修复 + B1 数据域下沉全量收口
+
+### 修复（致命：打包卫生门禁在 Windows CI 上必崩，误杀合格构建）
+- **根因**：`scripts/verify_package_no_tests.py` 输出中文，而 windows-2022（en-US）
+  上 Python 对**管道**的默认 stdout 编码是 ANSI 代码页 `cp1252` ——
+  第一个 `print` 即抛 `UnicodeEncodeError`，步骤以 exit 1 结束。
+  v1.12.3 的 `Build Windows Installer (x64)` 就是这样被拦下的（**产物其实完全干净**），
+  而该任务的 job 日志需 admin、注解里只有“exit code 1” —— 排查代价极高。
+  本地复现：`PYTHONIOENCODING=cp1252 python scripts/verify_package_no_tests.py ...`
+  修复前 exit 1（回溯到 encodings/cp1252.py），修复后 exit 0。
+- **修复**：① 脚本内强制 `sys.stdout/stderr.reconfigure(encoding="utf-8",
+  errors="replace")`；② `build-windows.yml` 的 build-windows 任务级加
+  `PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8`（防止同类事故再发）；
+  ③ 违规时额外输出 GitHub `::error::` 注解 —— **注解可通过
+  check-runs API 匿名读取**，日后门禁失败不再是一句无信息的
+  “exit code 1”。
+- **回归**：`test_verify_package_no_tests_v123.py` 新增 2 例子进程用
+  `PYTHONIOENCODING=cp1252` 跑真实脚本，分别锁定“干净产物必须 exit 0”
+  与“真违规仍必须 exit 1 且打印 ::error::”（编码兜底不得吞掉真问题）。
+- **出包影响**：v1.12.3 的 ARM64 DEB 构建成功、Windows 构建失败；
+  本版重出两包（标签 `v1.12.4`）。
+
+### 重构（架构评估 B1 Phase 2：数据域过滤全量下沉）
+- **api 层收口**：`assessment`、`data_quality`、`import_export/export`、`project_milestones`、
+  `report_templates`、`search`、`villages` 共 **19 处**调用改经
+  `services/data_scope_query.scoped_filter`（`db` 形参在核心原语里存在但从未使用，
+  删除为纯等价改写）。
+- **services 层收口**：`ai_service`(11)、`ai/recommendation_service`(5)、`analytics_service`(1)、
+  `excel_importer_service`(4)、`report_service`(1)、`async_export_service`(5) 共 **27 处**同步下沉。
+- **结构性回归**（新增 `test_data_scope_entrypoint_v123.py`，8 例）：
+  ① AST 扫描锁定 `app/api/**` 与 `app/services/**`（除唯一入口模块）**不得再出现**
+  核心原语引用 —— “新写路由又绕过统一入口”会在 CI 立刻失败；
+  ② 对 super_admin / admin / user 三档角色比对
+  `scoped_filter` 与 `filter_by_data_scope` 的 **SQL 编译串逐字一致**（S2 红线：
+  下沉只换入口、不改语义）；③ 核心原语仍是唯一真源，
+  服务层入口必须委派（patch 验证调用次数）。
+- 并修正批量迁移后失效的 **19 处测试 patch 目标**
+  （`app.api.v1.search.filter_by_data_scope` / `patch.object(mod, ...)` 等）——
+  它们在代码改名后会直接抛 AttributeError。
+
+### 验证
+- 后端全量：`pytest tests/ -n auto --cov=app` —— **11002 passed / 0 failed**，
+  覆盖率 **100.00%**（37862 语句 0 missing）。
+- 打包门禁：`verify_package_no_tests.py` 在 `PYTHONIOENCODING=cp1252` 下 exit 0（修复前 exit 1）；
+  真实产物（PyInstaller onedir 2923 文件 + 安装包模拟列表 2924 成员）零违规。
+- 静态/安全：flake8 0；bandit -ll 0（Medium/High 均 0）；`security_audit.py --verbose` 0 问题；
+  `sync-version.js --check` 退出 0。
+
 ## [1.12.3] - 2026-09-12 — 🛡️ 架构评估 P1/P2 整改（迁移单轨化 / 恢复演练 / CSRF ASGI 化 / 启动拆包 / 修复引导页）+ 安装包无测试门禁
 
 ### 加固（架构评估整改）
