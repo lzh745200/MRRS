@@ -15,6 +15,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.page import PageMargins
 
+from app.core.config import settings
 from app.services.entity_import_validator import EntityImportValidator
 
 
@@ -482,7 +483,7 @@ class ExcelTemplateService:
         footer_row = note_start + 2
         ws.merge_cells(f"A{footer_row}:{get_column_letter(col_count)}{footer_row}")
         ws.cell(row=footer_row, column=1).value = (
-            f"— 帮扶管理信息系统 v1.10.0 — {date.today().strftime('%Y-%m-%d')} —"
+            f"— 帮扶管理信息系统 v{settings.PROJECT_VERSION} — {date.today().strftime('%Y-%m-%d')} —"
         )
         ws.cell(row=footer_row, column=1).font = _footer_font
         ws.cell(row=footer_row, column=1).alignment = _center_align

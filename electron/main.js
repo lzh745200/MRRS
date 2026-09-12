@@ -1059,6 +1059,14 @@ app.whenReady().then(async () => {
       splash = new BrowserWindow({ width: 400, height: 300, frame: false, transparent: true, alwaysOnTop: true, resizable: false, icon: getIconPath(), webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
       splash.loadFile(splashPath);
       splash.center();
+      // 动态注入真实版本号，避免 splash.html 静态文本与 package.json 版本漂移
+      splash.webContents.on('did-finish-load', () => {
+        try {
+          splash.webContents.executeJavaScript(
+            `document.querySelector('.version').textContent = 'V${appVersion}';`
+          ).catch(() => {});
+        } catch (e) {}
+      });
     }
   } catch (e) {}
 
