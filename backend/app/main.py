@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 import logging
-import threading
 import time as _time
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
@@ -44,10 +43,9 @@ from starlette.types import Scope
 
 from app.core.audit_middleware import AuditMiddleware
 from app.core.config import settings
-from app.core.constants import FACTORY_ADMIN_PASSWORD, FACTORY_ADMIN_USERNAME
 from app.core.exceptions import register_exception_handlers
 from app.core.logging_config import init_logging
-from app.core.security import SecurityHeadersMiddleware, hash_password
+from app.core.security import SecurityHeadersMiddleware
 from app.core.static_files import setup_static_files
 from app.middleware.camel_to_snake import CamelToSnakeMiddleware
 from app.middleware.csrf_middleware import CSRFMiddleware
@@ -76,6 +74,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     _init_database_tables()
     _load_token_blacklist()
     _recover_interrupted_exports()
+    # C1 恢复演练：启动时回填上次演练结论，/health 重启后仍有数据
+    from app.services.restore_drill_service import _load_persisted_status
+
+    try:
+        _load_persisted_status()
+    except Exception as e:  # pragma: no cover — 双保险，内层已捕获
+        logger.warning("恢复演练历史状态回填失败: %s", e)
     _check_and_record_version_change()
     _seed_default_admin()
     _check_required_packages()
@@ -142,7 +147,8 @@ app.add_middleware(AuditMiddleware)
 app.add_middleware(RequestLoggerMiddleware)
 
 # 4. CSRF 保护中间件（仅在 settings.CSRF_ENABLED=True 时生效）
-# BaseHTTPMiddleware 会导致 h11 协议错误，仅在明确启用时注册
+# E1（架构评估 2026-09-12）：已改写为纯 ASGI 实现，不再经过 BaseHTTPMiddleware
+# （其响应缓冲/任务包装在流式与大 body 请求下会触发 h11 协议错误），可常开
 if settings.CSRF_ENABLED:
     app.add_middleware(CSRFMiddleware)
 
@@ -186,7 +192,6 @@ except Exception:
 print("  加载路由模块...", flush=True)
 _rt0 = _time.time()
 from app.api.v1 import api_v1_router  # noqa: E402
-from app.core.transaction import safe_commit  # noqa: E402
 app.include_router(api_v1_router)
 print(f"  路由加载完成 ({_time.time() - _rt0:.1f}s)", flush=True)
 
@@ -260,6 +265,10 @@ def health():
 
     info = get_build_info()
     at_head = _migration_status.get("at_head")
+    # C1 恢复演练状态（架构评估）：备份可用性对监控可见。
+    # 只出状态/文件名/异常类名 —— 本端点无认证，不出绝对路径与行数明细。
+    from app.services.restore_drill_service import RESTORE_DRILL_STATUS
+
     return {
         "status": "ok",
         "version": info.get("version", "unknown"),
@@ -268,6 +277,12 @@ def health():
             "at_head": at_head,
             "head": _migration_status.get("head"),
             "error_type": _migration_status.get("error_type"),
+        },
+        "restore_drill": {
+            "status": RESTORE_DRILL_STATUS.get("status"),
+            "checked_at": RESTORE_DRILL_STATUS.get("checked_at"),
+            "backup_file": RESTORE_DRILL_STATUS.get("backup_file"),
+            "error_type": RESTORE_DRILL_STATUS.get("error_type"),
         },
     }
 
@@ -393,45 +408,38 @@ else:
     )
 
 
-def _load_token_blacklist():
-    """启动时从数据库恢复 token 黑名单到内存。"""
-    try:
-        from app.core.database import SessionLocal
-        from app.core.token_blacklist import load_from_db
-        db = SessionLocal()
-        try:
-            count = load_from_db(db)
-            if count:
-                logger.info("Token 黑名单已恢复: %d 条记录", count)
-        finally:
-            db.close()
-    except Exception as e:
-        logger.warning("Token 黑名单加载失败: %s", e)
-
-
-def _recover_interrupted_exports():
-    """启动时恢复中断的异步导出任务（架构评估 A1）。
-
-    任务队列（task_queue）为进程内存态，重启后队列清空；export_tasks 中
-    残留的 pending/processing 行将永远无人推进。此处统一回写为 failed，
-    让用户可重新发起导出。失败仅告警不阻断启动（与既有启动钩子一致）。
-    """
-    try:
-        from app.core.database import SessionLocal
-        from app.services.async_export_service import recover_stale_export_tasks
-
-        db = SessionLocal()
-        try:
-            recovered = recover_stale_export_tasks(db)
-            if recovered:
-                logger.warning(
-                    "启动恢复：已将 %d 个中断导出任务标记为失败（原队列随重启丢失）",
-                    recovered,
-                )
-        finally:
-            db.close()
-    except Exception as e:
-        logger.warning("导出任务恢复检查失败: %s", e)
+# ── 启动钩子（B3 拆包：实现迁至 app/startup/*，main 只留编排清单）──
+# 同名 re-export 保证既有 `from app.main import _xxx` 与
+# `patch("app.main._xxx")` 用法完全兼容（tests/unit/test_main_*.py 依赖）。
+from app.startup.environment import (  # noqa: F401
+    REQUIRED_PACKAGES,
+    _check_and_record_version_change,
+    _check_required_packages,
+    _verify_file_integrity,
+)
+from app.startup.monitors import (  # noqa: F401
+    _run_database_startup_check,
+    _start_approval_reminder,
+    _start_backup_scheduler,
+    _start_database_health_monitoring,
+    _start_db_maintenance,
+    _start_resource_monitoring,
+    _start_wal_checkpoint_scheduler,
+    _stop_approval_reminder,
+    _stop_backup_scheduler,
+    _stop_database_health_monitoring,
+    _stop_db_maintenance,
+    _stop_resource_monitoring,
+    _stop_wal_checkpoint_scheduler,
+)
+from app.startup.recovery import (  # noqa: F401
+    _load_token_blacklist,
+    _recover_interrupted_exports,
+)
+from app.startup.seed import (  # noqa: F401
+    DEFAULT_ADMIN_USERNAME,
+    _seed_default_admin,
+)
 
 
 def _init_database_tables():
@@ -697,316 +705,6 @@ def _sqlite_col_spec(col):
             default_clause = "DEFAULT ''"
 
     return stype, default_clause
-
-
-# 默认管理员用户名（可通过环境变量配置）
-DEFAULT_ADMIN_USERNAME = (
-    os.getenv("DEFAULT_ADMIN_USERNAME", "").strip() or FACTORY_ADMIN_USERNAME
-)
-
-
-def _seed_default_admin():
-    """确保默认管理员账户存在，并在启动时解锁所有被锁定的用户账户。
-
-    首次启动时使用 DEFAULT_ADMIN_PASSWORD 环境变量；未设置时使用出厂默认
-    密码 Admin@2026（安装包开箱即用）。must_change_password=True 强制首次
-    登录修改密码。
-
-    离线单机系统没有远程管理员可以手动解锁账户，因此每次启动时
-    自动重置所有用户的锁定状态，确保用户不会因上次会话的失败尝试
-    而被永久锁定。运行期间的锁定机制仍然正常生效。
-    """
-    from app.core.database import SessionLocal
-    from app.models.user import User
-
-    db = SessionLocal()
-    try:
-        from app.services.lockout_service import get_lockout_service
-        svc = get_lockout_service()
-        unlocked_count = svc.unlock_expired(db, admin_username=DEFAULT_ADMIN_USERNAME)
-
-        if unlocked_count > 0:
-            logger.info("启动时已自动处理 %d 个账户", unlocked_count)
-
-        admin = db.query(User).filter(User.username == DEFAULT_ADMIN_USERNAME).first()
-        if not admin:
-            # 密码来源优先级：
-            #   1. DEFAULT_ADMIN_PASSWORD 环境变量（保密部署可注入随机强密码）
-            #   2. 文档化出厂默认密码 Admin@2026（安装包开箱即用）
-            # 两种来源均强制 must_change_password=True，首次登录必须修改。
-            _admin_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "").strip()
-            if not _admin_password:
-                _admin_password = FACTORY_ADMIN_PASSWORD
-                logger.warning(
-                    "使用出厂默认密码创建管理员（admin / %s），"
-                    "首次登录强制修改；保密部署请设置 DEFAULT_ADMIN_PASSWORD 环境变量",
-                    FACTORY_ADMIN_PASSWORD,
-                )
-
-            # 尝试获取顶级组织作为管理员的所属组织
-            top_org_id = None
-            try:
-                from app.models.organization import Organization
-
-                top_org = db.query(Organization).filter(Organization.parent_id.is_(None)).first()
-                if top_org:
-                    top_org_id = top_org.id
-            except Exception as e:
-                logger.warning("Failed to get top organization: %s", e)
-            admin = User(
-                username=DEFAULT_ADMIN_USERNAME,
-                email="admin@example.com",
-                hashed_password=hash_password(_admin_password),
-                full_name="系统管理员",
-                role="admin",
-                is_active=True,
-                is_superuser=True,
-                department="系统管理部",
-                organization_id=top_org_id,
-                permissions="",
-                must_change_password=True,
-            )
-            db.add(admin)
-            safe_commit(db)
-            logger.info(
-                "默认管理员账户已创建 (用户名: %s, 请通过 DEFAULT_ADMIN_PASSWORD 环境变量设置强密码，首次登录须修改密码)",
-                DEFAULT_ADMIN_USERNAME,
-            )
-        else:
-            logger.info("管理员账户已存在，跳过创建")
-    except Exception as e:
-        db.rollback()
-        logger.error("创建默认管理员失败: %s", e)
-    finally:
-        db.close()
-
-
-def _check_required_packages():
-    """启动时检查必需包（仅逐个检查核心包，避免遍历全部已安装包）"""
-    import importlib
-
-    missing = []
-    for pkg in REQUIRED_PACKAGES:
-        try:
-            importlib.import_module(pkg)
-        except ImportError:  # pragma: no cover
-            missing.append(pkg)
-
-    if missing:
-        logger.warning(
-            "缺少依赖包 %s，请运行: pip install %s",
-            missing,
-            " ".join(missing),
-        )
-    else:
-        logger.info("所有关键依赖包已安装。")
-
-
-def _start_resource_monitoring():
-    """启动资源监控"""
-    try:
-        from app.services.resource_limiter import resource_limiter
-
-        resource_limiter.start_monitoring()
-        logger.info("资源监控已启动")
-    except Exception as e:
-        logger.warning("启动资源监控失败: %s", e)
-
-
-def _stop_resource_monitoring():
-    """停止资源监控"""
-    try:
-        from app.services.resource_limiter import resource_limiter
-
-        resource_limiter.stop_monitoring()
-        logger.info("资源监控已停止")
-    except Exception as e:
-        logger.warning("停止资源监控失败: %s", e)
-
-
-def _start_database_health_monitoring():
-    """启动数据库健康监控"""
-    try:
-        from app.services.database_health_service import database_health_service
-
-        database_health_service.start_monitoring()
-        logger.info("数据库健康监控已启动")
-    except Exception as e:
-        logger.warning("启动数据库健康监控失败: %s", e)
-
-
-def _stop_database_health_monitoring():
-    """停止数据库健康监控"""
-    try:
-        from app.services.database_health_service import database_health_service
-
-        database_health_service.stop_monitoring()
-        logger.info("数据库健康监控已停止")
-    except Exception as e:
-        logger.warning("停止数据库健康监控失败: %s", e)
-
-
-def _check_and_record_version_change():
-    """检查版本变更并记录更新日志"""
-    try:
-        from app.core.database import SessionLocal
-        from app.services.update_log_service import UpdateLogService
-        from app.services.version_service import version_service
-
-        db = SessionLocal()
-        try:
-            update_service = UpdateLogService(db)
-            current_version = version_service.get_current_version()
-            version_str = current_version.get("version", "unknown")
-
-            result = update_service.check_and_record_version_change(
-                current_version=version_str,
-                updated_by="system",
-            )
-
-            if result:
-                action = result.get("action")
-                if action == "initialize":
-                    init_count = result["result"].get("initialized_count", 0)
-                    logger.info("版本历史初始化完成: %s 条记录", init_count)
-                elif action == "record_change":
-                    old_ver = result.get("old_version")
-                    new_ver = result.get("new_version")
-                    logger.info("检测到版本变更: %s -> %s", old_ver, new_ver)
-            else:
-                logger.info("当前版本: %s", version_str)
-
-        finally:
-            db.close()
-    except Exception as e:
-        logger.warning("版本变更检查失败: %s", e)
-
-
-def _verify_file_integrity():
-    """启动时验证关键文件完整性，防止二进制被替换"""
-    import hashlib
-
-    _critical_files = [
-        "app/core/config.py",
-        "app/core/security.py",
-        "app/core/database.py",
-        "app/main.py",
-    ]
-
-    try:
-        base_dir = Path(__file__).parent.parent
-        for rel_path in _critical_files:
-            file_path = base_dir / rel_path
-            if not file_path.exists():
-                logger.warning("文件完整性检查: 关键文件缺失: %s", rel_path)
-                continue
-
-            file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
-            logger.debug("文件完整性: %s SHA256=%s", rel_path, file_hash[:16])
-
-        logger.info("关键文件完整性检查完成 (%d个文件)", len(_critical_files))
-    except Exception as e:
-        logger.error("文件完整性检查失败: %s", e)
-
-
-# 审批提醒服务全局引用
-_approval_reminder = None
-
-
-def _start_approval_reminder():
-    """启动审批超时提醒后台服务"""
-    global _approval_reminder
-    try:
-        from app.services.reminder_service import start_approval_reminder
-
-        _approval_reminder = start_approval_reminder(check_interval_minutes=30)
-        logger.info("审批超时提醒服务已启动")
-    except Exception as e:
-        logger.warning("启动审批提醒服务失败: %s", e)
-
-
-def _stop_approval_reminder():
-    """停止审批超时提醒后台服务"""
-    global _approval_reminder
-    try:
-        from app.services.reminder_service import stop_approval_reminder
-
-        stop_approval_reminder(_approval_reminder)
-        _approval_reminder = None
-        logger.info("审批超时提醒服务已停止")
-    except Exception as e:
-        logger.warning("停止审批提醒服务失败: %s", e)
-
-
-def _start_db_maintenance():
-    """启动 SQLite 定期维护（VACUUM + PRAGMA optimize）。"""
-    try:
-        from app.services.db_maintenance import start_db_maintenance
-        start_db_maintenance()
-    except Exception as e:
-        logger.warning("数据库维护启动失败: %s", e)
-
-
-def _stop_db_maintenance():
-    """停止 SQLite 定期维护。"""
-    try:
-        from app.services.db_maintenance import stop_db_maintenance
-        stop_db_maintenance()
-    except Exception as e:
-        logger.warning("数据库维护停止失败: %s", e)
-
-
-def _start_wal_checkpoint_scheduler():
-    """启动每日凌晨 3 点 WAL checkpoint 调度（额外10）。"""
-    try:
-        from app.services.db_maintenance import start_wal_checkpoint_scheduler
-        start_wal_checkpoint_scheduler()
-    except Exception as e:
-        logger.warning("WAL checkpoint 调度启动失败: %s", e)
-
-
-def _stop_wal_checkpoint_scheduler():
-    """停止每日 WAL checkpoint 调度。"""
-    try:
-        from app.services.db_maintenance import stop_wal_checkpoint_scheduler
-        stop_wal_checkpoint_scheduler()
-    except Exception as e:
-        logger.warning("WAL checkpoint 调度停止失败: %s", e)
-
-
-def _start_backup_scheduler():
-    """启动备份调度器（自动备份/异常检测/待办提醒/周报/KPI 预计算）。"""
-    try:
-        from app.services.backup_scheduler import start_backup_scheduler
-        start_backup_scheduler()
-    except Exception as e:
-        logger.warning("备份调度器启动失败: %s", e)
-
-
-def _run_database_startup_check():
-    """启动时后台执行数据库快速自检（不阻塞启动）。"""
-    def _run():
-        try:
-            from app.services.database_health_service import database_health_service
-            result = database_health_service.startup_check()
-            if result.get("status") != "ok":
-                logger.warning("数据库启动自检异常: %s", result.get("message", "unknown"))
-            else:
-                logger.info("数据库启动自检通过 (%s)", result.get("db_size_mb", "?"))
-        except Exception as e:  # pragma: no cover
-            logger.warning("数据库启动自检失败: %s", e)
-
-    t = threading.Thread(target=_run, name="db-startup-check", daemon=True)
-    t.start()
-
-
-def _stop_backup_scheduler():
-    """停止备份调度器。"""
-    try:
-        from app.services.backup_scheduler import stop_backup_scheduler
-        stop_backup_scheduler()
-    except Exception as e:
-        logger.warning("备份调度器停止失败: %s", e)
 
 
 __all__ = ["app"]

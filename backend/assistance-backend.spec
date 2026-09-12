@@ -165,6 +165,21 @@ a = Analysis(
     win_private_assemblies=False,
 )
 
+# ========== 打包卫生：剔除第三方库自带的 tests/ 目录数据（2026-09-12） ==========
+# 实测 sklearn 会经 collect_data_files 把 sklearn/datasets/tests/（openml 夹具
+# 数据等 80+ 文件）带入产物。安装包不得包含任何测试资产，统一在此过滤。
+def _strip_test_data_toc(toc):
+    cleaned = []
+    for entry in toc:
+        name = entry[0].replace("\\", "/")
+        parts = [p for p in name.split("/") if p]
+        if any(p.lower() in ("tests", "test") for p in parts):
+            continue
+        cleaned.append(entry)
+    return cleaned
+
+a.datas = _strip_test_data_toc(a.datas)
+
 # ========== PYZ 阶段 ==========
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 

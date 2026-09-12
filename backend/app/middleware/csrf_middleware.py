@@ -20,8 +20,7 @@ import os
 import time
 from typing import List, Optional
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
+from starlette.datastructures import Headers
 from starlette.responses import JSONResponse, Response
 
 logger = logging.getLogger(__name__)
@@ -132,19 +131,19 @@ def _is_path_exempt(path: str) -> bool:
     return False
 
 
-def get_client_ip(request: Request) -> str:
-    """获取客户端真实 IP（fail-closed 代理透传）
+def get_client_ip(scope: dict) -> str:
+    """获取客户端真实 IP（fail-closed 代理透传）—— 纯 ASGI scope 版（E1）。
 
-    未配置 TRUSTED_PROXIES 时直接返回 request.client.host（直连 IP）；
-    配置后检查直连 IP（request.client.host）是否在可信代理列表中，
-    可信时透传 X-Forwarded-For 首段（真实客户端），不可信时降级为
-    直连 IP（防止伪造 XFF 绕过限流/审计）。
+    未配置 TRUSTED_PROXIES 时直接返回 scope["client"][0]（直连 IP）；
+    配置后检查直连 IP 是否在可信代理列表中，可信时透传 X-Forwarded-For
+    首段（真实客户端），不可信时降级为直连 IP（防止伪造 XFF 绕过限流/审计）。
 
     配置示例::
 
         TRUSTED_PROXIES=10.0.0.1,172.16.0.0/12
     """
-    direct_ip = getattr(getattr(request, "client", None), "host", "unknown")
+    client = scope.get("client") or ("unknown", 0)
+    direct_ip = client[0] if client else "unknown"
     if not _TRUSTED_PROXIES:
         return direct_ip
 
@@ -167,117 +166,152 @@ def get_client_ip(request: Request) -> str:
         return direct_ip
 
     # 直连 IP 可信 → 透传 X-Forwarded-For 首段（真实客户端）
-    forwarded_for = request.headers.get("x-forwarded-for", "")
+    headers = Headers(scope=scope)
+    forwarded_for = headers.get("x-forwarded-for", "")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
 
     return direct_ip
 
 
-class CSRFMiddleware(BaseHTTPMiddleware):
-    """CSRF 保护中间件（HMAC 签名验证）
+class CSRFMiddleware:
+    """CSRF 保护中间件（HMAC 签名验证）—— 纯 ASGI 实现（架构评估 E1）。
+
+    历史问题：原实现基于 ``BaseHTTPMiddleware``，其自身注释即承认会导致
+    h11 协议错误（流式/大 body 请求形态下），"开=带病、关=裸奔"两难。
+    本实现改为纯 ASGI 中间件（直接操作 scope/receive/send），不再经过
+    BaseHTTPMiddleware 的响应缓冲与任务包装，消除协议层冲突；
+    验证逻辑与原实现逐分支一致。
 
     验证逻辑:
-    1. GET/HEAD/OPTIONS 请求直接放行
-    2. 豁免路径直接放行
-    3. POST/PUT/DELETE/PATCH 请求需要携带有效的 X-CSRF-Token 头
-    4. 新流程：HMAC(header_value) == cookie_value（签名验证）
-    5. 回退：cookie/header 明文相同（旧版兼容，warning 日志）
-    6. 过期检测：token 内嵌时间戳超过 CSRF_TOKEN_EXPIRY 即拒绝
+    1. 非 HTTP scope（lifespan/websocket）直接放行
+    2. GET/HEAD/OPTIONS 请求直接放行
+    3. 豁免路径直接放行
+    4. POST/PUT/DELETE/PATCH 请求需要携带有效的 X-CSRF-Token 头
+    5. 新流程：HMAC(header_value) == cookie_value（签名验证）
+    6. 回退：cookie/header 明文相同（旧版兼容，warning 日志）
+    7. 过期检测：token 内嵌时间戳超过 CSRF_TOKEN_EXPIRY 即拒绝
     """
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        # 非 HTTP scope（lifespan 等）直接放行
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         # 延迟导入避免循环依赖
         from app.core.config import settings
 
         # CSRF 未启用时直接放行
         if not getattr(settings, "CSRF_ENABLED", False):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
+
+        headers = Headers(scope=scope)
+        method = scope.get("method", "GET").upper()
+        path = scope.get("path", "")
 
         # 安全方法直接放行
-        if request.method.upper() in _SAFE_METHODS:
-            return await call_next(request)
+        if method in _SAFE_METHODS:
+            await self.app(scope, receive, send)
+            return
 
         # 豁免路径直接放行
-        if _is_path_exempt(request.url.path):
-            return await call_next(request)
+        if _is_path_exempt(path):
+            await self.app(scope, receive, send)
+            return
 
         # 本机内部通道豁免：Electron 自动备份携带启动时注入环境变量的
         # X-Internal-Backup 密钥（与 shutdown 端点同一内部密钥模式）
         internal_key = os.getenv("INTERNAL_BACKUP_KEY", "")
-        if internal_key and request.headers.get("X-Internal-Backup", "") == internal_key:
-            return await call_next(request)
+        if internal_key and headers.get("X-Internal-Backup", "") == internal_key:
+            await self.app(scope, receive, send)
+            return
 
         # ── 状态变更请求（POST/PUT/DELETE/PATCH）验证 CSRF token ──
-        csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME, "")
-        csrf_header = request.headers.get(CSRF_HEADER_NAME, "")
+        cookies = self._parse_cookies(headers)
+        csrf_cookie = cookies.get(CSRF_COOKIE_NAME, "")
+        csrf_header = headers.get(CSRF_HEADER_NAME, "")
 
         if not csrf_cookie or not csrf_header:
-            client_ip = get_client_ip(request)
+            client_ip = get_client_ip(scope)
             logger.warning(
                 "CSRF 验证失败：缺少 token | method=%s path=%s cookie=%s header=%s ip=%s",
-                request.method,
-                request.url.path,
+                method,
+                path,
                 "present" if csrf_cookie else "missing",
                 "present" if csrf_header else "missing",
                 client_ip,
             )
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "code": 403,
-                    "message": "CSRF 验证失败：请先调用 GET /api/v1/auth/csrf-token 获取 token",
-                    "data": None,
-                },
-            )
+            response = self._forbidden("CSRF 验证失败：请先调用 GET /api/v1/auth/csrf-token 获取 token")
+            await response(scope, receive, send)
+            return
 
         # ── 过期检测 ──
         # 优先检查 header（raw token 含时间戳）；若为旧格式则检查 cookie
         if _token_expired(csrf_header) or _token_expired(csrf_cookie):
             logger.warning(
                 "CSRF 验证失败：token 已过期 | method=%s path=%s",
-                request.method,
-                request.url.path,
+                method,
+                path,
             )
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "code": 403,
-                    "message": "CSRF token 已过期，请重新获取",
-                    "data": None,
-                },
-            )
+            response = self._forbidden("CSRF token 已过期，请重新获取")
+            await response(scope, receive, send)
+            return
 
         # ── HMAC 签名校验（新流程）──
         # cookie = HMAC(raw_token)，header = raw_token
         # 验证：HMAC(header) == cookie
         signed_header = sign_csrf_token(csrf_header)
         if hmac.compare_digest(signed_header, csrf_cookie):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         # ── 回退：明文比对（旧版兼容，warning 标记退化路径）──
         if hmac.compare_digest(csrf_cookie, csrf_header):
             logger.warning(
                 "CSRF 验证通过（退化路径：明文比对，建议升级前端使用签名流程）"
                 " | method=%s path=%s ip=%s",
-                request.method,
-                request.url.path,
-                get_client_ip(request),
+                method,
+                path,
+                get_client_ip(scope),
             )
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         # ── 两种验证均失败 ──
         logger.warning(
             "CSRF 验证失败：token 不匹配 | method=%s path=%s ip=%s",
-            request.method,
-            request.url.path,
-            get_client_ip(request),
+            method,
+            path,
+            get_client_ip(scope),
         )
+        response = self._forbidden("CSRF token 无效或已过期，请重新获取")
+        await response(scope, receive, send)
+
+    @staticmethod
+    def _parse_cookies(headers: Headers) -> dict:
+        """从请求头解析 Cookie（纯 ASGI：不经 Request.cookies 以减少对象构建）。
+
+        与原实现的 `Request.cookies` 保持等价：starlette 走
+        `http.cookies._unquote`，会把 RFC 6265 允许的**带引号值**去掉引号
+        （如 `csrftoken="1757....abc"`）。此处显式去引号，避免该形态在
+        E1 改写后从"通过"变成 403。
+        """
+        cookies: dict = {}
+        for raw in headers.getlist("cookie"):
+            for part in raw.split(";"):
+                name, _, value = part.strip().partition("=")
+                if name:
+                    cookies[name] = value.strip().strip('"')
+        return cookies
+
+    @staticmethod
+    def _forbidden(message: str) -> Response:
         return JSONResponse(
             status_code=403,
-            content={
-                "code": 403,
-                "message": "CSRF token 无效或已过期，请重新获取",
-                "data": None,
-            },
+            content={"code": 403, "message": message, "data": None},
         )

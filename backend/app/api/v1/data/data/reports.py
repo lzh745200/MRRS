@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 from app.utils.helpers import safe_json_loads
 
 from app.core.database import get_db
-from app.core.data_permission import filter_by_data_scope
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.supported_village import ReportSubscription
@@ -32,6 +31,8 @@ from app.schemas.supported_village import (
 )
 from app.services.analytics_service import AnalyticsService
 from app.services.report_service import ReportService
+# B1 下沉（架构评估）：数据域过滤经服务层统一入口，不再直接调用核心原语
+from app.services.data_scope_query import scoped_filter
 from app.core.transaction import safe_commit
 
 logger = logging.getLogger(__name__)
@@ -740,9 +741,10 @@ async def generate_report(
             )
             if request.village_ids:
                 villages_query = villages_query.filter(SupportedVillage.id.in_(request.village_ids))
-            # R26-D10：报表数据须按数据权限隔离，防止跨组织村数据进入报表
-            villages_query = filter_by_data_scope(
-                villages_query, SupportedVillage, current_user, db=service.db
+            # R26-D10 + B1 下沉：报表数据须按数据权限隔离，防止跨组织村数据进入报表
+            # （语义不变：super_admin→全量 / admin→仅本组织 / 用户→仅本人，S2 红线）
+            villages_query = scoped_filter(
+                villages_query, SupportedVillage, current_user
             )
             villages = villages_query.limit(100).all()
             report_data["villages"] = [
@@ -759,10 +761,10 @@ async def generate_report(
 
         # 如果是汇总统计报表
         if request.report_type == "statistics":
-            # R26-D10：计数查询同样按数据权限隔离
-            stats_query = filter_by_data_scope(
+            # R26-D10 + B1 下沉：计数查询同样按数据权限隔离
+            stats_query = scoped_filter(
                 service.db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)),
-                SupportedVillage, current_user, db=service.db,
+                SupportedVillage, current_user,
             )
             report_data["statistics"] = {"total_villages": stats_query.count()}
 

@@ -57,4 +57,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /** 分块读取大文件，避免序列化阻塞 IPC */
   readFileChunked: (filePath, chunkSize) =>
     ipcRenderer.invoke('read-file-chunked', filePath, chunkSize),
+
+  // ── 修复引导页（A3/C2：后端不可用时的自助恢复）──
+  /** 获取引导页信息（触发原因 + 日志路径） */
+  getRecoveryInfo: () => ipcRenderer.invoke('recovery-get-info'),
+  /** 一键修复：重启后端并等待就绪，成功后主进程自动返回系统页面 */
+  recoveryRestartBackend: () => ipcRenderer.invoke('recovery-restart-backend'),
+  /** 打开日志（'crash' 诊断日志 / 'app' 应用日志） */
+  recoveryOpenLog: (which) => ipcRenderer.invoke('recovery-open-log', which),
 });

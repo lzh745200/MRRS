@@ -213,7 +213,7 @@ class TestD10ReportsDataScope:
         db.query.return_value = q
 
         with patch(
-            "app.api.v1.data.data.reports.filter_by_data_scope",
+            "app.api.v1.data.data.reports.scoped_filter",
             side_effect=lambda query, *a, **kw: query,
         ) as fbds:
             resp = c.post("/api/v1/reports/generate", json={"report_type": "comprehensive", "year": 2026})
@@ -230,7 +230,7 @@ class TestD10ReportsDataScope:
         db.query.return_value = q
 
         with patch(
-            "app.api.v1.data.data.reports.filter_by_data_scope",
+            "app.api.v1.data.data.reports.scoped_filter",
             side_effect=lambda query, *a, **kw: query,
         ) as fbds:
             resp = c.post("/api/v1/reports/generate", json={"report_type": "statistics", "year": 2026})

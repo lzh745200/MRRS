@@ -7,7 +7,10 @@ Comment=全面推进乡村振兴工作综合管理平台
 Comment[en]=Comprehensive management platform for military rural revitalization
 Exec=/opt/assistance-management-system/scripts/start-kylin.sh
 Path=/opt/assistance-management-system
-Icon=/opt/assistance-management-system/icons/app-circle-256.png
+# Icon 使用主题名（非绝对路径）：postinst 会把图标安装到
+# /usr/share/pixmaps 与 /usr/share/icons/hicolor/*/apps/，由图标主题解析，
+# 不依赖 /opt 安装布局；绝对路径在安装目录变动时会导致无图标。
+Icon=assistance-management-system
 Terminal=false
 Categories=Office;Management;
 Keywords=military;rural;management;专项;乡村振兴;管理;

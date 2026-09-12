@@ -452,6 +452,48 @@ def recycle_retention_job():
         db.close()
 
 
+async def restore_drill_job():
+    """月度备份恢复演练（架构评估 C1）：每日 05:45 检查到期，到期才执行演练。
+
+    演练 = 将最新备份还原到临时目录跑 integrity_check + 核心表抽查
+    （只读演练，绝不触碰生产库）。失败向管理员发消息——备份不可用
+    必须可见，不能只留在日志里。
+    """
+    try:
+        from app.services.restore_drill_service import is_drill_due, run_restore_drill
+
+        interval_days = int(get_config("restore_drill_interval_days", "30") or 30)
+        if not is_drill_due(interval_days):
+            logger.info("距上次恢复演练不足 %d 天，跳过", interval_days)
+            return
+
+        with get_db_context() as db:
+            result = run_restore_drill(db)
+        status = result.get("status")
+        if status == "fail":
+            try:
+                _send_backup_reminder(
+                    db,
+                    "恢复演练失败：备份可能不可用",
+                    (
+                        f"月度备份恢复演练失败（{result.get('backup_file')}，"
+                        f"{result.get('error_type')}）。数据库损坏时该备份可能无法还原，"
+                        "请立即检查备份目录并手动创建新备份。"
+                    ),
+                )
+            except Exception as msg_err:
+                logger.warning("恢复演练失败提醒发送失败: %s", msg_err)
+        elif status == "ok":
+            logger.info(
+                "恢复演练通过: %s（抽查 %d 张核心表）",
+                result.get("backup_file"), result.get("tables_checked", 0),
+            )
+        else:
+            logger.info("恢复演练状态: %s", status)
+    except Exception as e:
+        logger.error("恢复演练任务失败: %s", e, exc_info=True)
+
+
 async def subscription_dispatch_job():  # pragma: no cover — 并行会话在途(工单003)，待功能收口后补测
     """报表订阅到期分发（每 15 分钟扫描）：对到期订阅生成报表 + 站内通知。
 
@@ -572,6 +614,7 @@ def start_backup_scheduler():
     _schedule_daily(auto_backup_job, 2, 0, "auto_backup")
     _schedule_daily(auto_package_job, 3, 0, "auto_package")
     _schedule_daily(message_cleanup_job, 3, 30, "message_cleanup")
+    _schedule_daily(restore_drill_job, 5, 45, "restore_drill")
     _schedule_interval(reminder_scan_job, 6 * 3600, "reminder_scan")
     _schedule_daily(todo_reminder_job, 8, 0, "todo_reminder")
     _schedule_weekly(weekly_report_job, 0, 6, 30, "weekly_report")
@@ -580,7 +623,7 @@ def start_backup_scheduler():
     _scheduler_started = True
     logger.info(
         "调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 自动打包 + 消息清理"
-        " + 提醒扫描 + 待办提醒 + 周报 + 订阅分发）"
+        " + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发）"
     )
 
 

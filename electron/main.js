@@ -15,6 +15,7 @@ let isQuitting = false;
 let backendRestartCount = 0;
 let backendRestartTimer = null; // 后端自动重启定时器句柄（退出时清理）
 let rendererCrashedOnce = false; // 渲染进程崩溃自动恢复防循环标志
+let recoveryLastReason = '';     // 修复引导页触发原因（backend-crash / load-failed）
 const MAX_BACKEND_RESTARTS = 3;
 const INTERNAL_BACKUP_KEY = crypto.randomBytes(16).toString('hex');
 const INTERNAL_SHUTDOWN_KEY = crypto.randomBytes(16).toString('hex');
@@ -31,15 +32,22 @@ const WINDOW_STATE_FILE = path.join(getUserDataPath(), 'window-state.json');
 const SECRETS_FILE = path.join(getUserDataPath(), 'secrets.json');
 const CRASH_LOG_FILE = path.join(getUserDataPath(), 'crash.log');
 
+// F3（架构评估 2026-09-12）：版本单一来源 —— app.getVersion() 读取打包
+// 元数据（electron-builder 由根 package.json version 注入），开发态回读
+// package.json。不再维护硬编码 fallback 字面量，避免与 PROJECT_VERSION 双源漂移。
 const appVersion = (() => {
+  try { return app.getVersion(); } catch (_) {}
   try {
     const pkgPath = app.isPackaged
       ? path.join(process.resourcesPath, '..', 'package.json')
       : path.join(__dirname, '..', 'package.json');
-    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version || '1.12.2';
-  } catch (_) {
-    return '1.12.2';
+    const version = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version;
+    if (version) return version;
+  } catch (e) {
+    console.warn('[App] 版本号读取失败（PROJECT_VERSION 将缺省）:', e.message);
   }
+  console.warn('[App] 版本号不可用，请检查 package.json version 字段');
+  return '';
 })();
 
 // ─── 路径解析 ───
@@ -364,19 +372,9 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
           }
         }, 2000);
       } else {
-        const logPath = path.join(getUserDataPath(), 'logs', 'app.log');
-        // 提示可能原因：安全软件（杀软）可能拦截/终止了后端进程，
-        // 请将安装目录加入白名单；不要将应用安装在系统临时目录。
-        dialog.showErrorBox('后端异常退出',
-          `后端已重启 ${MAX_BACKEND_RESTARTS} 次仍失败。\n\n` +
-          `可能原因：\n` +
-          `1. 安全软件（杀毒/Defender）拦截了后端进程——请将程序安装目录加入白名单\n` +
-          `2. 安装目录位于临时目录（%TEMP%），文件可能被系统清理——请安装到正式目录\n` +
-          `3. 数据库文件损坏或磁盘空间不足\n` +
-          `4. 升级后数据库迁移失败（生产环境迁移失败会主动中止启动，避免带着\n` +
-          `   漂移的表结构运行）——请在应用日志中查找 CRITICAL 行\n` +
-          `   “生产环境迁移失败”，并按回滚流程连数据库一起回退\n\n` +
-          `诊断日志: ${CRASH_LOG_FILE}\n应用日志: ${logPath}`);
+        // C2（架构评估）：重启配额耗尽后进入修复引导页（自助重启/查日志），
+        // 替代原先"错误框后静默放弃"
+        showRecoveryPage('backend-crash');
       }
     }
   });
@@ -479,6 +477,32 @@ function waitForBackend(stderrCapture = []) {
   });
 }
 
+// ─── 修复引导页（A3/C2，架构评估 2026-09-12）──
+// 后端连崩超限 / 页面加载耗尽重试时，不再只弹错误框后放弃——
+// 加载本地引导页：一键重启后端 + 打开日志，给用户自助恢复路径。
+function showRecoveryPage(reason) {
+  recoveryLastReason = reason;
+  writeDiagnosticLog(`显示修复引导页: ${reason}`);
+  const recoveryPath = path.join(__dirname, 'recovery.html');
+  if (!fs.existsSync(recoveryPath) || !mainWindow || mainWindow.isDestroyed()) {
+    // 兜底：引导页缺失或窗口不可用时保留原错误框行为
+    dialog.showErrorBox('系统异常',
+      `系统未能正常启动（${reason}）。\n诊断日志: ${CRASH_LOG_FILE}`);
+    return;
+  }
+  try {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.loadFile(recoveryPath, { query: { reason } }).catch((err) => {
+      console.error('[Recovery] 引导页加载失败:', err?.message || err);
+      writeDiagnosticLog(`引导页加载失败: ${err?.message || err}`);
+    });
+  } catch (e) {
+    console.error('[Recovery] 引导页显示异常:', e);
+  }
+}
+
 // ─── 页面加载（带重试） ───
 // 后端冷启动（PyInstaller 解包 + 杀软扫描）可能长达数分钟，页面重试前
 // 先做 /health 健康检查，后端就绪后再加载，避免盲目重试耗尽次数。
@@ -512,7 +536,9 @@ function loadURLWithRetry(win, url, retryCount) {
     const msg = `加载页面失败（已重试 ${MAX_URL_LOAD_RETRIES} 次）: ${url}`;
     console.error('[Window]', msg);
     writeDiagnosticLog(msg);
-    dialog.showErrorBox('页面加载失败', `${msg}\n\n请检查后端服务是否正常运行，或重启应用。`);
+    // A3（架构评估）：最终失败改用修复引导页（含一键重启与日志入口），
+    // 不再只弹错误框后让用户面对死屏
+    showRecoveryPage('load-failed');
     return;
   }
   if (retryCount > 0) {
@@ -1024,6 +1050,43 @@ function setupIpcHandlers() {
   });
   ipcMain.on('window-force-redraw', () => {
     if (mainWindow) { mainWindow.webContents.invalidate(); mainWindow.focus(); mainWindow.webContents.focus(); }
+  });
+  // ─── 修复引导页（A3/C2）───
+  let recoveryRestarting = false;
+  ipcMain.handle('recovery-get-info', () => ({
+    reason: recoveryLastReason,
+    crashLogPath: CRASH_LOG_FILE,
+    appLogPath: path.join(getUserDataPath(), 'logs', 'app.log'),
+  }));
+  ipcMain.handle('recovery-restart-backend', async () => {
+    if (recoveryRestarting) return { success: false, error: '修复正在进行中' };
+    recoveryRestarting = true;
+    try {
+      console.log('[Recovery] 用户触发一键修复：重启后端');
+      writeDiagnosticLog('修复引导页：用户触发后端重启');
+      await stopBackend();
+      const stderr = [];
+      backendProcess = await startBackend(stderr, false);
+      if (!backendProcess) return { success: false, error: '后端启动失败' };
+      await waitForBackend(stderr);
+      backendRestartCount = 0; // 修复成功即重置配额（与自动重启语义一致）
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        await mainWindow.loadURL(`http://127.0.0.1:${backendPort}`);
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err?.message || String(err) };
+    } finally {
+      recoveryRestarting = false;
+    }
+  });
+  ipcMain.handle('recovery-open-log', async (_, which) => {
+    const target = which === 'app'
+      ? path.join(getUserDataPath(), 'logs', 'app.log')
+      : CRASH_LOG_FILE;
+    // 两个路径均在 userData 内（open-path 白名单范围），直接打开
+    if (!fs.existsSync(target)) return { error: 'log-not-found' };
+    return shell.openPath(target);
   });
   console.log('[IPC] 注册完成');
 }

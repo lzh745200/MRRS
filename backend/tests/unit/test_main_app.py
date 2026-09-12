@@ -1000,8 +1000,9 @@ class TestVerifyFileIntegrity:
             mock_warn.assert_called()
 
     def test_exception(self):
+        # B3 拆包后实现位于 app.startup.environment（Path 为该模块命名空间引用）
         with (
-            patch("app.main.Path", side_effect=Exception("fail")),
+            patch("app.startup.environment.Path", side_effect=Exception("fail")),
             patch("app.main.logger.error") as mock_err,
         ):
             _verify_file_integrity()
@@ -1016,7 +1017,7 @@ class TestApprovalReminder:
             patch("app.main.logger.info") as mock_info,
         ):
             _start_approval_reminder()
-            import app.main as m
+            import app.startup.monitors as m  # B3: 全局状态随钩子迁入 monitors
             assert m._approval_reminder == "reminder_ref"
             mock_info.assert_called_once()
 
@@ -1030,7 +1031,7 @@ class TestApprovalReminder:
             mock_warn.assert_called_once()
 
     def test_stop_success(self):
-        import app.main as m
+        import app.startup.monitors as m  # B3: 全局状态随钩子迁入 monitors
         m._approval_reminder = "ref"
         with (
             patch("app.services.reminder_service.stop_approval_reminder") as mock_stop,
@@ -1041,7 +1042,7 @@ class TestApprovalReminder:
             mock_info.assert_called_once()
 
     def test_stop_exception(self):
-        import app.main as m
+        import app.startup.monitors as m  # B3: 全局状态随钩子迁入 monitors
         m._approval_reminder = "ref"
         with (
             patch("app.services.reminder_service.stop_approval_reminder",

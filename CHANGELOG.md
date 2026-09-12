@@ -5,6 +5,104 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.3] - 2026-09-12 — 🛡️ 架构评估 P1/P2 整改（迁移单轨化 / 恢复演练 / CSRF ASGI 化 / 启动拆包 / 修复引导页）+ 安装包无测试门禁
+
+### 加固（架构评估整改）
+- **F1 迁移单轨化第一步**：`ENABLE_AUTO_MIGRATION` 默认值 `True → False`
+  （`core/config.py`），schema 变更统一走编程式 Alembic upgrade
+  （生产环境 fail-loud）。双轨制是唯一发生过真实事故的技术债
+  （commit 4c1ea8a0 MultipleHeads 打包实例启动失败）；应急时仍可
+  临时设 `ENABLE_AUTO_MIGRATION=true`。
+- **C1 月度备份恢复演练**：新增 `restore_drill_service` —— 把最新备份
+  真实还原到临时目录（unzip 落盘）跑 `PRAGMA integrity_check` +
+  核心表抽查，**只读演练不触碰生产库**；`restore_drill_job` 每日 05:45
+  检查到期（`restore_drill_interval_days`，默认 30）执行，失败向管理员
+  发消息；结论经 `/health` 的 `restore_drill` 字段暴露（无认证端点只出
+  状态/文件名/异常类名），重启后从 SystemConfig 回填。加密备份显式记
+  `skipped_encrypted`，不留盲区。
+- **E1 CSRF 中间件纯 ASGI 化**：从 `BaseHTTPMiddleware.dispatch` 改写为
+  `__call__(scope, receive, send)`（逐分支一致），消除注释自认的
+  h11 协议错误风险——"开=带病、关=裸奔"两难解除，CSRF 可常开；
+  `get_client_ip` 同步改为 scope 版（fail-closed 代理透传语义不变）。
+- **B1 数据域过滤下沉服务层（Phase 1）**：新增 `services/data_scope_query.py`
+  统一入口（`scoped_query` / `scoped_filter` / `scoped_count`，语义单一
+  真源仍是 `core/data_permission.py`），迁移评估点名热点
+  `data/data/reports.py`；security_audit 扫描器同步识别新入口名，
+  回归防线保留。其余 ~40 调用点按批迁移。
+- **B3 启动钩子拆包**：main.py 987 → ~710 行。14 个启动/停止钩子迁至
+  `app/startup/{recovery,seed,environment,monitors}.py`（逐字搬移），
+  main 以同名别名 re-export，`from app.main import _xxx` 与
+  `patch("app.main._xxx")` 全兼容；数据库初始化集群
+  （`_init_database_tables`/Alembic/`_migration_status`）与测试、/health
+  强耦合，按计划保留在 main。
+- **A3+C2 Electron 修复引导页**：新增 `electron/recovery.html` —— 后端
+  连崩 3 次超限、或页面加载耗尽 5 次重试时，加载引导页（一键重启后端 +
+  打开诊断/应用日志），替代原先"错误框后静默放弃/死屏"；IPC 通道
+  `recovery-*`，preload 经 contextBridge 暴露，一键修复成功自动返回系统。
+- **F3 Electron 版本单一来源**：`appVersion` 改用 `app.getVersion()`
+  （打包元数据由根 package.json 注入），删除硬编码 fallback 字面量，
+  读取失败回退为空 + 告警，不再与 PROJECT_VERSION 双源漂移。
+
+### 打包卫生（安装包不得包含测试内容）
+- **spec 剔除三方库测试资产**：实测 sklearn 经 collect_data_files 把
+  `sklearn/datasets/tests/`（openml 夹具 80+ 文件）带入产物；
+  `assistance-backend.spec` 新增 `_strip_test_data_toc` 统一过滤
+  a.datas 中所有 `tests/`/`test/` 目录。
+- **CI 双重门禁**：新增 `scripts/verify_package_no_tests.py`
+  （文件树扫描 + PYZ 模块检查 + 前端产物抽查，任一违规 fail-loud），
+  接入 build-windows 的 onedir 验证步；electron-builder 打包后经 7z
+  列举安装包内容抽查测试内容。
+- **extraResources 过滤兜底**：backend 产物拷贝 filter 显式排除
+  `tests/`、`test_*.py`、`conftest.py`、`pytest.ini`、`.coveragerc`。
+
+### 门禁收口（v1.12.3 出包前置）
+- **版本号全量对齐 1.12.3**：整改提交只把根 `package.json` 提到 1.12.3，
+  其余 9 处仍是 1.12.2（`config.py` / `version.txt` / `README` / `docker-compose.yml`、
+  `docker/Dockerfile.kylin-standalone` / `frontend/src/config/constants.ts` / `frontend/.env.example`、
+  `.env.example` / `backend/version.json` / `scripts/docker/build.ps1`）—— CI 的
+  Version consistency check 必红。已用 `scripts/sync_version.py 1.12.3` +
+  `node scripts/sync-version.js --write` 收口，`--check` 退出 0。
+  同时修掉两个**死版本目标**：`electron/main.js`（F3 后已无字面量可同步）
+  改为「单一来源契约检查」（仍需 `app.getVersion()` 且不得重新引入硬编码）；
+  `scripts/legacy/build-kylin.sh` 改为对准真实存在的 `|| echo "1.2.0"` 兜底字面量
+  （实测长期漂移到 1.2.0）；新增 `frontend/package-lock.json` 与
+  `electron/splash.html` 两个目标（splash 静态 `V1.12.2` 已删，改由 main.js 注入）。
+- **后端覆盖率门禁回 100%**：整改引入的 6 行未覆盖
+  （`backup_scheduler.py` 484-485 / 493-494、`restore_drill_service.py` 121 / 184）
+  以**行为断言**补齐（`tests/unit/test_restore_drill_gaps_v123.py`，新增 6 例），
+  而非 pragma 豁免。过程中发现既有 `test_restore_drill.py::TestSchedulerJob`
+  的 **patch 目标失效**：`backup_scheduler` 在模块级绑定了
+  `get_config` / `get_db_context`，patch 源模块属性不生效，导致
+  `test_job_exception_is_swallowed` 从未真正注入异常（测试"通过"却什么都没断言）——
+  已改为 patch 绑定处，并补齐 `else` 分支与 `backup_dir` 回退路径。
+- **bandit 门禁修复**：`restore_drill_service.py` 用 `# noqa: S608` 抑制 SQL 告警，
+  但本仓**未装 flake8-bandit 插件**、CI 跑的是 `python -m bandit -r app/ -ll`
+  （只认 `# nosec`）—— 惰性标记使 lint 任务必红。已改为
+  `# nosec B608` 并注明白名单理由（与仓内既有 10+ 处一致）。
+- **安装包抽查规则收口**：`build-windows.yml` 的 7z 抽查原为内联正则，
+  与 `scripts/verify_package_no_tests.py` 的规则重复实现（且无厂商豁免表）；
+  已改为 `--listing` 模式（同一实现 + 同一豁免表），并保留旧正则强度
+  （`pytest` 命名残留同样拦截）。本地对**真实构建产物**预演：2924 项归档成员 0 违规，
+  且规则强度与旧正则逐项比对无差异；同步补齐
+  `tests/unit/test_verify_package_no_tests_v123.py`（9 例：厂商豁免 / 本项目拦截 / CLI 三态）。
+- **CSRF 纯 ASGI 等价性补齐**：逐分支走查发现自行解析 Cookie 不去引号，
+  而原 `Request.cookies` 会按 RFC 6265 去除引号 —— `csrftoken="<token>"` 这一形态
+  会从"通过"变成 403（与原实现不再等价）。已在 `_parse_cookies` 去引号并补回归用例。
+
+### 文档
+- `docs/architecture/架构评估整改配套约定-2026-09-12.md`：E2 shutdown
+  信任边界标注、F2 覆盖率豁免清单约定（豁免必须同行注明理由）、
+  B2 services 分包分批规划（本期仅规划，零行为变更）、C1 RPO/RTO 与
+  备份存放基线（建议 `backup_target_dir` 指向独立物理盘）。
+
+### 回归
+- 新增回归：`test_csrf_asgi.py`（15，含引号 cookie 等价例）、`test_restore_drill.py`（25）、
+  `test_data_scope_query.py`（6）、`test_restore_drill_gaps_v123.py`（6）、
+  `test_verify_package_no_tests_v123.py`（9）。
+- B3 拆包保留了 `from app.main import _xxx` / `patch("app.main._xxx")` 兼容（别名同步
+  在 lifespan 里）；但调度器测试原先 patch 错了绑定处（见「门禁收口」），已修正。
+- 全量：**10994 passed / 0 failed，覆盖率 100.00%**；前端 302 文件 / 6045 用例全绿。
+
 ## [1.12.2] - 2026-09-11 — 🐛 R19–R31 深度探针修复 + 架构评估 P0 加固（导出/备份/迁移门禁）+ CI 前端门禁回归修复
 
 ### 加固（架构评估 P0）

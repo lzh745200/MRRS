@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.12.2"
+    PROJECT_VERSION: str = "1.12.3"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -211,12 +211,13 @@ class Settings(BaseSettings):
     ALERT_WEBHOOK_TYPE: str = "generic"  # generic, dingtalk, wecom
 
     # 启动时自动迁移（ALTER TABLE ADD COLUMN）
-    # 设为 False 可禁用运行时自动 DDL，改用 Alembic 迁移管理
-    # 注意：必须保持 True。部署环境的 SQLite 数据库可能缺少 is_active 等较新的列
-    # （如 supported_villages.is_active / projects.is_active / funds.is_active），
-    # 自动迁移会在启动时检测并 ALTER TABLE ADD COLUMN 补齐，避免运行时
-    # OperationalError: no such column: xxx.is_active
-    ENABLE_AUTO_MIGRATION: bool = True
+    # F1 迁移单轨化（架构评估 2026-09-12）：默认 False，schema 变更统一走
+    # Alembic（编程式 upgrade head 在生产环境 fail-loud，见 main._run_alembic_upgrade）。
+    # 历史背景：曾默认 True 作为旧库兜底，但与 Alembic 双轨并行已发生过
+    # MultipleHeads 真实事故（commit 4c1ea8a0），双轨制是当前最大技术债。
+    # 如遇极旧库升级兼容问题，可临时设 ENABLE_AUTO_MIGRATION=true 应急，
+    # 并在完成 Alembic 补齐后立即关闭（勿长期双轨）。
+    ENABLE_AUTO_MIGRATION: bool = False
 
     @property
     def CORS_ALLOWED_ORIGINS(self) -> List[str]:

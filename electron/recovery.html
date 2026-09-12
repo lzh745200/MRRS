@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>系统修复引导</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(160deg, #1b2a1e 0%, #22331f 60%, #1b2a1e 100%);
+    color: #e8e4d8;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    width: 560px;
+    max-width: 92vw;
+    background: rgba(30, 44, 32, 0.92);
+    border: 1px solid #3e5a3a;
+    border-radius: 12px;
+    padding: 36px 40px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.45);
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    letter-spacing: 2px;
+    background: #4a3420;
+    color: #e8b84a;
+    border: 1px solid #6b5527;
+    margin-bottom: 14px;
+  }
+  h1 { font-size: 22px; color: #f0ead6; margin-bottom: 10px; }
+  p.desc { font-size: 13px; line-height: 1.8; color: #c9c4b2; margin-bottom: 18px; }
+  .reason { color: #e8b84a; font-weight: 600; }
+  .paths {
+    font-size: 12px;
+    color: #a8a494;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid #33452f;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 22px;
+    word-break: break-all;
+    line-height: 1.7;
+  }
+  .btn-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  button {
+    flex: 1 1 150px;
+    padding: 11px 0;
+    font-size: 14px;
+    border-radius: 8px;
+    border: 1px solid #5a7a52;
+    background: #37503a;
+    color: #eef0e4;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button:hover { background: #436248; }
+  button.primary { background: #6d8f3f; border-color: #7fa24c; color: #fff; font-weight: 600; }
+  button.primary:hover { background: #7ba04a; }
+  button:disabled { opacity: .55; cursor: wait; }
+  .status { margin-top: 16px; font-size: 13px; color: #e8b84a; min-height: 18px; }
+  .hint { margin-top: 10px; font-size: 12px; color: #8f8c7e; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="badge">SYSTEM RECOVERY</div>
+  <h1 id="title">系统暂时无法连接</h1>
+  <p class="desc" id="desc">
+    后端服务未正常响应。<span class="reason" id="reason"></span><br>
+    您可以尝试一键修复（自动重启后端服务），或打开诊断日志排查原因。
+  </p>
+  <div class="paths">
+    <div>诊断日志：<span id="crashLog">-</span></div>
+    <div>应用日志：<span id="appLog">-</span></div>
+  </div>
+  <div class="btn-row">
+    <button class="primary" id="btnFix">一键修复（重启后端）</button>
+    <button id="btnCrashLog">打开诊断日志</button>
+    <button id="btnAppLog">打开应用日志</button>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="hint">提示：杀毒软件拦截是首启失败的最常见原因——请将安装目录加入白名单。</div>
+</div>
+<script>
+  const api = window.electronAPI || {};
+  const statusEl = document.getElementById('status');
+  const btnFix = document.getElementById('btnFix');
+
+  (async function init() {
+    try {
+      const info = await api.getRecoveryInfo();
+      if (!info) return;
+      document.getElementById('crashLog').textContent = info.crashLogPath || '-';
+      document.getElementById('appLog').textContent = info.appLogPath || '-';
+      if (info.reason === 'backend-crash') {
+        document.getElementById('reason').textContent = '后端进程多次异常退出。';
+      } else if (info.reason === 'load-failed') {
+        document.getElementById('reason').textContent = '页面多次加载失败。';
+      }
+    } catch (_) {}
+  })();
+
+  btnFix.addEventListener('click', async () => {
+    if (!api.recoveryRestartBackend) { statusEl.textContent = '当前环境不支持一键修复。'; return; }
+    btnFix.disabled = true;
+    statusEl.textContent = '正在重启后端服务，请稍候（最长约 5 分钟）…';
+    try {
+      const r = await api.recoveryRestartBackend();
+      if (r && r.success) {
+        statusEl.textContent = '修复成功，正在返回系统…';
+      } else {
+        statusEl.textContent = '修复失败：' + ((r && r.error) || '未知错误') + '，请打开日志排查。';
+        btnFix.disabled = false;
+      }
+    } catch (e) {
+      statusEl.textContent = '修复失败：' + (e && e.message || e);
+      btnFix.disabled = false;
+    }
+  });
+  document.getElementById('btnCrashLog').addEventListener('click', () => {
+    api.recoveryOpenLog && api.recoveryOpenLog('crash');
+  });
+  document.getElementById('btnAppLog').addEventListener('click', () => {
+    api.recoveryOpenLog && api.recoveryOpenLog('app');
+  });
+</script>
+</body>
+</html>

@@ -1529,21 +1529,33 @@ class TestExceptions:
 class TestCSRFMiddleware:
 
     async def test_internal_backup_key_bypass(self):
+        # E1：CSRF 已改纯 ASGI —— 经 scope/receive/send 透传验证内部密钥放行
         from app.middleware.csrf_middleware import CSRFMiddleware
         called = [False]
 
-        async def call_next(request):
+        async def downstream(scope, receive, send):
             called[0] = True
-            return JSONResponse(content={"ok": True})
 
-        mw = CSRFMiddleware(MagicMock())
-        request = MagicMock()
-        request.method = "POST"
-        request.url.path = "/api/backup"
-        request.headers = {"X-Internal-Backup": "secret-key-123"}
-        request.cookies = {}
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/backup",
+            "headers": [(b"x-internal-backup", b"secret-key-123")],
+            "client": ("127.0.0.1", 50000),
+            "query_string": b"",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+        }
+
+        async def receive():
+            return {"type": "http.request"}
+
+        async def send(message):
+            pass
+
+        mw = CSRFMiddleware(downstream)
         with patch.dict(os.environ, {"INTERNAL_BACKUP_KEY": "secret-key-123"}):
-            await mw.dispatch(request, call_next)
+            await mw(scope, receive, send)
             assert called[0] is True
 
 

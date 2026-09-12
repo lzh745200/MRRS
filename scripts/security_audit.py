@@ -265,13 +265,18 @@ def scan_missing_data_scope(verbose=False):
                 continue
 
             # 检查是否调用了任何形式的数据权限过滤
-            # 项目有三种等效实现：filter_by_data_scope / apply_data_scope / OrgScopeFilter.filter_by_org_ids
+            # 核心原语：filter_by_data_scope / apply_data_scope / OrgScopeFilter.filter_by_org_ids
+            # 服务层统一入口（B1 下沉 2026-09-12）：scoped_query / scoped_filter / scoped_count
+            # （语义单一真源仍是 core/data_permission.py，服务层入口只做统一收口）
             has_data_scope = any(pattern in content for pattern in [
                 "filter_by_data_scope",
                 "apply_data_scope",
                 "apply_scope_filter",
                 "filter_by_org_ids",
                 "apply_scope_to_query",
+                "scoped_query",
+                "scoped_filter",
+                "scoped_count",
             ])
 
             if not has_data_scope:

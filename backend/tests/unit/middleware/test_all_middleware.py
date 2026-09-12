@@ -174,18 +174,18 @@ class TestCSRFMiddleware:
 
     @pytest.mark.asyncio
     async def test_csrf_disabled(self):
+        """E1：纯 ASGI 实现 —— CSRF_ENABLED=False 时请求原样透传下游。"""
         from app.middleware.csrf_middleware import CSRFMiddleware
 
-        mock_app = AsyncMock()
-        mock_request = MagicMock()
-        mock_request.method = "POST"
-        mock_response = MagicMock()
-        mock_call_next = AsyncMock(return_value=mock_response)
+        async def mock_app(scope, receive, send):
+            mock_app.called = True
 
+        mock_app.called = False
+        scope = {"type": "http", "method": "POST", "path": "/api/v1/funds"}
         mw = CSRFMiddleware(mock_app)
         # CSRF_ENABLED defaults to False in test, so it should pass through
-        result = await mw.dispatch(mock_request, mock_call_next)
-        assert result is mock_response
+        await mw(scope, None, None)
+        assert mock_app.called is True
 
     def test_is_path_exempt(self):
         from app.middleware.csrf_middleware import _is_path_exempt

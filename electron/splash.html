@@ -80,7 +80,9 @@
     <div class="title">帮扶管理信息系统</div>
     <div class="subtitle">正在启动服务，请稍候...</div>
     <div class="loader"><div class="loader-bar"></div></div>
-    <div class="version">V1.12.2</div>
+    <!-- 版本号由 electron/main.js 在 did-finish-load 时注入（app.getVersion() 单一来源，
+         F3 2026-09-12）：此处不得留静态字面量，否则每次发版都会漂移出一版旧号 -->
+    <div class="version"></div>
   </div>
 </body>
 </html>

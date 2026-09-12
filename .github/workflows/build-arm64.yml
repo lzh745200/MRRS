@@ -214,6 +214,46 @@ jobs:
           mkdir -p DEBIAN
           tar xf control.tar.* -C DEBIAN/ 2>/dev/null || tar xf control.tar.gz -C DEBIAN/
           
+          # ── 桌面集成载荷注入（开始菜单无图标根因修复，2026-09-10）──
+          # electron-builder 的 linux.icon 仅 256x256，不满足其图标处理对
+          # 512x512 下限的要求，生成的 DEB 可能不含 hicolor 应用图标，
+          # 菜单项 Icon= 无法解析 → 开始菜单无图标；且 Linux 端从不创建
+          # 桌面快捷方式。这里在重打包阶段把图标直接写入 DEB 载荷。
+          DATA_MEMBER=$(ar t "../$DEB_FILE" | grep '^data\.tar' | head -1)
+          mkdir -p data_root
+          case "$DATA_MEMBER" in
+            data.tar.zst) tar --zstd -xf "$DATA_MEMBER" -C data_root ;;
+            data.tar.xz)  tar -Jxf "$DATA_MEMBER" -C data_root ;;
+            data.tar.bz2) tar -jxf "$DATA_MEMBER" -C data_root ;;
+            *)            tar -xf "$DATA_MEMBER" -C data_root ;;
+          esac
+          ICON_SRC="../resources/icons/app-circle-256.png"
+          test -f "$ICON_SRC" || { echo "::error::图标源不存在: $ICON_SRC"; exit 1; }
+          mkdir -p data_root/usr/share/pixmaps
+          install -m 644 "$ICON_SRC" data_root/usr/share/pixmaps/assistance-management-system.png
+          for size in 256 128 64 48 32 16; do
+            mkdir -p "data_root/usr/share/icons/hicolor/${size}x${size}/apps"
+            install -m 644 "$ICON_SRC" "data_root/usr/share/icons/hicolor/${size}x${size}/apps/assistance-management-system.png"
+          done
+          # 防御：electron-builder 生成的 .desktop 若 Icon= 非 executableName，
+          # 按其实际 Icon 值再补一份，保证菜单项图标一定可解析
+          DTFILE=$(find data_root/usr/share/applications -name '*.desktop' 2>/dev/null | head -1)
+          test -n "$DTFILE" || { echo "::error::DEB 载荷缺少 .desktop 文件（electron-builder 打包异常）"; exit 1; }
+          ICON_VAL=$(grep -m1 -E '^Icon=' "$DTFILE" | cut -d= -f2- | tr -d '\r' || true)
+          if [ -n "$ICON_VAL" ] && [ "$ICON_VAL" != "assistance-management-system" ]; then
+            for size in 256 128 64 48 32 16; do
+              install -m 644 "$ICON_SRC" "data_root/usr/share/icons/hicolor/${size}x${size}/apps/${ICON_VAL}.png"
+            done
+          fi
+          # 重打 data.tar.gz（统一 root 属主，dpkg 解包后文件归 root）
+          tar czf data.tar.gz --owner=0 --group=0 --numeric-owner -C data_root .
+          # 删除旧 control/data 成员（压缩格式可能是 gz/xz/zst，删除后
+          # 统一追加新的 control.tar.gz + data.tar.gz；避免同名不同压缩
+          # 格式共存导致 dpkg 出现双成员拒装。debian-binary 保持首位）
+          for m in $(ar t "../$DEB_FILE" | grep -E '^(control|data)\.tar'); do
+            ar d "../$DEB_FILE" "$m"
+          done
+          
           # Write postinst script
           cat > DEBIAN/postinst << 'POSTINST'
           #!/bin/bash
@@ -250,22 +290,117 @@ jobs:
           
           # Update icon cache
           if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-            gtk-update-icon-cache /usr/share/icons/ 2>/dev/null || true
+            gtk-update-icon-cache -f /usr/share/icons/hicolor/ 2>/dev/null || true
+          fi
+          
+          # ── 桌面快捷方式（2026-09-10 修复：Linux electron-builder 从不创建
+          # ~/Desktop 图标；安装目录需运行时发现——英文名/中文 productName 两种布局）
+          ELECTRON_DIR=""
+          for dir in /opt/assistance-management-system "/opt/帮扶管理系统"; do
+            if [ -f "$dir/assistance-management-system" ]; then
+              ELECTRON_DIR="$dir"
+              break
+            fi
+          done
+          
+          mk_desktop_entry() {
+            # $1=Exec 路径  $2=输出文件路径
+            printf '%s\n' \
+              "[Desktop Entry]" \
+              "Version=1.0" \
+              "Type=Application" \
+              "Name=帮扶管理系统" \
+              "Name[en]=Assistance Management System" \
+              "Comment=乡村振兴综合管理平台" \
+              "Exec=$1" \
+              "Icon=assistance-management-system" \
+              "Terminal=false" \
+              "Categories=Office;Utility;" \
+              "StartupNotify=true" > "$2"
+          }
+          
+          apply_trusted() {
+            # UKUI/麒麟桌面要求 .desktop 可执行且带信任标记，双击才不弹确认框
+            if command -v gio >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+              sudo -u "$1" gio set "$2" metadata::trusted true 2>/dev/null || true
+            fi
+          }
+          
+          DESKTOP_CREATED=0
+          if [ -n "$ELECTRON_DIR" ]; then
+            for home_dir in /home/*; do
+              [ -d "$home_dir" ] || continue
+              user_name=$(basename "$home_dir")
+              id "$user_name" >/dev/null 2>&1 || continue
+              user_desktop=""
+              if command -v xdg-user-dir >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+                user_desktop=$(sudo -u "$user_name" xdg-user-dir DESKTOP 2>/dev/null || true)
+              fi
+              if [ -z "$user_desktop" ] || [ ! -d "$user_desktop" ]; then
+                for candidate in "$home_dir/Desktop" "$home_dir/桌面" "$home_dir/desktop"; do
+                  if [ -d "$candidate" ]; then
+                    user_desktop="$candidate"
+                    break
+                  fi
+                done
+              fi
+              if [ -z "$user_desktop" ] || [ ! -d "$user_desktop" ]; then
+                user_desktop="$home_dir/Desktop"
+                mkdir -p "$user_desktop" 2>/dev/null || true
+                chown "$user_name" "$user_desktop" 2>/dev/null || true
+              fi
+              if [ -d "$user_desktop" ]; then
+                mk_desktop_entry "$ELECTRON_DIR/assistance-management-system" \
+                  "$user_desktop/assistance-management-system.desktop"
+                chmod 755 "$user_desktop/assistance-management-system.desktop" || true
+                chown "$user_name" "$user_desktop/assistance-management-system.desktop" || true
+                apply_trusted "$user_name" "$user_desktop/assistance-management-system.desktop"
+                DESKTOP_CREATED=$((DESKTOP_CREATED + 1))
+              fi
+            done
+          fi
+          
+          # SUDO_USER 兜底（/home/* 遍历无结果、用户 home 不在 /home 下等场景）
+          if [ "$DESKTOP_CREATED" -eq 0 ] && [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ] && [ -n "$ELECTRON_DIR" ]; then
+            sudo_home=$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6)
+            if [ -n "$sudo_home" ]; then
+              mkdir -p "$sudo_home/Desktop" 2>/dev/null || true
+              if [ -d "$sudo_home/Desktop" ]; then
+                mk_desktop_entry "$ELECTRON_DIR/assistance-management-system" \
+                  "$sudo_home/Desktop/assistance-management-system.desktop"
+                chmod 755 "$sudo_home/Desktop/assistance-management-system.desktop" || true
+                chown "$SUDO_USER" "$sudo_home/Desktop/assistance-management-system.desktop" 2>/dev/null || true
+                apply_trusted "$SUDO_USER" "$sudo_home/Desktop/assistance-management-system.desktop"
+                echo "已为安装用户 $SUDO_USER 创建桌面快捷方式: $sudo_home/Desktop/assistance-management-system.desktop"
+              fi
+            fi
+          fi
+          
+          # 刷新桌面数据库与图标缓存（菜单项/桌面图标立即可见）
+          if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database /usr/share/applications/ 2>/dev/null || true
+          fi
+          if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+            gtk-update-icon-cache -f /usr/share/icons/hicolor/ 2>/dev/null || true
           fi
           
           exit 0
           POSTINST
           chmod 755 DEBIAN/postinst
           
-          # Repack control archive
-          tar czf control.tar.gz -C DEBIAN .
+          # Repack control archive（root 属主）
+          tar czf control.tar.gz --owner=0 --group=0 --numeric-owner -C DEBIAN .
           
-          # Repack .deb
-          ar rcs "../$DEB_FILE" debian-binary control.tar.gz data.tar.*
+          # Repack .deb（data.tar.gz 已在前面注入图标并删除旧 data 成员）
+          ar rcs "../$DEB_FILE" debian-binary control.tar.gz data.tar.gz
           cd ..
           rm -rf deb_work
           
           echo "postinst injected successfully"
+          
+          echo "=== 桌面集成载荷验证（图标 + .desktop 必须在包内）==="
+          dpkg-deb -c "$DEB_FILE" | grep -E "usr/share/(pixmaps|icons/hicolor)/.*\.png" | head -5
+          dpkg-deb -c "$DEB_FILE" | grep -E "usr/share/applications/.*\.desktop"
 
       - name: Verify DEB package
         run: |
@@ -356,6 +491,17 @@ jobs:
           fi
           echo "维护脚本 LF 验证通过"
           bash -n /tmp/debchk/DEBIAN/postinst && echo "postinst 语法通过"
+          bash -n /tmp/debchk/DEBIAN/prerm && echo "prerm 语法通过"
+          bash -n /tmp/debchk/DEBIAN/postrm && echo "postrm 语法通过"
+          # 桌面集成载荷断言（2026-09-10）：图标与 .desktop 必须在包内，
+          # 缺失即出包失败，杜绝"安装后无图标/无快捷方式"静默出厂
+          dpkg-deb -c "$DEB" | grep -E "usr/share/pixmaps/assistance-management-system\.png" \
+            || { echo "::error::载荷缺少 pixmaps 图标"; exit 1; }
+          dpkg-deb -c "$DEB" | grep -E "usr/share/icons/hicolor/512x512/apps/assistance-management-system\.png" \
+            || { echo "::error::载荷缺少 hicolor 图标"; exit 1; }
+          dpkg-deb -c "$DEB" | grep -E "opt/assistance-management-system/desktop/.*\.desktop" \
+            || { echo "::error::载荷缺少 .desktop"; exit 1; }
+          echo "桌面集成载荷断言通过"
 
       # 产物 SHA256 清单（W6-T5；命名区分产物族，避免同 Release 覆盖）
       - name: Generate SHA256SUMS

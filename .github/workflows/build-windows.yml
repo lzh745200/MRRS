@@ -152,6 +152,11 @@ jobs:
           $internal = Get-ChildItem backend/dist/assistance-backend/_internal -Recurse -File | Measure-Object -Property Length -Sum
           Write-Host ("_internal: {0} files, {1}MB" -f $internal.Count, [math]::Round($internal.Sum / 1MB, 1))
 
+      # 8a. 打包卫生门禁：产物不得包含测试文件/测试目录/测试依赖（2026-09-12）
+      - name: Verify no test files in package
+        shell: bash
+        run: python scripts/verify_package_no_tests.py --backend-dir backend/dist/assistance-backend --frontend-dir frontend/dist
+
       # 8.5 后端 exe 签名（W6-T1，可选）：仓库 secrets 配置 CSC_LINK / CSC_KEY_PASSWORD
       # 后自动启用；未配置则显式 WARNING 跳过（不影响构建）。第 10 步 electron-builder
       # 会用同一对密钥自动签名安装包与卸载器。接入与验证方法见
@@ -213,6 +218,25 @@ jobs:
         run: npx electron-builder --win --x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 10.6 安装包内容抽查：NSIS 安装包可被 7z 列举，确认无测试内容
+      #      规则收口到 scripts/verify_package_no_tests.py --listing（与文件树扫描同一
+      #      实现 + 同一厂商豁免表）。此前内联正则没有豁免表，会把 prophet/cmdstan 自带
+      #      的 src/test/*.cpp（实测 283 项）误判为违规而阻断 Windows 出包。
+      - name: Verify installer contains no tests
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "dist/electron/*.exe" | Select-Object -First 1
+          if (-not $exe) { throw "dist/electron/*.exe not found" }
+          $sevenZip = "C:\Program Files\7-Zip\7z.exe"
+          if (-not (Test-Path $sevenZip)) {
+            Write-Warning "7-Zip 不可用，跳过安装包内容抽查（onedir 级验证已通过）"
+            exit 0
+          }
+          $listing = Join-Path $env:RUNNER_TEMP "installer-listing.txt"
+          & $sevenZip l $exe.FullName | Out-File -FilePath $listing -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw "7z 列举失败 (exit $LASTEXITCODE)" }
+          python scripts/verify_package_no_tests.py --listing $listing
 
       # 10.5 生成产物 SHA256 清单（军队分发完整性链，W6-T5）
       - name: Generate SHA256SUMS

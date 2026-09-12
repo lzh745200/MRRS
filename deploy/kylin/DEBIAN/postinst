@@ -132,6 +132,12 @@ DESKTOP_SRC="${INSTALL_DIR}/desktop/assistance-management-system.desktop"
 ICON_SRC="${INSTALL_DIR}/icons/app-circle-256.png"
 
 # 7.1 安装应用图标到系统图标目录（开始菜单显示用）
+# 图标源兜底链：/opt 包内图标 → DEB 载荷自带的 /usr/share/pixmaps 图标
+# （Dockerfile 构建时已将图标 COPY 进 usr/share/pixmaps/，确保永不缺源）
+if [ ! -f "${ICON_SRC}" ] && [ -f "/usr/share/pixmaps/${APP_NAME}.png" ]; then
+    ICON_SRC="/usr/share/pixmaps/${APP_NAME}.png"
+    echo "  /opt 包内图标缺失，使用载荷系统图标兜底: ${ICON_SRC}"
+fi
 if [ -f "${ICON_SRC}" ]; then
     mkdir -p /usr/share/pixmaps
     cp "${ICON_SRC}" /usr/share/pixmaps/assistance-management-system.png
@@ -148,6 +154,24 @@ else
 fi
 
 # 7.2 安装应用菜单快捷方式
+# .desktop 源兜底：包内文件缺失时内联生成（此前"仅警告跳过"会导致
+# 开始菜单无启动项——根因不再静默）
+if [ ! -f "${DESKTOP_SRC}" ]; then
+    echo "  警告: .desktop 文件不存在（${DESKTOP_SRC}），内联生成兜底"
+    mkdir -p "$(dirname "${DESKTOP_SRC}")"
+    cat > "${DESKTOP_SRC}" << 'DESKTOP_FALLBACK'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=帮扶管理信息系统
+Name[en]=Assistance Management Information System
+Exec=/opt/assistance-management-system/scripts/start-kylin.sh
+Path=/opt/assistance-management-system
+Icon=assistance-management-system
+Terminal=false
+Categories=Office;Management;
+DESKTOP_FALLBACK
+fi
 if [ -f "${DESKTOP_SRC}" ]; then
     cp "${DESKTOP_SRC}" /usr/share/applications/${APP_NAME}.desktop
     chmod 644 /usr/share/applications/${APP_NAME}.desktop
@@ -160,6 +184,17 @@ fi
 
 # 7.3 为每个桌面用户创建桌面快捷方式（麒麟 V10 桌面图标）
 # 遍历 /home 下所有用户目录，确保安装后桌面出现图标
+# 以指定用户身份执行命令：sudo 不可用（su 方式安装）时降级为 su，
+# 保证 xdg-user-dir / gio 在目标用户上下文中运行
+_as_user() {
+    local user_name="$1"
+    shift
+    if command -v sudo &>/dev/null; then
+        sudo -u "$user_name" "$@" 2>/dev/null
+    else
+        su -s /bin/sh "$user_name" -c "$*" 2>/dev/null
+    fi
+}
 DESKTOP_CREATED=0
 for home_dir in /home/*; do
     [ -d "$home_dir" ] || continue
@@ -169,7 +204,7 @@ for home_dir in /home/*; do
     # 桌面目录候选：xdg-user-dir 优先，其次常见路径（含中文"桌面"）
     user_desktop=""
     if command -v xdg-user-dir &>/dev/null; then
-        user_desktop=$(sudo -u "$user_name" xdg-user-dir DESKTOP 2>/dev/null)
+        user_desktop=$(_as_user "$user_name" xdg-user-dir DESKTOP)
     fi
     if [ -z "$user_desktop" ] || [ ! -d "$user_desktop" ]; then
         for candidate in "$home_dir/Desktop" "$home_dir/桌面" "$home_dir/desktop"; do
@@ -193,7 +228,7 @@ for home_dir in /home/*; do
         chown "$user_name:$user_name" "$user_desktop/${APP_NAME}.desktop"
         # 麒麟/UKUI 桌面需要信任标记才能直接双击运行
         if command -v gio &>/dev/null; then
-            sudo -u "$user_name" gio set "$user_desktop/${APP_NAME}.desktop" metadata::trusted true 2>/dev/null || true
+            _as_user "$user_name" gio set "$user_desktop/${APP_NAME}.desktop" metadata::trusted true || true
         fi
         DESKTOP_CREATED=$((DESKTOP_CREATED + 1))
         echo "  已在用户 '$user_name' 桌面创建快捷方式: $user_desktop/${APP_NAME}.desktop"
@@ -201,8 +236,37 @@ for home_dir in /home/*; do
 done
 
 if [ "$DESKTOP_CREATED" -eq 0 ]; then
-    echo "  未检测到桌面用户目录，桌面快捷方式未创建"
-    echo "  提示: 安装后可在应用菜单中搜索 '帮扶管理信息系统' 启动"
+    # 兜底：/home/* 遍历无结果（用户 home 不在 /home 下或无本地用户）时，
+    # 用执行安装的桌面用户（sudo dpkg -i 场景下 SUDO_USER 必有值）补建
+    if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ] && id "$SUDO_USER" &>/dev/null && [ -f "${DESKTOP_SRC}" ]; then
+        sudo_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+        if [ -n "$sudo_home" ]; then
+            sudo_desktop=""
+            for candidate in "$sudo_home/Desktop" "$sudo_home/桌面" "$sudo_home/desktop"; do
+                if [ -d "$candidate" ]; then
+                    sudo_desktop="$candidate"
+                    break
+                fi
+            done
+            if [ -z "$sudo_desktop" ]; then
+                sudo_desktop="$sudo_home/Desktop"
+                mkdir -p "$sudo_desktop"
+                chown "$SUDO_USER" "$sudo_desktop"
+            fi
+            cp "${DESKTOP_SRC}" "$sudo_desktop/${APP_NAME}.desktop"
+            chmod 755 "$sudo_desktop/${APP_NAME}.desktop"
+            chown "$SUDO_USER" "$sudo_desktop/${APP_NAME}.desktop"
+            if command -v gio &>/dev/null; then
+                _as_user "$SUDO_USER" gio set "$sudo_desktop/${APP_NAME}.desktop" metadata::trusted true || true
+            fi
+            DESKTOP_CREATED=1
+            echo "  已为安装用户 '$SUDO_USER' 创建桌面快捷方式: $sudo_desktop/${APP_NAME}.desktop"
+        fi
+    fi
+    if [ "$DESKTOP_CREATED" -eq 0 ]; then
+        echo "  未检测到桌面用户目录，桌面快捷方式未创建"
+        echo "  提示: 安装后可在应用菜单中搜索 '帮扶管理信息系统' 启动"
+    fi
 fi
 
 # ── 8. 安装启动命令 ──

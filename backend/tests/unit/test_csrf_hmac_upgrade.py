@@ -13,7 +13,7 @@
 import hashlib
 import hmac as _hmac
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -95,34 +95,47 @@ class TestTokenExpiry:
 
 # ── HMAC 验证流程（middleware 集成）────────────────────────────────────
 
-def _make_request(
+def _make_scope(
     method="POST",
     path="/api/v1/users",
     cookie="",
     header="",
     internal_backup="",
+    client=("127.0.0.1", 50000),
 ):
-    """构造 mock request"""
-    request = MagicMock()
-    request.method = method
-    request.url.path = path
-    request.cookies = {"csrftoken": cookie} if cookie else {}
-    request.headers = {}
+    """构造 ASGI scope（E1：纯 ASGI 实现的测试替身）"""
+    h = [(b"host", b"127.0.0.1:8000")]
+    if cookie:
+        h.append((b"cookie", f"csrftoken={cookie}".encode()))
     if header:
-        request.headers["X-CSRF-Token"] = header
+        h.append((b"x-csrf-token", header.encode()))
     if internal_backup:
-        request.headers["X-Internal-Backup"] = internal_backup
-    request.client = MagicMock()
-    request.client.host = "127.0.0.1"
-    return request
+        h.append((b"x-internal-backup", internal_backup.encode()))
+    return {
+        "type": "http", "method": method, "path": path, "headers": h,
+        "client": client, "query_string": b"", "scheme": "http",
+        "server": ("127.0.0.1", 8000),
+    }
 
 
-def _mock_settings(enabled=True):
-    s = MagicMock()
-    s.CSRF_ENABLED = enabled
-    s.CSRF_SECRET_KEY = "test-csrf-secret-key"
-    s.SECRET_KEY = "test-secret-key"
-    return s
+async def _call_mw(mw, scope):
+    """驱动 ASGI 中间件，返回 (downstream_called, status_code)。"""
+    called = [False]
+    captured = {"status": None}
+
+    async def downstream(scope, receive, send):
+        called[0] = True
+
+    async def receive():
+        return {"type": "http.request"}
+
+    async def send(message):
+        if message["type"] == "http.response.start":
+            captured["status"] = message["status"]
+
+    mw.app = downstream
+    await mw(scope, receive, send)
+    return called[0], captured["status"]
 
 
 @pytest.mark.asyncio
@@ -147,135 +160,127 @@ class TestCSRFMiddlewareHMAC:
         """cookie=HMAC(raw), header=raw → 验证通过"""
         raw_token = generate_csrf_token()
         signed = sign_csrf_token(raw_token, self._SECRET)
-        request = _make_request(cookie=signed, header=raw_token)
-        call_next = AsyncMock(return_value=MagicMock(status_code=200))
-
         mw = self._setup_settings()
         try:
-            resp = await mw.dispatch(request, call_next)
+            called, status = await _call_mw(
+                mw, _make_scope(cookie=signed, header=raw_token)
+            )
         finally:
             self._teardown_settings()
-        assert resp.status_code == 200
+        assert called is True
 
     async def test_hmac_verification_rejects_mismatch(self):
         """cookie 和 header 不匹配 → 403"""
-        request = _make_request(cookie="wrong-sig", header="wrong-raw")
-        call_next = AsyncMock(return_value=MagicMock(status_code=200))
-
         mw = self._setup_settings()
         try:
-            resp = await mw.dispatch(request, call_next)
+            called, status = await _call_mw(
+                mw, _make_scope(cookie="wrong-sig", header="wrong-raw")
+            )
         finally:
             self._teardown_settings()
-        assert resp.status_code == 403
+        assert called is False
+        assert status == 403
 
     async def test_plaintext_fallback_passes_with_warning(self):
         """旧版明文比对（cookie == header 非签名）→ 通过但 warning"""
         raw_token = generate_csrf_token()
-        request = _make_request(cookie=raw_token, header=raw_token)
-        call_next = AsyncMock(return_value=MagicMock(status_code=200))
-
         mw = self._setup_settings()
         try:
-            resp = await mw.dispatch(request, call_next)
+            called, status = await _call_mw(
+                mw, _make_scope(cookie=raw_token, header=raw_token)
+            )
         finally:
             self._teardown_settings()
-        assert resp.status_code == 200
+        assert called is True
 
     async def test_expired_token_rejects(self):
         """过期 token → 403"""
         old_ts = int(time.time()) - CSRF_TOKEN_EXPIRY - 100
         old_token = f"{old_ts}.abc123"
         signed = sign_csrf_token(old_token, self._SECRET)
-        request = _make_request(cookie=signed, header=old_token)
-        call_next = AsyncMock(return_value=MagicMock(status_code=200))
-
         mw = self._setup_settings()
         try:
-            resp = await mw.dispatch(request, call_next)
+            called, status = await _call_mw(
+                mw, _make_scope(cookie=signed, header=old_token)
+            )
         finally:
             self._teardown_settings()
-        assert resp.status_code == 403
+        assert called is False
+        assert status == 403
 
     async def test_safe_method_bypasses(self):
         """GET 请求直接放行"""
-        request = _make_request(method="GET")
-        call_next = AsyncMock(return_value=MagicMock(status_code=200))
-
         mw = self._setup_settings()
         try:
-            resp = await mw.dispatch(request, call_next)
+            called, _ = await _call_mw(mw, _make_scope(method="GET"))
         finally:
             self._teardown_settings()
-        assert resp.status_code == 200
+        assert called is True
 
     async def test_csrf_disabled_bypasses(self):
         """CSRF_ENABLED=False 直接放行"""
-        request = _make_request(cookie="x", header="y")
-        call_next = AsyncMock(return_value=MagicMock(status_code=200))
-
         mw = self._setup_settings(enabled=False)
         try:
-            resp = await mw.dispatch(request, call_next)
+            called, _ = await _call_mw(mw, _make_scope(cookie="x", header="y"))
         finally:
             self._teardown_settings()
-        assert resp.status_code == 200
+        assert called is True
 
 
 # ── get_client_ip ──────────────────────────────────────────────────────
 
 class TestGetClientIp:
-    def _req(self, client_host="127.0.0.1", xff=""):
-        r = MagicMock()
-        r.client = MagicMock()
-        r.client.host = client_host
-        r.headers = {}
+    """E1：get_client_ip 改为 scope 版，语义不变。"""
+
+    def _scope(self, client_host="127.0.0.1", xff=""):
+        h = [(b"host", b"x")]
         if xff:
-            r.headers["x-forwarded-for"] = xff
-        return r
+            h.append((b"x-forwarded-for", xff.encode()))
+        return {
+            "type": "http", "method": "GET", "path": "/",
+            "headers": h, "client": (client_host, 1000),
+            "query_string": b"", "scheme": "http", "server": ("127.0.0.1", 8000),
+        }
 
     def test_direct_no_proxy(self):
-        assert _mw._TRUSTED_PROXIES == [] or True  # may be empty
-        # Patch module-level _TRUSTED_PROXIES to simulate no config
         with patch.object(_mw, "_TRUSTED_PROXIES", []):
-            assert get_client_ip(self._req()) == "127.0.0.1"
+            assert get_client_ip(self._scope()) == "127.0.0.1"
 
     def test_no_client(self):
-        r = MagicMock()
-        r.client = None
-        r.headers = {}
+        scope = self._scope()
+        scope["client"] = None
         with patch.object(_mw, "_TRUSTED_PROXIES", []):
-            assert get_client_ip(r) == "unknown"
+            assert get_client_ip(scope) == "unknown"
 
     def test_trusted_proxy_forwards(self):
         with patch.object(_mw, "_TRUSTED_PROXIES", ["10.0.0.1"]):
-            assert get_client_ip(self._req(client_host="10.0.0.1", xff="1.2.3.4")) == "1.2.3.4"
+            assert get_client_ip(self._scope(client_host="10.0.0.1", xff="1.2.3.4")) == "1.2.3.4"
 
     def test_untrusted_proxy_fallback(self):
         with patch.object(_mw, "_TRUSTED_PROXIES", ["10.0.0.1"]):
-            assert get_client_ip(self._req(client_host="9.9.9.9", xff="5.6.7.8")) == "9.9.9.9"
+            assert get_client_ip(self._scope(client_host="9.9.9.9", xff="5.6.7.8")) == "9.9.9.9"
 
     def test_no_xff_header(self):
         with patch.object(_mw, "_TRUSTED_PROXIES", ["10.0.0.1"]):
-            assert get_client_ip(self._req(client_host="10.0.0.1")) == "10.0.0.1"
+            assert get_client_ip(self._scope(client_host="10.0.0.1")) == "10.0.0.1"
 
     def test_cidr_trusted_proxy_forwards(self):
         """CIDR 网段匹配：直连 IP 落在可信网段内 → 透传 XFF 首段。"""
         with patch.object(_mw, "_TRUSTED_PROXIES", ["10.0.0.0/8"]):
             assert get_client_ip(
-                self._req(client_host="10.1.2.3", xff="1.2.3.4")
+                self._scope(client_host="10.1.2.3", xff="1.2.3.4")
             ) == "1.2.3.4"
 
     def test_cidr_not_matched_falls_back(self):
         """CIDR 网段不匹配：直连 IP 不在可信网段 → 降级为直连 IP。"""
         with patch.object(_mw, "_TRUSTED_PROXIES", ["10.0.0.0/8"]):
             assert get_client_ip(
-                self._req(client_host="192.168.1.1", xff="5.6.7.8")
+                self._scope(client_host="192.168.1.1", xff="5.6.7.8")
             ) == "192.168.1.1"
 
     def test_cidr_invalid_direct_ip_swallowed(self):
         """直连 IP 非法时 ipaddress 抛 ValueError 被吞掉，降级为直连 IP。"""
         with patch.object(_mw, "_TRUSTED_PROXIES", ["10.0.0.0/8"]):
             assert get_client_ip(
-                self._req(client_host="not-an-ip", xff="5.6.7.8")
+                self._scope(client_host="not-an-ip", xff="5.6.7.8")
             ) == "not-an-ip"

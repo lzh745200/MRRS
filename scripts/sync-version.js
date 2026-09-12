@@ -160,15 +160,22 @@ const TARGETS = [
     },
   },
   {
-    name: "build-kylin.sh (artifact name, legacy)",
+    name: "build-kylin.sh (config.py 读取失败时的兜底字面量)",
     file: "scripts/legacy/build-kylin.sh",
     optional: true,
+    // 2026-09-12：原目标匹配 `arm64-vX.Y.Z.tar.gz`（历史产物命名），该命名已不存在
+    // → 目标恒不命中、只在输出里留一条 warn 噪声（死目标）。现改为对准文件里
+    // 真实存在的版本字面量：VERSION 从 config.py 提取，失败时兜底 `|| echo "1.2.0"`
+    // —— 那正是会随发版漂移的地方（2026-09-12 实测仍停在 1.2.0）。
     describe(c) {
-      const m = c.match(/arm64-v(\d+\.\d+\.\d+)\.tar\.gz/);
+      const m = c.match(/\|\|\s*echo\s*"(\d+\.\d+\.\d+)"/);
       return m ? m[1] : null;
     },
     apply(c, v) {
-      return c.replace(/(arm64-v)(\d+\.\d+\.\d+)(\.tar\.gz)/g, `$1${v}$3`);
+      return c.replace(
+        /(\|\|\s*echo\s*")(\d+\.\d+\.\d+)(")/,
+        `$1${v}$3`,
+      );
     },
   },
   {
@@ -195,6 +202,46 @@ const TARGETS = [
         /(VITE_APP_VERSION \|\|\s*')(\d+\.\d+\.\d+)(')/g,
         `$1${v}$3`,
       );
+    },
+  },
+  {
+    name: "frontend/package-lock.json (version + packages[\"\"].version)",
+    file: "frontend/package-lock.json",
+    // 2026-09-12 新增：lock 根部两处 version 长期靠手工对齐（v1.12.3 发版时实测
+    // 仍停在 1.12.2）。纳入单一版本源管理，避免"package.json 已升、lock 没升"。
+    describe(c) {
+      try {
+        const d = JSON.parse(c);
+        return d.version || null;
+      } catch {
+        return null;
+      }
+    },
+    apply(c, v) {
+      const d = JSON.parse(c);
+      d.version = v;
+      if (d.packages && d.packages[""]) {
+        d.packages[""].version = v;
+      }
+      return JSON.stringify(d, null, 2) + "\n";
+    },
+  },
+  {
+    name: "electron/splash.html (不得含静态版本字面量)",
+    file: "electron/splash.html",
+    // F3 单一来源契约：splash 的版本号由 main.js 用 app.getVersion() 注入，
+    // 静态 HTML 里出现 `V1.2.3` 就说明又埋了一处会漂移的第二来源（2026-09-12
+    // 实测残留 V1.12.2）。契约满足时返回源版本 → [ok]；否则哨兵 → --check 退出 1。
+    describe(c) {
+      const m = c.match(/V(\d+\.\d+\.\d+)/);
+      if (m) {
+        return `静态字面量 V${m[1]}（应由 main.js 注入）`;
+      }
+      return readSourceVersion();
+    },
+    apply(c) {
+      // 删除静态字面量属人工判断（可能连带注释），禁止自动改写。
+      return c;
     },
   },
   {
@@ -225,18 +272,24 @@ const TARGETS = [
     },
   },
   {
-    name: "electron/main.js (fallback version)",
+    name: "electron/main.js (版本单一来源: app.getVersion)",
     file: "electron/main.js",
+    // 2026-09-12（F3 整改副作用修复）：F3 删除了 `|| '1.2.3'` 硬编码回退，版本改为
+    // 由打包元数据（根 package.json）经 `app.getVersion()` 单一提供。原目标只认
+    // 字面量正则 → 永远匹配不到，成为死目标并每次输出 warn 噪声。
+    // 现改为**契约检查**：仍在使用 app.getVersion() 且未重新引入硬编码版本字面量
+    // 时视为一致（返回源版本）；契约被破坏则返回哨兵串 → 触发 [diff]，--check 退出 1。
     describe(c) {
-      // 取回退默认值（出现两次，取第一个）
-      const m = c.match(/\|\|\s*'(\d+\.\d+\.\d+)'/);
-      return m ? m[1] : null;
+      const usesPackedVersion = /app\.getVersion\(\)/.test(c);
+      const hasHardcoded = /(\|\|\s*'|return\s*')\d+\.\d+\.\d+'/.test(c);
+      if (!usesPackedVersion || hasHardcoded) {
+        return "契约破坏: 需 app.getVersion() 且无硬编码版本";
+      }
+      return readSourceVersion();
     },
-    apply(c, v) {
-      return c.replace(/(\|\|\s*')(\d+\.\d+\.\d+)(')/g, `$1${v}$3`).replace(
-        /(return\s*')(\d+\.\d+\.\d+)(')/g,
-        `$1${v}$3`,
-      );
+    apply(c) {
+      // 没有可同步的字面量：契约不满足只能人工修复，禁止自动改写。
+      return c;
     },
   },
   {
