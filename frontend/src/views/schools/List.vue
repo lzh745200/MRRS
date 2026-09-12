@@ -256,11 +256,8 @@
         />
         <el-upload
           ref="importUploadRef"
-          :action="importUrl"
-          :headers="uploadHeaders"
+          :http-request="handleImportUpload"
           :before-upload="beforeImportUpload"
-          :on-success="onImportSuccess"
-          :on-error="onImportError"
           :limit="1"
           accept=".xlsx,.xls"
           drag
@@ -286,7 +283,6 @@ import { DIALOG_SM } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
-import { useUploadHeaders } from '@/composables/useUploadHeaders'
 
 import { ref, reactive, computed, onMounted, onActivated, onUnmounted, watch, nextTick } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -322,10 +318,7 @@ const filterForm = reactive({
   status: '',
 })
 
-// 上传相关
-const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
-const importUrl = `${baseUrl}/schools/import/excel`
-const { uploadHeaders } = useUploadHeaders()
+// 上传相关（改用 :http-request 走 axios，见 handleImportUpload）
 
 const typeMap: Record<string, string> = {
   primary: '小学',
@@ -649,6 +642,20 @@ function onImportError() {
   ElMessage.error('导入失败，请检查文件格式')
 }
 
+// 自定义上传：走 axios 实例（携带 baseURL/代理/token/重试），避免 Electron file:// 下原生 XHR 相对路径失效
+async function handleImportUpload(options: any) {
+  try {
+    const res = await schoolApi.importExcel(options.file)
+    onImportSuccess(res)
+  } catch (err: any) {
+    logger.error('[SchoolList] 导入学校失败', err)
+    ElMessage.error(getErrorMessage(err) || '导入失败，请检查文件格式')
+    onImportError()
+  } finally {
+    options.onSuccess?.(undefined)
+  }
+}
+
 // 导出
 async function handleExport() {
   ElMessage.success('正在导出学校数据...')
@@ -664,16 +671,30 @@ async function handleExport() {
   }
 }
 
-onMounted(() => {
+// 首次挂载去重：keep-alive 页面 onMounted 与 onActivated 会同时触发，
+// 用标志确保首次只请求一次（两钩子谁先到谁负责首次加载），后续仅 onActivated 刷新。
+const firstLoaded = ref(false)
+
+function initialLoad() {
+  if (firstLoaded.value) return false
+  firstLoaded.value = true
   fetchData()
   loadApiStats()
+  return true
+}
+
+onMounted(() => {
+  initialLoad()
   window.addEventListener('resize', handleChartResize)
 })
 
 // 页面激活时刷新数据（解决keep-alive缓存问题）
 onActivated(() => {
-  fetchData()
-  loadApiStats()
+  // 首次激活已由 onMounted 完成加载时跳过，避免重复请求；后续激活正常刷新
+  if (!initialLoad()) {
+    fetchData()
+    loadApiStats()
+  }
   // keep-alive 恢复后容器尺寸可能变化，重绘图表
   nextTick(handleChartResize)
 })

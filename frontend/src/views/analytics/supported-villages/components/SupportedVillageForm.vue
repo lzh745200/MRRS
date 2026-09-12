@@ -584,6 +584,16 @@ async function handleSubmit() {
       return
     }
 
+    // 未点“添加”直接保存保护：若当前选中年度填了非零输入但尚未并入 rows，
+    // 先 upsert 该年度，避免该年度经费被静默丢弃。
+    // 仅在存在非零输入时并入——否则会误把已有行覆盖为 0，也不产生空行。
+    const currentYear = Number(selectedFundingYear.value)
+    const hasNonZeroInput =
+      Number(currentMilitaryInput.value || 0) !== 0 || Number(currentLocalInput.value || 0) !== 0
+    if (!isNaN(currentYear) && hasNonZeroInput) {
+      upsertFundingRow(currentYear)
+    }
+
     // 同步更新总额字段
     formData.transitionFundMilitaryTotal = transitionMilitaryTotal.value
     formData.transitionFundLocalTotal = transitionLocalTotal.value

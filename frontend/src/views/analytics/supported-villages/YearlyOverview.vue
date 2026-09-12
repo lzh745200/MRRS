@@ -379,7 +379,12 @@ const trendData = ref<{
 
 async function loadTrendData() {
   const currentYear = new Date().getFullYear()
-  const yearList = Array.from({ length: 6 }, (_, i) => currentYear - i + 1)
+  // 年度范围覆盖完整历史（2017 ~ 当前年+1），与详情页保持一致
+  const YEAR_START = 2017
+  const yearList = Array.from(
+    { length: currentYear + 1 - YEAR_START + 1 },
+    (_, i) => currentYear + 1 - i
+  )
   const records: Array<{ year: number; perCapita: number | null; collective: number | null }> = []
   for (const year of yearList) {
     try {

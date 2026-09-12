@@ -236,7 +236,12 @@ const village = ref<SupportedVillage | null>(null)
 const yearlyData = ref<YearlyDataSummary | null>(null)
 
 const currentYear = new Date().getFullYear()
-const availableYears = Array.from({ length: 6 }, (_, i) => currentYear - i + 1)
+// 年度范围覆盖完整历史（2017 ~ 当前年+1），不限于固定的近六年
+const YEAR_START = 2017
+const availableYears = Array.from(
+  { length: currentYear + 1 - YEAR_START + 1 },
+  (_, i) => currentYear + 1 - i
+)
 const selectedYear = ref(currentYear)
 
 // 页面模式：根据路由自动判断

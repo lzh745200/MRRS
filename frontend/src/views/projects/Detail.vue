@@ -147,7 +147,9 @@
             <el-table-column prop="title" label="任务名称" min-width="180" />
             <el-table-column prop="status" label="状态" width="100">
               <template #default="{ row }">
-                <el-tag :type="taskStatusType(row.status)">{{ row.status }}</el-tag>
+                <el-tag :type="taskStatusType(row.status)">{{
+                  statusMap[row.status]?.text ?? row.status
+                }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="priority" label="优先级" width="90">
@@ -336,7 +338,7 @@
 <script setup lang="ts">
 import { DIALOG_SM } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Edit, Back } from '@element-plus/icons-vue'
@@ -351,7 +353,7 @@ import FilePreview from '@/components/FilePreview.vue'
 const route = useRoute()
 const { pushSafe } = useRouterSafe()
 
-const projectId = safeRouteParam(route.params.id)
+const projectId = computed(() => safeRouteParam(route.params.id))
 
 // --- State ---
 const loading = ref(true)
@@ -451,7 +453,7 @@ async function loadProject() {
   loading.value = true
   error.value = ''
   try {
-    project.value = await projectsApi.get(projectId)
+    project.value = await projectsApi.get(projectId.value)
   } catch (e: any) {
     logger.error('加载项目详情失败', e)
     error.value = e?.message || '项目详情加载失败，请重试'
@@ -463,7 +465,7 @@ async function loadProject() {
 async function loadTasks() {
   tasksLoading.value = true
   try {
-    const res = await projectsApi.getTasks(projectId)
+    const res = await projectsApi.getTasks(projectId.value)
     tasks.value = Array.isArray(res) ? res : (res?.items ?? [])
   } catch (e) {
     logger.error('加载任务失败', e)
@@ -475,7 +477,7 @@ async function loadTasks() {
 async function loadFunds() {
   fundsLoading.value = true
   try {
-    const res = await projectsApi.getFunds(projectId)
+    const res = await projectsApi.getFunds(projectId.value)
     funds.value = Array.isArray(res) ? res : (res?.items ?? [])
   } catch (e) {
     logger.error('加载经费失败', e)
@@ -487,7 +489,7 @@ async function loadFunds() {
 async function loadFiles() {
   filesLoading.value = true
   try {
-    const res = await projectsApi.listFiles(projectId)
+    const res = await projectsApi.listFiles(projectId.value)
     // 后端返回 {files: [...], grouped: {...}}（非 items）——兼容两种结构，防止对象被当数组
     files.value = Array.isArray(res) ? res : (res?.files ?? res?.items ?? [])
   } catch (e) {
@@ -500,7 +502,7 @@ async function loadFiles() {
 async function loadHistory() {
   historyLoading.value = true
   try {
-    const res = await projectsApi.getChangeHistory(projectId)
+    const res = await projectsApi.getChangeHistory(projectId.value)
     history.value = Array.isArray(res) ? res : (res?.items ?? [])
   } catch (e) {
     logger.error('加载变更历史失败', e)
@@ -543,10 +545,10 @@ async function handleSaveTask() {
       due_date: taskForm.value.due_date || undefined,
     }
     if (editingTask.value) {
-      await projectsApi.updateTask(projectId, editingTask.value.id, payload)
+      await projectsApi.updateTask(projectId.value, editingTask.value.id, payload)
       ElMessage.success('任务已更新')
     } else {
-      await projectsApi.createTask(projectId, payload)
+      await projectsApi.createTask(projectId.value, payload)
       ElMessage.success('任务已创建')
     }
     taskDialogVisible.value = false
@@ -561,7 +563,7 @@ async function handleSaveTask() {
 
 async function handleDeleteTask(taskId: number) {
   try {
-    await projectsApi.deleteTask(projectId, taskId)
+    await projectsApi.deleteTask(projectId.value, taskId)
     ElMessage.success('任务已删除')
     await loadTasks()
   } catch (e: any) {
@@ -574,7 +576,7 @@ async function handleDeleteTask(taskId: number) {
 async function handleFileUpload(options: any) {
   try {
     // 分类须在后端白名单（research/approval/implementation/acceptance/photo）内，否则 400
-    await projectsApi.uploadFiles(projectId, 'implementation', [options.file])
+    await projectsApi.uploadFiles(projectId.value, 'implementation', [options.file])
     await loadFiles()
   } catch (e: any) {
     logger.error('上传附件失败', e)
@@ -584,13 +586,13 @@ async function handleFileUpload(options: any) {
 
 function handlePreviewFile(file: any) {
   previewFileName.value = file.filename || file.name || '附件'
-  previewFetchBlob.value = () => projectsApi.previewFile(projectId, file.id)
+  previewFetchBlob.value = () => projectsApi.previewFile(projectId.value, file.id)
   previewVisible.value = true
 }
 
 async function handleDownload(file: any) {
   try {
-    const url = projectsApi.getFileDownloadUrl(projectId, file.id)
+    const url = projectsApi.getFileDownloadUrl(projectId.value, file.id)
     const token = AuthStorage.getToken()
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
@@ -611,7 +613,7 @@ async function handleDownload(file: any) {
 
 async function handleDeleteFile(fileId: number) {
   try {
-    await projectsApi.deleteFile(projectId, fileId)
+    await projectsApi.deleteFile(projectId.value, fileId)
     ElMessage.success('附件已删除')
     await loadFiles()
   } catch (e: any) {
@@ -754,6 +756,17 @@ async function removeMilestone(row: any) {
 
 onMounted(async () => {
   await loadMilestones()
+  loadProject()
+  loadTasks()
+  loadFunds()
+  loadFiles()
+  loadHistory()
+})
+
+// 同一组件内切换项目（路由 id 变化）时重新加载详情，避免展示上一个项目的数据
+watch(projectId, (newId, oldId) => {
+  if (!newId || newId === oldId) return
+  loadMilestones()
   loadProject()
   loadTasks()
   loadFunds()

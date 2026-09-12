@@ -119,7 +119,10 @@ async function loadData() {
 
     // 聚合状态/地区分布(取全量列表)
     const listRes: any = await schoolsApi.list({ page: 1, page_size: 1000, all: true })
-    const rows: any[] = listRes?.data?.items ?? listRes?.data ?? listRes?.items ?? []
+    // 信封兼容 + 强制数组兜底：非数组（如对象/未解包信封）时回退空数组，避免 for...of 抛错被吞导致图表恒空
+    const raw = listRes?.data ?? listRes
+    const rawItems = Array.isArray(raw) ? raw : (raw?.items ?? [])
+    const rows: any[] = Array.isArray(rawItems) ? rawItems : []
     const statusCount: Record<string, number> = {}
     const regionCount: Record<string, number> = {}
     for (const row of rows) {

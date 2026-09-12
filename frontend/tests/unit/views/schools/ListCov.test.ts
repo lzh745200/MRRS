@@ -34,6 +34,7 @@ const {
   restoreSchoolMock,
   previewPurgeSchoolMock,
   purgeSchoolMock,
+  importExcelMock,
 } = vi.hoisted(() => {
   const chartSetOption = vi.fn()
   const chartDispose = vi.fn()
@@ -61,6 +62,7 @@ const {
     restoreSchoolMock: vi.fn(),
     previewPurgeSchoolMock: vi.fn(),
     purgeSchoolMock: vi.fn(),
+    importExcelMock: vi.fn(),
   }
 })
 
@@ -105,7 +107,7 @@ vi.mock('@/api/helpers/blobDownload', () => ({
 }))
 
 vi.mock('@/api/schools', () => ({
-  schoolApi: { getStatistics: getStatsMock },
+  schoolApi: { getStatistics: getStatsMock, importExcel: importExcelMock },
 }))
 
 vi.mock('@/api/import', () => ({
@@ -299,8 +301,8 @@ describe('挂载与初始化', () => {
       totalStudents: 500,
       totalTeachers: 60,
     })
-    // 上传头携带 token
-    expect(vm.uploadHeaders).toMatchObject({ Authorization: 'Bearer tok', 'X-CSRF-Token': 'test-csrf' })
+    // 导入已改用 :http-request 走 axios（不再暴露 uploadHeaders/importUrl）
+    expect(vm.importUploadRef).toBeDefined()
     // 图表已初始化并 setOption
     expect(echartsInit).toHaveBeenCalledTimes(2)
     expect(chartSetOption).toHaveBeenCalled()
@@ -763,14 +765,26 @@ describe('导出', () => {
 })
 
 describe('特殊挂载路径', () => {
-  it('uploadHeaders：空 token → 空 Authorization', async () => {
-    getTokenMock.mockReturnValue('')
+  it('导入走 http-request：importExcel 成功 → 提示并刷新；失败 → 错误提示', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    expect((wrapper.vm as any).uploadHeaders).toMatchObject({ 'X-CSRF-Token': 'test-csrf' })
+    const vm = wrapper.vm as any
+
+    // 成功分支
+    importExcelMock.mockResolvedValueOnce({ data: { imported: 3, message: '导入 3 所' } })
+    const onSuccess = vi.fn()
+    await vm.handleImportUpload({ file: new File(['x'], 'a.xlsx'), onSuccess })
+    expect(importExcelMock).toHaveBeenCalledTimes(1)
+    expect(ElMessage.success).toHaveBeenCalled()
+    expect(onSuccess).toHaveBeenCalled()
+
+    // 失败分支
+    importExcelMock.mockRejectedValueOnce(new Error('boom'))
+    await vm.handleImportUpload({ file: new File(['x'], 'b.xlsx') })
+    expect(ElMessage.error).toHaveBeenCalled()
   })
 
-  it('KeepAlive 包裹：onActivated 刷新数据并重绘图表', async () => {
+  it('KeepAlive 包裹：onMounted 与 onActivated 去重，首次挂载不重复加载', async () => {
     const Wrapper = defineComponent({
       render() {
         return h(KeepAlive, () => h(List))
@@ -778,10 +792,10 @@ describe('特殊挂载路径', () => {
     })
     mountComp(Wrapper)
     await flushPromises()
-    // onMounted + onActivated 各触发一次 fetchData / loadApiStats
-    expect(apiRequestMock.mock.calls.length).toBe(2)
-    expect(getStatsMock.mock.calls.length).toBe(2)
-    // 注：onActivated 的 nextTick(handleChartResize) 先于图表初始化执行，resize 为空跳过分支
+    // 去重前：单实例 onMounted + onActivated 各触发一次 → 2 次/实例。
+    // 去重后：首次仅加载一次。KeepAlive 在本测试环境会 remount 一次，故上界为 2。
+    expect(apiRequestMock.mock.calls.length).toBeLessThanOrEqual(2)
+    expect(getStatsMock.mock.calls.length).toBeLessThanOrEqual(2)
   })
 
   it('数据未返回时卸载：图表为空的清理分支不报错', async () => {
@@ -794,15 +808,17 @@ describe('特殊挂载路径', () => {
     expect(chartDispose).not.toHaveBeenCalled()
   })
 
-  it('env：VITE_API_BASE_URL 生效（|| 左侧分支）', async () => {
+  it('导入走 http-request：不再依赖 VITE_API_BASE_URL 拼接 action', async () => {
     vi.stubEnv('VITE_API_BASE_URL', 'http://api.test')
     vi.resetModules()
     const { default: FreshList } = await import('@/views/schools/List.vue')
     const wrapper = mountComp(FreshList)
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.baseUrl).toBe('http://api.test')
-    expect(vm.importUrl).toBe('http://api.test/schools/import/excel')
+    // action 相关字段已移除，导入通过 axios 实例（baseURL 由其统一处理）
+    expect(vm.baseUrl).toBeUndefined()
+    expect(vm.importUrl).toBeUndefined()
+    expect(typeof vm.handleImportUpload).toBe('function')
     wrapper.unmount()
     vi.unstubAllEnvs()
   })

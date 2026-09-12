@@ -1118,11 +1118,13 @@ async function loadSectionData() {
       })
       // 村委会板块加载成员列表
       if (props.sectionKey === 'committee' && sectionData.members) {
+        // 后端可能返回布尔/数字/字符串 "0"/"1"，Boolean("0") 会误判为 true，故用显式判断
+        const toBool = (v: any) => v === true || v === 1 || v === '1'
         committeeMembers.value = sectionData.members.map((m: any) => ({
           name: m.name || '',
           position: m.position || '',
           phone: m.phone || '',
-          isVeteran: Boolean(m.isVeteran),
+          isVeteran: toBool(m.isVeteran),
           remark: m.remark || '',
         }))
       }
