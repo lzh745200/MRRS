@@ -5,10 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布] - 2026-09-12 — 🔒 深度审计加固（目录穿越 / 存储型 XSS / 并发 / 备份 fail-loud）
-
-> 说明：本节内容在 `v1.12.4` 标签之后合入，**不属于 v1.12.4 发布产物**；
-> 下一个版本号统一时并入正式段。
+## [1.12.5] - 2026-09-12 — 🔒 深度审计加固（目录穿越 / 存储型 XSS / 并发 / 备份 fail-loud）+ D1 写锁退避重试
 
 ### 修复（安全：上传路径穿越 + 存储型 XSS）
 - **`core/upload_security.sanitize_filename`**：原实现仅替换 `<>:/"|?*` 而**保留 `\`**。
@@ -66,7 +63,7 @@
   → `Path(file_path).read_bytes()`，与契约类型统一、消除资源告警。
 
 ### 回归与验证
-- 新增 `tests/unit/test_deep_audit_fixes_20260912.py`（41 例）：逐修复点做「修复前失败、
+- 新增 `tests/unit/test_deep_audit_fixes_20260912.py`（42 例）：逐修复点做「修复前失败、
   修复后通过」的差异断言（穿越剥离、XSS 黑名单、并发无 `RuntimeError`、
   事件循环已关闭、幂等锁已释放、fail-loud 返回 error、`dirs_exist_ok` 覆盖等）。
 - **修正陈旧夹具（10 例）**：`test_backup_service.py` / `test_backup_service_full.py`
@@ -74,14 +71,8 @@
   早已引入的恢复性校验契约（helper 文档自述「纯文本占位夹具不再可用」）不一致；
   恢复路径 fail-loud 收口后集中暴露。现改用真实 SQLite 夹具并同步 `test_restore_no_db_in_backup`
   的语义（无库 → 期望抛 `BackupRestoreError`，不再 `success=True`）。
-- 受影响 28 个测试文件 **622 passed**（1 例为沙箱 bulk-delete 守卫在收尾清理时
-  误触发的环境噪声，隔离运行 1 passed）；14 个 flake8 检查文件 **0 告警**
-  （`test_backup_service.py` 的 5 处提示为**既有**，与本次改动无关）。
-
-## [未发布] - 2026-09-12 — D1 写锁竞争退避重试（后端线程）
-
-> 说明：本节内容在 `v1.12.4` 标签之后合入，**不属于 v1.12.4 发布产物**；
-> 下一个版本号统一时并入正式段。
+- CI 门禁闭环：首轮 backend-test 因 `backup_service.py:1207`（`if not db_verified`
+  防御返回块）未覆盖变红（99.99% < 100%），以可控桩补齐后 **PR Checks 6/6 全绿**。
 
 ### 修复（架构评估 D1：SQLite 写竞争“观测有余、防护不足”）
 - **根因**：仓库唯一的重试工具 `core/transaction.retry_on_deadlock` **只有测试引用**
