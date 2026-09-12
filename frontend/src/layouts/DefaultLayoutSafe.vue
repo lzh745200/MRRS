@@ -279,23 +279,19 @@
               <el-icon><Setting /></el-icon>
               <span class="menu-title-text">系统管理</span>
             </template>
+            <!-- 静态「机器码与通行码」isAdmin 专属入口保留（机器码/通行码合一管理页）；
+                 machine-code / pass-code 两个菜单 key 由该入口承载，动态列表中去重跳过 -->
             <el-menu-item v-if="authStore.isAdmin" index="/admin/machine-code/management"
               ><span>机器码与通行码</span></el-menu-item
             >
-            <el-menu-item v-if="menuStore.canAccessMenu('users-orgs')" index="/system/users"
-              ><span>用户与角色</span></el-menu-item
-            >
-            <el-menu-item v-if="menuStore.canAccessMenu('audit')" index="/system/audit"
-              ><span>审计管理</span></el-menu-item
-            >
-            <el-menu-item v-if="menuStore.canAccessMenu('system-config')" index="/system/config"
-              ><span>系统配置</span></el-menu-item
-            >
-            <el-menu-item v-if="menuStore.canAccessMenu('monitor')" index="/system/monitoring"
-              ><span>系统监控</span></el-menu-item
-            >
-            <el-menu-item v-if="menuStore.canAccessMenu('help')" index="/help"
-              ><span>帮助文档</span></el-menu-item
+            <!-- 其余子项改为后端菜单树动态渲染（2026-09-12：原硬编码 6 入口遗漏了
+                 system 组 25+ 功能项——缓存/零信任/更新日志/权限包/后台任务/数据分级/
+                 运行环境/系统总览/管理面板等全部无 UI 入口）。/menus/accessible 下发的
+                 菜单树本身已是后端按当前用户权限过滤的结果，故不逐项 canAccessMenu；
+                 path 解析（menuKey 路由兜底 / 漂移映射 / 死链跳过）、去重与排序规则
+                 统一见 @/utils/systemMenu -->
+            <el-menu-item v-for="item in systemMenuItems" :key="item.key" :index="item.path"
+              ><span>{{ item.label }}</span></el-menu-item
             >
           </el-sub-menu>
 
@@ -421,11 +417,12 @@ import { ref, computed, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
 import { SYSTEM_VERSION as systemVersion } from '@/config/constants'
 import { ElNotification } from 'element-plus'
 import { useAutoLock as useAutoLockModule } from '@/composables/useAutoLock'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useKeyboardShortcuts, type Shortcut } from '@/composables/useKeyboardShortcuts'
 import { useAuthStore } from '@/stores/auth'
 import { useMenuStore } from '@/stores/menu'
+import { resolveSystemMenuItems } from '@/utils/systemMenu'
 import { useConfigStore, THEME_OPTIONS } from '@/stores/config'
 import { cancelAllRequests, freezeRequests } from '@/api/request'
 import MobileBottomNav from '@/components/layout/MobileBottomNav.vue'
@@ -458,10 +455,18 @@ import {
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 const { pushSafe } = useRouterSafe()
 const authStore = useAuthStore()
 const menuStore = useMenuStore()
 const configStore = useConfigStore()
+
+// ── 系统管理子菜单：基于后端菜单树动态渲染 ──
+// 菜单树来自 /menus/accessible（已按当前用户权限过滤），故子项不逐项
+// canAccessMenu；path 解析（menuKey 路由兜底 / 漂移映射 / 死链跳过）、
+// 去重（backup/messages/machine-code/pass-code）与 order 排序规则
+// 统一封装在 @/utils/systemMenu，可独立单测。
+const systemMenuItems = computed(() => resolveSystemMenuItems(menuStore.menus, router.getRoutes()))
 
 // ── 消息中心未读角标 ──
 const unreadCount = ref(0)
