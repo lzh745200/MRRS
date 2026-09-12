@@ -141,28 +141,24 @@ def _rev_exists(ref: str) -> bool:
 def resolve_base(explicit: str, allow_missing: bool):
     """决定 diff 基线。
 
-    CI 里 `origin/main` 常常不存在（浅克隆）或**就等于 HEAD**（push 到 main 场景，
-    此时 diff 恒为空、检查形同虚设）。因此按顺序挑选第一个"能解析且不等于 HEAD"
-    的基线：origin/main → HEAD~1。都不可用则按 `--allow-missing-base` 决定
-    是明确报错（默认）还是大声告警后跳过 —— 绝不静默通过。
+    语义澄清（2026-09-12 修正）：`git diff <base>` 比的是 base → **工作区**，
+    因此 `base == HEAD` 并不等于"diff 恒为空" —— 本地有未提交改动时它照样有内容，
+    反而是最稳的选择（浅克隆里 HEAD~1 可能根本不存在，CI 默认 fetch-depth=1 即是）。
+    故这里**不再**排除等于 HEAD 的候选：按顺序取第一个能解析的
+    （显式给定 → origin/main → HEAD~1）。全部不可用则按 `--allow-missing-base`
+    决定是明确报错（默认，退出 2）还是大声告警后跳过 —— 绝不静默通过。
     """
     candidates = []
     if explicit and explicit != "auto":
         candidates.append(explicit)
     else:
         candidates += ["origin/main", "HEAD~1"]
-    head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True).stdout.decode().strip()
 
     for ref in candidates:
-        if not _rev_exists(ref):
-            continue
-        sha = subprocess.run(
-            ["git", "rev-parse", ref], capture_output=True
-        ).stdout.decode().strip()
-        if sha and sha != head:
+        if _rev_exists(ref):
             return ref, None
 
-    message = "无可用 diff 基线（候选: %s；origin/main 缺失或等于 HEAD）" % ", ".join(candidates)
+    message = "无可用 diff 基线（候选: %s；浅克隆下 HEAD~1 不存在）" % ", ".join(candidates)
     if allow_missing:
         return None, message
     return "", message

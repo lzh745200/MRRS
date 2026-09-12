@@ -121,14 +121,20 @@ class TestRepoWideScan:
         assert "WARNING" in result.stdout
 
     def test_new_bare_pragma_in_working_tree_is_detected(self, tmp_path):
-        """工作区新增的裸 pragma 必须被 --diff-base 命中（含未跟踪文件）。"""
+        """工作区新增的裸 pragma 必须被 --diff-base 命中（含未跟踪文件）。
+
+        基线用 **HEAD** 而非 HEAD~1：`git diff HEAD` 比的是"HEAD → 工作区"，
+        在有未提交改动时必然有内容，因此在 CI 的浅克隆（fetch-depth=1，没有
+        HEAD~1）与本地完整克隆下**结果一致** —— 首版用 HEAD~1 导致 Linux CI
+        直接失败（`无可用 diff 基线`），这里固化正确用法。
+        """
         probe = ROOT / "scripts" / "_pragma_probe_tmp.py"
         probe.write_text(
             "def probe():  # pragma: no cover\n    return 1\n", encoding="utf-8"
         )
         try:
             result = subprocess.run(
-                [sys.executable, str(SCRIPT), "--diff-base", "HEAD~1"],
+                [sys.executable, str(SCRIPT), "--diff-base", "HEAD"],
                 capture_output=True, text=True, cwd=str(ROOT),
             )
             assert result.returncode == 1, result.stdout
