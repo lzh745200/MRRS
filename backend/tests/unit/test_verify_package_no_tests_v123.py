@@ -119,3 +119,47 @@ class TestListingCli:
         with pytest.raises(SystemExit) as exc:
             mod.main()
         assert exc.value.code == 2
+
+
+class TestWindowsCiEncoding:
+    """CI 编码回归：门禁脚本在 cp1252 控制台下必须仍能跑完（v1.12.3 事故）。
+
+    windows-2022（en-US）上 Python 对管道的 stdout 编码是 cp1252，脚本输出中文
+    会在第一个 print 抛 UnicodeEncodeError → exit 1，把一次**干净**的构建判成
+    "安装包含测试内容"。此处以子进程 + PYTHONIOENCODING=cp1252 复现该环境，
+    锁定"脚本自身强制 UTF-8"的修复。
+    """
+
+    def _run(self, env_encoding: str, *args):
+        import os
+        import subprocess
+        import sys as _sys
+
+        env = dict(os.environ)
+        env.pop("PYTHONUTF8", None)          # 关掉本机可能存在的 UTF-8 模式
+        env["PYTHONIOENCODING"] = env_encoding
+        return subprocess.run(
+            [_sys.executable, str(SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            cwd=str(ROOT),
+        )
+
+    def test_survives_cp1252_console(self, tmp_path):
+        listing = tmp_path / "listing.txt"
+        listing.write_text(_line(_VENDOR_MEMBER) + "\n", encoding="utf-8")
+        result = self._run("cp1252", "--listing", str(listing))
+        assert "UnicodeEncodeError" not in result.stderr, result.stderr
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        assert "OK" in result.stdout
+
+    def test_cp1252_failure_still_reports_violation(self, tmp_path):
+        """编码兜底不得把"真违规"吞掉：违规时仍需 exit 1 且打印 ::error:: 注解。"""
+        listing = tmp_path / "listing.txt"
+        listing.write_text(_line(_PROJECT_TEST_DIR_MEMBER) + "\n", encoding="utf-8")
+        result = self._run("cp1252", "--listing", str(listing))
+        assert result.returncode == 1
+        assert "::error::" in result.stdout

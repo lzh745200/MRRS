@@ -26,6 +26,27 @@ import argparse
 import sys
 from pathlib import Path
 
+# ── Windows CI 编码兜底（2026-09-12 事故修复）───────────────────────────────
+# windows-2022（en-US）上 Python 对**管道**的默认 stdout 编码是 ANSI 代码页
+# cp1252，而本脚本输出中文：第一个 print 即抛 UnicodeEncodeError → 退出码 1。
+# v1.12.3 的 Windows 出包就是这样被"打包卫生门禁"拦下的（产物其实完全干净），
+# 排查时 job 日志需 admin、注解里只有"exit code 1"，代价很高。
+# 强制 UTF-8 + errors="replace"：Windows/Linux 一致，且任何情况下不再崩。
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
+def emit_error(message: str) -> None:
+    """输出 GitHub Actions 错误注解。
+
+    job 日志需要仓库 admin 权限才能下载，而 **注解可通过 check-runs API
+    匿名读取** —— 门禁失败时注解是唯一能自证的通道，违规明细必须走这里。
+    """
+    print("::error::%s" % message)
+    sys.stdout.flush()
+
+
 # 文件名/目录名命中即违规
 _TEST_FILE_PATTERNS = ("test_", "_test.py", "conftest.py", "pytest.ini", "tox.ini", ".coveragerc")
 _TEST_DIR_NAMES = {"tests", "test", "testing"}
@@ -176,6 +197,10 @@ def main():
             print("\n--- 违规清单 ---")
             for v in violations[:50]:
                 print(v)
+            emit_error(
+                "安装包内包含 %d 项测试内容，禁止发布（首项: %s）"
+                % (len(violations), violations[0])
+            )
             print(f"\nERROR: 安装包内包含 {len(violations)} 项测试内容，禁止发布")
             sys.exit(1)
         print("\nOK: 安装包归档不含测试文件/测试目录（厂商自带 tests 已按豁免表放行）")
@@ -202,6 +227,10 @@ def main():
         print("\n--- 违规清单 ---")
         for v in violations:
             print(v)
+        emit_error(
+            "安装包产物包含 %d 项测试内容，禁止发布（首项: %s）"
+            % (len(violations), violations[0])
+        )
         print(f"\nERROR: 安装包产物包含 {len(violations)} 项测试内容，禁止发布")
         sys.exit(1)
     print("\nOK: 产物不含测试文件/测试目录/测试依赖")

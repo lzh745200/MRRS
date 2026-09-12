@@ -57,6 +57,13 @@ jobs:
     if: always()
     runs-on: windows-2022
     timeout-minutes: 90
+    # Windows 运行器（en-US）上 Python 对管道的默认 stdout 编码是 cp1252：
+    # 任何输出中文的脚本（如 scripts/verify_package_no_tests.py）都会在第一个
+    # print 抛 UnicodeEncodeError 并让步骤以 exit 1 失败 —— v1.12.3 的 Windows
+    # 出包正是这样被误拦。此处统一开启 UTF-8 模式（脚本内亦有兜底）。
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: 'utf-8'
 
     steps:
       # 1. Checkout
