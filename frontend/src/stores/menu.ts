@@ -2,6 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { get } from '@/api/request'
 import { AuthStorage } from '@/utils/authStorage'
+// 与 stores/auth.ts 存在模块级互相引用（auth.ts 亦引入本文件的 useMenuStore）；
+// 双方都只在函数体内延迟调用对方 store，ESM 循环依赖可安全解析。
+import { useAuthStore } from '@/stores/auth'
 
 export interface MenuItem {
   key: string
@@ -70,6 +73,16 @@ export const useMenuStore = defineStore('menu', () => {
     // 组织级策略优先：hidden 模块不可见
     const policy = orgPolicies.value[menuKey]
     if (policy && policy.visibility === 'hidden') return false
+    // 超管旁路：与后端 /menus/accessible 的超管豁免（app/api/v1/menus.py
+    // _get_user_accessible_menu_keys 中 is_superuser 直接返回全量 key）配套，
+    // 防止后端下发 key 与本地 allKeys 漂移导致超管菜单缺失。
+    // 注意：仅 superuser（is_superuser===true 或 role==='super_admin'），
+    // 不含普通 admin 角色——后端对普通 admin 仍按 allowed_menus/权限包/角色默认
+    // 裁剪，本地放宽会造成"本地可见、后端拒绝"的不一致。
+    const auth = useAuthStore()
+    if (auth.user?.is_superuser === true || auth.user?.role === 'super_admin') {
+      return true
+    }
     return allKeys.value.has(menuKey)
   }
 

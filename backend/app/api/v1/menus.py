@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.core.constants import normalize_role
 from app.core.database import get_db
 from app.core.permission_utils import is_admin as _is_admin  # 唯一管理员判定入口（见 permission_utils.is_admin）
+from app.core.permission_utils import is_superuser as _is_superuser  # 超级管理员判定（豁免菜单裁剪）
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.permission_pack import PermissionPack
@@ -577,7 +578,16 @@ def _get_user_accessible_menu_keys(user: User, db: Session) -> set[str]:
 
     优先级：用户级 allowed_menus 配置 > 绑定的启用中权限包 > 角色默认。
     之后无条件并入 _PUBLIC_ACCESS_KEYS（政策法规/数据分析全角色公开）。
+
+    超级管理员豁免：不受 allowed_menus / 权限包 / 角色默认裁剪，始终返回全量菜单
+    （修复 2026-09-12 admin 被 allowed_menus 旧配置或权限包裁剪，导致
+    /menus/accessible 只下发少量菜单、而权限配置弹窗读取的 /menus/all 是全量，
+    出现"弹窗全勾选、菜单看不到"的不一致）。
     """
+    # 超管不受 allowed_menus/权限包/角色默认裁剪，修复 2026-09-12 admin 菜单缺失
+    if _is_superuser(user):
+        return _flatten_menu_keys(MENU_DEFINITIONS)
+
     allowed = user.allowed_menus_list
     if allowed is not None:
         # 用户级别配置优先

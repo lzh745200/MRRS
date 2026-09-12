@@ -14,6 +14,13 @@ vi.mock('@/utils/authStorage', () => ({
   },
 }))
 
+// canAccessMenu 现引入超管旁路判断（useAuthStore）。本文件只测 menu store 本身，
+// 故 mock 掉 auth store（user=null → 旁路不触发，既有断言语义不变），
+// 同时避免引入 auth.ts 的传递依赖（api/queries 等）。
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ user: null }),
+}))
+
 import { useMenuStore } from '@/stores/menu'
 
 describe('useMenuStore', () => {
