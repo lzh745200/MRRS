@@ -7,7 +7,7 @@ class TestHelperFunctions:
     def test_append_village_empty(self):
         from app.api.v1.search import _append_village_results
         db = MagicMock(); db.all.return_value = []
-        with patch("app.api.v1.search.filter_by_data_scope", return_value=db):
+        with patch("app.api.v1.search.scoped_filter", return_value=db):
             items = []
             _append_village_results(items, "测试", 5, db, MagicMock(is_superuser=True))
             assert items == []
@@ -15,7 +15,7 @@ class TestHelperFunctions:
     def test_append_project_empty(self):
         from app.api.v1.search import _append_project_results
         db = MagicMock(); db.all.return_value = []
-        with patch("app.api.v1.search.filter_by_data_scope", return_value=db):
+        with patch("app.api.v1.search.scoped_filter", return_value=db):
             items = []
             _append_project_results(items, "项目", 5, db, MagicMock(is_superuser=True))
             assert items == []
@@ -30,7 +30,7 @@ class TestHelperFunctions:
     def test_append_school_empty(self):
         from app.api.v1.search import _append_school_results
         db = MagicMock(); db.all.return_value = []
-        with patch("app.api.v1.search.filter_by_data_scope", return_value=db):
+        with patch("app.api.v1.search.scoped_filter", return_value=db):
             items = []
             _append_school_results(items, "学校", 5, db, MagicMock(is_superuser=True))
             assert items == []
@@ -55,7 +55,7 @@ class TestHelperFunctions:
         v = MagicMock()
         v.id = 1; v.village_name = "桃花村"; v.province = "广东"; v.city = "广州"; v.county = "从化区"
         db.limit.return_value.all.return_value = [v]
-        with patch("app.api.v1.search.filter_by_data_scope", return_value=db):
+        with patch("app.api.v1.search.scoped_filter", return_value=db):
             items = []
             _append_village_results(items, "桃花", 5, db, MagicMock(is_superuser=True))
             # ≥0: MagicMock query chain 迭代可能不执行（mock 链深层配置复杂）
@@ -68,7 +68,7 @@ class TestHelperFunctions:
         p = MagicMock()
         p.id = 1; p.name = "道路"; p.code = "001"
         db.limit.return_value.all.return_value = [p]
-        with patch("app.api.v1.search.filter_by_data_scope", return_value=db):
+        with patch("app.api.v1.search.scoped_filter", return_value=db):
             items = []
             _append_project_results(items, "道路", 5, db, MagicMock(is_superuser=True))
             assert len(items) >= 0

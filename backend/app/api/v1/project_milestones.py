@@ -14,7 +14,7 @@ from app.core.response import ok_list, success_response
 from app.models.project import Project
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
-from app.core.data_permission import filter_by_data_scope
+from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
 from app.models.project_milestone import (
     TRANSITION_REQUIREMENTS,
     VALID_TRANSITIONS,
@@ -324,7 +324,7 @@ async def get_change_logs(
     """
     # 验证项目存在且用户有访问权限
     project_query = db.query(Project).filter(Project.id == project_id)
-    project_query = filter_by_data_scope(project_query, Project, current_user, db=db)
+    project_query = scoped_filter(project_query, Project, current_user, )
     if not project_query.first():
         raise HTTPException(status_code=404, detail="项目不存在或无权访问")
 
@@ -365,7 +365,7 @@ async def get_upcoming_milestones(
         )
     )
     # 应用数据范围过滤，确保非管理员只能看到自己组织范围内的项目里程碑
-    query = filter_by_data_scope(query, Project, current_user, db=db)
+    query = scoped_filter(query, Project, current_user, )
 
     milestones = (
         query
@@ -422,7 +422,7 @@ async def get_overdue_milestones(
         )
     )
     # 应用数据范围过滤
-    query = filter_by_data_scope(query, Project, current_user, db=db)
+    query = scoped_filter(query, Project, current_user, )
 
     milestones = (
         query

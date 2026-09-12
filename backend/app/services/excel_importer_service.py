@@ -15,7 +15,7 @@ from openpyxl import load_workbook
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.core.data_permission import filter_by_data_scope
+from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
 from app.models.fund import Fund
 from app.models.import_history import ImportHistory, ImportMode, ImportStatus
 from app.models.organization import Organization
@@ -462,8 +462,8 @@ class ExcelImporterService:
         """
         # 删除现有记录（仅当前用户数据范围）
         if self.current_user:
-            query = filter_by_data_scope(
-                self.db.query(SupportedVillage), SupportedVillage, self.current_user, db=self.db
+            query = scoped_filter(
+                self.db.query(SupportedVillage), SupportedVillage, self.current_user
             )
         else:
             query = self.db.query(SupportedVillage)
@@ -578,8 +578,8 @@ class ExcelImporterService:
         if mode == ImportMode.INCREMENTAL:
             existing_names = set(name[0].strip().lower() for name in self.db.query(Project.name).all() if name[0])
         else:
-            query = filter_by_data_scope(
-                self.db.query(Project), Project, self.current_user, db=self.db
+            query = scoped_filter(
+                self.db.query(Project), Project, self.current_user
             ) if self.current_user else self.db.query(Project)
             query.delete(synchronize_session=False)
 
@@ -649,8 +649,8 @@ class ExcelImporterService:
                 for name in self.db.query(Fund.name).all() if name[0]
             )
         else:
-            query = filter_by_data_scope(
-                self.db.query(Fund), Fund, self.current_user, db=self.db
+            query = scoped_filter(
+                self.db.query(Fund), Fund, self.current_user
             ) if self.current_user else self.db.query(Fund)
             query.delete(synchronize_session=False)
 
@@ -721,7 +721,7 @@ class ExcelImporterService:
             )
         else:
             query = (
-                filter_by_data_scope(self.db.query(School), School, self.current_user, db=self.db)
+                scoped_filter(self.db.query(School), School, self.current_user)
                 if self.current_user
                 else self.db.query(School)
             )

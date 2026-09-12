@@ -33,7 +33,7 @@ class TestVillageComparison:
         user.role = "admin"
         user.is_superuser = True
 
-        with patch("app.api.v1.assessment.filter_by_data_scope", return_value=q):
+        with patch("app.api.v1.assessment.scoped_filter", return_value=q):
             resp = await compare_villages(village_ids="1", current_user=user, db=db)
 
         # 村庄被跳过 → 结果为空列表信封

@@ -153,10 +153,10 @@ async def validate_rules(  # noqa: C901 - 规则引擎分支多属正常
 ):
     """按用户组合的规则（字段/操作符/值/与或非）校验模块数据，返回不满足的记录
 
-    安全基线（W1-T3）：需认证；查询经 filter_by_data_scope 组织隔离，
+    安全基线（W1-T3）：需认证；查询经 scoped_filter 组织隔离，
     防止跨组织枚举业务记录。
     """
-    from app.core.data_permission import filter_by_data_scope
+    from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
     from app.models.supported_village import SupportedVillage
     from app.models.fund import Fund
     from app.models.project import Project
@@ -175,7 +175,7 @@ async def validate_rules(  # noqa: C901 - 规则引擎分支多属正常
 
     model, label_field = model_map[request.entity_type]
     query = db.query(model).filter(getattr(model, "is_active", True) == True)  # noqa: E712
-    records = filter_by_data_scope(query, model, current_user, db=db).all()
+    records = scoped_filter(query, model, current_user, ).all()
 
     def _match(record, rule: ValidateRuleItem) -> bool:
         value = getattr(record, rule.field, None)

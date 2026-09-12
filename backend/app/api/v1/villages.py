@@ -47,8 +47,8 @@ async def list_villages(
         query = query.filter(Village.ethnic_group == ethnic_group)
 
     # 数据权限过滤
-    from app.core.data_permission import filter_by_data_scope
-    query = filter_by_data_scope(query, Village, current_user, db=db)
+    from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
+    query = scoped_filter(query, Village, current_user, )
 
     # 先取 total 再分页（避免分页后 total 不准）
     total = query.count()

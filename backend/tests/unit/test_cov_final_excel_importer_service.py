@@ -17,7 +17,7 @@ class TestImportFullModeDataScope:
         result = MagicMock()
         result.failed_rows = 0
 
-        with patch("app.services.excel_importer_service.filter_by_data_scope") as mock_scope:
+        with patch("app.services.excel_importer_service.scoped_filter") as mock_scope:
             scoped_query = db.query.return_value
             mock_scope.return_value = scoped_query
             out = svc._import_full_mode([], result, MagicMock())

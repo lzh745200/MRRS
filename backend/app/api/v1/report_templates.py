@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
-from ...core.data_permission import filter_by_data_scope
+from ...services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
 from ...core.response import ok_list
 from ...core.security import get_current_user
 from ...models.report_template import ReportTemplate
@@ -671,7 +671,7 @@ def _village_prepare_import(
 
     deleted = 0
     if mode == "overwrite":
-        query = filter_by_data_scope(db.query(SupportedVillage), SupportedVillage, current_user, db=db)
+        query = scoped_filter(db.query(SupportedVillage), SupportedVillage, current_user, )
         deleted = query.delete(synchronize_session=False)
         safe_commit(db)
 
@@ -812,7 +812,7 @@ def _import_school_data(
 
     # overwrite 模式：仅删除当前用户数据范围内的记录
     if mode == "overwrite":
-        query = filter_by_data_scope(db.query(School), School, current_user, db=db)
+        query = scoped_filter(db.query(School), School, current_user, )
         deleted = query.delete(synchronize_session=False)
         safe_commit(db)
 
@@ -926,7 +926,7 @@ def _project_prepare_import(
 
     deleted = 0
     if mode == "overwrite":
-        query = filter_by_data_scope(db.query(Project), Project, current_user, db=db)
+        query = scoped_filter(db.query(Project), Project, current_user, )
         deleted = query.delete(synchronize_session=False)
         safe_commit(db)
 
@@ -1100,7 +1100,7 @@ def _rural_work_prepare_import(
 
     deleted = 0
     if mode == "overwrite":
-        query = filter_by_data_scope(db.query(RuralWork), RuralWork, current_user, db=db)
+        query = scoped_filter(db.query(RuralWork), RuralWork, current_user, )
         deleted = query.delete(synchronize_session=False)
         safe_commit(db)
 

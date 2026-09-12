@@ -32,35 +32,34 @@ class RecommendationService:
         Returns:
             推荐项目列表
         """
-        from app.core.data_permission import filter_by_data_scope
+        from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
         from app.models.project import Project
         from app.models.supported_village import SupportedVillage
 
         # 获取村庄信息（受数据权限约束，软删村排除）
-        village_query = filter_by_data_scope(
+        village_query = scoped_filter(
             db.query(SupportedVillage).filter(
                 SupportedVillage.id == village_id,
-                SupportedVillage.is_active.is_(True),
+                SupportedVillage.is_active.is_(True)
             ),
-            SupportedVillage, user, db=db,
+            SupportedVillage, user
         )
         village = village_query.first()
         if not village:
             return []
 
         # 查询相似村庄的成功项目（受数据权限约束，软删村排除）
-        similar_villages_query = filter_by_data_scope(
+        similar_villages_query = scoped_filter(
             db.query(SupportedVillage).filter(
                 and_(
                     SupportedVillage.id != village_id,
                     SupportedVillage.province == village.province,
                     SupportedVillage.city == village.city,
-                    SupportedVillage.is_active.is_(True),
+                    SupportedVillage.is_active.is_(True)
                 )
             ),
             SupportedVillage,
-            user,
-            db=db,
+            user
         )
         similar_villages = similar_villages_query.limit(10).all()
 
@@ -70,7 +69,7 @@ class RecommendationService:
         similar_village_ids = [v.id for v in similar_villages]
 
         # 查询这些村庄的成功项目（受数据权限约束，软删项目排除）
-        successful_projects_query = filter_by_data_scope(
+        successful_projects_query = scoped_filter(
             db.query(Project).filter(
                 and_(
                     Project.village_id.in_(similar_village_ids),
@@ -80,8 +79,7 @@ class RecommendationService:
                 )
             ),
             Project,
-            user,
-            db=db,
+            user
         )
         successful_projects = successful_projects_query.all()
 
@@ -151,7 +149,7 @@ class RecommendationService:
         Returns:
             资金分配建议
         """
-        from app.core.data_permission import filter_by_data_scope
+        from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
         from app.models.annual_income import AnnualIncome
         from app.models.annual_population import AnnualPopulation
         from app.models.supported_village import SupportedVillage
@@ -160,12 +158,12 @@ class RecommendationService:
             return {"allocations": [], "error": "村庄列表为空"}
 
         # 获取村庄信息（受数据权限约束，软删村排除）
-        villages = filter_by_data_scope(
+        villages = scoped_filter(
             db.query(SupportedVillage).filter(
                 SupportedVillage.id.in_(village_ids),
-                SupportedVillage.is_active.is_(True),
+                SupportedVillage.is_active.is_(True)
             ),
-            SupportedVillage, user, db=db,
+            SupportedVillage, user
         ).all()
 
         if not villages:
@@ -284,17 +282,17 @@ class RecommendationService:
         Returns:
             匹配的政策列表
         """
-        from app.core.data_permission import filter_by_data_scope
+        from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
         from app.models.policy import Policy
         from app.models.supported_village import SupportedVillage
 
         # 获取村庄信息（受数据权限约束，软删村排除）
-        village = filter_by_data_scope(
+        village = scoped_filter(
             db.query(SupportedVillage).filter(
                 SupportedVillage.id == village_id,
-                SupportedVillage.is_active.is_(True),
+                SupportedVillage.is_active.is_(True)
             ),
-            SupportedVillage, user, db=db,
+            SupportedVillage, user
         ).first()
         if not village:
             return []

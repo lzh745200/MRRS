@@ -654,12 +654,12 @@ class AnalyticsService:
             （由路由层负责字段序列化），total 为符合条件的总记录数。
         """
         try:
-            from app.core.data_permission import filter_by_data_scope
+            from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
 
             db = self.db
             query = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
             # 数据权限过滤（参照 villages.py:50 范式）
-            query = filter_by_data_scope(query, SupportedVillage, user, db=db)
+            query = scoped_filter(query, SupportedVillage, user)
 
             if filters.get("province"):
                 query = query.filter(SupportedVillage.province == filters["province"])

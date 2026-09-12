@@ -78,24 +78,23 @@ class AIServiceManager:
             db: 数据库会话。
             user: 当前用户，用于数据权限过滤。
         """
-        from app.core.data_permission import filter_by_data_scope
+        from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
         from app.models.supported_village import SupportedVillage, VillageIncome
 
         # VillageIncome 无 organization_id/created_by，需 join SupportedVillage 后按数据权限过滤
         rows = (
-            filter_by_data_scope(
+            scoped_filter(
                 db.query(
                     VillageIncome.year,
                     func.avg(VillageIncome.per_capita_income),
                     func.avg(VillageIncome.collective_income),
-                    func.count(VillageIncome.id),
+                    func.count(VillageIncome.id)
                 ).join(
                     SupportedVillage,
-                    VillageIncome.supported_village_id == SupportedVillage.id,
+                    VillageIncome.supported_village_id == SupportedVillage.id
                 ),
                 SupportedVillage,
-                user,
-                db=db,
+                user
             )
             .group_by(VillageIncome.year)
             .order_by(VillageIncome.year)
@@ -141,21 +140,20 @@ class AIServiceManager:
             db: 数据库会话。
             user: 当前用户，用于数据权限过滤。
         """
-        from app.core.data_permission import filter_by_data_scope
+        from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
         from app.models.project import Project
 
         today = date.today()
 
         # 逾期项目：end_date < today 且 status 不是 completed/cancelled（受数据权限约束，软删项目排除）
-        overdue_query = filter_by_data_scope(
+        overdue_query = scoped_filter(
             db.query(Project).filter(
                 Project.is_active == True,  # noqa: E712
                 Project.end_date < today,
-                Project.status.notin_(["completed", "cancelled"]),
+                Project.status.notin_(["completed", "cancelled"])
             ),
             Project,
-            user,
-            db=db,
+            user
         )
         overdue = overdue_query.all()
         overdue_list = [
@@ -170,15 +168,14 @@ class AIServiceManager:
         ]
 
         # 预算超支项目：actual_cost > budget 且 budget > 0（受数据权限约束，软删项目排除）
-        over_budget_query = filter_by_data_scope(
+        over_budget_query = scoped_filter(
             db.query(Project).filter(
                 Project.is_active == True,  # noqa: E712
                 Project.budget > 0,
-                Project.actual_cost > Project.budget,
+                Project.actual_cost > Project.budget
             ),
             Project,
-            user,
-            db=db,
+            user
         )
         over_budget = over_budget_query.all()
         over_budget_list = [
@@ -212,21 +209,20 @@ class AIServiceManager:
             db: 数据库会话。
             user: 当前用户，用于数据权限过滤。
         """
-        from app.core.data_permission import filter_by_data_scope
+        from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
         from app.models.fund import Fund
 
         # 按帮扶村聚合（受数据权限约束）
         village_rows = (
-            filter_by_data_scope(
+            scoped_filter(
                 db.query(
                     Fund.village_id,
                     func.coalesce(func.sum(Fund.amount), 0),
                     func.coalesce(func.sum(Fund.allocated_amount), 0),
-                    func.coalesce(func.sum(Fund.used_amount), 0),
+                    func.coalesce(func.sum(Fund.used_amount), 0)
                 ).filter(Fund.village_id.isnot(None)),
                 Fund,
-                user,
-                db=db,
+                user
             )
             .group_by(Fund.village_id)
             .all()
@@ -249,15 +245,14 @@ class AIServiceManager:
             )
 
         # 全局汇总（受数据权限约束）
-        global_row = filter_by_data_scope(
+        global_row = scoped_filter(
             db.query(
                 func.coalesce(func.sum(Fund.amount), 0),
                 func.coalesce(func.sum(Fund.allocated_amount), 0),
-                func.coalesce(func.sum(Fund.used_amount), 0),
+                func.coalesce(func.sum(Fund.used_amount), 0)
             ),
             Fund,
-            user,
-            db=db,
+            user
         ).first()
         g_total = float(global_row[0] or 0)
         g_alloc = float(global_row[1] or 0)
@@ -287,7 +282,7 @@ class AIServiceManager:
             db: 数据库会话。
             user: 当前用户，用于数据权限过滤。
         """
-        from app.core.data_permission import filter_by_data_scope
+        from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
         from app.models.supported_village import (
             SupportedVillage,
             VillageIncome,
@@ -295,28 +290,26 @@ class AIServiceManager:
         )
 
         # 按县聚合最新年份收入（受数据权限约束）
-        latest_income_year = filter_by_data_scope(
+        latest_income_year = scoped_filter(
             db.query(func.max(VillageIncome.year)).join(
                 SupportedVillage,
-                VillageIncome.supported_village_id == SupportedVillage.id,
+                VillageIncome.supported_village_id == SupportedVillage.id
             ),
             SupportedVillage,
-            user,
-            db=db,
+            user
         ).scalar()
         county_income = []
         if latest_income_year:
             rows = (
-                filter_by_data_scope(
+                scoped_filter(
                     db.query(
                         SupportedVillage.county,
                         func.count(SupportedVillage.id),
                         func.avg(VillageIncome.per_capita_income),
-                        func.avg(VillageIncome.collective_income),
+                        func.avg(VillageIncome.collective_income)
                     ),
                     SupportedVillage,
-                    user,
-                    db=db,
+                    user
                 )
                 .join(
                     VillageIncome,
@@ -337,27 +330,25 @@ class AIServiceManager:
                 )
 
         # 按县聚合最新年份人口（受数据权限约束）
-        latest_pop_year = filter_by_data_scope(
+        latest_pop_year = scoped_filter(
             db.query(func.max(VillagePopulation.year)).join(
                 SupportedVillage,
-                VillagePopulation.supported_village_id == SupportedVillage.id,
+                VillagePopulation.supported_village_id == SupportedVillage.id
             ),
             SupportedVillage,
-            user,
-            db=db,
+            user
         ).scalar()
         county_population = []
         if latest_pop_year:
             rows = (
-                filter_by_data_scope(
+                scoped_filter(
                     db.query(
                         SupportedVillage.county,
                         func.sum(VillagePopulation.total_population),
-                        func.sum(VillagePopulation.total_households),
+                        func.sum(VillagePopulation.total_households)
                     ),
                     SupportedVillage,
-                    user,
-                    db=db,
+                    user
                 )
                 .join(
                     VillagePopulation,
@@ -401,23 +392,22 @@ class AIServiceManager:
         """
         import numpy as np
 
-        from app.core.data_permission import filter_by_data_scope
+        from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
         from app.models.supported_village import SupportedVillage, VillageIncome
 
         # VillageIncome 无 organization_id/created_by，需 join SupportedVillage 后按数据权限过滤
         rows = (
-            filter_by_data_scope(
+            scoped_filter(
                 db.query(
                     VillageIncome.year,
                     func.avg(VillageIncome.per_capita_income),
-                    func.avg(VillageIncome.collective_income),
+                    func.avg(VillageIncome.collective_income)
                 ).join(
                     SupportedVillage,
-                    VillageIncome.supported_village_id == SupportedVillage.id,
+                    VillageIncome.supported_village_id == SupportedVillage.id
                 ),
                 SupportedVillage,
-                user,
-                db=db,
+                user
             )
             .group_by(VillageIncome.year)
             .order_by(VillageIncome.year)
@@ -493,7 +483,7 @@ class AIServiceManager:
             db: 数据库会话。
             user: 当前用户，用于数据权限过滤。
         """
-        from app.core.data_permission import filter_by_data_scope
+        from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
         from app.models.fund import Fund
 
         today = date.today()
@@ -509,15 +499,14 @@ class AIServiceManager:
         query_year_start = date(current_year, 1, 1)
         query_year_end = date(current_year + 1, 1, 1)
         row = (
-            filter_by_data_scope(
+            scoped_filter(
                 db.query(
                     func.coalesce(func.sum(Fund.amount), 0),
                     func.coalesce(func.sum(Fund.allocated_amount), 0),
-                    func.coalesce(func.sum(Fund.used_amount), 0),
+                    func.coalesce(func.sum(Fund.used_amount), 0)
                 ).filter(Fund.date >= query_year_start, Fund.date < query_year_end),
                 Fund,
-                user,
-                db=db,
+                user
             )
             .first()
         )

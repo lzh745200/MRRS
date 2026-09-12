@@ -31,7 +31,7 @@ def test_append_village_results_success():
     db = _db_with([row])
     q = _chain_query([row])
     items = []
-    with patch.object(mod, "filter_by_data_scope", return_value=q):
+    with patch.object(mod, "scoped_filter", return_value=q):
         mod._append_village_results(items, "幸福", 3, db, MagicMock())
     assert len(items) == 1
     assert items[0].type == "village"
@@ -42,14 +42,14 @@ def test_append_village_results_empty_location_subtitle_none():
     row = MagicMock(id=2, village_name="村", province=None, city=None, county=None)
     q = _chain_query([row])
     items = []
-    with patch.object(mod, "filter_by_data_scope", return_value=q):
+    with patch.object(mod, "scoped_filter", return_value=q):
         mod._append_village_results(items, "村", 3, MagicMock(), MagicMock())
     assert items[0].subtitle is None
 
 
 def test_append_village_results_exception_swallowed():
     items = []
-    with patch.object(mod, "filter_by_data_scope", side_effect=RuntimeError("db down")):
+    with patch.object(mod, "scoped_filter", side_effect=RuntimeError("db down")):
         mod._append_village_results(items, "x", 3, MagicMock(), MagicMock())
     assert items == []
 
@@ -61,7 +61,7 @@ def test_append_project_results_success():
     row.name = "产业路"
     q = _chain_query([row])
     items = []
-    with patch.object(mod, "filter_by_data_scope", return_value=q):
+    with patch.object(mod, "scoped_filter", return_value=q):
         mod._append_project_results(items, "产业", 3, MagicMock(), MagicMock())
     assert items[0].type == "project"
     assert items[0].subtitle == "项目编号：P001"
@@ -72,14 +72,14 @@ def test_append_project_results_no_code():
     row.name = "项目"
     q = _chain_query([row])
     items = []
-    with patch.object(mod, "filter_by_data_scope", return_value=q):
+    with patch.object(mod, "scoped_filter", return_value=q):
         mod._append_project_results(items, "项", 3, MagicMock(), MagicMock())
     assert items[0].subtitle is None
 
 
 def test_append_project_results_exception_swallowed():
     items = []
-    with patch.object(mod, "filter_by_data_scope", side_effect=RuntimeError("boom")):
+    with patch.object(mod, "scoped_filter", side_effect=RuntimeError("boom")):
         mod._append_project_results(items, "x", 3, MagicMock(), MagicMock())
     assert items == []
 
@@ -109,7 +109,7 @@ def test_append_school_results_success():
     row.name = "希望小学"
     q = _chain_query([row])
     items = []
-    with patch.object(mod, "filter_by_data_scope", return_value=q):
+    with patch.object(mod, "scoped_filter", return_value=q):
         mod._append_school_results(items, "希望", 3, MagicMock(), MagicMock())
     assert items[0].type == "school"
     assert items[0].subtitle == "川 蓉 高新"
@@ -120,14 +120,14 @@ def test_append_school_results_all_none_subtitle_none():
     row.name = "校"
     q = _chain_query([row])
     items = []
-    with patch.object(mod, "filter_by_data_scope", return_value=q):
+    with patch.object(mod, "scoped_filter", return_value=q):
         mod._append_school_results(items, "校", 3, MagicMock(), MagicMock())
     assert items[0].subtitle is None
 
 
 def test_append_school_results_exception_swallowed():
     items = []
-    with patch.object(mod, "filter_by_data_scope", side_effect=RuntimeError("boom")):
+    with patch.object(mod, "scoped_filter", side_effect=RuntimeError("boom")):
         mod._append_school_results(items, "x", 3, MagicMock(), MagicMock())
     assert items == []
 

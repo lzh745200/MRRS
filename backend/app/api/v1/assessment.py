@@ -9,7 +9,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.cache import get_cache_service
-from app.core.data_permission import filter_by_data_scope
+from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
 from app.core.database import get_db
 from app.core.response import ok_list
 from app.core.security import get_current_user
@@ -56,7 +56,7 @@ async def get_village_scores(
 
     # 预加载关联数据，避免N+1查询（软删村不参与评估）
     villages = (
-        filter_by_data_scope(db.query(SupportedVillage), SupportedVillage, current_user)
+        scoped_filter(db.query(SupportedVillage), SupportedVillage, current_user)
         .filter(SupportedVillage.is_active == True)  # noqa: E712
         .limit(5000)
         .all()
@@ -146,7 +146,7 @@ async def detect_anomalies(
 
         # 获取当前用户有权访问的村庄ID列表（软删村排除）
         allowed_villages = (
-            filter_by_data_scope(db.query(SupportedVillage), SupportedVillage, current_user)
+            scoped_filter(db.query(SupportedVillage), SupportedVillage, current_user)
             .filter(SupportedVillage.is_active == True)  # noqa: E712
             .all()
         )
@@ -199,7 +199,7 @@ async def detect_anomalies(
 
         # 2. 逾期项目检测（软删项目不参与）
         overdue_projects = (
-            filter_by_data_scope(db.query(Project), Project, current_user)
+            scoped_filter(db.query(Project), Project, current_user)
             .filter(
                 Project.is_active == True,  # noqa: E712
                 Project.end_date < date.today(),
@@ -223,7 +223,7 @@ async def detect_anomalies(
 
         # 3. 预算超支检测（软删项目不参与）
         over_budget = (
-            filter_by_data_scope(db.query(Project), Project, current_user)
+            scoped_filter(db.query(Project), Project, current_user)
             .filter(
                 Project.is_active == True,  # noqa: E712
                 Project.budget > 0,
@@ -265,7 +265,7 @@ async def get_trend_prediction(
     try:
         # 仅统计用户有权访问的村庄（软删村排除）
         allowed_villages = (
-            filter_by_data_scope(db.query(SupportedVillage), SupportedVillage, current_user)
+            scoped_filter(db.query(SupportedVillage), SupportedVillage, current_user)
             .filter(SupportedVillage.is_active == True)  # noqa: E712
             .all()
         )
@@ -333,7 +333,7 @@ async def compare_villages(
 
     # 批量查询村庄信息，避免 N+1，且仅查询用户有权访问的村庄（软删村排除）
     villages = (
-        filter_by_data_scope(db.query(SupportedVillage), SupportedVillage, current_user)
+        scoped_filter(db.query(SupportedVillage), SupportedVillage, current_user)
         .filter(
             SupportedVillage.id.in_(ids),
             SupportedVillage.is_active == True,  # noqa: E712

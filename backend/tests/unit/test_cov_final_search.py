@@ -18,7 +18,7 @@ class TestAppendFundResults:
         q.limit.return_value = q
         q.all.return_value = [_fund()]
         items = []
-        with patch("app.api.v1.search.filter_by_data_scope", return_value=q):
+        with patch("app.api.v1.search.scoped_filter", return_value=q):
             _append_fund_results(items, "扶贫", 5, MagicMock(), MagicMock())
         assert len(items) == 1
         assert items[0].type == "fund"
@@ -33,14 +33,14 @@ class TestAppendFundResults:
         q.limit.return_value = q
         q.all.return_value = [_fund(id=7, name=None, code=None, project_name=None)]
         items = []
-        with patch("app.api.v1.search.filter_by_data_scope", return_value=q):
+        with patch("app.api.v1.search.scoped_filter", return_value=q):
             _append_fund_results(items, "x", 5, MagicMock(), MagicMock())
         assert items[0].title == "资金 #7"
         assert items[0].subtitle is None
 
     def test_exception_is_logged_and_swallowed(self):
         items = []
-        with patch("app.api.v1.search.filter_by_data_scope", side_effect=RuntimeError("db down")):
+        with patch("app.api.v1.search.scoped_filter", side_effect=RuntimeError("db down")):
             with patch("app.api.v1.search.logger") as mock_log:
                 _append_fund_results(items, "x", 5, MagicMock(), MagicMock())
         assert items == []

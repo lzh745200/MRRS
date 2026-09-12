@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.data_permission import filter_by_data_scope
+from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.fund import Fund
@@ -31,13 +31,11 @@ _MIN_ITEMS_PER_TYPE = 3
 def _append_village_results(items: List, q: str, each: int, db: Session, current_user) -> None:
     """搜索帮扶村并追加到结果列表"""
     try:
-        village_q = filter_by_data_scope(
+        village_q = scoped_filter(
             db.query(SupportedVillage),
             SupportedVillage,
             current_user,
-            org_field="organization_id",
-            db=db,
-        ).filter(
+            org_field="organization_id", ).filter(
             SupportedVillage.is_active.is_(True),
             or_(
                 SupportedVillage.village_name.ilike(f"%{q}%"),
@@ -61,13 +59,11 @@ def _append_village_results(items: List, q: str, each: int, db: Session, current
 def _append_project_results(items: List, q: str, each: int, db: Session, current_user) -> None:
     """搜索帮扶项目并追加到结果列表"""
     try:
-        project_q = filter_by_data_scope(
+        project_q = scoped_filter(
             db.query(Project),
             Project,
             current_user,
-            org_field="organization_id",
-            db=db,
-        ).filter(
+            org_field="organization_id", ).filter(
             Project.is_active == True,  # noqa: E712
             or_(
                 Project.name.ilike(f"%{q}%"),
@@ -120,13 +116,11 @@ def _append_policy_results(items: List, q: str, each: int, db: Session) -> None:
 def _append_school_results(items: List, q: str, each: int, db: Session, current_user) -> None:
     """搜索帮扶学校并追加到结果列表"""
     try:
-        school_q = filter_by_data_scope(
+        school_q = scoped_filter(
             db.query(School),
             School,
             current_user,
-            org_field="organization_id",
-            db=db,
-        ).filter(School.is_active == True, School.name.ilike(f"%{q}%"))  # noqa: E712
+            org_field="organization_id", ).filter(School.is_active == True, School.name.ilike(f"%{q}%"))  # noqa: E712
         for r in school_q.limit(each).all():
             items.append(
                 SearchItem(
@@ -144,13 +138,11 @@ def _append_school_results(items: List, q: str, each: int, db: Session, current_
 def _append_fund_results(items: List, q: str, each: int, db: Session, current_user) -> None:
     """搜索资金并追加到结果列表"""
     try:
-        fund_q = filter_by_data_scope(
+        fund_q = scoped_filter(
             db.query(Fund),
             Fund,
             current_user,
-            org_field="organization_id",
-            db=db,
-        ).filter(
+            org_field="organization_id", ).filter(
             Fund.is_active == True,  # noqa: E712
             or_(
                 Fund.name.ilike(f"%{q}%"),

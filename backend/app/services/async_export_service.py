@@ -85,12 +85,12 @@ def _load_user(db: Session, user_id: Optional[int]):
 
 def _fetch_village_records(db: Session, user: Any, params: Dict) -> List[Dict[str, Any]]:
     """真实查询帮扶村数据（与 /export/villages 同口径）。"""
-    from app.core.data_permission import filter_by_data_scope
+    from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
     from app.models.supported_village import SupportedVillage
 
     query = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
     if user is not None:
-        query = filter_by_data_scope(query, SupportedVillage, user, db=db)
+        query = scoped_filter(query, SupportedVillage, user)
 
     if params.get("keyword"):
         query = query.filter(SupportedVillage.village_name.contains(params["keyword"]))
@@ -133,12 +133,12 @@ def _fetch_village_records(db: Session, user: Any, params: Dict) -> List[Dict[st
 
 def _fetch_fund_records(db: Session, user: Any, params: Dict) -> List[Dict[str, Any]]:
     """真实查询经费数据（与 /export/funds 同口径）。"""
-    from app.core.data_permission import filter_by_data_scope
+    from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
     from app.models.fund import Fund
 
     query = db.query(Fund).filter(Fund.is_active == True)  # noqa: E712
     if user is not None:
-        query = filter_by_data_scope(query, Fund, user, db=db)
+        query = scoped_filter(query, Fund, user)
 
     if params.get("keyword"):
         query = query.filter(Fund.name.contains(params["keyword"]))
@@ -166,12 +166,12 @@ def _fetch_fund_records(db: Session, user: Any, params: Dict) -> List[Dict[str, 
 
 def _fetch_project_records(db: Session, user: Any, params: Dict) -> List[Dict[str, Any]]:
     """真实查询项目数据（与 /export/projects 同口径）。"""
-    from app.core.data_permission import filter_by_data_scope
+    from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
     from app.models.project import Project
 
     query = db.query(Project).filter(Project.is_active == True)  # noqa: E712
     if user is not None:
-        query = filter_by_data_scope(query, Project, user, db=db)
+        query = scoped_filter(query, Project, user)
 
     if params.get("keyword"):
         query = query.filter(Project.name.contains(params["keyword"]))
@@ -199,12 +199,12 @@ def _fetch_project_records(db: Session, user: Any, params: Dict) -> List[Dict[st
 
 def _fetch_school_records(db: Session, user: Any, params: Dict) -> List[Dict[str, Any]]:
     """真实查询学校数据（与 /export/schools 同口径）。"""
-    from app.core.data_permission import filter_by_data_scope
+    from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
     from app.models.school import School
 
     query = db.query(School).filter(School.is_active == True)  # noqa: E712
     if user is not None:
-        query = filter_by_data_scope(query, School, user, db=db)
+        query = scoped_filter(query, School, user)
 
     if params.get("keyword"):
         query = query.filter(School.name.contains(params["keyword"]))
@@ -246,7 +246,7 @@ def _build_comprehensive_workbook(db: Session, user: Any) -> bytes:
     """生成综合报表工作簿（与 /export/comprehensive 同口径）。"""
     from sqlalchemy import func as sql_func
 
-    from app.core.data_permission import filter_by_data_scope
+    from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
     from app.models.fund import Fund
     from app.models.project import Project
     from app.models.school import School
@@ -256,7 +256,7 @@ def _build_comprehensive_workbook(db: Session, user: Any) -> bytes:
     users_count = db.query(User).count()
     village_q = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
     if user is not None:
-        village_q = filter_by_data_scope(village_q, SupportedVillage, user, db=db)
+        village_q = scoped_filter(village_q, SupportedVillage, user)
     villages_count = village_q.count()
     schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
     projects_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
