@@ -32,8 +32,32 @@
   （含 `no such table`/唯一约束必须不重试）、同步与协程重试成功/不重试/耗尽/零次四种
   终态、以及**结构性断言**（两个备份写入口必须仍挂着装饰器、
   `retry_on_deadlock` 在 `app/` 下必须有生产引用）。
-- **验证**：后端全量 **11024 passed / 0 failed，覆盖率 100.00%**；
+- **验证**：后端全量 **11033 passed / 0 failed，覆盖率 100.00%**；
   flake8 0；bandit -ll 0。
+
+### 增强（C1 备份同卷可见化 + F1 单轨化可观测）
+- **C1 同卷告警**：新增 `backups_share_volume_with_database()`（优先比较
+  `st_dev`，失败时按盘符/POSIX 挂载点前缀兜底，
+  无法判定返回 None —— **绝不猜成“安全”**），
+  并在无认证 `/health` 新增 `backup.same_volume_as_database`。
+  同盘意味着断电/盘损时数据与备份一起消失 ——
+  配套约定早已要求 `backup_target_dir` 指向独立物理盘，
+  但此前**没有任何机制让“没配”这件事可见**。
+  本机实测即为同盘（`true`）—— 该信号立刻有效。
+- **F1 单轨化可观测**：`/health.migration.auto_migration_enabled` 如实回报是否仍在跑
+  已弃用的自动补列兜底（`ENABLE_AUTO_MIGRATION`，默认 False），
+  使“单轨化倒计时”（连续 2 个版本无人开启即删除该路径）
+  有可依据的观测口，而不是只能翻代码。
+- **两个信号均不泄露路径**：`/health` 无认证，因此只出布尔值/状态；
+  回归用例断言响应文本不含数据库文件名与绝对路径。
+
+### 验证
+- 后端全量 **11033 passed / 0 failed，覆盖率 100.00%**（新增 9 例视可性回归）；
+  flake8 0；bandit -ll 0。
+- 分支可达性：`same_volume` 四种结论（同卷/异卷/未知/stat 失败兜底）在
+  Windows 与 Linux 上**均可计算**（实现刻意不做 abspath，否则 POSIX 分支在
+  Windows 永不可达，本地覆盖率门禁会与 CI 分叉）。
+
 
 ## [1.12.4] - 2026-09-12 — 🛠️ Windows 出包门禁编码缺陷修复 + B1 数据域下沉全量收口
 

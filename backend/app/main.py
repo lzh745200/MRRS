@@ -262,12 +262,23 @@ def health():
     原文可能含数据库绝对路径与 SQL 片段，完整细节见服务端日志。
     """
     from app.core.build_info import get_build_info
+    from app.core.config import settings as _settings
 
     info = get_build_info()
     at_head = _migration_status.get("at_head")
     # C1 恢复演练状态（架构评估）：备份可用性对监控可见。
     # 只出状态/文件名/异常类名 —— 本端点无认证，不出绝对路径与行数明细。
     from app.services.restore_drill_service import RESTORE_DRILL_STATUS
+    # C1 备份存放可见化：备份与库同盘 = 断电/盘损时数据与备份同亡
+    from app.services.backup_service import backups_share_volume_with_database
+    from app.utils.paths import get_backup_path, get_database_path
+
+    try:
+        same_volume = backups_share_volume_with_database(
+            str(get_database_path()), str(get_backup_path())
+        )
+    except Exception:  # pragma: no cover — /health 不得因附带信号失败（路径解析异常）
+        same_volume = None
 
     return {
         "status": "ok",
@@ -277,6 +288,14 @@ def health():
             "at_head": at_head,
             "head": _migration_status.get("head"),
             "error_type": _migration_status.get("error_type"),
+            # F1 单轨化可见性：true 表示仍在跑已弃用的自动补列兜底路径
+            "auto_migration_enabled": bool(
+                getattr(_settings, "ENABLE_AUTO_MIGRATION", False)
+            ),
+        },
+        "backup": {
+            # True=备份与数据库同卷（建议配置 backup_target_dir 到独立盘）；null=未知
+            "same_volume_as_database": same_volume,
         },
         "restore_drill": {
             "status": RESTORE_DRILL_STATUS.get("status"),

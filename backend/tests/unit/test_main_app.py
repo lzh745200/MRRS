@@ -63,6 +63,8 @@ class TestHealthRoute:
             "at_head": False,
             "head": "rev_head",
             "error_type": "OperationalError",
+            # F1 单轨化可见性（2026-09-12）：true=仍在跑已弃用的自动补列兜底
+            "auto_migration_enabled": False,
         }
 
     def test_migration_failure_records_only_exception_class_name(self):

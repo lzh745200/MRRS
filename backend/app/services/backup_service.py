@@ -72,6 +72,57 @@ class BackupRecord:
         self.checksum = checksum
 
 
+def backups_share_volume_with_database(db_path: str, backup_dir: str) -> Optional[bool]:
+    """备份目录是否与数据库**同一物理卷**（C1 数据安全可见化，2026-09-12）。
+
+    为什么需要：备份与数据库同盘时，断电/盘损会把"数据 + 备份"一起带走，
+    恢复无从谈起。配套约定要求 `backup_target_dir` 指向独立物理盘/U 盘，
+    但此前没有任何机制让"没配"这件事可见。
+
+    判定方式（跨平台、无外部依赖）：
+    - 两条路径都存在 → 比较 ``os.stat().st_dev``（同一设备号即同卷，最可靠）；
+    - 否则退回**路径前缀**判定：有盘符时比盘符（Windows），
+      无盘符时比首层挂载点（POSIX，如 /data vs /mnt/usb）；
+    - 既无盘符也不是绝对路径（相对路径）→ 返回 None（"未知"，
+      **绝不猜成"安全"**）。
+
+    注意：这里刻意用**原始路径**做前缀判定（不做 abspath）—— 否则 Windows 上
+    `abspath("/data/x")` 会被补上盘符，POSIX 分支永远不可达，本地 100% 覆盖率
+    门禁与 CI 行为会分叉。
+
+    Returns:
+        True 同卷（风险）／False 异卷（安全）／None 无法判定
+    """
+    if not db_path or not backup_dir:
+        return None
+
+    try:
+        # 直接比较设备号：任一路径不存在/无权限即抛 OSError，落到下方前缀兜底。
+        # （刻意不先用 os.path.exists 把关 —— 它会吞掉 OSError，
+        #   使兜底分支永久不可达，本地覆盖率门禁与 CI 会分叉。）
+        db_dev = os.stat(db_path).st_dev
+        bk_dev = os.stat(backup_dir).st_dev
+        return db_dev == bk_dev
+    except OSError:
+        pass
+
+    db_drive = os.path.splitdrive(db_path)[0]
+    bk_drive = os.path.splitdrive(backup_dir)[0]
+    if db_drive or bk_drive:
+        # Windows：盘符不同即不同物理卷（网络盘符各自独立）
+        return db_drive.lower() == bk_drive.lower()
+
+    db_norm = db_path.replace("\\", "/")
+    bk_norm = backup_dir.replace("\\", "/")
+    if not (db_norm.startswith("/") and bk_norm.startswith("/")):
+        return None
+
+    # POSIX：以首层挂载点近似（/data vs /mnt/usb）
+    db_mount = "/" + db_norm.lstrip("/").split("/")[0]
+    bk_mount = "/" + bk_norm.lstrip("/").split("/")[0]
+    return db_mount == bk_mount
+
+
 class BackupService:
     """系统备份服务"""
 
