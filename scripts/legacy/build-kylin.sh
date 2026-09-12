@@ -9,7 +9,7 @@ echo "  帮扶管理信息系统 - 麒麟 ARM64 DEB 构建"
 echo "=========================================="
 
 # 提取版本号
-VERSION=$(grep -oP 'PROJECT_VERSION[^=]*=\s*"\K[^"]+' backend/app/core/config.py || echo "1.12.4")
+VERSION=$(grep -oP 'PROJECT_VERSION[^=]*=\s*"\K[^"]+' backend/app/core/config.py || echo "1.12.5")
 echo "版本: $VERSION"
 
 # 清理旧产物
