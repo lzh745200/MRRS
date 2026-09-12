@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { nextTick, reactive } from 'vue'
 
 const { ElMessage, projectsApiMock, logError, pushSafeMock, routeBox } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
@@ -1068,6 +1068,48 @@ describe('里程碑弹窗：模板 v-model 与 footer', () => {
     await saves[1].trigger('click')
     await flushPromises()
     expect(msCreate).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('路由 id 变化 → 重新加载全部数据；id 为空 → 不重复加载', async () => {
+    // 覆盖 Detail.vue:768-774（CI 实测该 watch 体未覆盖）：
+    // 同一组件内切换项目必须重新拉数据，否则会展示上一个项目的内容；
+    // 而 id 变为空（如路由切换过程）时必须直接返回，不做无意义加载。
+    //
+    // 注意：routeBox 是 vi.hoisted 的**普通对象**，直接改 params.id 不会触发
+    // computed 重算（projectId 依赖不变化）—— 必须换成 reactive 对象才能模拟
+    // vue-router 的响应式 params，否则 watch 永远不触发（首版即踩此坑）。
+    const params = reactive({ id: '7' })
+    routeBox.params = params
+
+    const wrapper = mountComp()
+    await flushPromises()
+
+    projectsApiMock.get.mockClear()
+    projectsApiMock.getTasks.mockClear()
+    projectsApiMock.getFunds.mockClear()
+    projectsApiMock.listFiles.mockClear()
+    projectsApiMock.getChangeHistory.mockClear()
+
+    params.id = '8'
+    await nextTick()
+    await flushPromises()
+
+    expect(projectsApiMock.get).toHaveBeenCalled()
+    expect(projectsApiMock.getTasks).toHaveBeenCalled()
+    expect(projectsApiMock.getFunds).toHaveBeenCalled()
+    expect(projectsApiMock.listFiles).toHaveBeenCalled()
+    expect(projectsApiMock.getChangeHistory).toHaveBeenCalled()
+
+    // 空 id → watch 内提前 return（!newId 分支）
+    projectsApiMock.get.mockClear()
+    projectsApiMock.getTasks.mockClear()
+    params.id = ''
+    await nextTick()
+    await flushPromises()
+    expect(projectsApiMock.get).not.toHaveBeenCalled()
+    expect(projectsApiMock.getTasks).not.toHaveBeenCalled()
+
     wrapper.unmount()
   })
 })

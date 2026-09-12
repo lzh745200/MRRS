@@ -145,4 +145,45 @@ describe('SupportedVillageForm.vue H2 经费加载失败保护', () => {
     await flushPromises()
     expect(mocks.saveTransitionFunding).toHaveBeenCalledTimes(1)
   })
+
+  it('未点"添加"直接保存：选中年度有非零输入 → 先 upsert 该年度（避免静默丢弃）', async () => {
+    // 覆盖 SupportedVillageForm.vue:594-595（CI 实测该分支未覆盖）：
+    // 用户填了某年度经费但没点"添加"，直接保存时该年度不得被静默丢弃。
+    mocks.getTransitionFunding.mockResolvedValueOnce([])
+    const wrapper = mountForm()
+    await flushPromises()
+    const vm = stubValidate(wrapper)
+    vm.selectedFundingYear = 2027
+    vm.currentMilitaryInput = 30
+    vm.currentLocalInput = 0 // 军费非零即应并入（|| 语义）
+    await vm.handleSubmit()
+    await flushPromises()
+
+    const [vid, body] = mocks.saveTransitionFunding.mock.calls[0]
+    expect(vid).toBe(42)
+    expect(body.items).toEqual([
+      { year: 2027, militaryInvestment: 30, localInvestment: 0, totalInvestment: 30 },
+    ])
+  })
+
+  it('未点"添加"直接保存：选中年度无输入 → 不并入空行、已有行不被清零', async () => {
+    // 同一分支的另一侧：无非零输入时**不得** upsert —— 否则会把已有行覆盖为 0，
+    // 或凭空产生 0 值空行。
+    mocks.getTransitionFunding.mockResolvedValueOnce([
+      { year: 2024, militaryInvestment: 10, localInvestment: 5 },
+    ])
+    const wrapper = mountForm()
+    await flushPromises()
+    const vm = stubValidate(wrapper)
+    vm.selectedFundingYear = 2024
+    vm.currentMilitaryInput = 0
+    vm.currentLocalInput = 0
+    await vm.handleSubmit()
+    await flushPromises()
+
+    const [, body] = mocks.saveTransitionFunding.mock.calls[0]
+    expect(body.items).toEqual([
+      { year: 2024, militaryInvestment: 10, localInvestment: 5, totalInvestment: 15 },
+    ])
+  })
 })

@@ -293,6 +293,27 @@ describe('SectionDataForm.vue 初始化与年份切换', () => {
     ])
   })
 
+  it("committee 成员 isVeteran 显式真值判定：'1' 为真、0/'0' 为假", async () => {
+    // 补齐 toBool 的剩余分支（CI 实测 SectionDataForm.vue:1122 未覆盖）：
+    // 后端可能返回布尔/数字/字符串 "0"/"1"，Boolean("0") 会误判为 true。
+    mocks.getYearlyData.mockResolvedValue({
+      committee: {
+        members: [
+          { name: 'A', isVeteran: '1' },
+          { name: 'B', isVeteran: 0 },
+          { name: 'C', isVeteran: '0' },
+        ],
+      },
+    })
+    const wrapper = mountForm({ sectionKey: 'committee' })
+    await flushPromises()
+    expect(state(wrapper).committeeMembers.map((m: any) => m.isVeteran)).toEqual([
+      true,
+      false,
+      false,
+    ])
+  })
+
   it('addCommitteeMember → 追加空成员', async () => {
     const wrapper = mountForm({ sectionKey: 'committee' })
     await flushPromises()

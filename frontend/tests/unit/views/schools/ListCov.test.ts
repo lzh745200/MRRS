@@ -784,6 +784,21 @@ describe('特殊挂载路径', () => {
     expect(ElMessage.error).toHaveBeenCalled()
   })
 
+  it('导入失败且错误无可用信息 → 显示本模块兜底文案（getErrorMessage 第二参数）', async () => {
+    // 原实现写的是 `getErrorMessage(err) || '导入失败，请检查文件格式'`，
+    // 而 getErrorMessage **永不返回空串** → `||` 右侧是死分支（分支门禁实测 99.6%）。
+    // 改为把兜底文案作为第二参数传入：无信息时显示专有文案，而非通用"操作失败"。
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vi.mocked(ElMessage.error).mockClear()
+
+    importExcelMock.mockRejectedValueOnce({}) // 无 message / response → 走 fallback
+    await vm.handleImportUpload({ file: new File(['x'], 'c.xlsx') })
+
+    expect(ElMessage.error).toHaveBeenCalledWith('导入失败，请检查文件格式')
+  })
+
   it('KeepAlive 包裹：onMounted 与 onActivated 去重，首次挂载不重复加载', async () => {
     const Wrapper = defineComponent({
       render() {

@@ -190,4 +190,32 @@ describe('schools/Analysis.vue', () => {
     expect(vm.statusOption.series[0].data).toEqual([])
     wrapper.unmount()
   })
+
+  it('分支补齐: items 非数组 / 完全缺 items 时的兜底', async () => {
+    // 124-125 行的两条兜底分支（CI 实测 branch 94.44% 的来源）：
+    // ① raw 是对象但 items 不是数组 → rawItems 非数组 → 回退 []
+    // ② raw 是对象且完全没有 items → raw?.items 为 undefined → ?? [] 生效
+    vi.mocked(schoolsApi.getStatistics).mockResolvedValue({ data: {} } as never)
+    vi.mocked(schoolsApi.list).mockResolvedValue({ data: { items: 'bad-shape' } } as never)
+
+    const wrapper = mountAnalysis()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.statusDist).toEqual({})
+    expect(vm.statusOption.series[0].data).toEqual([])
+
+    vi.mocked(schoolsApi.list).mockResolvedValue({ data: { foo: 1 } } as never)
+    await vm.loadData()
+    expect(vm.statusDist).toEqual({})
+    expect(vm.regionDist).toEqual({})
+
+    // ③ data 本身就是数组（isArray(raw) 真分支）
+    vi.mocked(schoolsApi.list).mockResolvedValue({
+      data: [{ support_status: 'active', district: '荔波县' }],
+    } as never)
+    await vm.loadData()
+    expect(vm.statusDist['active']).toBe(1)
+    expect(vm.regionDist['荔波县']).toBe(1)
+    wrapper.unmount()
+  })
 })

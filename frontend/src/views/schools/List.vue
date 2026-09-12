@@ -649,7 +649,11 @@ async function handleImportUpload(options: any) {
     onImportSuccess(res)
   } catch (err: any) {
     logger.error('[SchoolList] 导入学校失败', err)
-    ElMessage.error(getErrorMessage(err) || '导入失败，请检查文件格式')
+    // 兜底文案经 getErrorMessage 的第二参数传入：该函数**永不返回空串**
+    // （无信息时返回其 fallback），故原先的 `|| '导入失败，请检查文件格式'`
+    // 是永不执行的死分支（CI 分支门禁实测 99.6%）。传入 fallback 既消除死分支，
+    // 又让"错误对象无可用信息"时显示的是本模块的专有文案而非通用"操作失败"。
+    ElMessage.error(getErrorMessage(err, '导入失败，请检查文件格式'))
     onImportError()
   } finally {
     options.onSuccess?.(undefined)
