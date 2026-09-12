@@ -558,6 +558,53 @@ class TestBackupServiceHardening:
         assert result["status"] == "ok"
         assert result.get("database_verified") is True
 
+    def test_verify_backup_integrity_not_ok_returns_error(self, tmp_path, monkeypatch):
+        """覆盖 backup_service.py:1207 —— integrity_check 正常返回但结果非 'ok'。
+
+        现实中损坏库多会直接抛 DatabaseError（被外层 except 兜住），
+        `if not db_verified` 属防御分支；此处以可控桩精确覆盖该返回块：
+        让 sqlite3.connect 返回的 cursor.fetchone() 给出 ("*** in database main ***",)。
+        """
+        import sqlite3 as _sqlite3
+
+        from app.services.backup_service import BackupService
+
+        class _FakeCursor:
+            def execute(self, *_a, **_k):
+                return self
+
+            def fetchone(self):
+                return ("*** in database main ***",)
+
+        class _FakeConn:
+            def cursor(self):
+                return _FakeCursor()
+
+            def close(self):
+                pass
+
+        # 仅替换 backup_service 模块内引用的 sqlite3.connect
+        import app.services.backup_service as bs_mod
+
+        svc = object.__new__(BackupService)
+        zip_path = tmp_path / "semi.zip"
+        # 先造真库（此刻尚未打桩，用的是真 sqlite3），再打桩
+        real_db = tmp_path / "seed.db"
+        _c = _sqlite3.connect(str(real_db))
+        _c.execute("CREATE TABLE t (id INTEGER)")
+        _c.commit()
+        _c.close()
+
+        monkeypatch.setattr(bs_mod.sqlite3, "connect", lambda *_a, **_k: _FakeConn())
+
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.write(str(real_db), "data/rural_revitalization.db")
+
+        result = svc.verify_backup(str(zip_path))
+        assert result["status"] == "error"
+        assert result.get("database_verified") is False
+        assert "完整性校验未通过" in result["message"]
+
 
 # ══════════════════════════════════════════════════════════════════════
 # 6. permission_package_service 文件读取统一
