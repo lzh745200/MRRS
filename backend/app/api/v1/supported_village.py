@@ -3,6 +3,7 @@
 # 数据权限过滤已迁移到 app.core.data_scope_adapter.apply_scope_filter()
 # 支持组织树展开（org_children 含下级组织），与 school.py 行为一致
 
+import contextlib
 import io
 import json
 import logging
@@ -20,6 +21,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
+from app.core.upload_security import sanitize_filename
 from app.models.user import User
 from app.models.audit import AuditAction
 from app.utils.common import dict_keys_to_camel, StringHelper
@@ -51,6 +53,14 @@ from app.services.approval_workflow_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/supported-villages", tags=["帮扶村管理"])
+
+# 禁止写入静态目录的「可被浏览器当文档执行」的扩展名。
+# 区块附件落盘在 settings.UPLOAD_DIR/sections，而该目录经 /uploads 静态挂载
+# 对外提供（无需鉴权）；允许 .html/.svg 等即形成未认证可达的存储型 XSS。
+_BLOCKED_ATTACHMENT_EXTENSIONS = {
+    ".html", ".htm", ".xhtml", ".shtml", ".svg", ".xml",
+    ".js", ".mjs", ".vbs", ".hta", ".jsp", ".php",
+}
 
 
 # ── 列表排序白名单 ──
@@ -1339,9 +1349,15 @@ async def upload_section_attachment(
     import os as _os
 
     content = await file.read()
+    safe_name = sanitize_filename(file.filename or "attachment")
+    ext = _os.path.splitext(safe_name)[1].lower()
+    if ext in _BLOCKED_ATTACHMENT_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"不允许上传该类型附件: {ext}")
     upload_dir = _os.path.join(settings.UPLOAD_DIR, "sections")
     _os.makedirs(upload_dir, exist_ok=True)
-    file_path = _os.path.join(upload_dir, f"{village_id}_{section}_{file.filename}")
+    # 文件名与区块名都必须净化：原实现直接拼接 file.filename，既可 ../ 穿越，
+    # 也可写入 .html/.svg 形成静态目录下的存储型 XSS
+    file_path = _os.path.join(upload_dir, f"{village_id}_{sanitize_filename(section)}_{safe_name}")
     with open(file_path, "wb") as f:
         f.write(content)
 
@@ -1410,8 +1426,14 @@ async def delete_section_attachment(
     )
     if not attachment:
         raise HTTPException(status_code=404, detail="附件不存在")
+    import os as _os
+
+    file_path = attachment.file_path or ""
     db.delete(attachment)
     safe_commit(db)
+    # 同步清理磁盘文件：原实现只删库记录，附件在 /uploads 下永久残留（孤儿文件）
+    with contextlib.suppress(OSError):
+        _os.remove(file_path)
     return {"code": 200, "success": True, "message": "删除成功"}
 
 

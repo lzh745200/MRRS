@@ -136,7 +136,12 @@ def start_wal_checkpoint_scheduler():
 
 def stop_wal_checkpoint_scheduler():
     """停止每日 WAL checkpoint 调度线程。"""
+    global _wal_thread
     _wal_stop_event.set()
     if _wal_thread:
         _wal_thread.join(timeout=1)
+    # 必须复位句柄：否则同进程内二次进入 lifespan（测试用 TestClient、
+    # 任何进程内重初始化）时 start_* 会因 _wal_thread is not None 直接
+    # 返回，WAL 调度永久静默失效。
+    _wal_thread = None
     logger.info("每日 WAL checkpoint 调度已停止")

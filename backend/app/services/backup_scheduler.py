@@ -528,6 +528,7 @@ def _run_scheduler_job(job_fn):
     """
     import asyncio
 
+    loop = None
     try:
         result = job_fn()
         if not asyncio.iscoroutine(result):
@@ -535,9 +536,13 @@ def _run_scheduler_job(job_fn):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(result)
-        loop.close()
     except Exception as e:
         logger.error("定时任务执行失败: %s", e)
+    finally:
+        # 修复：run_until_complete 抛异常时原实现不会执行 loop.close()，
+        # 导致每次失败泄漏一个事件循环（IOCP/selector fd + 未回收任务）
+        if loop is not None:
+            loop.close()
 
 
 def start_backup_scheduler():

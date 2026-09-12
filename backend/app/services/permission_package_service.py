@@ -22,6 +22,7 @@ import logging
 import os
 import zipfile
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from sqlalchemy import delete
@@ -277,7 +278,7 @@ class PermissionPackageService:
         if password:
             from app.utils.package_crypto import encrypt_bytes
 
-            raw = file_path.read_bytes() if hasattr(file_path, "read_bytes") else open(file_path, "rb").read()
+            raw = file_path.read_bytes() if hasattr(file_path, "read_bytes") else Path(file_path).read_bytes()
             with open(file_path, "wb") as _f:
                 _f.write(encrypt_bytes(raw, password))
         checksum = self._calculate_checksum(file_path)

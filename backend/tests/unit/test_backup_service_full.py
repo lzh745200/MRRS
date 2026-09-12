@@ -35,6 +35,16 @@ def _make_real_sqlite_db(db_path: str) -> None:
         conn.close()
 
 
+def _sqlite_blob_from(db_path: str) -> bytes:
+    """读取（或现造）一个合法 SQLite 库的二进制，用于写入 zip 备份包。
+
+    restore_backup 自 2026-09-12 起对恢复结果做完整性校验（fail-loud），
+    备份包里的库必须是真库。
+    """
+    _make_real_sqlite_db(db_path)
+    return Path(db_path).read_bytes()
+
+
 # ---------------------------------------------------------------------------
 # 辅助：构建 BackupService 实例（与现有 test_backup_service.py 相同的模式）
 # ---------------------------------------------------------------------------
@@ -371,11 +381,13 @@ class TestRestoreDecryptedTempCleanup:
         db_path = str(tmp_path / "data" / "rural_revitalization.db")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("orig")
+        _make_real_sqlite_db(db_path)
+        # 备份包内必须是真库，否则恢复完整性校验按设计 fail-loud
+        real_db_blob = _sqlite_blob_from(str(tmp_path / "src.db"))
 
         zip_path = os.path.join(bdir, "enc.zip")
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", "new")
+            zf.writestr("data/rural_revitalization.db", real_db_blob)
         BackupService._encrypt_file(zip_path, "pass")
 
         svc = _make_svc(mock_db, bdir, db_path, str(tmp_path / "u"))

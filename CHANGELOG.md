@@ -5,6 +5,79 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布] - 2026-09-12 — 🔒 深度审计加固（目录穿越 / 存储型 XSS / 并发 / 备份 fail-loud）
+
+> 说明：本节内容在 `v1.12.4` 标签之后合入，**不属于 v1.12.4 发布产物**；
+> 下一个版本号统一时并入正式段。
+
+### 修复（安全：上传路径穿越 + 存储型 XSS）
+- **`core/upload_security.sanitize_filename`**：原实现仅替换 `<>:/"|?*` 而**保留 `\`**。
+  Windows 下 `\` 与 `/` 同为路径分隔符，`..\..\evil.zip` 经
+  `Path(upload_dir) / name` 拼接后越界写出（目录穿越）。现先按两种分隔符
+  `re.split(r"[\\/]+", ...)` 取最后一段（等价 basename），并 `strip()` + 去尾部 `.`，
+  空结果兜底 `_`；中文文件名不受影响。
+- **`api/v1/data_sync._safe_filename`**：在 sanitize 之后再 `Path(...).name` 兜底一次，
+  保证任何平台语义下都无分隔符残留。
+- **`api/v1/supported_village.upload_section_attachment`**：区块附件落在
+  `UPLOAD_DIR/sections`，而该目录经 `/uploads` 静态挂载对外提供（无需鉴权）。
+  新增**禁止扩展名黑名单**（`.html/.htm/.xhtml/.shtml/.svg/.xml/.js/.mjs/.vbs/.hta/.jsp/.php`），
+  拦截存储型 XSS；并对 `file.filename` 与 `section` **双重净化**（原实现直接拼接 → 穿越 + XSS）。
+- **`api/v1/supported_village.delete_section_attachment`**：原实现仅删库记录，
+  附件在 `/uploads` 下**永久残留（孤儿文件）**；现同步 `os.remove` 清理磁盘文件。
+
+### 修复（可靠性：并发与资源泄漏）
+- **`api/v1/system/tasks`**：`_tasks` 内存字典无锁 —— 后台任务线程插入、请求线程迭代/删除
+  并发时可能抛 `RuntimeError: dictionary changed size`。新增 `_tasks_lock`，
+  对插入 / 列表快照 / 删除 / 计数**全部持锁**。
+- **`services/backup_scheduler._run_scheduler_job`**：`loop.run_until_complete` 抛异常时
+  原实现**跳过 `loop.close()`**，每次失败泄漏一个事件循环（IOCP/selector fd + 未回收任务）。
+  现将 `loop` 提到 try 外 + `finally: if loop is not None: loop.close()`。
+- **`services/db_maintenance.stop_wal_checkpoint_scheduler`**：停止后**未复位 `_wal_thread`**，
+  同进程二次进入 lifespan（测试用 TestClient / 进程内重初始化）时
+  `start_*` 会因 `_wal_thread is not None` 直接返回，WAL 调度**永久静默失效**。现置回 `None`。
+- **`services/immediate_backup.trigger_immediate_backup`**：`t.start()` 失败（线程资源耗尽）
+  时**未释放幂等锁** `_triggered_once`，此后所有「关键操作前备份」都被静默跳过。
+  现捕获异常 → 释放锁 → 记日志 → 返回 False。
+
+### 修复（备份/恢复：fail-loud 与 Windows 文件语义）
+- **`api/v1/system/backup._resolve_backup_file_path`（新增）**：下载/预览/校验/恢复四个入口
+  原先**只查默认目录**，配置 `backup_target_dir`（备份到 U 盘/移动硬盘）后
+  备份「列表可见，但下载与恢复恒 404」——恰是该功能的核心用途。现统一为
+  单一定位函数：优先配置目录 → 默认目录，保留 `realpath` 前缀校验防 `../` 逃逸（403）。
+- **`services/backup_service`**：
+  - `_restore_uploads_from_backup` / `_rollback_to_snapshot` 的 `shutil.copytree` 补
+    `dirs_exist_ok=True`：Windows 上 `rmtree` 可能因文件被占用而「部分删除」并留下目录，
+    原实现此时抛 `FileExistsError` 使恢复失败并连锁破坏回滚。
+  - 快照创建移入 `try` 内：原实现若在建快照时抛错（磁盘写满/文件被占用），
+    `finally` 不执行 → `restore_XXXX` 临时目录与**解密的明文临时包永久残留**在 `%TEMP%`
+    （敏感数据落地）。
+  - 恢复路径 **fail-loud**：`_restore_database_from_backup` 返回 False（备份包缺库 /
+    完整性校验未通过）时原实现**照常返回 `success=True`** 并删掉唯一回滚快照 →
+    「恢复失败却报成功且再无退路」。现抛 `BackupRestoreError`。
+  - `verify_backup` 同理：ZIP 结构完好但 `PRAGMA integrity_check` 未通过时
+    原返回 `status="ok"`（把最坏故障判为通过），现返回 `status="error"`。
+  - 回滚清理 `os.unlink` 的 `except FileNotFoundError` 放宽为 `except OSError`
+    （Windows 被占用时 `ERROR_SHARING_VIOLATION` 不再是 `FileNotFoundError`）。
+- **`api/v1/school.import_schools_excel`**：`delete=False` 的临时上传副本**成功/失败都不清理**，
+  每次导入在 `%TEMP%` 残留一份；现收敛到 `finally` 删除。
+
+### 工程（非功能性）
+- **`services/permission_package_service`**：`open(file_path, "rb").read()`
+  → `Path(file_path).read_bytes()`，与契约类型统一、消除资源告警。
+
+### 回归与验证
+- 新增 `tests/unit/test_deep_audit_fixes_20260912.py`（41 例）：逐修复点做「修复前失败、
+  修复后通过」的差异断言（穿越剥离、XSS 黑名单、并发无 `RuntimeError`、
+  事件循环已关闭、幂等锁已释放、fail-loud 返回 error、`dirs_exist_ok` 覆盖等）。
+- **修正陈旧夹具（10 例）**：`test_backup_service.py` / `test_backup_service_full.py`
+  中恢复路径仍用**纯文本占位 DB**（`zf.writestr(..., "new")`），与 `create_backup`
+  早已引入的恢复性校验契约（helper 文档自述「纯文本占位夹具不再可用」）不一致；
+  恢复路径 fail-loud 收口后集中暴露。现改用真实 SQLite 夹具并同步 `test_restore_no_db_in_backup`
+  的语义（无库 → 期望抛 `BackupRestoreError`，不再 `success=True`）。
+- 受影响 28 个测试文件 **622 passed**（1 例为沙箱 bulk-delete 守卫在收尾清理时
+  误触发的环境噪声，隔离运行 1 passed）；14 个 flake8 检查文件 **0 告警**
+  （`test_backup_service.py` 的 5 处提示为**既有**，与本次改动无关）。
+
 ## [未发布] - 2026-09-12 — D1 写锁竞争退避重试（后端线程）
 
 > 说明：本节内容在 `v1.12.4` 标签之后合入，**不属于 v1.12.4 发布产物**；

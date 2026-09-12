@@ -633,7 +633,9 @@ class BackupService:
             return False
         if os.path.exists(self.uploads_dir):
             shutil.rmtree(self.uploads_dir, ignore_errors=True)
-        shutil.copytree(backup_uploads_dir, self.uploads_dir)
+        # dirs_exist_ok：rmtree 在 Windows 上可能因文件被占用而「部分删除」并留下目录，
+        # 原实现此时 copytree 会抛 FileExistsError，使恢复失败并连锁破坏回滚
+        shutil.copytree(backup_uploads_dir, self.uploads_dir, dirs_exist_ok=True)
         return True
 
     def _cleanup_snapshots(self, snapshot_db_path, snapshot_uploads_dir):
@@ -652,17 +654,20 @@ class BackupService:
             if os.path.exists(self.database_path):
                 try:
                     os.unlink(self.database_path)
-                except FileNotFoundError:
-                    pass
+                except OSError:
+                    # Windows 上文件可能仍被占用（ERROR_SHARING_VIOLATION）。
+                    # 原实现只捕 FileNotFoundError，被占用时直接中断整条回滚链，
+                    # 使「已回滚到原始状态」的提示与事实不符。
+                    logger.warning("回滚: 原数据库文件删除失败（可能被占用），尝试直接覆盖")
             shutil.copy(snapshot_db_path, self.database_path)
             try:
                 os.unlink(snapshot_db_path)
-            except FileNotFoundError:
-                pass
+            except OSError:
+                logger.warning("回滚: 快照数据库文件清理失败（残留于 %s）", snapshot_db_path)
         if snapshot_uploads_dir and os.path.exists(snapshot_uploads_dir):
             if os.path.exists(self.uploads_dir):
                 shutil.rmtree(self.uploads_dir, ignore_errors=True)
-            shutil.copytree(snapshot_uploads_dir, self.uploads_dir)
+            shutil.copytree(snapshot_uploads_dir, self.uploads_dir, dirs_exist_ok=True)
             shutil.rmtree(snapshot_uploads_dir, ignore_errors=True)
 
     def _cleanup_temp(self, temp_dir, decrypted_temp_path):
@@ -694,13 +699,25 @@ class BackupService:
 
         restore_source, decrypted_temp_path = self._resolve_restore_source(backup_file_path, password)
         temp_dir = tempfile.mkdtemp(prefix="restore_")
-        snapshot_db_path, snapshot_uploads_dir = self._create_snapshots()
+        snapshot_db_path = None
+        snapshot_uploads_dir = None
 
         try:
+            # 快照必须建在 try 内：否则它在磁盘写满/文件被占用时抛错，
+            # 后面的 finally 不会执行 —— restore_XXXX 临时目录与（加密备份解密出的）
+            # 明文临时包会永久残留在 %TEMP%，后者还是敏感数据落盘
+            snapshot_db_path, snapshot_uploads_dir = self._create_snapshots()
+
             with zipfile.ZipFile(restore_source, "r") as zipf:
                 self._safe_extractall(zipf, temp_dir)
 
             database_restored = self._restore_database_from_backup(temp_dir)
+            if not database_restored:
+                # fail-loud：备份包缺库、或恢复后完整性校验未通过时，生产库可能已被
+                # 替换为不可用文件。原实现丢弃该返回值照样返回 success=True，
+                # 还会删掉唯一回滚快照，导致「恢复失败却报成功且再无退路」。
+                raise BackupRestoreError("数据库恢复失败（备份包缺少数据库文件或完整性校验未通过）")
+
             uploads_restored = self._restore_uploads_from_backup(temp_dir)
 
             self._cleanup_snapshots(snapshot_db_path, snapshot_uploads_dir)
@@ -1182,6 +1199,19 @@ class BackupService:
                     # 清理临时文件
                     if os.path.exists(temp_dir):
                         shutil.rmtree(temp_dir, ignore_errors=True)
+
+                if not db_verified:
+                    # fail-loud：原实现只要 ZIP 结构完好就返回 status="ok"，
+                    # 把「备份存在但库已损坏」这一最坏故障模式判为「验证通过」，
+                    # 掩盖了备份不可还原的事实
+                    return {
+                        "status": "error",
+                        "message": "备份文件验证失败：数据库完整性校验未通过",
+                        "file_hash": file_hash,
+                        "file_count": len(file_list),
+                        "backup_info": backup_info,
+                        "database_verified": False,
+                    }
 
             return {
                 "status": "ok",

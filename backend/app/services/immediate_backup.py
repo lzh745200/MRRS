@@ -53,5 +53,12 @@ def trigger_immediate_backup(description: str = "关键操作前备份", delay: 
             _triggered_once.release()
 
     t = threading.Thread(target=_run, name="immediate-backup", daemon=True)
-    t.start()
+    try:
+        t.start()
+    except Exception:
+        # 线程启动失败（如线程资源耗尽）时必须释放幂等锁，
+        # 否则后续所有「关键操作前备份」都会走 29 行提前返回而被静默跳过
+        _triggered_once.release()
+        logger.error("即时备份线程启动失败", exc_info=True)
+        return False
     return True

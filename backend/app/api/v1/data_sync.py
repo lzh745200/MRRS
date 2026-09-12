@@ -39,8 +39,9 @@ CHUNK_SIZE = 1024 * 1024
 
 def _safe_filename(filename: str) -> str:
     """净化文件名，防止路径遍历攻击"""
-    # 使用现有的安全文件名处理函数（去除路径遍历字符和特殊字符）
-    safe_name = sanitize_filename(filename)
+    # sanitize_filename 已剥离目录成分；再用 Path(...).name 兜底一次，
+    # 保证任何平台语义下都不会有路径分隔符残留到 upload_dir / name 拼接中
+    safe_name = Path(sanitize_filename(filename)).name
     # 验证扩展名白名单
     ext = Path(safe_name).suffix.lower()
     if ext not in ALLOWED_UPLOAD_EXTENSIONS:

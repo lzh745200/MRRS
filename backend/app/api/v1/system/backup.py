@@ -521,6 +521,33 @@ async def delete_backup(
         raise HTTPException(status_code=500, detail="删除备份失败，请稍后重试或联系管理员")
 
 
+def _resolve_backup_file_path(filename: str) -> str:
+    """定位备份文件，返回绝对路径（不存在则 404）。
+
+    备份可能落在两处：管理端配置的外部目标目录（``backup_target_dir``，用于备份到
+    U 盘/移动硬盘）或默认备份目录。原实现四个入口（下载/预览/校验/恢复）只查默认
+    目录，导致配置目标目录后备份「列表可见，但下载与恢复恒 404」——恰是该功能的核心用途。
+    """
+    from app.services.system_config_service import get_config
+    from app.utils.paths import get_backup_path
+
+    configured = (get_config("backup_target_dir", "") or "").strip()
+    candidates = [str(get_backup_path())]
+    if configured:
+        candidates.insert(0, configured)
+    for backup_dir in candidates:
+        file_path = os.path.join(backup_dir, filename)
+        if not os.path.exists(file_path):
+            continue
+        # 安全检查：确保路径在备份目录内（防 ../ 逃逸）
+        real_path = os.path.realpath(file_path)
+        real_dir = os.path.realpath(backup_dir)
+        if not (real_path == real_dir or real_path.startswith(real_dir + os.sep)):
+            raise HTTPException(status_code=403, detail="禁止访问备份目录外的文件")
+        return file_path
+    raise HTTPException(status_code=404, detail=f"备份文件 '{filename}' 不存在")
+
+
 @router.get("/download/{filename}", summary="下载备份文件")
 async def download_backup(
     filename: str,
@@ -535,19 +562,8 @@ async def download_backup(
     require_admin(current_user, error_message="仅管理员可下载备份文件")
 
     from fastapi.responses import FileResponse
-    from app.utils.paths import get_backup_path
 
-    backup_dir = str(get_backup_path())
-    file_path = os.path.join(backup_dir, filename)
-
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail=f"备份文件 '{filename}' 不存在")
-
-    # 安全检查：确保路径在备份目录内
-    real_path = os.path.realpath(file_path)
-    real_backup_dir = os.path.realpath(backup_dir)
-    if not (real_path == real_backup_dir or real_path.startswith(real_backup_dir + os.sep)):
-        raise HTTPException(status_code=403, detail="禁止访问备份目录外的文件")
+    file_path = _resolve_backup_file_path(filename)
 
     logger.info(
         "备份文件下载: %s，操作人: %s",
@@ -577,19 +593,7 @@ async def preview_backup(
     import json
     import zipfile
 
-    from app.utils.paths import get_backup_path
-
-    backup_dir = str(get_backup_path())
-    file_path = os.path.join(backup_dir, filename)
-
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail=f"备份文件 '{filename}' 不存在")
-
-    # 安全检查：确保路径在备份目录内
-    real_path = os.path.realpath(file_path)
-    real_backup_dir = os.path.realpath(backup_dir)
-    if not (real_path == real_backup_dir or real_path.startswith(real_backup_dir + os.sep)):
-        raise HTTPException(status_code=403, detail="禁止访问备份目录外的文件")
+    file_path = _resolve_backup_file_path(filename)
 
     try:
         with zipfile.ZipFile(file_path, "r") as zf:
@@ -631,19 +635,7 @@ async def verify_backup(
     require_admin(current_user, error_message="仅超级管理员可验证备份")
 
     try:
-        from app.utils.paths import get_backup_path
-
-        backup_dir = str(get_backup_path())
-        file_path = os.path.join(backup_dir, filename)
-
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail=f"备份文件 '{filename}' 不存在")
-
-        # 安全检查：确保路径在备份目录内
-        real_path = os.path.realpath(file_path)
-        real_backup_dir = os.path.realpath(backup_dir)
-        if not (real_path == real_backup_dir or real_path.startswith(real_backup_dir + os.sep)):
-            raise HTTPException(status_code=403, detail="禁止访问备份目录外的文件")
+        file_path = _resolve_backup_file_path(filename)
 
         svc = get_backup_service(db)
         result = svc.verify_backup(file_path)
@@ -675,13 +667,7 @@ async def restore_backup(
     require_admin(current_user, error_message="仅超级管理员可恢复备份")
 
     try:
-        from app.utils.paths import get_backup_path
-
-        backup_dir = str(get_backup_path())
-        file_path = os.path.join(backup_dir, body.filename)
-
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail=f"备份文件 '{body.filename}' 不存在")
+        file_path = _resolve_backup_file_path(body.filename)
 
         svc = get_backup_service(db)
         result = svc.restore_backup(file_path, password=_resolve_auto_backup_password(body.password))

@@ -50,6 +50,36 @@ def _make_real_sqlite_db(db_path: str) -> None:
         conn.close()
 
 
+def _real_sqlite_bytes(tmp_path, marker: str = "seed") -> bytes:
+    """返回一段合法 SQLite 库的二进制内容（用于写入 zip 备份包）。
+
+    restore_backup 自 2026-09-12 起对恢复结果做完整性校验（fail-loud），
+    因此备份包里 ``data/rural_revitalization.db`` 必须是真库，纯文本占位
+    会让校验按设计失败（这正是本轮修复要暴露的陈旧夹具问题）。
+    """
+    p = Path(tmp_path) / f"_src_{marker}_{os.urandom(4).hex()}.db"
+    conn = sqlite3.connect(str(p))
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS data (v TEXT)")
+        conn.execute("INSERT INTO data (v) VALUES (?)", (marker,))
+        conn.commit()
+    finally:
+        conn.close()
+    raw = p.read_bytes()
+    p.unlink()
+    return raw
+
+
+def _db_marker(db_path) -> str:
+    """读回恢复后库中的 marker，验证内容确实来自备份包。"""
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute("SELECT v FROM data LIMIT 1").fetchone()
+        return row[0] if row else ""
+    finally:
+        conn.close()
+
+
 class TestBackupRestoreError:
     def test_exception_message(self):
         e = BackupRestoreError("test msg")
@@ -251,11 +281,12 @@ class TestRestoreBackup:
         zip_path = os.path.join(bdir, "backup.zip")
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         svc.create_backup()
+        restored_db = _real_sqlite_bytes(tmp_path, "restored")
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", "new")
+            zf.writestr("data/rural_revitalization.db", restored_db)
             zf.writestr("uploads/f.txt", "new")
         svc.restore_backup(zip_path)
-        assert Path(db_path).read_text() == "new"
+        assert _db_marker(db_path) == "restored"
         assert Path(os.path.join(up_dir, "f.txt")).read_text() == "new"
 
     def test_restore_file_not_found(self, mock_db, tmp_path):
@@ -264,20 +295,24 @@ class TestRestoreBackup:
             svc.restore_backup("/nonexistent.zip")
 
     def test_restore_no_db_in_backup(self, mock_db, tmp_path):
+        """备份包不含数据库 → 2026-09-12 起 fail-loud 抛错，不再静默 success=True。
+
+        旧契约返回 success=True/database_restored=False，掩盖了「恢复后库不可用」
+        这一最坏故障；新契约要求显式失败，让调用方无法误判恢复成功。
+        """
         bdir = str(tmp_path / "backups")
         db_path = str(tmp_path / "data" / "rural_revitalization.db")
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("orig")
+        _make_real_sqlite_db(db_path)
         os.makedirs(up_dir)
         zip_path = os.path.join(bdir, "no_db.zip")
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr("uploads/f.txt", "new")
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
-        result = svc.restore_backup(zip_path)
-        assert result["success"] is True
-        assert result["database_restored"] is False
+        with pytest.raises(BackupRestoreError):
+            svc.restore_backup(zip_path)
 
     def test_restore_no_uploads_in_backup(self, mock_db, tmp_path):
         bdir = str(tmp_path / "backups")
@@ -285,13 +320,14 @@ class TestRestoreBackup:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("orig")
+        _make_real_sqlite_db(db_path)
         zip_path = os.path.join(bdir, "no_up.zip")
+        restored_db = _real_sqlite_bytes(tmp_path, "nouploads")
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", "new")
+            zf.writestr("data/rural_revitalization.db", restored_db)
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         svc.restore_backup(zip_path)
-        assert Path(db_path).read_text() == "new"
+        assert _db_marker(db_path) == "nouploads"
 
     def test_restore_no_snapshots_needed(self, mock_db, tmp_path):
         bdir = str(tmp_path / "backups")
@@ -301,7 +337,7 @@ class TestRestoreBackup:
         os.makedirs(os.path.dirname(db_path))
         zip_path = os.path.join(bdir, "b.zip")
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", "new")
+            zf.writestr("data/rural_revitalization.db", _real_sqlite_bytes(tmp_path, "snap"))
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         svc.restore_backup(zip_path)
 
@@ -370,10 +406,10 @@ class TestRestoreBackup:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("orig")
+        _make_real_sqlite_db(db_path)
         zip_path = os.path.join(bdir, "b.zip")
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", "new")
+            zf.writestr("data/rural_revitalization.db", _real_sqlite_bytes(tmp_path, "snapfail"))
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         call_count = [0]
         orig_unlink = os.unlink
@@ -450,10 +486,10 @@ class TestRestoreBackup:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("orig")
+        _make_real_sqlite_db(db_path)
         zip_path = os.path.join(bdir, "b.zip")
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", "new")
+            zf.writestr("data/rural_revitalization.db", _real_sqlite_bytes(tmp_path, "rmtree"))
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         with patch("shutil.rmtree") as mock_rm:
             svc.restore_backup(zip_path)
@@ -1130,12 +1166,12 @@ class TestEdgeCases:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("old")
+        _make_real_sqlite_db(db_path)
         os.makedirs(up_dir)
         Path(os.path.join(up_dir, "old.txt")).write_text("old")
         zip_path = os.path.join(bdir, "overwrite.zip")
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", "new")
+            zf.writestr("data/rural_revitalization.db", _real_sqlite_bytes(tmp_path, "overwrite"))
             zf.writestr("uploads/new.txt", "new")
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         svc.restore_backup(zip_path)
@@ -1147,10 +1183,10 @@ class TestEdgeCases:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("db")
+        _make_real_sqlite_db(db_path)
         zip_path = os.path.join(bdir, "fresh_uploads.zip")
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", "new")
+            zf.writestr("data/rural_revitalization.db", _real_sqlite_bytes(tmp_path, "fresh"))
             zf.writestr("uploads/f.txt", "fresh")
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         result = svc.restore_backup(zip_path)
@@ -1255,11 +1291,11 @@ class TestEdgeCases:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("orig")
+        _make_real_sqlite_db(db_path)
         os.makedirs(up_dir)
         zip_path = os.path.join(bdir, "b.zip")
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("data/rural_revitalization.db", "new")
+            zf.writestr("data/rural_revitalization.db", _real_sqlite_bytes(tmp_path, "snapfnf"))
             zf.writestr("uploads/f.txt", "new")
         svc = _make_svc(mock_db, bdir, db_path, up_dir)
         orig_unlink = os.unlink

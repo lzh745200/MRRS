@@ -190,5 +190,14 @@ def validate_excel_upload(file):
 
 
 def sanitize_filename(name):
-    import re
-    return re.sub(r'[<>:/"|?*]', "_", name)
+    """净化文件名：剥离目录成分，仅保留最后一段文件名。
+
+    安全要点：Windows 下 ``\\`` 与 ``/`` 同为路径分隔符，必须一并处理。
+    修复前仅替换 ``<>:/"|?*`` 而保留 ``\\``，导致 ``..\\..\\evil.zip``
+    这类文件名参与 ``Path(upload_dir) / name`` 拼接后越界写出（目录穿越）。
+    这里先按两种分隔符切分只取最后一段（等价 basename），从根本上消除
+    「..、绝对路径、盘符」进入后续路径拼接的可能。
+    """
+    basename = re.split(r"[\\/]+", str(name or ""))[-1]
+    cleaned = re.sub(r'[<>:"|?*]', "_", basename).strip().rstrip(".")
+    return cleaned or "_"

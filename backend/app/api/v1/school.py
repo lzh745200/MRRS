@@ -6,6 +6,7 @@
 # 数据权限过滤使用 OrgScopeFilter.filter_by_org_ids()（组织树风格，支持 org_children 含下级组织）
 # 其他模块（funds/projects/supported_village）已统一迁移到 data_scope_adapter.apply_scope_filter()
 
+import contextlib
 import io
 import logging
 import os
@@ -325,6 +326,11 @@ async def import_schools_excel(
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="导入失败，请稍后重试或联系管理员")
+    finally:
+        # 修复：delete=False 的临时文件此前无任何清理路径（成功/失败都不删），
+        # 每次导入都在 %TEMP% 残留一份上传副本；与同文件其它导入函数一致收口到 finally
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
 
 
 # ── 奖学金学生导入 ──

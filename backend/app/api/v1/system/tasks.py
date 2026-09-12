@@ -5,6 +5,7 @@
 """
 
 import logging
+import threading
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -67,6 +68,9 @@ class TaskCreateRequest(BaseModel):
 # ==================== 内存任务存储 ====================
 
 _tasks: Dict[str, dict] = {}
+# 保护 _tasks 的结构性变更：后台任务线程会插入记录，请求线程会迭代/删除，
+# 无锁时 list(_tasks.values()) 可能抛 RuntimeError: dictionary changed size
+_tasks_lock = threading.Lock()
 
 
 def _create_task_record(task_type: str, task_name: str, created_by: str = None, params: dict = None) -> dict:
@@ -86,7 +90,8 @@ def _create_task_record(task_type: str, task_name: str, created_by: str = None, 
         "params": params or {},
         "result": None,
     }
-    _tasks[task_id] = record
+    with _tasks_lock:
+        _tasks[task_id] = record
     return record
 
 
@@ -105,7 +110,8 @@ async def list_tasks(
 
     支持按状态和类型进行筛选，按创建时间倒序排列。
     """
-    tasks = list(_tasks.values())
+    with _tasks_lock:
+        tasks = list(_tasks.values())
 
     if status:
         tasks = [t for t in tasks if t["status"] == status]
@@ -136,7 +142,8 @@ async def get_task_stats(current_user=Depends(get_current_user)):
 
     按状态和类型统计任务数量和占比。
     """
-    tasks = list(_tasks.values())
+    with _tasks_lock:
+        tasks = list(_tasks.values())
     total = len(tasks)
 
     by_status = {}
@@ -271,7 +278,8 @@ async def delete_task(
     if task["status"] in (TaskStatus.PENDING.value, TaskStatus.RUNNING.value):
         raise HTTPException(status_code=400, detail="不能删除正在执行或等待中的任务，请先取消")
 
-    del _tasks[task_id]
+    with _tasks_lock:
+        del _tasks[task_id]
 
     return {"success": True, "message": f"任务 {task_id} 已删除"}
 
@@ -279,8 +287,9 @@ async def delete_task(
 @router.get("/running/count", summary="获取运行中任务数")
 async def get_running_task_count():
     """获取当前正在运行中的任务数量"""
-    running = [t for t in _tasks.values() if t["status"] == TaskStatus.RUNNING.value]
-    pending = [t for t in _tasks.values() if t["status"] == TaskStatus.PENDING.value]
+    with _tasks_lock:
+        running = [t for t in _tasks.values() if t["status"] == TaskStatus.RUNNING.value]
+        pending = [t for t in _tasks.values() if t["status"] == TaskStatus.PENDING.value]
 
     return {
         "success": True,
