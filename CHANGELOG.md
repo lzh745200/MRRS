@@ -51,6 +51,26 @@
 - **两个信号均不泄露路径**：`/health` 无认证，因此只出布尔值/状态；
   回归用例断言响应文本不含数据库文件名与绝对路径。
 
+### 工程（F2 豁免理由 ratchet：规则从“写在文档里”变成“门禁在跑”）
+- **现状**：配套约定 F2 条要求“`# pragma: no cover` 必须同行注明理由”，
+  但**零执行力** —— 实测 `backend/app` + `scripts` 共 172 处 pragma，其中 **130 处无理由**。
+- **新增 `scripts/check_pragma_reasons.py`**（ratchet 策略，不下调门槛、不要求一次性还债）：
+  - 默认只检查**本次新增/修改行**（基线自动解析 origin/main → HEAD~1，
+    浅克隆下也不静默通过：基线不可用默认退出 2，除非显式
+    `--allow-missing-base`）；
+  - `--max-bare 130` 作为**硬上限**：防止“一边清理一边新增”抵消；
+  - `--all` 输出存量清单供分批清理（不阻断）；违规时额外打 `::error::` 注解。
+  - 检测口径：用 `tokenize` 取**注释 token** 而非整行文本 —— 否则字符串里的
+    `"# pragma: no cover"`（检查器自身的实现行与 help 文案）会被当成豁免：
+    自检时实测报了 2 处假阳性，故改为词法层判定（语法错误文件回退行扫描，
+    检查器自身不得因被检文件而崩）。
+  - `--diff-base` 同时覆盖**未跟踪新文件**（`git ls-files --others`）——
+    自检时实测：新文件里塞一个裸 pragma 最初被漏掉。
+- **接入 CI**：pr-checks 的 static-analysis 新增“Coverage-exemption reason ratchet (F2)”步骤。
+- **回归**：`tests/unit/test_pragma_reason_ratchet_f2.py`（16 例）—— 理由判定真值表、
+  字符串不得误判、语法错误回退、上限拦截、基线缺失不静默、
+  以及“工作区新增裸 pragma 必须被命中”端到端用例。
+
 ### 验证
 - 后端全量 **11033 passed / 0 failed，覆盖率 100.00%**（新增 9 例视可性回归）；
   flake8 0；bandit -ll 0。

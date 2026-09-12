@@ -233,6 +233,14 @@ jobs:
         run: |
           pip install alembic
           python scripts/check_migrations.py
+      # F2 覆盖率豁免 ratchet：新增/修改行的 `# pragma: no cover` 必须同行注明理由
+      # （配套约定 F2 条）。存量裸 pragma 不阻断，但设上限防"边清理边新增"抵消；
+      # 基线自动解析（origin/main → HEAD~1），浅克隆下也不静默通过。
+      - name: Coverage-exemption reason ratchet (F2)
+        run: |
+          git fetch --no-tags --depth=100 origin main || true
+          python scripts/check_pragma_reasons.py --diff-base auto \
+            --allow-missing-base --max-bare 130
 
   # E2E 浏览器套件（Playwright，150 用例）：真实起后端(18000)+前端(15173)，
   # 独立 e2e_test.db。此前长期无 CI 执行导致选择器/密码腐化四周无人发现

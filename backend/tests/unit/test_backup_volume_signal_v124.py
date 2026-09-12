@@ -13,6 +13,7 @@ F1 则要求"是否仍在跑已弃用的自动补列兜底"可被运维直接观
    `migration.auto_migration_enabled` 两个信号，且**不泄露绝对路径**。
 """
 
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -64,13 +65,43 @@ class TestSameVolumeDetection:
             is True
         )
 
-    def test_windows_different_drive_is_other_volume(self):
-        """盘符不同 ⇒ 异卷（False）。用不存在的盘符，避免依赖真实磁盘布局。"""
+    def test_drive_letters_semantics_are_platform_specific(self):
+        """盘符语义只在 Windows 成立；POSIX 下 "C:/..." 属相对路径 ⇒ 未知(None)。
+
+        这条断言刻意按平台分支：Windows 与 Linux 的正确答案本就不同，
+        写死一个期望会让另一个平台的 CI 变红（v1.12.4 首次 CI 实测）。
+        """
+        result = backups_share_volume_with_database("C:/app/data/db.sqlite", "Z:/backups")
+        if sys.platform == "win32":
+            assert result is False  # 盘符不同 ⇒ 异卷
+        else:
+            assert result is None  # 非绝对路径 ⇒ 无法判定，绝不猜成安全
+
+    def test_drive_comparison_branch_is_covered_on_posix(self, monkeypatch):
+        """盘符分支在 POSIX 上不可达 → 用 splitdrive 替身触发，保证两平台口径一致。
+
+        必要性：该分支若只在 Windows 可达，Linux CI 的 100% 覆盖率门禁会因
+        "不可达行"变红（本次 CI 正是这样暴露出来的：37913 语句缺 1 行）。
+        """
+        import os as _os
+
+        real_splitdrive = _os.path.splitdrive
+
+        def fake_splitdrive(path):
+            text = str(path)
+            for drive in ("C:", "Z:"):
+                if text.startswith(drive):
+                    return drive, text[2:]
+            return real_splitdrive(path)
+
+        monkeypatch.setattr(
+            "app.services.backup_service.os.path.splitdrive", fake_splitdrive
+        )
         assert (
-            backups_share_volume_with_database(
-                "C:/app/data/rural_revitalization.db", "Z:/backups"
-            )
-            is False
+            backups_share_volume_with_database("C:/data/db.sqlite", "Z:/backups") is False
+        )
+        assert (
+            backups_share_volume_with_database("C:/data/db.sqlite", "C:/backups") is True
         )
 
     def test_posix_mount_points_are_compared_when_no_drive(self):
