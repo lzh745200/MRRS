@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import logging
+import time
 import uuid
 import os
 import shutil
@@ -121,6 +122,35 @@ def backups_share_volume_with_database(db_path: str, backup_dir: str) -> Optiona
     db_mount = "/" + db_norm.lstrip("/").split("/")[0]
     bk_mount = "/" + bk_norm.lstrip("/").split("/")[0]
     return db_mount == bk_mount
+
+
+def _copy_database_with_retry(
+    backup_db_path: str, database_path: str, db_coordinator
+) -> None:
+    """覆盖复制目标数据库，带 3 次退避重试。
+
+    R10-F1（真实 HTTP 探测 2026-09-13，Windows 实测 Errno 22）：目标文件可能被
+    杀软/资源管理器/在途请求短暂占用，瞬态占用不该让恢复整体失败；
+    3 次均失败则 fail-loud 抛 BackupRestoreError（不静默半恢复）。
+    """
+    last_copy_err: Exception | None = None
+    for attempt in range(3):
+        try:
+            if db_coordinator is not None:
+                with db_coordinator.exclusive_write(timeout=120.0):
+                    shutil.copy(backup_db_path, database_path)
+            else:
+                shutil.copy(backup_db_path, database_path)
+            return
+        except OSError as copy_err:
+            last_copy_err = copy_err
+            logger.warning(
+                "恢复复制数据库失败（第 %d/3 次）: %s", attempt + 1, copy_err
+            )
+            time.sleep(0.5 * (attempt + 1))
+    raise BackupRestoreError(
+        f"恢复复制数据库失败（重试后仍被占用）: {last_copy_err}"
+    )
 
 
 class BackupService:
@@ -577,6 +607,15 @@ class BackupService:
         # 写协调器独占窗口: 与批量导入等 opt-in 写路径互斥, 避免恢复覆盖期间
         # 长写事务交错。注: 普通请求的小写事务不经此锁（SQLite 单写者 +
         # busy_timeout 兜底）, 恢复完成后仍建议重启后端以彻底隔离旧文件句柄。
+
+        # R10-F1（真实 HTTP 探测 2026-09-13，Windows 实测 Errno 22）：先释放
+        # 本服务持有的会话连接——请求级 get_db 会话在恢复期间仍 checkout 着
+        # 目标数据库文件的连接（WAL 映射），Windows 上覆盖该文件必失败。
+        # 释放后由下方 engine.dispose() 一并关闭池内连接。
+        try:
+            self.db.close()
+        except Exception:  # pragma: no cover - 会话已关闭/为 Mock 时忽略
+            logger.debug("恢复前关闭服务会话失败", exc_info=True)
         try:
             from app.core.database import engine, db_coordinator
             engine.dispose()
@@ -592,11 +631,9 @@ class BackupService:
                         os.unlink(stale_path)
                     except OSError:
                         logger.warning("残留 %s 文件清理失败: %s", suffix, stale_path)
-            if db_coordinator is not None:
-                with db_coordinator.exclusive_write(timeout=120.0):
-                    shutil.copy(backup_db_path, self.database_path)
-            else:
-                shutil.copy(backup_db_path, self.database_path)
+            # R10-F1：覆盖复制带 3 次退避重试——Windows 上目标文件可能被
+            # 杀软/资源管理器/在途请求短暂占用，瞬态占用不该让恢复整体失败
+            _copy_database_with_retry(backup_db_path, self.database_path, db_coordinator)
         finally:
             # copy 后再次 dispose: 清理恢复窗口期间新建的池连接,
             # 使后续请求重新打开已替换的数据库文件

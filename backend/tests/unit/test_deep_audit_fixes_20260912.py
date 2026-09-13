@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 import threading
 import zipfile
@@ -32,7 +33,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.backup_service import BackupIncompleteError, BackupService
+from app.services.backup_service import (
+    BackupIncompleteError,
+    BackupRestoreError,
+    BackupService,
+)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -731,6 +736,101 @@ class TestSnapshotFailLoud:
         ), patch("os.remove", side_effect=OSError("busy")):
             with pytest.raises(BackupIncompleteError):
                 svc._create_consistency_snapshot()
+
+
+# ---------------------------------------------------------------------------
+# R10-F1：恢复前释放会话连接 + 复制退避重试（Windows 占用实测 Errno 22）
+# ---------------------------------------------------------------------------
+
+
+class TestRestoreSessionReleaseAndRetry:
+    def test_releases_service_session_before_copy(self, mock_db, tmp_path):
+        """恢复前必须 close 本服务会话：请求级 get_db 会话在恢复期间仍持有
+        目标库文件的 WAL 映射连接，Windows 上覆盖必失败（Errno 22 实证）。"""
+        svc = object.__new__(BackupService)
+        svc.db = MagicMock()
+        temp_dir = tmp_path / "restore_tmp"
+        (temp_dir / "data").mkdir(parents=True)
+        # 备份内容必须是真实 SQLite 库（恢复后 integrity_check 会校验）
+        real = sqlite3.connect(str(temp_dir / "seed.db"))
+        real.execute("CREATE TABLE t (x TEXT)")
+        real.commit()
+        real.close()
+        shutil.copy(str(temp_dir / "seed.db"),
+                    str(temp_dir / "data" / "rural_revitalization.db"))
+        live = tmp_path / "live.db"
+        live.write_bytes(b"live")
+        svc.database_path = str(live)
+
+        ok = svc._restore_database_from_backup(str(temp_dir))
+
+        assert ok is True
+        svc.db.close.assert_called_once()
+        assert live.read_bytes() == Path(str(temp_dir / "data" / "rural_revitalization.db")).read_bytes()
+
+    def test_copy_retry_exhausts_and_fails_loud(self, mock_db, tmp_path, monkeypatch):
+        """复制 3 次均被占用 → fail-loud 抛 BackupRestoreError（不得静默半恢复）。"""
+        svc = object.__new__(BackupService)
+        svc.db = MagicMock()
+        temp_dir = tmp_path / "restore_tmp"
+        (temp_dir / "data").mkdir(parents=True)
+        (temp_dir / "data" / "rural_revitalization.db").write_bytes(b"backup-db")
+        live = tmp_path / "live.db"
+        live.write_bytes(b"live")
+        svc.database_path = str(live)
+
+        calls = {"n": 0}
+
+        def always_busy(src, dst):
+            calls["n"] += 1
+            raise OSError("文件被占用")
+
+        monkeypatch.setattr(
+            "app.services.backup_service.shutil.copy", always_busy
+        )
+        monkeypatch.setattr("app.services.backup_service.time.sleep", lambda s: None)
+
+        with pytest.raises(BackupRestoreError) as exc:
+            svc._restore_database_from_backup(str(temp_dir))
+
+        assert calls["n"] == 3, "应恰好重试 3 次"
+        assert "重试后仍被占用" in str(exc.value)
+
+    def test_copy_retry_succeeds_after_transient_failure(
+        self, mock_db, tmp_path, monkeypatch
+    ):
+        """瞬态占用（第 1 次失败）→ 重试成功，恢复继续。"""
+        svc = object.__new__(BackupService)
+        svc.db = MagicMock()
+        temp_dir = tmp_path / "restore_tmp"
+        (temp_dir / "data").mkdir(parents=True)
+        real = sqlite3.connect(str(temp_dir / "seed.db"))
+        real.execute("CREATE TABLE t (x TEXT)")
+        real.commit()
+        real.close()
+        shutil.copy(str(temp_dir / "seed.db"),
+                    str(temp_dir / "data" / "rural_revitalization.db"))
+        live = tmp_path / "live.db"
+        live.write_bytes(b"live")
+        svc.database_path = str(live)
+
+        calls = {"n": 0}
+        real_copy = shutil.copy
+
+        def flaky(src, dst):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("瞬态占用")
+            return real_copy(src, dst)
+
+        monkeypatch.setattr("app.services.backup_service.shutil.copy", flaky)
+        monkeypatch.setattr("app.services.backup_service.time.sleep", lambda s: None)
+
+        ok = svc._restore_database_from_backup(str(temp_dir))
+
+        assert ok is True
+        assert calls["n"] == 2
+        assert live.read_bytes() == Path(str(temp_dir / "data" / "rural_revitalization.db")).read_bytes()
 
 
 # ---------------------------------------------------------------------------
