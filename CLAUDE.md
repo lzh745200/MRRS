@@ -64,7 +64,7 @@ cd frontend && npm install && npm run dev
 cd backend && python -m pytest tests/ -v          # 后端测试（~10228 passed）
 cd frontend && npm test -- --run                  # 前端测试（~6030 passed，301 个测试文件）
 cd backend && python -m flake8 app/ --max-line-length=120
-cd frontend && npm run lint && npm run typecheck
+cd frontend && npm run lint && npm run type-check
 
 # lint-staged：仅检查 git 暂存文件（加速提交）
 cd frontend && npx lint-staged

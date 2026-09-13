@@ -85,6 +85,12 @@ clean:
 	-find . -maxdepth 2 -name "vitest-*.log" -delete 2>/dev/null || true
 	-find . -maxdepth 2 -name "vitest-*.json" -delete 2>/dev/null || true
 	-find . -maxdepth 2 -name "test.db" -delete 2>/dev/null || true
+	# 根目录 / backend / frontend 遗留的临时日志与覆盖率产物（W4-T8）
+	-rm -f .coverage _*.log _*.txt backend/coverage.json backend/.covperm_v5 2>/dev/null || true
+	-rm -f backend/*.log frontend/_verify_*.log 2>/dev/null || true
+	-rm -rf .pytest_cache .ruff_cache 2>/dev/null || true
+	# 后端以外的 __pycache__（根 tests/、scripts/、electron/ 等；排除依赖与虚拟环境）
+	-find . \( -name node_modules -o -name .venv -o -name .git -o -name dist \) -prune -o -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # 安装依赖
 install:
