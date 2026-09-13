@@ -945,6 +945,12 @@ async def delete_village(
     """软删帮扶村（置 is_active=False，保留关联数据以便恢复/审计）"""
     village = _get_village_or_404(db, village_id, current_user)
 
+    # R2-F1（真实 HTTP 探测 2026-09-13）：对已软删记录重复 DELETE 原实现会
+    # 再次创建「帮扶村删除」审批任务并刷新 deleted_at —— 审批队列被垃圾任务
+    # 污染、审计时间失真。已在回收站中的记录必须拒绝重复删除。
+    if not village.is_active:
+        raise HTTPException(status_code=409, detail="该帮扶村已在回收站中，请勿重复删除")
+
     village.is_active = False
     village.deleted_at = datetime.now(timezone.utc)
     safe_commit(db)
@@ -1363,7 +1369,9 @@ async def upload_section_attachment(
 
     attachment = VillageAttachment(
         supported_village_id=village_id,
-        file_name=file.filename or "unnamed",
+        # R2-F2（真实 HTTP 探测 2026-09-13）：落盘名已净化，但 DB/响应此前回显
+        # 原始未净化文件名（如 ..\..\evil.txt）——统一存净化名，杜绝下游再拼接
+        file_name=safe_name,
         file_path=file_path,
         file_size=len(content),
         mime_type=file.content_type or "application/octet-stream",

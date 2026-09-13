@@ -835,3 +835,92 @@ class TestOptionsCacheHit:
 
         # 第二次必须命中缓存（同一对象）；原实现键含对象内存地址 → 永远重算
         assert first is second
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 8. R2 真实 HTTP 探测修复（2026-09-13）：重复软删 / 附件名回显
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestVillageDeleteGuard:
+    """R2-F1：对已软删帮扶村重复 DELETE 必须 409。
+
+    原实现会再次创建「帮扶村删除」审批任务并刷新 deleted_at
+    （审批队列被垃圾任务污染、审计时间失真）——由真实 HTTP 探测发现。
+    """
+
+    def test_duplicate_delete_returns_409_and_no_new_approval(self, monkeypatch):
+        from types import SimpleNamespace as _NS
+
+        from app.api.v1 import supported_village as sv
+        from fastapi import HTTPException as _HTTPException
+
+        ghost = _NS(id=5, is_active=False, village_name="回收站村")
+        monkeypatch.setattr(sv, "_get_village_or_404", lambda *a, **k: ghost)
+        monkeypatch.setattr(sv, "safe_commit", lambda *a, **k: None)
+        submit = MagicMock()
+        monkeypatch.setattr(sv, "submit_entity_change_approval", submit)
+
+        with pytest.raises(_HTTPException) as exc:
+            import asyncio
+
+            asyncio.run(
+                sv.delete_village(village_id=5, current_user=MagicMock(), db=MagicMock())
+            )
+
+        assert exc.value.status_code == 409
+        submit.assert_not_called(), "不得重复创建审批任务"
+
+    def test_active_village_deletes_normally(self, monkeypatch):
+        from types import SimpleNamespace as _NS
+
+        from app.api.v1 import supported_village as sv
+
+        active = _NS(id=6, is_active=True, village_name="在册村")
+        monkeypatch.setattr(sv, "_get_village_or_404", lambda *a, **k: active)
+        monkeypatch.setattr(sv, "safe_commit", lambda *a, **k: None)
+        submit = MagicMock(return_value=77)
+        monkeypatch.setattr(sv, "submit_entity_change_approval", submit)
+
+        import asyncio
+
+        result = asyncio.run(
+            sv.delete_village(village_id=6, current_user=MagicMock(), db=MagicMock())
+        )
+        assert result["code"] == 200
+        submit.assert_called_once()
+
+
+class TestSectionAttachmentStoredName:
+    """R2-F2：附件 DB file_name 必须存净化名（原回显 ..\\..\\evil.txt 原始名）。"""
+
+    def test_stored_file_name_is_sanitized(self, monkeypatch, tmp_path):
+        import asyncio
+
+        from app.api.v1 import supported_village as sv
+
+        monkeypatch.setattr(sv, "_get_village_or_404", lambda *a, **k: None)
+        monkeypatch.setattr(sv.settings, "UPLOAD_DIR", str(tmp_path))
+        monkeypatch.setattr(sv, "safe_commit", lambda *a, **k: None)
+
+        upload = MagicMock()
+        upload.filename = "..\\..\\evil.txt"
+        upload.content_type = "text/plain"
+        upload.read = AsyncMock(return_value=b"data")
+
+        db = MagicMock()
+        asyncio.run(
+            sv.upload_section_attachment(
+                village_id=7,
+                section="..\\x",
+                file=upload,
+                current_user=MagicMock(),
+                db=db,
+            )
+        )
+
+        added = db.add.call_args[0][0]
+        assert added.file_name == "evil.txt", (
+            f"DB file_name 必须为净化名，实际: {added.file_name!r}"
+        )
+        assert ".." not in added.file_name

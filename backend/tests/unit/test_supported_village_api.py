@@ -85,6 +85,9 @@ def _make_mock_village(id_=1, village_name="测试村", department=None,
     v = MagicMock(spec=object)
     v.id = id_
     v.village_name = village_name
+    # 真实模型字段：删除端点依赖 is_active 判定重复软删（R2-F1）
+    v.is_active = kwargs.get("is_active", True)
+    v.deleted_at = kwargs.get("deleted_at", None)
     v.department = department
     v.support_unit = support_unit
     v.province = kwargs.get("province", "贵州省")
