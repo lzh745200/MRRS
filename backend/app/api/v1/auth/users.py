@@ -21,6 +21,7 @@ from app.services.user_service import VALID_ROLES
 from app.core.constants import normalize_role
 from app.core.transaction import safe_commit
 from app.core.response import success_response
+from app.utils.upload_helper import read_upload_with_limit
 
 logger = logging.getLogger(__name__)
 
@@ -857,11 +858,13 @@ async def upload_avatar(
     if not avatar.content_type or avatar.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="仅支持 JPG/PNG/GIF/WebP 格式")
 
-    # 读取内容并校验大小（最大 2MB）
-    content = await avatar.read()
-    max_size = 2 * 1024 * 1024
-    if len(content) > max_size:
-        raise HTTPException(status_code=400, detail="头像文件不能超过 2MB")
+    # 读取内容并校验大小（R2 第二层：分块读取 + 滚动计数，超限即停，
+    # 不再先整包入内存再比较——2MB 上限下峰值可控）
+    content = await read_upload_with_limit(
+        avatar, 2 * 1024 * 1024,
+        status_code=400,
+        error_detail="头像文件不能超过 2MB",
+    )
 
     # 保存文件到 uploads/avatars/（使用 settings.UPLOAD_DIR，兼容打包模式）
     upload_dir = _Path(settings.UPLOAD_DIR) / "avatars"

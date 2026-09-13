@@ -60,6 +60,16 @@ logger = logging.getLogger(__name__)
 # ── 分块落盘粒度（8MB，与 backup upload-restore / files.py 约定一致）──
 UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
 
+# ── R2 第二层：内存内读取的分块粒度（1MB）──
+# 端点需要"整包入内存"（解析 xlsx/zip/JSON）时，用 read_upload_with_limit 替代
+# 一次性 `await file.read()`——后者先物化全量再校验，峰值不可控（单请求 OOM）。
+MEMORY_READ_CHUNK_SIZE = 1024 * 1024
+
+# ── R2 第三层：ZIP 解压体积上限（防高压缩比"压缩炸弹"）──
+# 1MB 的 deflate 包可膨胀到数十 GB；容器体积合规不等于解压后合规，
+# 故对 ZipInfo.file_size 求和设上限（与 data 包 200MB 业务口径一致）。
+ZIP_MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
+
 # ── 默认允许的文件扩展名 ──
 DEFAULT_ALLOWED_EXTENSIONS: Set[str] = {
     "pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx",
@@ -158,6 +168,121 @@ def _register_or_reuse_blob(
         if isinstance(winner, FileBlob):
             return winner
         return None
+
+
+async def read_upload_with_limit(
+    file: UploadFile,
+    max_bytes: int,
+    *,
+    chunk_size: int = MEMORY_READ_CHUNK_SIZE,
+    status_code: int = status.HTTP_413_CONTENT_TOO_LARGE,
+    limit_label: Optional[str] = None,
+    error_detail: Optional[str] = None,
+) -> bytes:
+    """分块读取上传文件并按**累计字节**限长（R2 第二层）。
+
+    背景：端点侧历史写法 ``await file.read()`` 先把整个 SpooledTemporaryFile
+    物化进内存，再比较 ``len(content)`` —— 校验只能"拒绝请求"，无法阻止内存
+    峰值（单机离线部署下单请求即可 OOM，整个应用不可用）。
+
+    本函数边读边累计，一旦超限立即停止读取并抛异常，峰值约为 ``max_bytes``
+    量级而非"文件真实大小"。
+
+    Args:
+        file: FastAPI ``UploadFile``
+        max_bytes: 允许的最大字节数（含）
+        chunk_size: 单次读取粒度（默认 1MB）
+        status_code: 超限状态码（默认 413）
+        limit_label: 超限提示中的业务名（如 ``"导入文件"``），缺省时按 MB 描述
+        error_detail: 超限时**原样使用**的 detail 文案（用于保持既有接口
+            语义与错误码，例如头像 400「头像文件不能超过 2MB」）
+
+    Returns:
+        完整文件内容（``bytes``）
+
+    Raises:
+        HTTPException: 累计字节超过 ``max_bytes``（``status_code``，默认 413）
+    """
+    total = 0
+    chunks: list = []
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            detail = error_detail or (
+                f"{limit_label or '文件'}超过大小限制（{max_bytes // (1024 * 1024)}MB）"
+            )
+            raise HTTPException(status_code=status_code, detail=detail)
+        chunks.append(chunk)
+        if len(chunk) < chunk_size:
+            # 短读即 EOF：FastAPI 的 UploadFile 背后是已落盘的 SpooledTemporaryFile，
+            # 除末块外 read(n) 必返回 n 字节。此判断同时让"固定返回值"的测试替身
+            # （AsyncMock(return_value=...)）不会被视为无限流而误报超限。
+            break
+    return b"".join(chunks)
+
+
+def zip_total_uncompressed_size(zf) -> int:
+    """累加 ZIP 内所有成员的**解压后**大小（R2 第三层）。
+
+    用于在真正解压前识别"压缩炸弹"：deflate 高压缩比样本容器体积合规，
+    解压后可达数十 GB，直接 ``zf.read`` / ``load_workbook`` 会耗尽内存与磁盘。
+
+    Args:
+        zf: 已打开的 ``zipfile.ZipFile``
+
+    Returns:
+        所有成员 ``ZipInfo.file_size`` 之和（字节）
+    """
+    return sum(int(getattr(info, "file_size", 0) or 0) for info in zf.infolist())
+
+
+def ensure_zip_within_limit(zf, max_bytes: Optional[int] = None) -> int:
+    """校验 ZIP 解压后总体积；超限抛 413（R2 第三层）。
+
+    Args:
+        max_bytes: 上限；``None`` 时读取模块常量 ``ZIP_MAX_UNCOMPRESSED_BYTES``
+            （运行期解析而非默认参数绑定，便于测试注入小阈值）
+
+    Returns:
+        解压后总体积（字节），便于调用方记录日志。
+    """
+    if max_bytes is None:
+        max_bytes = ZIP_MAX_UNCOMPRESSED_BYTES
+    total = zip_total_uncompressed_size(zf)
+    if total > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"压缩包解压后体积超过限制（{max_bytes // (1024 * 1024)}MB）",
+        )
+    return total
+
+
+def read_zip_member(
+    zf, name: str, max_bytes: Optional[int] = None
+) -> bytes:
+    """限长读取单个 ZIP 成员（R2 第三层）。
+
+    ``zf.read(name)`` 会把成员**解压后**完整物化进内存，高压缩比成员单条即可
+    撑爆进程；此处先按 ``ZipInfo.file_size`` 预检再读取（声明值不可信时
+    由 ``ensure_zip_within_limit`` 的总量闸门兜底）。
+
+    Raises:
+        KeyError: 成员不存在（保持 ``ZipFile.read`` 的既有语义）
+        HTTPException: 成员解压后体积超限（413）
+    """
+    if max_bytes is None:
+        max_bytes = ZIP_MAX_UNCOMPRESSED_BYTES
+    info = zf.getinfo(name)  # 成员缺失时抛 KeyError，与 zf.read 行为一致
+    size = int(getattr(info, "file_size", 0) or 0)
+    if size > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"压缩包成员 {name} 解压后超过限制（{max_bytes // (1024 * 1024)}MB）",
+        )
+    return zf.read(name)
 
 
 async def save_upload_file(

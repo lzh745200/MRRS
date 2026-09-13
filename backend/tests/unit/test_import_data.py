@@ -236,17 +236,23 @@ class TestValidateImportData:
             assert resp.status_code == 400
 
     def test_file_too_large(self, client_with_mocked_auth):
+        """R2：体积闸门前移到分块读取（原 validator.validate_file_size 事后校验
+        已被 read_upload_with_limit 取代，避免先整包入内存再拒绝）。"""
         mock_validator = MagicMock()
         mock_validator.validate_file_format.return_value = (True, "")
-        mock_validator.validate_file_size.return_value = (False, "文件过大")
 
-        with patch("app.api.v1.import_export.import_data.DataValidatorService", return_value=mock_validator):
+        import app.api.v1.import_export.import_data as id_module
+
+        with patch.object(id_module, "_IMPORT_MAX_FILE_SIZE", 16), \
+                patch.object(id_module, "_IMPORT_MAX_FILE_SIZE_MSG", "文件大小超过限制"), \
+                patch("app.api.v1.import_export.import_data.DataValidatorService", return_value=mock_validator):
             resp = client_with_mocked_auth.post(
                 f"{BASE}/validate",
                 files={"file": ("large.xlsx", b"x" * 100, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
                 params={"entity_type": "supported_village"},
             )
             assert resp.status_code == 400
+            assert "文件大小超过限制" in resp.json()["detail"]
 
     def test_entity_type_project_validation(self, client_with_mocked_auth):
         mock_validator = MagicMock()

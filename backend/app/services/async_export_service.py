@@ -428,6 +428,90 @@ def recover_stale_export_tasks(db: Session) -> int:
     return len(stale)
 
 
+# ── R5：过期导出文件与残留 .part 回收 ──
+
+_PART_STALE_SECONDS = 24 * 3600  # *.part 存活上限：超过即视为强杀残留（正常导出分钟级完成）
+
+
+def _as_utc(value: datetime) -> datetime:
+    """SQLite DateTime 列读取值为 naive，按 UTC 语义补齐时区。
+
+    与 ``ExportTask.is_downloadable`` 的既有口径一致：不做补齐会与 aware
+    ``datetime.now(timezone.utc)`` 比较抛 TypeError。
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def purge_expired_exports(db: Session) -> Dict[str, int]:
+    """回收过期导出文件与强杀遗留的 ``.part`` 半成品（遗留风险治理 R5）。
+
+    背景：``export_supported_villages_async`` 为任务写入 ``expires_at=now+24h``，
+    下载端据此拒绝过期下载，但**此前全仓无任何清理逻辑**——``exports/`` 目录随
+    使用频率单调增长（>5000 行自动走异步），且 A2 原子落盘引入的 ``*.part``
+    临时文件在进程被强杀时可能永久残留。
+
+    行为（只清理文件，不动数据）：
+      1. ``expires_at < now`` 且状态非 pending/processing 的任务 → 删除其导出
+         文件并把状态标记为 ``expired``（记录保留用于审计，``file_path`` 置空）；
+      2. 导出目录下 mtime 早于 24h 的 ``*.part`` → 删除（进行中的导出必然在
+         24h 内 replace 完成，超期即残留物）。
+
+    由 ``backup_scheduler.recycle_retention_job`` 每日调用（R5 接线点）。
+
+    Returns:
+        ``{"expired_tasks": n, "files_removed": n, "parts_removed": n}``
+    """
+    now = datetime.now(timezone.utc)
+    stats = {"expired_tasks": 0, "files_removed": 0, "parts_removed": 0}
+
+    candidates = (
+        db.query(ExportTask)
+        .filter(
+            ExportTask.expires_at.isnot(None),
+            ExportTask.status.notin_(
+                [ExportStatus.PENDING.value, ExportStatus.PROCESSING.value]
+            ),
+        )
+        .all()
+    )
+    for task in candidates:
+        if _as_utc(task.expires_at) >= now:
+            continue
+        if task.file_path:
+            try:
+                Path(task.file_path).unlink(missing_ok=True)
+                stats["files_removed"] += 1
+            except OSError as exc:  # 被占用/权限不足：保留记录下次重试
+                logger.warning("过期导出文件删除失败 file=%s err=%s", task.file_path, exc)
+                continue
+        task.status = ExportStatus.EXPIRED.value
+        task.file_path = None
+        stats["expired_tasks"] += 1
+    if stats["expired_tasks"]:
+        safe_commit(db)
+
+    try:
+        cutoff = now.timestamp() - _PART_STALE_SECONDS
+        for part in _get_export_dir().glob("*.part"):
+            try:
+                if part.stat().st_mtime < cutoff:
+                    part.unlink()
+                    stats["parts_removed"] += 1
+            except OSError as exc:  # pragma: no cover — 与上同：占用/权限异常
+                logger.warning("残留 .part 清理失败 file=%s err=%s", part.name, exc)
+    except OSError as exc:  # pragma: no cover — 导出目录不可访问时不影响主流程
+        logger.warning("导出目录扫描失败: %s", exc)
+
+    if stats["expired_tasks"] or stats["parts_removed"]:
+        logger.info(
+            "过期导出回收完成: 标记过期 %d / 删除文件 %d / 清理 .part %d",
+            stats["expired_tasks"], stats["files_removed"], stats["parts_removed"],
+        )
+    return stats
+
+
 class AsyncExportService:
     """异步导出服务：封装导出任务的创建、查询、下载与真实数据导出。"""
 

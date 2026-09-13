@@ -149,7 +149,7 @@ class TestSchedulerTimerLifecycle:
         import app.services.backup_scheduler as scheduler
 
         named = self._start(scheduler)
-        assert len(named) == 12, "12 个周期任务（含新增分片清理）必须全部登记"
+        assert len(named) == 13, "13 个周期任务（含新增分片清理 R4 + 过期导出回收 R5）必须全部登记"
         assert "scheduler-chunk_cleanup" in named
         assert all(t.is_alive() for t in _timers)
 
@@ -256,4 +256,4 @@ class TestSchedulerTimerLifecycle:
                 scheduler.start_backup_scheduler()
             named = {t.name: t for t in _timers}
             named[timer_name].fire()
-            assert len(_timers) == 12, f"{job_name} 执行中 stop 后不得重排下一次"
+            assert len(_timers) == 13, f"{job_name} 执行中 stop 后不得重排下一次"

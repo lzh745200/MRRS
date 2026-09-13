@@ -22,6 +22,7 @@ from app.core.database import get_db
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.core.upload_security import sanitize_filename
+from app.utils.upload_helper import read_upload_with_limit
 from app.models.user import User
 from app.models.audit import AuditAction
 from app.utils.common import dict_keys_to_camel, StringHelper
@@ -720,8 +721,12 @@ async def import_villages(
     """从 Excel 导入帮扶村"""
     if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="请上传 .xlsx 或 .xls 格式的文件")
+    # R2 第二层：分块读取 + 滚动计数（原一次性读完，超高压缩比 xlsx 可致 OOM）。
+    # 放在 try 之外：超限 413 必须在解析兜底之前抛出。
+    contents = await read_upload_with_limit(
+        file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
+    )
     try:
-        contents = await file.read()
         wb = openpyxl.load_workbook(io.BytesIO(contents))
         ws = wb.active
     except Exception:
@@ -1354,7 +1359,10 @@ async def upload_section_attachment(
     from app.models.supported_village import VillageAttachment
     import os as _os
 
-    content = await file.read()
+    # R2 第二层：分块读取 + 滚动计数（附件上限沿用全局 MAX_FILE_SIZE）
+    content = await read_upload_with_limit(
+        file, settings.MAX_FILE_SIZE, limit_label="附件"
+    )
     safe_name = sanitize_filename(file.filename or "attachment")
     ext = _os.path.splitext(safe_name)[1].lower()
     if ext in _BLOCKED_ATTACHMENT_EXTENSIONS:
@@ -1577,9 +1585,14 @@ async def import_section_data(
     model = _SECTION_MODEL.get(section_key or "")
     if model is None:
         raise HTTPException(status_code=400, detail=f"未知板块标识: {section_key}")
+    # R2 第二层：限长读取放在 try 之外——超限 413 必须原样抛出，
+    # 不能被下方的解析兜底 except 降级成 400「文件解析失败」
+    _section_bytes = await read_upload_with_limit(
+        file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
+    )
     try:
         import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(await file.read()))
+        wb = openpyxl.load_workbook(io.BytesIO(_section_bytes))
         ws = wb.active
     except Exception:
         raise HTTPException(status_code=400, detail="文件解析失败，请稍后重试或联系管理员")
@@ -1603,9 +1616,13 @@ async def import_all_sections_data(
 ):
     """导入帮扶村所有区块数据（按工作表名匹配板块，真实写库）"""
     _get_village_or_404(db, village_id, current_user)
+    # R2 第二层：限长读取置于 try 之外（413 不被解析兜底降级为 400）
+    _all_bytes = await read_upload_with_limit(
+        file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
+    )
     try:
         import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(await file.read()))
+        wb = openpyxl.load_workbook(io.BytesIO(_all_bytes))
     except Exception:
         raise HTTPException(status_code=400, detail="文件解析失败，请稍后重试或联系管理员")
     # 工作表名 → 板块键：兼容 section_key（population）与模型表名/中文名

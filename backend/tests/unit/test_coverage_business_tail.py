@@ -197,7 +197,7 @@ class TestSupportedVillageTail:
         buf.seek(0)
 
         class _FakeFile:
-            async def read(self):
+            async def read(self, size=-1):  # R2：端点改为分块读取，替身需接受 size
                 return buf.getvalue()
 
         with patch("app.api.v1.supported_village._get_village_or_404", return_value=MagicMock()):

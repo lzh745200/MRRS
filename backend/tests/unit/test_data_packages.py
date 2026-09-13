@@ -643,11 +643,28 @@ class TestDownloadDataPackage:
             resp = client_with_mocked_auth.get(f"{BASE}/1/download")
             assert resp.status_code == 404
 
-    def test_file_not_exists(self, client_with_mocked_auth):
+    def test_no_file_path_returns_409(self, client_with_mocked_auth):
+        """R9：校验失败被拒绝的包不落实体文件 → 409 明确语义（非模糊 404）。"""
         mock_pkg = MagicMock()
         mock_pkg.id = 1
         mock_pkg.org_id = 1
         mock_pkg.file_path = None
+
+        mock_svc = MagicMock()
+        mock_svc.get_package.return_value = mock_pkg
+        mock_perm = MagicMock()
+        mock_perm.can_access_organization.return_value = True
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, perm=mock_perm):
+            resp = client_with_mocked_auth.get(f"{BASE}/1/download")
+            assert resp.status_code == 409
+            assert "拒绝" in resp.json()["detail"]
+
+    def test_file_missing_on_disk_returns_404(self, client_with_mocked_auth):
+        """有路径但磁盘缺失 → 仍为 404（与 409 的『无实体文件』区分）。"""
+        mock_pkg = MagicMock()
+        mock_pkg.id = 1
+        mock_pkg.org_id = 1
+        mock_pkg.file_path = "Z:/nonexistent/path/pkg.zip"
 
         mock_svc = MagicMock()
         mock_svc.get_package.return_value = mock_pkg

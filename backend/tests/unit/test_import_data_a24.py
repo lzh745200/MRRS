@@ -153,21 +153,24 @@ class TestPreviewImportData:
 
     @pytest.mark.asyncio
     async def test_file_too_large_rejected(self):
+        """R2：体积闸门由「分块读取上限」承担（原 validator.validate_file_size
+        的事后校验已被前移，避免先整包入内存再拒绝）。"""
         validator = MagicMock()
         validator.validate_file_format.return_value = (True, "")
-        validator.validate_file_size.return_value = (False, "文件过大")
 
-        file = _upload(_make_xlsx([["名称"], ["项目A"]]), "projects.xlsx")
-        with patch.object(id_module, "_setup_preview_entity", return_value=(validator, "name", set())):
-            with pytest.raises(HTTPException) as exc_info:
-                await preview_import_data(
-                    file=file,
-                    entity_type="project",
-                    current_user=MagicMock(),
-                    db=MagicMock(),
-                )
+        file = _upload(b"x" * 64, "projects.xlsx")
+        with patch.object(id_module, "_IMPORT_MAX_FILE_SIZE", 16), \
+                patch.object(id_module, "_IMPORT_MAX_FILE_SIZE_MSG", "文件大小超过限制"):
+            with patch.object(id_module, "_setup_preview_entity", return_value=(validator, "name", set())):
+                with pytest.raises(HTTPException) as exc_info:
+                    await preview_import_data(
+                        file=file,
+                        entity_type="project",
+                        current_user=MagicMock(),
+                        db=MagicMock(),
+                    )
         assert exc_info.value.status_code == 400
-        assert "文件过大" in exc_info.value.detail
+        assert "文件大小超过限制" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_preview_with_invalid_and_duplicate_rows(self):

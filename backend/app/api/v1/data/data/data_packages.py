@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.exceptions import BusinessError, NotFoundException
+from app.utils.upload_helper import read_upload_with_limit
 from app.core.response import success_response
 from app.core.security import get_current_user
 from app.core.permission_utils import get_org_with_fallback, is_admin, require_admin
@@ -503,19 +504,19 @@ async def import_data_package(
     # 保存上传文件到临时目录
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
     try:
-        content = await file.read()
+        # R2 第二层：分块读取 + 滚动计数（原 `await file.read()` 先整包入内存，
+        # 100MB 上限下峰值不可控）。空文件与超限语义保持不变（422 / 413）。
+        content = await read_upload_with_limit(
+            file, 100 * 1024 * 1024,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            error_detail="文件过大，数据包大小不能超过 100MB",
+        )
 
         # 检查文件大小
         if len(content) == 0:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="文件为空，请选择有效的数据包文件"
-            )
-
-        if len(content) > 100 * 1024 * 1024:  # 100MB
-            raise HTTPException(
-                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-                detail="文件过大，数据包大小不能超过 100MB"
             )
 
         temp_file.write(content)
@@ -966,6 +967,17 @@ async def validate_data_package(
     if not package:
         raise NotFoundException("数据包不存在")
 
+    # R9：校验失败被拒绝的包不落实体文件（file_path 为 NULL），再次校验
+    # 无可校对象——给出明确 409 语义而不是走到"文件不存在"的模糊错误
+    if not package.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "该数据包已被拒绝（校验失败），无实体文件可校验"
+                + (f"：{package.error_message}" if package.error_message else "")
+            ),
+        )
+
     result = await service.validate_package(package.file_path)
 
     # 记录验证历史
@@ -1092,7 +1104,13 @@ async def download_data_package(
     if not permission_service.can_access_organization(current_user.id, package.org_id):
         raise NotFoundException("数据包不存在")
 
-    if not package.file_path or not os.path.exists(package.file_path):
+    # R9：无实体文件（校验失败被拒绝）→ 409 明确语义；有路径但磁盘缺失 → 404
+    if not package.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="该数据包已被拒绝（校验失败），不提供下载",
+        )
+    if not os.path.exists(package.file_path):
         raise NotFoundException("数据包文件不存在")
 
     return FileResponse(
@@ -1326,8 +1344,14 @@ async def upload_encrypted_package(
     temp_file_path = os.path.join(temp_dir, f"upload_{int(time.time())}_{file.filename}")
 
     try:
+        # R2 第二层：分块读取 + 滚动计数（原一次性读完再落盘，100MB 上限下
+        # 峰值不可控）。与 /import 端点同口径：上限 100MB。
+        content = await read_upload_with_limit(
+            file, 100 * 1024 * 1024,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            error_detail="文件过大，加密数据包大小不能超过 100MB",
+        )
         with open(temp_file_path, "wb") as f:
-            content = await file.read()
             f.write(content)
 
         # 检测是否加密
@@ -1367,6 +1391,12 @@ async def upload_encrypted_package(
             created_at=package.created_at,
         )
 
+    except HTTPException:
+        # R2：体积超限 413 必须原样上抛，不能被下方兜底降级为 500；
+        # 同时清理可能已建立的临时文件
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        raise
     except Exception as e:
         logger.error(f"上传加密数据包失败: {str(e)}", exc_info=True)
         if os.path.exists(temp_file_path):

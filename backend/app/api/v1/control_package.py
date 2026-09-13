@@ -25,12 +25,20 @@ from app.models.organization import Organization
 from app.models.org_module_policy import OrgModulePolicy
 from app.models.user import User
 from app.services.work_log_service import write_work_log
+from app.utils.upload_helper import (
+    ensure_zip_within_limit,
+    read_upload_with_limit,
+    read_zip_member,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/control-packages", tags=["管控配置包"])
 
 PACKAGE_VERSION = "1.0"
+
+# R2 第二层：管控配置包内存上限（与中间件「权限包/数据同步」512MB 分级一致）
+_MAX_CONTROL_PACKAGE_BYTES = 512 * 1024 * 1024
 
 
 class GenerateControlPackageRequest(BaseModel):
@@ -175,25 +183,30 @@ async def import_control_package_preview(
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="请上传 .zip 格式的管控配置包")
 
-    content = await file.read()
+    # R2 第二层：分块读取 + 滚动计数（超限 413，不再整包入内存）
+    content = await read_upload_with_limit(
+        file, _MAX_CONTROL_PACKAGE_BYTES, limit_label="管控配置包"
+    )
     try:
         buffer = io.BytesIO(content)
         with zipfile.ZipFile(buffer, "r") as zf:
+            # R2 第三层：解压后总体积上限（压缩炸弹防护）
+            ensure_zip_within_limit(zf)
             names = zf.namelist()
             if "manifest.json" not in names:
                 return ImportPreviewResponse(valid=False, error="无效的管控包：缺少 manifest.json")
 
-            manifest = json.loads(zf.read("manifest.json"))
+            manifest = json.loads(read_zip_member(zf, "manifest.json"))
             if manifest.get("package_type") != "control":
                 return ImportPreviewResponse(valid=False, error="非管控配置包类型")
 
             module_policy_count = 0
             user_count = 0
             if "module_policy.json" in names:
-                policies = json.loads(zf.read("module_policy.json"))
+                policies = json.loads(read_zip_member(zf, "module_policy.json"))
                 module_policy_count = len(policies)
             if "users.json" in names:
-                users = json.loads(zf.read("users.json"))
+                users = json.loads(read_zip_member(zf, "users.json"))
                 user_count = len(users)
 
             return ImportPreviewResponse(
@@ -218,22 +231,27 @@ async def import_control_package(
     if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="仅管理员可导入管控配置包")
 
-    content = await file.read()
+    # R2 第二层：分块读取 + 滚动计数（超限 413，不再整包入内存）
+    content = await read_upload_with_limit(
+        file, _MAX_CONTROL_PACKAGE_BYTES, limit_label="管控配置包"
+    )
     try:
         buffer = io.BytesIO(content)
         with zipfile.ZipFile(buffer, "r") as zf:
+            # R2 第三层：解压后总体积上限（压缩炸弹防护）
+            ensure_zip_within_limit(zf)
             names = zf.namelist()
             if "manifest.json" not in names:
                 raise HTTPException(status_code=400, detail="无效的管控包：缺少 manifest.json")
 
-            manifest = json.loads(zf.read("manifest.json"))
+            manifest = json.loads(read_zip_member(zf, "manifest.json"))
             if manifest.get("package_type") != "control":
                 raise HTTPException(status_code=400, detail="非管控配置包类型")
 
             # 导入模块策略
             applied_policies = 0
             if "module_policy.json" in names:
-                policies = json.loads(zf.read("module_policy.json"))
+                policies = json.loads(read_zip_member(zf, "module_policy.json"))
                 org_id = manifest.get("target_organization_id")
                 for item in policies:
                     existing = db.query(OrgModulePolicy).filter(
@@ -257,7 +275,7 @@ async def import_control_package(
             applied_configs = 0
             if "system_config.json" in names:
                 from app.models.system_config import SystemConfig
-                configs = json.loads(zf.read("system_config.json"))
+                configs = json.loads(read_zip_member(zf, "system_config.json"))
                 for key, value in configs.items():
                     existing = db.query(SystemConfig).filter(SystemConfig.key == key).first()
                     if existing:

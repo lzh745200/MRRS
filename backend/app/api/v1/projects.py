@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.transaction import safe_commit
 from app.core.data_permission import require_data_permission, check_record_access
 from app.core.data_permission import apply_scope_filter
@@ -41,6 +42,7 @@ from app.models.audit import AuditAction
 from app.utils.db_error_handler import handle_db_errors_async
 from app.core.money import MoneyField
 from app.utils.helpers import quantize_money
+from app.utils.upload_helper import read_upload_with_limit
 from app.services.work_log_service import write_work_log
 from app.services.approval_workflow_service import (
     ApprovalWorkflowService,
@@ -1741,9 +1743,14 @@ async def _parse_import_excel(file: UploadFile):
     try:
         import openpyxl
 
-        content = await file.read()
+        # R2 第二层：分块读取 + 滚动计数（超限 413，不再整包入内存）
+        content = await read_upload_with_limit(
+            file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
+        )
         wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
         return wb.active
+    except HTTPException:
+        raise  # 413/400 原样上抛，不被解析兜底降级
     except Exception:
         raise HTTPException(status_code=400, detail="Excel 解析失败，请稍后重试或联系管理员")
 

@@ -23,6 +23,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
+from ...core.config import settings
+from ...utils.upload_helper import read_upload_with_limit
 from ...services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
 from ...core.response import ok_list
 from ...core.security import get_current_user
@@ -1245,7 +1247,10 @@ async def upload_filled_template(
     if not fields:
         raise HTTPException(status_code=400, detail="模板未配置字段映射")
 
-    content = await file.read()
+    # R2 第二层：分块读取 + 滚动计数，超限即停（原 `await file.read()` 先物化全量）
+    content = await read_upload_with_limit(
+        file, settings.MAX_FILE_SIZE, limit_label="模板导入文件"
+    )
 
     try:
         wb = load_workbook(io.BytesIO(content), read_only=True)

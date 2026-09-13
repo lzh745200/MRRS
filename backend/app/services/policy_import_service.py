@@ -12,6 +12,12 @@ from app.models.policy import Policy
 from app.core.upload_security import validate_excel_upload
 from app.core.logging import logger
 from app.core.transaction import safe_commit
+from app.utils.upload_helper import read_upload_with_limit
+
+# R2 第三层：政策导入此前**完全无上限**（既无文件体积上限、也无行数上限），
+# 与 data_validator_service 的口径对齐（10MB / 1000 行）
+MAX_FILE_SIZE = 10 * 1024 * 1024
+MAX_ROWS = 1000
 
 
 async def import_policies_from_excel(
@@ -25,7 +31,10 @@ async def import_policies_from_excel(
     """
     if not validate_excel_upload(file):
         raise HTTPException(status_code=400, detail="文件校验失败: 不是有效的 Excel 文件")
-    content = await file.read()
+    # R2 第二层：分块读取 + 滚动计数（原 `await file.read()` 无上限）
+    content = await read_upload_with_limit(
+        file, MAX_FILE_SIZE, limit_label="政策导入文件"
+    )
 
     try:
         wb = load_workbook(BytesIO(content))
@@ -60,6 +69,14 @@ async def import_policies_from_excel(
         # 同时兼容用户自制"第1行表头"文件 → 自动探测表头行
         header_row = _find_header_row(ws, "政策标题")
         data_start = header_row + 1
+
+        # R2 第三层：行数上限（与 data_validator_service.MAX_ROWS 口径一致）。
+        # 此前无上限：超大 sheet 会持续累积 errors 列表并把整表载入内存。
+        if ws.max_row and (ws.max_row - data_start + 1) > MAX_ROWS:
+            raise HTTPException(
+                status_code=413,
+                detail=f"数据行数超过限制，单次最多导入 {MAX_ROWS} 条记录",
+            )
 
         imported = 0
         errors: List[Dict[str, Any]] = []
@@ -106,6 +123,10 @@ async def import_policies_from_excel(
             "errorRows": error_rows,
             "total": imported + len(errors),
         }
+    except HTTPException:
+        # R2：大小/行数上限（413/400）必须原样上抛，不能被下方兜底降级为 500
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         # 完整栈仅进服务端日志；detail 不得内插异常原文（W1 不变量 #6）

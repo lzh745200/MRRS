@@ -29,6 +29,7 @@ from ...core.config import settings
 from ...core.database import get_db
 from ...core.security import get_current_user
 from ...core.upload_security import validate_excel_upload
+from ...utils.upload_helper import read_upload_with_limit
 from ...models.school import (
     ProjectPhase,
     ScholarshipStatus,
@@ -245,10 +246,12 @@ async def import_schools_excel(
     db: Session = Depends(get_db),
 ):
     """从 Excel 导入学校"""
-    # 安全校验：文件类型 + 大小
+    # 安全校验：文件类型 + 大小（R2 第二层：分块读取，超限即停不物化全量）
     if not validate_excel_upload(file):
         raise HTTPException(status_code=400, detail="文件校验失败: 不是有效的 Excel 文件")
-    content = await file.read()
+    content = await read_upload_with_limit(
+        file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
+    )
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         tmp.write(content)
@@ -345,7 +348,9 @@ async def import_scholarship_students(
     """从 Excel 导入奖学金资助学生"""
     if not validate_excel_upload(file):
         raise HTTPException(status_code=400, detail="文件校验失败: 不是有效的 Excel 文件")
-    content = await file.read()
+    content = await read_upload_with_limit(
+        file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
+    )
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         tmp.write(content)
         tmp_path = tmp.name
@@ -1012,10 +1017,13 @@ async def upload_attachment(
     # 检查学校是否存在并校验数据权限
     _get_school_and_check_permission(school_id, current_user, db, "上传附件")
 
-    # 检查文件大小
-    content = await file.read()
-    if len(content) > settings.MAX_FILE_SIZE:
-        raise AppError.bad_request(f"文件大小超过限制({settings.MAX_FILE_SIZE // 1048576}MB)")
+    # 检查文件大小（R2 第二层：分块读取 + 滚动计数，超限即停；
+    # 保持既有 400 + AppError 文案不变）
+    content = await read_upload_with_limit(
+        file, settings.MAX_FILE_SIZE,
+        status_code=400,
+        error_detail=f"文件大小超过限制({settings.MAX_FILE_SIZE // 1048576}MB)",
+    )
 
     # 检查文件类型
     ext = (file.filename or "").rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
@@ -1369,7 +1377,9 @@ async def import_school_scholarship_students(
 
     if not validate_excel_upload(file):
         raise HTTPException(status_code=400, detail="文件校验失败: 不是有效的 Excel 文件")
-    content = await file.read()
+    content = await read_upload_with_limit(
+        file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
+    )
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         tmp.write(content)
         tmp_path = tmp.name

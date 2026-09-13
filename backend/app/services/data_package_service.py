@@ -246,14 +246,23 @@ class DataPackageService:
         """导入数据包 (预览阶段，同步方法)"""
         validation = await self.validate_package(file_path)
         if not validation.is_valid:
+            # R9：校验失败分支**不落 file_path**——该路径是 API 层的临时文件，
+            # 由调用方 finally 立即 unlink（见 data_packages.py import 端点），
+            # 落库后记录会永久指向不存在的文件：/validate、/download 恒报
+            # "文件不存在"且无修复路径。此处置 NULL，端点对 file_path 为空
+            # 返回 409 明确语义（校验失败已拒绝），错误明细随 error_message 保留。
             package = self._create_package_record(
-                file_path, file_name, org_id, imported_by,
+                None, file_name, org_id, imported_by,
                 status=PackageStatus.failed,
                 error_message="; ".join([e.message for e in validation.errors]),
             )
             return DataPackageImportResult(
                 package_id=package.id, package_code=package.package_code,
-                status=PackageStatusEnum.failed, manifest=validation.manifest,
+                # R9 顺带修复：PackageStatusEnum 成员为**大写** FAILED，
+                # 原 `PackageStatusEnum.failed` 必抛 AttributeError → 校验失败
+                # 分支被端点兜底成 500「导入失败」，用户看不到真实校验原因
+                # （既有单测用 patch 掩盖了该缺陷）。
+                status=PackageStatusEnum.FAILED, manifest=validation.manifest,
                 preview=[], validation=validation,
             )
 
@@ -784,14 +793,19 @@ class DataPackageService:
         return f"sha256:{sha256_hash.hexdigest()}"
 
     def _create_package_record(
-        self, file_path: str, file_name: str, org_id: int, created_by: int,
+        self, file_path: Optional[str], file_name: str, org_id: int, created_by: int,
         status: PackageStatus, error_message: str = None,
     ) -> DataPackage:
+        """创建数据包记录（R9：file_path 允许为 None——校验拒绝的包无实体文件）。"""
         package_code = self._generate_package_code("UNKNOWN", "ERR")
         package = DataPackage(
             package_code=package_code, org_id=org_id, file_path=file_path,
             file_name=file_name,
-            file_size=os.path.getsize(file_path) if os.path.exists(file_path) else 0,
+            file_size=(
+                os.path.getsize(file_path)
+                if file_path and os.path.exists(file_path)
+                else 0
+            ),
             status=status.value, version=CURRENT_VERSION,
             error_message=error_message, created_by=created_by,
         )

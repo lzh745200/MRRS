@@ -24,10 +24,18 @@ from app.core.transaction import safe_commit
 from app.models.subordinate_registry import SubordinateInstance
 from app.models.user import User
 from app.services.work_log_service import write_work_log
+from app.utils.upload_helper import (
+    ensure_zip_within_limit,
+    read_upload_with_limit,
+    read_zip_member,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/subordinate-reports", tags=["下级上报包"])
+
+# R2：下级上报包内存上限（与 body_size_limit 中间件的「数据同步」分级一致）
+_MAX_REPORT_PACKAGE_BYTES = 512 * 1024 * 1024
 
 
 @router.post("/generate-registration")
@@ -147,10 +155,15 @@ async def import_subordinate_report(
     if current_user.role not in ("admin", "super_admin") and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="仅管理员可导入下级上报包")
 
-    content = await file.read()
+    # R2 第二层：分块读取 + 滚动计数（原一次性读完，超高压缩比包可致 OOM）
+    content = await read_upload_with_limit(
+        file, _MAX_REPORT_PACKAGE_BYTES, limit_label="下级上报包"
+    )
     try:
         buffer = io.BytesIO(content)
         with zipfile.ZipFile(buffer, "r") as zf:
+            # R2 第三层：解压后总体积上限（压缩炸弹防护）
+            ensure_zip_within_limit(zf)
             names = zf.namelist()
 
             if "status_report.json" in names:
@@ -170,7 +183,7 @@ async def import_subordinate_report(
 
 def _process_status_report(zf: zipfile.ZipFile, db: Session, current_user: User):
     """处理状态报告包"""
-    report = json.loads(zf.read("status_report.json"))
+    report = json.loads(read_zip_member(zf, "status_report.json"))
     org_id = report.get("organization_id")
     instance_code = report.get("instance_code")
 
@@ -208,7 +221,7 @@ def _process_status_report(zf: zipfile.ZipFile, db: Session, current_user: User)
 
 def _process_registration_report(zf: zipfile.ZipFile, db: Session, current_user: User):
     """处理注册上报包"""
-    report = json.loads(zf.read("registration_report.json"))
+    report = json.loads(read_zip_member(zf, "registration_report.json"))
     org_id = report.get("organization_id")
     users = report.get("users", [])
 

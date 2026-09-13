@@ -5,6 +5,62 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.7] - 2026-09-13 — 🛡️ 遗留风险治理第二批（R2 上传体积上限 / R5 导出回收 / R9 导入拒绝记录 / R13 Windows CI 可见性）
+
+对应《deliverables/遗留风险彻底解决方案计划-2026-09-12.md》第二、三周批次。
+
+### 修复（可用性：上传内存峰值 — R2 第二层）
+- 新增 `utils.upload_helper.read_upload_with_limit(file, max_bytes, ...)`：分块读取（1MB/块）+
+  滚动累计字节，超限即停并抛 413；`status_code`/`error_detail` 可保持既有接口语义
+  （如头像 400「头像文件不能超过 2MB」）。端点层 18 处 `await file.read()` 全部替换：
+  头像 2MB / 数据包与加密包 100MB / Excel 导入 50MB / 导入校验 10MB / 上报包与管控包 512MB。
+- 原写法先把 SpooledTemporaryFile **整包物化进内存**再比较长度，校验只能拒绝请求、
+  挡不住内存峰值（单机离线部署下单请求即可 OOM，整库应用不可用）。中间件的
+  Content-Length 分级预检不变，本层补足端点内真实上限与「短读即 EOF」语义。
+
+### 修复（安全：压缩炸弹防护 — R2 第三层）
+- 新增 `zip_total_uncompressed_size(zf)` / `ensure_zip_within_limit(zf)`（解压后总量 ≤ 200MB）
+  与 `read_zip_member(zf, name)`（按 `ZipInfo.file_size` 预检后限长读取），接入
+  `control-packages/import-preview`、`control-packages/import`、`subordinate-reports/import`
+  与其 3 处成员读取点。容器体积合规 ≠ 解压后合规（1MB deflate 可膨胀到数十 GB）。
+- `policy_import_service` 此前**完全无上限**：补 10MB 体积上限（分块读取）+ 1000 行上限，
+  口径与 `data_validator_service`（10MB/1000 行）对齐。
+
+### 修复（磁盘增长：异步导出文件回收 — R5）
+- 新增 `async_export_service.purge_expired_exports(db)` + 调度作业 `export_purge_job`
+  （每日 04:00）：`expires_at < now` 且非 pending/processing 的任务删除文件并标记
+  `expired`（记录保留供审计、`file_path` 置空）；同时回收导出目录 mtime 早于 24h 的
+  `*.part` 半成品（A2 原子落盘后强杀残留）。
+- 此前 `expires_at` 只用于拒绝下载，**无任何回收逻辑**：`exports/` 目录随使用频率单调增长。
+
+### 修复（数据一致性：导入失败记录 — R9）
+- `DataPackageService.import_package` 校验失败分支不再落 `file_path`——该路径是 API 层
+  临时文件，调用方 `finally` 立即 unlink，落库后记录永久指向不存在文件（`/validate`、
+  `/download` 恒报「文件不存在」且无修复路径）。`_create_package_record` 支持 NULL 路径。
+- `/data-packages/{id}/validate`、`/{id}/download` 对 `file_path` 为空返回 **409**（明确
+  「已被拒绝（校验失败）」语义）；有路径但磁盘缺失仍为 404。
+- **顺带修复真实缺陷**：`PackageStatusEnum` 成员为大写 `FAILED`，原 `PackageStatusEnum.failed`
+  在校验失败分支必抛 `AttributeError` → 被端点兜底成 500「导入失败」，用户看不到真实校验
+  原因（既有单测用 `patch` 掩盖了该缺陷，已改为断言真实行为）。
+
+### 修复（工程：Windows 专属缺陷 CI 可见性 — R13）
+- `pr-checks.yml` 新增 `windows-smoke` 作业（`windows-latest`，`PYTHONUTF8=1` +
+  `PYTHONIOENCODING=utf-8`）：跑编码/句柄/路径敏感子集（pragma ratchet F2、安装包无测试
+  校验、备份路径对齐、数据同步路由、帮扶村上传）+ `flake8 app/ --max-complexity=16`。
+  此前全部作业跑在 ubuntu-latest，Windows 编码（GBK 管道）、句柄占用、路径分隔符类缺陷
+  只能本地撞见（v1.12.3 出包编码崩溃、v1.12.6 管道解码 3 例失败为同类先例）。作业数 6→7。
+
+### 未实施（按计划排期，非本批次）
+- **R7 恢复窗口与在途写请求竞态**（P1）计划列为 W3–W4（10-09 前），需改造 `get_db`
+  依赖注入与在途请求计数，不在本批次实施。
+- **R12 剩余项**（`os._exit` 优雅退出、`_tasks` 过期清理等）同列 W4。
+
+### 测试
+- 新增 `tests/unit/test_upload_limit_r2.py`（16 例）、`test_export_purge_r5.py`（15 例）、
+  `test_data_package_rejected_r9.py`（8 例）。
+- 适配既有断言：调度器 Timer 计数 12→13（新增 export_purge）、数据包下载无实体文件
+  404→409、导入体积门禁从「事后校验」改为「分块读取前置」。
+
 ## [1.12.6] - 2026-09-12 — 🛡️ 遗留风险治理第一批（P0 调度健壮性 / 启动 VACUUM / multipart 上限 / 备份语义）
 
 对应《deliverables/遗留风险彻底解决方案计划-2026-09-12.md》的第一、二周批次（R1/R2/R3/R4/R6/R8/R11/R12 部分）。

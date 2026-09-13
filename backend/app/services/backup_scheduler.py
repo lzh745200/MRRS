@@ -461,6 +461,25 @@ def recycle_retention_job():
         db.close()
 
 
+def export_purge_job():
+    """过期导出文件回收（R5：每日 04:00）。
+
+    异步导出的文件写入即带 24h 过期时间，下载端据此拒绝过期下载，但此前
+    无任何清理逻辑——`exports/` 随使用频率单调增长，A2 原子落盘引入的
+    `*.part` 在强杀场景下也可能永久残留。
+    """
+    from app.core.database import SessionLocal
+    from app.services.async_export_service import purge_expired_exports
+
+    db = SessionLocal()
+    try:
+        purge_expired_exports(db)
+    except Exception as e:
+        logger.error("过期导出回收任务失败: %s", e, exc_info=True)
+    finally:
+        db.close()
+
+
 async def restore_drill_job():
     """月度备份恢复演练（架构评估 C1）：每日 05:45 检查到期，到期才执行演练。
 
@@ -657,6 +676,8 @@ def start_backup_scheduler():
     _schedule_daily(auto_backup_job, 2, 0, "auto_backup")
     _schedule_daily(auto_package_job, 3, 0, "auto_package")
     _schedule_daily(message_cleanup_job, 3, 30, "message_cleanup")
+    # R5：过期导出文件 + 残留 .part 回收（此前 expires_at 只用于拒绝下载，无回收）
+    _schedule_daily(export_purge_job, 4, 0, "export_purge")
     _schedule_daily(restore_drill_job, 5, 45, "restore_drill")
     _schedule_interval(reminder_scan_job, 6 * 3600, "reminder_scan")
     _schedule_daily(todo_reminder_job, 8, 0, "todo_reminder")
@@ -669,7 +690,7 @@ def start_backup_scheduler():
     _scheduler_started = True
     logger.info(
         "调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 自动打包 + 消息清理"
-        " + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发 + 分片清理）"
+        " + 过期导出回收 + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发 + 分片清理）"
     )
 
 

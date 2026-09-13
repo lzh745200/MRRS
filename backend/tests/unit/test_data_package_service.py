@@ -366,18 +366,20 @@ class TestDataPackageService:
 
     # ===================== import_package =====================
     async     def test_import_package_validation_fails(self, service):
-        from app.schemas.data_package import PackageStatusEnum as RealPSE
-        with patch("app.services.data_package_service.PackageStatusEnum") as mock_enum:
-            mock_enum.failed = RealPSE.FAILED
-            with patch.object(service, "validate_package") as mock_validate:
-                mock_validate.return_value.is_valid = False
-                mock_validate.return_value.errors = [MagicMock(message="err")]
-                mock_validate.return_value.manifest = None
-                with patch.object(service, "_create_package_record") as mock_create:
-                    mock_create.return_value.id = 1
-                    mock_create.return_value.package_code = "ERR-CODE"
-                    result = await service.import_package("/tmp/test.zip", "test.zip", 1, 1)
-                    assert result.status == "failed"
+        # R9：不再 patch PackageStatusEnum——原写法用 mock 掩盖了
+        # `PackageStatusEnum.failed` 的大小写缺陷（真实成员为大写 FAILED，
+        # 生产路径必抛 AttributeError 被端点兜底成 500）。此处直接断言真实行为，
+        # 并断言失败记录不落临时文件路径（file_path=None）。
+        with patch.object(service, "validate_package") as mock_validate:
+            mock_validate.return_value.is_valid = False
+            mock_validate.return_value.errors = [MagicMock(message="err")]
+            mock_validate.return_value.manifest = None
+            with patch.object(service, "_create_package_record") as mock_create:
+                mock_create.return_value.id = 1
+                mock_create.return_value.package_code = "ERR-CODE"
+                result = await service.import_package("/tmp/test.zip", "test.zip", 1, 1)
+                assert result.status == "failed"
+                assert mock_create.call_args[0][0] is None
 
     async     def test_import_package_success(self, service):
         from app.schemas.data_package import DataPackageManifest, PackageStatusEnum as RealPSE

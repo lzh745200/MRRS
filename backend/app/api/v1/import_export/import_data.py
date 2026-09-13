@@ -19,6 +19,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.permission_utils import is_superuser
 from app.core.response import ok_list
@@ -28,11 +29,18 @@ from app.services.data_validator_service import DataValidatorService
 from app.services.entity_import_validator import EntityImportValidator
 from app.services.excel_importer_service import ExcelImporterService, ImportMode
 from app.services.excel_template_service import ExcelTemplateService
+from app.utils.upload_helper import read_upload_with_limit
 
 _XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 # 支持的实体类型
 VALID_ENTITY_TYPES = frozenset({"supported_village", "project", "fund", "school"})
+
+# R2 第二层：导入文件内存上限（与 DataValidatorService / EntityImportValidator
+# 的 MAX_FILE_SIZE=10MB 业务口径一致）。此处用模块常量而非读校验器实例属性：
+# mock 环境下实例属性为 MagicMock，比较会抛 TypeError。
+_IMPORT_MAX_FILE_SIZE = 10 * 1024 * 1024
+_IMPORT_MAX_FILE_SIZE_MSG = f"文件大小超过限制，最大允许 {_IMPORT_MAX_FILE_SIZE / (1024 * 1024)}MB"
 
 router = APIRouter(prefix="/import", tags=["数据导入"])
 
@@ -238,7 +246,12 @@ async def _import_entities(
             detail=f"不支持的实体类型: {entity_type}，支持 {', '.join(VALID_ENTITY_TYPES)}",
         )
 
-    file_bytes = await file.read()
+    # R2 第二层：分块读取 + 滚动计数，超限即停（原 `await file.read()`
+    # 先整包入内存；单机离线部署下单请求即可 OOM）。下游导入服务仍会
+    # 按行数/字段做业务校验。
+    file_bytes = await read_upload_with_limit(
+        file, settings.MAX_FILE_SIZE, limit_label="导入文件"
+    )
 
     if dry_run:
         # 仅校验模式：独立 DB 会话 + 屏蔽提交，执行完毕统一回滚。
@@ -384,10 +397,14 @@ async def validate_import_data(
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_msg)
 
-    file_content = await file.read()
-    is_valid, error_msg = validator.validate_file_size(len(file_content))
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=error_msg)
+    # R2 第二层：分块读取 + 滚动计数，超限即停（原 `await file.read()`
+    # 先物化全量再校验，校验只能拒绝请求、挡不住内存峰值）。
+    # 上限取校验器业务口径，超限文案与 validate_file_size 保持一致。
+    file_content = await read_upload_with_limit(
+        file, _IMPORT_MAX_FILE_SIZE,
+        status_code=400,
+        error_detail=_IMPORT_MAX_FILE_SIZE_MSG,
+    )
 
     try:
         rows = _parse_excel_rows(file_content, header_parser, example_markers)
@@ -504,13 +521,17 @@ async def preview_import_data(
 
     validator, duplicate_field, existing_names = _setup_preview_entity(entity_type, db)
 
-    file_content = await file.read()
+    # 先做格式校验（保持既有错误优先级），再做分块限长读取（R2 第二层）
     is_valid, error_msg = validator.validate_file_format(file.filename)
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_msg)
-    is_valid, error_msg = validator.validate_file_size(len(file_content))
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=error_msg)
+
+    # 上限取校验器业务口径，超限文案与其 validate_file_size 保持一致
+    file_content = await read_upload_with_limit(
+        file, _IMPORT_MAX_FILE_SIZE,
+        status_code=400,
+        error_detail=_IMPORT_MAX_FILE_SIZE_MSG,
+    )
 
     try:
         importer = ExcelImporterService(db, current_user=current_user)

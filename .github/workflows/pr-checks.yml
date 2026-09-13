@@ -273,3 +273,31 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report
           retention-days: 7
+
+  # R13（遗留风险治理计划 2026-09-12）：Windows 专属缺陷的 CI 可见性。
+  # 背景：以上作业全部跑在 ubuntu-latest，而 Windows 编码（GBK 管道解码）、
+  # 文件句柄占用、路径分隔符类缺陷**只能本地撞见**——v1.12.3 Windows 出包
+  # 编码崩溃、v1.12.6 subprocess.run(text=True) GBK 管道 3 例失败均为同类
+  # 先例（Linux CI 全绿、本地必红）。此作业以 windows-latest 跑"编码/句柄
+  # 敏感子集"+ lint，把缺陷提前到 PR 阶段暴露。
+  # 前置 PYTHONUTF8/PYTHONIOENCODING 统一 UTF-8，避免 runner 默认 GBK 造成
+  # 与产品无关的假失败。
+  windows-smoke:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: '3.11' }
+      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      # 编码/句柄/路径敏感子集：管道解码、打包产物校验、备份路径、
+      # 数据同步路由、帮扶村上传——历史上全部在 Windows 端暴露过问题
+      - name: Windows-sensitive test subset
+        run: |
+          cd backend
+          python -m pytest tests/unit/test_pragma_reason_ratchet_f2.py tests/unit/test_verify_package_no_tests_v123.py tests/unit/test_backup_path_alignment.py tests/unit/test_data_sync_route.py tests/unit/test_supported_village_api.py -q --tb=short
+      # 与 Linux lint 作业同口径（含 C901 复杂度上限）
+      - name: Lint (app/)
+        run: cd backend && python -m flake8 app/ --max-line-length=120 --count --max-complexity=16
