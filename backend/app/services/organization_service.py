@@ -5,7 +5,7 @@ Organization Service
 
 import logging
 from datetime import timezone, datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
@@ -155,6 +155,37 @@ class OrganizationService:
 
         return org
 
+    def repair_organization_paths(self) -> Dict[str, int]:
+        """回填缺失的组织 path/level（幂等；启动自检调用）。
+
+        背景：早期经 API 直接 Organization(**org_data) 落库的组织 path/level 为
+        NULL，而组织级数据权限完全依赖 path 前缀匹配 —— 这类组织的成员会被一律
+        判定"无组织权限"。按 id 升序（父先于子）单趟回填即可收敛：父级在本轮
+        已写入新 path，子级直接复用，无需多轮迭代。
+
+        Returns:
+            {"repaired": 本次回填条数, "remaining": 回填后仍为 NULL 的条数}
+        """
+        orgs = self.db.query(Organization).order_by(Organization.id).all()
+        by_id = {org.id: org for org in orgs}
+        repaired = 0
+        for org in orgs:
+            parent = by_id.get(org.parent_id) if org.parent_id else None
+            expected_path = (
+                f"{parent.path}{org.id}/"
+                if parent is not None and parent.path
+                else f"/{org.id}/"
+            )
+            expected_level = len([seg for seg in expected_path.split("/") if seg])
+            if org.path != expected_path or str(org.level) != str(expected_level):
+                org.path = expected_path
+                org.level = expected_level
+                repaired += 1
+        if repaired:
+            safe_commit(self.db)
+        remaining = self.db.query(Organization).filter(Organization.path.is_(None)).count()
+        return {"repaired": repaired, "remaining": remaining}
+
     def get_organization(self, org_id: int) -> Optional[Organization]:
         """
         获取单个组织
@@ -266,6 +297,12 @@ class OrganizationService:
             query = query.filter(Organization.is_active == True)  # noqa: E712
 
         # 使用路径前缀匹配
+        if not org.path:
+            # 历史数据兼容：早期经 API 直建的组织 path 为 NULL（前缀匹配必然
+            # 落空 → include_self=True 也返回空集 → 组织级数据权限把该组织成员
+            # 一律判为无权限）。此处退化为"仅自身"，配合
+            # repair_organization_paths() 的启动回填逐步自愈。
+            return [org] if include_self else []
         query = query.filter(Organization.path.like(f"{org.path}%"))
 
         if not include_self:

@@ -583,6 +583,21 @@ async def create_organization(
     if "is_active" not in org_data:
         org_data["is_active"] = True
 
+    # 组织树元数据（R14 真实 HTTP 探测 2026-09-13 修复）：此前直接
+    # Organization(**org_data) 落库，path/level 均为 NULL —— 而组织级数据权限
+    # （OrganizationPermissionService.can_access_organization → get_subordinate_ids
+    # → path LIKE 前缀匹配）**完全依赖 path**：新建组织的成员因此恒被判为
+    # "无组织权限"，数据包导出等组织门禁端点一律 403（安装包首启即复现）。
+    parent = None
+    if org_data.get("parent_id"):
+        parent = db.query(Organization).filter(Organization.id == org_data["parent_id"]).first()
+        if not parent:
+            raise HTTPException(status_code=400, detail="上级组织不存在")
+
+    if not org_data.get("level"):
+        depth = len([seg for seg in str(parent.path or "").split("/") if seg]) if parent else 0
+        org_data["level"] = depth + 1
+
     # 排序值自动递增：新增组织默认排到同级末尾
     # （sort_order 未显式指定或为 0 时，取当前最大值 +1）
     if not org_data.get("sort_order"):
@@ -609,6 +624,14 @@ async def create_organization(
             import secrets
 
             org.code = f"ORG{secrets.token_hex(3).upper()}"
+
+    # path 与 OrganizationService.create_organization 同口径：
+    # 根组织 /{id}/，子组织 {父 path}{id}/（前缀匹配是组织树查询的唯一依据）
+    if parent is not None and parent.path:
+        org.path = f"{parent.path}{org.id}/"
+    else:
+        org.path = f"/{org.id}/"
+
     safe_commit(db)
     db.refresh(org)
     try:
