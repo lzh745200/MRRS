@@ -601,10 +601,15 @@ class _FakeTimer:
         _FakeTimer.instances.append(self)
 
     def start(self):
-        pass
+        self._alive = True
 
     def cancel(self):
-        pass
+        self._alive = False
+
+    def is_alive(self):
+        # R8（2026-09-12）：_register_timer 依赖 is_alive() 回收已终止句柄，
+        # 替身需与真实 threading.Timer 同接口
+        return self._alive
 
 
 @pytest.fixture

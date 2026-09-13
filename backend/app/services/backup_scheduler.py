@@ -25,6 +25,15 @@ logger = logging.getLogger(__name__)
 
 _scheduler_started = False
 _timers: list[threading.Timer] = []
+# 停止标志：_job 在重排下一次之前必须检查，否则 stop 之后 interval/daily 链
+# 仍会继续自我重排（cancel 只能取消「尚未触发」的 Timer，拦不住正在运行中的 _job）
+_stopping = threading.Event()
+
+
+def _register_timer(timer: threading.Timer) -> None:
+    """登记调度 Timer，并回收已终止的旧句柄（防止 _timers 无限增长）。"""
+    _timers[:] = [t for t in _timers if t.is_alive()]
+    _timers.append(timer)
 
 
 def _admin_user_ids(db):
@@ -545,6 +554,91 @@ def _run_scheduler_job(job_fn):
             loop.close()
 
 
+def chunk_cleanup_job():
+    """清理过期分片上传会话（R4：磁盘 chunks/ 与内存 _sessions 双回收）。"""
+    from app.services.chunked_upload_service import get_chunked_upload_service
+
+    cleaned = get_chunked_upload_service().cleanup_expired_sessions()
+    if cleaned:
+        logger.info("分片上传过期会话清理完成: %s 个", cleaned)
+
+
+def _schedule_daily(coro_func, hour, minute, task_name):
+    """每日 HH:MM 调度（R8：重排 Timer 统一登记，_stopping 后不再自我延续）。"""
+    now = datetime.now()
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    delay = (target - now).total_seconds()
+
+    def _job():
+        if _stopping.is_set():
+            return
+        _run_scheduler_job(coro_func)
+        if _stopping.is_set():
+            return
+        _schedule_daily(coro_func, hour, minute, task_name)
+
+    t = threading.Timer(delay, _job)
+    t.daemon = True
+    t.name = f"scheduler-{task_name}"
+    _register_timer(t)
+    t.start()
+
+
+def _schedule_weekly(coro_func, weekday, hour, minute, task_name):
+    """每周 weekday HH:MM 调度（R8：同 _schedule_daily）。"""
+    now = datetime.now()
+    days_ahead = weekday - now.weekday()
+    if days_ahead < 0:
+        days_ahead += 7
+    target = (now + timedelta(days=days_ahead)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(weeks=1)
+    delay = (target - now).total_seconds()
+
+    def _job():
+        if _stopping.is_set():
+            return
+        _run_scheduler_job(coro_func)
+        if _stopping.is_set():
+            return
+        _schedule_weekly(coro_func, weekday, hour, minute, task_name)
+
+    t = threading.Timer(delay, _job)
+    t.daemon = True
+    t.name = f"scheduler-{task_name}"
+    _register_timer(t)
+    t.start()
+
+
+def _schedule_interval(coro_func, interval_seconds, task_name):
+    """按固定间隔调度（首次延迟 interval 秒）。
+
+    R8（2026-09-12）：递归重排的 Timer 此前从不入 _timers，stop_backup_scheduler
+    的 cancel 拦不到它们 → 关闭后 interval 链仍会触发（幽灵 DB 写）。
+    现统一经 _register_timer 登记并回收已终止句柄。
+    """
+
+    def _job():
+        if _stopping.is_set():
+            return
+        _run_scheduler_job(coro_func)
+        if _stopping.is_set():
+            return
+        t = threading.Timer(interval_seconds, _job)
+        t.daemon = True
+        t.name = f"scheduler-{task_name}"
+        _register_timer(t)
+        t.start()
+
+    t = threading.Timer(interval_seconds, _job)
+    t.daemon = True
+    t.name = f"scheduler-{task_name}"
+    _register_timer(t)
+    t.start()
+
+
 def start_backup_scheduler():
     """启动后台调度器（仅轻量任务，不含自动备份和 VACUUM）
 
@@ -554,64 +648,8 @@ def start_backup_scheduler():
     if _scheduler_started:
         logger.info("调度器已在运行，跳过重复启动")
         return
-
-    def _run_async_job(coro_func):
-        _run_scheduler_job(coro_func)
-
-    def _schedule_daily(coro_func, hour, minute, task_name):
-        now = datetime.now()
-        target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if target <= now:
-            target += timedelta(days=1)
-        delay = (target - now).total_seconds()
-
-        def _job():
-            _run_async_job(coro_func)
-            _schedule_daily(coro_func, hour, minute, task_name)
-
-        t = threading.Timer(delay, _job)
-        t.daemon = True
-        t.name = f"scheduler-{task_name}"
-        t.start()
-        _timers.append(t)
-
-    def _schedule_weekly(coro_func, weekday, hour, minute, task_name):
-        now = datetime.now()
-        days_ahead = weekday - now.weekday()
-        if days_ahead < 0:
-            days_ahead += 7
-        target = (now + timedelta(days=days_ahead)).replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if target <= now:
-            target += timedelta(weeks=1)
-        delay = (target - now).total_seconds()
-
-        def _job():
-            _run_async_job(coro_func)
-            _schedule_weekly(coro_func, weekday, hour, minute, task_name)
-
-        t = threading.Timer(delay, _job)
-        t.daemon = True
-        t.name = f"scheduler-{task_name}"
-        t.start()
-        _timers.append(t)
-
-    def _schedule_interval(coro_func, interval_seconds, task_name):
-        """按固定间隔调度（首次延迟 interval 秒）。
-        递归 Timer 不加入 _timers（daemon 线程随进程退出），避免列表无限增长。
-        """
-
-        def _job():
-            _run_async_job(coro_func)
-            t = threading.Timer(interval_seconds, _job)
-            t.daemon = True
-            t.name = f"scheduler-{task_name}"
-            t.start()
-
-        t = threading.Timer(interval_seconds, _job)
-        t.daemon = True
-        t.name = f"scheduler-{task_name}"
-        t.start()
-        _timers.append(t)
+    # 复位停止标志：允许 stop() 之后再次 start（与 _wal_thread 复位同理）
+    _stopping.clear()
 
     _schedule_daily(kpi_precalculate_job, 0, 30, "kpi_precalculate")
     _schedule_daily(recycle_retention_job, 4, 30, "recycle_retention")
@@ -624,17 +662,22 @@ def start_backup_scheduler():
     _schedule_daily(todo_reminder_job, 8, 0, "todo_reminder")
     _schedule_weekly(weekly_report_job, 0, 6, 30, "weekly_report")
     _schedule_interval(subscription_dispatch_job, 900, "subscription_dispatch")
+    # R4：分片上传过期会话清理（此前 cleanup_expired_sessions 无任何生产调用点，
+    # 放弃的会话在 uploads/chunks/ 与内存 _sessions 中永久泄漏）
+    _schedule_interval(chunk_cleanup_job, 1800, "chunk_cleanup")
 
     _scheduler_started = True
     logger.info(
         "调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 自动打包 + 消息清理"
-        " + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发）"
+        " + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发 + 分片清理）"
     )
 
 
 def stop_backup_scheduler():
     """停止备份调度器"""
     global _scheduler_started
+    # 先置停止标志再 cancel：拦住「正在执行、即将重排下一次」的 _job
+    _stopping.set()
     for t in _timers:
         t.cancel()
     _timers.clear()

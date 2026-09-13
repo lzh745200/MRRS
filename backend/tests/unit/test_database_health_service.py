@@ -138,6 +138,15 @@ class TestDatabaseHealthService:
             assert "size_before" in result
             assert "size_after" in result
 
+    def test_vacuum_uses_write_coordinator(self, service, temp_db):
+        """测试 VACUUM - 必须经 db_coordinator.exclusive_write 与长写互斥（R1）"""
+        coordinator = MagicMock()
+        with patch.object(service, 'db_path', Path(temp_db)), \
+                patch('app.core.database.db_coordinator', coordinator):
+            result = service.vacuum_database()
+        assert result["status"] == "ok"
+        coordinator.exclusive_write.assert_called_once()
+
     def test_vacuum_database_exception(self, service):
         """测试 VACUUM 异常处理"""
         with patch.object(service, 'db_path', MagicMock(exists=MagicMock(return_value=True))):
@@ -316,15 +325,12 @@ class TestDatabaseHealthService:
         service.check_integrity.assert_called()
         mock_wait.assert_called()
 
-    def test_monitor_loop_datetime_min_initial(self, service):
-        """测试监控循环 - datetime.min初始值导致首次全触发
+    def test_monitor_loop_heavy_checks_deferred_on_first_cycle(self, service):
+        """测试监控循环 - 重活首轮不触发，轻量 WAL checkpoint 首轮触发
 
-        datetime.min 距 now() 极远，三档检查（integrity / quick / vacuum）
-        首次进入循环时条件全部成立，应当都被各调用一次。
-        关键点：stop_event 必须在 *三个检查都跑完后* 才置位；
-        通过让 Event.wait() 第一次返回后置位 stop_event 来终止循环，
-        而非用 check_integrity 的 side_effect 提前置位（那样会令第 2、3 个
-        if 中的 `not self._stop_event.is_set()` 为 False，跳过后续检查）。
+        行为变更（2026-09-12 深度审计 R1）：integrity/quick/VACUUM 以「启动时刻」
+        为基准起算，首轮不触发——启动窗口正值请求高峰，VACUUM 需要独占锁，
+        原实现（datetime.min 初值）导致每次启动必跑全库扫描 + VACUUM。
         """
         with patch.object(service, 'check_integrity') as mock_ci:
             with patch.object(service, 'quick_check') as mock_qc:
@@ -336,13 +342,49 @@ class TestDatabaseHealthService:
                         service.wal_checkpoint_interval = 3600
 
                         service._stop_event.clear()
+                        cycles = {"n": 0}
 
-                        def stop_after_full_cycle(*args):
-                            # 一轮检查全部跑完后才终止循环，保证三个检查都被触发
-                            service._stop_event.set()
+                        def stop_after_two_cycles(*args):
+                            cycles["n"] += 1
+                            if cycles["n"] >= 2:
+                                service._stop_event.set()
 
                         with patch.object(service._stop_event, 'wait',
-                                          side_effect=stop_after_full_cycle):
+                                          side_effect=stop_after_two_cycles):
+                            service._monitor_loop()
+
+                        # 轻量 WAL checkpoint 首轮即执行（尽早回收 -wal）
+                        mock_wc.assert_called_once()
+                        # 重活首轮一律不触发
+                        mock_ci.assert_not_called()
+                        mock_qc.assert_not_called()
+                        mock_vd.assert_not_called()
+
+    def test_monitor_loop_heavy_checks_fire_when_interval_elapsed(self, service):
+        """测试监控循环 - 间隔到期后重活正常触发（首轮延迟的补偿验证）"""
+        with patch.object(service, 'check_integrity') as mock_ci:
+            with patch.object(service, 'quick_check') as mock_qc:
+                with patch.object(service, 'vacuum_database') as mock_vd:
+                    with patch.object(service, 'checkpoint_wal') as mock_wc:
+                        service.integrity_check_interval = 86400
+                        service.quick_check_interval = 3600
+                        service.vacuum_interval = 604800
+                        service.wal_checkpoint_interval = 3600
+
+                        service._stop_event.clear()
+                        cycles = {"n": 0}
+
+                        def on_wait(*args):
+                            cycles["n"] += 1
+                            if cycles["n"] == 1:
+                                # 模拟时间流逝：第二轮起各间隔视为已到期
+                                service.integrity_check_interval = 0
+                                service.quick_check_interval = 0
+                                service.vacuum_interval = 0
+                            elif cycles["n"] >= 2:
+                                service._stop_event.set()
+
+                        with patch.object(service._stop_event, 'wait', side_effect=on_wait):
                             service._monitor_loop()
 
                         mock_ci.assert_called_once()

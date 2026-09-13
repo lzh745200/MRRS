@@ -5,6 +5,73 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.6] - 2026-09-12 — 🛡️ 遗留风险治理第一批（P0 调度健壮性 / 启动 VACUUM / multipart 上限 / 备份语义）
+
+对应《deliverables/遗留风险彻底解决方案计划-2026-09-12.md》的第一、二周批次（R1/R2/R3/R4/R6/R8/R11/R12 部分）。
+
+### 修复（性能/可用性：启动期独占锁竞争 — R1）
+- **`services/database_health_service._monitor_loop`**：`last_integrity_check / last_quick_check /
+  last_vacuum` 原以 `datetime.min` 初始化，首轮条件恒真 —— 「每周一次 VACUUM」实际退化为
+  「**每次启动** + 每 7 天」，启动窗口正值前端请求高峰，VACUUM 需要独占锁造成
+  `database is locked` 抖动。现以「启动时刻」为基准起算，首轮不触发；
+  轻量的 WAL checkpoint（不生成临时文件）保留首轮即执行以尽早回收 `-wal`。
+- `vacuum_database()` 改为经 `db_coordinator.exclusive_write()` 执行，与批量导入等
+  opt-in 长写路径互斥，monitoring 线程不再与在线写事务互相等待超时。
+
+### 修复（可用性：调度器 Timer 生命周期 — R8）
+- **`services/backup_scheduler`**：三类调度形态收敛为统一语义 —
+  - interval/weekly/daily 的**递归重排 Timer 统一经 `_register_timer()` 登记**
+    （原 interval 链从不入 `_timers`，`stop_backup_scheduler()` 的 cancel 拦不到，
+    关闭阶段仍可能触发 DB 写 —— 「幽灵写」）；
+  - `_register_timer` 回收已终止句柄（原 daily/weekly 每次重排都 append，
+    每天 +9 个失效 Timer 对象常驻，停机耗时线性增长）；
+  - 新增模块级 `_stopping` Event：`stop()` 先置位再 cancel，`_job` 在执行前与
+    **重排前**双重检查 —— 单作业运行跨越 stop 窗口时链也不会复活；
+  - `start()` 复位 `_stopping`，支持同进程 stop → start 再初始化。
+- 调度体提升为模块级函数（`_schedule_daily/_schedule_weekly/_schedule_interval`），
+  `start_backup_scheduler` 复杂度回到 CI 门禁（C901 ≤ 16）以内。
+
+### 修复（资源泄漏：分片上传 — R4）
+- **`services/backup_scheduler`** 新增 `chunk_cleanup_job`（每 30 分钟）：
+  `chunked_upload_service.cleanup_expired_sessions()` 此前**全仓无任何生产调用点**，
+  客户端 init 后中断（断网/关页面）的会话在 `uploads/chunks/` 与内存 `_sessions`
+  中**永久泄漏**（单会话最坏 2GB）。
+- **`services/chunked_upload_service`**：新增 `MAX_SESSIONS=200` 会话数量上限，
+  超限按 `created_at` 淘汰最早会话（连同其分片目录），防异常客户端循环 init 打爆内存。
+
+### 修复（安全：multipart 请求体无上限 — R2 第一层）
+- **`middleware/body_size_limit`**：原实现对 multipart/form-data **一律放行**，
+  而 12 个上传端点均为「先整包 `await file.read()` 入内存后校验」——校验只能拒绝请求，
+  不能阻止内存峰值，单请求即可 OOM。现按 `Content-Length` **分级预检**：
+  备份恢复 10GB（对齐端点既有上限）/ 权限包与数据同步 512MB / 其余 512MB，超限 413。
+  各端点自身更严格的业务上限不受影响。Transfer-Encoding: chunked 的流式计量
+  留待纯 ASGI 改造（计划 R2 第二、三层）。
+
+### 修复（数据安全：备份语义 — R6 / R3）
+- **`services/backup_service._create_consistency_snapshot`**：快照失败不再回退
+  「WAL checkpoint + 裸拷贝主库」—— 该回退会**丢弃仍留在 `-wal` 中未合并的已提交事务**，
+  而备份包又能通过 CRC + integrity_check 校验，产出「陈旧但合法」的备份并标记成功。
+  现抛 `BackupIncompleteError`（宁可当天无可用备份，次日自动重试）。
+- **`cleanup_old_backups` / `cleanup_by_retention_days`**：文件删除失败（被下载流/
+  杀软占用）原实现吞异常**仍删数据库记录** → 「幽灵备份」永久占盘且 UI 无法再删。
+  现保留记录（WARNING 日志）等待下次清理重试，清理本身不中断。
+
+### 修复（性能：options 缓存永不命中 — R12）
+- **`api/v1/auth/users`**：三个 options 端点的 `@cache_result` 默认键包含
+  `current_user` 的 `repr`（含内存地址），每次请求键都不同 → 缓存命中率≈0。
+  三处返回内容为与调用者无关的静态数据，键改为固定函数名。
+
+### 其他
+- `requirements.txt`：为 `diskcache==5.6.3` 登记 PYSEC-2026-2447 / CVE-2025-69872
+  （上游无修复版本）及本仓 `JSONDisk` 应用层缓解说明。
+- 测试基建：`tests/unit/test_pragma_reason_ratchet_f2.py` 的 `subprocess.run(text=True)`
+  在 Windows GBK 管道下必现 `UnicodeDecodeError`（`_readerthread` 线程异常 →
+  3 例失败 + 4 条 warning），统一改为 `encoding="utf-8", errors="replace"`
+  （与 v1.12.4 `verify_package_no_tests.py` 同根因）；顺带移除未使用的 `import io`。
+- 新增回归测试：`tests/unit/test_scheduler_hardening_20260912.py`（R4/R8 共 10 例）+
+  `test_deep_audit_fixes_20260912.py` 扩充（R1/R2/R3/R6/R12 共 15 例）。
+- 文档：新增《遗留风险彻底解决方案计划-2026-09-12.md》（13 项风险分级/排期/验证标准）。
+
 ## [1.12.5] - 2026-09-12 — 🔒 深度审计加固（目录穿越 / 存储型 XSS / 并发 / 备份 fail-loud）+ D1 写锁退避重试
 
 ### 修复（安全：上传路径穿越 + 存储型 XSS）

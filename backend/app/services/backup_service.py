@@ -283,39 +283,37 @@ class BackupService:
     def _create_consistency_snapshot(self) -> Optional[str]:
         """使用 SQLite Backup API 生成一致性快照（自动合并 -wal 内容）。
 
-        失败时回退 WAL checkpoint + 裸拷贝；返回快照临时文件路径（无则回退主库）。
+        快照失败直接抛 BackupIncompleteError（R6，fail-loud）。原实现回退
+        「WAL checkpoint + 裸拷贝主库」：此时仍留在 -wal 中、未合并的已提交
+        事务会全部丢失，而备份包又能通过 CRC + integrity_check 校验——
+        产出「陈旧但合法」的备份并被调度器标记成功，破坏灾备语义。
+        宁可当天无可用备份（次日自动重试），也不可静默产出会丢数据的备份。
         """
+        if not os.path.exists(self.database_path):
+            # 主库不存在：交由上层按「备份未包含数据库文件」语义失败
+            return None
         snapshot_path = None
         try:
-            if os.path.exists(self.database_path):
-                fd, snapshot_path = tempfile.mkstemp(suffix=".db", prefix="backup_snapshot_")
-                os.close(fd)
-                src = sqlite3.connect(self.database_path)
-                dst = sqlite3.connect(snapshot_path)
-                try:
-                    with dst:
-                        src.backup(dst)
-                finally:
-                    dst.close()
-                    src.close()
-        except Exception as _snap_err:
-            logger.error("SQLite 一致性快照失败，回退 WAL checkpoint + 裸拷贝: %s", _snap_err)
-            if snapshot_path:
+            fd, snapshot_path = tempfile.mkstemp(suffix=".db", prefix="backup_snapshot_")
+            os.close(fd)
+            src = sqlite3.connect(self.database_path)
+            dst = sqlite3.connect(snapshot_path)
+            try:
+                with dst:
+                    src.backup(dst)
+            finally:
+                dst.close()
+                src.close()
+            return snapshot_path
+        except Exception as exc:
+            if snapshot_path and os.path.exists(snapshot_path):
                 try:
                     os.remove(snapshot_path)
                 except OSError:
-                    pass
-                snapshot_path = None
-            # 回退：原 WAL checkpoint 逻辑
-            try:
-                _conn = sqlite3.connect(self.database_path)
-                try:
-                    _conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-                finally:
-                    _conn.close()
-            except Exception as _wal_err:
-                logger.warning("备份前 WAL checkpoint 失败（备份可能不完整）: %s", _wal_err)
-        return snapshot_path
+                    logger.debug("快照临时文件清理失败（残留于 %s）", snapshot_path)
+            raise BackupIncompleteError(
+                f"一致性快照失败，已中止备份（-wal 数据保持原样，不会丢失）: {exc}"
+            ) from exc
 
     def _write_backup_zip(
         self, backup_file_path: str, snapshot_path: Optional[str],
@@ -829,8 +827,14 @@ class BackupService:
             if os.path.exists(config.value):
                 try:
                     os.unlink(config.value)
-                except (FileNotFoundError, IsADirectoryError, PermissionError):
-                    pass
+                except (FileNotFoundError, IsADirectoryError, PermissionError) as exc:
+                    # 删除失败必须保留记录：原实现吞掉异常仍删记录，
+                    # 产生「列表不可见、UI 无法再删、清理永不重试」的幽灵备份
+                    logger.warning(
+                        "备份文件删除失败（已保留记录以便重试）: %s (%s)",
+                        config.value, exc,
+                    )
+                    continue
             self.db.delete(config)
             deleted_count += 1
 
@@ -866,8 +870,13 @@ class BackupService:
                 if rec.value and os.path.exists(rec.value):
                     try:
                         os.unlink(rec.value)
-                    except (FileNotFoundError, IsADirectoryError, PermissionError):
-                        pass
+                    except (FileNotFoundError, IsADirectoryError, PermissionError) as exc:
+                        # 同 cleanup_old_backups：删除失败保留记录，等待下次清理重试
+                        logger.warning(
+                            "保留期清理删除备份失败（已保留记录）: %s (%s)",
+                            rec.value, exc,
+                        )
+                        continue
                 self.db.delete(rec)
                 deleted_count += 1
         if deleted_count > 0:

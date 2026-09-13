@@ -22,11 +22,17 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import threading
 import zipfile
+from datetime import datetime as _dt, timedelta as _td
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from app.services.backup_service import BackupIncompleteError, BackupService
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -625,3 +631,207 @@ class TestPermissionPackageReadBytes:
         # Path 有 read_bytes；str 没有 → 走 else 分支
         assert hasattr(Path("x"), "read_bytes")
         assert not hasattr("/some/path", "read_bytes")
+
+
+# ---------------------------------------------------------------------------
+# R3：备份清理失败必须保留记录（不得产出幽灵备份）
+# ---------------------------------------------------------------------------
+
+
+class TestBackupCleanupKeepsRecordOnFailure:
+    def test_cleanup_old_backups_keeps_record_when_unlink_locked(
+        self, tmp_path, monkeypatch
+    ):
+        ghost = tmp_path / "backup_locked.zip"
+        ghost.write_bytes(b"x")
+        record = SimpleNamespace(value=str(ghost))
+        db = MagicMock()
+        svc = object.__new__(BackupService)
+        svc.db = db
+
+        def locked_unlink(*args, **kwargs):
+            raise PermissionError("文件被占用（下载中/杀软扫描）")
+
+        monkeypatch.setattr(os, "unlink", locked_unlink)
+
+        with patch.object(svc, "_query_backup_records", return_value=[record]):
+            deleted = svc.cleanup_old_backups(keep_count=0)
+
+        assert deleted == 0
+        assert ghost.exists(), "文件仍在，记录必须保留以便下次清理重试"
+        db.delete.assert_not_called()
+
+    def test_retention_cleanup_keeps_record_when_unlink_locked(
+        self, tmp_path, monkeypatch
+    ):
+        ghost = tmp_path / "backup_expired_locked.zip"
+        ghost.write_bytes(b"x")
+        record = SimpleNamespace(value=str(ghost), created_at=_dt.now() - _td(days=30))
+        db = MagicMock()
+        svc = object.__new__(BackupService)
+        svc.db = db
+
+        def locked_unlink(*args, **kwargs):
+            raise PermissionError("文件被占用")
+
+        monkeypatch.setattr(os, "unlink", locked_unlink)
+
+        with patch.object(svc, "_query_backup_records", return_value=[record]):
+            deleted = svc.cleanup_by_retention_days(days=7)
+
+        assert deleted == 0
+        assert ghost.exists()
+        db.delete.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# R6：一致性快照失败必须 fail-loud（不得回退裸拷贝产出陈旧备份）
+# ---------------------------------------------------------------------------
+
+
+class TestSnapshotFailLoud:
+    def _broken_backup_conn(self):
+        src = MagicMock()
+        src.backup.side_effect = sqlite3.OperationalError("database is locked")
+        dst = MagicMock()
+        dst.__enter__ = MagicMock(return_value=dst)
+        dst.__exit__ = MagicMock(return_value=False)
+        return src, dst
+
+    def test_snapshot_failure_raises_incomplete_error_and_cleans_temp(self, tmp_path):
+        svc = object.__new__(BackupService)
+        live = tmp_path / "live.db"
+        live.write_bytes(b"x")
+        svc.database_path = str(live)
+        src, dst = self._broken_backup_conn()
+
+        with patch(
+            "app.services.backup_service.sqlite3.connect", side_effect=[src, dst]
+        ), patch("os.remove", wraps=os.remove) as mock_remove:
+            with pytest.raises(BackupIncompleteError):
+                svc._create_consistency_snapshot()
+
+        assert any("backup_snapshot_" in str(c) for c in mock_remove.call_args_list), \
+            "失败的快照临时文件必须被清理"
+
+    def test_missing_database_returns_none(self, tmp_path):
+        svc = object.__new__(BackupService)
+        svc.database_path = str(tmp_path / "nope.db")
+        assert svc._create_consistency_snapshot() is None
+
+    def test_snapshot_failure_swallows_cleanup_oserror(self, tmp_path):
+        svc = object.__new__(BackupService)
+        live = tmp_path / "live.db"
+        live.write_bytes(b"x")
+        svc.database_path = str(live)
+        src, dst = self._broken_backup_conn()
+
+        with patch(
+            "app.services.backup_service.sqlite3.connect", side_effect=[src, dst]
+        ), patch("os.remove", side_effect=OSError("busy")):
+            with pytest.raises(BackupIncompleteError):
+                svc._create_consistency_snapshot()
+
+
+# ---------------------------------------------------------------------------
+# R2：multipart 请求体分级预检（原实现一律放行 → 单请求可打爆内存）
+# ---------------------------------------------------------------------------
+
+
+class TestMultipartBodyLimit:
+    @staticmethod
+    def _request(path, content_length):
+        from types import SimpleNamespace as _NS
+
+        return _NS(
+            method="POST",
+            url=_NS(path=path),
+            headers={
+                "content-length": str(content_length),
+                "content-type": "multipart/form-data; boundary=x",
+            },
+        )
+
+    async def test_oversize_multipart_rejected_with_413(self):
+        from app.middleware.body_size_limit import BodySizeLimitMiddleware
+
+        mw = BodySizeLimitMiddleware(app=MagicMock(), max_body_size=1024)
+        call_next = AsyncMock(return_value="response-ok")
+        result = await mw.dispatch(
+            self._request("/api/v1/schools/import/excel", 600 * 1024 * 1024), call_next
+        )
+        assert result.status_code == 413
+        call_next.assert_not_awaited()
+
+    async def test_backup_restore_allows_large_body(self):
+        from app.middleware.body_size_limit import BodySizeLimitMiddleware
+
+        mw = BodySizeLimitMiddleware(app=MagicMock(), max_body_size=1024)
+        call_next = AsyncMock(return_value="response-ok")
+        result = await mw.dispatch(
+            self._request(
+                "/api/v1/system/backup/upload-restore", 2 * 1024 * 1024 * 1024
+            ),
+            call_next,
+        )
+        assert result == "response-ok"
+        call_next.assert_awaited_once()
+
+    async def test_limit_for_prefix_hit_and_default(self):
+        from app.middleware.body_size_limit import (
+            DEFAULT_MULTIPART_BODY_LIMIT,
+            MULTIPART_BODY_LIMITS,
+            _multipart_limit_for,
+        )
+
+        assert _multipart_limit_for("/api/v1/system/backup/upload-restore") == (
+            MULTIPART_BODY_LIMITS[0][1]
+        )
+        assert (
+            _multipart_limit_for("/api/v1/permission-packages/import")
+            == MULTIPART_BODY_LIMITS[1][1]
+        )
+        assert _multipart_limit_for("/api/v1/schools/import/excel") == (
+            DEFAULT_MULTIPART_BODY_LIMIT
+        )
+
+    async def test_multipart_without_content_length_passes_through(self):
+        from types import SimpleNamespace as _NS
+
+        from app.middleware.body_size_limit import BodySizeLimitMiddleware
+
+        mw = BodySizeLimitMiddleware(app=MagicMock(), max_body_size=1024)
+        request = _NS(
+            method="POST",
+            url=_NS(path="/api/v1/schools"),
+            headers={"content-type": "multipart/form-data; boundary=x"},
+        )
+        call_next = AsyncMock(return_value="response-ok")
+        result = await mw.dispatch(request, call_next)
+        assert result == "response-ok"
+
+    async def test_invalid_multipart_content_length_ignored(self):
+        from app.middleware.body_size_limit import BodySizeLimitMiddleware
+
+        mw = BodySizeLimitMiddleware(app=MagicMock(), max_body_size=1024)
+        request = self._request("/api/v1/schools", "not-a-number")
+        call_next = AsyncMock(return_value="response-ok")
+        result = await mw.dispatch(request, call_next)
+        assert result == "response-ok"
+
+
+# ---------------------------------------------------------------------------
+# R12：options 端点缓存键不得包含 current_user 的 repr（原实现永不命中）
+# ---------------------------------------------------------------------------
+
+
+class TestOptionsCacheHit:
+    async def test_cache_key_is_stable_across_requests(self):
+        from app.api.v1.auth import users as users_mod
+
+        with patch.object(users_mod, "require_admin", lambda *a, **k: None):
+            first = await users_mod.get_role_options(current_user=MagicMock())
+            second = await users_mod.get_role_options(current_user=MagicMock())
+
+        # 第二次必须命中缓存（同一对象）；原实现键含对象内存地址 → 永远重算
+        assert first is second

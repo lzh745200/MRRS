@@ -120,6 +120,9 @@ class ChunkedUploadConfig:
     # 会话过期时间：24小时
     SESSION_EXPIRE_HOURS = 24
 
+    # 内存会话数量上限（R4）：超限淘汰最早创建的会话，防异常客户端循环 init
+    MAX_SESSIONS = 200
+
 
 class ChunkedUploadService:
     """
@@ -173,6 +176,9 @@ class ChunkedUploadService:
 
         # 内存中的会话存储（生产环境应使用Redis）
         self._sessions: Dict[str, UploadSession] = {}
+        # R4：会话数量上限——异常客户端循环 init 会让 _sessions 无限增长；
+        # 超限时淘汰最早创建的会话（连同其分片文件）
+        self.max_sessions = ChunkedUploadConfig.MAX_SESSIONS
 
         # 确保目录存在
         self.temp_dir.mkdir(parents=True, exist_ok=True)
@@ -181,6 +187,18 @@ class ChunkedUploadService:
     def _generate_session_id(self) -> str:
         """生成会话ID"""
         return str(uuid.uuid4())
+
+    def _enforce_session_limit(self) -> None:
+        """会话数量上限保护（R4）：超限时淘汰最早创建的会话（含分片文件）。"""
+        overflow = len(self._sessions) - self.max_sessions
+        if overflow <= 0:
+            return
+        oldest_ids = sorted(self._sessions, key=lambda sid: self._sessions[sid].created_at)[
+            :overflow
+        ]
+        for sid in oldest_ids:
+            logger.warning("上传会话数超上限（%d），淘汰最早会话: %s", self.max_sessions, sid)
+            self.delete_session(sid)
 
     def _get_chunk_path(self, session_id: str, chunk_index: int) -> Path:
         """获取分片文件路径"""
@@ -272,6 +290,7 @@ class ChunkedUploadService:
 
         # 保存会话
         self._sessions[session_id] = session
+        self._enforce_session_limit()
 
         logger.info(
             f"Created upload session: {session_id}, " f"file={file_name}, size={file_size}, chunks={total_chunks}"

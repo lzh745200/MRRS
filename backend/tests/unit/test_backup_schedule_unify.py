@@ -194,7 +194,10 @@ class TestRetentionCleanup:
 
         deleted = BackupService(real_db_session).cleanup_by_retention_days(7)
 
-        assert deleted == 1
-        assert real_db_session.query(SystemConfig).count() == 0
-        # 目录本身未被误删（unlink 失败后被吞掉），仍留在磁盘上
+        # R3（2026-09-12）行为变更：删除失败必须保留数据库记录（旧实现吞异常
+        # 仍删记录 → 文件永久占盘且 UI 无法再删的「幽灵备份」）。清理不中断，
+        # 仅跳过该条，等待下次清理重试。
+        assert deleted == 0
+        assert real_db_session.query(SystemConfig).count() == 1
+        # 目录本身未被误删（unlink 失败被容错跳过），仍留在磁盘上等待重试
         assert a_dir.exists()

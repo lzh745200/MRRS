@@ -64,6 +64,9 @@ class TestEnsureDiskSpace:
 
 class TestCreateConsistencySnapshot:
     def test_backup_fail_remove_oserror(self, mock_db, tmp_path):
+        """R6（2026-09-12）：快照失败必须 fail-loud 抛 BackupIncompleteError，
+        不得再回退「裸拷贝主库」产出缺 WAL 内容的陈旧备份；
+        且快照临时文件清理自身抛 OSError 时同样不得吞掉主异常。"""
         db_path = str(tmp_path / "real.db")
         Path(db_path).write_bytes(b"x")
         svc = _make_svc(mock_db, str(tmp_path / "b"), db_path, str(tmp_path / "u"))
@@ -80,8 +83,9 @@ class TestCreateConsistencySnapshot:
         src.backup.side_effect = RuntimeError("boom")
         with patch("app.services.backup_service.sqlite3.connect", return_value=src), \
              patch("os.remove", side_effect=sel_remove):
-            result = svc._create_consistency_snapshot()
-        assert result is None
+            with pytest.raises(BackupIncompleteError):
+                svc._create_consistency_snapshot()
+        assert attempted, "失败的快照临时文件必须尝试清理"
         # 清理因 OSError 未删除的快照临时文件，避免残留
         for p in attempted:
             try:

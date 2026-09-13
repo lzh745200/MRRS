@@ -14,7 +14,6 @@
 """
 
 import importlib.util
-import io
 import subprocess
 import sys
 from pathlib import Path
@@ -98,7 +97,7 @@ class TestRepoWideScan:
         """上限设为 0 必然超标 → 退出码 1（证明该门禁真的会拦）。"""
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--max-bare", "0"],
-            capture_output=True, text=True, cwd=str(ROOT),
+            capture_output=True, encoding="utf-8", errors="replace", cwd=str(ROOT),
         )
         assert result.returncode == 1
         assert "::error::" in result.stdout
@@ -107,7 +106,7 @@ class TestRepoWideScan:
         """基线不可用且未允许缺失 → 退出码 2（绝不静默通过）。"""
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--diff-base", "no-such-ref-xyz"],
-            capture_output=True, text=True, cwd=str(ROOT),
+            capture_output=True, encoding="utf-8", errors="replace", cwd=str(ROOT),
         )
         assert result.returncode == 2
 
@@ -115,7 +114,7 @@ class TestRepoWideScan:
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--diff-base", "no-such-ref-xyz",
              "--allow-missing-base", "--max-bare", "100000"],
-            capture_output=True, text=True, cwd=str(ROOT),
+            capture_output=True, encoding="utf-8", errors="replace", cwd=str(ROOT),
         )
         assert result.returncode == 0
         assert "WARNING" in result.stdout
@@ -135,7 +134,7 @@ class TestRepoWideScan:
         try:
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "--diff-base", "HEAD"],
-                capture_output=True, text=True, cwd=str(ROOT),
+                capture_output=True, encoding="utf-8", errors="replace", cwd=str(ROOT),
             )
             assert result.returncode == 1, result.stdout
             assert "_pragma_probe_tmp.py" in result.stdout

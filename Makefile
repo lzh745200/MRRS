@@ -75,6 +75,10 @@ clean:
 	cd backend && rm -rf .pytest_cache htmlcov coverage.xml .coverage __pycache__
 	find backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find backend -type f -name "*.pyc" -delete 2>/dev/null || true
+	# pytest tmp_path 临时树：每次全量约 2.5GB，多轮运行累计可吃满磁盘
+	# （2026-09-13 实测累计 15.8GB 致命令通道瘫痪），随 clean 一并回收
+	rm -rf "$$TEMP/pytest-of-$${USERNAME:-$$USER}" 2>/dev/null || true
+	rm -rf /tmp/pytest-of-* 2>/dev/null || true
 	cd frontend && rm -rf coverage playwright-report test-results
 	# 根目录 / frontend 遗留物
 	-rm -f vitest-*.log vitest-*.json vitest-*.mjs test.db 2>/dev/null || true

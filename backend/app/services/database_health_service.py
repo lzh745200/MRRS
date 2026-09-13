@@ -105,9 +105,15 @@ class DatabaseHealthService:
 
     def _monitor_loop(self):
         """监控循环"""
-        last_integrity_check = datetime.min
-        last_quick_check = datetime.min
-        last_vacuum = datetime.min
+        # 重活（integrity_check 全库扫描 / quick_check / VACUUM 独占锁）以「现在」为
+        # 基准起算，首轮不触发：启动窗口正值前端请求高峰，VACUUM 需要独占锁，
+        # 会造成 database is locked 抖动。原实现用 datetime.min 初始化导致
+        # 「每周一次 VACUUM」实际退化为「每次启动 + 每 7 天」。
+        # WAL checkpoint 轻量（只截断 -wal、不生成临时文件），保留首轮即执行以尽早回收。
+        startup_now = datetime.now()
+        last_integrity_check = startup_now
+        last_quick_check = startup_now
+        last_vacuum = startup_now
         last_wal_checkpoint = datetime.min
 
         while not self._stop_event.is_set():
@@ -246,13 +252,19 @@ class DatabaseHealthService:
             # 获取优化前的大小
             size_before = self.db_path.stat().st_size
 
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
+            def _execute_vacuum() -> None:
+                conn = sqlite3.connect(str(self.db_path), timeout=10)
+                try:
+                    conn.execute("VACUUM")
+                finally:
+                    conn.close()
 
-            # 执行VACUUM
-            cursor.execute("VACUUM")
+            # VACUUM 需要独占锁：与批量导入等 opt-in 长写路径互斥，
+            # 避免与在线写事务互相等待超时（monitoring 线程不抢请求的锁）。
+            from app.core.database import db_coordinator
 
-            conn.close()
+            with db_coordinator.exclusive_write(timeout=30.0):
+                _execute_vacuum()
 
             # 获取优化后的大小
             size_after = self.db_path.stat().st_size
