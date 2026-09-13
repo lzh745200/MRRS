@@ -10,6 +10,7 @@ Usage（在 main.py 中注册）:
 """
 
 import logging
+import threading
 import time
 from collections import deque
 from typing import Any, Deque, Dict, List
@@ -22,11 +23,21 @@ _slow_apis: Deque[Dict[str, Any]] = deque(maxlen=_MAX_RECORDS)
 _slow_sqls: Deque[Dict[str, Any]] = deque(maxlen=_MAX_RECORDS)
 
 # ── 计数器 ──
+# R12-2：这些计数由并发线程写入 —— total_requests/slow_api_count 来自 ASGI
+# 请求线程，slow_sql_count 来自 SQLAlchemy 游标事件。裸 "+=" 是"读-改-写"
+# 三步字节码，交错即丢计数（统计口径失真，随并发度线性放大）。统一走互斥自增。
 _counters: Dict[str, int] = {
     "total_requests": 0,
     "slow_api_count": 0,
     "slow_sql_count": 0,
 }
+_counters_lock = threading.Lock()
+
+
+def _bump(key: str, delta: int = 1) -> None:
+    """互斥自增计数器（并发安全）。"""
+    with _counters_lock:
+        _counters[key] += delta
 
 
 def get_slow_api_records(limit: int = 50) -> List[Dict[str, Any]]:
@@ -43,8 +54,10 @@ def get_slow_stats() -> Dict[str, Any]:
     """获取性能统计摘要"""
     apis = list(_slow_apis)
     sqls = list(_slow_sqls)
+    with _counters_lock:
+        counters = dict(_counters)
     return {
-        **{k: v for k, v in _counters.items()},
+        **counters,
         "slow_api_last_50_avg_ms": round(sum(r["elapsed_ms"] for r in apis[-50:]) / max(len(apis[-50:]), 1), 1),
         "slow_sql_last_50_avg_ms": round(sum(r["elapsed_ms"] for r in sqls[-50:]) / max(len(sqls[-50:]), 1), 1),
         "slow_api_peak_ms": max((r["elapsed_ms"] for r in apis), default=0),
@@ -86,7 +99,7 @@ class SlowRequestMiddleware:
                     return
                 elapsed = (time.perf_counter() - start) * 1000
                 if elapsed > slow_sql_ms:
-                    _counters["slow_sql_count"] += 1
+                    _bump("slow_sql_count")
                     sql_short = statement[:200].replace("\n", " ")
                     _slow_sqls.append({
                         "sql": sql_short,
@@ -112,10 +125,10 @@ class SlowRequestMiddleware:
         async def _send(message):
             if message["type"] == "http.response.start":
                 elapsed = (time.perf_counter() - start) * 1000
-                _counters["total_requests"] += 1
+                _bump("total_requests")
                 status = message.get("status", 0)
                 if elapsed > self.slow_api_ms:
-                    _counters["slow_api_count"] += 1
+                    _bump("slow_api_count")
                     _slow_apis.append({
                         "method": method,
                         "path": path,

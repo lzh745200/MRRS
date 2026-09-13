@@ -140,6 +140,12 @@ app.add_middleware(
 
 app.add_middleware(MetricsMiddleware)
 
+# 1b. 维护模式闸门（R7）：恢复备份期间拒绝新的写请求（503），读放行。
+# 位置在本行之后添加 → 位于 Audit/RequestLogger 之内、Metrics 之外：
+# 被拒请求仍进审计与访问日志，但不占用数据库与指标采集路径。
+from app.middleware.maintenance_gate import MaintenanceGateMiddleware  # noqa: E402
+app.add_middleware(MaintenanceGateMiddleware)
+
 # 2. 审计日志中间件
 app.add_middleware(AuditMiddleware)
 
@@ -268,10 +274,15 @@ def health():
     at_head = _migration_status.get("at_head")
     # C1 恢复演练状态（架构评估）：备份可用性对监控可见。
     # 只出状态/文件名/异常类名 —— 本端点无认证，不出绝对路径与行数明细。
-    from app.services.restore_drill_service import RESTORE_DRILL_STATUS
+    # R12-3：经 snapshot_status() 取一致性快照（逐字段读模块字典会与演练
+    # 线程的逐字段写交错，产出撕裂结论）。
+    from app.services.restore_drill_service import snapshot_status as _drill_snapshot
+
+    _drill = _drill_snapshot()
     # C1 备份存放可见化：备份与库同盘 = 断电/盘损时数据与备份同亡
     from app.services.backup_service import backups_share_volume_with_database
     from app.utils.paths import get_backup_path, get_database_path
+    from app.core.maintenance import status as _maintenance_status
 
     try:
         same_volume = backups_share_volume_with_database(
@@ -297,11 +308,13 @@ def health():
             # True=备份与数据库同卷（建议配置 backup_target_dir 到独立盘）；null=未知
             "same_volume_as_database": same_volume,
         },
+        # R7：维护窗口可见性 —— active=true 表示恢复中（写请求被 503 拒绝）
+        "maintenance": _maintenance_status(),
         "restore_drill": {
-            "status": RESTORE_DRILL_STATUS.get("status"),
-            "checked_at": RESTORE_DRILL_STATUS.get("checked_at"),
-            "backup_file": RESTORE_DRILL_STATUS.get("backup_file"),
-            "error_type": RESTORE_DRILL_STATUS.get("error_type"),
+            "status": _drill.get("status"),
+            "checked_at": _drill.get("checked_at"),
+            "backup_file": _drill.get("backup_file"),
+            "error_type": _drill.get("error_type"),
         },
     }
 

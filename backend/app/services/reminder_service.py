@@ -23,6 +23,11 @@ DEFAULT_CHECK_INTERVAL_MINUTES = 30
 DEFAULT_DEADLINE_HOURS = 48
 DEFAULT_WARNING_HOURS = 36  # 提前12小时警告
 
+# R12-4：stop() 的 join 上限。原为 1s —— 扫描循环正在跑 DB 查询时必然超时，
+# 于是 stop() 复位 _running 后就返回，start() 会再起一个线程，两个扫描循环
+# 并存（提醒重复创建、DB 连接翻倍）。延长 join 且超时后**不**复位运行标记。
+STOP_JOIN_TIMEOUT_SECONDS = 5.0
+
 
 class ApprovalReminderService:
     """审批超时提醒服务 —— 后台线程定期扫描超时审批"""
@@ -33,15 +38,24 @@ class ApprovalReminderService:
         self._warning_hours = DEFAULT_WARNING_HOURS
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        # 线程真正退出后才置位的事件（初始=未运行）
+        self._stopped_event = threading.Event()
+        self._stopped_event.set()
         self._running = False
 
     def start(self):
-        """启动后台提醒线程"""
-        if self._running:
+        """启动后台提醒线程
+
+        R12-4：判据同时看 _running 与线程存活 —— 上一轮 stop() 若在 join 超时
+        （扫描正在跑 DB 查询）后返回，线程仍在收尾，此时只凭 _running 判断会
+        再起一个线程，出现两个扫描循环并存。
+        """
+        if self._running or (self._thread is not None and self._thread.is_alive()):
             logger.warning("审批提醒服务已在运行中")
             return
 
         self._stop_event.clear()
+        self._stopped_event.clear()
         self._thread = threading.Thread(
             target=self._scan_loop,
             daemon=True,
@@ -52,17 +66,31 @@ class ApprovalReminderService:
         logger.info(f"审批提醒服务已启动，检查间隔: {self._check_interval // 60}分钟")
 
     def stop(self):
-        """停止后台提醒线程"""
-        if not self._running:
+        """停止后台提醒线程（join 超时则保留运行标记，交由 start 判据兜底）"""
+        if not self._running and (self._thread is None or not self._thread.is_alive()):
             return
         self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=1)
+        if self._thread is not None:
+            self._thread.join(timeout=STOP_JOIN_TIMEOUT_SECONDS)
+            if self._thread.is_alive():
+                logger.warning(
+                    "审批提醒线程 %.1fs 内未退出（扫描进行中），保留运行标记避免重复启动",
+                    STOP_JOIN_TIMEOUT_SECONDS,
+                )
+                return
         self._running = False
+        self._stopped_event.set()
         logger.info("审批提醒服务已停止")
 
     def _scan_loop(self):  # pragma: no cover
         """后台扫描循环"""
+        try:
+            self._scan_loop_body()
+        finally:
+            self._stopped_event.set()
+
+    def _scan_loop_body(self):  # pragma: no cover
+        """扫描循环主体（退出即由 _scan_loop 置位 _stopped_event）"""
         # 首次启动等待30秒，确保数据库已初始化（stop 时立即唤醒）
         if self._stop_event.wait(30):
             return

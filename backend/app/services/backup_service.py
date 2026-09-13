@@ -25,6 +25,7 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.system_config import SystemConfig
+from app.core.maintenance import maintenance_window
 from app.core.transaction import retry_on_deadlock, safe_commit
 
 logger = logging.getLogger(__name__)
@@ -716,8 +717,22 @@ class BackupService:
                 pass
 
     def restore_backup(self, backup_file_path: str, password: str | None = None) -> Dict:
+        """从备份恢复系统（R7：外层维护窗口 + 事务保护 + 加密检测）
+
+        维护窗口语义见 app.core.maintenance：
+        置位维护模式 → 等在途请求归零 → 执行恢复 → finally 解除。
+
+        Returns:
+            恢复结果（含 maintenance_window_ms，供前端/日志留痕）
         """
-        从备份恢复系统（带事务保护 + 加密检测）
+        with maintenance_window("restore_backup") as window:
+            result = self._restore_backup_impl(backup_file_path, password)
+            result["maintenance_window_ms"] = window.elapsed_ms()
+            return result
+
+    def _restore_backup_impl(self, backup_file_path: str, password: str | None = None) -> Dict:
+        """
+        恢复实现（调用方须已进入维护窗口）
 
         Args:
             backup_file_path: 备份文件路径

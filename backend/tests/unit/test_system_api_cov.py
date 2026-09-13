@@ -3,15 +3,14 @@
 覆盖点：
 - get_system_info：DATABASE_URL 检测 PostgreSQL/MySQL/异常降级
 - get_system_status：数据库断开、缓存不可用分支
-- shutdown_system：触发 + _shutdown 后台函数（缓存关闭异常降级 + os._exit）
+- shutdown_system：触发 + _shutdown 后台函数（缓存关闭异常降级 + 优雅关闭信号）
 - restart_system：触发 + _restart 后台函数（win32 分支 + 缓存关闭异常降级）
 - get_environment_info：包版本查询异常 → "未安装"
 """
 
+import signal
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 import app.api.v1.system.system as sy
 
@@ -67,15 +66,16 @@ class TestShutdownRestart:
             result = await sy.shutdown_system(bg, 0, _admin())
         assert result["success"] is True
         func = bg.add_task.call_args.args[0]
-        # 驱动后台函数：缓存关闭异常降级 + os._exit
+        # 驱动后台函数：缓存关闭异常降级 + 优雅关闭（R12-5：不再 os._exit(0)，
+        # 否则 lifespan shutdown 不执行 —— 调度器/提醒线程/WAL checkpoint 全跳过）
         with (
             patch.object(sy.time, "sleep"),
             patch("app.core.cache.cache_manager") as m_cm,
-            patch.object(sy.os, "_exit") as m_exit,
+            patch("signal.raise_signal") as m_sig,
         ):
             m_cm.close.side_effect = RuntimeError("close boom")
             func()
-        m_exit.assert_called_once_with(0)
+        m_sig.assert_called_once_with(signal.SIGINT)
 
     async def test_restart_trigger_and_task(self):
         bg = MagicMock()
@@ -95,13 +95,14 @@ class TestShutdownRestart:
             patch.object(sy.sys, "platform", "win32"),
             patch("subprocess.Popen") as m_popen,
             patch.object(sy.os, "execv") as m_execv,
-            patch.object(sy.os, "_exit") as m_exit,
+            patch("signal.raise_signal") as m_sig,
         ):
             m_cm.close.side_effect = RuntimeError("close boom")
             func()
         m_popen.assert_called_once()
         m_execv.assert_not_called()
-        m_exit.assert_called_once_with(0)
+        # Windows 分支：拉起新进程后走优雅关闭（R12-5）
+        m_sig.assert_called_once_with(signal.SIGINT)
 
 
 class TestEnvironmentInfo:

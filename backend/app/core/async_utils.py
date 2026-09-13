@@ -114,10 +114,18 @@ def get_event_loop_safe():
 
 
 def create_background_task(coro):
-    """创建后台任务，自动选择事件循环。"""
+    """在当前运行的事件循环上创建后台任务；无运行循环时返回 None。
+
+    R12-7（遗留风险治理）：原实现在无运行循环时走 get_event_loop_safe()，
+    把一个"新建后从不 run"的缓存循环拿去 create_task —— 任务永不执行、
+    退出时抛 "Task was destroyed but it is pending!"；而调用方为 None 准备的
+    兜底分支（monitoring_service 的线程池发送）永远走不到，告警通知实际
+    静默丢失。现在如实返回 None，并 close 协程避免 "never awaited" 噪声，
+    由调用方决定兜底策略。
+    """
     try:
         loop = asyncio.get_running_loop()
-        return loop.create_task(coro)
     except RuntimeError:
-        loop = get_event_loop_safe()
-        return loop.create_task(coro)
+        coro.close()
+        return None
+    return loop.create_task(coro)

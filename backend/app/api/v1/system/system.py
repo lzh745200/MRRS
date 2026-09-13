@@ -159,6 +159,20 @@ async def get_system_status(current_user=Depends(get_current_user)):
     return {"success": True, "data": status_info}
 
 
+def _graceful_shutdown() -> None:
+    """R12-5：走信号优雅关闭路径（与 main.py 内部 shutdown 端点同一实现）。
+
+    原实现用 os._exit(0) 直接终止进程：lifespan shutdown 不执行 —— 调度器
+    Timer、审批提醒线程、任务队列、WAL checkpoint 全部被跳过，SQLite 侧可能
+    残留 -wal/-shm，A2 原子落盘的导出/备份 .part 半成品也无人回收。
+    raise_signal(SIGINT) 由主线程（事件循环）接收，uvicorn 走正常关闭流程。
+    """
+    import signal
+
+    logger.warning("触发优雅关闭（lifespan shutdown 将正常执行）")
+    signal.raise_signal(signal.SIGINT)
+
+
 @router.post("/shutdown", summary="系统关机")
 async def shutdown_system(
     background_tasks: BackgroundTasks,
@@ -188,7 +202,7 @@ async def shutdown_system(
             cache_manager.close()
         except Exception as e:
             logger.warning("关闭缓存管理器失败: %s", e)
-        os._exit(0)
+        _graceful_shutdown()
 
     background_tasks.add_task(_shutdown)
 
@@ -233,9 +247,11 @@ async def restart_system(
                 creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, "CREATE_NEW_CONSOLE") else 0,
                 close_fds=True,
             )
+            _graceful_shutdown()
         else:
+            # POSIX：execv 原地替换镜像（新建的监听 socket 由 PEP 446 置
+            # non-inheritable，端口随镜像替换释放，语义与旧实现一致）。
             os.execv(sys.executable, [sys.executable] + sys.argv)
-        os._exit(0)
 
     background_tasks.add_task(_restart)
 

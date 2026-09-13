@@ -72,6 +72,37 @@ _tasks: Dict[str, dict] = {}
 # 无锁时 list(_tasks.values()) 可能抛 RuntimeError: dictionary changed size
 _tasks_lock = threading.Lock()
 
+# R12-6：_tasks 只增不减 —— 每个终态任务永久占一份内存，长跑桌面端（数月不重启）
+# 与列表端点同步无界增长。终态任务保留 1 小时供前端展示/排障，过期回收。
+_TASK_RETENTION_SECONDS = 3600
+_TERMINAL_STATUSES = (
+    TaskStatus.COMPLETED.value,
+    TaskStatus.FAILED.value,
+    TaskStatus.CANCELLED.value,
+)
+
+
+def _purge_finished_tasks_locked(now: Optional[datetime] = None) -> int:
+    """回收超过保留期的终态任务，返回回收条数（调用方须已持有 _tasks_lock）。"""
+    current = now or datetime.now(timezone.utc)
+    expired = []
+    for task_id, record in _tasks.items():
+        if record.get("status") not in _TERMINAL_STATUSES:
+            continue
+        finished_raw = record.get("completed_at") or record.get("created_at")
+        try:
+            finished = datetime.fromisoformat(finished_raw)
+        except (TypeError, ValueError):
+            # 时间戳缺失/异常：保守保留（宁可占内存也不误删可见记录）
+            continue
+        if finished.tzinfo is None:
+            finished = finished.replace(tzinfo=timezone.utc)
+        if (current - finished).total_seconds() >= _TASK_RETENTION_SECONDS:
+            expired.append(task_id)
+    for task_id in expired:
+        _tasks.pop(task_id, None)
+    return len(expired)
+
 
 def _create_task_record(task_type: str, task_name: str, created_by: str = None, params: dict = None) -> dict:
     """创建任务记录"""
@@ -92,6 +123,7 @@ def _create_task_record(task_type: str, task_name: str, created_by: str = None, 
     }
     with _tasks_lock:
         _tasks[task_id] = record
+        _purge_finished_tasks_locked()
     return record
 
 
@@ -111,6 +143,7 @@ async def list_tasks(
     支持按状态和类型进行筛选，按创建时间倒序排列。
     """
     with _tasks_lock:
+        _purge_finished_tasks_locked()
         tasks = list(_tasks.values())
 
     if status:
@@ -143,6 +176,7 @@ async def get_task_stats(current_user=Depends(get_current_user)):
     按状态和类型统计任务数量和占比。
     """
     with _tasks_lock:
+        _purge_finished_tasks_locked()
         tasks = list(_tasks.values())
     total = len(tasks)
 
@@ -288,6 +322,7 @@ async def delete_task(
 async def get_running_task_count():
     """获取当前正在运行中的任务数量"""
     with _tasks_lock:
+        _purge_finished_tasks_locked()
         running = [t for t in _tasks.values() if t["status"] == TaskStatus.RUNNING.value]
         pending = [t for t in _tasks.values() if t["status"] == TaskStatus.PENDING.value]
 

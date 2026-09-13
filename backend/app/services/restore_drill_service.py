@@ -27,6 +27,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import threading
 import zipfile
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -41,6 +42,19 @@ RESTORE_DRILL_STATUS: Dict[str, Any] = {
     "error_type": None,     # 失败时的异常类名（原文进日志）
     "tables_checked": 0,    # 抽查的核心表数量
 }
+
+# R12-3：状态字典由演练线程逐字段写、由 /health 请求线程逐字段读。
+# 无锁时两次读之间可插入一次写入，产出"新 status + 旧 checked_at"这类
+# **撕裂快照**（把上次的 ok 结论挂到本次 fail 上，或反之）——运维据此判断
+# 备份可用性，读错即误导。读写一律经 _status_lock；读侧用 snapshot_status()。
+_status_lock = threading.RLock()
+
+
+def snapshot_status() -> Dict[str, Any]:
+    """返回演练状态的一致性快照（唯一读入口，避免撕裂读）。"""
+    with _status_lock:
+        return dict(RESTORE_DRILL_STATUS)
+
 
 # 核心表抽查清单：存在即计数（行数只进日志/持久化明细，不进 /health）
 _DRILL_SAMPLE_TABLES = ("users", "supported_villages", "projects", "funds", "schools")
@@ -69,11 +83,14 @@ def _latest_backup_file(backup_dir: str) -> Optional[str]:
 
 def _update_status(status: str, backup_file: Optional[str], error_type: Optional[str],
                    tables_checked: int) -> None:
-    RESTORE_DRILL_STATUS["status"] = status
-    RESTORE_DRILL_STATUS["checked_at"] = datetime.now().isoformat()
-    RESTORE_DRILL_STATUS["backup_file"] = os.path.basename(backup_file) if backup_file else None
-    RESTORE_DRILL_STATUS["error_type"] = error_type
-    RESTORE_DRILL_STATUS["tables_checked"] = tables_checked
+    with _status_lock:
+        RESTORE_DRILL_STATUS.update({
+            "status": status,
+            "checked_at": datetime.now().isoformat(),
+            "backup_file": os.path.basename(backup_file) if backup_file else None,
+            "error_type": error_type,
+            "tables_checked": tables_checked,
+        })
 
 
 def _persist_result() -> None:
@@ -81,10 +98,11 @@ def _persist_result() -> None:
     try:
         from app.services.system_config_service import set_config
 
-        set_config(_CFG_LAST_TIME, RESTORE_DRILL_STATUS["checked_at"] or "", "最近恢复演练时间")
+        snapshot = snapshot_status()
+        set_config(_CFG_LAST_TIME, snapshot["checked_at"] or "", "最近恢复演练时间")
         set_config(
             _CFG_LAST_RESULT,
-            json.dumps(RESTORE_DRILL_STATUS, ensure_ascii=False),
+            json.dumps(snapshot, ensure_ascii=False),
             "最近恢复演练结果（/health 同口径）",
         )
     except Exception as e:  # pragma: no cover — 持久化失败不掩盖演练结论
@@ -105,9 +123,10 @@ def _load_persisted_status() -> None:
         if not raw:
             return
         data = json.loads(raw)
-        for key in ("status", "checked_at", "backup_file", "error_type", "tables_checked"):
-            if key in data:
-                RESTORE_DRILL_STATUS[key] = data[key]
+        with _status_lock:
+            for key in ("status", "checked_at", "backup_file", "error_type", "tables_checked"):
+                if key in data:
+                    RESTORE_DRILL_STATUS[key] = data[key]
     except Exception as e:
         logger.warning("恢复演练历史状态回填失败: %s", e)
 
@@ -168,7 +187,7 @@ def run_restore_drill(db=None, backup_dir: Optional[str] = None) -> Dict[str, An
         logger.warning("恢复演练跳过：备份目录中无 backup_*.zip（%s）", backup_dir)
         _update_status("no_backup", None, None, 0)
         _persist_result()
-        return dict(RESTORE_DRILL_STATUS)
+        return snapshot_status()
 
     drill_dir = tempfile.mkdtemp(prefix="restore_drill_")
     try:
@@ -184,7 +203,7 @@ def run_restore_drill(db=None, backup_dir: Optional[str] = None) -> Dict[str, An
                     logger.info("恢复演练跳过：备份包已加密（%s）", os.path.basename(backup_file))
                     _update_status("skipped_encrypted", backup_file, None, 0)
                     _persist_result()
-                    return dict(RESTORE_DRILL_STATUS)
+                    return snapshot_status()
                 raise
 
             restored_db = os.path.join(drill_dir, _DB_MEMBER.replace("/", os.sep))
@@ -201,12 +220,13 @@ def run_restore_drill(db=None, backup_dir: Optional[str] = None) -> Dict[str, An
         shutil.rmtree(drill_dir, ignore_errors=True)
 
     _persist_result()
-    return dict(RESTORE_DRILL_STATUS)
+    return snapshot_status()
 
 
 def is_drill_due(interval_days: int = 30) -> bool:
     """距上次演练是否已到期（每日调度任务用，到期才真正执行演练）。"""
-    if RESTORE_DRILL_STATUS["status"] == "never" and not RESTORE_DRILL_STATUS["checked_at"]:
+    current = snapshot_status()
+    if current["status"] == "never" and not current["checked_at"]:
         # 首次：若从未持久化过结论则视为到期
         try:
             from app.core.database import SessionLocal
@@ -220,7 +240,7 @@ def is_drill_due(interval_days: int = 30) -> bool:
         except Exception:
             return True
     try:
-        last = datetime.fromisoformat(RESTORE_DRILL_STATUS["checked_at"])
+        last = datetime.fromisoformat(current["checked_at"])
         return (datetime.now() - last).days >= interval_days
     except (ValueError, TypeError):
         return True

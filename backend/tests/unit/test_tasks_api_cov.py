@@ -6,6 +6,7 @@
 """
 
 import time
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -38,7 +39,18 @@ def tk_client():
     app.dependency_overrides = original
 
 
-def _seed(task_id="t1", status="completed", task_type="backup", created_at="2026-07-25T00:00:00"):
+def _iso(minutes_ago: float = 0) -> str:
+    """生成 ISO 时间戳（默认=当前）。
+
+    R12-6 起终态任务只保留 1 小时（_purge_finished_tasks_locked），测试数据
+    必须"新鲜"，否则列表/统计端点会在断言前就把它们回收掉 —— 旧写法固定用
+    2026-07 的历史时间戳，语义上等价于"放了一年的过期任务"。
+    """
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).isoformat()
+
+
+def _seed(task_id="t1", status="completed", task_type="backup", created_at=None):
+    created_at = created_at or _iso()
     rec = {
         "task_id": task_id,
         "task_type": task_type,
@@ -72,9 +84,9 @@ def _capture_add_task():
 
 class TestListAndStats:
     def test_list_filter_and_pagination(self, tk_client):
-        _seed("a1", status="completed", task_type="backup", created_at="2026-07-24T00:00:00")
-        _seed("a2", status="running", task_type="data_import", created_at="2026-07-25T00:00:00")
-        _seed("a3", status="running", task_type="backup", created_at="2026-07-23T00:00:00")
+        _seed("a1", status="completed", task_type="backup", created_at=_iso(3))
+        _seed("a2", status="running", task_type="data_import", created_at=_iso(1))
+        _seed("a3", status="running", task_type="backup", created_at=_iso(2))
         resp = tk_client.get(f"{BASE}?status=running&task_type=backup&page=1&page_size=10")
         assert resp.status_code == 200
         data = resp.json()["data"]
@@ -82,9 +94,9 @@ class TestListAndStats:
         assert data["items"][0]["task_id"] == "a3"
 
     def test_list_sort_desc_and_slice(self, tk_client):
-        _seed("b1", created_at="2026-07-23T00:00:00")
-        _seed("b2", created_at="2026-07-25T00:00:00")
-        _seed("b3", created_at="2026-07-24T00:00:00")
+        _seed("b1", created_at=_iso(3))
+        _seed("b2", created_at=_iso(1))
+        _seed("b3", created_at=_iso(2))
         resp = tk_client.get(f"{BASE}?page=2&page_size=2")
         data = resp.json()["data"]
         assert data["total"] == 3

@@ -1,6 +1,5 @@
 """Tests for app/core/async_utils.py — 100% coverage."""
 import asyncio
-from unittest.mock import patch
 
 
 class TestGetExecutor:
@@ -133,8 +132,6 @@ class TestDelay:
         assert elapsed >= 0.01
 
 
-
-
 class TestGetEventLoopSafe:
     """get_event_loop_safe — return running or cached loop."""
 
@@ -196,21 +193,22 @@ class TestCreateBackgroundTask:
         assert "ran" in results
 
     def test_no_running_loop(self):
-        """Outside async context, uses get_event_loop_safe to get a loop."""
+        """无运行循环时返回 None（R12-7），且协程被显式 close。
+
+        旧行为把任务挂到 get_event_loop_safe() 的缓存循环上：该循环在生产
+        路径从不 run —— 任务永不执行、退出时抛 "Task was destroyed but it is
+        pending!"，而调用方为 None 准备的兜底分支（monitoring_service 线程池
+        发告警）永远走不到。**行为语义变更，已由架构评审（遗留风险治理计划
+        R12-7）裁定。**
+        """
+        import inspect
+
         from app.core.async_utils import create_background_task
-        from app.core.async_utils import _cached_loop as old_cache
-        import app.core.async_utils as m
-        try:
-            m._cached_loop = None
-            results = []
 
-            async def record():
-                results.append("ran")
+        async def record():  # pragma: no cover - 新契约下不应被执行
+            return "ran"
 
-            task = create_background_task(record())
-            assert isinstance(task, asyncio.Task)
-            loop = m.get_event_loop_safe()
-            loop.run_until_complete(task)
-            assert "ran" in results
-        finally:
-            m._cached_loop = old_cache
+        coro = record()
+        assert create_background_task(coro) is None
+        # close 掉协程：避免 CPython "coroutine was never awaited" 噪声
+        assert inspect.getcoroutinestate(coro) == inspect.CORO_CLOSED

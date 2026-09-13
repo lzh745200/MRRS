@@ -51,15 +51,39 @@ class TestApprovalReminderService:
         assert svc._running is False
 
     def test_stop_success(self):
-        # 源码 stop() 使用 join(timeout=1)（见 reminder_service.py:59），
-        # 这里断言匹配生产实现。
+        # R12-4：join 上限由 1s 延长到 STOP_JOIN_TIMEOUT_SECONDS，且仅在线程
+        # 确已退出（is_alive() False）时才复位运行标记。
+        from app.services.reminder_service import (
+            STOP_JOIN_TIMEOUT_SECONDS,
+            ApprovalReminderService,
+        )
+        svc = ApprovalReminderService()
+        svc._running = True
+        thread = MagicMock()
+        thread.is_alive.return_value = False
+        svc._thread = thread
+        svc.stop()
+        assert svc._running is False
+        assert svc._stopped_event.is_set()
+        thread.join.assert_called_once_with(timeout=STOP_JOIN_TIMEOUT_SECONDS)
+
+    def test_stop_alive_thread_keeps_running_flag(self):
+        """R12-4：join 超时（线程仍在收尾）时不复位 _running。
+
+        否则紧接着的 start() 会再起一个扫描线程，两个循环并存：提醒重复创建、
+        DB 连接翻倍。
+        """
         from app.services.reminder_service import ApprovalReminderService
         svc = ApprovalReminderService()
         svc._running = True
-        svc._thread = MagicMock()
+        thread = MagicMock()
+        thread.is_alive.return_value = True
+        svc._thread = thread
         svc.stop()
-        assert svc._running is False
-        svc._thread.join.assert_called_once_with(timeout=1)
+        assert svc._running is True
+        # 运行标记与存活线程共同构成 start() 的判据 → 不会起第二个线程
+        svc.start()
+        assert svc._thread is thread
 
     def test_scan_loop_stop_event(self):
         # 源码 _scan_loop 使用 self._stop_event.wait()（而非 time.sleep），

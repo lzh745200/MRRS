@@ -72,6 +72,11 @@ class _MetricsStore:
         with self._lock:
             self.active_requests -= 1
 
+    def active_count(self) -> int:
+        """当前在途请求数（R7 维护窗口等待归零用，加锁读避免撕裂）。"""
+        with self._lock:
+            return self.active_requests
+
     def get_summary(self) -> dict:
         with self._lock:
             avg_duration = (
