@@ -21,10 +21,10 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from app.core.money import MoneyField
 from app.utils.helpers import FUND_MONEY_FIELDS, quantize_money
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
-from pydantic import BaseModel
+from pydantic import AfterValidator, BaseModel, Field
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -236,70 +236,93 @@ ApprovalWorkflowService.register_entity_apply_handler("fund", _apply_fund_approv
 
 
 # ============================================================================
-# Pydantic Schemas (建议后续移至 app/schemas/fund.py)
+# Pydantic Schemas（契约对齐 app/schemas/fund.py；勿与 schemas 包同名类遮蔽）
+# R4-F1（真实 HTTP 探测 2026-09-13）：局部 FundCreate 曾把 name 设为可空、
+# 金额无 ge=0 约束 → 空名经费与负金额均可入库（财务数据完整性缺陷）。
+# R4-F2：局部 FundUpdate 缺 usage_description/receiver 等字段，而前端
+# Partial<Fund> 会携带且本类 extra=forbid → 更新必 422。
 # ============================================================================
+
+
+def _reject_negative_money(v: float) -> float:
+    """金额非负校验（R4-F1）。"""
+    if v is not None and v < 0:
+        raise ValueError("金额不能为负数")
+    return v
+
+
+Money0 = Annotated[MoneyField, AfterValidator(_reject_negative_money)]
 
 
 class FundCreate(BaseModel):
     """创建经费记录"""
-    name: Optional[str] = None
-    amount: MoneyField = 0
-    planned_amount: MoneyField = 0
-    approved_amount: Optional[MoneyField] = None
-    allocated_amount: Optional[MoneyField] = None
-    used_amount: Optional[MoneyField] = None
-    remaining_amount: Optional[MoneyField] = None
-    code: Optional[str] = None
-    type: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=200)
+    amount: Money0 = 0
+    planned_amount: Money0 = 0
+    approved_amount: Optional[Money0] = None
+    allocated_amount: Optional[Money0] = None
+    used_amount: Optional[Money0] = None
+    remaining_amount: Optional[Money0] = None
+    code: Optional[str] = Field(None, max_length=50)
+    type: Optional[str] = Field(None, max_length=50)
     fund_type: Optional[str] = None
     fund_source: Optional[str] = None
     project_id: Optional[int] = None
     project_name: Optional[str] = None
     village_id: Optional[int] = None
     school_id: Optional[int] = None
-    purpose: Optional[str] = None
-    source: Optional[str] = None
-    operator: Optional[str] = None
-    receiver: Optional[str] = None
-    usage_description: Optional[str] = None
+    purpose: Optional[str] = Field(None, max_length=2000)
+    source: Optional[str] = Field(None, max_length=200)
+    operator: Optional[str] = Field(None, max_length=100)
+    receiver: Optional[str] = Field(None, max_length=100)
+    usage_description: Optional[str] = Field(None, max_length=2000)
     status: str = "pending"
-    applicant: Optional[str] = None
+    applicant: Optional[str] = Field(None, max_length=100)
     remarks: Optional[str] = None
     date: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    application_date: Optional[str] = None
+    approved_by: Optional[str] = Field(None, max_length=100)
+    approval_date: Optional[str] = None
+    allocation_date: Optional[str] = None
 
     model_config = {"extra": "ignore"}
 
 
 class FundUpdate(BaseModel):
-    """更新经费记录"""
-    name: Optional[str] = None
-    amount: Optional[float] = None
-    planned_amount: Optional[float] = None
-    approved_amount: Optional[MoneyField] = None
-    allocated_amount: Optional[MoneyField] = None
-    used_amount: Optional[MoneyField] = None
-    remaining_amount: Optional[MoneyField] = None
-    code: Optional[str] = None
-    type: Optional[str] = None
+    """更新经费记录（字段与前端 Partial<Fund> 契约对齐）"""
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    amount: Optional[Money0] = None
+    planned_amount: Optional[Money0] = None
+    approved_amount: Optional[Money0] = None
+    allocated_amount: Optional[Money0] = None
+    used_amount: Optional[Money0] = None
+    remaining_amount: Optional[Money0] = None
+    code: Optional[str] = Field(None, max_length=50)
+    type: Optional[str] = Field(None, max_length=50)
     fund_type: Optional[str] = None
     fund_source: Optional[str] = None
     project_id: Optional[int] = None
     project_name: Optional[str] = None
     village_id: Optional[int] = None
     school_id: Optional[int] = None
-    purpose: Optional[str] = None
-    source: Optional[str] = None
-    operator: Optional[str] = None
+    purpose: Optional[str] = Field(None, max_length=2000)
+    source: Optional[str] = Field(None, max_length=200)
+    operator: Optional[str] = Field(None, max_length=100)
+    receiver: Optional[str] = Field(None, max_length=100)
+    usage_description: Optional[str] = Field(None, max_length=2000)
     status: Optional[str] = None
-    applicant: Optional[str] = None
+    applicant: Optional[str] = Field(None, max_length=100)
     remarks: Optional[str] = None
     date: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     approved_by: Optional[str] = None
     approval_date: Optional[str] = None
+    allocation_method: Optional[str] = Field(None, max_length=50)
+    application_date: Optional[str] = None
+    allocation_date: Optional[str] = None
 
     model_config = {"extra": "forbid"}
 

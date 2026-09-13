@@ -491,15 +491,25 @@ class TestCreateFund:
             assert resp.json()["message"] == "创建成功"
 
     def test_create_fund_default_values(self, client, mock_db):
-        """Create with minimal fields uses defaults."""
+        """Create with minimal fields uses defaults.
+
+        R4-F1（真实 HTTP 探测 2026-09-13）行为变更：name 为必填（min_length=1），
+        金额字段非负（ge=0）——空体创建由 201 改为 422（原实现校验被局部
+        schema 遮蔽弱化，可创建无名经费与负金额）。
+        """
         created = Mock()
         created.id = 102
         with patch("app.services.fund_service.FundService") as MockService:
             mock_svc = MockService.return_value
             mock_svc.create_fund_for_user.return_value = created
 
-            resp = client.post("/api/v1/funds", json={})
+            # 最小合法载荷（仅必填 name，其余走默认值）
+            resp = client.post("/api/v1/funds", json={"name": "默认值探测经费"})
             assert resp.status_code == 201
+
+            # 空体（缺 name）→ 422
+            resp = client.post("/api/v1/funds", json={})
+            assert resp.status_code == 422
 
 
 # ============================================================================
@@ -1782,3 +1792,45 @@ class TestTransitionStatus:
         assert resp.status_code == 200
         assert fund.status == "audited"
         assert fund.audit_date is not None
+
+
+# ============================================================================
+# 7. R4-F1/F2 schema 加固回归（真实 HTTP 探测 2026-09-13）
+# ============================================================================
+
+
+class TestFundSchemaHardening:
+    """局部 FundCreate/FundUpdate 曾遮蔽 app.schemas.fund 权威契约：
+
+    - name 可空（空体创建 201）、金额无 ge=0（负金额入库）；
+    - FundUpdate 缺 usage_description 等字段且 extra=forbid（前端更新必 422）。
+    """
+
+    def test_create_fund_empty_body_rejected(self, client, mock_db):
+        resp = client.post("/api/v1/funds", json={})
+        assert resp.status_code == 422
+
+    def test_create_fund_rejects_negative_planned_amount(self, client, mock_db):
+        resp = client.post("/api/v1/funds", json={"name": "x", "planned_amount": -5})
+        assert resp.status_code == 422
+
+    def test_create_fund_rejects_negative_amount(self, client, mock_db):
+        resp = client.post("/api/v1/funds", json={"name": "x", "amount": -1})
+        assert resp.status_code == 422
+
+    def test_create_fund_rejects_blank_name(self, client, mock_db):
+        resp = client.post("/api/v1/funds", json={"name": ""})
+        assert resp.status_code == 422
+
+    def test_update_accepts_usage_description(self, client, mock_db):
+        """R4-F2：局部 FundUpdate 缺 usage_description 且 extra=forbid → 更新必 422。"""
+        fund = FundMock(1, status="pending")
+        mock_db.execute.return_value = _exec_with_scalar_one_or_none(fund)
+        resp = client.put("/api/v1/funds/1", json={"usage_description": "用于探测"})
+        assert resp.status_code == 200
+
+    def test_update_rejects_negative_amount(self, client, mock_db):
+        fund = FundMock(1, status="pending")
+        mock_db.execute.return_value = _exec_with_scalar_one_or_none(fund)
+        resp = client.put("/api/v1/funds/1", json={"planned_amount": -3})
+        assert resp.status_code == 422
