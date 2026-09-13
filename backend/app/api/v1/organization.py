@@ -125,6 +125,21 @@ class OrganizationResponse(OrganizationBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class OrganizationEnvelopeResponse(BaseModel):
+    """单对象端点的标准信封响应（R7-F1，真实 HTTP 探测 2026-09-13）。
+
+    create/update/get/my-organization 此前以裸 OrganizationResponse 返回，前端
+    store 的 `res.code === 200 && res.data` 断言永不命中（org 业务编号 code 字段
+    恰好占用顶层）：新建/更新组织后本地列表不插入、缓存树不失效；fetchOrganization
+    / fetchMyOrganization 的 current.value 永不赋值。对齐 auth.LoginResponse 的
+    信封模式；axios 拦截器会把 data.data 展开到顶层，Edit.vue 的顶层字段读取不受影响。
+    """
+
+    code: int = 200
+    data: Optional[OrganizationResponse] = None
+    message: str = ""
+
+
 class OrganizationTreeNode(BaseModel):
     id: int
     name: str
@@ -455,7 +470,7 @@ async def export_organizations(
         raise HTTPException(status_code=500, detail="导出失败")
 
 
-@router.get("/my-organization", response_model=OrganizationResponse)
+@router.get("/my-organization", response_model=OrganizationEnvelopeResponse)
 async def get_my_organization(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """获取当前用户所属组织"""
     try:
@@ -470,7 +485,7 @@ async def get_my_organization(current_user=Depends(get_current_user), db: Sessio
                 .first()
             )
             if org:
-                return org
+                return success_response(data=org, message="success")
 
         # 如果用户没有关联组织,返回第一个激活的组织
         org = (
@@ -483,7 +498,7 @@ async def get_my_organization(current_user=Depends(get_current_user), db: Sessio
         if not org:
             raise HTTPException(status_code=404, detail="未找到组织信息")
 
-        return org
+        return success_response(data=org, message="success")
     except HTTPException:
         raise
     except Exception as e:  # pragma: no cover
@@ -491,7 +506,7 @@ async def get_my_organization(current_user=Depends(get_current_user), db: Sessio
         raise HTTPException(status_code=500, detail="获取当前用户组织失败，请稍后重试或联系管理员")
 
 
-@router.get("/my", response_model=OrganizationResponse)
+@router.get("/my", response_model=OrganizationEnvelopeResponse)
 async def get_my_organization_alias(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """获取当前用户所属组织（/my 别名，兼容前端调用）"""
     return await get_my_organization(current_user, db)
@@ -531,16 +546,16 @@ async def get_type_options():
     })
 
 
-@router.get("/{org_id}", response_model=OrganizationResponse)
+@router.get("/{org_id}", response_model=OrganizationEnvelopeResponse)
 async def get_organization(org_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """获取组织详情"""
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
-    return org
+    return success_response(data=org, message="success")
 
 
-@router.post("", response_model=OrganizationResponse)
+@router.post("", response_model=OrganizationEnvelopeResponse)
 async def create_organization(
     data: OrganizationCreate,
     current_user=Depends(get_current_user),
@@ -603,13 +618,14 @@ async def create_organization(
         logger.debug("记录工作日志失败", exc_info=True)
     await cache_manager.delete("orgs:list")
     _invalidate_dashboard_cache_safe()
-    # 注意：本端点声明了 response_model=OrganizationResponse（裸形态 + Pydantic
-    # 序列化）；不能改包 success_response 信封 —— response_model 会校验响应
-    # 结构导致 500。前端 Edit.vue 不消费返回体，保持原形态。
-    return org
+    # R7-F1：改用信封返回——此前裸形态使前端 store 的
+    # `res.code === 200 && res.data` 断言永不命中，新建组织后本地列表不插入、
+    # 缓存树不失效（用户看不到新组织）。response_model 已同步切换为
+    # OrganizationEnvelopeResponse（对齐 auth.LoginResponse 模式）。
+    return success_response(data=org, message="创建成功")
 
 
-@router.put("/{org_id}", response_model=OrganizationResponse)
+@router.put("/{org_id}", response_model=OrganizationEnvelopeResponse)
 async def update_organization(
     org_id: int,
     data: OrganizationUpdate,
@@ -655,7 +671,8 @@ async def update_organization(
         logger.debug("记录工作日志失败", exc_info=True)
     await cache_manager.delete("orgs:list")
     _invalidate_dashboard_cache_safe()
-    return org
+    # R7-F1：信封返回（同 create_organization），使 store 的更新断言生效
+    return success_response(data=org, message="更新成功")
 
 
 @router.delete("/{org_id}")

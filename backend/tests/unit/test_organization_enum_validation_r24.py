@@ -64,7 +64,8 @@ class TestInvalidOrgEnums:
             "/api/v1/organizations", json={"name": "R24 待更新单位", "level": "level_1"}
         )
         assert created.status_code in (200, 201)
-        oid = created.json()["id"]
+        # R7-F1：信封响应
+        oid = created.json()["data"]["id"]
 
         resp = client.put(f"/api/v1/organizations/{oid}", json={"level": "9"})
         assert resp.status_code == 422

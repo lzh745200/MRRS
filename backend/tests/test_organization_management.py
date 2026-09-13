@@ -122,10 +122,11 @@ class TestOrganizationManagement:
                 )
                 assert response.status_code == 200, response.text
                 body = response.json()
-                assert body["code"], f"新增组织 {name} 的编码不应为空"
-                assert body["code"].startswith("ORG")
-                created_ids.append(body["id"])
-                codes.append(body["code"])
+                # R7-F1：信封响应（data 内为组织对象，code 为组织业务编码）
+                assert body["data"]["code"], f"新增组织 {name} 的编码不应为空"
+                assert body["data"]["code"].startswith("ORG")
+                created_ids.append(body["data"]["id"])
+                codes.append(body["data"]["code"])
             # 两次生成的编码必须不同（唯一约束）
             assert len(set(codes)) == 2
         finally:

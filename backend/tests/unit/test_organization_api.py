@@ -245,7 +245,9 @@ class TestGetMyOrganization:
         q.first.return_value = _make_mock_org(1)
         resp = client_admin.get("/api/v1/organizations/my-organization")
         assert resp.status_code == 200
-        assert resp.json()["id"] == 1
+        # R7-F1：单对象端点改为标准信封（data 内为组织对象）
+        assert resp.json()["code"] == 200
+        assert resp.json()["data"]["id"] == 1
 
     def test_my_fallback_to_first_active(self, client_admin, mock_db):
         q = mock_db.query.return_value
@@ -253,7 +255,7 @@ class TestGetMyOrganization:
 
         resp = client_admin.get("/api/v1/organizations/my-organization")
         assert resp.status_code == 200
-        assert resp.json()["id"] == 1
+        assert resp.json()["data"]["id"] == 1
 
     def test_my_not_found(self, client_admin, mock_db):
         q = mock_db.query.return_value
@@ -271,7 +273,7 @@ class TestGetMyOrganization:
         q.first.return_value = _make_mock_org(1)
         resp = client_admin.get("/api/v1/organizations/my")
         assert resp.status_code == 200
-        assert resp.json()["id"] == 1
+        assert resp.json()["data"]["id"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +319,9 @@ class TestGetOrganization:
         mock_db.query.return_value.first.return_value = _make_mock_org(1)
         resp = client_admin.get("/api/v1/organizations/1")
         assert resp.status_code == 200
-        assert resp.json()["id"] == 1
+        # R7-F1：标准信封
+        assert resp.json()["code"] == 200
+        assert resp.json()["data"]["id"] == 1
 
     def test_get_not_found(self, client_admin, mock_db):
         mock_db.query.return_value.first.return_value = None
