@@ -444,7 +444,9 @@ class ChunkedUploadService:
                 for i in range(session.total_chunks):
                     chunk_path = self._get_chunk_path(session_id, i)
                     async with aiofiles.open(chunk_path, "rb") as infile:
-                        chunk_data = await infile.read()
+                        # 显式长度参数：单个分片 ≤ MAX_CHUNK_SIZE（写入侧已夹取），
+                        # 有界读取同时让 P-1 无界读门禁无需豁免
+                        chunk_data = await infile.read(ChunkedUploadConfig.MAX_CHUNK_SIZE)
                         await outfile.write(chunk_data)
 
             # 验证文件大小
@@ -454,11 +456,18 @@ class ChunkedUploadService:
 
             # 验证文件哈希（如果提供）
             if session.file_hash:
+                # R4 同族加固：原实现 await f.read() 把**合并后的整文件**读进内存
+                # 再算 MD5（单会话上限 2GB，合并即 OOM）；改 1MB 分块流式摘要。
+                digest = hashlib.md5(usedforsecurity=False)
                 async with aiofiles.open(final_path, "rb") as f:
-                    file_data = await f.read()
-                    actual_hash = self._calculate_md5(file_data)
-                    if actual_hash != session.file_hash:
-                        raise ValueError("File hash mismatch")
+                    while True:
+                        block = await f.read(1024 * 1024)
+                        if not block:
+                            break
+                        digest.update(block)
+                actual_hash = digest.hexdigest()
+                if actual_hash != session.file_hash:
+                    raise ValueError("File hash mismatch")
 
             # 更新会话状态
             session.status = ChunkUploadStatus.MERGED

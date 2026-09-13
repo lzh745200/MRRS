@@ -23,6 +23,8 @@ from sqlalchemy import inspect
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
+from fastapi import HTTPException
+
 from app.core.database import db_coordinator
 from app.core.exceptions import BusinessError
 from app.core.json_encoder import CustomJSONEncoder
@@ -31,6 +33,7 @@ from app.models.data_package import DataPackage, PackageStatus, PackageType
 from app.models.project import Fund, Project
 from app.models.school import School
 from app.models.supported_village import SupportedVillage
+from app.utils.upload_helper import ensure_zip_within_limit, read_zip_member
 from app.schemas.data_package import (
     DataPackageConfirmResult,
     DataPackageExportResult,
@@ -313,11 +316,15 @@ class DataPackageService:
 
         try:
             with zipfile.ZipFile(file_path, "r") as zf:
+                # R2 第三层（遗留风险治理补漏）：上传的包是**用户可控 zip**，
+                # 容器体积合规 ≠ 解压后合规（1MB deflate 可膨胀到数十 GB）。
+                # 原先此处直接 zf.read 全量物化 → 单请求即可耗尽内存。
+                ensure_zip_within_limit(zf)
                 if "manifest.json" not in zf.namelist():
                     errors.append(DataPackageValidationError(field="manifest", message="缺少manifest.json文件"))
                     return DataPackageValidationResult(is_valid=False, errors=errors, warnings=warnings, manifest=None)
 
-                manifest_content = zf.read("manifest.json").decode("utf-8")
+                manifest_content = read_zip_member(zf, "manifest.json").decode("utf-8")
                 manifest_dict = json.loads(manifest_content)
 
                 version = manifest_dict.get("version", "unknown")
@@ -339,7 +346,7 @@ class DataPackageService:
                         ))
                     else:
                         try:
-                            data_content = zf.read(data_file).decode("utf-8")
+                            data_content = read_zip_member(zf, data_file).decode("utf-8")
                             data = json.loads(data_content)
                             expected_count = manifest_dict.get("record_counts", {}).get(data_type, 0)
                             actual_count = len(data)
@@ -354,6 +361,9 @@ class DataPackageService:
                                 data_type=data_type,
                             ))
 
+        except HTTPException as e:
+            # 解压后超限（压缩炸弹）是可读的业务结论，不该降级成"验证失败: ..." 噪声
+            errors.append(DataPackageValidationError(field="file", message=str(e.detail)))
         except zipfile.BadZipFile:
             errors.append(DataPackageValidationError(field="file", message="ZIP文件损坏"))
         except Exception as e:
@@ -392,12 +402,13 @@ class DataPackageService:
         preview_list = []
         try:
             with zipfile.ZipFile(file_path, "r") as zf:
-                manifest_content = zf.read("manifest.json").decode("utf-8")
+                ensure_zip_within_limit(zf)  # R2 第三层：预览同样不得物化未限长的成员
+                manifest_content = read_zip_member(zf, "manifest.json").decode("utf-8")
                 manifest_dict = json.loads(manifest_content)
                 for data_type in manifest_dict.get("data_types", []):
                     data_file = f"data/{data_type}.json"
                     if data_file in zf.namelist():
-                        data_content = zf.read(data_file).decode("utf-8")
+                        data_content = read_zip_member(zf, data_file).decode("utf-8")
                         data = json.loads(data_content)
                         columns = list(data[0].keys()) if data else []
                         preview_list.append(DataPackagePreviewData(
@@ -429,7 +440,8 @@ class DataPackageService:
             self.db.begin_nested()
             with db_coordinator.exclusive_write(timeout=120.0):
                 with zipfile.ZipFile(package.file_path, "r") as zf:
-                    manifest_content = zf.read("manifest.json").decode("utf-8")
+                    ensure_zip_within_limit(zf)  # R2 第三层：确认导入前先卡解压后总量
+                    manifest_content = read_zip_member(zf, "manifest.json").decode("utf-8")
                     manifest_dict = json.loads(manifest_content)
 
                     resolved_org_id = package.org_id
@@ -449,7 +461,7 @@ class DataPackageService:
                         if data_file not in zf.namelist():
                             continue
 
-                        data_content = zf.read(data_file).decode("utf-8")
+                        data_content = read_zip_member(zf, data_file).decode("utf-8")
                         records = json.loads(data_content)
                         model = DATA_TYPE_MODELS[data_type]
 
@@ -638,7 +650,7 @@ class DataPackageService:
             is_encrypted = False
             try:
                 with zipfile.ZipFile(file_path, "r") as zf:
-                    zf.read("manifest.json")
+                    read_zip_member(zf, "manifest.json")
             except (zipfile.BadZipFile, KeyError):
                 is_encrypted = True
 
@@ -733,7 +745,8 @@ class DataPackageService:
             # 读取数据包并处理冲突
             with db_coordinator.exclusive_write(timeout=120.0):
                 with zipfile.ZipFile(file_path, "r") as zf:
-                    manifest_dict = json.loads(zf.read("manifest.json").decode("utf-8"))
+                    ensure_zip_within_limit(zf)  # R2 第三层：冲突导入路径同样先卡总量
+                    manifest_dict = json.loads(read_zip_member(zf, "manifest.json").decode("utf-8"))
                     data_types = manifest_dict.get("data_types", [])
 
                     resolver = SmartConflictResolver(self.db)
@@ -748,7 +761,7 @@ class DataPackageService:
                         if data_file not in zf.namelist():
                             continue
 
-                        records = json.loads(zf.read(data_file).decode("utf-8"))
+                        records = json.loads(read_zip_member(zf, data_file).decode("utf-8"))
                         if records:
                             data_dict[data_type] = records
 

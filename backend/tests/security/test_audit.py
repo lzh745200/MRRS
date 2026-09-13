@@ -23,7 +23,9 @@ class TestSecurityAudit:
         result = subprocess.run(
             [sys.executable, "-m", "bandit", "-r", "app/", "-ll", "-f", "json",
              "-s", "B101,B110"],
-            capture_output=True, text=True,
+            # 显式 encoding：Windows 下仅 text=True 会按 GBK 解码 bandit 的
+            # JSON 输出（含非 GBK 字节时 reader 线程抛 UnicodeDecodeError）
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
             cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         )
         if result.returncode == 0:

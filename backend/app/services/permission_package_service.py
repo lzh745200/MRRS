@@ -28,6 +28,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
+from app.utils.upload_helper import ensure_zip_within_limit, read_zip_member
 from app.models.rbac import (
     RbacRole,
     RolePermission,
@@ -363,6 +364,8 @@ class PermissionPackageService:
 
         try:
             with zipfile.ZipFile(_io.BytesIO(working), "r") as zf:
+                # R2 第三层：配置包同样是用户可控 zip，先卡解压后总量
+                ensure_zip_within_limit(zf)
                 names = zf.namelist()
 
                 # 验证必要文件
@@ -375,7 +378,7 @@ class PermissionPackageService:
                     return {"success": False, "errors": errors, "message": "包结构不完整"}
 
                 # 读取清单
-                manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+                manifest = json.loads(read_zip_member(zf, "manifest.json").decode("utf-8"))
                 version = manifest.get("version", "unknown")
                 if version != CURRENT_VERSION:
                     warnings.append(f"配置包版本 {version} 与当前版本 {CURRENT_VERSION} 不匹配")
@@ -390,15 +393,15 @@ class PermissionPackageService:
                     }
 
                 # 读取角色
-                roles_data = json.loads(zf.read("data/roles.json").decode("utf-8"))
+                roles_data = json.loads(read_zip_member(zf, "data/roles.json").decode("utf-8"))
 
                 # 读取用户遗留数据用于用户名匹配
-                user_legacy_data = json.loads(zf.read("data/user_legacy.json").decode("utf-8"))
+                user_legacy_data = json.loads(read_zip_member(zf, "data/user_legacy.json").decode("utf-8"))
 
                 # 读取全部数据段并做内容校验和强校验（防损坏/篡改）
                 def _read_json(name):
                     return (
-                        json.loads(zf.read(name).decode("utf-8"))
+                        json.loads(read_zip_member(zf, name).decode("utf-8"))
                         if name in names else []
                     )
 
@@ -448,15 +451,15 @@ class PermissionPackageService:
                     "roles": roles_data[:20],  # 预览前 20 个角色
                     "role_count": len(roles_data),
                     "user_role_count": (
-                        len(json.loads(zf.read("data/user_roles.json").decode("utf-8")))
+                        len(json.loads(read_zip_member(zf, "data/user_roles.json").decode("utf-8")))
                         if "data/user_roles.json" in names else 0
                     ),
                     "user_permission_count": (
-                        len(json.loads(zf.read("data/user_permissions.json").decode("utf-8")))
+                        len(json.loads(read_zip_member(zf, "data/user_permissions.json").decode("utf-8")))
                         if "data/user_permissions.json" in names else 0
                     ),
                     "user_menu_count": (
-                        len(json.loads(zf.read("data/user_menus.json").decode("utf-8")))
+                        len(json.loads(read_zip_member(zf, "data/user_menus.json").decode("utf-8")))
                         if "data/user_menus.json" in names else 0
                     ),
                     "user_legacy_count": len(user_legacy_data),
@@ -588,22 +591,23 @@ class PermissionPackageService:
         """解析 ZIP 导入包，返回各数据段。"""
         try:
             with zipfile.ZipFile(file_path, "r") as zf:
-                roles_data = json.loads(zf.read("data/roles.json").decode("utf-8"))
+                ensure_zip_within_limit(zf)  # R2 第三层：配置包为外部导入 zip
+                roles_data = json.loads(read_zip_member(zf, "data/roles.json").decode("utf-8"))
                 user_roles_data = (
-                    json.loads(zf.read("data/user_roles.json").decode("utf-8"))
+                    json.loads(read_zip_member(zf, "data/user_roles.json").decode("utf-8"))
                     if "data/user_roles.json" in zf.namelist() else []
                 )
                 user_permissions_data = (
-                    json.loads(zf.read("data/user_permissions.json").decode("utf-8"))
+                    json.loads(read_zip_member(zf, "data/user_permissions.json").decode("utf-8"))
                     if "data/user_permissions.json" in zf.namelist() else []
                 )
                 user_menus_data = (
-                    json.loads(zf.read("data/user_menus.json").decode("utf-8"))
+                    json.loads(read_zip_member(zf, "data/user_menus.json").decode("utf-8"))
                     if "data/user_menus.json" in zf.namelist() else []
                 )
-                user_legacy_data = json.loads(zf.read("data/user_legacy.json").decode("utf-8"))
+                user_legacy_data = json.loads(read_zip_member(zf, "data/user_legacy.json").decode("utf-8"))
                 organizations_data = (
-                    json.loads(zf.read("data/organizations.json").decode("utf-8"))
+                    json.loads(read_zip_member(zf, "data/organizations.json").decode("utf-8"))
                     if "data/organizations.json" in zf.namelist() else []
                 )
             return (roles_data, user_roles_data, user_permissions_data,
@@ -975,9 +979,10 @@ class PermissionPackageService:
         """
         try:
             with zipfile.ZipFile(file_path, "r") as zf:
+                ensure_zip_within_limit(zf)  # R2 第三层：校验和比对前先卡总量
                 if "manifest.json" not in zf.namelist():
                     return None
-                manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+                manifest = json.loads(read_zip_member(zf, "manifest.json").decode("utf-8"))
         except Exception:  # pragma: no cover - 解析失败交由调用方其它校验兜底
             return None
         expected = manifest.get("content_checksum")

@@ -220,6 +220,19 @@ jobs:
       # 软删除过滤静态扫描：新增对软删模型的无 is_active 聚合/列表查询即失败
       - name: Soft-delete filter guard
         run: python backend/scripts/check_soft_delete_usage.py
+      # P-1/P-2/P-3 预防性棘轮门禁（遗留风险治理计划 2026-09-13）：
+      # os._exit 绕 lifespan / subprocess text=True 缺 encoding / rmtree 后缺
+      # dirs_exist_ok 的 copytree / ZIP 与上传无界读取 / 上传端点未限长 /
+      # 裸 threading.Timer 未走 RecurringTimer。基线在 backend/scripts/gate_baselines/
+      # （棘轮只紧不松：清理完历史豁免后基线应趋向空文件）。
+      - name: P1/P2/P3 prevention ratchets
+        run: |
+          python backend/scripts/check_os_exit.py
+          python backend/scripts/check_subprocess_encoding.py
+          python backend/scripts/check_dir_replace.py
+          python backend/scripts/check_unbounded_read.py
+          python backend/scripts/check_upload_endpoints.py
+          python backend/scripts/check_scheduler_registration.py
       - name: Version consistency check
         run: node scripts/sync-version.js --check
       # 前后端菜单对齐门禁：前端菜单 key/path 与后端 MENU_DEFINITIONS/前端路由一致

@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 
 from app.core.database import get_db
 from app.core.response import ok_list, success_response
+from app.utils.upload_helper import read_zip_member
 from app.models.user import User
 from app.core.transaction import safe_commit
 from app.core.security import get_current_user
@@ -602,7 +603,7 @@ async def preview_backup(
                 for info in zf.infolist()
             ]
             try:
-                meta = json.loads(zf.read("backup_info.json"))
+                meta = json.loads(read_zip_member(zf, "backup_info.json"))
             except Exception:
                 # 无元信息文件或内容加密时降级为空 dict
                 meta = {}

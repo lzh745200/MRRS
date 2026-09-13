@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.models.system_config import SystemConfig
 from app.core.maintenance import maintenance_window
+from app.utils.upload_helper import read_zip_member
 from app.core.transaction import retry_on_deadlock, safe_commit
 
 logger = logging.getLogger(__name__)
@@ -417,22 +418,24 @@ class BackupService:
 
         调用时机：加密之前（明文 zip），故密码备份同样被校验。
         """
-        try:
-            with zipfile.ZipFile(backup_file_path, "r") as zf:
-                bad_member = zf.testzip()
-                if bad_member is not None:
-                    raise BackupIncompleteError(f"备份包 CRC 校验失败: {bad_member}")
-                db_bytes = zf.read("data/rural_revitalization.db")
-        except zipfile.BadZipFile as exc:
-            raise BackupIncompleteError(f"备份包损坏（非有效 zip）: {exc}") from exc
-        except KeyError as exc:
-            raise BackupIncompleteError("备份包缺少数据库文件") from exc
-
         fd, verify_db_path = tempfile.mkstemp(suffix=".db", prefix="backup_verify_")
         os.close(fd)
         try:
-            with open(verify_db_path, "wb") as f:
-                f.write(db_bytes)
+            try:
+                with zipfile.ZipFile(backup_file_path, "r") as zf:
+                    bad_member = zf.testzip()
+                    if bad_member is not None:
+                        raise BackupIncompleteError(f"备份包 CRC 校验失败: {bad_member}")
+                    # R2 同族加固：原实现 zf.read 把整个库文件物化进内存后才落盘 ——
+                    # 库文件可达 GB 级（本仓单机桌面长期运行的真实形态），备份校验
+                    # 自己成了内存峰值点。改为 1MB 分块流式解压落盘，峰值与库大小无关。
+                    with zf.open("data/rural_revitalization.db") as src, open(verify_db_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst, 1024 * 1024)
+            except zipfile.BadZipFile as exc:
+                raise BackupIncompleteError(f"备份包损坏（非有效 zip）: {exc}") from exc
+            except KeyError as exc:
+                raise BackupIncompleteError("备份包缺少数据库文件") from exc
+
             conn = sqlite3.connect(verify_db_path)
             try:
                 try:
@@ -1227,7 +1230,7 @@ class BackupService:
 
                 # 读取备份信息
                 try:
-                    backup_info_data = zipf.read("backup_info.json")
+                    backup_info_data = read_zip_member(zipf, "backup_info.json")
                     backup_info = json.loads(backup_info_data)
                 except Exception:
                     backup_info = None

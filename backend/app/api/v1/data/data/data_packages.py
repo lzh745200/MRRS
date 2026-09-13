@@ -19,7 +19,11 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.exceptions import BusinessError, NotFoundException
-from app.utils.upload_helper import read_upload_with_limit
+from app.utils.upload_helper import (
+    ensure_zip_within_limit,
+    read_upload_with_limit,
+    read_zip_member,
+)
 from app.core.response import success_response
 from app.core.security import get_current_user
 from app.core.permission_utils import get_org_with_fallback, is_admin, require_admin
@@ -643,13 +647,14 @@ def _compute_package_diff_stats(service: DataPackageService, file_path: str) -> 
 
     stats: Dict[str, Dict[str, int]] = {}
     with zipfile.ZipFile(file_path, "r") as zf:
-        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        ensure_zip_within_limit(zf)  # R2 第三层：用户可控 zip，先卡解压后总量
+        manifest = json.loads(read_zip_member(zf, "manifest.json").decode("utf-8"))
         for dtype in manifest.get("data_types", []):
             model = DATA_TYPE_MODELS.get(dtype)
             data_file = f"data/{dtype}.json"
             if not model or data_file not in zf.namelist():
                 continue
-            records = json.loads(zf.read(data_file).decode("utf-8"))
+            records = json.loads(read_zip_member(zf, data_file).decode("utf-8"))
             pk_name = sa_inspect(model).primary_key[0].name
             pk_col = getattr(model, pk_name)
             ids = [r.get(pk_name) for r in records if r.get(pk_name) is not None]
@@ -1360,7 +1365,8 @@ async def upload_encrypted_package(
         is_encrypted = False
         try:
             with zipfile.ZipFile(temp_file_path, "r") as zf:
-                zf.read("manifest.json")
+                ensure_zip_within_limit(zf)  # R2 第三层：加密探测前同样卡总量
+                read_zip_member(zf, "manifest.json")
         except (zipfile.BadZipFile, KeyError):
             is_encrypted = True
 

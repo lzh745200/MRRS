@@ -14,6 +14,10 @@ from app.utils.paths import get_data_path
 
 logger = logging.getLogger(__name__)
 
+# 单张瓦片 PNG 的读取上限（256x256 瓦片实测 5~50KB；上限只为把"文件被替换成
+# 巨型文件"这类异常挡在内存之外，见 P-1 check_unbounded_read 门禁）
+MAX_TILE_BYTES = 5 * 1024 * 1024
+
 # 模块级别获取瓦片缓存目录。
 # 使用 try/except 防护：如果 get_data_path() 因权限问题失败，
 # 回退到用户临时目录，避免整个路由模块加载失败（crash log 中曾导致 41/42 路由加载）。
@@ -57,7 +61,8 @@ class OfflineMapService:
             return None
         try:
             async with aiofiles.open(tile_path, "rb") as f:
-                return await f.read()
+                data = await f.read(MAX_TILE_BYTES)
+            return data
         except Exception:
             logger.warning("离线地图瓦片读取失败: %s", tile_path, exc_info=True)
             return None

@@ -11,7 +11,9 @@ from pydantic import BaseModel, Field
 
 from app.core.security import get_current_user
 from app.models.user import User
+from app.utils.upload_helper import read_upload_with_limit
 from app.services.chunked_upload_service import (
+    ChunkedUploadConfig,
     ChunkedUploadService,
     ChunkUploadStatus,
     get_chunked_upload_service,
@@ -101,7 +103,14 @@ async def upload_chunk(
     if session.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权操作此上传会话")
 
-    content = await file.read()
+    # R2 第二层：原先 await file.read() 把任意大小的"分片"整包读进内存
+    # （声明分片大小在服务层才校验，校验只能拒绝请求，挡不住内存峰值）。
+    # 会话 chunk_size 已由 ChunkedUploadConfig 夹到 MAX_CHUNK_SIZE 以内。
+    content = await read_upload_with_limit(
+        file,
+        ChunkedUploadConfig.MAX_CHUNK_SIZE,
+        limit_label="单个分片",
+    )
     success = await upload_service.upload_chunk(
         session_id=session_id,
         chunk_index=chunk_index,

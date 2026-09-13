@@ -482,6 +482,8 @@ async def import_policies(
     require_policy_operator_role(current_user)
     from ...services.policy_import_service import import_policies_from_excel
 
+    # nosec:upload-limit 委托 policy_import_service（R2 第二层已加 10MB 分块上限 +
+    # 1000 行上限，见 policy_import_service.import_policies_from_excel）
     result = await import_policies_from_excel(file, db, current_user)
     # 数据变更自动创建审批任务：政策批量导入进入待审批板块（审计留痕）
     imported = (result or {}).get("imported", 0) if isinstance(result, dict) else 0
