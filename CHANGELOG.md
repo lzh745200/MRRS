@@ -5,6 +5,78 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.8] - 2026-09-13 — 🛡️ 遗留风险治理第三批（R7 恢复维护窗口 / R12 低危批量 / R2 残余无界读取 / P-1~P-3 预防门禁）
+
+对应《deliverables/遗留风险彻底解决方案计划-2026-09-12.md》W3-W4 批次。
+
+### 修复（数据一致性：恢复窗口与在途写请求竞态 — R7，P1）
+- 新增 `app/core/maintenance.py` 维护模式闸门与 `MaintenanceGateMiddleware`：
+  恢复入口置位 → **新的写请求立即 503**（读请求放行）→ 等待在途请求归零
+  （上限 10s，与 `db_coordinator.exclusive_write` 同口径，超时记 ERROR 后继续）
+  → `finally` 解除。
+- `BackupService.restore_backup` 外层包维护窗口，返回值新增 `maintenance_window_ms`。
+  原实现只有 `engine.dispose()`（仅回收空闲连接），在途小写事务不经
+  `exclusive_write`：Windows 上覆盖复制必抛 `PermissionError`，POSIX 上写入
+  被替换的旧 inode —— 恢复后**静默缺失一段已提交事务**且无任何报错。
+- `/health` 暴露 `maintenance {active, reason, since, last_window_ms, last_waited_ms}`。
+
+### 修复（低危一致性批量 7 项 — R12，P3）
+- **R12-2** 慢请求/慢 SQL 计数器改互斥自增（裸 `+=` 并发丢计数），统计快照加锁读。
+- **R12-3** `RESTORE_DRILL_STATUS` 改一致性快照（`snapshot_status()` + RLock），
+  `/health` 不再逐字段读模块字典（与演练线程的逐字段写交错会产出撕裂结论）。
+- **R12-4** 审批提醒 `stop()` join 上限 1s→5s，超时后不复位 `_running` —— 否则
+  紧随的 `start()` 会再起一个扫描线程（提醒重复创建、DB 连接翻倍）。
+- **R12-5** `/system/shutdown` 与 `/system/restart`(win32) 不再 `os._exit(0)`：
+  改 `raise_signal(SIGINT)` 走 lifespan 优雅关闭（调度器 Timer、提醒线程、任务
+  队列、WAL checkpoint、`.part` 半成品回收不再被跳过）。
+- **R12-6** 内存任务表 `_tasks` 增加 1 小时终态回收（创建/列表/统计/运行计数
+  四处触发），长跑桌面端不再单调增长。
+- **R12-7** `create_background_task` 无运行循环时返回 `None`（不再把任务挂到
+  "永不 run"的缓存 loop 上），`monitoring_service` 的线程池兜底由死代码变为
+  生效路径。
+
+### 修复（R2 残余「先整包入内存再校验」清零）
+- `data_package_service`（5 处 zip 打开点）、`permission_package_service`（4 处）、
+  `data_packages` API（2 处）：补 `ensure_zip_within_limit` + `zf.read` →
+  `read_zip_member`。此前**任何登录用户**上传结构合法、解压后数十 GB 的包
+  （压缩炸弹）即可让进程 OOM —— 单机离线部署下等于整个应用不可用。
+- `backup_service._verify_backup_recovery`：原先把整个库文件读进内存再落盘校验
+  （库可达 GB 级，备份校验自身成了内存峰值点）→ 改为 1MB 分块流式解压落盘。
+- 分片上传端点：`await file.read()` → `read_upload_with_limit`（20MB）；
+  合并阶段整文件读算 MD5 → 1MB 分块流式摘要（单会话上限 2GB）。
+- 离线地图瓦片读、分片合并单块读改为显式长度参数（有界读）。
+
+### 修复（组织树元数据缺失致组织级数据权限恒拒 — R14，真实 HTTP 探测发现）
+- `POST /api/v1/organizations` 此前走 `Organization(**org_data)` 直建，`path`/`level`
+  **未落库**（NULL）；而组织级数据权限完全依赖 path 前缀匹配
+  （`OrganizationPermissionService.can_access_organization` → `get_subordinate_ids`
+  → `Organization.path LIKE`）——**经界面新建的组织，其成员一律被判为"无组织权限"**，
+  数据包导出等组织门禁端点恒 403（安装包首启、建组织、挂用户即复现，已实测复现）。
+- 端点补 `path`/`level`（根 `/{id}/`、子 `{父 path}{id}/`，与
+  `OrganizationService.create_organization` 同口径）+ 校验上级组织存在。
+- `get_subordinate_organizations` 对 path 为 NULL 的历史数据退化为"仅自身"，
+  避免 fail-closed 被放大成功能不可用。
+- 新增 `OrganizationService.repair_organization_paths()` 并在启动自检调用：
+  幂等单趟回填（父先于子），历史库自愈（实测 3 个 NULL-path 组织启动即修复，
+  修复后同类导出由 403 → 200）。
+
+### 工程（预防门禁 — 计划 §六 P-1/P-2/P-3）
+- 新增 6 个棘轮扫描器并接入 `pr-checks.yml` static-analysis：
+  `check_os_exit`、`check_subprocess_encoding`、`check_dir_replace`、
+  `check_unbounded_read`、`check_upload_endpoints`、
+  `check_scheduler_registration`（公共件 `_gate_common.py`：基线比对键 =
+  路径 + 归一化代码，忽略行号漂移；`--baseline` 收敛；棘轮只紧不松）。
+- 六个门禁当前 **NEW=0 且无基线豁免**，使 R2/R8/R12-5 三类根因在 PR 阶段即被拦下。
+
+### 测试
+- 新增 `tests/unit/test_r7_maintenance_window_20260913.py`（19 例）、
+  `tests/unit/test_r12_low_risk_batch_20260913.py`（15 例）、
+  `tests/unit/test_data_package_zip_limit_r2.py`（4 例）、
+  `tests/unit/test_ratchet_gates_p1_20260913.py`（26 例：门禁抓违规 + 真实仓库必须 exit 0）。
+- 同步既有断言（行为语义变更，非静默改断言）：`os._exit`→SIGINT、join 1s→5s、
+  `create_background_task` 旧契约、任务表测试种子时间戳改为"新鲜"、
+  bandit 子进程补 `encoding="utf-8"`。
+
 ## [1.12.7] - 2026-09-13 — 🛡️ 遗留风险治理第二批（R2 上传体积上限 / R5 导出回收 / R9 导入拒绝记录 / R13 Windows CI 可见性）
 
 对应《deliverables/遗留风险彻底解决方案计划-2026-09-12.md》第二、三周批次。
