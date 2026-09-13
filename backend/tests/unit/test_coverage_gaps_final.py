@@ -151,7 +151,9 @@ class TestOrganizationEndpoints:
              patch("app.api.v1.organization.write_work_log", side_effect=Exception("log fail")):
             cm.delete = AsyncMock()
             result = await create_organization(data, current_user=user, db=db)
-            assert result.name == "NewOrg"
+            # R7-F1：信封返回（data 内为 ORM 组织对象）
+            assert result["code"] == 200
+            assert result["data"].name == "NewOrg"
 
     async def test_update_org_code_dup(self):
         from app.api.v1.organization import update_organization, OrganizationUpdate
