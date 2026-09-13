@@ -109,6 +109,37 @@ class TestCreateOrganizationTreeMetadata:
             db.close()
 
 
+class TestStartupOrgPathBackfill:
+    """启动自检里的组织树回填（R14）：两条分支都要走通且只在缺失时写库。"""
+
+    def test_backfills_and_logs_when_missing(self, client, caplog):
+        from app.startup.monitors import _backfill_organization_paths
+
+        db = _db()
+        try:
+            db.add(Organization(name="启动回填R14", code="BOOT_FIX_R14", path=None, level=None, is_active=True))
+            db.commit()  # 启动回填走独立会话，必须已提交才可见
+        finally:
+            db.close()
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            outcome = _backfill_organization_paths()
+        assert outcome["repaired"] >= 1
+        assert any("组织树元数据回填" in r.message for r in caplog.records)
+
+    def test_silent_when_nothing_missing(self, client, caplog):
+        from app.startup.monitors import _backfill_organization_paths
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            outcome = _backfill_organization_paths()
+        assert outcome["repaired"] == 0
+        assert not any("组织树元数据回填" in r.message for r in caplog.records)
+
+
 class TestSubordinateFallbackAndRepair:
     def test_subordinate_ids_fall_back_to_self_for_null_path(self, client):
         from app.services.organization_service import OrganizationService

@@ -138,26 +138,33 @@ def _run_database_startup_check():
                 logger.warning("数据库启动自检异常: %s", result.get("message", "unknown"))
             else:
                 logger.info("数据库启动自检通过 (%s)", result.get("db_size_mb", "?"))
-            # 组织树元数据自愈（R14 修复）：历史 API 直建的组织 path/level 为
-            # NULL，会让组织级数据权限把成员一律判为无权限（数据包导出等 403）。
-            # 幂等、单趟、只在确有缺失时写库。
-            from app.core.database import SessionLocal
-            from app.services.organization_service import OrganizationService
-
-            session = SessionLocal()
-            try:
-                outcome = OrganizationService(session).repair_organization_paths()
-            finally:
-                session.close()
-            if outcome.get("repaired"):
-                logger.warning(
-                    "组织树元数据回填: %s 个组织（path/level 缺失，已修复）",
-                    outcome["repaired"],
-                )
+            _backfill_organization_paths()
         except Exception as e:  # pragma: no cover
             logger.warning("数据库启动自检失败: %s", e)
 
     threading.Thread(target=_run, name="db-startup-check", daemon=True).start()
+
+
+def _backfill_organization_paths():
+    """组织树元数据自愈（R14 修复；启动自检调用）。
+
+    历史经 API 直建的组织 path/level 为 NULL，会让组织级数据权限把该组织成员
+    一律判为无权限（数据包导出等 403）。幂等、单趟、只在确有缺失时写库。
+    """
+    from app.core.database import SessionLocal
+    from app.services.organization_service import OrganizationService
+
+    session = SessionLocal()
+    try:
+        outcome = OrganizationService(session).repair_organization_paths()
+    finally:
+        session.close()
+    if outcome.get("repaired"):
+        logger.warning(
+            "组织树元数据回填: %s 个组织（path/level 缺失，已修复）",
+            outcome["repaired"],
+        )
+    return outcome
 
 
 def _stop_backup_scheduler():
