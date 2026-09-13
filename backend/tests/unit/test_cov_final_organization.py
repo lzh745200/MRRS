@@ -62,10 +62,13 @@ class TestCreateOrganization:
             with patch("app.api.v1.organization.write_work_log"):
                 with patch("app.api.v1.organization.cache_manager") as cm:
                     cm.delete = AsyncMock()
-                    org = await create_organization(data, user, db)
+                    resp = await create_organization(data, user, db)
 
-        assert org.name == "新组织"
-        assert org.is_active is True
+        # R7-F1：信封返回（code/data/message；data 内为 ORM 组织对象）
+        assert resp["code"] == 200
+        created = resp["data"]
+        assert created.name == "新组织"
+        assert created.is_active is True
         db.add.assert_called_once()
 
 
