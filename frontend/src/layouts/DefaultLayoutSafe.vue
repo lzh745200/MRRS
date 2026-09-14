@@ -1074,7 +1074,7 @@ function handleCommand(command: string) {
 .layout-content {
   flex: 1;
   overflow: auto;
-  background: var(--color-bg-page, #f0f4f0);
+  background: var(--color-bg-page);
   padding: var(--layout-content-padding, 24px);
 }
 

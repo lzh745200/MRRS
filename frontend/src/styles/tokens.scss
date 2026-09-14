@@ -189,6 +189,11 @@
   --shadow-dropdown: 0 2px 12px 0 rgba(0, 0, 0, 0.12);
   --shadow-dialog: 0 8px 24px rgba(0, 0, 0, 0.15);
   --shadow-popover: 0 2px 8px rgba(0, 0, 0, 0.15);
+
+  // 认证页玻璃卡（Register/LoginEnhanced/ForgotPassword 共用视觉）
+  --color-surface-glass: rgba(255, 255, 255, 0.94);
+  --color-border-glass: rgba(255, 255, 255, 0.2);
+  --shadow-auth-card: 0 20px 60px rgba(0, 0, 0, 0.35);
 }
 
 // ==================== 过渡Token ====================
