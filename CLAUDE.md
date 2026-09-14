@@ -13,7 +13,7 @@
 
 ```
 ├── backend/app/              # 后端（FastAPI）
-│   ├── api/v1/               # API 路由（41 个路由模块）
+│   ├── api/v1/               # API 接口层（93 个模块 + 13 个子包）
 │   │   ├── auth/             # 认证模块
 │   │   ├── data/             # 数据分析
 │   │   ├── import_export/    # 异步导入导出
@@ -61,10 +61,19 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && python -m pytest tests/ -v          # 后端测试（~10228 passed）
-cd frontend && npm test -- --run                  # 前端测试（~6030 passed，301 个测试文件）
-cd backend && python -m flake8 app/ --max-line-length=120
-cd frontend && npm run lint && npm run type-check
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 11244 用例 + 覆盖率门禁 100%
+cd frontend && npm test -- --run                                       # 前端 302 文件 / 6051 用例
+cd backend && .venv/Scripts/python.exe -m flake8 app/ --max-line-length=120 --max-complexity=16
+cd frontend && npm run lint:check && npm run type-check
+
+# 预防性棘轮门禁（P-1~P-3，CI static-analysis 作业同款；全部应 NEW=0）
+cd backend && .venv/Scripts/python.exe scripts/check_os_exit.py
+cd backend && .venv/Scripts/python.exe scripts/check_unbounded_read.py
+cd backend && .venv/Scripts/python.exe scripts/check_upload_endpoints.py
+cd backend && .venv/Scripts/python.exe scripts/check_subprocess_encoding.py
+cd backend && .venv/Scripts/python.exe scripts/check_dir_replace.py
+cd backend && .venv/Scripts/python.exe scripts/check_scheduler_registration.py
+python scripts/check_hardcoded_styles.py          # 前端硬编码色值棘轮（只紧不松）
 
 # lint-staged：仅检查 git 暂存文件（加速提交）
 cd frontend && npx lint-staged
@@ -108,7 +117,10 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
 - 项目完全离线运行，安装包内置所有运行时
 - Schema 权威来源: `backend/app/models/` 和 Alembic 迁移；`database/init.sql` 已删除
 - `.env` 文件不纳入版本控制
-- 版本号在 `backend/app/core/config.py` → `Settings.PROJECT_VERSION`（当前 1.11.2）
+- 版本号在 `backend/app/core/config.py` → `Settings.PROJECT_VERSION`（当前 1.12.8）；
+  13 处版本号由 `node scripts/sync-version.js --write` 单源同步，`--check` 为 CI 门禁
+- **发布流程**：本地门禁全绿 → 提交推送 → `git tag v<版本> && git push origin v<版本>`
+  → Actions 自动产出 **Windows x64 安装包** 与 **麒麟 ARM64 deb** 并发布 Release（两个安装包）
 - 数据库: `backend/data/rural_revitalization.db`
 - 生产部署前清除测试数据: `DELETE FROM supported_villages; DELETE FROM schools;`
 - **`SupportedVillage.is_revitalization_tier`** 是 Boolean（是否振兴梯队），原来的 `revitalization_tier` (String) 和 `tiered_development_level` (String) 已删除
@@ -127,6 +139,10 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
 - **角色精简与归一化** (2026-08-01): 系统角色精简为 4 个：`super_admin`/`admin`/`user`/`viewer`。旧角色值通过 `normalize_role()`（`app/core/constants.py`）自动映射：`approval_leader`/`manager` → `admin`，`operator` → `user`。`data_permission.py` 已适配。前端角色选择器默认值必须为 `user`（非 `operator`）。
 - **通行码验证三级回退** (2026-08-01): `machine_code_service.py` 的 `verify_pass_code()` 增加第三级回退逻辑：当机器码+通行码匹配失败时，仅凭通行码匹配 `status=pending` 的记录并自动更新 `machine_code` 绑定。解决 Windows 下 `wmic` 命令不稳定导致机器码变化的问题。
 - **files API 响应格式统一** (2026-08-01): `files.py` 上传端点必须使用 `success_response()` 返回信封格式，禁止返回裸 dict。所有文件上传操作必须补充审计日志（`AuditLogger`）。
+- **维护窗口** (2026-09-14, R7): 备份恢复入口必须包 `app/core/maintenance.maintenance_window()` —— 期间写请求 503（`maintenance_gate.py` 中间件）、读放行、等在途请求归零（≤10s）、`finally` 解除；`/health` 出 `maintenance` 字段。禁止在恢复路径上跳过该闸门。
+- **上传与解压一律限长** (2026-09-13/14, R2): `UploadFile` 必须走 `read_upload_with_limit`/`save_upload_file`/带长度分块读；ZIP 先 `ensure_zip_within_limit` 再 `read_zip_member`（数据包、权限包、管控包、上报包、备份校验全覆盖）。
+- **组织树元数据** (2026-09-14, R14): 新建/变更组织必须落 `path`（根 `/{id}/`、子 `{父 path}{id}/`）与 `level`；`OrganizationService.repair_organization_paths()` 在启动自检幂等回填历史 NULL 值。缺失会让组织级数据权限 fail-closed 成"成员一律无权限"（导出恒 403）。
+- **优雅关闭** (2026-09-14, R12-5): 关机/重启一律 `signal.raise_signal(SIGINT)`，禁止 `os._exit`（`check_os_exit.py` 拦截）。
 
 ## Pre-commit Hooks（分阶段策略）
 

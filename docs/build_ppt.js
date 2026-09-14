@@ -38,7 +38,7 @@ function header(s, kicker, title) {
     color: TEXT, fontFace: F, margin: 0 });
   s.addText(String(pageNo).padStart(2, "0"), { x: W - 1.0, y: H - 0.55, w: 0.5, h: 0.3,
     fontSize: 11, color: MUTED, fontFace: F, align: "right", margin: 0 });
-  s.addText("帮扶管理信息系统 v1.11.2", { x: M, y: H - 0.55, w: 4, h: 0.3,
+  s.addText("帮扶管理信息系统 v1.12.8", { x: M, y: H - 0.55, w: 4, h: 0.3,
     fontSize: 10.5, color: MUTED, fontFace: F, margin: 0 });
 }
 function card(s, x, y, w, h, fill = BG) {
@@ -94,7 +94,7 @@ function sectionSlide(num, title, sub, items) {
     { text: "多机协同 · 军工级安全", options: {} },
   ], { x: 1.0, y: 4.75, w: 6, h: 0.85, fontSize: 16, color: LIGHT, fontFace: F,
     paraSpaceAfter: 6, margin: 0 });
-  s.addText("V1.11.2  |  2026-08-30  |  FastAPI + Vue 3 + Electron + SQLite", {
+  s.addText("V1.12.8  |  2026-09-14  |  FastAPI + Vue 3 + Electron + SQLite", {
     x: 1.0, y: 6.35, w: 10, h: 0.4, fontSize: 12.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
@@ -191,9 +191,9 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
   s.addShape(p.shapes.LINE, { x: M, y: 3.95, w: W - 2 * M, h: 0, line: { color: "D8E0DA", width: 1 } });
   stat(s, 0.55, 4.35, 3.0, "49", "后端 API 路由模块", PRIMARY_L);
   stat(s, 3.9, 4.35, 3.0, "88", "后端服务（80 + 8 子包）", PRIMARY_L);
-  stat(s, 7.25, 4.35, 3.0, "37", "数据库迁移版本", PRIMARY_L);
+  stat(s, 7.25, 4.35, 3.0, "43", "数据库迁移版本", PRIMARY_L);
   stat(s, 10.6, 4.35, 2.4, "4", "用户角色", PRIMARY_L, 40);
-  s.addText("数据来源：仓库实测（2026-08-30，v1.11.2）—— flake8 0 错误 · bandit 0 中高危 · vue-tsc 0 错误 · eslint 0 警告", {
+  s.addText("数据来源：仓库实测（2026-09-14，v1.12.8）—— 后端 11244 用例全绿 / 覆盖率 100% · 前端 6051 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告", {
     x: M, y: 6.35, w: 12.3, h: 0.4, fontSize: 12, color: MUTED, fontFace: F, margin: 0 });
 }
 
@@ -903,11 +903,11 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   const s = p.addSlide();
   header(s, "06 部署运行", "版本历程：三个月的密集演进");
   const tl = [
-    ["v1.10.0", "08-24", "全板块完善：假成功防线、经费流程、政策 FTS5"],
-    ["v1.10.6", "08-29", "死代码清理：净删 500+ 文件/5.5 万行，31 依赖精简"],
-    ["v1.11.0", "08-30", "体检修复：PII 加密 / fail-closed / 数据包补全 / 供应链加固"],
-    ["v1.11.1", "08-30", "安装器真机修复：NSIS 路径转义根修"],
     ["v1.11.2", "08-30", "403 六类根因修复 + 弹窗裁切修复 + 5 个 500 端点"],
+    ["v1.12.2", "09-12", "架构评估 P0/P1 加固：导出任务重启恢复、导出/备份原子写、备份可恢复性校验"],
+    ["v1.12.5", "09-12", "深度审计 13 项修复：目录穿越 / 存储型 XSS / 并发 / 备份 fail-loud"],
+    ["v1.12.7", "09-13", "遗留风险二批：上传体积三层上限、导出回收、导入拒绝记录、Windows CI 可见性"],
+    ["v1.12.8", "09-14", "R7 恢复维护闸门 / R12 低危批量 7 项 / R2 残余清零 / P-1~P-3 门禁 / R14 组织树修复"],
   ];
   s.addShape(p.shapes.LINE, { x: 1.1, y: 3.1, w: 11.1, h: 0, line: { color: "D8E0DA", width: 2 } });
   tl.forEach((t, i) => {
@@ -922,7 +922,7 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
       fontFace: F, align: "left", margin: 0 });
   });
   card(s, M, 5.95, 12.33, 1.0, PRIMARY_T);
-  s.addText("净效果：5.5 万行死代码出清后，系统以更小的体积承载了更多功能——10142 + 5691 项测试全绿，双平台安装包全自动构建", {
+  s.addText("净效果：11244 后端用例（覆盖率 100%）+ 6051 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
     x: 0.82, y: 5.95, w: 11.6, h: 1.0, fontSize: 13.5, bold: true, color: TEXT,
     fontFace: F, valign: "middle", margin: 0 });
 }
@@ -932,12 +932,12 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   const s = p.addSlide();
   header(s, "06 部署运行", "后续演进：已立项的工单");
   const plans = [
-    ["UI 精美化批量清扫", "W11-T45：58 个页头标准化、图表引擎统一（chart.js→echarts）、仪表盘配色令牌化"],
-    ["数据同步管道重做", "W2-T7：data_sync 裸 SQL → ORM 写入（修复 sync_version 增量语义 + 审计）"],
-    ["代码签名落地", "W6-T1：采购证书后接入 CSC secrets，安装包/后端 exe 全签名"],
-    ["审计保留策略", "W5-008：审计四表生命周期 + 请求级双写去重"],
-    ["E2E 链路修复", "W4-004：Docker E2E 三处断裂修复 + 5 条关键路径 Playwright 用例"],
-    ["弱断言清理", "W4-003：30 个接受 HTTP 500 的断言收紧为精确状态码"],
+    ["调度任务注册表（P-2）", "scheduler_registry 清单化 + /health 全量暴露（当前仅落地裸 threading.Timer 扫描门禁）"],
+    ["依赖门禁分级（P-4）", "pip-audit 分级：有修复版本的高危阻断合入；无修复版本强制登记豁免理由"],
+    ["本地环境标准化（R10）", "用 3.11.9+ 重建 .venv + make venv/test-local 固化 PYTHONUTF8 与 IDE 注入清理"],
+    ["代码签名落地", "采购证书后接入 CSC secrets，安装包/后端 exe 全签名（W6-T1）"],
+    ["评审清单与 PR 模板（P-5）", "新增线程/Timer、except-pass、文件写入、新依赖四类必答项并入 PR 模板"],
+    ["E2E 扩充", "Docker E2E 关键路径 Playwright 用例扩容（当前 150 例，CI 全绿）"],
   ];
   plans.forEach((pl, i) => {
     const col = i % 2, row = Math.floor(i / 2);
@@ -958,9 +958,9 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
     fontSize: 17, bold: true, color: ACCENT, fontFace: F, charSpacing: 4, margin: 0 });
   s.addText("谢谢观看", { x: 0.96, y: 3.0, w: 11, h: 1.2, fontSize: 54, bold: true,
     color: "FFFFFF", fontFace: F, margin: 0 });
-  s.addText("帮扶管理信息系统 v1.11.2  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
+  s.addText("帮扶管理信息系统 v1.12.8  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
     x: 1.0, y: 4.55, w: 11, h: 0.45, fontSize: 13.5, color: LIGHT, fontFace: F, margin: 0 });
-  s.addText("10,142 后端用例 + 5,691 前端用例 全绿守护 · Windows / 麒麟双平台离线交付", {
+  s.addText("11,244 后端用例（覆盖率 100%）+ 6,051 前端用例 全绿守护 · Windows x64 / 麒麟 ARM64 双平台离线交付", {
     x: 1.0, y: 5.05, w: 11, h: 0.45, fontSize: 13.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 

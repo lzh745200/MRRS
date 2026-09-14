@@ -1,19 +1,19 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.11.5
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.12.8
 
 ![Version](https://img.shields.io/badge/version-1.12.8-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-16%2C690%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-17%2C295%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **10,670 passed**, 0 失败（死代码清理后基线） |
-| 前端测试 | **6,028 passed**, 0 失败 |
+| 后端测试 | **11,244 passed**, 0 失败（含覆盖率 100% 门禁） |
+| 前端测试 | **6,051 passed**（302 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
 | Flake8 | 0 错误, 0 警告 |
@@ -26,7 +26,11 @@
 | Sass | 1.101.0（modern-compiler API） |
 | 角色体系 | 4 核心角色 (super_admin/admin/user/viewer) |
 
-> **上次全量验证**: 2026-09-04 — 后端 10,670 + 前端 6,028 测试全部通过，覆盖率门禁（后端 fail_under=100 / 前端 12 组 ×100）绿灯，零 lint 错误，零安全告警
+| 预防门禁 | 6 个棘轮扫描器（os._exit / 上传限长 / 无界读 / 子进程编码 / 目录替换 / 周期任务注册）接入 CI，NEW=0 |
+| 真实 HTTP 探测 | 21 个探针脚本 0 失败（探针专用库，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包） |
+
+> **上次全量验证**: 2026-09-14（v1.12.8）— 后端 11,244 用例 + 覆盖率 100%、前端 6,051 用例全部通过；
+> flake8 0 / bandit 中高危 0 / vue-tsc 0 / eslint 0；GitHub Actions 双安装包构建全绿
 
 ## 快速开始
 
@@ -95,10 +99,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端单元测试 | pytest | 10,670 | API/Service/Core/Model/Utils 全覆盖 |
+| 后端单元测试 | pytest | 11,244（覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,028 | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 6,051（302 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 12 流程 | Login/Dashboard/Projects/Approval/Funds |
 | 性能测试 | Locust | 配置可用 | 负载测试 |
 | 属性测试 | fast-check | 多组 | 组件属性验证 |
@@ -115,8 +119,9 @@ cd backend && pytest tests/ -q --tb=short
 # 前端
 cd frontend && npm test
 
-# 全量（不含 E2E）
-make test
+# 全量（不含 E2E）—— 有 make 的环境用 make test；Windows 无 make 时逐条执行
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app
+cd frontend && npm test -- --run
 
 # E2E (Docker)
 docker compose -f docker-compose.yml -f docker/docker-compose.e2e.yml --profile e2e up
@@ -139,35 +144,41 @@ cd backend && bandit -r app/
 pip install pre-commit && pre-commit install
 npx lint-staged                        # 仅检查暂存文件
 
-# 构建
-make build-win-x64                     # Windows x64 安装包
-make build-kylin                       # 麒麟 V10 ARM64 DEB
+# 构建（两种方式，产物一致）
+# ① 推荐：推 tag 由 GitHub Actions 一次产出两个安装包并发布 Release
+git tag v1.12.8 && git push origin v1.12.8     # → Windows x64 .exe + 麒麟 ARM64 .deb
+# ② 本地（Windows 无 make 时）：fetch_vcredist → 前端构建 → 同步 → PyInstaller → electron-builder
+powershell -ExecutionPolicy Bypass -File scripts/build/fetch_vcredist.ps1
+cd frontend && npm run build && cd .. && cmd /c scripts\build\sync-frontend-dist.bat
+cd backend && .venv/Scripts/python.exe -m PyInstaller assistance-backend.spec --clean --noconfirm && cd ..
+npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本>-x64.exe
 ```
 
 ## CI/CD 流水线
 
 | 流水线 | 触发条件 | 内容 |
 |--------|---------|------|
-| **PR Checks** | Pull Request | 后端测试 + 覆盖率门禁（`.coveragerc` fail_under=100）+ 前端测试（12 组 ×100）+ flake8 + npm audit + SBOM |
+| **PR Checks**（7 作业） | Pull Request | 后端测试 + 覆盖率门禁（`.coveragerc` fail_under=100）+ 前端检查 + lint + security + **static-analysis（含 6 个预防棘轮门禁）** + E2E + **windows-smoke** |
 | **Nightly Full** | 每日凌晨2:00 UTC | 全量测试 + 覆盖率报告 + Codecov + JUnit 报告 |
-| **Build Windows** | Push main / tag v* | PyInstaller + electron-builder NSIS |
-| **Build ARM64** | Push main / tag v* | Docker Buildx QEMU + electron-builder DEB |
+| **Build Windows x64** | **tag v\*** / 手动 | PyInstaller onedir + electron-builder NSIS → 安装包挂到 Release |
+| **Build ARM64 deb** | **tag v\*** / 手动 | Docker Buildx QEMU + electron-builder DEB → 安装包挂到 Release |
 
 ## 项目结构
 
 ```
-├── backend/app/              # 后端（FastAPI）
-│   ├── api/v1/               # API 路由（47 个路由模块）
-│   ├── core/                 # 核心：config, security, database, transaction, cache
-│   ├── models/               # SQLAlchemy 数据模型（~40 个）
-│   ├── services/             # 业务逻辑层（~60 个服务）
-│   └── middleware/            # CSRF, 审计, 请求日志, 零信任
-├── frontend/src/             # 前端（Vue 3 + TypeScript）
-│   ├── views/                # 页面视图（~90 个组件）
-│   ├── components/           # 通用 + 业务组件（~60 个）
-│   ├── stores/               # Pinia 状态（18 个 store）
-│   ├── composables/          # 组合式函数（~22 个）
-│   └── utils/                # 工具函数（~40 个模块）
+├── backend/app/              # 后端（FastAPI，339 个 py / 8.1 万行）
+│   ├── api/v1/               # API 接口层（93 个模块 + 13 个子包）
+│   ├── core/                 # 核心：config, security, database, transaction, cache, maintenance(维护闸门)
+│   ├── models/               # SQLAlchemy 数据模型（59 个文件）
+│   ├── services/             # 业务逻辑层（100 个服务 + 13 个子包）
+│   ├── middleware/           # CSRF, 审计, 请求日志, 指标, maintenance_gate(写请求闸门)
+│   └── startup/              # 启动钩子（种子/监控/恢复/环境自检 + 组织树自愈）
+├── frontend/src/             # 前端（Vue 3 + TypeScript，292 个源文件）
+│   ├── views/                # 页面视图（131 个 .vue）
+│   ├── components/           # 通用 + 业务组件
+│   ├── stores/               # Pinia 状态
+│   ├── composables/          # 组合式函数
+│   └── utils/                # 工具函数
 ├── electron/                 # Electron 桌面壳
 ├── docker/                   # 多架构 Dockerfile + E2E compose
 ├── deploy/                   # 麒麟 V10 systemd + DEBIAN 配置
@@ -186,7 +197,31 @@ MIT License - 详见 [LICENSE](LICENSE)
 
 Copyright © 2025-2026 贵州省乡村振兴项目组
 
+## 安装包获取
+
+| 平台 | 安装包 | 获取方式 |
+|------|--------|---------|
+| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（约 228 MB，内置后端 exe + 前端产物 + VC++ 运行库） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA512） |
+| 麒麟 V10 / 统信 UOS ARM64 | `*.deb`（自包含后端二进制） | 同上（`build-arm64.yml` 产出） |
+
+> 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；
+> 发布校验和随 GitHub Release 一起提供（旧版 `SHA256SUMS-*` 已随版本归档清理）。
+
 ## 近期修复记录
+
+### 2026-09-14（v1.12.8）
+- 🛡️ **R7 恢复维护窗口**：备份恢复期间新的写请求一律 503、读请求放行、等待在途请求归零后执行、`finally` 解除；`/health` 暴露 `maintenance` 状态。修复"恢复时恰有在途写 → Windows 覆盖失败 / POSIX 写进旧 inode 静默丢提交"
+- 🛡️ **R14 组织树元数据**：新建组织不再缺 `path/level`（此前导致组织级数据权限 fail-closed，成员一律 403、管理员无法导出数据包）；历史数据由启动自检幂等回填
+- 🧱 **R12 低危一致性 7 项**：慢请求计数器原子化、演练状态快照、提醒线程双启动窗口、`os._exit`→优雅关闭、内存任务表终态回收、后台任务调度契约
+- 🔒 **R2 残余清零**：数据包/权限包 11 处 zip 打开点补解压后总量闸门与限长读；备份校验改流式；分片上传限长 + 合并摘要分块
+- 🚦 **P-1~P-3 预防门禁**：6 个棘轮扫描器接入 CI（`os._exit` / 无界读 / 上传端点 / 子进程编码 / 目录替换 / 裸 Timer）
+- 🎨 认证页与布局硬编码色值清零 + 补齐 3 个设计 token（样式棘轮新增归零）
+- 📊 后端 11,244 用例 / 覆盖率 100%；前端 6,051 用例；21 个真实 HTTP 探针 0 失败
+
+### 2026-09-13（v1.12.6 / v1.12.7）
+- 🛡️ 遗留风险第一批：调度器 RecurringTimer 收敛 + 作业看门狗（自动备份不再静默停摆）、启动不再抢锁 VACUUM、备份语义 fail-loud
+- 🛡️ 遗留风险第二批：上传体积三层上限（中间件/端点 18 处/压缩炸弹防护）、导出过期回收、导入失败记录 409 语义、Windows 冒烟作业入 CI
+- 🔧 版本与依赖单源收敛（sync-version 13 处 + 删除 3 个无人引用的 requirements 变体）
 
 ### 2026-08-09
 - ✨ 备份包上传恢复完整链路：`/system/backup/upload-restore` 支持加密备份（密码透传解密）、上传前内存预校验（加密标记/损坏ZIP/缺库文件，拒绝零残留）、恢复流程 WAL 安全（先释放连接池再覆盖）
