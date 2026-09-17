@@ -128,6 +128,11 @@ hiddenimports = [
     # 文件处理
     'PIL.Image',
 
+    # Word 导出（python-docx）：report_export_service 在函数内 `from docx import Document`，
+    # 自动探测只跟到顶层；docx 的子模块（oxml/parts/shared/enum）存在动态导入，
+    # 显式全量收集（2026-09-14 R15：安装包内 Word 导出曾因排除 docx 而不可用）
+    *collect_submodules('docx'),
+
 ]
 
 # Windows 平台特定隐藏导入
@@ -144,7 +149,9 @@ excludes = [
     'tkinter', 'test', 'tests',
     'matplotlib', 'IPython', 'jupyter',
     'notebook', 'spyder', 'pylint',
-    'docx', 'apscheduler',
+    'apscheduler',
+    # 注意：docx **不得**排除——report_export_service 用 python-docx 生成 Word 报表，
+    # 排除后安装包内 Word 导出必然 ImportError（2026-09-14 R15 冻结运行时复验发现，已移除）
     # 注意：mammoth 不再排除（policy.py 用于 .docx → HTML 转换，是运行时依赖）
 ]
 

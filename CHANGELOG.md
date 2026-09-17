@@ -77,6 +77,9 @@
   `"<当前解释器>" -m pip install -r "<backend/requirements.txt>"`。
 - 顺带修复被误写入的文档：`docs/03-开发文档/06-运维文档/技术栈说明.md` 原为一份被截断的
   Claude Code 权限配置 JSON（2026-07-22），已重写为真正的技术栈说明（含依赖三级清单与自检口径）。
+- **打包依赖同批修复**（冻结运行时复验发现）：`backend/assistance-backend.spec` 的 `excludes`
+  里排除了 `docx`，而 `report_export_service` 用 **python-docx** 生成 Word 报表 —— 安装包内
+  Word 导出必然 ImportError。已从 excludes 移除并加入 `collect_submodules('docx')` 全量收集。
 
 ### 工程（预防门禁 — 计划 §六 P-1/P-2/P-3）
 - 新增 6 个棘轮扫描器并接入 `pr-checks.yml` static-analysis：
