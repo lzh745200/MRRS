@@ -82,6 +82,8 @@ cd frontend && npm install && npm run dev
 - **缓存**: diskcache + 内存 LRU
 - **任务**: threading.Timer 定时调度（备份计划/KPI预计算/异常检测, APScheduler 已移除）
 - **角色体系**: 4 核心角色（super_admin/admin/user/viewer）+ `normalize_role()` 向后兼容
+- **依赖自检**: 运行时依赖登记在 `backend/app/core/required_packages.py`（必需/可选/仅开发三级），
+  启动自检与 `GET /api/v1/env/check` 按 **import 名** 校验；自包含安装包不误报、不给无效 pip 建议
 - **打包**: PyInstaller（x64 + ARM64）+ electron-builder（NSIS 安装包）
 
 ### 前端

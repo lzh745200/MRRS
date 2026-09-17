@@ -111,7 +111,7 @@ function sectionSlide(num, title, sub, items) {
     ["02", "技术架构", "技术栈 · 分层设计 · 离线优先"],
     ["03", "功能模块", "七大业务域 · 71 个功能菜单"],
     ["04", "安全体系", "四角色权限 · PII 加密 · 审计合规"],
-    ["05", "质量工程", "15833 项自动化测试 · CI/CD"],
+    ["05", "质量工程", "17,295 项自动化测试 · CI/CD · 依赖自检"],
     ["06", "部署运行", "双平台安装包 · 备份升级 · 版本历程"],
   ];
   toc.forEach((t, i) => {
@@ -212,8 +212,8 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
   const cols = [
     ["桌面壳层", "Electron", ["Windows x64 NSIS 安装包", "麒麟 V10 ARM64 DEB", "托盘 / 自启 / 锁屏 / 快捷键", "后端进程托管与健康检查"]],
     ["前端", "Vue 3 + TypeScript", ["Element Plus + Pinia + Vue Router", "SCSS 设计令牌（4 套可切换主题）", "131 个视图 · 25 个共享组件", "Axios 统一信封 + CSRF + 离线 Mock"]],
-    ["后端", "FastAPI (Python 3.11)", ["49 个路由模块 + 5 个子包", "80 个服务 + 8 个子包", "SQLAlchemy 2.x + Alembic", "JWT + 黑名单 + 限流 + 审计中间件"]],
-    ["数据", "SQLite", ["单文件数据库，随备份带走", "WAL 并发 + 外键强制", "EncryptedText 列透明加密", "37 个 Alembic 迁移版本"]],
+    ["后端", "FastAPI (Python 3.11)", ["93 个路由模块 + 13 个子包", "100 个服务 + 13 个子包", "SQLAlchemy 2.x + Alembic", "依赖登记表单一事实源（三级自检）"]],
+    ["数据", "SQLite", ["单文件数据库，随备份带走", "WAL 并发 + 外键强制", "EncryptedText 列透明加密", "43 个 Alembic 迁移版本"]],
   ];
   cols.forEach((c, i) => {
     const x = M + i * 3.18;
@@ -309,7 +309,7 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
 /* 12 数据与模型 */
 {
   const s = p.addSlide();
-  header(s, "02 技术架构", "数据层：57 个模型的安全基座");
+  header(s, "02 技术架构", "数据层：59 个模型的安全基座");
   card(s, M, 1.8, 5.9, 4.9);
   s.addText("模型与迁移", { x: 0.82, y: 2.05, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   bullets(s, [

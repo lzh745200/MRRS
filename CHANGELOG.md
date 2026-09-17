@@ -60,6 +60,24 @@
   幂等单趟回填（父先于子），历史库自愈（实测 3 个 NULL-path 组织启动即修复，
   修复后同类导出由 403 → 200）。
 
+### 修复（依赖清单收敛与自检口径 — R15，2026-09-14 用户实测反馈）
+- **幻影依赖**：`GET /api/v1/env/check` 自持的清单里列了应用**从不 import** 的 `fpdf2`
+  （`requirements.txt` 中亦无该分发名）与**仅开发期**的 `pytest` —— 任何环境下恒报"缺失依赖"，
+  用户照提示 `pip install fpdf2 pytest` 永远装不出 `fpdf2`。
+- **冻结运行时误报**：判定用 `importlib.metadata.distributions()` 枚举已安装分发，而
+  PyInstaller 冻结运行时里 bundled 包的 `.dist-info` 不完整 —— 能 import 的包也被判缺失，
+  **安装包首启即弹"缺失 7 个依赖"**（2026-09-14 用户截图场景）。
+- 修复：新增 `app/core/required_packages.py` 作为**依赖登记表单一事实源**（运行时必需 /
+  运行时可选 / 仅开发 三级）；`app/main.py`、`app/startup/environment.py`、
+  `app/api/v1/system/env.py` 三处清单全部改指该表；判定改 **import 名 + `find_spec`**
+  （冻结运行时同样可靠），版本号取 `importlib.metadata` **尽力而为**。
+- 环境诊断页按三级分别展示：红色"缺失依赖"只给运行时必需；可选缺失提示"功能降级"；
+  开发期缺失单独成组；**冻结运行时不再给不适用的 `pip install` 建议**，改为"自包含安装包运行，
+  请重新安装安装包或联系管理员"。修复命令改为可执行形态
+  `"<当前解释器>" -m pip install -r "<backend/requirements.txt>"`。
+- 顺带修复被误写入的文档：`docs/03-开发文档/06-运维文档/技术栈说明.md` 原为一份被截断的
+  Claude Code 权限配置 JSON（2026-07-22），已重写为真正的技术栈说明（含依赖三级清单与自检口径）。
+
 ### 工程（预防门禁 — 计划 §六 P-1/P-2/P-3）
 - 新增 6 个棘轮扫描器并接入 `pr-checks.yml` static-analysis：
   `check_os_exit`、`check_subprocess_encoding`、`check_dir_replace`、

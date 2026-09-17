@@ -121,6 +121,12 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
   13 处版本号由 `node scripts/sync-version.js --write` 单源同步，`--check` 为 CI 门禁
 - **发布流程**：本地门禁全绿 → 提交推送 → `git tag v<版本> && git push origin v<版本>`
   → Actions 自动产出 **Windows x64 安装包** 与 **麒麟 ARM64 deb** 并发布 Release（两个安装包）
+- **依赖清单单一事实源** (2026-09-14, R15)：运行时依赖只登记在
+  `backend/app/core/required_packages.py`（运行时必需 / 运行时可选 / 仅开发 三级），
+  并在 `backend/requirements*.txt` 登记同一分发名。**禁止**在端点或启动钩子里自持清单
+  （历史三处漂移：UI 那份列了应用不用的 `fpdf2` 与仅开发期的 `pytest` → 任何环境恒报缺失）。
+  判定用 **import 名 + `importlib.util.find_spec`**（PyInstaller 冻结运行时同样可靠），
+  不用 `importlib.metadata.distributions()` 枚举（冻结包里 `.dist-info` 不全 → 误报）。
 - 数据库: `backend/data/rural_revitalization.db`
 - 生产部署前清除测试数据: `DELETE FROM supported_villages; DELETE FROM schools;`
 - **`SupportedVillage.is_revitalization_tier`** 是 Boolean（是否振兴梯队），原来的 `revitalization_tier` (String) 和 `tiered_development_level` (String) 已删除
