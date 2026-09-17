@@ -11,7 +11,10 @@
     <div v-loading="loading" class="file-preview-body">
       <template v-if="objectUrl">
         <img v-if="isImage" :src="objectUrl" class="preview-image" :alt="fileName" />
-        <iframe v-else :src="objectUrl" class="preview-frame" title="文件预览" />
+        <!-- sandbox 必须为空（禁脚本/禁同源）：blob: URL 继承应用源，
+             含 html 的附件（type.includes("html") 亦匹配 xhtml）一旦渲染即可在
+             本应用源下执行脚本并读取会话令牌。空 sandbox 仍可正常显示 PDF/文本。 -->
+        <iframe v-else :src="objectUrl" class="preview-frame" title="文件预览" sandbox="" />
       </template>
       <el-empty v-else-if="unsupported" description="该文件类型不支持在线预览，请下载查看">
         <el-button type="primary" @click="handleDownload">下载文件</el-button>

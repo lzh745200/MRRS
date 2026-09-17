@@ -325,7 +325,6 @@ describe('API module imports', () => {
     'message',
     'machineCode',
     'organizationPassCode',
-    'userManagement',
     'export',
     'batchOperations',
     'validationRules',

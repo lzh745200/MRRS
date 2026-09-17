@@ -3,6 +3,7 @@
 提供用户权限检查、管理员验证和组织关系查询。
 """
 
+import inspect
 import logging
 from functools import wraps
 from typing import Optional
@@ -69,7 +70,11 @@ def is_admin(user) -> bool:
     return False
 
 
-def require_admin(func=None, *, error_message: str = "需要管理员权限"):
+# 哨兵：区分「无参调用（装饰器工厂）」与「显式传入 None（非法用户，须拒绝）」。
+_UNSET = object()
+
+
+def require_admin(func=_UNSET, *, error_message: str = "需要管理员权限"):
     """管理员权限验证 — 支持装饰器和直接调用两种模式。
 
     装饰器模式:
@@ -81,48 +86,54 @@ def require_admin(func=None, *, error_message: str = "需要管理员权限"):
         require_admin(current_user)
         require_admin(current_user, error_message="仅管理员可执行")
     """
-    # 直接调用模式：第一个参数是用户对象（有 role 属性且值为字符串）
-    if func is not None and isinstance(getattr(func, "role", None), str):
-        user = func
-        if not is_admin(user):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=error_message,
-            )
-        return None
-
-    # 装饰器模式：第一个参数是被装饰的函数
-    if func is None:
+    # 无参调用 = 装饰器工厂（与显式传入 None 区分开）
+    if func is _UNSET:
         def decorator(f):
             return require_admin(f, error_message=error_message)
         return decorator
 
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        # 从 kwargs 中查找 current_user
-        current_user = kwargs.get("current_user")
-        if current_user is None:
-            # 尝试从 args 中查找（如果是位置参数）
-            for arg in args:
-                if hasattr(arg, "role") or hasattr(arg, "is_superuser"):
-                    current_user = arg
-                    break
+    # 装饰器模式：参数是「待装饰的函数 / 方法 / 类」。
+    # 判定必须用 inspect，**不可用 callable()**：测试与部分调用方传入的是 Mock /
+    # MagicMock 用户对象，它们同样是**可调用**的；用 callable() 会把它们误判成
+    # 待装饰函数并返回 wrapper，权限校验被静默跳过（fail-open）。
+    if inspect.isfunction(func) or inspect.ismethod(func) or inspect.isclass(func):
 
-        if current_user is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="未提供用户认证信息",
-            )
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # 从 kwargs 中查找 current_user
+            current_user = kwargs.get("current_user")
+            if current_user is None:
+                # 尝试从 args 中查找（如果是位置参数）
+                for arg in args:
+                    if hasattr(arg, "role") or hasattr(arg, "is_superuser"):
+                        current_user = arg
+                        break
 
-        if not is_admin(current_user):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=error_message,
-            )
+            if current_user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="未提供用户认证信息",
+                )
 
-        return await func(*args, **kwargs)
+            if not is_admin(current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=error_message,
+                )
 
-    return wrapper
+            return await func(*args, **kwargs)
+
+        return wrapper
+
+    # 直接调用模式：参数是「用户对象」（含 None 等非法值）—— 一律 fail-closed。
+    # 原实现以 isinstance(getattr(func, "role", None), str) 判定，使 role 为 None/枚举、
+    # 或载荷缺 role 的用户对象落入装饰器分支并返回 wrapper，校验被静默跳过。
+    if not is_admin(func):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_message,
+        )
+    return None
 
 
 def get_user_org_id(user) -> Optional[int]:
@@ -268,8 +279,11 @@ def require_organization(func=None, *, org_param: str = "organization_id"):
         user_org_id = get_user_org_id(current_user)
         requested_org_id = kwargs.get(org_param)
 
-        if requested_org_id is not None and user_org_id is not None:
-            if requested_org_id != user_org_id:
+        # fail-closed：请求显式指定组织时，用户必须「有归属」且与之相同。
+        # 原条件附带 user_org_id is not None，使「无组织归属」的账号直接跳过整段
+        # 校验，可读取任意 organization_id 的数据（违反 CONTEXT.md 不变量 2）。
+        if requested_org_id is not None:
+            if user_org_id is None or requested_org_id != user_org_id:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="无权访问其他组织的数据",

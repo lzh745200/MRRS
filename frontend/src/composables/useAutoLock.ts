@@ -2,6 +2,7 @@
  * 自动锁屏 composable（改用依赖注入式实现,便于测试与 ESM 兼容）
  */
 import { onMounted, onUnmounted } from 'vue'
+import { AuthStorage } from '@/utils/authStorage'
 import { markLockNow } from '@/utils/lockDigest'
 
 const STORAGE_KEY = 'auto-lock-minutes'
@@ -30,8 +31,10 @@ export function useAutoLock(opts: AutoLockOptions = {}) {
     opts.onLock ??
     (() => {
       // 默认行为: 结束会话（保留"记住登录"持久凭据）+ 锁屏标记 + 跳登录页
+      // 注意：这里**不能**用 require() —— 浏览器 ESM 打包产物没有 require，
+      // 抛出的 ReferenceError 会被下面的 catch 静默吞掉，导致锁屏「看起来启用
+      // 但从不生效」（不清会话、不落锁屏标记）。必须用顶层 import。
       try {
-        const { AuthStorage } = require('@/utils/authStorage')
         AuthStorage.clearSession()
         window.sessionStorage.setItem('auto_lock_active', '1')
         markLockNow()

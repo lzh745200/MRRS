@@ -74,7 +74,10 @@ class ErrorCode(IntEnum):
     # --- Backward-compat aliases (preserve original code values for legacy consumers) ---
     UNKNOWN_ERROR = 1000
     # Legacy codes that differ from current numbering — use unique values to avoid clashes
-    _USER_NOT_FOUND_LEGACY = 4003
+    # 注意：此值必须是**未被占用**的；曾误用 4003，与 FILE_UPLOAD_FAILED 撞号后
+    # IntEnum 会把它静默变成别名（ErrorCode(4003) 解析为 FILE_UPLOAD_FAILED，
+    # 且该成员从迭代中消失）。4001-4004 属 File 段，故取 4005。
+    _USER_NOT_FOUND_LEGACY = 4005
     _DATABASE_ERROR_LEGACY = 6000
     _BUSINESS_ERROR_LEGACY = 5000
     _BACKUP_ERROR_LEGACY = 5004
@@ -123,6 +126,8 @@ ERROR_MESSAGES = {
     4002: "文件类型不允许",
     4003: "文件上传失败",  # also USER_NOT_FOUND legacy via alias
     4004: "文件已损坏",
+    # 原 4003 与 FILE_UPLOAD_FAILED 撞号，故 USER_NOT_FOUND 的 legacy 值分离到 4005
+    4005: "用户不存在",
     # Database
     5000: "业务规则违反",  # BUSINESS_ERROR legacy
     5001: "数据库连接失败",

@@ -1,4 +1,4 @@
-﻿"""数据同步服务单元测试 (100% coverage)"""
+"""数据同步服务单元测试 (100% coverage)"""
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch

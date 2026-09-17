@@ -60,6 +60,9 @@ def _get_algorithm() -> str:
 # Token creation
 # ---------------------------------------------------------------------------
 
+# JWT 保留声明：调用方通过 extra_claims 不得覆盖（见 create_token_pair）。
+_RESERVED_CLAIMS = frozenset({"sub", "jti", "type", "iat", "exp", "nbf"})
+
 
 def create_token_pair(
     subject: str,
@@ -106,7 +109,12 @@ def create_token_pair(
         "exp": now + timedelta(minutes=access_ttl_minutes),
     }
     if extra_claims:
-        access_payload.update(extra_claims)
+        # 保留声明不可被调用方覆盖：extra_claims={"type": "refresh"} 会绕过
+        # validate_token 的类型校验，{"exp": ...} 会延长有效期，{"sub"/"jti"} 会
+        # 造成主体/吊销标识漂移。这里只允许**追加**非保留声明。
+        for _key, _value in extra_claims.items():
+            if _key not in _RESERVED_CLAIMS:
+                access_payload[_key] = _value
     access_token = jwt.encode(access_payload, secret, algorithm=algorithm)
 
     # Refresh token
@@ -159,8 +167,10 @@ def validate_token(token: str, *, token_type: str = "access") -> Tuple[bool, Opt
         if jti and is_blacklisted(jti):
             return False, None, "令牌已被吊销"
 
+        # 类型声明必须"存在且相等"：原真值判断让**缺失 type** 的令牌同时通过
+        # access 与 refresh 校验，同密钥签出的无类型令牌可换发新令牌对（fail-open）。
         actual_type = payload.get("type")
-        if actual_type and actual_type != token_type:
+        if actual_type != token_type:
             return False, None, f"令牌类型不匹配 (expected {token_type}, got {actual_type})"
 
         return True, payload, None

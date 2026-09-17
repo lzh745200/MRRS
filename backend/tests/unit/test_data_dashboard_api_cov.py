@@ -1,4 +1,4 @@
-﻿"""
+"""
 dashboard.py 覆盖率攻坚测试（补充 test_data_dashboard_api.py 未覆盖部分）
 
 目标分支：

@@ -369,3 +369,8 @@ frontend/tests/e2e/.auth/
 frontend/test-results/
 frontend/playwright-report/
 .zcode/
+
+# OpenCodeReview 中间产物（findings 原始 JSON / 批处理脚本，体积大且可重生成）
+.ocr-tmp/
+result.json
+review.json

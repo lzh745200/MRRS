@@ -232,7 +232,7 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="所属组织">
+        <el-form-item label="所属组织" prop="organization_id">
           <el-tree-select
             v-model="formData.organization_id"
             :data="orgTreeOptions"
@@ -433,6 +433,7 @@ import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { logger } from '@/utils/logger'
 import { generateRandomPassword } from '@/utils/clipboard'
+import { passwordValidator } from '@/utils/passwordPolicy'
 
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -611,6 +612,9 @@ const dataScopeOptions = [
   { value: 'self', label: '仅自己' },
 ]
 
+// 与后端 PasswordPolicy 同源的密码校验器（>=12 位 + 大小写 + 数字 + 白名单特殊字符）
+const validatePassword = passwordValidator()
+
 const rules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
@@ -618,10 +622,25 @@ const rules = {
   ],
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, max: 50, message: '长度在 6 到 50 个字符', trigger: 'blur' },
+    // 密码策略统一走 @/utils/passwordPolicy（前端单一事实源，与后端 PasswordPolicy 对齐）。
+    // 此前为 min:6 + 各自书写的字符类别规则，用户填 6~11 位或白名单外特殊字符时
+    // 会出现「前端放行、后端 400」。
+    { required: true, validator: validatePassword, trigger: 'blur' },
   ],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+  organization_id: [
+    {
+      // 与后端守卫对齐（POST/PUT /api/v1/users）：部门级管理员必须有组织，
+      // 否则服务端 400。此处提前拦截，避免用户填完整张表单才被拒绝。
+      validator: (_rule: any, value: number | null, callback: (error?: Error) => void) => {
+        if ((formData.role === 'admin' || formData.role === 'super_admin') && !value) {
+          return callback(new Error('管理员必须指定所属组织'))
+        }
+        callback()
+      },
+      trigger: ['change', 'blur'],
+    },
+  ],
 }
 
 const getRoleTagType = (role: string): 'info' | 'primary' | 'success' | 'warning' | 'danger' => {

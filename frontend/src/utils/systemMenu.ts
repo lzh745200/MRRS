@@ -28,14 +28,17 @@ const DEDUP_SKIP_KEYS: ReadonlySet<string> = new Set([
 ])
 
 /**
- * 后端菜单 path 与前端路由漂移的兜底映射。
- * 这些 key 的 child.path 不是已注册路由、也没有 meta.menuKey 匹配的路由，
- * 直接使用会渲染死链；映射到承载同一功能的真实路由。
+ * 后端菜单 path 与前端路由漂移的兜底映射（纯防御层，正常路径不会命中）。
+ *
+ * 2026-09-14：后端源头已修复（menus.py 中 users-orgs / monitor / report-templates /
+ * data-package-list / data / data-quality 六处漂移 path 已对齐真实路由，并由
+ * scripts/check_menu_alignment.py 规则 3 持续拦截）。此表保留用于旧版数据包或
+ * 缓存下发的历史菜单树，避免渲染死链。
  */
 const PATH_OVERRIDES: Readonly<Record<string, string>> = {
-  // 后端 /system/users-orgs 无对应路由，用户与组织管理页面实际在 /system/users
+  // 历史后端下发 /system/users-orgs（前端无此路由），用户与组织管理实际在 /system/users
   'users-orgs': '/system/users',
-  // 后端 /system/monitor 漂移，系统监控页面实际路由为 /system/monitoring
+  // 历史后端下发 /system/monitor，系统监控实际路由为 /system/monitoring
   monitor: '/system/monitoring',
 }
 

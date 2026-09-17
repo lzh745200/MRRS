@@ -37,7 +37,7 @@ def _pending_of_type(client, entity_type):
     resp = client.get("/api/v1/approval/tasks/pending?skip=0&limit=200")
     assert resp.status_code == 200
     body = resp.json()
-    return [t for t in body["data"] if t["entity_type"] == entity_type]
+    return [t for t in body["data"]["items"] if t["entity_type"] == entity_type]
 
 
 class TestProjectApprovalIntegration:

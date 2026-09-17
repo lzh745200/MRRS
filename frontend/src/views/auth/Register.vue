@@ -132,6 +132,7 @@ import { ref, reactive } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { logger } from '@/utils/logger'
+import { passwordValidator } from '@/utils/passwordPolicy'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { apiRequest } from '@/api/request'
 
@@ -150,30 +151,10 @@ const registerForm = reactive({
   orgName: '',
 })
 
-// 验证密码强度（与后端 PasswordPolicy 保持一致：≥12位 + 大写 + 小写 + 数字 + 特殊字符）
-const validatePassword = (_rule: any, value: any, callback: any) => {
-  if (!value) {
-    callback(new Error('请输入密码'))
-    return
-  }
-  const errors: string[] = []
-  if (value.length < 12) errors.push('至少12个字符')
-  if (!/[A-Z]/.test(value)) errors.push('包含大写字母')
-  if (!/[a-z]/.test(value)) errors.push('包含小写字母')
-  if (!/\d/.test(value)) errors.push('包含数字')
-  if (!/[!@#$%^&*()+\-=[\]{};':"\\|,.<>/?`~]/.test(value)) errors.push('包含特殊字符')
-  if (errors.length > 0) {
-    callback(new Error(`密码需要：${errors.join('、')}`))
-    return
-  }
-  // 与后端 PasswordPolicy.validate 末条一致：密码不得包含用户名（用户名不含空格，等价整名包含）
-  const uname = registerForm.username?.trim().toLowerCase()
-  if (uname && value.toLowerCase().includes(uname)) {
-    callback(new Error('密码不能包含用户名'))
-    return
-  }
-  callback()
-}
+// 密码策略统一走 @/utils/passwordPolicy（前端单一事实源，与后端 PasswordPolicy 对齐）。
+// 此前本文件自持一份实现，特殊字符白名单比后端更宽（接受 ~ ` ' " \ / 等），
+// 会出现「前端放行、后端 400」；2026-09-14 收敛。
+const validatePassword = passwordValidator(() => registerForm.username)
 
 // 验证密码一致性
 const validateConfirmPassword = (_rule: any, value: any, callback: any) => {

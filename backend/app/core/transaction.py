@@ -161,14 +161,22 @@ class TransactionManager:
                 # 自动创建会话
                 with get_db_context() as session:
                     try:
-                        return func(session, *args, **kwargs)
+                        result = func(session, *args, **kwargs)
+                        # get_db() 的收尾只有 close()（对未提交事务是隐式回滚），
+                        # 缺这一句会让 func 的全部写入被静默丢弃 —— 与本模块
+                        # transaction()/run_in_transaction() 的成功即提交语义对齐。
+                        session.commit()
+                        return result
                     except Exception as e:
                         session.rollback()
                         raise _transaction_failure(e) from e
             else:
                 # 使用现有会话
                 try:
-                    return func(*args, **kwargs)
+                    result = func(*args, **kwargs)
+                    # 同上：使用调用方会话时同样必须提交，否则写入丢失
+                    db.commit()
+                    return result
                 except Exception as e:
                     db.rollback()
                     raise _transaction_failure(e) from e

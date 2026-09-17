@@ -42,7 +42,6 @@ const API_MODULES = [
   { name: 'systemMonitor', path: '@/api/systemMonitor' },
   { name: 'tasks', path: '@/api/tasks' },
   { name: 'updateLogs', path: '@/api/updateLogs' },
-  { name: 'userManagement', path: '@/api/userManagement' },
   { name: 'validationRules', path: '@/api/validationRules' },
   { name: 'zeroTrust', path: '@/api/zeroTrust' },
   { name: 'ai', path: '@/api/ai' },

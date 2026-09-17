@@ -173,7 +173,7 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
             {
                 "key": "report-templates",
                 "label": "报表模板管理",
-                "path": "/report-templates",
+                "path": "/report/templates",
                 "roles": ["admin", "super_admin"],
             },
             {
@@ -233,7 +233,7 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
             {
                 "key": "data-package-list",
                 "label": "数据包列表",
-                "path": "/data-package/list",
+                "path": "/data-package",
                 "roles": None,
             },
             {
@@ -242,12 +242,8 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "path": "/data-package/version",
                 "roles": None,
             },
-            {
-                "key": "task-package-admin",
-                "label": "任务数据包管理",
-                "path": "/data-package/admin",
-                "roles": ["admin", "super_admin"],
-            },
+            # 已删除死项 task-package-admin（path /data-package/admin 前端无对应页面，
+            # 2026-09-14）：该键从未在 UI 渲染，保留只会持续触发菜单对齐门禁豁免。
         ],
     },
     {
@@ -260,7 +256,7 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
             {
                 "key": "data-overview",
                 "label": "数据总览",
-                "path": "/data-management/overview",
+                "path": "/data-management",
                 "roles": None,
             },
             {
@@ -272,7 +268,7 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
             {
                 "key": "data-quality",
                 "label": "数据质量监控",
-                "path": "/data-management/quality",
+                "path": "/data-management",
                 "roles": None,
             },
             {
@@ -313,7 +309,7 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
             {
                 "key": "users-orgs",
                 "label": "用户与组织管理",
-                "path": "/system/users-orgs",
+                "path": "/system/users",
                 "roles": ["admin", "super_admin"],
             },
             # 角色权限管理和菜单权限管理已合并到用户管理页面中的"角色/权限"子模块
@@ -331,12 +327,8 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "path": "/system/audit",
                 "roles": ["admin", "super_admin"],
             },
-            {
-                "key": "health",
-                "label": "系统健壮性",
-                "path": "/system/health",
-                "roles": ["admin", "super_admin"],
-            },
+            # 已删除死项 health（系统健壮性）：与 health-check 指向同一页面
+            # （HealthCheck.vue）且 path /system/health 前端不存在，2026-09-14 去重下线。
             {
                 "key": "feedback",
                 "label": "反馈管理",
@@ -359,7 +351,7 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
             {
                 "key": "monitor",
                 "label": "系统监控",
-                "path": "/system/monitor",
+                "path": "/system/monitoring",
                 "roles": ["admin", "super_admin"],
             },
             {

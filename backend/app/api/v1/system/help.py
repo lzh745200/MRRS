@@ -975,15 +975,12 @@ async def get_help_articles(
             "tags": article.get("tags", []),
         })
 
-    return {
-        "success": True,
-        "data": {
-            "items": result_items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        },
-    }
+    return ok_list(
+        items=result_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/articles/{article_id}", summary="获取帮助文档详情")

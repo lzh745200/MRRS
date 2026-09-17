@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.data_permission import DataScope, get_data_scope
 from app.core.database import get_db
 from app.core.exceptions import AuthenticationException, NotFoundException
 from app.core.permission_utils import is_superuser, require_admin
@@ -227,17 +228,26 @@ async def list_users(
     require_admin(current_user)
     query = db.query(User)
 
-    # 非 super_admin 只能查看本组织及下级组织的用户
-    is_super = getattr(current_user, "is_superuser", False) or current_user.role == "super_admin"
-    if not is_super and current_user.organization_id:
+    # 数据范围收口（ADR-0002 fail-closed）：唯一事实源 core.data_permission。
+    # - ALL（super_admin / is_superuser）→ 不过滤
+    # - OWN_DEPT（有组织的部门级管理员）→ 本组织及下级组织
+    # - OWN（无组织者）→ 仅本人
+    # 历史缺陷：原写法在无组织时条件为假，过滤被整体跳过 → 跨组织枚举全部用户。
+    scope = get_data_scope(current_user)
+    if scope == DataScope.OWN:
+        query = query.filter(User.id == current_user.id)
+    elif scope == DataScope.OWN_DEPT:
         from app.models.organization import Organization
+
         child_org_ids = [
-            row[0] for row in db.query(Organization.id).filter(
-                Organization.path.contains(f"/{current_user.organization_id}/")
-            ).all()
+            row[0]
+            for row in db.query(Organization.id)
+            .filter(Organization.path.contains(f"/{current_user.organization_id}/"))
+            .all()
         ]
-        allowed_org_ids = [current_user.organization_id] + child_org_ids
-        query = query.filter(User.organization_id.in_(allowed_org_ids))
+        query = query.filter(
+            User.organization_id.in_([current_user.organization_id] + child_org_ids)
+        )
 
     if keyword:
         query = query.filter(
@@ -341,20 +351,28 @@ class StaffItem(BaseModel):
 async def get_staff_list(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
+    keyword: Optional[str] = None,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取活跃用户列表，供任务分配等场景使用（任何登录用户均可访问）"""
-    from app.core.data_permission import get_data_scope, DataScope
-
+    """获取活跃用户列表，供任务分配/审批转交等场景使用（任何登录用户均可访问）"""
     query = db.query(User).filter(User.is_active == True)  # noqa: E712
-    # User 模型无 created_by/department_id 列，仅按组织过滤
+    # 数据范围收口（ADR-0002 fail-closed）：无组织者的 OWN_DEPT 已在 get_data_scope
+    # 内降级为 OWN，故此处不会出现“条件为假 → 跳过过滤”的越权路径。
     scope = get_data_scope(current_user)
     if scope == DataScope.OWN:
         query = query.filter(User.id == current_user.id)
-    elif scope == DataScope.OWN_DEPT and getattr(current_user, "organization_id", None):
+    elif scope == DataScope.OWN_DEPT:
+        # 走到此处即有组织（见 get_data_scope 收口）
         query = query.filter(User.organization_id == current_user.organization_id)
     # DataScope.ALL — 无过滤
+
+    # 关键词检索（审批转交/任务分配的远程搜索；原 /user-management 列表能力迁移至此）
+    if keyword and keyword.strip():
+        kw = keyword.strip()
+        query = query.filter(
+            User.username.contains(kw) | User.full_name.contains(kw)
+        )
     total = query.count()
 
     users = (
@@ -471,6 +489,14 @@ async def create_user(
     if data_scope not in VALID_SCOPES:
         raise HTTPException(status_code=400, detail=f"无效的数据范围: {data_scope}")
 
+    # 禁止创建无组织管理员（产品决策 2026-09-14）：部门级管理员的职责边界就是其组织，
+    # 无组织会让数据范围失去锚点（修复前更会因过滤被跳过而越权枚举全库用户）。
+    if role in ("admin", "super_admin") and not data.organization_id:
+        raise HTTPException(
+            status_code=400,
+            detail="管理员必须指定所属组织：请在“所属组织”中选择该管理员管辖的组织",
+        )
+
     # 密码策略校验：与 admin-reset-password / change-password 保持一致
     # （此前管理员可绕过策略设置任意弱口令，E2E 回归发现的不一致）
     from app.core.security import PasswordPolicy
@@ -560,6 +586,15 @@ async def update_user(
         update_fields["role"] = normalize_role(update_fields["role"])
         if update_fields["role"] not in VALID_ROLES:
             raise HTTPException(status_code=400, detail="无效的角色")
+
+    # 禁止把管理员改成“无组织”（与创建同一不变式：管理员必须有组织）
+    effective_role = normalize_role(update_fields.get("role") or user.role)
+    effective_org = update_fields["organization_id"] if "organization_id" in update_fields else user.organization_id
+    if effective_role in ("admin", "super_admin") and not effective_org:
+        raise HTTPException(
+            status_code=400,
+            detail="管理员必须指定所属组织：不能将管理员改为无组织状态",
+        )
 
     # 验证数据范围有效性
     if "data_scope" in update_fields and update_fields["data_scope"]:

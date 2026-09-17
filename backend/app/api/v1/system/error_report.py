@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 
+from app.core.response import ok_list
 from app.core.database import SessionLocal
 from app.core.security import get_current_user
 from app.models.error_report import ErrorReport
@@ -115,15 +116,12 @@ async def list_error_reports(
             .all()
         )
 
-        return {
-            "success": True,
-            "data": {
-                "items": [r.to_dict() for r in items],
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-            },
-        }
+        return ok_list(
+            items=[r.to_dict() for r in items],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
     finally:
         db.close()
 

@@ -214,11 +214,21 @@ class TestValidateToken:
     @patch("jwt.decode")
     @patch("app.core.token_blacklist.is_blacklisted", return_value=False)
     def test_no_type_claim(self, mock_blacklisted, mock_decode, mock_algo, mock_key):
+        # 缺少 type 声明属于「鉴权前置条件缺失」，按 CONTEXT.md 不变量 2（fail-closed）
+        # 必须拒绝。旧断言 `valid is True` 固化了 fail-open 行为：同一密钥签出的、
+        # 不带 type 的令牌（历史/异构签发）会同时通过 access 与 refresh 校验，
+        # 等于用 access 令牌换发新令牌对。
         mock_decode.return_value = {"sub": "user1", "jti": "abc"}
         valid, payload, err = validate_token("some-token", token_type="access")
-        assert valid is True
-        assert payload["sub"] == "user1"
-        assert err is None
+        assert valid is False
+        assert payload is None
+        assert "令牌类型不匹配" in err
+
+        # refresh 侧同样必须拒绝
+        valid_r, payload_r, err_r = validate_token("some-token", token_type="refresh")
+        assert valid_r is False
+        assert payload_r is None
+        assert "令牌类型不匹配" in err_r
 
     @patch("app.core.token_manager._get_secret_key", return_value="s")
     @patch("app.core.token_manager._get_algorithm", return_value="HS256")

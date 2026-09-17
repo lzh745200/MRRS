@@ -275,6 +275,33 @@ Scheduled daily at 2:00 UTC + manual trigger (`workflow_dispatch`). Three jobs:
 
 ## Known Issues & Fixes
 
+### OpenCodeReview 深度审查批次（Fixed 2026-09-17）
+
+`alibaba/open-code-review` v1.12.4 全文件扫描（376 文件 / 918 条发现）后修复 19 处确证缺陷。
+以下四条已沉淀为**长期约定**，改动相关代码时不得回退：
+
+- **本地门禁脚本必须做 UTF-8 输出兜底**。中文 Windows 控制台下 Python 3.11 的 stdout 是 `gbk`，
+  脚本只要输出 `✓` 等非 cp936 字符就会 `UnicodeEncodeError`。`check_tokens_sync.py` /
+  `check_hardcoded_styles.py` 曾在**成功路径**打印 `✓`，造成"检查通过反而 exit 1"——
+  门禁假红且与真失败无法区分。新增脚本一律带上：
+  ```python
+  if hasattr(sys.stdout, "reconfigure"):
+      sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+      sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+  ```
+- **`transactional` 装饰器与 `transaction()` / `run_in_transaction()` 同语义：成功即 `commit`**。
+  切勿改为依赖 `get_db_context()` 收尾提交 —— `get_db()` 只有 `rollback` + `close`，
+  `Session.close()` 对未提交事务即隐式回滚，会让被装饰函数的**全部写入静默丢失**。
+- **JWT 保留声明不可被 `extra_claims` 覆盖**（`sub`/`jti`/`type`/`iat`/`exp`/`nbf`），且
+  `validate_token` 要求 `type` **存在且相等**（缺失即拒绝，禁止 fail-open）。令牌吊销中
+  `expires_at IS NULL` 表示**永久吊销**，内存里必须是 `_PERMANENT = math.inf`；
+  `token_blacklist._blacklist` 的一切读写都必须持 `_BLACKLIST_LOCK`。
+- **外部传入的文件名必须校验为纯文件名**（`Path(x).name == x`）：pathlib 语义下绝对路径会
+  **完全覆盖** base 目录，`../` 可逃逸（归档恢复、上传落盘均适用）。
+
+完整发现清单 `deliverables/ocr-findings-detail.md`；总报告
+`deliverables/open-code-review-深度审查报告-2026-09-17.md`。
+
 ### Path Dual-Source Bug (Fixed 2026-08-30)
 
 `app/utils/paths.py` 的路径推断与运行时 `DATABASE_URL`/`UPLOAD_DIR`（Electron 注入）是两个不同来源。历史缺陷：BackupService 等消费方按静态规则推断路径，打包环境下备份的是陈旧错误文件、恢复写回错误位置却提示成功。修复后规则：

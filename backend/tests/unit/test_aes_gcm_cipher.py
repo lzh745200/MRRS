@@ -32,12 +32,15 @@ class TestAESGCMCipher:
         c = AESGCMCipher(key=key)
         assert c.key == key
 
-    def test_custom_key_invalid_length_auto_generates(self):
+    def test_custom_key_invalid_length_rejected(self):
+        # 旧断言是「无效长度 -> 自动生成随机密钥」，即静默密钥替换：调用方以为在用自己的
+        # 密钥，实际数据永远无法解密（且加解密都"成功"），属静默的数据不可恢复。
+        # 按 CONTEXT.md 不变量 2（fail-closed）改为显式拒绝；未提供密钥（None）仍自动生成。
         from app.services.aes_gcm_cipher import AESGCMCipher
-        key = b"short"  # not 32 bytes
-        c = AESGCMCipher(key=key)
-        assert len(c.key) == 32
-        assert c.key != key
+        with pytest.raises(ValueError, match="32 字节"):
+            AESGCMCipher(key=b"short")
+        with pytest.raises(ValueError, match="32 字节"):
+            AESGCMCipher(key=b"")
 
     def test_custom_key_is_none_auto_generates(self):
         from app.services.aes_gcm_cipher import AESGCMCipher

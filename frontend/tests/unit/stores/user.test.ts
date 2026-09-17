@@ -254,11 +254,11 @@ describe('stores/user', () => {
       expect(post).toHaveBeenCalledWith('/users/7/admin-reset-password', { new_password: 'newPass' })
     })
 
-    it('assignRole POST 正确路径 + role_code query param', async () => {
-      ;(post as any).mockResolvedValue({ code: 200 })
+    it('assignRole 走 /users/{id}/permissions（已统一到 /users 族）', async () => {
+      ;(put as any).mockResolvedValue({ code: 200 })
       const s = useUserStore()
       await s.assignRole(7, 'admin')
-      expect(post).toHaveBeenCalledWith('/user-management/7/assign-role?role_code=admin')
+      expect(put).toHaveBeenCalledWith('/users/7/permissions', { role: 'admin' })
     })
 
     it('logout 清 AuthStorage', async () => {

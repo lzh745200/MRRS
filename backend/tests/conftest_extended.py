@@ -1,4 +1,4 @@
-﻿"""
+"""
 扩展的测试框架配置
 在现有 conftest.py 基础上添加:
 - SQLite内存数据库 fixture

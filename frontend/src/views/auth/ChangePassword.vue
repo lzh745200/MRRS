@@ -159,6 +159,7 @@ import { useRouter } from 'vue-router'
 import { WarningFilled, Lock, Check, Warning } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useAuthStore } from '@/stores/auth'
+import { checkPassword } from '@/utils/passwordPolicy'
 import { cancelAllRequests, freezeRequests } from '@/api/request'
 
 const router = useRouter()
@@ -219,7 +220,7 @@ const passwordRules: Record<string, any[]> = reactive({
           callback(new Error('请输入新密码'))
         } else if (value === passwordForm.oldPassword) {
           callback(new Error('新密码不能与当前密码相同'))
-        } else if (passwordStrengthData.validCount < 5 || passwordStrengthData.length < 12) {
+        } else if (!checkPassword(value).valid) {
           callback(new Error('密码强度不足，需满足全部5项规则且长度≥12位'))
         } else {
           callback()
@@ -245,26 +246,20 @@ const passwordRules: Record<string, any[]> = reactive({
   ],
 })
 
-// 验证密码强度（与后端 PasswordPolicy.SPECIAL_WHITELIST 一致）
+// 验证密码强度：逐项判定统一走 @/utils/passwordPolicy（前端单一事实源，
+// 与后端 PasswordPolicy 同口径），本函数只负责把结果映射到强度条 UI。
 const validatePassword = (value: string) => {
   showPasswordHint.value = !!value
 
-  // 重置验证结果
+  const checked = checkPassword(value)
   passwordStrengthData.length = value.length
-  passwordStrengthData.hasUppercase = /[A-Z]/.test(value)
-  passwordStrengthData.hasLowercase = /[a-z]/.test(value)
-  passwordStrengthData.hasNumber = /\d/.test(value)
-  // 与后端白名单一致：!@#$%^&*()-_=+[]{}|;:,.<>?
-  passwordStrengthData.hasSpecial = /[!@#$%^&*()\-_=+[\]{}|;:,.<>?]/.test(value)
+  passwordStrengthData.hasUppercase = checked.uppercase
+  passwordStrengthData.hasLowercase = checked.lowercase
+  passwordStrengthData.hasNumber = checked.digit
+  passwordStrengthData.hasSpecial = checked.special
 
-  // 计算符合规则的数量（与后端 PasswordPolicy 一致：长度≥12）
-  const validCount = [
-    passwordStrengthData.length >= 12,
-    passwordStrengthData.hasUppercase,
-    passwordStrengthData.hasLowercase,
-    passwordStrengthData.hasNumber,
-    passwordStrengthData.hasSpecial,
-  ].filter(Boolean).length
+  // 符合规则的数量（0~5，含长度项）
+  const validCount = checked.passed
 
   passwordStrengthData.validCount = validCount
 

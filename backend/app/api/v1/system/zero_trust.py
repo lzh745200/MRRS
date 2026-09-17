@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.response import ok_list
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.transaction import safe_commit
@@ -466,15 +467,12 @@ async def get_security_events(
         .all()
     )
 
-    return {
-        "success": True,
-        "data": {
-            "items": [_event_to_dict(e) for e in rows],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        },
-    }
+    return ok_list(
+        items=[_event_to_dict(e) for e in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post("/events", summary="记录安全事件")

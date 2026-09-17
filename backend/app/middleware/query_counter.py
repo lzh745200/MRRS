@@ -97,6 +97,23 @@ class QueryCounterMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def current_query_count() -> int:
+    """返回当前请求上下文已执行的 SQL 条数（无上下文时为 0）。
+
+    供 ``core.query_optimizer`` 的 N+1 检测读取真实计数 —— 该模块旧有的
+    threading.local 计数器没有任何写入者，恒为 0。
+    """
+    counter = _query_counter_ctx.get()
+    return counter[0] if counter is not None else 0
+
+
+def reset_current_query_count() -> None:
+    """把当前请求上下文的计数清零（无上下文时为空操作）。"""
+    counter = _query_counter_ctx.get()
+    if counter is not None:
+        counter[0] = 0
+
+
 def increment_query_count(request: Request) -> None:
     """
     增加查询计数器。

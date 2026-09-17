@@ -1,4 +1,4 @@
-﻿"""查询计划分析工具 - 分析慢查询并检测全表扫描"""
+"""查询计划分析工具 - 分析慢查询并检测全表扫描"""
 import logging
 import sys
 from pathlib import Path

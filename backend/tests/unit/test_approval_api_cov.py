@@ -170,9 +170,9 @@ class TestPendingCountFallback:
             resp = build_client(db, _user(admin=True)).get("/api/v1/approval/tasks/pending")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["total"] == 1  # 回退为当页长度
-        assert body["data"][0]["submitter_name"] == "alice"
-        assert body["data"][0]["change_data"] == {"amount": 100}
+        assert body["data"]["total"] == 1  # 回退为当页长度
+        assert body["data"]["items"][0]["submitter_name"] == "alice"
+        assert body["data"]["items"][0]["change_data"] == {"amount": 100}
 
 
 class TestBatchApproveNonAdmin:

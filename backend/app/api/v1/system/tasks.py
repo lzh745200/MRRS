@@ -14,6 +14,7 @@ from typing import Dict, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from app.core.response import ok_list
 from app.core.security import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -158,15 +159,12 @@ async def list_tasks(
     start = (page - 1) * page_size
     end = start + page_size
 
-    return {
-        "success": True,
-        "data": {
-            "items": tasks[start:end],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        },
-    }
+    return ok_list(
+        items=tasks[start:end],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/stats", summary="获取任务统计")

@@ -761,6 +761,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
   "15,833 项自动化测试",
   "三重前端门禁 + 双重后端门禁",
   "CI/CD 流水线",
+  "AI 代码深度审查（376 文件 / 918 条发现）",
   "双平台安装包自动构建",
 ]);
 
@@ -841,7 +842,32 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
   ], 7.17, 2.55, 5.4, 3.9, { size: 13, gap: 10 });
 }
 
-/* ════════ 35 章节页：部署运行 ════════ */
+/* 35 代码深度审查 */
+{
+  const s = p.addSlide();
+  header(s, "05 质量工程", "AI 代码深度审查：OpenCodeReview 全量扫描");
+  card(s, M, 1.8, 6.0, 4.9);
+  s.addText("扫描规模", { x: 0.82, y: 2.05, w: 4, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "工具：alibaba/open-code-review v1.12.4（全文件 scan 模式）",
+    "范围：376 个源文件（backend/app 全覆盖）",
+    "产出：918 条发现 — critical 36 / high 177 / medium 458 / low 247",
+    "消耗约 2,534 万 token，逐条甄别而非机械采纳",
+    "确证缺陷 19 处已修复；有意设计/误报显式记录不改",
+  ], 0.82, 2.55, 5.4, 3.9, { size: 13, gap: 10 });
+  card(s, 6.85, 1.8, 6.0, 4.9);
+  s.addText("代表性修复", { x: 7.17, y: 2.05, w: 4, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "事务装饰器两条路径均缺 commit：写入被静默丢弃",
+    "令牌 extra_claims 可覆盖 type/exp；缺 type 令牌 fail-open",
+    "永久吊销被降级为 24 小时 —— 已吊销令牌复活",
+    "require_admin 模式判定 fail-open（约 100 处调用）",
+    "AES 密钥长度非法时静默换随机密钥 → 数据永不可解",
+    "归档恢复路径穿越；本地门禁在 cp936 下「通过即崩溃」",
+  ], 7.17, 2.55, 5.4, 3.9, { size: 13, gap: 10 });
+}
+
+/* ════════ 36 章节页：部署运行 ════════ */
 sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   "三种部署形态对比",
   "备份恢复与离线升级",

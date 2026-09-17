@@ -17,7 +17,14 @@ def _load() -> dict:
         import json
 
         try:
-            return json.loads(_BUILD_INFO_FILE.read_text(encoding="utf-8"))
+            data = json.loads(_BUILD_INFO_FILE.read_text(encoding="utf-8"))
+            # 合法但非对象的 JSON（如 ["a"]、"1.2.3"、123）是**真值**，会让调用方的
+            # dev fallback 被跳过，并在 info.setdefault(...) 处抛 AttributeError，
+            # 把版本查询（含未鉴权的 /health）打成 500。此处按「无有效元数据」处理。
+            if not isinstance(data, dict):
+                logger.warning("构建信息文件不是 JSON 对象（%s），按缺失处理", type(data).__name__)
+                return {}
+            return data
         except Exception:
             logger.debug("读取构建信息文件失败", exc_info=True)
     return {}

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """system/init.py 覆盖率测试：initialize 分支 + reset 分支"""
 
 from unittest.mock import MagicMock, patch

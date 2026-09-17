@@ -49,10 +49,11 @@ def _apply_payload(**overrides):
 
 
 def _pending_tasks(client):
+    """返回 (任务列表, total)。统一列表 envelope：任务在 data.items，总数在 data.total。"""
     resp = client.get("/api/v1/approval/tasks/pending?skip=0&limit=100")
     assert resp.status_code == 200
-    body = resp.json()
-    return body["data"], body.get("total", 0)
+    body = resp.json()["data"]
+    return body["items"], body.get("total", 0)
 
 
 class TestFundApplyCreatesApprovalTask:
@@ -83,9 +84,9 @@ class TestFundApplyCreatesApprovalTask:
         r = client.get("/api/v1/approval/tasks/mine?skip=0&limit=100")
         assert r.status_code == 200
         body = r.json()
-        assert body["total"] >= 1
+        assert body["data"]["total"] >= 1
         # id 即任务 ID（撤回/重新提交可直接使用）
-        mine = [t for t in body["data"] if t["entity_type"] == "fund"]
+        mine = [t for t in body["data"]["items"] if t["entity_type"] == "fund"]
         assert mine and mine[0]["id"] == resp.json()["data"]["approval_task_id"]
 
 
@@ -188,7 +189,7 @@ class TestFundDirectApproveResolvesTasks:
         assert r.json()["data"]["resolved_tasks"] >= 1
 
         # 关联审批任务已被完结（approved），不再出现在待审批板块
-        task = client.get(f"/api/v1/approval/tasks/history?skip=0&limit=100").json()["data"]
+        task = client.get(f"/api/v1/approval/tasks/history?skip=0&limit=100").json()["data"]["items"]
         matched = [t for t in task if t["id"] == task_id]
         assert matched and matched[0]["status"] == "approved"
 
@@ -203,10 +204,10 @@ class TestApprovalTaskHistoryEndpoints:
         r = client.get("/api/v1/approval/tasks/history?completed=true&skip=0&limit=100")
         assert r.status_code == 200
         body = r.json()
-        assert isinstance(body["total"], int)
+        assert isinstance(body["data"]["total"], int)
 
         # 待审批任务不在已办结列表中
-        assert all(t["status"] != "pending" for t in body["data"])
+        assert all(t["status"] != "pending" for t in body["data"]["items"])
 
     def test_history_entity_filter(self, client):
         client.post("/api/v1/funds/apply", json=_apply_payload(name="过滤经费"))
@@ -214,5 +215,5 @@ class TestApprovalTaskHistoryEndpoints:
         r = client.get("/api/v1/approval/tasks/history?entity_type=fund&skip=0&limit=100")
         assert r.status_code == 200
         body = r.json()
-        assert all(t["entity_type"] == "fund" for t in body["data"])
-        assert body["total"] >= 1
+        assert all(t["entity_type"] == "fund" for t in body["data"]["items"])
+        assert body["data"]["total"] >= 1

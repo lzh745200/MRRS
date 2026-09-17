@@ -578,6 +578,78 @@ describe('密码生成与复制', () => {
   })
 })
 
+describe('新增表单密码规则（与后端 PasswordPolicy 对齐）', () => {
+  // 回归背景：规则原为 min:6，用户填 6~11 位能通过前端校验却被后端 400 拒绝
+  // （PasswordPolicy.MIN_LENGTH=12 且要求大小写/数字/特殊字符），新增用户必然失败。
+  async function validate(value: string): Promise<Error | undefined> {
+    const wrapper = mountComp()
+    await flushPromises()
+    const rule = (wrapper.vm as any).rules.password.find((r: any) => typeof r.validator === 'function')
+    return new Promise<Error | undefined>((resolve) => {
+      rule.validator({}, value, (err?: Error) => resolve(err))
+    })
+  }
+
+  it('空密码被拒', async () => {
+    expect((await validate(''))?.message).toBe('请输入密码')
+  })
+
+  it('长度不足（<12，旧规则放行的 6~11 位）被拒', async () => {
+    expect((await validate('Abc12345!'))?.message).toBe('密码需要：至少12个字符')
+  })
+
+  it('缺项一次性列出（与注册页/后端同源措辞）', async () => {
+    expect((await validate('abcdefgh1234'))?.message).toBe('密码需要：包含大写字母、包含特殊字符')
+  })
+
+  it('缺少数字被拒', async () => {
+    expect((await validate('Abcdefghijkl!'))?.message).toBe('密码需要：包含数字')
+  })
+
+  it('合规密码通过校验', async () => {
+    expect(await validate('Abcdefgh1234!')).toBeUndefined()
+  })
+
+  it('表单使用共享策略校验器（不再自持 min/字符规则）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const rules = (wrapper.vm as any).rules.password
+    expect(rules).toHaveLength(1)
+    expect(typeof rules[0].validator).toBe('function')
+  })
+})
+
+describe('新增表单：管理员必须有组织（与后端守卫对齐）', () => {
+  // 后端 POST/PUT /api/v1/users 对 admin/super_admin 强制要求 organization_id（否则 400），
+  // 前端提前拦截：避免用户填完整张表单才被服务端拒绝。
+  async function validateOrg(value: number | null, role: string): Promise<Error | undefined> {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.formData.role = role
+    const rule = vm.rules.organization_id[0]
+    return new Promise<Error | undefined>((resolve) => {
+      rule.validator({}, value, (err?: Error) => resolve(err))
+    })
+  }
+
+  it('admin 未选组织被拒', async () => {
+    expect((await validateOrg(null, 'admin'))?.message).toBe('管理员必须指定所属组织')
+  })
+
+  it('super_admin 未选组织被拒', async () => {
+    expect((await validateOrg(null, 'super_admin'))?.message).toBe('管理员必须指定所属组织')
+  })
+
+  it('admin 已选组织通过', async () => {
+    expect(await validateOrg(3, 'admin')).toBeUndefined()
+  })
+
+  it('普通用户可不选组织（后端不限制）', async () => {
+    expect(await validateOrg(null, 'user')).toBeUndefined()
+  })
+})
+
 describe('新增 / 编辑 / 提交', () => {
   it('handleAdd 重置表单并打开弹窗', async () => {
     const wrapper = mountComp()

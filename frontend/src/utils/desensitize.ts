@@ -33,14 +33,21 @@ export enum DesensitizeLevel {
 
 /** 手机号脱敏: 138****1234 */
 export function maskPhone(phone: string | null | undefined): string {
-  if (!phone || phone.length < 7) return phone ?? ''
-  return phone.replace(/(\d{3})\d{4}(\d+)/, '$1****$2')
+  if (!phone) return ''
+  if (phone.length < 7) return phone
+  const masked = phone.replace(/(\d{3})\d{4}(\d+)/, '$1****$2')
+  // 正则未命中时必须 fail-closed 全掩：带 +86 前缀、空格/短横线分隔的号码都不匹配，
+  // 原实现会直接返回原字符串 —— 敏感号码**原样泄露**给本应看到脱敏值的角色。
+  return masked === phone ? phone.replace(/\d/g, '*') : masked
 }
 
 /** 身份证号脱敏: 110***********1234 */
 export function maskIdCard(id: string | null | undefined): string {
-  if (!id || id.length < 8) return id ?? ''
-  return id.replace(/(\d{3})\d+(\d{4})/, '$1***********$2')
+  if (!id) return ''
+  if (id.length < 8) return id
+  const masked = id.replace(/(\d{3})\d+(\d{4})/, '$1***********$2')
+  // 尾位为 X 的身份证不会被上面的纯数字正则命中 → 同样必须 fail-closed 全掩
+  return masked === id ? id.replace(/[0-9A-Za-z]/g, '*') : masked
 }
 
 /** 姓名脱敏: 张*三 / 张* */
@@ -53,9 +60,12 @@ export function maskName(name: string | null | undefined): string {
 
 /** 银行卡号脱敏: 6222 **** **** 1234 */
 export function maskBankCard(card: string | null | undefined): string {
-  if (!card || card.length < 8) return card || ''
+  if (!card) return ''
+  if (card.length < 8) return card
   // 处理 16-19 位银行卡号
-  return card.replace(/(\d{4})\d{8,12}(\d{4})/, '$1 **** **** $2')
+  const masked = card.replace(/(\d{4})\d{8,12}(\d{4})/, '$1 **** **** $2')
+  // 带空格/短横线分组或超长卡号不会命中 → fail-closed 全掩，避免原样泄露
+  return masked === card ? card.replace(/\d/g, '*') : masked
 }
 
 /** 邮箱脱敏: z***@example.com */

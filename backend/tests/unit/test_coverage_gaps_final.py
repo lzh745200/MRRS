@@ -1659,23 +1659,8 @@ class TestApproval:
             assert result["code"] == 200
 
 
-# ===================================================================
-# 43. auth/user_management.py  (1 line)
-# ===================================================================
-
-
-class TestUserManagement:
-
-    async def test_delete_self_forbidden(self):
-        from app.api.v1.auth.user_management import delete_user
-        db = _mock_db()
-        user = _make_user(uid=5, username="admin")
-        target = _make_user(uid=5, username="admin")
-        target.is_superuser = False
-        db.query.return_value.filter.return_value.first.return_value = target
-        with pytest.raises(HTTPException) as exc_info:
-            await delete_user(5, db=db, current_user=user)
-        assert exc_info.value.status_code == 400
+# 注：原 43 节 auth/user_management.py 用例已随该模块于 2026-09-14 下线移除
+# （/user-management 与 /users 双实现收敛，删除自持 is_superuser 的创建路径）
 
 
 # ===================================================================

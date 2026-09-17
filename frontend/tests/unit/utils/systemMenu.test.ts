@@ -36,7 +36,8 @@ const ROUTES = [
   { path: '/odd-menu-key', meta: { menuKey: 123 } }, // 非字符串 menuKey 忽略
 ]
 
-// ── 菜单树：镜像后端 MENU_DEFINITIONS system 组（含漂移/死链/分组/重复等形态）──
+// ── 菜单树：镜像后端 MENU_DEFINITIONS system 组（含漂移/分组/重复等形态）──
+// 注：个别合成用例（如 synthetic-dead-link）不镜像后端，仅用于覆盖解析器分支。
 const SYSTEM_MENUS: MenuItem[] = [
   null as unknown as MenuItem, // 菜单树防御分支（脏数据不抛错；须位于 system 之前才会被遍历到）
   { key: 'dashboard', label: '工作台', path: '/dashboard' },
@@ -54,7 +55,9 @@ const SYSTEM_MENUS: MenuItem[] = [
       { key: 'help', label: '帮助文档', path: '/system/help' }, // redirect 路由同样有效
       { key: 'update-logs', label: '更新日志', path: '/system/update-logs' },
       { key: 'zero-trust', label: '零信任' }, // 无 path → menuKey 路由兜底
-      { key: 'health', label: '系统健壮性', path: '/system/health' }, // 死链 → 跳过
+      // 合成死链用例（非后端镜像）：覆盖“无路由可解析 → 不渲染”分支。
+      // 原此处镜像后端 health 键，该键已于 2026-09-14 从 MENU_DEFINITIONS 移除。
+      { key: 'synthetic-dead-link', label: '合成死链项', path: '/system/__no_such_route__' },
       {
         key: 'group-a',
         label: '分组A',
@@ -114,8 +117,8 @@ describe('resolveSystemMenuItems', () => {
   it('死链与脏数据跳过：无路由可解析的项不渲染', () => {
     const items = resolveSystemMenuItems(SYSTEM_MENUS, ROUTES)
     const keys = items.map((i) => i.key)
-    // /system/health 无对应路由、无 menuKey 兜底、无漂移映射 → 跳过
-    expect(keys).not.toContain('health')
+    // 合成死链项：无对应路由、无 menuKey 兜底、无漂移映射 → 跳过
+    expect(keys).not.toContain('synthetic-dead-link')
     // 缺 key / 缺 label 的脏数据 → 跳过
     expect(items.some((i) => i.label === '空key')).toBe(false)
     expect(items.some((i) => i.key === 'no-label')).toBe(false)

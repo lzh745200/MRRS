@@ -18,6 +18,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# ── Windows 编码兜底：本脚本输出中文与 ✓，cp936/cp1252 控制台下会 UnicodeEncodeError ──
+# 与 check_pragma_reasons.py / audit_static_assets.py 保持一致。
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = Path(__file__).resolve().parent.parent
 VARS_FILE = ROOT / "frontend" / "src" / "styles" / "tokens-vars.scss"
 TOKENS_FILE = ROOT / "frontend" / "src" / "styles" / "tokens.scss"

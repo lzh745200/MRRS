@@ -8,7 +8,7 @@ vi.mock('@/api/request', () => ({
   get: mockGet,
   getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
 
-import { getUsers, getUserById, getCurrentUser } from '@/api/queries/user'
+import { getUsers, getUserById, getCurrentUser, listStaff } from '@/api/queries/user'
 
 describe('api/queries/user', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -26,6 +26,14 @@ describe('api/queries/user', () => {
     mockGet.mockResolvedValueOnce(body)
     const r = await getUsers({ page: 2, page_size: 10 })
     expect(mockGet).toHaveBeenCalledWith('/users', { page: 2, page_size: 10 })
+    expect(r).toBe(body)
+  })
+
+  it('listStaff GET /users/staff-list（审批转交/任务分配用）', async () => {
+    const body = { items: [], total: 0 }
+    mockGet.mockResolvedValueOnce(body)
+    const r = await listStaff({ page_size: 50, keyword: '张' })
+    expect(mockGet).toHaveBeenCalledWith('/users/staff-list', { page_size: 50, keyword: '张' })
     expect(r).toBe(body)
   })
 

@@ -21,7 +21,18 @@ class AESGCMCipher:
     """
 
     def __init__(self, key: Optional[bytes] = None):
-        self._key = key if key and len(key) == 32 else _os.urandom(32)
+        # 长度非法的密钥必须报错，不能静默换成随机密钥：那样调用方以为用的是
+        # 自己的密钥，实际本次加密的数据**永远无法解密**（且加密/解密都"成功"），
+        # 属于静默的数据不可恢复。未提供密钥（None）才按文档自动生成。
+        if key is None:
+            self._key = _os.urandom(32)
+        elif len(key) != 32:
+            raise ValueError(
+                f"AESGCMCipher 密钥必须为 32 字节（AES-256），收到 {len(key)} 字节；"
+                "如需自动生成密钥请显式传入 None。"
+            )
+        else:
+            self._key = key
         self._aesgcm = AESGCM(self._key)
 
     @property

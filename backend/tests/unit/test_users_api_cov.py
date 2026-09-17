@@ -44,18 +44,21 @@ def _db(*queries):
 
 
 class TestStaffListScopes:
+    # 注意：users.py 在模块级导入 get_data_scope，补丁目标必须是使用者模块
+    _PATCH = "app.api.v1.auth.users.get_data_scope"
+
     async def test_own_scope(self):
         u = _user(id=5, is_superuser=False)
         db = _db(_q(count=1, all=[u]))
-        with patch("app.core.data_permission.get_data_scope", return_value=DataScope.OWN):
-            result = await us.get_staff_list(1, 20, u, db)
+        with patch(self._PATCH, return_value=DataScope.OWN):
+            result = await us.get_staff_list(page=1, page_size=20, current_user=u, db=db)
         assert result["data"]["total"] == 1
 
     async def test_own_dept_scope(self):
         u = _user(id=5, is_superuser=False, organization_id=7)
         db = _db(_q(count=1, all=[u]))
-        with patch("app.core.data_permission.get_data_scope", return_value=DataScope.OWN_DEPT):
-            result = await us.get_staff_list(1, 20, u, db)
+        with patch(self._PATCH, return_value=DataScope.OWN_DEPT):
+            result = await us.get_staff_list(page=1, page_size=20, current_user=u, db=db)
         assert result["data"]["total"] == 1
 
 

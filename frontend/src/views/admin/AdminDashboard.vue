@@ -10,7 +10,7 @@
             <p class="welcome-subtitle">{{ currentDate }}</p>
           </div>
           <div class="admin-actions">
-            <button class="action-btn gold" @click="pushSafe('/system/users-orgs')">
+            <button class="action-btn gold" @click="pushSafe('/system/users')">
               <el-icon><UserFilled /></el-icon> 用户管理
             </button>
             <button class="action-btn gold" @click="pushSafe('/system/backup')">
@@ -250,12 +250,12 @@ const recentLogins = ref<any[]>([])
 const auditLogs = ref<any[]>([])
 
 const quickActions = [
-  { icon: UserFilled, label: '用户管理', path: '/system/users-orgs' },
+  { icon: UserFilled, label: '用户管理', path: '/system/users' },
   { icon: Key, label: '角色权限', path: '/system/roles' },
   { icon: Files, label: '数据备份', path: '/system/backup' },
   { icon: Document, label: '操作审计', path: '/system/audit' },
   { icon: Setting, label: '系统配置', path: '/system/config' },
-  { icon: DataAnalysis, label: '数据总览', path: '/data-management/overview' },
+  { icon: DataAnalysis, label: '数据总览', path: '/data-management' },
 ]
 
 const pendingItems = ref<any[]>([])

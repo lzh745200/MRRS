@@ -83,7 +83,13 @@ async def gather_limited(
 
     Returns:
         List of results in the same order as *coros*.
+
+    Raises:
+        ValueError: *concurrency* 小于 1。0 会让 Semaphore(0) 永久阻塞首个
+            acquire()（整个 gather 永不返回）；负数会让构造器直接抛错。
     """
+    if concurrency < 1:
+        raise ValueError(f"concurrency 必须 >= 1，收到 {concurrency}")
     sem = asyncio.Semaphore(concurrency)
 
     async def limited(coro: Coroutine) -> Any:

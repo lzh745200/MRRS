@@ -369,7 +369,11 @@ class Settings(BaseSettings):
             self.DATABASE_URL = _get_default_database_url()
         elif self.DATABASE_URL.startswith("sqlite:///./"):
             # 替换相对路径为绝对路径
-            db_name = self.DATABASE_URL.replace("sqlite:///./", "").replace("data/", "")
+            db_name = self.DATABASE_URL.replace("sqlite:///./", "")
+            # 只剥离**开头**的 data/ 目录分量。str.replace 会移除全部出现，
+            # 把 sqlite:///./data/mydata/app.db 误算成 "myapp.db"（路径错位到空库）。
+            if db_name.startswith("data/"):
+                db_name = db_name[len("data/"):]
             self.DATABASE_URL = f"sqlite:///{data_dir}/{db_name}"
 
         # 动态设置其他路径（如果不是绝对路径或环境变量已设置）

@@ -153,6 +153,10 @@ class ColoredFormatter(logging.Formatter):
     RESET = "\033[0m"
 
     def format(self, record: logging.LogRecord) -> str:
+        # 必须对副本着色：同一个 LogRecord 会依次交给 console 与 file handler，
+        # 就地改写 levelname 会把 ANSI 转义序列写进文件日志（JSON 格式化器还会把
+        # 它当成 level 字段值），且同一 record 被重复处理时转义序列会不断叠加。
+        record = logging.makeLogRecord(record.__dict__)
         color = self.COLORS.get(record.levelname, "")
         record.levelname = f"{color}{record.levelname}{self.RESET}"
         return super().format(record)

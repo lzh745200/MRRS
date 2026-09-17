@@ -305,7 +305,7 @@ import {
   type ApprovalTask,
   type TaskDiff,
 } from '@/api/approval'
-import { listUsers } from '@/api/userManagement'
+import { listStaff } from '@/api/queries/user'
 
 // ==================== 状态 ====================
 
@@ -554,7 +554,7 @@ async function handleTransfer(task: any) {
   transferDialogVisible.value = true
   transferSearching.value = false
   try {
-    const res: any = await listUsers({ page_size: 200 })
+    const res: any = await listStaff({ page_size: 200 })
     const users = Array.isArray(res) ? res : res?.items || res?.data?.items || []
     // 排除当前审批人自己
     candidateUsers.value = (users as any[]).filter((u: any) => u.id !== task.current_approver_id)
@@ -572,7 +572,7 @@ async function searchTransferUsers(query: string) {
   try {
     const params: Record<string, unknown> = { page_size: 50 }
     if (query && query.trim()) params.keyword = query.trim()
-    const res: any = await listUsers(params)
+    const res: any = await listStaff(params)
     const users = Array.isArray(res) ? res : res?.items || res?.data?.items || []
     candidateUsers.value = (users as any[]).filter(
       (u: any) => u.id !== currentTask.value?.current_approver_id

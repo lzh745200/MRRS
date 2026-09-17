@@ -1,4 +1,4 @@
-﻿"""app.api.v1.permission_package 覆盖率攻坚测试
+"""app.api.v1.permission_package 覆盖率攻坚测试
 
 覆盖 4 个端点全部分支：
 - export：成功 / 失败 500 / body 为 None

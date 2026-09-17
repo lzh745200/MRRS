@@ -6,6 +6,7 @@ database-backed persistence layer for production use.
 """
 
 import logging
+import math
 import threading
 import time
 from datetime import datetime, timezone
@@ -22,6 +23,10 @@ _blacklist: dict[str, float] = {}
 
 # 并发保护锁（is_blacklisted 每次请求都会触发 _cleanup_expired，多线程下防 KeyError）
 _BLACKLIST_LOCK = threading.Lock()
+
+# 永久吊销哨兵：expires_at IS NULL 语义为「永不过期」，内存中绝不可降级为有限 TTL。
+# 否则条目会在 24h 后被 _cleanup_expired 清掉，而已吊销的 token 重新可用（安全回归）。
+_PERMANENT = math.inf
 
 
 def add(token_jti: str, *, expires_at: Optional[datetime] = None, ttl_seconds: int = 0) -> None:
@@ -54,7 +59,8 @@ def add(token_jti: str, *, expires_at: Optional[datetime] = None, ttl_seconds: i
 
 def remove(token_jti: str) -> None:
     """Remove a token JTI from the blacklist (e.g. admin un-revoke)."""
-    _blacklist.pop(token_jti, None)
+    with _BLACKLIST_LOCK:
+        _blacklist.pop(token_jti, None)
 
 
 def is_blacklisted(token_jti: str) -> bool:
@@ -83,18 +89,22 @@ def load_from_db(db_session) -> int:
             )
             .all()
         )
-        for entry in entries:
-            if entry.token_jti not in _blacklist:
-                if entry.expires_at is None:
-                    expiry = now + 86400
-                else:
-                    # expires_at 为 UTC 存储的 aware/naive datetime：
-                    # 统一按 UTC 解析，避免按本地时区解释导致吊销条目提前 8h 过期
-                    exp = entry.expires_at
-                    if exp.tzinfo is None:
-                        exp = exp.replace(tzinfo=timezone.utc)
-                    expiry = exp.timestamp()
-                _blacklist[entry.token_jti] = expiry
+        # 与 add()/remove()/clear()/_cleanup_expired() 共用同一把锁：
+        # 该函数在启动路径可能与应用线程并发写入，裸写会与清理遍历竞态。
+        with _BLACKLIST_LOCK:
+            for entry in entries:
+                if entry.token_jti not in _blacklist:
+                    if entry.expires_at is None:
+                        # expires_at IS NULL = 永久吊销，用哨兵保留其语义
+                        expiry = _PERMANENT
+                    else:
+                        # expires_at 为 UTC 存储的 aware/naive datetime：
+                        # 统一按 UTC 解析，避免按本地时区解释导致吊销条目提前 8h 过期
+                        exp = entry.expires_at
+                        if exp.tzinfo is None:
+                            exp = exp.replace(tzinfo=timezone.utc)
+                        expiry = exp.timestamp()
+                    _blacklist[entry.token_jti] = expiry
         if entries:
             logger.info("从数据库加载 %d 条黑名单记录", len(entries))
         return len(entries)
@@ -105,7 +115,8 @@ def load_from_db(db_session) -> int:
 
 def clear() -> None:
     """Remove all entries from the blacklist."""
-    _blacklist.clear()
+    with _BLACKLIST_LOCK:
+        _blacklist.clear()
 
 
 def count() -> int:

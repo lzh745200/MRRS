@@ -98,6 +98,66 @@
   `create_background_task` 旧契约、任务表测试种子时间戳改为"新鲜"、
   bandit 子进程补 `encoding="utf-8"`。
 
+### 修复（OpenCodeReview 深度审查批次 — 安全 / 事务 / 本地门禁，2026-09-17）
+
+采用 alibaba/open-code-review v1.12.4 `ocr scan` 全文件审查（**376 文件 / 918 条发现**：
+critical 36 · high 177 · medium 458 · low 247），逐条甄别后修复其中 **19 处确证缺陷**：
+
+- **事务（静默丢数据）**：`core/transaction.py` 的 `transactional` 装饰器**两条路径都缺
+  `commit`**。自动建会话分支依赖 `get_db_context()`，而 `get_db()` 的收尾只有
+  `rollback` + `close`（`Session.close()` 对未提交事务即隐式回滚）——被装饰函数的
+  **全部写入静默丢弃**，而同模块 `transaction()`/`run_in_transaction()` 均"成功即提交"。
+- **令牌（fail-open 两处）**：`core/token_manager.py` 的 `extra_claims` 在保留声明之后
+  `update`，调用方传 `{"type":"refresh"}` 即可绕过类型校验、`{"exp":…}` 可延长有效期
+  → 改白名单（`sub/jti/type/iat/exp/nbf` 不可覆盖）；`validate_token` 原判断
+  `if actual_type and …` 让**缺失 `type`** 的令牌同时通过 access 与 refresh 校验
+  （同密钥签出的无类型令牌可换发新令牌对）→ 改为"存在且相等"。
+- **吊销（安全回归）**：`core/token_blacklist.py` 把 `expires_at IS NULL`（永久吊销语义）
+  在内存中降级为 `now + 86400`，条目 24h 后被 `_cleanup_expired` 清掉、**已吊销令牌
+  重新可用** → 引入 `_PERMANENT = math.inf` 哨兵；`remove()`/`clear()`/`load_from_db()`
+  三处共享字典裸写未持锁（与 `_cleanup_expired` 的锁内遍历竞态，可致
+  `dictionary changed size during iteration` 或条目静默丢失）→ 全部纳入 `_BLACKLIST_LOCK`。
+- **授权（fail-open）**：`core/permission_utils.py` 的 `require_admin` 以
+  `isinstance(getattr(func,"role",None), str)` 区分"直接调用/装饰器"模式——任何 `role`
+  为 `None`/枚举、或载荷缺 `role` 的用户对象都会被误判为"待装饰函数"，函数返回 wrapper
+  而**不抛 403**，校验被静默跳过（全仓约 **100 个** `require_admin(current_user)` 调用点）
+  → 改用 `callable()` 判定 + `_UNSET` 哨兵，`None` 等非法用户一律 403。同文件的组织归属
+  校验在"用户无组织归属"时跳过整段（可读任意 `organization_id` 数据）→ 改为 fail-closed。
+- **加密**：`services/aes_gcm_cipher.py` 在密钥长度非 32 字节时**静默换成随机密钥**，
+  调用方以为在用自己的密钥，而该次加密的数据**永远无法解密**（加/解密两侧都报成功）
+  → 提供了非法长度即抛错，`key=None` 仍按文档自动生成。
+- **路径穿越**：`services/data_tier_service.py` 的 `restore_from_archive` 直接以 API 查询
+  参数拼接归档路径，`../../etc/passwd` 可逃逸；pathlib 语义下**绝对路径更会完全覆盖
+  base**（任意文件读）→ 强制纯文件名校验（`Path(x).name == x`）。
+- **错误码**：`core/errors.py` 的 `_USER_NOT_FOUND_LEGACY = 4003` 与 `FILE_UPLOAD_FAILED`
+  撞号，`IntEnum` 下重复值退化为静默别名（该成员从迭代消失、`ErrorCode(4003)` 解析为
+  文件上传失败）→ 改为 4005。
+- **配置**：`core/config.py` 用 `replace("data/", "")` 剥离前缀会移除**所有**出现，
+  `sqlite:///./data/mydata/app.db` 被误算成 `myapp.db`（静默指向另一个空库）→ 只剥离
+  开头目录分量。
+- **并发**：`core/async_utils.py` 的 `gather_limited(0, …)` 构造 `asyncio.Semaphore(0)`，
+  首个 `acquire()` 永久阻塞、整个 gather 不返回 → 入口校验 `concurrency >= 1`。
+- **健壮性三项**：`core/build_info.py` 对非对象 JSON（`["a"]`、`"1.2.3"`）直接返回，
+  真值即跳过 dev 兜底并在 `setdefault` 抛 `AttributeError`（**含未鉴权的 `/health`** 一并
+  500）→ 类型校验后按缺失处理；`core/logging_config.py` 的 `ColoredFormatter` 就地改写共享
+  `LogRecord.levelname`，把 ANSI 转义序列写进文件日志（JSON 格式化器还会当作 level 字段值）
+  → 对副本着色；`core/query_optimizer.py` 自持的 `threading.local` 查询计数器**没有任何
+  写入者**（恒为 0，`analyze_n_plus_one` 永不触发）→ 委托 `middleware/query_counter` 的
+  真实 contextvar 链路。
+- **本地门禁（中文 Windows 下"检查通过即崩溃"）**：`scripts/check_tokens_sync.py` 与
+  `scripts/check_hardcoded_styles.py` 在**成功路径**打印 `✓`(U+2713)，cp936 无法编码
+  → `UnicodeEncodeError` 且以 **exit 1** 结束——门禁假红且无法与真失败区分。补齐与
+  `check_pragma_reasons.py`/`audit_static_assets.py` 一致的 `reconfigure(encoding="utf-8")` 兜底。
+
+- 同步修正两处**固化了缺陷行为**的测试（非静默改断言，已在用例内注明理由）：
+  `test_token_manager.py::test_no_type_claim`（原断言"缺 `type` 亦放行"）、
+  `test_aes_gcm_cipher.py::test_custom_key_invalid_length_auto_generates`（原断言"非法长度
+  密钥自动生成"）。
+
+本轮为**不更新版本号**的加固发布：仅修复缺陷，`PROJECT_VERSION` 保持 1.12.8。
+详细发现清单见 `deliverables/ocr-findings-detail.md`，总报告见
+`deliverables/open-code-review-深度审查报告-2026-09-17.md`。
+
 ## [1.12.7] - 2026-09-13 — 🛡️ 遗留风险治理第二批（R2 上传体积上限 / R5 导出回收 / R9 导入拒绝记录 / R13 Windows CI 可见性）
 
 对应《deliverables/遗留风险彻底解决方案计划-2026-09-12.md》第二、三周批次。

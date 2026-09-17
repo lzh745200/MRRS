@@ -231,7 +231,7 @@ describe('交互', () => {
       await btn.trigger('click')
     }
 
-    expect(mockPush).toHaveBeenCalledWith('/system/users-orgs')
+    expect(mockPush).toHaveBeenCalledWith('/system/users')
     expect(mockPush).toHaveBeenCalledWith('/system/backup')
     expect(mockPush).toHaveBeenCalledWith('/system/audit')
     expect(mockPush).toHaveBeenCalledWith('/system/config')
@@ -255,7 +255,7 @@ describe('交互', () => {
       await action.trigger('click')
     }
     expect(mockPush).toHaveBeenCalledWith('/system/roles')
-    expect(mockPush).toHaveBeenCalledWith('/data-management/overview')
+    expect(mockPush).toHaveBeenCalledWith('/data-management')
   })
 })
 

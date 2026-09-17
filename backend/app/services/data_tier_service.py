@@ -276,6 +276,12 @@ class DataTierService:
         Returns:
             (恢复数量, 状态信息)
         """
+        # 防路径穿越：archive_file 直接来自 API 查询参数。
+        # Path(base) / "../../etc/passwd" 会逃逸出归档目录；绝对路径更会**完全覆盖**
+        # base（pathlib 语义），造成任意文件读取。要求它必须是纯文件名。
+        if not archive_file or Path(archive_file).name != archive_file:
+            return 0, f"非法的归档文件名: {archive_file}"
+
         archive_path = Path(self.config.COLD_ARCHIVE_PATH) / archive_file
 
         if not archive_path.exists():

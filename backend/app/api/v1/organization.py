@@ -472,31 +472,28 @@ async def export_organizations(
 
 @router.get("/my-organization", response_model=OrganizationEnvelopeResponse)
 async def get_my_organization(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """获取当前用户所属组织"""
-    try:
-        # 优先返回用户关联的组织
-        if hasattr(current_user, "organization_id") and current_user.organization_id:
-            org = (
-                db.query(Organization)
-                .filter(
-                    Organization.id == current_user.organization_id,
-                    Organization.is_active == True,  # noqa: E712
-                )
-                .first()
-            )
-            if org:
-                return success_response(data=org, message="success")
+    """获取当前用户所属组织。
 
-        # 如果用户没有关联组织,返回第一个激活的组织
+    无组织归属（或所属组织已停用 / 不存在）时返回 404 —— **不回退到其它组织**。
+    历史实现会返回“第一个活跃组织”，在多组织部署下等于把他人组织当作本人的，
+    既误导用户，又会让后续接口以错误归属提交数据；2026-09-14 修正为
+    与数据范围 fail-closed 一致的口径（无组织即无组织上下文）。
+    """
+    try:
+        org_id = getattr(current_user, "organization_id", None)
+        if not org_id:
+            raise HTTPException(status_code=404, detail="当前用户未关联任何组织")
+
         org = (
             db.query(Organization)
-            .filter(Organization.is_active == True)  # noqa: E712
-            .order_by(Organization.id)
+            .filter(
+                Organization.id == org_id,
+                Organization.is_active == True,  # noqa: E712
+            )
             .first()
         )
-
         if not org:
-            raise HTTPException(status_code=404, detail="未找到组织信息")
+            raise HTTPException(status_code=404, detail="当前用户所属组织不存在或已停用")
 
         return success_response(data=org, message="success")
     except HTTPException:

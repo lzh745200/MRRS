@@ -124,14 +124,23 @@ def _ensure_counter() -> None:
 
 
 def get_query_count() -> int:
-    """Return the current per-thread query count."""
-    _ensure_counter()
-    return _query_counter.count
+    """返回当前请求上下文已执行的 SQL 条数。
+
+    真实的计数由 SQLAlchemy ``after_cursor_execute`` 事件写入
+    ``middleware.query_counter`` 的 contextvar。本模块旧有的 threading.local
+    计数器**没有任何写入者**，恒为 0，会让 analyze_n_plus_one 永不触发，
+    故此处直接委托给真实链路。
+    """
+    from app.middleware.query_counter import current_query_count
+
+    return current_query_count()
 
 
 def reset_query_count() -> None:
-    """Reset the per-thread query counter to zero."""
-    _query_counter.count = 0
+    """把当前请求上下文的计数清零。"""
+    from app.middleware.query_counter import reset_current_query_count
+
+    reset_current_query_count()
 
 
 def analyze_n_plus_one(threshold: int = 20):

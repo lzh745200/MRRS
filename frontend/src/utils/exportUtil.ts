@@ -5,9 +5,15 @@
 
 import { downloadBlob } from '@/api/request'
 
-/** RFC 4180 兼容 CSV 转义 */
+/** RFC 4180 兼容 CSV 转义 + 公式注入防御 */
 function escapeCSVField(val: unknown): string {
-  const str = String(val ?? '')
+  let str = String(val ?? '')
+  // CSV 公式注入（OWASP）：Excel / Sheets 会把以 = + - @ 以及 Tab/CR 开头的
+  // 单元格当作公式求值，攻击者可借导入的村名/备注触发外链请求或命令。
+  // 仅对**文本**值前置单引号强制按文本处理；数字/布尔保持原样以免破坏数值语义。
+  if (typeof val === 'string' && /^[=+\-@\t\r]/.test(str)) {
+    str = "'" + str
+  }
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`
   }

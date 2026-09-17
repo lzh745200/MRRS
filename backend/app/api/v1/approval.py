@@ -32,13 +32,25 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.permission_utils import is_admin, require_admin
-from app.core.response import success_response
+from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.message import Message
 from app.models.user import User
 from app.services.approval_workflow_service import ApprovalWorkflowService
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
+
+
+def _pagination(skip, limit):
+    """由 skip/limit 推导 (page, page_size)，供统一列表 envelope 使用。
+
+    参数非整数时（例如测试直接调用端点函数、拿到的是 Query 默认值对象）回退为第 1 页，
+    避免对 Query 对象做算术运算抛 TypeError。经 FastAPI 调用时二者恒为 int。
+    """
+    if isinstance(skip, int) and isinstance(limit, int) and limit > 0:
+        return skip // limit + 1, limit
+    return 1, 20
+
 
 logger = logging.getLogger(__name__)
 
@@ -739,11 +751,9 @@ def get_all_tasks(
     tasks = result["items"]
     total = result["total"]
 
-    return {
-        "code": 200,
-        "success": True,
-        "total": total,
-        "data": [
+    _page, _page_size = _pagination(skip, limit)
+    return ok_list(
+        items=[
             {
                 "id": t.id,
                 "title": t.title,
@@ -762,7 +772,10 @@ def get_all_tasks(
             }
             for t in tasks
         ],
-    }
+        total=total,
+        page=_page,
+        page_size=_page_size,
+    )
 
 
 @router.get("/tasks/pending", summary="待审批列表")
@@ -820,11 +833,9 @@ def get_pending_tasks(
         cd = getattr(t, "change_data", None)
         return cd if isinstance(cd, dict) else None
 
-    return {
-        "code": 200,
-        "success": True,
-        "total": total,
-        "data": [
+    _page, _page_size = _pagination(skip, limit)
+    return ok_list(
+        items=[
             {
                 "id": t.id,
                 "title": t.title,
@@ -841,7 +852,10 @@ def get_pending_tasks(
             }
             for t in tasks
         ],
-    }
+        total=total,
+        page=_page,
+        page_size=_page_size,
+    )
 
 
 @router.post("/tasks/batch", summary="批量审批")
@@ -944,12 +958,13 @@ def get_my_tasks(
         skip=skip,
         limit=limit,
     )
-    return {
-        "code": 200,
-        "success": True,
-        "total": result["total"],
-        "data": [_task_to_dict(t) for t in result["items"]],
-    }
+    _page, _page_size = _pagination(skip, limit)
+    return ok_list(
+        items=[_task_to_dict(t) for t in result["items"]],
+        total=result["total"],
+        page=_page,
+        page_size=_page_size,
+    )
 
 
 @router.get("/tasks/history", summary="审批任务历史列表")
@@ -973,12 +988,13 @@ def get_task_history(
         skip=skip,
         limit=limit,
     )
-    return {
-        "code": 200,
-        "success": True,
-        "total": result["total"],
-        "data": [_task_to_dict(t) for t in result["items"]],
-    }
+    _page, _page_size = _pagination(skip, limit)
+    return ok_list(
+        items=[_task_to_dict(t) for t in result["items"]],
+        total=result["total"],
+        page=_page,
+        page_size=_page_size,
+    )
 
 
 @router.get("/tasks/{task_id}/diff", summary="变更对比")

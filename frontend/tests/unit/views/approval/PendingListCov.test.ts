@@ -52,8 +52,8 @@ vi.mock('element-plus', () => ({
   ElMessageBox: { confirm: confirmMock, prompt: promptMock },
 }))
 
-vi.mock('@/api/userManagement', () => ({
-  listUsers: mockListUsers,
+vi.mock('@/api/queries/user', () => ({
+  listStaff: mockListUsers,
 }))
 
 vi.mock('@/composables/useRouterSafe', () => ({

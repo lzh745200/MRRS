@@ -249,13 +249,14 @@ class TestGetMyOrganization:
         assert resp.json()["code"] == 200
         assert resp.json()["data"]["id"] == 1
 
-    def test_my_fallback_to_first_active(self, client_admin, mock_db):
+    def test_my_no_org_returns_404_no_fallback(self, client_admin, mock_db):
+        # 2026-09-14 修正：无组织归属时返回 404，绝不回退到“第一个活跃组织”
+        # （历史实现会把他人组织当成本人的，造成误导与错误归属）。
         q = mock_db.query.return_value
         q.first.side_effect = [None, _make_mock_org(1)]
 
         resp = client_admin.get("/api/v1/organizations/my-organization")
-        assert resp.status_code == 200
-        assert resp.json()["data"]["id"] == 1
+        assert resp.status_code == 404
 
     def test_my_not_found(self, client_admin, mock_db):
         q = mock_db.query.return_value

@@ -237,7 +237,12 @@ describe('useAuthStore', () => {
       expect(result).toEqual({ status: 'two_factor_required', tempToken: 'tmp-1' })
     })
 
-    it('two_factor_required=true 但无 temp_token 时走正常登录', async () => {
+    it('two_factor_required=true 但无 temp_token 时拒绝登录（fail-closed）', async () => {
+      // 后端 2FA 分支是 `return` + `data=None` 的互斥分支，正常情况下不会出现
+      // 「要求 2FA 却同时下发完整登录数据」。但前端不应依赖后端这一实现细节：
+      // 旧断言 `status === 'success'` 固化了 fail-open —— 一旦后端回归、网关改写
+      // 响应或接入新的认证后端，前端会直接放行登录、**绕过双因素认证**。
+      // 按 CONTEXT.md 不变量 2（鉴权前置条件缺失即拒绝）改为拒绝。
       mockApiRequest.mockResolvedValueOnce({
         code: 200,
         two_factor_required: true,
@@ -245,7 +250,7 @@ describe('useAuthStore', () => {
       })
       const store = useAuthStore()
       const result = await store.login('alice', 'pwd')
-      expect(result.status).toBe('success')
+      expect(result.status).toBe('error')
     })
 
     it('code=200 但无 data 时返回 error', async () => {

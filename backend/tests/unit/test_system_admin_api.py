@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for app.api.v1.system.admin — 100% coverage
 """
 

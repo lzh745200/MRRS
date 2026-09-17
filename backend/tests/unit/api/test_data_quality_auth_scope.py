@@ -1,4 +1,4 @@
-﻿"""W1-T3 安全回归：/data-quality/validate-rules 认证与数据隔离。
+"""W1-T3 安全回归：/data-quality/validate-rules 认证与数据隔离。
 
 工单 .scratch/w1-security-redline/003
 历史缺陷：端点无认证依赖且查询无组织过滤，匿名可枚举全库记录。

@@ -63,6 +63,18 @@ class DataScope(str, Enum):
     """See only the user's own records."""
 
 
+def _get_user_org_id(user: Any) -> Any:
+    """读取用户组织 ID（兼容历史 ``org_id`` 属性回退）。
+
+    全仓唯一口径：get_data_scope 判定 OWN_DEPT 与本模块 get_accessible_org_ids
+    展开组织树都经此函数，避免「两处各写一遍回退」再次漂移。
+    """
+    org_id = getattr(user, "organization_id", None)
+    if org_id is None:
+        org_id = getattr(user, "org_id", None)
+    return org_id
+
+
 def get_data_scope(user: Any) -> DataScope:
     """Determine the data scope for a given user.
 
@@ -87,6 +99,15 @@ def get_data_scope(user: Any) -> DataScope:
         return DataScope.ALL
 
     if role == ROLE_ADMIN:
+        # 部门级管理员必须有组织：无组织时降级为“仅本人”（ADR-0002 fail-closed）。
+        # 历史缺陷：无组织 admin 仍返回 OWN_DEPT，而下游普遍写成
+        #   scope == OWN_DEPT and current_user.organization_id
+        # 条件为假即整体跳过过滤，导致无组织管理员可枚举全库用户
+        # （/users 与 /users/staff-list 均已实测复现，2026-09-14 修复）。
+        # 在此收口后，所有消费方（users / staff-list / rural_work / data_permission 内部）
+        # 一并 fail-closed，无需各自补守卫。
+        if _get_user_org_id(user) is None:
+            return DataScope.OWN
         return DataScope.OWN_DEPT
 
     # user, viewer → 仅本人数据
@@ -410,9 +431,7 @@ def get_accessible_org_ids(user: Any, db: Any = None) -> Optional[List[int]]:
     if scope == DataScope.ALL:
         return None
 
-    org_id = getattr(user, "organization_id", None)
-    if org_id is None:
-        org_id = getattr(user, "org_id", None)
+    org_id = _get_user_org_id(user)
 
     if scope == DataScope.OWN_DEPT and org_id is not None:
         if db is not None:

@@ -21,50 +21,9 @@
   "#f87171",
   "#1e4d8c"
  ],
- "frontend/src/components/common/Header.vue": [
-  "rgba(64, 145, 108, 0.3)"
- ],
- "frontend/src/components/common/PageContainer.vue": [
-  "#e8e8e8",
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.06)",
-  "#e8e8e8"
- ],
- "frontend/src/components/common/PrintDialog.vue": [
-  "#e8e8e8"
- ],
- "frontend/src/components/common/PrintTable.vue": [
-  "rgba(0, 0, 0, 0.5)",
-  "#fafafa"
- ],
- "frontend/src/components/common/ResponsiveDataTable.vue": [
-  "rgba(0, 0, 0, 0.06)",
-  "#e8f5e9",
-  "#2e7d32",
-  "#fce4ec",
-  "#c62828",
-  "#fff3e0",
-  "#ef6c00",
-  "#e3f2fd",
-  "#1565c0",
-  "#eee"
- ],
  "frontend/src/components/common/StatsCard.vue": [
   "rgba(0, 0, 0, 0.06)",
   "rgba(0, 0, 0, 0.1)"
- ],
- "frontend/src/components/common/Skeleton/Skeleton.vue": [
-  "#f5f5f5",
-  "rgba(0, 0, 0, 0.1)",
-  "#fafafa"
- ],
- "frontend/src/components/dashboard/ActivityFeed.vue": [
-  "rgba(0, 0, 0, 0.06)",
-  "#fafafa"
- ],
- "frontend/src/components/dashboard/ProjectProgress.vue": [
-  "rgba(0, 0, 0, 0.06)",
-  "#ecf5ff"
  ],
  "frontend/src/components/layout/MobileBottomNav.vue": [
   "#1a3c2a"
@@ -115,7 +74,6 @@
   "rgba(255, 255, 255, 0.85)",
   "rgba(255, 255, 255, 0.4)",
   "rgba(255, 255, 255, 0.7)",
-  "#f0f2f5",
   "rgba(255, 255, 255, 0.4)",
   "#152718",
   "rgba(255, 255, 255, 0.06)",
@@ -155,13 +113,6 @@
  ],
  "frontend/src/views/analytics/supported-villages/Detail.vue": [
   "rgba(0, 0, 0, 0.06)"
- ],
- "frontend/src/views/analytics/supported-villages/List.vue": [
-  "#f0f9f4",
-  "#e8f5e9",
-  "#c8e6c9",
-  "rgba(64, 145, 108, 0.15)",
-  "#2e7d32"
  ],
  "frontend/src/views/analytics/supported-villages/YearlyOverview.vue": [
   "rgba(0, 0, 0, 0.06)",
@@ -234,10 +185,6 @@
  "frontend/src/views/auth/Profile.vue": [
   "rgba(0, 0, 0, 0.08)",
   "rgba(0, 0, 0, 0.08)"
- ],
- "frontend/src/views/auth/Register.vue": [
-  "rgba(0, 0, 0, 0.3)",
-  "rgba(255, 255, 255, 0.95)"
  ],
  "frontend/src/views/batch/Index.vue": [
   "rgba(0, 0, 0, 0.08)"

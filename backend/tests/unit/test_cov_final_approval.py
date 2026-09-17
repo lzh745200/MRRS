@@ -46,5 +46,5 @@ class TestPendingTasksFallback:
             resp = client.get("/api/v1/approval/tasks/pending")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["total"] == 0
-        assert body["data"] == []
+        assert body["data"]["total"] == 0
+        assert body["data"]["items"] == []

@@ -128,10 +128,8 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function assignRole(userId: number, roleCode: string) {
-    // 后端期望 role_code 作为 query 参数（string），不是 JSON body 中的 role_id
-    return post<ApiResponse<null>>(
-      `/user-management/${userId}/assign-role?role_code=${encodeURIComponent(roleCode)}`
-    )
+    // 统一走 /users 族（原 /user-management/{id}/assign-role 已下线，避免双份用户接口漂移）
+    return put<ApiResponse<null>>(`/users/${userId}/permissions`, { role: roleCode })
   }
 
   // Profile / Auth 兼容方法

@@ -188,9 +188,10 @@
 <script setup lang="ts">
 import { DIALOG_MD, DIALOG_LG } from '@/config/dialog'
 // ================================================================
-// DEPRECATED: 角色管理功能已集成到 UserManagement.vue 中
-// 通过用户管理页面的"角色/权限"按钮打开 PermissionAssignmentDrawer
-// 本文件保留以供参考，不再独立路由访问（/system/roles → redirect /system/users）
+// 独立路由已下线：/system/roles → redirect /system/users（2026-09 权限收敛）
+// 但本组件**仍在使用**：UserManagement.vue 以「角色管理」页签内嵌引入
+// （import RoleManagement from "./Role.vue"），并非“仅保留参考”的废弃文件。
+// 修改角色管理逻辑时需同步其单测：tests/unit/views/system/Role*.test.ts
 // ================================================================
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, ElTree } from 'element-plus'

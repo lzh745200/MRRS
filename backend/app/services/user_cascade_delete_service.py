@@ -57,7 +57,7 @@ class UserCascadeDeleteService:
 
         Returns:
             包含 ``success``/``message``/``deleted_records``/``set_null_records``
-            的字典，与 ``auth/user_management.py`` 路由的调用契约一致。
+            的字典，与 ``auth/users.py`` 删除路由（DELETE /users/{id}）的调用契约一致。
         """
         db = self.db
         user = db.query(User).filter(User.id == user_id).first()

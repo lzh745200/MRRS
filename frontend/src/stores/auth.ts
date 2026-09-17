@@ -181,7 +181,14 @@ export const useAuthStore = defineStore('auth', () => {
 
       if (res.code === 200) {
         // 2FA 挑战：后端要求双因素认证
-        if (res.two_factor_required && res.temp_token) {
+        if (res.two_factor_required) {
+          // 后端标记需要 2FA 却未下发 temp_token 时必须**拒绝**。原条件把两者用 &&
+          // 连在一起，temp_token 缺失时会继续往下走并落入正常登录分支 —— 等于
+          // 直接绕过双因素认证（fail-open）。
+          if (!res.temp_token) {
+            error.value = '双因素认证挑战缺少临时令牌，请重试或联系管理员'
+            return { status: 'error', message: error.value }
+          }
           return { status: 'two_factor_required', tempToken: res.temp_token as string }
         }
 

@@ -1,4 +1,4 @@
-﻿"""data_quality API 覆盖率补充：validate_rules 全分支 + validate_data 分支（CI --cov-fail-under 门禁）"""
+"""data_quality API 覆盖率补充：validate_rules 全分支 + validate_data 分支（CI --cov-fail-under 门禁）"""
 from unittest.mock import Mock
 
 import pytest

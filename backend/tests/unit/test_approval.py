@@ -452,7 +452,7 @@ class TestGetAllTasks:
             MockSvc.return_value = svc
             resp = client_with_mocked_auth.get(f"{BASE}/tasks/all")
             assert resp.status_code == 200
-            assert resp.json()["total"] == 1
+            assert resp.json()["data"]["total"] == 1
 
     def test_regular_user_forbidden(self, client_with_regular_user_auth):
         resp = client_with_regular_user_auth.get(f"{BASE}/tasks/all")
@@ -479,7 +479,7 @@ class TestGetPendingTasks:
             MockSvc.return_value = svc
             resp = client_with_mocked_auth.get(f"{BASE}/tasks/pending")
             assert resp.status_code == 200
-            assert resp.json()["total"] >= 1
+            assert resp.json()["data"]["total"] >= 1
 
     def test_fallback_to_all_pending(self, client_with_mocked_auth):
         from app.core.database import get_db
