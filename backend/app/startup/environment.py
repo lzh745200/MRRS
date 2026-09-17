@@ -3,34 +3,36 @@
 import logging
 from pathlib import Path
 
+from app.core.required_packages import (  # noqa: E402
+    REQUIRED_RUNTIME_PACKAGES,
+    fix_command,
+    missing_runtime,
+)
+
 logger = logging.getLogger("assistance_management")
 
-REQUIRED_PACKAGES = [
-    "fastapi",
-    "uvicorn",
-    "sqlalchemy",
-    "pandas",
-    "openpyxl",
-]
+# 向后兼容别名（既有 `from app.main import REQUIRED_PACKAGES` 用法继续可用）
+REQUIRED_PACKAGES = [dep.module for dep in REQUIRED_RUNTIME_PACKAGES]
 
 
 def _check_required_packages():
-    """启动时检查必需包（仅逐个检查核心包，避免遍历全部已安装包）"""
-    import importlib
+    """启动自检：运行时必需依赖是否可导入（登记表见 app/core/required_packages.py）
 
-    missing = []
-    for pkg in REQUIRED_PACKAGES:
-        try:
-            importlib.import_module(pkg)
-        except ImportError:  # pragma: no cover
-            missing.append(pkg)
-
+    R15（2026-09-14）：此前三处清单互相漂移，UI 那份还列了应用不用的 fpdf2 与仅开发期
+    的 pytest，导致恒报缺失。现统一走登记表 + import 名校验。
+    """
+    missing = missing_runtime()
     if missing:
-        logger.warning(
-            "缺少依赖包 %s，请运行: pip install %s",
-            missing,
-            " ".join(missing),
-        )
+        detail = "，".join(f"{dep.distribution}（{dep.purpose}）" for dep in missing)
+        hint = fix_command(missing)
+        if hint:
+            logger.warning("缺少运行时依赖: %s；修复命令: %s", detail, hint)
+        else:
+            # 冻结运行时（安装包自包含）缺依赖 = 包本身异常，pip 不适用
+            logger.error(
+                "自包含运行时缺少依赖: %s —— 请重新安装安装包或联系管理员",
+                detail,
+            )
     else:
         logger.info("所有关键依赖包已安装。")
 

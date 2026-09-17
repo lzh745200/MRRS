@@ -2061,19 +2061,34 @@ class TestSystemEnv:
         assert "python_version" in result
 
     def test_check_env_with_missing(self):
+        """R15：缺失判定走登记表（missing_runtime），不再依赖 distributions() 枚举。"""
         from app.api.v1.system.env import check_env
+        from app.core.required_packages import Dependency
+
         db = _mock_db()
         user = _make_user()
-        with patch("app.api.v1.system.env._get_installed_packages", return_value={}):
+        with (
+            patch("app.api.v1.system.env.missing_runtime",
+                  return_value=[Dependency("pandas", "pandas", "报表与数据分析")]),
+            patch("app.api.v1.system.env.fix_command", return_value='python -m pip install -r req.txt'),
+        ):
             result = check_env(db=db, current_user=user)
-            assert len(result["data"]["missing_packages"]) > 0
+            assert result["data"]["missing_packages"] == ["pandas"]
+            assert result["data"]["runtime_ok"] is False
             assert "fix_command" in result["data"]
 
     def test_check_env_no_missing(self):
-        from app.api.v1.system.env import check_env, REQUIRED_PACKAGES
+        from app.api.v1.system.env import check_env
+
         db = _mock_db()
         user = _make_user()
-        all_installed = {pkg: "1.0" for pkg in REQUIRED_PACKAGES}
-        with patch("app.api.v1.system.env._get_installed_packages", return_value=all_installed):
+        with (
+            patch("app.api.v1.system.env.missing_runtime", return_value=[]),
+            patch("app.api.v1.system.env.missing_optional", return_value=[]),
+            patch("app.api.v1.system.env.missing_dev", return_value=[]),
+            patch("app.api.v1.system.env.fix_command", return_value=None),
+        ):
             result = check_env(db=db, current_user=user)
-            assert len(result["data"]["missing_packages"]) == 0
+            assert result["data"]["missing_packages"] == []
+            assert result["data"]["runtime_ok"] is True
+            assert "fix_command" not in result["data"]

@@ -226,3 +226,44 @@ describe('EnvCheck.vue 依赖筛选兜底分支', () => {
     expect(vm.filteredDependencies[0].name).toBe('axios')
   })
 })
+
+describe('EnvCheck.vue R15 依赖三级分组', () => {
+  it('可选/开发期依赖缺失 → 分别用降级/提示卡片展示，且不计入运行时故障', async () => {
+    envApi.check.mockResolvedValue({
+      system: { python_version: '3.11', platform: 'Linux', env_mode: 'production', frozen: false },
+      packages: { fastapi: '0.136.3', reportlab: '', pytest: '' },
+      missing_packages: [],
+      optional_missing: ['reportlab'],
+      dev_missing: ['pytest'],
+      runtime_ok: true,
+    })
+    const w = await mountComp()
+    const vm = w.vm as any
+    expect(vm.missingPackages).toEqual([])
+    expect(vm.optionalMissing).toEqual(['reportlab'])
+    expect(vm.devMissing).toEqual(['pytest'])
+    expect(ElMessage.success).toHaveBeenCalledWith('环境检查通过，所有依赖已就绪')
+    const text = w.text()
+    expect(text).toContain('可选依赖缺失（功能降级）')
+    expect(text).toContain('开发期依赖缺失')
+    // 运行时必需依赖齐备 → 不出现红色"以下依赖包未安装"故障卡
+    expect(text).not.toContain('以下依赖包未安装')
+  })
+
+  it('自包含安装包（frozen）且无缺失 → 不显示缺失卡，改为运行时说明', async () => {
+    envApi.check.mockResolvedValue({
+      system: { python_version: '3.11', platform: 'Windows', env_mode: 'production', frozen: true },
+      packages: { fastapi: '0.136.3' },
+      missing_packages: ['pandas'],
+      runtime_ok: false,
+    })
+    const w = await mountComp()
+    const vm = w.vm as any
+    expect(vm.systemInfo?.frozen).toBe(true)
+    expect(vm.missingPackages).toEqual(['pandas'])
+    expect(w.text()).toContain('自包含安装包')
+    expect(w.text()).toContain('重新安装安装包')
+    expect(w.text()).not.toContain('pip install')
+  })
+})
+

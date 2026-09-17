@@ -804,26 +804,42 @@ class TestSeedDefaultAdmin:
 
 
 class TestCheckRequiredPackages:
+    """R15：启动自检改走 app/core/required_packages 登记表（import 名 + find_spec 校验）。"""
+
     def test_all_packages_installed(self):
         with (
-            patch("builtins.__import__") as mock_import,
+            patch("app.startup.environment.missing_runtime", return_value=[]),
             patch("app.main.logger.info") as mock_info,
         ):
             _check_required_packages()
             mock_info.assert_called_once()
 
     def test_missing_packages(self):
-        def mock_import_module(name):
-            if name == "pandas":
-                raise ImportError
-            return MagicMock()
+        from app.core.required_packages import Dependency
+
+        missing = [Dependency("pandas", "pandas", "报表与数据分析")]
         with (
-            patch("importlib.import_module", side_effect=mock_import_module),
+            patch("app.startup.environment.missing_runtime", return_value=missing),
+            patch("app.startup.environment.fix_command", return_value="pip install -r requirements.txt"),
         ):
             import app.main as m
             with patch.object(m.logger, "warning") as mock_warn:
                 _check_required_packages()
                 mock_warn.assert_called_once()
+
+    def test_missing_packages_frozen_without_pip_hint(self):
+        """冻结运行时（安装包）不给 pip 建议，改为明确的自包含运行时错误。"""
+        from app.core.required_packages import Dependency
+
+        missing = [Dependency("pandas", "pandas", "报表与数据分析")]
+        with (
+            patch("app.startup.environment.missing_runtime", return_value=missing),
+            patch("app.startup.environment.fix_command", return_value=None),
+        ):
+            import app.main as m
+            with patch.object(m.logger, "error") as mock_err:
+                _check_required_packages()
+                mock_err.assert_called_once()
 
 
 class TestResourceMonitoring:

@@ -245,13 +245,8 @@ class CachedStaticFiles(StaticFiles):
         return response
 
 
-REQUIRED_PACKAGES = [
-    "fastapi",
-    "uvicorn",
-    "sqlalchemy",
-    "pandas",
-    "openpyxl",
-]
+# 运行时依赖登记表已收敛到 app/core/required_packages.py（本文件不再自持清单；
+# 下方 `from app.startup.environment import REQUIRED_PACKAGES` 提供兼容别名）。
 
 
 # /health 等非API路由必须在 SPA catch-all 之前注册

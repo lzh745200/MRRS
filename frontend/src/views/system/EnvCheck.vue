@@ -26,6 +26,9 @@
               <el-tag :type="envModeTagType">
                 {{ systemInfo?.env_mode || '-' }}
               </el-tag>
+              <el-tag v-if="systemInfo?.frozen" type="info" style="margin-left: 8px">
+                自包含安装包
+              </el-tag>
             </el-descriptions-item>
           </el-descriptions>
         </el-col>
@@ -114,6 +117,53 @@
         <p>修复命令：</p>
         <code>{{ envData.fix_command }}</code>
       </div>
+      <div v-else-if="envData?.system?.frozen" class="fix-command">
+        <p>当前为自包含安装包运行：无需也无法 pip 安装，请重新安装安装包或联系管理员。</p>
+      </div>
+    </el-card>
+
+    <!-- 可选依赖缺失：仅对应功能降级，不影响系统运行 -->
+    <el-card v-if="optionalMissing.length > 0" class="warning-card">
+      <template #header>
+        <div class="card-header">
+          <span style="color: var(--color-warning)">可选依赖缺失（功能降级）</span>
+          <el-tag type="warning">{{ optionalMissing.length }} 个包缺失</el-tag>
+        </div>
+      </template>
+      <el-alert
+        title="以下依赖未安装，仅影响对应导出/图片功能，系统可正常运行"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px"
+      />
+      <div class="missing-list">
+        <el-tag v-for="pkg in optionalMissing" :key="pkg" type="warning" class="missing-tag">
+          {{ pkg }}
+        </el-tag>
+      </div>
+    </el-card>
+
+    <!-- 仅开发期依赖缺失：开发环境诊断用，生产/安装包不关心 -->
+    <el-card v-if="devMissing.length > 0" class="warning-card">
+      <template #header>
+        <div class="card-header">
+          <span>开发期依赖缺失</span>
+          <el-tag type="info">{{ devMissing.length }} 个包缺失</el-tag>
+        </div>
+      </template>
+      <el-alert
+        title="以下依赖仅开发/测试期需要（安装包内不含），生产运行不受影响"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px"
+      />
+      <div class="missing-list">
+        <el-tag v-for="pkg in devMissing" :key="pkg" type="info" class="missing-tag">
+          {{ pkg }}
+        </el-tag>
+      </div>
     </el-card>
 
     <!-- 空状态 -->
@@ -136,6 +186,8 @@ const pkgFilter = ref('')
 
 const systemInfo = ref<SystemInfo | null>(null)
 const missingPackages = ref<string[]>([])
+const optionalMissing = ref<string[]>([])
+const devMissing = ref<string[]>([])
 
 const installedCount = computed(() => {
   if (!envData.value?.packages) return 0
@@ -186,6 +238,8 @@ async function runCheck() {
     envData.value = result
     systemInfo.value = result.system
     missingPackages.value = result.missing_packages || []
+    optionalMissing.value = result.optional_missing || []
+    devMissing.value = result.dev_missing || []
     if (missingPackages.value.length === 0) {
       ElMessage.success('环境检查通过，所有依赖已就绪')
     } else {
