@@ -198,6 +198,17 @@
 - `.github/workflows/build-windows.yml`：见"门禁"小节（下一批次）。
 - 后端补齐最后 8 行覆盖率缺口至 **100.00%**（`system.py` 端口探活轮询 sleep、`tasks.py`
   完成/失败回写守卫、`camel_to_snake.py` 响应头复制、`chunked_upload_service.py` 合并锁二次检查）。
+- **`brace-expansion` 覆盖版本修正**（`frontend/package.json`）：安全作业要求消除
+  `brace-expansion` 的 DoS 高危项，首版覆盖到 `^5.0.12`——但 v4+ 是 **ESM-only**
+  （`type: module`，只有具名导出 `expand`，无 `default`），而 `minimatch@9/10` 的 CJS
+  入口仍写 `import expand from 'brace-expansion'`，于是 `vite build` 直接
+  `SyntaxError: does not provide an export named 'default'`（ARM64 流水线的
+  `Build Frontend` / `Build backend binary` / `standalone-deb` 三作业同时失败即由此而来）。
+  改为覆盖到 **`^2.1.7`**：2.x 为 CJS（无 `type`、`main: index.js`，默认导出可用），
+  且 2.1.7 已修完该分支的全部公告（`GHSA-q2hr-2g5m-vwhr` 中危、`GHSA-qhr7-859c-m2p7`
+  等）、`npm audit --audit-level=high` 无 `brace-expansion` 项，构建与门禁同时满足。
+  教训：**安全覆盖必须验证模块格式（ESM/CJS）与下游 import 形态**，仅看版本号更高即覆盖
+  会在构建期炸掉整条出包链路。
 
 ### 变更（行为）
 - 新增 `assert_org_reachable`（`core/data_permission.py`）作为跨组织可达性守卫的**唯一实现**，
