@@ -167,7 +167,9 @@ _PORT_PROBE_INTERVAL_SECONDS = 0.05
 
 def _probe_host(host: str) -> str:
     """把通配绑定地址换成可探测的回环地址。"""
-    if not host or host in ("0.0.0.0", "::", "[::]"):
+    # 这里是**比较**通配地址字面量（把它替换为回环地址用于端口探活），并非绑定 0.0.0.0；
+    # bandit 只做字符串匹配，属误报。
+    if not host or host in ("0.0.0.0", "::", "[::]"):  # nosec B104
         return "127.0.0.1"
     return host
 
