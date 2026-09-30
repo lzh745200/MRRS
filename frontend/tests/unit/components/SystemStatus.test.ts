@@ -1,4 +1,4 @@
-﻿/**
+/**
  * SystemStatus.vue 测试
  * 覆盖：快照加载（在线/离线/无数据）、数据库大小、同步时间文案分支、
  * CPU/内存告警等级、刷新按钮、轮询与清理
@@ -222,6 +222,22 @@ describe('SystemStatus.vue', () => {
     expect(mocks.getMonitorSnapshot).toHaveBeenCalledTimes(3)
     vi.useRealTimers()
     wrapper.unmount()
+  })
+
+  // 2026-09-30 深审修复：onMounted 内 await refresh() 之后才 setInterval，
+  // await 期间卸载会创建"永不清理"的定时器（onUnmounted 只清当时已存在的 timer）。
+  it('await 期间卸载 → 不再创建轮询定时器（卸载竞态）', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = mountStatus({ pollInterval: 1000 })
+      wrapper.unmount() // 在 refresh() 的 await 完成前卸载
+      await flushPromises()
+      mocks.getMonitorSnapshot.mockClear()
+      vi.advanceTimersByTime(5000)
+      expect(mocks.getMonitorSnapshot).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('pollInterval=0 时不启动轮询', async () => {

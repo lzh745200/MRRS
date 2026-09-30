@@ -2,7 +2,14 @@
 """
 机器码权限服务
 
-管理基于机器码的功能权限分配和限制。
+管理基于机器码的功能权限**限制**（restriction）。
+
+语义（2026-09-30 深审澄清，与 models/rbac.py:225 及 rbac_service 的
+`permissions - restricted_perms` 扣减逻辑一致）：本服务写入
+machine_code_permissions 的每一行都表示"该机器码上禁用某权限"，RBAC 计算
+用户有效权限时会把它从直接权限/角色权限中**扣除**。因此 grant_permission /
+batch_grant_permissions 的实际效果是"限制/禁用"，而非放行——命名保留是为兼容
+既有调用方，含义以本说明为准（fail-closed 方向，不会造成越权放行）。
 """
 
 import logging
@@ -98,7 +105,10 @@ class MachineCodePermissionService:
         granted_by: int,
         expires_at: Optional[datetime] = None,
     ) -> MachineCodePermission:
-        """为机器码授予权限
+        """为机器码登记一条权限**限制**（见模块 docstring）
+
+        写入的行会被 rbac_service 从该机器码绑定用户的有效权限中扣除，即调用本
+        方法的效果是"禁用该权限"，不是"放行该权限"。
 
         Args:
             machine_code_id: 机器码ID
@@ -107,7 +117,7 @@ class MachineCodePermissionService:
             expires_at: 过期时间
 
         Returns:
-            MachineCodePermission: 创建的权限记录
+            MachineCodePermission: 创建/更新的限制记录
         """
         if not self.db:
             raise ValueError("数据库会话未初始化")
@@ -185,7 +195,7 @@ class MachineCodePermissionService:
         granted_by: int,
         expires_at: Optional[datetime] = None,
     ) -> int:
-        """批量授予机器码权限
+        """批量登记机器码权限**限制**（见模块 docstring；效果是禁用而非放行）
 
         Args:
             machine_code_id: 机器码ID
@@ -194,7 +204,7 @@ class MachineCodePermissionService:
             expires_at: 过期时间
 
         Returns:
-            int: 成功授予的权限数量
+            int: 已登记的限制条数
         """
         if not self.db:
             raise ValueError("数据库会话未初始化")

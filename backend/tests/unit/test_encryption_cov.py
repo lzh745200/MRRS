@@ -60,13 +60,17 @@ class TestDeploymentSalt:
         assert salt2 is salt1  # 缓存命中不再调用
         m.assert_called_once()
 
-    def test_load_failure_random_fallback(self):
+    def test_load_failure_fails_closed(self):
+        """盐值不可持久化时必须直接失败，绝不用进程内随机盐顶替（深审 #85）。
+
+        旧行为是 warning + 随机盐：本次运行写入的密文重启后永久不可解，
+        且只有解密时才暴露。
+        """
         with patch(
             "app.utils.runtime_secrets.get_or_create_secret", side_effect=Exception("io err")
         ):
-            salt = DataPackageEncryption._load_deployment_salt()
-        assert isinstance(salt, bytes)
-        assert len(salt) == 32
+            with pytest.raises(RuntimeError, match="部署盐值初始化失败"):
+                DataPackageEncryption._load_deployment_salt()
 
 
 # ==================== 派生与加解密 ====================

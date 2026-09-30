@@ -14,12 +14,26 @@ logger = logging.getLogger(__name__)
 FTS_TABLE = "policies_fts"
 
 
+def _fts_table_exists(db: Session) -> bool:
+    """只读探测 FTS5 虚拟表是否已建立（不发 DDL、不提交）。"""
+    try:
+        row = db.execute(text(
+            f"SELECT name FROM sqlite_master WHERE type='table' AND name='{FTS_TABLE}'"  # nosec B608
+        )).fetchone()
+        return row is not None
+    except Exception:
+        logger.warning("FTS5 表探测失败", exc_info=True)
+        return False
+
+
 def ensure_fts_table(db: Session) -> None:
-    """确保 FTS5 虚拟表存在，若不存在则创建."""
-    result = db.execute(text(
-        f"SELECT name FROM sqlite_master WHERE type='table' AND name='{FTS_TABLE}'"  # nosec B608
-    )).fetchone()
-    if result:
+    """确保 FTS5 虚拟表存在，若不存在则创建（含已有数据同步）.
+
+    写路径专用：仅在政策新增/批量重建时调用。**读路径不要调用本函数** ——
+    在 GET 搜索接口里发 CREATE VIRTUAL TABLE + INSERT + commit 会在并发读下
+    产生写锁竞争与隐式事务提交（深审 #58）。
+    """
+    if _fts_table_exists(db):
         return
     db.execute(text(f"""
         CREATE VIRTUAL TABLE IF NOT EXISTS {FTS_TABLE}
@@ -53,10 +67,14 @@ def search_policies_fts(
     Returns:
         [{"id": int, "title": str, "summary": str, "snippet": str, "rank": float}, ...]
     """
-    ensure_fts_table(db)
-
     if not query or not query.strip():
         return []
+
+    # 读路径：只探测、不建表。索引缺失时直接走 LIKE 降级（语义与 FTS 失败一致），
+    # 避免在 GET 请求里执行 DDL/DML 并提交事务（深审 #58）。
+    if not _fts_table_exists(db):
+        logger.debug("FTS5 表 %s 不存在，本次搜索降级为 LIKE", FTS_TABLE)
+        return _search_policies_like(db, query, limit, offset)
 
     # FTS5 查询语法：用双引号包裹精确短语，否则分词匹配
     sanitized = query.strip().replace('"', '""')
@@ -82,18 +100,41 @@ def search_policies_fts(
     except Exception as e:
         logger.warning("FTS5 搜索失败: %s, query=%s", e, sanitized)
         # Fallback: LIKE 搜索
-        like = f"%{sanitized}%"
-        rows = db.execute(
-            text("""
-                SELECT id, title, summary, keywords, level, category,
-                       substr(summary, 1, 60) AS snippet, 0.0 AS rank
-                FROM policies
-                WHERE title LIKE :like OR summary LIKE :like OR keywords LIKE :like OR content LIKE :like
-                LIMIT :limit OFFSET :offset
-            """),
-            {"like": like, "limit": limit, "offset": offset},
-        ).fetchall()
+        return _search_policies_like(db, query, limit, offset)
 
+    return [
+        {
+            "id": r[0],
+            "title": r[1],
+            "summary": r[2],
+            "keywords": r[3],
+            "level": r[4],
+            "category": r[5],
+            "snippet": r[6] or "",
+            "rank": round(float(r[7]), 2) if r[7] else 0.0,
+        }
+        for r in rows
+    ]
+
+
+def _search_policies_like(
+    db: Session,
+    query: str,
+    limit: int,
+    offset: int,
+) -> List[Dict[str, Any]]:
+    """LIKE 降级搜索（FTS 表缺失或 MATCH 语法失败时使用）。"""
+    like = f"%{query.strip()}%"
+    rows = db.execute(
+        text("""
+            SELECT id, title, summary, keywords, level, category,
+                   substr(summary, 1, 60) AS snippet, 0.0 AS rank
+            FROM policies
+            WHERE title LIKE :like OR summary LIKE :like OR keywords LIKE :like OR content LIKE :like
+            LIMIT :limit OFFSET :offset
+        """),
+        {"like": like, "limit": limit, "offset": offset},
+    ).fetchall()
     return [
         {
             "id": r[0],

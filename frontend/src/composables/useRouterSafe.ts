@@ -30,6 +30,7 @@ export function toSafeLocationHref(
   // 先按 URL 规范剥离控制字符（含 \t \n \r）与首尾空白，
   // 否则 "java\tscript:" 之类的变形会绕过下面的协议判定
   const cleaned = String(path ?? '')
+    // eslint-disable-next-line no-control-regex -- 控制字符白名单即本守卫的目的：必须逐码点剥离
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .trim()
   if (!cleaned) return fallback
@@ -38,6 +39,19 @@ export function toSafeLocationHref(
   // 带协议前缀（javascript: / data: / http: / https: ...）：一律拒绝，只放行同源相对路径
   if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(cleaned)) return fallback
   return cleaned
+}
+
+/**
+ * 判定 vue-router 的 NavigationFailure（守卫中止 / 取消 / 重复导航）。
+ *
+ * 不直接 import isNavigationFailure：仓内大量视图测试用局部 factory mock 掉
+ * 'vue-router'（只提供 useRouter），import 绑定会是 undefined，调用即抛。
+ * NavigationFailure 由 createRouterError 构造 —— Error + 数字 type + from/to。
+ */
+export function isNavigationFailureLike(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  const typed = err as { type?: unknown; from?: unknown; to?: unknown }
+  return typeof typed.type === 'number' && typed.from !== undefined && typed.to !== undefined
 }
 
 /**
@@ -77,8 +91,18 @@ export function useRouterSafe() {
       const resolved = router.resolve(pathString)
       if (resolved.name === 'NotFound' || resolved.matched.length === 0) {
         console.error(`[pushSafe] 路由不存在: ${pathString}${debugLabel ? ` (${debugLabel})` : ''}`)
-        // 仍尝试原生跳转作为兜底（仅同源相对路径，见 toSafeLocationHref）
-        window.location.href = toSafeLocationHref(pathString)
+        // 内部未知路由 → 走 SPA 内的 404 页面。
+        // 原先的 window.location.href 会整页重载、丢弃全部内存态，
+        // 重启后前端路由仍解析回同一个 NotFound 页面（纯浪费 + 状态丢失）。
+        try {
+          router.push({ name: 'NotFound' })?.catch((err: unknown) => {
+            console.error('[pushSafe] NotFound 路由不可达，回退原生跳转:', err)
+            window.location.href = toSafeLocationHref(pathString)
+          })
+        } catch (err) {
+          console.error('[pushSafe] NotFound 路由不可达，回退原生跳转:', err)
+          window.location.href = toSafeLocationHref(pathString)
+        }
         return
       }
     }
@@ -89,7 +113,13 @@ export function useRouterSafe() {
         logger.debug(`尝试跳转到${debugLabel}页面`)
       }
 
-      router.push(path)?.catch((err) => {
+      router.push(path)?.catch((err: unknown) => {
+        // 守卫中止/取消/重复导航属正常控制流：记日志后忽略。
+        // 一律整页重载会绕过守卫的决定（如未登录被引导到 /login）并丢内存态。
+        if (isNavigationFailureLike(err)) {
+          logger.debug('[pushSafe] 导航未完成（守卫中止/取消/重复），已忽略:', err)
+          return
+        }
         console.error('路由跳转失败:', err)
         if (pathString) {
           window.location.href = toSafeLocationHref(pathString)

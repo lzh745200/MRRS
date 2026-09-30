@@ -733,6 +733,51 @@ class TestPermissionOptions:
         _clear_overrides(client, get_current_user)
 
 
+class TestOptionsCacheHitStillRequiresAdmin:
+    """W15 深审 #9 回归：静态选项端点的缓存命中路径也必须过管理员校验。
+
+    cache_result 装饰器在命中缓存时直接返回缓存值，函数体内的 require_admin
+    被整体跳过；因此这三个端点必须把校验挂到路由依赖（dependencies=[...]）上。
+    """
+
+    prefix = "/api/v1/users"
+
+    def _warm_cache_as_admin(self, client, path, cache_key):
+        from app.core.cache import default_cache
+
+        _setup_admin_user(client)
+        first = client.get(f"{self.prefix}{path}")
+        assert first.status_code == 200
+        # 断言缓存确已写入：后续非管理员请求走的是"缓存命中直接返回"路径，
+        # 函数体内的 require_admin 不会执行——只有路由级依赖能拦住它
+        assert default_cache.get(cache_key) is not None
+        return first.json()
+
+    def test_role_options_cache_hit_rejects_non_admin(self, client):
+        cached = self._warm_cache_as_admin(client, "/roles/options", "role-options")
+        assert len(cached["data"]["roles"]) == 4
+        _setup_regular_user(client)
+        response = client.get(f"{self.prefix}/roles/options")
+        assert response.status_code == 403
+        _clear_overrides(client, get_current_user)
+
+    def test_data_scope_options_cache_hit_rejects_non_admin(self, client):
+        cached = self._warm_cache_as_admin(client, "/data-scopes/options", "data-scope-options")
+        assert len(cached["data"]["data_scopes"]) == 4
+        _setup_regular_user(client)
+        response = client.get(f"{self.prefix}/data-scopes/options")
+        assert response.status_code == 403
+        _clear_overrides(client, get_current_user)
+
+    def test_permission_options_cache_hit_rejects_non_admin(self, client):
+        cached = self._warm_cache_as_admin(client, "/permissions/options", "permission-options")
+        assert len(cached["data"]["permissions"]) > 0
+        _setup_regular_user(client)
+        response = client.get(f"{self.prefix}/permissions/options")
+        assert response.status_code == 403
+        _clear_overrides(client, get_current_user)
+
+
 class TestAdminResetPassword:
     prefix = "/api/v1/users"
 

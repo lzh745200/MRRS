@@ -65,6 +65,27 @@ def get_slow_stats() -> Dict[str, Any]:
     }
 
 
+def _summarize_params(parameters) -> "str | None":
+    """把 SQL 参数压缩成"个数+类型"摘要（绝不含参数值）。
+
+    Args:
+        parameters: SQLAlchemy 传入的参数（dict / list / tuple / 标量 / None）。
+
+    Returns:
+        形如 ``"3 params<int,str,NoneType>"`` 的摘要；无参数返回 None。
+    """
+    if not parameters:
+        return None
+    if isinstance(parameters, dict):
+        values = list(parameters.values())
+    elif isinstance(parameters, (list, tuple)):
+        values = list(parameters)
+    else:
+        values = [parameters]
+    types = ",".join(type(value).__name__ for value in values)
+    return f"{len(values)} params<{types}>"
+
+
 class SlowRequestMiddleware:
     """ASGI 中间件：记录慢 API 和慢 SQL（通过 SQLAlchemy 事件钩子）"""
 
@@ -101,14 +122,18 @@ class SlowRequestMiddleware:
                 if elapsed > slow_sql_ms:
                     _bump("slow_sql_count")
                     sql_short = statement[:200].replace("\n", " ")
+                    # 只记录参数个数与类型，绝不落参数值：参数里含口令散列、
+                    # 令牌、身份证/手机号等 PII，进环形缓冲与 warning 日志即外泄
+                    # （深审 #35）。
+                    params_summary = _summarize_params(parameters)
                     _slow_sqls.append({
                         "sql": sql_short,
-                        "params": str(parameters)[:200] if parameters else None,
+                        "params": params_summary,
                         "elapsed_ms": round(elapsed, 2),
                     })
                     logger.warning(
                         "慢SQL %.2fms: %s | params=%s",
-                        elapsed, sql_short, str(parameters)[:100] if parameters else "",
+                        elapsed, sql_short, params_summary,
                     )
         except Exception:
             logger.debug("SQLAlchemy 慢 SQL 监听器安装失败（数据库尚未初始化）")

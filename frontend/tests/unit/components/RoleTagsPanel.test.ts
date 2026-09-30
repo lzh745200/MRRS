@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   post: vi.fn(),
   apiRequest: vi.fn(),
   message: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+  messageBox: { confirm: vi.fn() },
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }))
 
 const mockGet = mocks.get
@@ -30,7 +32,8 @@ vi.mock('@/api/request', () => ({
   apiRequest: (...a: any[]) => mocks.apiRequest(...a),
   getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
 
-vi.mock('element-plus', () => ({ ElMessage: mocks.message }))
+vi.mock('element-plus', () => ({ ElMessage: mocks.message, ElMessageBox: mocks.messageBox }))
+vi.mock('@/utils/logger', () => ({ logger: mocks.logger }))
 
 const allRoles = [
   { id: 'r1', name: '管理员', description: '全部权限', is_system: true },
@@ -91,6 +94,8 @@ describe('RoleTagsPanel.vue', () => {
     mockGet.mockResolvedValue({ data: [{ id: 'r1', name: '管理员', description: 'x', is_system: true }] })
     mockPost.mockResolvedValue({})
     mockApiRequest.mockResolvedValue({})
+    // 撤销角色需二次确认：默认确认通过
+    mocks.messageBox.confirm.mockResolvedValue('confirm')
   })
 
   it('渲染已分配角色与可选角色（排除已分配与停用）', async () => {
@@ -126,12 +131,24 @@ describe('RoleTagsPanel.vue', () => {
     expect(wrapper2.text()).toContain('暂无可分配的角色')
   })
 
-  it('loadAssignedRoles 失败时清空已分配角色', async () => {
-    mockGet.mockRejectedValueOnce(new Error('boom'))
+  // 2026-09-30 深审修复：原先 catch 一律 assignedRoles=[]，403/网络/5xx 与"无角色"
+  // 不可区分（管理员会误判为没有角色）。现改为保留旧值 + 显式告警 + logger.error。
+  it('loadAssignedRoles 失败 → 显式告警且不清空已加载数据', async () => {
     const wrapper = mountPanel({ userId: 1, allRoles })
     await (wrapper.vm as any).loadAssignedRoles()
     await flushPromises()
-    expect(wrapper.text()).toContain('暂未分配任何 RBAC 角色')
+    expect(wrapper.text()).toContain('管理员')
+
+    mockGet.mockRejectedValueOnce(new Error('boom'))
+    await (wrapper.vm as any).loadAssignedRoles()
+    await flushPromises()
+    // 旧值保留 + 失败提示可见（不再伪装成"暂无角色"）
+    expect(wrapper.text()).toContain('管理员')
+    expect(wrapper.find('.load-failed-hint').exists()).toBe(true)
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      '[RoleTagsPanel] 已分配角色加载失败:',
+      expect.any(Error)
+    )
   })
 
   it('loadAssignedRoles 返回无 data 结构时安全处理', async () => {
@@ -142,11 +159,19 @@ describe('RoleTagsPanel.vue', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('直返角色')
 
-    // res 整体为 falsy → 空数组
+    // res 整体为 falsy/非数组（0）→ 视为畸形载荷：走失败分支（显式告警）而非静默空
     mockGet.mockResolvedValueOnce(0)
     await (wrapper.vm as any).loadAssignedRoles()
     await flushPromises()
-    expect(wrapper.text()).toContain('暂未分配任何 RBAC 角色')
+    expect(wrapper.find('.load-failed-hint').exists()).toBe(true)
+  })
+
+  it('loadAssignedRoles 载荷为非数组对象 → 不渲染、不抛错（走失败分支）', async () => {
+    mockGet.mockResolvedValueOnce({ data: { roles: [] } })
+    const wrapper = mountPanel({ userId: 1, allRoles })
+    await expect((wrapper.vm as any).loadAssignedRoles()).resolves.toBeUndefined()
+    await flushPromises()
+    expect(wrapper.find('.load-failed-hint').exists()).toBe(true)
   })
 
   it('assignRole 成功：post + 刷新 + emit assigned + 成功提示', async () => {
@@ -224,6 +249,50 @@ describe('RoleTagsPanel.vue', () => {
     await wrapper.find('button.tag-close').trigger('click')
     await flushPromises()
     expect(mockMessage.error).toHaveBeenCalledWith('角色移除失败')
+  })
+
+  // ── 2026-09-30 深审修复：撤销角色二次确认 ──
+
+  it('removeRole 先二次确认（系统角色提示影响面），确认后才发撤销请求', async () => {
+    const wrapper = mountPanel({ userId: 1, allRoles })
+    await (wrapper.vm as any).loadAssignedRoles()
+    await flushPromises()
+    await wrapper.find('button.tag-close').trigger('click')
+    await flushPromises()
+
+    expect(mocks.messageBox.confirm).toHaveBeenCalledWith(
+      '「管理员」是系统角色，撤销可能影响该用户既有权限。确认移除？',
+      '移除角色',
+      { type: 'warning', confirmButtonText: '确认移除', cancelButtonText: '取消' }
+    )
+    expect(mockApiRequest).toHaveBeenCalled()
+  })
+
+  it('removeRole 用户取消确认 → 不发撤销请求、不提示成功', async () => {
+    mocks.messageBox.confirm.mockRejectedValueOnce('cancel')
+    const wrapper = mountPanel({ userId: 1, allRoles })
+    await (wrapper.vm as any).loadAssignedRoles()
+    await flushPromises()
+    await wrapper.find('button.tag-close').trigger('click')
+    await flushPromises()
+
+    expect(mockApiRequest).not.toHaveBeenCalled()
+    expect(mockMessage.success).not.toHaveBeenCalled()
+    expect(wrapper.emitted('removed')).toBeUndefined()
+  })
+
+  it('非系统角色的确认文案不含"系统角色"字样', async () => {
+    mockGet.mockResolvedValueOnce({ data: [{ id: 'r2', name: '帮扶员' }] })
+    const wrapper = mountPanel({ userId: 1, allRoles })
+    await (wrapper.vm as any).loadAssignedRoles()
+    await flushPromises()
+    await wrapper.find('button.tag-close').trigger('click')
+    await flushPromises()
+    expect(mocks.messageBox.confirm).toHaveBeenCalledWith(
+      '确认移除角色「帮扶员」？',
+      '移除角色',
+      expect.any(Object)
+    )
   })
 
   it('暴露 loadAssignedRoles 与 assignedRoles', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useBackupSchedule } from '@/composables/useBackupSchedule'
+import { useBackupSchedule, type ScheduleConfig } from '@/composables/useBackupSchedule'
 
 vi.mock('@/api/request', () => ({
   get: vi.fn(),
@@ -172,6 +172,76 @@ describe('useBackupSchedule toCron 分支（经 saveSchedule 间接驱动）', (
     expect(await cronFor('23:45', 'monthly')).toBe('45 23 1 * *')
     // 未知频率保守回退 daily 表达式
     expect(await cronFor('23:45', 'daily')).toBe('45 23 * * *')
+  })
+})
+
+/**
+ * 2026-09-30 深审修复：cron 解析/回写的静默失真
+ * - 步长表达式（每 5 分钟）原先拼成 backupTime "02:05/5"（假时间）
+ * - `0 2 * * 3` / `0 2 15 * *` 经界面一保存即被改写成 周一 / 1 号
+ * - backupTime 非法（25:99 / abc:xyz / 02:99）原先直接拼进 cron 下发
+ */
+describe('useBackupSchedule cron 保真与时刻校验', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(put as any).mockResolvedValue({ success: true })
+  })
+
+  /** 用给定后端 cron 载入配置（可选改动）后保存，返回 PUT 下发的 schedule */
+  async function loadThenSave(schedule: string, mutate?: (c: ScheduleConfig) => void) {
+    ;(get as any).mockResolvedValue({ enabled: true, keepCount: 5, schedule })
+    const api = useBackupSchedule()
+    await api.loadScheduleConfig()
+    mutate?.(api.scheduleConfig.value)
+    await api.saveSchedule()
+    const calls = (put as any).mock.calls
+    return calls[calls.length - 1][1].schedule as string
+  }
+
+  it('分钟字段非纯数字（*/5）→ 用户未改动时原样回写，不再编造 02:*/5', async () => {
+    expect(await loadThenSave('*/5 2 * * *')).toBe('*/5 2 * * *')
+    // 展示侧仍回落到默认 02:00（不显示假时间）
+    ;(get as any).mockResolvedValue({ enabled: true, keepCount: 5, schedule: '*/5 2 * * *' })
+    const api = useBackupSchedule()
+    await api.loadScheduleConfig()
+    expect(api.scheduleConfig.value.backupTime).toBe('02:00')
+  })
+
+  it('不可表达的 cron + 用户改了时间 → 按用户输入下发新表达式', async () => {
+    expect(
+      await loadThenSave('*/5 2 * * *', (c) => {
+        c.backupTime = '03:30'
+      })
+    ).toBe('30 03 * * *')
+  })
+
+  it('weekly 保留原星期字段（0 2 * * 3 不再被静默改写成周一）', async () => {
+    expect(await loadThenSave('0 2 * * 3')).toBe('00 02 * * 3')
+  })
+
+  it('monthly 保留原"日"字段（0 2 15 * * 不再被静默改写成 1 号）', async () => {
+    expect(await loadThenSave('0 2 15 * *')).toBe('00 02 15 * *')
+  })
+
+  it('weekly/monthly 且原字段为 * → 回落默认 周一 / 1 号', async () => {
+    expect(await loadThenSave('0 2 * * 1')).toBe('00 02 * * 1')
+    expect(await loadThenSave('0 2 1 * *')).toBe('00 02 1 * *')
+  })
+
+  it('backupTime 非法 → fail-closed：提示且不下发任何请求', async () => {
+    for (const bad of ['25:99', 'abc:xyz', '02:99', '99:00', ':']) {
+      vi.clearAllMocks()
+      ;(put as any).mockResolvedValue({ success: true })
+      const { scheduleConfig, saveSchedule, savingSchedule } = useBackupSchedule()
+      scheduleConfig.value.backupTime = bad
+      await saveSchedule()
+      expect(put).not.toHaveBeenCalled()
+      expect(ElMessage.error).toHaveBeenCalledWith(
+        expect.stringContaining('备份时间格式不正确')
+      )
+      expect(ElMessage.success).not.toHaveBeenCalled()
+      expect(savingSchedule.value).toBe(false)
+    }
   })
 })
 

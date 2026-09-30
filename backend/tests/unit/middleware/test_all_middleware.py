@@ -291,10 +291,13 @@ class TestRequestLogger:
     def test_get_client_ip_from_forwarded(self):
         from app.middleware.request_logger import _get_client_ip
 
+        # 只有直连对端是可信代理（默认回环/TestClient）时才采信 XFF；
+        # 深审 #34 修复后必须带上可信 client，否则一律回落 socket 地址。
         scope = {
+            "client": ("127.0.0.1", 8000),
             "headers": [
                 (b"x-forwarded-for", b"10.0.0.1, 10.0.0.2"),
-            ]
+            ],
         }
         assert _get_client_ip(scope) == "10.0.0.1"
 
@@ -302,9 +305,10 @@ class TestRequestLogger:
         from app.middleware.request_logger import _get_client_ip
 
         scope = {
+            "client": ("127.0.0.1", 8000),
             "headers": [
                 (b"x-real-ip", b"192.168.1.1"),
-            ]
+            ],
         }
         assert _get_client_ip(scope) == "192.168.1.1"
 

@@ -153,6 +153,10 @@ class LocalTaskQueue:
             except (asyncio.CancelledError, Exception):
                 pass
         self._worker_tasks.clear()
+        # 深审 #67：原实现只置 _running=False 而不清 _queue，submit() 的自愈
+        # 判据却是 `self._queue is None` —— stop 后队列仍非 None，任务被 put 进
+        # 一个没有消费者的队列，状态永远停在 PENDING。此处一并复位。
+        self._queue = None
         logger.info("任务队列已停止")
 
     async def submit(
@@ -178,7 +182,9 @@ class LocalTaskQueue:
         self._tasks[task.id] = task
 
         # 队列未启动时自动启动 worker（自愈：应用未显式调用 start() 也能执行任务）
-        if self._queue is None:
+        # 判据含 _running：stop() 已复位 _queue=None，单看 _queue 无法区分
+        # "从未启动"与"已停止"（深审 #67）。
+        if self._queue is None or not self._running:
             await self.start()
 
         if self._queue is not None:

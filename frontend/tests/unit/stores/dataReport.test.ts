@@ -118,4 +118,54 @@ describe('useDataReportStore', () => {
       data: { content: 'new' },
     }))
   })
+
+  // 原实现：previewReport/receiveReport/rejectReport/downloadReport/submitReport
+  // 均无 try/catch —— 失败既不写 error 也不重置 loading，与两个 fetch* 的标准不一致。
+  describe('读写方法错误可观测性', () => {
+    it('previewReport 失败：写 error、重置 loading 并向上抛出', async () => {
+      mockApiRequest.mockRejectedValueOnce(new Error('preview boom'))
+      await expect(store.previewReport(5)).rejects.toThrow('preview boom')
+      expect(store.error).toBe('preview boom')
+      expect(store.loading).toBe(false)
+    })
+
+    it('receiveReport 失败：写 error、重置 loading 并向上抛出', async () => {
+      mockApiRequest.mockRejectedValueOnce(new Error('receive boom'))
+      await expect(store.receiveReport(3)).rejects.toThrow('receive boom')
+      expect(store.error).toBe('receive boom')
+      expect(store.loading).toBe(false)
+    })
+
+    it('rejectReport 失败：写 error 并向上抛出', async () => {
+      mockApiRequest.mockRejectedValueOnce(new Error('reject boom'))
+      await expect(store.rejectReport(3, '原因')).rejects.toThrow('reject boom')
+      expect(store.error).toBe('reject boom')
+    })
+
+    it('downloadReport 失败：写 error 并向上抛出', async () => {
+      mockApiRequest.mockRejectedValueOnce(new Error('download boom'))
+      await expect(store.downloadReport(7)).rejects.toThrow('download boom')
+      expect(store.error).toBe('download boom')
+    })
+
+    it('submitReport 失败：写 error 并向上抛出', async () => {
+      mockApiRequest.mockRejectedValueOnce(new Error('submit boom'))
+      await expect(store.submitReport({ content: 'x' })).rejects.toThrow('submit boom')
+      expect(store.error).toBe('submit boom')
+    })
+
+    it('无 message 时回退中文兜底文案（不外泄原始异常形态）', async () => {
+      mockApiRequest.mockRejectedValueOnce({})
+      await expect(store.submitReport({})).rejects.toEqual({})
+      expect(store.error).toBe('提交上报失败')
+    })
+
+    it('成功时清空 error 并复位 loading', async () => {
+      store.error = '旧错误'
+      mockApiRequest.mockResolvedValueOnce({ data: { id: 1 } })
+      await store.previewReport(1)
+      expect(store.error).toBeNull()
+      expect(store.loading).toBe(false)
+    })
+  })
 })

@@ -5,7 +5,7 @@
 在另一台电脑导入后完全还原权限分配。
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -79,7 +79,9 @@ class PermissionPackageImportResult(BaseModel):
 class PermissionPackageConfirmRequest(BaseModel):
     """确认导入请求"""
     overwrite_existing: bool = Field(True, description="是否覆盖已有配置（mirror 模式）")
-    mode: Optional[str] = Field(
+    # 取值必须是封闭集合：未知取值（"MERGE"/"mirror"/拼写错）此前被服务层当作
+    # "非 merge"，静默走破坏性 mirror 清空路径（深审 LIVE）。非法值现在直接 422。
+    mode: Optional[Literal["overwrite", "merge"]] = Field(
         None, description="导入模式：overwrite=完全替换（默认），merge=合并（保留目标机既有配置）"
     )
 

@@ -4,6 +4,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import { AuthStorage } from '@/utils/authStorage'
 import { markLockNow } from '@/utils/lockDigest'
+import { logger } from '@/utils/logger'
 
 const STORAGE_KEY = 'auto-lock-minutes'
 const DEFAULT_MINUTES = 15
@@ -38,8 +39,10 @@ export function useAutoLock(opts: AutoLockOptions = {}) {
         AuthStorage.clearSession()
         window.sessionStorage.setItem('auto_lock_active', '1')
         markLockNow()
-      } catch {
-        /* 静默 */
+      } catch (err) {
+        // 锁屏失败必须可观测：静默吞掉会表现为"锁屏已启用却从不生效"
+        // （会话未清理、锁屏标记未落库 → 守卫放行、无锁屏摘要）。
+        logger.error('[useAutoLock] 锁屏执行失败（会话未清理/锁屏标记未写入）:', err)
       }
     })
 

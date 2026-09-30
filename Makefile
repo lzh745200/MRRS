@@ -1,4 +1,4 @@
-.PHONY: test test-backend test-frontend test-e2e test-e2e-docker coverage deploy-check clean \
+.PHONY: venv test-local test test-backend test-frontend test-e2e test-e2e-docker coverage deploy-check clean \
         build-deb build-deb-amd64 build-deb-arm64 build-deb-all \
         docker-build docker-build-amd64 docker-build-arm64 docker-build-all \
         deb-clean \
@@ -8,6 +8,36 @@
 # 后端 Python 解释器：默认使用项目虚拟环境（裸 python 为 managed runtime，
 # 缺少 PyInstaller/pytest 等依赖）；所有调用均在 `cd backend &&` 之后，故用相对路径
 PYTHON ?= .venv/Scripts/python.exe
+
+# 本地环境一键准备（P-6：环境一致性）——建虚拟环境 + 装依赖 + 校验解释器版本
+# 说明：项目要求 Python 3.11（>=3.11.9 更佳，历史 .venv 为 3.11.0 时建议重建）
+venv:
+	@echo ">>> 准备后端虚拟环境..."
+	cd backend && python -m venv .venv
+	cd backend && $(PYTHON) -m pip install --upgrade pip
+	cd backend && $(PYTHON) -m pip install -r requirements.txt -r requirements-dev.txt
+	@echo ">>> 版本自检:"
+	cd backend && $(PYTHON) -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version; print(sys.version)"
+	@echo ">>> 前端依赖:"
+	cd frontend && npm ci --legacy-peer-deps
+	@echo "✓ 环境就绪（后端 backend/.venv + 前端 frontend/node_modules）"
+
+# 本地全量门禁（与 CI 等价，P-6）：后端测试+覆盖率、flake8、前端 lint/type/test、
+# 6 项棘轮门禁、版本单一来源校验
+test-local:
+	@echo ">>> [1/6] 后端测试 + 覆盖率门禁..."
+	cd backend && $(PYTHON) -m pytest tests/ -q --cov=app
+	@echo ">>> [2/6] flake8..."
+	cd backend && $(PYTHON) -m flake8 app/ --max-line-length=120 --max-complexity=16
+	@echo ">>> [3/6] 前端 lint / type-check / 测试..."
+	cd frontend && npm run lint:check && npm run type-check && npm run test:coverage
+	@echo ">>> [4/6] 棘轮门禁..."
+	cd backend && $(PYTHON) scripts/check_os_exit.py && $(PYTHON) scripts/check_unbounded_read.py && $(PYTHON) scripts/check_upload_endpoints.py && $(PYTHON) scripts/check_subprocess_encoding.py && $(PYTHON) scripts/check_dir_replace.py && $(PYTHON) scripts/check_scheduler_registration.py
+	@echo ">>> [5/6] Alembic 单 head 校验..."
+	$(PYTHON) scripts/check_migrations.py || backend/$(PYTHON) scripts/check_migrations.py
+	@echo ">>> [6/6] 版本单一来源校验..."
+	node scripts/sync-version.js --check
+	@echo "✓ 本地全量门禁通过"
 
 # 默认运行所有测试
 test: test-backend test-frontend

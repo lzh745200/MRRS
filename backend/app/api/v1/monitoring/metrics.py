@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.permission_utils import is_admin
 from app.core.security import get_current_active_user
 from app.middleware.metrics_middleware import metrics_store
 from app.models.user import User
@@ -36,11 +37,22 @@ async def get_business_metrics(
 
 
 @router.get("/prometheus")
-async def get_prometheus_metrics():
+async def get_prometheus_metrics(
+    current_user: User = Depends(get_current_active_user),
+):
     """
-    获取 Prometheus 格式的指标
+    获取 Prometheus 格式的指标（管理员）
     用于 Grafana 等监控工具集成
+
+    深审 #61：原实现无任何认证依赖 —— 业务指标（资金审批成功率、拨付率、
+    上报完成率、用户活跃度、系统错误率）可被任意未认证请求抓取，且
+    /metrics/prometheus 常被扫描器枚举。与同模块其它端点一致收敛为管理员可见。
     """
+    if not is_admin(current_user):
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
     from fastapi.responses import PlainTextResponse
 
     return PlainTextResponse(

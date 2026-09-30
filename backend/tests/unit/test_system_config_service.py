@@ -317,3 +317,62 @@ class TestSystemConfigService:
         with patch("json.loads", side_effect=TypeError("bad type")):
             result = svc.import_config("{}")
             assert result is False
+
+    def test_import_config_rejects_non_object_json(self):
+        """深审 #57：'[1,2]' / '"str"' / '5' 解析成功但非对象 → 必须返回 False 而非抛 AttributeError。"""
+        from app.services.system_config_service import SystemConfigService
+        svc = SystemConfigService()
+        svc.set = MagicMock()
+        for payload in ('["k1", "v1"]', '"just-a-string"', '42', 'null', 'true'):
+            assert svc.import_config(payload) is False, payload
+        svc.set.assert_not_called()
+
+    def test_import_config_commits_once_via_db(self):
+        """深审 #57：有会话时批量导入只提交一次（原子性），不逐键提交。"""
+        from app.services import system_config_service as scs
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        svc = scs.SystemConfigService(db)
+
+        with patch.object(scs, "safe_commit") as commit:
+            result = svc.import_config('{"k1": "v1", "k2": "v2", "k3": "v3"}')
+
+        assert result is True
+        assert commit.call_count == 1
+        assert db.add.call_count == 3
+
+    def test_import_config_updates_existing_row(self):
+        """已存在的键走更新分支（覆盖 value），不再新建。"""
+        from app.services import system_config_service as scs
+        db = MagicMock()
+        existing = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = existing
+        svc = scs.SystemConfigService(db)
+
+        with patch.object(scs, "safe_commit"):
+            assert svc.import_config('{"system_id": "SYS-X"}') is True
+
+        assert existing.value == "SYS-X"
+        db.add.assert_not_called()
+
+    def test_import_config_db_none_delegates_to_set(self):
+        """无会话（只读实例）保持既有语义：逐键 set。"""
+        from app.services.system_config_service import SystemConfigService
+        svc = SystemConfigService()
+        svc.set = MagicMock()
+        assert svc.import_config('{"a": 1, "b": 2}') is True
+        assert svc.set.call_count == 2
+
+    def test_set_serializes_bool_and_container(self):
+        """set() 派生自 _set_no_commit 后，类型转换语义必须保持不变。"""
+        from app.services import system_config_service as scs
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        svc = scs.SystemConfigService(db)
+
+        with patch.object(scs, "safe_commit"):
+            svc.set("flag", True)
+            svc.set("items", [1, 2])
+
+        added = [c.args[0].value if c.args else c.kwargs["value"] for c in db.add.call_args_list]
+        assert added == ["true", "[1, 2]"]

@@ -63,28 +63,35 @@ class TestRecordSecurityEventRollbackFailure:
 
 
 class TestTrustAssessmentBranches:
-    async def test_unauthenticated_https_is_low_risk(self):
-        """未认证 + HTTPS → 100-40=60 → low_risk（覆盖 265-271、321-322）。"""
+    """评分为因子分求和归一（深审 #93）后的期望值。
+
+    原断言（60/50/90）锁定的是"正因子分只 append 不参与计算"的失效模型：
+    总分只被两处硬编码扣分影响，与 factors 列表自相矛盾。现按
+    100×Σ因子分/65 计算：未认证 = (-40+15+10+10+5)/65 → 0；
+    已认证 + HTTP = (25+15+10-10+5)/65 → 69.2。
+    """
+
+    async def test_unauthenticated_https_is_untrusted(self):
+        """未认证 + HTTPS → Σ=0 → 0.0 → untrusted（覆盖认证失败因子与等级分支）。"""
         result = await get_trust_assessment(_make_request(scheme="https"), current_user=None)
 
         data = result["data"]
         assert result["success"] is True
-        assert data["score"] == 60
-        assert data["level"] == "low_risk"
+        assert data["score"] == 0.0
+        assert data["level"] == "untrusted"
         auth_factor = next(f for f in data["factors"] if f["factor"] == "authentication")
         assert auth_factor["status"] == "fail"
         assert auth_factor["score"] == -40
-        # HTTPS 正常且评分 >= 60 → 无安全建议
-        assert data["recommendations"] == []
+        # 评分 < 60 → 触发"信任评分偏低"建议
+        assert data["recommendations"] == ["信任评分偏低，建议审查安全配置"]
 
-    async def test_unauthenticated_http_is_medium_risk(self):
-        """未认证 + HTTP → 100-40-10=50 → medium_risk，两条建议
-        （覆盖 265-271、300-306、323-324、333、335）。"""
+    async def test_unauthenticated_http_is_also_untrusted(self):
+        """未认证 + HTTP → Σ=-10 → 夹取为 0.0 → untrusted，两条建议。"""
         result = await get_trust_assessment(_make_request(scheme="http"), current_user=None)
 
         data = result["data"]
-        assert data["score"] == 50
-        assert data["level"] == "medium_risk"
+        assert data["score"] == 0.0
+        assert data["level"] == "untrusted"
         transport = next(f for f in data["factors"] if f["factor"] == "transport_security")
         assert transport["status"] == "warning"
         assert transport["score"] == -10
@@ -93,16 +100,16 @@ class TestTrustAssessmentBranches:
             "信任评分偏低，建议审查安全配置",
         ]
 
-    async def test_authenticated_http_stays_trusted_with_https_recommendation(self):
-        """已认证 + HTTP → 100-10=90 → trusted，仅 HTTPS 建议（覆盖 300-306、333）。"""
+    async def test_authenticated_http_is_low_risk_with_https_recommendation(self):
+        """已认证 + HTTP → Σ=45 → 69.2 → low_risk，仅 HTTPS 建议。"""
         user = MagicMock()
         user.username = "admin"
 
         result = await get_trust_assessment(_make_request(scheme="http"), current_user=user)
 
         data = result["data"]
-        assert data["score"] == 90
-        assert data["level"] == "trusted"
+        assert data["score"] == 69.2
+        assert data["level"] == "low_risk"
         assert data["recommendations"] == ["建议启用HTTPS确保传输层安全"]
 
 
@@ -145,7 +152,7 @@ class TestSecurityEventStatsWithEvents:
 
 
 # ── 不可达分支说明 ─────────────────────────────────────────────────────────
-# get_trust_assessment 的 high_risk（325-326）/ untrusted（327-328）等级不可达：
-# total_score 初值 100，仅有两处扣分——未认证 -40（line 271）、非 HTTPS -10
-# （line 306），最低只能到 50，永远满足 `total_score >= 40`，不可能进入
-# `>= 20`（high_risk）或 else（untrusted）分支。属于死代码/疑似设计缺陷。
+# 深审 #93 改为按因子分求和归一（100×Σ/65）后，可达档位为
+# 100.0（已认证 + HTTPS）/ 69.2（已认证 + HTTP）/ 0.0（未认证，端点依赖下不可达），
+# medium_risk（40~59）与 high_risk（20~39）在现有权重下没有对应组合，
+# 已在 zero_trust.py 中标注 pragma 并说明原因。

@@ -27,6 +27,11 @@ from app.services.async_export_service import AsyncExportService
 
 router = APIRouter(prefix="/async-export", tags=["异步导出"])
 
+# W15 深审 #48：报表导出 / 状态查询 / 任务列表 / 文件下载的实现都是同步阻塞的
+# （真实查库 + openpyxl 生成、整包读文件）。这些端点刻意声明为普通 def ——
+# FastAPI 会把同步端点放进线程池执行，事件循环不会被单次导出占死；
+# 若改回 async def 而不加 run_in_threadpool，一次大报表导出即可卡住整个进程。
+
 
 # ==================== Response Schemas ====================
 
@@ -98,7 +103,7 @@ class ReportExportRequest(BaseModel):
 
 
 @router.post("/reports")
-async def export_reports(
+def export_reports(
     params: ReportExportRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -199,7 +204,7 @@ async def export_villages(
 
 
 @router.get("/status/{task_id}", response_model=ExportTaskResponse)
-async def get_export_status(
+def get_export_status(
     task_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -239,7 +244,7 @@ async def get_export_status(
 
 
 @router.get("/download/{task_id}")
-async def download_export_file(
+def download_export_file(
     task_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -289,7 +294,7 @@ async def download_export_file(
 
 
 @router.get("/tasks", response_model=ExportTaskListResponse)
-async def get_export_tasks(
+def get_export_tasks(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     status: Optional[str] = Query(None, description="状态筛选"),

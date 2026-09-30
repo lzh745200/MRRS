@@ -36,7 +36,10 @@ const props = withDefaults(defineProps<Props>(), {
 
 const formattedValue = computed(() => {
   if (typeof props.value === 'string') return props.value
-  return `${props.prefix}${props.value.toLocaleString()}${props.suffix}`
+  // 调用方常以 {...stats, ...anyPayload} 合并异步载荷：null/undefined/NaN 会
+  // 让 toLocaleString 抛 TypeError 或渲染出 "NaN"，此处统一兜底为占位符。
+  if (!Number.isFinite(props.value)) return '-'
+  return `${props.prefix}${props.value.toLocaleString('zh-CN')}${props.suffix}`
 })
 
 const trendClass = computed(() => {

@@ -117,7 +117,12 @@ class APIErrorHandler:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_val is not None:
-            handle_service_error(self.operation, exc_val, self.status_code)
-            return True
-        return False
+        if exc_val is None:
+            return False
+        # with 块内主动抛出的 HTTPException（403/404/422…）必须原样上抛：
+        # 此前一律经 handle_service_error 改写成默认 500，状态码语义被抹掉
+        # （深审 #80）。handle_service_error 自身必然抛 HTTPException，
+        # 故其后无 return —— 不再有"return True 吞掉异常"的误导分支。
+        if isinstance(exc_val, HTTPException):
+            return False
+        handle_service_error(self.operation, exc_val, self.status_code)

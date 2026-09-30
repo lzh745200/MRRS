@@ -159,6 +159,9 @@ class MetricsMiddleware:
         method = scope.get("method", "?")
         start_time = time.time()
         status_code = 0
+        # 一次性标志：异常分支已按 500 记录后，finally 不得再按 status_code
+        # 记第二次（深审 #33 —— 计数与耗时被重复累加，错误率虚高）。
+        recorded = False
 
         metrics_store.inc_active()
 
@@ -172,10 +175,11 @@ class MetricsMiddleware:
             await self.app(scope, receive, send_wrapper)
         except Exception:
             duration = time.time() - start_time
+            recorded = True
             metrics_store.record(method, path, 500, duration)
             raise
         finally:
             duration = time.time() - start_time
             metrics_store.dec_active()
-            if status_code > 0:
+            if status_code > 0 and not recorded:
                 metrics_store.record(method, path, status_code, duration)

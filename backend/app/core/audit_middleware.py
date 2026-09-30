@@ -2,6 +2,7 @@
 import logging
 import time
 
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.core.transaction import safe_commit
 
@@ -50,8 +51,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
             username or "anonymous",
         )
 
-        # 落库到 api_access_logs（独立 session，失败不破坏请求）
-        self._persist_api_access_log(
+        # 落库到 api_access_logs（独立 session，失败不破坏请求）。
+        # 必须卸载到线程池：_persist_api_access_log 是同步 DB IO（SessionLocal +
+        # commit），直接在事件循环里调用会阻塞所有并发请求（深审 #7）。
+        await run_in_threadpool(
+            self._persist_api_access_log,
             request=request,
             response_status=response.status_code,
             duration_ms=duration_ms,

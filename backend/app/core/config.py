@@ -220,6 +220,8 @@ class Settings(BaseSettings):
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM: Optional[str] = None
+    # SMTP 连接/读写超时（秒）：邮件服务器挂起时避免无限阻塞（深审 #69）
+    SMTP_TIMEOUT: int = 10
     ALERT_WEBHOOK_URL: Optional[str] = None
     ALERT_WEBHOOK_TYPE: str = "generic"  # generic, dingtalk, wecom
 

@@ -241,13 +241,29 @@ describe('api/approval', () => {
       expect(mockPost).toHaveBeenCalledWith('/approval/tasks/1/auto-approve', { opinion: 'fast' })
     })
 
-    it('autoApproveAll POST /approval/tasks/auto-approve-all', async () => {
-      mockPost.mockResolvedValueOnce({ success: [1, 2], failed: [3] })
+    it('autoApproveAll POST /approval/tasks/auto-approve-all 并规范化为计数', async () => {
+      // 后端真实形状：data = {total_pending, approved, failed}（三者均为计数）
+      mockPost.mockResolvedValueOnce({ total_pending: 5, approved: 4, failed: 1 })
       const result = await autoApproveAll()
       expect(mockPost).toHaveBeenCalledWith('/approval/tasks/auto-approve-all', {
         opinion: undefined,
       })
-      expect(result.success).toEqual([1, 2])
+      expect(result).toEqual({ total_pending: 5, approved: 4, failed: 1 })
+    })
+
+    it('autoApproveAll 缺字段/非数字一律按 0 计（不臆造成功条数）', async () => {
+      mockPost.mockResolvedValueOnce({ approved: '3', failed: null })
+      const result = await autoApproveAll('op')
+      expect(result).toEqual({ total_pending: 0, approved: 0, failed: 0 })
+    })
+
+    it('autoApproveAll 响应非对象时不抛错（全 0）', async () => {
+      mockPost.mockResolvedValueOnce(undefined)
+      await expect(autoApproveAll()).resolves.toEqual({
+        total_pending: 0,
+        approved: 0,
+        failed: 0,
+      })
     })
 
     it('submitAndAutoApprove POST /approval/submit-auto', async () => {

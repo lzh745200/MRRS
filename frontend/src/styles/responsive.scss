@@ -22,6 +22,24 @@ $breakpoints: (
 
 // ==================== 媒体查询 Mixins ====================
 
+/// 计算 max-width 上界：对数值统一 -1px 以与 min-width 错开，
+/// 并 clamp 到 ≥0。
+///
+/// 深审 #73：原实现命名断点走 `map.get(...) - 1px`，xs=0 → 输出
+/// `max-width: -1px`（永不匹配、静默丢样式）；else 分支的原始像素**不减 1**，
+/// 导致 768px 同时命中 min-width(768px) 与 max-width(768px)。
+/// 此处统一处理：数值一端 -1px 并下限 0；单位为 0 时直接返回 0。
+@function _max-width-bound($value) {
+  @if $value == 0 or $value == 0px {
+    @return 0;
+  }
+  $adjusted: $value - 1px;
+  @if $adjusted < 0 {
+    @return 0;
+  }
+  @return $adjusted;
+}
+
 /// 最小宽度媒体查询
 /// @param {String} $breakpoint - 断点名称
 @mixin min-width($breakpoint) {
@@ -40,11 +58,11 @@ $breakpoints: (
 /// @param {String} $breakpoint - 断点名称
 @mixin max-width($breakpoint) {
   @if map.has-key($breakpoints, $breakpoint) {
-    @media (max-width: map.get($breakpoints, $breakpoint) - 1px) {
+    @media (max-width: _max-width-bound(map.get($breakpoints, $breakpoint))) {
       @content;
     }
   } @else {
-    @media (max-width: $breakpoint) {
+    @media (max-width: _max-width-bound($breakpoint)) {
       @content;
     }
   }
@@ -60,10 +78,10 @@ $breakpoints: (
   }
   $max-width: $max;
   @if map.has-key($breakpoints, $max) {
-    $max-width: map.get($breakpoints, $max) - 1px;
+    $max-width: map.get($breakpoints, $max);
   }
 
-  @media (min-width: $min-width) and (max-width: $max-width) {
+  @media (min-width: $min-width) and (max-width: _max-width-bound($max-width)) {
     @content;
   }
 }

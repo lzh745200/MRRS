@@ -7,7 +7,7 @@
 fund 关系统一配置 cascade="all, delete-orphan" + passive_deletes=True。
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, Index
 from sqlalchemy.orm import backref, relationship
@@ -46,7 +46,11 @@ class FundStatusHistory(Base):
         comment="操作人ID",
     )
     operator_name = Column(String(100), nullable=True, comment="操作人姓名")
-    operation_time = Column(DateTime(timezone=True), default=datetime.utcnow, comment="操作时间")
+    # 列声明为 timezone=True 却写 naive utcnow：会话时区不同即静默偏移；
+    # 且 datetime.utcnow 在 3.12+ 已废弃（深审 LIVE）。统一写 aware UTC。
+    operation_time = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), comment="操作时间"
+    )
     remark = Column(String(500), nullable=True, comment="操作备注/原因")
 
     # 关联
@@ -97,7 +101,9 @@ class FundFieldChange(Base):
         comment="修改人ID",
     )
     changed_by_name = Column(String(100), nullable=True, comment="修改人姓名")
-    changed_at = Column(DateTime(timezone=True), default=datetime.utcnow, comment="修改时间")
+    changed_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), comment="修改时间"
+    )
 
     # 关联
     fund = relationship(

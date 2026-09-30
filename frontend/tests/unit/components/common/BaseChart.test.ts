@@ -66,7 +66,43 @@ describe('common/BaseChart.vue', () => {
     const newOption = { xAxis: { type: 'category', data: ['B'] } }
     await wrapper.setProps({ option: newOption })
     await flushPromises()
-    expect(echartsInstance.setOption).toHaveBeenCalledWith(newOption, true)
+    // 2026-09-30 深审修复：原为 setOption(newOption, true)（notMerge 全量替换），
+    // 会重置 dataZoom/legend 等用户视图状态；现改为合并更新，断言随之改写。
+    expect(echartsInstance.setOption).toHaveBeenCalledWith(newOption)
+  })
+
+  it('autoResize 中途变化 → 监听对称附加/移除（2026-09-30 深审修复）', async () => {
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    const removeSpy = vi.spyOn(window, 'removeEventListener')
+    try {
+      const wrapper = mount(BaseChart, { props: { option, autoResize: true } })
+      await flushPromises()
+      addSpy.mockClear()
+      removeSpy.mockClear()
+
+      await wrapper.setProps({ autoResize: false })
+      expect(removeSpy).toHaveBeenCalledWith('resize', expect.any(Function))
+
+      await wrapper.setProps({ autoResize: true })
+      expect(addSpy).toHaveBeenCalledWith('resize', expect.any(Function))
+    } finally {
+      addSpy.mockRestore()
+      removeSpy.mockRestore()
+    }
+  })
+
+  it('卸载时无条件移除 resize 监听（autoResize 变化后仍对称）', async () => {
+    const removeSpy = vi.spyOn(window, 'removeEventListener')
+    try {
+      const wrapper = mount(BaseChart, { props: { option, autoResize: false } })
+      await flushPromises()
+      await wrapper.setProps({ autoResize: true })
+      removeSpy.mockClear()
+      wrapper.unmount()
+      expect(removeSpy).toHaveBeenCalledWith('resize', expect.any(Function))
+    } finally {
+      removeSpy.mockRestore()
+    }
   })
 
   it('resizes on window resize event and via exposed resize', async () => {

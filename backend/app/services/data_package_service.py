@@ -573,13 +573,18 @@ class DataPackageService:
         stmt = self._build_upsert_statement(model, clean_records, pk_name, overwrite)
 
         try:
-            self.db.execute(stmt)
+            # 本批使用独立 SAVEPOINT：失败只回滚本批，保留同一外层事务中已导入的
+            # 前序数据类型。历史实现在此处调用整事务 rollback() —— 会连同
+            # confirm_import 的 begin_nested() 内已导入的前序类型一起丢弃，而
+            # imported_counts 仍按"成功"计数并照常 commit（计数与数据不一致、
+            # 静默丢数据）。
+            with self.db.begin_nested():
+                self.db.execute(stmt)
             imported = len(clean_records)
         except Exception as e:
             errors.append(DataPackageValidationError(
                 field=model.__tablename__, message=f"批量写入数据库失败: {e}", data_type=model.__tablename__
             ))
-            self.db.rollback()
             imported = 0
 
         return imported, 0, errors

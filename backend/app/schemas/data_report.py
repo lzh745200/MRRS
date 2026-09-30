@@ -76,13 +76,26 @@ class DataReportReview(BaseModel):
 
 
 class DataReportStatistics(BaseModel):
-    """数据上报统计"""
+    """数据上报统计
+
+    深审 #6：service 曾传入 draft/cancelled/overdue/pending_review/approval_rate/
+    by_source_org/by_month 七个字段，但 schema 未声明 —— Pydantic 默认 extra=ignore
+    会**静默丢弃**，调用方拿不到这些统计。此处补齐为显式字段（全部带默认值，向后兼容）。
+    """
 
     total: int = 0
     submitted: int = 0
     approved: int = 0
     rejected: int = 0
     pending: int = 0
+    # 以下为补齐字段
+    draft: int = 0
+    cancelled: int = 0
+    overdue: int = 0
+    pending_review: int = 0
+    approval_rate: float = 0.0
+    by_source_org: Dict[str, int] = Field(default_factory=dict)
+    by_month: Dict[str, int] = Field(default_factory=dict)
 
 
 class SubordinateReportSummary(BaseModel):

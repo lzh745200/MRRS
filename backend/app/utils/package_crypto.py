@@ -29,6 +29,13 @@ _SALT_LEN = PasswordEncryptionService.SALT_LENGTH  # 32 字节
 # 新格式包头固定长度 = 魔术头 + 4 字节迭代数 + salt。短于此即截断/损坏。
 _HEADER_LEN = len(_MAGIC) + 4 + _SALT_LEN
 
+# 迭代次数上下界：迭代数完全由包头（攻击者可控）决定，伪造 0xFFFFFFFF 会让
+# PBKDF2 跑 ~42.9 亿次，一个请求即可打满 CPU（DoS，深审 #3）。
+# 下界取 1e4（低于此的"加密"毫无强度，只可能是伪造/损坏）；上界 1e7 已远高于
+# 本系统实际写入值（PasswordEncryptionService.DEFAULT_ITERATIONS）。
+_MIN_ITERATIONS = 10_000
+_MAX_ITERATIONS = 10_000_000
+
 
 def _legacy_fernet_from_password(password: str) -> Fernet:
     """[已弃用] 由口令直接派生 Fernet 密钥（SHA-256 → urlsafe-b64）。
@@ -84,6 +91,8 @@ def _parse_header(raw: bytes):
         raise InvalidToken("权限包格式损坏（包头被截断）")
     offset = len(_MAGIC)
     iterations = struct.unpack(">I", raw[offset:offset + 4])[0]
+    if not _MIN_ITERATIONS <= iterations <= _MAX_ITERATIONS:
+        raise InvalidToken("权限包格式损坏（迭代次数超出允许范围）")
     offset += 4
     salt = raw[offset:offset + _SALT_LEN]
     offset += _SALT_LEN

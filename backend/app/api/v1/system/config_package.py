@@ -163,7 +163,10 @@ async def import_config_package(
                 skipped_count += 1
                 continue
 
-            svc.set(key, str(value) if not isinstance(value, str) else value)
+            # 深审 #81：SystemConfigService.set 已对 bool/dict/list 做归一
+            # （json.dumps），外层再 str() 会把 dict 变成 Python repr（单引号），
+            # 之后 get_json 解析必然失败 —— 配置包往返后配置项静默损坏。
+            svc.set(key, value)
             imported_count += 1
 
         logger.info(

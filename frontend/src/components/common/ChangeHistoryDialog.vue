@@ -44,7 +44,16 @@ defineEmits<{ (e: 'update:visible', v: boolean): void }>()
 
 function formatValue(v: unknown): string {
   if (v === null || v === undefined || v === '') return '（空）'
-  if (typeof v === 'object') return JSON.stringify(v)
+  if (typeof v === 'object') {
+    try {
+      const serialized = JSON.stringify(v)
+      // 含 toJSON 返回 undefined 的对象 → JSON.stringify 得 undefined
+      return serialized === undefined ? String(v) : serialized
+    } catch {
+      // 循环引用等不可序列化值：渲染期抛错会中断整个对话框
+      return '[无法序列化的值]'
+    }
+  }
   return String(v)
 }
 </script>

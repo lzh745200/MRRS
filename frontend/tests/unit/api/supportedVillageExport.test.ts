@@ -65,7 +65,6 @@ import * as sv from '@/api/supportedVillage'
 
 import {
   exportVillages,
-  getExportTasks,
   getExportStatus,
   getExportHistory,
   downloadExportFile,
@@ -205,12 +204,9 @@ describe('api/export', () => {
     expect(mockDownloadBlob).toHaveBeenCalledWith(expect.any(Blob), expect.any(String))
   })
 
-  it('getExportTasks GET /async-export/tasks', async () => {
-    mockGet.mockResolvedValueOnce({ data: { items: [] } })
-    await getExportTasks({ page: 1 })
-    // 命名 get(url, params) 辅助函数：params 直接作为第二参数
-    expect(mockGet).toHaveBeenCalledWith('/async-export/tasks', { page: 1 })
-  })
+  // 注：原 getExportTasks 用例已移除——它与 getExportHistory 请求同一端点
+  // （GET /async-export/tasks）且零生产调用方，属重复死代码，已在 src 中删除；
+  // 该端点的 URL 断言保留在下方 getExportHistory 用例中（覆盖不减少）。
 
   it('getExportStatus GET /async-export/status/{id}', async () => {
     mockGet.mockResolvedValueOnce({ data: { status: 'pending' } })

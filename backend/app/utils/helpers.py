@@ -2,11 +2,14 @@
 
 import hashlib
 import json
+import logging
 import secrets
 import string
 from datetime import date, datetime
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def generate_random_string(length: int = 16) -> str:
@@ -88,7 +91,13 @@ def parse_date(value: Optional[str], fmt: str = "%Y-%m-%d") -> Optional[date]:
 
 
 def paginate(items: List[Any], page: int = 1, page_size: int = 20) -> Dict[str, Any]:
-    """Paginate a list of items."""
+    """Paginate a list of items.
+
+    入参先夹取到合法区间：page_size<=0 此前直接 ZeroDivisionError（500），
+    page<1 或负 page_size 会以负索引切片静默返回错误窗口（深审 #86）。
+    """
+    page = max(page, 1)
+    page_size = max(page_size, 1)
     total = len(items)
     start = (page - 1) * page_size
     end = start + page_size
@@ -134,13 +143,16 @@ BUDGET_MONEY_FIELDS = frozenset({"budget_amount", "executed_amount", "used_amoun
 def quantize_money(value: Any) -> Decimal:
     """将金额量化为4位小数（ROUND_HALF_UP 四舍五入）。
 
-    None/非法输入返回 Decimal("0")，便于直接用于列默认值。
+    None 与非法输入（NaN/Inf/非数值字符串）返回 Decimal("0")，便于直接用于
+    列默认值；非法输入额外记 WARNING —— 此前 except Exception 静默吞掉
+    InvalidOperation，非法金额与真实 0 无法区分（深审 #87）。
     """
     if value is None:
         return Decimal("0")
     try:
         return Decimal(str(value)).quantize(MONEY_PLACES, rounding=ROUND_HALF_UP)
-    except Exception:
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        logger.warning("金额量化失败，按 0 处理: value=%r error=%s", value, exc)
         return Decimal("0")
 
 

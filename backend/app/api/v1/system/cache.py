@@ -20,6 +20,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/cache", tags=["缓存管理"])
 
 
+def _snapshot_cache(backend) -> tuple:
+    """在缓存自身锁内取一致快照。
+
+    深审 #80：core/cache.py 的所有读写都在 self._lock 内，管理端点若直接读
+    _store，并发写入时 len() 与 items() 会看到不同的字典状态（甚至
+    RuntimeError: dictionary changed size during iteration）。这里统一在锁内
+    复制一份快照，统计口径才自洽。
+    """
+    with backend._lock:
+        return (
+            dict(backend._store),
+            getattr(backend, "_hits", 0),
+            getattr(backend, "_misses", 0),
+        )
+
+
 @router.get("/stats", summary="获取缓存统计信息")
 async def get_cache_stats(
     current_user=Depends(get_current_user),
@@ -31,16 +47,15 @@ async def get_cache_stats(
     """
     try:
         backend = default_cache
-        item_count = len(backend._store)
-        hits = getattr(backend, '_hits', 0)
-        misses = getattr(backend, '_misses', 0)
+        snapshot, hits, misses = _snapshot_cache(backend)
+        item_count = len(snapshot)
         total_requests = hits + misses
         hit_rate = round((hits / total_requests) * 100, 1) if total_requests > 0 else 0.0
 
         # 估算缓存大小
         import sys
         estimated_size = sum(
-            sys.getsizeof(k) + sys.getsizeof(v) for k, (_, v) in backend._store.items()
+            sys.getsizeof(k) + sys.getsizeof(v) for k, (_, v) in snapshot.items()
         )
 
         return success_response(
@@ -75,11 +90,13 @@ async def clear_cache(
     require_admin(current_user, error_message="仅超级管理员可清除缓存")
 
     try:
-        stats_before = len(default_cache._store)
+        with default_cache._lock:
+            stats_before = len(default_cache._store)
         await cache_manager.clear()
-        # 重置统计计数器
-        default_cache._hits = 0
-        default_cache._misses = 0
+        # 重置统计计数器（同一把锁内，避免与并发命中的计数互相覆盖）
+        with default_cache._lock:
+            default_cache._hits = 0
+            default_cache._misses = 0
 
         logger.info(
             "缓存已全部清除，清除前键数: %d，操作人: %s",

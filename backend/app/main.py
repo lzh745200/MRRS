@@ -44,6 +44,7 @@ from starlette.types import Scope
 from app.core.audit_middleware import AuditMiddleware
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
+from sqlalchemy.exc import SQLAlchemyError
 from app.core.logging_config import init_logging
 from app.core.security import SecurityHeadersMiddleware
 from app.core.static_files import setup_static_files
@@ -656,7 +657,7 @@ def _migrate_missing_columns(engine, model_base):
                             stype,
                             default_info,
                         )
-                    except (ValueError, TypeError, AttributeError) as col_err:
+                    except (ValueError, TypeError, AttributeError, SQLAlchemyError) as col_err:
                         total_failed += 1
                         logger.warning(
                             "Schema migration: failed to add %s.%s: %s",
@@ -665,7 +666,7 @@ def _migrate_missing_columns(engine, model_base):
                             col_err,
                         )
                 conn.commit()
-        except (ValueError, TypeError, KeyError) as tbl_err:
+        except (ValueError, TypeError, KeyError, SQLAlchemyError) as tbl_err:
             logger.warning(
                 "Schema migration: error processing table %s: %s",
                 table_name,

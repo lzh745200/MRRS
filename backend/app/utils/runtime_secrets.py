@@ -16,6 +16,92 @@ from app.utils.paths import get_data_path
 
 _logger = logging.getLogger(__name__)
 
+# 密钥最小长度（env 与文件两条来源共用同一强度口径）
+_MIN_KEY_LENGTH = 32
+
+
+def _validated_file_key(loaded: dict, key: str) -> str:
+    """读取文件来源的密钥并复用同一强度口径（≥32 字符）。
+
+    此前只有 os.environ 来源做长度校验，文件来源直接注入环境变量，
+    校验目标被绕过（深审 LIVE #6）。不达标的密钥按无效处理并告警，
+    由调用方重新生成（与弱环境变量同样的一次性代价）。
+    """
+    raw = loaded.get(key)
+    value = str(raw).strip() if raw else ""
+    if value and len(value) < 32:
+        _logger.warning(
+            "运行时密钥文件中的 %s 长度不足（%d < 32），将被忽略并重新生成",
+            key, len(value),
+        )
+        return ""
+    return value
+
+
+def _strip_weak_env_key(env_name: str) -> str:
+    """读取环境变量并在长度不足时告警清空（弱密钥视为无效）。"""
+    value = os.environ.get(env_name, "").strip()
+    if value and len(value) < _MIN_KEY_LENGTH:
+        _logger.warning(
+            "环境变量 %s 长度不足（%d < %d），将被忽略并重新生成",
+            env_name, len(value), _MIN_KEY_LENGTH,
+        )
+        return ""
+    return value
+
+
+def _load_secrets_file(secrets_file: str) -> tuple[dict, bool]:
+    """读取运行时密钥文件。
+
+    Returns:
+        (loaded, file_usable)：file_usable=False 表示**不得覆写**磁盘文件
+        （损坏/无权限/非对象顶层），否则会抹掉其它已持久化密钥。
+    """
+    try:
+        with open(secrets_file, "r", encoding="utf-8") as f:
+            raw_loaded = json.load(f)
+    except FileNotFoundError:
+        return {}, True
+    except json.JSONDecodeError as exc:
+        # 损坏的文件绝不能被随后的落盘覆盖：一旦覆写，会把 ENCRYPTION_FERNET_KEY
+        # 等其它已持久化密钥一并抹掉（深审 LIVE #5）。保留原文件待人工修复。
+        _logger.error(
+            "运行时密钥文件 JSON 格式损坏，拒绝覆写，请人工修复或删除 %s: %s",
+            secrets_file, exc,
+        )
+        return {}, False
+    except PermissionError as exc:
+        _logger.warning("运行时密钥文件无读取权限，将使用进程内密钥: %s", exc)
+        return {}, False
+    except Exception as exc:
+        _logger.warning("读取运行时密钥文件失败，将重新生成: %s", exc)
+        return {}, False
+
+    # "abc"/123/[...] 是真值但非对象：此前 loaded 直接变成非 dict，
+    # 下游 loaded.get 抛 AttributeError 打崩启动（深审 LIVE #5）。
+    if isinstance(raw_loaded, dict):
+        return raw_loaded, True
+    _logger.error(
+        "运行时密钥文件顶层不是 JSON 对象（%s），拒绝覆写: %s",
+        type(raw_loaded).__name__,
+        secrets_file,
+    )
+    return {}, False
+
+
+def _persist_runtime_secrets(secrets_file: str, loaded: dict, secret_key: str, csrf_secret_key: str) -> None:
+    """合并写回运行时密钥文件（以磁盘现有内容为基线，绝不抹掉其它密钥）。"""
+    merged = dict(loaded)
+    merged["SECRET_KEY"] = secret_key
+    merged["CSRF_SECRET_KEY"] = csrf_secret_key
+    try:
+        _atomic_write_json(secrets_file, merged)
+        _logger.info("已初始化运行时密钥文件: %s", secrets_file)
+    except PermissionError as exc:
+        _logger.warning("运行时密钥落盘失败（无写入权限），将仅使用进程内密钥: %s", exc)
+    except Exception as exc:
+        _logger.warning("运行时密钥落盘失败，将仅使用进程内密钥: %s", exc)
+
 
 def ensure_runtime_secrets() -> None:
     """
@@ -26,44 +112,18 @@ def ensure_runtime_secrets() -> None:
     2. 否则读取 runtime_secrets.json；
     3. 仍不存在则生成并原子落盘，随后注入到环境变量。
     """
-    secret_key = os.environ.get("SECRET_KEY", "").strip()
-    csrf_secret_key = os.environ.get("CSRF_SECRET_KEY", "").strip()
-
     # 验证已存在的密钥强度（至少 32 字符），弱密钥视为无效需重新生成
-    _min_key_length = 32
-    if secret_key and len(secret_key) < _min_key_length:
-        _logger.warning(
-            "环境变量 SECRET_KEY 长度不足（%d < %d），将被忽略并重新生成",
-            len(secret_key), _min_key_length,
-        )
-        secret_key = ""
-    if csrf_secret_key and len(csrf_secret_key) < _min_key_length:
-        _logger.warning(
-            "环境变量 CSRF_SECRET_KEY 长度不足（%d < %d），将被忽略并重新生成",
-            len(csrf_secret_key), _min_key_length,
-        )
-        csrf_secret_key = ""
+    secret_key = _strip_weak_env_key("SECRET_KEY")
+    csrf_secret_key = _strip_weak_env_key("CSRF_SECRET_KEY")
 
     if secret_key and csrf_secret_key:
         return
 
     secrets_file = _resolve_secrets_file()
-    loaded: dict[str, str] = {}
+    loaded, file_usable = _load_secrets_file(secrets_file)
 
-    try:
-        with open(secrets_file, "r", encoding="utf-8") as f:
-            loaded = json.load(f) or {}
-    except FileNotFoundError:
-        pass
-    except json.JSONDecodeError as exc:
-        _logger.warning("运行时密钥文件 JSON 格式损坏，将重新生成: %s", exc)
-    except PermissionError as exc:
-        _logger.warning("运行时密钥文件无读取权限，将使用进程内密钥: %s", exc)
-    except Exception as exc:
-        _logger.warning("读取运行时密钥文件失败，将重新生成: %s", exc)
-
-    secret_key = secret_key or loaded.get("SECRET_KEY", "")
-    csrf_secret_key = csrf_secret_key or loaded.get("CSRF_SECRET_KEY", "")
+    secret_key = secret_key or _validated_file_key(loaded, "SECRET_KEY")
+    csrf_secret_key = csrf_secret_key or _validated_file_key(loaded, "CSRF_SECRET_KEY")
 
     changed = False
     if not secret_key:
@@ -76,20 +136,14 @@ def ensure_runtime_secrets() -> None:
     os.environ["SECRET_KEY"] = secret_key
     os.environ["CSRF_SECRET_KEY"] = csrf_secret_key
 
-    if changed:
-        try:
-            _atomic_write_json(
-                secrets_file,
-                {
-                    "SECRET_KEY": secret_key,
-                    "CSRF_SECRET_KEY": csrf_secret_key,
-                },
-            )
-            _logger.info("已初始化运行时密钥文件: %s", secrets_file)
-        except PermissionError as exc:
-            _logger.warning("运行时密钥落盘失败（无写入权限），将仅使用进程内密钥: %s", exc)
-        except Exception as exc:
-            _logger.warning("运行时密钥落盘失败，将仅使用进程内密钥: %s", exc)
+    if not changed:
+        return
+
+    if not file_usable:
+        _logger.error("运行时密钥文件不可用，本次生成的密钥仅存在于进程内（重启后失效）")
+        return
+
+    _persist_runtime_secrets(secrets_file, loaded, secret_key, csrf_secret_key)
 
 
 def get_or_create_secret(key: str, *, generate=None, require_persisted: bool = False) -> str:

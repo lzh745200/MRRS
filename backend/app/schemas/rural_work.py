@@ -29,8 +29,10 @@ def _parse_date(v):
         for fmt, tz in _DATE_FORMATS:
             try:
                 parsed = datetime.strptime(v, fmt)
-                if tz:
-                    parsed = parsed.replace(tzinfo=tz)
+                # 裸日期/无时区格式此前返回 naive，同一字段可 aware 可 naive，
+                # 与 timezone=True 的模型列比较时行为随会话时区漂移（深审 LIVE）。
+                # 统一：显式时区用声明的，其余一律按 UTC 解释。
+                parsed = parsed.replace(tzinfo=tz or timezone.utc)
                 return parsed
             except ValueError:
                 continue

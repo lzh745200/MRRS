@@ -215,6 +215,83 @@ describe('MenuVisibilityPanel.vue', () => {
     ])
   })
 
+  // ── 2026-09-30 深审修复：半选父键丢失 ──
+
+  it('勾选子菜单（父节点半选）→ 父键一并保存（后端 _filter_menu_tree 要求父键在白名单内）', async () => {
+    const wrapper = mountPanel(
+      { userId: 7, username: 'x', isCustomized: true, roleDefaultKeys: [] },
+      treeStubWith({ checkedKeys: ['village'], halfCheckedKeys: ['management'] })
+    )
+    await flushPromises()
+    await wrapper.find('button.tree-check').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button.stub-btn')[1].trigger('click')
+    await flushPromises()
+
+    expect(mockPut).toHaveBeenCalledWith('/menus/user-menus/7', {
+      menu_keys: expect.arrayContaining(['village', 'management']),
+    })
+    const saved = (mockPut.mock.calls.at(-1)![1] as any).menu_keys as string[]
+    expect(saved).toHaveLength(2)
+  })
+
+  it('展示前沿键：含选中后代的祖先键不交给 el-tree（避免级联勾选兄弟节点）', async () => {
+    const wrapper = mountPanel(
+      { userId: 7, username: 'x' },
+      treeStubWith({ checkedKeys: ['village'], halfCheckedKeys: ['management'] })
+    )
+    await flushPromises()
+    await wrapper.find('button.tree-check').trigger('click')
+    await flushPromises()
+    // management 因"有选中后代"被剔除，由 el-tree 自行推导半选
+    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual([
+      'village',
+    ])
+  })
+
+  it('父键缺失的历史配置 → 载入时保留原值（不静默改写），勾选动作再补齐祖先', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/menus/all') return Promise.resolve({ data: menuTree })
+      return Promise.resolve({ data: { menu_keys: ['village'], is_customized: true } })
+    })
+    const wrapper = mountPanel({ userId: 7, username: 'x' })
+    await flushPromises()
+    // 展示：village（前沿），父键不在集合内
+    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual(['village'])
+  })
+
+  it('畸形 menu_keys 载荷（字符串/对象）→ 不当作选中集合', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/menus/all') return Promise.resolve({ data: menuTree })
+      return Promise.resolve({ data: { menu_keys: 'dashboard' } })
+    })
+    const wrapper = mountPanel({ userId: 7, username: 'x', roleDefaultKeys: ['dashboard'] })
+    await flushPromises()
+    // 'dashboard' 为字符串（非数组）→ 视为异常载荷，回退空选而非把字符串当键集合
+    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual([])
+
+    // 对象载荷同理
+    const wrapper2 = mountPanel({ userId: 8, username: 'y' })
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/menus/all') return Promise.resolve({ data: menuTree })
+      return Promise.resolve({ data: { menu_keys: { a: 1 } } })
+    })
+    await flushPromises()
+    expect(wrapper2.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual([])
+  })
+
+  it('watch currentMenuKeys：非数组载荷被忽略（不污染选中集合）', async () => {
+    const wrapper = mountPanel({ userId: 7, username: 'x', currentMenuKeys: ['dashboard'] })
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual([
+      'dashboard',
+    ])
+    await wrapper.setProps({ currentMenuKeys: 'village' as any })
+    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual([
+      'dashboard',
+    ])
+  })
+
   it('恢复角色默认 → 保存 null；保存成功 emit saved', async () => {
     const wrapper = mountPanel({ userId: 7, username: 'x', isCustomized: true, roleDefaultKeys: ['dashboard'] })
     await flushPromises()

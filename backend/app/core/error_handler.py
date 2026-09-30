@@ -21,14 +21,14 @@ app_logger = logger  # backward compatibility alias
 # Backward compat aliases — canonical definitions in app.core.exceptions
 # （仅保留有外部引用的 AppError/NotFoundError；BadRequestError/ForbiddenError/
 #   ConflictError/ServerError 四个别名零引用，2026-08-29 死代码清理移除）
-try:
-    from app.core.exceptions import (
-        AppError,
-        NotFoundError,
-    )
-except ImportError:  # pragma: no cover
-    AppError = Exception  # type: ignore
-    NotFoundError = Exception  # type: ignore
+# 直接导入，禁止 ImportError 静默降级（深审 #10）：此处一旦退化，
+# AppError 变成 Exception、NotFoundError 变成 Exception，所有
+# isinstance 判定与异常处理器都会静默失效（本该 404 的变成 500，或反之）。
+# 真出现导入失败应当在启动期就炸掉，而不是把错误语义悄悄改掉。
+from app.core.exceptions import (  # noqa: E402,F401 — 兼容别名，供外部 `from app.core.error_handler import AppError` 使用
+    AppError,
+    NotFoundError,
+)
 
 # ---------------------------------------------------------------------------
 # Response builders

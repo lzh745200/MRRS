@@ -126,6 +126,22 @@ class TestImportEntities:
                 assert resp.status_code == 200
                 assert resp.json()["success"] is True
 
+    def test_file_too_large_enforces_module_limit(self, client_with_mocked_auth):
+        """W15 深审 #53：/entities 的体积闸门必须与校验器同口径（模块常量），
+        不能退回全局 settings.MAX_FILE_SIZE（50MB）——否则 10~50MB 的文件
+        在此放行、到导入器才被拒，端点间行为不一致。"""
+        import app.api.v1.import_export.import_data as id_module
+
+        with patch.object(id_module, "_IMPORT_MAX_FILE_SIZE", 16), \
+                patch.object(id_module, "_IMPORT_MAX_FILE_SIZE_MSG", "文件大小超过限制"):
+            resp = client_with_mocked_auth.post(
+                f"{BASE}/entities",
+                files={"file": ("large.xlsx", b"x" * 100, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                params={"mode": "incremental", "entity_type": "project"},
+            )
+            assert resp.status_code == 400
+            assert "文件大小超过限制" in resp.json()["detail"]
+
     def test_dry_run_mode(self, client_with_mocked_auth):
         mock_result = MagicMock()
         mock_result.to_dict.return_value = {

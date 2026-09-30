@@ -7,7 +7,18 @@
     <!-- 当前已分配的角色 -->
     <div class="section">
       <h4>已分配角色</h4>
-      <div v-if="assignedRoles.length === 0" class="empty-hint">暂未分配任何 RBAC 角色</div>
+      <!-- 加载失败（403/网络/5xx）必须与"无角色"可区分：保留上一次已知值并显式告警，
+           否则管理员会把"读不到"误判成"没有角色"，进而重复分配/漏撤销 -->
+      <el-alert
+        v-if="loadFailed"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="load-failed-hint"
+      >
+        角色数据加载失败，当前显示可能不是最新状态，请稍后重试。
+      </el-alert>
+      <div v-else-if="assignedRoles.length === 0" class="empty-hint">暂未分配任何 RBAC 角色</div>
       <el-tag
         v-for="role in assignedRoles"
         :key="role.id"
@@ -52,8 +63,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { InfoFilled } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post, apiRequest } from '@/api/request'
+import { logger } from '@/utils/logger'
 
 interface RbacRole {
   id: string
@@ -77,6 +89,8 @@ const emit = defineEmits<{
 
 const assignedRoles = ref<RbacRole[]>([])
 const selectedRoleId = ref('')
+/** 已分配角色加载失败标记（用于把失败与"无角色"区分开） */
+const loadFailed = ref(false)
 
 const availableRoles = computed(() => {
   if (!props.allRoles) return []
@@ -86,10 +100,18 @@ const availableRoles = computed(() => {
 
 async function loadAssignedRoles() {
   try {
-    const res = await get(`/rbac/user/${props.userId}/roles`)
-    assignedRoles.value = (res.data || res || []) as RbacRole[]
-  } catch {
-    assignedRoles.value = []
+    const res: any = await get(`/rbac/user/${props.userId}/roles`)
+    const data = res?.data ?? res
+    // 载荷必须是数组：非数组（对象/字符串/0）会在模板 .map 处渲染期抛错
+    if (!Array.isArray(data)) {
+      throw new Error('角色列表载荷格式不正确')
+    }
+    assignedRoles.value = data as RbacRole[]
+    loadFailed.value = false
+  } catch (err) {
+    // 绝不静默清空：403/网络/5xx 与"无角色"必须可区分（保留旧值 + 显式告警）
+    loadFailed.value = true
+    logger.error('[RoleTagsPanel] 已分配角色加载失败:', err)
   }
 }
 
@@ -110,6 +132,18 @@ async function assignRole(roleId: string) {
 }
 
 async function removeRole(role: RbacRole) {
+  // 撤销角色是不可逆的授权变更，必须先二次确认；系统角色额外提示影响面
+  try {
+    await ElMessageBox.confirm(
+      role.is_system
+        ? `「${role.name}」是系统角色，撤销可能影响该用户既有权限。确认移除？`
+        : `确认移除角色「${role.name}」？`,
+      '移除角色',
+      { type: 'warning', confirmButtonText: '确认移除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return // 用户取消（ElMessageBox 以 reject 表达取消）
+  }
   try {
     await apiRequest({
       method: 'DELETE',

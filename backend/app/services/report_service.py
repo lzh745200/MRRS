@@ -14,6 +14,10 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+#: 单次报表导出的硬上限（防极端数据量把内存打爆）；超出即截断并留 WARNING，
+#: 绝不静默丢弃（深审 #49）。
+_MAX_REPORT_ROWS = 20000
+
 
 class ReportService:
     """Service for generating data reports in various formats.
@@ -316,19 +320,47 @@ class ReportService:
         """Fetch report data from the database.
 
         Args:
-            query_params: 可选的查询过滤参数。
+            query_params: 可选的查询过滤参数（year / village_ids / report_type）。
             user: 当前用户，用于数据权限过滤。
 
         Override this in production to query real models.
+
+        深审 #49/#50：原实现把 query_params 只写在签名与 docstring 里，函数体
+        从未使用 —— 调用方（data/reports.py）确实传入了 year/village_ids/
+        report_type，但导出范围与请求不符；同时 `limit(100)` 会静默截断，
+        而副标题用的正是截断后的 len()，报表看起来"就是这么多条"。
+        现在过滤条件全部生效，且不再静默截断（上限仅作为极端保护并留痕）。
         """
         try:
+            params = query_params or {}
+            include_sections = params.get("include_sections")
+            # 未勾选任何板块时显式返回空集，而不是"忽略参数导出全部"（fail-closed）
+            if include_sections is not None and not include_sections:
+                logger.info("报表导出未选择任何板块，返回空数据集")
+                return []
+
             from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
             from app.models.supported_village import SupportedVillage
 
             query = self.db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
             # 数据权限过滤（参照 villages.py:50 范式）
             query = scoped_filter(query, SupportedVillage, user)
-            rows = query.limit(100).all()
+
+            # year: SupportedVillage 本身没有年度列（年度数据在 annual_* 系列表，
+            # 报表主表是村庄维表）——因此 year 不作为村庄过滤条件，只进副标题，
+            # 避免用不存在的列构造条件（AttributeError → 500）。
+            village_ids = params.get("village_ids")
+            if village_ids:
+                query = query.filter(SupportedVillage.id.in_(list(village_ids)))
+
+            rows = query.order_by(SupportedVillage.id.asc()).all()
+            if len(rows) > _MAX_REPORT_ROWS:
+                logger.warning(
+                    "报表数据超过 %d 行（实际 %d 行），已截断；请缩窄 year/village_ids 条件",
+                    _MAX_REPORT_ROWS,
+                    len(rows),
+                )
+                rows = rows[:_MAX_REPORT_ROWS]
             return [
                 [i + 1, r.village_name or "", r.province or "", r.county or "",
                  "是" if r.is_revitalization_tier else "否", "", "", r.updated_at.isoformat() if r.updated_at else ""]

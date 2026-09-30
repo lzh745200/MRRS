@@ -21,6 +21,24 @@ from app.core.transaction import safe_commit
 logger = logging.getLogger(__name__)
 
 
+def _safe_json(payload: Dict[str, Any]) -> str:
+    """审计数据 JSON 序列化（绝不抛异常）。
+
+    details 里可能出现 datetime/Decimal/ORM 对象（log_data_change 传入
+    old_data/new_data），default=str 兜住类型问题（深审 #81）；循环引用会让
+    json.dumps 抛 ValueError，此时降级为最小可读摘要 —— 审计序列化失败
+    绝不能冒泡进业务流。
+    """
+    try:
+        return json.dumps(payload, ensure_ascii=False, default=str)
+    except (TypeError, ValueError) as exc:
+        logger.warning("审计数据序列化失败，降级为摘要: %s", exc)
+        return json.dumps(
+            {"action": str(payload.get("action")), "serialization_error": str(exc)},
+            ensure_ascii=False,
+        )
+
+
 class AuditAction(str, Enum):
     """审计操作类型"""
 
@@ -106,7 +124,7 @@ class AuditLogger:
         }
 
         # 1. 写入 Python 日志系统（app.log 中的 [AUDIT] JSON 行）
-        log_message = f"[AUDIT] {json.dumps(audit_data, ensure_ascii=False)}"
+        log_message = f"[AUDIT] {_safe_json(audit_data)}"
 
         if level == AuditLevel.CRITICAL:
             logger.critical(log_message)

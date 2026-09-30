@@ -91,7 +91,9 @@ async def run_integrity_check(
             from app.core.database_indexes import EXTRA_INDEXES
 
             expected_custom_indexes = set()
-            for idx_name, _, _ in EXTRA_INDEXES:
+            # 深审 #95：EXTRA_INDEXES 元组顺序为 (表名, 索引名, 列)，原实现取第一个
+            # 元素（表名）当索引名比对，missing 恒非空 → 每次完整性检查都误报缺索引。
+            for _table, idx_name, _columns in EXTRA_INDEXES:
                 expected_custom_indexes.add(idx_name)
 
             # 获取实际索引

@@ -61,9 +61,10 @@ class MessageTemplate(Base):
         """
         try:
             return self.title_template.format(**variables)
-        except (KeyError, IndexError, ValueError):
-            # 模板可能含位置占位符 {} / {0}（IndexError）或未转义花括号（ValueError），
-            # 只捕 KeyError 会让渲染直接抛给调用方（深审 LIVE）。
+        except (KeyError, IndexError, ValueError, AttributeError, TypeError):
+            # 模板可能含位置占位符 {} / {0}（IndexError）、未转义花括号（ValueError），
+            # 或 {user.name} 这类属性访问（AttributeError/TypeError）——模板由管理员
+            # 在库存改，任何一类都不许穿透成 500（深审 LIVE）。
             return self.title_template
 
     def render_content(self, variables: dict) -> str:
@@ -78,7 +79,7 @@ class MessageTemplate(Base):
         """
         try:
             return self.content_template.format(**variables)
-        except (KeyError, IndexError, ValueError):
+        except (KeyError, IndexError, ValueError, AttributeError, TypeError):
             return self.content_template
 
     def render_email_subject(self, variables: dict) -> str:
@@ -95,7 +96,7 @@ class MessageTemplate(Base):
             return self.render_title(variables)
         try:
             return self.email_subject_template.format(**variables)
-        except (KeyError, IndexError, ValueError):
+        except (KeyError, IndexError, ValueError, AttributeError, TypeError):
             return self.email_subject_template
 
     def render_email_body(self, variables: dict) -> str:
@@ -112,7 +113,7 @@ class MessageTemplate(Base):
             return self.render_content(variables)
         try:
             return self.email_body_template.format(**variables)
-        except (KeyError, IndexError, ValueError):
+        except (KeyError, IndexError, ValueError, AttributeError, TypeError):
             return self.email_body_template
 
 

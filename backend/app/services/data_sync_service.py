@@ -224,6 +224,11 @@ class DataSyncService:
                         **(sync_log.details or {}),
                         "errors": export_errors,
                     }
+                    # 2026-09-30 深审修复：此处必须立即提交。本方法返回后
+                    # _get_db_context 只做 db.close()，未提交的改动被隐式回滚
+                    # → 部分失败的导出在 sync_logs 永久记为 completed（静默失效，
+                    # UI/审计看不到失败）。
+                    safe_commit(db, self.logger)
 
                 self.logger.info("data_exported: %s", result)
                 return result

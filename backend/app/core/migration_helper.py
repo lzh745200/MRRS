@@ -9,6 +9,7 @@ import logging
 
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,7 @@ def migrate_missing_columns(engine, model_base):
                             stype,
                             default_info,
                         )
-                    except (ValueError, TypeError, AttributeError) as col_err:
+                    except (ValueError, TypeError, AttributeError, SQLAlchemyError) as col_err:
                         total_failed += 1
                         logger.warning(
                             "Schema migration: failed to add %s.%s: %s",
@@ -136,7 +137,7 @@ def migrate_missing_columns(engine, model_base):
                             col_err,
                         )
                 conn.commit()
-        except (ValueError, TypeError, KeyError) as tbl_err:
+        except (ValueError, TypeError, KeyError, SQLAlchemyError) as tbl_err:
             logger.warning(
                 "Schema migration: error processing table %s: %s",
                 table_name,

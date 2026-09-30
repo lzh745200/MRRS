@@ -61,11 +61,14 @@ describe('mounted 钩子', () => {
     expect(parent.contains(el)).toBe(true)
   })
 
-  it('菜单模式：canAccessMenu=false → 移除元素', () => {
+  // 2026-09-30 深审修复：无权限不再 removeChild（永久摘除、updated 无法复原），
+  // 改为与 updated 对称的 display:none（可逆），故断言随之改写。
+  it('菜单模式：canAccessMenu=false → 隐藏元素（不再摘除）', () => {
     const { parent, el } = makeEl()
     callMounted(el, { menu: 'system' })
     expect(menuState.canAccessMenu).toHaveBeenCalledWith('system')
-    expect(parent.contains(el)).toBe(false)
+    expect(parent.contains(el)).toBe(true)
+    expect(el.style.display).toBe('none')
   })
 
   it('菜单模式：canAccessMenu=true → 保留元素', () => {
@@ -75,10 +78,10 @@ describe('mounted 钩子', () => {
     expect(parent.contains(el)).toBe(true)
   })
 
-  it('菜单模式：无权限且 el 无父节点 → parentNode 短路安全跳过', () => {
+  it('菜单模式：无权限且 el 无父节点 → 隐藏且不抛错（无需 parentNode）', () => {
     const { el } = makeEl(false)
     callMounted(el, { menu: 'system' })
-    expect(el.parentNode).toBeNull()
+    expect(el.style.display).toBe('none')
   })
 
   it('权限码模式：已授权 → 保留', () => {
@@ -88,30 +91,31 @@ describe('mounted 钩子', () => {
     expect(parent.contains(el)).toBe(true)
   })
 
-  it('权限码模式：未授权 → 移除', () => {
+  it('权限码模式：未授权 → 隐藏（可逆）', () => {
     const { parent, el } = makeEl()
     callMounted(el, 'project:create')
-    expect(parent.contains(el)).toBe(false)
+    expect(parent.contains(el)).toBe(true)
+    expect(el.style.display).toBe('none')
   })
 
-  it('权限码模式：未授权且 el 无父节点 → 安全跳过', () => {
+  it('权限码模式：未授权且 el 无父节点 → 隐藏且不抛错', () => {
     const { el } = makeEl(false)
     callMounted(el, 'project:create')
-    expect(el.parentNode).toBeNull()
+    expect(el.style.display).toBe('none')
   })
 
-  it('权限码模式：user 为 null → role/permissions 双兜底后移除', () => {
+  it('权限码模式：user 为 null → role/permissions 双兜底后隐藏', () => {
     authState.user = null
-    const { parent, el } = makeEl()
+    const { el } = makeEl()
     callMounted(el, 'project:create')
-    expect(parent.contains(el)).toBe(false)
+    expect(el.style.display).toBe('none')
   })
 
-  it('权限码模式：user.permissions 缺失 → 兜底空数组后移除', () => {
+  it('权限码模式：user.permissions 缺失 → 兜底空数组后隐藏', () => {
     authState.user = { role: 'viewer' }
-    const { parent, el } = makeEl()
+    const { el } = makeEl()
     callMounted(el, 'project:create')
-    expect(parent.contains(el)).toBe(false)
+    expect(el.style.display).toBe('none')
   })
 
   it('角色数组模式：角色命中 → 保留', () => {
@@ -120,16 +124,16 @@ describe('mounted 钩子', () => {
     expect(parent.contains(el)).toBe(true)
   })
 
-  it('角色数组模式：角色未命中 → 移除', () => {
-    const { parent, el } = makeEl()
+  it('角色数组模式：角色未命中 → 隐藏', () => {
+    const { el } = makeEl()
     callMounted(el, ['admin', 'manager'])
-    expect(parent.contains(el)).toBe(false)
+    expect(el.style.display).toBe('none')
   })
 
-  it('角色数组模式：未命中且 el 无父节点 → 安全跳过', () => {
+  it('角色数组模式：未命中且 el 无父节点 → 隐藏且不抛错', () => {
     const { el } = makeEl(false)
     callMounted(el, ['admin'])
-    expect(el.parentNode).toBeNull()
+    expect(el.style.display).toBe('none')
   })
 
   it('角色数组模式：currentRole 为数组 → 任一命中即保留', () => {
@@ -180,10 +184,35 @@ describe('mounted 钩子', () => {
     expect(el.style.display).toBe('none')
   })
 
-  it('模块粒度：未知 level → 两个 else-if 均不命中，display 不变', () => {
+  // 2026-09-30 深审修复：未知 level 原先"两个 else-if 都不进"→ 元素保持可见（fail-open）。
+  // 现改为 fail-closed 隐藏 + DEV 告警，断言随之改写。
+  it('模块粒度：未知 level → fail-closed 隐藏并在 DEV 告警', () => {
     authState.modulePermissions = { village: { view: true, edit: true } }
     const { el } = makeEl()
     callMounted(el, { module: 'village', level: 'delete' })
+    expect(el.style.display).toBe('none')
+    expect(loggerMock.warn).toHaveBeenCalledWith(expect.stringContaining('未知的模块权限级别'))
+  })
+
+  it('模块粒度：未知 level 且非 DEV 环境 → 静默隐藏（不写告警）', () => {
+    vi.stubEnv('DEV', false)
+    try {
+      authState.modulePermissions = { village: { view: true, edit: true } }
+      const { el } = makeEl()
+      callMounted(el, { module: 'village', level: 'undefined-level' })
+      expect(el.style.display).toBe('none')
+      expect(loggerMock.warn).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('无权限隐藏后权限恢复 → updated 钩子可复原 display（可逆性）', () => {
+    const { el } = makeEl()
+    callMounted(el, { menu: 'system' })
+    expect(el.style.display).toBe('none')
+    menuState.canAccessMenu.mockReturnValue(true)
+    callUpdated(el, { menu: 'system' }, { menu: 'other' })
     expect(el.style.display).toBe('')
   })
 

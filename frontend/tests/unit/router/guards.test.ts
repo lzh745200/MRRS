@@ -164,7 +164,9 @@ describe('白名单路由（登录/注册/找回密码）免登录跳转 + 锁�
     expect(next).not.toHaveBeenCalledWith('/dashboard')
   })
 
-  it('sessionStorage 抛错（隐私模式/配额）时按未锁屏处理，不崩溃', async () => {
+  it('sessionStorage 抛错（隐私模式/配额）时 fail-closed：按已锁定处理，不自动免登录', async () => {
+    // 2026-09-30 深审：原断言为"读锁屏标记失败 → 按未锁屏放行"，属安全判定的 fail-open。
+    // 锁屏是安全屏障，异常时必须收紧（重输密码），故改为按已锁定处理。
     // src/test/setup.ts 把 globalThis.sessionStorage 装成了一个普通对象（非 Storage 实例），
     // 因此必须直接 spy 该对象；spy Storage.prototype 不会被命中，catch 分支永远进不去。
     const spy = vi.spyOn(sessionStorage, 'getItem').mockImplementation(() => {
@@ -173,12 +175,48 @@ describe('白名单路由（登录/注册/找回密码）免登录跳转 + 锁�
     try {
       const next = vi.fn()
       await routeGuard({ meta: {}, path: '/login' } as any, {} as any, next)
-      // 读锁屏标记失败 → locked 维持 false → 有令牌仍免登录进工作台
       expect(spy).toHaveBeenCalledWith('auto_lock_active')
-      expect(next).toHaveBeenCalledWith('/dashboard')
+      expect(next).toHaveBeenCalledWith()
+      expect(next).not.toHaveBeenCalledWith('/dashboard')
     } finally {
       spy.mockRestore()
     }
+  })
+
+  it('锁屏标记存在且仍有令牌时，访问受保护路由 → 重定向 /login（原实现直接放行）', async () => {
+    sessionStorage.setItem('auto_lock_active', '1')
+    const next = vi.fn()
+    await routeGuard({ meta: {}, path: '/dashboard' } as any, {} as any, next)
+    expect(next).toHaveBeenCalledWith('/login?redirect=/dashboard')
+  })
+
+  it('锁屏标记存在时，含权限/菜单元数据的路由同样先收口到登录页', async () => {
+    sessionStorage.setItem('auto_lock_active', '1')
+    mockCanAccess.mockReturnValue(true)
+    const next = vi.fn()
+    await routeGuard(
+      { meta: { roles: ['admin'], menuKey: 'audit' }, path: '/system/audit' } as any,
+      {} as any,
+      next
+    )
+    expect(next).toHaveBeenCalledWith('/login?redirect=/system/audit')
+    expect(next).not.toHaveBeenCalledWith('/403')
+    expect(next).not.toHaveBeenCalledWith()
+  })
+
+  it('锁屏但无令牌 → 仍走未登录分支（带 redirect）', async () => {
+    sessionStorage.setItem('auto_lock_active', '1')
+    mockGetToken.mockReturnValue(null)
+    const next = vi.fn()
+    await routeGuard({ meta: {}, path: '/dashboard' } as any, {} as any, next)
+    expect(next).toHaveBeenCalledWith('/login?redirect=/dashboard')
+  })
+
+  it('未锁屏时受保护路由正常放行（不误伤）', async () => {
+    sessionStorage.removeItem('auto_lock_active')
+    const next = vi.fn()
+    await routeGuard({ meta: {}, path: '/dashboard' } as any, {} as any, next)
+    expect(next).toHaveBeenCalledWith()
   })
 })
 

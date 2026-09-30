@@ -101,15 +101,41 @@ class TestCycleGuard:
         assert "child_tbl" in out["details"]
         assert "supported_villages" not in out["details"]
 
+    def test_descendant_chains_stop_at_root(self, svc):
+        """DFS 遇到 root_table 回流必须剪枝，否则会无限递归。"""
+        svc._load_graph = MagicMock(side_effect=[
+            [("child_tbl", "child_id")],        # root 的直接子表
+            [("supported_villages", "sv_id")],  # child 的子图含 root → 必须剪枝
+        ])
+        chains = svc._descendant_chains("supported_villages")
+        # 仅展开 root → child_tbl 一条链，未继续下钻
+        assert chains == [[("child_tbl", "child_id", "supported_villages", "id")]]
+
+    def test_descendant_chains_visited_set_breaks_cycles(self, svc):
+        """child ↔ grandchild 互引要由访问集截断，避免环上死循环。"""
+        svc._load_graph = MagicMock(side_effect=[
+            [("child_tbl", "child_id")],
+            [("grand_tbl", "grand_id")],
+            [("child_tbl", "child_id")],  # 回流到已访问节点 → 剪枝
+        ])
+        chains = svc._descendant_chains("supported_villages")
+        assert len(chains) == 2
+        assert chains[0][0][0] == "child_tbl"
+        assert chains[1][0][0] == "grand_tbl"
+
     def test_purge_skips_root_in_deep_graph(self, svc):
         svc._load_graph = MagicMock(side_effect=[
-            [("child_tbl", "child_id")],        # deep 循环的 root 子表
+            [("child_tbl", "child_id")],        # DFS 的 root 子表
             [("supported_villages", "sv_id")],  # 含 root → continue
             [("child_tbl", "child_id")],        # 直接删除循环的 root 子表
         ])
-        svc._delete_deep = MagicMock(return_value=1)
+        svc._delete_chain = MagicMock(return_value=1)
         svc._delete = MagicMock(return_value=1)
-        # 主行不存在 → rowcount 0 → 回滚；deep continue 分支已在之前执行
+        # 主行不存在 → rowcount 0 → 回滚
         out = svc.purge("supported_villages", 999999)
         assert out["success"] is False
-        svc._delete_deep.assert_not_called()  # root 被 continue，未进入孙表删除
+        # 链已剪枝：仅一条 root→child_tbl 链被删除，未下钻到孙表
+        assert svc._delete_chain.call_count == 1
+        assert svc._delete_chain.call_args[0][0] == [
+            ("child_tbl", "child_id", "supported_villages", "id")
+        ]

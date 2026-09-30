@@ -424,6 +424,72 @@ const militaryTechDarkTheme: ThemeConfig = {
       },
     },
   },
+
+  // ── 以下为 2026-09-30 补齐：此前暗色变体只覆盖 textStyle/title/categoryAxis/
+  //    valueAxis/legend/tooltip，饼图描边、对数轴/时间轴、工具箱图标、数据缩放
+  //    仍沿用浅色取值（#ffffff 描边、#cbd5e1 缩放条、#94a3b8 图标）→ 在暗底上
+  //    出现白边/刺眼条。取值沿用本文件暗色族的 slate 色阶。──
+  pie: {
+    ...militaryTechTheme.pie,
+    itemStyle: {
+      ...militaryTechTheme.pie.itemStyle,
+      // 分隔描边用暗色表面色，替代浅色主题的纯白 #ffffff
+      borderColor: '#1e293b',
+    },
+  },
+
+  logAxis: {
+    ...militaryTechTheme.logAxis,
+    axisLabel: {
+      color: '#64748b',
+      fontSize: 11,
+    },
+    splitLine: {
+      show: true,
+      lineStyle: {
+        color: 'rgba(51, 65, 85, 0.5)',
+        type: 'dashed',
+        width: 1,
+      },
+    },
+  },
+
+  timeAxis: {
+    ...militaryTechTheme.timeAxis,
+    axisLine: {
+      show: true,
+      lineStyle: { color: '#334155' },
+    },
+    axisLabel: {
+      color: '#64748b',
+      fontSize: 11,
+    },
+  },
+
+  toolbox: {
+    iconStyle: {
+      borderColor: '#64748b',
+    },
+    emphasis: {
+      iconStyle: {
+        // 浅色主题的强调色是品牌深蓝 #1e4d8c，在暗底上几乎不可见 → 用亮蓝
+        borderColor: '#3b82f6',
+      },
+    },
+  },
+
+  dataZoom: {
+    dataBackground: {
+      lineStyle: { color: '#334155' },
+      areaStyle: { color: 'rgba(51, 65, 85, 0.3)' },
+    },
+    selectedDataBackground: {
+      lineStyle: { color: '#3b82f6' },
+      areaStyle: { color: 'rgba(59, 130, 246, 0.15)' },
+    },
+    handleStyle: { color: '#64748b' },
+    textStyle: { color: '#94a3b8' },
+  },
 }
 
 // ============================================================================

@@ -25,14 +25,42 @@ class TestApprovalReminderService:
         assert svc._check_interval == 600
 
     def test_start_already_running(self):
+        # 2026-09-30 深审修复：start() 判据改为"线程是否存活"（旧判据 _running 在
+        # stop() join 超时后会永久残留，同一实例再也无法重启）。原用例只置
+        # _running=True 而不存在线程，在新语义下必须允许启动，故改写为构造真实
+        # 存活线程；"已在运行时告警且不替换线程"的语义保持不变。
         # 直接 patch 模块 logger，避免全量运行时全局 logging 被其他测试重配
         # 导致 caplog 捕获不到（隔离性修复，生产行为不变）。
         import app.services.reminder_service as mod
         svc = mod.ApprovalReminderService()
         svc._running = True
+        alive_thread = MagicMock()
+        alive_thread.is_alive.return_value = True
+        svc._thread = alive_thread
         with patch.object(mod, "logger") as mock_logger:
             svc.start()
         assert any("已在运行" in str(call.args) for call in mock_logger.warning.call_args_list)
+        assert svc._thread is alive_thread, "已运行状态下不得替换线程"
+
+    def test_start_recovers_after_join_timeout_thread_exit(self):
+        """join 超时后残留的 _running=True 不得让实例永久无法重启（本轮修复）。"""
+        import app.services.reminder_service as mod
+        svc = mod.ApprovalReminderService()
+        svc._running = True
+        stale_thread = MagicMock()
+        stale_thread.is_alive.return_value = True
+        svc._thread = stale_thread
+        assert svc.stop() is False, "线程仍在收尾时必须如实返回 False"
+        assert svc._running is True
+
+        # 线程事后自行退出：start() 必须能重启（以存活状态为唯一判据）
+        stale_thread.is_alive.return_value = False
+        svc._scan_loop = MagicMock()
+        svc.start()
+        assert svc._running is True
+        assert svc._thread is not stale_thread
+        svc._stop_event.set()
+        svc._thread.join(timeout=2)
 
     def test_start_success(self):
         from app.services.reminder_service import ApprovalReminderService

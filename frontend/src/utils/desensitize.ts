@@ -91,10 +91,20 @@ export function maskAmount(amount: number | string | null | undefined, showAmoun
   return '****'
 }
 
-/** 证件编号脱敏 */
+/**
+ * 证件编号脱敏。
+ *
+ * 原实现有两个泄露点：长度 <4 时**原样返回**（'ab' → 'ab'）；
+ * 长度恰为 4 时 slice(0,2) + slice(-2) 恰好覆盖全部字符（'1234' → '12****34'，
+ * 每位仍可见）。这里对"前缀+后缀会把凭据全部露出"的短凭证固定全掩，
+ * 保证任何长度都至少隐藏中间部分。
+ */
 export function maskMilitaryID(id: string | null | undefined): string {
-  if (!id || id.length < 4) return id || ''
-  return id.slice(0, 2) + '****' + id.slice(-2)
+  if (!id) return ''
+  const s = String(id)
+  // 2 位前缀 + 2 位后缀 >= 长度 → 无任何中段被隐藏 → 全掩
+  if (s.length <= 4) return '****'
+  return s.slice(0, 2) + '****' + s.slice(-2)
 }
 
 // ══════════════════════════════════════════════════════════════

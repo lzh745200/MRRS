@@ -88,12 +88,21 @@ function main() {
   const target = resolveTargetFile()
   let src = fs.readFileSync(target, 'utf-8')
 
-  // 幂等：已是最新补丁（SITE3 写侧防护已生效）则跳过。
-  // 注意不能仅用 MARKER 短路——旧版补丁（仅读侧）也含 MARKER，
-  // 需继续走下方分支升级到 SITE3。
-  if (src.includes(SITE3_PATCHED)) {
+  // 幂等：已是最新补丁则跳过。注意不能只看写侧（SITE1/SITE3）——
+  // 若写侧已打而读侧 SITE2 缺失（旧版补丁的中间态/半途失败），
+  // 覆盖率分片读回仍会 ENOENT，门禁依旧变红；此时必须 **fail-loud**，
+  // 而不是打印"已打最新补丁"后 exit 0 放行（深审 part-D 确证缺陷）。
+  const hasWriteSide = src.includes(SITE3_PATCHED) || src.includes(SITE1_PATCHED)
+  const hasReadSide = src.includes(SITE2_PATCHED)
+  if (hasWriteSide && !hasReadSide) {
+    fail(
+      '检测到写侧补丁但缺少读侧补丁（SITE2）：分片读回仍会 ENOENT。' +
+        '请删除 node_modules/vitest 后重新安装（npm ci）以重新打补丁（目标: ' + target + '）'
+    )
+  }
+  if (src.includes(SITE3_PATCHED) && hasReadSide) {
     console.log(
-      '[patch-vitest-coverage] 已打最新补丁（含写侧防护），跳过（' +
+      '[patch-vitest-coverage] 已打最新补丁（读侧 SITE2 + 写侧 SITE3），跳过（' +
         path.relative(process.cwd(), target) +
         '）'
     )
@@ -122,13 +131,8 @@ function main() {
     // 全新安装：SITE1 → SITE3（写侧防护），SITE2 → 读侧防护。
     src = src.replace(SITE1_ANCHOR, SITE3_PATCHED).replace(SITE2_ANCHOR, SITE2_PATCHED)
   } else if (c3 === 1) {
-    // 已是最新补丁（SITE3 生效），无需动作。
-    console.log(
-      '[patch-vitest-coverage] 已是最新补丁（含写侧防护），跳过（' +
-        path.relative(process.cwd(), target) +
-        '）'
-    )
-    return
+    // 写侧已在、读侧缺失（上方已在入口拦截；此处兜底再判一次，避免漏网放行）
+    fail('写侧补丁存在但读侧 SITE2 缺失，无法安全跳过（目标: ' + target + '）')
   } else if (src.includes(SITE1_PATCHED)) {
     // 旧版补丁（仅 SITE1 写镜像 + 可能已有 SITE2 读防护）→ 升级：SITE1 替换为 SITE3。
     // SITE2 若未打则不在此路径处理（新装路径已覆盖），已打则保持原样。

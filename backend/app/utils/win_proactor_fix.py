@@ -111,13 +111,37 @@ def _patch_proactor_transport() -> None:
 
 
 def _silent_close(transport: object, error: BaseException) -> None:
-    """尝试安全关闭 transport socket，忽略所有错误。"""
+    """关闭 transport socket 并补全 _call_connection_lost 的 finally 拆解。
+
+    原实现的 finally 里 shutdown()/close() 一旦抛异常，其后的
+    self._sock=None / _protocol=None / _loop=None / server._detach() / _server=None
+    全部被跳过，transport 停在"半拆解"态：仍持有已关闭的 socket 与活着的
+    protocol（深审 #9）。这里逐项兜底，任何一步失败都不阻断后续拆解。
+    """
     sock = getattr(transport, '_sock', None)
     if sock is not None:
         try:
             sock.close()
         except OSError:
             pass
+
+    for attr in ("_sock", "_protocol", "_loop"):
+        try:
+            setattr(transport, attr, None)
+        except Exception:  # pragma: no cover - 只读/无 __dict__ 的替身对象兜底
+            logger.debug("transport 属性 %s 无法置空（忽略）", attr)
+
+    server = getattr(transport, "_server", None)
+    if server is not None:
+        try:
+            server._detach()
+        except Exception:  # pragma: no cover - 已 detach 的 server 兜底
+            logger.debug("server._detach() 失败（忽略）")
+        try:
+            setattr(transport, "_server", None)
+        except Exception:  # pragma: no cover - 只读属性兜底
+            logger.debug("transport._server 无法置空（忽略）")
+
     logger.debug("静默关闭已重置的连接: %s", error)
 
 

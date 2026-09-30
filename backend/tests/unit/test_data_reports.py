@@ -64,6 +64,22 @@ def _setup_permission_override(client, mock_perm=None):
     return mock_perm
 
 
+def _insert_reports(client, *rows):
+    """向应用共享的内存库写入真实 DataReport 行（分页 total 走真库计数）。
+
+    W15 深审 #24/#25 回归用：total 必须来自同条件 COUNT，而不是当前页 len()。
+    """
+    from app.core.database import get_db
+    from app.models.data_report import DataReport
+
+    db = next(client.app.dependency_overrides[get_db]())
+    for index, row in enumerate(rows):
+        payload = dict(row)
+        payload.setdefault("report_code", "RP-TEST-%d" % index)
+        db.add(DataReport(**payload))
+    db.commit()
+
+
 # ──────────────────────────────────────────────
 # 1. GET /api/v1/data-reports — list_data_reports
 # ──────────────────────────────────────────────
@@ -83,6 +99,7 @@ class TestListDataReports:
 
     def test_received_direction(self, client_with_mocked_auth):
         _setup_user_override(client_with_mocked_auth, org_id=1)
+        _insert_reports(client_with_mocked_auth, {"source_org_id": 2, "target_org_id": 1, "status": "submitted"})
         mock_svc = Mock()
         mock_svc.get_subordinate_reports.return_value = [_make_report(id=1, status="submitted", source_org_id=2, target_org_id=1)]
         _setup_service_override(client_with_mocked_auth, mock_svc)
@@ -92,6 +109,7 @@ class TestListDataReports:
 
     def test_submitted_direction(self, client_with_mocked_auth):
         _setup_user_override(client_with_mocked_auth, org_id=1)
+        _insert_reports(client_with_mocked_auth, {"source_org_id": 1, "target_org_id": 3, "status": "draft"})
         mock_svc = Mock()
         mock_svc.get_submitted_reports.return_value = [_make_report(id=2, status="draft", source_org_id=1, target_org_id=3)]
         _setup_service_override(client_with_mocked_auth, mock_svc)
@@ -99,6 +117,46 @@ class TestListDataReports:
         assert resp.status_code == 200
         assert resp.json()["total"] == 1
         mock_svc.get_submitted_reports.assert_called_once()
+
+    def test_total_is_full_count_not_page_length(self, client_with_mocked_auth):
+        """W15 深审 #24：total 必须是同条件全量计数，不能等于当前页条数"""
+        _setup_user_override(client_with_mocked_auth, org_id=1)
+        _insert_reports(
+            client_with_mocked_auth,
+            {"source_org_id": 2, "target_org_id": 1, "status": "submitted"},
+            {"source_org_id": 3, "target_org_id": 1, "status": "submitted"},
+            {"source_org_id": 4, "target_org_id": 1, "status": "submitted"},
+            # 其他组织/状态的上报不得计入
+            {"source_org_id": 2, "target_org_id": 9, "status": "submitted"},
+            {"source_org_id": 2, "target_org_id": 1, "status": "approved"},
+        )
+        mock_svc = Mock()
+        mock_svc.get_subordinate_reports.return_value = [
+            _make_report(id=1, status="submitted", source_org_id=2, target_org_id=1),
+            _make_report(id=2, status="submitted", source_org_id=3, target_org_id=1),
+        ]
+        _setup_service_override(client_with_mocked_auth, mock_svc)
+        resp = client_with_mocked_auth.get(BASE, params={"direction": "received", "page_size": 2})
+        assert resp.status_code == 200
+        body = resp.json()
+        # 目标组织=1 的全部 4 条（含 approved）：既排除他组织，也不被分页截断
+        assert body["total"] == 4
+        assert len(body["items"]) == 2
+
+    def test_total_honours_status_filter(self, client_with_mocked_auth):
+        """W15 深审 #24：total 必须与列表同筛选条件（状态过滤生效）"""
+        _setup_user_override(client_with_mocked_auth, org_id=1)
+        _insert_reports(
+            client_with_mocked_auth,
+            {"source_org_id": 1, "target_org_id": 3, "status": "draft"},
+            {"source_org_id": 1, "target_org_id": 3, "status": "submitted"},
+        )
+        mock_svc = Mock()
+        mock_svc.get_submitted_reports.return_value = []
+        _setup_service_override(client_with_mocked_auth, mock_svc)
+        resp = client_with_mocked_auth.get(BASE, params={"direction": "submitted", "status": "draft"})
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 1
 
     def test_status_filter_received(self, client_with_mocked_auth):
         _setup_user_override(client_with_mocked_auth, org_id=1)
@@ -180,12 +238,35 @@ class TestGetPendingReports:
 
     def test_success(self, client_with_mocked_auth):
         _setup_user_override(client_with_mocked_auth, org_id=1)
+        _insert_reports(client_with_mocked_auth, {"source_org_id": 2, "target_org_id": 1, "status": "submitted"})
         mock_svc = Mock()
         mock_svc.get_subordinate_reports.return_value = [_make_report(id=1, status="submitted", source_org_id=2, target_org_id=1)]
         _setup_service_override(client_with_mocked_auth, mock_svc)
         resp = client_with_mocked_auth.get(f"{BASE}/pending")
         assert resp.status_code == 200
         assert resp.json()["data"]["total"] == 1
+
+    def test_total_is_full_count_not_page_length(self, client_with_mocked_auth):
+        """W15 深审 #25：待审批列表 total 同样是全量计数（非当前页条数）"""
+        _setup_user_override(client_with_mocked_auth, org_id=1)
+        _insert_reports(
+            client_with_mocked_auth,
+            {"source_org_id": 2, "target_org_id": 1, "status": "submitted"},
+            {"source_org_id": 3, "target_org_id": 1, "status": "submitted"},
+            {"source_org_id": 4, "target_org_id": 1, "status": "submitted"},
+            # 非待审批状态不计入
+            {"source_org_id": 5, "target_org_id": 1, "status": "approved"},
+        )
+        mock_svc = Mock()
+        mock_svc.get_subordinate_reports.return_value = [
+            _make_report(id=1, status="submitted", source_org_id=2, target_org_id=1),
+        ]
+        _setup_service_override(client_with_mocked_auth, mock_svc)
+        resp = client_with_mocked_auth.get(f"{BASE}/pending", params={"page_size": 1})
+        assert resp.status_code == 200
+        body = resp.json()["data"]
+        assert body["total"] == 3
+        assert len(body["items"]) == 1
 
 
 # ──────────────────────────────────────────────────────

@@ -81,7 +81,11 @@ class OfflineMapService:
             return False
 
     async def get_coverage(self) -> Dict[str, Any]:
-        """获取地图覆盖范围统计（带缓存）"""
+        """获取地图覆盖范围统计（带缓存）
+
+        cache_dir 在 __init__ 中创建失败或事后被外部删除时，iterdir() 会抛
+        FileNotFoundError；此时应返回"零覆盖"而非 500。
+        """
         if self._coverage_cache is not None:
             return self._coverage_cache
 
@@ -89,19 +93,35 @@ class OfflineMapService:
         total_size = 0
         zoom_levels = set()
 
+        if not self.cache_dir.is_dir():
+            # 目录不存在：视为无离线数据，并缓存结果避免每请求打盘
+            self._coverage_cache = {
+                "total_tiles": 0,
+                "total_size_mb": 0.0,
+                "zoom_levels": [],
+            }
+            return self._coverage_cache
+
         for z_dir in self.cache_dir.iterdir():
             if z_dir.is_dir():
                 try:
                     zoom_level = int(z_dir.name)
-                    zoom_levels.add(zoom_level)
-                    for x_dir in z_dir.iterdir():
-                        if x_dir.is_dir():
-                            for tile_file in x_dir.iterdir():
-                                if tile_file.suffix == ".png":
-                                    total_tiles += 1
-                                    total_size += tile_file.stat().st_size
                 except ValueError:
+                    # 非缩放层目录（如 tmp/、README）直接跳过
                     continue
+                zoom_levels.add(zoom_level)
+                for x_dir in z_dir.iterdir():
+                    if not x_dir.is_dir():
+                        continue
+                    for tile_file in x_dir.iterdir():
+                        if tile_file.suffix != ".png":
+                            continue
+                        try:
+                            total_size += tile_file.stat().st_size
+                        except OSError:
+                            # 扫描期间文件被并发删除/占用：跳过该文件而非中断统计
+                            continue
+                        total_tiles += 1
 
         self._coverage_cache = {
             "total_tiles": total_tiles,

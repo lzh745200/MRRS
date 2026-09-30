@@ -72,4 +72,5 @@ class TestBaseResponse:
     def test_serialization(self):
         resp = BaseResponse.success(data="hello")
         d = resp.model_dump()
-        assert d == {"code": 200, "data": "hello", "message": "success"}
+        # success 字段与 success_response 信封对齐（深审 #26 修复）
+        assert d == {"code": 200, "data": "hello", "message": "success", "success": True}

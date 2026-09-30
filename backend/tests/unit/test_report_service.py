@@ -235,7 +235,7 @@ class TestReportService:
             is_revitalization_tier=False,
             updated_at=datetime(2025, 6, 1, 10, 0, 0),
         )
-        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = [mock_village]
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [mock_village]
         # 传入 admin user 使 filter_by_data_scope 跳过过滤（保持 mock 链不变）
         admin_user = MagicMock()
         admin_user.is_superuser = True
@@ -248,8 +248,29 @@ class TestReportService:
         assert result[0][4] == "否"
 
     @pytest.mark.asyncio
+    async def test_fetch_report_data_applies_village_ids_filter(self, svc, mock_db):
+        """深审 #50：village_ids 必须真正作用于查询，而不是只写在签名里。"""
+        mock_db.query.return_value.filter.return_value.filter.return_value \
+            .order_by.return_value.all.return_value = []
+        admin_user = MagicMock()
+        admin_user.is_superuser = True
+        result = await svc._fetch_report_data({"village_ids": [3, 7]}, user=admin_user)
+        assert result == []
+        # filter 被调用两次：is_active + id.in_()
+        assert mock_db.query.return_value.filter.return_value.filter.called
+
+    @pytest.mark.asyncio
+    async def test_fetch_report_data_empty_sections_returns_empty(self, svc, mock_db):
+        """显式空 include_sections 时 fail-closed 返回空集，不导出全量。"""
+        admin_user = MagicMock()
+        admin_user.is_superuser = True
+        result = await svc._fetch_report_data({"include_sections": []}, user=admin_user)
+        assert result == []
+        mock_db.query.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_fetch_report_data_no_query_params(self, svc, mock_db):
-        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = []
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
         result = await svc._fetch_report_data()
         assert result == []
 
@@ -261,6 +282,26 @@ class TestReportService:
             await svc._fetch_report_data({"year": 2025})
 
     @pytest.mark.asyncio
+    async def test_fetch_report_data_truncation_is_logged(self, svc, mock_db, caplog):
+        """深审 #49：超上限截断必须留 WARNING，不得静默丢弃。"""
+        import app.services.report_service as rs
+
+        rows = [
+            MockSupportedVillage(
+                village_name=f"V{i}", province="P", county="C",
+                is_revitalization_tier=False, updated_at=None, id=i,
+            )
+            for i in range(3)
+        ]
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = rows
+        admin_user = MagicMock()
+        admin_user.is_superuser = True
+        with patch.object(rs, "_MAX_REPORT_ROWS", 2):
+            result = await svc._fetch_report_data({}, user=admin_user)
+        assert len(result) == 2
+        assert any("已截断" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
     async def test_fetch_report_data_none_values(self, svc, mock_db):
         mock_village = MockSupportedVillage(
             village_name="",
@@ -270,7 +311,7 @@ class TestReportService:
             updated_at=None,
             id=5,
         )
-        mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = [mock_village]
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [mock_village]
         # 传入 admin user 使 filter_by_data_scope 跳过过滤（保持 mock 链不变）
         admin_user = MagicMock()
         admin_user.is_superuser = True

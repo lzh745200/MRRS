@@ -23,7 +23,12 @@ class SecretsManager:
         self._init_default_key()
 
     def _init_default_key(self):
-        """初始化默认密钥（持久化到文件，避免重启后数据不可恢复）"""
+        """初始化默认密钥（持久化到文件，避免重启后数据不可恢复）
+
+        兜底密钥必须是**合法 Fernet key**（44 字符 urlsafe-base64 且解码后 32 字节），
+        否则 key_type 声明为 fernet 而实际不可用，调用方 Fernet(key) 会在运行时
+        抛 ValueError（深审 #52）。
+        """
         default_key = os.getenv("ENCRYPTION_KEY")
         if not default_key:
             key_file = os.path.join(
@@ -41,13 +46,33 @@ class SecretsManager:
                     with open(key_file, "w", encoding="utf-8") as f:
                         f.write(default_key)
             except ImportError:  # pragma: no cover
-                default_key = secrets.token_urlsafe(32)
+                default_key = self._generate_fallback_key()
             except Exception:
-                default_key = secrets.token_urlsafe(32)
+                # 磁盘不可写/权限不足：仍需给出可用的 Fernet key
+                default_key = self._generate_fallback_key()
         self._secrets["default"] = default_key
         self._key_versions.append(
             {"version_id": "v1", "created_at": time.time(), "is_active": True, "key_type": "fernet"}
         )
+
+    @staticmethod
+    def _generate_fallback_key() -> str:
+        """生成合法 Fernet key；cryptography 不可用时退化为等长 base64 随机串。
+
+        退化分支仅为"极端环境不崩溃"兜底，且会记录 WARNING ——
+        与 cryptography 缺失时 rotate_key/create_key 本身就会 ImportError 保持一致，
+        不掩盖问题。
+        """
+        try:
+            from cryptography.fernet import Fernet
+            return Fernet.generate_key().decode()
+        except ImportError:  # pragma: no cover
+            import base64
+            import logging
+            logging.getLogger(__name__).warning(
+                "cryptography 不可用，默认密钥退化为非 Fernet 随机串"
+            )
+            return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
 
     def get_secret(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """获取密钥"""

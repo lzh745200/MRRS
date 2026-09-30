@@ -115,4 +115,29 @@ describe('directives/watermark', () => {
     vWatermark.mounted!(el, { value: 'x' } as DirectiveBinding)
     expect(el.style.position).toBe('absolute')
   })
+
+  // 2026-09-30 深审修复：原先只有 mounted/updated，宿主销毁后水印层残留
+  // （元素复用/重挂载时重复叠加）。新增 unmounted 清理并复原自身写入的 position。
+  it('unmounted 移除水印层并复原由指令写入的 position（幂等）', () => {
+    const el = makeEl()
+    vWatermark.mounted!(el, { value: 'x' } as DirectiveBinding)
+    expect(el.querySelectorAll('.watermark-layer').length).toBe(1)
+    expect(el.style.position).toBe('relative')
+
+    vWatermark.unmounted!(el, { value: 'x' } as DirectiveBinding)
+    expect(el.querySelectorAll('.watermark-layer').length).toBe(0)
+    expect(el.style.position).toBe('')
+
+    // 二次卸载幂等：无水印层、无 dataset 标记时不得抛错
+    expect(() => vWatermark.unmounted!(el, { value: 'x' } as DirectiveBinding)).not.toThrow()
+  })
+
+  it('unmounted 不覆盖宿主自带的 position', () => {
+    const el = makeEl()
+    el.style.position = 'absolute'
+    vWatermark.mounted!(el, { value: 'x' } as DirectiveBinding)
+    vWatermark.unmounted!(el, { value: 'x' } as DirectiveBinding)
+    expect(el.style.position).toBe('absolute')
+    expect(el.querySelectorAll('.watermark-layer').length).toBe(0)
+  })
 })

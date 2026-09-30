@@ -136,9 +136,16 @@ class DataReport(Base):
 
     @property
     def is_overdue(self) -> bool:
-        """Check if report is past deadline"""
+        """Check if report is past deadline
+
+        SQLite 回读 DateTime(timezone=True) 得到的是 naive datetime，直接与
+        aware 的 now 比较会抛 TypeError（深审 LIVE）——naive 值按 UTC 解释后比较。
+        """
         if not self.deadline:
             return False
         from datetime import datetime, timezone
 
-        return datetime.now(timezone.utc) > self.deadline and self.status == ReportStatus.DRAFT.value
+        deadline = self.deadline
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) > deadline and self.status == ReportStatus.DRAFT.value

@@ -411,6 +411,9 @@ class TestMachineCodeServiceOrgPassCode:
     def test_create_org_pass_code_success(self):
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
+        # 2026-09-30：复用查询增加了 order_by(id)（按任意状态匹配同组织/同通行码），
+        # 故 mock 链需同步补上 order_by 层
+        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
         svc = self._make_service(db)
         record = svc.create_organization_pass_code(1, "1234", True, 1, description="test")
         assert db.add.called

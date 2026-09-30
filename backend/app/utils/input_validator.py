@@ -3,6 +3,7 @@
 提供XSS防护、SQL注入防护、格式验证等功能
 """
 
+import html
 import re
 from typing import List, Optional
 
@@ -21,12 +22,26 @@ class InputValidator:
         r"<embed",
     ]
 
+    # 锚定到 SQL 语法结构，而不是裸关键词：原规则把 union|select|update|delete
+    # 等词本身当注入特征，正常文本（"please update the record"）会被误判
+    # （深审 #1）。
     SQL_INJECTION_PATTERNS = [
-        r"(\s|^)(union|select|insert|update|delete|drop|create|alter|exec|execute)(\s|$)",
+        r"\bunion\s+(all\s+)?select\b",
+        r"\bselect\b[^\n]{0,80}?\bfrom\b",
+        r"\binsert\s+into\b",
+        r"\bupdate\s+\w+\s+set\b",
+        r"\bdelete\s+from\b",
+        r"\bdrop\s+(table|database|index|view|trigger)\b",
+        r"\bcreate\s+(table|database|index|view|trigger|user)\b",
+        r"\balter\s+table\b",
+        r"\bexec(ute)?\s+\w",
         r"(--|#|/\*|\*/)",
         r"(\bor\b.*=.*\bor\b)",
         r"(\band\b.*=.*\band\b)",
     ]
+
+    # 校验长度上限：正则回溯在超长输入上是 CPU 放大器（深审 #1）。
+    MAX_SQL_CHECK_LENGTH = 4096
 
     @staticmethod
     def sanitize_string(text: str, max_length: int = 1000) -> str:
@@ -48,8 +63,9 @@ class InputValidator:
             if re.search(pattern, text, re.IGNORECASE):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="输入包含不安全内容")
 
-        text = text.replace("<", "&lt;").replace(">", "&gt;")
-        return text.strip()
+        # 用 html.escape 完整转义（含 & 与引号）：原先只替换尖括号，&lt;script&gt;
+        # 原样通过，且 & 未转义会让输出无法安全嵌入 HTML 属性（深审 #2）。
+        return html.escape(text, quote=True).strip()
 
     @staticmethod
     def validate_sql_safe(text: str) -> str:
@@ -63,6 +79,12 @@ class InputValidator:
         """
         if not isinstance(text, str):
             return str(text)
+
+        if len(text) > InputValidator.MAX_SQL_CHECK_LENGTH:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"输入过长（上限 {InputValidator.MAX_SQL_CHECK_LENGTH} 字符）",
+            )
 
         for pattern in InputValidator.SQL_INJECTION_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE):

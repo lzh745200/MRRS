@@ -15,6 +15,8 @@ import os
 import sys
 from unittest.mock import patch
 
+import pytest
+
 import app.api.v1.system as pkg
 
 SUBMODULES = [
@@ -43,11 +45,16 @@ def test_package_init_loads_all_subrouters():
     assert len(mod.router.routes) >= len(SUBMODULES)
 
 
-def test_package_init_tolerates_every_submodule_import_failure():
-    """异常路径：18 个子模块全部导入失败 → 逐个走 except logger.warning"""
+def test_package_init_fails_fast_on_submodule_import_failure():
+    """异常路径（深审 #78 改写）：子模块导入失败必须 fail-fast。
+
+    原实现把 import 与 include_router 一起包在 try 里，失败只记 warning ——
+    端点静默缺失（审计/零信任/备份路由缺失时无人察觉）且原始栈被吞掉。
+    现改为：导入失败即 RuntimeError（带模块名与原始异常链），不再挂载任何子路由。
+    """
     broken = {f"app.api.v1.system.{name}": None for name in SUBMODULES}
     with patch.dict(sys.modules, broken):
-        mod = _exec_fresh("system_pkg_init_a26_broken")
-    # 主路由仍然创建，但没有任何子路由被挂载
-    assert mod.router is not None
-    assert len(mod.router.routes) == 0
+        with pytest.raises(RuntimeError) as exc_info:
+            _exec_fresh("system_pkg_init_a26_broken")
+    assert "加载 system.admin 路由失败" in str(exc_info.value)
+    assert isinstance(exc_info.value.__cause__, ImportError)

@@ -204,6 +204,32 @@ describe('downloadBlobAsFile', () => {
       '既不是 Blob 也不是 AxiosResponse'
     )
   })
+
+  it('AxiosResponse.data 不是 Blob（204/空响应）时判失败并走 onError', async () => {
+    const onError = vi.fn()
+    const onEnd = vi.fn()
+    await expect(
+      downloadBlobAsFile(async () => ({ data: '', headers: {} }) as any, { onError, onEnd })
+    ).rejects.toThrow('下载失败：响应内容不是文件')
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(onEnd).toHaveBeenCalledTimes(1)
+    // 未触发下载（不会在 URL.createObjectURL 上抛 TypeError）
+    expect(createdObjectURLs).toHaveLength(0)
+  })
+
+  it('AxiosResponse.data 是 HTML 错误页 Blob 时判失败', async () => {
+    const htmlBlob = new Blob(['<html>403</html>'], { type: 'text/html; charset=utf-8' })
+    await expect(
+      downloadBlobAsFile(async () => ({ data: htmlBlob, headers: {} }) as any)
+    ).rejects.toThrow('下载失败：服务端返回了错误页面')
+    expect(createdObjectURLs).toHaveLength(0)
+  })
+
+  it('下载文件名解析复用 request.parseContentDisposition（无回归）', async () => {
+    const cd = "attachment; filename*=UTF-8''%E5%B8%AE%E6%89%B6.csv"
+    expect(parseFileName(cd)).toBe('帮扶.csv')
+    expect(parseFileName('attachment; filename=plain.txt')).toBe('plain.txt')
+  })
 })
 
 // ─── getFileNameFromResponse 测试 ───

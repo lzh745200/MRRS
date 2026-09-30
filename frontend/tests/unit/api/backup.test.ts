@@ -64,6 +64,22 @@ describe('api/backup', () => {
     expect(mockDel).toHaveBeenCalledWith('/system/backup/backup-2024.zip')
   })
 
+  it('deleteBackup 对文件名做路径段编码（# / ? 不再改写路由）', async () => {
+    mockDel.mockResolvedValue({ success: true })
+    await deleteBackup('bk#1?.zip')
+    expect(mockDel).toHaveBeenCalledWith('/system/backup/bk%231%3F.zip')
+  })
+
+  it('deleteBackup 对空文件名 / 含分隔符或 .. 的名字 fail-closed 抛错', async () => {
+    mockDel.mockClear()
+    await expect(deleteBackup('')).rejects.toThrow('备份文件名不能为空')
+    await expect(deleteBackup('   ')).rejects.toThrow('备份文件名不能为空')
+    await expect(deleteBackup('a/b.zip')).rejects.toThrow('备份文件名非法')
+    await expect(deleteBackup('..\\etc\\passwd')).rejects.toThrow('备份文件名非法')
+    await expect(deleteBackup('..%2Fx.zip')).rejects.toThrow('备份文件名非法')
+    expect(mockDel).not.toHaveBeenCalled()
+  })
+
   it('getBackupStats 调用 GET /system/backup/stats 并透传返回值', async () => {
     const body = { total_backups: 3, total_size: 1024, auto_backup_enabled: true }
     mockGet.mockResolvedValue(body)

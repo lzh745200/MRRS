@@ -18,6 +18,8 @@ describe('utils/authStorage', () => {
   it('setUser and getUser work', async () => {
     const { AuthStorage } = await import('@/utils/authStorage')
     const user = { id: 1, username: 'admin', role: 'admin' }
+    // 凭据同源（fail-closed）：只有 user 而无 token 视为未登录，getUser 返回 null
+    AuthStorage.setToken('test-token-123')
     AuthStorage.setUser(user)
     const fetched = AuthStorage.getUser()
     expect(fetched).toEqual(user)

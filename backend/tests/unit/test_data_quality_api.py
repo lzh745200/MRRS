@@ -86,20 +86,23 @@ class TestGetDataQualityReport:
         assert data["null_rate_report"]["total_villages"] == 2
 
     def test_exception(self, client):
+        """W15 深审 #23：异常必须 fail-closed 成 500，且内部错误细节不出站"""
         from app.core.database import get_db
 
         mock_db = Mock()
-        mock_db.query.side_effect = RuntimeError("db error")
+        mock_db.query.side_effect = RuntimeError("db error: secret-table-name")
         original_override = client.app.dependency_overrides.get(get_db)
         client.app.dependency_overrides[get_db] = lambda: mock_db
         try:
             resp = client.get("/api/v1/data-quality/report")
-            assert resp.status_code == 200
-            data = resp.json()["data"]
-            assert "error" in data
-            assert data["null_rate_report"] == {}
-            assert data["income_anomalies"] == []
-            assert data["filing_progress"] == {}
+            assert resp.status_code == 500
+            body = resp.json()
+            # 不再以 200 + "error" 伪装成功（静默失效）
+            assert "error" not in body
+            assert "data" not in body
+            # 只回通用文案，不外泄底层异常文本
+            assert "secret-table-name" not in resp.text
+            assert "db error" not in resp.text
         finally:
             if original_override:
                 client.app.dependency_overrides[get_db] = original_override

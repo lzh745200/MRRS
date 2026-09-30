@@ -23,7 +23,27 @@ vi.mock('@/api/request', () => ({
   put: (url: string, ...rest: any[]) => (rest.length > 0 ? mockPut(url, rest[0]) : mockPut(url)),
   del: (url: string) => mockDel(url),
   apiRequest: (...args: any[]) => mockApiRequest(...args),
-  parseContentDisposition: (_headers: any, fallback = 'download') => fallback,
+  // 忠实反映真实解析语义（"响应头文件名优先"的断言必须能测到实现）
+  parseContentDisposition: (headers: any, fallback = 'download') => {
+    const cd = headers?.['content-disposition'] || headers?.['Content-Disposition']
+    if (!cd) return fallback
+    const star = cd.match(/filename\*=([^;]+)/i)
+    if (star) {
+      const raw = star[1].trim()
+      const i = raw.indexOf("''")
+      if (i >= 0) {
+        try {
+          const decoded = decodeURIComponent(raw.slice(i + 2))
+          if (decoded) return decoded
+        } catch {
+          /* fallthrough */
+        }
+      }
+    }
+    const quoted = cd.match(/filename="?([^";]+)"?/i)
+    if (quoted && quoted[1].trim()) return quoted[1].trim()
+    return fallback
+  },
   downloadBlob: (...args: any[]) => mockDownloadBlob(...args),
   default: {
     get: (url: string, config?: any) => mockGet(url, config),

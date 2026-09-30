@@ -240,6 +240,11 @@ _DEFAULT_POLICIES = [{"id": "ztp-001",
 
 # ==================== API 端点 ====================
 
+# 满分信任权重：所有正向因子分值之和（authentication 25 + session 15 +
+# client_ip 10 + transport_security 10 + user_activity 5）。任一因子缺失或
+# 降级都会等比例拉低总分，而不是像旧实现那样只影响展示。
+_FULL_TRUST_WEIGHT = 65.0
+
 
 @router.get("/assessment", summary="获取信任评估")
 async def get_trust_assessment(
@@ -253,7 +258,6 @@ async def get_trust_assessment(
     """
     # 收集评估因子
     factors = []
-    total_score = 100.0
 
     # 认证因子：已认证用户得分
     if current_user:
@@ -270,7 +274,6 @@ async def get_trust_assessment(
             "status": "fail",
             "detail": "用户未认证",
         })
-        total_score -= 40
 
     # 会话因子
     factors.append({
@@ -305,7 +308,6 @@ async def get_trust_assessment(
             "status": "warning",
             "detail": "未使用HTTPS，传输层不安全",
         })
-        total_score -= 10
 
     # 用户活跃度因子
     factors.append({
@@ -315,19 +317,27 @@ async def get_trust_assessment(
         "detail": "用户活跃度正常",
     })
 
-    total_score = max(0, min(100, total_score))
+    # 深审 #93：原实现只把两处硬编码扣分（未认证 -40、非 HTTPS -10）计入总分，
+    # 认证/会话/客户端/HTTPS/活跃度五个因子的分值 append 后即被丢弃 →
+    # 正常会话恒 100 分（HTTP 恒 90），等级恒 trusted，评估结果与其自身证据脱钩。
+    # 现按因子分求和并归一化到 0-100（满分 = 全体正权重之和 _FULL_TRUST_WEIGHT），
+    # 任一因子失败/降级都会等比例反映到总分与等级。
+    earned_score = sum(f["score"] for f in factors)
+    total_score = max(0.0, min(100.0, round(100.0 * earned_score / _FULL_TRUST_WEIGHT, 1)))
 
-    # 确定信任等级
+    # 确定信任等级。当前因子集产出 100.0（已认证 + HTTPS）、69.2（已认证但
+    # 非 HTTPS）与 0.0（未认证，端点依赖下不可达）三档；medium_risk / high_risk
+    # 两档在现有权重下没有对应组合（_FULL_TRUST_WEIGHT=65 且无中间权重因子）。
     if total_score >= 80:
         level = "trusted"
     elif total_score >= 60:
         level = "low_risk"
-    elif total_score >= 40:
-        level = "medium_risk"
-    elif total_score >= 20:  # pragma: no cover — 评分模型最低50分，数学不可达
+    elif total_score >= 40:  # pragma: no cover - 现有因子权重无 40~59 组合
+        level = "medium_risk"  # pragma: no cover
+    elif total_score >= 20:  # pragma: no cover - 现有因子权重无 20~39 组合
         level = "high_risk"  # pragma: no cover
-    else:  # pragma: no cover — 评分模型最低50分，数学不可达
-        level = "untrusted"  # pragma: no cover
+    else:
+        level = "untrusted"
 
     # 安全建议
     recommendations = []
@@ -447,7 +457,14 @@ async def get_security_events(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取记录的安全事件列表（从数据库读取，持久化存储）"""
+    """获取记录的安全事件列表（从数据库读取，持久化存储）
+
+    深审 #94：安全事件含全实例的 IP / 用户名 / 攻击特征，仅登录即可枚举。
+    与其它监控端点一致收敛为管理员可见（fail-closed）。
+    """
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user, error_message="仅管理员可查看安全事件")
     from app.models.audit import SecurityEvent
 
     query = db.query(SecurityEvent)
@@ -506,7 +523,13 @@ async def get_security_event_stats(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取安全事件的统计分析数据（从数据库读取）"""
+    """获取安全事件的统计分析数据（从数据库读取）
+
+    深审 #94：与 /events 同源数据，同样收敛为管理员可见。
+    """
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user, error_message="仅管理员可查看安全事件统计")
     from app.models.audit import SecurityEvent
 
     events = db.query(SecurityEvent).all()

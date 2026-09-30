@@ -35,8 +35,22 @@ function createWatermark(el: HTMLElement, text: string) {
     background-repeat: repeat;
   `
 
-  el.style.position = el.style.position || 'relative'
+  // 仅当宿主原本没有 position 时才写入，并记录"position 由本指令写入"，
+  // 以便卸载时复原（否则宿主被复用/重挂载时叠加多个水印层或残留定位）。
+  if (!el.style.position) {
+    el.style.position = 'relative'
+    el.dataset.watermarkPosition = '1'
+  }
   el.appendChild(watermarkDiv)
+}
+
+/** 移除水印层并复原由本指令写入的 position（重挂载/卸载时调用） */
+function removeWatermark(el: HTMLElement): void {
+  el.querySelector('.watermark-layer')?.remove()
+  if (el.dataset.watermarkPosition === '1') {
+    el.style.position = ''
+    delete el.dataset.watermarkPosition
+  }
 }
 
 function getDefaultText(): string {
@@ -60,6 +74,11 @@ export const vWatermark: Directive = {
   updated(el: HTMLElement, binding: DirectiveBinding) {
     const text = binding.value || getDefaultText()
     createWatermark(el, text)
+  },
+  // 宿主销毁必须清理水印层：水印 DOM 直接 append 在 Vue 管理的元素内，
+  // 不清理会在元素复用/重挂载时重复叠加（内存与视觉双重泄漏）。
+  unmounted(el: HTMLElement) {
+    removeWatermark(el)
   },
 }
 

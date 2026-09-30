@@ -71,10 +71,25 @@ export interface TaskDiff {
   diff_fields: string[]
 }
 
-/** 批量审批结果 */
+/** 批量审批结果（逐条批量审批端点 /approval/tasks/batch-approve） */
 export interface BatchApproveResult {
   success: number[]
   failed: Array<{ id: number; reason: string }>
+}
+
+/**
+ * 一键审批全部待处理任务的结果。
+ *
+ * 后端 auto_approve_all 返回 data = {total_pending, approved, failed}，
+ * 三者均为**计数**（service.auto_approve_all_pending 的返回值），
+ * 与逐条批量审批的 BatchApproveResult（id 数组）形状不同。
+ * 原实现把响应原样透传却声明为 {success: number[]; failed: number[]}，
+ * 调用方按声明取 result.success 永远得到 undefined（静默显示"成功 0 条"）。
+ */
+export interface AutoApproveAllResult {
+  total_pending: number
+  approved: number
+  failed: number
 }
 
 // ==================== 审批流程 API ====================
@@ -365,13 +380,17 @@ export async function autoApproveSingleTask(
 /**
  * 单机版一键审批所有待处理任务
  */
-export async function autoApproveAll(
-  opinion?: string
-): Promise<{ success: number[]; failed: number[] }> {
-  const response = await post<any>('/approval/tasks/auto-approve-all', {
+export async function autoApproveAll(opinion?: string): Promise<AutoApproveAllResult> {
+  const response: any = await post<any>('/approval/tasks/auto-approve-all', {
     opinion,
   })
-  return response
+  // 规范化：后端为计数（number），缺字段/非数字一律按 0 计（不臆造成功条数）
+  const asCount = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  return {
+    total_pending: asCount(response?.total_pending),
+    approved: asCount(response?.approved),
+    failed: asCount(response?.failed),
+  }
 }
 
 /**

@@ -149,8 +149,18 @@ class TestBackupCodeSingleUseIsPersisted:
 
         s3 = Session()
         row = s3.query(TwoFactorAuth).first()
-        assert row.backup_codes == ["22222222"], "被消费的备用码必须从库中移除"
+        # 2026-09-30 深审修复：恢复码不再明文落库（只存 PBKDF2-HMAC-SHA256 摘要），
+        # 原断言 `row.backup_codes == ["22222222"]` 固化了"明文存储"这一缺陷行为，
+        # 故改写为"被消费的码必须消失 + 剩余码仍可校验且不得明文存储"。
+        assert len(row.backup_codes) == 1, "被消费的备用码必须从库中移除"
+        assert row.backup_codes[0] != "22222222", "剩余恢复码不得明文落库"
+        assert TwoFactorService.is_hashed_backup_code(row.backup_codes[0])
         s3.close()
+
+        s4 = Session()
+        assert TwoFactorService.verify_login(s4, user, "11111111") is False, "已消费的码不得再次可用"
+        assert TwoFactorService.verify_login(s4, user, "22222222") is True, "剩余码必须仍可校验"
+        s4.close()
 
     def test_second_use_of_same_code_is_rejected(self, file_engine):
         from app.models.two_factor_auth import TwoFactorAuth

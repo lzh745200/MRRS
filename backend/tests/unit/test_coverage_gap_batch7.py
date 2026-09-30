@@ -329,6 +329,37 @@ class TestCamelDispatchResponsePatching:
         result, original = await self._dispatch(b"not-json")
         assert result is original
 
+    @pytest.mark.asyncio
+    async def test_headers_copied_except_content_length(self):
+        """重包响应时必须整体复制响应头（CORS/Set-Cookie/X-Request-Id），
+        但 content-length 要剔除（由 JSONResponse 依新 body 重算）。"""
+        mw = CamelToSnakeMiddleware(AsyncMock())
+        request = MagicMock()
+        request.headers.get.return_value = "application/json"
+        request.body = AsyncMock(return_value=b"{}")
+        response = MagicMock()
+        response.headers.get.return_value = "application/json"
+        response.status_code = 200
+        response.body = b'{"foo": "bar"}'
+        # 真实可迭代的 headers（MagicMock 的 items() 不产出键值对，会漏过复制循环）
+        response.headers.items.return_value = [
+            ("content-length", "14"),
+            ("X-Request-Id", "rid-1"),
+            ("access-control-allow-origin", "*"),
+        ]
+        background = object()
+        response.background = background
+        call_next = AsyncMock(return_value=response)
+
+        result = await mw.dispatch(request, call_next)
+
+        assert result is not response
+        assert result.headers["X-Request-Id"] == "rid-1"
+        assert result.headers["access-control-allow-origin"] == "*"
+        # content-length 被剔除，并被 JSONResponse 依新 body 重算
+        assert int(result.headers["content-length"]) == len(result.body)
+        assert result.background is background
+
 
 # ===========================================================================
 # 7. app/services/machine_code_service.py — 第三回退：机器码更新 (496-506)

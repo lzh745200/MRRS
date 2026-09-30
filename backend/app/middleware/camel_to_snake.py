@@ -100,6 +100,15 @@ class CamelToSnakeMiddleware(BaseHTTPMiddleware):
                 content=patched,
                 status_code=response.status_code,
             )
+            # headers 必须整体复制（CORS/Set-Cookie/X-Request-Id/缓存头都在里面，
+            # 裸 JSONResponse 会全部丢掉，深审 #32）；content-length 由
+            # JSONResponse 依新 body 重算，不能沿用旧值。background 同样透传，
+            # 否则后台任务（如审计/清理）被静默丢弃。
+            for header_name, header_value in response.headers.items():
+                if header_name.lower() == "content-length":
+                    continue
+                new_response.headers[header_name] = header_value
+            new_response.background = response.background
             return new_response
         except Exception:
             return response

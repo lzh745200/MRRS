@@ -540,10 +540,14 @@ class TestNavigationSecurity:
         page.evaluate('window.location.href = "https://evil.example.com"')
         page.wait_for_timeout(2000)
 
-        # 在浏览器环境中，导航可能成功；在 Electron 中会被拦截
-        # 此测试主要确保应用不会主动引导到外部地址
-        # 验证页面仍在应用内或被阻止
-        assert "evil.example.com" not in page.url or True  # 浏览器环境可能跳转
+        # 浏览器上下文无法复现 Electron 的 will-navigate 拦截（纯浏览器里该跳转必然成功），
+        # 因此这里不再用 "or True" 恒真断言假装验证过安全行为，改为验证**可验证的事实**：
+        # 外部跳转后应用仍可正常返回并渲染（未被导航劫持成不可恢复状态）。
+        # Electron 侧的非白名单导航拦截由 electron/main.js 的 origin 精确匹配逻辑承担。
+        page.goto(BASE_URL)
+        page.wait_for_load_state("domcontentloaded")
+        assert page.url.rstrip("/").startswith(BASE_URL.rstrip("/")), page.url
+        assert page.locator("body").is_visible()
 
 
 # ============================================================

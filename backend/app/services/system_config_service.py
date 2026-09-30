@@ -164,28 +164,7 @@ class SystemConfigService:
         if self.db is None:
             return
 
-        # 转换值为字符串
-        if isinstance(value, bool):
-            value = "true" if value else "false"
-        elif isinstance(value, (dict, list)):
-            value = json.dumps(value, ensure_ascii=False)
-        else:
-            value = str(value)
-
-        config = self.db.query(SystemConfig).filter(SystemConfig.key == key).first()
-
-        if config:
-            config.value = value
-            if description:
-                config.description = description
-        else:
-            config = SystemConfig(
-                key=key,
-                value=value,
-                description=description or self.DEFAULT_CONFIGS.get(key, {}).get("description", ""),
-            )
-            self.db.add(config)
-
+        self._set_no_commit(key, value, description)
         safe_commit(self.db)
 
     def get_all(self) -> Dict[str, str]:
@@ -255,11 +234,52 @@ class SystemConfigService:
         return json.dumps(configs, ensure_ascii=False, indent=2)
 
     def import_config(self, config_json: str) -> bool:
-        """从JSON字符串导入配置"""
+        """从JSON字符串导入配置.
+
+        深审 #57：
+        - 仅接受 JSON **对象**。列表/字符串/数字解析成功但 .items() 抛 AttributeError，
+          不被下方 except 覆盖 → 500。
+        - 逐键写入后只提交一次：原实现每个 set() 内部 safe_commit，
+          半途失败会留下"部分导入"状态，导入不具备原子性。
+        """
         try:
             configs = json.loads(config_json)
+        except (json.JSONDecodeError, TypeError):
+            return False
+
+        if not isinstance(configs, dict):
+            return False
+
+        if self.db is None:
+            # 无会话（只读实例）：保持既有语义，逐键调用 set
             for key, value in configs.items():
                 self.set(key, value)
             return True
-        except (json.JSONDecodeError, TypeError):
-            return False
+
+        for key, value in configs.items():
+            self._set_no_commit(key, value)
+        safe_commit(self.db)
+        return True
+
+    def _set_no_commit(self, key: str, value: Any, description: str = None) -> None:
+        """set() 的无提交变体（批量导入用，事务由调用方统一提交）。"""
+        if isinstance(value, bool):
+            value = "true" if value else "false"
+        elif isinstance(value, (dict, list)):
+            value = json.dumps(value, ensure_ascii=False)
+        else:
+            value = str(value)
+
+        config = self.db.query(SystemConfig).filter(SystemConfig.key == key).first()
+
+        if config:
+            config.value = value
+            if description:
+                config.description = description
+        else:
+            config = SystemConfig(
+                key=key,
+                value=value,
+                description=description or self.DEFAULT_CONFIGS.get(key, {}).get("description", ""),
+            )
+            self.db.add(config)

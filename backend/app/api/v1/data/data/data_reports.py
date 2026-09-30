@@ -41,6 +41,21 @@ def get_permission_service(db: Session = Depends(get_db)) -> OrganizationPermiss
     return OrganizationPermissionService(db)
 
 
+def _count_org_reports(db: Session, org_id: int, *, direction: str, status: Optional[str] = None) -> int:
+    """按端点筛选条件统计全量条数（供分页 total 使用）。
+
+    W15 深审 #24/#25：两个列表端点此前用 total=len(当前页)，第 2 页起 total 会缩水
+    成"本页条数"，前端分页器页数随之抖动（翻到第 2 页只剩 1 页）。
+    """
+    from app.models.data_report import DataReport
+
+    org_column = DataReport.target_org_id if direction == "received" else DataReport.source_org_id
+    query = db.query(DataReport).filter(org_column == org_id)
+    if status:
+        query = query.filter(DataReport.status == status)
+    return query.count()
+
+
 @router.get("", response_model=DataReportListResponse)
 async def list_data_reports(
     page: int = Query(1, ge=1),
@@ -49,6 +64,7 @@ async def list_data_reports(
     direction: str = Query("received", pattern="^(received|submitted)$"),
     current_user=Depends(get_current_user),
     service: DataReportService = Depends(get_report_service),
+    db: Session = Depends(get_db),
 ):
     """
     获取数据上报列表
@@ -67,7 +83,7 @@ async def list_data_reports(
         reports = service.get_submitted_reports(org_id, status=status, skip=(page - 1) * page_size, limit=page_size)
 
     return DataReportListResponse(
-        total=len(reports),
+        total=_count_org_reports(db, org_id, direction=direction, status=status),
         page=page,
         page_size=page_size,
         items=[DataReportResponse.model_validate(r) for r in reports],
@@ -104,6 +120,7 @@ async def get_pending_reports(
     page_size: int = Query(20, ge=1, le=100),
     current_user=Depends(get_current_user),
     service: DataReportService = Depends(get_report_service),
+    db: Session = Depends(get_db),
 ):
     """获取待审批的上报"""
     if not hasattr(current_user, "org_id") or not current_user.org_id:
@@ -118,7 +135,9 @@ async def get_pending_reports(
 
     return ok_list(
         items=[DataReportResponse.model_validate(r) for r in reports],
-        total=len(reports),
+        total=_count_org_reports(
+            db, current_user.org_id, direction="received", status=ReportStatus.SUBMITTED.value
+        ),
         page=page,
         page_size=page_size,
         message="成功获取待审批上报列表"

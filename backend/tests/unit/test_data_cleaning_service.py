@@ -239,6 +239,55 @@ class TestCleanDataset:
         result = DataCleaningService.clean_dataset(records, rules)
         assert result[0]["phone"] is None
 
+    def test_standardize_failure_preserves_original_value(self):
+        """深审 #4：解析失败返回 None 时不得把合法原值清空。
+
+        8 位座机 '01012345678' 其实能解析；这里用一个 standardize_phone
+        明确返回 None 的输入（'12345'）验证"失败即保留原值"。
+        """
+        records = [{"phone": "12345"}]
+        rules = {"standardize": [{"field": "phone", "type": "phone"}]}
+        result = DataCleaningService.clean_dataset(records, rules)
+        assert result[0]["phone"] == "12345"
+
+    def test_standardize_rule_missing_keys_does_not_raise(self):
+        """深审 #4：规则缺 field/type 时只跳过该规则，不 KeyError 中断清洗。"""
+        records = [{"phone": "138-0013-8001", "name": "张三"}]
+        rules = {"standardize": [{"field": "phone"}, {"type": "email"}]}
+        result = DataCleaningService.clean_dataset(records, rules)
+        assert result[0]["phone"] == "138-0013-8001"
+
+    def test_standardize_unknown_type_keeps_value(self):
+        records = [{"x": "raw"}]
+        rules = {"standardize": [{"field": "x", "type": "no_such_type"}]}
+        result = DataCleaningService.clean_dataset(records, rules)
+        assert result[0]["x"] == "raw"
+
+    def test_median_ignores_non_numeric_and_uses_two_middle(self):
+        """深审 #3：混入空串/文本不得中断；偶数样本取两中位均值。"""
+        records = [
+            {"v": 1},
+            {"v": 2},
+            {"v": 3},
+            {"v": 4},
+            {"v": ""},
+            {"v": "not-a-number"},
+            {"v": None},  # 待填充
+        ]
+        DataCleaningService._fill_median(records, "v")
+        # [1,2,3,4] → (2+3)/2 = 2.5
+        assert records[-1]["v"] == 2.5
+
+    def test_median_odd_count_uses_middle(self):
+        records = [{"v": 1}, {"v": 5}, {"v": 9}, {"v": None}]
+        DataCleaningService._fill_median(records, "v")
+        assert records[-1]["v"] == 5
+
+    def test_median_all_non_numeric_returns_without_change(self):
+        records = [{"v": "abc"}, {"v": None}]
+        DataCleaningService._fill_median(records, "v")
+        assert records[-1]["v"] is None
+
     def test_fill_missing_rule(self):
         records = [{"name": None}, {"name": "张三"}]
         rules = {"fill_missing": [{"field": "name", "strategy": "default", "default_value": "未知"}]}

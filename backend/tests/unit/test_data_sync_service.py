@@ -144,6 +144,41 @@ class TestDataSyncService:
                             assert "supported_villages" in result["errors"]
 
     @pytest.mark.asyncio
+    async def test_export_incremental_failure_status_is_committed(self, service):
+        """部分表导出失败时，sync_log.status="failed" 必须真正提交（不得随 close 回滚）。"""
+        with patch("app.services.data_sync_service.get_db") as mock_get_db:
+            db = MagicMock()
+            mock_get_db.return_value = iter([db])
+            added_logs = []
+            committed_statuses = []
+
+            def _capture_add(obj):
+                added_logs.append(obj)
+                # commit 时快照状态，证明 failed 是在提交前写入的
+                db.commit.side_effect = lambda: committed_statuses.append(obj.status)
+
+            db.add.side_effect = _capture_add
+
+            with patch.object(service, "_export_table_data", new_callable=AsyncMock) as mock_export:
+                mock_export.side_effect = Exception("export fail")
+                with patch.object(service, "_save_export_package", new_callable=AsyncMock) as mock_save:
+                    mock_save.return_value = Path("/tmp/test_sync/pkg_fail.zip")
+                    with patch.object(Path, "exists", return_value=True):
+                        with patch.object(Path, "stat") as ms:
+                            ms.return_value.st_size = 100
+                            from app.services.data_sync_service import ExportConfig
+                            result = await service.export_incremental(
+                                ExportConfig(since=None, modules=["supported_villages"])
+                            )
+
+            assert result["success"] is False
+            assert added_logs and added_logs[0].status == "failed"
+            assert "failed" in committed_statuses, (
+                "失败状态必须在方法返回前提交：否则 _get_db_context 的 close() 会隐式回滚，"
+                "部分失败的导出在 sync_logs 永久记为 completed"
+            )
+
+    @pytest.mark.asyncio
     async def test_export_incremental_general_exception(self, service):
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             mock_get_db.side_effect = Exception("big fail")

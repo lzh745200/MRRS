@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
+
+// 2026-09-30 深审修复：默认 lockNow 的 catch 由"完全静默"改为 logger.error 可观测。
+// 为覆盖失败分支（真实环境无注入时不会失败），此处 mock 会话清理并令其抛错。
+const authMocks = vi.hoisted(() => ({ clearSession: vi.fn() }))
+const lockMocks = vi.hoisted(() => ({ markLockNow: vi.fn() }))
+const logMocks = vi.hoisted(() => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }))
+vi.mock('@/utils/authStorage', () => ({ AuthStorage: { clearSession: authMocks.clearSession } }))
+vi.mock('@/utils/lockDigest', () => ({ markLockNow: lockMocks.markLockNow }))
+vi.mock('@/utils/logger', () => ({ logger: logMocks }))
+
 import { useAutoLock } from '@/composables/useAutoLock'
 
 function mountHost(opts: any = {}) {
@@ -120,11 +130,26 @@ describe('useAutoLock（自动锁屏）', () => {
     w.unmount()
   })
 
-  it('默认 lockNow（未注入 onLock）静默执行（require 在 ESM 测试环境不可用走 catch）', () => {
-    // vitest/vite-node 的模块级 require shim 无法解析 @/ 别名，
-    // 且 vi.mock 不拦截 require 路径 → 必走 try 的 catch 分支（静默）
+  it('默认 lockNow（未注入 onLock）：清会话 + 落锁屏标记 + 记锁屏时间', () => {
+    const { w } = mountHost()
+    vi.advanceTimersByTime(15 * 60 * 1000 + 100)
+    expect(authMocks.clearSession).toHaveBeenCalled()
+    expect(window.sessionStorage.getItem('auto_lock_active')).toBe('1')
+    expect(lockMocks.markLockNow).toHaveBeenCalled()
+    expect(logMocks.error).not.toHaveBeenCalled()
+    w.unmount()
+  })
+
+  it('默认 lockNow 失败 → 记录 error（原为完全静默的 catch）', () => {
+    authMocks.clearSession.mockImplementationOnce(() => {
+      throw new Error('storage broken')
+    })
     const { w } = mountHost()
     expect(() => vi.advanceTimersByTime(15 * 60 * 1000 + 100)).not.toThrow()
+    expect(logMocks.error).toHaveBeenCalledWith(
+      '[useAutoLock] 锁屏执行失败（会话未清理/锁屏标记未写入）:',
+      expect.any(Error)
+    )
     w.unmount()
   })
 

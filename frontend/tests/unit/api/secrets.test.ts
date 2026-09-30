@@ -69,6 +69,28 @@ describe('api/secrets', () => {
     expect(result).toBe(body)
   })
 
+  it('revokeSecret 对路径段编码（/ ? # 不再改写请求路径）', async () => {
+    mockPost.mockResolvedValue({ message: 'ok', version_id: 'v1' })
+    await revokeSecret('a/b?c#d')
+    expect(mockPost).toHaveBeenCalledWith('/secrets/revoke/a%2Fb%3Fc%23d')
+  })
+
+  it('revokeSecret 接受数字版本号并去空白', async () => {
+    mockPost.mockResolvedValue({ message: 'ok', version_id: '7' })
+    await revokeSecret(7)
+    expect(mockPost).toHaveBeenCalledWith('/secrets/revoke/7')
+    await revokeSecret('  v9  ')
+    expect(mockPost).toHaveBeenCalledWith('/secrets/revoke/v9')
+  })
+
+  it('revokeSecret 版本号为空时 fail-closed 抛错且不发请求', async () => {
+    mockPost.mockClear()
+    await expect(revokeSecret('')).rejects.toThrow('密钥版本号不能为空')
+    await expect(revokeSecret('   ')).rejects.toThrow('密钥版本号不能为空')
+    await expect(revokeSecret(undefined as any)).rejects.toThrow('密钥版本号不能为空')
+    expect(mockPost).not.toHaveBeenCalled()
+  })
+
   it('cleanupSecrets 默认 keep_days=90', async () => {
     mockPost.mockResolvedValue({ message: 'ok', deleted_count: 1 })
     await cleanupSecrets()

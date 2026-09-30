@@ -433,3 +433,32 @@ class TestGetExportTasks:
         data = resp.json()
         assert data["total"] == 0
         assert len(data["items"]) == 0
+
+
+class TestEndpointsRunOffEventLoop:
+    """W15 深审 #48：同步阻塞实现必须声明为普通 def（FastAPI 走线程池）。
+
+    这几个端点内部是真实查库 + openpyxl 生成 / 整包读文件；一旦声明为
+    async def 又不卸载线程池，单次大导出会阻塞事件循环，全站请求排队。
+    """
+
+    def test_blocking_handlers_are_sync(self):
+        import inspect
+
+        from app.api.v1.import_export import async_export
+
+        for handler in (
+            async_export.export_reports,
+            async_export.get_export_status,
+            async_export.download_export_file,
+            async_export.get_export_tasks,
+        ):
+            assert not inspect.iscoroutinefunction(handler), handler.__name__
+
+    def test_async_villages_handler_stays_async(self):
+        """导出帮扶村端点内部 await 异步任务，必须保持 async def"""
+        import inspect
+
+        from app.api.v1.import_export import async_export
+
+        assert inspect.iscoroutinefunction(async_export.export_villages)

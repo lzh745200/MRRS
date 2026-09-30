@@ -32,6 +32,33 @@ describe('ChangeHistoryDialog.formatValue', () => {
     w.unmount()
   })
 
+  // 2026-09-30 深审修复：JSON.stringify 无 try/catch，循环引用/BigInt 会在
+  // 模板渲染期抛错并中断整个对话框。现捕获并给占位符。
+  it('循环引用对象 → 占位符（不抛错）', () => {
+    const w = mountDialog()
+    const vm = w.vm as any
+    const circular: any = { a: 1 }
+    circular.self = circular
+    expect(() => vm.formatValue(circular)).not.toThrow()
+    expect(vm.formatValue(circular)).toBe('[无法序列化的值]')
+    w.unmount()
+  })
+
+  it('含 BigInt 的对象 → 占位符（JSON.stringify 抛 TypeError）', () => {
+    const w = mountDialog()
+    const vm = w.vm as any
+    expect(vm.formatValue({ n: 1n })).toBe('[无法序列化的值]')
+    w.unmount()
+  })
+
+  it('toJSON 返回 undefined → 回退 String(v)', () => {
+    const w = mountDialog()
+    const vm = w.vm as any
+    const weird = { toJSON: () => undefined, toString: () => 'fallback' }
+    expect(vm.formatValue(weird)).toBe('fallback')
+    w.unmount()
+  })
+
   it('标量 → String 化', () => {
     const w = mountDialog()
     const vm = w.vm as any
@@ -140,6 +167,20 @@ describe('ChangeHistoryDialog update:visible 转发', () => {
     expect(items[1].attributes('data-type')).toBe('undefined')
     expect(w.findAll('.change-field-row')).toHaveLength(1)
     expect(w.text()).toContain('修改 by 张三')
+    w.unmount()
+  })
+
+  it('history 含循环引用值时整块对话框仍正常渲染（渲染期不抛错）', () => {
+    const circular: any = { a: 1 }
+    circular.self = circular
+    const w = mountWithDialogStub({
+      visible: true,
+      history: [
+        { time: '2024-01-01', action: '修改', user: '张三', changes: [{ field: 'F', old_value: circular, new_value: 1 }] },
+      ],
+    })
+    expect(w.findAll('.change-field-row')).toHaveLength(1)
+    expect(w.text()).toContain('[无法序列化的值]')
     w.unmount()
   })
 })

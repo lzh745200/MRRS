@@ -174,11 +174,34 @@ class DataCleaningService:
             logger.warning(f"无法计算{field_name}的平均值")
 
     @staticmethod
+    def _to_numeric(values: List[Any]) -> List[float]:
+        """尽量把值转成数值；不可转换（空串/文本/None）的剔除以避免整体中断。
+
+        深审 #3：原实现直接 sorted([...]) 后取中位，混入空串或文本值即
+        TypeError 中断整轮清洗；且偶数个样本时取上中位（[1,2,3,4] → 3），
+        不是统计意义上的中位数。
+        """
+        numeric: List[float] = []
+        for v in values:
+            if v is None or v == "":
+                continue
+            try:
+                numeric.append(float(v))
+            except (TypeError, ValueError):
+                continue
+        return numeric
+
+    @staticmethod
     def _fill_median(records: List[Dict[str, Any]], field_name: str) -> None:
-        values = sorted([record.get(field_name) for record in records if record.get(field_name) is not None])
+        values = DataCleaningService._to_numeric(
+            [record.get(field_name) for record in records if record.get(field_name) is not None]
+        )
         if not values:
             return
-        median_value = values[len(values) // 2]
+        values.sort()
+        mid = len(values) // 2
+        # 偶数样本取两中位均值（原实现取上中位，偏大）
+        median_value = values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
         for record in records:
             if record.get(field_name) is None:
                 record[field_name] = median_value
@@ -249,18 +272,32 @@ class DataCleaningService:
         # 格式标准化
         if cleaning_rules.get("standardize"):
             for field_config in cleaning_rules["standardize"]:
-                field_name = field_config["field"]
-                field_type = field_config["type"]
+                # 深审 #4：原用 field_config["field"]/["type"] 直接下标，规则缺键
+                # 时 KeyError 中断（且此时前面的记录已被就地修改，数据半洗）；
+                # 改为 .get + 前置校验，缺键只警告并跳过该条规则。
+                field_name = field_config.get("field")
+                field_type = field_config.get("type")
+                if not field_name or not field_type:
+                    logger.warning("标准化规则缺少 field/type，已跳过: %s", field_config)
+                    continue
 
                 for record in records:
                     value = record.get(field_name)
-                    if value:
-                        if field_type == "phone":
-                            record[field_name] = DataCleaningService.standardize_phone(value)
-                        elif field_type == "email":
-                            record[field_name] = DataCleaningService.standardize_email(value)
-                        elif field_type == "address":
-                            record[field_name] = DataCleaningService.standardize_address(value)
+                    if not value:
+                        continue
+                    # 深审 #4：standardize_* 解析失败会返回 None，原实现无条件覆盖
+                    # → 8 位座机等合法值被清空。只有解析成功才写回。
+                    if field_type == "phone":
+                        normalized = DataCleaningService.standardize_phone(value)
+                    elif field_type == "email":
+                        normalized = DataCleaningService.standardize_email(value)
+                    elif field_type == "address":
+                        normalized = DataCleaningService.standardize_address(value)
+                    else:  # pragma: no cover - 未知类型不修改数据
+                        logger.warning("未知的标准化类型 %s，已跳过", field_type)
+                        continue
+                    if normalized is not None:
+                        record[field_name] = normalized
 
         # 填充缺失值
         if cleaning_rules.get("fill_missing"):

@@ -24,6 +24,8 @@ describe('utils/offlineMock', () => {
     describe('GET 认证', () => {
       it('/auth/me 有用户时返回用户', () => {
         const user = { id: 1, username: 'test' }
+        // 凭据同源（fail-closed）：token 与 user 必须同源，缺 token 时视为未登录
+        sessionStorage.setItem('auth_token', 'tok-1')
         sessionStorage.setItem('auth_user', JSON.stringify(user))
         expect(getMockResponse('GET', '/api/v1/auth/me').data).toEqual(user)
       })
@@ -130,10 +132,14 @@ describe('utils/offlineMock', () => {
         expect(getMockResponse('GET', '/api/v1/approval/workflows').data.length).toBe(2)
       })
       it('/approval/workflows/1', () => {
-        expect(getMockResponse('GET', '/api/v1/approval/workflows/1').data.name).toBe('经费审批流程')
+        expect(getMockResponse('GET', '/api/v1/approval/workflows/1').data.name).toBe(
+          '经费审批流程'
+        )
       })
       it('/approval/workflows/999 未命中回退第一个流程', () => {
-        expect(getMockResponse('GET', '/api/v1/approval/workflows/999').data.name).toBe('经费审批流程')
+        expect(getMockResponse('GET', '/api/v1/approval/workflows/999').data.name).toBe(
+          '经费审批流程'
+        )
       })
       it('/approval/tasks/pending', () => {
         const r = getMockResponse('GET', '/api/v1/approval/tasks/pending')
@@ -180,19 +186,27 @@ describe('utils/offlineMock', () => {
         expect(r.data.items.length).toBe(3)
       })
       it('详情命中', () => {
-        expect(getMockResponse('GET', '/api/v1/rural-works/1').data.data.name).toBe('红星村道路硬化工程')
+        expect(getMockResponse('GET', '/api/v1/rural-works/1').data.data.name).toBe(
+          '红星村道路硬化工程'
+        )
       })
       it('详情未命中回退', () => {
-        expect(getMockResponse('GET', '/api/v1/rural-works/99').data.data.name).toBe('红星村道路硬化工程')
+        expect(getMockResponse('GET', '/api/v1/rural-works/99').data.data.name).toBe(
+          '红星村道路硬化工程'
+        )
       })
       it('/rural-works/statistics/summary', () => {
-        expect(getMockResponse('GET', '/api/v1/rural-works/statistics/summary').data.data.total).toBe(3)
+        expect(
+          getMockResponse('GET', '/api/v1/rural-works/statistics/summary').data.data.total
+        ).toBe(3)
       })
       it('/rural-works/villages', () => {
         expect(getMockResponse('GET', '/api/v1/rural-works/villages').data.data.length).toBe(3)
       })
       it('/rural-works/years', () => {
-        expect(getMockResponse('GET', '/api/v1/rural-works/years').data.data).toEqual([2024, 2025, 2026])
+        expect(getMockResponse('GET', '/api/v1/rural-works/years').data.data).toEqual([
+          2024, 2025, 2026,
+        ])
       })
       it('/rural-works/report/generate', () => {
         const r = getMockResponse('GET', '/api/v1/rural-works/report/generate')
@@ -241,7 +255,7 @@ describe('utils/offlineMock', () => {
       })
       it('其他路径返回成功', () => {
         const r = getMockResponse('GET', '/api/v1/data-sync/something')
-        expect(r.data.success).toBe(true)
+        expect(r['data']['success']).toBe(true)
       })
     })
 
@@ -259,7 +273,7 @@ describe('utils/offlineMock', () => {
         expect(r.data.system).toBe('Windows')
       })
       it('其他路径返回成功', () => {
-        expect(getMockResponse('GET', '/api/v1/machine-code/other').data.success).toBe(true)
+        expect(getMockResponse('GET', '/api/v1/machine-code/other')['data']['success']).toBe(true)
       })
     })
 
@@ -282,7 +296,9 @@ describe('utils/offlineMock', () => {
 
     describe('URL 规范化', () => {
       it('完整 URL', () => {
-        expect(getMockResponse('GET', 'http://localhost:3000/api/v1/villages').data.items.length).toBe(5)
+        expect(
+          getMockResponse('GET', 'http://localhost:3000/api/v1/villages').data.items.length
+        ).toBe(5)
       })
       it('https URL 无 /api/v1 前缀', () => {
         expect(getMockResponse('GET', 'https://example.com/villages').data.items.length).toBe(5)
@@ -326,7 +342,7 @@ describe('utils/offlineMock', () => {
     describe('PUT/PATCH/DELETE', () => {
       it('PUT 返回更新成功', () => {
         const r = getMockResponse('PUT', '/api/v1/projects/1')
-        expect(r.data.success).toBe(true)
+        expect(r['data']['success']).toBe(true)
         expect(r.data.message).toContain('更新')
       })
       it('PATCH 返回更新成功', () => {

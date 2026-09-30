@@ -64,11 +64,15 @@ describe('funds/YearlyComparisonChart.vue', () => {
     })
     await flushPromises()
 
+    // 2026-09-30 深审修复：后端该端点不接受 department（未知查询参数被静默忽略），
+    // 前端原先发出去却毫无效果 → 图表始终未按部门过滤。现不再发送，
+    // 并在有部门筛选时显示"暂不支持按部门筛选"提示（断言随之改写）。
     expect(mockGet).toHaveBeenCalledWith('/funds/supported-village/statistics/yearly-comparison', {
       year_start: 2022,
       year_end: 2024,
-      department: 'rural',
     })
+    expect(wrapper.find('.dept-filter-notice').exists()).toBe(true)
+    expect(wrapper.text()).toContain('暂不支持按部门筛选')
     const baseChart = wrapper.findComponent(BaseChart)
     expect(baseChart.exists()).toBe(true)
     const option = baseChart.props('option') as any
@@ -148,12 +152,34 @@ describe('funds/YearlyComparisonChart.vue', () => {
 
   it('only sends defined query params', async () => {
     mockGet.mockResolvedValue({ data: [] })
-    mount(YearlyComparisonChart, { global: { stubs } })
+    const wrapper = mount(YearlyComparisonChart, { global: { stubs } })
     await flushPromises()
     expect(mockGet).toHaveBeenCalledWith(
       '/funds/supported-village/statistics/yearly-comparison',
       {}
     )
+    // 未传部门 → 不显示"不支持部门筛选"提示
+    expect(wrapper.find('.dept-filter-notice').exists()).toBe(false)
+  })
+
+  it('部门筛选变化时重新加载并保持提示（watch 维度含 department）', async () => {
+    mockGet.mockResolvedValue({ data: [] })
+    const wrapper = mount(YearlyComparisonChart, {
+      props: { department: 'rural' },
+      global: { stubs },
+    })
+    await flushPromises()
+    expect(wrapper.find('.dept-filter-notice').exists()).toBe(true)
+    expect(mockGet).toHaveBeenCalledTimes(1)
+
+    await wrapper.setProps({ department: 'education' })
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.dept-filter-notice').exists()).toBe(true)
+
+    await wrapper.setProps({ department: '' })
+    await flushPromises()
+    expect(wrapper.find('.dept-filter-notice').exists()).toBe(false)
   })
 
   it('reloads when watched props change and exposes refresh', async () => {

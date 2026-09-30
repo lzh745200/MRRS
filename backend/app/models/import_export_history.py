@@ -52,11 +52,14 @@ class ImportExportHistory(Base):
         comment="数据包ID",
     )
     operation_type = Column(String(20), nullable=False, comment="操作类型")
+    # 审计追踪表：组织删除绝不能连带清空导入导出历史（原 CASCADE），
+    # 否则"谁在什么时候导出了什么"的留痕随组织一起消失。改为 SET NULL + 可空，
+    # 历史行保留，仅失去组织归类（深审 LIVE）。
     org_id = Column(
         Integer,
-        ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
-        comment="操作组织ID",
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="操作组织ID(组织删除后置空，审计留痕保留)",
     )
     user_id = Column(
         Integer,

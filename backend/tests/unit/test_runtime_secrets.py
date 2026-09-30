@@ -11,7 +11,9 @@ import pytest
 from app.utils.runtime_secrets import (
     ensure_runtime_secrets,
     get_or_create_secret,
+    _load_secrets_file,
     _resolve_secrets_file,
+    _validated_file_key,
     _atomic_write_json,
 )
 
@@ -73,6 +75,76 @@ def _selective_open(target_path, exc):
 # ---------------------------------------------------------------------------
 
 
+class TestValidatedFileKey:
+    """文件来源密钥的强度校验（深审 #6：文件来源曾被绕过长度校验）。"""
+
+    def test_weak_file_key_rejected_with_warning(self, rs_log):
+        assert _validated_file_key({"SECRET_KEY": "short"}, "SECRET_KEY") == ""
+        assert "长度不足" in rs_log.text
+
+    def test_strong_file_key_accepted(self):
+        strong = "x" * 40
+        assert _validated_file_key({"SECRET_KEY": strong}, "SECRET_KEY") == strong
+
+    def test_missing_or_empty_key_returns_empty(self, rs_log):
+        assert _validated_file_key({}, "SECRET_KEY") == ""
+        assert _validated_file_key({"SECRET_KEY": ""}, "SECRET_KEY") == ""
+        # 空值不触发"长度不足"告警
+        assert "长度不足" not in rs_log.text
+
+    def test_non_string_key_coerced_and_validated(self):
+        long_num = 1234567890123456789012345678901234567890
+        assert _validated_file_key({"SECRET_KEY": long_num}, "SECRET_KEY") == str(long_num)
+        # 数字转换后不足 32 字符 → 拒绝
+        assert _validated_file_key({"SECRET_KEY": 7}, "SECRET_KEY") == ""
+
+
+class TestLoadSecretsFile:
+    """_load_secrets_file 的 file_usable 语义（False = 不得覆写磁盘）。"""
+
+    def test_missing_file_is_usable(self, tmp_path):
+        loaded, usable = _load_secrets_file(str(tmp_path / "nope.json"))
+        assert loaded == {} and usable is True
+
+    def test_valid_object_is_usable(self, tmp_path):
+        path = tmp_path / "runtime_secrets.json"
+        path.write_text(json.dumps({"SECRET_KEY": "k"}), encoding="utf-8")
+        loaded, usable = _load_secrets_file(str(path))
+        assert loaded == {"SECRET_KEY": "k"} and usable is True
+
+    def test_corrupt_json_is_not_usable(self, tmp_path, rs_log):
+        path = tmp_path / "runtime_secrets.json"
+        path.write_text("{broken", encoding="utf-8")
+        loaded, usable = _load_secrets_file(str(path))
+        assert loaded == {} and usable is False
+        assert "拒绝覆写" in rs_log.text
+
+    def test_permission_error_is_not_usable(self, tmp_path, rs_log):
+        path = tmp_path / "runtime_secrets.json"
+        path.write_text("{}", encoding="utf-8")
+        with patch("builtins.open", _selective_open(path, PermissionError("denied"))):
+            loaded, usable = _load_secrets_file(str(path))
+        assert loaded == {} and usable is False
+        assert "无读取权限" in rs_log.text
+
+    def test_generic_read_error_is_not_usable(self, tmp_path, rs_log):
+        path = tmp_path / "runtime_secrets.json"
+        path.write_text("{}", encoding="utf-8")
+        with patch("builtins.open", _selective_open(path, OSError("io"))):
+            loaded, usable = _load_secrets_file(str(path))
+        assert loaded == {} and usable is False
+        assert "重新生成" in rs_log.text
+
+    @pytest.mark.parametrize("payload", ['"just-a-string"', "[1,2,3]", "123", "true"])
+    def test_non_object_top_level_is_not_usable(self, tmp_path, rs_log, payload):
+        """顶层非对象（真值但非 dict）→ 拒绝覆写，避免下游 loaded.get 崩启动。"""
+        path = tmp_path / "runtime_secrets.json"
+        path.write_text(payload, encoding="utf-8")
+        loaded, usable = _load_secrets_file(str(path))
+        assert loaded == {} and usable is False
+        assert "顶层不是 JSON 对象" in rs_log.text
+
+
 class TestEnsureRuntimeSecretsEnvProvided:
     def test_both_env_vars_set_returns_immediately(self):
         with patch.dict(os.environ, {"SECRET_KEY": "a" * 40, "CSRF_SECRET_KEY": "b" * 40}):
@@ -96,18 +168,23 @@ class TestEnsureRuntimeSecretsEnvProvided:
 class TestEnsureRuntimeSecretsFromFile:
     def test_loads_from_file_when_env_missing(self, tmp_path):
         secrets_file = tmp_path / "runtime_secrets.json"
-        secrets_file.write_text(json.dumps({"SECRET_KEY": "file_sk", "CSRF_SECRET_KEY": "file_csrf"}), encoding="utf-8")
+        # 文件来源的密钥同样要过 ≥32 字符强度校验（深审 #6 修复），
+        # 故这里用真实强度的值，断言"文件值被原样采用"的语义不变。
+        strong_sk = "file_sk_0123456789abcdef0123456789abcdef"
+        strong_csrf = "file_csrf_0123456789abcdef0123456789ab"
+        secrets_file.write_text(json.dumps({"SECRET_KEY": strong_sk, "CSRF_SECRET_KEY": strong_csrf}), encoding="utf-8")
         with patch.dict(os.environ, {"SECRET_KEY": "", "CSRF_SECRET_KEY": "", "RUNTIME_SECRETS_FILE": str(secrets_file)}):
             ensure_runtime_secrets()
-            assert os.environ["SECRET_KEY"] == "file_sk"
-            assert os.environ["CSRF_SECRET_KEY"] == "file_csrf"
+            assert os.environ["SECRET_KEY"] == strong_sk
+            assert os.environ["CSRF_SECRET_KEY"] == strong_csrf
 
     def test_partial_from_file_combined_with_env(self, tmp_path):
         secrets_file = tmp_path / "runtime_secrets.json"
-        secrets_file.write_text(json.dumps({"SECRET_KEY": "file_sk"}), encoding="utf-8")
+        strong_sk = "file_sk_0123456789abcdef0123456789abcdef"
+        secrets_file.write_text(json.dumps({"SECRET_KEY": strong_sk}), encoding="utf-8")
         with patch.dict(os.environ, {"SECRET_KEY": "", "CSRF_SECRET_KEY": "", "RUNTIME_SECRETS_FILE": str(secrets_file)}):
             ensure_runtime_secrets()
-            assert os.environ["SECRET_KEY"] == "file_sk"
+            assert os.environ["SECRET_KEY"] == strong_sk
             assert os.environ["CSRF_SECRET_KEY"] != ""
 
     def test_file_not_found_generates_new(self, tmp_path):

@@ -1,20 +1,53 @@
 """自动化提醒引擎 — 审批超时/项目到期/经费告警."""
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
 from app.models.approval import ApprovalTask, ApprovalStatus
 from app.models.project import Project
 from app.models.fund import Fund
+from app.models.base import _utcnow
 
 logger = logging.getLogger(__name__)
 
 
+def _as_utc(value: datetime) -> datetime:
+    """把从库中读回的时间统一为 UTC aware。
+
+    created_at 由 models.base._utcnow 写 UTC，但 SQLite 读回的是 naive 值；
+    历史实现用 `datetime.now()`（本机时区）与之比较，非 UTC 主机（UTC+8）上
+    阈值与 elapsed_hours 整体偏移 8 小时（超时提醒晚 8 小时才触发）。
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _elapsed_hours(created_at: Optional[datetime]) -> float:
+    """已等待小时数（UTC 口径）；创建时间为空时按 0 处理，避免 NoneType 崩溃"""
+    if created_at is None:
+        return 0.0
+    return round((_utcnow() - _as_utc(created_at)).total_seconds() / 3600, 1)
+
+
+def _approval_recipient(task: Any) -> Optional[int]:
+    """解析审批提醒接收人：当前审批人 → 提交人。
+
+    两者都为空时返回 None，由 orchestrator 跳过（messages.user_id NOT NULL）。
+    历史实现在这里不解析接收人，导致审批类提醒在 orchestrator 恒被丢弃。
+    """
+    for attr in ("current_approver_id", "submitter_id"):
+        value = getattr(task, attr, None)
+        if value:
+            return value
+    return None
+
+
 def scan_overtime_approvals(db: Session, hours_threshold: int = 48) -> List[Dict[str, Any]]:
     """扫描超时未处理的审批任务."""
-    cutoff = datetime.now() - timedelta(hours=hours_threshold)
+    cutoff = _utcnow() - timedelta(hours=hours_threshold)
     tasks = (
         db.query(ApprovalTask)
         .filter(
@@ -28,9 +61,8 @@ def scan_overtime_approvals(db: Session, hours_threshold: int = 48) -> List[Dict
             "type": "approval_overtime",
             "entity_id": t.id,
             "title": getattr(t, "title", "") or f"审批任务 #{t.id}",
-            "elapsed_hours": round(
-                (datetime.now() - t.created_at).total_seconds() / 3600, 1
-            ),
+            "elapsed_hours": _elapsed_hours(t.created_at),
+            "user_id": _approval_recipient(t),
         }
         for t in tasks
     ]
@@ -40,7 +72,7 @@ def scan_approaching_approvals(
     db: Session, warning_hours: int = 36, deadline_hours: int = 48
 ) -> List[Dict[str, Any]]:
     """扫描即将超时的审批任务（36~48 小时预警档，与旧 reminder_service 功能对齐）。"""
-    now = datetime.now()
+    now = _utcnow()
     warning_time = now - timedelta(hours=warning_hours)
     deadline = now - timedelta(hours=deadline_hours)
     tasks = (
@@ -57,7 +89,8 @@ def scan_approaching_approvals(
             "type": "approval_approaching",
             "entity_id": t.id,
             "title": getattr(t, "title", "") or f"审批任务 #{t.id}",
-            "elapsed_hours": round((now - t.created_at).total_seconds() / 3600, 1),
+            "elapsed_hours": _elapsed_hours(t.created_at),
+            "user_id": _approval_recipient(t),
         }
         for t in tasks
     ]

@@ -133,6 +133,23 @@ describe('useFundsStore', () => {
       expect(store.fundList[0].id).toBe(2)
       expect(store.total).toBe(1)
     })
+
+    it('删除的记录不在当前页时 total 不变（服务端总数不可臆减）', async () => {
+      mockDel.mockResolvedValueOnce({ code: 200 })
+      store.fundList = [{ id: 1 } as any]
+      store.total = 30 // 服务端分页总数：当前页只有 1 条
+      await store.deleteFund(999)
+      expect(store.fundList).toHaveLength(1)
+      expect(store.total).toBe(30)
+    })
+
+    it('total 永不为负（原实现无条件 -- 会减成负数）', async () => {
+      mockDel.mockResolvedValueOnce({ code: 200 })
+      store.fundList = [{ id: 1 } as any]
+      store.total = 0
+      await store.deleteFund(1)
+      expect(store.total).toBe(0)
+    })
   })
 
   describe('getSummary', () => {

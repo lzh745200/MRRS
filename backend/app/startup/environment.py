@@ -73,10 +73,87 @@ def _check_and_record_version_change():
         logger.warning("版本变更检查失败: %s", e)
 
 
-def _verify_file_integrity():
-    """启动时验证关键文件完整性，防止二进制被替换"""
+class FileIntegrityError(RuntimeError):
+    """关键文件完整性校验失败（清单比对不符 / 关键文件缺失）。"""
+
+
+_INTEGRITY_MANIFEST_NAME = "integrity_manifest.json"
+
+
+def _load_integrity_manifest(base_dir: Path):
+    """读取完整性清单；不可用时返回 None（按"未提供"处理）。"""
+    import json
+
+    manifest_path = base_dir / _INTEGRITY_MANIFEST_NAME
+    if not manifest_path.exists():
+        return None
+    try:
+        raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        # 清单存在但读取/解析失败：不能当作"校验通过"，但也不阻断启动
+        # （装机残留的坏文件会把应用永久卡在启动阶段）。
+        logger.error("文件完整性检查: 清单无法解析 %s: %s", manifest_path, exc)
+        return None
+    if isinstance(raw_manifest, dict):
+        return raw_manifest
+    logger.error(
+        "文件完整性检查: 清单顶层不是对象（%s），按未提供处理",
+        type(raw_manifest).__name__,
+    )
+    return None
+
+
+def _collect_integrity_mismatches(base_dir: Path, critical_files, manifest) -> list:
+    """比对关键文件哈希，返回不符合项描述列表（按严格与否区分处理）。"""
     import hashlib
 
+    mismatches = []
+    for rel_path in critical_files:
+        file_path = base_dir / rel_path
+        if not file_path.exists():
+            if manifest is not None:
+                mismatches.append(f"{rel_path}: 缺失")
+            else:
+                logger.warning("文件完整性检查: 关键文件缺失: %s", rel_path)
+            continue
+
+        try:
+            file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        except OSError as exc:
+            if manifest is not None:
+                mismatches.append(f"{rel_path}: 无法读取({exc})")
+            else:
+                logger.warning("文件完整性检查: 无法读取 %s: %s", rel_path, exc)
+            continue
+
+        if manifest is None:
+            logger.debug("文件完整性: %s SHA256=%s", rel_path, file_hash[:16])
+            continue
+
+        expected = manifest.get(rel_path)
+        if not expected:
+            logger.warning("文件完整性检查: 清单未登记 %s，跳过比对", rel_path)
+        elif expected != file_hash:
+            mismatches.append(f"{rel_path}: 哈希不符")
+
+    return mismatches
+
+
+def _verify_file_integrity(base_dir: Path | None = None):
+    """启动时验证关键文件完整性（防二进制被替换）。
+
+    有清单（backend/integrity_manifest.json，形如 {"app/main.py": "<sha256>"}）时
+    **严格比对**：任何关键文件缺失或哈希不符都抛 FileIntegrityError 中止启动
+    （fail-closed，防替换/篡改）。没有清单时不假装校验过，只记 WARNING 说明
+    基线比对未启用 —— 此前实现仅把哈希写进 DEBUG 日志、缺文件也只是一条
+    warning，与 docstring "防止二进制被替换" 完全不符（深审 LIVE #79）。
+
+    Args:
+        base_dir: 仓库（backend）根目录；默认由本模块位置上溯三级，测试可注入。
+
+    Raises:
+        FileIntegrityError: 提供了清单且存在缺失/哈希不符/无法读取的关键文件。
+    """
     _critical_files = [
         "app/core/config.py",
         "app/core/security.py",
@@ -84,18 +161,22 @@ def _verify_file_integrity():
         "app/main.py",
     ]
 
-    try:
-        # 本模块位于 app/startup/，仓库（backend）根需上溯三级
+    # 本模块位于 app/startup/，仓库（backend）根需上溯三级
+    if base_dir is None:
         base_dir = Path(__file__).resolve().parent.parent.parent
-        for rel_path in _critical_files:
-            file_path = base_dir / rel_path
-            if not file_path.exists():
-                logger.warning("文件完整性检查: 关键文件缺失: %s", rel_path)
-                continue
 
-            file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
-            logger.debug("文件完整性: %s SHA256=%s", rel_path, file_hash[:16])
+    manifest = _load_integrity_manifest(base_dir)
+    if manifest is None:
+        logger.warning(
+            "文件完整性检查: 未提供 %s，本次仅记录哈希、不做基线比对（防篡改未启用）",
+            _INTEGRITY_MANIFEST_NAME,
+        )
 
-        logger.info("关键文件完整性检查完成 (%d个文件)", len(_critical_files))
-    except Exception as e:
-        logger.error("文件完整性检查失败: %s", e)
+    mismatches = _collect_integrity_mismatches(base_dir, _critical_files, manifest)
+
+    if mismatches:
+        raise FileIntegrityError(
+            "关键文件完整性校验失败（文件可能被替换/篡改）: " + "; ".join(mismatches)
+        )
+
+    logger.info("关键文件完整性检查完成 (%d个文件)", len(_critical_files))

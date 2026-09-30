@@ -1345,8 +1345,13 @@ class TestEncryptedPackage:
             os.unlink(path)
 
     def test_extract_bad_magic(self):
+        """magic 非法 —— 但文件须先满足 27 字节最小长度才能走到 magic 判定。
+
+        深审 #63 后短文件优先报"文件过短"（避免 struct.error），
+        故此用例补齐头部长度以覆盖真正的 magic 分支。
+        """
         with tempfile.NamedTemporaryFile(suffix=".rrs", delete=False) as f:
-            f.write(b"XXXX")
+            f.write(b"XXXX" + b"\x00" * 23)
             path = f.name
         try:
             with pytest.raises(ValueError, match="无效的文件格式"):
@@ -1356,7 +1361,7 @@ class TestEncryptedPackage:
 
     def test_extract_bad_version(self):
         with tempfile.NamedTemporaryFile(suffix=".rrs", delete=False) as f:
-            f.write(MAGIC + b"2.0" + b"\x00" * 16)
+            f.write(MAGIC + b"2.0" + b"\x00" * 20)
             path = f.name
         try:
             with pytest.raises(ValueError, match="不支持的版本"):

@@ -38,6 +38,10 @@ export function batchExport(data: {
 export function validateBatch(tableName: string, ids: number[]): Promise<any> {
   return post(`${BASE_URL}/validate`, null, {
     params: { table_name: tableName, ids },
+    // 后端 FastAPI 契约：ids: List[int] = Query(...)，要求重复查询键 `ids=1&ids=2`。
+    // axios 默认把数组序列化为 `ids[]=1&ids[]=2`（键名变成 "ids[]"），后端取不到
+    // ids → 该端点恒 422。indexes:null 表示不加方括号、重复同名键。
+    paramsSerializer: { indexes: null },
   })
 }
 

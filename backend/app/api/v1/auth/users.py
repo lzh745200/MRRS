@@ -758,7 +758,11 @@ async def update_user_permissions(
     }, message="用户权限更新成功")
 
 
-@router.get("/roles/options", summary="获取角色选项")
+@router.get(
+    "/roles/options",
+    summary="获取角色选项",
+    dependencies=[Depends(_require_admin_user)],
+)
 # R12：默认键包含 current_user 的 repr（含内存地址），每次请求键都不同 → 缓存永不
 # 命中。三处 options 返回内容与调用者无关（静态数据），键固定为函数名。
 @cache_result(ttl=OPTIONS_CACHE_TTL, key_builder=lambda *a, **k: "role-options")
@@ -778,7 +782,11 @@ async def get_role_options(
     })
 
 
-@router.get("/data-scopes/options", summary="获取数据范围选项")
+@router.get(
+    "/data-scopes/options",
+    summary="获取数据范围选项",
+    dependencies=[Depends(_require_admin_user)],
+)
 @cache_result(ttl=OPTIONS_CACHE_TTL, key_builder=lambda *a, **k: "data-scope-options")
 async def get_data_scope_options(
     current_user=Depends(get_current_user),
@@ -796,7 +804,11 @@ async def get_data_scope_options(
     })
 
 
-@router.get("/permissions/options", summary="获取权限选项")
+@router.get(
+    "/permissions/options",
+    summary="获取权限选项",
+    dependencies=[Depends(_require_admin_user)],
+)
 @cache_result(ttl=OPTIONS_CACHE_TTL, key_builder=lambda *a, **k: "permission-options")
 async def get_permission_options(
     current_user=Depends(get_current_user),

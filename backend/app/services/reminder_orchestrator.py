@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.core.transaction import get_db_context
 from app.models.message import Message
@@ -95,18 +95,30 @@ def _format_reminder(r: Dict[str, Any]) -> str:
     return str(r)
 
 
-def list_reminders(limit: int = 50) -> List[Dict[str, Any]]:
-    """查询提醒中心的全部提醒（按时间倒序）"""
+def list_reminders(limit: int = 50, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """查询当前用户的提醒（按时间倒序）
+
+    fail-closed：提醒归属具体接收人（messages.user_id NOT NULL），缺少 user_id 时
+    返回空列表，绝不返回全实例提醒。历史缺陷：任意登录用户都能看到他人提醒的
+    标题/内容。调用方（api/v1/reminders.py）必须传 current_user.id。
+    """
+    if not user_id:
+        logger.warning("list_reminders 缺少 user_id，按 fail-closed 返回空列表")
+        return []
+
     from app.core.database import SessionLocal
 
     db = SessionLocal()
     try:
         rows = (
             db.query(Message)
-            .filter(Message.message_type.in_(
-                ["approval_overtime", "approval_approaching", "deadline_warning",
-                 "budget_warning", "backup_reminder", "package_reminder"]
-            ))
+            .filter(
+                Message.message_type.in_(
+                    ["approval_overtime", "approval_approaching", "deadline_warning",
+                     "budget_warning", "backup_reminder", "package_reminder"]
+                ),
+                Message.user_id == user_id,
+            )
             .order_by(Message.created_at.desc())
             .limit(limit)
             .all()

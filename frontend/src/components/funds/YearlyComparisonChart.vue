@@ -1,6 +1,12 @@
 <template>
   <el-card class="chart-card">
     <template #header><span class="title">年度对比</span></template>
+    <!-- 后端 /funds/supported-village/statistics/yearly-comparison 只接受 year_start/year_end，
+         部门维度并未实现（FastAPI 会静默忽略未知查询参数）。此处显式告知，
+         避免用户把"全部部门数据"误读为"已按部门过滤"（静默降级）。 -->
+    <div v-if="departmentFilterUnsupported" class="dept-filter-notice">
+      当前接口暂不支持按部门筛选，以下为全部部门的年度对比数据
+    </div>
     <el-skeleton v-if="loading" :rows="5" animated />
     <ChartErrorState v-else-if="loadError" :message="loadError" @retry="load" />
     <BaseChart v-else-if="chartOption" :option="chartOption" height="320px" />
@@ -25,14 +31,18 @@ const yearlyData = ref<any[]>([])
 const loading = ref(false)
 const loadError = ref('')
 
+/** 传入了部门筛选但后端不支持该维度 → 展示显式提示（不静默当成已过滤） */
+const departmentFilterUnsupported = computed(() => Boolean(props.department))
+
 async function load() {
   loading.value = true
   loadError.value = ''
   try {
+    // 不发送 department：后端未声明该参数（未知查询参数被静默忽略），
+    // 发出去只会造成"看起来按部门过滤了"的假象（提示见 departmentFilterUnsupported）
     const params: any = {}
     if (props.yearStart) params.year_start = props.yearStart
     if (props.yearEnd) params.year_end = props.yearEnd
-    if (props.department) params.department = props.department
     const res: any = await get('/funds/supported-village/statistics/yearly-comparison', params)
     // 兼容 {success, data} 信封 / 裸数组 / 裸 data 三种形态
     const data = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
@@ -76,3 +86,14 @@ watch(() => [props.yearStart, props.yearEnd, props.department], load, {
 
 defineExpose({ refresh: load })
 </script>
+
+<style scoped>
+.dept-filter-notice {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--color-warning-dark);
+  background: var(--color-warning-lightest);
+  border-radius: 4px;
+}
+</style>

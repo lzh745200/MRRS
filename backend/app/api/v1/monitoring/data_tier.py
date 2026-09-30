@@ -3,7 +3,7 @@
 提供数据分级查询、归档管理和存储统计
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import timezone, datetime
@@ -75,8 +75,10 @@ async def get_tier_info(
 @router.post("/archive/{model_name}")
 async def archive_model(
     model_name: str,
-    before_days: int = 365,
-    batch_size: int = 1000,
+    # 深审 #58：原实现无任何边界 —— before_days 传负数会让 before_date 落到
+    # 未来（把全部"未到期"数据当旧数据归档），batch_size<=0 则静默不处理。
+    before_days: int = Query(365, ge=1, le=36500, description="归档多少天之前的数据"),
+    batch_size: int = Query(1000, ge=1, le=100000, description="批次大小"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -213,7 +215,9 @@ async def restore_from_archive(
 
 @router.delete("/cleanup")
 async def cleanup_old_archives(
-    max_age_days: int = 365,
+    # 深审 #59：max_age_days 为负数时 cutoff 移到未来，cleanup_old_archives
+    # 会删除**全部**归档文件。这里强制为正数（fail-closed）。
+    max_age_days: int = Query(365, ge=1, le=36500, description="归档文件最大保留天数"),
     current_user: User = Depends(get_current_active_user),
 ):
     """

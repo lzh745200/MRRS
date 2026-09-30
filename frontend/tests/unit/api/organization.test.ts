@@ -80,18 +80,28 @@ describe('api/organization', () => {
     expect(r).toBe(body)
   })
 
-  it('deleteOrganization DELETE /organizations/{id}', async () => {
-    const body = { success: true }
-    mockDel.mockResolvedValueOnce(body)
-    const r = await deleteOrganization(4)
-    expect(mockDel).toHaveBeenCalledWith('/organizations/4')
-    expect(r).toBe(body)
+  // 后端 DELETE /organizations/{id} 的 confirm_password 为 Query 且必填语义
+  // （空值恒 400「二次确认失败」），故前端 fail-closed：缺密码不发请求。
+  it('deleteOrganization 缺密码时 fail-closed 抛错且不发请求', async () => {
+    mockDel.mockClear()
+    await expect(deleteOrganization(4)).rejects.toThrow('删除组织需要二次确认密码')
+    await expect(deleteOrganization(4, '')).rejects.toThrow('删除组织需要二次确认密码')
+    expect(mockDel).not.toHaveBeenCalled()
   })
 
-  it('deleteOrganization 携带 confirm_password 二次确认', async () => {
-    mockDel.mockResolvedValueOnce({ success: true })
-    await deleteOrganization(4, 'pass123')
-    expect(mockDel).toHaveBeenCalledWith('/organizations/4?confirm_password=pass123')
+  it('deleteOrganization 非法 id fail-closed', async () => {
+    mockDel.mockClear()
+    await expect(deleteOrganization(0, 'pass123')).rejects.toThrow('无效的组织 ID')
+    await expect(deleteOrganization(1.5, 'pass123')).rejects.toThrow('无效的组织 ID')
+    expect(mockDel).not.toHaveBeenCalled()
+  })
+
+  it('deleteOrganization 携带 confirm_password 二次确认（URL 编码）', async () => {
+    const body = { success: true }
+    mockDel.mockResolvedValueOnce(body)
+    const r = await deleteOrganization(4, 'p@ss 1&2')
+    expect(mockDel).toHaveBeenCalledWith('/organizations/4?confirm_password=p%40ss%201%262')
+    expect(r).toBe(body)
   })
 
   it('batchUpdateSortOrders POST /organizations/batch-update-sort', async () => {

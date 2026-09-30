@@ -45,6 +45,10 @@ class ResourceLimiter:
     管理请求速率限制和资源配额
     """
 
+    #: 未登记限额的键在清剪时的默认保留窗口（秒）—— 仅用于限制内存增长，
+    #: 不参与限流判定（深审 #51）。
+    _DEFAULT_CLEANUP_WINDOW = 3600
+
     def __init__(self):
         self._rate_limits: Dict[str, RateLimit] = {}
         self._quotas: Dict[str, ResourceQuota] = {}
@@ -53,6 +57,10 @@ class ResourceLimiter:
         self._lock = threading.Lock()
         self._monitoring = False
         self._monitor_thread = None
+
+    @property
+    def _default_cleanup_window(self) -> int:
+        return self._DEFAULT_CLEANUP_WINDOW
 
     def start_monitoring(self):
         """启动资源监控（兼容接口）"""
@@ -80,15 +88,21 @@ class ResourceLimiter:
                 self._request_counts[key] = []
 
             # 清理过期的请求记录
-            if key in self._rate_limits:
-                limit = self._rate_limits[key]
+            # 深审 #51：原实现把清剪放在 `if key in self._rate_limits` 内，未注册
+            # 限额的键（如按 IP/端点自由生成的 key）仍会在下面 append，却永不清剪
+            # → 进程生命周期内 _request_counts 无界增长。改为无条件清剪。
+            limit = self._rate_limits.get(key)
+            if limit is not None:
                 cutoff = now - limit.window
+            else:
+                # 无限额登记：按全局默认窗口清剪，保证不留永久残值
+                cutoff = now - self._default_cleanup_window
+            if self._request_counts[key]:
                 self._request_counts[key] = [t for t in self._request_counts[key] if t > cutoff]
 
-                # 检查是否超过限制
-                if len(self._request_counts[key]) >= limit.requests:
-                    self._update_usage(key, allowed=False)
-                    return False
+            if limit is not None and len(self._request_counts[key]) >= limit.requests:
+                self._update_usage(key, allowed=False)
+                return False
 
             # 记录请求
             self._request_counts[key].append(now)
@@ -120,6 +134,9 @@ class ResourceLimiter:
         with self._lock:
             self._quotas[key] = ResourceQuota(max_requests=max_requests, period=period)
             self._rate_limits[key] = RateLimit(requests=max_requests, window=period)
+            # 深审 #51：换新窗口时旧窗口的请求时间戳仍留在 _request_counts 里，
+            # 会立刻按新配额判定（例如把 100/小时 调成 10/分钟时被旧记录误拒）。
+            self._request_counts[key] = []
 
     def clear_quota(self, key: str):
         """

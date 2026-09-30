@@ -22,6 +22,15 @@ logger = logging.getLogger(__name__)
 MAGIC = b"RRS\x00"
 VERSION = b"1.0"
 
+# 文件头固定长度: 4B MAGIC + 3B VERSION + 16B salt + 4B metadata_len
+_HEADER_LEN = 4 + 3 + 16 + 4
+# checksum 固定长度（SHA256）
+_CHECKSUM_LEN = 32
+# metadata 密文长度上限（16 MiB）。真实 metadata 只有 {"format_version","timestamp"}
+# 几十字节；无上界时一个损坏/恶意文件可让 meta_len 声明为 4GiB，f.read(meta_len)
+# 直接吃满内存（深审 #63）。
+MAX_METADATA_BYTES = 16 * 1024 * 1024
+
 
 def _derive_key(password: str, salt: bytes) -> bytes:
     """PBKDF2-SHA256 密钥派生."""
@@ -83,23 +92,43 @@ def extract_encrypted_package(
         ValueError: 密码错误、格式损坏或数据被篡改
     """
     with open(input_path, "rb") as f:
-        magic = f.read(4)
+        # 1) 先校验文件头是否读满，避免对短文件 struct.unpack 抛 struct.error
+        header = f.read(_HEADER_LEN)
+        if len(header) < _HEADER_LEN:
+            raise ValueError(
+                f"数据包损坏: 文件过短（{len(header)} 字节，至少需要 {_HEADER_LEN} 字节）"
+            )
+
+        magic = header[:4]
         if magic != MAGIC:
             raise ValueError(f"无效的文件格式: {magic!r}, 期望 {MAGIC!r}")
 
-        version = f.read(3)
+        version = header[4:7]
         if version != VERSION:
             raise ValueError(f"不支持的版本: {version}")
 
-        salt = f.read(16)
-        meta_len = struct.unpack(">I", f.read(4))[0]
+        salt = header[7:23]
+        meta_len = struct.unpack(">I", header[23:27])[0]
+
+        # 2) meta_len 上界校验：损坏文件可能声明超大长度，直接 read 会 OOM
+        if meta_len > MAX_METADATA_BYTES:
+            raise ValueError(
+                f"数据包损坏: metadata 长度异常（{meta_len} 字节，上限 {MAX_METADATA_BYTES}）"
+            )
+
         encrypted_metadata = f.read(meta_len)
+        if len(encrypted_metadata) < meta_len:
+            raise ValueError("数据包损坏: metadata 内容不完整")
+
         # 剩余数据 = encrypted_data + checksum (32 bytes)
         remaining = f.read()
-        if len(remaining) < 32:
+        if len(remaining) < _CHECKSUM_LEN:
             raise ValueError("数据包损坏: 内容不完整")
-        encrypted_data = remaining[:-32]
-        stored_checksum = remaining[-32:]
+        encrypted_data = remaining[:-_CHECKSUM_LEN]
+        stored_checksum = remaining[-_CHECKSUM_LEN:]
+
+    if not encrypted_data:
+        raise ValueError("数据包损坏: 缺少数据段")
 
     key = _derive_key(password, salt)
     cipher = AESGCMCipher(key=key)

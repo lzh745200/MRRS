@@ -32,10 +32,23 @@ export async function copyToClipboard(text: string, label = '内容'): Promise<b
     textArea.style.left = '-999999px'
     textArea.style.top = '-999999px'
     document.body.appendChild(textArea)
-    textArea.focus()
-    textArea.select()
-    document.execCommand('copy')
-    textArea.remove()
+    let copied = false
+    try {
+      textArea.focus()
+      textArea.select()
+      // 原实现丢弃 execCommand 的布尔结果并直接提示"已复制"——
+      // 复制实际失败时用户被误导。这里以返回值判定成败。
+      copied =
+        typeof document.execCommand === 'function' ? document.execCommand('copy') === true : false
+    } finally {
+      // 无论 focus/select/execCommand 是否抛错，临时节点都必须移除（原实现不在 finally，
+      // 异常时 textarea 永久残留在 DOM 中）
+      textArea.remove()
+    }
+    if (!copied) {
+      ElMessage.error('复制失败，请手动复制')
+      return false
+    }
     ElMessage.success(`${label}已复制到剪贴板`)
     return true
   } catch (error) {

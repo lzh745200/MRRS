@@ -28,12 +28,21 @@ class TestDeleteVillageCascade:
         mock_db.commit.assert_called_once()
 
     def test_individual_table_exception_logs_warning(self, service, mock_db):
+        """schema 差异（表不存在）可容忍：跳过该表继续删除其余。
+
+        深审 #72：原实现 `except Exception` 无差别吞掉所有 SQL 错误，
+        这里改为只容忍 OperationalError 且特征为"表/列不存在"。
+        """
+        from sqlalchemy.exc import OperationalError
+
         normal_result = MagicMock()
         normal_result.rowcount = 1
         side_effects = []
         for i, _ in enumerate(service.DEPENDENT_TABLES):
             if i == 0:
-                side_effects.append(Exception("table not found"))
+                side_effects.append(
+                    OperationalError("DELETE FROM x", {}, Exception("no such table: x"))
+                )
             else:
                 side_effects.append(normal_result)
         side_effects.append(MagicMock(rowcount=1))
@@ -43,6 +52,33 @@ class TestDeleteVillageCascade:
         assert result["success"] is True
         mock_logger.warning.assert_called_once()
         mock_db.commit.assert_called_once()
+
+    def test_non_schema_sql_error_is_fail_loud(self, service, mock_db):
+        """非 schema 类 SQL 错误（如 database is locked）必须回滚并上抛。
+
+        原实现在这里只 warning 后继续，主行删除成功但依赖行残留、计数漏报 ——
+        调用方拿到 success=True 的假成功（深审 #72）。
+        """
+        from sqlalchemy.exc import OperationalError
+
+        locked = OperationalError("DELETE FROM x", {}, Exception("database is locked"))
+        mock_db.execute.side_effect = [locked] + [MagicMock(rowcount=1)] * (
+            len(service.DEPENDENT_TABLES) + 1
+        )
+        with patch("app.services.village_cascade_delete_service.logger"):
+            with pytest.raises(OperationalError):
+                service.delete_village_cascade(1)
+        mock_db.rollback.assert_called_once()
+        mock_db.commit.assert_not_called()
+
+    def test_arbitrary_exception_is_fail_loud(self, service, mock_db):
+        """非 SQLAlchemy 异常同样不得被静默吞掉。"""
+        mock_db.execute.side_effect = RuntimeError("unexpected")
+        with patch("app.services.village_cascade_delete_service.logger"):
+            with pytest.raises(RuntimeError):
+                service.delete_village_cascade(1)
+        mock_db.rollback.assert_called_once()
+        mock_db.commit.assert_not_called()
 
     def test_village_not_found_returns_error(self, service, mock_db):
         mock_db.execute.return_value.rowcount = 0

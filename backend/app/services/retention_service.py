@@ -2,7 +2,9 @@
 
 - N 由配置 RECYCLE_RETENTION_DAYS 控制（默认 30，0=禁用）；
 - 仅清理 is_active=False 且 deleted_at 早于阈值的记录；
-- 清除前触发一次即时备份（防误删兜底）；
+- 清除前触发一次即时备份（防误删兜底）——**备份在清除之前**，备份失败则本轮
+  清除中止（2026-09-30 深审 #55 修复：原实现把备份放在清除之后，快照不含被删行，
+  兜底名存实亡）；
 - 按元数据外键图级联清除子表（复用 CascadePurgeService）。
 """
 
@@ -47,9 +49,12 @@ def purge_expired_soft_deleted(db, days: int | None = None) -> dict:
     summary: dict = {"cutoff": cutoff.isoformat(), "purged": {}}
     total = 0
 
+    # 深审 #55：本模块 docstring 承诺"清除前触发一次即时备份（防误删兜底）"，
+    # 但原实现把备份放在**清除循环之后**——快照里已经没有待删行，兜底事实上
+    # 不存在。改为先算出待删清单、先备份、再执行清除（备份失败即中止本轮，
+    # 不做无兜底的物理删除）。
+    planned: list[tuple[str, str, int]] = []
     for table, pk in SOFT_DELETE_TABLES:
-        # 仅选取已标记软删且超期的 id（deleted_at 为空的旧数据不自动清除，
-        # 避免历史数据被意外清空；如需处理请人工执行）
         rows = db.execute(  # nosec B608 - table/pk from code constants, value parameterized
             text(
                 f"SELECT {pk} FROM {table} "  # nosec B608
@@ -57,27 +62,35 @@ def purge_expired_soft_deleted(db, days: int | None = None) -> dict:
             ),
             {"cutoff": cutoff},
         ).fetchall()
+        planned.extend((table, pk, rid) for (rid,) in rows)
 
-        for (rid,) in rows:
-            try:
-                stats = svc.purge(table, rid)
-                if stats.get("success"):
-                    summary["purged"][f"{table}#{rid}"] = stats.get("deleted_records", 0)
-                    total += 1
-            except Exception as e:  # 单条失败不阻断其余
-                db.rollback()
-                logger.error("回收站自动清除失败 %s#%s: %s", table, rid, e, exc_info=True)
+    if not planned:
+        summary["total_records"] = 0
+        logger.info("回收站保留期策略执行完成：无可清除记录 %s", summary)
+        return summary
+
+    try:
+        from app.services.immediate_backup import trigger_immediate_backup
+
+        trigger_immediate_backup(
+            description=f"回收站保留期自动清除 {len(planned)} 条前备份", delay=1.0
+        )
+    except Exception:
+        # fail-closed：没有兜底快照就不做物理删除（软删记录可人工再清）
+        logger.error("回收站自动清除前备份失败，本轮清除中止", exc_info=True)
+        summary["backup_failed"] = True
+        return summary
+
+    for table, pk, rid in planned:
+        try:
+            stats = svc.purge(table, rid)
+            if stats.get("success"):
+                summary["purged"][f"{table}#{rid}"] = stats.get("deleted_records", 0)
+                total += 1
+        except Exception as e:  # 单条失败不阻断其余
+            db.rollback()
+            logger.error("回收站自动清除失败 %s#%s: %s", table, rid, e, exc_info=True)
 
     summary["total_records"] = total
-    if total:
-        try:
-            from app.services.immediate_backup import trigger_immediate_backup
-
-            trigger_immediate_backup(
-                description=f"回收站保留期自动清除 {total} 条后备份", delay=1.0
-            )
-        except Exception:  # pragma: no cover
-            logger.warning("回收站自动清除后备份触发失败", exc_info=True)
-
     logger.info("回收站保留期策略执行完成：%s", summary)
     return summary

@@ -241,10 +241,16 @@ describe('Data and workflow view imports', () => {
     ['Sentiment', '@/views/sentiment/Index.vue'],
   ]
 
+  // W4-T3：把"import 成功即通过"升级为**编译契约**断言——
+  // 只有真正编译出组件（render/setup/name 之一存在）才算通过。
   dataViews.forEach(([label, p]) => {
     it(label, async () => {
       const mod = await import(p)
-      expect(mod.default).toBeDefined()
+      const comp = mod.default as any
+      expect(comp).toBeTruthy()
+      expect(
+        typeof comp === 'object' && (comp.render || comp.setup || comp.__name || comp.name)
+      ).toBeTruthy()
     })
   })
 })
@@ -266,7 +272,11 @@ describe('Common component imports', () => {
   components.forEach(([label, p]) => {
     it(label, async () => {
       const mod = await import(p)
-      expect(mod.default).toBeDefined()
+      const comp = mod.default as any
+      expect(comp).toBeTruthy()
+      expect(
+        typeof comp === 'object' && (comp.render || comp.setup || comp.__name || comp.name)
+      ).toBeTruthy()
     })
   })
 })
@@ -288,10 +298,12 @@ describe('Store imports', () => {
     'dataReport',
   ]
 
+  // W4-T3：断言 store 模块确实导出对应的 useXxxStore 工厂（而非仅"能 import"）
   stores.forEach((name) => {
-    it(`use${name.charAt(0).toUpperCase() + name.slice(1)}Store imports`, async () => {
+    const factory = `use${name.charAt(0).toUpperCase() + name.slice(1)}Store`
+    it(`${factory} exports a store factory`, async () => {
       const mod = await import(`@/stores/${name}.ts`)
-      expect(mod).toBeDefined()
+      expect(typeof (mod as any)[factory]).toBe('function')
     })
   })
 })
@@ -347,10 +359,15 @@ describe('API module imports', () => {
     'zeroTrust',
   ]
 
+  // W4-T3：断言 API 模块确实导出函数（请求层契约），而非仅"能 import"
   apis.forEach((name) => {
-    it(`${name} imports`, async () => {
+    it(`${name} exports callable API`, async () => {
       const mod = await import(`@/api/${name}.ts`)
-      expect(mod).toBeDefined()
+      const callables = Object.values(mod).filter((v) => typeof v === 'function')
+      const hasApiObject = Object.values(mod).some(
+        (v) => v && typeof v === 'object' && Object.values(v as object).some((f) => typeof f === 'function')
+      )
+      expect(callables.length > 0 || hasApiObject).toBe(true)
     })
   })
 })

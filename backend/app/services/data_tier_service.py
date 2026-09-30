@@ -10,6 +10,7 @@
 
 import json
 import gzip
+import os
 from datetime import timezone, datetime, timedelta
 from enum import Enum
 from pathlib import Path
@@ -176,6 +177,13 @@ class DataTierService:
 
         archived = 0
         tier = self.determine_tier(before_date)
+        if tier == DataTier.HOT:
+            # 2026-09-30 深审修复：截止日落在热数据窗口内（默认
+            # before_date = now - HOT_THRESHOLD_DAYS，determine_tier 以 <= 判 HOT）
+            # 时，待归档记录的年龄实际处于**温存期**（1~3 年），绝不是冷存期。
+            # 历史实现把它送进 else 的冷存分支 → 1~3 年前的记录被当"三年以上
+            # 冷数据"导出并从主库删除。
+            tier = DataTier.WARM
 
         try:
             if tier == DataTier.WARM:
@@ -186,6 +194,9 @@ class DataTierService:
             return archived, f"成功归档 {archived}/{total_count} 条记录到 {tier.value} 存储"
 
         except Exception as e:
+            # 失败必须回滚：历史实现只记日志，会话可能停留在待回滚状态，
+            # 同一会话后续写操作全部失败（静默失效）。
+            db.rollback()
             logger.error(f"归档失败: {e}")
             return archived, f"归档失败: {e}"
 
@@ -199,11 +210,22 @@ class DataTierService:
 
         # 这里简化实现：实际应该创建温数据数据库连接并迁移
         # 目前只是记录日志，实际迁移需要更复杂的实现
+        # 2026-09-30 深审修复：全仓没有任何模型定义 is_archived 列，历史实现对
+        # 每条记录无条件 archived += 1 后提交并上报"成功归档 N 条"——实际什么
+        # 都没改（静默失效）。现只统计真正被标记的记录，一条都标记不了就如实
+        # 返回 0 并告警，不再做假归档。
         for record in query.limit(batch_size).all():
             # 标记记录为已归档（软删除或添加归档标记）
             if hasattr(record, "is_archived"):
                 record.is_archived = True
-            archived += 1
+                archived += 1
+
+        if archived == 0:
+            logger.warning(
+                "模型 %s 无 is_archived 归档标记列，温存迁移未实现，本轮不做任何改动",
+                getattr(model_class, "__name__", model_class),
+            )
+            return 0
 
         safe_commit(db)
         logger.info(f"归档 {archived} 条记录到温存储")
@@ -236,13 +258,24 @@ class DataTierService:
         # 压缩并保存
         json_data = json.dumps(records, ensure_ascii=False, default=str)
 
-        if self.config.COMPRESSION_ENABLED:
-            with gzip.open(archive_path, "wt", encoding="utf-8") as f:
-                f.write(json_data)
-        else:
+        if not self.config.COMPRESSION_ENABLED:
             archive_path = archive_path.with_suffix(".json")
-            with open(archive_path, "w", encoding="utf-8") as f:
-                f.write(json_data)
+
+        # 先写临时文件再原子改名：历史实现直接写目标文件，写入中途失败/进程被杀
+        # 会留下损坏的半截归档（.gz），而库中行尚未删除 → 恢复时数据重复或丢失。
+        tmp_path = archive_path.with_name(archive_path.name + ".tmp")
+        try:
+            if self.config.COMPRESSION_ENABLED:
+                with gzip.open(tmp_path, "wt", encoding="utf-8") as f:
+                    f.write(json_data)
+            else:
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    f.write(json_data)
+            os.replace(tmp_path, archive_path)
+        except Exception:
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
 
         # 删除已归档的记录
         query.filter(model_class.id.in_(record_ids)).delete(synchronize_session=False)

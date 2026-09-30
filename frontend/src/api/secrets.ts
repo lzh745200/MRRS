@@ -68,11 +68,22 @@ export async function createSecret(params?: {
   return post(`/secrets/create${qs}`)
 }
 
-/** 撤销密钥 */
+/**
+ * 撤销密钥。
+ *
+ * versionId 作为**路径段**必须编码并对空值 fail-fast：未编码时含 / ? # 的
+ * 值会改写请求路径（打到别的密钥版本或别的路由）。version_id 允许数字形态
+ * 传入（后端返回的是字符串，历史调用方可能透传 number）。
+ */
 export async function revokeSecret(
-  versionId: string
+  versionId: string | number
 ): Promise<{ message: string; version_id: string }> {
-  return post(`/secrets/revoke/${versionId}`)
+  const id =
+    typeof versionId === 'number' && Number.isFinite(versionId) ? String(versionId) : versionId
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new Error('密钥版本号不能为空')
+  }
+  return post(`/secrets/revoke/${encodeURIComponent(id.trim())}`)
 }
 
 /** 清理过期密钥 */

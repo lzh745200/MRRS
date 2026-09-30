@@ -46,6 +46,26 @@ def _safe_parse_expires(expires_at):
 _restricted_perms_cache: ContextVar[Optional[Dict[int, Set[str]]]] = ContextVar("restricted_perms_cache", default=None)
 
 
+def _required_resource_access_level(permission: str) -> str:
+    """把权限标识符映射为资源级授权（rbac_resource_access.access_level）所需级别。
+
+    取值域为 read / write / delete（models/rbac.py:176）：
+
+    - read 类动作只要求 read 级授权。历史实现恒按字面 "write" 判定 →
+      只读资源授权**永远无法**满足检查（授权形同不存在）。
+    - delete 类动作要求 delete 级授权。历史实现按 "write" 判定 →
+      仅授予 write 的资源授权可以满足同资源的 delete 检查（越权放行）。
+    - 其余写类动作（write/export/publish/create/restore/download/...）按 write 判定，
+      与历史行为一致，不放宽。
+    """
+    action = (permission or "").rsplit(":", 1)[-1].strip().lower()
+    if action == "read":
+        return "read"
+    if action == "delete":
+        return "delete"
+    return "write"
+
+
 # ==================== 权限枚举 ====================
 
 
@@ -195,9 +215,11 @@ class RBACService:
             )
             return True
 
-        # 检查资源权限
+        # 检查资源权限（所需级别由请求的 permission 派生，见
+        # _required_resource_access_level：历史实现恒传 "write"）
         if resource_type and resource_id:
-            if self._has_resource_access(user_id, resource_type, resource_id, "write", db):
+            required_level = _required_resource_access_level(permission)
+            if self._has_resource_access(user_id, resource_type, resource_id, required_level, db):
                 self._log_access(
                     db,
                     user_id,

@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import {
   useConfigStore,
   applyThemeToDom,
+  normalizeTheme,
+  readStoredTheme,
   DEFAULT_THEME,
   THEME_STORAGE_KEY,
   THEME_OPTIONS,
@@ -77,6 +79,74 @@ describe('applyThemeToDom', () => {
   it('其他主题设置属性', () => {
     applyThemeToDom('high-contrast')
     expect(document.documentElement.getAttribute('data-theme')).toBe('high-contrast')
+  })
+})
+
+// 2026-09-30 深审：localStorage 读取/写入无守卫，受限存储（隐私模式/配额）下
+// SecurityError 会中断 main.ts 入口模块（白屏）；非法主题值会原样写进 data-theme。
+describe('主题取值 fail-closed（白名单 + 存储守卫）', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    document.documentElement.removeAttribute('data-theme')
+    setActivePinia(createPinia())
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('normalizeTheme：白名单内保留，非法/非字符串回退默认主题', () => {
+    expect(normalizeTheme('dark')).toBe('dark')
+    expect(normalizeTheme('high-contrast')).toBe('high-contrast')
+    expect(normalizeTheme('darkk')).toBe(DEFAULT_THEME)
+    expect(normalizeTheme('')).toBe(DEFAULT_THEME)
+    expect(normalizeTheme(null)).toBe(DEFAULT_THEME)
+    expect(normalizeTheme(undefined)).toBe(DEFAULT_THEME)
+    expect(normalizeTheme(123)).toBe(DEFAULT_THEME)
+  })
+
+  it('readStoredTheme：非法存量值回退默认主题（不再写坏 data-theme）', () => {
+    localStorage.setItem(THEME_STORAGE_KEY, '<script>')
+    expect(readStoredTheme()).toBe(DEFAULT_THEME)
+    localStorage.setItem(THEME_STORAGE_KEY, 'outdoor')
+    expect(readStoredTheme()).toBe('outdoor')
+  })
+
+  it('readStoredTheme：getItem 抛错（受限存储）时回退默认主题而不抛出', () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError')
+    })
+    try {
+      expect(readStoredTheme()).toBe(DEFAULT_THEME)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('store 初始化：存量非法主题不会写进 data-theme', () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'not-a-theme')
+    setActivePinia(createPinia())
+    const store = useConfigStore()
+    expect(store.theme).toBe(DEFAULT_THEME)
+  })
+
+  it('setTheme 非法值不落盘、不写 data-theme', () => {
+    const store = useConfigStore()
+    store.setTheme('evil-theme')
+    expect(store.theme).toBe(DEFAULT_THEME)
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe(DEFAULT_THEME)
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false)
+  })
+
+  it('setTheme 写盘抛错（配额）时仍在本会话生效且不抛出', () => {
+    const store = useConfigStore()
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    try {
+      expect(() => store.setTheme('dark')).not.toThrow()
+      expect(store.theme).toBe('dark')
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 

@@ -6,7 +6,6 @@
 
 from datetime import datetime, timezone
 
-from tests.utils import HTTP_SUCCESS_OR_ERROR
 
 
 # ==================== 一、认证与授权 ====================
@@ -602,13 +601,14 @@ class TestSecurityFixes:
     def test_health_endpoint_public(self, client):
         """健康检查无需认证"""
         resp = client.get("/health")
-        assert resp.status_code in (200, 201, 404, 500)  # API may vary
+        # W4-T3：健康检查必须 200 —— 原断言接受 500 会让"后端不可用"也算通过
+        assert resp.status_code == 200, resp.text
         assert resp.json()["status"] == "ok"
 
     def test_env_check_endpoint(self, client, admin_headers):
         """环境检查端点"""
         resp = client.get("/api/v1/env/check", headers=admin_headers)
-        assert resp.status_code in HTTP_SUCCESS_OR_ERROR
+        assert resp.status_code == 200, resp.text
 
     def test_shutdown_requires_localhost(self, client):
         """Shutdown 端点验证（TestClient 模拟的请求可能不是本机）"""

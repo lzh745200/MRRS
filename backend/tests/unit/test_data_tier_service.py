@@ -193,11 +193,15 @@ class TestDataTierService:
         assert "warm" in message or "温" in message
 
     def test_archive_records_to_warm_no_is_archived(self, service):
-        """测试归档记录到温存储 - 模型无is_archived属性"""
+        """模型无 is_archived 列时必须如实返回 0（2026-09-30 深审修复）。
+
+        原用例用 MagicMock 记录（自动生成任意属性）并断言 count == 1，固化了
+        "什么都没改也上报成功归档"这一静默失效行为；改用真实对象后断言诚实计数。
+        """
+        from types import SimpleNamespace
+
         mock_db = MagicMock()
-        mock_record = MagicMock()
-        del mock_record.is_archived
-        mock_record.id = 1
+        mock_record = SimpleNamespace(id=1)  # 无 is_archived 属性（全仓模型皆如此）
 
         mock_query = MagicMock()
         mock_query.count.return_value = 1
@@ -213,8 +217,9 @@ class TestDataTierService:
             mock_db, MockModel, before_date=before_date, batch_size=1000
         )
 
-        assert count == 1
+        assert count == 0, "没有真正迁移任何记录时不得上报成功归档"
         assert "warm" in message
+        mock_db.commit.assert_not_called()
 
     def test_archive_records_exception(self, service):
         """测试归档记录 - 异常处理"""

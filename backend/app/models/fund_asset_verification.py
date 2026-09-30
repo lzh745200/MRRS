@@ -46,7 +46,10 @@ class FundAssetVerification(Base):
     total_paid = Column(Numeric(15, 4), default=0, comment="已付款总额(万元)")
     asset_value = Column(Numeric(15, 4), default=0, comment="转固资产价值(万元)")
     difference = Column(Numeric(15, 4), default=0, comment="差额(万元)")
-    difference_rate = Column(Numeric(5, 2), default=0, comment="差异率(%)")
+    # 差异率 = |已付款-转固资产|/已付款*100：已付款极小、资产极大时可达 1e6 量级，
+    # Numeric(5,2)（上限 999.99）在严格数值型数据库上必然溢出报错（深审 LIVE）。
+    # 加宽到 12 位；SQLite 不校验精度，故需迁移同步加宽其它后端。
+    difference_rate = Column(Numeric(12, 2), default=0, comment="差异率(%)")
     status = Column(String(20), default="pending", comment="校验状态: pending/passed/failed/waived")
     verified_by = Column(String(50), nullable=True, comment="校验人")
     verified_at = Column(DateTime(timezone=True), nullable=True, comment="校验时间")

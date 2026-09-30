@@ -63,7 +63,9 @@ describe('desensitize additional coverage', () => {
   it('masks militaryID', async () => {
     const { maskMilitaryID } = await import('@/utils/desensitize')
     expect(maskMilitaryID('')).toBe('')
-    expect(maskMilitaryID('ab')).toBe('ab')
+    // 短凭证（<=4 位）固定全掩：原实现会原样返回 'ab'，等同于未脱敏
+    expect(maskMilitaryID('ab')).toBe('****')
+    expect(maskMilitaryID('1234')).toBe('****')
     expect(maskMilitaryID('ABCDEF')).toBe('AB****EF')
   })
 

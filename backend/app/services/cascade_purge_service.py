@@ -15,6 +15,7 @@
 """
 
 import logging
+from typing import List
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -101,23 +102,76 @@ class CascadePurgeService:
             {"rid": rid},
         ).rowcount or 0
 
+    def _descendant_chains(self, root_table: str) -> List[List[tuple]]:
+        """从根表出发做 DFS，返回自底向上的"删除链"列表。
+
+        每个链形如 [(leaf_table, leaf_col, parent_table, parent_col), ..., (t1, c1, root, root_pk)]，
+        按由深到浅排列 —— 调用方按此顺序 DELETE，可保证外键始终先于被引用行删除。
+
+        深审 #1：原实现只做两层（root → 子表 → 孙表），supported_villages ←
+        projects ← funds ← fund_transactions 这类**第三级**依赖不会被删除，
+        残留孤儿行；且跨分支删除顺序随元数据序，先删 projects 分支会连带影响
+        funds 分支的定位条件。改为访问集 DFS + 自底向上展开。
+        """
+        visited: set = set()
+        chains: List[List[tuple]] = []
+
+        def walk(table: str, root_pk: str, lineage: List[tuple], seen: set) -> None:
+            for child, col in self._load_graph(table):
+                if child == root_table or child in seen:
+                    continue
+                # child 直接引用 table（经由 table 的主键）
+                link = (child, col, table, root_pk)
+                new_lineage = lineage + [link]
+                chains.append(list(reversed(new_lineage)))
+                walk(child, "id", new_lineage, seen | {child})
+
+        # root 的主键列固定为 id（与 _delete 用的 WHERE id 一致）
+        walk(root_table, "id", [], visited)
+        return chains
+
+    def _delete_chain(self, chain: List[tuple], rid: int) -> int:
+        """按链删除（最深层用子查询锚定到根行），返回删除行数。"""
+        total = 0
+        # chain 已按由深到浅排列：最深的一跳用 IN (SELECT ... WHERE root_pk = :rid)
+        for idx, (table, col, parent, parent_pk) in enumerate(chain):
+            if idx == 0:
+                sql = (
+                    f"DELETE FROM {table} WHERE {col} IN "  # nosec B608
+                    f"(SELECT {parent_pk} FROM {parent} WHERE id = :rid)"
+                )
+            else:
+                # 中间层已由上一跳删除，这里用"不在父表中"兜底清理残留
+                sql = (
+                    f"DELETE FROM {table} WHERE {col} NOT IN "  # nosec B608
+                    f"(SELECT {parent_pk} FROM {parent})"
+                )
+            total += self.db.execute(text(sql), {"rid": rid}).rowcount or 0
+        return total
+
     # ------------------------------------------------------------------
     def purge(self, root_table: str, row_id: int) -> dict:
-        """物理删除主行及全部层级依赖行，返回统计。"""
+        """物理删除主行及全部层级依赖行，返回统计。
+
+        **自底向上**：先删最深依赖，再逐层向上，最后删主行（深审 #1）。
+        """
         logger.info("级联彻底删除 %s#%s 开始", root_table, row_id)
         stats: dict = {}
         total = 0
 
-        # 先删二级依赖（孙表），再删一级子表，最后删主行
-        for tbl, col in self._load_graph(root_table):
-            for t2, c2 in self._load_graph(tbl):
-                if t2 == root_table:
-                    continue
-                n2 = self._delete_deep(t2, c2, tbl, col, row_id)
-                if n2:
-                    key = f"{t2}(via {tbl})"
-                    stats[key] = stats.get(key, 0) + n2
-                    total += n2
+        # 依赖链按"深度降序"处理：深的先删
+        chains = sorted(self._descendant_chains(root_table), key=len, reverse=True)
+        deep_deleted: set = set()
+        for chain in chains:
+            head = chain[0]
+            key = f"{head[0]}(via {head[2]})"
+            if key in deep_deleted:
+                continue
+            n = self._delete_chain(chain, row_id)
+            if n:
+                stats[key] = stats.get(key, 0) + n
+                total += n
+            deep_deleted.add(key)
 
         for tbl, col in self._load_graph(root_table):
             n = self._delete(tbl, col, row_id)

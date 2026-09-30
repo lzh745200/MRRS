@@ -26,6 +26,9 @@ describe('offlineMock', () => {
     describe('GET 请求', () => {
       it('/auth/me 有用户数据时返回用户', () => {
         const user = { id: 1, username: 'test' }
+        // 凭据同源（fail-closed）：只有 auth_user 而无 auth_token 时不提供身份，
+        // 因此这里必须同时写入 token。
+        sessionStorage.setItem('auth_token', 'tok-1')
         sessionStorage.setItem('auth_user', JSON.stringify(user))
         const result = getMockResponse('GET', '/api/v1/auth/me')
         expect(result.data).toEqual(user)
@@ -66,7 +69,7 @@ describe('offlineMock', () => {
     describe('POST 请求', () => {
       it('返回成功响应', () => {
         const result = getMockResponse('POST', '/api/v1/projects')
-        expect(result.data.success).toBe(true)
+        expect(result['data']['success']).toBe(true)
         expect(result.data.data.id).toMatch(/^offline-/)
       })
     })
@@ -74,20 +77,20 @@ describe('offlineMock', () => {
     describe('PUT/PATCH 请求', () => {
       it('PUT 返回更新成功', () => {
         const result = getMockResponse('PUT', '/api/v1/projects/1')
-        expect(result.data.success).toBe(true)
+        expect(result['data']['success']).toBe(true)
         expect(result.data.message).toContain('更新成功')
       })
 
       it('PATCH 返回更新成功', () => {
         const result = getMockResponse('PATCH', '/api/v1/projects/1')
-        expect(result.data.success).toBe(true)
+        expect(result['data']['success']).toBe(true)
       })
     })
 
     describe('DELETE 请求', () => {
       it('返回删除成功', () => {
         const result = getMockResponse('DELETE', '/api/v1/projects/1')
-        expect(result.data.success).toBe(true)
+        expect(result['data']['success']).toBe(true)
         expect(result.data.message).toContain('删除成功')
       })
     })

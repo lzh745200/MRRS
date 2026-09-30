@@ -10,6 +10,20 @@ const whiteList = ['/login', '/register', '/forgot-password']
 // 强制改密期间允许访问的路由
 const changePasswordWhitelist = ['/change-password', '/logout']
 
+/**
+ * 读取锁屏标记（自动/手动锁屏置 '1'，登录成功后由 authStore.unlockSession 清除）。
+ *
+ * fail-closed：读取失败（隐私模式/配额/SecurityError）时按"已锁定"处理——
+ * 这是一处安全判定，异常时宁可要求重新输密码，也不能静默放行。
+ */
+function readLockFlag(): boolean {
+  try {
+    return sessionStorage.getItem('auto_lock_active') === '1'
+  } catch {
+    return true
+  }
+}
+
 export const routeGuard = async (to: any, _from: any, next: any) => {
   document.title = (to.meta?.title as string) || '帮扶管理信息系统'
 
@@ -20,16 +34,11 @@ export const routeGuard = async (to: any, _from: any, next: any) => {
   }
 
   const token = AuthStorage.getToken()
+  const locked = readLockFlag()
 
   // 已登录（含"记住登录"持久令牌）访问登录/注册页 → 直接进入工作台，实现免登录；
   // 但锁屏标记存在时（自动/手动锁屏）必须重新输入密码，不允许自动跳回。
   if (whiteList.includes(to.path)) {
-    let locked = false
-    try {
-      locked = sessionStorage.getItem('auto_lock_active') === '1'
-    } catch {
-      /* 静默 */
-    }
     if (token && !locked) {
       next('/dashboard')
       return
@@ -40,6 +49,16 @@ export const routeGuard = async (to: any, _from: any, next: any) => {
 
   // 未登录 → 登录页
   if (!token) {
+    next(`/login?redirect=${to.path}`)
+    return
+  }
+
+  // ── 锁屏收口（安全修复）──
+  // token 可能来自"记住登录"的持久令牌回退链（AuthStorage.getToken 的
+  // session → PERSIST_TOKEN → legacy 三级回退），原实现只在白名单分支读锁屏标记，
+  // 于是锁屏后直接在地址栏输入 /dashboard、点书签或按后退，都能带着旧 token
+  // 进入受保护页面，锁屏形同虚设。此处对所有非白名单路由统一校验。
+  if (locked) {
     next(`/login?redirect=${to.path}`)
     return
   }

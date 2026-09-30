@@ -336,8 +336,13 @@ class MachineCodeService:
         # 兼容用户去掉连字符的输入
         normalized_input = (pass_code or "").strip().replace("-", "").lower()
         normalized_expected = expected.replace("-", "").lower()
-        # 常量时间比较，避免时序侧信道
-        return hmac.compare_digest(normalized_input, normalized_expected)
+        # 常量时间比较，避免时序侧信道。
+        # 2026-09-30 深审修复：compare_digest 对含非 ASCII 的 str 会抛 TypeError
+        # （CPython 限制：str 比较仅支持 ASCII）→ 用户输入中文/emoji 时注册端点 500。
+        # 统一按 UTF-8 字节比较，契约仍是返回 bool。
+        return hmac.compare_digest(
+            normalized_input.encode("utf-8"), normalized_expected.encode("utf-8")
+        )
 
     def self_verify_org_pass_code(self, pass_code: str, org_name: str):
         """组织通行码跨机器自验证：凭"通行码 + 单位名称"在本机建组织与记录。
@@ -358,8 +363,9 @@ class MachineCodeService:
             return None
         expected = self.generate_org_pass_code(org_name_clean)
         normalized_input = (pass_code or "").strip().replace("-", "").lower()
+        # 同 verify_pass_code_hmac：非 ASCII 输入必须按字节比较，否则 TypeError → 500
         if not normalized_input or not hmac.compare_digest(
-            normalized_input, expected.replace("-", "").lower()
+            normalized_input.encode("utf-8"), expected.replace("-", "").lower().encode("utf-8")
         ):
             return None
 
@@ -1032,18 +1038,27 @@ class MachineCodeService:
         org_name = (org.name if org else "") or ""
         pass_code = self.generate_org_pass_code(org_name)
 
-        # 幂等复用：同组织已有 pending 记录则重置为确定性通行码（避免
-        # pass_code UNIQUE 冲突与重复记录堆积）
+        # 幂等复用：同组织已有记录（任意状态）则重置为确定性通行码（避免
+        # pass_code UNIQUE 冲突与重复记录堆积）。
+        # 2026-09-30 深审修复：原查询只筛 status == "pending"，而 pass_code 由
+        # 单位名确定性派生且列为 UNIQUE —— 该组织已有 active/revoked 记录时
+        # 新建必撞 UNIQUE 约束（IntegrityError 未捕获 → 500）。同名单位（不同
+        # organization_id）同样会产出同一通行码，故同时按 pass_code 兜底匹配。
         existing = (
             self.db.query(MachineCode)
             .filter(
-                MachineCode.organization_id == organization_id,
-                MachineCode.status == "pending",
+                or_(
+                    MachineCode.organization_id == organization_id,
+                    MachineCode.pass_code == pass_code,
+                )
             )
+            .order_by(MachineCode.id.asc())
             .first()
         )
         if existing:
+            existing.organization_id = organization_id
             existing.pass_code = pass_code
+            existing.status = "pending"
             existing.allow_subordinate_generation = allow_subordinate
             existing.user_id = None
             existing.activated_at = None

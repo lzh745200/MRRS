@@ -369,9 +369,13 @@ async def preview_data_for_export(
         requested_org_id=data.org_id,
         get_first_org_callback=lambda: _get_first_active_org(service.db),
     )
+    # 组织必须可确定：org_id 缺失时旧实现既不校验权限、counts 也不带组织过滤，
+    # 直接回全库规模（fail-open）。与 /export 同口径 fail-closed 拒绝。
+    if not org_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ORG_NOT_BOUND_ERROR)
     # get_org_with_fallback 对 requested_org_id 不做任何权限判断，
     # 缺此校验时任何登录用户传任意 org_id 即可预览他组织数据规模（深审 LIVE）。
-    if org_id and not permission_service.can_access_organization(current_user.id, org_id):
+    if not permission_service.can_access_organization(current_user.id, org_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="您没有权限访问该组织的数据。请联系管理员为您分配正确的组织权限。"
@@ -981,10 +985,17 @@ async def validate_data_package(
     current_user=Depends(get_current_user),
     service: DataPackageService = Depends(get_package_service),
     history_service: ImportExportHistoryService = Depends(get_history_service),
+    permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
     """验证数据包"""
     package = service.get_package(package_id)
     if not package:
+        raise NotFoundException("数据包不存在")
+
+    # 归属校验：本端点会真实解包并回传校验明细，是 preview/confirm/download 的
+    # 同类读路径，但历史实现漏了组织校验——任何登录用户凭 package_id 即可
+    # 解析他组织数据包（越权读 + 写他人 package 的校验历史）。与同组端点同口径 404。
+    if not permission_service.can_access_organization(current_user.id, package.org_id):
         raise NotFoundException("数据包不存在")
 
     # R9：校验失败被拒绝的包不落实体文件（file_path 为 NULL），再次校验
@@ -1206,6 +1217,16 @@ async def get_package_history(
 
     history = history_service.get_history_by_package(package_id, skip=(page - 1) * page_size, limit=page_size)
 
+    # 分页 total 取同条件全量计数：历史实现用 len(当前页)，第 2 页起 total 缩水
+    # 成"本页条数"（与 data-reports 深审 #24/#25 同型缺陷）。
+    from app.models.import_export_history import ImportExportHistory
+
+    total = (
+        history_service.db.query(ImportExportHistory)
+        .filter(ImportExportHistory.package_id == package_id)
+        .count()
+    )
+
     return success_response(
         data={
             "package_id": package_id,
@@ -1221,7 +1242,7 @@ async def get_package_history(
                 }
                 for h in history
             ],
-            "total": len(history),
+            "total": total,
         },
         message="成功",
     )
@@ -1457,6 +1478,13 @@ async def decrypt_and_preview_package(
 
     try:
         result = await service.decrypt_and_preview_package(package_id, body.password)
+        # 审计留痕：解密预览是最敏感的一步（口令尝试 + 他组织数据可见性），
+        # 与 confirm/preview 一致落操作日志；日志失败不阻断主流程。
+        _safe_write_work_log(
+            service.db, "decrypt_preview", package_id,
+            package.file_name or package.package_code, current_user,
+            detail="解密预览数据包",
+        )
         return result
     except BusinessError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -1519,6 +1547,13 @@ async def confirm_import_with_conflict_resolution(
             client_ip=client_ip,
         )
 
+        # 审计留痕（成功侧）：冲突策略与包归属一并落操作日志
+        _safe_write_work_log(
+            service.db, "import", package_id,
+            package.file_name or package.package_code, current_user,
+            detail=f"确认导入，冲突策略={body.conflict_strategy}",
+        )
+
         return result
 
     except Exception as e:
@@ -1532,6 +1567,12 @@ async def confirm_import_with_conflict_resolution(
             duration_ms=duration_ms,
             client_ip=client_ip,
             error_message=str(e),
+        )
+        # 审计留痕（失败侧）：失败尝试同样要留痕，便于事后追溯
+        _safe_write_work_log(
+            service.db, "import", package_id,
+            package.file_name or package.package_code, current_user,
+            detail=f"确认导入失败，冲突策略={body.conflict_strategy}",
         )
         # W1: 错误细节不出站, 仅日志与操作历史保留内部原因
         raise HTTPException(

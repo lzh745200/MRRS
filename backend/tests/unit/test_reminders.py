@@ -107,11 +107,21 @@ def test_list_reminders():
         _msg(id=2, message_type="deadline_warning", is_read=True),
     ]
     with patch("app.core.database.SessionLocal", return_value=mock_db):
-        rows = list_reminders(10)
+        # 2026-09-30 深审修复：提醒必须按接收人隔离，调用方需传 user_id
+        rows = list_reminders(10, user_id=7)
     assert len(rows) == 1
     assert rows[0]["type"] == "deadline_warning"
     assert rows[0]["is_read"] is True
     mock_db.close.assert_called_once()
+
+
+def test_list_reminders_without_user_id_is_fail_closed():
+    """缺少 user_id 时不得返回全实例提醒（历史越权读他人提醒）。"""
+    from app.services.reminder_orchestrator import list_reminders
+
+    with patch("app.core.database.SessionLocal") as session_local:
+        assert list_reminders(10) == []
+    session_local.assert_not_called()
 
 
 def test_reminders_api_list():

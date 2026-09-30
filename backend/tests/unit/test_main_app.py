@@ -1017,14 +1017,16 @@ class TestVerifyFileIntegrity:
             _verify_file_integrity()
             mock_warn.assert_called()
 
-    def test_exception(self):
-        # B3 拆包后实现位于 app.startup.environment（Path 为该模块命名空间引用）
-        with (
-            patch("app.startup.environment.Path", side_effect=Exception("fail")),
-            patch("app.main.logger.error") as mock_err,
-        ):
-            _verify_file_integrity()
-            mock_err.assert_called_once()
+    def test_unexpected_exception_propagates_fail_loud(self):
+        """深审 LIVE #79：完整性检查不得有"吞异常"的兜底。
+
+        原实现有 `except Exception as e: logger.error(...)` 兜底，把任何
+        非预期错误（含真正的篡改线索）降级为一条日志后继续启动。改为
+        fail-closed 后，非预期异常必须向上抛出中止启动。
+        """
+        with patch("app.startup.environment.Path", side_effect=Exception("fail")):
+            with pytest.raises(Exception, match="fail"):
+                _verify_file_integrity()
 
 
 class TestApprovalReminder:

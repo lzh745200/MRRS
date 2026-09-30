@@ -159,6 +159,50 @@ async def get_system_status(current_user=Depends(get_current_user)):
     return {"success": True, "data": status_info}
 
 
+# 深审 #86：Windows 下监听 socket 默认 SO_EXCLUSIVEADDRUSE，父进程仍持有端口时
+# 子进程必然绑定失败。重启流程因此必须"先让出端口，再拉起新实例"。
+_PORT_RELEASE_TIMEOUT_SECONDS = 10.0
+_PORT_PROBE_INTERVAL_SECONDS = 0.05
+
+
+def _probe_host(host: str) -> str:
+    """把通配绑定地址换成可探测的回环地址。"""
+    if not host or host in ("0.0.0.0", "::", "[::]"):
+        return "127.0.0.1"
+    return host
+
+
+def _wait_for_port_release(
+    host: str,
+    port: int,
+    timeout: float = _PORT_RELEASE_TIMEOUT_SECONDS,
+) -> bool:
+    """等待监听端口被释放（连接被拒 = 已无人监听）。
+
+    优雅关闭会先关闭 listening socket 再等待在途请求，因此端口通常在
+    进程退出前就可用；这里轮询到可用即返回 True，超时返回 False。
+    """
+    import socket
+
+    if not port:
+        return True  # 未配置端口时无需等待（测试/嵌入式用法）
+    target = (_probe_host(host), int(port))
+    deadline = time.monotonic() + max(0.0, timeout)
+    while True:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            probe.settimeout(0.2)
+            if probe.connect_ex(target) != 0:
+                return True
+        except OSError:
+            return True
+        finally:
+            probe.close()
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(_PORT_PROBE_INTERVAL_SECONDS)
+
+
 def _graceful_shutdown() -> None:
     """R12-5：走信号优雅关闭路径（与 main.py 内部 shutdown 端点同一实现）。
 
@@ -239,19 +283,37 @@ async def restart_system(
             cache_manager.close()
         except Exception as e:
             logger.warning("关闭缓存管理器失败: %s", e)
-        # 安全重启：使用 subprocess/subprocess.Popen 避免命令注入
-        if sys.platform == "win32":
-            import subprocess
-            subprocess.Popen(
-                [sys.executable] + sys.argv[1:],
-                creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, "CREATE_NEW_CONSOLE") else 0,
-                close_fds=True,
-            )
-            _graceful_shutdown()
-        else:
+        if sys.platform != "win32":
             # POSIX：execv 原地替换镜像（新建的监听 socket 由 PEP 446 置
             # non-inheritable，端口随镜像替换释放，语义与旧实现一致）。
+            # execv 成功即不再返回，显式 return 表明后续 Windows 分支不可达
+            # （也让"被 mock 替换镜像"的测试不会继续走到拉起子进程）。
             os.execv(sys.executable, [sys.executable] + sys.argv)
+            return
+
+        # Windows：先触发优雅关闭让 uvicorn 关闭 listening socket，
+        # 等端口真正释放后再拉起新实例（原实现先 Popen 再关闭，子进程
+        # 几乎必然在父进程仍持端口时绑定失败 —— 重启竞态，深审 #86）。
+        _graceful_shutdown()
+        released = _wait_for_port_release(getattr(settings, "HOST", "127.0.0.1"), getattr(settings, "PORT", 0))
+        if released:
+            logger.info(
+                "监听端口 %s:%s 已释放，拉起新实例",
+                getattr(settings, "HOST", "127.0.0.1"),
+                getattr(settings, "PORT", 0),
+            )
+        else:
+            # 超时后不再无谓等待：仍尝试拉起（新实例可能因端口占用启动失败，
+            # 但比"永远不重启"更符合用户预期），并留下可诊断的 ERROR 日志。
+            logger.error("等待监听端口释放超时，仍尝试拉起新实例（新实例可能绑定失败）")
+
+        # 安全重启：使用 subprocess/subprocess.Popen 避免命令注入
+        import subprocess
+        subprocess.Popen(
+            [sys.executable] + sys.argv[1:],
+            creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, "CREATE_NEW_CONSOLE") else 0,
+            close_fds=True,
+        )
 
     background_tasks.add_task(_restart)
 

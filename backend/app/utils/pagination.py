@@ -140,7 +140,10 @@ def keyset_paginate(
         last_item = items[-1]
         # 动态获取列名 (兼容 InstrumentedAttribute 和 Column)
         col_key = order_column.key if hasattr(order_column, "key") else str(order_column.name)
-        last_value = getattr(last_item, col_key, None)
+        # 标量 select（items 为裸值而非 ORM 对象）时 getattr 恒为默认值，
+        # 此前默认 None → has_more=True 而 next_cursor=None，翻页静默卡死
+        # （深审 #4）。标量分支直接以末值本身作为游标。
+        last_value = getattr(last_item, col_key, last_item)
         if last_value is not None:
             next_cursor = encode_cursor(last_value)
 

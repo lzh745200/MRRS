@@ -451,7 +451,30 @@ class TestGetReportStatistics:
         assert result.total == 3
         assert result.submitted == 1
         assert result.approved == 1
-        # Note: draft/cancelled/overdue are calculated but not in schema, only total/submitted/approved/rejected/pending are kept
+        # 深审 #6：schema 已补齐 draft/cancelled/overdue/pending_review/approval_rate/
+        # by_source_org/by_month，统计字段不再被 Pydantic 静默丢弃。
+        assert result.draft == 1
+        assert result.overdue == 1
+        assert result.pending_review == 1
+        # 仅 1 条进入已审（approved），其中 1 条批准 → 100%
+        assert result.approval_rate == 100.0
+        assert result.by_source_org == {"1": 2, "2": 1}
+        assert sum(result.by_month.values()) == 2
+
+    def test_statistics_schema_keeps_all_service_fields(self):
+        """回归锁：service 传的每个 kwarg 都必须在 schema 上有对应字段。
+
+        防止再次出现"service 加统计项、schema 忘同步"导致的静默丢弃。
+        """
+        from app.schemas.data_report import DataReportStatistics
+
+        declared = set(DataReportStatistics.model_fields)
+        # 与 data_report_service.get_report_statistics 的构造参数保持一致
+        service_kwargs = {
+            "total", "draft", "submitted", "approved", "rejected", "cancelled",
+            "overdue", "pending_review", "approval_rate", "by_source_org", "by_month",
+        }
+        assert service_kwargs <= declared, f"schema 缺少字段: {service_kwargs - declared}"
 
 class TestGetSubordinateDashboard:
     """测试 get_subordinate_dashboard 方法"""

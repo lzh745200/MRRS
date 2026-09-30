@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
 )
+from sqlalchemy.orm import synonym
 
 from app.models.base import Base
 
@@ -77,6 +78,11 @@ class AlertHistory(Base):
         nullable=False,
         index=True,
     )
+    # 消费端（api/v1/system/monitor.py）按 AlertHistory.created_at 排序/取值，
+    # 而本表只有 triggered_at —— AttributeError 被上层 except 吞掉，告警历史
+    # 恒为空列表（深审 LIVE）。以 synonym 暴露同名属性别名，读写与
+    # order_by/列表达式语义与 triggered_at 完全一致，无需改表。
+    created_at = synonym("triggered_at")
     resolved_at = Column(DateTime(timezone=True), nullable=True)
     message = Column(Text, nullable=False)
     metric_value = Column(Float, nullable=True)

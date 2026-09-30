@@ -90,8 +90,114 @@
 - **模板渲染**（`models/message_template.py`）：四个渲染方法统一补 IndexError/ValueError，
   不再因位置占位符/未转义花括号直接抛给调用方。
 
+### 修复（服务层 — 深审残余 live 条目，R16 批次）
+- **级联彻底删除只做两层**（`cascade_purge_service.py`）：原实现 `root → 子表 → 孙表`
+  两跳，`supported_villages ← projects ← funds ← fund_transactions` 这类**第三级**依赖
+  不会被删，残留孤儿行；且跨分支删除顺序随元数据序，先删 projects 会连带影响 funds 的
+  定位条件。改为访问集 DFS + **自底向上链式删除**（`_descendant_chains` / `_delete_chain`）。
+- **分片合并并发重入**（`chunked_upload_service.py`）：合并含 await，同一 session 可被并发
+  调用重入 —— 第二次进来时状态已是 MERGING，会与第一次同时写同一 `final_path`，且第一次
+  `rmtree` 后第二次 FileNotFoundError → 500。改为每会话锁串行化 + 拒绝 MERGING 状态重入
+  （抽 `_acquire_merge_lock`）。
+- **数据清洗中位数与标准化**（`data_cleaning_service.py`）：偶数样本原取 `values[mid]`
+  （非真正中位）；标准化段直接用字段名当 key，缺键即 KeyError；未知类型静默写回坏值。
+  改为偶数样本取两中位均值、`field_config.get("field")/get("type")` 缺键 skip+warn、
+  仅在 `normalized is not None` 时写回、`_to_numeric` 跳过空串/文本。
+- **报表导出金额单位错标**（`report_export_service.py`）：表头写 `(元)`，而
+  Fund/Project 金额列实际单位是**万元**，导出表数字被读成 1e4 倍偏差。统一改为 `(万元)`。
+- **报表取数参数与截断**（`report_service.py`）：`include_sections` 显式为空时原会返回全表
+  （fail-open），改为早退空列表；`village_ids` 参数原先**完全未进入过滤**（静默忽略调用方
+  的村筛选），改为真正 `filter(SupportedVillage.id.in_(...))`；`limit(100)` 硬截断改为
+  按 id 排序取全量并在超过 `_MAX_REPORT_ROWS`(20000) 时截断 + WARNING。
+- **回收站备份先于清除**（`retention_service.py`）：原实现**先清除后备份**，一旦备份失败
+  数据已不可恢复。改为"先算清单 → 先备份 → 再清除"，备份失败置 `backup_failed=True` 并
+  中止本轮；无候选时显式 `total_records=0`。
+- **村庄级联删除吞异常**（`village_cascade_delete_service.py`）：原对任意异常
+  `logger.warning` 后继续，真实 SQL 错误被降级为"跳过该表"（数据不一致且无感知）。改为仅
+  "no such table / no such column" 这类 schema 差异降级，其余 `rollback` 后 **re-raise**。
+- **资源限额计数泄漏**（`resource_limiter.py`）：未登记限额的键永不被清剪（`_request_counts`
+  无限增长），且 `set_quota` 不重置既有计数。新增 `_DEFAULT_CLEANUP_WINDOW` 无条件清剪，
+  `set_quota` 末尾重置计数。
+- **任务队列停止后不可重启**（`task_queue.py`）：`stop()` 未复位 `self._queue`，
+  `submit()` 自愈判据过窄 → 同进程二次启动静默失效。改为 `stop()` 置 `_queue=None`、
+  `submit()` 判 `is None or not _running`。
+- **SMTP 发送加固**（`alert_service.py` + `core/config.py`）：补 `SMTP_TIMEOUT`（非法值回退
+  10s）、`ssl.create_default_context()` 显式传入 `starttls`、`From` 头缺 `SMTP_FROM` 时
+  回退 `SMTP_USER`（原先直接发空 From 被服务端拒收）。
+- **离线地图覆盖统计崩溃**（`offline_map_service.py`）：`cache_dir` 被删除时 `iterdir()`
+  抛 FileNotFoundError（500）；扫描期文件被并发删除抛 OSError 中断统计。改为目录缺失返回
+  零覆盖并缓存、`stat()` 失败跳过该文件、非目录条目跳过。
+- **默认密钥非合法 Fernet key**（`secrets_manager.py`）：兜底分支用 `token_urlsafe(32)`
+  （43 字符、非 base64-32B），而 `key_type` 声明为 `fernet`，调用方 `Fernet(key)` 运行时
+  ValueError。兜底统一产出**合法 Fernet key**（`_generate_fallback_key`）。
+- **加密包截断与无界读取**（`encrypted_package.py`）：短文件 `struct.unpack` 抛
+  `struct.error`（调用方只捕 ValueError → 500）；`meta_len` 无上界，损坏文件声明 4GiB
+  会吃满内存。改为先校验头部读满、`meta_len ≤ 16 MiB`、逐段长度校验，全部抛 ValueError。
+- **FTS 读路径发 DDL 并提交**（`policy_fts_service.py`）：`search_policies_fts`（GET 搜索）
+  首行调 `ensure_fts_table`，会执行 `CREATE VIRTUAL TABLE` + `INSERT ... SELECT` + commit
+  —— 并发读下写锁竞争，且读请求隐式提交调用方事务。改为只读探测 + LIKE 降级，
+  DDL 仅留在写路径 `ensure_fts_table`。
+- **配置导入非对象 JSON 崩溃 + 非原子**（`system_config_service.py`）：`json.loads('[1,2]')`
+  成功但 `.items()` 抛 AttributeError（500）；逐键 `set()` 各自 commit，半途失败留下
+  "部分导入"。改为仅接受 JSON **对象**、抽 `_set_no_commit` 后**单次提交**。
+- **数据上报统计 7 字段被丢弃**（`schemas/data_report.py` + `data_report_service.py`）：
+  service 传 `draft/cancelled/overdue/pending_review/approval_rate/by_source_org/by_month`，
+  schema 未声明 —— Pydantic 默认 `extra=ignore` **静默丢弃**，调用方拿到缺失统计。schema
+  补齐为显式字段（均带默认值，向后兼容），并加"service kwargs ⊆ schema fields"回归锁。
+- **导入冲突解决四类缺陷**（`smart_conflict_resolver.py`）：
+  ① 时间比较 `import_updated > local_updated` 在 str/datetime 或 naive-vs-aware 混合时抛
+  TypeError 中断整包导入 → 抽 `_to_datetime` 统一归一，不可比较时退默认策略；
+  ② OVERWRITE/AUTO 对导入记录**全键 setattr**，扁平化/派生键变成实例属性且
+  `organization_id`/`updated_at` 被覆盖 → 改为按模型真实列过滤（`_writable_items` +
+  `_PROTECTED_COLUMNS`）；
+  ③ KEEP_BOTH 直插新行且**不重映射外键**，新行挂到源机村/项目 ID → 抽 `_keep_both` 并
+  传入 `id_mapping` 走 `_update_foreign_keys`；
+  ④ 冲突检测无租户条件，按 code/village_name 命中**他组织**行后可改写/复制他人数据 →
+  构造参数 `organization_id` 参与检测，且导入时强制覆盖记录的租户列。
+
+### 修复（响应信封与前端凭据/角色语义，R16 收尾）
+- **`success_response(success=False)` 被静默丢弃**（`core/response.py`）：`success` 属信封保留键，
+  覆盖值被 `_merge_extra_fields` 丢弃 → RBAC 批量撤销有失败项、`/system/monitor/database-size`
+  读不到数据库文件等**部分失败场景仍回 success=true**，前端按 success 分支会错判为成功。
+  改为 `success_response` 显式开启 `allow_success_override`，**仅接受 bool**；
+  `error_response` 永不开启（错误信封不得被翻转为"成功"，防 `**payload` 伪造）。
+- **越权校验缺失的数据包校验端点**（`data/data/data_packages.py` `POST /{id}/validate`）：
+  与同组 preview/confirm/download 同口径补组织归属校验，越权一律 404（不泄露资源存在性）。
+- **前端角色默认值自相矛盾**（`utils/roleAccess.ts`）：`getRoleFromLocalStorage` 默认 `'viewer'`
+  且返回**原始** role，与 `normalizeRole` 的默认 `'user'` 冲突 —— 同一用户在不同入口得到
+  `user / viewer / operator` 三种值。改为统一归一化返回、默认 `'user'`；`isAdminUser` /
+  `hasAllowedRole` / `hasMinRole` 的白名单比对同样先归一化，历史角色（`manager` /
+  `approval_leader` / `operator`）配置不再导致菜单被错误隐藏。
+- **凭据跨来源拼接**（`utils/authStorage.ts`）：原 token/user/refresh 是三条独立回退链，
+  可拼出「A 的 token + B 的档案/刷新令牌」。改为 `_activeCredentials()` 整体取值：会话槽有
+  token 才是权威来源，缺档案时**仅当持久槽 token 完全一致**才补齐（同一凭据的正常续期），
+  否则不提供身份（fail-closed）；`setAuthData` 无 refresh_token 时清掉会话级残留刷新令牌。
+- **新增告警样式硬编码颜色**（`funds/YearlyComparisonChart.vue`）：部门维度不支持的提示条
+  原先用 `var(--x, #b45309)` 内联回退值，触发硬编码样式棘轮（345 → 347）。
+  改用既有 token `--color-warning-dark` / `--color-warning-lightest`，回到基线 345。
+- **无档案会话丢失刷新令牌**（`utils/authStorage.ts`）：`_activeCredentials()` 在「会话有 token
+  但无 user 且持久槽不同源」分支把 `refresh` 一并置 `null`。该 refresh 与 token **同源**
+  （同一次登录写入），丢弃后会让"access 已轮换、档案尚未回填"的会话无法续期，登出吊销
+  也拿不到 `refresh_token`。改为保留会话槽 refresh；身份仍 fail-closed（`user=null`）。
+- **短证件编号等同未脱敏**（`utils/desensitize.ts`）：`maskMilitaryID` 原实现在长度 <4 时
+  **原样返回**（`'ab'` → `'ab'`），长度恰为 4 时前缀+后缀覆盖全部字符（`'1234'` → `'12****34'`，
+  每位仍可见）。改为长度 ≤4 一律全掩（`'****'`），保证任何长度都至少隐藏中间部分。
+- **复制失败被误报成功**（`utils/clipboard.ts`）：降级 `execCommand` 路径丢弃布尔返回值并直接
+  提示"已复制"，实际失败时误导用户；临时 textarea 不在 `finally` 移除，异常时永久残留 DOM。
+  改为以 `execCommand('copy') === true` 判定成败、返回 false 时明确报错，节点移除移入 `finally`。
+- **离线 mock 与凭据同源口径不一致**（测试）：`getMockResponse` / `AuthStorage.getUser` 的
+  相关用例只写 `auth_user` 而不写 `auth_token`，与新 fail-closed 语义冲突；已同步为一并写入 token
+  并补"仅有 user 无 token → null"断言。
+- **响应头文件名解析在测试中被替身短路**（`api/{importExtra,schoolsFull,supportedVillageFull}`）：
+  mock 的 `parseContentDisposition` 恒返回 fallback，使"响应头文件名优先"这条断言**永远测不到实现**；
+  改为忠实反映真实解析语义（`filename*` / `filename="…"`）。
+
 ### 修复（发布门禁与工程）
+- `frontend/src/composables/useRouterSafe.ts`：控制字符剥离正则加 `no-control-regex` 豁免
+  说明（`lint:check --max-warnings=0` 下必须显式声明理由）。
 - `.github/workflows/build-windows.yml`：见"门禁"小节（下一批次）。
+- 后端补齐最后 8 行覆盖率缺口至 **100.00%**（`system.py` 端口探活轮询 sleep、`tasks.py`
+  完成/失败回写守卫、`camel_to_snake.py` 响应头复制、`chunked_upload_service.py` 合并锁二次检查）。
 
 ### 变更（行为）
 - 新增 `assert_org_reachable`（`core/data_permission.py`）作为跨组织可达性守卫的**唯一实现**，

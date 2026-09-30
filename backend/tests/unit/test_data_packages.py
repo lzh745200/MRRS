@@ -503,7 +503,7 @@ class TestValidateDataPackage:
         mock_svc.get_package.return_value = mock_pkg
         mock_svc.validate_package = AsyncMock(return_value=mock_result)
         mock_hist = MagicMock()
-        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=mock_hist):
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=mock_hist, perm=_perm(True)):
             resp = client_with_mocked_auth.post(f"{BASE}/1/validate")
             assert resp.status_code == 200
             mock_hist.record_validate.assert_called_once()
@@ -523,10 +523,23 @@ class TestValidateDataPackage:
         mock_svc.get_package.return_value = mock_pkg
         mock_svc.validate_package = AsyncMock(return_value=mock_result)
         mock_hist = MagicMock()
-        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=mock_hist):
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=mock_hist, perm=_perm(True)):
             resp = client_with_mocked_auth.post(f"{BASE}/1/validate")
             assert resp.status_code == 200
             assert resp.json()["is_valid"] is False
+
+    def test_no_permission_returns_404(self, client_with_mocked_auth):
+        """越权读回归：/validate 与 preview/confirm/download 同口径拒绝他组织数据包"""
+        mock_svc = MagicMock()
+        mock_svc.get_package.return_value = _pkg(org_id=999)
+        mock_svc.validate_package = AsyncMock()
+        mock_hist = MagicMock()
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=mock_hist, perm=_perm(False)):
+            resp = client_with_mocked_auth.post(f"{BASE}/1/validate")
+            assert resp.status_code == 404
+            # 未授权时不得解包，也不得写他人包的校验历史
+            mock_svc.validate_package.assert_not_called()
+            mock_hist.record_validate.assert_not_called()
 
 
 class TestPreviewDataPackage:

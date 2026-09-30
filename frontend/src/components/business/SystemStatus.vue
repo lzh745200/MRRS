@@ -131,6 +131,8 @@ const processMemoryMB = ref<number>(0)
 const processThreads = ref<number>(0)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
+/** 卸载标记：onMounted 的 await 期间可能已卸载，此后不得再创建定时器 */
+let unmounted = false
 
 // =========================================================================
 // 计算属性
@@ -225,6 +227,10 @@ const refresh = async () => {
 onMounted(async () => {
   await refresh()
 
+  // await 期间组件可能已被卸载：此时创建定时器会永不清理，
+  // 持续轮询并更新已销毁组件（onUnmounted 只清当时已存在的 timer）。
+  if (unmounted) return
+
   if (props.pollInterval > 0) {
     pollTimer = setInterval(() => {
       fetchSnapshot()
@@ -233,6 +239,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  unmounted = true
   if (pollTimer !== null) {
     clearInterval(pollTimer)
     pollTimer = null

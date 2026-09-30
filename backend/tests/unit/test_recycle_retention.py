@@ -175,3 +175,84 @@ class patch_backup:
     def __exit__(self, *a):
         for p in self.patches:
             p.stop()
+
+
+class TestBackupPrecedesPurge:
+    """深审 #55：兜底备份必须在**物理清除之前**触发。
+
+    原实现先 purge 再 trigger_immediate_backup，快照里已不含被删行 ——
+    docstring 承诺的"防误删兜底"名存实亡。
+    """
+
+    def test_backup_called_before_any_purge(self, mem_db):
+        now = datetime.now(timezone.utc)
+        victim = Fund(name="待清除", amount=1)
+        victim.is_active = False
+        victim.deleted_at = now - timedelta(days=40)
+        mem_db.add(victim)
+        mem_db.commit()
+
+        order: list[str] = []
+
+        def fake_backup(*a, **kw):
+            # 备份时刻必须仍能看到待删行
+            assert mem_db.query(Fund).filter(Fund.id == victim.id).first() is not None
+            order.append("backup")
+
+        def fake_purge(self, table, rid):
+            order.append("purge")
+            mem_db.query(Fund).filter(Fund.id == rid).delete()
+            mem_db.commit()
+            return {"success": True, "deleted_records": 1}
+
+        with __import__("unittest.mock", fromlist=["patch"]).patch(
+            "app.services.immediate_backup.trigger_immediate_backup", fake_backup
+        ), __import__("unittest.mock", fromlist=["patch"]).patch(
+            "app.services.cascade_purge_service.CascadePurgeService.purge", fake_purge
+        ):
+            result = purge_expired_soft_deleted(mem_db, days=30)
+
+        assert order == ["backup", "purge"]
+        assert result["total_records"] == 1
+
+    def test_backup_failure_aborts_purge_fail_closed(self, mem_db):
+        """备份失败时不得继续物理删除（没有兜底快照就不删）。"""
+        now = datetime.now(timezone.utc)
+        victim = Fund(name="待清除", amount=1)
+        victim.is_active = False
+        victim.deleted_at = now - timedelta(days=40)
+        mem_db.add(victim)
+        mem_db.commit()
+
+        purge_called: list[int] = []
+
+        def boom(*a, **kw):
+            raise RuntimeError("备份不可用")
+
+        def fake_purge(self, table, rid):
+            purge_called.append(rid)
+            return {"success": True, "deleted_records": 1}
+
+        with __import__("unittest.mock", fromlist=["patch"]).patch(
+            "app.services.immediate_backup.trigger_immediate_backup", boom
+        ), __import__("unittest.mock", fromlist=["patch"]).patch(
+            "app.services.cascade_purge_service.CascadePurgeService.purge", fake_purge
+        ):
+            result = purge_expired_soft_deleted(mem_db, days=30)
+
+        assert purge_called == []
+        assert result.get("backup_failed") is True
+        assert mem_db.query(Fund).filter(Fund.id == victim.id).first() is not None
+
+    def test_no_candidates_skips_backup_entirely(self, mem_db):
+        """没有待清除记录时不触发备份（原实现 total==0 也会备份）。"""
+        calls: list[int] = []
+
+        with __import__("unittest.mock", fromlist=["patch"]).patch(
+            "app.services.immediate_backup.trigger_immediate_backup",
+            lambda *a, **kw: calls.append(1),
+        ):
+            result = purge_expired_soft_deleted(mem_db, days=30)
+
+        assert calls == []
+        assert result["total_records"] == 0

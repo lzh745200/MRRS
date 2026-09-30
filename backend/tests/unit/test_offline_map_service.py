@@ -176,6 +176,66 @@ class TestOfflineMapService:
         service.clear_cache()
         assert service._map_data == {}
 
+
+class TestCoverageRobustness:
+    """深审 P-1：缓存目录被删除 / 扫描中文件消失时的健壮性。"""
+
+    @pytest.mark.asyncio
+    async def test_get_coverage_when_cache_dir_removed(self):
+        """__init__ 后目录被外部删除 → 应返回零覆盖而非抛 FileNotFoundError。"""
+        from app.services.offline_map_service import OfflineMapService
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service = OfflineMapService(cache_dir=Path(tmpdir))
+            Path(tmpdir).rmdir()
+            result = await service.get_coverage()
+            assert result["total_tiles"] == 0
+            assert result["zoom_levels"] == []
+            # 结果被缓存，二次调用不再打盘
+            assert service._coverage_cache is not None
+
+    @pytest.mark.asyncio
+    async def test_get_coverage_skips_non_dir_entries(self):
+        """z 层目录下混入普通文件不应计数，也不应崩。"""
+        from app.services.offline_map_service import OfflineMapService
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service = OfflineMapService(cache_dir=Path(tmpdir))
+            (Path(tmpdir) / "10" / "1").mkdir(parents=True)
+            (Path(tmpdir) / "10" / "1" / "2.png").write_bytes(b"tile")
+            (Path(tmpdir) / "10" / "stray.txt").write_text("noise", encoding="utf-8")
+            result = await service.get_coverage()
+            assert result["total_tiles"] == 1
+
+    @pytest.mark.asyncio
+    async def test_get_coverage_survives_stat_failure(self):
+        """扫描中某瓦片 stat() 抛 OSError（并发删除/占用）应跳过而非中断。"""
+        from app.services.offline_map_service import OfflineMapService
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service = OfflineMapService(cache_dir=Path(tmpdir))
+            (Path(tmpdir) / "10" / "1").mkdir(parents=True)
+            bad = Path(tmpdir) / "10" / "1" / "9.png"
+            bad.write_bytes(b"tile")
+
+            # 同时放一个好瓦片与一个非 png 文件：
+            # 坏瓦片被跳过、非 png 被跳过、好瓦片仍被统计
+            (Path(tmpdir) / "10" / "1" / "1.png").write_bytes(b"ok")
+            (Path(tmpdir) / "10" / "1" / "readme.txt").write_bytes(b"x")
+
+            real_stat = Path.stat
+
+            def flaky_stat(self, *a, **kw):
+                # 只让目标瓦片的 stat 失败；目录枚举（is_dir/iterdir 内部也走 stat）
+                # 与好瓦片不受影响
+                if self.name == "9.png":
+                    raise OSError("vanished")
+                return real_stat(self, *a, **kw)
+
+            with patch.object(Path, "stat", flaky_stat):
+                result = await service.get_coverage()
+
+            # 坏瓦片被跳过（不中断统计），好瓦片仍计入
+            assert result["total_tiles"] == 1
+            assert result["zoom_levels"] == [10]
+
 class TestGlobalInstance:
     """测试全局实例"""
 

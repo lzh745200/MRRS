@@ -58,53 +58,109 @@ export const useDataReportStore = defineStore('dataReport', () => {
     }
   }
 
-  /** 预览上报数据 */
+  /** 提取可展示的错误文案（与上方两个 fetch* 的既有口径一致） */
+  function _errMessage(e: any, fallback: string): string {
+    return e?.userMessage || e?.response?.data?.message || e?.message || fallback
+  }
+
+  /**
+   * 预览上报数据。
+   *
+   * 读/写方法统一 try/catch：原实现直接 await，失败既不写 error 也不重置 loading，
+   * 与 fetchReports/fetchReceivedReports 的处理标准不一致（页面只能靠自己的
+   * catch 兜底，store 侧完全不可观测）。失败仍向上抛出，交给调用方决定提示方式。
+   */
   async function previewReport(reportId: number) {
-    const res = await apiRequest<any>({
-      method: 'GET',
-      url: `/data-reports/${reportId}`,
-      timeout: 10000,
-    })
-    return res
+    loading.value = true
+    error.value = null
+    try {
+      const res = await apiRequest<any>({
+        method: 'GET',
+        url: `/data-reports/${reportId}`,
+        timeout: 10000,
+      })
+      return res
+    } catch (e: any) {
+      error.value = _errMessage(e, '加载上报详情失败')
+      throw e
+    } finally {
+      loading.value = false
+    }
   }
 
   /** 接收/批准上报 */
   async function receiveReport(reportId: number) {
-    await apiRequest<any>({
-      method: 'POST',
-      url: `/data-reports/${reportId}/approve`,
-      timeout: 15000,
-    })
+    loading.value = true
+    error.value = null
+    try {
+      await apiRequest<any>({
+        method: 'POST',
+        url: `/data-reports/${reportId}/approve`,
+        timeout: 15000,
+      })
+    } catch (e: any) {
+      error.value = _errMessage(e, '接收上报失败')
+      throw e
+    } finally {
+      loading.value = false
+    }
   }
 
   /** 拒绝上报 */
   async function rejectReport(reportId: number, reason: string) {
-    await apiRequest<any>({
-      method: 'POST',
-      url: `/data-reports/${reportId}/review`,
-      data: { decision: 'reject', comment: reason },
-      timeout: 10000,
-    })
+    loading.value = true
+    error.value = null
+    try {
+      await apiRequest<any>({
+        method: 'POST',
+        url: `/data-reports/${reportId}/review`,
+        data: { decision: 'reject', comment: reason },
+        timeout: 10000,
+      })
+    } catch (e: any) {
+      error.value = _errMessage(e, '拒绝上报失败')
+      throw e
+    } finally {
+      loading.value = false
+    }
   }
 
   /** 下载上报数据包 */
   async function downloadReport(reportId: number) {
-    const res = await apiRequest<any>({
-      method: 'GET',
-      url: `/data-reports/${reportId}/package`,
-      timeout: 10000,
-    })
-    return res
+    loading.value = true
+    error.value = null
+    try {
+      const res = await apiRequest<any>({
+        method: 'GET',
+        url: `/data-reports/${reportId}/package`,
+        timeout: 10000,
+      })
+      return res
+    } catch (e: any) {
+      error.value = _errMessage(e, '下载上报数据包失败')
+      throw e
+    } finally {
+      loading.value = false
+    }
   }
 
   /** 提交上报 */
   async function submitReport(data: any) {
-    await apiRequest<any>({
-      method: 'POST',
-      url: '/data-reports',
-      data,
-      timeout: 15000,
-    })
+    loading.value = true
+    error.value = null
+    try {
+      await apiRequest<any>({
+        method: 'POST',
+        url: '/data-reports',
+        data,
+        timeout: 15000,
+      })
+    } catch (e: any) {
+      error.value = _errMessage(e, '提交上报失败')
+      throw e
+    } finally {
+      loading.value = false
+    }
   }
 
   return {

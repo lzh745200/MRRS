@@ -13,8 +13,16 @@ import {
   getRoleFromLocalStorage,
 } from '@/utils/roleAccess'
 
+/**
+ * 写入一份**完整**的会话凭据（token + user）。
+ *
+ * R16：AuthStorage.getUser() 改为从 _activeCredentials() 同源取值——
+ * 会话槽只有 user 而没有 token 时不再被当作已登录身份（fail-closed，
+ * 防止拼出"A 的 token + B 的档案"）。因此这里必须同时写入 token。
+ */
 function setAuthUser(user: Record<string, unknown>) {
   sessionStorage.clear()
+  sessionStorage.setItem('auth_token', 'test-token')
   sessionStorage.setItem('auth_user', JSON.stringify(user))
 }
 
@@ -92,20 +100,21 @@ describe('roleAccess utility', () => {
 
   it('getRoleFromLocalStorage returns default when no user', () => {
     sessionStorage.clear()
-    expect(getRoleFromLocalStorage()).toBe('viewer')
-    expect(getRoleFromLocalStorage('operator')).toBe('operator')
+    // 默认值 'user'（与 normalizeRole 一致）；入参同样被归一化
+    expect(getRoleFromLocalStorage()).toBe('user')
+    expect(getRoleFromLocalStorage('operator')).toBe('user')
   })
 
   it('getRoleFromLocalStorage reads sessionStorage auth_user', () => {
-    sessionStorage.clear()
-    sessionStorage.setItem('auth_user', JSON.stringify({ role: 'manager' }))
-    expect(getRoleFromLocalStorage()).toBe('manager')
+    setAuthUser({ role: 'manager' })
+    expect(getRoleFromLocalStorage()).toBe('admin')
   })
 
   it('getRoleFromLocalStorage handles invalid json', () => {
     sessionStorage.clear()
+    sessionStorage.setItem('auth_token', 'test-token')
     sessionStorage.setItem('auth_user', '{invalid')
-    expect(getRoleFromLocalStorage()).toBe('viewer')
+    expect(getRoleFromLocalStorage()).toBe('user')
   })
 })
 
@@ -208,17 +217,29 @@ describe('getRoleFromLocalStorage 补充', () => {
     expect(getRoleFromLocalStorage()).toBe('admin')
   })
 
-  it('用户无 role 字段 → 回退 defaultRole', () => {
+  it('用户无 role 字段 → 回退 defaultRole（归一化后）', () => {
     setAuthUser({})
-    expect(getRoleFromLocalStorage()).toBe('viewer')
+    // 默认值与 normalizeRole 对齐为 'user'（R16：原默认 'viewer' 与
+    // normalizeRole('') 的 'user' 互相矛盾，同一用户在不同入口得到不同角色）
+    expect(getRoleFromLocalStorage()).toBe('user')
     expect(getRoleFromLocalStorage('user')).toBe('user')
+    // 旧角色作为默认值也会被归一化
+    expect(getRoleFromLocalStorage('operator')).toBe('user')
+    expect(getRoleFromLocalStorage('manager')).toBe('admin')
   })
 
   it('getUser 抛错 → default（catch 分支）', () => {
     const spy = vi.spyOn(AuthStorage, 'getUser').mockImplementation(() => {
       throw new Error('boom')
     })
-    expect(getRoleFromLocalStorage()).toBe('viewer')
+    expect(getRoleFromLocalStorage()).toBe('user')
     spy.mockRestore()
+  })
+
+  it('返回值恒为归一化角色（不再透出原始历史角色）', () => {
+    setAuthUser({ role: 'manager' })
+    expect(getRoleFromLocalStorage()).toBe('admin')
+    setAuthUser({ role: 'operator' })
+    expect(getRoleFromLocalStorage()).toBe('user')
   })
 })

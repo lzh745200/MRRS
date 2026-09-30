@@ -16,7 +16,28 @@ const { mockPost, mockApiRequest, mockRequestGet, mockDownloadBlob } = vi.hoiste
 vi.mock('@/api/request', () => ({
   post: (url: string, ...rest: any[]) => mockPost(url, ...rest),
   apiRequest: (...args: any[]) => mockApiRequest(...args),
-  parseContentDisposition: (_headers: any, fallback = 'download') => fallback,
+  // 必须反映真实解析语义（否则"响应头文件名优先"这条断言永远测不到实现）。
+  // 用一个忠实的极简替身覆盖 filename* 与 filename="..." 两种形态。
+  parseContentDisposition: (headers: any, fallback = 'download') => {
+    const cd = headers?.['content-disposition'] || headers?.['Content-Disposition']
+    if (!cd) return fallback
+    const star = cd.match(/filename\*=([^;]+)/i)
+    if (star) {
+      const raw = star[1].trim()
+      const i = raw.indexOf("''")
+      if (i >= 0) {
+        try {
+          const decoded = decodeURIComponent(raw.slice(i + 2))
+          if (decoded) return decoded
+        } catch {
+          /* fallthrough */
+        }
+      }
+    }
+    const quoted = cd.match(/filename="?([^";]+)"?/i)
+    if (quoted && quoted[1].trim()) return quoted[1].trim()
+    return fallback
+  },
   downloadBlob: (...args: any[]) => mockDownloadBlob(...args),
   default: {
     get: (url: string, config?: any) => mockRequestGet(url, config),

@@ -37,8 +37,15 @@ describe('utils/authStorage', () => {
 
   describe('setUser / getUser', () => {
     it('写入并读取用户 JSON', () => {
+      // R16：凭据同源 —— 会话槽必须同时有 token 才被视为有效身份
+      AuthStorage.setToken('t')
       AuthStorage.setUser(USER)
       expect(AuthStorage.getUser()).toEqual(USER)
+    })
+
+    it('仅有 user 而无 token → null（凭据不完整，fail-closed）', () => {
+      AuthStorage.setUser(USER)
+      expect(AuthStorage.getUser()).toBeNull()
     })
 
     it('无用户时返回 null', () => {
@@ -46,6 +53,7 @@ describe('utils/authStorage', () => {
     })
 
     it('非法 JSON 返回 null', () => {
+      AuthStorage.setToken('t')
       sessionStorage.setItem('auth_user', 'not-json{')
       expect(AuthStorage.getUser()).toBeNull()
     })
@@ -53,6 +61,8 @@ describe('utils/authStorage', () => {
 
   describe('setRefreshToken / getRefreshToken', () => {
     it('写入并读取刷新令牌', () => {
+      AuthStorage.setToken('t')
+      AuthStorage.setUser(USER)
       AuthStorage.setRefreshToken('rt-1')
       expect(AuthStorage.getRefreshToken()).toBe('rt-1')
     })
@@ -187,6 +197,7 @@ describe('utils/authStorage', () => {
     })
 
     it('getAuthUser 委托 AuthStorage.getUser', () => {
+      AuthStorage.setToken('t')
       AuthStorage.setUser(USER)
       expect(getAuthUser()).toEqual(USER)
     })
@@ -276,6 +287,87 @@ describe('utils/authStorage', () => {
       expect(AuthStorage.hasPersistedAuth()).toBe(false)
       expect(AuthStorage.getToken()).toBeNull()
       expect(localStorage.getItem('auth_persist_token')).toBeNull()
+    })
+  })
+
+  // 2026-09-30 深审：原先 getToken/getUser/getRefreshToken 是三条**彼此独立**的
+  // 回退链，可以拼出"A 的 token + B 的档案/刷新令牌"这类串号组合。
+  // 现改为整份凭据同源（_activeCredentials）。
+  describe('凭据同源（拒绝跨来源拼接）', () => {
+    it('会话 token 与持久 user 属不同凭据时 → 不返回该 user（isAuthenticated 为 false）', () => {
+      AuthStorage.setToken('token-A')
+      // 持久槽属于另一个用户/另一次登录（token 不同）
+      AuthStorage.persistForAutoLogin({ token: 'token-B', user: USER, refreshToken: 'rt-B' })
+      expect(AuthStorage.getToken()).toBe('token-A')
+      expect(AuthStorage.getUser()).toBeNull()
+      expect(AuthStorage.getRefreshToken()).toBeNull()
+      expect(AuthStorage.isAuthenticated()).toBe(false)
+    })
+
+    it('会话 token 与持久 token 完全一致时 → 允许用持久档案补齐（续期只写 token 的正常路径）', () => {
+      AuthStorage.persistForAutoLogin({ token: 'same-t', user: USER, refreshToken: 'rt-same' })
+      AuthStorage.setToken('same-t')
+      expect(AuthStorage.getUser()).toEqual(USER)
+      expect(AuthStorage.getRefreshToken()).toBe('rt-same')
+      expect(AuthStorage.isAuthenticated()).toBe(true)
+    })
+
+    it('会话自带完整档案 → 整份以会话为准，不借用持久槽任何字段', () => {
+      AuthStorage.persistForAutoLogin({
+        token: 'same-t2',
+        user: { id: '2', username: 'other', role: 'user' },
+        refreshToken: 'rt-2',
+      })
+      AuthStorage.setToken('same-t2')
+      AuthStorage.setUser(USER)
+      // 会话槽 token+user 齐备即为权威来源：档案与 refresh 都不跨界取用
+      expect(AuthStorage.getUser()).toEqual(USER)
+      expect(AuthStorage.getRefreshToken()).toBeNull()
+    })
+
+    it('会话 refresh 缺失且持久 token 不同 → 不借用别人的刷新令牌', () => {
+      AuthStorage.setToken('token-x')
+      AuthStorage.setUser(USER)
+      AuthStorage.persistForAutoLogin({ token: 'token-y', user: USER, refreshToken: 'rt-y' })
+      expect(AuthStorage.getRefreshToken()).toBeNull()
+    })
+
+    it('会话有 token+refresh 但档案缺失 → refresh 仍保留（同源，401 续期不可失效）', () => {
+      // 回归：早期实现该分支把 refresh 一并置 null，导致"access 已轮换、档案未回填"
+      // 的会话无法续期（登出吊销也拿不到 refresh_token）。
+      AuthStorage.setToken('t-keep')
+      AuthStorage.setRefreshToken('rt-keep')
+      expect(AuthStorage.getUser()).toBeNull() // 无档案 → isAuthenticated 为 false
+      expect(AuthStorage.isAuthenticated()).toBe(false)
+      expect(AuthStorage.getRefreshToken()).toBe('rt-keep')
+    })
+
+    it('会话完全为空时整体回退持久凭据', () => {
+      AuthStorage.persistForAutoLogin({ token: 'p-t', user: USER, refreshToken: 'p-rt' })
+      expect(AuthStorage.getToken()).toBe('p-t')
+      expect(AuthStorage.getUser()).toEqual(USER)
+      expect(AuthStorage.getRefreshToken()).toBe('p-rt')
+    })
+
+    it('无会话/无持久时回退旧版 localStorage 键（含 user 与 refresh）', () => {
+      localStorage.setItem('access_token', 'legacy-t')
+      localStorage.setItem('user', JSON.stringify(USER))
+      localStorage.setItem('refresh_token', 'legacy-rt')
+      expect(AuthStorage.getToken()).toBe('legacy-t')
+      expect(AuthStorage.getUser()).toEqual(USER)
+      expect(AuthStorage.getRefreshToken()).toBe('legacy-rt')
+    })
+
+    it('setAuthData 无 refreshToken 时清除上一会话遗留的刷新令牌（防串号续期）', () => {
+      AuthStorage.setRefreshToken('stale-rt')
+      AuthStorage.setAuthData({ token: 'new-t', user: USER })
+      expect(AuthStorage.getRefreshToken()).toBeNull()
+    })
+
+    it('持久 user 为非对象 JSON（如 "abc"）时视为无档案', () => {
+      localStorage.setItem('auth_persist_token', 'p-t2')
+      localStorage.setItem('auth_persist_user', JSON.stringify('abc'))
+      expect(AuthStorage.getUser()).toBeNull()
     })
   })
 })

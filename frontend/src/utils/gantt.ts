@@ -10,9 +10,18 @@ export interface GanttItem {
   progress?: number
 }
 
+/** 纯日期（YYYY-MM-DD）——只有这种形态才做 '/' 替换（见下） */
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
+
 function toTs(s?: string | null): number | null {
   if (!s) return null
-  const t = new Date(s.replace(/-/g, '/')).getTime()
+  const raw = String(s)
+  // 原实现对**所有** '-' 做替换：'2026-09-17T10:00:00Z' → '2026/09/17T10:00:00Z'
+  // （Z 被当成本地时间，偏移 8 小时），'2026-09-17T10:00:00-05:00' → '…/05:00' → NaN，
+  // 脏值随后进入 hasRange 与条形偏移。只有纯日期串在部分引擎里需要替换成 '/' 才能
+  // 稳定按**本地时间**解析，其余原样交给 Date（保留 Z/偏移语义）。
+  const normalized = DATE_ONLY_RE.test(raw) ? raw.replace(/-/g, '/') : raw
+  const t = new Date(normalized).getTime()
   return Number.isNaN(t) ? null : t
 }
 

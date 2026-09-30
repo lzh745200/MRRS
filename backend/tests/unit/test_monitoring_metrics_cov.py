@@ -25,13 +25,21 @@ class TestGetBusinessMetrics:
 
 class TestGetPrometheusMetrics:
     async def test_plain_text_response(self):
+        """深审 #61：/prometheus 已收敛为管理员可见，调用需传 current_user。"""
         svc = MagicMock()
         svc.to_prometheus_format.return_value = "fund_approval_rate 0.9\n"
+        admin = SimpleNamespace(is_superuser=True, role="admin")
         with patch.object(m, "business_metrics_service", svc):
-            result = await m.get_prometheus_metrics()
+            result = await m.get_prometheus_metrics(current_user=admin)
         assert result.media_type == "text/plain; charset=utf-8"
         assert result.body == b"fund_approval_rate 0.9\n"
         svc.to_prometheus_format.assert_called_once_with()
+
+    async def test_non_admin_forbidden(self):
+        user = SimpleNamespace(is_superuser=False, role="user")
+        with pytest.raises(HTTPException) as exc_info:
+            await m.get_prometheus_metrics(current_user=user)
+        assert exc_info.value.status_code == 403
 
 
 class TestGetPerformanceDashboard:

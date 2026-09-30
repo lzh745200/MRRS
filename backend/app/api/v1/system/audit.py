@@ -62,10 +62,16 @@ class BatchDeleteRequest(BaseModel):
     @field_validator("actions", mode="before")
     @classmethod
     def normalize_actions(cls, v):
-        """兼容前端旧字段名 action_types（保留向后兼容，由路由层适配）。"""
+        """归一为操作类型列表（深审 #79）。
+
+        原实现对入参直接 for-in：字符串 "login" 被拆成 ['l', 'o', 'g', 'i', 'n']
+        （按字符匹配操作类型 → 删错记录），标量 int 则抛 TypeError（validator 内
+        非 ValueError → 500）。非列表一律整体作为单个元素处理。
+        """
         if v is None:
             return v
-        return [str(a).strip() for a in v if a is not None]
+        items = list(v) if isinstance(v, (list, tuple, set)) else [v]
+        return [str(a).strip() for a in items if a is not None]
 
     @field_validator("before_date", mode="before")
     @classmethod

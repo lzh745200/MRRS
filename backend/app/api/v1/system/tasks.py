@@ -201,7 +201,10 @@ async def get_task(
     current_user=Depends(get_current_user),
 ):
     """获取指定任务的详细信息和执行状态"""
-    task = _tasks.get(task_id)
+    with _tasks_lock:
+        task = _tasks.get(task_id)
+        # 锁内复制快照，避免与后台线程的写并发时返回撕裂的字段组合
+        task = dict(task) if task else None
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
 
@@ -230,31 +233,50 @@ async def create_task(
     def _execute_task(task_id: str):
         import time
 
-        task = _tasks.get(task_id)
-        if not task:
-            return
-
-        task["status"] = TaskStatus.RUNNING.value
-        task["started_at"] = datetime.now(timezone.utc).isoformat()
-        task["message"] = "任务执行中..."
+        # 深审 #90：所有 _tasks 读写一律在 _tasks_lock 内完成。
+        # 原实现后台线程裸写 task 字典，与请求线程的取消/删除/回收并发时
+        # 既会撕裂读，也会把已被用户取消的任务回写成 COMPLETED。
+        with _tasks_lock:
+            task = _tasks.get(task_id)
+            if not task:
+                return
+            if task["status"] in _TERMINAL_STATUSES:
+                # 已被取消（或已终结）：绝不把终态回写成 RUNNING/COMPLETED
+                return
+            task["status"] = TaskStatus.RUNNING.value
+            task["started_at"] = datetime.now(timezone.utc).isoformat()
+            task["message"] = "任务执行中..."
 
         try:
             # 模拟执行步骤
             for i in range(1, 6):
                 time.sleep(0.5)
-                task["progress"] = i * 20.0
-                task["message"] = f"正在执行第 {i}/5 步..."
+                with _tasks_lock:
+                    task = _tasks.get(task_id)
+                    # 任务被取消/删除后立即停止推进，不再写回任何状态
+                    if not task or task["status"] == TaskStatus.CANCELLED.value:
+                        return
+                    task["progress"] = i * 20.0
+                    task["message"] = f"正在执行第 {i}/5 步..."
 
-            task["status"] = TaskStatus.COMPLETED.value
-            task["progress"] = 100.0
-            task["message"] = "任务执行完成"
-            task["completed_at"] = datetime.now(timezone.utc).isoformat()
-            task["result"] = {"success": True, "message": "任务执行成功"}
+            with _tasks_lock:
+                task = _tasks.get(task_id)
+                if not task or task["status"] == TaskStatus.CANCELLED.value:
+                    return
+                task["status"] = TaskStatus.COMPLETED.value
+                task["progress"] = 100.0
+                task["message"] = "任务执行完成"
+                task["completed_at"] = datetime.now(timezone.utc).isoformat()
+                task["result"] = {"success": True, "message": "任务执行成功"}
         except Exception as e:
-            task["status"] = TaskStatus.FAILED.value
-            task["message"] = f"任务执行失败: {str(e)}"
-            task["completed_at"] = datetime.now(timezone.utc).isoformat()
-            task["result"] = {"success": False, "error": str(e)}
+            with _tasks_lock:
+                task = _tasks.get(task_id)
+                if not task or task["status"] == TaskStatus.CANCELLED.value:
+                    return
+                task["status"] = TaskStatus.FAILED.value
+                task["message"] = f"任务执行失败: {str(e)}"
+                task["completed_at"] = datetime.now(timezone.utc).isoformat()
+                task["result"] = {"success": False, "error": str(e)}
 
     background_tasks.add_task(_execute_task, record["task_id"])
 
@@ -274,16 +296,19 @@ async def cancel_task(
 
     仅可取消状态为 pending 或 running 的任务。
     """
-    task = _tasks.get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    with _tasks_lock:
+        task = _tasks.get(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
 
-    if task["status"] not in (TaskStatus.PENDING.value, TaskStatus.RUNNING.value):
-        raise HTTPException(status_code=400, detail=f"任务状态为 {task['status']}，无法取消")
+        if task["status"] not in (TaskStatus.PENDING.value, TaskStatus.RUNNING.value):
+            raise HTTPException(status_code=400, detail=f"任务状态为 {task['status']}，无法取消")
 
-    task["status"] = TaskStatus.CANCELLED.value
-    task["message"] = "任务已被用户取消"
-    task["completed_at"] = datetime.now(timezone.utc).isoformat()
+        # 状态判定与写入必须在同一临界区：否则后台线程可能在两者之间完成任务，
+        # 取消请求仍把 COMPLETED 覆盖成 CANCELLED（或反之）。
+        task["status"] = TaskStatus.CANCELLED.value
+        task["message"] = "任务已被用户取消"
+        task["completed_at"] = datetime.now(timezone.utc).isoformat()
 
     logger.info(
         "任务 %s 已被用户 %s 取消",
@@ -303,14 +328,15 @@ async def delete_task(
 
     仅允许删除已完成、已失败或已取消的任务。
     """
-    task = _tasks.get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
-
-    if task["status"] in (TaskStatus.PENDING.value, TaskStatus.RUNNING.value):
-        raise HTTPException(status_code=400, detail="不能删除正在执行或等待中的任务，请先取消")
-
     with _tasks_lock:
+        task = _tasks.get(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+
+        if task["status"] in (TaskStatus.PENDING.value, TaskStatus.RUNNING.value):
+            raise HTTPException(status_code=400, detail="不能删除正在执行或等待中的任务，请先取消")
+
+        # 存在性检查与删除同一临界区：否则可能被保留期回收后 KeyError → 500
         del _tasks[task_id]
 
     return {"success": True, "message": f"任务 {task_id} 已删除"}

@@ -217,7 +217,11 @@ class TestFetchReportDataIsolation:
 
     @pytest.mark.asyncio
     async def test_fetch_report_data_admin_no_filtering(self):
-        """admin 用户：filter_by_data_scope 返回 query 不变，直接 limit().all()。"""
+        """admin 用户：filter_by_data_scope 返回 query 不变，按 id 排序取全量。
+
+        深审 #49：原先 `limit(100)` 硬截断改为 `order_by(id).all()` + 超上限
+        （_MAX_REPORT_ROWS=20000）时截断并 WARNING，故此处断言 order_by/all。
+        """
         db = MagicMock()
         q = _make_self_chain_query(all_result=[])
         db.query.return_value = q
@@ -228,8 +232,9 @@ class TestFetchReportDataIsolation:
         result = await svc._fetch_report_data({}, user=admin_user)
 
         assert result == []
-        # admin 用户 → filter_by_data_scope 直接返回 query → query.limit(100).all()
-        q.limit.assert_called_once_with(100)
+        # admin 用户 → filter_by_data_scope 直接返回 query → query.order_by(...).all()
+        q.order_by.assert_called_once()
+        q.limit.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_fetch_report_data_non_admin_gets_filtered(self):

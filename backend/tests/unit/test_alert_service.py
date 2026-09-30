@@ -19,20 +19,24 @@ class TestSendEmailAlert:
             mock_st.SMTP_USER = "user@test.com"
             mock_st.SMTP_PASSWORD = "secret"
             mock_st.SMTP_FROM = "noreply@test.com"
+            mock_st.SMTP_TIMEOUT = 10
 
             with patch("smtplib.SMTP", return_value=mock_server) as smtp_cls:
                 result = await AlertService.send_email_alert(
                     ["a@b.com", "c@d.com"], "主题", "内容"
                 )
                 assert result is True
-                smtp_cls.assert_called_once_with("smtp.test.com", 587)
+                # 深审 #69：SMTP 必须带超时（服务器挂起时不再无限阻塞）
+                smtp_cls.assert_called_once_with("smtp.test.com", 587, timeout=10)
+                # starttls 必须显式传 SSL context（否则不校验证书/主机名）
                 mock_server.starttls.assert_called_once()
+                assert mock_server.starttls.call_args[1]["context"] is not None
                 mock_server.login.assert_called_once_with("user@test.com", "secret")
                 mock_server.send_message.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_smtp_from_none(self):
-        """SMTP_FROM 为 None 时不影响发送"""
+        """SMTP_FROM 为 None 时回退到 SMTP_USER（原实现发出空发件人）"""
         from app.services.alert_service import AlertService
 
         mock_server = MagicMock()
@@ -43,13 +47,39 @@ class TestSendEmailAlert:
             mock_st.SMTP_USER = "user@test.com"
             mock_st.SMTP_PASSWORD = "secret"
             mock_st.SMTP_FROM = None
+            mock_st.SMTP_TIMEOUT = 10
 
             with patch("smtplib.SMTP", return_value=mock_server):
                 result = await AlertService.send_email_alert(
                     ["a@b.com"], "主题", "内容"
                 )
                 assert result is True
-                mock_server.send_message.assert_called_once()
+                sent = mock_server.send_message.call_args[0][0]
+                assert sent["From"] == "user@test.com"
+
+    @pytest.mark.asyncio
+    async def test_smtp_timeout_fallback_on_invalid_value(self):
+        """SMTP_TIMEOUT 非法值 → 回退 10 秒并告警，不影响发送"""
+        from app.services.alert_service import AlertService
+
+        mock_server = MagicMock()
+        mock_server.__enter__.return_value = mock_server
+        with patch("app.services.alert_service.settings") as mock_st:
+            mock_st.SMTP_HOST = "smtp.test.com"
+            mock_st.SMTP_PORT = 587
+            mock_st.SMTP_USER = "user@test.com"
+            mock_st.SMTP_PASSWORD = "secret"
+            mock_st.SMTP_FROM = "noreply@test.com"
+            mock_st.SMTP_TIMEOUT = "not-a-number"
+
+            with patch("smtplib.SMTP", return_value=mock_server) as smtp_cls:
+                with patch("app.services.alert_service.logger") as mock_log:
+                    result = await AlertService.send_email_alert(
+                        ["a@b.com"], "主题", "内容"
+                    )
+                    assert result is True
+                    smtp_cls.assert_called_once_with("smtp.test.com", 587, timeout=10)
+                    mock_log.warning.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_incomplete_config(self):
@@ -62,6 +92,7 @@ class TestSendEmailAlert:
             mock_st.SMTP_PASSWORD = None
             mock_st.SMTP_PORT = 587
             mock_st.SMTP_FROM = None
+            mock_st.SMTP_TIMEOUT = 10
 
             with patch("app.services.alert_service.logger") as mock_log:
                 result = await AlertService.send_email_alert(
@@ -83,6 +114,7 @@ class TestSendEmailAlert:
             mock_st.SMTP_PASSWORD = "pass"
             mock_st.SMTP_PORT = 587
             mock_st.SMTP_FROM = "noreply@test.com"
+            mock_st.SMTP_TIMEOUT = 10
 
             with patch("smtplib.SMTP", side_effect=Exception("conn refused")):
                 with patch("app.services.alert_service.logger") as mock_log:

@@ -46,14 +46,19 @@ class ApprovalReminderService:
     def start(self):
         """启动后台提醒线程
 
-        R12-4：判据同时看 _running 与线程存活 —— 上一轮 stop() 若在 join 超时
-        （扫描正在跑 DB 查询）后返回，线程仍在收尾，此时只凭 _running 判断会
-        再起一个线程，出现两个扫描循环并存。
+        R12-4：判据看线程存活 —— 上一轮 stop() 若在 join 超时（扫描正在跑 DB
+        查询）后返回，线程仍在收尾，此时只凭 _running 判断会再起一个线程，
+        出现两个扫描循环并存。
+        2026-09-30 深审修复：join 超时时 stop() 会保留 _running=True 标记，
+        而线程事后自行退出并不会清它 → 旧判据下同一实例永不能重启。现以
+        "线程是否存活"为唯一判据，并清理残留标记。
         """
-        if self._running or (self._thread is not None and self._thread.is_alive()):
+        if self._thread is not None and self._thread.is_alive():
             logger.warning("审批提醒服务已在运行中")
             return
 
+        # 线程已退出（或从未启动）：清掉可能残留的运行标记
+        self._running = False
         self._stop_event.clear()
         self._stopped_event.clear()
         self._thread = threading.Thread(
@@ -65,10 +70,15 @@ class ApprovalReminderService:
         self._running = True
         logger.info(f"审批提醒服务已启动，检查间隔: {self._check_interval // 60}分钟")
 
-    def stop(self):
-        """停止后台提醒线程（join 超时则保留运行标记，交由 start 判据兜底）"""
+    def stop(self) -> bool:
+        """停止后台提醒线程
+
+        Returns:
+            bool: True 表示线程已确认退出；False 表示 join 超时、线程仍在收尾
+            （此时保留 _running 标记；调用方不得清空单例，否则会再起一个扫描循环）
+        """
         if not self._running and (self._thread is None or not self._thread.is_alive()):
-            return
+            return True
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=STOP_JOIN_TIMEOUT_SECONDS)
@@ -77,10 +87,11 @@ class ApprovalReminderService:
                     "审批提醒线程 %.1fs 内未退出（扫描进行中），保留运行标记避免重复启动",
                     STOP_JOIN_TIMEOUT_SECONDS,
                 )
-                return
+                return False
         self._running = False
         self._stopped_event.set()
         logger.info("审批提醒服务已停止")
+        return True
 
     def _scan_loop(self):  # pragma: no cover
         """后台扫描循环"""
@@ -343,6 +354,8 @@ def stop_approval_reminder(service: Optional[ApprovalReminderService] = None):  
     global _reminder_service
     target = service or _reminder_service
     if target:
-        target.stop()
-        if target is _reminder_service:
+        stopped = target.stop()
+        # 仅在确认线程退出后清空单例：join 超时仍存活时清空会让下一次
+        # start_approval_reminder 新建实例并起第二个扫描循环（重复提醒/连接翻倍）
+        if target is _reminder_service and stopped:
             _reminder_service = None

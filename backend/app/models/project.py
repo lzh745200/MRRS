@@ -176,9 +176,21 @@ class Project(Base):
     def __repr__(self):
         return f"<Project(id={self.id}, name={self.name}, status={self.status})>"
 
-    def to_dict(self):
-        """Convert to dictionary."""
-        return {
+    # ── PII 出站脱敏（深审 #53）──
+    # to_dict 是 Project 的模型级序列化出口，此前对联系人与银行账号一律明文输出
+    # （列表/详情/导出对所有可见者一致）。默认脱敏，只有明确需要全量值的授权
+    # 端点才显式传 mask_pii=False。
+    _MASK_PHONE_FIELDS = ("contact_phone", "payer_contact", "payee_contact")
+    _MASK_ACCOUNT_FIELDS = ("payer_account_number", "payee_account_number")
+
+    def to_dict(self, *, mask_pii: bool = True):
+        """Convert to dictionary.
+
+        Args:
+            mask_pii: 默认 True —— 联系电话输出 138****8000、银行账号输出
+                ****1234；授权端点需要全量值时传 False。
+        """
+        data = {
             "id": self.id,
             "name": self.name,
             "code": self.code,
@@ -230,6 +242,36 @@ class Project(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+        if mask_pii:
+            for field in self._MASK_PHONE_FIELDS:
+                data[field] = _mask_phone(data.get(field))
+            for field in self._MASK_ACCOUNT_FIELDS:
+                data[field] = _mask_account(data.get(field))
+        return data
+
+    def to_dict_unmasked(self) -> dict:
+        """返回含全量 PII 的 dict —— 仅限已授权的导出/同步路径调用。"""
+        return self.to_dict(mask_pii=False)
+
+
+def _mask_phone(value):
+    """电话/手机脱敏：保留前 3 位与后 4 位（138****8000）。"""
+    if not value:
+        return value
+    text = str(value)
+    if len(text) < 7:
+        return "*" * len(text)
+    return f"{text[:3]}****{text[-4:]}"
+
+
+def _mask_account(value):
+    """银行账号/卡号脱敏：只保留后 4 位（****1234）。"""
+    if not value:
+        return value
+    text = str(value)
+    if len(text) <= 4:
+        return "*" * len(text)
+    return "****" + text[-4:]
 
 
 # 重新导出 Fund 以兼容 from app.models.project import Fund 的写法

@@ -12,9 +12,24 @@
 """
 
 import logging
+import os
 import time
 
 logger = logging.getLogger("app.request")
+
+# 可信代理（直连对端地址）：只有对端本身可信时，X-Forwarded-For / X-Real-IP
+# 才有意义。否则任何客户端都能伪造日志中的来源 IP（深审 #34 —— 溯源证据不可信）。
+# 默认覆盖本机回环与 TestClient；反代部署时用 TRUSTED_PROXIES 追加（逗号分隔）。
+_DEFAULT_TRUSTED_PROXIES = frozenset({"127.0.0.1", "::1", "localhost", "testclient"})
+
+
+def _trusted_proxies() -> frozenset:
+    """可信代理集合 = 默认回环集合 ∪ 环境变量 TRUSTED_PROXIES（逗号分隔）。"""
+    extra = os.environ.get("TRUSTED_PROXIES", "")
+    if not extra:
+        return _DEFAULT_TRUSTED_PROXIES
+    return _DEFAULT_TRUSTED_PROXIES | {item.strip() for item in extra.split(",") if item.strip()}
+
 
 # 不记录日志的路径前缀
 _SKIP_PREFIXES = (
@@ -26,19 +41,21 @@ _SKIP_PREFIXES = (
 
 
 def _get_client_ip(scope: dict) -> str:
-    """从 ASGI scope 中提取客户端 IP"""
-    # 优先从 headers 获取代理后的真实 IP
-    headers = dict(scope.get("headers", []))
-    forwarded = headers.get(b"x-forwarded-for")
-    if forwarded:
-        return forwarded.decode("utf-8", errors="replace").split(",")[0].strip()
-    real_ip = headers.get(b"x-real-ip")
-    if real_ip:
-        return real_ip.decode("utf-8", errors="replace").strip()
-    # 回退到 socket 地址
+    """从 ASGI scope 中提取客户端 IP（不可信对端一律用 socket 地址）"""
     client = scope.get("client")
-    if client:
-        return client[0]
+    peer_ip = client[0] if client else None
+
+    if peer_ip and peer_ip in _trusted_proxies():
+        headers = dict(scope.get("headers", []))
+        forwarded = headers.get(b"x-forwarded-for")
+        if forwarded:
+            return forwarded.decode("utf-8", errors="replace").split(",")[0].strip()
+        real_ip = headers.get(b"x-real-ip")
+        if real_ip:
+            return real_ip.decode("utf-8", errors="replace").strip()
+
+    if peer_ip:
+        return peer_ip
     return "unknown"
 
 

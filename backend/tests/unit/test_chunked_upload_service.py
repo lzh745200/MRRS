@@ -551,6 +551,83 @@ class TestChunkedUploadService:
         assert result == "/already/merged.bin"
 
     @pytest.mark.asyncio
+    async def test_merge_chunks_rejects_merging_state(self):
+        """深审 #2：MERGING 状态重入必须拒绝，不得并发写同一 final_path。"""
+        service = ChunkedUploadService(temp_dir=".", final_dir=".")
+        session = service.create_session("f.bin", 100, 1)
+        session.chunks[0].uploaded = True
+        session.status = ChunkUploadStatus.MERGING
+        with pytest.raises(ValueError, match="already merging"):
+            await service.merge_chunks(session.session_id)
+
+    @pytest.mark.asyncio
+    async def test_merge_chunks_rejects_when_lock_held(self):
+        """锁被占用（并发调用）时同样拒绝。"""
+        service = ChunkedUploadService(temp_dir=".", final_dir=".")
+        session = service.create_session("f.bin", 100, 1)
+        session.chunks[0].uploaded = True
+        lock = service._get_session_lock(session.session_id)
+        lock.acquire()
+        try:
+            with pytest.raises(ValueError, match="already merging"):
+                await service.merge_chunks(session.session_id)
+        finally:
+            lock.release()
+
+    @pytest.mark.asyncio
+    async def test_merge_chunks_returns_first_call_result_when_merged_while_waiting(self):
+        """并发场景：第二个调用拿到锁时首个调用已完成合并 → 直接返回其路径（483）。
+
+        进入时 status 仍是 UPLOADING（通过 474 的状态判断），但在等待/获取锁期间
+        状态被首个调用置为 MERGED —— _acquire_merge_lock 的锁内二次检查返回
+        (None, merged_file_path)，merge_chunks 必须返回该路径而非重复合并。
+        """
+        service = ChunkedUploadService(temp_dir=".", final_dir=".")
+        session = service.create_session("f.bin", 100, 1)
+        session.chunks[0].uploaded = True
+        session.merged_file_path = "/done/first.zip"
+
+        # 用可控锁：acquire 成功后把状态翻成 MERGED，精确命中锁内二次检查
+        class _MergeOnAcquireLock:
+            def acquire(self_, blocking=True):
+                session.status = ChunkUploadStatus.MERGED
+                return True
+
+            def release(self_):
+                return None
+
+        with patch.object(service, "_get_session_lock", lambda _sid: _MergeOnAcquireLock()):
+            result = await service.merge_chunks(session.session_id)
+        assert result == "/done/first.zip"
+
+    @pytest.mark.asyncio
+    async def test_merge_lock_released_after_failure(self, tmp_path):
+        """失败路径必须释放锁，否则该会话永久无法重试。"""
+        t = tmp_path / "c"
+        f = tmp_path / "d"
+        service = ChunkedUploadService(temp_dir=str(t), final_dir=str(f))
+        session = service.create_session("out.txt", 4, 1, chunk_size=4)
+        session.chunks[0].uploaded = True
+        session.file_hash = "deadbeef"  # 触发 hash 不匹配失败
+        # 分片文件必须真实存在，才能走到 hash 校验分支
+        (t / session.session_id).mkdir(parents=True, exist_ok=True)
+        (t / session.session_id / "chunk_000000").write_bytes(b"abcd")
+
+        with pytest.raises(ValueError):
+            await service.merge_chunks(session.session_id)
+
+        assert service._get_session_lock(session.session_id).locked() is False
+
+    def test_delete_session_releases_lock_entry(self):
+        """删除会话时同步回收锁对象，避免无界增长。"""
+        service = ChunkedUploadService(temp_dir=".", final_dir=".")
+        session = service.create_session("f.bin", 100, 1)
+        service._get_session_lock(session.session_id)
+        assert session.session_id in service._merge_locks
+        service.delete_session(session.session_id)
+        assert session.session_id not in service._merge_locks
+
+    @pytest.mark.asyncio
     async def test_merge_chunks_success(self, tmp_path):
         """Happy path — all chunks merged, size verified, cleanup runs."""
         t = tmp_path / "c"

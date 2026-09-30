@@ -9,6 +9,7 @@ Requirements: 10.4 - 实现文件上传优化（分片上传）
 
 import hashlib
 import logging
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import timezone, datetime, timedelta
@@ -180,6 +181,10 @@ class ChunkedUploadService:
         # 超限时淘汰最早创建的会话（连同其分片文件）
         self.max_sessions = ChunkedUploadConfig.MAX_SESSIONS
 
+        # 深审 #2：每会话合并锁，杜绝同一 session 并发重入合并（撕裂文件 + 500）
+        self._merge_locks: Dict[str, threading.Lock] = {}
+        self._locks_guard = threading.Lock()
+
         # 确保目录存在
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.final_dir.mkdir(parents=True, exist_ok=True)
@@ -305,6 +310,15 @@ class ChunkedUploadService:
             session.status = ChunkUploadStatus.EXPIRED
         return session
 
+    def _get_session_lock(self, session_id: str) -> threading.Lock:
+        """取（或惰性创建）某会话的合并锁（深审 #2）。"""
+        with self._locks_guard:
+            lock = self._merge_locks.get(session_id)
+            if lock is None:
+                lock = threading.Lock()
+                self._merge_locks[session_id] = lock
+            return lock
+
     def delete_session(self, session_id: str) -> bool:
         """删除上传会话"""
         if session_id not in self._sessions:
@@ -318,6 +332,9 @@ class ChunkedUploadService:
             shutil.rmtree(session_dir, ignore_errors=True)
 
         del self._sessions[session_id]
+        # 同步回收该会话的合并锁，避免 _merge_locks 随会话生命周期无界增长
+        with self._locks_guard:
+            self._merge_locks.pop(session_id, None)
         logger.info(f"Deleted upload session: {session_id}")
         return True
 
@@ -407,6 +424,32 @@ class ChunkedUploadService:
 
     # ==================== 分片合并 ====================
 
+    def _acquire_merge_lock(self, session, session_id: str):
+        """获取合并锁并做锁内二次状态检查。
+
+        Returns:
+            (lock, early_result)：
+            - 正常获得锁 → (lock, None)
+            - 已有调用正在合并 → 抛 ValueError
+            - 等待期间被首个调用合并完成 → 返回 (None, merged_file_path)
+        """
+        if session.status == ChunkUploadStatus.MERGING:
+            raise ValueError(f"Session is already merging: {session_id}")
+
+        lock = self._get_session_lock(session_id)
+        if not lock.acquire(blocking=False):
+            raise ValueError(f"Session is already merging: {session_id}")
+
+        # 锁内二次检查：等待期间可能已被首个调用合并完成
+        if session.status == ChunkUploadStatus.MERGED:
+            lock.release()
+            return None, session.merged_file_path
+        if session.status == ChunkUploadStatus.MERGING:
+            lock.release()
+            raise ValueError(f"Session is already merging: {session_id}")
+
+        return lock, None
+
     async def merge_chunks(self, session_id: str) -> str:
         """
         合并所有分片
@@ -430,6 +473,14 @@ class ChunkedUploadService:
 
         if session.status == ChunkUploadStatus.MERGED:
             return session.merged_file_path
+
+        # 深审 #2：合并过程含 await（逐分片读写），同一 session 可被并发调用
+        # 重入 —— 第二次进来时状态已是 MERGING，会与第一次同时写同一个
+        # final_path，且第一次 rmtree 后第二次 FileNotFoundError → 500。
+        # 用每会话锁串行化，并拒绝 MERGING 状态的重入。
+        lock, early = self._acquire_merge_lock(session, session_id)
+        if early is not None:
+            return early
 
         # 更新状态
         session.status = ChunkUploadStatus.MERGING
@@ -491,6 +542,8 @@ class ChunkedUploadService:
             session.updated_at = datetime.now(timezone.utc)
             logger.error(f"Failed to merge chunks for session {session_id}: {e}")
             raise
+        finally:
+            lock.release()
 
     # ==================== 清理 ====================
 

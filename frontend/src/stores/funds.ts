@@ -55,8 +55,14 @@ export const useFundsStore = defineStore('funds', () => {
 
   async function deleteFund(id: number) {
     await del<any>('/funds/' + id)
+    // total 是**服务端分页总数**（fetchFunds 中 unwrapList 的 total），不是标志位：
+    // 原实现无条件 total.value-- ，当被删记录不在当前页时会与真实总数偏离，
+    // 反复删除还会把计数减成负数。只有确实从当前页移除了记录才递减，且下限为 0。
+    const before = fundList.value.length
     fundList.value = fundList.value.filter((f: any) => f.id !== id)
-    total.value--
+    if (fundList.value.length < before) {
+      total.value = Math.max(0, total.value - 1)
+    }
   }
 
   async function getSummary() {

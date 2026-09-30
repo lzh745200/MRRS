@@ -19,7 +19,6 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.database import get_db
 from app.core.permission_utils import is_superuser
 from app.core.response import ok_list
@@ -249,8 +248,15 @@ async def _import_entities(
     # R2 第二层：分块读取 + 滚动计数，超限即停（原 `await file.read()`
     # 先整包入内存；单机离线部署下单请求即可 OOM）。下游导入服务仍会
     # 按行数/字段做业务校验。
+    #
+    # W15 深审 #53：上游闸门必须与下游业务口径一致。此前 /entities 读全局
+    # settings.MAX_FILE_SIZE（50MB），而校验器 validate_file_size 与 /validate、
+    # /preview 都是 10MB —— 10~50MB 的文件在这里被放行、到导入器才被拒，
+    # 各端点行为/状态码不一致（且白白把 50MB 读进内存）。统一到模块常量。
     file_bytes = await read_upload_with_limit(
-        file, settings.MAX_FILE_SIZE, limit_label="导入文件"
+        file, _IMPORT_MAX_FILE_SIZE,
+        status_code=400,
+        error_detail=_IMPORT_MAX_FILE_SIZE_MSG,
     )
 
     if dry_run:

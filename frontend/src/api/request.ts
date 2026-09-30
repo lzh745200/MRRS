@@ -191,7 +191,11 @@ request.interceptors.request.use(async (config) => {
   // ── W3-T4：仅幂等的 GET 参与去重取消 ──
   // POST/PUT/DELETE 绝不互相取消：此前全方法共用 key 池，同端点两个并发 POST
   // （body 不同）会被静默 cancel 导致批量操作丢写入。
-  if ((config.method || 'get').toLowerCase() === 'get') {
+  //
+  // 调用方自带 cancelToken 时（createCancelableRequest / requestWithTimeout 等）
+  // 绝不覆盖：覆盖会让调用方的 cancel() 变成空操作、requestWithTimeout 的超时也
+  // 不再中止请求（原实现无条件覆盖）。此时跳过去重注册，取消权完全交给调用方。
+  if ((config.method || 'get').toLowerCase() === 'get' && !config.cancelToken) {
     const requestKey = _makeRequestKey(config.method, config.url, config.params)
     if (pendingRequests.has(requestKey)) {
       pendingRequests.get(requestKey)!()

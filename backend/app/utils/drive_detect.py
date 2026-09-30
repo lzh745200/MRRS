@@ -46,7 +46,10 @@ def _list_linux_mounts() -> List[Dict[str, str]]:
             for entry in os.listdir(base):
                 full = os.path.join(base, entry)
                 if os.path.isdir(full) and os.access(full, os.W_OK):
-                    results.append({"path": full, "type": "removable"})
+                    # list_backup_dirs 的契约是每项含 path/type/available；
+                    # 非 Windows 分支此前漏掉 available，消费方取键即 KeyError
+                    # （深审 #84）。此处循环已用 os.access 验证可写。
+                    results.append({"path": full, "type": "removable", "available": True})
         except OSError:  # pragma: no cover
             continue
     return results

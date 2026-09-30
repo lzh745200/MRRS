@@ -6,6 +6,7 @@
 import base64
 import hashlib
 import os
+import threading
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -39,21 +40,39 @@ class DataPackageEncryption:
 
     # 从运行时密钥存储中加载部署唯一盐值
     _deployment_salt: bytes | None = None
+    # 首次加载可能被多线程并发触发：无锁时各线程会各自拿到不同的随机盐，
+    # 同进程内派生出互不兼容的密钥（深审 #85）。
+    _salt_lock = threading.Lock()
 
     @classmethod
     def _load_deployment_salt(cls) -> bytes:
-        """加载或生成部署唯一盐值（持久化到运行时密钥文件）"""
+        """加载或生成部署唯一盐值（持久化到运行时密钥文件）。
+
+        Raises:
+            RuntimeError: 盐值无法持久化。绝不用进程内随机盐顶替 ——
+                本次运行写入的密文在重启后将永久不可解，且只有解密时才暴露
+                （深审 #85）。与 pii_crypto 的 require_persisted 口径一致。
+        """
         if cls._deployment_salt is not None:
             return cls._deployment_salt
 
-        try:
+        with cls._salt_lock:
+            if cls._deployment_salt is not None:
+                return cls._deployment_salt
             from app.utils.runtime_secrets import get_or_create_secret
-            salt_hex = get_or_create_secret("ENCRYPTION_SALT", generate=lambda: os.urandom(32).hex())
+            try:
+                salt_hex = get_or_create_secret(
+                    "ENCRYPTION_SALT",
+                    generate=lambda: os.urandom(32).hex(),
+                    require_persisted=True,
+                )
+            except Exception as exc:
+                logger.error("部署盐值无法持久化，拒绝使用进程内临时盐值: %s", exc)
+                raise RuntimeError(
+                    "部署盐值初始化失败：无法读写 runtime_secrets.json。"
+                    "使用临时盐值会让重启后旧密文永久不可解，故直接失败。"
+                ) from exc
             cls._deployment_salt = bytes.fromhex(salt_hex)
-        except Exception:
-            import secrets as _sec
-            cls._deployment_salt = _sec.token_bytes(32)
-            logger.warning("无法加载持久化盐值，使用临时随机盐值（重启后可能无法解密旧数据）")
         return cls._deployment_salt
 
     def _derive_key_from_password(self, password: str, salt: bytes = None) -> bytes:

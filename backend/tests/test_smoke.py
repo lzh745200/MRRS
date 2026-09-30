@@ -7,9 +7,6 @@
 - 受保护端点（需认证）
 """
 
-from tests.utils import HTTP_SUCCESS_OR_ERROR
-
-
 class TestHealthEndpoints:
     """健康检查端点"""
 
@@ -22,13 +19,13 @@ class TestHealthEndpoints:
     def test_env_check(self, client, admin_token_headers):
         """GET /api/v1/env/check 应返回 200"""
         resp = client.get("/api/v1/env/check", headers=admin_token_headers)
-        assert resp.status_code in HTTP_SUCCESS_OR_ERROR
-        if resp.status_code == 200:
-            data = resp.json()
-            # 兼容信封格式 {code, data: {system, packages}, message} 与裸对象
-            payload = data.get("data", data) if isinstance(data, dict) and isinstance(data.get("data"), dict) else data
-            assert "system" in payload
-            assert "packages" in payload
+        # W4-T3：管理员访问必须 200（原"接受任意状态码"让 500 也算通过）
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        # 兼容信封格式 {code, data: {system, packages}, message} 与裸对象
+        payload = data.get("data", data) if isinstance(data, dict) and isinstance(data.get("data"), dict) else data
+        assert "system" in payload
+        assert "packages" in payload
 
 
 class TestAuthEndpoints:

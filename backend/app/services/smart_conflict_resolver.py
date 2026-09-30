@@ -4,9 +4,10 @@ Smart Conflict Resolver
 """
 
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_
+from sqlalchemy import and_, inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 from app.models.project import Fund, Project
@@ -22,6 +23,65 @@ class ConflictStrategy:
     KEEP_BOTH = "KEEP_BOTH"  # 保留两者，导入数据创建新记录
     MERGE = "MERGE"  # 智能合并（优先使用非空值）
     AUTO = "AUTO"  # 自动选择最佳策略（根据冲突类型智能判断）
+
+
+# 永不允许由导入数据写入的列（主键/审计/租户边界），
+# 深审 #61：原实现只排除 id/created_at/created_by，organization_id、
+# updated_at 等会被导入值覆盖，破坏租户隔离与 DateTime 列类型。
+_PROTECTED_COLUMNS = frozenset({
+    "id",
+    "created_at",
+    "updated_at",
+    "created_by",
+    "updated_by",
+    "organization_id",
+})
+
+# 租户列：冲突检测/归属校验都按它收敛（深审 #63）
+_TENANT_COLUMN = "organization_id"
+
+
+def _to_datetime(value: Any) -> Optional[datetime]:
+    """把导入/本地的时间值归一为可安全比较的 datetime（深审 #60）。
+
+    - datetime → 原样（naive 统一补 UTC，避免 naive/aware 比较 TypeError）
+    - str → fromisoformat，支持尾部 Z
+    - 其余/无法解析 → None（调用方视为"不可比较"，退回默认策略）
+    """
+    from datetime import timezone
+
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+    else:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _model_columns(model_class: Any) -> set:
+    """模型的可映射列名集合（用于过滤导入键，深审 #61）。
+
+    优先取类上的 `__mapper__`（探针/替身可显式借用真实模型的 mapper）；
+    否则退化为 sa_inspect。两者都拿不到时返回空集，调用方**不得**据此放行
+    任意键 —— 见 `_writable_items` 的处理。
+    """
+    mapper = getattr(model_class, "__mapper__", None)
+    if mapper is not None:
+        try:
+            return {c.key for c in mapper.column_attrs}
+        except Exception:  # pragma: no cover — 防御
+            pass
+    try:
+        return {c.key for c in sa_inspect(model_class).mapper.column_attrs}
+    except Exception:  # pragma: no cover — 非映射类
+        return set()
 
 
 class DataConflict:
@@ -76,8 +136,15 @@ DATA_TYPE_MODELS = {
 class SmartConflictResolver:
     """智能冲突解决器"""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, organization_id: Optional[int] = None):
+        """深审 #63：可选租户收敛。
+
+        organization_id 非空时，冲突检测只会命中**本组织**行；命中他组织的
+        同业务键记录既不改写（OVERWRITE/MERGE）也不复制（KEEP_BOTH），
+        避免跨组织串改数据。为 None 时退回旧行为（仅用于系统级任务）。
+        """
         self.db = db
+        self.organization_id = organization_id
 
     def detect_conflicts_by_business_key(self, import_records: List[Dict], data_type: str) -> ConflictDetectionResult:
         """
@@ -90,6 +157,9 @@ class SmartConflictResolver:
         Returns:
             冲突检测结果
         """
+        return self._detect_conflicts_impl(import_records, data_type)
+
+    def _detect_conflicts_impl(self, import_records: List[Dict], data_type: str) -> ConflictDetectionResult:
         model_class = DATA_TYPE_MODELS.get(data_type)
         if not model_class:
             raise ValueError(f"不支持的数据类型: {data_type}")
@@ -108,6 +178,13 @@ class SmartConflictResolver:
 
             # 查询本地是否存在相同业务键的记录
             query_conditions = [getattr(model_class, k) == v for k, v in business_key.items() if v is not None]
+
+            # 深审 #63：租户列参与收敛（模型确实有该列时才加）
+            model_cols = _model_columns(model_class)
+            if self.organization_id is not None and _TENANT_COLUMN in model_cols:
+                query_conditions.append(
+                    getattr(model_class, _TENANT_COLUMN) == self.organization_id
+                )
 
             if not query_conditions:
                 # 如果没有有效的业务键，视为新记录
@@ -176,6 +253,33 @@ class SmartConflictResolver:
 
         return differences
 
+    def _writable_items(self, model_class: Any, import_record: Dict[str, Any]):
+        """过滤出可安全 setattr 的 (key, value)（深审 #61）。
+
+        只保留模型**真实映射列**，排除 _PROTECTED_COLUMNS（主键/审计/租户）。
+        原实现直接对 import_record 全键 setattr，会把扁平化/派生键写成实例属性，
+        并覆盖 organization_id / updated_at（字符串 updated_at 破坏 DateTime 列）。
+        """
+        allowed = _model_columns(model_class)
+        for key, value in import_record.items():
+            if key in _PROTECTED_COLUMNS:
+                continue
+            if allowed and key not in allowed:
+                continue
+            yield key, value
+
+    def _import_is_newer(self, import_record: Dict[str, Any], local_record: Any) -> bool:
+        """导入记录的 updated_at 是否严格新于本地（深审 #60）。
+
+        统一经 _to_datetime 归一；任一侧不可解析时视为"不可比较"→ False，
+        避免 naive/aware 或 str/datetime 直接 `>` 抛 TypeError 中断整包导入。
+        """
+        import_updated = _to_datetime(import_record.get("updated_at"))
+        local_updated = _to_datetime(getattr(local_record, "updated_at", None))
+        if import_updated is None or local_updated is None:
+            return False
+        return import_updated > local_updated
+
     def resolve_conflicts_with_strategy(  # noqa: C901
         self, conflicts: List[DataConflict], strategy: str
     ) -> Dict[str, Dict[int, int]]:
@@ -206,43 +310,26 @@ class SmartConflictResolver:
                 id_mapping[data_type][old_id] = local_record.id
 
             elif strategy == ConflictStrategy.OVERWRITE:
-                # 用导入数据覆盖本地数据
-                for key, value in import_record.items():
-                    if key not in {"id", "created_at", "created_by"}:
-                        setattr(local_record, key, value)
+                # 用导入数据覆盖本地数据（仅模型真实列，排除主键/审计/租户）
+                for key, value in self._writable_items(model_class, import_record):
+                    setattr(local_record, key, value)
                 self.db.flush()
                 id_mapping[data_type][old_id] = local_record.id
 
             elif strategy == ConflictStrategy.KEEP_BOTH:
-                # 创建新记录，修改业务键避免冲突
-                new_data = import_record.copy()
-                new_data.pop("id", None)
-
-                # 修改业务键（添加时间戳后缀）
-                code_field = self._get_code_field(data_type)
-                if code_field and code_field in new_data:
-                    original_code = new_data[code_field]
-                    new_data[code_field] = f"{original_code}_imp_{int(time.time())}"
-
-                new_record = model_class(**new_data)
-                self.db.add(new_record)
-                self.db.flush()
-                id_mapping[data_type][old_id] = new_record.id
+                self._keep_both(conflict, id_mapping)
 
             elif strategy == ConflictStrategy.MERGE:
                 # 智能合并：优先使用非空值
-                for key, import_value in import_record.items():
-                    if key not in {"id", "created_at", "created_by"}:
-                        local_value = getattr(local_record, key, None)
-                        # 如果本地值为空，使用导入值
-                        if local_value is None and import_value is not None:
-                            setattr(local_record, key, import_value)
-                        # 如果都不为空，比较updated_at（如果有）
-                        elif import_value is not None:
-                            import_updated = import_record.get("updated_at")
-                            local_updated = getattr(local_record, "updated_at", None)
-                            if import_updated and local_updated and import_updated > local_updated:
-                                setattr(local_record, key, import_value)
+                newer = self._import_is_newer(import_record, local_record)
+                for key, import_value in self._writable_items(model_class, import_record):
+                    local_value = getattr(local_record, key, None)
+                    # 如果本地值为空，使用导入值
+                    if local_value is None and import_value is not None:
+                        setattr(local_record, key, import_value)
+                    # 都非空时仅在导入记录更新时覆盖
+                    elif import_value is not None and newer:
+                        setattr(local_record, key, import_value)
                 self.db.flush()
                 id_mapping[data_type][old_id] = local_record.id
 
@@ -252,26 +339,52 @@ class SmartConflictResolver:
                 if auto_strategy == ConflictStrategy.SKIP:
                     id_mapping[data_type][old_id] = local_record.id
                 elif auto_strategy == ConflictStrategy.OVERWRITE:
-                    for key, value in import_record.items():
-                        if key not in {"id", "created_at", "created_by"}:
-                            setattr(local_record, key, value)
+                    for key, value in self._writable_items(model_class, import_record):
+                        setattr(local_record, key, value)
                     self.db.flush()
                     id_mapping[data_type][old_id] = local_record.id
                 elif auto_strategy == ConflictStrategy.MERGE:
-                    for key, import_value in import_record.items():
-                        if key not in {"id", "created_at", "created_by"}:
-                            local_value = getattr(local_record, key, None)
-                            if local_value is None and import_value is not None:
-                                setattr(local_record, key, import_value)
-                            elif import_value is not None:
-                                import_updated = import_record.get("updated_at")
-                                local_updated = getattr(local_record, "updated_at", None)
-                                if import_updated and local_updated and import_updated > local_updated:
-                                    setattr(local_record, key, import_value)
+                    newer = self._import_is_newer(import_record, local_record)
+                    for key, import_value in self._writable_items(model_class, import_record):
+                        local_value = getattr(local_record, key, None)
+                        if local_value is None and import_value is not None:
+                            setattr(local_record, key, import_value)
+                        elif import_value is not None and newer:
+                            setattr(local_record, key, import_value)
                     self.db.flush()
                     id_mapping[data_type][old_id] = local_record.id
 
         return id_mapping
+
+    def _keep_both(
+        self,
+        conflict: DataConflict,
+        id_mapping: Dict[str, Dict[int, int]],
+    ) -> None:
+        """KEEP_BOTH：把导入记录插为新行（业务键加时间戳后缀避免再次冲突）。
+
+        深审 #62：外键必须经 id_mapping 重映射，否则新行会挂到**源机**的
+        村/项目 ID 上（轻则 FK 报错，重则关联到无关记录）。
+        """
+        data_type = conflict.data_type
+        model_class = DATA_TYPE_MODELS[data_type]
+        import_record = conflict.import_record
+        old_id = import_record.get("id")
+
+        new_data = {k: v for k, v in self._writable_items(model_class, import_record)}
+
+        # 修改业务键（添加时间戳后缀）
+        code_field = self._get_code_field(data_type)
+        if code_field and code_field in new_data:
+            original_code = new_data[code_field]
+            new_data[code_field] = f"{original_code}_imp_{int(time.time())}"
+
+        self._update_foreign_keys(new_data, data_type, id_mapping)
+
+        new_record = model_class(**new_data)
+        self.db.add(new_record)
+        self.db.flush()
+        id_mapping.setdefault(data_type, {})[old_id] = new_record.id
 
     def _get_code_field(self, data_type: str) -> Optional[str]:
         """获取数据类型的编码字段名"""
@@ -306,33 +419,15 @@ class SmartConflictResolver:
         if diff_count <= 2:
             return ConflictStrategy.MERGE
 
-        # 比较 updated_at 时间戳
-        import_record = conflict.import_record
-        local_record = conflict.local_record
+        # 比较 updated_at 时间戳（深审 #60：统一经 _to_datetime 归一，
+        # 任一侧缺失/不可解析时返回 None 比较，避免 naive/aware 抛 TypeError）
+        import_updated = _to_datetime(conflict.import_record.get("updated_at"))
+        local_updated = _to_datetime(getattr(conflict.local_record, "updated_at", None))
 
-        import_updated = import_record.get("updated_at")
-        local_updated = getattr(local_record, "updated_at", None)
-
-        if import_updated and local_updated:
-            try:
-                from datetime import datetime
-
-                # 解析时间戳（兼容字符串和datetime对象）
-                if isinstance(import_updated, str):
-                    import_updated = datetime.fromisoformat(
-                        import_updated.replace("Z", "+00:00")
-                    )
-                if isinstance(local_updated, str):
-                    local_updated = datetime.fromisoformat(
-                        local_updated.replace("Z", "+00:00")
-                    )
-
-                if import_updated > local_updated:
-                    return ConflictStrategy.OVERWRITE
-                else:
-                    return ConflictStrategy.SKIP
-            except (ValueError, TypeError):
-                pass
+        if import_updated is not None and local_updated is not None:
+            if import_updated > local_updated:
+                return ConflictStrategy.OVERWRITE
+            return ConflictStrategy.SKIP
 
         # 默认：智能合并
         return ConflictStrategy.MERGE
@@ -354,12 +449,13 @@ class SmartConflictResolver:
         Returns:
             ID映射表 {data_type: {old_id: new_id}}
         """
-        from datetime import datetime
-
         id_mapping = {}
 
         # 按依赖顺序处理
         import_order = ["villages", "schools", "projects", "funds"]
+
+        # 深审 #63：租户上下文由构造参数决定；导入记录不得携带他组织 organization_id
+        tenant = self.organization_id
 
         for data_type in import_order:
             if data_type not in data_dict:
@@ -369,14 +465,14 @@ class SmartConflictResolver:
             if not records:
                 continue
 
-            # 转换日期时间字段
+            # 转换日期时间字段（深审 #60：归一为 datetime，便于后续安全比较）
             for record in records:
                 for field in ["created_at", "updated_at"]:
                     if field in record and isinstance(record[field], str):
-                        try:
-                            record[field] = datetime.fromisoformat(record[field].replace("Z", "+00:00"))
-                        except (ValueError, AttributeError):
-                            record[field] = None
+                        record[field] = _to_datetime(record[field])
+                # 深审 #61/#63：导入数据不得跨组织写入其 organization_id
+                if tenant is not None:
+                    record[_TENANT_COLUMN] = tenant
 
             records = data_dict[data_type]
             if not records:  # pragma: no cover — 与上方 369 行同为 data_dict[data_type] 的重复判空，369 行非空此处必非空，不可达
@@ -421,8 +517,8 @@ class SmartConflictResolver:
 
         for record in new_records:
             old_id = record.get("id")
-            new_data = record.copy()
-            new_data.pop("id", None)
+            # 深审 #61：同样按模型列集合过滤，避免派生/扁平键污染实例属性
+            new_data = {k: v for k, v in self._writable_items(model_class, record)}
 
             # 更新外键引用
             self._update_foreign_keys(new_data, data_type, id_mapping)

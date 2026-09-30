@@ -383,13 +383,18 @@ class Validator:
     @staticmethod
     def is_valid_email(email: str) -> bool:
         """验证邮箱格式"""
-        pattern = r"^[a - zA - Z0 - 9._%+-]+@[a - zA - Z0 - 9.-]+\.[a - zA - Z]{2,}$"
+        # 原字符类里混入了空格（"[a - zA - Z0 - 9...]"），实际匹配的是
+        # {a,' ','-','z','A','Z','0','9',…} 而非 a-z/A-Z/0-9 区间，
+        # user@example.com 这类正常邮箱会被拒（深审 #82）。
+        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         return bool(re.match(pattern, email))
 
     @staticmethod
     def is_valid_phone(phone: str) -> bool:
         """验证手机号格式"""
-        pattern = r"^1[3 - 9]\d{9}$"
+        # 原 "[3 - 9]" 是字面集合 {3,' ','-',9}，不是 3-9 区间 ——
+        # 第二位为 4~8 的合法号段（145/156/176/188…）全被拒（深审 #83）。
+        pattern = r"^1[3-9]\d{9}$"
         return bool(re.match(pattern, phone))
 
     @staticmethod

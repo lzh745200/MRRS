@@ -33,16 +33,17 @@ const ASYNC_EXPORT_BASE = '/async-export'
 
 // ─── 非 Blob 端点 ───
 
-export async function getExportTasks(params?: { page?: number; page_size?: number }) {
-  const res = await get(`${ASYNC_EXPORT_BASE}/tasks`, params)
-  return res
-}
-
 export async function getExportStatus(taskId: string) {
   const res = await get(`${ASYNC_EXPORT_BASE}/status/${taskId}`)
   return res
 }
 
+/**
+ * 异步导出任务历史列表。
+ *
+ * 后端 async_export 只有 /tasks 一个列表端点（无 /history），故此处是**唯一**实现；
+ * 同名同 URL 的 getExportTasks 死代码已删除（零生产调用方，语义完全重复）。
+ */
 export async function getExportHistory(params?: { page?: number; page_size?: number }) {
   const res = await get(`${ASYNC_EXPORT_BASE}/tasks`, params)
   return res

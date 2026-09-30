@@ -4,6 +4,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useMenuStore } from '@/stores/menu'
 import { ADMIN_ROLES } from '@/utils/roleAccess'
 
+/** 无权限时隐藏元素（mounted/updated 共用同一形态，保证可逆） */
+function _hideElement(el: HTMLElement): void {
+  el.style.display = 'none'
+}
+
 /**
  * 权限指令：支持四种用法
  *
@@ -11,10 +16,15 @@ import { ADMIN_ROLES } from '@/utils/roleAccess'
  * 2. 按钮级权限码： v-permission="'project:create'"
  * 3. 菜单 key 检查： v-permission="{ menu: 'system' }"
  * 4. 模块 view/edit 粒度： v-permission="{ module: 'village', level: 'edit' }"
- *    - level: 'view' → 检查 {module}:read，无权限则移除元素
- *    - level: 'edit' → 检查 {module}:write，无权限则隐藏/禁用元素
+ *    - level: 'view' → 检查 {module}:read，无权限则隐藏元素
+ *    - level: 'edit' → 检查 {module}:write，无权限则隐藏元素
+ *    - 未知/拼错的 level → **fail-closed 隐藏**（不默认放行，DEV 下告警）
  *
  * 管理员自动拥有所有权限
+ *
+ * 隐藏统一走 style.display：mounted 与 updated 两个钩子必须对称，
+ * 否则权限恢复后元素无法复现（旧的 removeChild 是永久摘除）。
+ * 注意前端隐藏只是可见性控制，真正的越权屏障在后端接口鉴权。
  */
 export const permission: ObjectDirective = {
   mounted(el, binding) {
@@ -31,7 +41,7 @@ export const permission: ObjectDirective = {
     // 模式 3：菜单 key 检查，如 v-permission="{ menu: 'system' }"
     if (value && typeof value === 'object' && 'menu' in value) {
       if (!menuStore.canAccessMenu(value.menu as string)) {
-        el.parentNode && el.parentNode.removeChild(el)
+        _hideElement(el)
       }
       return
     }
@@ -40,7 +50,7 @@ export const permission: ObjectDirective = {
     if (typeof value === 'string') {
       const userPermissions: string[] = authStore.user?.permissions || []
       if (!userPermissions.includes(value)) {
-        el.parentNode && el.parentNode.removeChild(el)
+        _hideElement(el)
       }
       return
     }
@@ -50,7 +60,7 @@ export const permission: ObjectDirective = {
       const roles = Array.isArray(currentRole) ? currentRole : [currentRole]
       const hasPermission = roles.some((role) => value.includes(role))
       if (!hasPermission) {
-        el.parentNode && el.parentNode.removeChild(el)
+        _hideElement(el)
       }
       return
     }
@@ -127,7 +137,7 @@ export const permission: ObjectDirective = {
  */
 function _applyModulePermission(
   el: HTMLElement,
-  { module: mod, level }: { module: string; level: 'view' | 'edit' }
+  { module: mod, level }: { module: string; level: string }
 ): void {
   const authStore = useAuthStore()
   const permMap = authStore.modulePermissions
@@ -136,5 +146,11 @@ function _applyModulePermission(
     el.style.display = modPerm.view || modPerm.edit ? '' : 'none'
   } else if (level === 'edit') {
     el.style.display = modPerm.edit ? '' : 'none'
+  } else {
+    // 未知 level（拼错 / 未传 / 未来新增枚举）：按无权限处理，绝不默认放行
+    _hideElement(el)
+    if (import.meta.env.DEV) {
+      logger.warn(`v-permission: 未知的模块权限级别 "${String(level)}"，已按无权限隐藏元素`)
+    }
   }
 }

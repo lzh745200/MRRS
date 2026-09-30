@@ -132,7 +132,9 @@ class TestRejectedPackageValidateEndpoint:
     def test_validate_no_file_path_returns_409(self, client_with_mocked_auth):
         mock_svc = MagicMock()
         mock_svc.get_package.return_value = _rejected_package()
-        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock()):
+        perm = MagicMock()
+        perm.can_access_organization.return_value = True
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock(), perm=perm):
             resp = client_with_mocked_auth.post(f"{BASE}/42/validate")
 
         assert resp.status_code == 409
@@ -148,11 +150,25 @@ class TestRejectedPackageValidateEndpoint:
         mock_svc.validate_package = AsyncMock(
             return_value=DataPackageValidationResult(is_valid=True, errors=[])
         )
-        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock()):
+        perm = MagicMock()
+        perm.can_access_organization.return_value = True
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock(), perm=perm):
             resp = client_with_mocked_auth.post(f"{BASE}/42/validate")
 
         assert resp.status_code == 200
         mock_svc.validate_package.assert_awaited_once_with("/tmp/pkg.zip")
+
+    def test_validate_cross_org_returns_404(self, client_with_mocked_auth):
+        """越权读取他组织数据包 → 404（与同组端点同口径，不泄露资源存在性）。"""
+        mock_svc = MagicMock()
+        mock_svc.get_package.return_value = _rejected_package()
+        perm = MagicMock()
+        perm.can_access_organization.return_value = False
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock(), perm=perm):
+            resp = client_with_mocked_auth.post(f"{BASE}/42/validate")
+
+        assert resp.status_code == 404
+        mock_svc.validate_package.assert_not_called()
 
 
 class TestRejectedPackageDownloadEndpoint:

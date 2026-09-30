@@ -142,7 +142,13 @@ class TestEnableTwoFactor:
         result = TwoFactorService.enable_two_factor(mock_db, user)
         assert result["secret"] == "new_secret"
         assert existing.secret_key == "new_encrypted"
-        assert existing.backup_codes == ["87654321"]
+        # 2026-09-30 深审修复：恢复码改为哈希落库（原断言 existing.backup_codes == ["87654321"]
+        # 固化了"明文存储"这一缺陷行为），明文只随响应返回。
+        assert len(existing.backup_codes) == 1
+        assert existing.backup_codes[0] != "87654321"
+        assert TwoFactorService.is_hashed_backup_code(existing.backup_codes[0])
+        assert TwoFactorService._verify_backup_code("87654321", existing.backup_codes[0]) is True
+        assert result["backup_codes"] == ["87654321"]
         assert existing.enabled is False
         mock_db.add.assert_not_called()
 

@@ -31,6 +31,31 @@ class TestInitDefaultKey:
         assert mgr._secrets["default"] == "my-env-key"
         assert mgr._key_versions[0]["is_active"] is True
 
+    def test_default_key_is_valid_fernet_key(self, monkeypatch, tmp_path):
+        """深审 #52：默认密钥必须能被 Fernet() 接受（key_type 声明为 fernet）。"""
+        from cryptography.fernet import Fernet
+        monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+        mgr = SecretsManager()
+        # 不抛 ValueError 即为合法 Fernet key（32 字节 url-safe base64）
+        Fernet(mgr._secrets["default"].encode())
+        # 往返加解密可正常工作
+        f = Fernet(mgr._secrets["default"].encode())
+        assert f.decrypt(f.encrypt(b"payload")) == b"payload"
+
+    def test_fallback_on_unwritable_dir_is_valid_fernet(self, monkeypatch, tmp_path):
+        """磁盘不可写触发兜底分支时，密钥仍须是合法 Fernet key（深审 #52）。"""
+        from cryptography.fernet import Fernet
+        monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+
+        def boom(*a, **kw):
+            raise OSError("disk full")
+
+        monkeypatch.setattr("os.makedirs", boom)
+        mgr = SecretsManager()
+        Fernet(mgr._secrets["default"].encode())
+
     def test_without_env_uses_fernet(self, monkeypatch):
         """ENCRYPTION_KEY 未设 + cryptography 可用 → Fernet.generate_key。"""
         monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
@@ -40,7 +65,7 @@ class TestInitDefaultKey:
         assert len(mgr._secrets["default"]) >= 32
 
     def test_without_env_fernet_import_error(self, monkeypatch):
-        """ENCRYPTION_KEY 未设 + cryptography 不可用 → secrets.token_urlsafe 兜底。"""
+        """ENCRYPTION_KEY 未设 + cryptography 不可用 → 退化为 base64 随机串兜底。"""
         monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
         # 让 `from cryptography.fernet import Fernet` 抛 ImportError
         import builtins
@@ -56,6 +81,14 @@ class TestInitDefaultKey:
         mgr = SecretsManager()
         assert "default" in mgr._secrets
         assert mgr._secrets["default"] is not None
+        # 退化为 32 字节 urlsafe base64（仍为 44 字符格式，长度与 Fernet key 一致）
+        assert len(mgr._secrets["default"]) == 44
+
+    def test_generate_fallback_key_directly(self, monkeypatch):
+        """_generate_fallback_key 在 cryptography 可用时返回合法 Fernet key。"""
+        from cryptography.fernet import Fernet
+        key = SecretsManager._generate_fallback_key()
+        Fernet(key.encode())
 
 
 # ---------------------------------------------------------------------------

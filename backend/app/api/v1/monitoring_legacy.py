@@ -32,7 +32,9 @@ async def get_api_performance(
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
-    stats = MonitoringService.get_api_performance_stats(db, hours, endpoint)
+    # 深审 #63：同步 SQLAlchemy 聚合直接在事件循环执行会冻结整个服务，
+    # 与 /monitoring/resources（已用 run_in_threadpool）保持一致。
+    stats = await run_in_threadpool(MonitoringService.get_api_performance_stats, db, hours, endpoint)
     return success_response(data=stats)
 
 
@@ -52,7 +54,8 @@ async def get_endpoint_stats(
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
-    stats = MonitoringService.get_endpoint_stats(db, hours, limit)
+    # 深审 #64：同上，卸载到线程池
+    stats = await run_in_threadpool(MonitoringService.get_endpoint_stats, db, hours, limit)
     return success_response(data={"endpoints": stats})
 
 
@@ -71,7 +74,8 @@ async def get_error_stats(
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
-    stats = MonitoringService.get_error_stats(db, hours)
+    # 深审 #65：同上，卸载到线程池
+    stats = await run_in_threadpool(MonitoringService.get_error_stats, db, hours)
     return success_response(data=stats)
 
 

@@ -9,12 +9,14 @@
 - 246-266 初始化前检查清单端点。
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from app.api.v1.system import init as init_api
+from app.models.user import User
 
 
 def _request():
@@ -28,8 +30,18 @@ def _request():
 
 class TestInitializeSystemAdminFailure:
     async def test_admin_creation_failure_aborts_and_never_marks_initialized(self):
+        # 根组织查询（步骤 1b）走正常路径，故障注入只作用于管理员用户查询：
+        # 本用例锁定的语义是"超管创建失败必须中止"，与组织步骤的失败面分开。
+        org_query = MagicMock()
+        org_query.filter.return_value.order_by.return_value.first.return_value = SimpleNamespace(id=1)
         db = MagicMock()
-        db.query.side_effect = RuntimeError("database is locked")
+
+        def _query(model):
+            if model is User:
+                raise RuntimeError("database is locked")
+            return org_query
+
+        db.query.side_effect = _query
         svc = MagicMock()
         svc.is_initialized.return_value = False
 

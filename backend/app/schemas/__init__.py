@@ -41,7 +41,15 @@ def _register_schema(module_name: str) -> None:
 
     for attr_name in dir(module):
         attr = getattr(module, attr_name)
-        if isinstance(attr, type) and issubclass(attr, BaseModel):
+        # 只登记**本模块定义**的模型：模块级 import 进来的 BaseModel 本身、
+        # 以及兄弟模块的类型同样满足 issubclass(..., BaseModel)，会把
+        # BaseModel 与无关模型塞进 __all__，import * 直接泄漏（深审 LIVE）。
+        if (
+            isinstance(attr, type)
+            and issubclass(attr, BaseModel)
+            and attr is not BaseModel
+            and getattr(attr, "__module__", None) == module.__name__
+        ):
             globals()[attr_name] = attr
             __all__.append(attr_name)
 

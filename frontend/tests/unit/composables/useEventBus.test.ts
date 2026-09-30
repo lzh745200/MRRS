@@ -1,12 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+// 2026-09-30 深审修复：emit 逐个 handler 隔离异常并 logger.error 上报
+const logMocks = vi.hoisted(() => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }))
+vi.mock('@/utils/logger', () => ({ logger: logMocks }))
+
 import { getEventBus, useEventBus } from '@/composables/useEventBus'
 
 describe('eventBus', () => {
   beforeEach(() => {
-    // 清空所有事件订阅 (通过 emit 一个特殊事件 reset)
-    const bus = getEventBus()
-    // 先 emit 一次,再 off 全部 handler 没有 API, 用一个不同的清空方法
-    // 由于 useEventBus 是单例, 用新 key 避免污染其他测试
+    // clear() 为新增 API：单例 Map 在用例间保持隔离
+    getEventBus().clear()
+    logMocks.error.mockClear()
   })
 
   it('useEventBus 返回 bus with on/off/emit', () => {
@@ -71,5 +75,57 @@ describe('eventBus', () => {
     bus.on('dedup', handler)
     bus.emit('dedup')
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  // ── 2026-09-30 深审修复新增用例 ──
+
+  it('emit：单个 handler 抛错被隔离，其余 handler 仍执行且记录错误', () => {
+    const bus = useEventBus()
+    const boom = vi.fn(() => {
+      throw new Error('handler failed')
+    })
+    const after = vi.fn()
+    bus.on('isolate', boom)
+    bus.on('isolate', after)
+
+    expect(() => bus.emit('isolate', 'arg')).not.toThrow()
+    expect(boom).toHaveBeenCalledWith('arg')
+    // 原实现用 Map.forEach，抛错会中断迭代 → after 被静默跳过
+    expect(after).toHaveBeenCalledWith('arg')
+    expect(logMocks.error).toHaveBeenCalledWith(
+      '[eventBus] 事件 "isolate" 的处理器执行失败:',
+      expect.any(Error)
+    )
+  })
+
+  it('emit：handler 内部 off 自身不影响本次派发的其余订阅者（快照迭代）', () => {
+    const bus = useEventBus()
+    const first = vi.fn(() => bus.off('snapshot', first))
+    const second = vi.fn()
+    bus.on('snapshot', first)
+    bus.on('snapshot', second)
+    bus.emit('snapshot')
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+    bus.emit('snapshot')
+    expect(second).toHaveBeenCalledTimes(2)
+  })
+
+  it('clear(event) 只清指定事件；clear() 清空全部订阅', () => {
+    const bus = useEventBus()
+    const a = vi.fn()
+    const b = vi.fn()
+    bus.on('e1', a)
+    bus.on('e2', b)
+
+    bus.clear('e1')
+    bus.emit('e1')
+    bus.emit('e2')
+    expect(a).not.toHaveBeenCalled()
+    expect(b).toHaveBeenCalledTimes(1)
+
+    bus.clear()
+    bus.emit('e2')
+    expect(b).toHaveBeenCalledTimes(1)
   })
 })

@@ -5,6 +5,7 @@
 
 import logging
 import smtplib
+import ssl
 from datetime import timezone, datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -39,9 +40,19 @@ class AlertService:
             smtp_port = getattr(settings, "SMTP_PORT", 587)
             smtp_user = getattr(settings, "SMTP_USER", None)
             smtp_password = getattr(settings, "SMTP_PASSWORD", None)
-            smtp_from = getattr(settings, "SMTP_FROM", smtp_user)
+            # SMTP_FROM 未配置时 config 里该属性仍存在但为 None，getattr 的
+            # default 不会生效 → 发件人为空。改为显式回退到 smtp_user（深审 #70）。
+            smtp_from = getattr(settings, "SMTP_FROM", None) or smtp_user
 
-            if not all([smtp_host, smtp_user, smtp_password]):
+            # 超时：SMTP 服务器挂起时无限阻塞（且本函数在事件循环内同步执行）。
+            smtp_timeout = getattr(settings, "SMTP_TIMEOUT", 10)
+            try:
+                smtp_timeout = max(1, int(smtp_timeout))
+            except (TypeError, ValueError):
+                logger.warning("SMTP_TIMEOUT 配置非法，回退 10 秒")
+                smtp_timeout = 10
+
+            if not all([smtp_host, smtp_user, smtp_password, smtp_from]):
                 logger.warning("SMTP配置不完整,跳过邮件发送")
                 return False
 
@@ -54,8 +65,12 @@ class AlertService:
             msg.attach(MIMEText(message, "plain", "utf-8"))
 
             # 发送邮件
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
-                server.starttls()
+            # 深审 #69：原实现 starttls() 不带 SSL context，smtplib 会退回
+            # 不校验证书链/主机名的默认上下文，随后明文发送凭据（可被 MITM）；
+            # 且 SMTP 无 timeout，服务器不响应即无限阻塞。两者一并修复。
+            context = ssl.create_default_context()
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as server:
+                server.starttls(context=context)
                 server.login(smtp_user, smtp_password)
                 server.send_message(msg)
 

@@ -310,10 +310,13 @@ class DatabaseHealthService:
             size_after = wal_path.stat().st_size if wal_path.exists() else 0
             self.stats["last_wal_checkpoint"] = datetime.now().isoformat()
 
-            if size_after > self.wal_size_warning_bytes:
+            # 2026-09-30 深审修复：告警判据必须用 checkpoint **之前**的体积。
+            # TRUNCATE checkpoint 后 -wal 约等于 0，用 size_after 判 >50MB 恒不成立
+            # → 告警永不触发（size_after 仅用于日志/返回值）。
+            if size_before > self.wal_size_warning_bytes:
                 logger.warning(
                     "WAL 文件偏大: %.2f MB（阈值 %.0f MB），可能存在长事务或持续写入",
-                    size_after / 1024 / 1024,
+                    size_before / 1024 / 1024,
                     self.wal_size_warning_bytes / 1024 / 1024,
                 )
 

@@ -7,6 +7,7 @@
 # security-audit: exempt data_scope — 系统初始化引导，创建首个管理员，无数据权限主体
 
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -23,6 +24,11 @@ from app.services.system_config_service import SystemConfigService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/init", tags=["系统初始化"])
+
+# 深审 #82：初始化并发守卫。原实现先 is_initialized() 再写多步配置，两者之间
+# 没有任何互斥 —— 两个并发请求（多 worker / 内部调用）会各自创建超管、重复
+# 生成 system_id，并把初始化标记与组织/系统 ID 写成互相覆盖的结果。
+_INIT_LOCK = threading.Lock()
 
 
 # ==================== Pydantic 模型 ====================
@@ -99,6 +105,20 @@ async def initialize_system(
     request: InitRequest,
     db: Session = Depends(get_db),
 ):
+    """系统首次初始化入口（并发 fail-closed 守卫见 _run_initialization）。"""
+    # 非阻塞抢锁：已有初始化在跑时直接 409，绝不并发双跑（fail-closed）
+    if not _INIT_LOCK.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="系统初始化正在进行中，请稍后重试")
+    try:
+        return await _run_initialization(request, db)
+    finally:
+        _INIT_LOCK.release()
+
+
+async def _run_initialization(
+    request: InitRequest,
+    db: Session = Depends(get_db),
+):
     """执行系统首次初始化
 
     系统部署后首次使用时调用此接口完成初始化配置，包括：
@@ -126,6 +146,39 @@ async def initialize_system(
 
         # 步骤1：验证输入参数
         steps.append({"step": "validate", "status": "success", "message": "参数验证通过"})
+
+        # 步骤1b：创建（或复用）根组织单位
+        # 深审 #83：文档承诺"创建根组织单位"，原实现完全不建组织，却在末尾把
+        # organization_id 硬编码成 1 —— 当根组织不是 id=1（预置数据/序列漂移/
+        # 历史库）时配置指向不存在的组织，组织级数据权限与上报归属全部错位。
+        from app.models.organization import Organization
+        from app.schemas.organization import OrganizationCreate
+        from app.services.organization_service import OrganizationService
+
+        try:
+            root_org = (
+                db.query(Organization)
+                .filter(Organization.parent_id.is_(None))
+                .order_by(Organization.id.asc())
+                .first()
+            )
+            if root_org is None:
+                org_svc = OrganizationService(db)
+                root_org = await org_svc.create_organization(
+                    OrganizationCreate(name=request.organization_name, is_active=True),
+                    created_by=0,
+                )
+                steps.append({"step": "organization", "status": "success", "message": "根组织单位创建成功"})
+            else:
+                steps.append({"step": "organization", "status": "skipped", "message": "根组织单位已存在，直接复用"})
+            root_org_id = int(root_org.id)
+        except Exception as e:
+            db.rollback()
+            logger.error("根组织单位创建失败，初始化中止: %s", e, exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="根组织单位创建失败，系统未初始化；请检查数据库可用性后重试，或联系管理员",
+            )
 
         # 步骤2：初始化系统配置
         svc.initialize_defaults()
@@ -174,8 +227,8 @@ async def initialize_system(
                 detail="超级管理员账号创建失败，系统未初始化；请检查数据库可用性后重试，或联系管理员",
             )
 
-        # 步骤4：标记系统为已初始化
-        svc.set_initialized(org_id=1)
+        # 步骤4：标记系统为已初始化（写入真实根组织 ID，不再硬编码 1）
+        svc.set_initialized(org_id=root_org_id)
         steps.append({"step": "finalize", "status": "success", "message": "系统初始化完成"})
 
         logger.info("系统初始化完成，单位: %s", request.organization_name)

@@ -48,8 +48,22 @@ export async function uploadRestoreBackup(file: File, password?: string) {
   return post(`${BASE}/upload-restore`, formData)
 }
 
+/**
+ * 删除备份文件。
+ *
+ * 文件名来自后端列表，但仍属"外部输入"：未编码直接拼进路径时，
+ * 含 / ? # 或被 ../ 构造的名字会被解析到别的路由（路径穿越/越权删除）。
+ * 这里 fail-closed：先校验形态，再逐段编码（encodeURIComponent 不编码 . - _ ~ ! * ' ( )，
+ * 正常备份名 `backup-2024-01-01.zip` 编码后不变，不影响既有调用）。
+ */
 export async function deleteBackup(filename: string) {
-  return del(`${BASE}/${filename}`)
+  if (typeof filename !== 'string' || !filename.trim()) {
+    throw new Error('备份文件名不能为空')
+  }
+  if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+    throw new Error('备份文件名非法：不允许路径分隔符')
+  }
+  return del(`${BASE}/${encodeURIComponent(filename)}`)
 }
 
 export async function getBackupStats(): Promise<BackupStats> {

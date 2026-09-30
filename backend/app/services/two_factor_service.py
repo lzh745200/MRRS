@@ -2,6 +2,8 @@
 双因素认证服务
 """
 
+import hashlib
+import hmac
 import logging
 import secrets
 from base64 import b64encode
@@ -18,6 +20,17 @@ from app.services.encryption_service import decrypt_field, encrypt_field
 from app.core.transaction import safe_commit
 
 logger = logging.getLogger(__name__)
+
+# 备用恢复码存储格式（2026-09-30 深审修复）：
+# 历史实现把 8 位恢复码**明文**写入 two_factor_auth.backup_codes（JSON 列）并在
+# verify_login 里明文比对 —— 数据库文件或备份泄露即等于二次验证被绕过。
+# 现改为只存单向 PBKDF2-HMAC-SHA256 摘要（每码独立随机盐），明文仅出现在
+# enable_two_factor 的当次响应里。校验时先按摘要比对；为兼容升级前已落库的
+# 历史明文数据，摘要未命中时再与明文比对（常量时间），命中即把该用户剩余的
+# 明文恢复码整体升级为摘要后落库。
+BACKUP_CODE_PREFIX = "pbkdf2_sha256"
+BACKUP_CODE_ITERATIONS = 100_000
+_BACKUP_CODE_SALT_BYTES = 16
 
 
 class TwoFactorService:
@@ -45,6 +58,44 @@ class TwoFactorService:
             code = "".join([str(secrets.randbelow(10)) for _ in range(8)])
             codes.append(code)
         return codes
+
+    @staticmethod
+    def _hash_backup_code(code: str) -> str:
+        """把恢复码转换为带随机盐的单向摘要（存储格式见 BACKUP_CODE_PREFIX）"""
+        salt = secrets.token_bytes(_BACKUP_CODE_SALT_BYTES)
+        digest = hashlib.pbkdf2_hmac("sha256", code.encode("utf-8"), salt, BACKUP_CODE_ITERATIONS)
+        return "$".join(
+            (BACKUP_CODE_PREFIX, str(BACKUP_CODE_ITERATIONS), salt.hex(), digest.hex())
+        )
+
+    @staticmethod
+    def is_hashed_backup_code(stored: object) -> bool:
+        """判断存储项是否已是摘要格式（否则视为历史明文数据）"""
+        if not isinstance(stored, str):
+            return False
+        parts = stored.split("$")
+        return len(parts) == 4 and parts[0] == BACKUP_CODE_PREFIX and parts[1].isdigit()
+
+    @staticmethod
+    def _verify_backup_code(code: str, stored: object) -> bool:
+        """校验恢复码：摘要优先，未命中再兼容历史明文（常量时间比较）"""
+        if not isinstance(code, str) or not code:
+            return False
+        if TwoFactorService.is_hashed_backup_code(stored):
+            parts = str(stored).split("$")
+            try:
+                salt = bytes.fromhex(parts[2])
+                expected = bytes.fromhex(parts[3])
+                iterations = int(parts[1])
+            except ValueError:
+                # 存储项畸形（如手工改库）时 fail-closed：视为不匹配
+                return False
+            digest = hashlib.pbkdf2_hmac("sha256", code.encode("utf-8"), salt, iterations)
+            return hmac.compare_digest(digest, expected)
+        if isinstance(stored, str):
+            # 历史明文数据：常量时间比较，避免按字符提前返回泄露前缀
+            return hmac.compare_digest(code, stored)
+        return False
 
     @staticmethod
     def generate_qr_code(secret: str, user_email: str, issuer: str = "帮扶管理信息系统") -> str:
@@ -123,10 +174,13 @@ class TwoFactorService:
         # 加密存储密钥
         encrypted_secret = encrypt_field(secret)
 
+        # 落库的只有摘要；明文恢复码仅随本次响应返回给用户
+        hashed_backup_codes = [TwoFactorService._hash_backup_code(code) for code in backup_codes]
+
         # 创建或更新记录
         if existing:
             existing.secret_key = encrypted_secret
-            existing.backup_codes = backup_codes
+            existing.backup_codes = hashed_backup_codes
             existing.enabled = False  # 需要验证后才启用
             existing.verified_at = None
             two_factor = existing
@@ -134,7 +188,7 @@ class TwoFactorService:
             two_factor = TwoFactorAuth(
                 user_id=user.id,
                 secret_key=encrypted_secret,
-                backup_codes=backup_codes,
+                backup_codes=hashed_backup_codes,
                 enabled=False,
             )
             db.add(two_factor)
@@ -204,15 +258,29 @@ class TwoFactorService:
         if TwoFactorService.verify_totp(secret, token):
             return True
 
-        # 尝试备用码验证
-        if token in two_factor.backup_codes:
-            # 使用后移除备用码
-            two_factor.backup_codes.remove(token)
-            safe_commit(db)
-            logger.info(f"用户 {user.username} 使用备用码登录")
-            return True
+        # 尝试备用码验证（使用后移除；顺带把历史明文码升级为摘要存储）
+        stored_codes = list(two_factor.backup_codes or [])
+        matched_index = None
+        for index, stored in enumerate(stored_codes):
+            if TwoFactorService._verify_backup_code(token, stored):
+                matched_index = index
+                break
 
-        return False
+        if matched_index is None:
+            return False
+
+        remaining = [code for i, code in enumerate(stored_codes) if i != matched_index]
+        has_legacy_plaintext = any(not TwoFactorService.is_hashed_backup_code(code) for code in remaining)
+        migrated = [
+            code if TwoFactorService.is_hashed_backup_code(code) else TwoFactorService._hash_backup_code(code)
+            for code in remaining
+        ]
+        if has_legacy_plaintext:
+            logger.info("用户 %s 的历史明文备用码已升级为摘要存储", user.username)
+        two_factor.backup_codes = migrated
+        safe_commit(db)
+        logger.info(f"用户 {user.username} 使用备用码登录")
+        return True
 
     @staticmethod
     def disable_two_factor(db: Session, user: User):

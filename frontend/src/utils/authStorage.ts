@@ -48,10 +48,97 @@ const LEGACY_KEYS = {
   REFRESH_TOKEN: ['refresh_token'],
 } as const
 
+/** 单一来源的整份凭据（token / user / refresh 必须同源，绝不跨来源拼接） */
+interface CredentialSlot {
+  token: string | null
+  user: AuthData['user'] | null
+  refresh: string | null
+}
+
+/** 凭据来源：当前会话 / 记住登录持久化 / 旧版 localStorage 键 */
+type CredentialSource = 'session' | 'persist' | 'legacy'
+
 /**
  * 认证存储管理器
  */
 export class AuthStorage {
+  /** 解析用户 JSON（损坏/非对象一律 null，避免把字符串当用户档案用） */
+  private static _parseUser(raw: string | null): AuthData['user'] | null {
+    if (!raw) return null
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' ? (parsed as AuthData['user']) : null
+    } catch {
+      return null
+    }
+  }
+
+  /** 读取旧版 localStorage 键（按顺序取第一个非空值） */
+  private static _readLegacy(keys: readonly string[]): string | null {
+    for (const key of keys) {
+      const value = localStorage.getItem(key)
+      if (value) return value
+    }
+    return null
+  }
+
+  /** 读取某个来源上的整份凭据 */
+  private static _readSlot(source: CredentialSource): CredentialSlot {
+    if (source === 'session') {
+      return {
+        token: sessionStorage.getItem(STORAGE_KEYS.TOKEN),
+        user: AuthStorage._parseUser(sessionStorage.getItem(STORAGE_KEYS.USER)),
+        refresh: sessionStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN),
+      }
+    }
+    if (source === 'persist') {
+      return {
+        token: localStorage.getItem(STORAGE_KEYS.PERSIST_TOKEN),
+        user: AuthStorage._parseUser(localStorage.getItem(STORAGE_KEYS.PERSIST_USER)),
+        refresh: localStorage.getItem(STORAGE_KEYS.PERSIST_REFRESH),
+      }
+    }
+    return {
+      token: AuthStorage._readLegacy(LEGACY_KEYS.TOKEN),
+      user: AuthStorage._parseUser(AuthStorage._readLegacy(LEGACY_KEYS.USER)),
+      refresh: AuthStorage._readLegacy(LEGACY_KEYS.REFRESH_TOKEN),
+    }
+  }
+
+  /**
+   * 判定当前生效的**整份凭据**（token/user/refresh 同源）。
+   *
+   * 历史实现是三条彼此独立的回退链（getToken: session→persist→legacy；
+   * getUser: session→persist；getRefreshToken: session→persist），可以拼出
+   * "A 的 token + B 的档案/刷新令牌"这种串号组合。这里改为整体取值：
+   *
+   * 1) 会话槽有 token → 会话槽为权威来源；若会话槽缺 user（例如 401 续期只写了
+   *    新 access token），仅当持久槽持有**完全相同的 token** 时才用持久 user 补齐
+   *    （同一份凭据的正常刷新路径），否则视为不一致 → 不提供身份（fail-closed，
+   *    宁愿要求重新登录，也不能把两个人的凭据拼在一起）。
+   * 2) 会话槽无 token → 持久槽（记住登录）→ 旧版键。
+   */
+  private static _activeCredentials(): CredentialSlot {
+    const session = AuthStorage._readSlot('session')
+    if (session.token) {
+      if (session.user) return session
+      const persist = AuthStorage._readSlot('persist')
+      if (persist.user && persist.token === session.token) {
+        return {
+          token: session.token,
+          user: persist.user,
+          refresh: session.refresh || persist.refresh,
+        }
+      }
+      // 会话有 token 但拿不到同源档案 → 不提供身份（isAuthenticated() 因此为 false）。
+      // refresh 仍取自**同一会话槽**：它与 token 同源（同一次登录写入），
+      // 若一并丢弃会让"刷新后 access 已轮换、档案尚未回填"的 401 续期路径失效。
+      return { token: session.token, user: null, refresh: session.refresh }
+    }
+    const persist = AuthStorage._readSlot('persist')
+    if (persist.token) return persist
+    return AuthStorage._readSlot('legacy')
+  }
   /**
    * 保存认证令牌到 sessionStorage
    * 注意：不再写入 localStorage，避免数据持久化风险
@@ -61,15 +148,14 @@ export class AuthStorage {
   }
 
   /**
-   * 获取认证令牌
-   * 优先从 sessionStorage 读取，回退到 localStorage（向后兼容）与持久令牌（记住登录）
+   * 获取认证令牌。
+   *
+   * 优先级与历史行为一致（session → 持久令牌 → 旧版键），但改为从
+   * _activeCredentials() 这一**唯一天然来源**取值，保证 token/user/refresh
+   * 三者同源（详见 _activeCredentials 注释）。
    */
   static getToken(): string | null {
-    return (
-      sessionStorage.getItem(STORAGE_KEYS.TOKEN) ||
-      localStorage.getItem(STORAGE_KEYS.PERSIST_TOKEN) ||
-      localStorage.getItem(STORAGE_KEYS.TOKEN)
-    )
+    return AuthStorage._activeCredentials().token
   }
 
   /**
@@ -80,26 +166,10 @@ export class AuthStorage {
   }
 
   /**
-   * 获取用户信息
+   * 获取用户信息（与 getToken 同源，绝不返回另一个来源的档案）
    */
   static getUser(): AuthData['user'] | null {
-    const sessionUser = sessionStorage.getItem(STORAGE_KEYS.USER)
-    if (sessionUser) {
-      try {
-        return JSON.parse(sessionUser)
-      } catch {
-        return null
-      }
-    }
-    const persistUser = localStorage.getItem(STORAGE_KEYS.PERSIST_USER)
-    if (persistUser) {
-      try {
-        return JSON.parse(persistUser)
-      } catch {
-        return null
-      }
-    }
-    return null
+    return AuthStorage._activeCredentials().user
   }
 
   /**
@@ -110,15 +180,13 @@ export class AuthStorage {
   }
 
   /**
-   * 获取刷新令牌
-   * 优先 sessionStorage；"记住登录"开启时回退到 localStorage 的持久刷新令牌，
-   * 使 access token 过期后仍可静默续期（自动登录）。
+   * 获取刷新令牌。
+   *
+   * 与 getToken/getUser 同源：只在"凭据完全一致"时才回退到持久刷新令牌，
+   * 避免用**上一个用户**的刷新令牌续期出别人的 access token。
    */
   static getRefreshToken(): string | null {
-    return (
-      sessionStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) ||
-      localStorage.getItem(STORAGE_KEYS.PERSIST_REFRESH)
-    )
+    return AuthStorage._activeCredentials().refresh
   }
 
   /**
@@ -129,6 +197,10 @@ export class AuthStorage {
     this.setUser(data.user)
     if (data.refreshToken) {
       this.setRefreshToken(data.refreshToken)
+    } else {
+      // 本次登录没有 refresh_token：必须清掉上一会话遗留的会话级刷新令牌，
+      // 否则 401 续期会用它换出**上一个用户**的 access token（身份串号）。
+      sessionStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
     }
   }
 
@@ -212,8 +284,12 @@ export class AuthStorage {
   }
 
   /**
-   * 从旧版 localStorage 迁移数据到 sessionStorage
-   * 仅执行一次，迁移完成后清理旧数据
+   * 从旧版 localStorage 迁移数据到 sessionStorage。
+   * 仅执行一次，迁移完成后清理旧数据。
+   *
+   * 注：这里沿用 getToken/getUser/getRefreshToken 读取"当前生效凭据"——
+   * 迁移时机在应用启动早期（session 通常为空），_activeCredentials() 会回退到
+   * 旧版键，因此旧数据仍能被完整搬走（保持既有可测语义）。
    */
   static migrateFromLocalStorage(): boolean {
     // 检查是否已迁移

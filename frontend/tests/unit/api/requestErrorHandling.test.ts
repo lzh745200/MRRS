@@ -179,6 +179,20 @@ describe('api/request — 拦截器未覆盖分支', () => {
         expect(c.cancelToken).toBeUndefined()
       }
     })
+
+    it('GET 自带 cancelToken 时不得被去重 token 覆盖（否则 cancel/超时失效）', async () => {
+      capturedCancels.length = 0
+      const callerToken = { reason: 'caller-owned' } as any
+      const c = makeConfig({ method: 'GET', url: '/keep-token', cancelToken: callerToken })
+      await handlers.request(c)
+      // 调用方 token 原样保留，且不注册去重 cancel
+      expect(c.cancelToken).toBe(callerToken)
+      expect(capturedCancels).toHaveLength(0)
+      // 同一 key 再来一次也不会取消前一个（去重让位于调用方取消权）
+      const c2 = makeConfig({ method: 'GET', url: '/keep-token', cancelToken: callerToken })
+      await handlers.request(c2)
+      expect(capturedCancels).toHaveLength(0)
+    })
   })
 
   describe('response interceptor — success 边界', () => {

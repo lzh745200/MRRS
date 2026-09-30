@@ -706,7 +706,14 @@ class TestDataPackageService:
             with patcher:
                 imp, skip, errs = service._bulk_upsert_records(model, records, 1, True)
                 assert len(errs) >= 1
-                service.db.rollback.assert_called()
+                assert imp == 0, "失败的批次必须如实计 0"
+                # 2026-09-30 深审修复：原断言 service.db.rollback.assert_called() 固化了
+                # "整事务回滚"这一缺陷行为（会丢弃同外层事务内已导入的前序数据类型）。
+                # 现改为断言使用了 SAVEPOINT 且异常被交给 savepoint 回滚。
+                service.db.begin_nested.assert_called_once()
+                savepoint = service.db.begin_nested.return_value
+                assert savepoint.__exit__.called, "异常必须由 SAVEPOINT 上下文回滚"
+                assert savepoint.__exit__.call_args.args[0] is Exception
 
     # ===================== export_encrypted_package =====================
     async     def test_export_encrypted_no_password(self, service):

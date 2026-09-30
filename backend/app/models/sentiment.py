@@ -9,7 +9,10 @@ app.models.sentiment.SentimentNews 但文件不存在），
 2026-07-17 按两处实际使用字段补齐。
 """
 
+from datetime import datetime, timezone
+
 from sqlalchemy import Boolean, Column, DateTime, Float, String, Text
+from sqlalchemy.sql import func
 
 from app.models.base import BaseModel
 
@@ -25,7 +28,16 @@ class SentimentNews(BaseModel):
     content = Column(Text, nullable=True, comment="正文内容")
     author = Column(String(100), nullable=True, comment="作者")
     published_at = Column(DateTime(timezone=True), nullable=True, index=True, comment="发布时间")
-    collected_at = Column(DateTime(timezone=True), nullable=True, comment="采集时间")
+    # 迁移 006 建的是 NOT NULL 且无 server_default —— 而全仓无任何写入点填该列，
+    # 迁移建的库插入必失败，create_all 建的库却可空，行为分裂（深审 LIVE）。
+    # 统一为「ORM 侧必有值 + 物理列放宽」，两侧语义一致。
+    collected_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=True,
+        comment="采集时间",
+    )
 
     # 关键词（crawler 以英文逗号拼接存储；分析后重写为逗号拼接的热词）
     keywords = Column(String(500), nullable=True, default="", comment="关键词（逗号分隔）")

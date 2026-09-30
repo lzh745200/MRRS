@@ -46,31 +46,11 @@ export interface DownloadOptions {
  */
 export function parseFileName(contentDisposition: string | undefined | null): string | null {
   if (!contentDisposition) return null
-
-  // 1. 优先 filename*=UTF-8''xxx
-  const starMatch = contentDisposition.match(/filename\*=([^;]+)/i)
-  if (starMatch) {
-    const raw = starMatch[1].trim()
-    const idx = raw.indexOf("''")
-    if (idx >= 0) {
-      const encoded = raw.slice(idx + 2)
-      try {
-        const decoded = decodeURIComponent(encoded)
-        if (decoded) return decoded
-      } catch {
-        // 解码失败时 fallthrough
-      }
-    }
-  }
-
-  // 2. 回退 filename="xxx" 或 filename=xxx
-  const quotedMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
-  if (quotedMatch) {
-    const name = quotedMatch[1].trim()
-    if (name) return name
-  }
-
-  return null
+  // 解析逻辑统一由 @/api/request 的 parseContentDisposition 提供（原实现在此处
+  // 逐字复制了一份同构代码，两处规则一旦漂移就会出现"下载文件名不一致"）。
+  // fallback 传空串以保留本函数的 null 语义（调用方据此回退 fallbackFileName）。
+  const headers = { 'content-disposition': contentDisposition }
+  return parseContentDisposition(headers, '') || null
 }
 
 /**
@@ -114,8 +94,18 @@ export async function downloadBlobAsFile(
       // 纯 Blob 返回（来自 apiRequest）
       blob = result
     } else if (result && typeof result === 'object' && 'data' in result) {
-      // AxiosResponse<Blob>
-      blob = result.data as Blob
+      // AxiosResponse<Blob> — 必须先证实载荷确实是 Blob：
+      // 204/空响应在 responseType:'blob' 下 data 可能是 '' / undefined，
+      // 直接当 Blob 用会在 URL.createObjectURL 抛 TypeError（用户看到无提示的失败）。
+      const payload: unknown = result.data
+      if (!(payload instanceof Blob)) {
+        throw new Error('下载失败：响应内容不是文件')
+      }
+      // 服务端错误页（HTML）被包成 Blob 时同样不是可下载文件
+      if ((payload.type || '').toLowerCase().includes('text/html')) {
+        throw new Error('下载失败：服务端返回了错误页面')
+      }
+      blob = payload
       // 尝试从响应头解析文件名
       const headers = result.headers || {}
       const cd =

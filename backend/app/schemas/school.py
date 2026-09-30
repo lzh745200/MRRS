@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.school import SchoolLevel, SchoolType
 
@@ -75,6 +75,10 @@ class SchoolUpdate(BaseModel):
 
 class SchoolResponse(SchoolBase):
     """Schema"""
+
+    # Pydantic v2 从 ORM 实例转换需显式开启（深审 LIVE）；缺失时
+    # model_validate(orm_obj) 直接 ValidationError。
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     created_at: datetime

@@ -29,14 +29,17 @@ jobs:
         with: { python-version: '3.11' }
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: '22' }
+      # W4-T9 / W4-T5 修复（2026-09-30）：发版门禁不得被绕过
+      #  - 移除 continue-on-error：后端/前端测试失败必须阻断出包（原实现测试全红照样发 Release）
+      #  - 移除内联 --cov-fail-under=50：它会把门禁从 100% 降到 50% 并屏蔽
+      #    backend/.coveragerc 的单一事实源（与 pr-checks / nightly 口径统一）
       - name: Backend smoke test
-        continue-on-error: true
         run: |
           pip install -r backend/requirements.txt -r backend/requirements-dev.txt
           # 注意：-dist loadfile 与 pytest-rerunfailures 不兼容（worker 崩溃时
           # mark_test_pending 在 loadscope 调度器上抛 NotImplementedError），
           # 使用默认 load 调度器让 rerun 正常生效。
-          cd backend && python -m pytest tests/ -q --tb=short -n auto --cov=app --cov-report=term --cov-fail-under=50 --reruns 3 --reruns-delay 1 --junitxml=test-results.xml
+          cd backend && python -m pytest tests/ -q --tb=short -n auto --cov=app --cov-report=term --reruns 3 --reruns-delay 1 --junitxml=test-results.xml
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -45,7 +48,6 @@ jobs:
           path: backend/test-results.xml
           retention-days: 7
       - name: Frontend smoke test
-        continue-on-error: true
         run: |
           cd frontend
           npm ci --legacy-peer-deps --prefer-offline || npm install --legacy-peer-deps
@@ -54,7 +56,8 @@ jobs:
 
   build-windows:
     needs: smoke-test
-    if: always()
+    # W4-T9：仅当 smoke-test 成功才构建/发布（原 if: always() 会在测试失败时照样出包并发 Release）
+    if: success()
     runs-on: windows-2022
     timeout-minutes: 90
     # Windows 运行器（en-US）上 Python 对管道的默认 stdout 编码是 cp1252：

@@ -26,7 +26,10 @@ class SystemConfig(Base):
     )
 
     def __repr__(self):
-        return f"<SystemConfig(key='{self.key}', value='{self.value}')>"
+        # SystemConfig 存 encryption_salt / verify_hash 等敏感值：repr 会被日志、
+        # 调试器、异常回溯原样打印，绝不回显 value（深审 LIVE），只给长度。
+        _value_len = len(self.value) if self.value else 0
+        return f"<SystemConfig(key='{self.key}', value=<{_value_len} chars>)>"
 
 
 class SystemUpdateLog(Base):

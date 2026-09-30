@@ -128,7 +128,11 @@ class ReportExportService:
                 table_rows.append(totals)
 
             table = {
-                "headers": ["经费类型", "笔数", "申请金额(元)", "批准金额(元)", "拨付金额(元)", "使用金额(元)"],
+                # 深审 #48：Fund.amount/approved_amount/allocated_amount/used_amount
+                # 与 Project.budget/actual_cost 在模型中均以**万元**为单位
+                # （models/fund.py:94-99、models/project.py:94-95 注释），原表头
+                # 写"(元)"，正式 Word/PDF 上的数值口径差 10000 倍。统一改为"(万元)"。
+                "headers": ["经费类型", "笔数", "申请金额(万元)", "批准金额(万元)", "拨付金额(万元)", "使用金额(万元)"],
                 "rows": table_rows,
             }
             paragraphs = [] if rows else [f"{year} 年度暂无经费记录。"]
@@ -190,7 +194,8 @@ class ReportExportService:
                 )
 
             table = {
-                "headers": ["项目状态", "项目数", "平均进度", "预算金额(元)", "实际花费(元)"],
+                # 同 #48：Project.budget / actual_cost 单位亦为万元。
+                "headers": ["项目状态", "项目数", "平均进度", "预算金额(万元)", "实际花费(万元)"],
                 "rows": table_rows,
             }
             paragraphs = [] if rows else [f"{year} 年度暂无项目记录。"]

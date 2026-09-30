@@ -218,13 +218,31 @@ class TestKeysetPaginate:
         assert "items" in result
 
     @patch(PATCH_SELECT)
-    def test_last_value_is_none(self, _):
-        """When the last item (after truncation) lacks the cursor column attribute, next_cursor stays None."""
+    def test_last_item_without_column_attribute_falls_back_to_scalar(self, _):
+        """末项缺少游标列属性时（标量查询场景），以末项对象本身作为游标，
+        避免 has_more=True 却 next_cursor=None 导致翻页静默卡死（深审 #4）。"""
         class ItemNoAttr:
             pass
+
         item1, item2, item3, item4 = MagicMock(), MagicMock(), ItemNoAttr(), MagicMock()
         item1.id = 1
         item2.id = 2
+        item4.id = 4
+
+        result = keyset_paginate(MagicMock(), MockOrderCol(), page_size=3, db=make_db(10, 4, items=[item1, item2, item3, item4]))
+        assert result["has_more"] is True
+        # 截断后末项为 item3（无 id 属性）→ 回退到末项本身，
+        # 游标经 default=str 序列化，故解码后为对象字符串表示
+        assert result["next_cursor"] is not None
+        assert decode_cursor(result["next_cursor"]) == str(item3)
+
+    @patch(PATCH_SELECT)
+    def test_last_value_none_yields_no_cursor(self, _):
+        """末项游标列取值显式为 None 时，无法构造游标，next_cursor 保持 None。"""
+        item1, item2, item3, item4 = MagicMock(), MagicMock(), MagicMock(), MagicMock()
+        item1.id = 1
+        item2.id = 2
+        item3.id = None  # 截断后的末项
         item4.id = 4
 
         result = keyset_paginate(MagicMock(), MockOrderCol(), page_size=3, db=make_db(10, 4, items=[item1, item2, item3, item4]))

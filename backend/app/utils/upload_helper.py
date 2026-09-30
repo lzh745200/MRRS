@@ -79,7 +79,11 @@ DEFAULT_ALLOWED_EXTENSIONS: Set[str] = {
 # ── 图片 magic 头（防改名绕过；取自历史 files.py，逐字节等价）──
 # 注意: svg 不在白名单（可含脚本导致存储型 XSS），故此处不含 svg 规则。
 _IMAGE_MAGIC = {
+    # jpeg/jpe 与 jpg 同族（同一 magic），DEFAULT_ALLOWED_EXTENSIONS 同时放行
+    # jpg 与 jpeg —— 漏登记 jpeg 会让 .jpeg 跳过嗅探（深审 #7）。
     "jpg": [b"\xff\xd8\xff"],
+    "jpeg": [b"\xff\xd8\xff"],
+    "jpe": [b"\xff\xd8\xff"],
     "png": [b"\x89PNG\r\n\x1a\n"],
     "gif": [b"GIF87a", b"GIF89a"],
     "bmp": [b"BM"],

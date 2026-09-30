@@ -48,14 +48,18 @@ export function getEffectiveRoles(role?: string | null): string[] {
 }
 
 /**
- * 检查是否为管理员（支持 role 和 is_superuser 标志）
+ * 检查是否为管理员（支持 role 和 is_superuser 标志）。
+ *
+ * 角色必须先 normalizeRole：后端旧值 manager/approval_leader 归一化后就是 admin，
+ * 直接用原始 role 比对 ADMIN_ROLES 会把这类存量管理员误判为非管理员
+ * （菜单/入口按管理员隐藏），与后端 normalize_role 的语义不一致。
  */
 export function isAdminUser(): boolean {
   try {
     const user = AuthStorage.getUser()
     if (!user) return false
-    // 检查角色
-    if (ADMIN_ROLES.includes(user.role || '')) return true
+    // 检查角色（归一化后比对）
+    if (ADMIN_ROLES.includes(normalizeRole(user.role))) return true
     // 检查 is_superuser 标志
     if (user.is_superuser === true) return true
     return false
@@ -87,7 +91,9 @@ export function hasAllowedRole(role: string, allowedRoles?: string[]): boolean {
   // 管理员自动拥有所有权限
   if (isAdminUser()) return true
   const effectiveRoles = getEffectiveRoles(role)
-  return allowedRoles.some((r) => effectiveRoles.includes(r))
+  // 白名单同样归一化后比对：否则 {roles:['manager']} 这类存量配置与
+  // 归一化后的 'admin' 永不相等（菜单被错误隐藏）
+  return allowedRoles.some((r) => effectiveRoles.includes(normalizeRole(r)))
 }
 
 /**
@@ -100,7 +106,8 @@ export function hasMinRole(role: string, minRole?: string): boolean {
   // 管理员自动满足所有最小角色要求
   if (isAdminUser()) return true
   const currentPriority = ROLE_PRIORITY[normalizeRole(role)] ?? ROLE_PRIORITY.viewer
-  const requiredPriority = ROLE_PRIORITY[minRole] ?? ROLE_PRIORITY.super_admin
+  // minRole 归一化后再查表；未知角色的回退保持 super_admin（最严门槛，fail-closed）
+  const requiredPriority = ROLE_PRIORITY[normalizeRole(minRole)] ?? ROLE_PRIORITY.super_admin
   return currentPriority <= requiredPriority
 }
 
@@ -115,24 +122,26 @@ export function canAccessMenu(
 }
 
 /**
- * 从 localStorage 安全获取角色
- * 如果用户是 is_superuser，但 role 不是 admin/super_admin，则返回 super_admin
+ * 从 localStorage 安全获取角色。
+ *
+ * 返回值统一为归一化角色（与 normalizeRole 的默认值 'user' 对齐；
+ * 原实现返回原始 role 且默认 'viewer'，与 normalizeRole 的默认值互相矛盾，
+ * 调用方拿到的"同一个用户"在不同入口可能是 user / viewer / operator 三种值）。
+ * is_superuser 为 true 但角色不是管理员时，仍返回 super_admin。
  */
-export function getRoleFromLocalStorage(defaultRole = 'viewer'): string {
+export function getRoleFromLocalStorage(defaultRole = 'user'): string {
   try {
     const user = AuthStorage.getUser()
-    if (!user) return defaultRole
+    if (!user) return normalizeRole(defaultRole)
 
-    // 检查角色
     const role = user.role || defaultRole
 
-    // 如果 is_superuser 为 true，但 role 不是管理员角色，则返回 super_admin
-    if (user.is_superuser === true && !ADMIN_ROLES.includes(role)) {
+    if (user.is_superuser === true && !ADMIN_ROLES.includes(normalizeRole(role))) {
       return 'super_admin'
     }
 
-    return role
+    return normalizeRole(role)
   } catch {
-    return defaultRole
+    return normalizeRole(defaultRole)
   }
 }

@@ -6,9 +6,6 @@
 from fastapi.testclient import TestClient
 from pathlib import Path
 
-from tests.utils import HTTP_SUCCESS_OR_ERROR
-
-
 class TestSystemAdmin:
     """系统管理员功能测试类"""
 
@@ -17,14 +14,12 @@ class TestSystemAdmin:
         response = client.get(
             "/api/v1/system/admin/info", headers=admin_token_headers
         )
-        # 接受 200 成功、400 错误、401 未授权、403 禁止访问或 422 参数错误
-        assert response.status_code in HTTP_SUCCESS_OR_ERROR
-        # 仅在成功时验证响应体
-        if response.status_code == 200:
-            data = response.json()
-            assert "version" in data
-            assert "database_size" in data
-            assert "user_count" in data
+        # W4-T3：管理员访问必须是 200（原"接受任意状态码"让 500 也算通过）
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert "version" in data
+        assert "database_size" in data
+        assert "user_count" in data
 
     def test_create_backup(self, client: TestClient, admin_token_headers: dict, tmp_path: Path):
         """测试创建备份（使用临时目录，避免产生真实备份文件）"""
@@ -40,13 +35,11 @@ class TestSystemAdmin:
             response = client.post(
                 "/api/v1/system/admin/backup", headers=admin_token_headers
             )
-        # 接受 200 成功、400 错误、401 未授权、403 禁止访问、422 参数错误或 500 服务器错误
-        assert response.status_code in (200, 400, 401, 403, 422, 500)
-        # 仅在成功时验证响应体
-        if response.status_code == 200:
-            data = response.json()
-            assert data.get("success") is True
-            assert "filename" in data.get("data", {})
+        # W4-T3：mock 环境下创建备份必须成功
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data.get("success") is True
+        assert "filename" in data.get("data", {})
         # 清理临时备份文件
         for f in backup_dir.glob("backup_*.db"):
             f.unlink(missing_ok=True)
@@ -56,21 +49,17 @@ class TestSystemAdmin:
         response = client.get(
             "/api/v1/system/admin/backups", headers=admin_token_headers
         )
-        # 接受 200 成功、400 错误、401 未授权、403 禁止访问或 422 参数错误
-        assert response.status_code in HTTP_SUCCESS_OR_ERROR
-        # 仅在成功时验证响应体
-        if response.status_code == 200:
-            data = response.json()
-            assert data.get("success") is True
-            assert "items" in data.get("data", {})
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data.get("success") is True
+        assert "items" in data.get("data", {})
 
     def test_get_system_config(self, client: TestClient, admin_token_headers: dict):
         """测试获取系统配置"""
         response = client.get(
             "/api/v1/system/admin/config", headers=admin_token_headers
         )
-        # 接受 200 成功、400 错误、401 未授权、403 禁止访问或 422 参数错误
-        assert response.status_code in HTTP_SUCCESS_OR_ERROR
+        assert response.status_code == 200, response.text
 
     def test_update_system_config(self, client: TestClient, admin_token_headers: dict):
         """测试更新系统配置"""
@@ -85,24 +74,21 @@ class TestSystemAdmin:
             json=config_data,
             headers=admin_token_headers,
         )
-        # 接受 200 成功、400 错误、401 未授权、403 禁止访问或 422 参数错误
-        assert response.status_code in HTTP_SUCCESS_OR_ERROR
+        assert response.status_code == 200, response.text
 
     def test_clear_cache(self, client: TestClient, admin_token_headers: dict):
         """测试清理缓存"""
         response = client.post(
             "/api/v1/system/admin/clear-cache", headers=admin_token_headers
         )
-        # 接受 200 成功、400 错误、401 未授权、403 禁止访问或 422 参数错误
-        assert response.status_code in HTTP_SUCCESS_OR_ERROR
+        assert response.status_code == 200, response.text
 
     def test_get_system_logs(self, client: TestClient, admin_token_headers: dict):
         """测试获取系统日志"""
         response = client.get(
             "/api/v1/system/admin/logs", headers=admin_token_headers
         )
-        # 接受 200 成功、400 错误、401 未授权、403 禁止访问或 422 参数错误
-        assert response.status_code in HTTP_SUCCESS_OR_ERROR
+        assert response.status_code == 200, response.text
 
     def test_non_admin_cannot_access_system_info(
         self, client: TestClient, operator_token_headers: dict
@@ -111,8 +97,8 @@ class TestSystemAdmin:
         response = client.get(
             "/api/v1/system/admin/info", headers=operator_token_headers
         )
-        # 接受 200 成功、400 错误、401 未授权、403 禁止访问或 422 参数错误
-        assert response.status_code in HTTP_SUCCESS_OR_ERROR
+        # W4-T3：越权访问必须被拒（原"接受 200"让越权也算通过）
+        assert response.status_code in (401, 403), response.text
 
     def test_non_admin_cannot_create_backup(
         self, client: TestClient, operator_token_headers: dict
@@ -121,8 +107,7 @@ class TestSystemAdmin:
         response = client.post(
             "/api/v1/system/admin/backup", headers=operator_token_headers
         )
-        # 接受 200 成功、400 错误、401 未授权、403 禁止访问或 422 参数错误
-        assert response.status_code in HTTP_SUCCESS_OR_ERROR
+        assert response.status_code in (401, 403), response.text
 
     def test_non_admin_cannot_update_config(
         self, client: TestClient, operator_token_headers: dict
@@ -135,5 +120,4 @@ class TestSystemAdmin:
             json=config_data,
             headers=operator_token_headers,
         )
-        # 接受 200 成功、400 错误、401 未授权、403 禁止访问或 422 参数错误
-        assert response.status_code in HTTP_SUCCESS_OR_ERROR
+        assert response.status_code in (401, 403), response.text

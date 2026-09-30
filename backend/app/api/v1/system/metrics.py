@@ -170,7 +170,9 @@ async def get_performance_metrics(current_user=Depends(get_current_user)):
             "value": cpu_percent,
             "unit": "%",
             "threshold": 80,
-            "status": "warning" if cpu_percent > 80 else "critical" if cpu_percent > 95 else "normal",
+            # 深审 #84：先判高阈值再判低阈值。原写法 critical 分支不可达
+            # （>95 必然先命中 >80），超过 95% 只报 warning。
+            "status": "critical" if cpu_percent > 95 else "warning" if cpu_percent > 80 else "normal",
         })
 
         # 内存指标
@@ -181,7 +183,7 @@ async def get_performance_metrics(current_user=Depends(get_current_user)):
             "value": memory.percent,
             "unit": "%",
             "threshold": 85,
-            "status": "warning" if memory.percent > 85 else "critical" if memory.percent > 95 else "normal",
+            "status": "critical" if memory.percent > 95 else "warning" if memory.percent > 85 else "normal",
         })
 
         # 磁盘指标（跨平台路径：Windows 取 SystemDrive，其它平台取文件系统根）
@@ -192,7 +194,7 @@ async def get_performance_metrics(current_user=Depends(get_current_user)):
             "value": disk.percent,
             "unit": "%",
             "threshold": 80,
-            "status": "warning" if disk.percent > 80 else "critical" if disk.percent > 95 else "normal",
+            "status": "critical" if disk.percent > 95 else "warning" if disk.percent > 80 else "normal",
         })
     except ImportError:  # pragma: no cover
         pass
@@ -291,13 +293,16 @@ async def get_metrics_history(
         from app.models.system_monitor import SystemMonitor
 
         since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        # 深审 #85：原实现 asc + limit(500) 取的是窗口内**最早**的 500 条，
+        # 采样密集时最新数据全被丢弃。改为取最新 500 条后反转成正序返回。
         records = (
             db.query(SystemMonitor)
             .filter(SystemMonitor.created_at >= since)
-            .order_by(SystemMonitor.created_at.asc())
+            .order_by(SystemMonitor.created_at.desc())
             .limit(500)
             .all()
         )
+        records.reverse()
 
         history = []
         for record in records:

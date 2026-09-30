@@ -11,7 +11,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -45,15 +45,15 @@ async def get_data_quality_report(
             "income_anomalies": anomalies,
             "filing_progress": progress,
         })
-    except Exception as e:
-        logger.error("数据质量报告生成失败: %s", e, exc_info=True)
-        return success_response(data={
-            "generated_at": datetime.now().isoformat(),
-            "error": str(e),
-            "null_rate_report": {},
-            "income_anomalies": [],
-            "filing_progress": {},
-        })
+    except Exception:
+        # W15 深审 #23：异常曾被吞成 200 + `"error": str(e)`——既让调用方把失败
+        # 当成功（静默失效），又把内部异常文本（表名/SQL/路径）出站。改为
+        # fail-closed：日志留全栈，响应只给通用 500 文案。
+        logger.error("数据质量报告生成失败", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="数据质量报告生成失败，请稍后重试或联系管理员",
+        )
 
 
 # ------------------------------------------------------------------

@@ -6,9 +6,25 @@
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from app.core.transaction import safe_commit
 
 logger = logging.getLogger(__name__)
+
+#: 可容忍的 schema 差异错误特征（表/列不存在）——部署版本落后于代码时出现
+_MISSING_SCHEMA_HINTS = (
+    "no such table",
+    "no such column",
+    "does not exist",
+    "unknown column",
+    "has no column named",
+)
+
+
+def _is_missing_schema_error(exc: Exception) -> bool:
+    """判断异常是否为"表/列不存在"这类可容忍的 schema 差异（深审 #72）。"""
+    message = str(getattr(exc, "orig", exc)).lower()
+    return any(hint in message for hint in _MISSING_SCHEMA_HINTS)
 
 
 class VillageCascadeDeleteService:
@@ -77,9 +93,16 @@ class VillageCascadeDeleteService:
                         delete_stats[table_name] = deleted_count
                         total_deleted += deleted_count
                         logger.info(f"  删除 {table_name}: {deleted_count} 条记录")
-                except Exception as e:
-                    # 表可能不存在或列名不同,记录警告但继续
-                    logger.warning(f"  删除 {table_name} 失败: {e}")
+                except (OperationalError, ProgrammingError) as e:
+                    # 深审 #72：仅"表/列不存在"这类 schema 差异可容忍（部署版本
+                    # 落后于代码时新表尚未建）；其余 SQL 错误（如 database is
+                    # locked、约束冲突）此前也被 warning 吞掉，导致主行删除成功
+                    # 但依赖行残留、计数漏报。现在只有 schema 类错误降级为警告，
+                    # 其余一律回滚并向上抛出。
+                    if _is_missing_schema_error(e):
+                        logger.warning(f"  删除 {table_name} 跳过（表/列不存在）: {e}")
+                        continue
+                    raise
 
             # 2. 删除村庄本身
             result = self.db.execute(

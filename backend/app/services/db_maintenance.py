@@ -67,9 +67,14 @@ def start_db_maintenance():
 
 def stop_db_maintenance():
     """停止后台数据库维护线程。"""
+    global _maintenance_thread
     _stop_event.set()
     if _maintenance_thread:
         _maintenance_thread.join(timeout=1)
+    # 2026-09-30 深审修复：必须复位全局线程引用，否则 start_db_maintenance 的
+    # `if _maintenance_thread is not None: return` 使同进程二次启动静默失效
+    # （对照下方 stop_wal_checkpoint_scheduler 的显式复位）。
+    _maintenance_thread = None
     logger.info("数据库定期维护已停止")
 
 

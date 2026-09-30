@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import axios from 'axios'
 
 const { mockGet, mockPost } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -54,8 +55,27 @@ describe('api/batchOperations', () => {
     const r = await validateBatch('villages', [1, 2])
     expect(mockPost).toHaveBeenCalledWith('/batch/validate', null, {
       params: { table_name: 'villages', ids: [1, 2] },
+      // 后端 ids: List[int] = Query(...) 需要重复键 ids=1&ids=2；
+      // axios 默认发 ids[]=… → 后端取不到 ids 恒 422（回归：见下一条用例）
+      paramsSerializer: { indexes: null },
     })
     expect(r).toBe(body)
+  })
+
+  it('validateBatch 序列化结果为重复同名键 ids=1&ids=2（不是 ids[]=1）', () => {
+    // 用真实 axios 验证序列化语义：这是该端点 422 缺陷的根因断言
+    const url = axios.getUri({
+      url: '/batch/validate',
+      params: { table_name: 'villages', ids: [1, 2] },
+      paramsSerializer: { indexes: null },
+    })
+    expect(url).toBe('/batch/validate?table_name=villages&ids=1&ids=2')
+    const defaultUrl = axios.getUri({
+      url: '/batch/validate',
+      params: { table_name: 'villages', ids: [1, 2] },
+    })
+    // 记录 axios 默认行为（方括号形式）——证明必须显式 indexes:null
+    expect(defaultUrl).toContain('ids%5B%5D=1')
   })
 
   it('getBatchStatus GET /batch/status', async () => {

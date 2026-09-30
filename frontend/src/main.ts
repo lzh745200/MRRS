@@ -36,12 +36,22 @@ import '@/styles/print.scss'
 // 无障碍增强（焦点环/skip-link/reduced-motion/high-contrast 主题补全）
 import '@/styles/accessibility.css'
 
-// 挂载前应用已记忆的主题，避免首屏主题闪烁（FOUC）
-import { applyThemeToDom, THEME_STORAGE_KEY, DEFAULT_THEME } from '@/stores/config'
-applyThemeToDom(localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME)
+// 挂载前应用已记忆的主题，避免首屏主题闪烁（FOUC）。
+// readStoredTheme 内部已做 try/catch + THEME_OPTIONS 白名单校验：
+// 受限存储下 getItem 抛 SecurityError 会中断入口模块（白屏），
+// 非法主题值则会写到 data-theme 上导致全站 token 失效。
+import { applyThemeToDom, readStoredTheme } from '@/stores/config'
+import { logger } from '@/utils/logger'
+applyThemeToDom(readStoredTheme())
 
-// 一次性将旧版 localStorage token 迁移到 sessionStorage
-AuthStorage.migrateFromLocalStorage()
+// 一次性将旧版 localStorage token 迁移到 sessionStorage。
+// 迁移涉及 sessionStorage/localStorage 读写，受限存储/配额下会抛错：
+// 入口模块抛错 = 整站白屏，用户连重新登录的机会都没有。失败只告警并继续挂载。
+try {
+  AuthStorage.migrateFromLocalStorage()
+} catch (e) {
+  logger.warn('[main] 旧版认证数据迁移失败，已跳过（用户可重新登录）', e)
+}
 
 const app = createApp(App)
 
