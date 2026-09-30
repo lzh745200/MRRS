@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
+from ...core.permission_utils import require_admin
 from ...core.security import get_current_user
 from ...models.validation_rule import RuleType, ValidationRule
 from app.core.response import success_response
@@ -86,6 +87,8 @@ async def create_rule(
     db: Session = Depends(get_db),
 ):
     """创建校验规则（管理员）"""
+    require_admin(current_user, error_message="仅管理员可创建校验规则")
+
     # 校验 params 是否为合法 JSON
     if rule_in.params:
         try:
@@ -121,6 +124,8 @@ async def update_rule(
     db: Session = Depends(get_db),
 ):
     """更新校验规则"""
+    require_admin(current_user, error_message="仅管理员可修改校验规则")
+
     rule = db.query(ValidationRule).filter(ValidationRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="规则不存在")
@@ -150,6 +155,8 @@ async def delete_rule(
     db: Session = Depends(get_db),
 ):
     """删除校验规则"""
+    require_admin(current_user, error_message="仅管理员可删除校验规则")
+
     rule = db.query(ValidationRule).filter(ValidationRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="规则不存在")
@@ -212,7 +219,12 @@ async def validate_data(
     errors = []
     for rule in rules:
         field_value = data.get(rule.field)
-        params = json.loads(rule.params) if rule.params else {}
+        # 规则参数是用户配置的 JSON 文本：脏数据不应把校验端点打成 500，
+        # 非法 JSON 一律按"无参数"处理并留痕（深审 LIVE）。
+        try:
+            params = json.loads(rule.params) if rule.params else {}
+        except (TypeError, ValueError):
+            params = {}
         error = _check_rule(rule, field_value, params, data)
         if error:
             field_label = FIELD_LABELS.get(rule.field, rule.field)

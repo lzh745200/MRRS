@@ -911,6 +911,10 @@ class TestDataPackageService:
                 m_val.return_value.manifest = real_manifest
                 result = await service.decrypt_and_preview_package(1, "pwd")
                 assert result.status == "validated"
+                # v1.12.9：解密预览成功必须把包推进到 validated 并落库，
+                # 否则 confirm-import 因状态仍是 pending 直接拒绝（三步链路恒失败）
+                assert pkg.status == "validated"
+                service.db.commit.assert_called()
 
     async     def test_decrypt_and_preview_validation_fails(self, service):
         pkg = MagicMock()

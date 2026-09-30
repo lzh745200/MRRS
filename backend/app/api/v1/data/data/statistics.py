@@ -55,7 +55,7 @@ async def _cache_stats(cache_key: str, data: dict):
         logger.warning("统计缓存写入失败 (key=%s): %s", cache_key, e)
 
 
-def _calc_village_completeness(db: Session, SV, VP, VI, total_villages: int) -> int:
+def _calc_village_completeness(db: Session, SV, VP, VI, total_villages: int, scope_filter=None) -> int:
     """计算帮扶村数据完整率（百分比整数）
 
     检查维度：
@@ -65,41 +65,72 @@ def _calc_village_completeness(db: Session, SV, VP, VI, total_villages: int) -> 
     4. 收入数据：至少有1年 VillageIncome 记录
 
     每个帮扶村满分 6 个检查项，汇总所有村的通过项占比。
+
+    2026-09-17 修复（软删分子 + 数据范围）：
+    * 全部子计数只统计 is_active=True 的帮扶村。此前 4 个基本字段、坐标、
+      人口、收入子计数一律不过滤软删（分母 sv_count 却是活跃村数），
+      软删村仍计入分子 → 完整率可输出 >100%（实测 117）；
+    * scope_filter：可选的数据域过滤回调（调用方传 _scoped 这类既有
+      app.core.data_permission 入口）。传入后分子与分母取同一村集合，
+      窄范围用户不会再看到全库聚合出的完整率；
+    * 结果钳制到 [0, 100]，任何口径漂移都不再输出 >100% 的完整率。
     """
-    if total_villages == 0:
+    if total_villages <= 0:
         return 0
 
     checks_per_village = 6
     total_checks = total_villages * checks_per_village
     passed = 0
 
-    # 1. 基本信息字段（各字段非空计数）
+    def _apply_scope(query):
+        """把调用方的数据域过滤挂到子计数上（未传回调时保持原样）"""
+        return scope_filter(query) if scope_filter is not None else query
+
+    # 1. 基本信息字段（各字段非空计数；排除软删村）
     for col in [SV.village_name, SV.county, SV.department, SV.support_unit]:
         cnt = (
-            db.query(func.count(SV.id))
-            .filter(col.isnot(None), col != "")
-            .scalar() or 0
+            _apply_scope(
+                db.query(func.count(SV.id)).filter(
+                    SV.is_active.is_(True), col.isnot(None), col != ""
+                )
+            ).scalar() or 0
         )
-        passed += cnt
+        passed += min(cnt, total_villages)
 
-    # 2. 地理坐标（lat 和 lng 都非空才算通过）
+    # 2. 地理坐标（lat 和 lng 都非空才算通过；排除软删村）
     coords_filled = (
-        db.query(func.count(SV.id))
-        .filter(SV.latitude.isnot(None), SV.longitude.isnot(None))
-        .scalar() or 0
+        _apply_scope(
+            db.query(func.count(SV.id)).filter(
+                SV.is_active.is_(True),
+                SV.latitude.isnot(None),
+                SV.longitude.isnot(None),
+            )
+        ).scalar() or 0
     )
-    passed += coords_filled
+    passed += min(coords_filled, total_villages)
 
-    # 3. 人口数据（至少有1年记录的村数）
-    pop_villages = db.query(func.count(func.distinct(VP.supported_village_id))).scalar() or 0
+    # 3. 人口数据（至少有1年记录的村数）——join 村表排除软删村与数据范围外的村
+    pop_villages = (
+        _apply_scope(
+            db.query(func.count(func.distinct(VP.supported_village_id)))
+            .join(SV, VP.supported_village_id == SV.id)
+            .filter(SV.is_active.is_(True))
+        ).scalar() or 0
+    )
     passed += min(pop_villages, total_villages)
 
-    # 4. 收入数据（至少有1年记录的村数）
+    # 4. 收入数据（至少有1年记录的村数）——同上
     # NOTE: VillageIncome 表名可能为 village_income 或 village_incomes
-    income_villages = db.query(func.count(func.distinct(VI.supported_village_id))).scalar() or 0
+    income_villages = (
+        _apply_scope(
+            db.query(func.count(func.distinct(VI.supported_village_id)))
+            .join(SV, VI.supported_village_id == SV.id)
+            .filter(SV.is_active.is_(True))
+        ).scalar() or 0
+    )
     passed += min(income_villages, total_villages)
 
-    return round(passed / total_checks * 100)
+    return max(0, min(100, round(passed / total_checks * 100)))
 
 
 @router.get("/summary")
@@ -647,7 +678,11 @@ async def _get_analysis_data_impl(db: Session, current_user):
     total_investment = float(mil_total) + float(loc_total)
 
     # 数据完整率 — 基于关键字段实际填写率
-    completeness = _calc_village_completeness(db, SupportedVillage, VillagePopulation, VillageIncome, total_villages)
+    # 2026-09-17 修复：分子同样套 _scoped —— 否则窄范围用户的完整率分子取全库计数、
+    # 分母只取本范围村数（既虚高又泄漏范围外数据规模）。传 _scoped 使分子分母同源。
+    completeness = _calc_village_completeness(
+        db, SupportedVillage, VillagePopulation, VillageIncome, total_villages, _scoped
+    )
 
     # --- 投入趋势 (2021-2025) ---
     # H3：经费口径统一到权威源 SupportedVillage.transition_fund_items(按年度明细 JSON)
@@ -678,13 +713,16 @@ async def _get_analysis_data_impl(db: Session, current_user):
     total_cat_inv = 0
     for cat_name, model, inv_field in cat_models:
         # 合并 count + sum 为单次查询（减少 50% 查询数）；join 村表排除软删村数据
+        # 2026-09-17 修复：分类聚合此前未套数据范围，窄范围用户可见全库分类汇总。
         result = (
-            db.query(
-                func.count(1).label("cnt"),
-                func.coalesce(func.sum(getattr(model, inv_field)), 0).label("inv"),
+            _scoped(
+                db.query(
+                    func.count(1).label("cnt"),
+                    func.coalesce(func.sum(getattr(model, inv_field)), 0).label("inv"),
+                )
+                .join(SupportedVillage, model.supported_village_id == SupportedVillage.id)
+                .filter(SupportedVillage.is_active.is_(True))
             )
-            .join(SupportedVillage, model.supported_village_id == SupportedVillage.id)
-            .filter(SupportedVillage.is_active.is_(True))
             .first()
         )
         cnt = (result.cnt if result else 0) or 0
@@ -694,14 +732,16 @@ async def _get_analysis_data_impl(db: Session, current_user):
             {"category": cat_name, "count": cnt, "investment": round(inv, 2), "beneficiaries": 0, "ratio": 0}
         )
 
-    # 消费帮扶（合并 count + sum；排除软删村）
+    # 消费帮扶（合并 count + sum；排除软删村；2026-09-17 补数据范围）
     cons_result = (
-        db.query(
-            func.count(1).label("cnt"),
-            func.coalesce(func.sum(ConsumptionSupport.village_products_purchase), 0).label("inv"),
+        _scoped(
+            db.query(
+                func.count(1).label("cnt"),
+                func.coalesce(func.sum(ConsumptionSupport.village_products_purchase), 0).label("inv"),
+            )
+            .join(SupportedVillage, ConsumptionSupport.supported_village_id == SupportedVillage.id)
+            .filter(SupportedVillage.is_active.is_(True))
         )
-        .join(SupportedVillage, ConsumptionSupport.supported_village_id == SupportedVillage.id)
-        .filter(SupportedVillage.is_active.is_(True))
         .first()
     )
     cons_cnt = (cons_result.cnt if cons_result else 0) or 0
@@ -711,14 +751,16 @@ async def _get_analysis_data_impl(db: Session, current_user):
         {"category": "消费帮扶", "count": cons_cnt, "investment": round(cons_inv, 2), "beneficiaries": 0, "ratio": 0}
     )
 
-    # 就业帮扶（合并 count + sum；排除软删村）
+    # 就业帮扶（合并 count + sum；排除软删村；2026-09-17 补数据范围）
     emp_result = (
-        db.query(
-            func.count(1).label("cnt"),
-            func.coalesce(func.sum(EmploymentSupport.trained_population), 0).label("ben"),
+        _scoped(
+            db.query(
+                func.count(1).label("cnt"),
+                func.coalesce(func.sum(EmploymentSupport.trained_population), 0).label("ben"),
+            )
+            .join(SupportedVillage, EmploymentSupport.supported_village_id == SupportedVillage.id)
+            .filter(SupportedVillage.is_active.is_(True))
         )
-        .join(SupportedVillage, EmploymentSupport.supported_village_id == SupportedVillage.id)
-        .filter(SupportedVillage.is_active.is_(True))
         .first()
     )
     emp_cnt = (emp_result.cnt if emp_result else 0) or 0
@@ -731,20 +773,23 @@ async def _get_analysis_data_impl(db: Session, current_user):
             cs["ratio"] = round(cs["investment"] / total_cat_inv * 100) if cs["investment"] > 0 else 0
 
     # --- 地区分布 ---
+    # 2026-09-17 修复：县区聚合此前只有 is_active，窄范围用户可见全州县区投入。
     region_stats = []
     county_data = (
-        db.query(
-            SupportedVillage.county,
-            func.count(SupportedVillage.id),
-            func.coalesce(func.sum(SupportedVillage.transition_fund_military_total), 0),
-            func.coalesce(func.sum(SupportedVillage.transition_fund_local_total), 0),
+        _scoped(
+            db.query(
+                SupportedVillage.county,
+                func.count(SupportedVillage.id),
+                func.coalesce(func.sum(SupportedVillage.transition_fund_military_total), 0),
+                func.coalesce(func.sum(SupportedVillage.transition_fund_local_total), 0),
+            )
+            .filter(
+                SupportedVillage.county.isnot(None),
+                SupportedVillage.county != "",
+                SupportedVillage.is_active.is_(True),
+            )
+            .group_by(SupportedVillage.county)
         )
-        .filter(
-            SupportedVillage.county.isnot(None),
-            SupportedVillage.county != "",
-            SupportedVillage.is_active.is_(True),
-        )
-        .group_by(SupportedVillage.county)
         .all()
     )
 
@@ -760,12 +805,14 @@ async def _get_analysis_data_impl(db: Session, current_user):
 
     # --- 年度关键指标对比（按年份聚合，供前端年度对比图/描述展示） ---
     yearly_comparison = {"years": [], "villages": {}, "investment": {}, "income": {}}
-    # 各年有数据的帮扶村数（以人口数据为准；软删村排除）
+    # 各年有数据的帮扶村数（以人口数据为准；软删村排除；2026-09-17 补数据范围）
     pop_rows = (
-        db.query(VillagePopulation.year, func.count(func.distinct(VillagePopulation.supported_village_id)))
-        .join(SupportedVillage, VillagePopulation.supported_village_id == SupportedVillage.id)
-        .filter(SupportedVillage.is_active.is_(True))
-        .group_by(VillagePopulation.year)
+        _scoped(
+            db.query(VillagePopulation.year, func.count(func.distinct(VillagePopulation.supported_village_id)))
+            .join(SupportedVillage, VillagePopulation.supported_village_id == SupportedVillage.id)
+            .filter(SupportedVillage.is_active.is_(True))
+            .group_by(VillagePopulation.year)
+        )
         .all()
     )
     for yr, cnt in pop_rows:
@@ -775,10 +822,14 @@ async def _get_analysis_data_impl(db: Session, current_user):
     # 与投入趋势、列表 KPI 保持同一权威口径（不再读空的 SupportFunding 子表）。
     for yr in sorted(set(year_mil) | set(year_loc)):
         yearly_comparison["investment"][str(yr)] = round(year_mil.get(yr, 0.0) + year_loc.get(yr, 0.0), 2)
-    # 各年人均收入均值（万元）
+    # 各年人均收入均值（万元）——2026-09-17 补 join 村表 + 数据范围（此前全库无隔离）
     inc_rows = (
-        db.query(VillageIncome.year, func.avg(VillageIncome.per_capita_income))
-        .group_by(VillageIncome.year)
+        _scoped(
+            db.query(VillageIncome.year, func.avg(VillageIncome.per_capita_income))
+            .join(SupportedVillage, VillageIncome.supported_village_id == SupportedVillage.id)
+            .filter(SupportedVillage.is_active.is_(True))
+            .group_by(VillageIncome.year)
+        )
         .all()
     )
     for yr, avg_inc in inc_rows:

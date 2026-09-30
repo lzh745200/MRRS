@@ -120,6 +120,48 @@ class TestDelete:
         assert resp.status_code == 404
 
 
+class TestDeleteRealSession:
+    """删除端点走真实 SQLite 会话（含 commit 后的实例状态）。
+
+    深审 #91 声称"db.delete + commit 后再读 record.version → ObjectDeletedError
+    （500）"。实测 SQLAlchemy 2.0.50 + expire_on_commit=True：被删除实例在 commit
+    时被 expunge、属性保持已加载，读取不会抛错，故该 500 不可复现（误报）。
+    用例保留为删除路径的行为锁定：真库下必须 200 且版本号可用于审计日志。
+    """
+
+    def test_delete_returns_200_and_row_gone(self, client_with_mocked_auth, caplog):
+        import logging
+
+        from app.core.database import get_db
+        from app.models.base import Base
+        from app.models.system_config import SystemUpdateLog
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
+
+        engine = create_engine(
+            "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
+        )
+        Base.metadata.create_all(bind=engine)
+        session = sessionmaker(bind=engine)()
+        session.add(SystemUpdateLog(id="v1", version="1.0.0", description="首个版本"))
+        session.commit()
+
+        client = client_with_mocked_auth
+        original = client.app.dependency_overrides.copy()
+        client.app.dependency_overrides[get_db] = lambda: session
+        try:
+            with caplog.at_level(logging.INFO, logger="app.api.v1.system.update_logs"):
+                resp = client.delete(f"{BASE}/v1")
+        finally:
+            client.app.dependency_overrides = original
+        assert resp.status_code == 200
+        assert session.query(SystemUpdateLog).count() == 0
+        assert "1.0.0" in caplog.text
+        session.close()
+        engine.dispose()
+
+
 class TestCheckVersion:
     def test_changed(self, client_with_mocked_auth):
         mock_svc = MagicMock()
@@ -137,13 +179,19 @@ class TestCheckVersion:
         assert resp.status_code == 200
         assert "未变更" in resp.json()["message"]
 
-    def test_exception(self, client_with_mocked_auth):
+    def test_exception_reports_failure(self, client_with_mocked_auth):
+        """深审 LIVE：异常时曾返回 success:True 且回显 str(e)，调用方无法区分失败。"""
         mock_svc = MagicMock()
         mock_svc.check_and_record_version_change.side_effect = RuntimeError("oops")
         with patch("app.api.v1.system.update_logs.UpdateLogService", return_value=mock_svc):
             resp = client_with_mocked_auth.get(f"{BASE}/check/version")
         assert resp.status_code == 200
-        assert "check_error" in resp.json()["data"]
+        body = resp.json()
+        assert body["success"] is False
+        assert "失败" in body["message"]
+        assert "oops" not in resp.text  # 不外泄内部异常文本
+        assert "check_error" not in body["data"]
+        assert body["data"]["current_version"]
 
 
 class TestInitialize:

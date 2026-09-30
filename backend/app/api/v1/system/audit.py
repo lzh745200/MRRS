@@ -40,11 +40,18 @@ class BatchDeleteRequest(BaseModel):
     @field_validator("ids", mode="before")
     @classmethod
     def coerce_ids_to_int(cls, v):
-        """将 ids 中的字符串元素自动转换为 int，非法值抛出 ValueError。"""
+        """将 ids 归一化为 int 列表，非法值抛出 ValueError（→ 422）。
+
+        深审 LIVE：原实现对入参直接 for-in 迭代 —— 传字符串 "12" 时被逐字符
+        解析成 [1, 2]（删错记录）；传标量则抛 TypeError（validator 内非
+        ValueError）→ 500。除列表/元组/集合外一律视为单个值整体转换，
+        字符串必须整串转 int。
+        """
         if v is None:
             return v
+        items = list(v) if isinstance(v, (list, tuple, set)) else [v]
         result: List[int] = []
-        for item in v:
+        for item in items:
             try:
                 result.append(int(item))
             except (TypeError, ValueError):
@@ -59,6 +66,27 @@ class BatchDeleteRequest(BaseModel):
         if v is None:
             return v
         return [str(a).strip() for a in v if a is not None]
+
+    @field_validator("before_date", mode="before")
+    @classmethod
+    def validate_before_date(cls, v):
+        """before_date 必须是合法 ISO 日期。
+
+        历史上非法日期只被 warning 忽略，导致查询完全失去过滤条件后执行
+        query.delete()，清空整张审计表。这里在入口 fail-closed：非法值直接 422，
+        绝不降级为"无过滤"。
+        """
+        if v is None:
+            return v
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return None
+        try:
+            datetime.fromisoformat(str(v))
+        except ValueError as exc:
+            raise ValueError(f"before_date 必须为合法 ISO 日期字符串: {v!r}") from exc
+        return v
 
 
 # ─── 辅助函数 ─────────────────────────────────────────────────────────────────
@@ -126,14 +154,16 @@ async def batch_delete_audit_logs(
             return success_response(data={"deleted_count": 0}, message="已删除 0 条日志记录")
 
         if body.before_date:
+            # 入口 schema 已校验；此处再兜一层，非法日期一律 400，绝不放行"无过滤全表删除"
             try:
                 dt = datetime.fromisoformat(body.before_date)
-                query = query.filter(AuditLogModel.created_at < dt)
             except ValueError:
-                logger.warning(
-                    "批量删除: before_date 格式无效 %r，已忽略日期过滤",
-                    body.before_date,
+                logger.error("批量删除: before_date 格式无效 %r，拒绝执行", body.before_date)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"before_date 格式无效: {body.before_date}",
                 )
+            query = query.filter(AuditLogModel.created_at < dt)
 
     deleted = query.delete(synchronize_session=False)
     safe_commit(db)

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { get, post, put, del, apiRequest } from '@/api/request'
+import { get, post, put, apiRequest } from '@/api/request'
 import type { ApiResponse } from '@/types/api'
 
 export const useOrganizationStore = defineStore('organization', () => {
@@ -67,9 +67,24 @@ export const useOrganizationStore = defineStore('organization', () => {
     return res
   }
 
-  async function deleteOrganization(id: number) {
-    const res = await del('/organizations/' + id)
-    if (res.code === 200) {
+  /**
+   * 删除组织（后端为逻辑删除）。
+   *
+   * 后端契约：`DELETE /organizations/{org_id}?confirm_password=<当前用户密码>`
+   * （organization.py 的 confirm_password 为 Query 参数）。缺少该参数时后端
+   * 恒返回 400「二次确认失败：密码不正确」——原实现不传密码，属必然失败的空转请求。
+   * 这里改为：密码缺失时 fail-fast，存在时按契约以查询参数下发。
+   */
+  async function deleteOrganization(id: number, confirmPassword?: string) {
+    if (!confirmPassword) {
+      throw new Error('删除组织需提供当前用户密码（二次确认）')
+    }
+    const res = await apiRequest<any>({
+      method: 'DELETE',
+      url: '/organizations/' + id,
+      params: { confirm_password: confirmPassword },
+    })
+    if (res?.code === 200) {
       orgs.value = orgs.value.filter((o: any) => o.id !== id)
       tree.value = []
     }

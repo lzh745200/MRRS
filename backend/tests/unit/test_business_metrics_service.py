@@ -247,6 +247,73 @@ class TestGetAllMetrics:
         mock_session.close.assert_called_once()
 
 
+class TestDataReportMetricsAgainstRealSchema:
+    """真实库回归：完成率/及时率必须命中真实完成态（ReportStatus.APPROVED）。
+
+    历史缺陷：过滤条件写死字符串 "completed"，而 ReportStatus 枚举只有
+    draft/submitted/approved/rejected/cancelled → 完成数恒 0、两个比率恒 0。
+    """
+
+    @staticmethod
+    def _seed(db, *, status, submitted_at, deadline):
+        from app.models.data_package import DataPackage
+        from app.models.data_report import DataReport
+        from app.models.organization import Organization
+
+        source = Organization(name="下级单位")
+        target = Organization(name="上级单位")
+        db.add_all([source, target])
+        db.flush()
+        package = DataPackage(
+            package_code=f"PKG-{status}", org_id=source.id, description="上报包"
+        )
+        db.add(package)
+        db.flush()
+        db.add(DataReport(
+            report_code=f"RPT-{status}", package_id=package.id,
+            source_org_id=source.id, target_org_id=target.id,
+            status=status, submitted_at=submitted_at, deadline=deadline,
+        ))
+        db.commit()
+
+    def test_approved_report_counts_as_completed(self, real_db_session):
+        from datetime import datetime as _dt
+
+        now = _dt.now()
+        self._seed(real_db_session, status="approved", submitted_at=now, deadline=now)
+
+        service = BusinessMetricsService()
+        result = service.get_data_report_metrics(real_db_session)
+
+        assert result["expected_reports"] == 1
+        assert result["completed_reports"] == 1
+        assert result["report_completion_rate"] == 100.0
+        assert result["on_time_reports"] == 1
+        assert result["on_time_rate"] == 100.0
+
+    def test_literal_completed_is_not_a_real_status(self, real_db_session):
+        """锁定枚举事实：写死 "completed" 的行不会被计入完成态。"""
+        from app.models.data_report import ReportStatus
+
+        assert {s.value for s in ReportStatus} == {
+            "draft", "submitted", "approved", "rejected", "cancelled"
+        }
+        assert "completed" not in {s.value for s in ReportStatus}
+
+    def test_submitted_report_is_not_completed(self, real_db_session):
+        from datetime import datetime as _dt
+
+        now = _dt.now()
+        self._seed(real_db_session, status="submitted", submitted_at=now, deadline=now)
+
+        service = BusinessMetricsService()
+        result = service.get_data_report_metrics(real_db_session)
+
+        assert result["expected_reports"] == 1
+        assert result["completed_reports"] == 0
+        assert result["report_completion_rate"] == 0
+
+
 class TestToPrometheusFormat:
     def test_returns_prometheus_format(self, service):
         mock_metrics = {

@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime
 from pathlib import Path
 
-from app.core.exceptions import NotFoundException, BusinessError
+from app.core.exceptions import AppError, NotFoundException, BusinessError
 from app.core.permission_utils import require_admin
 from app.core.response import ok_list
 from app.core.security import get_current_user
@@ -60,14 +60,22 @@ async def _save_upload_file(file: UploadFile, upload_dir: Path, default_name: st
 
     Returns:
         保存后的文件路径
+
+    深审 LIVE：写盘中途失败（磁盘写满/客户端断流）时本函数直接抛出，调用方
+    的 file_path 仍是 None（赋值发生在返回之后），finally 清理分支永不执行
+    —— 半成品文件永久残留在 uploads 目录。这里在失败点就地清理自身产物。
     """
     safe_name = _safe_filename(file.filename or default_name)
     file_path = upload_dir / safe_name
 
-    with open(file_path, "wb") as f:
-        # 分块读取，避免一次性读入内存
-        while chunk := await file.read(CHUNK_SIZE):
-            f.write(chunk)
+    try:
+        with open(file_path, "wb") as f:
+            # 分块读取，避免一次性读入内存
+            while chunk := await file.read(CHUNK_SIZE):
+                f.write(chunk)
+    except Exception:
+        _cleanup_file(file_path)
+        raise
 
     return file_path
 
@@ -186,6 +194,11 @@ async def download_export_package(
         media_type = "application/zip" if package_path.suffix == ".zip" else "application/octet-stream"
 
         return FileResponse(path=str(package_path), filename=package_path.name, media_type=media_type)
+    except (HTTPException, AppError):
+        # 深审 LIVE：数据包不存在时抛 NotFoundException(404)（AppError 子类），
+        # 被下面的通用 except 包装成 BusinessError（默认 400）—— 404 语义丢失，
+        # 前端把"文件不存在"当成"请求有误"。HTTPException/AppError 原样透传。
+        raise
     except Exception as e:
         raise BusinessError(f"下载数据包失败: {str(e)}")
 
@@ -273,11 +286,22 @@ async def get_conflicts(
         raise BusinessError(f"获取冲突列表失败: {str(e)}")
 
 
+class ResolveConflictRequest(BaseModel):
+    """解决冲突请求体。
+
+    深审 LIVE：原实现把 conflict_id/resolution/merged_data 全部声明为查询参数，
+    而前端（frontend/src/api/dataSync.ts → resolveConflict）发的是 JSON body，
+    实际调用恒 422；merged_data 是 dict，查询参数也无法承载。
+    """
+
+    conflict_id: int
+    resolution: str
+    merged_data: Optional[dict] = None
+
+
 @router.post("/resolve-conflict")
 async def resolve_conflict(
-    conflict_id: int,
-    resolution: str,
-    merged_data: Optional[dict] = None,
+    body: ResolveConflictRequest,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -286,9 +310,9 @@ async def resolve_conflict(
     require_admin(current_user, error_message="仅管理员可执行数据同步操作")
     try:
         result = await data_sync_service.resolve_conflict(
-            conflict_id=conflict_id,
-            resolution=resolution,
-            merged_data=merged_data,
+            conflict_id=body.conflict_id,
+            resolution=body.resolution,
+            merged_data=body.merged_data,
             user_id=getattr(current_user, "id", None),
         )
         return result

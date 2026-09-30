@@ -232,13 +232,18 @@ class TestAnalysisDataImpl:
         ])
         with _patch_scope() as scope:
             result = await st._get_analysis_data_impl(db, _SCOPE_USER)
-        # fail-closed 回归：4 条经费查询（村数/军投入/地方投入/年度明细）均须挂隔离
-        assert scope.call_count == 4
+        # fail-closed 回归（v1.12.9 扩面）：不只是 4 条经费口径，分类/消费/就业/县区
+        # 等全部聚合查询都必须挂数据域隔离 —— 断言"至少覆盖原有的 4 条"且
+        # 关键聚合分组查询均在内（21 处），避免以后新增聚合时漏挂过滤。
+        assert scope.call_count >= 4
+        assert scope.call_count == 21
         ov = result["overview"]
         assert ov["total_villages"] == 2
         assert ov["total_investment"] == 150.0
-        # passed=2*4(字段)+2(坐标)+min(2,2)(人口)+min(2,2)(收入)=14，total=2*6=12 → round(116.67)=117
-        assert ov["completeness"] == 117
+        # 分子按软删过滤后与分母同源：passed=min(2,2)*4(字段)+2(坐标)+2(人口)+2(收入)=14，
+        # total=2*6=12 → 116.67，**钳制到 [0,100]** = 100
+        # （v1.12.9：原实现分子不过滤软删，可输出 >100% 的完整率）
+        assert ov["completeness"] == 100
         # 投入趋势
         trend = result["investment_trend"]
         assert len(trend) == 5

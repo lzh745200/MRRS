@@ -147,10 +147,13 @@ async def get_sync_dashboard(
     disk_info = check_disk_space(min_mb=100)
 
     # ── 7. 成功率统计 ──
-    success_count = sum(1 for log in sync_logs if log.status == "success")
-    failure_count = sum(1 for log in sync_logs if log.status == "failure")
+    # 终态口径：DataSyncLog.status 实际取值为 processing/completed/failed
+    # （历史字面量 "success"/"failure" 与写入端不一致，使失败数恒为 0、成功率恒 100%）
+    success_count = sum(1 for log in sync_logs if log.status == "completed")
+    failure_count = sum(1 for log in sync_logs if log.status == "failed")
+    terminal_count = success_count + failure_count
     total_count = len(sync_logs)
-    success_rate = round(success_count / total_count * 100, 1) if total_count > 0 else 100.0
+    success_rate = round(success_count / terminal_count * 100, 1) if terminal_count > 0 else 100.0
 
     return success_response(
         data={

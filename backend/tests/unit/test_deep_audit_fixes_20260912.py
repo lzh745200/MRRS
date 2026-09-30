@@ -910,14 +910,16 @@ class TestMultipartBodyLimit:
         result = await mw.dispatch(request, call_next)
         assert result == "response-ok"
 
-    async def test_invalid_multipart_content_length_ignored(self):
+    async def test_invalid_multipart_content_length_fails_closed(self):
+        # OCR-2026-09-17：畸形 Content-Length 不再静默放行 → 400
         from app.middleware.body_size_limit import BodySizeLimitMiddleware
 
         mw = BodySizeLimitMiddleware(app=MagicMock(), max_body_size=1024)
         request = self._request("/api/v1/schools", "not-a-number")
         call_next = AsyncMock(return_value="response-ok")
         result = await mw.dispatch(request, call_next)
-        assert result == "response-ok"
+        assert result.status_code == 400
+        call_next.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

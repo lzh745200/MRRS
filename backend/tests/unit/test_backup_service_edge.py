@@ -159,23 +159,30 @@ class TestCreateBackupIntegrity:
 
 
 class TestCreateSnapshots:
-    def test_consistency_exception_fallback_copy(self, mock_db, tmp_path):
+    def test_consistency_exception_is_fail_loud(self, mock_db, tmp_path):
+        """一致性快照失败必须中止，绝不允许回退裸拷贝。
+
+        裸拷贝不含 -wal 内容 → 产出"看似合法却丢数据"的快照（R6 同类缺陷，
+        2026-09 深审再次确证 _create_snapshots 仍在静默回退）。
+        """
         db_path = str(tmp_path / "real.db")
         Path(db_path).write_bytes(b"dbdata")
         svc = _make_svc(mock_db, str(tmp_path / "b"), db_path, str(tmp_path / "u"))
         with patch.object(svc, "_create_consistency_snapshot",
-                          side_effect=RuntimeError("boom")):
-            snap_db, snap_up = svc._create_snapshots()
-        # 核心：一致性快照异常时回退为裸拷贝（.snapshot_ 后缀）
-        try:
-            assert snap_db and ".snapshot_" in snap_db
-            assert os.path.exists(snap_db)
-        finally:
-            if snap_db and os.path.exists(snap_db):
-                os.remove(snap_db)
-            if snap_up and os.path.exists(snap_up):
-                import shutil as _sh
-                _sh.rmtree(snap_up, ignore_errors=True)
+                          side_effect=BackupIncompleteError("boom")):
+            with pytest.raises(BackupIncompleteError):
+                svc._create_snapshots()
+        # 不得留下任何 .snapshot_ 裸拷贝残留
+        assert not [f for f in os.listdir(str(tmp_path)) if ".snapshot_" in f]
+
+    def test_empty_snapshot_path_is_fail_loud(self, mock_db, tmp_path):
+        """一致性快照返回空路径同样中止（不得退回裸拷贝）。"""
+        db_path = str(tmp_path / "real.db")
+        Path(db_path).write_bytes(b"dbdata")
+        svc = _make_svc(mock_db, str(tmp_path / "b"), db_path, str(tmp_path / "u"))
+        with patch.object(svc, "_create_consistency_snapshot", return_value=None):
+            with pytest.raises(BackupIncompleteError):
+                svc._create_snapshots()
 
 
 class TestRestoreDatabase:

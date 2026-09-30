@@ -67,11 +67,17 @@ class TestCreateTransactionLinks:
 
         db = MagicMock()
         db.query.side_effect = [q_budget, q_fund]
+        db.execute.return_value.rowcount = 1  # 条件更新命中（额度内）
 
         with patch.object(fb, "write_work_log"):
             tx = await fb.create_transaction(data=data, current_user=_user(), db=db)
 
-        assert float(budget.executed_amount) == 5100.0
+        # 预算改为原子条件更新：累加与 100% 上限守卫在同一条 UPDATE 内
+        stmt = db.execute.call_args[0][0]
+        sql = " ".join(str(stmt.compile(compile_kwargs={"literal_binds": True})).split())
+        assert "UPDATE fund_budgets SET executed_amount=(coalesce(fund_budgets.executed_amount, 0) + " in sql
+        assert "WHERE fund_budgets.id = 1 AND coalesce(fund_budgets.executed_amount, 0) + " in sql
+        assert "<= 10000" in sql
         assert float(fund.used_amount) == 5200.0
         assert float(fund.remaining_amount) == 1000.0 - 5200.0
         db.add.assert_called()
@@ -92,6 +98,8 @@ class TestCreateTransactionLinks:
 
         db = MagicMock()
         db.query.side_effect = [q_budget]
+        # 条件更新命中 0 行 = 累加会突破上限（原子守卫，非内存比较）
+        db.execute.return_value.rowcount = 0
 
         with pytest.raises(HTTPException) as exc_info:
             await fb.create_transaction(data=data, current_user=_user(), db=db)

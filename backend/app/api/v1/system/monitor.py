@@ -176,8 +176,16 @@ async def get_resource_usage(current_user=Depends(get_current_user)):
         if resources["memory"]["percent"] > 85:
             issues.append({"component": "内存", "severity": "warning",
                           "message": f"内存使用率过高: {resources['memory']['percent']}%"})
-        if disks and disks[0]["percent"] > 85:
-            issues.append({"component": "磁盘", "severity": "warning", "message": f"磁盘使用率过高: {disks[0]['percent']}%"})
+        # 逐盘评估：读取失败的分区没有 percent 键，取 disks[0] 会抛 KeyError
+        # 并被外层 except 吞掉整份资源报告（深审 critical）
+        for disk in disks:
+            percent = disk.get("percent")
+            if percent is not None and percent > 85:
+                issues.append({
+                    "component": "磁盘",
+                    "severity": "warning",
+                    "message": f"磁盘使用率过高: {disk.get('mountpoint', '?')} {percent}%",
+                })
 
         resources["health_status"] = "unhealthy" if len(issues) > 2 else "degraded" if issues else "healthy"
         resources["health_issues"] = issues

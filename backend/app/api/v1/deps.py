@@ -38,17 +38,39 @@ def require_policy_operator_role(current_user) -> None:
     return None
 
 
+# 经费管理可操作角色白名单（allowlist）：
+# super_admin / admin / user 可完整操作经费流程；viewer 只读；其余角色一律拒绝。
+_FUNDS_OPERATOR_ROLES = frozenset({"super_admin", "admin", "user"})
+
+
 def require_funds_operator_role(current_user) -> None:
     """经费管理操作权限：放行 user 及以上角色（viewer 保持只读）。
 
     产品要求普通用户（user）可完整操作经费管理（申请/审批/拨付/结算全流程），
     viewer 仍为只读角色；数据隔离由 filter_by_data_scope / check_record_access 保障。
+
+    安全约定（W15 深审 #36）：本函数原为 **denylist**（只拒绝 viewer），而
+    normalize_role 对未知角色原样返回、对空值兜底为 user，于是拼写错误、
+    脏数据、无角色账号全部被放行 → 等价于给任意非法角色发放经费全流程写权限。
+    现改为 **allowlist**（fail-closed）：归一化后不在白名单内一律 403。
     """
     from app.core.constants import normalize_role
 
-    role = normalize_role(getattr(current_user, "role", ""))
-    if role == "viewer" and not is_superuser(current_user):
+    # 显式 is_superuser 标记（历史账号 role 可能不是 super_admin）仍需放行
+    if is_superuser(current_user):
+        return None
+
+    raw_role = getattr(current_user, "role", None)
+    # 空角色没有任何授权基础：normalize_role 会把空值兜底成 user，
+    # 沿用该兜底等于让"未分配角色"的账号获得写权限 → 这里直接 fail-closed。
+    if not isinstance(raw_role, str) or not raw_role.strip():
+        raise HTTPException(status_code=403, detail="权限不足：账号未分配有效角色")
+
+    role = normalize_role(raw_role)
+    if role == "viewer":
         raise HTTPException(status_code=403, detail="权限不足，viewer 角色仅可查看经费数据")
+    if role not in _FUNDS_OPERATOR_ROLES:
+        raise HTTPException(status_code=403, detail="权限不足：当前角色无权操作经费数据")
     return None
 
 

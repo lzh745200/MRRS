@@ -88,6 +88,46 @@ def _safe_isoformat(val) -> Optional[str]:
         return str(val) if val else None
 
 
+def _resolve_safe_upload_path(candidate: str) -> str:
+    """把客户端传入的附件 URL/路径解析为上传目录内的绝对路径。
+
+    - ``/uploads/xxx`` → ``settings.UPLOAD_DIR`` 之下的绝对路径；
+    - 其余值按普通路径处理（绝对 / 相对均可）。
+
+    **包含性校验**：候选路径归一化（``realpath``，解析 ``..`` 与符号链接）后
+    必须位于 ``settings.UPLOAD_DIR``（``realpath``）之内，否则抛 400。
+    写入（``_apply_attachments``）与读取（preview / download）共用同一实现：
+    写入侧拦截 ``/uploads/../../etc/passwd`` 之类的目录穿越与任意绝对路径落库，
+    读取侧拦截历史脏数据被 ``FileResponse`` 读出去（纵深防御）。
+    Windows 下用 ``normcase`` 统一大小写与分隔符后再比较。
+
+    Raises:
+        HTTPException: 400 —— 路径为空或落在上传目录之外。
+    """
+    from app.core.config import settings
+
+    raw = (candidate or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="附件路径不能为空")
+
+    if raw.startswith("/uploads/"):
+        rel = raw[len("/uploads/"):].replace("/", os.sep)
+        local = os.path.join(os.path.abspath(settings.UPLOAD_DIR), rel)
+    else:
+        local = os.path.abspath(raw)
+
+    base = os.path.normcase(os.path.realpath(os.path.abspath(settings.UPLOAD_DIR)))
+    resolved = os.path.normcase(os.path.realpath(local))
+    try:
+        inside = os.path.commonpath([resolved, base]) == base
+    except ValueError:  # pragma: no cover - Windows 跨盘符时不存在公共路径
+        inside = False
+    if not inside:
+        logger.warning("拒绝上传目录之外的附件路径: %s", candidate)
+        raise HTTPException(status_code=400, detail="非法的附件路径：文件必须位于上传目录内")
+    return os.path.normpath(local)
+
+
 def _apply_attachments(policy: Policy, urls) -> None:
     """将前端附件URL列表映射到政策附件字段。
 
@@ -100,8 +140,6 @@ def _apply_attachments(policy: Policy, urls) -> None:
     import json
     import os as _os
 
-    from app.core.config import settings
-
     clean = [u for u in (urls or []) if isinstance(u, str) and u.strip()]
     if not clean:
         # 清空分支：删除全部附件
@@ -111,16 +149,11 @@ def _apply_attachments(policy: Policy, urls) -> None:
         policy.file_size = 0
         return
 
+    # 首个 URL 映射主文件：先做包含性校验（越界即 400，不产生任何字段变更）
+    local = _resolve_safe_upload_path(clean[0])
+
     # 多附件：完整列表落库
     policy.attachment_urls = json.dumps(clean, ensure_ascii=False)
-
-    first = clean[0]
-    # /uploads/xxx → 本地绝对路径
-    if first.startswith("/uploads/"):
-        rel = first[len("/uploads/"):].replace("/", _os.sep)
-        local = _os.path.join(_os.path.abspath(settings.UPLOAD_DIR), rel)
-    else:
-        local = first
     policy.file_path = local
     ext = _os.path.splitext(local)[1].lower().lstrip(".")
     policy.file_type = ext or None
@@ -935,7 +968,10 @@ async def preview_policy_file(
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
 
-    if not policy.file_path or not os.path.exists(policy.file_path):
+    # 纵深防御：历史脏数据可能带越界的 file_path，包含性校验失败即 400（不读盘）
+    safe_file_path = _resolve_safe_upload_path(policy.file_path) if policy.file_path else None
+
+    if not safe_file_path or not os.path.exists(safe_file_path):
         # 没有附件，返回正文内容作HTML预览
         # 安全基线（W1-T4）：用户可控的 title/content 必须 HTML 转义，防存储型 XSS
         import html as _html
@@ -949,19 +985,20 @@ async def preview_policy_file(
         )
 
     ext = (policy.file_type or "").lower()
+    filename = os.path.basename(safe_file_path)
 
     if ext == "pdf":
         return FileResponse(
-            path=policy.file_path,
+            path=safe_file_path,
             media_type="application/pdf",
-            filename=os.path.basename(policy.file_path),
+            filename=filename,
         )
     elif ext in ("doc", "docx"):
         # 使用 mammoth 将 docx 转换为 HTML
         try:
             import mammoth
 
-            with open(policy.file_path, "rb") as f:
+            with open(safe_file_path, "rb") as f:
                 result = mammoth.convert_to_html(f)
             html_style = "body{font-family:SimSun,serif;padding:20px;max-width:800px;margin:0 auto}"
             # W1-T4：title 为用户可控输入，转义；mammoth 产物保持原样
@@ -977,23 +1014,23 @@ async def preview_policy_file(
         except ImportError:  # pragma: no cover
             # mammoth 未安装，返回下载
             return FileResponse(
-                path=policy.file_path,
+                path=safe_file_path,
                 media_type="application/octet-stream",
-                filename=os.path.basename(policy.file_path),
+                filename=filename,
             )
         except Exception as _conv_err:  # 损坏/非法文档转换失败 → 回退下载而非 500
-            logger.warning("政策附件 doc/docx 转换失败，回退下载: %s (%s)", policy.file_path, _conv_err)
+            logger.warning("政策附件 doc/docx 转换失败，回退下载: %s (%s)", safe_file_path, _conv_err)
             return FileResponse(
-                path=policy.file_path,
+                path=safe_file_path,
                 media_type="application/octet-stream",
-                filename=os.path.basename(policy.file_path),
+                filename=filename,
             )
     else:
         # 其他类型直接下载
         return FileResponse(
-            path=policy.file_path,
+            path=safe_file_path,
             media_type="application/octet-stream",
-            filename=os.path.basename(policy.file_path),
+            filename=filename,
         )
 
 
@@ -1007,7 +1044,11 @@ async def download_policy_file(
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
-    if not policy.file_path or not os.path.exists(policy.file_path):
+    if not policy.file_path:
+        raise HTTPException(status_code=404, detail="附件文件不存在")
+    # 纵深防御：越界的 file_path（历史脏数据）一律 400，绝不交给 FileResponse
+    safe_file_path = _resolve_safe_upload_path(policy.file_path)
+    if not os.path.exists(safe_file_path):
         raise HTTPException(status_code=404, detail="附件文件不存在")
 
     # W2-T6：原子递增（UPDATE x=x+1），消除并发读-改-写丢更新
@@ -1019,9 +1060,9 @@ async def download_policy_file(
     safe_commit(db)
 
     return FileResponse(
-        path=policy.file_path,
+        path=safe_file_path,
         media_type="application/octet-stream",
-        filename=os.path.basename(policy.file_path),
+        filename=os.path.basename(safe_file_path),
     )
 
 

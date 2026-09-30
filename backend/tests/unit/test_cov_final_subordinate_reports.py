@@ -14,6 +14,8 @@ class TestGenerateStatusReport:
 
         user = MagicMock(name="user")
         user.username = "reporter"
+        user.role = "admin"  # 生成上报包需管理员（深审：导出 PII 不能仅凭登录）
+        user.is_superuser = False
         user.organization_id = None  # _get_instance_code 直接返回 None
 
         def _boom(path):

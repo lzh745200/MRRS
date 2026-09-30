@@ -6,7 +6,7 @@ Requirements: 6.2 - Support user notification preference configuration
 """
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
@@ -25,12 +25,14 @@ class NotificationPreference(Base):
     __tablename__ = "notification_preferences"
 
     id = Column(Integer, primary_key=True, index=True)
+    # 通知偏好是纯粹的"每用户设置"，无审计价值：用户删除时随用户一并清除
+    # （原 SET NULL 与 nullable=False 自相矛盾，删用户必然 IntegrityError）。
     user_id = Column(
         Integer,
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
-        comment="用户ID",
+        comment="用户ID(用户删除时偏好一并清除)",
     )
 
     # 邮件通知偏好
@@ -52,7 +54,17 @@ class NotificationPreference(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
 
     # Relationships
-    user = relationship("User", backref="notification_preference", uselist=False)
+    # passive_deletes=True：由数据库 ON DELETE CASCADE 清理，ORM 不得先把
+    # user_id 置空（非空列置空 → IntegrityError）。
+    user = relationship(
+        "User",
+        backref=backref(
+            "notification_preference",
+            uselist=False,
+            cascade="all, delete-orphan",
+            passive_deletes=True,
+        ),
+    )
 
     __table_args__ = (Index("ix_notification_preferences_user_id", "user_id"),)
 

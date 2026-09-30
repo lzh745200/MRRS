@@ -398,8 +398,12 @@ def _fund_to_dict(f: Fund) -> Dict[str, Any]:
 
 
 def _get_fund_or_404(db: Session, fund_id: int, current_user: User) -> Fund:
-    """通用：获取经费并校验权限，不存在则抛出 404"""
-    stmt = select(Fund).where(Fund.id == fund_id)
+    """通用：获取经费并校验权限，不存在（或已软删）则抛出 404。
+
+    软删（is_active=False）的经费不得再被详情/流转/附件等任何路径访问，
+    否则删除只是列表里看不见，记录仍可被继续审批与拨付（深审 LIVE）。
+    """
+    stmt = select(Fund).where(Fund.id == fund_id, Fund.is_active.is_(True))
     stmt = apply_scope_filter(stmt, current_user, Fund, db=db)
     fund = db.execute(stmt).scalar_one_or_none()
     if not fund:
@@ -607,7 +611,18 @@ def update_fund(
     # exclude_unset: 仅排除客户端未发送的字段，显式传 null 的字段会设为 None（清空）
     changed_by_name = getattr(current_user, "full_name", None) or current_user.username
     changed_fields: Dict[str, Any] = {}
-    for key, value in data.model_dump(exclude_unset=True).items():
+
+    # 状态机红线：status 不得经通用更新接口写入（否则可绕过审批/附件/里程碑校验直达 approved）
+    payload = data.model_dump(exclude_unset=True)
+    if "status" in payload:
+        requested_status = payload.pop("status")
+        if requested_status is not None and requested_status != fund.status:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="经费状态不能直接修改，请使用审批/拨付等专用端点",
+            )
+
+    for key, value in payload.items():
         if hasattr(fund, key):
             new_value = _parse_date_value(key, value)
             if key in FUND_MONEY_FIELDS and new_value is not None:

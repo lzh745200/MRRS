@@ -72,7 +72,12 @@ async def test_initialize_full_optional_fields_and_existing_admin():
 
 
 @pytest.mark.asyncio
-async def test_initialize_admin_creation_failure_warns():
+async def test_initialize_admin_creation_failure_aborts():
+    """管理员创建失败必须中止初始化，且不得置"已初始化"。
+
+    历史缺陷：失败仅记 warning 后照常 set_initialized —— 系统无超管且
+    /initialize 不可重入，部署被永久锁死（深审 critical）。
+    """
     svc = _svc(False)
     pp = MagicMock()
     pp.validate.return_value = (True, None)
@@ -81,11 +86,12 @@ async def test_initialize_admin_creation_failure_warns():
     with patch.object(mod, "SystemConfigService", return_value=svc), patch.object(
         mod, "PasswordPolicy", pp
     ):
-        resp = await mod.initialize_system(request=_req(), db=db)
-    assert resp["success"] is True
-    steps = {s["step"]: s["status"] for s in resp["data"]["steps"]}
-    assert steps["admin_user"] == "warning"
-    assert "db down" in resp["data"]["steps"][2]["message"]
+        with pytest.raises(HTTPException) as exc:
+            await mod.initialize_system(request=_req(), db=db)
+    assert exc.value.status_code == 500
+    assert "系统未初始化" in exc.value.detail
+    db.rollback.assert_called_once()
+    svc.set_initialized.assert_not_called()
 
 
 @pytest.mark.asyncio

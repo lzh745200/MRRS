@@ -232,13 +232,20 @@ async def delete_update_log(
     if not record:
         raise HTTPException(status_code=404, detail="更新日志不存在")
 
+    # 深审 #91 加固：原实现在 db.delete + commit 之后才读 record.version。
+    # 实测（SQLAlchemy 2.x，expire_on_commit=True）：被删除实例在 commit 时被
+    # expunge 且属性保持已加载，读取不会抛 ObjectDeletedError，因此该条所述
+    # "删除成功却 500" 在当前依赖版本下不可复现；但"先取值再删行"是更稳妥的
+    # 写法（不依赖实例删除后的状态语义，未来换会话配置也不会退化），故保留。
+    record_version = record.version
+
     db.delete(record)
     safe_commit(db)
 
     logger.info(
         "更新日志 %s (版本 %s) 已被删除，操作人: %s",
         update_id,
-        record.version,
+        record_version,
         getattr(current_user, "username", "unknown"),
     )
 
@@ -275,9 +282,12 @@ async def check_version_change(
                 "message": "版本未变更，无需记录",
                 "data": {"current_version": current_version},
             }
-    except Exception as e:
+    except Exception:
+        # 深审 LIVE：原实现异常时仍返回 success:True，调用方无法区分"检查通过"
+        # 与"检查失败"；且把 str(e) 回显给前端。改为显式失败 + 记日志。
+        logger.error("检查版本变更失败", exc_info=True)
         return {
-            "success": True,
-            "message": f"版本检查完成，当前版本: {current_version}",
-            "data": {"current_version": current_version, "check_error": str(e)},
+            "success": False,
+            "message": "版本检查失败，请稍后重试或联系管理员",
+            "data": {"current_version": current_version},
         }

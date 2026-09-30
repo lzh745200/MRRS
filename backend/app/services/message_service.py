@@ -72,6 +72,7 @@ class MessageService:
             MessageType.SYSTEM.value,
             MessageType.APPROVAL.value,
             MessageType.TASK.value,
+            MessageType.BACKUP.value,
         ]
         if message_type not in valid_types:
             raise ValueError(f"无效的消息类型: {message_type}，有效类型: {valid_types}")
@@ -170,6 +171,7 @@ class MessageService:
             MessageType.SYSTEM.value: 0,
             MessageType.APPROVAL.value: 0,
             MessageType.TASK.value: 0,
+            MessageType.BACKUP.value: 0,
         }
         for row in result:
             counts[row.message_type] = row.count

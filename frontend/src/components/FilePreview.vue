@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { downloadBlob } from '@/api/request'
 
@@ -54,17 +54,46 @@ const objectUrl = ref('')
 const blobRef = ref<Blob | null>(null)
 const unsupported = ref(false)
 
+/**
+ * 请求令牌：每次重新打开/切换文件自增，卸载时也自增。
+ * 异步 fetchBlob 回来后若令牌已过期（组件已卸载或已切到别的文件），
+ * 直接丢弃结果，避免为已废弃的文件创建 Blob URL（泄漏）或覆盖新文件的状态。
+ */
+let loadToken = 0
+let unmounted = false
+
 const isImage = computed(() => (blobRef.value?.type || '').startsWith('image/'))
+
+function release() {
+  if (objectUrl.value) {
+    URL.revokeObjectURL(objectUrl.value)
+    objectUrl.value = ''
+  }
+  blobRef.value = null
+  unsupported.value = false
+}
 
 watch(
   () => props.modelValue,
   async (visible) => {
-    if (!visible) return
+    if (!visible) {
+      // 关闭：中止在途请求并释放上一个文件的 Blob URL 与状态
+      loadToken++
+      release()
+      return
+    }
+    const token = ++loadToken
+    // 切换文件/重新打开：先清空上一个文件的状态，避免显示或下载到上一个文件的内容
+    release()
     loading.value = true
-    unsupported.value = false
     try {
       const blob = await props.fetchBlob()
-      if (!blob || blob.size === 0) return
+      if (token !== loadToken || unmounted) return // 结果已过期：不建 URL、不改状态
+      if (!blob || blob.size === 0) {
+        blobRef.value = null
+        objectUrl.value = ''
+        return
+      }
       const type = blob.type || ''
       blobRef.value = blob
       if (
@@ -78,23 +107,23 @@ watch(
         unsupported.value = true
       }
     } catch {
+      if (token !== loadToken || unmounted) return
+      release()
       ElMessage.error('文件预览失败')
     } finally {
-      loading.value = false
+      if (token === loadToken && !unmounted) loading.value = false
     }
   },
   // 初始即为可见时也要加载（父组件可能直接以 visible=true 挂载）
   { immediate: true }
 )
 
-function release() {
-  if (objectUrl.value) {
-    URL.revokeObjectURL(objectUrl.value)
-    objectUrl.value = ''
-  }
-  blobRef.value = null
-  unsupported.value = false
-}
+// 卸载（父组件 v-if 摘除弹窗等场景不会触发 handleClose）也必须释放 Blob URL
+onBeforeUnmount(() => {
+  unmounted = true
+  loadToken++ // 使在途请求的结果失效
+  release()
+})
 
 function handleClose() {
   release()

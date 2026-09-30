@@ -12,12 +12,17 @@ from app.services.validation_engine_service import ValidationEngineService
 
 
 def _make_rule(field, rule_type, params=None, message=None):
-    """构造模拟的 ValidationRule 记录（service 访问 field/rule_type/params/message）。"""
+    """构造模拟的 ValidationRule 记录。
+
+    必须对齐真实模型列名：错误文案列是 error_message（不是 message），
+    params 是 JSON 字符串列——历史上测试用 message 属性掩盖了
+    AttributeError → 校验规则静默失效的缺陷。
+    """
     rule = MagicMock(name=f"rule_{field}_{rule_type}")
     rule.field = field
     rule.rule_type = rule_type
     rule.params = params
-    rule.message = message
+    rule.error_message = message
     return rule
 
 
@@ -100,7 +105,7 @@ class TestValidateWithDbRules:
 
     def test_db_rules_required_and_typed(self):
         """覆盖 required 命中/通过、类型化规则失败/通过、value 为 None 跳过、
-        params 为 None 的 or 兜底、message 为 None 的默认文案（行 106-117）"""
+        params 为 None 的 or 兜底、error_message 为 None 的默认文案（行 106-117）"""
         rules = [
             # required 且字段缺失 → 报错（使用自定义 message）
             _make_rule("name", "required", params=None, message="必须填写名称"),

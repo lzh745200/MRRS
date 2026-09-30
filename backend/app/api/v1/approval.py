@@ -895,7 +895,10 @@ def batch_approve(
         for tid in denied:
             results["failed"].append({"id": tid, "reason": "无权限审批此任务"})
     else:
-        results = service.batch_approve(data.task_ids, current_user.id, data.opinion)
+        # 管理员批量审批：可处理指派给他人的任务（与单任务端点 standalone=is_admin 一致）
+        results = service.batch_approve(
+            data.task_ids, current_user.id, data.opinion, standalone=True
+        )
 
     return {
         "code": 200,
@@ -1007,8 +1010,24 @@ def get_task_diff(
     获取变更对比数据
 
     Requirements: 4.3 - 变更对比视图
+
+    归属校验（W15 深审 #2，IDOR 修复）：与本文件 pending/history 等同口径——
+    管理员可见全部；普通用户仅可查看「自己提交」或「分配给自己的」任务，
+    否则 change_data/original_data 可被任意登录用户按自增 id 遍历读取。
     """
     service = ApprovalWorkflowService(db)
+    task = service.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    if not is_admin(current_user):
+        viewable_ids = {
+            getattr(task, "submitter_id", None),
+            getattr(task, "current_approver_id", None),
+        }
+        if current_user.id not in viewable_ids:
+            raise HTTPException(status_code=403, detail="无权查看该审批任务的变更对比")
+
     diff = service.get_task_diff(task_id)
 
     if not diff:

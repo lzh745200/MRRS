@@ -2,8 +2,8 @@
 数据包版本管理模型
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import backref, relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
@@ -16,6 +16,12 @@ class PackageVersion(Base):
     """数据包版本管理"""
 
     __tablename__ = "package_versions"
+
+    __table_args__ = (
+        # 同一数据包内版本号必须唯一：API 虽按 (package_id, version) 查重后返回 400，
+        # 但缺数据库级约束，并发写入/直写可绕过（compare 端点按该组合取单行）。
+        UniqueConstraint("package_id", "version", name="uq_package_version_package_version"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     package_id = Column(
@@ -36,7 +42,12 @@ class PackageVersion(Base):
     )
 
     # 关系
-    package = relationship("DataPackage", backref="versions")
+    # package_id 非空且 ondelete=CASCADE：删父行必须交给数据库级联清理。
+    # 缺 passive_deletes 时 ORM 会先把 package_id 置空（非空列）→ IntegrityError。
+    package = relationship(
+        "DataPackage",
+        backref=backref("versions", cascade="all, delete-orphan", passive_deletes=True),
+    )
     creator = relationship("User", foreign_keys=[created_by])
 
     def __repr__(self):

@@ -159,9 +159,12 @@ class TestBudgetAttachments:
         assert "/fund-budgets/1/" in data["url"]
         budget = mock_db.first.return_value
         import json as _json
-        attachments = _json.loads(budget.remarks)
+        # 附件存 remarks 列的保留键信封，与用户备注文本互不覆盖
+        envelope = _json.loads(budget.remarks)
+        attachments = envelope["__budget_attachments__"]
         assert attachments[-1]["file_name"] == "批复文件.pdf"
         assert attachments[-1]["uploaded_by"] == "预算管理员"
+        assert envelope["text"] is None
 
     def test_upload_attachment_budget_not_found(self, client, mock_db):
         resp = client.post(
@@ -231,6 +234,90 @@ class TestBudgetAttachments:
         result = _get_attachments(budget)
         assert len(result) == 1
         assert result[0]["url"] == "/uploads/ok.pdf"
+
+
+class TestRemarksAttachmentIsolation:
+    """深审 LIVE：附件写入 remarks 后，PUT 普通文本备注会摧毁附件清单。"""
+
+    def test_update_remarks_preserves_attachments(self, client, mock_db):
+        import json as _json
+
+        budget = _make_existing_budget(remarks=None)
+        budget.remarks = _json.dumps(
+            {"__budget_attachments__": [{"url": "/uploads/a.pdf"}], "text": "旧备注"},
+            ensure_ascii=False,
+        )
+        _set_db_first(mock_db, budget)
+
+        resp = client.put("/fund-budgets/1", json={"remarks": "新备注"})
+        assert resp.status_code == 200
+        envelope = _json.loads(budget.remarks)
+        assert envelope["text"] == "新备注"
+        assert envelope["__budget_attachments__"][0]["url"] == "/uploads/a.pdf"
+        # 出参：备注只出文本，附件单独出列表（不再把 JSON 当备注）
+        assert resp.json()["remarks"] == "新备注"
+        assert resp.json()["attachments"][0]["url"] == "/uploads/a.pdf"
+
+    def test_update_remarks_none_keeps_attachments(self, client, mock_db):
+        import json as _json
+
+        budget = _make_existing_budget(remarks=None)
+        budget.remarks = _json.dumps(
+            {"__budget_attachments__": [{"url": "/uploads/a.pdf"}], "text": "旧备注"},
+            ensure_ascii=False,
+        )
+        _set_db_first(mock_db, budget)
+
+        resp = client.put("/fund-budgets/1", json={"remarks": None})
+        assert resp.status_code == 200
+        envelope = _json.loads(budget.remarks)
+        assert envelope["text"] is None
+        assert envelope["__budget_attachments__"][0]["url"] == "/uploads/a.pdf"
+
+    def test_list_budgets_remarks_is_plain_text(self, client, mock_db):
+        import json as _json
+
+        budget = _make_existing_budget(remarks=None)
+        budget.remarks = _json.dumps(
+            {"__budget_attachments__": [{"url": "/uploads/a.pdf"}], "text": "用户备注"},
+            ensure_ascii=False,
+        )
+        mock_db.all.return_value = [budget]
+
+        resp = client.get("/fund-budgets")
+        assert resp.status_code == 200
+        item = resp.json()["data"]["items"][0]
+        assert item["remarks"] == "用户备注"
+        assert item["attachments"][0]["url"] == "/uploads/a.pdf"
+
+
+class TestRemarksCodec:
+    def test_plain_text_roundtrip(self):
+        from app.api.v1.fund_budgets import _decode_remarks, _encode_remarks
+
+        assert _decode_remarks("普通备注") == {"text": "普通备注", "attachments": []}
+        assert _encode_remarks("普通备注", []) == "普通备注"
+        assert _encode_remarks(None, []) is None
+
+    def test_legacy_bare_array_kept_as_attachments(self):
+        from app.api.v1.fund_budgets import _decode_remarks
+
+        decoded = _decode_remarks('[{"url": "/uploads/ok.pdf"}, {"name": "no-url"}]')
+        assert decoded["text"] is None  # 备注已被历史缺陷覆盖，不可恢复
+        assert len(decoded["attachments"]) == 1
+
+    def test_malformed_json_treated_as_text(self):
+        from app.api.v1.fund_budgets import _decode_remarks
+
+        assert _decode_remarks("{bad json")["text"] == "{bad json"
+        assert _decode_remarks('"just a string"')["text"] == '"just a string"'
+
+    def test_other_json_object_treated_as_text(self):
+        from app.api.v1.fund_budgets import _decode_remarks
+
+        decoded = _decode_remarks('{"foo": 1}')
+        assert decoded["text"] == '{"foo": 1}'
+        assert decoded["attachments"] == []
 
 
 def pytest_asyncio_wrap(value):

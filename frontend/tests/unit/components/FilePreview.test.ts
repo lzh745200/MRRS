@@ -1,6 +1,7 @@
 /**
  * FilePreview 通用文件预览组件测试（问题5/9/14）
  * 覆盖：PDF iframe 预览 / 图片 img 预览 / 不支持类型转下载 / 关闭释放 Blob URL
+ * 回归：Blob URL 必须在关闭、切换与卸载时释放，且卸载后迟到的响应不得再建 URL
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -94,7 +95,7 @@ describe('FilePreview', () => {
   it('加载失败 → ElMessage.error「文件预览失败」', async () => {
     elMessageErrorMock.mockClear()
     const fetchBlob = vi.fn().mockRejectedValue(new Error('net'))
-    const wrapper = mount(FilePreview, {
+    mount(FilePreview, {
       props: { modelValue: true, fetchBlob, fileName: 'a.pdf' },
       global: { stubs },
     })
@@ -168,5 +169,103 @@ describe('FilePreview', () => {
     await wrapper.setProps({ modelValue: true })
     await vi.waitFor(() => expect(fetchBlob).toHaveBeenCalledTimes(2))
     expect((wrapper.vm as any).loading).toBe(false)
+  })
+
+  it('父组件直接置 visible=false（不触发 close 事件）→ 立即释放 Blob URL 并清空状态', async () => {
+    const fetchBlob = vi.fn().mockResolvedValue(new Blob(['x'], { type: 'application/pdf' }))
+    const wrapper = mount(FilePreview, {
+      props: { modelValue: true, fetchBlob, fileName: 'a.pdf' },
+      global: { stubs },
+    })
+    await vi.waitFor(() => expect(wrapper.find('iframe').exists()).toBe(true))
+
+    await wrapper.setProps({ modelValue: false })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+    expect(vm.objectUrl).toBe('')
+    expect(vm.blobRef).toBeNull()
+    expect(vm.unsupported).toBe(false)
+  })
+
+  it('卸载 → 释放 Blob URL（onBeforeUnmount，父组件 v-if 摘除场景）', async () => {
+    const fetchBlob = vi.fn().mockResolvedValue(new Blob(['x'], { type: 'application/pdf' }))
+    const wrapper = mount(FilePreview, {
+      props: { modelValue: true, fetchBlob, fileName: 'a.pdf' },
+      global: { stubs },
+    })
+    await vi.waitFor(() => expect(wrapper.find('iframe').exists()).toBe(true))
+
+    wrapper.unmount()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+  })
+
+  it('卸载后迟到的 fetchBlob 响应 → 不再创建 Blob URL（请求令牌）', async () => {
+    let resolveBlob!: (b: Blob) => void
+    const fetchBlob = vi.fn(
+      () =>
+        new Promise<Blob>((r) => {
+          resolveBlob = r
+        })
+    )
+    const wrapper = mount(FilePreview, {
+      props: { modelValue: true, fetchBlob, fileName: 'a.pdf' },
+      global: { stubs },
+    })
+    await flushPromises()
+    expect(fetchBlob).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+    resolveBlob(new Blob(['x'], { type: 'application/pdf' }))
+    await flushPromises()
+    // 组件已卸载 → 不得再为废弃文件创建 Blob URL（否则永久泄漏）
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('重新打开时加载失败 → 不残留上一个文件的可下载内容', async () => {
+    const fetchBlob = vi
+      .fn()
+      .mockResolvedValueOnce(new Blob(['x'], { type: 'application/pdf' }))
+      .mockRejectedValueOnce(new Error('net'))
+    const wrapper = mount(FilePreview, {
+      props: { modelValue: true, fetchBlob, fileName: 'a.pdf' },
+      global: { stubs },
+    })
+    await vi.waitFor(() => expect(wrapper.find('iframe').exists()).toBe(true))
+
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true, fileName: 'b.pdf' })
+    await vi.waitFor(() => expect(elMessageErrorMock).toHaveBeenCalledWith('文件预览失败'))
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.blobRef).toBeNull()
+    expect(vm.objectUrl).toBe('')
+    expect(vm.unsupported).toBe(false)
+    // 下载按钮场景：blobRef 为空 → 不会把上一个文件的 blob 下载出去
+    downloadBlobMock.mockClear()
+    vm.handleDownload()
+    expect(downloadBlobMock).not.toHaveBeenCalled()
+  })
+
+  it('重新打开拿到空 blob → 清空上一个文件的预览状态', async () => {
+    const fetchBlob = vi
+      .fn()
+      .mockResolvedValueOnce(new Blob(['x'], { type: 'application/pdf' }))
+      .mockResolvedValueOnce(new Blob([], { type: 'application/pdf' }))
+    const wrapper = mount(FilePreview, {
+      props: { modelValue: true, fetchBlob, fileName: 'a.pdf' },
+      global: { stubs },
+    })
+    await vi.waitFor(() => expect(wrapper.find('iframe').exists()).toBe(true))
+
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true, fileName: 'empty.pdf' })
+    await vi.waitFor(() => expect(wrapper.text()).toContain('暂无可预览的文件'))
+    const vm = wrapper.vm as any
+    expect(vm.blobRef).toBeNull()
+    expect(vm.objectUrl).toBe('')
+    expect(vm.unsupported).toBe(false)
+    expect(wrapper.find('iframe').exists()).toBe(false)
   })
 })

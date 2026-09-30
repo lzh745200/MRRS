@@ -94,12 +94,31 @@ class UserService:
         self.db.refresh(user)
         return user
 
+    # 允许经本服务更新的字段白名单（纵深防御）。
+    # 历史实现是无过滤 setattr：任何调用方传入 role / is_superuser /
+    # hashed_password / is_active 都能一步提权或篡改凭据（深审 LIVE）。
+    UPDATABLE_FIELDS = frozenset({
+        "email",
+        "full_name",
+        "phone",
+        "department",
+        "position",
+        "organization_id",
+        "data_scope",
+        "allowed_menus",
+        "avatar",
+        "remarks",
+    })
+
     def update_user(self, user_id: int, data: dict):
-        """更新用户"""
+        """更新用户（仅白名单字段；角色/凭据/启用状态必须走专用端点）"""
         user = self.get_user_by_id(user_id)
         if user is None:
             return None
         for key, value in data.items():
+            if key not in self.UPDATABLE_FIELDS:
+                logger.warning("update_user: 忽略非白名单字段 '%s'（user_id=%s）", key, user_id)
+                continue
             if hasattr(user, key) and value is not None:
                 setattr(user, key, value)
         if self.db:

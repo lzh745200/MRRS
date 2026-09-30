@@ -116,6 +116,56 @@ VALID_SCOPES = {"all", "org", "org_children", "self"}
 # 静态选项数据缓存 TTL (1小时)
 OPTIONS_CACHE_TTL = 3600
 
+# 超级管理员账号的保护口径（W15 深审 #9~#12）：
+# 系统管理员（admin）不得创建、修改、删除或重置 super_admin 账号——
+# 修复前 admin 可创建 super_admin（一步提权）、可删除/重置超管密码（接管超管）。
+_SUPER_ADMIN_ROLE = "super_admin"
+
+
+def _is_super_admin_account(user) -> bool:
+    """判断目标账号是否属于超级管理员（role 或 is_superuser 任一命中即算）"""
+    if user is None:
+        return False
+    if is_superuser(user):
+        return True
+    return normalize_role(getattr(user, "role", None)) == _SUPER_ADMIN_ROLE
+
+
+def _assert_can_manage_super_admin(
+    current_user,
+    target=None,
+    *,
+    target_role: Optional[str] = None,
+) -> None:
+    """仅 super_admin 可管理 super_admin 账号。
+
+    Args:
+        current_user: 发起操作的用户。
+        target: 被操作的用户对象（删除/重置密码/改资料时传入）。
+        target_role: 目标角色（创建/改角色时传入的新角色值）。
+
+    Raises:
+        HTTPException(403): 非超管试图管理超管账号。
+    """
+    if is_superuser(current_user):
+        return
+    if target is not None and _is_super_admin_account(target):
+        raise HTTPException(status_code=403, detail="仅超级管理员可管理超级管理员账号")
+    if target_role is not None and normalize_role(target_role) == _SUPER_ADMIN_ROLE:
+        raise HTTPException(status_code=403, detail="仅超级管理员可管理超级管理员账号")
+
+
+def _require_admin_user(current_user=Depends(get_current_user)):  # noqa: B008 - FastAPI 依赖
+    """路由级管理员校验依赖（供带缓存装饰器的静态选项端点使用）。
+
+    W15 深审 #9：cache_result 装饰器在缓存命中时直接返回缓存值，
+    函数体内联的 require_admin 被整体跳过（认证依赖仍会执行，但不再校验角色），
+    普通用户命中缓存即可读取管理员专属选项。把校验放进路由依赖后，
+    缓存命中与否都必须先过权限。
+    """
+    require_admin(current_user)
+    return current_user
+
 
 # ==================== 个人中心 ====================
 
@@ -484,6 +534,9 @@ async def create_user(
     if role not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"无效的角色: {role}")
 
+    # 提权收敛：仅 super_admin 可创建 super_admin 账号
+    _assert_can_manage_super_admin(current_user, target_role=role)
+
     # 验证数据范围有效性
     data_scope = data.data_scope or "org"
     if data_scope not in VALID_SCOPES:
@@ -587,6 +640,11 @@ async def update_user(
         if update_fields["role"] not in VALID_ROLES:
             raise HTTPException(status_code=400, detail="无效的角色")
 
+    # 提权收敛：非超管既不能改动 super_admin 账号，也不能把账号提升为 super_admin
+    _assert_can_manage_super_admin(current_user, target=user)
+    if "role" in update_fields:
+        _assert_can_manage_super_admin(current_user, target_role=update_fields["role"])
+
     # 禁止把管理员改成“无组织”（与创建同一不变式：管理员必须有组织）
     effective_role = normalize_role(update_fields.get("role") or user.role)
     effective_org = update_fields["organization_id"] if "organization_id" in update_fields else user.organization_id
@@ -616,6 +674,9 @@ async def delete_user(user_id: int, current_user=Depends(get_current_user), db: 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise NotFoundException("用户不存在")
+
+    # 提权收敛：仅 super_admin 可删除 super_admin 账号
+    _assert_can_manage_super_admin(current_user, target=user)
 
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="不能删除当前登录用户")
@@ -668,6 +729,11 @@ async def update_user_permissions(
             update_fields["role"] = normalize_role(update_fields["role"])
         if update_fields["role"] not in VALID_ROLES:
             raise HTTPException(status_code=400, detail=f"无效的角色: {update_fields['role']}")
+
+    # 提权收敛：非超管既不能改动 super_admin 账号，也不能把账号提升为 super_admin
+    _assert_can_manage_super_admin(current_user, target=user)
+    if "role" in update_fields:
+        _assert_can_manage_super_admin(current_user, target_role=update_fields["role"])
 
     # 验证数据范围有效性
     if "data_scope" in update_fields:
@@ -778,6 +844,10 @@ async def admin_reset_password(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise NotFoundException("用户不存在")
+
+    # 提权收敛：仅 super_admin 可重置 super_admin 账号的密码，
+    # 否则部门级管理员可直接接管超级管理员账号（改密 + 吊销其全部令牌）
+    _assert_can_manage_super_admin(current_user, target=user)
 
     from app.core.security import PasswordPolicy
 

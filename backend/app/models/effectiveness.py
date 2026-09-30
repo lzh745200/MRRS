@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
 )
 
 from app.models.base import Base
@@ -21,6 +22,13 @@ class EffectivenessEvaluation(Base):
     """成效评估表"""
 
     __tablename__ = "effectiveness_evaluations"
+
+    __table_args__ = (
+        # 同村同年度只应有一份评估：EffectivenessService 按 (village_id, year)
+        # 查一取最新后更新（_find_evaluation），缺数据库级唯一约束时并发评估
+        # 会插入重复行，排名/取数结果随查询顺序漂移。
+        UniqueConstraint("village_id", "year", name="uq_effectiveness_village_year"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     village_id = Column(

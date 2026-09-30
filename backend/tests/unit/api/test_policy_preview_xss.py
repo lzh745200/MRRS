@@ -70,13 +70,15 @@ class TestPreviewXssEscaping:
         assert '<img src=x onerror' not in resp.text
         assert "&lt;img" in resp.text
 
-    def test_mammoth_branch_title_escaped(self, client):
+    def test_mammoth_branch_title_escaped(self, client, tmp_path, monkeypatch):
         """docx 分支：mammoth 转换结果保留，但 title 必须转义。"""
         tc, db = client
+        # 附件必须位于 UPLOAD_DIR 之内（P0 路径越界修复后，越界 file_path 一律 400）
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(tmp_path))
         policy = _policy_with(
             title="<b>evil</b>标题",
             content="ignored",
-            file_path="C:/tmp/fake.docx",
+            file_path=str(tmp_path / "fake.docx"),
         )
         policy.file_type = "docx"
         db.query.return_value.filter.return_value.first.return_value = policy
@@ -111,9 +113,10 @@ class TestPreviewXssEscaping:
         assert "&lt;b&gt;evil&lt;/b&gt;" in resp.text
         assert "<p>转换后的正文</p>" in resp.text, "mammoth 产物不应被二次转义"
 
-    def test_mammoth_conversion_failure_falls_back_to_download(self, client, tmp_path):
-        """覆盖 policy.py:972-974 —— docx 转换抛非-ImportError 异常时回退下载而非 500。"""
+    def test_mammoth_conversion_failure_falls_back_to_download(self, client, tmp_path, monkeypatch):
+        """覆盖 docx 转换抛非-ImportError 异常时回退下载而非 500（附件须在上传目录内）。"""
         tc, db = client
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(tmp_path))
         docx = tmp_path / "broken.docx"
         docx.write_bytes(b"PK\x03\x04 not-a-real-docx")
         policy = _policy_with(title="t", content="c", file_path=str(docx))

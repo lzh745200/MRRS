@@ -195,9 +195,10 @@ async def update_error_report(
         # 归属校验: 仅报告提交者本人或管理员可修改
         from app.core.permission_utils import is_admin
 
-        is_owner = getattr(record, "user_id", None) is None or getattr(record, "user_id", None) == getattr(
-            current_user, "id", None
-        )
+        # 归属判定必须用真实被写入的字段：ErrorReport 只有 reporter（用户名），
+        # 没有 user_id。原先读 user_id 恒为 None，使 is_owner 恒为 True（任何人可改任何报告）。
+        reporter = getattr(record, "reporter", None)
+        is_owner = bool(reporter) and reporter == getattr(current_user, "username", None)
         if not is_owner and not is_admin(current_user):
             raise HTTPException(status_code=403, detail="无权修改该错误报告")
 

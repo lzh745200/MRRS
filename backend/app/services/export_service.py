@@ -87,7 +87,26 @@ class ExcelExportService:
             "名称", "编码", "类型", "层级", "联系人", "联系电话",
             "地址", "描述", "成员数", "状态", "创建时间",
         ]
-        wb = self._create_workbook(filename, headers, organizations, watermark=watermark)
+        # 显式字段映射：_create_workbook 以“中文表头 == row 的键”取值，而调用方
+        # （api/v1/organization.py::export_organizations）给的是英文字段名。历史实现直接
+        # 把中文表头当键去 row.get → 11 列全部落空，导出文件只有表头。
+        rows = [
+            {
+                "名称": item.get("name", ""),
+                "编码": item.get("code", ""),
+                "类型": item.get("type", ""),
+                "层级": item.get("level", ""),
+                "联系人": item.get("contact_person", ""),
+                "联系电话": item.get("contact_phone", ""),
+                "地址": item.get("address", ""),
+                "描述": item.get("description", ""),
+                "成员数": item.get("member_count", ""),
+                "状态": item.get("status", ""),
+                "创建时间": item.get("created_at", ""),
+            }
+            for item in organizations
+        ]
+        wb = self._create_workbook(filename, headers, rows, watermark=watermark)
         return self._to_bytes(wb)
 
     def export_organization_pass_codes(

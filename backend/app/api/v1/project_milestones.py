@@ -99,6 +99,23 @@ class TransitionRulesResponse(BaseModel):
     requirements: dict
 
 
+# ==================== 数据权限守卫 ====================
+
+
+def _get_accessible_project_or_404(db: Session, project_id: int, current_user) -> Project:
+    """按数据域取项目；不可见即 404（不泄露存在性）。
+
+    里程碑/变更记录/状态流转此前都按裸 project_id 查询，任意登录用户可读改
+    他组织项目的里程碑并推进其状态（深审 LIVE，IDOR）。
+    """
+    project = scoped_filter(
+        db.query(Project).filter(Project.id == project_id), Project, current_user
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    return project
+
+
 # ==================== 里程碑 API ====================
 
 
@@ -109,6 +126,7 @@ async def get_milestones(
     db: Session = Depends(get_db),
 ):
     """获取项目里程碑列表"""
+    _get_accessible_project_or_404(db, project_id, current_user)
     milestones = (
         db.query(ProjectMilestone)
         .filter(ProjectMilestone.project_id == project_id)
@@ -126,8 +144,8 @@ async def create_milestone(
     db: Session = Depends(get_db),
 ):
     """创建项目里程碑"""
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
+    project = _get_accessible_project_or_404(db, project_id, current_user)
+    if not project:  # pragma: no cover - 守卫已保证非空，保留防御分支
         raise HTTPException(status_code=404, detail="项目不存在")
 
     milestone = ProjectMilestone(project_id=project_id, **data.model_dump())
@@ -149,6 +167,7 @@ async def update_milestone(
     db: Session = Depends(get_db),
 ):
     """更新项目里程碑"""
+    _get_accessible_project_or_404(db, project_id, current_user)
     milestone = (
         db.query(ProjectMilestone)
         .filter(
@@ -188,6 +207,7 @@ async def delete_milestone(
     db: Session = Depends(get_db),
 ):
     """删除项目里程碑"""
+    _get_accessible_project_or_404(db, project_id, current_user)
     milestone = (
         db.query(ProjectMilestone)
         .filter(
@@ -222,9 +242,7 @@ async def get_transition_rules(
     db: Session = Depends(get_db),
 ):
     """获取项目当前可用的状态流转规则"""
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    project = _get_accessible_project_or_404(db, project_id, current_user)
 
     current = project.status or "draft"
     allowed = VALID_TRANSITIONS.get(current, [])
@@ -254,9 +272,7 @@ async def transition_status(
     db: Session = Depends(get_db),
 ):
     """执行项目状态流转"""
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="项目不存在")
+    project = _get_accessible_project_or_404(db, project_id, current_user)
 
     old_status = project.status or "draft"
 

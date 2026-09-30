@@ -35,6 +35,22 @@ describe('desensitize edge branches', () => {
   })
 })
 
+describe('fail-closed：正则不命中时必须全掩而非回落原文', () => {
+  // 原实现直接 `return str.replace(...)`，正则不命中时 replace 原样返回 →
+  // 带分隔符的号码/卡号会**原样泄露**给本应看到脱敏值的角色。
+  it('maskPhone 带分隔符的号码全掩', () => {
+    expect(maskPhone('138-1234-5678')).toBe('***-****-****')
+    expect(maskPhone('+86 138 1234 5678')).toBe('+** *** **** ****')
+  })
+  it('maskIdCard 带分隔符的证件号全掩', () => {
+    expect(maskIdCard('1101-0119-9001-011X')).toBe('****-****-****-****')
+  })
+  it('maskBankCard 带空格/短横线分组的卡号全掩', () => {
+    expect(maskBankCard('6222 1234 5678 9012')).toBe('**** **** **** ****')
+    expect(maskBankCard('6222-1234-5678-9012')).toBe('****-****-****-****')
+  })
+})
+
 describe('desensitize', () => {
   describe('maskPhone', () => {
     it('11位手机号: 138****1234', () => {

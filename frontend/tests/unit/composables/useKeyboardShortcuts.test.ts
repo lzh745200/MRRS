@@ -25,7 +25,9 @@ describe('formatShortcut', () => {
   })
 
   it('formats Shift+Alt+Escape', () => {
-    expect(formatShortcut({ key: 'Escape', shift: true, alt: true, handler: () => {} })).toBe('Shift+Alt+Escape')
+    expect(formatShortcut({ key: 'Escape', shift: true, alt: true, handler: () => {} })).toBe(
+      'Shift+Alt+Escape'
+    )
   })
 
   it('formats plain Enter', () => {
@@ -38,6 +40,10 @@ describe('formatShortcut', () => {
 
   it('uppercases single-char keys', () => {
     expect(formatShortcut({ key: 'a', ctrl: true, handler: () => {} })).toBe('Ctrl+A')
+  })
+
+  it('formats Shift+1 by physical key（与事件侧归一化口径一致）', () => {
+    expect(formatShortcut({ key: '1', shift: true, handler: () => {} })).toBe('Shift+1')
   })
 })
 
@@ -267,5 +273,57 @@ describe('handleKeydown（window 事件驱动）', () => {
     window.dispatchEvent(keyEvent({ key: 's', ctrlKey: true }))
     expect(h1).not.toHaveBeenCalled()
     expect(h2).toHaveBeenCalledTimes(1)
+  })
+
+  // ── Shift 组合（e.key 为上档字符）──
+
+  it('Shift+数字：e.key 为 "!" 也能命中注册的 { key: "1", shift: true }', () => {
+    attachShortcut({ key: '1', ctrl: false, shift: true })
+    window.dispatchEvent(keyEvent({ key: '!', code: 'Digit1', shiftKey: true }))
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('缺少 e.code 时用上档字符还原表命中 Shift+数字', () => {
+    attachShortcut({ key: '2', ctrl: false, shift: true })
+    window.dispatchEvent(keyEvent({ key: '@', shiftKey: true }))
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('Numpad 数字的 code 同样可反解', () => {
+    attachShortcut({ key: '3', ctrl: false, shift: true })
+    window.dispatchEvent(keyEvent({ key: '#', code: 'Numpad3', shiftKey: true }))
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('直接注册上档字符 { key: "?", shift: true } 仍可命中（不因归一化丢匹配）', () => {
+    attachShortcut({ key: '?', ctrl: false, shift: true })
+    window.dispatchEvent(keyEvent({ key: '?', code: 'Slash', shiftKey: true }))
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('Shift+字母：大小写归一化仍然匹配且不重复触发', () => {
+    attachShortcut({ key: 's', ctrl: false, shift: true })
+    window.dispatchEvent(keyEvent({ key: 'S', code: 'KeyS', shiftKey: true }))
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('未按 Shift 时不得误触发 Shift 组合', () => {
+    attachShortcut({ key: '1', ctrl: false, shift: true })
+    window.dispatchEvent(keyEvent({ key: '1', code: 'Digit1' }))
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('Shift + 未知上档字符（无 code、还原表未收录）不触发也不抛错', () => {
+    attachShortcut({ key: '1', ctrl: false, shift: true })
+    window.dispatchEvent(keyEvent({ key: 'Ω', shiftKey: true }))
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('Shift+数字与 Ctrl+Shift+数字 互不串扰', () => {
+    attachShortcut({ key: '1', ctrl: true, shift: true })
+    window.dispatchEvent(keyEvent({ key: '!', code: 'Digit1', shiftKey: true }))
+    expect(handler).not.toHaveBeenCalled()
+    window.dispatchEvent(keyEvent({ key: '!', code: 'Digit1', ctrlKey: true, shiftKey: true }))
+    expect(handler).toHaveBeenCalledTimes(1)
   })
 })

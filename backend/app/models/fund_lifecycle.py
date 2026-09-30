@@ -296,11 +296,13 @@ class FundContractPayment(Base):
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    # 付款明细是合同的组成部分：合同删除后孤儿明细仍会被计入付款汇总，
+    # 故外键动作取 CASCADE（原 SET NULL 与 nullable=False 自相矛盾）。
     contract_id = Column(
         Integer,
-        ForeignKey("fund_contracts.id", ondelete="SET NULL"),
+        ForeignKey("fund_contracts.id", ondelete="CASCADE"),
         nullable=False,
-        comment="合同ID",
+        comment="合同ID(合同删除时付款明细级联删除)",
     )
     payment_no = Column(String(100), nullable=True, comment="付款编号")
     amount = Column(Numeric(15, 4), nullable=False, comment="付款金额(万元)")

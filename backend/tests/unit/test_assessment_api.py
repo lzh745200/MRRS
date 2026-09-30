@@ -259,7 +259,9 @@ class TestGetVillageScores:
         client.get("/api/v1/assessment/village-scores")
         assert mc.set.called
         args, kwargs = mc.set.call_args
-        assert args[0] == f"village_scores:{_CURRENT_YEAR}"
+        # 缓存键含调用者身份（v1.12.9）：结果由 scoped_filter(..., current_user) 决定，
+        # 共享键会把宽范围用户的结果回放给窄范围用户（跨用户数据泄露）。
+        assert args[0] == f"village_scores:{_CURRENT_YEAR}:1"
         assert kwargs.get("ttl") == 300 or (len(args) >= 3 and args[2] == 300)
 
     @patch("app.api.v1.assessment.get_cache_service")
@@ -272,7 +274,18 @@ class TestGetVillageScores:
 
         client.get("/api/v1/assessment/village-scores?year=2022")
         assert mc.set.called
-        assert mc.set.call_args[0][0] == "village_scores:2022"
+        assert mc.set.call_args[0][0] == "village_scores:2022:1"
+
+    @patch("app.api.v1.assessment.get_cache_service")
+    def test_cache_key_is_per_user(self, mock_get_cache, client_and_db):
+        """不同用户不得共用同一份评分缓存（跨用户数据泄露回归）。"""
+        client, db = client_and_db
+        mc = AsyncMock()
+        mc.get.return_value = None
+        mock_get_cache.return_value = mc
+        mkv(db); db.commit()
+        client.get("/api/v1/assessment/village-scores")
+        assert mc.get.call_args[0][0] == f"village_scores:{_CURRENT_YEAR}:1"
 
     def test_score_level_assignment(self, client_and_db):
         client, db = client_and_db

@@ -15,7 +15,7 @@ from app.models.fund import Fund, FundStatus
 from app.models.approval import ApprovalTask, ApprovalStatus
 from app.models.monitoring import APIMetric
 from app.models.user import User
-from app.models.data_report import DataReport
+from app.models.data_report import DataReport, ReportStatus
 from app.core.database import SessionLocal
 
 
@@ -180,13 +180,16 @@ class BusinessMetricsService:
             .count()
         )
 
-        # 本月已上报数
+        # 本月已上报数（完成态）
+        # 业务口径：上报流程的终态是「已批准」（ReportStatus.APPROVED，data_report_service
+        # 的审批与统计口径一致）；ReportStatus 枚举里**不存在** "completed"，历史字符串字面量
+        # 永不匹配 → 完成率/及时率恒 0，静默掩盖真实上报情况。
         completed_reports = (
             db.query(DataReport)
             .filter(
                 and_(
                     func.strftime("%Y-%m", DataReport.created_at) == month_prefix,
-                    DataReport.status == "completed",
+                    DataReport.status == ReportStatus.APPROVED.value,
                 )
             )
             .count()
@@ -201,7 +204,7 @@ class BusinessMetricsService:
             .filter(
                 and_(
                     func.strftime("%Y-%m", DataReport.created_at) == month_prefix,
-                    DataReport.status == "completed",
+                    DataReport.status == ReportStatus.APPROVED.value,
                     DataReport.submitted_at.isnot(None),
                     DataReport.deadline.isnot(None),
                     DataReport.submitted_at <= DataReport.deadline,

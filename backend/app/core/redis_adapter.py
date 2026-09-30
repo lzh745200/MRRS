@@ -27,6 +27,15 @@ class RedisAdapter:
     def flush(self):
         self._data.clear()
 
+    def clear(self) -> bool:
+        """清空缓存并显式报告成功。
+
+        /performance/cache/clear 以返回值判定成败；flush() 历史上返回 None
+        会让该端点恒 500（深审 critical），故提供带返回值的 clear()。
+        """
+        self.flush()
+        return True
+
     def get_stats(self) -> dict:
         """缓存统计（离线内存适配器：返回键规模等基础指标）"""
         return {

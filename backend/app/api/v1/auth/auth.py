@@ -74,8 +74,20 @@ def _check_account_lockout(
 router = APIRouter(prefix="/auth", tags=["认证"])
 
 
-def _handle_failed_login(user, username: str, db, now, client_ip: str, user_agent: str | None):
-    """处理登录失败：递增计数、锁定、审计日志。"""
+def _handle_failed_login(
+    user,
+    username: str,
+    db,
+    now,
+    client_ip: str,
+    user_agent: str | None,
+    failure_reason: str = "密码错误",
+):
+    """处理认证失败：递增计数、达阈值锁定、写审计日志。
+
+    返回本次失败后的累计失败次数，供调用方决定是否进一步处置
+    （例如 2FA 失败达阈值时吊销临时令牌）。
+    """
     failed_count = 0
     try:
         # W2-T6：经 lockout_service 原子递增（SQL 端 COALESCE+CASE+RETURNING），
@@ -94,8 +106,37 @@ def _handle_failed_login(user, username: str, db, now, client_ip: str, user_agen
     AuditLogger.log_login(
         user_id=user.id, username=username, success=False,
         ip_address=client_ip, user_agent=user_agent,
-        failure_reason=f"密码错误（失败{failed_count}次）",
+        failure_reason=f"{failure_reason}（失败{failed_count}次）",
     )
+    return failed_count
+
+
+def _discard_orphan_user(db, user) -> None:
+    """清除注册失败后残留的半成品用户（W15 深审 #3）。
+
+    UserService.create_user 内部自行提交（safe_commit + refresh），注册流程
+    后续步骤（通行码认领、组织绑定、令牌签发）失败时无法整体回滚事务，
+    会在 users 表留下无通行码绑定的孤儿账号。这里显式回滚并删除该用户，
+    使注册具备"全成功或全不落库"的原子语义。
+    """
+    if user is None:
+        return
+    try:
+        db.rollback()
+    except Exception:
+        logger.debug("注册失败清理：回滚会话失败", exc_info=True)
+    try:
+        db.delete(user)
+        safe_commit(db)
+        logger.info("已清理注册失败的孤儿账号: id=%s", getattr(user, "id", None))
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            logger.debug("注册失败清理：二次回滚失败", exc_info=True)
+        logger.error(
+            "清理注册失败的孤儿账号失败: id=%s", getattr(user, "id", None), exc_info=True,
+        )
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -355,18 +396,31 @@ async def two_factor_verify_login(
             detail="用户不存在或已被禁用",
         )
 
+    # 已锁定账户直接拒绝（与 /auth/login 同口径：锁定期间不再校验任何凭据）
+    _check_account_lockout(user, username, db)
+
     # 验证 TOTP / 备用码
     from app.services.two_factor_service import TwoFactorService
 
     if not TwoFactorService.verify_login(db, user, verify_request.code):
-        AuditLogger.log_login(
-            user_id=user.id,
-            username=username,
-            success=False,
-            ip_address=client_ip,
-            user_agent=request.headers.get("user-agent"),
+        # W15 深审 #4：2FA 校验失败必须与登录路径同口径——计入失败计数，
+        # 达阈值时锁定账户并吊销 temp_token。修复前失败只写审计日志、既不计数
+        # 也不吊销临时令牌，攻击者凭一个 temp_token 即可无限次枚举动态码。
+        failed_count = _handle_failed_login(
+            user,
+            username,
+            db,
+            datetime.now(timezone.utc),
+            client_ip,
+            request.headers.get("user-agent"),
             failure_reason="2FA验证码错误",
         )
+        if failed_count >= _MAX_FAILED_ATTEMPTS:
+            token_manager.revoke_token(verify_request.temp_token)
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail=f"账户已锁定，请{_LOCKOUT_MINUTES}分钟后再试",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="验证码错误，请重试",
@@ -836,6 +890,9 @@ async def register_user(
     if email and user_service.get_user_by_email(email):
         raise BizValidationError(message="该邮箱已被注册", field="email")
 
+    # 跟踪已落库的注册用户：任何后续步骤失败都要把它清掉（W15 深审 #3）
+    created_user = None
+
     try:
         # 创建用户数据
         user_create = UserCreate(
@@ -850,17 +907,16 @@ async def register_user(
 
         # 创建新用户（create_user 期望 dict；model_dump 转换 pydantic 对象）
         user = user_service.create_user(user_create.model_dump())
+        created_user = user
 
         # 激活机器码（绑定到用户；组织通行码记录的 machine_code 是占位串，
         # 必须改绑为注册机器的真实机器码，否则登录侧机器校验恒拒绝）
         # 原子认领：返回 False 表示通行码已被并发注册抢先激活——
-        # 清理刚创建的用户（create_user 内部已提交，需显式删除）并返回 400
+        # 交由统一异常清理删除刚创建的用户（create_user 内部已提交）并返回 400
         claimed = machine_service.activate_machine_code(
             machine_record, user.id, current_machine_code=current_machine_code
         )
         if not claimed:
-            db.delete(user)
-            safe_commit(db)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="通行码已被使用（可能被并发注册抢先激活），请重新获取通行码",
@@ -907,8 +963,12 @@ async def register_user(
         )
 
     except (HTTPException, UserAlreadyExistsError, BizValidationError):
+        # 业务性失败（含并发认领失败）同样必须清除已落库的半成品用户
+        _discard_orphan_user(db, created_user)
         raise
     except Exception as e:
+        # 原子性：注册链路上任何非预期异常都回滚并删除已创建用户，不留孤儿账号
+        _discard_orphan_user(db, created_user)
         logger.error("注册用户失败: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -74,15 +74,27 @@ def _patch_refresh(mock_db, **fields):
 
 
 class TestGetMilestones:
+    def _allow_project(self, mock_db):
+        """数据域守卫要求项目可见（v1.12.9 起里程碑端点按 scoped_filter 取项目）。"""
+        mock_db.query.return_value.filter.return_value.first.return_value = _make_project()
+
     def test_empty(self, client, mock_db):
+        self._allow_project(mock_db)
         mock_db.all.return_value = []
         resp = client.get("/projects/1/milestones")
         assert resp.status_code == 200
 
     def test_with_data(self, client, mock_db):
+        self._allow_project(mock_db)
         mock_db.all.return_value = [_make_milestone()]
         resp = client.get("/projects/1/milestones")
         assert resp.status_code == 200
+
+    def test_invisible_project_404(self, client, mock_db):
+        """数据域外的项目一律 404（不泄露存在性）—— v1.12.9 IDOR 修复回归。"""
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        resp = client.get("/projects/999/milestones")
+        assert resp.status_code == 404
 
 
 class TestCreateMilestone:

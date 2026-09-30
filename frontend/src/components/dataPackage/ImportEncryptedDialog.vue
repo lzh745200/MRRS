@@ -95,6 +95,12 @@ function handleFileRemove() {
   fileList.value = []
 }
 
+/**
+ * 加密数据包导入：严格按后端三步契约串联。
+ * 后端 upload-encrypted 只落盘并建 pending 记录（不导入数据），
+ * 真正落库必须再走 decrypt-preview（带密码校验）与 confirm-import，
+ * 因此任一步失败都必须如实报错，绝不能提示"导入成功"。
+ */
 async function handleImport() {
   if (!selectedFile.value) {
     ElMessage.warning('请先选择数据包文件')
@@ -108,19 +114,41 @@ async function handleImport() {
   }
   submitting.value = true
   try {
+    // 第一步：上传加密包（后端仅登记 pending 记录）
     const fd = new FormData()
     fd.append('file', selectedFile.value)
     fd.append('password', form.password)
-    const result: any = await post('/data-packages/upload-encrypted', fd, {
+    const upload: any = await post('/data-packages/upload-encrypted', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
-    ElMessage.success(result?.message || '加密数据包导入成功')
+    const uploadData = upload?.data ?? upload
+    const packageId = uploadData?.id
+    if (!packageId) {
+      throw new Error('上传加密数据包失败：服务端未返回数据包 ID')
+    }
+
+    // 第二步：携带密码解密预览（密码经请求体传输，后端校验密码与包结构）
+    await post(`/data-packages/decrypt-preview/${packageId}`, { password: form.password })
+
+    // 第三步：确认导入（后端在单一事务内完成冲突处理与落库）
+    const confirm: any = await post(`/data-packages/confirm-import/${packageId}`, {
+      conflict_strategy: 'KEEP_BOTH',
+      // 加密包必须同时提交解密口令（后端 confirm-import 自行解密后导入）
+      password: form.password,
+    })
+    // 后端该端点以 HTTP 200 + {success, message} 表达业务成败，必须显式判定
+    const confirmData = confirm?.data ?? confirm
+    if (!confirmData || confirmData.success !== true) {
+      throw new Error(confirmData?.message || '确认导入失败')
+    }
+
+    ElMessage.success(confirmData.message || '加密数据包导入成功')
     emit('success')
     emit('update:modelValue', false)
     selectedFile.value = null
     fileList.value = []
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.detail || '导入失败')
+    ElMessage.error(err?.response?.data?.detail || err?.message || '导入失败')
   } finally {
     submitting.value = false
   }

@@ -8,7 +8,7 @@
 """
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -46,7 +46,9 @@ class TestApplyFailureClosure:
             ok = svc.apply_entity_change(task)
         assert ok is False
 
-    def test_apply_success_returns_true(self, svc):
+    def test_apply_success_returns_true(self):
+        # 需要支持 begin_nested() 上下文管理器的事务替身（SAVEPOINT 隔离回写）
+        svc = ApprovalWorkflowService(MagicMock())
         task = _mk_task()
         calls = []
         with patch.object(

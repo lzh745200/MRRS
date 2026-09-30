@@ -215,10 +215,15 @@ def _enrich_fund_time_fields(mapper, connection, target: Fund):
     if parsed_date:
         target.year = parsed_date.year
         target.year_month = parsed_date.strftime("%Y-%m")
-
         # 计算季度: 1-3月为Q1, 4-6月为Q2, 7-9月为Q3, 10-12月为Q4
         quarter = (parsed_date.month - 1) // 3 + 1
         target.year_quarter = f"{parsed_date.year}-Q{quarter}"
+    else:
+        # 日期被清空时必须同步清空派生列，否则年/年月/季度残留旧值，
+        # 按年筛选与统计会把该经费算进已删除的年度（深审 LIVE）。
+        target.year = None
+        target.year_month = None
+        target.year_quarter = None
 
 
 # 监听插入和更新事件

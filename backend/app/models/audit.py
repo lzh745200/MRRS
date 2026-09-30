@@ -180,7 +180,9 @@ class DataExportLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=False, index=True)
+    # 用户删除后置空 user_id（审计留痕保留）——SET NULL 要求列可空，历史快照里
+    # 该列曾是 nullable=False，导致删用户必然 IntegrityError。
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     username = Column(String(100), nullable=True)
 
     export_type = Column(String(50), nullable=False)

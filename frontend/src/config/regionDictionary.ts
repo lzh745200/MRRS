@@ -89,18 +89,25 @@ export const EDUCATION_ACTIVITY_TYPES = [
   { label: '其他', value: 'other' },
 ]
 
-export function detectRegionAttributes(province?: string, _city?: string, _county?: string) {
-  // 兼容旧版三参数调用：从省份值反查标签
+/**
+ * 区域属性判定结果。
+ *
+ * 只包含**确有判定依据**的字段：province（行政区划代码 → 中文标签）。
+ * 三区三州 / 边疆地区 / 民族地区 / 革命老区 / 重点帮扶县 等标记没有可离线核定的
+ * 权威数据源（本文件只有省市县名称字典），因此**一律不返回**——历史实现回填
+ * false 会被调用方写回表单，静默清空用户手工填写或后端回填的真实标记。
+ */
+export interface RegionAttributes {
+  /** 省份中文标签（由行政区划代码或标签本身解析；无法解析时为空串） */
+  province: string
+}
+
+export function detectRegionAttributes(
+  province?: string,
+  _city?: string,
+  _county?: string
+): RegionAttributes {
+  // 兼容旧版三参数调用：市/县级属性无权威字典可查，仅从省份值反查标签
   const provinceObj = PROVINCES.find((p) => p.value === province || p.label === province)
-  return {
-    province: provinceObj?.label || province || '',
-    isCoastal: false,
-    isBorder: false,
-    isEthnicRegion: false,
-    isThreeRegionsThreeStates: false,
-    isBorderArea: false,
-    isEthnicArea: false,
-    isRevolutionaryArea: false,
-    isKeyCounty: false,
-  }
+  return { province: provinceObj?.label || province || '' }
 }

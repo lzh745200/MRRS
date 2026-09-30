@@ -258,14 +258,22 @@ def _build_comprehensive_workbook(db: Session, user: Any) -> bytes:
     if user is not None:
         village_q = scoped_filter(village_q, SupportedVillage, user)
     villages_count = village_q.count()
-    schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
-    projects_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
-    funds_count = db.query(Fund).filter(Fund.is_active == True).count()  # noqa: E712
-    funds_sum = (
-        db.query(sql_func.coalesce(sql_func.sum(Fund.amount), 0))
-        .filter(Fund.is_active == True)  # noqa: E712
-        .scalar()
+
+    # 全部聚合都必须过数据域过滤（S2 导出隔离红线）：历史实现只过滤了村庄，
+    # 学校/项目/经费计数与金额是全局口径 → 部门级非管理员可读出跨组织总量。
+    def _scoped_count(model):
+        q = db.query(model).filter(model.is_active.is_(True))
+        return scoped_filter(q, model, user).count() if user is not None else q.count()
+
+    schools_count = _scoped_count(School)
+    projects_count = _scoped_count(Project)
+    funds_count = _scoped_count(Fund)
+    fund_sum_q = db.query(sql_func.coalesce(sql_func.sum(Fund.amount), 0)).filter(
+        Fund.is_active.is_(True)
     )
+    if user is not None:
+        fund_sum_q = scoped_filter(fund_sum_q, Fund, user)
+    funds_sum = fund_sum_q.scalar()
 
     summary = {
         "用户总数": users_count,
@@ -380,6 +388,9 @@ def _run_export_task(task_id: str) -> None:
     except Exception as exc:  # noqa: BLE001 — 任务级兜底，必须回写失败状态
         logger.exception("异步导出任务执行失败 task_id=%s", task_id)
         try:
+            # 失败事务必须先回滚：否则后续查询/更新在同一失败事务上继续，
+            # 状态回写本身会抛错，任务永远停在 processing（深审 LIVE）。
+            db.rollback()
             task = db.query(ExportTask).filter(ExportTask.task_id == task_id).first()
             if task:
                 task.status = ExportStatus.FAILED.value

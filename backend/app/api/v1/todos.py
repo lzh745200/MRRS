@@ -223,8 +223,11 @@ async def update_todo(
         if not todo:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="待办事项不存在")
 
-        # 只更新提供了的字段
-        update_data = data.model_dump(exclude_unset=True)
+        # 只更新提供了的字段；显式 null 一律忽略 —— 多数列 NOT NULL，
+        # 直接 setattr(None) 会以 IntegrityError 500 结束（深审 LIVE）。
+        update_data = {
+            k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None
+        }
         for field, value in update_data.items():
             setattr(todo, field, value)
 

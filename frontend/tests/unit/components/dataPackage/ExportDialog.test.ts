@@ -4,11 +4,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const { ElMessage, mockPost, downloadMock } = vi.hoisted(() => {
+const { ElMessage, mockPost, downloadMock, loggerError } = vi.hoisted(() => {
   return {
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
     mockPost: vi.fn(),
     downloadMock: vi.fn().mockResolvedValue(undefined),
+    loggerError: vi.fn(),
   }
 })
 
@@ -24,6 +25,10 @@ vi.mock('@/api/request', () => ({
 
 vi.mock('@/stores/dataPackage', () => ({
   useDataPackageStore: () => ({ downloadPackage: downloadMock }),
+}))
+
+vi.mock('@/utils/logger', () => ({
+  logger: { error: loggerError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }))
 
 import ExportDialog from '@/components/dataPackage/ExportDialog.vue'
@@ -146,36 +151,35 @@ describe('dataPackage/ExportDialog.vue', () => {
   })
 })
 
+it('模板事件处理器执行(dialog/checkbox/input update)', async () => {
+  const wrapper = mountDialog()
+  await flushPromises()
+  wrapper.findComponent({ name: 'ElDialog' }).vm.$emit('update:modelValue', false)
+  expect(wrapper.emitted('update:modelValue')).toContainEqual([false])
+  wrapper.findComponent({ name: 'ElCheckboxGroup' }).vm.$emit('update:modelValue', ['schools'])
+  expect(wrapper.vm.form.data_types).toEqual(['schools'])
+  wrapper.findComponent({ name: 'ElInput' }).vm.$emit('update:modelValue', '备注X')
+  expect(wrapper.vm.form.description).toBe('备注X')
+  wrapper.unmount()
+})
 
-  it('模板事件处理器执行(dialog/checkbox/input update)', async () => {
-    const wrapper = mountDialog()
-    await flushPromises()
-    wrapper.findComponent({ name: 'ElDialog' }).vm.$emit('update:modelValue', false)
-    expect(wrapper.emitted('update:modelValue')).toContainEqual([false])
-    wrapper.findComponent({ name: 'ElCheckboxGroup' }).vm.$emit('update:modelValue', ['schools'])
-    expect(wrapper.vm.form.data_types).toEqual(['schools'])
-    wrapper.findComponent({ name: 'ElInput' }).vm.$emit('update:modelValue', '备注X')
-    expect(wrapper.vm.form.description).toBe('备注X')
-    wrapper.unmount()
-  })
+it('formRef 缺失时直接返回', async () => {
+  const wrapper = mountDialog()
+  await flushPromises()
+  wrapper.vm.formRef = null
+  await wrapper.vm.handleExport()
+  expect(mockPost).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
 
-  it('formRef 缺失时直接返回', async () => {
-    const wrapper = mountDialog()
-    await flushPromises()
-    wrapper.vm.formRef = null
-    await wrapper.vm.handleExport()
-    expect(mockPost).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('导出成功但无 message 时走默认提示', async () => {
-    const wrapper = mountDialog()
-    await flushPromises()
-    wrapper.vm.formRef = { validate: vi.fn(() => Promise.resolve()) }
-    mockPost.mockResolvedValue({ package_id: 1 })
-    await wrapper.vm.handleExport()
-    expect(ElMessage.success).toHaveBeenCalled()
-    wrapper.unmount()
+it('导出成功但无 message 时走默认提示', async () => {
+  const wrapper = mountDialog()
+  await flushPromises()
+  wrapper.vm.formRef = { validate: vi.fn(() => Promise.resolve()) }
+  mockPost.mockResolvedValue({ package_id: 1 })
+  await wrapper.vm.handleExport()
+  expect(ElMessage.success).toHaveBeenCalled()
+  wrapper.unmount()
 })
 
 describe('导出后自动下载', () => {
@@ -197,6 +201,29 @@ describe('导出后自动下载', () => {
     mockPost.mockResolvedValue({ package_id: 6 })
     await wrapper.vm.handleExport()
     expect(ElMessage.error).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('下载失败不再静默：warning 提示可到列表手动下载 + logger.error 记录原因', async () => {
+    const wrapper = mountDialog()
+    await flushPromises()
+    wrapper.vm.formRef = { validate: vi.fn(() => Promise.resolve()) }
+    mockPost.mockResolvedValue({ package_id: 9 })
+    const err = new Error('net down')
+    downloadMock.mockRejectedValue(err)
+
+    await wrapper.vm.handleExport()
+
+    expect(ElMessage.warning).toHaveBeenCalledTimes(1)
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      '数据包已导出，但自动下载失败，请到数据包列表手动下载'
+    )
+    expect(loggerError).toHaveBeenCalledWith('[ExportDialog] 数据包自动下载失败', err, {
+      packageId: 9,
+    })
+    // 导出本身成功：仍提示成功并关闭对话框（不因下载失败回滚导出结果）
+    expect(ElMessage.success).toHaveBeenCalledWith(expect.stringContaining('9'))
+    expect(wrapper.emitted('success')).toBeTruthy()
     wrapper.unmount()
   })
 })

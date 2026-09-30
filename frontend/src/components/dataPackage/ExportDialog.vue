@@ -36,6 +36,7 @@
 import { ref, reactive, watch } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { exportDataPackage } from '@/api/dataPackage'
+import { logger } from '@/utils/logger'
 
 const props = defineProps<{
   modelValue: boolean
@@ -92,8 +93,10 @@ async function handleExport() {
       try {
         const { useDataPackageStore } = await import('@/stores/dataPackage')
         await useDataPackageStore().downloadPackage(packageId)
-      } catch {
-        /* 下载失败不阻塞（可到列表手动下载） */
+      } catch (err) {
+        // 下载失败不阻塞主流程，但必须如实告知（否则用户只看到"成功"却拿不到文件）
+        logger.error('[ExportDialog] 数据包自动下载失败', err, { packageId })
+        ElMessage.warning('数据包已导出，但自动下载失败，请到数据包列表手动下载')
       }
       emit('success')
       emit('update:modelValue', false)

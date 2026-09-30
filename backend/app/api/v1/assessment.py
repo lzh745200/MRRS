@@ -48,8 +48,10 @@ async def get_village_scores(
     target_year = year or date.today().year
 
     # 缓存检查（TTL=5分钟）
+    # 缓存键必须包含调用者身份：结果由 scoped_filter(..., current_user) 决定，
+    # 共享键会把宽范围用户的结果回放给窄范围用户（跨用户数据泄露）。
     cache = await get_cache_service()
-    cache_key = f"village_scores:{target_year}"
+    cache_key = f"village_scores:{target_year}:{getattr(current_user, 'id', 'anonymous')}"
     cached = await cache.get(cache_key)
     if cached is not None:
         return cached

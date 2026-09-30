@@ -61,8 +61,9 @@ class RuralTask(Base):
     rural_work_id = Column(
         Integer,
         ForeignKey("rural_works.id", ondelete="SET NULL"),
-        nullable=False,
+        nullable=True,
         index=True,
+        comment="所属乡村工作ID(工作删除后置空，任务留痕保留)",
     )
     # 基本信息
     title = Column(String(200), nullable=False)

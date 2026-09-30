@@ -703,11 +703,18 @@ async def generate_report(
 
         # 订阅场景：从订阅读取报表类型/年份/格式
         if request.subscription_id and request.report_type == "summary":
-            sub = (
-                service.db.query(ReportSubscription)
-                .filter(ReportSubscription.id == request.subscription_id)
-                .first()
+            from app.core.constants import normalize_role as _nr
+            from app.core.permission_utils import is_superuser as _isu
+
+            _sub_q = service.db.query(ReportSubscription).filter(
+                ReportSubscription.id == request.subscription_id
             )
+            if not (
+                _isu(current_user)
+                or _nr(getattr(current_user, "role", "")) in ("admin", "super_admin")
+            ):
+                _sub_q = _sub_q.filter(ReportSubscription.user_id == current_user.id)
+            sub = _sub_q.first()
             if sub is not None:
                 request.report_type = sub.report_type or "summary"
                 if request.year is None:
@@ -788,12 +795,17 @@ async def download_generated_report(
     根据报表类型和格式返回对应的文件流。
     """
     try:
-        # 尝试从订阅记录中查找
-        subscription = (
-            service.db.query(ReportSubscription)
-            .filter(ReportSubscription.id == report_id)
-            .first()
-        )
+        # 尝试从订阅记录中查找（权限：仅订阅属主或管理员，与其余订阅端点一致）
+        from app.core.constants import normalize_role as _normalize_role
+        from app.core.permission_utils import is_superuser as _is_superuser
+
+        sub_query = service.db.query(ReportSubscription).filter(ReportSubscription.id == report_id)
+        if not (
+            _is_superuser(current_user)
+            or _normalize_role(getattr(current_user, "role", "")) in ("admin", "super_admin")
+        ):
+            sub_query = sub_query.filter(ReportSubscription.user_id == current_user.id)
+        subscription = sub_query.first()
 
         if subscription:
             # 根据订阅配置重新生成报表

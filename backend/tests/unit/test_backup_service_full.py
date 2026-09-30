@@ -266,7 +266,9 @@ class TestRestoreEncryptedBackup:
         up_dir = str(tmp_path / "uploads")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("orig_db")
+        # 现库必须是真实 SQLite：v1.12.9 起一致性快照失败即 fail-loud，
+        # 用文本占位文件会（按设计）中止恢复
+        _make_real_sqlite_db(db_path)
         os.makedirs(up_dir)
 
         zip_path = os.path.join(bdir, "backup.zip")
@@ -309,7 +311,7 @@ class TestRestoreEncryptedBackup:
         db_path = str(tmp_path / "data" / "rural_revitalization.db")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("orig")
+        _make_real_sqlite_db(db_path)
 
         zip_path = os.path.join(bdir, "plain.zip")
         self._make_zip(zip_path)
@@ -333,7 +335,7 @@ class TestRestoreEngineDisposeFailure:
         db_path = str(tmp_path / "data" / "rural_revitalization.db")
         os.makedirs(bdir)
         os.makedirs(os.path.dirname(db_path))
-        Path(db_path).write_text("orig")
+        _make_real_sqlite_db(db_path)
 
         zip_path = os.path.join(bdir, "b.zip")
         import sqlite3 as _sqlite3

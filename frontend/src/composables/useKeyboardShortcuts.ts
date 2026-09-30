@@ -34,15 +34,66 @@ export interface Shortcut {
 const INPUT_ELEMENTS = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
 
 /**
+ * 按住 Shift 时 e.key 会变成上档字符（Shift+1 → '!'），
+ * 注册侧写的却是物理键位（'1'）。此表把上档字符还原回物理键位，
+ * 使 `{ key: '1', shift: true }` 这类快捷键能被命中。
+ */
+const SHIFTED_CHAR_TO_BASE: Record<string, string> = {
+  '!': '1',
+  '@': '2',
+  '#': '3',
+  $: '4',
+  '%': '5',
+  '^': '6',
+  '&': '7',
+  '*': '8',
+  '(': '9',
+  ')': '0',
+  _: '-',
+  '+': '=',
+  '{': '[',
+  '}': ']',
+  '|': '\\',
+  ':': ';',
+  '"': "'",
+  '<': ',',
+  '>': '.',
+  '?': '/',
+  '~': '`',
+}
+
+/** 单字符键名统一大写，保证注册端与事件端拼出的组合串一致 */
+function normalizeKey(key: string): string {
+  return key.length === 1 ? key.toUpperCase() : key
+}
+
+/** 组合键字符串的唯一构造入口（formatShortcut 与 handleKeydown 共用，避免两处实现漂移） */
+function buildCombo(key: string, mods: { ctrl?: boolean; shift?: boolean; alt?: boolean }): string {
+  const parts: string[] = []
+  if (mods.ctrl) parts.push('Ctrl')
+  if (mods.shift) parts.push('Shift')
+  if (mods.alt) parts.push('Alt')
+  parts.push(normalizeKey(key))
+  return parts.join('+')
+}
+
+/**
+ * 由物理键位码反解基础键名（Shift+1 的 e.code 仍是 'Digit1'）。
+ * 键盘布局差异下可能返回 null，此时仅依赖 e.key 与上档字符还原表。
+ */
+function baseKeyFromCode(code: string | undefined): string | null {
+  if (!code) return null
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3)
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5)
+  if (/^Numpad[0-9]$/.test(code)) return code.slice(6)
+  return null
+}
+
+/**
  * 获取快捷键的字符串表示
  */
 export function formatShortcut(s: Shortcut): string {
-  const parts: string[] = []
-  if (s.ctrl) parts.push('Ctrl')
-  if (s.shift) parts.push('Shift')
-  if (s.alt) parts.push('Alt')
-  parts.push(s.key.length === 1 ? s.key.toUpperCase() : s.key)
-  return parts.join('+')
+  return buildCombo(s.key, { ctrl: s.ctrl, shift: s.shift, alt: s.alt })
 }
 
 export function useKeyboardShortcuts(shortcuts: Shortcut[]) {
@@ -79,15 +130,30 @@ export function useKeyboardShortcuts(shortcuts: Shortcut[]) {
     const isInput = INPUT_ELEMENTS.has(target.tagName)
     const isContentEditable = target.isContentEditable
 
-    // Build the combo for O(1) map lookup
-    const parts: string[] = []
-    if (e.ctrlKey || e.metaKey) parts.push('Ctrl')
-    if (e.shiftKey) parts.push('Shift')
-    if (e.altKey) parts.push('Alt')
-    parts.push(e.key.length === 1 ? e.key.toUpperCase() : e.key)
-    const combo = parts.join('+')
+    const mods = { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey, alt: e.altKey }
 
-    const s = shortcutMap.value.get(combo)
+    // 候选组合串（O(1) 查表）：
+    // ① e.key 原样 —— 覆盖 'Escape'、'F5'、以及直接注册上档字符（{ key: '!', shift: true }）的情形；
+    // ② Shift 生效时的物理键位 —— Shift+1 的 e.key 是 '!'，仅靠 ① 永远匹配不到注册的 { key: '1', shift: true }。
+    //    物理键位优先由 e.code 反解（布局无关），退化时用上档字符还原表。
+    const candidates = [buildCombo(e.key, mods)]
+    if (mods.shift && e.key.length === 1) {
+      const physical = baseKeyFromCode(e.code) || SHIFTED_CHAR_TO_BASE[e.key] || null
+      if (physical && normalizeKey(physical) !== normalizeKey(e.key)) {
+        candidates.push(buildCombo(physical, mods))
+      }
+    }
+
+    let combo = ''
+    let s: Shortcut | undefined
+    for (const candidate of candidates) {
+      const hit = shortcutMap.value.get(candidate)
+      if (hit) {
+        combo = candidate
+        s = hit
+        break
+      }
+    }
     if (!s) return
 
     // 输入框中跳过

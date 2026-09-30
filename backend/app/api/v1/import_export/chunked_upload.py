@@ -69,13 +69,18 @@ async def init_upload(
     upload_service: ChunkedUploadService = Depends(get_chunked_upload_service),
 ):
     """初始化分片上传会话"""
-    session = upload_service.create_session(
-        file_name=request.file_name,
-        file_size=request.file_size,
-        user_id=current_user.id,
-        chunk_size=request.chunk_size,
-        file_hash=request.file_hash,
-    )
+    try:
+        session = upload_service.create_session(
+            file_name=request.file_name,
+            file_size=request.file_size,
+            user_id=current_user.id,
+            chunk_size=request.chunk_size,
+            file_hash=request.file_hash,
+        )
+    except ValueError as e:
+        # 深审 LIVE：服务层用 ValueError 表达"文件大小非法/超过 2GB 上限"，
+        # 未捕获时冒泡为 500（异常处理器只注册了 AppError/Pydantic/DB）。
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return InitUploadResponse(
         session_id=session.session_id,
         file_name=session.file_name,
@@ -111,12 +116,16 @@ async def upload_chunk(
         ChunkedUploadConfig.MAX_CHUNK_SIZE,
         limit_label="单个分片",
     )
-    success = await upload_service.upload_chunk(
-        session_id=session_id,
-        chunk_index=chunk_index,
-        chunk_data=content,
-        chunk_hash=chunk_hash,
-    )
+    try:
+        success = await upload_service.upload_chunk(
+            session_id=session_id,
+            chunk_index=chunk_index,
+            chunk_data=content,
+            chunk_hash=chunk_hash,
+        )
+    except ValueError as e:
+        # 会话过期/序号越界/大小或哈希不匹配均为用户输入问题 → 400（原为 500）
+        raise HTTPException(status_code=400, detail=str(e)) from e
     if not success:
         raise HTTPException(status_code=400, detail="分片上传失败")
     return {"success": True, "chunk_index": chunk_index}
@@ -158,7 +167,11 @@ async def merge_chunks(
     if session.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权操作此上传会话")
 
-    file_path = await upload_service.merge_chunks(session_id)
+    try:
+        file_path = await upload_service.merge_chunks(session_id)
+    except ValueError as e:
+        # 分片未传完/合并后大小或哈希不匹配 → 400（原为 500）
+        raise HTTPException(status_code=400, detail=str(e)) from e
     if not file_path:
         raise HTTPException(status_code=400, detail="合并失败")
     session = upload_service.get_session(session_id)

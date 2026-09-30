@@ -213,13 +213,18 @@ class TestConfigEncryptionKeyFallback:
         )
 
     def test_encryption_key_generated_via_lambda(self):
-        def fake_get_or_create(name, generate):
+        seen_kwargs = {}
+
+        def fake_get_or_create(name, generate, **kwargs):
+            seen_kwargs.update(kwargs)
             return generate()
 
         with patch("app.utils.runtime_secrets.get_or_create_secret",
                    side_effect=fake_get_or_create):
             s = Settings(ENVIRONMENT="production", ENCRYPTION_KEY="")
         assert s.ENCRYPTION_KEY
+        # v1.12.9：静态加密密钥必须持久化（落盘失败即报错，不再用一次性密钥顶替）
+        assert seen_kwargs.get("require_persisted") is True
 
 
 # ===========================================================================

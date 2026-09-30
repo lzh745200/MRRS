@@ -87,11 +87,13 @@ class AllocationOrderItem(Base):
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    # 明细是拨款指令的组成部分：指令删除后孤儿明细仍会被按单位汇总计入金额，
+    # 故外键动作取 CASCADE（原 SET NULL 与 nullable=False 自相矛盾）。
     order_id = Column(
         Integer,
-        ForeignKey("fund_allocation_orders.id", ondelete="SET NULL"),
+        ForeignKey("fund_allocation_orders.id", ondelete="CASCADE"),
         nullable=False,
-        comment="拨款指令ID",
+        comment="拨款指令ID(指令删除时明细级联删除)",
     )
     organization_id = Column(
         Integer,

@@ -40,6 +40,9 @@ class ValidationErrorCode(str, Enum):
     INVALID_COUNTY = "IMPORT_008"
     INVALID_NUMERIC_VALUE = "IMPORT_009"
     VALUE_OUT_OF_RANGE = "IMPORT_010"
+    # v1.12.9：新增"是否振兴梯队"取值校验所需错误码
+    # （历史字符串列 tiered_development_level 已删除，现列为布尔 is_revitalization_tier）
+    INVALID_TIERED_LEVEL = "IMPORT_011"
 
 
 @dataclass
@@ -511,10 +514,15 @@ class DataValidatorService:
 
         return converted
 
+    # 振兴梯队字段的合法取值（模型列已从历史字符串收窄为布尔 is_revitalization_tier）
+    _TIER_TRUE = {"是", "true", "True", "1", "yes", "Y"}
+    _TIER_FALSE = {"否", "false", "False", "0", "no", "N", ""}
+
     def validate_import_data(
         self,
         rows: List[Dict[str, Any]],
         validate_county: bool = True,
+        validate_tiered_level: bool = True,
     ) -> ValidationResult:
         """
         验证导入数据（增强版）
@@ -565,6 +573,25 @@ class DataValidatorService:
                     county_error = self._validate_field_format("county", county_value, "county", idx)
                     if county_error:
                         row_errors.append(county_error)
+
+            # 额外验证"是否振兴梯队"（历史 tiered_development_level 字符串列已删除，
+            # 现列为布尔 is_revitalization_tier；此处只接受真/假口径的取值）
+            if validate_tiered_level:
+                tier_value = row.get("is_revitalization_tier")
+                if tier_value is not None:
+                    tier_text = str(tier_value).strip()
+                    if tier_text not in self._TIER_TRUE and tier_text not in self._TIER_FALSE:
+                        row_errors.append(
+                            ValidationError(
+                                row_number=idx,
+                                field_name="is_revitalization_tier",
+                                error_code=ValidationErrorCode.INVALID_TIERED_LEVEL,
+                                message=(
+                                    f"第 {idx} 行 是否振兴梯队 取值非法: {tier_text}"
+                                    "（仅支持 是/否）"
+                                ),
+                            )
+                        )
 
             if row_errors:
                 all_errors.extend(row_errors)

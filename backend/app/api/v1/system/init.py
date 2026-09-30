@@ -143,11 +143,13 @@ async def initialize_system(
         steps.append({"step": "config", "status": "success", "message": "系统配置初始化完成"})
 
         # 步骤3：创建超级管理员账号
-        try:
-            from app.models.user import User
-            from app.core.security import get_password_hash
+        # 失败必须中止：若继续走到 set_initialized，系统会被标记为已初始化却
+        # 没有任何超级管理员，而 /initialize 不可重入 —— 部署被永久锁死。
+        from app.models.user import User
+        from app.core.security import get_password_hash
 
-            # 检查管理员用户是否已存在
+        # 检查管理员用户是否已存在（查询同样纳入守卫：DB 异常也必须中止初始化）
+        try:
             existing_admin = db.query(User).filter(User.username == request.admin_username).first()
             if existing_admin:
                 steps.append({"step": "admin_user", "status": "skipped", "message": "管理员账号已存在"})
@@ -164,8 +166,13 @@ async def initialize_system(
                 safe_commit(db)
                 steps.append({"step": "admin_user", "status": "success", "message": "超级管理员账号创建成功"})
         except Exception as e:
-            logger.warning("创建管理员账号失败: %s", e)
-            steps.append({"step": "admin_user", "status": "warning", "message": f"管理员账号创建失败: {str(e)}"})
+            db.rollback()
+            logger.error("创建管理员账号失败，初始化中止: %s", e, exc_info=True)
+            # 错误细节不出站（W1-T8）：内部原因只进日志，响应只给可操作提示
+            raise HTTPException(
+                status_code=500,
+                detail="超级管理员账号创建失败，系统未初始化；请检查数据库可用性后重试，或联系管理员",
+            )
 
         # 步骤4：标记系统为已初始化
         svc.set_initialized(org_id=1)

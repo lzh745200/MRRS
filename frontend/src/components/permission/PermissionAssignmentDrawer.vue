@@ -148,6 +148,19 @@ const roleDefaultKeys = ref<string[]>([])
 const currentMenuKeys = ref<string[]>([])
 const isMenuCustomized = ref(false)
 
+/**
+ * 已加载权限所属的用户 id。
+ * 用户切换后若与 props.user.id 不一致，说明面板里是上一个用户的数据，
+ * 此时禁止保存，避免把 A 的权限写到 B 名下。
+ */
+const loadedPermissionsUserId = ref<number | null>(null)
+
+/**
+ * 加载序号（身份令牌）。每次用户切换自增，异步响应回来时若序号已过期
+ * 就直接丢弃 —— 否则 A 的慢响应会覆盖 B 的数据。
+ */
+let loadSeq = 0
+
 const legacyForm = ref({
   role: '',
   data_scope: '',
@@ -155,40 +168,70 @@ const legacyForm = ref({
 
 // ── 加载数据 ──
 
-async function loadAllRoles() {
+/** 用户切换时立即清空上一个用户的所有残留状态 */
+function resetUserScopedState() {
+  currentPermissions.value = []
+  currentMenuKeys.value = []
+  roleDefaultKeys.value = []
+  isMenuCustomized.value = false
+  permissionsLoadFailed.value = false
+  loadedPermissionsUserId.value = null
+}
+
+/** 响应是否仍然有效：未被更新的加载取代，且仍是同一个用户 */
+function isStale(seq: number, userId: number): boolean {
+  return seq !== loadSeq || props.user?.id !== userId
+}
+
+async function loadAllRoles(seq: number = loadSeq) {
   try {
     const res = await get('/rbac/roles')
-    allRoles.value = (res.data || res || []) as RbacRole[]
+    if (seq !== loadSeq) return // 已有更新的加载，丢弃过期响应
+    const data = (res as any)?.data || res || []
+    allRoles.value = Array.isArray(data) ? data : []
   } catch {
+    if (seq !== loadSeq) return
     allRoles.value = []
   }
 }
 
-async function loadCurrentPermissions() {
-  if (!props.user?.id) return
+async function loadCurrentPermissions(
+  userId: number | null = props.user?.id ?? null,
+  seq: number = loadSeq
+) {
+  if (!userId) return
   try {
-    const res = await get(`/rbac/user/${props.user.id}/permissions`)
-    const payload = res.data || res
+    const res = await get(`/rbac/user/${userId}/permissions`)
+    if (isStale(seq, userId)) return // 用户已切换：丢弃属于上一个用户的响应
+    const payload = (res as any)?.data || res
     const perms = payload?.permissions || payload || []
     currentPermissions.value = Array.isArray(perms) ? perms : []
     permissionsLoadFailed.value = false
+    loadedPermissionsUserId.value = userId
   } catch {
+    if (isStale(seq, userId)) return
     permissionsLoadFailed.value = true
     currentPermissions.value = [] // 清空过期数据，防止前一个用户权限残留
+    loadedPermissionsUserId.value = null
   }
 }
 
-async function loadMenuConfig() {
-  if (!props.user?.id) return
+async function loadMenuConfig(
+  userId: number | null = props.user?.id ?? null,
+  seq: number = loadSeq
+) {
+  if (!userId) return
   try {
-    const res = await get(`/menus/user-menus/${props.user.id}`)
-    const data = res.data || res
+    const res = await get(`/menus/user-menus/${userId}`)
+    if (isStale(seq, userId)) return // 用户已切换：丢弃属于上一个用户的响应
+    const data = (res as any)?.data || res
     if (data) {
       currentMenuKeys.value = data.menu_keys || []
       isMenuCustomized.value = data.is_customized || false
       roleDefaultKeys.value = data.role_default_keys || []
     }
   } catch {
+    if (isStale(seq, userId)) return
     currentMenuKeys.value = []
   }
 }
@@ -208,15 +251,22 @@ function onPermissionsChange(perms: string[]) {
 // ── 保存操作 ──
 
 async function savePermissions() {
-  if (!props.user?.id || permissionsLoadFailed.value) return
+  const userId = props.user?.id
+  if (!userId || permissionsLoadFailed.value) return
+  // 防串号：面板里的权限必须确实属于当前用户，否则保存会把上一个用户的权限写到他名下
+  if (loadedPermissionsUserId.value !== userId) {
+    ElMessage.error('权限数据尚未加载完成，请稍后重试')
+    return
+  }
   savingPermissions.value = true
   try {
-    // 原子性保存：后端在单个事务内完成撤销+授予
+    // 原子性保存：后端在单个事务内完成撤销+授予（user_id 取本次点击时的用户）
     const res = await post('/rbac/save-permissions', {
-      user_id: props.user.id,
+      user_id: userId,
       permissions: currentPermissions.value,
     })
-    if (!visible.value) return // 抽屉已关闭，中止后续操作
+    // 抽屉已关闭或用户已切换 → 本次结果不再适用于当前面板，中止后续操作
+    if (!visible.value || props.user?.id !== userId) return
 
     // 后端 /rbac/save-permissions 裸返回 {success, granted, revoked, skipped, failed, message}
     // （无 envelope data 键），res 即结果对象
@@ -250,16 +300,20 @@ async function savePermissions() {
 }
 
 async function saveLegacyRole() {
-  if (!props.user?.id) return
+  const userId = props.user?.id
+  if (!userId) return
   savingLegacy.value = true
   try {
-    await put(`/users/${props.user.id}/permissions`, {
+    await put(`/users/${userId}/permissions`, {
       role: legacyForm.value.role,
       data_scope: legacyForm.value.data_scope,
     })
+    // 用户已切换 → 本次结果不再适用于当前面板
+    if (props.user?.id !== userId) return
     ElMessage.success('系统角色保存成功')
     emit('saved')
   } catch (err: any) {
+    if (props.user?.id !== userId) return
     ElMessage.error(err?.response?.data?.detail || '保存失败')
   } finally {
     savingLegacy.value = false
@@ -275,15 +329,26 @@ function handleClose() {
 watch(
   () => props.user,
   async (user) => {
-    if (user) {
-      legacyForm.value = {
-        role: user.role || 'user',
-        data_scope: user.data_scope || 'org',
-      }
-      await Promise.all([loadAllRoles(), loadCurrentPermissions(), loadMenuConfig()])
-      // 加载已分配角色
-      setTimeout(() => rolePanelRef.value?.loadAssignedRoles?.(), 200)
+    // 用户切换：先作废所有在途请求，再清空上一个用户的残留数据
+    const seq = ++loadSeq
+    resetUserScopedState()
+    const userId = user?.id
+    if (!user || !userId) return
+
+    legacyForm.value = {
+      role: user.role || 'user',
+      data_scope: user.data_scope || 'org',
     }
+    await Promise.all([
+      loadAllRoles(seq),
+      loadCurrentPermissions(userId, seq),
+      loadMenuConfig(userId, seq),
+    ])
+    // 加载已分配角色（仅本次加载仍是最新时才刷新，避免旧用户的慢响应触发）
+    if (seq !== loadSeq) return
+    setTimeout(() => {
+      if (seq === loadSeq) rolePanelRef.value?.loadAssignedRoles?.()
+    }, 200)
   },
   { immediate: true }
 )

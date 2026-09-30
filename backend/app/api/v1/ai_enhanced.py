@@ -99,7 +99,7 @@ async def detect_anomalies(
     request: AnomalyDetectionRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-) -> Dict[str, Any]:
+) -> List[Dict[str, Any]]:
     """异常检测 - 使用Isolation Forest或统计方法检测数据中的异常值"""
     service = _get_anomaly_service()
     return service.detect_anomalies(

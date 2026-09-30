@@ -233,6 +233,17 @@ async def update_task(
     task = _get_task_or_403(task_id, current_user, db)
 
     update_data = data.model_dump(exclude_unset=True)
+
+    # 审批红线：审批字段一律不得经通用更新接口写入；status 只允许在
+    # 草稿/被驳回阶段修改（否则创建人可直接把任务置为 approved，绕过审批）。
+    for blocked in ("approved_by", "approved_at", "approval_comment"):
+        update_data.pop(blocked, None)
+    if "status" in update_data and task.status not in (TaskStatus.draft, TaskStatus.rejected):
+        raise HTTPException(
+            status_code=400,
+            detail="任务已提交，状态不能直接修改，请使用审批/驳回流程",
+        )
+
     for key, val in update_data.items():
         setattr(task, key, val)
     task.updated_by = current_user.id
@@ -310,6 +321,12 @@ async def approve_task(
     task = _get_task_or_403(task_id, current_user, db)
     if task.status != TaskStatus.pending_approval:
         raise HTTPException(status_code=400, detail="仅待审批的任务可审批")
+
+    # 审批独立性红线：非管理员不得审批自己创建/提交的任务（自审自批使审批形同虚设）
+    if not is_admin(current_user) and (
+        task.created_by == current_user.id or task.submitted_by == current_user.id
+    ):
+        raise HTTPException(status_code=403, detail="不得审批本人创建或提交的任务")
 
     task.approved_by = current_user.id
     task.approved_at = datetime.now(timezone.utc)

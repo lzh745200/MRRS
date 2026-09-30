@@ -100,16 +100,45 @@
               <el-icon><Money /></el-icon>
               <span class="menu-title-text">经费管理</span>
             </template>
-            <el-menu-item index="/funds"><span>经费总览</span></el-menu-item>
-            <el-menu-item index="/funds/budget"><span>预算管理</span></el-menu-item>
-            <el-menu-item index="/funds/user"><span>经费申请</span></el-menu-item>
-            <el-menu-item index="/funds/contract"><span>合同管理</span></el-menu-item>
-            <el-menu-item index="/funds/transfer"><span>转账凭证</span></el-menu-item>
-            <el-menu-item index="/funds/anomaly"><span>异常监控</span></el-menu-item>
-            <el-menu-item index="/funds/lifecycle"><span>资金周期</span></el-menu-item>
-            <el-menu-item index="/funds/settlement"><span>决算结算</span></el-menu-item>
-            <el-menu-item index="/funds/analysis"><span>经费分析</span></el-menu-item>
-            <el-menu-item index="/funds/report"><span>经费报表</span></el-menu-item>
+            <!-- 子项各按自己的 menuKey 门控：仅凭父级 funds-admin/funds-user
+                 放行会让无权限的子项照样可见（对应路由 meta.menuKey 见 router/index.ts，
+                 缺失的历史路由按经费管理主键 funds-admin 收敛）。 -->
+            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds">
+              <span>经费总览</span>
+            </el-menu-item>
+            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/budget">
+              <span>预算管理</span>
+            </el-menu-item>
+            <el-menu-item v-if="menuStore.canAccessMenu('funds-user')" index="/funds/user">
+              <span>经费申请</span>
+            </el-menu-item>
+            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/contract">
+              <span>合同管理</span>
+            </el-menu-item>
+            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/transfer">
+              <span>转账凭证</span>
+            </el-menu-item>
+            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/anomaly">
+              <span>异常监控</span>
+            </el-menu-item>
+            <el-menu-item
+              v-if="menuStore.canAccessMenu('funds-lifecycle')"
+              index="/funds/lifecycle"
+            >
+              <span>资金周期</span>
+            </el-menu-item>
+            <el-menu-item
+              v-if="menuStore.canAccessMenu('funds-settlement')"
+              index="/funds/settlement"
+            >
+              <span>决算结算</span>
+            </el-menu-item>
+            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/analysis">
+              <span>经费分析</span>
+            </el-menu-item>
+            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/report">
+              <span>经费报表</span>
+            </el-menu-item>
           </el-sub-menu>
 
           <el-menu-item v-if="menuStore.canAccessMenu('policies')" index="/policies">
@@ -498,11 +527,22 @@ async function loadUnreadCount() {
   }
 }
 
+// 未读数轮询定时器句柄必须放在 setup 作用域：
+// 原实现把 onBeforeUnmount 注册在 onMounted 回调内部（此时无活动实例，
+// 钩子不生效）且 timer 为回调局部变量 → 布局销毁后定时器仍在轮询，永久泄漏。
+let unreadTimer: number | null = null
+
 onMounted(() => {
   loadUnreadCount()
   // 每 60 秒轮询未读数（单机版无 WebSocket）
-  const timer = window.setInterval(loadUnreadCount, 60000)
-  onBeforeUnmount(() => window.clearInterval(timer))
+  unreadTimer = window.setInterval(loadUnreadCount, 60000)
+})
+
+onBeforeUnmount(() => {
+  if (unreadTimer !== null) {
+    window.clearInterval(unreadTimer)
+    unreadTimer = null
+  }
 })
 
 // ── 主题切换 ──
@@ -540,12 +580,17 @@ onUnmounted(() => {
 })
 
 // ── 自动锁屏（单机共用电脑，无操作 N 分钟回登录页）──
-import { consumeLockDigest } from '@/utils/lockDigest'
+// markLockNow：锁屏打点（供解锁后的摘要判定）；consumeLockDigest：摘要消费
+import { consumeLockDigest, markLockNow } from '@/utils/lockDigest'
 // 锁屏只结束当前会话；不调用 logout()（否则会清除"记住登录"持久凭据，
 // 导致下次开机免登录失效 —— 修复 2026-08-15）
 useAutoLockModule({
   onLock: () => {
     authStore.lockSession()
+    // 打锁屏时间戳：解锁回来后的首次未读轮询据此弹「欢迎回来」摘要
+    // （consumeLockDigest 只认近 30 分钟内的打点，自定义 onLock 覆盖了
+    //  useAutoLock 默认实现，此处不调用则摘要永不触发）。
+    markLockNow()
     // 携带当前路由：解锁重新登录后恢复到锁屏前页面
     const _rp =
       route.fullPath && route.fullPath !== '/login'

@@ -15,7 +15,8 @@ vi.mock('@/api/request', () => ({
   createCancelableRequest: vi.fn(),
   requestWithTimeout: vi.fn(),
   isSuccess: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/authStorage', () => ({
   AuthStorage: { clear: vi.fn(), getToken: vi.fn(), setToken: vi.fn(), getUser: vi.fn(() => null) },
@@ -50,7 +51,16 @@ describe('stores/user', () => {
 
   describe('fetchUsers', () => {
     it('成功: 填充 userList + total', async () => {
-      ;(get as any).mockResolvedValue({ code: 200, data: { items: [{ id: 1, name: 'A' }, { id: 2, name: 'B' }], total: 2 } })
+      ;(get as any).mockResolvedValue({
+        code: 200,
+        data: {
+          items: [
+            { id: 1, name: 'A' },
+            { id: 2, name: 'B' },
+          ],
+          total: 2,
+        },
+      })
       const s = useUserStore()
       await s.fetchUsers()
       expect(s.userList).toHaveLength(2)
@@ -164,6 +174,58 @@ describe('stores/user', () => {
       await s.fetchUser(1)
       expect(s.error).toBe('Not Found')
     })
+
+    it('响应 id 与请求 id 不一致：拒绝采用并保留原状态', async () => {
+      ;(get as any).mockResolvedValue({ id: 99, username: 'other' })
+      const s = useUserStore()
+      s.currentUser = { id: 1, username: 'me' } as any
+      const r = await s.fetchUser(2)
+      expect(r).toBeUndefined()
+      expect(s.currentUser).toEqual({ id: 1, username: 'me' })
+      expect(s.error).toContain('响应与请求的用户不一致')
+    })
+
+    it('已登录时查询他人：返回数据但不覆盖本人会话档案', async () => {
+      ;(get as any).mockResolvedValue({ id: 2, username: 'lisi' })
+      const s = useUserStore()
+      s.currentUser = { id: 1, username: 'me' } as any
+      const r = await s.fetchUser(2)
+      expect(r).toEqual({ id: 2, username: 'lisi' })
+      expect(s.currentUser).toEqual({ id: 1, username: 'me' })
+      expect(s.error).toBeNull()
+    })
+
+    it('无会话用户时（刷新后 /me 失败的回退路径）允许写入 currentUser', async () => {
+      ;(get as any).mockResolvedValue({ data: { id: 12, username: 'fallback' } })
+      const s = useUserStore()
+      const r = await s.fetchUser(12)
+      expect(r).toEqual({ id: 12, username: 'fallback' })
+      expect(s.currentUser).toEqual({ id: 12, username: 'fallback' })
+    })
+
+    it('查询本人（id 一致）时刷新会话档案', async () => {
+      ;(get as any).mockResolvedValue({ id: 1, username: 'me', role: 'admin' })
+      const s = useUserStore()
+      s.currentUser = { id: 1, username: 'me' } as any
+      await s.fetchUser(1)
+      expect(s.currentUser).toEqual({ id: 1, username: 'me', role: 'admin' })
+    })
+
+    it('非法响应载荷（非对象/数组/无数字 id）一律拒绝且不改状态', async () => {
+      const s = useUserStore()
+      s.currentUser = { id: 1, username: 'me' } as any
+      ;(get as any).mockResolvedValueOnce('not-an-object')
+      expect(await s.fetchUser(1)).toBeUndefined()
+      ;(get as any).mockResolvedValueOnce([{ id: 1 }])
+      expect(await s.fetchUser(1)).toBeUndefined()
+      ;(get as any).mockResolvedValueOnce({ username: 'no-id' })
+      expect(await s.fetchUser(1)).toBeUndefined()
+      ;(get as any).mockResolvedValueOnce({ id: '1', username: 'string-id' })
+      expect(await s.fetchUser(1)).toBeUndefined()
+
+      expect(s.currentUser).toEqual({ id: 1, username: 'me' })
+      expect(s.error).toContain('响应数据非法')
+    })
   })
 
   describe('createUser', () => {
@@ -251,7 +313,9 @@ describe('stores/user', () => {
       ;(post as any).mockResolvedValue({ code: 200 })
       const s = useUserStore()
       await s.resetUserPassword(7, 'newPass')
-      expect(post).toHaveBeenCalledWith('/users/7/admin-reset-password', { new_password: 'newPass' })
+      expect(post).toHaveBeenCalledWith('/users/7/admin-reset-password', {
+        new_password: 'newPass',
+      })
     })
 
     it('assignRole 走 /users/{id}/permissions（已统一到 /users 族）', async () => {
@@ -381,26 +445,34 @@ describe('stores/user', () => {
       const payload = Buffer.from(JSON.stringify({ sub: 'alice' })).toString('base64')
       ;(AuthStorage.getToken as any).mockReturnValue(`h.${payload}.s`)
       const s = useUserStore()
-      await expect(s.uploadAvatar(new File([''], 'a.png'))).rejects.toThrow('无法获取用户ID，请重新登录')
+      await expect(s.uploadAvatar(new File([''], 'a.png'))).rejects.toThrow(
+        '无法获取用户ID，请重新登录'
+      )
     })
 
     it('token 无法解析（非法 payload）时抛出', async () => {
       const payload = Buffer.from('not-json').toString('base64')
       ;(AuthStorage.getToken as any).mockReturnValue(`h.${payload}.s`)
       const s = useUserStore()
-      await expect(s.uploadAvatar(new File([''], 'a.png'))).rejects.toThrow('无法获取用户ID，请重新登录')
+      await expect(s.uploadAvatar(new File([''], 'a.png'))).rejects.toThrow(
+        '无法获取用户ID，请重新登录'
+      )
     })
 
     it('token 格式非法（缺少分段）时抛出', async () => {
       ;(AuthStorage.getToken as any).mockReturnValue('not-a-jwt')
       const s = useUserStore()
-      await expect(s.uploadAvatar(new File([''], 'a.png'))).rejects.toThrow('无法获取用户ID，请重新登录')
+      await expect(s.uploadAvatar(new File([''], 'a.png'))).rejects.toThrow(
+        '无法获取用户ID，请重新登录'
+      )
     })
 
     it('无任何身份信息时抛出', async () => {
       ;(AuthStorage.getToken as any).mockReturnValue(null)
       const s = useUserStore()
-      await expect(s.uploadAvatar(new File([''], 'a.png'))).rejects.toThrow('无法获取用户ID，请重新登录')
+      await expect(s.uploadAvatar(new File([''], 'a.png'))).rejects.toThrow(
+        '无法获取用户ID，请重新登录'
+      )
     })
 
     it('响应无 data 时返回原始 res', async () => {

@@ -39,8 +39,8 @@ class DataReport(Base):
     package_id = Column(
         Integer,
         ForeignKey("data_packages.id", ondelete="SET NULL"),
-        nullable=False,
-        comment="数据包ID",
+        nullable=True,
+        comment="数据包ID(数据包删除后置空，上报留痕保留)",
     )
     source_org_id = Column(
         Integer,

@@ -10,6 +10,7 @@ def client():
     from app.main import app
     from app.core.database import get_db
     from app.core.security import get_current_user
+    from app.api.v1.data.data.data_packages import get_permission_service
 
     user = MagicMock()
     user.id = 1; user.is_superuser = True; user.role = "admin"
@@ -19,13 +20,19 @@ def client():
     mock_db.all.return_value = []
     mock_db.first.return_value = None
 
+    # /preview 等端点自 v1.12.9 起需要组织权限依赖：显式放行，避免真实服务拒绝
+    perm = MagicMock()
+    perm.can_access_organization.return_value = True
+
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[get_permission_service] = lambda: perm
 
     tc = TestClient(app, raise_server_exceptions=False)
     yield tc
     app.dependency_overrides.pop(get_current_user, None)
     app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_permission_service, None)
 
 
 class TestListPackages:

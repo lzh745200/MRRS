@@ -360,6 +360,7 @@ async def preview_data_for_export(
     data: DataPackageExportRequest,
     current_user=Depends(get_current_user),
     service: DataPackageService = Depends(get_package_service),
+    permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
     """预览导出数据的统计信息（不生成包，仅返回各数据类型记录数）"""
     # 获取组织ID（支持超级管理员回退到第一个可用组织）
@@ -368,6 +369,13 @@ async def preview_data_for_export(
         requested_org_id=data.org_id,
         get_first_org_callback=lambda: _get_first_active_org(service.db),
     )
+    # get_org_with_fallback 对 requested_org_id 不做任何权限判断，
+    # 缺此校验时任何登录用户传任意 org_id 即可预览他组织数据规模（深审 LIVE）。
+    if org_id and not permission_service.can_access_organization(current_user.id, org_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="您没有权限访问该组织的数据。请联系管理员为您分配正确的组织权限。"
+        )
 
     from app.services.data_package_service import DATA_TYPE_MODELS
 
@@ -861,7 +869,14 @@ async def incremental_import(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="数据包文件缺失，无法处理")
 
     org_id = getattr(package, "org_id", None)
-    if org_id and not permission_service.can_access_organization(current_user.id, org_id):
+    # 归属必须确定：org_id 缺失时原先直接跳过校验，还会以 org_id=0 落库
+    # （既绕过权限又把数据挂到不存在的组织上）。这里 fail-closed。
+    if not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="数据包缺少归属组织，无法导入；请重新导出后再试",
+        )
+    if not permission_service.can_access_organization(current_user.id, org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权导入该数据包")
 
     try:
@@ -892,7 +907,7 @@ async def incremental_import(
         result = await service.import_package(
             file_path=package.file_path,
             file_name=package.file_name or "package.zip",
-            org_id=org_id or 0,
+            org_id=org_id,
             imported_by=current_user.id,
         )
         confirm = await service.confirm_import(
@@ -921,7 +936,7 @@ async def incremental_import(
         try:
             history_service.record_import(
                 package_id=result.package_id,
-                org_id=org_id or 0,
+                org_id=org_id,
                 user_id=current_user.id,
                 file_name=package.file_name or "package.zip",
                 record_count=summary["total_added"] + summary["total_modified"],
@@ -1345,8 +1360,10 @@ async def upload_encrypted_package(
         )
 
     # 保存上传文件
-    temp_dir = tempfile.gettempdir()
-    temp_file_path = os.path.join(temp_dir, f"upload_{int(time.time())}_{file.filename}")
+    # 文件名由客户端控制：历史实现直接拼进临时路径，可 ../../ 穿越写任意文件，
+    # 且同一秒的并发上传会互相覆盖。改用 mkstemp 生成唯一且受限的路径。
+    _fd, temp_file_path = tempfile.mkstemp(prefix="upload_", suffix=".rrs")
+    os.close(_fd)
 
     try:
         # R2 第二层：分块读取 + 滚动计数（原一次性读完再落盘，100MB 上限下
@@ -1426,12 +1443,18 @@ async def decrypt_and_preview_package(
     body: DecryptPreviewRequest,
     current_user=Depends(get_current_user),
     service: DataPackageService = Depends(get_package_service),
+    permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
     """
     解密并预览数据包（第二步：提供密码解密）
 
     返回预览数据和冲突信息
     """
+    # 归属校验：缺此校验时任何登录用户凭 package_id 即可解密预览他组织数据包
+    package = service.get_package(package_id)
+    if not package or not permission_service.can_access_organization(current_user.id, package.org_id):
+        raise NotFoundException("数据包不存在")
+
     try:
         result = await service.decrypt_and_preview_package(package_id, body.password)
         return result
@@ -1447,9 +1470,14 @@ async def decrypt_and_preview_package(
 
 
 class ConfirmImportRequest(BaseModel):
-    """确认导入请求"""
+    """确认导入请求
+
+    password：加密数据包的解密口令（multipart/JSON 体内传输，避免落入 URL 与访问日志）。
+    历史实现不透传密码，加密包确认导入必然失败。
+    """
 
     conflict_strategy: str = "KEEP_BOTH"
+    password: Optional[str] = None
 
 
 @router.post("/confirm-import/{package_id}")
@@ -1460,17 +1488,25 @@ async def confirm_import_with_conflict_resolution(
     current_user=Depends(get_current_user),
     service: DataPackageService = Depends(get_package_service),
     history_service: ImportExportHistoryService = Depends(get_history_service),
+    permission_service: OrganizationPermissionService = Depends(get_permission_service),
 ):
     """
     确认导入并处理冲突（第三步：选择冲突策略并导入）
 
     支持的策略：SKIP, OVERWRITE, KEEP_BOTH, MERGE
     """
+    # 归属校验：缺此校验时任何登录用户可触发他组织数据包的导入落库（越权写）
+    package = service.get_package(package_id)
+    if not package or not permission_service.can_access_organization(current_user.id, package.org_id):
+        raise NotFoundException("数据包不存在")
+
     start_time = time.time()
     client_ip = get_client_ip(request)
 
     try:
-        result = await service.confirm_import_with_conflict_resolution(package_id, body.conflict_strategy)
+        result = await service.confirm_import_with_conflict_resolution(
+            package_id, body.conflict_strategy, password=body.password
+        )
 
         # 记录历史
         duration_ms = int((time.time() - start_time) * 1000)

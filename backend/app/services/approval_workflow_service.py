@@ -57,10 +57,12 @@ class ApprovalWorkflowService:
         if not handler:
             return True
         try:
-            handler(self.db, task)
+            # SAVEPOINT 隔离：直接 rollback() 会连带丢弃调用方已加入同一事务的
+            # 审批记录（审批留痕消失）与刚赋值的 completed_at（深审 critical）。
+            with self.db.begin_nested():
+                handler(self.db, task)
             return True
         except Exception:  # pragma: no cover - 防御分支
-            self.db.rollback()
             logger.error(
                 "审批回写实体失败 entity_type=%s entity_id=%s",
                 task.entity_type,
@@ -623,7 +625,14 @@ class ApprovalWorkflowService:
         # 任务回到 pending 后同步业务实体（R23 修复）：经费被驳回后重新提交时，
         # 只改任务不改经费会让「任务在审、经费仍显示已驳回」，且最终审批通过还会被
         # 回写处理器按"非 pending 不回写"静默忽略 —— 审批过了、经费永远停在已驳回。
-        self.apply_entity_change(task)
+        # 与 approve/reject 一致：回写失败必须落到可重试的 *_apply_failed 终态，
+        # 不能吞掉返回值（否则任务显示在审、实体永远停在旧状态且无从发现）。
+        if not self.apply_entity_change(task):
+            task.status = ApprovalStatus.PENDING.value + self.APPLY_FAILED_SUFFIX
+            logger.error(
+                "重新提交回写实体失败 task=%s entity=%s:%s",
+                task.id, task.entity_type, task.entity_id,
+            )
 
         safe_commit(self.db)
         self.db.refresh(task)
@@ -713,13 +722,20 @@ class ApprovalWorkflowService:
         task_ids: List[int],
         approver_id: int,
         opinion: str = "批量同意",
+        *,
+        standalone: bool = False,
     ) -> Dict[str, Any]:
-        """批量审批"""
+        """批量审批。
+
+        standalone 默认 False（逐任务校验审批人归属）；只有调用方已确认
+        （如 API 层已判定管理员）才可传 True 跳过校验 —— 历史上硬编码
+        standalone=True 会让任何直接调用方绕过审批人校验。
+        """
         success = []
         failed = []
         for tid in task_ids:
             try:
-                result = self.approve_task(tid, approver_id, opinion, standalone=True)
+                result = self.approve_task(tid, approver_id, opinion, standalone=standalone)
                 if result:
                     success.append(tid)
                 else:

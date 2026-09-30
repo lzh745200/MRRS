@@ -62,7 +62,11 @@ describe('dataPackage/ImportDialog.vue', () => {
     wrapper.vm.handleFileChange({ raw: new File(['x'], 'pkg.zip') })
     mockPost.mockResolvedValue({ message: '导入完成' })
     await wrapper.vm.handleImport()
-    expect(mockPost).toHaveBeenCalledWith('/data-packages/import', expect.any(FormData), expect.any(Object))
+    expect(mockPost).toHaveBeenCalledWith(
+      '/data-packages/import',
+      expect.any(FormData),
+      expect.any(Object)
+    )
     expect(ElMessage.success).toHaveBeenCalledWith('导入完成')
     expect(wrapper.emitted('success')).toBeTruthy()
     expect(wrapper.vm.selectedFile).toBeNull()
@@ -111,18 +115,58 @@ describe('dataPackage/ImportDialog.vue', () => {
     expect(wrapper.vm.fileList).toEqual([])
     wrapper.unmount()
   })
-})
 
-
-  it('模板事件处理器(dialog update)与 success 默认提示', async () => {
+  it('关闭对话框即清空已选文件：重新打开不带旧文件、不能直接再次导入', async () => {
     const wrapper = mountDialog()
     await flushPromises()
-    wrapper.findComponent({ name: 'ElDialog' }).vm.$emit('update:modelValue', false)
-    expect(wrapper.emitted('update:modelValue')).toContainEqual([false])
-    // success 无 message 走默认提示
     wrapper.vm.handleFileChange({ raw: new File(['x'], 'pkg.zip') })
-    mockPost.mockResolvedValue({})
+    wrapper.vm.fileList = [{ name: 'pkg.zip', raw: new File(['x'], 'pkg.zip') }]
+    expect(wrapper.vm.selectedFile).toBeInstanceOf(File)
+
+    // 取消关闭
+    await wrapper.setProps({ modelValue: false })
+    await flushPromises()
+    expect(wrapper.vm.selectedFile).toBeNull()
+    expect(wrapper.vm.fileList).toEqual([])
+
+    // 重新打开：仍是空状态（"导入"按钮的 disabled 绑定即 !selectedFile，故不可点）
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    expect(wrapper.vm.selectedFile).toBeNull()
+    expect(wrapper.vm.fileList).toEqual([])
+
     await wrapper.vm.handleImport()
-    expect(ElMessage.success).toHaveBeenCalled()
+    expect(mockPost).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请先选择数据包文件')
     wrapper.unmount()
+  })
+
+  it('导入成功后再次打开（modelValue 变化）保持空状态', async () => {
+    const wrapper = mountDialog()
+    await flushPromises()
+    wrapper.vm.handleFileChange({ raw: new File(['x'], 'pkg.zip') })
+    mockPost.mockResolvedValue({ message: '导入完成' })
+    await wrapper.vm.handleImport()
+    expect(wrapper.vm.selectedFile).toBeNull()
+
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    expect(wrapper.vm.selectedFile).toBeNull()
+    expect(wrapper.vm.fileList).toEqual([])
+    wrapper.unmount()
+  })
+})
+
+it('模板事件处理器(dialog update)与 success 默认提示', async () => {
+  const wrapper = mountDialog()
+  await flushPromises()
+  wrapper.findComponent({ name: 'ElDialog' }).vm.$emit('update:modelValue', false)
+  expect(wrapper.emitted('update:modelValue')).toContainEqual([false])
+  // success 无 message 走默认提示
+  wrapper.vm.handleFileChange({ raw: new File(['x'], 'pkg.zip') })
+  mockPost.mockResolvedValue({})
+  await wrapper.vm.handleImport()
+  expect(ElMessage.success).toHaveBeenCalled()
+  wrapper.unmount()
 })

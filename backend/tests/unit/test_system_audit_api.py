@@ -224,7 +224,12 @@ class TestBatchDeleteAuditLogs:
         assert resp.status_code == 200
         assert resp.json()["data"]["deleted_count"] == 1
 
-    def test_invalid_before_date_still_deletes_by_action(self, db_client):
+    def test_invalid_before_date_rejected_not_deleted(self, db_client):
+        """非法 before_date 必须 422 且一条都不删。
+
+        历史缺陷：解析失败只 warning 后"忽略日期过滤"，配合空动作条件会
+        直接清空整张审计表（深审 critical）。
+        """
         client, session = db_client
         from app.models.audit import AuditLog
         session.add(AuditLog(action="create", username="admin"))
@@ -233,11 +238,63 @@ class TestBatchDeleteAuditLogs:
         resp = _delete_json(client, self.URL, {
             "action": "create", "before_date": "not-a-date",
         })
+        assert resp.status_code == 422
+        assert session.query(AuditLog).count() == 2
+
+    def test_invalid_before_date_without_filters_does_not_wipe_table(self, db_client):
+        """最危险路径：仅非法 before_date、无 ids/actions —— 绝不允许退化为全表删除。"""
+        client, session = db_client
+        from app.models.audit import AuditLog
+        for a in ("create", "delete", "update"):
+            session.add(AuditLog(action=a, username="admin"))
+        session.commit()
+        resp = _delete_json(client, self.URL, {"before_date": "2026-13-45T99:99:99"})
+        assert resp.status_code == 422
+        assert session.query(AuditLog).count() == 3
+
+    def test_blank_before_date_treated_as_absent(self, db_client):
+        """空串等价于未提供：仍走"无过滤条件不删除"保护分支。"""
+        client, session = db_client
+        from app.models.audit import AuditLog
+        session.add(AuditLog(action="create", username="admin"))
+        session.commit()
+        resp = _delete_json(client, self.URL, {"before_date": "   "})
         assert resp.status_code == 200
-        assert resp.json()["data"]["deleted_count"] == 1
+        assert resp.json()["data"]["deleted_count"] == 0
+        assert session.query(AuditLog).count() == 1
 
     def test_ids_rejects_bad_string(self, client_with_mocked_auth):
         resp = _delete_json(client_with_mocked_auth, self.URL, {"ids": ["abc"]})
+        assert resp.status_code == 422
+
+    def test_ids_bare_string_is_whole_int(self, db_client):
+        """深审 LIVE：传 "12" 时被逐字符解析成 [1, 2]，删错记录。"""
+        client, session = db_client
+        from app.models.audit import AuditLog
+        for i in range(1, 13):
+            session.add(AuditLog(id=i, action="create", username="admin"))
+        session.commit()
+        resp = _delete_json(client, self.URL, {"ids": "12"})
+        assert resp.status_code == 200
+        assert resp.json()["data"]["deleted_count"] == 1
+        assert session.query(AuditLog).filter(AuditLog.id == 12).first() is None
+        assert session.query(AuditLog).filter(AuditLog.id == 1).first() is not None
+        assert session.query(AuditLog).filter(AuditLog.id == 2).first() is not None
+
+    def test_ids_scalar_int_accepted(self, db_client):
+        """标量（非列表）必须整体转换，原实现会 TypeError → 500。"""
+        client, session = db_client
+        from app.models.audit import AuditLog
+        for i in range(1, 5):
+            session.add(AuditLog(id=i, action="create", username="admin"))
+        session.commit()
+        resp = _delete_json(client, self.URL, {"ids": 3})
+        assert resp.status_code == 200
+        assert resp.json()["data"]["deleted_count"] == 1
+        assert session.query(AuditLog).filter(AuditLog.id == 3).first() is None
+
+    def test_ids_scalar_bad_string_422(self, client_with_mocked_auth):
+        resp = _delete_json(client_with_mocked_auth, self.URL, {"ids": "abc"})
         assert resp.status_code == 422
 
     def test_actions_with_whitespace(self, db_client):

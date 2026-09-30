@@ -7,8 +7,19 @@ import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from fastapi import HTTPException
+
 import app.api.v1.policy as m
 from app.models.policy import Policy
+
+# P0 路径越界回归用例集：客户端可控的附件路径绝不能落到上传目录之外
+EVIL_UPLOAD_PATHS = [
+    "/uploads/../../etc/passwd",   # 目录穿越（拼接到 UPLOAD_DIR 后逃出）
+    "../../etc/passwd",             # 纯相对穿越
+    "/etc/passwd",                  # 任意绝对路径（POSIX）
+    "C:\\Windows\\win.ini",     # 任意绝对路径（Windows）
+]
 
 
 def _admin():
@@ -69,7 +80,9 @@ class TestApplyAttachments:
         assert p.file_type == "pdf"
         assert p.file_size == 3
 
-    def test_absolute_path_kept_as_is(self, tmp_path):
+    def test_absolute_path_inside_upload_dir_allowed(self, tmp_path, monkeypatch):
+        """上传目录内的绝对路径照常放行。"""
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(tmp_path))
         f = os.path.join(str(tmp_path), "b.docx")
         with open(f, "w") as fh:
             fh.write("x")
@@ -77,6 +90,19 @@ class TestApplyAttachments:
         m._apply_attachments(p, [f])
         assert p.file_path == f
         assert p.file_type == "docx"
+        assert p.file_size == 1
+
+    @pytest.mark.parametrize("evil", EVIL_UPLOAD_PATHS)
+    def test_out_of_bounds_url_rejected(self, tmp_path, monkeypatch, evil):
+        """P0：越界附件路径一律 400 拒绝，且不产生任何字段变更（不落库脏路径）。"""
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(tmp_path))
+        p = _policy()
+        with pytest.raises(HTTPException) as ei:
+            m._apply_attachments(p, [evil])
+        assert ei.value.status_code == 400
+        assert "上传目录" in str(ei.value.detail)  # 中文错误信息
+        assert p.file_path is None
+        assert p.attachment_urls is None
 
     def test_missing_file_size_zero(self):
         p = _policy()
@@ -216,6 +242,19 @@ class TestCreatePolicyWithAttachments:
             result = await create_policy(req, current_user=_admin(), db=db)
         assert result["data"]["title"] == "新政策2"
 
+    async def test_create_rejects_out_of_bounds_attachment(self, tmp_path, monkeypatch):
+        """P0 写入侧：穿越路径 / 任意绝对路径不得落库（400 且不写 DB）。"""
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(tmp_path))
+        db = _make_db()
+        from app.api.v1.policy import create_policy, PolicyCreateRequest
+
+        for evil in EVIL_UPLOAD_PATHS:
+            req = PolicyCreateRequest(title="evil", attachment_urls=[evil])
+            with pytest.raises(HTTPException) as ei:
+                await create_policy(req, current_user=_admin(), db=db)
+            assert ei.value.status_code == 400
+        db.add.assert_not_called()
+
 
 class TestUpdatePolicyWithAttachments:
     async def test_update_with_attachment_urls_and_worklog_failure(self, monkeypatch, tmp_path):
@@ -294,3 +333,106 @@ class TestDeletePolicyWorkLogDegrade:
             from app.api.v1.policy import delete_policy
             result = await delete_policy(1, current_user=_admin(), db=db)
         assert result["success"] is True
+
+
+class TestResolveSafeUploadPath:
+    """_resolve_safe_upload_path 的包含性校验（写入与读取共用同一实现）。"""
+
+    def test_uploads_url_inside_allowed(self, tmp_path, monkeypatch):
+        """正常附件 URL（/uploads/policies/x.pdf）应放行，并解析为上传目录内路径。"""
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(tmp_path))
+        resolved = m._resolve_safe_upload_path("/uploads/policies/x.pdf")
+        assert resolved == os.path.join(str(tmp_path), "policies", "x.pdf")
+
+    @pytest.mark.parametrize("evil", EVIL_UPLOAD_PATHS)
+    def test_out_of_bounds_rejected(self, tmp_path, monkeypatch, evil):
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(tmp_path))
+        with pytest.raises(HTTPException) as ei:
+            m._resolve_safe_upload_path(evil)
+        assert ei.value.status_code == 400
+        assert "上传目录" in str(ei.value.detail)
+
+    def test_empty_candidate_rejected(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(tmp_path))
+        with pytest.raises(HTTPException) as ei:
+            m._resolve_safe_upload_path("   ")
+        assert ei.value.status_code == 400
+
+    def test_sibling_dir_with_shared_prefix_rejected(self, tmp_path, monkeypatch):
+        """公共前缀（uploads-evil）不是包含关系：按路径段判定而非 startswith。"""
+        root = tmp_path / "uploads"
+        root.mkdir()
+        sibling = tmp_path / "uploads-evil"
+        sibling.mkdir()
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(root))
+        with pytest.raises(HTTPException) as ei:
+            m._resolve_safe_upload_path(str(sibling / "x.pdf"))
+        assert ei.value.status_code == 400
+
+    def test_case_and_separator_normalized(self, tmp_path, monkeypatch):
+        """Windows 分隔符/大小写归一：正斜杠与大小写不同的同一路径仍被放行。"""
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(tmp_path))
+        expected = os.path.join(str(tmp_path), "policies", "x.pdf")
+        forward = expected.replace(os.sep, "/")
+        assert m._resolve_safe_upload_path(forward) == expected
+        if os.name == "nt":  # pragma: no cover - 平台相关分支
+            upper = os.path.join(str(tmp_path).upper(), "policies", "x.pdf")
+            assert os.path.normcase(m._resolve_safe_upload_path(upper)) == os.path.normcase(expected)
+
+
+class TestPreviewDownloadPathContainment:
+    """P0 纵深防御：越界 file_path（历史脏数据）不得被 preview/download 读出去。"""
+
+    @pytest.fixture
+    def api_client(self, client, tmp_path, monkeypatch):
+        from app.core.database import get_db
+        from app.core.security import get_current_user
+
+        monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", str(tmp_path))
+        policy = _policy()
+        db = _make_db(first=policy)
+        client.app.dependency_overrides[get_db] = lambda: db
+        client.app.dependency_overrides[get_current_user] = lambda: _admin()
+        yield client, policy, tmp_path
+        client.app.dependency_overrides.pop(get_db, None)
+        client.app.dependency_overrides.pop(get_current_user, None)
+
+    @pytest.mark.parametrize("evil", EVIL_UPLOAD_PATHS)
+    def test_preview_rejects_out_of_bounds(self, api_client, evil):
+        tc, policy, _root = api_client
+        policy.file_path = evil
+        policy.file_type = "txt"
+        resp = tc.get("/api/v1/policies/1/preview")
+        assert resp.status_code in (400, 404), f"越界路径被 preview 放行: {evil} -> {resp.status_code}"
+
+    @pytest.mark.parametrize("evil", EVIL_UPLOAD_PATHS)
+    def test_download_rejects_out_of_bounds(self, api_client, evil):
+        tc, policy, _root = api_client
+        policy.file_path = evil
+        policy.file_type = "txt"
+        resp = tc.get("/api/v1/policies/1/download")
+        assert resp.status_code in (400, 404), f"越界路径被 download 放行: {evil} -> {resp.status_code}"
+
+    def test_preview_allows_in_bounds(self, api_client):
+        tc, policy, root = api_client
+        target = os.path.join(str(root), "policies", "ok.txt")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w") as f:
+            f.write("ok")
+        policy.file_path = target
+        policy.file_type = "txt"
+        resp = tc.get("/api/v1/policies/1/preview")
+        assert resp.status_code == 200
+        assert resp.content == b"ok"
+
+    def test_download_allows_in_bounds(self, api_client):
+        tc, policy, root = api_client
+        target = os.path.join(str(root), "policies", "ok.pdf")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "wb") as f:
+            f.write(b"%PDF-1.4")
+        policy.file_path = target
+        policy.file_type = "pdf"
+        resp = tc.get("/api/v1/policies/1/download")
+        assert resp.status_code == 200
+        assert resp.content == b"%PDF-1.4"

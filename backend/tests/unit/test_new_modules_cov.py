@@ -310,7 +310,7 @@ class TestImportControlPackage:
             {"module_key": "funds", "visibility": "hidden", "edit_mode": "read_only"},
             {"module_key": "map", "visibility": "visible", "edit_mode": "full_edit"},
         ]
-        sys_cfg = {"site_name": "NewVal"}
+        sys_cfg = {"system_name": "NewVal"}  # 必须在管控包配置白名单内（v1.12.9）
         content = _make_zip({
             "manifest.json": json.dumps(manifest),
             "module_policy.json": json.dumps(policies),
@@ -442,6 +442,13 @@ class TestGenerateRegistrationReport:
         assert resp.media_type == "application/zip"
         assert "registration_report" in resp.headers["Content-Disposition"]
 
+    def test_generate_registration_forbidden_for_regular_user(self, mock_db, regular_user):
+        """深审 LIVE：导出全量用户 PII（用户名/姓名/角色/最后登录）此前仅要求登录。"""
+        with pytest.raises(HTTPException) as exc_info:
+            generate_registration_report(db=mock_db, current_user=regular_user)
+        assert exc_info.value.status_code == 403
+        assert "仅管理员" in exc_info.value.detail
+
 
 class TestGenerateStatusReport:
     @patch("app.api.v1.subordinate_reports._get_instance_code", return_value="INST001")
@@ -474,6 +481,12 @@ class TestGenerateStatusReport:
 
         os.unlink(tmp.name)
         assert resp.media_type == "application/zip"
+
+    def test_generate_status_forbidden_for_regular_user(self, mock_db, regular_user):
+        """深审 LIVE：全局运行状态导出此前仅要求登录。"""
+        with pytest.raises(HTTPException) as exc_info:
+            generate_status_report(db=mock_db, current_user=regular_user)
+        assert exc_info.value.status_code == 403
 
 
 class TestImportSubordinateReport:

@@ -62,7 +62,9 @@ def search_policies_fts(
     sanitized = query.strip().replace('"', '""')
     fts_query = f'"{sanitized}"' if " " in sanitized else sanitized
 
-    sql = """
+    # 必须是 f-string：普通字符串会让 {FTS_TABLE} 原样进入 SQL，
+    # SQLite 报 "unrecognized token"，异常被吞后每次搜索都静默退化为 LIKE。
+    sql = f"""
         SELECT p.id, p.title, p.summary, p.keywords, p.level, p.category,
                snippet({FTS_TABLE}, 1, '<mark>', '</mark>', '...', 32) AS snippet,
                bm25({FTS_TABLE}, 8.0, 10.0, 5.0) AS rank

@@ -94,17 +94,47 @@ class TestVerifyAndEnable:
 
 
 class TestDisableTwoFactor:
+    """关闭 2FA 必须通过二次验证（v1.12.9 深审 #6：仅凭会话即可关闭 2FA 是账号接管通道）。"""
+
     def test_success(self, client):
-        with patch(f"{SVC_PATH}.disable_two_factor", return_value=None):
-            resp = client.post("/two-factor/disable")
+        with patch(f"{SVC_PATH}.verify_login", return_value=True), patch(
+            f"{SVC_PATH}.disable_two_factor", return_value=None
+        ):
+            resp = client.post("/two-factor/disable", json={"code": "123456"})
             assert resp.status_code == 200
             assert resp.json()["message"] == "双因素认证已禁用"
 
     def test_exception(self, client):
-        with patch(f"{SVC_PATH}.disable_two_factor", side_effect=Exception("err")):
-            resp = client.post("/two-factor/disable")
+        with patch(f"{SVC_PATH}.verify_login", return_value=True), patch(
+            f"{SVC_PATH}.disable_two_factor", side_effect=Exception("err")
+        ):
+            resp = client.post("/two-factor/disable", json={"code": "123456"})
             assert resp.status_code == 500
             assert "禁用失败" in resp.json()["detail"]
+
+    def test_missing_credential_rejected(self, client):
+        """不提供动态码/密码 → 400，绝不关闭 2FA。"""
+        with patch(f"{SVC_PATH}.disable_two_factor") as mock_disable:
+            resp = client.post("/two-factor/disable")
+        assert resp.status_code == 400
+        mock_disable.assert_not_called()
+
+    def test_wrong_credential_rejected(self, client):
+        """凭据校验失败 → 401，绝不关闭 2FA。"""
+        with patch(f"{SVC_PATH}.verify_login", return_value=False), patch(
+            f"{SVC_PATH}.disable_two_factor"
+        ) as mock_disable:
+            resp = client.post("/two-factor/disable", json={"code": "000000"})
+        assert resp.status_code == 401
+        mock_disable.assert_not_called()
+
+    def test_password_fallback(self, client):
+        """设备丢失时可用账户密码兜底（密码校验通过即放行）。"""
+        with patch("app.api.v1.auth.two_factor.verify_password", return_value=True), patch(
+            f"{SVC_PATH}.disable_two_factor", return_value=None
+        ):
+            resp = client.post("/two-factor/disable", json={"password": "Abcd1234!@#$"})
+        assert resp.status_code == 200
 
 
 class TestGetTwoFactorStatus:

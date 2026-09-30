@@ -47,8 +47,8 @@ class Message(Base):
     user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=False,
-        comment="接收用户ID",
+        nullable=True,
+        comment="接收用户ID(用户删除后置空，消息留痕保留)",
     )
     message_type = Column(String(20), nullable=False, comment="消息类型: system / approval / task / backup")
     title = Column(String(200), nullable=False, comment="消息标题")

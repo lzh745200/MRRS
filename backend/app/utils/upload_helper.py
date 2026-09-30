@@ -119,6 +119,21 @@ def _sanitize_sub_dir(sub_dir: str) -> str:
     return "/".join(parts)
 
 
+def _sanitize_file_name(name: str, fallback: str = "upload") -> str:
+    """净化客户端提供的文件名，禁止路径穿越。
+
+    multipart 的 filename 完全由客户端控制，可能含目录分隔符、盘符或 .. 段
+    （如 "x/../../../etc/cron.d/evil"）。直接拼进 os.path.join 会逃出上传目录，
+    因此这里只保留基名，并过滤分隔符与控制字符；结果为空时回退 fallback。
+    """
+    base = (name or "").replace("\\", "/").split("/")[-1].strip()
+    cleaned = "".join(c for c in base if c.isprintable() and c not in "\x00/\\:")
+    cleaned = cleaned.lstrip(".").strip()
+    if not cleaned or cleaned in (".", ".."):
+        return fallback
+    return cleaned
+
+
 def _normalize_path(path: str) -> str:
     """归一化为绝对路径（用于 FileBlob 路径比对）。"""
     return os.path.normpath(os.path.abspath(path))
@@ -323,8 +338,8 @@ async def save_upload_file(
     _max_size = max_size if max_size is not None else settings.MAX_FILE_SIZE
     _chunk = chunk_size if chunk_size else UPLOAD_CHUNK_SIZE
 
-    orig_name = file.filename or "unknown"
-    ext = _safe_extension(file.filename or "")
+    orig_name = _sanitize_file_name(file.filename or "unknown")
+    ext = _safe_extension(orig_name)
 
     # 1. 类型校验（先校验再落盘，避免无谓写盘）——无扩展名时跳过（向后兼容）
     if allowed_extensions is None:
@@ -349,7 +364,10 @@ async def save_upload_file(
         unique_name = name_generator(orig_name, ext)
     else:
         unique_name = f"{uuid.uuid4().hex[:12]}_{orig_name}"
-    file_path = os.path.join(upload_dir, unique_name)
+    file_path = os.path.join(upload_dir, _sanitize_file_name(unique_name))
+    # 纵深防御：任何情况下落盘路径都必须位于上传根目录内
+    if os.path.commonpath([_normalize_path(file_path), base_upload]) != _normalize_path(base_upload):
+        raise HTTPException(status_code=type_status_code, detail="非法的文件名")
 
     # 4. 分块流式落盘 + 滚动大小校验 + 边写边算 sha256
     written = 0

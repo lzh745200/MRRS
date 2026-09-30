@@ -151,16 +151,24 @@ def get_template_service(db: Session = Depends(get_db)) -> MessageTemplateServic
 # ==================== 辅助函数 ====================
 
 
-def _parse_query_date(val: Optional[str]) -> Optional[datetime]:
-    """将查询参数中的日期字符串安全转换为 datetime"""
+def _parse_query_date(val: Optional[str], *, end_of_day: bool = False) -> Optional[datetime]:
+    """将查询参数中的日期字符串安全转换为 datetime。
+
+    end_of_day=True 时，纯日期（YYYY-MM-DD）解析为当日 23:59:59.999999：
+    深审 LIVE —— 原实现统一解析成 00:00:00，而 message_service 用
+    ``created_at <= end_date`` 过滤，导致"结束日当天"的消息被整体排除。
+    """
     if not val or not val.strip():
         return None
     val = val.strip()
     for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.strptime(val, fmt)
+            parsed = datetime.strptime(val, fmt)
         except ValueError:
             continue
+        if end_of_day and fmt == "%Y-%m-%d":
+            return parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return parsed
     return None
 
 
@@ -188,7 +196,8 @@ async def get_messages(
         message_type=message_type,
         is_read=is_read,
         start_date=_parse_query_date(start_date),
-        end_date=_parse_query_date(end_date),
+        # 结束日按当日末刻包含（否则丢当天消息）
+        end_date=_parse_query_date(end_date, end_of_day=True),
         page=page,
         page_size=page_size,
     )

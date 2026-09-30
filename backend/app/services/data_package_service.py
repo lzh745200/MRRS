@@ -699,6 +699,12 @@ class DataPackageService:
             if not validation_result.is_valid:
                 raise PackageValidationError([e.message for e in validation_result.errors])
 
+            # 三步链路（upload-encrypted → decrypt-preview → confirm-import）要求
+            # 解密预览通过后把包推进到 validated：confirm 只接受 validated 状态，
+            # 历史实现不落状态使确认导入恒失败（前端表现为"导入"永远报错）。
+            package.status = PackageStatus.validated.value
+            self.db.commit()
+
             return DataPackageImportResult(
                 package_id=package.id, package_code=package.package_code,
                 status=PackageStatusEnum.VALIDATED, manifest=validation_result.manifest,

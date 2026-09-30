@@ -515,9 +515,19 @@ async def get_subordinates(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取下级组织列表"""
+    """获取下级组织列表（限调用者可及的组织子树）"""
     try:
+        from app.core.data_permission import _get_org_subtree
+        from app.core.permission_utils import is_superuser
+
         query = db.query(Organization).filter(Organization.is_active == True)  # noqa: E712
+        # 数据范围收敛：历史实现对所有登录用户返回整张组织表（跨单位组织架构外泄）
+        if not is_superuser(current_user):
+            org_id = getattr(current_user, "organization_id", None)
+            if not org_id:
+                raise HTTPException(status_code=403, detail="账号未归属组织，无法查看下级组织")
+            allowed_ids, _names = _get_org_subtree(db, org_id)
+            query = query.filter(Organization.id.in_(allowed_ids or [org_id]))
         if not include_self:
             query = query.filter(Organization.parent_id.isnot(None))
         return query.order_by(Organization.sort_order, Organization.id).all()

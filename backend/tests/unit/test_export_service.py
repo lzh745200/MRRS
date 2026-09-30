@@ -62,6 +62,43 @@ class TestExcelExportService:
         result = export_svc.export_fund_list(data)
         assert isinstance(result, bytes)
 
+    def test_export_organizations_field_mapping(self, export_svc):
+        """组织机构导出必须把英文键映射进中文表头对应的单元格（历史 11 列全空）。"""
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        data = [{
+            "name": "测试单位", "code": "ORG-1", "type": "部门单位", "level": "level_1",
+            "contact_person": "张三", "contact_phone": "13800000000",
+            "address": "某地址", "description": "描述", "member_count": 7,
+            "status": "正常", "created_at": "2024-01-01",
+        }]
+        result = export_svc.export_organizations(data)
+        ws = load_workbook(BytesIO(result)).active
+
+        headers = [ws.cell(row=5, column=c).value for c in range(1, 12)]
+        assert headers == [
+            "名称", "编码", "类型", "层级", "联系人", "联系电话",
+            "地址", "描述", "成员数", "状态", "创建时间",
+        ]
+        row = [ws.cell(row=6, column=c).value for c in range(1, 12)]
+        assert [str(v) for v in row] == [
+            "测试单位", "ORG-1", "部门单位", "level_1", "张三", "13800000000",
+            "某地址", "描述", "7", "正常", "2024-01-01",
+        ]
+
+    def test_export_organizations_missing_keys_become_blank(self, export_svc):
+        """缺字段不报错，落空串（保持导出契约稳定）。"""
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        result = export_svc.export_organizations([{"name": "只有一个字段"}])
+        ws = load_workbook(BytesIO(result)).active
+        assert ws.cell(row=6, column=1).value == "只有一个字段"
+        assert ws.cell(row=6, column=2).value in (None, "")
+
     def test_headers_and_styles_applied(self, export_svc):
         """Verify 统一抬头/表头样式（军绿底 + 白字粗体）+ A4 打印设置。"""
         headers = ["ID", "名称"]

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
+from app.core.data_permission import assert_org_reachable
 from app.core.response import success_response
 from app.core.transaction import safe_commit
 from app.models.org_module_policy import (
@@ -73,6 +74,7 @@ def get_org_policies(
     """获取某下级组织的模块策略（含默认值填充）"""
     if current_user.role not in ("admin", "super_admin") and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="仅管理员可管理模块策略")
+    assert_org_reachable(db, current_user, org_id, action="读取模块策略")
 
     db_policies = db.query(OrgModulePolicy).filter(
         OrgModulePolicy.organization_id == org_id
@@ -101,6 +103,7 @@ def set_org_policies(
     """批量设置某下级组织的模块策略"""
     if current_user.role not in ("admin", "super_admin") and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="仅管理员可管理模块策略")
+    assert_org_reachable(db, current_user, org_id, action="管理模块策略")
 
     valid_keys = {m["key"] for m in MODULE_DEFINITIONS}
     for item in body.policies:
@@ -153,6 +156,7 @@ def reset_org_policy(
     """重置某模块策略为默认值（删除自定义记录）"""
     if current_user.role not in ("admin", "super_admin") and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="仅管理员可管理模块策略")
+    assert_org_reachable(db, current_user, org_id, action="重置模块策略")
 
     policy = db.query(OrgModulePolicy).filter(
         OrgModulePolicy.organization_id == org_id,
@@ -174,6 +178,7 @@ def export_org_policies(
     """导出某组织的模块策略（用于管控配置包）"""
     if current_user.role not in ("admin", "super_admin") and not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="仅管理员可导出模块策略")
+    assert_org_reachable(db, current_user, org_id, action="导出模块策略")
 
     policies = db.query(OrgModulePolicy).filter(
         OrgModulePolicy.organization_id == org_id

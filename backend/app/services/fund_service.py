@@ -151,6 +151,9 @@ class FundService:
                           返回的 Fund.id 在当前事务内有效但未持久化。
         """
         fund_dict = data.model_dump(exclude_none=True)
+        # 状态机红线：经费状态只能由审批/拨付等专用流程驱动，
+        # 绝不接受客户端在创建载荷里自带的 status（否则可直接造出"已批准/已拨付"经费）。
+        fund_dict.pop("status", None)
         quantize_money_fields(fund_dict, FUND_MONEY_FIELDS)
 
         # code 留空时在 flush 取到 id 后按 ZJ+年份+6位流水 生成（见下方 _ensure_zj_code）
@@ -167,8 +170,7 @@ class FundService:
         fund.created_by = created_by
         if organization_id is not None:
             fund.organization_id = organization_id
-        if status is not None:
-            fund.status = status
+        fund.status = status if status is not None else "pending"
         if applicant is not None:
             fund.applicant = applicant
         self.db.add(fund)

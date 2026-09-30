@@ -5,6 +5,99 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.9] - 2026-09-30 — 🛡️ 深审缺陷批量修复（越权/数据完整性/静默失效/发布门禁）
+
+对应 `deliverables/open-code-review-深度审查报告-2026-09-17.md` 与逐条复核台账
+`.scratch/w15-ocr-triage/part-{A,B,C,D}.md`（共 337 条判定为 LIVE 的历史发现，
+本轮按严重度分批修复，剩余条目见 `deliverables/ocr-findings-ledger-2026-09-30.md`）。
+
+### 修复（安全 — 越权与任意文件读写）
+- **审计日志批量删除 fail-closed**（`system/audit.py`）：非法 `before_date` 原先只
+  warning 后"忽略日期过滤"，配合空动作条件会**清空整张 audit_logs**。现在入口 422、
+  路由层 400，两条回归锁定"非法日期一条都不删"。
+- **错误报告归属校验**（`system/error_report.py`）：原读不存在的 `record.user_id`
+  → `is_owner` 恒 True，任何登录用户可改任意报告；改用真实字段 `reporter`。
+- **报表订阅 IDOR**（`data/data/reports.py`）：`/{id}/download` 与 `/generate` 收敛到
+  "订阅属主或管理员"，与其余订阅端点同口径。
+- **政策附件路径穿越**（`policy.py`）：写入/预览/下载三处统一做 `realpath + commonpath`
+  包含性校验，`/uploads/../../etc/passwd`、绝对路径一律 400，杜绝任意文件读取。
+- **数据包三端点补归属校验**（`data/data/data_packages.py`）：`preview`、
+  `decrypt-preview`、`confirm-import` 原先任何登录用户凭 id 即可预览/解密/落库他组织
+  数据；`incremental/import` 的 org 缺失改为 fail-closed（不再以 `org_id=0` 写库）；
+  加密包上传临时文件改 `mkstemp`（原名可 `../` 穿越且同秒互相覆盖）。
+- **项目里程碑全端点数据域守卫**（`project_milestones.py`）：里程碑读写、状态流转、
+  流转规则、变更记录统一走 `scoped_filter`，不可见即 404。
+- **上报归属校验**（`data/data/data_reports.py`）：`submit` 原先无归属判断，任何登录
+  用户可把他组织上报提交给其上级。
+- **综合报表导出门禁**（`import_export/export.py`）：补 `require_admin`，学校/项目/经费
+  的计数、金额与明细全部过 `scoped_filter`（S2 导出隔离红线）。
+- **组织模块策略跨组织读写**（`org_module_policy.py`、`control_package.py`）：4 个策略
+  端点 + 管控包导入按 `assert_org_reachable` 校验目标组织子树，杜绝部门级 admin
+  改他组织策略 / 用编辑过的包跨组织写。
+- **上传文件名净化**（`utils/upload_helper.py`）：文件名只取基名并过滤分隔符/控制字符，
+  落盘前再做一次"最终路径必须位于上传根目录内"的包含性校验。
+- **经费状态机红线**（`fund_service.py`、`funds.py`）：创建强制 `pending`（忽略客户端
+  status），更新接口禁止直接改 `status`（须走审批/拨付端点），软删经费不再可详情/流转。
+- **校验规则补管理员门禁**（`validation.py`）：增/改/删三个端点补 `require_admin`。
+- **用户管理提权收敛**（`auth/users.py`）：仅 super_admin 可创建/改/删/重置 super_admin
+  账号；静态选项端点的权限校验移入路由依赖（缓存命中不再跳过校验）。
+- **经费角色改白名单**（`deps.py`）：原 denylist 对未知/空角色放行全流程，改 allowlist
+  fail-closed。
+- **用户服务字段白名单**（`services/user_service.py`）：`update_user` 不再对任意键
+  `setattr`（原先可改 role/is_superuser/hashed_password）。
+- **组织 `/subordinates` 限子树**（`organization.py`）：原先对任何登录用户返回整张组织表。
+- **农村任务审批独立性**（`rural_tasks.py`）：非管理员不得审批本人创建/提交的任务；
+  审批字段不得经通用更新接口写入，已提交任务禁止直接改 status。
+- **系统初始化 fail-loud**（`system/init.py`）：超管账号创建失败立即中止且不落"已初始化"
+  （原行为会留下无超管且不可重入的永久锁死部署）。
+- **2FA 加固**：`/two-factor/verify` 与 `/disable` 补限流与二次验证（`auth/two_factor.py`），
+  恢复码写入路径统一校验。
+- **密钥持久化 fail-closed**（`core/pii_crypto.py`、`core/config.py`、`utils/runtime_secrets.py`）：
+  `require_persisted=True`，静态数据加密密钥落盘失败即报错，不再用一次性进程内密钥
+  顶替（重启后历史密文会永久不可解）。
+
+### 修复（数据完整性 — 静默失效与丢数据）
+- **增量备份记录不可见**（`backup_service.py`）：备份列表原先只匹配 `backup_20%`，
+  `backup_incremental_*` 永远不入列表（不轮转、不可见）；清单改在备份记录落库**之后**
+  推进（原先先写清单，记录写失败即静默漏备）；一致性快照失败不再回退 WAL-blind 裸拷贝
+  （fail-loud）；回滚时数据库文件被占用不再原地覆盖（保留快照并显式报错）。
+- **异步导出**（`async_export_service.py`）：综合工作簿的学校/项目/经费计数与金额补数据域
+  过滤；失败回写前先 `rollback()`（否则任务永停 processing）。
+- **审批回写**（`approval_workflow_service.py`）：实体回写改用 SAVEPOINT 隔离（原
+  `rollback()` 会连带丢弃同一事务里的审批记录与 `completed_at`）；重新提交时回写失败
+  落到可重试的 `*_apply_failed` 终态；`batch_approve` 默认校验审批人归属（仅管理员
+  走跳过分支）。
+- **FTS5 全文检索**（`policy_fts_service.py`）：SQL 由普通字符串改为 f-string，
+  `{FTS_TABLE}` 不再原样发给 SQLite —— 此前每次搜索都静默退化为 LIKE。
+- **数据库校验规则引擎**（`validation_engine_service.py`）：改用真实列 `error_message`，
+  `params` 反序列化 JSON 字符串并用 try/except 兜住脏数据（原先 AttributeError 被宽
+  except 吞掉 → 所有 range/regex/enum 规则静默失效）。
+- **备份消息类型**（`message_service.py`）：白名单补 `MessageType.BACKUP`（模型已定义、
+  备份调度器在用，原实现每发必抛 ValueError）。
+- **同步成功率**（`sync.py`）：状态字面量由 `success/failure` 改为写入端真实取值
+  `completed/failed`，成功率按终态为分母（原先失败数恒 0、成功率恒 100%）。
+- **派生列残留**（`models/fund.py`）：经费日期被清空时同步清空 year/year_month/year_quarter。
+- **批量更新同步版本**（`models/base.py`）：`query.update()` 等 bulk update 也递增
+  `sync_version`（原先只有 ORM 逐行路径递增，增量同步会漏行）。
+- **外键动作与可空性自相矛盾**（`models/*`）：审计/留痕类引用列放宽为可空，
+  配套迁移 `w15_relax_notnull_001`（含 effectiveness/package_versions 唯一约束，
+  检测到重复数据时跳过并告警）；`package_versions`、`fund_history` 补
+  `passive_deletes`（原先 ORM 删父会先置空非空外键 → IntegrityError）。
+- **全盘健康评估**（`system/monitor.py`）：逐盘判 `percent`（读取失败的分区没有该键，
+  原取 `disks[0]` 会 KeyError 并丢掉整份资源报告）。
+- **导入校验 500**（`import_export/import_data.py` + `data_validator_service.py`）：
+  `validate_import_data` 补 `validate_tiered_level` 参数并实现"是否振兴梯队"取值校验。
+- **模板渲染**（`models/message_template.py`）：四个渲染方法统一补 IndexError/ValueError，
+  不再因位置占位符/未转义花括号直接抛给调用方。
+
+### 修复（发布门禁与工程）
+- `.github/workflows/build-windows.yml`：见"门禁"小节（下一批次）。
+
+### 变更（行为）
+- 新增 `assert_org_reachable`（`core/data_permission.py`）作为跨组织可达性守卫的**唯一实现**，
+  `control_package` 改为委托调用（保留模块级可 patch 语义）。
+- 权限、路径与状态类改动均为 **fail-closed**：非法输入一律显式 4xx，不再静默放行或降级。
+
 ## [1.12.8] - 2026-09-13 — 🛡️ 遗留风险治理第三批（R7 恢复维护窗口 / R12 低危批量 / R2 残余无界读取 / P-1~P-3 预防门禁）
 
 对应《deliverables/遗留风险彻底解决方案计划-2026-09-12.md》W3-W4 批次。

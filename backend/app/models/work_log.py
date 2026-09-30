@@ -24,8 +24,8 @@ class WorkLog(Base):
     user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=False,
-        comment="记录人ID",
+        nullable=True,
+        comment="记录人ID(用户删除后置空，日志留痕保留)",
     )
     log_date = Column(Date, nullable=False, comment="工作日期")
     content = Column(Text, nullable=False, comment="工作内容")

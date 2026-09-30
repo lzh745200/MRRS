@@ -212,7 +212,16 @@ async def submit_report(
     current_user=Depends(get_current_user),
     service: DataReportService = Depends(get_report_service),
 ):
-    """提交上报"""
+    """提交上报（仅来源组织成员；与服务层状态流转校验互补）"""
+    # 归属校验：缺此校验时任何登录用户凭 report_id 即可把**他组织**的上报
+    # 提交给其上级（越权触发上报流程，深审 LIVE）。
+    existing = service.get_report(report_id)
+    if not existing:
+        raise NotFoundException("上报不存在")
+    user_org_id = getattr(current_user, "organization_id", None) or getattr(current_user, "org_id", None)
+    if user_org_id != existing.source_org_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有来源组织可以提交上报")
+
     try:
         report = await service.submit_report(report_id=report_id, submitted_by=current_user.id, comment=comment)
 

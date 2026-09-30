@@ -22,6 +22,21 @@ from app.schemas.data_package import (
 BASE = "/api/v1/data-packages"
 
 
+def _perm(allowed: bool) -> MagicMock:
+    """构造组织权限服务替身（新增的归属预检依赖）。"""
+    m = MagicMock()
+    m.can_access_organization.return_value = allowed
+    return m
+
+
+def _pkg(org_id: int = 1):
+    """构造数据包替身（归属预检用）。"""
+    m = MagicMock()
+    m.id = 1
+    m.org_id = org_id
+    return m
+
+
 @contextlib.contextmanager
 def _override_deps(client, svc=None, hist=None, perm=None, db=None):
     """Set up dependency overrides for service functions used via Depends()."""
@@ -241,6 +256,16 @@ class TestPreviewDataForExport:
         resp = client.post(f"{BASE}/preview", json={"data_types": ["villages"]})
         assert resp.status_code == 401
 
+    def test_no_permission_for_requested_org(self, client_with_mocked_auth):
+        """预览必须校验请求的组织归属（缺校验时可枚举他组织数据规模）"""
+        with patch("app.api.v1.data.data.data_packages.get_org_with_fallback", return_value=99):
+            mock_svc = MagicMock()
+            with _override_deps(client_with_mocked_auth, svc=mock_svc, perm=_perm(False)):
+                resp = client_with_mocked_auth.post(
+                    f"{BASE}/preview", json={"data_types": ["villages"]}
+                )
+        assert resp.status_code == 403
+
     def test_success_default_types(self, client_with_mocked_auth):
         with patch("app.api.v1.data.data.data_packages.get_org_with_fallback", return_value=1):
             mock_svc = MagicMock()
@@ -249,7 +274,7 @@ class TestPreviewDataForExport:
             mock_query.count.return_value = 5
             mock_db.query.return_value = mock_query
             mock_svc.db = mock_db
-            with _override_deps(client_with_mocked_auth, svc=mock_svc):
+            with _override_deps(client_with_mocked_auth, svc=mock_svc, perm=_perm(True)):
                 resp = client_with_mocked_auth.post(f"{BASE}/preview", json={"data_types": ["villages"]})
                 assert resp.status_code == 200
                 assert "counts" in resp.json()["data"]
@@ -259,7 +284,7 @@ class TestPreviewDataForExport:
             mock_svc = MagicMock()
             mock_db = MagicMock()
             mock_svc.db = mock_db
-            with _override_deps(client_with_mocked_auth, svc=mock_svc):
+            with _override_deps(client_with_mocked_auth, svc=mock_svc, perm=_perm(True)):
                 resp = client_with_mocked_auth.post(f"{BASE}/preview", json={"data_types": ["unknown_type"]})
                 assert resp.status_code == 200
                 assert resp.json()["data"]["counts"]["unknown_type"] == 0
@@ -278,7 +303,7 @@ class TestPreviewDataForExport:
             mock_query.count.return_value = 0
             mock_db.query.return_value = mock_query
             mock_svc.db = mock_db
-            with _override_deps(client_with_mocked_auth, svc=mock_svc):
+            with _override_deps(client_with_mocked_auth, svc=mock_svc, perm=_perm(True)):
                 resp = client_with_mocked_auth.post(f"{BASE}/preview", json={"data_types": ["villages"]})
                 assert resp.status_code == 200
 
@@ -937,12 +962,23 @@ class TestDecryptAndPreviewPackage:
         resp = client.post(f"{BASE}/decrypt-preview/1")
         assert resp.status_code == 401
 
+    def test_other_org_package_forbidden(self, client_with_mocked_auth):
+        """归属预检：他组织数据包不得解密预览（深审 LIVE）"""
+        mock_svc = MagicMock()
+        mock_svc.get_package.return_value = _pkg(org_id=99)
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, perm=_perm(False)):
+            resp = client_with_mocked_auth.post(
+                f"{BASE}/decrypt-preview/1", json={"password": "x12345678"}
+            )
+        assert resp.status_code == 404
+
     def test_success(self, client_with_mocked_auth):
         mock_result = {"decrypted": True, "data_types": ["villages"]}
 
         mock_svc = MagicMock()
+        mock_svc.get_package.return_value = _pkg(org_id=1)
         mock_svc.decrypt_and_preview_package = AsyncMock(return_value=mock_result)
-        with _override_deps(client_with_mocked_auth, svc=mock_svc):
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, perm=_perm(True)):
             resp = client_with_mocked_auth.post(
                 f"{BASE}/decrypt-preview/1",
                 json={"password": "decrypt123"}
@@ -953,8 +989,9 @@ class TestDecryptAndPreviewPackage:
     def test_business_error(self, client_with_mocked_auth):
         from app.core.exceptions import BusinessError
         mock_svc = MagicMock()
+        mock_svc.get_package.return_value = _pkg(org_id=1)
         mock_svc.decrypt_and_preview_package = AsyncMock(side_effect=BusinessError("wrong password"))
-        with _override_deps(client_with_mocked_auth, svc=mock_svc):
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, perm=_perm(True)):
             resp = client_with_mocked_auth.post(
                 f"{BASE}/decrypt-preview/1",
                 json={"password": "wrong"}
@@ -963,8 +1000,9 @@ class TestDecryptAndPreviewPackage:
 
     def test_unexpected_error(self, client_with_mocked_auth):
         mock_svc = MagicMock()
+        mock_svc.get_package.return_value = _pkg(org_id=1)
         mock_svc.decrypt_and_preview_package = AsyncMock(side_effect=RuntimeError("decrypt failed"))
-        with _override_deps(client_with_mocked_auth, svc=mock_svc):
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, perm=_perm(True)):
             resp = client_with_mocked_auth.post(
                 f"{BASE}/decrypt-preview/1",
                 json={"password": "test1234"}
@@ -977,12 +1015,32 @@ class TestConfirmImportWithConflictResolution:
         resp = client.post(f"{BASE}/confirm-import/1", json={"conflict_strategy": "KEEP_BOTH"})
         assert resp.status_code == 401
 
+    def test_other_org_package_forbidden(self, client_with_mocked_auth):
+        """归属预检：他组织数据包不得触发导入（越权写，深审 LIVE）"""
+        mock_svc = MagicMock()
+        mock_svc.get_package.return_value = _pkg(org_id=99)
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock(), perm=_perm(False)):
+            resp = client_with_mocked_auth.post(
+                f"{BASE}/confirm-import/1", json={"conflict_strategy": "OVERWRITE"}
+            )
+        assert resp.status_code == 404
+
+    def test_missing_package_forbidden(self, client_with_mocked_auth):
+        mock_svc = MagicMock()
+        mock_svc.get_package.return_value = None
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock(), perm=_perm(True)):
+            resp = client_with_mocked_auth.post(
+                f"{BASE}/confirm-import/1", json={"conflict_strategy": "OVERWRITE"}
+            )
+        assert resp.status_code == 404
+
     def test_success(self, client_with_mocked_auth):
         mock_result = {"imported": True, "records_imported": 50}
 
         mock_svc = MagicMock()
+        mock_svc.get_package.return_value = _pkg(org_id=1)
         mock_svc.confirm_import_with_conflict_resolution = AsyncMock(return_value=mock_result)
-        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock()):
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock(), perm=_perm(True)):
             resp = client_with_mocked_auth.post(
                 f"{BASE}/confirm-import/1",
                 json={"conflict_strategy": "OVERWRITE"}
@@ -991,8 +1049,9 @@ class TestConfirmImportWithConflictResolution:
 
     def test_error(self, client_with_mocked_auth):
         mock_svc = MagicMock()
+        mock_svc.get_package.return_value = _pkg(org_id=1)
         mock_svc.confirm_import_with_conflict_resolution = AsyncMock(side_effect=RuntimeError("import failed"))
-        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock()):
+        with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock(), perm=_perm(True)):
             resp = client_with_mocked_auth.post(
                 f"{BASE}/confirm-import/1",
                 json={"conflict_strategy": "SKIP"}

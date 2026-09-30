@@ -286,6 +286,7 @@ class TestSubmitReport:
         from app.services.data_report_service import ReportNotFoundError
 
         mock_svc = Mock()
+        mock_svc.get_report.return_value = None  # 归属预检取不到上报 → 404
         mock_svc.submit_report = AsyncMock(side_effect=ReportNotFoundError(999))
         _setup_service_override(client_with_mocked_auth, mock_svc)
         resp = client_with_mocked_auth.post(f"{BASE}/999/submit")
@@ -295,6 +296,7 @@ class TestSubmitReport:
         from app.services.data_report_service import ReportStatusError
 
         mock_svc = Mock()
+        mock_svc.get_report.return_value = _make_report(id=1, source_org_id=1)
         mock_svc.submit_report = AsyncMock(side_effect=ReportStatusError(1, "approved", "draft"))
         _setup_service_override(client_with_mocked_auth, mock_svc)
         resp = client_with_mocked_auth.post(f"{BASE}/1/submit")
@@ -302,11 +304,22 @@ class TestSubmitReport:
 
     def test_success(self, client_with_mocked_auth):
         mock_svc = Mock()
+        mock_svc.get_report.return_value = _make_report(id=1, source_org_id=1)
         mock_svc.submit_report = AsyncMock(return_value=_make_report(id=1, status="submitted"))
         _setup_service_override(client_with_mocked_auth, mock_svc)
         resp = client_with_mocked_auth.post(f"{BASE}/1/submit")
         assert resp.status_code == 200
         assert resp.json()["status"] == "submitted"
+
+    def test_submit_other_org_forbidden(self, client_with_mocked_auth):
+        """归属校验：他组织上报不得被提交（深审 LIVE 的越权写入面）"""
+        mock_svc = Mock()
+        mock_svc.get_report.return_value = _make_report(id=1, source_org_id=99)
+        mock_svc.submit_report = AsyncMock(return_value=_make_report(id=1, status="submitted"))
+        _setup_service_override(client_with_mocked_auth, mock_svc)
+        resp = client_with_mocked_auth.post(f"{BASE}/1/submit")
+        assert resp.status_code == 403
+        mock_svc.submit_report.assert_not_called()
 
 
 # ──────────────────────────────────────────────────────

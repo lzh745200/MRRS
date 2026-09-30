@@ -287,19 +287,28 @@ async def export_comprehensive_report(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # 综合报表是全库口径导出：必须是管理员，且每一项聚合都要过数据域过滤。
+    # 历史实现只过滤了村庄，学校/项目/经费计数与金额以及项目/经费样例都是全局
+    # 口径 → 部门级非管理员可读出跨组织总量与记录（违反 S2 导出隔离红线）。
+    require_admin(current_user, error_message="仅管理员可导出综合报表")
+
     users_count = db.query(User).count()
     village_q = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
     village_q = scoped_filter(village_q, SupportedVillage, current_user)
     villages_count = village_q.count()
-    schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
-    projects_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
+
+    def _scoped_count(model):
+        q = db.query(model).filter(model.is_active.is_(True))
+        return scoped_filter(q, model, current_user).count()
+
+    schools_count = _scoped_count(School)
+    projects_count = _scoped_count(Project)
     from sqlalchemy import func as sql_func
-    funds_count = db.query(Fund).filter(Fund.is_active == True).count()  # noqa: E712
-    funds_sum = (
-        db.query(sql_func.coalesce(sql_func.sum(Fund.amount), 0))
-        .filter(Fund.is_active == True)  # noqa: E712
-        .scalar()
+    funds_count = _scoped_count(Fund)
+    fund_sum_q = db.query(sql_func.coalesce(sql_func.sum(Fund.amount), 0)).filter(
+        Fund.is_active.is_(True)
     )
+    funds_sum = scoped_filter(fund_sum_q, Fund, current_user).scalar() or 0
 
     summary = {
         "用户总数": users_count,
@@ -325,7 +334,9 @@ async def export_comprehensive_report(
         for v in villages
     ]
 
-    projects = db.query(Project).limit(100).all()
+    projects = scoped_filter(
+        db.query(Project).filter(Project.is_active.is_(True)), Project, current_user
+    ).limit(100).all()
     project_data = [
         {
             "ID": p.id,
@@ -337,7 +348,9 @@ async def export_comprehensive_report(
         for p in projects
     ]
 
-    funds = db.query(Fund).limit(100).all()
+    funds = scoped_filter(
+        db.query(Fund).filter(Fund.is_active.is_(True)), Fund, current_user
+    ).limit(100).all()
     fund_data = [
         {
             "ID": f.id,

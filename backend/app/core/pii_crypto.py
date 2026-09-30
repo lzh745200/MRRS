@@ -45,6 +45,7 @@ def _load_key() -> bytes:
             secret = get_or_create_secret(
                 "PII_AESSIV_KEY",
                 generate=lambda: base64.b64encode(os.urandom(64)).decode(),
+                require_persisted=True,
             )
             logger.info("PII 加密密钥已从运行时密钥存储加载")
         except Exception as e:

@@ -29,7 +29,8 @@
       </el-tag>
     </div>
 
-    <!-- 菜单树选择 -->
+    <!-- 菜单树选择：default-checked-keys 只是渲染期初值，
+         异步回填/恢复默认后的选中态由 syncTreeCheckedKeys 显式对齐 -->
     <el-tree
       ref="menuTreeRef"
       :data="menuTreeData"
@@ -37,7 +38,7 @@
       node-key="key"
       :check-strictly="false"
       :default-expand-all="true"
-      :default-checked-keys="selectedMenuKeys || []"
+      :default-checked-keys="displayCheckedKeys"
       :props="{ label: 'label', children: 'children' }"
       style="margin-top: 12px"
       @check="onMenuCheck"
@@ -46,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { get, put } from '@/api/request'
 
@@ -73,6 +74,20 @@ const menuTreeRef = ref()
 const saving = ref(false)
 const selectedMenuKeys = ref<string[] | null>([])
 const menuTreeData = ref<MenuTreeNode[]>([])
+
+// 程序化同步树勾选期间置位：此间树回传的 check 事件不得再写回 selectedMenuKeys（避免反馈环）
+let syncingTree = false
+
+/**
+ * 树应展示的勾选键。
+ *
+ * selectedMenuKeys === null 表示"继承角色默认菜单"（保存时提交 null），
+ * 此时树必须展示角色默认菜单——否则"恢复角色默认"后管理员看到的是空选，
+ * 与保存结果（恢复为角色默认）不一致。
+ */
+const displayCheckedKeys = computed<string[]>(
+  () => selectedMenuKeys.value ?? props.roleDefaultKeys ?? []
+)
 
 // 菜单 key → label 映射
 const menuLabelMap = ref<Record<string, string>>({})
@@ -107,6 +122,25 @@ async function loadMenuTree() {
   }
 }
 
+/**
+ * 把选中态显式同步到树。
+ *
+ * el-tree 的 default-checked-keys 只在渲染期生效（异步赋值/外部 watcher/恢复默认都不会重放），
+ * 不同步会让树勾选与 saveConfig 提交的内容不一致（管理员看到 A、提交 B）。
+ */
+async function syncTreeCheckedKeys() {
+  await nextTick()
+  const tree = menuTreeRef.value as { setCheckedKeys?: (keys: string[]) => void } | undefined
+  // 树未渲染（组件已卸载）或测试桩未实现 setCheckedKeys 时跳过
+  if (typeof tree?.setCheckedKeys !== 'function') return
+  syncingTree = true
+  try {
+    tree.setCheckedKeys(displayCheckedKeys.value)
+  } finally {
+    syncingTree = false
+  }
+}
+
 async function loadUserMenuConfig() {
   if (!props.userId) return
   try {
@@ -122,15 +156,20 @@ async function loadUserMenuConfig() {
   } catch {
     selectedMenuKeys.value = props.currentMenuKeys || []
   }
+  await syncTreeCheckedKeys()
 }
 
 function onMenuCheck(_node: any, checked: any) {
+  // 程序化同步（setCheckedKeys）回传的 check 事件直接丢弃，避免与选中态互相覆盖
+  if (syncingTree) return
   selectedMenuKeys.value = (checked?.checkedKeys || checked) as string[]
 }
 
 function resetToDefault() {
-  // 设为 null 表示"恢复角色默认菜单"——后端 len==0 会清空所有菜单
-  selectedMenuKeys.value = null as any
+  // 设为 null 表示"恢复角色默认菜单"——后端把 allowed_menus 清空（提交 null，不是空数组）
+  selectedMenuKeys.value = null
+  // 树同步展示角色默认菜单，与保存语义保持一致
+  void syncTreeCheckedKeys()
 }
 
 async function saveConfig() {

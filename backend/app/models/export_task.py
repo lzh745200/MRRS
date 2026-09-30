@@ -39,8 +39,8 @@ class ExportTask(Base):
     user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=False,
-        comment="操作用户ID",
+        nullable=True,
+        comment="操作用户ID(用户删除后置空，导出任务留痕保留)",
     )
     task_id = Column(
         String(36),

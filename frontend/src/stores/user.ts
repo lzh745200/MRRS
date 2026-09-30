@@ -52,6 +52,22 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  /** 响应载荷是否为合法的用户对象（对象且 id 为数字） */
+  function _isValidUserPayload(payload: any): payload is User {
+    return (
+      !!payload &&
+      typeof payload === 'object' &&
+      !Array.isArray(payload) &&
+      typeof payload.id === 'number'
+    )
+  }
+
+  /**
+   * 按 id 查询用户详情。
+   * currentUser 是当前登录会话档案（changePassword 等依赖它），
+   * 因此只有"响应合法 + 响应 id 与请求 id 一致 + 确为当前会话用户"时才写回，
+   * 否则拒绝写入并保留原状态（管理员查他人不得覆盖本人档案）。
+   */
   async function fetchUser(id: number) {
     loading.value = true
     error.value = null
@@ -59,10 +75,20 @@ export const useUserStore = defineStore('user', () => {
       const res = await get<any>(`/users/${id}`)
       // 后端 GET /users/{id} 返回裸用户对象（无 envelope），也兼容 envelope 格式
       const userData = res?.data ?? res
-      if (userData && typeof userData === 'object') {
-        currentUser.value = userData
-        return userData
+      if (!_isValidUserPayload(userData)) {
+        error.value = '获取用户详情失败：响应数据非法'
+        return
       }
+      // 响应与请求不一致（如代理串号/缓存串页）→ 拒绝采用
+      if (userData.id !== id) {
+        error.value = '获取用户详情失败：响应与请求的用户不一致'
+        return
+      }
+      // 仅当尚无会话用户（如刷新后 /me 失败的回退路径）或就是本人时，才更新会话档案
+      if (currentUser.value === null || currentUser.value.id === userData.id) {
+        currentUser.value = userData
+      }
+      return userData
     } catch (e: any) {
       error.value = e?.response?.data?.message || e?.message || '获取用户详情失败'
     } finally {

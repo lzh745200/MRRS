@@ -25,6 +25,19 @@ class AnalyticsService:
     def __init__(self, db: Session):
         self.db = db
 
+    @staticmethod
+    def _error_payload(action: str, exc: Exception, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """裸 SQL 失败时统一收口：记录完整堆栈，并在返回值里显式暴露 error 标记。
+
+        历史缺陷：这些方法只 app_logger.error 后返回空结构，调用方无法区分
+        “确实没有数据”与“SQL 报错”，错误表名因此长期恒空且无人察觉。带 error
+        的返回值可被接口/前端断言与展示，失败不再静默。
+        """
+        message = f"{action}失败: {exc}"
+        app_logger.error(message, exc_info=True)
+        payload["error"] = message
+        return payload
+
     def get_dashboard_overview(self, db: Session) -> Dict[str, Any]:
         """获取仪表盘总览数据"""
         try:
@@ -98,15 +111,17 @@ class AnalyticsService:
             investment_row = investment_result.fetchone()
 
             # 人口统计
+            # 表名为模型声明的单数名（VillagePopulation.__tablename__ = "village_population"）；
+            # 历史复数写法会让 SQL 直接报 no such table 并被下方 except 吞掉 → 恒空结果。
             population_result = db.execute(text("""
                 SELECT
                     SUM(vp.total_population) as total_population,
                     SUM(vp.resident_population) as total_resident,
-                    AVG(vp.resident_population * 100.0 / vp.total_population) as avg_resident_rate
-                FROM village_populations vp
+                    AVG(vp.resident_population * 100.0 / NULLIF(vp.total_population, 0)) as avg_resident_rate
+                FROM village_population vp
                 JOIN supported_villages sv ON sv.id = vp.supported_village_id AND sv.is_active = 1
                 WHERE vp.year = (
-                    SELECT MAX(year) FROM village_populations
+                    SELECT MAX(year) FROM village_population
                 )
             """))
             population_row = population_result.fetchone()
@@ -116,10 +131,10 @@ class AnalyticsService:
                 SELECT
                     AVG(vi.per_capita_income) as avg_per_capita_income,
                     AVG(vi.county_per_capita_income) as avg_county_income
-                FROM village_incomes vi
+                FROM village_income vi
                 JOIN supported_villages sv ON sv.id = vi.supported_village_id AND sv.is_active = 1
                 WHERE vi.year = (
-                    SELECT MAX(year) FROM village_incomes
+                    SELECT MAX(year) FROM village_income
                 )
             """))
             income_row = income_result.fetchone()
@@ -131,19 +146,19 @@ class AnalyticsService:
                     SUM(investment) as total_amount
                 FROM (
                     SELECT '道路' as investment_category, SUM(ii.road_km * 1000000) as investment
-                    FROM infrastructure_improvements ii
+                    FROM infrastructure_improvement ii
                     JOIN supported_villages sv ON sv.id = ii.supported_village_id AND sv.is_active = 1
-                    WHERE ii.year = (SELECT MAX(year) FROM infrastructure_improvements)
+                    WHERE ii.year = (SELECT MAX(year) FROM infrastructure_improvement)
                     UNION ALL
                     SELECT '住房改造' as investment_category, SUM(housing_renovation) as investment
-                    FROM infrastructure_improvements ii2
+                    FROM infrastructure_improvement ii2
                     JOIN supported_villages sv2 ON sv2.id = ii2.supported_village_id AND sv2.is_active = 1
-                    WHERE ii2.year = (SELECT MAX(year) FROM infrastructure_improvements)
+                    WHERE ii2.year = (SELECT MAX(year) FROM infrastructure_improvement)
                     UNION ALL
                     SELECT '文化设施' as investment_category, SUM(cultural_plaza + library_cafe) as investment
-                    FROM infrastructure_improvements ii3
+                    FROM infrastructure_improvement ii3
                     JOIN supported_villages sv3 ON sv3.id = ii3.supported_village_id AND sv3.is_active = 1
-                    WHERE ii3.year = (SELECT MAX(year) FROM infrastructure_improvements)
+                    WHERE ii3.year = (SELECT MAX(year) FROM infrastructure_improvement)
                 ) infra
                 GROUP BY investment_category
             """))
@@ -167,8 +182,7 @@ class AnalyticsService:
                 "infrastructure": infra_data,
             }
         except Exception as e:
-            app_logger.error(f"获取帮扶村分析数据失败: {e}")
-            return {}
+            return self._error_payload("获取帮扶村分析数据", e, {})
 
     def get_funding_trends(self, db: Session, years: int = 5) -> Dict[str, Any]:
         """获取资金趋势分析"""
@@ -177,25 +191,29 @@ class AnalyticsService:
             start_year = current_year - years
             end_year = current_year
 
+            # 口径说明：supported_villages 只有累计投入列（transition_fund_military_total /
+            # transition_fund_local_total），**没有 year 列**，历史 SQL 取 vp.year 直接报错被吞。
+            # 这里用村级人口年度表 village_population.year 作为年度轴：每村按其最新一个人口
+            # 年度归属一次（避免同一笔累计投入在多年度里重复累加），村数按 DISTINCT 去重。
             result = db.execute(
                 text("""
                 SELECT
-                    vp.year,
-                    SUM(vp.transition_fund_military_total + vp.transition_fund_local_total) as total_funding,
-                    SUM(vp.transition_fund_military_total) as military_funding,
-                    SUM(vp.transition_fund_local_total) as local_funding,
-                    COUNT(vp.id) as village_count
-                FROM supported_villages vp
-                WHERE vp.is_active = 1
-                  AND vp.id IN (
-                    SELECT DISTINCT sv.id
-                    FROM supported_villages sv
-                    JOIN village_populations vp_pop ON sv.id = vp_pop.supported_village_id
-                    WHERE vp_pop.year BETWEEN :start_year AND :end_year
-                      AND sv.is_active = 1
-                )
-                GROUP BY vp.year
-                ORDER BY vp.year
+                    pop.year,
+                    SUM(sv.transition_fund_military_total + sv.transition_fund_local_total) as total_funding,
+                    SUM(sv.transition_fund_military_total) as military_funding,
+                    SUM(sv.transition_fund_local_total) as local_funding,
+                    COUNT(DISTINCT sv.id) as village_count
+                FROM supported_villages sv
+                JOIN village_population pop
+                  ON pop.supported_village_id = sv.id
+                 AND pop.year = (
+                    SELECT MAX(p2.year) FROM village_population p2
+                    WHERE p2.supported_village_id = sv.id
+                 )
+                WHERE sv.is_active = 1
+                  AND pop.year BETWEEN :start_year AND :end_year
+                GROUP BY pop.year
+                ORDER BY pop.year
             """),
                 {"start_year": start_year, "end_year": end_year},
             )
@@ -214,8 +232,7 @@ class AnalyticsService:
 
             return {"trends": trends, "start_year": start_year, "end_year": end_year}
         except Exception as e:
-            app_logger.error(f"获取资金趋势失败: {e}")
-            return {"trends": [], "start_year": 0, "end_year": 0}
+            return self._error_payload("获取资金趋势", e, {"trends": [], "start_year": 0, "end_year": 0})
 
     def get_performance_metrics(self, db: Session) -> Dict[str, Any]:
         """获取绩效指标"""
@@ -254,8 +271,8 @@ class AnalyticsService:
                 SELECT
                     '基础设施' as category,
                     SUM(investment) as amount
-                FROM infrastructure_improvements
-                WHERE year = (SELECT MAX(year) FROM infrastructure_improvements)
+                FROM infrastructure_improvement
+                WHERE year = (SELECT MAX(year) FROM infrastructure_improvement)
                   AND supported_village_id IN (SELECT id FROM supported_villages WHERE is_active = 1)
                 UNION ALL
                 SELECT
@@ -286,8 +303,7 @@ class AnalyticsService:
                 "investment_categories": categories,
             }
         except Exception as e:
-            app_logger.error(f"获取绩效指标失败: {e}")
-            return {}
+            return self._error_payload("获取绩效指标", e, {})
 
     def get_comparison_analysis(self, db: Session, compare_type: str, target_value: Optional[str]) -> Dict[str, Any]:
         """获取对比分析数据"""
@@ -300,11 +316,11 @@ class AnalyticsService:
                         SUM(vp.transition_fund_military_total + vp.transition_fund_local_total) as total_investment,
                         AVG(vi.per_capita_income) as avg_income
                     FROM supported_villages vp
-                    JOIN village_incomes vi ON vp.id = vi.supported_village_id
-                    JOIN village_populations vp_pop ON vp.id = vp_pop.supported_village_id
+                    JOIN village_income vi ON vp.id = vi.supported_village_id
+                    JOIN village_population vp_pop ON vp.id = vp_pop.supported_village_id
                     WHERE vp.is_active = 1
-                      AND vi.year = (SELECT MAX(year) FROM village_incomes)
-                      AND vp_pop.year = (SELECT MAX(year) FROM village_populations)
+                      AND vi.year = (SELECT MAX(year) FROM village_income)
+                      AND vp_pop.year = (SELECT MAX(year) FROM village_population)
                     GROUP BY province
                     ORDER BY total_investment DESC
                 """))
@@ -316,9 +332,9 @@ class AnalyticsService:
                         SUM(vp.transition_fund_military_total + vp.transition_fund_local_total) as total_investment,
                         AVG(vi.per_capita_income) as avg_income
                     FROM supported_villages vp
-                    JOIN village_incomes vi ON vp.id = vi.supported_village_id
+                    JOIN village_income vi ON vp.id = vi.supported_village_id
                     WHERE vp.is_active = 1
-                      AND vi.year = (SELECT MAX(year) FROM village_incomes)
+                      AND vi.year = (SELECT MAX(year) FROM village_income)
                     GROUP BY vp.is_revitalization_tier
                     ORDER BY avg_income DESC
                 """))
@@ -337,8 +353,9 @@ class AnalyticsService:
 
             return {"comparison": comparison, "compare_type": compare_type}
         except Exception as e:
-            app_logger.error(f"获取对比分析失败: {e}")
-            return {"comparison": [], "compare_type": compare_type}
+            return self._error_payload(
+                "获取对比分析", e, {"comparison": [], "compare_type": compare_type}
+            )
 
     def generate_report_data(
         self,
@@ -381,8 +398,7 @@ class AnalyticsService:
                     "generated_at": datetime.now().isoformat(),
                 }
         except Exception as e:
-            app_logger.error(f"生成报表数据失败: {e}")
-            return {}
+            return self._error_payload("生成报表数据", e, {})
 
     @staticmethod
     def _apply_year_filter(query, model, year, village_subq, db):

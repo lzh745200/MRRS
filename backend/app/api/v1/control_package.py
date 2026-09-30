@@ -17,11 +17,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
-from app.core.data_permission import OrgScopeFilter, _get_org_subtree
+from app.core.data_permission import _get_org_subtree, assert_org_reachable
 from app.core.response import success_response
-from app.core.permission_utils import is_admin, is_superuser
+from app.core.permission_utils import is_admin
 from app.core.transaction import safe_commit
-from app.models.organization import Organization
 from app.models.org_module_policy import OrgModulePolicy
 from app.models.user import User
 from app.services.work_log_service import write_work_log
@@ -40,6 +39,39 @@ PACKAGE_VERSION = "1.0"
 # R2 第二层：管控配置包内存上限（与中间件「权限包/数据同步」512MB 分级一致）
 _MAX_CONTROL_PACKAGE_BYTES = 512 * 1024 * 1024
 
+# 管控包允许交换的全局配置键白名单（fail-closed）。
+#
+# 背景（W15 深审 #14/#15）：导出端此前全量导出 SystemConfig，导入端对包内任意
+# key 直接写库，使受控包可覆盖安全与基础设施配置——数据库加密的盐值/校验哈希、
+# 登录锁定阈值、会话超时、密码过期天数、备份/打包目标目录（任意路径写入）等，
+# 属于典型的配置注入提权面。
+#
+# 白名单只保留「上级单位可下发的业务/展示类默认值」；安全、身份与路径类键一律
+# 不参与交换：导入时跳过（并计入 skipped_configs），导出时剔除。
+CONTROL_PACKAGE_CONFIG_KEYS = frozenset({
+    # 单位展示信息（上级下发 / 初始化信息）
+    "system_name",
+    "organization_name",
+    "organization_short_name",
+    "organization_code",
+    "contact_person",
+    "contact_phone",
+    # 备份与打包运营参数（不含目标路径与加密开关）
+    "auto_backup",
+    "backup_retention_days",
+    "backup_interval_days",
+    "max_backup_count",
+    "backup_reminder_days",
+    "auto_package_enabled",
+    "auto_package_interval_months",
+    "data_retention_days",
+    "package_max_size_mb",
+    # 异常检测阈值
+    "anomaly_detection_enabled",
+    "anomaly_zscore_threshold",
+    "anomaly_overspend_threshold_pct",
+})
+
 
 class GenerateControlPackageRequest(BaseModel):
     organization_id: int
@@ -56,16 +88,13 @@ def _assert_org_reachable(db: Session, current_user: User, org_id: int) -> None:
     （``filter_by_org_ids``），越权抛 403，防止部门级管理员（``role="admin"``）
     传入其它组织 id，导出跨组织用户/RBAC/系统配置（跨组织数据外泄）。
     """
-    if is_superuser(current_user):
-        return
-    user_org_id = getattr(current_user, "organization_id", None)
-    allowed_org_ids = _get_org_subtree(db, user_org_id)[0] if user_org_id is not None else []
-    scope = OrgScopeFilter(is_admin=False, org_ids=allowed_org_ids)
-    reachable = scope.filter_by_org_ids(
-        db.query(Organization).filter(Organization.id == org_id), Organization.id
-    ).first()
-    if reachable is None:
-        raise HTTPException(status_code=403, detail="无权对该组织生成管控配置包")
+    assert_org_reachable(
+        db,
+        current_user,
+        org_id,
+        action="生成管控配置包",
+        subtree_resolver=_get_org_subtree,
+    )
 
 
 @router.post("/generate")
@@ -110,8 +139,16 @@ def generate_control_package(
     system_config_data = {}
     if body.include_system_config:
         from app.models.system_config import SystemConfig
-        configs = db.query(SystemConfig).all()
-        system_config_data = {c.key: c.value for c in configs}
+        # 只导出白名单键（原实现 db.query(SystemConfig).all() 全量外泄，
+        # 含加密盐值等安全配置）
+        configs = (
+            db.query(SystemConfig)
+            .filter(SystemConfig.key.in_(sorted(CONTROL_PACKAGE_CONFIG_KEYS)))
+            .all()
+        )
+        system_config_data = {
+            c.key: c.value for c in configs if c.key in CONTROL_PACKAGE_CONFIG_KEYS
+        }
 
     # 4. 构建 manifest
     now = datetime.now(timezone.utc).isoformat()
@@ -221,6 +258,41 @@ async def import_control_package_preview(
         return ImportPreviewResponse(valid=False, error="JSON解析失败：清单文件格式无效")
 
 
+def _apply_module_policies(db: Session, policies, org_id: int, current_user: User) -> int:
+    """把管控包中的模块策略写入目标组织，返回写入条数。"""
+    applied = 0
+    for item in policies:
+        existing = db.query(OrgModulePolicy).filter(
+            OrgModulePolicy.organization_id == org_id,
+            OrgModulePolicy.module_key == item["module_key"],
+        ).first()
+        if existing:
+            existing.visibility = item["visibility"]
+            existing.edit_mode = item["edit_mode"]
+        else:
+            db.add(OrgModulePolicy(
+                organization_id=org_id,
+                module_key=item["module_key"],
+                visibility=item["visibility"],
+                edit_mode=item["edit_mode"],
+                created_by=current_user.id,
+            ))
+        applied += 1
+    return applied
+
+
+def _resolve_package_target_org(db: Session, manifest: dict, current_user: User) -> int:
+    """解析并校验管控包的目标组织（来自不受信上传清单）。
+
+    缺校验会让编辑过的包把策略写到任意其它组织（跨组织写）。
+    """
+    org_id = manifest.get("target_organization_id")
+    if not isinstance(org_id, int) or isinstance(org_id, bool) or org_id <= 0:
+        raise HTTPException(status_code=400, detail="无效的管控包：target_organization_id 非法")
+    _assert_org_reachable(db, current_user, org_id)
+    return org_id
+
+
 @router.post("/import")
 async def import_control_package(
     file: UploadFile = File(...),
@@ -252,31 +324,22 @@ async def import_control_package(
             applied_policies = 0
             if "module_policy.json" in names:
                 policies = json.loads(read_zip_member(zf, "module_policy.json"))
-                org_id = manifest.get("target_organization_id")
-                for item in policies:
-                    existing = db.query(OrgModulePolicy).filter(
-                        OrgModulePolicy.organization_id == org_id,
-                        OrgModulePolicy.module_key == item["module_key"],
-                    ).first()
-                    if existing:
-                        existing.visibility = item["visibility"]
-                        existing.edit_mode = item["edit_mode"]
-                    else:
-                        db.add(OrgModulePolicy(
-                            organization_id=org_id,
-                            module_key=item["module_key"],
-                            visibility=item["visibility"],
-                            edit_mode=item["edit_mode"],
-                            created_by=current_user.id,
-                        ))
-                    applied_policies += 1
+                org_id = _resolve_package_target_org(db, manifest, current_user)
+                applied_policies = _apply_module_policies(db, policies, org_id, current_user)
 
-            # 导入系统配置
+            # 导入系统配置（仅白名单键；包可能被篡改，非白名单键一律跳过）
             applied_configs = 0
+            skipped_configs: list = []
             if "system_config.json" in names:
                 from app.models.system_config import SystemConfig
                 configs = json.loads(read_zip_member(zf, "system_config.json"))
+                if not isinstance(configs, dict):
+                    raise HTTPException(status_code=400, detail="无效的管控包：system_config.json 必须是对象")
                 for key, value in configs.items():
+                    if key not in CONTROL_PACKAGE_CONFIG_KEYS:
+                        skipped_configs.append(key)
+                        logger.warning("管控包跳过非白名单配置键: %s", key)
+                        continue
                     existing = db.query(SystemConfig).filter(SystemConfig.key == key).first()
                     if existing:
                         existing.value = str(value)
@@ -300,7 +363,8 @@ async def import_control_package(
     try:
         write_work_log(
             db, "control_package", "import", 0,
-            f"导入管控配置包 hash={content_hash[:16]} policies={applied_policies} configs={applied_configs}",
+            f"导入管控配置包 hash={content_hash[:16]} policies={applied_policies} "
+            f"configs={applied_configs} skipped={len(skipped_configs)}",
             user_id=current_user.id,
             username=getattr(current_user, "username", ""),
         )
@@ -311,6 +375,8 @@ async def import_control_package(
         data={
             "applied_policies": applied_policies,
             "applied_configs": applied_configs,
+            # 被白名单拒绝的键回传，便于审计"包被篡改/版本过旧"
+            "skipped_configs": skipped_configs,
             "package_hash": content_hash,
         },
         message="管控配置包导入成功",

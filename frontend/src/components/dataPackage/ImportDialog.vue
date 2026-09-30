@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { importDataPackage } from '@/api/dataPackage'
 
@@ -59,6 +59,18 @@ const uploadRef = ref()
 const fileList = ref<any[]>([])
 const selectedFile = ref<File | null>(null)
 const submitting = ref(false)
+
+// 关闭（取消/右上角关闭/导入成功）即清空已选文件：
+// 否则下次打开仍带着上一次的文件，"导入"按钮直接可用，极易重复导入同一份数据。
+watch(
+  () => props.modelValue,
+  (visible) => {
+    if (!visible) {
+      selectedFile.value = null
+      fileList.value = []
+    }
+  }
+)
 
 function handleFileChange(file: any) {
   selectedFile.value = file.raw || null

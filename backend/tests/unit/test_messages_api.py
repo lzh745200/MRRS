@@ -98,7 +98,8 @@ class TestGetMessages:
         assert kwargs["message_type"] == "approval"
         assert kwargs["is_read"] is True
         assert kwargs["start_date"] == datetime(2026, 7, 1)
-        assert kwargs["end_date"] == datetime(2026, 7, 24)
+        # 结束日按当日末刻（深审 LIVE：原为 00:00:00，丢结束日当天消息）
+        assert kwargs["end_date"] == datetime(2026, 7, 24, 23, 59, 59, 999999)
         assert kwargs["page"] == 2 and kwargs["page_size"] == 5
 
     @pytest.mark.parametrize(
@@ -124,6 +125,33 @@ class TestGetMessages:
         resp = authed_client.get(f"/api/v1/messages?start_date={raw}")
         assert resp.status_code == 200
         assert msg_service.get_messages.call_args.kwargs["start_date"] == expected
+
+    def _kwargs(self, authed_client, msg_service, query):
+        msg_service.get_messages.return_value = {
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "page_size": 20,
+            "total_pages": 0,
+        }
+        resp = authed_client.get(f"/api/v1/messages?{query}")
+        assert resp.status_code == 200
+        return msg_service.get_messages.call_args.kwargs
+
+    def test_end_date_covers_whole_day(self, authed_client, msg_service):
+        """深审 LIVE：end_date=YYYY-MM-DD 曾解析成当日 00:00:00，丢当天消息。"""
+        kwargs = self._kwargs(authed_client, msg_service, "end_date=2026-07-24")
+        assert kwargs["end_date"] == datetime(2026, 7, 24, 23, 59, 59, 999999)
+
+    def test_start_date_keeps_midnight(self, authed_client, msg_service):
+        """起始日仍是 00:00:00（包含当天首条）。"""
+        kwargs = self._kwargs(authed_client, msg_service, "start_date=2026-07-24")
+        assert kwargs["start_date"] == datetime(2026, 7, 24)
+
+    def test_end_date_with_explicit_time_untouched(self, authed_client, msg_service):
+        """带时分秒的 end_date 不被改写（用户显式指定的边界优先）。"""
+        kwargs = self._kwargs(authed_client, msg_service, "end_date=2026-07-24T10:20:30")
+        assert kwargs["end_date"] == datetime(2026, 7, 24, 10, 20, 30)
 
     def test_list_page_validation(self, authed_client):
         resp = authed_client.get("/api/v1/messages?page=0")

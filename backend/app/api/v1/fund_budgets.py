@@ -6,8 +6,11 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import func as sa_func
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
+import json as _json
 import os
 
 from app.core.config import settings
@@ -20,6 +23,7 @@ from app.models.fund_budget import FundBudget, FundTransaction, check_budget_ale
 from app.core.money import MoneyField
 from app.api.v1.deps import require_funds_operator_role as _require_manager
 from app.core.transaction import safe_commit
+from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一数据域入口
 from app.services.work_log_service import write_work_log
 from app.utils.helpers import BUDGET_MONEY_FIELDS, quantize_money, quantize_money_fields
 
@@ -60,6 +64,8 @@ class BudgetResponse(BaseModel):
     organization_id: Optional[int] = None
     description: Optional[str] = None
     remarks: Optional[str] = None
+    # 附件单独出参（remarks 列内保留键存储，见 _decode_remarks）
+    attachments: Optional[List[dict]] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -108,6 +114,46 @@ class TransactionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ==================== 数据域守卫 ====================
+
+
+def _get_budget_or_404(db: Session, budget_id: int, current_user) -> FundBudget:
+    """按数据域取预算；不可见即 404（不泄露记录是否存在）。
+
+    深审 LIVE：update/delete/附件端点此前只做 _require_manager（角色）校验，
+    再按裸 id 取记录 → 任意管理角色可改删他组织预算并解析其附件清单。
+    """
+    budget = scoped_filter(
+        db.query(FundBudget).filter(FundBudget.id == budget_id), FundBudget, current_user
+    ).first()
+    if not budget:
+        raise HTTPException(status_code=404, detail="预算不存在")
+    return budget
+
+
+def _get_transaction_or_404(db: Session, transaction_id: int, current_user) -> FundTransaction:
+    """按数据域取使用明细；不可见即 404（同预算守卫，深审 LIVE）。"""
+    tx = scoped_filter(
+        db.query(FundTransaction).filter(FundTransaction.id == transaction_id),
+        FundTransaction,
+        current_user,
+    ).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="明细不存在")
+    return tx
+
+
+def _budget_to_response(budget) -> dict:
+    """预算响应体：备注只出用户文本，附件单独出列表。"""
+    data = budget.to_dict()
+    data["remaining_amount"] = budget.remaining_amount
+    data["execution_rate"] = budget.execution_rate
+    decoded = _decode_remarks(getattr(budget, "remarks", None))
+    data["remarks"] = decoded["text"]
+    data["attachments"] = decoded["attachments"]
+    return data
+
+
 # ==================== 预算 API ====================
 
 
@@ -133,9 +179,7 @@ async def get_budgets(
 
     result = []
     for b in budgets:
-        data = b.to_dict()
-        data["remaining_amount"] = b.remaining_amount
-        data["execution_rate"] = b.execution_rate
+        data = _budget_to_response(b)
         data["used_amount"] = float(b.executed_amount or 0)
         data["budget"] = float(b.budget_amount or 0)
         data["used"] = float(b.executed_amount or 0)
@@ -166,10 +210,7 @@ async def create_budget(
     safe_commit(db)
     db.refresh(budget)
 
-    resp = budget.to_dict()
-    resp["remaining_amount"] = budget.remaining_amount
-    resp["execution_rate"] = budget.execution_rate
-    return resp
+    return _budget_to_response(budget)
 
 
 @router.put("/{budget_id}", response_model=BudgetResponse)
@@ -181,9 +222,7 @@ async def update_budget(
 ):
     """更新预算（仅管理角色）"""
     _require_manager(current_user)
-    budget = db.query(FundBudget).filter(FundBudget.id == budget_id).first()
-    if not budget:
-        raise HTTPException(status_code=404, detail="预算不存在")
+    budget = _get_budget_or_404(db, budget_id, current_user)
 
     update_data = data.model_dump(exclude_unset=True)
     # used_amount（前端字段）映射到 executed_amount
@@ -193,15 +232,18 @@ async def update_budget(
             update_data["executed_amount"] = used
     quantize_money_fields(update_data, BUDGET_MONEY_FIELDS)
 
+    # 备注与附件分离：PUT 只改用户备注文本，绝不摧毁已有附件清单（深审 LIVE）
+    if "remarks" in update_data:
+        update_data["remarks"] = _encode_remarks(
+            update_data["remarks"], _get_attachments(budget)
+        )
+
     for key, value in update_data.items():
         setattr(budget, key, value)
     safe_commit(db)
     db.refresh(budget)
 
-    resp = budget.to_dict()
-    resp["remaining_amount"] = budget.remaining_amount
-    resp["execution_rate"] = budget.execution_rate
-    return resp
+    return _budget_to_response(budget)
 
 
 @router.delete("/{budget_id}")
@@ -212,9 +254,7 @@ async def delete_budget(
 ):
     """删除预算（仅管理角色）"""
     _require_manager(current_user)
-    budget = db.query(FundBudget).filter(FundBudget.id == budget_id).first()
-    if not budget:
-        raise HTTPException(status_code=404, detail="预算不存在")
+    budget = _get_budget_or_404(db, budget_id, current_user)
     db.delete(budget)
     safe_commit(db)
     return success_response(message="删除成功")
@@ -342,16 +382,7 @@ async def create_transaction(
     if data.budget_id:
         budget = db.query(FundBudget).filter(FundBudget.id == data.budget_id).first()
         if budget:
-            projected = quantize_money(
-                float(budget.executed_amount or 0) + float(tx_amount)
-            )
-            budget_total = float(budget.budget_amount or 0) or None
-            if budget_total and projected > budget_total + 1e-9:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"预算执行将达 {projected}/{budget_total}（超 100%），禁止核销；请先调整预算",
-                )
-            budget.executed_amount = projected
+            _apply_budget_execution(db, budget, float(tx_amount))
 
     # 如果关联了 Fund，自动更新 Fund.used_amount 和 remaining_amount
     if data.fund_id:
@@ -384,9 +415,7 @@ async def delete_transaction(
 ):
     """删除经费使用明细（仅管理角色）"""
     _require_manager(current_user)
-    tx = db.query(FundTransaction).filter(FundTransaction.id == transaction_id).first()
-    if not tx:
-        raise HTTPException(status_code=404, detail="明细不存在")
+    tx = _get_transaction_or_404(db, transaction_id, current_user)
 
     # 如果关联了预算，减回已执行金额
     if tx.budget_id:
@@ -418,9 +447,7 @@ async def upload_budget_attachment(
 ):
     """上传预算相关的附件资料（批复文件/凭证/执行资料等）"""
     _require_manager(current_user)
-    budget = db.query(FundBudget).filter(FundBudget.id == budget_id).first()
-    if not budget:
-        raise HTTPException(status_code=404, detail="预算不存在")
+    budget = _get_budget_or_404(db, budget_id, current_user)
 
     from app.utils.upload_helper import save_upload_file
 
@@ -454,18 +481,90 @@ async def list_budget_attachments(
 ):
     """获取预算上传的附件记录列表"""
     _require_manager(current_user)
-    budget = db.query(FundBudget).filter(FundBudget.id == budget_id).first()
-    if not budget:
-        raise HTTPException(status_code=404, detail="预算不存在")
-    return ok_list(items=_get_attachments(budget), total=len(_get_attachments(budget)))
+    budget = _get_budget_or_404(db, budget_id, current_user)
+    attachments = _get_attachments(budget)
+    return ok_list(items=attachments, total=len(attachments))
+
+
+def _apply_budget_execution(db: Session, budget, amount: float) -> None:
+    """原子累加预算已执行金额；超过 100% 上限时 400。
+
+    深审 LIVE：原实现是"先读 executed_amount → 内存里算 projected → 比较 → 赋值"，
+    两个并发请求都能在各自读到旧值后通过检查并写回，100% 上限可被突破
+    （条件竞争）。这里把"上限判断 + 累加"合并进同一条 UPDATE 的 WHERE 子句，
+    由数据库对写事务串行化，读改写窗口消失。
+    """
+    budget_total = float(budget.budget_amount or 0)
+    executed_col = sa_func.coalesce(FundBudget.executed_amount, 0)
+    stmt = (
+        sa_update(FundBudget)
+        .where(FundBudget.id == budget.id)
+        .values(executed_amount=executed_col + amount)
+        # fetch：更新后按 WHERE 条件回查同步会话内实例，避免内存值过期
+        # 造成后续读取到旧执行额
+        .execution_options(synchronize_session="fetch")
+    )
+    if budget_total > 0:
+        # 仅当累加后仍在 100% 上限内才命中行；命中 0 行即代表会突破上限
+        stmt = stmt.where(executed_col + amount <= budget_total + 1e-9)
+
+    result = db.execute(stmt)
+    if result.rowcount == 0:
+        projected = quantize_money(float(budget.executed_amount or 0) + amount)
+        raise HTTPException(
+            status_code=400,
+            detail=f"预算执行将达 {projected}/{budget_total}（超 100%），禁止核销；请先调整预算",
+        )
+
+
+# 预算附件在 remarks 列内的保留键。历史缺陷（深审 LIVE）：附件列表整段 JSON 写进
+# 用户可见的 remarks —— ① PUT 预算写普通文本备注即摧毁全部附件；
+# ② 备注里的附件 JSON 会原样出现在前端"备注"框。
+# FundBudget 无独立附件列（本期不改模型/迁移），故在同一列内做命名空间隔离，
+# 并兼容读取历史"裸数组"形态，保证老数据不丢。
+_BUDGET_ATTACHMENT_KEY = "__budget_attachments__"
+
+
+def _filter_attachment_entries(value) -> list:
+    """仅保留形如 {"url": ...} 的字典条目（脏数据/注入串一律丢弃）。"""
+    if not isinstance(value, list):
+        return []
+    return [a for a in value if isinstance(a, dict) and "url" in a]
+
+
+def _decode_remarks(raw) -> dict:
+    """把 remarks 原文解码为 {"text": 用户备注文本|None, "attachments": [...]}。"""
+    if not raw:
+        return {"text": None, "attachments": []}
+    try:
+        parsed = _json.loads(raw)
+    except (ValueError, TypeError):
+        # 普通文本备注（最常见形态）
+        return {"text": raw, "attachments": []}
+    if isinstance(parsed, list):
+        # 历史裸数组：整列都是附件记录，用户备注已被覆盖、不可恢复
+        return {"text": None, "attachments": _filter_attachment_entries(parsed)}
+    if isinstance(parsed, dict) and _BUDGET_ATTACHMENT_KEY in parsed:
+        return {
+            "text": parsed.get("text"),
+            "attachments": _filter_attachment_entries(parsed.get(_BUDGET_ATTACHMENT_KEY)),
+        }
+    # 其它 JSON 形态（对象/字符串/数字）按普通文本处理
+    return {"text": raw, "attachments": []}
+
+
+def _encode_remarks(text, attachments: list) -> Optional[str]:
+    """编码备注列：无附件时存纯文本，有附件时存保留键信封。"""
+    if not attachments:
+        return text
+    return _json.dumps({_BUDGET_ATTACHMENT_KEY: attachments, "text": text}, ensure_ascii=False)
 
 
 def _record_attachment(budget, url: str, file_name: str, current_user, db) -> None:
-    """将附件记录追加到预算备注（JSON 数组）"""
-    import json as _json
-
-    existing = _get_attachments(budget)
-    existing.append(
+    """追加一条附件记录（不触碰用户备注文本）并落库"""
+    decoded = _decode_remarks(getattr(budget, "remarks", None))
+    attachments = decoded["attachments"]
+    attachments.append(
         {
             "url": url,
             "file_name": file_name,
@@ -473,21 +572,10 @@ def _record_attachment(budget, url: str, file_name: str, current_user, db) -> No
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
     )
-    setattr(budget, "remarks", _json.dumps(existing, ensure_ascii=False) if existing else None)
+    budget.remarks = _encode_remarks(decoded["text"], attachments)
     safe_commit(db)
 
 
 def _get_attachments(budget) -> list:
-    """解析预算备注中的附件记录（JSON 数组）"""
-    import json as _json
-
-    remarks = getattr(budget, "remarks", None)
-    if not remarks:
-        return []
-    try:
-        parsed = _json.loads(remarks)
-        if isinstance(parsed, list):
-            return [a for a in parsed if isinstance(a, dict) and "url" in a]
-    except (ValueError, TypeError):
-        pass
-    return []
+    """解析预算附件记录（兼容历史裸数组与新的保留键信封）"""
+    return _decode_remarks(getattr(budget, "remarks", None))["attachments"]

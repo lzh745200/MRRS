@@ -64,6 +64,14 @@ class TestInitUpload:
         assert data["status"] == "uploading"
         svc.create_session.assert_called_once()
 
+    def test_init_value_error_returns_400(self, client):
+        """深审 LIVE：服务层超限抛 ValueError，未捕获时冒泡为 500。"""
+        c, svc = client
+        svc.create_session.side_effect = ValueError("File size exceeds maximum limit of 2.0GB")
+        resp = c.post(f"{BASE}/init", json={"file_name": "big.zip", "file_size": 3 * 1024 * 1024 * 1024})
+        assert resp.status_code == 400
+        assert "2.0GB" in resp.json()["detail"]
+
 
 # ==================== /chunk ====================
 
@@ -95,6 +103,15 @@ class TestUploadChunk:
         svc.upload_chunk = AsyncMock(return_value=None)
         resp = c.post(f"{BASE}/chunk/sess-1/0", files={"file": ("c0", b"data")})
         assert resp.status_code == 400
+
+    def test_upload_value_error_400(self, client):
+        """会话过期/序号越界/大小或哈希不匹配 → 400（原为 500）。"""
+        c, svc = client
+        svc.get_session.return_value = _session()
+        svc.upload_chunk = AsyncMock(side_effect=ValueError("Session has expired"))
+        resp = c.post(f"{BASE}/chunk/sess-1/0", files={"file": ("c0", b"data")})
+        assert resp.status_code == 400
+        assert "expired" in resp.json()["detail"]
 
 
 # ==================== /progress ====================
@@ -149,6 +166,15 @@ class TestMergeChunks:
         svc.get_session.return_value = _session()
         svc.merge_chunks = AsyncMock(return_value=None)
         assert c.post(f"{BASE}/merge/sess-1").status_code == 400
+
+    def test_merge_value_error_400(self, client):
+        """分片未传完 / 合并后大小或哈希不匹配 → 400（原为 500）。"""
+        c, svc = client
+        svc.get_session.return_value = _session()
+        svc.merge_chunks = AsyncMock(side_effect=ValueError("Upload not complete, missing chunks: [1]"))
+        resp = c.post(f"{BASE}/merge/sess-1")
+        assert resp.status_code == 400
+        assert "missing chunks" in resp.json()["detail"]
 
 
 # ==================== DELETE ====================

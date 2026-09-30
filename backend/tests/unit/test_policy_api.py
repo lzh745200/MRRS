@@ -66,6 +66,17 @@ def sample_category():
     return c
 
 
+@pytest.fixture
+def upload_root(monkeypatch):
+    """把上传根指向临时目录，与用例的落盘位置保持一致。
+
+    P0 路径越界修复后，附件只服务 settings.UPLOAD_DIR 之内的文件：
+    越界 file_path（含历史「任意绝对路径」数据）一律 400，不再交给 FileResponse。
+    """
+    monkeypatch.setattr("app.core.config.settings.UPLOAD_DIR", tempfile.gettempdir())
+    return tempfile.gettempdir()
+
+
 def _setup_client(client, mock_db, user):
     from app.core.database import get_db
     from app.core.security import get_current_user
@@ -439,9 +450,9 @@ class TestPolicyAPI:
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
 
-    def test_preview_policy_pdf(self, client, mock_db, admin_user, sample_policy):
+    def test_preview_policy_pdf(self, client, mock_db, admin_user, sample_policy, upload_root):
         _setup_client(client, mock_db, admin_user)
-        sample_policy.file_path = os.path.join(os.path.dirname(__file__), "..", "data", "test.pdf")
+        sample_policy.file_path = os.path.join(upload_root, "policies", "test.pdf")
         sample_policy.file_type = "pdf"
         os.makedirs(os.path.dirname(sample_policy.file_path), exist_ok=True)
         with open(sample_policy.file_path, "w") as f:
@@ -454,12 +465,12 @@ class TestPolicyAPI:
             if os.path.exists(sample_policy.file_path):
                 os.remove(sample_policy.file_path)
 
-    def test_preview_policy_docx_with_mammoth(self, client, mock_db, admin_user, sample_policy):
+    def test_preview_policy_docx_with_mammoth(self, client, mock_db, admin_user, sample_policy, upload_root):
         _setup_client(client, mock_db, admin_user)
         sys.modules["mammoth"] = MagicMock()
         sys.modules["mammoth"].convert_to_html.return_value = MagicMock(value="<p>html</p>")
         try:
-            sample_policy.file_path = os.path.join(tempfile.gettempdir(), "test_policy.docx")
+            sample_policy.file_path = os.path.join(upload_root, "test_policy.docx")
             sample_policy.file_type = "docx"
             with open(sample_policy.file_path, "wb") as f:
                 f.write(b"test")
@@ -472,9 +483,9 @@ class TestPolicyAPI:
             if os.path.exists(sample_policy.file_path):
                 os.remove(sample_policy.file_path)
 
-    def test_preview_policy_docx_no_mammoth(self, client, mock_db, admin_user, sample_policy):
+    def test_preview_policy_docx_no_mammoth(self, client, mock_db, admin_user, sample_policy, upload_root):
         _setup_client(client, mock_db, admin_user)
-        sample_policy.file_path = os.path.join(tempfile.gettempdir(), "test_policy2.docx")
+        sample_policy.file_path = os.path.join(upload_root, "test_policy2.docx")
         sample_policy.file_type = "docx"
         with open(sample_policy.file_path, "wb") as f:
             f.write(b"test")
@@ -493,9 +504,9 @@ class TestPolicyAPI:
             if os.path.exists(sample_policy.file_path):
                 os.remove(sample_policy.file_path)
 
-    def test_preview_policy_other_type(self, client, mock_db, admin_user, sample_policy):
+    def test_preview_policy_other_type(self, client, mock_db, admin_user, sample_policy, upload_root):
         _setup_client(client, mock_db, admin_user)
-        sample_policy.file_path = os.path.join(tempfile.gettempdir(), "test_policy.txt")
+        sample_policy.file_path = os.path.join(upload_root, "test_policy.txt")
         sample_policy.file_type = "txt"
         with open(sample_policy.file_path, "w") as f:
             f.write("test")
@@ -513,9 +524,9 @@ class TestPolicyAPI:
         resp = client.get("/api/v1/policies/999/preview")
         assert resp.status_code == 404
 
-    def test_download_policy_file(self, client, mock_db, admin_user, sample_policy):
+    def test_download_policy_file(self, client, mock_db, admin_user, sample_policy, upload_root):
         _setup_client(client, mock_db, admin_user)
-        sample_policy.file_path = os.path.join(tempfile.gettempdir(), "test_download.pdf")
+        sample_policy.file_path = os.path.join(upload_root, "test_download.pdf")
         with open(sample_policy.file_path, "w") as f:
             f.write("test")
         try:
@@ -532,9 +543,10 @@ class TestPolicyAPI:
         resp = client.get("/api/v1/policies/999/download")
         assert resp.status_code == 404
 
-    def test_download_policy_file_missing_on_disk(self, client, mock_db, admin_user, sample_policy):
+    def test_download_policy_file_missing_on_disk(self, client, mock_db, admin_user, sample_policy, upload_root):
         _setup_client(client, mock_db, admin_user)
-        sample_policy.file_path = "/tmp/nonexistent.pdf"
+        # 目录内但磁盘上不存在 → 404（越界路径为 400，语义不同，另见越界回归用例）
+        sample_policy.file_path = os.path.join(upload_root, "policies", "nonexistent.pdf")
         mock_db.query.return_value.filter.return_value.first.return_value = sample_policy
         resp = client.get("/api/v1/policies/1/download")
         assert resp.status_code == 404

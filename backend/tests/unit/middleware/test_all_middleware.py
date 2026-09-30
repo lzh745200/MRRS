@@ -66,35 +66,50 @@ class TestAuditContext:
 
 
 class TestCacheHeadersMiddleware:
-    @pytest.mark.asyncio
-    async def test_cache_headers_matched(self):
+    def _mw(self, path, *, method="GET", status_code=200, headers=None):
         from app.middleware.cache_headers import CacheHeadersMiddleware
 
-        mock_app = AsyncMock()
         mock_request = MagicMock()
-        mock_request.url.path = "/api/v1/organizations/tree"
+        mock_request.method = method
+        mock_request.url.path = path
         mock_response = MagicMock()
-        mock_response.headers = {}
-        mock_call_next = AsyncMock(return_value=mock_response)
+        mock_response.status_code = status_code
+        mock_response.headers = dict(headers or {})
+        return CacheHeadersMiddleware(AsyncMock()), mock_request, mock_response
 
-        mw = CacheHeadersMiddleware(mock_app)
-        await mw.dispatch(mock_request, mock_call_next)
-        assert mock_response.headers.get("Cache-Control") == "public, max-age=300"
+    @pytest.mark.asyncio
+    async def test_cache_headers_matched(self):
+        mw, req, resp = self._mw("/api/v1/organizations/tree")
+        await mw.dispatch(req, AsyncMock(return_value=resp))
+        assert resp.headers.get("Cache-Control") == "public, max-age=300"
 
     @pytest.mark.asyncio
     async def test_cache_headers_unmatched(self):
-        from app.middleware.cache_headers import CacheHeadersMiddleware
+        mw, req, resp = self._mw("/api/v1/users/me")
+        await mw.dispatch(req, AsyncMock(return_value=resp))
+        assert "Cache-Control" not in resp.headers
 
-        mock_app = AsyncMock()
-        mock_request = MagicMock()
-        mock_request.url.path = "/api/v1/users/me"
-        mock_response = MagicMock()
-        mock_response.headers = {}
-        mock_call_next = AsyncMock(return_value=mock_response)
+    @pytest.mark.asyncio
+    async def test_error_response_not_cached(self):
+        """错误响应绝不加缓存头（否则 401/404/500 会被浏览器 public 缓存）。"""
+        mw, req, resp = self._mw("/api/v1/organizations/tree", status_code=500)
+        await mw.dispatch(req, AsyncMock(return_value=resp))
+        assert "Cache-Control" not in resp.headers
 
-        mw = CacheHeadersMiddleware(mock_app)
-        await mw.dispatch(mock_request, mock_call_next)
-        assert "Cache-Control" not in mock_response.headers
+    @pytest.mark.asyncio
+    async def test_write_request_not_cached(self):
+        mw, req, resp = self._mw("/api/v1/organizations/tree", method="POST")
+        await mw.dispatch(req, AsyncMock(return_value=resp))
+        assert "Cache-Control" not in resp.headers
+
+    @pytest.mark.asyncio
+    async def test_route_explicit_header_respected(self):
+        """路由显式设置的 no-store 不得被中间件覆盖。"""
+        mw, req, resp = self._mw(
+            "/api/v1/organizations/tree", headers={"cache-control": "no-store"}
+        )
+        await mw.dispatch(req, AsyncMock(return_value=resp))
+        assert resp.headers.get("cache-control") == "no-store"
 
 
 class TestCamelToSnakeMiddleware:

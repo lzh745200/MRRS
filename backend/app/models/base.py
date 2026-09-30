@@ -105,6 +105,29 @@ def _bump_sync_version_on_update(mapper, connection, target) -> None:
         target.sync_version = (sv or 0) + 1
 
 
+# ── sync_version 对批量 UPDATE 同样递增 ──
+# ORM 的 before_update 事件只覆盖"加载对象再改属性"的路径；query.update() /
+# update(Model).values(...) 这类 bulk update 直接发 SQL，不触发该事件 ——
+# 这些行 sync_version 不变，增量同步按 sync_version > since 过滤时会漏行
+# （深审 LIVE）。这里在 SQL 层补上自增，保证两条路径语义一致。
+from sqlalchemy.engine import Engine as _Engine  # noqa: E402
+from sqlalchemy.sql.dml import Update as _UpdateStmt  # noqa: E402
+
+
+@_sqla_event.listens_for(_Engine, "before_execute", retval=True)
+def _bump_sync_version_on_bulk_update(conn, clauseelement, multiparams, params, execution_options):
+    """为 bulk UPDATE 补 sync_version 自增（调用方已显式设置时不动）。"""
+    if isinstance(clauseelement, _UpdateStmt):
+        table = getattr(clauseelement, "table", None)
+        if table is not None and "sync_version" in table.c:
+            values = getattr(clauseelement, "_values", None) or {}
+            if "sync_version" not in values:
+                clauseelement = clauseelement.values(
+                    sync_version=table.c.sync_version + 1
+                )
+    return clauseelement, multiparams, params
+
+
 # ── 软删除混入 ──
 class SoftDeleteMixin:
     """为模型添加软删除支持。

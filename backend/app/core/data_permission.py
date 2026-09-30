@@ -321,6 +321,44 @@ def _get_org_subtree(
     return ids, names
 
 
+def assert_org_reachable(
+    db: Session,
+    current_user,
+    org_id: int,
+    *,
+    action: str = "访问",
+    subtree_resolver=None,
+) -> None:
+    """组织可达性守卫（跨组织越权的唯一实现）。
+
+    超管放行；非超管只允许其自身组织子树内的组织。用于所有接受 org_id
+    路径/载荷参数的「上级管理下级」端点，防止部门级 admin 传入其它组织的 id
+    读写对方数据（跨组织越权）。
+
+    Args:
+        db: 数据库会话。
+        current_user: 当前用户对象。
+        org_id: 目标组织 ID。
+        action: 越权时错误信息中的动作描述（如"管理模块策略"）。
+        subtree_resolver: 组织子树解析函数（默认 _get_org_subtree）。
+            保留该参数以便调用方沿用模块级的可 patch 引用。
+
+    Raises:
+        HTTPException: 403 —— 目标组织不在调用者可及范围内。
+    """
+    if is_superuser(current_user):
+        return
+    resolver = subtree_resolver or _get_org_subtree
+    user_org_id = getattr(current_user, "organization_id", None)
+    allowed_org_ids = resolver(db, user_org_id)[0] if user_org_id is not None else []
+    scope = OrgScopeFilter(is_admin=False, org_ids=allowed_org_ids)
+    reachable = scope.filter_by_org_ids(
+        db.query(Organization).filter(Organization.id == org_id), Organization.id
+    ).first()
+    if reachable is None:
+        raise HTTPException(status_code=403, detail=f"无权对该组织{action}")
+
+
 async def get_org_scope(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),

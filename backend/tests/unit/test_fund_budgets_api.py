@@ -237,3 +237,281 @@ class TestThreeLevelAlertThresholds:
 
     def test_below_80_silent(self):
         assert self._alerts_for(50) == []
+
+# ==================== 数据域 + 原子上限（真实 SQLite） ====================
+
+
+@pytest.fixture
+def real_client():
+    """真实 SQLite 会话的客户端：数据域过滤与原子 UPDATE 只有真库才能验证。"""
+    from app.main import app
+    from app.core.database import get_db
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app.models.base import Base
+
+    engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+
+    def _get_db():
+        yield session
+
+    original = app.dependency_overrides.copy()
+    app.dependency_overrides[get_db] = _get_db
+    try:
+        yield TestClient(app, raise_server_exceptions=False), session, app
+    finally:
+        app.dependency_overrides = original
+        session.close()
+        engine.dispose()
+
+
+def _bind_user(app, *, user_id=1, role="admin", is_superuser=False, org_id=1):
+    """绑定当前登录用户（真实数据域判定需要具体的 role/organization_id）。"""
+    from app.core.security import get_current_user
+
+    user = MagicMock()
+    user.id = user_id
+    user.username = f"u{user_id}"
+    user.role = role
+    user.is_superuser = is_superuser
+    user.organization_id = org_id
+    user.full_name = "测试用户"
+    app.dependency_overrides[get_current_user] = lambda: user
+    return user
+
+
+def _seed_budget(session, *, budget_id=1, org_id=1, created_by=99, amount=100, executed=0):
+    from app.models.fund_budget import FundBudget
+
+    budget = FundBudget(
+        id=budget_id,
+        year=2026,
+        category="基建",
+        budget_amount=amount,
+        executed_amount=executed,
+        organization_id=org_id,
+        created_by=created_by,
+        remarks=None,
+    )
+    session.add(budget)
+    session.commit()
+    return budget
+
+
+def _seed_transaction(session, *, tx_id=5, created_by=99, amount=10):
+    from datetime import date as _date
+    from app.models.fund_budget import FundTransaction
+
+    tx = FundTransaction(
+        id=tx_id,
+        amount=amount,
+        purpose="修路",
+        transaction_date=_date(2026, 1, 1),
+        created_by=created_by,
+    )
+    session.add(tx)
+    session.commit()
+    return tx
+
+
+class TestBudgetDataScope:
+    """深审 LIVE：预算改删/明细删除只校验角色，不校验数据域（IDOR）。"""
+
+    def test_update_other_org_budget_404(self, real_client):
+        from app.models.fund_budget import FundBudget
+
+        client, session, app = real_client
+        _seed_budget(session, org_id=1)
+        _bind_user(app, role="admin", is_superuser=False, org_id=2)
+        resp = client.put("/api/v1/fund-budgets/1", json={"budget_amount": 1})
+        assert resp.status_code == 404
+        session.expire_all()
+        assert float(session.get(FundBudget, 1).budget_amount) == 100.0
+
+    def test_update_same_org_ok(self, real_client):
+        from app.models.fund_budget import FundBudget
+
+        client, session, app = real_client
+        _seed_budget(session, org_id=1)
+        _bind_user(app, role="admin", is_superuser=False, org_id=1)
+        resp = client.put("/api/v1/fund-budgets/1", json={"budget_amount": 20})
+        assert resp.status_code == 200
+        session.expire_all()
+        assert float(session.get(FundBudget, 1).budget_amount) == 20.0
+
+    def test_delete_other_org_budget_404(self, real_client):
+        from app.models.fund_budget import FundBudget
+
+        client, session, app = real_client
+        _seed_budget(session, org_id=1)
+        _bind_user(app, role="admin", is_superuser=False, org_id=2)
+        resp = client.delete("/api/v1/fund-budgets/1")
+        assert resp.status_code == 404
+        assert session.get(FundBudget, 1) is not None
+
+    def test_upload_attachment_other_org_budget_404(self, real_client):
+        client, session, app = real_client
+        _seed_budget(session, org_id=1)
+        _bind_user(app, role="admin", is_superuser=False, org_id=2)
+        resp = client.post(
+            "/api/v1/fund-budgets/1/attachments",
+            files={"file": ("a.pdf", b"%PDF", "application/pdf")},
+        )
+        assert resp.status_code == 404
+
+    def test_list_attachments_other_org_budget_404(self, real_client):
+        client, session, app = real_client
+        _seed_budget(session, org_id=1)
+        _bind_user(app, role="admin", is_superuser=False, org_id=2)
+        resp = client.get("/api/v1/fund-budgets/1/attachments")
+        assert resp.status_code == 404
+
+    def test_attachment_and_remark_roundtrip_real_db(self, real_client):
+        """真库往返：上传附件 → 列表 → PUT 文本备注，附件不丢、备注不出 JSON。"""
+        import json as _json
+        from unittest.mock import patch as _patch
+
+        from app.utils import upload_helper
+        from app.models.fund_budget import FundBudget
+
+        client, session, app = real_client
+        _seed_budget(session, org_id=1)
+        _bind_user(app, user_id=1, role="admin", is_superuser=True, org_id=1)
+
+        async def _fake_save(file=None, sub_dir=None, **kwargs):
+            return {
+                "file_path": "C:/uploads/x/a.pdf",
+                "file_name": "a.pdf",
+                "file_size": 3,
+                "file_type": "application/pdf",
+            }
+
+        with _patch.object(upload_helper, "save_upload_file", _fake_save), \
+                _patch("app.api.v1.fund_budgets.settings.UPLOAD_DIR", "C:/uploads"):
+            up = client.post(
+                "/api/v1/fund-budgets/1/attachments",
+                files={"file": ("a.pdf", b"%PDF", "application/pdf")},
+            )
+        assert up.status_code == 200
+
+        listed = client.get("/api/v1/fund-budgets/1/attachments")
+        assert listed.status_code == 200
+        assert listed.json()["data"]["total"] == 1
+
+        upd = client.put("/api/v1/fund-budgets/1", json={"remarks": "用户备注"})
+        assert upd.status_code == 200
+        assert upd.json()["remarks"] == "用户备注"
+        assert upd.json()["attachments"][0]["file_name"] == "a.pdf"
+
+        session.expire_all()
+        envelope = _json.loads(session.get(FundBudget, 1).remarks)
+        assert envelope["text"] == "用户备注"
+        assert envelope["__budget_attachments__"][0]["url"].endswith("x/a.pdf")
+
+    def test_delete_other_user_transaction_404(self, real_client):
+        from app.models.fund_budget import FundTransaction
+
+        client, session, app = real_client
+        _seed_transaction(session, created_by=99)
+        _bind_user(app, user_id=1, role="admin", is_superuser=False, org_id=1)
+        resp = client.delete("/api/v1/fund-budgets/transactions/5")
+        assert resp.status_code == 404
+        assert session.get(FundTransaction, 5) is not None
+
+    def test_delete_own_transaction_ok(self, real_client):
+        from app.models.fund_budget import FundTransaction
+
+        client, session, app = real_client
+        _seed_transaction(session, created_by=7)
+        _bind_user(app, user_id=7, role="admin", is_superuser=False, org_id=1)
+        resp = client.delete("/api/v1/fund-budgets/transactions/5")
+        assert resp.status_code == 200
+        assert session.get(FundTransaction, 5) is None
+
+
+class TestBudgetExecutionAtomic:
+    """深审 LIVE：读改写窗口使并发请求可突破 100% 核销上限（改条件更新）。"""
+
+    def test_over_cap_rejected_and_unchanged(self, real_client):
+        from fastapi import HTTPException
+        from app.api.v1.fund_budgets import _apply_budget_execution
+        from app.models.fund_budget import FundBudget
+
+        _, session, _ = real_client
+        budget = _seed_budget(session, amount=100, executed=90)
+        with pytest.raises(HTTPException) as exc:
+            _apply_budget_execution(session, budget, 20)
+        assert exc.value.status_code == 400
+        session.expire_all()
+        assert float(session.get(FundBudget, 1).executed_amount) == 90.0
+
+    def test_stale_in_memory_value_cannot_bypass_cap(self, real_client):
+        """并发写入后本会话仍持有旧值：上限判定必须基于库内当前值。"""
+        from sqlalchemy import text
+        from fastapi import HTTPException
+        from app.api.v1.fund_budgets import _apply_budget_execution
+        from app.models.fund_budget import FundBudget
+
+        _, session, _ = real_client
+        budget = _seed_budget(session, amount=100, executed=90)
+        assert float(budget.executed_amount) == 90.0  # 先加载进会话，制造"旧值"
+        session.execute(text("UPDATE fund_budgets SET executed_amount = 95 WHERE id = 1"))
+        assert float(budget.executed_amount) == 90.0
+        with pytest.raises(HTTPException) as exc:
+            _apply_budget_execution(session, budget, 10)
+        assert exc.value.status_code == 400
+        session.expire_all()
+        assert float(session.get(FundBudget, 1).executed_amount) == 95.0
+
+    def test_under_cap_accumulates(self, real_client):
+        from app.api.v1.fund_budgets import _apply_budget_execution
+        from app.models.fund_budget import FundBudget
+
+        _, session, _ = real_client
+        budget = _seed_budget(session, amount=100, executed=90)
+        _apply_budget_execution(session, budget, 10)
+        session.expire_all()
+        assert float(session.get(FundBudget, 1).executed_amount) == 100.0
+
+    def test_create_transaction_endpoint_over_cap_400(self, real_client):
+        from app.models.fund_budget import FundBudget
+
+        client, session, app = real_client
+        _seed_budget(session, amount=100, executed=95)
+        _bind_user(app, user_id=1, role="admin", is_superuser=True, org_id=1)
+        resp = client.post(
+            "/api/v1/fund-budgets/transactions",
+            json={
+                "amount": 10,
+                "purpose": "超限核销",
+                "transaction_date": "2026-01-02",
+                "budget_id": 1,
+            },
+        )
+        assert resp.status_code == 400
+        session.expire_all()
+        assert float(session.get(FundBudget, 1).executed_amount) == 95.0
+
+    def test_create_transaction_endpoint_accumulates(self, real_client):
+        from app.models.fund_budget import FundBudget
+
+        client, session, app = real_client
+        _seed_budget(session, amount=100, executed=95)
+        _bind_user(app, user_id=1, role="admin", is_superuser=True, org_id=1)
+        resp = client.post(
+            "/api/v1/fund-budgets/transactions",
+            json={
+                "amount": 5,
+                "purpose": "正常核销",
+                "transaction_date": "2026-01-02",
+                "budget_id": 1,
+            },
+        )
+        assert resp.status_code == 200
+        session.expire_all()
+        assert float(session.get(FundBudget, 1).executed_amount) == 100.0

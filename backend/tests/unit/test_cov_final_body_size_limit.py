@@ -1,4 +1,4 @@
-"""覆盖 app.middleware.body_size_limit 缺口：非法 content-length 头的容错放行。"""
+"""覆盖 app.middleware.body_size_limit：非法 content-length 头 fail-closed。"""
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -6,8 +6,8 @@ from app.middleware.body_size_limit import BodySizeLimitMiddleware
 
 
 class TestInvalidContentLength:
-    async def test_non_numeric_content_length_is_ignored(self):
-        # content-length 无法解析为 int → except (ValueError, TypeError) 放行（行 75-76）
+    async def test_non_numeric_content_length_fails_closed(self):
+        # OCR-2026-09-17：content-length 无法解析 → 不再静默放行，返回 400
         mw = BodySizeLimitMiddleware(app=MagicMock(), max_body_size=1024)
         request = SimpleNamespace(
             method="POST",
@@ -18,8 +18,8 @@ class TestInvalidContentLength:
 
         result = await mw.dispatch(request, call_next)
 
-        assert result == "response-ok"
-        call_next.assert_awaited_once_with(request)
+        assert result.status_code == 400
+        call_next.assert_not_awaited()
 
     async def test_oversize_content_length_returns_413(self):
         # 对照组：超限但合法的 content-length 仍返回 413

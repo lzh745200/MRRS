@@ -180,7 +180,9 @@ class TestAnalyticsService:
         db.execute.side_effect = RuntimeError("fail")
         svc = AnalyticsService(db)
         result = svc.get_village_analysis(db)
-        assert result == {}
+        # 失败必须可见：不再静默返回空结构，而是带 error 标记
+        assert result["error"].startswith("获取帮扶村分析数据失败")
+        assert "investment" not in result
 
     # ════════════════════════════════════════════
     #  get_funding_trends
@@ -224,7 +226,9 @@ class TestAnalyticsService:
         db.execute.side_effect = RuntimeError("trends fail")
         svc = AnalyticsService(db)
         result = svc.get_funding_trends(db)
-        assert result == {"trends": [], "start_year": 0, "end_year": 0}
+        assert result["trends"] == []
+        assert result["start_year"] == 0 and result["end_year"] == 0
+        assert result["error"].startswith("获取资金趋势失败")
 
     # ════════════════════════════════════════════
     #  get_performance_metrics
@@ -279,7 +283,7 @@ class TestAnalyticsService:
         db.execute.side_effect = RuntimeError("perf fail")
         svc = AnalyticsService(db)
         result = svc.get_performance_metrics(db)
-        assert result == {}
+        assert result["error"].startswith("获取绩效指标失败")
 
     # ════════════════════════════════════════════
     #  get_comparison_analysis
@@ -324,7 +328,9 @@ class TestAnalyticsService:
         db.execute.side_effect = RuntimeError("compare fail")
         svc = AnalyticsService(db)
         result = svc.get_comparison_analysis(db, "province", None)
-        assert result == {"comparison": [], "compare_type": "province"}
+        assert result["comparison"] == []
+        assert result["compare_type"] == "province"
+        assert result["error"].startswith("获取对比分析失败")
 
     # ════════════════════════════════════════════
     #  generate_report_data
@@ -372,7 +378,7 @@ class TestAnalyticsService:
         svc = AnalyticsService(db)
         svc.get_dashboard_overview = MagicMock(side_effect=RuntimeError("gen fail"))
         result = svc.generate_report_data(db, "comprehensive")
-        assert result == {}
+        assert result["error"].startswith("生成报表数据失败")
 
     # ════════════════════════════════════════════
     #  get_summary_statistics
@@ -692,3 +698,142 @@ class TestAnalyticsService:
         svc = AnalyticsService(db)
         result = svc.export_data(db, "pdf", {"some": "data"})
         assert result == b""
+
+
+class TestAnalyticsRawSqlAgainstRealSchema:
+    """真实库回归：裸 SQL 必须命中真实表名（历史复数表名 → 恒空结果）。
+
+    用 real_db_session（内存 SQLite + Base.metadata.create_all）建真实表结构，
+    插入数据后断言查询确实返回了这些数据；表名写错时这些用例会直接抛
+    OperationalError（no such table）而失败。
+    """
+
+    @staticmethod
+    def _seed_village(db, *, funds=(500.0, 200.0), pop_year=2024):
+        from app.models.supported_village import (
+            InfrastructureImprovement,
+            SupportedVillage,
+            VillageIncome,
+            VillagePopulation,
+        )
+
+        village = SupportedVillage(village_name="真实表名村", province="贵州省")
+        db.add(village)
+        db.flush()
+
+        db.add(VillagePopulation(
+            supported_village_id=village.id, year=pop_year,
+            total_population=1000, resident_population=600,
+        ))
+        db.add(VillageIncome(
+            supported_village_id=village.id, year=pop_year,
+            per_capita_income=1.5, county_per_capita_income=1.2,
+        ))
+        db.add(InfrastructureImprovement(
+            supported_village_id=village.id, year=pop_year,
+            investment=88.0, road_km=2.0, housing_renovation=30,
+            cultural_plaza=4, library_cafe=6,
+        ))
+        village.transition_fund_military_total = funds[0]
+        village.transition_fund_local_total = funds[1]
+        db.commit()
+        return village
+
+    def test_village_analysis_hits_real_tables(self, real_db_session):
+        year = datetime.now().year
+        self._seed_village(real_db_session, pop_year=year)
+
+        result = AnalyticsService(real_db_session).get_village_analysis(real_db_session)
+
+        assert "error" not in result
+        assert result["population"]["total"] == 1000
+        assert result["population"]["resident"] == 600
+        assert result["population"]["avg_resident_rate"] == 60.0
+        assert result["income"]["avg_per_capita"] == 1.5
+        assert result["income"]["avg_county"] == 1.2
+        infra = {row["category"]: row["amount"] for row in result["infrastructure"]}
+        assert infra["道路"] == 2000000.0
+        assert infra["住房改造"] == 30.0
+        assert infra["文化设施"] == 10.0
+
+    def test_population_avg_rate_ignores_zero_total(self, real_db_session):
+        """total_population 默认 0 时不能除零（NULLIF 兜底），其余数据照常返回。"""
+        from app.models.supported_village import SupportedVillage, VillagePopulation
+
+        year = datetime.now().year
+        village = SupportedVillage(village_name="零人口村")
+        real_db_session.add(village)
+        real_db_session.flush()
+        real_db_session.add(VillagePopulation(
+            supported_village_id=village.id, year=year,
+            total_population=0, resident_population=0,
+        ))
+        real_db_session.commit()
+
+        result = AnalyticsService(real_db_session).get_village_analysis(real_db_session)
+        assert result["population"]["total"] == 0
+        assert result["population"]["avg_resident_rate"] == 0
+
+    def test_funding_trends_uses_real_year_axis(self, real_db_session):
+        year = datetime.now().year
+        self._seed_village(real_db_session, funds=(500.0, 200.0), pop_year=year)
+
+        result = AnalyticsService(real_db_session).get_funding_trends(real_db_session, years=5)
+
+        assert "error" not in result
+        assert [row["year"] for row in result["trends"]] == [year]
+        assert result["trends"][0]["total_funding"] == 700.0
+        assert result["trends"][0]["military_funding"] == 500.0
+        assert result["trends"][0]["local_funding"] == 200.0
+        assert result["trends"][0]["village_count"] == 1
+
+    def test_funding_trends_out_of_window_is_empty_not_error(self, real_db_session):
+        """超出窗口的年度不属于趋势范围：结果为空的“真空”，不带 error 标记。"""
+        self._seed_village(real_db_session, pop_year=1999)
+
+        result = AnalyticsService(real_db_session).get_funding_trends(real_db_session, years=5)
+        assert result["trends"] == []
+        assert "error" not in result
+
+    def test_performance_metrics_hits_real_tables(self, real_db_session):
+        from app.models.supported_village import (
+            EducationSupport,
+            IndustrySupport,
+            InfrastructureImprovement,
+            SupportedVillage,
+        )
+
+        year = datetime.now().year
+        village = SupportedVillage(village_name="绩效村")
+        real_db_session.add(village)
+        real_db_session.flush()
+        real_db_session.add(IndustrySupport(
+            supported_village_id=village.id, year=year, investment=11.0))
+        real_db_session.add(InfrastructureImprovement(
+            supported_village_id=village.id, year=year, investment=22.0))
+        real_db_session.add(EducationSupport(
+            supported_village_id=village.id, year=year, investment=33.0))
+        real_db_session.commit()
+
+        result = AnalyticsService(real_db_session).get_performance_metrics(real_db_session)
+
+        assert "error" not in result
+        assert result["villages"]["total"] == 1
+        categories = {row["category"]: row["amount"] for row in result["investment_categories"]}
+        assert categories["产业帮扶"] == 11.0
+        assert categories["基础设施"] == 22.0
+        assert categories["教育帮扶"] == 33.0
+
+    def test_comparison_by_province_hits_real_tables(self, real_db_session):
+        year = datetime.now().year
+        self._seed_village(real_db_session, pop_year=year)
+
+        result = AnalyticsService(real_db_session).get_comparison_analysis(
+            real_db_session, "province", None
+        )
+
+        assert "error" not in result
+        assert result["comparison"][0]["label"] == "贵州省"
+        assert result["comparison"][0]["village_count"] == 1
+        assert result["comparison"][0]["total_investment"] == 700.0
+

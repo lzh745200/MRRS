@@ -163,6 +163,45 @@ def _viewer_user():
     return u
 
 
+def _foreign_admin_user():
+    """他组织的部门级管理员（is_superuser=False，organization_id=2）。"""
+    u = Mock()
+    u.id = 999
+    u.username = "other_admin"
+    u.role = "admin"
+    u.is_superuser = False
+    u.is_active = True
+    u.permissions_list = ["read", "write"]
+    u.organization_id = 2  # 与 project.organization_id(1) 不同
+    u.email = "other@test.com"
+    u.full_name = "他组织管理员"
+    return u
+
+
+class _ActAsForeignAdmin:
+    """上下文管理器：当前用户切换为他组织管理员，退出时恢复原覆盖。"""
+
+    def __init__(self, app):
+        self.app = app
+        self._original = None
+
+    def __enter__(self):
+        from app.core.security import get_current_user
+
+        self._original = self.app.dependency_overrides.copy()
+        user = _foreign_admin_user()
+
+        async def _auth():
+            return user
+
+        self.app.dependency_overrides[get_current_user] = _auth
+        return user
+
+    def __exit__(self, *exc):
+        self.app.dependency_overrides = self._original
+        return False
+
+
 # =====================================================================
 #  Phase Management (3.1)
 # =====================================================================
@@ -313,6 +352,20 @@ class TestAdvancePhase:
         assert resp.status_code == 403
         app.dependency_overrides.pop(get_current_user, None)
 
+    def test_cross_org_project_404(self, client, project, phases):
+        """深审 LIVE：推进阶段只校验角色，他组织管理角色可推进别人的项目。"""
+        from app.main import app
+
+        with _ActAsForeignAdmin(app):
+            resp = client.post(f"/api/v1/fund-lifecycle/phases/{project.id}/advance")
+        assert resp.status_code == 404
+        assert "项目不存在" in resp.text
+
+    def test_nonexistent_project_404(self, client):
+        """深审 LIVE：project_id 不存在时原实现直插阶段行，撞外键升级为 500。"""
+        resp = client.post("/api/v1/fund-lifecycle/phases/999/advance")
+        assert resp.status_code == 404
+
 
 class TestRollbackPhase:
     def test_success(self, client, project, phases, fund, db_session):
@@ -347,6 +400,19 @@ class TestRollbackPhase:
         db_session.flush()
         resp = client.post(f"/api/v1/fund-lifecycle/phases/{project.id}/rollback", json={"remarks": "退回修正"})
         assert resp.status_code == 200
+
+    def test_cross_org_project_404(self, client, project, phases):
+        """深审 LIVE：退回阶段同样只校验角色，可回退他组织项目的阶段。"""
+        from app.main import app
+
+        with _ActAsForeignAdmin(app):
+            resp = client.post(f"/api/v1/fund-lifecycle/phases/{project.id}/rollback")
+        assert resp.status_code == 404
+        assert "项目不存在" in resp.text
+
+    def test_nonexistent_project_404(self, client):
+        resp = client.post("/api/v1/fund-lifecycle/phases/999/rollback")
+        assert resp.status_code == 404
 
 
 # =====================================================================
@@ -423,6 +489,20 @@ class TestLockBudget:
         baseline = db_session.query(BudgetBaseline).first()
         assert baseline.category == "education"
         assert float(baseline.baseline_amount) == 200.0
+
+    def test_cross_org_project_404(self, client, project, fund, db_session):
+        """深审 LIVE：锁定预算基线只校验角色，可锁定他组织项目的预算。"""
+        from app.main import app
+
+        with _ActAsForeignAdmin(app):
+            resp = client.post(f"/api/v1/fund-lifecycle/budget-lock/{project.id}")
+        assert resp.status_code == 404
+        assert "项目不存在" in resp.text
+        assert db_session.query(BudgetBaseline).count() == 0
+
+    def test_nonexistent_project_404(self, client):
+        resp = client.post("/api/v1/fund-lifecycle/budget-lock/999")
+        assert resp.status_code == 404
 
 
 class TestComplianceCheck:
@@ -736,6 +816,37 @@ class TestUpdateTransferVoucher:
         resp = client.put("/api/v1/fund-lifecycle/transfer-vouchers/1", json={"amount": 200.0})
         assert resp.status_code == 400
         assert "不可修改" in resp.text
+
+    def test_status_confirmed_rejected(self, client, project, db_session):
+        """深审 LIVE：PUT {"status": "confirmed"} 曾绕过 /confirm 直接落库。"""
+        v = FundTransferVoucher(
+            id=1, project_id=project.id, voucher_no="V001",
+            direction="military_to_local", amount=Decimal("100.00"),
+            status=VoucherStatus.DRAFT.value,
+        )
+        db_session.add(v)
+        db_session.flush()
+        resp = client.put("/api/v1/fund-lifecycle/transfer-vouchers/1", json={"status": "confirmed"})
+        assert resp.status_code == 400
+        assert "confirm" in resp.text
+        db_session.refresh(v)
+        assert v.status == VoucherStatus.DRAFT.value
+        # 绕过路径不会写确认人/确认时间（审计链断裂）
+        assert v.confirmed_by is None
+        assert v.confirmed_at is None
+
+    def test_status_submitted_allowed(self, client, project, db_session):
+        """draft → submitted 仍走通用更新端点（无独立提交端点）。"""
+        v = FundTransferVoucher(
+            id=1, project_id=project.id, voucher_no="V001",
+            direction="military_to_local", amount=Decimal("100.00"),
+            status=VoucherStatus.DRAFT.value,
+        )
+        db_session.add(v)
+        db_session.flush()
+        resp = client.put("/api/v1/fund-lifecycle/transfer-vouchers/1", json={"status": "submitted"})
+        assert resp.status_code == 200
+        assert resp.json()["data"]["status"] == "submitted"
 
 
 class TestDeleteTransferVoucher:
@@ -1161,6 +1272,27 @@ class TestMonitoringDeviation:
         finally:
             sys.modules.pop('app.services.fund_report_generator', None)
 
+    def test_deviation_rate_persisted(self, client, project, fund, db_session):
+        """深审 LIVE：偏差率此前只 flush 不提交，会话关闭即回滚丢失。"""
+        fund.used_amount = Decimal("60.00")
+        fund.approved_amount = Decimal("100.00")
+        fund.amount = Decimal("100.00")
+        project.progress = 50.0
+        db_session.flush()
+        resp = client.get(f"/api/v1/fund-lifecycle/monitoring/deviation/{project.id}")
+        assert resp.status_code == 200
+        db_session.refresh(fund)
+        assert float(fund.deviation_rate) == 10.0
+
+    def test_deviation_rate_committed(self, client, project, fund, db_session):
+        """回归防线：写偏差率的路径必须提交（不能退回 flush-only）。"""
+        from unittest.mock import patch
+
+        with patch("app.api.v1.fund_lifecycle.safe_commit") as mock_commit:
+            resp = client.get(f"/api/v1/fund-lifecycle/monitoring/deviation/{project.id}")
+        assert resp.status_code == 200
+        mock_commit.assert_called_once()
+
 
 class TestFundFlow:
     def test_success(self, client, project, fund, db_session):
@@ -1241,6 +1373,19 @@ class TestDetectAnomalies:
             assert resp.json()["data"]["new_count"] == 0
         finally:
             sys.modules.pop('app.services.fund_anomaly_detector', None)
+
+    def test_cross_org_project_404(self, client, project):
+        """深审 LIVE：异常检测只校验角色，可对他组织项目跑检测并落库异常记录。"""
+        from app.main import app
+
+        with _ActAsForeignAdmin(app):
+            resp = client.post(f"/api/v1/fund-lifecycle/anomalies/detect/{project.id}")
+        assert resp.status_code == 404
+        assert "项目不存在" in resp.text
+
+    def test_nonexistent_project_404(self, client):
+        resp = client.post("/api/v1/fund-lifecycle/anomalies/detect/999")
+        assert resp.status_code == 404
 
 
 class TestResolveAnomaly:

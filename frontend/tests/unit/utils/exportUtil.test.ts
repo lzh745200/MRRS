@@ -57,6 +57,26 @@ describe('utils/exportUtil', () => {
       expect(exportUtil.escapeCSVField('a\rb')).toBe('"a\rb"')
     })
 
+    it('公式前缀文本被前置单引号（CSV 注入防御）', () => {
+      // Excel / Sheets 会把 = + - @ 及 Tab/CR 开头的单元格当公式求值
+      expect(exportUtil.escapeCSVField('=1+1')).toBe("'=1+1")
+      expect(exportUtil.escapeCSVField('+SUM(A1)')).toBe("'+SUM(A1)")
+      expect(exportUtil.escapeCSVField('-2')).toBe("'-2")
+      expect(exportUtil.escapeCSVField('@SUM(A1)')).toBe("'@SUM(A1)")
+      expect(exportUtil.escapeCSVField('\tcmd')).toBe("'\tcmd")
+      expect(exportUtil.escapeCSVField('\rcmd')).toBe('"\'\rcmd"')
+    })
+
+    it('数字/布尔不做公式前缀（避免破坏数值语义）', () => {
+      expect(exportUtil.escapeCSVField(-5)).toBe('-5')
+      expect(exportUtil.escapeCSVField(42)).toBe('42')
+      expect(exportUtil.escapeCSVField(true)).toBe('true')
+    })
+
+    it('公式前缀与逗号同时出现时先加前缀再整体加引号', () => {
+      expect(exportUtil.escapeCSVField('=a,b')).toBe('"\'=a,b"')
+    })
+
     it('null/undefined 转为空串', () => {
       expect(exportUtil.escapeCSVField(null)).toBe('')
       expect(exportUtil.escapeCSVField(undefined)).toBe('')

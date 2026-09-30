@@ -272,22 +272,35 @@ describe('全量 v-model 处理器', () => {
 })
 
 describe('地区智能识别与辅助函数', () => {
-  it('onRegionChange：三字段齐全时识别属性，否则跳过', async () => {
+  it('省市县变化不再静默覆盖手工填写的区域属性', async () => {
+    // 回归背景（v1.12.9）：原先 @change=onRegionChange 会调用 detectRegionAttributes
+    // 并把"三区三州/边疆/民族/革命老区/重点县"一律写回 false —— 用户手工勾选或
+    // 后端回填的真实标记会在改省市区时被静默清空。
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    // 不齐全 → 不调用识别（保持初始 false）
-    vm.onRegionChange()
-    expect(vm.formData.basicInfo.isThreeRegionsThreeStates).toBe(false)
-    // 齐全 → 写入识别结果
+    vm.formData.basicInfo.isRevolutionaryArea = true
+    vm.formData.basicInfo.isBorderArea = true
+    vm.formData.basicInfo.isKeyCounty = true
     vm.formData.basicInfo.province = '520000'
     vm.formData.basicInfo.city = '贵阳市'
     vm.formData.basicInfo.county = '云岩区'
-    vm.onRegionChange()
-    expect(vm.formData.basicInfo.isBorderArea).toBe(false)
-    expect(vm.formData.basicInfo.isKeyCounty).toBe(false)
-    expect('isThreeRegionsThreeStates' in vm.formData.basicInfo).toBe(true)
+    await nextTick()
+    expect(vm.formData.basicInfo.isRevolutionaryArea).toBe(true)
+    expect(vm.formData.basicInfo.isBorderArea).toBe(true)
+    expect(vm.formData.basicInfo.isKeyCounty).toBe(true)
+    // 组件不应再暴露会覆盖真实标记的处理函数
+    expect(typeof vm.onRegionChange).not.toBe('function')
     wrapper.unmount()
+  })
+
+  it('detectRegionAttributes 只返回省份标签，不返回无依据的布尔属性', async () => {
+    const { detectRegionAttributes } = await import('@/config/regionDictionary')
+    const attrs = detectRegionAttributes('520000') as Record<string, unknown>
+    expect(attrs.province).toBe('贵州省')
+    expect('isBorderArea' in attrs).toBe(false)
+    expect('isKeyCounty' in attrs).toBe(false)
+    expect('isThreeRegionsThreeStates' in attrs).toBe(false)
   })
 
   it('getPopData/getInvestData 未命中年份时回退首条', async () => {

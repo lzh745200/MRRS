@@ -19,6 +19,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
+from app.core.permission_utils import is_admin
 from app.core.response import success_response
 from app.core.transaction import safe_commit
 from app.models.subordinate_registry import SubordinateInstance
@@ -38,6 +39,18 @@ router = APIRouter(prefix="/subordinate-reports", tags=["下级上报包"])
 _MAX_REPORT_PACKAGE_BYTES = 512 * 1024 * 1024
 
 
+def _require_report_admin(current_user: User) -> None:
+    """上报包导出管理员门禁。
+
+    深审 LIVE：两个生成端点此前只依赖 get_current_active_user —— 任意登录用户
+    即可一键导出本系统全部注册用户（用户名/姓名/角色/最后登录时间，属 PII）
+    以及全局运行状态，且在成员单位部署下还会带上部署级统计。与 /import
+    的管理员门禁对齐（同一功能的两端不能一严一松）。
+    """
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="仅管理员可生成下级上报包")
+
+
 @router.post("/generate-registration")
 def generate_registration_report(
     db: Session = Depends(get_db),
@@ -47,6 +60,7 @@ def generate_registration_report(
 
     包含本系统所有注册用户的基本信息，供上级审批。
     """
+    _require_report_admin(current_user)
     users = db.query(User).filter(User.is_active == True).all()  # noqa: E712
     org_id = current_user.organization_id
 
@@ -93,6 +107,8 @@ def generate_status_report(
 
     包含系统版本、用户统计、数据库大小、错误计数等运行状态。
     """
+    _require_report_admin(current_user)
+
     from app.core.config import settings
 
     user_count = db.query(func.count(User.id)).filter(User.is_active == True).scalar() or 0  # noqa: E712

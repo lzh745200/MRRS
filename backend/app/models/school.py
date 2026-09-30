@@ -125,8 +125,10 @@ class School(Base):
 
     def to_dict(self):
         """转换为字典（同时提供 camelCase 和 snake_case 键以兼容前端）"""
-        _support_status = self.support_status.value if self.support_status else None
-        _type = self.type.value if self.type else None
+        # 列里可能存的是纯字符串（历史数据/直接 SQL 写入），对 str 取 .value 会
+        # AttributeError 让整个 to_dict 崩掉（深审 LIVE）—— 用 getattr 兼容两者。
+        _support_status = getattr(self.support_status, "value", self.support_status)
+        _type = getattr(self.type, "value", self.type)
         _created = self.created_at.isoformat() if self.created_at else None
         _updated = self.updated_at.isoformat() if self.updated_at else None
         _start = self.support_start_date.isoformat() if self.support_start_date else None

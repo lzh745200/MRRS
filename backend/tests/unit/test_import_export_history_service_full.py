@@ -108,13 +108,39 @@ class TestCreateHistory:
         assert record.result == "failed"
         assert record.error_message == "bad file"
 
-    def test_extra_kwargs_ignored(self, sync_db):
-        """**extra 额外参数被静默接受。"""
+    def test_extra_kwargs_ignored_but_logged(self, sync_db, caplog):
+        """未声明的额外参数不再静默：仍不落库，但输出告警日志（可追踪）。"""
+        svc = ImportExportHistoryService(sync_db)
+        with caplog.at_level("WARNING", logger="app.services.import_export_history_service"):
+            record = svc.create_history(
+                org_id=1, user_id=2, custom_field="ignored",
+            )
+        assert record.id is not None
+        assert any("custom_field" in rec.getMessage() for rec in caplog.records)
+
+    def test_audit_metadata_is_persisted(self, sync_db):
+        """显式声明的 6 个审计元数据列必须真正落库（历史缺陷：落进 **extra 被吞）。"""
         svc = ImportExportHistoryService(sync_db)
         record = svc.create_history(
-            org_id=1, user_id=2, custom_field="ignored",
+            org_id=1, user_id=2, operation_type="export",
+            file_name="audit.xlsx", file_size=2048, record_count=12,
+            data_types=["village"], user_agent="pytest/1.0",
+            details_json={"source": "unit-test"},
         )
-        assert record.id is not None
+        assert record.file_name == "audit.xlsx"
+        assert record.file_size == 2048
+        assert record.record_count == 12
+        assert record.data_types == '["village"]'
+        assert record.user_agent == "pytest/1.0"
+        assert record.details_json == '{"source": "unit-test"}'
+
+    def test_dump_json_passthrough_and_none(self, sync_db):
+        """_dump_json: None/字符串原样透传，列表/字典序列化。"""
+        svc = ImportExportHistoryService(sync_db)
+        assert svc._dump_json(None) is None
+        assert svc._dump_json("[1]") == "[1]"
+        assert svc._dump_json(["a"]) == '["a"]'
+        assert svc._dump_json({"k": "v"}) == '{"k": "v"}'
 
     def test_commit_failure_raises_and_rolls_back(self, sync_db):
         """commit 抛异常 → rollback + re-raise。"""
@@ -148,9 +174,12 @@ class TestRecordExportImport:
             ip_address="10.0.0.1", user_agent="curl/8",
         )
         assert record.operation_type == "export"
-        # create_history 只将 duration_ms / ip_address / error_message 等写入模型；
-        # file_name / file_size / record_count / data_types / user_agent 通过 **extra 传入
-        # 但 create_history 不会转发它们到 ImportExportHistory 构造函数 → 模型字段为 None。
+        # 审计元数据必须落库（不再落进 **extra 被静默丢弃）
+        assert record.file_name == "data.rrs"
+        assert record.file_size == 1024
+        assert record.record_count == 10
+        assert record.data_types == '["village", "fund"]'
+        assert record.user_agent == "curl/8"
         assert record.duration_ms == 50
         assert record.ip_address == "10.0.0.1"
         assert record.result == "success"
@@ -170,6 +199,8 @@ class TestRecordExportImport:
         assert record.operation_type == "import"
         assert record.result == "failed"
         assert record.error_message == "parse error"
+        assert record.file_name == "in.rrs"
+        assert record.data_types == '["village"]'
 
     def test_record_import_without_data_types(self, sync_db):
         svc = ImportExportHistoryService(sync_db)
@@ -215,9 +246,10 @@ class TestRecordConfirmDelete:
             duration_ms=200, details={"source": "upload"}, ip_address="10.0.0.4",
         )
         assert record.operation_type == "confirm"
-        # record_count / data_types / details_json 通过 **extra 传入 create_history，
-        # 但 create_history 不转发它们 → 模型字段为 None。
-        # duration_ms 和 ip_address 由 create_history 直接写入模型。
+        # record_count / data_types / details_json 审计元数据必须落库
+        assert record.record_count == 5
+        assert record.data_types == '["fund"]'
+        assert record.details_json == '{"source": "upload"}'
         assert record.duration_ms == 200
         assert record.ip_address == "10.0.0.4"
         assert record.result == "success"

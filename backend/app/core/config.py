@@ -31,6 +31,19 @@ def _get_default_database_url() -> str:
     return f"sqlite:///{abs_path}"
 
 
+def _absolutize_sqlite_url(url: str, data_dir: str) -> str:
+    """把 ``sqlite:///./x`` 形式的相对 URL 解析为 *data_dir* 下的绝对路径。
+
+    只剥离**开头**的 ``data/`` 目录分量：``str.replace`` 会移除全部出现，
+    把 ``sqlite:///./data/mydata/app.db`` 误算成 ``myapp.db``（静默指向空库）。
+    抽成独立函数同时避免 ``Settings.model_post_init`` 触发 C901 复杂度门禁。
+    """
+    db_name = url.replace("sqlite:///./", "")
+    if db_name.startswith("data/"):
+        db_name = db_name[len("data/"):]
+    return f"sqlite:///{data_dir}/{db_name}"
+
+
 def _get_default_cache_dir() -> str:
     """获取默认缓存目录"""
     from app.utils.paths import get_cache_path
@@ -65,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.12.8"
+    PROJECT_VERSION: str = "1.12.9"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -348,6 +361,9 @@ class Settings(BaseSettings):
                 self.ENCRYPTION_KEY = get_or_create_secret(
                     "ENCRYPTION_FERNET_KEY",
                     generate=lambda: _generate_fernet_key(),
+                    # 静态数据加密密钥必须真实落盘：拿一次性进程内密钥顶替，
+                    # 重启后历史密文全部不可解（深审 critical）。
+                    require_persisted=True,
                 )
             except Exception as exc:
                 import logging
@@ -368,13 +384,8 @@ class Settings(BaseSettings):
         if not self.DATABASE_URL:
             self.DATABASE_URL = _get_default_database_url()
         elif self.DATABASE_URL.startswith("sqlite:///./"):
-            # 替换相对路径为绝对路径
-            db_name = self.DATABASE_URL.replace("sqlite:///./", "")
-            # 只剥离**开头**的 data/ 目录分量。str.replace 会移除全部出现，
-            # 把 sqlite:///./data/mydata/app.db 误算成 "myapp.db"（路径错位到空库）。
-            if db_name.startswith("data/"):
-                db_name = db_name[len("data/"):]
-            self.DATABASE_URL = f"sqlite:///{data_dir}/{db_name}"
+            # 替换相对路径为绝对路径（剥离规则见 _absolutize_sqlite_url）
+            self.DATABASE_URL = _absolutize_sqlite_url(self.DATABASE_URL, data_dir)
 
         # 动态设置其他路径（如果不是绝对路径或环境变量已设置）
         if self.CACHE_DIR.startswith("./"):

@@ -259,12 +259,23 @@ class TestIncrementalImport:
         resp = ctx["client"].post(self.URL, json={"package_id": 9})
         assert resp.status_code == 403
 
+    def test_missing_org_fail_closed_400(self, ctx, tmp_path):
+        """数据包无归属组织 → 400（v1.12.9 起不再跳过校验并以 org_id=0 写库）。"""
+        pkg_file = tmp_path / "p.zip"
+        pkg_file.write_bytes(b"PK")
+        ctx["svc"].get_package.return_value = SimpleNamespace(
+            file_path=str(pkg_file), file_name="p.zip", org_id=None,
+        )
+        resp = ctx["client"].post(self.URL, json={"package_id": 9, "apply_changes": True})
+        assert resp.status_code == 400
+        assert "缺少归属组织" in resp.json()["detail"]
+
     def test_diff_stats_failure_500(self, ctx, tmp_path):
         # 覆盖 data_packages.py:863-865 —— 差异统计失败 → 500
         pkg_file = tmp_path / "p.zip"
         pkg_file.write_bytes(b"PK")
         ctx["svc"].get_package.return_value = SimpleNamespace(
-            file_path=str(pkg_file), file_name="p.zip", org_id=None,
+            file_path=str(pkg_file), file_name="p.zip", org_id=5,
         )
         with patch.object(dp, "_compute_package_diff_stats", side_effect=Exception("bad zip")):
             resp = ctx["client"].post(self.URL, json={"package_id": 9})
@@ -276,7 +287,7 @@ class TestIncrementalImport:
         pkg_file = tmp_path / "p.zip"
         pkg_file.write_bytes(b"PK")
         ctx["svc"].get_package.return_value = SimpleNamespace(
-            file_path=str(pkg_file), file_name="p.zip", org_id=None,
+            file_path=str(pkg_file), file_name="p.zip", org_id=5,
         )
         ctx["svc"].import_package = AsyncMock(return_value=SimpleNamespace(package_id=11))
         ctx["svc"].confirm_import = AsyncMock(return_value=SimpleNamespace(success=True))
@@ -294,7 +305,7 @@ class TestIncrementalImport:
         pkg_file = tmp_path / "p.zip"
         pkg_file.write_bytes(b"PK")
         ctx["svc"].get_package.return_value = SimpleNamespace(
-            file_path=str(pkg_file), file_name="p.zip", org_id=None,
+            file_path=str(pkg_file), file_name="p.zip", org_id=5,
         )
         ctx["svc"].import_package = AsyncMock(side_effect=BusinessError("格式不支持"))
         with patch.object(
@@ -309,7 +320,7 @@ class TestIncrementalImport:
         pkg_file = tmp_path / "p.zip"
         pkg_file.write_bytes(b"PK")
         ctx["svc"].get_package.return_value = SimpleNamespace(
-            file_path=str(pkg_file), file_name="p.zip", org_id=None,
+            file_path=str(pkg_file), file_name="p.zip", org_id=5,
         )
         ctx["svc"].import_package = AsyncMock(side_effect=RuntimeError("boom"))
         with patch.object(

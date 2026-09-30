@@ -7,15 +7,15 @@ vi.mock('@/api/request', () => ({
   put: vi.fn(),
   del: vi.fn(),
   apiRequest: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import { useOrganizationStore } from '@/stores/organization'
-import { get, post, put, del } from '@/api/request'
+import { get, post, put } from '@/api/request'
 
 const mockGet = get as ReturnType<typeof vi.fn>
 const mockPost = post as ReturnType<typeof vi.fn>
 const mockPut = put as ReturnType<typeof vi.fn>
-const mockDel = del as ReturnType<typeof vi.fn>
 
 describe('useOrganizationStore', () => {
   let store: ReturnType<typeof useOrganizationStore>
@@ -81,11 +81,38 @@ describe('useOrganizationStore', () => {
     expect(store.orgs[0].name).toBe('Updated')
   })
 
-  it('deleteOrganization removes item', async () => {
+  it('deleteOrganization 按后端契约带 confirm_password 查询参数', async () => {
+    const { apiRequest } = await import('@/api/request')
+    const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
     store.orgs = [{ id: 1 }, { id: 2 }]
-    mockDel.mockResolvedValueOnce({ code: 200 })
-    await store.deleteOrganization(1)
+    store.tree = [{ id: 1 }]
+    mockApiRequest.mockResolvedValueOnce({ code: 200, message: '组织已删除' })
+    await store.deleteOrganization(1, 'pwd12345')
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      method: 'DELETE',
+      url: '/organizations/1',
+      params: { confirm_password: 'pwd12345' },
+    })
     expect(store.orgs).toHaveLength(1)
+    expect(store.tree).toEqual([])
+  })
+
+  it('deleteOrganization 缺二次确认密码时 fail-fast，不发请求', async () => {
+    const { apiRequest } = await import('@/api/request')
+    const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
+    store.orgs = [{ id: 1 }]
+    await expect(store.deleteOrganization(1)).rejects.toThrow(
+      '删除组织需提供当前用户密码（二次确认）'
+    )
+    expect(mockApiRequest).not.toHaveBeenCalled()
+    expect(store.orgs).toHaveLength(1)
+  })
+
+  it('deleteOrganization 空字符串密码同样 fail-fast', async () => {
+    const { apiRequest } = await import('@/api/request')
+    const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
+    await expect(store.deleteOrganization(1, '')).rejects.toThrow()
+    expect(mockApiRequest).not.toHaveBeenCalled()
   })
 
   it('fetchOrganizations handles errors', async () => {
@@ -177,9 +204,11 @@ describe('useOrganizationStore', () => {
   })
 
   it('deleteOrganization 非 200 code 时不移除', async () => {
+    const { apiRequest } = await import('@/api/request')
+    const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
     store.orgs = [{ id: 1 }]
-    mockDel.mockResolvedValueOnce({ code: 403 })
-    await store.deleteOrganization(1)
+    mockApiRequest.mockResolvedValueOnce({ code: 403 })
+    await store.deleteOrganization(1, 'pwd12345')
     expect(store.orgs).toHaveLength(1)
   })
 

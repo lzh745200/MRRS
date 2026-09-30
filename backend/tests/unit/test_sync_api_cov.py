@@ -99,9 +99,11 @@ class TestSyncDashboard:
         ]
 
     def test_dashboard_full_path(self, client):
+        # 状态字面量必须用写入端真实取值 completed/failed
+        # （历史测试用 success/failure 掩盖了"失败数恒 0、成功率恒 100%"的缺陷）
         logs = [
-            _log(id=1, action="export", status="success"),
-            _log(id=2, action="import", status="failure", created_at=datetime(2026, 7, 21, 11, 0, 0)),
+            _log(id=1, action="export", status="completed"),
+            _log(id=2, action="import", status="failed", created_at=datetime(2026, 7, 21, 11, 0, 0)),
             _log(id=3, action=None, created_at=None, username=None, resource_type=None, status=None, user_ip=None),
         ]
         _use_db(client, _db(sync_logs=logs))
@@ -119,7 +121,8 @@ class TestSyncDashboard:
         assert data["summary"]["total_syncs"] == 3
         assert data["summary"]["success_count"] == 1
         assert data["summary"]["failure_count"] == 1
-        assert data["summary"]["success_rate"] == 33.3
+        # 成功率按终态（completed+failed）为分母：1/(1+1) = 50.0
+        assert data["summary"]["success_rate"] == 50.0
         # action None → unknown
         assert data["action_counts"]["unknown"] == 1
         assert data["action_counts"]["export"] == 1

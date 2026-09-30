@@ -58,11 +58,7 @@
           <el-row :gutter="20">
             <el-col :span="8">
               <el-form-item label="省份" required>
-                <el-select
-                  v-model="formData.basicInfo.province"
-                  placeholder="请选择"
-                  @change="onRegionChange"
-                >
+                <el-select v-model="formData.basicInfo.province" placeholder="请选择">
                   <el-option
                     v-for="p in provinces"
                     :key="p.value"
@@ -74,20 +70,12 @@
             </el-col>
             <el-col :span="8">
               <el-form-item label="市/州" required>
-                <el-input
-                  v-model="formData.basicInfo.city"
-                  placeholder="请输入市/州"
-                  @change="onRegionChange"
-                />
+                <el-input v-model="formData.basicInfo.city" placeholder="请输入市/州" />
               </el-form-item>
             </el-col>
             <el-col :span="8">
               <el-form-item label="县/区" required>
-                <el-input
-                  v-model="formData.basicInfo.county"
-                  placeholder="请输入县/区"
-                  @change="onRegionChange"
-                />
+                <el-input v-model="formData.basicInfo.county" placeholder="请输入县/区" />
               </el-form-item>
             </el-col>
           </el-row>
@@ -109,7 +97,9 @@
             </el-col>
           </el-row>
 
-          <h3 class="form-section-title">地区属性（智能识别）</h3>
+          <!-- 地区属性无离线权威数据源，一律由填报人手填/后端回填，
+               不做自动推断（历史"智能识别"回填 false 会静默清空真实标记） -->
+          <h3 class="form-section-title">地区属性（据实填写）</h3>
           <el-row :gutter="20">
             <el-col :span="6"
               ><el-form-item label="三区三州"
@@ -938,18 +928,6 @@ const totalLocalInvest = computed(() =>
 const totalVisits = computed(() =>
   formData.investmentData.reduce((s, d) => s + d.leaderVisits + d.soldierVisits, 0)
 )
-
-const onRegionChange = () => {
-  const { province, city, county } = formData.basicInfo
-  if (province && city && county) {
-    const attrs = detectRegionAttributes(province, city, county)
-    formData.basicInfo.isThreeRegionsThreeStates = attrs.isThreeRegionsThreeStates
-    formData.basicInfo.isBorderArea = attrs.isBorderArea
-    formData.basicInfo.isEthnicArea = attrs.isEthnicArea
-    formData.basicInfo.isRevolutionaryArea = attrs.isRevolutionaryArea
-    formData.basicInfo.isKeyCounty = attrs.isKeyCounty
-  }
-}
 
 const addHonor = () => {
   formData.honors.push({

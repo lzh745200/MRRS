@@ -38,6 +38,7 @@ from ...models.fund_lifecycle import (
 from ...models.project import Project
 from ...core.permission_utils import is_superuser
 from ...core.data_permission import apply_data_scope, check_record_access
+from ...services.data_scope_query import scoped_filter  # B1 下沉：服务层统一数据域入口
 from ...services.work_log_service import write_work_log
 from .deps import ADMIN_ROLES, require_funds_operator_role as _require_manager  # noqa: F401
 
@@ -74,6 +75,22 @@ def _get_project_or_403(project_id: int, current_user, db: Session) -> Project:
         raise HTTPException(status_code=404, detail="项目不存在")
     if not check_record_access(project, current_user):
         raise HTTPException(status_code=403, detail="无权访问该组织数据")
+    return project
+
+
+def _get_accessible_project_or_404(db: Session, project_id: int, current_user) -> Project:
+    """按数据域取项目；不可见即 404（不泄露项目是否存在）。
+
+    阶段推进/回退、预算锁定、异常检测此前只做 _require_manager（角色）校验，
+    然后按裸 project_id 读写 ProjectFundPhase / BudgetBaseline / FundAnomaly
+    —— 任意管理角色都能推进他组织项目的阶段（深审 LIVE，IDOR）；
+    project_id 不存在时还会撞 SQLite 外键约束升级为 500。
+    """
+    project = scoped_filter(
+        db.query(Project).filter(Project.id == project_id), Project, current_user
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
     return project
 
 
@@ -206,6 +223,7 @@ async def advance_phase(
 ):
     """推进到下一阶段（含准入校验）"""
     _require_manager(current_user)
+    _get_accessible_project_or_404(db, project_id, current_user)
 
     phases = (
         db.query(ProjectFundPhase)
@@ -249,6 +267,7 @@ async def rollback_phase(
 ):
     """退回上一阶段"""
     _require_manager(current_user)
+    _get_accessible_project_or_404(db, project_id, current_user)
 
     phases = (
         db.query(ProjectFundPhase)
@@ -395,6 +414,7 @@ async def lock_budget(
 ):
     """锁定预算基线"""
     _require_manager(current_user)
+    _get_accessible_project_or_404(db, project_id, current_user)
 
     funds = db.query(Fund).filter(Fund.project_id == project_id).all()
     if not funds:
@@ -676,6 +696,15 @@ class TransferVoucherUpdate(BaseModel):
         return v
 
 
+# 通用更新端点允许流转到的状态白名单：confirmed 必须走 /confirm
+# （写入 confirmed_by/confirmed_at 与工作日志），否则可绕过凭证确认审计链。
+_ALLOWED_VOUCHER_UPDATE_STATUSES = {
+    VoucherStatus.DRAFT.value,
+    VoucherStatus.SUBMITTED.value,
+    VoucherStatus.REJECTED.value,
+}
+
+
 @router.get("/transfer-vouchers")
 async def list_transfer_vouchers(
     project_id: Optional[int] = None,
@@ -791,7 +820,18 @@ async def update_transfer_voucher(
     if v.status == VoucherStatus.CONFIRMED.value:
         raise HTTPException(status_code=400, detail="已确认凭证不可修改")
 
-    for key, val in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    # 深审 LIVE：status 可直接传 "confirmed" 落库，绕过 /confirm 端点
+    # （不写 confirmed_by/confirmed_at，凭证确认审计链失效）。状态机收口：
+    # 通用更新只允许 draft/submitted/rejected，confirmed 必须走确认端点。
+    new_status = update_data.get("status")
+    if new_status is not None and new_status not in _ALLOWED_VOUCHER_UPDATE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail="凭证 status 只能通过 /transfer-vouchers/{id}/confirm 流转为 confirmed",
+        )
+
+    for key, val in update_data.items():
         setattr(v, key, val)
     safe_commit(db)
     db.refresh(v)
@@ -1252,7 +1292,7 @@ async def monitoring_deviation(
         fund_progress = round(used / approved * 100, 1) if approved > 0 else 0
         deviation = round(fund_progress - project_progress, 1)
 
-        # 更新偏差率
+        # 更新偏差率（此前只 db.flush()，get_db 关闭时回滚 → 偏差率永久丢失）
         f.deviation_rate = abs(deviation)
 
         # 红黄绿灯预警：±5%绿灯，±5%-10%黄灯，±10%以上红灯
@@ -1278,7 +1318,7 @@ async def monitoring_deviation(
             }
         )
 
-    db.flush()
+    safe_commit(db)
 
     result = success_response(
         data={
@@ -1408,6 +1448,7 @@ async def detect_anomalies(
 ):
     """触发智能异常检测"""
     _require_manager(current_user)
+    _get_accessible_project_or_404(db, project_id, current_user)
 
     from ...services.fund_anomaly_detector import detect_anomalies as run_detection
 

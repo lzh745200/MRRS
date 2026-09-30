@@ -164,11 +164,12 @@ class TestDownloadExport:
         return sync_dir
 
     def test_not_found(self, client, tmp_path, monkeypatch):
+        """深审 LIVE：NotFoundException(404) 曾被通用 except 包装成 400。"""
         test_client, db = client
         self._bind_sync_dir(monkeypatch, tmp_path)
         resp = test_client.get(self.URL + "/nonexistent")
-        assert resp.status_code == 400
-        assert "失败" in resp.json()["message"]
+        assert resp.status_code == 404
+        assert resp.json()["message"] == "数据包不存在"
 
     def test_download_zip(self, client, tmp_path, monkeypatch):
         test_client, db = client
@@ -317,13 +318,18 @@ class TestGetConflicts:
 
 
 class TestResolveConflict:
+    """深审 LIVE：端点原把 conflict_id/resolution/merged_data 声明为查询参数，
+    而前端（api/dataSync.ts resolveConflict）发的是 JSON body → 实际调用恒 422，
+    merged_data（dict）也无法经查询串传递。现绑定请求体模型。
+    """
+
     URL = "/api/v1/data-sync/resolve-conflict"
 
     def test_success_local(self, client):
         test_client, db = client
         with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
             mock_svc.resolve_conflict = AsyncMock(return_value={"success": True, "resolution": "use_local"})
-            resp = test_client.post(self.URL + "?conflict_id=1&resolution=use_local")
+            resp = test_client.post(self.URL, json={"conflict_id": 1, "resolution": "use_local"})
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
@@ -331,22 +337,120 @@ class TestResolveConflict:
         test_client, db = client
         with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
             mock_svc.resolve_conflict = AsyncMock(return_value={"success": True, "resolution": "use_remote"})
-            resp = test_client.post(self.URL + "?conflict_id=2&resolution=use_remote")
+            resp = test_client.post(self.URL, json={"conflict_id": 2, "resolution": "use_remote"})
         assert resp.status_code == 200
 
     def test_success_merge(self, client):
         test_client, db = client
         with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
             mock_svc.resolve_conflict = AsyncMock(return_value={"success": True, "resolution": "merge"})
-            resp = test_client.post(self.URL + "?conflict_id=3&resolution=merge")
+            resp = test_client.post(self.URL, json={"conflict_id": 3, "resolution": "merge"})
         assert resp.status_code == 200
+
+    def test_merged_data_dict_via_body(self, client):
+        """merged_data 必须能整份传入服务层（查询参数无法承载 dict）。"""
+        test_client, db = client
+        with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
+            mock_svc.resolve_conflict = AsyncMock(return_value={"success": True})
+            resp = test_client.post(self.URL, json={
+                "conflict_id": 3,
+                "resolution": "merge",
+                "merged_data": {"name": "合并后的名称", "amount": 12.5},
+            })
+        assert resp.status_code == 200
+        assert mock_svc.resolve_conflict.await_args.kwargs["merged_data"] == {
+            "name": "合并后的名称",
+            "amount": 12.5,
+        }
+
+    def test_query_params_no_longer_accepted(self, client):
+        """回归防线：查询参数形态（前端旧调用）不再被静默接受。"""
+        test_client, db = client
+        resp = test_client.post(self.URL + "?conflict_id=1&resolution=use_local")
+        assert resp.status_code == 422
 
     def test_exception(self, client):
         test_client, db = client
         with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
             mock_svc.resolve_conflict = AsyncMock(side_effect=RuntimeError("resolve failed"))
-            resp = test_client.post(self.URL + "?conflict_id=1&resolution=use_local")
+            resp = test_client.post(self.URL, json={"conflict_id": 1, "resolution": "use_local"})
         assert resp.status_code == 400
+
+
+class TestImportUploadCleanup:
+    """深审 LIVE：写盘中途失败时半成品文件残留在 uploads 目录（file_path 仍为
+    None，端点 finally 清理分支不执行）。
+    """
+
+    class _AbortingUpload:
+        """第二次 read 抛错的上传对象：模拟磁盘写满/客户端断流。"""
+
+        def __init__(self, filename):
+            self.filename = filename
+            self._calls = 0
+
+        async def read(self, size=-1):
+            self._calls += 1
+            if self._calls == 1:
+                return b"partial-data"
+            raise OSError("client aborted")
+
+    class _OneShotUpload:
+        def __init__(self, filename, payload):
+            self.filename = filename
+            self._payload = payload
+            self._done = False
+
+        async def read(self, size=-1):
+            if self._done:
+                return b""
+            self._done = True
+            return self._payload
+
+    def test_partial_file_removed_on_write_failure(self, tmp_path):
+        import asyncio
+
+        from app.api.v1.data_sync import _save_upload_file
+
+        upload_dir = tmp_path / "uploads"
+        upload_dir.mkdir()
+        with pytest.raises(OSError):
+            asyncio.run(
+                _save_upload_file(self._AbortingUpload("data.zip"), upload_dir, "upload.zip")
+            )
+        assert list(upload_dir.iterdir()) == []
+
+    def test_successful_save_keeps_file(self, tmp_path):
+        import asyncio
+
+        from app.api.v1.data_sync import _save_upload_file
+
+        upload_dir = tmp_path / "uploads"
+        upload_dir.mkdir()
+        path = asyncio.run(
+            _save_upload_file(self._OneShotUpload("data.zip", b"payload"), upload_dir, "upload.zip")
+        )
+        assert path.read_bytes() == b"payload"
+
+    def test_import_endpoint_cleans_temp_file_on_failure(self, client, tmp_path, monkeypatch):
+        """导入失败路径：finally 仍须清理已保存的临时包。"""
+        test_client, db = client
+        import app.utils.paths as paths_mod
+
+        monkeypatch.setattr(paths_mod, "get_app_data_dir", lambda: tmp_path)
+        upload_dir = tmp_path / "data_sync" / "uploads"
+
+        with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
+            mock_svc.import_package = AsyncMock(side_effect=RuntimeError("import failed"))
+            resp = test_client.post(
+                TestImportData.URL,
+                files={"file": ("test.zip", BytesIO(b"zip data"))},
+                data={"strategy": "skip"},
+            )
+
+        assert resp.status_code == 400
+        assert upload_dir.exists()
+        assert list(upload_dir.iterdir()) == []
 
 
 class TestGetSyncLogs:

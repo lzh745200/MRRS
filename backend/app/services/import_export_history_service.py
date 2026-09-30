@@ -5,6 +5,7 @@
 注入的是同步 Session。
 """
 import json
+import logging
 from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy import desc, func, select
@@ -13,6 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.models.import_export_history import ImportExportHistory, OperationResult
 from app.core.transaction import safe_commit
+
+logger = logging.getLogger(__name__)
 
 
 class ImportExportHistoryService:
@@ -23,6 +26,13 @@ class ImportExportHistoryService:
     # ------------------------------------------------------------------
     # 同步便捷方法（路由层使用）
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _dump_json(value: Optional[Union[str, list, Dict[str, Any]]]) -> Optional[str]:
+        """把列表/字典统一序列化为 JSON 文本；已是字符串的原样透传。"""
+        if value is None or isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False)
 
     def create_history(
         self,
@@ -35,12 +45,26 @@ class ImportExportHistoryService:
         duration_ms: Optional[int] = None,
         client_ip: Optional[str] = None,
         error_message: Optional[str] = None,
+        file_name: Optional[str] = None,
+        file_size: Optional[int] = None,
+        record_count: Optional[int] = None,
+        data_types: Optional[Union[str, list]] = None,
+        user_agent: Optional[str] = None,
+        details_json: Optional[Union[str, Dict[str, Any]]] = None,
         **extra,
     ) -> Optional[ImportExportHistory]:
         """创建一条操作历史记录（同步）。
 
         兼容路由中 history_service.create_history(...) 的调用签名。
+
+        审计元数据修复：record_export / record_import / record_confirm 一直以关键字
+        传入 file_name / file_size / record_count / data_types / user_agent /
+        details_json，但本方法此前未声明这 6 个参数 → 全部落进 **extra 被静默丢弃，
+        模型上对应的 6 个审计列永远为 NULL。现显式声明并写库；仍未声明的键改为
+        告警日志，不再无声吞掉。
         """
+        if extra:
+            logger.warning("create_history 收到未声明的审计元数据，已忽略: %s", sorted(extra))
         result_value = result.value if isinstance(result, OperationResult) else str(result)
         record = ImportExportHistory(
             package_id=package_id,
@@ -51,6 +75,12 @@ class ImportExportHistoryService:
             duration_ms=duration_ms,
             ip_address=client_ip,
             error_message=error_message,
+            file_name=file_name,
+            file_size=file_size,
+            record_count=record_count,
+            data_types=self._dump_json(data_types),
+            user_agent=user_agent,
+            details_json=self._dump_json(details_json),
         )
         self.db.add(record)
         try:

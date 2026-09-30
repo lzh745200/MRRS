@@ -1,12 +1,16 @@
 """
 经费历史记录模型
 用于记录经费的状态变更、字段修改等历史信息
+
+注：三张历史/日志表的 fund_id 均为 NOT NULL + ON DELETE CASCADE。删除经费时须由
+数据库级联清理，ORM 不得先把 fund_id 置空（非空列置空 → IntegrityError），故各
+fund 关系统一配置 cascade="all, delete-orphan" + passive_deletes=True。
 """
 
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, Index
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 from sqlalchemy.sql import func
 
 from .base import Base
@@ -46,7 +50,10 @@ class FundStatusHistory(Base):
     remark = Column(String(500), nullable=True, comment="操作备注/原因")
 
     # 关联
-    fund = relationship("Fund", backref="status_histories")
+    fund = relationship(
+        "Fund",
+        backref=backref("status_histories", cascade="all, delete-orphan", passive_deletes=True),
+    )
     operator = relationship("User", foreign_keys=[operator_id])
 
     def to_dict(self):
@@ -93,7 +100,10 @@ class FundFieldChange(Base):
     changed_at = Column(DateTime(timezone=True), default=datetime.utcnow, comment="修改时间")
 
     # 关联
-    fund = relationship("Fund", backref="field_changes")
+    fund = relationship(
+        "Fund",
+        backref=backref("field_changes", cascade="all, delete-orphan", passive_deletes=True),
+    )
     changer = relationship("User", foreign_keys=[changed_by])
 
     def to_dict(self):
@@ -143,7 +153,10 @@ class FundOperationLog(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="操作时间")
 
     # 关联
-    fund = relationship("Fund", backref="operation_logs")
+    fund = relationship(
+        "Fund",
+        backref=backref("operation_logs", cascade="all, delete-orphan", passive_deletes=True),
+    )
     operator = relationship("User", foreign_keys=[operator_id])
 
     def to_dict(self):

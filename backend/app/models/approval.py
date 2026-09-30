@@ -153,8 +153,8 @@ class ApprovalTask(Base):
     submitter_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=False,
-        comment="提交人ID",
+        nullable=True,
+        comment="提交人ID(用户删除后置空，审批留痕保留)",
     )
     current_level = Column(Integer, default=1, comment="当前审批级别")
     current_approver_id = Column(

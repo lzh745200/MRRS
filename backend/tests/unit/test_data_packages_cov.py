@@ -91,10 +91,14 @@ class TestPreviewDataForExport:
         service.db.query.return_value = q
         data = DataPackageExportRequest(org_id=10, data_types=["villages", "mystery"])
 
+        permission = MagicMock()
+        permission.can_access_organization.return_value = True
         result = await m.preview_data_for_export(
-            data=data, current_user=_user(), service=service)
+            data=data, current_user=_user(), service=service,
+            permission_service=permission)
 
         assert result["data"]["counts"] == {"villages": 3, "mystery": 0}
+        permission.can_access_organization.assert_called_once()
         q.filter.assert_called_once()  # 组织过滤已应用
 
 

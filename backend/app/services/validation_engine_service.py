@@ -4,6 +4,7 @@
 提供数据验证功能，支持从DB加载ValidationRule并执行完整规则检查。
 """
 
+import json
 import re
 from dataclasses import dataclass
 import logging
@@ -13,6 +14,25 @@ from sqlalchemy.orm import Session
 from app.utils.input_validator import InputValidator
 
 logger = logging.getLogger(__name__)
+
+
+def _load_rule_params(raw: Any) -> Dict[str, Any]:
+    """把 ValidationRule.params 反序列化为字典。
+
+    该列是 Text 且存 JSON 字符串；直接当字典用会让 _check_typed_rule 里的
+    params.get(...) 抛 AttributeError，被宽 except 吞掉后**所有** range/regex/
+    enum/length 规则静默失效（深审 critical）。非法 JSON 一律降级为空规则。
+    """
+    if isinstance(raw, dict):
+        return raw
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.warning("校验规则 params 不是合法 JSON，已忽略: %r", raw)
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 @dataclass
@@ -106,15 +126,15 @@ class ValidationEngineService:
             for rule in db_rules:
                 field = rule.field
                 value = data.get(field)
-                params = rule.params or {}
+                params = _load_rule_params(rule.params)
 
                 if rule.rule_type == "required":
                     if value is None or (isinstance(value, str) and value.strip() == ""):
-                        errors.append(f"{field}: {rule.message or '为必填项'}")
+                        errors.append(f"{field}: {rule.error_message or '为必填项'}")
                 elif value is not None:
                     failed = self._check_typed_rule(rule.rule_type, value, params)
                     if failed:
-                        errors.append(f"{field}: {rule.message or '校验失败'}")
+                        errors.append(f"{field}: {rule.error_message or '校验失败'}")
 
             self._errors = errors
             return errors

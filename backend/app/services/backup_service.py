@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from typing import Dict, List, Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.system_config import SystemConfig
@@ -589,14 +590,13 @@ class BackupService:
         if os.path.exists(self.database_path):
             # 复用一致性快照（SQLite Backup API 自动合并 -wal；失败内部回退
             # checkpoint+拷贝）。返回 None 时回退裸拷贝主库文件。
-            try:
-                snapshot_db_path = self._create_consistency_snapshot()
-            except Exception as snap_err:
-                logger.warning("一致性快照异常，回退裸拷贝（可能不含 WAL 内容）: %s", snap_err)
-                snapshot_db_path = None
+            # R6 语义：一致性快照失败必须 fail-loud。裸拷贝主库文件不含 -wal 内容，
+            # 会产出"看起来合法却丢数据"的陈旧快照，比直接失败危险得多。
+            snapshot_db_path = self._create_consistency_snapshot()
             if not snapshot_db_path:
-                snapshot_db_path = f"{self.database_path}.snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                shutil.copy(self.database_path, snapshot_db_path)
+                raise BackupIncompleteError(
+                    "一致性快照不可用，已中止备份（拒绝产出不含 WAL 内容的陈旧快照）"
+                )
         if os.path.exists(self.uploads_dir):
             snapshot_uploads_dir = f"{self.uploads_dir}_snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             shutil.copytree(self.uploads_dir, snapshot_uploads_dir)
@@ -693,11 +693,19 @@ class BackupService:
             if os.path.exists(self.database_path):
                 try:
                     os.unlink(self.database_path)
-                except OSError:
+                except OSError as unlink_err:
                     # Windows 上文件可能仍被占用（ERROR_SHARING_VIOLATION）。
-                    # 原实现只捕 FileNotFoundError，被占用时直接中断整条回滚链，
-                    # 使「已回滚到原始状态」的提示与事实不符。
-                    logger.warning("回滚: 原数据库文件删除失败（可能被占用），尝试直接覆盖")
+                    # 此时**不能**用 shutil.copy 原地覆盖：目标被占用时复制会失败或
+                    # 写出半截文件，并把真正的失败原因掩盖成另一个异常。
+                    # 快照必须保留，让用户可手工恢复。
+                    logger.error(
+                        "回滚: 无法删除原数据库文件 %s（%s），快照保留于 %s",
+                        self.database_path, unlink_err, snapshot_db_path,
+                    )
+                    raise RuntimeError(
+                        f"回滚失败：数据库文件被占用，无法还原快照；"
+                        f"原始快照已保留在 {snapshot_db_path}，请关闭占用进程后手工恢复"
+                    ) from unlink_err
             shutil.copy(snapshot_db_path, self.database_path)
             try:
                 os.unlink(snapshot_db_path)
@@ -795,10 +803,15 @@ class BackupService:
         备份记录 key 形如 backup_YYYYMMDD_HHMMSS 且值指向 .zip 文件；
         配置键（backup_interval_days / backup_target_dir 等）不参与备份管理。
         """
+        # 两类键都要匹配：全量 backup_YYYYMMDD_HHMMSS 与增量 backup_incremental_*。
+        # 历史只匹配 backup_20%，增量备份永远不出现在列表里（不可见 → 不会被轮转清理）。
         return (
             self.db.query(SystemConfig)
             .filter(
-                SystemConfig.key.like("backup_20%"),
+                or_(
+                    SystemConfig.key.like("backup_20%"),
+                    SystemConfig.key.like("backup_incremental_%"),
+                ),
                 SystemConfig.value.like("%.zip"),
             )
             .order_by(SystemConfig.created_at.desc())
@@ -1164,12 +1177,14 @@ class BackupService:
                 timestamp, description, include_uploads,
             )
 
-            self._save_manifest(current_manifest)
-            self.last_backup_manifest = current_manifest
-
             config, file_size = self._save_incremental_backup_record(
                 backup_file_path, description, changed_files, timestamp,
             )
+
+            # 清单必须在备份记录落库**之后**推进：先写清单而记录写失败，
+            # 下次增量会认为这些文件已备份 → 静默漏备（深审 LIVE）。
+            self._save_manifest(current_manifest)
+            self.last_backup_manifest = current_manifest
 
             logger.info(f"增量备份完成: {backup_file_name} ({file_size / 1024 / 1024:.2f}MB)")
 

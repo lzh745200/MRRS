@@ -92,7 +92,7 @@ def ensure_runtime_secrets() -> None:
             _logger.warning("运行时密钥落盘失败，将仅使用进程内密钥: %s", exc)
 
 
-def get_or_create_secret(key: str, *, generate=None) -> str:
+def get_or_create_secret(key: str, *, generate=None, require_persisted: bool = False) -> str:
     """获取或创建任意持久化密钥。
 
     从 runtime_secrets.json 读取指定 key，若不存在则调用 generate()
@@ -101,9 +101,16 @@ def get_or_create_secret(key: str, *, generate=None) -> str:
     Args:
         key: 密钥名称（如 "ENCRYPTION_FERNET_KEY"）
         generate: 无参回调函数，返回新密钥字符串。默认为 token_urlsafe(48)
+        require_persisted: 为 True 时，读取/写入失败一律抛 RuntimeError，
+            绝不用"进程内一次性密钥"顶替。用于**加密静态数据**的密钥：
+            落盘失败时静默返回进程内值，会让历史密文在重启后永久无法解密
+            （深审 critical）。默认 False 保持既有调用方语义。
 
     Returns:
         密钥字符串
+
+    Raises:
+        RuntimeError: require_persisted=True 且密钥无法读取/持久化。
     """
     if generate is None:
         def _default_generate() -> str:
@@ -119,6 +126,10 @@ def get_or_create_secret(key: str, *, generate=None) -> str:
     except FileNotFoundError:
         pass
     except (json.JSONDecodeError, PermissionError) as exc:
+        if require_persisted:
+            # 文件存在却读不出来：若就此重新生成，会把既有密钥覆盖掉，
+            # 历史密文同样不可解 —— 必须显式失败。
+            raise RuntimeError(f"无法读取运行时密钥文件 {secrets_file}: {exc}") from exc
         _logger.warning("读取运行时密钥文件失败 (%s)，将重新生成 %s", exc, key)
 
     if key in loaded and loaded[key]:
@@ -130,6 +141,8 @@ def get_or_create_secret(key: str, *, generate=None) -> str:
         _atomic_write_json(secrets_file, loaded)
         _logger.info("已持久化新密钥 '%s' 到 %s", key, secrets_file)
     except Exception as exc:
+        if require_persisted:
+            raise RuntimeError(f"无法持久化密钥 {key} 到 {secrets_file}: {exc}") from exc
         _logger.warning("无法持久化密钥 '%s'，将仅使用进程内值: %s", key, exc)
     return new_value
 
