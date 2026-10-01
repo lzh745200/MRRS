@@ -199,16 +199,54 @@
 - 后端补齐最后 8 行覆盖率缺口至 **100.00%**（`system.py` 端口探活轮询 sleep、`tasks.py`
   完成/失败回写守卫、`camel_to_snake.py` 响应头复制、`chunked_upload_service.py` 合并锁二次检查）。
 - **`brace-expansion` 覆盖版本修正**（`frontend/package.json`）：安全作业要求消除
-  `brace-expansion` 的 DoS 高危项，首版覆盖到 `^5.0.12`——但 v4+ 是 **ESM-only**
-  （`type: module`，只有具名导出 `expand`，无 `default`），而 `minimatch@9/10` 的 CJS
-  入口仍写 `import expand from 'brace-expansion'`，于是 `vite build` 直接
-  `SyntaxError: does not provide an export named 'default'`（ARM64 流水线的
-  `Build Frontend` / `Build backend binary` / `standalone-deb` 三作业同时失败即由此而来）。
-  改为覆盖到 **`^2.1.7`**：2.x 为 CJS（无 `type`、`main: index.js`，默认导出可用），
-  且 2.1.7 已修完该分支的全部公告（`GHSA-q2hr-2g5m-vwhr` 中危、`GHSA-qhr7-859c-m2p7`
-  等）、`npm audit --audit-level=high` 无 `brace-expansion` 项，构建与门禁同时满足。
-  教训：**安全覆盖必须验证模块格式（ESM/CJS）与下游 import 形态**，仅看版本号更高即覆盖
-  会在构建期炸掉整条出包链路。
+  `brace-expansion` 的 DoS 高危项。此处**连续踩了两个相反的坑**，最终以「按 major 作用域
+  覆盖」收敛：
+  1. 首版全局覆盖 `^5.0.12` —— v4+ 是 **ESM-only**（`type: module`，只有具名导出
+     `expand`，无 `default`），而 `minimatch@9` 的 ESM 入口写
+     `import expand from 'brace-expansion'`，于是 `vite build` 直接
+     `SyntaxError: The requested module 'brace-expansion' does not provide an export named 'default'`
+     （ARM64 流水线 `Build Frontend` / `Build backend binary` / `standalone-deb` 三作业同时红、
+     PR 的 `frontend-check` 仅跑 5m19s 即被炸断，均由此而来）。
+  2. 次版改全局 `^2.1.7` —— 2.x 是 CJS（无 `type`、`main: index.js`、`module.exports = expandTop`），
+     修好了 `minimatch@9`，却把 **`minimatch@10` 打挂**：其 CJS 入口写
+     `require('brace-expansion').expand(...)`，需要**具名导出**，于是覆盖率链路
+     （`test-exclude → minimatch@10`）报 `TypeError: (0, brace_expansion_1.expand) is not a function`。
+  3. 最终正解 —— **不设全局 minimatch pin，只按消费者 major 分别覆盖**：
+     ```json
+     "overrides": {
+       "minimatch@9": { "brace-expansion": "^2.1.7" },
+       "minimatch@10": { "brace-expansion": "^5.0.12" }
+     }
+     ```
+     （`minimatch@3` 走 eslint 链，保持 `brace-expansion@1.1.21` 不动。）
+     解析结果经 `npm ls` 校验无 `invalid`，`npm audit --audit-level=high` exit 0，
+     `npm run build` 与 `npx vitest run --coverage` 均通过。
+  教训一：**同名依赖被两个消费者以相反的模块格式引用时，全局 override 必然打挂其中一方**，
+  必须用 `pkg@major` 作用域覆盖分别满足。
+  教训二：**安全覆盖必须验证模块格式（ESM/CJS）与下游 import 形态**（default vs 具名），
+  仅看版本号更高即覆盖会在构建期炸掉整条出包链路。
+- **前端覆盖率缺口清零（10 个文件）**：本轮把 `src/**` 各分组门禁从"接近 100"推到
+  **全部分组 100%**，方式分两类——
+  - **补真实测试**（弱断言/零覆盖处）：`useRouterSafe.toSafeLocationHref` 此前**完全没有直接
+    测试**（它是防开放重定向与 `javascript:` 协议执行的**安全控制**），新增 12 例覆盖协议相对
+    地址、`javascript:`/`data:`/`vbscript:`、控制字符（`java\tscript:` 变形）剥离、空值回退；
+    `policy._errMessage` / `dataReport._errMessage` 补齐 `userMessage → response.data.message
+    → message → fallback` 四级回退的**每一级**与 falsy 短路；`PermissionAssignmentDrawer`
+    补 `catch` 内竞态守卫（过期失败响应丢弃）、`userId=null` 早退、`props.user?.id ?? null`
+    的 null 侧；`MenuVisibilityPanel` 补 `setCheckedKeys` 同步主体（原默认树桩无此方法 →
+    该逻辑**从未执行**）与 `syncingTree` 重入守卫；`FilePreview` 补卸载后迟到失败不误报；
+    `useBackupSchedule` 补端点失败静默回退；`config` 补受限存储 `getItem`/`setItem` 抛错。
+  - **删除不可达死代码**（而非用 `c8 ignore` 掩盖）：`stores/config.ts` 的
+    `readStoredTheme`/`setTheme` 测试原先 **spy 了 `Storage.prototype`**，但
+    `src/test/setup.ts` 用 `Object.defineProperty` 把 `localStorage` 换成**普通对象字面量桩**，
+    其原型链上根本没有 `Storage.prototype` —— 该 spy 是**空操作**，两个 `catch` 分支从未执行
+    （覆盖率恒 0、测试给出**虚假信心**）。改为 spy 实例本身后真实命中。
+    `useBackupSchedule.toCron` 的 `backupTime || '02:00'` 与解构默认值 `m = '0'`：
+    经实测 `normalizeBackupTime('3') === '03:00'`、`('25:99') === null`，到达 `toCron` 的值
+    必然非空且必含冒号，两处兜底**均为死代码**（旧注释误称 `'3'` 可到达），一并删除。
+  - **确认 v8 计数伪影**（有仓内既有先例）：`dataReport.ts` 两个含 `return` 的 `try/finally`
+    的 `finally` 侧、`dataReport.ts:63`/`policy.ts` 等按既有约定标注
+    `/* c8 ignore next -- finally 分支为 v8 计数伪影 */`（与 `stores/dataPackage.ts` 同款）。
 
 ### 变更（行为）
 - 新增 `assert_org_reachable`（`core/data_permission.py`）作为跨组织可达性守卫的**唯一实现**，
