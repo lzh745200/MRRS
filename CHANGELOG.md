@@ -219,8 +219,16 @@
      }
      ```
      （`minimatch@3` 走 eslint 链，保持 `brace-expansion@1.1.21` 不动。）
-     解析结果经 `npm ls` 校验无 `invalid`，`npm audit --audit-level=high` exit 0，
-     `npm run build` 与 `npx vitest run --coverage` 均通过。
+     实测装出的树：`minimatch@9.0.9 → 2.1.7`、`minimatch@10.2.5/6 → 5.0.12`、
+     `minimatch@3.1.5 → 1.1.21`，**每个消费者的真实需求都被满足**；
+     `npm audit --audit-level=high` exit 0，`npm run build` 与
+     `npx vitest run --coverage` 均通过。CI 只跑 `npm audit`（不跑 `npm ls`），门禁全绿。
+     已知无害残留：`npm ls brace-expansion` 会对
+     `test-exclude/node_modules/minimatch/node_modules/brace-expansion@5.0.12`
+     标一条 `invalid: "^2.1.7"`——这是 npm 把 `minimatch@9` 规则误套到同目录层级
+     `minimatch@10` 实例上的**显示层伪影**（两规则在同一物理位置重叠），
+     实际解析正确、`npm ls` 之外的一切工具不受影响。试过用
+     `"test-exclude": { "minimatch": "^10.0.0" }` 消掉它，会触发 ERESOLVE，故保留现状。
   教训一：**同名依赖被两个消费者以相反的模块格式引用时，全局 override 必然打挂其中一方**，
   必须用 `pkg@major` 作用域覆盖分别满足。
   教训二：**安全覆盖必须验证模块格式（ESM/CJS）与下游 import 形态**（default vs 具名），
