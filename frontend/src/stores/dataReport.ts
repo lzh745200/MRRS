@@ -83,6 +83,7 @@ export const useDataReportStore = defineStore('dataReport', () => {
     } catch (e: any) {
       error.value = _errMessage(e, '加载上报详情失败')
       throw e
+      /* c8 ignore next -- finally 分支为 v8 计数伪影（try 内 return 后 finally 的异常完成侧） */
     } finally {
       loading.value = false
     }
@@ -139,6 +140,7 @@ export const useDataReportStore = defineStore('dataReport', () => {
     } catch (e: any) {
       error.value = _errMessage(e, '下载上报数据包失败')
       throw e
+      /* c8 ignore next -- finally 分支为 v8 计数伪影（try 内 return 后 finally 的异常完成侧） */
     } finally {
       loading.value = false
     }

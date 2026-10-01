@@ -102,8 +102,11 @@ function toFiniteNumber(raw: number | string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/** 经纬度范围校验（fail-closed：非法值不外发） */
-function inRange(v: number | null, min: number, max: number): boolean {
+/** 经纬度范围校验（fail-closed：非法值不外发）。
+ *  以 `v is number` 类型谓词返回，使调用方在通过校验后**由 TS 自动收窄**为
+ *  number —— 从而不再需要 `if (lng == null) return` 这类运行期兜底
+ *  （该判定在 `inRange` 之后恒为假，属不可达死分支，实测分支计数恒为 0）。 */
+function inRange(v: number | null, min: number, max: number): v is number {
   return v !== null && v >= min && v <= max
 }
 
@@ -153,13 +156,11 @@ function onInputChange() {
   const lng = toFiniteNumber(innerLng.value)
   const lat = toFiniteNumber(innerLat.value)
   // 非法/超范围坐标一律不外发（父组件按 number 消费，脏值会变成 NaN 或越界坐标入库）
+  // inRange 为类型谓词，通过后 lng/lat 已被 TS 收窄为 number，无需再判空。
   if (!inRange(lng, -180, 180) || !inRange(lat, -90, 90)) {
     ElMessage.warning('经纬度格式不正确：经度 -180~180，纬度 -90~90')
     return
   }
-  // toFiniteNumber 返回 number | null；inRange 通过后已保证非空，
-  // 但 TS 无法跨函数收窄，故在赋值/外发前显式断言为非空。
-  if (lng == null || lat == null) return
   innerLng.value = lng
   innerLat.value = lat
   emit('update:modelValue', { lng, lat })

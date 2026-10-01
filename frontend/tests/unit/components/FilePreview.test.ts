@@ -222,6 +222,59 @@ describe('FilePreview', () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled()
   })
 
+  it('卸载后迟到的 fetchBlob 失败 → 不弹「文件预览失败」、不残留状态（catch 内守卫）', async () => {
+    // catch 块内的 `if (token !== loadToken || unmounted) return` 真分支：
+    // 组件已卸载时请求才失败，此时禁止弹全局错误提示（用户已离开该视图，属于噪音）
+    let rejectBlob!: (e: unknown) => void
+    const fetchBlob = vi.fn(
+      () =>
+        new Promise<Blob>((_, rej) => {
+          rejectBlob = rej
+        })
+    )
+    const wrapper = mount(FilePreview, {
+      props: { modelValue: true, fetchBlob, fileName: 'a.pdf' },
+      global: { stubs },
+    })
+    await flushPromises()
+    expect(fetchBlob).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+    rejectBlob(new Error('late network failure'))
+    await flushPromises()
+    // 已卸载 → 不弹提示、不释放（release 由 onBeforeUnmount 已做过）
+    expect(elMessageErrorMock).not.toHaveBeenCalled()
+  })
+
+  it('重新打开触发的新请求使旧请求失败结果失效 → 守卫拦截，不误报错误', async () => {
+    let rejectFirst!: (e: unknown) => void
+    const fetchBlob = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Blob>((_, rej) => {
+            rejectFirst = rej
+          })
+      )
+      .mockResolvedValueOnce(new Blob(['x'], { type: 'application/pdf' }))
+    const wrapper = mount(FilePreview, {
+      props: { modelValue: true, fetchBlob, fileName: 'a.pdf' },
+      global: { stubs },
+    })
+    await flushPromises()
+    expect(fetchBlob).toHaveBeenCalledTimes(1)
+
+    // 重新打开：loadToken 自增 → 旧请求的 token 与当前不符
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true, fileName: 'b.pdf' })
+    await flushPromises()
+
+    // 旧请求此刻才失败 → token 不匹配，守卫直接 return（不弹错误）
+    rejectFirst(new Error('stale failure'))
+    await flushPromises()
+    expect(elMessageErrorMock).not.toHaveBeenCalled()
+  })
+
   it('重新打开时加载失败 → 不残留上一个文件的可下载内容', async () => {
     const fetchBlob = vi
       .fn()

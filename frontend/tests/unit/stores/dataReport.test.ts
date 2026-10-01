@@ -5,12 +5,14 @@ const mockApiRequest = vi.fn()
 
 vi.mock('@/api/request', () => ({
   apiRequest: (...args: any[]) => mockApiRequest(...args),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/unwrapList', () => ({
   unwrapList: (res: any) => {
     if (Array.isArray(res)) return { items: res, total: res.length }
-    if (res?.data?.items) return { items: res.data.items, total: res.data.total ?? res.data.items.length }
+    if (res?.data?.items)
+      return { items: res.data.items, total: res.data.total ?? res.data.items.length }
     return { items: [], total: 0 }
   },
 }))
@@ -36,11 +38,13 @@ describe('useDataReportStore', () => {
       data: { items: [{ id: 1 }, { id: 2 }], total: 2 },
     })
     await store.fetchReceivedReports({ page: 1 })
-    expect(mockApiRequest).toHaveBeenCalledWith(expect.objectContaining({
-      method: 'GET',
-      url: '/data-reports/received',
-      params: { page: 1 },
-    }))
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        url: '/data-reports/received',
+        params: { page: 1 },
+      })
+    )
     expect(store.receivedReports).toHaveLength(2)
     expect(store.receivedTotal).toBe(2)
   })
@@ -75,48 +79,58 @@ describe('useDataReportStore', () => {
   it('previewReport 调用 GET /data-reports/{id}', async () => {
     mockApiRequest.mockResolvedValueOnce({ data: { id: 5, content: 'x' } })
     await store.previewReport(5)
-    expect(mockApiRequest).toHaveBeenCalledWith(expect.objectContaining({
-      method: 'GET',
-      url: '/data-reports/5',
-    }))
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        url: '/data-reports/5',
+      })
+    )
   })
 
   it('receiveReport 调用 POST /data-reports/{id}/approve', async () => {
     mockApiRequest.mockResolvedValueOnce({})
     await store.receiveReport(3)
-    expect(mockApiRequest).toHaveBeenCalledWith(expect.objectContaining({
-      method: 'POST',
-      url: '/data-reports/3/approve',
-    }))
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'POST',
+        url: '/data-reports/3/approve',
+      })
+    )
   })
 
   it('rejectReport 调用 POST /data-reports/{id}/review with decision=reject', async () => {
     mockApiRequest.mockResolvedValueOnce({})
     await store.rejectReport(3, '数据不完整')
-    expect(mockApiRequest).toHaveBeenCalledWith(expect.objectContaining({
-      method: 'POST',
-      url: '/data-reports/3/review',
-      data: { decision: 'reject', comment: '数据不完整' },
-    }))
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'POST',
+        url: '/data-reports/3/review',
+        data: { decision: 'reject', comment: '数据不完整' },
+      })
+    )
   })
 
   it('downloadReport 调用 GET /data-reports/{id}/package', async () => {
     mockApiRequest.mockResolvedValueOnce({ data: { url: 'http://x' } })
     await store.downloadReport(7)
-    expect(mockApiRequest).toHaveBeenCalledWith(expect.objectContaining({
-      method: 'GET',
-      url: '/data-reports/7/package',
-    }))
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        url: '/data-reports/7/package',
+      })
+    )
   })
 
   it('submitReport 调用 POST /data-reports', async () => {
     mockApiRequest.mockResolvedValueOnce({})
     await store.submitReport({ content: 'new' })
-    expect(mockApiRequest).toHaveBeenCalledWith(expect.objectContaining({
-      method: 'POST',
-      url: '/data-reports',
-      data: { content: 'new' },
-    }))
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'POST',
+        url: '/data-reports',
+        data: { content: 'new' },
+      })
+    )
   })
 
   // 原实现：previewReport/receiveReport/rejectReport/downloadReport/submitReport
@@ -158,6 +172,48 @@ describe('useDataReportStore', () => {
       mockApiRequest.mockRejectedValueOnce({})
       await expect(store.submitReport({})).rejects.toEqual({})
       expect(store.error).toBe('提交上报失败')
+    })
+
+    it('优先采用请求层净化的 userMessage（优于 response.data.message）', async () => {
+      mockApiRequest.mockRejectedValueOnce({
+        userMessage: '网络连接失败，请检查网络',
+        response: { data: { message: '原始后端消息' } },
+        message: 'raw',
+      })
+      // 写方法失败会向上抛出，必须先吞掉拒绝再断言
+      await expect(store.receiveReport(3)).rejects.toEqual(
+        expect.objectContaining({ userMessage: '网络连接失败，请检查网络' })
+      )
+      expect(store.error).toBe('网络连接失败，请检查网络')
+    })
+
+    it('userMessage 为空串时跳过（falsy）取 response.data.message', async () => {
+      mockApiRequest.mockRejectedValueOnce({
+        userMessage: '',
+        response: { data: { message: '业务错误' } },
+      })
+      await expect(store.downloadReport(7)).rejects.toEqual(
+        expect.objectContaining({ response: { data: { message: '业务错误' } } })
+      )
+      expect(store.error).toBe('业务错误')
+    })
+
+    it('downloadReport 无任何错误属性时回退中文兜底文案', async () => {
+      mockApiRequest.mockRejectedValueOnce({})
+      await expect(store.downloadReport(7)).rejects.toEqual({})
+      expect(store.error).toBe('下载上报数据包失败')
+    })
+
+    it('rejectReport 无任何错误属性时回退中文兜底文案', async () => {
+      mockApiRequest.mockRejectedValueOnce({})
+      await expect(store.rejectReport(3, '原因')).rejects.toEqual({})
+      expect(store.error).toBe('拒绝上报失败')
+    })
+
+    it('previewReport 无任何错误属性时回退中文兜底文案', async () => {
+      mockApiRequest.mockRejectedValueOnce({})
+      await expect(store.previewReport(5)).rejects.toEqual({})
+      expect(store.error).toBe('加载上报详情失败')
     })
 
     it('成功时清空 error 并复位 loading', async () => {

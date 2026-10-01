@@ -110,9 +110,33 @@ describe('主题取值 fail-closed（白名单 + 存储守卫）', () => {
   })
 
   it('readStoredTheme：getItem 抛错（受限存储）时回退默认主题而不抛出', () => {
-    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    // 必须 spy 全局 localStorage 实例本身，不能 spy Storage.prototype：
+    // src/test/setup.ts 用 Object.defineProperty 把 localStorage 换成普通对象字面量桩，
+    // 其原型链上根本没有 Storage.prototype → 对原型的 spy 不会被命中，catch 分支永远进不去
+    // （覆盖率计数恒为 0，测试给出虚假信心）。同 traps 参见 guards.test.ts / lockDigest.test.ts。
+    const spy = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError')
     })
+    try {
+      expect(readStoredTheme()).toBe(DEFAULT_THEME)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('readStoredTheme：getItem 抛非 Error 值（如字符串）同样回退默认主题', () => {
+    const spy = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw 'SecurityError'
+    })
+    try {
+      expect(readStoredTheme()).toBe(DEFAULT_THEME)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('readStoredTheme：getItem 正常返回但值为非法主题时回退默认主题', () => {
+    const spy = vi.spyOn(localStorage, 'getItem').mockImplementation(() => 'darkk')
     try {
       expect(readStoredTheme()).toBe(DEFAULT_THEME)
     } finally {
@@ -137,13 +161,44 @@ describe('主题取值 fail-closed（白名单 + 存储守卫）', () => {
 
   it('setTheme 写盘抛错（配额）时仍在本会话生效且不抛出', () => {
     const store = useConfigStore()
-    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    // 同 readStoredTheme：spy 实例而非 Storage.prototype（setup.ts 的桩不在原型链上）
+    const spy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError')
     })
     try {
       expect(() => store.setTheme('dark')).not.toThrow()
       expect(store.theme).toBe('dark')
       expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+      // 写盘失败：值不落盘（区别于正常路径的持久化断言）
+      expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('setTheme 写盘抛非 Error 值（如字符串）时同样不抛出且本会话生效', () => {
+    const store = useConfigStore()
+    const spy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw 'QuotaExceededError'
+    })
+    try {
+      expect(() => store.setTheme('high-contrast')).not.toThrow()
+      expect(store.theme).toBe('high-contrast')
+      expect(document.documentElement.getAttribute('data-theme')).toBe('high-contrast')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('store 初始化：getItem 抛错（受限存储）时 theme 回退默认且不中断构造', () => {
+    const spy = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError')
+    })
+    try {
+      setActivePinia(createPinia())
+      const store = useConfigStore()
+      expect(store.theme).toBe(DEFAULT_THEME)
+      expect(store.appName).toBe('帮扶管理信息系统')
     } finally {
       spy.mockRestore()
     }

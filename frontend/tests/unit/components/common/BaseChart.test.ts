@@ -132,7 +132,11 @@ describe('common/BaseChart.vue', () => {
     expect(echartsInstance.dispose).toHaveBeenCalledTimes(1)
   })
 
-  it('guards initChart when chartRef is null (unmounted before nextTick)', async () => {
+  it('卸载早于 nextTick 时不初始化图表（unmounted 守卫拦住）', async () => {
+    // 2026-09-30：`initChart` 里原有的 `if (!chartRef.value) return` 是不可达分支
+    // （调用点已被 `unmounted` 先行拦截、模板根节点恒存在），已改为非空断言移除；
+    // 真正承担"卸载后不再初始化"职责的是 nextTick 回调里的 `unmounted` 判定，
+    // 本用例即锁定该语义：卸载后 echarts.init 不得被调用。
     const wrapper = mount(BaseChart, { props: { option } })
     wrapper.unmount()
     await flushPromises()

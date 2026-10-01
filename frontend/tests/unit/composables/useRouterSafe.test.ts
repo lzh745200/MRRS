@@ -6,12 +6,79 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockPush, resolve: mockResolve }),
 }))
 
-import { useRouterSafe, safeRouteParam, isNavigationFailureLike } from '@/composables/useRouterSafe'
+import {
+  useRouterSafe,
+  safeRouteParam,
+  isNavigationFailureLike,
+  toSafeLocationHref,
+  SAFE_LOCATION_FALLBACK,
+} from '@/composables/useRouterSafe'
 
 /** 构造与 vue-router createRouterError 同形的 NavigationFailure（Error + 数字 type + from/to） */
 function makeNavigationFailure(type = 4) {
   return Object.assign(new Error('navigation aborted'), { type, from: {}, to: {} })
 }
+
+describe('toSafeLocationHref（开放重定向 / 脚本协议守卫）', () => {
+  it('同源相对路径原样放行', () => {
+    expect(toSafeLocationHref('/dashboard')).toBe('/dashboard')
+    expect(toSafeLocationHref('/policies/1?tab=detail')).toBe('/policies/1?tab=detail')
+    expect(toSafeLocationHref('relative/path')).toBe('relative/path')
+    expect(toSafeLocationHref('#hash')).toBe('#hash')
+  })
+
+  it('空串 / 纯空白 / 控制字符 → 回退默认首页', () => {
+    // cleaned 为空 → 命中 `if (!cleaned) return fallback`
+    expect(toSafeLocationHref('')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('   ')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('\t\n\r')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('\u0000\u001f')).toBe(SAFE_LOCATION_FALLBACK)
+  })
+
+  it('自定义 fallback 在非法目标时生效', () => {
+    expect(toSafeLocationHref('', '/login')).toBe('/login')
+    expect(toSafeLocationHref('https://evil.com', '/login')).toBe('/login')
+  })
+
+  it('协议相对地址（// 或 /\\ 开头）→ 回退（防外站跳转）', () => {
+    expect(toSafeLocationHref('//evil.com/x')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('/\\evil.com/x')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('\\\\evil.com/x')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('\\evil.com')).toBe(SAFE_LOCATION_FALLBACK)
+  })
+
+  it('带协议前缀（http/https/javascript/data 等）→ 回退（防脚本执行）', () => {
+    expect(toSafeLocationHref('https://evil.com')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('http://evil.com')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('javascript:alert(1)')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('data:text/html,<script>x</script>')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('vbscript:msgbox(1)')).toBe(SAFE_LOCATION_FALLBACK)
+    // 大小写不敏感（正则 [a-zA-Z] 首字符）
+    expect(toSafeLocationHref('JavaScript:alert(1)')).toBe(SAFE_LOCATION_FALLBACK)
+  })
+
+  it('控制字符剥离后仍能识别脚本协议（防 java\\tscript: 绕过）', () => {
+    // 先剥离 \t \n \r 再判定，否则 "java\tscript:" 会通过协议正则漏网
+    expect(toSafeLocationHref('java\tscript:alert(1)')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('java\nscript:alert(1)')).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref('\tjavascript:alert(1)')).toBe(SAFE_LOCATION_FALLBACK)
+    // 带前导空白的正常路径剥离后放行
+    expect(toSafeLocationHref('  /dashboard  ')).toBe('/dashboard')
+  })
+
+  it('协议判定不误伤含冒号但非协议前缀的相对路径', () => {
+    // 首字符非字母（正则要求 [a-zA-Z] 开头）→ 不判为协议
+    expect(toSafeLocationHref('/a:b')).toBe('/a:b')
+    expect(toSafeLocationHref('1:2')).toBe('1:2')
+  })
+
+  it('运行时传入 null/undefined（绕过 TS 类型）→ 回退而非抛错', () => {
+    // String(path ?? '') 的 ?? 右侧：JS 调用方（如 window.location.href 直接取值）
+    // 可能传入 undefined，此处锁死"不抛 TypeError、静默回退"的防御语义
+    expect(toSafeLocationHref(null as unknown as string)).toBe(SAFE_LOCATION_FALLBACK)
+    expect(toSafeLocationHref(undefined as unknown as string)).toBe(SAFE_LOCATION_FALLBACK)
+  })
+})
 
 describe('isNavigationFailureLike', () => {
   it('非 Error（字符串/普通对象）→ false', () => {
@@ -28,7 +95,9 @@ describe('isNavigationFailureLike', () => {
 
   it('Error + 数字 type 但缺 from/to → false', () => {
     expect(isNavigationFailureLike(Object.assign(new Error('x'), { type: 4 }))).toBe(false)
-    expect(isNavigationFailureLike(Object.assign(new Error('x'), { type: 4, from: {} }))).toBe(false)
+    expect(isNavigationFailureLike(Object.assign(new Error('x'), { type: 4, from: {} }))).toBe(
+      false
+    )
   })
 
   it('Error + 数字 type + from/to → true（NavigationFailure 结构）', () => {
@@ -166,9 +235,7 @@ describe('useRouterSafe', () => {
     mockPush.mockReturnValueOnce(Promise.resolve())
     const { pushSafe } = useRouterSafe()
     pushSafe('/unknown', '未知路由')
-    expect(consoleErr).toHaveBeenCalledWith(
-      expect.stringContaining('/unknown (未知路由)')
-    )
+    expect(consoleErr).toHaveBeenCalledWith(expect.stringContaining('/unknown (未知路由)'))
     expect(mockPush).toHaveBeenCalledWith({ name: 'NotFound' })
     expect(window.location.href).toBe('')
     consoleErr.mockRestore()

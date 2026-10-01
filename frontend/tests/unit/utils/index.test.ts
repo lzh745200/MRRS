@@ -230,6 +230,14 @@ describe('utils/index.ts 统一导出', () => {
       const invalid = new Date('invalid')
       expect(format.formatDateTime(invalid)).toBe(String(invalid))
     })
+
+    // 守卫与兄弟函数（formatDateTimeLocale / formatDate / formatDateTimeFull）对齐：
+    // 原实现遇到 null/undefined 会走 d.getTime() 抛 TypeError（渲染期整页崩溃）。
+    it('null / undefined / 空串回退 "-" 而不抛 TypeError', () => {
+      expect(format.formatDateTime(null as any)).toBe('-')
+      expect(format.formatDateTime(undefined as any)).toBe('-')
+      expect(format.formatDateTime('' as any)).toBe('-')
+    })
   })
 
   describe('format.formatDateTimeLocale', () => {
@@ -268,6 +276,19 @@ describe('utils/index.ts 统一导出', () => {
 
     it('自定义单位', () => {
       expect(format.formatCurrency(100, '万元')).toBe('100万元')
+    })
+
+    // 原实现直接 value.toLocaleString()：null/undefined 抛 TypeError，NaN 渲染成 'NaN'。
+    it('null / undefined / 空串回退 "-" 而不抛 TypeError', () => {
+      expect(format.formatCurrency(null)).toBe('-')
+      expect(format.formatCurrency(undefined)).toBe('-')
+      expect(format.formatCurrency('')).toBe('-')
+    })
+
+    it('非有限数（NaN / Infinity / 非数字串）回退 "-" 而不渲染 NaN', () => {
+      expect(format.formatCurrency(Number.NaN)).toBe('-')
+      expect(format.formatCurrency(Number.POSITIVE_INFINITY)).toBe('-')
+      expect(format.formatCurrency('not-a-number')).toBe('-')
     })
   })
 

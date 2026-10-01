@@ -6,7 +6,8 @@ vi.mock('@/api/request', () => ({
   post: vi.fn(),
   put: vi.fn(),
   del: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import { usePolicyStore } from '@/stores/policy'
 import { get, post, put, del } from '@/api/request'
@@ -74,7 +75,10 @@ describe('usePolicyStore', () => {
   })
 
   it('deletePolicy removes item', async () => {
-    store.policyList = [{ id: 1, title: 'To Delete' }, { id: 2, title: 'Keep' }]
+    store.policyList = [
+      { id: 1, title: 'To Delete' },
+      { id: 2, title: 'Keep' },
+    ]
     store.total = 2
     mockDel.mockResolvedValueOnce({ code: 200 })
     await store.deletePolicy(1)
@@ -107,9 +111,41 @@ describe('usePolicyStore', () => {
     })
 
     it('fetchPolicies 优先采用请求层净化的 userMessage', async () => {
-      mockGet.mockRejectedValueOnce(Object.assign(new Error('raw'), { userMessage: '网络连接失败' }))
+      mockGet.mockRejectedValueOnce(
+        Object.assign(new Error('raw'), { userMessage: '网络连接失败' })
+      )
       await store.fetchPolicies()
       expect(store.error).toBe('网络连接失败')
+    })
+
+    it('fetchPolicies：无 userMessage 时取响应体 message（axios 错误形状）', async () => {
+      // _errMessage 第二级回退分支 e.response.data.message
+      mockGet.mockRejectedValueOnce({ response: { data: { message: '后端返回的业务错误' } } })
+      await store.fetchPolicies()
+      expect(store.error).toBe('后端返回的业务错误')
+    })
+
+    it('fetchPolicies：userMessage 为空串时跳过（falsy）取下一级', async () => {
+      mockGet.mockRejectedValueOnce({
+        userMessage: '',
+        response: { data: { message: '业务错误' } },
+        message: 'raw',
+      })
+      await store.fetchPolicies()
+      expect(store.error).toBe('业务错误')
+    })
+
+    it('fetchPolicies：三级来源全缺失时回退到默认文案', async () => {
+      // _errMessage 末级 fallback 分支：既无 userMessage 也无 response/message
+      mockGet.mockRejectedValueOnce({})
+      await store.fetchPolicies()
+      expect(store.error).toBe('加载政策列表失败')
+    })
+
+    it('fetchPolicy：无任何错误属性时回退到默认文案', async () => {
+      mockGet.mockRejectedValueOnce(null)
+      await store.fetchPolicy(3)
+      expect(store.error).toBe('加载政策详情失败')
     })
 
     it('fetchPolicy 失败时写入 error 且不抛出', async () => {
@@ -169,7 +205,9 @@ describe('fetchPolicies 响应形态', () => {
 })
 
 describe('fetchPolicies 响应形态补充', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
   it('信封 data.items → 赋值', async () => {
     ;(get as any).mockResolvedValue({ code: 200, data: { items: [{ id: 3 }], total: 1 } })
     const s = usePolicyStore()

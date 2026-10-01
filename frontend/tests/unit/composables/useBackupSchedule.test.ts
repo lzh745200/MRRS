@@ -49,6 +49,28 @@ describe('useBackupSchedule (T044 唯一真相源)', () => {
     expect(scheduleConfig.value.backupTime).toBe('02:00')
   })
 
+  it('端点不可用（GET 拒绝）时静默保留默认配置且不抛出', async () => {
+    // catch 空块：cron 配置端点 404/500/网络断开时不能因加载失败而白屏或中断初始化
+    const defaultSnapshot = useBackupSchedule().scheduleConfig.value
+    ;(get as any).mockRejectedValue(new Error('Network Error'))
+    const { scheduleConfig, loadScheduleConfig } = useBackupSchedule()
+    await expect(loadScheduleConfig()).resolves.toBeUndefined()
+    // 默认值原样保留（未被失败响应污染）
+    expect(scheduleConfig.value.enabled).toBe(defaultSnapshot.enabled)
+    expect(scheduleConfig.value.frequency).toBe(defaultSnapshot.frequency)
+    expect(scheduleConfig.value.backupTime).toBe(defaultSnapshot.backupTime)
+    expect(scheduleConfig.value.retentionCount).toBe(defaultSnapshot.retentionCount)
+  })
+
+  it('响应体为空（data 为 null）时同样保留默认配置', async () => {
+    ;(get as any).mockResolvedValue({ data: null })
+    const { scheduleConfig, loadScheduleConfig } = useBackupSchedule()
+    await loadScheduleConfig()
+    // data 为假值 → if (data) 不进入，配置保持默认
+    expect(scheduleConfig.value.frequency).toBe('daily')
+    expect(scheduleConfig.value.backupTime).toBe('02:00')
+  })
+
   it('saveSchedule 写入 cron + keep_count，并回读保持一致', async () => {
     ;(put as any).mockResolvedValue({ data: { success: true } })
     ;(get as any).mockResolvedValue({
@@ -158,11 +180,11 @@ describe('useBackupSchedule toCron 分支（经 saveSchedule 间接驱动）', (
     return calls[calls.length - 1][1].schedule as string
   }
 
-  it('backupTime 为空串 → `|| \'02:00\'` 兜底', async () => {
+  it("backupTime 为空串 → `|| '02:00'` 兜底", async () => {
     expect(await cronFor('', 'daily')).toBe('00 02 * * *')
   })
 
-  it('backupTime 无冒号 → 解构默认值 m = \'0\' 生效', async () => {
+  it("backupTime 无冒号 → 解构默认值 m = '0' 生效", async () => {
     // '3'.split(':') === ['3'] → h='3'、m 缺席取默认 '0' → 03:00
     expect(await cronFor('3', 'daily')).toBe('00 03 * * *')
   })
@@ -236,9 +258,7 @@ describe('useBackupSchedule cron 保真与时刻校验', () => {
       scheduleConfig.value.backupTime = bad
       await saveSchedule()
       expect(put).not.toHaveBeenCalled()
-      expect(ElMessage.error).toHaveBeenCalledWith(
-        expect.stringContaining('备份时间格式不正确')
-      )
+      expect(ElMessage.error).toHaveBeenCalledWith(expect.stringContaining('备份时间格式不正确'))
       expect(ElMessage.success).not.toHaveBeenCalled()
       expect(savingSchedule.value).toBe(false)
     }

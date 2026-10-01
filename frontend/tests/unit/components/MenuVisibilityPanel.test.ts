@@ -21,7 +21,8 @@ const mockMessage = mocks.message
 vi.mock('@/api/request', () => ({
   get: (...a: any[]) => mocks.get(...a),
   put: (...a: any[]) => mocks.put(...a),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('element-plus', () => ({ ElMessage: mocks.message }))
 
@@ -42,7 +43,8 @@ const ElButtonStub = {
     size: String,
   },
   emits: ['click'],
-  template: '<button class="stub-btn" :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
+  template:
+    '<button class="stub-btn" :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
 }
 
 const ElTreeStub = {
@@ -50,6 +52,31 @@ const ElTreeStub = {
   props: ['data', 'defaultCheckedKeys', 'showCheckbox'],
   emits: ['check'],
   methods: {
+    onCheck() {
+      this.$emit('check', null, this.payload)
+    },
+  },
+  template:
+    '<div class="stub-tree"><button class="tree-check" @click="onCheck">check</button></div>',
+}
+
+/**
+ * 带 setCheckedKeys 的树桩。
+ *
+ * 真实 el-tree 暴露 setCheckedKeys（程序化回填勾选态）。默认 ElTreeStub 无此方法，
+ * 会命中 syncTreeCheckedKeys 的 `typeof tree?.setCheckedKeys !== 'function'` 守卫提前 return，
+ * 使「树同步」这段关键逻辑从未被执行（管理员看到 A、提交 B 的静默不一致正是此处缺测所致）。
+ */
+const setCheckedKeysCalls: string[][] = []
+const ElTreeStubWithSync = {
+  name: 'ElTreeStubWithSync',
+  props: ['data', 'defaultCheckedKeys', 'showCheckbox'],
+  emits: ['check'],
+  methods: {
+    setCheckedKeys(keys: string[]) {
+      // 记录每次回填，供断言"展示态与保存集合一致"
+      setCheckedKeysCalls.push([...keys])
+    },
     onCheck() {
       this.$emit('check', null, this.payload)
     },
@@ -123,7 +150,9 @@ describe('MenuVisibilityPanel.vue', () => {
     expect(tags[1].text()).toBe('帮扶村')
 
     // 自定义配置 → defaultCheckedKeys 为用户配置
-    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual(['dashboard'])
+    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual([
+      'dashboard',
+    ])
   })
 
   it('无自定义配置（menu_keys 为 null）时使用角色默认菜单', async () => {
@@ -138,7 +167,9 @@ describe('MenuVisibilityPanel.vue', () => {
       isCustomized: false,
     })
     await flushPromises()
-    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual(['village'])
+    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual([
+      'village',
+    ])
     // 未自定义 → 恢复按钮禁用
     expect(wrapper.findAll('button.stub-btn')[0].attributes('disabled')).toBeDefined()
     // 无自定义提示（roleDefaultKeys.length || 0 的 0 分支）
@@ -152,7 +183,9 @@ describe('MenuVisibilityPanel.vue', () => {
     })
     const wrapper = mountPanel({ userId: 7, username: 'x', currentMenuKeys: ['management'] })
     await flushPromises()
-    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual(['management'])
+    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual([
+      'management',
+    ])
   })
 
   it('loadMenuTree 失败时回退前端 MENU_CONFIG', async () => {
@@ -257,7 +290,9 @@ describe('MenuVisibilityPanel.vue', () => {
     const wrapper = mountPanel({ userId: 7, username: 'x' })
     await flushPromises()
     // 展示：village（前沿），父键不在集合内
-    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual(['village'])
+    expect(wrapper.findComponent({ name: 'ElTreeStub' }).props('defaultCheckedKeys')).toEqual([
+      'village',
+    ])
   })
 
   it('畸形 menu_keys 载荷（字符串/对象）→ 不当作选中集合', async () => {
@@ -293,7 +328,12 @@ describe('MenuVisibilityPanel.vue', () => {
   })
 
   it('恢复角色默认 → 保存 null；保存成功 emit saved', async () => {
-    const wrapper = mountPanel({ userId: 7, username: 'x', isCustomized: true, roleDefaultKeys: ['dashboard'] })
+    const wrapper = mountPanel({
+      userId: 7,
+      username: 'x',
+      isCustomized: true,
+      roleDefaultKeys: ['dashboard'],
+    })
     await flushPromises()
 
     await wrapper.findAll('button.stub-btn')[0].trigger('click')
@@ -342,5 +382,142 @@ describe('MenuVisibilityPanel.vue', () => {
     const wrapper = mountPanel({ userId: 7, username: 'x' })
     await flushPromises()
     expect(typeof (wrapper.vm as any).loadUserMenuConfig).toBe('function')
+  })
+
+  // ── 树勾选态同步（syncTreeCheckedKeys 主体） ──
+  // 默认 ElTreeStub 无 setCheckedKeys → 守卫提前 return，同步逻辑零执行。
+  // 以下用例挂带 setCheckedKeys 的树桩，真实驱动 setCheckedKeys 路径。
+  describe('树勾选态程序化同步（setCheckedKeys）', () => {
+    beforeEach(() => {
+      setCheckedKeysCalls.length = 0
+    })
+
+    it('加载用户自定义菜单后调用 setCheckedKeys 回填', async () => {
+      const wrapper = mountPanel(
+        { userId: 7, username: 'x', isCustomized: true },
+        ElTreeStubWithSync
+      )
+      await flushPromises()
+      // 用户有自定义配置 menu_keys=['dashboard'] → 回填该集合
+      expect(setCheckedKeysCalls.length).toBeGreaterThan(0)
+      expect(setCheckedKeysCalls.at(-1)).toEqual(['dashboard'])
+      expect(wrapper.findComponent({ name: 'ElTreeStubWithSync' }).exists()).toBe(true)
+    })
+
+    it('无自定义配置时回填角色默认菜单', async () => {
+      mockGet.mockImplementation((url: string) => {
+        if (url === '/menus/all') return Promise.resolve({ data: menuTree })
+        return Promise.resolve({ data: { menu_keys: null } })
+      })
+      mountPanel(
+        { userId: 7, username: 'x', roleDefaultKeys: ['dashboard', 'village'] },
+        ElTreeStubWithSync
+      )
+      await flushPromises()
+      expect(setCheckedKeysCalls.at(-1)).toEqual(['dashboard', 'village'])
+    })
+
+    it('勾选回调后重新回填（展示态与保存集合对齐）', async () => {
+      const wrapper = mountPanel(
+        { userId: 7, username: 'x', isCustomized: true },
+        ElTreeStubWithSync
+      )
+      await flushPromises()
+      const before = setCheckedKeysCalls.length
+      await wrapper.find('button.tree-check').trigger('click')
+      await flushPromises()
+      // onMenuCheck 末尾 void syncTreeCheckedKeys() → 再次回填
+      expect(setCheckedKeysCalls.length).toBeGreaterThan(before)
+    })
+
+    it('恢复默认后回填空集合（提交 null 语义）', async () => {
+      const wrapper = mountPanel(
+        { userId: 7, username: 'x', isCustomized: true },
+        ElTreeStubWithSync
+      )
+      await flushPromises()
+      setCheckedKeysCalls.length = 0
+      // 通过组件暴露的 resetToDefault 触发（等价于点击「恢复默认」按钮）
+      ;(wrapper.vm as any).resetToDefault()
+      await flushPromises()
+      expect(setCheckedKeysCalls.at(-1)).toEqual([])
+    })
+
+    it('角色默认键未提供（undefined）时回填空数组（displayCheckedKeys 的 ?? [] 兜底）', async () => {
+      mockGet.mockImplementation((url: string) => {
+        if (url === '/menus/all') return Promise.resolve({ data: menuTree })
+        // menu_keys 为 null → selectedMenuKeys = roleDefaultKeys
+        return Promise.resolve({ data: { menu_keys: null } })
+      })
+      // 不传 roleDefaultKeys → props.roleDefaultKeys 为 undefined → 命中 ?? []
+      mountPanel({ userId: 7, username: 'x' }, ElTreeStubWithSync)
+      await flushPromises()
+      expect(setCheckedKeysCalls.at(-1)).toEqual([])
+    })
+  })
+
+  // ── onMenuCheck 载荷形状兼容 ──
+  describe('onMenuCheck 载荷形状兼容', () => {
+    it('checked 为纯数组时直接采用', async () => {
+      // treeStubWith 通过 payload 控制 emit 的 checked 值
+      const w2 = mountPanel({ userId: 7, username: 'x' }, treeStubWith(['dashboard', 'village']))
+      await flushPromises()
+      await w2.find('button.tree-check').trigger('click')
+      await flushPromises()
+      expect((w2.vm as any).selectedMenuKeys).toContain('dashboard')
+      expect((w2.vm as any).selectedMenuKeys).toContain('village')
+    })
+
+    it('checked 既非对象 checkedKeys 也非数组（畸形载荷）→ 落空数组，不污染选中态', async () => {
+      // 命中 onMenuCheck 的 `: []` 末级兜底：字符串/数字等畸形载荷不得当选中集合
+      const w = mountPanel({ userId: 7, username: 'x' }, treeStubWith('malformed-payload'))
+      await flushPromises()
+      await w.find('button.tree-check').trigger('click')
+      await flushPromises()
+      expect((w.vm as any).selectedMenuKeys).toEqual([])
+    })
+
+    it('checkedKeys 对象含 halfCheckedKeys 时合并父级键（防父键缺失被后端裁掉）', async () => {
+      const payload = { checkedKeys: ['village'], halfCheckedKeys: ['management'] }
+      const w = mountPanel({ userId: 7, username: 'x' }, treeStubWith(payload))
+      await flushPromises()
+      await w.find('button.tree-check').trigger('click')
+      await flushPromises()
+      const keys = (w.vm as any).selectedMenuKeys
+      expect(keys).toContain('village')
+      expect(keys).toContain('management')
+    })
+  })
+
+  // ── syncingTree 重入守卫 ──
+  describe('syncingTree 重入守卫', () => {
+    it('setCheckedKeys 期间回传的 check 事件被丢弃，不与选中态互相覆盖', async () => {
+      // 真实 el-tree：setCheckedKeys 会同步触发 check 事件。
+      // 若不丢弃，程序化回填会被当作"用户勾选"再写回 selectedMenuKeys，
+      // 造成展示态与保存集合偏移。此桩在 setCheckedKeys 内同步 emit check 复现该重入。
+      const ReentrantTreeStub = {
+        name: 'ReentrantTreeStub',
+        props: ['data', 'defaultCheckedKeys', 'showCheckbox'],
+        emits: ['check'],
+        mounted() {
+          // 模拟 el-tree 初始化后同步回传一次 check
+          ;(this as any).$emit('check', null, { checkedKeys: ['should-be-ignored'] })
+        },
+        methods: {
+          setCheckedKeys() {
+            ;(this as any).$emit('check', null, { checkedKeys: ['should-be-ignored'] })
+          },
+        },
+        template: '<div class="stub-tree"></div>',
+      }
+      mockGet.mockImplementation((url: string) => {
+        if (url === '/menus/all') return Promise.resolve({ data: menuTree })
+        return Promise.resolve({ data: { menu_keys: ['dashboard'] } })
+      })
+      const w = mountPanel({ userId: 7, username: 'x' }, ReentrantTreeStub)
+      await flushPromises()
+      // 重入事件被 syncingTree 守卫丢弃 → 选中集合保持加载值，未被 'should-be-ignored' 覆盖
+      expect((w.vm as any).selectedMenuKeys).toEqual(['dashboard'])
+    })
   })
 })

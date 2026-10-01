@@ -92,11 +92,15 @@ function toCron(
   backupTime: string,
   preserve?: Pick<ParsedCron, 'monthDay' | 'weekday'>
 ): string {
-  // 小时位不给解构默认值：String.prototype.split 恒返回至少 1 个元素且元素必为
-  // 字符串，故下标 0 永不为 undefined，原来的 `h = '2'` 是不可达死代码（任务#28 删除）。
-  // 分钟位的 `m = '0'` 必须保留：backupTime 形如 '3'（无冒号）时 split 只得 ['3']，
-  // m 为 undefined，该默认值真实生效（见 useBackupSchedule.test.ts「backupTime 无冒号」）。
-  const [h, m = '0'] = (backupTime || '02:00').split(':')
+  // toCron 的唯一调用点是 resolveScheduleExpression ← saveSchedule，其 backupTime 参数
+  // 来自 normalizeBackupTime()：该函数要么返回 null（saveSchedule 已提前 return 不下发），
+  // 要么返回 padStart 两位拼接的 "HH:MM" 定长字符串。因此到达此处时 backupTime
+  // 必然非空、必然含冒号、split(':') 必然恰好两段：
+  //   - `backupTime || '02:00'` 的 falsy 分支不可达
+  //   - 分钟位解构默认值 `m = '0'` 不可达
+  // 两者均为历史遗留的死代码（旧注释曾误称 '3' 可到达，实测 '3' 经 normalize 后为 '03:00'），
+  // 2026-09-12 深审一并删除，避免用"防御性代码"掩盖不可达路径。
+  const [h, m] = backupTime.split(':')
   const hour = String(h).padStart(2, '0')
   const minute = String(m).padStart(2, '0')
   if (frequency === 'weekly') {

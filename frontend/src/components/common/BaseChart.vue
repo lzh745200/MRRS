@@ -32,9 +32,12 @@ let chartInstance: echarts.ECharts | null = null
 let unmounted = false
 
 const initChart = () => {
-  if (!chartRef.value) return
+  // 调用点（nextTick 回调）已先判 `unmounted` 提前返回，且模板根节点恒存在，
+  // 故此处的空值早退在真实路径上不可达。保留 `chartRef.value!` 的非空断言
+  // 而非 runtime 分支：既让 echarts.init 收到确切类型，也不留永远计 0 的死分支。
+  const el = chartRef.value as HTMLDivElement
 
-  chartInstance = echarts.init(chartRef.value, props.theme)
+  chartInstance = echarts.init(el, props.theme)
   chartInstance.setOption(props.option)
 
   chartInstance.on('click', (params) => {

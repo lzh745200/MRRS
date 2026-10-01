@@ -785,4 +785,139 @@ describe('PermissionAssignmentDrawer.vue', () => {
     // 重新加载结果被采纳
     expect((wrapper.vm as any).loadedPermissionsUserId).toBe(1)
   })
+
+  // ── catch 内过期守卫（失败响应同样要按序号丢弃）──
+  it('用户切换：A 的权限加载【失败】迟到 → catch 内守卫丢弃，不把 A 的失败态写给 B', async () => {
+    // 覆盖 loadCurrentPermissions catch 的 `if (isStale(...)) return` 真分支。
+    // 若不丢弃：A 的失败会把 permissionsLoadFailed 置 true 并清空 B 已加载的权限。
+    let rejectA!: (e: unknown) => void
+    const pendingA = new Promise((_, rej) => {
+      rejectA = rej
+    })
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/rbac/user/1/permissions') return pendingA
+      if (url.includes('/permissions'))
+        return Promise.resolve({ data: { permissions: ['b:read'] } })
+      if (url.includes('/user-menus')) return Promise.resolve({ data: { menu_keys: ['b-menu'] } })
+      return Promise.resolve({ data: [] })
+    })
+    const wrapper = mountDrawer({ user })
+    await flushPromises()
+
+    // 切到用户 2，B 成功加载
+    await wrapper.setProps({ user: { id: 2, username: 'lisi' } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.currentPermissions).toEqual(['b:read'])
+    expect(vm.permissionsLoadFailed).toBe(false)
+
+    // A 的失败此时才回来 → 必须被丢弃，B 的干净状态不被污染
+    rejectA(new Error('stale boom'))
+    await flushPromises()
+    expect(vm.permissionsLoadFailed).toBe(false)
+    expect(vm.currentPermissions).toEqual(['b:read'])
+    expect(vm.loadedPermissionsUserId).toBe(2)
+  })
+
+  it('用户切换：A 的菜单配置加载【失败】迟到 → catch 内守卫丢弃，不清空 B 的菜单键', async () => {
+    // 覆盖 loadMenuConfig catch 的 `if (isStale(...)) return` 真分支
+    let rejectA!: (e: unknown) => void
+    const pendingA = new Promise((_, rej) => {
+      rejectA = rej
+    })
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/menus/user-menus/1') return pendingA
+      if (url.includes('/permissions'))
+        return Promise.resolve({ data: { permissions: ['b:read'] } })
+      if (url.includes('/user-menus'))
+        return Promise.resolve({ data: { menu_keys: ['b-menu'], is_customized: true } })
+      return Promise.resolve({ data: [] })
+    })
+    const wrapper = mountDrawer({ user })
+    await flushPromises()
+
+    await wrapper.setProps({ user: { id: 2, username: 'lisi' } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.currentMenuKeys).toEqual(['b-menu'])
+
+    rejectA(new Error('stale menu boom'))
+    await flushPromises()
+    // 守卫拦住 → 不清空为 []
+    expect(vm.currentMenuKeys).toEqual(['b-menu'])
+  })
+
+  it('loadMenuConfig(userId=null) → 直接早退，不发请求', async () => {
+    // 覆盖 loadMenuConfig 的 `if (!userId) return` 真分支
+    const wrapper = mountDrawer({ user })
+    await flushPromises()
+    mockGet.mockClear()
+    const vm = wrapper.vm as any
+    await vm.loadMenuConfig(null)
+    await flushPromises()
+    // 未发出任何 /user-menus 请求
+    const calledMenus = mockGet.mock.calls.filter((c: any[]) =>
+      String(c[0]).includes('/user-menus')
+    )
+    expect(calledMenus).toHaveLength(0)
+  })
+
+  it('loadCurrentPermissions(userId=null) → 直接早退，不发请求', async () => {
+    // 覆盖 loadCurrentPermissions 的 `if (!userId) return` 真分支
+    const wrapper = mountDrawer({ user })
+    await flushPromises()
+    mockGet.mockClear()
+    const vm = wrapper.vm as any
+    await vm.loadCurrentPermissions(null)
+    await flushPromises()
+    const calledPerms = mockGet.mock.calls.filter((c: any[]) =>
+      String(c[0]).includes('/permissions')
+    )
+    expect(calledPerms).toHaveLength(0)
+  })
+
+  it('user 为 null 时默认参数落到 ?? null（不发请求、不抛错）', async () => {
+    // 覆盖 `props.user?.id ?? null` 的 null 侧：drawer 在无用户上下文中挂载
+    const wrapper = mountDrawer({ user: null })
+    await flushPromises()
+    mockGet.mockClear()
+    const vm = wrapper.vm as any
+    await vm.loadCurrentPermissions()
+    await vm.loadMenuConfig()
+    await flushPromises()
+    // user 为 null → 默认 userId 为 null → 两个加载函数均早退
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(vm.permissionsLoadFailed).toBe(false)
+  })
+
+  it('用户切换：A 的角色列表加载【失败】迟到 → catch 内序号守卫丢弃，不清空 B 的角色', async () => {
+    // 覆盖 loadAllRoles catch 的 `if (seq !== loadSeq) return` 真分支
+    let rejectRolesA!: (e: unknown) => void
+    const pendingRolesA = new Promise((_, rej) => {
+      rejectRolesA = rej
+    })
+    let rolesCall = 0
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/rbac/roles') {
+        rolesCall += 1
+        return rolesCall === 1 ? pendingRolesA : Promise.resolve([{ id: 'r-b', name: 'B 角色' }])
+      }
+      if (url.includes('/permissions'))
+        return Promise.resolve({ data: { permissions: ['b:read'] } })
+      if (url.includes('/user-menus')) return Promise.resolve({ data: { menu_keys: ['b-menu'] } })
+      return Promise.resolve({ data: [] })
+    })
+    const wrapper = mountDrawer({ user })
+    await flushPromises()
+
+    await wrapper.setProps({ user: { id: 2, username: 'lisi' } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.allRoles).toEqual([{ id: 'r-b', name: 'B 角色' }])
+
+    // A 的角色加载失败迟到 → 丢弃，不清空 B 的角色列表
+    rejectRolesA(new Error('stale roles boom'))
+    await flushPromises()
+    expect(vm.allRoles).toEqual([{ id: 'r-b', name: 'B 角色' }])
+  })
 })
