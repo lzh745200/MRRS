@@ -4,12 +4,12 @@
 
 import enum
 
-from sqlalchemy import Boolean, Column, DateTime
+from sqlalchemy import Boolean, Column
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.sql import func
 
-from .base import Base, EncryptedText
+from .base import Base, EncryptedText, UtcDateTime
 
 
 class SchoolLevel(str, enum.Enum):
@@ -87,8 +87,8 @@ class School(Base):
         comment="帮扶状态",
     )
     support_unit = Column(String(200), comment="帮扶单位")
-    support_start_date = Column(DateTime(timezone=True), comment="帮扶开始日期")
-    support_end_date = Column(DateTime(timezone=True), comment="帮扶结束日期")
+    support_start_date = Column(UtcDateTime(), comment="帮扶开始日期")
+    support_end_date = Column(UtcDateTime(), comment="帮扶结束日期")
 
     # 联系信息
     principal = Column(String(50), comment="校长姓名")
@@ -99,7 +99,7 @@ class School(Base):
     description = Column(Text, comment="学校简介")
     remarks = Column(Text, comment="备注")
     is_active = Column(Boolean, default=True, comment="是否启用")
-    deleted_at = Column(DateTime(timezone=True), nullable=True, comment="软删时间(回收站保留期计算依据)")
+    deleted_at = Column(UtcDateTime(), nullable=True, comment="软删时间(回收站保留期计算依据)")
 
     # 数据权限字段
     organization_id = Column(
@@ -112,9 +112,9 @@ class School(Base):
     created_by = Column(Integer, nullable=True, index=True, comment="创建者ID")
 
     # 时间戳
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         comment="更新时间",
@@ -203,7 +203,7 @@ class SchoolAttachment(Base):
     file_type = Column(String(50), comment="文件MIME类型")
     description = Column(String(500), comment="文件说明")
     uploaded_by = Column(String(50), comment="上传人")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="上传时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="上传时间")
 
     def to_dict(self):
         return {
@@ -241,8 +241,8 @@ class SchoolSupport(Base):
     support_type = Column(String(50), comment="帮扶类型")
     amount = Column(Integer, default=0, comment="帮扶金额")
     description = Column(Text, comment="描述")
-    support_date = Column(DateTime(timezone=True), comment="帮扶日期")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    support_date = Column(UtcDateTime(), comment="帮扶日期")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
 
 
 class ProjectPhase(str, enum.Enum):
@@ -282,13 +282,13 @@ class SchoolProject(Base):
     category = Column(String(100), comment="项目类别")
     budget = Column(Float, default=0, comment="预算金额(万元)")
     actual_cost = Column(Float, default=0, comment="实际投入(万元)")
-    start_date = Column(DateTime(timezone=True), comment="开始日期")
-    end_date = Column(DateTime(timezone=True), comment="结束日期")
+    start_date = Column(UtcDateTime(), comment="开始日期")
+    end_date = Column(UtcDateTime(), comment="结束日期")
     description = Column(Text, comment="项目描述")
     remarks = Column(Text, comment="备注")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         comment="更新时间",
@@ -351,9 +351,9 @@ class ScholarshipStudent(Base):
     )
     contact_info = Column(String(100), comment="联系方式")
     remarks = Column(Text, comment="备注")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         comment="更新时间",

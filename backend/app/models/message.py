@@ -10,7 +10,6 @@ import enum
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -19,7 +18,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class MessageType(str, enum.Enum):
@@ -55,8 +54,8 @@ class Message(Base):
     content = Column(Text, nullable=False, comment="消息内容")
     link = Column(String(500), nullable=True, comment="关联链接")
     is_read = Column(Boolean, default=False, comment="是否已读")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    read_at = Column(DateTime(timezone=True), nullable=True, comment="阅读时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    read_at = Column(UtcDateTime(), nullable=True, comment="阅读时间")
 
     __table_args__ = (
         Index("ix_messages_user_id", "user_id"),

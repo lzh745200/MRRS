@@ -4,7 +4,6 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -13,7 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class AuditAction(str, enum.Enum):
@@ -92,7 +91,7 @@ class AuditLog(Base):
     session_id = Column(String(100), nullable=True, index=True)
     trace_id = Column(String(100), nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(UtcDateTime(), server_default=func.now(), index=True)
 
 
 class SecurityEvent(Base):
@@ -113,11 +112,11 @@ class SecurityEvent(Base):
     affected_resources = Column(JSON, nullable=True)
 
     resolved = Column(Boolean, default=False)
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_at = Column(UtcDateTime(), nullable=True)
     resolved_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     resolution_notes = Column(Text, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(UtcDateTime(), server_default=func.now(), index=True)
 
     __table_args__ = (
         Index("idx_security_severity", "severity", "created_at"),
@@ -137,7 +136,7 @@ class LoginAttempt(Base):
     success = Column(Boolean, default=False)
     failure_reason = Column(String(200), nullable=True)
 
-    attempt_time = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    attempt_time = Column(UtcDateTime(), server_default=func.now(), index=True)
 
     __table_args__ = (
         Index("idx_login_attempts_user", "username", "attempt_time"),
@@ -167,7 +166,7 @@ class APIAccessLog(Base):
 
     session_id = Column(String(100), nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(UtcDateTime(), server_default=func.now(), index=True)
 
     __table_args__ = (
         Index("idx_api_access_user", "user_id", "created_at"),
@@ -198,7 +197,7 @@ class DataExportLog(Base):
     status = Column(String(20), default=AuditStatus.SUCCESS.value)
     error_message = Column(Text, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(UtcDateTime(), server_default=func.now(), index=True)
 
     __table_args__ = (
         Index("idx_export_user", "user_id", "created_at"),

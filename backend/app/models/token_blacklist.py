@@ -5,9 +5,9 @@ Token 黑名单数据模型
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import Column, ForeignKey, Index, Integer, String
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class TokenBlacklist(Base):
@@ -31,14 +31,14 @@ class TokenBlacklist(Base):
         comment="用户ID",
     )
     blacklisted_at = Column(
-        DateTime,
+        UtcDateTime(),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
         index=True,
         comment="加入黑名单时间",
     )
     expires_at = Column(
-        DateTime,
+        UtcDateTime(),
         nullable=True,
         index=True,
         comment="Token 原始过期时间",

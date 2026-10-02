@@ -7,7 +7,6 @@
 from sqlalchemy import (
     Column,
     Date,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -17,7 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 
-from .base import Base
+from .base import Base, UtcDateTime
 
 
 class FundAllocationOrder(Base):
@@ -65,12 +64,12 @@ class FundAllocationOrder(Base):
         default="draft",
         comment="状态: draft/issued/received/completed/cancelled",
     )
-    received_at = Column(DateTime(timezone=True), nullable=True, comment="接收时间")
+    received_at = Column(UtcDateTime(), nullable=True, comment="接收时间")
     received_by = Column(String(50), nullable=True, comment="接收人")
     remarks = Column(Text, nullable=True, comment="备注")
     created_by = Column(String(50), nullable=True, comment="创建人")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
         return f"<FundAllocationOrder(id={self.id}, order_no={self.order_no}, amount={self.total_amount})>"
@@ -105,10 +104,10 @@ class AllocationOrderItem(Base):
     amount = Column(Numeric(15, 4), nullable=False, comment="分配金额(万元)")
     account = Column(String(200), nullable=True, comment="接收账户")
     status = Column(String(20), default="pending", comment="状态: pending/transferred/confirmed")
-    transferred_at = Column(DateTime(timezone=True), nullable=True, comment="划转时间")
-    confirmed_at = Column(DateTime(timezone=True), nullable=True, comment="确认时间")
+    transferred_at = Column(UtcDateTime(), nullable=True, comment="划转时间")
+    confirmed_at = Column(UtcDateTime(), nullable=True, comment="确认时间")
     remarks = Column(Text, nullable=True, comment="备注")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
 
     def __repr__(self):
         return f"<AllocationOrderItem(id={self.id}, amount={self.amount})>"

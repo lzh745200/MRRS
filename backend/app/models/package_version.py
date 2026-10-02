@@ -2,11 +2,11 @@
 数据包版本管理模型
 """
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import backref, relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .data_package import DataPackage  # noqa: F401 - relationship 字符串引用注册
 from .user import User  # noqa: F401 - relationship 字符串引用注册
@@ -33,7 +33,7 @@ class PackageVersion(Base):
     version = Column(String(20), nullable=False, comment="版本号")
     changes = Column(Text, comment="变更记录（JSON格式）")
     description = Column(Text, comment="版本说明")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
     created_by = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),

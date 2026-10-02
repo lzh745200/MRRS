@@ -3,7 +3,6 @@
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -12,7 +11,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class Todo(Base):
@@ -40,13 +39,13 @@ class Todo(Base):
     )
 
     created_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         nullable=False,
         comment="创建时间",
     )
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,

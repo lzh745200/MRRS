@@ -20,7 +20,6 @@
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     Float,
     ForeignKey,
     Index,
@@ -31,9 +30,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from .base import Base, EncryptedText, TimestampMixin
-
-
+from .base import Base, EncryptedText, TimestampMixin, UtcDateTime
 # ══════════════════════════════════════════════════════════════
 #  帮扶村基本信息
 # ══════════════════════════════════════════════════════════════
@@ -102,7 +99,7 @@ class SupportedVillage(Base, TimestampMixin):
 
     # 软删标记（与 School/Project 一致，is_active=False 表示已删除）
     is_active = Column(Boolean, default=True, nullable=False, comment="是否启用(软删标记)")
-    deleted_at = Column(DateTime(timezone=True), nullable=True, comment="软删时间(回收站保留期计算依据)")
+    deleted_at = Column(UtcDateTime(), nullable=True, comment="软删时间(回收站保留期计算依据)")
 
     # 外键
     organization_id = Column(
@@ -703,7 +700,7 @@ class ReportSubscription(Base, TimestampMixin):
     output_format = Column(String(20), default="pdf", comment="输出格式: pdf/excel")
     is_active = Column(Boolean, default=True, comment="是否启用")
     last_sent_at = Column(
-        DateTime, nullable=True, comment="最近一次成功生成/送达时间（NULL=从未生成）"
+        UtcDateTime(), nullable=True, comment="最近一次成功生成/送达时间（NULL=从未生成）"
     )
 
 

@@ -5,11 +5,11 @@ Tracks the status of data reports from subordinate to superior units.
 
 import enum
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .data_package import DataPackage  # noqa: F401 - relationship 字符串引用注册
 from .organization import Organization  # noqa: F401 - relationship 字符串引用注册
@@ -65,7 +65,7 @@ class DataReport(Base):
     rejection_reason = Column(Text, nullable=True, comment="拒绝原因")
 
     # Submission info
-    submitted_at = Column(DateTime(timezone=True), nullable=True, comment="提交时间")
+    submitted_at = Column(UtcDateTime(), nullable=True, comment="提交时间")
     submitted_by = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -74,7 +74,7 @@ class DataReport(Base):
     )
 
     # Review info
-    reviewed_at = Column(DateTime(timezone=True), nullable=True, comment="审批时间")
+    reviewed_at = Column(UtcDateTime(), nullable=True, comment="审批时间")
     reviewed_by = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -83,10 +83,10 @@ class DataReport(Base):
     )
 
     # Deadline
-    deadline = Column(DateTime(timezone=True), nullable=True, comment="截止时间")
+    deadline = Column(UtcDateTime(), nullable=True, comment="截止时间")
 
     # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
     created_by = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -94,7 +94,7 @@ class DataReport(Base):
         comment="创建人ID",
     )
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         comment="更新时间",
@@ -138,7 +138,7 @@ class DataReport(Base):
     def is_overdue(self) -> bool:
         """Check if report is past deadline
 
-        SQLite 回读 DateTime(timezone=True) 得到的是 naive datetime，直接与
+        SQLite 回读 UtcDateTime() 得到的是 naive datetime，直接与
         aware 的 now 比较会抛 TypeError（深审 LIVE）——naive 值按 UTC 解释后比较。
         """
         if not self.deadline:

@@ -6,12 +6,12 @@ RuralWork 的子任务，支持年度管理、审批状态追踪、上下级协�
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import relationship
 
-from app.models.base import Base, EncryptedText
+from app.models.base import Base, EncryptedText, UtcDateTime
 
 from .rural_work import RuralWork  # noqa: F401 - relationship 字符串引用注册
 from .user import User  # noqa: F401 - relationship 字符串引用注册
@@ -96,23 +96,23 @@ class RuralTask(Base):
     responsible_person = Column(String(50), nullable=True)  # 负责人
     contact_phone = Column(EncryptedText(64), nullable=True, comment="联系电话(透明加密, ADR-0005)")
     # 时间
-    planned_start = Column(DateTime(timezone=True), nullable=True)
-    planned_end = Column(DateTime(timezone=True), nullable=True)
-    actual_start = Column(DateTime(timezone=True), nullable=True)
-    actual_end = Column(DateTime(timezone=True), nullable=True)
+    planned_start = Column(UtcDateTime(), nullable=True)
+    planned_end = Column(UtcDateTime(), nullable=True)
+    actual_start = Column(UtcDateTime(), nullable=True)
+    actual_end = Column(UtcDateTime(), nullable=True)
     # 审批
     submitted_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    submitted_at = Column(DateTime(timezone=True), nullable=True)
+    submitted_at = Column(UtcDateTime(), nullable=True)
     approved_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    approved_at = Column(DateTime(timezone=True), nullable=True)
+    approved_at = Column(UtcDateTime(), nullable=True)
     approval_comment = Column(Text, nullable=True)
     # 关联帮扶村
     village_id = Column(Integer, ForeignKey("villages.id", ondelete="CASCADE"), nullable=True)
     # 附件（JSON存储文件列表）
     attachments = Column(Text, nullable=True)  # JSON: [{name, path, size}]
     # 审计
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now())
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 

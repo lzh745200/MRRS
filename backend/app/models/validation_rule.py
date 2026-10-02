@@ -5,11 +5,11 @@ ValidationRule Model - 数据校验规则
 
 from enum import Enum
 
-from sqlalchemy import Boolean, Column, DateTime
+from sqlalchemy import Boolean, Column
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import Integer, String, Text, func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class RuleType(str, Enum):
@@ -49,6 +49,6 @@ class ValidationRule(Base):
     # 优先级（数字越小优先级越高）
     priority = Column(Integer, default=100, nullable=False)
     # 审计
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now())
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, nullable=True)

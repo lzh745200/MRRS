@@ -4,12 +4,12 @@ RuralWork Model
 
 from enum import Enum
 
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import relationship
 
-from app.models.base import Base, EncryptedText
+from app.models.base import Base, EncryptedText, UtcDateTime
 from app.models.village import Village  # noqa: F401 — RuralWork.village relationship target
 
 from .user import User  # noqa: F401 - relationship 字符串引用注册
@@ -50,13 +50,13 @@ class RuralWork(Base):
     village_id = Column(Integer, ForeignKey("villages.id", ondelete="CASCADE"), nullable=True)
     responsible_person = Column(String(50), nullable=True)
     contact_phone = Column(EncryptedText(64), nullable=True, comment="联系电话(透明加密, ADR-0005)")
-    start_date = Column(DateTime(timezone=True), nullable=True)
-    end_date = Column(DateTime(timezone=True), nullable=True)
+    start_date = Column(UtcDateTime(), nullable=True)
+    end_date = Column(UtcDateTime(), nullable=True)
     description = Column(Text, nullable=True)
     target = Column(Text, nullable=True)
     progress = Column(Integer, default=0)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now())
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     organization_id = Column(

@@ -29,6 +29,7 @@ from app.models.system_config import SystemConfig
 from app.core.maintenance import maintenance_window
 from app.utils.upload_helper import read_zip_member
 from app.core.transaction import retry_on_deadlock, safe_commit
+from app.utils.time_utils import as_utc, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -924,7 +925,10 @@ class BackupService:
         """
         if days <= 0:
             return 0
-        cutoff = datetime.now() - timedelta(days=days)
+        # 时间基准统一 UTC：库中 created_at 是 aware UTC（models.base.UtcDateTime），
+        # 此前用本地 naive 的 datetime.now() 作 cutoff 与之比较 —— 在同一类缺陷里
+        # 属静默偏一个时区差；改类型后该比较会响亮抛 TypeError，正好暴露出来。
+        cutoff = utcnow() - timedelta(days=days)
         records = self._query_backup_records()
         deleted_count = 0
         for rec in records:
@@ -934,7 +938,7 @@ class BackupService:
                     rec_time = datetime.fromisoformat(rec_time)
                 except ValueError:
                     continue
-            if rec_time and rec_time < cutoff:
+            if rec_time is not None and as_utc(rec_time) < cutoff:
                 if rec.value and os.path.exists(rec.value):
                     try:
                         os.unlink(rec.value)
@@ -1119,7 +1123,7 @@ class BackupService:
             existing = self.db.query(SystemConfig).filter(SystemConfig.key == "last_backup_time").first()
             if existing:
                 existing.value = datetime.now().isoformat()
-                existing.updated_at = datetime.now()
+                existing.updated_at = utcnow()
 
         safe_commit(self.db)
         return config, file_size

@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -15,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class UserOrganization(Base):
@@ -42,13 +41,13 @@ class UserOrganization(Base):
         comment="在该组织中的角色: admin, member, viewer",
     )
     created_at = Column(
-        DateTime,
+        UtcDateTime(),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
         comment="创建时间",
     )
     updated_at = Column(
-        DateTime,
+        UtcDateTime(),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,

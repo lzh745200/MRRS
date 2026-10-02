@@ -5,12 +5,12 @@ DataPackage Model
 
 from enum import Enum
 
-from sqlalchemy import JSON, Boolean, Column, DateTime
+from sqlalchemy import JSON, Boolean, Column
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import relationship
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .organization import Organization  # noqa: F401 - relationship 字符串引用注册
 from .user import User  # noqa: F401 - relationship 字符串引用注册
@@ -77,7 +77,7 @@ class DataPackage(Base):
     encryption_iterations = Column(Integer, nullable=True, comment="PBKDF2迭代次数")
 
     # 创建信息
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
     created_by = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -86,7 +86,7 @@ class DataPackage(Base):
     )
 
     # 导入信息
-    imported_at = Column(DateTime(timezone=True), nullable=True, comment="导入时间")
+    imported_at = Column(UtcDateTime(), nullable=True, comment="导入时间")
     imported_by = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -95,7 +95,7 @@ class DataPackage(Base):
     )
 
     # 更新信息
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
+    updated_at = Column(UtcDateTime(), onupdate=func.now(), comment="更新时间")
 
     # Relationships
     organization = relationship("Organization", backref="data_packages")

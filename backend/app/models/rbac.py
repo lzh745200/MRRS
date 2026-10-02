@@ -9,7 +9,6 @@ import uuid
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -19,7 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .machine_code import MachineCode  # noqa: F401 - relationship 字符串引用注册
 
@@ -44,13 +43,13 @@ class RbacRole(Base):
     is_active = Column(Boolean, default=True, comment="是否启用")
     priority = Column(Integer, default=100, comment="优先级，数字越小优先级越高")
     created_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         nullable=False,
         comment="创建时间",
     )
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -91,10 +90,10 @@ class UserRole(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     role_id = Column(String(36), ForeignKey("rbac_roles.id", ondelete="CASCADE"), nullable=False)
     granted_by = Column(Integer, comment="授权人ID")
-    expires_at = Column(DateTime(timezone=True), comment="过期时间")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(UtcDateTime(), comment="过期时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -119,9 +118,9 @@ class RolePermission(Base):
     id = Column(String(36), primary_key=True, default=_uuid)
     role_id = Column(String(36), ForeignKey("rbac_roles.id", ondelete="CASCADE"), nullable=False)
     permission = Column(String(50), nullable=False, comment="权限标识")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -147,10 +146,10 @@ class UserPermission(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     permission = Column(String(50), nullable=False, comment="权限标识")
     granted_by = Column(Integer, comment="授权人ID")
-    expires_at = Column(DateTime(timezone=True), comment="过期时间")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(UtcDateTime(), comment="过期时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -175,10 +174,10 @@ class ResourceAccessControl(Base):
     resource_id = Column(String(36), nullable=False, comment="资源ID")
     access_level = Column(String(20), default="read", comment="访问级别: read, write, delete")
     granted_by = Column(Integer, comment="授权人ID")
-    expires_at = Column(DateTime(timezone=True), comment="过期时间")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(UtcDateTime(), comment="过期时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -206,9 +205,9 @@ class AccessLog(Base):
     reason = Column(String(200), comment="拒绝原因")
     ip_address = Column(String(50), comment="IP地址")
     user_agent = Column(Text, comment="用户代理")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -241,10 +240,10 @@ class MachineCodePermission(Base):
     )
     permission = Column(String(100), nullable=False, comment="权限标识符")
     granted_by = Column(Integer, comment="授权人ID")
-    expires_at = Column(DateTime(timezone=True), comment="过期时间")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(UtcDateTime(), comment="过期时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,

@@ -25,6 +25,7 @@ from app.core.transaction import safe_commit
 from app.models.export_task import ExportStatus, ExportTask
 from app.services.export_service import ExcelExportService
 from app.services.task_queue import task_queue
+from app.utils.time_utils import as_utc
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +58,16 @@ _REPORT_TYPE_TO_ENTITY = {
 
 
 def _format_datetime(value: Any) -> str:
-    """将日期/时间值格式化为字符串（导出用）。"""
+    """将日期/时间值格式化为字符串（导出用）。
+
+    库中时间为 **aware UTC**（models.base.UtcDateTime）；导出件面向用户，
+    故先换算到本地墙钟再格式化 —— 否则导出里出现的是 UTC 时刻，比本地早一个时区差。
+    """
     if value is None:
         return ""
     if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            value = value.astimezone().replace(tzinfo=None)
         return value.strftime("%Y-%m-%d %H:%M:%S")
     return str(value)
 
@@ -444,15 +451,9 @@ def recover_stale_export_tasks(db: Session) -> int:
 _PART_STALE_SECONDS = 24 * 3600  # *.part 存活上限：超过即视为强杀残留（正常导出分钟级完成）
 
 
-def _as_utc(value: datetime) -> datetime:
-    """SQLite DateTime 列读取值为 naive，按 UTC 语义补齐时区。
-
-    与 ``ExportTask.is_downloadable`` 的既有口径一致：不做补齐会与 aware
-    ``datetime.now(timezone.utc)`` 比较抛 TypeError。
-    """
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
+# 兼容别名：历史本模块内有一份同名私有实现，现已统一到 app.utils.time_utils
+# （单一事实源）。语义说明见 time_utils：SQLite DateTime 列读回为 naive，按 UTC 补齐。
+_as_utc = as_utc
 
 
 def purge_expired_exports(db: Session) -> Dict[str, int]:

@@ -2,10 +2,10 @@
 系统监控模型
 """
 
-from sqlalchemy import Column, DateTime, Float, Index, Integer, String, Text
+from sqlalchemy import Column, Float, Index, Integer, String, Text
 from sqlalchemy.sql import func
 
-from .base import Base
+from .base import Base, UtcDateTime
 
 
 class SystemMonitor(Base):
@@ -43,7 +43,7 @@ class SystemMonitor(Base):
     host = Column(String(100), comment="主机名")
     status = Column(String(50), comment="状态")
     notes = Column(Text, comment="备注")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="记录时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="记录时间")
 
     def __repr__(self):
         return f"<SystemMonitor(id={self.id}, host='{self.host}', cpu={self.cpu_usage}%)>"

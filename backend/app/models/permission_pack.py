@@ -7,10 +7,10 @@
 
 import json
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
 
-from .base import Base
+from .base import Base, UtcDateTime
 
 
 class PermissionPack(Base):
@@ -29,8 +29,8 @@ class PermissionPack(Base):
         nullable=True,
         comment="创建人用户ID",
     )
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    updated_at = Column(UtcDateTime(), onupdate=func.now(), comment="更新时间")
 
     @property
     def menu_keys_list(self) -> list:

@@ -13,6 +13,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from app.utils.time_utils import (
+    as_utc_naive,
+    local_naive,
+    local_naive_to_utc,
+    to_local,
+    to_utc,
+)
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_SEND_TIME = "08:00"
@@ -155,6 +163,36 @@ def _period_starts_after(base: datetime, sent: datetime, frequency: str) -> bool
         return False
 
 
+def next_send_at_utc(
+    frequency: str,
+    send_day: Optional[int],
+    send_time: Optional[str],
+    base: datetime,
+) -> datetime:
+    """计算 `base` 之后的下一次发送时刻，返回 **aware UTC**。
+
+    `base` 必填（调用方先判空；库中值缺失时不应有「成功」的语义），
+    `frequency` 非法时抛 ValueError（与 `next_run_at` 一致，保持 fail-loud）。
+
+    ## 时区语义（2026-10-02 修复，本项目统一口径）
+
+    入库时间为 naive UTC（见 ``app/utils/time_utils.py`` 模块文档），而
+    ``send_day`` / ``send_time`` 是**面向用户的调度规则**——用户配置「每天 08:00」
+    指的是**本地** 08:00，不是 08:00 UTC。因此换算顺序是：
+
+    1. ``base``（naive UTC）→ 本地墙钟（``local_naive``）；
+    2. 用本地墙钟做日历运算（`next_run_at` 本身是纯函数，只认墙钟）；
+    3. 结果按本地时区解释回 aware UTC 输出，前端按本地渲染即用户配置的时刻。
+
+    历史缺陷：此前直接用 naive-UTC 的 ``base`` 参与运算、又拿结果与**本地**
+    ``datetime.now()`` 比较，两者基准相差一个本机时区偏移（UTC+8 即 8 小时），
+    表现为「列表里的 next_send_at 可能落在本地过去时刻」「新建订阅可能被提前派发」。
+    该缺陷只在「本地小时 ≥ 发送小时 > UTC 小时」的窗口内显形，故长期未被发现。
+    """
+    next_local = next_run_at(frequency, send_day, send_time, local_naive(base))
+    return local_naive_to_utc(next_local)
+
+
 class SubscriptionDispatchService:
     """订阅到期扫描与单条生成。"""
 
@@ -171,7 +209,9 @@ class SubscriptionDispatchService:
             db: 数据库会话。
             sub: ReportSubscription 记录。
             user: 订阅属主（生成走其数据权限过滤）。
-            now: 本次生成时间戳（写入 last_sent_at 与文件名）。
+            now: 本次生成时刻（**aware**，任意时区；内部统一换算）。
+                文件名用本地墙钟（便于人工识别），``last_sent_at`` 落库用
+                naive UTC（与 ``created_at`` 同基准，避免混用两种基准）。
 
         Returns:
             {"file_name", "file_path", "size"}
@@ -201,11 +241,15 @@ class SubscriptionDispatchService:
             payload = await report_service.export_to_excel(query_params, user=user)
             ext = "xlsx"
 
-        file_name = f"subscription-{sub.id}-{now.strftime('%Y%m%d%H%M%S')}.{ext}"
+        # now 语义：aware（任意时区）或 naive 本地（datetime.now()），统一换算为 UTC。
+        # 统一为 UTC 后再落库，避免与 created_at（naive UTC）混用两种基准。
+        now_utc = to_utc(now)
+        local_now = to_local(now_utc) or now_utc
+        file_name = f"subscription-{sub.id}-{local_now.strftime('%Y%m%d%H%M%S')}.{ext}"
         file_path = out_dir / file_name
         file_path.write_bytes(payload)
 
-        sub.last_sent_at = now
+        sub.last_sent_at = as_utc_naive(now_utc)
         from app.core.transaction import safe_commit
 
         safe_commit(db)
@@ -229,10 +273,15 @@ class SubscriptionDispatchService:
     async def dispatch_due_subscriptions(self, db, now: datetime) -> Dict[str, int]:
         """扫描全部启用订阅，对到期项生成并送达。
 
-        到期判定：next_run_at(frequency, send_day, send_time, base) <= now，
-        其中 base = last_sent_at（上次生成时间）或 created_at（从未生成）。
-        生成成功后 last_sent_at=now 成为新基准——下一次运行必然严格晚于它，
-        同一周期天然不会重复生成。
+        到期判定：``next_send_at_utc(...) <= now``，其中基准
+        = last_sent_at（上次生成时间）或 created_at（从未生成）。
+        生成成功后 last_sent_at = now（naive UTC）成为新基准——下一次运行必然
+        严格晚于它，同一周期天然不会重复生成。
+
+        Args:
+            now: 扫描时刻，**aware**（调度方传 ``time_utils.utcnow()``）。
+                历史缺陷：曾传本地 naive ``datetime.now()`` 与 UTC 基准比较，
+                本机时区偏移量级的提前派发（2026-10-02 修复）。
 
         Returns:
             {"dispatched": N, "skipped": N, "failed": N}
@@ -240,6 +289,7 @@ class SubscriptionDispatchService:
         from app.models.supported_village import ReportSubscription
         from app.models.user import User
 
+        now_utc = to_utc(now)
         stats = {"dispatched": 0, "skipped": 0, "failed": 0}
         subs = (
             db.query(ReportSubscription)
@@ -252,14 +302,16 @@ class SubscriptionDispatchService:
                 if base is None:
                     stats["skipped"] += 1
                     continue
-                due_at = next_run_at(
+                # 频率非法时 next_send_at_utc 抛 ValueError → 由下方 except 计入
+                # failed 并 rollback（保持 fail-loud，不静默按某频次派发）
+                due_at = next_send_at_utc(
                     sub.frequency, sub.send_day, sub.send_time, base
                 )
-                if due_at > now:
+                if due_at > now_utc:
                     stats["skipped"] += 1
                     continue
                 owner = db.query(User).filter(User.id == sub.user_id).first()
-                await self.generate_for_subscription(db, sub, owner, now)
+                await self.generate_for_subscription(db, sub, owner, now_utc)
                 stats["dispatched"] += 1
             except Exception as e:
                 stats["failed"] += 1

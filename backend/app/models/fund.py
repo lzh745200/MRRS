@@ -8,7 +8,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     Date,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -20,8 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from .base import Base, BaseModel
-
+from .base import Base, BaseModel, UtcDateTime
 # 确保 relationship("School") 字符串引用对应类已注册到 mapper registry，
 # 避免仅导入 Fund 时（如监控指标服务）SQLAlchemy 配置 mapper 失败
 from .school import School  # noqa: F401
@@ -115,18 +113,18 @@ class Fund(BaseModel):
     status = Column(String(50), default=FundStatus.PENDING.value, comment="状态")
 
     applicant = Column(String(100), nullable=True, comment="申请人")
-    application_date = Column(DateTime(timezone=True), nullable=True, comment="申请日期")
+    application_date = Column(UtcDateTime(), nullable=True, comment="申请日期")
     approved_by = Column(String(100), nullable=True, comment="审批人")
-    approval_date = Column(DateTime(timezone=True), nullable=True, comment="审批日期")
-    allocation_date = Column(DateTime(timezone=True), nullable=True, comment="拨付日期")
+    approval_date = Column(UtcDateTime(), nullable=True, comment="审批日期")
+    allocation_date = Column(UtcDateTime(), nullable=True, comment="拨付日期")
     allocation_method = Column(String(50), nullable=True, comment="拨付方式")
     receiver = Column(String(100), nullable=True, comment="接收人")
 
     usage_description = Column(Text, nullable=True, comment="使用说明")
-    start_date = Column(DateTime(timezone=True), nullable=True, comment="开始日期")
-    end_date = Column(DateTime(timezone=True), nullable=True, comment="结束日期")
+    start_date = Column(UtcDateTime(), nullable=True, comment="开始日期")
+    end_date = Column(UtcDateTime(), nullable=True, comment="结束日期")
 
-    audit_date = Column(DateTime(timezone=True), nullable=True, comment="审计日期")
+    audit_date = Column(UtcDateTime(), nullable=True, comment="审计日期")
     audit_result = Column(String(50), nullable=True, comment="审计结果")
     audit_opinion = Column(Text, nullable=True, comment="审计意见")
     remarks = Column(Text, nullable=True, comment="备注")
@@ -144,7 +142,7 @@ class Fund(BaseModel):
 
     # ================= 软删标记 =================
     is_active = Column(Boolean, default=True, nullable=False, comment="是否启用(软删标记)")
-    deleted_at = Column(DateTime(timezone=True), nullable=True, comment="软删时间(回收站保留期计算依据)")
+    deleted_at = Column(UtcDateTime(), nullable=True, comment="软删时间(回收站保留期计算依据)")
 
     # ================= 数据权限字段 =================
     organization_id = Column(
@@ -252,7 +250,7 @@ class FundAttachment(Base):
     category = Column(String(50), default="other", comment="附件分类: contract/invoice/receipt/report/other")
     description = Column(String(500), comment="文件说明")
     uploaded_by = Column(String(50), comment="上传人")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="上传时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="上传时间")
 
     def to_dict(self):
         return {
@@ -280,8 +278,8 @@ class BudgetRecord(Base):
     used_amount = Column(Numeric(15, 4), default=0, comment="已使用金额(万元)")
     remaining_reason = Column(Text, nullable=True, comment="结余原因")
     remarks = Column(Text, nullable=True, comment="备注")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="更新时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now(), comment="更新时间")
 
     def to_dict(self):
         return {

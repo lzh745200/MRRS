@@ -4,11 +4,11 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, Column, ForeignKey, Integer, String
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import relationship
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class TwoFactorAuth(Base):
@@ -26,12 +26,12 @@ class TwoFactorAuth(Base):
     # 重复使用，"每个恢复码只能使用一次"的承诺被破坏，泄露一个码即永久绕过 2FA。
     backup_codes = Column(MutableList.as_mutable(JSON), nullable=True)  # 备用恢复码列表
     enabled = Column(Boolean, default=False, nullable=False)
-    verified_at = Column(DateTime(timezone=True), nullable=True)
+    verified_at = Column(UtcDateTime(), nullable=True)
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        UtcDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,

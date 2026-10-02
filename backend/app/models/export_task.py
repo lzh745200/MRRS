@@ -6,11 +6,11 @@ Supports both synchronous and asynchronous export with status tracking.
 import enum
 import uuid
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .user import User  # noqa: F401 - relationship 字符串引用注册
 
@@ -62,10 +62,10 @@ class ExportTask(Base):
         comment="导出状态",
     )
     error_message = Column(Text, nullable=True, comment="错误信息")
-    expires_at = Column(DateTime(timezone=True), nullable=True, comment="文件过期时间")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    started_at = Column(DateTime(timezone=True), nullable=True, comment="开始时间")
-    completed_at = Column(DateTime(timezone=True), nullable=True, comment="完成时间")
+    expires_at = Column(UtcDateTime(), nullable=True, comment="文件过期时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    started_at = Column(UtcDateTime(), nullable=True, comment="开始时间")
+    completed_at = Column(UtcDateTime(), nullable=True, comment="完成时间")
 
     # Relationships
     user = relationship("User", backref="export_tasks")

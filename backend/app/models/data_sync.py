@@ -1,8 +1,8 @@
 """数据同步模型"""
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, ForeignKey, Integer, String, Text, DateTime, Boolean, JSON
-from app.models.base import BaseModel
+from sqlalchemy import Column, ForeignKey, Integer, String, Text, Boolean, JSON
+from app.models.base import BaseModel, UtcDateTime
 
 
 class DataSyncLog(BaseModel):
@@ -16,7 +16,7 @@ class DataSyncLog(BaseModel):
     package_path = Column(String(500))
 
     # 导出信息
-    since_time = Column(DateTime(timezone=True))
+    since_time = Column(UtcDateTime())
     modules = Column(JSON)  # 导出的模块列表
     include_files = Column(Boolean, default=False)
 
@@ -37,8 +37,8 @@ class DataSyncLog(BaseModel):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     user_name = Column(String(100))
 
-    started_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    completed_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(), default=lambda: datetime.now(timezone.utc))
+    completed_at = Column(UtcDateTime(), nullable=True)
 
 
 class DataConflict(BaseModel):
@@ -62,7 +62,7 @@ class DataConflict(BaseModel):
     # 解决方案
     resolution = Column(String(50))  # keep_local/use_import/merge/skip
     resolved = Column(Boolean, default=False)
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_at = Column(UtcDateTime(), nullable=True)
     resolved_by = Column(Integer)  # 解决人ID
 
     # 合并后的数据

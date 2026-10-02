@@ -2,8 +2,13 @@
 
 墙钟纪律（CI#84 教训）：next_run_at 是纯函数，全部用固定 datetime 断言，
 任何用例不得依赖 datetime.now()。
+
+时区纪律（2026-10-02 补）：dispatch 链路的**调度语义按本地时区解释**
+（用户配置「每天 08:00」= 本地 08:00），库中基准是 naive UTC。
+因此本文件的 fixture 必须用 ``local_wall()`` / ``local_now()`` 表达「本地墙钟」，
+使断言在任意运行时时区下结论一致（此前用裸 naive datetime，等价于假定本机为 UTC）。
 """
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,7 +16,25 @@ import pytest
 from app.services.subscription_dispatch_service import (
     SubscriptionDispatchService,
     next_run_at,
+    next_send_at_utc,
 )
+from app.utils.time_utils import as_utc_naive
+
+LOCAL_TZ = datetime.now().astimezone().tzinfo
+
+
+def local_wall(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:
+    """本地墙钟 → naive UTC（库中存储形态）。用例据此表达「本地某时刻」。"""
+    return (
+        datetime(year, month, day, hour, minute, tzinfo=LOCAL_TZ)
+        .astimezone(timezone.utc)
+        .replace(tzinfo=None)
+    )
+
+
+def local_now(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:
+    """本地墙钟 → aware 本地时刻（模拟调度器/端点传入的 now）。"""
+    return datetime(year, month, day, hour, minute, tzinfo=LOCAL_TZ)
 
 
 def _dt(s: str) -> datetime:
@@ -130,6 +153,9 @@ class TestNextRunAtInvalid:
 # ════════════════ dispatch_due_subscriptions ════════════════
 
 
+_UNSET = object()  # 区分「未传 created_at」与「显式传 None」（后者用于无基准场景）
+
+
 def _make_sub(
     sub_id=1,
     user_id=7,
@@ -137,7 +163,7 @@ def _make_sub(
     send_day=None,
     send_time="08:00",
     last_sent_at=None,
-    created_at=datetime(2026, 9, 1, 8, 0),
+    created_at=_UNSET,
     is_active=True,
     format="xlsx",
     output_dir=None,
@@ -152,7 +178,8 @@ def _make_sub(
     sub.send_day = send_day
     sub.send_time = send_time
     sub.last_sent_at = last_sent_at
-    sub.created_at = created_at
+    # 默认基准 = 本地 2026-09-01 08:00（表达为库中 naive UTC）；显式 None 表示无基准
+    sub.created_at = local_wall(2026, 9, 1, 8, 0) if created_at is _UNSET else created_at
     sub.is_active = is_active
     sub.output_dir = output_dir
     return sub
@@ -176,7 +203,8 @@ def dispatch_env(tmp_path):
         out_dir.mkdir(parents=True, exist_ok=True)
         file_path = out_dir / f"subscription-{sub.id}.xlsx"
         file_path.write_bytes(b"xlsx-bytes")
-        sub.last_sent_at = now
+        # 与真实实现一致：last_sent_at 落库统一 naive UTC（非直接写调用方传入的 now）
+        sub.last_sent_at = as_utc_naive(now)
         written[sub.id] = str(file_path)
         return {"file_name": file_path.name, "file_path": str(file_path), "size": 10}
 
@@ -189,43 +217,62 @@ class TestDispatchDueSubscriptions:
     async def test_due_subscription_dispatched(self, dispatch_env):
         service, owner, written = dispatch_env
         db = MagicMock()
-        sub = _make_sub(created_at=datetime(2026, 9, 1, 8, 0))
+        sub = _make_sub()  # 基准 = 本地 09-01 08:00
         db.query.return_value.filter.return_value.all.return_value = [sub]
         db.query.return_value.filter.return_value.first.return_value = owner
 
-        stats = await service.dispatch_due_subscriptions(db, datetime(2026, 9, 10, 8, 0))
+        stats = await service.dispatch_due_subscriptions(db, local_now(2026, 9, 10, 8, 0))
 
         assert stats == {"dispatched": 1, "skipped": 0, "failed": 0}
         assert 1 in written
-        assert sub.last_sent_at == datetime(2026, 9, 10, 8, 0)
+        # last_sent_at 落库为 naive UTC（与 created_at 同基准，不再是调用方的本地墙钟）
+        assert sub.last_sent_at == local_wall(2026, 9, 10, 8, 0)
 
     @pytest.mark.asyncio
     async def test_not_due_skipped(self, dispatch_env):
         service, owner, written = dispatch_env
         db = MagicMock()
-        # created_at=09-01 daily → 到期应为 09-02；now=09-01 09:00 未到期
-        sub = _make_sub(created_at=datetime(2026, 9, 1, 8, 0))
+        # 基准 = 本地 09-01 08:00，daily → 下次本地 09-02 08:00；本地 09-01 09:00 未到期
+        sub = _make_sub()
         db.query.return_value.filter.return_value.all.return_value = [sub]
 
-        stats = await service.dispatch_due_subscriptions(db, datetime(2026, 9, 1, 9, 0))
+        stats = await service.dispatch_due_subscriptions(db, local_now(2026, 9, 1, 9, 0))
 
         assert stats == {"dispatched": 0, "skipped": 1, "failed": 0}
         assert written == {}
 
     @pytest.mark.asyncio
     async def test_recently_sent_not_redispatched_same_cycle(self, dispatch_env):
-        """last_sent_at=今天 08:00（daily 08:00 已发）→ 下一基准明天 08:00 → now=当天 20:00 不重发。"""
+        """last_sent_at=本地今天 08:00（daily 08:00 已发）→ 下次本地明天 08:00 → 本地 20:00 不重发。"""
         service, owner, written = dispatch_env
         db = MagicMock()
         sub = _make_sub(
             frequency="daily", send_time="08:00",
-            last_sent_at=datetime(2026, 9, 10, 8, 0),
+            last_sent_at=local_wall(2026, 9, 10, 8, 0),
         )
         db.query.return_value.filter.return_value.all.return_value = [sub]
 
-        stats = await service.dispatch_due_subscriptions(db, datetime(2026, 9, 10, 20, 0))
+        stats = await service.dispatch_due_subscriptions(db, local_now(2026, 9, 10, 20, 0))
 
         assert stats == {"dispatched": 0, "skipped": 1, "failed": 0}
+
+    @pytest.mark.asyncio
+    async def test_created_today_after_send_time_not_dispatched(self, dispatch_env):
+        """回归（2026-10-02）：基准的**本地**时刻已过发送点 → 下次是明天，不得立刻派发。
+
+        该场景正是历史缺陷的显形窗口：本地 12:00 创建、send_time=08:00 时，
+        naive-UTC 基准（04:00）会让当日 08:00 被判为「未到」而立刻派发；
+        按本地语义则 08:00 已过，下次应为明天 08:00。
+        """
+        service, owner, written = dispatch_env
+        db = MagicMock()
+        sub = _make_sub(created_at=local_wall(2026, 9, 1, 12, 0))
+        db.query.return_value.filter.return_value.all.return_value = [sub]
+
+        stats = await service.dispatch_due_subscriptions(db, local_now(2026, 9, 1, 12, 30))
+
+        assert stats == {"dispatched": 0, "skipped": 1, "failed": 0}
+        assert written == {}
 
     @pytest.mark.asyncio
     async def test_inactive_filtered_at_query_level(self, dispatch_env):
@@ -235,7 +282,7 @@ class TestDispatchDueSubscriptions:
         # 模拟真实 DB：is_active=True 过滤后禁用订阅不出现在结果里
         db.query.return_value.filter.return_value.all.return_value = []
 
-        stats = await service.dispatch_due_subscriptions(db, datetime(2026, 9, 10, 8, 0))
+        stats = await service.dispatch_due_subscriptions(db, local_now(2026, 9, 10, 8, 0))
 
         filter_arg = db.query.return_value.filter.call_args[0][0]
         assert "is_active" in str(filter_arg)
@@ -246,8 +293,8 @@ class TestDispatchDueSubscriptions:
     async def test_one_failure_does_not_block_others(self, dispatch_env):
         service, owner, written = dispatch_env
         db = MagicMock()
-        bad = _make_sub(sub_id=1, created_at=datetime(2026, 9, 1, 8, 0))
-        good = _make_sub(sub_id=2, created_at=datetime(2026, 9, 1, 8, 0))
+        bad = _make_sub(sub_id=1)
+        good = _make_sub(sub_id=2)
         db.query.return_value.filter.return_value.all.return_value = [bad, good]
 
         async def flaky_generate(db, sub, user, now):
@@ -265,7 +312,7 @@ class TestDispatchDueSubscriptions:
 
         service.generate_for_subscription = AsyncMock(side_effect=wrapper)
 
-        stats = await service.dispatch_due_subscriptions(db, datetime(2026, 9, 10, 8, 0))
+        stats = await service.dispatch_due_subscriptions(db, local_now(2026, 9, 10, 8, 0))
 
         assert stats == {"dispatched": 1, "skipped": 0, "failed": 1}
         assert 2 in written and 1 not in written
@@ -275,10 +322,10 @@ class TestDispatchDueSubscriptions:
     async def test_unknown_frequency_counted_failed(self, dispatch_env):
         service, owner, written = dispatch_env
         db = MagicMock()
-        sub = _make_sub(frequency="yearly", created_at=datetime(2026, 9, 1, 8, 0))
+        sub = _make_sub(frequency="yearly")
         db.query.return_value.filter.return_value.all.return_value = [sub]
 
-        stats = await service.dispatch_due_subscriptions(db, datetime(2026, 9, 10, 8, 0))
+        stats = await service.dispatch_due_subscriptions(db, local_now(2026, 9, 10, 8, 0))
 
         assert stats["failed"] == 1
         db.rollback.assert_called_once()
@@ -289,6 +336,52 @@ class TestParseSendTimeErrors:
         # _parse_send_time 的 except 分支：非数字小时/分钟回落 08:00
         base = _dt("2026-09-06 09:00")
         assert next_run_at("daily", None, "abc:xy", base) == _dt("2026-09-07 08:00")
+
+
+class TestNextSendAtUtcSemantics:
+    """`next_send_at_utc` 的时区语义：返回的是「**本地** send_time」对应的 UTC 瞬时。
+
+    这些断言对旧实现（直接拿 naive-UTC 基准做运算并返回 naive 墙钟）必然失败，
+    因此是该缺陷的有效回归防线 —— 且结论与运行时时区无关。
+    """
+
+    def test_returns_local_send_time_instant_when_same_day(self):
+        base = local_wall(2026, 9, 17, 4, 0)  # 本地 04:00，早于本地 08:00
+        result = next_send_at_utc("daily", None, "08:00", base)
+        local = result.astimezone(LOCAL_TZ)
+        assert (local.hour, local.minute) == (8, 0)
+        assert local.date() == datetime(2026, 9, 17).date()
+        assert result == local_wall(2026, 9, 17, 8, 0).replace(tzinfo=timezone.utc)
+
+    def test_rolls_to_next_day_when_local_time_passed(self):
+        base = local_wall(2026, 9, 17, 12, 0)  # 本地 12:00，已过本地 08:00
+        result = next_send_at_utc("daily", None, "08:00", base)
+        local = result.astimezone(LOCAL_TZ)
+        assert (local.hour, local.minute) == (8, 0)
+        assert local.date() == datetime(2026, 9, 18).date()
+
+    def test_not_in_the_past_when_local_time_already_passed_send_time(self):
+        """锁死历史缺陷的病理：本地已过发送点却返回**当日**（已过去）的发送时刻。
+
+        base = 本地 09-17 12:00 时，缺陷实现会给出「本地 09-17 08:00」——相对基准
+        已是**过去**；正确结果必须是本地 09-18 08:00。
+        """
+        base = local_wall(2026, 9, 17, 12, 0)
+        result = next_send_at_utc("daily", None, "08:00", base)
+        result_local_naive = result.astimezone(LOCAL_TZ).replace(tzinfo=None)
+        assert result_local_naive > datetime(2026, 9, 17, 12, 0)
+
+    def test_unknown_frequency_raises(self):
+        with pytest.raises(ValueError):
+            next_send_at_utc("yearly", None, "08:00", local_wall(2026, 9, 17, 4, 0))
+
+    def test_weekly_uses_local_weekday(self):
+        # 本地 2026-09-17（周四）04:00 → send_day=7（周日）→ 本地 09-20 08:00
+        base = local_wall(2026, 9, 17, 4, 0)
+        result = next_send_at_utc("weekly", 7, "08:00", base)
+        local = result.astimezone(LOCAL_TZ)
+        assert local.weekday() == 6 and (local.hour, local.minute) == (8, 0)
+        assert local.date() == datetime(2026, 9, 20).date()
 
 
 class TestQuarterlyCatchupYearRollover:
@@ -306,7 +399,7 @@ class TestDispatchNoBase:
         sub = _make_sub(last_sent_at=None, created_at=None)
         db.query.return_value.filter.return_value.all.return_value = [sub]
 
-        stats = await service.dispatch_due_subscriptions(db, datetime(2026, 9, 10, 8, 0))
+        stats = await service.dispatch_due_subscriptions(db, local_now(2026, 9, 10, 8, 0))
 
         assert stats["skipped"] == 1
         assert written == {}
@@ -342,7 +435,7 @@ class TestGenerateForSubscriptionReal:
             setattr(instance, method, AsyncMock(return_value=payload))
             with patch("app.services.message_service.MessageService") as MockMsg:
                 result = await SubscriptionDispatchService().generate_for_subscription(
-                    db, sub, owner, datetime(2026, 9, 10, 8, 0)
+                    db, sub, owner, local_now(2026, 9, 10, 8, 0)
                 )
 
         assert result["size"] == len(payload)
@@ -350,8 +443,8 @@ class TestGenerateForSubscriptionReal:
         from pathlib import Path
 
         assert Path(result["file_path"]).read_bytes() == payload
-        # 送达语义：last_sent_at 更新 + 站内消息
-        assert sub.last_sent_at == datetime(2026, 9, 10, 8, 0)
+        # 送达语义：last_sent_at 更新为 **naive UTC**（与 created_at 同基准）+ 站内消息
+        assert sub.last_sent_at == local_wall(2026, 9, 10, 8, 0)
         MockMsg.return_value.send_system_message.assert_called_once()
         kwargs = MockMsg.return_value.send_system_message.call_args.kwargs
         assert kwargs["user_id"] == 7
@@ -372,7 +465,7 @@ class TestGenerateForSubscriptionReal:
             MockReportSvc.return_value.export_to_excel = AsyncMock(return_value=b"data")
             with patch("app.services.message_service.MessageService"):
                 result = await SubscriptionDispatchService().generate_for_subscription(
-                    db, sub, owner, datetime(2026, 9, 10, 8, 0)
+                    db, sub, owner, local_now(2026, 9, 10, 8, 0)
                 )
 
         assert result["file_path"].startswith(str(custom))

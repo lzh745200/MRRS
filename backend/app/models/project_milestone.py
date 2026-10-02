@@ -1,10 +1,10 @@
 """项目里程碑与变更记录模型"""
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Column, Date, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from .base import Base
+from .base import Base, UtcDateTime
 
 from .project import Project  # noqa: F401 - relationship 字符串引用注册
 
@@ -39,13 +39,13 @@ class ProjectMilestone(Base):
     )
     sort_order = Column(Integer, default=0, comment="排序序号")
     created_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         nullable=False,
         comment="创建时间",
     )
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         comment="更新时间",
@@ -92,7 +92,7 @@ class ProjectChangeLog(Base):
         comment="操作人ID",
     )
     created_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         nullable=False,
         comment="变更时间",

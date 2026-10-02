@@ -1,6 +1,6 @@
 """自动化提醒引擎 — 审批超时/项目到期/经费告警."""
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -8,28 +8,26 @@ from sqlalchemy.orm import Session
 from app.models.approval import ApprovalTask, ApprovalStatus
 from app.models.project import Project
 from app.models.fund import Fund
-from app.models.base import _utcnow
+from app.utils.time_utils import as_utc, utcnow
 
 logger = logging.getLogger(__name__)
 
-
-def _as_utc(value: datetime) -> datetime:
-    """把从库中读回的时间统一为 UTC aware。
-
-    created_at 由 models.base._utcnow 写 UTC，但 SQLite 读回的是 naive 值；
-    历史实现用 `datetime.now()`（本机时区）与之比较，非 UTC 主机（UTC+8）上
-    阈值与 elapsed_hours 整体偏移 8 小时（超时提醒晚 8 小时才触发）。
-    """
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+# 兼容别名：历史本模块内有一份同名私有实现，现已统一到 app.utils.time_utils
+# （单一事实源）。保留该名字以免既有调用方/测试断裂。
+_as_utc = as_utc
 
 
 def _elapsed_hours(created_at: Optional[datetime]) -> float:
-    """已等待小时数（UTC 口径）；创建时间为空时按 0 处理，避免 NoneType 崩溃"""
+    """已等待小时数（UTC 口径）；创建时间为空时按 0 处理，避免 NoneType 崩溃。
+
+    时间基准统一到 ``app.utils.time_utils``（单一口径）：created_at 由
+    ``models.base._utcnow`` 写 UTC，SQLite 读回是 naive 值，必须按 UTC 补齐后再与
+    当前时刻比较。历史实现用 ``datetime.now()``（本机时区）与之比较，非 UTC 主机
+    （UTC+8）上阈值与 elapsed_hours 整体偏移 8 小时（超时提醒晚 8 小时才触发）。
+    """
     if created_at is None:
         return 0.0
-    return round((_utcnow() - _as_utc(created_at)).total_seconds() / 3600, 1)
+    return round((utcnow() - as_utc(created_at)).total_seconds() / 3600, 1)
 
 
 def _approval_recipient(task: Any) -> Optional[int]:
@@ -47,7 +45,7 @@ def _approval_recipient(task: Any) -> Optional[int]:
 
 def scan_overtime_approvals(db: Session, hours_threshold: int = 48) -> List[Dict[str, Any]]:
     """扫描超时未处理的审批任务."""
-    cutoff = _utcnow() - timedelta(hours=hours_threshold)
+    cutoff = utcnow() - timedelta(hours=hours_threshold)
     tasks = (
         db.query(ApprovalTask)
         .filter(
@@ -72,7 +70,7 @@ def scan_approaching_approvals(
     db: Session, warning_hours: int = 36, deadline_hours: int = 48
 ) -> List[Dict[str, Any]]:
     """扫描即将超时的审批任务（36~48 小时预警档，与旧 reminder_service 功能对齐）。"""
-    now = _utcnow()
+    now = utcnow()
     warning_time = now - timedelta(hours=warning_hours)
     deadline = now - timedelta(hours=deadline_hours)
     tasks = (

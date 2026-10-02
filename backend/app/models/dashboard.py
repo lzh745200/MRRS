@@ -1,9 +1,9 @@
 """仪表盘相关数据模型"""
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import Column, Integer, String
 from sqlalchemy.sql import func
 
-from .base import Base
+from .base import Base, UtcDateTime
 
 
 class DashboardActivity(Base):
@@ -17,7 +17,7 @@ class DashboardActivity(Base):
     action = Column(String(100), nullable=False, comment="操作")
     target = Column(String(500), nullable=False, comment="目标")
     user = Column(String(100), default="系统", comment="操作人")
-    created_at = Column(DateTime(timezone=True), default=func.now())
+    created_at = Column(UtcDateTime(), default=func.now())
 
 
 class HiddenDashboardActivity(Base):
@@ -38,4 +38,4 @@ class HiddenDashboardActivity(Base):
         unique=True,
         comment="被隐藏的动态ID，如 project_123",
     )
-    hidden_at = Column(DateTime(timezone=True), default=func.now())
+    hidden_at = Column(UtcDateTime(), default=func.now())

@@ -184,7 +184,7 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
 {
   const s = p.addSlide();
   header(s, "01 系统概述", "一眼看懂：系统规模");
-  stat(s, 0.55, 2.1, 3.0, "11,870", "后端自动化测试用例");
+  stat(s, 0.55, 2.1, 3.0, "11,915", "后端自动化测试用例");
   stat(s, 3.9, 2.1, 3.0, "6,287", "前端自动化测试用例");
   stat(s, 7.25, 2.1, 3.0, "54", "功能菜单键（三级菜单树）");
   stat(s, 10.6, 2.1, 2.4, "131", "业务页面视图");
@@ -193,7 +193,7 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
   stat(s, 3.9, 4.35, 3.0, "90", "后端服务（83 + 7 子包）", PRIMARY_L);
   stat(s, 7.25, 4.35, 3.0, "45", "数据库迁移版本", PRIMARY_L);
   stat(s, 10.6, 4.35, 2.4, "4", "用户角色", PRIMARY_L, 40);
-  s.addText("数据来源：仓库实测（2026-10-02，v1.12.10）—— 后端 11,870 用例全绿 / 覆盖率 100% · 前端 6,287 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告", {
+  s.addText("数据来源：仓库实测（2026-10-02，v1.12.11）—— 后端 11,915 用例全绿 / 覆盖率 100% · 前端 6,287 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告", {
     x: M, y: 6.35, w: 12.3, h: 0.4, fontSize: 12, color: MUTED, fontFace: F, margin: 0 });
 }
 
@@ -772,7 +772,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
   s.addChart(p.charts.BAR, [{
     name: "用例数",
     labels: ["后端 pytest", "前端 vitest"],
-    values: [11870, 6287],
+    values: [11915, 6287],
   }], {
     x: M, y: 1.95, w: 6.6, h: 4.2, barDir: "col",
     chartColors: [PRIMARY, PRIMARY_L], varyColors: true,
@@ -949,7 +949,7 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
       fontFace: F, align: "left", margin: 0 });
   });
   card(s, M, 5.95, 12.33, 1.0, PRIMARY_T);
-  s.addText("净效果：11,870 后端用例（覆盖率 100%）+ 6,287 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
+  s.addText("净效果：11,915 后端用例（覆盖率 100%）+ 6,287 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
     x: 0.82, y: 5.95, w: 11.6, h: 1.0, fontSize: 13.5, bold: true, color: TEXT,
     fontFace: F, valign: "middle", margin: 0 });
 }
@@ -987,7 +987,7 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
     color: "FFFFFF", fontFace: F, margin: 0 });
   s.addText("帮扶管理信息系统 v1.12.8  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
     x: 1.0, y: 4.55, w: 11, h: 0.45, fontSize: 13.5, color: LIGHT, fontFace: F, margin: 0 });
-  s.addText("11,870 后端用例（覆盖率 100%）+ 6,287 前端用例 全绿守护 · Windows x64 / 麒麟 ARM64 双平台离线交付", {
+  s.addText("11,915 后端用例（覆盖率 100%）+ 6,287 前端用例 全绿守护 · Windows x64 / 麒麟 ARM64 双平台离线交付", {
     x: 1.0, y: 5.05, w: 11, h: 0.45, fontSize: 13.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 

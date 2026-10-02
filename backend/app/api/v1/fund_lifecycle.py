@@ -40,6 +40,7 @@ from ...core.permission_utils import is_superuser
 from ...core.data_permission import apply_data_scope, check_record_access
 from ...services.data_scope_query import scoped_filter  # B1 下沉：服务层统一数据域入口
 from ...services.work_log_service import write_work_log
+from ...utils.time_utils import utcnow
 from .deps import ADMIN_ROLES, require_funds_operator_role as _require_manager  # noqa: F401
 
 router = APIRouter(prefix="/fund-lifecycle", tags=["经费生命周期"])
@@ -340,7 +341,7 @@ async def initiate_project_fund(
     phase1 = next((p for p in phases if p.phase == 1), None)
     if phase1 and phase1.status == PhaseStatus.NOT_STARTED.value:
         phase1.status = PhaseStatus.IN_PROGRESS.value
-        phase1.entered_at = datetime.now()
+        phase1.entered_at = utcnow()
         phase1.operator = _get_username(current_user)
 
     safe_commit(db)
@@ -875,7 +876,7 @@ async def confirm_transfer_voucher(
 
     v.status = VoucherStatus.CONFIRMED.value
     v.confirmed_by = _get_username(current_user)
-    v.confirmed_at = datetime.now()
+    v.confirmed_at = utcnow()
     safe_commit(db)
     write_work_log(
         db, "fund", "confirm_transfer_voucher", v.id,
@@ -1483,7 +1484,7 @@ async def resolve_anomaly(
 
     a.resolved = True
     a.resolved_by = _get_username(current_user)
-    a.resolved_at = datetime.now()
+    a.resolved_at = utcnow()
     a.resolution = data.resolution
 
     # 检查该经费是否还有未解决异常
@@ -1915,7 +1916,7 @@ async def quota_adjust(
         fund.approved_amount = data.new_amount
         fund.budget_version = new_version
         bv.approved_by = _get_username(current_user)
-        bv.approved_at = datetime.now()
+        bv.approved_at = utcnow()
 
     safe_commit(db)
     msg = "紧急额度调整已生效" if data.is_emergency else "额度调整申请已提交，待审批"

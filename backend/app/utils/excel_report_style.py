@@ -80,7 +80,11 @@ def _coerce(value: Any) -> Any:
     """将任意值转换为 openpyxl 可安全写入的类型。"""
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
-    if isinstance(value, (_dt.datetime, _dt.date, _dt.time)):
+    if isinstance(value, _dt.datetime):
+        # 库中时间为 aware UTC（models.base.UtcDateTime）；Excel 面向用户阅读，
+        # 换算成本地墙钟写入，避免单元格里出现 UTC 时刻或 +00:00 文本。
+        return value.astimezone().replace(tzinfo=None) if value.tzinfo is not None else value
+    if isinstance(value, (_dt.date, _dt.time)):
         return value
     try:
         from decimal import Decimal

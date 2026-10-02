@@ -6,7 +6,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     Date,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -16,8 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 
-from .base import Base
-
+from .base import Base, UtcDateTime
 # ==================== 枚举 ====================
 
 
@@ -142,12 +140,12 @@ class ProjectFundPhase(Base):
     )
     phase = Column(Integer, nullable=False, comment="阶段编号(1-7)")
     status = Column(String(20), default=PhaseStatus.NOT_STARTED.value, comment="阶段状态")
-    entered_at = Column(DateTime(timezone=True), nullable=True, comment="进入时间")
-    completed_at = Column(DateTime(timezone=True), nullable=True, comment="完成时间")
+    entered_at = Column(UtcDateTime(), nullable=True, comment="进入时间")
+    completed_at = Column(UtcDateTime(), nullable=True, comment="完成时间")
     operator = Column(String(50), nullable=True, comment="操作人")
     remarks = Column(Text, nullable=True, comment="备注")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
         return f"<ProjectFundPhase(project={self.project_id}, phase={self.phase}, status={self.status})>"
@@ -180,9 +178,9 @@ class BudgetBaseline(Base):
     snapshot_year = Column(Integer, nullable=False, comment="快照年度")
     category = Column(String(100), nullable=True, comment="预算科目")
     baseline_amount = Column(Numeric(15, 4), default=0, comment="基线金额(万元)")
-    locked_at = Column(DateTime(timezone=True), nullable=True, comment="锁定时间")
+    locked_at = Column(UtcDateTime(), nullable=True, comment="锁定时间")
     locked_by = Column(String(50), nullable=True, comment="锁定人")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
 
     def __repr__(self):
         return f"<BudgetBaseline(project={self.project_id}, year={self.snapshot_year}, amount={self.baseline_amount})>"
@@ -221,12 +219,12 @@ class FundTransferVoucher(Base):
     transfer_date = Column(Date, nullable=True, comment="划转日期")
     status = Column(String(20), default=VoucherStatus.DRAFT.value, comment="凭证状态")
     confirmed_by = Column(String(50), nullable=True, comment="确认人")
-    confirmed_at = Column(DateTime(timezone=True), nullable=True, comment="确认时间")
+    confirmed_at = Column(UtcDateTime(), nullable=True, comment="确认时间")
     attachment_id = Column(Integer, nullable=True, comment="附件ID")
     remarks = Column(Text, nullable=True, comment="备注")
     created_by = Column(String(50), nullable=True, comment="创建人")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     # 协同扩展字段
     military_project_code = Column(String(100), nullable=True, comment="专项项目编号")
@@ -278,8 +276,8 @@ class FundContract(Base):
     # 全部附件（探针实证）。附件必须有自己的列，remarks 只存备注。
     attachments_json = Column(Text, nullable=True, comment="合同附件记录(JSON 数组)")
     created_by = Column(String(50), nullable=True, comment="创建人")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
         return f"<FundContract(id={self.id}, contract_no={self.contract_no}, status={self.status})>"
@@ -312,7 +310,7 @@ class FundContractPayment(Base):
     status = Column(String(20), default="pending", comment="状态: pending/approved/rejected")
     operator = Column(String(50), nullable=True, comment="经办人")
     remarks = Column(Text, nullable=True, comment="备注")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
 
     # WBS 关联字段
     wbs_code = Column(String(100), nullable=True, comment="WBS工作分解结构编码")
@@ -356,12 +354,12 @@ class FundAnomaly(Base):
     anomaly_type = Column(String(30), nullable=False, comment="异常类型")
     severity = Column(String(20), default=AnomalySeverity.WARNING.value, comment="严重程度")
     description = Column(Text, nullable=False, comment="异常描述")
-    detected_at = Column(DateTime(timezone=True), server_default=func.now(), comment="检测时间")
+    detected_at = Column(UtcDateTime(), server_default=func.now(), comment="检测时间")
     resolved = Column(Boolean, default=False, comment="是否已解决")
     resolved_by = Column(String(50), nullable=True, comment="解决人")
-    resolved_at = Column(DateTime(timezone=True), nullable=True, comment="解决时间")
+    resolved_at = Column(UtcDateTime(), nullable=True, comment="解决时间")
     resolution = Column(Text, nullable=True, comment="解决说明")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
 
     def __repr__(self):
         return f"<FundAnomaly(id={self.id}, type={self.anomaly_type}, severity={self.severity})>"
@@ -403,8 +401,8 @@ class FundSettlement(Base):
     performance_level = Column(String(5), nullable=True, comment="绩效等级(A/B/C/D)")
     remarks = Column(Text, nullable=True, comment="备注")
     created_by = Column(String(50), nullable=True, comment="创建人")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     # 资产联动校验字段
     asset_verified = Column(Boolean, default=False, comment="资产是否已校验")
@@ -446,9 +444,9 @@ class BudgetVersion(Base):
     status = Column(String(20), default="draft", comment="状态: draft/submitted/approved/rejected")
     operator = Column(String(50), nullable=True, comment="操作人")
     approved_by = Column(String(50), nullable=True, comment="审批人")
-    approved_at = Column(DateTime(timezone=True), nullable=True, comment="审批时间")
+    approved_at = Column(UtcDateTime(), nullable=True, comment="审批时间")
     snapshot_data = Column(Text, nullable=True, comment="完整预算快照(JSON)")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
 
     def __repr__(self):
         return f"<BudgetVersion(fund={self.fund_id}, version={self.version}, status={self.status})>"

@@ -5,9 +5,9 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Column, ForeignKey, Integer, String
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class AuditChange(Base):
@@ -26,7 +26,7 @@ class AuditChange(Base):
     old_value = Column(JSON, nullable=True)  # 旧值
     new_value = Column(JSON, nullable=True)  # 新值
     change_type = Column(String(20), nullable=False)  # create/update/delete
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(UtcDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     def __repr__(self):
         return f"<AuditChange(id={self.id}, field={self.field_name}, type={self.change_type})>"

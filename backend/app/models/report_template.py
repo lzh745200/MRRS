@@ -9,7 +9,6 @@ from enum import Enum
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Integer,
     String,
@@ -18,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .user import User  # noqa: F401 - relationship 字符串引用注册
 
@@ -65,8 +64,8 @@ class ReportTemplate(Base):
     # 创建人
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     # 审计
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now())
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     # 关系
     creator = relationship("User", backref="report_templates")

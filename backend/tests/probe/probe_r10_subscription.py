@@ -75,10 +75,25 @@ with TestClient(app, raise_server_exceptions=False) as client:
     check("列表返回 4 条", len(items) == 4, len(items))
     now = datetime.now()
     by_freq = {i["frequency"]: i for i in items}
-    nxt = lambda s: datetime.strptime(s, "%Y-%m-%dT%H:%M:%S") if s and "T" in s else (
-        datetime.strptime(s, "%Y-%m-%d %H:%M:%S") if s else None)
+
+    def nxt(s):
+        """next_send_at → **本地墙钟**（naive），以便按用户视角断言。
+
+        接口返回 aware UTC（调度规则按本地时区解释后换算成 UTC 瞬时），
+        故必须先换算到本地再断言 hour/weekday/day —— 直接比较 UTC 小时会
+        在非 UTC 主机上得到错误结论（这正是 2026-10-02 修复的缺陷形态）。
+        """
+        if not s or "T" not in s:
+            return None
+        try:
+            parsed = datetime.fromisoformat(s)
+        except ValueError:
+            return None
+        return parsed.astimezone().replace(tzinfo=None) if parsed.tzinfo else parsed
+
     n_daily = nxt(by_freq["daily"]["next_send_at"])
-    check("daily next=明天08:00", n_daily is not None and n_daily > now and n_daily.hour == 8,
+    check("daily next=下一个本地08:00（在未来）",
+          n_daily is not None and n_daily > now and n_daily.hour == 8,
           by_freq["daily"]["next_send_at"])
     n_weekly = nxt(by_freq["weekly"]["next_send_at"])
     check("weekly next=周三08:00(下一个周三)",
@@ -117,6 +132,7 @@ with TestClient(app, raise_server_exceptions=False) as client:
     # ── R1.4 dispatch 到期分发（DB 回拨 last_sent_at 8 天 → 到期）+ 同周期幂等 ──
     from app.core.database import SessionLocal  # noqa: E402
     from app.services.subscription_dispatch_service import SubscriptionDispatchService  # noqa: E402
+    from app.utils.time_utils import utcnow  # noqa: E402
 
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
@@ -128,7 +144,7 @@ with TestClient(app, raise_server_exceptions=False) as client:
 
     db = SessionLocal()
     stats1 = __import__("asyncio").run(
-        SubscriptionDispatchService().dispatch_due_subscriptions(db, datetime.now()))
+        SubscriptionDispatchService().dispatch_due_subscriptions(db, utcnow()))
     db.close()
     check("回拨后 dispatch 生成 ≥1", stats1["dispatched"] >= 1, stats1)
     check("dispatch 无失败", stats1["failed"] == 0, stats1)
@@ -139,7 +155,7 @@ with TestClient(app, raise_server_exceptions=False) as client:
     # 同 now 再跑：last_sent_at 已更新 → 同周期不重复
     db = SessionLocal()
     stats2 = __import__("asyncio").run(
-        SubscriptionDispatchService().dispatch_due_subscriptions(db, datetime.now()))
+        SubscriptionDispatchService().dispatch_due_subscriptions(db, utcnow()))
     db.close()
     check("同周期二次 dispatch 不重复", stats2["dispatched"] == 0, stats2)
 

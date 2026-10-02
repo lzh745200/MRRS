@@ -1,8 +1,8 @@
 """Issue tracking models."""
 
-from sqlalchemy import Column, DateTime, Index, Integer, String, Text
+from sqlalchemy import Column, Index, Integer, String, Text
 
-from .base import BaseModel
+from .base import BaseModel, UtcDateTime
 
 
 class Issue(BaseModel):
@@ -70,7 +70,7 @@ class Feedback(BaseModel):
 
     # Response tracking
     response = Column(Text, comment="回复内容")
-    responded_at = Column(DateTime(timezone=True), comment="回复时间")
+    responded_at = Column(UtcDateTime(), comment="回复时间")
     responded_by = Column(String(100), comment="回复人")
 
     def __repr__(self):

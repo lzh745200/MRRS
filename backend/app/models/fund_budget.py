@@ -3,7 +3,6 @@
 from sqlalchemy import (
     Column,
     Date,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -13,7 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 
-from .base import Base
+from .base import Base, UtcDateTime
 
 
 class FundBudget(Base):
@@ -57,8 +56,8 @@ class FundBudget(Base):
         nullable=True,
         comment="创建人ID",
     )
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     @property
     def remaining_amount(self):
@@ -132,8 +131,8 @@ class FundTransaction(Base):
         nullable=True,
         comment="录入人ID",
     )
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
         purpose_preview = self.purpose[:20] if self.purpose else ""

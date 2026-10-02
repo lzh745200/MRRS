@@ -11,7 +11,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String, text
+from sqlalchemy import BigInteger, Boolean, Column, Date, DateTime, Integer, String, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.types import TypeDecorator
@@ -45,6 +45,23 @@ class EncryptedText(TypeDecorator):
         return decrypt_pii(value)
 
 
+def is_datetime_type(col_type) -> bool:
+    """判定列类型是否为日期/时间列，**兼容 TypeDecorator 包装**（如 `UtcDateTime`）。
+
+    为什么需要它：`isinstance(col.type, DateTime)` 在列类型被 TypeDecorator 包装后
+    会**静默失配** —— 2026-10-02 引入 `UtcDateTime` 后，数据包校验器
+    （`services/package_record_validator._date_fields`）因此不再把
+    `support_start_date` 识别为日期列，跳过「日期归一 ISO」，脏字符串直达批量入库、
+    整批写入失败。凡按类型识别时间列的地方都必须走本函数。
+    """
+    candidate = col_type
+    for _ in range(5):  # 防御多层包装；正常为单层
+        if not isinstance(candidate, TypeDecorator):
+            break
+        candidate = candidate.impl
+    return isinstance(candidate, (Date, DateTime))
+
+
 def _base_to_dict(self) -> dict:
     """将模型实例转为字典（所有列）。BaseModel 覆盖此方法增加 datetime 处理。"""
     result = {}
@@ -62,19 +79,83 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
-# ── 时间戳混入 ──
+class UtcDateTime(TypeDecorator):
+    """DateTime 列专用类型：落库统一为 **naive UTC**，读回统一为 **aware UTC**。
+
+    ## 为什么需要它
+
+    SQLite 不保存时区，aware 值写下去偏移即被丢弃、读回是 naive —— 其语义是 UTC
+    （见下方「时间基准强约定」）。但 naive 值一旦流出 ORM，**所有消费方都会丢掉
+    「这是 UTC」这一事实**：``to_dict()`` 的 ``isoformat()`` 不带偏移、FastAPI 的
+    ``jsonable_encoder`` 同理，前端 ``new Date(str)`` 便按**本地**时区解析，于是库中的
+    UTC 墙钟被当作本地时间展示 —— 非 UTC 主机（UTC+8）上全部时间偏早 8 小时。
+
+    本类型把该事实编码进类型本身，从而**一处修复、所有出口正确**：
+
+    * ``to_dict()`` / FastAPI 序列化 → 输出带 ``+00:00``，前端按本地渲染即正确；
+    * Python 级比较自动与 aware 的 ``utcnow()`` 兼容，不再静默错位（错用会**响亮地**
+      抛 TypeError 而不是悄悄偏 8 小时）；
+    * SQL 级比较不受影响 —— 绑定处理器本就丢弃偏移，落库字面量仍是 UTC 墙钟；
+    * 导出（Excel/PDF）拿到的是 aware 值，展示前按本地渲染即可。
+
+    存量数据**无需迁移**：库中本来就是 UTC 墙钟，本类型只补齐时区标注。
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def __init__(self, *args, **kwargs):
+        # 兼容历史写法 UtcDateTime(timezone=True)：时区语义由本类固定，忽略该参数
+        kwargs.pop("timezone", None)
+        super().__init__(*args, **kwargs)
+
+    def process_bind_param(self, value, dialect):
+        """写入：aware → 转 UTC 后去时区；naive 按约定视为 UTC 原样落库。
+
+        ⚠️ 非 datetime 值（如数据包导入传入的脏字符串）**原样放行**交给隐含类型
+        处理 —— 本装饰器只负责时区归一，不得收窄基础类型原本接受的输入范围，
+        否则会以 AttributeError 的形式在批量导入等路径上误伤（2026-10-02 实测）。
+        """
+        if not isinstance(value, datetime):
+            return value
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+    def process_result_value(self, value, dialect):
+        """读取：补成 aware UTC（naive 即 UTC；后端返回 aware 时统一换算）。"""
+        if not isinstance(value, datetime):
+            return value
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+
+# ── 时间基准强约定（改这部分前务必读完）──────────────────────────────
+# 1. **存储**：所有 DateTime 列**必须**使用 ``UtcDateTime``（落库 naive UTC、读回 aware UTC）。
+#    SQLite 不保存时区，aware 值写下去偏移即被丢弃，读回是 naive —— 其语义是 UTC。
+# 2. **比较**：与「当前时刻」比较必须用 UTC 口径（``app.utils.time_utils.utcnow()``）。
+#    **禁止**用 ``datetime.now()``（本机本地）直接与库值比较，非 UTC 主机（如 UTC+8）上
+#    会整体偏移 8 小时。历史实例：审批超时提醒晚 8 小时触发（reminder_engine）、
+#    报表订阅提前派发（subscription_dispatch_service，2026-10-02）。转换入口统一在
+#    ``app.utils.time_utils``，不要在各处自造实现。
+#    ⚠️ 写入侧同理：``model.field = datetime.now()`` 会把**本地**墙钟写进 UTC 列，
+#    必须改用 ``time_utils.utcnow()``（或 ``utcnow_naive()``）。
+# 3. **展示**：``to_dict()`` 输出的时间带 ``+00:00`` 偏移，前端 ``new Date(str)``
+#    会正确换算到本地时区显示。
+# ────────────────────────────────────────────────────────────────
 class TimestampMixin:
     """为模型添加 created_at / updated_at 字段"""
 
     created_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         default=_utcnow,
         server_default=func.now(),
         nullable=False,
         comment="创建时间",
     )
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         default=_utcnow,
         onupdate=_utcnow,
         server_default=func.now(),
@@ -149,7 +230,7 @@ class SoftDeleteMixin:
     """
 
     is_deleted = Column(Boolean, default=False, nullable=False, comment="是否已删除")
-    deleted_at = Column(DateTime(timezone=True), nullable=True, comment="删除时间")
+    deleted_at = Column(UtcDateTime(), nullable=True, comment="删除时间")
     deleted_by = Column(Integer, nullable=True, comment="删除操作人用户ID（审计追踪）")
 
     def soft_delete(self, deleted_by: int | None = None) -> None:

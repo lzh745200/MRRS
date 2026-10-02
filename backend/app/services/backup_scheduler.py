@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from app.core.transaction import get_db_context
 from app.services.backup_service import BackupService
 from app.services.system_config_service import get_config
+from app.utils.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -527,6 +528,10 @@ async def subscription_dispatch_job():  # pragma: no cover — 并行会话在�
 
     工单 003 方案 A：补齐订阅消费方。到期判定与生成逻辑统一在
     SubscriptionDispatchService，generate-now 端点共用同一函数。
+
+    时间基准：必须传 **aware UTC**（``time_utils.utcnow()``）。库中订阅基准是
+    naive UTC，而调度规则按本地时区解释；此前这里传本地 naive ``datetime.now()``
+    直接与之比较，本机时区偏移量级的提前派发（UTC+8 即 8 小时，2026-10-02 修复）。
     """
     from app.core.database import SessionLocal
     from app.services.subscription_dispatch_service import SubscriptionDispatchService
@@ -534,7 +539,7 @@ async def subscription_dispatch_job():  # pragma: no cover — 并行会话在�
     db = SessionLocal()
     try:
         stats = await SubscriptionDispatchService().dispatch_due_subscriptions(
-            db, datetime.now()
+            db, utcnow()
         )
         if stats["dispatched"] or stats["failed"]:
             logger.info(

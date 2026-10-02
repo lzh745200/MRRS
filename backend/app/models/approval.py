@@ -11,7 +11,6 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -21,7 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .user import User  # noqa: F401 - relationship 字符串引用注册
 
@@ -71,8 +70,8 @@ class ApprovalWorkflow(Base):
         nullable=True,
         comment="创建人ID",
     )
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    updated_at = Column(UtcDateTime(), onupdate=func.now(), comment="更新时间")
 
     # Relationships
     nodes = relationship(
@@ -120,7 +119,7 @@ class ApprovalNode(Base):
     )
     approver_id = Column(Integer, nullable=True, comment="审批人ID或角色ID")
     timeout_hours = Column(Integer, default=24, comment="超时时间(小时)")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
 
     # Relationships
     workflow = relationship("ApprovalWorkflow", back_populates="nodes")
@@ -174,9 +173,9 @@ class ApprovalTask(Base):
     priority = Column(Integer, default=0, comment="优先级(数值越大越优先)")
     title = Column(String(200), nullable=True, comment="审批标题")
     description = Column(Text, nullable=True, comment="审批说明")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
-    completed_at = Column(DateTime(timezone=True), nullable=True, comment="完成时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    updated_at = Column(UtcDateTime(), onupdate=func.now(), comment="更新时间")
+    completed_at = Column(UtcDateTime(), nullable=True, comment="完成时间")
 
     # Relationships
     workflow = relationship("ApprovalWorkflow", back_populates="tasks")
@@ -251,7 +250,7 @@ class ApprovalRecord(Base):
         comment="转交目标用户ID",
     )
     transfer_reason = Column(Text, nullable=True, comment="转交原因")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="审批时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="审批时间")
 
     # Relationships
     task = relationship("ApprovalTask", back_populates="records")

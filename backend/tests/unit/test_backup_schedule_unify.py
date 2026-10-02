@@ -5,7 +5,7 @@
 - BackupService.cleanup_by_retention_days 按保留天数清理过期备份（fake clock）
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 BASE = "/api/v1/system/backup"
@@ -72,14 +72,10 @@ class TestRetentionCleanup:
         from app.models.system_config import SystemConfig
         from app.services.backup_service import BackupService
 
-        NOW = datetime(2026, 8, 1, 12, 0, 0)
-
-        class FakeDateTime(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return NOW
-
-        monkeypatch.setattr("app.services.backup_service.datetime", FakeDateTime)
+        NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=timezone.utc)
+        # 时间基准统一 UTC（2026-10-02）：cleanup_by_retention_days 改用
+        # time_utils.utcnow()，注入点随之对齐（原先 patch backup_service.datetime）。
+        monkeypatch.setattr("app.services.backup_service.utcnow", lambda: NOW)
 
         old = SystemConfig(key="backup_20260722_010000", value="/tmp/old.zip", description="b")
         old.created_at = NOW - timedelta(days=10)
@@ -123,14 +119,8 @@ class TestRetentionCleanup:
         from app.models.system_config import SystemConfig
         from app.services.backup_service import BackupService
 
-        NOW = datetime(2026, 8, 1, 12, 0, 0)
-
-        class FakeDateTime(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return NOW
-
-        monkeypatch.setattr("app.services.backup_service.datetime", FakeDateTime)
+        NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr("app.services.backup_service.utcnow", lambda: NOW)
 
         rec = SystemConfig(key="backup_20260701_010000", value="/tmp/str.zip", description="b")
         real_db_session.add(rec)
@@ -172,14 +162,8 @@ class TestRetentionCleanup:
         from app.models.system_config import SystemConfig
         from app.services.backup_service import BackupService
 
-        NOW = datetime(2026, 8, 1, 12, 0, 0)
-
-        class FakeDateTime(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return NOW
-
-        monkeypatch.setattr("app.services.backup_service.datetime", FakeDateTime)
+        NOW = datetime(2026, 8, 1, 12, 0, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr("app.services.backup_service.utcnow", lambda: NOW)
 
         # 名字必须以 .zip 结尾：_query_backup_records 用 value.like("%.zip") 过滤，
         # 否则记录根本不会被查出来，测不到 unlink 的容错分支。

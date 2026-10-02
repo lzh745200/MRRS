@@ -25,10 +25,10 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import Column, Integer, String
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 def _utcnow() -> datetime:
@@ -55,7 +55,7 @@ class FileBlob(Base):
         comment="引用计数（归零才删除物理文件）",
     )
     created_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         default=_utcnow,
         server_default=func.now(),
         nullable=False,

@@ -1,8 +1,8 @@
 """错误报告模型 — 持久化系统错误报告（替代内存存储）。"""
 
-from sqlalchemy import Column, DateTime, String, Text
+from sqlalchemy import Column, String, Text
 
-from app.models.base import BaseModel
+from app.models.base import BaseModel, UtcDateTime
 
 
 class ErrorReport(BaseModel):
@@ -16,7 +16,7 @@ class ErrorReport(BaseModel):
     severity = Column(String(20), default="warning", nullable=False, comment="严重程度: info/warning/error/critical")
     status = Column(String(20), default="open", nullable=False, comment="状态: open/resolved/ignored/in_progress")
     reporter = Column(String(100), nullable=True, comment="报告人")
-    resolved_at = Column(DateTime(timezone=True), nullable=True, comment="解决时间")
+    resolved_at = Column(UtcDateTime(), nullable=True, comment="解决时间")
     resolution_note = Column(Text, nullable=True, comment="处理备注")
 
     def to_dict(self, camel_case: bool = True):

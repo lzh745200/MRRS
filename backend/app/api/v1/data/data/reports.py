@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.utils.helpers import safe_json_loads
+from app.utils.time_utils import utcnow
 
 from app.core.database import get_db
 from app.core.response import ok_list, success_response
@@ -618,7 +619,7 @@ async def generate_subscription_now(
             raise HTTPException(status_code=400, detail="订阅已禁用，请先启用后再生成")
 
         result = await SubscriptionDispatchService().generate_for_subscription(
-            db, subscription, current_user, datetime.now()
+            db, subscription, current_user, utcnow()
         )
         return success_response(
             data={
@@ -639,15 +640,29 @@ async def generate_subscription_now(
 
 
 def _subscription_to_response(subscription: ReportSubscription) -> dict:
-    """将订阅模型转换为响应格式"""
-    from app.services.subscription_dispatch_service import next_run_at
+    """将订阅模型转换为响应格式。
 
-    base = subscription.last_sent_at or subscription.created_at
+    ``next_send_at`` 为 **aware UTC**：调度规则（send_day/send_time）按用户直觉的
+    **本地**时区解释，再换算成 UTC 瞬时输出，前端按本地渲染即为用户配置的时刻。
+    历史缺陷（2026-10-02 修复）：此前直接以 naive-UTC 的基准做日历运算并输出 naive 值，
+    前端按本地解析 → UTC+8 上显示早 8 小时，且可能落在**过去**（本地 08:00–16:00 窗口内
+    稳定复现，故长期只在特定时段暴露）。
+
+    容错：**展示侧必须容忍脏数据**——频率非法或基准缺失时 `next_send_at` 置 None，
+    绝不让单行异常把整个列表/更新接口打成 500。派发侧（dispatcher）仍保持 fail-loud，
+    把非法频率计入 failed 并 rollback，两处口径不同是刻意的。
+    """
+    from app.services.subscription_dispatch_service import next_send_at_utc
+
     next_send_at = None
+    base = subscription.last_sent_at or subscription.created_at
     if subscription.is_active and base is not None:
         try:
-            next_send_at = next_run_at(
-                subscription.frequency, subscription.send_day, subscription.send_time, base
+            next_send_at = next_send_at_utc(
+                subscription.frequency,
+                subscription.send_day,
+                subscription.send_time,
+                base,
             )
         except ValueError:
             next_send_at = None

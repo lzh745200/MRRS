@@ -5,11 +5,11 @@ Allows users to configure which notifications they want to receive.
 Requirements: 6.2 - Support user notification preference configuration
 """
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer
+from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer
 from sqlalchemy.orm import backref, relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .user import User  # noqa: F401 - relationship 字符串引用注册
 
@@ -50,8 +50,8 @@ class NotificationPreference(Base):
     push_task = Column(Boolean, default=True, comment="推送 - 任务提醒")
     push_system = Column(Boolean, default=True, comment="推送 - 系统通知")
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    updated_at = Column(UtcDateTime(), onupdate=func.now(), comment="更新时间")
 
     # Relationships
     # passive_deletes=True：由数据库 ON DELETE CASCADE 清理，ORM 不得先把

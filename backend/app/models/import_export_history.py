@@ -5,11 +5,11 @@ Tracks all import and export operations for compliance and debugging.
 
 import enum
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .data_package import DataPackage  # noqa: F401 - relationship 字符串引用注册
 from .organization import Organization  # noqa: F401 - relationship 字符串引用注册
@@ -68,7 +68,7 @@ class ImportExportHistory(Base):
         comment="操作用户ID(用户删除后置空，导入导出留痕保留)",
     )
     operation_time = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         nullable=False,
         comment="操作时间",
@@ -92,7 +92,7 @@ class ImportExportHistory(Base):
     user_agent = Column(String(500), nullable=True, comment="用户代理")
 
     # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
 
     # Relationships
     package = relationship("DataPackage", backref="history")

@@ -4,7 +4,6 @@ from typing import Optional
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -14,7 +13,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base, EncryptedText
+from app.models.base import Base, EncryptedText, UtcDateTime
 from app.models.two_factor_auth import TwoFactorAuth  # noqa: F401
 
 from .organization import Organization  # noqa: F401 - relationship 字符串引用注册
@@ -78,11 +77,11 @@ class User(Base):
     token_version = Column(Integer, default=0, comment="Token版本号，递增后旧token全部失效")
     must_change_password = Column(Boolean, default=False, comment="是否必须修改密码")
     failed_login_count = Column(Integer, default=0, comment="连续登录失败次数")
-    locked_until = Column(DateTime(timezone=True), nullable=True, comment="账户锁定截止时间")
-    password_changed_at = Column(DateTime(timezone=True), nullable=True, comment="密码最后修改时间")
-    last_login = Column(DateTime(timezone=True), comment="最后登录时间")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
+    locked_until = Column(UtcDateTime(), nullable=True, comment="账户锁定截止时间")
+    password_changed_at = Column(UtcDateTime(), nullable=True, comment="密码最后修改时间")
+    last_login = Column(UtcDateTime(), comment="最后登录时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    updated_at = Column(UtcDateTime(), onupdate=func.now(), comment="更新时间")
 
     # 关系
     projects = relationship("Project", back_populates="creator", foreign_keys="[Project.created_by]")

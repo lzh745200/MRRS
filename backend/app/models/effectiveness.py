@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     JSON,
     Column,
-    DateTime,
     Float,
     ForeignKey,
     Integer,
@@ -15,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class EffectivenessEvaluation(Base):
@@ -48,13 +47,13 @@ class EffectivenessEvaluation(Base):
     report_path = Column(String(500), nullable=True)  # 报告文件路径
     evaluated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     evaluated_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        UtcDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        UtcDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,

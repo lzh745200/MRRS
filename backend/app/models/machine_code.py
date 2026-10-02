@@ -3,11 +3,11 @@
 用于管理用户注册的机器码和通行码系统。
 """
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .organization import Organization  # noqa: F401 - relationship 字符串引用注册
 from .user import User  # noqa: F401 - relationship 字符串引用注册
@@ -61,10 +61,10 @@ class MachineCode(Base):
     restrict_permissions = Column(Text, default="", comment="此机器码限制的功能权限(JSON数组)")
     description = Column(Text, comment="备注说明")
     created_by = Column(Integer, ForeignKey("users.id"), comment="创建人ID（管理员）")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    activated_at = Column(DateTime(timezone=True), nullable=True, comment="激活时间")
-    revoked_at = Column(DateTime(timezone=True), nullable=True, comment="撤销时间")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    activated_at = Column(UtcDateTime(), nullable=True, comment="激活时间")
+    revoked_at = Column(UtcDateTime(), nullable=True, comment="撤销时间")
+    updated_at = Column(UtcDateTime(), onupdate=func.now(), comment="更新时间")
 
     # 关系
     user = relationship("User", foreign_keys=[user_id], lazy="select")

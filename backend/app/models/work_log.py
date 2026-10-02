@@ -1,10 +1,10 @@
 """工作日志模型"""
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Column, Date, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql import func
 
-from .base import Base
+from .base import Base, UtcDateTime
 
 
 class WorkLog(Base):
@@ -55,8 +55,8 @@ class WorkLog(Base):
     location = Column(String(200), nullable=True, comment="工作地点")
     participants = Column(String(500), nullable=True, comment="参与人员(逗号分隔)")
     attachments = Column(Text, nullable=True, comment="附件路径(JSON数组)")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     # 兼容前端字段的属性
     @hybrid_property

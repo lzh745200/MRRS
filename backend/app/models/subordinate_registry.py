@@ -4,9 +4,9 @@
 通过注册上报包和管控配置包实现离线双向管理。
 """
 
-from sqlalchemy import Column, Date, DateTime, Integer, String, Text
+from sqlalchemy import Column, Date, Integer, String, Text
 
-from app.models.base import BaseModel
+from app.models.base import BaseModel, UtcDateTime
 
 
 class SubordinateInstance(BaseModel):
@@ -59,12 +59,12 @@ class SubordinateInstance(BaseModel):
         comment="最后下发的管控配置包SHA256哈希",
     )
     last_config_applied_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         nullable=True,
         comment="下级最后应用配置的时间",
     )
     last_report_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         nullable=True,
         comment="最后收到状态报告的时间",
     )

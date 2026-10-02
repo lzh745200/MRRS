@@ -6,7 +6,6 @@
 
 from sqlalchemy import (
     Column,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -16,7 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 
-from .base import Base
+from .base import Base, UtcDateTime
 
 
 class FundAssetVerification(Base):
@@ -52,11 +51,11 @@ class FundAssetVerification(Base):
     difference_rate = Column(Numeric(12, 2), default=0, comment="差异率(%)")
     status = Column(String(20), default="pending", comment="校验状态: pending/passed/failed/waived")
     verified_by = Column(String(50), nullable=True, comment="校验人")
-    verified_at = Column(DateTime(timezone=True), nullable=True, comment="校验时间")
+    verified_at = Column(UtcDateTime(), nullable=True, comment="校验时间")
     opinion = Column(Text, nullable=True, comment="校验意见")
     remarks = Column(Text, nullable=True, comment="备注")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
+    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
         return f"<FundAssetVerification(id={self.id}, project={self.project_id}, status={self.status})>"

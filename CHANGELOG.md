@@ -5,6 +5,88 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.11] - 2026-10-02 — 🕐 时间基准统一：报表订阅 next_send_at / 到期派发彻底修复 + 时间转换单一事实源
+
+承接 1.12.10 登记的遗留缺陷（`ReportSubscription.next_send_at` 时间基准不一致）。
+根因是一类**基准混用**：库中 DateTime 列落库为 naive **UTC**，而调度规则
+（`send_day` / `send_time`）与 `datetime.now()` 都是**本地**口径，两者混在一起比较。
+
+### 修复（正确性 — 调度语义与比较基准）
+- **报表订阅 next_send_at 与到期派发**（`services/subscription_dispatch_service.py`）：
+  新增 `next_send_at_utc()` 作为唯一计算入口——把库中 naive-UTC 基准换算成本地墙钟、
+  用本地墙钟做日历运算、结果再换算回 **aware UTC** 输出。
+  * 用户配置「每天 08:00」现在稳定表示**本地** 08:00，前端按本地渲染即为该时刻；
+  * 到期判定两侧统一到 UTC（`dispatch_due_subscriptions(now=` 传 aware UTC），
+    不再出现「新建订阅被提前派发」；
+  * `last_sent_at` 落库统一为 **naive UTC**（此前写调用方的本地墙钟，会污染下一次基准）。
+  * 缺陷显形窗口很窄（仅「本地小时 ≥ 发送小时 > UTC 小时」，UTC+8 即本地 08:00–16:00），
+    故长期只在特定时段暴露——这也是它此前躲过回归的原因。
+- **列表端点**（`api/v1/data/data/reports.py`）：`_subscription_to_response` 改走同一入口，
+  `next_send_at` 输出 aware UTC（此前输出 naive 墙钟，前端按本地解析会偏早 8 小时、
+  甚至落在过去）。
+- **调度器**（`services/backup_scheduler.py`）：订阅派发作业改传 `utcnow()`（aware UTC）。
+- **generate-now 端点**：改传 `utcnow()`，与派发路径同基准。
+
+### 修复（正确性 — 展示基准，此前登记为「待决策」的系统性问题）
+- **新增 `models.base.UtcDateTime` 类型（一处修复、所有出口正确）**：库中 DateTime 列
+  落库为 naive UTC，读回也是 naive —— naive 值一旦流出 ORM，**所有消费方都会丢掉
+  「这是 UTC」这一事实**：`to_dict()` 的 `isoformat()` 不带偏移、FastAPI 的
+  `jsonable_encoder` 同理，前端 `new Date(str)` 便按**本地**时区解析，于是 UTC 墙钟被
+  当作本地时间展示（UTC+8 上全部时间偏早 8 小时）。
+  `UtcDateTime` 在绑定参数时统一换算为 naive UTC、读取时补成 aware UTC，于是：
+  * `to_dict()` / FastAPI 序列化输出带 `+00:00` → 前端按本地渲染即正确；
+  * Python 级比较自动与 aware 的 `utcnow()` 兼容，错用会**响亮地抛 TypeError**
+    而不是悄悄偏 8 小时；
+  * SQL 级比较不受影响（绑定处理器本就丢弃偏移，落库字面量仍是 UTC 墙钟）；
+  * **存量数据无需迁移** —— 库中本来就是 UTC 墙钟，本类型只补齐时区标注。
+- **全模型接入**：`app/models/` 下 48 个文件的 195 处 `DateTime(timezone=True)` 与
+  5 处裸 `DateTime` 统一改为 `UtcDateTime()`（含 `TimestampMixin` / `SoftDeleteMixin`）。
+- **导出通道按本地渲染**（避免导出件里出现 UTC 墙钟或 `+00:00` 文本）：
+  `async_export_service._format_datetime` 与 `excel_report_style._coerce`
+  对 aware 值先转本地再格式化。
+- **清除「本地时间写进 UTC 列」的混用**：`fund_lifecycle`（entered_at / confirmed_at /
+  resolved_at / approved_at）、`audit_service.resolved_at`、`backup_service.updated_at`
+  由 `datetime.now()` 改为 `time_utils.utcnow()`。这些列**未在任何界面展示**，
+  故不产生展示侧回归，但消除了同一张表内两种时间基准并存的数据污染。
+
+### 连带修复（新类型暴露出的既有缺陷）
+- **`isinstance(col.type, DateTime)` 识别失效**（`services/package_record_validator._date_fields`）：
+  列类型被 TypeDecorator 包装后该判定**静默失配**，数据包导入不再把
+  `support_start_date` 识别为日期列、跳过「日期归一 ISO」，脏字符串直达批量入库、
+  整批写入失败（实测 schools 导入 0/2）。新增 `models.base.is_datetime_type()`
+  （递归解开 TypeDecorator 包装）并改用它 —— 全仓仅此一处按类型识别时间列。
+- **`backup_service.cleanup_by_retention_days` 基准错位**：cutoff 原用本地 naive
+  `datetime.now()` 与库中时间比较（同一类缺陷里的静默偏移）；改用
+  `time_utils.utcnow()` 并对字符串形态的 `created_at` 统一按 UTC 补齐。相应地，
+  该服务的三个保留期用例把时刻注入点从 `backup_service.datetime` 对齐到
+  `backup_service.utcnow`（断言强度不变）。
+- **列表端点的容错**：`_subscription_to_response` 恢复对非法频率的容忍
+  （`next_send_at=None`），**展示侧不得让单行脏数据把整个列表/更新接口打成 500**；
+  派发侧仍保持 fail-loud（计入 failed 并 rollback），两处口径不同是刻意的。
+
+### 重构（单一事实源）
+- 新增 `app/utils/time_utils.py`：`utcnow` / `utcnow_naive` / `as_utc` / `as_utc_naive` /
+  `to_local` / `local_naive` / `local_naive_to_utc` / `to_utc` / `to_utc_naive` / `now_local`，
+  并在模块文档中固化三条约定（存储 naive UTC / 比较同基准 / 调度按本地语义）。
+- 收敛两处重复实现：`services/reminder_engine.py` 与 `services/async_export_service.py`
+  各自的私有 `_as_utc` 改为指向 `time_utils.as_utc`（保留原名兼容既有调用与测试）。
+  `as_utc` 对已是 UTC 的值原样返回，保持对象恒等语义。
+- `models/base.py` 补「时间基准强约定」注释块，并**显式登记**尚未处理的系统性问题：
+  `to_dict()` 对 naive 值输出不带偏移的 ISO，而前端按本地解析 ⇒ 所有经
+  `created_at` / `updated_at` 展示的时间偏早一个时区差。该问题影响面覆盖全部模型与界面，
+  需全局序列化口径调整 + 存量数据评估，故不在本轮改动。
+
+### 测试
+- 新增 `tests/unit/test_time_utils.py`（全分支 + 往返不变量 + `as_utc` 与 `to_utc`
+  对同一 naive 值解释必须不同）。
+- `tests/unit/test_subscription_dispatch.py` 全面改造为**时区无关**表达：用
+  `local_wall()` / `local_now()` 把「本地某时刻」显式换算成库中的 naive UTC，
+  断言在任意运行时时区下结论一致；并新增
+  `test_created_today_after_send_time_not_dispatched` 直接锁定历史缺陷的显形窗口。
+- `tests/probe/probe_r10_subscription.py`：`next_send_at` 断言改为解析带偏移的 ISO 后
+  换算到本地再比较（此前按 naive 解析，且 `now` 用本地时间与 UTC 值比较），
+  该探针从此**与运行时刻无关**；派发调用改传 `utcnow()`。
+
 ## [1.12.10] - 2026-10-02 — 🔧 跨平台 CI 双红根因修复（平台相关穿越判定 / 时区相关断言）+ 测试会话隔离契约
 
 本轮根因由 GitHub Actions 的 **check-run annotations** 直接定位（job 日志需认证，

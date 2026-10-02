@@ -6,6 +6,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.core.transaction import safe_commit
+from app.utils.time_utils import utcnow
 from app.models.audit import (
     APIAccessLog,
     AuditAction,
@@ -445,7 +446,7 @@ class SecurityEventService:
         event = self.db.query(SecurityEvent).filter(SecurityEvent.id == event_id).first()
         if event:
             event.resolved = True
-            event.resolved_at = datetime.now()
+            event.resolved_at = utcnow()
             event.resolved_by = resolved_by
             event.resolution_notes = resolution_notes
             safe_commit(self.db)

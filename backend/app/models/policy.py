@@ -3,7 +3,6 @@ import enum
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -13,7 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 """政策法规模型"""
 
@@ -57,8 +56,8 @@ class PolicyCategory(Base):
     sort_order = Column(Integer, default=0, comment="排序")
     is_active = Column(Boolean, default=True, comment="是否启用")
     description = Column(Text, nullable=True, comment="描述")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    updated_at = Column(UtcDateTime(), onupdate=func.now(), comment="更新时间")
 
 
 class PolicyFavorite(Base):
@@ -85,7 +84,7 @@ class PolicyFavorite(Base):
         nullable=False,
         comment="政策ID(政策删除时收藏行级联清除)",
     )
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="收藏时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="收藏时间")
 
 
 class Policy(Base):
@@ -112,8 +111,8 @@ class Policy(Base):
     )
     # 发布信息
     issuing_authority = Column(String(200), comment="发布机关")
-    issue_date = Column(DateTime(timezone=True), comment="发布日期")
-    effective_date = Column(DateTime(timezone=True), comment="生效日期")
+    issue_date = Column(UtcDateTime(), comment="发布日期")
+    effective_date = Column(UtcDateTime(), comment="生效日期")
     # 内容
     summary = Column(Text, comment="摘要")
     content = Column(Text, comment="全文内容")
@@ -138,8 +137,8 @@ class Policy(Base):
     view_count = Column(Integer, default=0, comment="查看次数")
     download_count = Column(Integer, default=0, comment="下载次数")
     # 时间戳
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    updated_at = Column(UtcDateTime(), onupdate=func.now(), comment="更新时间")
 
     def __repr__(self):
         return f"<Policy(id={self.id}, title='{self.title}', code='{self.code}')>"

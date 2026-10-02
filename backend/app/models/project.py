@@ -6,7 +6,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     Date,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -17,7 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base, EncryptedText
+from app.models.base import Base, EncryptedText, UtcDateTime
 
 from .user import User  # noqa: F401 - relationship 字符串引用注册
 
@@ -142,7 +141,7 @@ class Project(Base):
 
     # ================= 软删标记 =================
     is_active = Column(Boolean, default=True, nullable=False, comment="是否启用(软删标记)")
-    deleted_at = Column(DateTime(timezone=True), nullable=True, comment="软删时间(回收站保留期计算依据)")
+    deleted_at = Column(UtcDateTime(), nullable=True, comment="软删时间(回收站保留期计算依据)")
 
     created_by = Column(
         Integer,
@@ -151,13 +150,13 @@ class Project(Base):
         comment="创建人ID",
     )
     created_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         nullable=False,
         comment="创建时间",
     )
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -303,9 +302,9 @@ class ProjectTask(Base):
     priority = Column(Integer, default=0, comment="优先级")
     assignee = Column(String(50), nullable=True, comment="负责人")
     due_date = Column(Date, nullable=True, comment="截止日期")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         onupdate=func.now(),
         comment="更新时间",
@@ -349,7 +348,7 @@ class ProjectFile(Base):
         comment="上传人ID",
     )
     created_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         server_default=func.now(),
         nullable=False,
         comment="上传时间",

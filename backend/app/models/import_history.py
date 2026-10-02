@@ -5,11 +5,11 @@ Records import history including success / failure counts and error details.
 
 import enum
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, Column, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 from .user import User  # noqa: F401 - relationship 字符串引用注册
 
@@ -66,9 +66,9 @@ class ImportHistory(Base):
         nullable=False,
         comment="导入状态",
     )
-    started_at = Column(DateTime(timezone=True), nullable=True, comment="开始时间")
-    completed_at = Column(DateTime(timezone=True), nullable=True, comment="完成时间")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    started_at = Column(UtcDateTime(), nullable=True, comment="开始时间")
+    completed_at = Column(UtcDateTime(), nullable=True, comment="完成时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
 
     # Relationships
     user = relationship("User", backref="import_histories")

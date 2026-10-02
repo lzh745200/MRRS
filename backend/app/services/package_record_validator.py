@@ -38,9 +38,10 @@ import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import Date, DateTime, Float, Integer, Numeric
+from sqlalchemy import Float, Integer, Numeric
 
 from app.core.logging import logger
+from app.models.base import is_datetime_type
 from app.models.fund import Fund, FundSource, FundStatus, FundType
 from app.models.project import Project, ProjectStatus, ProjectType
 from app.models.school import School, SchoolType, SupportStatus
@@ -113,11 +114,16 @@ def _required_fields(model: Any) -> List[str]:
 
 
 def _date_fields(model: Any) -> List[str]:
-    """按列类型派生日期字段（Date/DateTime，排除系统时间戳列）"""
+    """按列类型派生日期字段（Date/DateTime，排除系统时间戳列）。
+
+    用 ``is_datetime_type`` 而非裸 ``isinstance(..., DateTime)``：后者在列类型被
+    TypeDecorator 包装（`UtcDateTime`）后会静默失配，导致日期字段不再归一
+    （2026-10-02 数据包导入回归的根因）。
+    """
     return [
         c.name
         for c in model.__table__.columns
-        if c.name not in _SYSTEM_COLUMNS and isinstance(c.type, (Date, DateTime))
+        if c.name not in _SYSTEM_COLUMNS and is_datetime_type(c.type)
     ]
 
 

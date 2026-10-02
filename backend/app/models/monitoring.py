@@ -8,7 +8,6 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Column,
-    DateTime,
     Float,
     ForeignKey,
     Integer,
@@ -17,7 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import synonym
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class APIMetric(Base):
@@ -30,7 +29,7 @@ class APIMetric(Base):
     method = Column(String(10), nullable=False)
     response_time_ms = Column(Float, nullable=False)
     status_code = Column(Integer, nullable=False, index=True)
-    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    timestamp = Column(UtcDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     user_id = Column(Integer, nullable=True)
     error_message = Column(Text, nullable=True)
 
@@ -50,10 +49,10 @@ class AlertRule(Base):
     email_recipients = Column(JSON, nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        UtcDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False
     )
     updated_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
@@ -73,7 +72,7 @@ class AlertHistory(Base):
         index=True,
     )
     triggered_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
         index=True,
@@ -83,7 +82,7 @@ class AlertHistory(Base):
     # 恒为空列表（深审 LIVE）。以 synonym 暴露同名属性别名，读写与
     # order_by/列表达式语义与 triggered_at 完全一致，无需改表。
     created_at = synonym("triggered_at")
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_at = Column(UtcDateTime(), nullable=True)
     message = Column(Text, nullable=False)
     metric_value = Column(Float, nullable=True)
     status = Column(String(20), default="triggered", nullable=False)  # triggered/resolved

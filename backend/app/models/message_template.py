@@ -5,10 +5,10 @@ Supports variable placeholders for dynamic content generation.
 Requirements: 7.1, 7.2, 7.3, 7.4, 7.5 - Message template management
 """
 
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, Index, Integer, String, Text
 from sqlalchemy.sql import func
 
-from app.models.base import Base
+from app.models.base import Base, UtcDateTime
 
 
 class MessageTemplate(Base):
@@ -37,8 +37,8 @@ class MessageTemplate(Base):
     is_active = Column(Boolean, default=True, comment="是否启用")
     is_system = Column(Boolean, default=False, comment="是否为系统预置模板")
     created_by = Column(Integer, nullable=True, comment="创建人ID")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), comment="更新时间")
+    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
+    updated_at = Column(UtcDateTime(), onupdate=func.now(), comment="更新时间")
 
     __table_args__ = (
         Index("ix_message_templates_code", "code"),
