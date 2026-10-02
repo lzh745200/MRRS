@@ -13,7 +13,7 @@ _fetch_* / _build_* 记录函数跳过了真实查询路径与工具函数，导
 全部使用伪 Query（_FakeQuery）与 SimpleNamespace 记录，不连真实数据库、
 不提交全局 executor，无挂起线程。
 """
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -156,6 +156,16 @@ class TestFormatDatetime:
 
     def test_datetime_formatted(self):
         assert _format_datetime(datetime(2025, 3, 4, 5, 6, 7)) == "2025-03-04 05:06:07"
+
+    def test_aware_utc_rendered_as_local_wall_clock(self):
+        """库中时间为 aware UTC（models.base.UtcDateTime）；导出件面向用户，
+        必须换算成本地墙钟 —— 否则导出里是 UTC 时刻，比本地早一个时区差。"""
+        aware = datetime(2025, 3, 4, 5, 6, 7, tzinfo=timezone.utc)
+        expected = aware.astimezone().replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+        assert _format_datetime(aware) == expected
+        # 本机非 UTC 时，结果必须与 naive 直出不同（否则等价于没换算）
+        if datetime.now().astimezone().utcoffset() != timedelta(0):
+            assert _format_datetime(aware) != "2025-03-04 05:06:07"
 
     def test_other_value_str(self):
         assert _format_datetime(123) == "123"
