@@ -1,19 +1,19 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.12.9
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.12.10
 
-![Version](https://img.shields.io/badge/version-1.12.9-blue)
+![Version](https://img.shields.io/badge/version-1.12.10-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-17%2C672%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-18%2C157%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **11,548 passed**, 0 失败（含覆盖率 100% 门禁） |
-| 前端测试 | **6,124 passed**（302 文件）, 0 失败 |
+| 后端测试 | **11,870 passed**, 0 失败（含覆盖率 100% 门禁） |
+| 前端测试 | **6,287 passed**（302 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
 | Flake8 | 0 错误, 0 警告 |
@@ -28,9 +28,9 @@
 
 | 预防门禁 | 6 个棘轮扫描器（os._exit / 上传限长 / 无界读 / 子进程编码 / 目录替换 / 周期任务注册）接入 CI，NEW=0 |
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
-| 真实 HTTP 探测 | 21 个探针脚本 0 失败（探针专用库，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包） |
+| 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包）；⚠️ `probe_r10` 的 `daily next` 断言依赖运行时刻，本地时间晚于 08:00 时因订阅时间基准不一致（UTC 存储 vs 本地比较）而失败 1 项 —— 已知项，见 `docs/03-开发文档/04-安全文档/安全加固.md` §13.6 |
 
-> **上次全量验证**: 2026-09-30（v1.12.9）— 后端 11,548 用例 + 覆盖率 100.00%、前端 6,124 用例（302 文件）全部通过；
+> **上次全量验证**: 2026-10-02（v1.12.10）— 后端 11,870 用例 + 覆盖率 100.00%、前端 6,287 用例（302 文件）全部通过；
 > flake8 0 / 6 项棘轮门禁 NEW=0 / vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（44 版本）
 
 ## 快速开始

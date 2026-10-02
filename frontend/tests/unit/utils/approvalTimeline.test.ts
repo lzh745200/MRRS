@@ -95,18 +95,29 @@ describe('buildApprovalTimeline 数据源缺失兜底', () => {
 describe('buildApprovalTimeline 时间解析与排序', () => {
   const t = (v: unknown) => [{ operator: 'o', action: 'a', time: v }]
 
-  it('ISO 与空格格式混排按真实时间倒序（不再依赖字符串字典序）', () => {
-    // 字典序下 "2026-09-17 10:00:00" > "2026-09-17T10:00:00Z"（空格 < 'T'），
-    // 但后者带 Z 实为更晚时刻——数值解析必须排在前。
+  it('ISO 与空格格式混排按真实时间倒序（不再依赖字符串字典序），且判据不随运行时时区漂移', () => {
+    // 取值必须满足两条：① 字典序与时间戳序结论**相反**（否则无法判别旧实现）；
+    // ② 对任意运行时时区结论**一致**（否则 CI 恒红、本地恒绿）。
+    //
+    // 反面教材（本用例 2026-10-02 修正前）：原取 `'2026-09-17 10:00:00'`
+    // vs `'2026-09-17T10:00:00Z'`。朴素串无时区、由 JS 按**本地时区**解析，
+    // 在 UTC runner（CI 的 ubuntu-latest）上二者是**同一时刻** → 落入稳定排序
+    // 分支保持输入顺序 → 断言失败。而 UTC+8 本地恒绿 —— 并且该组合在新旧实现
+    // 下"排第一"的都是 ISO，**从未真正判别过修复**（弱断言）。
+    //
+    // 现取同一天的最早/最晚时刻：lexicographically 仅第 10 位 ' '(0x20) vs 'T'(0x54)
+    // 有别 → 空格串更小 → 旧实现（localeCompare 降序）把 ISO 排在前；
+    // 而本地 23:59:59 折算 UTC 最坏情形为次日 11:59:59，恒晚于当日 00:00:00Z
+    // （UTC-12…UTC+14 全覆盖验证）→ 新实现把空格串排在前。两者结论相反。
     const nodes = buildApprovalTimeline(
       [
-        { operator: 'space', action: 'a', time: '2026-09-17 10:00:00' },
-        { operator: 'iso', action: 'a', time: '2026-09-17T10:00:00Z' },
+        { operator: 'space', action: 'a', time: '2026-09-17 23:59:59' },
+        { operator: 'iso', action: 'a', time: '2026-09-17T00:00:00Z' },
       ],
       null as any
     )
-    expect(nodes[0].operator).toBe('iso')
-    expect(nodes[1].operator).toBe('space')
+    expect(nodes[0].operator).toBe('space')
+    expect(nodes[1].operator).toBe('iso')
   })
 
   it('epoch 秒（10 位）按 ×1000 解析为毫秒', () => {

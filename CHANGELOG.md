@@ -5,6 +5,46 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.10] - 2026-10-02 — 🔧 跨平台 CI 双红根因修复（平台相关穿越判定 / 时区相关断言）+ 测试会话隔离契约
+
+本轮根因由 GitHub Actions 的 **check-run annotations** 直接定位（job 日志需认证，
+但 `::error::` 上报会以注解形式公开可读），证伪了此前两个猜测：
+后端作业覆盖率**已达 100%**、前端作业亦非 `v8 fnMap` 合并伪影。
+真实病因是「测试断言依赖运行平台 / 时区」而非产品逻辑错误 —— 同源表现为
+**本地（Windows / UTC+8）恒绿、CI（ubuntu-latest / UTC）恒红**。
+
+### 修复（跨平台 — 发布门禁）
+- **归档恢复的路径穿越判定与运行平台绑定**（`app/services/data_tier_service.py`）：
+  `Path(archive_file).name != archive_file` 只按**运行平台**的分隔符解析 —— Linux 上
+  反斜杠不是分隔符，`C:\Windows\win.ini` 这类 Windows 风格路径**绕过**校验、落到
+  "文件不存在"分支（ubuntu-latest 上表现为断言 `'非法' in '归档文件不存在: C:\Windows\win.ini'`
+  失败，Windows 本地恒绿）。现显式拒绝 `/` 与 `\` 两种分隔符，两平台结论一致且更严；
+  合法纯文件名不受影响（POSIX 语义对照探针已验证修复前后差异）。
+- **审批时间轴排序断言的时区依赖**（`frontend/tests/unit/utils/approvalTimeline.test.ts`）：
+  朴素时间串（无时区）由 JS 按运行环境**本地时区**解析，`'2026-09-17 10:00:00'` 与
+  `'2026-09-17T10:00:00Z'` 在 UTC runner 上是**同一时刻** → 落入稳定排序分支保持输入顺序
+  → 断言失败（UTC+8 本地恒绿）。改用同一天最早/最晚时刻组合，经 UTC-12…UTC+14 全偏移
+  离线验证结论恒定，且与字典序排序结论相反（保住对"改回 localeCompare"的判别力）。
+  顺带纠正：原取值在新旧实现下"排首者"完全相同、且含 TIE 区间，属**无可判别力的弱用例**。
+
+### 修复（测试基础设施 — 会话数据根隔离契约）
+- **Linux 上测试数据根逃逸**（`backend/tests/conftest.py`）：conftest 用
+  `BUMOFU_BACKEND_DIR_OVERRIDE` 把数据根指向会话临时目录，但 `paths.get_app_data_dir()`
+  的首分支 `is_bundled() or (is_linux() and not BUMOFU_DEV_MODE)` 在 Linux 上恒真，
+  **短路返回 `~/.bumofu`、根本不经过 `get_project_backend_dir()`** → override 形同虚设，
+  测试数据写进 runner 家目录（跨用例共享、跨运行残留），Settings 亦把
+  CACHE_DIR/UPLOAD_DIR/EXPORT_DIR 一并固化到那里；Windows 本地因 `is_linux()` 为假不受影响。
+  现同时声明 `BUMOFU_DEV_MODE=1`，两平台统一由 override 收口（**生产态 Linux 行为不变**，
+  由 `test_prod_linux_without_dev_mode_uses_home` 继续锁定）。
+- 新增 `backend/tests/unit/test_session_isolation_contract.py`（2 用例）：以**行为级**断言
+  守护该契约（不用源码文本扫描），既能拦住"漏声明"，也能拦住"声明晚于 `app.*` 导入"的
+  时序错位（Settings 在 import 期即完成路径归一）。放在独立模块的原因：
+  `tests/unit/test_paths.py` 带模块级 `pytest.mark.real_backend_dir`，conftest 的 autouse
+  fixture 会为该模块临时删除 override，无法在该模块内观察隔离实效。
+- 新增 `scripts/ci/scan_shared_vue_refs.py`：扫描受覆盖率门禁锁定的 `.vue` 被多个测试文件
+  引用的情况（现状 64 处）。经 CI 注解确认**当前并未发作**（前端覆盖率 100%），
+  故保留为潜在风险探测工具，本轮不做重构。
+
 ## [1.12.9] - 2026-09-30 — 🛡️ 深审缺陷批量修复（越权/数据完整性/静默失效/发布门禁）
 
 对应 `deliverables/open-code-review-深度审查报告-2026-09-17.md` 与逐条复核台账

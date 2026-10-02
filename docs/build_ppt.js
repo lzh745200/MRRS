@@ -38,7 +38,7 @@ function header(s, kicker, title) {
     color: TEXT, fontFace: F, margin: 0 });
   s.addText(String(pageNo).padStart(2, "0"), { x: W - 1.0, y: H - 0.55, w: 0.5, h: 0.3,
     fontSize: 11, color: MUTED, fontFace: F, align: "right", margin: 0 });
-  s.addText("帮扶管理信息系统 v1.12.9", { x: M, y: H - 0.55, w: 4, h: 0.3,
+  s.addText("帮扶管理信息系统 v1.12.10", { x: M, y: H - 0.55, w: 4, h: 0.3,
     fontSize: 10.5, color: MUTED, fontFace: F, margin: 0 });
 }
 function card(s, x, y, w, h, fill = BG) {
@@ -94,7 +94,7 @@ function sectionSlide(num, title, sub, items) {
     { text: "多机协同 · 军工级安全", options: {} },
   ], { x: 1.0, y: 4.75, w: 6, h: 0.85, fontSize: 16, color: LIGHT, fontFace: F,
     paraSpaceAfter: 6, margin: 0 });
-  s.addText("V1.12.9  |  2026-09-14  |  FastAPI + Vue 3 + Electron + SQLite", {
+  s.addText("V1.12.10  |  2026-10-02  |  FastAPI + Vue 3 + Electron + SQLite", {
     x: 1.0, y: 6.35, w: 10, h: 0.4, fontSize: 12.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
@@ -184,7 +184,7 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
 {
   const s = p.addSlide();
   header(s, "01 系统概述", "一眼看懂：系统规模");
-  stat(s, 0.55, 2.1, 3.0, "11,868", "后端自动化测试用例");
+  stat(s, 0.55, 2.1, 3.0, "11,870", "后端自动化测试用例");
   stat(s, 3.9, 2.1, 3.0, "6,287", "前端自动化测试用例");
   stat(s, 7.25, 2.1, 3.0, "54", "功能菜单键（三级菜单树）");
   stat(s, 10.6, 2.1, 2.4, "131", "业务页面视图");
@@ -193,7 +193,7 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
   stat(s, 3.9, 4.35, 3.0, "90", "后端服务（83 + 7 子包）", PRIMARY_L);
   stat(s, 7.25, 4.35, 3.0, "45", "数据库迁移版本", PRIMARY_L);
   stat(s, 10.6, 4.35, 2.4, "4", "用户角色", PRIMARY_L, 40);
-  s.addText("数据来源：仓库实测（2026-09-14，v1.12.9）—— 后端 11,868 用例全绿 / 覆盖率 100% · 前端 6,287 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告", {
+  s.addText("数据来源：仓库实测（2026-10-02，v1.12.10）—— 后端 11,870 用例全绿 / 覆盖率 100% · 前端 6,287 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告", {
     x: M, y: 6.35, w: 12.3, h: 0.4, fontSize: 12, color: MUTED, fontFace: F, margin: 0 });
 }
 
@@ -772,7 +772,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
   s.addChart(p.charts.BAR, [{
     name: "用例数",
     labels: ["后端 pytest", "前端 vitest"],
-    values: [11868, 6287],
+    values: [11870, 6287],
   }], {
     x: M, y: 1.95, w: 6.6, h: 4.2, barDir: "col",
     chartColors: [PRIMARY, PRIMARY_L], varyColors: true,
@@ -782,7 +782,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
     valAxisHidden: true, valGridLine: { style: "none" }, catGridLine: { style: "none" },
     showLegend: false, chartArea: { fill: { color: BG } },
   });
-  s.addText("数据来源：v1.12.9 全量本地实测（2026-09-14）· 后端与前端覆盖率均 100%", { x: 0.7, y: 6.25, w: 6.6, h: 0.35,
+  s.addText("数据来源：v1.12.10 全量本地实测（2026-10-02）· 后端与前端覆盖率均 100%", { x: 0.7, y: 6.25, w: 6.6, h: 0.35,
     fontSize: 11, color: MUTED, fontFace: F, margin: 0 });
   card(s, 7.6, 1.95, 5.25, 4.2);
   s.addText("测试纪律", { x: 7.92, y: 2.2, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
@@ -930,11 +930,11 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   const s = p.addSlide();
   header(s, "06 部署运行", "版本历程：三个月的密集演进");
   const tl = [
-    ["v1.12.2", "09-12", "架构评估 P0/P1 加固：导出任务重启恢复、导出/备份原子写、备份可恢复性校验"],
     ["v1.12.5", "09-12", "深度审计 13 项修复：目录穿越 / 存储型 XSS / 并发 / 备份 fail-loud"],
     ["v1.12.7", "09-13", "遗留风险二批：上传体积三层上限、导出回收、导入拒绝记录、Windows CI 可见性"],
     ["v1.12.8", "09-14", "R7 恢复维护闸门 / R12 低危批量 7 项 / R2 残余清零 / P-1~P-3 门禁 / R14 组织树修复"],
     ["v1.12.9", "09-14", "深审缺陷批量修复（越权/数据完整性/静默失效）+ 响应信封与凭据语义修复 + 前后端覆盖率双双补齐至 100%（前端 10 个文件：安全守卫零覆盖、弱断言、死代码）"],
+    ["v1.12.10", "10-02", "跨平台 CI 双红根因修复：归档恢复穿越判定去平台化（Windows 风格路径曾绕过校验）、审批时间轴断言去时区依赖（UTC runner 与本地结论相反）+ 测试会话数据根隔离契约（Linux 上 override 曾被短路忽略）"],
   ];
   s.addShape(p.shapes.LINE, { x: 1.1, y: 3.1, w: 11.1, h: 0, line: { color: "D8E0DA", width: 2 } });
   tl.forEach((t, i) => {
@@ -949,7 +949,7 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
       fontFace: F, align: "left", margin: 0 });
   });
   card(s, M, 5.95, 12.33, 1.0, PRIMARY_T);
-  s.addText("净效果：11,868 后端用例（覆盖率 100%）+ 6,287 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
+  s.addText("净效果：11,870 后端用例（覆盖率 100%）+ 6,287 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
     x: 0.82, y: 5.95, w: 11.6, h: 1.0, fontSize: 13.5, bold: true, color: TEXT,
     fontFace: F, valign: "middle", margin: 0 });
 }
@@ -987,7 +987,7 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
     color: "FFFFFF", fontFace: F, margin: 0 });
   s.addText("帮扶管理信息系统 v1.12.8  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
     x: 1.0, y: 4.55, w: 11, h: 0.45, fontSize: 13.5, color: LIGHT, fontFace: F, margin: 0 });
-  s.addText("11,868 后端用例（覆盖率 100%）+ 6,287 前端用例 全绿守护 · Windows x64 / 麒麟 ARM64 双平台离线交付", {
+  s.addText("11,870 后端用例（覆盖率 100%）+ 6,287 前端用例 全绿守护 · Windows x64 / 麒麟 ARM64 双平台离线交付", {
     x: 1.0, y: 5.05, w: 11, h: 0.45, fontSize: 13.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 

@@ -12,7 +12,11 @@ import tempfile
 
 TMP = tempfile.mkdtemp(prefix="probe_r6_")
 os.chdir(TMP)
-os.environ["BUMOFU_BACKEND_DIR_OVERRIDE"] = TMP  # 路径全隔离（官方测试接缝）
+os.environ["BUMOFU_BACKEND_DIR_OVERRIDE"] = TMP
+# Linux 上 get_app_data_dir() 的 `is_linux() and not BUMOFU_DEV_MODE` 分支会短路到
+# ~/.bumofu、绕过上面的 override（会使 CACHE_DIR/EXPORT_DIR 落到真实家目录）；
+# 显式声明 DEV_MODE 令本机与 CI 走同一条 else 分支（2026-10-02 与 conftest 同步修复）。
+os.environ["BUMOFU_DEV_MODE"] = "1"  # 路径全隔离（官方测试接缝）
 os.environ["DATABASE_URL"] = f"sqlite:///{TMP}/probe.db"
 os.environ["ENVIRONMENT"] = "test"
 os.environ["SECRET_KEY"] = "x" * 40

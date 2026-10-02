@@ -18,8 +18,12 @@ cd backend
 
 ## 隔离契约（必读）
 
-- 每个探针启动时设置 `BUMOFU_BACKEND_DIR_OVERRIDE` + `DATABASE_URL` +
-  `UPLOAD_DIR` 指向**本次运行的临时目录**——绝不读写真实 `backend/data/`。
+- 每个探针启动时设置 `BUMOFU_BACKEND_DIR_OVERRIDE` + `BUMOFU_DEV_MODE=1` +
+  `DATABASE_URL` + `UPLOAD_DIR` 指向**本次运行的临时目录**——绝不读写真实 `backend/data/`。
+- ⚠️ **`BUMOFU_DEV_MODE=1` 不可省略**（2026-10-02 补）：`get_app_data_dir()` 的首分支是
+  `is_bundled() or (is_linux() and not BUMOFU_DEV_MODE)` —— 在 Linux 上恒真时会**短路返回
+  `~/.bumofu`、根本不经过 override**，使 `CACHE_DIR` / `EXPORT_DIR` 仍落到真实家目录。
+  开发机（Windows）因 `is_linux()` 为假看不出差异，**Windows 全绿不代表 Linux 正确**。
 - ⚠️ 任何新探针都必须遵守此契约：`get_app_data_dir()` 在开发环境固定指向
   backend 根目录（与 CWD 无关），漏设 override 会把探针数据写进真实数据区。
 - pytest 不会收集本目录（`python_files = test_*.py`），探针仅供手工/CI

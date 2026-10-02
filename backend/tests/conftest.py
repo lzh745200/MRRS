@@ -39,6 +39,23 @@ _APP_DATA_ROOT = _Path(_tempfile.mkdtemp(prefix="bumofu_pytest_appdata_"))
 # 分叉（实测导致 test_paths.py 两处断言失败）。
 _os.environ["BUMOFU_BACKEND_DIR_OVERRIDE"] = str(_APP_DATA_ROOT)
 
+# ── 关键修复（2026-10-02）：必须同时声明 BUMOFU_DEV_MODE，否则 Linux CI 隔离整体失效 ──
+# paths.get_app_data_dir() / get_cache_path() 的首个分支是：
+#     if is_bundled() or (is_linux() and not os.environ.get("BUMOFU_DEV_MODE")):
+# 在 ubuntu-latest（Linux）上该条件恒真 → 直接 return Path.home() / ".bumofu"，
+# **根本不经过上面的 get_project_backend_dir()**，于是 BUMOFU_BACKEND_DIR_OVERRIDE
+# 完全失效；而在开发者本机（Windows）is_linux() 为假 → 走 else 分支 → override 生效。
+# 后果（Linux CI 与 Windows 本地的口径分叉）：
+#   1) Settings 在 import 期把 DATABASE_URL/CACHE_DIR/UPLOAD_DIR/EXPORT_DIR 固化为
+#      /home/runner/.bumofu/...，测试数据写进 runner 家目录而非本会话临时根；
+#   2) 依赖隔离的用例与覆盖率分支在 Linux 上走另一条路径 → 本地全绿、CI 恒红
+#      （PR Checks backend-test / Nightly backend-full / build-windows smoke-test
+#       三个作业同在 ubuntu-latest 跑全量，长期同时红；windows-smoke 只跑 5 文件子集故绿）。
+# 声明 BUMOFU_DEV_MODE 让两平台都落到 else 分支、统一由 override 收口，口径即一致。
+# 必须在任何 app.* 导入之前设置——Settings 构造期完成路径归一，晚设无效。
+# 回归守护：tests/unit/test_paths.py::TestSessionIsolationContract
+_os.environ["BUMOFU_DEV_MODE"] = "1"
+
 _os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 _os.environ["LOG_FILE"] = (_APP_DATA_ROOT / "logs" / "app.log").as_posix()
 

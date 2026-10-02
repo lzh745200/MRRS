@@ -312,7 +312,19 @@ class DataTierService:
         # 防路径穿越：archive_file 直接来自 API 查询参数。
         # Path(base) / "../../etc/passwd" 会逃逸出归档目录；绝对路径更会**完全覆盖**
         # base（pathlib 语义），造成任意文件读取。要求它必须是纯文件名。
-        if not archive_file or Path(archive_file).name != archive_file:
+        #
+        # 平台无关加固（2026-10-02）：`Path(...).name` 只按**运行平台**的分隔符解析 ——
+        # 在 Linux（CI 的 ubuntu-latest）上反斜杠不是分隔符，
+        # `Path("C:\\Windows\\win.ini").name` 仍等于原串，Windows 风格路径遂绕过本校验、
+        # 落到下方"文件不存在"分支（表现为断言 `'非法' in '归档文件不存在: C:\\Windows\\win.ini'`
+        # 失败，CI 恒红、Windows 本地恒绿）；在 Windows 上该串则被判非法。
+        # 归档文件名本就不允许含任何目录成分，故显式拒绝两种分隔符，使两平台结论一致且更严。
+        if (
+            not archive_file
+            or Path(archive_file).name != archive_file
+            or "/" in archive_file
+            or "\\" in archive_file
+        ):
             return 0, f"非法的归档文件名: {archive_file}"
 
         archive_path = Path(self.config.COLD_ARCHIVE_PATH) / archive_file
