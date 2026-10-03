@@ -94,9 +94,28 @@ jobs:
       # 由一个测试深挂载）。详见 frontend/vitest.config.ts 注释 (A)。
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: '22' }
-      - run: |
+      # npm 网络抖动治理（2026-10-03）：一次 ECONNRESET 曾让 npm ci 失败 → vitest 压根没
+      # 启动，而下方"Report vitest failure"因日志文件不存在又二次失败，annotation 只剩
+      # "Process completed with exit code 1"，真因被彻底掩盖。两头都加固：
+      # ① 提高 fetch 重试次数与超时；② npm ci 外层再做幂等重试；③ 上报步骤识别"日志缺失"。
+      - name: Install frontend dependencies
+        run: |
           cd frontend
-          npm ci --legacy-peer-deps
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          npm config set fetch-timeout 300000
+          for i in 1 2 3; do
+            echo "===== npm ci attempt $i ====="
+            if npm ci --legacy-peer-deps; then
+              echo "npm ci OK (attempt $i)"
+              exit 0
+            fi
+            echo "npm ci attempt $i failed; retrying in 10s"
+            sleep 10
+          done
+          echo "::error::npm ci 连续 3 次失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
+          exit 1
       - run: cd frontend && npx vue-tsc --noEmit 2>&1
       # lint:check 为纯检查模式（不带 --fix），CI 必须真实暴露 lint 违规而非自动修复
       - run: cd frontend && npm run lint:check 2>&1
@@ -136,6 +155,13 @@ jobs:
         if: failure()
         run: |
           LOG="$RUNNER_TEMP/vitest-coverage.log"
+          # 日志文件由"Frontend tests + coverage"步骤开头创建；若它不存在，说明失败发生在
+          # 更早的步骤（典型是依赖安装/类型检查），此时旧脚本会撞上 grep 的 ENOENT 再报一次
+          # exit 1，把真因挤掉。这里显式区分。
+          if [ ! -f "$LOG" ]; then
+            echo "::error::vitest 未产生日志 —— 失败发生在本步骤之前（依赖安装 / vue-tsc / lint 阶段），请查看前置步骤日志"
+            exit 1
+          fi
           # 关键信号优先(annotation 上限 ~10 条，保留最先发出的)：先出硬失败信号
           # (覆盖率阈值不达 / OOM / ENOENT / 失败用例标记 / Test Files N failed 汇总)，
           # 不再匹配 ✓(299 行通过用例会刷屏挤掉真因)。
@@ -191,12 +217,33 @@ jobs:
       - name: Backend dependency audit
         run: pip-audit -r backend/requirements.txt
         continue-on-error: true  # 依赖漏洞提示, 不阻断合并/构建
-      # 前端依赖漏洞扫描（npm audit，仅 high 以上阻断）
-      - name: Frontend dependency audit
+      # 前端依赖漏洞扫描
+      # 2026-10-03 校正：旧写法 `npm audit --audit-level=high` 把 devDependencies 的漏洞
+      # 一并作为阻断项。当时唯一命中是 braces GHSA-vfj7-8cjw-p6xm（CVE-2026-93687，
+      # 受影响 ≤3.0.3，官方 advisory「Patched versions: None」，overrides 无解），
+      # 命中链 braces→micromatch→fast-glob→globby→@typescript-eslint/*、chokidar→braces，
+      # 全部只存在于 devDependencies（实测 `npm ls braces --omit=dev --all` 输出为空）。
+      # 以「无上游修复版本的开发期依赖」阻断合并，等于把门禁变成永久红灯，反而掩盖真实
+      # 的生产依赖风险。因此：阻断门禁收敛到生产依赖树（--omit=dev），全量审计改为
+      # 非阻断并留存 JSON artifact —— 可见性不降低，阻断语义回到「真实可修的生产风险」。
+      - name: Frontend dependency audit (production tree, blocking)
         run: |
           cd frontend
           npm install --legacy-peer-deps
-          npm audit --audit-level=high
+          npm audit --omit=dev --audit-level=high
+      - name: Frontend dependency audit (full tree, report only)
+        continue-on-error: true
+        run: |
+          cd frontend
+          npm audit --json > npm-audit-full.json
+      - name: Upload full npm audit report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-audit-full
+          path: frontend/npm-audit-full.json
+          if-no-files-found: ignore
+          retention-days: 7
       # 生成 SBOM（许可证清单），作为 artifact 上传供军口许可证白名单审查
       - name: Generate SBOM (license list)
         run: |

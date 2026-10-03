@@ -13,7 +13,9 @@ starlette==1.3.1
 python-multipart==0.0.31
 httpx==0.28.1
 httpcore==1.0.9
-anyio==4.13.0
+# anyio 4.13.0 命中 PYSEC-2026-4024 / PYSEC-2026-4025（2026-10-03 pip-audit 实测），
+# 两条的 Fix Versions 均为 4.14.2 —— 取能覆盖全部告警的最低版本。
+anyio==4.14.2
 sniffio==1.3.1
 h11==0.16.0
 httptools==0.8.0
@@ -31,7 +33,10 @@ async-timeout==5.0.1
 # ============================================================
 # 认证与安全
 # ============================================================
-PyJWT==2.13.0
+# PyJWT 2.13.0 命中 13 条 PYSEC-2026-414x（2026-10-03 pip-audit 实测），其中 12 条
+# Fix Versions 为 2.14.0，仅 PYSEC-2026-4141 要求 2.15.0 —— 取最高值 2.15.0 一次覆盖，
+# 避免只升到 2.14.0 后仍留 1 条告警。
+PyJWT==2.15.0
 passlib==1.7.4
 bcrypt>=4.2.0
 cryptography>=41.0.0
@@ -86,8 +91,9 @@ tzlocal==5.3.1
 python-json-logger==2.0.7
 colorama==0.4.6
 # diskcache==5.6.3 携带 PYSEC-2026-2447 / CVE-2025-69872（默认 pickle 反序列化 RCE），
-# 上游暂无修复版本；本仓唯一使用点（api/v1/data/data/dashboard.py）已改用
-# diskcache.JSONDisk（JSON 序列化），攻击面已在应用层闭环。上游发版即升级。
+# 上游暂无修复版本（pip-audit 的 Fix Versions 为空）。本仓共 2 个使用点
+# （api/v1/data/data/dashboard.py、api/v1/map.py）均已改用 diskcache.JSONDisk
+# （JSON 序列化），攻击面已在应用层闭环。上游发版即升级。
 diskcache==5.6.3
 
 # ============================================================
@@ -106,7 +112,8 @@ idna==3.17
 certifi==2026.5.20
 charset-normalizer==3.4.5
 requests==2.33.0
-urllib3==2.7.0
+# urllib3 2.7.0 命中 PYSEC-2026-4175 / 4176 / 4177，Fix Versions 均为 2.8.0。
+urllib3==2.8.0
 PyYAML==6.0.3
 markdown-it-py==4.0.0
 mdurl==0.1.2

@@ -1,6 +1,6 @@
 # 全链路探针回归资产（2026-09 深度探测循环固化）
 
-9 个真实 HTTP 全链路探针（共 200+ 断言），覆盖 30+ 功能模块的主业务链、
+11 个真实 HTTP 全链路探针（共 240+ 断言），覆盖 30+ 功能模块的主业务链、
 并发竞态与契约语义。源自 2026-09 深度探测循环（详见
 `.scratch/w14-deep-probe/002-zcode-probe-r1-r3.md`），累计发现并修复
 9 个产品缺陷——本目录是这批缺陷的**常驻回归防线**。
@@ -42,6 +42,8 @@ cd backend
 | r7 | probe_r7_help_assessment_effectiveness.py | 帮助文档全量、考核评估、成效评估 |
 | r8 | probe_r8_concurrency.py | 并发：同记录写/审批竞态/并发备份/注册竞态/并发导入 |
 | r9 | probe_r9_quality_analytics_chunked.py | 数据质量、分析、离线地图、机器码管理、分片上传全链、通知偏好 |
+| r10 | probe_r10_subscription.py | 报表订阅全链路（四频次创建/next_send_at/generate-now/dispatch 幂等/边界） |
+| r15 | probe_r15_user_management.py | 用户域全链路（列表/新增/编辑/删除/重置密码/分配角色/人员列表/数据范围收口/越权边界/管理员组织必填） |
 
 ## 已知修复清单（本资产锁定的缺陷）
 
