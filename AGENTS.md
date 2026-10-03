@@ -14,7 +14,7 @@ FastAPI + Vue 3 + Electron + SQLite. Windows primary, Linux ARM64 (Kylin V10) se
 ```bash
 cd backend
 .venv\Scripts\python start.py                           # Start server (http://localhost:8000)
-python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~10670, 死代码清理后)
+python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~11944)
 python -m pytest tests/unit/test_xxx.py -v              # Run single test file
 # 必须带 --max-complexity=16：CI 的 lint 任务用这个组合，缺了它 C901 复杂度回归
 # 只在 CI 变红、本地静默放过（2026-09-04 已因此漏过 2 处）
@@ -28,7 +28,7 @@ python -m bandit -r app/ -ll                            # Security scan
 ```bash
 cd frontend
 npm run dev                                             # Dev server (http://localhost:5173)
-npm run test -- --run                                   # Run all tests (~6029, 300 test files, 死代码清理后)
+npm run test -- --run                                   # Run all tests (~6304, 302 test files)
 npx vitest run tests/unit/views/xxx/xxx.test.ts        # Run single test file (tests live under tests/unit/)
 npm run lint                                            # ESLint --fix (改文件, 本地用, --max-warnings=0)
 npm run lint:check                                      # ESLint 纯检查 (CI gate, 不带 --fix)
@@ -240,7 +240,7 @@ Triggered on `push` to main、每个指向 main 的 PR、以及 `workflow_dispat
 （`push` 触发器 2026-09-04 才补上——此前直接推 main 不会跑任何 CI，因为
 build-* 只在 tag `v*` 触发、nightly 只在定时触发，main 实际处于无门禁状态。）
 
-六个 job 承载的门禁：
+七个 job 承载的门禁：
 
 | Job | 门禁 |
 |-----|------|
@@ -248,8 +248,9 @@ build-* 只在 tag `v*` 触发、nightly 只在定时触发，main 实际处于�
 | `frontend-check` | `vue-tsc --noEmit`、`npm run lint:check`、`vitest run --coverage` |
 | `lint` | flake8（`--max-line-length=120 --count --max-complexity=16`）、mypy（非阻断）、bandit `-ll` |
 | `security` | pip-audit（非阻断）、`npm audit --audit-level=high`（阻断）、SBOM 许可证清单 |
-| `static-analysis` | 软删过滤扫描、版本一致性、前后端菜单对齐、后端综合安全审计 |
-| `e2e-test` | Playwright 浏览器套件 150 用例（真实起后端+前端，独立 e2e_test.db；Linux chromium，失败上传报告 artifact） |
+| `static-analysis` | 软删过滤扫描、6 个棘轮门禁、版本一致性、前后端菜单对齐、后端综合安全审计、Alembic 单 head、覆盖率豁免理由棘轮 |
+| `e2e-test` | Playwright 浏览器套件（真实起后端+前端，独立 e2e_test.db；Linux chromium，失败上传报告 artifact） |
+| `windows-smoke` | windows-latest：跑编码/句柄/路径敏感子集 + flake8（前置 `PYTHONUTF8=1`）——把"只在 Windows 出现"的缺陷提前到 PR 阶段 |
 
 ### Nightly Full (`.github/workflows/nightly-full.yml`)
 

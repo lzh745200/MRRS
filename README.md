@@ -1,19 +1,19 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.12.11
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.12.12
 
-![Version](https://img.shields.io/badge/version-1.12.11-blue)
+![Version](https://img.shields.io/badge/version-1.12.12-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-18%2C203%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-18%2C248%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **11,916 passed**, 0 失败（含覆盖率 100% 门禁） |
-| 前端测试 | **6,287 passed**（302 文件）, 0 失败 |
+| 后端测试 | **11,944 passed**, 0 失败（含覆盖率 100% 门禁） |
+| 前端测试 | **6,304 passed**（302 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
 | Flake8 | 0 错误, 0 警告 |
@@ -30,8 +30,8 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-02（v1.12.11）— 后端 11,916 用例 + 覆盖率 100.00%、前端 6,287 用例（302 文件）全部通过；
-> flake8 0 / 6 项棘轮门禁 NEW=0 / vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（44 版本）
+> **上次全量验证**: 2026-10-03（v1.12.12）— 后端 11,944 用例 + 覆盖率 100.00%、前端 6,304 用例（302 文件）全部通过；
+> flake8 0 / 6 项棘轮门禁 NEW=0 / vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（45 版本）
 
 ## 快速开始
 
@@ -102,10 +102,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端单元测试 | pytest | 11,244（覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端单元测试 | pytest | 11,944（覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,051（302 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 6,304（302 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 12 流程 | Login/Dashboard/Projects/Approval/Funds |
 | 性能测试 | Locust | 配置可用 | 负载测试 |
 | 属性测试 | fast-check | 多组 | 组件属性验证 |
@@ -219,7 +219,7 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 - 🔒 **R2 残余清零**：数据包/权限包 11 处 zip 打开点补解压后总量闸门与限长读；备份校验改流式；分片上传限长 + 合并摘要分块
 - 🚦 **P-1~P-3 预防门禁**：6 个棘轮扫描器接入 CI（`os._exit` / 无界读 / 上传端点 / 子进程编码 / 目录替换 / 裸 Timer）
 - 🎨 认证页与布局硬编码色值清零 + 补齐 3 个设计 token（样式棘轮新增归零）
-- 📊 后端 11,244 用例 / 覆盖率 100%；前端 6,051 用例；21 个真实 HTTP 探针 0 失败
+- 📊 后端 11,244 用例 / 覆盖率 100%；前端 6,051 用例；10 个真实 HTTP 探针 0 失败（该版本当时的实测口径；当前口径见上方「质量指标」表）
 
 ### 2026-09-13（v1.12.6 / v1.12.7）
 - 🛡️ 遗留风险第一批：调度器 RecurringTimer 收敛 + 作业看门狗（自动备份不再静默停摆）、启动不再抢锁 VACUUM、备份语义 fail-loud

@@ -5,6 +5,225 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.12] - 2026-10-03 — 🐞 全库缺陷排查修复（时间基准 / 契约脱节 / 竞态）+ 汇报大屏契约修复 + 冷启动优化 + 前端日期收敛 + 文档与门禁治理
+
+> 本版在前述主题基础上追加一轮**全库缺陷排查（R17）**：静态门禁（flake8 / vue-tsc / eslint）
+> 全绿的前提下，逐模块排查语义层缺陷，共修复 **17 处**，详见下方「全库缺陷排查（R17）」。
+
+### 重构（消除重复实现）
+- **前端日期/时间格式化统一收敛到 `frontend/src/utils/index.ts`**：此前散落在
+  **36 个文件里的 41 处**"各自实现"（含 4 种 locale 变体、3 种手写补零、5 处字符串切片、
+  相对时间与运行时长各一套）已全部删除，改为委派统一入口。
+  视图层不再持任何格式化**逻辑**，只保留一行委派（原函数名保留，模板零改动）。
+- `format` 工具集补齐 12 个函数：`formatDateTimeLocale` / `formatLocalDate` /
+  `formatLocalDate2Digit` / `formatLocalDateTime2Digit` / `formatDateTimeFull` /
+  `formatDate` / `formatCnDate` / `formatRelativeTime` / `formatShortDateTime` /
+  `formatShortDateTimePadded` / `formatDuration`，并为 `formatDateTime` 增加可选
+  `fallback`（各页面空值文案不同：`-` / 空串 / `无` / `N/A` / `--`，全部保持原样）。
+- **统一空值语义**：新增内部 `toDate()` 归一化，空值/非法值一律走兜底文案 ——
+  此前多个页面会把 `Invalid Date` 直接渲染到界面上（现已不可能出现）。
+- 顺带修正两处"按 UTC 字符串切片当本地时间显示"的实现（`funds/Detail`、`sentiment/Index`
+  等 5 处）：改用本地时区日期，消除跨日边界差一天的问题。
+- 移除收敛后产生的孤立辅助函数（`SettingsOverview` 的 `pad`）。
+
+### 修复（文档与实现不一致，共 14 项）
+- 订正 `frontend/docs/design/{components,tokens,pages,hardcoded-colors-report}.md`：
+  删除对不存在的 `business/KpiCard.vue`、`utils/datetime.ts`、`common/ResponsiveDataTable.vue`
+  的引用；全局组件尺寸 `small` → `large`；密度令牌更新为 UI v2.1 实际值（44/40/32/48px）。
+- 订正 `docs/03-开发文档/前后端契约规范.md`：删除对**从未存在**的
+  `frontend/src/utils/camelize.ts` 的描述，改为说明真实链路（后端中间件 + 模型 `to_dict`，前端不转换）。
+- 订正 `AGENTS.md`（CI 六个 job → **七个**，补 `windows-smoke` 行与 static-analysis 检查项）、
+  `README.md`（Alembic 44 → **45** 版本）、`CONTRIBUTING.md`（覆盖率 50% → **100%**，
+  配置位置 `pyproject.toml` → `.coveragerc`）、`build-scripts/README.md`
+  （产物名 → `MRRS-Setup-<版本>-<架构>.exe`、删除不存在的 `build-config.json`、x86 已放弃）。
+- 订正 `resources/icons/README.md`（按实际文件名重写）、`backend/version.json`
+  （build/release_date/description/features 更新为 1.12.11）、`CLAUDE.md`（版本同步 13 处 → **18 处**）。
+
+### 修复（根因治理）
+- **`.env.example` 纳入版本单一来源**：新增 `scripts/sync-version.js` 目标，
+  该文件此前长期漂移（停在 1.12.5，落后 6 个补丁版本，因为旧脚本 `sync_version.py`
+  覆盖 `.env*` 而新工具漏了它）。现已同步为 1.12.11，且 `--check` 门禁覆盖，杜绝复发。
+
+### 修复（汇报大屏：前后端契约脱节导致的可见功能异常）
+> 根因不是大屏代码写错，而是**接口 mock 从编造的字段构造**——测试全绿，真实大屏恒空/恒 0。
+- **「项目状态分布」饼图恒空**：后端此前不返回任何状态字段，前端读的两个键都不存在。
+  现由 `_query_project_approval_stats` 增加一条 group_by 查询，返回
+  `projects_by_status: {状态: 数量}`，前端改读 `stats.projects_by_status`。
+- **KPI「完成率」恒显 `—`**：前端读 `completion_rate`，后端实际字段为 `data_completeness`（0~1）。
+  现改读 `data_completeness` 并按百分比 1 位小数展示。
+- **KPI「经费总额(万)」恒显 0**：前端读 `total_amount`，后端实际字段为 `total_funds`。
+  现改读 `total_funds`。
+  ⚠️ 本条目当时的「单位为元，需换算为万元」结论**有误**，已在 1.12.12 的全库排查中订正
+  （`Fund.amount` 列即「申请金额(万元)」，`total_funds` 本就是万元，除以 10000 会把数值缩小 1 万倍）。
+- 移除大屏上「恒空」的 `getSummaryStatistics` 死请求（loadAll 由 4 个接口收敛为 3 个）。
+- **测试同步**：`BigScreen.test.ts` 的 mock 全部按真实响应体重写，新增「契约对齐」断言
+  （完成率 88.6% / 饼图取到数据）；同时移除把缓存击穿写进断言的做法
+  （`toHaveBeenCalledWith(true)` → `toHaveBeenCalledWith()`）。
+
+### 修复（汇报大屏：数据范围 / 安全口径）
+- **`/dashboard/yearly-trends` 的帮扶村、人口、经费三类查询此前完全没有数据范围过滤**
+  （`income` 有），非管理员能在两张图上看到全局数据，与 `/dashboard/stats` 的组织口径自相矛盾
+  （涉军口审计红线 S2）。现非全量访问时三类查询全部套 `data_scope`；全量访问保持既有全局语义。
+- **`/dashboard/stats` 的三个系统级指标收敛**：非全量访问时，审批待办收敛为「当前用户提交的
+  待审批」（`ApprovalTask.submitter_id == user_id`）、用户总数收敛为可访问组织的活跃用户、
+  数据完整性收敛为可访问帮扶村范围；全量访问（超管）保持全局口径不变。
+
+### 变更（汇报大屏：性能与语义打磨）
+- **消除缓存击穿**：大屏 30 秒轮询此前带 `refresh=true`，每轮绕过后端 2 分钟 diskcache、
+  重算约 13 条聚合查询。现改为走缓存（`refresh` 仍可由用户手动触发）。
+- `yearly-trends` 的逐年循环（≤40 条 SQL）合并为按年 `GROUP BY`（约 4N → 4+N 条）。
+- `_query_fund_stats` 的 IN 列表物化改为子查询（语义与原空列表分支严格等价）。
+- 年度对比图的 `project_count` 由「经费记录条数」改为**真实项目数**（按 `Project.start_date`
+  年分组 + 同一数据范围口径），原口径降级为新增字段 `fund_count` 保底；前端兜底链
+  `project_count ?? fund_count ?? count`。
+- 页脚「自动轮播 5 秒」与实际 30 秒不符 → 改为「数据每 30 秒自动刷新」；删除 `dashboard.py`
+  一处描述与实现相反的陈旧注释。
+
+### 变更（冷启动优化 P2-4）
+- **`api/v1/map.py` 的 diskcache 缓存改为惰性初始化**：此前在**模块导入期**就执行
+  `os.makedirs(CACHE_DIR)` + `diskcache.Cache(...)`（实测中位约 130ms 的磁盘 I/O），
+  属于 `import app.main` 冷启动路径上的可推迟开销。现仅保留廉价的模块级 import，真正的
+  Cache 构造推迟到首次使用（`_get_map_cache()`），线程安全（双检锁）；测试可继续注入
+  mock / None（哨兵 `_UNSET` 语义：未初始化 vs 已禁用）；缓存失效路径改为
+  `_clear_map_cache_if_ready()`，不会因清理缓存而反向触发构造。
+- **openpyxl（连带 numpy）已完整移出冷启动路径**。上一轮只改了 `api/v1/supported_village.py`，
+  并在此处登记了「openpyxl 仍在 `sys.modules`、实际收益≈0」的遗留；本轮把剩余模块全部收口：
+  - `api/v1/supported_village.py`：仅在「Excel 导入」端点内导入；
+  - `services/excel_importer_service.py`：模块级 `from openpyxl import load_workbook` 移入使用点；
+  - `services/excel_template_service.py`：导入语句移入方法，且**十余个模块级样式对象**
+    （`Font`/`PatternFill`/`Border`/`Alignment`…）原先在 import 期构造，现由 `_ensure_styles()`
+    在真正生成模板时惰性构造（幂等 `if "_title_font" in globals(): return`，仍复用同一批对象，
+    语义与改造前一致）；
+  - `services/export_service.py`：`from openpyxl import Workbook` 移入方法；类型注解改用
+    `TYPE_CHECKING` + 字符串前向引用（`-> "Workbook"`），运行期不再需要该名称；
+  - `api/v1/school.py`、`api/v1/report_templates.py`（`from openpyxl import Workbook`）。
+- **验证口径（可直接复跑）**：
+  `python -c "import sys, app.main; print('openpyxl' in sys.modules, 'numpy' in sys.modules)"`
+  → 实测输出 `False False`（改造前为 `True True`，即本轮真正达成了「把 openpyxl 移出冷启动路径」
+  这一目标）；启动耗时量化见 `backend/scripts/measure_startup.py`。
+
+### 修复（CI 门禁：把误阻断与真因掩盖一并治理）
+- **`security` 作业前端审计误阻断**：`npm audit --audit-level=high` 会把 devDependencies
+  的漏洞也算作阻断项。当时的唯一命中是 `braces` GHSA-vfj7-8cjw-p6xm（CVE-2026-93687，
+  受影响 ≤3.0.3，官方 advisory「Patched versions: None」，overrides 无解），命中链
+  braces→micromatch→fast-glob→globby→@typescript-eslint/*、chokidar→braces，**全部只存在于
+  devDependencies**（实测 `npm ls braces --omit=dev --all` 输出为空）。以「无上游修复版本的
+  开发期依赖」阻断合并，等于把门禁变成永久红灯，反而掩盖真实的生产依赖风险。现阻断门禁收敛为
+  生产依赖树（`npm audit --omit=dev --audit-level=high`），另加一条 `continue-on-error`
+  的全量 `--json` 审计并上传 artifact —— 可见性不降低，阻断语义回到「真实可修的生产风险」。
+- **`frontend-check` 依赖安装抗网络抖动**：一次 `ECONNRESET` 让 `npm ci` 失败 → vitest 压根
+  没启动，而「Report vitest failure」又因日志文件不存在再报一次 `exit code 1`，annotation
+  只剩「Process completed with exit code 1」，真因被完全掩盖。现：① 提高 npm
+  `fetch-retries` / `fetch-timeout`；② `npm ci` 外层做幂等重试（3 次，间隔 10s，失败时显式
+  输出「疑似 registry 网络故障，非业务代码问题」）；③ 上报步骤识别「日志缺失」并直接指出
+  失败发生在前置步骤。
+
+### 修复（后端依赖已知漏洞）
+- 依据 2026-10-03 `pip-audit` 实测结果（20 条，4 个包），升级**有修复版本**的三项：
+  `anyio 4.13.0 → 4.14.2`（PYSEC-2026-4024 / 4025）、
+  `PyJWT 2.13.0 → 2.15.0`（13 条 PYSEC-2026-414x，其中 12 条 2.14.0 可修、
+  仅 PYSEC-2026-4141 需 2.15.0，取最高值一次覆盖）、
+  `urllib3 2.7.0 → 2.8.0`（PYSEC-2026-4175 / 4176 / 4177）。
+- `diskcache 5.6.3` 的 PYSEC-2026-2447 **上游无修复版本**，保持不动；同时订正该行注释的
+  事实错误（原写「本仓唯一使用点」，实际有 2 个使用点：`dashboard.py` 与 `map.py`，
+  均已改用 `JSONDisk` 消除 pickle 反序列化执行面）。
+
+### 修复（回归资产与口径）
+- **探针总运行器补齐注册**：`probe_r15_user_management.py` 早在 2026-09-18 就已存在，但一直
+  漏注册于 `tests/probe/run_all.py` 的 `PROBES`（该文件此前也只写到 r10），导致「单文件能跑、
+  总运行器不跑」。现补入 r10 与 r15，探针总数 9 → **11**，README 同步（200+ 断言 → 240+）。
+- **README 数字口径订正**：`近期修复记录` 里 v1.12.8 条目残留「21 个真实 HTTP 探针」——
+  该版本当时 `run_all.py` 实际只有 10 个探针（`git show 8c425fe:backend/tests/probe/run_all.py`
+  可复核），属笔误，已订正为 10 并注明「该版本当时的实测口径」。
+
+### 测试
+- `tests/unit/utils/index.test.ts` 新增 **12** 个用例，覆盖上述 12 个新函数与 `fallback` 分支，
+  `src/utils/index.ts` 四项覆盖率指标保持 **100%**。
+- `tests/unit/test_map_lazy_cache_p2_4.py` 新增 9 个用例，锁定惰性缓存的全部契约
+  （首次构造 / 单例复用 / 沿用注入的 mock 与 None / diskcache 缺失降级 / 就绪态才清空 /
+  导入期不产生磁盘 I/O）。
+- 汇报大屏 5 个 dashboard 测试文件 104 通过；前端 BigScreen + dashboard API 24 通过。
+- **补齐 `yearly-trends` 数据范围回归守护（`test_dashboard_trends.py` +2 用例）**：上述
+  「数据范围补齐」的安全修复此前**没有任何测试守护**，也正是 `dashboard.py` 覆盖率缺口的
+  所在（CI 100% 门禁必红）。新增：① 非全量访问时村/人口/经费三类查询逐个套 `data_scope`
+  并校验过滤次数；② `_apply_project_scope` 在「非全量且无任何组织信息」时原样返回。
+  补测后 `dashboard.py` 与 `map.py` 覆盖率均回到 **100%**。
+- 后端用例口径同步为 **11,944**（`pytest tests/ --collect-only -q` 实测），README 与
+  `docs/build_ppt.js` 同步。
+
+### 修复（全库缺陷排查 R17：17 处）
+
+> 排查前提：`flake8` / `vue-tsc` / `eslint` 三项静态门禁**全绿**——本批缺陷全部落在静态检查
+> 盲区（语义层）。排查路径：反模式扫描 → 双线只读审计 → **逐条源码级复核**（审计给出的
+> 「`total_funds` 单位为元」结论被三源交叉否证，未采纳）。
+
+**时间基准：本地 naive 与 UTC 列混用（7 处）**
+- `services/fund_anomaly_detector.py:_check_idle` —— `datetime.now() - allocation_date`
+  是 naive−aware **必抛 `TypeError`**；该异常被 `backup_scheduler` 的逐项目 `try/except`
+  吞掉，导致**资金闲置检测在生产环境静默永不生效**（`allocation_date` 为 `UtcDateTime`，读回 aware UTC）。
+  改 `utcnow() - as_utc(alloc_date)`。实证：旧实现 `TypeError: can't subtract offset-naive
+  and offset-aware datetimes`。
+- `services/audit_service.py:418` —— `LoginAttempt.attempt_time >= datetime.now() - 1h`：
+  UTC+8 下阈值落在未来 7 小时，**匹配恒为 0**，暴力破解分级永远停在 `low`。改 `utcnow()`。
+- `api/v1/fund_lifecycle.py`（3 处）—— 阶段 `entered_at/completed_at`、预算基线 `locked_at`、
+  资产校验 `verified_at` 均被写入本地墙钟（UTC+8 偏早 8 小时）。预算基线处的 `snapshot_year`
+  按本地日历口径**保持不变**，故拆分为 `now_local` / `locked_at` 两个变量。
+- `services/fund_event_handler.py` —— 项目状态联动写阶段时间，同上。
+- `api/v1/data/data/statistics.py` —— 「今日操作数 / 近 7 天趋势」把本地日界直接与 UTC 列比较，
+  UTC+8 下「今日」从本地 08:00 才起算、日桶错位。现按本机时区偏移平移日界，分桶改用
+  `date(col, '+N seconds')`。偏移计算**取整到秒**（`round`）——直接 `int()` 会因两次取时的
+  微秒差得到 28799 秒，使日界偏移 1 秒。
+- `api/v1/sync.py`、`api/v1/system/audit.py` —— 审计统计窗口基准改 `utcnow()`。
+- `services/rural_work_service.py:_coerce_datetime` —— 解析失败时回退本地 naive（该值用作
+  `UtcDateTime` 列的比较边界），改 `utcnow()`。
+
+**前后端契约脱节（5 处）**
+- **大屏与首页「经费总额」被缩小 1 万倍**：`views/bigscreen/BigScreen.vue`、`views/dashboard/KpiCards.vue`
+  对 `total_funds` 再除 10000。实证三源：`models/fund.py` 的 `amount` 列注释即「申请金额(万元)」、
+  `views/funds/Analysis.vue` 直接把 `total_amount` 当万元展示、`services/report_export_service.py:134`
+  明载「写(元)会导致口径差 10000 倍，统一改为(万元)」。
+- `views/dashboard/ChartRow.vue` —— `funds_allocated || total_funds`：已拨付合法为 0 时被回退成
+  经费总额，改用 `??`。
+- **i18n 完成率双向双重错误**：后端公式误用 `|target| - |missing|`（source 49 / target 38 / missing 11
+  时真实 77.6% 被算成 55.1%），前端又乘以 100（曾显示 **5510.2%**）。后端改为
+  `(|source| - |missing|) / |source|`，前端去掉乘 100。
+- `api/dataPackage.ts:getDownloadUrl` —— 写死 `'' + '/api/v1'`，与 `request.ts`/`projects.ts`
+  的 `|| '/api/v1'` 约定不一致，`VITE_API_BASE_URL` 含 `/api/v1` 时拼成双前缀导致下载 404。
+- `views/admin/AdminDashboard.vue` —— 「数据记录」卡片把 `total_funds`（万元）与记录条数相加，
+  属量纲错误，现只累加村/项目/学校条数。
+
+**竞态与健壮性（5 处）**
+- `views/dashboard/components/GlobalSearch.vue` —— 300ms 防抖只降频不保序，慢响应会覆盖新结果。
+  新增请求序号，仅最后一次发起的搜索可写回。
+- `views/ruralWorks/Task.vue` —— `new Date('')` 产生 Invalid Date / `NaN`，被静默判成「正常」且
+  `isOverdue` 恒 false，现加空值短路。
+- `views/dashboard/{ChartRow,InfoRow}.vue`、`views/dashboard/index.vue` —— 失败重试 `setTimeout`
+  与「已保存」提示复位计时器未在卸载时清理，销毁后仍会发起请求/写 ref，现统一 `onUnmounted` 清理。
+
+**回归资产与门禁**
+- **补齐上一轮遗留的覆盖率门禁缺口**：1.12.12 期间把大屏饼图数据源从 `/analytics/summary` 改为
+  `stats.projects_by_status` 时，新增的 `stats.value ?? {}` / `s.projects_by_status ?? {}` 兜底分支
+  无测试触达 → `src/views/**/*.vue` 分支门禁必红（`BigScreen.vue` 实测 98.59%）。补「stats 为 null」
+  用例后回到 100×4。
+- 新增回归守护 8 例：`_check_idle` 的 **aware-UTC** 三条（此前 4 条用例全喂 naive 值，正是缺陷
+  逃逸原因）、i18n 完成率公式等式断言、搜索乱序响应、deadline 空值、饼图 nullish 兜底。
+- **弱 mock 复盘点**：本批 4 处缺陷均伴随「测试全绿但真实功能坏」——`_check_idle` 喂 naive、
+  `BigScreen.test.ts` 编造 `completion_rate/total_amount/by_status`、`AdminDashboard.test.ts`
+  编造 5 个不存在的后端字段、`KpiCards` 断言 `fmtFunds(8900000) === '890'`。
+
+**登记未修（已定性，非缺陷）**
+- `AdminDashboard.vue` 的系统状态 / 最近登录 / 审计日志 / 待处理 / 存储五个面板读取的是
+  `/dashboard/stats` **从不返回**的字段 → 面板恒空。真实端点已写入代码注释
+  （`/system-health/overview`、`/system-health/disk-space`、`/audit/logs`、`/audit/login-attempts`、
+  `/approval/tasks/pending`），**有意不盲接**：属功能补全且需产品定展示语义，照猜测契约实现
+  正是本批「mock 编造字段导致假绿」的复现路径。
+- 首页 `refresh:true`（每 60s 绕过 2 分钟缓存）：单机离线部署下约 13 条聚合开销可忽略，且手动
+  刷新与自动轮询共用同一路径，改走缓存反而使「手动刷新」变慢，故保留。
+- 各处 `datetime.now().year` 年份口径：属「本地日历 vs UTC」的产品语义选择
+  （`SystemConfig.last_backup_time` 已明确取本地日历），非缺陷。
+
+---
+
 ## [1.12.11] - 2026-10-02 — 🕐 时间基准统一：报表订阅 next_send_at / 到期派发彻底修复 + 时间转换单一事实源
 
 承接 1.12.10 登记的遗留缺陷（`ReportSubscription.next_send_at` 时间基准不一致）。
