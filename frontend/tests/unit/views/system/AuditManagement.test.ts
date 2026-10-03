@@ -425,8 +425,14 @@ describe('AuditManagement.vue', () => {
     expect(vm.fmtTime('2026-08-29T04:59:54')).toBe('2026-08-29 04:59:54')
     // 带小数秒 → 截到秒
     expect(vm.fmtTime('2026-08-29T04:59:54.123456')).toBe('2026-08-29 04:59:54')
-    // 仅日期串按规范视为 UTC 零点 → 本地（UTC+8）显示 08:00:00
-    expect(vm.fmtTime('2026-08-29')).toBe('2026-08-29 08:00:00')
+    // 仅日期串按 ECMAScript 规范视为 UTC 零点 → 渲染为本地时区。
+    // 断言写成时区无关的**不变量**：渲染值按本地时区解析后必须恰好等于 UTC 零点
+    // （UTC 主机渲染 00:00:00、UTC+8 渲染 08:00:00、UTC-5 渲染前一日 19:00:00，
+    //   三者按各自本地时区解析都回到同一 UTC 时刻）。
+    // 2026-10-03 CI 实测：此前硬编码 UTC+8 预期 '...08:00:00'，在 ubuntu/UTC 恒红。
+    const rendered = vm.fmtTime('2026-08-29') as string
+    expect(rendered).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+    expect(new Date(rendered.replace(' ', 'T')).getTime()).toBe(Date.UTC(2026, 7, 29))
     expect(vm.fmtTime('')).toBe('')
     expect(vm.fmtTime(undefined)).toBe('')
   })
