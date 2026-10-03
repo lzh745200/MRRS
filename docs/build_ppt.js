@@ -27,6 +27,167 @@ const bu = () => ({ code: "25AA", indent: 12 });
 const shadow = () => ({ type: "outer", color: "1A2E24", blur: 7, offset: 2, angle: 90, opacity: 0.13 });
 let pageNo = 0;
 
+/* ════════ 文本度量与自适应布局工具 ════════
+ * 生成即达标：脚本内用与 scripts/ppt_overflow_check.py 同源的字符宽度 / 行高模型
+ * 先算后画，杜绝「写完靠肉眼调字号」。体检器判据：需高 ≤ 可用高 × 0.92；
+ * 本脚本取 0.90（更严 2 个点），并统一叠加 normAutofit（fit:'shrink'）作渲染兜底。
+ */
+const PT = 72;            // pt / 英寸
+const LINE_FACTOR = 1.45; // 单倍行距安全系数（体检器同值）
+const BOLD_FACTOR = 1.05; // 粗体字宽 / 行高加成（体检器同值）
+const SAFE_RATIO = 0.90;  // 需高 ≤ 可用高 × SAFE_RATIO（体检器 0.92）
+const BULLET_INDENT = 13; // 项目符号缩进（pt）：bullet.indent=12 + 1pt 余量
+const fitLog = [];
+function fitNote(where, from, to) {
+  if (to < from) fitLog.push(`${where}: ${from} → ${to}pt`);
+}
+
+/** 单字符宽度（em）：CJK / 全角标点 1.00、A-Z 0.60、小写与数字 0.52、空格 0.28、西文标点 0.40 */
+function charWidth(ch) {
+  const o = ch.codePointAt(0);
+  if (o < 0x20) return 0;
+  if (ch === " ") return 0.28;
+  if (o >= 0x30 && o <= 0x39) return 0.52; // 0-9
+  if (o >= 0x41 && o <= 0x5A) return 0.60; // A-Z
+  if (o >= 0x61 && o <= 0x7A) return 0.52; // a-z
+  if (o >= 0x2000) {
+    if (o >= 0x2E80 && o <= 0x9FFF) return 1.00; // CJK 统一表意
+    if (o >= 0xF900 && o <= 0xFAFF) return 1.00; // CJK 兼容表意
+    if (o >= 0xFF00 && o <= 0xFFEF) return 1.00; // 全角形式（，。：（）等）
+    if (o >= 0x2000 && o <= 0x206F) return 0.50; // 通用标点（“” —— ·）
+    return 1.00;
+  }
+  return 0.40; // 西文标点（≥ 体检器的 0.32~0.40，取保守上限）
+}
+
+/** 按宽度换行后占用的行数（粗体按 1.05 放大，与体检器一致） */
+function measureLines(text, widthPt, sizePt, bold = false) {
+  const s = sizePt * (bold ? BOLD_FACTOR : 1);
+  let lines = 1, acc = 0;
+  for (const ch of String(text)) {
+    const w = charWidth(ch) * s;
+    if (acc + w > widthPt && acc > 0) { lines += 1; acc = 0; }
+    acc += w;
+  }
+  return lines;
+}
+
+/** 多段文本所需总高度（pt）；spaceAfterPt 逐段计入（末段也计，与体检器口径一致） */
+function neededHeightPts(paras, widthPt, sizePt, spaceAfterPt = 0, lineFactor = LINE_FACTOR) {
+  const list = Array.isArray(paras) ? paras : [{ text: String(paras) }];
+  let h = 0;
+  for (const para of list) {
+    const size = para.size || sizePt;
+    const eff = size * (para.bold ? BOLD_FACTOR : 1);
+    const usable = Math.max(widthPt - (para.indent || 0), 1);
+    h += measureLines(para.text, usable, size, !!para.bold) * eff * lineFactor + spaceAfterPt;
+  }
+  return h;
+}
+
+/** 从 maxSize 递减找最大可容纳字号（判据：需高 ≤ 可用高 × 0.90） */
+function fitFontSize(text, widthIn, heightIn, maxSize, minSize = 9, spaceAfterPt = 0, indentPt = 0) {
+  const list = Array.isArray(text) ? text : [{ text }];
+  const availPt = heightIn * PT * SAFE_RATIO;
+  for (let size = maxSize; size >= minSize; size -= 0.5) {
+    if (neededHeightPts(list, widthIn * PT - indentPt, size, spaceAfterPt) <= availPt) return size;
+  }
+  return minSize;
+}
+
+/** 文本框自适应：先「框高上探」（≤ maxH）保字号，仍不达标才降字号；返回 {h, size} */
+function autoBox(text, wIn, hIn, maxSize, maxH = hIn, minSize = 10, bold = false, spaceAfterPt = 0, label = "") {
+  const list = Array.isArray(text) ? text : [{ text, bold }];
+  const cap = Math.max(hIn, maxH);
+  let size = minSize;
+  for (let s = maxSize; s >= minSize; s -= 0.5) {
+    if (neededHeightPts(list, wIn * PT, s, spaceAfterPt) <= cap * PT * SAFE_RATIO) { size = s; break; }
+  }
+  fitNote(label, maxSize, size);
+  const need = neededHeightPts(list, wIn * PT, size, spaceAfterPt);
+  return { h: Math.min(cap, Math.max(hIn, need / PT / SAFE_RATIO + 0.02)), size };
+}
+
+/** 圆角标签块（卡片 + 居中文本）：高度按度量自适应，含体检器的「卡片 8pt 内边距」口径 */
+function chip(s, x, y, w, text, opts = {}) {
+  const inner = w - 0.16;
+  const size = fitFontSize(text, inner, opts.maxH || 0.6, opts.size || 11.5, opts.min || 9.5);
+  fitNote(opts.label || text, opts.size || 11.5, size);
+  const need = neededHeightPts([{ text, bold: true }], inner * PT, size);
+  const h = Math.max(opts.h || 0, (need / SAFE_RATIO + 8) / PT + 0.03);
+  s.addShape(p.shapes.ROUNDED_RECTANGLE, { x, y, w, h, fill: { color: opts.fill || PRIMARY_T }, rectRadius: 0.05 });
+  s.addText(text, { x, y, w, h, fontSize: size, bold: true, color: opts.color || TEXT, fontFace: F,
+    align: "center", valign: "middle", margin: 0 });
+  return h;
+}
+
+/** 卡片高度 = 标题需求 + 内容需求 + 内边距（不小于 minH） */
+function autoCardHeight(wIn, title, items, opts = {}) {
+  const padTop = opts.padTop == null ? 0.2 : opts.padTop;
+  const padBottom = opts.padBottom == null ? 0.18 : opts.padBottom;
+  const titleGap = opts.titleGap == null ? 0.18 : opts.titleGap;
+  const padX = opts.padX == null ? 0.32 : opts.padX;
+  const gap = opts.gap == null ? 9 : opts.gap;
+  const bodyW = Math.max(wIn - 2 * padX, 1) * PT;
+  let h = padTop + padBottom;
+  if (title) h += neededHeightPts([{ text: title, bold: true }], bodyW, opts.titleSize || 16) / PT + titleGap;
+  if (items && items.length) {
+    h += neededHeightPts(items.map((t) => ({ text: t })), bodyW - BULLET_INDENT, opts.size || 13.5, gap) / PT / SAFE_RATIO + 0.03;
+  }
+  return h;
+}
+
+/** 卡片高度自适应（不小于 minH），返回最终高度 */
+function cardAuto(s, x, y, w, h, opts = {}) {
+  const hh = Math.max(h, autoCardHeight(w, opts.title, opts.items, opts));
+  card(s, x, y, w, hh, opts.fill);
+  return hh;
+}
+
+/** 卡片 + 标题 + 项目符号：卡片高度自适应（≤ maxH），正文按最终空间自动定字号 */
+function bulletCard(s, x, y, w, h, title, items, opts = {}) {
+  const padX = opts.padX == null ? 0.32 : opts.padX;
+  const titleSize = opts.titleSize || 16;
+  const gap = opts.gap == null ? 10 : opts.gap;
+  const size0 = opts.size || 13.5;
+  const minSize = opts.min || 11;
+  const maxH = opts.maxH || h;
+  const bodyW = Math.max(w - 2 * padX, 1);
+  const titleH = title ? neededHeightPts([{ text: title, bold: true }], bodyW * PT, titleSize) / PT : 0;
+  const top = 0.2 + titleH + (title ? 0.14 : 0);
+  const bottom = 0.18;
+  const list = items.map((t) => ({ text: t }));
+  let cardH = Math.max(h, top + bottom + neededHeightPts(list, bodyW * PT - BULLET_INDENT, size0, gap) / PT / SAFE_RATIO + 0.03);
+  cardH = Math.min(cardH, maxH);
+  card(s, x, y, w, cardH, opts.fill);
+  // 正文可用高：min(文本框自身容量, 卡片底 - 文本框顶 - 8pt)（体检器口径）
+  const bodyTop = y + top;
+  const bodyH = Math.min(cardH - top - bottom, y + cardH - bodyTop - 8 / PT);
+  const size = fitFontSize(list, bodyW, Math.max(bodyH, 0.5), size0, minSize, gap, BULLET_INDENT);
+  fitNote(opts.label || title || "bulletCard", size0, size);
+  let ty = y + 0.2;
+  if (title) {
+    s.addText(title, { x: x + padX, y: ty, w: bodyW, h: titleH + 0.05, fontSize: titleSize,
+      bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+    ty += titleH + 0.14;
+  }
+  bullets(s, items, x + padX, ty, bodyW, Math.max(0.6, y + cardH - 0.16 - ty), { size, gap, color: opts.color, min: minSize });
+  return cardH;
+}
+
+// 所有 addText 统一补 normAutofit（fit:'shrink'）：PowerPoint / WPS 渲染时按框自动缩放，
+// 与脚本内的 fitFontSize 度量形成「生成期 + 渲染期」双保险。显式传入 fit 的调用点优先。
+const _addSlide = p.addSlide.bind(p);
+p.addSlide = function (...args) {
+  const slide = _addSlide(...args);
+  const _addText = slide.addText.bind(slide);
+  slide.addText = function (text, options = {}) {
+    return _addText(text, { fit: "shrink", ...options });
+  };
+  return slide;
+};
+
+
 // ── 通用元件 ──
 function header(s, kicker, title) {
   pageNo += 1;
@@ -38,7 +199,7 @@ function header(s, kicker, title) {
     color: TEXT, fontFace: F, margin: 0 });
   s.addText(String(pageNo).padStart(2, "0"), { x: W - 1.0, y: H - 0.55, w: 0.5, h: 0.3,
     fontSize: 11, color: MUTED, fontFace: F, align: "right", margin: 0 });
-  s.addText("帮扶管理信息系统 v1.12.10", { x: M, y: H - 0.55, w: 4, h: 0.3,
+  s.addText("帮扶管理信息系统 v1.12.11", { x: M, y: H - 0.55, w: 4, h: 0.3,
     fontSize: 10.5, color: MUTED, fontFace: F, margin: 0 });
 }
 function card(s, x, y, w, h, fill = BG) {
@@ -46,31 +207,52 @@ function card(s, x, y, w, h, fill = BG) {
     rectRadius: 0.07, shadow: shadow() });
 }
 function bullets(s, items, x, y, w, h, opts = {}) {
-  s.addText(items.map((t, i) => ({
+  const gap = opts.gap == null ? 9 : opts.gap;
+  const maxSize = opts.size || 14.5;
+  const minSize = opts.min || 10;
+  const bold = !!opts.bold;
+  // 自动收缩：按「可用宽 - 项目符号缩进」与「可用高（体检器口径：卡片底 - 文本框顶 - 8pt）」求最大字号
+  const size = fitFontSize(items.map((t) => ({ text: t, bold })), w, h, maxSize, minSize, gap, BULLET_INDENT);
+  fitNote(opts.label || `bullets@(${x},${y})`, maxSize, size);
+  s.addText(items.map((t) => ({
     text: t, options: { bullet: bu(), breakLine: true, color: opts.color || TEXT,
-      bold: false },
-  })), { x, y, w, h, fontSize: opts.size || 14.5, fontFace: F, paraSpaceAfter: opts.gap || 9,
+      bold },
+  })), { x, y, w, h, fontSize: size, fontFace: F, paraSpaceAfter: gap,
     margin: 0, valign: "top", align: "left" });
+  return size;
 }
 function stat(s, x, y, w, num, label, color = PRIMARY, numSize = 40) {
-  s.addText(num, { x, y, w, h: 0.85, fontSize: numSize, bold: true, color, fontFace: F,
+  // 数字框高自适应（原 0.85in 对 40pt 粗体数字不足：需 60.9pt vs 可用 61.2×0.92）
+  const numH = Math.max(0.85, neededHeightPts([{ text: num, bold: true }], w * PT, numSize) / PT / SAFE_RATIO + 0.02);
+  s.addText(num, { x, y, w, h: numH, fontSize: numSize, bold: true, color, fontFace: F,
     align: "center", margin: 0 });
-  s.addText(label, { x, y: y + 0.88, w, h: 0.55, fontSize: 13, color: MUTED, fontFace: F,
+  const labelH = Math.max(0.5, neededHeightPts([{ text: label }], w * PT, 13) / PT / SAFE_RATIO + 0.02);
+  s.addText(label, { x, y: y + numH + 0.03, w, h: labelH, fontSize: 13, color: MUTED, fontFace: F,
     align: "center", margin: 0 });
+  return y + numH + 0.03 + labelH;
 }
 function sectionSlide(num, title, sub, items) {
   pageNo += 1;
   const s = p.addSlide();
   s.background = { color: BG_DARK };
-  s.addText(num, { x: 0.55, y: 0.9, w: 4.6, h: 3.4, fontSize: 200, bold: true,
+  // 章节大数字：框高按度量自适应上探（≤ 4.8in，透明无填充、内容顶部对齐，视觉墨迹不变），
+  // 避免为通过判据而把 200pt 水印字形缩小；仅当上探仍不足时才降字号。
+  const NUM_W = 4.6, NUM_Y = 0.9, NUM_MAX_H = 4.8, NUM_MAX = 200;
+  let numSize = NUM_MAX;
+  for (; numSize > 60; numSize -= 5) {
+    const need = neededHeightPts([{ text: num, bold: true }], NUM_W * PT, numSize);
+    if (need / PT / SAFE_RATIO + 0.02 <= NUM_MAX_H) break;
+  }
+  const numH = Math.min(NUM_MAX_H, neededHeightPts([{ text: num, bold: true }], NUM_W * PT, numSize) / PT / SAFE_RATIO + 0.02);
+  fitNote(`章节大数字 ${num}`, NUM_MAX, numSize);
+  s.addText(num, { x: 0.55, y: NUM_Y, w: NUM_W, h: numH, fontSize: numSize, bold: true,
     color: BG_DARK2, fontFace: F, margin: 0 });
-  s.addText(title, { x: 1.0, y: 4.35, w: 11.3, h: 0.95, fontSize: 40, bold: true,
+  const t = autoBox(title, 11.3, 0.95, 40, 1.0, 20, true, 0, `章节标题 ${num}`);
+  s.addText(title, { x: 1.0, y: 4.35, w: 11.3, h: t.h, fontSize: t.size, bold: true,
     color: "FFFFFF", fontFace: F, margin: 0 });
   s.addText(sub, { x: 1.02, y: 5.35, w: 11, h: 0.5, fontSize: 15, color: ACCENT,
     fontFace: F, margin: 0 });
-  s.addText(items.map((t) => ({ text: t, options: { bullet: bu(), breakLine: true } })),
-    { x: 8.1, y: 1.55, w: 4.6, h: 3.4, fontSize: 14, color: LIGHT, fontFace: F,
-      paraSpaceAfter: 10, margin: 0, valign: "top" });
+  bullets(s, items, 8.1, 1.55, 4.6, 3.4, { size: 14, gap: 10, color: LIGHT, label: `章节要点 ${num}` });
   s.addText(String(pageNo).padStart(2, "0"), { x: W - 1.0, y: H - 0.55, w: 0.5, h: 0.3,
     fontSize: 11, color: "6E8177", fontFace: F, align: "right", margin: 0 });
   return s;
@@ -85,7 +267,8 @@ function sectionSlide(num, title, sub, items) {
   s.addShape(p.shapes.RECTANGLE, { x: 1.0, y: 2.02, w: 0.26, h: 0.26, fill: { color: ACCENT } });
   s.addText("军民融合 · 乡村振兴帮扶数字化平台", { x: 1.4, y: 1.9, w: 9, h: 0.5,
     fontSize: 15, bold: true, color: ACCENT, fontFace: F, charSpacing: 4, margin: 0 });
-  s.addText("帮扶管理信息系统", { x: 0.96, y: 2.55, w: 11.5, h: 1.35, fontSize: 58,
+  const tMain = autoBox("帮扶管理信息系统", 11.5, 1.35, 58, 1.45, 30, true, 0, "P01 主标题");
+  s.addText("帮扶管理信息系统", { x: 0.96, y: 2.55, w: 11.5, h: tMain.h, fontSize: tMain.size,
     bold: true, color: "FFFFFF", fontFace: F, margin: 0 });
   s.addText("Assistance Management Information System", { x: 1.0, y: 3.95, w: 10, h: 0.45,
     fontSize: 15, color: LIGHT, fontFace: F, italic: true, margin: 0 });
@@ -94,7 +277,7 @@ function sectionSlide(num, title, sub, items) {
     { text: "多机协同 · 军工级安全", options: {} },
   ], { x: 1.0, y: 4.75, w: 6, h: 0.85, fontSize: 16, color: LIGHT, fontFace: F,
     paraSpaceAfter: 6, margin: 0 });
-  s.addText("V1.12.10  |  2026-10-02  |  FastAPI + Vue 3 + Electron + SQLite", {
+  s.addText("V1.12.11  |  2026-10-02  |  FastAPI + Vue 3 + Electron + SQLite", {
     x: 1.0, y: 6.35, w: 10, h: 0.4, fontSize: 12.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
@@ -102,7 +285,8 @@ function sectionSlide(num, title, sub, items) {
 {
   const s = p.addSlide();
   s.background = { color: BG_DARK };
-  s.addText("目录", { x: 1.0, y: 0.85, w: 5, h: 0.9, fontSize: 38, bold: true,
+  const tToc = autoBox("目录", 5, 0.9, 38, 0.95, 26, true, 0, "P02 目录");
+  s.addText("目录", { x: 1.0, y: 0.85, w: 5, h: tToc.h, fontSize: tToc.size, bold: true,
     color: "FFFFFF", fontFace: F, margin: 0 });
   s.addText("CONTENTS", { x: 1.02, y: 1.8, w: 5, h: 0.4, fontSize: 13, color: ACCENT,
     fontFace: F, charSpacing: 5, margin: 0 });
@@ -111,7 +295,7 @@ function sectionSlide(num, title, sub, items) {
     ["02", "技术架构", "技术栈 · 分层设计 · 离线优先"],
     ["03", "功能模块", "七大业务域 · 71 个功能菜单"],
     ["04", "安全体系", "四角色权限 · PII 加密 · 审计合规"],
-    ["05", "质量工程", "17,295 项自动化测试 · CI/CD · 依赖自检"],
+    ["05", "质量工程", "18,203 项自动化测试 · CI/CD · 依赖自检"],
     ["06", "部署运行", "双平台安装包 · 备份升级 · 版本历程"],
   ];
   toc.forEach((t, i) => {
@@ -173,8 +357,9 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
     const x = M + col * 6.35, y = 1.85 + row * 2.5;
     card(s, x, y, 5.9, 2.15);
     s.addShape(p.shapes.RECTANGLE, { x: x + 0.32, y: y + 0.34, w: 0.16, h: 0.16, fill: { color: ACCENT } });
-    s.addText(c[0], { x: x + 0.62, y: y + 0.2, w: 4.6, h: 0.45, fontSize: 19, bold: true,
-      color: PRIMARY, fontFace: F, margin: 0 });
+    const tCard = autoBox(c[0], 4.6, 0.45, 19, 0.5, 14, true, 0, "P05 卡片标题");
+    s.addText(c[0], { x: x + 0.62, y: y + 0.2, w: 4.6, h: tCard.h, fontSize: tCard.size,
+      bold: true, color: PRIMARY, fontFace: F, margin: 0 });
     s.addText(c[1], { x: x + 0.34, y: y + 0.78, w: 5.25, h: 1.25, fontSize: 13.5,
       color: MUTED, fontFace: F, margin: 0 });
   });
@@ -184,16 +369,16 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
 {
   const s = p.addSlide();
   header(s, "01 系统概述", "一眼看懂：系统规模");
-  stat(s, 0.55, 2.1, 3.0, "11,915", "后端自动化测试用例");
+  stat(s, 0.55, 2.1, 3.0, "11,916", "后端自动化测试用例");
   stat(s, 3.9, 2.1, 3.0, "6,287", "前端自动化测试用例");
   stat(s, 7.25, 2.1, 3.0, "54", "功能菜单键（三级菜单树）");
   stat(s, 10.6, 2.1, 2.4, "131", "业务页面视图");
   s.addShape(p.shapes.LINE, { x: M, y: 3.95, w: W - 2 * M, h: 0, line: { color: "D8E0DA", width: 1 } });
-  stat(s, 0.55, 4.35, 3.0, "49", "后端 API 路由模块", PRIMARY_L);
-  stat(s, 3.9, 4.35, 3.0, "90", "后端服务（83 + 7 子包）", PRIMARY_L);
+  stat(s, 0.55, 4.35, 3.0, "93", "后端 API 模块（api/v1 含子包）", PRIMARY_L);
+  stat(s, 3.9, 4.35, 3.0, "100", "后端服务（100 + 13 子包）", PRIMARY_L);
   stat(s, 7.25, 4.35, 3.0, "45", "数据库迁移版本", PRIMARY_L);
   stat(s, 10.6, 4.35, 2.4, "4", "用户角色", PRIMARY_L, 40);
-  s.addText("数据来源：仓库实测（2026-10-02，v1.12.11）—— 后端 11,915 用例全绿 / 覆盖率 100% · 前端 6,287 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告", {
+  s.addText("数据来源：仓库实测（v1.12.11）—— 后端 11,916 用例全绿 / 覆盖率 100% · 前端 6,287 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告", {
     x: M, y: 6.35, w: 12.3, h: 0.4, fontSize: 12, color: MUTED, fontFace: F, margin: 0 });
 }
 
@@ -217,7 +402,8 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
   ];
   cols.forEach((c, i) => {
     const x = M + i * 3.18;
-    card(s, x, 1.85, 2.95, 4.7);
+    // 卡片高度 = 标题需求 + 内容需求 + 内边距（不小于设计高度 4.7in）
+    cardAuto(s, x, 1.85, 2.95, 4.7, { title: c[1], items: c[2], titleSize: 16, size: 12, gap: 8, padX: 0.25 });
     s.addText(c[0], { x: x + 0.25, y: 2.1, w: 2.5, h: 0.35, fontSize: 13, bold: true,
       color: ACCENT, fontFace: F, margin: 0, charSpacing: 2 });
     s.addText(c[1], { x: x + 0.25, y: 2.52, w: 2.6, h: 0.46, fontSize: 16, bold: true,
@@ -233,8 +419,8 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
   const layers = [
     ["Electron 主进程", "窗口/托盘 · 后端 exe 托管 · DATABASE_URL 注入 · 导航白名单", 9.6],
     ["Vue 3 前端（渲染进程）", "131 视图 · Pinia · Axios 信封拦截器 · CSRF 续期 · 离线 Mock", 10.4],
-    ["FastAPI 应用层", "49 路由 · 数据范围过滤 · 限流 · 审计中间件 · 统一信封", 10.4],
-    ["SQLite 数据层", "WAL · 37 迁移 · EncryptedText 加密列 · 备份/恢复", 9.6],
+    ["FastAPI 应用层", "93 API 模块 · 数据范围过滤 · 限流 · 审计中间件 · 统一信封", 10.4],
+    ["SQLite 数据层", "WAL · 45 迁移 · EncryptedText 加密列 · 备份/恢复", 9.6],
   ];
   layers.forEach((l, i) => {
     const y = 1.78 + i * 1.3;
@@ -284,7 +470,7 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
     ["审计中间件", "记录 谁·何时·做什么"],
     ["认证与限流", "JWT 校验 · Token 黑名单 · 滑动窗口限流"],
     ["数据范围过滤", "按角色 + 组织自动限定可见数据"],
-    ["业务服务层", "80 个服务：资金 / 项目 / 数据包 / 审批…"],
+    ["业务服务层", "100 个服务：资金 / 项目 / 数据包 / 审批…"],
     ["统一信封响应", "success_response / ok_list"],
   ];
   steps.forEach((t, i) => {
@@ -296,14 +482,13 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
     s.addText(t[1], { x: x + 0.05, y: 3.15, w: 2.5, h: 0.75, fontSize: 11.5, color: MUTED,
       fontFace: F, margin: 0 });
   });
-  card(s, M, 4.35, 12.33, 2.2);
-  s.addText("工程纪律", { x: 0.82, y: 4.6, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
-  bullets(s, [
+  // 卡片高度按内容自适应（≤ 2.5in，底边 6.85in 仍在页面安全区内、避开页脚文字带）
+  bulletCard(s, M, 4.35, 12.33, 2.2, "工程纪律", [
     "事务工具箱：with_transaction / 嵌套事务 / 死锁重试 / 批量操作（1000 条/批）",
     "错误细节不出站：detail 一律泛化文案 + 日志 exc_info（源码扫描测试强制拦截）",
     "响应格式统一：全部列表端点走 ok_list 信封（本轮收敛 51 处裸 dict）",
     "flake8 --count=0 与 bandit 中高危=0 是硬门禁",
-  ], 0.82, 5.05, 11.6, 1.4, { size: 13, gap: 7 });
+  ], { size: 13, gap: 7, min: 11, titleSize: 15, maxH: 2.5, label: "P11 工程纪律" });
 }
 
 /* 12 数据与模型 */
@@ -313,10 +498,10 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
   card(s, M, 1.8, 5.9, 4.9);
   s.addText("模型与迁移", { x: 0.82, y: 2.05, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   bullets(s, [
-    "57 个模型文件 / 120+ 模型类：村、项目、资金、学校、政策、组织、审计…",
+    "59 个模型文件 / 120+ 模型类：村、项目、资金、学校、政策、组织、审计…",
     "TimestampMixin：created_at / updated_at / sync_version 自动维护",
     "SoftDeleteMixin：is_active 软删 + deleted_by 审计列",
-    "37 个 Alembic 迁移：含 PII 存量回填（幂等可重跑）与外键守护",
+    "45 个 Alembic 迁移：含 PII 存量回填（幂等可重跑）与外键守护",
     "Schema 权威来源 = models/ + Alembic（init.sql 已删除）",
   ], 0.82, 2.55, 5.3, 3.9, { size: 13.5, gap: 10 });
   card(s, 6.75, 1.8, 6.1, 4.9);
@@ -441,8 +626,8 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
     "按年度记录全村数据，跨年对比自动生成（人口/收入/资金投入趋势）",
     "村档案变更历史：字段级 old → new 记录，谁改的、何时改、改了什么全程可溯",
     "村委会成员、脱贫跟踪、荣誉展示；软删除进回收站，管理员可恢复或彻底删除",
-    "导出：整村档案导出（脱敏可选），支撑向上汇报",
-  ], M, 4.85, 12.3, 1.9, { size: 13.5, gap: 9 });
+    "年度板块数据支持 Excel 模板按板块导入（工作表名需与板块对应）；整村档案可导出（脱敏可选），支撑向上汇报",
+  ], M, 4.85, 12.3, 1.9, { size: 13.5, gap: 9, label: "P17 帮扶村要点" });
 }
 
 /* 18 项目管理 */
@@ -535,11 +720,12 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
   });
   bullets(s, [
     "申请人视角：我的申请全状态跟踪；审批人视角：待办池 + 全部任务（/approval/tasks/all）",
+    "「待我审批 / 我发起的 / 已完成」状态页签切换，支持批量通过 / 驳回（原因必填）",
     "驳回必填原因（前后端双向校验）；转审批将任务移交其他管理员，链条完整记录",
     "审批概览：通过率 / 平均时长 / 按类型分布，管理视角一眼看清瓶颈",
     "与经费申请深度联动：审批通过自动推进资金阶段状态",
     "全部审批动作写工作日志 + 操作历史，支持审计追溯",
-  ], M, 3.4, 12.3, 2.9, { size: 14, gap: 11 });
+  ], M, 3.4, 12.3, 2.9, { size: 14, gap: 11, label: "P21 审批中心要点" });
 }
 
 /* 22 数据包协同（本轮新功能） */
@@ -596,7 +782,7 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
   const s = p.addSlide();
   header(s, "03 功能模块", "系统管理：管理员的全套工具箱");
   const items = [
-    ["用户与组织", "用户增删改、组织树管理、组织删除级联守卫"],
+    ["用户与组织", "用户增删改、组织树管理（启动钩子自动自愈）、组织删除级联守卫"],
     ["角色与菜单", "四角色体系；菜单可见性按角色 + 用户级 + 权限包三级裁剪"],
     ["权限包", "菜单权限套餐化管理：给一批用户一键授权"],
     ["审计中心", "操作日志 / 登录尝试 / 安全事件 / API 访问，支持导出"],
@@ -686,18 +872,19 @@ sectionSlide("04", "安全体系", "SECURITY & COMPLIANCE", [
   s.addText("读写全透明", { x: 0.82, y: 2.02, w: 4, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   const flow2 = [["ORM 写入", "明文"], ["EncryptedText", "AES-SIV 加密"], ["SQLite", "enc.v1: 密文"]];
   flow2.forEach((f, i) => {
-    const y = 2.55 + i * 0.72;
-    s.addShape(p.shapes.ROUNDED_RECTANGLE, { x: 0.95, y, w: 1.9, h: 0.55,
-      fill: { color: i === 2 ? PRIMARY : PRIMARY_T }, rectRadius: 0.05 });
-    s.addText(f[0] + " · " + f[1], { x: 0.95, y, w: 1.9, h: 0.55, fontSize: 11.5, bold: true,
-      color: i === 2 ? "FFFFFF" : TEXT, fontFace: F, align: "center", valign: "middle", margin: 0 });
-    if (i < 2) s.addShape(p.shapes.LINE, { x: 2.9, y: y + 0.27, w: 0.3, h: 0,
+    const y = 2.5 + i * 0.78;
+    // 标签块高度按度量自适应（统一 0.66in）：原 1.9×0.55in 装不下「EncryptedText · AES-SIV 加密」
+    chip(s, 0.95, y, 2.15, f[0] + " · " + f[1], {
+      h: 0.66, size: 11, min: 9.5, fill: i === 2 ? PRIMARY : PRIMARY_T,
+      color: i === 2 ? "FFFFFF" : TEXT, label: `P28 加密流 ${i + 1}`,
+    });
+    if (i < 2) s.addShape(p.shapes.LINE, { x: 3.14, y: y + 0.33, w: 0.24, h: 0,
       line: { color: ACCENT, width: 2, endArrowType: "triangle" } });
   });
   s.addText([
     { text: "覆盖 9 列：身份证号 / 电话类（含 users.phone）", options: { bullet: bu(), breakLine: true } },
     { text: "密钥：ENCRYPTION_KEY 派生（多机同配）或运行时密钥库", options: { bullet: bu() } },
-  ], { x: 3.55, y: 2.55, w: 3.35, h: 2.1, fontSize: 11.5, color: TEXT, fontFace: F,
+  ], { x: 3.45, y: 2.55, w: 2.95, h: 2.1, fontSize: 11.5, color: TEXT, fontFace: F,
     paraSpaceAfter: 8, margin: 0 });
   // 右：确定性
   card(s, 6.85, 1.8, 6.0, 3.1);
@@ -758,11 +945,12 @@ sectionSlide("04", "安全体系", "SECURITY & COMPLIANCE", [
 
 /* ════════ 31 章节页：质量工程 ════════ */
 sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
-  "15,833 项自动化测试",
+  "18,203 项自动化测试（后端 11,916 + 前端 6,287）",
   "三重前端门禁 + 双重后端门禁",
-  "CI/CD 流水线",
+  "CI/CD 流水线（PR Checks 7 作业）",
   "AI 代码深度审查（376 文件 / 918 条发现）",
   "双平台安装包自动构建",
+  "6 项预防棘轮门禁 + 11 个真实 HTTP 探针",
 ]);
 
 /* 32 测试体系 */
@@ -772,7 +960,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
   s.addChart(p.charts.BAR, [{
     name: "用例数",
     labels: ["后端 pytest", "前端 vitest"],
-    values: [11915, 6287],
+    values: [11916, 6287],
   }], {
     x: M, y: 1.95, w: 6.6, h: 4.2, barDir: "col",
     chartColors: [PRIMARY, PRIMARY_L], varyColors: true,
@@ -782,18 +970,18 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
     valAxisHidden: true, valGridLine: { style: "none" }, catGridLine: { style: "none" },
     showLegend: false, chartArea: { fill: { color: BG } },
   });
-  s.addText("数据来源：v1.12.10 全量本地实测（2026-10-02）· 后端与前端覆盖率均 100%", { x: 0.7, y: 6.25, w: 6.6, h: 0.35,
+  s.addText("数据来源：v1.12.11 仓库实测 · 后端 11,916 / 前端 6,287 用例 · 覆盖率 100%", { x: 0.7, y: 6.25, w: 6.6, h: 0.35,
     fontSize: 11, color: MUTED, fontFace: F, margin: 0 });
-  card(s, 7.6, 1.95, 5.25, 4.2);
-  s.addText("测试纪律", { x: 7.92, y: 2.2, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
-  bullets(s, [
+  // 卡片高度自适应（≤ maxH 4.9in），正文按最终空间自动定字号
+  bulletCard(s, 7.6, 1.95, 5.25, 4.2, "测试纪律", [
     "前后端覆盖率门禁均 100%（CI 硬阈值，12 个源码分组全约束）",
     "新增接口/页面必须配套测试（协作约定强制）",
     "弱断言治理：安全守卫补真实断言（开放重定向 / javascript: 协议防线）",
     "安全回归：限流签名 / loopback 门禁 / 错误不泄露 / PII 加密 / 组织守卫 均有专项锁定",
-    "0 个 skip 滥用：仅 13 个平台专属跳过（Win/Linux 差异）",
-    "已知 flaky 用例公开记录，不允许静默重试掩盖",
-  ], 7.92, 2.68, 4.7, 3.3, { size: 12.5, gap: 9 });
+    "6 项预防棘轮门禁接入 CI（os._exit / 上传限长 / 无界读 / 子进程编码 / 目录替换 / 周期任务注册），NEW=0",
+    "11 个真实 HTTP 探针脚本（backend/tests/probe/）：与运行时刻 / 时区无关",
+    "0 个 skip 滥用：仅 13 个平台专属跳过（Win/Linux 差异）；flaky 用例公开记录",
+  ], { size: 12.5, gap: 9, min: 10, maxH: 4.9, titleSize: 15, label: "P32 测试纪律" });
 }
 
 /* 33 CI/CD 流水线 */
@@ -905,24 +1093,21 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
 {
   const s = p.addSlide();
   header(s, "06 部署运行", "备份恢复与离线升级");
-  card(s, M, 1.8, 6.0, 4.9);
-  s.addText("备份与恢复", { x: 0.82, y: 2.05, w: 4, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
-  bullets(s, [
-    "备份包必含数据库本体，缺失即抛错（fail-loud）",
-    "列表标注 is_encrypted / database_included",
-    "上传恢复：8MB 分块流式落盘防 OOM，10GB 防御上限",
+  bulletCard(s, M, 1.8, 6.0, 4.9, "备份与恢复", [
+    "备份包必含数据库本体，缺失即抛错（fail-loud）；列表标注 is_encrypted / database_included",
+    "上传恢复：8MB 分块流式落盘防 OOM、10GB 防御上限；上传前内存预校验（加密标记 / 损坏 ZIP / 缺库文件）→ 拒绝零残留",
+    "恢复流程 WAL 安全：先释放连接池再覆盖数据库文件",
     "加密备份口令（PBKDF2+Fernet）；全部拒绝路径清理临时文件",
-    "路径单一来源：以会话引擎/DATABASE_URL 为准（历史错源事故根治）",
-  ], 0.82, 2.55, 5.4, 3.9, { size: 13, gap: 10 });
-  card(s, 6.85, 1.8, 6.0, 4.9);
-  s.addText("离线升级（ADR 指南）", { x: 7.17, y: 2.05, w: 4.5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
-  bullets(s, [
+    "路径单一来源：以会话引擎 / DATABASE_URL 为准（历史错源事故根治）",
+  ], { size: 13, gap: 10, min: 11, maxH: 4.9, titleSize: 16, label: "P37 备份恢复" });
+  bulletCard(s, 6.85, 1.8, 6.0, 4.9, "离线升级（ADR 指南）", [
     "升级四步：备份 → SHA256/签名校验 → 覆盖安装 → Alembic 迁移",
     "失败回滚路径文档化；用户数据与安装目录分离",
     "出厂恢复通道（ADR-0008）：仅本机 + 仅未激活管理员 + 全程审计",
     "删库守卫：完整性失败默认 SystemExit 保留现场",
     "机器码三级回退：Windows 重装也能通过通行码恢复授权",
-  ], 7.17, 2.55, 5.4, 3.9, { size: 13, gap: 10 });
+    "升级期间写请求闸门（maintenance gate）挡住并发写入",
+  ], { size: 13, gap: 10, min: 11, maxH: 4.9, titleSize: 16, label: "P37 离线升级" });
 }
 
 /* 38 版本历程 */
@@ -945,12 +1130,16 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
       color: i === tl.length - 1 ? PRIMARY_L : TEXT, fontFace: F, align: "center", margin: 0 });
     s.addText(t[1], { x: x - 0.35, y: 3.42, w: 1.4, h: 0.32, fontSize: 11, color: MUTED,
       fontFace: F, align: "center", margin: 0 });
-    s.addText(t[2], { x: x - 0.55, y: 3.9, w: 2.15, h: 1.9, fontSize: 11.5, color: MUTED,
+    // 版本说明：字号按度量自适应（原 11.5pt 在 2.15×1.9in 内需 133.4pt > 可用 125.9pt）
+    const dSize = fitFontSize(t[2], 2.15, 1.98, 11.5, 9.5);
+    fitNote(`P39 版本说明 ${t[0]}`, 11.5, dSize);
+    s.addText(t[2], { x: x - 0.55, y: 3.85, w: 2.15, h: 1.98, fontSize: dSize, color: MUTED,
       fontFace: F, align: "left", margin: 0 });
   });
-  card(s, M, 5.95, 12.33, 1.0, PRIMARY_T);
-  s.addText("净效果：11,915 后端用例（覆盖率 100%）+ 6,287 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
-    x: 0.82, y: 5.95, w: 11.6, h: 1.0, fontSize: 13.5, bold: true, color: TEXT,
+  // 摘要条下移压缩：底边 6.85in，避开页脚文字带（体检器对 y ≥ 495pt 的页脚另有卡片归属判定）
+  card(s, M, 5.9, 12.33, 0.95, PRIMARY_T);
+  s.addText("净效果：11,916 后端用例（覆盖率 100%）+ 6,287 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
+    x: 0.82, y: 5.9, w: 11.6, h: 0.95, fontSize: 13.5, bold: true, color: TEXT,
     fontFace: F, valign: "middle", margin: 0 });
 }
 
@@ -983,12 +1172,18 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   s.addShape(p.shapes.RECTANGLE, { x: 1.0, y: 2.5, w: 0.26, h: 0.26, fill: { color: ACCENT } });
   s.addText("数据可信 · 流程可控 · 成效可查", { x: 1.4, y: 2.38, w: 10, h: 0.55,
     fontSize: 17, bold: true, color: ACCENT, fontFace: F, charSpacing: 4, margin: 0 });
-  s.addText("谢谢观看", { x: 0.96, y: 3.0, w: 11, h: 1.2, fontSize: 54, bold: true,
+  // 框高上探至 1.45in：文本顶端对齐（valign 默认 top）视觉不变，但给体检器留足页底余量
+  const tThanks = autoBox("谢谢观看", 11, 1.45, 54, 1.6, 36, true, 0, "P41 谢谢观看");
+  s.addText("谢谢观看", { x: 0.96, y: 3.0, w: 11, h: tThanks.h, fontSize: tThanks.size, bold: true,
     color: "FFFFFF", fontFace: F, margin: 0 });
-  s.addText("帮扶管理信息系统 v1.12.8  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
+  s.addText("帮扶管理信息系统 v1.12.11  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
     x: 1.0, y: 4.55, w: 11, h: 0.45, fontSize: 13.5, color: LIGHT, fontFace: F, margin: 0 });
-  s.addText("11,915 后端用例（覆盖率 100%）+ 6,287 前端用例 全绿守护 · Windows x64 / 麒麟 ARM64 双平台离线交付", {
+  s.addText("11,916 后端用例（覆盖率 100%）+ 6,287 前端用例 全绿守护 · Windows x64 / 麒麟 ARM64 双平台离线交付", {
     x: 1.0, y: 5.05, w: 11, h: 0.45, fontSize: 13.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
-p.writeFile({ fileName: "帮扶管理信息系统介绍.pptx" }).then(() => console.log("DONE pages=" + pageNo));
+p.writeFile({ fileName: "帮扶管理信息系统介绍.pptx" }).then(() => {
+  console.log("DONE pages=" + pageNo);
+  console.log(`[自适应度量] 触发字号收缩 ${fitLog.length} 处：`);
+  fitLog.forEach((l) => console.log("  · " + l));
+});
