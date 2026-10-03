@@ -160,20 +160,20 @@ class TestQueryFundStats:
         assert result["funds_planned"] == 20.0
 
     def test_limited_access_with_villages(self):
-        """非全量访问：有可访问村 → village_id IN 或 NULL 过滤"""
+        """非全量访问：可访问村 subquery 参与 IN 过滤（subquery 化，不再物化 IN 列表）"""
         db = _db_with_queries([
             _q(all=[("allocated", 50.0)]),           # fund 聚合查询（先发起）
-            _q(all=[(1,), (2,)]),                    # accessible_village_ids
+            _pop_inner_select(),                    # 可访问村 subquery（in_ 参数需真实 selectable）
         ])
         result = dash._query_fund_stats(db, _scope(False))
         assert result["funds_allocated"] == 50.0
         assert result["total_funds"] == 50.0
 
     def test_limited_access_no_villages(self):
-        """非全量访问：无可访问村 → 只统计未关联村经费"""
+        """非全量访问：子查询为空时 IN 恒为假 → 只统计未关联村经费（语义与原空列表分支一致）"""
         db = _db_with_queries([
-            _q(all=[("completed", 80.0)]),           # fund 聚合查询
-            _q(all=[]),                              # 无可访问村
+            _q(all=[("completed", 80.0)]),           # fund 聚合查询（先发起）
+            _pop_inner_select(),                    # 空子查询
         ])
         result = dash._query_fund_stats(db, _scope(False))
         assert result["funds_allocated"] == 80.0  # completed ∈ allocated_statuses
@@ -186,11 +186,19 @@ class TestQueryProjectApprovalStats:
     def _run(self, scope, approval_side_effect=None, villages=2, filled=10):
         queries = [
             _q(first=(10, 4)),                       # proj_row
+            _q(all=[]),                              # projects_by_status（group_by）
             _q(scalar=approval_side_effect if approval_side_effect is not None else 3),
             _q(scalar=8),                            # total_users
-            _q(scalar=villages),                     # total_villages_count
-            _q(scalar=filled),                       # total_filled
+            _q(scalar=villages),                     # total_villages_count（scope 过滤后）
         ]
+        if not scope.has_full_access():
+            # 顺序对齐实现：filled_query 的 db.query 先发起（其后才挂 .filter），
+            # accessible 子查询的 db.query 在 filter 参数求值时才发起
+            queries.append(_q(scalar=filled))
+            # accessible 子查询（in_ 参数需真实 selectable）
+            queries.append(_pop_inner_select())
+        else:
+            queries.append(_q(scalar=filled))            # total_filled（scope 过滤后）
         db = _db_with_queries(queries)
         return dash._query_project_approval_stats(db, scope)
 
@@ -230,6 +238,7 @@ class TestQueryProjectApprovalStats:
         bad_q.scalar.side_effect = Exception("no table")
         db = _db_with_queries([
             _q(first=(10, 4)),
+            _q(all=[]),                              # projects_by_status
             bad_q,                                   # approval 查询抛异常
             _q(scalar=8),
             _q(scalar=0),                            # total_villages_count=0 → 跳过完整性
@@ -255,7 +264,7 @@ class TestStatsWithData:
             # fund_stats
             _q(all=[("approved", 100.0)]),
             # project_approval_stats
-            _q(first=(10, 4)), _q(scalar=3), _q(scalar=8), _q(scalar=2), _q(scalar=10),
+            _q(first=(10, 4)), _q(all=[("active", 6), ("pending", 4)]), _q(scalar=3), _q(scalar=8), _q(scalar=2), _q(scalar=10),
         ])
         _override_db(cov_client, db)
         with patch.object(dash, "_cache", None):
@@ -265,13 +274,15 @@ class TestStatsWithData:
         assert data["total_villages"] == 3
         assert data["total_funds"] == 100.0
         assert data["total_projects"] == 10
+        # 汇报大屏"项目状态分布"数据源：与项目总数同口径的 group_by 结果
+        assert data["projects_by_status"] == {"active": 6, "pending": 4}
 
     def test_stats_writes_cache(self, cov_client):
         db = _db_with_queries([
             _q(), _q(scalar=3), _q(scalar=2026), _q(first=(1000, 120)),
             _pop_inner_select(), _q(first=(5, 3, 500, 60)),
             _q(all=[("approved", 100.0)]),
-            _q(first=(10, 4)), _q(scalar=3), _q(scalar=8), _q(scalar=2), _q(scalar=10),
+            _q(first=(10, 4)), _q(all=[("active", 6), ("pending", 4)]), _q(scalar=3), _q(scalar=8), _q(scalar=2), _q(scalar=10),
         ])
         _override_db(cov_client, db)
         with patch.object(dash, "_cache") as mc:
@@ -293,7 +304,7 @@ class TestDashboardSummary:
             _q(), _q(scalar=3), _q(scalar=2026), _q(first=(1000, 120)),
             _pop_inner_select(), _q(first=(5, 3, 500, 60)),
             _q(all=[("approved", 100.0)]),
-            _q(first=(10, 4)), _q(scalar=3), _q(scalar=8), _q(scalar=2), _q(scalar=10),
+            _q(first=(10, 4)), _q(all=[("active", 6), ("pending", 4)]), _q(scalar=3), _q(scalar=8), _q(scalar=2), _q(scalar=10),
         ])
         _override_db(cov_client, db)
         with patch.object(dash, "_cache", None), patch.object(
@@ -671,7 +682,7 @@ class TestCacheAndFallbackBranches:
         db = _db_with_queries([
             _q(), _q(scalar=0), _q(scalar=None), _q(first=None),   # village 全 0（跳过人口）
             _q(all=[]),                                            # fund 全 0
-            _q(first=(0, 0)), _q(scalar=0), _q(scalar=0), _q(scalar=0),  # project 全 0
+            _q(first=(0, 0)), _q(all=[]), _q(scalar=0), _q(scalar=0), _q(scalar=0),  # project 全 0
         ])
         _override_db(cov_client, db)
         with patch.object(dash, "_cache", None):
@@ -694,7 +705,7 @@ class TestCacheAndFallbackBranches:
         db = _db_with_queries([
             _q(), _q(scalar=1), _q(scalar=None), _q(first=(1, 1, 1, 1)),
             _q(all=[]),
-            _q(first=(0, 0)), _q(scalar=0), _q(scalar=0), _q(scalar=0),
+            _q(first=(0, 0)), _q(all=[]), _q(scalar=0), _q(scalar=0), _q(scalar=0),
         ])
         _override_db(cov_client, db)
         with patch.object(dash, "_cache") as mc:
@@ -725,7 +736,7 @@ class TestCacheAndFallbackBranches:
         monkeypatch.setattr(dash.Project, "department", _FakeCol(), raising=False)
         scope = _scope(False, org_ids=[], org_names=["某部"])
         db = _db_with_queries([
-            _q(first=(10, 4)), _q(scalar=3), _q(scalar=8), _q(scalar=0),
+            _q(first=(10, 4)), _q(all=[]), _q(scalar=3), _q(scalar=8), _q(scalar=0),
         ])
         result = dash._query_project_approval_stats(db, scope)
         assert result["total_projects"] == 10

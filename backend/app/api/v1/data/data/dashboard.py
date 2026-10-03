@@ -138,7 +138,7 @@ def _query_village_stats(db: Session, data_scope: OrgScopeFilter) -> dict:
         func.coalesce(func.sum(case((School.support_status == "active", 1), else_=0)), 0),
         func.coalesce(func.sum(School.student_count), 0),
         func.coalesce(func.sum(School.teacher_count), 0),
-    ).filter(School.is_active == True)  # 修复: 使用 is_ 方法  # noqa: E712
+    ).filter(School.is_active == True)  # noqa: E712
     school_query = data_scope.filter_by_org_ids(
         school_query, School.organization_id, created_by_column=School.created_by
     )
@@ -171,7 +171,9 @@ def _query_fund_stats(db: Session, data_scope: OrgScopeFilter) -> dict:
     if not data_scope.has_full_access():
         from sqlalchemy import or_
 
-        # 获取当前用户可访问的帮扶村 ID
+        # 可访问帮扶村用 subquery（与 _query_village_stats 一致），避免大 IN 列表
+        # 物化到 Python；子查询为空时 IN 恒为假，or_ 兜底为"未关联村的经费"——
+        # 与原"无可访问村时只统计未关联村经费"分支语义完全一致
         village_query = db.query(SupportedVillage.id).filter(
             SupportedVillage.is_active == True  # noqa: E712
         )
@@ -179,18 +181,12 @@ def _query_fund_stats(db: Session, data_scope: OrgScopeFilter) -> dict:
             village_query, SupportedVillage.organization_id,
             created_by_column=SupportedVillage.created_by,
         )
-        accessible_village_ids = [r[0] for r in village_query.all()]
-
-        if accessible_village_ids:
-            query = query.filter(
-                or_(
-                    Fund.village_id.in_(accessible_village_ids),
-                    Fund.village_id.is_(None),  # 未关联帮扶村的经费也纳入统计
-                )
+        query = query.filter(
+            or_(
+                Fund.village_id.in_(village_query),
+                Fund.village_id.is_(None),  # 未关联帮扶村的经费也纳入统计
             )
-        else:
-            # 无可访问的帮扶村时只统计未关联村的经费
-            query = query.filter(Fund.village_id.is_(None))
+        )
 
     rows = query.group_by(Fund.status).all()
 
@@ -218,8 +214,35 @@ def _query_fund_stats(db: Session, data_scope: OrgScopeFilter) -> dict:
     }
 
 
-def _query_project_approval_stats(db: Session, data_scope: OrgScopeFilter) -> dict:
-    """查询3：项目聚合 + 审批待办 + 用户数 + 数据完整性"""
+def _apply_project_scope(query, data_scope: OrgScopeFilter):
+    """非管理员按组织数据范围过滤项目（项目总数与状态分布共用同一口径）"""
+    if data_scope.has_full_access():
+        return query
+    if hasattr(Project, "organization_id") and data_scope.org_ids:
+        return data_scope.filter_by_org_ids(query, Project.organization_id)
+    if data_scope.org_names:
+        # 回退到文本匹配（按项目负责单位/部门过滤）
+        from sqlalchemy import or_
+
+        conditions = []
+        for name in data_scope.org_names:
+            if len(name) >= 2:
+                if hasattr(Project, "responsible_unit"):
+                    conditions.append(Project.responsible_unit.contains(name))
+                if hasattr(Project, "department"):
+                    conditions.append(Project.department.contains(name))
+        if conditions:
+            return query.filter(or_(*conditions))
+        return query.filter(False)
+    return query
+
+
+def _query_project_approval_stats(db: Session, data_scope: OrgScopeFilter, user_id: Optional[int] = None) -> dict:
+    """查询3：项目聚合 + 审批待办 + 用户数 + 数据完整性
+
+    全量访问（管理员）保持系统级口径；非全量访问时审批待办/用户数/完整度
+    均收敛到用户可访问范围，避免向受限用户泄漏全局规模。
+    """
     # 项目统计（按数据范围过滤）
     proj_query = db.query(
         func.count(Project.id),
@@ -228,51 +251,82 @@ def _query_project_approval_stats(db: Session, data_scope: OrgScopeFilter) -> di
         Project.status != "cancelled",
         Project.is_active == True,  # noqa: E712
     )
-    # 非管理员按组织数据范围过滤项目
-    if not data_scope.has_full_access():
-        if hasattr(Project, "organization_id") and data_scope.org_ids:
-            proj_query = data_scope.filter_by_org_ids(proj_query, Project.organization_id)
-        elif data_scope.org_names:
-            # 回退到文本匹配（按项目负责单位/部门过滤）
-            from sqlalchemy import or_
-
-            conditions = []
-            for name in data_scope.org_names:
-                if len(name) >= 2:
-                    if hasattr(Project, "responsible_unit"):
-                        conditions.append(Project.responsible_unit.contains(name))
-                    if hasattr(Project, "department"):
-                        conditions.append(Project.department.contains(name))
-            if conditions:
-                proj_query = proj_query.filter(or_(*conditions))
-            else:
-                proj_query = proj_query.filter(False)
+    proj_query = _apply_project_scope(proj_query, data_scope)
     proj_row = proj_query.first()
     total_projects = int(proj_row[0]) if proj_row else 0
     active_projects = int(proj_row[1]) if proj_row else 0
 
+    # 项目状态分布（汇报大屏饼图用；与项目总数同口径，一条 group_by 完成）
+    status_rows = (
+        _apply_project_scope(
+            db.query(Project.status, func.count(Project.id)).filter(
+                Project.status != "cancelled",
+                Project.is_active == True,  # noqa: E712
+            ),
+            data_scope,
+        )
+        .group_by(Project.status)
+        .all()
+    )
+    projects_by_status = {str(s): int(c) for s, c in status_rows}
+
     # 审批待办
+    # 全量访问：系统级待审批总数；非全量访问：ApprovalTask 无组织列，
+    # 收敛为"当前用户提交的待审批"（submitter_id 过滤），不泄漏全局审批规模
     pending_approvals = 0
     try:
-        pending_approvals = db.query(func.count(ApprovalTask.id)).filter(ApprovalTask.status == "pending").scalar() or 0
+        approval_query = db.query(func.count(ApprovalTask.id)).filter(
+            ApprovalTask.status == "pending"
+        )
+        if not data_scope.has_full_access():
+            approval_query = approval_query.filter(
+                ApprovalTask.submitter_id == (user_id if user_id is not None else -1)
+            )
+        pending_approvals = approval_query.scalar() or 0
     except Exception as e:
         logger.warning("查询审批待办失败: %s", e)
 
     # 用户总数（仅活跃用户）
-    total_users = db.query(func.count(User.id)).filter(User.is_active == True).scalar() or 0  # noqa: E712
+    # 全量访问：系统级；非全量访问：可访问组织的活跃用户数
+    users_query = db.query(func.count(User.id)).filter(User.is_active == True)  # noqa: E712
+    if not data_scope.has_full_access():
+        if data_scope.org_ids:
+            users_query = users_query.filter(User.organization_id.in_(data_scope.org_ids))
+        else:
+            users_query = users_query.filter(False)
+    total_users = users_query.scalar() or 0
 
     # 数据完整性：帮扶村已填报年份数 / 应填报年份数
+    # 全量访问：全局口径；非全量访问：可访问帮扶村范围内
     current_year = datetime.now().year
     expected_years = max(current_year - _DATA_START_YEAR + 1, 1)
     data_completeness = 0.0
 
-    total_villages_count = db.query(func.count(SupportedVillage.id)).filter(
+    village_count_query = db.query(func.count(SupportedVillage.id)).filter(
         SupportedVillage.is_active == True  # noqa: E712
-    ).scalar() or 0
+    )
+    if not data_scope.has_full_access():
+        village_count_query = data_scope.filter_by_org_ids(
+            village_count_query, SupportedVillage.organization_id,
+            created_by_column=SupportedVillage.created_by,
+        )
+    total_villages_count = village_count_query.scalar() or 0
     if total_villages_count > 0:
         # 简化计算：总填报条数 / (村数 × 应填年份数)
         total_expected = total_villages_count * expected_years
-        total_filled = db.query(func.count(VillagePopulation.id)).scalar() or 0
+        filled_query = db.query(func.count(VillagePopulation.id))
+        if not data_scope.has_full_access():
+            accessible_villages = db.query(SupportedVillage.id).filter(
+                SupportedVillage.is_active == True  # noqa: E712
+            )
+            accessible_villages = data_scope.filter_by_org_ids(
+                accessible_villages, SupportedVillage.organization_id,
+                created_by_column=SupportedVillage.created_by,
+            )
+            filled_query = filled_query.filter(
+                VillagePopulation.supported_village_id.in_(accessible_villages)
+            )
+        total_filled = filled_query.scalar() or 0
         data_completeness = round(min(total_filled / total_expected, 1.0), 4) if total_expected > 0 else 0.0
 
     return {
@@ -281,6 +335,8 @@ def _query_project_approval_stats(db: Session, data_scope: OrgScopeFilter) -> di
         "pending_approvals": int(pending_approvals),
         "total_users": int(total_users),
         "data_completeness": data_completeness,
+        # 汇报大屏"项目状态分布"饼图数据源（键=状态，值=项目数）
+        "projects_by_status": projects_by_status,
     }
 
 
@@ -385,7 +441,7 @@ async def get_dashboard_stats(
     try:
         village_stats = _query_village_stats(db, data_scope)
         fund_stats = _query_fund_stats(db, data_scope)
-        project_stats = _query_project_approval_stats(db, data_scope)
+        project_stats = _query_project_approval_stats(db, data_scope, user_id=user_id)
 
         result = {**village_stats, **fund_stats, **project_stats}
 
@@ -449,53 +505,101 @@ async def get_yearly_trends(
 ):
     """按最近 N 年返回:
     - years/villages/population/income: 分析页折线图
-    - trends: [{year, total_planned, total_actual, project_count}] 大屏经费趋势
+    - trends: [{year, total_planned, total_actual, project_count, fund_count}]
+      project_count 为真实项目数（按 start_date 年份，供大屏"年度对比"图），
+      fund_count 为经费记录条数（兼容旧 project_count 语义的保底字段）
     """
     try:
+        from sqlalchemy import or_
+
         now_year = datetime.now().year
         year_list = list(range(now_year - years + 1, now_year + 1))
 
-        villages_list = []
-        population_list = []
-        income_list = []
+        # ── 一次性按年聚合（取代逐年循环，SQL 数量从 ~4N 降至 N+3）──
+        # 全量访问保持全局口径（与分析页历史行为一致）；非全量访问时
+        # 村/人口/经费三类查询套数据范围过滤（此前为全局数据，口径泄漏）
+        if not data_scope.has_full_access():
+            accessible_villages = db.query(SupportedVillage.id).filter(
+                SupportedVillage.is_active == True  # noqa: E712
+            )
+            accessible_villages = data_scope.filter_by_org_ids(
+                accessible_villages, SupportedVillage.organization_id,
+                created_by_column=SupportedVillage.created_by,
+            )
+
+        # 帮扶村（按创建年份统计）
+        village_year_col = func.strftime("%Y", SupportedVillage.created_at)
+        village_rows = db.query(
+            village_year_col, func.count(SupportedVillage.id)
+        ).filter(SupportedVillage.is_active == True)  # noqa: E712
+        if not data_scope.has_full_access():
+            village_rows = data_scope.filter_by_org_ids(
+                village_rows, SupportedVillage.organization_id,
+                created_by_column=SupportedVillage.created_by,
+            )
+        villages_by_year = {
+            int(r[0]): int(r[1] or 0) for r in village_rows.group_by(village_year_col).all() if r[0]
+        }
+        villages_list = [villages_by_year.get(y, 0) for y in year_list]
+
+        # 人口（按年度表；非全量访问限定可访问帮扶村的年报，全量访问保持全局口径）
+        pop_rows = db.query(
+            VillagePopulation.year,
+            func.coalesce(func.sum(VillagePopulation.total_population), 0),
+        )
+        if not data_scope.has_full_access():
+            pop_rows = pop_rows.filter(
+                VillagePopulation.supported_village_id.in_(accessible_villages)
+            )
+        pop_by_year = {
+            int(r[0]): int(r[1] or 0) for r in pop_rows.group_by(VillagePopulation.year).all()
+        }
+        population_list = [pop_by_year.get(y, 0) for y in year_list]
+
+        # 人均收入（逐年取可用年份列，保持既有实现）
+        income_list = [round(_avg_per_capita_income(db, data_scope, year=y), 2) for y in year_list]
+
+        # 经费：计划投入/实际投入 + 记录条数（软删经费排除）
+        fund_rows = db.query(
+            Fund.year,
+            func.coalesce(func.sum(Fund.planned_amount), 0),
+            func.coalesce(func.sum(Fund.allocated_amount), 0),
+            func.count(Fund.id),
+        ).filter(Fund.is_active == True)  # noqa: E712
+        if not data_scope.has_full_access():
+            fund_rows = fund_rows.filter(
+                or_(Fund.village_id.in_(accessible_villages), Fund.village_id.is_(None))
+            )
+        fund_by_year = {}
+        for r in fund_rows.group_by(Fund.year).all():
+            fund_by_year[int(r[0])] = {
+                "planned": round(float(r[1] or 0), 2),
+                "actual": round(float(r[2] or 0), 2),
+                "count": int(r[3] or 0),
+            }
+
+        # 项目年度分布（按 start_date 年份；与项目总数统计同口径的范围过滤）
+        project_year_col = func.strftime("%Y", Project.start_date)
+        project_rows = db.query(
+            project_year_col, func.count(Project.id)
+        ).filter(
+            Project.status != "cancelled",
+            Project.is_active == True,  # noqa: E712
+        )
+        project_rows = _apply_project_scope(project_rows, data_scope)
+        project_by_year = {
+            int(r[0]): int(r[1] or 0) for r in project_rows.group_by(project_year_col).all() if r[0]
+        }
+
         trends_list = []
-
         for y in year_list:
-            # 帮扶村(按创建年份统计, 无创建年份数据时按活跃村数占位)
-            village_count = (
-                db.query(func.count(SupportedVillage.id))
-                .filter(SupportedVillage.is_active == True,  # noqa: E712
-                        func.strftime("%Y", SupportedVillage.created_at) == str(y))
-                .scalar()
-            )
-            villages_list.append(village_count or 0)
-
-            # 人口(按年度表)
-            pop = (
-                db.query(func.coalesce(func.sum(VillagePopulation.total_population), 0))
-                .filter(VillagePopulation.year == y)
-                .scalar()
-            )
-            population_list.append(int(pop or 0))
-
-            # 人均收入(该年可用列, 无则 0)
-            income_list.append(round(_avg_per_capita_income(db, data_scope, year=y), 2))
-
-            # 经费: 计划投入/实际投入 + 项目数（软删经费排除）
-            fund_row = (
-                db.query(
-                    func.coalesce(func.sum(Fund.planned_amount), 0),
-                    func.coalesce(func.sum(Fund.allocated_amount), 0),
-                    func.count(Fund.id),
-                )
-                .filter(Fund.year == y, Fund.is_active == True)  # noqa: E712
-                .first()
-            )
+            f = fund_by_year.get(y)
             trends_list.append({
                 "year": y,
-                "total_planned": round(float(fund_row[0]) if fund_row else 0, 2),
-                "total_actual": round(float(fund_row[1]) if fund_row else 0, 2),
-                "project_count": int(fund_row[2]) if fund_row else 0,
+                "total_planned": f["planned"] if f else 0.0,
+                "total_actual": f["actual"] if f else 0.0,
+                "project_count": project_by_year.get(y, 0),
+                "fund_count": f["count"] if f else 0,
             })
 
         return success_response(
@@ -570,7 +674,7 @@ async def get_dashboard_summary(
     try:
         village_stats = _query_village_stats(db, data_scope)
         fund_stats = _query_fund_stats(db, data_scope)
-        project_stats = _query_project_approval_stats(db, data_scope)
+        project_stats = _query_project_approval_stats(db, data_scope, user_id=user_id)
         stats = {**village_stats, **fund_stats, **project_stats}
     except Exception as e:
         logger.error("仪表盘汇总统计失败: %s", e, exc_info=True)

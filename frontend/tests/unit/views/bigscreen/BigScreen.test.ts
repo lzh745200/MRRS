@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   getDashboardStats: vi.fn(),
   getYearlyTrends: vi.fn(),
   getRankings: vi.fn(),
-  getSummaryStatistics: vi.fn(),
 }))
 
 vi.mock('@/api/dashboard', () => ({
@@ -16,10 +15,6 @@ vi.mock('@/api/dashboard', () => ({
 
 vi.mock('@/api/effectiveness', () => ({
   getRankings: mocks.getRankings,
-}))
-
-vi.mock('@/api/analytics', () => ({
-  getSummaryStatistics: mocks.getSummaryStatistics,
 }))
 
 vi.mock('@/components/common/BaseChart.vue', () => ({
@@ -36,12 +31,16 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
+    // 真实后端契约（/dashboard/stats 返回体）：此前 mock 编造了
+    // completion_rate/total_amount/by_status 等后端不存在的字段，
+    // 导致测试全绿但真实大屏 KPI 恒 0、状态饼图恒空
     mocks.getDashboardStats.mockResolvedValue({
       total_villages: 12,
       total_projects: 34,
       total_schools: 5,
-      completion_rate: 88,
-      total_amount: 123.4,
+      data_completeness: 0.886,
+      total_funds: 1234000,
+      projects_by_status: { completed: 10, active: 8 },
     })
     mocks.getYearlyTrends.mockResolvedValue({
       trends: [
@@ -56,9 +55,6 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
         { village_name: '乙村', score: 85 },
       ],
     })
-    mocks.getSummaryStatistics.mockResolvedValue({
-      by_status: { completed: 10, active: 8 },
-    })
   })
 
   afterEach(() => {
@@ -69,10 +65,10 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
   it('挂载加载数据并渲染 KPI 与图表', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    expect(mocks.getDashboardStats).toHaveBeenCalledWith(true)
+    // 轮询走后端缓存：不传 refresh=true（缓存击穿修复）
+    expect(mocks.getDashboardStats).toHaveBeenCalledWith()
     expect(mocks.getYearlyTrends).toHaveBeenCalledWith(5)
     expect(mocks.getRankings).toHaveBeenCalled()
-    expect(mocks.getSummaryStatistics).toHaveBeenCalled()
     expect(wrapper.text()).toContain('帮扶成效总览大屏')
     const vm = wrapper.vm as any
     expect(vm.kpis.length).toBe(5)
@@ -81,17 +77,46 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
     wrapper.unmount()
   })
 
+  it('契约对齐：KPI 使用真实后端字段（data_completeness/total_funds）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 完成率：data_completeness 0.886 → 88.6%
+    expect(vm.kpis[3]).toEqual({ label: '完成率', value: '88.6%' })
+    // 经费总额：total_funds 已是万元（SUM(Fund.amount)），不得再除 10000
+    expect(vm.kpis[4]).toEqual({ label: '经费总额(万)', value: 1234000 })
+    // 项目状态分布：读 stats.projects_by_status
+    expect(vm.projectStatusOption.series[0].data).toEqual([
+      { name: '已完成', value: 10 },
+      { name: '进行中', value: 8 },
+    ])
+    wrapper.unmount()
+  })
+
   it('接口失败静默降级（KPI 默认 0）', async () => {
     mocks.getDashboardStats.mockRejectedValue(new Error('net'))
     mocks.getYearlyTrends.mockRejectedValue(new Error('net'))
     mocks.getRankings.mockRejectedValue(new Error('net'))
-    mocks.getSummaryStatistics.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.kpis[0].value).toBe(0)
     expect(vm.rankings).toEqual([])
     expect(vm.yearlyOption.series[0].data).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('stats 为空时各 computed 走 ?? {} 兜底（不抛错、返回空结构）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 后端无数据时 getDashboardStats 返回 null → stats 为 nullish
+    vm.stats = null
+    await nextTick()
+    expect(vm.kpis.length).toBe(5)
+    expect(vm.kpis[0].value).toBe(0)
+    // projects_by_status 缺失 → 饼图空数据（此前该兜底分支无覆盖）
+    expect(vm.projectStatusOption.series[0].data).toEqual([])
     wrapper.unmount()
   })
 
@@ -124,7 +149,7 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
   })
 
   it('状态图对未知状态键回退显示原始键', async () => {
-    mocks.getSummaryStatistics.mockResolvedValue({ by_status: { weird: 3 } })
+    mocks.getDashboardStats.mockResolvedValue({ projects_by_status: { weird: 3 } })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -181,8 +206,8 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
     // rankings 为 null → ?? [] 兜底
     vm.rankings = null
     expect(vm.rankOption.yAxis.data).toEqual([])
-    // summary 为 null → ?? {} 兜底 → 空饼图
-    vm.summary = null
+    // stats 无 projects_by_status → ?? {} 兜底 → 空饼图
+    vm.stats = {}
     expect(vm.projectStatusOption.series[0].data).toEqual([])
     // 年度数据：year 缺失 + planned/actual/count 两级 ?? 兜底
     vm.yearlyTrends = [
@@ -202,7 +227,7 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
     expect(vm.rankOption.yAxis.data).toEqual(['甲', 'v1', ''])
     expect(vm.rankOption.series[0].data).toEqual([9, 0, 0])
     // 状态图：计数为 0 → Number(v) || 0 兜底
-    vm.summary = { by_status: { completed: 0, active: 8 } }
+    vm.stats = { projects_by_status: { completed: 0, active: 8 } }
     expect(vm.projectStatusOption.series[0].data).toEqual([
       { name: '已完成', value: 0 },
       { name: '进行中', value: 8 },
@@ -214,14 +239,12 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
     mocks.getDashboardStats.mockResolvedValue(null)
     mocks.getYearlyTrends.mockResolvedValue(null)
     mocks.getRankings.mockResolvedValue(null)
-    mocks.getSummaryStatistics.mockResolvedValue(null)
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.stats).toEqual({})
     expect(vm.yearlyTrends).toEqual([])
     expect(vm.rankings).toEqual([])
-    expect(vm.summary).toEqual({})
     wrapper.unmount()
   })
 
@@ -251,6 +274,21 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
     const vm = wrapper.vm as any
     expect(vm.yearlyTrends).toEqual([{ year: 2023, total_planned: 60 }])
     expect(vm.fundTrendOption.xAxis.data).toContain(2023)
+    wrapper.unmount()
+  })
+
+  it('年度对比图：project_count 缺失时回退 fund_count/count（语义对齐真实项目数）', async () => {
+    mocks.getYearlyTrends.mockResolvedValue({
+      trends: [
+        { year: 2026, fund_count: 7 },
+        { year: 2027, count: 4 },
+        { year: 2028 },
+      ],
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.yearlyOption.series[0].data).toEqual([7, 4, 0])
     wrapper.unmount()
   })
 
