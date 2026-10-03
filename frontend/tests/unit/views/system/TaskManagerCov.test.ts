@@ -653,21 +653,22 @@ describe('工具函数', () => {
     expect(vm.statusLabel('weird')).toBe('weird')
   })
 
-  it('formatDateTime：空值 → --；非法日期 → 原样；合法日期 → 本地化；toLocaleString 抛错 → catch 原样返回', () => {
+  it('formatDateTime：空值/非法日期 → --；合法日期 → 本地化；toLocaleString 抛错 → 兜底', () => {
     const wrapper = mountComp()
     const vm = wrapper.vm as any
     expect(vm.formatDateTime('')).toBe('--')
-    expect(vm.formatDateTime('not-a-date')).toBe('not-a-date')
+    // 2026-10-03 收敛：非法值统一走兜底 '--'（不再回显原串）
+    expect(vm.formatDateTime('not-a-date')).toBe('--')
     const out = vm.formatDateTime('2024-01-01T10:00:00')
     expect(out).toContain('2024')
 
-    // toLocaleString 抛错 → catch 分支返回原始字符串
+    // toLocaleString 抛错 → 统一实现内部 catch，回退兜底文案（渲染期不抛错）
     const orig = Date.prototype.toLocaleString
     Date.prototype.toLocaleString = () => {
       throw new Error('boom')
     }
     try {
-      expect(vm.formatDateTime('2024-06-01T08:00:00')).toBe('2024-06-01T08:00:00')
+      expect(vm.formatDateTime('2024-06-01T08:00:00')).toBe('--')
     } finally {
       Date.prototype.toLocaleString = orig
     }

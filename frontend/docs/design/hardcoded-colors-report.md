@@ -3,6 +3,12 @@
 > 生成：`check_hardcoded_styles.py --update-baseline` ｜ 存量 **660 处 / 103 文件**（基线已冻结，只减不增）
 > 消化方式：按映射表替换为 `var(--token)` → 跑 vitest+vue-tsc → `--update-baseline` 收紧基线。
 
+> ⚠️ **本文档是历史快照，不是实时数据**。当前真实存量与文件清单以
+> `scripts/hardcoded_styles_baseline.json`（门禁基线）与实际扫描结果为准。
+> 已知该快照中至少有一个文件此后已被删除：`frontend/src/components/common/ResponsiveDataTable.vue`
+> （已不存在，对应的 10 处存量随之清零）。引用本表前请先用
+> `python scripts/check_hardcoded_styles.py` 取实时数据。
+
 ## 颜色频次 Top15（映射表依据）
 
 > Top15 字面量合计 285/660 处（约 43%），映射直换即可消化大半。

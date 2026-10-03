@@ -232,6 +232,7 @@ import {
 import { get } from '@/api/request'
 import { logger } from '@/utils/logger'
 
+import { format } from '@/utils'
 const { pushSafe } = useRouterSafe()
 
 // ==================== 状态 ====================
@@ -476,10 +477,7 @@ function handleGoToLink(message: Message) {
 /**
  * 格式化日期时间
  */
-function formatDateTime(dateStr: string): string {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
+const formatDateTime = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr)
 
 /**
  * 初始化WebSocket

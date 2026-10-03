@@ -268,6 +268,127 @@ describe('utils/index.ts 统一导出', () => {
     })
   })
 
+  // 2026-10-03：把各页面自行实现的日期格式化统一收敛到 utils/index.ts，
+  // 以下用例锁定新增变体的行为（空值兜底、格式形状、分支全覆盖）。
+  describe('format 统一补齐的日期时间变体', () => {
+    const d = new Date(2024, 0, 5, 9, 8, 7) // 本地 2024-01-05 09:08:07
+
+    it('formatLocalDate：zh-CN 仅日期；空值/非法走兜底文案', () => {
+      expect(format.formatLocalDate(d)).toBe('2024/1/5')
+      expect(format.formatLocalDate(null)).toBe('-')
+      expect(format.formatLocalDate('bad-date', '无')).toBe('无')
+      expect(format.formatLocalDate(undefined, '')).toBe('')
+    })
+
+    it('formatLocalDate2Digit：两位补零', () => {
+      expect(format.formatLocalDate2Digit(d)).toBe('2024/01/05')
+      expect(format.formatLocalDate2Digit('bad-date')).toBe('-')
+      expect(format.formatLocalDate2Digit('', 'N/A')).toBe('N/A')
+    })
+
+    it('formatLocalDateTime2Digit：补零日期时间', () => {
+      expect(format.formatLocalDateTime2Digit(d)).toBe('2024/01/05 09:08:07')
+      expect(format.formatLocalDateTime2Digit('bad-date', '--')).toBe('--')
+    })
+
+    it('formatCnDate：中文长日期 + 星期', () => {
+      expect(format.formatCnDate(new Date(2024, 0, 5))).toBe('2024年1月5日 周五')
+      expect(format.formatCnDate('bad-date')).toBe('-')
+      expect(format.formatCnDate(null, '未知')).toBe('未知')
+    })
+
+    it('formatRelativeTime：刚刚 / 分钟前 / 小时前 / 更早显示短日期时间', () => {
+      const now = Date.now()
+      expect(format.formatRelativeTime(new Date(now - 10 * 1000))).toBe('刚刚')
+      expect(format.formatRelativeTime(new Date(now - 5 * 60000))).toBe('5分钟前')
+      expect(format.formatRelativeTime(new Date(now - 3 * 3600000))).toBe('3小时前')
+      // 天级档（来自 src/api/message.ts 原实现的能力并集）
+      expect(format.formatRelativeTime(new Date(now - 2 * 86400000))).toBe('2天前')
+      const older = new Date(2020, 9, 2, 20, 3)
+      expect(format.formatRelativeTime(older)).toBe('10月2日 20:03')
+      expect(format.formatRelativeTime(null)).toBe('--:--')
+      expect(format.formatRelativeTime('bad-date', '-')).toBe('-')
+    })
+
+    it('formatShortDateTime / formatShortDateTimePadded：短日期时间', () => {
+      expect(format.formatShortDateTime(d)).toBe('1/5 9:08')
+      expect(format.formatShortDateTime('bad-date')).toBe('')
+      expect(format.formatShortDateTimePadded(d)).toBe('01-05 09:08')
+      expect(format.formatShortDateTimePadded(undefined, '-')).toBe('-')
+    })
+
+    it('formatDuration：天 / 小时 / 分钟三档 + 空值文案可配', () => {
+      expect(format.formatDuration(90061)).toBe('1 天 1 小时')
+      expect(format.formatDuration(3720)).toBe('1 小时 2 分钟')
+      expect(format.formatDuration(125)).toBe('2 分钟')
+      expect(format.formatDuration(0)).toBe('-')
+      expect(format.formatDuration(-5)).toBe('-')
+      expect(format.formatDuration(null)).toBe('-')
+      expect(format.formatDuration(undefined, '未知')).toBe('未知')
+      expect(format.formatDuration(Number.NaN)).toBe('-')
+    })
+
+    it('统一入口接受 Date 实例与数字时间戳（toDate 各分支）', () => {
+      const ts = d.getTime()
+      expect(format.formatDateTimeLocale(d)).toBe(d.toLocaleString('zh-CN'))
+      expect(format.formatDateTimeLocale(ts)).toBe(d.toLocaleString('zh-CN'))
+      expect(format.formatLocalDate(ts)).toBe('2024/1/5')
+    })
+
+    // 收敛前各页面自带 try/catch（`new Date()` 与 `toLocaleString()` 都可能抛错），
+    // 统一实现必须保留同等韧性，否则等于"越改越脆"。
+    it('极端输入与宿主 locale 异常都不抛错（双层兜底）', () => {
+      // ① toDate 内部 try/catch：Symbol 会让 new Date() 直接抛 TypeError
+      expect(format.formatDateTimeLocale(Symbol('x') as unknown as string)).toBe('-')
+      expect(format.formatDateTimeLocale(Symbol('x') as unknown as string, 'N/A')).toBe('N/A')
+      expect(format.formatDate(Symbol('x') as unknown as string, '无')).toBe('无')
+
+      // ② localeFormat 内部 try/catch：toLocaleString/toLocaleDateString 抛错 → 回退文案
+      const origDateTime = Date.prototype.toLocaleString
+      const origDate = Date.prototype.toLocaleDateString
+      Date.prototype.toLocaleString = () => {
+        throw new Error('boom')
+      }
+      Date.prototype.toLocaleDateString = () => {
+        throw new Error('boom')
+      }
+      try {
+        const valid = new Date(2024, 0, 5, 9, 8, 7)
+        expect(format.formatDateTimeLocale(valid)).toBe('-')
+        expect(format.formatLocalDate(valid)).toBe('-')
+        expect(format.formatLocalDate2Digit(valid, '无')).toBe('无')
+        expect(format.formatLocalDateTime2Digit(valid, '--')).toBe('--')
+        // 相对时间的"更早"分支同样走 locale，异常时回退
+        expect(format.formatRelativeTime(new Date(2020, 9, 2, 20, 3), 'X')).toBe('X')
+      } finally {
+        Date.prototype.toLocaleString = origDateTime
+        Date.prototype.toLocaleDateString = origDate
+      }
+    })
+  })
+
+  // 2026-10-03：各页面空值文案不一（`-` / ``/ `无` / `N/A` / `--`），
+  // 为此给核心函数加可选 fallback；不传时保持历史行为不变。
+  describe('format 兜底文案参数（fallback）', () => {
+    it('formatDateTime：传 fallback 时空值与非法值都用它', () => {
+      expect(format.formatDateTime(null, 'YYYY-MM-DD', '-')).toBe('-')
+      expect(format.formatDateTime('bad-date', 'YYYY-MM-DD', '-')).toBe('-')
+      expect(format.formatDateTime(new Date(2024, 0, 5), 'YYYY-MM-DD', '-')).toBe('2024-01-05')
+    })
+
+    it('formatDateTime：不传 fallback 时保持历史行为（空值 - / 非法值原样回显）', () => {
+      expect(format.formatDateTime(null)).toBe('-')
+      expect(format.formatDateTime('bad-date', 'YYYY-MM-DD')).toBe('bad-date')
+    })
+
+    it('formatDate / formatDateTimeFull：支持自定义兜底', () => {
+      expect(format.formatDate(new Date(2024, 0, 5), '无')).toBe('2024-01-05')
+      expect(format.formatDate(null, '无')).toBe('无')
+      expect(format.formatDateTimeFull('bad-date', '')).toBe('')
+      expect(format.formatDateTimeFull(new Date(2024, 0, 5, 6, 7, 8), '')).toBe('2024-01-05 06:07:08')
+    })
+  })
+
   describe('format.formatCurrency', () => {
     it('千分位 + 默认单位元 + 最多4位小数去尾零', () => {
       expect(format.formatCurrency(1234567.891)).toBe('1,234,567.891元')

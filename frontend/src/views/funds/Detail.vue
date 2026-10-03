@@ -795,6 +795,7 @@ import { ArrowLeft, Edit, Delete, Loading, Upload } from '@element-plus/icons-vu
 import { get, post, put, del, apiRequest } from '@/api/request'
 import { fundApi } from '@/api/funds'
 
+import { format } from '@/utils'
 const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
 const route = useRoute()
@@ -1132,14 +1133,7 @@ const formatMoney = (v: any) =>
     : Number(v).toLocaleString('zh-CN', {
         maximumFractionDigits: 4,
       })
-const formatDateTime = (d?: string | null) => {
-  if (!d) return '-'
-  try {
-    return String(d).split('T')[0]
-  } catch {
-    return String(d)
-  }
-}
+const formatDateTime = (d?: string | null): string => format.formatDate(d)
 
 // 操作日志辅助函数
 const getOperationTypeLabel = (type: string): string => {

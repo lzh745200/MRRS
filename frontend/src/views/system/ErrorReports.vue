@@ -281,6 +281,7 @@ import { ElMessage } from 'element-plus'
 import { Refresh, View, Warning } from '@element-plus/icons-vue'
 import { errorReportApi, type ErrorReport, type ErrorStats } from '@/api/errorReport'
 
+import { format } from '@/utils'
 // ==================== 统计数据 ====================
 const statsLoading = ref(false)
 const stats = ref<ErrorStats>({
@@ -471,19 +472,8 @@ function statusTagType(status: string): TagType {
   return map[status] || 'info'
 }
 
-function formatTime(isoStr?: string): string {
-  if (!isoStr) return ''
-  try {
-    const d = new Date(isoStr)
-    if (isNaN(d.getTime())) return isoStr
-    const pad = (n: number) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-    /* c8 ignore start */
-  } catch {
-    return isoStr
-  }
-  /* c8 ignore stop */
-}
+const formatTime = (isoStr?: string | null): string =>
+  format.formatDateTimeFull(isoStr, isoStr ?? '')
 
 // ==================== 生命周期 ====================
 onMounted(() => {

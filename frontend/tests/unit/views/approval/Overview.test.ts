@@ -177,8 +177,9 @@ describe('审批概览补充分支', () => {
     const vm = wrapper.vm as any
     // typeLabel 兜底
     expect(vm.typeLabel('custom')).toBe('custom')
-    // formatDate 非法日期 → 原样返回
-    expect(vm.formatDate('not-a-date')).toBe('Invalid Date')
+    // formatDate 非法日期 → 统一兜底（2026-10-03 收敛到 @/utils format：
+    // 不再回显原串，也不会渲染出英文 "Invalid Date"）
+    expect(vm.formatDate('not-a-date')).toBe('-')
     // goApprove：task_id / id / 无 id
     vm.goApprove({ task_id: 5 })
     vm.goApprove({ id: 6 })
@@ -253,7 +254,8 @@ describe('边界分支补充', () => {
     const vm = wrapper.vm as any
     expect(vm.typeLabel('unknown_type')).toBe('unknown_type')
     expect(vm.typeLabel(undefined)).toBe('其他')
-    expect(vm.formatDate(Symbol('x') as any)).toBe('Symbol(x)')
+    // Symbol 无法转成日期 → 统一兜底（原先回显 String(Symbol)，收敛后走 '-'）
+    expect(vm.formatDate(Symbol('x') as any)).toBe('-')
     expect(vm.formatDate(undefined)).toBe('-')
     wrapper.unmount()
   })

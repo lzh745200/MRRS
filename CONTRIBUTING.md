@@ -7,7 +7,7 @@
 1. **Fork** 项目到您自己的 GitHub 账户
 2. **创建分支**: `git checkout -b feature/your-feature-name`
 3. **编写代码**: 遵循代码规范，添加必要的测试用例
-4. **运行测试**: 后端 `cd backend && python -m pytest tests/ -v`，前端 `cd frontend && npm test -- --run`
+4. **运行测试**: 后端 `cd backend && python -m pytest tests/ -q -n auto`，前端 `cd frontend && npx vitest run`（提交前建议再跑 `make test-local` 复跑 CI 六道门禁）
 5. **提交变更**: `git commit -m "feat: 你的功能描述"`
 6. **推送分支**: `git push origin feature/your-feature-name`
 7. **创建 PR**: 在 GitHub 上创建 Pull Request
@@ -43,9 +43,11 @@ chore:    杂项（清理、格式化等）
 - 避免在模板中使用复杂表达式
 
 ## 测试要求
-- 当前覆盖率门禁基线为 **50%**（见 `backend/pyproject.toml` 的 `fail_under` 与 CI `--cov-fail-under=50`）
-- 目标：逐步提升至 **70%**
-- 新功能建议达到 **80%** 覆盖率；核心业务逻辑争取 100% 覆盖
+- 覆盖率门禁基线为 **100%**（后端口径见 `backend/.coveragerc` 的 `fail_under`，前端见 `frontend/vitest.config.ts` 的 `thresholds`）
+- 100% 指「**可覆盖集** 100%」：所有未被 `exclude_lines` 排除、未标 `# pragma: no cover` 的可执行行都必须被测试覆盖
+- 每一处 `# pragma: no cover` 豁免都必须附带理由（CI 由 `scripts/check_pragma_reasons.py` 校验），不得用豁免掩盖未测代码
+- 新增/修改可执行行时必须同时补测试，否则 CI 的 `backend-test` / `frontend-check` 会因覆盖率不足红灯
+- **不要**在命令行内联 `--cov-fail-under`（会屏蔽配置文件里的单一事实源口径）
 - 集成测试覆盖关键 API 路径
 
 ## 问题反馈

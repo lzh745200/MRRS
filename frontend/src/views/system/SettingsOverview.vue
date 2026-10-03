@@ -148,6 +148,7 @@ import { getBackupStats } from '@/api/backup'
 import { getSecretsStatus } from '@/api/secrets'
 import { SYSTEM_VERSION } from '@/config/constants'
 
+import { format } from '@/utils'
 const systemVersion = SYSTEM_VERSION
 
 // ── 类型定义 ──
@@ -273,27 +274,11 @@ const navGroups: NavGroup[] = [
   },
 ]
 
-// ── 工具函数 ──
-function pad(n: number): string {
-  return String(n).padStart(2, '0')
-}
+// ── 工具函数（日期/时长格式化统一走 @/utils 的 format，本文件不再自实现） ──
+const formatDateTime = (iso?: string | null): string =>
+  format.formatDateTime(iso, 'YYYY-MM-DD HH:mm', '-')
 
-function formatDateTime(iso?: string): string {
-  if (!iso) return '-'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function formatUptime(sec?: number): string {
-  if (sec == null || Number.isNaN(sec)) return '-'
-  const days = Math.floor(sec / 86400)
-  const hours = Math.floor((sec % 86400) / 3600)
-  const mins = Math.floor((sec % 3600) / 60)
-  if (days > 0) return `${days} 天 ${hours} 小时`
-  if (hours > 0) return `${hours} 小时 ${mins} 分钟`
-  return `${mins} 分钟`
-}
+const formatUptime = (sec?: number): string => format.formatDuration(sec)
 
 /** 使用率阈值：<70 正常，70-85 偏高，>85 告警 */
 function usageLevel(pct: number): StatusLevel {

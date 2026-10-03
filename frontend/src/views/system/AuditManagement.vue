@@ -199,6 +199,7 @@ import { apiRequest } from '@/api/request'
 import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
 import { logger } from '@/utils/logger'
 
+import { format } from '@/utils'
 const activeTab = ref('operations')
 const loading = ref(false)
 const filters = reactive({
@@ -216,7 +217,7 @@ const stats = reactive({
 })
 
 /** ISO 时间显示格式化：'2026-08-29T04:59:54' → '2026-08-29 04:59:54' */
-const fmtTime = (t?: string): string => (t ? t.replace('T', ' ').slice(0, 19) : '')
+const fmtTime = (t?: string | null): string => format.formatDateTimeFull(t, '')
 
 const actionTagType = (a: string): 'info' | 'primary' | 'success' | 'warning' | 'danger' => {
   const map: Record<string, 'info' | 'primary' | 'success' | 'warning' | 'danger'> = {

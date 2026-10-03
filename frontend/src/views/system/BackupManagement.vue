@@ -334,6 +334,7 @@ import { useBackupSchedule } from '@/composables/useBackupSchedule'
 import { uploadRestoreBackup } from '@/api/backup'
 import { AuthStorage } from '@/utils/authStorage'
 
+import { format } from '@/utils'
 // 普通用户只读：仅 admin/super_admin 可执行备份写操作（后端 require_admin 双重把关）。
 // 无用户信息时保持按钮可见（后端权限兜底），兼容未注入用户态的旧测试场景。
 const canOperateBackup = computed(() => {
@@ -685,14 +686,8 @@ function formatSize(bytes: number) {
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
 }
 
-function formatTime(time: string | number | Date | null) {
-  if (!time) return '-'
-  try {
-    return new Date(time).toLocaleString('zh-CN')
-  } catch {
-    return '-'
-  }
-}
+const formatTime = (time?: string | number | Date | null): string =>
+  format.formatDateTimeLocale(time)
 
 onMounted(() => {
   refreshAll()

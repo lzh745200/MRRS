@@ -49,6 +49,7 @@ import { ElMessage } from 'element-plus'
 import { RefreshRight } from '@element-plus/icons-vue'
 import { getReminders, triggerReminderScan, type ReminderItem } from '@/api/reminders'
 
+import { format } from '@/utils'
 const loading = ref(false)
 const scanning = ref(false)
 const items = ref<ReminderItem[]>([])
@@ -104,12 +105,7 @@ function typeLabel(type: string): string {
   return map[type] ?? type
 }
 
-function formatTime(t?: string | null): string {
-  if (!t) return ''
-  const d = new Date(t)
-  if (Number.isNaN(d.getTime())) return t
-  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
+const formatTime = (t?: string | null): string => format.formatShortDateTimePadded(t)
 
 onMounted(load)
 </script>

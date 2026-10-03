@@ -432,7 +432,7 @@ const getChangeCount = (
 }
 
 // 格式化时间
-const formatTime = (time: string | undefined) => format.formatDateTimeLocale(time || '')
+const formatTime = (time?: string | null): string => format.formatDateTimeLocale(time || '')
 
 onMounted(() => {
   if (packageId.value) {

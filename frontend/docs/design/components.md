@@ -17,20 +17,24 @@
 - `#metrics` 插槽：标题下度量行
 - 字号 20/semibold，副题 13/secondary —— 全 token 驱动
 
-## 2. KpiCard（`components/business/KpiCard.vue`）
+## 2. StatsCard（`components/common/StatsCard.vue`）
 
-统计卡纯展示组件。
+统计卡纯展示组件（**工作台 KPI 行**由页面级组件 `views/dashboard/KpiCards.vue` 组装使用）。
 
 ```vue
-<KpiCard label="帮扶村" :value="stats.villages" :trend="trends.villages"
-         trend-label="较上月" icon="OfficeBuilding" to="/villages" />
+<StatsCard title="帮扶村" :value="stats.villages" :trend="trends.villages"
+           subtitle="较上月" :icon="OfficeBuilding" type="primary" suffix="个" />
 ```
 
-- 数值 24px semibold mono 千分位；null → `--`
+- 属性：`title`(必填) / `value`(必填) / `subtitle?` / `icon?` / `type?`(primary|success|warning|danger|info) / `trend?` / `prefix?` / `suffix?`
+- 数值 24px semibold mono 千分位；空值统一走 `@/utils` 的 `format` 兜底
 - 趋势语义：升=绿 `Top`、降=红 `Bottom`、0=持平；
-  **负向指标**（异常数/超期数）传 `invert-trend` 反转颜色
-- `theme`: primary/success/warning/danger/info 图标底色变体
-- `to` 可选点击跳转（走 pushSafe）
+  **负向指标**（异常数/超期数）需在页面侧自行决定颜色语义
+- 图标底色由 `type` 决定
+
+> ⚠️ **本文档曾经过期**：早期版本写的是 `components/business/KpiCard.vue`，该文件**不存在**
+> （`components/business/` 实际只有 `EmptyState/`、`FundGuidePopover.vue`、`SystemStatus.vue`）。
+> 工作台的 KPI 行实为 `views/dashboard/KpiCards.vue`，请以此为准。
 
 ## 3. Dialog 弹窗
 
@@ -45,7 +49,7 @@
 
 ## 4. Table 表格
 
-- 全局 small 已生效，无需逐个声明；表头底色 bg-hover、文字 secondary
+- 全局组件尺寸 `large` 已在 `App.vue` 的 `el-config-provider` 固化，无需逐个声明；表头底色 bg-hover、文字 secondary
 - **stripe 仅当可见列 ≥6** 时使用（81 处存量按此规则消化）
 - 空态必须 `<EmptyState>`（business 组件），54 处 el-empty 渐进替换
 - 操作列固定右侧，宽 ≤180；长表格横向滚动兜底 min-width
@@ -70,5 +74,9 @@
 ## 8. 图标与日期
 
 - 图标统一 `@element-plus/icons-vue`，16/18 两档，禁 emoji
-- 日期时间只允许 `utils/datetime.ts` 具名格式（8 个），
-  ESLint 视图层新增本地 formatDate 定义会被 review 打回
+- **日期时间只允许走 `@/utils` 的 `format`**（唯一实现，见 `src/utils/index.ts`）：
+  `formatDateTime` / `formatDateTimeLocale` / `formatLocalDate` / `formatLocalDate2Digit` /
+  `formatLocalDateTime2Digit` / `formatDate` / `formatDateTimeFull` / `formatCnDate` /
+  `formatRelativeTime` / `formatShortDateTime` / `formatShortDateTimePadded` / `formatDuration`。
+  2026-10-03 已把此前散落在 36 个文件里的 41 处本地实现全部收敛到这里；
+  视图层**不要再新写** `formatDate` / `formatDateTime` 之类的本地函数

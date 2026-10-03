@@ -5,6 +5,7 @@
  */
 
 import { get, post, put, apiRequest } from '@/api/request'
+import { format } from '@/utils'
 
 // ==================== 类型定义 ====================
 
@@ -183,21 +184,12 @@ export function formatMessageType(type: MessageType): {
 }
 
 /**
- * 格式化时间为相对时间
+ * 格式化时间为相对时间。
+ *
+ * 2026-10-03 收敛：实现统一迁到 `@/utils` 的 `format.formatRelativeTime`
+ * （含「刚刚 / N分钟前 / N小时前 / N天前 / 超过 7 天走 zh-CN 日期」全部档位），
+ * 此处仅保留同名导出以兼容既有调用方（`views/message/MessageCenter.vue`）。
  */
 export function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  if (hours < 24) return `${hours}小时前`
-  if (days < 7) return `${days}天前`
-
-  return date.toLocaleDateString('zh-CN')
+  return format.formatRelativeTime(dateStr)
 }

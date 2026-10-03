@@ -131,6 +131,7 @@ import { apiRequest } from '@/api/request'
 import { useUserStore } from '@/stores/user'
 import { getYearOptions } from '@/utils/yearOptions'
 
+import { format } from '@/utils'
 const route = useRoute()
 const userStore = useUserStore()
 // 仅管理员可发起评估（后端 /effectiveness/evaluate 限 super_admin/admin）
@@ -173,11 +174,7 @@ function fmtScore(v: any): string {
   return v == null ? '-' : Number(v).toFixed(1)
 }
 
-function fmtDateTime(v: any): string {
-  if (!v) return '-'
-  const d = new Date(v)
-  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString('zh-CN', { hour12: false })
-}
+const fmtDateTime = (v?: string | number | null): string => format.formatDateTimeLocale(v)
 
 function gradeLabel(grade: any): string {
   const map: Record<string, string> = {

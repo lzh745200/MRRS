@@ -117,8 +117,11 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
 - 项目完全离线运行，安装包内置所有运行时
 - Schema 权威来源: `backend/app/models/` 和 Alembic 迁移；`database/init.sql` 已删除
 - `.env` 文件不纳入版本控制
-- 版本号在 `backend/app/core/config.py` → `Settings.PROJECT_VERSION`（当前 1.12.8）；
-  13 处版本号由 `node scripts/sync-version.js --write` 单源同步，`--check` 为 CI 门禁
+- 版本号**唯一权威来源**是根 `package.json` 的 `version`（后端经同步写入
+  `backend/app/core/config.py` → `Settings.PROJECT_VERSION`）；
+  **18 处目标**（含若干 optional 项）由 `node scripts/sync-version.js --write` 单源同步，
+  `--check` 为 CI 门禁。⚠️ 旧脚本 `scripts/sync_version.py` 只覆盖 6 类文件且**无校验能力**，
+  仅被构建流水线按 tag 使用，不要把它当作唯一同步手段
 - **发布流程**：本地门禁全绿 → 提交推送 → `git tag v<版本> && git push origin v<版本>`
   → Actions 自动产出 **Windows x64 安装包** 与 **麒麟 ARM64 deb** 并发布 Release（两个安装包）
 - **依赖清单单一事实源** (2026-09-14, R15)：运行时依赖只登记在

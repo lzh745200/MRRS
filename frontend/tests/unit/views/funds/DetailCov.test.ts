@@ -976,9 +976,10 @@ describe('辅助函数', () => {
     expect(vm.formatDateTime(null)).toBe('-')
     expect(vm.formatDateTime('')).toBe('-')
     expect(vm.formatDateTime('2024-01-11T08:00:00')).toBe('2024-01-11')
-    // toString 抛错 → catch 臂（catch 内 String 仍抛 → 向外传播）
+    // 2026-10-03 收敛到 @/utils format：无法转日期的输入统一兜底 '-'，
+    // 渲染期绝不抛错（旧实现 catch 内的 String() 会二次抛错向外传播）
     const bad = Object.create(null)
-    expect(() => vm.formatDateTime(bad)).toThrow()
+    expect(vm.formatDateTime(bad)).toBe('-')
 
     expect(vm.getOperationTypeLabel('attachment_upload')).toBe('附件上传')
     expect(vm.getOperationTypeLabel('attachment_delete')).toBe('附件删除')

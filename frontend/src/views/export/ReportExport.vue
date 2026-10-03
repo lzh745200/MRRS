@@ -235,6 +235,7 @@
 import { logger } from '@/utils/logger'
 import { post, downloadBlob } from '@/api/request'
 
+import { format } from '@/utils'
 import { ref, reactive, onMounted } from 'vue'
 import { Download, Refresh, Document, DocumentChecked } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -385,10 +386,7 @@ function getExportStatusType(
   return exportStatusTypes[status] || 'info'
 }
 
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
+const formatDate = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr)
 
 function resetForm() {
   exportForm.dateRange = null

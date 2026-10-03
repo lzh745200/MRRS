@@ -164,6 +164,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { format } from '@/utils'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading, Refresh, DataAnalysis } from '@element-plus/icons-vue'
@@ -200,10 +201,7 @@ const newsFilter = ref('')
 const collecting = ref(false)
 const analyzing = ref(false)
 
-function formatDate(d: string) {
-  if (!d) return '-'
-  return d.split('T')[0]
-}
+const formatDate = (d?: string | null): string => format.formatDate(d)
 
 function sentimentLabel(label: string) {
   const map: Record<string, string> = {

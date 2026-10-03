@@ -168,6 +168,7 @@ import { useDataPackageStore } from '@/stores/dataPackage'
 import { useOrganizationStore } from '@/stores/organization'
 import type { DataPackage, DataPackagePreviewData } from '@/types/organization'
 
+import { format } from '@/utils'
 const packageStore = useDataPackageStore()
 const orgStore = useOrganizationStore()
 
@@ -255,10 +256,7 @@ function formatFileSize(bytes?: number): string {
   return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
 }
 
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
+const formatDate = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr)
 
 async function handlePreview(pkg: DataPackage) {
   try {

@@ -415,13 +415,18 @@ describe('AuditManagement.vue', () => {
   })
 
   // fmtTime 真侧（branch@227）：模板里三处列都传 row.timestamp，而列桩样本无该字段，
-  // 因此只覆盖了 t 为 undefined 的假侧；此处补齐有值侧的替换与截断语义。
-  it('fmtTime：ISO 时间 → 空格分隔并截到秒；空值/undefined → 空串', async () => {
+  // 因此只覆盖了 t 为 undefined 的假侧；此处补齐有值侧。
+  // 2026-10-03 起统一走 @/utils 的 formatDateTimeFull（本地时区渲染），
+  // 不再做"把 T 换成空格再截断"的字符串切片。
+  it('fmtTime：ISO 时间 → 本地时区格式化；空值/undefined → 空串', async () => {
     const w = await mountComp()
     const vm = w.vm as any
+    // 无时区标记的串按本地时间解析 → 原样呈现
     expect(vm.fmtTime('2026-08-29T04:59:54')).toBe('2026-08-29 04:59:54')
+    // 带小数秒 → 截到秒
     expect(vm.fmtTime('2026-08-29T04:59:54.123456')).toBe('2026-08-29 04:59:54')
-    expect(vm.fmtTime('2026-08-29')).toBe('2026-08-29')
+    // 仅日期串按规范视为 UTC 零点 → 本地（UTC+8）显示 08:00:00
+    expect(vm.fmtTime('2026-08-29')).toBe('2026-08-29 08:00:00')
     expect(vm.fmtTime('')).toBe('')
     expect(vm.fmtTime(undefined)).toBe('')
   })

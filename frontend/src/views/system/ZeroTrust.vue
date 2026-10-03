@@ -411,6 +411,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { format } from '@/utils'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Check } from '@element-plus/icons-vue'
@@ -681,19 +682,7 @@ async function loadEvents() {
 
 // ==================== 工具函数 ====================
 
-function formatDateTime(dateStr: string): string {
-  if (!dateStr) return '-'
-  try {
-    const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return dateStr
-    const pad = (n: number) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-    /* c8 ignore start */
-  } catch {
-    return dateStr
-  }
-  /* c8 ignore stop */
-}
+const formatDateTime = (dateStr?: string | null): string => format.formatDateTimeFull(dateStr, '-')
 
 // ==================== 初始化 ====================
 

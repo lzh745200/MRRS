@@ -223,6 +223,7 @@ import {
 import { get, del } from '@/api/request'
 import { schoolApi } from '@/api/schools'
 
+import { format } from '@/utils'
 const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
 const route = useRoute()
@@ -309,10 +310,7 @@ const getStatusTagType = (status: string) => {
   return 'info'
 }
 
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '-'
-  return dateStr.split('T')[0]
-}
+const formatDate = (dateStr?: string | null): string => format.formatDate(dateStr)
 
 const loadAttachments = async () => {
   const id = route.params.id

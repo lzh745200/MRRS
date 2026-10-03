@@ -111,6 +111,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { updateLogsApi, type UpdateLog } from '@/api/updateLogs'
 import { useAuthStore } from '@/stores/auth'
 
+import { format } from '@/utils'
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.isAdmin)
 
@@ -197,21 +198,7 @@ async function handleDelete(log: UpdateLog) {
   }
 }
 
-function formatDate(dateStr: string) {
-  if (!dateStr) return '-'
-  try {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-    /* c8 ignore start */
-  } catch {
-    return dateStr.slice(0, 10)
-  }
-  /* c8 ignore stop */
-}
+const formatDate = (dateStr?: string | null): string => format.formatLocalDate2Digit(dateStr)
 
 onMounted(() => {
   refreshData()

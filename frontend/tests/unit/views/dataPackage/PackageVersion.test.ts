@@ -404,6 +404,7 @@ describe('辅助函数', () => {
     // 无该类型字段 → length || 0
     expect(vm.getChangeCount({ villages: {} } as any, 'added')).toBe(0)
     expect(vm.formatTime('2024-01-01')).toBe('FT:2024-01-01')
+    // 空值统一传 '' 给统一入口（真实现下 '' 与 undefined 都走兜底，行为一致）
     expect(vm.formatTime(undefined as any)).toBe('FT:')
     wrapper.unmount()
   })

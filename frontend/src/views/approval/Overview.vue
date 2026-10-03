@@ -107,6 +107,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getOverview, getPendingTasks, batchApprove } from '@/api/approval'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 
+import { format } from '@/utils'
 const { pushSafe } = useRouterSafe()
 
 const loading = ref(false)
@@ -135,14 +136,7 @@ function typeLabel(t?: string) {
   return TYPE_LABELS[t || 'other'] || t || '其他'
 }
 
-function formatDate(v?: string) {
-  if (!v) return '-'
-  try {
-    return new Date(v).toLocaleString('zh-CN')
-  } catch {
-    return String(v)
-  }
-}
+const formatDate = (v?: string | null): string => format.formatDateTimeLocale(v)
 
 async function loadOverview() {
   try {

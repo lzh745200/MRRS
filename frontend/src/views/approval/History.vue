@@ -170,6 +170,7 @@ import { DIALOG_LG } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
+import { format } from '@/utils'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search, View } from '@element-plus/icons-vue'
 import {
@@ -312,10 +313,7 @@ function handleViewEntity(task: any) {
 /**
  * 格式化日期时间
  */
-function formatDateTime(dateStr: string): string {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
+const formatDateTime = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr)
 
 // ==================== 生命周期 ====================
 

@@ -75,6 +75,19 @@ const TARGETS = [
     },
   },
   {
+    name: ".env.example (PROJECT_VERSION)",
+    // 2026-10-03 补入：此前本文件不在同步目标内，导致长期漂移到 1.12.5
+    // （旧脚本 sync_version.py 覆盖 .env*，新工具漏了，两边口径不一致）。
+    file: ".env.example",
+    describe(c) {
+      const m = c.match(/^PROJECT_VERSION=(\S+)$/m);
+      return m ? m[1] : null;
+    },
+    apply(c, v) {
+      return c.replace(/^PROJECT_VERSION=\S+$/m, `PROJECT_VERSION=${v}`);
+    },
+  },
+  {
     name: "backend/version.txt",
     file: "backend/version.txt",
     optional: true,

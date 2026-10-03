@@ -446,7 +446,9 @@ describe('计算属性与残留清理', () => {
     await nextTick()
     const text = wrapper.text()
     expect(text).not.toContain('第') // rank null → '-'
-    expect(text).toContain('not-a-date') // 非法日期原样输出
+    // 2026-10-03 收敛到 @/utils format：非法日期统一兜底 '-'
+    expect(text).toContain('-')
+    expect(text).not.toContain('not-a-date')
     expect(vm.indicatorItems).toEqual([])
   })
 

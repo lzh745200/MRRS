@@ -276,6 +276,7 @@ import { getOrganizationTree } from '@/api/organization'
 import { copyToClipboard } from '@/utils/clipboard'
 import type { OrganizationTreeNode } from '@/types/organization'
 
+import { format } from '@/utils'
 // 表单引用
 const generateFormRef = ref<FormInstance>()
 const machineFormRef = ref<FormInstance>()
@@ -537,18 +538,8 @@ const handleExport = async () => {
 }
 
 // 格式化日期时间
-const formatDateTime = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-}
+const formatDateTime = (dateStr?: string | null): string =>
+  format.formatLocalDateTime2Digit(dateStr)
 
 // 初始化
 onMounted(() => {

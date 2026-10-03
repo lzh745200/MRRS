@@ -121,7 +121,8 @@ describe('ReminderCenter.vue（提醒中心）', () => {
     const vm = w.vm as any
     expect(vm.formatTime(null)).toBe('')
     expect(vm.formatTime(undefined)).toBe('')
-    expect(vm.formatTime('not-a-date')).toBe('not-a-date')
+    // 2026-10-03 收敛：非法值统一走空串兜底（不再回显原串）
+    expect(vm.formatTime('not-a-date')).toBe('')
     w.unmount()
   })
 

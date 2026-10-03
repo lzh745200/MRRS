@@ -152,6 +152,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import { logger } from '@/utils/logger'
+import { format } from '@/utils'
 import {
   exportData,
   exportEncryptedData,
@@ -316,9 +317,7 @@ const formatSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
 }
 
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
+const formatDate = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr)
 
 onMounted(() => {
   loadExportHistory()

@@ -55,6 +55,7 @@ import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import { Plus, TrendCharts, Upload, MoreFilled, Grid } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { post } from '@/api/request'
+import { format } from '@/utils'
 import GlobalSearch from './components/GlobalSearch.vue'
 
 const emit = defineEmits<{
@@ -74,11 +75,7 @@ const isAdmin = computed(
   () => ADMIN_ROLES.includes(normalizeRole(authStore.user?.role)) || authStore.user?.is_superuser
 )
 
-const formattedDate = computed(() => {
-  const now = new Date()
-  const weekDays = ['日', '一', '二', '三', '四', '五', '六']
-  return `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 周${weekDays[now.getDay()]}`
-})
+const formattedDate = computed(() => format.formatCnDate(new Date()))
 
 async function handleBackup() {
   backingUp.value = true

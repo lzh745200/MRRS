@@ -175,6 +175,7 @@ import { useDesensitize } from '@/composables/useDesensitize'
 import { ElMessage } from 'element-plus'
 import { getOrganizationDetail, getOrganizationMembers } from '@/api/organization'
 
+import { format } from '@/utils'
 const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
 const route = useRoute()
@@ -210,10 +211,7 @@ const memberTotal = ref(0)
 const memberPage = ref(1)
 const memberPageSize = ref(10)
 
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '无'
-  return dateStr.split('T')[0]
-}
+const formatDate = (dateStr?: string | null): string => format.formatDate(dateStr, '无')
 
 const formatLevel = (level: any): string => {
   if (!level) return '未设置'

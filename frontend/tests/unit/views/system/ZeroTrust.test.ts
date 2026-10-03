@@ -703,7 +703,8 @@ describe('ZeroTrust.vue', () => {
     expect(vm.getSeverityTagType('other')).toBe('info')
     expect(vm.formatDateTime('')).toBe('-')
     expect(vm.formatDateTime('2024-01-01T10:00:00Z')).toContain('2024-01-01')
-    expect(vm.formatDateTime('not-a-date')).toBe('not-a-date')
+    // 2026-10-03 收敛：非法值统一走兜底（不再回显原串）
+    expect(vm.formatDateTime('not-a-date')).toBe('-')
   })
 
   it('评分颜色分支：低分/中分', async () => {

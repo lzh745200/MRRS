@@ -103,6 +103,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getMyTasks, formatEntityType, type ApprovalTask } from '@/api/approval'
 import { post } from '@/api/request'
 
+import { format } from '@/utils'
 const loading = ref(false)
 const applications = ref<ApprovalTask[]>([])
 const filters = reactive({ status: '', dateRange: null as any })
@@ -135,7 +136,7 @@ const statusTagType = (
       withdrawn: 'info',
     }) as Record<string, 'success' | 'warning' | 'danger' | 'info' | 'primary'>
   )[s] || 'info'
-const formatDate = (d: string) => (d ? new Date(d).toLocaleString('zh-CN') : '-')
+const formatDate = (d?: string | null): string => format.formatDateTimeLocale(d)
 
 async function loadData() {
   loading.value = true

@@ -209,6 +209,7 @@ import {
 } from '@/api/policy'
 import { downloadImportTemplateAndSave } from '@/api/import'
 
+import { format } from '@/utils'
 type OrganizationLevel = string
 
 // Wrapper: API defines getLevelLabel(level) but view calls it with (category, level)
@@ -277,11 +278,7 @@ async function refreshLevelOptions() {
 }
 
 // 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN')
-}
+const formatDate = (dateStr?: string | null): string => format.formatLocalDate(dateStr)
 
 // 分类变化时清空层级选择并异步加载层级选项
 const handleCategoryChange = () => {

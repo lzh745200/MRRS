@@ -78,6 +78,7 @@
 
 <script setup lang="ts">
 import { DIALOG_SM } from '@/config/dialog'
+import { format } from '@/utils'
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
@@ -125,12 +126,7 @@ function getEvents(date: Date): WorkEvent[] {
   return events.value.filter((e) => e.date === ds)
 }
 
-function formatDate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
+const formatDate = (d?: Date | null): string => format.formatDate(d)
 
 function selectDate(date: Date) {
   selectedDate.value = formatDate(date)

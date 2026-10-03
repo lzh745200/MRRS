@@ -169,6 +169,7 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { importData, importEncryptedData, getSyncLogs } from '@/api/dataSync'
+import { format } from '@/utils'
 import type { UploadFile } from 'element-plus'
 
 const { pushSafe } = useRouterSafe()
@@ -296,9 +297,7 @@ const loadImportHistory = async () => {
   }
 }
 
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
+const formatDate = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr)
 
 onMounted(() => {
   loadImportHistory()

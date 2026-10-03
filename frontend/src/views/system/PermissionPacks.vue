@@ -143,6 +143,7 @@ import {
 } from '@/api/permissionPack'
 import { get, apiRequest } from '@/api/request'
 
+import { format } from '@/utils'
 const packs = ref<PermissionPack[]>([])
 const loading = ref(false)
 const menuTreeData = ref<any[]>([])
@@ -345,13 +346,8 @@ async function loadMenuTree() {
   }
 }
 
-function formatDateTime(v?: string | null) {
-  if (!v) return '-'
-  const d = new Date(v)
-  if (isNaN(d.getTime())) return '-'
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
-}
+const formatDateTime = (v?: string | null): string =>
+  format.formatDateTime(v, 'YYYY-MM-DD HH:mm', '-')
 
 onMounted(() => {
   loadPacks()

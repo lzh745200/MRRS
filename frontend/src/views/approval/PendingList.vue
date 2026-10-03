@@ -483,6 +483,7 @@ function handleSizeChange() {
 }
 
 import { useRouterSafe } from '@/composables/useRouterSafe'
+import { format } from '@/utils'
 const { pushSafe } = useRouterSafe()
 
 // ... existing code ...
@@ -733,10 +734,7 @@ async function handleBatchApprove() {
 /**
  * 格式化日期时间
  */
-function formatDateTime(dateStr: string): string {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
+const formatDateTime = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr)
 
 // ==================== 生命周期 ====================
 

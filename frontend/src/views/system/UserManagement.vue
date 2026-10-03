@@ -534,6 +534,7 @@ const formData = reactive({
 
 import { normalizeTreeNodes } from '@/utils/treeNormalizer'
 
+import { format } from '@/utils'
 const orgTreeOptions = ref<any[]>([])
 
 async function loadOrgTree() {
@@ -978,14 +979,7 @@ async function handleReset2fa() {
   }
 }
 
-function formatSessionTime(time: string | null) {
-  if (!time) return '-'
-  try {
-    return new Date(time).toLocaleString('zh-CN')
-  } catch {
-    return '-'
-  }
-}
+const formatSessionTime = (time?: string | null): string => format.formatDateTimeLocale(time)
 
 // ── 权限包导入/导出 ──
 const exportingPermPackage = ref(false)

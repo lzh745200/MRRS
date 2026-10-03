@@ -100,6 +100,7 @@ import { getMonitorSnapshot, getDatabaseFileSize } from '@/api/systemMonitor'
 import type { MonitorSnapshot } from '@/api/systemMonitor'
 import { logger } from '@/utils/logger'
 
+import { format } from '@/utils'
 // =========================================================================
 // Props
 // =========================================================================
@@ -143,24 +144,7 @@ const onlineStatusText = computed(() => {
   return isOnline.value ? '在线' : '离线'
 })
 
-const formattedSyncTime = computed(() => {
-  if (!lastSyncTime.value) return '--:--'
-  const now = new Date()
-  const diff = now.getTime() - lastSyncTime.value.getTime()
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  if (hours < 24) return `${hours}小时前`
-
-  return lastSyncTime.value.toLocaleDateString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-})
+const formattedSyncTime = computed(() => format.formatRelativeTime(lastSyncTime.value))
 
 /** 人性化数据库文件大小显示 */
 const dbSizeText = computed(() => {

@@ -197,6 +197,7 @@ import { ElMessage } from 'element-plus'
 import { Plus, Edit, Delete, Loading, Calendar } from '@element-plus/icons-vue'
 import { listTodos, createTodo, updateTodo, deleteTodo, toggleTodo } from '@/api/todos'
 
+import { format } from '@/utils'
 const addForm = reactive({
   title: '',
   priority: 'medium' as string,
@@ -238,7 +239,7 @@ const priorityLabel = (p: string) => {
   return '低'
 }
 
-const formatDate = (d: string) => (d ? d.split('T')[0] : '-')
+const formatDate = (d?: string | null): string => format.formatDate(d)
 
 function isOverdue(todo: { deadline?: string; completed?: boolean }) {
   if (!todo.deadline || todo.completed) return false

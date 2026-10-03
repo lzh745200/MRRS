@@ -303,8 +303,9 @@ describe('UpdateLogs.vue', () => {
     const vm = w.vm as any
     expect(vm.formatDate('')).toBe('-')
     expect(vm.formatDate('2024-01-01T10:00:00Z')).toContain('2024')
-    // jsdom 中 Invalid Date 的 toLocaleDateString 返回 'Invalid Date'（不抛异常）
-    expect(vm.formatDate('not-a-date')).toBe('Invalid Date')
+    // 2026-10-03 收敛到 @/utils format：非法值统一兜底 '-'
+    // （旧实现直连 toLocaleDateString，jsdom 下会渲染出英文 'Invalid Date'）
+    expect(vm.formatDate('not-a-date')).toBe('-')
   })
 
   it('空列表 → 空状态展示', async () => {

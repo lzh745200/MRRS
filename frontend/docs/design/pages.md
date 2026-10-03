@@ -9,12 +9,12 @@
 | **T1 列表页** | PageHeader(题+副题+唯一主钮) → 筛选工具条(inline) → 卡片包裹 Table → 分页右下 | funds/EnhancedList、schools/List、policies/List 等 77 张表页 |
 | **T2 详情页** | 头卡(descriptions 关键字段+状态 tag+操作排) → Tabs 分区（每 Tab 内 2-3 卡片） | funds/Detail、projects/Detail、supported-villages/Detail |
 | **T3 表单页** | section 分组卡 → label 100/120 → 控件宽 {full,360,240} → sticky 底部操作条 | 各 Edit.vue ×14 |
-| **T4 仪表盘** | KpiRow(KpiCard×4) → ChartCard 双列栅格 → 快捷入口 | dashboard/index、analytics/* |
+| **T4 仪表盘** | KPI 行（`views/dashboard/KpiCards.vue`，内部用 `components/common/StatsCard.vue`）→ ChartRow 双列栅格 → 快捷入口 | dashboard/index、analytics/* |
 | **T5 弹窗流** | sm 表单/确认 · md 双列/详情 · lg 内嵌表格；底部 [取消][主钮] 右对齐 | 全部弹窗 |
 
 ## Top20 高频页精修清单（P3 批次）
 
-1. dashboard/index — KpiRow 换 KpiCard、ChartRow 空态
+1. dashboard/index — KPI 行统一用 `KpiCards.vue`（内部 `StatsCard`）、ChartRow 空态
 2. funds/EnhancedList — PageHeader 化、stripe 规则、dialog 常量
 3. funds/Detail — T2 头卡、steps 上移
 4. projects/List、projects/Detail

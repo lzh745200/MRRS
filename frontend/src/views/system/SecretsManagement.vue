@@ -144,6 +144,7 @@ import { Refresh, Key, Warning, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { secretsApi, type KeyVersion, type SecretsStatus } from '@/api/secrets'
 
+import { format } from '@/utils'
 /**
  * el-table 作用域插槽回传的行类型（表格边界）。
  *
@@ -330,10 +331,8 @@ async function handleCleanup() {
 
 // ==================== 工具函数 ====================
 
-function formatTime(ts?: number): string {
-  if (!ts) return '-'
-  return new Date(Number(ts) * 1000).toLocaleString('zh-CN')
-}
+const formatTime = (ts?: number | null): string =>
+  format.formatDateTimeLocale(ts ? Number(ts) * 1000 : null)
 
 function getStatusType(row: VersionRow): 'success' | 'warning' | 'danger' | 'info' {
   if (row.is_active) return 'success'

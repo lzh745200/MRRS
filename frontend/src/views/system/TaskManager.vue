@@ -271,6 +271,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, VideoPause, Delete, Plus, Search } from '@element-plus/icons-vue'
 import { tasksApi, type TaskInfo, type TaskStats, type RunningTaskCount } from '@/api/tasks'
 
+import { format } from '@/utils'
 // ==================== 响应式状态 ====================
 
 const loading = ref(false)
@@ -549,23 +550,8 @@ function statusLabel(status: string) {
   return map[status] || status
 }
 
-function formatDateTime(dateStr: string) {
-  if (!dateStr) return '--'
-  try {
-    const date = new Date(dateStr)
-    if (isNaN(date.getTime())) return dateStr
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    })
-  } catch {
-    return dateStr
-  }
-}
+const formatDateTime = (dateStr?: string | null): string =>
+  format.formatLocalDateTime2Digit(dateStr, '--')
 
 // ==================== 生命周期 ====================
 

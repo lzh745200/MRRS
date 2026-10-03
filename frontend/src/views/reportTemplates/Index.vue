@@ -475,6 +475,7 @@ import {
 import type { FormInstance, FormRules } from 'element-plus'
 import { get, post, put, del, apiRequest } from '@/api/request'
 
+import { format } from '@/utils'
 interface Template {
   id: number
   name: string
@@ -617,10 +618,7 @@ const moduleLabel = (m: string) =>
     comprehensive: '综合报表',
   })[m] || m
 
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '-'
-  return dateStr.slice(0, 10)
-}
+const formatDate = (dateStr?: string | null): string => format.formatDate(dateStr)
 
 const parseFields = (fields?: string): string[] => {
   if (!fields) return []

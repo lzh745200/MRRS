@@ -152,6 +152,7 @@ import { FirstAidKit, Timer, Download, Loading } from '@element-plus/icons-vue'
 import { get } from '@/api/request'
 import { chartColor } from '@/utils/chartColors'
 
+import { format } from '@/utils'
 // ── 类型定义 ──
 
 type CheckStatus = 'pending' | 'running' | 'success' | 'warning' | 'error'
@@ -272,19 +273,9 @@ function pad(n: number): string {
   return n.toString().padStart(2, '0')
 }
 
-function formatDateTime(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
+const formatDateTime = (d?: Date | null): string => format.formatDateTimeFull(d)
 
-function formatUptime(sec?: number): string {
-  if (!sec || sec <= 0) return '未知'
-  const days = Math.floor(sec / 86400)
-  const hours = Math.floor((sec % 86400) / 3600)
-  const mins = Math.floor((sec % 3600) / 60)
-  if (days > 0) return `${days} 天 ${hours} 小时`
-  if (hours > 0) return `${hours} 小时 ${mins} 分钟`
-  return `${mins} 分钟`
-}
+const formatUptime = (sec?: number): string => format.formatDuration(sec, '未知')
 
 /**
  * 统一解包后端响应。

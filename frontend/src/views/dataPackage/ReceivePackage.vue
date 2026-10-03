@@ -391,6 +391,7 @@ import type { DataReport, DataPackagePreviewData } from '@/types/organization'
 import { get, post } from '@/api/request'
 import { downloadDataPackage, previewDataPackage } from '@/api/dataPackage'
 
+import { format } from '@/utils'
 const reportStore = useDataReportStore()
 const orgStore = useOrganizationStore()
 const authStore = useAuthStore()
@@ -528,10 +529,7 @@ function parseDataTypes(types: string | string[]): string[] {
   }
 }
 
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
+const formatDate = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr)
 
 // ========== 接收记录（仅管理员） ==========
 const receivedLoading = ref(false)

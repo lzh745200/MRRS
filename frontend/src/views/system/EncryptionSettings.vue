@@ -137,6 +137,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { get, post } from '@/api/request'
 
+import { format } from '@/utils'
 const encryptionStatus = ref({
   enabled: false,
   algorithm: '',
@@ -332,10 +333,7 @@ const handleDisable = async () => {
   }
 }
 
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return 'N/A'
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
+const formatDate = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr, 'N/A')
 
 onMounted(() => {
   loadStatus()

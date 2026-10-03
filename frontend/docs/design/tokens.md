@@ -52,16 +52,18 @@
 | md 720 | `--dialog-md` | `DIALOG_MD` | 双列表单、详情 |
 | lg 960 | `--dialog-lg` | `DIALOG_LG` | 复杂表单+内嵌表格（需注释豁免） |
 
-## 6. 密度（紧凑档 formalize）
+## 6. 密度（UI v2.1 舒适档）
 
 | 变量 | 值 | 说明 |
 |---|---|---|
-| `--table-row-height` | 36px | 紧凑表格行高 |
-| `--control-height` | 32px | 控件高度（= el size small） |
+| `--table-row-height` | 44px | 舒适表格行高（v2.1 密度升级前为 36px） |
+| `--control-height` | 40px | 默认控件高度（= el `size="large"` 实际值） |
+| `--control-height-sm` | 32px | 紧凑控件高度（原默认档降级为 `sm`） |
+| `--control-height-lg` | 48px | 大号控件高度（登录页等主行动作） |
 | `--form-label-width` | 100px | 标签宽第一档；长标签表单用 120 |
 
-全局 `size="small"` 已在 App.vue `el-config-provider` 固化；
-新代码不要再逐个写 `size="small"`（显式覆盖除外）。
+全局 `size="large"` 已在 `App.vue` 的 `el-config-provider` 固化（见该文件顶部注释「UI v2.1 舒适档」）；
+新代码不要再逐个写 `size="large"`（需紧凑/大号时显式用 `size="small"` / `size="large"` 覆盖）。
 
 ## 7. 布局壳
 

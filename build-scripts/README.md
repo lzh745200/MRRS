@@ -15,7 +15,7 @@ electron-builder (package.json build 段)
   ├─ extraResources: frontend/dist         → resources/frontend/
   ├─ extraResources: resources/vcredist    → resources/vcredist/
   ├─ NSIS target (内置) + electron-builder-nsis-hook.nsh 钩子
-  └─ dist/electron/帮扶管理系统-Setup-<version>.exe  (~250MB)
+  └─ dist/electron/MRRS-Setup-<version>-x64.exe  (~234MB)
 ```
 
 ### 关键文件
@@ -23,8 +23,9 @@ electron-builder (package.json build 段)
 | 文件 | 用途 |
 |------|------|
 | `electron-builder-nsis-hook.nsh` | electron-builder NSIS 钩子：VC++ SHA256 校验 + 静默安装 + 进程终止 + 卸载数据清理；同时是 URL/SHA256 钉扎常量的单一事实源 |
-| `../scripts/build/fetch_vcredist.ps1` | 从官方 URL 下载 vc_redist 并按钉扎 SHA256 校验（CI 与本地构建共用） |
-| `build-config.json` | 构建元数据（架构、入口、版本等） |
+
+> ⚠️ 本目录**只有上述两个文件**。早期版本文档提到的 `build-config.json`、`build_deployment_packages.py`、
+> `build_nuitka_arm64.py` 在本目录并不存在；ARM64 的构建入口已统一为 `docker/Dockerfile.*` + `make build-kylin-arm64`。
 
 ### 本地构建步骤
 
@@ -52,7 +53,8 @@ npx electron-builder --win --x64    # 64 位安装包（主力）
 
 ### 产物位置
 
-- 安装包：`dist/electron/帮扶管理系统 Setup <version>-x64.exe`（~280MB）
+- 安装包：`dist/electron/MRRS-Setup-<version>-x64.exe`（约 234MB；产物名由 `package.json` 的
+  `build.artifactName` 决定，值为 `MRRS-Setup-${version}-${arch}.${ext}`）
 - 后端 exe：`backend/dist/assistance-backend/assistance-backend.exe`（onedir 布局，W6-T6）
 - 预置数据库：`resources/database/rural_revitalization.db`（打包进安装包，首次运行复制到用户目录）
 
@@ -82,8 +84,10 @@ URL/SHA256 常量唯一维护点：`electron-builder-nsis-hook.nsh` 文件头 `!
 
 ## CI/CD
 
-GitHub Actions 工作流 `.github/workflows/build-windows.yml` 自动构建 x64 + x86
-双架构安装包，tag（`v*`）触发时自动发布 GitHub Release。
+GitHub Actions 工作流 `.github/workflows/build-windows.yml` 在 tag（`v*`）触发时构建
+**Windows x64** 安装包并自动发布 GitHub Release；麒麟（国产 Linux）ARM64 的 `.deb` 包
+由另一条工作流 `.github/workflows/build-arm64.yml` 构建并发布到**同一个** Release。
+**32 位（x86）已放弃**（上游科学计算包不再提供 win32 cp311 wheels），CI 仅出 x64。
 
 ## electron-builder 打包方案说明
 
