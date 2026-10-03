@@ -605,6 +605,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Upload, Download, ArrowDown, Document } from '@element-plus/icons-vue'
 import { getRuralWorks, createRuralWork, updateRuralWork, deleteRuralWork } from '@/api/ruralWork'
 import { logger } from '@/utils/logger'
+import { format } from '@/utils'
 // 为 FormRules 定义类型
 type FormRules = Record<string, any[]>
 
@@ -1408,6 +1409,11 @@ const getDeadlineClass = (task: Task) => {
   if (task.status === 'completed' || task.status === 'cancelled') {
     return 'deadline-normal'
   }
+  // 无截止日期：不参与临期/超期着色。否则 new Date('') 得到 Invalid Date，
+  // daysLeft 变 NaN，所有比较都为 false，会被静默判成「正常」而掩盖缺数据。
+  if (!task.deadline) {
+    return 'deadline-normal'
+  }
 
   const now = new Date()
   const deadline = new Date(task.deadline)
@@ -1427,22 +1433,19 @@ const isOverdue = (task: Task) => {
     return false
   }
 
+  if (!task.deadline) {
+    return false // Invalid Date 参与比较恒为 false，显式返回以免误导
+  }
+
   const now = new Date()
   const deadline = new Date(task.deadline)
   return now > deadline
 }
 
-const formatDate = (dateString: string) => {
-  if (!dateString) return ''
-  const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN')
-}
+const formatDate = (dateString?: string | null): string => format.formatLocalDate(dateString, '')
 
-const formatDateTime = (dateTimeString: string) => {
-  if (!dateTimeString) return ''
-  const date = new Date(dateTimeString)
-  return date.toLocaleString('zh-CN')
-}
+const formatDateTime = (dateTimeString?: string | null): string =>
+  format.formatDateTimeLocale(dateTimeString, '')
 </script>
 
 <style lang="scss" scoped>

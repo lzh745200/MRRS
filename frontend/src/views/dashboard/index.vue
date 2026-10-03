@@ -211,6 +211,8 @@ onMounted(loadLayout)
 // ── KPI 数据自动刷新（每 60 秒）+ 手动刷新 ──
 const kpiRefreshKey = ref(0)
 let kpiRefreshTimer: ReturnType<typeof setInterval> | null = null
+// 「已保存」提示的复位定时器：卸载时一并清理，避免销毁后仍写 ref
+let layoutSavedTimer: ReturnType<typeof setTimeout> | undefined
 
 function refreshKpiData() {
   // 页签隐藏时不刷新，避免无效请求
@@ -228,6 +230,7 @@ onUnmounted(() => {
     clearInterval(kpiRefreshTimer)
     kpiRefreshTimer = null
   }
+  clearTimeout(layoutSavedTimer) // undefined 为安全空操作
 })
 
 // 拖拽排序
@@ -307,7 +310,7 @@ function applyPreset(val: string) {
   }
   saveLayout()
   layoutSaved.value = true
-  setTimeout(() => (layoutSaved.value = false), 2000)
+  layoutSavedTimer = setTimeout(() => (layoutSaved.value = false), 2000)
 }
 
 async function handleBackup() {

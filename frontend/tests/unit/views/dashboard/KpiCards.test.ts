@@ -145,7 +145,9 @@ describe('KpiCards.vue', () => {
 
     expect(vm.fmt(1234)).toBe('1,234')
     expect(vm.fmt(undefined)).toBe('--')
-    expect(vm.fmtFunds(8900000)).toBe('890')
+    // total_funds 本就是「万元」（SUM(Fund.amount)），不再除 10000
+    expect(vm.fmtFunds(8900000)).toBe('8,900,000')
+    expect(vm.fmtFunds(1234.567)).toBe('1,234.57')
     expect(vm.fmtFunds(undefined)).toBe('--')
     expect(vm.fmtPop(undefined)).toBe('--')
     expect(vm.fmtPop(9999)).toBe('9,999')

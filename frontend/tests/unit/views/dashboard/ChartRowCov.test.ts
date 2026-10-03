@@ -110,6 +110,18 @@ describe('ChartRow 数据形状', () => {
     wrapper.unmount()
   })
 
+  it('funds_allocated 合法为 0 时不得回退到 total_funds（防已拨付虚增）', async () => {
+    mockApiRequest.mockResolvedValue({ data: { items: [] } })
+    // 全部未拨付：funds_allocated=0 且有 total_funds —— 旧实现用 || 会误取 total_funds
+    mockGet.mockResolvedValue({ funds_allocated: 0, total_funds: 5000, funds_pending: 20 })
+    const wrapper = mountChart()
+    await flushPromises()
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.funds).toEqual({ allocated: 0, pending: 20, planned: 0 })
+    wrapper.unmount()
+  })
+
   it('项目字段全缺：name/project_name 均无 → 空串；progress/completion_rate 均无 → 0', async () => {
     mockApiRequest.mockResolvedValue({
       data: { items: [{ id: 1 }, { name: '有名字', progress: 40 }] },

@@ -159,5 +159,8 @@ export async function previewExport(data: Record<string, any>): Promise<any> {
  * 获取下载URL
  */
 export function getDownloadUrl(id: number): string {
-  return `${import.meta.env.VITE_API_BASE_URL || ''}/api/v1${BASE_URL}/${id}/download`
+  // 与 request.ts / projects.ts 保持同一前缀约定：VITE_API_BASE_URL 缺省为 '/api/v1'。
+  // 旧实现写死 `'' + /api/v1`，一旦 VITE_API_BASE_URL 配了含 /api/v1 的值就会
+  // 拼出 /api/v1/api/v1/... 导致下载 404。
+  return `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}${BASE_URL}/${id}/download`
 }

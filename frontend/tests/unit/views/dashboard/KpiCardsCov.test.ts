@@ -131,7 +131,7 @@ describe('KpiCards 补充覆盖', () => {
     expect(vm.fmtPop(undefined)).toBe('--')
     expect(vm.fmtPop(12345)).toBe('1.2万')
     expect(vm.fmtPop(9999)).toBe('9,999')
-    expect(vm.fmtFunds(50000)).toBe('5')
+    expect(vm.fmtFunds(50000)).toBe('50,000')
     wrapper.unmount()
   })
 

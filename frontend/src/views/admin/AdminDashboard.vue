@@ -278,22 +278,35 @@ function formatSize(bytes: number): string {
 async function loadAdminData() {
   try {
     const res: any = await get('/dashboard/stats')
-    // 后端返回 {code, data:{total_users,total_villages,total_projects,total_funds,...}, message}
-    // 无数据时返回 null
+    // /dashboard/stats 实际返回（backend/app/api/v1/data/data/dashboard.py）：
+    //   total_users / total_villages / total_projects / total_schools / total_population /
+    //   total_funds(万元) / funds_allocated / funds_pending / funds_planned /
+    //   data_completeness / pending_approvals / projects_by_status / trends
+    // 无数据时返回 null。
+    // ⚠️ system_status / recent_logins / audit_logs / pending_items / storage
+    // **不在该响应中**，故本页对应面板恒为空（待接入真实端点，见下方说明）。
     const data = res?.data ?? res ?? {}
 
     adminStats.value[0].value = Number(data.total_users) || 0
     // 今日活跃后端未提供 → 用覆盖人口展示（卡片文案保持不变会误导，改用有数据支撑的字段）
     adminStats.value[1].value = Number(data.total_population) || 0
+    // 「数据记录」只累加**记录条数**（村/项目/学校）。此前把 total_funds 也加进来，
+    // 而 total_funds = SUM(Fund.amount)，单位是万元，与条数混加属量纲错误。
     adminStats.value[2].value =
       Number(data.total_villages || 0) +
       Number(data.total_projects || 0) +
-      Number(data.total_funds || 0) +
       Number(data.total_schools || 0)
     if (data.total_villages !== undefined) {
       adminStats.value[3].value = `${data.total_villages} 村 / ${data.total_projects ?? 0} 项目`
     }
 
+    // ⚠️ 以下五个字段 /dashboard/stats 从未返回（后端无此键），面板因此恒为空。
+    // 已核实的可用真实来源（尚未接入，属功能待补，非运行时错误）：
+    //   系统状态 ← GET /system-health/overview（checks: {db,disk,db_file,wal}）
+    //   存储     ← GET /system-health/disk-space（total_gb/free_gb/used_percent）
+    //   审计日志 ← GET /audit/logs?page_size=5（items[]）
+    //   最近登录 ← GET /audit/login-attempts?page_size=5（items[]）
+    //   待处理   ← GET /approval/tasks/pending（items[]）
     if (data.system_status && Array.isArray(data.system_status)) {
       systemStatus.value = data.system_status
     }

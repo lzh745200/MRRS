@@ -148,8 +148,8 @@ describe('数据加载', () => {
     expect(mockGet).toHaveBeenCalledWith('/dashboard/stats')
     expect(vm.adminStats[0].value).toBe(42)
     expect(vm.adminStats[1].value).toBe(7)
-    // 数据记录 = 帮扶村100 + 项目400 + 经费500 + 学校24
-    expect(vm.adminStats[2].value).toBe(1024)
+    // 数据记录 = 帮扶村100 + 项目400 + 学校24（total_funds 单位是万元，不得混入条数）
+    expect(vm.adminStats[2].value).toBe(524)
     expect(vm.adminStats[3].value).toBe('100 村 / 400 项目')
     expect(vm.systemStatus).toHaveLength(2)
     expect(vm.recentLogins).toHaveLength(2)

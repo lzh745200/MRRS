@@ -46,16 +46,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { EditPen, Close } from '@element-plus/icons-vue'
 import { put, del, apiRequest } from '@/api/request'
 import { logger } from '@/utils/logger'
 
+import { format } from '@/utils'
 const activities = ref<any[]>([])
 const loading = ref(true)
 const error = ref(false)
 const retried = ref(false)
+// 失败自动重试的定时器句柄：卸载时必须清理，否则销毁后仍会触发一次 loadActivities
+let retryTimer: ReturnType<typeof setTimeout> | undefined
 const editingId = ref<string | null>(null)
 const editForm = ref({ action: '', target: '' })
 
@@ -87,12 +90,7 @@ async function deleteActivity(id: string) {
   }
 }
 
-function formatTime(t: string): string {
-  if (!t) return ''
-  const d = new Date(t)
-  if (isNaN(d.getTime())) return t.slice(0, 10)
-  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
-}
+const formatTime = (t?: string | null): string => format.formatShortDateTime(t)
 
 async function loadActivities() {
   loading.value = true
@@ -112,7 +110,7 @@ async function loadActivities() {
     // 后端可能仍在冷启动: 2 秒后自动重试一次,避免首次打开即报错
     if (!retried.value) {
       retried.value = true
-      setTimeout(() => {
+      retryTimer = setTimeout(() => {
         if (error.value) loadActivities()
       }, 2000)
     }
@@ -123,6 +121,10 @@ async function loadActivities() {
 
 onMounted(() => {
   loadActivities()
+})
+
+onUnmounted(() => {
+  clearTimeout(retryTimer) // undefined 为安全空操作，无需分支
 })
 </script>
 

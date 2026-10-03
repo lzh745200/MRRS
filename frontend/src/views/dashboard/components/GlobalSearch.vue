@@ -152,21 +152,37 @@ function onInput() {
   debounceTimer = setTimeout(() => doSearch(q), 300)
 }
 
+// 请求序号：300ms 防抖只降频、不保证响应顺序。慢请求后返回时会覆盖新结果，
+// 因此只为「最后一次发起的搜索」写回数据。
+let searchSeq = 0
+
 async function doSearch(q: string) {
+  const seq = ++searchSeq
   loading.value = true
   activeIndex.value = -1
+  let ok = true
+  let items: SearchItem[] = []
+  let count = 0
   try {
     const res = await globalSearch(q, 20)
-    results.value = res.items
-    total.value = res.total
+    items = res.items
+    count = res.total
+  } catch {
+    ok = false
+  }
+  if (seq !== searchSeq) {
+    return // 过期响应：期间已发出更新的搜索，丢弃本次结果（loading 交由新请求收尾）
+  }
+  if (ok) {
+    results.value = items
+    total.value = count
     trimmedKeyword.value = q
     showNoResult.value = true
-  } catch {
+  } else {
     results.value = []
     total.value = 0
-  } finally {
-    loading.value = false
   }
+  loading.value = false
 }
 
 function onFocus() {

@@ -1288,11 +1288,14 @@ describe('辅助函数', () => {
     expect(vm.getDeadlineClass({ status: 'pending', deadline: '2099-12-31' })).toBe(
       'deadline-normal'
     )
+    // 无截止日期：不得因 Invalid Date → NaN 而被静默判为正常/超期
+    expect(vm.getDeadlineClass({ status: 'pending', deadline: '' })).toBe('deadline-normal')
 
     expect(vm.isOverdue({ status: 'completed', deadline: '2020-01-01' })).toBe(false)
     expect(vm.isOverdue({ status: 'cancelled', deadline: '2020-01-01' })).toBe(false)
     expect(vm.isOverdue({ status: 'pending', deadline: '2020-01-01' })).toBe(true)
     expect(vm.isOverdue({ status: 'pending', deadline: '2099-12-31' })).toBe(false)
+    expect(vm.isOverdue({ status: 'pending', deadline: '' })).toBe(false)
   })
 
   it('formatDate / formatDateTime 空值与正常值', async () => {

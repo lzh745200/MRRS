@@ -145,6 +145,41 @@ describe('输入与防抖', () => {
     expect(mockGlobalSearch).toHaveBeenCalledWith('甲乙丙', 20)
     wrapper.unmount()
   })
+
+  it('乱序响应：过期请求不得覆盖最新结果', async () => {
+    // 按“关键词”而不是“调用先后”索引挂起的 Promise：
+    // mockImplementationOnce 队列把「哪个 Promise 属于哪次请求」押在调用顺序上，任何一次
+    // 多余/缺失的调用（防抖窗口、环境复用下的时序差异）都会让两个 resolver 互换或错位，
+    // 使断言以“旧结果覆盖新结果”的假象失败，而组件其实是对的。按关键词索引后，
+    // 无论调用顺序如何，测试都能精确控制「新请求先返回、旧请求后返回」。
+    const pending = new Map<string, (v: any) => void>()
+    mockGlobalSearch.mockReset() // 清掉前序用例遗留的持久实现，避免干扰（clearAllMocks 不还原实现）
+    mockGlobalSearch.mockImplementation(
+      (q: string) => new Promise((resolve) => pending.set(q, resolve))
+    )
+
+    const wrapper = mountSearch()
+    await wrapper.find('input').setValue('旧词')
+    vi.advanceTimersByTime(400) // 第 1 次搜索发出（挂起）
+    await wrapper.find('input').setValue('新词')
+    vi.advanceTimersByTime(400) // 第 2 次搜索发出（挂起）
+    expect(mockGlobalSearch).toHaveBeenCalledTimes(2)
+    expect([...pending.keys()]).toEqual(['旧词', '新词'])
+
+    // 后发先至：新请求先返回
+    pending.get('新词')!({ total: 1, items: [{ id: 2, type: 'village', title: '新结果', link: '/v/2' }] })
+    await flushPromises()
+    expect((wrapper.vm as any).results[0].title).toBe('新结果')
+    expect((wrapper.vm as any).loading).toBe(false)
+
+    // 旧请求后返回 → 必须被丢弃，不得覆盖新结果
+    pending.get('旧词')!({ total: 9, items: [{ id: 1, type: 'village', title: '旧结果', link: '/v/1' }] })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.results[0].title).toBe('新结果')
+    expect(vm.total).toBe(1)
+    wrapper.unmount()
+  })
 })
 
 describe('搜索结果渲染', () => {

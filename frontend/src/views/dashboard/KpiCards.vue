@@ -120,7 +120,9 @@ function fmt(v: number | undefined): string {
   return v != null ? v.toLocaleString() : '--'
 }
 function fmtFunds(v: number | undefined): string {
-  return v != null ? (v / 10000).toFixed(0) : '--'
+  // 卡片单位为「万元」，而 total_funds = SUM(Fund.amount) 本就是万元
+  // （models/fund.py: amount 注释「申请金额(万元)」），不得再除 10000。
+  return v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '--'
 }
 function fmtPop(v: number | undefined): string {
   if (v == null) return '--'

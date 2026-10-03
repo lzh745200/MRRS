@@ -146,11 +146,12 @@ describe('InfoRow 编辑与删除', () => {
 })
 
 describe('InfoRow 格式化与状态', () => {
-  it('formatTime：空串 → 空；非法日期 → 前 10 字符；合法日期 → 格式化', () => {
+  it('formatTime：空串/非法日期 → 空；合法日期 → 格式化', () => {
     const wrapper = mountInfo()
     const vm = wrapper.vm as any
     expect(vm.formatTime('')).toBe('')
-    expect(vm.formatTime('garbage')).toBe('garbage')
+    // 2026-10-03 收敛：非法值不再截取前 10 字符回显，统一走空串兜底
+    expect(vm.formatTime('garbage')).toBe('')
     const d = new Date(2026, 5, 6, 10, 30)
     expect(vm.formatTime(d.toISOString())).toBe(`${d.getMonth() + 1}/6 10:30`)
     wrapper.unmount()

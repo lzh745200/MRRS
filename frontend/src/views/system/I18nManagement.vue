@@ -45,7 +45,7 @@
         <div class="card-header">
           <span>缺失翻译键报告</span>
           <el-tag type="danger">
-            完成率: {{ (missingReport.completion_rate * 100).toFixed(1) }}%
+            完成率: {{ Number(missingReport.completion_rate).toFixed(1) }}%
           </el-tag>
         </div>
       </template>

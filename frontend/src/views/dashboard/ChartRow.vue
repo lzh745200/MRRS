@@ -38,6 +38,8 @@ let pieChart: echarts.ECharts | null = null
 const loading = ref(true)
 const error = ref(false)
 const retried = ref(false)
+// 失败自动重试的定时器句柄：组件卸载时必须清理，否则销毁后仍会触发一次 loadData
+let retryTimer: ReturnType<typeof setTimeout> | undefined
 const projects = ref<any[]>([])
 const funds = ref({ allocated: 0, pending: 0, planned: 0 })
 
@@ -57,7 +59,9 @@ async function loadData() {
     projects.value = projRes?.data?.items || projRes?.data?.data || projRes?.items || []
     // get() 已解包响应，fundRes 直接是数据对象
     funds.value = {
-      allocated: fundRes?.funds_allocated || fundRes?.total_funds || 0,
+      // 必须用 ?? 而非 ||：funds_allocated 合法为 0（全部未拨付）时，
+      // || 会回退到 total_funds，把「已拨付」虚增为经费总额
+      allocated: fundRes?.funds_allocated ?? fundRes?.total_funds ?? 0,
       pending: fundRes?.funds_pending || 0,
       planned: fundRes?.funds_planned || 0,
     }
@@ -70,7 +74,7 @@ async function loadData() {
     // 后端可能仍在冷启动: 2 秒后自动重试一次,避免首次打开即报错
     if (!retried.value) {
       retried.value = true
-      setTimeout(() => {
+      retryTimer = setTimeout(() => {
         if (error.value) loadData()
       }, 2000)
     }
@@ -198,6 +202,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  clearTimeout(retryTimer) // 传入 undefined 亦为安全空操作，无需分支
   barChart?.dispose()
   pieChart?.dispose()
 })
