@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -183,6 +183,30 @@ class TestCheckIdle:
                           allocation_date=old)
         results = _check_idle(fund)
         assert len(results) == 1
+
+    # ── 生产路径：allocation_date 是 UtcDateTime 列，ORM 读回为 **aware UTC** ──
+    # 上面各用例喂的是 naive 值，恰好掩盖了「本地 naive 与 aware 相减抛 TypeError」
+    # 的缺陷（资金闲置检测在生产环境静默失效）。以下三条锁定 aware 输入。
+
+    def test_alloc_date_aware_utc_recent(self):
+        recent = datetime.now(timezone.utc) - timedelta(days=10)
+        fund = _make_fund(allocated_amount=100, used_amount=0, allocation_date=recent)
+        assert _check_idle(fund) == []
+
+    def test_alloc_date_aware_utc_old_danger(self):
+        old = datetime.now(timezone.utc) - timedelta(days=90)
+        fund = _make_fund(allocated_amount=100, used_amount=0, allocation_date=old)
+        results = _check_idle(fund)
+        assert len(results) == 1
+        assert results[0]["severity"] == AnomalySeverity.DANGER.value
+
+    def test_alloc_date_aware_utc_str_warning(self):
+        # to_dict()/JSON 序列化形态：带 +00:00 的字符串（fromisoformat 得 aware）
+        old = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+        fund = _make_fund(allocated_amount=100, used_amount=0, allocation_date=old)
+        results = _check_idle(fund)
+        assert len(results) == 1
+        assert results[0]["severity"] == AnomalySeverity.WARNING.value
 
 
 # ---------------------------------------------------------------------------

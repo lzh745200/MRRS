@@ -13,6 +13,7 @@ from app.models.rural_work import RuralWork, WorkStatus, WorkType
 from app.schemas.rural_work import RuralWorkStatistics
 from app.services.work_log_service import write_work_log
 from app.core.transaction import safe_commit
+from app.utils.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -548,7 +549,12 @@ class RuralWorkService:
 
 
 def _coerce_datetime(val: Any) -> datetime:
-    """将字符串/datetime 统一转换为 datetime；无法解析时返回当前时间。"""
+    """将字符串/datetime 统一转换为 datetime；无法解析时返回当前 UTC 时刻。
+
+    本函数仅用作 RuralWork.start_date/end_date（UtcDateTime 列）的**比较边界**，
+    因此回退值必须是 aware UTC——旧实现返回本地 naive 的 ``datetime.now()``，
+    在无法解析的入参下会与 UTC 列相差一个本机时区偏移。
+    """
     if isinstance(val, datetime):
         return val
     if val:
@@ -556,4 +562,4 @@ def _coerce_datetime(val: Any) -> datetime:
             return datetime.fromisoformat(str(val))
         except ValueError:
             pass
-    return datetime.now()
+    return utcnow()

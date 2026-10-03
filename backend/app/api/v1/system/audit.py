@@ -13,6 +13,7 @@ from app.core.security import get_current_user
 from app.models.audit import AuditAction, AuditLevel, AuditStatus
 from app.services.audit_service import AuditService, SecurityEventService
 from app.core.transaction import safe_commit
+from app.utils.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -627,7 +628,8 @@ async def get_user_activity(
 
     from app.models.audit import AuditLog
 
-    start_date = datetime.now() - timedelta(days=days)
+    # AuditLog.created_at 为 UTC 墙钟列：窗口基准必须用 UTC 口径
+    start_date = utcnow() - timedelta(days=days)
 
     logs = (
         db.query(AuditLog)

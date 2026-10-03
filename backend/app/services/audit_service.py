@@ -415,7 +415,7 @@ class SecurityEventService:
             .filter(
                 LoginAttempt.username == username,
                 LoginAttempt.ip_address == ip_address,
-                LoginAttempt.attempt_time >= datetime.now() - timedelta(hours=1),
+                LoginAttempt.attempt_time >= utcnow() - timedelta(hours=1),
                 LoginAttempt.success == False,  # noqa: E712
             )
             .count()

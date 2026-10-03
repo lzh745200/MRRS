@@ -241,7 +241,9 @@ async def advance_phase(
 
     _check_phase_danger_anomalies(db, project_id)
 
-    now = datetime.now()
+    # entered_at/completed_at 为 UtcDateTime 列：必须写 aware UTC（naive 会被原样
+    # 落库当作 UTC，UTC+8 上阶段时间偏早 8 小时）
+    now = utcnow()
     username = _get_username(current_user)
     remarks = data.remarks if data else None
 
@@ -421,9 +423,12 @@ async def lock_budget(
     if not funds:
         raise HTTPException(status_code=404, detail="该项目无关联经费")
 
-    now = datetime.now()
+    # 快照年份按本地日历口径（保持原语义）；locked_at 为 UtcDateTime 列，
+    # 必须写 aware UTC，否则本地墙钟被当 UTC 落库（UTC+8 偏早 8 小时）
+    now_local = datetime.now()
+    locked_at = utcnow()
     username = _get_username(current_user)
-    year = now.year
+    year = now_local.year
     created_count = 0
 
     for fund in funds:
@@ -437,7 +442,7 @@ async def lock_budget(
             snapshot_year=year,
             category=fund.type or fund.fund_type,
             baseline_amount=fund.approved_amount or fund.planned_amount or fund.amount,
-            locked_at=now,
+            locked_at=locked_at,
             locked_by=username,
         )
         db.add(baseline)
@@ -2040,7 +2045,8 @@ async def verify_asset(
         difference_rate=diff_rate,
         status="passed" if passed else "failed",
         verified_by=_get_username(current_user),
-        verified_at=datetime.now(),
+        # verified_at 为 UtcDateTime 列：必须写 aware UTC
+        verified_at=utcnow(),
         opinion=data.opinion,
     )
     db.add(verification)

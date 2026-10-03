@@ -67,6 +67,12 @@ class TestGetMissingKeys:
         assert data["source_language"] == "zh-CN"
         assert data["missing_count"] == len(data["missing_keys"])
         assert 0 <= data["completion_rate"] <= 100
+        # 公式守卫：完成率 = 源语言已被覆盖的键占比 = (|source| - |missing|) / |source|
+        # （历史缺陷：误用 |target| - |missing|，target 少于 source 时严重低估）
+        expected = round(
+            (data["source_count"] - data["missing_count"]) / data["source_count"] * 100, 1
+        )
+        assert data["completion_rate"] == expected
 
     async def test_unsupported_source_400(self):
         with pytest.raises(HTTPException) as exc_info:

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.models.fund import Fund
 from app.models.fund_budget import FundTransaction
 from app.models.fund_lifecycle import AnomalySeverity, AnomalyType, FundAnomaly
+from app.utils.time_utils import as_utc, utcnow
 
 # ---------- 阈值配置 ----------
 
@@ -162,7 +163,11 @@ def _check_idle(fund: Fund) -> List[dict]:
         except (ValueError, TypeError):
             return []
 
-    days_since = (datetime.now() - alloc_date).days
+    # allocation_date 为 UtcDateTime 列：ORM 读回是 aware UTC，字符串兜底分支
+    # 可能是 naive（按约定视为 UTC）。统一经 as_utc 归一后再与 utcnow() 相减——
+    # 此前用本地 naive 的 datetime.now() 与其相减，aware/naive 混算必抛 TypeError，
+    # 且异常被 backup_scheduler 的逐项目 try/except 吞掉，导致资金闲置检测静默失效。
+    days_since = (utcnow() - as_utc(alloc_date)).days
     if days_since < IDLE_DAYS:
         return []
 

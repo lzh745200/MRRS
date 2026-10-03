@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.response import success_response
 from app.core.security import get_current_user
 from app.models.user import User
+from app.utils.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,9 @@ async def get_sync_dashboard(
     from app.models.audit import AuditLog
 
     # ── 1. 审计日志中的同步操作统计 ──
-    start_date = datetime.now() - timedelta(days=days)
+    # AuditLog.created_at 为 UTC 墙钟列：窗口基准必须用 UTC 口径，
+    # 否则 UTC+8 下窗口整体前移 8 小时
+    start_date = utcnow() - timedelta(days=days)
     sync_logs = (
         db.query(AuditLog)
         .filter(

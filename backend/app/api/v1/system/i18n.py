@@ -277,7 +277,10 @@ async def get_missing_keys(
             "missing_keys": missing_keys,
             "missing_count": len(missing_keys),
             "extra_keys": extra_keys,
-            "completion_rate": round((len(target) - len(missing_keys)) / len(source) * 100, 1) if source else 100,
+            # 完成率 = 源语言中「目标语言已覆盖」的键占比 = (|source| - |missing|) / |source|。
+            # 此前误用 |target| - |missing|：当 target 的键数少于 source 时会低估
+            # （如 source 3 键 / target 2 键 → 真实 66.7%，旧式算出 33.3%）。
+            "completion_rate": round((len(source) - len(missing_keys)) / len(source) * 100, 1) if source else 100,
         },
     }
 

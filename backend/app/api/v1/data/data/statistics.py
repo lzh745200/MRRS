@@ -217,6 +217,7 @@ async def _get_overview_impl(db: Session):
 
     from app.models.audit import AuditLog
     from app.models.supported_village import SupportedVillage
+    from app.utils.time_utils import utcnow_naive
 
     villages_count = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count()
     projects_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
@@ -276,8 +277,20 @@ async def _get_overview_impl(db: Session):
     module_scores.append(100 if funds_count > 0 else 0)
     health_score = round(sum(module_scores) / max(len(module_scores), 1))
 
+    # 「今日/近 7 天」按**本地日历**解释，而 AuditLog.created_at 是 UTC 墙钟列：
+    # 必须先把本地日界平移到 UTC 再比较、并给分桶键加同样的偏移，否则 UTC+8 下
+    # 「今日」从本地 08:00 才起算（漏掉 00:00–08:00 的操作），日桶也会错位。
+    # 偏移取「本地墙钟 − UTC 墙钟」（后者走 time_utils 单一事实源），
+    # 避免 astimezone().utcoffset() 的 None 分支。
+    # 必须取整到秒：两次取时相差若干微秒，直接 int() 截断会得到 28799 秒（UTC+8），
+    # 使日界整体偏移 1 秒。
+    local_offset = timedelta(seconds=round((datetime.now() - utcnow_naive()).total_seconds()))
+    local_shift = f"{int(local_offset.total_seconds())} seconds"
+
     # 今日操作数
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = (
+        datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - local_offset
+    )
     today_ops = 0
     try:
         today_ops = db.query(AuditLog).filter(AuditLog.created_at >= today_start).count()
@@ -287,11 +300,14 @@ async def _get_overview_impl(db: Session):
     # 近7天数据趋势（单次 GROUP BY 查询替代 7 次循环查询）
     trend = []
     try:
-        week_start = (datetime.now() - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = (datetime.now() - timedelta(days=6)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - local_offset
+        local_day = func.date(AuditLog.created_at, local_shift)
         daily_results = (
-            db.query(func.date(AuditLog.created_at).label("day"), func.count(AuditLog.id).label("cnt"))
+            db.query(local_day.label("day"), func.count(AuditLog.id).label("cnt"))
             .filter(AuditLog.created_at >= week_start)
-            .group_by(func.date(AuditLog.created_at))
+            .group_by(local_day)
             .all()
         )
         day_counts = {r.day: r.cnt for r in daily_results}

@@ -5,12 +5,12 @@
 """
 
 import logging
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from app.models.fund import Fund
 from app.models.fund_lifecycle import PhaseStatus, ProjectFundPhase
+from app.utils.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,9 @@ def on_project_status_change(db: Session, project_id: int, old_status: str, new_
         # 自动初始化
         phases = _init_phases(db, project_id)
 
-    now = datetime.now()
+    # entered_at/completed_at 均为 UtcDateTime 列，必须写 aware UTC（naive 会被
+    # 原样落库，把本地墙钟当 UTC 存，UTC+8 上偏早 8 小时）
+    now = utcnow()
 
     # 将目标阶段之前的阶段全部标记完成
     for p in phases:
