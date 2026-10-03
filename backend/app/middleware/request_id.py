@@ -18,6 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from app.core.config import settings
 from app.core.constants import HTTP_CLIENT_CLOSED_REQUEST
 
 logger = logging.getLogger(__name__)
@@ -25,8 +26,8 @@ logger = logging.getLogger(__name__)
 # X-Request-ID 合法格式：仅允许字母数字、连字符、下划线，最长 64 字符
 _VALID_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
 
-# 慢请求阈值（毫秒）
-SLOW_REQUEST_THRESHOLD_MS = 2000
+# 慢请求阈值（毫秒）已收敛到 settings.SLOW_REQUEST_THRESHOLD_MS（原硬编码 2000），
+# 在 dispatch 中于请求时读取，便于经环境变量调优而无需改代码。
 
 # 上下文变量：在异步环境中安全传递请求ID
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")
@@ -96,8 +97,8 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         # 在响应头中返回请求ID
         response.headers["X-Request-ID"] = req_id
 
-        # 慢请求警告
-        if elapsed_ms > SLOW_REQUEST_THRESHOLD_MS:
+        # 慢请求警告（阈值来自 settings，调用时读取）
+        if elapsed_ms > settings.SLOW_REQUEST_THRESHOLD_MS:
             logger.warning(
                 "慢请求 | rid=%s | %s %s | %.1fms | status=%d",
                 req_id,

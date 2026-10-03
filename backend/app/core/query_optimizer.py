@@ -13,6 +13,8 @@ from typing import Any, Callable, List, Optional, Tuple
 
 from sqlalchemy.orm import Query
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -56,7 +58,8 @@ def paginate(
 
 _slow_query_log: List[dict] = []
 _slow_query_lock = _threading.Lock()
-_slow_threshold_ms: float = 200.0
+# 慢查询阈值（毫秒）—— 收敛到 settings.SLOW_QUERY_THRESHOLD_MS（原硬编码 200.0），
+# 于 track_query 调用时读取，修掉"配置写了却不生效"的缺陷。
 
 
 def track_query(
@@ -79,7 +82,7 @@ def track_query(
     result = query_fn()
     elapsed = (time.perf_counter() - start) * 1000
 
-    threshold = threshold_ms if threshold_ms is not None else _slow_threshold_ms
+    threshold = threshold_ms if threshold_ms is not None else settings.SLOW_QUERY_THRESHOLD_MS
     if threshold > 0 and elapsed > threshold:
         logger.warning("慢查询 %s: %.2f ms (> %.0f ms)", label, elapsed, threshold)
     else:

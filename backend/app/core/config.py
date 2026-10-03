@@ -213,6 +213,14 @@ class Settings(BaseSettings):
     SLOW_API_MS: float = 500.0
     SLOW_SQL_MS: float = 200.0
 
+    # ── 其余慢判定阈值统一收敛到 settings（P2-3 收尾）──
+    # 默认值严格等于各模块此前的硬编码值，保证行为零变化；均可经同名环境变量调优。
+    # RequestIDMiddleware：单请求耗时 > 该值（毫秒）即记 WARNING 慢请求日志。
+    SLOW_REQUEST_THRESHOLD_MS: float = 2000.0
+    # MetricsMiddleware：单请求耗时 > 该值（**秒**，注意单位）即计入慢请求列表，
+    # 经 /system/monitor/api-stats 的 slow_requests / slow_threshold_seconds 暴露。
+    SLOW_METRICS_THRESHOLD_SECONDS: float = 1.0
+
     # 告警配置
     ALERT_EMAIL_RECIPIENTS: Optional[List[str]] = None
     SMTP_HOST: Optional[str] = None

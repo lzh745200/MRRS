@@ -13,6 +13,8 @@ import logging
 import time
 import threading
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 # 不采集指标的路径前缀
@@ -36,7 +38,9 @@ class _MetricsStore:
         self._path_durations = {}  # (method, path) -> [total, count, max]
         self._slow_requests = []  # [(method, path, duration, timestamp)]
         self._max_slow = 100  # 最多保留 100 条慢请求记录
-        self._slow_threshold = 1.0  # 慢请求阈值（秒）
+        # 慢请求阈值（秒）—— 来自 settings（SLOW_METRICS_THRESHOLD_SECONDS），
+        # 原硬编码 1.0，默认值保持不变，可经环境变量调优。
+        self._slow_threshold = settings.SLOW_METRICS_THRESHOLD_SECONDS
         self._start_time = time.time()
 
     def record(self, method: str, path: str, status: int, duration: float):
