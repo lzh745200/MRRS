@@ -5,14 +5,14 @@
 ![Version](https://img.shields.io/badge/version-1.12.11-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-18%2C157%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-18%2C203%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **11,915 passed**, 0 失败（含覆盖率 100% 门禁） |
+| 后端测试 | **11,916 passed**, 0 失败（含覆盖率 100% 门禁） |
 | 前端测试 | **6,287 passed**（302 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -30,7 +30,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-02（v1.12.11）— 后端 11,915 用例 + 覆盖率 100.00%、前端 6,287 用例（302 文件）全部通过；
+> **上次全量验证**: 2026-10-02（v1.12.11）— 后端 11,916 用例 + 覆盖率 100.00%、前端 6,287 用例（302 文件）全部通过；
 > flake8 0 / 6 项棘轮门禁 NEW=0 / vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（44 版本）
 
 ## 快速开始
