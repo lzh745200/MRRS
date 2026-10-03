@@ -9,12 +9,6 @@ from io import BytesIO
 from typing import Any, Dict, List
 from datetime import date
 
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.datavalidation import DataValidation
-from openpyxl.worksheet.page import PageMargins
-
 from app.core.config import settings
 from app.services.entity_import_validator import EntityImportValidator
 
@@ -48,43 +42,68 @@ MILITARY_EXAMPLE_BG = "e2efda"
 MILITARY_REQUIRED_BG = "fde8e8"
 
 # ═══════════════════════════════════════════════════════════════
-# 样式对象（复用避免重复创建）
+# 样式对象（惰性构造，复用避免重复创建）
 # ═══════════════════════════════════════════════════════════════
-_title_fill = PatternFill(start_color=MILITARY_DARK_GREEN, end_color=MILITARY_DARK_GREEN, fill_type="solid")
-_title_font = Font(name="SimHei", bold=True, color=MILITARY_GOLD, size=22)
-_subtitle_font = Font(name="SimHei", bold=True, color=MILITARY_WHITE, size=14)
-_info_font = Font(name="SimSun", color=MILITARY_WHITE, size=10)
-_header_fill = PatternFill(start_color=MILITARY_DARK_GREEN, end_color=MILITARY_DARK_GREEN, fill_type="solid")
-_header_font = Font(name="SimHei", bold=True, color=MILITARY_WHITE, size=11)
-_data_font = Font(name="SimSun", color=MILITARY_DARK_TEXT, size=10)
-_example_fill = PatternFill(start_color=MILITARY_EXAMPLE_BG, end_color=MILITARY_EXAMPLE_BG, fill_type="solid")
-_example_font = Font(name="SimSun", color=MILITARY_GRAY_TEXT, size=10, italic=True)
-_required_fill = PatternFill(start_color=MILITARY_REQUIRED_BG, end_color=MILITARY_REQUIRED_BG, fill_type="solid")
-_zebra_fills = [
-    PatternFill(start_color=MILITARY_ZEBRA_ODD, end_color=MILITARY_ZEBRA_ODD, fill_type="solid"),
-    PatternFill(start_color=MILITARY_ZEBRA_EVEN, end_color=MILITARY_ZEBRA_EVEN, fill_type="solid"),
-]
-_decor_line_fill = PatternFill(start_color=MILITARY_GOLD, end_color=MILITARY_GOLD, fill_type="solid")
-_footer_font = Font(name="SimSun", color=MILITARY_GRAY_TEXT, size=9)
-_section_font = Font(name="SimHei", bold=True, color=MILITARY_DARK_GREEN, size=12)
-_note_font = Font(name="SimSun", color=MILITARY_GRAY_TEXT, size=10)
+# P2-4 启动优化：以下样式对象原本在 import 期构造，而 openpyxl（连带 numpy）
+# 的导入实测约 760ms，属冷启动路径上的主要可推迟开销，且模板生成是低频操作。
+# 现改为首次真正生成模板（落到需要样式的方法）时才构造，见 _ensure_styles()。
 
-_thin_side = Side(style="thin", color="cbd5e1")
-_thin_border = Border(left=_thin_side, right=_thin_side, top=_thin_side, bottom=_thin_side)
-_bottom_gold = Border(
-    left=_thin_side,
-    right=_thin_side,
-    top=_thin_side,
-    bottom=Side(style="medium", color=MILITARY_GOLD),
-)
-_header_border = Border(
-    left=_thin_side,
-    right=_thin_side,
-    top=Side(style="medium", color=MILITARY_GOLD),
-    bottom=Side(style="medium", color=MILITARY_GOLD),
-)
-_center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-_left_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+def _ensure_styles() -> None:
+    """惰性构造 openpyxl 样式对象并注入模块全局（幂等）。
+
+    仅在 ``_write_title_header`` / ``_write_data_table`` / ``_write_help_sheet``
+    这三个真正使用样式的方法入口调用。已构造过则直接返回 —— 样式对象复用，
+    不重复创建（与改造前 "复用避免重复创建" 的语义一致）。
+    """
+    global _title_fill, _title_font, _subtitle_font, _info_font
+    global _header_fill, _header_font, _data_font
+    global _example_fill, _example_font, _required_fill, _zebra_fills
+    global _decor_line_fill, _footer_font, _section_font, _note_font
+    global _thin_side, _thin_border, _bottom_gold, _header_border
+    global _center_align, _left_align
+
+    if "_title_font" in globals():
+        return
+
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    _title_fill = PatternFill(start_color=MILITARY_DARK_GREEN, end_color=MILITARY_DARK_GREEN, fill_type="solid")
+    _title_font = Font(name="SimHei", bold=True, color=MILITARY_GOLD, size=22)
+    _subtitle_font = Font(name="SimHei", bold=True, color=MILITARY_WHITE, size=14)
+    _info_font = Font(name="SimSun", color=MILITARY_WHITE, size=10)
+    _header_fill = PatternFill(start_color=MILITARY_DARK_GREEN, end_color=MILITARY_DARK_GREEN, fill_type="solid")
+    _header_font = Font(name="SimHei", bold=True, color=MILITARY_WHITE, size=11)
+    _data_font = Font(name="SimSun", color=MILITARY_DARK_TEXT, size=10)
+    _example_fill = PatternFill(start_color=MILITARY_EXAMPLE_BG, end_color=MILITARY_EXAMPLE_BG, fill_type="solid")
+    _example_font = Font(name="SimSun", color=MILITARY_GRAY_TEXT, size=10, italic=True)
+    _required_fill = PatternFill(start_color=MILITARY_REQUIRED_BG, end_color=MILITARY_REQUIRED_BG, fill_type="solid")
+    _zebra_fills = [
+        PatternFill(start_color=MILITARY_ZEBRA_ODD, end_color=MILITARY_ZEBRA_ODD, fill_type="solid"),
+        PatternFill(start_color=MILITARY_ZEBRA_EVEN, end_color=MILITARY_ZEBRA_EVEN, fill_type="solid"),
+    ]
+    _decor_line_fill = PatternFill(start_color=MILITARY_GOLD, end_color=MILITARY_GOLD, fill_type="solid")
+    _footer_font = Font(name="SimSun", color=MILITARY_GRAY_TEXT, size=9)
+    _section_font = Font(name="SimHei", bold=True, color=MILITARY_DARK_GREEN, size=12)
+    _note_font = Font(name="SimSun", color=MILITARY_GRAY_TEXT, size=10)
+
+    _thin_side = Side(style="thin", color="cbd5e1")
+    _thin_border = Border(left=_thin_side, right=_thin_side, top=_thin_side, bottom=_thin_side)
+    _bottom_gold = Border(
+        left=_thin_side,
+        right=_thin_side,
+        top=_thin_side,
+        bottom=Side(style="medium", color=MILITARY_GOLD),
+    )
+    _header_border = Border(
+        left=_thin_side,
+        right=_thin_side,
+        top=Side(style="medium", color=MILITARY_GOLD),
+        bottom=Side(style="medium", color=MILITARY_GOLD),
+    )
+    _center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    _left_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
 
 A4_PAGE_SETUP = {
     "paperSize": 9,  # A4
@@ -320,6 +339,9 @@ class ExcelTemplateService:
             validator = EntityImportValidator(entity_type)
             fields = validator.get_field_definitions()
 
+        # P2-4 启动优化：openpyxl 惰性导入（import 期约 760ms，含 numpy）
+        from openpyxl import Workbook
+
         wb = Workbook()
         ws = wb.active
         ws.title = "数据导入"
@@ -344,6 +366,9 @@ class ExcelTemplateService:
     @staticmethod
     def _setup_page(ws):
         """设置 A4 打印参数"""
+        # P2-4 启动优化：openpyxl 惰性导入（同上）
+        from openpyxl.worksheet.page import PageMargins
+
         ws.page_setup.paperSize = 9  # A4
         ws.page_setup.orientation = "landscape"
         ws.page_setup.fitToWidth = 1
@@ -365,6 +390,12 @@ class ExcelTemplateService:
 
     def _write_title_header(self, ws, title: str, col_count: int) -> int:
         """写入风格标题区，返回数据起始行号"""
+        # P2-4 启动优化：openpyxl 样式类惰性导入 + 样式对象惰性构造（同上）
+        from openpyxl.styles import Alignment, Font
+        from openpyxl.utils import get_column_letter
+
+        _ensure_styles()
+
         max_col = get_column_letter(max(col_count, 6))
 
         # ── 第1行：主标题（深绿底色 + 金色大字）──
@@ -410,6 +441,12 @@ class ExcelTemplateService:
 
     def _write_data_table(self, ws, fields, start_row: int, include_example: bool, validator=None):
         """写入数据表头 + 示例行 + 下拉验证"""
+        # P2-4 启动优化：openpyxl 样式类惰性导入 + 样式对象惰性构造（同上）
+        from openpyxl.styles import Font
+        from openpyxl.utils import get_column_letter
+
+        _ensure_styles()
+
         col_count = len(fields)
 
         # ── 表头行 ──
@@ -495,6 +532,10 @@ class ExcelTemplateService:
     @staticmethod
     def _add_validation(ws, fields, start_row: int, end_row: int, validator=None):
         """为枚举字段添加下拉列表"""
+        # P2-4 启动优化：openpyxl 惰性导入（同上）
+        from openpyxl.utils import get_column_letter
+        from openpyxl.worksheet.datavalidation import DataValidation
+
         for col_idx, field in enumerate(fields, 1):
             ftype = field.get("type", "")
             col_letter = get_column_letter(col_idx)
@@ -533,6 +574,12 @@ class ExcelTemplateService:
 
     def _write_help_sheet(self, ws, title: str, fields):
         """写入填写说明"""
+        # P2-4 启动优化：openpyxl 样式类惰性导入 + 样式对象惰性构造（同上）
+        from openpyxl.styles import Font
+        from openpyxl.utils import get_column_letter
+
+        _ensure_styles()
+
         col_count = 5
         max_col = get_column_letter(col_count)
 

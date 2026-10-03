@@ -10,7 +10,6 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-import openpyxl
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import AliasChoices, BaseModel, Field
@@ -726,6 +725,8 @@ async def import_villages(
     contents = await read_upload_with_limit(
         file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
     )
+    import openpyxl  # 重依赖惰性导入（连带 numpy，约 3s），仅在该导入端点触发
+
     try:
         wb = openpyxl.load_workbook(io.BytesIO(contents))
         ws = wb.active

@@ -9,9 +9,11 @@ import math
 import os
 import random
 import sys
+import threading
 from pathlib import Path
 from typing import Optional
 
+from app.core.config import settings as _settings
 from app.utils.helpers import safe_json_loads
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -34,42 +36,81 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/map", tags=["地图可视化"])
 
-# ==================== diskcache 缓存 ====================
+# ==================== diskcache 缓存（惰性初始化，P2-4 启动优化） ====================
+# diskcache.Cache(...) 构造会在磁盘上创建缓存目录并建立索引（实测中位 ~130ms），
+# 属于应用冷启动（import app.main）路径上的可推迟开销。此处仅保留廉价的模块级
+# import；真正的 Cache 构造推迟到首次使用（见 _get_map_cache），避免拖慢冷启动。
 try:
     import diskcache as _dc
+except ImportError:  # pragma: no cover - 可选依赖缺失（功能降级为无缓存）
+    _dc = None
 
-    from app.core.config import settings as _settings
-
-    _map_cache_dir = _settings.CACHE_DIR
-    os.makedirs(_map_cache_dir, exist_ok=True)
-    _map_cache = _dc.Cache(
-        os.path.join(_map_cache_dir, "map"),
-        size_limit=10 * 1024 * 1024,  # 10MB
-        # JSON 序列化替代 pickle（CVE-2025-69872 / PYSEC-2026-2447，上游无修复版本）：
-        # 缓存内容为纯 JSON 结构（距离/时长的 dict/list/float），换 JSONDisk 无行为差异。
-        disk=_dc.JSONDisk,
-    )
-except ImportError:  # pragma: no cover
-    _map_cache = None
-    logger.warning("diskcache 未安装，地图距离缓存已禁用")
-except Exception as e:
-    _map_cache = None
-    logger.warning("diskcache 初始化失败: %s，使用内存缓存", e)
-    # 删除损坏的缓存文件
-    import shutil
-    _bad_dir = os.path.join(_settings.CACHE_DIR, "map")
-    try:
-        shutil.rmtree(_bad_dir, ignore_errors=True)
-    except Exception as e:
-        logger.warning("清理损坏的地图缓存目录失败: %s", e)
+# 惰性单例哨兵：_UNSET 表示"尚未初始化"；None 表示"不可用/已禁用"。
+_UNSET = object()
+_map_cache = _UNSET
+_map_cache_lock = threading.Lock()
 
 _DISTANCES_TTL = 600  # 10 分钟
 
 
+def _build_map_cache():
+    """构造地图 diskcache 缓存实例（仅由 _get_map_cache 首次调用时执行）。
+
+    Returns:
+        diskcache.Cache | None: 缓存实例；diskcache 不可用或初始化失败时为 None。
+    """
+    if _dc is None:
+        logger.warning("diskcache 未安装，地图距离缓存已禁用")
+        return None
+    try:
+        cache_dir = _settings.CACHE_DIR
+        os.makedirs(cache_dir, exist_ok=True)
+        return _dc.Cache(
+            os.path.join(cache_dir, "map"),
+            size_limit=10 * 1024 * 1024,  # 10MB
+            # JSON 序列化替代 pickle（CVE-2025-69872 / PYSEC-2026-2447，上游无修复版本）：
+            # 缓存内容为纯 JSON 结构（距离/时长的 dict/list/float），换 JSONDisk 无行为差异。
+            disk=_dc.JSONDisk,
+        )
+    except Exception as e:
+        logger.warning("diskcache 初始化失败: %s，使用内存缓存", e)
+        # 删除损坏的缓存文件
+        import shutil
+        bad_dir = os.path.join(_settings.CACHE_DIR, "map")
+        try:
+            shutil.rmtree(bad_dir, ignore_errors=True)
+        except Exception as e:
+            logger.warning("清理损坏的地图缓存目录失败: %s", e)
+        return None
+
+
+def _get_map_cache():
+    """惰性获取地图缓存单例（线程安全，首次调用时才构造）。
+
+    - 若外部已把 ``_map_cache`` 设为 mock / None（测试用），直接沿用，不触发构造；
+    - 仅当仍为 ``_UNSET`` 哨兵时才真正构造缓存。
+
+    Returns:
+        diskcache.Cache | None: 缓存实例；diskcache 不可用时为 None。
+    """
+    global _map_cache
+    if _map_cache is _UNSET:
+        with _map_cache_lock:
+            if _map_cache is _UNSET:
+                _map_cache = _build_map_cache()
+    return None if _map_cache is _UNSET else _map_cache
+
+
+def _clear_map_cache_if_ready() -> None:
+    """仅当缓存已初始化（非哨兵、非 None）时清空；不触发惰性构造。"""
+    cache = _map_cache
+    if cache is not _UNSET and cache is not None:
+        cache.clear()
+
+
 def invalidate_map_cache() -> None:
     """公开函数：清除地图模块缓存（供 admin.py 调用）"""
-    if _map_cache is not None:
-        _map_cache.clear()
+    _clear_map_cache_if_ready()
 
 
 # --------------- 离线瓦片目录 ---------------
@@ -383,11 +424,10 @@ async def update_marker_coordinates(
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
     except Exception:
         logger.debug("记录工作日志失败")
-    if _map_cache is not None:
-        try:
-            _map_cache.clear()
-        except Exception:
-            logger.debug("地图缓存失效失败")
+    try:
+        _clear_map_cache_if_ready()
+    except Exception:
+        logger.debug("地图缓存失效失败")
     return {
         "success": True,
         "message": "坐标已更新",
@@ -409,9 +449,11 @@ async def get_distances(
     """
     user_id = getattr(current_user, "id", 0)
     cache_key = f"map_distances:{user_id}"
-    if _map_cache is not None:
+    # 惰性获取缓存：首次访问 /distances 时才构造 diskcache，避免拖慢应用冷启动
+    map_cache = _get_map_cache()
+    if map_cache is not None:
         try:
-            cached = _map_cache.get(cache_key)
+            cached = map_cache.get(cache_key)
             if cached is not None:
                 return cached
         except Exception:
@@ -499,9 +541,9 @@ async def get_distances(
         )
     result["county_distances"].sort(key=lambda x: x["distance_km"])
 
-    if _map_cache is not None:
+    if map_cache is not None:
         try:
-            _map_cache.set(cache_key, result, expire=_DISTANCES_TTL)
+            map_cache.set(cache_key, result, expire=_DISTANCES_TTL)
         except Exception:
             logger.debug("写入地图距离缓存失败")
 

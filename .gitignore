@@ -162,6 +162,10 @@ logs/*.log.*
 # 被 mkdir 真实创建于 backend/ 下（根因 test_svc_batch.py::test_h38 已修，此处防御性忽略）
 backend/MagicMock/
 backend/mock_leak_trace.log
+# P2-4 导入耗时探测脚本目录（会话内临时产物，不作为交付物）
+backend/_scratch_lazy/
+# 构建期生成物（scripts/generate_build_info.py 覆写；开发环境走默认值 dev）
+backend/app/core/_build_info.json
 
 # ===== .scratch 探测产物（保留已跟踪的 *.md 记录；忽略自动化会话临时产物）=====
 # 依据：.scratch/** 下已纳入版本控制的文件【全部为 .md】，下列后缀均为并发

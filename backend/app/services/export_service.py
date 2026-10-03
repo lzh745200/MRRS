@@ -1,31 +1,23 @@
 """Excel 导出服务 - 实现真实的数据导出功能"""
 
 from io import BytesIO
+from typing import TYPE_CHECKING
 
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+if TYPE_CHECKING:
+    from openpyxl import Workbook
 
 
 class ExcelExportService:
     """Excel 导出服务"""
 
-    _HEADER_FONT = Font(bold=True, size=11)
-    _HEADER_FILL = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-    _HEADER_FONT_WHITE = Font(bold=True, size=11, color="FFFFFF")
-    _THIN_BORDER = Border(
-        left=Side(style="thin"),
-        right=Side(style="thin"),
-        top=Side(style="thin"),
-        bottom=Side(style="thin"),
-    )
-    _CENTER_ALIGN = Alignment(horizontal="center", vertical="center")
-
-    def _create_workbook(self, sheet_name: str, headers: list, rows: list[dict], watermark: str = "") -> Workbook:
+    def _create_workbook(self, sheet_name: str, headers: list, rows: list[dict], watermark: str = "") -> "Workbook":
         """创建通用 Excel 工作簿（统一军绿+金色样式 + A4 打印设置）。
 
         watermark 追加到页脚，用于审计溯源。
         """
         from app.utils.excel_report_style import build_report_sheet, make_subtitle
+        # P2-4 启动优化：openpyxl 惰性导入（import 期约 760ms，含 numpy）
+        from openpyxl import Workbook
 
         wb = Workbook()
         matrix = [[row.get(h, "") for h in headers] for row in rows]
@@ -42,7 +34,7 @@ class ExcelExportService:
         return wb
 
     @staticmethod
-    def _to_bytes(wb: Workbook) -> bytes:
+    def _to_bytes(wb: "Workbook") -> bytes:
         output = BytesIO()
         wb.save(output)
         output.seek(0)
@@ -146,6 +138,8 @@ class ExcelExportService:
     ) -> bytes:
         """导出综合报表（多 sheet，统一军绿+金色样式 + A4 打印设置）"""
         from app.utils.excel_report_style import build_report_sheet, make_subtitle
+        # P2-4 启动优化：openpyxl 惰性导入（同上）
+        from openpyxl import Workbook
 
         wb = Workbook()
 

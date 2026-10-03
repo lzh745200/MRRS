@@ -17,8 +17,6 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment, Font, PatternFill
 from pydantic import BaseModel
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
@@ -258,6 +256,9 @@ async def import_schools_excel(
         tmp_path = tmp.name
 
     try:
+        # P2-4 启动优化：openpyxl 惰性导入（import 期约 760ms，含 numpy），仅本端点触发
+        from openpyxl import load_workbook
+
         with open(tmp_path, "rb") as _f:
             wb = load_workbook(_f)
         ws = wb.active
@@ -355,6 +356,9 @@ async def import_scholarship_students(
         tmp.write(content)
         tmp_path = tmp.name
     try:
+        # P2-4 启动优化：openpyxl 惰性导入（同上）
+        from openpyxl import load_workbook
+
         with open(tmp_path, "rb") as _f:
             wb = load_workbook(_f)
         ws = wb.active
@@ -432,6 +436,10 @@ async def export_schools_excel(
     db: Session = Depends(get_db),
 ):
     """导出学校到 Excel"""
+    # P2-4 启动优化：openpyxl 惰性导入（同上）
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
     query = db.query(School).filter(School.is_active == True)  # noqa: E712
     query = data_scope.filter_by_org_ids(query, School.organization_id, created_by_column=School.created_by)
     schools = query.all()
@@ -1391,6 +1399,9 @@ async def import_school_scholarship_students(
         "已完成": "completed",
     }
     try:
+        # P2-4 启动优化：openpyxl 惰性导入（同上）
+        from openpyxl import load_workbook
+
         with open(tmp_path, "rb") as _f:
             wb = load_workbook(_f)
         ws = wb.active

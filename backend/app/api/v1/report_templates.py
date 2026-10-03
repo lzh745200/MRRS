@@ -16,9 +16,6 @@ from app.utils.helpers import safe_json_loads
 from app.core.transaction import safe_commit
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -482,6 +479,11 @@ async def download_template(
         raise HTTPException(status_code=404, detail="模板不存在")
 
     fields = _normalize_template_fields(safe_json_loads(t.fields, default=[]))
+    # P2-4 启动优化：openpyxl 惰性导入（import 期约 760ms，含 numpy），仅本端点触发
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
     wb = Workbook()
     ws = wb.active
     ws.title = t.name[:31]  # Excel sheet name max 31 chars
@@ -565,6 +567,9 @@ def _parse_template_excel(
         - errors: 错误信息列表
         - rows: 原始数据行列表
     """
+    # P2-4 启动优化：openpyxl 惰性导入（同上）
+    from openpyxl import load_workbook
+
     wb = load_workbook(io.BytesIO(content), read_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(min_row=3, values_only=True))  # 跳过标题和表头
@@ -1253,6 +1258,9 @@ async def upload_filled_template(
     )
 
     try:
+        # P2-4 启动优化：openpyxl 惰性导入（同上）
+        from openpyxl import load_workbook
+
         wb = load_workbook(io.BytesIO(content), read_only=True)
         wb.close()
     except Exception:

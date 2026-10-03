@@ -263,7 +263,7 @@ class TestUpdateCoordsCacheBranch:
         assert record.latitude == 26.5
 
 
-# ==================== 模块级 diskcache 初始化分支（47-59） ====================
+# ==================== 模块级 diskcache 惰性初始化分支 ====================
 
 
 class TestCacheInitBranches:
@@ -273,7 +273,9 @@ class TestCacheInitBranches:
         monkeypatch.setitem(sys.modules, "diskcache", None)
         importlib.reload(map_mod)
         try:
-            assert map_mod._map_cache is None
+            # diskcache 不可用 → 惰性构造返回 None（缓存功能禁用）
+            assert map_mod._dc is None
+            assert map_mod._get_map_cache() is None
         finally:
             monkeypatch.undo()
             importlib.reload(map_mod)
@@ -285,7 +287,8 @@ class TestCacheInitBranches:
         monkeypatch.setattr("shutil.rmtree", MagicMock(side_effect=OSError("locked")))
         importlib.reload(map_mod)
         try:
-            assert map_mod._map_cache is None
+            # Cache 构造抛错 → 惰性构造捕获、清理损坏目录后返回 None
+            assert map_mod._get_map_cache() is None
         finally:
             monkeypatch.undo()
             importlib.reload(map_mod)
