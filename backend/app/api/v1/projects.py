@@ -718,7 +718,14 @@ async def list_projects(
         query = query.filter(_func.strftime("%Y", Project.start_date) == str(year))
 
     # 排序
-    sort_column = getattr(Project, sort_by, None) if sort_by else None
+    # R18：排序列白名单。此前 getattr(Project, sort_by) 接受任意字符串，
+    # 传入方法/关系名（如 "query"、"metadata"）会触发 AttributeError → 500。
+    _SORTABLE_COLUMNS = (
+        "id", "name", "code", "type", "status", "priority", "progress",
+        "start_date", "end_date", "actual_start_date", "actual_end_date",
+        "budget", "leader", "created_at", "updated_at",
+    )
+    sort_column = getattr(Project, sort_by, None) if sort_by in _SORTABLE_COLUMNS else None
     if sort_column is not None:
         query = query.order_by(sort_column.desc() if sort_order == "desc" else sort_column.asc())
     else:

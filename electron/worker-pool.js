@@ -40,13 +40,32 @@ class WorkerPool {
    */
   exec(task, payload, timeout = 120000) {
     return new Promise((resolve, reject) => {
-      const id = ++this._idCounter;
-      const timer = setTimeout(() => {
+      const job = {
+        id: ++this._idCounter,
+        task,
+        payload,
+        resolve,
+        reject,
+        timer: null,
+        worker: null,
+        done: false,
+      };
+      job.timer = setTimeout(() => {
+        if (job.done) return;
+        job.done = true;
+        if (job.worker) {
+          // 已在执行：必须强制终止，否则 hang 死的任务会永久占用并发槽位；
+          // 同时回收计数（exit 回调因 done 标记不再重复处理）。
+          this._active = Math.max(0, this._active - 1);
+          job.worker.terminate();
+          this._processNext();
+        } else {
+          this._cleanup(job.id);
+        }
         reject(new Error(`Worker task "${task}" timed out after ${timeout}ms`));
-        this._cleanup(id);
       }, timeout);
 
-      this._queue.push({ id, task, payload, resolve, reject, timer });
+      this._queue.push(job);
       this._processNext();
     });
   }
@@ -61,32 +80,33 @@ class WorkerPool {
     const worker = new Worker(WORKER_SCRIPT, {
       workerData: { task: job.task, payload: job.payload },
     });
+    job.worker = worker;
 
-    worker.on('message', (result) => {
+    // 终局收敛到单一路径：settle 只执行一次、_active 只扣减一次。
+    // 此前 message 与 exit(code=1) 各扣一次（terminate 的 exit code 恒为 1），
+    // _active 单调变负导致 maxWorkers 并发闸门永久失效。
+    const finish = (ok, value) => {
+      if (job.done) return;
+      job.done = true;
       clearTimeout(job.timer);
-      if (result.error) {
-        job.reject(new Error(result.error));
-      } else {
-        job.resolve(result.data);
-      }
-      this._active--;
+      this._active = Math.max(0, this._active - 1);
+      if (ok) job.resolve(value);
+      else job.reject(value instanceof Error ? value : new Error(String(value)));
+      // 幂等：对已退出的 worker 调用 terminate 是安全空操作
       worker.terminate();
       this._processNext();
+    };
+
+    worker.on('message', (result) => {
+      if (result && result.error) finish(false, new Error(result.error));
+      else finish(true, result ? result.data : undefined);
     });
 
-    worker.on('error', (err) => {
-      clearTimeout(job.timer);
-      job.reject(err);
-      this._active--;
-      this._processNext();
-    });
+    worker.on('error', (err) => finish(false, err));
 
     worker.on('exit', (code) => {
       if (code !== 0) {
-        clearTimeout(job.timer);
-        job.reject(new Error(`Worker exited with code ${code}`));
-        this._active--;
-        this._processNext();
+        finish(false, new Error(`Worker exited with code ${code}`));
       }
     });
   }

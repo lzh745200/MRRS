@@ -20,15 +20,18 @@ _START_TIME = time.time()
 @router.get("")
 @router.get("/overview")
 async def health_overview():
-    """System health overview with key metrics."""
+    """System health overview with key metrics.
+
+    R18：本端点无认证，此前回显 platform.platform()（精确到 OS 构建号）与
+    python_version，属于不必要的指纹暴露。消费方（HealthCheck.vue）只使用
+    status / uptime_seconds，故裁剪到最小集。
+    """
     uptime = time.time() - _START_TIME
     return {
         "code": 200,
         "data": {
             "status": "healthy",
             "uptime_seconds": round(uptime, 1),
-            "platform": platform.platform(),
-            "python_version": platform.python_version(),
             "cpu_count": os.cpu_count(),
         },
     }
@@ -51,7 +54,9 @@ async def health_database():
             },
         }
     except Exception as e:
-        return {"code": 500, "message": str(e)}
+        # 无认证端点：异常原文可能含数据库路径/内部拓扑，仅回类型名，原文进日志
+        logger.error("健康检查（database）失败", exc_info=True)
+        return {"code": 500, "message": f"health check failed: {type(e).__name__}"}
     finally:
         db.close()
 
@@ -74,7 +79,9 @@ async def health_database_detail():
             },
         }
     except Exception as e:
-        return {"code": 500, "message": str(e), "data": {"status": "error"}}
+        # 无认证端点：同上，只回类型名，不回显异常原文
+        logger.error("健康检查（database-health）失败", exc_info=True)
+        return {"code": 500, "message": f"health check failed: {type(e).__name__}", "data": {"status": "error"}}
 
 
 @router.get("/liveness")

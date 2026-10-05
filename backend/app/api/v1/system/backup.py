@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 
 from app.core.database import get_db
+from app.core.async_utils import run_in_thread
 from app.core.response import ok_list, success_response
 from app.utils.upload_helper import read_zip_member
 from app.models.user import User
@@ -199,7 +200,12 @@ async def create_backup(
             if not ensure_target_dir(target_dir):
                 raise HTTPException(status_code=400, detail=f"备份目标目录不可写: {target_dir}")
             svc = BackupService(db, backup_dir=target_dir)
-        record = svc.create_backup(
+        # R18：备份是 CPU/磁盘密集的同步重活（SQLite Backup API 全库拷贝 +
+        # shutil.copytree 上传目录 + zip CRC 校验 + integrity_check + 可选
+        # PBKDF2 加密），此前直接跑在事件循环线程上，备份期间**全部并发请求
+        # （含登录与前端轮询）无响应**。移入线程池保持事件循环可响应。
+        record = await run_in_thread(
+            svc.create_backup,
             description=body.description,
             include_uploads=body.include_uploads,
             password=body.password,

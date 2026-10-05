@@ -240,6 +240,34 @@ class TestExportPurgeJob:
         assert "export_purge_job" in src
         assert '"export_purge"' in src
 
+    def test_job_reclaims_task_queue_history(self):
+        """R18：task_queue._tasks 只增不减，本任务须回收历史记录（有残留分支）。"""
+        import app.services.backup_scheduler as bs
+
+        db = MagicMock()
+        with patch("app.core.database.SessionLocal", return_value=db), patch(
+            "app.services.async_export_service.purge_expired_exports"
+        ), patch("app.services.task_queue.task_queue") as mock_tq:
+            mock_tq.cleanup.return_value = 3
+            bs.export_purge_job()
+
+        mock_tq.cleanup.assert_called_once_with(max_age=3600)
+        db.close.assert_called_once()
+
+    def test_job_tolerates_task_queue_cleanup_failure(self):
+        """R18：task_queue 清理失败不得影响导出回收与本任务收尾。"""
+        import app.services.backup_scheduler as bs
+
+        db = MagicMock()
+        with patch("app.core.database.SessionLocal", return_value=db), patch(
+            "app.services.async_export_service.purge_expired_exports"
+        ), patch("app.services.task_queue.task_queue") as mock_tq:
+            mock_tq.cleanup.side_effect = RuntimeError("tq boom")
+            bs.export_purge_job()  # 不抛错
+
+        mock_tq.cleanup.assert_called_once_with(max_age=3600)
+        db.close.assert_called_once()
+
 
 @pytest.mark.parametrize(
     "status", ["pending", "processing"]

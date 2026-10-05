@@ -1,6 +1,7 @@
 """数据同步API路由"""
 
 import logging
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -66,7 +67,11 @@ async def _save_upload_file(file: UploadFile, upload_dir: Path, default_name: st
     —— 半成品文件永久残留在 uploads 目录。这里在失败点就地清理自身产物。
     """
     safe_name = _safe_filename(file.filename or default_name)
-    file_path = upload_dir / safe_name
+    # R18：文件名必须唯一。此前直接用客户端原文件名（缺省时固定为 upload.zip），
+    # 两个并发导入会写同一物理路径——后写者截断前写者正在读取的文件，
+    # 先到者把后到者的数据当自己的包导入（静默数据错乱），且 finally 清理会
+    # 删掉对方刚写入的文件。加 uuid 前缀保证唯一，保留原名便于排查。
+    file_path = upload_dir / f"{uuid.uuid4().hex}_{safe_name}"
 
     try:
         with open(file_path, "wb") as f:

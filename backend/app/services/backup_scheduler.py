@@ -480,6 +480,18 @@ def export_purge_job():
     finally:
         db.close()
 
+    # R18：LocalTaskQueue._tasks 只增不减——cleanup() 此前全仓无任何调用点，
+    # 每个异步导出任务对象（含 func 闭包 / args / result 引用）永久驻留，
+    # 长期运行下缓慢泄漏内存且 list_tasks 越来越慢。挂靠本每日任务一并回收。
+    try:
+        from app.services.task_queue import task_queue
+
+        removed = task_queue.cleanup(max_age=3600)
+        if removed:
+            logger.info("任务队列历史记录回收: %d 条", removed)
+    except Exception as e:
+        logger.error("任务队列清理失败: %s", e, exc_info=True)
+
 
 async def restore_drill_job():
     """月度备份恢复演练（架构评估 C1）：每日 05:45 检查到期，到期才执行演练。

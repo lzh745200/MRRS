@@ -404,10 +404,14 @@ function stopBackend() {
       } catch (_) {}
     };
     const proc = backendProcess;
+    let fallbackTimer = null;
     proc.once('exit', () => {
       exited = true;
       if (graceTimer) { clearTimeout(graceTimer); graceTimer = null; }
-      backendProcess = null;
+      if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+      // 仅当引用仍是本进程时才清空：否则 5s 兜底回调会把重启后的新进程抹成
+      // null，旧进程对象失去引用成为孤儿（每个持完整 FastAPI 运行时）
+      if (backendProcess === proc) backendProcess = null;
       done();
     });
     const req = http.request({
@@ -424,7 +428,12 @@ function stopBackend() {
     req.on('error', forceKill);
     req.on('timeout', () => { req.destroy(); forceKill(); });
     req.end();
-    setTimeout(() => { backendProcess = null; done(); }, 5000);
+    // 5s 兜底：保存句柄以便 exit 路径清理；仅在引用仍是本进程时才置空
+    fallbackTimer = setTimeout(() => {
+      fallbackTimer = null;
+      if (backendProcess === proc) backendProcess = null;
+      done();
+    }, 5000);
   });
 }
 

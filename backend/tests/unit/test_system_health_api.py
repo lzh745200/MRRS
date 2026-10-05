@@ -26,8 +26,9 @@ class TestHealthOverview:
         assert data["code"] == 200
         assert data["data"]["status"] == "healthy"
         assert "uptime_seconds" in data["data"]
-        assert "platform" in data["data"]
-        assert "python_version" in data["data"]
+        # R18：无认证端点裁剪指纹字段（platform/python_version 不再回显）
+        assert "platform" not in data["data"]
+        assert "python_version" not in data["data"]
 
     def test_health_overview_slash(self, client):
         resp = client.get("/api/v1/health/overview")
@@ -60,7 +61,9 @@ class TestHealthDatabase:
             assert resp.status_code == 200
             data = resp.json()
             assert data["code"] == 500
-            assert "DB down" in data["message"]
+            # R18：不再回显异常原文（可能含数据库路径），只回类型名
+            assert data["message"] == "health check failed: Exception"
+            assert "DB down" not in data["message"]
 
     def test_database_no_db_url(self, client):
         with patch("app.api.v1.system.health.SessionLocal") as mock_sl:
@@ -76,6 +79,37 @@ class TestHealthLiveness:
         resp = client.get("/api/v1/health/liveness")
         assert resp.status_code == 200
         assert resp.json() == {"status": "alive"}
+
+
+class TestHealthDatabaseDetail:
+    def test_database_health_detail_ok(self, client):
+        with patch(
+            "app.services.database_health_service.database_health_service"
+        ) as mock_svc:
+            mock_svc.get_database_info.return_value = {"status": "ok", "table_count": 3}
+            mock_svc.get_stats.return_value = {"integrity_errors": 0}
+            mock_svc.health_status = {"issues": []}
+            resp = client.get("/api/v1/health/database-health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["code"] == 200
+            assert data["data"]["status"] == "ok"
+
+    def test_database_health_detail_exception_hides_original_text(self, client):
+        """R18：无认证端点异常只回类型名，不回显原文（可能含库路径/内部拓扑）。"""
+        with patch(
+            "app.services.database_health_service.database_health_service"
+        ) as mock_svc:
+            mock_svc.get_database_info.side_effect = Exception(
+                "secret: C:/app/data/mrrs.db locked"
+            )
+            resp = client.get("/api/v1/health/database-health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["code"] == 500
+            assert data["message"] == "health check failed: Exception"
+            assert "mrrs.db" not in data["message"]
+            assert data["data"]["status"] == "error"
 
 
 class TestHealthReadiness:
