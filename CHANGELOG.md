@@ -5,6 +5,65 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.13] - 2026-10-05 — 🛡 R18 全维度排查修复（并发闸门 / 事件循环阻塞 / 竞态互踩 / 信息泄露）
+
+> 排查方式：3 路并行只读审计（并发性能 / 内存泄漏 / 安全）+ 9 维度清单逐项核查，
+> 每条结论源码级复核（复核拦截 1 条审计误报：`data_packages` 导入临时文件
+> 实际已有 `finally os.unlink`，系复核 grep 范围截断所致）。
+
+### 修复（高）
+- **`electron/worker-pool.js` — Worker 池并发闸门永久失效**：`_active` 被双扣
+  （`message` 扣一次后 `terminate()`，而 terminate 的 exit code 恒为 1，`exit` 回调再扣一次），
+  计数单调变负使 `maxWorkers` 形同虚设；超时路径不 `terminate()`，hang 死任务永久占用槽位。
+  收敛为单一 `finish` 终局路径 + `done` 标记 + `Math.max` 防负漂移 + 超时强制终止并回收槽位。
+  实证：真实 Worker 线程 6 并发 `hash-file`，旧实现 `_active:-2`、新实现归 0（同一验证脚本
+  跑新旧两版，证明断言有区分力）；超时后槽位回收、后续任务可执行。
+- **`api/v1/system/backup.py` — 备份阻塞整个事件循环**：备份（SQLite Backup API 全库拷贝 +
+  `shutil.copytree` 上传目录 + zip CRC 校验 + `integrity_check` + 可选 PBKDF2 加密）此前在
+  `async def` 内同步执行，耗时与库体积成正比，期间**全部并发请求（含登录、前端轮询）无响应**，
+  且 Electron 24h 定时备份同样走此端点。现移入 `run_in_thread` 线程池。
+
+### 修复（中）
+- **`api/v1/data_sync.py` — 上传临时包同名互踩**：沿用客户端原文件名（缺省固定 `upload.zip`），
+  两个并发导入写同一物理路径——后写者截断前写者正在读取的文件，先到者把后到者的数据当
+  自己的包导入（静默数据错乱），且 `finally` 清理会删掉对方刚写入的文件。加 uuid 前缀唯一化。
+- **`api/v1/system/health.py` — 无认证端点信息面收敛**：`/health`、`/health/overview` 此前回显
+  `platform.platform()`（精确到 OS 构建号）与 `python_version`；`/database`、`/database-health`
+  异常分支把 `str(e)` 原文回显（可含数据库路径）。现裁剪到消费方实际使用的最小集
+  （已核实 `HealthCheck.vue` 仅用 `uptime_seconds`），异常只回 `type(e).__name__`、原文进日志。
+- **`electron/main.js` — stopBackend 孤儿进程竞态**：5s 兜底定时器无句柄且无条件
+  `backendProcess = null`——进程在 4.9s 退出并立刻重启后，第 5s 回调会把**新进程**抹成 null，
+  旧进程对象失去引用成为孤儿（每个持完整 FastAPI 运行时）。现保存句柄、exit 时清理，
+  仅在引用仍为本进程时置空。
+- **`services/backup_scheduler.py` — 任务队列记录只增不减**：`LocalTaskQueue._tasks` 的
+  `cleanup()` 此前全仓无任何调用点，每个异步导出任务对象（含 func 闭包 / args / result 引用）
+  永久驻留。挂靠既有每日 `export_purge_job`（04:00）一并回收，**不新增定时器**。
+
+### 修复（低）
+- **`api/v1/projects.py`**：排序列白名单——此前 `getattr(Project, sort_by)` 接受任意字符串，
+  传入方法/关系名（如 `query`、`metadata`）触发 `AttributeError` → 500。
+- **`deploy/kylin/config/kylin.env`**：部署模板不应自行降级安全基线——`ACCESS_TOKEN_EXPIRE_MINUTES`
+  2880(48h) → 480(8h)、`CSRF_ENABLED` false → true（前端 `request.ts` 已自动回填 X-CSRF-Token，
+  cookie 缺失时懒加载 `/auth/csrf-token`，开启不会造成 POST 失败）。
+
+### 登记未修（已定性，需产品决策 / 架构级）
+- 出厂管理员密码硬编码 `Admin@2026`（`core/constants.py:24`）与机器码初始密码熵不足
+  （用户名前 4 位 + 10⁴ 校验码、`/verify-machine-code` 公开可查）——涉军审计最可能开单的两项，
+  改随机生成 + 一次性凭据交付会影响装机流程，须产品拍板。
+- 备份双事实源：Electron 每 24h 直调备份端点，打穿后端 `backup_interval_days`（默认 30 天）
+  间隔判定；两套清理并发删同一目录。需先定「到底多久备一次」。
+- `control_package.py` 512MB zip 在事件循环内同步解析（解压峰值 GB 级，admin-only）。
+- `data_package_service` full 导出逐模型 `query.all()` + `indent=2` 全量驻留（内存约库体积 3-4 倍）。
+- `policy.py` 列表序列化携带 Text 全文 `content`（裁剪会改 API 契约，需确认列表页不渲染全文）。
+
+### 测试
+- 新增 4 例：`export_purge_job` 挂靠回收（有残留 / 清理失败容忍）各 1、
+  `/health/database-health` 正常与异常脱敏各 1；定向回归 411 用例全绿。
+- 用例口径同步：后端 **11,948**（`pytest --collect-only` 实测）、前端 6,304（302 文件）不变，
+  合计 18,252；README / `docs/build_ppt.js` / `项目文件结构说明.md` 同步。
+
+---
+
 ## [1.12.12] - 2026-10-03 — 🐞 全库缺陷排查修复（时间基准 / 契约脱节 / 竞态）+ 汇报大屏契约修复 + 冷启动优化 + 前端日期收敛 + 文档与门禁治理
 
 > 本版在前述主题基础上追加一轮**全库缺陷排查（R17）**：静态门禁（flake8 / vue-tsc / eslint）
@@ -148,7 +207,7 @@
   所在（CI 100% 门禁必红）。新增：① 非全量访问时村/人口/经费三类查询逐个套 `data_scope`
   并校验过滤次数；② `_apply_project_scope` 在「非全量且无任何组织信息」时原样返回。
   补测后 `dashboard.py` 与 `map.py` 覆盖率均回到 **100%**。
-- 后端用例口径同步为 **11,944**（`pytest tests/ --collect-only -q` 实测），README 与
+- 后端用例口径同步为 **11,944**（`pytest tests/ --collect-only -q` 实测，1.12.12 当时口径），README 与
   `docs/build_ppt.js` 同步。
 
 ### 修复（全库缺陷排查 R17：17 处）

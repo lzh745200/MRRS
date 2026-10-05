@@ -14,7 +14,7 @@ FastAPI + Vue 3 + Electron + SQLite. Windows primary, Linux ARM64 (Kylin V10) se
 ```bash
 cd backend
 .venv\Scripts\python start.py                           # Start server (http://localhost:8000)
-python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~11944)
+python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~11948)
 python -m pytest tests/unit/test_xxx.py -v              # Run single test file
 # 必须带 --max-complexity=16：CI 的 lint 任务用这个组合，缺了它 C901 复杂度回归
 # 只在 CI 变红、本地静默放过（2026-09-04 已因此漏过 2 处）

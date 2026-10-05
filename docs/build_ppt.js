@@ -199,7 +199,7 @@ function header(s, kicker, title) {
     color: TEXT, fontFace: F, margin: 0 });
   s.addText(String(pageNo).padStart(2, "0"), { x: W - 1.0, y: H - 0.55, w: 0.5, h: 0.3,
     fontSize: 11, color: MUTED, fontFace: F, align: "right", margin: 0 });
-  s.addText("帮扶管理信息系统 v1.12.12", { x: M, y: H - 0.55, w: 4, h: 0.3,
+  s.addText("帮扶管理信息系统 v1.12.13", { x: M, y: H - 0.55, w: 4, h: 0.3,
     fontSize: 10.5, color: MUTED, fontFace: F, margin: 0 });
 }
 function card(s, x, y, w, h, fill = BG) {
@@ -277,7 +277,7 @@ function sectionSlide(num, title, sub, items) {
     { text: "多机协同 · 军工级安全", options: {} },
   ], { x: 1.0, y: 4.75, w: 6, h: 0.85, fontSize: 16, color: LIGHT, fontFace: F,
     paraSpaceAfter: 6, margin: 0 });
-  s.addText("V1.12.12  |  2026-10-03  |  FastAPI + Vue 3 + Electron + SQLite", {
+  s.addText("V1.12.13  |  2026-10-05  |  FastAPI + Vue 3 + Electron + SQLite", {
     x: 1.0, y: 6.35, w: 10, h: 0.4, fontSize: 12.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
@@ -295,7 +295,7 @@ function sectionSlide(num, title, sub, items) {
     ["02", "技术架构", "技术栈 · 分层设计 · 离线优先"],
     ["03", "功能模块", "七大业务域 · 71 个功能菜单"],
     ["04", "安全体系", "四角色权限 · PII 加密 · 审计合规"],
-    ["05", "质量工程", "18,248 项自动化测试 · CI/CD · 依赖自检"],
+    ["05", "质量工程", "18,252 项自动化测试 · CI/CD · 依赖自检"],
     ["06", "部署运行", "双平台安装包 · 备份升级 · 版本历程"],
   ];
   toc.forEach((t, i) => {
@@ -369,7 +369,7 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
 {
   const s = p.addSlide();
   header(s, "01 系统概述", "一眼看懂：系统规模");
-  stat(s, 0.55, 2.1, 3.0, "11,944", "后端自动化测试用例");
+  stat(s, 0.55, 2.1, 3.0, "11,948", "后端自动化测试用例");
   stat(s, 3.9, 2.1, 3.0, "6,304", "前端自动化测试用例");
   stat(s, 7.25, 2.1, 3.0, "54", "功能菜单键（三级菜单树）");
   stat(s, 10.6, 2.1, 2.4, "131", "业务页面视图");
@@ -378,7 +378,7 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
   stat(s, 3.9, 4.35, 3.0, "100", "后端服务（100 + 13 子包）", PRIMARY_L);
   stat(s, 7.25, 4.35, 3.0, "45", "数据库迁移版本", PRIMARY_L);
   stat(s, 10.6, 4.35, 2.4, "4", "用户角色", PRIMARY_L, 40);
-  s.addText("数据来源：仓库实测（v1.12.12）—— 后端 11,944 用例全绿 / 覆盖率 100% · 前端 6,304 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告", {
+  s.addText("数据来源：仓库实测（v1.12.13）—— 后端 11,948 用例全绿 / 覆盖率 100% · 前端 6,304 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告", {
     x: M, y: 6.35, w: 12.3, h: 0.4, fontSize: 12, color: MUTED, fontFace: F, margin: 0 });
 }
 
@@ -945,7 +945,7 @@ sectionSlide("04", "安全体系", "SECURITY & COMPLIANCE", [
 
 /* ════════ 31 章节页：质量工程 ════════ */
 sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
-  "18,248 项自动化测试（后端 11,944 + 前端 6,304）",
+  "18,252 项自动化测试（后端 11,948 + 前端 6,304）",
   "三重前端门禁 + 双重后端门禁",
   "CI/CD 流水线（PR Checks 7 作业）",
   "AI 代码深度审查（376 文件 / 918 条发现）",
@@ -960,7 +960,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
   s.addChart(p.charts.BAR, [{
     name: "用例数",
     labels: ["后端 pytest", "前端 vitest"],
-    values: [11944, 6304],
+    values: [11948, 6304],
   }], {
     x: M, y: 1.95, w: 6.6, h: 4.2, barDir: "col",
     chartColors: [PRIMARY, PRIMARY_L], varyColors: true,
@@ -970,7 +970,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
     valAxisHidden: true, valGridLine: { style: "none" }, catGridLine: { style: "none" },
     showLegend: false, chartArea: { fill: { color: BG } },
   });
-  s.addText("数据来源：v1.12.12 仓库实测 · 后端 11,944 / 前端 6,304 用例 · 覆盖率 100%", { x: 0.7, y: 6.25, w: 6.6, h: 0.35,
+  s.addText("数据来源：v1.12.13 仓库实测 · 后端 11,948 / 前端 6,304 用例 · 覆盖率 100%", { x: 0.7, y: 6.25, w: 6.6, h: 0.35,
     fontSize: 11, color: MUTED, fontFace: F, margin: 0 });
   // 卡片高度自适应（≤ maxH 4.9in），正文按最终空间自动定字号
   bulletCard(s, 7.6, 1.95, 5.25, 4.2, "测试纪律", [
@@ -1138,7 +1138,7 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   });
   // 摘要条下移压缩：底边 6.85in，避开页脚文字带（体检器对 y ≥ 495pt 的页脚另有卡片归属判定）
   card(s, M, 5.9, 12.33, 0.95, PRIMARY_T);
-  s.addText("净效果：11,944 后端用例（覆盖率 100%）+ 6,304 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
+  s.addText("净效果：11,948 后端用例（覆盖率 100%）+ 6,304 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
     x: 0.82, y: 5.9, w: 11.6, h: 0.95, fontSize: 13.5, bold: true, color: TEXT,
     fontFace: F, valign: "middle", margin: 0 });
 }
@@ -1176,9 +1176,9 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   const tThanks = autoBox("谢谢观看", 11, 1.45, 54, 1.6, 36, true, 0, "P41 谢谢观看");
   s.addText("谢谢观看", { x: 0.96, y: 3.0, w: 11, h: tThanks.h, fontSize: tThanks.size, bold: true,
     color: "FFFFFF", fontFace: F, margin: 0 });
-  s.addText("帮扶管理信息系统 v1.12.12  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
+  s.addText("帮扶管理信息系统 v1.12.13  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
     x: 1.0, y: 4.55, w: 11, h: 0.45, fontSize: 13.5, color: LIGHT, fontFace: F, margin: 0 });
-  s.addText("11,944 后端用例（覆盖率 100%）+ 6,304 前端用例 全绿守护 · Windows x64 / 麒麟 ARM64 双平台离线交付", {
+  s.addText("11,948 后端用例（覆盖率 100%）+ 6,304 前端用例 全绿守护 · Windows x64 / 麒麟 ARM64 双平台离线交付", {
     x: 1.0, y: 5.05, w: 11, h: 0.45, fontSize: 13.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
