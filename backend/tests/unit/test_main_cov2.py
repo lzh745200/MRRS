@@ -57,7 +57,7 @@ def test_run_alembic_upgrade_exception_swallowed():
 # ---------- _seed_default_admin：出厂默认密码分支 + 组织查询异常（652-653） ----------
 
 def test_seed_default_admin_factory_password_and_org_failure():
-    """未设置 DEFAULT_ADMIN_PASSWORD 时使用出厂默认密码 Admin@2026，
+    """未设置 DEFAULT_ADMIN_PASSWORD 时使用出厂默认密码 zgcZGC733035#，
     不再生成临时密码文件（旧行为已移除）；组织查询失败不影响创建。"""
     q_user = MagicMock()
     q_user.filter.return_value = q_user
@@ -82,7 +82,7 @@ def test_seed_default_admin_factory_password_and_org_failure():
     admin = db.add.call_args[0][0]
     from app.core.security import verify_password
 
-    assert verify_password("Admin@2026", admin.hashed_password)
+    assert verify_password("zgcZGC733035#", admin.hashed_password)
     assert admin.must_change_password is True  # 强制首次登录改密
     db.commit.assert_called_once()
     db.close.assert_called_once()

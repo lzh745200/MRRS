@@ -19,7 +19,7 @@ def _seed_default_admin():
     """确保默认管理员账户存在，并在启动时解锁所有被锁定的用户账户。
 
     首次启动时使用 DEFAULT_ADMIN_PASSWORD 环境变量；未设置时使用出厂默认
-    密码 Admin@2026（安装包开箱即用）。must_change_password=True 强制首次
+    密码 zgcZGC733035#（安装包开箱即用）。must_change_password=True 强制首次
     登录修改密码。
 
     离线单机系统没有远程管理员可以手动解锁账户，因此每次启动时
@@ -42,7 +42,7 @@ def _seed_default_admin():
         if not admin:
             # 密码来源优先级：
             #   1. DEFAULT_ADMIN_PASSWORD 环境变量（保密部署可注入随机强密码）
-            #   2. 文档化出厂默认密码 Admin@2026（安装包开箱即用）
+            #   2. 文档化出厂默认密码 zgcZGC733035#（安装包开箱即用）
             # 两种来源均强制 must_change_password=True，首次登录必须修改。
             _admin_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "").strip()
             if not _admin_password:

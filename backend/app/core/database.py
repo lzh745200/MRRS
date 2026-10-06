@@ -12,7 +12,6 @@ SQLite 性能优化策略：
 """
 
 import logging
-import os
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -29,20 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 # 模块级常量：SQLite PRAGMA 调优值（避免每次连接重复计算）
-def _parse_env_int(key: str, default: int) -> int:
-    """从环境变量解析整数值，非数字值时给出清晰错误并回退到默认。"""
-    raw = os.environ.get(key, "")
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        logger.warning("%s=%r 不是有效整数，使用默认值 %d", key, raw, default)
-        return default
+# 解析逻辑统一走 app.utils.env_utils.parse_env_int（单一事实源，非法值回退默认）
+from app.utils.env_utils import parse_env_int  # noqa: E402
 
-
-SQLITE_MMAP_SIZE = _parse_env_int("SQLITE_MMAP_SIZE", 134217728)  # 默认 128MB
-SQLITE_CACHE_SIZE = _parse_env_int("SQLITE_CACHE_SIZE", -64000)    # 默认 64MB
+SQLITE_MMAP_SIZE = parse_env_int("SQLITE_MMAP_SIZE", 134217728)  # 默认 128MB
+SQLITE_CACHE_SIZE = parse_env_int("SQLITE_CACHE_SIZE", -64000)    # 默认 64MB
 
 DATABASE_URL = settings.DATABASE_URL
 IS_SQLITE = DATABASE_URL.startswith("sqlite")

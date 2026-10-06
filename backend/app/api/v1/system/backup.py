@@ -27,7 +27,8 @@ from app.services.backup_service import (
     BackupService,
     get_backup_service,
 )
-from app.services.system_config_service import get_config, set_config
+from app.services.system_config_service import get_config, get_int_config, set_config
+from app.utils.time_utils import parse_local_wallclock
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,10 @@ class CreateBackupRequest(BaseModel):
     include_uploads: bool = Field(True, description="是否包含上传文件")
     password: Optional[str] = Field(None, description="加密密码（可选）")
     target_dir: Optional[str] = Field(None, description="备份目标目录（可选，缺省用配置 backup_target_dir，再缺省用应用数据目录）")
+    trigger: str = Field(
+        "manual",
+        description="触发来源：auto=自动（由 backup_interval_days 决定是否落盘）；manual=手动（无条件执行）",
+    )
 
 
 class RestoreBackupRequest(BaseModel):
@@ -130,7 +135,12 @@ async def _jwt_user_from_request(request: Request) -> Any:
     scheme, _, token = auth.partition(" ")
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(status_code=401, detail="未提供认证凭证")
-    return await get_current_user(HTTPAuthorizationCredentials(scheme=scheme, credentials=token))
+    # 传 request：让首登强制改密的服务端拦截在本通道也能拿到真实路径判定，
+    # 而不是因缺路径退化成 fail-closed 的"一律拦截"。
+    return await get_current_user(
+        HTTPAuthorizationCredentials(scheme=scheme, credentials=token),
+        request=request,
+    )
 
 
 async def _authenticate_backup_request(request: Request) -> str:
@@ -174,6 +184,31 @@ async def _authenticate_backup_delete_request(request: Request) -> str:
 # ==================== API 端点 ====================
 
 
+def _auto_backup_skip_reason(get_config) -> Optional[str]:
+    """自动触发时是否应跳过本次备份；返回跳过原因（``None`` = 应当落盘）。
+
+    后端是备份节奏的**唯一权威**：Electron 只按固定频率轮询本端点，真正的
+    "今天该不该备份"由 ``auto_backup`` / ``backup_interval_days`` /
+    ``last_backup_time`` 决定。此前 Electron 自带 24h 硬编码节奏直调本端点，
+    使 ``backup_interval_days`` 完全失效（配置说 30 天、实际每天备）。
+
+    手动备份（前端按钮/托盘「立即备份」）不走这里，永远无条件执行。
+    """
+    if get_config("auto_backup", "true") != "true":
+        return "auto_backup_disabled"
+    interval_days = get_int_config("backup_interval_days", 1, getter=get_config)
+    last_time = get_config("last_backup_time", "")
+    last_ts = parse_local_wallclock(last_time)
+    if last_ts is None:
+        # 缺失或损坏：按"该备份了"处理，避免脏数据让自动备份永久停摆
+        return None
+    from datetime import datetime as _dt, timedelta as _td
+
+    if _dt.now() - last_ts < _td(days=interval_days):
+        return f"interval_not_reached:{interval_days}"
+    return None
+
+
 @router.post("", summary="创建数据库备份")
 async def create_backup(
     body: CreateBackupRequest,
@@ -191,6 +226,17 @@ async def create_backup(
     try:
         # 目标目录解析: 请求参数 > 配置 backup_target_dir > 应用数据目录
         from app.services.system_config_service import get_config
+
+        # 自动触发：先由后端判定是否到了该备份的时间（节奏单点）
+        if body.trigger == "auto":
+            skip_reason = _auto_backup_skip_reason(get_config)
+            if skip_reason:
+                logger.info("自动备份跳过: %s", skip_reason)
+                return {
+                    "success": True,
+                    "message": "自动备份无需执行（未到间隔或已禁用）",
+                    "data": {"skipped": True, "reason": skip_reason},
+                }
 
         svc = get_backup_service(db)
         target_dir = body.target_dir or get_config("backup_target_dir", "")
@@ -215,6 +261,19 @@ async def create_backup(
             "备份已创建: %s，操作人: %s",
             record.file_name, operator,
         )
+
+        # 保留策略在此统一执行（单一事实源）。
+        # 触发方可能是 Electron 定时任务（X-Internal-Backup）或前端手动备份，
+        # 无论谁来都由后端按 backup_retention_days 收敛旧备份 —— 历史上这条策略
+        # 只存在于 Electron 主进程里（硬编码 7 天），且后端自己的清理被间隔判定
+        # 饿死，形成两套并行且互相打架的事实源。清理失败不影响备份结果本身。
+        try:
+            retention_days = get_int_config("backup_retention_days", 7, getter=get_config)
+            deleted = await run_in_thread(svc.cleanup_by_retention_days, retention_days)
+            if deleted:
+                logger.info("备份后按保留 %d 天清理了 %d 个旧备份", retention_days, deleted)
+        except Exception:
+            logger.warning("备份后保留策略清理失败（不影响本次备份）", exc_info=True)
 
         return {
             "success": True,
@@ -440,7 +499,7 @@ async def get_backup_schedule(
     from datetime import datetime
 
     enabled = get_config("auto_backup", "true") == "true"
-    retention = int(get_config("backup_retention_days", "7") or 7)
+    retention = get_int_config("backup_retention_days", 7, getter=get_config)
     cron = get_config("backup_schedule_cron", "0 2 * * *")
 
     # 计算下一次运行时间（基于 cron 的每日 02:00 语义）
@@ -466,7 +525,11 @@ async def update_backup_schedule(
     """更新自动备份计划配置（写入 SystemConfig，后端调度热生效）。
 
     唯一真相源为后端 scheduler；Electron 仅触发，不维护策略。
+
+    权限：**仅管理员**。此前只校验"已登录"，任何普通用户都能改写全局备份开关/
+    频率/保留策略（前端页面自述普通用户只读，但接口未收口）。
     """
+    require_admin(current_user, error_message="仅管理员可修改备份计划")
     set_config("auto_backup", "true" if body.enabled else "false", "自动备份开关")
     if body.keep_count is not None:
         set_config("backup_retention_days", str(int(body.keep_count)), "备份保留天数")
@@ -474,7 +537,7 @@ async def update_backup_schedule(
         set_config("backup_schedule_cron", body.schedule, "备份调度 Cron")
 
     enabled = get_config("auto_backup", "true") == "true"
-    retention = int(get_config("backup_retention_days", "7") or 7)
+    retention = get_int_config("backup_retention_days", 7, getter=get_config)
     return success_response(
         data={
             "enabled": enabled,

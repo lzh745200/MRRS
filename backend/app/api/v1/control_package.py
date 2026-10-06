@@ -217,6 +217,10 @@ async def import_control_package_preview(
     current_user: User = Depends(get_current_active_user),
 ):
     """预览管控配置包内容（不执行导入）"""
+    # 权限与 /import 对齐：预览同样要解压并解析整个包（CPU/内存开销与导入相当），
+    # 此前只要求"已登录"，任何普通用户都能反复上传来占用解析资源。
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="仅管理员可预览管控配置包")
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="请上传 .zip 格式的管控配置包")
 
@@ -234,6 +238,13 @@ async def import_control_package_preview(
                 return ImportPreviewResponse(valid=False, error="无效的管控包：缺少 manifest.json")
 
             manifest = json.loads(read_zip_member(zf, "manifest.json"))
+            # 结构校验：预览是只读探测，畸形成员应返回 valid=False 而不是 500
+            # （原先只 catch BadZipFile / JSONDecodeError，manifest 为数组时
+            #  .get() 抛 AttributeError 直接 500）
+            if not isinstance(manifest, dict):
+                return ImportPreviewResponse(
+                    valid=False, error="无效的管控包：manifest.json 结构异常（应为 JSON 对象）"
+                )
             if manifest.get("package_type") != "control":
                 return ImportPreviewResponse(valid=False, error="非管控配置包类型")
 
@@ -241,10 +252,11 @@ async def import_control_package_preview(
             user_count = 0
             if "module_policy.json" in names:
                 policies = json.loads(read_zip_member(zf, "module_policy.json"))
-                module_policy_count = len(policies)
+                # 非数组结构按"无策略"处理，同样避免 500
+                module_policy_count = len(policies) if isinstance(policies, list) else 0
             if "users.json" in names:
                 users = json.loads(read_zip_member(zf, "users.json"))
-                user_count = len(users)
+                user_count = len(users) if isinstance(users, list) else 0
 
             return ImportPreviewResponse(
                 valid=True,

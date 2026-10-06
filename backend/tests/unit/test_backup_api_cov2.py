@@ -143,6 +143,29 @@ class TestUpdateBackupSchedule:
         assert ("backup_retention_days", "5") in set_calls
         assert ("auto_backup", "true") in set_calls
 
+    def test_schedule_requires_admin(self, client2):
+        """仅管理员可改全局备份计划。
+
+        历史缺陷：该端点只依赖 ``get_current_user``，任何登录用户（含只读的 role=user）
+        都能改写全局自动备份开关/频率/保留策略 —— 与页面自述"普通用户只读"矛盾。
+        """
+        from types import SimpleNamespace
+
+        client, _db = client2
+        plain_user = SimpleNamespace(
+            id=99, username="plain", role="user", is_superuser=False, is_active=True
+        )
+        client.app.dependency_overrides[get_current_user] = lambda: plain_user
+        try:
+            resp = client.put(
+                "/api/v1/system/backup/schedule",
+                json={"enabled": False, "schedule": "0 3 * * *", "keep_count": 5},
+            )
+        finally:
+            client.app.dependency_overrides[get_current_user] = _admin
+        assert resp.status_code == 403
+        assert "仅管理员" in resp.json()["detail"]
+
 
 # ==================== _jwt_user_from_request: awaitable override ====================
 

@@ -82,17 +82,96 @@ class TestAutoBackupJob:
             await bm.auto_backup_job()
         BS.assert_not_called()
 
-    async def test_interval_not_reached_skips(self):
+    async def test_interval_not_reached_skips_backup_but_still_cleans(self):
+        """未到间隔时不落新备份，但**保留策略仍要执行**。
+
+        历史缺陷：清理原先排在间隔 early return 之后，而 Electron 每次自动备份都会
+        刷新 ``last_backup_time``，使间隔判定长期命中"跳过" → 后端清理永久不可达，
+        磁盘上只剩 Electron 侧硬编码的那套清理（两套事实源）。
+        """
         db = MagicMock()
         recent = MagicMock()
         recent.value = datetime.now().isoformat()
         db.query.return_value.filter.return_value.first.return_value = recent
         with patch.object(bm, "get_db_context", _db_ctx(db)), \
              patch.object(bm, "get_config", _cfg({
-                 "auto_backup": "true", "backup_interval_days": "30"})), \
+                 "auto_backup": "true", "backup_interval_days": "30",
+                 "backup_retention_days": "7"})), \
              patch.object(bm, "BackupService") as BS:
+            BS.return_value.cleanup_by_retention_days.return_value = 0
             await bm.auto_backup_job()
-        BS.assert_not_called()
+        BS.return_value.create_backup.assert_not_called()
+        BS.return_value.cleanup_by_retention_days.assert_called_once_with(7)
+
+    async def test_invalid_retention_days_falls_back_to_7(self):
+        """backup_retention_days 非数字 → 回退 7 天（脏配置不致清理停摆或抛错）。"""
+        db = MagicMock()
+        with patch.object(bm, "get_db_context", _db_ctx(db)), \
+             patch.object(bm, "get_config", _cfg({
+                 "auto_backup": "true", "backup_interval_days": "30",
+                 "backup_retention_days": "abc"})), \
+             patch.object(bm, "BackupService") as BS, \
+             patch.object(bm, "_send_backup_reminder"):
+            BS.return_value.cleanup_by_retention_days.return_value = 0
+            BS.return_value.create_backup.return_value = MagicMock(file_name="b.zip", file_size=0)
+            await bm.auto_backup_job()
+        BS.return_value.cleanup_by_retention_days.assert_called_once_with(7)
+
+    async def test_retention_cleanup_failure_is_swallowed(self):
+        """清理抛错不得影响备份主流程（下个周期重试即可）。"""
+        db = MagicMock()
+        with patch.object(bm, "get_db_context", _db_ctx(db)), \
+             patch.object(bm, "get_config", _cfg({
+                 "auto_backup": "true", "backup_interval_days": "1",
+                 "backup_retention_days": "7"})), \
+             patch.object(bm, "BackupService") as BS:
+            BS.return_value.cleanup_by_retention_days.side_effect = RuntimeError("disk boom")
+            BS.return_value.create_backup.return_value = MagicMock(file_name="b.zip", file_size=0)
+            with patch.object(bm, "_send_backup_reminder"):
+                await bm.auto_backup_job()  # 不抛出
+        BS.return_value.create_backup.assert_called_once()
+
+    async def test_old_last_backup_proceeds(self):
+        """last_backup_time 已超过间隔 → 正常落盘（覆盖间隔判定的放行侧）。"""
+        db = MagicMock()
+        old = MagicMock()
+        old.value = (datetime.now() - timedelta(days=40)).isoformat()
+        db.query.return_value.filter.return_value.first.return_value = old
+        backup = MagicMock(file_name="b.zip", file_size=0)
+        with patch.object(bm, "get_db_context", _db_ctx(db)), \
+             patch.object(bm, "get_config", _cfg({
+                 "auto_backup": "true", "backup_interval_days": "30",
+                 "backup_target_dir": "", "backup_encrypt": "false",
+                 "backup_retention_days": "7"})), \
+             patch.object(bm, "BackupService") as BS, \
+             patch.object(bm, "_send_backup_reminder"):
+            BS.return_value.create_backup.return_value = backup
+            BS.return_value.cleanup_by_retention_days.return_value = 0
+            await bm.auto_backup_job()
+        BS.return_value.create_backup.assert_called_once()
+
+    async def test_aware_last_backup_time_does_not_fail_job(self):
+        """带时区偏移的脏 last_backup_time 不得让整条自动备份任务失败。
+
+        旧实现只 catch ValueError，而 naive - aware 抛的是 TypeError → 逃逸到外层
+        except → 每次自动备份都以"自动备份失败"告终（并给管理员发失败提醒）。
+        断言"未触发失败分支"可区分新旧实现。
+        """
+        db = MagicMock()
+        aware = MagicMock()
+        aware.value = datetime.now().astimezone().isoformat()  # 带 +08:00 偏移
+        db.query.return_value.filter.return_value.first.return_value = aware
+        with patch.object(bm, "get_db_context", _db_ctx(db)), \
+             patch.object(bm, "get_config", _cfg({
+                 "auto_backup": "true", "backup_interval_days": "30",
+                 "backup_target_dir": "", "backup_encrypt": "false",
+                 "backup_retention_days": "7"})), \
+             patch.object(bm, "BackupService") as BS, \
+             patch.object(bm, "_send_backup_reminder") as rem:
+            BS.return_value.cleanup_by_retention_days.return_value = 0
+            await bm.auto_backup_job()  # 不得抛
+        assert rem.call_count == 0  # 未走"自动备份失败"分支
+        BS.return_value.create_backup.assert_not_called()  # 刚备份过 → 跳过落盘
 
     async def test_success_plain_with_retention_and_reminder(self):
         db = MagicMock()

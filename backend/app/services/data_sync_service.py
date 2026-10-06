@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import timezone, datetime
@@ -18,10 +19,23 @@ from app.core.transaction import safe_commit
 from app.models.data_sync import DataSyncLog, DataConflict
 from app.services.encrypted_package import create_encrypted_package, extract_encrypted_package
 import hashlib as _hashlib
+from fastapi import HTTPException
+
+from app.core.async_utils import run_in_thread
+from app.utils.upload_helper import ensure_zip_within_limit, read_zip_member
 
 logger = logging.getLogger(__name__)
 # 预编译正则表达式，避免每次调用重新编译
 _TABLE_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+# 数据包「解压后」体积上限（压缩炸弹防线）。
+# multipart 中间件对 /api/v1/data-sync 放行 512MB **压缩包**（见
+# middleware/body_size_limit.py 的分级表），而 data.json 是 JSON 文本、压缩比很高，
+# 一个几 MB 的 zip 解压后可达成 GB 级 —— 直接在事件循环里 json.loads 全量物化会撑爆进程。
+# 合法导入远小于此值（对应配置项 package_max_size_mb 默认 100MB），故 1GB 兜底足够宽松，
+# 只会拦下病态样本。control_package / permission-packages 用的是 200MB 的共享常量，
+# 数据包语义更重，这里单独给阈值。
+_MAX_DATA_PACKAGE_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024
 
 # 允许同步的表名白名单（防止 SQL 注入）
 _ALLOWED_TABLES = frozenset({
@@ -140,7 +154,13 @@ class DataSyncService:
         """
         try:
             export_time = datetime.now(timezone.utc)
-            package_name = f"export_{export_time.strftime('%Y%m%d_%H%M%S')}"
+            # 秒级时间戳不足以区分同秒并发（双击导出 / 两管理员同时点）：此前包名无
+            # 随机后缀，两个请求写同一 zip 路径，后者 "w" 截断前者，两条 DataSyncLog
+            # 指向同一文件、先完成者被覆盖。追加短 uuid 消除碰撞（与
+            # backup_service.create_backup 的既有做法一致）。
+            package_name = (
+                f"export_{export_time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            )
 
             self.logger.info(f"开始导出增量数据: {package_name}")
 
@@ -395,16 +415,43 @@ class DataSyncService:
                 self.logger.info("data_imported: %s", result)
                 return result
 
+        except HTTPException:
+            # 解压体积闸门（413）需原样透传给客户端，不能被下面的兜底统一降级成
+            # BusinessLogicError —— 否则前端只看到「数据导入失败」，分不清是包太大
+            # 还是数据结构有问题，运维无从下手。
+            raise
         except Exception as e:
             self.logger.error(f"导入数据失败: {str(e)}")
             raise BusinessLogicError(f"数据导入失败: {str(e)}")
 
+    @staticmethod
+    def _read_import_package_sync(package_path: Path) -> Dict[str, Any]:
+        """同步解析数据包（由 ``_load_import_package`` 派发到 worker 线程执行）。
+
+        两点加固：
+        1. **解压体积闸门**：先按 ``ZipInfo.file_size`` 总量预检，压缩炸弹在
+           ``json.loads`` 之前就被 413 拦下，不会先耗尽内存；
+        2. **限长读取**：走 ``read_zip_member`` 而非 ``zf.open(...).read()``，
+           单成员声明体积也做二次预检。
+        """
+        with zipfile.ZipFile(package_path, "r") as zipf:
+            ensure_zip_within_limit(zipf, _MAX_DATA_PACKAGE_UNCOMPRESSED_BYTES)
+            raw = read_zip_member(zipf, "data.json", _MAX_DATA_PACKAGE_UNCOMPRESSED_BYTES)
+        return json.loads(raw.decode("utf-8"))
+
     async def _load_import_package(self, package_path: Path) -> Dict[str, Any]:
-        """加载导入数据包"""
+        """加载导入数据包。
+
+        IO/CPU 密集型（zip 解压 + 全量 JSON 解析）统一移入线程池：此前直接在
+        事件循环线程内同步执行，一次大包导入会让**全部并发请求（含登录、前端轮询）
+        无响应**，直到解析结束。
+        """
         try:
-            with zipfile.ZipFile(package_path, "r") as zipf:
-                with zipf.open("data.json") as f:
-                    return json.loads(f.read().decode("utf-8"))
+            return await run_in_thread(self._read_import_package_sync, package_path)
+        except HTTPException:
+            # 体积闸门语义（413）必须透传：若被下面的兜底吞掉会退化成"空包"，
+            # 调用方只看到"数据包格式错误"，超限真因被完全掩盖。
+            raise
         except Exception as e:
             self.logger.error(f"加载数据包失败: {str(e)}")
             return {}
@@ -459,6 +506,18 @@ class DataSyncService:
                                     "type": "duplicate",
                                 }
                             )
+                            result["success"] += 1
+                        else:
+                            # merge（智能合并）：仅当导入记录更新时覆盖，语义与加密包
+                            # 路径 _import_table_data_enhanced 的 merge 分支一致。
+                            # 历史缺陷：本分支缺失且无 else 兜底，而前端数据同步页的
+                            # **默认策略就是 merge**（"智能合并（推荐）"）—— 已存在
+                            # 记录既不被更新也不计入 success/failed/conflicts，接口却
+                            # 返回"导入成功"，且 total != success + failed，冲突数据
+                            # 静默不生效。未知策略同样落此分支并计入 success。
+                            existing_dict = dict(zip(existing.keys(), existing))
+                            if self._should_update_record(existing_dict, record):
+                                await self._update_record(db, table_name, record)
                             result["success"] += 1
                     else:
                         # 插入新记录
@@ -609,7 +668,13 @@ class DataSyncService:
                 raise BusinessLogicError("密码长度至少为8位")
 
             export_time = datetime.now(timezone.utc)
-            package_name = f"export_{export_time.strftime('%Y%m%d_%H%M%S')}"
+            # 秒级时间戳不足以区分同秒并发（双击导出 / 两管理员同时点）：此前包名无
+            # 随机后缀，两个请求写同一 zip 路径，后者 "w" 截断前者，两条 DataSyncLog
+            # 指向同一文件、先完成者被覆盖。追加短 uuid 消除碰撞（与
+            # backup_service.create_backup 的既有做法一致）。
+            package_name = (
+                f"export_{export_time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            )
 
             self.logger.info(f"开始导出加密数据包: {package_name}")
 
@@ -898,6 +963,37 @@ class DataSyncService:
         safe_commit(db, self.logger)
         return result
 
+    @staticmethod
+    def _normalize_record_time(value: Any) -> Optional[datetime]:
+        """把记录里的时间字段归一为 aware UTC；无法解析返回 ``None``。
+
+        三个来源形态不同，必须先归一：
+        - raw ``text()`` 查询（``SELECT * FROM ...``）返回的是**字符串**（pysqlite
+          默认未开 ``detect_types``）——这是本方法存在的根因；
+        - 导入包的 JSON 值是字符串；
+        - ORM 路径给的是 aware ``datetime``。
+
+        历史缺陷：直接 ``imported_time > existing_time`` 会因 ``datetime > str``
+        抛 ``TypeError``，被外层 ``except Exception`` 吞成一条 warning 后**恒返回
+        False** —— 加密包的"智能合并"因此永不更新本地记录（静默降级为 skip）。
+        同类归一化在 ``utils/smart_conflict_resolver.py`` 已有先例。
+        """
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value)
+            except ValueError:
+                return None
+        else:
+            return None
+        # 库内与包内时间均为 UTC 墙钟（naive），故 naive 一律按 UTC 解释
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
     def _should_update_record(self, existing: Dict[str, Any], imported: Dict[str, Any]) -> bool:
         """
         判断是否应该更新记录（基于时间戳）
@@ -911,25 +1007,12 @@ class DataSyncService:
         """
         # 如果导入记录有 updated_at 字段，比较时间戳
         if "updated_at" in imported and "updated_at" in existing:
-            try:
-                from dateutil import parser
-
-                imported_time = (
-                    parser.parse(imported["updated_at"])
-                    if isinstance(imported["updated_at"], str)
-                    else imported["updated_at"]
-                )
-                existing_time = existing["updated_at"]
-
-                # 如果导入的记录更新，则更新
+            imported_time = self._normalize_record_time(imported["updated_at"])
+            existing_time = self._normalize_record_time(existing["updated_at"])
+            if imported_time is not None and existing_time is not None:
                 return imported_time > existing_time
-            except Exception:
-                # 时间解析失败会静默跳过该记录 → 数据不一致，升级为 warning 可观测
-                logger.warning(
-                    "数据同步更新比较失败（记录可能被跳过）: %s", imported.get("id", "?"), exc_info=True
-                )
 
-        # 默认不更新
+        # 默认不更新（字段缺失或时间无法解析）
         return False
 
 

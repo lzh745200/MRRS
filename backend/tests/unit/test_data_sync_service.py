@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 
 @pytest.fixture
@@ -379,17 +380,18 @@ class TestDataSyncService:
                 await service.import_package("/tmp/test.zip")
 
     # ===================== _load_import_package =====================
+    # 注意：`tmp_path` 必须排在这些用例的**第一个**夹具参数位。
+    # `service` 夹具在整个用例期间 patch 了 `pathlib.Path.mkdir`，
+    # 若它先于 tmp_path 实例化，pytest 建临时目录会静默失败（E FileNotFoundError: .lock）。
     @pytest.mark.asyncio
-    async def test_load_import_package_success(self, service):
-        with patch("zipfile.ZipFile") as mock_zip:
-            m = MagicMock()
-            mock_zip.return_value.__enter__ = MagicMock(return_value=m)
-            mock_zip.return_value.__exit__ = MagicMock()
-            file_ctx = MagicMock()
-            file_ctx.__enter__.return_value.read.return_value = json.dumps({"key": "val"}).encode("utf-8")
-            m.open.return_value = file_ctx
-            result = await service._load_import_package(Path("/tmp/test_pkg.zip"))
-            assert result == {"key": "val"}
+    async def test_load_import_package_success(self, tmp_path, service):
+        """真实 zip 走完整链路（R18 后续：改走 read_zip_member + 解压体积闸门）。"""
+        import zipfile
+
+        pkg = tmp_path / "pkg.zip"
+        with zipfile.ZipFile(pkg, "w") as zf:
+            zf.writestr("data.json", json.dumps({"key": "val"}))
+        assert await service._load_import_package(pkg) == {"key": "val"}
 
     @pytest.mark.asyncio
     async def test_load_import_package_failure(self, service):
@@ -397,6 +399,74 @@ class TestDataSyncService:
             mock_zip.side_effect = Exception("bad zip")
             result = await service._load_import_package(Path("/tmp/test_pkg.zip"))
             assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_load_import_package_missing_member(self, tmp_path, service):
+        """缺 data.json 时 KeyError 落入兜底，仍返回空包（既有语义不变）。"""
+        import zipfile
+
+        pkg = tmp_path / "nodata.zip"
+        with zipfile.ZipFile(pkg, "w") as zf:
+            zf.writestr("other.json", "{}")
+        assert await service._load_import_package(pkg) == {}
+
+    @pytest.mark.asyncio
+    async def test_load_import_package_bomb_413_propagates(
+        self, tmp_path, service, monkeypatch
+    ):
+        """压缩炸弹：解压后超限必须抛 413 透传。
+
+        守护重点：闸门异常**不能**被 "except Exception → return {}" 吞掉 ——
+        一旦吞掉，调用方只看到"数据包格式错误"，超限真因被完全掩盖。
+        """
+        import zipfile
+
+        import app.services.data_sync_service as mod
+
+        monkeypatch.setattr(mod, "_MAX_DATA_PACKAGE_UNCOMPRESSED_BYTES", 10)
+        pkg = tmp_path / "bomb.zip"
+        with zipfile.ZipFile(pkg, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("data.json", json.dumps({"blob": "x" * 5000}))
+
+        with pytest.raises(HTTPException) as ei:
+            await service._load_import_package(pkg)
+        assert ei.value.status_code == 413
+
+    @pytest.mark.asyncio
+    async def test_load_import_package_runs_off_event_loop(self, tmp_path, service):
+        """解析必须派发到 worker 线程：否则大包导入会阻塞整个事件循环。"""
+        import threading
+        import zipfile
+
+        pkg = tmp_path / "pkg2.zip"
+        with zipfile.ZipFile(pkg, "w") as zf:
+            zf.writestr("data.json", json.dumps({"k": 1}))
+
+        seen = {}
+        real = service._read_import_package_sync
+
+        def spy(path):
+            seen["thread"] = threading.current_thread().name
+            return real(path)
+
+        with patch.object(service, "_read_import_package_sync", side_effect=spy):
+            assert await service._load_import_package(pkg) == {"k": 1}
+        assert seen["thread"] != threading.current_thread().name
+
+    @pytest.mark.asyncio
+    async def test_import_package_propagates_uncompressed_413(self, tmp_path, service):
+        """`import_package` 必须原样透传解析层的 413（不被降级成 400）。"""
+        pkg = tmp_path / "p.zip"
+        pkg.write_bytes(b"pk")
+        with patch.object(
+            service,
+            "_load_import_package",
+            new_callable=AsyncMock,
+            side_effect=HTTPException(status_code=413, detail="压缩包解压后体积超过限制（1024MB）"),
+        ):
+            with pytest.raises(HTTPException) as ei:
+                await service.import_package(str(pkg))
+        assert ei.value.status_code == 413
 
     # ===================== _import_table_data =====================
     @pytest.mark.asyncio
@@ -408,6 +478,72 @@ class TestDataSyncService:
         result = await service._import_table_data(db, "supported_villages", [{"id": 1}], "skip", 1)
         assert result["success"] == 1
         db.commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_import_merge_existing_updates_when_newer(self, service):
+        """merge 策略必须真的合并 —— 前端数据同步页**默认策略就是 merge**。
+
+        历史缺陷：`_import_table_data` 只有 skip/overwrite/manual 三个分支且无 else
+        兜底，merge 落到"什么都不做"：既不更新、也不计 success/failed/conflicts，
+        接口却返回"导入成功"（且 total != success + failed）。本用例在旧实现下
+        ``result["success"]`` 为 0，必然失败 —— 用于锁住修复。
+        """
+
+        class _Row:
+            """模拟 raw text() 查询返回的行（支持 keys() 与迭代）。"""
+
+            def __init__(self, data):
+                self._data = data
+
+            def keys(self):
+                return list(self._data.keys())
+
+            def __iter__(self):
+                return iter(self._data.values())
+
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = _Row(
+            {"id": 1, "updated_at": "2024-01-01 00:00:00"}
+        )
+        with patch.object(service, "_update_record", new_callable=AsyncMock) as upd:
+            result = await service._import_table_data(
+                db,
+                "supported_villages",
+                [{"id": 1, "updated_at": "2024-06-01T00:00:00"}],
+                "merge",
+                1,
+            )
+        assert result["success"] == 1
+        upd.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_import_merge_keeps_newer_local(self, service):
+        """本地记录更新时不覆盖，但仍计入 success，保证计数平衡。"""
+
+        class _Row:
+            def __init__(self, data):
+                self._data = data
+
+            def keys(self):
+                return list(self._data.keys())
+
+            def __iter__(self):
+                return iter(self._data.values())
+
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = _Row(
+            {"id": 1, "updated_at": "2024-12-01 00:00:00"}
+        )
+        with patch.object(service, "_update_record", new_callable=AsyncMock) as upd:
+            result = await service._import_table_data(
+                db,
+                "supported_villages",
+                [{"id": 1, "updated_at": "2024-06-01T00:00:00"}],
+                "merge",
+                1,
+            )
+        assert result["success"] == 1
+        upd.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_import_overwrite(self, service):
@@ -864,6 +1000,40 @@ class TestDataSyncService:
     def test_should_update_parse_error(self, service):
         r = service._should_update_record({"id": 1, "updated_at": "bad"}, {"id": 1, "updated_at": "also-bad"})
         assert r is False
+
+    def test_should_update_raw_sqlite_strings(self, service):
+        """**生产形态**：两侧都是 raw ``text()`` 查询返回的字符串。
+
+        旧实现直接 ``imported_time > existing_time``（datetime vs str）抛 TypeError，
+        被外层 except 吞成 warning 后恒返回 False —— 加密包的"智能合并"永不更新本地
+        记录。本用例在旧实现下必失败，用于锁住归一化修复。
+        """
+        assert service._should_update_record(
+            {"id": 1, "updated_at": "2024-01-01 00:00:00"},
+            {"id": 1, "updated_at": "2024-06-01T00:00:00"},
+        ) is True
+
+    def test_should_update_aware_vs_naive(self, service):
+        """aware / naive 混算不得抛 TypeError（naive 按 UTC 解释）。"""
+        from datetime import datetime, timezone
+
+        assert service._should_update_record(
+            {"id": 1, "updated_at": datetime(2024, 1, 1, tzinfo=timezone.utc)},
+            {"id": 1, "updated_at": "2024-06-01 00:00:00"},
+        ) is True
+        assert service._should_update_record(
+            {"id": 1, "updated_at": "2024-06-01 00:00:00"},
+            {"id": 1, "updated_at": datetime(2024, 1, 1, tzinfo=timezone.utc)},
+        ) is False
+
+    def test_should_update_non_time_types(self, service):
+        """非 str/datetime（如 int/None）不得抛异常。"""
+        assert service._should_update_record(
+            {"id": 1, "updated_at": 123}, {"id": 1, "updated_at": "2024-06-01"}
+        ) is False
+        assert service._should_update_record(
+            {"id": 1, "updated_at": None}, {"id": 1, "updated_at": "2024-06-01"}
+        ) is False
 
     # ===================== module-level instance =====================
     def test_data_sync_service_instance(self):

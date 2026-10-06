@@ -27,6 +27,7 @@ from app.services.machine_code_permission_service import MachineCodePermissionSe
 from app.services.rbac_service import Permission, rbac_service
 from app.services.work_log_service import write_work_log
 from app.core.transaction import safe_commit
+from app.utils.pagination import clamp_offset_limit
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +261,9 @@ async def admin_list_machine_codes(
 
     try:
         service = MachineCodeService(db)
-        records, total = service.list_machine_codes(status=status_filter, skip=skip, limit=limit)
+        # 钳制分页（limit=-1 在 SQLite 下等同不限量）
+        offset, lim = clamp_offset_limit(skip, limit)
+        records, total = service.list_machine_codes(status=status_filter, skip=offset, limit=lim)
 
         items = []
         for record in records:

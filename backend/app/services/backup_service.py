@@ -30,6 +30,7 @@ from app.core.maintenance import maintenance_window
 from app.utils.upload_helper import read_zip_member
 from app.core.transaction import retry_on_deadlock, safe_commit
 from app.utils.time_utils import as_utc, utcnow
+from app.utils.env_utils import parse_env_int
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +185,10 @@ class BackupService:
 
         # 增量备份配置
         self.incremental_enabled = os.getenv("INCREMENTAL_BACKUP_ENABLED", "true").lower() == "true"
-        self.compression_level = int(os.getenv("BACKUP_COMPRESSION_LEVEL", "6"))  # 0-9
+        # 压缩级别 0-9：非数字回退默认、越界收敛到合法区间。
+        # 历史缺陷：裸 int() 在环境变量非数字时抛 ValueError → 每次构造
+        # BackupService 即失败 → 备份创建/列表/清理整条链路不可用。
+        self.compression_level = min(9, max(0, parse_env_int("BACKUP_COMPRESSION_LEVEL", 6)))
         self.last_backup_manifest = self._load_last_manifest()
 
     def _resolve_database_path(self) -> Path:

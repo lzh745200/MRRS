@@ -41,6 +41,29 @@ def get_config(key: str, default: Any = None) -> Optional[str]:
         db.close()
 
 
+def get_int_config(key: str, default: int, getter=None) -> int:
+    """读取配置并转为 ``int``；缺失/非数字/类型异常一律回退 ``default``。
+
+    通用配置端点（``PUT /config/{key}``）与控制包导入都能写入**任意字符串**，因此
+    ``int(get_config(key, ...))`` 是活的可炸点：库里存了非数字时，未加保护的调用点
+    会直接抛 ``ValueError`` → 接口 500。
+
+    Args:
+        key: 配置键
+        default: 缺失或非法时的默认值
+        getter: 可选的取值函数（签名同 ``get_config``）。调用方模块通常以
+            ``from ... import get_config`` 引入并在测试中被 patch —— 此时必须把
+            **该模块自己的** ``get_config`` 传进来（``getter=get_config``），否则
+            本函数内部走模块级 ``get_config`` 会绕过 patch，导致测试看似通过却
+            没测到真实分支（弱 mock）。
+    """
+    read = getter or get_config
+    try:
+        return int(read(key, str(default)) or default)
+    except (TypeError, ValueError):
+        return default
+
+
 def set_config(key: str, value: Any, description: str = ""):
     """设置配置值（全局函数）"""
     if _global_config_service is not None:
@@ -76,7 +99,11 @@ class SystemConfigService:
         "data_package_encryption": {"value": "false", "description": "是否加密数据包"},
         "auto_backup": {"value": "true", "description": "是否自动备份（默认开启，由后端调度统一执行，保留 backup_retention_days 天）"},
         "backup_retention_days": {"value": "7", "description": "备份保留天数（超过自动清理）"},
-        "backup_interval_days": {"value": "30", "description": "备份间隔（天）"},
+        # 备份间隔（天）。2026-10-06：由 30 改为 1 —— 与桌面端实际生效的节奏对齐。
+        # 此前默认 30 天，而 Electron 侧固定每 24h 直调备份端点且不读本配置，
+        # 使本项长期与实际行为矛盾（配置说 30 天、实际每天备）。改为 1 天后
+        # 「配置 = 行为」，调整节奏只需改这里（Electron 不再自带节奏）。
+        "backup_interval_days": {"value": "1", "description": "备份间隔（天）"},
         "max_backup_count": {"value": "3", "description": "最大备份数量"},
         "backup_target_dir": {"value": "", "description": "备份目标目录（留空=应用数据目录；可填U盘/移动硬盘路径）"},
         "backup_encrypt": {"value": "false", "description": "自动备份默认加密（AES-256）"},

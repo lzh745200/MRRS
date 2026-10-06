@@ -6,6 +6,7 @@
 import io
 import logging
 import os
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -163,8 +164,14 @@ def _apply_attachments(policy: Policy, urls) -> None:
         policy.file_size = 0
 
 
-def _policy_to_frontend(policy: Policy) -> Dict[str, Any]:
-    """将数据库 Policy 对象转换为前端期望的格式"""
+def _policy_to_frontend(policy: Policy, include_content: bool = True) -> Dict[str, Any]:
+    """将数据库 Policy 对象转换为前端期望的格式。
+
+    ``include_content=False`` 供**列表端点**使用：``content`` 是无长度上限的
+    ``Text`` 全文，列表页并不渲染它（详情走 ``GET /policies/{policy_id}``，
+    前端 ``views/policies/Detail.vue`` 用 ``sanitizeHtml`` + ``v-html`` 渲染），
+    返回它只会放大响应体。详情/创建/更新端点保持默认 True 不变。
+    """
     level_val = str(policy.level) if policy.level else ""
     status_val = str(policy.status) if policy.status else "draft"
     category_val = str(policy.category) if policy.category else ""
@@ -173,11 +180,10 @@ def _policy_to_frontend(policy: Policy) -> Dict[str, Any]:
     level_names = _level_display_map()
     status_names = _status_display_map()
 
-    return {
+    result: Dict[str, Any] = {
         "id": policy.id,
         "title": policy.title,
         "code": policy.code,
-        "content": policy.content or "",
         "summary": policy.summary,
         "keywords": policy.keywords,
         # 分类 & 层级
@@ -210,6 +216,9 @@ def _policy_to_frontend(policy: Policy) -> Dict[str, Any]:
         "created_at": _safe_isoformat(policy.created_at),
         "updated_at": _safe_isoformat(policy.updated_at),
     }
+    if include_content:
+        result["content"] = policy.content or ""
+    return result
 
 
 # ==================== Pydantic模型 ====================
@@ -931,12 +940,15 @@ async def upload_policy_file(
     _orig_name = file.filename or ""
     ext = _orig_name.rsplit(".", 1)[-1].lower() if "." in _orig_name else ""
     _ts = int(datetime.now().timestamp())
+    # 文件名加短 uuid：秒级时间戳不足以区分同秒两次上传（同一 policy 覆盖同一路径，
+    # 后者截断前者）。save_upload_file 在显式传入 name_generator 时不会自动补 uuid。
+    _nonce = uuid.uuid4().hex[:6]
 
     file_info = await save_upload_file(
         file,
         "policies",
         allowed_extensions={"pdf", "doc", "docx", "pptx"},
-        name_generator=lambda _orig, _ext: f"policy_{policy_id}_{_ts}.{_ext}",
+        name_generator=lambda _orig, _ext: f"policy_{policy_id}_{_ts}_{_nonce}.{_ext}",
     )
 
     # 更新数据库
@@ -1210,7 +1222,7 @@ async def get_policies(
 
     items = query.offset(offset).limit(lim).all()
 
-    items_list = [_policy_to_frontend(p) for p in items]
+    items_list = [_policy_to_frontend(p, include_content=False) for p in items]
     result = ok_list(items=items_list, total=total, page=(offset // lim) + 1 if lim else 1, page_size=lim)
     if _no_filter and _is_default_page:
         await cache_manager.set(_cache_key, result, ttl=300)
@@ -1243,7 +1255,7 @@ async def get_related_policies(
     if policy.category:
         query = query.filter(Policy.category == policy.category)
     related = query.order_by(Policy.created_at.desc()).limit(limit).all()
-    return success_response(data=[_policy_to_frontend(p) for p in related])
+    return success_response(data=[_policy_to_frontend(p, include_content=False) for p in related])
 
 
 @router.get("/search")
@@ -1607,7 +1619,7 @@ async def get_user_favorites(
     if not policy_ids:
         return success_response(data=[])
     items = db.query(Policy).filter(Policy.id.in_(policy_ids)).all()
-    return success_response(data=[_policy_to_frontend(p) for p in items])
+    return success_response(data=[_policy_to_frontend(p, include_content=False) for p in items])
 
 
 def _attachment_urls_of(policy: Policy) -> list:

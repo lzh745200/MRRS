@@ -6,7 +6,35 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.pagination import encode_cursor, decode_cursor, keyset_paginate, paginate_query
+from app.utils.pagination import (
+    MAX_PAGE_SIZE,
+    clamp_offset_limit,
+    decode_cursor,
+    encode_cursor,
+    keyset_paginate,
+    paginate_query,
+)
+
+
+class TestClampOffsetLimit:
+    """端点级 skip/limit 钳制（单一事实源）。"""
+
+    def test_valid_values_unchanged(self):
+        assert clamp_offset_limit(20, 50) == (20, 50)
+
+    def test_negative_limit_becomes_one(self):
+        """limit=-1 在 SQLite 语义下等同"不限量"，必须被钳制。"""
+        assert clamp_offset_limit(0, -1) == (0, 1)
+
+    def test_negative_skip_becomes_zero(self):
+        assert clamp_offset_limit(-5, 50) == (0, 50)
+
+    def test_oversized_limit_capped(self):
+        assert clamp_offset_limit(0, 10**6) == (0, MAX_PAGE_SIZE)
+
+    def test_custom_max_page_size(self):
+        assert clamp_offset_limit(0, 999, max_page_size=10) == (0, 10)
+
 
 
 # ============================================================================

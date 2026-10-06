@@ -53,7 +53,7 @@ from app.main import app  # noqa: E402
 with TestClient(app, raise_server_exceptions=False) as client:
     r = client.get("/api/v1/auth/csrf-token")
     token = (r.json().get("data") or {}).get("csrf_token")
-    r = client.post("/api/v1/auth/login", json={"username": "admin", "password": "Admin@2026"},
+    r = client.post("/api/v1/auth/login", json={"username": "admin", "password": "zgcZGC733035#"},
                     headers={"X-CSRF-Token": token})
     at = (r.json().get("data") or {}).get("access_token")
     check("管理员登录", bool(at))
@@ -150,7 +150,7 @@ with TestClient(app, raise_server_exceptions=False) as client:
     r = client.post("/api/v1/two-factor/verify", json={"token": "000000"}, headers=AUTH)
     check("错误验证码被拒(400)", r.status_code == 400, (r.status_code, str(r.json())[:120]))
     # 关闭 2FA（恢复环境；带验证码或密码按契约）
-    r = client.post("/api/v1/two-factor/disable", json={"code": "000000", "password": "Admin@2026"},
+    r = client.post("/api/v1/two-factor/disable", json={"code": "000000", "password": "zgcZGC733035#"},
                     headers=AUTH)
     check("关闭2FA", r.status_code in (200, 400), (r.status_code, str(r.json())[:120]))
 

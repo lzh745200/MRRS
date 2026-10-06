@@ -124,7 +124,7 @@ class TestOrgSelfVerifyRegistration:
         token = (r.json().get("data") or {}).get("csrf_token")
         r = client.post(
             "/api/v1/auth/login",
-            json={"username": "admin", "password": "Admin@2026"},
+            json={"username": "admin", "password": "zgcZGC733035#"},
             headers={"X-CSRF-Token": token},
         )
         d = r.json()

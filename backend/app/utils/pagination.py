@@ -21,6 +21,23 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+# 端点级分页上限（与 paginate_query 默认口径一致：单页最多 200 条）
+MAX_PAGE_SIZE = 200
+
+
+def clamp_offset_limit(skip: int, limit: int, max_page_size: int = MAX_PAGE_SIZE) -> tuple[int, int]:
+    """钳制端点上的 ``skip`` / ``limit``，返回 ``(offset, limit)``。
+
+    裸 ``.offset(skip).limit(limit)`` 在用户可控参数下有两个真实风险：
+    ``limit=-1`` 在 SQLite 语义下等于「不限量」（一次拉全表，既是 DoS 面也是信息
+    暴露面），``skip`` 为负则是非法偏移。仓库既有端点多用 ``max(skip, 0)`` 就地钳制、
+    口径不一；此处收敛为单一事实源（与 ``paginate_query`` 的 ``max_page_size`` 一致）。
+
+    采用**钳制**而非 422 校验：与仓库既有 ``max(skip, 0)`` 行为一致，不会让
+    前端 0 基页码等历史调用突然失败。
+    """
+    return max(skip, 0), min(max(limit, 1), max_page_size)
+
 
 # ============================================================================
 # 1. Cursor 编码与解码 (用于 Keyset 分页)

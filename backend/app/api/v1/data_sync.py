@@ -16,6 +16,7 @@ from app.core.security import get_current_user
 from app.core.upload_security import sanitize_filename
 from app.models.user import User
 from app.services.data_sync_service import data_sync_service, ExportConfig
+from app.utils.pagination import clamp_offset_limit
 
 
 class ExportEncryptedRequest(BaseModel):
@@ -122,6 +123,10 @@ async def export_data(
             )
         )
         return result
+    except HTTPException:
+        # 非法 since 等参数校验的 400 必须原样透传，不能被降级成
+        # "导出数据失败: 400: 时间格式错误"（同文件 import_data 已是此口径）
+        raise
     except Exception as e:
         raise BusinessError(f"导出数据失败: {str(e)}")
 
@@ -234,6 +239,10 @@ async def import_data(
         )
 
         return result
+    except HTTPException:
+        # 解压体积闸门返回 413：语义必须原样透传（前端按状态码提示"包过大"），
+        # 不能被兜底降级成 400 的"导入数据失败"。
+        raise
     except Exception as e:
         raise BusinessError(f"导入数据失败: {str(e)}")
     finally:
@@ -270,6 +279,9 @@ async def import_encrypted_data(
         )
 
         return result
+    except HTTPException:
+        # 解压体积闸门（413）等 HTTP 语义原样透传，理由同 import_data
+        raise
     except Exception as e:
         raise BusinessError(f"导入加密数据失败: {str(e)}")
     finally:
@@ -344,6 +356,8 @@ async def get_sync_logs(
             if sync_type:
                 query = query.filter(DataSyncLog.sync_type == sync_type)
 
+            # 钳制分页（limit=-1 在 SQLite 下等同不限量）
+            _offset, limit = clamp_offset_limit(0, limit)
             logs = query.order_by(DataSyncLog.created_at.desc()).limit(limit).all()
 
             items_list = [

@@ -20,8 +20,11 @@ HTTP_CLIENT_CLOSED_REQUEST = 499
 # 默认管理员出厂密码（单一来源）：main.py 种子逻辑与 machine_code.py 破窗恢复
 # 端点共同引用。保密部署可通过 DEFAULT_ADMIN_PASSWORD 环境变量覆盖种子值，
 # 但出厂恢复端点固定重置为本常量（首登强制改密，不构成弱口令驻留）。
+# 2026-10-06：由 "Admin@2026"（10 位，低于 PasswordPolicy.MIN_LENGTH=12 且可被
+# 字典猜测）改为 13 位混合字符，满足自身密码策略；配套由 core/security.py 的
+# get_current_user 在服务端强制首登改密（原先仅前端路由守卫拦截，直连 API 可绕过）。
 FACTORY_ADMIN_USERNAME = "admin"
-FACTORY_ADMIN_PASSWORD = "Admin@2026"
+FACTORY_ADMIN_PASSWORD = "zgcZGC733035#"
 
 
 # ── 角色常量 ──

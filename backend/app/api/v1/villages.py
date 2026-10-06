@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.database import get_db
 from app.core.response import ok_list
 from app.core.security import get_current_user
+from app.utils.pagination import clamp_offset_limit
 
 router = APIRouter(prefix="/villages", tags=["村庄管理"])
 
@@ -52,7 +53,9 @@ async def list_villages(
 
     # 先取 total 再分页（避免分页后 total 不准）
     total = query.count()
-    villages = query.offset(skip).limit(limit).all()
+    # 钳制分页（limit=-1 在 SQLite 下等同不限量）
+    offset, lim = clamp_offset_limit(skip, limit)
+    villages = query.offset(offset).limit(lim).all()
 
     items = [
         {

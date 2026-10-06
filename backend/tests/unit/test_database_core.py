@@ -2,7 +2,7 @@
 app/core/database.py 单元测试 — 目标 100% 行覆盖。
 
 测试内容：
-- _parse_env_int：空值/有效整数/无效整数（ValueError 回退）
+- parse_env_int：空值/有效整数/无效整数（ValueError 回退）
 - _set_sqlite_pragma：标准 PRAGMA（真实连接 + 直接调用 mock）、SQLCipher 加密分支
   （密钥文件存在/缺失/空白/异常）
 - get_db：生成器 yield Session 并在结束时 close
@@ -20,11 +20,11 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 from app.core import database
+from app.utils.env_utils import parse_env_int
 from app.core.database import (
     SQLITE_CACHE_SIZE,
     SQLITE_MMAP_SIZE,
     SQLiteWriteCoordinator,
-    _parse_env_int,
     _set_sqlite_pragma,
     db_coordinator,
     engine,
@@ -33,26 +33,26 @@ from app.core.database import (
 
 
 # ---------------------------------------------------------------------------
-# _parse_env_int
+# parse_env_int
 # ---------------------------------------------------------------------------
 class TestParseEnvInt:
     """测试环境变量整数解析的三个分支。"""
 
     def test_empty_env_returns_default(self, monkeypatch):
         monkeypatch.delenv("TEST_PARSE_INT_VAR", raising=False)
-        assert _parse_env_int("TEST_PARSE_INT_VAR", 42) == 42
+        assert parse_env_int("TEST_PARSE_INT_VAR", 42) == 42
 
     def test_valid_integer_env(self, monkeypatch):
         monkeypatch.setenv("TEST_PARSE_INT_VAR", "999")
-        assert _parse_env_int("TEST_PARSE_INT_VAR", 42) == 999
+        assert parse_env_int("TEST_PARSE_INT_VAR", 42) == 999
 
     def test_invalid_integer_falls_back_with_warning(self, monkeypatch):
         monkeypatch.setenv("TEST_PARSE_INT_VAR", "not-a-number")
-        result = _parse_env_int("TEST_PARSE_INT_VAR", 42)
+        result = parse_env_int("TEST_PARSE_INT_VAR", 42)
         assert result == 42
 
     def test_module_level_constants_are_integers(self):
-        """模块级常量在导入时已通过 _parse_env_int 计算，验证类型。"""
+        """模块级常量在导入时已通过 parse_env_int 计算，验证类型。"""
         assert isinstance(SQLITE_MMAP_SIZE, int)
         assert isinstance(SQLITE_CACHE_SIZE, int)
         # 默认值验证

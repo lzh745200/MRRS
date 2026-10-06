@@ -123,3 +123,29 @@ def to_utc_naive(value: Optional[datetime]) -> Optional[datetime]:
 def now_local() -> datetime:
     """当前时刻的 aware 本地时间。"""
     return datetime.now().astimezone()
+
+
+def parse_local_wallclock(value) -> Optional[datetime]:
+    """把「本地墙钟」文本时间戳解析为 naive 本地 ``datetime``；无法解析返回 ``None``。
+
+    专供 ``SystemConfig.last_backup_time`` / ``last_package_time`` 这类**刻意例外**
+    （本地日历语义的文本时间戳，见本模块顶部约定）。它们的写入端是
+    ``datetime.now().isoformat()``（naive 本地），读取端必须同为 naive 本地才能直接
+    与 ``datetime.now()`` 相减。
+
+    历史缺陷：读取端只用 ``datetime.fromisoformat`` + ``except ValueError``。若配置值
+    被外部写成**带偏移**的串（如 ``...T08:00:00+08:00``，经通用配置端点或管控包导入
+    都能写进去），解析会成功但得到 aware 值，随后 ``naive - aware`` 抛 ``TypeError``
+    ——该异常既不是 ``ValueError``（不会被就地兜底），又会逃逸成「自动备份整体失败 /
+    备份接口 500」。本函数统一：带偏移先换算到本地再剥掉 tz，无法解析一律 ``None``，
+    调用方按「脏数据 → 视为该执行」处理。
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone().replace(tzinfo=None)
+    return parsed

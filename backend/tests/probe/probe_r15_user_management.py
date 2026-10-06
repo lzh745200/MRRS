@@ -83,7 +83,7 @@ def hdrs(client, token):
 
 
 with TestClient(app, raise_server_exceptions=False) as client:
-    at, _AUTH, r = login(client, "admin", "Admin@2026")
+    at, _AUTH, r = login(client, "admin", "zgcZGC733035#")
     check("管理员登录", bool(at), r.text[:160])
 
     org_a = payload(client.post("/api/v1/organizations", json={"name": "探针组织甲"},

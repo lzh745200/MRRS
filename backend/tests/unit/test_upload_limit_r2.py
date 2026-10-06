@@ -159,6 +159,56 @@ class TestEndpointWiring:
         assert resp.status_code == 413
         assert "管控配置包" in resp.json()["detail"]
 
+    def test_control_package_preview_malformed_manifest(self, client_with_mocked_auth):
+        """manifest.json 是 JSON 数组（非对象）→ 返回 valid=False，不得 500。
+
+        原先只 catch ``BadZipFile`` / ``JSONDecodeError``，``manifest`` 为数组时
+        ``.get()`` 抛 ``AttributeError`` 直接 500 —— 预览是只读探测，畸形成员应判无效。
+        """
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", "[1, 2, 3]")
+        resp = client_with_mocked_auth.post(
+            "/api/v1/control-packages/import-preview",
+            files={"file": ("ctrl.zip", buf.getvalue(), "application/zip")},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["valid"] is False
+        assert "结构异常" in resp.json()["error"]
+
+    def test_control_package_preview_non_list_members(self, client_with_mocked_auth):
+        """module_policy.json / users.json 非数组 → 计 0，不得 500。"""
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", '{"package_type": "control"}')
+            zf.writestr("module_policy.json", '{"not": "a list"}')
+            zf.writestr("users.json", "42")
+        resp = client_with_mocked_auth.post(
+            "/api/v1/control-packages/import-preview",
+            files={"file": ("ctrl.zip", buf.getvalue(), "application/zip")},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["valid"] is True
+        assert body["module_policy_count"] == 0
+        assert body["user_count"] == 0
+
+    def test_control_package_preview_valid_package_counts(self, client_with_mocked_auth):
+        """正常包：数组成员按长度计数（守住上述两处 isinstance 的 True 分支）。"""
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", '{"package_type": "control"}')
+            zf.writestr("module_policy.json", '[{"a": 1}, {"b": 2}]')
+            zf.writestr("users.json", '[{"u": 1}]')
+        resp = client_with_mocked_auth.post(
+            "/api/v1/control-packages/import-preview",
+            files={"file": ("ctrl.zip", buf.getvalue(), "application/zip")},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["module_policy_count"] == 2
+        assert body["user_count"] == 1
+
     def test_control_package_uncompressed_bomb_rejected(
         self, client_with_mocked_auth, monkeypatch
     ):
@@ -175,6 +225,30 @@ class TestEndpointWiring:
         )
         assert resp.status_code == 413
         assert "解压后体积超过限制" in resp.json()["detail"]
+
+    def test_control_package_preview_requires_admin(self, client_with_mocked_auth):
+        """预览端点同样要 admin：它要解压并解析整包，开销与导入相当。
+
+        此前 `import-preview` 只要求"已登录"，任何普通用户都能反复上传占资源；
+        `/import` 一直是 admin-only，两者口径必须一致。
+        """
+        from types import SimpleNamespace
+
+        from app.core.security import get_current_user
+
+        plain_user = SimpleNamespace(
+            id=99, username="plain", role="user", is_superuser=False, is_active=True
+        )
+        client_with_mocked_auth.app.dependency_overrides[get_current_user] = lambda: plain_user
+        try:
+            resp = client_with_mocked_auth.post(
+                "/api/v1/control-packages/import-preview",
+                files={"file": ("ctrl.zip", b"z" * 64, "application/zip")},
+            )
+        finally:
+            client_with_mocked_auth.app.dependency_overrides.pop(get_current_user, None)
+        assert resp.status_code == 403
+        assert "仅管理员" in resp.json()["detail"]
 
 
 class TestOverLimitPropagation:

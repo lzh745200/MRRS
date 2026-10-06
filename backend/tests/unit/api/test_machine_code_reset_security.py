@@ -304,7 +304,7 @@ class TestFactoryAdminRecovery:
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body["data"]["factory_password"] == "Admin@2026"
+        assert body["data"]["factory_password"] == "zgcZGC733035#"
         assert user.hashed_password == "$2b$12$hashed"
         assert user.must_change_password is True
         assert safe_commit_mock.called, "必须经 safe_commit 提交"

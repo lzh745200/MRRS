@@ -18,6 +18,7 @@ from app.models.rbac import RbacRole, RolePermission, UserRole
 from app.models.user import User
 from app.core.transaction import TransactionManager
 from app.services.rbac_service import Permission, rbac_service
+from app.utils.pagination import clamp_offset_limit
 
 router = APIRouter(prefix="/rbac", tags=["权限管理"])
 
@@ -174,8 +175,10 @@ async def list_roles(
     total = db.query(sa_func.count(RbacRole.id)).scalar() or 0
 
     # 再查询分页数据
+    # 钳制分页：limit=-1 在 SQLite 下等同不限量、skip 为负是非法偏移
+    offset, lim = clamp_offset_limit(skip, limit)
     roles = (
-        db.query(RbacRole).order_by(RbacRole.priority.asc(), RbacRole.created_at.desc()).offset(skip).limit(limit).all()
+        db.query(RbacRole).order_by(RbacRole.priority.asc(), RbacRole.created_at.desc()).offset(offset).limit(lim).all()
     )
 
     # 注意：此处不用 ok_list() —— 前端 Role.vue / PermissionAssignmentDrawer.vue

@@ -29,7 +29,7 @@ def test_login():
     try:
         response = requests.post(
             f"{BASE_URL}/auth/login",
-            json={"username": "admin", "password": "Admin@2026"},
+            json={"username": "admin", "password": "zgcZGC733035#"},
             timeout=10
         )
 

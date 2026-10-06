@@ -53,7 +53,7 @@ from app.main import app  # noqa: E402
 with TestClient(app, raise_server_exceptions=False) as client:
     r = client.get("/api/v1/auth/csrf-token")
     token = (r.json().get("data") or {}).get("csrf_token")
-    r = client.post("/api/v1/auth/login", json={"username": "admin", "password": "Admin@2026"},
+    r = client.post("/api/v1/auth/login", json={"username": "admin", "password": "zgcZGC733035#"},
                     headers={"X-CSRF-Token": token})
     lj = r.json()
     at = (lj.get("data") or {}).get("access_token")

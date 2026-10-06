@@ -17,6 +17,7 @@ from app.core.security import get_current_user
 from app.models.issue_tracking import Feedback
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
+from app.utils.pagination import clamp_offset_limit
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,8 @@ async def list_feedback(
 
     # 按时间倒序
     total = query.count()
-    offset = (page - 1) * page_size
+    # 钳制分页：page=0/负数会产生非法偏移，超大 page_size 会被 SQLite 当作不限量
+    offset, page_size = clamp_offset_limit((page - 1) * page_size, page_size)
     rows = query.order_by(Feedback.created_at.desc()).offset(offset).limit(page_size).all()
 
     items = []

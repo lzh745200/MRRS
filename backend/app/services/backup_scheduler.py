@@ -19,8 +19,8 @@ from datetime import datetime, timedelta
 
 from app.core.transaction import get_db_context
 from app.services.backup_service import BackupService
-from app.services.system_config_service import get_config
-from app.utils.time_utils import utcnow
+from app.services.system_config_service import get_config, get_int_config
+from app.utils.time_utils import parse_local_wallclock, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,28 @@ def _send_backup_reminder(db, title: str, content: str) -> None:
         )
 
 
+def _cleanup_expired_backups(db) -> int:
+    """按 ``backup_retention_days`` 清理过期备份，返回实际使用的保留天数。
+
+    **单一事实源 + 与备份节奏解耦**：保留策略只由后端配置决定，且不受
+    「距上次备份是否满 N 天」影响。
+
+    历史缺陷：本清理原先排在 ``auto_backup_job`` 的**间隔 early return 之后** ——
+    而 Electron 每次自动备份都会刷新 ``last_backup_time``，使间隔判定长期命中
+    "距上次不足 N 天，跳过"，于是后端清理永久不可达；磁盘上实际只剩 Electron 侧
+    硬编码 7 天的那套清理，形成两套事实源。
+    """
+    retention_days = get_int_config("backup_retention_days", 7, getter=get_config)
+    try:
+        deleted_count = BackupService(db).cleanup_by_retention_days(retention_days)
+        if deleted_count > 0:
+            logger.info("按保留 %d 天清理了 %d 个旧备份", retention_days, deleted_count)
+    except Exception:
+        # 清理失败不应影响备份主流程（下个周期会再试）
+        logger.warning("备份保留策略清理失败", exc_info=True)
+    return retention_days
+
+
 async def auto_backup_job():
     """自动备份任务（后端调度唯一真相源）。
 
@@ -80,24 +102,27 @@ async def auto_backup_job():
                 logger.info("自动备份已禁用，跳过")
                 return
 
+            # 保留策略先于「是否该备份」执行（自动备份开着就每天清一次），
+            # 否则间隔判定会把清理一起饿死 —— 详见 _cleanup_expired_backups 注释。
+            retention_days = _cleanup_expired_backups(db)
+
             # 间隔检查: 距上次备份不足 interval_days 则跳过
             from datetime import datetime as _dt, timedelta as _td
             from app.models.system_config import SystemConfig
 
-            interval_days = int(get_config("backup_interval_days", "30") or 30)
+            interval_days = get_int_config("backup_interval_days", 1, getter=get_config)
             last_row = (
                 db.query(SystemConfig)
                 .filter(SystemConfig.key == "last_backup_time")
                 .first()
             )
             if last_row and isinstance(getattr(last_row, "value", None), str) and last_row.value:
-                try:
-                    last_ts = _dt.fromisoformat(last_row.value)
-                    if _dt.now() - last_ts < _td(days=interval_days):
-                        logger.info("距上次备份不足 %d 天，跳过自动备份", interval_days)
-                        return
-                except ValueError:
-                    pass
+                # 用 time_utils.parse_local_wallclock 归一：带时区偏移的脏值不再因
+                # naive - aware 抛 TypeError 逃逸成"整个自动备份失败"。
+                last_ts = parse_local_wallclock(last_row.value)
+                if last_ts is not None and _dt.now() - last_ts < _td(days=interval_days):
+                    logger.info("距上次备份不足 %d 天，跳过自动备份", interval_days)
+                    return
 
             from app.utils.drive_detect import ensure_target_dir
 
@@ -126,11 +151,6 @@ async def auto_backup_job():
                     description="自动备份", include_uploads=False,
                 )
             logger.info("自动备份完成: %s, 大小: %d 字节", backup.file_name, backup.file_size or 0)
-
-            retention_days = int(get_config("backup_retention_days", "7") or 7)
-            deleted_count = backup_service.cleanup_by_retention_days(retention_days)
-            if deleted_count > 0:
-                logger.info("按保留 %d 天清理了 %d 个旧备份", retention_days, deleted_count)
 
             # 备份提醒消息：通知管理员备份结果（消息中心「备份提醒」分类）
             try:
@@ -382,7 +402,7 @@ async def _auto_package_with_db(db):
 
     from datetime import datetime as _dt
 
-    interval_months = int(get_config("auto_package_interval_months", "1") or 1)
+    interval_months = get_int_config("auto_package_interval_months", 1, getter=get_config)
     target_dir = (get_config("auto_package_dir", "") or "").strip()
     if not target_dir:
         logger.info("自动打包未配置目标目录，跳过")
@@ -503,34 +523,36 @@ async def restore_drill_job():
     try:
         from app.services.restore_drill_service import is_drill_due, run_restore_drill
 
-        interval_days = int(get_config("restore_drill_interval_days", "30") or 30)
+        interval_days = get_int_config("restore_drill_interval_days", 30, getter=get_config)
         if not is_drill_due(interval_days):
             logger.info("距上次恢复演练不足 %d 天，跳过", interval_days)
             return
 
         with get_db_context() as db:
             result = run_restore_drill(db)
-        status = result.get("status")
-        if status == "fail":
-            try:
-                _send_backup_reminder(
-                    db,
-                    "恢复演练失败：备份可能不可用",
-                    (
-                        f"月度备份恢复演练失败（{result.get('backup_file')}，"
-                        f"{result.get('error_type')}）。数据库损坏时该备份可能无法还原，"
-                        "请立即检查备份目录并手动创建新备份。"
-                    ),
+            status = result.get("status")
+            # 提醒必须在 with 块**内**发送：get_db_context 退出时会 close 会话，
+            # 块外继续用该会话会隐式重开一条不受 finally 管理的连接（历史缺陷）。
+            if status == "fail":
+                try:
+                    _send_backup_reminder(
+                        db,
+                        "恢复演练失败：备份可能不可用",
+                        (
+                            f"月度备份恢复演练失败（{result.get('backup_file')}，"
+                            f"{result.get('error_type')}）。数据库损坏时该备份可能无法还原，"
+                            "请立即检查备份目录并手动创建新备份。"
+                        ),
+                    )
+                except Exception as msg_err:
+                    logger.warning("恢复演练失败提醒发送失败: %s", msg_err)
+            elif status == "ok":
+                logger.info(
+                    "恢复演练通过: %s（抽查 %d 张核心表）",
+                    result.get("backup_file"), result.get("tables_checked", 0),
                 )
-            except Exception as msg_err:
-                logger.warning("恢复演练失败提醒发送失败: %s", msg_err)
-        elif status == "ok":
-            logger.info(
-                "恢复演练通过: %s（抽查 %d 张核心表）",
-                result.get("backup_file"), result.get("tables_checked", 0),
-            )
-        else:
-            logger.info("恢复演练状态: %s", status)
+            else:
+                logger.info("恢复演练状态: %s", status)
     except Exception as e:
         logger.error("恢复演练任务失败: %s", e, exc_info=True)
 

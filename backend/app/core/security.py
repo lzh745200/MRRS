@@ -11,6 +11,7 @@
 
 import logging
 import os
+import re
 import secrets
 import string
 from datetime import datetime, timedelta, timezone
@@ -57,6 +58,7 @@ from jwt import InvalidTokenError as JWTError  # noqa: E402  # 兼容别名
 from passlib.context import CryptContext  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 from app.core.database import get_db  # noqa: E402
+from app.utils.env_utils import parse_env_int  # noqa: E402
 
 
 # ── 常量 ──
@@ -91,8 +93,11 @@ except Exception as _settings_err:  # pragma: no cover
     logger.warning("Failed to load settings for SECRET_KEY, falling back to env vars: %s", _settings_err)
     SECRET_KEY = _ensure_secret_key()
     ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))
-REFRESH_TOKEN_EXPIRE_DAYS = int(os.environ.get("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
+# 令牌有效期：环境变量非数字时回退默认并记 warning。此处是**模块导入期**执行，
+# 裸 int() 会让一处笔误（如 ACCESS_TOKEN_EXPIRE_MINUTES=8h）直接以 ImportError
+# 让整个后端无法启动，且报错形态与真实原因严重脱节。
+ACCESS_TOKEN_EXPIRE_MINUTES = parse_env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 480)
+REFRESH_TOKEN_EXPIRE_DAYS = parse_env_int("REFRESH_TOKEN_EXPIRE_DAYS", 30)
 
 # 角色常量（4 个实用角色；历史角色值统一通过 constants.py normalize_role() 归一化）
 ROLE_SUPER_ADMIN = "super_admin"
@@ -245,9 +250,54 @@ def decode_token(token: str) -> Optional[dict]:
 # ══════════════════════════════════════════════════════════════
 
 
+# 首登强制改密期间仍放行的端点。
+# 与前端 `router/guards.ts` 的 `changePasswordWhitelist` 对应，并补上
+# 「完成改密所必需」的接口 —— 否则改密链路自己会被拦住（死锁）。
+_MUST_CHANGE_PASSWORD_ALLOWED_PATH = re.compile(
+    r"^/api/v1/(auth/(me|logout|refresh|csrf-token)|users/me|menus/accessible)$"
+)
+# 改密端点：仅放行「改自己」的那一个 id（管理员改他人密码同样要先完成首登改密）
+_MUST_CHANGE_PASSWORD_OWN_PASSWORD_PATH = re.compile(r"^/api/v1/users/(\d+)/password$")
+
+
+def _must_change_password_request_allowed(
+    method: str, path: str, user_id: Optional[int] = None
+) -> bool:
+    """强制改密期间是否放行该请求。
+
+    fail-closed：无法判定路径（``request`` 缺失，即非 HTTP 内部直调）时一并拦截。
+    预检请求（OPTIONS）必须放行，否则跨域预检失败会让改密页自己发不出请求。
+    """
+    if method == "OPTIONS":
+        return True
+    if _MUST_CHANGE_PASSWORD_ALLOWED_PATH.match(path):
+        return True
+    matched = _MUST_CHANGE_PASSWORD_OWN_PASSWORD_PATH.match(path)
+    return bool(matched and user_id is not None and matched.group(1) == str(user_id))
+
+
+def _enforce_must_change_password(user, request: Optional[Request]) -> None:
+    """首登强制改密的服务端兜底（未通过则抛 403）。
+
+    独立成函数是为了把判定分支从 ``get_current_user`` 里摘出去 —— 后者已承担
+    令牌解码/黑名单/类型/版本等校验，内联本判定会让其 C901 复杂度越过 CI 门禁
+    阈值（max-complexity=16）。
+    """
+    if not getattr(user, "must_change_password", False):
+        return
+    method = request.method if request is not None else ""
+    path = request.url.path if request is not None else ""
+    if not _must_change_password_request_allowed(method, path, getattr(user, "id", None)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="检测到初始密码未修改，请先完成修改密码后再使用系统",
+        )
+
+
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
     db: Session = Depends(get_db),
+    request: Request = None,
 ) -> Optional[object]:
     """
     获取当前登录用户（FastAPI 依赖）。
@@ -367,6 +417,12 @@ async def get_current_user(
         except Exception:
             # 审计归因不应阻断主流程
             pass
+
+        # 首登强制改密的服务端强制（2026-10-06）。
+        # 历史缺陷：`must_change_password` 只在登录响应里回传，改密拦截**仅由前端
+        # router/guards.ts 收口** —— 直接 curl/脚本登录即可以最高权限调用全部业务
+        # 端点，出厂口令「首登强制改密」形同虚设（该口令本身也是公开常识值）。
+        _enforce_must_change_password(user, request)
         return user
     finally:
         # 仅关闭本依赖自建的会话；注入的会话由 get_db 统一关闭，避免误关共享连接

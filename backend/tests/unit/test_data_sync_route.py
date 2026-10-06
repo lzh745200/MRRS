@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from pathlib import Path
 from io import BytesIO
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 
@@ -246,6 +247,59 @@ class TestImportData:
             resp = test_client.post(self.URL, files={"file": ("test.zip", BytesIO(b"zip data"))}, data={"strategy": "skip"})
         assert resp.status_code == 400
         assert "失败" in resp.json()["message"]
+
+    @patch("app.api.v1.data_sync._save_upload_file", new_callable=AsyncMock)
+    def test_uncompressed_too_large_returns_413(self, mock_save, client):
+        """解压体积闸门的 413 必须原样透传。
+
+        守护重点：端点兜底 `except Exception → BusinessError(400)` 不能把 413 降级，
+        否则前端只提示"导入数据失败"，运维无法区分"包太大"与"数据有问题"。
+        """
+        mock_save.return_value = Path("/tmp/test.zip")
+        test_client, db = client
+        with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
+            mock_svc.import_package = AsyncMock(
+                side_effect=HTTPException(
+                    status_code=413, detail="压缩包解压后体积超过限制（1024MB）"
+                )
+            )
+            resp = test_client.post(
+                self.URL, files={"file": ("test.zip", BytesIO(b"zip data"))}, data={"strategy": "skip"}
+            )
+        assert resp.status_code == 413
+        assert "解压后体积超过限制" in resp.json()["detail"]
+
+
+class TestHttpExceptionPassthrough:
+    """HTTP 语义必须原样透传，不被端点的 `except Exception` 降级成业务错误。"""
+
+    def test_export_invalid_since_returns_plain_400(self, client):
+        """非法 since → 400 且 detail 就是原始校验信息（不被包成"导出数据失败: 400: ..."）。
+
+        注意：本文件有**局部** ``client`` 夹具（返回 (TestClient, db) 元组），
+        会遮蔽 conftest 的同名夹具，故不能用 ``client_with_mocked_auth``。
+        """
+        test_client, _db = client
+        resp = test_client.post("/api/v1/data-sync/export?since=not-a-date")
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "时间格式错误"
+
+    @patch("app.api.v1.data_sync._save_upload_file", new_callable=AsyncMock)
+    def test_import_encrypted_passthrough(self, mock_save, client):
+        """加密导入的服务层 413 必须透传为 413（不被降级成 400）。"""
+        mock_save.return_value = Path("/tmp/x.rrs")
+        test_client, db = client
+        with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
+            mock_svc.import_encrypted = AsyncMock(
+                side_effect=HTTPException(status_code=413, detail="压缩包解压后体积超过限制（1024MB）")
+            )
+            resp = test_client.post(
+                "/api/v1/data-sync/import-encrypted",
+                files={"file": ("pkg.rrs", BytesIO(b"encrypted"))},
+                data={"password": "12345678", "strategy": "merge"},
+            )
+        assert resp.status_code == 413
+        assert "解压后体积超过限制" in resp.json()["detail"]
 
 
 class TestImportEncrypted:

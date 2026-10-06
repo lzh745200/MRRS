@@ -122,6 +122,26 @@ class TestUtilityFunctions:
         assert d["download_count"] == 5
         assert d["attachment_urls"] == []
 
+    def test_policy_to_frontend_list_omits_content(self, sample_policy):
+        """列表端点裁剪全文：content 为无上限 Text，列表页不渲染它（详情走独立接口）。
+
+        守护两点：默认（详情/创建/更新）仍带 content；include_content=False（列表/收藏/
+        相关政策）必须不带该键，避免响应体随正文体积线性放大。
+        """
+        full = _policy_to_frontend(sample_policy)
+        assert "content" in full
+
+        trimmed = _policy_to_frontend(sample_policy, include_content=False)
+        assert "content" not in trimmed
+        # 其余字段不受影响
+        assert trimmed["title"] == full["title"]
+        assert trimmed["id"] == full["id"]
+
+    def test_policy_to_frontend_content_null_coerced(self, sample_policy):
+        """content 为 NULL 时仍回落空串（详情接口契约不变）。"""
+        sample_policy.content = None
+        assert _policy_to_frontend(sample_policy)["content"] == ""
+
     def test_policy_to_frontend_military(self, sample_policy):
         sample_policy.category = "military"
         sample_policy.level = "central_military"
