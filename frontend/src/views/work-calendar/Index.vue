@@ -14,7 +14,7 @@
             :class="{ today: isToday(data.date) }"
             @click="selectDate(data.date)"
           >
-            <span class="day-num">{{ data.day.split('-').pop()?.replace(/^0/, '') }}</span>
+            <span class="day-num">{{ dayLabel(data.day) }}</span>
             <div class="events">
               <el-tag
                 v-for="evt in getEvents(data.date)"
@@ -127,6 +127,14 @@ const events = ref<WorkEvent[]>(readStoredEvents())
 
 function saveEvents() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(events.value))
+}
+
+/** 单元格日号：'2026-10-06' → '6'（去前导零）。
+ *  写成 slice(-2) 而非 split('-').pop()?.… 是为了**无分支**：可选链在
+ *  'YYYY-MM-DD' 输入下存在永远不可达的分支，会让 `src/views/**` 的分支
+ *  覆盖率门禁（100%）无法达成。*/
+function dayLabel(day: string): string {
+  return day.slice(-2).replace(/^0/, '')
 }
 
 function isToday(date: Date): boolean {

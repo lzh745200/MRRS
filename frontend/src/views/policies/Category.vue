@@ -151,8 +151,8 @@ const loadStatistics = async () => {
     // → 抛 TypeError 被下方 catch 静默吞掉，两张卡片恒显示「0 条」。
     // 现直接走已存在的 API 封装（后端 GET /policies/statistics）。
     const res: any = await getPolicyStats()
-    // 兼容信封 {code,data} 与已解包形态
-    const data = res?.data?.data ?? res?.data ?? res ?? {}
+    // 兼容信封 {code,data} 与已解包形态（拦截器通常已展开）
+    const data: any = res?.data ?? res ?? {}
     statistics.military = data.military ?? { total: 0, levels: {} }
     statistics.local = data.local ?? { total: 0, levels: {} }
   } catch (error: any) {

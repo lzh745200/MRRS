@@ -91,6 +91,29 @@ describe('挂载与统计', () => {
     expect(vm.loading).toBe(false)
   })
 
+  it('统计响应为信封 {data} 形态 → 取内层（兼容拦截器未展开）', async () => {
+    mockGetPolicyStats.mockResolvedValue({ data: stats })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).statistics.military.total).toBe(3)
+  })
+
+  it('统计响应为空/null → 计数兜底 0（不抛错）', async () => {
+    mockGetPolicyStats.mockResolvedValue(null)
+    let wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).statistics).toEqual({
+      military: { total: 0, levels: {} },
+      local: { total: 0, levels: {} },
+    })
+
+    // 响应存在但缺字段 → 两级 ?? 的兜底侧
+    mockGetPolicyStats.mockResolvedValue({})
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).statistics.military.total).toBe(0)
+  })
+
   it('统计加载失败 → logger 静默', async () => {
     mockGetPolicyStats.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()

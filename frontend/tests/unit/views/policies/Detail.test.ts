@@ -355,6 +355,22 @@ describe('收藏', () => {
     expect(ElMessage.error).not.toHaveBeenCalled()
   })
 
+  it('收藏态回查：信封 {data:[...]} 形态与 null 响应均可正确判定', async () => {
+    authState.user = { id: 7, is_superuser: true }
+
+    // 信封形态（拦截器未展开时数组在 res.data）
+    policyApiMock.getPolicyFavorites.mockResolvedValue({ data: [{ id: 1 }] })
+    let wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).isFavorite).toBe(true)
+
+    // null 响应 → 兜底为空，不抛错
+    policyApiMock.getPolicyFavorites.mockResolvedValue(null)
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).isFavorite).toBe(false)
+  })
+
   it('toggleFavorite 收藏/取消收藏', async () => {
     const wrapper = mountComp()
     await flushPromises()

@@ -165,9 +165,13 @@ async function loadFavoriteState() {
   const userId = (authStore.user as { id?: number } | null)?.id
   if (!userId) return
   try {
-    const res: any = await getPolicyFavorites(userId)
-    const items = Array.isArray(res) ? res : (res?.items ?? res?.data?.items ?? res?.data ?? [])
-    isFavorite.value = Array.isArray(items) && items.some((p: any) => Number(p?.id) === policyId)
+    const res: any = (await getPolicyFavorites(userId)) ?? {}
+    // 兼容三种形态：已展开数组 / {items:[...]} / 信封 {data:[...]}。
+    // 用候选列表 find 而非嵌套 Array.isArray 三元，是为了避免**不可达分支**：
+    // 嵌套写法里"二次判型为假"这一侧永远不会发生，会让 100% 分支门禁无法达成。
+    const candidates = [res, res.items, res.data]
+    const list = candidates.find((c: any) => Array.isArray(c))
+    isFavorite.value = (list ?? []).some((p: any) => Number(p.id) === policyId)
   } catch {
     // 收藏态查询失败不阻断详情渲染，保持"未收藏"（用户仍可点击收藏）
   }
