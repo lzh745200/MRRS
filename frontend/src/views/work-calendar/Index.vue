@@ -16,15 +16,20 @@
           >
             <span class="day-num">{{ dayLabel(data.day) }}</span>
             <div class="events">
-              <el-tag
-                v-for="evt in getEvents(data.date)"
-                :key="evt.id"
-                :type="(evt.type || 'primary') as any"
-                class="event-tag"
-                @click.stop="editEvent(evt)"
-              >
-                {{ evt.title }}
-              </el-tag>
+              <!-- `.stop` 必须挂在原生元素上：ElTag 是组件，其 click 为 emit 事件，
+                   @click.stop 的修饰符拿到的是 emit payload（可能为 undefined）而非
+                   原生 MouseEvent，会抛 "reading 'stopPropagation'"（CI 未处理错误）。 -->
+              <span class="event-tag-wrap" @click.stop>
+                <el-tag
+                  v-for="evt in getEvents(data.date)"
+                  :key="evt.id"
+                  :type="(evt.type || 'primary') as any"
+                  class="event-tag"
+                  @click="editEvent(evt)"
+                >
+                  {{ evt.title }}
+                </el-tag>
+              </span>
             </div>
           </div>
         </template>
