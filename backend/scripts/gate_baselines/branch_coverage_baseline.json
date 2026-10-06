@@ -1,0 +1,12 @@
+{
+  "branches": 96.0,
+  "measured": {
+    "platform": "windows / python 3.13 / 6 分块 -n 8",
+    "branches_percent": 96.7,
+    "covered_branches": 9241,
+    "num_branches": 9556,
+    "date": "2026-10-06"
+  },
+  "note": "分支覆盖棘轮：只紧不松。基线取实测 96.70% 减 0.7 个百分点余量（Linux CI 与 Windows 的平台分支不对称 + 挂死用例中止），CI 首跑后在 OK 输出中核对真实值并逐步收紧至 100。",
+  "generated": "2026-10-06"
+}
