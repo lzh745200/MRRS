@@ -219,11 +219,13 @@ jobs:
           # 2026-10-06 追加：三轮失败（ffdbf76/1e08ea3/a317a99）的报错都未被上述模式覆盖
           # （exit 1、早期退出、日志里无 FAIL/heap/阈值行）——job log API 需认证(401)、
           # 网页是 JS 渲染，注解是本仓库免认证唯一可读通道（每步上限 ~10 条、单条 ≤4096 字符）。
-          # 因此把疑似报错行与日志尾部直接注解化：
+          # c69bdfe5 轮已确认真凶形态：「Vitest caught 1 unhandled error —— TypeError:
+          # ... reading 'stopPropagation'」且覆盖率表已全 100（门禁本身通过）。
+          # 这里优先把 Unhandled Errors 的完整堆栈注解化（直接定位文件:行）：
+          echo "===== unhandled error stack ====="
+          grep -aA 16 "Unhandled Errors" "$LOG" | grep -avE "^[0-9]+[-:]\s*$" | head -14 | cut -c1-380 | sed 's/^/::error::/' || true
           echo "===== generic error lines ====="
           grep -naE "Error:|Unhandled|error during|exited with|EADDR|ENOSPC|ENOMEM|RangeError|TypeError" "$LOG" | tail -3 | cut -c1-380 | sed 's/^/::error::/' || true
-          echo "===== log tail ====="
-          tail -n 5 "$LOG" | cut -c1-380 | sed 's/^/::error::/' || true
           exit 1
       - name: Upload vitest log
         if: failure()
