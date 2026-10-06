@@ -133,12 +133,16 @@ jobs:
       # ::error::。Linux 专有失败在本地 Windows 无法复现、job 日志又需 admin（403），
       # artifact 是唯一可下载的完整证据通道。
       - name: Frontend tests + coverage
+        env:
+          # 单进程 v8 覆盖率内存贴着 7GB runner 的悬崖（见下方注释）。压低 V8 堆上限，
+          # 让 GC 在内核 OOM-KILL 之前更积极回收；真不够时会以清晰 FATAL 落日志
+          # （Report 步骤可提炼）而非被静默 SIGKILL。
+          NODE_OPTIONS: --max-old-space-size=5632
         run: |
           cd frontend
           LOG="$RUNNER_TEMP/vitest-coverage.log"
-          # 先落环境快照：maxWorkers:1 让单 worker 累积 299 文件 v8 覆盖率，内存峰值高，
-          # 7GB runner 上可能 OOM（exit 1）。artifact 里有 node 版本/内存/堆上限才能区分
-          # OOM 崩溃 vs 真实断言/阈值失败。
+          # 先落环境快照：artifact 里有 node 版本/内存/堆上限才能区分 OOM 崩溃 vs
+          # 真实断言/阈值失败。
           {
             echo "===== ENV SNAPSHOT ====="
             echo "node: $(node -v)  npm: $(npm -v)"
@@ -150,7 +154,28 @@ jobs:
             echo "========================"
           } > "$LOG"
           set -o pipefail
-          npx vitest run --coverage 2>&1 | tee -a "$LOG"
+          # 2026-10-06：303 文件 + maxWorkers:1 的单进程 v8 覆盖率在 7GB runner 上
+          # 内存贴悬崖（近三轮 1 绿 2 红被 OS 硬杀，日志零错误信号；本地 16m42s 全绿
+          # 证明套件无回归，属 runner 资源边缘问题）。缓解：
+          #   1) CI 报告去掉 html（262 文件逐页嵌源码，报告期内存大头）；
+          #      json 保留 —— 供下方 codecov 上传。
+          #   2) NODE_OPTIONS 压堆上限（见上）。
+          #   3) 整门禁自动重试一次 —— 内存边缘问题上 GC 时序的差异足以决定成败，
+          #      同一提交第二次运行往往通过（曾试点 v8 分片 + 位置并集合并，因 v8 的
+          #      statement/branch/fn 结构随执行状态漂移而不可靠，已放弃）。
+          overall=1
+          for attempt in 1 2; do
+            echo "===== coverage attempt $attempt =====" | tee -a "$LOG"
+            if npx vitest run --coverage --coverage.reporter=text --coverage.reporter=json 2>&1 | tee -a "$LOG"; then
+              overall=0
+              break
+            fi
+            echo "attempt $attempt 失败，15s 后重试" | tee -a "$LOG"
+            rm -rf coverage
+            sleep 15
+          done
+          [ "$overall" -eq 0 ] || echo "::error::覆盖率门禁连续 2 次失败（含 OOM 边缘可能）—— 详见上方日志"
+          exit $overall
       - name: Report vitest failure
         if: failure()
         run: |

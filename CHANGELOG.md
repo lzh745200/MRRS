@@ -9,7 +9,7 @@
 
 > 排查方式：后端反模式清单逐项扫描（时间基准 / 异常吞噬 / 边界 / 竞态 / 注入）+ 前端契约与竞态只读审计，
 > 每条结论均源码级复核，且**新增断言均验证过"新旧实现结论不同"**（防弱断言）。
-> 用例口径：后端 **12,005**（`pytest --collect-only` 实测）/ 前端 **6,315**（303 文件）。
+> 用例口径：后端 **12,005**（`pytest --collect-only` 实测）/ 前端 **6,330**（303 文件，分片实测）。
 
 ### 修复（高）
 - **数据同步「智能合并」策略完全失效**（`services/data_sync_service.py`）：`_import_table_data`（ZIP `/data-sync/import` 路径）
@@ -75,9 +75,23 @@
 ### 测试
 - 新增 `test_must_change_password_guard.py`(17) / `test_backup_single_source_of_truth.py`(12) /
   `test_data_sync_service` +6（merge 分支、raw 字符串时间归一、线程池断言、413 透传）/
-  `test_data_sync_route` +2 / `test_upload_limit_r2` +3（预览容错）/ 前端 `workCalendar/Index.test.ts`(4) /
+  `test_data_sync_route` +2 / `test_upload_limit_r2` +3（预览容错）/ 前端 `workCalendar/Index.test.ts`(16) /
   政策三视图与 store 竞态用例重写与新增；同步更新被"错误 mock"掩盖的旧断言（弱 mock 纠正）。
-- 用例口径：后端 **12,005** / 覆盖率 100%；前端 **6,315**（303 文件）。
+- 用例口径：后端 **12,005** / 覆盖率 100%；前端 **6,330**（303 文件）。
+
+### CI 与依赖安全
+- **frontend-check 覆盖率门禁内存缓解**：单进程 `vitest run --coverage` 在 303 文件 + `maxWorkers:1` 下
+  内存贴着 7GB runner 的悬崖（近三轮 1 绿 2 红被 OS 硬杀，日志零错误信号；本地 16m42s 全绿证明套件
+  无回归）。三项缓解：① CI 报告去掉 **html**（262 文件逐页嵌源码是报告期内存大头；json 保留供
+  codecov）；② `NODE_OPTIONS=--max-old-space-size=5632` 压低 V8 堆上限，让 GC 在内核 OOM-KILL 前
+  积极回收（真不够时留下清晰 FATAL 而非静默被杀）；③ 门禁自动重试一次（GC 时序差异）。
+  （曾试点「v8 分片 + 按位置并集合并」，实证 v8 的 statement/branch/fn 结构随执行状态漂移、
+  跨分片合并不可靠，已放弃；istanbul provider 口径差异过大亦不可行。）
+- **npm 安全公告修复**（公告于 v1.12.13 之后发布，非业务代码引入）：`vue` ≤3.5.41 XSS
+  （GHSA-g2v6-rqmx-r4w6）→ **3.5.43**；`source-map-js` ≤1.2.1 DoS（GHSA-68fv-2mgg-jv7q）→
+  overrides `^1.2.2`。`npm audit --omit=dev` 复核 **0 漏洞**；生产构建 + 全量用例通过。
+- e2e-test 的裸 `npm ci` + `playwright install` 与 build-windows 的裸 `npm ci` 补齐 3 次幂等重试
+  与明确 `::error::`（此前失败形态只剩一个未命名步骤，真因被完全掩盖）。
 
 ---
 
