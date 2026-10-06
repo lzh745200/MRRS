@@ -52,6 +52,26 @@ jobs:
           } > "$LOG"
           set -o pipefail
           python -m pytest tests/ -q --tb=line -n auto --cov=app --cov-report=xml --cov-report=term-missing --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
+      # 分支覆盖棘轮（2026-10-06 测试质量审计 P0-1）：
+      # .coveragerc 门禁只度量语句，"语句 100%" 对条件组合（a and b 短路 / except 兜底 /
+      # 嵌套 if 部分真值）零约束。本步用 --cov-branch 单独度量并把分支覆盖钉在基线上
+      # （只紧不松），分模块清零后再把 .coveragerc 升级为 branch=true 全局门禁。
+      # --cov-fail-under=0 仅用于屏蔽 .coveragerc 的 fail_under=100（语句门禁由上一步承载）。
+      - name: Branch coverage ratchet
+        run: |
+          cd backend
+          python -m pytest tests/ -q --tb=line -n auto --cov=app --cov-branch \
+            --cov-fail-under=0 --cov-report=json:coverage-branch.json --reruns 2 --reruns-delay 1
+          python ../scripts/check_branch_coverage.py \
+            --json coverage-branch.json \
+            --baseline scripts/gate_baselines/branch_coverage_baseline.json
+      - name: Upload branch coverage json
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: branch-coverage
+          path: backend/coverage-branch.json
+          if-no-files-found: ignore
       - name: Report backend failure
         if: failure()
         run: |
@@ -196,6 +216,14 @@ jobs:
           # 仅匹配覆盖率表格行(token 后跟可选空白再跟 `|`)，排除 `List.test.ts (63 tests)`
           # 这类通过用例结果行(含 `.ts ` 但无 `|`)——旧模式会刷屏挤掉真因(annotations 上限 ~10)。
           grep -E "(\.vue|\.ts|All files)[[:space:]]*\|" "$LOG" | grep -vE "\|[[:space:]]*100[[:space:]]*\|[[:space:]]*100[[:space:]]*\|[[:space:]]*100[[:space:]]*\|[[:space:]]*100" | head -30 | sed 's/^/::error::/' || true
+          # 2026-10-06 追加：三轮失败（ffdbf76/1e08ea3/a317a99）的报错都未被上述模式覆盖
+          # （exit 1、早期退出、日志里无 FAIL/heap/阈值行）——job log API 需认证(401)、
+          # 网页是 JS 渲染，注解是本仓库免认证唯一可读通道（每步上限 ~10 条、单条 ≤4096 字符）。
+          # 因此把疑似报错行与日志尾部直接注解化：
+          echo "===== generic error lines ====="
+          grep -naE "Error:|Unhandled|error during|exited with|EADDR|ENOSPC|ENOMEM|RangeError|TypeError" "$LOG" | tail -3 | cut -c1-380 | sed 's/^/::error::/' || true
+          echo "===== log tail ====="
+          tail -n 5 "$LOG" | cut -c1-380 | sed 's/^/::error::/' || true
           exit 1
       - name: Upload vitest log
         if: failure()
@@ -326,7 +354,9 @@ jobs:
         run: |
           git fetch --no-tags --deepen=50 origin main || true
           python scripts/check_pragma_reasons.py --diff-base auto \
-            --allow-missing-base --max-bare 130
+            # 2026-10-06 起仓库裸 pragma 已清零（127→0），上限从 130 收紧到 0：
+          # 任何人再写无理由豁免，此处直接红（配套单测 test_repo_bare_pragmas_stay_zero）
+          --allow-missing-base --max-bare 0
 
   # E2E 浏览器套件（Playwright，150 用例）：真实起后端(18000)+前端(15173)，
   # 独立 e2e_test.db。此前长期无 CI 执行导致选择器/密码腐化四周无人发现
