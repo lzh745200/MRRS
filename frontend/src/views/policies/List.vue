@@ -140,7 +140,7 @@
         </el-table-column>
         <el-table-column prop="level_name" label="组织层级" width="100" align="center">
           <template #default="{ row }">
-            {{ row.level_name || getLevelLabel(row.category, row.organization_level) }}
+            {{ row.level_name || getLevelLabel(row.organization_level) }}
           </template>
         </el-table-column>
         <el-table-column prop="publish_date" label="发布日期" width="110" sortable="custom">
@@ -197,7 +197,7 @@ import { usePolicyStore } from '@/stores/policy'
 import { useAuthStore } from '@/stores/auth'
 import {
   getCategoryLabel,
-  getLevelLabel as _getLevelLabel,
+  getLevelLabel,
   getStatusLabel,
   getStatusColor,
   getLevelOptions,
@@ -211,9 +211,6 @@ import { downloadImportTemplateAndSave } from '@/api/import'
 
 import { format } from '@/utils'
 type OrganizationLevel = string
-
-// Wrapper: API defines getLevelLabel(level) but view calls it with (category, level)
-const getLevelLabel = (...args: any[]): string => (_getLevelLabel as any)(...args)
 
 // Typed wrapper for el-tag :type (getStatusColor returns `string`, el-tag expects a union)
 type ElTagType = 'success' | 'warning' | 'danger' | 'info' | 'primary' | undefined
@@ -371,7 +368,7 @@ const handleDelete = async (row: any) => {
         type: 'warning',
       }
     )
-    await (policyStore as any).removePolicy(row.id)
+    await policyStore.deletePolicy(row.id)
     // 成功静默：删除成功仅刷新列表
   } catch (error: any) {
     if (error !== 'cancel') {
@@ -389,9 +386,24 @@ const handleBatchDelete = async () => {
       '批量删除确认',
       { type: 'warning' }
     )
-    await (policyStore as any).removePolicies(selectedIds.value)
-    selectedIds.value = []
-    ElMessage.success('批量删除成功')
+    // 逐条删除：store 只提供单条 deletePolicy（历史缺陷：此处误调并不存在的
+    // removePolicies，抛 TypeError 被下方 catch 吞成"批量删除失败"提示，
+    // 数据从未被删除）。单条失败不中断其余，最后只保留失败项待用户重试。
+    const ids = [...selectedIds.value]
+    const failed: number[] = []
+    for (const id of ids) {
+      try {
+        await policyStore.deletePolicy(id)
+      } catch {
+        failed.push(id)
+      }
+    }
+    selectedIds.value = failed
+    if (failed.length) {
+      ElMessage.warning(`${ids.length - failed.length} 条删除成功，${failed.length} 条失败`)
+    } else {
+      ElMessage.success('批量删除成功')
+    }
   } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.message || '批量删除失败')

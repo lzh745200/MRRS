@@ -17,8 +17,11 @@ export interface ScheduleConfig {
  * 保证前端与后端一致。
  */
 /**
- * 后端以 cron 表达式存储调度（`schedule` 字段，如 "0 2 * * *"），并以
- * `keep_count` 控制保留份数（见 backend/app/api/backup.py:BackupScheduleUpdate）。
+ * 后端以 cron 表达式存储调度（`schedule` 字段，如 "0 2 * * *"）。
+ *
+ * 语义提醒：`keep_count` 实际写入后端 `backup_retention_days`（**天数**，见
+ * `backend/app/api/v1/system/backup.py::update_backup_schedule`），因此界面文案
+ * 统一表述为「保留天数」——避免出现「设 7 份却按 7 天清理」的语义错位。
  * 前端以用户友好的 `frequency` / `backupTime` / `retentionCount` 呈现，
  * 因此读写时需做 cron ↔ 友好模型 的双向转换。
  *

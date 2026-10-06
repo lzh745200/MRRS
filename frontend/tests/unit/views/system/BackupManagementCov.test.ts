@@ -439,27 +439,43 @@ describe('自动备份设置（localStorage）', () => {
     spy.mockRestore()
   })
 
-  it('saveAutoBackupConfig：点击保存设置 → 成功提示并落盘', async () => {
+  it('saveAutoBackupConfig：点击保存设置 → 真实落库到后端（不再只写 localStorage）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.autoBackupConfig.frequency = 'monthly'
+    vm.autoBackupConfig.retentionCount = 20
     await clickButton(wrapper, '保存设置')
-    expect(ElMessage.success).toHaveBeenCalledWith('自动备份设置已保存')
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')).toMatchObject({
-      frequency: 'monthly',
-    })
+    // 关键：必须真的下发到后端（历史缺陷是只写 localStorage 却提示"已保存"）
+    expect(mockPut).toHaveBeenCalledWith(
+      '/system/backup/schedule',
+      expect.objectContaining({ keep_count: 20 })
+    )
+    expect(ElMessage.success).toHaveBeenCalledWith('备份计划已保存')
+    // 回读后按后端真相源校正面板（本地缓存只用于表单回填）
+    expect(vm.autoBackupConfig.frequency).toBe('weekly')
+    expect(vm.autoBackupConfig.retentionCount).toBe(10)
   })
 
-  it('saveAutoBackupConfig：写入抛错 → 错误提示', async () => {
+  it('saveAutoBackupConfig：后端保存失败 → 错误提示', async () => {
+    mockPut.mockRejectedValue(new Error('boom'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.autoBackupConfig.enabled = true
+    await vm.saveAutoBackupConfig()
+    expect(ElMessage.error).toHaveBeenCalledWith('保存备份计划失败')
+  })
+
+  it('saveAutoBackupConfig：本地缓存写入抛错 → 静默吞掉（配置已落库）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     const spy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
       throw new Error('quota exceeded')
     })
-    vm.saveAutoBackupConfig()
-    expect(ElMessage.error).toHaveBeenCalledWith('保存自动备份设置失败')
+    await expect(vm.saveAutoBackupConfig()).resolves.toBeUndefined()
+    expect(ElMessage.success).toHaveBeenCalledWith('备份计划已保存')
     spy.mockRestore()
   })
 })

@@ -111,6 +111,7 @@ import {
   addPolicyFavorite,
   removePolicyFavorite,
   getPolicyRelated,
+  getPolicyFavorites,
   getCategoryLabel,
   getLevelLabel,
   getStatusLabel,
@@ -145,10 +146,30 @@ async function loadData() {
   try {
     policy.value = await getPolicy(policyId)
     loadRelated()
+    loadFavoriteState()
   } catch {
     ElMessage.error('加载政策详情失败')
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * 初始化收藏态。
+ *
+ * 历史缺陷：``isFavorite`` 恒以 ``false`` 起手且从不回查 → 已收藏的政策显示为
+ * "收藏"，点击后后端返回 400「已收藏该政策」；而 ``isFavorite`` 永远为 false，
+ * **DELETE 分支不可达，用户在本页无法取消收藏**。
+ */
+async function loadFavoriteState() {
+  const userId = (authStore.user as { id?: number } | null)?.id
+  if (!userId) return
+  try {
+    const res: any = await getPolicyFavorites(userId)
+    const items = Array.isArray(res) ? res : (res?.items ?? res?.data?.items ?? res?.data ?? [])
+    isFavorite.value = Array.isArray(items) && items.some((p: any) => Number(p?.id) === policyId)
+  } catch {
+    // 收藏态查询失败不阻断详情渲染，保持"未收藏"（用户仍可点击收藏）
   }
 }
 

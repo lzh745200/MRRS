@@ -360,7 +360,7 @@ describe('ForgotPassword.vue', () => {
   })
 
   it('管理员出厂恢复：切换模式后请求新端点并展示出厂密码', async () => {
-    mockPost.mockResolvedValue({ code: 200, data: { factory_password: 'Admin@2026' } })
+    mockPost.mockResolvedValue({ code: 200, data: { factory_password: 'zgcZGC733035#' } })
     const w = await mountComp()
     const vm = w.vm as any
     vm.accountMode = 'admin'
@@ -372,7 +372,7 @@ describe('ForgotPassword.vue', () => {
       '/machine-code/recover-admin-factory-password',
       vm.resetForm
     )
-    expect(vm.newPassword).toBe('Admin@2026')
+    expect(vm.newPassword).toBe('zgcZGC733035#')
     expect(vm.currentStep).toBe(1)
     expect(ElMessage.success).toHaveBeenCalledWith('出厂密码已恢复')
   })

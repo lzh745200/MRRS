@@ -27,6 +27,7 @@ const {
     downloadPolicyFile: vi.fn(),
     addPolicyFavorite: vi.fn(),
     removePolicyFavorite: vi.fn(),
+    getPolicyFavorites: vi.fn(),
     getPolicyRelated: vi.fn(),
     getCategoryLabel: vi.fn((c: any) => `类别:${c}`),
     getLevelLabel: vi.fn((l: any) => `级别:${l}`),
@@ -321,6 +322,39 @@ describe('发布/归档', () => {
 })
 
 describe('收藏', () => {
+  it('进入详情回查收藏态：已收藏 → isFavorite=true（否则无法取消收藏）', async () => {
+    authState.user = { id: 7, is_superuser: true }
+    policyApiMock.getPolicyFavorites.mockResolvedValue([{ id: 1 }, { id: 2 }])
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(policyApiMock.getPolicyFavorites).toHaveBeenCalledWith(7)
+    expect((wrapper.vm as any).isFavorite).toBe(true)
+  })
+
+  it('进入详情回查收藏态：未收藏 / 无用户 id / 查询失败 均保持 false', async () => {
+    // 未收藏
+    authState.user = { id: 7, is_superuser: true }
+    policyApiMock.getPolicyFavorites.mockResolvedValue({ items: [{ id: 99 }] })
+    let wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).isFavorite).toBe(false)
+
+    // 无用户 id → 早退，不发请求
+    authState.user = { is_superuser: true }
+    policyApiMock.getPolicyFavorites.mockClear()
+    wrapper = mountComp()
+    await flushPromises()
+    expect(policyApiMock.getPolicyFavorites).not.toHaveBeenCalled()
+
+    // 查询失败 → 静默保持 false，不阻断详情
+    authState.user = { id: 7, is_superuser: true }
+    policyApiMock.getPolicyFavorites.mockRejectedValueOnce(new Error('net'))
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).isFavorite).toBe(false)
+    expect(ElMessage.error).not.toHaveBeenCalled()
+  })
+
   it('toggleFavorite 收藏/取消收藏', async () => {
     const wrapper = mountComp()
     await flushPromises()

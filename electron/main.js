@@ -27,7 +27,10 @@ const APP_TITLE = '帮扶管理系统';
 const BACKEND_READY_TIMEOUT = 300000; // 5分钟——PyInstaller打包exe首次启动需提取文件+杀软扫描+初始化数据库（实测可超3分钟）
 const MAX_URL_LOAD_RETRIES = 5;     // 页面加载失败最大重试次数
 const URL_LOAD_RETRY_DELAY = 3000;  // 页面加载重试间隔（毫秒，健康检查等待将覆盖此延时）
-const AUTO_BACKUP_INTERVAL = 24 * 60 * 60 * 1000;
+// 自动备份**轮询**间隔：真正"是否该备份"由后端按 backup_interval_days 判定，
+// 主进程只按此频率询问（此前是固定 24h 直接落盘，绕过后端 backup_interval_days
+// 策略并使后端 02:00 调度被 last_backup_time 刷新饿死 —— 两套事实源）。
+const AUTO_BACKUP_POLL_INTERVAL = 30 * 60 * 1000;
 const WINDOW_STATE_FILE = path.join(getUserDataPath(), 'window-state.json');
 const SECRETS_FILE = path.join(getUserDataPath(), 'secrets.json');
 const CRASH_LOG_FILE = path.join(getUserDataPath(), 'crash.log');
@@ -890,13 +893,18 @@ function showTrayNotification(title, body) {
 // ─── 自动备份 ───
 function startAutoBackup() {
   setTimeout(() => {
-    performAutoBackup();
-    setInterval(performAutoBackup, AUTO_BACKUP_INTERVAL);
+    performAutoBackup('auto');
+    setInterval(() => performAutoBackup('auto'), AUTO_BACKUP_POLL_INTERVAL);
   }, 5 * 60 * 1000);
-  console.log('[AutoBackup] 已调度');
+  console.log('[AutoBackup] 已调度（是否落盘由后端按 backup_interval_days 判定）');
 }
 
-function performAutoBackup() {
+/**
+ * 触发一次备份请求。
+ * @param {'auto'|'manual'} trigger - auto 时后端按 auto_backup / backup_interval_days
+ *   决定是否真正落盘（未到间隔则返回 data.skipped）；manual（托盘/快捷键）无条件执行。
+ */
+function performAutoBackup(trigger = 'manual') {
   const req = http.request({
     hostname: '127.0.0.1',
     port: backendPort,
@@ -909,58 +917,31 @@ function performAutoBackup() {
     res.on('data', (chunk) => { body += chunk; });
     res.on('end', () => {
       if (res.statusCode === 200 || res.statusCode === 201) {
+        let skipped = false;
+        try {
+          const parsed = JSON.parse(body);
+          skipped = !!(parsed && parsed.data && parsed.data.skipped);
+        } catch (_) { /* 非 JSON 响应按未跳过处理 */ }
+        if (skipped) {
+          console.log('[AutoBackup] 后端判定本次无需备份（未到间隔或已禁用）');
+          return;
+        }
         console.log('[AutoBackup] 成功');
         showTrayNotification('备份完成', '自动备份成功');
-        cleanupOldBackups();
       } else console.warn(`[AutoBackup] 状态码 ${res.statusCode}`);
     });
   });
   req.on('error', (err) => { console.warn('[AutoBackup] 请求失败:', err.message); });
-  req.write(JSON.stringify({ description: '自动定时备份' }));
+  req.write(JSON.stringify({
+    description: trigger === 'auto' ? '自动定时备份' : '手动备份',
+    trigger,
+  }));
   req.end();
 }
 
-function cleanupOldBackups() {
-  // 列表/删除端点接受 X-Internal-Backup 内部密钥(与自动备份 POST 同模式),
-  // 否则 JWT 缺失导致 7 天保留策略永不生效, 备份无限累积。
-  const internalHeaders = { 'X-Internal-Backup': INTERNAL_BACKUP_KEY };
-  const req = http.request({
-    hostname: '127.0.0.1',
-    port: backendPort,
-    path: '/api/v1/system/backup',
-    method: 'GET',
-    headers: internalHeaders,
-    timeout: 10000,
-  }, (res) => {
-    let body = '';
-    res.on('data', (chunk) => { body += chunk; });
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(body);
-        // API 返回 envelope 格式: {code:200, data:{items:[...], total:N}}
-        const backups = (parsed && parsed.data && parsed.data.items) ? parsed.data.items : [];
-        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        for (const backup of backups) {
-          const createdAt = new Date(backup.created_at).getTime();
-          if (createdAt < sevenDaysAgo && backup.file_name && backup.file_name.startsWith('backup_')) {
-            const delReq = http.request({
-              hostname: '127.0.0.1',
-              port: backendPort,
-              path: `/api/v1/system/backup/${encodeURIComponent(backup.file_name)}`,
-              method: 'DELETE',
-              headers: internalHeaders,
-              timeout: 10000,
-            }, (res) => { if (res.statusCode >= 400) console.warn(`删除 ${backup.file_name} 失败`); });
-            delReq.on('error', (err) => { console.warn(`删除 ${backup.file_name} 错误:`, err.message); });
-            delReq.end();
-            console.log(`[AutoBackup] 删除旧备份: ${backup.file_name}`);
-          }
-        }
-      } catch (e) { console.warn('[AutoBackup] 清理失败:', e.message); }
-    });
-  });
-  req.on('error', (err) => { console.warn('[AutoBackup] 获取列表失败:', err.message); });
-}
+// 备份保留策略已收敛到后端（POST /system/backup 成功后按 backup_retention_days
+// 统一清理）。此处原有的 cleanupOldBackups() 硬编码 7 天、与后端 backup_retention_days
+// 各写一套，且两侧可能并发删除同一批文件 —— 2026-10-06 移除，只保留单一事实源。
 
 // ─── VC++ 检查（Windows，但保留定义） ───
 function checkVCRuntime() { return true; }

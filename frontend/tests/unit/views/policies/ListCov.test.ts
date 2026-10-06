@@ -36,8 +36,7 @@ const {
       ] as any,
       fetchPolicies: vi.fn(),
       setFilters: vi.fn(),
-      removePolicy: vi.fn(),
-      removePolicies: vi.fn(),
+      deletePolicy: vi.fn(),
     },
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
     confirmMock: vi.fn(),
@@ -161,8 +160,8 @@ beforeEach(() => {
   ]
   policyStore.fetchPolicies.mockResolvedValue({})
   policyStore.setFilters.mockReturnValue(undefined)
-  policyStore.removePolicy.mockResolvedValue({})
-  policyStore.removePolicies.mockResolvedValue({})
+  policyStore.deletePolicy.mockReset()
+  policyStore.deletePolicy.mockResolvedValue({})
   confirmMock.mockResolvedValue(undefined)
   alertMock.mockResolvedValue(undefined)
   mockPushSafe.mockResolvedValue(undefined)
@@ -440,7 +439,10 @@ describe('表格列插槽与行操作', () => {
     const text = wrapper.text()
     expect(text).toContain('cat:military') // category_name 空 → getCategoryLabel
     expect(text).toContain('地方政策') // category_name 值侧
-    expect(text).toContain('lvl:military') // level_name 空 → getLevelLabel(category, level) 首参
+    // level_name 空 → getLevelLabel(organization_level)。
+    // 旧实现把 (category, level) 两参传给只接受 level 的函数，首参被当层级用，
+    // 实际渲染出 'lvl:military'（category 值）—— 即"层级列显示分类"的缺陷。
+    expect(text).toContain('lvl:province')
     expect(text).toContain('市级') // level_name 值侧
     expect(text).toContain('status:active') // status_name 空 → getStatusLabel
     expect(text).toContain('失效') // status_name 值侧
@@ -476,7 +478,7 @@ describe('表格列插槽与行操作', () => {
     await delBtn!.trigger('click')
     await flushPromises()
     expect(confirmMock).toHaveBeenCalled()
-    expect(policyStore.removePolicy).toHaveBeenCalledWith(1)
+    expect(policyStore.deletePolicy).toHaveBeenCalledWith(1)
   })
 
   it('头部按钮：下载模板/导入/导出PDF/导出WPS/新增政策均真实点击', async () => {
@@ -504,7 +506,7 @@ describe('删除与批量删除全分支', () => {
     const row = { id: 1, title: '甲政策' }
 
     await vm.handleDelete(row)
-    expect(policyStore.removePolicy).toHaveBeenCalledWith(1)
+    expect(policyStore.deletePolicy).toHaveBeenCalledWith(1)
     // 成功静默：删除成功不弹提示
     expect(ElMessage.success).not.toHaveBeenCalled()
 
@@ -512,16 +514,16 @@ describe('删除与批量删除全分支', () => {
     await vm.handleDelete(row)
     expect(ElMessage.error).not.toHaveBeenCalled()
 
-    policyStore.removePolicy.mockRejectedValueOnce(new Error('存在引用'))
+    policyStore.deletePolicy.mockRejectedValueOnce(new Error('存在引用'))
     await vm.handleDelete(row)
     expect(ElMessage.error).toHaveBeenCalledWith('存在引用')
 
-    policyStore.removePolicy.mockRejectedValueOnce({})
+    policyStore.deletePolicy.mockRejectedValueOnce({})
     await vm.handleDelete(row)
     expect(ElMessage.error).toHaveBeenCalledWith('删除失败')
   })
 
-  it('handleBatchDelete：空选择早退；确认成功清空选择；cancel；失败两侧', async () => {
+  it('handleBatchDelete：空选择早退；逐条删除全部成功清空选择', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -531,9 +533,30 @@ describe('删除与批量删除全分支', () => {
 
     vm.selectedIds = [1, 2]
     await vm.handleBatchDelete()
-    expect(policyStore.removePolicies).toHaveBeenCalledWith([1, 2])
+    // 逐条调用 store **真实存在**的方法（历史缺陷：误调不存在的 removePolicies，
+    // 抛 TypeError 被 catch 吞成"批量删除失败"提示，数据从未被删除）
+    expect(policyStore.deletePolicy).toHaveBeenCalledWith(1)
+    expect(policyStore.deletePolicy).toHaveBeenCalledWith(2)
     expect(vm.selectedIds).toEqual([])
     expect(ElMessage.success).toHaveBeenCalledWith('批量删除成功')
+  })
+
+  it('handleBatchDelete：部分失败保留失败项并 warning（不中断其余删除）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    policyStore.deletePolicy.mockRejectedValueOnce(new Error('约束冲突'))
+    vm.selectedIds = [4, 5]
+    await vm.handleBatchDelete()
+    expect(vm.selectedIds).toEqual([4])
+    expect(ElMessage.warning).toHaveBeenCalledWith('1 条删除成功，1 条失败')
+  })
+
+  it('handleBatchDelete：cancel 静默；确认框异常走错误提示两侧', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
 
     vm.selectedIds = [3]
     confirmMock.mockRejectedValueOnce('cancel')
@@ -541,12 +564,12 @@ describe('删除与批量删除全分支', () => {
     expect(ElMessage.error).not.toHaveBeenCalled()
 
     vm.selectedIds = [4]
-    policyStore.removePolicies.mockRejectedValueOnce(new Error('约束冲突'))
+    confirmMock.mockRejectedValueOnce(new Error('约束冲突'))
     await vm.handleBatchDelete()
     expect(ElMessage.error).toHaveBeenCalledWith('约束冲突')
 
     vm.selectedIds = [5]
-    policyStore.removePolicies.mockRejectedValueOnce({})
+    confirmMock.mockRejectedValueOnce({})
     await vm.handleBatchDelete()
     expect(ElMessage.error).toHaveBeenCalledWith('批量删除失败')
   })
@@ -559,7 +582,7 @@ describe('删除与批量删除全分支', () => {
     await nextTick()
     await findBtn(wrapper, '批量删除').trigger('click')
     await flushPromises()
-    expect(policyStore.removePolicies).toHaveBeenCalledWith([1])
+    expect(policyStore.deletePolicy).toHaveBeenCalledWith(1)
   })
 })
 

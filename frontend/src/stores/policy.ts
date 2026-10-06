@@ -20,11 +20,20 @@ export const usePolicyStore = defineStore('policy', () => {
     filters.value = { ...filters.value, ...f }
   }
 
+  /**
+   * 请求序号：列表的翻页/改筛选会产生**不同** params，请求层的同 URL+params 去重
+   * 拦截器不会取消它们，网络乱序时旧响应会覆盖新响应（表格内容与高亮页码不一致）。
+   * 每次发起自增，回来时不是最新序号就丢弃。
+   */
+  let _listSeq = 0
+
   async function fetchPolicies(params?: any) {
+    const seq = ++_listSeq
     loading.value = true
     error.value = null
     try {
       const res = await get<any>('/policies', { ...filters.value, ...params })
+      if (seq !== _listSeq) return // 已被更新的请求取代，丢弃过期响应
       if (res.code === 200 && res.data) {
         // 兼容三种响应形状：旧 bare data=[...] / 新信封 data={items,total} / 拦截器展开 items
         const items = Array.isArray(res.data) ? res.data : res.items || res.data?.items || []
@@ -32,12 +41,14 @@ export const usePolicyStore = defineStore('policy', () => {
         total.value = res.total ?? items.length
       }
     } catch (e: any) {
+      if (seq !== _listSeq) return
       // 原实现 catch { /* silent */ }：失败既不留痕也不写 error，页面只能显示空列表
       // 且无任何解释（请求层已不弹全局提示，等于全线静默）。此处记录并可观测。
       error.value = _errMessage(e, '加载政策列表失败')
       logger.error('[policy] 加载政策列表失败', e)
     } finally {
-      loading.value = false
+      // 只有最新一次请求才允许结束 loading（否则旧请求先回会提前熄灯）
+      if (seq === _listSeq) loading.value = false
     }
   }
 

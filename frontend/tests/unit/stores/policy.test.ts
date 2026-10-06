@@ -44,6 +44,60 @@ describe('usePolicyStore', () => {
     expect(store.total).toBe(1)
   })
 
+  it('并发翻页：过期响应被丢弃，不覆盖最新数据（请求序号防护）', async () => {
+    // 翻页/改筛选产生的请求 params 不同，请求层去重拦不住 → 必须靠序号判定
+    const deferred = () => {
+      let resolve!: (v: any) => void
+      const promise = new Promise((res) => {
+        resolve = res
+      })
+      return { promise, resolve }
+    }
+    const first = deferred()
+    const second = deferred()
+    mockGet.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+
+    const p1 = store.fetchPolicies({ page: 1 })
+    const p2 = store.fetchPolicies({ page: 2 })
+
+    // 新请求先返回
+    second.resolve({ code: 200, data: { items: [{ id: 2 }], total: 1 } })
+    await p2
+    expect(store.policyList).toEqual([{ id: 2 }])
+    expect(store.loading).toBe(false)
+
+    // 旧请求后返回 → 必须被丢弃
+    first.resolve({ code: 200, data: { items: [{ id: 1 }], total: 1 } })
+    await p1
+    expect(store.policyList).toEqual([{ id: 2 }])
+  })
+
+  it('并发翻页：过期请求的错误同样被丢弃（不覆盖最新成功的状态）', async () => {
+    const deferred = () => {
+      let resolve!: (v: any) => void
+      const promise = new Promise((res) => {
+        resolve = res
+      })
+      return { promise, resolve }
+    }
+    const first = deferred()
+    const second = deferred()
+    mockGet.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+
+    const p1 = store.fetchPolicies({ page: 1 })
+    const p2 = store.fetchPolicies({ page: 2 })
+
+    second.resolve({ code: 200, data: { items: [{ id: 2 }], total: 1 } })
+    await p2
+
+    first.resolve(Promise.reject(new Error('stale failure')))
+    await p1
+    // 过期请求先被丢弃：不写 error，也不影响最新数据
+    expect(store.error).toBeNull()
+    expect(store.policyList).toEqual([{ id: 2 }])
+    expect(store.loading).toBe(false)
+  })
+
   it('fetchPolicies handles error gracefully', async () => {
     mockGet.mockRejectedValueOnce(new Error('Network error'))
     await store.fetchPolicies()

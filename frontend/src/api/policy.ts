@@ -13,7 +13,8 @@ export type CategoriesConfig = Record<PolicyCategory, string>
 export type Policy = {
   id: number
   title: string
-  content: string
+  /** 全文内容：仅详情/创建/更新接口返回；列表接口已裁剪该字段以收敛响应体 */
+  content?: string
   category: PolicyCategory
   level: string
   status: PolicyStatus

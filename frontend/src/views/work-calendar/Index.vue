@@ -105,8 +105,25 @@ const form = ref({
   location: '',
 })
 
+/**
+ * 读取本地存储的事件。
+ *
+ * 历史缺陷：直接在 setup 顶层 `JSON.parse(...)` 且不校验结果形态 —— 该键被写坏
+ * （半截写入/手工编辑）时抛 SyntaxError 让**整条路由渲染失败**；值为合法 JSON 但非
+ * 数组时，后续 `events.value.filter(...)` 抛 TypeError。此处统一兜底为空数组。
+ */
+function readStoredEvents(): WorkEvent[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    // 数据损坏：回退空列表，不阻断页面
+    return []
+  }
+}
+
 // 从 localStorage 加载事件
-const events = ref<WorkEvent[]>(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'))
+const events = ref<WorkEvent[]>(readStoredEvents())
 
 function saveEvents() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(events.value))

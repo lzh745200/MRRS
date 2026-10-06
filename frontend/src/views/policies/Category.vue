@@ -96,13 +96,16 @@ import { logger } from '@/utils/logger'
 import { ref, reactive, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { Aim, OfficeBuilding, Flag, Location, ArrowRight, List } from '@element-plus/icons-vue'
-import { usePolicyStore } from '@/stores/policy'
-import { getLevelOptions, type PolicyCategory, type LevelConfig } from '@/api/policy'
+import {
+  getLevelOptions,
+  getPolicyStats,
+  type PolicyCategory,
+  type LevelConfig,
+} from '@/api/policy'
 
 type OrganizationLevel = string
 
 const { pushSafe } = useRouterSafe()
-const policyStore = usePolicyStore()
 
 const loading = ref(false)
 
@@ -144,9 +147,14 @@ const loadLevels = async () => {
 const loadStatistics = async () => {
   loading.value = true
   try {
-    const data = await (policyStore as any).fetchStatistics()
-    statistics.military = data.military
-    statistics.local = data.local
+    // 历史缺陷：此处调用 `policyStore.fetchStatistics()`，而该 store 从未导出此方法
+    // → 抛 TypeError 被下方 catch 静默吞掉，两张卡片恒显示「0 条」。
+    // 现直接走已存在的 API 封装（后端 GET /policies/statistics）。
+    const res: any = await getPolicyStats()
+    // 兼容信封 {code,data} 与已解包形态
+    const data = res?.data?.data ?? res?.data ?? res ?? {}
+    statistics.military = data.military ?? { total: 0, levels: {} }
+    statistics.local = data.local ?? { total: 0, levels: {} }
   } catch (error: any) {
     logger.error('加载统计数据失败:', error)
     // 静默处理错误，使用默认值

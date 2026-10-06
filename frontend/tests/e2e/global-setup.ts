@@ -8,7 +8,7 @@
  * localStorage（sessionStorage 为标签页级，无法预置），因此写入 persist 键。
  *
  * 首登强制改密自适应（2026-09-06）：全新 e2e_test.db 由后端种子逻辑创建
- * 管理员（出厂密码 Admin@2026，must_change_password=True），首次登录会被
+ * 管理员（出厂密码 zgcZGC733035#，must_change_password=True），首次登录会被
  * 强制跳转修改密码页。此处自动完成一次改密（改为 E2E 专用密码），并把
  * E2E 专用密码通过 process.env.TEST_PASSWORD 传给各 spec——持久库第二次
  * 运行时直接用该密码登录。
@@ -25,7 +25,7 @@ export const AUTH_FILE = path.join(__dirname, '.auth', 'admin.json')
 const API_BASE = process.env.E2E_API_URL || 'http://127.0.0.1:18000/api/v1'
 const WEB_ORIGIN = process.env.E2E_BASE_URL || 'http://127.0.0.1:15173'
 
-const FACTORY_PASSWORD = 'Admin@2026'
+const FACTORY_PASSWORD = 'zgcZGC733035#'
 const E2E_PASSWORD = process.env.TEST_PASSWORD || 'E2e#Probe2026!x'
 
 async function login(ctx: ReturnType<typeof request.newContext>, password: string) {
@@ -63,7 +63,7 @@ async function changePassword(
   ctx: ReturnType<typeof request.newContext>,
   token: string,
   userId: number,
-  oldPassword: string,
+  oldPassword: string
 ) {
   // 改密为状态变更请求：需先取 CSRF token（响应会同时写入 csrf_token cookie，
   // APIRequestContext 自动携带，形成 cookie+header 配对）
@@ -78,9 +78,7 @@ async function changePassword(
     data: { old_password: oldPassword, new_password: E2E_PASSWORD },
   })
   if (!resp.ok()) {
-    throw new Error(
-      `E2E 首登改密失败: HTTP ${resp.status()} ${await resp.text()}`,
-    )
+    throw new Error(`E2E 首登改密失败: HTTP ${resp.status()} ${await resp.text()}`)
   }
 }
 

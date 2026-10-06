@@ -6,24 +6,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const { pushSafeMock, policyStore, logError, mockGetLevelOptions } = vi.hoisted(() => ({
+const { pushSafeMock, logError, mockGetLevelOptions, mockGetPolicyStats } = vi.hoisted(() => ({
   pushSafeMock: vi.fn(),
-  policyStore: {
-    fetchStatistics: vi.fn(),
-  },
   logError: vi.fn(),
   mockGetLevelOptions: vi.fn(),
+  mockGetPolicyStats: vi.fn(),
 }))
 
 vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: pushSafeMock }),
 }))
 
-vi.mock('@/stores/policy', () => ({ usePolicyStore: () => policyStore }))
-
-// 真实接口形态：返回全部层级（Promise），前端按「专项/地方」拆分
+// 真实接口形态：返回全部层级（Promise），前端按「专项/地方」拆分。
+// 统计走 getPolicyStats（历史缺陷：视图曾调用 store 上并不存在的 fetchStatistics，
+// 抛 TypeError 被静默吞掉 → 计数恒为 0；该错误被此处 mock 里凭空塞的
+// fetchStatistics 掩盖，故现在只 mock 视图真正使用的 API。
 vi.mock('@/api/policy', () => ({
   getLevelOptions: mockGetLevelOptions,
+  getPolicyStats: mockGetPolicyStats,
 }))
 
 vi.mock('@/utils/logger', () => ({
@@ -72,7 +72,7 @@ function mountComp() {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  policyStore.fetchStatistics.mockResolvedValue(stats)
+  mockGetPolicyStats.mockResolvedValue(stats)
   mockGetLevelOptions.mockResolvedValue(allLevels)
 })
 
@@ -85,14 +85,14 @@ describe('挂载与统计', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(policyStore.fetchStatistics).toHaveBeenCalled()
+    expect(mockGetPolicyStats).toHaveBeenCalled()
     expect(vm.statistics.military.total).toBe(3)
     expect(vm.statistics.local.levels.county).toBe(1)
     expect(vm.loading).toBe(false)
   })
 
   it('统计加载失败 → logger 静默', async () => {
-    policyStore.fetchStatistics.mockRejectedValue(new Error('net'))
+    mockGetPolicyStats.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
     expect(logError).toHaveBeenCalled()

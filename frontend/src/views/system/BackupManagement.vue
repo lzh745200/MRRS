@@ -30,19 +30,19 @@
             <el-radio value="monthly">每月</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="保留备份份数">
+        <el-form-item label="保留天数">
           <el-input-number
             v-model="autoBackupConfig.retentionCount"
             :min="1"
             :max="30"
             :disabled="!autoBackupConfig.enabled"
           />
-          <span class="retention-hint">保留最近 N 份备份</span>
+          <span class="retention-hint">保留最近 N 天备份</span>
         </el-form-item>
         <el-form-item label="下次备份时间">
           <span>{{ nextBackupTime }}</span>
         </el-form-item>
-        <el-form-item>
+        <el-form-item v-if="canOperateBackup">
           <el-button type="primary" @click="saveAutoBackupConfig">保存设置</el-button>
         </el-form-item>
       </el-form>
@@ -200,12 +200,12 @@
             style="width: 200px"
           />
         </el-form-item>
-        <el-form-item label="保留份数">
+        <el-form-item label="保留天数">
           <el-input-number
             v-model="scheduleConfig.retentionCount"
             :min="1"
             :max="99"
-            placeholder="保留最近 N 份备份"
+            placeholder="保留最近 N 天备份"
           />
         </el-form-item>
         <el-form-item v-if="canOperateBackup">
@@ -422,7 +422,12 @@ function dirTypeLabel(type: string): string {
   return map[type] ?? type
 }
 
-// ── Auto backup settings (localStorage-based) ──
+// ── Backup schedule configuration ──
+// 后端调度为唯一真相源（ADR-0010）。提前声明，供下方"自动备份设置"面板复用同一条
+// 写入通道，避免出现"两个面板、两套保存逻辑"的割裂（旧版自动备份面板只写 localStorage）。
+const { scheduleConfig, savingSchedule, loadScheduleConfig, saveSchedule } = useBackupSchedule()
+
+// ── Auto backup settings（表单缓存用；真相源在后端） ──
 const AUTO_BACKUP_STORAGE_KEY = 'auto-backup-config'
 
 interface AutoBackupConfig {
@@ -492,17 +497,35 @@ const nextBackupTime = computed(() => {
   return next.toLocaleString('zh-CN')
 })
 
-function saveAutoBackupConfig() {
-  try {
-    localStorage.setItem(AUTO_BACKUP_STORAGE_KEY, JSON.stringify({ ...autoBackupConfig }))
-    ElMessage.success('自动备份设置已保存')
-  } catch {
-    ElMessage.error('保存自动备份设置失败')
-  }
+/** 用后端回读结果校正面板显示（后端为唯一真相源；本地缓存只是表单回填）。 */
+function syncPanelFromBackend() {
+  autoBackupConfig.enabled = scheduleConfig.value.enabled
+  autoBackupConfig.frequency = scheduleConfig.value.frequency
+  autoBackupConfig.retentionCount = scheduleConfig.value.retentionCount
 }
 
-// ── Backup schedule configuration ──
-const { scheduleConfig, savingSchedule, loadScheduleConfig, saveSchedule } = useBackupSchedule()
+/**
+ * 保存「自动备份设置」。
+ *
+ * 历史缺陷（2026-10-06 修复）：本函数只把配置写进 localStorage 就提示"已保存"，
+ * 后端配置毫无变化；叠加旧版 Electron 固定 24h 直调备份端点、不读 auto_backup 开关，
+ * 于是"用户以为关掉了自动备份，实际仍在每天备份" —— 典型的虚假成功反馈。
+ * 现统一走 PUT /system/backup/schedule（与"备份计划"面板同一通道、同一真相源），
+ * 并在回读后校正面板，保证界面显示的永远是真落库的值。
+ */
+async function saveAutoBackupConfig() {
+  scheduleConfig.value.enabled = autoBackupConfig.enabled
+  scheduleConfig.value.frequency = autoBackupConfig.frequency
+  scheduleConfig.value.retentionCount = autoBackupConfig.retentionCount
+  await saveSchedule()
+  // saveSchedule 内部已回读后端配置；此处据其校正面板显示
+  syncPanelFromBackend()
+  try {
+    localStorage.setItem(AUTO_BACKUP_STORAGE_KEY, JSON.stringify({ ...autoBackupConfig }))
+  } catch {
+    // Storage full or unavailable
+  }
+}
 
 async function fetchBackupList() {
   try {
