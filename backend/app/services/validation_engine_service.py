@@ -138,7 +138,7 @@ class ValidationEngineService:
 
             self._errors = errors
             return errors
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
             logger.debug("DB规则加载失败，跳过", exc_info=True)
             return []
 

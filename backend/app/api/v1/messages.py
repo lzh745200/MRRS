@@ -242,7 +242,7 @@ async def mark_messages_as_read(
     try:
         write_work_log(service.db, "message", "mark_read", 0, f"标记{count}条消息已读",
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         logger.debug("记录工作日志失败", exc_info=True)
     return success_response(data={"message": f"已标记 {count} 条消息为已读", "count": count}, message=f"已标记 {count} 条消息为已读")
 
@@ -258,7 +258,7 @@ async def mark_all_as_read(
     try:
         write_work_log(service.db, "message", "mark_all_read", 0, "标记全部已读",
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         logger.debug("记录工作日志失败", exc_info=True)
     return success_response(data={"message": f"已标记 {count} 条消息为已读", "count": count}, message=f"已标记 {count} 条消息为已读")
 
@@ -278,7 +278,7 @@ async def delete_messages(
     try:
         write_work_log(service.db, "message", "delete", 0, f"删除{count}条消息",
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         logger.debug("记录工作日志失败", exc_info=True)
     return success_response(data={"message": f"已删除 {count} 条消息", "count": count}, message=f"已删除 {count} 条消息")
 
@@ -293,7 +293,7 @@ async def delete_all_read_messages(
     try:
         write_work_log(service.db, "message", "delete_read", 0, f"删除{count}条已读消息",
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         logger.debug("记录工作日志失败", exc_info=True)
     return success_response(data={"message": f"已删除 {count} 条已读消息", "count": count}, message=f"已删除 {count} 条已读消息")
 

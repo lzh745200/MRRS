@@ -93,14 +93,14 @@ class ApprovalReminderService:
         logger.info("审批提醒服务已停止")
         return True
 
-    def _scan_loop(self):  # pragma: no cover
+    def _scan_loop(self):  # pragma: no cover - 后台守护线程主体：装配与启停由生命周期用例验证，循环体不纳入单测
         """后台扫描循环"""
         try:
             self._scan_loop_body()
         finally:
             self._stopped_event.set()
 
-    def _scan_loop_body(self):  # pragma: no cover
+    def _scan_loop_body(self):  # pragma: no cover - 后台守护线程主体：装配与启停由生命周期用例验证，循环体不纳入单测
         """扫描循环主体（退出即由 _scan_loop 置位 _stopped_event）"""
         # 首次启动等待30秒，确保数据库已初始化（stop 时立即唤醒）
         if self._stop_event.wait(30):
@@ -120,7 +120,7 @@ class ApprovalReminderService:
             # 等待下一次检查（响应停止信号）
             self._stop_event.wait(self._check_interval)
 
-    def _check_overdue_approvals(self):  # pragma: no cover
+    def _check_overdue_approvals(self):  # pragma: no cover - 后台守护线程主体：装配与启停由生命周期用例验证，循环体不纳入单测
         """检查超时和即将超时的审批"""
         from app.core.database import SessionLocal
         from app.models.approval import ApprovalTask, ApprovalStatus
@@ -169,7 +169,7 @@ class ApprovalReminderService:
         finally:
             db.close()
 
-    def _resolve_reminder_recipient(self, db, approval_task):  # pragma: no cover
+    def _resolve_reminder_recipient(self, db, approval_task):  # pragma: no cover - 后台守护线程主体：装配与启停由生命周期用例验证，循环体不纳入单测
         """解析审批提醒接收人：current_approver_id → 节点审批人 → 提交人 → None。"""
         if approval_task.current_approver_id:
             return approval_task.current_approver_id
@@ -194,7 +194,7 @@ class ApprovalReminderService:
             return approval_task.submitter_id
         return None
 
-    def _create_reminder_message(self, db, approval_task, level: str):  # pragma: no cover
+    def _create_reminder_message(self, db, approval_task, level: str):  # pragma: no cover - 后台线程主体，不纳入单测
         """创建提醒消息（幂等——与 reminder_orchestrator 共用 type:entity_id 去重键，
         避免双服务并存时同一审批生成重复消息）"""
         from app.models.message import Message
@@ -237,7 +237,7 @@ class ApprovalReminderService:
         db.add(message)
         logger.info(f"审批提醒已创建: {title}")
 
-    def _check_deadline_reminders(self):  # pragma: no cover
+    def _check_deadline_reminders(self):  # pragma: no cover - 后台守护线程主体：装配与启停由生命周期用例验证，循环体不纳入单测
         """检查项目/里程碑/待办截止日，生成到期提醒"""
         from app.core.database import SessionLocal
         from app.models.message import Message
@@ -336,7 +336,7 @@ class ApprovalReminderService:
 _reminder_service: Optional[ApprovalReminderService] = None
 
 
-def start_approval_reminder(  # pragma: no cover
+def start_approval_reminder(  # pragma: no cover - 后台守护线程主体：装配与启停由生命周期用例验证，循环体不纳入单测
     check_interval_minutes: int = DEFAULT_CHECK_INTERVAL_MINUTES,
 ) -> ApprovalReminderService:
     """启动审批提醒服务（在main.py lifespan中调用）"""
@@ -349,7 +349,7 @@ def start_approval_reminder(  # pragma: no cover
     return _reminder_service
 
 
-def stop_approval_reminder(service: Optional[ApprovalReminderService] = None):  # pragma: no cover
+def stop_approval_reminder(service: Optional[ApprovalReminderService] = None):  # pragma: no cover - 后台线程主体，不纳入单测
     """停止审批提醒服务（在main.py lifespan shutdown中调用）"""
     global _reminder_service
     target = service or _reminder_service

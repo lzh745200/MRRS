@@ -291,7 +291,7 @@ async def _batch_purge_records(db, model, resource, table, ids, current_user, on
         trigger_immediate_backup(
             description=f"批量彻底删除{resource} {total} 条后备份", delay=1.0
         )
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.warning("批量彻底删除后备份触发失败", exc_info=True)
 
     return success_response(

@@ -623,7 +623,7 @@ async def export_projects(
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
         )
-    except ImportError:  # pragma: no cover
+    except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
         import csv
         from io import StringIO
 

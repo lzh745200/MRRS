@@ -271,7 +271,7 @@ class ApprovalWorkflowService:
             )
             self.db.add(msg)
             safe_commit(self.db)
-        except ImportError:  # pragma: no cover
+        except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             logger.warning("消息模块不可用，跳过审批推送")
         except Exception:
             self.db.rollback()

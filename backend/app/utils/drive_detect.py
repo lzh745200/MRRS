@@ -50,7 +50,7 @@ def _list_linux_mounts() -> List[Dict[str, str]]:
                     # 非 Windows 分支此前漏掉 available，消费方取键即 KeyError
                     # （深审 #84）。此处循环已用 os.access 验证可写。
                     results.append({"path": full, "type": "removable", "available": True})
-        except OSError:  # pragma: no cover
+        except OSError:  # pragma: no cover - 防御兜底：磁盘/设备探测的系统调用失败时跳过该项
             continue
     return results
 
@@ -92,7 +92,7 @@ def list_backup_dirs() -> List[Dict[str, str]]:
                     "available": os.access(os.path.dirname(cwd) or cwd, os.W_OK),
                 }
             )
-        except OSError:  # pragma: no cover
+        except OSError:  # pragma: no cover - 防御兜底：磁盘/设备探测的系统调用失败时跳过该项
             pass
 
     # 去重
@@ -113,5 +113,5 @@ def ensure_target_dir(path: str) -> bool:
     try:
         os.makedirs(path, exist_ok=True)
         return os.path.isdir(path) and os.access(path, os.W_OK)
-    except OSError:  # pragma: no cover
+    except OSError:  # pragma: no cover - 防御兜底：磁盘/设备探测的系统调用失败时跳过该项
         return False

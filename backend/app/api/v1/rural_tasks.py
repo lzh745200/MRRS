@@ -216,7 +216,7 @@ async def create_task(
         write_work_log(db, "rural_task", "create", task.id,
                        f"创建驻村工作任务: {task.code} {task.title}",
                        user_id=current_user.id)
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         pass
 
     return ResponseModel(code=200, data=_task_to_response(task), message="创建成功")
@@ -256,7 +256,7 @@ async def update_task(
         write_work_log(db, "rural_task", "update", task.id,
                        f"更新驻村工作任务: {task.code} 字段={','.join(update_data.keys())}",
                        user_id=current_user.id)
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         pass
     return ResponseModel(code=200, data=_task_to_response(task), message="更新成功")
 
@@ -276,7 +276,7 @@ async def delete_task(
         write_work_log(db, "rural_task", "delete", task_id,
                        f"删除驻村工作任务: {task.code}",
                        user_id=current_user.id)
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         pass
     return ResponseModel(code=200, message="删除成功")
 
@@ -305,7 +305,7 @@ async def submit_task(
         write_work_log(db, "rural_task", "submit", task.id,
                        f"提交任务审批: {task.code}",
                        user_id=current_user.id)
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         pass
     return ResponseModel(code=200, message="提交成功")
 
@@ -345,7 +345,7 @@ async def approve_task(
                        task.id,
                        f"{action}任务: {task.code} 意见={body.comment or '无'}",
                        user_id=current_user.id)
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         pass
     return ResponseModel(code=200, message=f"任务已{action}")
 
@@ -377,6 +377,6 @@ async def batch_delete_tasks(
         write_work_log(db, "rural_task", "batch_delete", 0,
                        f"批量删除驻村工作任务 {deleted} 条 ids={ids}",
                        user_id=current_user.id)
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         pass
     return ResponseModel(code=200, data={"deleted": deleted}, message=f"成功删除{deleted}条记录")

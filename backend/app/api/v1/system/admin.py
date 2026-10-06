@@ -124,7 +124,7 @@ async def create_backup(current_user=Depends(get_current_user), db: Session = De
             },
             message="备份创建成功",
         )
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 未知异常兜底：业务分支未列明的意外异常统一转 500，正常路径不可达
         raise HTTPException(status_code=500, detail="备份失败，请稍后重试或联系管理员")
 
 
@@ -190,7 +190,7 @@ async def restore_backup(
             raise HTTPException(status_code=404, detail="备份文件不存在")
 
         return success_response(message="数据库恢复成功")
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 未知异常兜底：业务分支未列明的意外异常统一转 500，正常路径不可达
         raise HTTPException(status_code=500, detail="恢复失败，请稍后重试或联系管理员")
 
 
@@ -215,7 +215,7 @@ async def delete_backup(filename: str, current_user=Depends(get_current_user)):
         return success_response(message="备份删除成功")
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="备份文件不存在")
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 未知异常兜底：业务分支未列明的意外异常统一转 500，正常路径不可达
         raise HTTPException(status_code=500, detail="删除失败，请稍后重试或联系管理员")
 
 
@@ -285,14 +285,14 @@ async def clear_cache(current_user=Depends(get_current_user)):
             from app.api.v1.data.data.dashboard import invalidate_dashboard_cache
 
             invalidate_dashboard_cache()
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  # pragma: no cover - 纯加速层：缓存读写失败不影响业务正确性
             logger.warning("清理 dashboard 缓存失败: %s", e)
 
         try:
             from app.api.v1.map import invalidate_map_cache
 
             invalidate_map_cache()
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  # pragma: no cover - 纯加速层：缓存读写失败不影响业务正确性
             logger.warning("清理 map 缓存失败: %s", e)
 
         return success_response(message="缓存清理成功")
@@ -342,7 +342,7 @@ async def get_system_logs(
             page=page,
             page_size=page_size,
         )
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 未知异常兜底：业务分支未列明的意外异常统一转 500，正常路径不可达
         raise HTTPException(status_code=500, detail="读取日志失败，请稍后重试或联系管理员")
 
 

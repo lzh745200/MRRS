@@ -351,7 +351,7 @@ async def export_audit_logs(  # noqa: C901
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
             )
-        except ImportError:  # pragma: no cover
+        except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             logger.warning("openpyxl 未安装，回退到 CSV 格式")
 
     # CSV 格式

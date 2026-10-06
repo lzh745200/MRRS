@@ -113,7 +113,7 @@ async def export_pdf(
             media_type="application/pdf",
             headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
         )
-    except ImportError:  # pragma: no cover
+    except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
         raise HTTPException(status_code=501, detail="PDF导出功能未启用，请安装reportlab库")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

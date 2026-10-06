@@ -78,7 +78,7 @@ async def get_system_metrics(current_user=Depends(get_current_user)):
             "disk_used_gb": round(disk.used / (1024 ** 3), 2),
             "disk_total_gb": round(disk.total / (1024 ** 3), 2),
         }
-    except ImportError:  # pragma: no cover
+    except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
         metrics["resources"] = {
             "status": "unavailable",
             "message": "psutil 未安装，资源指标不可用",
@@ -196,7 +196,7 @@ async def get_performance_metrics(current_user=Depends(get_current_user)):
             "threshold": 80,
             "status": "critical" if disk.percent > 95 else "warning" if disk.percent > 80 else "normal",
         })
-    except ImportError:  # pragma: no cover
+    except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
         pass
 
     return {

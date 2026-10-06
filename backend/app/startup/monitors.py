@@ -139,7 +139,7 @@ def _run_database_startup_check():
             else:
                 logger.info("数据库启动自检通过 (%s)", result.get("db_size_mb", "?"))
             _backfill_organization_paths()
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
             logger.warning("数据库启动自检失败: %s", e)
 
     threading.Thread(target=_run, name="db-startup-check", daemon=True).start()

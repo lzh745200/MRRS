@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 try:
     from app.services.batch_import_optimizer import read_excel_raw as _pandas_read_raw
     _HAS_PANDAS_FAST_READ = True
-except ImportError:  # pragma: no cover
+except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
     _HAS_PANDAS_FAST_READ = False
 
 # 注意: ImportMode 枚举已在 app.models.import_history 中定义，此处统一使用该定义，避免重复

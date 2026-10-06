@@ -85,7 +85,7 @@ def _patch_proactor_transport() -> None:
     """
     try:
         from asyncio.proactor_events import _ProactorBasePipeTransport
-    except ImportError:  # pragma: no cover
+    except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
         logger.debug("无法导入 _ProactorBasePipeTransport，跳过 transport patch")
         return
 

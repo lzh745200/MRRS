@@ -85,7 +85,7 @@ try:
     from app.core.config import settings as _settings
     SECRET_KEY = _settings.SECRET_KEY or _ensure_secret_key()
     ALGORITHM = getattr(_settings, "ALGORITHM", "HS256")
-except Exception as _settings_err:  # pragma: no cover
+except Exception as _settings_err:  # pragma: no cover - 模块导入期 config 导入失败才可达（论证见下方注释）
     # 不可达防御：仅在模块导入期 app.core.config 导入失败时执行。
     # 运行/测试进程中 config 恒可导入；强制触发需 reload 本模块，
     # 会替换 get_current_user 单例身份（全 app 依赖与 dependency_overrides

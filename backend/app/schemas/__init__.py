@@ -28,7 +28,7 @@ def _register_schema(module_name: str) -> None:
     """Register schema from module."""
     try:
         module = importlib.import_module(f"{__name__}.{module_name}")
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error("Failed to import schema %s: %s", module_name, exc)
         return
 

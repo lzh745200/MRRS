@@ -33,7 +33,7 @@ from .rbac_service import Permission, RBACService  # noqa: F401
 # 加密服务（为测试兼容性提供别名）
 try:
     from .encryption_service import DataPackageEncryption as EncryptionService  # noqa: F401
-except ImportError:  # pragma: no cover
+except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
     EncryptionService = None  # type: ignore[assignment]
 
 # RATE_LIMITS 已移至 app.core.security 模块的 check_rate_limit() 函数管理

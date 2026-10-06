@@ -22,11 +22,11 @@ try:
 
     # 可选依赖 prophet 的“成功导入”分支：仅在环境安装了 prophet 时执行，
     # 与下方 ImportError 分支互斥；CI/测试环境未安装 prophet，故对称豁免。
-    PROPHET_AVAILABLE = True  # pragma: no cover
-    logger.info("Prophet 已加载，趋势预测功能可用")  # pragma: no cover
-except ImportError as e:  # pragma: no cover
-    PROPHET_AVAILABLE = False  # pragma: no cover
-    logger.warning(f"Prophet未安装,趋势预测功能将受限: {e}")  # pragma: no cover
+    PROPHET_AVAILABLE = True  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
+    logger.info("Prophet 已加载，趋势预测功能可用")  # pragma: no cover - 可选依赖 Prophet 的加载结果分支（未安装环境不可达）
+except ImportError as e:  # pragma: no cover - 可选依赖未安装时的功能降级分支
+    PROPHET_AVAILABLE = False  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
+    logger.warning(f"Prophet未安装,趋势预测功能将受限: {e}")  # pragma: no cover - 可选依赖缺失分支：Prophet 未安装时的降级告警
 
 
 class TrendPredictionService:
@@ -62,7 +62,7 @@ class TrendPredictionService:
             }
 
         try:
-            if method == "prophet" and PROPHET_AVAILABLE:  # pragma: no cover
+            if method == "prophet" and PROPHET_AVAILABLE:  # pragma: no cover - 可选依赖启用分支：Prophet 未安装时不可达
                 # Prophet 在 Windows 上可能因 cmdstanpy/where.exe 挂起，添加超时保护
                 with ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(
@@ -92,7 +92,7 @@ class TrendPredictionService:
             }
 
     @staticmethod
-    def _predict_with_prophet(  # pragma: no cover
+    def _predict_with_prophet(  # pragma: no cover - 可选依赖 Prophet 的专用路径：未安装/Windows 挂起保护下不可达
         historical_data: List[Dict[str, Any]],
         periods: int,
         date_field: str,
@@ -269,7 +269,9 @@ class TrendPredictionService:
         )
 
     @staticmethod
-    def predict_village_income(db: Session, village_id: int, periods: int = 12) -> Dict[str, Any]:  # pragma: no cover
+    def predict_village_income(  # pragma: no cover - 可选依赖 Prophet 入口，未安装环境不可达
+        db: Session, village_id: int, periods: int = 12
+    ) -> Dict[str, Any]:
         """
         预测村庄收入趋势
 
@@ -308,7 +310,7 @@ class TrendPredictionService:
         )
 
     @staticmethod
-    def predict_village_population(  # pragma: no cover
+    def predict_village_population(  # pragma: no cover - 可选依赖 Prophet 的专用路径：未安装/Windows 挂起保护下不可达
         db: Session, village_id: int, periods: int = 12
     ) -> Dict[str, Any]:
         """

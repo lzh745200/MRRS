@@ -1023,7 +1023,7 @@ async def preview_policy_file(
                 io.BytesIO(html.encode("utf-8")),
                 media_type="text/html",
             )
-        except ImportError:  # pragma: no cover
+        except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             # mammoth 未安装，返回下载
             return FileResponse(
                 path=safe_file_path,

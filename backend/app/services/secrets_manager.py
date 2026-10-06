@@ -45,7 +45,7 @@ class SecretsManager:
                     default_key = Fernet.generate_key().decode()
                     with open(key_file, "w", encoding="utf-8") as f:
                         f.write(default_key)
-            except ImportError:  # pragma: no cover
+            except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
                 default_key = self._generate_fallback_key()
             except Exception:
                 # 磁盘不可写/权限不足：仍需给出可用的 Fernet key
@@ -66,7 +66,7 @@ class SecretsManager:
         try:
             from cryptography.fernet import Fernet
             return Fernet.generate_key().decode()
-        except ImportError:  # pragma: no cover
+        except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             import base64
             import logging
             logging.getLogger(__name__).warning(

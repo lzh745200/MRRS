@@ -52,7 +52,7 @@ def _apply_work_scope(query, current_user: Any, db: Any):
     # get_data_scope() 仅当 is_superuser=True 或 role==super_admin 时返回 ALL，
     # 而这两类用户在上方 line 41 已被 is_admin() 判定为管理员并提前 return。
     # 故任何能执行到此处的非管理员用户，scope 恒不等于 ALL，此分支永不命中。
-    if scope == DataScope.ALL:  # pragma: no cover
+    if scope == DataScope.ALL:  # pragma: no cover - 论证见上：能到达此处的非管理员 scope 恒不等于 ALL
         return query
 
     org_id = getattr(current_user, "organization_id", None) or getattr(current_user, "org_id", None)

@@ -98,7 +98,7 @@ def _coerce(value: Any) -> Any:
 
         if isinstance(value, enum.Enum):
             return value.value
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 防御兜底：enum 为标准库、isinstance 恒不抛错
         pass
     return str(value)
 

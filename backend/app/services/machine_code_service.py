@@ -55,7 +55,7 @@ class MachineCodeService:
 
     @staticmethod
     def _collect_wmic_info() -> list:
-        if platform.system() != "Windows":  # pragma: no cover
+        if platform.system() != "Windows":  # pragma: no cover - 平台守卫：当前测试运行环境不可达
             return []
 
         wmic_queries = [
@@ -80,19 +80,19 @@ class MachineCodeService:
                         _,
                     )
                 )
-            except Exception:  # pragma: no cover
+            except Exception:  # pragma: no cover - 防御兜底：单条机器信息探测启动失败时记空并跳过
                 procs.append((None, _))
 
         info = []
         for proc, skip_val in procs:
-            if proc is None:  # pragma: no cover
+            if proc is None:  # pragma: no cover - 承接上条兜底：探测启动失败的进程直接跳过
                 continue
             try:
                 stdout, _ = proc.communicate(timeout=2)
                 val = stdout.strip().split("\n")[-1].strip()
                 if val and val != skip_val:
                     info.append(val)
-            except Exception:  # pragma: no cover
+            except Exception:  # pragma: no cover - 防御兜底：单条机器信息探测启动失败时记空并跳过
                 try:
                     proc.kill()
                 except Exception:
@@ -105,7 +105,7 @@ class MachineCodeService:
             return ":".join(
                 ["{:02x}".format((uuid.getnode() >> elements) & 0xFF) for elements in range(0, 2 * 6, 2)][::-1]
             )
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
             logger.debug("获取 MAC 地址失败")
             return None
 
@@ -114,7 +114,7 @@ class MachineCodeService:
         try:
             name = platform.node()
             return name if name else None
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
             logger.debug("获取计算机名失败")
             return None
 
@@ -243,7 +243,7 @@ class MachineCodeService:
                 )
                 cpu_name = result.stdout.strip().split("\n")[-1].strip()
                 info["cpu_name"] = cpu_name
-            except Exception:  # pragma: no cover
+            except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
                 logger.debug("获取 CPU 信息失败")
 
             try:
@@ -260,7 +260,7 @@ class MachineCodeService:
                 if memory:
                     memory_gb = int(memory) / (1024**3)
                     info["memory_gb"] = round(memory_gb, 2)
-            except Exception:  # pragma: no cover
+            except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
                 logger.debug("获取内存信息失败")
 
         return info
@@ -657,7 +657,7 @@ class MachineCodeService:
                     getattr(record, "id", None),
                     f"通行码回退验证改绑机器码: {old_machine_code}... -> {machine_code[:16]}...",
                 )
-            except Exception:  # pragma: no cover
+            except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
                 logger.debug("记录通行码回退改绑审计失败", exc_info=True)
             logger.info(
                 "通行码回退验证成功（机器码已更新）: pass_code=%s..., "
@@ -701,7 +701,7 @@ class MachineCodeService:
                     record_machine_code[:16],
                 )
                 return record
-            except Exception as e:  # pragma: no cover
+            except Exception as e:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
                 logger.warning("HMAC 自验证后创建本地记录失败: %s", e)
                 return MachineCode(
                     machine_code=machine_code,

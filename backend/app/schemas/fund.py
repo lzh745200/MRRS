@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-try:  # pragma: no cover -
+try:  # pragma: no cover - 项目内模块必然可导入，此防御回退不可达
     from app.models.fund import FundSource, FundStatus, FundType
 except Exception:  # noqa: BLE001  # pragma: no cover —— app.models.fund 为项目内模块必然可导入，防御回退不可达
 

@@ -64,7 +64,7 @@ class ReportService:
             wb.save(output)
             output.seek(0)
             return output.getvalue()
-        except ImportError:  # pragma: no cover
+        except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             logger.warning("openpyxl not available, returning empty Excel")
             return self._empty_excel()
         except Exception as e:
@@ -141,7 +141,7 @@ class ReportService:
             ).build(story, canvasmaker=make_numbered_canvas(f"帮扶管理信息系统 - {rpt_type}"))
             buffer.seek(0)
             return buffer.getvalue()
-        except ImportError:  # pragma: no cover
+        except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             logger.warning("reportlab not available, returning empty PDF")
             return self._empty_pdf()
         except Exception as e:
@@ -382,7 +382,7 @@ class ReportService:
             wb.save(output)
             output.seek(0)
             return output.getvalue()
-        except ImportError:  # pragma: no cover
+        except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             return b""
 
     @staticmethod
@@ -396,5 +396,5 @@ class ReportService:
             c.save()
             buffer.seek(0)
             return buffer.getvalue()
-        except ImportError:  # pragma: no cover
+        except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             return b""

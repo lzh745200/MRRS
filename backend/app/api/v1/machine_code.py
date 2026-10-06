@@ -189,7 +189,7 @@ async def get_machine_code(request: Request):
             "data": data,
             "message": "机器码获取成功",
         }
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error(f"获取机器码失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="获取机器码失败，请稍后重试或联系管理员")
 
@@ -222,7 +222,7 @@ async def admin_create_machine_code(
         try:
             write_work_log(db, "machine_code", "create", record.id, f"录入机器码: {request.machine_code}",
                            user_id=current_user.id, username=getattr(current_user, "username", ""))
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
             logger.debug("记录工作日志失败")
         return {
             "code": 200,
@@ -238,7 +238,7 @@ async def admin_create_machine_code(
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error(f"录入机器码失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="录入机器码失败，请稍后重试或联系管理员")
 
@@ -287,7 +287,7 @@ async def admin_list_machine_codes(
             )
 
         return ok_list(items=items, total=total)
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error(f"查询机器码列表失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
 
@@ -316,12 +316,12 @@ async def admin_revoke_machine_code(
         try:
             write_work_log(db, "machine_code", "revoke", machine_code_id, f"撤销机器码: id={machine_code_id}",
                            user_id=current_user.id, username=getattr(current_user, "username", ""))
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
             logger.debug("记录工作日志失败")
         return {"code": 200, "success": True, "message": "机器码已撤销"}
     except HTTPException:
         raise
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error(f"撤销机器码失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="撤销失败，请稍后重试或联系管理员")
 
@@ -376,7 +376,7 @@ async def generate_initial_password(
         try:
             write_work_log(db, "machine_code", "generate_password", user.id, f"生成初始密码: {request.username}",
                            user_id=current_user.id, username=getattr(current_user, "username", ""))
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
             logger.debug("记录工作日志失败")
         return {
             "code": 200,
@@ -390,7 +390,7 @@ async def generate_initial_password(
         }
     except HTTPException:
         raise
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 防御性回滚：仅在未预期 DB 异常路径触发，正常路径不可达
         db.rollback()
         logger.error(f"生成密码失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="生成密码失败，请稍后重试或联系管理员")
@@ -475,7 +475,7 @@ async def reset_password_with_machine_code(
                 db, "user", "reset_password_by_machine", user.id,
                 f"通过机器码验证重置用户密码: {username}",
             )
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
             logger.debug("记录密码重置审计日志失败", exc_info=True)
 
         # 离线单机环境：新密码通过 HTTP 响应返回（仅 localhost 可访问），
@@ -490,7 +490,7 @@ async def reset_password_with_machine_code(
         }
     except HTTPException:
         raise
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 防御性回滚：仅在未预期 DB 异常路径触发，正常路径不可达
         db.rollback()
         logger.error(f"重置密码失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="重置密码失败，请稍后重试或联系管理员")
@@ -590,7 +590,7 @@ async def recover_admin_factory_password(
                 db, "user", "recover_admin_factory_password", user.id,
                 f"管理员账号出厂恢复（从未激活状态）: {username}",
             )
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
             logger.debug("记录出厂恢复审计日志失败", exc_info=True)
 
         logger.warning(
@@ -605,7 +605,7 @@ async def recover_admin_factory_password(
         }
     except HTTPException:
         raise
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 防御性回滚：仅在未预期 DB 异常路径触发，正常路径不可达
         db.rollback()
         logger.error(f"管理员出厂恢复失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="出厂恢复失败，请稍后重试")
@@ -619,7 +619,7 @@ async def get_machine_info(current_user=Depends(get_current_user)):
         machine_info = service.get_machine_info()
 
         return {"code": 200, "success": True, "data": machine_info, "message": "获取成功"}
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error(f"获取机器信息失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="获取机器信息失败，请稍后重试或联系管理员")
 
@@ -668,7 +668,7 @@ async def get_organization_verification_code(
         }
     except HTTPException:
         raise
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error(f"获取组织校验码失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="获取组织校验码失败，请稍后重试或联系管理员")
 
@@ -717,7 +717,7 @@ async def create_organization_pass_code(
         try:
             write_work_log(db, "machine_code", "create_org_pass_code", record.id, f"生成组织通行码: org={org.name}",
                            user_id=current_user.id, username=getattr(current_user, "username", ""))
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
             logger.debug("记录工作日志失败")
         return {
             "code": 200,
@@ -735,7 +735,7 @@ async def create_organization_pass_code(
         }
     except HTTPException:
         raise
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 防御性回滚：仅在未预期 DB 异常路径触发，正常路径不可达
         db.rollback()
         logger.error(f"生成组织通行码失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="生成通行码失败，请稍后重试或联系管理员")
@@ -804,7 +804,7 @@ async def list_organization_pass_codes(
         return ok_list(items=items, total=total, page=page, page_size=page_size)
     except HTTPException:
         raise
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error(f"查询组织通行证码列表失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="查询组织通行证码列表失败，请稍后重试或联系管理员")
 
@@ -884,7 +884,7 @@ async def export_organization_pass_codes(
         )
     except HTTPException:
         raise
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error(f"导出组织通行证码列表失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="导出组织通行证码列表失败，请稍后重试或联系管理员")
 
@@ -916,13 +916,13 @@ async def delete_organization_pass_code(
         try:
             write_work_log(db, "machine_code", "delete_org_pass_code", pass_code_id, f"删除通行码记录: id={pass_code_id}",
                            user_id=current_user.id, username=getattr(current_user, "username", ""))
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
             logger.debug("记录工作日志失败")
 
         return {"code": 200, "success": True, "message": "通行码记录已删除"}
     except HTTPException:
         raise
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover - 防御性回滚：仅在未预期 DB 异常路径触发，正常路径不可达
         db.rollback()
         logger.error(f"删除通行码记录失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="删除失败，请稍后重试或联系管理员")
@@ -987,7 +987,7 @@ async def get_machine_code_permissions(
         ]
 
         return ok_list(items, len(items), message="查询成功")
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error("获取机器码权限失败", exc_info=True)
         raise HTTPException(status_code=500, detail="获取机器码权限失败")
 
@@ -1017,7 +1017,7 @@ async def grant_machine_code_permissions(
         try:
             write_work_log(db, "machine_code", "grant_permissions", machine_code_id, f"授予机器码权限: {count}个",
                            user_id=current_user.id, username=getattr(current_user, "username", ""))
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
             logger.debug("记录工作日志失败")
         return {
             "code": 200,
@@ -1025,7 +1025,7 @@ async def grant_machine_code_permissions(
             "data": {"granted_count": count},
             "message": f"成功授予 {count} 个权限",
         }
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error("授予机器码权限失败", exc_info=True)
         raise HTTPException(status_code=500, detail="授予机器码权限失败")
 
@@ -1053,7 +1053,7 @@ async def revoke_machine_code_permissions(
         try:
             write_work_log(db, "machine_code", "revoke_permissions", machine_code_id, f"撤销机器码权限: {count}个",
                            user_id=current_user.id, username=getattr(current_user, "username", ""))
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
             logger.debug("记录工作日志失败")
         return {
             "code": 200,
@@ -1061,7 +1061,7 @@ async def revoke_machine_code_permissions(
             "data": {"revoked_count": count},
             "message": f"成功撤销 {count} 个权限",
         }
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error("撤销机器码权限失败", exc_info=True)
         raise HTTPException(status_code=500, detail="撤销机器码权限失败")
 
@@ -1089,7 +1089,7 @@ async def revoke_single_machine_code_permission(
         return {"code": 200, "success": True, "message": "权限已撤销"}
     except HTTPException:
         raise
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error("撤销机器码权限失败", exc_info=True)
         raise HTTPException(status_code=500, detail="撤销机器码权限失败")
 
@@ -1119,6 +1119,6 @@ async def get_user_effective_permissions(
             },
             "message": "查询成功",
         }
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error("获取用户实际权限失败", exc_info=True)
         raise HTTPException(status_code=500, detail="获取用户实际权限失败")

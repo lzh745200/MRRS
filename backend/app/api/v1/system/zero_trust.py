@@ -333,9 +333,9 @@ async def get_trust_assessment(
     elif total_score >= 60:
         level = "low_risk"
     elif total_score >= 40:  # pragma: no cover - 现有因子权重无 40~59 组合
-        level = "medium_risk"  # pragma: no cover
+        level = "medium_risk"  # pragma: no cover - 现有评分因子组合不可达该档位（防御性分级）
     elif total_score >= 20:  # pragma: no cover - 现有因子权重无 20~39 组合
-        level = "high_risk"  # pragma: no cover
+        level = "high_risk"  # pragma: no cover - 现有评分因子组合不可达该档位（防御性分级）
     else:
         level = "untrusted"
 

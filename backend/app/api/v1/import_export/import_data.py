@@ -279,7 +279,7 @@ async def _import_entities(
         finally:
             try:
                 dry_db.rollback()
-            except Exception:  # pragma: no cover
+            except Exception:  # pragma: no cover - 防御性回滚：dry-run 会话仅在未预期异常时需要回滚
                 pass
             dry_db.close()
     else:

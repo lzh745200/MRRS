@@ -19,7 +19,7 @@ try:
 
     SKLEARN_AVAILABLE = True
     logger.info("scikit-learn 已加载，异常检测功能可用")
-except ImportError as e:  # pragma: no cover
+except ImportError as e:  # pragma: no cover - 可选依赖未安装时的功能降级分支
     SKLEARN_AVAILABLE = False
     logger.warning(f"scikit-learn未安装,异常检测功能将受限: {e}")
 
