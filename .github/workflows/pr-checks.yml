@@ -350,13 +350,15 @@ jobs:
       # （配套约定 F2 条）。存量裸 pragma 不阻断，但设上限防"边清理边新增"抵消；
       # 基线自动解析（origin/main → HEAD~1）；--deepen 让浅克隆也拿到父提交，
       # 无基线时显式告警而非静默通过。
+      # 2026-10-06 起仓库裸 pragma 已清零（127→0），上限从 130 收紧到 0：
+      # 任何人再写无理由豁免，此处直接红（配套单测 test_repo_bare_pragmas_stay_zero）。
+      # 注意：说明注释必须放在命令起始行之前，不能插进反斜杠续行中间
+      # （否则续行拼接后参数行会被当成独立命令执行 → exit 127）。
       - name: Coverage-exemption reason ratchet (F2)
         run: |
           git fetch --no-tags --deepen=50 origin main || true
           python scripts/check_pragma_reasons.py --diff-base auto \
-            # 2026-10-06 起仓库裸 pragma 已清零（127→0），上限从 130 收紧到 0：
-          # 任何人再写无理由豁免，此处直接红（配套单测 test_repo_bare_pragmas_stay_zero）
-          --allow-missing-base --max-bare 0
+            --allow-missing-base --max-bare 0
 
   # E2E 浏览器套件（Playwright，150 用例）：真实起后端(18000)+前端(15173)，
   # 独立 e2e_test.db。此前长期无 CI 执行导致选择器/密码腐化四周无人发现
