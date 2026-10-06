@@ -28,7 +28,7 @@ python -m bandit -r app/ -ll                            # Security scan
 ```bash
 cd frontend
 npm run dev                                             # Dev server (http://localhost:5173)
-npm run test -- --run                                   # Run all tests (~6315, 303 test files)
+npm run test -- --run                                   # Run all tests (~6330, 303 test files)
 npx vitest run tests/unit/views/xxx/xxx.test.ts        # Run single test file (tests live under tests/unit/)
 npm run lint                                            # ESLint --fix (改文件, 本地用, --max-warnings=0)
 npm run lint:check                                      # ESLint 纯检查 (CI gate, 不带 --fix)
