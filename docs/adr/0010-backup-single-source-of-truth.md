@@ -22,22 +22,26 @@
 | 配置键 | 默认值 | 含义 |
 |--------|--------|------|
 | `auto_backup` | `"true"` | 是否启用（DEFAULT_CONFIGS 改为 true） |
+| `backup_interval_days` | `"1"` | 距上次备份不足该天数则跳过（2026-10-06 由 `"30"` 改为 `"1"`，对齐实际每日节奏） |
 | `backup_retention_days` | `"7"` | 保留天数（新增，过期自动清理） |
 | `backup_schedule_cron` | `"0 2 * * *"` | 调度表达式（每日 02:00） |
 
 落地要点：
 
-- `GET /system/backup/schedule` 读取上述配置并返回 `enabled` / `keepCount` / `nextRun`；无配置时回退默认值（DEFAULT_CONFIGS）。
-- `PUT /system/backup/schedule` 写入 `SystemConfig`（`set_config`），**热生效**——下次 scheduler 循环与后续 GET 立即反映，无需重启。
-- `auto_backup_job`：默认开启；备份完成后调用 `BackupService.cleanup_by_retention_days(retention_days)` 按天数清理（取代旧的按份数 `cleanup_old_backups`）。
-- **Electron 仅触发**：`performAutoBackup` 只 POST 创建备份，移除自有的 `cleanupOldBackups`（清理职责完全交给后端）。
-- 前端 `BackupManagement.vue` 抽出 `useBackupSchedule` composable：保存后**回读** GET，保证与后端一致。
+- `GET /system/backup/schedule` 读取上述配置并返回 `enabled` / `keepCount` / `nextRun`；无配置时回退默认值（DEFAULT_CONFIGS）。**非数字脏值回退默认**（`get_int_config`），不再 500。
+- `PUT /system/backup/schedule` 写入 `SystemConfig`（`set_config`），**热生效**——下次 scheduler 循环与后续 GET 立即反映，无需重启。**仅管理员可调用**（2026-10-06 补 `require_admin`；此前只校验"已登录"）。
+- `auto_backup_job`：默认开启；**保留清理与备份节奏解耦**——清理在开关判定之后、间隔判定之前执行，避免被"距上次不足 N 天，跳过"的 early return 饿死（2026-10-06 修复）。备份完成后同样调用 `BackupService.cleanup_by_retention_days(retention_days)`（取代旧的按份数 `cleanup_old_backups`）。
+- `POST /system/backup` 新增 `trigger` 字段：`auto`（Electron 定时）时由后端按 `auto_backup` + `backup_interval_days` + `last_backup_time` 判定是否落盘（未到间隔返回 `data.skipped=true`）；`manual`（前端按钮 / 托盘「立即备份」）无条件执行。
+- **Electron 仅触发**：`performAutoBackup('auto')` 只 POST 创建备份并按后端判定跳过，**移除自有的 `cleanupOldBackups`**（清理职责完全交给后端），轮询间隔 30 分钟（`AUTO_BACKUP_POLL_INTERVAL`）。
+- 前端 `BackupManagement.vue` 抽出 `useBackupSchedule` composable：保存后**回读** GET，保证与后端一致；「自动备份设置」面板亦走同一 `PUT` 通道（2026-10-06 修复此前"只写 localStorage 却提示已保存"的虚假成功）。
+- 界面文案统一为「**保留天数**」：`keep_count` 实际写入 `backup_retention_days`（天数），此前的「保留份数」表述与实现不符。
 
 ## 后果
 
 - 管理员在 UI 配置的策略真实生效，单一可解释来源。
 - Electron 不再维护备份策略，升级后端即可改策略。
 - 默认开启自动备份（每日 02:00，保留 7 天），符合单机离线场景的数据安全预期；磁盘敏感场景可由管理员显式关闭。
+- 稳态磁盘占用 ≈ `backup_retention_days` ×（库 + 上传目录）单份体积。
 
 ## 验收（见 tests/unit/test_backup_schedule_unify.py + frontend useBackupSchedule.test.ts）
 

@@ -61,8 +61,29 @@ jobs:
       # bare 渲染根治（每个 .vue 只由一个测试深挂载）。详见 frontend/vitest.config.ts 注释 (A)。
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: '22' }
-      # npm ci 严格按 lockfile 安装（与 pr-checks 一致），保证 nightly 与 PR 结果可复现
-      - run: cd frontend && npm ci --legacy-peer-deps
+      # npm ci 严格按 lockfile 安装（与 pr-checks 一致），保证 nightly 与 PR 结果可复现。
+      # 网络抖动治理（2026-10-06）：此处原为裸 `npm ci`，未移植 pr-checks 的加固 ——
+      # 一次 ECONNRESET 即让 npm ci 失败、vitest 压根没跑，nightly 呈现"红但无信息"，
+      # 白白丢掉夜间回归的发现能力（2026-10-05 实际发生）。与 pr-checks.yml 保持同款：
+      # ① 提高 fetch 重试与超时；② 外层 3 次幂等重试；③ 连续失败时给出明确 ::error::。
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          npm config set fetch-timeout 300000
+          for i in 1 2 3; do
+            echo "===== npm ci attempt $i ====="
+            if npm ci --legacy-peer-deps; then
+              echo "npm ci OK (attempt $i)"
+              exit 0
+            fi
+            echo "npm ci attempt $i failed; retrying in 10s"
+            sleep 10
+          done
+          echo "::error::npm ci 连续 3 次失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
+          exit 1
       - name: Full test + coverage
         run: cd frontend && npx vitest run --coverage --reporter=junit --outputFile=test-results.xml 2>&1
       - name: Upload test results

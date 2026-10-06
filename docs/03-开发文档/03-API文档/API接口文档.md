@@ -27,6 +27,8 @@
 | **软删** | 列表默认只返回 `is_active=true`;`include_deleted=true` 仅管理员有效 |
 | **限流** | `/auth/login` 5 次/分、`/auth/register` 3 次/分、`/auth/refresh` 10 次/分、`/auth/csrf-token` 30 次/分 |
 | **loopback 门禁** | 标注"仅本机"的接口只接受 127.0.0.1 来源(机器码校验/公开密码重置/权限包导入确认) |
+| **首登强制改密** | `must_change_password=true` 的账号（出厂管理员/重置后）在完成改密前，除 `/auth/{me,logout,refresh,csrf-token}`、`/users/me`、`/menus/accessible`、`PUT /users/{自己}/password` 与预检 `OPTIONS` 外，**一律返回 403**（服务端拦截，直连 API 无法绕过） |
+| **分页参数钳制** | 端点对 `skip/limit/page/page_size` 做钳制（`limit<=0` → 1、`skip<0` → 0、上限 200），不返回 422；`limit=-1`（SQLite 语义"不限量"）已被拦截 |
 
 **鉴权列说明**(下表自动标注):`登录`=需有效 JWT;`管理员`=还需 admin/super_admin;`仅本机`=只接受本机来源;`公开`=无需登录;标注混合时以后者为准。
 
@@ -727,7 +729,7 @@
 | GET | `/policies/{policy_id}/preview` | 预览政策附件文件（返回文件流或HTML） | 登录 |
 | GET | `/policies/{policy_id}/download` | 下载政策附件 | 登录 |
 | POST | `/policies/batch-delete` | 批量删除政策 | 登录 |
-| GET | `/policies` | 获取政策列表 —— 兼容前端 skip/limit 和旧 page/page_size 参数 | 登录 |
+| GET | `/policies` | 获取政策列表 —— 兼容前端 skip/limit 和旧 page/page_size 参数；**列表不返回 `content` 全文**（详情/创建/更新才返回，列表页不渲染全文） | 登录 |
 | GET | `/policies/{policy_id}/related` | 获取相关政策（仅展示已发布政策或本人创建的政策） | 登录 |
 | GET | `/policies/search` | 全文检索帮扶政策（FTS5 + 关键词高亮） | 登录 |
 | GET | `/policies/{policy_id}` | 获取政策详情 | 登录 |
@@ -988,14 +990,14 @@
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| POST | `/system/backup` | 创建系统数据库备份 | 登录/公开 |
+| POST | `/system/backup` | 创建系统数据库备份（`trigger=auto` 时由后端按 `auto_backup`+`backup_interval_days` 判定，未到间隔返回 `data.skipped=true`；默认 `manual` 无条件执行） | 登录/公开 |
 | POST | `/system/backup/request-download` | 普通用户发起备份下载申请 → 站内消息通知全部超管，由管理员线下授权。 | 登录 |
 | GET | `/system/backup` | 获取所有数据库备份文件列表 | 登录/公开 |
 | GET | `/system/backup/stats` | 获取备份统计信息 | 登录 |
 | GET | `/system/backup/dirs` | 枚举可用的备份目标目录（可移动磁盘/固定盘/网络盘），供前端备份目标选择。 | 登录 |
 | PUT | `/system/backup/target` | 持久化备份目标目录（写入 SystemConfig） | 登录 |
 | GET | `/system/backup/schedule` | 获取自动备份计划配置（后端调度为唯一真相源）。 | 登录 |
-| PUT | `/system/backup/schedule` | 更新自动备份计划配置（写入 SystemConfig，后端调度热生效）。 | 登录 |
+| PUT | `/system/backup/schedule` | 更新自动备份计划配置（写入 SystemConfig，后端调度热生效）。 | **管理员** |
 | DELETE | `/system/backup/{filename}` | 删除指定的备份文件 | 登录/公开 |
 | GET | `/system/backup/download/{filename}` | 下载指定的备份文件 | 管理员/登录 |
 | GET | `/system/backup/preview/{filename}` | 读取备份 ZIP 的文件清单与元信息（backup_info.json），供前端预览弹窗使用。 | 管理员/登录 |

@@ -5,6 +5,82 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.14] - 2026-10-06 — 🔍 全库深度排查与修复（数据合并/权限收口/时间基准/健壮性）+ 文档与 PPT 同步
+
+> 排查方式：后端反模式清单逐项扫描（时间基准 / 异常吞噬 / 边界 / 竞态 / 注入）+ 前端契约与竞态只读审计，
+> 每条结论均源码级复核，且**新增断言均验证过"新旧实现结论不同"**（防弱断言）。
+> 用例口径：后端 **12,005**（`pytest --collect-only` 实测）/ 前端 **6,315**（303 文件）。
+
+### 修复（高）
+- **数据同步「智能合并」策略完全失效**（`services/data_sync_service.py`）：`_import_table_data`（ZIP `/data-sync/import` 路径）
+  只有 `skip/overwrite/manual` 分支且无 else 兜底，而前端数据同步页**默认策略就是 `merge`**（"智能合并（推荐）"）——
+  已存在记录既不被更新、也不计入 `success/failed/conflicts`，接口仍返回"导入成功"，且 `total != success + failed`，
+  冲突数据静默不生效。现补齐 `merge` 分支（语义与加密包路径 `_import_table_data_enhanced` 一致）。
+- **加密包合并永不更新**（同文件 `_should_update_record`）：`existing` 来自 raw `text()` 查询是**字符串**，
+  与 `parser.parse(...)` 得到的 `datetime` 直接比较抛 `TypeError`，被 `except Exception` 吞成一条 warning 后
+  **恒返回 False**。新增 `_normalize_record_time`（str/datetime/None → aware UTC，naive 按 UTC 解释），
+  一并消除 naive/aware 混算。守护用例用**生产形态**（两侧均为 raw 字符串）断言，旧实现必失败。
+- **政策模块三处前端功能失效**（调用了不存在的 store 方法，被 mock 掩盖）：
+  - `views/policies/List.vue` 调用 `policyStore.removePolicy/removePolicies`（store 只导出 `deletePolicy`）
+    → 单条与批量删除抛 `TypeError`、**数据从未被删除**；现改逐条 `deletePolicy`，部分失败保留失败项并告警。
+  - `views/policies/Category.vue` 调用 `policyStore.fetchStatistics`（同样不存在）→ 分类总览计数**恒为 0**；
+    现改走已存在的 `getPolicyStats()`（`GET /policies/statistics`）。
+  - `views/policies/Detail.vue` 收藏态从不回查（`isFavorite` 恒 false）→ 已收藏政策显示为"收藏"、
+    点击报 400，且 DELETE 分支不可达 → **无法取消收藏**；现进入详情即回查收藏列表初始化。
+- **备份计划端点越权**（`api/v1/system/backup.py`）：`PUT /system/backup/schedule` 只校验"已登录"，
+  任何普通用户都能改写全局备份开关/频率/保留策略（与页面自述"普通用户只读"矛盾）。现补 `require_admin`，
+  前端该面板保存按钮同步加 `canOperateBackup` 收口。
+
+### 修复（中）
+- **出厂口令改值 + 服务端强制首登改密**：`FACTORY_ADMIN_PASSWORD` 由 `Admin@2026`（10 位、低于自有策略
+  `MIN_LENGTH=12`、属公开常识值）改为 13 位混合字符；`get_current_user` 增加拦截——`must_change_password=true`
+  时除改密链路（`auth/{me,logout,refresh,csrf-token}`、`users/me`、`menus/accessible`、仅限改自己的
+  `PUT /users/{id}/password`）与 `OPTIONS` 外**一律 403**。此前拦截仅由前端路由守卫收口，直连 API 可绕过。
+- **`backup_retention_days` 脏值导致备份计划页 500**：`GET|PUT /system/backup/schedule` 裸 `int()` 解析配置，
+  而通用配置端点/管控包导入可写入任意字符串。新增 `get_int_config`（可注入 getter 以保留各模块测试的
+  `get_config` patch 缝合点）并统一接入备份/调度各调用点。
+- **`last_backup_time` 带时区偏移时整条自动备份失败**：`except ValueError` 覆盖不到 `naive - aware` 的
+  `TypeError`，异常逃逸为"自动备份失败"/接口 500。新增 `time_utils.parse_local_wallclock` 统一归一。
+- **`restore_drill_job` 在 `with get_db_context()` 之外使用已关闭会话** 发提醒：隐式重开不受 `finally`
+  管理的连接；现移入 `with` 块内。
+- **导入包解析加固**（同 R18 后续）：`data_sync` 导入解析下沉线程池 + 解压体积闸门（1GB）+
+  `except HTTPException: raise` 守住 413 语义；`control-package/import-preview` 补 `require_admin`，
+  畸形 `manifest.json`（非对象）/非数组成员由 500 改为 `valid=false`/计 0。
+- **工作日历 localStorage 脏数据崩页**：`setup` 顶层裸 `JSON.parse` 且不校验形态 → SyntaxError 让**整条路由
+  渲染失败**；现 `readStoredEvents()` 兜底空数组（新增专属测试）。
+- **多个列表端点 `limit/skip/page` 无边界**：`limit=-1` 在 SQLite 语义下等同"不限量"（一次拉全表）。
+  新增 `utils/pagination.clamp_offset_limit` 并在 5 个端点接入（rbac/villages/machine-code/feedback/data-sync）。
+
+### 修复（低）
+- **`BACKUP_COMPRESSION_LEVEL` 非数字** → `BackupService` 构造即抛 `ValueError`、备份链路整体不可用；
+  提取 `utils/env_utils.parse_env_int`（**同时消除 `core/database._parse_env_int` 的重复实现**）并收敛
+  `security.ACCESS_TOKEN_EXPIRE_MINUTES`（模块导入期裸 `int()`，一处笔误即让后端以 ImportError 无法启动）、
+  `REFRESH_TOKEN_EXPIRE_DAYS`、压缩级别（越界收敛 0-9）。
+- **同秒并发写同一物理文件**：数据同步导出包名（增量/加密两处）与政策附件名仅到秒且无随机后缀 →
+  后者 `"w"` 截断前者；均追加短 uuid。
+- **政策列表竞态**：翻页/改筛选的请求 params 不同，请求层去重拦不住，网络乱序时旧响应覆盖新响应；
+  store 加请求序号（含 error 与 loading 的过期保护）。
+- **`getLevelLabel` 实参顺序错误**：视图按 `(category, level)` 传参而函数只取首参 → 层级列在 `level_name`
+  缺失时显示 `military/local`；改为只传 `organization_level` 并删除误导性 wrapper。
+
+### 文档与 PPT
+- 同步用例口径与版本（README / AGENTS.md / 项目文件结构说明.md / docs/build_ppt.js → 重生成 PPTX 并解包核验）；
+- 修正与实现不符的说明：部署指南"首次启动自动生成随机密码"（实际为出厂口令）、用户手册备份章节
+  （频率/保留语义，实为**天数**）、`架构评估整改配套约定` RPO 行；
+- ADR-0010 补记实际落地状态（此前声称的"Electron 仅触发/移除自带清理/清理交后端"**一直未真正实现**，
+  本轮才落地）、新增 `backup_interval_days` 键（默认 30→**1 天**）与 `trigger=auto` 语义、管理员权限要求；
+- API 文档补：首登强制改密 403 规则、分页参数钳制口径、`POST /system/backup` 的 `trigger`、
+  `PUT /system/backup/schedule` 权限、`GET /policies` 列表不含 `content`。
+
+### 测试
+- 新增 `test_must_change_password_guard.py`(17) / `test_backup_single_source_of_truth.py`(12) /
+  `test_data_sync_service` +6（merge 分支、raw 字符串时间归一、线程池断言、413 透传）/
+  `test_data_sync_route` +2 / `test_upload_limit_r2` +3（预览容错）/ 前端 `workCalendar/Index.test.ts`(4) /
+  政策三视图与 store 竞态用例重写与新增；同步更新被"错误 mock"掩盖的旧断言（弱 mock 纠正）。
+- 用例口径：后端 **12,005** / 覆盖率 100%；前端 **6,315**（303 文件）。
+
+---
+
 ## [1.12.13] - 2026-10-05 — 🛡 R18 全维度排查修复（并发闸门 / 事件循环阻塞 / 竞态互踩 / 信息泄露）
 
 > 排查方式：3 路并行只读审计（并发性能 / 内存泄漏 / 安全）+ 9 维度清单逐项核查，
