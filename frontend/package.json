@@ -33,7 +33,7 @@
     "element-plus": "^2.6.1",
     "pinia": "^2.1.7",
     "sortablejs": "^1.15.2",
-    "vue": "^3.4.21",
+    "vue": "^3.5.43",
     "vue-router": "^4.3.0",
     "xlsx": "npm:@e965/xlsx@^0.20.3"
   },
@@ -71,6 +71,7 @@
     },
     "minimatch@10": {
       "brace-expansion": "^5.0.12"
-    }
+    },
+    "source-map-js": "^1.2.2"
   }
 }

@@ -318,10 +318,41 @@ jobs:
       # 后端依赖（webServer 直接 python -m uvicorn 启动，无 venv）
       - run: pip install -r backend/requirements.txt
       # 前端依赖 + Playwright chromium 浏览器（config 在 Linux 用 chromium）
-      - run: |
+      # 网络抖动治理（2026-10-06）：此处原为裸 `npm ci` + 裸 `playwright install` ——
+      # 2026-10-06 的 5b63d72 运行即因本步骤失败（同一批次里带重试的 frontend-check
+      # 反而通过），而失败形态只有一个"Run cd frontend"步骤名，真因被完全掩盖。
+      # 与 frontend-check 保持同款：提高 fetch 重试/超时 + 外层 3 次幂等重试。
+      - name: Install frontend deps and Playwright browser
+        run: |
           cd frontend
-          npm ci --legacy-peer-deps
-          npx playwright install chromium --with-deps
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          npm config set fetch-timeout 300000
+          for i in 1 2 3; do
+            echo "===== npm ci attempt $i ====="
+            if npm ci --legacy-peer-deps; then
+              echo "npm ci OK (attempt $i)"
+              break
+            fi
+            if [ "$i" = "3" ]; then
+              echo "::error::npm ci 连续 3 次失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
+              exit 1
+            fi
+            echo "npm ci attempt $i failed; retrying in 10s"
+            sleep 10
+          done
+          for i in 1 2 3; do
+            echo "===== playwright install attempt $i ====="
+            if npx playwright install chromium --with-deps; then
+              echo "playwright install OK (attempt $i)"
+              exit 0
+            fi
+            echo "playwright install attempt $i failed; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::playwright install 连续 3 次失败 —— 疑似浏览器下载源/apt 镜像故障，非业务代码问题"
+          exit 1
       - name: E2E tests (Playwright)
         run: |
           cd frontend

@@ -205,8 +205,26 @@ jobs:
           Write-Host "后端 exe 已签名并通过验证"
 
       # 9. 安装 Electron 依赖 (根目录)
+      # 网络抖动治理（2026-10-06）：与 pr-checks 的 frontend-check 同款加固，
+      # 避免一次 registry 抖动让整条出包流水线失败（历史 nightly/e2e 均因此报红）。
       - name: Install Electron deps
-        run: npm ci
+        shell: bash
+        run: |
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          npm config set fetch-timeout 300000
+          for i in 1 2 3; do
+            echo "===== npm ci attempt $i ====="
+            if npm ci; then
+              echo "npm ci OK (attempt $i)"
+              exit 0
+            fi
+            echo "npm ci attempt $i failed; retrying in 10s"
+            sleep 10
+          done
+          echo "::error::npm ci 连续 3 次失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
+          exit 1
 
       # 9.5 Electron 主进程语法门禁（防再发 10c56cd0 乱码损坏进入安装包）
       - name: Syntax check Electron main process
