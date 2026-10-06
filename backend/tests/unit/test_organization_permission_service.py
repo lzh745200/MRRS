@@ -207,8 +207,9 @@ class TestRequireOrganizationAccess:
         mock_db = MagicMock()
         svc = OrganizationPermissionService(mock_db)
         svc.can_access_organization = MagicMock(return_value=True)
+        # allowed 路径：正确透传 (user_id, org_id) 做权限判断且不抛错（返回 None）
         svc.require_organization_access(1, 2)
-        assert True
+        svc.can_access_organization.assert_called_once_with(1, 2, ip_address=None)
 
     def test_denied_raises(self):
         from app.services.organization_permission_service import PermissionDeniedError, OrganizationPermissionService

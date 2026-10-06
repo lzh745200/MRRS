@@ -287,7 +287,11 @@ describe('搜索与选项卡', () => {
     expect((wrapper.vm as any).searchText).toBe('A')
     inputs[0].vm.$emit('clear')
     inputs[0].vm.$emit('keyup', { key: 'Enter' })
-    expect(true).toBe(true)
+    // onFilterChange 为有意 no-op（displayTemplates 是 computed 自动响应）：
+    // 事件触发后不得破坏筛选状态，输入绑定依旧生效
+    expect((wrapper.vm as any).searchText).toBe('A')
+    inputs[0].vm.$emit('update:modelValue', 'B')
+    expect((wrapper.vm as any).searchText).toBe('B')
   })
 
   it('模块筛选 select change；tabs tab-change 与 v-model', async () => {

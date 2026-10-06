@@ -4,6 +4,7 @@
 """
 import time
 from datetime import datetime
+from unittest.mock import patch
 
 class TestRateLimit:
     """测试 RateLimit 数据类"""
@@ -138,11 +139,11 @@ class TestResourceLimiter:
         limiter.is_allowed("test_key")
         limiter.is_allowed("test_key")
 
-        # 等待窗口过期
-        time.sleep(1.1)
-
-        # 新请求应该被允许（旧的已过期）
-        assert limiter.is_allowed("test_key") is True
+        # 用假时钟把窗口推到过期：替代真实 sleep(1.1)，消除等待与调度抖动
+        # （限流器内部取 now = time.time()，注入未来时间戳即视为窗口已过期）
+        with patch("app.services.resource_limiter.time.time", return_value=time.time() + 1.1):
+            # 新请求应该被允许（旧的已过期）
+            assert limiter.is_allowed("test_key") is True
 
     def test_get_usage_stats_existing(self):
         """测试获取存在的使用统计"""

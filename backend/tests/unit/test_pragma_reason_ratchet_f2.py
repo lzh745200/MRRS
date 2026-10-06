@@ -93,14 +93,35 @@ class TestRepoWideScan:
         # 每行都必须是注释内容，不能是整行源码
         assert all("# pragma: no cover" in comment for _p, _n, comment in rows)
 
-    def test_max_bare_ceiling_fails_loudly(self):
-        """上限设为 0 必然超标 → 退出码 1（证明该门禁真的会拦）。"""
+    def test_max_bare_ceiling_fails_loudly(self, tmp_path):
+        """上限低于实际裸数 → 退出码 1（证明该门禁真的会拦）。
+
+        2026-10-06 前本测试依赖"仓库自身存在裸 pragma"这一状态（--max-bare 0
+        必然超标）；裸 pragma 清零后该假设失效。改为自建探测目录：目录里有
+        1 处裸 pragma、上限压到 0，门禁必须响亮失败。
+        """
+        probe_dir = tmp_path / "probe_app"
+        probe_dir.mkdir()
+        (probe_dir / "probe.py").write_text(
+            "def f():\n    return 1  # pragma: no cover\n", encoding="utf-8"
+        )
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), "--max-bare", "0"],
+            [sys.executable, str(SCRIPT), "--max-bare", "0", "--paths", str(probe_dir)],
             capture_output=True, encoding="utf-8", errors="replace", cwd=str(ROOT),
         )
         assert result.returncode == 1
         assert "::error::" in result.stdout
+
+    def test_repo_bare_pragmas_stay_zero(self):
+        """仓库自身裸 pragma 必须为 0（2026-10-06 清零后钉死；新增即被拦）。
+
+        与 CI 的 `--max-bare 0` 同口径：任何人再写无理由豁免，此用例先红。
+        """
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--max-bare", "0"],
+            capture_output=True, encoding="utf-8", errors="replace", cwd=str(ROOT),
+        )
+        assert result.returncode == 0, result.stdout
 
     def test_missing_base_is_not_silent(self):
         """基线不可用且未允许缺失 → 退出码 2（绝不静默通过）。"""

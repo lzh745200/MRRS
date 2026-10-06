@@ -609,8 +609,8 @@ describe('附件操作', () => {
       await previewBtns[0].trigger('click')
       expect((wrapper.vm as any).previewVisible).toBe(true)
     } else {
-      // 附件表格行未渲染时至少确保组件可卸载（防御断言）
-      expect(true).toBe(true)
+      // 附件表格行未渲染时：预览弹窗必须保持默认关闭态
+      expect((wrapper.vm as any).previewVisible).toBe(false)
     }
     // FilePreview v-model 箭头：子组件 emit update:modelValue(false) → previewVisible 复位
     const fp = wrapper.findComponent({ name: 'FilePreview' })

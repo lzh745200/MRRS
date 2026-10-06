@@ -95,6 +95,9 @@ export default defineConfig({
         'e2e/**',
         'scripts/**',
         '**/__tests__/**',
+        // App.vue / main.ts 为装配入口（createApp + 全局插件注册 + 路由挂载），
+        // 其行为由「应用能否启动」承载（electron 启动冒烟 + router/index 全量路由表测试），
+        // 单测挂载会与 router-index.test.ts 的模块级单例互相干扰，故显式豁免（F2 同款约定：豁免须登记理由）。
         'src/App.vue',
         'src/App.test.vue',
         'src/main.ts',

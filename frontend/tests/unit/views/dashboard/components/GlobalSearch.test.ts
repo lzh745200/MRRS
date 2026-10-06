@@ -326,12 +326,12 @@ describe('交互与导航', () => {
 describe('清理', () => {
   it('onUnmounted 清理防抖与 blur 定时器', async () => {
     const wrapper = mountSearch()
-    const vm = wrapper.vm as any
-    wrapper.find('input').trigger('blur')
-    wrapper.unmount()
-    // 不抛错即通过；blur 定时器已被清理
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout')
+    wrapper.find('input').trigger('blur') // 安排 blur 延迟关闭定时器
+    wrapper.unmount() // 卸载必须清理未触发的定时器
+    // 清理契约：blur 安排的定时器在卸载时被 clearTimeout 回收，不再触发
     vi.advanceTimersByTime(500)
-    expect(true).toBe(true)
-    wrapper.unmount()
+    expect(clearSpy).toHaveBeenCalled()
+    clearSpy.mockRestore()
   })
 })

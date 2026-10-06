@@ -806,10 +806,9 @@ describe('加载失败与取消分支', () => {
     await vm.refreshLevelOptions().catch(() => {})
     wrapper.unmount()
   })
-  it('submitApproval 拒绝 "cancel" → 不提示', async () => {
-    // 政策 v1.8.0 起移除「提交审批」功能，本用例保留占位说明
-    expect(true).toBe(true)
-  })
+  // 注：政策 v1.8.0 起移除「提交审批」功能——submitApproval 入口已从视图与
+  // @/api/policy 一并删除，原占位用例（expect(true) 恒真断言）随之移除，
+  // 不再以恒真断言虚增通过数。「已移除」这一契约由 API 层无该导出保证。
 })
 
 describe('层级加载失败分支2', () => {
@@ -824,16 +823,3 @@ describe('层级加载失败分支2', () => {
   })
 })
 
-describe('审批提交分支收尾', () => {
-  it('确认后 reject cancel / reject detail', async () => {
-    // 政策 v1.8.0 起移除「提交审批」功能，保留占位
-    expect(true).toBe(true)
-  })
-})
-
-describe('审批失败兜底文案', () => {
-  it('error 无 response 无 message → 兜底文案', async () => {
-    // 政策 v1.8.0 起移除「提交审批」功能，保留占位
-    expect(true).toBe(true)
-  })
-})

@@ -471,10 +471,13 @@ describe('跳转与格式化', () => {
     wrapper.findComponent({ name: 'ElDialog' }).vm.$emit('update:modelValue', false)
     await nextTick()
     expect(vm.detailDialogVisible).toBe(false)
+    const countBefore = vm.messages.length
     vm.initWebSocket()
     vm.closeWebSocket()
+    // 单机版 WebSocket 为有意 no-op（消息走 HTTP 轮询，见组件内注释）：
+    // 调用后不得产生副作用，消息列表保持已加载结果
+    expect(vm.messages.length).toBe(countBefore)
     wrapper.unmount()
-    expect(true).toBe(true)
   })
 })
 

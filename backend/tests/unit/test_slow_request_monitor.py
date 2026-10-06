@@ -1,5 +1,6 @@
 """Tests for app.middleware.slow_request_monitor — 100% coverage target."""
 
+import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -39,7 +40,9 @@ def _make_app(slow_api_ms=500, slow_sql_ms=200, slow_sleep=0.01):
         return PlainTextResponse("fast")
 
     async def slow_enough(request):
-        time.sleep(slow_sleep)
+        # 异步端点内必须用 asyncio.sleep 而非 time.sleep：
+        # 后者会阻塞事件循环，扭曲并发请求的耗时测量
+        await asyncio.sleep(slow_sleep)
         return PlainTextResponse("slowish")
 
     app = Starlette(
@@ -224,9 +227,10 @@ class TestSqlEventListeners:
 
         mw, real_engine = self._make_middleware_with_real_db()
         with real_engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        # If _before fired, _after consumed the start; no crash = success
-        assert True
+            result = conn.execute(text("SELECT 1"))
+            assert result.scalar() == 1
+            # _before 已写入、_after 已取走：连接信息中不应残留起始时间戳
+            assert "_slow_req_start" not in conn.info
 
     def test_after_skipped_when_no_start(self):
         """_after returns early if _slow_req_start is missing from conn.info."""

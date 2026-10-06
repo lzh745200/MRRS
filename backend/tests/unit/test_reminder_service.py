@@ -287,7 +287,8 @@ class TestGlobalFunctions:
         try:
             mod._reminder_service = None
             mod.stop_approval_reminder()
-            assert True
+            # 单例本为 None：stop 必须保持 None（不得凭空创建实例）
+            assert mod._reminder_service is None
         finally:
             mod._reminder_service = old
 

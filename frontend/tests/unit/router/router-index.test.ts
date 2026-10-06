@@ -209,8 +209,10 @@ describe('router/index.ts', () => {
     ;(window as any).electronAPI = undefined
     try {
       vi.resetModules()
-      await import('@/router')
-      expect(true).toBe(true)
+      const mod: any = await import('@/router')
+      // 契约：electronAPI 缺失时模块仍可加载、路由表完整，只是不注册 onNavigate
+      expect(mod.default).toBeTruthy()
+      expect(mod.default.getRoutes().length).toBeGreaterThan(0)
     } finally {
       delete (window as any).electronAPI
       vi.resetModules()
