@@ -865,3 +865,94 @@ class TestDataValidator:
     def test_validate_phone_short(self, validator):
         result = validator.validate_phone("13800")
         assert not result.is_valid
+
+
+# ---------------------------------------------------------------------------
+#  分支覆盖清零（coverage report --show-missing 实测的 7 个部分分支）
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def dvs():
+    from app.services.data_validator_service import DataValidatorService
+    return DataValidatorService()
+
+
+def test_parse_excel_headers_skips_empty_header(dvs):
+    """空表头 → if header 为假跳过该列（356->355）。键名取自 COLUMN_MAPPING。"""
+    mapping = dvs.parse_excel_headers(["*县 / 市", "", "序号"])
+    assert 1 not in mapping
+    assert mapping == {0: "county", 2: "sequence_no"}
+
+
+def test_get_validation_summary_groups_and_skips_empty_field(dvs):
+    """get_validation_summary：同类型/同字段复用分组桶（669->671、677->679），
+    无字段名错误被跳过（676->675，如行数超限这类非字段级错误）。"""
+    from app.services.data_validator_service import (
+        ValidationErrorCode,
+        ValidationError,
+        ValidationResult,
+    )
+
+    result = ValidationResult(is_valid=False, total_rows=3, valid_rows=0)
+    result.errors = [
+        ValidationError(
+            row_number=1,
+            field_name="department",
+            error_code=ValidationErrorCode.MISSING_REQUIRED_FIELD,
+            message="缺失部门",
+        ),
+        ValidationError(
+            row_number=2,
+            field_name="department",
+            error_code=ValidationErrorCode.MISSING_REQUIRED_FIELD,
+            message="缺失部门",
+        ),
+        ValidationError(
+            row_number=0,
+            field_name="",
+            error_code=ValidationErrorCode.ROW_LIMIT_EXCEEDED,
+            message="数据行数超过限制",
+        ),
+    ]
+    summary = dvs.get_validation_summary(result)
+    assert summary["error_count"] == 3
+    assert summary["errors_by_type"]["IMPORT_003"] == 2
+    # 同字段两条复用同一分组桶；无字段名错误不进入字段分组
+    assert list(summary["errors_by_field"].values()) == [2]
+    assert "" not in summary["errors_by_field"]
+
+
+def test_validate_int_field_without_range_config(dvs):
+    """字段不在 NUMERIC_FIELD_RANGES → 直接通过（373->383）。"""
+    assert dvs._validate_int_field("未配置范围的整数字段", 7, 1) is None
+
+
+def test_validate_float_field_accepts_number(dvs):
+    """float 校验器收到 int/float → elif 为假正常返回（388->exit）。"""
+    dvs._validate_float_field(12.5)
+    dvs._validate_float_field(12)
+
+
+def test_import_grouping_duplicate_type_and_field(dvs):
+    """两条必填缺失错误：同 error_code（669->671）+ 同 field_name（677->679）复用分组桶。"""
+    rows = [
+        {"department": "", "support_unit": "", "village_name": ""},
+        {"department": "", "support_unit": "", "village_name": ""},
+    ]
+    result = dvs.validate_import_data(rows, validate_county=False)
+    assert result.errors
+    codes = [e.error_code.value for e in result.errors]
+    fields = [e.field_name for e in result.errors]
+    assert len(codes) != len(set(codes)), "应有重复 error_code"
+    assert len(fields) != len(set(fields)), "应有重复 field_name"
+
+
+def test_import_empty_field_below_half_is_skipped(dvs):
+    """非必填字段空值占比 ≤50% → 警告循环 continue（640->639）。"""
+    rows = [
+        {"department": "某部", "support_unit": "某团", "village_name": "村1", "county": "都匀市", "project_name": ""},
+        {"department": "某部", "support_unit": "某团", "village_name": "村2", "county": "长顺县", "project_name": "项目A"},
+        {"department": "某部", "support_unit": "某团", "village_name": "村3", "county": "贵定县", "project_name": "项目B"},
+    ]
+    result = dvs.validate_import_data(rows, validate_county=True)
+    assert not any("为空" in w for w in result.warnings)
