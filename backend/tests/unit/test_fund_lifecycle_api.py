@@ -2017,3 +2017,78 @@ class TestForbiddenForViewer:
                 app.dependency_overrides[get_current_user] = original
             else:
                 app.dependency_overrides.pop(get_current_user, None)
+
+
+# ---------------------------------------------------------------------------
+#  分支覆盖清零（coverage report --show-missing 实测的部分分支）
+# ---------------------------------------------------------------------------
+
+def _set_phase(db_session, project, phase_no, status):
+    """把指定阶段设为给定状态（status 传 PhaseStatus 枚举）。"""
+    from app.models.fund_lifecycle import ProjectFundPhase
+
+    p = (
+        db_session.query(ProjectFundPhase)
+        .filter(ProjectFundPhase.project_id == project.id, ProjectFundPhase.phase == phase_no)
+        .first()
+    )
+    assert p is not None, f"阶段 {phase_no} 不存在"
+    p.status = status.value
+    db_session.flush()
+    return p
+
+
+def test_advance_from_last_phase_has_no_next(client, project, phases, fund, db_session):
+    """推进处于最后阶段（阶段7）的项目：查无 phase+1 → next_phase=None 分支。
+
+    覆盖 _complete_and_advance_phase 的 205->210（查找循环耗尽）与
+    210->exit（if next_phase 为假）——此前推进用例永远停在 1→2，
+    两个弧从未被走到。
+    """
+    for i in range(1, 7):
+        _set_phase(db_session, project, i, PhaseStatus.COMPLETED)
+    _set_phase(db_session, project, 7, PhaseStatus.IN_PROGRESS)
+    resp = client.post(f"/api/v1/fund-lifecycle/phases/{project.id}/advance")
+    assert resp.status_code == 200
+    assert "已推进到阶段 7" in resp.json()["message"]
+
+
+def test_rollback_from_phase3_iterates_past_phase1(client, project, phases, fund, db_session):
+    """从阶段3回退：prev 查找循环先跳过阶段1再命中阶段2（302->301 连续迭代弧）。"""
+    _set_phase(db_session, project, 1, PhaseStatus.COMPLETED)
+    _set_phase(db_session, project, 2, PhaseStatus.COMPLETED)
+    _set_phase(db_session, project, 3, PhaseStatus.IN_PROGRESS)
+    resp = client.post(f"/api/v1/fund-lifecycle/phases/{project.id}/rollback")
+    assert resp.status_code == 200
+    assert "已退回到阶段 2" in resp.json()["message"]
+
+
+def test_rollback_with_phase_gap_has_no_prev(client, project, phases, fund, db_session):
+    """阶段记录出现空洞（缺阶段2）→ prev 查找耗尽 → prev=None 跳过同步块。
+
+    覆盖 rollback 的 301->306（查找循环耗尽）与 306->313（if prev 为假）
+    ——对脏数据/阶段空洞的健壮性行为。
+    """
+    _set_phase(db_session, project, 1, PhaseStatus.COMPLETED)
+    _set_phase(db_session, project, 3, PhaseStatus.IN_PROGRESS)
+    from app.models.fund_lifecycle import ProjectFundPhase
+
+    gap = (
+        db_session.query(ProjectFundPhase)
+        .filter(ProjectFundPhase.project_id == project.id, ProjectFundPhase.phase == 2)
+        .first()
+    )
+    db_session.delete(gap)
+    db_session.flush()
+    resp = client.post(f"/api/v1/fund-lifecycle/phases/{project.id}/rollback")
+    assert resp.status_code == 200
+    assert "已退回到阶段 2" in resp.json()["message"]
+
+
+def test_initiate_twice_is_idempotent(client, project, phases, fund, db_session):
+    """二次 initiate：阶段已存在（339->343 假分支）且阶段1非 NOT_STARTED（344->349 假分支）。"""
+    r1 = client.post(f"/api/v1/fund-lifecycle/initiate/{project.id}")
+    assert r1.status_code == 200
+    r2 = client.post(f"/api/v1/fund-lifecycle/initiate/{project.id}")
+    assert r2.status_code == 200
+    assert r2.json()["message"] == "论证立项已启动"
