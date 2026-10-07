@@ -1,12 +1,12 @@
 {
-  "branches": 96.0,
+  "branches": 96.5,
   "measured": {
-    "platform": "windows / python 3.13 / 6 分块 -n 8",
-    "branches_percent": 96.7,
-    "covered_branches": 9241,
-    "num_branches": 9556,
-    "date": "2026-10-06"
+    "platform": "windows / python 3.13 / 6 分块 -n 8（全量 615 文件重建）",
+    "branches_percent": 98.94,
+    "covered_branches": 9457,
+    "num_branches": 9558,
+    "date": "2026-10-07"
   },
-  "note": "分支覆盖棘轮：只紧不松。基线取实测 96.70% 减 0.7 个百分点余量（Linux CI 与 Windows 的平台分支不对称 + 挂死用例中止），CI 首跑后在 OK 输出中核对真实值并逐步收紧至 100。",
+  "note": "分支覆盖棘轮：只紧不松。2026-10-07 并行清零 8 批后本地实测 98.94%（起点 96.70%，缺口 279→101）。基线自 96.0 收紧至 96.5：CI（Linux）实测值不可直接观测，按其历史平台差（≤0.7%）与新增约 178 弧覆盖推算 CI ≥ 97% 量级，96.5 留足回旋；首轮如稳定通过可继续向 98+ 收紧。",
   "generated": "2026-10-06"
 }
