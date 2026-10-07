@@ -837,3 +837,38 @@ class TestAnalyticsRawSqlAgainstRealSchema:
         assert result["comparison"][0]["village_count"] == 1
         assert result["comparison"][0]["total_investment"] == 700.0
 
+
+
+# ---------------------------------------------------------------------------
+#  分支覆盖清零（coverage report --show-missing 实测的部分分支）
+# ---------------------------------------------------------------------------
+
+def test_get_summary_statistics_aggregate_first_returns_none():
+    """有帮扶村但各聚合查询 .first() 返回 None → 5 个 _calc_* 的赋值分支全部跳过。
+
+    覆盖 441/460/473/493/505 的 ->exit 假分支（聚合行缺失时摘要保持 0 值），
+    以及 _build_village_query 的 419->421（filters 无 department 键）。
+    """
+    db = MagicMock()
+    # 按 db.query 调用序注入不同查询对象：
+    # 1) 帮扶村查询  2) 村子计数（scalar=5，保证不提前短路返回）
+    # 3-14) 各 _calc_* 的聚合查询（每个方法 2 次调用，共 12 次；first/scalar 全 None
+    # → 命中全部“无聚合行”假分支）。
+    # 注意 _make_query_mock(first_result=None) 会因 is not None 守卫跳过赋值，
+    # None 必须显式设置；_calc_industry 用 .scalar() 而非 .first()。
+    village_q = _make_query_mock()
+    count_q = _make_query_mock(scalar_result=5)
+    empty_q = _make_query_mock(first_result=None, scalar_result=None)
+    empty_q.first.return_value = None
+    empty_q.scalar.return_value = None
+    db.query.side_effect = [village_q, count_q] + [empty_q] * 12
+
+    svc = AnalyticsService(db)
+    result = svc.get_summary_statistics(filters={"is_three_regions": True}, year=2025)
+
+    assert result["villages"]["totalVillages"] == 5
+    # 聚合行缺失 → 各 _calc_* 赋值被跳过，保持 0 值（441/460/473/493/505 ->exit）
+    assert result["population"]["totalPopulation"] == 0
+    assert result["income"]["avgPerCapitaIncome"] == 0
+    assert result["investment"]["industry"] == 0
+    assert result["investment"]["education"] == 0
