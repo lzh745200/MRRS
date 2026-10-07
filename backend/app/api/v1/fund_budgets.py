@@ -195,12 +195,12 @@ async def create_budget(
 ):
     """创建预算（仅管理角色）"""
     _require_manager(current_user)
-    # used_amount（前端字段）映射到 executed_amount
     payload = data.model_dump()
-    if "used_amount" in payload:
-        used = payload.pop("used_amount")
-        if used is not None:
-            payload["executed_amount"] = used
+    # used_amount（前端字段）映射到 executed_amount
+    # pop 带默认值：等价兼容「键缺失」与「键存在但为 None」两种形态
+    used = payload.pop("used_amount", None)
+    if used is not None:
+        payload["executed_amount"] = used
     quantize_money_fields(payload, BUDGET_MONEY_FIELDS)
     budget = FundBudget(
         **payload,
