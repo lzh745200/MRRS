@@ -284,16 +284,21 @@ class TestImportDataBranches:
         assert summary["errors_by_type"] == {"IMPORT_005": 1, "IMPORT_003": 1}
         assert summary["errors_by_field"] == {"资金名称": 1}
 
-    def test_setup_preview_entity_unknown_type_hits_name_error(self):
-        """471->473：实体类型不在 project/fund/school 分支 → EntityModel 未绑定。
+    def test_setup_preview_entity_unknown_type_rejected_with_400(self):
+        """471->473：实体类型不在 project/fund/school 分支 → 入口白名单拦截。
 
-        注：这是潜在缺陷（未知类型应提前校验拦截），此处仅覆盖分支。
+        R24 修复：未知类型不再让 EntityModel 未绑定抛 NameError（500），
+        而是入口处以明确的 400 拒绝（与同模块既有错误风格一致）。
         """
+        from fastapi import HTTPException
+
         from app.services.entity_import_validator import EntityImportValidator
 
         assert EntityImportValidator("unknown_entity").config == {}
-        with pytest.raises(NameError):
+        with pytest.raises(HTTPException) as ei:
             _setup_preview_entity("unknown_entity", MagicMock())
+        assert ei.value.status_code == 400
+        assert "unknown_entity" in ei.value.detail
 
     def test_import_data_unknown_entity_falls_through_dispatch(self):
         """excel_importer_service.py 338->342：未知实体类型跳过全部分发分支。"""
@@ -780,8 +785,8 @@ class TestRecommendationServiceBranches:
     def test_fund_allocation_non_positive_total_score_skips_allocation(self):
         """255->261：total_score <= 0 → 不分配金额。
 
-        注：负分场景（人口数为负的异常数据）会触发排序阶段 KeyError ——
-        该分支当前实现存在潜在缺陷（未分配金额却参与排序），此处如实覆盖。
+        R24 修复：负分场景（人口数为负的异常数据）此前会触发排序阶段 KeyError（500），
+        现在排序前补 recommended_amount=0，返回稳定结构且不再抛异常。
         """
         villages = [SimpleNamespace(id=1, village_name="A"), SimpleNamespace(id=2, village_name="B")]
         pop_rows = [
@@ -796,8 +801,11 @@ class TestRecommendationServiceBranches:
         db.query.side_effect = [q_villages, q_pop_meta, q_pop, q_inc_meta, q_inc]
 
         with self._patched_scoped_filter():
-            with pytest.raises(KeyError):
-                RecommendationService.recommend_fund_allocation(db, total_budget=1000.0, village_ids=[1, 2])
+            result = RecommendationService.recommend_fund_allocation(db, total_budget=1000.0, village_ids=[1, 2])
+
+        allocations = result["allocations"]
+        assert len(allocations) == 2
+        assert all(a["recommended_amount"] == 0.0 for a in allocations)
 
 
 class TestBackupSchedulerBranches:

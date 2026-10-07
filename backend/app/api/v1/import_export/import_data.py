@@ -453,7 +453,18 @@ class ImportPreviewResponse(BaseModel):
 
 
 def _setup_preview_entity(entity_type: str, db: Session):
-    """设置预览所需的验证器和重复检测字段"""
+    """设置预览所需的验证器和重复检测字段
+
+    入口按白名单校验实体类型：仅 supported_village/project/fund/school 会被
+    分发到对应验证器与模型。其余类型（含 EntityImportValidator 会接受但不在
+    分发链上的未知类型）在此直接以 400 拒绝，避免走到下方 getattr 时
+    EntityModel 未绑定抛出 NameError（进而 500）。
+    """
+    if entity_type not in VALID_ENTITY_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的实体类型: {entity_type}，支持 {', '.join(VALID_ENTITY_TYPES)}",
+        )
     if entity_type == "supported_village":
         validator = DataValidatorService()
         duplicate_field = "village_name"

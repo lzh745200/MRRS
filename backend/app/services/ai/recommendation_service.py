@@ -257,6 +257,12 @@ class RecommendationService:
                 allocation["recommended_amount"] = round((allocation["score"] / total_score) * total_budget, 2)
                 allocation["percentage"] = round((allocation["score"] / total_score) * 100, 2)
 
+        # 兜底：total_score<=0（如人口数为负的脏数据）时会跳过上面的金额分配，
+        # 但下方排序仍会读取 recommended_amount，需保证键存在（补 0，语义不变）。
+        # setdefault 仅在键缺失时生效，故不影响正常路径的分配结果。
+        for allocation in allocations:
+            allocation.setdefault("recommended_amount", 0.0)
+
         # 按推荐金额排序
         allocations.sort(key=lambda x: x["recommended_amount"], reverse=True)
 
