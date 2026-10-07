@@ -49,7 +49,9 @@ class SafeTimedRotatingFileHandler(TimedRotatingFileHandler):
                         + traceback.format_exc()
                     )
         # 无论轮转是否成功，都要重新打开流以继续写入
-        if not self.stream:
+        # （流在函数入口已置 None，且基类 doRollover 在抛 PermissionError 时不会重新开流，
+        #  故此处的“流仍存在”假分支恒不可达——纯防御性兜底）
+        if not self.stream:  # pragma: no cover - 假分支不可达：fn 入口 self.stream 已置 None 且基类失败路径不重开流
             self.stream = self._open()
 
 

@@ -487,8 +487,8 @@ class SmartConflictResolver:
             # 解决冲突
             conflict_id_mapping = self.resolve_conflicts_with_strategy(detection_result.conflict_records, strategy)
 
-            # 合并ID映射
-            if data_type not in id_mapping:
+            # 合并ID映射（data_type 的键必然已在本轮循环上方初始化——调用方从不在跨轮复用 id_mapping，此防御检查无可达假分支）
+            if data_type not in id_mapping:  # pragma: no cover - 死防御：类型键同轮已初始化，假分支需跨轮复用 id_mapping，全仓调用方均不跨轮复用
                 id_mapping[data_type] = {}
             id_mapping[data_type].update(type_id_mapping.get(data_type, {}))
             id_mapping[data_type].update(conflict_id_mapping.get(data_type, {}))

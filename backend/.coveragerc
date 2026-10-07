@@ -27,6 +27,11 @@
 
 [run]
 source = app
+# 2026-10-07：开启分支覆盖（与 fail_under=100 组合为全局分支门禁）。
+# 前置：八批专项 + 四组并行 + 终局轮清零后，全仓分支缺口已收敛至
+# 3 个文档化不可达弧（crawler 导入期环境分支 / smart_conflict_resolver 死防御 /
+# logging_config 基类行为兜底），均以带同行理由的 pragma 豁免（见 F2 规范）。
+branch = True
 omit =
     */tests/*
     */test_*.py

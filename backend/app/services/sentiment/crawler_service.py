@@ -16,7 +16,7 @@ from app.core.transaction import safe_commit
 # 离线单机版默认禁用爬虫；联网部署时设置环境变量 ENABLE_CRAWLER=true 启用
 _CRAWLER_ENABLED = os.getenv("ENABLE_CRAWLER", "").strip().lower() in ("true", "1", "yes")
 
-if not _CRAWLER_ENABLED:
+if not _CRAWLER_ENABLED:  # pragma: no cover - 导入期环境分支：ENABLE_CRAWLER 导入时求值，测试进程禁止 reload 服务模块，启用侧仅联网部署执行
     import logging
     _log = logging.getLogger(__name__)
     _log.info("爬虫服务已禁用（离线模式）。设置 ENABLE_CRAWLER=true 以启用。")
