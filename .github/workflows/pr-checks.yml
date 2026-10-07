@@ -284,7 +284,9 @@ jobs:
       - name: Frontend dependency audit (production tree, blocking)
         run: |
           cd frontend
-          npm install --legacy-peer-deps
+          # npm audit 只读已提交的 package-lock.json + registry advisory 库，
+          # 无需安装 node_modules——原步骤里的 `npm install --legacy-peer-deps`
+          # 是 security 作业唯一的网络抖动源（两次瞬时失败），移除之。
           npm audit --omit=dev --audit-level=high
       - name: Frontend dependency audit (full tree, report only)
         continue-on-error: true
