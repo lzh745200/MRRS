@@ -38,6 +38,33 @@ def test_get_machine_info_memory_parse_exception():
     assert "memory_gb" not in info  # 内存段异常被兜底，不写入字段且不影响响应
 
 
+def test_get_machine_info_memory_empty_stdout():
+    """内存段 stdout 为空白 → 解析为空串 → `if memory:` 假分支跳过赋值（260->266）。
+
+    注意：Arc 260->266 不是异常路径（异常由 stdout=None 用例覆盖 259->263），
+    而是空串时 if 为假直接落到 return info 的分支。
+    """
+    cpu_result = MagicMock()
+    cpu_result.stdout = "Intel Core\n"
+    mem_result = MagicMock()
+    mem_result.stdout = "   \n"  # strip 后为空串
+
+    with patch("app.services.machine_code_service.platform") as mock_platform, patch(
+        "app.services.machine_code_service.subprocess.run",
+        side_effect=[cpu_result, mem_result],
+    ):
+        mock_platform.system.return_value = "Windows"
+        mock_platform.release.return_value = "10"
+        mock_platform.version.return_value = "10.0"
+        mock_platform.machine.return_value = "x64"
+        mock_platform.processor.return_value = ""
+        mock_platform.node.return_value = "PC"
+        info = MachineCodeService.get_machine_info()
+
+    assert info["cpu_name"] == "Intel Core"
+    assert "memory_gb" not in info  # 空串 → 假分支 → 不写字段
+
+
 def test_get_build_info_with_existing_metadata(monkeypatch):
     """_load 返回有效元数据 → 跳过 dev fallback 的 git 探测（43->63 假分支）。
 
