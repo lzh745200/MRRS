@@ -681,9 +681,8 @@ async def list_projects(
     # N+1 优化：预加载关联数据（selectinload 分次查询，避免超大 JOIN）
     from sqlalchemy.orm import selectinload
 
+    # R20 复审(M19)：列表序列化不读取 tasks/funds，预加载纯浪费 —— 仅保留实际使用的关联
     query = query.options(
-        selectinload(Project.tasks),
-        selectinload(Project.funds),
         selectinload(Project.village),
         selectinload(Project.organization),
     )
@@ -1355,7 +1354,10 @@ async def update_project_task(
     db: Session = Depends(get_db),
 ):
     """更新指定任务。"""
-    _get_project_or_404(db, project_id, current_user)
+    project = _get_project_or_404(db, project_id, current_user)
+    # R20 复审(M20)：与 update_project/upload_project_files 同口径，防同组织非创建者改删任务
+    if not _can_modify_project(project, current_user):
+        raise HTTPException(status_code=403, detail="无权修改该项目任务")
     task = db.query(ProjectTask).filter(ProjectTask.id == task_id, ProjectTask.project_id == project_id).first()
     if not task:
         raise NotFoundException("任务不存在")
@@ -1387,7 +1389,9 @@ async def delete_project_task(
     db: Session = Depends(get_db),
 ):
     """删除指定任务（物理删除）。"""
-    _get_project_or_404(db, project_id, current_user)
+    project = _get_project_or_404(db, project_id, current_user)
+    if not _can_modify_project(project, current_user):
+        raise HTTPException(status_code=403, detail="无权删除该项目任务")
     task = db.query(ProjectTask).filter(ProjectTask.id == task_id, ProjectTask.project_id == project_id).first()
     if not task:
         raise NotFoundException("任务不存在")
@@ -1847,7 +1851,7 @@ def _build_import_project(db: Session, data: dict, current_user) -> Project:
     )
 
 
-def _process_import_rows(db: Session, ws, header_row: int, headers: dict, current_user) -> tuple:
+def _process_import_rows(db: Session, ws, header_row: int, headers: dict, current_user, mode="incremental") -> tuple:
     """逐行解析数据并创建项目，返回 (created, failed, errors)"""
     created = 0
     failed = 0
@@ -1862,10 +1866,12 @@ def _process_import_rows(db: Session, ws, header_row: int, headers: dict, curren
             continue
         if not data.get("name"):
             continue
+        # R20 复审(M14)：逐行 SAVEPOINT —— 单行失败只回滚自身，不再毒化整个会话
         try:
-            project = _build_import_project(db, data, current_user)
-            db.add(project)
-            db.flush()
+            with db.begin_nested():
+                project = _build_import_project(db, data, current_user)
+                db.add(project)
+                db.flush()
             created += 1
         except Exception as e:
             failed += 1
@@ -1893,7 +1899,20 @@ async def import_projects(
     if not header_row:
         raise HTTPException(status_code=400, detail="未找到有效表头，请使用系统提供的模板")
 
-    created, failed, errors = _process_import_rows(db, ws, header_row, headers, current_user)
+    # R20 复审(M13)：mode=overwrite 此前从未生效（参数被忽略，静默变增量）。
+    # 现按数据域软删既有活跃项目后再导入，与插入同事务（末尾 safe_commit 统一提交）。
+    if mode == "overwrite":
+        from app.services.data_scope_query import scoped_filter  # B1 结构性收口：api 层经统一入口
+
+        scoped = scoped_filter(
+            db.query(Project).filter(Project.is_active == True),  # noqa: E712
+            Project,
+            current_user,
+        )
+        overwritten = scoped.update({Project.is_active: False}, synchronize_session=False)
+        logger.info("项目 overwrite 导入：数据域内软删 %s 条既有项目", overwritten)
+
+    created, failed, errors = _process_import_rows(db, ws, header_row, headers, current_user, mode=mode)
 
     try:
         safe_commit(db)

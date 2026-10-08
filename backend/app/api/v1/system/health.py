@@ -6,10 +6,11 @@ import platform
 import time
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy import text
 
 from app.core.database import SessionLocal
+from app.core.security import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/health", tags=["系统健康"])
@@ -105,8 +106,13 @@ async def health_readiness():
 
 
 @router.get("/full")
-async def health_full():
-    """Comprehensive health report with DB stats, backup status, and performance metrics."""
+async def health_full(current_user=Depends(get_current_user)):
+    """Comprehensive health report with DB stats, backup status, and performance metrics.
+
+    R20 复审：本端点暴露平台指纹、库文件体积与备份目录信息，且在线执行
+    PRAGMA integrity_check（重 I/O）——收敛为登录可见（与 /overview 的
+    无认证裁剪口径互补：详细诊断仅认证用户可用）。
+    """
     import sqlite3
     from app.core.build_info import get_build_info
     from app.core.config import settings

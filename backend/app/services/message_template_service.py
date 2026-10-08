@@ -380,10 +380,17 @@ class MessageTemplateService:
         try:
             return template_str.format(**variables)
         except KeyError as e:
-            # 缺失变量时保留原占位符
+            # R20 复审：原实现只补第一个缺失变量，模板含 ≥2 个缺失占位符时
+            # 二次 format 仍抛 KeyError。改为 format_map + 缺失键保留原占位符，
+            # 一次渲染完成，不因多缺失变量中断发送链路。
             missing_key = str(e).strip("'")
             variables[missing_key] = f"{{{missing_key}}}"
-            return template_str.format(**variables)
+
+            class _KeepMissingPlaceholders(dict):
+                def __missing__(self, key: str) -> str:
+                    return "{" + key + "}"
+
+            return template_str.format_map(_KeepMissingPlaceholders(variables))
 
     def _prepare_variables(self, variables: Dict[str, Any], use_defaults: bool = True) -> Dict[str, Any]:
         """

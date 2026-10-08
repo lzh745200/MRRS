@@ -33,6 +33,61 @@
 ### 用例口径
 - 后端 **12,381**（`--collect-only` 实测）/ 前端 **6,323**（299 文件，分片全量实测）；合计 **18,704**。
 
+## [1.12.15] - 2026-10-08 — 🔍 R20 全库逐文件代码审查修复（权限收口 / 数据域 / 功能失效 / 健壮性）
+
+> 审查方式：自动化基线（flake8 0 / bandit -ll 0 / vue-tsc 0 / eslint 0 / 行+分支覆盖 100%）+
+> 分片逐文件只读审查（backend 341 / frontend 276 / electron 5 / scripts 51）+ 高中危逐条源码复核。
+> 本轮修复其中 21 项（高 4 / 中 14 / 低 3），其余登记项见 `docs/代码审查报告-2026-10-08.md`。
+
+### 修复（高）
+- **report_templates 模块整体无角色守卫**：任意登录用户可增删改共享报表模板并触发
+  overwrite 导入（清空数据域记录）→ 模板 CRUD 与上传导入统一收敛 `require_manager_role`。
+- **fund_lifecycle 资金写端点缺数据域**：划转凭证（改/删/确认/附件）、合同（改/删/付款）、
+  决算（改/审批）、拨款下达、额度调整/锁定、异常处理共 14 处仅角色校验、裸 id 加载 →
+  统一补 `_get_project_or_403`（读端点已有、写端点遗漏的口径矛盾消除）。
+- **综合报表导出明细越权**（async_export_service）：summary 计数已过滤但项目/经费明细
+  裸查全库（各 100 条）→ 补 `scoped_filter`。
+- **report_templates overwrite 导入非原子**（4 个模块 prepare 共性）：先删后插分两次提交，
+  插入失败旧数据永久丢失 → 删除与插入并入同一事务，失败整体回滚。
+
+### 修复（中）
+- **权限收敛**（登录即可见 → 管理员）：`system/config/export/json`、`system/error-reports`
+  （列表/统计/详情，含 stack_trace）、`secrets/status`、`metrics/business`、`system/backup/target`、
+  `zero-trust/events`（防伪造安全事件）、`health/full`（指纹 + integrity_check 重 I/O）、
+  `help/articles*`（帮助文案含出厂管理员口令，未认证放大）。
+- **项目导入**：`mode=overwrite` 参数从未生效（静默变增量）→ 按数据域软删后导入；
+  逐行 SAVEPOINT（首行 IntegrityError 毒化会话 → 连锁失败的缺陷消除）。
+- **项目任务越权**：任务更新/删除补 `_can_modify_project`（同组织非创建者可改删的缺口）。
+- **数据域遗漏**：rural_work 统计 by_type / analytics 类登记（后者属服务层签名改造，
+  见报告登记项）；`list_backups` 未传 `backup_type` → 增量备份统计恒 0。
+- **功能失效**：PDF 导出未转义 `<`/`&`（标题含尖括号即 500）；消息模板 ≥2 个缺失变量
+  二次 format 抛 KeyError；excel_importer `convert_row_types` 被当属性引用（类型转换从不执行）；
+  batch_service.batch_export 只写表头不写数据。
+- **数据正确性**：数据清洗误删 SQL 关键字子串（standard→stard）→ 加词边界；
+  audit_service 当日统计窗口用本地 `datetime.now()` 与 UTC 库值比较（偏 8 小时）；
+  消息保留 30 天 → 90 天（对齐需求 5.6）；增量备份文件名/键同秒互撞 → 追加 uuid。
+- **一致性**：organization_code 校验允许 `-`（与生成规则一致）；organization_code 缓存
+  原子取值；村级联删除引用检查收窄裸 except；query_analyzer `_count` 键清理。
+
+### 修复（低）
+- upload_security 允许扩展名 `.gi` → `.gif`；seed 出厂口令不再写入日志原文；
+  runtime_secrets 密钥文件顶层非对象 JSON 防御；config 密钥文件读取显式 UTF-8；
+  main.py 死代码 env；audit 模型重复索引；supported_village to_dict 补 transitionStatus。
+
+### 登记（本轮不修，见报告）
+- analytics/nlp-query/statistics/dashboard/report_export 的服务层签名级数据域改造（需独立 PR）；
+- 两个占位实现（effectiveness 评估 / fund_health 履约分）；两处需迁移的类型问题
+  （two_factor secret_key 加密存储、AccessLog.user_id/todo.deadline 类型）；
+- token_manager.refresh_access_token 与 SECURITY_HEADERS 双源等死代码/分叉项；
+- 前端逐文件审查（本轮完成 backend 全量，frontend 分片待续）。
+
+### 测试
+- 新增 `test_r20_review_fixes.py`（13 例：守卫 401/403 全分支 + overwrite 软删分支 +
+  逐行 SAVEPOINT 隔离）；message_service 保留断言对齐 90 天；org_code 连字符断言更新。
+- 用例口径：后端 **12,395**（`--collect-only` 实测）/ 前端 **6,323**（299 文件）；合计 **18,717**。
+
+---
+
 ## [1.12.14] - 2026-10-06 — 🔍 全库深度排查与修复（数据合并/权限收口/时间基准/健壮性）+ 文档与 PPT 同步
 
 > 排查方式：后端反模式清单逐项扫描（时间基准 / 异常吞噬 / 边界 / 竞态 / 注入）+ 前端契约与竞态只读审计，

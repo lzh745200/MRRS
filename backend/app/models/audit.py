@@ -53,8 +53,6 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     __table_args__ = (
-        Index("ix_audit_user_action", "user_id", "action"),
-        Index("ix_audit_timestamp", "created_at"),
         Index("idx_audit_user_action", "user_id", "action"),
         Index("idx_audit_resource", "resource_type", "resource_id"),
         Index("idx_audit_created", "created_at"),

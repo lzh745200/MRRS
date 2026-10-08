@@ -302,6 +302,11 @@ def _build_comprehensive_workbook(db: Session, user: Any) -> bytes:
         }
         for v in village_q.order_by(SupportedVillage.id).limit(100).all()
     ]
+    # R20 复审(高)：明细此前未过数据域，跨组织项目/经费随综合报表外泄
+    _pq = db.query(Project).filter(Project.is_active == True)  # noqa: E712
+    if user is not None:
+        from app.services.data_scope_query import scoped_filter
+        _pq = scoped_filter(_pq, Project, user)
     project_data = [
         {
             "ID": p.id,
@@ -310,8 +315,12 @@ def _build_comprehensive_workbook(db: Session, user: Any) -> bytes:
             "预算": p.budget or 0,
             "进度": f"{p.progress or 0}%",
         }
-        for p in db.query(Project).filter(Project.is_active == True).limit(100).all()  # noqa: E712
+        for p in _pq.order_by(Project.id).limit(100).all()
     ]
+    _fq = db.query(Fund).filter(Fund.is_active == True)  # noqa: E712
+    if user is not None:
+        from app.services.data_scope_query import scoped_filter
+        _fq = scoped_filter(_fq, Fund, user)
     fund_data = [
         {
             "ID": f.id,
@@ -320,7 +329,7 @@ def _build_comprehensive_workbook(db: Session, user: Any) -> bytes:
             "状态": f.status,
             "使用日期": _format_datetime(f.date),
         }
-        for f in db.query(Fund).filter(Fund.is_active == True).limit(100).all()  # noqa: E712
+        for f in _fq.order_by(Fund.id).limit(100).all()
     ]
 
     return ExcelExportService().export_comprehensive_report(

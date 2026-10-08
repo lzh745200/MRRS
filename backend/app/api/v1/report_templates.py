@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/report-templates", tags=["报表模板管理"])
 
+# R20 复审(H1)：模板管理面向管理/管理角色（创建后分配给下级使用），写操作统一收敛
+from .deps import require_manager_role  # noqa: E402
+
 # ---- Schemas ----
 
 
@@ -339,6 +342,7 @@ async def create_template(
     db: Session = Depends(get_db),
 ):
     """创建报表模板"""
+    require_manager_role(current_user)
     # 校验 type 和 module 值
     if tpl_in.type not in VALID_TEMPLATE_TYPES:
         raise HTTPException(
@@ -406,6 +410,7 @@ async def update_template(
     db: Session = Depends(get_db),
 ):
     """更新模板"""
+    require_manager_role(current_user)
     t = db.query(ReportTemplate).filter(ReportTemplate.id == template_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="模板不存在")
@@ -430,6 +435,7 @@ async def delete_template(
     db: Session = Depends(get_db),
 ):
     """删除模板"""
+    require_manager_role(current_user)
     t = db.query(ReportTemplate).filter(ReportTemplate.id == template_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="模板不存在")
@@ -680,7 +686,8 @@ def _village_prepare_import(
     if mode == "overwrite":
         query = scoped_filter(db.query(SupportedVillage), SupportedVillage, current_user, )
         deleted = query.delete(synchronize_session=False)
-        safe_commit(db)
+        # R20 复审(H4)：删除与后续插入共用同一事务，由调用方在全部插入成功后统一提交，
+        # 插入失败整体回滚，避免删旧已落库、插新失败导致数据域内旧数据永久丢失
 
     existing_names = set()
     if mode == "incremental":
@@ -821,7 +828,8 @@ def _import_school_data(
     if mode == "overwrite":
         query = scoped_filter(db.query(School), School, current_user, )
         deleted = query.delete(synchronize_session=False)
-        safe_commit(db)
+        # R20 复审(H4)：删除与后续插入共用同一事务，由调用方在全部插入成功后统一提交，
+        # 插入失败整体回滚，避免删旧已落库、插新失败导致数据域内旧数据永久丢失
 
     existing_names = set()
     if mode == "incremental":
@@ -935,7 +943,8 @@ def _project_prepare_import(
     if mode == "overwrite":
         query = scoped_filter(db.query(Project), Project, current_user, )
         deleted = query.delete(synchronize_session=False)
-        safe_commit(db)
+        # R20 复审(H4)：删除与后续插入共用同一事务，由调用方在全部插入成功后统一提交，
+        # 插入失败整体回滚，避免删旧已落库、插新失败导致数据域内旧数据永久丢失
 
     existing_names = set()
     if mode == "incremental":
@@ -1109,7 +1118,8 @@ def _rural_work_prepare_import(
     if mode == "overwrite":
         query = scoped_filter(db.query(RuralWork), RuralWork, current_user, )
         deleted = query.delete(synchronize_session=False)
-        safe_commit(db)
+        # R20 复审(H4)：删除与后续插入共用同一事务，由调用方在全部插入成功后统一提交，
+        # 插入失败整体回滚，避免删旧已落库、插新失败导致数据域内旧数据永久丢失
 
     existing_names = set()
     if mode == "incremental":
@@ -1241,6 +1251,7 @@ async def upload_filled_template(
     - mode=confirm: 解析 Excel，根据关联模块类型写入对应数据表
     - import_mode: incremental=增量导入（跳过重复）, overwrite=全量覆盖（先删除再导入）
     """
+    require_manager_role(current_user)
     t = db.query(ReportTemplate).filter(ReportTemplate.id == template_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="模板不存在")

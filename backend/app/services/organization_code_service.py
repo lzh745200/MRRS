@@ -4,6 +4,8 @@
 提供组织编码的管理功能
 """
 
+import re
+
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
@@ -43,7 +45,7 @@ class OrganizationCodeService:
 
     def validate_code(self, code: str) -> bool:
         """验证组织编码"""
-        return len(code) >= 4 and code.isalnum()
+        return len(code) >= 4 and bool(re.fullmatch(r"[A-Za-z0-9-]+", code))
 
     def get_code_info(self, code: str) -> Optional[Dict[str, Any]]:
         """获取编码信息"""

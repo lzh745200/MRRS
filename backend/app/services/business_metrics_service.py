@@ -28,11 +28,12 @@ class BusinessMetricsService:
 
     def _get_cached(self, key: str) -> Optional[any]:
         """获取缓存值"""
-        if key in self._cache:
-            value, timestamp = self._cache[key]
+        entry = self._cache.pop(key, None)
+        if entry is not None:
+            value, timestamp = entry
             if time.time() - timestamp < self._cache_ttl:
+                self._cache[key] = entry
                 return value
-            del self._cache[key]
         return None
 
     def _set_cached(self, key: str, value: any):

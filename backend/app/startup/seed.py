@@ -48,9 +48,8 @@ def _seed_default_admin():
             if not _admin_password:
                 _admin_password = FACTORY_ADMIN_PASSWORD
                 logger.warning(
-                    "使用出厂默认密码创建管理员（admin / %s），"
-                    "首次登录强制修改；保密部署请设置 DEFAULT_ADMIN_PASSWORD 环境变量",
-                    FACTORY_ADMIN_PASSWORD,
+                    "使用出厂默认密码创建管理员账号 admin（口令详见交付凭据，首次登录强制修改），"
+                    "保密部署请设置 DEFAULT_ADMIN_PASSWORD 环境变量",
                 )
 
             # 尝试获取顶级组织作为管理员的所属组织

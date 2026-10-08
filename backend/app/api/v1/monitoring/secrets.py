@@ -112,6 +112,7 @@ async def get_secrets_status(
     """
     获取密钥状态
     """
+    _require_admin(current_user)
     versions = secrets_manager.list_key_versions()
     active_versions = [v for v in versions if v.get("is_active")]
 

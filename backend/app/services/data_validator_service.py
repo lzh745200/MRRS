@@ -1054,7 +1054,7 @@ class DataValidator:
                 "AND",
             ]
             for keyword in sql_keywords:
-                result = re.sub(keyword, "", result, flags=re.IGNORECASE)
+                result = re.sub(r"\b" + keyword + r"\b", "", result, flags=re.IGNORECASE)
             # 移除特殊SQL字符
             special_chars = [
                 r"'",  # 单引号

@@ -156,9 +156,10 @@ class VillageCascadeDeleteService:
                 if count > 0:
                     reference_stats[table_name] = count
                     total_refs += count
-            except Exception:
-                # 表可能不存在,忽略
-                pass
+            except Exception as e:  # noqa: BLE001
+                # 表可能不存在,忽略；其余错误留痕便于排查引用统计失真
+                if "no such table" not in str(e).lower():
+                    logger.warning("村引用检查查询失败(忽略): %s", e)
 
         return {
             "village_id": village_id,

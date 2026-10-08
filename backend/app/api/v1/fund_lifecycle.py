@@ -592,6 +592,8 @@ async def quota_lock(fund_id: int, current_user=Depends(get_current_user), db: S
     fund = db.query(Fund).filter(Fund.id == fund_id).first()
     if not fund:
         raise HTTPException(status_code=404, detail="经费记录不存在")
+    if getattr(fund, "project_id", None):
+        _get_project_or_403(fund.project_id, current_user, db)
 
     if not fund.budget_locked:
         raise HTTPException(status_code=400, detail="请先锁定预算基线（阶段2）")
@@ -609,7 +611,16 @@ async def quota_lock(fund_id: int, current_user=Depends(get_current_user), db: S
                 detail=f"拨付额度 {allocated:.2f} 超过基线 {baseline_val:.2f}，不允许",
             )
 
+    if getattr(fund, "project_id", None):
+        _get_project_or_403(fund.project_id, current_user, db)
+
     safe_commit(db)
+    write_work_log(
+        db, "fund", "quota_lock", fund_id,
+        f"经费 #{fund_id} 额度锁定核验通过",
+        user_id=current_user.id, username=_get_username(current_user),
+        detail=f"拨付额度 {allocated:.2f}（基线核验通过）",
+    )
     return success_response(
         message="额度已锁定",
         data={"fund_id": fund_id, "allocated": allocated},
@@ -823,6 +834,8 @@ async def update_transfer_voucher(
     v = db.query(FundTransferVoucher).filter(FundTransferVoucher.id == voucher_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="凭证不存在")
+    if v.project_id:
+        _get_project_or_403(v.project_id, current_user, db)
     if v.status == VoucherStatus.CONFIRMED.value:
         raise HTTPException(status_code=400, detail="已确认凭证不可修改")
 
@@ -856,6 +869,8 @@ async def delete_transfer_voucher(
     v = db.query(FundTransferVoucher).filter(FundTransferVoucher.id == voucher_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="凭证不存在")
+    if v.project_id:
+        _get_project_or_403(v.project_id, current_user, db)
     if v.status != VoucherStatus.DRAFT.value:
         raise HTTPException(status_code=400, detail="仅草稿状态凭证可删除")
 
@@ -876,6 +891,8 @@ async def confirm_transfer_voucher(
     v = db.query(FundTransferVoucher).filter(FundTransferVoucher.id == voucher_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="凭证不存在")
+    if v.project_id:
+        _get_project_or_403(v.project_id, current_user, db)
     if v.status not in (VoucherStatus.DRAFT.value, VoucherStatus.SUBMITTED.value):
         raise HTTPException(status_code=400, detail=f"当前状态 {v.status} 不允许确认")
 
@@ -910,6 +927,8 @@ async def upload_voucher_attachment(
     v = db.query(FundTransferVoucher).filter(FundTransferVoucher.id == voucher_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="凭证不存在")
+    if v.project_id:
+        _get_project_or_403(v.project_id, current_user, db)
 
     from ...models.fund import FundAttachment
     from ...utils.upload_helper import save_upload_file
@@ -1125,6 +1144,8 @@ async def update_contract(
     c = db.query(FundContract).filter(FundContract.id == contract_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="合同不存在")
+    if c.project_id:
+        _get_project_or_403(c.project_id, current_user, db)
 
     for key, val in data.model_dump(exclude_unset=True).items():
         setattr(c, key, val)
@@ -1145,6 +1166,8 @@ async def delete_contract(
     c = db.query(FundContract).filter(FundContract.id == contract_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="合同不存在")
+    if c.project_id:
+        _get_project_or_403(c.project_id, current_user, db)
     if c.status != ContractStatus.DRAFT.value:
         raise HTTPException(status_code=400, detail="仅草稿状态合同可删除")
 
@@ -1183,6 +1206,8 @@ async def create_contract_payment(
     c = db.query(FundContract).filter(FundContract.id == contract_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="合同不存在")
+    if c.project_id:
+        _get_project_or_403(c.project_id, current_user, db)
 
     # 生成付款编号
     count = (
@@ -1484,6 +1509,10 @@ async def resolve_anomaly(
     a = db.query(FundAnomaly).filter(FundAnomaly.id == anomaly_id).first()
     if not a:
         raise HTTPException(status_code=404, detail="异常记录不存在")
+    if a.fund_id:
+        _fund = db.query(Fund).filter(Fund.id == a.fund_id).first()
+        if _fund is not None and getattr(_fund, "project_id", None):
+            _get_project_or_403(_fund.project_id, current_user, db)
     if a.resolved:
         raise HTTPException(status_code=400, detail="该异常已处理")
 
@@ -1596,6 +1625,8 @@ async def update_settlement(
     s = db.query(FundSettlement).filter(FundSettlement.id == settlement_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="决算记录不存在")
+    if s.project_id:
+        _get_project_or_403(s.project_id, current_user, db)
     if s.status == SettlementStatus.APPROVED.value:
         raise HTTPException(status_code=400, detail="已审批决算不可修改")
 
@@ -1628,6 +1659,8 @@ async def approve_settlement(
     s = db.query(FundSettlement).filter(FundSettlement.id == settlement_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="决算记录不存在")
+    if s.project_id:
+        _get_project_or_403(s.project_id, current_user, db)
     # 幂等守卫：仅 SUBMITTED（或 DRAFT 直接提交）可审批，重复审批拒绝，
     # 避免覆盖 auditor/audit_opinion/performance_* 审计字段并重复写工作日志
     if s.status not in (
@@ -1840,6 +1873,8 @@ async def issue_allocation_order(
     order = db.query(FundAllocationOrder).filter(FundAllocationOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="拨款指令不存在")
+    if order.project_id:
+        _get_project_or_403(order.project_id, current_user, db)
     if order.status != "draft":
         raise HTTPException(status_code=400, detail="仅草稿状态可下达")
 
@@ -1889,6 +1924,8 @@ async def quota_adjust(
     fund = db.query(Fund).filter(Fund.id == fund_id).first()
     if not fund:
         raise HTTPException(status_code=404, detail="经费记录不存在")
+    if getattr(fund, "project_id", None):
+        _get_project_or_403(fund.project_id, current_user, db)
 
     if data.is_emergency:
         role = getattr(current_user, "role", "")

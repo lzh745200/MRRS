@@ -344,9 +344,9 @@ class AuditService:
         recent_activity = query.order_by(desc(AuditLog.created_at)).limit(20).all()
 
         # 前端统计卡派生字段（today_operations / active_users / failed_operations / warnings）
-        from datetime import datetime as _dt
+        from app.utils.time_utils import utcnow as _utcnow
 
-        today_start = _dt.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = _utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         today_operations = (
             self.db.query(func.count(AuditLog.id))
             .filter(AuditLog.created_at >= today_start)

@@ -502,6 +502,9 @@ async def report_security_event(
 
     用于外部安全工具或前端异常检测上报安全事件。
     """
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user)
     event = _record_security_event(
         db=db,
         event_type=body.event_type,

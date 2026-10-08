@@ -457,6 +457,9 @@ async def set_backup_target(
     current_user=Depends(get_current_user),
 ):
     """持久化备份目标目录（写入 SystemConfig）"""
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user)
     try:
         from app.services.system_config_service import set_config
         from app.utils.drive_detect import ensure_target_dir

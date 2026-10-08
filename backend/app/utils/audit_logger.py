@@ -13,7 +13,7 @@
 
 import json
 import logging
-from datetime import datetime
+from app.utils.time_utils import utcnow
 from enum import Enum
 from typing import Any, Dict, Optional
 from app.core.transaction import safe_commit
@@ -111,7 +111,7 @@ class AuditLogger:
             user_agent: 用户代理
         """
         audit_data = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": utcnow().isoformat(),
             "action": action.value if isinstance(action, AuditAction) else str(action),
             "user_id": user_id,
             "username": username,

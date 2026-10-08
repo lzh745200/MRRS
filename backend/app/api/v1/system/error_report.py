@@ -98,6 +98,9 @@ async def list_error_reports(
     current_user=Depends(get_current_user),
 ):
     """获取错误报告列表"""
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user)
     db = SessionLocal()
     try:
         query = db.query(ErrorReport)
@@ -129,6 +132,9 @@ async def list_error_reports(
 @router.get("/stats", summary="获取错误统计")
 async def get_error_stats(current_user=Depends(get_current_user)):
     """获取错误报告统计数据"""
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user)
     db = SessionLocal()
     try:
         total = db.query(func.count(ErrorReport.id)).scalar() or 0
@@ -169,6 +175,9 @@ async def get_error_report(
     current_user=Depends(get_current_user),
 ):
     """获取指定错误报告的详细信息"""
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user)
     db = SessionLocal()
     try:
         record = db.query(ErrorReport).filter(ErrorReport.id == report_id).first()

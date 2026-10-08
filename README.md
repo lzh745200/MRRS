@@ -2,7 +2,7 @@
 
 > 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.12.14
 
-![Version](https://img.shields.io/badge/version-1.12.14-blue)
+![Version](https://img.shields.io/badge/version-1.12.15-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-18%2C704%2B-brightgreen)
@@ -12,7 +12,7 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **12,381 passed**（621 文件）, 0 失败（含覆盖率 100% 门禁） |
+| 后端测试 | **12,395 passed**（622 文件）, 0 失败（含行+分支覆盖率 100% 门禁） |
 | 前端测试 | **6,323 passed**（299 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
@@ -31,7 +31,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-07（v1.12.14）— 后端 12,381 用例 + 行/分支覆盖率 100.00%（**分支覆盖全局严格门禁上线**）、前端 6,323 用例（299 文件，分片全量实测）全部通过；
+> **上次全量验证**: 2026-10-08（v1.12.15）— 后端 12,395 用例 + 行/分支覆盖率 100.00%、前端 6,323 用例（299 文件）全部通过；
 > flake8 0 / 6 项棘轮门禁 NEW=0 / vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（45 版本）
 
 ## 快速开始
@@ -103,7 +103,7 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端单元测试 | pytest | 12,381（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端单元测试 | pytest | 12,395（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
 | 前端单元测试 | Vitest | 6,323（299 文件） | API/Store/Component/Composable/Utils |

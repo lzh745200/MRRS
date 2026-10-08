@@ -404,8 +404,9 @@ class RuralWorkService:
         completed = base.filter(RuralWork.status == WorkStatus.completed).count()
         delayed = base.filter(RuralWork.status == WorkStatus.delayed).count()
 
+        # R20 复审：by_type 此前直接查全表，非管理员拿到跨组织类型分布
         rows = (
-            self.db.query(RuralWork.type, func.count(RuralWork.id))
+            _apply_work_scope(self.db.query(RuralWork.type, func.count(RuralWork.id)), current_user, self.db)
             .group_by(RuralWork.type)
             .all()
         )

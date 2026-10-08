@@ -7,10 +7,11 @@
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.core.response import ok_list
+from app.core.security import get_current_user
 
 
 logger = logging.getLogger(__name__)
@@ -942,6 +943,7 @@ async def get_help_articles(
     keyword: Optional[str] = Query(None, description="按关键词搜索"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
+    current_user=Depends(get_current_user),
 ):
     """获取帮助文档列表，支持分类筛选和关键词搜索"""
     articles = _HELP_ARTICLES
@@ -984,7 +986,10 @@ async def get_help_articles(
 
 
 @router.get("/articles/{article_id}", summary="获取帮助文档详情")
-async def get_help_article(article_id: int):
+async def get_help_article(
+    article_id: int,
+    current_user=Depends(get_current_user),
+):
     """获取指定帮助文档的完整内容"""
     for article in _HELP_ARTICLES:
         if article["id"] == article_id:
@@ -997,6 +1002,7 @@ async def get_help_article(article_id: int):
 async def search_help_articles(
     q: str = Query(..., description="搜索关键词"),
     limit: int = Query(20, ge=1, le=50),
+    current_user=Depends(get_current_user),
 ):
     """全文搜索帮助文档"""
     if not q.strip():

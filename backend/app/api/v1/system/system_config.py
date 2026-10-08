@@ -115,6 +115,9 @@ async def export_configs(
 
     可用于配置的备份和迁移。
     """
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user)
     svc = SystemConfigService(db)
     config_json = svc.export_config()
 

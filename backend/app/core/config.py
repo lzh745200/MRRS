@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.12.14"
+    PROJECT_VERSION: str = "1.12.15"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -292,11 +292,11 @@ class Settings(BaseSettings):
                 return
 
             # 读取主密钥
-            with open(master_key_file, "r") as f:
+            with open(master_key_file, "r", encoding="utf-8") as f:
                 master_key = f.read().strip()
 
             # 读取加密配置
-            with open(secrets_file, "r") as f:
+            with open(secrets_file, "r", encoding="utf-8") as f:
                 encrypted_config = _json.load(f)
 
             # 解密配置

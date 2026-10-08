@@ -177,6 +177,9 @@ def get_or_create_secret(key: str, *, generate=None, require_persisted: bool = F
     try:
         with open(secrets_file, "r", encoding="utf-8") as f:
             loaded = json.load(f) or {}
+        if not isinstance(loaded, dict):
+            # R20：密钥文件被外部破坏为非对象 JSON 时按空处理，与 _load_secrets_file 口径一致
+            loaded = {}
     except FileNotFoundError:
         pass
     except (json.JSONDecodeError, PermissionError) as exc:

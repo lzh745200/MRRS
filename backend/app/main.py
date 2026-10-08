@@ -54,7 +54,6 @@ from app.middleware.metrics_middleware import MetricsMiddleware
 from app.middleware.request_id import RequestIDMiddleware
 from app.middleware.request_logger import RequestLoggerMiddleware
 
-env = os.getenv("ENV", "dev")
 # P2-1: 统一日志入口——移除 SafeLogger，走 logging_config.init_logging()
 init_logging()
 logger = logging.getLogger("assistance_management")

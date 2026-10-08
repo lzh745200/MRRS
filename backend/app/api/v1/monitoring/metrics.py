@@ -33,6 +33,12 @@ async def get_business_metrics(
     - 用户活跃度
     - 系统错误率
     """
+    # R20 复审：与 /prometheus、/performance-dashboard 同口径收敛为管理员可见
+    if not is_admin(current_user):
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
     return business_metrics_service.get_all_metrics()
 
 

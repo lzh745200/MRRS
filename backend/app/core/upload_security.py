@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ALLOWED_EXTENSIONS: Set[str] = {
     ".xlsx", ".xls", ".csv", ".pdf",
-    ".jpg", ".jpeg", ".png", ".gi", ".webp", ".bmp",
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp",
     ".doc", ".docx", ".ppt", ".pptx",
     ".txt", ".json",
 }

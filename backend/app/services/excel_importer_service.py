@@ -284,12 +284,12 @@ class ExcelImporterService:
             if entity_type == "supported_village":
                 validation_result = self.validator.validate_batch(rows)
                 duplicate_errors = self.validator.check_duplicates(rows)
-                self.validator.convert_row_types
+                rows = [self.validator.convert_row_types(r) for r in rows]
             else:
                 entity_validator = EntityImportValidator(entity_type)
                 validation_result = entity_validator.validate_batch(rows)
                 duplicate_errors = entity_validator.check_duplicates(rows)
-                entity_validator.convert_row_types
+                rows = [entity_validator.convert_row_types(r) for r in rows]
 
             # 验证数据
             if not validation_result.is_valid:

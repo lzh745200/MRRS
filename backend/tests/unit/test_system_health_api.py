@@ -132,7 +132,7 @@ class TestHealthReadiness:
 
 
 class TestHealthFull:
-    def test_full_health(self, client):
+    def test_full_health(self, auth_client):
         with patch("app.utils.paths.get_database_path") as mock_gdp, \
              patch("app.utils.paths.get_backup_path") as mock_gbp, \
              patch("os.path.exists", return_value=True), \
@@ -148,33 +148,33 @@ class TestHealthFull:
                 mock_conn.return_value = conn_instance
                 with patch("os.listdir", return_value=["b1.zip", "b2.db"]), \
                      patch("os.path.getsize", side_effect=[100, 200]):
-                    resp = client.get("/api/v1/health/full")
+                    resp = auth_client.get("/api/v1/health/full")
                     assert resp.status_code == 200
                     data = resp.json()
                     assert data["code"] == 200
                     assert data["data"]["db_size_mb"] == 0.0
 
-    def test_full_health_db_not_exists(self, client):
+    def test_full_health_db_not_exists(self, auth_client):
         with patch("app.utils.paths.get_database_path") as mock_gdp, \
              patch("app.utils.paths.get_backup_path") as mock_gbp, \
              patch("os.path.exists", return_value=False):
             mock_gdp.return_value.absolute.return_value = "/fake/db.sqlite3"
             mock_gbp.return_value = "/fake/backups"
-            resp = client.get("/api/v1/health/full")
+            resp = auth_client.get("/api/v1/health/full")
             assert resp.status_code == 200
 
-    def test_full_health_db_error(self, client):
+    def test_full_health_db_error(self, auth_client):
         with patch("app.utils.paths.get_database_path") as mock_gdp, \
              patch("app.utils.paths.get_backup_path") as mock_gbp, \
              patch("os.path.exists", return_value=True), \
              patch("os.path.getsize", side_effect=Exception("no access")):
             mock_gdp.return_value.absolute.return_value = "/fake/db.sqlite3"
             mock_gbp.return_value = "/fake/backups"
-            resp = client.get("/api/v1/health/full")
+            resp = auth_client.get("/api/v1/health/full")
             assert resp.status_code == 200
             assert "db_error" in resp.json()["data"]
 
-    def test_full_health_backup_error(self, client):
+    def test_full_health_backup_error(self, auth_client):
         with patch("app.utils.paths.get_database_path") as mock_gdp, \
              patch("app.utils.paths.get_backup_path") as mock_gbp, \
              patch("os.path.exists", return_value=True), \
@@ -188,12 +188,12 @@ class TestHealthFull:
                 conn_instance.execute.return_value = cursor
                 mock_conn.return_value = conn_instance
                 with patch("os.listdir", side_effect=Exception("permission denied")):
-                    resp = client.get("/api/v1/health/full")
+                    resp = auth_client.get("/api/v1/health/full")
                     assert resp.status_code == 200
                     data = resp.json()["data"]
                     assert data.get("total_backups") == 0
 
-    def test_full_health_slow_queries(self, client):
+    def test_full_health_slow_queries(self, auth_client):
         with patch("app.utils.paths.get_database_path") as mock_gdp, \
              patch("app.utils.paths.get_backup_path") as mock_gbp, \
              patch("os.path.exists", return_value=True), \
@@ -209,11 +209,11 @@ class TestHealthFull:
                 with patch("os.listdir", return_value=[]), \
                      patch("app.core.query_optimizer.get_slow_queries") as mock_sq:
                     mock_sq.return_value = [{"slow": True}, {"slow": False}]
-                    resp = client.get("/api/v1/health/full")
+                    resp = auth_client.get("/api/v1/health/full")
                     assert resp.status_code == 200
                     assert resp.json()["data"]["slow_queries_24h"] == 1
 
-    def test_full_health_slow_queries_error(self, client):
+    def test_full_health_slow_queries_error(self, auth_client):
         with patch("app.utils.paths.get_database_path") as mock_gdp, \
              patch("app.utils.paths.get_backup_path") as mock_gbp, \
              patch("os.path.exists", return_value=True), \
@@ -228,6 +228,6 @@ class TestHealthFull:
                 mock_conn.return_value = conn_instance
                 with patch("os.listdir", return_value=[]), \
                      patch("app.core.query_optimizer.get_slow_queries", side_effect=Exception("import error")):
-                    resp = client.get("/api/v1/health/full")
+                    resp = auth_client.get("/api/v1/health/full")
                     assert resp.status_code == 200
                     assert resp.json()["data"]["slow_queries_24h"] == 0

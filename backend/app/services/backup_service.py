@@ -844,6 +844,7 @@ class BackupService:
                     BackupRecord(
                         backup_id=config.id,
                         file_name=file_name,
+                        backup_type=("incremental" if file_name.startswith("backup_incremental_") else "full"),
                         file_path=config.value,
                         file_size=file_size,
                         description=config.description,
@@ -1164,7 +1165,7 @@ class BackupService:
 
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_file_name = f"backup_incremental_{timestamp}.zip"
+            backup_file_name = f"backup_incremental_{timestamp}_{uuid.uuid4().hex[:6]}.zip"
             backup_file_path = os.path.join(self.backup_dir, backup_file_name)
 
             current_manifest = self._build_current_manifest(include_uploads)
