@@ -142,3 +142,20 @@ class TestCheckVillageReferences:
         mock_db.execute.side_effect = side_effects
         result = service.check_village_references(1)
         assert result["total_references"] == 0
+
+    def test_no_such_table_error_skips_warning(self, service, mock_db):
+        """错误信息含 'no such table' 时静默跳过该表、不打 warning，循环继续。
+
+        覆盖 `if "no such table" not in str(e).lower():` 的假分支
+        （161->149）：表不存在属预期 schema 差异，无需留痕。
+        """
+        normal_result = MagicMock()
+        normal_result.scalar.return_value = 0
+        side_effects = [Exception("no such table: foo")] + [normal_result] * (
+            len(service.DEPENDENT_TABLES) - 1
+        )
+        mock_db.execute.side_effect = side_effects
+        with patch("app.services.village_cascade_delete_service.logger") as mock_logger:
+            result = service.check_village_references(1)
+        assert result["total_references"] == 0
+        mock_logger.warning.assert_not_called()

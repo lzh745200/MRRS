@@ -2092,3 +2092,136 @@ def test_initiate_twice_is_idempotent(client, project, phases, fund, db_session)
     r2 = client.post(f"/api/v1/fund-lifecycle/initiate/{project.id}")
     assert r2.status_code == 200
     assert r2.json()["message"] == "论证立项已启动"
+
+
+# =====================================================================
+#  R20 复审（CI 覆盖率缺口）：project_id 假分支 + 1877 真分支
+# =====================================================================
+
+
+class TestProjectIdBranches:
+    """fund_lifecycle 中 `if <实体>.project_id:` 的假分支此前从未走到。
+
+    这些实体的 project_id 均可空（models 中 nullable=True），不挂项目是合法
+    业务场景（如机动/通用经费、跨项目凭证）。逐端点补最小真实场景；另外
+    FundAllocationOrder 的 project_id 真分支（1877 行）也从未执行。
+    """
+
+    def test_quota_lock_without_project(self, client, fund, db_session):
+        """quota-lock：fund.project_id 为空 → 595->598 与 614->617 假分支。"""
+        fund.project_id = None
+        fund.budget_locked = True
+        db_session.flush()
+        resp = client.post(f"/api/v1/fund-lifecycle/quota-lock/{fund.id}")
+        assert resp.status_code == 200
+
+    def test_update_voucher_without_project(self, client, db_session):
+        """PUT voucher：v.project_id 为空 → 837->839 假分支。"""
+        v = FundTransferVoucher(
+            id=1, project_id=None, voucher_no="VP001",
+            direction="military_to_local", amount=Decimal("100.00"),
+            status=VoucherStatus.DRAFT.value,
+        )
+        db_session.add(v)
+        db_session.flush()
+        resp = client.put("/api/v1/fund-lifecycle/transfer-vouchers/1", json={"amount": 200.0})
+        assert resp.status_code == 200
+
+    def test_delete_voucher_without_project(self, client, db_session):
+        """DELETE voucher：v.project_id 为空 → 872->874 假分支。"""
+        v = FundTransferVoucher(
+            id=1, project_id=None, voucher_no="VP002",
+            direction="military_to_local", amount=Decimal("100.00"),
+            status=VoucherStatus.DRAFT.value,
+        )
+        db_session.add(v)
+        db_session.flush()
+        resp = client.delete("/api/v1/fund-lifecycle/transfer-vouchers/1")
+        assert resp.status_code == 200
+
+    def test_confirm_voucher_without_project(self, client, db_session):
+        """POST confirm：v.project_id 为空 → 894->896 假分支。"""
+        v = FundTransferVoucher(
+            id=1, project_id=None, voucher_no="VP003",
+            direction="military_to_local", amount=Decimal("100.00"),
+            status=VoucherStatus.DRAFT.value,
+        )
+        db_session.add(v)
+        db_session.flush()
+        resp = client.post("/api/v1/fund-lifecycle/transfer-vouchers/1/confirm")
+        assert resp.status_code == 200
+
+    def test_update_contract_without_project(self, client, db_session):
+        """PUT contract：c.project_id 为空 → 1147->1150 假分支。"""
+        c = FundContract(
+            id=1, project_id=None, contract_no="CP001",
+            contract_name="旧名称", contract_amount=Decimal("100.00"),
+        )
+        db_session.add(c)
+        db_session.flush()
+        resp = client.put("/api/v1/fund-lifecycle/contracts/1", json={"contract_name": "新名称"})
+        assert resp.status_code == 200
+
+    def test_delete_contract_without_project(self, client, db_session):
+        """DELETE contract：c.project_id 为空 → 1169->1171 假分支。"""
+        c = FundContract(id=1, project_id=None, contract_no="CP002",
+                         contract_name="待删", status=ContractStatus.DRAFT.value)
+        db_session.add(c)
+        db_session.flush()
+        resp = client.delete("/api/v1/fund-lifecycle/contracts/1")
+        assert resp.status_code == 200
+
+    def test_create_payment_without_project(self, client, db_session):
+        """登记付款：c.project_id 为空 → 1209->1213 假分支。"""
+        c = FundContract(id=1, project_id=None, contract_no="CP003",
+                         contract_name="合同", contract_amount=Decimal("200.00"),
+                         status=ContractStatus.ACTIVE.value)
+        db_session.add(c)
+        db_session.flush()
+        resp = client.post("/api/v1/fund-lifecycle/contracts/1/payments", json={
+            "amount": 30.0, "payment_date": "2025-06-01", "purpose": "首付款",
+        })
+        assert resp.status_code == 200
+
+    def test_update_settlement_without_project(self, client, db_session):
+        """PUT settlement：s.project_id 为假值（该列 NOT NULL，用 0）→ 1628->1630 假分支。"""
+        s = FundSettlement(id=1, project_id=0, settlement_no="JS-P001",
+                           total_budget=Decimal("500.00"), total_spent=Decimal("300.00"),
+                           status=SettlementStatus.DRAFT.value)
+        db_session.add(s)
+        db_session.flush()
+        resp = client.put("/api/v1/fund-lifecycle/settlement/1", json={
+            "total_budget": 600.0, "total_spent": 400.0,
+        })
+        assert resp.status_code == 200
+
+    def test_approve_settlement_without_project(self, client, db_session):
+        """POST approve：s.project_id 为假值（该列 NOT NULL，用 0）→ 1662->1666 假分支。"""
+        s = FundSettlement(id=1, project_id=0, settlement_no="JS-P002",
+                           status=SettlementStatus.DRAFT.value)
+        db_session.add(s)
+        db_session.flush()
+        resp = client.post("/api/v1/fund-lifecycle/settlement/1/approve")
+        assert resp.status_code == 200
+        db_session.refresh(s)
+        assert s.status == SettlementStatus.APPROVED.value
+
+    def test_quota_adjust_without_project(self, client, fund, db_session):
+        """quota-adjust：fund.project_id 为空 → 1927->1930 假分支。"""
+        fund.project_id = None
+        db_session.flush()
+        resp = client.put(f"/api/v1/fund-lifecycle/quota-adjust/{fund.id}", json={
+            "new_amount": 600.0, "reason": "无项目经费调整",
+        })
+        assert resp.status_code == 200
+
+    def test_issue_allocation_order_with_project(self, client, project, db_session):
+        """issue：order.project_id 为真 → 1877 行 _get_project_or_403 被执行。"""
+        o = FundAllocationOrder(
+            id=1, project_id=project.id, order_no="AOP001",
+            total_amount=Decimal("100.00"), status="draft",
+        )
+        db_session.add(o)
+        db_session.flush()
+        resp = client.post("/api/v1/fund-lifecycle/allocation-orders/1/issue")
+        assert resp.status_code == 200

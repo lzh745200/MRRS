@@ -343,6 +343,15 @@ class TestRenderString:
         assert "Alice" in result
         assert "{date}" in result
 
+    def test_multiple_missing_keys_all_preserved(self, svc):
+        """≥2 个缺失占位符：一次 format_map + __missing__ 全部保留原样。
+
+        旧实现只回填首个缺失键，二次 format 仍会 KeyError 中断发送链路；
+        新实现走 `_KeepMissingPlaceholders.__missing__`，覆盖其 return 分支。
+        """
+        result = svc._render_string("你好 {a}，欢迎 {b}，时间 {c}", {})
+        assert result == "你好 {a}，欢迎 {b}，时间 {c}"
+
 
 class TestPrepareVariables:
     def test_with_defaults(self, svc):

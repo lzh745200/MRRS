@@ -129,6 +129,23 @@ class TestPolicyBranchGaps:
         assert isinstance(data, bytes)
         assert len(data) > 0
 
+    def test_build_policies_pdf_escapes_html_metachars(self):
+        """R20：标题/正文含 < & > 时 reportlab mini-HTML 解析不得抛异常。
+
+        修复前 `Paragraph(f"{idx}. {p.title}")` 直接拼未转义文本，标题含
+        `<`/`&`（如"关于<重点>帮扶&振兴的通知"）会触发 500。此处直接调用
+        `_build_policies_pdf` 断言不抛异常且返回非空 PDF 字节流（%PDF 魔数）。
+        """
+        p = make_policy(
+            title="关于<重点>帮扶&振兴的通知",
+            content="<p>支出 &lt; 100 &gt; 50</p><p>第二段含 A & B</p>",
+            file_path=None,
+        )
+        data = policy_mod._build_policies_pdf([p])
+        assert isinstance(data, bytes)
+        assert len(data) > 0
+        assert data[:4] == b"%PDF"
+
     async def test_get_related_policies_without_category(self):
         """1255->1257：源政策 category 为空，跳过 category 过滤仍返回相关政策。"""
         policy = make_policy(category=None)

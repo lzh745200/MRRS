@@ -301,6 +301,21 @@ class TestGetOrCreateSecret:
         source = inspect.getsource(get_or_create_secret)
         assert "token_urlsafe" in source
 
+    def test_non_object_json_treated_as_empty(self, tmp_path):
+        """顶层为非对象 JSON（真值但非 dict）→ `loaded = {}` 后再生成并持久化。
+
+        覆盖 get_or_create_secret 中 `if not isinstance(loaded, dict)` 的真分支：
+        文件被外部破坏成数组/字符串时不得让后续 `key in loaded`/`loaded[key]`
+        在非 dict 上崩掉。
+        """
+        secrets_file = tmp_path / "runtime_secrets.json"
+        secrets_file.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(secrets_file)}):
+            val = get_or_create_secret("NONOBJ")
+            assert val != ""
+            data = json.loads(secrets_file.read_text(encoding="utf-8"))
+            assert data["NONOBJ"] == val
+
 
 # ---------------------------------------------------------------------------
 # _resolve_secrets_file

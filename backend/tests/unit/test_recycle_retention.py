@@ -244,6 +244,38 @@ class TestBackupPrecedesPurge:
         assert result.get("backup_failed") is True
         assert mem_db.query(Fund).filter(Fund.id == victim.id).first() is not None
 
+    def test_backup_returns_false_aborts_purge_fail_closed(self, mem_db):
+        """备份返回 False（被跳过/失败，非抛异常）时必须同样中止物理删除。
+
+        R20 复审(高)：retention 改为 `ok = trigger_immediate_backup(..., wait=True)`
+        并检查 `if ok is False: raise`，由外层 except 记录并中止清除 ——
+        此前只测过"备份抛异常"路径，`ok is False` 这一显式分支无覆盖。
+        """
+        now = datetime.now(timezone.utc)
+        victim = Fund(name="待清除", amount=1)
+        victim.is_active = False
+        victim.deleted_at = now - timedelta(days=40)
+        mem_db.add(victim)
+        mem_db.commit()
+
+        purge_called: list[int] = []
+
+        def fake_purge(self, table, rid):
+            purge_called.append(rid)
+            return {"success": True, "deleted_records": 1}
+
+        with __import__("unittest.mock", fromlist=["patch"]).patch(
+            "app.services.immediate_backup.trigger_immediate_backup",
+            lambda *a, **kw: False,
+        ), __import__("unittest.mock", fromlist=["patch"]).patch(
+            "app.services.cascade_purge_service.CascadePurgeService.purge", fake_purge
+        ):
+            result = purge_expired_soft_deleted(mem_db, days=30)
+
+        assert purge_called == []
+        assert result.get("backup_failed") is True
+        assert mem_db.query(Fund).filter(Fund.id == victim.id).first() is not None
+
     def test_no_candidates_skips_backup_entirely(self, mem_db):
         """没有待清除记录时不触发备份（原实现 total==0 也会备份）。"""
         calls: list[int] = []

@@ -210,14 +210,23 @@ class BatchService:
         import base64
         try:
             from openpyxl import Workbook
+            model = self._get_model_class(table_name)
+            # R20 复审(中)：原实现只写表头即返回成功 —— 实际导出内容为空
+            query = self.db.query(model)
+            if ids:
+                query = query.filter(model.id.in_(ids))
+            records = [r.to_dict() for r in query.all()]
             wb = Workbook()
             ws = wb.active
             ws.title = table_name
-            ws.append(["id", "name"])
+            header = list(records[0].keys()) if records else ["id"]
+            ws.append(header)
+            for rec in records:
+                ws.append([rec.get(h) for h in header])
             output = BytesIO()
             wb.save(output)
             data = base64.b64encode(output.getvalue()).decode()
-            return {"success": True, "data": data, "exported_count": len(ids)}
+            return {"success": True, "data": data, "exported_count": len(records)}
         except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             return {"success": False, "data": "", "exported_count": 0}
 

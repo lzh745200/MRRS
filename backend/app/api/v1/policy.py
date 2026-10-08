@@ -737,7 +737,9 @@ def _build_policies_pdf(policies_list: List[Policy]) -> bytes:
         leading=16, firstLineIndent=20,
     )
     for idx, p in enumerate(policies_list, 1):
-        story.append(Paragraph(f"{idx}. {p.title or '未命名政策'}", detail_title_style))
+        # R20 复审(中)：reportlab 按 mini-HTML 解析，标题含 < & 时 500 → 统一转义
+        from xml.sax.saxutils import escape as _xml_escape
+        story.append(Paragraph(f"{idx}. {_xml_escape(p.title or '未命名政策')}", detail_title_style))
         meta_parts = []
         if p.code:
             meta_parts.append(f"文号：{p.code}")
@@ -757,7 +759,7 @@ def _build_policies_pdf(policies_list: List[Policy]) -> bytes:
             for para in plain.splitlines():
                 para = para.strip()
                 if para:
-                    story.append(Paragraph(para, detail_body_style))
+                    story.append(Paragraph(_xml_escape(para), detail_body_style))
         else:
             story.append(Paragraph("（暂无正文内容）", detail_meta_style))
         if p.file_path:

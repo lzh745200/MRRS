@@ -408,11 +408,36 @@ class TestBatchExport:
     async def test_success(self):
         from app.services.batch_service import BatchService
         svc = BatchService(db=Mock())
+        recs = [Mock(to_dict=MagicMock(return_value={"id": i, "name": f"n{i}"})) for i in (1, 2, 3)]
+        svc.db.query.return_value.filter.return_value.all.return_value = recs
         result = await svc.batch_export("projects", [1, 2, 3])
         assert result["success"] is True
         assert result["exported_count"] == 3
         assert isinstance(result["data"], str)
         assert len(result["data"]) > 0
+
+    async def test_success_empty_ids(self):
+        """ids 为空 → 跳过 `if ids:` 过滤分支，直接导出全表（此处 0 条）。"""
+        from app.services.batch_service import BatchService
+        svc = BatchService(db=Mock())
+        # ids 为空时不经过 .filter()，链终点是 db.query(...).all()
+        svc.db.query.return_value.all.return_value = []
+        result = await svc.batch_export("projects", [])
+        assert result["success"] is True
+        assert result["exported_count"] == 0
+        # 空结果集时表头回落为 ["id"]
+        svc.db.query.return_value.filter.assert_not_called()
+
+    async def test_success_ids_no_match(self):
+        """ids 非空但一条都没查到 → 走 `if ids:` 真分支后 records 为空。"""
+        from app.services.batch_service import BatchService
+        svc = BatchService(db=Mock())
+        svc.db.query.return_value.filter.return_value.all.return_value = []
+        result = await svc.batch_export("projects", [1, 2])
+        assert result["success"] is True
+        assert result["exported_count"] == 0
+        assert isinstance(result["data"], str) and len(result["data"]) > 0
+        svc.db.query.return_value.filter.assert_called_once()
 
     async def test_import_error(self):
         """openpyxl not available → returns failure."""

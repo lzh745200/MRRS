@@ -72,9 +72,14 @@ def purge_expired_soft_deleted(db, days: int | None = None) -> dict:
     try:
         from app.services.immediate_backup import trigger_immediate_backup
 
-        trigger_immediate_backup(
-            description=f"回收站保留期自动清除 {len(planned)} 条前备份", delay=1.0
+        # R20 复审(高)：原实现为后台线程延迟备份且不检查结果 —— 快照可能晚于删除、
+        # 或因幂等锁被占用根本没触发。改为同步等待真实结果，False/异常均中止清除。
+        ok = trigger_immediate_backup(
+            description=f"回收站保留期自动清除 {len(planned)} 条前备份",
+            delay=0.0, wait=True, wait_timeout=300.0,
         )
+        if ok is False:
+            raise RuntimeError("即时备份未成功执行（被跳过或失败）")
     except Exception:
         # fail-closed：没有兜底快照就不做物理删除（软删记录可人工再清）
         logger.error("回收站自动清除前备份失败，本轮清除中止", exc_info=True)

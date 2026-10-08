@@ -14,7 +14,10 @@ logger = logging.getLogger(__name__)
 _triggered_once = threading.Lock()
 
 
-def trigger_immediate_backup(description: str = "关键操作前备份", delay: float = 0.0) -> bool:
+def trigger_immediate_backup(
+    description: str = "关键操作前备份", delay: float = 0.0,
+    wait: bool = False, wait_timeout: float = 180.0,
+) -> bool:
     """
     触发一次即时备份（后台线程，幂等保护：同一时刻只允许一个在跑）。
 
@@ -23,7 +26,9 @@ def trigger_immediate_backup(description: str = "关键操作前备份", delay: 
         delay: 延迟秒数（避免与操作并发写库）
 
     Returns:
-        True 已排队; False 已有备份在跑（跳过本次）
+        wait=False: True 已排队; False 已有备份在跑（跳过本次）
+        wait=True:  备份实际执行成功返回 True；失败/超时/被跳过返回 False
+                    （R20：retention 的 fail-closed 需要真实结果而非"已排队"）
     """
     if not _triggered_once.acquire(blocking=False):
         logger.info("即时备份已在执行，跳过本次触发")
@@ -47,12 +52,22 @@ def trigger_immediate_backup(description: str = "关键操作前备份", delay: 
                     include_uploads=False,
                 )
                 logger.info("即时备份完成: %s", description)
+            return True
         except Exception as e:
             logger.error("即时备份失败: %s", e, exc_info=True)
+            return False
         finally:
             _triggered_once.release()
 
-    t = threading.Thread(target=_run, name="immediate-backup", daemon=True)
+    result_holder = {"ok": False}
+
+    def _run_tracked():
+        # _run 内部已 try/except 归一化为布尔，此处据实回填真实成败；
+        # 修复原实现恒置 True —— 备份抛错时 wait=True 亦会误报成功，
+        # 使回收站清除的 fail-closed 失效。
+        result_holder["ok"] = bool(_run())
+
+    t = threading.Thread(target=_run_tracked, name="immediate-backup", daemon=True)
     try:
         t.start()
     except Exception:
@@ -61,4 +76,10 @@ def trigger_immediate_backup(description: str = "关键操作前备份", delay: 
         _triggered_once.release()
         logger.error("即时备份线程启动失败", exc_info=True)
         return False
+    if wait:
+        t.join(wait_timeout)
+        if t.is_alive():
+            logger.error("即时备份等待超时(%ss)，按失败处理", wait_timeout)
+            return False
+        return result_holder["ok"]
     return True
