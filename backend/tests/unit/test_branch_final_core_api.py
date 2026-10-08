@@ -160,6 +160,13 @@ def test_async_utils_gather_limited_invalid_concurrency():
 def test_cache_module_compat_branch_false():
     import app.core.cache as cm
 
+    # 快照原始命名空间：``importlib.reload`` 会就地重建模块内的 ``cache_manager`` /
+    # ``CacheManager`` 等对象，使其成为新对象；而 ``app.api.v1.policy`` /
+    # ``app.api.v1.organization`` 等模块是【按值导入】``cache_manager`` 的，仍持有旧
+    # 引用。二者分裂后，测试里 ``patch("app.core.cache.cache_manager.get")`` 会打在
+    # 新对象上、端点却用旧对象 → 跨文件 patch 静默失效（本缺陷曾拦截 v1.12.15 构建）。
+    original = dict(cm.__dict__)
+
     inject = {"hasattr": lambda *a, **k: True, "isinstance": lambda *a, **k: False}
     for name, fn in inject.items():
         setattr(cm, name, fn)
@@ -168,8 +175,12 @@ def test_cache_module_compat_branch_false():
     finally:
         for name in inject:
             cm.__dict__.pop(name, None)
-        # 恢复模块到正常状态（重新定义 _cache property）
+        # 恢复模块到正常状态（重新定义 _cache property），覆盖兼容属性注入分支
         importlib.reload(cm)
+        # 再就地还原原始命名空间：reload 只能得到【新】对象、无法恢复对象身份，
+        # 只有回填 __dict__ 才能让 cache_manager 重新等于各模块按值持有的旧引用。
+        cm.__dict__.clear()
+        cm.__dict__.update(original)
 
     assert cm.CacheManager is not None
 
