@@ -84,7 +84,35 @@
 ### 测试
 - 新增 `test_r20_review_fixes.py`（13 例：守卫 401/403 全分支 + overwrite 软删分支 +
   逐行 SAVEPOINT 隔离）；message_service 保留断言对齐 90 天；org_code 连字符断言更新。
-- 用例口径：后端 **12,395**（`--collect-only` 实测）/ 前端 **6,323**（299 文件）；合计 **18,717**。
+- 用例口径：后端 **12,422**（`--collect-only` 实测，622 文件）/ 前端 **6,323**（299 文件）；合计 **18,745**。
+  （复审补丁新增 27 例：PDF 转义承重用例、batch_export 分支、即时备份 wait 全路径、
+  回收站 fail-closed，以及 4 处 CI 覆盖率缺口的补测。）
+
+### 复审补丁（F2，同日追加，随本版一并发布）
+- **PDF 导出转义不完整（同一注入面漏网）**：`_build_policies_pdf` 的标题与正文已转义，但
+  元信息行（`p.code` 文号 / `p.issuing_authority` 发文机关）仍直连 reportlab 的 mini-HTML
+  解析器，含未闭合标签（如 `文号<b`）依旧 500 → 元信息行一并转义；并对该函数内**全部**
+  `Paragraph(...)` 与 `Table` 单元格做了完整排查（`Table` 的纯字符串单元格不经 mini-HTML
+  解析，无注入面）。
+- **即时备份 `wait` 语义缺陷（使 fail-closed 失效）**：`_run` 吞掉备份异常后
+  `result_holder["ok"]` 恒为 `True`，导致 `wait=True` 时备份失败也误报成功 →
+  `_run` 改为返回真实成败并由 `_run_tracked` 据实回填；`wait=True` 在失败/超时/被幂等锁
+  跳过时均返回 `False`。
+- **回收站保留期清除的备份时序**：原实现以后台线程延迟 1 秒触发且不检查结果（快照可能
+  晚于物理删除，或因幂等锁被占用根本没触发）→ 改为同步等待真实结果，
+  `False`/异常一律中止本轮物理删除（fail-closed 名副其实）。
+- **`batch_export` 空导出**：原实现只写表头即返回成功（导出内容为空、`exported_count`
+  取自入参）→ 改为按真实记录查询并逐行写入，`exported_count` 为实际导出条数。
+- **弱断言治理**：新增的 PDF 转义回归用例原输入即使不转义也不会抛错（从未守护该修复）→
+  替换为未闭合标签输入，并以「去掉转义必失败」做承重性对照证明。
+
+### 覆盖率（复审补丁）
+- 清零 CI `backend-test` 在 R20 提交上的覆盖率缺口（**99.97% → 100%**，行 + 分支）：
+  `app/utils/runtime_secrets.py`（行 182 + 1 分支）、
+  `app/services/village_cascade_delete_service.py`（分支 `161->149`）、
+  `app/services/message_template_service.py`（行 391）、
+  `app/api/v1/fund_lifecycle.py`（行 1877 + 11 处 `if x.project_id:` 假分支）。
+  均以真实测试触发，**未新增任何覆盖率豁免**。
 
 ---
 

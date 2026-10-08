@@ -123,6 +123,20 @@ const TARGETS = [
     },
   },
   {
+    // 顶部标语行的版本号（"… | 多机协同数据同步 | vX.Y.Z"）。
+    // 原实现只覆盖 shields.io 徽标，导致该行长期漂移（v1.12.15 发布时仍写 1.12.14），
+    // 故单列一条目标；与徽标完全独立，互不干扰。
+    name: "README.md (顶部标语)",
+    file: "README.md",
+    describe(c) {
+      const m = c.match(/多机协同数据同步 \| v(\d+\.\d+\.\d+)/);
+      return m ? m[1] : null;
+    },
+    apply(c, v) {
+      return c.replace(/(多机协同数据同步 \| v)(\d+\.\d+\.\d+)/, `$1${v}`);
+    },
+  },
+  {
     name: "Dockerfile (echo banner)",
     file: "Dockerfile",
     optional: true,
