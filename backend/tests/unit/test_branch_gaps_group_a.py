@@ -129,21 +129,43 @@ class TestPolicyBranchGaps:
         assert isinstance(data, bytes)
         assert len(data) > 0
 
-    def test_build_policies_pdf_escapes_html_metachars(self):
-        """R20：标题/正文含 < & > 时 reportlab mini-HTML 解析不得抛异常。
+    def test_build_policies_pdf_title_unclosed_tag(self):
+        """承重：标题含 reportlab 可识别的**未闭合**标签 → 未转义必抛 ValueError。
 
-        修复前 `Paragraph(f"{idx}. {p.title}")` 直接拼未转义文本，标题含
-        `<`/`&`（如"关于<重点>帮扶&振兴的通知"）会触发 500。此处直接调用
-        `_build_policies_pdf` 断言不抛异常且返回非空 PDF 字节流（%PDF 魔数）。
+        注意：裸 `&`、未知标签（如 `<重点>`）、已成对标签都不会触发，
+        必须用 `<b` / `<i` 这类可识别但未闭合的标签才真正守护本修复。
+        """
+        p = make_policy(title="关于加强<b政策", content="正常正文", file_path=None)
+        data = policy_mod._build_policies_pdf([p])
+        assert isinstance(data, bytes)
+        assert data[:4] == b"%PDF"
+
+    def test_build_policies_pdf_body_unclosed_tag(self):
+        """承重：正文含未被「去标签」正则吞掉的未闭合标签（后无 '>'）→ 未转义必抛。
+
+        正文先经 `re.sub(r"<[^>]+>", ...)` 去标签：若未闭合标签后跟 `>` 会被
+        一并删掉而失活；这里用「无 '>' 结尾」的 `<b` 保证其存活到 Paragraph。
+        """
+        p = make_policy(title="正常标题", content="正文含未闭合标签 <b 结尾", file_path=None)
+        data = policy_mod._build_policies_pdf([p])
+        assert isinstance(data, bytes)
+        assert data[:4] == b"%PDF"
+
+    def test_build_policies_pdf_meta_unclosed_tag(self):
+        """承重：meta 行（文号/发文机关）含未闭合标签 → meta 行未转义必抛。
+
+        对应 R20 复审补丁：`Paragraph("　　".join(meta_parts))` 的 code /
+        issuing_authority 同为用户可控字段，与 title/body 同一注入面。
         """
         p = make_policy(
-            title="关于<重点>帮扶&振兴的通知",
-            content="<p>支出 &lt; 100 &gt; 50</p><p>第二段含 A & B</p>",
+            title="正常标题",
+            code="文号<b",
+            issuing_authority="某机关<i",
+            content="正常正文",
             file_path=None,
         )
         data = policy_mod._build_policies_pdf([p])
         assert isinstance(data, bytes)
-        assert len(data) > 0
         assert data[:4] == b"%PDF"
 
     async def test_get_related_policies_without_category(self):

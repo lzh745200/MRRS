@@ -750,7 +750,9 @@ def _build_policies_pdf(policies_list: List[Policy]) -> bytes:
         if p.effective_date:
             meta_parts.append(f"生效日期：{p.effective_date.strftime('%Y-%m-%d')}")
         if meta_parts:
-            story.append(Paragraph("　　".join(meta_parts), detail_meta_style))
+            # R20 复审(中)补：meta 行的文号/发文机关同为用户可控字段，与标题/正文
+            # 同一 mini-HTML 注入面 —— 拼接后统一转义（分隔符「　　」无元字符，语义不变）
+            story.append(Paragraph(_xml_escape("　　".join(meta_parts)), detail_meta_style))
         content = (p.content or "").strip()
         if content:
             import re as _re
