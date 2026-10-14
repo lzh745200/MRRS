@@ -138,6 +138,36 @@ class ResourceLimiter:
             # 会立刻按新配额判定（例如把 100/小时 调成 10/分钟时被旧记录误拒）。
             self._request_counts[key] = []
 
+    def ensure_quota(self, key: str, max_requests: int, period: int) -> bool:
+        """幂等登记配额：**仅当参数发生变化时**才重置请求窗口。
+
+        深审 #51 复审（2026-10-14 系统排查 M22）：`check_rate_limit` 旧实现每次都
+        先 `set_quota`，而 `set_quota` 内部会清空 `_request_counts[key]` ——
+        紧接着的 `is_allowed` 永远看到空历史，限流因此**从不生效**。
+        这里改为：参数未变时不触碰窗口；参数变化时才重置
+        （保留 `set_quota` 原本要解决的"调低配额不被旧记录误拒"语义）。
+
+        Args:
+            key: 限制键
+            max_requests: 最大请求数
+            period: 时间周期（秒）
+
+        Returns:
+            bool: 配额是否发生变化（True = 已重置请求窗口）
+        """
+        with self._lock:
+            existing = self._rate_limits.get(key)
+            if (
+                existing is not None
+                and existing.requests == max_requests
+                and existing.window == period
+            ):
+                return False
+            self._quotas[key] = ResourceQuota(max_requests=max_requests, period=period)
+            self._rate_limits[key] = RateLimit(requests=max_requests, window=period)
+            self._request_counts[key] = []
+            return True
+
     def clear_quota(self, key: str):
         """
         清除配额
@@ -172,6 +202,10 @@ def check_rate_limit(key: str, limit: int, window: int) -> bool:
     """
     检查速率限制
 
+    深审 #51 复审（2026-10-14 系统排查 M22）：旧实现每次都先 `set_quota`，
+    而 `set_quota` 内部会清空 `_request_counts[key]` —— 紧接着的 `is_allowed`
+    永远看到空历史，限流因此**从不生效**。现改用幂等的 `ensure_quota`。
+
     Args:
         key: 限制键
         limit: 限制数量
@@ -180,7 +214,7 @@ def check_rate_limit(key: str, limit: int, window: int) -> bool:
     Returns:
         bool: 是否允许
     """
-    _rate_limiter.set_quota(key, limit, window)
+    _rate_limiter.ensure_quota(key, limit, window)
     return _rate_limiter.is_allowed(key)
 
 
