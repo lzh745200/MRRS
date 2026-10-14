@@ -93,15 +93,6 @@ class CascadePurgeService:
             {"rid": rid},
         ).scalar() or 0
 
-    def _delete_deep(self, t2: str, c2: str, p_table: str, p_col: str, rid: int) -> int:
-        return self.db.execute(
-            text(
-                f"DELETE FROM {t2} WHERE {c2} IN "  # nosec B608
-                f"(SELECT id FROM {p_table} WHERE {p_col} = :rid)"
-            ),
-            {"rid": rid},
-        ).rowcount or 0
-
     def _descendant_chains(self, root_table: str) -> List[List[tuple]]:
         """从根表出发做 DFS，返回自底向上的"删除链"列表。
 
@@ -131,21 +122,35 @@ class CascadePurgeService:
         return chains
 
     def _delete_chain(self, chain: List[tuple], rid: int) -> int:
-        """按链删除（最深层用子查询锚定到根行），返回删除行数。"""
-        total = 0
-        # chain 已按由深到浅排列：最深的一跳用 IN (SELECT ... WHERE root_pk = :rid)
-        for idx, (table, col, parent, parent_pk) in enumerate(chain):
-            if idx == 0:
-                sql = (
-                    f"DELETE FROM {table} WHERE {col} IN "  # nosec B608
-                    f"(SELECT {parent_pk} FROM {parent} WHERE id = :rid)"
-                )
+        """按链删除（每一层都用嵌套子查询锚定到根行），返回删除行数。
+
+        深审 #1 复审（2026-10-14 全面排查 H1）：链由深到浅排列，旧实现有两个致命问题——
+        1. 最深跳生成 ``parent.id = :rid``，把**根行主键**拿去比对中间表主键
+           （根=村、链=村→项目→经费时，会生成
+           ``DELETE FROM funds WHERE project_id IN (SELECT id FROM projects WHERE id = :vid)``，
+           ``:vid`` 是村 id 却被拿来比 ``projects.id`` → 深层几乎必然删不掉，残留孤儿行）；
+        2. 中间层退化为 ``col NOT IN (SELECT parent_pk FROM parent)`` —— **完全不带根行限定**，
+           等价于对全表做"悬挂清理"，会误删**其它根行**指向已删数据的关联行。
+
+        现改为：把链还原成浅→深序列，逐层用嵌套子查询锚定根行 ``:rid``，
+        并保持「最深先行」的删除顺序（外键先于被引用行删除）。
+        """
+        if not chain:
+            return 0
+        # 浅→深：L[0] 直接引用根表，L[-1] 最深
+        shallow_to_deep = list(reversed(chain))
+        # subs[i] = "属于根行 :rid 的 shallow_to_deep[i] 表 id 集合"
+        subs: List[str] = []
+        for link in shallow_to_deep:
+            table, col = link[0], link[1]
+            if not subs:
+                subs.append(f"SELECT id FROM {table} WHERE {col} = :rid")  # nosec B608 表/列名来自元数据
             else:
-                # 中间层已由上一跳删除，这里用"不在父表中"兜底清理残留
-                sql = (
-                    f"DELETE FROM {table} WHERE {col} NOT IN "  # nosec B608
-                    f"(SELECT {parent_pk} FROM {parent})"
-                )
+                subs.append(f"SELECT id FROM {table} WHERE {col} IN ({subs[-1]})")  # nosec B608
+        total = 0
+        # 最深先行：保证外键先于被引用行删除
+        for i in range(len(shallow_to_deep) - 1, -1, -1):
+            sql = f"DELETE FROM {shallow_to_deep[i][0]} WHERE id IN ({subs[i]})"  # nosec B608
             total += self.db.execute(text(sql), {"rid": rid}).rowcount or 0
         return total
 
