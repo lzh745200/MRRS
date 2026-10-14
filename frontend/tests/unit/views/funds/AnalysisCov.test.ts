@@ -93,14 +93,12 @@ const dimRows = [
 ]
 
 const trendRows = [
-  { year: 2023, total_actual: 100, utilization_rate: 80 },
-  {
-    year: 2024,
-    total_actual: null,
-    total_military: 30,
-    total_local: 20,
-    utilization_rate: undefined,
-  },
+  // 2026-10-14（排查报告 H10）：按后端真实契约构造
+  // （/funds/supported-village/statistics/yearly-comparison 只返回
+  //  year/total_actual/total_planned/count，没有 utilization_rate，
+  //  旧 mock 编造该字段导致"测试全绿但真实页面折线恒为 0"）。
+  { year: 2023, total_actual: 100, total_planned: 200, count: 3 }, // 利用率 50%
+  { year: 2024, total_actual: null, total_planned: 0, count: 0 }, // 无计划 → 0
 ]
 
 function mountComp() {
@@ -251,26 +249,30 @@ describe('图表 computed', () => {
     expect(vm.barChartOption.yAxis.data).toEqual(['无数据'])
   })
 
-  it('yearlyTrendAreaOption：null 与 total_actual/军地合计/全缺三形态', async () => {
+  it('yearlyTrendAreaOption：null 与 total_actual 缺省兜底', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     const opt = vm.yearlyTrendAreaOption
     expect(opt.xAxis.data).toEqual(['2023年', '2024年'])
-    expect(opt.series[0].data).toEqual([100, 50])
+    expect(opt.series[0].data).toEqual([100, 0])
     vm.yearlyTrend = [{ year: 2025 }]
     expect(vm.yearlyTrendAreaOption.series[0].data).toEqual([0])
     vm.yearlyTrend = []
     expect(vm.yearlyTrendAreaOption).toBeNull()
   })
 
-  it('utilizationTrendOption：null 与利用率缺失兜底', async () => {
+  it('utilizationTrendOption：按 total_actual/total_planned 计算（后端不返回 utilization_rate）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     const opt = vm.utilizationTrendOption
     expect(opt.xAxis.data).toEqual(['2023年', '2024年'])
-    expect(opt.series[0].data).toEqual([80, 0])
+    // 100/200 = 50%；total_planned=0 时不得除零，按 0 处理
+    expect(opt.series[0].data).toEqual([50, 0])
+    // 计划为 0 但实际有支出 → 仍按 0 处理（避免 Infinity）
+    vm.yearlyTrend = [{ year: 2025, total_actual: 30, total_planned: 0, count: 1 }]
+    expect(vm.utilizationTrendOption.series[0].data).toEqual([0])
     vm.yearlyTrend = []
     expect(vm.utilizationTrendOption).toBeNull()
   })

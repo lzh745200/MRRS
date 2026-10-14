@@ -357,9 +357,7 @@ const yearlyTrendAreaOption = computed<EChartsOption | null>(() => {
   const data = yearlyTrend.value ?? []
   if (!data.length) return null
   const years = data.map((d) => `${d.year}年`)
-  const totals = data.map(
-    (d) => Number(d.total_actual ?? (d.total_military || 0) + (d.total_local || 0)) || 0
-  )
+  const totals = data.map((d) => Number(d.total_actual) || 0)
   return {
     tooltip: {
       trigger: 'axis',
@@ -401,7 +399,13 @@ const utilizationTrendOption = computed<EChartsOption | null>(() => {
   const data = yearlyTrend.value ?? []
   if (!data.length) return null
   const years = data.map((d) => `${d.year}年`)
-  const rates = data.map((d) => Number(d.utilization_rate) || 0)
+  // 2026-10-14（排查报告 H10）：后端 yearly-comparison 不返回 utilization_rate，
+  // 旧实现读该字段恒为 undefined → 折线恒画在 0%。改按 total_actual / total_planned 计算。
+  const rates = data.map((d) => {
+    const planned = Number(d.total_planned) || 0
+    if (planned <= 0) return 0
+    return Math.round(((Number(d.total_actual) || 0) / planned) * 1000) / 10
+  })
   return {
     tooltip: {
       trigger: 'axis',

@@ -46,15 +46,17 @@ export interface FundStatistics {
   utilization_rate: number
 }
 
-// 年度经费汇总接口
+// 年度经费对比接口
+// 2026-10-14 按真实契约订正（backend/app/api/v1/funds.py
+// `/supported-village/statistics/yearly-comparison` 的实际返回体）：
+// 历史上虚构了 total_military/total_local/utilization_rate/by_type 等字段，
+// 导致经费分析页"利用率趋势"折线图恒为 0（排查报告 H10）。
+// 利用率由前端按 total_actual / total_planned 计算。
 export interface YearlyFundSummary {
   year: number
-  total_military: number
-  total_local: number
-  total_planned: number
   total_actual: number
-  utilization_rate: number
-  by_type: Record<string, FundStatistics>
+  total_planned: number
+  count: number
 }
 
 // 利用率统计接口
