@@ -1,19 +1,52 @@
-"""Audit middleware for logging API requests with user identity."""
+"""Audit middleware for logging API requests with user identity.
+
+性能契约（2026-10-14 系统排查报告 H9 修复，语义变化如实声明）：
+旧实现"每请求一写"——每个非跳过请求结束后独立开 session + INSERT + commit，
+SQLite 单写者模型下与业务事务形成第二个写者竞争，拖慢全站延迟与吞吐、
+使 -wal 持续膨胀、并抬高并发时 database is locked 概率。
+
+新契约——批量缓冲 + 三重刷写：
+1. 请求结束后仅把一条审计记录 O(1) 追加进进程内线程安全缓冲（无任何 I/O）；
+2. 定量刷写：缓冲达到 ``_FLUSH_THRESHOLD``（25 条）时，由触发的那次请求在
+   线程池执行一次批量落库（单 session + add_all + 单次 safe_commit）；
+3. 定时兜底：惰性启动的 daemon 线程每 ``_FLUSH_INTERVAL_SECONDS``（5 秒）
+   把不足阈值的余量刷掉——**低流量下日志最多延迟 5 秒落库**；
+4. 进程退出兜底：``atexit`` 注册最终 flush——**进程崩溃时最多丢失一个未满批**；
+5. 失败不致命：批量落库失败仅记 WARNING 并丢弃该批（访问日志是可丢的
+   观测数据），绝不向请求路径抛异常，绝不影响业务响应。
+
+跳过路径（/health 等）判定逻辑保持不变，仍不记录。
+"""
+import atexit
 import logging
+import threading
 import time
 
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
+
 from app.core.transaction import safe_commit
 
 logger = logging.getLogger(__name__)
+
+# ── 批量落库参数（模块常量，便于测试 patch；刻意不新增 settings 配置项）──
+_FLUSH_THRESHOLD = 25          # 定量刷写：缓冲满 25 条 → 触发请求批量落库一次
+_FLUSH_INTERVAL_SECONDS = 5.0  # 定时兜底：不足阈值时最多 5 秒刷写一次
+
+# ── 进程内共享的待写缓冲（所有访问都在 _buffer_lock 保护内）──
+_buffer: list = []
+_buffer_lock = threading.Lock()
+_flush_stop_event = threading.Event()
+_flusher_thread: "threading.Thread | None" = None
+_flusher_lock = threading.Lock()
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
     """Logs request method, path, status code, duration, and authenticated user.
 
-    同时将每次 HTTP 请求落库到 ``api_access_logs`` 表（独立短 session，
-    不影响请求事务）。落库失败仅写 WARNING 日志，绝不破坏业务请求。
+    审计落库为进程内批量缓冲 + 定量/定时/退出三重刷写（语义变化见模块
+    docstring：低流量下最多延迟 5 秒落库，进程崩溃最多丢一个未满批）。
+    落库失败仅写 WARNING 日志，绝不破坏业务请求。
     """
 
     # 无需审计的路径前缀：健康检查 / 指标 / 静态资源 / API 文档。
@@ -51,17 +84,22 @@ class AuditMiddleware(BaseHTTPMiddleware):
             username or "anonymous",
         )
 
-        # 落库到 api_access_logs（独立 session，失败不破坏请求）。
-        # 必须卸载到线程池：_persist_api_access_log 是同步 DB IO（SessionLocal +
-        # commit），直接在事件循环里调用会阻塞所有并发请求（深审 #7）。
-        await run_in_threadpool(
-            self._persist_api_access_log,
-            request=request,
-            response_status=response.status_code,
-            duration_ms=duration_ms,
-            user_id=user_id_int,
-            username=username,
-        )
+        # O(1) 入缓冲，无 DB I/O、不阻塞事件循环。record 的键与
+        # APIAccessLog 列一一对应，落库时直接 APIAccessLog(**record)。
+        record = {
+            "user_id": user_id_int,
+            "username": username,
+            "endpoint": request.url.path,
+            "method": request.method,
+            "response_status": response.status_code,
+            "response_time_ms": duration_ms,
+            "ip_address": request.client.host if request.client else None,
+            "user_agent": request.headers.get("user-agent"),
+        }
+        if _enqueue_record(record):
+            # 定量刷写：由触发阈值的那次请求在线程池执行一次批量落库。
+            # 同步 DB IO 必须卸载到线程池（深审 #7），不在事件循环里调用。
+            await run_in_threadpool(_flush_pending)
 
         return response
 
@@ -98,33 +136,86 @@ class AuditMiddleware(BaseHTTPMiddleware):
             logger.debug("审计中间件: token 解析失败（可能是未认证请求）: %s", e, exc_info=True)
             return None, None
 
-    @staticmethod
-    def _persist_api_access_log(request, response_status, duration_ms, user_id, username):
-        """将本次请求落库到 api_access_logs，使用独立短 session。"""
+
+def _enqueue_record(record) -> bool:
+    """将审计记录追加进缓冲，返回是否达到定量刷写阈值。
+
+    首次入缓冲时惰性启动定时兜底线程。
+    """
+    with _buffer_lock:
+        _buffer.append(record)
+        reached = len(_buffer) >= _FLUSH_THRESHOLD
+    _ensure_flusher_started()
+    return reached
+
+
+def _ensure_flusher_started():
+    """惰性启动定时兜底 daemon 线程（进程内仅启动一次）。"""
+    global _flusher_thread
+    with _flusher_lock:
+        if _flusher_thread is not None and _flusher_thread.is_alive():
+            return
+        _flush_stop_event.clear()
+        _flusher_thread = threading.Thread(
+            target=_flusher_loop, name="audit-log-flusher", daemon=True
+        )
+        _flusher_thread.start()
+
+
+def _flusher_loop():
+    """定时兜底：每 _FLUSH_INTERVAL_SECONDS 把不足阈值的余量刷掉。"""
+    while not _flush_stop_event.wait(_FLUSH_INTERVAL_SECONDS):
+        _flush_pending()
+
+
+def _drain_buffer():
+    """线程安全取走当前缓冲全部记录；空缓冲返回 []。"""
+    with _buffer_lock:
+        if not _buffer:
+            return []
+        batch = _buffer[:]
+        _buffer.clear()
+        return batch
+
+
+def _flush_pending():
+    """刷写当前缓冲（缓冲为空是 no-op）；失败不外抛（见 _persist_batch）。"""
+    batch = _drain_buffer()
+    if batch:
+        _persist_batch(batch)
+
+
+def _persist_batch(records):
+    """将一批审计记录落库：单 session + add_all + 单次 safe_commit。
+
+    落库失败仅记 WARNING 并丢弃该批——访问日志是可丢的观测数据，
+    绝不能因它让业务请求失败或让兜底线程崩溃。
+    """
+    if not records:
+        return
+    try:
+        from app.core.database import SessionLocal
+        from app.models.audit import APIAccessLog
+
+        db = SessionLocal()
         try:
-            from app.core.database import SessionLocal
-            from app.models.audit import APIAccessLog
+            db.add_all([APIAccessLog(**record) for record in records])
+            safe_commit(db)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(
+            "api_access_logs 批量落库失败，丢弃 %d 条审计记录: %s",
+            len(records),
+            e,
+            exc_info=True,
+        )
 
-            client_ip = request.client.host if request.client else None
-            user_agent = request.headers.get("user-agent")
 
-            db = SessionLocal()
-            try:
-                db.add(
-                    APIAccessLog(
-                        user_id=user_id,
-                        username=username,
-                        endpoint=request.url.path,
-                        method=request.method,
-                        response_status=response_status,
-                        response_time_ms=duration_ms,
-                        ip_address=client_ip,
-                        user_agent=user_agent,
-                    )
-                )
-                safe_commit(db)
-            finally:
-                db.close()
-        except Exception as e:
-            # 审计落库失败绝不能破坏业务请求，只记录 WARNING
-            logger.warning("api_access_logs 落库失败: %s", e, exc_info=True)
+def _final_flush():
+    """进程退出兜底（atexit）：停止定时线程并尽力刷掉残余缓冲。"""
+    _flush_stop_event.set()
+    _flush_pending()
+
+
+atexit.register(_final_flush)

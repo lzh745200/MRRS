@@ -20,6 +20,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
 
+from app.core import audit_middleware as am
 from app.core.audit_middleware import AuditMiddleware
 from app.core.money import MoneyField, _quantize_4
 from app.core.response import error_response, success_response
@@ -129,16 +130,39 @@ class TestErrorHandlerNoSilentDegrade:
         assert NotFoundError is not Exception
 
 
+def _stop_flusher_and_clear():
+    """H9 批量化改约：隔离 audit_middleware 模块级缓冲/兜底线程。"""
+    am._flush_stop_event.set()
+    t = am._flusher_thread
+    if t is not None and t is not threading.current_thread() and t.is_alive():
+        t.join(timeout=2)
+    am._flusher_thread = None
+    with am._buffer_lock:
+        am._buffer.clear()
+    am._flush_stop_event.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_audit_state():
+    _stop_flusher_and_clear()
+    yield
+    _stop_flusher_and_clear()
+
+
 class TestAuditMiddlewareOffloadsDbWrite:
-    """part-B #7：同步 DB 落库必须卸载到线程池，不阻塞事件循环。"""
+    """part-B #7：同步 DB 落库必须卸载到线程池，不阻塞事件循环。
+
+    2026-10-14 H9 批量化改约：落库由"每请求一写"改为批量缓冲刷写，
+    本用例锁定"定量刷写在线程池执行"的新契约（DB 写仍不在事件循环线程）。
+    """
 
     @pytest.mark.asyncio
     async def test_persist_runs_on_worker_thread(self):
         seen = {}
 
-        def _record(**kwargs):
+        def _record(records):
             seen["thread"] = threading.current_thread().name
-            seen["path"] = kwargs["request"].url.path
+            seen["path"] = records[0]["endpoint"]
 
         request = SimpleNamespace(
             url=SimpleNamespace(path="/api/v1/funds"),
@@ -147,8 +171,9 @@ class TestAuditMiddlewareOffloadsDbWrite:
             client=SimpleNamespace(host="127.0.0.1"),
         )
         call_next = mock.AsyncMock(return_value=SimpleNamespace(status_code=200))
-        with mock.patch.object(AuditMiddleware, "_persist_api_access_log", mock.MagicMock(side_effect=_record)):
-            response = await AuditMiddleware(app=None).dispatch(request, call_next)
+        with mock.patch.object(am, "_FLUSH_THRESHOLD", 1):
+            with mock.patch.object(am, "_persist_batch", side_effect=_record):
+                response = await AuditMiddleware(app=None).dispatch(request, call_next)
 
         assert response.status_code == 200
         assert seen["path"] == "/api/v1/funds"
