@@ -69,18 +69,31 @@ npx electron-builder --win --x64    # 64 位安装包（主力）
 目标机器无需预装任何 VC++ 运行库。二进制不入库（`.gitignore: resources/vcredist/`），
 URL/SHA256 常量唯一维护点：`electron-builder-nsis-hook.nsh` 文件头 `!define` 段。
 
-### 数据目录（非安装目录）
+### 数据目录（非安装目录，H11 口径统一 2026-10-14）
 
 ```
-%LOCALAPPDATA%\bumofu-assistance\
-├── data\rural_revitalization.db   (SQLite 数据库)
+%APPDATA%\帮扶管理系统\               (Electron userData，真实生产数据目录)
+├── database\rural_revitalization.db   (SQLite 数据库，Electron 注入 DATABASE_URL)
 ├── logs\app.log
 ├── uploads\
+├── cache\ / exports\
+├── secrets.json / crash.log / window-state.json
 └── ...
+
+%LOCALAPPDATA%\bumofu-assistance\     (仅 frozen 后端无环境变量时的兜底目录，paths.py)
 ```
 
-数据库放在 `%LOCALAPPDATA%` 而非安装目录，避免 Program Files 权限问题。
-卸载时由 NSIS 钩子询问是否删除。
+目录名来源：package.json `productName` = "帮扶管理系统"，Electron 对 `app.name`
+优先取 `productName`（而非 `name` 字段），`app.getPath('userData')` 默认为
+`%APPDATA%\<app.name>`（electron/main.js 无 `setPath('userData', ...)`，仓库中也
+无人设置 `ELECTRON_USER_DATA_PATH`）。数据放在用户目录而非安装目录，避免
+Program Files 权限问题。
+
+卸载时由 NSIS 钩子询问是否删除：安装期把真实 userData 路径写入注册表
+（`HKLM\Software\Bumofu\AssistanceManagementSystem` 的 `UserDataPath` 值），
+卸载期读回后删除，注册表值缺失时以字面量兜底；同时清理旧版遗留目录
+`%LOCALAPPDATA%\bumofu-assistance`（旧版 H11 缺陷曾把它误当真实数据目录，
+导致卸载后数据库/密钥残留）。
 
 ## CI/CD
 

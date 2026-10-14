@@ -48,6 +48,17 @@ datas = [
     (os.path.join(backend_dir, '.env.example'), '.'),
 ]
 
+# H12（2026-10-14）：构建元数据由 CI 在打包前经 scripts/generate_build_info.py
+# 写入 app/core/_build_info.json（builder="ci"），build_info.py 以
+# Path(__file__).with_name("_build_info.json") 读取。collect_submodules('app')
+# 只收 .py，JSON 不进 PYZ，必须在此显式收录，否则冻结产物永远走 dev fallback
+# （git_hash="dev"、builder="dev"），/health/full 构建指纹与分发溯源失效。
+# 条件收录（与下方 prophet 同模式）：本地开发/未生成该文件时跳过，不报错。
+# spec 在 backend/ 目录上下文执行，backend_dir 即 backend 根（见上方路径定义）。
+_build_info_path = os.path.join(backend_dir, 'app', 'core', '_build_info.json')
+if os.path.exists(_build_info_path):
+    datas.append((_build_info_path, os.path.join('app', 'core')))
+
 # 自动收集 prophet 包数据（如果存在；x86/ARM64 构建时可能未安装，自动跳过）。
 # prophet 仍为可选依赖（trend_prediction_service 函数级延迟导入，缺失时降级），
 # 其数据文件无法由 Analysis 自动发现，故按存在性条件收集。

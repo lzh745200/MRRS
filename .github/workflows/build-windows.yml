@@ -167,6 +167,14 @@ jobs:
         shell: bash
         run: python scripts/verify_package_no_tests.py --backend-dir backend/dist/assistance-backend --frontend-dir frontend/dist
 
+      # 8b. 构建指纹门禁（H12，2026-10-14）：onedir 产物必须包含 CI 生成的
+      #     app/core/_build_info.json（builder=ci），否则冻结后端 /health/full
+      #     永远上报 dev 指纹，分发溯源失效。脚本输出全 ASCII（en-US 运行器
+      #     cp1252 stdout 兜底，见 job 级 PYTHONUTF8 注释）。
+      - name: Verify build info in package
+        shell: bash
+        run: python scripts/verify_build_info.py --backend-dir backend/dist/assistance-backend
+
       # 8.5 后端 exe 签名（W6-T1，可选）：仓库 secrets 配置 CSC_LINK / CSC_KEY_PASSWORD
       # 后自动启用；未配置则显式 WARNING 跳过（不影响构建）。第 10 步 electron-builder
       # 会用同一对密钥自动签名安装包与卸载器。接入与验证方法见

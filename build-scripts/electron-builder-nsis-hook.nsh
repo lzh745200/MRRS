@@ -8,7 +8,9 @@
 ;      PyInstaller 自动捆绑 vcruntime140.dll 等核心 DLL）
 ;   3. 创建桌面快捷方式（使用圆形图标）
 ;   4. 卸载前终止运行进程（避免卸载时文件占用导致失败）
-;   5. 卸载时询问是否删除 %LOCALAPPDATA%\bumofu-assistance\ 用户数据目录
+;   5. 卸载时询问是否删除 Electron userData 用户数据目录
+;      （%APPDATA%\帮扶管理系统，H11，2026-10-14：安装期经注册表记录、
+;      卸载期读回删除，并以字面量兜底；详见 customUnInstall 段注释）
 ;   6. 卸载时清理桌面快捷方式
 ;
 ; NSIS 字符串转义铁律（v1.11.0 安装失败复盘，2026-08-30）：
@@ -50,6 +52,17 @@
 ; 安装钩子：终止旧进程 + VC++ 校验安装 + 创建桌面快捷方式
 ; ----------------------------------------------------------------------------
 !macro customInstall
+  ; ─── 记录 Electron userData 目录（H11，2026-10-14）───
+  ; electron/main.js getUserDataPath() 打包态返回 app.getPath('userData')，
+  ; 全仓库无 setPath('userData', ...)、无任何地方设置 ELECTRON_USER_DATA_PATH
+  ; → 取 Electron 默认值 %APPDATA%\<app.name>，且 Electron 对 app.name 优先取
+  ; package.json 的 productName（"帮扶管理系统"）而非 name → 真实 userData 为
+  ; %APPDATA%\帮扶管理系统。此处安装期把该路径写入注册表作为单一事实源，
+  ; 卸载段读回后删除，避免卸载器自行拼路径、以及未来 productName 变更时
+  ; 安装/卸载两侧口径漂移。
+  ; perMachine=true（package.json build.nsis）→ 卸载器本就以管理员运行，HKLM 可用。
+  WriteRegStr HKLM "Software\Bumofu\AssistanceManagementSystem" "UserDataPath" "$APPDATA\\帮扶管理系统"
+
   ; 安装前终止可能正在运行的旧进程（升级场景）
   ; taskkill 在进程不存在时返回非零退出码，Pop 丢弃即可，不阻断安装
   nsExec::Exec 'taskkill /F /IM "帮扶管理系统.exe" /IM "assistance-backend.exe"'
@@ -152,12 +165,35 @@
     DetailPrint "已删除桌面快捷方式"
   skip_del_desktop:
 
-  ; 询问用户是否删除用户数据目录（含 SQLite 数据库、上传文件、日志等）
-  ; deleteAppDataOnUninstall=false（package.json）保留 userData 小文件，
-  ; 此处单独询问大文件数据目录 %LOCALAPPDATA%\bumofu-assistance\
-  ; /SD IDNO + MB_DEFBUTTON2（W6-T10）：静默卸载（企业批量部署）默认保留用户数据
-  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "是否同时删除用户数据（包含数据库）?$\n$\n位置: $LOCALAPPDATA\\bumofu-assistance\\" /SD IDNO IDNO keep_user_data
+  ; 询问用户是否删除用户数据目录（含 SQLite 数据库、上传文件、密钥、日志等）
+  ; H11（2026-10-14）：旧版删除目标 $LOCALAPPDATA\bumofu-assistance 与真实
+  ; 数据目录不一致，导致卸载后数据库/上传/密钥全部残留。生产数据实际全部
+  ; 位于 Electron userData（electron/main.js 将 DATABASE_URL/LOG_FILE/
+  ; UPLOAD_DIR/CACHE_DIR/EXPORT_DIR 与 secrets.json/crash.log 均放在
+  ; getUserDataPath() 下），即 %APPDATA%\帮扶管理系统。
+  ; 优先读安装段写入的注册表值（单一事实源，见 customInstall 段注释）；
+  ; 注册表值缺失（异常安装/手工清理）时回退到字面量。
+  ; deleteAppDataOnUninstall=false（package.json）保留 userData 小文件的
+  ; 语义由本询问承接；/SD IDNO + MB_DEFBUTTON2（W6-T10）：静默卸载
+  ; （企业批量部署）默认保留用户数据
+  ReadRegStr $R0 HKLM "Software\Bumofu\AssistanceManagementSystem" "UserDataPath"
+  StrCmp $R0 "" uninst_user_data_fallback uninst_user_data_registry
+  uninst_user_data_registry:
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "是否同时删除用户数据（包含数据库）?$\n$\n位置: $R0" /SD IDNO IDNO keep_user_data
+      RMDir /r /REBOOTOK "$R0"
+      DetailPrint "已删除用户数据目录: $R0"
+      Goto uninst_legacy_cleanup
+  uninst_user_data_fallback:
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "是否同时删除用户数据（包含数据库）?$\n$\n位置: $APPDATA\\帮扶管理系统\\" /SD IDNO IDNO keep_user_data
+      RMDir /r /REBOOTOK "$APPDATA\\帮扶管理系统"
+      DetailPrint "已删除用户数据目录: $APPDATA\\帮扶管理系统"
+  uninst_legacy_cleanup:
+    ; 用户已同意删除用户数据：顺带清理旧版遗留目录。该目录是 frozen 后端
+    ; 在无 Electron 注入环境变量时的兜底数据目录（backend/app/utils/paths.py
+    ; get_app_data_dir），可能残留旧版数据库副本（敏感数据），一并删除。
     RMDir /r /REBOOTOK "$LOCALAPPDATA\\bumofu-assistance"
-    DetailPrint "已删除用户数据目录: $LOCALAPPDATA\\bumofu-assistance"
+    DetailPrint "已清理遗留兜底数据目录: $LOCALAPPDATA\\bumofu-assistance"
   keep_user_data:
+  ; 清理本钩子自有注册表键（不动 electron-builder 的卸载信息键）
+  DeleteRegKey HKLM "Software\Bumofu\AssistanceManagementSystem"
 !macroend

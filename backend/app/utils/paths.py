@@ -1,9 +1,14 @@
 """
 应用路径工具模块
 
-解决不同平台的数据目录权限问题：
+解决不同平台的数据目录权限问题（H11 口径统一，2026-10-14）：
 - 开发环境：使用项目目录（./data, ./backups, ./cache）
-- Windows 生产环境：使用用户数据目录（%APPDATA%/bumofu-assistance/）
+- Windows 桌面端打包运行时：Electron 注入 DATABASE_URL/UPLOAD_DIR 等环境变量，
+  全部数据位于 Electron userData = %APPDATA%\\帮扶管理系统（目录名来自
+  package.json 的 productName，Electron 对 app.name 优先取 productName；
+  见 electron/main.js getUserDataPath 与 build-scripts NSIS 钩子 H11 注释）。
+  本模块在 frozen 且无环境变量时的兜底目录为 %LOCALAPPDATA%\\bumofu-assistance
+  （见 get_app_data_dir），桌面端正常不落到该目录，卸载时由 NSIS 钩子一并清理。
 - Linux 生产环境（麒麟V10 ARM64）：使用家目录隐藏文件夹（~/.bumofu/）
 """
 
