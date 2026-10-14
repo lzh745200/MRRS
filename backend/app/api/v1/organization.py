@@ -57,6 +57,31 @@ def _coerce_org_enums(org_data: dict) -> None:
             ) from None
 
 
+def _assert_org_write_scope(
+    db: Session,
+    current_user,
+    org_ids: List[int],
+    *,
+    action: str,
+) -> None:
+    """R27（2026-10-14）：组织写端点跨组织越权守卫。
+
+    写端点此前只有内联角色判定（admin/super_admin），不校验目标组织是否在
+    调用者组织子树内 —— 部门级管理员（role=admin, organization_id=2）可以对
+    其它分支的组织改名/软删/移动/排序。这里统一接入
+    core.data_permission.assert_org_reachable（与 org_module_policy /
+    control_package 写端点同口径）：超管直接放行；非超管要求目标组织在自身
+    组织子树内，否则 403（"无权对该组织{action}"）。
+
+    独立成函数：本模块多个端点的 C901 复杂度已贴近上限（16），新判定不得
+    内联进现有大函数。
+    """
+    from app.core.data_permission import assert_org_reachable
+
+    for org_id in org_ids:
+        assert_org_reachable(db, current_user, org_id, action=action)
+
+
 def _invalidate_dashboard_cache_safe() -> None:
     """组织写操作后失效工作台统计缓存，保证删除/新增/停用后总数立即更新。"""
     try:
@@ -656,6 +681,10 @@ async def create_organization(
         parent = db.query(Organization).filter(Organization.id == org_data["parent_id"]).first()
         if not parent:
             raise HTTPException(status_code=400, detail="上级组织不存在")
+        # R27（2026-10-14）：跨组织越权守卫 —— 部门级管理员只能在自身组织
+        # 子树内创建组织（OrganizationCreate 无 organization_id 字段，树归属
+        # 完全由 parent_id 决定，校验父级即可）。
+        _assert_org_write_scope(db, current_user, [org_data["parent_id"]], action="创建组织")
 
     if not org_data.get("level"):
         depth = len([seg for seg in str(parent.path or "").split("/") if seg]) if parent else 0
@@ -733,6 +762,9 @@ async def update_organization(
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
+
+    # R27（2026-10-14）：跨组织越权守卫 —— 目标组织必须在调用者子树内
+    _assert_org_write_scope(db, current_user, [org_id], action="修改组织")
 
     # 检查编码是否重复
     if data.code:
@@ -825,6 +857,10 @@ async def delete_organization(
 
     logger.info(f"找到组织: id={org.id}, name={org.name}")
 
+    # R27（2026-10-14）：跨组织越权守卫 —— 目标组织必须在调用者子树内，
+    # 部门级管理员不得软删其它分支的组织节点
+    _assert_org_write_scope(db, current_user, [org_id], action="删除组织")
+
     # 检查是否有激活的子组织（软删除的子组织不阻止父级删除）
     children = db.query(Organization).filter(
         Organization.parent_id == org_id,
@@ -911,6 +947,9 @@ async def move_organization(
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
 
+    # R27（2026-10-14）：跨组织越权守卫 —— 被移动的组织必须在调用者子树内
+    _assert_org_write_scope(db, current_user, [org_id], action="移动组织")
+
     new_parent_id = body.new_parent_id
 
     # 检查新父级是否存在
@@ -918,6 +957,9 @@ async def move_organization(
         new_parent = db.query(Organization).filter(Organization.id == new_parent_id).first()
         if not new_parent:
             raise HTTPException(status_code=404, detail="目标父组织不存在")
+
+        # R27：新父级也必须在调用者子树内（把子组织挂到别的分支下同样越权）
+        _assert_org_write_scope(db, current_user, [new_parent_id], action="移动组织")
 
         # 检查是否会形成循环（沿父链逐级查询，避免全表加载）
         visited: set = set()
@@ -958,6 +1000,12 @@ async def batch_update_sort_orders(
         "super_admin",
     ) and not is_superuser(current_user):
         raise HTTPException(status_code=403, detail="仅管理员可执行此操作")
+
+    # R27（2026-10-14）：跨组织越权守卫 —— 所有目标组织都必须在调用者子树内，
+    # 且在任何变更发生前统一校验（不落部分更新）
+    _assert_org_write_scope(
+        db, current_user, [item.id for item in request.items], action="排序组织"
+    )
 
     try:
         service = OrganizationService(db)
