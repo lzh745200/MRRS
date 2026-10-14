@@ -15,7 +15,7 @@ import os
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.data_permission import apply_data_scope
+from app.core.data_permission import apply_data_scope, assert_org_reachable
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.fund import Fund
@@ -143,6 +143,26 @@ def _get_transaction_or_404(db: Session, transaction_id: int, current_user) -> F
     return tx
 
 
+def _get_scoped_record_or_404(
+    db: Session, model, record_id: int, current_user, label: str
+):
+    """写路径专用：按数据域取单条关联记录；不可见即 404。
+
+    系统排查 2026-10-14 H3：`create_transaction` 原先按**裸 id** 取 FundBudget / Fund
+    （`db.query(Fund).filter(Fund.id == data.fund_id)`，取到才更新、取不到静默跳过），
+    任意管理角色可传入**他组织**的 budget_id / fund_id，直接改写对方
+    `executed_amount` / `used_amount` / `remaining_amount`（跨组织资金篡改）。
+    与 `_get_budget_or_404` 同口径：按 `scoped_filter` 收敛，不可见即 404
+    （不泄露记录是否存在）。
+    """
+    record = scoped_filter(
+        db.query(model).filter(model.id == record_id), model, current_user
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail=f"{label}不存在")
+    return record
+
+
 def _budget_to_response(budget) -> dict:
     """预算响应体：备注只出用户文本，附件单独出列表。"""
     data = budget.to_dict()
@@ -195,6 +215,11 @@ async def create_budget(
 ):
     """创建预算（仅管理角色）"""
     _require_manager(current_user)
+    # 系统排查 2026-10-14 H3：organization_id 来自请求体，原先不校验可达性，
+    # 部门级管理角色可把预算挂到**任意组织**名下。与 org_module_policy /
+    # control_package 的写端点同口径，用 assert_org_reachable 收敛。
+    if data.organization_id is not None:
+        assert_org_reachable(db, current_user, data.organization_id, action="创建预算")
     payload = data.model_dump()
     # used_amount（前端字段）映射到 executed_amount
     # pop 带默认值：等价兼容「键缺失」与「键存在但为 None」两种形态
@@ -370,6 +395,19 @@ async def create_transaction(
     """创建经费使用明细（仅管理角色）"""
     _require_manager(current_user)
     tx_amount = quantize_money(data.amount)
+    # 系统排查 2026-10-14 H3：先做数据域校验与关联加载，**再**产生任何会话变更。
+    # 旧实现按裸 id 取、取不到静默跳过（且 db.add 已先执行），既让调用方误以为
+    # 核销已入账，也让传入他组织 budget_id/fund_id 改写对方金额成为可能。
+    scoped_budget = (
+        _get_scoped_record_or_404(db, FundBudget, data.budget_id, current_user, "预算")
+        if data.budget_id
+        else None
+    )
+    scoped_fund = (
+        _get_scoped_record_or_404(db, Fund, data.fund_id, current_user, "经费记录")
+        if data.fund_id
+        else None
+    )
     payload = data.model_dump()
     payload["amount"] = tx_amount
     transaction = FundTransaction(
@@ -379,21 +417,17 @@ async def create_transaction(
     db.add(transaction)
 
     # 如果关联了预算，自动更新已执行金额；执行率达 100% 后禁止再写入（ADR-0009 三级预警）
-    if data.budget_id:
-        budget = db.query(FundBudget).filter(FundBudget.id == data.budget_id).first()
-        if budget:
-            _apply_budget_execution(db, budget, float(tx_amount))
+    if scoped_budget is not None:
+        _apply_budget_execution(db, scoped_budget, float(tx_amount))
 
     # 如果关联了 Fund，自动更新 Fund.used_amount 和 remaining_amount
-    if data.fund_id:
-        fund = db.query(Fund).filter(Fund.id == data.fund_id).first()
-        if fund:
-            fund.used_amount = quantize_money(
-                float(fund.used_amount or 0) + float(tx_amount)
-            )
-            fund.remaining_amount = quantize_money(
-                float(fund.allocated_amount or 0) - float(fund.used_amount or 0)
-            )
+    if scoped_fund is not None:
+        scoped_fund.used_amount = quantize_money(
+            float(scoped_fund.used_amount or 0) + float(tx_amount)
+        )
+        scoped_fund.remaining_amount = quantize_money(
+            float(scoped_fund.allocated_amount or 0) - float(scoped_fund.used_amount or 0)
+        )
 
     safe_commit(db)
     db.refresh(transaction)

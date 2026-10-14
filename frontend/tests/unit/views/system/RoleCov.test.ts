@@ -33,7 +33,8 @@ vi.mock('@/api/request', () => ({
   post: mockPost,
   put: mockPut,
   del: mockDel,
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/composables/useDesensitize', () => ({
   useDesensitize: () => ({ ds: dsMock }),
@@ -266,8 +267,7 @@ describe('挂载与数据加载', () => {
     expect(vm.tableData).toEqual([])
     expect(vm.pagination.total).toBe(0)
     const userCountCalls = mockGet.mock.calls.filter(
-      ([url]) =>
-        typeof url === 'string' && url.startsWith('/rbac/roles/') && url.endsWith('/users')
+      ([url]) => typeof url === 'string' && url.startsWith('/rbac/roles/') && url.endsWith('/users')
     )
     expect(userCountCalls).toHaveLength(0)
   })
@@ -355,13 +355,62 @@ describe('搜索 / 重置 / 分页', () => {
     expect(vm.searchForm.status).toBe('active')
   })
 
-  it('点击查询 → 重新加载角色', async () => {
+  it('点击查询 → 按条件本地过滤并回到第 1 页（接口无服务端过滤参数）', async () => {
     const wrapper = mountComp()
     await flushPromises()
+    const vm = wrapper.vm as any
     mockGet.mockClear()
+
+    vm.tableData = [
+      { id: '1', name: '系统管理员', code: 'ADMIN', status: 'active' },
+      { id: '2', name: '只读用户', code: 'VIEWER', status: 'inactive' },
+    ]
+    vm.pagination.page = 3
+    await nextTick()
+
+    // 按名称过滤
+    vm.searchForm.name = '管理员'
     await findButtons(wrapper, '查询')[0].trigger('click')
+    expect(vm.filteredRoles.map((r: any) => r.id)).toEqual(['1'])
+    expect(vm.pagination.page).toBe(1) // 查询后回到第 1 页
+
+    // 按编码过滤（大小写不敏感）
+    vm.searchForm.name = ''
+    vm.searchForm.code = 'view'
+    await nextTick()
+    expect(vm.filteredRoles.map((r: any) => r.id)).toEqual(['2'])
+
+    // 按状态过滤
+    vm.searchForm.code = ''
+    vm.searchForm.status = 'inactive'
+    await nextTick()
+    expect(vm.filteredRoles.map((r: any) => r.id)).toEqual(['2'])
+
+    // 条件不匹配 → 空结果
+    vm.searchForm.name = '不存在的角色'
+    await nextTick()
+    expect(vm.filteredRoles).toEqual([])
+
+    // 本地过滤不产生任何请求
+    expect(mockGet).not.toHaveBeenCalled()
+  })
+
+  it('分页切片：size 变化时按 filteredRoles 切页', async () => {
+    const wrapper = mountComp()
     await flushPromises()
-    expect(mockGet).toHaveBeenCalledWith('/rbac/roles')
+    const vm = wrapper.vm as any
+    vm.tableData = Array.from({ length: 5 }, (_, i) => ({
+      id: String(i + 1),
+      name: `角色${i + 1}`,
+      code: `R${i + 1}`,
+      status: 'active',
+    }))
+    vm.pagination.size = 2
+    await nextTick()
+    expect(vm.pagedRoles.map((r: any) => r.id)).toEqual(['1', '2'])
+    vm.pagination.page = 3
+    await nextTick()
+    expect(vm.pagedRoles.map((r: any) => r.id)).toEqual(['5'])
   })
 
   it('点击重置 → 清空条件并重新加载', async () => {
@@ -371,11 +420,14 @@ describe('搜索 / 重置 / 分页', () => {
     vm.searchForm.name = 'x'
     vm.searchForm.code = 'y'
     vm.searchForm.status = 'active'
+    vm.pagination.page = 2
     mockGet.mockClear()
     await findButtons(wrapper, '重置')[0].trigger('click')
     await flushPromises()
     expect(vm.searchForm).toEqual({ name: '', code: '', status: '' })
-    expect(mockGet).toHaveBeenCalledWith('/rbac/roles')
+    expect(vm.pagination.page).toBe(1)
+    // 过滤是本地行为：清空条件即恢复全量显示，无需再请求一次
+    expect(vm.filteredRoles.length).toBe(vm.tableData.length)
   })
 
   it('分页 v-model:current-page / page-size 内联处理器', async () => {
@@ -488,6 +540,7 @@ describe('新增 / 编辑 / 取消 / 提交', () => {
     const vm = wrapper.vm as any
     vm.handleAdd()
     vm.formData.name = '数据专员'
+    vm.formData.code = 'DATA_SPECIALIST'
     vm.formData.description = '负责数据录入'
     // Vue 重渲染会把模板 ref 重同步为 stub 实例，调用提交前必须重新赋值
     vm.formRef = { validate: (cb: any) => cb(true) }
@@ -496,6 +549,8 @@ describe('新增 / 编辑 / 取消 / 提交', () => {
     await flushPromises()
     expect(mockPost).toHaveBeenCalledWith('/rbac/roles', {
       name: '数据专员',
+      // 编码由后端权威存储，前端提交当前表单值（2026-10-14 起）
+      code: 'DATA_SPECIALIST',
       description: '负责数据录入',
       permissions: [],
       is_system: false,
@@ -511,11 +566,13 @@ describe('新增 / 编辑 / 取消 / 提交', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.handleEdit({ ...rowA })
+    vm.formData.code = 'SYSTEM_ADMIN'
     vm.formRef = { validate: (cb: any) => cb(true) }
     await vm.handleSubmit()
     await flushPromises()
     expect(mockPut).toHaveBeenCalledWith('/rbac/roles/r1', {
       name: '系统管理员',
+      code: 'SYSTEM_ADMIN',
       description: '最高权限',
       is_active: true,
     })

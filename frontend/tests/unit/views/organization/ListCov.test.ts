@@ -21,6 +21,8 @@ const {
   mockDel,
   mockApiRequest,
   mockBatchSort,
+  mockActivateOrg,
+  mockDeactivateOrg,
   logError,
   mockPushSafe,
   sortableCreate,
@@ -36,6 +38,8 @@ const {
     mockDel: vi.fn(),
     mockApiRequest: vi.fn(),
     mockBatchSort: vi.fn(),
+    mockActivateOrg: vi.fn(),
+    mockDeactivateOrg: vi.fn(),
     logError: vi.fn(),
     mockPushSafe: vi.fn(),
     sortableCreate: vi.fn(),
@@ -53,10 +57,13 @@ vi.mock('@/api/request', () => ({
   put: mockPut,
   del: mockDel,
   apiRequest: mockApiRequest,
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/api/organization', () => ({
   batchUpdateSortOrders: mockBatchSort,
+  activateOrganization: mockActivateOrg,
+  deactivateOrganization: mockDeactivateOrg,
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -199,7 +206,6 @@ beforeEach(() => {
   mockApiRequest.mockImplementation(defaultApiImpl)
   mockPost.mockResolvedValue({ data: {} })
   mockPut.mockResolvedValue({ data: {} })
-  mockDel.mockResolvedValue({ data: { message: '组织已删除' } })
   confirmMock.mockResolvedValue(undefined)
   promptMock.mockResolvedValue({ value: 'pass123' })
   mockBatchSort.mockResolvedValue({ data: {} })
@@ -230,7 +236,7 @@ describe('挂载与数据加载', () => {
       expect.objectContaining({
         method: 'GET',
         url: '/organizations',
-        params: expect.objectContaining({ page: 1, page_size: 20, is_active: true }),
+        params: expect.objectContaining({ page: 1, page_size: 20, is_active: undefined }),
       })
     )
     // search/org_type 空 → || undefined 兜底侧
@@ -420,7 +426,11 @@ describe('表格列插槽与行交互', () => {
     await findBtn(wrapper, '删除').trigger('click')
     await flushPromises()
     expect(promptMock).toHaveBeenCalled()
-    expect(mockDel).toHaveBeenCalledWith('/organizations/1?confirm_password=pass123')
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      method: 'DELETE',
+      url: '/organizations/1',
+      headers: { 'X-Confirm-Password': 'pass123' },
+    })
   })
 
   it('删除时密码前后空白会被 trim 后传递', async () => {
@@ -429,7 +439,11 @@ describe('表格列插槽与行交互', () => {
     await flushPromises()
     await findBtn(wrapper, '删除').trigger('click')
     await flushPromises()
-    expect(mockDel).toHaveBeenCalledWith('/organizations/1?confirm_password=pass123')
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      method: 'DELETE',
+      url: '/organizations/1',
+      headers: { 'X-Confirm-Password': 'pass123' },
+    })
   })
 
   it('非 admin：无导出/新增按钮，操作列仅详情，initSortable 早退（!isAdmin 侧）', async () => {
@@ -653,12 +667,12 @@ describe('删除组织全分支', () => {
     const vm = wrapper.vm as any
 
     // del() 已自动解包（返回 res.data），message 在顶层
-    mockDel.mockResolvedValueOnce({ message: '已停用' })
+    mockApiRequest.mockResolvedValueOnce({ message: '已停用' })
     await vm.handleDelete(orgRow1)
     expect(ElMessage.success).toHaveBeenCalledWith('已停用')
     expect(vm.currentPage).toBe(1)
 
-    mockDel.mockResolvedValueOnce({})
+    mockApiRequest.mockResolvedValueOnce({})
     await vm.handleDelete(orgRow2)
     expect(ElMessage.success).toHaveBeenCalledWith('组织已删除')
   })
@@ -668,15 +682,15 @@ describe('删除组织全分支', () => {
     await flushPromises()
     const vm = wrapper.vm as any
 
-    mockDel.mockRejectedValueOnce({ response: { data: { detail: '存在子组织' } } })
+    mockApiRequest.mockRejectedValueOnce({ response: { data: { detail: '存在子组织' } } })
     await vm.handleDelete(orgRow1)
     expect(ElMessage.error).toHaveBeenCalledWith('存在子组织')
 
-    mockDel.mockRejectedValueOnce(new Error('网络错误'))
+    mockApiRequest.mockRejectedValueOnce(new Error('网络错误'))
     await vm.handleDelete(orgRow1)
     expect(ElMessage.error).toHaveBeenCalledWith('网络错误')
 
-    mockDel.mockRejectedValueOnce({})
+    mockApiRequest.mockRejectedValueOnce({})
     await vm.handleDelete(orgRow1)
     expect(ElMessage.error).toHaveBeenCalledWith('删除失败')
   })
@@ -696,16 +710,24 @@ describe('删除组织全分支', () => {
     expect(validator('')).toBe('请输入密码') // v 空串 → && 短路
     expect(validator('   ')).toBe('请输入密码') // v 有值但 trim 后为空
     expect(validator('pass')).toBe(true) // 合法输入
-    expect(mockDel).toHaveBeenCalledWith('/organizations/1?confirm_password=pass123')
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      method: 'DELETE',
+      url: '/organizations/1',
+      headers: { 'X-Confirm-Password': 'pass123' },
+    })
   })
 
-  it('删除时密码 value 为 null → value?.trim() ?? \'\' 兜底空串', async () => {
+  it("删除时密码 value 为 null → value?.trim() ?? '' 兜底空串", async () => {
     promptMock.mockResolvedValueOnce({ value: null })
     const wrapper = mountComp()
     await flushPromises()
     await findBtn(wrapper, '删除').trigger('click')
     await flushPromises()
-    expect(mockDel).toHaveBeenCalledWith('/organizations/1?confirm_password=')
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      method: 'DELETE',
+      url: '/organizations/1',
+      headers: { 'X-Confirm-Password': '' },
+    })
   })
 })
 
@@ -841,7 +863,38 @@ describe('formatLevel', () => {
     expect(vm.formatLevel(null)).toBe('未设置')
     expect(vm.formatLevel(0)).toBe('未设置')
     expect(vm.formatLevel('level_3')).toBe('第3级')
-    expect(vm.formatLevel(5)).toBe('5')
+    // 数字形态（后端建组织时写入的深度）与枚举形态显示统一为"第N级"
+    expect(vm.formatLevel(5)).toBe('第5级')
     expect(vm.formatLevel('abc')).toBe('abc')
+  })
+})
+
+describe('组织启停入口（2026-10-14 新增）', () => {
+  it('停用：调用 deactivateOrganization 并提示；启用：is_active=false 时调 activate', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    await vm.handleToggleActive({ id: 7, name: '甲', is_active: true })
+    expect(mockDeactivateOrg).toHaveBeenCalledWith(7)
+    expect(ElMessage.success).toHaveBeenCalledWith('组织已停用')
+
+    await vm.handleToggleActive({ id: 8, name: '乙', is_active: false })
+    expect(mockActivateOrg).toHaveBeenCalledWith(8)
+    expect(ElMessage.success).toHaveBeenCalledWith('组织已启用')
+  })
+
+  it('失败：透出后端 detail；无 detail 时用通用文案', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    mockDeactivateOrg.mockRejectedValueOnce({ response: { data: { detail: '存在下级组织' } } })
+    await vm.handleToggleActive({ id: 9, name: '丙', is_active: true })
+    expect(ElMessage.error).toHaveBeenCalledWith('存在下级组织')
+
+    mockDeactivateOrg.mockRejectedValueOnce(new Error('boom'))
+    await vm.handleToggleActive({ id: 10, name: '丁', is_active: true })
+    expect(ElMessage.error).toHaveBeenCalledWith('操作失败')
   })
 })

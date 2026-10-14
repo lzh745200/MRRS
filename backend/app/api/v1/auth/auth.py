@@ -274,6 +274,12 @@ async def login(
     access_token = tokens["access_token"]
     refresh_token_str = tokens["refresh_token"]
 
+    # 登记登录会话（2026-10-14）：使"活跃会话列表 / 按会话精确吊销"可用。
+    # 失败只记日志、不阻断登录（见 session_service.record_login_session）。
+    from app.services.session_service import record_login_session
+
+    record_login_session(db, user, tokens, request)
+
     # 确保管理员角色正确：is_superuser=True 时强制使用 super_admin 角色
     user_role = user.role or "user"
     if user.is_superuser and user_role not in ["admin", "super_admin"]:
@@ -443,6 +449,12 @@ async def two_factor_verify_login(
     )
     access_token = tokens["access_token"]
     refresh_token_str = tokens["refresh_token"]
+
+    # 登记登录会话（2026-10-14）：使"活跃会话列表 / 按会话精确吊销"可用。
+    # 失败只记日志、不阻断登录（见 session_service.record_login_session）。
+    from app.services.session_service import record_login_session
+
+    record_login_session(db, user, tokens, request)
 
     # 构建用户信息
     user_role = user.role or "user"
@@ -694,6 +706,11 @@ async def refresh_token(request: Request, token: str = Body(..., embed=True), db
         # 检查账户锁定状态
         _check_account_lockout(user, username, db)
 
+        # 会话跟随令牌轮换：jti 必须在吊销旧令牌之前取出（入黑名单后再解析会失败）；
+        # 会话行的更新在下方新令牌签发后执行，否则"按会话吊销"会吊销到已废弃的旧 jti
+        # （表面成功、实际失效的安全缺口）。
+        old_session_jti = payload.get("jti")
+
         # 吊销旧 token（加入黑名单使其立即失效）
         token_manager.revoke_token(token)
 
@@ -704,6 +721,11 @@ async def refresh_token(request: Request, token: str = Body(..., embed=True), db
         )
         new_access_token = new_tokens["access_token"]
         new_refresh_token = new_tokens["refresh_token"]
+
+        # 把会话指向新 jti（见上方 old_session_jti 说明）
+        from app.services.session_service import update_session_on_refresh
+
+        update_session_on_refresh(db, old_session_jti, new_tokens)
 
         user_info = UserInfo(
             id=user.id,

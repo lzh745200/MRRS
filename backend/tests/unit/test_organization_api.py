@@ -95,6 +95,9 @@ def _make_mock_org(id_, name="测试组织", org_type="department", parent_id=No
     org.code = code or f"ORG{id_:03d}"
     org.org_type = org_type
     org.level = level
+    # path 是组织级数据权限的唯一依据，真实行必有值（根为 /{id}/，子为 {父path}{id}/）。
+    # 移动/改父级后服务端会级联重算它，故替身必须如实提供该属性。
+    org.path = f"/{id_}/" if parent_id is None else f"/{parent_id}/{id_}/"
     org.parent_id = parent_id
     org.is_active = is_active
     org.sort_order = sort_order
@@ -438,7 +441,7 @@ class TestDeleteOrganization:
 
         self._mock_user_password(mock_db, hash_password("pass123"))
         mock_db.query.return_value.first.return_value = None
-        resp = client_admin.delete("/api/v1/organizations/999?confirm_password=pass123")
+        resp = client_admin.delete("/api/v1/organizations/999", headers={"X-Confirm-Password": "pass123"})
         assert resp.status_code == 404
 
     def test_has_children(self, client_admin, mock_db):
@@ -451,7 +454,7 @@ class TestDeleteOrganization:
         children_q.filter.return_value = children_q
         children_q.count.return_value = 2
         mock_db.query.return_value = children_q
-        resp = client_admin.delete("/api/v1/organizations/1?confirm_password=pass123")
+        resp = client_admin.delete("/api/v1/organizations/1", headers={"X-Confirm-Password": "pass123"})
         assert resp.status_code == 400
 
     def test_success(self, client_admin, mock_db):
@@ -464,7 +467,7 @@ class TestDeleteOrganization:
         children_q.filter.return_value = children_q
         children_q.count.return_value = 0
         mock_db.query.return_value = children_q
-        resp = client_admin.delete("/api/v1/organizations/1?confirm_password=pass123")
+        resp = client_admin.delete("/api/v1/organizations/1", headers={"X-Confirm-Password": "pass123"})
         assert resp.status_code == 200
         assert resp.json()["data"]["type"] == "soft_delete"
 
@@ -545,9 +548,13 @@ class TestMoveOrganization:
         q = mock_db.query.return_value
         org = _make_mock_org(1)
         q.first.return_value = org
+        # 移动后会级联重算自身与子孙的 path/level：该组织无子节点
+        q.all.return_value = []
         resp = client_admin.post("/api/v1/organizations/1/move", json={"new_parent_id": None})
         assert resp.status_code == 200
         assert org.parent_id is None
+        # 置为顶级后 path 应收敛为 /{id}/
+        assert org.path == "/1/"
 
 
 # ---------------------------------------------------------------------------
@@ -653,7 +660,9 @@ class TestStatisticsSummary:
         q.group_by.return_value = q
         # total=5, active=3, orgs_with_members=2, total_members=5
         q.scalar.side_effect = [5, 3, 2, 5]
+        # 2026-10-14 数据范围收敛：统计前先查"当前用户可见的组织 id 集合"（admin → 全量）
         q.all.side_effect = [
+            [(1,), (2,), (3,)],  # 可见组织 id
             [("department", 3), (None, 2)],  # 类型分布（含 None → unknown）
             [("level_1", 4), (None, 1)],  # 层级分布（含 None → unknown）
         ]

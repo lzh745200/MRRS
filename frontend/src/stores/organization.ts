@@ -70,10 +70,9 @@ export const useOrganizationStore = defineStore('organization', () => {
   /**
    * 删除组织（后端为逻辑删除）。
    *
-   * 后端契约：`DELETE /organizations/{org_id}?confirm_password=<当前用户密码>`
-   * （organization.py 的 confirm_password 为 Query 参数）。缺少该参数时后端
-   * 恒返回 400「二次确认失败：密码不正确」——原实现不传密码，属必然失败的空转请求。
-   * 这里改为：密码缺失时 fail-fast，存在时按契约以查询参数下发。
+   * 后端契约：`DELETE /organizations/{org_id}`，二次确认密码走**请求头**
+   * `X-Confirm-Password`（2026-10-14 由查询串改为请求头，避免密码进 access log）。
+   * 缺少密码时后端恒返回 400「二次确认失败」——故这里 fail-fast，不发空转请求。
    */
   async function deleteOrganization(id: number, confirmPassword?: string) {
     if (!confirmPassword) {
@@ -82,7 +81,7 @@ export const useOrganizationStore = defineStore('organization', () => {
     const res = await apiRequest<any>({
       method: 'DELETE',
       url: '/organizations/' + id,
-      params: { confirm_password: confirmPassword },
+      headers: { 'X-Confirm-Password': confirmPassword },
     })
     if (res?.code === 200) {
       orgs.value = orgs.value.filter((o: any) => o.id !== id)

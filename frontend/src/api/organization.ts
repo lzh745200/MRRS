@@ -1,4 +1,4 @@
-import { get, post, put, del } from '@/api/request'
+import { get, post, put, apiRequest } from '@/api/request'
 
 export const getOrganizations = (params?: any) => get('/organizations', params)
 export const getOrganization = (id: number) => get('/organizations/' + id)
@@ -8,14 +8,10 @@ export const updateOrganization = (id: number, data: any) => put('/organizations
 /**
  * 删除组织（后端逻辑删除）。
  *
- * 二次确认密码是后端 `DELETE /organizations/{id}` 的 **Query 参数**契约
- * （organization.py: confirm_password: str = Query("")），缺少或为空时后端
- * 恒返回 400「二次确认失败」——因此这里 fail-closed：没有密码直接抛错，
- * 不再发出必然失败的请求。
- *
- * 安全备注（残留风险，需与后端接口方协同）：密码仍在查询串中传输，
- * 会出现在 uvicorn access log 的请求行里。彻底消除需要后端把该参数改为
- * 请求体（Body）字段，属于 organization API 的改动，本次未越界修改。
+ * 二次确认密码自 2026-10-14 起改为 **请求头** `X-Confirm-Password`：
+ * 此前放在 URL 查询串，会原样进 uvicorn access log，明文密码随之落盘。
+ * 缺少或为空时后端恒返回 400「二次确认失败」——因此这里 fail-closed：
+ * 没有密码直接抛错，不再发出必然失败的请求。
  */
 export const deleteOrganization = (id: number, confirmPassword?: string) => {
   if (!Number.isInteger(id) || id <= 0) {
@@ -25,7 +21,11 @@ export const deleteOrganization = (id: number, confirmPassword?: string) => {
   if (!password) {
     return Promise.reject(new Error('删除组织需要二次确认密码'))
   }
-  return del(`/organizations/${id}?confirm_password=${encodeURIComponent(password)}`)
+  return apiRequest({
+    method: 'DELETE',
+    url: `/organizations/${id}`,
+    headers: { 'X-Confirm-Password': password },
+  })
 }
 export const batchUpdateSortOrders = (d: any[]) => post('/organizations/batch-update-sort', d)
 

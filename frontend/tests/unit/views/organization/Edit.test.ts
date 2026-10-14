@@ -66,9 +66,12 @@ vi.mock('@/utils/logger', () => ({
 import Edit from '@/views/organization/Edit.vue'
 
 const orgData = {
+  // 真实响应形态：顶层 `code` 是信封状态码（响应拦截器展平 data 载荷时会跳过
+  // 已存在的键），组织自身的业务 code 只保留在载荷（`data.code`）里。
+  code: 200,
+  data: { code: 'HQ' },
   id: 5,
   name: '总部',
-  code: 'HQ',
   parent_id: 3,
   org_type: 'support_unit',
   is_active: false,
@@ -375,14 +378,16 @@ describe('编辑模式', () => {
     wrapper.unmount()
   })
 
-  it('编辑时 parent_id 为 null → 提交 undefined', async () => {
+  it('编辑时 parent_id 为 null → 显式提交 null（置为顶级）', async () => {
     routeBox.params = { id: '5' }
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.formData.parent_id = null
     await clickBtn(wrapper, '保存')
-    expect(mockUpdateOrganization).toHaveBeenCalledWith(5, expect.objectContaining({ parent_id: undefined }))
+    // 后端 update 走 exclude_unset：传 undefined 等于不提交该字段 → 父级不变。
+    // 只有显式 null 才能把组织置为顶级（对齐列表页对话框的行为）。
+    expect(mockUpdateOrganization).toHaveBeenCalledWith(5, expect.objectContaining({ parent_id: null }))
     wrapper.unmount()
   })
 

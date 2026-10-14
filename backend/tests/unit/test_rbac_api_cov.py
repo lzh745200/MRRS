@@ -267,13 +267,15 @@ class TestRoleCrud:
 
     def test_get_role_users(self, rbac_client):
         _as_user(rbac_client, _user())
-        row = SimpleNamespace(id=1, username="zhang", full_name="张三", role="admin", is_active=True)
+        row = SimpleNamespace(id=1, username="zhang", full_name="张三", email="zhang@example.com", role="admin", is_active=True)
         _use_db(rbac_client, _db_with([_q(all=[row])]))
         resp = rbac_client.get("/api/v1/rbac/roles/r1/users")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 1
         assert data["data"][0]["username"] == "zhang"
+        # email 现随 full_name 一并返回（角色关联用户弹窗的"邮箱"列需要）
+        assert data["data"][0]["email"] == "zhang@example.com"
 
 
 # ==================== 权限分配 ====================

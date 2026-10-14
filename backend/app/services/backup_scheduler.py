@@ -283,6 +283,38 @@ async def todo_reminder_job():
             logger.error("待办提醒失败: %s", e, exc_info=True)
 
 
+async def session_cleanup_job():
+    """回收过期/已吊销的登录会话行（每日 05:15，保留 30 天供审计）。
+
+    user_sessions（2026-10-14 新增）只增不减：过期/已吊销行保留 30 天供审计追溯，
+    超期后回收，防止长期运行的库无限膨胀。
+    """
+    from datetime import timedelta
+
+    with get_db_context() as db:
+        try:
+            from app.models.user_session import UserSession
+            from app.core.transaction import safe_commit
+            from app.utils.time_utils import utcnow
+
+            cutoff = utcnow() - timedelta(days=30)
+            expired = (
+                db.query(UserSession)
+                .filter(UserSession.expires_at.isnot(None), UserSession.expires_at < cutoff)
+                .delete(synchronize_session=False)
+            )
+            revoked = (
+                db.query(UserSession)
+                .filter(UserSession.revoked_at.isnot(None), UserSession.revoked_at < cutoff)
+                .delete(synchronize_session=False)
+            )
+            safe_commit(db)
+            if expired or revoked:
+                logger.info("会话清理：回收过期 %s 条、已吊销 %s 条（保留期 30 天）", expired, revoked)
+        except Exception:
+            logger.error("会话清理作业失败", exc_info=True)
+
+
 async def message_cleanup_job():
     """清理过期站内消息（每日 03:30，保留最近 30 天）"""
     with get_db_context() as db:
@@ -715,6 +747,8 @@ def start_backup_scheduler():
     _schedule_daily(auto_backup_job, 2, 0, "auto_backup")
     _schedule_daily(auto_package_job, 3, 0, "auto_package")
     _schedule_daily(message_cleanup_job, 3, 30, "message_cleanup")
+    # R27：过期/已吊销登录会话回收（user_sessions 只增不减）
+    _schedule_daily(session_cleanup_job, 5, 15, "session_cleanup")
     # R5：过期导出文件 + 残留 .part 回收（此前 expires_at 只用于拒绝下载，无回收）
     _schedule_daily(export_purge_job, 4, 0, "export_purge")
     _schedule_daily(restore_drill_job, 5, 45, "restore_drill")

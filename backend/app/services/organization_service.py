@@ -186,6 +186,77 @@ class OrganizationService:
         remaining = self.db.query(Organization).filter(Organization.path.is_(None)).count()
         return {"repaired": repaired, "remaining": remaining}
 
+    def would_create_cycle(self, org_id: int, new_parent_id: Optional[int]) -> bool:
+        """判断把 ``org_id`` 挂到 ``new_parent_id`` 之下是否会形成环。
+
+        沿 ``new_parent_id`` 的**父链逐级上溯**（不是查 path —— path 在组织被移动后
+        可能尚未刷新，用它做防环判定不可靠）。上溯过程自带 visited 去重：即使库中
+        已因历史缺陷存在环，也不会死循环。
+
+        Args:
+            org_id: 被移动的组织 id
+            new_parent_id: 目标父级 id（None / 0 表示置为顶级，永远合法）
+
+        Returns:
+            True 表示新父级是自身或自身的子孙（必须拒绝）
+        """
+        if not new_parent_id:
+            return False
+        visited: set = set()
+        cursor: Optional[int] = new_parent_id
+        while cursor and cursor not in visited:
+            if cursor == org_id:
+                return True
+            visited.add(cursor)
+            node = self.db.query(Organization).filter(Organization.id == cursor).first()
+            cursor = node.parent_id if node else None
+        return False
+
+    def recompute_subtree_paths(self, root: Organization) -> int:
+        """重算 ``root`` 及其全部子孙的 ``path`` / ``level``（移动或改父级后必须调用）。
+
+        背景：组织级数据权限完全依赖 path 前缀匹配
+        （``Organization.path.like(f"{org.path}%")``）。改父级却不刷新 path，会让
+        「树视图（parent_id）」与「权限视图（path）」长期背离 —— 表现为移动后的
+        组织看不到自己的下级数据、或仍能看到原父级的兄弟数据。
+
+        - 采用广度优先：父级先于子级被处理，子级直接复用父级刚写入的 path，单趟收敛。
+        - 与 ``create_organization`` / ``repair_organization_paths`` 保持同一套口径：
+          ``path = 父.path + 本节点id + "/"``（根为 ``/{id}/``），``level = path 段数``。
+        - visited 去重：库中若已存在环也不会死循环（只跳过重复节点）。
+
+        Returns:
+            被改写的组织条数（0 表示原本就是正确的）
+        """
+        changed = 0
+        visited: set = set()
+        queue: List[Organization] = [root]
+        while queue:
+            node = queue.pop(0)
+            if node.id in visited:
+                continue
+            visited.add(node.id)
+
+            parent = (
+                self.db.query(Organization).filter(Organization.id == node.parent_id).first()
+                if node.parent_id
+                else None
+            )
+            expected_path = (
+                f"{parent.path}{node.id}/"
+                if parent is not None and parent.path
+                else f"/{node.id}/"
+            )
+            expected_level = len([seg for seg in expected_path.split("/") if seg])
+            if node.path != expected_path or str(node.level) != str(expected_level):
+                node.path = expected_path
+                node.level = expected_level
+                changed += 1
+
+            children = self.db.query(Organization).filter(Organization.parent_id == node.id).all()
+            queue.extend(children)
+        return changed
+
     def get_organization(self, org_id: int) -> Optional[Organization]:
         """
         获取单个组织
@@ -501,8 +572,11 @@ class OrganizationService:
         return query.limit(limit).all()
 
     def validate_parent_child_relationship(self, parent_id: int, child_id: int) -> bool:
-        """
-        验证父子关系是否有效（防止循环引用）
+        """验证父子关系是否有效（防止循环引用）
+
+        2026-10-14：判据统一到 ``would_create_cycle``（沿父链上溯），不再用
+        ``get_subordinate_ids`` 的 path 前缀比对 —— 组织被移动后 path 可能尚未刷新，
+        用 path 判环会漏判。对外语义保持不变（自身/不存在的子级一律 False）。
 
         Args:
             parent_id: 父组织ID
@@ -513,14 +587,9 @@ class OrganizationService:
         """
         if parent_id == child_id:
             return False
-
-        # 检查parent是否是child的后代
-        child = self.get_organization(child_id)
-        if not child:
+        if not self.get_organization(child_id):
             return False
-
-        subordinates = self.get_subordinate_ids(child_id, include_self=False)
-        return parent_id not in subordinates
+        return not self.would_create_cycle(child_id, parent_id)
 
     def batch_update_sort_orders(self, sort_list: List[dict]) -> tuple[bool, int]:
         """批量更新组织排序

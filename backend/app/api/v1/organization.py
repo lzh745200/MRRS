@@ -10,7 +10,7 @@ import io
 from datetime import datetime
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
@@ -179,14 +179,27 @@ async def get_organizations(
     response: Response = None,
 ):
     """获取组织列表（分页）"""
-    # 无过滤条件的默认列表请求使用缓存（5分钟）
+    # 无过滤条件的默认列表请求使用缓存（5分钟）。
+    # 2026-10-14 数据范围收敛后，缓存只对"可见全量"的管理员启用 ——
+    # 否则普通用户的受限结果会被写入全局缓存，造成跨用户数据泄漏。
+    from app.core.data_permission import apply_scope_filter
+    from app.core.permission_utils import is_admin
+
+    _admin_view = is_admin(current_user)
     _cache_key = "orgs:list"
-    if not any([org_type, parent_id, is_active, keyword, search]) and page == 1 and page_size == 20:
+    if (
+        _admin_view
+        and not any([org_type, parent_id, is_active, keyword, search])
+        and page == 1
+        and page_size == 20
+    ):
         cached = await cache_manager.get(_cache_key)
         if cached is not None:
             return cached
     try:
-        query = db.query(Organization)
+        query = apply_scope_filter(
+            db.query(Organization), current_user, Organization, org_id_field="id", db=db
+        )
 
         if org_type:
             query = query.filter(Organization.org_type == org_type)
@@ -236,10 +249,17 @@ def _set_no_cache_headers(response: Response):
 
 
 def _org_level_to_number(org: Organization) -> int:
-    """将组织 level 枚举值转为数字"""
+    """将组织 level 转为数字（兼容两种历史形态）。
+
+    `level` 列历史上被两处写入不同口径：① 建组织时写**深度数字**（`1`/`2`…）；
+    ② 早期允许显式传枚举 `level_N`。此前这里只认 `level_N`，于是第 ① 类组织
+    一律被换算成 0（界面显示"未设置"）。现两种形态都正确解析；无法识别才回 0。
+    """
     if not org.level:
         return 0
-    level_str = str(org.level)
+    level_str = str(org.level).strip()
+    if level_str.isdigit():
+        return int(level_str)
     if not level_str.startswith("level_"):
         return 0
     try:
@@ -309,6 +329,11 @@ async def get_organization_tree(
     _set_no_cache_headers(response)
     try:
         query = db.query(Organization).filter(Organization.is_active == True)  # noqa: E712
+        # 2026-10-14 数据范围收敛：普通用户只见本组织及子树；管理员/超管全量。
+        # （/organizations/tree 被用户管理、通行码等页面复用为组织下拉。）
+        from app.core.data_permission import apply_scope_filter
+
+        query = apply_scope_filter(query, current_user, Organization, org_id_field="id", db=db)
 
         if org_type:
             query = query.filter(Organization.org_type == org_type)
@@ -337,16 +362,29 @@ async def get_organization_statistics(
     返回：总数量、活跃/停用数、按类型分布、按层级分布、成员总数等
     """
     try:
-        total = db.query(func.count(Organization.id)).scalar() or 0
+        # 2026-10-14 数据范围收敛：统计口径跟随当前用户可见的组织集合
+        # （此前任何登录用户都能看到全库组织统计）。管理员=全量；普通用户=本组织及子树。
+        from app.core.data_permission import apply_scope_filter
+
+        scoped_org_ids = [
+            row if isinstance(row, int) else row[0]
+            for row in apply_scope_filter(
+                db.query(Organization.id), current_user, Organization, org_id_field="id", db=db
+            ).all()
+        ]
+        org_scope = Organization.id.in_(scoped_org_ids)
+        user_scope = User.organization_id.in_(scoped_org_ids)
+
+        total = db.query(func.count(Organization.id)).filter(org_scope).scalar() or 0
         active = db.query(func.count(Organization.id)).filter(
-            Organization.is_active == True  # noqa: E712
+            org_scope, Organization.is_active == True  # noqa: E712
         ).scalar() or 0
         inactive = total - active
 
         # 按类型统计
         type_rows = (
             db.query(Organization.org_type, func.count(Organization.id))
-            .filter(Organization.is_active == True)  # noqa: E712
+            .filter(org_scope, Organization.is_active == True)  # noqa: E712
             .group_by(Organization.org_type)
             .all()
         )
@@ -355,7 +393,7 @@ async def get_organization_statistics(
         # 按层级统计
         level_rows = (
             db.query(Organization.level, func.count(Organization.id))
-            .filter(Organization.is_active == True)  # noqa: E712
+            .filter(org_scope, Organization.is_active == True)  # noqa: E712
             .group_by(Organization.level)
             .all()
         )
@@ -364,7 +402,7 @@ async def get_organization_statistics(
         # 绑定了用户的组织数
         orgs_with_members = (
             db.query(func.count(func.distinct(User.organization_id)))
-            .filter(User.organization_id.isnot(None), User.is_active == True)  # noqa: E712
+            .filter(user_scope, User.organization_id.isnot(None), User.is_active == True)  # noqa: E712
             .scalar()
             or 0
         )
@@ -372,7 +410,7 @@ async def get_organization_statistics(
         # 总用户数
         total_members = (
             db.query(func.count(User.id))
-            .filter(User.is_active == True, User.organization_id.isnot(None))  # noqa: E712
+            .filter(user_scope, User.is_active == True, User.organization_id.isnot(None))  # noqa: E712
             .scalar()
             or 0
         )
@@ -408,9 +446,14 @@ async def export_organizations(
         raise HTTPException(status_code=403, detail="仅管理员可导出组织列表")
 
     try:
+        from app.core.data_permission import apply_scope_filter
         from app.services.export_service import ExcelExportService
 
-        query = db.query(Organization)
+        # 2026-10-14 数据范围收敛（军审红线 S2）：部门级 admin 只能导出本组织及子树，
+        # super_admin/超管全量 —— 与列表/树/统计口径一致。
+        query = apply_scope_filter(
+            db.query(Organization), current_user, Organization, org_id_field="id", db=db
+        )
         if org_type:
             query = query.filter(Organization.org_type == org_type)
         if is_active is not None:
@@ -559,6 +602,19 @@ async def get_organization(org_id: int, current_user=Depends(get_current_user), 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
+    # 2026-10-14 数据范围收敛：越权访问返回 403（区别于 404"不存在"，
+    # 与本仓库跨组织访问的既有语义一致）。
+    from app.core.data_permission import apply_scope_filter
+
+    visible = (
+        apply_scope_filter(
+            db.query(Organization.id), current_user, Organization, org_id_field="id", db=db
+        )
+        .filter(Organization.id == org_id)
+        .first()
+    )
+    if visible is None:
+        raise HTTPException(status_code=403, detail="无权查看该组织")
     return success_response(data=org, message="success")
 
 
@@ -633,9 +689,13 @@ async def create_organization(
             org.code = f"ORG{secrets.token_hex(3).upper()}"
 
     # path 与 OrganizationService.create_organization 同口径：
-    # 根组织 /{id}/，子组织 {父 path}{id}/（前缀匹配是组织树查询的唯一依据）
-    if parent is not None and parent.path:
-        org.path = f"{parent.path}{org.id}/"
+    # 根组织 /{id}/，子组织 {父 path}{id}/（前缀匹配是组织树查询的唯一依据）。
+    # 2026-10-14：父级 path 为空（历史数据）时**不能**让子级退化成根路径 ——
+    # 那会让父子在权限视图里彻底割裂（子级被当成根，子树成员权限判错）。
+    # 此处用父级 id 兜底拼出父前缀，父级自身的回填仍由启动自检统一收敛。
+    if parent is not None:
+        parent_prefix = parent.path or f"/{parent.id}/"
+        org.path = f"{parent_prefix}{org.id}/"
     else:
         org.path = f"/{org.id}/"
 
@@ -682,15 +742,26 @@ async def update_organization(
 
     update_data = data.model_dump(exclude_unset=True)
 
-    # 安全检查：禁止将 parent_id 设为自身（防止循环引用）
-    if "parent_id" in update_data and update_data["parent_id"] == org_id:
-        raise HTTPException(status_code=400, detail="不能将组织自身设为上级组织")
+    # 安全检查：禁止将 parent_id 设为自身或其子孙（防止循环引用）。
+    # 走 OrganizationService.would_create_cycle —— 它沿父链逐级上溯判定，
+    # 不依赖 path（组织被移动后 path 可能尚未刷新，用 path 判定不可靠）。
+    if "parent_id" in update_data:
+        new_parent_id = update_data["parent_id"]
+        if new_parent_id is not None and OrganizationService(db).would_create_cycle(
+            org_id, new_parent_id
+        ):
+            raise HTTPException(status_code=400, detail="不能将组织设为自身或其子孙的上级组织")
 
     # 转换枚举类型
     _coerce_org_enums(update_data)
 
     for key, value in update_data.items():
         setattr(org, key, value)
+
+    # 改父级后必须级联重算自身与全部子孙的 path/level：
+    # 组织级数据权限依赖 path 前缀匹配，不刷新会让「树视图」与「权限视图」背离。
+    if "parent_id" in update_data:
+        OrganizationService(db).recompute_subtree_paths(org)
 
     safe_commit(db)
     db.refresh(org)
@@ -709,7 +780,11 @@ async def update_organization(
 async def delete_organization(
     org_id: int,
     force: bool = Query(False, description="保留参数，暂未使用"),
-    confirm_password: str = Query("", description="二次确认：输入当前用户密码"),
+    confirm_password: str = Header(
+        "",
+        alias="X-Confirm-Password",
+        description="二次确认：输入当前用户密码（请求头传递，避免落入 access log）",
+    ),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -719,7 +794,9 @@ async def delete_organization(
     Args:
         org_id: 组织ID
         force: 保留参数，暂未使用
-        confirm_password: 二次确认密码（单机共用电脑防误删）
+        confirm_password: 二次确认密码（**请求头** `X-Confirm-Password`）。
+            2026-10-14 由 URL 查询串改为请求头：查询串会原样进 uvicorn access log，
+            明文密码随之落盘；请求头不参与访问日志的请求行。
 
     Returns:
         删除结果
@@ -853,6 +930,9 @@ async def move_organization(
             check_id = check_node.parent_id if check_node else None
 
     org.parent_id = new_parent_id
+    # 移动后必须级联重算自身与全部子孙的 path/level（同 PUT 改父级），
+    # 否则组织级数据权限按旧 path 前缀匹配 → 子树成员被误判无权限/看错数据。
+    OrganizationService(db).recompute_subtree_paths(org)
     safe_commit(db)
     await cache_manager.delete("orgs:list")
     _invalidate_dashboard_cache_safe()
@@ -917,6 +997,18 @@ async def get_organization_members(
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
+    # 2026-10-14 数据范围收敛：成员名单属于组织敏感数据，越权 403（同详情端点语义）
+    from app.core.data_permission import apply_scope_filter
+
+    visible = (
+        apply_scope_filter(
+            db.query(Organization.id), current_user, Organization, org_id_field="id", db=db
+        )
+        .filter(Organization.id == org_id)
+        .first()
+    )
+    if visible is None:
+        raise HTTPException(status_code=403, detail="无权查看该组织的成员")
 
     try:
         query = db.query(User).filter(User.organization_id == org_id, User.is_active == True)  # noqa: E712

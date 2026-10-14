@@ -70,7 +70,8 @@ vi.mock('@/api/request', () => ({
   put: mockPut,
   del: mockDel,
   apiRequest: mockApiRequest,
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/api/permissionPack', () => ({
   listPermissionPacks: listPacksMock,
@@ -150,7 +151,12 @@ function defaultGetImpl(url: string) {
     return Promise.resolve({
       data: {
         data: [
-          { session_id: 's1', ip_address: '1.1.1.1', user_agent: 'Chrome', created_at: '2024-01-01T10:00:00' },
+          {
+            session_id: 's1',
+            ip_address: '1.1.1.1',
+            user_agent: 'Chrome',
+            created_at: '2024-01-01T10:00:00',
+          },
         ],
       },
     })
@@ -186,7 +192,8 @@ function mountComp(extraStubs: Record<string, any> = {}) {
         // 注入两行样本数据，覆盖 machine_code 有/无、is_active 真/假、organization_name 空值等模板两侧分支
         'el-table-column': {
           name: 'ElTableColumn',
-          template: '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /><slot :row="rowC" /></div>',
+          template:
+            '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /><slot :row="rowC" /></div>',
           data() {
             return {
               rowA: {
@@ -465,7 +472,14 @@ describe('搜索 / 重置 / 分页', () => {
     expect(mockApiRequest).toHaveBeenCalledWith({
       method: 'GET',
       url: '/users',
-      params: { page: 1, page_size: 10, username: 'u1', keyword: 'n1', role: 'admin', is_active: true },
+      params: {
+        page: 1,
+        page_size: 10,
+        username: 'u1',
+        keyword: 'n1',
+        role: 'admin',
+        is_active: true,
+      },
     })
   })
 
@@ -483,7 +497,11 @@ describe('搜索 / 重置 / 分页', () => {
     expect(vm.searchForm).toEqual({ username: '', name: '', role: '', is_active: undefined })
     expect(mockApiRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        params: expect.objectContaining({ username: undefined, keyword: undefined, role: undefined }),
+        params: expect.objectContaining({
+          username: undefined,
+          keyword: undefined,
+          role: undefined,
+        }),
       })
     )
   })
@@ -584,7 +602,9 @@ describe('新增表单密码规则（与后端 PasswordPolicy 对齐）', () => 
   async function validate(value: string): Promise<Error | undefined> {
     const wrapper = mountComp()
     await flushPromises()
-    const rule = (wrapper.vm as any).rules.password.find((r: any) => typeof r.validator === 'function')
+    const rule = (wrapper.vm as any).rules.password.find(
+      (r: any) => typeof r.validator === 'function'
+    )
     return new Promise<Error | undefined>((resolve) => {
       rule.validator({}, value, (err?: Error) => resolve(err))
     })
@@ -690,12 +710,16 @@ describe('新增 / 编辑 / 提交', () => {
     await nextTick() // 渲染会话表格（userSessions.length > 0 分支）
   })
 
-  it('handleEdit 保留已有 organization_id', async () => {
+  it('handleEdit 保留已有 organization_id（转为树节点 id 形态以便回显）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.handleEdit({ ...sampleUser, organization_id: 42 })
-    expect(vm.formData.organization_id).toBe(42)
+    // 组织树的节点 id 带 `_` 前缀（normalizeTreeNodes 为 DOM 安全所加），
+    // el-tree-select 的 v-model 必须用同一形态，否则回显为空；提交时再还原为数字。
+    expect(vm.formData.organization_id).toBe('_42')
+    vm.handleEdit({ ...sampleUser, organization_id: null })
+    expect(vm.formData.organization_id).toBeNull()
   })
 
   it('handleSubmit：formRef 为空 → 直接返回', async () => {
@@ -818,6 +842,69 @@ describe('重置密码', () => {
     await vm.confirmResetPassword()
     expect(ElMessage.warning).toHaveBeenCalledWith('请输入或生成新密码')
     expect(mockPost).not.toHaveBeenCalled()
+  })
+
+  it('confirmResetPassword 失败：后端返回 message（非 detail）时展示具体策略原因', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.handleResetPassword(sampleUser)
+    vm.resetPwdForm.newPassword = '弱密码'
+    // 密码策略失败时后端返回 {code, message, field}，没有 detail
+    mockPost.mockRejectedValueOnce({
+      response: { data: { code: 400, message: '密码需包含特殊字符', field: 'new_password' } },
+    })
+    await vm.confirmResetPassword()
+    expect(ElMessage.error).toHaveBeenCalledWith('密码需包含特殊字符')
+  })
+
+  it('组织 id 双向转换：空值与非法值安全回退（提交 422 的根因修复）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 回显方向：数字加树前缀；已是树形态原样；空值 undefined
+    expect(vm.toOrgTreeValue(42)).toBe('_42')
+    expect(vm.toOrgTreeValue('_7')).toBe('_7')
+    expect(vm.toOrgTreeValue(undefined)).toBeUndefined()
+    // 提交方向：去前缀还原数字；非法/空值一律 undefined（后端 organization_id 是 int）
+    expect(vm.toOrgIdPayload('_42')).toBe(42)
+    expect(vm.toOrgIdPayload('abc')).toBeUndefined()
+    expect(vm.toOrgIdPayload('')).toBeUndefined()
+  })
+
+  it('待审核用户：通过审核启用账号并从列表移除；清空后关闭弹窗', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.pendingUsers = [
+      { id: 9, username: 'p1' },
+      { id: 10, username: 'p2' },
+    ]
+    vm.pendingDialogVisible = true
+    mockPut.mockResolvedValue({ code: 200 })
+
+    await vm.approvePendingUser({ id: 9, username: 'p1' })
+    expect(mockPut).toHaveBeenCalledWith('/users/9', { is_active: true })
+    expect(vm.pendingUsers.map((u: any) => u.id)).toEqual([10])
+
+    // 处理掉最后一个 → 列表清空，弹窗自动关闭
+    await vm.approvePendingUser({ id: 10, username: 'p2' })
+    expect(vm.pendingUsers).toEqual([])
+    expect(vm.pendingDialogVisible).toBe(false)
+  })
+
+  it('待审核用户：通过失败 → 透出后端 detail，否则通用文案', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    mockPut.mockRejectedValueOnce({ response: { data: { detail: '无权限' } } })
+    await vm.approvePendingUser({ id: 9, username: 'p1' })
+    expect(ElMessage.error).toHaveBeenCalledWith('无权限')
+
+    mockPut.mockRejectedValueOnce(new Error('boom'))
+    await vm.approvePendingUser({ id: 11, username: 'p3' })
+    expect(ElMessage.error).toHaveBeenCalledWith('审核失败')
   })
 
   it('confirmResetPassword 成功：复制密码 + 弹窗提示 + 状态复位', async () => {
@@ -1046,7 +1133,6 @@ describe('权限包导入导出', () => {
     expect(vm3.permExportRoleOptions).toEqual([])
     expect(vm3.permRolesLoading).toBe(false)
   })
-
 
   it('导出成功：走 downloadBlobAsFile 触发下载并提示统计', async () => {
     const wrapper = mountComp()
@@ -1331,7 +1417,6 @@ describe('模板条件渲染（非管理员视角）', () => {
   })
 })
 
-
 describe('模板 v-model 处理器（函数覆盖）', () => {
   it('全部 v-model 组件触发 update 事件', async () => {
     const wrapper = mountComp()
@@ -1367,9 +1452,9 @@ describe('模板 v-model 处理器（函数覆盖）', () => {
     expect(vm.pagination.page).toBe(2)
     expect(vm.pagination.size).toBe(20)
 
-    // 三个对话框（用户/重置密码/导出权限包）+ 权限抽屉的 v-model
+    // 四个对话框（用户/重置密码/导出权限包/待审核用户）+ 权限抽屉的 v-model
     const dialogs = wrapper.findAllComponents({ name: 'ElDialog' })
-    expect(dialogs.length).toBe(3)
+    expect(dialogs.length).toBe(4)
     for (const d of dialogs) d.vm.$emit('update:modelValue', false)
     expect(vm.dialogVisible).toBe(false)
     expect(vm.resetPwdDialogVisible).toBe(false)
@@ -1654,7 +1739,8 @@ const permDialogStubs = {
   'el-dialog': {
     props: { modelValue: { type: Boolean, default: false }, title: { type: String, default: '' } },
     emits: ['update:modelValue'],
-    template: '<div class="el-dialog-stub" :data-title="title"><slot /><slot name="footer" /></div>',
+    template:
+      '<div class="el-dialog-stub" :data-title="title"><slot /><slot name="footer" /></div>',
   },
   'el-button': {
     template: '<button class="el-button-stub" @click="$emit(\'click\')"><slot /></button>',
@@ -1790,7 +1876,9 @@ describe('openPermExportDialog 角色响应形态与缓存', () => {
     // res 为 null：res?.data → undefined；|| res → null；|| {} → {} → data.data/items 均缺 → []
     expect(await load(null)).toEqual([])
     // res 为裸数组：res?.data → undefined；|| res → 数组 → Array.isArray 真侧
-    expect(await load([{ name: 'x', description: '描述X' }])).toEqual([{ name: 'x', label: '描述X' }])
+    expect(await load([{ name: 'x', description: '描述X' }])).toEqual([
+      { name: 'x', label: '描述X' },
+    ])
     // res.data 为数组：res?.data 真侧 + Array.isArray 真侧
     expect(await load({ data: [{ name: 'y', label: 'Y' }] })).toEqual([{ name: 'y', label: 'Y' }])
     // res.data.items
@@ -1922,7 +2010,10 @@ describe('加密权限包导入（Phase E）', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    const h = stubImport({ data: { success: false, message: ENC_MSG } }, { data: { success: true } })
+    const h = stubImport(
+      { data: { success: false, message: ENC_MSG } },
+      { data: { success: true } }
+    )
     promptMock.mockRejectedValueOnce('cancel')
     vm.handleImportPermissionPackage()
     await fireImport(vm, inputs, 0)
@@ -1964,7 +2055,10 @@ describe('加密权限包导入（Phase E）', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     // 重传响应不带 data 信封（res2.data 为 undefined）→ `res2.data || res2` 取右侧
-    stubImport({ data: { success: false, message: ENC_MSG } }, { success: false, message: '包已损坏' })
+    stubImport(
+      { data: { success: false, message: ENC_MSG } },
+      { success: false, message: '包已损坏' }
+    )
     vm.handleImportPermissionPackage()
     await fireImport(vm, inputs, 0)
     expect(ElMessage.error).toHaveBeenCalledWith('包已损坏')
@@ -1980,7 +2074,10 @@ describe('加密权限包导入（Phase E）', () => {
     // 进入本分支的前提是 /加密/.test(result.message) 为真，但 merged 可以带一个空的
     // message 键：Object.assign(result, merged) 会用 '' 覆盖原有的加密提示，
     // 此时 merged.message 与 result.message 同时为假 → 第三操作数可达。
-    stubImport({ data: { success: false, message: ENC_MSG } }, { data: { success: false, message: '' } })
+    stubImport(
+      { data: { success: false, message: ENC_MSG } },
+      { data: { success: false, message: '' } }
+    )
     vm.handleImportPermissionPackage()
     await fireImport(vm, inputs, 0)
     expect(ElMessage.error).toHaveBeenCalledWith('导入失败')
@@ -2037,4 +2134,3 @@ describe('加密权限包导入（Phase E）', () => {
     spy.mockRestore()
   })
 })
-

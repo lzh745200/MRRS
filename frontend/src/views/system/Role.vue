@@ -46,7 +46,7 @@
         </div>
       </template>
 
-      <el-table :data="tableData" stripe border>
+      <el-table :data="pagedRoles" stripe border>
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="name" label="角色名称" min-width="150" />
         <el-table-column prop="code" label="角色编码" min-width="120" />
@@ -78,7 +78,7 @@
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.size"
-        :total="pagination.total"
+        :total="filteredRoles.length"
         layout="total, prev, pager, next"
         class="pagination"
       />
@@ -127,9 +127,9 @@
       <el-table v-loading="loadingUsers" stripe :data="roleUsers" border>
         <el-table-column type="index" label="序号" width="60" />
         <el-table-column prop="username" label="用户名" min-width="120" />
-        <el-table-column prop="real_name" label="姓名" min-width="100">
+        <el-table-column prop="full_name" label="姓名" min-width="100">
           <template #default="{ row }">
-            {{ ds(row.real_name, 'name') }}
+            {{ ds(row.full_name, 'name') }}
           </template>
         </el-table-column>
         <el-table-column prop="email" label="邮箱" min-width="150">
@@ -193,7 +193,7 @@ import { DIALOG_MD, DIALOG_LG } from '@/config/dialog'
 // （import RoleManagement from "./Role.vue"），并非“仅保留参考”的废弃文件。
 // 修改角色管理逻辑时需同步其单测：tests/unit/views/system/Role*.test.ts
 // ================================================================
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, ElTree } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { useDesensitize } from '@/composables/useDesensitize'
@@ -238,6 +238,30 @@ const searchForm = reactive({
 })
 
 const tableData = ref<RoleItem[]>([])
+
+/**
+ * 按查询条件过滤后的角色（全量）。
+ *
+ * 后端 `GET /rbac/roles` 不支持筛选/分页参数，此前「查询/重置」只重新拉了一次
+ * 全量列表、`searchForm` 从未参与任何计算 → 查询按钮看起来毫无作用。
+ * 这里在**前端**完成过滤与分页，使界面行为与控件语义一致。
+ */
+const filteredRoles = computed(() => {
+  const nameKw = searchForm.name.trim().toLowerCase()
+  const codeKw = searchForm.code.trim().toLowerCase()
+  return tableData.value.filter((r) => {
+    if (nameKw && !r.name.toLowerCase().includes(nameKw)) return false
+    if (codeKw && !r.code.toLowerCase().includes(codeKw)) return false
+    if (searchForm.status && r.status !== searchForm.status) return false
+    return true
+  })
+})
+
+/** 当前页数据（前端切片） */
+const pagedRoles = computed(() => {
+  const start = (pagination.page - 1) * pagination.size
+  return filteredRoles.value.slice(start, start + pagination.size)
+})
 
 const pagination = reactive({
   page: 1,
@@ -313,12 +337,15 @@ const uncheckAll = () => {
 }
 
 const handleSearch = () => {
-  loadRoles()
+  // 过滤是响应式的，这里回到第 1 页并同步分页总数
+  pagination.page = 1
+  pagination.total = filteredRoles.value.length
 }
 
 const handleReset = () => {
   Object.assign(searchForm, { name: '', code: '', status: '' })
-  loadRoles()
+  pagination.page = 1
+  pagination.total = filteredRoles.value.length
 }
 
 const handleAdd = () => {
@@ -413,6 +440,8 @@ const handleSubmit = async () => {
       if (isEdit.value) {
         await put(`/rbac/roles/${formData.id}`, {
           name: formData.name,
+          // 编码由后端权威存储（此前编辑时被整体丢弃，导致列表只能按名称派生）
+          code: formData.code,
           description: formData.description,
           is_active: formData.status === 'active',
         })
@@ -420,6 +449,7 @@ const handleSubmit = async () => {
       } else {
         await post('/rbac/roles', {
           name: formData.name,
+          code: formData.code,
           description: formData.description,
           permissions: [],
           is_system: false,
@@ -557,9 +587,13 @@ async function loadRoles() {
         return {
           id: rid,
           name: String(roleItem.name || ''),
-          code: String(roleItem.name || '')
-            .toUpperCase()
-            .replace(/\s+/g, '_'),
+          // 编码以后端返回为准（2026-10-14 起 RbacRole.code 已落库）；
+          // 仅在历史数据为空时按名称派生兜底，保证列不空白。
+          code:
+            String(roleItem.code || '').trim() ||
+            String(roleItem.name || '')
+              .toUpperCase()
+              .replace(/\s+/g, '_'),
           description: String(roleItem.description || ''),
           userCount,
           createTime: String(roleItem.created_at || ''),
@@ -569,7 +603,9 @@ async function loadRoles() {
     )
 
     tableData.value = rolesWithUserCount
-    pagination.total = tableData.value.length
+    // 分页总数：模板用 filteredRoles.length 派生（始终与筛选结果一致）；
+    // 这里同步维护 pagination.total 供既有调用/断言读取。
+    pagination.total = filteredRoles.value.length
   } catch (error) {
     tableData.value = []
     ElMessage.error(getErrorMessage(error, '加载角色列表失败，请稍后重试'))

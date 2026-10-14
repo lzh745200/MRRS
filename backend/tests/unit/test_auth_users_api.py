@@ -557,6 +557,9 @@ class TestUpdateUser:
         _setup_admin_user(client)
         user = _make_user(id=2)
         mock_db = _make_mock_db(user=user)
+        # 第一次 first() 是"取目标用户"，第二次是新增的"邮箱占用"查重 → 必须返回 None，
+        # 否则查重会误判为"邮箱已被占用"（此前无查重分支，故无需区分）
+        mock_db.query.return_value.first.side_effect = [user, None]
         _override_db(client, mock_db)
         with patch("app.api.v1.auth.users.require_admin") as mock_req:
             mock_req.return_value = None
@@ -596,10 +599,17 @@ class TestDeleteUser:
         target = _make_user(id=2, username="other")
         mock_db = _make_mock_db(user=target)
         _override_db(client, mock_db)
-        with patch("app.api.v1.auth.users.require_admin") as mock_req:
+        # 路由现已委托 UserCascadeDeleteService 做级联清理（该服务有独立用例覆盖）；
+        # 路由层用例只断言"委托并被正确调用"，避免用粗粒度 Mock 重建 sqlite_master 反射。
+        with patch("app.api.v1.auth.users.require_admin") as mock_req, patch(
+            "app.services.user_cascade_delete_service.UserCascadeDeleteService.delete_user_cascade",
+            return_value={"success": True, "message": "用户删除成功", "deleted_records": 1, "set_null_records": 0},
+        ) as mock_cascade:
             mock_req.return_value = None
             response = client.delete(f"{self.prefix}/2")
             assert response.status_code == 200
+            assert response.json()["message"] == "删除成功"
+            mock_cascade.assert_called_once_with(2)
         _clear_overrides(client, get_db, get_current_user)
 
     def test_delete_user_not_admin(self, client):

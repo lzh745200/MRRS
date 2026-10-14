@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// organization.ts 只从 '@/api/request' 导入 get/post/put/del（自动拆信封，resolve body 即可）
-const { mockGet, mockPost, mockPut, mockDel } = vi.hoisted(() => ({
+// organization.ts 从 '@/api/request' 导入 get/post/put（自动拆信封，resolve body 即可）；
+// 删除组织改走 apiRequest（del 的签名不支持 headers），故一并 mock。
+const { mockGet, mockPost, mockPut, mockDel, mockApiRequest } = vi.hoisted(() => ({
   mockGet: vi.fn().mockResolvedValue({}),
   mockPost: vi.fn().mockResolvedValue({}),
   mockPut: vi.fn().mockResolvedValue({}),
   mockDel: vi.fn().mockResolvedValue({}),
+  mockApiRequest: vi.fn().mockResolvedValue({}),
 }))
 
 vi.mock('@/api/request', () => ({
@@ -13,7 +15,10 @@ vi.mock('@/api/request', () => ({
   post: (...args: any[]) => mockPost(...args),
   put: (...args: any[]) => mockPut(...args),
   del: (...args: any[]) => mockDel(...args),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  // 删除组织改走 apiRequest（del 的签名不支持 headers）
+  apiRequest: (...args: any[]) => mockApiRequest(...args),
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import {
   getOrganizations,
@@ -80,27 +85,31 @@ describe('api/organization', () => {
     expect(r).toBe(body)
   })
 
-  // 后端 DELETE /organizations/{id} 的 confirm_password 为 Query 且必填语义
-  // （空值恒 400「二次确认失败」），故前端 fail-closed：缺密码不发请求。
+  // 后端 DELETE /organizations/{id} 的二次确认密码自 2026-10-14 起走**请求头**
+  // `X-Confirm-Password`（查询串会进 access log）；空值恒 400，故前端 fail-closed。
   it('deleteOrganization 缺密码时 fail-closed 抛错且不发请求', async () => {
     mockDel.mockClear()
     await expect(deleteOrganization(4)).rejects.toThrow('删除组织需要二次确认密码')
     await expect(deleteOrganization(4, '')).rejects.toThrow('删除组织需要二次确认密码')
-    expect(mockDel).not.toHaveBeenCalled()
+    expect(mockApiRequest).not.toHaveBeenCalled()
   })
 
   it('deleteOrganization 非法 id fail-closed', async () => {
     mockDel.mockClear()
     await expect(deleteOrganization(0, 'pass123')).rejects.toThrow('无效的组织 ID')
     await expect(deleteOrganization(1.5, 'pass123')).rejects.toThrow('无效的组织 ID')
-    expect(mockDel).not.toHaveBeenCalled()
+    expect(mockApiRequest).not.toHaveBeenCalled()
   })
 
-  it('deleteOrganization 携带 confirm_password 二次确认（URL 编码）', async () => {
+  it('deleteOrganization 二次确认密码走请求头（不再拼进 URL）', async () => {
     const body = { success: true }
-    mockDel.mockResolvedValueOnce(body)
+    mockApiRequest.mockResolvedValueOnce(body)
     const r = await deleteOrganization(4, 'p@ss 1&2')
-    expect(mockDel).toHaveBeenCalledWith('/organizations/4?confirm_password=p%40ss%201%262')
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      method: 'DELETE',
+      url: '/organizations/4',
+      headers: { 'X-Confirm-Password': 'p@ss 1&2' },
+    })
     expect(r).toBe(body)
   })
 

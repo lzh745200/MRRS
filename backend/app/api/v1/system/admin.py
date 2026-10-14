@@ -432,12 +432,16 @@ async def list_user_sessions(
         except Exception:
             blacklisted = 0
 
+    # 2026-10-14：user_sessions 表上线后返回真实活跃会话
+    # （此前只能返回 sessions:[]，会话区与"强制登出"不可达）。
+    from app.services.session_service import list_active_sessions
+
+    sessions = list_active_sessions(db, user_id)
     return success_response(data={
         "user_id": user_id,
         "username": user.username,
         "blacklisted_tokens": blacklisted,
-        "sessions": [],
-        "message": "单机部署模式下会话信息有限，仅显示 token 黑名单统计",
+        "sessions": [s.to_dict() for s in sessions],
     })
 
 
@@ -448,16 +452,34 @@ async def revoke_user_session(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """强制登出用户（使其全部现存 token 立即失效）"""
+    """强制登出用户。
+
+    2026-10-14 起支持**按会话精确吊销**：session_id 命中 user_sessions 表时，
+    只吊销该会话（access/refresh 的 jti 一并进黑名单），不影响该用户其它设备；
+    未命中（历史登录/未登记会话）则退回原有"递增 token_version 全量踢下线"语义。
+    """
     require_admin(current_user, error_message="仅管理员可强制登出用户")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    # W1-T5（ADR-0001）：单机模式会话列表为空，session_id 并非真实 JWT，
-    # 历史实现将其传入 jwt.decode 必然失败 → 接口恒 400。
-    # 可靠的强制下线 = 递增 token_version（get_current_user 版本校验拦截）；
-    # 若调用方传入真实 JWT 则额外按 jti 吊销（向前兼容）。
+    from app.services.session_service import get_session, revoke_session
+
+    session = get_session(db, user_id, session_id)
+    if session is not None:
+        revoke_session(
+            db,
+            session,
+            operator_id=getattr(current_user, "id", None),
+            reason="admin_force_logout",
+        )
+        logger.info(
+            "管理员 %s 精确吊销用户 %s 的会话 #%s", current_user.username, user.username, session.id
+        )
+        return success_response(message=f"已强制登出用户 {user.username} 的该会话")
+
+    # 未登记会话（历史登录）：递增 token_version 使该用户全部现存 token 立即失效
+    # （get_current_user 的版本校验拦截）。
     try:
         setattr(user, "token_version", (getattr(user, "token_version", 0) or 0) + 1)
         # safe_commit 失败时已在其内部 rollback（见 app/core/transaction.py），

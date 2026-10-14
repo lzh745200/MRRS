@@ -173,16 +173,31 @@ class TestGetTransactions:
 
 
 class TestCreateTransaction:
-    def test_with_budget_update(self, client, mock_db):
-        budget = _make_budget()
-        budget.executed_amount = 0
-        mock_db.first.side_effect = [None, budget, _make_tx()]
-        resp = client.post("/fund-budgets/transactions", json={
-            "amount": 5000, "purpose": "修路材料",
-            "transaction_date": "2025-06-15", "budget_id": 1
-        })
-        assert resp.status_code in (200, 422, 500)
-        mock_db.add.assert_called()
+    def test_missing_budget_reference_404(self, real_client):
+        """2026-10-14（排查 H3）：明细引用的预算按数据域加载后，不存在/不可见即 404。
+
+        旧实现是"裸 id 取 + 取不到静默跳过"——调用方以为核销已入账，
+        实际预算执行额纹丝不动；也正是这个静默跳过让跨组织 budget_id 篡改成为可能。
+        （原 mock 版用例以 (200, 422, 500) 弱断言容忍 500，且从未真正走到预算累加，
+        已由本真库用例与 test_create_transaction_endpoint_* 取代。）
+        """
+        from app.models.fund_budget import FundBudget
+
+        client, session, app = real_client
+        _seed_budget(session, amount=100, executed=95)
+        _bind_user(app, user_id=1, role="admin", is_superuser=True, org_id=1)
+        resp = client.post(
+            "/api/v1/fund-budgets/transactions",
+            json={
+                "amount": 1,
+                "purpose": "引用不存在的预算",
+                "transaction_date": "2026-01-02",
+                "budget_id": 999,
+            },
+        )
+        assert resp.status_code == 404
+        session.expire_all()
+        assert float(session.get(FundBudget, 1).executed_amount) == 95.0
 
     def test_without_budget(self, client, mock_db):
         mock_db.first.return_value = _make_tx()
@@ -319,6 +334,35 @@ def _seed_transaction(session, *, tx_id=5, created_by=99, amount=10):
     return tx
 
 
+def _seed_fund(session, *, fund_id=1, org_id=1, allocated=100, used=0):
+    """系统排查 2026-10-14 H3：为"跨组织经费篡改"用例造经费记录。"""
+    from decimal import Decimal
+
+    from app.models.fund import Fund
+
+    fund = Fund(
+        id=fund_id,
+        name="跨组织经费",
+        organization_id=org_id,
+        allocated_amount=Decimal(allocated),
+        used_amount=Decimal(used),
+        remaining_amount=Decimal(allocated - used),
+        is_active=True,
+    )
+    session.add(fund)
+    session.commit()
+    return fund
+
+
+def _seed_org_tree(session):
+    """组织树：1(总队) → 2(支队)。供 assert_org_reachable 判定可达性。"""
+    from app.models.organization import Organization
+
+    session.add(Organization(id=1, name="总队", parent_id=None))
+    session.add(Organization(id=2, name="支队", parent_id=1))
+    session.commit()
+
+
 class TestBudgetDataScope:
     """深审 LIVE：预算改删/明细删除只校验角色，不校验数据域（IDOR）。"""
 
@@ -370,6 +414,108 @@ class TestBudgetDataScope:
         _bind_user(app, role="admin", is_superuser=False, org_id=2)
         resp = client.get("/api/v1/fund-budgets/1/attachments")
         assert resp.status_code == 404
+
+    # ---------------- 系统排查 2026-10-14 H3：写路径跨组织资金篡改 ----------------
+
+    def test_create_transaction_other_org_budget_404(self, real_client):
+        """旧实现按裸 id 取预算且取不到**静默跳过** → 可传他组织 budget_id 改其 executed_amount。"""
+        from app.models.fund_budget import FundBudget
+
+        client, session, app = real_client
+        _seed_budget(session, org_id=1)
+        _bind_user(app, role="admin", is_superuser=False, org_id=2)
+        resp = client.post(
+            "/api/v1/fund-budgets/transactions",
+            json={
+                "amount": 5,
+                "purpose": "越权核销",
+                "transaction_date": "2026-01-02",
+                "budget_id": 1,
+            },
+        )
+        assert resp.status_code == 404
+        session.expire_all()
+        assert float(session.get(FundBudget, 1).executed_amount) == 0.0
+
+    def test_create_transaction_other_org_fund_404(self, real_client):
+        """旧实现按裸 id 取经费 → 可传他组织 fund_id 改其 used_amount/remaining_amount。"""
+        from app.models.fund import Fund
+
+        client, session, app = real_client
+        _seed_fund(session, fund_id=1, org_id=1, allocated=100, used=0)
+        _bind_user(app, role="admin", is_superuser=False, org_id=2)
+        resp = client.post(
+            "/api/v1/fund-budgets/transactions",
+            json={
+                "amount": 5,
+                "purpose": "越权记账",
+                "transaction_date": "2026-01-02",
+                "fund_id": 1,
+            },
+        )
+        assert resp.status_code == 404
+        session.expire_all()
+        fund = session.get(Fund, 1)
+        assert float(fund.used_amount) == 0.0
+        assert float(fund.remaining_amount) == 100.0
+
+    def test_create_transaction_same_org_updates_both(self, real_client):
+        """同组织（合法路径）不得被误伤：预算与经费都正常累加。"""
+        from app.models.fund import Fund
+        from app.models.fund_budget import FundBudget
+
+        client, session, app = real_client
+        _seed_budget(session, budget_id=1, org_id=1, amount=100, executed=0)
+        _seed_fund(session, fund_id=1, org_id=1, allocated=100, used=0)
+        _bind_user(app, role="admin", is_superuser=False, org_id=1)
+        resp = client.post(
+            "/api/v1/fund-budgets/transactions",
+            json={
+                "amount": 5,
+                "purpose": "正常核销",
+                "transaction_date": "2026-01-02",
+                "budget_id": 1,
+                "fund_id": 1,
+            },
+        )
+        assert resp.status_code == 200
+        session.expire_all()
+        assert float(session.get(FundBudget, 1).executed_amount) == 5.0
+        fund = session.get(Fund, 1)
+        assert float(fund.used_amount) == 5.0
+        assert float(fund.remaining_amount) == 95.0
+
+    def test_create_budget_other_org_403(self, real_client):
+        """旧实现可直接把预算挂到任意组织名下；现要求组织可达（assert_org_reachable）。"""
+        client, session, app = real_client
+        _seed_org_tree(session)
+        _bind_user(app, role="admin", is_superuser=False, org_id=1)
+        resp = client.post(
+            "/api/v1/fund-budgets",
+            json={
+                "year": 2026,
+                "category": "基建",
+                "budget_amount": 10,
+                "organization_id": 99,  # 不在 1 的子树内
+            },
+        )
+        assert resp.status_code == 403
+
+    def test_create_budget_own_subtree_ok(self, real_client):
+        """子树内组织（含下级 2）可正常创建。"""
+        client, session, app = real_client
+        _seed_org_tree(session)
+        _bind_user(app, role="admin", is_superuser=False, org_id=1)
+        resp = client.post(
+            "/api/v1/fund-budgets",
+            json={
+                "year": 2026,
+                "category": "基建",
+                "budget_amount": 10,
+                "organization_id": 2,
+            },
+        )
+        assert resp.status_code == 200
 
     def test_attachment_and_remark_roundtrip_real_db(self, real_client):
         """真库往返：上传附件 → 列表 → PUT 文本备注，附件不丢、备注不出 JSON。"""

@@ -76,6 +76,7 @@ _MODULE_MAP = {
     "SubordinateInstance": ".subordinate_registry",
     "PermissionPack": ".permission_pack",
     "FileBlob": ".file_blob",
+    "UserSession": ".user_session",
 }
 
 import sys as _sys

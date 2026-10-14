@@ -179,6 +179,27 @@
       />
     </el-card>
 
+    <!-- 待审核用户对话框（2026-10-14 接通：此前按钮只拉数据、无弹窗消费） -->
+    <el-dialog v-model="pendingDialogVisible" append-to-body title="待审核用户" :width="DIALOG_MD">
+      <el-table v-if="pendingUsers.length > 0" stripe :data="pendingUsers" border>
+        <el-table-column prop="username" label="用户名" min-width="120" />
+        <el-table-column prop="full_name" label="姓名" min-width="100" />
+        <el-table-column prop="role" label="角色" width="110" />
+        <el-table-column prop="organization_name" label="所属组织" min-width="140" />
+        <el-table-column label="状态" width="90">
+          <template #default>
+            <el-tag type="warning">待审核</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" align="center">
+          <template #default="{ row }">
+            <el-button text type="primary" @click="approvePendingUser(row)">通过审核</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <EmptyState v-else description="暂无待审核用户" />
+    </el-dialog>
+
     <!-- 用户编辑对话框 -->
     <el-dialog v-model="dialogVisible" append-to-body :title="dialogTitle" :width="DIALOG_MD">
       <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
@@ -528,7 +549,7 @@ const formData = reactive({
   phone: '',
   email: '',
   is_active: true,
-  organization_id: null as number | null,
+  organization_id: null as number | string | null,
   permissions: [] as string[],
 })
 
@@ -536,6 +557,28 @@ import { normalizeTreeNodes } from '@/utils/treeNormalizer'
 
 import { format } from '@/utils'
 const orgTreeOptions = ref<any[]>([])
+
+/**
+ * 组织树节点 id 前缀还原。
+ *
+ * `normalizeTreeNodes` 为了 DOM 安全会给"纯数字开头的 id"加下划线前缀
+ * （`3` → `_3`），而 `el-tree-select` 直接把这些 id 作为 v-model 的值。
+ * 后端 `organization_id` 是 int，提交 `"_3"` 会被 Pydantic 判定为非法 → 422。
+ * 因此提交前必须还原为数字；空值统一给 undefined（后端按"未选择"处理）。
+ */
+function toOrgIdPayload(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') return undefined
+  const raw = String(value).replace(/^_/, '')
+  const num = Number(raw)
+  return Number.isFinite(num) ? num : undefined
+}
+
+/** 回显时把后端数字 id 转成树节点 id 形态（`3` → `_3`），否则选不中 */
+function toOrgTreeValue(value: unknown): string | undefined {
+  if (value === null || value === undefined || value === '') return undefined
+  const raw = String(value)
+  return /^[0-9]/.test(raw) ? `_${raw}` : raw
+}
 
 async function loadOrgTree() {
   try {
@@ -764,6 +807,26 @@ const showPendingUsers = async () => {
   }
 }
 
+/**
+ * 通过审核（启用账号）—— 闭合"待审核用户"闭环。
+ *
+ * 背景：该按钮此前只拉数据却没有任何弹窗消费 `pendingDialogVisible/pendingUsers`，
+ * 属于"点了没反应"的死功能；`is_active=false` 在本系统既表示"待审核"也表示
+ * "已禁用"，故列表口径与按钮文案保持"待审核（未启用）"语义，操作即启用账号。
+ */
+const approvePendingUser = async (row: any) => {
+  try {
+    await put(`/users/${row.id}`, { is_active: true })
+    ElMessage.success(`已通过 ${row.username} 的审核`)
+    pendingUsers.value = pendingUsers.value.filter((u) => u.id !== row.id)
+    pendingCount.value = pendingUsers.value.length
+    pendingDialogVisible.value = pendingUsers.value.length > 0
+    await loadPendingCount()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '审核失败')
+  }
+}
+
 const handleSearch = () => {
   pagination.page = 1
   loadData()
@@ -814,7 +877,8 @@ const handleEdit = (row: any) => {
   currentUser.value = row
   Object.assign(formData, {
     ...row,
-    organization_id: row.organization_id ?? null,
+    // 树节点 id 带 `_` 前缀，回显必须转回树形态，否则下拉框选不中当前组织
+    organization_id: toOrgTreeValue(row.organization_id) ?? null,
   })
   dialogVisible.value = true
   // Load active sessions for this user
@@ -832,13 +896,14 @@ const handleSubmit = async () => {
       if (isEdit.value) {
         await put(`/users/${formData.id}`, {
           full_name: formData.full_name,
+          // 空邮箱由后端统一归一到 NULL（单一事实源），前端不做二次判断
           email: formData.email,
           phone: formData.phone,
           department: formData.department,
           role: formData.role,
           is_active: formData.is_active,
           data_scope: formData.data_scope,
-          organization_id: formData.organization_id,
+          organization_id: toOrgIdPayload(formData.organization_id),
         })
         ElMessage.success('用户更新成功')
       } else {
@@ -846,12 +911,13 @@ const handleSubmit = async () => {
           username: formData.username,
           full_name: formData.full_name,
           password: formData.password || undefined,
+          // 空邮箱由后端统一归一到 NULL（单一事实源），前端不做二次判断
           email: formData.email,
           phone: formData.phone,
           department: formData.department,
           role: formData.role,
           data_scope: formData.data_scope,
-          organization_id: formData.organization_id,
+          organization_id: toOrgIdPayload(formData.organization_id),
           is_active: formData.is_active,
           permissions: formData.permissions?.join(',') || '',
         })
@@ -905,7 +971,9 @@ const confirmResetPassword = async () => {
     resetPwdDialogVisible.value = false
     resetPwdForm.newPassword = ''
   } catch (error: any) {
-    const msg = error?.response?.data?.detail || '重置密码失败'
+    // 后端密码策略失败返回的是 {code, message, field}（而非 detail）；
+    // 只读 detail 会把「具体哪条策略不满足」丢掉，退化成通用文案。
+    const msg = error?.response?.data?.detail || error?.response?.data?.message || '重置密码失败'
     ElMessage.error(msg)
   }
 }

@@ -81,7 +81,7 @@ describe('useOrganizationStore', () => {
     expect(store.orgs[0].name).toBe('Updated')
   })
 
-  it('deleteOrganization 按后端契约带 confirm_password 查询参数', async () => {
+  it('deleteOrganization 按后端契约以请求头传二次确认密码', async () => {
     const { apiRequest } = await import('@/api/request')
     const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
     store.orgs = [{ id: 1 }, { id: 2 }]
@@ -91,7 +91,7 @@ describe('useOrganizationStore', () => {
     expect(mockApiRequest).toHaveBeenCalledWith({
       method: 'DELETE',
       url: '/organizations/1',
-      params: { confirm_password: 'pwd12345' },
+      headers: { 'X-Confirm-Password': 'pwd12345' },
     })
     expect(store.orgs).toHaveLength(1)
     expect(store.tree).toEqual([])

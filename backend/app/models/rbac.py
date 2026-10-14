@@ -38,6 +38,9 @@ class RbacRole(Base):
 
     id = Column(String(36), primary_key=True, default=_uuid)
     name = Column(String(50), unique=True, nullable=False, comment="角色名称")
+    # 角色编码：后端权威字段（此前只有前端按名称大写派生，与后端无关，
+    # 导致"MAINTAINER"与"系统维护员"这类名称变更后编码漂移、且无法用于对接）
+    code = Column(String(50), unique=True, nullable=True, index=True, comment="角色编码（唯一，可空）")
     description = Column(Text, comment="角色描述")
     is_system = Column(Boolean, default=False, comment="是否系统内置角色")
     is_active = Column(Boolean, default=True, comment="是否启用")
@@ -68,6 +71,7 @@ class RbacRole(Base):
         return {
             "id": self.id,
             "name": self.name,
+            "code": self.code,
             "description": self.description,
             "is_system": self.is_system,
             "is_active": self.is_active,

@@ -190,6 +190,7 @@ class TestAuditEventLifecycle:
         with patch("app.services.audit_event_handler.event.listen") as mock_listen:
             result = setup_audit_events()
             # 26 个默认模型 * 3 个事件 = 78
+            # （user_sessions 是基础设施表，2026-10-14 有意不纳入业务审计事件）
             assert result == 26
             assert mock_listen.call_count == 78
 

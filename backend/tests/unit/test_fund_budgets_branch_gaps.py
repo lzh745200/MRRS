@@ -14,6 +14,9 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+from fastapi import HTTPException
+
 from app.api.v1.fund_budgets import (
     BudgetCreate,
     TransactionCreate,
@@ -122,8 +125,13 @@ def test_apply_budget_execution_under_cap_hits_guard():
     db.execute.assert_called_once()
 
 
-async def test_create_transaction_with_missing_fund():
-    """fund_id 有值但 Fund 已不存在 → 内层 if fund 为假，跳过联动更新（390->398）。"""
+async def test_create_transaction_with_missing_fund_404():
+    """2026-10-14（排查 H3）行为变更：fund_id 有值但 Fund 不存在/不可见 → 404。
+
+    旧实现"裸 id 取 + 取不到静默跳过联动更新"（原断言只验证 add 一次），
+    既让调用方误以为核销已入账，也让跨组织 fund_id 篡改成为可能；
+    现改为 `_get_scoped_record_or_404` 收敛，缺失即 404。
+    """
     data = TransactionCreate(
         amount=50.0,
         purpose="对方账户已删除的支出",
@@ -136,9 +144,11 @@ async def test_create_transaction_with_missing_fund():
     q.filter.return_value = q
     q.first.return_value = None
     db.query.return_value = q
-    await create_transaction(data=data, current_user=_admin(), db=db)
-    tx_calls = [c.args[0] for c in db.add.call_args_list if isinstance(c.args[0], FundTransaction)]
-    assert len(tx_calls) == 1
+    with pytest.raises(HTTPException) as exc:
+        await create_transaction(data=data, current_user=_admin(), db=db)
+    assert exc.value.status_code == 404
+    # 明细本身不入库
+    assert not [c for c in db.add.call_args_list if isinstance(c.args[0], FundTransaction)]
 
 
 async def test_delete_transaction_with_missing_relations():

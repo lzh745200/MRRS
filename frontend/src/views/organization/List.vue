@@ -71,6 +71,16 @@
               <el-option label="部门单位" value="department" />
               <el-option label="帮扶单位" value="support_unit" />
             </el-select>
+            <el-select
+              v-model="filterStatus"
+              placeholder="全部状态"
+              clearable
+              style="width: 130px; margin-right: 10px"
+              @change="handleSearch"
+            >
+              <el-option label="正常" value="active" />
+              <el-option label="已停用" value="inactive" />
+            </el-select>
             <el-button v-if="isAdmin" :loading="exporting" @click="handleExport">
               <el-icon><Download /></el-icon>
               <span>导出</span>
@@ -85,7 +95,10 @@
 
       <div v-if="isAdmin && !searchText && !filterType" class="drag-tip">
         <el-alert title="拖拽提示" type="info" :closable="false" show-icon>
-          <template #default> 可以通过拖拽表格行来调整组织排序，松开鼠标后自动保存 </template>
+          <template #default>
+            可以通过拖拽表格行来调整组织排序，松开鼠标后自动保存。
+            <strong>排序仅作用于当前页</strong>（跨页排序请先按状态/类型缩小范围或调整每页条数）。
+          </template>
         </el-alert>
       </div>
 
@@ -127,6 +140,9 @@
           <template #default="scope">
             <el-button @click="handleViewDetail(scope.row)">详情</el-button>
             <el-button type="primary" @click="handleEdit(scope.row)">编辑</el-button>
+            <el-button @click="handleToggleActive(scope.row)">
+              {{ scope.row.is_active === false ? '启用' : '停用' }}
+            </el-button>
             <el-button type="danger" @click="handleDelete(scope.row)">删除</el-button>
           </template>
         </el-table-column>
@@ -231,12 +247,16 @@ import { logger } from '@/utils/logger'
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { OfficeBuilding, CircleCheck, User, Share, Download, Plus } from '@element-plus/icons-vue'
-import { post, put, del, apiRequest } from '@/api/request'
+import { post, put, apiRequest } from '@/api/request'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import Sortable from 'sortablejs'
-import { batchUpdateSortOrders } from '@/api/organization'
+import {
+  activateOrganization,
+  batchUpdateSortOrders,
+  deactivateOrganization,
+} from '@/api/organization'
 
 const { pushSafe } = useRouterSafe()
 
@@ -249,6 +269,8 @@ const tableData = ref<any[]>([])
 const loading = ref(false)
 const searchText = ref('')
 const filterType = ref('')
+/** 状态筛选：'' = 全部（与统计卡片同口径）、active = 正常、inactive = 停用 */
+const filterStatus = ref('')
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -291,8 +313,12 @@ const formRules: FormRules = {
 function formatLevel(level: any): string {
   if (!level) return '未设置'
   const levelStr = String(level)
+  // 兼容两种历史形态：枚举 `level_N` 与深度数字 `N`。
+  // 2026-10-14 修复：此前数字形态被原样回显（列表显示"3"、树端点显示"第3级"），
+  // 同一字段两处口径不一致；现统一显示为"第N级"。
   const match = levelStr.match(/level_(\d+)/)
   if (match) return `第${match[1]}级`
+  if (/^\d+$/.test(levelStr)) return `第${levelStr}级`
   return levelStr
 }
 
@@ -352,7 +378,9 @@ async function fetchData() {
         page_size: pageSize.value,
         search: searchText.value || undefined,
         org_type: filterType.value || undefined,
-        is_active: true,
+        // 2026-10-14：此前硬编码 is_active:true → 停用组织"删除即失踪"，
+        // 且列表总数与统计卡片（含停用）口径不一致。改为按状态筛选，默认"全部"。
+        is_active: filterStatus.value === '' ? undefined : filterStatus.value === 'active',
       },
     })
     // 防御：apiRequest 已解包；信封保留 data 键，裸数据直接使用
@@ -364,6 +392,25 @@ async function fetchData() {
     logger.error('加载数据失败:', e)
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * 启用 / 停用组织。
+ *
+ * 背景（2026-10-14 修复）：列表此前硬编码 `is_active:true` 且没有启停入口 ——
+ * 一旦停用，组织就从列表消失且再也找不到（只能改库）。现补全入口：
+ * 停用后可通过"已停用"状态筛选找回并重新启用。
+ */
+async function handleToggleActive(row: any) {
+  const enable = row.is_active === false
+  try {
+    await (enable ? activateOrganization(row.id) : deactivateOrganization(row.id))
+    ElMessage.success(enable ? '组织已启用' : '组织已停用')
+    await fetchDataWithSort()
+    fetchStats()
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '操作失败')
   }
 }
 
@@ -467,9 +514,13 @@ async function handleDelete(row: any) {
     )
     confirmPassword = value?.trim() ?? ''
 
-    const response = await del(
-      `/organizations/${row.id}?confirm_password=${encodeURIComponent(confirmPassword)}`
-    )
+    // 二次确认密码走请求头（2026-10-14 起）：查询串会原样进 access log，明文密码随之落盘。
+    // 用 apiRequest 而非 del()：后者签名只接受路径，无法携带配置。
+    const response = await apiRequest({
+      method: 'DELETE',
+      url: `/organizations/${row.id}`,
+      headers: { 'X-Confirm-Password': confirmPassword },
+    })
     // del() 已自动解包（返回 res.data），message 在顶层
     ElMessage.success((response as any)?.message || '组织已删除')
     currentPage.value = 1

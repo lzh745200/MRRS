@@ -172,9 +172,10 @@ def generate_control_package(
         zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
         zf.writestr("module_policy.json", json.dumps(module_policy_data, ensure_ascii=False, indent=2))
         if users_data:
-            zf.writestr("users.json", json.dumps(users_data, ensure_ascii=False, indent=2))
+            # users.json 可能非常大：去掉 indent（zip 内已压缩），降低序列化内存峰值与耗时
+            zf.writestr("users.json", json.dumps(users_data, ensure_ascii=False))
         if system_config_data:
-            zf.writestr("system_config.json", json.dumps(system_config_data, ensure_ascii=False, indent=2))
+            zf.writestr("system_config.json", json.dumps(system_config_data, ensure_ascii=False))
 
     buffer.seek(0)
     content = buffer.read()

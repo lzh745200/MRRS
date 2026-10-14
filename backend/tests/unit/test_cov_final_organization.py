@@ -78,7 +78,7 @@ class TestUpdateOrganization:
         q.first.return_value = MagicMock(name="org", id=5)
         resp = client.put("/api/v1/organizations/5", json={"parent_id": 5})
         assert resp.status_code == 400
-        assert resp.json()["detail"] == "不能将组织自身设为上级组织"
+        assert resp.json()["detail"] == "不能将组织设为自身或其子孙的上级组织"
 
 
 class TestOrganizationDetail:

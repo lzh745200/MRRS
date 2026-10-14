@@ -268,13 +268,20 @@ async def list_users(
     page: int = 1,
     page_size: int = 20,
     keyword: Optional[str] = None,
+    username: Optional[str] = None,
     is_active: Optional[bool] = None,
     organization_id: Optional[int] = None,
     role: Optional[str] = None,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """用户列表 - 支持按状态、组织、角色筛选"""
+    """用户列表 - 支持按用户名、关键词、状态、组织、角色筛选
+
+    ``username`` 与 ``keyword`` 的区别：前者只匹配账号名（前端「用户名」搜索框），
+    后者模糊匹配账号名/姓名/邮箱（前端「姓名」搜索框）。
+    历史缺陷：前端一直发 ``username``，而后端没有该形参，FastAPI 静默忽略未知
+    query 参数 → 「用户名」搜索框完全不生效（测试只断言参数已发送，故全绿）。
+    """
     require_admin(current_user)
     query = db.query(User)
 
@@ -298,6 +305,9 @@ async def list_users(
         query = query.filter(
             User.organization_id.in_([current_user.organization_id] + child_org_ids)
         )
+
+    if username:
+        query = query.filter(User.username.contains(username))
 
     if keyword:
         query = query.filter(
@@ -518,7 +528,12 @@ async def create_user(
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
 
-    if data.email and db.query(User).filter(User.email == data.email).first():
+    # 邮箱归一化：空串/纯空白视同"未填写"（统一存 NULL）。
+    # 历史缺陷：前端未填邮箱时提交 ""，而查重分支 `if data.email` 会短路跳过查重，
+    # 但 User.email 有 UNIQUE 约束 → 第二个"未填邮箱"的用户插入即触发
+    # IntegrityError（500）。归一到 None 后多行 NULL 不违反唯一约束。
+    email = (data.email or "").strip() or None
+    if email and db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=400, detail="邮箱已被使用")
 
     # 验证组织是否存在（如果指定了组织）
@@ -570,7 +585,7 @@ async def create_user(
     # 创建用户，包含所有权限和组织信息
     user = User(
         username=data.username,
-        email=data.email,
+        email=email,
         full_name=data.full_name,
         hashed_password=get_password_hash(data.password),
         role=role,
@@ -659,6 +674,15 @@ async def update_user(
         if update_fields["data_scope"] not in VALID_SCOPES:
             raise HTTPException(status_code=400, detail="无效的数据范围")
 
+    # 邮箱归一化 + 唯一性校验。
+    # 历史缺陷：更新路径既不归一化也不查重 —— ① 提交 "" 会占住邮箱唯一键
+    # （第二个空邮箱用户更新即 500）；② 改成已存在的邮箱同样撞 UNIQUE 约束 500。
+    if "email" in update_fields:
+        email = (update_fields["email"] or "").strip() or None
+        update_fields["email"] = email
+        if email and db.query(User).filter(User.email == email, User.id != user_id).first():
+            raise HTTPException(status_code=400, detail="邮箱已被使用")
+
     for field, value in update_fields.items():
         setattr(user, field, value)
 
@@ -681,8 +705,16 @@ async def delete_user(user_id: int, current_user=Depends(get_current_user), db: 
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="不能删除当前登录用户")
 
-    db.delete(user)
-    safe_commit(db)
+    # 级联清理后再删除：按外键的 ondelete 策略清理/置空所有引用 users.id 的表。
+    # 历史缺陷：此处原为直接 `db.delete(user)` —— 而 machine_code.created_by 等
+    # 外键既无 ondelete 声明又非空，删除"创建过机器码"的用户会撞外键约束，
+    # safe_commit 重新抛出原始异常 → 500（且没有任何中文提示）。
+    # 级联服务（含"合规留痕表只置空绝不物理删除"的保护）早已存在，只是从未接线。
+    from app.services.user_cascade_delete_service import UserCascadeDeleteService
+
+    cascade_result = UserCascadeDeleteService(db).delete_user_cascade(user_id)
+    if not cascade_result.get("success"):
+        raise HTTPException(status_code=400, detail=cascade_result.get("message") or "删除用户失败")
 
     return {"code": 200, "message": "删除成功"}
 

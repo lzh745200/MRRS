@@ -181,10 +181,13 @@ const loadData = async () => {
 
   loading.value = true
   try {
-    const data = await getOrganization(id as number)
+    const data: any = await getOrganization(id as number)
     Object.assign(formData, {
       name: data.name || '',
-      code: data.code || '',
+      // 响应信封的顶层 `code` 是 HTTP 状态码（200），响应拦截器展平 data 载荷时
+      // 会跳过已存在的键 → 组织自身的业务 code 不会提到顶层。必须从载荷里取，
+      // 否则"组织编码"输入框会显示 200。
+      code: data?.data?.code || '',
       parent_id: data.parent_id ?? null,
       org_type: data.org_type || 'department',
       is_active: data.is_active !== false,
@@ -218,7 +221,9 @@ const handleSubmit = async () => {
       if (isEdit.value) {
         await updateOrganization(safeRouteParam(route.params.id) as number, {
           name: formData.name,
-          parent_id: formData.parent_id ?? undefined, // 编辑也必须提交上级组织（此前被丢弃）
+          // 显式传 null 才能在编辑时把组织"置为顶级"：
+          // 后端 update 用 exclude_unset，传 undefined 等于不提交该字段 → 父级不变。
+          parent_id: formData.parent_id ?? null,
           org_type: formData.org_type,
           description: formData.description || undefined,
           contact_person: formData.contact_person || undefined,

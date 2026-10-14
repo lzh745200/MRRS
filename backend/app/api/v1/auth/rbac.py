@@ -28,6 +28,9 @@ router = APIRouter(prefix="/rbac", tags=["权限管理"])
 
 class RoleCreate(BaseModel):
     name: str
+    # 角色编码：后端权威字段。前端此前用「名称大写」派生，改名即漂移；
+    # 留空则后端按同一规则派生一次并落库（保证列表不再由前端造值）。
+    code: Optional[str] = None
     description: str
     permissions: List[str]
     is_system: bool = False
@@ -35,6 +38,7 @@ class RoleCreate(BaseModel):
 
 class RoleUpdate(BaseModel):
     name: Optional[str] = None
+    code: Optional[str] = None
     description: Optional[str] = None
     permissions: Optional[List[str]] = None
     is_active: Optional[bool] = None
@@ -155,6 +159,7 @@ async def create_role(
             description=role_data.description,
             permissions=role_data.permissions,
             is_system=role_data.is_system,
+            code=role_data.code,
             db=sess,
         )
     return success_response(
@@ -220,6 +225,8 @@ async def update_role(
         # 更新基本字段
         if role_data.name is not None:
             role.name = role_data.name
+        if role_data.code is not None:
+            role.code = role_data.code
         if role_data.description is not None:
             role.description = role_data.description
         if role_data.is_active is not None:
@@ -266,7 +273,7 @@ async def get_role_users(
 ):
     """获取角色关联的用户列表"""
     rows = (
-        db.query(User.id, User.username, User.full_name, User.role, User.is_active)
+        db.query(User.id, User.username, User.full_name, User.email, User.role, User.is_active)
         .join(UserRole, User.id == UserRole.user_id)
         .filter(UserRole.role_id == role_id)
         .all()
@@ -277,6 +284,9 @@ async def get_role_users(
             "id": r.id,
             "username": r.username,
             "full_name": r.full_name,
+            # email 一并返回：角色关联用户弹窗有"邮箱"列，此前后端不返回该字段
+            # → 前端列恒为空（前端还曾误取 real_name，后端从未提供过该字段）。
+            "email": r.email,
             "role": r.role,
             "is_active": r.is_active,
         }

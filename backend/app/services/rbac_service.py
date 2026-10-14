@@ -5,6 +5,7 @@ RBAC权限管理服务
 """
 
 import logging
+import re
 from contextvars import ContextVar
 from datetime import datetime
 from enum import Enum
@@ -613,10 +614,16 @@ class RBACService:
         description: str,
         permissions: List[str],
         is_system: bool = False,
+        code: Optional[str] = None,
         db: Session = None,
     ) -> str:
-        """创建角色"""
-        role = RbacRole(name=name, description=description, is_system=is_system)
+        """创建角色
+
+        ``code`` 为可空唯一编码：不传时按名称派生一次（大写、非字母数字转下划线），
+        与前端此前的展示规则一致，避免列表出现空白编码。
+        """
+        derived = (code or "").strip() or re.sub(r"[^0-9A-Za-z]+", "_", name.upper()).strip("_")
+        role = RbacRole(name=name, description=description, is_system=is_system, code=derived or None)
         db.add(role)
         db.flush()  # 获取生成的 id
 
