@@ -1,16 +1,16 @@
 {
-  "version": "1.12.16",
-  "build": "20261005",
-  "release_date": "2026-10-05",
-  "description": "R18 全维度排查修复：Worker 池并发闸门 / 备份阻塞事件循环 / 数据包同名互踩 / 健康端点信息面收敛 / 孤儿进程竞态",
+  "version": "1.12.17",
+  "build": "20261016",
+  "release_date": "2026-10-16",
+  "description": "R28 全系统排查修复：数据域越权收敛 / 报表导出隔离 / 服务层正确性 / 中间件与限流 / 前端与构建链",
   "features": [
-    "electron/worker-pool：修复 _active 双扣致 maxWorkers 并发闸门永久失效（message 与 exit(code=1) 各扣一次），超时任务强制终止并回收槽位，杜绝 hang 死任务占用线程",
-    "备份端点移入线程池（run_in_thread）：备份含全库拷贝/上传目录打包/CRC 校验/可选 PBKDF2 加密，此前在事件循环同步执行导致备份期间全站无响应",
-    "数据包/同步上传临时文件唯一化（uuid 前缀）：修复同名并发导入互踩（后写者覆写前写者正读取的文件，静默数据错乱）",
-    "无认证健康端点信息面收敛：裁剪 OS/Python 指纹字段，异常分支只回类型名不回显原文（可含数据库路径）",
-    "stopBackend 孤儿进程竞态修复：5s 兜底定时器保存句柄并在 exit 清理，仅在引用仍为本进程时置空",
-    "任务队列记录挂靠每日回收（LocalTaskQueue._tasks 此前只增不减，cleanup 全仓无调用点）",
-    "项目列表排序列白名单（此前 getattr 任意字符串可触发 500）；麒麟部署模板恢复 CSRF、Token 收窄至 8 小时",
-    "后端 11948 用例 / 覆盖率 100%，前端 6304 用例（302 文件）全绿；Windows x64 与麒麟 ARM64 双安装包发布"
+    "数据域越权收敛：用户管理三处子树过滤统一到 _apply_user_data_scope（db 必填 fail-closed）；/export/villages、/data-sync、/system-health/*、/system/environment、/monitoring、/system/config 读端点、/batch/validate（含表名白名单）收敛为管理员/登录可见",
+    "报表导出数据域：公文报告导出六个 generate_*_report_data 改为强制 current_user 位置参数（漏传即 TypeError），部门级 admin 不再能借导出读到跨组织村/校/项目/经费总量与金额；/export/comprehensive 用户数聚合同步收敛",
+    "仪表盘与近期活动数据域：/dashboard/recent-activities 三路 feed（项目/经费/审批）按 get_org_scope 收敛，审批按「我提交/待我审批」；共享缓存仅全量访问者读写，普通用户按域现算",
+    "服务层正确性：审批 approve/reject 改带条件原子抢占；数据包批量 upsert 只更新实际携带列；组织导入两阶段回填 parent_id/path/level；冲突保留双方时后缀唯一化；2FA 并发撞唯一键回退；通知偏好写入 upsert；履约评分真实化",
+    "平台与性能：中间件链纯 ASGI 化并合并；限流器接线 settings.RATE_LIMIT_* 与整体关闭；token 黑名单清理节流；缓存 LRU 并支持缓存 None；Redis 适配器加锁并接线 REDIS_ENABLED（未装客户端安全降级）；系统时钟统一 UTC",
+    "错误细节不出站：system_health、system/metrics、/overview 去 str(e)/绝对路径/表名/行数明细，原文只进日志；/encryption/status 不再回吐 KDF 迭代数；匿名反馈 content 加 5000 字上限",
+    "构建与发布：Electron 真分块读大文件、worker 路径白名单上提主进程（path-guard 单一实现）、重启计数改稳定存活口径、will-navigate file:// 白名单；卸载删除真实 userData 口径统一；CI 收录 _build_info.json 使发布件构建指纹不再恒为 dev",
+    "门禁与守卫：修复 scan_mojibake 扫得出来但拦不住（mojibake 命中从不影响退出码）与 frontend/package.json 描述双重编码损坏；pragma 理由棘轮 0 无理由；后端 12.6k 用例 / 前端 6.3k 用例全绿，双向覆盖率 100%（行+分支）"
   ]
 }

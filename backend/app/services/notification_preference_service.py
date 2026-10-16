@@ -17,6 +17,7 @@ API 层使用的 site_message.enabled / email.enabled / report / quiet_hours 等
 from datetime import timezone, datetime
 from typing import Any, Dict, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.notification_preference import NotificationPreference
@@ -37,28 +38,28 @@ class NotificationPreferenceService:
     # ==================== 获取偏好 ====================
 
     def get_preference(self, user_id: int) -> NotificationPreference:
+        """获取用户通知偏好（**只读**，缺记录时返回未持久化的默认对象）。
+
+        M27（R27 排查）：旧实现 getter 隐式写库（缺则创建默认并提交）——
+        只读请求产生写入副作用，并发首访还会撞 user_id 唯一键并把
+        IntegrityError 直穿成 500。现在写入统一走 update_preference
+        （缺记录时创建；并发撞唯一键时回退为更新）。
         """
-        获取用户通知偏好
-
-        如果不存在则创建默认偏好
-
-        参数:
-            user_id: 用户ID
-
-        返回:
-            NotificationPreference: 通知偏好对象
-        """
-        preference = self.db.query(NotificationPreference).filter(NotificationPreference.user_id == user_id).first()
+        preference = (
+            self.db.query(NotificationPreference)
+            .filter(NotificationPreference.user_id == user_id)
+            .first()
+        )
 
         if not preference:
-            # 创建默认偏好
-            preference = self._create_default_preference(user_id)
+            preference = self._build_default_preference(user_id)
 
         return preference
 
-    def _create_default_preference(self, user_id: int) -> NotificationPreference:
-        """创建默认通知偏好（使用模型真实列）"""
-        preference = NotificationPreference(
+    @staticmethod
+    def _build_default_preference(user_id: int) -> NotificationPreference:
+        """构造默认通知偏好对象（不落库、不提交）。"""
+        return NotificationPreference(
             user_id=user_id,
             # 邮件通知默认: 审批/任务开启, 系统关闭（与模型 default 一致）
             email_approval=True,
@@ -74,17 +75,14 @@ class NotificationPreferenceService:
             push_system=True,
         )
 
-        self.db.add(preference)
-        safe_commit(self.db)
-        self.db.refresh(preference)
-
-        return preference
-
     # ==================== 更新偏好 ====================
 
     def update_preference(self, user_id: int, **kwargs) -> NotificationPreference:
         """
-        更新用户通知偏好
+        更新用户通知偏好（缺记录时创建；写入原子落库）
+
+        M27（R27 排查）：getter 不再隐式写库，默认记录的创建收敛到本方法；
+        并发首次写入撞 user_id 唯一键时回退为更新已落库行（upsert 语义）。
 
         参数:
             user_id: 用户ID
@@ -93,9 +91,40 @@ class NotificationPreferenceService:
         返回:
             NotificationPreference: 更新后的偏好对象
         """
-        preference = self.get_preference(user_id)
+        preference = (
+            self.db.query(NotificationPreference)
+            .filter(NotificationPreference.user_id == user_id)
+            .first()
+        )
+        if not preference:
+            preference = self._build_default_preference(user_id)
+            self.db.add(preference)
 
-        # 允许更新的字段（模型真实列）
+        self._apply_allowed_fields(preference, kwargs)
+
+        try:
+            safe_commit(self.db)
+        except IntegrityError:
+            # 并发首次写入时两方都判"无记录"、各自 INSERT，后者撞唯一键；
+            # 回滚后按 upsert 语义更新已落库行。
+            self.db.rollback()
+            preference = (
+                self.db.query(NotificationPreference)
+                .filter(NotificationPreference.user_id == user_id)
+                .first()
+            )
+            if preference is None:
+                raise
+            self._apply_allowed_fields(preference, kwargs)
+            safe_commit(self.db)
+
+        self.db.refresh(preference)
+
+        return preference
+
+    @staticmethod
+    def _apply_allowed_fields(preference: NotificationPreference, kwargs: Dict[str, Any]) -> None:
+        """把 kwargs 中模型真实列允许的字段写入偏好对象（不含提交）。"""
         allowed_fields = [
             "email_approval",
             "email_task",
@@ -113,10 +142,6 @@ class NotificationPreferenceService:
                 setattr(preference, field, value)
 
         preference.updated_at = datetime.now(timezone.utc)
-        safe_commit(self.db)
-        self.db.refresh(preference)
-
-        return preference
 
     def update_site_message_settings(
         self,

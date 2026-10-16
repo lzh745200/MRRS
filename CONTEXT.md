@@ -23,7 +23,7 @@
 
 ## 不变量（违反即缺陷）
 
-1. **数据隔离**：一切业务查询必须经过组织范围过滤（`filter_by_data_scope` / `apply_scope_filter`）。语义：`user`=OWN，`admin`=OWN_DEPT，`super_admin`=ALL；角色先过 `normalize_role()`。
+1. **数据隔离**：一切业务查询必须经过组织范围过滤（`filter_by_data_scope` / `apply_scope_filter`）。语义：`user`=OWN，`admin`=OWN_DEPT（本组织**及子树**），`super_admin`=ALL；角色先过 `normalize_role()`。`apply_scope_filter` 默认即此严格口径（2026-10-14 R27-H8 收口），只有组织树可见性端点（地图/大屏/统计/组织树）显式传 `admin_full_access=True` 时才让部门级 admin 看全量；`check_record_access` 在组织归属缺失（任一侧为 NULL）时 fail-closed 拒绝。
 2. **fail-closed**：鉴权、加密、限流的任何前置条件缺失时拒绝操作，绝不放行。
 3. **envelope 响应**：新端点一律 `success_response()` / `ok_list()`（`core/response.py`）。
 4. **软删除**：核心业务模型用 `is_active` + `deleted_by`；审计类记录永不物理删除。

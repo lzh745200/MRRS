@@ -342,11 +342,11 @@ export interface AggregateQuery {
 
 /**
  * 钻取查询参数
+ * 后端 DrillDownQuery 字段：dimension / value / year / filters（无 target_dimension）
  */
 export interface DrillDownQuery {
   dimension: 'department' | 'support_unit' | 'region' | 'year' | 'province'
   value: string
-  targetDimension: 'department' | 'support_unit' | 'region' | 'year'
   filters?: Record<string, unknown>
 }
 

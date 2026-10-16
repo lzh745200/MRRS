@@ -385,22 +385,28 @@ async function loadTrendData() {
     { length: currentYear + 1 - YEAR_START + 1 },
     (_, i) => currentYear + 1 - i
   )
-  const records: Array<{ year: number; perCapita: number | null; collective: number | null }> = []
-  for (const year of yearList) {
-    try {
-      const data = await getYearlyData(villageId.value, year)
-      const income = (data as any)?.income
-      if (income && (income.perCapitaIncome != null || income.collectiveIncome != null)) {
-        records.push({
-          year,
-          perCapita: income.perCapitaIncome != null ? Number(income.perCapitaIncome) : null,
-          collective: income.collectiveIncome != null ? Number(income.collectiveIncome) : null,
-        })
+  // 各年份请求互相独立，并发拉取（原串行 for-await 需 N 次往返）
+  const results = await Promise.all(
+    yearList.map(async (year) => {
+      try {
+        const data = await getYearlyData(villageId.value, year)
+        const income = (data as any)?.income
+        if (income && (income.perCapitaIncome != null || income.collectiveIncome != null)) {
+          return {
+            year,
+            perCapita: income.perCapitaIncome != null ? Number(income.perCapitaIncome) : null,
+            collective: income.collectiveIncome != null ? Number(income.collectiveIncome) : null,
+          }
+        }
+        return null
+      } catch {
+        return null // 跳过无数据年份
       }
-    } catch {
-      // 跳过无数据年份
-    }
-  }
+    })
+  )
+  const records = results.filter(
+    (r): r is { year: number; perCapita: number | null; collective: number | null } => r !== null
+  )
   records.sort((a, b) => a.year - b.year)
   trendData.value = {
     years: records.map((r) => r.year),

@@ -108,14 +108,6 @@ def create_token_pair(
         "iat": now,
         "exp": now + timedelta(minutes=access_ttl_minutes),
     }
-    if extra_claims:
-        # 保留声明不可被调用方覆盖：extra_claims={"type": "refresh"} 会绕过
-        # validate_token 的类型校验，{"exp": ...} 会延长有效期，{"sub"/"jti"} 会
-        # 造成主体/吊销标识漂移。这里只允许**追加**非保留声明。
-        for _key, _value in extra_claims.items():
-            if _key not in _RESERVED_CLAIMS:
-                access_payload[_key] = _value
-    access_token = jwt.encode(access_payload, secret, algorithm=algorithm)
 
     # Refresh token
     refresh_payload = {
@@ -125,6 +117,21 @@ def create_token_pair(
         "iat": now,
         "exp": now + timedelta(days=refresh_ttl_days),
     }
+
+    if extra_claims:
+        # 保留声明不可被调用方覆盖：extra_claims={"type": "refresh"} 会绕过
+        # validate_token 的类型校验，{"exp": ...} 会延长有效期，{"sub"/"jti"} 会
+        # 造成主体/吊销标识漂移。这里只允许**追加**非保留声明。
+        #
+        # R28 T1（R20 L2）：extra_claims 必须**同时**进入 refresh 载荷。
+        # refresh_access_token 只能从 refresh 载荷取回声明（如 token_version）；
+        # 若 refresh 不带，刷新链路会签发缺少版本声明的 access，在 W1
+        # fail-closed（get_current_user 要求版本声明）下立即失效。
+        _extra = {k: v for k, v in extra_claims.items() if k not in _RESERVED_CLAIMS}
+        access_payload.update(_extra)
+        refresh_payload.update(_extra)
+
+    access_token = jwt.encode(access_payload, secret, algorithm=algorithm)
     refresh_token = jwt.encode(refresh_payload, secret, algorithm=algorithm)
 
     return {
@@ -242,11 +249,20 @@ def refresh_access_token(refresh_token: str) -> Tuple[bool, Optional[Dict[str, A
     if not subject:
         return False, None, "Refresh token 缺少 subject"
 
+    # R20 L2（R28 T1 安全项）：刷新必须携带原令牌的非保留声明（如 token_version）。
+    # 原实现 `create_token_pair(subject)` 丢掉了全部 extra_claims：在 W1 fail-closed
+    # （get_current_user 要求 token_version 声明）下会签发"立即失效"的新 access；
+    # 反向场景（保留声明被伪造）不会发生——保留声明已在 create_token_pair 中过滤。
+    carry = {k: v for k, v in payload.items() if k not in _RESERVED_CLAIMS}
+
     # Revoke the used refresh token (rotation)
     revoke_token(refresh_token, reason="refresh_rotation")
 
     # Issue new pair
-    token_pair = create_token_pair(subject)
+    if carry:
+        token_pair = create_token_pair(subject, extra_claims=carry)
+    else:
+        token_pair = create_token_pair(subject)
     return True, token_pair, None
 
 

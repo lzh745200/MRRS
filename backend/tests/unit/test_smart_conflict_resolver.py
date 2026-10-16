@@ -276,14 +276,31 @@ class TestSmartConflictResolver:
             {"id": 10, "village_name": "V001", "name": "New Copy"},
             ["name"]
         )
-        with patch("app.services.smart_conflict_resolver.time.time", return_value=1234567890):
-            result = resolver.resolve_conflicts_with_strategy([conflict], ConflictStrategy.KEEP_BOTH)
+        result = resolver.resolve_conflicts_with_strategy([conflict], ConflictStrategy.KEEP_BOTH)
         assert result == {"villages": {10: 1}}
         mock_db.add.assert_called_once()
         added = mock_db.add.call_args[0][0]
         assert isinstance(added, MockVillage)
-        assert added.village_name == "V001_imp_1234567890"
+        # M24（R27 订正）：后缀从秒级时间戳改为随机唯一值 —— 旧断言锁定的是
+        # "同批同 code 在同一秒内撞出相同业务键"的缺陷行为。
+        assert added.village_name.startswith("V001_imp_")
         assert added.name == "New Copy"
+
+    def test_resolve_conflicts_keep_both_suffix_unique(self, resolver, mock_db):
+        """M24：同批同 code 两次 KEEP_BOTH 不得生成相同业务键。"""
+        local = MockVillage()
+        conflict = DataConflict(
+            "villages", {"village_name": "V001"}, local,
+            {"id": 10, "village_name": "V001", "name": "Copy"},
+            ["name"]
+        )
+        resolver.resolve_conflicts_with_strategy([conflict], ConflictStrategy.KEEP_BOTH)
+        resolver.resolve_conflicts_with_strategy([conflict], ConflictStrategy.KEEP_BOTH)
+        first = mock_db.add.call_args_list[0][0][0]
+        second = mock_db.add.call_args_list[1][0][0]
+        assert first.village_name != second.village_name
+        assert first.village_name.startswith("V001_imp_")
+        assert second.village_name.startswith("V001_imp_")
 
     def test_resolve_conflicts_keep_both_no_code_field(self, resolver, mock_db):
         local = MockVillage()
@@ -292,8 +309,7 @@ class TestSmartConflictResolver:
             {"id": 10, "name": "No Code Copy"},
             ["name"]
         )
-        with patch("app.services.smart_conflict_resolver.time.time", return_value=1234567890):
-            result = resolver.resolve_conflicts_with_strategy([conflict], ConflictStrategy.KEEP_BOTH)
+        result = resolver.resolve_conflicts_with_strategy([conflict], ConflictStrategy.KEEP_BOTH)
         assert result == {"villages": {10: 1}}
         mock_db.add.assert_called_once()
         added = mock_db.add.call_args[0][0]

@@ -42,7 +42,7 @@ try:
         def _patched_finalize(cls, name, dryrun):
             try:
                 return _orig_finalize(cls, name, dryrun)
-            except (ValueError, Exception):
+            except Exception:  # noqa: BLE001 - 任何后端检测失败都跳过（原 (ValueError, Exception) 冗余）
                 return True  # 跳过 passlib 的 bcrypt wrap-bug 检测
 
         _pb._BcryptCommon._finalize_backend_mixin = classmethod(_patched_finalize)
@@ -115,7 +115,16 @@ ALL_ROLES = [
 ADMIN_ROLES = {ROLE_SUPER_ADMIN, ROLE_ADMIN}
 
 # ── 密码上下文 ──
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from app.core.config import settings as _config  # noqa: E402
+
+# 哈希轮数由 settings.BCRYPT_ROUNDS 提供（此前该配置零消费，R28 低危项）；
+# 默认 12 与 passlib bcrypt 默认一致，故默认配置下哈希产物与既有库完全兼容
+# （bcrypt 哈希自带 cost 前缀，校验时按哈希内 cost 进行，调高只影响新哈希）。
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=_config.BCRYPT_ROUNDS,
+)
 
 # ── Bearer token 提取 ──
 security_scheme = HTTPBearer(auto_error=False)
@@ -538,8 +547,8 @@ async def check_rate_limit(
     key: str = None,
     *,
     request=None,
-    limit: int = 60,
-    window: int = 60,
+    limit: int = None,
+    window: int = None,
 ) -> bool:
     """速率限制检查。
 
@@ -555,8 +564,8 @@ async def check_rate_limit(
     Args:
         key: 速率限制键（通常为 IP 或用户名），必填
         request: FastAPI Request，必填
-        limit: 窗口内最大请求数
-        window: 时间窗口（秒）
+        limit: 窗口内最大请求数；None 时回退 settings.RATE_LIMIT_PER_MINUTE（M38）
+        window: 时间窗口（秒）；None 时回退 60 秒
 
     Returns:
         bool: True=允许请求，False=速率超限
@@ -568,6 +577,20 @@ async def check_rate_limit(
         raise ValueError("check_rate_limit requires a non-empty string key")
     if request is None:
         raise ValueError("check_rate_limit requires a FastAPI request")
+
+    # M38（R27 排查）：settings.RATE_LIMIT_ENABLED / RATE_LIMIT_PER_MINUTE /
+    # RATE_LIMIT_PER_HOUR 历史上全仓零消费——"配了不生效"且无法整体关闭。
+    # 此处接线：显式关闭时短路放行（运维应急开关，fail-open 是关闭语义本身）；
+    # 调用方未显式传 limit/window 时回退到 settings 的每分钟/每小时额度。
+    # 注意与 services/resource_limiter.py 是两套独立实现，互不影响。
+    from app.core.config import settings as _rl_settings
+
+    if not getattr(_rl_settings, "RATE_LIMIT_ENABLED", True):
+        return True
+    if limit is None:
+        limit = getattr(_rl_settings, "RATE_LIMIT_PER_MINUTE", 60)
+    if window is None:
+        window = 60
 
     now = time.monotonic()
     with _rate_limit_lock:
@@ -693,6 +716,39 @@ class PasswordPolicy:
 # ══════════════════════════════════════════════════════════════
 
 
+# ── 安全响应头（M35，R27 排查）──
+# 单一事实源：SecurityHeadersMiddleware 遍历本常量下发，不再各自硬编码。
+# 本轮订正：
+# - 删除 X-XSS-Protection：现代浏览器已废弃（旧 XSS Auditor 反而引入绕过面，
+#   OWASP 现建议 `0` 或不发送）。
+# - 补齐 HSTS / CSP / Permissions-Policy：原常量里有、中间件却没下发。
+# - CSP 取保守口径：本应用是完全离线的单机桌面应用，前端产物无内联 <script>、
+#   无外部 CDN，瓦片/图片全部同源（resources/frontend/index.html 仅一个 module
+#   script）。style-src 保留 'unsafe-inline'——Element Plus 等组件在运行期写内联
+#   样式；img-src 放行 data:/blob:（图表与导出预览）。
+# - HSTS 对纯 HTTP 部署无副作用（浏览器对 IP/localhost 有豁免），但经 nginx TLS
+#   终结的麒麟部署需要它，故始终下发。
+SECURITY_HEADERS: dict = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    ),
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+
 class SecurityHeadersMiddleware:
     """安全响应头中间件"""
 
@@ -709,26 +765,27 @@ class SecurityHeadersMiddleware:
                 path = scope.get("path", "")
                 method = scope.get("method", "")
 
-                security_headers = [
-                    (b"X-Content-Type-Options", b"nosniff"),
-                    (b"X-Frame-Options", b"DENY"),
-                    (b"X-XSS-Protection", b"1; mode=block"),
-                    (b"Referrer-Policy", b"strict-origin-when-cross-origin"),
-                ]
+                headers = list(message.get("headers", []))
+                existing = {name.lower() for name, _ in headers}
+
+                # M35（R27 排查）：遍历 SECURITY_HEADERS 单一事实源下发——
+                # 此前常量零消费、中间件硬编码 4 项，HSTS/CSP/Permissions-Policy
+                # 实际缺失。路由已显式设置的头部一律尊重，不覆盖。
+                for header_name, header_value in SECURITY_HEADERS.items():
+                    encoded_name = header_name.encode("latin-1")
+                    if encoded_name.lower() in existing:
+                        continue
+                    headers.append((encoded_name, header_value.encode("latin-1")))
+                    existing.add(encoded_name.lower())
 
                 # Cache-Control: 静态资源和参考数据可缓存，变更数据不缓存
-                if method == "GET":
+                if method == "GET" and b"cache-control" not in existing:
                     if any(path.startswith(p) for p in ("/static/", "/assets/", "/frontend/")):
-                        security_headers.append((b"Cache-Control", b"public, max-age=86400"))
+                        headers.append((b"Cache-Control", b"public, max-age=86400"))
                     elif any(path.startswith(p) for p in ("/api/v1/data/", "/api/v1/policy/")):
-                        security_headers.append((b"Cache-Control", b"private, max-age=300"))
+                        headers.append((b"Cache-Control", b"private, max-age=300"))
 
-                existing = {h[0].lower() for h in message.get("headers", [])}
-                for name, value in security_headers:
-                    if name.lower() not in existing:
-                        message["headers"] = list(message.get("headers", [])) + [
-                            (name, value)
-                        ]
+                message["headers"] = headers
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
@@ -788,16 +845,6 @@ class AuditLogService:
 #  安全常量
 # ══════════════════════════════════════════════════════════════
 
-# 安全响应头字典（供 SecurityHeadersMiddleware 使用）
-SECURITY_HEADERS: dict = {
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "X-XSS-Protection": "1; mode=block",
-    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "Content-Security-Policy": "default-src 'self'",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-}
 
 # 敏感数据检测模式（供 sanitize_log_data 使用）
 SENSITIVE_PATTERNS: list = [

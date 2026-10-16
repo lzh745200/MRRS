@@ -53,7 +53,11 @@
                 </h3>
               </div>
               <div class="system-status">
-                <div v-if="systemStatus.length === 0" class="empty-tip">加载中...</div>
+                <div v-if="!panelsLoaded" class="empty-tip">加载中...</div>
+                <div v-else-if="panelError.status" class="empty-tip error-tip">
+                  {{ panelError.status }}
+                </div>
+                <div v-else-if="systemStatus.length === 0" class="empty-tip">暂无状态数据</div>
                 <div v-for="status in systemStatus" :key="status.name" class="status-item">
                   <span class="status-name">{{ status.name }}</span>
                   <span class="status-value" :class="status.status">
@@ -72,10 +76,14 @@
                 </h3>
               </div>
               <div class="login-list">
-                <div v-if="recentLogins.length === 0" class="empty-tip">暂无登录记录</div>
+                <div v-if="!panelsLoaded" class="empty-tip">加载中...</div>
+                <div v-else-if="panelError.logins" class="empty-tip error-tip">
+                  {{ panelError.logins }}
+                </div>
+                <div v-else-if="recentLogins.length === 0" class="empty-tip">暂无登录记录</div>
                 <div v-for="login in recentLogins" :key="login.id" class="login-item">
                   <div class="login-avatar">
-                    {{ (login.name || '').charAt(0) || 'U' }}
+                    {{ login.avatar }}
                   </div>
                   <div class="login-info">
                     <span class="login-name">{{ login.name }}</span>
@@ -95,7 +103,11 @@
                 <button class="text-btn" @click="pushSafe('/system/audit')">查看全部</button>
               </div>
               <div class="audit-list">
-                <div v-if="auditLogs.length === 0" class="empty-tip">暂无审计记录</div>
+                <div v-if="!panelsLoaded" class="empty-tip">加载中...</div>
+                <div v-else-if="panelError.audit" class="empty-tip error-tip">
+                  {{ panelError.audit }}
+                </div>
+                <div v-else-if="auditLogs.length === 0" class="empty-tip">暂无审计记录</div>
                 <div v-for="log in auditLogs" :key="log.id" class="audit-item">
                   <span class="audit-action" :class="log.type">{{ log.action }}</span>
                   <span class="audit-user">{{ log.user }}</span>
@@ -139,7 +151,11 @@
                 <span class="pending-count">{{ pendingItems.length }}</span>
               </div>
               <div class="pending-list">
-                <div v-if="pendingItems.length === 0" class="empty-tip">暂无待处理事项</div>
+                <div v-if="!panelsLoaded" class="empty-tip">加载中...</div>
+                <div v-else-if="panelError.pending" class="empty-tip error-tip">
+                  {{ panelError.pending }}
+                </div>
+                <div v-else-if="pendingItems.length === 0" class="empty-tip">暂无待处理事项</div>
                 <div
                   v-for="item in pendingItems"
                   :key="item.id"
@@ -161,15 +177,18 @@
                 </h3>
               </div>
               <div class="storage-info">
-                <div class="storage-bar">
+                <div v-if="storageError" class="empty-tip error-tip">
+                  {{ panelError.storage || '存储信息加载失败' }}
+                </div>
+                <div v-else class="storage-bar">
                   <div class="storage-used" :style="{ width: storagePercent + '%' }"></div>
                 </div>
-                <div class="storage-text">
+                <div v-if="!storageError" class="storage-text">
                   已使用 {{ formatSize(storageUsed) }} /
                   {{ formatSize(storageTotal) }}
                 </div>
               </div>
-              <div class="storage-breakdown">
+              <div v-if="!storageError" class="storage-breakdown">
                 <div class="breakdown-item">
                   <span class="breakdown-label">数据库</span>
                   <span class="breakdown-value">{{ formatSize(dbSize) }}</span>
@@ -199,8 +218,9 @@ import { logger } from '@/utils/logger'
 import { ref, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useUserStore } from '@/stores/user'
-import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
+import { isAdminUser } from '@/utils/roleAccess'
 import { get } from '@/api/request'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import {
   UserFilled,
   Files,
@@ -218,10 +238,9 @@ import {
 
 const { pushSafe } = useRouterSafe()
 const userStore = useUserStore()
-const isAdmin = computed(() => {
-  const role = normalizeRole(userStore.currentUser?.role)
-  return ADMIN_ROLES.includes(role)
-})
+// M47：管理员判定统一走 roleAccess.isAdminUser()（normalizeRole + is_superuser），
+// 与路由守卫 / v-permission 指令同口径。
+const isAdmin = computed(() => isAdminUser(userStore.currentUser))
 
 const currentDate = new Date().toLocaleDateString('zh-CN', {
   year: 'numeric',
@@ -232,7 +251,9 @@ const currentDate = new Date().toLocaleDateString('zh-CN', {
 
 const adminStats = ref([
   { label: '用户总数', value: 0, icon: UserFilled, trend: '', trendClass: 'stable' },
-  { label: '覆盖人口', value: 0, icon: CircleCheck, trend: '', trendClass: 'stable' },
+  // 「今日活跃」取审计统计的 active_users（真实指标）；接口失败时回落 '--' 而非 0，
+  // 避免把"取不到"伪装成"今天没人活跃"。
+  { label: '今日活跃', value: '--', icon: CircleCheck, trend: '', trendClass: 'stable' },
   { label: '数据记录', value: 0, icon: DataAnalysis, trend: '', trendClass: 'stable' },
   {
     label: '系统运行',
@@ -265,6 +286,11 @@ const storageTotal = ref(1)
 const dbSize = ref(0)
 const backupSize = ref(0)
 const logSize = ref(0)
+const storageError = ref(false)
+/** 五个数据面板是否已加载完成（用于区分"加载中"与"确实为空"） */
+const panelsLoaded = ref(false)
+/** 各面板的加载失败原因：失败时把"暂无数据"换成真实原因，不静默伪装成空 */
+const panelError = ref<Record<string, string>>({})
 
 const storagePercent = computed(() => Math.round((storageUsed.value / storageTotal.value) * 100))
 
@@ -275,21 +301,43 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
 }
 
-async function loadAdminData() {
+/** 把任意错误对象转成一行可读文本（用于面板内联错误提示，不弹全局消息） */
+function errText(e: unknown, fallback: string): string {
+  return getErrorMessage(e, fallback)
+}
+
+/** 从响应中取数组（兼容裸数组 / {items} / envelope 展开后的两种形态） */
+function pickItems(res: any): any[] {
+  if (Array.isArray(res)) return res
+  const items = res?.items ?? res?.data?.items
+  return Array.isArray(items) ? items : []
+}
+
+/** 从响应中取 payload（envelope 展开后字段已在顶层；未展开时回落到 data） */
+function pickData(res: any): any {
+  const inner = res?.data
+  return inner && typeof inner === 'object' ? inner : (res ?? {})
+}
+
+/** 秒级时间戳/ISO 串 → 本地 'YYYY-MM-DD HH:mm'；解析失败返回 '--' */
+function fmtTime(value?: string | null): string {
+  if (!value) return '--'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return '--'
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** 概览统计（用户数 / 数据记录 / 系统运行） */
+async function loadOverviewStats() {
   try {
     const res: any = await get('/dashboard/stats')
-    // /dashboard/stats 实际返回（backend/app/api/v1/data/data/dashboard.py）：
+    // /dashboard/stats 返回（backend/app/api/v1/data/data/dashboard.py）：
     //   total_users / total_villages / total_projects / total_schools / total_population /
-    //   total_funds(万元) / funds_allocated / funds_pending / funds_planned /
-    //   data_completeness / pending_approvals / projects_by_status / trends
-    // 无数据时返回 null。
-    // ⚠️ system_status / recent_logins / audit_logs / pending_items / storage
-    // **不在该响应中**，故本页对应面板恒为空（待接入真实端点，见下方说明）。
+    //   total_funds(万元) / data_completeness / pending_approvals / trends；无数据时返回 null。
     const data = res?.data ?? res ?? {}
 
     adminStats.value[0].value = Number(data.total_users) || 0
-    // 今日活跃后端未提供 → 用覆盖人口展示（卡片文案保持不变会误导，改用有数据支撑的字段）
-    adminStats.value[1].value = Number(data.total_population) || 0
     // 「数据记录」只累加**记录条数**（村/项目/学校）。此前把 total_funds 也加进来，
     // 而 total_funds = SUM(Fund.amount)，单位是万元，与条数混加属量纲错误。
     adminStats.value[2].value =
@@ -299,36 +347,211 @@ async function loadAdminData() {
     if (data.total_villages !== undefined) {
       adminStats.value[3].value = `${data.total_villages} 村 / ${data.total_projects ?? 0} 项目`
     }
-
-    // ⚠️ 以下五个字段 /dashboard/stats 从未返回（后端无此键），面板因此恒为空。
-    // 已核实的可用真实来源（尚未接入，属功能待补，非运行时错误）：
-    //   系统状态 ← GET /system-health/overview（checks: {db,disk,db_file,wal}）
-    //   存储     ← GET /system-health/disk-space（total_gb/free_gb/used_percent）
-    //   审计日志 ← GET /audit/logs?page_size=5（items[]）
-    //   最近登录 ← GET /audit/login-attempts?page_size=5（items[]）
-    //   待处理   ← GET /approval/tasks/pending（items[]）
-    if (data.system_status && Array.isArray(data.system_status)) {
-      systemStatus.value = data.system_status
-    }
-    if (data.recent_logins && Array.isArray(data.recent_logins)) {
-      recentLogins.value = data.recent_logins
-    }
-    if (data.audit_logs && Array.isArray(data.audit_logs)) {
-      auditLogs.value = data.audit_logs
-    }
-    if (data.pending_items && Array.isArray(data.pending_items)) {
-      pendingItems.value = data.pending_items
-    }
-    if (data.storage) {
-      storageUsed.value = data.storage.used || 0
-      storageTotal.value = data.storage.total || 1
-      dbSize.value = data.storage.db || 0
-      backupSize.value = data.storage.backup || 0
-      logSize.value = data.storage.log || 0
-    }
   } catch (e) {
-    logger.error('加载管理数据失败:', e)
+    logger.error('加载概览统计失败:', e)
   }
+}
+
+/** 「今日活跃」← 审计统计 active_users（真实指标） */
+async function loadActiveUsers() {
+  try {
+    const res: any = await get('/system/audit/stats')
+    const data = pickData(res)
+    const active = Number(data.active_users)
+    adminStats.value[1].value = Number.isFinite(active) ? active : '--'
+  } catch (e) {
+    // 取不到时保持 '--'：不得回落成 0（那会把"接口失败"显示为"今日无人活跃"）
+    logger.error('加载活跃用户数失败:', e)
+    adminStats.value[1].value = '--'
+  }
+}
+
+/**
+ * 系统状态 ← GET /system/monitor/snapshot
+ * 后端快照字段：cpu_usage / memory_usage / disk_usage / status（healthy|limited|error）
+ * 原实现读 /dashboard/stats 的 system_status（后端无此键）→ 面板恒为空。
+ */
+async function loadSystemStatus() {
+  try {
+    const res: any = await get('/system/monitor/snapshot')
+    const snap = pickData(res)
+    const rows: Array<{ name: string; status: string; statusText: string }> = []
+    const push = (name: string, pct: unknown) => {
+      const v = Number(pct)
+      if (!Number.isFinite(v)) return
+      rows.push({
+        name,
+        status: v >= 90 ? 'offline' : 'online',
+        statusText: `${v.toFixed(1)}%`,
+      })
+    }
+    push('CPU 使用率', snap.cpu_usage)
+    push('内存使用率', snap.memory_usage)
+    push('磁盘使用率', snap.disk_usage)
+    const overall = snap.status
+    if (overall) {
+      rows.push({
+        name: '采集状态',
+        status: overall === 'healthy' ? 'online' : 'offline',
+        statusText: overall === 'healthy' ? '正常' : overall === 'limited' ? '受限' : '异常',
+      })
+    }
+    systemStatus.value = rows
+  } catch (e) {
+    logger.error('加载系统状态失败:', e)
+    panelError.value.status = errText(e, '系统状态加载失败')
+    systemStatus.value = []
+  }
+}
+
+/**
+ * 存储 ← GET /system/monitor/database-size（库文件）+ GET /system/backup/stats（备份）
+ * 原实现读 /dashboard/stats 的 storage（后端无此键）→ 面板恒为 0/1。
+ */
+async function loadStorage() {
+  try {
+    const [dbRes, backupRes]: any[] = await Promise.all([
+      get('/system/monitor/database-size'),
+      get('/system/backup/stats'),
+    ])
+    const dbData = pickData(dbRes)
+    const backupData = pickData(backupRes)
+    dbSize.value = Number(dbData.size_bytes) || 0
+    backupSize.value = Number(backupData.totalSize) || 0
+    // 日志体积后端无端点可查 → 保持 0（面板显示 0 B），不虚构数字
+    logSize.value = 0
+    await applyDiskUsage()
+    storageError.value = false
+  } catch (e) {
+    logger.error('加载存储信息失败:', e)
+    panelError.value.storage = errText(e, '存储信息加载失败')
+    storageError.value = true
+  }
+}
+
+/**
+ * 容量口径 ← GET /system-health/disk-space（total_gb / used_percent）。
+ * 磁盘端点不可用时退化为「已用 = 库文件 + 备份」，并保证 total ≥ used（百分比不越界）。
+ */
+async function applyDiskUsage() {
+  const used = dbSize.value + backupSize.value
+  let totalBytes: number | null = null
+  let usedPct: number | null = null
+  try {
+    const diskRes: any = await get('/system-health/disk-space')
+    const disk = pickData(diskRes)
+    const totalGb = Number(disk.total_gb)
+    const pct = Number(disk.used_percent)
+    if (Number.isFinite(totalGb) && totalGb > 0) totalBytes = totalGb * 1024 ** 3
+    if (Number.isFinite(pct) && pct >= 0) usedPct = pct
+  } catch (e) {
+    logger.error('加载磁盘容量失败:', e)
+  }
+  if (totalBytes === null) {
+    storageTotal.value = Math.max(used, 1)
+    storageUsed.value = used
+    return
+  }
+  storageTotal.value = totalBytes
+  storageUsed.value = usedPct === null ? used : (totalBytes * usedPct) / 100
+}
+
+/**
+ * 最近登录 ← GET /system/audit/login-attempts（仅取成功的登录尝试）
+ * 原实现读 /dashboard/stats 的 recent_logins（后端无此键）→ 面板恒为空。
+ */
+async function loadRecentLogins() {
+  try {
+    const res: any = await get('/system/audit/login-attempts', { page: 1, page_size: 10 })
+    recentLogins.value = pickItems(res)
+      .filter((it: any) => it?.success === true)
+      .slice(0, 5)
+      .map((it: any) => ({
+        id: it.id,
+        name: it.username || '未知用户',
+        // 头像取原始用户名首字母：name 是中文占位符时不能再取它的首字（否则空
+        // 用户名会渲染成「未」）；取不到时回落 'U'（Unknown）。
+        avatar: (it.username || '').charAt(0).toUpperCase() || 'U',
+        time: fmtTime(it.attemptTime ?? it.attempt_time),
+        ip: it.ipAddress ?? it.ip_address ?? '--',
+      }))
+  } catch (e) {
+    logger.error('加载最近登录失败:', e)
+    panelError.value.logins = errText(e, '登录记录加载失败')
+    recentLogins.value = []
+  }
+}
+
+/**
+ * 审计日志 ← GET /system/audit/logs（page_size=5）
+ * 原实现读 /dashboard/stats 的 audit_logs（后端无此键）→ 面板恒为空。
+ */
+async function loadAuditLogs() {
+  try {
+    const res: any = await get('/system/audit/logs', { page: 1, page_size: 5 })
+    auditLogs.value = pickItems(res)
+      .slice(0, 5)
+      .map((it: any) => ({
+        id: it.id,
+        // 级别决定标签配色（info/warning/danger），与后端 level 字段对齐
+        type: it.level === 'error' || it.level === 'critical' ? 'danger' : (it.level ?? 'info'),
+        action: it.action || '--',
+        user: it.username || '系统',
+        target: it.resourceType ?? it.resource_type ?? '--',
+        time: fmtTime(it.createdAt ?? it.created_at),
+      }))
+  } catch (e) {
+    logger.error('加载审计日志失败:', e)
+    panelError.value.audit = errText(e, '审计日志加载失败')
+    auditLogs.value = []
+  }
+}
+
+/**
+ * 待处理事项 ← GET /approval/tasks/pending
+ * 原实现读 /dashboard/stats 的 pending_items（后端无此键）→ 面板恒为空。
+ */
+async function loadPendingItems() {
+  try {
+    const res: any = await get('/approval/tasks/pending', { skip: 0, limit: 5 })
+    pendingItems.value = pickItems(res)
+      .slice(0, 5)
+      .map((it: any) => ({
+        id: it.id,
+        // 后端 priority 为整数（>0 为高优先级），与 PendingList.vue 的判定一致
+        priority: Number(it.priority) > 0 ? 'high' : 'low',
+        type: it.entityType ?? it.entity_type ?? '审批',
+        description: it.title || '--',
+        time: fmtTime(it.createdAt ?? it.created_at),
+      }))
+  } catch (e) {
+    logger.error('加载待处理事项失败:', e)
+    panelError.value.pending = errText(e, '待处理事项加载失败')
+    pendingItems.value = []
+  }
+}
+
+/**
+ * 加载管理面板数据。
+ *
+ * 修复（M42）：原实现只调 /dashboard/stats，却去读 system_status / recent_logins /
+ * audit_logs / pending_items / storage 五个该端点**从不返回**的键，导致 5 个区域恒为空；
+ * 且 adminStats[1]「今日活跃」展示的是 total_population（量纲错位）。
+ * 现改为各面板接各自真实端点，逐块独立降级（单块失败不影响其他块）。
+ */
+async function loadAdminData() {
+  panelsLoaded.value = false
+  panelError.value = {}
+  await Promise.all([
+    loadOverviewStats(),
+    loadActiveUsers(),
+    loadSystemStatus(),
+    loadStorage(),
+    loadRecentLogins(),
+    loadAuditLogs(),
+    loadPendingItems(),
+  ])
+  panelsLoaded.value = true
 }
 
 onMounted(() => {
@@ -776,6 +999,11 @@ onMounted(() => {
   color: var(--color-text-placeholder);
   font-size: 13px;
   padding: 20px 0;
+}
+
+/* 加载失败与"确实为空"必须可区分：失败用告警色 + 真实原因 */
+.empty-tip.error-tip {
+  color: var(--color-danger);
 }
 
 @media (max-width: 768px) {

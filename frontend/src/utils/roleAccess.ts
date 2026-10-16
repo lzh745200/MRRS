@@ -47,21 +47,32 @@ export function getEffectiveRoles(role?: string | null): string[] {
   return [normalized]
 }
 
+/** 管理员判定所需的用户档案子集 */
+export interface AdminCheckUser {
+  role?: string | null
+  is_superuser?: boolean | null
+}
+
 /**
  * 检查是否为管理员（支持 role 和 is_superuser 标志）。
  *
  * 角色必须先 normalizeRole：后端旧值 manager/approval_leader 归一化后就是 admin，
  * 直接用原始 role 比对 ADMIN_ROLES 会把这类存量管理员误判为非管理员
  * （菜单/入口按管理员隐藏），与后端 normalize_role 的语义不一致。
+ *
+ * @param user 可选。组件内传入 **store 中的响应式用户档案**（如
+ *   `userStore.currentUser` / `authStore.user`）时，判定结果随其变化重新计算；
+ *   缺省则读取 AuthStorage 中的会话档案（与路由守卫同源）。
+ *   两条来源的判定规则完全一致（归一化 + ADMIN_ROLES + is_superuser）。
  */
-export function isAdminUser(): boolean {
+export function isAdminUser(user?: AdminCheckUser | null): boolean {
   try {
-    const user = AuthStorage.getUser()
-    if (!user) return false
+    const target = user === undefined ? AuthStorage.getUser() : user
+    if (!target) return false
     // 检查角色（归一化后比对）
-    if (ADMIN_ROLES.includes(normalizeRole(user.role))) return true
+    if (ADMIN_ROLES.includes(normalizeRole(target.role))) return true
     // 检查 is_superuser 标志
-    if (user.is_superuser === true) return true
+    if (target.is_superuser === true) return true
     return false
   } catch {
     return false

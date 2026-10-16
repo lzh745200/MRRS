@@ -10,6 +10,7 @@ Task 2.6: 实现导入API端点
 Requirements: 1.1, 1.4, 1.8, 20.1
 """
 
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -31,6 +32,8 @@ from app.services.excel_template_service import ExcelTemplateService
 from app.utils.upload_helper import read_upload_with_limit
 
 _XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+logger = logging.getLogger(__name__)
 
 # 支持的实体类型
 VALID_ENTITY_TYPES = frozenset({"supported_village", "project", "fund", "school"})
@@ -415,6 +418,10 @@ async def validate_import_data(
     try:
         rows = _parse_excel_rows(file_content, header_parser, example_markers)
     except Exception:
+        # R28 §3：面向用户的文案保持泛化（W1 不变量 #6：异常原文不出站），
+        # 但真实原因必须进日志——原实现把解析异常静默吞掉，模板/编码类问题
+        # 无从定位。
+        logger.error("Excel 校验解析失败（validate）", exc_info=True)
         raise HTTPException(status_code=400, detail="Excel文件解析失败，请稍后重试或联系管理员")
 
     if entity_type == "supported_village":
@@ -452,13 +459,18 @@ class ImportPreviewResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
-def _setup_preview_entity(entity_type: str, db: Session):
+def _setup_preview_entity(entity_type: str, db: Session, rows=None):
     """设置预览所需的验证器和重复检测字段
 
     入口按白名单校验实体类型：仅 supported_village/project/fund/school 会被
     分发到对应验证器与模型。其余类型（含 EntityImportValidator 会接受但不在
     分发链上的未知类型）在此直接以 400 拒绝，避免走到下方 getattr 时
     EntityModel 未绑定抛出 NameError（进而 500）。
+
+    R28-M14：重复检测此前对 project/fund/school 做**全表**名称扫描
+    （`db.query(列).all()` 把整表载入内存，无分页/无数据域）。改为只查导入
+    行中实际出现的名称（IN 查询，名称集合上限 = 预览行数），
+    `rows` 缺省时退化为原全表口径（向后兼容既有调用方）。
     """
     if entity_type not in VALID_ENTITY_TYPES:
         raise HTTPException(
@@ -468,23 +480,69 @@ def _setup_preview_entity(entity_type: str, db: Session):
     if entity_type == "supported_village":
         validator = DataValidatorService()
         duplicate_field = "village_name"
-        from app.models.supported_village import SupportedVillage
-        existing_names = set(
-            name[0].strip().lower() for name in db.query(SupportedVillage.village_name).all() if name[0]
-        )
     else:
         validator = EntityImportValidator(entity_type)
         duplicate_field = validator.config.get("duplicate_key", "name")
-        if entity_type == "project":
-            from app.models.project import Project as EntityModel
-        elif entity_type == "fund":
-            from app.models.fund import Fund as EntityModel
-        elif entity_type == "school":
-            from app.models.school import School as EntityModel
-        existing_names = set(
-            name[0].strip().lower() for name in db.query(getattr(EntityModel, duplicate_field)).all() if name[0]
+    column = _preview_duplicate_column(entity_type, duplicate_field)
+    return validator, duplicate_field, _existing_names(db, column, duplicate_field, rows)
+
+
+def _preview_duplicate_column(entity_type: str, duplicate_field: str):
+    """解析实体类型 → 重复检测所用的 ORM 列（分发链唯一出口）。
+
+    R28-M14：分发链末端由「隐式回退 school → 未绑定 EntityModel 抛 NameError（500）」
+    改为**显式 fail-closed 400**。白名单已在 `_setup_preview_entity` 入口拦截未知类型，
+    本分支只在白名单被改动/绕过时才可达。
+    """
+    if entity_type == "supported_village":
+        from app.models.supported_village import SupportedVillage
+
+        return SupportedVillage.village_name
+    if entity_type == "project":
+        from app.models.project import Project
+
+        return getattr(Project, duplicate_field)
+    if entity_type == "fund":
+        from app.models.fund import Fund
+
+        return getattr(Fund, duplicate_field)
+    if entity_type == "school":
+        from app.models.school import School
+
+        return getattr(School, duplicate_field)
+    raise HTTPException(
+        status_code=400,
+        detail=f"不支持的实体类型: {entity_type}，支持 {', '.join(VALID_ENTITY_TYPES)}",
+    )
+
+
+def _existing_names(db: Session, column, duplicate_field: str, rows=None) -> set:
+    """已存在的重复键值集合（R28-M14）。
+
+    传入 rows 时只查这些行实际出现的名称（IN 查询）；否则退回全表扫描。
+    注意 SQL 参数上限：按名称去重后仍可能很多，故分块查询（每块 500）。
+    """
+    if rows is None:
+        return set(
+            name[0].strip().lower() for name in db.query(column).all() if name[0]
         )
-    return validator, duplicate_field, existing_names
+
+    wanted = set()
+    for row in rows:
+        value = (row.get(duplicate_field) or "").strip()
+        if value:
+            wanted.add(value)
+    if not wanted:
+        return set()
+
+    found = set()
+    wanted_list = sorted(wanted)
+    for start in range(0, len(wanted_list), 500):
+        chunk = wanted_list[start:start + 500]
+        for name in db.query(column).filter(column.in_(chunk)).all():
+            if name[0]:
+                found.add(name[0].strip().lower())
+    return found
 
 
 def _build_preview_row_response(row, idx, validator, existing_names, duplicate_field):
@@ -536,7 +594,9 @@ async def preview_import_data(
             detail=f"不支持的实体类型: {entity_type}，支持 {', '.join(VALID_ENTITY_TYPES)}",
         )
 
-    validator, duplicate_field, existing_names = _setup_preview_entity(entity_type, db)
+    # R28-M14：重复检测所需的"已存在名称"必须等解析出 rows 之后再查，
+    # 以便只查导入行实际出现的名称（IN 查询）而不是全表扫描。
+    validator, duplicate_field, _ = _setup_preview_entity(entity_type, db, rows=[])
 
     # 先做格式校验（保持既有错误优先级），再做分块限长读取（R2 第二层）
     is_valid, error_msg = validator.validate_file_format(file.filename)
@@ -554,7 +614,14 @@ async def preview_import_data(
         importer = ExcelImporterService(db, current_user=current_user)
         rows, _headers = importer.parse_excel(file_content, entity_type=entity_type)
     except Exception:
+        # R28 §3：同 validate 路径——用户看到泛化文案，真实原因进日志（exc_info）。
+        logger.error("Excel 预览解析失败（preview）", exc_info=True)
         raise HTTPException(status_code=400, detail="Excel文件解析失败，请稍后重试或联系管理员")
+
+    # R28-M14：按导入行名称 IN 查询（替代原全表扫描）
+    existing_names = _existing_names(
+        db, _preview_duplicate_column(entity_type, duplicate_field), duplicate_field, rows
+    )
 
     preview_rows = []
     valid_count = 0

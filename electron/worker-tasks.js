@@ -12,28 +12,34 @@ const zlib = require('zlib');
 const path = require('path');
 const os = require('os');
 
-const { task, payload } = workerData;
+// M50：规则收口到 electron/path-guard.js（主进程 IPC 层与 worker 共用同一实现）
+const { assertPathAllowed } = require('./path-guard');
+
+const { task, payload, allowedRoots: injectedRoots } = workerData;
 
 /**
- * 路径安全校验 — 仅允许应用数据目录/安装目录/系统临时目录
+ * 路径安全校验 — 仅允许应用数据目录/安装目录/系统临时目录。
+ *
+ * M50（2026-10-14）：根目录**由主进程注入**（workerData.allowedRoots，取自
+ * app.getPath('userData')/app.getAppPath()/os.tmpdir()）。旧实现在 worker 内自行
+ * 拼 `LOCALAPPDATA/bumofu-assistance`，与真实 userData（%APPDATA%\帮扶管理系统）
+ * 不一致 → 加密/解密对真实数据一律 forbidden-path。
+ * 缺省回退仅在"未走主进程 IPC"的直连/测试场景生效，且保持同等强度。
  */
-function validatePath(filePath) {
-  const resolved = path.resolve(String(filePath || ''));
+function resolveAllowedRoots() {
+  if (Array.isArray(injectedRoots) && injectedRoots.length > 0) {
+    return injectedRoots.map((p) => path.resolve(p));
+  }
   const appData = process.env.LOCALAPPDATA || process.env.XDG_DATA_HOME || os.homedir();
-  const allowedRoots = [
+  return [
     path.join(appData, 'bumofu-assistance'),
     path.resolve(__dirname, '..'),
     os.tmpdir(),
   ].map((p) => path.resolve(p));
-  const inScope = allowedRoots.some(
-    (root) => resolved === root || resolved.startsWith(root + path.sep)
-  );
-  const lower = resolved.toLowerCase();
-  const isSecrets = lower.includes('runtime_secrets.json') || lower.includes('secrets.json') || lower.includes('master.key');
-  if (!inScope || isSecrets) {
-    throw new Error(`forbidden-path: ${resolved}`);
-  }
-  return resolved;
+}
+
+function validatePath(filePath) {
+  return assertPathAllowed(filePath, resolveAllowedRoots());
 }
 
 /**
@@ -110,6 +116,8 @@ async function run() {
 
       // ── SHA-256 文件哈希 ──
       case 'hash-file': {
+        // M50：hash-file 原先完全跳过 validatePath —— 任意路径均可被渲染进程哈希
+        payload.inputPath = validatePath(payload.inputPath);
         const hash = crypto.createHash('sha256');
         const stream = fs.createReadStream(payload.inputPath);
         await new Promise((resolve, reject) => {

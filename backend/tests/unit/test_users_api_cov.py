@@ -57,6 +57,20 @@ class TestStaffListScopes:
     async def test_own_dept_scope(self):
         u = _user(id=5, is_superuser=False, organization_id=7)
         db = _db(_q(count=1, all=[u]))
+        # R28：staff-list 改用共享的 _apply_user_data_scope（含组织子树解析），
+        # mock db 无法走真实子树查询 → 固定子树解析结果，只验证过滤分支被执行。
+        with patch(self._PATCH, return_value=DataScope.OWN_DEPT), patch(
+            "app.core.data_permission._get_org_subtree", return_value=([7], ["org7"])
+        ):
+            result = await us.get_staff_list(page=1, page_size=20, current_user=u, db=db)
+        assert result["data"]["total"] == 1
+
+    async def test_own_dept_scope_without_org_degrades_to_self(self):
+        """防御分支（口径漂移）：scope 被判定为 OWN_DEPT 但用户无组织 →
+        退化为仅本人，绝不落入"不过滤"。正常路径由 get_data_scope 收口，
+        此处以补丁模拟上游契约被破坏的场景（与 M40 同类防御测试口径一致）。"""
+        u = _user(id=5, is_superuser=False, organization_id=None)
+        db = _db(_q(count=1, all=[u]))
         with patch(self._PATCH, return_value=DataScope.OWN_DEPT):
             result = await us.get_staff_list(page=1, page_size=20, current_user=u, db=db)
         assert result["data"]["total"] == 1

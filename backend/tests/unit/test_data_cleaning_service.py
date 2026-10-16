@@ -47,6 +47,21 @@ class TestDeduplicate:
         result = DataCleaningService.deduplicate(records, ["name", "phone"])
         assert len(result) == 1
 
+    def test_fuzzy_candidate_blocked_by_quick_ratio_bound(self):
+        """M27：同桶候选先经 quick_ratio 上界预筛；上界不足阈值时直接判非重。"""
+        records = [
+            {"name": "abcdef", "phone": "13800138001"},
+            {"name": "abcxyz", "phone": "13800138001"},
+        ]
+        # 均值上界 = (0.5 + 1.0) / 2 = 0.75 < 0.9 → 不做精确 ratio 也判非重
+        result = DataCleaningService.deduplicate(records, ["name", "phone"], similarity_threshold=0.9)
+        assert len(result) == 2
+
+
+class TestIsSimilar:
+    def test_empty_tuple_is_not_similar(self):
+        assert DataCleaningService._is_similar((), (), 0.9) is False
+
 
 class TestCalculateSimilarity:
     def test_different_length_returns_zero(self):
@@ -124,6 +139,15 @@ class TestStandardizeAddress:
     def test_standard_replacements_applied(self):
         result = DataCleaningService.standardize_address("XX省XX市XX县")
         assert "省" in result and "市" in result and "县" in result
+
+    def test_fullwidth_and_punctuation_normalized(self):
+        """M27：全角 ASCII/标点归一为半角，标点两侧空白清理。"""
+        result = DataCleaningService.standardize_address("ＡＢＣ１２３，路５号（北）")
+        assert result == "ABC123,路5号(北)"
+
+    def test_repeated_punctuation_collapsed(self):
+        result = DataCleaningService.standardize_address("XX村,,,3组")
+        assert result == "XX村,3组"
 
 
 class TestFillMissingValues:

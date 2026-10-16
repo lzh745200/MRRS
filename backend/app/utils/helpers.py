@@ -5,7 +5,7 @@ import json
 import logging
 import secrets
 import string
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
 
@@ -20,7 +20,9 @@ def generate_random_string(length: int = 16) -> str:
 
 def generate_code(prefix: str, id_value: int) -> str:
     """Generate a code with prefix and zero-padded ID."""
-    year = datetime.now().year
+    # 年份取 UTC：全系统时间口径为 UTC（models.base.UtcDateTime）。本地墙钟在
+    # 跨时区/时钟偏移下会生成相邻年份混用的编码（R28 低危项）。
+    year = datetime.now(timezone.utc).year
     return f"{prefix}{year}{str(id_value).zfill(4)}"
 
 

@@ -136,11 +136,16 @@ async def recommend_fund_allocation(
 
 
 @router.post("/nlp-query")
-async def nlp_query(
+def nlp_query(
     query: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> Dict[str, Any]:
-    """自然语言查询 - 将自然语言问题转换为SQL查询并返回结果"""
+    """自然语言查询 - 将自然语言问题转换为SQL查询并返回结果
+
+    H13：① 透传 current_user —— execute_query 据此把模板 SQL 收敛到调用者数据域，
+    不再让任意登录用户读取跨组织聚合；② 端点为同步 def（原 async def 内直接跑同步
+    DB 查询会阻塞事件循环，FastAPI 会把同步端点自动放入线程池执行）。
+    """
     service = _get_nlp_service()
-    return service.execute_query(db=db, query=query)
+    return service.execute_query(db=db, query=query, user=current_user)

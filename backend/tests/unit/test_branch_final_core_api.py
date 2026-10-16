@@ -30,6 +30,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
+from fastapi import HTTPException  # R28-M14：断言分发链末端 fail-closed 400
 
 from app.core.config import settings  # noqa: F401  (保持与运行环境一致的导入顺序)
 
@@ -362,10 +363,13 @@ def test_import_data_setup_preview_entity_unknown_dispatch(monkeypatch):
     monkeypatch.setattr(imp, "EntityImportValidator", _FakeValidator)
 
     db = mock.MagicMock()
-    # entity_type="widget" 通过白名单但不在 project/fund/school 分发链 → 482 为假 → 484
-    # 之后 EntityModel 未绑定 → NameError（这正是被白名单挡住的原始缺陷路径）
-    with pytest.raises(NameError):
+    # entity_type="widget" 通过白名单但不在分发链上。
+    # R28-M14 订正：旧断言期望 NameError（未绑定 EntityModel）——那是**缺陷本身**
+    # （未绑定变量 → 500），不是应当锁定的契约。现在分发链末端显式 fail-closed 400。
+    with pytest.raises(HTTPException) as exc_info:
         imp._setup_preview_entity("widget", db)
+    assert exc_info.value.status_code == 400
+    assert "不支持的实体类型" in exc_info.value.detail
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1443,7 +1447,10 @@ async def test_system_metrics_database_metrics_file_and_truncation(monkeypatch, 
     res = await sm.get_database_metrics(db, _admin())
     md = res["data"]["metrics"]
     assert md["table_count"] == 25                                     # 248->249
-    assert md["table_names_truncated"] is True
+    # R27/W1-T8：表名清单与绝对路径一律不出站（原断言固化的是泄露行为）
+    assert "table_names" not in md
+    assert "table_names_truncated" not in md
+    assert "database_file_path" not in md
     assert md["database_file_size_mb"] == round(2048 / (1024 * 1024), 2)  # 233->234
 
 

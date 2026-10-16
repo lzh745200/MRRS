@@ -32,17 +32,18 @@ class TestGetDatabaseMetrics:
         db.execute.return_value = result
         return db
 
-    async def test_table_names_truncated_over_20(self, monkeypatch):
+    async def test_table_names_not_exposed(self, monkeypatch):
+        """R27/W1-T8：表名清单属 schema 拓扑，仅出数量聚合值（原断言固化的是泄露行为）。"""
         inspector = SimpleNamespace(get_table_names=lambda: [f"t{i}" for i in range(25)])
         monkeypatch.setattr("sqlalchemy.inspect", lambda bind: inspector)
         resp = await get_database_metrics(db=self._db(), current_user=MagicMock())
         metrics = resp["data"]["metrics"]
         assert metrics["table_count"] == 25
-        assert len(metrics["table_names"]) == 20
-        assert metrics["table_names_truncated"] is True
+        assert "table_names" not in metrics
+        assert "table_names_truncated" not in metrics
 
     async def test_row_count_outer_exception(self, monkeypatch):
-        """内层 db.execute 失败 → logger.debug 再抛异常 → 外层兜底 (lines 263-264)"""
+        """内层 db.execute 失败 → logger 再抛异常 → 外层兜底且不泄露内部原因"""
         inspector = SimpleNamespace(get_table_names=lambda: [])
         monkeypatch.setattr("sqlalchemy.inspect", lambda bind: inspector)
         db = self._db()
@@ -50,4 +51,7 @@ class TestGetDatabaseMetrics:
         with patch.object(metrics_mod, "logger") as mock_log:
             mock_log.debug.side_effect = RuntimeError("log fail")
             resp = await get_database_metrics(db=db, current_user=MagicMock())
-        assert "row_count_error" in resp["data"]["metrics"]
+        metrics = resp["data"]["metrics"]
+        assert "row_count_error" in metrics
+        # 错误细节不出站（R27）：泛化文案，不含内部异常文本
+        assert "db fail" not in str(metrics["row_count_error"])

@@ -201,6 +201,15 @@ describe('挂载与初始加载', () => {
 })
 
 describe('图表 computed', () => {
+  it('utilizationTrendOption：planned<=0 记 0%，正常行按比例（407 分支双覆盖）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const opt: any = (wrapper.vm as any).utilizationTrendOption
+    const line = (opt.series as any[]).find((s) => s.name === '利用率')
+    // 2023: 100/200=50%；2024: total_planned=0 → planned<=0 → 记 0%
+    expect(line.data).toEqual([50, 0])
+    expect((opt.xAxis as any).data).toEqual(['2023年', '2024年'])
+  })
   it('pieChartOption：数据映射、空数据兜底与 color 函数', async () => {
     const wrapper = mountComp()
     await flushPromises()

@@ -883,7 +883,6 @@ const handleRegionClick = async (params: { name: string }) => {
       // 后端钻取维度为 province（非 region）
       dimension: 'province',
       value: params.name,
-      targetDimension: 'department',
     })
   } catch (error) {
     logger.error('钻取查询失败:', error)

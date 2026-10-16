@@ -1,15 +1,28 @@
 # -*- coding: utf-8 -*-
-"""
-请求体键名转换中间件 + 响应信封最小补全
+"""请求体键名转换中间件 + 响应信封最小补全
 
 1. 请求体: 前端 camelCase JSON 键 → snake_case(Pydantic 字段一致)
 2. 响应: 对裸 dict JSON 响应补全信封元数据(success/code),不改变数据层级。
    - 已含 success 或 code 的响应跳过
    - 裸 list/标量跳过(前端拦截器已兼容)
    - 文件/流式响应跳过
+
+M33（R27 性能排查）：旧实现对**每个** application/json 响应都完整解码 → 递归遍历
+→ 重新序列化，且重建 JSONResponse（复制全部响应头 + background）。即使绝大多数
+响应已是标准信封（`{"code":...,"success":...}`），也要付出一次 json.loads 与一次
+json.dumps 的代价（大列表响应尤其昂贵），并被 BaseHTTPMiddleware 的响应缓冲放大。
+
+现契约（行为等价，仅省去无谓解析）：
+- **仅对"顶层裸 dict"补信封**——顶层含 success/code 的响应直接放行（不再解析 body）；
+  顶层是 list/标量/流式的响应同样直接放行（与旧实现一致，旧实现也不会改写它们）。
+- 判定只看 body 的**首个非空白字节**：信封响应以 `{` 开头且必然带 code/success，
+  裸 dict 里可能内嵌 `"code"`（如 `{"data":{"code":1}}`），故不能用子串匹配；
+  但 `[`/`"`/数字/`true`/`false`/`null` 开头必然不是可补信封的 dict。
+- 真正需要补信封时才解码 → 补 → 重建响应（沿用旧实现：完整复制响应头、
+  跳过 content-length、透传 background）。
 """
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -56,6 +69,19 @@ def _patch_envelope(data: Any) -> Dict[str, Any]:
     return merged
 
 
+def _first_non_whitespace_byte(body: bytes) -> Optional[int]:
+    """返回 body 首个非空白字节；全空白/空 body 返回 None。"""
+    for byte in body:
+        if byte not in (0x20, 0x09, 0x0A, 0x0D):
+            return byte
+    return None
+
+
+def _needs_envelope(body: bytes) -> bool:
+    """廉价判定：仅顶层裸 dict 需要补信封，其余一律免解析。"""
+    return _first_non_whitespace_byte(body) == 0x7B  # "{"
+
+
 class CamelToSnakeMiddleware(BaseHTTPMiddleware):
     """
     HTTP 中间件：
@@ -88,7 +114,8 @@ class CamelToSnakeMiddleware(BaseHTTPMiddleware):
             if response.status_code >= 400:
                 return response  # 错误响应由异常处理器生成
             body_bytes = getattr(response, "body", None)
-            if not body_bytes:
+            if not body_bytes or not _needs_envelope(body_bytes):
+                # 非"顶层裸 dict"（含已是标准信封的绝大多数响应）无需解析
                 return response
 
             parsed = json.loads(body_bytes.decode("utf-8"))

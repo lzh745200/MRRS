@@ -35,15 +35,16 @@ export const FUND_STATUSES = {
 
 export type FundType = keyof typeof FUND_TYPES
 
-// 经费统计数据接口
+// 经费类型统计（单一类型条目）
+// 2026-10-16 按真实契约订正（backend/app/api/v1/funds.py `fund_stats_by_type`）：
+// 后端只返回 fund_type / fund_type_label / total_investment / count 四个字段，
+// 历史上的 military_investment/local_investment/planned_investment/utilization_rate
+// 均为前端虚构，读取恒 undefined（H10 类型谎报清理）。
 export interface FundStatistics {
   fund_type: string
   fund_type_label: string
-  military_investment: number
-  local_investment: number
-  planned_investment: number
   total_investment: number
-  utilization_rate: number
+  count: number
 }
 
 // 年度经费对比接口
@@ -60,40 +61,22 @@ export interface YearlyFundSummary {
 }
 
 // 利用率统计接口
+// 2026-10-16 按真实契约订正：后端 `fund_stats_utilization` 不含 by_type 分组，
+// 页面若要按类型拆分需另调 by-type 端点自行计算。
 export interface UtilizationRateData {
   overall_utilization_rate: number
   total_actual_investment: number
   total_planned_investment: number
-  by_type: Record<
-    string,
-    {
-      utilization_rate: number
-      actual: number
-      planned: number
-    }
-  >
 }
 
 // 经费汇总接口
+// 2026-10-16 按真实契约订正：后端 `fund_stats_summary` 返回四项总量指标，
+// 历史字段 period/grand_total/by_type/yearly_data 均为前端虚构（H10 清理）。
 export interface FundSummaryData {
-  period: string
-  grand_total: {
-    military_investment: number
-    local_investment: number
-    planned_investment: number
-    actual_investment: number
-    utilization_rate: number
-  }
-  by_type: Record<
-    string,
-    {
-      label: string
-      total: number
-      planned: number
-      utilization_rate: number
-    }
-  >
-  yearly_data: YearlyFundSummary[]
+  total_count: number
+  total_amount: number
+  total_allocated: number
+  total_used: number
 }
 
 // 查询参数接口
@@ -105,14 +88,53 @@ export interface FundQueryParams {
   year_end?: number
 }
 
+// ── 契约编译期断言（对照 backend/app/api/v1/funds.py 四个统计端点）──
+// "接口类型写错"这类谎报运行时测试无法拦截（多写字段只会让页面读取恒 undefined），
+// 这里用严格类型相等断言把它锁进 vue-tsc 门禁：契约漂移 → 编译期报 TS2344。
+type Assert<T extends true> = T
+/** 严格类型相等判定（含多余键与可选性，等价 vitest expectTypeOf 的相等技巧） */
+type TypeEquals<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+
+export type FundStatisticsContract = Assert<
+  TypeEquals<
+    FundStatistics,
+    { fund_type: string; fund_type_label: string; total_investment: number; count: number }
+  >
+>
+export type YearlyFundSummaryContract = Assert<
+  TypeEquals<
+    YearlyFundSummary,
+    { year: number; total_actual: number; total_planned: number; count: number }
+  >
+>
+export type UtilizationRateDataContract = Assert<
+  TypeEquals<
+    UtilizationRateData,
+    {
+      overall_utilization_rate: number
+      total_actual_investment: number
+      total_planned_investment: number
+    }
+  >
+>
+export type FundSummaryDataContract = Assert<
+  TypeEquals<
+    FundSummaryData,
+    { total_count: number; total_amount: number; total_allocated: number; total_used: number }
+  >
+>
+
 /**
  * 按类型获取经费统计
+ * 后端 data 为 {fund_type: 类型条目} 映射（信封经响应拦截器会把条目提升到顶层，
+ * 但契约保证的读取路径是 res.data[fund_type]）；无 fund_types 字段。
  */
 export function getFundStatisticsByType(params?: FundQueryParams) {
   return get<{
     success: boolean
+    message?: string
     data: Record<string, FundStatistics>
-    fund_types: Record<string, string>
   }>('/funds/supported-village/statistics/by-type', params)
 }
 

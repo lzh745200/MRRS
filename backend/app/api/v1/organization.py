@@ -208,12 +208,15 @@ async def get_organizations(
     # 2026-10-14 数据范围收敛后，缓存只对"可见全量"的管理员启用 ——
     # 否则普通用户的受限结果会被写入全局缓存，造成跨用户数据泄漏。
     from app.core.data_permission import apply_scope_filter
-    from app.core.permission_utils import is_admin
+    from app.core.permission_utils import is_superuser
 
-    _admin_view = is_admin(current_user)
+    # R27-H8 收口后：部门级 admin 的列表结果已被数据域收敛为「本组织及子树」，
+    # 若仍写入全局键 "orgs:list"，组织 A 的管理员会把受限结果喂给组织 B 的管理员
+    # （跨组织泄漏）。因此缓存只对**真正全局**的用户启用（超管 / is_superuser）。
+    _global_view = is_superuser(current_user) or getattr(current_user, "data_scope", None) == "all"
     _cache_key = "orgs:list"
     if (
-        _admin_view
+        _global_view
         and not any([org_type, parent_id, is_active, keyword, search])
         and page == 1
         and page_size == 20

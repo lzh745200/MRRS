@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.config import settings
+from app.core.permission_utils import require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -327,7 +328,12 @@ async def restart_system(
 
 @router.get("/environment", summary="获取运行环境信息")
 async def get_environment_info(current_user=Depends(get_current_user)):
-    """获取详细的系统运行环境信息"""
+    """获取详细的系统运行环境信息
+
+    M5：运行环境含 python_executable/cwd/hostname/platform 与依赖版本，
+    属主机指纹信息，仅管理员可见（未授权访问在认证层即被 401 拦截）。
+    """
+    require_admin(current_user, error_message="仅管理员可查看运行环境信息")
     import importlib.metadata
 
     # 获取已安装的关键依赖包版本

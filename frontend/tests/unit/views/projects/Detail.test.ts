@@ -460,6 +460,11 @@ describe('任务 CRUD', () => {
     projectsApiMock.createTask.mockRejectedValueOnce({})
     await vm.handleSaveTask()
     expect(ElMessage.error).toHaveBeenCalledWith('保存任务失败')
+
+    // M43：优先展示拦截器挂载的服务端 userMessage（旧实现只看 detail/message）
+    projectsApiMock.createTask.mockRejectedValueOnce({ userMessage: '权限不足' })
+    await vm.handleSaveTask()
+    expect(ElMessage.error).toHaveBeenCalledWith('权限不足')
   })
 
   it('删除任务：成功/失败', async () => {
@@ -586,7 +591,8 @@ describe('附件操作', () => {
     await flushPromises()
     fetchMock.mockResolvedValue({ ok: false })
     await (wrapper.vm as any).handleDownload(file)
-    expect(ElMessage.error).toHaveBeenCalledWith('Download failed')
+    // 响应非 ok 时抛出中文文案，经 getErrorMessage 原样展示（原为英文 'Download failed'）
+    expect(ElMessage.error).toHaveBeenCalledWith('下载失败')
   })
 
   it('预览附件 → 打开 FilePreview 并经 fetchBlob 调 previewFile', async () => {
@@ -951,8 +957,8 @@ describe('里程碑：submitMilestone', () => {
     wrapper.unmount()
   })
 
-  it('保存失败 → logger + 统一文案 + msSaving 复位', async () => {
-    msCreate.mockRejectedValue(new Error('server'))
+  it('保存失败 → logger + 透传错误消息/兜底文案 + msSaving 复位', async () => {
+    msCreate.mockRejectedValueOnce(new Error('里程碑名称重复'))
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -960,9 +966,14 @@ describe('里程碑：submitMilestone', () => {
     vm.msForm.planned_date = '2024-08-01'
     await vm.submitMilestone()
     expect(logError).toHaveBeenCalledWith('里程碑保存失败:', expect.any(Error))
-    expect(ElMessage.error).toHaveBeenCalledWith('保存失败，请稍后重试')
+    // M43：优先展示错误对象携带的消息（原为固定兜底文案）
+    expect(ElMessage.error).toHaveBeenCalledWith('里程碑名称重复')
     expect(vm.msSaving).toBe(false)
     expect(vm.msDialogVisible).toBe(false)
+    // 无消息错误 → 统一兜底文案
+    msCreate.mockRejectedValueOnce({})
+    await vm.submitMilestone()
+    expect(ElMessage.error).toHaveBeenCalledWith('保存失败，请稍后重试')
     wrapper.unmount()
   })
 })
@@ -983,12 +994,16 @@ describe('里程碑：completeMilestone / removeMilestone', () => {
     wrapper.unmount()
   })
 
-  it('标记完成失败 → logger + 操作失败', async () => {
-    msUpdate.mockRejectedValue(new Error('nope'))
+  it('标记完成失败 → logger + 透传错误消息/兜底文案', async () => {
+    msUpdate.mockRejectedValueOnce(new Error('服务暂不可用'))
     const wrapper = mountComp()
     await flushPromises()
     await (wrapper.vm as any).completeMilestone({ id: 12 })
     expect(logError).toHaveBeenCalledWith('完成里程碑失败:', expect.any(Error))
+    // M43：优先展示错误对象携带的消息（原为固定兜底文案）
+    expect(ElMessage.error).toHaveBeenCalledWith('服务暂不可用')
+    msUpdate.mockRejectedValueOnce({})
+    await (wrapper.vm as any).completeMilestone({ id: 12 })
     expect(ElMessage.error).toHaveBeenCalledWith('操作失败')
     wrapper.unmount()
   })
@@ -1006,12 +1021,16 @@ describe('里程碑：completeMilestone / removeMilestone', () => {
     wrapper.unmount()
   })
 
-  it('删除失败 → logger + 删除失败', async () => {
-    msDelete.mockRejectedValue(new Error('del'))
+  it('删除失败 → logger + 透传错误消息/兜底文案', async () => {
+    msDelete.mockRejectedValueOnce(new Error('里程碑不存在'))
     const wrapper = mountComp()
     await flushPromises()
     await (wrapper.vm as any).removeMilestone({ id: 12 })
     expect(logError).toHaveBeenCalledWith('删除里程碑失败:', expect.any(Error))
+    // M43：优先展示错误对象携带的消息（原为固定兜底文案）
+    expect(ElMessage.error).toHaveBeenCalledWith('里程碑不存在')
+    msDelete.mockRejectedValueOnce({})
+    await (wrapper.vm as any).removeMilestone({ id: 12 })
     expect(ElMessage.error).toHaveBeenCalledWith('删除失败')
     wrapper.unmount()
   })

@@ -46,9 +46,17 @@ INDEX_DEFINITIONS = EXTRA_INDEXES
 COMPOSITE_INDEXES = []
 
 
-def _validate_columns(engine, table_name, index_name, columns):
-    """验证索引列在目标表中存在，返回缺失列列表。"""
-    insp = inspect(engine)
+def _validate_columns(engine, table_name, index_name, columns, inspector=None):
+    """验证索引列在目标表中存在，返回缺失列列表。
+
+    Args:
+        inspector: 可选的已构建 ``Inspector``。``create_indexes`` 循环内复用
+            同一个实例——SQLAlchemy 的 Inspector 自带 reflection 缓存
+            （``get_table_names`` / ``get_columns`` 均经 ``@reflection.cache``），
+            复用它同时消除 N 次 inspect() 构造与 N 次重复元数据查询
+            （R28 低危项）。缺省时自行构建，保持旧签名兼容。
+    """
+    insp = inspector if inspector is not None else inspect(engine)
     if table_name not in insp.get_table_names():
         return None  # 表不存在
     existing_cols = {c["name"] for c in insp.get_columns(table_name)}
@@ -70,10 +78,14 @@ def create_indexes(engine=None):
     skipped = 0
     errors = 0
 
+    # R28：单次构建 inspector 并全程复用（其 reflection 缓存同时省掉重复
+    # get_table_names/get_columns 查询），旧实现每条索引都 inspect(engine) 一次。
+    inspector = inspect(engine)
+
     with engine.connect() as conn:
         for table_name, index_name, columns in EXTRA_INDEXES:
             # 启动时验证列名有效性
-            missing = _validate_columns(engine, table_name, index_name, columns)
+            missing = _validate_columns(engine, table_name, index_name, columns, inspector=inspector)
             if missing is None:
                 skipped += 1
                 continue

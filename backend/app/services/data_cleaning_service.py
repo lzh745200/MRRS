@@ -35,26 +35,55 @@ class DataCleaningService:
             return []
 
         unique_records = []
-        seen_keys = []
+        seen_exact = set()
+        buckets: Dict[tuple, List[tuple]] = {}
 
         for record in records:
             # 构建关键字段组合
             key_values = tuple(str(record.get(field, "")) for field in key_fields)
 
-            # 检查是否与已有记录相似
+            # M27（R27 排查）：旧实现对全部已见键做两两 SequenceMatcher 比较
+            # （O(n²)，且每对都构造 SequenceMatcher）。现两级处理：
+            # 1) 精确重复走 set，O(1) 直接跳过；
+            # 2) 模糊匹配按"分桶签名"（各关键字段前 2 个字符）分组，只与同桶
+            #    已见键比较（首 2 字符已不同的记录在实际数据中不可能达到高相似
+            #    阈值），并在候选内用 quick_ratio 上界预筛、避免无谓 ratio 计算。
+            #    分桶只是**候选裁剪**：阈值语义与旧实现一致（同样调用
+            #    _calculate_similarity），组内比较顺序也不变。
+            if key_values in seen_exact:
+                continue
+
+            signature = tuple(value[:2] for value in key_values)
             is_duplicate = False
-            for seen_key in seen_keys:
-                similarity = DataCleaningService._calculate_similarity(key_values, seen_key)
-                if similarity >= similarity_threshold:
+            for seen_key in buckets.get(signature, ()):
+                if DataCleaningService._is_similar(key_values, seen_key, similarity_threshold):
                     is_duplicate = True
                     break
 
             if not is_duplicate:
                 unique_records.append(record)
-                seen_keys.append(key_values)
+                seen_exact.add(key_values)
+                buckets.setdefault(signature, []).append(key_values)
 
         logger.info(f"去重: {len(records)} -> {len(unique_records)} 条记录")
         return unique_records
+
+    @staticmethod
+    def _is_similar(tuple1: tuple, tuple2: tuple, threshold: float) -> bool:
+        """分桶内的相似度判定：先 quick_ratio 上界预筛，再精确比较。
+
+        quick_ratio 是 ratio 的上界，均值上界低于阈值即可安全跳过；
+        通过预筛的候选再调用 _calculate_similarity，保证结论与旧实现一致。
+        """
+        if not tuple1:
+            return False
+        upper = sum(
+            SequenceMatcher(None, val1, val2).quick_ratio()
+            for val1, val2 in zip(tuple1, tuple2)
+        ) / len(tuple1)
+        if upper < threshold:
+            return False
+        return DataCleaningService._calculate_similarity(tuple1, tuple2) >= threshold
 
     @staticmethod
     def _calculate_similarity(tuple1: tuple, tuple2: tuple) -> float:
@@ -136,19 +165,20 @@ class DataCleaningService:
         # 去除多余空格
         address = re.sub(r"\s+", " ", address.strip())
 
-        # 统一省市县的写法
-        replacements = {
-            "省": "省",
-            "市": "市",
-            "县": "县",
-            "区": "区",
-            "镇": "镇",
-            "乡": "乡",
-            "村": "村",
-        }
-
-        for old, new in replacements.items():
-            address = address.replace(old, new)
+        # M27（R27 排查）：旧实现 replacements 键值全同 —— 纯空操作。现做真实的
+        # 格式层归一（不臆造行政区划层级、不改动词序，避免破坏业务语义）：
+        # 1) 全角 ASCII（数字/字母/括号/标点）→ 半角；
+        # 2) 中文标点统一为半角等价符；
+        # 3) 标点两侧空白清理、连续标点折叠，保证同一地址的录入差异可被去重。
+        address = address.translate(str.maketrans(  # 全角 → 半角（含标点）
+            "０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ"
+            "ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ（）：，、；－—～",
+            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+            "():,,;--~",
+        ))
+        address = re.sub(r"\s*([(),;、])\s*", r"\1", address)   # 半角标点两侧空白清理
+        address = re.sub(r"([(),;、])\1+", r"\1", address)      # 连续重复标点折叠
+        address = re.sub(r"\s+", " ", address).strip()
 
         return address
 

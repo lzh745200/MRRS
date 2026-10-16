@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
@@ -200,7 +199,12 @@ async def get_role(
     """获取角色详情"""
     role = db.query(RbacRole).filter(RbacRole.id == role_id).first()
     if not role:
-        return JSONResponse(status_code=404, content={"error": "角色不存在"})
+        # R28-M17：统一错误信封。原实现返回裸 {"error": "角色不存在"} ——
+        # 既非本仓信封 {code,message,success}，也与同文件其它两处 404
+        # （update_role:230 / delete_role:266 的 HTTPException(detail=str)）不一致；
+        # 前端 _extractServerMessage 只认 detail/message 字符串，裸 error 键会让
+        # 兜底提示落空。改抛 HTTPException，与兄弟端点同形。
+        raise HTTPException(status_code=404, detail="角色不存在")
 
     perms = db.query(RolePermission.permission).filter(RolePermission.role_id == role_id).all()
 

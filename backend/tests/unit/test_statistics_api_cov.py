@@ -164,7 +164,11 @@ class TestOverviewImpl:
             _q(scalar="2026-07-23"),     # Fund
             _q(scalar="2026-07-22"),     # School
             _q(scalar="2026-07-21"),     # User
-            _q(count=0),                 # sv_count=0 → completeness=0 跳过计算
+            # villages=2（首个 count=2）→ sv_count>0，故 _calc_village_completeness
+            # 会执行 4 个基本信息字段 + 坐标 + 人口 + 收入 共 7 次查询，且均走 .scalar()
+            # （不是 .count()）。全部答 2（每村 6 项全通过）→ completeness=100。
+            _q(scalar=2), _q(scalar=2), _q(scalar=2), _q(scalar=2),
+            _q(scalar=2), _q(scalar=2), _q(scalar=2),
             _q(count=7),                 # today_ops
             _q(all=[SimpleNamespace(day=datetime.now().strftime("%Y-%m-%d"), cnt=3)]),  # trend（须落在近7天窗口内，动态取今天）
             _q(all=logs),                # recent_logs
@@ -172,7 +176,7 @@ class TestOverviewImpl:
         result = await st._get_overview_impl(db)
         assert result["villages"] == 2
         assert result["funds_amount"] == 100.0
-        assert result["completeness"] == 0
+        assert result["completeness"] == 100
         assert result["today_operations"] == 7
         assert len(result["trend"]) == 7
         assert any(t["operations"] == 3 for t in result["trend"] if t["date"] == datetime.now().strftime("%m-%d"))

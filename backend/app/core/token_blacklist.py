@@ -28,6 +28,19 @@ _BLACKLIST_LOCK = threading.Lock()
 # 否则条目会在 24h 后被 _cleanup_expired 清掉，而已吊销的 token 重新可用（安全回归）。
 _PERMANENT = math.inf
 
+# ── M39（R27 性能排查）：清理节流与永久条目上限 ──
+# 1. 全量清理（O(n) 扫描 + 持锁）不再挂在每次 is_blacklisted 上——鉴权路径每请求
+#    调用一次，条目越多越慢且长时间占锁。改为：(a) is_blacklisted 只做 O(1) 定向
+#    过期判定（命中已过期条目就地删除），(b) 全量扫描按 _CLEANUP_INTERVAL_SECONDS 节流。
+# 2. 永久条目（expires_at IS NULL）历史上永不清理且无上限 → 内存无界增长。
+#    超出 _MAX_PERMANENT_ENTRIES 时把**最早**的溢出条目降级为超长有限 TTL
+#    （_PERMANENT_RETENTION_SECONDS = 180 天），既不无界增长，也不立刻放行已吊销令牌；
+#    数据库侧的永久吊销记录不受影响（重启后 load_from_db 会重新装载）。
+_CLEANUP_INTERVAL_SECONDS = 60.0
+_PERMANENT_RETENTION_SECONDS = 180 * 24 * 3600
+_MAX_PERMANENT_ENTRIES = 10_000
+_last_cleanup_at: float = 0.0
+
 
 def add(token_jti: str, *, expires_at: Optional[datetime] = None, ttl_seconds: int = 0) -> None:
     """Add a token JTI to the blacklist.
@@ -66,14 +79,25 @@ def remove(token_jti: str) -> None:
 def is_blacklisted(token_jti: str) -> bool:
     """Check whether a token JTI is in the blacklist.
 
+    O(1) 定向判定：只检查目标条目自身的过期时间，命中已过期条目时就地删除。
+    全量清理由 add()/count() 按 _CLEANUP_INTERVAL_SECONDS 节流触发（M39）。
+
     Args:
         token_jti: The JWT ID to check.
 
     Returns:
         *True* if the token has been revoked.
     """
-    _cleanup_expired()
-    return token_jti in _blacklist
+    now = time.time()
+    with _BLACKLIST_LOCK:
+        expiry = _blacklist.get(token_jti)
+        if expiry is None:
+            return False
+        if expiry <= now:
+            # 惰性删除：过期的吊销条目不再拦截（与清理语义一致）
+            del _blacklist[token_jti]
+            return False
+        return True
 
 
 def load_from_db(db_session) -> int:
@@ -126,14 +150,42 @@ def count() -> int:
 
 
 def _cleanup_expired() -> None:
-    """Remove entries whose expiry timestamp has passed."""
+    """Remove entries whose expiry timestamp has passed.
+
+    全量扫描按 _CLEANUP_INTERVAL_SECONDS 节流（M39）：鉴权路径不再为每次判定
+    付出 O(n)+持锁代价；单条过期判定由 is_blacklisted 就地完成。
+    """
+    global _last_cleanup_at
     now = time.time()
     with _BLACKLIST_LOCK:
+        if now - _last_cleanup_at < _CLEANUP_INTERVAL_SECONDS:
+            return
+        _last_cleanup_at = now
         expired = [jti for jti, exp in _blacklist.items() if exp <= now]
         for jti in expired:
             del _blacklist[jti]
+        degraded = _cap_permanent_entries(now)
     if expired:
         logger.debug("清理过期黑名单条目: %d 个", len(expired))
+    if degraded:
+        logger.warning(
+            "永久吊销条目超过上限 %d，已将最早 %d 条降级为 %d 天有限 TTL（防内存无界增长）",
+            _MAX_PERMANENT_ENTRIES,
+            degraded,
+            _PERMANENT_RETENTION_SECONDS // 86400,
+        )
+
+
+def _cap_permanent_entries(now: float) -> int:
+    """把超出上限的最早永久条目降级为超长有限 TTL，返回降级条数（调用方须持锁）。"""
+    permanent = [jti for jti, exp in _blacklist.items() if exp == _PERMANENT]
+    overflow = len(permanent) - _MAX_PERMANENT_ENTRIES
+    if overflow <= 0:
+        return 0
+    degraded_expiry = now + _PERMANENT_RETENTION_SECONDS
+    for jti in permanent[:overflow]:
+        _blacklist[jti] = degraded_expiry
+    return overflow
 
 
 # ---------------------------------------------------------------------------

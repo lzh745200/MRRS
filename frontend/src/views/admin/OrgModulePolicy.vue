@@ -74,6 +74,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { get, put } from '@/api/request'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 interface PolicyRow {
   key: string
@@ -126,7 +127,7 @@ async function loadPolicies() {
     const res = await get(`/org-policies/${selectedOrgId.value}`)
     policies.value = res.data || res || []
   } catch (e: unknown) {
-    ElMessage.error(e instanceof Error ? e.message : '加载策略失败')
+    ElMessage.error(getErrorMessage(e, '加载策略失败'))
   } finally {
     loading.value = false
   }
@@ -146,7 +147,7 @@ async function handleSave() {
     ElMessage.success('模块策略已保存')
     await loadPolicies()
   } catch (e: unknown) {
-    ElMessage.error(e instanceof Error ? e.message : '保存失败')
+    ElMessage.error(getErrorMessage(e, '保存失败'))
   } finally {
     saving.value = false
   }

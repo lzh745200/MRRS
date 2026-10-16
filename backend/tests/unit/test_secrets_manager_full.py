@@ -14,8 +14,28 @@
 """
 import time
 
+import pytest
 
 from app.services.secrets_manager import SecretsManager, secrets_manager
+
+
+@pytest.fixture(autouse=True)
+def _isolate_key_store(monkeypatch, tmp_path):
+    """把密钥库目录隔离到 tmp_path，避免污染真实用户数据。
+
+    SecretsManager._init_default_key / _persist_key_store 会读写
+    %LOCALAPPDATA%/bumofu-assistance/data/ 下的密钥文件。不做隔离时
+    rotate_key / create_key / cleanup_expired_keys 会把本文件里的假密钥
+    （例如 TestCleanupExpiredKeys 里 `_secrets["default"] = "d"`）真实写进
+    用户密钥库，后果有二：
+
+    1. 真实应用启动后读到 default_key="d"，用真实密钥加密的历史数据
+       将永远无法解密（数据不可逆级缺陷）；
+    2. 后续用例读到上一次运行的残留版本，结果依赖运行历史，
+       在隔离运行与全量运行下表现不一致（顺序相关 flaky）。
+    """
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
 
 
 # ---------------------------------------------------------------------------

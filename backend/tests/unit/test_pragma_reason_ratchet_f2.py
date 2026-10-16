@@ -27,6 +27,20 @@ _spec = importlib.util.spec_from_file_location("check_pragma_reasons", SCRIPT)
 mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(mod)
 
+# test_new_bare_pragma_in_working_tree_is_detected 会在仓库 scripts/ 下建探针文件。
+# 若那次运行被硬中断（例如 pytest-timeout 直接杀进程），finally 里的 unlink 不会执行，
+# 探针文件残留 → 下一轮全量跑时 test_repo_bare_pragmas_stay_zero 等"仓库级"门禁
+# 全部误报（实测 191 处变 192 处、无理由 0 变 1）。这里在每个用例前后都清一次。
+_PROBE = ROOT / "scripts" / "_pragma_probe_tmp.py"
+
+
+@pytest.fixture(autouse=True)
+def _no_stale_pragma_probe():
+    """清理上一次被中断的运行可能残留的探针文件。"""
+    _PROBE.unlink(missing_ok=True)
+    yield
+    _PROBE.unlink(missing_ok=True)
+
 
 class TestReasonDetection:
     @pytest.mark.parametrize(

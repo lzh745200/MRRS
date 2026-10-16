@@ -16,7 +16,20 @@ from app.core.logging import logger
 
 
 class DataPackageEncryption:
-    """数据包加密工具"""
+    """数据包加密工具。
+
+    与生产路径的关系（R28 复核，R27 低危项「文件整体读入内存」的处置结论）：
+        ``config.py`` 只消费 :meth:`from_key_string`（密钥派生），
+        ``scripts/manage_keys.py`` 亦同；:meth:`encrypt_file` / :meth:`decrypt_file`
+        **全仓无生产调用方**（仅历史测试），真正的数据包加解密路径是
+        ``services/password_encryption_service``（格式为 ``salt|iterations|token``，
+        与这里的「整文件 Fernet 令牌」不兼容）。
+
+        因此本轮**不做分块改造**：改这两处只会改变一个无消费方的格式，
+        零收益却可能破坏历史加密包的可解性。若将来真要复用它加密大文件，
+        必须先设计分块格式（多 Fernet 令牌串联 + 长度前缀）并同步迁移调用方，
+        而不是让这两个方法默默吃下整个文件。
+    """
 
     def __init__(self, password: str = None, key: bytes = None):
         """

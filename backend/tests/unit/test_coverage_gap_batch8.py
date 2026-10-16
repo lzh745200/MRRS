@@ -570,12 +570,20 @@ class TestBackupSchedulerExtras:
              patch.object(bs, "_timers", []), \
              patch.object(_threading, "Timer", return_value=fake_timer) as mock_timer:
             bs.start_backup_scheduler()
-            # 8 daily + 3 interval + 1 weekly = 12 类任务 → 13 个 timer
-            # （含恢复演练 2026-09-12；含分片清理 chunk_cleanup，R4 2026-09-12；
-            #   含过期导出回收 export_purge，R5 2026-09-13）
-            assert mock_timer.call_count == 13
-            assert fake_timer.start.call_count == 13
-            assert len(bs._timers) == 13
+            # 周期作业数随功能增长（R27：已含会话清理/待办提醒等）。
+            # 用源码注册点数推导，避免每次新增作业就硬编码漂移。
+            import inspect as _inspect
+
+            _src = _inspect.getsource(bs.start_backup_scheduler)
+            _expected = (
+                _src.count("_schedule_daily(")
+                + _src.count("_schedule_interval(")
+                + _src.count("_schedule_weekly(")
+            )
+            assert _expected >= 14
+            assert mock_timer.call_count == _expected
+            assert fake_timer.start.call_count == _expected
+            assert len(bs._timers) == _expected
         # 恢复全局状态避免污染其他测试
         with patch.object(bs, "_scheduler_started", True), \
              patch.object(bs, "_timers", []):
@@ -750,7 +758,18 @@ class TestSchedulerJobsTriggered:
              patch.object(bs, "_timers", []), \
              patch.object(_threading, "Timer", CapturingTimer) as mock_timer:
             bs.start_backup_scheduler()
-        assert len(CapturingTimer.instances) == 13  # 含消息清理 + 订阅分发 + 恢复演练 + 分片清理（R4）+ 过期导出回收（R5）
+        # R27：作业数随功能增长（含会话清理/待办提醒等），硬编码 13 会每次加作业即红。
+        # 改为与源码注册点数量一致（_schedule_daily/_schedule_interval 调用数）。
+        import inspect as _inspect
+
+        _src = _inspect.getsource(bs.start_backup_scheduler)
+        _expected = (
+            _src.count("_schedule_daily(")
+            + _src.count("_schedule_interval(")
+            + _src.count("_schedule_weekly(")
+        )
+        assert len(CapturingTimer.instances) == _expected, f"实得 {len(CapturingTimer.instances)}"
+        assert _expected >= 14
         # 找到 name 含 "reminder_scan" 的 timer 并触发其 _job 闭包
         target = next(t for t in CapturingTimer.instances if t.name == "scheduler-reminder_scan")
         with patch.object(bs, "_timers", []):
@@ -789,7 +808,18 @@ class TestSchedulerJobsTriggered:
              patch.object(bs, "_timers", []), \
              patch.object(_threading, "Timer", CapturingTimer):
             bs.start_backup_scheduler()
-        assert len(CapturingTimer.instances) == 13  # 含消息清理 + 订阅分发 + 恢复演练 + 分片清理（R4）+ 过期导出回收（R5）
+        # R27：作业数随功能增长（含会话清理/待办提醒等），硬编码 13 会每次加作业即红。
+        # 改为与源码注册点数量一致（_schedule_daily/_schedule_interval 调用数）。
+        import inspect as _inspect
+
+        _src = _inspect.getsource(bs.start_backup_scheduler)
+        _expected = (
+            _src.count("_schedule_daily(")
+            + _src.count("_schedule_interval(")
+            + _src.count("_schedule_weekly(")
+        )
+        assert len(CapturingTimer.instances) == _expected, f"实得 {len(CapturingTimer.instances)}"
+        assert _expected >= 14
         target = next(t for t in CapturingTimer.instances if t.name == "scheduler-kpi_precalculate")
         with patch.object(bs, "_timers", []), \
              patch("app.services.backup_scheduler.kpi_precalculate_job") as mock_kpi:

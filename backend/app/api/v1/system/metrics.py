@@ -233,9 +233,11 @@ async def get_database_metrics(
         if db_path.exists():
             size_bytes = db_path.stat().st_size
             metrics["database_file_size_mb"] = round(size_bytes / (1024 * 1024), 2)
-            metrics["database_file_path"] = str(db_path)
+            # W1-T8：数据库绝对路径属于部署拓扑信息，不出站（回归见 test_system_gates_r27）
     except Exception as e:
-        metrics["database_file_error"] = str(e)
+        # 错误细节不出站：仅记录泛化文案，内部原因进日志
+        logger.debug("读取数据库文件大小失败: %s", e, exc_info=True)
+        metrics["database_file_error"] = "无法读取数据库文件信息"
 
     # 表数量统计
     try:
@@ -243,12 +245,11 @@ async def get_database_metrics(
 
         inspector = inspect(db.get_bind())
         tables = inspector.get_table_names()
+        # W1-T8：表名清单属于 schema 拓扑信息，不出站；仅返回数量聚合值
         metrics["table_count"] = len(tables)
-        metrics["table_names"] = tables[:20]  # 限制返回数量
-        if len(tables) > 20:
-            metrics["table_names_truncated"] = True
     except Exception as e:
-        metrics["table_count_error"] = str(e)
+        logger.debug("读取表清单失败: %s", e, exc_info=True)
+        metrics["table_count_error"] = "无法读取表清单"
 
     # 关键表行数统计（白名单防御：仅允许预定义的安全表名）
     try:
@@ -270,7 +271,13 @@ async def get_database_metrics(
                 row_counts[table] = "N/A"
         metrics["key_table_row_counts"] = row_counts
     except Exception as e:
-        metrics["row_count_error"] = str(e)
+        # 兜底路径本身不得再抛：日志系统异常（handler 故障/序列化失败）不应把
+        # 只读指标端点打成 500（回归见 test_cov_final_system_metrics 的外层兜底用例）
+        try:
+            logger.debug("统计关键表行数失败: %s", e, exc_info=True)
+        except Exception:  # pragma: no cover - 日志设施自身故障
+            pass
+        metrics["row_count_error"] = "无法统计关键表行数"
 
     return {
         "success": True,
@@ -328,13 +335,17 @@ async def get_metrics_history(
             },
         }
     except Exception as e:
+        # R27 复审：原实现 success=True + 回显 str(e) —— 面板把"查询失败"显示成
+        # "0 条记录"（用户以为真的没有历史），同时把内部错误细节透出站。
+        # 改为 success=False + 泛化文案（内部原因进日志）。
+        logger.warning("历史指标查询失败: %s", e, exc_info=True)
         return {
-            "success": True,
+            "success": False,
             "data": {
                 "metric_type": metric_type,
                 "hours": hours,
                 "record_count": 0,
                 "history": [],
-                "message": f"历史指标数据暂不可用: {str(e)}",
+                "message": "历史指标数据暂不可用，请稍后重试",
             },
         }

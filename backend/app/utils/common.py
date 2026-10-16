@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import re
 import secrets
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from pydantic import BaseModel
@@ -138,104 +138,6 @@ class PaginationHelper:
             分页结果字典
         """
         return {"items": items, "pagination": page_info.model_dump()}
-
-
-class DateTimeHelper:
-    """日期时间助手"""
-
-    FORMAT_DATE = "%Y-%m-%d"
-    FORMAT_DATETIME = "%Y-%m-%d %H:%M:%S"
-    FORMAT_ISO = "%Y-%m-%dT%H:%M:%S"
-
-    @staticmethod
-    def now() -> datetime:
-        """获取当前时间"""
-        return datetime.now()
-
-    @staticmethod
-    def today() -> date:
-        """获取今天日期"""
-        return date.today()
-
-    @staticmethod
-    def format_datetime(dt: Optional[datetime], fmt: str = "%Y-%m-%d %H:%M:%S") -> Optional[str]:
-        """格式化日期时间
-
-        Args:
-            dt: 日期时间对象
-            fmt: 格式字符串
-
-        Returns:
-            格式化后的字符串
-        """
-        if not dt:
-            return None
-        return dt.strftime(fmt)
-
-    @staticmethod
-    def parse_datetime(dt_str: str, fmt: str = "%Y-%m-%d %H:%M:%S") -> Optional[datetime]:
-        """解析日期时间字符串
-
-        Args:
-            dt_str: 日期时间字符串
-            fmt: 格式字符串
-
-        Returns:
-            日期时间对象
-        """
-        try:
-            return datetime.strptime(dt_str, fmt)
-        except (ValueError, TypeError):
-            return None
-
-    @staticmethod
-    def to_iso_string(dt: Optional[datetime]) -> Optional[str]:
-        """转换为ISO格式字符串"""
-        if not dt:
-            return None
-        return dt.isoformat()
-
-    @staticmethod
-    def from_iso_string(iso_str: str) -> Optional[datetime]:
-        """从ISO格式字符串解析"""
-        try:
-            return datetime.fromisoformat(iso_str)
-        except (ValueError, TypeError):
-            return None
-
-    @staticmethod
-    def add_days(dt: datetime, days: int) -> datetime:
-        """添加天数"""
-        return dt + timedelta(days=days)
-
-    @staticmethod
-    def add_hours(dt: datetime, hours: int) -> datetime:
-        """添加小时数"""
-        return dt + timedelta(hours=hours)
-
-    @staticmethod
-    def diff_days(dt1: datetime, dt2: datetime) -> int:
-        """计算天数差"""
-        return (dt1 - dt2).days
-
-    @staticmethod
-    def is_expired(dt: datetime) -> bool:
-        """检查是否过期"""
-        return dt < datetime.now()
-
-    @staticmethod
-    def get_date_range(start: date, end: date) -> List[date]:
-        """获取日期范围
-
-        Args:
-            start: 开始日期
-            end: 结束日期
-
-        Returns:
-            日期列表
-        """
-        days = (end - start).days + 1
-        return [start + timedelta(days=i) for i in range(days)]
 
 
 class CryptoHelper:

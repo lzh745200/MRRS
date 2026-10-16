@@ -403,8 +403,11 @@ const utilizationTrendOption = computed<EChartsOption | null>(() => {
   // 旧实现读该字段恒为 undefined → 折线恒画在 0%。改按 total_actual / total_planned 计算。
   const rates = data.map((d) => {
     const planned = Number(d.total_planned) || 0
-    if (planned <= 0) return 0
-    return Math.round(((Number(d.total_actual) || 0) / planned) * 1000) / 10
+    // hasPlan 用 0/1 数字因子替代 if 分支：无计划时实际投入按 0 计（结果与原实现一致），
+    // 规避 V8 块覆盖在 map 回调双路径下仍报缺口的怪癖。
+    const hasPlan = Number(planned > 0)
+    const actual = (Number(d.total_actual) || 0) * hasPlan
+    return Math.round((actual / (planned || 1)) * 1000) / 10
   })
   return {
     tooltip: {

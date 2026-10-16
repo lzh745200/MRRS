@@ -531,8 +531,22 @@ class DataPackageService:
     def _build_upsert_statement(self, model: Any, clean_records: List[Dict], pk_name: str, overwrite: bool):
         stmt = sqlite_insert(model).values(clean_records)
         if overwrite:
-            update_cols = {c.name: c for c in stmt.excluded if c.name != pk_name}
-            stmt = stmt.on_conflict_do_update(index_elements=[pk_name], set_=update_cols)
+            # M29（R27 排查）：`stmt.excluded` 为**表内全部列**提供伪列 —— 未出现在
+            # VALUES 中的列在 excluded 里是 NULL，全量 set_ 会把「记录未携带的字段」
+            # 写成 NULL、覆盖目标库已有值。分组（见 _bulk_upsert_records）保证组内
+            # 键集合一致，这里只对本组实际携带的列生成 UPDATE。
+            carried = set(clean_records[0].keys())
+            update_cols = {
+                c.name: c
+                for c in stmt.excluded
+                if c.name != pk_name and c.name in carried
+            }
+            if update_cols:
+                stmt = stmt.on_conflict_do_update(index_elements=[pk_name], set_=update_cols)
+            else:
+                # 记录只带主键（无任何可更新列）：DO UPDATE 空 SET 是非法 SQL，
+                # 语义等价于「冲突则忽略」。
+                stmt = stmt.on_conflict_do_nothing(index_elements=[pk_name])
         else:
             stmt = stmt.on_conflict_do_nothing(index_elements=[pk_name])
         return stmt
@@ -563,29 +577,34 @@ class DataPackageService:
         if not clean_records:
             return 0, 0, errors
 
-        # 键集合归一：批量 INSERT 以首行键集合编译 SQL，字段不一致的记录
-        # （如字段级校验纠正后补齐的字段）会丢失非首行独有的键，统一补齐 None。
-        all_keys = set()
+        # M29（R27 排查）：旧实现把所有记录按**键并集**补齐 None 后一次性 upsert，
+        # overwrite 时 `stmt.excluded` 会把"某条记录未携带的字段"写成 NULL，
+        # 覆盖掉目标库已有值。现按「记录实际携带的键集合」分组：组内键集合完全
+        # 一致，每组独立编译 upsert（update set_ 仅含组内真实携带的列）——
+        # 既保留批量写入，又不会用缺失键清空既有列；显式携带的 None 仍照写
+        # （语义与"字段不存在"区分开）。多组并非常态（同一类型的导出记录字段集
+        # 通常一致），分组开销可忽略。
+        groups: Dict[frozenset, List[Dict]] = {}
         for r in clean_records:
-            all_keys.update(r.keys())
-        clean_records = [{k: r.get(k) for k in all_keys} for r in clean_records]
+            groups.setdefault(frozenset(r.keys()), []).append(r)
 
-        stmt = self._build_upsert_statement(model, clean_records, pk_name, overwrite)
+        imported = 0
+        for group_records in groups.values():
+            stmt = self._build_upsert_statement(model, group_records, pk_name, overwrite)
 
-        try:
-            # 本批使用独立 SAVEPOINT：失败只回滚本批，保留同一外层事务中已导入的
-            # 前序数据类型。历史实现在此处调用整事务 rollback() —— 会连同
-            # confirm_import 的 begin_nested() 内已导入的前序类型一起丢弃，而
-            # imported_counts 仍按"成功"计数并照常 commit（计数与数据不一致、
-            # 静默丢数据）。
-            with self.db.begin_nested():
-                self.db.execute(stmt)
-            imported = len(clean_records)
-        except Exception as e:
-            errors.append(DataPackageValidationError(
-                field=model.__tablename__, message=f"批量写入数据库失败: {e}", data_type=model.__tablename__
-            ))
-            imported = 0
+            try:
+                # 本组使用独立 SAVEPOINT：失败只回滚本组，保留同一外层事务中已导入的
+                # 前序数据类型与前序分组。历史实现在此处调用整事务 rollback() —— 会
+                # 连同 confirm_import 的 begin_nested() 内已导入的前序类型一起丢弃，
+                # 而 imported_counts 仍按"成功"计数并照常 commit（计数与数据不一致、
+                # 静默丢数据）。
+                with self.db.begin_nested():
+                    self.db.execute(stmt)
+                imported += len(group_records)
+            except Exception as e:
+                errors.append(DataPackageValidationError(
+                    field=model.__tablename__, message=f"批量写入数据库失败: {e}", data_type=model.__tablename__
+                ))
 
         return imported, 0, errors
 

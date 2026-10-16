@@ -174,26 +174,33 @@ class FundService:
         if applicant is not None:
             fund.applicant = applicant
         self.db.add(fund)
+        # M31（R27 排查）：原子化创建。历史实现先 commit 落库、再补编号、第二次 commit
+        # —— 第二次失败会留下"无 code 的经费行"（编号规则 ADR-0011 形同虚设，且该行
+        # 后续无法被编号查询命中）。改为 flush（拿到自增 id）→ 生成编号 → 单次 commit：
+        # 编号写入与记录落库同生同死。
+        self.db.flush()
+        self._ensure_zj_code(fund)
         if auto_commit:
             safe_commit(self.db)
             self.db.refresh(fund)
-            self._ensure_zj_code(fund)
-            safe_commit(self.db)
-            logger.info("Fund %s created by user %d", fund.id, created_by)
-        else:
-            self.db.flush()
-            self._ensure_zj_code(fund)
-            logger.info("Fund %s created by user %d (flushed, not committed)", fund.id, created_by)
+        logger.info(
+            "Fund %s created by user %d (committed=%s)",
+            getattr(fund, "id", None),
+            created_by,
+            auto_commit,
+        )
         return fund
 
     @staticmethod
     def _ensure_zj_code(fund: "Fund") -> None:
         """编号规则 ADR-0011：ZJ + 年份 + 6 位流水（取自自增 id，id 唯一故编号唯一）。"""
-        import datetime as _datetime
+        from datetime import datetime, timezone
 
         if getattr(fund, "code", None):
             return
-        year = _datetime.date.today().year
+        # M31：年份取 UTC 而非本地墙钟——本地时区跨年时编号年份与业务年度不一致
+        # （一台 UTC+X 的机器在 23:30 新建的经费会拿到次年的号，验收时与账面年度对不上）。
+        year = datetime.now(timezone.utc).year
         try:
             fund.code = f"ZJ{year}{int(fund.id):06d}"
         except (TypeError, ValueError):

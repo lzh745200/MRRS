@@ -288,20 +288,36 @@ describe('行交互', () => {
     wrapper.unmount()
   })
 
-  it('handleMarkRead：成功递减未读计数（下限 0）；失败静默', async () => {
+  it('handleMarkRead：成功递减未读计数（下限 0）；失败保持状态并提示', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.unreadCount = 1
-    await vm.handleMarkRead({ id: 5, is_read: false } as any)
+    const first = { id: 5, is_read: false } as any
+    await vm.handleMarkRead(first)
     expect(mockMarkAsRead).toHaveBeenCalledWith([5])
+    expect(first.is_read).toBe(true)
     expect(vm.unreadCount).toBe(0)
     await vm.handleMarkRead({ id: 6, is_read: false } as any)
     expect(vm.unreadCount).toBe(0)
 
+    // M46：失败必须提示且本地状态与后端保持一致（不回写 is_read/未读数）
+    vm.unreadCount = 2
     mockMarkAsRead.mockRejectedValue(new Error('x'))
-    await vm.handleMarkRead({ id: 7, is_read: false } as any)
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    const failed = { id: 7, is_read: false } as any
+    await vm.handleMarkRead(failed)
+    expect(failed.is_read).toBe(false)
+    expect(vm.unreadCount).toBe(2)
+    expect(ElMessage.error).toHaveBeenCalledWith('x')
+
+    // 服务端原因（detail/message）优先于通用 message
+    mockMarkAsRead.mockRejectedValueOnce({ response: { data: { detail: '消息不存在' } } })
+    await vm.handleMarkRead({ id: 8, is_read: false } as any)
+    expect(ElMessage.error).toHaveBeenCalledWith('消息不存在')
+
+    mockMarkAsRead.mockRejectedValueOnce({})
+    await vm.handleMarkRead({ id: 9, is_read: false } as any)
+    expect(ElMessage.error).toHaveBeenCalledWith('标记已读失败')
     wrapper.unmount()
   })
 

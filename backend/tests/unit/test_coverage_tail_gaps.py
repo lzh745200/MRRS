@@ -148,18 +148,23 @@ class TestReportExportEdge:
         assert _fmt_amount("abc") == "0.00"   # ValueError → 42-43
         assert _fmt_amount(None) == "0.00"    # TypeError → 42-43
 
+    @staticmethod
+    def _scope_user():
+        """超管替身（R28 · H6）：报表构建需 current_user，本类只测查询失败兜底。"""
+        return SimpleNamespace(id=1, role="super_admin", is_superuser=True, organization_id=None)
+
     def test_fund_detail_query_failure(self):
         svc = ReportExportService()
         db = MagicMock()
         db.query.side_effect = RuntimeError("boom")
-        data = svc.generate_fund_detail_report_data(db, 2024)
+        data = svc.generate_fund_detail_report_data(db, 2024, self._scope_user())
         assert data["sections"][0]["table"] is None  # 140-146
 
     def test_project_progress_query_failure(self):
         svc = ReportExportService()
         db = MagicMock()
         db.query.side_effect = RuntimeError("boom")
-        data = svc.generate_project_progress_report_data(db, 2024)
+        data = svc.generate_project_progress_report_data(db, 2024, self._scope_user())
         assert data["sections"][0]["table"] is None  # 202-208
 
     def test_iter_render_items_empty_table(self):
@@ -253,7 +258,19 @@ class TestDataSyncEdge:
 
 class TestApprovalWorkflowEdge:
     def _svc(self):
-        return ApprovalWorkflowService(MagicMock())
+        """M30（R28）契约：approve/reject 由 check-then-act 改为**带条件原子 UPDATE
+        抢占**，`rowcount != 1` 即视为已被并发/重放请求处理并提前返回。
+
+        旧替身（裸 MagicMock 的 db）下 `update()` 返回 MagicMock（`!= 1`）→ 抢占
+        视为失败 → 方法提前返回、任务停在 pending，这正是本类三条用例原先锁定的
+        **旧行为**。现按新契约显式回填抢占成功（rowcount=1），断言本身不变；
+        晋级值改为断言「原子 UPDATE 的 payload」——`synchronize_session=False` +
+        MagicMock 的 `refresh()` 是 no-op，值不再回写内存对象属性，只有 payload
+        才代表真正落库的内容。
+        """
+        db = MagicMock()
+        db.query.return_value.filter.return_value.update.return_value = 1
+        return ApprovalWorkflowService(db)
 
     def test_approve_role_node_resolved(self):
         svc = self._svc()
@@ -270,7 +287,9 @@ class TestApprovalWorkflowEdge:
              patch.object(svc, "_resolve_role_approver_id", return_value=99) as rr:
             svc.approve_task(1, 7)
         rr.assert_called_once_with(5)          # 490-491
-        assert task.current_approver_id == 99
+        claim_payload = svc.db.query.return_value.filter.return_value.update.call_args[0][0]
+        assert claim_payload["current_approver_id"] == 99
+        assert claim_payload["current_level"] == 1
 
     def test_approve_final_level_apply_failed(self):
         svc = self._svc()
@@ -295,6 +314,20 @@ class TestApprovalWorkflowEdge:
              patch.object(svc, "apply_entity_change", return_value=False):
             svc.reject_task(1, 7)
         assert task.status == ApprovalStatus.REJECTED.value + svc.APPLY_FAILED_SUFFIX  # 534-535
+
+    def test_claim_lost_returns_none(self):
+        """M30 新增分支：抢占 rowcount != 1（并发/重放）必须放弃本次操作。"""
+        db = MagicMock()
+        db.query.return_value.filter.return_value.update.return_value = 0
+        svc = ApprovalWorkflowService(db)
+        task = MagicMock()
+        task.status = ApprovalStatus.PENDING.value
+        task.current_approver_id = None
+        task.current_level = 1
+        with patch.object(svc, "get_task", return_value=task), \
+             patch.object(svc, "apply_entity_change") as apply_mock:
+            assert svc.approve_task(1, 7) is None
+        apply_mock.assert_not_called()
 
     def test_retry_no_task_returns_none(self):
         svc = self._svc()

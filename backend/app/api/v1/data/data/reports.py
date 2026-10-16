@@ -165,9 +165,9 @@ async def export_comprehensive_report(
 async def get_filter_options(
     current_user=Depends(get_current_user), service: AnalyticsService = Depends(get_analytics_service)
 ):
-    """获取所有可用的筛选选项"""
+    """获取所有可用的筛选选项（按调用者数据域收敛）"""
     try:
-        return service.get_filter_options()
+        return service.get_filter_options(current_user)
     except Exception as e:
         logger.error("获取筛选选项失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="获取筛选选项失败，请稍后重试或联系管理员")
@@ -240,7 +240,7 @@ async def drill_down(
     """
     try:
         # drill_down expects a plain dict, not a pydantic model
-        return service.drill_down(query.model_dump())
+        return service.drill_down(query.model_dump(), current_user)
     except Exception as e:
         logger.error("数据钻取查询失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
@@ -266,7 +266,7 @@ async def compare_villages(
         对比结果
     """
     try:
-        return service.compare_villages(village_ids, year, metrics)
+        return service.compare_villages(village_ids, year, metrics, current_user)
     except Exception as e:
         logger.error("帮扶村对比查询失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
@@ -297,7 +297,7 @@ async def compare_years(
         if metrics:
             metric_list = [m.strip() for m in metrics.split(",") if m.strip()]
 
-        return service.compare_years(village_id, year_list, metric_list)
+        return service.compare_years(village_id, year_list, metric_list, current_user)
     except ValueError:
         raise HTTPException(status_code=400, detail="参数格式错误，请稍后重试或联系管理员")
     except Exception as e:
@@ -336,7 +336,7 @@ async def get_summary_statistics(
         if is_key_county is not None:
             filters["is_key_county"] = is_key_county
 
-        return service.get_summary_statistics(filters, year)
+        return service.get_summary_statistics(filters, year, current_user)
     except Exception as e:
         logger.error("汇总统计查询失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")

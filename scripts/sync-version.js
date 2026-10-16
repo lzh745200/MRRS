@@ -2,24 +2,23 @@
 /**
  * sync-version.js — 版本号统一校验/同步工具
  *
- * 以根目录 package.json 的 `version` 字段为唯一版本源，校验/同步以下文件中的版本号：
- *   - backend/app/core/config.py        PROJECT_VERSION
- *   - backend/version.txt (若存在) / version.txt
- *   - README.md                          badge + 文末版本
- *   - Dockerfile                         echo 版本
- *   - Dockerfile.runtime                 LABEL version
- *   - docker-compose.yml                 BUILD_VERSION / image tag / PROJECT_VERSION / 头注释
- *   - build.ps1                          $Version 默认值
- *   - build-kylin.sh                     产物文件名版本
- *   - build-with-check.ps1               $PACKAGE_VERSION
- *   - electron/main.js                   回退默认版本
- *   - launch.py                          启动横幅版本
+ * 以根目录 package.json 的 `version` 字段为唯一版本源，校验/同步所有目标文件中的版本号。
+ *
+ * M53（2026-10-14）：本文件是版本同步的**唯一实现**。历史上仓库有两套工具两套目标集
+ * （本 .js 供 CI 门禁 + Makefile/preflight；`scripts/sync_version.py` 供出包流水线按 tag
+ * 同步），两边覆盖面不同 → 实测根 `package-lock.json` 停在 1.10.0、`frontend/.env.example`
+ * 停在 1.12.5 长期无人发现。现收敛为：
+ *   - 目标集只在本文件维护（含 package-lock.json / frontend/.env.example / .env.production）；
+ *   - `scripts/sync_version.py` 退化为**薄封装**（转发到本文件），保留旧调用签名；
+ *   - 出包工作流直接调用本文件（不再经 .py）。
  *
  * 用法:
- *   node scripts/sync-version.js --check   # 仅校验，不一致退出码 1
- *   node scripts/sync-version.js --write   # 自动同步所有文件到 package.json 版本
+ *   node scripts/sync-version.js --check             # 仅校验，不一致退出码 1
+ *   node scripts/sync-version.js --write             # 同步到 package.json 的 version
+ *   node scripts/sync-version.js --write --version 1.12.17
+ *   node scripts/sync-version.js --write 1.12.17     # 位置参数等价写法（tag 触发场景）
  *
- * 退出码: 0 = 一致/已同步; 1 = 存在不一致（--check 模式）
+ * 退出码: 0 = 一致/已同步; 1 = 存在不一致（--check 模式）或源版本非法
  */
 
 "use strict";
@@ -232,6 +231,54 @@ const TARGETS = [
     },
   },
   {
+    // M53（2026-10-14）：根 package-lock.json 长期不在任何同步目标内，实测停在
+    // 1.10.0（package.json 已 1.12.16）→ `npm ci` 元数据与包版本不一致。
+    // 与 frontend/package-lock.json 同款两处写入（根部 version + packages[""]）。
+    name: "package-lock.json (version + packages[\"\"].version)",
+    file: "package-lock.json",
+    describe(c) {
+      try {
+        const d = JSON.parse(c);
+        return d.version || null;
+      } catch {
+        return null;
+      }
+    },
+    apply(c, v) {
+      const d = JSON.parse(c);
+      d.version = v;
+      if (d.packages && d.packages[""]) {
+        d.packages[""].version = v;
+      }
+      return JSON.stringify(d, null, 2) + "\n";
+    },
+  },
+  {
+    // M53（2026-10-14）：前端 VITE_APP_VERSION 此前只被 sync_version.py 覆盖，
+    // 实测停在 1.12.5。纳入单一目标集，保证 UI 版本显示与包版本同源。
+    name: "frontend/.env.example (VITE_APP_VERSION)",
+    file: "frontend/.env.example",
+    describe(c) {
+      const m = c.match(/^VITE_APP_VERSION=(\S+)$/m);
+      return m ? m[1] : null;
+    },
+    apply(c, v) {
+      return c.replace(/^VITE_APP_VERSION=\S+$/m, `VITE_APP_VERSION=${v}`);
+    },
+  },
+  {
+    name: "frontend/.env.production (VITE_APP_VERSION)",
+    file: "frontend/.env.production",
+    optional: true,
+    describe(c) {
+      const m = c.match(/^VITE_APP_VERSION=(\S+)$/m);
+      return m ? m[1] : null;
+    },
+    apply(c, v) {
+      return c.replace(/^VITE_APP_VERSION=\S+$/m, `VITE_APP_VERSION=${v}`);
+    },
+  },
+  {
     name: "frontend/package-lock.json (version + packages[\"\"].version)",
     file: "frontend/package-lock.json",
     // 2026-09-12 新增：lock 根部两处 version 长期靠手工对齐（v1.12.3 发版时实测
@@ -333,6 +380,25 @@ const TARGETS = [
   },
 ];
 
+/**
+ * 解析命令行传入的目标版本（tag 触发场景：`--version 1.12.17` 或位置参数 `1.12.17`）。
+ * 未传入时返回 null（表示以 package.json 现有 version 为源）。
+ */
+function readRequestedVersion(argv) {
+  const flagIndex = argv.indexOf("--version");
+  const candidates = [];
+  if (flagIndex >= 0 && argv[flagIndex + 1]) candidates.push(argv[flagIndex + 1]);
+  for (const arg of argv) {
+    if (arg.startsWith("-")) continue;
+    candidates.push(arg);
+  }
+  for (const raw of candidates) {
+    const v = String(raw).replace(/^v/, "").trim();
+    if (/^\d+\.\d+\.\d+/.test(v)) return v;
+  }
+  return null;
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const mode = argv.includes("--write")
@@ -340,6 +406,23 @@ function main() {
     : argv.includes("--check")
       ? "check"
       : "check"; // 默认 check
+
+  // M53：出包流水线按 git tag 传版本号。此前由 scripts/sync_version.py 改
+  // package.json 的 version（**源**），现在单一工具自己承担：先把源写到 tag 版本，
+  // 再走同一套目标集同步，避免"源被另一个工具改、目标由本工具改"的分裂。
+  const requested = readRequestedVersion(argv);
+  if (requested && mode !== "write") {
+    console.error("[sync-version] --version 仅在 --write 模式下有效");
+    process.exit(1);
+  }
+  if (requested) {
+    const pkg = JSON.parse(fs.readFileSync(PKG_PATH, "utf-8"));
+    if (pkg.version !== requested) {
+      pkg.version = requested;
+      fs.writeFileSync(PKG_PATH, JSON.stringify(pkg, null, 2) + "\n", "utf-8");
+      console.log(`[sync-version] 源版本已更新: ${requested} (package.json)`);
+    }
+  }
 
   const sourceVer = readSourceVersion();
   console.log(`[sync-version] 源版本 (package.json): ${sourceVer}`);

@@ -2,12 +2,29 @@
 密钥管理服务
 
 提供密钥的安全存储和管理
+
+M23（2026-10-14 系统排查）：密钥版本**必须持久化**。
+旧实现把 rotate_key / create_key 生成的密钥只存内存（self._secrets），
+重启后 _key_versions 清空、历史版本密钥丢失 —— 用旧版本密钥加密的数据
+将永远无法解密（数据不可逆级缺陷）。现落“受保护文件”
+（LOCALAPPDATA/bumofu-assistance/data/.secrets_manager_keys.json，0600，
+原子替换），启动时加载，重启后历史版本仍可解密。
 """
 
-from typing import Optional, List, Dict, Any
+import json
+import logging
 import os
 import secrets
 import time
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+# 受保护密钥库文件名（与历史单密钥文件 .secrets_manager_key 同目录）
+KEYS_FILE_NAME = ".secrets_manager_keys.json"
+
+# 版本记录中属于“元数据”的键（密钥本体单独存于同文件的 key 字段）
+_VERSION_META_KEYS = ("version_id", "created_at", "is_active", "key_type")
 
 
 class SecretsManager:
@@ -22,12 +39,68 @@ class SecretsManager:
         self._key_versions = []
         self._init_default_key()
 
+    # ------------------------------------------------------------------
+    # 持久化（M23）
+    # ------------------------------------------------------------------
+
+    def _keys_file_path(self) -> str:
+        """受保护密钥库路径（与默认密钥文件同目录）。"""
+        return os.path.join(
+            os.getenv("LOCALAPPDATA", os.path.expanduser("~")),
+            "bumofu-assistance", "data", KEYS_FILE_NAME,
+        )
+
+    def _load_key_store(self) -> Optional[Dict[str, Any]]:
+        """从受保护文件加载密钥库；不存在/损坏时返回 None（退回内存态）。"""
+        path = self._keys_file_path()
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        versions = data.get("versions")
+        default_key = data.get("default_key")
+        if not isinstance(versions, list) or not isinstance(default_key, str) or not default_key:
+            return None
+        return {"default_key": default_key, "versions": versions}
+
+    def _persist_key_store(self) -> None:
+        """把当前密钥库原子写入受保护文件（失败仅告警，保持内存态不中断业务）。"""
+        versions = []
+        for v in self._key_versions:
+            entry = {k: v[k] for k in _VERSION_META_KEYS if k in v}
+            for extra in ("expires_at", "revoked_at"):
+                if extra in v:
+                    entry[extra] = v[extra]
+            entry["key"] = self._secrets.get(v["version_id"])
+            versions.append(entry)
+        data = {"default_key": self._secrets.get("default"), "versions": versions}
+
+        path = self._keys_file_path()
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp_path = path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            try:
+                os.chmod(tmp_path, 0o600)  # 仅属主可读写
+            except OSError:  # pragma: no cover - Windows 上 chmod 语义有限
+                pass
+            os.replace(tmp_path, path)  # 原子替换，避免半截文件
+        except OSError:
+            logger.warning("密钥库持久化失败（%s），本次仅在内存中生效", path, exc_info=True)
+
     def _init_default_key(self):
         """初始化默认密钥（持久化到文件，避免重启后数据不可恢复）
 
         兜底密钥必须是**合法 Fernet key**（44 字符 urlsafe-base64 且解码后 32 字节），
         否则 key_type 声明为 fernet 而实际不可用，调用方 Fernet(key) 会在运行时
         抛 ValueError（深审 #52）。
+
+        M23：本方法同时从受保护密钥库加载历史版本（rotate_key 落盘的版本），
+        使重启后 _key_versions 不清空、历史版本密钥仍可用于解密。
         """
         default_key = os.getenv("ENCRYPTION_KEY")
         if not default_key:
@@ -51,6 +124,34 @@ class SecretsManager:
                 # 磁盘不可写/权限不足：仍需给出可用的 Fernet key
                 default_key = self._generate_fallback_key()
         self._secrets["default"] = default_key
+
+        # M23：加载持久化的密钥库（ENCRYPTION_KEY 显式指定时操作者意图优先，
+        # 仍加载历史版本 —— 否则轮换过的版本在重启后照样丢失）。
+        store = self._load_key_store()
+        if store is not None:
+            if not os.getenv("ENCRYPTION_KEY"):
+                # 环境变量未指定默认密钥时，以持久化的 default 为准
+                # （可能与旧版单密钥文件不同：库里的 default 是最新持久态）
+                self._secrets["default"] = store["default_key"]
+            loaded = 0
+            for v in store["versions"]:
+                if not isinstance(v, dict):
+                    continue
+                version_id = v.get("version_id")
+                key_material = v.get("key")
+                if not version_id or not key_material:
+                    continue
+                self._secrets[version_id] = key_material
+                entry = {k: v[k] for k in _VERSION_META_KEYS if k in v}
+                for extra in ("expires_at", "revoked_at"):
+                    if extra in v:
+                        entry[extra] = v[extra]
+                self._key_versions.append(entry)
+                loaded += 1
+            if loaded:
+                logger.info("已从密钥库加载 %d 个历史密钥版本", loaded)
+                return
+
         self._key_versions.append(
             {"version_id": "v1", "created_at": time.time(), "is_active": True, "key_type": "fernet"}
         )
@@ -68,7 +169,6 @@ class SecretsManager:
             return Fernet.generate_key().decode()
         except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             import base64
-            import logging
             logging.getLogger(__name__).warning(
                 "cryptography 不可用，默认密钥退化为非 Fernet 随机串"
             )
@@ -130,6 +230,8 @@ class SecretsManager:
                 if v["version_id"] != new_version_id:
                     v["is_active"] = False
 
+        # M23：落受保护文件，重启后新版本仍可解密
+        self._persist_key_store()
         return new_version_id
 
     def create_key(self, key_type: str = "fernet", expires_days: Optional[int] = None) -> str:
@@ -162,6 +264,8 @@ class SecretsManager:
 
         self._key_versions.append(key_info)
 
+        # M23：落受保护文件，重启后新版本仍可解密
+        self._persist_key_store()
         return version_id
 
     def revoke_key(self, version_id: str) -> bool:
@@ -178,6 +282,8 @@ class SecretsManager:
             if v["version_id"] == version_id:
                 v["is_active"] = False
                 v["revoked_at"] = time.time()
+                # M23：撤销状态同样持久化，避免重启后“已撤销”被复活
+                self._persist_key_store()
                 return True
         return False
 
@@ -209,6 +315,10 @@ class SecretsManager:
         for vid in remove_set:
             self._secrets.pop(vid, None)
         deleted_count = len(remove_set)
+
+        # M23：清理结果持久化，避免重启后已清理密钥复活
+        if deleted_count:
+            self._persist_key_store()
 
         return deleted_count
 

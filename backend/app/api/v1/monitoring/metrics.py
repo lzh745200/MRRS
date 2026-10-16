@@ -74,8 +74,12 @@ async def get_performance_dashboard(
     性能监控面板 — 综合展示 HTTP 请求指标、慢请求、错误率等
     需要管理员权限
     """
-    if not current_user.is_superuser:
+    # R28-M16：与同文件 /business、/prometheus 统一走 is_admin 口径。
+    # 原实现用 is_superuser —— role=admin（is_superuser=False）的部门管理员被 403，
+    # 同一模块三个端点的"管理员"含义不一致。
+    if not is_admin(current_user):
         from fastapi import HTTPException
+
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     summary = metrics_store.get_summary()

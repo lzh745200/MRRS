@@ -102,20 +102,44 @@ class TestCamelToSnakeHeaderPassthrough:
         assert resp.headers.get("content-length") == str(len(resp.content))
 
 
-# ==================== cascade_purge: _delete_deep ====================
+# ==================== cascade_purge: _delete_chain ====================
 
 
-class TestCascadePurgeDeleteDeep:
-    def test_delete_deep_executes_parameterized_delete(self):
+class TestCascadePurgeDeleteChain:
+    """深审 #1/H1 回归：链式删除必须**逐层锚定根行**且**最深先行**。
+
+    旧实现（_delete_deep）有两个致命问题：深层用根行主键比中间表主键（删不掉，
+    残留孤儿行）、中间层退化为不带根行限定的 NOT IN（误删其它根行的关联行）。
+    """
+
+    def _svc(self):
         from app.services.cascade_purge_service import CascadePurgeService
 
-        db = MagicMock()
-        svc = CascadePurgeService(db)
-        svc._delete_deep("child_t", "parent_id", "parent_t", "id", 7)
-        stmt = db.execute.call_args[0][0]
-        compiled = str(stmt)
-        assert "DELETE FROM child_t" in compiled
-        assert db.execute.call_args[0][1] == {"rid": 7}
+        return CascadePurgeService(MagicMock())
+
+    def test_delete_chain_anchors_every_level_to_root(self):
+        svc = self._svc()
+        # 链（深→浅）：funds ← projects ← villages
+        chain = [
+            ("funds", "project_id", "projects", "id"),
+            ("projects", "village_id", "villages", "id"),
+        ]
+        svc._delete_chain(chain, 7)
+        stmts = [str(c[0][0]) for c in svc.db.execute.call_args_list]
+        params = [c[0][1] for c in svc.db.execute.call_args_list]
+        assert len(stmts) == 2
+        # 最深表先删
+        assert "DELETE FROM funds" in stmts[0]
+        assert "DELETE FROM projects" in stmts[1]
+        # 每层都以根行 :rid 锚定（不得出现无根行限定的悬挂清理）
+        assert "village_id = :rid" in stmts[1]
+        assert ":rid" in stmts[0]
+        assert all(p == {"rid": 7} for p in params)
+
+    def test_delete_chain_empty_is_noop(self):
+        svc = self._svc()
+        assert svc._delete_chain([], 7) == 0
+        svc.db.execute.assert_not_called()
 
 
 # ==================== chunked_upload: 合并锁二次检查 ====================
@@ -333,7 +357,8 @@ class TestTaskExecutionWriteback:
         ):
             resp = client_with_mocked_auth.post(
                 "/api/v1/system/tasks",
-                json={"task_type": "demo", "task_name": "演示任务"},
+                # M6：task_type 已按 TaskType 枚举校验，必须用合法值（原 "demo" 属非法）
+                json={"task_type": "other", "task_name": "演示任务"},
             )
         assert resp.status_code == 200, resp.text
         return captured, json.loads(resp.content)["data"]["task_id"]

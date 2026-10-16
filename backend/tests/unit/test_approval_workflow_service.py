@@ -386,11 +386,17 @@ class TestApproveTask:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
 
+        # M30：原子抢占 mock 返回 rowcount=1
+        mock_db.query.return_value.filter.return_value.update.return_value = 1
+
         with patch.object(svc, "get_task", return_value=mock_task):
             result = svc.approve_task(1, 10, standalone=True)
             assert result is not None
-            assert result.current_level == 2
-            assert result.current_approver_id == 30
+            # M30 订正：级别推进改由原子 UPDATE 抢占完成，mock 下不再回写
+            # 对象属性；断言抢占语句携带的新级别/审批人与返回值。
+            claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
+            assert claim["current_level"] == 2
+            assert claim["current_approver_id"] == 30
             mock_db.add.assert_called_once()
             mock_db.commit.assert_called_once()
 
@@ -411,11 +417,16 @@ class TestApproveTask:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
 
+        # M30：原子抢占 mock 返回 rowcount=1
+        mock_db.query.return_value.filter.return_value.update.return_value = 1
+
         with patch.object(svc, "get_task", return_value=mock_task):
             result = svc.approve_task(1, 20)
             assert result is not None
-            assert result.status == ApprovalStatus.APPROVED.value
-            assert result.completed_at is not None
+            # M30 订正：终态由原子 UPDATE 设置（mock 下对象属性不回声）
+            claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
+            assert claim["status"] == ApprovalStatus.APPROVED.value
+            assert claim["completed_at"] is not None
             mock_db.add.assert_called_once()
             mock_db.commit.assert_called_once()
 
@@ -437,12 +448,16 @@ class TestApproveTask:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
 
+        # M30：原子抢占 mock 返回 rowcount=1
+        mock_db.query.return_value.filter.return_value.update.return_value = 1
+
         with patch.object(svc, "get_task", return_value=mock_task):
             result = svc.approve_task(1, 30)
             assert result is not None
-            assert result.current_level == 3
-            assert result.current_approver_id == 40
-            assert result.status == ApprovalStatus.PENDING.value  # not final yet
+            # M30 订正：中间级晋级由原子 UPDATE 完成
+            claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
+            assert claim["current_level"] == 3
+            assert claim["current_approver_id"] == 40
 
 
 class TestRejectTask:
@@ -476,11 +491,16 @@ class TestRejectTask:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
 
+        # M30：原子抢占 mock 返回 rowcount=1
+        mock_db.query.return_value.filter.return_value.update.return_value = 1
+
         with patch.object(svc, "get_task", return_value=mock_task):
             result = svc.reject_task(1, 10, standalone=True)
             assert result is not None
-            assert result.status == ApprovalStatus.REJECTED.value
-            assert result.completed_at is not None
+            # M30 订正：驳回终态由原子 UPDATE 设置
+            claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
+            assert claim["status"] == ApprovalStatus.REJECTED.value
+            assert claim["completed_at"] is not None
             mock_db.add.assert_called_once()
             mock_db.commit.assert_called_once()
 
@@ -494,10 +514,15 @@ class TestRejectTask:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
 
+        # M30：原子抢占 mock 返回 rowcount=1
+        mock_db.query.return_value.filter.return_value.update.return_value = 1
+
         with patch.object(svc, "get_task", return_value=mock_task):
             result = svc.reject_task(1, 30, opinion="不同意")
             assert result is not None
-            assert result.status == ApprovalStatus.REJECTED.value
+            # M30 订正：驳回终态由原子 UPDATE 设置
+            claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
+            assert claim["status"] == ApprovalStatus.REJECTED.value
 
 
 class TestWithdrawTask:
@@ -918,10 +943,15 @@ class TestUnassignedTaskActions:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
 
+        # M30：原子抢占 mock 返回 rowcount=1
+        mock_db.query.return_value.filter.return_value.update.return_value = 1
+
         with patch.object(svc, "get_task", return_value=mock_task):
             result = svc.approve_task(1, 10)  # 非审批人、非 standalone
             assert result is not None
-            assert result.status == ApprovalStatus.APPROVED.value
+            # M30 订正：终态由原子 UPDATE 设置
+            claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
+            assert claim["status"] == ApprovalStatus.APPROVED.value
 
     def test_reject_unassigned_allowed(self, svc, mock_db):
         mock_task = MagicMock()
@@ -933,10 +963,15 @@ class TestUnassignedTaskActions:
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
 
+        # M30：原子抢占 mock 返回 rowcount=1
+        mock_db.query.return_value.filter.return_value.update.return_value = 1
+
         with patch.object(svc, "get_task", return_value=mock_task):
             result = svc.reject_task(1, 10, opinion="驳回")
             assert result is not None
-            assert result.status == ApprovalStatus.REJECTED.value
+            # M30 订正：驳回终态由原子 UPDATE 设置
+            claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
+            assert claim["status"] == ApprovalStatus.REJECTED.value
 
     def test_transfer_unassigned_allowed(self, svc, mock_db):
         mock_task = MagicMock()

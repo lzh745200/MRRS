@@ -63,6 +63,16 @@ def _make_row(*values):
     return _Row(*values)
 
 
+def _admin_user():
+    """全量数据域用户（super_admin）——H2/H6 后分析服务方法必须接收 current_user。"""
+    return _Obj(id=1, role="super_admin", is_superuser=True, organization_id=1)
+
+
+def _dept_admin_user(org_id=10):
+    """部门级 admin：严格口径下仅本组织及子树（军审红线 S2）。"""
+    return _Obj(id=2, role="admin", is_superuser=False, organization_id=org_id)
+
+
 class _Obj:
     """Simple object with arbitrary attributes (ORM result rows)."""
     def __init__(self, **kw):
@@ -88,7 +98,7 @@ class TestAnalyticsService:
         db.query.return_value = q
 
         svc = AnalyticsService(db)
-        result = svc.get_dashboard_overview(db)
+        result = svc.get_dashboard_overview(db, _admin_user())
 
         assert result["total_villages"] == 21
         assert result["province_distribution"][0]["province"] == "贵州"
@@ -103,7 +113,7 @@ class TestAnalyticsService:
         db.query.return_value = q
 
         svc = AnalyticsService(db)
-        result = svc.get_dashboard_overview(db)
+        result = svc.get_dashboard_overview(db, _admin_user())
         assert result["total_villages"] == 0
         assert result["province_distribution"] == []
         assert result["tier_distribution"] == []
@@ -112,7 +122,7 @@ class TestAnalyticsService:
         db = MagicMock()
         db.query.side_effect = RuntimeError("DB down")
         svc = AnalyticsService(db)
-        result = svc.get_dashboard_overview(db)
+        result = svc.get_dashboard_overview(db, _admin_user())
         assert result == {"total_villages": 0, "province_distribution": [],
                           "tier_distribution": []}
 
@@ -131,7 +141,7 @@ class TestAnalyticsService:
         ]
 
         svc = AnalyticsService(db)
-        result = svc.get_village_analysis(db)
+        result = svc.get_village_analysis(db, _admin_user())
 
         assert result["investment"]["total"] == 1000.0
         assert result["investment"]["average"] == 50.0
@@ -153,7 +163,7 @@ class TestAnalyticsService:
         ]
 
         svc = AnalyticsService(db)
-        result = svc.get_village_analysis(db)
+        result = svc.get_village_analysis(db, _admin_user())
         assert result["investment"]["total"] == 0
         assert result["population"]["total"] == 0
         assert result["income"]["avg_per_capita"] == 0
@@ -169,7 +179,7 @@ class TestAnalyticsService:
         ]
 
         svc = AnalyticsService(db)
-        result = svc.get_village_analysis(db)
+        result = svc.get_village_analysis(db, _admin_user())
         assert result["investment"]["total"] == 0
         assert result["population"]["total"] == 0
         assert result["income"]["avg_per_capita"] == 0
@@ -179,7 +189,7 @@ class TestAnalyticsService:
         db = MagicMock()
         db.execute.side_effect = RuntimeError("fail")
         svc = AnalyticsService(db)
-        result = svc.get_village_analysis(db)
+        result = svc.get_village_analysis(db, _admin_user())
         # 失败必须可见：不再静默返回空结构，而是带 error 标记
         assert result["error"].startswith("获取帮扶村分析数据失败")
         assert "investment" not in result
@@ -195,7 +205,7 @@ class TestAnalyticsService:
                   _make_row(2022, 200.0, 120.0, 80.0, 6)])
 
         svc = AnalyticsService(db)
-        result = svc.get_funding_trends(db, years=3)
+        result = svc.get_funding_trends(db, years=3, current_user=_admin_user())
 
         assert len(result["trends"]) == 2
         assert result["trends"][0]["total_funding"] == 100.0
@@ -209,7 +219,7 @@ class TestAnalyticsService:
             rows=[_make_row(2021, None, None, None, 0)])
 
         svc = AnalyticsService(db)
-        result = svc.get_funding_trends(db)
+        result = svc.get_funding_trends(db, current_user=_admin_user())
         assert result["trends"][0]["total_funding"] == 0
         assert result["trends"][0]["military_funding"] == 0
         assert result["trends"][0]["local_funding"] == 0
@@ -218,14 +228,14 @@ class TestAnalyticsService:
         db = MagicMock()
         db.execute.return_value = _make_execute_result(rows=[])
         svc = AnalyticsService(db)
-        result = svc.get_funding_trends(db)
+        result = svc.get_funding_trends(db, current_user=_admin_user())
         assert result["trends"] == []
 
     def test_get_funding_trends_exception(self):
         db = MagicMock()
         db.execute.side_effect = RuntimeError("trends fail")
         svc = AnalyticsService(db)
-        result = svc.get_funding_trends(db)
+        result = svc.get_funding_trends(db, current_user=_admin_user())
         assert result["trends"] == []
         assert result["start_year"] == 0 and result["end_year"] == 0
         assert result["error"].startswith("获取资金趋势失败")
@@ -234,17 +244,27 @@ class TestAnalyticsService:
     #  get_performance_metrics
     # ════════════════════════════════════════════
 
-    def test_get_performance_metrics_normal(self):
+    def _perf_db(self, policy_row, village_row, category_rows):
+        """政策统计走 ORM（policies 有组织列），村/分类统计走裸 SQL。"""
         db = MagicMock()
+        policy_query = _make_query_mock()
+        policy_query.first.return_value = policy_row  # 显式 None：空表时 first() 返回 None
+        db.query.return_value = policy_query
         db.execute.side_effect = [
-            _make_execute_result(fetchone_result=_make_row(10, 7)),
-            _make_execute_result(fetchone_result=_make_row(50, 12)),
-            _make_execute_result(rows=[_make_row("产业帮扶", 200.0),
-                                      _make_row("基础设施", 300.0)]),
+            _make_execute_result(fetchone_result=village_row),
+            _make_execute_result(rows=category_rows),
         ]
+        return db
+
+    def test_get_performance_metrics_normal(self):
+        db = self._perf_db(
+            _make_row(10, 7),
+            _make_row(50, 12),
+            [_make_row("产业帮扶", 200.0), _make_row("基础设施", 300.0)],
+        )
 
         svc = AnalyticsService(db)
-        result = svc.get_performance_metrics(db)
+        result = svc.get_performance_metrics(db, _admin_user())
 
         assert result["policies"]["total"] == 10
         assert result["policies"]["published"] == 7
@@ -253,36 +273,27 @@ class TestAnalyticsService:
         assert len(result["investment_categories"]) == 2
 
     def test_get_performance_metrics_none_rows(self):
-        db = MagicMock()
-        db.execute.side_effect = [
-            _make_execute_result(fetchone_result=None),
-            _make_execute_result(fetchone_result=None),
-            _make_execute_result(rows=[]),
-        ]
+        db = self._perf_db(None, None, [])
 
         svc = AnalyticsService(db)
-        result = svc.get_performance_metrics(db)
+        result = svc.get_performance_metrics(db, _admin_user())
         assert result["policies"]["total"] == 0
         assert result["villages"]["total"] == 0
         assert result["investment_categories"] == []
 
     def test_get_performance_metrics_null_amount(self):
-        db = MagicMock()
-        db.execute.side_effect = [
-            _make_execute_result(fetchone_result=_make_row(5, 3)),
-            _make_execute_result(fetchone_result=_make_row(20, 8)),
-            _make_execute_result(rows=[_make_row("教育帮扶", None)]),
-        ]
+        db = self._perf_db(_make_row(5, 3), _make_row(20, 8), [_make_row("教育帮扶", None)])
 
         svc = AnalyticsService(db)
-        result = svc.get_performance_metrics(db)
+        result = svc.get_performance_metrics(db, _admin_user())
         assert result["investment_categories"][0]["amount"] == 0
 
     def test_get_performance_metrics_exception(self):
         db = MagicMock()
+        db.query.side_effect = RuntimeError("perf fail")
         db.execute.side_effect = RuntimeError("perf fail")
         svc = AnalyticsService(db)
-        result = svc.get_performance_metrics(db)
+        result = svc.get_performance_metrics(db, _admin_user())
         assert result["error"].startswith("获取绩效指标失败")
 
     # ════════════════════════════════════════════
@@ -295,7 +306,7 @@ class TestAnalyticsService:
             rows=[_make_row("贵州", 10, 500.0, 1.8)])
 
         svc = AnalyticsService(db)
-        result = svc.get_comparison_analysis(db, "province", None)
+        result = svc.get_comparison_analysis(db, "province", None, _admin_user())
         assert result["compare_type"] == "province"
         assert result["comparison"][0]["total_investment"] == 500.0
 
@@ -304,13 +315,13 @@ class TestAnalyticsService:
         db.execute.return_value = _make_execute_result(
             rows=[_make_row("1", 8, 400.0, 2.0)])
         svc = AnalyticsService(db)
-        result = svc.get_comparison_analysis(db, "tier", None)
+        result = svc.get_comparison_analysis(db, "tier", None, _admin_user())
         assert result["compare_type"] == "tier"
 
     def test_comparison_other_type(self):
         db = MagicMock()
         svc = AnalyticsService(db)
-        result = svc.get_comparison_analysis(db, "unknown", None)
+        result = svc.get_comparison_analysis(db, "unknown", None, _admin_user())
         assert result["compare_type"] == "unknown"
         assert result["comparison"] == []
 
@@ -319,7 +330,7 @@ class TestAnalyticsService:
         db.execute.return_value = _make_execute_result(
             rows=[_make_row("贵州", 10, None, None)])
         svc = AnalyticsService(db)
-        result = svc.get_comparison_analysis(db, "province", None)
+        result = svc.get_comparison_analysis(db, "province", None, _admin_user())
         assert result["comparison"][0]["total_investment"] == 0
         assert result["comparison"][0]["avg_income"] == 0
 
@@ -327,7 +338,7 @@ class TestAnalyticsService:
         db = MagicMock()
         db.execute.side_effect = RuntimeError("compare fail")
         svc = AnalyticsService(db)
-        result = svc.get_comparison_analysis(db, "province", None)
+        result = svc.get_comparison_analysis(db, "province", None, _admin_user())
         assert result["comparison"] == []
         assert result["compare_type"] == "province"
         assert result["error"].startswith("获取对比分析失败")
@@ -339,31 +350,33 @@ class TestAnalyticsService:
     def test_generate_report_comprehensive(self):
         db = MagicMock()
         svc = AnalyticsService(db)
+        user = _admin_user()
         svc.get_dashboard_overview = MagicMock(return_value={"total_villages": 10})
         svc.get_village_analysis = MagicMock(return_value={"investment": {}})
         svc.get_performance_metrics = MagicMock(return_value={"policies": {}})
 
-        result = svc.generate_report_data(db, "comprehensive")
+        result = svc.generate_report_data(db, "comprehensive", current_user=user)
 
         assert result["report_type"] == "comprehensive"
         assert result["dashboard"] == {"total_villages": 10}
         assert "generated_at" in result
-        svc.get_dashboard_overview.assert_called_once_with(db)
-        svc.get_village_analysis.assert_called_once_with(db)
-        svc.get_performance_metrics.assert_called_once_with(db)
+        # 数据域必须一路透传到子方法（漏传即回退全局口径 → 跨组织泄漏）
+        svc.get_dashboard_overview.assert_called_once_with(db, user)
+        svc.get_village_analysis.assert_called_once_with(db, user)
+        svc.get_performance_metrics.assert_called_once_with(db, user)
 
     def test_generate_report_village_funding(self):
         db = MagicMock()
         svc = AnalyticsService(db)
         svc.get_funding_trends = MagicMock(return_value={"trends": []})
-        result = svc.generate_report_data(db, "village_funding")
+        result = svc.generate_report_data(db, "village_funding", current_user=_admin_user())
         assert result["report_type"] == "village_funding"
 
     def test_generate_report_policy_execution(self):
         db = MagicMock()
         svc = AnalyticsService(db)
         svc.get_performance_metrics = MagicMock(return_value={"policies": {}})
-        result = svc.generate_report_data(db, "policy_execution")
+        result = svc.generate_report_data(db, "policy_execution", current_user=_admin_user())
         assert result["report_type"] == "policy_execution"
 
     def test_generate_report_unknown_type(self):
@@ -377,7 +390,7 @@ class TestAnalyticsService:
         db = MagicMock()
         svc = AnalyticsService(db)
         svc.get_dashboard_overview = MagicMock(side_effect=RuntimeError("gen fail"))
-        result = svc.generate_report_data(db, "comprehensive")
+        result = svc.generate_report_data(db, "comprehensive", current_user=_admin_user())
         assert result["error"].startswith("生成报表数据失败")
 
     # ════════════════════════════════════════════
@@ -743,7 +756,7 @@ class TestAnalyticsRawSqlAgainstRealSchema:
         year = datetime.now().year
         self._seed_village(real_db_session, pop_year=year)
 
-        result = AnalyticsService(real_db_session).get_village_analysis(real_db_session)
+        result = AnalyticsService(real_db_session).get_village_analysis(real_db_session, _admin_user())
 
         assert "error" not in result
         assert result["population"]["total"] == 1000
@@ -770,7 +783,7 @@ class TestAnalyticsRawSqlAgainstRealSchema:
         ))
         real_db_session.commit()
 
-        result = AnalyticsService(real_db_session).get_village_analysis(real_db_session)
+        result = AnalyticsService(real_db_session).get_village_analysis(real_db_session, _admin_user())
         assert result["population"]["total"] == 0
         assert result["population"]["avg_resident_rate"] == 0
 
@@ -778,7 +791,9 @@ class TestAnalyticsRawSqlAgainstRealSchema:
         year = datetime.now().year
         self._seed_village(real_db_session, funds=(500.0, 200.0), pop_year=year)
 
-        result = AnalyticsService(real_db_session).get_funding_trends(real_db_session, years=5)
+        result = AnalyticsService(real_db_session).get_funding_trends(
+            real_db_session, years=5, current_user=_admin_user()
+        )
 
         assert "error" not in result
         assert [row["year"] for row in result["trends"]] == [year]
@@ -791,7 +806,9 @@ class TestAnalyticsRawSqlAgainstRealSchema:
         """超出窗口的年度不属于趋势范围：结果为空的“真空”，不带 error 标记。"""
         self._seed_village(real_db_session, pop_year=1999)
 
-        result = AnalyticsService(real_db_session).get_funding_trends(real_db_session, years=5)
+        result = AnalyticsService(real_db_session).get_funding_trends(
+            real_db_session, years=5, current_user=_admin_user()
+        )
         assert result["trends"] == []
         assert "error" not in result
 

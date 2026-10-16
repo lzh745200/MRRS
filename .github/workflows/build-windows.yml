@@ -107,25 +107,23 @@ jobs:
           # 将 Vite/Rollup 的进度输出误判为错误并产生 false annotation
           npm run build 2>&1
 
-      - name: Sync frontend to resources
-        shell: pwsh
-        run: |
-          $source = "frontend\dist"
-          $dest = "resources\frontend"
-          if (Test-Path $source) {
-            New-Item -ItemType Directory -Force -Path $dest | Out-Null
-            Copy-Item -Path "$source\*" -Destination $dest -Recurse -Force
-            Write-Host "Frontend resources synced to $dest"
-          } else {
-            Write-Error "frontend\dist not found"
-            exit 1
-          }
+      # M55（2026-10-14）：此处原有 "Sync frontend to resources"（cp frontend/dist →
+      # resources/frontend）。已删除——electron-builder 的 extraResources 直接以
+      # `from: frontend/dist` 复制到安装包内 resources/frontend（electron/main.js
+      # getFrontendPath() 打包态只读 process.resourcesPath/frontend），PyInstaller
+      # spec 不打包 resources/frontend（frontend/dist 由 Electron 单独提供），
+      # 全仓库无消费方 → 死步骤。resources/frontend 的本地同步仅由
+      # scripts/build/sync-frontend-dist.{sh,bat} 服务 standalone/Web 部署，与本
+      # Windows 安装包链路无关。
 
       # 5. 版本同步 (仅 tag 触发)
+      # M53（2026-10-14）：版本同步收口到单一工具 scripts/sync-version.js
+      # （scripts/sync_version.py 现为薄封装，保留仅为兼容历史调用）。
+      # 直接调用 .js 可保证 CI 出包与 CI 版本门禁用**同一份目标集**。
       - name: Sync version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
-        run: python scripts/sync_version.py ${{ github.ref_name }}
+        run: node scripts/sync-version.js --write ${{ github.ref_name }}
 
       # 5b. 生成构建元数据
       - name: Generate build info

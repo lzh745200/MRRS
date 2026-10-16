@@ -52,6 +52,38 @@ class RecyclePurgeRequest(BaseModel):
     ids: list[int] = []
 
 
+def _reachable_ids(db: Session, model, table: str, ids: list, current_user) -> list:
+    """R28-M3：把批量 ids 收敛到调用者的数据域内（跨组织 id 静默剔除）。
+
+    require_admin 只保证"是管理员"，不保证"这批 id 属于他"——部门级 admin
+    （role=admin 且 is_superuser=False）传入其它组织的 id 即可物理清除对方数据
+    （列表页已按数据域过滤，正常 UI 不会产生越界 id）。过滤语义复用全仓唯一入口
+    services.data_scope_query.scoped_filter（严格口径：部门级 admin 限本组织及子树，
+    军审红线 S2；API 层不得直接引用 app.core.data_permission 原语——由
+    test_data_scope_entrypoint_v123 的架构守卫强制）。
+    """
+    from app.core.data_permission import DataScope, get_data_scope
+    from app.services.data_scope_query import scoped_filter
+
+    if not ids:
+        return []
+    # 全局管理员（super_admin / is_superuser / data_scope=all）本就无数据域限制：直接放行，
+    # 省掉一次多余查询（也避免对纯 Mock 会话做无意义的查询链）。
+    if get_data_scope(current_user) == DataScope.ALL:
+        return list(ids)
+    try:
+        query = db.query(model).filter(model.id.in_(ids))
+        scoped = scoped_filter(query, model, current_user)
+        return [rec.id for rec in scoped.all()]
+    except Exception:
+        # 模型缺组织/所有者列时 fail-closed：拒绝全部，绝不退化成"不过滤"
+        logger.warning(
+            "回收站批量操作数据域过滤失败（fail-closed 拒绝全部 id）: table=%s",
+            table, exc_info=True,
+        )
+        return []
+
+
 def register_recycle_bin_routes(
     router: APIRouter,
     *,
@@ -142,6 +174,8 @@ def register_recycle_bin_routes(
         ids = getattr(body, "ids", [])
         if not ids:
             raise HTTPException(status_code=400, detail="请提供要恢复的 ID 列表")
+        # R28-M3：仅处理调用者数据域内的 id（越界 id 静默剔除，与逐条 404 同语义）
+        ids = _reachable_ids(db, model, table, ids, current_user)
         return await _batch_restore_records(db, model, resource, ids, current_user, on_changed)
 
     @router.post("/batch-purge", summary=f"批量彻底删除{resource}（级联物理清除）")
@@ -155,6 +189,9 @@ def register_recycle_bin_routes(
         ids = getattr(body, "ids", [])
         if not ids:
             raise HTTPException(status_code=400, detail="请提供要彻底删除的 ID 列表")
+        # R28-M3：跨组织物理清除是最危险的一类越权（数据不可恢复），
+        # 必须先收敛到调用者数据域内的 id。
+        ids = _reachable_ids(db, model, table, ids, current_user)
         return await _batch_purge_records(db, model, resource, table, ids, current_user, on_changed)
 
 

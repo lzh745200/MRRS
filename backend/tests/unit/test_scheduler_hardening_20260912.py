@@ -149,7 +149,17 @@ class TestSchedulerTimerLifecycle:
         import app.services.backup_scheduler as scheduler
 
         named = self._start(scheduler)
-        assert len(named) == 13, "13 个周期任务（含新增分片清理 R4 + 过期导出回收 R5）必须全部登记"
+        # R27：周期任务数随功能增长；用源码注册点数推导，避免硬编码漂移
+        import inspect as _inspect
+
+        _src = _inspect.getsource(scheduler.start_backup_scheduler)
+        _expected = (
+            _src.count("_schedule_daily(")
+            + _src.count("_schedule_interval(")
+            + _src.count("_schedule_weekly(")
+        )
+        assert len(named) == _expected, f"{_expected} 个周期任务必须全部登记（实得 {len(named)}）"
+        assert _expected >= 14
         assert "scheduler-chunk_cleanup" in named
         assert all(t.is_alive() for t in _timers)
 
@@ -255,5 +265,8 @@ class TestSchedulerTimerLifecycle:
             with patch.object(scheduler.threading, "Timer", FakeTimer):
                 scheduler.start_backup_scheduler()
             named = {t.name: t for t in _timers}
+            before = len(_timers)
             named[timer_name].fire()
-            assert len(_timers) == 13, f"{job_name} 执行中 stop 后不得重排下一次"
+            # R27：作业执行中置位 _stopping → 重排前的第二次检查必须拦截，
+            # _timers 不得因重排而增长（原断言硬编码 13，随作业数增长即误报）
+            assert len(_timers) == before, f"{job_name} 执行中 stop 后不得重排下一次"

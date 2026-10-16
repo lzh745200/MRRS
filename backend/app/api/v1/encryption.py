@@ -153,16 +153,20 @@ async def get_encryption_status(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """获取加密状态"""
+    """获取加密状态
+
+    R28 §3：原实现回吐 `iterations`（PBKDF2 迭代数）与盐位是否存在——迭代数
+    是 KDF 工作因子，属口令派生参数，可帮离线爆破方估算成本；盐值本身已由
+    `has_salt` 布尔化，迭代数同样只需概要。改为只回吐布尔/概要字段
+    （is_enabled / has_salt），不泄露任何 KDF 参数。
+    """
     svc = SystemConfigService(db)
     enabled = svc.get(_CONFIG_KEY_ENABLED)
     salt = svc.get(_CONFIG_KEY_SALT)
-    iterations = svc.get(_CONFIG_KEY_ITERATIONS)
 
     status = {
         "is_enabled": enabled == "true",
         "has_salt": salt is not None and len(salt) > 0,
-        "iterations": int(iterations) if iterations else PasswordEncryptionService.DEFAULT_ITERATIONS,
     }
     return success_response(data=status)
 

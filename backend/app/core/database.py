@@ -57,12 +57,25 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+# M34（R27 性能排查）：after_cursor_execute 是**每条 SQL** 都执行的热路径，
+# 原实现在函数体内 `from app.middleware.query_counter import ...`——即使命中
+# sys.modules，import 语句仍要走一遍模块查找与导入锁。改为模块级缓存引用：
+# 首次执行时解析一次，之后直接调用；惰性解析同时避免 import 期
+# database → middleware → database 的循环依赖。
+_cursor_execute_hook = None
+
+
 @event.listens_for(engine, "after_cursor_execute")
 def _count_query_execution(conn, cursor, statement, parameters, context, executemany) -> None:
     """N+1 检测：SQL 执行计数写入当前请求的 contextvar 计数器（query_counter 中间件消费）。"""
-    from app.middleware.query_counter import _on_cursor_execute
+    global _cursor_execute_hook
+    hook = _cursor_execute_hook
+    if hook is None:
+        from app.middleware.query_counter import _on_cursor_execute as _hook
 
-    _on_cursor_execute(conn, cursor, statement, parameters, context, executemany)
+        hook = _hook
+        _cursor_execute_hook = hook
+    hook(conn, cursor, statement, parameters, context, executemany)
 
 
 @event.listens_for(engine, "connect")

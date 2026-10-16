@@ -123,15 +123,14 @@ import { Loading, Search } from '@element-plus/icons-vue'
 import { getRankings } from '@/api/effectiveness'
 import { useUserStore } from '@/stores/user'
 import { getYearOptions } from '@/utils/yearOptions'
+import { isAdminUser } from '@/utils/roleAccess'
 
 const { pushSafe } = useRouterSafe()
 const userStore = useUserStore()
-// 仅管理员可发起评估；其余角色（viewer/user）入口降级为"查看"
-const isAdmin = computed(
-  () =>
-    ['admin', 'super_admin'].includes(userStore.currentUser?.role || '') ||
-    !!userStore.currentUser?.is_superuser
-)
+// 仅管理员可发起评估；其余角色（viewer/user）入口降级为"查看"。
+// M47：统一走 roleAccess.isAdminUser()（归一化 role + is_superuser），
+// 与路由守卫口径一致；原实现硬编码原始 role，存量 manager/approval_leader 被误判。
+const isAdmin = computed(() => isAdminUser(userStore.currentUser))
 
 const currentYear = new Date().getFullYear()
 // 年份范围：当前年-4 ~ 当前年+10（滚动窗口，见 utils/yearOptions）

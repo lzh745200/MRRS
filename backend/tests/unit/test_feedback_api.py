@@ -688,15 +688,23 @@ class TestSubmitFeedback:
     # ── 边界条件 ──
 
     def test_very_long_content(self, app, c):
-        """超长 content 正常处理"""
+        """R28 §3：content 上限 5000 字，超限拒绝（匿名可写端点的存储放大面）"""
         mock_db = _make_mock_db()
         _setup_db_override(app, mock_db)
 
-        long_text = "长" * 10000
-        resp = c.post("/api/v1/feedback", json={"content": long_text})
+        resp = c.post("/api/v1/feedback", json={"content": "长" * 10000})
+        assert resp.status_code == 422
+        mock_db.add.assert_not_called()
+
+    def test_content_at_max_length_boundary(self, app, c):
+        """恰好 5000 字（上限）应被接受"""
+        mock_db = _make_mock_db()
+        _setup_db_override(app, mock_db)
+
+        resp = c.post("/api/v1/feedback", json={"content": "长" * 5000})
         assert resp.status_code == 200
         created = mock_db.add.call_args[0][0]
-        assert len(created.content) == 10000
+        assert len(created.content) == 5000
 
     def test_special_characters_content(self, app, c):
         """content 含中文标点、emoji、HTML 等特殊字符"""

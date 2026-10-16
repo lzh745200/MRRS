@@ -2,7 +2,6 @@
 完整测试 - app.services.effectiveness_service
 覆盖率目标: 100%
 """
-from datetime import datetime
 
 
 
@@ -22,40 +21,7 @@ class TestEffectivenessService:
         assert service.evaluation_cache == {}
 
 
-
-
-    def test_get_effectiveness_trends(self):
-        """测试获取效果趋势"""
-        from app.services.effectiveness_service import EffectivenessService
-        service = EffectivenessService()
-        result = service.get_effectiveness_trends(1, "village")
-        assert isinstance(result, dict)
-        assert "income_growth" in result
-        assert "completion_rate" in result
-        assert "satisfaction" in result
-
-    def test_export_effectiveness_report_pdf(self):
-        """测试导出PDF报告"""
-        from app.services.effectiveness_service import EffectivenessService
-        service = EffectivenessService()
-        result = service.export_effectiveness_report(1, format="pdf")
-        assert isinstance(result, bytes)
-
-    def test_export_effectiveness_report_excel(self):
-        """测试导出Excel报告"""
-        from app.services.effectiveness_service import EffectivenessService
-        service = EffectivenessService()
-        result = service.export_effectiveness_report(1, format="excel")
-        assert isinstance(result, bytes)
-
-    def test_compare_effectiveness_periods(self):
-        """测试对比时期效果"""
-        from app.services.effectiveness_service import EffectivenessService
-        service = EffectivenessService()
-        result = service.compare_effectiveness_periods(
-            1, "2024-01-01", "2024-06-30", "2024-07-01", "2024-12-31"
-        )
-        assert isinstance(result, dict)
-        assert "period1_metrics" in result
-        assert "period2_metrics" in result
-        assert "improvement" in result
+# 说明（R27-H7）：本文件原有 4 个用例锁定 effectiveness_service 的假数据占位方法
+# （get_effectiveness_trends / export_effectiveness_report / compare_effectiveness_periods）。
+# 这些方法无任何调用方且返回写死数据，已随 R28 收尾删除 —— 旧断言锁定的正是
+# R27 报告 H7 要求消除的「误导性假数据」，故未保留替代断言。

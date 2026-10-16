@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from app.api.v1.deps import get_current_active_user
+from app.core.permission_utils import is_admin
 from app.core.response import ok_list, success_response
 from app.core.redis_adapter import redis_adapter
 from app.models.user import User
@@ -28,8 +29,8 @@ async def get_slow_queries(
     获取慢查询列表
     需要管理员权限
     """
-    # 检查权限
-    if not current_user.is_superuser:
+    # 检查权限（R28-M16：统一 is_admin 口径，role=admin 不再被误挡）
+    if not is_admin(current_user):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
@@ -51,8 +52,8 @@ async def get_query_stats(current_user: User = Depends(get_current_active_user))
     获取查询统计信息
     需要管理员权限
     """
-    # 检查权限
-    if not current_user.is_superuser:
+    # 检查权限（R28-M16：统一 is_admin 口径，role=admin 不再被误挡）
+    if not is_admin(current_user):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
@@ -68,8 +69,8 @@ async def clear_slow_queries(current_user: User = Depends(get_current_active_use
     清空慢查询记录
     需要管理员权限
     """
-    # 检查权限
-    if not current_user.is_superuser:
+    # 检查权限（R28-M16：统一 is_admin 口径，role=admin 不再被误挡）
+    if not is_admin(current_user):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
@@ -85,8 +86,8 @@ async def get_cache_stats(current_user: User = Depends(get_current_active_user))
     获取缓存统计信息
     需要管理员权限
     """
-    # 检查权限
-    if not current_user.is_superuser:
+    # 检查权限（R28-M16：统一 is_admin 口径，role=admin 不再被误挡）
+    if not is_admin(current_user):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
@@ -103,8 +104,8 @@ async def clear_cache(current_user: User = Depends(get_current_active_user)):
     清空缓存
     需要管理员权限
     """
-    # 检查权限
-    if not current_user.is_superuser:
+    # 检查权限（R28-M16：统一 is_admin 口径，role=admin 不再被误挡）
+    if not is_admin(current_user):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="需要管理员权限")

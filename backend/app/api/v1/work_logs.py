@@ -18,6 +18,30 @@ from app.core.transaction import safe_commit
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/work-logs", tags=["工作日志"])
 
+# R28-M10：system_auto 是**保留分类**——服务端自动留痕用它，客户端不得写入
+# （否则可伪造全局可见且不可删除的记录，见 deliverables/ocr-triage-2026-09-30 part-B #4）。
+AUTO_CATEGORY = "system_auto"
+# 客户端可写入的分类白名单（create/update 校验用）
+_CLIENT_CATEGORIES = {
+    "visit", "meeting", "inspection", "training", "daily", "checkin",
+    "project", "village", "school", "other",
+}
+
+
+def _apply_work_log_scope(query, current_user):
+    """工作日志可见性收敛（R28-M10）。
+
+    原实现：非管理员可见「自己的日志 + **所有人的** system_auto 自动留痕」——
+    自动留痕由 write_work_log 写入并携带 user_id，因此等价于向所有用户
+    暴露他人操作流水（内容形如 "create: xxx | by <他人用户名>"）。
+    收敛口径：管理员看全量；非管理员只看**本人**日志（含本人触发的自动留痕）。
+    """
+    from app.core.permission_utils import is_admin
+
+    if is_admin(current_user):
+        return query
+    return query.filter(WorkLog.user_id == getattr(current_user, "id", None))
+
 
 class WorkLogCreate(BaseModel):
     # 兼容前端字段：title/work_date/log_type
@@ -92,18 +116,9 @@ async def get_work_logs(
     """获取工作日志列表"""
     query = db.query(WorkLog)
 
-    # 非管理员只能看自己的日志（自动日志所有人都能看）
-    role = getattr(current_user, "role", "")
-    if role not in ("admin", "super_admin"):
-        # 手动日志只看自己的，自动日志所有人都能看
-        from sqlalchemy import or_
-
-        query = query.filter(
-            or_(
-                WorkLog.category == "system_auto",
-                WorkLog.user_id == current_user.id,
-            )
-        )
+    # R28-M10：非管理员只看本人日志（原实现额外放行「所有人的自动留痕」→
+    # 他人操作流水对所有登录用户可见）。
+    query = _apply_work_log_scope(query, current_user)
 
     if start_date:
         query = query.filter(WorkLog.log_date >= start_date)
@@ -218,6 +233,13 @@ async def create_work_log(
         if exists:
             raise HTTPException(status_code=400, detail="今天已完成驻村打卡")
 
+    # R28-M10 附带收口：system_auto 是服务端保留分类，客户端不得写入
+    # （原实现允许任意用户创建 category="system_auto" 的记录：该分类在
+    # 可见性逻辑里被特殊放行且删除接口固定拒绝删除 → 可造出全局可见、
+    # 不可清理的伪造留痕）。
+    if log_data.get("category") == AUTO_CATEGORY:
+        raise HTTPException(status_code=400, detail="system_auto 为系统保留分类，不允许手工写入")
+
     log = WorkLog(user_id=current_user.id, **log_data)
     db.add(log)
     safe_commit(db)
@@ -270,6 +292,10 @@ async def update_work_log(
         if not update_data.get("category"):
             update_data["category"] = update_data["log_type"]
         update_data.pop("log_type")
+
+    # R28-M10 附带收口：不得把已有日志改写为系统保留分类（同上）
+    if update_data.get("category") == AUTO_CATEGORY:
+        raise HTTPException(status_code=400, detail="system_auto 为系统保留分类，不允许手工写入")
 
     for key, value in update_data.items():
         setattr(log, key, value)
@@ -327,17 +353,8 @@ async def get_calendar_events(
 
     query = db.query(WorkLog).filter(WorkLog.log_date >= start, WorkLog.log_date <= end)
 
-    # 非管理员只能看自己的日志（自动日志所有人都能看）
-    role = getattr(current_user, "role", "")
-    if role not in ("admin", "super_admin"):
-        from sqlalchemy import or_ as sa_or
-
-        query = query.filter(
-            sa_or(
-                WorkLog.category == "system_auto",
-                WorkLog.user_id == current_user.id,
-            )
-        )
+    # R28-M10：非管理员只看本人日志（同列表端点口径）
+    query = _apply_work_log_scope(query, current_user)
 
     # 日志来源筛选
     if source == "auto":
@@ -386,16 +403,8 @@ async def work_log_monthly_summary(
     end = date(year, month, last_day)
 
     query = db.query(WorkLog).filter(WorkLog.log_date >= start, WorkLog.log_date <= end)
-    role = getattr(current_user, "role", "")
-    if role not in ("admin", "super_admin"):
-        from sqlalchemy import or_ as sa_or
-
-        query = query.filter(
-            sa_or(
-                WorkLog.category == "system_auto",
-                WorkLog.user_id == current_user.id,
-            )
-        )
+    # R28-M10：非管理员只看本人日志（同列表端点口径）
+    query = _apply_work_log_scope(query, current_user)
 
     logs = query.order_by(WorkLog.log_date).all()
 

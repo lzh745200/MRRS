@@ -159,7 +159,8 @@ class TestGetEncryptionStatus:
             data = result["data"]
             assert data["is_enabled"] is True
             assert data["has_salt"] is True
-            assert data["iterations"] == 100000
+            # R28 §3：迭代数是 KDF 工作因子，配置里即使有也不得回吐
+            assert "iterations" not in data
 
 
 # ── disable_encryption ────────────────────────────────────────────────────────

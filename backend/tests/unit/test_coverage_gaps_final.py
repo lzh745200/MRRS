@@ -755,13 +755,30 @@ class TestDataQuality:
             result = await clean_data(req, current_user=user)
             assert result["data"]["original_count"] == 1
 
-    async def test_clean_data_forbidden(self):
+    async def test_clean_data_forbidden_for_plain_user(self):
+        """R28-M16 订正：旧用例用 _make_user(is_superuser=False) 期望 403，
+        但该替身 role 默认是 "admin" —— 它锁定的是**旧口径** is_superuser
+        （role=admin 被误挡），正是 M16 要修的缺陷。
+        新口径按 is_admin：普通用户（role="user"）必须 403。
+        """
         from app.api.v1.data_quality import clean_data, CleanDataRequest
-        user = _make_user(is_superuser=False)
+        user = _make_user(role="user", is_superuser=False)
         req = CleanDataRequest(records=[], cleaning_rules={})
         with pytest.raises(HTTPException) as exc_info:
             await clean_data(req, current_user=user)
         assert exc_info.value.status_code == 403
+
+    async def test_clean_data_allows_dept_admin_without_superuser_flag(self):
+        """R28-M16 反向锁：role=admin 且 is_superuser=False 的部门级管理员
+        不再被误挡（旧口径下这里会 403）。
+        """
+        from app.api.v1.data_quality import clean_data, CleanDataRequest
+        user = _make_user(role="admin", is_superuser=False)
+        req = CleanDataRequest(records=[{"a": 1}], cleaning_rules={"trim_whitespace": True})
+        with patch("app.api.v1.data_quality.DataCleaningService") as svc:
+            svc.clean_dataset.return_value = [{"a": 1}]
+            result = await clean_data(req, current_user=user)
+        assert result["data"]["original_count"] == 1
 
     async def test_deduplicate_data(self):
         from app.api.v1.data_quality import deduplicate_data
@@ -1921,11 +1938,13 @@ class TestSystemAudit:
 
 class TestSystemHealth:
 
-    async def test_health_full_disk_error(self):
+    def test_health_full_disk_error(self):
+        """R27：health_full 已改为同步 def（线程池执行，避免重 I/O 阻塞事件循环）"""
         from app.api.v1.system.health import health_full
         with patch("shutil.disk_usage", side_effect=Exception("no disk")):
-            result = await health_full()
+            result = health_full()
             assert result is not None
+            assert result["data"]["disk_free_gb"] is None
 
 
 # ===================================================================

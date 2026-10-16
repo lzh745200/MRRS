@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.api.v1.deps import get_current_active_user, get_db
+from app.core.permission_utils import is_admin
 from app.core.response import success_response
 from app.models.user import User
 from app.services.monitoring_service import MonitoringService
@@ -27,7 +28,8 @@ async def get_api_performance(
     获取API性能统计
     需要管理员权限
     """
-    if not current_user.is_superuser:
+    # R28-M16：统一走 is_admin 口径（原 is_superuser 会把 role=admin 的部门管理员挡在门外）
+    if not is_admin(current_user):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
@@ -49,7 +51,8 @@ async def get_endpoint_stats(
     获取各端点统计信息
     需要管理员权限
     """
-    if not current_user.is_superuser:
+    # R28-M16：统一走 is_admin 口径（原 is_superuser 会把 role=admin 的部门管理员挡在门外）
+    if not is_admin(current_user):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
@@ -69,7 +72,8 @@ async def get_error_stats(
     获取错误统计
     需要管理员权限
     """
-    if not current_user.is_superuser:
+    # R28-M16：统一走 is_admin 口径（原 is_superuser 会把 role=admin 的部门管理员挡在门外）
+    if not is_admin(current_user):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="需要管理员权限")
@@ -85,7 +89,8 @@ async def get_resource_stats(current_user: User = Depends(get_current_active_use
     获取系统资源统计
     需要管理员权限
     """
-    if not current_user.is_superuser:
+    # R28-M16：统一走 is_admin 口径（原 is_superuser 会把 role=admin 的部门管理员挡在门外）
+    if not is_admin(current_user):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="需要管理员权限")

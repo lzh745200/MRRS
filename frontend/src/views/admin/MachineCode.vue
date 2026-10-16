@@ -167,7 +167,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
-import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
+import { isAdminUser } from '@/utils/roleAccess'
 import {
   getMachineCode as fetchMachineCode,
   generateInitialPassword,
@@ -196,10 +196,8 @@ const resetForm = ref({
   verification_code: '',
 })
 
-const isAdmin = computed(() => {
-  const role = normalizeRole(userStore.currentUser?.role)
-  return ADMIN_ROLES.includes(role)
-})
+// M47：统一走 roleAccess.isAdminUser()，与路由守卫/其他管理员入口同口径
+const isAdmin = computed(() => isAdminUser(userStore.currentUser))
 
 const getMachineCode = async () => {
   loading.value = true

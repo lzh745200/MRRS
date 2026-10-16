@@ -13,6 +13,7 @@ from sqlalchemy import case, func as sa_func
 from sqlalchemy.orm import Session
 
 from app.core.cache import get_cache_service
+from app.core.data_permission import apply_scope_filter
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.services.analytics_service import AnalyticsService
@@ -95,7 +96,7 @@ async def get_dashboard(
     if cached is not None:
         return AnalyticsResponse(success=True, data=cached, message="仪表盘数据获取成功")
     service = AnalyticsService(db)
-    data = service.get_dashboard_overview(db)
+    data = service.get_dashboard_overview(db, current_user)
     await _set_cached(f"dashboard:{user_id}", data)
     return AnalyticsResponse(success=True, data=data, message="仪表盘数据获取成功")
 
@@ -112,7 +113,7 @@ async def get_village_analysis(
     if cached is not None:
         return AnalyticsResponse(success=True, data=cached, message="帮扶村分析数据获取成功")
     service = AnalyticsService(db)
-    data = service.get_village_analysis(db)
+    data = service.get_village_analysis(db, current_user)
     await _set_cached(f"village_analysis:{user_id}", data)
     return AnalyticsResponse(success=True, data=data, message="帮扶村分析数据获取成功")
 
@@ -125,12 +126,13 @@ async def get_funding_trends(
     current_user=Depends(get_current_user),
 ):
     """获取资金趋势分析"""
-    cached = await _get_cached(f"funding_trends_{years}")
+    user_id = getattr(current_user, "id", 0)
+    cached = await _get_cached(f"funding_trends_{years}:{user_id}")
     if cached is not None:
         return AnalyticsResponse(success=True, data=cached, message="资金趋势分析数据获取成功")
     service = AnalyticsService(db)
-    data = service.get_funding_trends(db, years)
-    await _set_cached(f"funding_trends_{years}", data)
+    data = service.get_funding_trends(db, years, current_user)
+    await _set_cached(f"funding_trends_{years}:{user_id}", data)
     return AnalyticsResponse(success=True, data=data, message="资金趋势分析数据获取成功")
 
 
@@ -146,7 +148,7 @@ async def get_performance_metrics(
     if cached is not None:
         return AnalyticsResponse(success=True, data=cached, message="绩效指标数据获取成功")
     service = AnalyticsService(db)
-    data = service.get_performance_metrics(db)
+    data = service.get_performance_metrics(db, current_user)
     await _set_cached(f"performance_metrics:{user_id}", data)
     return AnalyticsResponse(success=True, data=data, message="绩效指标数据获取成功")
 
@@ -160,7 +162,7 @@ async def get_comparison_analysis(
 ):
     """获取对比分析数据"""
     service = AnalyticsService(db)
-    data = service.get_comparison_analysis(db, request.compare_type, request.target_value)
+    data = service.get_comparison_analysis(db, request.compare_type, request.target_value, current_user)
     return AnalyticsResponse(success=True, data=data, message="对比分析数据获取成功")
 
 
@@ -173,7 +175,9 @@ async def generate_report(
 ):
     """生成数据分析报表"""
     service = AnalyticsService(db)
-    data = service.generate_report_data(db, request.report_type, request.start_date, request.end_date)
+    data = service.generate_report_data(
+        db, request.report_type, request.start_date, request.end_date, current_user
+    )
     return AnalyticsResponse(success=True, data=data, message="报表生成成功")
 
 
@@ -187,10 +191,10 @@ async def export_data(
     """导出分析数据"""
     service = AnalyticsService(db)
     if request.report_type == "json":
-        data = service.generate_report_data(db, "comprehensive", request.start_date, request.end_date)
+        data = service.generate_report_data(db, "comprehensive", request.start_date, request.end_date, current_user)
         return AnalyticsResponse(success=True, data=data, message="数据导出成功")
     elif request.report_type == "excel":
-        data = service.generate_report_data(db, "comprehensive", request.start_date, request.end_date)
+        data = service.generate_report_data(db, "comprehensive", request.start_date, request.end_date, current_user)
         file_bytes = service.export_data(db, "excel", data)
         return Response(
             content=file_bytes,
@@ -198,7 +202,7 @@ async def export_data(
             headers={"Content-Disposition": "attachment; filename=analytics_export.xlsx"},
         )
     else:
-        data = service.generate_report_data(db, request.report_type, request.start_date, request.end_date)
+        data = service.generate_report_data(db, request.report_type, request.start_date, request.end_date, current_user)
         return AnalyticsResponse(success=True, data=data, message="数据导出成功")
 
 
@@ -210,7 +214,7 @@ async def get_realtime_stats(
 ):
     """获取实时统计数据"""
     service = AnalyticsService(db)
-    dashboard = service.get_dashboard_overview(db)
+    dashboard = service.get_dashboard_overview(db, current_user)
     recent_activities = [
         {"type": "project_updated", "source": "system", "message": "更新了项目: " + str(item)}
         for item in (dashboard.get("recent_updates", []) if dashboard else [])[:5]
@@ -223,20 +227,31 @@ async def get_realtime_stats(
     return AnalyticsResponse(success=True, data=data, message="实时统计数据获取成功")
 
 
-def compute_kpi_summary_data(db: Session) -> dict:
-    """KPI 汇总计算唯一实现：端点缓存未命中与每日预计算任务共用，杜绝口径漂移。"""
+def compute_kpi_summary_data(db: Session, current_user=None) -> dict:
+    """KPI 汇总计算唯一实现：端点缓存未命中与每日预计算任务共用，杜绝口径漂移。
+
+    数据域（H2/H6）：传入 current_user 时按调用者数据域收敛；未传（定时预计算任务等
+    无用户上下文场景）保持系统级口径，与全局缓存键 kpi_summary_{period} 语义一致。
+    """
     from app.models.project import Project
     from app.models.supported_village import SupportedVillage
 
     total_villages = (
-        db.query(sa_func.count(SupportedVillage.id))
-        .filter(SupportedVillage.is_active.is_(True))
-        .scalar()
+        apply_scope_filter(
+            db.query(sa_func.count(SupportedVillage.id)).filter(SupportedVillage.is_active.is_(True)),
+            current_user,
+            SupportedVillage,
+            db=db,
+        ).scalar()
         or 0
     )
     rows = (
-        db.query(Project.status, sa_func.count(Project.id))
-        .filter(Project.is_active == True)  # noqa: E712
+        apply_scope_filter(
+            db.query(Project.status, sa_func.count(Project.id)).filter(Project.is_active == True),  # noqa: E712
+            current_user,
+            Project,
+            db=db,
+        )
         .group_by(Project.status)
         .all()
     )
@@ -264,19 +279,25 @@ async def get_kpi_summary(
     current_user=Depends(get_current_user),
 ):
     """获取KPI汇总数据"""
-    cached = await _get_cached(f"kpi_summary_{period}")
+    user_id = getattr(current_user, "id", 0)
+    cached = await _get_cached(f"kpi_summary_{period}:{user_id}")
     if cached is not None:
         return AnalyticsResponse(success=True, data=cached, message="KPI数据获取成功")
 
-    data = compute_kpi_summary_data(db)
+    data = compute_kpi_summary_data(db, current_user)
     data["period"] = period
-    await _set_cached(f"kpi_summary_{period}", data)
+    await _set_cached(f"kpi_summary_{period}:{user_id}", data)
     return AnalyticsResponse(success=True, data=data, message="KPI数据获取成功")
 
 
 @router.get("/health")
-async def get_analytics_health():
-    """获取分析服务健康状态"""
+async def get_analytics_health(current_user=Depends(get_current_user)):
+    """获取分析服务健康状态
+
+    R28 §3：本端点原为整个 /analytics 模块唯一无认证依赖的路由（其余端点
+    均要求登录）。返回值虽只有 status=healthy，但无认证的可探测端点会成为
+    攻击面（版本/存活指纹）。收敛为登录可见；前端无消费方，不涉及兼容。
+    """
     return AnalyticsResponse(success=True, data={"status": "healthy"}, message="分析服务状态正常")
 
 

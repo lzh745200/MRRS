@@ -71,10 +71,10 @@ export async function filterVillages(
  * 数据钻取查询
  */
 export async function drillDown(query: DrillDownQuery): Promise<DrillDownResult> {
+  // 后端 DrillDownQuery 仅接受 dimension/value/year/filters（无 target_dimension，extra 会被静默忽略）
   const response = await post<DrillDownResult>(`${BASE_URL}/drill-down`, {
     dimension: query.dimension,
     value: query.value,
-    target_dimension: query.targetDimension,
     filters: query.filters,
   })
   return response
@@ -96,8 +96,11 @@ export async function compareVillages(
     data: villageIds,
     params: {
       year,
-      metrics: metrics?.join(','),
+      metrics,
     },
+    // 后端契约 metrics: Optional[List[str]] = None，要求重复查询键（?metrics=gdp&metrics=population）；
+    // axios 默认序列化为 metrics[]=...（键名带方括号），后端取不到 → metrics 恒空。indexes:null 不加括号。
+    paramsSerializer: { indexes: null },
   })
   return response
 }
@@ -135,70 +138,4 @@ export async function getSummaryStatistics(params?: {
     is_key_county: params?.isKeyCounty,
   })
   return response
-}
-
-// ==================== 数据分析核心端点 (/analytics/*) ====================
-
-const ANALYTICS_BASE = '/analytics'
-
-/** 获取仪表盘数据 */
-export async function getDashboard(dateRange?: string, filters?: string): Promise<any> {
-  return get(`${ANALYTICS_BASE}/dashboard`, { date_range: dateRange, filters })
-}
-
-/** 获取帮扶村分析数据 */
-export async function getVillageAnalysis(): Promise<any> {
-  return get(`${ANALYTICS_BASE}/village-analysis`)
-}
-
-/** 获取资金趋势分析 */
-export async function getFundingTrends(years?: number): Promise<any> {
-  return get(`${ANALYTICS_BASE}/funding-trends`, { years: years ?? 5 })
-}
-
-/** 获取绩效指标数据 */
-export async function getPerformanceMetrics(): Promise<any> {
-  return get(`${ANALYTICS_BASE}/performance-metrics`)
-}
-
-/** 获取对比分析数据 */
-export async function getComparisonAnalysis(data: {
-  province?: string
-  compare_type?: string
-  target_value?: string
-}): Promise<any> {
-  return post(`${ANALYTICS_BASE}/comparison`, data)
-}
-
-/** 生成数据分析报表 */
-export async function generateReport(data: {
-  report_type?: string
-  start_date?: string
-  end_date?: string
-}): Promise<any> {
-  return post(`${ANALYTICS_BASE}/generate-report`, data)
-}
-
-/** 导出分析数据 */
-export async function exportData(data: {
-  report_type?: string
-  start_date?: string
-  end_date?: string
-}): Promise<any> {
-  return post(`${ANALYTICS_BASE}/export`, data)
-}
-
-/** 获取实时统计数据 */
-export async function getRealtimeStats(): Promise<any> {
-  return get(`${ANALYTICS_BASE}/realtime-stats`)
-}
-
-/** 获取KPI汇总数据 */
-export async function getKpiSummary(period?: string): Promise<any> {
-  return get(`${ANALYTICS_BASE}/kpi-summary`, { period: period ?? 'month' })
-}
-
-/** 获取分析服务健康状态 */
-export async function getAnalyticsHealth(): Promise<any> {
-  return get(`${ANALYTICS_BASE}/health`)
 }

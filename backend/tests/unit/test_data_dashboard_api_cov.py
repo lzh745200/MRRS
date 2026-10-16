@@ -23,6 +23,8 @@ import app.api.v1.data.data.dashboard as dash
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.data_permission import get_org_scope
+from app.models.fund import Fund
+from app.models.project import Project
 from app.models.supported_village import SupportedVillage
 
 
@@ -400,7 +402,7 @@ class TestFetchActivities:
                              updated_at=updated_later, created_at=created)
         sess = _sess_with([_q(all=[p1, p2])])
         with patch.object(dash, "SessionLocal", return_value=sess):
-            items = dash._fetch_project_activities()
+            items = dash._fetch_project_activities(_scope(True))
         assert items[0]["action"] == "创建了"
         assert items[1]["action"] == "更新了"
         assert items[1]["target"] == ""
@@ -410,14 +412,14 @@ class TestFetchActivities:
         sess = _sess_with([])
         sess.query = MagicMock(side_effect=Exception("x"))
         with patch.object(dash, "SessionLocal", return_value=sess):
-            assert dash._fetch_project_activities() == []
+            assert dash._fetch_project_activities(_scope(True)) == []
 
     def test_fetch_fund_activities(self):
         f1 = SimpleNamespace(id=1, name="经费A", status="approved", applicant="赵六", updated_at=datetime(2026, 7, 2, 8, 0))
         f2 = SimpleNamespace(id=2, name=None, status="unknown_status", applicant=None, updated_at=None)
         sess = _sess_with([_q(all=[f1, f2])])
         with patch.object(dash, "SessionLocal", return_value=sess):
-            items = dash._fetch_fund_activities()
+            items = dash._fetch_fund_activities(_scope(True))
         assert items[0]["action"] == "审批通过"
         assert items[1]["action"] == "更新了"  # 未知状态回退
         assert items[1]["user"] == "系统"
@@ -427,7 +429,7 @@ class TestFetchActivities:
         sess = _sess_with([])
         sess.query = MagicMock(side_effect=Exception("x"))
         with patch.object(dash, "SessionLocal", return_value=sess):
-            assert dash._fetch_fund_activities() == []
+            assert dash._fetch_fund_activities(_scope(True)) == []
 
     def test_fetch_approval_activities(self):
         a1 = SimpleNamespace(
@@ -441,7 +443,7 @@ class TestFetchActivities:
         )
         sess = _sess_with([_q(all=[a1, a2])])
         with patch.object(dash, "SessionLocal", return_value=sess):
-            items = dash._fetch_approval_activities()
+            items = dash._fetch_approval_activities(_scope(True))
         assert items[0]["action"] == "待审批"
         assert items[0]["user"] == "审批人"
         assert items[1]["action"] == "weird"  # 未知状态原样
@@ -453,7 +455,52 @@ class TestFetchActivities:
         sess = _sess_with([])
         sess.query = MagicMock(side_effect=Exception("x"))
         with patch.object(dash, "SessionLocal", return_value=sess):
-            assert dash._fetch_approval_activities() == []
+            assert dash._fetch_approval_activities(_scope(True)) == []
+
+
+class TestFetchActivitiesDataScope:
+    """R28 补漏：三路 feed 必须按数据域过滤（此前全局，普通用户可跨组织读）。"""
+
+    def test_project_feed_applies_org_scope(self):
+        scope = _scope(False, org_ids=[7])
+        q = _q(all=[])
+        scope.filter_by_org_ids = MagicMock(return_value=q)
+        sess = _sess_with([q])
+        with patch.object(dash, "SessionLocal", return_value=sess):
+            dash._fetch_project_activities(scope)
+        # 组织列 + 归属列一起下传，普通用户按组织子树收敛
+        assert scope.filter_by_org_ids.call_args.args[1] is Project.organization_id
+        assert scope.filter_by_org_ids.call_args.kwargs["created_by_column"] is Project.created_by
+
+    def test_fund_feed_applies_org_scope(self):
+        scope = _scope(False, org_ids=[7])
+        q = _q(all=[])
+        scope.filter_by_org_ids = MagicMock(return_value=q)
+        sess = _sess_with([q])
+        with patch.object(dash, "SessionLocal", return_value=sess):
+            dash._fetch_fund_activities(scope)
+        assert scope.filter_by_org_ids.call_args.args[1] is Fund.organization_id
+        assert scope.filter_by_org_ids.call_args.kwargs["created_by_column"] is Fund.created_by
+
+    def test_approval_feed_related_only_for_partial_access(self):
+        scope = _scope(False)
+        scope.user_id = 42
+        q = _q(all=[])
+        sess = _sess_with([q])
+        with patch.object(dash, "SessionLocal", return_value=sess):
+            dash._fetch_approval_activities(scope)
+        # 非全量访问：追加「我提交 / 待我审批」过滤（ApprovalTask 无组织列）
+        assert q.filter.called
+
+    def test_approval_feed_fail_closed_without_user_id(self):
+        scope = _scope(False)
+        scope.user_id = None
+        q = _q(all=[])
+        sess = _sess_with([q])
+        with patch.object(dash, "SessionLocal", return_value=sess):
+            dash._fetch_approval_activities(scope)
+        # 无 user_id 且非全量 → fail-closed 空集，不泄漏跨组织审批
+        assert q.filter.called
 
 
 # ==================== GET /dashboard/recent-activities ====================
@@ -496,6 +543,26 @@ class TestRecentActivitiesEndpoint:
         ):
             resp = cov_client.get("/api/v1/dashboard/recent-activities")
         assert len(resp.json()["data"]["items"]) == 10
+
+    def test_partial_access_bypasses_shared_cache(self, cov_client):
+        """R28：非全量访问者按数据域现算，不得读/写共享缓存。
+
+        否则普通用户会命中管理员写入的全量动态（跨组织项目名 / 审批标题）。
+        """
+        cov_client.app.dependency_overrides[get_org_scope] = lambda: _scope(False)
+        with patch.object(dash, "_cache") as mc, patch.object(
+            dash, "_fetch_hidden_activities", return_value=set()
+        ), patch.object(dash, "_fetch_custom_activities", return_value=[]), patch.object(
+            dash, "_fetch_project_activities", return_value=[]
+        ) as fp, patch.object(dash, "_fetch_fund_activities", return_value=[]), patch.object(
+            dash, "_fetch_approval_activities", return_value=[]
+        ):
+            resp = cov_client.get("/api/v1/dashboard/recent-activities")
+        assert resp.status_code == 200
+        mc.get.assert_not_called()
+        mc.set.assert_not_called()
+        # 数据域实例被透传给 feed 抓取器（按域过滤）
+        assert fp.call_args[0][0].has_full_access() is False
 
 
 # ==================== recent-activities CRUD ====================

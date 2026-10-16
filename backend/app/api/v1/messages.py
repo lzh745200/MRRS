@@ -336,14 +336,20 @@ async def get_recent_activities(
     ]
 
     try:
-        logs = (
+        # R28-M9：本端点原样回吐**全局**审计日志（含他人操作、资源类型与资源 id），
+        # 任意登录用户即可枚举全系统活动。收敛口径：管理员看全局；
+        # 普通用户只看**本人**的审计活动——既堵住全局审计外泄，
+        # 又保住工作台"近期动态"卡片（非管理员仍有内容，不会被打空）。
+        from app.core.permission_utils import is_admin
+
+        query = (
             db.query(AuditLog)
             .filter(AuditLog.action.in_(meaningful_actions))
             .filter(AuditLog.status == "success")
-            .order_by(AuditLog.created_at.desc())
-            .limit(limit)
-            .all()
         )
+        if not is_admin(current_user):
+            query = query.filter(AuditLog.user_id == getattr(current_user, "id", None))
+        logs = query.order_by(AuditLog.created_at.desc()).limit(limit).all()
 
         # 将审计日志转为前端需要的活动格式
         action_title_map = {

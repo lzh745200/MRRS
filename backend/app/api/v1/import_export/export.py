@@ -123,6 +123,9 @@ async def export_villages(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # R28-M1：本端点此前独缺管理员门禁（同文件 users/schools/projects 均已收口），
+    # 任意登录用户可拉取全村镇明细导出文件（含人口/状态/编码）。
+    require_admin(current_user, error_message="仅管理员可导出数据")
     query = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
     query = scoped_filter(query, SupportedVillage, current_user)
 
@@ -292,7 +295,10 @@ async def export_comprehensive_report(
     # 口径 → 部门级非管理员可读出跨组织总量与记录（违反 S2 导出隔离红线）。
     require_admin(current_user, error_message="仅管理员可导出综合报表")
 
-    users_count = db.query(User).count()
+    # 用户总数同样必须过数据域：部门级 admin 不得借综合报表读出跨组织账号规模
+    # （R28 复核补漏：原实现 db.query(User).count() 为全库口径，与同一函数内
+    #  其余 5 项聚合的 scoped_filter 口径不一致）。
+    users_count = scoped_filter(db.query(User), User, current_user).count()
     village_q = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
     village_q = scoped_filter(village_q, SupportedVillage, current_user)
     villages_count = village_q.count()
@@ -410,17 +416,17 @@ async def export_report_word(
         raise HTTPException(status_code=400, detail=f"不支持的报告类型: {report_type}")
 
     if report_type == "summary":
-        data = report_export_service.generate_summary_report_data(db, year)
+        data = report_export_service.generate_summary_report_data(db, year, current_user)
     elif report_type == "fund_detail":
-        data = report_export_service.generate_fund_detail_report_data(db, year)
+        data = report_export_service.generate_fund_detail_report_data(db, year, current_user)
     elif report_type == "project_progress":
-        data = report_export_service.generate_project_progress_report_data(db, year)
+        data = report_export_service.generate_project_progress_report_data(db, year, current_user)
     elif report_type == "school_statistics":
-        data = report_export_service.generate_school_statistics_report_data(db, year)
+        data = report_export_service.generate_school_statistics_report_data(db, year, current_user)
     elif report_type == "village_summary":
-        data = report_export_service.generate_village_summary_report_data(db, year)
+        data = report_export_service.generate_village_summary_report_data(db, year, current_user)
     else:
-        data = report_export_service.generate_annual_summary_report_data(db, year)
+        data = report_export_service.generate_annual_summary_report_data(db, year, current_user)
 
     content = report_export_service.export_word(report_type, data)
     filename = f"{_REPORT_TYPE_MAP[report_type][0]}_{data['year']}.docx"
@@ -448,17 +454,17 @@ async def export_report_pdf(
         raise HTTPException(status_code=400, detail=f"不支持的报告类型: {report_type}")
 
     if report_type == "summary":
-        data = report_export_service.generate_summary_report_data(db, year)
+        data = report_export_service.generate_summary_report_data(db, year, current_user)
     elif report_type == "fund_detail":
-        data = report_export_service.generate_fund_detail_report_data(db, year)
+        data = report_export_service.generate_fund_detail_report_data(db, year, current_user)
     elif report_type == "project_progress":
-        data = report_export_service.generate_project_progress_report_data(db, year)
+        data = report_export_service.generate_project_progress_report_data(db, year, current_user)
     elif report_type == "school_statistics":
-        data = report_export_service.generate_school_statistics_report_data(db, year)
+        data = report_export_service.generate_school_statistics_report_data(db, year, current_user)
     elif report_type == "village_summary":
-        data = report_export_service.generate_village_summary_report_data(db, year)
+        data = report_export_service.generate_village_summary_report_data(db, year, current_user)
     else:
-        data = report_export_service.generate_annual_summary_report_data(db, year)
+        data = report_export_service.generate_annual_summary_report_data(db, year, current_user)
 
     content = report_export_service.export_pdf(report_type, data)
     filename = f"{_REPORT_TYPE_MAP[report_type][0]}_{data['year']}.pdf"

@@ -238,9 +238,16 @@ PR Checks 和 Nightly 工作流均上传覆盖率到 [Codecov](https://codecov.i
   `core/unified_data_scope.py`、`core/data_scope_adapter.py`、`services/village/data_permission.py`，
   约 12 处调用点改指统一入口。**语义**：`filter_by_data_scope`（内部列表/导出，~40 处调用）
   严格按角色——super_admin→全部、admin→本组织(OWN_DEPT)、其余→仅本人；部门级 admin 导出
-  **不得跨组织**（军事审计红线 S2，`test_import_export_permission_security`）。面向组织树
-  端点（map/dashboard/effectiveness/statistics）的 `apply_scope_filter`/`get_org_scope` 保留
-  admin 全量语义。
+  **不得跨组织**（军事审计红线 S2，`test_import_export_permission_security`）。
+- **R28 收口（2026-10-14，R27-H8）**：`apply_scope_filter` 原先对**任何**管理员直接放行全量，
+  与导出链路「admin 仅本组织」冲突（同一数据面两条口径：列表看全量、导出只看本组织）。
+  现已统一为**默认严格**：部门级 admin（`role=admin` 且 `is_superuser=False`）收敛到
+  「本组织及子树」；`super_admin`/`is_superuser`/`data_scope="all"` 仍为全局。只有组织树可见性
+  模型（map / dashboard / 统计 / 组织树等，需 admin 全量才能渲染组织下拉与全局大屏）才显式
+  传 `admin_full_access=True`。**新增调用点默认不得传该开关**。同时：`check_record_access`
+  组织归属缺失（任一侧为 NULL）改为 fail-closed 拒绝；`orgs:list` 缓存只对真正全局用户启用
+  （部门级 admin 的受限结果不得进全局缓存）。回归：`tests/unit/test_data_scope_strict_r28.py`、
+  `test_data_permission_gaps_r28.py`。
 - **is_admin**：`core/permission_utils.is_admin` 为全仓**唯一**管理员判定入口；语义为
   **仅 super_admin / admin / is_superuser**。历史"管理级业务角色" manager/approval_leader
   **不**归一化为系统管理员（不获得 include_deleted、跨组织等管理员专属能力）；其"管理操作"

@@ -51,7 +51,15 @@ async def get_all_configs(
     """获取所有系统配置项的键值对列表
 
     返回系统中所有持久化的配置参数及其说明。
+
+    R28 §3：本端点原为「任意登录用户可读」，而配置表含 `backup_target_dir`/
+    `auto_package_dir` 一类本机路径键，以及加密模块写入的盐值/验证哈希——
+    普通账号不应看到。收敛为管理员可见（消费方 ConfigPackage.vue 的路由
+    meta.roles 本就是 admin/super_admin，无普通用户场景）。
     """
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user, error_message="仅管理员可查看系统配置")
     svc = SystemConfigService(db)
     configs = svc.get_all()
 
@@ -163,11 +171,17 @@ async def import_configs(
 
 
 @router.get("/defaults", summary="获取默认配置值")
-async def get_default_configs():
+async def get_default_configs(current_user=Depends(get_current_user)):
     """获取系统内建的所有默认配置项
 
     用于了解系统的可配置参数及其默认值。
+
+    R28 §3：与 GET /config、GET /config/{key} 同口径收敛为管理员可见
+    （默认值列表含备份/自动打包目录等路径型键的说明，属运维面信息）。
     """
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user, error_message="仅管理员可查看系统配置")
     defaults = [
         {"key": k, "value": v["value"], "description": v["description"]}
         for k, v in SystemConfigService.DEFAULT_CONFIGS.items()
@@ -188,7 +202,14 @@ async def get_config(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """获取指定配置项的值及其说明"""
+    """获取指定配置项的值及其说明
+
+    R28 §3：与 GET /config 同口径收敛为管理员可见——任意键都可能指向
+    本机路径或加密参数（盐值/验证哈希），不能按 key 逐个放行。
+    """
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user, error_message="仅管理员可查看系统配置")
     svc = SystemConfigService(db)
     value = svc.get(key)
 

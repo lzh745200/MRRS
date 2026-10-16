@@ -123,20 +123,54 @@ def _score_voucher_completeness(funds) -> float:
 
 
 def _score_contract_fulfillment(db, project_id: int) -> float:
-    """合同履约维度：存在异常未解决时扣分，否则 90（中性偏积极）"""
-    from app.models.fund_lifecycle import FundContract
+    """合同履约维度：按合同状态与逾期情况计分（R27-H7：改真实计算）。
+
+    历史缺陷（R27 报告 H7 / R20 登记未修）：旧实现查询合同总数后
+    **无条件返回 90.0** —— ``total`` 从未参与任何计算，项目详情/健康度展示的
+    「合同履约」分项与真实合同数据完全无关（误导性假数据）。
+
+    新口径（基线 100，逐份合同按最严重适用项扣分，下限 0）：
+      - 终止 terminated：-20/份（合同失败，履约维度重扣）；
+      - 逾期（deadline 已过且非 completed）：-10/份；
+      - 草稿 draft（尚未生效）：-5/份；
+      - 履约中 active（及未知历史状态）：-2/份；
+      - 已完成 completed：不扣分。
+    无有效合同时返回中性 90（与旧行为一致 —— 无合同不等于履约完美）；
+    查询异常返回 90（保持既有容错契约，不让评分链路 500）。
+    """
+    from datetime import date
+
+    from app.models.fund_lifecycle import ContractStatus, FundContract
 
     try:
-        total = (
-            db.query(FundContract)
+        rows = (
+            db.query(FundContract.status, FundContract.deadline)
             .filter(FundContract.project_id == project_id)
-            .count()
+            .all()
         )
     except Exception:
         return 90.0
-    if total <= 0:
+    if not rows:
         return 90.0
-    return 90.0
+
+    today = date.today()
+    score = 100.0
+    for status, deadline in rows:
+        value = getattr(status, "value", status)
+        # hasattr(deadline, "year") 拦截非日期对象（防御历史脏数据/测试替身），
+        # 避免 str < date 抛 TypeError 把健康度整链打崩。
+        if value == ContractStatus.TERMINATED.value:
+            score -= 20
+        elif value == ContractStatus.COMPLETED.value:
+            continue
+        elif deadline is not None and hasattr(deadline, "year") and deadline < today:
+            score -= 10
+        elif value == ContractStatus.DRAFT.value:
+            score -= 5
+        else:
+            # active 与未知历史状态：轻微扣分（绝不静默满分）
+            score -= 2
+    return round(max(0.0, score), 1)
 
 
 def calculate_project_health_sync(db, project_id: int) -> dict:
@@ -144,9 +178,11 @@ def calculate_project_health_sync(db, project_id: int) -> dict:
 
     返回结构对齐前端 HealthScore：{health_score, details: {key: {score, weight}}}。
     """
+    # M18（R27 排查）：软删经费（is_active=False）不得计入健康度 ——
+    # 旧实现不滤软删，已删除的经费仍参与预算/凭证/及时性分项计算。
     funds = (
         db.query(Fund)
-        .filter(Fund.project_id == project_id)
+        .filter(Fund.project_id == project_id, Fund.is_active.is_(True))
         .all()
     )
     unresolved = (

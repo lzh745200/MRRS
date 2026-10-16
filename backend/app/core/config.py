@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.12.16"
+    PROJECT_VERSION: str = "1.12.17"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -132,8 +132,11 @@ class Settings(BaseSettings):
     TRUST_PROXY_HEADERS: bool = False
 
     # 本地缓存配置（替代Redis）
+    # 注：原 CACHE_SIZE_LIMIT（MB）已于 R28 删除——全仓零消费，且磁盘缓存
+    # 消费方（api/map.py 10MB、api/dashboard.py 50MB）各自持有专属容量，
+    # 与"100MB 全局上限"语义不符，接线会改变既有缓存容量。env 中残留该
+    # 变量无害（pydantic extra="ignore"）。
     CACHE_DIR: str = "./data/cache"
-    CACHE_SIZE_LIMIT: int = 100  # MB
 
     # Redis配置（可选）
     REDIS_ENABLED: bool = False

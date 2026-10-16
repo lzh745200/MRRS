@@ -106,7 +106,17 @@ async def health_readiness():
 
 
 @router.get("/full")
-async def health_full(current_user=Depends(get_current_user)):
+def health_full(current_user=Depends(get_current_user)):
+    """Comprehensive health report with DB stats, backup status, and performance metrics.
+
+    R20 复审：本端点暴露平台指纹、库文件体积与备份目录信息，且在线执行
+    PRAGMA integrity_check（重 I/O）——收敛为登录可见（与 /overview 的
+    无认证裁剪口径互补：详细诊断仅认证用户可用）。
+
+    R27 复审：改为 **同步** 端点（无 await）。同步 def 由 FastAPI 放入线程池
+    执行，integrity_check 这类重 I/O 不再占用事件循环；回归见
+    test_system_gates_r27.py::TestM8HealthFullOffEventLoop。
+    """
     """Comprehensive health report with DB stats, backup status, and performance metrics.
 
     R20 复审：本端点暴露平台指纹、库文件体积与备份目录信息，且在线执行

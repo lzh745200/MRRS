@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -27,9 +27,15 @@ router = APIRouter(prefix="/feedback", tags=["意见反馈"])
 _VALID_TYPES = {"bug", "suggestion", "other"}
 
 
+# R28 §3：匿名可写端点的 content 长度上限。Feedback.content 是 SQLite TEXT
+# （列级无长度约束），不设上限时单个匿名请求可写入任意体积文本——既是存储
+# 放大/刷屏面，也让运营侧审查列表被超长内容撑爆。5000 字覆盖真实反馈场景。
+_FEEDBACK_CONTENT_MAX_LENGTH = 5000
+
+
 class FeedbackCreate(BaseModel):
     type: str = "other"  # bug | suggestion | other
-    content: str
+    content: str = Field(..., max_length=_FEEDBACK_CONTENT_MAX_LENGTH)
     contact: Optional[str] = None
 
 

@@ -347,6 +347,7 @@ import { projectsApi } from '@/api/projects'
 import { listMilestones, createMilestone, updateMilestone, deleteMilestone } from '@/api/milestones'
 import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
 import { AuthStorage } from '@/utils/authStorage'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { chartColor } from '@/utils/chartColors'
 import FilePreview from '@/components/FilePreview.vue'
 
@@ -456,7 +457,7 @@ async function loadProject() {
     project.value = await projectsApi.get(projectId.value)
   } catch (e: any) {
     logger.error('加载项目详情失败', e)
-    error.value = e?.message || '项目详情加载失败，请重试'
+    error.value = getErrorMessage(e, '项目详情加载失败，请重试')
   } finally {
     loading.value = false
   }
@@ -555,7 +556,7 @@ async function handleSaveTask() {
     await loadTasks()
   } catch (e: any) {
     logger.error('保存任务失败', e)
-    ElMessage.error(e?.response?.data?.detail || e?.message || '保存任务失败')
+    ElMessage.error(getErrorMessage(e, '保存任务失败'))
   } finally {
     taskSaving.value = false
   }
@@ -568,7 +569,7 @@ async function handleDeleteTask(taskId: number) {
     await loadTasks()
   } catch (e: any) {
     logger.error('删除任务失败', e)
-    ElMessage.error(e?.message || '删除任务失败')
+    ElMessage.error(getErrorMessage(e, '删除任务失败'))
   }
 }
 
@@ -580,7 +581,7 @@ async function handleFileUpload(options: any) {
     await loadFiles()
   } catch (e: any) {
     logger.error('上传附件失败', e)
-    ElMessage.error(e?.message || '上传失败')
+    ElMessage.error(getErrorMessage(e, '上传失败'))
   }
 }
 
@@ -597,7 +598,7 @@ async function handleDownload(file: any) {
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     })
-    if (!response.ok) throw new Error('Download failed')
+    if (!response.ok) throw new Error('下载失败')
     const blob = await response.blob()
     const blobUrl = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -607,7 +608,7 @@ async function handleDownload(file: any) {
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
   } catch (e: any) {
     logger.error('下载文件失败', e)
-    ElMessage.error(e?.message || '下载失败')
+    ElMessage.error(getErrorMessage(e, '下载失败'))
   }
 }
 
@@ -618,7 +619,7 @@ async function handleDeleteFile(fileId: number) {
     await loadFiles()
   } catch (e: any) {
     logger.error('删除附件失败', e)
-    ElMessage.error(e?.message || '删除附件失败')
+    ElMessage.error(getErrorMessage(e, '删除附件失败'))
   }
 }
 
@@ -722,7 +723,7 @@ async function submitMilestone() {
     await loadMilestones()
   } catch (e) {
     logger.error('里程碑保存失败:', e)
-    ElMessage.error('保存失败，请稍后重试')
+    ElMessage.error(getErrorMessage(e, '保存失败，请稍后重试'))
   } finally {
     msSaving.value = false
   }
@@ -739,7 +740,7 @@ async function completeMilestone(row: any) {
     await loadMilestones()
   } catch (e) {
     logger.error('完成里程碑失败:', e)
-    ElMessage.error('操作失败')
+    ElMessage.error(getErrorMessage(e, '操作失败'))
   }
 }
 
@@ -750,7 +751,7 @@ async function removeMilestone(row: any) {
     await loadMilestones()
   } catch (e) {
     logger.error('删除里程碑失败:', e)
-    ElMessage.error('删除失败')
+    ElMessage.error(getErrorMessage(e, '删除失败'))
   }
 }
 

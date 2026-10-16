@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
+from app.core.permission_utils import is_admin
 from app.models.user import User
 from app.services.data_cleaning_service import DataCleaningService
 from app.services.validation_engine_service import ValidationEngine
@@ -79,7 +80,8 @@ async def clean_data(request: CleanDataRequest, current_user: User = Depends(get
     清洗数据
     需要管理员权限
     """
-    if not current_user.is_superuser:
+    # R28-M16：统一 is_admin 口径（原 is_superuser 会把 role=admin 误挡）
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     unknown_rules = set(request.cleaning_rules) - SUPPORTED_CLEANING_RULES

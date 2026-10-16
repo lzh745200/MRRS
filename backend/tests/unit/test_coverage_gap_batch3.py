@@ -515,9 +515,16 @@ class TestRBACService:
             assert "user:read" in result
 
     def test_get_user_permissions_admin_all(self, svc, mock_db):
+        # M21（R28）：admin:all 不再提前 return，改为「展开为全部权限 → 与普通路径
+        # 共用白名单交集 + 机器码限制扣减」。因此本用例必须显式让 User 查询返回
+        # None（无白名单 = 不裁剪），否则 `db.query(User)...first()` 拿到 MagicMock，
+        # 其 allowed_permissions_list 迭代为空集 → 交集把权限清空（旧断言失败是
+        # 测试替身未对齐新契约，非实现缺陷；真实用户 allowed_permissions_list 为
+        # None 时不会发生裁剪）。
         with patch.object(svc, "_get_cached_restricted_permissions", return_value=set()):
             mock_db.query.return_value.filter.return_value.all.return_value = [("admin:all",)]
             mock_db.query.return_value.join.return_value.filter.return_value.filter.return_value.distinct.return_value.all.return_value = []
+            mock_db.query.return_value.filter.return_value.first.return_value = None
             result = _run_async(
                 svc.get_user_permissions("1", mock_db)
             )

@@ -44,7 +44,6 @@ from starlette.types import Scope
 from app.core.audit_middleware import AuditMiddleware
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
-from sqlalchemy.exc import SQLAlchemyError
 from app.core.logging_config import init_logging
 from app.core.security import SecurityHeadersMiddleware
 from app.core.static_files import setup_static_files
@@ -53,6 +52,10 @@ from app.middleware.csrf_middleware import CSRFMiddleware
 from app.middleware.metrics_middleware import MetricsMiddleware
 from app.middleware.request_id import RequestIDMiddleware
 from app.middleware.request_logger import RequestLoggerMiddleware
+from app.core.migration_helper import (
+    _sqlite_col_spec as _migration_helper_sqlite_col_spec,
+    migrate_missing_columns as _migration_helper_migrate_missing_columns,
+)
 
 # P2-1: 统一日志入口——移除 SafeLogger，走 logging_config.init_logging()
 init_logging()
@@ -121,9 +124,14 @@ app = FastAPI(
 
 register_exception_handlers(app)
 
-# 中间件注册顺序（Starlette 按添加的逆序执行）：
-# 执行顺序: RequestID → SecurityHeaders → CORS → CamelToSnake → CSRF → RequestLogger → Audit → Metrics
-# 添加顺序: Metrics → Audit → RequestLogger → CSRF → CamelToSnake → CORS → SecurityHeaders → RequestID
+# 中间件注册顺序（Starlette 按添加的逆序执行：后添加者在外层、先进入）：
+# 执行顺序（外→内）: _PathAndCharset → RequestID → BodySizeLimit → SecurityHeaders
+#   → CORS → CacheHeaders → CamelToSnake → CSRF → RequestLogger → Audit
+#   → MaintenanceGate → Metrics → SlowRequest → QueryCounter（最内层，包裹路由）
+# 添加顺序（本文件自上而下）: QueryCounter → SlowRequest → Metrics → MaintenanceGate
+#   → Audit → RequestLogger → CSRF → CamelToSnake → CacheHeaders → CORS
+#   → SecurityHeaders → BodySizeLimit → RequestID → _PathAndCharset
+# CSRF 仅在 settings.CSRF_ENABLED=True 时添加（关闭时该层不存在，其余层顺序不变）。
 
 # 1. 性能监控中间件（最内层，最后执行，包裹实际请求处理）
 # 0. 数据库查询计数中间件（记录每个请求的 SQL 查询次数）
@@ -202,27 +210,53 @@ app.include_router(api_v1_router)
 print(f"  路由加载完成 ({_time.time() - _rt0:.1f}s)", flush=True)
 
 
-# 全局 Content-Type charset=UTF-8 修复
-@app.middleware("http")
-async def _ensure_charset_utf8(request: Request, call_next):
-    response = await call_next(request)
-    ct = response.headers.get("content-type", "")
-    if ct and "charset" not in ct:
-        if ct.startswith("text/") or ct.startswith("application/json") or ct.startswith("application/javascript"):
-            response.headers["content-type"] = f"{ct}; charset=utf-8"
-    return response
+# ── 尾部斜杠规范化 + Content-Type charset 补全（M36）──
+# 两件事合并进一个**纯 ASGI** 中间件（原先是两个 @app.middleware("http") 函数式
+# 中间件，各自再包一层 BaseHTTPMiddleware）：
+# 1. 修复 API 路径尾部斜杠 404：/api/v1/xxx/?q=1 → 307 → /api/v1/xxx?q=1；
+# 2. 文本类响应补 charset=utf-8。
+# 语义与顺序保持：重定向发生在最外层（先于其余中间件，重定向响应直接返回），
+# charset 在响应头部于下游全部中间件写完后补全，因此末尾追加即等价。
+# 常量 time：模块级缓存，热路径不再每次 import（同 M34 口径）。
+_TEXTUAL_CONTENT_TYPES = ("text/", "application/json", "application/javascript")
 
 
-# 修复 API 路径尾部斜杠 404：/api/v1/xxx/?q=1 → 307 → /api/v1/xxx?q=1
-@app.middleware("http")
-async def _trailing_slash_redirect(request: Request, call_next):
-    path = request.url.path
-    if len(path) > 1 and path.endswith("/"):
-        new_path = path.rstrip("/")
-        qs = request.url.query
-        redirect_url = f"{new_path}?{qs}" if qs else new_path
-        return RedirectResponse(url=redirect_url, status_code=307)
-    return await call_next(request)
+class _PathAndCharsetMiddleware:
+    """纯 ASGI：尾斜杠 307 重定向 + 文本响应 charset 补全。"""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        if len(path) > 1 and path.endswith("/"):
+            query_string = scope.get("query_string", b"").decode("latin-1")
+            location = path.rstrip("/") + (f"?{query_string}" if query_string else "")
+            response = RedirectResponse(url=location, status_code=307)
+            await response(scope, receive, send)
+            return
+
+        async def send_with_charset(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                for index, (name, value) in enumerate(headers):
+                    if name.lower() != b"content-type":
+                        continue
+                    decoded = value.decode("latin-1")
+                    if "charset" not in decoded and decoded.startswith(_TEXTUAL_CONTENT_TYPES):
+                        headers[index] = (name, (decoded + "; charset=utf-8").encode("latin-1"))
+                    break
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, send_with_charset)
+
+
+app.add_middleware(_PathAndCharsetMiddleware)
 
 
 class CachedStaticFiles(StaticFiles):
@@ -577,6 +611,14 @@ def _run_alembic_upgrade():
         )
 
 
+# M41（R27 排查，R20 L9 未消除）：`_sqlite_col_spec` / `_migrate_missing_columns`
+# 曾在本文件与 app/core/migration_helper.py 各有一份近似实现，任何一侧改动都会
+# 让启动补列与 version_service 的补列行为漂移。现统一以 core.migration_helper
+# 为唯一实现：本模块只保留名字转发（测试与 alembic/env.py 仍按
+# `app.main._migrate_missing_columns` 导入），不再持有重复逻辑。
+_sqlite_col_spec = _migration_helper_sqlite_col_spec
+
+
 def _migrate_missing_columns(engine, model_base):
     """检测列差异并自动添加缺失列 [DEPRECATED: 逐步迁移到纯 Alembic]
 
@@ -592,7 +634,7 @@ def _migrate_missing_columns(engine, model_base):
     import os
     import warnings
 
-    # 发出弃用警告，提醒迁移到 Alembic
+    # 发出弃用警告，提醒迁移到 Alembic（语义与 core.migration_helper 一致）
     warnings.warn(
         "_migrate_missing_columns 已弃用，请迁移到 Alembic 数据库迁移。"
         "设置 DISABLE_AUTO_MIGRATION=1 可禁用此功能。",
@@ -604,134 +646,13 @@ def _migrate_missing_columns(engine, model_base):
         "设置 DISABLE_AUTO_MIGRATION=1 可禁用。"
     )
 
+    # 环境变量短路保留在包装层：日志归属 app.main（既有运维脚本/测试按此定位），
+    # 真正会漂移的 DDL 逻辑已单点收敛到 core.migration_helper。
     if os.getenv("DISABLE_AUTO_MIGRATION", "").strip() == "1":
         logger.info("DISABLE_AUTO_MIGRATION=1，跳过自动列补齐（请使用 Alembic 迁移）")
         return
 
-    from sqlalchemy import inspect as sa_inspect
-    from sqlalchemy import text
-
-    try:
-        inspector = sa_inspect(engine)
-    except Exception as e:
-        logger.warning("Schema migration: failed to create inspector: %s", e)
-        return
-
-    total_added = 0
-    total_failed = 0
-    for table_name, table in model_base.metadata.tables.items():
-        try:
-            if not inspector.has_table(table_name):
-                continue
-            db_cols = {c["name"] for c in inspector.get_columns(table_name)}
-            model_cols = {c.name for c in table.columns}
-            missing = model_cols - db_cols
-            if not missing:
-                continue
-            logger.info(
-                "Schema migration: table [%s] has %d missing column(s): %s",
-                table_name,
-                len(missing),
-                sorted(missing),
-            )
-            with engine.connect() as conn:
-                for col_name in sorted(missing):
-                    try:
-                        col = table.c[col_name]
-                        stype, default_clause = _sqlite_col_spec(col)
-                        # SQLite: nullable=False 列必须有 DEFAULT 才能 ADD COLUMN
-                        not_null = ""
-                        if not col.nullable and default_clause:
-                            not_null = "NOT NULL "
-                        ddl = (
-                            f"ALTER TABLE [{table_name}] ADD COLUMN [{col_name}] " f"{stype} {not_null}{default_clause}"
-                        ).rstrip()
-                        conn.execute(text(ddl))
-                        total_added += 1
-                        default_info = f" {default_clause}" if default_clause else ""
-                        logger.info(
-                            "Schema migration: [AUTO-ADD] %s.%s (%s%s)",
-                            table_name,
-                            col_name,
-                            stype,
-                            default_info,
-                        )
-                    except (ValueError, TypeError, AttributeError, SQLAlchemyError) as col_err:
-                        total_failed += 1
-                        logger.warning(
-                            "Schema migration: failed to add %s.%s: %s",
-                            table_name,
-                            col_name,
-                            col_err,
-                        )
-                conn.commit()
-        except (ValueError, TypeError, KeyError, SQLAlchemyError) as tbl_err:
-            logger.warning(
-                "Schema migration: error processing table %s: %s",
-                table_name,
-                tbl_err,
-            )
-
-    if total_added or total_failed:
-        logger.info(
-            "Schema migration summary: %d column(s) added, %d failed",
-            total_added,
-            total_failed,
-        )
-    else:
-        logger.info("Schema migration: all tables up to date, no columns to add")
-
-
-def _sqlite_col_spec(col):
-    """根据 SQLAlchemy Column 推断 SQLite 列类型和 DEFAULT 子句。
-
-    Returns:
-        (sqlite_type, default_clause) - 例如 ("INTEGER", "DEFAULT 0")
-    """
-    t = str(col.type).upper()
-
-    # 类型映射
-    if "INT" in t or "BOOL" in t:
-        stype = "INTEGER"
-    elif "FLOAT" in t or "REAL" in t or "NUMERIC" in t:
-        stype = "REAL"
-    else:
-        # DATE, DATETIME, JSON, VARCHAR, TEXT, ENUM 等在 SQLite 中均用 TEXT
-        stype = "TEXT"
-
-    # 推断 DEFAULT 值
-    default_clause = ""
-    # 优先使用模型 default（ColumnDefault）
-    if (
-        col.default is not None
-        and hasattr(col.default, "arg")
-        and col.default.arg is not None
-        and not callable(col.default.arg)
-    ):
-        raw = col.default.arg
-        if isinstance(raw, bool):
-            default_clause = f"DEFAULT {1 if raw else 0}"
-        elif isinstance(raw, (int, float)):
-            default_clause = f"DEFAULT {raw}"
-        elif isinstance(raw, str):
-            escaped = raw.replace("'", "''")
-            default_clause = f"DEFAULT '{escaped}'"
-    elif col.server_default is not None:
-        # 注意: SQLite ALTER TABLE ADD COLUMN 不支持非常量 DEFAULT
-        # (CURRENT_TIMESTAMP 会报错 "Cannot add a column with non-constant default")
-        # 对于 server_default=func.now() 这类情况，跳过 DEFAULT，
-        # ORM 层的 default=_utcnow 会为新行自动赋值。
-        pass
-    elif not col.nullable:
-        # nullable=False 但没有显式 default → 给一个类型感知的零值
-        if stype == "INTEGER":
-            default_clause = "DEFAULT 0"
-        elif stype == "REAL":
-            default_clause = "DEFAULT 0"
-        else:
-            default_clause = "DEFAULT ''"
-
-    return stype, default_clause
+    _migration_helper_migrate_missing_columns(engine, model_base)
 
 
 __all__ = ["app"]

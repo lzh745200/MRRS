@@ -9,7 +9,7 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -205,7 +205,15 @@ async def get_alert_rules(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """获取当前配置的监控告警规则"""
+    """获取当前配置的监控告警规则（仅管理员）
+
+    R27 复审：告警阈值反映系统可观测边界，普通登录用户不应读取 → 补 is_admin 门禁。
+    """
+    from app.core.permission_utils import is_admin
+
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
     rules = []
 
     try:
@@ -223,7 +231,8 @@ async def get_alert_rules(
                 "created_at": rule.created_at.isoformat() if hasattr(rule, "created_at") and rule.created_at else None,
             })
     except Exception as e:
-        logger.debug("获取告警规则失败: %s", e)
+        # 静默吞异常会让"规则查询失败"表现为"只有默认规则"，阈值被篡改也无从发现
+        logger.warning("获取告警规则失败: %s", e, exc_info=True)
 
     # 如果没有数据库中的告警规则，返回默认规则
     if not rules:
@@ -264,7 +273,15 @@ async def get_alert_history(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """获取系统告警历史记录"""
+    """获取系统告警历史记录（仅管理员）
+
+    R27 复审：告警历史含主机级故障细节，补 is_admin 门禁。
+    """
+    from app.core.permission_utils import is_admin
+
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
     items = []
 
     try:
@@ -286,7 +303,7 @@ async def get_alert_history(
                 "created_at": record.created_at.isoformat() if record.created_at else None,
             })
     except Exception as e:
-        logger.debug("获取告警历史失败: %s", e)
+        logger.warning("获取告警历史失败: %s", e, exc_info=True)
         total = 0
 
     return ok_list(items=items, total=total, page=page, page_size=page_size)

@@ -11,12 +11,17 @@
 PyInstaller (assistance-backend.spec)
   └─ backend/dist/assistance-backend/  (onedir, ~85MB 主 exe + _internal 依赖目录, W6-T6)
 electron-builder (package.json build 段)
-  ├─ extraResources: assistance-backend.exe → resources/backend/
-  ├─ extraResources: frontend/dist         → resources/frontend/
-  ├─ extraResources: resources/vcredist    → resources/vcredist/
+  ├─ extraResources: backend/dist/assistance-backend → resources/backend/assistance-backend
+  ├─ extraResources: frontend/dist                → resources/frontend/
+  ├─ win.extraResources: resources/vcredist       → resources/vcredist/   (仅 Windows)
   ├─ NSIS target (内置) + electron-builder-nsis-hook.nsh 钩子
   └─ dist/electron/MRRS-Setup-<version>-x64.exe  (~234MB)
 ```
+
+> `resources/vcredist` 挂在 `build.win.extraResources` 而非全局 `build.extraResources`：
+> 该目录被 gitignore（`.gitignore: resources/vcredist/`），Linux ARM64 构建机上从不存在，
+> 若留在全局段会让每次 DEB 构建都引用一个缺失路径。electron-builder 会把
+> `win.extraResources` 与全局段合并后再匹配 Windows 产物，Windows 侧行为不变。
 
 ### 关键文件
 
@@ -34,9 +39,10 @@ electron-builder (package.json build 段)
 #    已存在且哈希匹配时自动跳过）
 make fetch-vcredist
 
-# 1. 前端构建并同步到 resources/frontend
+# 1. 前端构建（产物落 frontend/dist，electron-builder 经 extraResources
+#    复制成安装包内的 resources/frontend；仅在需要生成 resources/frontend
+#    完整性清单时才额外跑 `bash scripts/build/sync-frontend-dist.sh`）
 cd frontend && npm run build
-mkdir -p ../resources/frontend && cp -rf dist/* ../resources/frontend/
 
 # 2. 后端打包（需对应架构的 Python 3.11）
 cd ../backend && python -m PyInstaller assistance-backend.spec --clean --noconfirm
@@ -56,7 +62,8 @@ npx electron-builder --win --x64    # 64 位安装包（主力）
 - 安装包：`dist/electron/MRRS-Setup-<version>-x64.exe`（约 234MB；产物名由 `package.json` 的
   `build.artifactName` 决定，值为 `MRRS-Setup-${version}-${arch}.${ext}`）
 - 后端 exe：`backend/dist/assistance-backend/assistance-backend.exe`（onedir 布局，W6-T6）
-- 预置数据库：`resources/database/rural_revitalization.db`（打包进安装包，首次运行复制到用户目录）
+- 安装包内资源：`<安装目录>\resources\{frontend,backend,vcredist}\`（由 `build.extraResources`
+  与 `build.win.extraResources` 生成；**没有预置数据库**——数据库由后端首次启动自建）
 
 ### VC++ 运行库策略（双保险 + 供应链校验）
 

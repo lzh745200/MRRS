@@ -228,15 +228,23 @@ class SystemConfigService:
         return self.get_bool("initialized", False)
 
     def set_initialized(self, org_id: int, system_id: str = None):
-        """设置系统已初始化"""
+        """设置系统已初始化。
+
+        M27（R27 低危）：旧实现连续调用三次 set()（每次内部 safe_commit），
+        中途失败会留下 "initialized=true 但 organization_id/system_id 未写入"
+        的半初始化状态。改为三次写入内存后**单次提交**，保证原子性。
+        """
         import uuid
 
+        if self.db is None:
+            return
         if not system_id:
             system_id = f"SYS-{uuid.uuid4().hex[:8].upper()}"
 
-        self.set("initialized", "true")
-        self.set("organization_id", str(org_id))
-        self.set("system_id", system_id)
+        self._set_no_commit("initialized", "true")
+        self._set_no_commit("organization_id", str(org_id))
+        self._set_no_commit("system_id", system_id)
+        safe_commit(self.db)
 
     def delete(self, key: str) -> bool:
         """删除配置"""

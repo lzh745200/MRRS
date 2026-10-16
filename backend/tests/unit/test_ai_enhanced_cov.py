@@ -88,11 +88,14 @@ async def test_recommend_fund_allocation():
     svc.recommend_fund_allocation.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_nlp_query():
+def test_nlp_query():
+    """R28-H13：端点为同步 def（同步 DB 查询不得在 async def 内阻塞事件循环），
+    且必须把 current_user 透传给 execute_query 以便服务层收敛数据域。"""
     svc = MagicMock()
     svc.execute_query.return_value = {"rows": 2}
+    user = MagicMock()
     with patch.object(mod, "_get_nlp_service", return_value=svc):
-        resp = await mod.nlp_query(query="有多少个村", db=MagicMock(), current_user=MagicMock())
+        resp = mod.nlp_query(query="有多少个村", db=MagicMock(), current_user=user)
     assert resp == {"rows": 2}
     svc.execute_query.assert_called_once()
+    assert svc.execute_query.call_args.kwargs.get("user") is user

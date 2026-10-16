@@ -96,7 +96,11 @@ class TestImportOrganizations:
         assert new_org.name == "E"
         assert new_org.code == "CE"
         assert new_org.org_type == "县"
-        db.flush.assert_called_once()
+        # M26 订正：旧断言期望仅一次 flush（建行取 id）；现在新建行在第二阶段
+        # 还要回填 parent_id/path/level，故 flush 共 2 次。
+        assert db.flush.call_count == 2
+        assert str(new_org.path).startswith("/")  # 根组织路径 /{id}/
+        assert new_org.level == 1
 
 
 class TestImportUserLegacyOrgRestore:

@@ -1,6 +1,6 @@
 """批量操作API路由"""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field, field_validator
@@ -12,7 +12,7 @@ from app.core.permission_utils import require_admin, is_superuser
 from app.core.response import success_response
 from app.core.security import get_current_user
 from app.models.user import User
-from app.services.batch_service import BatchService, TABLE_MODEL_MAP
+from app.services.batch_service import ALLOWED_TABLES, BatchService, TABLE_MODEL_MAP
 from app.services.work_log_service import write_work_log
 
 logger = logging.getLogger(__name__)
@@ -227,7 +227,17 @@ async def validate_batch(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """验证批量操作"""
+    """验证批量操作（仅管理员）
+
+    R28 §3：本端点此前既无管理员门禁、table_name 也不做白名单——
+    任意登录用户可用任意表名探测批量服务内部行为（服务层虽会拒绝未知表，
+    但异常被泛化为"验证批量操作失败"，口径不明）。收敛为与
+    /batch/update|delete|export 一致：require_admin + ALLOWED_TABLES 白名单。
+    """
+    require_admin(current_user)
+    # 白名单与 Pydantic 请求体校验共用同一事实源（services.batch_service.ALLOWED_TABLES）
+    if table_name not in ALLOWED_TABLES:
+        raise HTTPException(status_code=400, detail=f"不允许的表名: {table_name}")
     try:
         svc = BatchService(db)
         result = await svc.validate_batch(

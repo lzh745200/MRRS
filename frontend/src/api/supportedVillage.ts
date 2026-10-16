@@ -175,8 +175,3 @@ export const importAllSectionsData = (villageId: number, year: number, file: Fil
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }
-
-// ── Export modules / formats / preview ──
-export const getExportModules = () => get('/supported-villages/export/modules')
-export const getExportFormats = () => get('/supported-villages/export/formats')
-export const previewExport = (params?: any) => get('/supported-villages/export/preview', params)

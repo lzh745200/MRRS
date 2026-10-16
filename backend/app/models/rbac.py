@@ -201,6 +201,9 @@ class AccessLog(Base):
     )
 
     id = Column(String(36), primary_key=True, default=_uuid)
+    # 类型说明（R27 低危，勿改列类型 —— 需迁移）：全仓 user_id 多为 Integer，
+    # 本表为历史遗留 String(36)。写入方 rbac_service._log_access 统一 str(user_id)；
+    # 新增读取查询时务必用 str 值比较，不要传 int（避免类型亲和导致静默不匹配）。
     user_id = Column(String(36), nullable=False, comment="用户ID")
     action = Column(String(50), nullable=False, comment="操作动作")
     resource_type = Column(String(50), nullable=False, comment="资源类型")

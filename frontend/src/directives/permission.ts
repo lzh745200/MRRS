@@ -2,7 +2,7 @@ import { logger } from '@/utils/logger'
 import { ObjectDirective } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useMenuStore } from '@/stores/menu'
-import { ADMIN_ROLES } from '@/utils/roleAccess'
+import { isAdminUser } from '@/utils/roleAccess'
 
 /** 无权限时隐藏元素（mounted/updated 共用同一形态，保证可逆） */
 function _hideElement(el: HTMLElement): void {
@@ -33,8 +33,9 @@ export const permission: ObjectDirective = {
     const menuStore = useMenuStore()
     const currentRole = authStore.user?.role || ''
 
-    // 管理员始终放行
-    if (ADMIN_ROLES.includes(currentRole) || authStore.user?.is_superuser) {
+    // 管理员始终放行（M47：统一 isAdminUser，含 normalizeRole 归一化，
+    // 存量旧角色 manager/approval_leader 归一化后即 admin，原实现会漏放行）
+    if (isAdminUser(authStore.user)) {
       return
     }
 
@@ -88,8 +89,8 @@ export const permission: ObjectDirective = {
     const menuStore = useMenuStore()
     const currentRole = authStore.user?.role || ''
 
-    // 管理员始终放行
-    if (ADMIN_ROLES.includes(currentRole) || authStore.user?.is_superuser) {
+    // 管理员始终放行（M47：统一 isAdminUser，理由同上）
+    if (isAdminUser(authStore.user)) {
       el.style.display = ''
       el.removeAttribute('disabled')
       return

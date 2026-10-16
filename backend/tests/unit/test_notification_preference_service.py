@@ -29,19 +29,23 @@ class TestGetPreference:
 
     def test_creates_default_when_not_found(self, svc, mock_db):
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        with patch.object(svc, '_create_default_preference') as mock_create:
-            mock_create.return_value = MagicMock()
+        with patch.object(svc, '_build_default_preference') as mock_build:
+            mock_build.return_value = MagicMock()
             result = svc.get_preference(1)
-            mock_create.assert_called_once_with(1)
-            assert result is mock_create.return_value
+            mock_build.assert_called_once_with(1)
+            assert result is mock_build.return_value
+            # M27 订正：getter 只读 —— 旧用例期望缺记录时自动落库（隐式写），
+            # 那正是排查报告要求消除的行为；现在写入统一走 update_preference。
+            mock_db.add.assert_not_called()
+            mock_db.commit.assert_not_called()
 
 
-class TestCreateDefaultPreference:
+class TestBuildDefaultPreference:
     @patch('app.services.notification_preference_service.NotificationPreference')
-    def test_creates_default(self, mock_model, svc, mock_db):
+    def test_builds_default(self, mock_model, svc, mock_db):
         mock_pref = MagicMock()
         mock_model.return_value = mock_pref
-        result = svc._create_default_preference(42)
+        result = svc._build_default_preference(42)
         assert result is mock_pref
         mock_model.assert_called_once()
         _, kwargs = mock_model.call_args
@@ -56,9 +60,9 @@ class TestCreateDefaultPreference:
         assert kwargs['push_system'] is True
         assert kwargs['push_approval'] is True
         assert kwargs['push_task'] is True
-        mock_db.add.assert_called_once_with(mock_pref)
-        mock_db.commit.assert_called_once()
-        mock_db.refresh.assert_called_once_with(mock_pref)
+        # M27：构造器不落库（写入由 update_preference 负责）
+        mock_db.add.assert_not_called()
+        mock_db.commit.assert_not_called()
 
 
 class TestUpdatePreference:
@@ -67,7 +71,7 @@ class TestUpdatePreference:
         pref.site_system = True
         pref.email_system = True
         pref.updated_at = None
-        svc.get_preference = MagicMock(return_value=pref)
+        mock_db.query.return_value.filter.return_value.first.return_value = pref
         result = svc.update_preference(
             1,
             site_system=False,
@@ -82,7 +86,7 @@ class TestUpdatePreference:
 
     def test_updates_all_allowed_fields(self, svc, mock_db):
         pref = MagicMock()
-        svc.get_preference = MagicMock(return_value=pref)
+        mock_db.query.return_value.filter.return_value.first.return_value = pref
         svc.update_preference(1, site_system=True, site_approval=True, site_task=True,
                               email_system=True, email_approval=True, email_task=True,
                               push_system=True, push_approval=True, push_task=True)
@@ -96,15 +100,41 @@ class TestUpdatePreference:
         assert pref.push_approval is True
         assert pref.push_task is True
 
+    def test_creates_when_missing(self, svc, mock_db):
+        """M27：缺记录时由 update_preference 显式创建并落库（getter 只读）。"""
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        with patch.object(svc, '_build_default_preference') as mock_build:
+            mock_build.return_value = MagicMock()
+            result = svc.update_preference(1, site_system=False)
+            assert result is mock_build.return_value
+            mock_db.add.assert_called_once_with(mock_build.return_value)
+            mock_db.commit.assert_called_once()
+
+    def test_concurrent_insert_falls_back_to_update(self, svc, mock_db):
+        """M27：并发首写撞唯一键 → 回滚后按 upsert 更新已落库行。"""
+        from sqlalchemy.exc import IntegrityError
+        winner = MagicMock()
+        mock_db.commit.side_effect = [IntegrityError("stmt", {}, Exception("dup")), None]
+        # 第一次查询 None（触发创建）→ 撞键回滚 → 二次查询命中并发方已写入的行
+        mock_db.query.return_value.filter.return_value.first.side_effect = [None, winner]
+        with patch.object(svc, '_build_default_preference', return_value=MagicMock()), \
+                patch.object(svc, '_apply_allowed_fields') as mock_apply:
+            result = svc.update_preference(1, site_system=False)
+            assert result is winner
+            # safe_commit 失败时内部已回滚一次，except 分支再做一次幂等回滚
+            assert mock_db.rollback.call_count == 2
+            assert mock_apply.call_count == 2
+            assert mock_db.commit.call_count == 2
+
     def test_ignores_unknown_fields(self, svc, mock_db):
         pref = MagicMock()
-        svc.get_preference = MagicMock(return_value=pref)
+        mock_db.query.return_value.filter.return_value.first.return_value = pref
         svc.update_preference(1, invalid_field="value")
         mock_db.commit.assert_called_once()
 
     def test_ignores_fields_not_on_preference(self, svc, mock_db):
         pref = MagicMock(spec=[])  # no attributes
-        svc.get_preference = MagicMock(return_value=pref)
+        mock_db.query.return_value.filter.return_value.first.return_value = pref
         svc.update_preference(1, site_message_enabled=False)
         mock_db.commit.assert_called_once()
 

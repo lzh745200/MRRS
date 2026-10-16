@@ -131,6 +131,15 @@ class TestExportImport:
 
 class TestDefaults:
     async def test_defaults(self):
-        result = await sc.get_default_configs()
+        # R28 §3：/defaults 与 /config 同口径收敛为管理员可见，
+        # 直接调用端点函数须显式传入管理员（否则 require_admin 抛 403）
+        result = await sc.get_default_configs(_admin())
         assert result["success"] is True
         assert result["data"]["total"] == len(result["data"]["defaults"])
+
+    async def test_defaults_denied_for_non_admin(self):
+        """R28 §3：非管理员调用 /defaults 必须 403。"""
+        non_admin = SimpleNamespace(id=2, username="user", role="viewer", is_superuser=False)
+        with pytest.raises(HTTPException) as exc_info:
+            await sc.get_default_configs(non_admin)
+        assert exc_info.value.status_code == 403

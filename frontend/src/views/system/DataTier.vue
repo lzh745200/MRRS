@@ -442,6 +442,19 @@ async function handleArchive() {
 
 // ==================== 恢复操作 ====================
 
+/**
+ * 从归档文件名解析模型名。
+ * 后端归档命名约定：{model_name}_{YYYYmmdd_HHMMSS}.json.gz（未压缩为 .json），
+ * 模型名自身可能含下划线（如 work_log），按第一个下划线截断会丢字符。
+ */
+function parseArchiveModelName(fileName: string): string {
+  const base = fileName.replace(/\.(json\.gz|json|gz)$/i, '')
+  const withoutTimestamp = base.replace(/_\d{8}_\d{6}$/, '')
+  if (withoutTimestamp && withoutTimestamp !== base) return withoutTimestamp
+  // 非时间戳命名的历史文件：退回旧口径（首个下划线前的片段）
+  return base.split('_')[0] || ''
+}
+
 async function handleRestore(file: ArchiveFile | Record<string, any>) {
   try {
     await ElMessageBox.confirm(`确定要恢复归档文件「${file.name}」吗？`, '确认恢复', {
@@ -453,8 +466,9 @@ async function handleRestore(file: ArchiveFile | Record<string, any>) {
     return // user cancelled
   }
 
-  // Extract model name from archive file name (convention: model_name_*.json)
-  const modelName = file.name.split('_')[0] || ''
+  // 从归档文件名解析模型名：后端约定 {model_name}_{YYYYmmdd_HHMMSS}.json.gz，
+  // 模型名本身可能含下划线（如 work_log），不能按第一个下划线硬截断。
+  const modelName = parseArchiveModelName(file.name)
 
   try {
     const result = await dataTierApi.restore(file.name, modelName)

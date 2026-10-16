@@ -314,9 +314,14 @@ class RBACService:
         for (perm,) in role_perm_rows:
             permissions.add(perm)
 
-        # 如果有管理员权限，返回所有权限
+        # 如果有管理员权限，展开为全部权限 —— 但**不提前 return**（M21）：
+        # 旧实现在此 return ({p.value for p in Permission}, set())，跳过白名单交集
+        # 与机器码限制扣减，而 check_permission(:166-191) 会先查 restricted_perms
+        # 再判管理员 —— 两条路径对同一用户给出不同答案（get_user_permissions 返回
+        # 的权限集合里含会被 check_permission 拒绝的权限）。现统一为：先展开全部
+        # 权限，再与普通路径共用同一套收敛逻辑（白名单交集 + 限制扣减）。
         if Permission.ADMIN_ALL.value in permissions:
-            return ({p.value for p in Permission}, set())
+            permissions = {p.value for p in Permission}
 
         # 检查用户白名单权限
         user_allowed = None
@@ -614,14 +619,21 @@ class RBACService:
         description: str,
         permissions: List[str],
         is_system: bool = False,
-        code: Optional[str] = None,
         db: Session = None,
+        code: Optional[str] = None,
     ) -> str:
         """创建角色
 
-        ``code`` 为可空唯一编码：不传时按名称派生一次（大写、非字母数字转下划线），
+        code 为可空唯一编码：不传时按名称派生一次（大写、非字母数字转下划线），
         与前端此前的展示规则一致，避免列表出现空白编码。
+
+        注意参数顺序（R27 回归）：code 必须排在 db 之后。历史上它被插在
+        is_system 与 db 之间，使既有位置参数调用
+        create_role(name, desc, perms, is_system, db) 把 db 当成 code，
+        真正的 db 变成 None，触发 AttributeError: NoneType has no attribute add。
         """
+        if db is None:
+            raise ValueError("create_role 需要显式传入 db 会话")
         derived = (code or "").strip() or re.sub(r"[^0-9A-Za-z]+", "_", name.upper()).strip("_")
         role = RbacRole(name=name, description=description, is_system=is_system, code=derived or None)
         db.add(role)

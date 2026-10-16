@@ -5,6 +5,68 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.17] - 2026-10-16 — 🛡️ R28 全系统排查修复（门禁 / 数据域 / 服务正确性 / 前端与构建）
+
+> 用例口径：后端 **12,6xx** / 前端 **6,3xx**（以 CI 实测为准）；双向覆盖率 100%（行+分支）。
+> 条目来源：`docs/系统全面排查报告-2026-10-14.md`（R27，115 条）中本批承担部分。
+
+### Security
+- **用户管理数据域收口**：`/users` 列表、待审列表、员工列表三处各自实现子树过滤
+  → 统一到 `_apply_user_data_scope(query, current_user, db)`，且 `db` 改为**必填**
+  （漏传即 TypeError，fail-closed）；悬空组织退化为只命中本人。
+- **管理端门禁补齐**：`/export/villages`、`/data-sync` 下载与冲突/日志、`/system-health/overview`
+  /`disk-space`/`table-stats`、`/system/environment`、`/monitoring` 告警规则与历史、
+  `/system/config` 全部读端点、`/batch/validate`（并加表名白名单）、`/analytics/health`
+  均收敛为管理员（或登录）可见，非管理员 403。
+- **回收站批量操作数据域过滤**：批量恢复/彻底删除先按调用者数据域收敛 ids（跨组织 id
+  静默剔除）；模型缺组织列时 **fail-closed 拒绝全部**，杜绝部门级 admin 物理清除他人数据。
+- **任务端点归属校验**：`cancel`/`delete` 限本人或管理员；`/tasks/running/count` 补认证；
+  `task_type` 按枚举校验。
+- **工作日志可见性**：非管理员仅见**本人**日志（原实现额外放行所有人的 `system_auto`
+  自动留痕 → 他人操作流水全员可见）；`system_auto` 为系统保留分类，禁止客户端创建/改写。
+- **近期活动**：`/messages/recent-activities` 非管理员仅返回本人审计活动（不再回吐全局审计）。
+- **仪表盘近期动态数据域**：`/dashboard/recent-activities` 的项目 / 经费 / 审批三路 feed
+  此前**无任何过滤**——任意登录用户可读到跨组织项目名、负责人与审批标题（与上条同类）。
+  现按 `get_org_scope` 口径收敛；审批任务（模型无组织列）按「我提交 / 待我审批」收敛；
+  只有全量访问者读写**共享**缓存，普通用户按域现算，绝不命中管理员范围缓存。
+- **报表导出数据域**：公文报告导出（`/export/report-word`、`/export/report-pdf`）的
+  `generate_*_report_data` 六个方法改为**强制 `current_user` 位置参数**（漏传即
+  `TypeError`，fail-closed）并在服务层套数据域——部门级 admin 不再能借导出读到跨组织
+  的村/校/项目/经费总量与金额（与同模块 `/export/funds`、`/export/comprehensive` 口径一致）；
+  `/export/comprehensive` 的用户数聚合同步收敛（原为全库 `count()`）。
+- **错误细节不出站**：`system_health`、`system/metrics`、`/overview` 等去 `str(e)`、
+  数据库绝对路径、表名清单与行数明细，原文只进日志；`/encryption/status` 不再回吐 KDF 迭代数。
+- **匿名反馈长度上限**：`content` ≤ 5000 字（原为无上限 TEXT，可被单请求灌入任意体积）。
+- **令牌刷新携带声明**：`refresh_access_token` 现携带原 refresh token 的非保留声明
+  （含 `token_version`），修复「刷新后 access token 立即被判定失效」的 R20 L2 缺陷。
+
+### Fixed
+- **服务层正确性**：审批工作流 `approve/reject` 改带条件**原子抢占**（并发/重放零重复落账）；
+  数据包批量 upsert 只更新记录**实际携带**的列（缺键不再写成 NULL，空更新集合退化为 DO NOTHING）；
+  组织导入两阶段（先 upsert 记源 id→本机行，再对新建行按父链回填 `parent_id/path/level`，既有行不动）；
+  冲突解决保留双方时后缀唯一化（uuid）；权限包导入外键重映射；2FA 启用并发撞唯一键回退更新；
+  通知偏好 getter 只读 + 写入统一 upsert；合同履约评分改为真实实现（删除无消费方的占位方法）。
+- **响应形状统一**：`/funds/budgets/transactions`（列表 + 创建）与 `/villages/{id}` 改
+  `ok_list`/`success_response` 信封并补分页 total；`/funds/lifecycle/quota_lock` 不再谎报
+  「额度已锁定」（模型无锁定字段 → 如实回吐 `locked=false`）；`/rbac/roles/{id}` 404 统一信封。
+- **导入预览重复检测**改按导入行名称 `IN` 查询（原为全表名称扫描 + 无分页）。
+- **平台与性能**：中间件链纯 ASGI 化并合并尾斜杠/charset 处理；限流器支持 `settings.RATE_LIMIT_*`
+  与整体关闭；token 黑名单清理节流；缓存改 LRU 并支持缓存 None；Redis 适配器加锁并接线
+  `REDIS_ENABLED`（未装 redis 客户端时安全降级）；系统时钟统一 UTC（编号生成/报表时间）；
+  迁移兜底委托 `migration_helper` 单一实现；敏感日志过滤器覆盖异常堆栈（PII 不再随异常落盘）；
+  磁盘路径跨平台修正（不再硬编码 `C:\`）。
+- **构建与发布**：`pr-checks` 各作业补 `timeout-minutes`、`nightly-full` 加 `concurrency`；
+  `build-arm64` 改 `npm ci`；`vcredist` 收敛为 win 条件 `extraResources`；deb 依赖补
+  `libxtst6/libatspi2.0-0`；Electron 真分块读取大文件、worker 路径白名单上提主进程、
+  后端重启计数改「稳定存活 N 秒后才重置」、preload 无消费 IPC 收敛、`will-navigate`
+  file:// 白名单化；卸载删除真实 userData 目录口径统一；CI 收录 `_build_info.json`
+  使发布件构建指纹不再恒为 dev。
+- **构建指纹探测**：`build_info` 仅在确实存在 `.git`（目录或 worktree 文件）时才调用
+  git，打包 / 未装 git 的离线终端不再白等超时；超时由 5s 收紧到 2s。
+
+### Docs
+- 更新《构建打包指南》《OFFLINE_UPGRADE》，并把介绍 PPT 的版本口径统一到 v1.12.17。
+
 ## [1.12.16] - 2026-10-14 — 🔐 安全与权限收敛 + 会话管理落地
 
 > 用例口径：后端 **12,422** / 前端 **6,323**（新增/订正用例后以 CI 实测为准）。

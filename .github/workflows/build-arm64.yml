@@ -43,6 +43,13 @@ jobs:
             fi
           done
 
+      # H12（2026-10-14）：ARM64 流水线此前不生成构建元数据 —— spec 的
+      # app/core/_build_info.json 条件收录随之落空，冻结点永远是 dev 指纹。
+      # 在 docker 构建前先在宿主生成（Dockerfile COPY backend/ 会带入，spec datas
+      # 收录到 _internal/app/core/）；非 tag 手动触发与 Windows 出包同口径传 ref_name。
+      - name: Generate build info (H12)
+        run: python3 scripts/generate_build_info.py "${{ github.ref_name || 'dev' }}"
+
       - name: Build backend binary in ARM64 Debian Buster container
         run: |
           mkdir -p backend/dist
@@ -81,7 +88,12 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ./frontend
         run: |
-          npm install --legacy-peer-deps --no-fund --no-audit
+          # npm ci 严格按 frontend/package-lock.json 安装 —— 旧写法 npm install 在
+          # lock 与 package.json 漂移时会静默改 lock，产出不可复现（M53 已把 lock
+          # 纳入版本单一事实源，用 npm ci 才能在 CI 里暴露漂移）。
+          # 层缓存不受影响：actions/setup-node 的 cache: 'npm'（cache-dependency-path
+          # 指向 frontend/package-lock.json）缓存的是 ~/.npm 下载缓存，npm ci 同样命中。
+          npm ci --legacy-peer-deps --no-fund --no-audit
 
       - name: Build frontend
         working-directory: ./frontend
@@ -107,7 +119,9 @@ jobs:
 
       - name: Install root dependencies (ARM64 cross-compile)
         run: |
-          npm install --legacy-peer-deps --no-fund --no-audit
+          # 同 build-frontend：npm ci 按根 package-lock.json 严格安装（可复现）。
+          # 根部 lock 的 version 字段已由 scripts/sync-version.js 纳入同步目标（M53）。
+          npm ci --legacy-peer-deps --no-fund --no-audit
         env:
           npm_config_arch: arm64
           npm_config_target_arch: arm64
@@ -161,6 +175,22 @@ jobs:
           echo "=== Icon ==="
           ls -lh resources/icons/app-circle-256.png
 
+      # M54（2026-10-14）：打包卫生门禁与 Windows 出包同口径（build-windows.yml 8a）。
+      # ARM64 此前只有 DEB 冒烟（arch/glibc），无"产物不得含测试资产"校验。
+      # 在 electron-builder 之前对 onedir 后端 + 前端 dist 做文件树/PYZ 三重扫描，
+      # 违规即失败，杜绝携测试资产出厂。
+      - name: Verify no test files in package
+        run: |
+          python3 scripts/verify_package_no_tests.py \
+            --backend-dir backend/dist/assistance-backend \
+            --frontend-dir frontend/dist
+
+      # H12 产物门禁（与 build-windows.yml 8b 同口径）：冻结点必须携带 CI 生成的
+      # app/core/_build_info.json（builder=ci），否则 /health/full 指纹恒 dev。
+      - name: Verify build info in package
+        run: |
+          python3 scripts/verify_build_info.py --backend-dir backend/dist/assistance-backend
+
       - name: Cache Electron binary
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -180,9 +210,10 @@ jobs:
 
       # 版本号与发布 tag 对齐（与 build-windows.yml:115 一致）——否则 Electron DEB
       # 产物永远使用仓库 package.json 的静态版本（历史 DEB 1.10.0 ≠ Setup 1.10.4 根因）
+      # M53（2026-10-14）：与 build-windows.yml 统一使用单一版本工具
       - name: Sync version from tag
         if: startsWith(github.ref, 'refs/tags/v')
-        run: python scripts/sync_version.py "${GITHUB_REF_NAME#v}"
+        run: node scripts/sync-version.js --write "${GITHUB_REF_NAME#v}"
 
       - name: Build with electron-builder
         run: |

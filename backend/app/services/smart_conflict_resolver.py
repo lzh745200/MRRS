@@ -3,7 +3,7 @@ Smart Conflict Resolver
 智能冲突解决服务 - 处理数据导入时的ID和业务键冲突
 """
 
-import time
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -172,6 +172,31 @@ class SmartConflictResolver:
         conflict_records = []
         no_conflict_records = []
 
+        # M27（R27 排查）：批量预取。旧实现逐条 import_record 发一次 SELECT
+        # （N+1）；单列业务键下改为一次 IN 查询取回全部命中行，多列业务键退回
+        # 逐条查询（正确性优先）。
+        model_cols = _model_columns(model_class)
+        single_key = key_fields[0] if len(key_fields) == 1 else None
+        key_attr = getattr(model_class, single_key, None) if single_key is not None else None
+        prefetched: Dict[Any, Any] = {}
+        # 列描述符具备 in_ 能力时才走预取（真实模型必然具备；探针/替身类
+        # 退回逐条查询，语义不变）。
+        use_prefetch = single_key is not None and hasattr(key_attr, "in_")
+        if use_prefetch:
+            candidate_values = {
+                record.get(single_key)
+                for record in import_records
+                if record.get(single_key) is not None
+            }
+            if candidate_values:
+                prefetch_conditions = [key_attr.in_(candidate_values)]
+                if self.organization_id is not None and _TENANT_COLUMN in model_cols:
+                    prefetch_conditions.append(
+                        getattr(model_class, _TENANT_COLUMN) == self.organization_id
+                    )
+                for row in self.db.query(model_class).filter(and_(*prefetch_conditions)).all():
+                    prefetched.setdefault(getattr(row, single_key, None), row)
+
         for import_record in import_records:
             # 构建业务键查询条件（仅使用code字段）
             business_key = {field: import_record.get(field) for field in key_fields}
@@ -180,7 +205,6 @@ class SmartConflictResolver:
             query_conditions = [getattr(model_class, k) == v for k, v in business_key.items() if v is not None]
 
             # 深审 #63：租户列参与收敛（模型确实有该列时才加）
-            model_cols = _model_columns(model_class)
             if self.organization_id is not None and _TENANT_COLUMN in model_cols:
                 query_conditions.append(
                     getattr(model_class, _TENANT_COLUMN) == self.organization_id
@@ -191,7 +215,10 @@ class SmartConflictResolver:
                 new_records.append(import_record)
                 continue
 
-            local_record = self.db.query(model_class).filter(and_(*query_conditions)).first()
+            if use_prefetch and business_key.get(single_key) is not None:
+                local_record = prefetched.get(business_key[single_key])
+            else:
+                local_record = self.db.query(model_class).filter(and_(*query_conditions)).first()
 
             if not local_record:
                 # 本地不存在，标记为新记录
@@ -373,11 +400,14 @@ class SmartConflictResolver:
 
         new_data = {k: v for k, v in self._writable_items(model_class, import_record)}
 
-        # 修改业务键（添加时间戳后缀）
+        # 修改业务键（添加随机后缀）
+        # M24（R27 排查）：旧实现用秒级时间戳后缀，同批次同 code 的多条记录会
+        # 在同一秒内生成相同业务键 —— 唯一约束报错或再次判为冲突。改用随机短
+        # 后缀，保证同批内唯一。
         code_field = self._get_code_field(data_type)
         if code_field and code_field in new_data:
             original_code = new_data[code_field]
-            new_data[code_field] = f"{original_code}_imp_{int(time.time())}"
+            new_data[code_field] = f"{original_code}_imp_{uuid.uuid4().hex[:8]}"
 
         self._update_foreign_keys(new_data, data_type, id_mapping)
 
@@ -541,9 +571,16 @@ class SmartConflictResolver:
             id_mapping: ID映射表
         """
         # 外键映射关系
+        # M25（R27 排查）：旧实现漏了 funds.village_id / funds.school_id，
+        # 跨机导入时经费会挂到**源机**的村/学校 ID 上（轻则 FK 报错，重则
+        # 关联到本机无关记录）。
         foreign_key_mapping = {
             "projects": {"village_id": "villages"},
-            "funds": {"project_id": "projects"},
+            "funds": {
+                "project_id": "projects",
+                "village_id": "villages",
+                "school_id": "schools",
+            },
         }
 
         if data_type in foreign_key_mapping:

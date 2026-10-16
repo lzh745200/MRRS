@@ -231,6 +231,7 @@ import {
 } from '@/api/message'
 import { get } from '@/api/request'
 import { logger } from '@/utils/logger'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { format } from '@/utils'
 const { pushSafe } = useRouterSafe()
@@ -380,10 +381,11 @@ function getRowClassName({ row }: { row: Message }) {
 async function handleMarkRead(message: Message) {
   try {
     await markAsRead([message.id])
+    // 仅在请求成功后更新本地状态：失败时 is_read/未读数保持原值，与后端一致
     message.is_read = true
     unreadCount.value = Math.max(0, unreadCount.value - 1)
-  } catch {
-    // 静默失败
+  } catch (e: unknown) {
+    ElMessage.error(getErrorMessage(e, '标记已读失败'))
   }
 }
 

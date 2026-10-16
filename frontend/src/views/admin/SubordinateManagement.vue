@@ -113,6 +113,7 @@ import { DIALOG_SM } from '@/config/dialog'
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post, put } from '@/api/request'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 interface SubordinateInstance {
   id: number
@@ -170,7 +171,7 @@ async function loadData() {
     instances.value = data.items || []
     total.value = data.total || 0
   } catch (e: unknown) {
-    ElMessage.error(e instanceof Error ? e.message : '加载失败')
+    ElMessage.error(getErrorMessage(e, '加载失败'))
   } finally {
     loading.value = false
   }
@@ -201,7 +202,7 @@ async function handleRegister() {
     page.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     await loadData()
   } catch (e: unknown) {
-    ElMessage.error(e instanceof Error ? e.message : '注册失败')
+    ElMessage.error(getErrorMessage(e, '注册失败'))
   } finally {
     registering.value = false
   }
@@ -210,15 +211,20 @@ async function handleRegister() {
 async function handleToggleLicense(row: SubordinateInstance) {
   const newStatus = row.licenseStatus === 'active' ? 'revoked' : 'active'
   const action = newStatus === 'active' ? '授权' : '撤销授权'
+  // 确认与请求拆成两段 try/catch：取消是正常操作需静默，请求失败必须提示（原先同一 catch 会把失败也吞掉）
   try {
     await ElMessageBox.confirm(`确认${action}该下级单位？`, '提示', { type: 'warning' })
+  } catch {
+    return // 用户取消
+  }
+  try {
     // 后端授权/撤销接口为 PUT /subordinates/{id}（POST 会 405 静默失败）
     await put(`/subordinates/${row.id}`, { license_status: newStatus })
     ElMessage.success(`${action}成功`)
     page.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     await loadData()
-  } catch {
-    // 用户取消
+  } catch (e: unknown) {
+    ElMessage.error(getErrorMessage(e, `${action}失败`))
   }
 }
 
@@ -227,7 +233,7 @@ async function handleGeneratePackage(row: SubordinateInstance) {
     await post('/control-packages/generate', { organization_id: row.organizationId })
     ElMessage.success('管控配置包已生成，请下载')
   } catch (e: unknown) {
-    ElMessage.error(e instanceof Error ? e.message : '生成失败')
+    ElMessage.error(getErrorMessage(e, '生成失败'))
   }
 }
 
@@ -250,7 +256,7 @@ async function handleFileSelected(event: Event) {
     page.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     await loadData()
   } catch (e: unknown) {
-    ElMessage.error(e instanceof Error ? e.message : '导入失败')
+    ElMessage.error(getErrorMessage(e, '导入失败'))
   } finally {
     input.value = ''
   }

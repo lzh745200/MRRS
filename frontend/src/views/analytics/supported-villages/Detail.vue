@@ -299,23 +299,22 @@ let trendChart: ReturnType<typeof echarts.init> | null = null
 const trendData = ref<{ years: number[]; incomes: number[] }>({ years: [], incomes: [] })
 
 async function loadTrendData() {
-  if (!village.value) return
-  const years: number[] = []
-  const incomes: number[] = []
-  for (const year of availableYears) {
-    try {
-      const data = await getYearlyData(village.value.id, year)
-      const income = (data as any)?.income?.perCapitaIncome
-      if (income != null) {
-        years.push(year)
-        incomes.push(Number(income))
+  const current = village.value
+  if (!current) return
+  // 各年份请求互相独立，并发拉取（原串行 for-await 需 N 次往返，年份一多就明显变慢）
+  const results = await Promise.all(
+    availableYears.map(async (year) => {
+      try {
+        const data = await getYearlyData(current.id, year)
+        const income = (data as any)?.income?.perCapitaIncome
+        return income != null ? { year, income: Number(income) } : null
+      } catch {
+        return null // 无数据年份跳过
       }
-    } catch {
-      // skip years with no data
-    }
-  }
+    })
+  )
+  const paired = results.filter((r): r is { year: number; income: number } => r !== null)
   // Sort ascending by year
-  const paired = years.map((y, i) => ({ year: y, income: incomes[i] }))
   paired.sort((a, b) => a.year - b.year)
   trendData.value = {
     years: paired.map((p) => p.year),

@@ -493,13 +493,16 @@ def client():
         original_overrides = app.dependency_overrides.copy()
         app.dependency_overrides[get_db] = override_get_db
 
-        yield TestClient(app, raise_server_exceptions=False)
-
-        # 清理：恢复原始依赖覆盖与全局 engine/SessionLocal
-        app.dependency_overrides = original_overrides
-        _db_module.engine = _original_engine
-        _db_module.SessionLocal = _original_session_local
-        db.close()
+        try:
+            yield TestClient(app, raise_server_exceptions=False)
+        finally:
+            # 清理必须在 finally：测试体抛异常时若跳过还原，app.dependency_overrides
+            # 会残留本用例的内存库覆盖，后续测试复用同一 app 实例时拿到已耗尽
+            # mock（side_effect StopIteration）或错误会话 —— 顺序污染的通用根因。
+            app.dependency_overrides = original_overrides
+            _db_module.engine = _original_engine
+            _db_module.SessionLocal = _original_session_local
+            db.close()
     except Exception:
         # 失败必须显式暴露：静默吞掉会让 fixture 返回 None, 所有消费方
         # 测试被悄悄 skip, 呈现"绿但什么都没测"的假象（覆盖率门禁只能

@@ -27,15 +27,21 @@ async def get_system_overview(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取系统整体健康状态"""
+    """获取系统整体健康状态
+
+    M4：基础设施健康详情（磁盘/库文件/WAL）仅管理员可见。
+    """
+    require_admin(current_user, error_message="仅管理员可查看系统健康概览")
     checks = {}
 
     # 1. 数据库连接
     try:
         db.execute(text("SELECT 1"))
         checks["database"] = {"status": "ok", "message": "数据库连接正常"}
-    except Exception as e:
-        checks["database"] = {"status": "error", "message": f"数据库连接异常: {str(e)}"}
+    except Exception:
+        # M4：异常原文可能携带连接串/内部路径，仅进日志，不回显给客户端
+        logger.warning("系统健康概览：数据库连接检查失败", exc_info=True)
+        checks["database"] = {"status": "error", "message": "数据库连接异常，请查看服务日志"}
 
     # 2. 磁盘空间
     disk = _check_disk_space()
@@ -122,11 +128,13 @@ async def run_integrity_check(
                 "timestamp": datetime.now().isoformat(),
             }
         )
-    except Exception as e:
+    except Exception:
+        # M4 收尾（R28）：异常原文（含 SQL 片段/路径）仅进日志，不回显客户端
+        logger.error("SQLite 完整性校验执行失败", exc_info=True)
         return success_response(
             data={
                 "status": "error",
-                "messages": [str(e)],
+                "messages": ["完整性校验执行失败，请查看服务日志"],
                 "warnings": [],
                 "elapsed_seconds": round(time.time() - start, 2),
                 "timestamp": datetime.now().isoformat(),
@@ -162,11 +170,12 @@ async def run_wal_checkpoint(
                 "timestamp": datetime.now().isoformat(),
             }
         )
-    except Exception as e:
+    except Exception:
+        logger.error("WAL 检查点执行失败", exc_info=True)
         return success_response(
             data={
                 "status": "error",
-                "message": str(e),
+                "message": "WAL 检查点执行失败，请查看服务日志",
                 "timestamp": datetime.now().isoformat(),
             }
         )
@@ -179,7 +188,11 @@ async def run_wal_checkpoint(
 async def get_disk_space(
     current_user=Depends(get_current_user),
 ):
-    """获取磁盘空间详情"""
+    """获取磁盘空间详情
+
+    M4：磁盘容量属主机基础设施信息，仅管理员可见。
+    """
+    require_admin(current_user, error_message="仅管理员可查看磁盘空间详情")
     return success_response(data=_check_disk_space())
 
 
@@ -191,7 +204,11 @@ async def get_table_stats(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取各表记录数统计"""
+    """获取各表记录数统计
+
+    M4：全库表清单与行数分布属运维信息，仅管理员可见。
+    """
+    require_admin(current_user, error_message="仅管理员可查看表统计信息")
     tables = db.execute(
         text("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     ).fetchall()
@@ -236,11 +253,12 @@ async def run_vacuum(
                 "elapsed_seconds": elapsed,
             }
         )
-    except Exception as e:
+    except Exception:
+        logger.error("VACUUM 压缩执行失败", exc_info=True)
         return success_response(
             data={
                 "status": "error",
-                "message": str(e),
+                "message": "数据库压缩执行失败，请查看服务日志",
                 "elapsed_seconds": round(time.time() - start, 2),
             }
         )
@@ -275,8 +293,10 @@ def _check_disk_space() -> dict:
             "total_gb": total_gb,
             "used_percent": used_pct,
         }
-    except Exception as e:
-        return {"status": "error", "message": f"无法获取磁盘信息: {str(e)}"}
+    except Exception:
+        # M4 收尾（R28）：异常原文不出站，仅进日志
+        logger.warning("磁盘空间读取失败", exc_info=True)
+        return {"status": "error", "message": "无法获取磁盘信息，请查看服务日志"}
 
 
 def _get_db_file_info(db: Session) -> dict:
@@ -290,16 +310,17 @@ def _get_db_file_info(db: Session) -> dict:
                 mtime = os.path.getmtime(db_path)
                 return {
                     "status": "ok",
-                    "path": db_path,
+                    # M4：不回吐数据库文件绝对路径（信息泄露），仅保留体积等聚合值
                     "size_mb": round(size / (1024 * 1024), 2),
                     "last_modified": datetime.fromtimestamp(mtime).isoformat(),
                     "message": f"数据库文件 {round(size / (1024 * 1024), 2)}MB",
                 }
         return {"status": "ok", "message": "内存数据库或路径未知", "size_mb": 0}
-    except Exception as e:
+    except Exception:
+        logger.warning("数据库文件信息读取失败", exc_info=True)
         return {
             "status": "warning",
-            "message": f"无法获取文件信息: {str(e)}",
+            "message": "无法获取数据库文件信息，请查看服务日志",
             "size_mb": 0,
         }
 
@@ -333,5 +354,6 @@ def _check_wal_status(db: Session) -> dict:
             "journal_mode": journal_mode,
             "message": f"日志模式: {journal_mode}",
         }
-    except Exception as e:
-        return {"status": "warning", "message": f"无法检查WAL状态: {str(e)}"}
+    except Exception:
+        logger.warning("WAL 状态检查失败", exc_info=True)
+        return {"status": "warning", "message": "无法检查WAL状态，请查看服务日志"}

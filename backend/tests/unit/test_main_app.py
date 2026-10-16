@@ -380,10 +380,12 @@ class TestMigrateMissingColumns:
             assert any("DISABLE_AUTO_MIGRATION=1" in m for m in info_msgs)
 
     def test_inspector_creation_failure(self):
+        # M41：补列实现已单点收敛到 app.core.migration_helper，inspect 与告警日志
+        # 均归属该模块（app.main 仅保留转发包装），故 patch/断言目标随之迁移。
         with (
             patch.dict(os.environ, {}),
-            patch("sqlalchemy.inspect", side_effect=Exception("no insp")),
-            patch("app.main.logger.warning") as mock_warn,
+            patch("app.core.migration_helper.sa_inspect", side_effect=Exception("no insp")),
+            patch("app.core.migration_helper.logger.warning") as mock_warn,
         ):
             _migrate_missing_columns(MagicMock(), MagicMock())
             # 弃用警告与 inspector 失败警告均会触发；仅断言 inspector 失败警告存在
@@ -888,6 +890,17 @@ class TestDatabaseHealthMonitoring:
         ):
             _start_database_health_monitoring()
             svc.start_monitoring.assert_called_once()
+            mock_info.assert_called_once()
+
+    def test_start_disabled_by_config(self):
+        """HEALTH_CHECK_ENABLED=False 时不启动后台监控（R28 接线该配置键）"""
+        with (
+            patch("app.core.config.settings.HEALTH_CHECK_ENABLED", False),
+            patch("app.services.database_health_service.database_health_service") as svc,
+            patch("app.main.logger.info") as mock_info,
+        ):
+            _start_database_health_monitoring()
+            svc.start_monitoring.assert_not_called()
             mock_info.assert_called_once()
 
     def test_start_exception(self):

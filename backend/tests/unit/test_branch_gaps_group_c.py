@@ -204,12 +204,12 @@ class TestSmartConflictResolverBranches:
         resolve_conflicts_with_strategy / _import_new_records 均返回新字典
         而不改写外层映射，故 491 行条件恒为真。
         """
-        local = SimpleNamespace(id=1, village_name="旧村名", updated_at=None)
+        local = SimpleNamespace(id=1, village_name="新村名", memo="旧", updated_at=None)
         db = MagicMock()
-        db.query.return_value = _query_mock(first=local)
+        db.query.return_value = _query_mock(first=local, all=[local])
         resolver = SmartConflictResolver(db)
         result = resolver.import_with_id_mapping(
-            {"villages": [{"id": 100, "village_name": "新村名"}]}, strategy=ConflictStrategy.SKIP
+            {"villages": [{"id": 100, "village_name": "新村名", "memo": "新"}]}, strategy=ConflictStrategy.SKIP
         )
         assert result == {"villages": {100: 1}}
         db.flush.assert_not_called()  # SKIP 策略不写库

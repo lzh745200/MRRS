@@ -370,15 +370,18 @@ class TestOrganizationBranchGaps:
         assert resp["code"] == 200
 
     async def test_move_organization_parent_chain_terminates(self):
-        """848->855：新父级父链到根自然结束 → 正常移动，不抛循环错误。"""
+        """父链到根自然结束 → 正常移动，不抛循环错误。"""
         org = SimpleNamespace(id=5, parent_id=None, name="子组织")
         root = SimpleNamespace(id=2, parent_id=None, name="根组织")
         db = MagicMock()
         db.query.side_effect = [_query(org), _query(root), _query(root)]
         body = org_mod.MoveOrganizationRequest(new_parent_id=2)
 
+        # recompute_subtree_paths 走真实 OrganizationService 会查库（Mock 下耗尽
+        # side_effect）；本用例聚焦父链遍历，path 重算由专用测试覆盖
         with patch.object(org_mod, "safe_commit"), \
-             patch.object(org_mod, "cache_manager") as cm:
+             patch.object(org_mod, "cache_manager") as cm, \
+             patch("app.services.organization_service.OrganizationService.recompute_subtree_paths"):
             cm.delete = AsyncMock()
             resp = await org_mod.move_organization(5, body, current_user=_admin_user(), db=db)
 

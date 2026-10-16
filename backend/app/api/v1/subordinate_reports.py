@@ -117,12 +117,19 @@ def generate_status_report(
     # 获取数据库文件大小
     db_size_mb = 0.0
     try:
-        import os
-        db_path = settings.DATABASE_URL.replace("sqlite:///", "")
-        if os.path.exists(db_path):
-            db_size_mb = round(os.path.getsize(db_path) / (1024 * 1024), 2)
+        # R28 §3：路径口径必须走 app.utils.paths.get_database_path() 单一事实源
+        # （env DATABASE_URL → settings.DATABASE_URL → 静态推断）。原实现自拼
+        # settings.DATABASE_URL.replace("sqlite:///", "")：Electron 打包态
+        # DATABASE_URL 由 env 注入时与 settings 分叉，db_size_mb 恒为 0
+        # （上报给上级的"库大小"是假的）。
+        from app.utils.paths import get_database_path
+
+        db_path = get_database_path()
+        if db_path.is_file():
+            db_size_mb = round(db_path.stat().st_size / (1024 * 1024), 2)
     except Exception:
-        pass
+        # 路径解析/文件读取失败不阻断上报包生成（size 记 0），但必须留痕
+        logger.warning("读取数据库文件大小失败，上报包 db_size_mb 记为 0", exc_info=True)
 
     report_data = {
         "report_type": "status",

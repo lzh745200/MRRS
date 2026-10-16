@@ -1421,7 +1421,7 @@ const checkPageMode = () => {
 }
 onMounted(async () => {
   checkPageMode()
-  // 并行加载数据，提高页面加载性能
+  // 历史/附件依赖 loadFundDetail 解析出的 fundData.id，必须串行：先详情后历史
   await loadFundDetail()
   await loadAllHistory()
 })

@@ -174,9 +174,21 @@ backend/app/core/_build_info.json
 .scratch/**/*.txt
 .scratch/**/*.json
 .scratch/**/*.py
+.scratch/**/*.js
+.scratch/**/*.cjs
+.scratch/**/*.sh
+.scratch/**/.coverage*
 .scratch/**/*.log
 .scratch/**/*.db*
 .scratch/**/r25-run/
+# 一次性验证脚本会复制 HEAD 版实现做新旧对照（_wpool_verify_m50.js / head-electron/），
+# 属会话中间产物，不入库。
+.scratch/**/head-electron/
+
+# ===== 会话本地状态（WorkBuddy 记忆/技能），不入库 =====
+# 说明：.workbuddy-ai/ 存的是"项目相关数据"（记忆、技能），不是可丢弃缓存 ——
+# 因此**不删除**，但也不应进入产品仓库（属会话本地状态，且含绝对路径）。
+.workbuddy-ai/
 
 # ===== Frontend temp scripts & outputs =====
 frontend/*_output.txt
@@ -378,3 +390,6 @@ frontend/playwright-report/
 .ocr-tmp/
 result.json
 review.json
+
+# PPT 版本口径统一脚本的一次性备份
+.scratch/**/ppt-backup-*/

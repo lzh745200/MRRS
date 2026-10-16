@@ -6,7 +6,7 @@
 from datetime import datetime
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import app.services.backup_scheduler as bm
 
@@ -116,3 +116,75 @@ class TestWeeklySchedule:
 
         mock_new_loop.assert_called_once_with()
         assert len(FakeTimer.instances) == count_before + 1
+
+
+class TestWeeklyAndIntervalReschedule:
+    """触发周任务/间隔任务的 _job，覆盖其"执行后重排下一次"分支（695 / 718）。"""
+
+    @staticmethod
+    def _fire(timer):
+        with patch("app.services.backup_scheduler.threading.Timer", FakeTimer), \
+             patch("asyncio.new_event_loop") as mock_new_loop, \
+             patch("asyncio.set_event_loop"):
+            timer.callback()
+        return mock_new_loop
+
+    def test_weekly_job_reschedules_after_fire(self):
+        _start_with_fake_now(datetime(2025, 1, 7, 10, 0, 0))
+        with patch("app.services.backup_scheduler.threading.Timer", FakeTimer):
+            bm._schedule_weekly(_noop_coro, 0, 8, 0, "test_weekly_r27")
+        weekly = next(t for t in FakeTimer.instances if t.name.endswith("test_weekly_r27"))
+        count_before = len(FakeTimer.instances)
+
+        self._fire(weekly)
+
+        # _job 执行后按周粒度重排下一次
+        assert len(FakeTimer.instances) == count_before + 1
+
+    def test_interval_job_reschedules_after_fire(self):
+        _start_with_fake_now(datetime(2025, 1, 7, 10, 0, 0))
+        with patch("app.services.backup_scheduler.threading.Timer", FakeTimer):
+            bm._schedule_interval(_noop_coro, 60, "test_interval_r27")
+        interval = next(t for t in FakeTimer.instances if t.name.endswith("test_interval_r27"))
+        count_before = len(FakeTimer.instances)
+
+        self._fire(interval)
+
+        # _job 执行后按间隔重建 Timer（718）
+        assert len(FakeTimer.instances) == count_before + 1
+
+
+async def _noop_coro():
+    """调度器触发测试用的空协程工厂。"""
+
+
+def test_weekly_job_does_not_reschedule_when_stopping():
+    """作业执行期间收到停止信号 → 不再重排（695 return 分支）。"""
+    _start_with_fake_now(datetime(2025, 1, 7, 10, 0, 0))
+    with patch("app.services.backup_scheduler.threading.Timer", FakeTimer):
+        bm._schedule_weekly(_noop_coro, 0, 8, 0, "test_weekly_stop")
+    weekly = next(t for t in FakeTimer.instances if t.name.endswith("test_weekly_stop"))
+    count_before = len(FakeTimer.instances)
+
+    bm._stopping.set()  # 模拟执行期间调用了 stop()
+    with patch("app.services.backup_scheduler.threading.Timer", FakeTimer), \
+         patch("asyncio.new_event_loop"), patch("asyncio.set_event_loop"):
+        weekly.callback()
+
+    assert len(FakeTimer.instances) == count_before
+
+
+def test_interval_job_does_not_reschedule_when_stopping():
+    """间隔任务同理（718 return 分支）。"""
+    _start_with_fake_now(datetime(2025, 1, 7, 10, 0, 0))
+    with patch("app.services.backup_scheduler.threading.Timer", FakeTimer):
+        bm._schedule_interval(_noop_coro, 60, "test_interval_stop")
+    interval = next(t for t in FakeTimer.instances if t.name.endswith("test_interval_stop"))
+    count_before = len(FakeTimer.instances)
+
+    bm._stopping.set()
+    with patch("app.services.backup_scheduler.threading.Timer", FakeTimer), \
+         patch("asyncio.new_event_loop"), patch("asyncio.set_event_loop"):
+        interval.callback()
+
+    assert len(FakeTimer.instances) == count_before

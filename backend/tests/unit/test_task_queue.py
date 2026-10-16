@@ -262,10 +262,22 @@ class TestLocalTaskQueue:
         q = LocalTaskQueue()
         q._running = True
         mock_queue = AsyncMock()
-        mock_queue.get.side_effect = asyncio.TimeoutError()
+
+        async def _timeout_after_yield():
+            # 必须真正让出一次事件循环再抛：若 side_effect 同步抛出 TimeoutError，
+            # asyncio.wait_for 不会挂起，_worker 的 `while self._running` 会退化成
+            # 不 yield 的紧循环 → 本用例的 asyncio.sleep/q.stop() 永不执行 → 死锁，
+            # 且 pytest-timeout(thread) 会 dump 全部线程栈后直接杀掉整个全量进程。
+            await asyncio.sleep(0)
+            raise asyncio.TimeoutError()
+
+        mock_queue.get.side_effect = _timeout_after_yield
         q._queue = mock_queue
         q._worker_tasks = [asyncio.create_task(q._worker("w1"))]
         await asyncio.sleep(0.05)
+        # 连续超时后 worker 必须仍存活（走的是 continue 分支，而不是 break 退出）
+        assert not q._worker_tasks[0].done()
+        assert mock_queue.get.await_count >= 2
         await q.stop()
 
     @pytest.mark.asyncio

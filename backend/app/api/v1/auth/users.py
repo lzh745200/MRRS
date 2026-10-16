@@ -155,6 +155,63 @@ def _assert_can_manage_super_admin(
         raise HTTPException(status_code=403, detail="仅超级管理员可管理超级管理员账号")
 
 
+def _apply_user_data_scope(query, current_user, db: Session):
+    """用户查询的数据域过滤（user 列表 / 待审 / staff-list 共用）。
+
+    - ALL（super_admin / is_superuser）→ 不过滤
+    - OWN_DEPT（有组织的部门级管理员）→ 本组织及下级组织（parent_id 递归子树）
+    - OWN（无组织归属者）→ 仅本人
+
+    ADR-0002 fail-closed：无组织账号绝不落入"不过滤"分支。
+
+    R28 口径（W1-#10 fail-closed）：``db`` 为**必填**参数 —— 旧实现默认
+    ``db=None``，缺失时静默退化为「仅本组织」，staff-list / 待审列表两处调用方
+    因此漏看下级组织成员。子树解析必须依赖真实会话；漏传在调用点直接 TypeError。
+    """
+    scope = get_data_scope(current_user)
+    if scope == DataScope.OWN:
+        return query.filter(User.id == getattr(current_user, "id", None))
+    if scope == DataScope.OWN_DEPT:
+        from app.core.data_permission import _get_org_subtree
+
+        org_id = getattr(current_user, "organization_id", None) or getattr(current_user, "org_id", None)
+        if org_id is None:
+            return query.filter(User.id == getattr(current_user, "id", None))
+        subtree, _names = _get_org_subtree(db, org_id)
+        # 组织不存在（被删除/悬空 id）→ 子树为空，退化为 in_([org_id]) 只命中悬空
+        # 组织自身名下的记录，仍不会放大可见范围（fail-closed）。
+        return query.filter(User.organization_id.in_(subtree or [org_id]))
+    return query
+
+
+def _assert_user_org_reachable(db: Session, current_user, target_user, *, action: str = "管理该用户") -> None:
+    """用户管理写端点的跨组织越权守卫（H4，涉军审计红线）。
+
+    历史缺陷：这些端点只有 ``require_admin``（角色级）+ 提权收敛，
+    完全没有组织可达性校验 —— role=admin、organization_id=2 的部门管理员可以
+    对其它组织的用户改角色/改组织/停用/删除/重置密码/分配权限（越权管理）。
+
+    此处与 organization.py ``_assert_org_write_scope`` / fund_budgets.py 同口径，
+    统一走 core.data_permission.assert_org_reachable：超管直接放行；非超管要求
+    目标用户所属组织在自身组织子树内，否则 403。
+
+    目标用户 ``organization_id`` 为 None 时 fail-closed（ADR-0002）：无组织归属的
+    账号不属于任何组织树分支，部门级管理员不得管理（仅超管可管理），否则会出现
+    "无组织用户人人可管"的漏洞。
+    """
+    from app.core.data_permission import assert_org_reachable
+
+    target_org_id = getattr(target_user, "organization_id", None)
+    if target_org_id is None:
+        if is_superuser(current_user):
+            return
+        raise HTTPException(
+            status_code=403,
+            detail="目标用户无组织归属，仅超级管理员可管理无组织用户",
+        )
+    assert_org_reachable(db, current_user, target_org_id, action=action)
+
+
 def _require_admin_user(current_user=Depends(get_current_user)):  # noqa: B008 - FastAPI 依赖
     """路由级管理员校验依赖（供带缓存装饰器的静态选项端点使用）。
 
@@ -286,25 +343,11 @@ async def list_users(
     query = db.query(User)
 
     # 数据范围收口（ADR-0002 fail-closed）：唯一事实源 core.data_permission。
-    # - ALL（super_admin / is_superuser）→ 不过滤
-    # - OWN_DEPT（有组织的部门级管理员）→ 本组织及下级组织
-    # - OWN（无组织者）→ 仅本人
-    # 历史缺陷：原写法在无组织时条件为假，过滤被整体跳过 → 跨组织枚举全部用户。
-    scope = get_data_scope(current_user)
-    if scope == DataScope.OWN:
-        query = query.filter(User.id == current_user.id)
-    elif scope == DataScope.OWN_DEPT:
-        from app.models.organization import Organization
-
-        child_org_ids = [
-            row[0]
-            for row in db.query(Organization.id)
-            .filter(Organization.path.contains(f"/{current_user.organization_id}/"))
-            .all()
-        ]
-        query = query.filter(
-            User.organization_id.in_([current_user.organization_id] + child_org_ids)
-        )
+    # R28 统一口径：改走共享的 _apply_user_data_scope（OWN_DEPT = 本组织及子树，
+    # parent_id 递归），与 /pending、/staff-list 同一实现。旧实现内联按
+    # Organization.path 前缀匹配子孙组织 —— 依赖 path 已被回填，遗留库或直写
+    # 组织的 path 缺失时会静默漏数据；且同文件三处各自实现，口径容易漂移。
+    query = _apply_user_data_scope(query, current_user, db=db)
 
     if username:
         query = query.filter(User.username.contains(username))
@@ -373,10 +416,20 @@ async def get_pending_users(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取待审核（未激活）的用户列表，供管理员审核"""
+    """获取待审核（未激活）的用户列表，供管理员审核
+
+    H4：按调用者数据域收敛 —— 原实现列**全库**待审核用户，任意部门管理员可看到
+    其它组织的待审账号（含用户名/邮箱），属跨组织信息外泄。约束与 ``list_users``
+    同一口径：super_admin/is_superuser 全量、部门级管理员本组织及子树、无组织者仅本人。
+    """
     require_admin(current_user)
 
-    pending_users = db.query(User).filter(User.is_active == False).all()  # noqa: E712
+    query = db.query(User).filter(User.is_active == False)  # noqa: E712
+    # R28 口径修正：传 db 以解析组织子树。旧调用漏传 db，共享函数静默退化为
+    # 「仅本组织」，与 docstring 的 «本组织及子树» 契约（及 list_users/staff-list）
+    # 不一致 —— 部门级管理员会漏看下级组织的待审账号。
+    query = _apply_user_data_scope(query, current_user, db=db)
+    pending_users = query.all()
 
     return ok_list(
         items=[
@@ -417,15 +470,11 @@ async def get_staff_list(
 ):
     """获取活跃用户列表，供任务分配/审批转交等场景使用（任何登录用户均可访问）"""
     query = db.query(User).filter(User.is_active == True)  # noqa: E712
-    # 数据范围收口（ADR-0002 fail-closed）：无组织者的 OWN_DEPT 已在 get_data_scope
-    # 内降级为 OWN，故此处不会出现“条件为假 → 跳过过滤”的越权路径。
-    scope = get_data_scope(current_user)
-    if scope == DataScope.OWN:
-        query = query.filter(User.id == current_user.id)
-    elif scope == DataScope.OWN_DEPT:
-        # 走到此处即有组织（见 get_data_scope 收口）
-        query = query.filter(User.organization_id == current_user.organization_id)
-    # DataScope.ALL — 无过滤
+    # 数据范围收口（ADR-0002 fail-closed）：与 /users 列表共用 _apply_user_data_scope ——
+    # OWN_DEPT 为**本组织及子树**。旧实现此处内联 `organization_id == 本组织`（不含
+    # 子树），同一部门级管理员在 /users 与 /staff-list 看到的成员集合不一致
+    # （R28 统一口径；无组织管理员仍由 get_data_scope 收口为 OWN，不会跳过过滤）。
+    query = _apply_user_data_scope(query, current_user, db=db)
 
     # 关键词检索（审批转交/任务分配的远程搜索；原 /user-management 列表能力迁移至此）
     if keyword and keyword.strip():
@@ -474,6 +523,11 @@ async def get_user(user_id: int, current_user=Depends(get_current_user), db: Ses
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise NotFoundException("用户不存在")
+    # H4 补口（跨组织越权读取）：非本人查看详情时目标用户须在自身组织子树内
+    # （与 update/delete/permissions/reset-password 同口径）。原实现只查角色级
+    # admin，部门级 admin 可通过遍历 id 读取他组织用户详情（手机号/邮箱/组织）。
+    if user_id != current_user.id:
+        _assert_user_org_reachable(db, current_user, user, action="查看该用户详情")
 
     org = user.organization
     org_info = {"id": org.id, "name": org.name, "code": org.code} if org else None
@@ -543,6 +597,13 @@ async def create_user(
         org = db.query(Organization).filter(Organization.id == data.organization_id).first()
         if not org:
             raise HTTPException(status_code=400, detail=f"组织ID {data.organization_id} 不存在")
+        # H4 补口（跨组织越权写入，2026-10-16 收尾）：与 update/delete/permissions/
+        # admin-reset-password 的 _assert_user_org_reachable 同口径 —— 非超管只能把
+        # 新用户创建在**自身组织子树**内，否则部门级 admin 可向任意组织投放账号
+        # （含 admin 角色账号，构成对目标组织的持久渗透）。
+        from app.core.data_permission import assert_org_reachable
+
+        assert_org_reachable(db, current_user, data.organization_id, action="在该组织下创建用户")
 
     # 验证角色有效性（兼容历史角色值：approval_leader/manager→admin，operator→user）
     role = normalize_role(data.role)
@@ -648,6 +709,13 @@ async def update_user(
         org = db.query(Organization).filter(Organization.id == update_fields["organization_id"]).first()
         if not org:
             raise HTTPException(status_code=400, detail="组织不存在")
+        # H4 补口（跨组织越权写入）：非超管只能把用户改到**自身组织子树**内的组织，
+        # 否则可把账号“推入”他组织（含改组织后脱离自身管理，或向目标组织渗透）。
+        from app.core.data_permission import assert_org_reachable
+
+        assert_org_reachable(
+            db, current_user, update_fields["organization_id"], action="把用户移动到该组织"
+        )
 
     # 验证角色有效性（归一化兼容历史角色值）
     if "role" in update_fields and update_fields["role"]:
@@ -659,6 +727,9 @@ async def update_user(
     _assert_can_manage_super_admin(current_user, target=user)
     if "role" in update_fields:
         _assert_can_manage_super_admin(current_user, target_role=update_fields["role"])
+
+    # H4：跨组织越权守卫（目标用户必须在自身组织子树内）
+    _assert_user_org_reachable(db, current_user, user, action="修改该用户")
 
     # 禁止把管理员改成“无组织”（与创建同一不变式：管理员必须有组织）
     effective_role = normalize_role(update_fields.get("role") or user.role)
@@ -701,6 +772,9 @@ async def delete_user(user_id: int, current_user=Depends(get_current_user), db: 
 
     # 提权收敛：仅 super_admin 可删除 super_admin 账号
     _assert_can_manage_super_admin(current_user, target=user)
+
+    # H4：跨组织越权守卫（删除他组织用户属越权管理）
+    _assert_user_org_reachable(db, current_user, user, action="删除该用户")
 
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="不能删除当前登录用户")
@@ -766,6 +840,9 @@ async def update_user_permissions(
     _assert_can_manage_super_admin(current_user, target=user)
     if "role" in update_fields:
         _assert_can_manage_super_admin(current_user, target_role=update_fields["role"])
+
+    # H4：跨组织越权守卫（分配他组织用户的权限属越权管理）
+    _assert_user_org_reachable(db, current_user, user, action="管理该用户权限")
 
     # 验证数据范围有效性
     if "data_scope" in update_fields:
@@ -892,6 +969,9 @@ async def admin_reset_password(
     # 提权收敛：仅 super_admin 可重置 super_admin 账号的密码，
     # 否则部门级管理员可直接接管超级管理员账号（改密 + 吊销其全部令牌）
     _assert_can_manage_super_admin(current_user, target=user)
+
+    # H4：跨组织越权守卫（重置他组织用户密码属越权接管）
+    _assert_user_org_reachable(db, current_user, user, action="重置该用户密码")
 
     from app.core.security import PasswordPolicy
 

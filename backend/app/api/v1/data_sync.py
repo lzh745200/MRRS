@@ -178,7 +178,10 @@ async def download_export_package(
     package_name: str,
     current_user: User = Depends(get_current_user),
 ):
-    """下载导出的数据包"""
+    """下载导出的数据包（仅管理员）"""
+    # R28-M2：本端点此前独缺管理员门禁——同文件的导出/导入均已 require_admin，
+    # 而下载只需猜到包名（导出文件名可预测）即可取走全量数据包。
+    require_admin(current_user, error_message="仅管理员可下载数据包")
     import re
 
     # 路径遍历防护：仅允许字母数字和下划线横线点
@@ -295,7 +298,9 @@ async def get_conflicts(
     sync_log_id: int,
     current_user: User = Depends(get_current_user),
 ):
-    """获取冲突列表"""
+    """获取冲突列表（仅管理员）"""
+    # R28-M2：冲突明细含两侧记录的字段级差异（跨机数据内容），收敛为管理员可见。
+    require_admin(current_user, error_message="仅管理员可查看同步冲突")
     try:
         conflicts = await data_sync_service.get_conflicts(sync_log_id)
         return {"success": True, "data": conflicts, "count": len(conflicts)}
@@ -343,7 +348,9 @@ async def get_sync_logs(
     limit: int = 50,
     current_user: User = Depends(get_current_user),
 ):
-    """获取同步日志"""
+    """获取同步日志（仅管理员）"""
+    # R28-M2：同步日志含包名/记录数/操作人，属运维信息，收敛为管理员可见。
+    require_admin(current_user, error_message="仅管理员可查看同步日志")
     try:
         from app.core.database import get_db
         from app.models.data_sync import DataSyncLog

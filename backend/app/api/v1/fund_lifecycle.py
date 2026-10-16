@@ -614,16 +614,27 @@ async def quota_lock(fund_id: int, current_user=Depends(get_current_user), db: S
     if getattr(fund, "project_id", None):
         _get_project_or_403(fund.project_id, current_user, db)
 
+    # R28-M12：原实现只做核验 + 写日志，**不落任何字段**却回 "额度已锁定" ——
+    # 调用方以为锁定生效，实际数据库无任何变化（复核 R27-M12 后确认 Fund 模型
+    # 只有 budget_locked（阶段2 预算基线锁），并无"额度锁定"字段；本批次不新增
+    # alembic 迁移，故按 lead 决策改为**如实语义**：不再谎报锁定成功，
+    # 而是把核验结果如实回吐（locked=False + 说明），并记录核验留痕。
     safe_commit(db)
     write_work_log(
         db, "fund", "quota_lock", fund_id,
-        f"经费 #{fund_id} 额度锁定核验通过",
+        f"经费 #{fund_id} 额度锁定核验通过（额度锁定未落库）",
         user_id=current_user.id, username=_get_username(current_user),
-        detail=f"拨付额度 {allocated:.2f}（基线核验通过）",
+        detail=f"拨付额度 {allocated:.2f}（基线核验通过；额度锁定功能未实现，未写入任何锁定状态）",
     )
     return success_response(
-        message="额度已锁定",
-        data={"fund_id": fund_id, "allocated": allocated},
+        message="拨付额度核验通过；额度锁定功能尚未实现，未写入任何锁定状态",
+        data={
+            "fund_id": fund_id,
+            "allocated": allocated,
+            "locked": False,
+            "lock_implemented": False,
+            "baseline_verified": True,
+        },
     )
 
 

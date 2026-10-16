@@ -50,6 +50,12 @@ class PermissionPackageService:
 
     def __init__(self, db: Session):
         self.db = db
+        # M27（R27 排查）：username / 角色名 → 行 的记忆化缓存。导入时同一
+        # 用户名（角色名）会在用户-角色、用户权限、菜单、遗留字段中反复出现，
+        # 旧实现每条绑定各发一次 SELECT（N+1）；一次导入内不会创建新用户，
+        # 缓存不会过期。
+        self._user_name_cache: Dict[str, Optional[User]] = {}
+        self._role_name_cache: Dict[str, Optional[RbacRole]] = {}
 
     # ================================================================
     # 导出
@@ -648,8 +654,20 @@ class PermissionPackageService:
         self.db.flush()
 
     def _import_organizations(self, organizations_data, stats, errors):
-        """导入组织信息。按 code 匹配，不存在则创建。"""
+        """导入组织信息。按 code 匹配，不存在则创建。
+
+        M26（R27 排查）：新建组织必须回填 parent_id / path / level —— 组织级
+        数据权限完全依赖 path 前缀匹配，旧实现三者都不写，导入的组织在权限
+        链路上等于隐形。分两阶段：先 upsert 并记录「源 id → 本机行」，再对
+        新建行按父链生成 path（与 organization_service 口径一致：
+        ``path = 父.path + 本机id + "/"``，根为 ``/{id}/``；父不可解析时落为
+        根）。既有行不动（其层级由本机维护）。
+        """
         from app.models.organization import Organization
+
+        source_map: Dict[Any, Organization] = {}
+        created: Dict[int, Organization] = {}
+        pending_parent: Dict[int, Any] = {}
 
         for org_data in organizations_data:
             try:
@@ -682,9 +700,10 @@ class PermissionPackageService:
                     existing.is_active = org_data.get("is_active", True)
                     existing.sort_order = org_data.get("sort_order", existing.sort_order or 0)
                     stats["organizations_updated"] += 1
+                    target = existing
                 else:
-                    # 创建新组织
-                    new_org = Organization(
+                    # 创建新组织（path/level 在第二阶段按父链回填）
+                    target = Organization(
                         name=name,
                         code=code,
                         org_type=org_data.get("org_type"),
@@ -692,11 +711,48 @@ class PermissionPackageService:
                         is_active=org_data.get("is_active", True),
                         sort_order=org_data.get("sort_order", 0),
                     )
-                    self.db.add(new_org)
+                    self.db.add(target)
                     self.db.flush()
                     stats["organizations_created"] += 1
+                    created[target.id] = target
+                    pending_parent[target.id] = org_data.get("parent_id")
+
+                source_id = org_data.get("id")
+                if source_id is not None:
+                    source_map[source_id] = target
             except Exception as e:  # pragma: no cover - 权限包内容异常兜底：逐条收集错误、不中断整包导入
                 errors.append(f"组织「{org_data.get('name', '未知')}」导入失败: {e}")
+
+        # 第二阶段（M26）：新建行按父链回填 parent_id/path/level。
+        # 源 id 只有在本次映射中可解析时才建立父子关系，否则落为根节点。
+        resolved: Dict[int, str] = {}
+
+        def _resolve_path(org: Organization, chain: set) -> str:
+            if org.id in resolved:
+                return resolved[org.id]
+            chain.add(org.id)
+            parent = source_map.get(pending_parent.get(org.id))
+            if parent is not None and parent.id != org.id and parent.id not in chain:
+                parent_path = (
+                    _resolve_path(parent, chain)
+                    if parent.id in created
+                    else (parent.path or "")
+                )
+                org.parent_id = parent.id
+            else:
+                parent = None
+                parent_path = ""
+            path = f"{parent_path}{org.id}/" if parent is not None and parent_path else f"/{org.id}/"
+            org.path = path
+            org.level = len([seg for seg in path.split("/") if seg])
+            resolved[org.id] = path
+            return path
+
+        for org in created.values():
+            _resolve_path(org, set())
+        if created:
+            self.db.flush()
+
         return stats, errors
 
     def _import_roles(self, roles_data, stats, errors):
@@ -773,9 +829,17 @@ class PermissionPackageService:
         return stats, errors
 
     def _resolve_user_by_username_or_id(self, username, user_id):
-        """跨机器安全匹配：优先 username，回退数字 ID（旧包兼容）。"""
+        """跨机器安全匹配：优先 username，回退数字 ID（旧包兼容）。
+
+        M27：username 命中/未命中均写入实例缓存，一次导入内同一用户名
+        最多查库一次；导入过程不创建新用户，缓存不会过期。
+        """
         if username:
-            user = self.db.query(User).filter(User.username == username).first()
+            if username in self._user_name_cache:
+                user = self._user_name_cache[username]
+            else:
+                user = self.db.query(User).filter(User.username == username).first()
+                self._user_name_cache[username] = user
             if user:
                 return user
         if user_id is not None:
@@ -791,9 +855,14 @@ class PermissionPackageService:
             return role_id_map[old_role_id]
         role_name = ur_data.get("role_name")
         if role_name:
-            by_name = (
-                self.db.query(RbacRole).filter(RbacRole.name == role_name).first()
-            )
+            # M27：角色名记忆化（同上，消除逐条绑定的 N+1）
+            if role_name in self._role_name_cache:
+                by_name = self._role_name_cache[role_name]
+            else:
+                by_name = (
+                    self.db.query(RbacRole).filter(RbacRole.name == role_name).first()
+                )
+                self._role_name_cache[role_name] = by_name
             if by_name:
                 return by_name.id
         exists = self.db.query(RbacRole).filter(RbacRole.id == old_role_id).first()
@@ -836,7 +905,8 @@ class PermissionPackageService:
                 if not isinstance(menu_data, dict):
                     raise ValueError(f"菜单数据格式错误（应为对象，实际 {type(menu_data).__name__}）")
                 username = menu_data.get("username", "")
-                user = self.db.query(User).filter(User.username == username).first()
+                # M27：走记忆化解析器，消除逐条菜单记录的用户名查询
+                user = self._resolve_user_by_username_or_id(username, None)
                 if not user:
                     continue
                 incoming = menu_data.get("allowed_menus", [])
@@ -867,7 +937,8 @@ class PermissionPackageService:
                 if not isinstance(legacy_data, dict):
                     raise ValueError(f"遗留权限数据格式错误（应为对象，实际 {type(legacy_data).__name__}）")
                 username = legacy_data.get("username", "")
-                user = self.db.query(User).filter(User.username == username).first()
+                # M27：走记忆化解析器，消除逐条遗留记录的查询
+                user = self._resolve_user_by_username_or_id(username, None)
                 if not user:
                     continue
                 if merge_mode:

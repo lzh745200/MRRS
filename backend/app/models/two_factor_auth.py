@@ -18,6 +18,8 @@ class TwoFactorAuth(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    # 应用层加密列（TwoFactorService 经 encrypt_field/decrypt_field 读写），历史列
+    # 类型非 EncryptedText；改列类型需迁移，业务代码禁止绕过服务直接写明文。
     secret_key = Column(String(255), nullable=False)  # 加密存储
     # MutableList 包装是必需的，不是风格选择（2026-09-06）：
     # 裸 Column(JSON) 对"就地修改"（list.remove/append）不产生 attribute 事件，

@@ -10,6 +10,7 @@
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +18,7 @@ from fastapi.testclient import TestClient
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.main import app
+from app.models.fund_lifecycle import ContractStatus
 from app.models.organization import Organization
 from app.models.user import User
 
@@ -242,18 +244,57 @@ class TestScoreVoucherCompleteness:
 
 
 class TestScoreContractFulfillment:
+    """R27-H7：合同履约分从“恒 90 假数据”改为按状态/逾期真实计分。"""
+
+    @staticmethod
+    def _db_with(rows):
+        db = MagicMock()
+        q = MagicMock()
+        q.filter.return_value = q
+        q.all.return_value = rows
+        db.query.return_value = q
+        return db
+
     def test_query_raises_returns_neutral(self):
         db = MagicMock()
         db.query.side_effect = Exception("boom")
         assert _score_contract_fulfillment(db, 1) == 90.0
 
-    def test_has_contracts(self):
-        db = MagicMock()
-        q = MagicMock()
-        q.filter.return_value = q
-        q.count.return_value = 3
-        db.query.return_value = q
-        assert _score_contract_fulfillment(db, 1) == 90.0
+    def test_no_contracts_returns_neutral(self):
+        assert _score_contract_fulfillment(self._db_with([]), 1) == 90.0
+
+    def test_all_completed_full_score(self):
+        rows = [("completed", date(2020, 1, 1)), ("completed", None)]
+        assert _score_contract_fulfillment(self._db_with(rows), 1) == 100.0
+
+    def test_terminated_penalized(self):
+        assert _score_contract_fulfillment(self._db_with([("terminated", None)]), 1) == 80.0
+
+    def test_overdue_contract_penalized(self):
+        past = date.today() - timedelta(days=1)
+        assert _score_contract_fulfillment(self._db_with([("active", past)]), 1) == 90.0
+
+    def test_future_deadline_active_minor_penalty(self):
+        future = date.today() + timedelta(days=10)
+        assert _score_contract_fulfillment(self._db_with([("active", future)]), 1) == 98.0
+
+    def test_none_deadline_active_minor_penalty(self):
+        assert _score_contract_fulfillment(self._db_with([("active", None)]), 1) == 98.0
+
+    def test_non_date_deadline_does_not_crash(self):
+        # 防御历史脏数据：str < date 会 TypeError，须按轻微扣分处理而非 500
+        assert _score_contract_fulfillment(self._db_with([("active", "2020-01-01")]), 1) == 98.0
+
+    def test_draft_penalized(self):
+        assert _score_contract_fulfillment(self._db_with([("draft", None)]), 1) == 95.0
+
+    def test_enum_status_and_unknown_status(self):
+        rows = [(ContractStatus.ACTIVE, None), ("legacy_unknown", None)]
+        assert _score_contract_fulfillment(self._db_with(rows), 1) == 96.0
+
+    def test_score_never_below_zero(self):
+        rows = [("terminated", None)] * 6
+        assert _score_contract_fulfillment(self._db_with(rows), 1) == 0.0
 
 
 class TestCalculateProjectsHealthSync:

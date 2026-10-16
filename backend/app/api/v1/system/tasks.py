@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.core.response import ok_list
 from app.core.security import get_current_user
+from app.core.permission_utils import is_admin
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,18 @@ def _create_task_record(task_type: str, task_name: str, created_by: str = None, 
 # ==================== API 端点 ====================
 
 
+def _ensure_task_owner(task: dict, current_user) -> None:
+    """M6：任务操作「本人或管理员」校验（统一走 is_admin 判定口径）。
+
+    任务记录携带 created_by（创建者用户名）；非创建者且非管理员的登录用户
+    一律 403，杜绝任意用户操作他人任务。
+    """
+    if is_admin(current_user):
+        return
+    if task.get("created_by") != getattr(current_user, "username", None):
+        raise HTTPException(status_code=403, detail="无权操作其他用户的任务")
+
+
 @router.get("", summary="获取任务列表")
 async def list_tasks(
     status: Optional[str] = Query(None, description="按状态筛选: pending/running/completed/failed"),
@@ -221,6 +234,14 @@ async def create_task(
 
     任务将以异步方式在后台执行，可通过任务ID查询执行状态和结果。
     """
+    # M6：task_type 按既有 TaskType 枚举校验，拒绝任意字符串
+    valid_task_types = {t.value for t in TaskType}
+    if request.task_type not in valid_task_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"非法任务类型: {request.task_type}，允许值: {', '.join(sorted(valid_task_types))}",
+        )
+
     created_by = getattr(current_user, "username", "system")
     record = _create_task_record(
         task_type=request.task_type,
@@ -301,6 +322,9 @@ async def cancel_task(
         if not task:
             raise HTTPException(status_code=404, detail="任务不存在")
 
+        # M6：仅任务创建者本人或管理员可取消
+        _ensure_task_owner(task, current_user)
+
         if task["status"] not in (TaskStatus.PENDING.value, TaskStatus.RUNNING.value):
             raise HTTPException(status_code=400, detail=f"任务状态为 {task['status']}，无法取消")
 
@@ -333,6 +357,9 @@ async def delete_task(
         if not task:
             raise HTTPException(status_code=404, detail="任务不存在")
 
+        # M6：仅任务创建者本人或管理员可删除
+        _ensure_task_owner(task, current_user)
+
         if task["status"] in (TaskStatus.PENDING.value, TaskStatus.RUNNING.value):
             raise HTTPException(status_code=400, detail="不能删除正在执行或等待中的任务，请先取消")
 
@@ -343,8 +370,13 @@ async def delete_task(
 
 
 @router.get("/running/count", summary="获取运行中任务数")
-async def get_running_task_count():
-    """获取当前正在运行中的任务数量"""
+async def get_running_task_count(
+    current_user=Depends(get_current_user),
+):
+    """获取当前正在运行中的任务数量
+
+    M6：原实现完全无认证依赖，已补齐登录要求。
+    """
     with _tasks_lock:
         _purge_finished_tasks_locked()
         running = [t for t in _tasks.values() if t["status"] == TaskStatus.RUNNING.value]

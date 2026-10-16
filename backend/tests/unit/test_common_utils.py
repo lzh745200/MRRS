@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from app.utils.common import (
     CryptoHelper,
     DataConverter,
-    DateTimeHelper,
     PageInfo,
     PaginationHelper,
     StringHelper,
@@ -234,114 +233,6 @@ class TestCreatePageResult:
         assert result["items"] == ["a", "b"]
         assert result["pagination"]["page"] == 1
         assert result["pagination"]["total"] == 5
-
-
-# ============================================================================
-# Test: DateTimeHelper
-# ============================================================================
-
-class TestDateTimeHelper:
-    def test_now(self):
-        with patch("app.utils.common.datetime") as mock_dt:
-            mock_dt.now.return_value = datetime(2024, 1, 1)
-            assert DateTimeHelper.now() == datetime(2024, 1, 1)
-
-    def test_today(self):
-        with patch("app.utils.common.date") as mock_date:
-            mock_date.today.return_value = date(2024, 6, 15)
-            assert DateTimeHelper.today() == date(2024, 6, 15)
-
-    def test_format_datetime(self):
-        dt = datetime(2024, 6, 15, 14, 30, 0)
-        result = DateTimeHelper.format_datetime(dt, "%Y-%m-%d")
-        assert result == "2024-06-15"
-
-    def test_format_datetime_none(self):
-        assert DateTimeHelper.format_datetime(None) is None
-
-    def test_format_datetime_default_format(self):
-        dt = datetime(2024, 6, 15, 14, 30, 0)
-        result = DateTimeHelper.format_datetime(dt)
-        assert result == "2024-06-15 14:30:00"
-
-    def test_parse_datetime(self):
-        result = DateTimeHelper.parse_datetime("2024-06-15", "%Y-%m-%d")
-        assert result == datetime(2024, 6, 15)
-
-    def test_parse_datetime_invalid(self):
-        assert DateTimeHelper.parse_datetime("not-a-date", "%Y-%m-%d") is None
-
-    def test_parse_datetime_type_error(self):
-        result = DateTimeHelper.parse_datetime(None, "%Y-%m-%d")
-        assert result is None
-
-    def test_to_iso_string(self):
-        dt = datetime(2024, 6, 15, 14, 30, 0)
-        result = DateTimeHelper.to_iso_string(dt)
-        assert result == "2024-06-15T14:30:00"
-
-    def test_to_iso_string_none(self):
-        assert DateTimeHelper.to_iso_string(None) is None
-
-    def test_from_iso_string(self):
-        result = DateTimeHelper.from_iso_string("2024-06-15T14:30:00")
-        assert result == datetime(2024, 6, 15, 14, 30, 0)
-
-    def test_from_iso_string_invalid(self):
-        assert DateTimeHelper.from_iso_string("not-iso") is None
-
-    def test_from_iso_string_type_error(self):
-        result = DateTimeHelper.from_iso_string(None)
-        assert result is None
-
-    def test_add_days(self):
-        dt = datetime(2024, 1, 1)
-        assert DateTimeHelper.add_days(dt, 10) == datetime(2024, 1, 11)
-
-    def test_add_hours(self):
-        dt = datetime(2024, 1, 1, 10, 0, 0)
-        assert DateTimeHelper.add_hours(dt, 3) == datetime(2024, 1, 1, 13, 0, 0)
-
-    def test_diff_days(self):
-        dt1 = datetime(2024, 1, 11)
-        dt2 = datetime(2024, 1, 1)
-        assert DateTimeHelper.diff_days(dt1, dt2) == 10
-
-    def test_diff_days_negative(self):
-        dt1 = datetime(2024, 1, 1)
-        dt2 = datetime(2024, 1, 11)
-        assert DateTimeHelper.diff_days(dt1, dt2) == -10
-
-    def test_is_expired_true(self):
-        with patch("app.utils.common.datetime") as mock_dt:
-            mock_dt.now.return_value = datetime(2024, 6, 15)
-            assert DateTimeHelper.is_expired(datetime(2024, 1, 1)) is True
-
-    def test_is_expired_false(self):
-        with patch("app.utils.common.datetime") as mock_dt:
-            mock_dt.now.return_value = datetime(2024, 1, 1)
-            assert DateTimeHelper.is_expired(datetime(2024, 6, 15)) is False
-
-    def test_get_date_range(self):
-        start = date(2024, 1, 1)
-        end = date(2024, 1, 5)
-        result = DateTimeHelper.get_date_range(start, end)
-        assert result == [
-            date(2024, 1, 1),
-            date(2024, 1, 2),
-            date(2024, 1, 3),
-            date(2024, 1, 4),
-            date(2024, 1, 5),
-        ]
-
-    def test_get_date_range_single_day(self):
-        start = end = date(2024, 6, 15)
-        result = DateTimeHelper.get_date_range(start, end)
-        assert result == [date(2024, 6, 15)]
-
-    def test_parse_datetime_default_format(self):
-        result = DateTimeHelper.parse_datetime("2024-06-15 14:30:00")
-        assert result == datetime(2024, 6, 15, 14, 30, 0)
 
 
 # ============================================================================

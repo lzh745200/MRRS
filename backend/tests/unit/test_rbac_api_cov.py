@@ -208,7 +208,11 @@ class TestRoleCrud:
         _use_db(rbac_client, _db_with([_q(first=None)]))
         resp = rbac_client.get("/api/v1/rbac/roles/ghost")
         assert resp.status_code == 404
-        assert resp.json()["error"] == "角色不存在"
+        # R28-M17 契约订正：原实现返回裸 JSON {"error": "角色不存在"}（既非本仓
+        # 信封，也与同文件 update_role/delete_role 的 HTTPException(detail=str)
+        # 不一致，前端 _extractServerMessage 读不到）。现统一为 HTTPException
+        # → FastAPI 默认 {"detail": "角色不存在"}，与兄弟端点同形。
+        assert resp.json()["detail"] == "角色不存在"
 
     def test_update_role_full(self, rbac_client):
         _as_user(rbac_client, _user())

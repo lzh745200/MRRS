@@ -2,10 +2,13 @@
 
 const { app, BrowserWindow, dialog, Menu, Tray, shell, ipcMain, safeStorage } = require('electron');
 const path = require('path');
-const { spawn, execSync } = require('child_process');
+const { spawn } = require('child_process');
 const crypto = require('crypto');
 const http = require('http');
 const fs = require('fs');
+// M50/M49：路径白名单与分块读取收口到可独立测试的模块（主进程与 worker 共用）
+const { isPathAllowed } = require('./path-guard');
+const { readFileChunk } = require('./file-chunk');
 
 // ─── 全局变量 ───
 let mainWindow = null;
@@ -17,6 +20,11 @@ let backendRestartTimer = null; // 后端自动重启定时器句柄（退出时
 let rendererCrashedOnce = false; // 渲染进程崩溃自动恢复防循环标志
 let recoveryLastReason = '';     // 修复引导页触发原因（backend-crash / load-failed）
 const MAX_BACKEND_RESTARTS = 3;
+// M51（2026-10-14）：重启配额只在后端**稳定存活**满该时长后才重置。原实现在
+// waitForBackend() 返回（"就绪"）后立即 backendRestartCount = 0 —— 只要后端能
+// 起来一次就重新获得 3 次配额，崩溃-重启循环永不收敛（每 2s 一轮，MAX 形同虚设）。
+const BACKEND_STABLE_RESET_MS = 60 * 1000;
+let backendStableTimer = null;   // 稳定存活计时器（后端退出/应用退出时清理）
 const INTERNAL_BACKUP_KEY = crypto.randomBytes(16).toString('hex');
 const INTERNAL_SHUTDOWN_KEY = crypto.randomBytes(16).toString('hex');
 
@@ -60,9 +68,15 @@ function getUserDataPath() {
   return app.getPath('userData');
 }
 
-function getResourcePath(...segments) {
-  if (app.isPackaged) return path.join(process.resourcesPath, ...segments);
-  return path.join(__dirname, '..', ...segments);
+// ─── 允许访问的根目录（单一事实源）───
+// 应用数据目录（真实 userData）/ 应用安装目录 / 系统临时目录。
+// 主进程 IPC 校验与 worker 注入（workerData.allowedRoots）共用同一份取值，
+// 避免两处各拼一套导致"校验通过但 worker 拒绝"（M50 根因）。
+function appAllowedRoots() {
+  const os = require('os');
+  return [getUserDataPath(), app.getAppPath(), os.tmpdir()]
+    .filter(Boolean)
+    .map((r) => path.resolve(r));
 }
 
 function getBackendExePath() {
@@ -156,11 +170,31 @@ function getDatabasePath() {
   }
   if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
   const dbPath = path.join(dbDir, 'rural_revitalization.db');
-  if (!fs.existsSync(dbPath)) {
-    const sourceDb = getResourcePath('database', 'rural_revitalization.db');
-    if (fs.existsSync(sourceDb)) fs.copyFileSync(sourceDb, dbPath);
-  }
+  // 不再有"预置数据库"复制分支：仓库内没有 resources/database/（该目录不存在、
+  // 也没有任何构建流程产出它），原分支恒为 existsSync=false 的死代码。
+  // 数据库由 backend 首次启动时自建（见 backend start.py 的 init_db）。
   return dbPath;
+}
+
+// ─── 后端重启配额（M51）───
+// 后端"就绪"不等于"稳定"：只有连续存活 BACKEND_STABLE_RESET_MS 才把重启计数清零，
+// 否则崩溃循环里的每次短暂就绪都会重新发放 3 次配额。
+function scheduleBackendRestartCountReset() {
+  if (backendStableTimer) clearTimeout(backendStableTimer);
+  backendStableTimer = setTimeout(() => {
+    backendStableTimer = null;
+    if (backendRestartCount > 0) {
+      console.log(`[Backend] 后端稳定存活 ${BACKEND_STABLE_RESET_MS / 1000}s，重置重启计数（原 ${backendRestartCount}）`);
+      writeDiagnosticLog(`后端稳定存活 ${BACKEND_STABLE_RESET_MS / 1000}s，重置重启计数（原 ${backendRestartCount}）`);
+    }
+    backendRestartCount = 0;
+  }, BACKEND_STABLE_RESET_MS);
+  // 不因该计时器阻止进程退出
+  if (typeof backendStableTimer.unref === 'function') backendStableTimer.unref();
+}
+
+function cancelBackendRestartCountReset() {
+  if (backendStableTimer) { clearTimeout(backendStableTimer); backendStableTimer = null; }
 }
 
 // ─── 日志写入 ───
@@ -344,6 +378,8 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
     console.log('[Backend] 退出, code:', code);
     writeDiagnosticLog(`后端退出, code: ${code}`);
     backendProcess = null;
+    // 后端退出即重新计时：稳定窗口内的崩溃不发放新配额（M51）
+    cancelBackendRestartCountReset();
     if (!isQuitting && code !== 0) {
       if (backendRestartCount < MAX_BACKEND_RESTARTS) {
         backendRestartCount++;
@@ -359,8 +395,10 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
           // 等待重启的后端就绪后重新加载页面
           try {
             await waitForBackend(restartStderr);
-            // 重启成功后重置重启计数：恢复运行后偶发崩溃不应消耗历史配额
-            backendRestartCount = 0;
+            // M51：不再"就绪即重置"——就绪只说明这次起来了，崩溃循环里每次
+            // 短暂就绪都会重新发放 3 次配额。改为稳定存活满 BACKEND_STABLE_RESET_MS
+            // 才清零（scheduleBackendRestartCountReset）。
+            scheduleBackendRestartCountReset();
             console.log('[Backend] 重启后端已就绪，重新加载页面');
             writeDiagnosticLog('重启后端已就绪，重新加载页面');
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -633,18 +671,32 @@ function createMainWindow() {
              origin === `http://localhost:${backendPort}`;
     } catch (_) { return false; }
   };
+  // M56（2026-10-14）：file:// 白名单化。原实现 `!url.startsWith('file://')` 把
+  // **任意**本地文件导航都放行（被注入/被劫持的页面可跳 file:///C:/... 读取本机
+  // 资源，或加载任意本地 HTML 到同一窗口）。只允许应用自身目录（electron/，
+  // 即 recovery.html / splash.html 所在目录）下的本地页面。
+  const isAllowedLocalFileUrl = (url) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'file:') return false;
+      const target = path.resolve(require('url').fileURLToPath(parsed));
+      const appDir = path.resolve(__dirname);
+      return target === appDir || target.startsWith(appDir + path.sep);
+    } catch (_) { return false; }
+  };
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!isAllowedAppUrl(url) && !url.startsWith('file://')) {
-      event.preventDefault();
-      try {
-        const proto = new URL(url).protocol;
-        if (ALLOWED_EXTERNAL_PROTOCOLS.includes(proto)) {
-          shell.openExternal(url);
-        } else {
-          console.warn('[Security] 拒绝非白名单协议导航:', url);
-        }
-      } catch (_) { /* malformed URL, ignore */ }
-    }
+    if (isAllowedAppUrl(url) || isAllowedLocalFileUrl(url)) return;
+    event.preventDefault();
+    try {
+      const proto = new URL(url).protocol;
+      if (ALLOWED_EXTERNAL_PROTOCOLS.includes(proto)) {
+        shell.openExternal(url);
+      } else if (proto === 'file:') {
+        console.warn('[Security] 拒绝越界 file:// 导航（仅允许应用自身页面）:', url);
+      } else {
+        console.warn('[Security] 拒绝非白名单协议导航:', url);
+      }
+    } catch (_) { /* malformed URL, ignore */ }
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -943,10 +995,6 @@ function performAutoBackup(trigger = 'manual') {
 // 统一清理）。此处原有的 cleanupOldBackups() 硬编码 7 天、与后端 backup_retention_days
 // 各写一套，且两侧可能并发删除同一批文件 —— 2026-10-06 移除，只保留单一事实源。
 
-// ─── VC++ 检查（Windows，但保留定义） ───
-function checkVCRuntime() { return true; }
-async function tryInstallVCRuntime() { return false; }
-
 // ─── IPC 处理器 ───
 function setupIpcHandlers() {
   ipcMain.handle('get-app-version', () => appVersion);
@@ -989,54 +1037,74 @@ function setupIpcHandlers() {
     }
   });
   ipcMain.handle('open-path', async (_, p) => {
-    const os = require('os');
     const resolved = path.resolve(String(p || ''));
-    const allowedRoots = [app.getPath('userData'), app.getAppPath(), os.tmpdir()]
-      .map((r) => path.resolve(r));
-    const inScope = allowedRoots.some(
-      (root) => resolved === root || resolved.startsWith(root + path.sep)
-    );
-    const lower = resolved.toLowerCase();
-    const isSecrets = lower.includes('runtime_secrets.json') || lower.includes('secrets.json') || lower.includes('master.key');
-    if (!inScope || isSecrets) {
+    if (!isPathAllowed(resolved, appAllowedRoots())) {
       console.warn(`[IPC] open-path 拒绝越界路径: ${resolved}`);
       return { error: 'forbidden-path' };
     }
     return shell.openPath(resolved);
   });
+  // ─── worker 任务路径白名单（M50，2026-10-14）───
+  // 校验在主进程 IPC 层完成，根目录由主进程按真实运行环境注入 worker：
+  // 旧实现让 worker 自己拼 `LOCALAPPDATA/bumofu-assistance`（与真实
+  // app.getPath('userData') 不一致）→ 加密/解密对真实数据一律 forbidden-path，
+  // 且 hash-file 分支压根没调 validatePath（可哈希任意路径）。
+  // 仅 encrypt/decrypt/hash 三类文件任务需要路径；其余（compress/decompress）不涉及文件。
+  const WORKER_FILE_TASKS = new Set(['encrypt-file', 'decrypt-file', 'hash-file']);
+  const WORKER_PATH_FIELDS = { 'encrypt-file': ['inputPath', 'outputPath'], 'decrypt-file': ['inputPath', 'outputPath'], 'hash-file': ['inputPath'] };
+  function validateWorkerPath(rawPath) {
+    const resolved = path.resolve(String(rawPath || ''));
+    return isPathAllowed(resolved, appAllowedRoots()) ? resolved : null;
+  }
   // worker-pool 如果不存在，可忽略或提供占位
   try {
     const { workerPool } = require('./worker-pool');
     ipcMain.handle('worker-exec', async (_, task, payload, timeout) => {
-      try { const result = await workerPool.exec(task, payload, timeout); return { success: true, data: result }; }
-      catch (err) { return { success: false, error: err.message }; }
+      const fields = WORKER_PATH_FIELDS[task];
+      const safePayload = { ...(payload || {}) };
+      if (fields) {
+        for (const field of fields) {
+          const checked = validateWorkerPath(safePayload[field]);
+          if (!checked) {
+            const raw = path.resolve(String(safePayload[field] || ''));
+            console.warn(`[IPC] worker-exec 拒绝越界路径: ${task}.${field}=${raw}`);
+            return { success: false, error: `forbidden-path: ${raw}` };
+          }
+          safePayload[field] = checked;
+        }
+      }
+      try {
+        // 根目录由主进程注入：worker 不再自行推断（避免与真实 userData 漂移）
+        const result = await workerPool.exec(task, safePayload, timeout, { allowedRoots: workerAllowedRoots() });
+        return { success: true, data: result };
+      } catch (err) { return { success: false, error: err.message }; }
     });
     ipcMain.handle('worker-stats', () => workerPool.stats);
   } catch (_) {}
-  ipcMain.handle('read-file-chunked', async (_, filePath, chunkSize) => {
+  // ─── 大文件分块读取（M49，2026-10-14）───
+  // 旧实现名为"分块"实为整文件驻留：createReadStream 的每块都被 push 进数组，
+  // 末尾 chunks.join('') 把整个文件（base64 再放大 1.33×）拼进内存 → 大文件必 OOM。
+  // 现在改为真实游标接口：每次 IPC 只读 [offset, offset+length) 一段，返回
+  // { data(base64), offset, bytesRead, size, nextOffset, eof }；调用方按 nextOffset
+  // 循环取块，主进程内存占用与文件大小无关。
+  // 兼容旧调用签名 readFileChunked(path, chunkSize:number) —— 视为"从 0 读一块"。
+  ipcMain.handle('read-file-chunked', async (_, filePath, options) => {
     // 路径白名单：仅允许应用数据目录/安装目录/系统临时目录，
     // 并显式拒绝密钥文件，防止被注入的渲染进程读取任意文件（如 SECRET_KEY）
-    const os = require('os');
     const resolved = path.resolve(String(filePath || ''));
-    const allowedRoots = [app.getPath('userData'), app.getAppPath(), os.tmpdir()]
-      .map((p) => path.resolve(p));
-    const inScope = allowedRoots.some(
-      (root) => resolved === root || resolved.startsWith(root + path.sep)
-    );
-    const lower = resolved.toLowerCase();
-    // 与 open-path(:946) 保持一致: master.key 同样在拦截列表
-    const isSecrets = lower.includes('runtime_secrets.json') || lower.includes('secrets.json') || lower.includes('master.key');
-    if (!inScope || isSecrets) {
+    if (!isPathAllowed(resolved, appAllowedRoots())) {
       console.warn(`[IPC] read-file-chunked 拒绝越界路径: ${resolved}`);
       return { error: 'forbidden-path' };
     }
-    return new Promise((resolve) => {
-      const chunks = [];
-      const stream = fs.createReadStream(resolved, { highWaterMark: chunkSize || 256 * 1024, encoding: 'base64' });
-      stream.on('data', (chunk) => chunks.push(chunk));
-      stream.on('end', () => resolve({ data: chunks.join('') }));
-      stream.on('error', () => resolve({ error: 'read-failed' }));
-    });
+    try {
+      return await readFileChunk(resolved, options);
+    } catch (err) {
+      console.warn(`[IPC] read-file-chunked 读取失败: ${resolved} (${err.message})`);
+      if (err && err.message === 'offset-out-of-range') {
+        return { error: 'offset-out-of-range' };
+      }
+      return { error: 'read-failed' };
+    }
   });
   ipcMain.on('window-force-redraw', () => {
     if (mainWindow) { mainWindow.webContents.invalidate(); mainWindow.focus(); mainWindow.webContents.focus(); }
@@ -1058,8 +1126,9 @@ function setupIpcHandlers() {
       const stderr = [];
       backendProcess = await startBackend(stderr, false);
       if (!backendProcess) return { success: false, error: '后端启动失败' };
+      // M51：人工一键修复后同样只"重新计时"，稳定存活满窗口才清零配额
       await waitForBackend(stderr);
-      backendRestartCount = 0; // 修复成功即重置配额（与自动重启语义一致）
+      scheduleBackendRestartCountReset();
       if (mainWindow && !mainWindow.isDestroyed()) {
         await mainWindow.loadURL(`http://127.0.0.1:${backendPort}`);
       }
@@ -1127,7 +1196,7 @@ app.whenReady().then(async () => {
     console.log('[App] 等待后端就绪...');
     await waitForBackend(stderrCapture);
     console.log('[App] 后端已就绪');
-    backendRestartCount = 0;
+    scheduleBackendRestartCountReset();
   } catch (err) {
     console.error('[App] 后端启动失败:', err.message);
     writeDiagnosticLog(`后端启动失败: ${err.message}`);
@@ -1153,7 +1222,7 @@ app.whenReady().then(async () => {
         writeDiagnosticLog('重试等待后端就绪');
         await waitForBackend(stderrCapture);
         console.log('[App] 重试后端已就绪');
-        backendRestartCount = 0;
+        scheduleBackendRestartCountReset();
       } catch (retryErr) {
         console.error('[App] 重试后端启动仍然失败:', retryErr.message);
         writeDiagnosticLog(`重试后端启动仍然失败: ${retryErr.message}`);
@@ -1173,6 +1242,7 @@ app.on('before-quit', () => {
   isQuitting = true;
   // 清理后端自动重启定时器，避免退出后残留后端进程
   if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null; }
+  cancelBackendRestartCountReset();
   stopBackend();
 });
 app.on('activate', () => { if (!mainWindow) createMainWindow(); else mainWindow.show(); });
@@ -1195,8 +1265,16 @@ if (process.platform === 'win32') {
   app.commandLine.appendSwitch('gpu-disk-cache-dir', gpuCache);
   app.commandLine.appendSwitch('disable-background-timer-throttling');
 }
+// M56（2026-10-14）：root 场景的 Chromium 沙箱取舍。
+// Linux root 下 Chromium 的 SUID/namespace 沙箱无法初始化（zygote 直接崩溃），
+// 故此处追加 --no-sandbox；这与 createMainWindow 的 webPreferences.sandbox:true
+// （渲染进程沙箱开关，约束的是 renderer 的 Node 能力）是**两个层面**：
+//   - webPreferences.sandbox:true 仍生效 → 渲染进程无 Node/require、仍走 contextBridge；
+//   - --no-sandbox 关闭的是 OS 级进程隔离，使 root 下应用能启动。
+// 该降级的适用边界、风险与"请勿以 root 运行"的部署要求见
+// docs/04-部署文档/02-Linux部署/麒麟V10离线部署完整方案.md「以 root 运行的限制」。
 if (process.platform === 'linux' && typeof process.getuid === 'function' && process.getuid() === 0) {
-  console.warn('[Main] root 用户，启用 --no-sandbox');
+  console.warn('[Main] root 用户，启用 --no-sandbox（OS 级沙箱关闭；webPreferences.sandbox 仍为 true，见部署文档）');
   app.commandLine.appendSwitch('no-sandbox');
 }
 if (process.platform === 'linux') {

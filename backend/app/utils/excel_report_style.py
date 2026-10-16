@@ -104,7 +104,12 @@ def _coerce(value: Any) -> Any:
 
 
 def make_subtitle(unit: Optional[str] = None, year: Optional[Any] = None, extra: Optional[str] = None) -> str:
-    """构造副标题（单位 / 年度 / 生成时间），空项自动省略。"""
+    """构造副标题（单位 / 年度 / 生成时间），空项自动省略。
+
+    生成时间取 UTC 并以 "UTC" 显式标注（R28 低危项）：本模块供多类报表复用，
+    若写本地墙钟，服务器时区不同会让同一批报表出现不一致的"生成时间"，
+    且审计口径要求 UTC。显式标注避免读者把 UTC 误当北京时间。
+    """
     parts = []
     if unit:
         parts.append(f"单位：{unit}")
@@ -112,7 +117,8 @@ def make_subtitle(unit: Optional[str] = None, year: Optional[Any] = None, extra:
         parts.append(f"年度：{year}")
     if extra:
         parts.append(extra)
-    parts.append(f"生成时间：{_dt.datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    now_utc = _dt.datetime.now(_dt.timezone.utc)
+    parts.append(f"生成时间：{now_utc.strftime('%Y-%m-%d %H:%M')} UTC")
     return "    ".join(parts)
 
 
@@ -286,11 +292,12 @@ def setup_print(
     if header_row:
         ws.print_title_rows = f"{header_row}:{header_row}"
 
-    # 页眉：左=单位/标题，右=生成日期
+    # 页眉：左=单位/标题，右=生成日期（UTC，与 make_subtitle 同一时间口径）
     ws.oddHeader.left.text = header_left or SYSTEM_NAME
     ws.oddHeader.left.size = 9
     ws.oddHeader.left.color = MILITARY_GRAY_TEXT
-    ws.oddHeader.right.text = header_right or _dt.date.today().strftime("%Y-%m-%d")
+    _today_utc = _dt.datetime.now(_dt.timezone.utc).date()
+    ws.oddHeader.right.text = header_right or _today_utc.strftime("%Y-%m-%d")
     ws.oddHeader.right.size = 9
     ws.oddHeader.right.color = MILITARY_GRAY_TEXT
 

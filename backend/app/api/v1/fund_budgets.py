@@ -357,7 +357,7 @@ async def get_budget_summary(
 # ==================== 使用明细 API ====================
 
 
-@router.get("/transactions", response_model=List[TransactionResponse])
+@router.get("/transactions")
 async def get_transactions(
     fund_id: Optional[int] = None,
     project_id: Optional[int] = None,
@@ -380,13 +380,22 @@ async def get_transactions(
     if budget_id:
         query = query.filter(FundTransaction.budget_id == budget_id)
 
+    # R28-M13：原实现返回**裸数组**且分页无 total —— 前端只能把当前页长度当总数
+    # （分页器页数恒为 1），与全仓 ok_list 信封口径也不一致。
+    # 注意：事务明细查询此前没有 count()，补上真实总数（同一 query 复用过滤条件）。
+    total = query.count()
     items = (
         query.order_by(FundTransaction.transaction_date.desc()).offset((page - 1) * page_size).limit(page_size).all()
     )
-    return items
+    return ok_list(
+        items=[tx.to_dict() for tx in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
-@router.post("/transactions", response_model=TransactionResponse)
+@router.post("/transactions")
 async def create_transaction(
     data: TransactionCreate,
     current_user=Depends(get_current_user),
@@ -438,7 +447,9 @@ async def create_transaction(
         username=getattr(current_user, "full_name", None) or getattr(current_user, "username", ""),
         detail=f"金额: {data.amount} 万元",
     )
-    return transaction
+    # R28-M13：原实现返回裸 ORM 对象（response_model 序列化后仍是裸对象），
+    # 与全仓 success_response 信封不一致；统一信封（数据体保持 to_dict 字段集）。
+    return success_response(data=transaction.to_dict(), message="创建成功")
 
 
 @router.delete("/transactions/{transaction_id}")

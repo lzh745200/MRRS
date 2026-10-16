@@ -152,6 +152,59 @@ class TestEnableTwoFactor:
         assert existing.enabled is False
         mock_db.add.assert_not_called()
 
+    @patch("app.services.two_factor_service.TwoFactorService.generate_secret")
+    @patch("app.services.two_factor_service.TwoFactorService.generate_backup_codes")
+    @patch("app.services.two_factor_service.encrypt_field")
+    @patch("app.services.two_factor_service.TwoFactorService.generate_qr_code")
+    def test_concurrent_insert_falls_back_to_update(self, mock_qr, mock_encrypt, mock_codes, mock_secret):
+        """M32：并发首建撞 user_id 唯一键 → 回滚后更新已落库行，不直穿 500。"""
+        from sqlalchemy.exc import IntegrityError
+        from app.services.two_factor_service import TwoFactorService
+        mock_db = MagicMock()
+        winner = MagicMock()
+        winner.enabled = False
+        # 首次查询 None（判定"无记录"）→ commit 撞唯一键 → 二次查询命中并发方已建行
+        mock_db.query.return_value.filter.return_value.first.side_effect = [None, winner]
+        mock_db.commit.side_effect = [IntegrityError("stmt", {}, Exception("dup")), None]
+        mock_secret.return_value = "s2"
+        mock_codes.return_value = ["11112222"]
+        mock_encrypt.return_value = "enc2"
+        mock_qr.return_value = "qr"
+        user = MagicMock()
+        user.id = 7
+        user.email = "u7@test.com"
+
+        result = TwoFactorService.enable_two_factor(mock_db, user)
+
+        assert result["secret"] == "s2"
+        assert winner.secret_key == "enc2"
+        assert winner.enabled is False
+        assert mock_db.commit.call_count == 2
+        # safe_commit 失败时内部已回滚一次，except 分支再做一次幂等回滚
+        assert mock_db.rollback.call_count == 2
+
+    @patch("app.services.two_factor_service.TwoFactorService.generate_secret")
+    @patch("app.services.two_factor_service.TwoFactorService.generate_backup_codes")
+    @patch("app.services.two_factor_service.encrypt_field")
+    @patch("app.services.two_factor_service.TwoFactorService.generate_qr_code")
+    def test_concurrent_insert_reraise_when_winner_missing(self, mock_qr, mock_encrypt, mock_codes, mock_secret):
+        """M32 兜底：撞键后二次查询仍无行（数据被并发删除）→ 原异常上抛，不静默吞。"""
+        from sqlalchemy.exc import IntegrityError
+        from app.services.two_factor_service import TwoFactorService
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.side_effect = [None, None]
+        mock_db.commit.side_effect = IntegrityError("stmt", {}, Exception("dup"))
+        mock_secret.return_value = "s3"
+        mock_codes.return_value = ["33334444"]
+        mock_encrypt.return_value = "enc3"
+        mock_qr.return_value = "qr"
+        user = MagicMock()
+        user.id = 8
+        user.email = "u8@test.com"
+
+        with pytest.raises(IntegrityError):
+            TwoFactorService.enable_two_factor(mock_db, user)
+
 
 class TestVerifyAndEnable:
     @patch("app.services.two_factor_service.decrypt_field")

@@ -2,64 +2,98 @@ from unittest.mock import MagicMock, patch, AsyncMock
 
 
 class TestGetApiPerformanceStats:
+    """R27-M28：SQL 聚合 + 端点过滤 + NULL 防御（真实 SQLite 验证过滤行为）。
+
+    旧实现把 24h 内全部 ORM 行载入内存，且 response_time_ms 为 NULL 时
+    ``.sort()`` 抛 TypeError —— mock 断言 filter 调用无法证明返回集口径，
+    故此处用真实库插入数据验证。
+    """
+
+    @staticmethod
+    def _make_db():
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
+
+        from app.models.monitoring import APIMetric
+
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        APIMetric.__table__.create(engine)
+        return sessionmaker(bind=engine)()
+
+    @staticmethod
+    def _add(db, endpoint, response_time_ms, status_code, minutes_ago=0):
+        from datetime import datetime, timedelta, timezone
+
+        from app.models.monitoring import APIMetric
+
+        db.add(
+            APIMetric(
+                endpoint=endpoint,
+                method="GET",
+                response_time_ms=response_time_ms,
+                status_code=status_code,
+                timestamp=datetime.now(timezone.utc) - timedelta(minutes=minutes_ago),
+            )
+        )
+
     def test_no_metrics(self):
         from app.services.monitoring_service import MonitoringService
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.all.return_value = []
-        result = MonitoringService.get_api_performance_stats(mock_db)
-        assert result["total_requests"] == 0
 
-    def test_with_endpoint_filter(self):
+        result = MonitoringService.get_api_performance_stats(self._make_db())
+        assert result == {
+            "total_requests": 0,
+            "avg_response_time_ms": 0,
+            "p50_response_time_ms": 0,
+            "p95_response_time_ms": 0,
+            "p99_response_time_ms": 0,
+            "error_rate": 0,
+        }
+
+    def test_aggregates_and_percentiles(self):
         from app.services.monitoring_service import MonitoringService
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
 
-        def filter_side_effect(*args, **kwargs):
-            if len(args) > 0:
-                mock_query2 = MagicMock()
-                mock_q = MagicMock()
-                mock_db.query.return_value = mock_q
-                mock_q.filter.return_value = mock_q
-                mock_q.all.return_value = []
-                return mock_query2
-            return mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.all.return_value = []
-        result = MonitoringService.get_api_performance_stats(mock_db, endpoint="/api/test")
-        assert result["total_requests"] == 0
+        db = self._make_db()
+        for rt, code in [(100.0, 200), (200.0, 200), (300.0, 200), (400.0, 500)]:
+            self._add(db, "/api/a", rt, code)
+        db.commit()
 
-    def test_with_metrics_no_errors(self):
+        result = MonitoringService.get_api_performance_stats(db)
+        assert result["total_requests"] == 4
+        assert result["avg_response_time_ms"] == 250.0
+        assert result["p50_response_time_ms"] == 300.0
+        assert result["p95_response_time_ms"] == 400.0
+        assert result["p99_response_time_ms"] == 400.0
+        assert result["error_rate"] == 25.0
+
+    def test_endpoint_filter(self):
         from app.services.monitoring_service import MonitoringService
-        mock_db = MagicMock()
-        m1 = MagicMock()
-        m1.response_time_ms = 100.0
-        m1.status_code = 200
-        m2 = MagicMock()
-        m2.response_time_ms = 200.0
-        m2.status_code = 200
-        mock_db.query.return_value.filter.return_value.all.return_value = [m1, m2]
-        result = MonitoringService.get_api_performance_stats(mock_db)
-        assert result["total_requests"] == 2
-        assert result["avg_response_time_ms"] == 150.0
+
+        db = self._make_db()
+        self._add(db, "/api/a", 100.0, 200)
+        self._add(db, "/api/b", 500.0, 500)
+        db.commit()
+
+        result = MonitoringService.get_api_performance_stats(db, endpoint="/api/a")
+        assert result["total_requests"] == 1
+        assert result["avg_response_time_ms"] == 100.0
         assert result["error_rate"] == 0.0
 
-    def test_with_errors(self):
+    def test_time_window_excludes_old_rows(self):
         from app.services.monitoring_service import MonitoringService
-        mock_db = MagicMock()
-        m1 = MagicMock()
-        m1.response_time_ms = 50.0
-        m1.status_code = 500
-        m2 = MagicMock()
-        m2.response_time_ms = 100.0
-        m2.status_code = 200
-        mock_db.query.return_value.filter.return_value.all.return_value = [m1, m2]
-        result = MonitoringService.get_api_performance_stats(mock_db)
-        assert result["total_requests"] == 2
-        assert result["error_rate"] == 50.0
+
+        db = self._make_db()
+        self._add(db, "/api/a", 100.0, 200)
+        self._add(db, "/api/a", 900.0, 200, minutes_ago=48 * 60)
+        db.commit()
+
+        result = MonitoringService.get_api_performance_stats(db, hours=24)
+        assert result["total_requests"] == 1
+        assert result["avg_response_time_ms"] == 100.0
 
 
 class TestPercentile:

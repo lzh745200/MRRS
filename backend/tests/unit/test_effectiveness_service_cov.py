@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""effectiveness_service 覆盖率补测：静态方法组 + 实例方法组"""
+"""effectiveness_service 覆盖率补测：静态方法组（实例假数据方法组已随 R27-H7 删除）"""
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
@@ -133,29 +133,10 @@ def test_compare_evaluations_delta():
     assert r["year1_data"]["total_score"] == 70.0
 
 
-# ---------- 实例方法组 ----------
-
-def test_instance_evaluators():
-    svc = EffectivenessService()
-    m1 = svc.evaluate_village_effectiveness(1)
-    assert m1.overall_score == 0.82
-    m2 = svc.evaluate_project_effectiveness(2)
-    assert m2.project_completion_rate == 0.95
-    m3 = svc.evaluate_fund_effectiveness(3)
-    assert m3.fund_usage_rate == 0.92
-
-
-def test_trends_and_export():
-    svc = EffectivenessService()
-    t = svc.get_effectiveness_trends(1, "village")
-    assert len(t["income_growth"]) == 5
-    assert svc.export_effectiveness_report(1, format="excel") == b"Mock report content"
-
-
-def test_compare_periods_four_and_two_args():
-    svc = EffectivenessService()
-    r4 = svc.compare_effectiveness_periods(1, "2024-01", "2024-06", "2024-07", "2024-12")
-    assert r4["period1"] == "2024-01 to 2024-06"
-    assert r4["improvement"] == 0.07
-    r2 = svc.compare_effectiveness_periods(1, "2024-01", "2024-12")
-    assert r2["period1"] == "2024-01"
+# ---------- 实例方法组（R27-H7 已删除） ----------
+# evaluate_village_effectiveness / evaluate_project_effectiveness / evaluate_fund_effectiveness /
+# get_effectiveness_trends / export_effectiveness_report / compare_effectiveness_periods
+# 已随 R28 收尾删除：六个方法无任何调用方（全仓 grep 确认），且全部返回写死假数据
+# （EffectivenessMetrics 常量 / b"Mock report content"）—— R27 报告 H7 要求
+# 「绝不返回假数据」。真实评估链路（evaluate_village / get_evaluation_report /
+# compare_evaluations）保留，且已有独立用例覆盖。

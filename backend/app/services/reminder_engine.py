@@ -129,7 +129,20 @@ def scan_budget_warnings(
     danger_threshold: float = 0.95,
 ) -> List[Dict[str, Any]]:
     """扫描经费预算告警."""
-    funds = db.query(Fund).filter(Fund.amount > 0).all()
+    # M19（R27 排查）：两处收敛 —— ①软删经费（is_active=False）不提醒；
+    # ②告警判定下推 SQL（used >= amount * threshold，乘法避开 SQLite 整数
+    # 除法截断），只载入真正达阈值的行，不再全表 .all() 驻留内存。
+    # NULL used_amount 在 SQL 比较中为 UNKNOWN → 自然排除，与旧 Python
+    # 侧 ``used or 0``（0 < 阈值）行为一致。
+    funds = (
+        db.query(Fund)
+        .filter(
+            Fund.is_active == True,  # noqa: E712 软删经费不提醒
+            Fund.amount > 0,
+            Fund.used_amount >= Fund.amount * warning_threshold,
+        )
+        .all()
+    )
     results = []
     for f in funds:
         used = getattr(f, "used_amount", 0) or 0

@@ -58,6 +58,16 @@ vi.mock('@/views/export/ReportExport.vue', () => ({
   default: { name: 'ReportExportCoverageStub' },
 }))
 
+// 下级单位管理 / 模块策略配置：coverage-merge 不变量——两者各有专属深挂载测试，
+// 本文件若真实加载会产出不含渲染分支的 fnMap 分片，满量按 id 合并会错位。
+// 懒加载函数本体仍被执行（router/index.ts 语句覆盖不受影响），只是不再触碰真实模块。
+vi.mock('@/views/admin/SubordinateManagement.vue', () => ({
+  default: { name: 'SubordinateManagementCoverageStub' },
+}))
+vi.mock('@/views/admin/OrgModulePolicy.vue', () => ({
+  default: { name: 'OrgModulePolicyCoverageStub' },
+}))
+
 import router, { routes } from '@/router'
 
 // ==================== Helpers ====================

@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+# 并发组（R28 低危清理）：只避免同一工作流在同一 ref 上叠加运行 ——
+# backend-full 90 分钟预算是正常耗时（AGENTS.md：不要取消它），
+# 因此 cancel-in-progress: false（新触发排队等待，绝不取消进行中的全量回归）。
+concurrency:
+  group: nightly-full-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   backend-full:
     runs-on: ubuntu-latest
@@ -106,6 +113,7 @@ jobs:
 
   quality-report:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [backend-full, frontend-full]
     if: always()
     steps:

@@ -22,16 +22,6 @@ import {
   compareVillages,
   compareYears,
   getSummaryStatistics,
-  getDashboard,
-  getVillageAnalysis,
-  getFundingTrends,
-  getPerformanceMetrics,
-  getComparisonAnalysis,
-  generateReport,
-  exportData,
-  getRealtimeStats,
-  getKpiSummary,
-  getAnalyticsHealth,
 } from '@/api/analytics'
 
 describe('api/analytics', () => {
@@ -73,30 +63,30 @@ describe('api/analytics', () => {
     expect(r.pageSize).toBe(50)
   })
 
-  it('drillDown POST dimension + targetDimension', async () => {
+  it('drillDown POST dimension + value（后端无 target_dimension）', async () => {
     mockPost.mockResolvedValueOnce({ items: [] })
     await drillDown({
       dimension: 'province',
       value: '北京',
-      targetDimension: 'city',
       filters: {},
     } as any)
     expect(mockPost).toHaveBeenCalledWith('/reports/analytics/drill-down', {
       dimension: 'province',
       value: '北京',
-      target_dimension: 'city',
       filters: {},
     })
   })
 
-  it('compareVillages POST with metrics joined', async () => {
+  it('compareVillages POST，metrics 走重复查询键（后端 List[str]）', async () => {
     mockApiRequest.mockResolvedValueOnce({ items: [] })
     await compareVillages([1, 2], 2026, ['gdp', 'population'])
     expect(mockApiRequest).toHaveBeenCalledWith({
       method: 'POST',
       url: '/reports/analytics/compare-villages',
       data: [1, 2],
-      params: { year: 2026, metrics: 'gdp,population' },
+      params: { year: 2026, metrics: ['gdp', 'population'] },
+      // indexes:null → ?metrics=gdp&metrics=population（axios 默认会序列化成 metrics[]）
+      paramsSerializer: { indexes: null },
     })
   })
 
@@ -140,104 +130,5 @@ describe('api/analytics', () => {
       is_three_regions: undefined,
       is_key_county: undefined,
     })
-  })
-
-  it('getDashboard GET with date_range + filters', async () => {
-    mockGet.mockResolvedValueOnce({})
-    await getDashboard('30d', 'dept:X')
-    expect(mockGet).toHaveBeenCalledWith('/analytics/dashboard', {
-      date_range: '30d',
-      filters: 'dept:X',
-    })
-  })
-
-  it('getDashboard 无参', async () => {
-    mockGet.mockResolvedValueOnce({})
-    await getDashboard()
-    expect(mockGet).toHaveBeenCalledWith('/analytics/dashboard', {
-      date_range: undefined,
-      filters: undefined,
-    })
-  })
-
-  it('getVillageAnalysis GET 透传返回值', async () => {
-    const body = { items: [1, 2] }
-    mockGet.mockResolvedValueOnce(body)
-    const r = await getVillageAnalysis()
-    expect(mockGet).toHaveBeenCalledWith('/analytics/village-analysis')
-    expect(r).toBe(body)
-  })
-
-  it('getFundingTrends 默认 5 年', async () => {
-    mockGet.mockResolvedValueOnce({})
-    await getFundingTrends()
-    expect(mockGet).toHaveBeenCalledWith('/analytics/funding-trends', { years: 5 })
-  })
-
-  it('getFundingTrends 自定义年数', async () => {
-    mockGet.mockResolvedValueOnce({})
-    await getFundingTrends(3)
-    expect(mockGet).toHaveBeenCalledWith('/analytics/funding-trends', { years: 3 })
-  })
-
-  it('getPerformanceMetrics GET', async () => {
-    const body = { kpis: [] }
-    mockGet.mockResolvedValueOnce(body)
-    const r = await getPerformanceMetrics()
-    expect(mockGet).toHaveBeenCalledWith('/analytics/performance-metrics')
-    expect(r).toBe(body)
-  })
-
-  it('getComparisonAnalysis POST /analytics/comparison', async () => {
-    const body = { result: 'ok' }
-    mockPost.mockResolvedValueOnce(body)
-    const data = { province: '四川', compare_type: 'year', target_value: '2026' }
-    const r = await getComparisonAnalysis(data)
-    expect(mockPost).toHaveBeenCalledWith('/analytics/comparison', data)
-    expect(r).toBe(body)
-  })
-
-  it('generateReport POST /analytics/generate-report', async () => {
-    mockPost.mockResolvedValueOnce({ url: '/reports/1.pdf' })
-    const data = { report_type: 'yearly', start_date: '2026-01-01', end_date: '2026-12-31' }
-    await generateReport(data)
-    expect(mockPost).toHaveBeenCalledWith('/analytics/generate-report', data)
-  })
-
-  it('exportData POST /analytics/export 透传返回值', async () => {
-    const body = { file: 'x.xlsx' }
-    mockPost.mockResolvedValueOnce(body)
-    const data = { report_type: 'summary' }
-    const r = await exportData(data)
-    expect(mockPost).toHaveBeenCalledWith('/analytics/export', data)
-    expect(r).toBe(body)
-  })
-
-  it('getRealtimeStats GET', async () => {
-    const body = { online: 3 }
-    mockGet.mockResolvedValueOnce(body)
-    const r = await getRealtimeStats()
-    expect(mockGet).toHaveBeenCalledWith('/analytics/realtime-stats')
-    expect(r).toBe(body)
-  })
-
-  it('getKpiSummary 默认 period=month', async () => {
-    mockGet.mockResolvedValueOnce({})
-    await getKpiSummary()
-    expect(mockGet).toHaveBeenCalledWith('/analytics/kpi-summary', { period: 'month' })
-  })
-
-  it('getKpiSummary 自定义 period', async () => {
-    mockGet.mockResolvedValueOnce({})
-    await getKpiSummary('year')
-    expect(mockGet).toHaveBeenCalledWith('/analytics/kpi-summary', { period: 'year' })
-  })
-
-  it('getAnalyticsHealth GET', async () => {
-    const body = { status: 'up' }
-    mockGet.mockResolvedValueOnce(body)
-    const r = await getAnalyticsHealth()
-    expect(mockGet).toHaveBeenCalledWith('/analytics/health')
-    expect(r).toBe(body)
   })
 })

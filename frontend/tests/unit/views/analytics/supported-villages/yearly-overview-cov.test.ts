@@ -256,6 +256,26 @@ describe('YearlyOverview.vue 趋势图', () => {
     expect(mocks.setOption).toHaveBeenCalled()
   })
 
+  it('loadTrendData：各年度请求一次性并发发出（Promise.all，非串行）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mocks.getYearlyData.mockClear()
+    // 全部年份挂起不 resolve：串行实现此刻只会发出第 1 个请求
+    const pending: Array<(value: any) => void> = []
+    mocks.getYearlyData.mockImplementation(
+      () => new Promise((resolve) => pending.push(resolve))
+    )
+    const loading = vm.loadTrendData()
+    const expectYears = new Date().getFullYear() + 1 - 2017 + 1
+    expect(mocks.getYearlyData).toHaveBeenCalledTimes(expectYears)
+    // 挂起的请求全部 settle 后正常收尾，趋势数据不为空
+    pending.forEach((resolve) => resolve({ income: { perCapitaIncome: 1 } }))
+    await loading
+    await nextTick()
+    expect(vm.trendData.years).toHaveLength(expectYears)
+  })
+
   it('renderTrendChart：无趋势数据 → 空态标题', async () => {
     mocks.getYearlyData.mockResolvedValue({})
     const wrapper = mountComp()

@@ -31,6 +31,10 @@ class MonitoringService:
         """
         获取API性能统计
 
+        R27-M28：计数/均值/错误数下推 SQL 聚合；百分位样本只取
+        ``response_time_ms`` 单列（按升序、过滤 NULL）——不再把整段时间窗内的
+        全量 ORM 行载入内存，也杜绝 NULL 混入排序导致的 TypeError。
+
         Args:
             db: 数据库会话
             hours: 统计时间范围(小时)
@@ -41,14 +45,22 @@ class MonitoringService:
         """
         since = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-        query = db.query(APIMetric).filter(APIMetric.timestamp >= since)
-
+        filters = [APIMetric.timestamp >= since]
         if endpoint:
-            query = query.filter(APIMetric.endpoint == endpoint)
+            filters.append(APIMetric.endpoint == endpoint)
 
-        metrics = query.all()
+        summary = (
+            db.query(
+                func.count(APIMetric.id).label("total_requests"),
+                func.avg(APIMetric.response_time_ms).label("avg_response_time"),
+                func.sum(case((APIMetric.status_code >= 400, 1), else_=0)).label("error_count"),
+            )
+            .filter(*filters)
+            .one()
+        )
+        total = int(summary.total_requests or 0)
 
-        if not metrics:
+        if total == 0:
             return {
                 "total_requests": 0,
                 "avg_response_time_ms": 0,
@@ -58,19 +70,25 @@ class MonitoringService:
                 "error_rate": 0,
             }
 
-        response_times = [m.response_time_ms for m in metrics]
-        response_times.sort()
+        errors = int(summary.error_count or 0)
 
-        total = len(metrics)
-        errors = len([m for m in metrics if m.status_code >= 400])
+        # 百分位需要有序样本：只取单列（轻量），并防御性过滤 NULL
+        # （ORM 路径 response_time_ms 为 NOT NULL；历史库可能无该约束）。
+        rows = (
+            db.query(APIMetric.response_time_ms)
+            .filter(*filters, APIMetric.response_time_ms.isnot(None))
+            .order_by(APIMetric.response_time_ms.asc())
+            .all()
+        )
+        response_times = [row[0] for row in rows]
 
         return {
             "total_requests": total,
-            "avg_response_time_ms": round(sum(response_times) / total, 2),
+            "avg_response_time_ms": round(float(summary.avg_response_time or 0), 2),
             "p50_response_time_ms": MonitoringService._percentile(response_times, 50),
             "p95_response_time_ms": MonitoringService._percentile(response_times, 95),
             "p99_response_time_ms": MonitoringService._percentile(response_times, 99),
-            "error_rate": round(errors / total * 100, 2) if total > 0 else 0,
+            "error_rate": round(errors / total * 100, 2),
         }
 
     @staticmethod

@@ -226,6 +226,24 @@ describe('DataTier.vue', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('恢复失败')
   })
 
+  it('handleRestore：带时间戳的归档名解析出完整模型名（含下划线不截断）', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    // 后端约定 {model_name}_{YYYYmmdd_HHMMSS}.json.gz：模型名 work_log 不能被截成 work
+    await vm.handleRestore({ name: 'work_log_20260101_120000.json.gz' })
+    expect(dataTierApi.restore).toHaveBeenCalledWith(
+      'work_log_20260101_120000.json.gz',
+      'work_log'
+    )
+
+    await vm.handleRestore({ name: 'worklog_20260101_120000.gz' })
+    expect(dataTierApi.restore).toHaveBeenCalledWith('worklog_20260101_120000.gz', 'worklog')
+
+    // 时间戳前为空模型名 → 回落旧口径得到空串（提示调用方数据异常而非拼出错误模型名）
+    await vm.handleRestore({ name: '_20260101_120000.json' })
+    expect(dataTierApi.restore).toHaveBeenCalledWith('_20260101_120000.json', '')
+  })
+
   it('handleArchiveTabChange 无副作用', async () => {
     const w = await mountComp()
     const vm = w.vm as any

@@ -46,32 +46,3 @@ export function getDatabaseFileSize(): Promise<{
     data: { size_bytes: number; size_mb: number }
   }>('/system/monitor/database-size')
 }
-
-/** 获取资源使用详情 */
-export function getResources(): Promise<{
-  success: boolean
-  data: Record<string, any>
-}> {
-  return get<{ success: boolean; data: Record<string, any> }>('/system/monitor/resources')
-}
-
-/** 获取告警规则列表 */
-export function getAlerts(): Promise<{ success: boolean; data: any[] }> {
-  return get<{ success: boolean; data: any[] }>('/system/monitor/alerts')
-}
-
-/** 获取告警历史记录 */
-export function getAlertHistory(params?: {
-  page?: number
-  page_size?: number
-}): Promise<{ success: boolean; data: any[] }> {
-  return get<{ success: boolean; data: any[] }>('/system/monitor/alerts/history', params)
-}
-
-/** 获取 API 调用统计 */
-export function getApiStats(): Promise<{
-  success: boolean
-  data: Record<string, any>
-}> {
-  return get<{ success: boolean; data: Record<string, any> }>('/system/monitor/api-stats')
-}

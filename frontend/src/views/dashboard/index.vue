@@ -150,17 +150,20 @@ import InfoRow from './InfoRow.vue'
 import { useUserStore } from '@/stores/user'
 import { createBackup } from '@/api/backup'
 import { useRouterSafe } from '@/composables/useRouterSafe'
+import { isAdminUser } from '@/utils/roleAccess'
 
 const { pushSafe } = useRouterSafe()
 const backingUp = ref(false)
 
 const showLayoutEditor = ref(false)
 const userStore = useUserStore()
-const isAdmin = computed(
-  () =>
-    ['admin', 'super_admin'].includes(userStore.currentUser?.role || '') ||
-    !!userStore.currentUser?.is_superuser
-)
+// M47：管理员判定统一走 roleAccess.isAdminUser()（读 AuthStorage 并 normalizeRole），
+// 不再硬编码原始 role —— 存量旧角色 manager/approval_leader 归一化后即 admin，
+// 原实现会把他们误判为非管理员（隐藏备份/恢复入口），与路由守卫口径不一致。
+// userStore 仍在使用（布局持久化/用户信息），保留引用。
+// 显式传入 store 中的响应式用户档案：既保持对 currentUser 的响应式依赖
+//（store 变化时重新计算），也让测试替身走同一条判定路径。
+const isAdmin = computed(() => isAdminUser(userStore.currentUser))
 const isManager = computed(() => isAdmin.value)
 
 // 布局持久化

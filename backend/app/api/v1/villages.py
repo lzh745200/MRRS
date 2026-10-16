@@ -56,7 +56,6 @@ async def list_villages(
     # 钳制分页（limit=-1 在 SQLite 下等同不限量）
     offset, lim = clamp_offset_limit(skip, limit)
     villages = query.offset(offset).limit(lim).all()
-
     items = [
         {
             "id": v.id,
@@ -86,8 +85,12 @@ async def list_villages(
     ]
 
     # envelope 格式：{code:200, data:{items,total,...}, message:"成功"}
-    page = (skip // limit) + 1 if limit > 0 else 1
-    return ok_list(items, total, page=page, page_size=limit)
+    # R28 §3：页号必须由**钳制后**的 offset/lim 推导。原实现用原始
+    # `skip // limit`——skip 为负时 Python 地板除得 -1 → page=0（前端分页器
+    # 越界），limit 被钳到 200 而 page_size 仍回吐请求值 1000 时页号也随之错算。
+    # clamp_offset_limit 保证 lim >= 1，无除零风险。
+    page = (offset // lim) + 1
+    return ok_list(items, total, page=page, page_size=lim)
 
 
 @router.get("/{village_id}")
@@ -121,7 +124,13 @@ async def get_village(
         raise HTTPException(status_code=403, detail="无权访问该村庄")
 
     from app.utils.common import StringHelper
-    return {
+    # R28-M11：列表端点已用 ok_list 信封，详情端点此前返回裸 dict ——
+    # 同一模块两种响应形状，前端需兼容两态。统一为 success_response。
+    # 兼容性：前端 axios 响应拦截器会把 data 内层对象的键提升到顶层，
+    # 因此旧形状（res.data.id）与新形状（res.id）同时可用，不破坏现有消费方。
+    from app.core.response import success_response
+
+    return success_response(data={
         "id": village.id,
         "name": village.name,
         "code": village.code,
@@ -150,4 +159,4 @@ async def get_village(
             {"id": ind.id, "name": ind.name, "industry_type": ind.industry_type}
             for ind in (village.industries or [])
         ],
-    }
+    })

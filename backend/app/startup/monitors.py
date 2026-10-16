@@ -33,7 +33,17 @@ def _stop_resource_monitoring():
 
 
 def _start_database_health_monitoring():
-    """启动数据库健康监控"""
+    """启动数据库健康监控（HEALTH_CHECK_ENABLED=False 时跳过）
+
+    HEALTH_CHECK_ENABLED 此前全仓零消费（R28 低危项）：接线为「关闭即不启动
+    数据库健康监控后台线程」，避免无谓的后台轮询；停止逻辑保持无条件调用
+    （未启动时 stop 为幂等空操作）。
+    """
+    from app.core.config import settings
+
+    if not settings.HEALTH_CHECK_ENABLED:
+        logger.info("数据库健康监控已禁用（HEALTH_CHECK_ENABLED=False）")
+        return
     try:
         from app.services.database_health_service import database_health_service
 

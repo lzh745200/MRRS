@@ -149,7 +149,10 @@ class MetricsMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        # METRICS_ENABLED 此前零消费（R28 低危项）：关闭时直接透传，
+        # 不计数、不耗时统计、不写慢请求（/metrics 端点本身仍在路由层）。
+        # 运行时读取 settings 属性，便于运维热切换与测试注入。
+        if scope["type"] != "http" or not settings.METRICS_ENABLED:
             await self.app(scope, receive, send)
             return
 

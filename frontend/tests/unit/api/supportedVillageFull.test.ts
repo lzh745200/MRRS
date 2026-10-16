@@ -78,9 +78,6 @@ import {
   importSectionData,
   downloadAllTemplates,
   importAllSectionsData,
-  getExportModules,
-  getExportFormats,
-  previewExport,
 } from '@/api/supportedVillage'
 
 describe('api/supportedVillage — 过滤/年度数据', () => {
@@ -304,26 +301,5 @@ describe('api/supportedVillage — 衔接资金/导入导出', () => {
     const fd = mockApiRequest.mock.calls[0][0].data as FormData
     expect(fd.get('file')).toBe(file)
     expect(result).toEqual({ success_rows: 99 })
-  })
-
-  it('getExportModules GET /supported-villages/export/modules', async () => {
-    mockGet.mockResolvedValueOnce(['income'])
-    const result = await getExportModules()
-    expect(mockGet).toHaveBeenCalledWith('/supported-villages/export/modules')
-    expect(result).toEqual(['income'])
-  })
-
-  it('getExportFormats GET /supported-villages/export/formats', async () => {
-    mockGet.mockResolvedValueOnce(['xlsx'])
-    const result = await getExportFormats()
-    expect(mockGet).toHaveBeenCalledWith('/supported-villages/export/formats')
-    expect(result).toEqual(['xlsx'])
-  })
-
-  it('previewExport GET /supported-villages/export/preview with params', async () => {
-    mockGet.mockResolvedValueOnce({ rows: [] })
-    const result = await previewExport({ year: 2024 })
-    expect(mockGet).toHaveBeenCalledWith('/supported-villages/export/preview', { year: 2024 })
-    expect(result).toEqual({ rows: [] })
   })
 })

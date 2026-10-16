@@ -625,12 +625,12 @@ class TestSmartConflictResolverFinalNote:
             SmartConflictResolver,
         )
 
-        local = SimpleNamespace(id=1, village_name="旧村名", updated_at=None)
+        local = SimpleNamespace(id=1, village_name="新村名", memo="旧", updated_at=None)
         db = MagicMock()
-        db.query.return_value = _query_mock(first=local)
+        db.query.return_value = _query_mock(first=local, all=[local])
         resolver = SmartConflictResolver(db)
         result = resolver.import_with_id_mapping(
-            {"villages": [{"id": 100, "village_name": "新村名"}]},
+            {"villages": [{"id": 100, "village_name": "新村名", "memo": "新"}]},
             strategy=ConflictStrategy.SKIP,
         )
         assert result == {"villages": {100: 1}}

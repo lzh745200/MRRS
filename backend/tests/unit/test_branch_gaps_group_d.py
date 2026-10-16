@@ -670,6 +670,14 @@ class TestMainBranches:
         import app.main as main_mod
 
         orig_isdir = os.path.isdir
+        # reload 只能得到【新】对象、无法恢复对象身份 —— 必须先把整个模块命名空间快照，
+        # 结束后原样回填。否则 main_mod.app 会变成另一个全新的 FastAPI 实例，而其它用例
+        # （含根 conftest 的 client 夹具）都是"模块导入期就绑定 app"的旧引用：依赖覆盖
+        # 打在旧实例上、请求却打到新实例 → 未认证 401。
+        # （同一类缺陷 2026-09 已在 test_branch_final_core_api.py 用 __dict__ 回填修过，
+        #   本处遗漏；实测令 tests/unit/api/test_data_quality_auth_scope.py 的两条
+        #   数据域用例在批量跑时 401 失败，单跑全绿。）
+        original_ns = dict(main_mod.__dict__)
 
         def fake_isdir(p):
             if os.path.basename(str(p)) in ("assets", "images", "static"):
@@ -684,7 +692,10 @@ class TestMainBranches:
             assert "/images" not in mounted
             assert "/static" not in mounted
         finally:
-            importlib.reload(main_mod)  # 还原模块状态
+            importlib.reload(main_mod)  # 重新执行模块级代码（恢复挂载）
+            # 回填原命名空间：reload 出的新实例必须丢弃，否则对象身份被换掉
+            main_mod.__dict__.clear()
+            main_mod.__dict__.update(original_ns)
         mounted_restored = {getattr(r, "path", "") for r in main_mod.app.routes}
         assert "/assets" in mounted_restored or "/uploads" in mounted_restored
 

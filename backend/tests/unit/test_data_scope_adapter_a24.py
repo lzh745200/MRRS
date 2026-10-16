@@ -76,7 +76,8 @@ class TestGetAccessibleOrgIds:
         assert get_accessible_org_ids(MANAGER_ORG_ID_ATTR) == [20]
 
     def test_own_dept_with_db_expands_subtree(self):
-        with patch("app.core.data_permission._get_org_subtree", return_value=([10, 11, 12], ["总部", "分部", "小组"])) as mock_sub:
+        subtree = ([10, 11, 12], ["总部", "分部", "小组"])
+        with patch("app.core.data_permission._get_org_subtree", return_value=subtree) as mock_sub:
             assert get_accessible_org_ids(MANAGER, db=MagicMock()) == [10, 11, 12]
         mock_sub.assert_called_once()
 
@@ -92,10 +93,19 @@ class TestGetAccessibleOrgIds:
 
 
 class TestApplyScopeFilter:
-    def test_admin_query_unchanged(self):
+    def test_admin_query_unchanged_only_with_explicit_full_access(self):
+        """R27-H8：部门级 admin 默认**不再**全量放行，必须显式 admin_full_access。"""
         q = MagicMock()
-        assert apply_scope_filter(q, ADMIN, TinyModel) is q
+        assert apply_scope_filter(q, ADMIN, TinyModel, admin_full_access=True) is q
         q.filter.assert_not_called()
+
+    def test_department_admin_is_scoped_to_own_org_by_default(self):
+        """R27-H8 回归：role=admin（非超管）默认收敛到本组织及子树。"""
+        q = MagicMock()
+        user = _user(id=9, role="admin", organization_id=10)
+        result = apply_scope_filter(q, user, TinyModel)
+        q.filter.assert_called_once()
+        assert result is q.filter.return_value
 
     def test_data_scope_all_query_unchanged(self):
         q = MagicMock()
@@ -114,10 +124,19 @@ class TestApplyScopeFilter:
             assert apply_scope_filter(q, VIEWER, TinyModel) is q
         q.filter.assert_not_called()
 
-    def test_own_dept_org_ids_none_returns_query(self):
+    def test_own_dept_org_ids_none_requires_explicit_full_access(self):
+        """R27-H8：get_accessible_org_ids 返回 None（全局范围）时，未显式声明
+        admin_full_access 一律按本组织子树收敛，绝不静默放行全量。"""
         q = MagicMock()
         with patch.object(adapter, "get_accessible_org_ids", return_value=None):
-            assert apply_scope_filter(q, MANAGER, TinyModel) is q
+            result = apply_scope_filter(q, MANAGER, TinyModel)
+        q.filter.assert_called_once()
+        assert result is q.filter.return_value
+
+    def test_own_dept_org_ids_none_with_full_access_returns_query(self):
+        q = MagicMock()
+        with patch.object(adapter, "get_accessible_org_ids", return_value=None):
+            assert apply_scope_filter(q, MANAGER, TinyModel, admin_full_access=True) is q
         q.filter.assert_not_called()
 
     def test_own_dept_applies_org_filter_query(self):

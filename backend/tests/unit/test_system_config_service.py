@@ -244,18 +244,29 @@ class TestSystemConfigService:
         from app.services.system_config_service import SystemConfigService
         mock_db = MagicMock()
         svc = SystemConfigService(mock_db)
-        svc.set = MagicMock()
+        svc._set_no_commit = MagicMock()
         svc.set_initialized(1)
-        svc.set.assert_any_call("initialized", "true")
-        svc.set.assert_any_call("organization_id", "1")
-        assert svc.set.call_count == 3
+        svc._set_no_commit.assert_any_call("initialized", "true")
+        svc._set_no_commit.assert_any_call("organization_id", "1")
+        assert svc._set_no_commit.call_count == 3
+        # M27 订正：旧用例锁定了"三次 set 各自提交"（非原子）这一缺陷行为；
+        # 现在三次写入合并为单次提交（中途失败不会留下半初始化状态）。
+        mock_db.commit.assert_called_once()
 
     def test_set_initialized_with_system_id(self):
         from app.services.system_config_service import SystemConfigService
-        svc = SystemConfigService()
-        svc.set = MagicMock()
+        mock_db = MagicMock()
+        svc = SystemConfigService(mock_db)
+        svc._set_no_commit = MagicMock()
         svc.set_initialized(1, "SYS-CUSTOM")
-        svc.set.assert_any_call("system_id", "SYS-CUSTOM")
+        svc._set_no_commit.assert_any_call("system_id", "SYS-CUSTOM")
+
+    def test_set_initialized_no_db_is_noop(self):
+        from app.services.system_config_service import SystemConfigService
+        svc = SystemConfigService()
+        svc._set_no_commit = MagicMock()
+        svc.set_initialized(1)
+        svc._set_no_commit.assert_not_called()
 
     def test_delete_no_db(self):
         from app.services.system_config_service import SystemConfigService

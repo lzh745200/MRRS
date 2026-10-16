@@ -28,7 +28,10 @@ class Todo(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     title = Column(String(500), nullable=False, comment="待办标题")
     description = Column(Text, nullable=True, comment="待办描述")
-    deadline = Column(String(20), nullable=True, comment="截止日期")
+    # 存 ISO 日期字符串（YYYY-MM-DD），保留 String(20) 不改列类型（需迁移）：
+    # 读取方 backup_scheduler 用 `Todo.deadline >= today_str` 做字典序比较、
+    # `strptime(..., "%Y-%m-%d")` 解析 —— 命中与解析都要求写入严格为 ISO 格式。
+    deadline = Column(String(20), nullable=True, comment="截止日期（ISO 格式 YYYY-MM-DD）")
     completed = Column(Boolean, default=False, nullable=False, comment="是否完成")
     priority = Column(String(10), default="medium", nullable=False, comment="优先级: high/medium/low")
     user_id = Column(

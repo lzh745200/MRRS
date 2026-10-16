@@ -18,7 +18,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.data_permission import OrgScopeFilter, get_org_scope
@@ -340,66 +340,124 @@ def _query_project_approval_stats(db: Session, data_scope: OrgScopeFilter, user_
     }
 
 
+def _scope_village_query(query, data_scope: OrgScopeFilter):
+    """把组织范围挂到帮扶村查询上（非全量访问时）。"""
+    if data_scope.has_full_access():
+        return query
+    return data_scope.filter_by_org_ids(
+        query, SupportedVillage.organization_id, created_by_column=SupportedVillage.created_by
+    )
+
+
+def _scope_village_ids(db: Session, data_scope: OrgScopeFilter):
+    """数据域内的帮扶村 id 子查询（子表按村收敛用）。"""
+    query = db.query(SupportedVillage.id).filter(SupportedVillage.is_active == True)  # noqa: E712
+    return _scope_village_query(query, data_scope)
+
+
 def _compute_trends(db: Session, data_scope: OrgScopeFilter) -> dict:
-    """计算各KPI的30天环比趋势百分比"""
+    """计算各KPI的30天环比趋势百分比
+
+    H2 修复：四个趋势查询（村/项目/学校/资金）此前一律全局聚合，导致受限用户
+    在大屏上仍能看到全库环比；现全部套数据范围，与 /stats 其它指标同口径。
+    人口/人均收入经帮扶村子查询收敛（年度表本身无组织列）。
+    """
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     trends = {}
 
     try:
         # 帮扶村趋势
-        current_villages = db.query(func.count(SupportedVillage.id)).filter(
-            SupportedVillage.is_active == True  # noqa: E712
+        current_villages = _scope_village_query(
+            db.query(func.count(SupportedVillage.id)).filter(
+                SupportedVillage.is_active == True  # noqa: E712
+            ),
+            data_scope,
         ).scalar() or 0
-        prev_villages = db.query(func.count(SupportedVillage.id)).filter(
-            SupportedVillage.is_active == True,  # noqa: E712
-            SupportedVillage.created_at <= thirty_days_ago,
+        prev_villages = _scope_village_query(
+            db.query(func.count(SupportedVillage.id)).filter(
+                SupportedVillage.is_active == True,  # noqa: E712
+                SupportedVillage.created_at <= thirty_days_ago,
+            ),
+            data_scope,
         ).scalar() or 0
         trends["villages"] = _pct_change(current_villages, prev_villages)
 
         # 项目趋势
-        current_projects = db.query(func.count(Project.id)).filter(
-            Project.is_active == True,  # noqa: E712
-            Project.status != "cancelled",
+        current_projects = _apply_project_scope(
+            db.query(func.count(Project.id)).filter(
+                Project.is_active == True,  # noqa: E712
+                Project.status != "cancelled",
+            ),
+            data_scope,
         ).scalar() or 0
-        prev_projects = db.query(func.count(Project.id)).filter(
-            Project.is_active == True,  # noqa: E712
-            Project.status != "cancelled",
-            Project.created_at <= thirty_days_ago,
+        prev_projects = _apply_project_scope(
+            db.query(func.count(Project.id)).filter(
+                Project.is_active == True,  # noqa: E712
+                Project.status != "cancelled",
+                Project.created_at <= thirty_days_ago,
+            ),
+            data_scope,
         ).scalar() or 0
         trends["projects"] = _pct_change(current_projects, prev_projects)
 
         # 学校趋势
-        current_schools = db.query(func.count(School.id)).filter(
-            School.is_active == True  # noqa: E712
-        ).scalar() or 0
-        prev_schools = db.query(func.count(School.id)).filter(
+        school_current_q = db.query(func.count(School.id)).filter(School.is_active == True)  # noqa: E712
+        school_prev_q = db.query(func.count(School.id)).filter(
             School.is_active == True,  # noqa: E712
             School.created_at <= thirty_days_ago,
-        ).scalar() or 0
+        )
+        if not data_scope.has_full_access():
+            school_current_q = data_scope.filter_by_org_ids(
+                school_current_q, School.organization_id, created_by_column=School.created_by
+            )
+            school_prev_q = data_scope.filter_by_org_ids(
+                school_prev_q, School.organization_id, created_by_column=School.created_by
+            )
+        current_schools = school_current_q.scalar() or 0
+        prev_schools = school_prev_q.scalar() or 0
         trends["schools"] = _pct_change(current_schools, prev_schools)
 
-        # 资金趋势
-        current_funds = db.query(func.coalesce(func.sum(Fund.amount), 0)).filter(
+        # 资金趋势（Fund 有 organization_id，直接按组织范围收敛）
+        fund_current_q = db.query(func.coalesce(func.sum(Fund.amount), 0)).filter(
             Fund.is_active == True  # noqa: E712
-        ).scalar() or 0
-        prev_funds = db.query(func.coalesce(func.sum(Fund.amount), 0)).filter(
+        )
+        fund_prev_q = db.query(func.coalesce(func.sum(Fund.amount), 0)).filter(
             Fund.is_active == True,  # noqa: E712
             Fund.created_at <= thirty_days_ago,
-        ).scalar() or 0
+        )
+        if not data_scope.has_full_access():
+            fund_current_q = data_scope.filter_by_org_ids(
+                fund_current_q, Fund.organization_id, created_by_column=Fund.created_by
+            )
+            fund_prev_q = data_scope.filter_by_org_ids(
+                fund_prev_q, Fund.organization_id, created_by_column=Fund.created_by
+            )
+        current_funds = fund_current_q.scalar() or 0
+        prev_funds = fund_prev_q.scalar() or 0
         trends["funds"] = _pct_change(float(current_funds), float(prev_funds))
 
         # 人口/人均收入为年度数据，30 天窗口无环比意义——采用最新数据年同比
-        max_pop_year = db.query(func.max(VillagePopulation.year)).scalar()
+        max_pop_year = (
+            db.query(func.max(VillagePopulation.year))
+            .filter(VillagePopulation.supported_village_id.in_(_scope_village_ids(db, data_scope)))
+            .scalar()
+        )
         if max_pop_year:
             cur_pop = (
                 db.query(func.coalesce(func.sum(VillagePopulation.total_population), 0))
-                .filter(VillagePopulation.year == max_pop_year)
+                .filter(
+                    VillagePopulation.year == max_pop_year,
+                    VillagePopulation.supported_village_id.in_(_scope_village_ids(db, data_scope)),
+                )
                 .scalar()
                 or 0
             )
             prev_pop = (
                 db.query(func.coalesce(func.sum(VillagePopulation.total_population), 0))
-                .filter(VillagePopulation.year == max_pop_year - 1)
+                .filter(
+                    VillagePopulation.year == max_pop_year - 1,
+                    VillagePopulation.supported_village_id.in_(_scope_village_ids(db, data_scope)),
+                )
                 .scalar()
                 or 0
             )
@@ -680,8 +738,9 @@ async def get_dashboard_summary(
         logger.error("仪表盘汇总统计失败: %s", e, exc_info=True)
         stats = {}
 
-    # 复用 recent-activities 逻辑
-    activities = await get_recent_activities(current_user=current_user, db=db)
+    # 复用 recent-activities 逻辑（必须显式透传已解析的数据域：直接函数调用不会
+    # 走 FastAPI 依赖注入，漏传会把 Depends 哨兵当成 OrgScopeFilter 使用）
+    activities = await get_recent_activities(current_user=current_user, data_scope=data_scope, db=db)
 
     result = {"stats": stats, "recent_activities": activities.get("items", [])}
     _set_cached(cache_key, result, ttl=120)  # 2 分钟缓存
@@ -718,11 +777,21 @@ def _fetch_custom_activities() -> list:
     return items
 
 
-def _fetch_project_activities() -> list:
+def _fetch_project_activities(data_scope: OrgScopeFilter) -> list:
+    """最近项目动态。
+
+    数据域（R28 补漏）：本 feed 此前**无任何过滤**，任意登录用户都能读到
+    其它组织的项目名与负责人（与 M9 ``/messages/recent-activities`` 同类）。
+    现按与其它仪表盘端点一致的 ``OrgScopeFilter`` 口径过滤。
+    """
     sess = SessionLocal()
     items = []
     try:
-        query = sess.query(Project).filter(Project.is_active == True)  # noqa: E712
+        query = data_scope.filter_by_org_ids(
+            sess.query(Project).filter(Project.is_active == True),  # noqa: E712
+            Project.organization_id,
+            created_by_column=Project.created_by,
+        )
         for p in query.order_by(Project.updated_at.desc()).limit(5).all():
             action = "更新了" if p.updated_at != p.created_at else "创建了"
             items.append({
@@ -738,12 +807,17 @@ def _fetch_project_activities() -> list:
     return items
 
 
-def _fetch_fund_activities() -> list:
+def _fetch_fund_activities(data_scope: OrgScopeFilter) -> list:
+    """最近经费动态（数据域过滤口径同项目动态，R28 补漏）。"""
     sess = SessionLocal()
     items = []
     try:
         status_label_map = {"approved": "审批通过", "allocated": "已拨付", "pending": "待审批", "planned": "已规划"}
-        fund_query = sess.query(Fund).filter(Fund.is_active == True)  # noqa: E712
+        fund_query = data_scope.filter_by_org_ids(
+            sess.query(Fund).filter(Fund.is_active == True),  # noqa: E712
+            Fund.organization_id,
+            created_by_column=Fund.created_by,
+        )
         for f in fund_query.order_by(Fund.updated_at.desc()).limit(5).all():
             items.append({
                 "id": f"fund_{f.id}", "type": "fund",
@@ -759,14 +833,31 @@ def _fetch_fund_activities() -> list:
     return items
 
 
-def _fetch_approval_activities() -> list:
+def _fetch_approval_activities(data_scope: OrgScopeFilter) -> list:
+    """最近审批动态。
+
+    数据域（R28 补漏）：``ApprovalTask`` 既无 ``organization_id`` 也无
+    ``created_by``，无法复用按组织列的过滤；非全量访问者按「与我相关」
+    （我提交 / 待我审批）收敛，避免普通用户看到跨组织审批标题与提交人。
+    """
     sess = SessionLocal()
     items = []
     try:
         status_label_map = {"pending": "待审批", "approved": "已通过", "rejected": "已驳回", "withdrawn": "已撤回"}
+        approval_query = sess.query(ApprovalTask).options(joinedload(ApprovalTask.submitter))
+        if not data_scope.has_full_access():
+            uid = data_scope.user_id
+            if uid is None:
+                approval_query = approval_query.filter(False)
+            else:
+                approval_query = approval_query.filter(
+                    or_(
+                        ApprovalTask.submitter_id == uid,
+                        ApprovalTask.current_approver_id == uid,
+                    )
+                )
         for a in (
-            sess.query(ApprovalTask)
-            .options(joinedload(ApprovalTask.submitter))
+            approval_query
             .order_by(ApprovalTask.updated_at.desc())
             .limit(5).all()
         ):
@@ -790,23 +881,33 @@ def _fetch_approval_activities() -> list:
 @router.get("/recent-activities")
 async def get_recent_activities(
     current_user=Depends(get_current_user),
+    data_scope: OrgScopeFilter = Depends(get_org_scope),
     db: Session = Depends(get_db),
 ):
     """获取近期动态（覆盖项目、经费、审批多类事件 + 自定义动态）
 
     优化：5个独立查询并行执行，响应时间从 sum(5) 降至 max(单次)。
+
+    数据域（R28 补漏）：项目/经费/审批三路 feed 此前**无过滤**——任意登录用户
+    可读到跨组织项目名、负责人与审批标题（M9 同类缺陷）。现按与其它仪表盘端点
+    一致的 ``get_org_scope`` 口径收敛。
+
+    缓存：只有**全量访问者**（org-tree 模型下的管理员）读写共享缓存；普通用户
+    按数据域现算——绝不能读共享缓存，否则会拿到管理员范围的全量动态。
     """
     cache_key = "dashboard_recent_activities"
-    cached = _get_cached(cache_key)
-    if cached is not None:
-        return success_response(data=cached)
+    use_cache = data_scope.has_full_access()
+    if use_cache:
+        cached = _get_cached(cache_key)
+        if cached is not None:
+            return success_response(data=cached)
 
     hidden_ids, custom_items, project_items, fund_items, approval_items = await asyncio.gather(
         asyncio.to_thread(_fetch_hidden_activities),
         asyncio.to_thread(_fetch_custom_activities),
-        asyncio.to_thread(_fetch_project_activities),
-        asyncio.to_thread(_fetch_fund_activities),
-        asyncio.to_thread(_fetch_approval_activities),
+        asyncio.to_thread(_fetch_project_activities, data_scope),
+        asyncio.to_thread(_fetch_fund_activities, data_scope),
+        asyncio.to_thread(_fetch_approval_activities, data_scope),
     )
 
     items = custom_items + project_items + fund_items + approval_items
@@ -816,7 +917,8 @@ async def get_recent_activities(
 
     items.sort(key=lambda x: x.get("time", ""), reverse=True)
     result = {"items": items[:10]}
-    _set_cached(cache_key, result, ttl=60)
+    if use_cache:
+        _set_cached(cache_key, result, ttl=60)
     return success_response(data=result)
 
 

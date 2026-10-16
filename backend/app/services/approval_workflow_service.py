@@ -470,15 +470,8 @@ class ApprovalWorkflowService:
         if not standalone and task.current_approver_id not in (None, approver_id):
             return None
 
-        # 创建审批记录
-        record = ApprovalRecord(
-            task_id=task.id,
-            level=task.current_level,
-            approver_id=approver_id,
-            action=ApprovalAction.APPROVE.value,
-            opinion=opinion,
-        )
-        self.db.add(record)
+        # 当前级别（审批记录按操作发生时的级别落库）
+        record_level = task.current_level
 
         # 检查是否有下一级
         workflow_nodes = sorted(task.workflow.nodes, key=lambda n: n.level)
@@ -486,16 +479,52 @@ class ApprovalWorkflowService:
 
         if next_level <= len(workflow_nodes):
             next_node = workflow_nodes[next_level - 1]
-            task.current_level = next_level
             next_approver = next_node.approver_id
             # role 类型节点：晋级时同样解析为具体用户（与提交流程一致）
             if getattr(next_node, "approver_type", "user") == "role":
                 next_approver = self._resolve_role_approver_id(next_node.approver_id)
-            task.current_approver_id = next_approver
+            claim_values: Dict[str, Any] = {
+                "current_level": next_level,
+                "current_approver_id": next_approver,
+            }
         else:
-            # 所有级别通过
-            task.status = ApprovalStatus.APPROVED.value
-            task.completed_at = datetime.now(timezone.utc)
+            claim_values = {
+                "status": ApprovalStatus.APPROVED.value,
+                "completed_at": datetime.now(timezone.utc),
+            }
+
+        # M30（R27 排查）：原实现是 check-then-act —— 上面的 status/审批人校验与
+        # 状态推进之间没有原子性，并发或重放请求会双双通过校验、各写一条审批
+        # 记录并重复推进级别。改为带条件的原子 UPDATE 抢占：仅当行仍满足
+        # status=pending 且 current_level 未被推进时才成功，rowcount != 1
+        # 即视为已被他人处理，放弃本次操作。（SQLite 无行级 SELECT..FOR UPDATE，
+        # 以 rowcount 校验作为稳定口径。）
+        claimed = (
+            self.db.query(ApprovalTask)
+            .filter(
+                ApprovalTask.id == task.id,
+                ApprovalTask.status == ApprovalStatus.PENDING.value,
+                ApprovalTask.current_level == record_level,
+            )
+            .update(claim_values, synchronize_session=False)
+        )
+        if claimed != 1:
+            return None
+
+        # 抢占成功：按库内新状态继续（apply_entity_change 读取 task.status）
+        self.db.refresh(task)
+
+        # 创建审批记录（抢占成功后才写，重放请求不会留下重复记录）
+        record = ApprovalRecord(
+            task_id=task.id,
+            level=record_level,
+            approver_id=approver_id,
+            action=ApprovalAction.APPROVE.value,
+            opinion=opinion,
+        )
+        self.db.add(record)
+
+        if next_level > len(workflow_nodes):
             # 审批通过后执行数据变更（Requirement 3.6）：回写业务实体状态
             if not self.apply_entity_change(task):
                 # 回写失败：任务不进入成功终态，标记为可查询/可重试的失败态
@@ -521,17 +550,37 @@ class ApprovalWorkflowService:
         if not standalone and task.current_approver_id not in (None, approver_id):
             return None
 
+        # M30：同 approve_task —— 原子抢占（status + current_level 双条件，
+        # rowcount != 1 视为已被并发/重放请求处理）。
+        record_level = task.current_level
+        claimed = (
+            self.db.query(ApprovalTask)
+            .filter(
+                ApprovalTask.id == task.id,
+                ApprovalTask.status == ApprovalStatus.PENDING.value,
+                ApprovalTask.current_level == record_level,
+            )
+            .update(
+                {
+                    "status": ApprovalStatus.REJECTED.value,
+                    "completed_at": datetime.now(timezone.utc),
+                },
+                synchronize_session=False,
+            )
+        )
+        if claimed != 1:
+            return None
+        self.db.refresh(task)
+
         record = ApprovalRecord(
             task_id=task.id,
-            level=task.current_level,
+            level=record_level,
             approver_id=approver_id,
             action=ApprovalAction.REJECT.value,
             opinion=opinion,
         )
         self.db.add(record)
 
-        task.status = ApprovalStatus.REJECTED.value
-        task.completed_at = datetime.now(timezone.utc)
         # 驳回回写业务实体状态（如经费：pending → rejected）
         if not self.apply_entity_change(task):
             task.status = ApprovalStatus.REJECTED.value + self.APPLY_FAILED_SUFFIX

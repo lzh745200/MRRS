@@ -82,7 +82,10 @@ if non_utf8:
     print(f'non-UTF8 files: {len(non_utf8)}')
     for p in non_utf8:
         print(f'  {p}')
-if CHECK_MODE and (nul_hits or non_utf8):
-    print('[scan_mojibake --check] FAIL：存在 NUL/非UTF-8 损坏文件')
+if CHECK_MODE and (hits or nul_hits or non_utf8):
+    # 2026-10-16 修复：原判据只含 nul_hits/non_utf8，mojibake 命中（hits）虽被统计
+    # 却从不影响退出码 —— 即"扫得出来但拦不住"。frontend/package.json 的
+    # description 被 GBK↔UTF-8 双重编码损坏多时未被本守卫拦下，正是此漏洞所致。
+    print('[scan_mojibake --check] FAIL：存在 mojibake/NUL/非UTF-8 损坏文件')
     sys.exit(1)
 print('[scan_mojibake --check] OK' if CHECK_MODE else '')

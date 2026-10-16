@@ -256,7 +256,7 @@ describe('操作按钮', () => {
       await findBtn(wrapper, '采集新闻').trigger('click')
       await flushPromises()
       expect(mockCollectNews).toHaveBeenCalledWith({
-        keywords: ['乡村振兴', '帮扶', '帮扶', '助学兴教'],
+        keywords: ['乡村振兴', '帮扶', '助学兴教'],
       })
       expect(ElMessage.success).toHaveBeenCalledWith('新闻采集已触发')
       const statsBefore = mockGetStatistics.mock.calls.length

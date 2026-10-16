@@ -36,14 +36,18 @@ class WorkerPool {
    * @param {string} task - 任务类型
    * @param {object} payload - 任务参数
    * @param {number} [timeout=120000] - 超时 (ms)
+   * @param {{allowedRoots?: string[]}} [options] - M50：允许访问的根目录白名单，
+   *   由主进程（真实 app.getPath('userData') 等）注入 worker；缺省时 worker
+   *   自身推断（仅限测试/直连场景，生产一律由主进程传入）
    * @returns {Promise<any>}
    */
-  exec(task, payload, timeout = 120000) {
+  exec(task, payload, timeout = 120000, options = {}) {
     return new Promise((resolve, reject) => {
       const job = {
         id: ++this._idCounter,
         task,
         payload,
+        allowedRoots: Array.isArray(options && options.allowedRoots) ? options.allowedRoots : null,
         resolve,
         reject,
         timer: null,
@@ -78,7 +82,7 @@ class WorkerPool {
     this._active++;
 
     const worker = new Worker(WORKER_SCRIPT, {
-      workerData: { task: job.task, payload: job.payload },
+      workerData: { task: job.task, payload: job.payload, allowedRoots: job.allowedRoots },
     });
     job.worker = worker;
 

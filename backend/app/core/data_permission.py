@@ -17,13 +17,21 @@ Semantics:
 
 * :func:`get_data_scope` maps roles to scopes: super-admin→ALL, admin→OWN_DEPT,
   others→OWN.
-* :func:`filter_by_data_scope` (internal list/export paths, ~40 callers) follows
-  the role semantics **strictly**: a department-level admin (``role="admin"``,
-  ``is_superuser=False``) is limited to its own organization — this preserves the
-  military audit **S2 export-isolation red-line** (cross-org data must not leak).
-* :func:`apply_scope_filter` / :func:`get_org_scope` (org-tree endpoints:
-  map / dashboard / effectiveness / statistics) grant administrators full access
-  (admin sees all) — the org-tree visibility model.
+* :func:`filter_by_data_scope` / :func:`apply_scope_filter` (internal list/export
+  paths, ~40 callers) follow the role semantics **strictly**: a department-level
+  admin (``role="admin"``, ``is_superuser=False``) is limited to its own
+  organization and its sub-tree — this preserves the military audit
+  **S2 export-isolation red-line** (cross-org data must not leak).
+* R27-H8 fix (2026-10-14): :func:`apply_scope_filter` used to grant *every*
+  administrator unrestricted access, so the same department-level admin saw
+  **all** rows on the funds / projects / villages lists while the export path
+  (:func:`filter_by_data_scope`) showed only its own organization — one data
+  plane, two answers.  The strict semantics is now the default; call sites that
+  really need the org-tree visibility model (map / dashboard / statistics /
+  organization tree — they also feed the org pickers) must opt in explicitly
+  with ``admin_full_access=True``.
+* :func:`get_org_scope` (org-tree endpoints) keeps the org-tree visibility model
+  (admin sees all) — it stays a separate, explicitly named entry point.
 """
 
 import logging
@@ -190,7 +198,23 @@ def check_record_access(
     if scope == DataScope.ALL:
         return True
     if scope == DataScope.OWN_DEPT:
-        return getattr(record, dept_field, None) == getattr(user, dept_field, None)
+        # fail-closed（ADR-0002 / R27-M40）：原实现直接比较 record.dept == user.dept，
+        # 当两侧都为 None（用户无组织归属、或记录组织列为 NULL）时 None == None 为真
+        # → **放行**，即无组织用户可访问全部「组织为 NULL」的记录。显式判空后拒绝，
+        # 与 get_data_scope 对无组织 admin 的降级口径一致。
+        record_org = getattr(record, dept_field, None)
+        # 用户侧优先读同名字段（历史契约：调用方可传自定义 dept_field，如 org_id），
+        # 缺省时回退到全仓统一的 _get_user_org_id（organization_id → org_id）。
+        user_org = getattr(user, dept_field, None)
+        if user_org is None:
+            user_org = _get_user_org_id(user)
+        if record_org is None or user_org is None:
+            logger.warning(
+                "check_record_access fail-closed: 组织归属缺失（record.%s=%r, user=%r）",
+                dept_field, record_org, user_org,
+            )
+            return False
+        return record_org == user_org
     # OWN：仅记录创建者本人可见
     return getattr(record, owner_field, None) == getattr(user, "id", None)
 
@@ -482,6 +506,23 @@ def get_accessible_org_ids(user: Any, db: Any = None) -> Optional[List[int]]:
     return []
 
 
+def _get_scope_org_ids(user: Any, db: Any = None) -> List[int]:
+    """严格口径下的可访问组织 id：本组织 + 全部下级（R27-H8）。
+
+    与 :func:`get_accessible_org_ids` 的差别：后者对管理员返回 ``None``
+    （"不受组织限制"，服务于全局管理员语义），本函数**永不返回 None**，
+    供内部数据面在"部门级 admin 也要收敛到本组织子树"时使用。
+    无组织归属时返回空列表（调用方据此 fail-closed 降级为仅本人）。
+    """
+    org_id = _get_user_org_id(user)
+    if org_id is None:
+        return []
+    if db is not None:
+        org_ids, _names = _get_org_subtree(db, org_id)
+        return org_ids if org_ids else [org_id]
+    return [org_id]
+
+
 def apply_scope_filter(
     query: Any,  # sqlalchemy.orm.Query 或 sqlalchemy.Select
     user: Any,
@@ -490,6 +531,7 @@ def apply_scope_filter(
     *,
     owner_field: str = "created_by",
     db: Any = None,
+    admin_full_access: bool = False,
 ) -> Any:
     """统一数据权限过滤入口。
 
@@ -503,20 +545,28 @@ def apply_scope_filter(
         org_id_field: 组织 ID 字段名（默认 ``organization_id``）。
         owner_field: 所有者字段名（默认 ``created_by``，用于"仅本人"范围）。
         db: 可选 Session。提供时按组织树展开可访问组织（含下级）。
+        admin_full_access: **默认 False（严格口径）**。仅当调用点属于"组织树可见性
+            模型"（地图 / 大屏 / 统计 / 组织树等，需要 admin 看到全量才能正常渲染
+            组织下拉与全局大屏）时才显式传 True。内部数据面列表 / 详情 / 导出
+            **必须**保持默认，否则部门级 admin 会看到跨组织全量（R27-H8）。
 
     Returns:
         过滤后的 query 对象（与入参同类型）。
 
-    行为说明：
-        * 管理员 / super_admin / data_scope="all" -> 不过滤；
+    行为说明（默认严格口径）：
+        * 部门级 admin（role=admin, is_superuser=False）-> ``IN (本组织及子树)``，
+          与 :func:`filter_by_data_scope` / 导出链路口径一致（军审红线 S2）；
+        * super_admin / is_superuser / data_scope="all" -> 不过滤（全局管理员）；
+        * admin_full_access=True 时，admin 亦不过滤（组织树可见性模型）；
         * 部门范围(OWN_DEPT) -> ``model.org_id_field IN (可访问组织IDs)``；
           用户无组织归属时回退到"仅本人"；
         * 仅本人(OWN / data_scope="self") -> ``model.owner_field == user.id``；
         * 模型缺少组织字段 -> fail-closed（ADR-0002）：降级为"仅本人"并记
           error 日志，绝不静默放行全量；连 owner 字段也缺失则抛错拒绝。
     """
-    # 管理员（含超级管理员）不受数据权限限制
-    if is_admin(user):
+    # 全局管理员（super_admin / is_superuser）不受数据权限限制；
+    # 部门级 admin 仅在调用点显式声明 admin_full_access=True 时放行（R27-H8）。
+    if admin_full_access and is_admin(user):
         return query
 
     # 显式 data_scope 字段优先（兼容组织树体系的用户配置）
@@ -528,12 +578,25 @@ def apply_scope_filter(
 
     scope = get_data_scope(user)
     if scope == DataScope.ALL:
+        # ALL 只可能来自 super_admin / is_superuser（见 get_data_scope），
+        # 属真正的全局管理员，不受 admin_full_access 开关约束。
         return query
 
     if scope == DataScope.OWN_DEPT:
         org_ids = get_accessible_org_ids(user, db=db)
         if org_ids is None:
-            return query
+            # None = "不受组织限制"（全局管理员 / data_scope="all"）。
+            # 严格口径下（未显式声明 admin_full_access）不能据此放行全量：
+            # 部门级 admin 收敛到"本组织及子树"，与导出链路同口径（R27-H8）。
+            # super_admin / is_superuser 已在 scope == ALL 分支提前返回。
+            if admin_full_access:
+                return query
+            org_ids = _get_scope_org_ids(user, db=db)
+            if not org_ids:
+                logger.warning(
+                    "部门级管理员无组织归属，数据范围按 fail-closed 降级为仅本人",
+                )
+                return _apply_owner_filter(query, model, owner_field, user)
         if not org_ids:
             # 无组织归属 -> 回退到"仅本人"（与 apply_scope_to_query 行为一致）
             logger.debug("User has no organization; falling back to OWN scope")

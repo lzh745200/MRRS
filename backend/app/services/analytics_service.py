@@ -5,9 +5,10 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Integer, cast, func, text
+from sqlalchemy import Integer, case, cast, func, text
 from sqlalchemy.orm import Session
 
+from app.core.data_permission import apply_scope_filter
 from app.core.error_handler import app_logger
 from app.models.supported_village import (
     SupportedVillage,
@@ -26,6 +27,40 @@ class AnalyticsService:
         self.db = db
 
     @staticmethod
+    def _scoped(query: Any, model: Any, current_user: Any, db: Session) -> Any:
+        """H2/H6：分析服务统一数据域入口（严格口径）。
+
+        current_user 由调用方透传；**未传即抛 TypeError**（fail-closed）——
+        历史上这些方法只接收 db，端点无从收敛范围，任意登录用户即可读取
+        全库聚合（军审红线 S2）。语义单一真源仍是
+        app.core.data_permission.apply_scope_filter：super_admin 全量、
+        部门级 admin 本组织及子树、普通用户仅本人创建。
+        """
+        return apply_scope_filter(query, current_user, model, db=db)
+
+    @staticmethod
+    def _scoped_id_sql(db: Session, model: Any, current_user: Any) -> str:
+        """把数据域过滤后的 id 集合编译为可内联的 SQL 子查询文本。
+
+        少数聚合走 db.execute(text(...)) 裸 SQL（多表 JOIN / UNION），无法直接
+        接收 ORM Query；这里复用同一数据域原语生成 SELECT id FROM ... WHERE ...
+        文本（literal_binds 后仅含整型字面量，无注入面），保证裸 SQL 与 ORM
+        查询**同一口径**，不再各自手写一遍过滤条件。
+        """
+        query = AnalyticsService._scoped(db.query(model.id), model, current_user, db)
+        return str(query.statement.compile(compile_kwargs={"literal_binds": True}))
+
+    @classmethod
+    def _village_scope_clause(cls, db: Session, current_user: Any, column: str) -> str:
+        """帮扶村维度数据域子句：column IN (数据域内帮扶村 id)。"""
+        return f"{column} IN ({cls._scoped_id_sql(db, SupportedVillage, current_user)})"
+
+    @classmethod
+    def _village_id_scope_clause(cls, db: Session, current_user: Any, column: str) -> str:
+        """子表维度数据域子句（子表本身无组织/归属列，经 supported_village_id 收敛）。"""
+        return cls._village_scope_clause(db, current_user, column)
+
+    @staticmethod
     def _error_payload(action: str, exc: Exception, payload: Dict[str, Any]) -> Dict[str, Any]:
         """裸 SQL 失败时统一收口：记录完整堆栈，并在返回值里显式暴露 error 标记。
 
@@ -38,34 +73,33 @@ class AnalyticsService:
         payload["error"] = message
         return payload
 
-    def get_dashboard_overview(self, db: Session) -> Dict[str, Any]:
-        """获取仪表盘总览数据"""
+    def get_dashboard_overview(self, db: Session, current_user: Any) -> Dict[str, Any]:
+        """获取仪表盘总览数据（按调用者数据域收敛）"""
         try:
             # 按省份统计帮扶村 - 使用 ORM 查询替代原始 SQL
             from sqlalchemy import func
 
-            province_result = (
+            province_result = self._scoped(
                 db.query(
                     SupportedVillage.province,
                     func.count(SupportedVillage.id).label("count"),
-                )
-                .filter(SupportedVillage.is_active.is_(True))
-                .group_by(SupportedVillage.province)
-                .order_by(func.count(SupportedVillage.id).desc())
-                .all()
-            )
+                ).filter(SupportedVillage.is_active.is_(True)),
+                SupportedVillage,
+                current_user,
+                db,
+            ).group_by(SupportedVillage.province).order_by(func.count(SupportedVillage.id).desc()).all()
             province_distribution = [{"province": row.province, "count": row.count} for row in province_result]
 
             # 按振兴梯队统计 - 使用 ORM 查询
-            tier_result = (
+            tier_result = self._scoped(
                 db.query(
                     SupportedVillage.is_revitalization_tier,
                     func.count(SupportedVillage.id).label("count"),
-                )
-                .filter(SupportedVillage.is_active.is_(True))
-                .group_by(SupportedVillage.is_revitalization_tier)
-                .all()
-            )
+                ).filter(SupportedVillage.is_active.is_(True)),
+                SupportedVillage,
+                current_user,
+                db,
+            ).group_by(SupportedVillage.is_revitalization_tier).all()
 
             tier_map = {True: "振兴梯队", False: "非振兴梯队"}
             tier_distribution = [
@@ -77,9 +111,14 @@ class AnalyticsService:
             ]
 
             total_villages = (
-                db.query(func.count(SupportedVillage.id))
-                .filter(SupportedVillage.is_active.is_(True))
-                .scalar()
+                self._scoped(
+                    db.query(func.count(SupportedVillage.id)).filter(
+                        SupportedVillage.is_active.is_(True)
+                    ),
+                    SupportedVillage,
+                    current_user,
+                    db,
+                ).scalar()
                 or 0
             )
 
@@ -96,24 +135,27 @@ class AnalyticsService:
                 "tier_distribution": [],
             }
 
-    def get_village_analysis(self, db: Session) -> Dict[str, Any]:
-        """获取帮扶村分析数据"""
+    def get_village_analysis(self, db: Session, current_user: Any) -> Dict[str, Any]:
+        """获取帮扶村分析数据（按调用者数据域收敛）"""
         try:
-            # 投资统计（软删村排除）
-            investment_result = db.execute(text("""
+            # 数据域子句（裸 SQL 与 ORM 查询同源同口径，见 _village_scope_clause）
+            village_scope = self._village_scope_clause(db, current_user, "id")
+
+            # 投资统计（软删村排除 + 数据域）
+            investment_result = db.execute(text(f"""
                 SELECT
                     SUM(transition_fund_military_total + transition_fund_local_total) as total_investment,
                     AVG(transition_fund_military_total + transition_fund_local_total) as avg_investment,
                     MAX(transition_fund_military_total + transition_fund_local_total) as max_investment
                 FROM supported_villages
-                WHERE is_active = 1
+                WHERE is_active = 1 AND {village_scope}
             """))
             investment_row = investment_result.fetchone()
 
             # 人口统计
             # 表名为模型声明的单数名（VillagePopulation.__tablename__ = "village_population"）；
             # 历史复数写法会让 SQL 直接报 no such table 并被下方 except 吞掉 → 恒空结果。
-            population_result = db.execute(text("""
+            population_result = db.execute(text(f"""
                 SELECT
                     SUM(vp.total_population) as total_population,
                     SUM(vp.resident_population) as total_resident,
@@ -123,11 +165,12 @@ class AnalyticsService:
                 WHERE vp.year = (
                     SELECT MAX(year) FROM village_population
                 )
+                  AND sv.id IN ({self._scoped_id_sql(db, SupportedVillage, current_user)})
             """))
             population_row = population_result.fetchone()
 
             # 收入统计
-            income_result = db.execute(text("""
+            income_result = db.execute(text(f"""
                 SELECT
                     AVG(vi.per_capita_income) as avg_per_capita_income,
                     AVG(vi.county_per_capita_income) as avg_county_income
@@ -136,11 +179,14 @@ class AnalyticsService:
                 WHERE vi.year = (
                     SELECT MAX(year) FROM village_income
                 )
+                  AND sv.id IN ({self._scoped_id_sql(db, SupportedVillage, current_user)})
             """))
             income_row = income_result.fetchone()
 
             # 基础设施投资分类
-            infra_result = db.execute(text("""
+            # 三段 UNION 各自带数据域（子查询内联三次，SQLite 可正确解析）
+            infra_scope = self._scoped_id_sql(db, SupportedVillage, current_user)
+            infra_result = db.execute(text(f"""
                 SELECT
                     investment_category,
                     SUM(investment) as total_amount
@@ -149,16 +195,19 @@ class AnalyticsService:
                     FROM infrastructure_improvement ii
                     JOIN supported_villages sv ON sv.id = ii.supported_village_id AND sv.is_active = 1
                     WHERE ii.year = (SELECT MAX(year) FROM infrastructure_improvement)
+                      AND sv.id IN ({infra_scope})
                     UNION ALL
                     SELECT '住房改造' as investment_category, SUM(housing_renovation) as investment
                     FROM infrastructure_improvement ii2
                     JOIN supported_villages sv2 ON sv2.id = ii2.supported_village_id AND sv2.is_active = 1
                     WHERE ii2.year = (SELECT MAX(year) FROM infrastructure_improvement)
+                      AND sv2.id IN ({infra_scope})
                     UNION ALL
                     SELECT '文化设施' as investment_category, SUM(cultural_plaza + library_cafe) as investment
                     FROM infrastructure_improvement ii3
                     JOIN supported_villages sv3 ON sv3.id = ii3.supported_village_id AND sv3.is_active = 1
                     WHERE ii3.year = (SELECT MAX(year) FROM infrastructure_improvement)
+                      AND sv3.id IN ({infra_scope})
                 ) infra
                 GROUP BY investment_category
             """))
@@ -184,8 +233,8 @@ class AnalyticsService:
         except Exception as e:
             return self._error_payload("获取帮扶村分析数据", e, {})
 
-    def get_funding_trends(self, db: Session, years: int = 5) -> Dict[str, Any]:
-        """获取资金趋势分析"""
+    def get_funding_trends(self, db: Session, years: int = 5, current_user: Any = None) -> Dict[str, Any]:
+        """获取资金趋势分析（按调用者数据域收敛）"""
         try:
             current_year = datetime.now().year
             start_year = current_year - years
@@ -196,7 +245,7 @@ class AnalyticsService:
             # 这里用村级人口年度表 village_population.year 作为年度轴：每村按其最新一个人口
             # 年度归属一次（避免同一笔累计投入在多年度里重复累加），村数按 DISTINCT 去重。
             result = db.execute(
-                text("""
+                text(f"""
                 SELECT
                     pop.year,
                     SUM(sv.transition_fund_military_total + sv.transition_fund_local_total) as total_funding,
@@ -211,6 +260,7 @@ class AnalyticsService:
                     WHERE p2.supported_village_id = sv.id
                  )
                 WHERE sv.is_active = 1
+                  AND sv.id IN ({self._scoped_id_sql(db, SupportedVillage, current_user)})
                   AND pop.year BETWEEN :start_year AND :end_year
                 GROUP BY pop.year
                 ORDER BY pop.year
@@ -234,20 +284,28 @@ class AnalyticsService:
         except Exception as e:
             return self._error_payload("获取资金趋势", e, {"trends": [], "start_year": 0, "end_year": 0})
 
-    def get_performance_metrics(self, db: Session) -> Dict[str, Any]:
-        """获取绩效指标"""
+    def get_performance_metrics(self, db: Session, current_user: Any = None) -> Dict[str, Any]:
+        """获取绩效指标（按调用者数据域收敛）"""
         try:
-            # 政策统计
-            policy_result = db.execute(text("""
-                SELECT
-                    COUNT(*) as total_policies,
-                    SUM(CASE WHEN status = '已发布' THEN 1 ELSE 0 END) as published_policies
-                FROM policies
-            """))
-            policy_row = policy_result.fetchone()
+            village_scope = self._scoped_id_sql(db, SupportedVillage, current_user)
 
-            # 示范村统计
-            village_result = db.execute(text("""
+            # 政策统计（policies 表自带 organization_id/created_by，直接走 ORM 数据域过滤）
+            from app.models.policy import Policy
+
+            policy_row = self._scoped(
+                db.query(
+                    func.count(Policy.id),
+                    func.coalesce(
+                        func.sum(case((Policy.status == "已发布", 1), else_=0)), 0
+                    ),
+                ),
+                Policy,
+                current_user,
+                db,
+            ).first()
+
+            # 示范村统计（软删村排除 + 数据域）
+            village_result = db.execute(text(f"""
                 SELECT
                     COUNT(*) as total_villages,
                     SUM(CASE
@@ -255,39 +313,39 @@ class AnalyticsService:
                         THEN 1 ELSE 0 END
                     ) as demo_villages
                 FROM supported_villages
-                WHERE is_active = 1
+                WHERE is_active = 1 AND id IN ({village_scope})
             """))
             village_row = village_result.fetchone()
 
-            # 各类帮扶投资
-            category_result = db.execute(text("""
+            # 各类帮扶投资（子表经 supported_village_id 收敛到数据域内帮扶村）
+            category_result = db.execute(text(f"""
                 SELECT
                     '产业帮扶' as category,
                     SUM(investment) as amount
                 FROM industry_support
                 WHERE year = (SELECT MAX(year) FROM industry_support)
-                  AND supported_village_id IN (SELECT id FROM supported_villages WHERE is_active = 1)
+                  AND supported_village_id IN ({village_scope})
                 UNION ALL
                 SELECT
                     '基础设施' as category,
                     SUM(investment) as amount
                 FROM infrastructure_improvement
                 WHERE year = (SELECT MAX(year) FROM infrastructure_improvement)
-                  AND supported_village_id IN (SELECT id FROM supported_villages WHERE is_active = 1)
+                  AND supported_village_id IN ({village_scope})
                 UNION ALL
                 SELECT
                     '医疗帮扶' as category,
                     SUM(investment) as amount
                 FROM medical_support
                 WHERE year = (SELECT MAX(year) FROM medical_support)
-                  AND supported_village_id IN (SELECT id FROM supported_villages WHERE is_active = 1)
+                  AND supported_village_id IN ({village_scope})
                 UNION ALL
                 SELECT
                     '教育帮扶' as category,
                     SUM(investment) as amount
                 FROM education_support
                 WHERE year = (SELECT MAX(year) FROM education_support)
-                  AND supported_village_id IN (SELECT id FROM supported_villages WHERE is_active = 1)
+                  AND supported_village_id IN ({village_scope})
             """))
             categories = [{"category": row[0], "amount": float(row[1]) if row[1] else 0} for row in category_result]
 
@@ -305,11 +363,14 @@ class AnalyticsService:
         except Exception as e:
             return self._error_payload("获取绩效指标", e, {})
 
-    def get_comparison_analysis(self, db: Session, compare_type: str, target_value: Optional[str]) -> Dict[str, Any]:
-        """获取对比分析数据"""
+    def get_comparison_analysis(
+        self, db: Session, compare_type: str, target_value: Optional[str], current_user: Any = None
+    ) -> Dict[str, Any]:
+        """获取对比分析数据（按调用者数据域收敛）"""
         try:
+            village_scope = self._scoped_id_sql(db, SupportedVillage, current_user)
             if compare_type == "province":
-                result = db.execute(text("""
+                result = db.execute(text(f"""
                     SELECT
                         province,
                         COUNT(*) as village_count,
@@ -319,13 +380,14 @@ class AnalyticsService:
                     JOIN village_income vi ON vp.id = vi.supported_village_id
                     JOIN village_population vp_pop ON vp.id = vp_pop.supported_village_id
                     WHERE vp.is_active = 1
+                      AND vp.id IN ({village_scope})
                       AND vi.year = (SELECT MAX(year) FROM village_income)
                       AND vp_pop.year = (SELECT MAX(year) FROM village_population)
                     GROUP BY province
                     ORDER BY total_investment DESC
                 """))
             elif compare_type == "tier":
-                result = db.execute(text("""
+                result = db.execute(text(f"""
                     SELECT
                         CASE WHEN vp.is_revitalization_tier THEN '是' ELSE '否' END as tier,
                         COUNT(*) as village_count,
@@ -334,6 +396,7 @@ class AnalyticsService:
                     FROM supported_villages vp
                     JOIN village_income vi ON vp.id = vi.supported_village_id
                     WHERE vp.is_active = 1
+                      AND vp.id IN ({village_scope})
                       AND vi.year = (SELECT MAX(year) FROM village_income)
                     GROUP BY vp.is_revitalization_tier
                     ORDER BY avg_income DESC
@@ -363,13 +426,14 @@ class AnalyticsService:
         report_type: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        current_user: Any = None,
     ) -> Dict[str, Any]:
-        """生成报表数据"""
+        """生成报表数据（按调用者数据域收敛）"""
         try:
             if report_type == "comprehensive":
-                dashboard = self.get_dashboard_overview(db)
-                village_analysis = self.get_village_analysis(db)
-                performance = self.get_performance_metrics(db)
+                dashboard = self.get_dashboard_overview(db, current_user)
+                village_analysis = self.get_village_analysis(db, current_user)
+                performance = self.get_performance_metrics(db, current_user)
                 return {
                     "report_type": "comprehensive",
                     "dashboard": dashboard,
@@ -378,14 +442,14 @@ class AnalyticsService:
                     "generated_at": datetime.now().isoformat(),
                 }
             elif report_type == "village_funding":
-                funding = self.get_funding_trends(db)
+                funding = self.get_funding_trends(db, current_user=current_user)
                 return {
                     "report_type": "village_funding",
                     "funding_trends": funding,
                     "generated_at": datetime.now().isoformat(),
                 }
             elif report_type == "policy_execution":
-                performance = self.get_performance_metrics(db)
+                performance = self.get_performance_metrics(db, current_user)
                 return {
                     "report_type": "policy_execution",
                     "performance": performance,
@@ -412,9 +476,14 @@ class AnalyticsService:
         )
         return query.filter(model.year == latest)
 
-    def _build_village_query(self, filters, db):
-        """构建帮扶村查询并返回子查询和总数（软删村统一排除）"""
-        village_query = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
+    def _build_village_query(self, filters, db, current_user=None):
+        """构建帮扶村查询并返回子查询和总数（软删村统一排除 + 数据域）"""
+        village_query = self._scoped(
+            db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)),
+            SupportedVillage,
+            current_user,
+            db,
+        )
         if filters:
             if filters.get("department"):
                 village_query = village_query.filter(SupportedVillage.department == filters["department"])
@@ -524,12 +593,14 @@ class AnalyticsService:
             },
         }
 
-    def get_summary_statistics(self, filters: Optional[Dict] = None, year: Optional[int] = None) -> Dict[str, Any]:
-        """汇总统计（同步，供 reports/analytics/summary 使用）"""
+    def get_summary_statistics(
+        self, filters: Optional[Dict] = None, year: Optional[int] = None, current_user: Any = None
+    ) -> Dict[str, Any]:
+        """汇总统计（同步，供 reports/analytics/summary 使用；按调用者数据域收敛）"""
         try:
             db = self.db
             current_year = year or datetime.now().year
-            village_subq, total_villages = self._build_village_query(filters, db)
+            village_subq, total_villages = self._build_village_query(filters, db, current_user)
 
             result = self._empty_summary(current_year)
             result["villages"]["totalVillages"] = total_villages
@@ -547,24 +618,30 @@ class AnalyticsService:
             app_logger.error(f"获取汇总统计失败: {e}", exc_info=True)
             return self._empty_summary(year)
 
-    def drill_down(self, query_params: Dict[str, Any]) -> Dict[str, Any]:
-        """数据钻取（同步，供 reports 路由使用）"""
+    def drill_down(self, query_params: Dict[str, Any], current_user: Any = None) -> Dict[str, Any]:
+        """数据钻取（同步，供 reports 路由使用；按调用者数据域收敛）"""
         try:
             db = self.db
             dimension = query_params.get("dimension", "province")
             value = query_params.get("value")
 
             if dimension == "province":
-                villages = (
-                    db.query(SupportedVillage)
-                    .filter(
+                villages = self._scoped(
+                    db.query(SupportedVillage).filter(
                         SupportedVillage.province == value,
                         SupportedVillage.is_active.is_(True),
-                    )
-                    .all()
-                )
+                    ),
+                    SupportedVillage,
+                    current_user,
+                    db,
+                ).all()
             else:
-                villages = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).all()
+                villages = self._scoped(
+                    db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)),
+                    SupportedVillage,
+                    current_user,
+                    db,
+                ).all()
 
             items = [{"id": v.id, "name": v.village_name, "province": v.province} for v in villages]
             return {
@@ -582,27 +659,47 @@ class AnalyticsService:
         village_ids: List[int],
         year: Optional[int] = None,
         metrics: Optional[List[str]] = None,
+        current_user: Any = None,
     ) -> Dict[str, Any]:
-        """帮扶村对比（同步，供 reports 路由使用）"""
+        """帮扶村对比（同步，供 reports 路由使用；按调用者数据域收敛）"""
         try:
             db = self.db
-            villages = (
-                db.query(SupportedVillage)
-                .filter(
+            villages = self._scoped(
+                db.query(SupportedVillage).filter(
                     SupportedVillage.id.in_(village_ids),
                     SupportedVillage.is_active.is_(True),
-                )
-                .all()
-            )
+                ),
+                SupportedVillage,
+                current_user,
+                db,
+            ).all()
             items = [{"id": v.id, "name": v.village_name, "province": v.province} for v in villages]
             return {"villages": items, "year": year, "metrics": metrics or []}
         except Exception as e:
             app_logger.error(f"帮扶村对比失败: {e}")
             return {"villages": [], "year": year}
 
-    def compare_years(self, village_id: int, years: List[int], metrics: Optional[List[str]] = None) -> Dict[str, Any]:
-        """年度对比（同步，供 reports 路由使用）"""
+    def compare_years(
+        self, village_id: int, years: List[int], metrics: Optional[List[str]] = None, current_user: Any = None
+    ) -> Dict[str, Any]:
+        """年度对比（同步，供 reports 路由使用）。
+
+        数据域：先校验目标村在调用者可访问范围内，越权/不存在一律返回空结果
+        （fail-closed，不泄漏"该村存在但无权访问"的信息差）。
+        """
         try:
+            db = self.db
+            accessible = self._scoped(
+                db.query(SupportedVillage).filter(
+                    SupportedVillage.id == village_id,
+                    SupportedVillage.is_active.is_(True),
+                ),
+                SupportedVillage,
+                current_user,
+                db,
+            ).first()
+            if accessible is None:
+                return {"village_id": village_id, "years": years, "metrics": metrics or [], "data": []}
             return {
                 "village_id": village_id,
                 "years": years,
@@ -613,32 +710,34 @@ class AnalyticsService:
             app_logger.error(f"年度对比失败: {e}")
             return {}
 
-    def get_filter_options(self) -> Dict[str, Any]:
-        """获取筛选选项（同步，供 reports 路由使用）"""
+    def get_filter_options(self, current_user: Any = None) -> Dict[str, Any]:
+        """获取筛选选项（同步，供 reports 路由使用；按调用者数据域收敛）"""
         try:
             db = self.db
-            provinces = (
-                db.query(SupportedVillage.province)
-                .filter(SupportedVillage.is_active.is_(True))
-                .distinct()
-                .all()
-            )
+            provinces = self._scoped(
+                db.query(SupportedVillage.province).filter(SupportedVillage.is_active.is_(True)),
+                SupportedVillage,
+                current_user,
+                db,
+            ).distinct().all()
             province_list = [p[0] for p in provinces if p[0]]
 
-            is_tier_list = (
-                db.query(SupportedVillage.is_revitalization_tier)
-                .filter(SupportedVillage.is_active.is_(True))
-                .distinct()
-                .all()
-            )
+            is_tier_list = self._scoped(
+                db.query(SupportedVillage.is_revitalization_tier).filter(
+                    SupportedVillage.is_active.is_(True)
+                ),
+                SupportedVillage,
+                current_user,
+                db,
+            ).distinct().all()
             tier_list = ["是" if t[0] else "否" for t in is_tier_list]
 
-            departments = (
-                db.query(SupportedVillage.department)
-                .filter(SupportedVillage.is_active.is_(True))
-                .distinct()
-                .all()
-            )
+            departments = self._scoped(
+                db.query(SupportedVillage.department).filter(SupportedVillage.is_active.is_(True)),
+                SupportedVillage,
+                current_user,
+                db,
+            ).distinct().all()
             dept_list = [d[0] for d in departments if d[0]]
 
             return {

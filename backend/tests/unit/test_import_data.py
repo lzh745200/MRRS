@@ -367,7 +367,9 @@ class TestPreviewImportData:
         )
 
         mock_db = MagicMock()
-        mock_db.query.return_value.all.return_value = [("existing村",)]
+        # R28-M14：重复检测改为按导入行名称 IN 查询（query().filter().all()），
+        # 不再是全表扫描（query().all()）
+        mock_db.query.return_value.filter.return_value.all.return_value = [("existing村",)]
 
         with patch("app.api.v1.import_export.import_data.DataValidatorService", return_value=mock_validator):
             with patch("app.api.v1.import_export.import_data.ExcelImporterService", return_value=mock_importer):

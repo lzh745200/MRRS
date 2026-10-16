@@ -21,8 +21,12 @@ permissions:
   pull-requests: read
 
 jobs:
+  # 全部作业加 timeout-minutes（R28 低危清理）：GitHub 默认 360 分钟，作业一旦卡死
+  # （网络挂起 / xdist worker 僵死 / 浏览器下载无响应）会白占并发额度并延迟 PR 反馈。
+  # 预算按实测耗时给约 2 倍余量，只拦"卡死"，不误伤正常慢跑。
   backend-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 90   # 实测双遍全量（覆盖 + 分支棘轮）约 40-50 分钟
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -103,6 +107,7 @@ jobs:
 
   frontend-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 45   # 实测安装 + tsc + lint + 覆盖率约 20-25 分钟
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       # Node 22（与仓库其余 CI 一致）。注意：src/views/auth/LoginEnhanced.vue 全量跑 functions
@@ -245,6 +250,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -261,6 +267,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -314,6 +321,7 @@ jobs:
 
   static-analysis:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -370,6 +378,7 @@ jobs:
   # 平台切换，Windows 本地用系统 Edge）。
   e2e-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 60   # 依赖安装 + Playwright chromium + 150 用例
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -436,6 +445,7 @@ jobs:
   # 与产品无关的假失败。
   windows-smoke:
     runs-on: windows-latest
+    timeout-minutes: 60
     env:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8

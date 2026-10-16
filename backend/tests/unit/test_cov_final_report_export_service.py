@@ -11,6 +11,25 @@ from unittest.mock import MagicMock
 from app.services.report_export_service import ReportExportService
 
 
+class _FullScopeUser:
+    """超管替身（R28 · H6）。
+
+    报表数据构建方法自 R28 起强制 ``current_user`` 位置参数并套数据域过滤。
+    本文件断言的是**聚合口径**（与数据域无关），故统一传超管替身
+    （``is_superuser=True`` → ``filter_by_data_scope`` 原样返回查询），
+    保持既有断言不变。数据域隔离本身由
+    ``tests/unit/test_scope_service_r28_report_export.py`` 用真实 SQLite 锁定。
+    """
+
+    id = 1
+    role = "super_admin"
+    is_superuser = True
+    organization_id = None
+
+
+SCOPE_USER = _FullScopeUser()
+
+
 class TestSchoolStatisticsReportData:
     """generate_school_statistics_report_data()"""
 
@@ -19,7 +38,7 @@ class TestSchoolStatisticsReportData:
         db = MagicMock(name="db")
         db.query.return_value.filter.return_value.first.return_value = (3, 120, 15)
 
-        result = ReportExportService().generate_school_statistics_report_data(db, year=2025)
+        result = ReportExportService().generate_school_statistics_report_data(db, year=2025, current_user=SCOPE_USER)
 
         assert result["year"] == 2025
         assert result["title"] == "帮扶学校统计表"
@@ -34,7 +53,7 @@ class TestSchoolStatisticsReportData:
         db = MagicMock(name="db")
         db.query.return_value.filter.return_value.first.return_value = None
 
-        result = ReportExportService().generate_school_statistics_report_data(db, year=2025)
+        result = ReportExportService().generate_school_statistics_report_data(db, year=2025, current_user=SCOPE_USER)
 
         assert result["total_schools"] == 0
         assert result["total_students"] == 0
@@ -46,7 +65,7 @@ class TestSchoolStatisticsReportData:
         db = MagicMock(name="db")
         db.query.side_effect = RuntimeError("db down")
 
-        result = ReportExportService().generate_school_statistics_report_data(db, year=2025)
+        result = ReportExportService().generate_school_statistics_report_data(db, year=2025, current_user=SCOPE_USER)
 
         assert result["year"] == 2025
         assert result["total_schools"] == 0
@@ -63,7 +82,7 @@ class TestVillageSummaryReportData:
         db = MagicMock(name="db")
         db.query.return_value.filter.return_value.scalar.return_value = 7
 
-        result = ReportExportService().generate_village_summary_report_data(db, year=2024)
+        result = ReportExportService().generate_village_summary_report_data(db, year=2024, current_user=SCOPE_USER)
 
         assert result["year"] == 2024
         assert result["title"] == "帮扶村年度汇总表"
@@ -75,7 +94,7 @@ class TestVillageSummaryReportData:
         db = MagicMock(name="db")
         db.query.return_value.filter.return_value.scalar.return_value = None
 
-        result = ReportExportService().generate_village_summary_report_data(db, year=2024)
+        result = ReportExportService().generate_village_summary_report_data(db, year=2024, current_user=SCOPE_USER)
 
         assert result["total_villages"] == 0
         assert result["sections"][0]["paragraphs"]
@@ -85,7 +104,7 @@ class TestVillageSummaryReportData:
         db = MagicMock(name="db")
         db.query.side_effect = RuntimeError("db down")
 
-        result = ReportExportService().generate_village_summary_report_data(db, year=2024)
+        result = ReportExportService().generate_village_summary_report_data(db, year=2024, current_user=SCOPE_USER)
 
         assert result["total_villages"] == 0
         assert result["sections"][0]["paragraphs"]
@@ -101,7 +120,7 @@ class TestAnnualSummaryReportData:
         db.query.return_value.filter.return_value.first.return_value = (1, 10, 5)
         db.query.return_value.filter.return_value.group_by.return_value.order_by.return_value.all.return_value = []
 
-        result = ReportExportService().generate_annual_summary_report_data(db, year=2026)
+        result = ReportExportService().generate_annual_summary_report_data(db, 2026, SCOPE_USER)
 
         assert result["year"] == 2026
         assert result["title"] == "年度综合总结报告"

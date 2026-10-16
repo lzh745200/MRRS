@@ -296,7 +296,6 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
     expect(drillDown).toHaveBeenCalledWith({
       dimension: 'province',
       value: '三区三州',
-      targetDimension: 'department',
     })
     const panel = wrapper.find('.drill-down-panel')
     expect(panel.exists()).toBe(true)

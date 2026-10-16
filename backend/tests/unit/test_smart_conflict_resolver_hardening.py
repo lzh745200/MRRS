@@ -158,7 +158,7 @@ class TestKeepBothForeignKeyRemap:
         db.add.side_effect = lambda obj: setattr(obj, "id", next(seq))
         db.flush = MagicMock()
         # 所有业务键查询 miss → 全部走"新记录"路径，旧 id 被记录进 id_mapping
-        db.query.return_value.filter.return_value.first.return_value = None
+        db.query.return_value.filter.return_value.all.return_value = []
 
         r = SmartConflictResolver(db)
         data = {
@@ -181,7 +181,7 @@ class TestTenantScoping:
 
     def test_tenant_condition_added_to_query(self):
         db = MagicMock()
-        db.query.return_value.filter.return_value.first.return_value = None
+        db.query.return_value.filter.return_value.all.return_value = []
 
         SmartConflictResolver(db, organization_id=42).detect_conflicts_by_business_key(
             [{"code": "C1", "name": "X"}], "projects"
@@ -193,7 +193,7 @@ class TestTenantScoping:
 
     def test_no_tenant_condition_when_org_is_none(self):
         db = MagicMock()
-        db.query.return_value.filter.return_value.first.return_value = None
+        db.query.return_value.filter.return_value.all.return_value = []
 
         SmartConflictResolver(db).detect_conflicts_by_business_key(
             [{"code": "C1", "name": "X"}], "projects"

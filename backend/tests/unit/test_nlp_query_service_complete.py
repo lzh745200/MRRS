@@ -28,7 +28,9 @@ class TestNLPQueryServiceParseQuery:
 
         assert result["template"] == "village_by_province"
         assert "province" in result["params"]
-        assert "广东省" in result["params"]["province"]  # 正则保留"省"字
+        # R28-H13/M20：库内 province 列存的是不带"省"字的口径（"广东"），
+        # 历史实现原样保留"广东省"→等值匹配恒空。归一化后参数为"广东"。
+        assert result["params"]["province"] == "广东"
 
     def test_parse_project_count(self):
         """测试解析项目数量查询"""

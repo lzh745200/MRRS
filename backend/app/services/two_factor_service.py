@@ -12,6 +12,7 @@ from io import BytesIO
 from typing import List
 
 import pyotp
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.two_factor_auth import TwoFactorAuth
@@ -193,7 +194,28 @@ class TwoFactorService:
             )
             db.add(two_factor)
 
-        safe_commit(db)
+        try:
+            safe_commit(db)
+        except IntegrityError:
+            # M32（R27 排查）：check-then-act 竞态 —— 两个并发请求都判定"无记录"
+            # 后各自 INSERT，后者撞 two_factor_auth.user_id 唯一约束，旧实现让
+            # IntegrityError 直穿成 500。这里回退为"更新既有行"（后写覆盖；
+            # 语义与正常重试一致：仍需用户再验一次 TOTP 才会真正启用）。
+            db.rollback()
+            existing = (
+                db.query(TwoFactorAuth)
+                .filter(TwoFactorAuth.user_id == user.id)
+                .first()
+            )
+            if existing is None:
+                raise
+            existing.secret_key = encrypted_secret
+            existing.backup_codes = hashed_backup_codes
+            existing.enabled = False
+            existing.verified_at = None
+            two_factor = existing
+            safe_commit(db)
+
         db.refresh(two_factor)
 
         # 生成二维码

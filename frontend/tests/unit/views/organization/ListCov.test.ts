@@ -869,6 +869,39 @@ describe('formatLevel', () => {
   })
 })
 
+describe('组织状态筛选（2026-10-14）', () => {
+  it('filterStatus=active/inactive 分别下发 is_active=true/false；空=不过滤', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    mockApiRequest.mockClear()
+    // 通过真实 emit 触发模板内联 onUpdate 包装（直接赋 ref 不会经过它）
+    const statusSelect = wrapper.findAllComponents({ name: 'ElSelect' })[1]
+    statusSelect.vm.$emit('update:modelValue', 'active')
+    await nextTick()
+    expect(vm.filterStatus).toBe('active')
+    await vm.fetchData()
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ params: expect.objectContaining({ is_active: true }) })
+    )
+
+    statusSelect.vm.$emit('update:modelValue', 'inactive')
+    await nextTick()
+    await vm.fetchData()
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ params: expect.objectContaining({ is_active: false }) })
+    )
+
+    mockApiRequest.mockClear()
+    vm.filterStatus = ''
+    await vm.fetchData()
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ params: expect.objectContaining({ is_active: undefined }) })
+    )
+  })
+})
+
 describe('组织启停入口（2026-10-14 新增）', () => {
   it('停用：调用 deactivateOrganization 并提示；启用：is_active=false 时调 activate', async () => {
     const wrapper = mountComp()

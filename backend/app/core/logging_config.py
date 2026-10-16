@@ -108,6 +108,19 @@ class SensitiveDataFilter(logging.Filter):
         except Exception:
             # 脱敏失败不应阻断日志输出
             pass
+        # M37（R27 排查）：只脱敏 record.msg 会让 PII 随异常堆栈原样落盘——
+        # 异常文本常内联 SQL/请求体（如 IntegrityError 回显身份证、手机号），
+        # 而 Formatter.formatException 在 filter 之后才把 traceback 渲染成字符串。
+        # 这里提前渲染并脱敏 traceback，写入 record.exc_text：Formatter 见
+        # exc_text 非空即直接复用（CPython 标准行为），不再自行渲染。
+        try:
+            if record.exc_info and not record.exc_text:
+                record.exc_text = self._redact(
+                    logging.Formatter().formatException(record.exc_info)
+                )
+        except Exception:
+            # 渲染失败时保持 exc_text 为空 → Formatter 走原生渲染（不阻断日志）
+            pass
         return True
 
     @classmethod

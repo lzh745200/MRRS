@@ -191,14 +191,20 @@ class TestPreviewImportData:
         importer = MagicMock()
         importer.parse_excel.return_value = ([{"name": "已有"}, {"name": ""}], ["名称"])
 
+        # R28-M14：_setup_preview_entity 的第三个返回值（已存在名称）已被弃用，
+        # 端点改为在解析出 rows 后自行调用 _existing_names 做 IN 查询，
+        # 故此处必须让 db 真的返回"已存在"的名称，才能走通重复检测分支。
+        db = MagicMock()
+        db.query.return_value.filter.return_value.all.return_value = [("已有",)]
+
         file = _upload(_make_xlsx([["名称"], ["已有"], [""]]), "projects.xlsx")
-        with patch.object(id_module, "_setup_preview_entity", return_value=(validator, "name", {"已有"})), \
+        with patch.object(id_module, "_setup_preview_entity", return_value=(validator, "name", set())), \
              patch.object(id_module, "ExcelImporterService", return_value=importer):
             resp = await preview_import_data(
                 file=file,
                 entity_type="project",
                 current_user=MagicMock(),
-                db=MagicMock(),
+                db=db,
             )
 
         assert resp.total_rows == 2

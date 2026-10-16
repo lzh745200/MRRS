@@ -33,6 +33,29 @@ def _load() -> dict:
 _cached: dict | None = None
 
 
+def _has_git_worktree(start: Path | None = None) -> bool:
+    """探测给定位置（默认本文件位置 + CWD）是否处于 git 工作树中。
+
+    R28 低危项：``get_build_info()`` 原实现**无条件**执行
+    ``subprocess.check_output(["git", "rev-parse", ...], timeout=5)``。
+    打包环境（PyInstaller/Electron，无 git、无 .git）与未装 git 的离线终端上，
+    这次调用只会白等到超时/抛异常后才回退 ``"dev"``，把进程内首次版本查询
+    （含未鉴权的 ``/health``）拖慢数秒。改为：只有**确实存在 .git** 才尝试。
+
+    要点：
+      * worktree / submodule 的 ``.git`` 是**文件**而非目录，故用 ``exists()``；
+      * 起点取「本文件位置」与「CWD」两处，各向上找 4 层，覆盖
+        ``backend/app/core/build_info.py``（仓库根在 3 层之上）与从仓库任意
+        子目录启动两种情形。
+    """
+    bases = [Path(__file__).resolve().parent, Path.cwd()] if start is None else [start]
+    for base in bases:
+        for parent in (base, *list(base.parents)[:4]):
+            if (parent / ".git").exists():
+                return True
+    return False
+
+
 def get_build_info() -> dict:
     """返回构建元数据：version / git_hash / build_time / builder。"""
     global _cached
@@ -42,18 +65,19 @@ def get_build_info() -> dict:
     info = _load()
     if not info:
         git_hash = "dev"
-        try:
-            git_hash = (
-                subprocess.check_output(
-                    ["git", "rev-parse", "--short", "HEAD"],
-                    stderr=subprocess.DEVNULL,
-                    timeout=5,
+        if _has_git_worktree():
+            try:
+                git_hash = (
+                    subprocess.check_output(
+                        ["git", "rev-parse", "--short", "HEAD"],
+                        stderr=subprocess.DEVNULL,
+                        timeout=2,
+                    )
+                    .decode()
+                    .strip()
                 )
-                .decode()
-                .strip()
-            )
-        except Exception:
-            logger.debug("获取git hash失败", exc_info=True)
+            except Exception:
+                logger.debug("获取git hash失败", exc_info=True)
         info = {
             "git_hash": git_hash,
             "build_time": None,

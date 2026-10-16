@@ -1,6 +1,6 @@
 {
   "name": "Assistance-Management-Information-System",
-  "version": "1.12.16",
+  "version": "1.12.17",
   "private": true,
   "description": "帮扶管理系统 - 贵州省版 Standalone桌面应用",
   "main": "electron/main.js",
@@ -40,7 +40,8 @@
     },
     "files": [
       "electron/**/*",
-      "frontend/dist/**/*",
+      "!electron/tests{,/**/*}",
+      "!frontend/dist{,/**/*}",
       "node_modules/**/*",
       "resources/icons/app-circle-256.png"
     ],
@@ -66,13 +67,6 @@
         ]
       },
       {
-        "from": "resources/vcredist",
-        "to": "vcredist",
-        "filter": [
-          "**/*.exe"
-        ]
-      },
-      {
         "from": "resources/icons/app-circle-256.png",
         "to": "icon.png"
       },
@@ -85,7 +79,16 @@
       "target": [
         "nsis"
       ],
-      "icon": "resources/icons/app-circle.ico"
+      "icon": "resources/icons/app-circle.ico",
+      "extraResources": [
+        {
+          "from": "resources/vcredist",
+          "to": "vcredist",
+          "filter": [
+            "**/*.exe"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -148,7 +151,9 @@
         "libxrandr2",
         "libgtk-3-0",
         "libpango-1.0-0",
-        "libcairo2"
+        "libcairo2",
+        "libxtst6",
+        "libatspi2.0-0"
       ]
     }
   }

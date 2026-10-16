@@ -1,12 +1,15 @@
 import json
 import logging
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.data_permission import get_accessible_org_ids
 from app.core.database import get_db
+from app.core.permission_utils import is_admin
 from app.core.security import get_current_user
 from app.models.fund import Fund
 from app.models.project import Project
@@ -143,40 +146,55 @@ async def get_summary(current_user=Depends(get_current_user), db: Session = Depe
     - 配置查询结果TTL（5分钟）
     """
     try:
-        # 尝试从缓存获取
-        cache_key = "summary"
+        # 尝试从缓存获取（缓存键含用户，避免跨用户串数据）
+        user_id = getattr(current_user, "id", 0)
+        cache_key = f"summary:{user_id}"
         cached = await _get_cached_stats(cache_key)
         if cached:
             return cached
 
-        # 缓存未命中，从数据库查询
-        users_count = db.query(User).filter(User.is_active == True).count()  # noqa: E712
+        # 缓存未命中，从数据库查询（H2：全部按调用者数据域收敛）
+        from app.core.data_permission import apply_scope_filter
         from app.models.supported_village import SupportedVillage as SVModel
-        villages_count = db.query(SVModel).filter(SVModel.is_active.is_(True)).count()
-        schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
-        projects_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
-        funds_count = db.query(Fund).filter(Fund.is_active == True).count()  # noqa: E712
 
-        funds_total = (
-            db.query(Fund.amount)
-            .filter(Fund.status == "approved", Fund.is_active == True)  # noqa: E712
-            .all()
-        )
-        funds_sum = sum(f[0] for f in funds_total) if funds_total else 0
+        def _scoped(query, model):
+            return apply_scope_filter(query, current_user, model, db=db)
 
-        projects_by_status = (
-            db.query(Project.status, func.count(Project.id))
-            .filter(Project.is_active == True)  # noqa: E712
-            .group_by(Project.status)
-            .all()
+        users_count = _scoped(db.query(User).filter(User.is_active == True), User).count()  # noqa: E712
+        villages_count = _scoped(
+            db.query(SVModel).filter(SVModel.is_active.is_(True)), SVModel
+        ).count()
+        schools_count = _scoped(db.query(School).filter(School.is_active == True), School).count()  # noqa: E712
+        projects_count = _scoped(db.query(Project).filter(Project.is_active == True), Project).count()  # noqa: E712
+        funds_count = _scoped(db.query(Fund).filter(Fund.is_active == True), Fund).count()  # noqa: E712
+
+        funds_sum = (
+            _scoped(
+                db.query(func.sum(Fund.amount)).filter(
+                    Fund.status == "approved", Fund.is_active == True  # noqa: E712
+                ),
+                Fund,
+            ).scalar()
+            or 0
         )
+
+        projects_by_status = _scoped(
+            db.query(Project.status, func.count(Project.id)).filter(Project.is_active == True),  # noqa: E712
+            Project,
+        ).group_by(Project.status).all()
         projects_status_dist = {status: count for status, count in projects_by_status}
 
-        active_projects = db.query(Project).filter(
-            Project.is_active == True, Project.status == "active"  # noqa: E712
+        active_projects = _scoped(
+            db.query(Project).filter(
+                Project.is_active == True, Project.status == "active"  # noqa: E712
+            ),
+            Project,
         ).count()
-        completed_projects = db.query(Project).filter(
-            Project.is_active == True, Project.status == "completed"  # noqa: E712
+        completed_projects = _scoped(
+            db.query(Project).filter(
+                Project.is_active == True, Project.status == "completed"  # noqa: E712
+            ),
+            Project,
         ).count()
 
         result = {
@@ -203,41 +221,131 @@ async def get_summary(current_user=Depends(get_current_user), db: Session = Depe
 @router.get("/overview")
 async def get_overview(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """
-    数据总览接口 - 返回各模块概况、最后更新时间、健康评分、趋势数据
+    数据总览接口 - 返回各模块概况、最后更新时间、健康评分、趋势数据（按调用者数据域收敛）
     """
     try:
-        return await _get_overview_impl(db)
+        return await _get_overview_impl(db, current_user)
     except Exception as e:
         logger.error("数据总览查询失败: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="查询失败，请稍后重试或联系管理员")
 
 
-async def _get_overview_impl(db: Session):
-    from datetime import datetime, timedelta
+def _calc_health_score(
+    villages_count: int, projects_count: int, schools_count: int, funds_count: int, completeness
+):
+    """数据健康评分 (0-100)：综合各模块数据量与帮扶村完整率。
 
+    从 _get_overview_impl 拆出，使主聚合流程的控制复杂度维持在门禁内。
+    """
+    module_scores = []
+    if villages_count > 0:
+        module_scores.append(min(100, completeness))
+    else:
+        module_scores.append(0)
+    module_scores.append(100 if projects_count > 0 else 0)
+    module_scores.append(100 if schools_count > 0 else 0)
+    module_scores.append(100 if funds_count > 0 else 0)
+    return round(sum(module_scores) / max(len(module_scores), 1))
+
+
+def _build_7day_trend(day_counts) -> list:
+    """把 (日期 -> 操作数) 映射补齐成连续 7 天趋势（含无数据日补 0）。"""
+    trend = []
+    now = datetime.now()
+    for i in range(6, -1, -1):
+        day = (now - timedelta(days=i)).strftime("%m-%d")
+        day_key = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        trend.append({"date": day, "operations": day_counts.get(day_key, 0)})
+    return trend
+
+
+def _build_recent_logs(logs) -> list:
+    """把审计日志 ORM 行转成看板所需的精简字典。"""
+    return [
+        {
+            "id": log.id,
+            "action": f"{log.action or ''} {log.resource_type or ''}".strip(),
+            "user": log.username or f"用户{log.user_id or ''}",
+            "time": str(log.created_at) if log.created_at else "",
+        }
+        for log in logs
+    ]
+
+
+async def _get_overview_impl(db: Session, current_user=None):
+    """数据总览聚合（H2：按调用者数据域收敛）。
+
+    模型覆盖：帮扶村/项目/学校/经费均带 organization_id（apply_scope_filter 直接过滤）；
+    用户总数按可访问组织收敛；审计日志（今日操作/7 天趋势/最近操作）在受限范围内
+    收敛为"本人操作"，避免向任意登录用户回显全局操作流水（M9 同类问题）。
+    """
+    from app.core.data_permission import OrgScopeFilter, apply_scope_filter
     from app.models.audit import AuditLog
     from app.models.supported_village import SupportedVillage
     from app.utils.time_utils import utcnow_naive
 
-    villages_count = db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count()
-    projects_count = db.query(Project).filter(Project.is_active == True).count()  # noqa: E712
-    schools_count = db.query(School).filter(School.is_active == True).count()  # noqa: E712
-    funds_count = db.query(Fund).filter(Fund.is_active == True).count()  # noqa: E712
-    users_count = db.query(User).filter(User.is_active == True).count()  # noqa: E712
+    def _scoped(query, model, org_field="organization_id"):
+        """统一数据域过滤入口（严格口径：部门级 admin 仅本组织及子树）。
+
+        current_user 为 None 表示"无用户上下文"（内部/定时调用），保持系统级口径；
+        端点路径始终透传真实用户。
+        """
+        if current_user is None:
+            return query
+        return apply_scope_filter(query, current_user, model, org_field, db=db)
+
+    def _users_query():
+        """用户统计口径：受限用户只统计可访问组织内的活跃用户。
+
+        User 模型无 created_by 列（"仅本人"范围无法表达），故不经
+        apply_scope_filter 的 OWN 分支，直接按可访问组织收敛。
+        """
+        query = db.query(User).filter(User.is_active == True)  # noqa: E712
+        if current_user is not None and not is_admin(current_user):
+            org_ids = get_accessible_org_ids(current_user, db=db)
+            query = query.filter(User.organization_id.in_(org_ids or []))
+        return query
+
+    villages_count = _scoped(
+        db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)), SupportedVillage
+    ).count()
+    projects_count = _scoped(db.query(Project).filter(Project.is_active == True), Project).count()  # noqa: E712
+    schools_count = _scoped(db.query(School).filter(School.is_active == True), School).count()  # noqa: E712
+    funds_count = _scoped(db.query(Fund).filter(Fund.is_active == True), Fund).count()  # noqa: E712
+
+    users_count = _users_query().count()
 
     funds_total = (
-        db.query(func.sum(Fund.amount))
-        .filter(Fund.status == "approved", Fund.is_active == True)  # noqa: E712
-        .scalar()
+        _scoped(
+            db.query(func.sum(Fund.amount)).filter(
+                Fund.status == "approved", Fund.is_active == True  # noqa: E712
+            ),
+            Fund,
+        ).scalar()
         or 0
     )
+
+    # 审计日志范围：全量访问者看全局；受限用户只看本人操作（不泄漏他人操作流水）
+    audit_scope = OrgScopeFilter(is_admin=True)
+    if current_user is not None and not is_admin(current_user):
+        audit_scope = OrgScopeFilter(
+            is_admin=False,
+            self_only=True,
+            user_id=getattr(current_user, "id", None),
+        )
+
+    def _audit_scoped(query):
+        return audit_scope.filter_by_org_ids(query, AuditLog.user_id, created_by_column=AuditLog.user_id)
 
     # 各模块最后更新时间
     def _last_update(model):
         col = getattr(model, "updated_at", None) or getattr(model, "created_at", None)
         if col is None:  # pragma: no cover —— 调用方仅传入 Village/Project/Fund/School/User，均带时间戳，防御分支不可达
             return None
-        val = db.query(func.max(col)).scalar()
+        if model is User:
+            val = _users_query().with_entities(func.max(col)).scalar()
+        else:
+            val = _scoped(db.query(func.max(col)), model).scalar()
         return str(val) if val else None
 
     modules = [
@@ -263,19 +371,22 @@ async def _get_overview_impl(db: Session):
     from app.models.supported_village import VillageIncome as VI
     from app.models.supported_village import VillagePopulation as VP
 
-    sv_count = db.query(SV).filter(SV.is_active.is_(True)).count()  # noqa: E712
-    completeness = _calc_village_completeness(db, SV, VP, VI, sv_count) if sv_count > 0 else 0
+    sv_count = villages_count
+    # _calc_village_completeness 的 scope_filter 是**单参**回调，而 _scoped 需 (query, model)；
+    # 这里绑定默认 model 让分子/分母同源（详见 2026-09-17 修复注释）。直接传 _scoped 会
+    # TypeError: missing 1 required positional argument: 'model'。
+    completeness = (
+        _calc_village_completeness(
+            db, SV, VP, VI, sv_count, lambda q, _m=SV: _scoped(q, _m)
+        )
+        if sv_count > 0
+        else 0
+    )
 
     # 数据健康评分 (0-100) — 综合考虑各模块数据量和完整率
-    module_scores = []
-    if villages_count > 0:
-        module_scores.append(min(100, completeness))
-    else:
-        module_scores.append(0)
-    module_scores.append(100 if projects_count > 0 else 0)
-    module_scores.append(100 if schools_count > 0 else 0)
-    module_scores.append(100 if funds_count > 0 else 0)
-    health_score = round(sum(module_scores) / max(len(module_scores), 1))
+    health_score = _calc_health_score(
+        villages_count, projects_count, schools_count, funds_count, completeness
+    )
 
     # 「今日/近 7 天」按**本地日历**解释，而 AuditLog.created_at 是 UTC 墙钟列：
     # 必须先把本地日界平移到 UTC 再比较、并给分桶键加同样的偏移，否则 UTC+8 下
@@ -293,7 +404,9 @@ async def _get_overview_impl(db: Session):
     )
     today_ops = 0
     try:
-        today_ops = db.query(AuditLog).filter(AuditLog.created_at >= today_start).count()
+        today_ops = _audit_scoped(
+            db.query(AuditLog).filter(AuditLog.created_at >= today_start)
+        ).count()
     except Exception:
         logger.warning("查询今日操作数失败（看板将显示 0）", exc_info=True)
 
@@ -304,36 +417,23 @@ async def _get_overview_impl(db: Session):
             hour=0, minute=0, second=0, microsecond=0
         ) - local_offset
         local_day = func.date(AuditLog.created_at, local_shift)
-        daily_results = (
-            db.query(local_day.label("day"), func.count(AuditLog.id).label("cnt"))
-            .filter(AuditLog.created_at >= week_start)
-            .group_by(local_day)
-            .all()
-        )
+        daily_results = _audit_scoped(
+            db.query(local_day.label("day"), func.count(AuditLog.id).label("cnt")).filter(
+                AuditLog.created_at >= week_start
+            )
+        ).group_by(local_day).all()
         day_counts = {r.day: r.cnt for r in daily_results}
     except Exception:
         logger.warning("查询近7天趋势失败（看板趋势将为空）", exc_info=True)
         day_counts = {}
 
-    for i in range(6, -1, -1):
-        day = (datetime.now() - timedelta(days=i)).strftime("%m-%d")
-        day_key = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
-        cnt = day_counts.get(day_key, 0)
-        trend.append({"date": day, "operations": cnt})
+    trend = _build_7day_trend(day_counts)
 
     # 最近操作记录
     recent_logs = []
     try:
-        logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(8).all()
-        for log in logs:
-            recent_logs.append(
-                {
-                    "id": log.id,
-                    "action": f"{log.action or ''} {log.resource_type or ''}".strip(),
-                    "user": log.username or f"用户{log.user_id or ''}",
-                    "time": str(log.created_at) if log.created_at else "",
-                }
-            )
+        logs = _audit_scoped(db.query(AuditLog)).order_by(AuditLog.created_at.desc()).limit(8).all()
+        recent_logs = _build_recent_logs(logs)
     except Exception:
         logger.warning("查询最近操作记录失败（最近操作列表将为空）", exc_info=True)
 
@@ -361,14 +461,17 @@ async def _get_overview_impl(db: Session):
 @router.get("/villages/distribution")
 async def get_villages_distribution(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
+        from app.core.data_permission import apply_scope_filter
         from app.models.supported_village import SupportedVillage, VillagePopulation
 
-        by_status = (
-            db.query(SupportedVillage.transition_status, func.count(SupportedVillage.id))
-            .filter(SupportedVillage.is_active.is_(True))
-            .group_by(SupportedVillage.transition_status)
-            .all()
-        )
+        def _scoped(query):
+            return apply_scope_filter(query, current_user, SupportedVillage, db=db)
+
+        by_status = _scoped(
+            db.query(SupportedVillage.transition_status, func.count(SupportedVillage.id)).filter(
+                SupportedVillage.is_active.is_(True)
+            )
+        ).group_by(SupportedVillage.transition_status).all()
         status_data = [{"name": status or "未分类", "value": count} for status, count in by_status]
 
         # 人口最多的村庄：取每个村最新年人口（避免 N+1）；软删村排除
@@ -381,28 +484,29 @@ async def get_villages_distribution(current_user=Depends(get_current_user), db: 
             .subquery()
         )
         top_villages = (
-            db.query(SupportedVillage.village_name, VillagePopulation.total_population)
-            .join(pop_subq, pop_subq.c.supported_village_id == SupportedVillage.id)
-            .join(
-                VillagePopulation,
-                and_(
-                    VillagePopulation.supported_village_id == SupportedVillage.id,
-                    VillagePopulation.year == pop_subq.c.max_year,
-                ),
+            _scoped(
+                db.query(SupportedVillage.village_name, VillagePopulation.total_population)
+                .join(pop_subq, pop_subq.c.supported_village_id == SupportedVillage.id)
+                .join(
+                    VillagePopulation,
+                    and_(
+                        VillagePopulation.supported_village_id == SupportedVillage.id,
+                        VillagePopulation.year == pop_subq.c.max_year,
+                    ),
+                )
+                .filter(SupportedVillage.is_active.is_(True))
             )
-            .filter(SupportedVillage.is_active.is_(True))
             .order_by(VillagePopulation.total_population.desc())
             .limit(10)
             .all()
         )
         top_data = [{"name": name, "value": population or 0} for name, population in top_villages]
 
-        by_province = (
-            db.query(SupportedVillage.province, func.count(SupportedVillage.id))
-            .filter(SupportedVillage.is_active.is_(True))
-            .group_by(SupportedVillage.province)
-            .all()
-        )
+        by_province = _scoped(
+            db.query(SupportedVillage.province, func.count(SupportedVillage.id)).filter(
+                SupportedVillage.is_active.is_(True)
+            )
+        ).group_by(SupportedVillage.province).all()
         province_data = [{"name": province or "未知", "value": count} for province, count in by_province if province]
 
         return success_response(
@@ -416,39 +520,37 @@ async def get_villages_distribution(current_user=Depends(get_current_user), db: 
 @router.get("/projects/statistics")
 async def get_projects_statistics(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
-        by_status = (
-            db.query(Project.status, func.count(Project.id))
-            .filter(Project.is_active == True)  # noqa: E712
-            .group_by(Project.status)
-            .all()
-        )
+        from app.core.data_permission import apply_scope_filter
+
+        def _scoped(query):
+            return apply_scope_filter(query, current_user, Project, db=db)
+
+        by_status = _scoped(
+            db.query(Project.status, func.count(Project.id)).filter(Project.is_active == True)  # noqa: E712
+        ).group_by(Project.status).all()
         status_data = [{"name": status, "value": count} for status, count in by_status]
 
-        by_type = (
-            db.query(Project.type, func.count(Project.id))
-            .filter(Project.is_active == True)  # noqa: E712
-            .group_by(Project.type)
-            .all()
-        )
+        by_type = _scoped(
+            db.query(Project.type, func.count(Project.id)).filter(Project.is_active == True)  # noqa: E712
+        ).group_by(Project.type).all()
         type_data = [{"name": ptype or "未分类", "value": count} for ptype, count in by_type if ptype]
 
         budget_sum = (
-            db.query(func.sum(Project.budget)).filter(Project.is_active == True).scalar() or 0  # noqa: E712
+            _scoped(db.query(func.sum(Project.budget)).filter(Project.is_active == True)).scalar() or 0  # noqa: E712
         )
         invested_sum = (
-            db.query(func.sum(Project.invested_amount))
-            .filter(Project.is_active == True)  # noqa: E712
-            .scalar()
+            _scoped(
+                db.query(func.sum(Project.invested_amount)).filter(Project.is_active == True)  # noqa: E712
+            ).scalar()
             or 0
         )
 
         avg_progress = (
-            db.query(func.avg(Project.progress)).filter(Project.is_active == True).scalar() or 0  # noqa: E712
+            _scoped(db.query(func.avg(Project.progress)).filter(Project.is_active == True)).scalar() or 0  # noqa: E712
         )
 
         recent_projects = (
-            db.query(Project)
-            .filter(Project.is_active == True)  # noqa: E712
+            _scoped(db.query(Project).filter(Project.is_active == True))  # noqa: E712
             .order_by(Project.created_at.desc())
             .limit(5)
             .all()
@@ -474,7 +576,12 @@ async def get_projects_statistics(current_user=Depends(get_current_user), db: Se
 @router.get("/funds/statistics")
 async def get_funds_statistics(year: int = None, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
-        query = db.query(Fund).filter(Fund.is_active == True)  # noqa: E712
+        from app.core.data_permission import apply_scope_filter
+
+        def _scoped(query):
+            return apply_scope_filter(query, current_user, Fund, db=db)
+
+        query = _scoped(db.query(Fund).filter(Fund.is_active == True))  # noqa: E712
 
         if year:
             query = query.filter(func.strftime("%Y", Fund.date) == str(year))
@@ -486,19 +593,22 @@ async def get_funds_statistics(year: int = None, current_user=Depends(get_curren
 
         total_amount = query.with_entities(func.sum(Fund.amount)).scalar() or 0
         approved_amount = (
-            db.query(func.sum(Fund.amount))
-            .filter(Fund.status == "approved", Fund.is_active == True)  # noqa: E712
-            .scalar()
+            _scoped(
+                db.query(func.sum(Fund.amount)).filter(
+                    Fund.status == "approved", Fund.is_active == True  # noqa: E712
+                )
+            ).scalar()
             or 0
         )
 
         monthly_stats = (
-            db.query(
-                func.strftime("%Y-%m", Fund.date).label("month"),
-                func.count(Fund.id).label("count"),
-                func.sum(Fund.amount).label("amount"),
+            _scoped(
+                db.query(
+                    func.strftime("%Y-%m", Fund.date).label("month"),
+                    func.count(Fund.id).label("count"),
+                    func.sum(Fund.amount).label("amount"),
+                ).filter(Fund.date.isnot(None), Fund.is_active == True)  # noqa: E712
             )
-            .filter(Fund.date.isnot(None), Fund.is_active == True)  # noqa: E712
             .group_by("month")
             .order_by("month")
             .limit(12)
@@ -523,38 +633,50 @@ async def get_funds_statistics(year: int = None, current_user=Depends(get_curren
 @router.get("/schools/statistics")
 async def get_schools_statistics(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
-        by_type = (
-            db.query(School.type, func.count(School.id))
-            .filter(School.is_active == True)  # noqa: E712
-            .group_by(School.type)
-            .all()
-        )
+        from app.core.data_permission import apply_scope_filter
+
+        def _scoped(query):
+            """学校子表经 schools.organization_id 收敛（SchoolSupport 自身无组织列）。"""
+            return apply_scope_filter(query, current_user, School, db=db)
+
+        by_type = _scoped(
+            db.query(School.type, func.count(School.id)).filter(School.is_active == True)  # noqa: E712
+        ).group_by(School.type).all()
         type_data = [{"name": stype or "未分类", "value": count} for stype, count in by_type if stype]
 
         total_students = (
-            db.query(func.sum(School.student_count)).filter(School.is_active == True).scalar() or 0  # noqa: E712
+            _scoped(
+                db.query(func.sum(School.student_count)).filter(School.is_active == True)  # noqa: E712
+            ).scalar()
+            or 0
         )
         total_teachers = (
-            db.query(func.sum(School.teacher_count)).filter(School.is_active == True).scalar() or 0  # noqa: E712
+            _scoped(
+                db.query(func.sum(School.teacher_count)).filter(School.is_active == True)  # noqa: E712
+            ).scalar()
+            or 0
         )
 
         supports_by_type = (
-            db.query(SchoolSupport.support_type, func.count(SchoolSupport.id))
-            .join(School, SchoolSupport.school_id == School.id)
-            .filter(School.is_active == True)  # noqa: E712
+            _scoped(
+                db.query(SchoolSupport.support_type, func.count(SchoolSupport.id))
+                .join(School, SchoolSupport.school_id == School.id)
+                .filter(School.is_active == True)  # noqa: E712
+            )
             .group_by(SchoolSupport.support_type)
             .all()
         )
         support_data = [{"name": sptype or "未分类", "value": count} for sptype, count in supports_by_type]
 
         total_support_amount = (
-            db.query(func.sum(SchoolSupport.amount))
-            .join(School, SchoolSupport.school_id == School.id)
-            .filter(
-                SchoolSupport.amount.isnot(None),
-                School.is_active == True,  # noqa: E712
-            )
-            .scalar()
+            _scoped(
+                db.query(func.sum(SchoolSupport.amount))
+                .join(School, SchoolSupport.school_id == School.id)
+                .filter(
+                    SchoolSupport.amount.isnot(None),
+                    School.is_active == True,  # noqa: E712
+                )
+            ).scalar()
             or 0
         )
 
@@ -696,6 +818,8 @@ async def _get_analysis_data_impl(db: Session, current_user):
     # 数据完整率 — 基于关键字段实际填写率
     # 2026-09-17 修复：分子同样套 _scoped —— 否则窄范围用户的完整率分子取全库计数、
     # 分母只取本范围村数（既虚高又泄漏范围外数据规模）。传 _scoped 使分子分母同源。
+    # 注意：本作用域内的 _scoped 是单参回调（见其定义），正好匹配
+    # _calc_village_completeness 的 scope_filter 契约，直接传入即可。
     completeness = _calc_village_completeness(
         db, SupportedVillage, VillagePopulation, VillageIncome, total_villages, _scoped
     )
@@ -874,36 +998,50 @@ async def get_dashboard_data(current_user=Depends(get_current_user), db: Session
     Task 4.2: 在查询服务中集成缓存
     """
     try:
-        # 尝试从缓存获取
-        cache_key = "dashboard"
+        # 尝试从缓存获取（缓存键含用户，避免跨用户串数据）
+        user_id = getattr(current_user, "id", 0)
+        cache_key = f"dashboard:{user_id}"
         cached = await _get_cached_stats(cache_key)
         if cached:
             return cached
 
+        from app.core.data_permission import apply_scope_filter
         from app.models.supported_village import SupportedVillage
 
+        def _scoped(query, model):
+            return apply_scope_filter(query, current_user, model, db=db)
+
         summary = {
-            "total_users": db.query(User).count(),
-            "total_villages": db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)).count(),
-            "total_schools": db.query(School).filter(School.is_active == True).count(),  # noqa: E712
-            "total_projects": db.query(Project).filter(Project.is_active == True).count(),  # noqa: E712
-            "active_projects": db.query(Project).filter(
-                Project.is_active == True, Project.status == "active"  # noqa: E712
+            "total_users": _scoped(db.query(User), User).count(),
+            "total_villages": _scoped(
+                db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)), SupportedVillage
             ).count(),
-            "total_funds": db.query(Fund).filter(Fund.is_active == True).count(),  # noqa: E712
+            "total_schools": _scoped(db.query(School).filter(School.is_active == True), School).count(),  # noqa: E712
+            "total_projects": _scoped(
+                db.query(Project).filter(Project.is_active == True), Project  # noqa: E712
+            ).count(),
+            "active_projects": _scoped(
+                db.query(Project).filter(
+                    Project.is_active == True, Project.status == "active"  # noqa: E712
+                ),
+                Project,
+            ).count(),
+            "total_funds": _scoped(db.query(Fund).filter(Fund.is_active == True), Fund).count(),  # noqa: E712
         }
 
         funds_total = (
-            db.query(func.sum(Fund.amount))
-            .filter(Fund.status == "approved", Fund.is_active == True)  # noqa: E712
-            .scalar()
+            _scoped(
+                db.query(func.sum(Fund.amount)).filter(
+                    Fund.status == "approved", Fund.is_active == True  # noqa: E712
+                ),
+                Fund,
+            ).scalar()
             or 0
         )
         summary["approved_funds"] = funds_total
 
         recent_activities = (
-            db.query(Project)
-            .filter(Project.is_active == True)  # noqa: E712
+            _scoped(db.query(Project).filter(Project.is_active == True), Project)  # noqa: E712
             .order_by(Project.updated_at.desc())
             .limit(5)
             .all()
@@ -919,12 +1057,10 @@ async def get_dashboard_data(current_user=Depends(get_current_user), db: Session
             for p in recent_activities
         ]
 
-        projects_by_status = (
-            db.query(Project.status, func.count(Project.id))
-            .filter(Project.is_active == True)  # noqa: E712
-            .group_by(Project.status)
-            .all()
-        )
+        projects_by_status = _scoped(
+            db.query(Project.status, func.count(Project.id)).filter(Project.is_active == True),  # noqa: E712
+            Project,
+        ).group_by(Project.status).all()
         summary["projects_chart"] = [{"name": status, "value": count} for status, count in projects_by_status]
 
         # 写入缓存

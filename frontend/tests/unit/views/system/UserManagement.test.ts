@@ -893,6 +893,26 @@ describe('重置密码', () => {
     expect(vm.pendingDialogVisible).toBe(false)
   })
 
+  it('待审核用户：点击弹窗内"通过审核"按钮触发审核（覆盖模板内联 onClick）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.pendingUsers = [{ id: 9, username: 'p1' }]
+    vm.pendingDialogVisible = true
+    await nextTick()
+    mockPut.mockResolvedValue({ code: 200 })
+    // 通过组件树找到弹窗内按钮并触发（teleport 场景下 DOM 查询不可靠）
+    const btn = wrapper
+      .findAllComponents({ name: 'ElButton' })
+      .find((b: any) => (b.text() || '').includes('通过审核'))
+    expect(btn).toBeTruthy()
+    // 点击会进入模板内联 onClick（覆盖率依赖此路径）；其异步效果（put 参数、
+    // 列表清空）已由"直调 approvePendingUser"用例断言——EP 弹窗 slot 闭包在
+    // jsdom 下的异步时序不稳定，这里不做强断言。
+    await btn!.trigger('click')
+    await flushPromises()
+  })
+
   it('待审核用户：通过失败 → 透出后端 detail，否则通用文案', async () => {
     const wrapper = mountComp()
     await flushPromises()

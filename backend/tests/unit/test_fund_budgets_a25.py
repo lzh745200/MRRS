@@ -34,6 +34,7 @@ class TestGetTransactionsFilters:
         q.offset.return_value = q
         q.limit.return_value = q
         q.all.return_value = []
+        q.count.return_value = 0
         db = MagicMock()
         db.query.return_value = q
 
@@ -41,7 +42,11 @@ class TestGetTransactionsFilters:
             fund_id=1, project_id=2, village_id=3, budget_id=4,
             page=1, page_size=20, current_user=_user(), db=db,
         )
-        assert result == []
+        # R28-M13 订正：旧断言 `result == []` 锁定的是**裸数组**契约 ——
+        # 该契约下分页无 total，前端只能把当前页长度当总数（页数恒为 1），
+        # 且与全仓 ok_list 信封口径不一致。新契约断言信封结构与真实 total。
+        assert result["code"] == 200
+        assert result["data"] == {"items": [], "total": 0, "page": 1, "page_size": 20}
 
 
 class TestCreateTransactionLinks:

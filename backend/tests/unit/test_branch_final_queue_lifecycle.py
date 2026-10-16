@@ -269,7 +269,13 @@ def fund(db_session, project):
 
 class TestFundLifecycleFinalBranches:
     def test_quota_lock_within_baseline(self, client, fund, db_session):
-        """606->612：拨付额度未超基线 → 不抛 400，提交并返回已锁定。"""
+        """606->612：拨付额度未超基线 → 不抛 400，提交并如实回吐核验结果。
+
+        旧断言锁定的是错误行为（message == "额度已锁定"），而该端点此前
+        **不落任何字段**（Fund 模型无"额度锁定"列），即"谎报成功"（R27/R28-M12）。
+        新契约：核验通过如实回吐 locked=False / lock_implemented=False，
+        绝不宣称锁定已生效。
+        """
         fund.budget_locked = True
         fund.allocated_amount = Decimal("300.00")
         fund.approved_amount = Decimal("300.00")
@@ -282,8 +288,14 @@ class TestFundLifecycleFinalBranches:
         resp = client.post(f"/api/v1/fund-lifecycle/quota-lock/{fund.id}")
 
         assert resp.status_code == 200
-        assert resp.json()["message"] == "额度已锁定"
-        assert resp.json()["data"]["allocated"] == 300.0
+        body = resp.json()
+        assert "未实现" in body["message"]
+        assert "已锁定" not in body["message"]
+        data = body["data"]
+        assert data["allocated"] == 300.0
+        assert data["locked"] is False
+        assert data["lock_implemented"] is False
+        assert data["baseline_verified"] is True
 
     def test_allocation_plan_keeps_newest_baseline_only(self, client, project, fund, db_session):
         """641->640：同一 fund 多条 baseline → 仅保留最新（id 最大）的一条。"""

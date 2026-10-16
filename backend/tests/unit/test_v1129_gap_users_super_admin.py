@@ -140,15 +140,23 @@ class TestListUsersScopeFiltering:
         user_query = _q()
         org_query = MagicMock()
         org_query.filter.return_value = org_query
-        org_query.all.return_value = [(8,), (9,)]
+        org = MagicMock()
+        org.id = 7
+        org_query.first.return_value = org
+        org_query.all.return_value = []  # 子树遍历：本组织无下级
         db = MagicMock()
-        db.query.side_effect = [user_query, org_query]
+        # 三次查询：User 列表、子树根组织（first）、子树下级遍历（all）
+        db.query.side_effect = [user_query, org_query, org_query]
 
         with patch("app.api.v1.auth.users.get_data_scope", return_value=DataScope.OWN_DEPT):
             result = await us.list_users(current_user=admin, db=db)
 
         assert result["data"]["total"] == 0
-        org_query.all.assert_called_once()
+        # R28 订正：旧断言锁定的是「内联按 Organization.path 前缀查子组织」的
+        # 实现细节；list_users 已统一到共享 _apply_user_data_scope，
+        # 子树改为 parent_id 递归解析 —— 断言子树解析确实执行（取组织 + 遍历下级）。
+        assert org_query.first.called
+        assert org_query.all.called
 
 
 class TestAdminMustHaveOrganization:

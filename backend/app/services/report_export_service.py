@@ -52,13 +52,35 @@ class ReportExportService:
     def _resolve_year(year) -> int:
         return int(year) if year else datetime.now().year
 
-    def generate_summary_report_data(self, db, year: int) -> dict:
+    @staticmethod
+    def _scoped(query, model, current_user):
+        """给报表查询追加调用者数据域过滤（R28 · H6 / 军事审计红线 S2）。
+
+        Args:
+            query: 已带业务条件（如 ``is_active``）的查询。
+            model: 目标 ORM 模型（须有 ``organization_id`` / ``created_by``）。
+            current_user: 当前用户 —— **必填位置参数且无默认值**，漏传在调用点
+                直接 ``TypeError``（fail-closed），而不是静默退回全库口径。
+
+        Why: 公文报告导出（``/export/report-word``、``/export/report-pdf``）此前在
+        服务层直接聚合**全库**，只靠 ``require_admin`` 把关 —— 部门级管理员
+        （``role="admin"`` 且非超管）因此能借导出读到跨组织总量与金额，与
+        ``/export/funds``、``/export/comprehensive`` 的 ``scoped_filter`` 口径不一致，
+        违反 S2 导出隔离红线。过滤语义单一真源仍是 ``app.core.data_permission``，
+        这里只经服务层统一入口 :func:`app.services.data_scope_query.scoped_filter`
+        追加，不重复实现判定逻辑。
+        """
+        from app.services.data_scope_query import scoped_filter
+
+        return scoped_filter(query, model, current_user)
+
+    def generate_summary_report_data(self, db, year: int, current_user) -> dict:
         """生成年度帮扶工作总结数据（村/校/项目/经费四块合并）"""
         year = self._resolve_year(year)
-        village = self.generate_village_summary_report_data(db, year)
-        school = self.generate_school_statistics_report_data(db, year)
-        project = self.generate_project_progress_report_data(db, year)
-        fund = self.generate_fund_detail_report_data(db, year)
+        village = self.generate_village_summary_report_data(db, year, current_user)
+        school = self.generate_school_statistics_report_data(db, year, current_user)
+        project = self.generate_project_progress_report_data(db, year, current_user)
+        fund = self.generate_fund_detail_report_data(db, year, current_user)
 
         sections = [
             {
@@ -87,8 +109,11 @@ class ReportExportService:
         ]
         return {"year": year, "title": _REPORT_TITLES["summary"], "sections": sections}
 
-    def generate_fund_detail_report_data(self, db, year: int) -> dict:
-        """生成经费明细报表数据（按经费类型分组聚合）"""
+    def generate_fund_detail_report_data(self, db, year: int, current_user) -> dict:
+        """生成经费明细报表数据（按经费类型分组聚合）
+
+        数据域：``current_user`` 必填（H6），聚合仅覆盖调用者可见组织/本人记录。
+        """
         from sqlalchemy import func
 
         from app.models.fund import Fund
@@ -97,7 +122,8 @@ class ReportExportService:
         try:
             year_col = func.extract("year", func.coalesce(Fund.date, Fund.created_at))
             type_col = func.coalesce(Fund.fund_type, "未分类")
-            rows = (
+            # S2：先套数据域再聚合（顺序无关，但先套可读性更好）
+            agg_query = self._scoped(
                 db.query(
                     type_col.label("ftype"),
                     func.count(Fund.id),
@@ -105,8 +131,12 @@ class ReportExportService:
                     func.coalesce(func.sum(Fund.approved_amount), 0),
                     func.coalesce(func.sum(Fund.allocated_amount), 0),
                     func.coalesce(func.sum(Fund.used_amount), 0),
-                )
-                .filter(Fund.is_active == True, year_col == year)  # noqa: E712
+                ),
+                Fund,
+                current_user,
+            )
+            rows = (
+                agg_query.filter(Fund.is_active == True, year_col == year)  # noqa: E712
                 .group_by(type_col)
                 .order_by(type_col)
                 .all()
@@ -149,8 +179,11 @@ class ReportExportService:
                 "sections": [{"title": "经费执行明细", "paragraphs": [f"{year} 年度经费数据查询失败。"], "table": None}],
             }
 
-    def generate_project_progress_report_data(self, db, year: int) -> dict:
-        """生成项目进度报表数据（按状态分组聚合）"""
+    def generate_project_progress_report_data(self, db, year: int, current_user) -> dict:
+        """生成项目进度报表数据（按状态分组聚合）
+
+        数据域：``current_user`` 必填（H6）。
+        """
         from sqlalchemy import func
 
         from app.models.project import Project
@@ -158,15 +191,19 @@ class ReportExportService:
         year = self._resolve_year(year)
         try:
             year_col = func.extract("year", func.coalesce(Project.start_date, Project.created_at))
-            rows = (
+            agg_query = self._scoped(
                 db.query(
                     Project.status,
                     func.count(Project.id),
                     func.coalesce(func.avg(Project.progress), 0),
                     func.coalesce(func.sum(Project.budget), 0),
                     func.coalesce(func.sum(Project.actual_cost), 0),
-                )
-                .filter(year_col == year, Project.is_active == True)  # noqa: E712
+                ),
+                Project,
+                current_user,
+            )
+            rows = (
+                agg_query.filter(year_col == year, Project.is_active == True)  # noqa: E712
                 .group_by(Project.status)
                 .order_by(Project.status)
                 .all()
@@ -212,19 +249,27 @@ class ReportExportService:
                 "sections": [{"title": "项目进展统计", "paragraphs": [f"{year} 年度项目数据查询失败。"], "table": None}],
             }
 
-    def generate_school_statistics_report_data(self, db, year: int) -> dict:
-        """生成帮扶学校统计报表数据"""
+    def generate_school_statistics_report_data(self, db, year: int, current_user) -> dict:
+        """生成帮扶学校统计报表数据
+
+        数据域：``current_user`` 必填（H6）。
+        """
         from sqlalchemy import func
 
         from app.models.school import School
 
         year = self._resolve_year(year)
         try:
-            schools = db.query(
-                func.count(School.id),
-                func.coalesce(func.sum(School.student_count), 0),
-                func.coalesce(func.sum(School.teacher_count), 0),
-            ).filter(School.is_active == True).first()  # noqa: E712
+            agg_query = self._scoped(
+                db.query(
+                    func.count(School.id),
+                    func.coalesce(func.sum(School.student_count), 0),
+                    func.coalesce(func.sum(School.teacher_count), 0),
+                ),
+                School,
+                current_user,
+            )
+            schools = agg_query.filter(School.is_active == True).first()  # noqa: E712
 
             total_schools = int(schools[0]) if schools else 0
             total_students = int(schools[1]) if schools else 0
@@ -252,15 +297,23 @@ class ReportExportService:
             ],
         }
 
-    def generate_village_summary_report_data(self, db, year: int) -> dict:
-        """生成帮扶村年度汇总报表数据"""
+    def generate_village_summary_report_data(self, db, year: int, current_user) -> dict:
+        """生成帮扶村年度汇总报表数据
+
+        数据域：``current_user`` 必填（H6）。
+        """
         from sqlalchemy import func
 
         from app.models.supported_village import SupportedVillage
 
         year = self._resolve_year(year)
         try:
-            total = db.query(func.count(SupportedVillage.id)).filter(
+            agg_query = self._scoped(
+                db.query(func.count(SupportedVillage.id)),
+                SupportedVillage,
+                current_user,
+            )
+            total = agg_query.filter(
                 SupportedVillage.is_active == True  # noqa: E712
             ).scalar() or 0
         except Exception:
@@ -280,13 +333,16 @@ class ReportExportService:
             ],
         }
 
-    def generate_annual_summary_report_data(self, db, year: int) -> dict:
-        """生成年度综合总结报告数据（合并村/项目/资金/学校）"""
+    def generate_annual_summary_report_data(self, db, year: int, current_user) -> dict:
+        """生成年度综合总结报告数据（合并村/项目/资金/学校）
+
+        数据域：``current_user`` 必填（H6），四块子报表逐块透传。
+        """
         year = self._resolve_year(year)
-        village_data = self.generate_village_summary_report_data(db, year)
-        school_data = self.generate_school_statistics_report_data(db, year)
-        project_data = self.generate_project_progress_report_data(db, year)
-        fund_data = self.generate_fund_detail_report_data(db, year)
+        village_data = self.generate_village_summary_report_data(db, year, current_user)
+        school_data = self.generate_school_statistics_report_data(db, year, current_user)
+        project_data = self.generate_project_progress_report_data(db, year, current_user)
+        fund_data = self.generate_fund_detail_report_data(db, year, current_user)
 
         sections = [
             {"title": "一、帮扶村概况", "paragraphs": village_data["sections"][0]["paragraphs"], "table": None},
