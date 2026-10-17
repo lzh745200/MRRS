@@ -210,6 +210,9 @@ class TestD10ReportsDataScope:
         q.filter.return_value = q
         q.limit.return_value = q
         q.all.return_value = [village]
+        # W18 P1：总数改用 count()（不能用被 limit(100) 截断后的 len()，
+        # 否则村数 >100 的报表永远显示 100）。此处总数=1 与明细条数一致。
+        q.count.return_value = 1
         db.query.return_value = q
 
         with patch(
@@ -220,6 +223,8 @@ class TestD10ReportsDataScope:
 
         assert resp.status_code == 200
         assert resp.json()["data"]["total_villages"] == 1
+        # 未截断时如实标注 False（总数与明细一致）
+        assert resp.json()["data"]["villages_truncated"] is False
         assert fbds.call_count == 1
 
     def test_statistics_wrapped_by_data_scope(self, reports_client):

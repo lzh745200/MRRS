@@ -549,7 +549,9 @@ class BackupService:
             file_path=backup_file_path,
             file_size=file_size,
             description=description,
-            created_at=datetime.now(),
+            # W18-B：created_at 是 UtcDateTime 列（UTC 语义），此前写本地 naive
+            # datetime.now()，在 UTC+8 主机会落成"未来 8 小时"，备份列表时间虚高。
+            created_at=utcnow(),
         )
 
     def _safe_extractall(self, zipf: zipfile.ZipFile, dest_dir: str) -> None:

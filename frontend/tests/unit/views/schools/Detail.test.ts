@@ -378,6 +378,12 @@ describe('导航与删除', () => {
     const stu = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('管理资助学生'))
     await stu!.trigger('click')
     expect(pushSafeMock).toHaveBeenCalledWith('/schools/3/scholarship')
+
+    // 结对帮扶台账入口：跳转按对象聚合的结对/走访台账（深链筛选）
+    pushSafeMock.mockClear()
+    const pairing = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('结对帮扶台账'))
+    await pairing!.trigger('click')
+    expect(pushSafeMock).toHaveBeenCalledWith('/pairings?partner_type=school&partner_id=3')
   })
 
   it('handleDelete 确认后成功', async () => {

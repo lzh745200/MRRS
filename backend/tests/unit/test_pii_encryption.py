@@ -127,3 +127,21 @@ def test_migration_list_matches_model_metadata():
             if isinstance(col.type, EncryptedText):
                 encrypted.add((table.name, col.name))
     assert set(mod._iter_pii_columns()) == encrypted, "迁移回填清单与模型加密列不一致"
+
+
+def test_key_fingerprint_is_stable_and_not_the_key(monkeypatch):
+    """W18-B：指纹用于比对密钥是否漂移，必须稳定、且不能等于密钥本身。"""
+    from app.core import pii_crypto
+
+    fp1 = pii_crypto.key_fingerprint()
+    fp2 = pii_crypto.key_fingerprint()
+    assert fp1 == fp2
+    assert len(fp1) == 16
+    assert all(c in "0123456789abcdef" for c in fp1)
+    # 换一把密钥后指纹必须变（否则"漂移检测"形同虚设）
+    monkeypatch.setattr("app.core.config.settings.ENCRYPTION_KEY", "another-key-" + "x" * 32)
+    pii_crypto.reset_key_cache()
+    try:
+        assert pii_crypto.key_fingerprint() != fp1
+    finally:
+        pii_crypto.reset_key_cache()

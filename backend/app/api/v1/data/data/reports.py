@@ -768,6 +768,10 @@ async def generate_report(
             villages_query = scoped_filter(
                 villages_query, SupportedVillage, current_user
             )
+            # W18 P1：总数必须用 count()，不能用明细截断后的 len()——
+            # 原实现 villages 被 limit(100) 截断后 len() 当总数，村数 >100 的报表
+            # 永远显示 100（拿去汇报就是错数）。
+            total_villages = villages_query.count()
             villages = villages_query.limit(100).all()
             report_data["villages"] = [
                 {
@@ -779,7 +783,9 @@ async def generate_report(
                 }
                 for v in villages
             ]
-            report_data["total_villages"] = len(villages)
+            report_data["total_villages"] = total_villages
+            # 明细是否被截断（如实标注，避免"总数 500 但只列 100 条"的困惑）
+            report_data["villages_truncated"] = total_villages > len(villages)
 
         # 如果是汇总统计报表
         if request.report_type == "statistics":

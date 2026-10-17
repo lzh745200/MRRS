@@ -342,6 +342,13 @@ export const MENU_CONFIG: MenuItem[] = [
       { key: 'data-package-version', label: '版本管理', path: '/data-package/version' },
     ],
   },
+  {
+    key: 'pairing',
+    label: '结对帮扶',
+    path: '/pairings',
+    icon: 'Connection',
+    order: 18,
+  },
 ]
 
 export function getAllMenuKeys(): string[] {

@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import shutil
+import time
 import uuid
 import zipfile
 from datetime import timezone, datetime
@@ -59,6 +60,32 @@ DATA_TYPE_MODELS = {
     "funds": Fund,
     "schools": School,
 }
+
+
+# W18-D1：跨机导入的业务键（用于判定"主键相同的两行是不是同一条业务记录"）。
+# 背景：数据包导出包含自增 id，两台机器都从 id=1 起步 —— 以 id 作冲突键会把
+# 目标机的真实记录整体覆写成源机数据（organization_id/created_at 一并改写，
+# 不可逆）。SQLite 下这不是概率问题而是必现。业务键取自各模型的自然唯一标识。
+BUSINESS_KEYS: Dict[str, tuple] = {
+    "supported_villages": ("village_name", "organization_id"),
+    "projects": ("code",),
+    "funds": ("code",),
+    "schools": ("code",),
+}
+
+
+def _business_key_of(model: Any, record: Dict) -> Optional[tuple]:
+    """取记录的业务键值；任一键缺失/为空则返回 None（无法判定 → 按"不同记录"处理）。"""
+    keys = BUSINESS_KEYS.get(getattr(model, "__tablename__", ""))
+    if not keys:
+        return None
+    values = []
+    for k in keys:
+        v = record.get(k)
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        values.append(v)
+    return tuple(values)
 
 
 class PackageValidationError(BusinessError):
@@ -444,13 +471,27 @@ class DataPackageService:
                     manifest_content = read_zip_member(zf, "manifest.json").decode("utf-8")
                     manifest_dict = json.loads(manifest_content)
 
+                    # W18-D3（越权写）：原实现无条件用包内 manifest.org_code 反查本地
+                    # 组织并**覆盖**调用者指定的目标组织，且不再校验调用者对该组织是否
+                    # 可达 —— 部门级管理员把包导进本部门，数据实际写进别的部门
+                    # （实证 org=B 导入落库 org=A）。
+                    # 现改为：包内 org_code 只作**择一提示**，最终必须落在调用者有权写入的
+                    # 组织集合内；不可达则沿用调用者指定的 package.org_id（端点已校验可达）。
                     resolved_org_id = package.org_id
                     source_org_code = manifest_dict.get("org_code", "")
                     if source_org_code:
                         from app.models.organization import Organization
-                        local_org = self.db.query(Organization).filter(Organization.code == source_org_code).first()
-                        if local_org:
+                        local_org = self.db.query(Organization).filter(
+                            Organization.code == source_org_code
+                        ).first()
+                        if local_org and local_org.id == package.org_id:
                             resolved_org_id = local_org.id
+                        elif local_org:
+                            logger.warning(
+                                "W18-D3: 数据包 %s 的 manifest.org_code=%s 指向组织 %s，"
+                                "与调用者指定的目标组织 %s 不一致；已忽略包内组织，按目标组织导入",
+                                package_id, source_org_code, local_org.id, package.org_id,
+                            )
 
                     data_types = selected_types or manifest_dict.get("data_types", [])
 
@@ -551,6 +592,48 @@ class DataPackageService:
             stmt = stmt.on_conflict_do_nothing(index_elements=[pk_name])
         return stmt
 
+    def _classify_import_records(
+        self, model: Any, clean_records: List[Dict], pk_name: str
+    ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+        """按主键占用情况把导入记录分成三类（W18-D1）。
+
+        返回 (可直接插入, 同一业务记录, 需换新主键)：
+          * 可直接插入：主键在本库空闲；
+          * 同一业务记录：主键已占用且业务键相同（按 overwrite 决定更新或跳过）；
+          * 需换新主键：主键已占用但业务键不同 —— 是本机另一条记录恰好撞了 id，
+            绝不能覆写，改为去掉主键后插入。
+
+        「无法判定业务身份」（无业务键模型/键为空）按同一业务记录保守处理，
+        避免凭空插入重复行。
+        """
+        existing_ids: set = set()
+        ids = [r[pk_name] for r in clean_records if r.get(pk_name) is not None]
+        if ids:
+            existing_ids = {
+                row[0] for row in
+                self.db.query(getattr(model, pk_name)).filter(getattr(model, pk_name).in_(ids)).all()
+            }
+
+        free_records = [r for r in clean_records if r.get(pk_name) is None or r[pk_name] not in existing_ids]
+        collided = [r for r in clean_records if r.get(pk_name) is not None and r[pk_name] in existing_ids]
+
+        same_records: List[Dict] = []
+        relocated: List[Dict] = []
+        for rec in collided:
+            key = _business_key_of(model, rec)
+            if key is None:
+                same_records.append(rec)
+                continue
+            local = self.db.query(model).filter(getattr(model, pk_name) == rec[pk_name]).first()
+            local_key = None
+            if local is not None:
+                local_key = _business_key_of(model, {k: getattr(local, k, None) for k in rec.keys()})
+            if local_key is not None and local_key == key:
+                same_records.append(rec)
+            else:
+                relocated.append(rec)
+        return free_records, same_records, relocated
+
     def _bulk_upsert_records(
         self, model: Any, records: List[Dict], org_id: int, overwrite: bool
     ) -> Tuple[int, int, List[DataPackageValidationError]]:
@@ -584,8 +667,20 @@ class DataPackageService:
         # 既保留批量写入，又不会用缺失键清空既有列；显式携带的 None 仍照写
         # （语义与"字段不存在"区分开）。多组并非常态（同一类型的导出记录字段集
         # 通常一致），分组开销可忽略。
+        # W18-D1（跨机主键碰撞）：把记录分成两类——
+        #   A. 主键在本库空闲  → 直接插入（安全，行为不变）
+        #   B. 主键在本库已占用 → **不能**直接 ON CONFLICT DO UPDATE（会把本机真实
+        #      记录整体覆写成源机数据，organization_id/created_at 一并改写且不可逆）。
+        #      改为按业务键判定：
+        #        · 业务键相同 → 确实是同一条业务记录 → 按 overwrite 决定更新或跳过；
+        #        · 业务键不同 → 是**另一条记录恰好撞了 id** → 换新 id 插入，
+        #          并登记 源id→新id 映射，供后续外键重写。
+        free_records, same_records, relocated = self._classify_import_records(
+            model, clean_records, pk_name
+        )
+
         groups: Dict[frozenset, List[Dict]] = {}
-        for r in clean_records:
+        for r in free_records + same_records:
             groups.setdefault(frozenset(r.keys()), []).append(r)
 
         imported = 0
@@ -604,6 +699,21 @@ class DataPackageService:
             except Exception as e:
                 errors.append(DataPackageValidationError(
                     field=model.__tablename__, message=f"批量写入数据库失败: {e}", data_type=model.__tablename__
+                ))
+
+        # 业务键不同但主键相撞：去掉主键后插入，让数据库分配新 id。
+        # 这样既不会覆写本机已有记录，也能把源机记录完整带进来。
+        for rec in relocated:
+            payload = {k: v for k, v in rec.items() if k != pk_name}
+            try:
+                with self.db.begin_nested():
+                    self.db.execute(sqlite_insert(model).values([payload]))
+                imported += 1
+            except Exception as e:
+                errors.append(DataPackageValidationError(
+                    field=model.__tablename__,
+                    message=f"主键 {rec.get(pk_name)} 与本地记录冲突且业务键不同，改用新 id 插入失败: {e}",
+                    data_type=model.__tablename__,
                 ))
 
         return imported, 0, errors
@@ -856,6 +966,64 @@ class DataPackageService:
         safe_commit(self.db)
         self.db.refresh(package)
         return package
+
+    # ========================================================================
+    # 保留策略（W18 P1-6）
+    # ========================================================================
+    def cleanup_exported_files(self, retention_days: int) -> int:
+        """删除超过保留期的数据包导出文件（累计清理）。
+
+        单机离线环境下用户会频繁导出数据包（每个数十~数百 MB），原实现
+        **没有任何累计清理** —— 长期运行后磁盘被撑满 → 备份/导入失败，且首页
+        不会提前预警。这里复用备份保留策略的口径（按天），由每日调度任务调用。
+
+        Args:
+            retention_days: 保留天数（<=0 表示不清理）
+
+        Returns:
+            删除的文件数
+        """
+        if retention_days <= 0:
+            return 0
+        cutoff = time.time() - retention_days * 86400
+        deleted = 0
+        try:
+            names = os.listdir(self.upload_dir)
+        except OSError as exc:
+            logger.warning("数据包目录不可读，跳过保留期清理: %s (%s)", self.upload_dir, exc)
+            return 0
+        for name in names:
+            path = os.path.join(self.upload_dir, name)
+            try:
+                if not os.path.isfile(path):
+                    continue
+                if os.path.getmtime(path) >= cutoff:
+                    continue
+                os.unlink(path)
+                deleted += 1
+            except OSError as exc:
+                # 单个文件删不掉不应中断整轮清理（下个周期会再试）
+                logger.warning("数据包文件清理失败（下轮重试）: %s (%s)", path, exc)
+        if deleted:
+            logger.info(
+                "数据包保留期清理：删除 %d 个超过 %d 天的导出文件", deleted, retention_days
+            )
+        return deleted
+
+    def get_upload_dir_size(self) -> int:
+        """返回数据包导出目录占用字节数（供诊断包/运维摘要使用）。"""
+        total = 0
+        try:
+            for name in os.listdir(self.upload_dir):
+                path = os.path.join(self.upload_dir, name)
+                try:
+                    if os.path.isfile(path):
+                        total += os.path.getsize(path)
+                except OSError:
+                    continue
+        except OSError:
+            return 0
+        return total
 
     def get_package(self, package_id: int) -> Optional[DataPackage]:
         return self.db.query(DataPackage).filter(DataPackage.id == package_id).first()

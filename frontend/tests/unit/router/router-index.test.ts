@@ -68,6 +68,12 @@ vi.mock('@/views/admin/OrgModulePolicy.vue', () => ({
   default: { name: 'OrgModulePolicyCoverageStub' },
 }))
 
+// PairingList.vue 同理：本文件执行全部懒加载组件函数，专属测试
+// tests/unit/views/pairing/List.test.ts 深挂载全部分支；此处桩替换避免 fnMap 分片错位。
+vi.mock('@/views/pairing/List.vue', () => ({
+  default: { name: 'PairingListCoverageStub' },
+}))
+
 import router, { routes } from '@/router'
 
 // ==================== Helpers ====================

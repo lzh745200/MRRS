@@ -367,6 +367,15 @@ jobs:
       # `# nosec B608 - <理由>`。用 AST 定位完整语句范围（多行 f-string
       # 内含 SQL 括号也不会误判）；理由写在语句范围外不算。配套单测
       # backend/tests/unit/test_raw_sql_fstring_gate.py 钉死仓库零违规。
+      # W18 防腐门禁（2026-10-17）：
+      #  - check_unused_scope_params：作用域形参收下却从未使用（P0-2 "看起来
+      #    已隔离、实际没隔离"的最危险形态）
+      #  - check_userdata_path_consistency：Electron userData / NSIS 钩子 /
+      #    backend paths.py 三处目录口径漂移（漂移只在卸载时才暴露）
+      - name: W18 anti-drift gates
+        run: |
+          python scripts/check_unused_scope_params.py
+          python scripts/check_userdata_path_consistency.py
       - name: Raw SQL f-string exemption guard
         run: python scripts/check_raw_sql_fstrings.py
       - name: Version consistency check

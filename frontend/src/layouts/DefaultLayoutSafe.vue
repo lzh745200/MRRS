@@ -57,6 +57,7 @@
               menuStore.canAccessMenu('villages') ||
               menuStore.canAccessMenu('projects') ||
               menuStore.canAccessMenu('schools') ||
+              menuStore.canAccessMenu('pairing') ||
               menuStore.canAccessMenu('policies') ||
               menuStore.canAccessMenu('funds-admin') ||
               menuStore.canAccessMenu('funds-user')
@@ -87,6 +88,14 @@
             <el-icon><School /></el-icon>
             <template #title>
               <span class="menu-title-text">帮扶学校</span>
+            </template>
+          </el-menu-item>
+
+          <!-- 结对帮扶：主体↔对象台账（结对 + 走访记录） -->
+          <el-menu-item v-if="menuStore.canAccessMenu('pairing')" index="/pairings">
+            <el-icon><Connection /></el-icon>
+            <template #title>
+              <span class="menu-title-text">结对帮扶</span>
             </template>
           </el-menu-item>
 

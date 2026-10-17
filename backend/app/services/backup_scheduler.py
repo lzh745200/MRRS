@@ -283,6 +283,26 @@ async def todo_reminder_job():
             logger.error("待办提醒失败: %s", e, exc_info=True)
 
 
+async def data_package_cleanup_job():
+    """数据包导出文件保留期清理（W18 P1-6，每日 04:10）。
+
+    单机离线环境下用户频繁导出数据包（每个数十~数百 MB），原实现没有任何累计
+    清理：一年后磁盘被撑满 → 备份/导入失败，且首页不会提前预警。保留策略与
+    备份同口径（按天，默认 7 天，可由配置覆盖），避免"只增不减"。
+    """
+    with get_db_context() as db:
+        try:
+            retention_days = get_int_config(
+                "data_package_retention_days", 7, getter=get_config
+            )
+            from app.services.data_package_service import DataPackageService
+
+            DataPackageService(db).cleanup_exported_files(retention_days)
+        except Exception:
+            # 清理失败不影响其它任务（下个周期会再试）
+            logger.warning("数据包保留期清理失败", exc_info=True)
+
+
 async def session_cleanup_job():
     """回收过期/已吊销的登录会话行（每日 05:15，保留 30 天供审计）。
 
@@ -759,11 +779,15 @@ def start_backup_scheduler():
     # R4：分片上传过期会话清理（此前 cleanup_expired_sessions 无任何生产调用点，
     # 放弃的会话在 uploads/chunks/ 与内存 _sessions 中永久泄漏）
     _schedule_interval(chunk_cleanup_job, 1800, "chunk_cleanup")
+    # W18 P1-6：数据包导出文件保留期清理（此前 data-packages 目录只增不减，
+    # 长期运行撑满磁盘 → 备份/导入失败）
+    _schedule_daily(data_package_cleanup_job, 4, 10, "data_package_cleanup")
 
     _scheduler_started = True
     logger.info(
         "调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 自动打包 + 消息清理"
-        " + 过期导出回收 + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发 + 分片清理）"
+        " + 过期导出回收 + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发"
+        " + 分片清理 + 数据包清理）"
     )
 
 

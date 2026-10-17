@@ -47,6 +47,15 @@ module.exports = {
       {
         selector: "MemberExpression[object.property.name='data'][property.name='success']",
         message: "禁止 response.data.success 双重解包。get/post/apiRequest 返回已解包的 envelope，请直接用 response.success。详见 AGENTS.md Bug 模式 #1。"
+      },
+      {
+        // W18 P2-2：禁止把原始异常文案直接弹给用户。
+        // 后端错误详情按安全口径已脱敏，但前端 catch 到的 e.message 可能是
+        // axios 原文（含 URL/状态码）或未预期异常文本 —— 统一走 getErrorMessage()。
+        // 仅限 UI 反馈入口（ElMessage/ElNotification/message/notification/toast）；
+        // console.error(e.message) 属开发日志，不在此列。
+        selector: "CallExpression[callee.object.name=/^(ElMessage|ElNotification|message|notification|toast)$/][callee.property.name=/^(error|warning)$/] > MemberExpression[object.name=/^(e|err|error|ex|exception|reason)$/][property.name='message']",
+        message: "禁止把原始异常文案直接弹给用户（如 ElMessage.error(e.message)）。请用 getErrorMessage(e)。详见 W18 P2-2。"
       }
     ]
   },

@@ -58,6 +58,7 @@ class TestGenerateReport:
         q.filter.return_value = q
         q.limit.return_value = q
         q.all.return_value = [village]
+        q.count.return_value = 1  # W18 P1：总数走 count()，不再用截断后的 len()
         db.query.return_value = q
 
         resp = c.post(
@@ -67,14 +68,35 @@ class TestGenerateReport:
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["total_villages"] == 1
+        assert data["villages_truncated"] is False
         assert data["villages"][0]["village_name"] == "幸福村"
         assert data["generated_by"] == "管理员"
+
+    def test_generate_comprehensive_total_not_truncated(self, client):
+        """W18 P1 回归：明细被 limit(100) 截断时，总数仍是真实 count。"""
+        c, db, _ = client
+        q = MagicMock()
+        q.filter.return_value = q
+        q.limit.return_value = q
+        q.all.return_value = [SimpleNamespace(
+            id=1, village_name="幸福村", department="d", support_unit="s", region_scope="省内"
+        )]
+        q.count.return_value = 250
+        db.query.return_value = q
+
+        resp = c.post(f"{BASE}/generate", json={"report_type": "comprehensive", "year": 2026})
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["total_villages"] == 250      # 真实总数
+        assert data["villages_truncated"] is True  # 明细被截断如实标注
 
     def test_generate_comprehensive_without_village_ids(self, client):
         c, db, _ = client
         q = MagicMock()
+        q.filter.return_value = q  # 真实 Query.filter 返回自身（scoped_filter 依赖此语义）
         q.limit.return_value = q
         q.all.return_value = []
+        q.count.return_value = 0
         db.query.return_value = q
 
         resp = c.post(f"{BASE}/generate", json={"report_type": "comprehensive", "year": 2026})

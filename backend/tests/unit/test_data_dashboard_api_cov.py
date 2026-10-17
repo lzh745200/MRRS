@@ -25,7 +25,8 @@ from app.core.security import get_current_user
 from app.core.data_permission import get_org_scope
 from app.models.fund import Fund
 from app.models.project import Project
-from app.models.supported_village import SupportedVillage
+from app.models.supported_village import SupportedVillage, VillagePopulation
+from sqlalchemy import func
 
 
 # ==================== 公共设施 ====================
@@ -42,9 +43,16 @@ def _scope(full_access=True, org_ids=None, org_names=None):
 
 
 def _q(**kw):
-    """通用查询链 mock：scalar/first/all 可配，其余链式调用自返回"""
+    """通用查询链 mock：scalar/first/all 可配，其余链式调用自返回。
+
+    注意 `join` 必须在这里自返回：W18 P0-1 的人口聚合改成了
+    `db.query(...).join(pop_subq, ...).filter(...).first()`，若 join 返回
+    自动创建的子 mock，`.first()` 会落在那条链的**新** mock 上（默认返回
+    MagicMock，`int(MagicMock)` 恒为 1），症状是人口数莫名其妙变成 1。
+    """
     q = MagicMock()
-    for attr in ("filter", "order_by", "limit", "offset", "group_by", "select_from", "options", "subquery", "in_"):
+    for attr in ("filter", "order_by", "limit", "offset", "group_by", "select_from",
+                 "options", "subquery", "in_", "join"):
         getattr(q, attr).return_value = q
     q.scalar.return_value = kw.get("scalar")
     q.first.return_value = kw.get("first")
@@ -66,6 +74,26 @@ def _pop_inner_select():
     必须是真实 selectable，否则 in_() 强转报错。
     """
     return select(SupportedVillage.id).scalar_subquery()
+
+
+def _q_pop_subquery(**kw):
+    """「每村取各自最新年份」的子查询构造器（W18 P0-1 口径）。
+
+    该子查询的 `.c.vid` / `.c.max_year` 会被真实列参与
+    `and_(col == subq.c.vid, ...)` 构造，因此 `.subquery()` 必须返回
+    **真实** selectable；直接返回 MagicMock 会让 SQLAlchemy 在构造
+    BinaryExpression 时把 mock 当字面量强转而报错。
+    """
+    q = _q(**kw)
+    q.subquery.return_value = (
+        select(
+            VillagePopulation.supported_village_id.label("vid"),
+            func.max(VillagePopulation.year).label("max_year"),
+        )
+        .group_by(VillagePopulation.supported_village_id)
+        .subquery()
+    )
+    return q
 
 
 @pytest.fixture
@@ -108,7 +136,7 @@ class TestQueryVillageStats:
         db = _db_with_queries([
             _q(),                                    # village_query（透传过滤）
             _q(scalar=3),                            # total_villages
-            _q(scalar=2026),                         # latest_year
+            _q_pop_subquery(),                       # 每村最新年份子查询（W18 P0-1）
             _q(first=(1000, 120)),                   # pop_row（外层查询先求值）
             _pop_inner_select(),                     # pop in_() 内层子查询
             _q(first=(5, 3, 500, 60)),               # school_row
@@ -123,11 +151,10 @@ class TestQueryVillageStats:
         assert result["total_teachers"] == 60
 
     def test_no_population_when_zero_villages(self):
-        """total_villages=0 时跳过人口汇总（pop_row 不查询）"""
+        """total_villages=0 时整段跳过人口汇总（不再发起人口查询）"""
         db = _db_with_queries([
             _q(),
             _q(scalar=0),                            # total_villages=0
-            _q(scalar=2026),                         # latest_year
             _q(first=None),                          # school_row 为 None → 全部回退 0
         ])
         result = dash._query_village_stats(db, _scope(True))
@@ -135,16 +162,28 @@ class TestQueryVillageStats:
         assert result["total_population"] == 0
         assert result["total_schools"] == 0
 
-    def test_no_latest_year_skips_population(self):
+    def test_population_row_missing_keeps_zero(self):
+        """有村但没有任何人口上报 → 聚合行返回 None，人口/户数保持 0。
+
+        守护 `if pop_row:` 的**假**分支。原用例名 test_no_latest_year_skips_population
+        对应的是「先取全库最大年份」的旧口径（W18 P0-1 已改为每村取各自最新年份，
+        不再存在"无最新年份"这一状态），故按新语义重写。
+        """
         db = _db_with_queries([
             _q(),
-            _q(scalar=2),
-            _q(scalar=None),                         # 无人口年份
-            _q(first=(1, 1, 100, 10)),
+            _q(scalar=2),                            # total_villages=2
+            _q_pop_subquery(),                       # 每村最新年份子查询
+            _q(first=None),                          # pop_row 为空 → 保持 0
+            _pop_inner_select(),                     # pop in_() 内层子查询
+            _q(first=(1, 1, 100, 10)),               # school_row
         ])
         result = dash._query_village_stats(db, _scope(True))
         assert result["total_villages"] == 2
         assert result["total_population"] == 0
+        assert result["total_households"] == 0
+        # 学校统计不受影响
+        assert result["total_schools"] == 1
+        assert result["total_students"] == 100
 
 
 # ==================== _query_fund_stats ====================
@@ -166,6 +205,9 @@ class TestQueryFundStats:
         db = _db_with_queries([
             _q(all=[("allocated", 50.0)]),           # fund 聚合查询（先发起）
             _pop_inner_select(),                    # 可访问村 subquery（in_ 参数需真实 selectable）
+            # W18 P1-2：未关联帮扶村的经费改按 Fund.organization_id 判域，
+            # 因此非全量访问下会再发起一次 db.query(Fund.id) 组织域子查询
+            _pop_inner_select(),
         ])
         result = dash._query_fund_stats(db, _scope(False))
         assert result["funds_allocated"] == 50.0
@@ -176,6 +218,7 @@ class TestQueryFundStats:
         db = _db_with_queries([
             _q(all=[("completed", 80.0)]),           # fund 聚合查询（先发起）
             _pop_inner_select(),                    # 空子查询
+            _pop_inner_select(),                    # W18 P1-2：未关联村经费的组织域子查询
         ])
         result = dash._query_fund_stats(db, _scope(False))
         assert result["funds_allocated"] == 80.0  # completed ∈ allocated_statuses
@@ -747,7 +790,7 @@ class TestCacheAndFallbackBranches:
     def test_stats_no_data_returns_null(self, cov_client):
         """统计全为 0 → 返回 None，前端显示空状态（覆盖 has_data=False）"""
         db = _db_with_queries([
-            _q(), _q(scalar=0), _q(scalar=None), _q(first=None),   # village 全 0（跳过人口）
+            _q(), _q(scalar=0), _q(first=None),                    # village 全 0（人口段整段跳过）
             _q(all=[]),                                            # fund 全 0
             _q(first=(0, 0)), _q(all=[]), _q(scalar=0), _q(scalar=0), _q(scalar=0),  # project 全 0
         ])
@@ -770,7 +813,10 @@ class TestCacheAndFallbackBranches:
     def test_cache_read_write_exception_still_computes(self, cov_client):
         """缓存读/写均异常 → 正常计算并返回（覆盖 _get_cached/_set_cached 异常分支）"""
         db = _db_with_queries([
-            _q(), _q(scalar=1), _q(scalar=None), _q(first=(1, 1, 1, 1)),
+            # village：village_query / total_villages / 每村最新年子查询 / 人口行(None) /
+            #          人口 in_() 内层子查询 / school_row
+            _q(), _q(scalar=1), _q_pop_subquery(), _q(first=None), _pop_inner_select(),
+            _q(first=(1, 1, 1, 1)),
             _q(all=[]),
             _q(first=(0, 0)), _q(all=[]), _q(scalar=0), _q(scalar=0), _q(scalar=0),
         ])

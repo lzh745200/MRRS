@@ -106,6 +106,29 @@ def _purge_finished_tasks_locked(now: Optional[datetime] = None) -> int:
     return len(expired)
 
 
+def get_tasks_diagnostics() -> dict:
+    """任务运行状态快照（W18 P1-3，供诊断包使用）。
+
+    只出**数量与任务类型**，不出 error 原文（可能含文件路径/SQL 片段）。
+    调用方无需持锁。
+    """
+    with _tasks_lock:
+        _purge_finished_tasks_locked()
+        records = list(_tasks.values())
+    failed = [r for r in records if r.get("status") == TaskStatus.FAILED.value]
+    running = [r for r in records if r.get("status") == TaskStatus.RUNNING.value]
+    return {
+        "total": len(records),
+        "running": len(running),
+        "failed": len(failed),
+        # 最近失败的 5 个任务只给类型/名称（不含 message 原文）
+        "recent_failed": [
+            {"task_type": r.get("task_type"), "task_name": r.get("task_name")}
+            for r in failed[-5:]
+        ],
+    }
+
+
 def _create_task_record(task_type: str, task_name: str, created_by: str = None, params: dict = None) -> dict:
     """创建任务记录"""
     task_id = str(uuid.uuid4())[:8]

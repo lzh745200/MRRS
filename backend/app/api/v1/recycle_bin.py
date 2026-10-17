@@ -84,6 +84,43 @@ def _reachable_ids(db: Session, model, table: str, ids: list, current_user) -> l
         return []
 
 
+def _require_reachable(db: Session, model, table: str, rid: int, current_user) -> None:
+    """单条记录的数据域守卫（W18-D6）。
+
+    背景：R28-M3 只给**批量**端点接入了 `_reachable_ids`，单条
+    `/{rid}/restore` 与 `/{rid}/purge` 仍然只做"存在 + 在回收站"校验 ——
+    部门级管理员可以直接物理删除（不可逆）其它组织的回收站记录。
+
+    与批量端点语义对齐：越界一律 404（不泄露记录是否存在）。
+
+    实现要点：**不能**直接用 `not _reachable_ids(...)` 判定 —— 该函数在"无法判定
+    数据域"（模型缺组织/所有者列、会话异常）时也返回空列表（fail-closed），那属于
+    "判定不了"而非"确定不可达"。这里区分两者：
+      · 全局管理员 → 直接放行（无数据域限制）；
+      · 判定成功且命中 → 放行；
+      · 判定成功但未命中 → 404（越权）；
+      · 判定抛异常（无法判定）→ 放行给调用方原有校验兜底（存在性/回收站状态），
+        避免把"环境异常"误判成"记录不存在"。
+    """
+    from app.core.data_permission import DataScope, get_data_scope
+    from app.services.data_scope_query import scoped_filter
+
+    if get_data_scope(current_user) == DataScope.ALL:
+        return
+    try:
+        query = db.query(model).filter(model.id == rid)
+        scoped = scoped_filter(query, model, current_user)
+        hit = scoped.first()
+    except Exception:  # pragma: no cover - 判定失败时由调用方既有校验兜底
+        logger.warning(
+            "回收站单条操作数据域判定失败（交由既有存在性校验兜底）: table=%s", table,
+            exc_info=True,
+        )
+        return
+    if hit is None:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+
 def register_recycle_bin_routes(
     router: APIRouter,
     *,
@@ -126,6 +163,7 @@ def register_recycle_bin_routes(
     ):
         require_admin(current_user)
         rec = _get_or_404(db, rid)
+        _require_reachable(db, model, table, rid, current_user)
         _require_in_recycle_bin(rec)
         from app.services.cascade_purge_service import CascadePurgeService
 
@@ -146,6 +184,8 @@ def register_recycle_bin_routes(
     ):
         require_admin(current_user)
         rec = _get_or_404(db, rid)
+        # W18-D6：单条恢复同样必须限定数据域（原先只校验存在性）
+        _require_reachable(db, model, table, rid, current_user)
         _require_in_recycle_bin(rec)
         return await _restore_record(db, model, resource, table, rid, current_user, on_changed)
 
@@ -159,6 +199,8 @@ def register_recycle_bin_routes(
         require_admin(current_user)
         _verify_password(data, current_user)
         rec = _get_or_404(db, rid)
+        # W18-D6：单条彻底删除是**不可逆**操作，必须限定数据域（原先可跨组织物理删除）
+        _require_reachable(db, model, table, rid, current_user)
         _require_in_recycle_bin(rec)
         return await _purge_record(db, model, resource, table, rid, data, current_user, on_changed)
 

@@ -7,10 +7,13 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from app.core.transaction import get_db_context
 from app.models.message import Message
+from app.services.reminder_types import REMINDER_MESSAGE_TYPES
+from app.utils.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +24,9 @@ _TYPE_TO_MESSAGE = {
     "deadline_warning": "deadline_warning",
     "budget_warning": "budget_warning",
 }
+
+# 排序权重：未处理优先，其次已处理，忽略置底（稳定排序，组内保持时间倒序）
+_STATE_RANK = {"open": 0, "handled": 1, "ignored": 2}
 
 
 def _dedupe_link(reminder: Dict[str, Any]) -> str:
@@ -95,44 +101,94 @@ def _format_reminder(r: Dict[str, Any]) -> str:
     return str(r)
 
 
-def list_reminders(limit: int = 50, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
-    """查询当前用户的提醒（按时间倒序）
+def _parse_entity_id(link: Optional[str]) -> Optional[int]:
+    """解析去重键 ``type:entity_id`` 中的实体 ID；无法解析时返回 None。"""
+    if not link:
+        return None
+    tail = link.partition(":")[2]
+    try:
+        return int(tail)
+    except (TypeError, ValueError):
+        return None
+
+
+def list_reminders(
+    limit: int = 50, user_id: Optional[int] = None, include_ignored: bool = False
+) -> List[Dict[str, Any]]:
+    """查询当前用户的提醒（未处理优先，其次时间倒序）
 
     fail-closed：提醒归属具体接收人（messages.user_id NOT NULL），缺少 user_id 时
     返回空列表，绝不返回全实例提醒。历史缺陷：任意登录用户都能看到他人提醒的
     标题/内容。调用方（api/v1/reminders.py）必须传 current_user.id。
+
+    处置富化（w17-001）：附带 ``state/note/snooze_until/entity_id/link``；
+    ``include_ignored=False``（默认）时过滤掉已忽略的提醒。
     """
     if not user_id:
         logger.warning("list_reminders 缺少 user_id，按 fail-closed 返回空列表")
         return []
 
     from app.core.database import SessionLocal
+    from app.services.reminder_disposition_service import load_dispositions, serialize_disposition
 
     db = SessionLocal()
     try:
         rows = (
             db.query(Message)
             .filter(
-                Message.message_type.in_(
-                    ["approval_overtime", "approval_approaching", "deadline_warning",
-                     "budget_warning", "backup_reminder", "package_reminder"]
-                ),
+                Message.message_type.in_(REMINDER_MESSAGE_TYPES),
                 Message.user_id == user_id,
             )
             .order_by(Message.created_at.desc())
             .limit(limit)
             .all()
         )
-        return [
-            {
-                "id": m.id,
-                "type": m.message_type,
-                "title": m.title,
-                "content": m.content,
-                "created_at": m.created_at.isoformat() if m.created_at else None,
-                "is_read": m.is_read if hasattr(m, "is_read") else False,
-            }
-            for m in rows
-        ]
+        dispositions = load_dispositions(db, [m.id for m in rows], user_id)
+        items: List[Dict[str, Any]] = []
+        for m in rows:
+            disposition = serialize_disposition(dispositions.get(m.id))
+            if disposition["state"] == "ignored" and not include_ignored:
+                continue
+            items.append(
+                {
+                    "id": m.id,
+                    "type": m.message_type,
+                    "title": m.title,
+                    "content": m.content,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                    "is_read": m.is_read if hasattr(m, "is_read") else False,
+                    "state": disposition["state"],
+                    "note": disposition["note"],
+                    "snooze_until": disposition["snooze_until"],
+                    "acted_at": disposition["acted_at"],
+                    "link": getattr(m, "link", None),
+                    "entity_id": _parse_entity_id(getattr(m, "link", None)),
+                }
+            )
+        # 稳定排序：未处理优先；同组保持 created_at 倒序
+        items.sort(key=lambda r: _STATE_RANK.get(r["state"], 0))
+        return items
     finally:
         db.close()
+
+
+def summarize_reminders(reminders: List[Dict[str, Any]]) -> Dict[str, int]:
+    """按处置状态汇总（提醒中心统计卡片）。"""
+    now = utcnow()
+    stats = {"pending": 0, "handled": 0, "ignored": 0, "snoozed": 0, "total": len(reminders)}
+    for r in reminders:
+        state = r.get("state") or "open"
+        if state == "handled":
+            stats["handled"] += 1
+        elif state == "ignored":
+            stats["ignored"] += 1
+        else:
+            stats["pending"] += 1
+        snooze_until = r.get("snooze_until")
+        if state == "open" and snooze_until:
+            try:
+                if datetime.fromisoformat(snooze_until) > now:
+                    stats["snoozed"] += 1
+            except (TypeError, ValueError):
+                logger.debug("忽略无法解析的延期时间: %r", snooze_until)
+    return stats

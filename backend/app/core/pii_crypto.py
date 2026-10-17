@@ -92,3 +92,13 @@ def reset_key_cache() -> None:
     """重置密钥缓存（测试用）"""
     global _key_cache
     _key_cache = None
+
+
+def key_fingerprint() -> str:
+    """当前 PII 密钥的指纹（SHA-256 前 16 位十六进制）。
+
+    W18-B：换机/重装后「库里的密文还能不能解」取决于密钥是否同一把，
+    但密钥本身不能出机器。指纹只用于**比对**：两台机器、或备份清单与当前
+    机器指纹不一致，就说明密钥漂移了，无需暴露密钥内容。
+    """
+    return hashlib.sha256(_load_key()).hexdigest()[:16]

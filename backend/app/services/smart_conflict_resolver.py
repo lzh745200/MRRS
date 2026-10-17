@@ -411,6 +411,17 @@ class SmartConflictResolver:
 
         self._update_foreign_keys(new_data, data_type, id_mapping)
 
+        # W18-D3（越权/丢数据）：_PROTECTED_COLUMNS 故意排除 organization_id（防止
+        # 导入值覆盖租户隔离），但**插入新行**时必须补回归属，否则新行 org=NULL ——
+        # 对普通用户等于"导入即丢"（数据域过滤下 NULL 行不可见）。这里从冲突的本地
+        # 记录继承归属，取不到则回退到导入记录携带的值。
+        if _TENANT_COLUMN not in new_data or new_data.get(_TENANT_COLUMN) is None:
+            local_org = getattr(conflict.local_record, _TENANT_COLUMN, None)
+            if local_org is None:
+                local_org = import_record.get(_TENANT_COLUMN)
+            if local_org is not None:
+                new_data[_TENANT_COLUMN] = local_org
+
         new_record = model_class(**new_data)
         self.db.add(new_record)
         self.db.flush()

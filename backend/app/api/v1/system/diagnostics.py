@@ -229,6 +229,81 @@ def _resource_snapshot() -> dict:
     return snapshot
 
 
+def _business_snapshot(db: Session) -> dict:
+    """业务运行状态（W18 P1-3）：备份 / 调度器 / 失败任务 / 数据包占用。
+
+    原诊断包只有基础设施快照（版本/平台/迁移/数据库/日志/资源），现场最常问的
+    三句答不出来：「昨晚备份成功了吗」「提醒为什么没发」「导入为什么失败」。
+    本段补齐业务侧状态，并沿用既有的脱敏边界：只出**数量/时间/类型/类名**，
+    不出异常原文、数据库路径与文件名。
+    """
+    business: dict = {}
+
+    # ── 备份：最近一次时间 + 数量（失败与否看 last_backup_status）──
+    try:
+        from app.services.backup_service import BackupService
+
+        backups = BackupService(db).list_backups()
+        last = backups[0] if backups else None
+        business["backup"] = {
+            "count": len(backups),
+            "last_backup_at": str(last.created_at) if last is not None else None,
+            "last_backup_size_bytes": getattr(last, "file_size", None),
+            "last_backup_type": getattr(last, "backup_type", None),
+        }
+    except Exception as exc:  # noqa: BLE001 - 诊断不允许因单段失败而整体失败
+        business["backup"] = {"error_type": type(exc).__name__}
+
+    # ── 调度器：是否在跑 + 已登记的周期任务 ──
+    try:
+        from app.services import backup_scheduler as sched
+
+        timers = list(getattr(sched, "_timers", []))
+        business["scheduler"] = {
+            "started": bool(getattr(sched, "_scheduler_started", False)),
+            "job_count": len(timers),
+            "alive_count": sum(1 for t in timers if hasattr(t, "is_alive") and t.is_alive()),
+            "jobs": sorted({t.name for t in timers if getattr(t, "name", None)}),
+        }
+    except Exception as exc:  # noqa: BLE001
+        business["scheduler"] = {"error_type": type(exc).__name__}
+
+    # ── 后台任务：失败数量与最近失败类型 ──
+    try:
+        from app.api.v1.system.tasks import get_tasks_diagnostics
+
+        business["tasks"] = get_tasks_diagnostics()
+    except Exception as exc:  # noqa: BLE001
+        business["tasks"] = {"error_type": type(exc).__name__}
+
+    # ── 数据包占用：导出目录体积（P1-6 保留策略的可见化）──
+    try:
+        from app.services.data_package_service import DataPackageService
+
+        svc = DataPackageService(db)
+        business["data_packages"] = {
+            "export_dir_size_mb": round(svc.get_upload_dir_size() / (1024 * 1024), 2),
+        }
+    except Exception as exc:  # noqa: BLE001
+        business["data_packages"] = {"error_type": type(exc).__name__}
+
+    # ── PII 加密：密钥指纹 + 存量密文可解性 ──
+    # 换机/重装后最典型的事故是"能登录、能看列表，但身份证号全是乱码"。
+    # 指纹用于比对（不泄露密钥），可解性用启动预检的同一判据，避免两套口径。
+    try:
+        from app.core.pii_crypto import key_fingerprint
+        from app.startup.preflight import _check_encryption_key
+
+        business["pii_encryption"] = {
+            "key_fingerprint": key_fingerprint(),
+            **_check_encryption_key(),
+        }
+    except Exception as exc:  # noqa: BLE001
+        business["pii_encryption"] = {"error_type": type(exc).__name__}
+
+    return business
+
+
 def collect_diagnostics(db: Session) -> dict:
     """汇总一份完整诊断（summary 端点与 bundle 包共用同一份数据）。"""
     db_path = _runtime_db_path()
@@ -242,6 +317,7 @@ def collect_diagnostics(db: Session) -> dict:
         "migration": _migration_snapshot(),
         "logs": _log_snapshot(log_file),
         "resources": _resource_snapshot(),
+        "business": _business_snapshot(db),
     }
 
 

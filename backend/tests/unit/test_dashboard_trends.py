@@ -214,13 +214,17 @@ def test_yearly_trends_limited_scope_applies_org_filters():
         filter_by_org_ids=_filter_by_org_ids,
     )
 
-    # 调用序：可访问村子查询 → 村聚合 → 人口聚合 → 经费聚合 → 项目聚合
+    from app.models.fund import Fund
+
+    # 调用序：可访问村子查询 → 村聚合 → 人口聚合 → 经费聚合
+    #         → **经费判域查询（W18 P1-2）** → 项目聚合
     mock_db = MagicMock()
     mock_db.query = MagicMock(side_effect=[
         select(SupportedVillage.id),  # 真实 selectable：其 in_() 参数校验要求非 MagicMock
         _q_all([("2026", 2)]),
         _q_all([(2026, 100)]),
         _q_all([(2026, 100.0, 80.0, 3)]),
+        select(Fund.id),  # W18 P1-2：未关联村经费按 Fund.organization_id 判域
         _q_all([("2026", 5)]),
     ])
 
@@ -242,8 +246,9 @@ def test_yearly_trends_limited_scope_applies_org_filters():
         assert trend["fund_count"] == 3
         assert trend["total_planned"] == 100.0
         assert trend["total_actual"] == 80.0
-        # 可访问村、村聚合、项目聚合各套一次组织范围过滤
-        assert len(scope_calls) == 3
+        # 经 filter_by_org_ids 的过滤点：可访问村、村聚合、经费判域（W18 P1-2）、
+        # 项目聚合 = 4 次（人口聚合直接 in_(accessible_villages)，不重复调用）
+        assert len(scope_calls) == 4
     finally:
         app.dependency_overrides.clear()
 

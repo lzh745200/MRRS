@@ -31,8 +31,10 @@ test-local:
 	cd backend && $(PYTHON) -m flake8 app/ --max-line-length=120 --max-complexity=16
 	@echo ">>> [3/6] 前端 lint / type-check / 测试..."
 	cd frontend && npm run lint:check && npm run type-check && npm run test:coverage
-	@echo ">>> [4/6] 棘轮门禁..."
+	@echo ">>> [4/6] 棘轮门禁 + W18 防腐门禁..."
 	cd backend && $(PYTHON) scripts/check_os_exit.py && $(PYTHON) scripts/check_unbounded_read.py && $(PYTHON) scripts/check_upload_endpoints.py && $(PYTHON) scripts/check_subprocess_encoding.py && $(PYTHON) scripts/check_dir_replace.py && $(PYTHON) scripts/check_scheduler_registration.py
+	backend/$(PYTHON) scripts/check_unused_scope_params.py
+	backend/$(PYTHON) scripts/check_userdata_path_consistency.py
 	@echo ">>> [5/6] Alembic 单 head 校验..."
 	$(PYTHON) scripts/check_migrations.py || backend/$(PYTHON) scripts/check_migrations.py
 	@echo ">>> [6/6] 版本单一来源校验..."

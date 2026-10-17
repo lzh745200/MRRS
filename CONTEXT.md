@@ -30,6 +30,24 @@
 5. **审计留痕**：写操作调用 `write_work_log()`；审批/授权/密码类操作必须留痕。
 6. **敏感数据**：身份证号等 PII 加密存储；日志与错误响应不得泄露内部细节。
 
+## 指标字典（W18 P2-1，2026-10-17）
+
+> 同一指标**只能有一个口径**。新增/修改指标必须在此登记，并复用对应实现
+> （禁止在端点里另写一套 SQL —— W18 P0-1 即因此让两个页面相差 500 人）。
+
+| 指标 | 定义/公式 | 数据源 | 唯一实现 | 回归 |
+|------|-----------|--------|----------|------|
+| 帮扶村总数 | 过滤后 count(supported_villages.id)，仅 is_active=True | supported_villages | dashboard._query_village_stats | test_w18_metric_consistency |
+| 总人口 | **每村取各自最新年份**的 total_population 后求和（不是"全库最大年份"） | village_population | dashboard._query_village_stats / statistics（同口径） | test_w18_metric_consistency.TestPopulationMetricConsistency |
+| 总户数 | 同"总人口"口径（每村最新年 total_households 求和） | village_population | 同上 | 同上 |
+| 人均纯收入 | 指定年份列 per_capita_income_<year> 的平均值，**必须接 data_scope**；无 scope 返回 0（fail-closed） | annual_income | dashboard._avg_per_capita_income | test_w18_metric_consistency.TestAvgPerCapitaIncomeScope |
+| 经费合计 | 过滤后 sum(funds.amount)；未关联村（village_id IS NULL）的经费按 funds.organization_id 判域 | funds | dashboard 经费统计 | test_dashboard_trends |
+| 报表村总数 | **独立 count()**，不得用明细 limit(100) 后的 len() | supported_villages | reports.generate_report | test_reports_api_cov |
+| 金额单位 | 后端存储与接口一律**万元**，前端按需格式化；不得混用元 | —— | —— | —— |
+
+**防腐门禁**：scripts/check_unused_scope_params.py（防"形参收下不用"）、
+test_w18_metric_consistency.py（防"两套口径"）。
+
 ## 已知架构决策（ADR）
 
 见 `docs/adr/`。整改期间新增：

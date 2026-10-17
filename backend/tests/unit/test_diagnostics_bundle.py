@@ -263,8 +263,20 @@ class TestEndpoints:
         data = resp.json()["data"]
         assert set(data) == {
             "generated_at", "version", "build", "platform", "database", "migration", "logs", "resources",
+            # W18 P1-3：业务运行状态（备份/调度器/失败任务/数据包占用）
+            "business",
         }
         assert data["database"]["integrity_check"] == "ok"
+        # 业务段必须能答出"昨晚备份成功了吗 / 调度器在跑吗 / 有失败任务吗"
+        business = data["business"]
+        assert set(business) == {"backup", "scheduler", "tasks", "data_packages", "pii_encryption"}
+        assert "count" in business["backup"]
+        assert "started" in business["scheduler"]
+        assert "failed" in business["tasks"]
+        assert "export_dir_size_mb" in business["data_packages"]
+        # W18-B：密钥指纹（不泄露密钥）+ 存量密文可解性
+        assert len(business["pii_encryption"]["key_fingerprint"]) == 16
+        assert business["pii_encryption"]["status"] in {"ok", "warning", "unknown"}
 
     def test_bundle_requires_admin(self, client):
         user = Mock(id=2, username="u", role="user", is_superuser=False, is_active=True)
@@ -305,3 +317,39 @@ class TestEndpoints:
         _override_user(client, admin_user)
         resp = client.get("/api/v1/system/diagnostics/bundle")
         assert resp.status_code == 200
+
+
+# ==================== 业务段降级（W18-B） ====================
+
+
+class TestBusinessSnapshotDegrades:
+    """业务段任何一块坏掉都只能降级为 error_type，不能拖垮整份诊断。
+
+    此前这些 ``except`` 分支没有任何用例覆盖（覆盖率门禁会因此变红）：
+    真实故障恰恰发生在这里 —— 库半损坏、备份目录不可读时，
+    诊断包必须仍然出得来。
+    """
+
+    def test_every_section_degrades_independently(self, monkeypatch):
+        class Boom:
+            def __init__(self, *_a, **_k):
+                raise RuntimeError("boom")
+
+        def _raise():
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr("app.services.backup_service.BackupService", Boom)
+        # 调度器段用 `getattr(sched, "_timers", [])` 读取：换成属性访问即抛的对象
+
+        class BoomSched:
+            def __getattr__(self, _name):
+                raise RuntimeError("boom")
+
+        monkeypatch.setattr("app.services.backup_scheduler", BoomSched(), raising=False)
+        monkeypatch.setattr("app.api.v1.system.tasks.get_tasks_diagnostics", _raise)
+        monkeypatch.setattr("app.services.data_package_service.DataPackageService", Boom)
+        monkeypatch.setattr("app.core.pii_crypto.key_fingerprint", _raise)
+
+        biz = diag._business_snapshot(Mock())
+        for key in ("backup", "scheduler", "tasks", "data_packages", "pii_encryption"):
+            assert biz[key] == {"error_type": "RuntimeError"}, key

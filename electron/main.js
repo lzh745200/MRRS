@@ -43,6 +43,10 @@ const WINDOW_STATE_FILE = path.join(getUserDataPath(), 'window-state.json');
 const SECRETS_FILE = path.join(getUserDataPath(), 'secrets.json');
 const CRASH_LOG_FILE = path.join(getUserDataPath(), 'crash.log');
 
+// W18-B：密钥文件"读不出来"时的隔离备份路径。非 null 表示本次启动检测到
+// 密钥文件不可用（换机/DPAPI 失效/文件损坏），已另存原始字节并重新生成密钥。
+let secretsQuarantinePath = null;
+
 // F3（架构评估 2026-09-12）：版本单一来源 —— app.getVersion() 读取打包
 // 元数据（electron-builder 由根 package.json version 注入），开发态回读
 // package.json。不再维护硬编码 fallback 字面量，避免与 PROJECT_VERSION 双源漂移。
@@ -107,8 +111,38 @@ function getIconPath() {
 }
 
 // ─── 密钥持久化 ───
+/**
+ * 把不可用的密钥文件原样另存一份（**绝不丢弃**），供事后恢复。
+ *
+ * 为什么必须做：secrets.json 里的 ENCRYPTION_KEY 是库里 PII 密文（身份证号/
+ * 电话，见 ADR-0005）的唯一解钥。旧实现遇到"文件存在但读不出来"（换机后
+ * DPAPI 解不开、文件被改坏、JSON 截断）会直接生成新密钥并覆盖 —— 旧密钥
+ * 就此永久消失，历史密文再也解不开，且用户毫无感知。
+ *
+ * 优先 copy（保留原文件，后续写入仍走原路径）；copy 失败再尝试 rename。
+ */
+function _quarantineSecretsFile(reason) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const bak = `${SECRETS_FILE}.${reason}-${stamp}.bak`;
+  try {
+    fs.copyFileSync(SECRETS_FILE, bak);
+    secretsQuarantinePath = bak;
+    return bak;
+  } catch (_) { /* 落到 rename */ }
+  try {
+    fs.renameSync(SECRETS_FILE, bak);
+    secretsQuarantinePath = bak;
+    return bak;
+  } catch (e) {
+    console.error('[Secrets] 密钥文件备份失败，原文件将被覆盖:', e.message);
+    return null;
+  }
+}
+
 function getOrCreateSecrets() {
   const canEncrypt = safeStorage.isEncryptionAvailable();
+  // 文件存在但不可用的原因；非 null 时写新密钥前必须先隔离备份
+  let unusableReason = null;
   try {
     if (fs.existsSync(SECRETS_FILE)) {
       const raw = fs.readFileSync(SECRETS_FILE);
@@ -121,10 +155,12 @@ function getOrCreateSecrets() {
           try {
             data = JSON.parse(raw.toString('utf-8'));
             _writeSecrets(data, true);
-          } catch (__) { data = {}; }
+          } catch (__) { data = {}; unusableReason = 'unreadable'; }
         }
       } else {
-        data = JSON.parse(raw.toString('utf-8'));
+        try {
+          data = JSON.parse(raw.toString('utf-8'));
+        } catch (__) { data = {}; unusableReason = 'unreadable'; }
       }
       if (data.SECRET_KEY && data.CSRF_SECRET_KEY) {
         // 确保旧版本密钥文件也有 ENCRYPTION_KEY
@@ -134,8 +170,20 @@ function getOrCreateSecrets() {
         }
         return data;
       }
+      // 能解析但缺关键项（如只剩 ENCRYPTION_KEY）：同样不能覆盖
+      if (!unusableReason) unusableReason = 'incomplete';
     }
-  } catch (e) { console.warn('[Secrets] 读取失败:', e.message); }
+  } catch (e) {
+    console.warn('[Secrets] 读取失败:', e.message);
+    unusableReason = 'read-error';
+  }
+  if (unusableReason) {
+    const bak = _quarantineSecretsFile(unusableReason);
+    console.error(
+      `[Secrets] 密钥文件不可用（${unusableReason}），已重新生成密钥。` +
+      (bak ? `原始文件已另存: ${bak}` : '原始文件备份失败，旧密钥可能已丢失。')
+    );
+  }
   const secrets = {
     SECRET_KEY: crypto.randomBytes(32).toString('hex'),
     CSRF_SECRET_KEY: crypto.randomBytes(32).toString('hex'),
@@ -143,6 +191,11 @@ function getOrCreateSecrets() {
   };
   _writeSecrets(secrets, canEncrypt);
   return secrets;
+}
+
+/** 本次启动是否发生过密钥重建（供启动提示/诊断使用）。 */
+function getSecretsQuarantineInfo() {
+  return secretsQuarantinePath;
 }
 
 function _writeSecrets(secrets, encrypt) {
@@ -1169,6 +1222,31 @@ app.whenReady().then(async () => {
   console.log('[App] 启动...');
   setupIpcHandlers();
   registerGlobalShortcuts();
+
+  // W18-B：密钥重建必须让用户看见。密钥文件读不出来时后端会照常启动，
+  // 但历史身份证号/电话等加密字段已无法解密 —— 旧行为只在控制台留一行
+  // warn，现场会把它当成"系统显示乱码"报上来，且永远不会想到是密钥。
+  try {
+    getOrCreateSecrets();
+    const quarantine = getSecretsQuarantineInfo();
+    if (quarantine) {
+      dialog.showMessageBoxSync({
+        type: 'warning',
+        title: '加密密钥已重置',
+        message: '系统检测到本机加密密钥文件无法读取，已重新生成密钥。',
+        detail:
+          '影响：本次之前录入的身份证号、联系电话等加密字段可能显示为乱码（enc.v1: 开头）。\n\n' +
+          '原始密钥文件已另存备份（不会被删除）：\n' + quarantine + '\n\n' +
+          '请立即联系运维：把该备份文件交回后，可用它恢复历史加密数据；' +
+          '在此之前请勿继续录入或修改敏感信息。',
+        buttons: ['我知道了'],
+        noLink: true,
+      });
+      writeDiagnosticLog(`加密密钥重建，原文件备份: ${quarantine}`);
+    }
+  } catch (e) {
+    console.warn('[Secrets] 启动密钥自检失败:', e.message);
+  }
 
   const stderrCapture = [];
   // 首次启动时探测可用端口

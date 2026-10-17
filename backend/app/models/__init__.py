@@ -77,6 +77,14 @@ _MODULE_MAP = {
     "PermissionPack": ".permission_pack",
     "FileBlob": ".file_blob",
     "UserSession": ".user_session",
+    "ReminderDisposition": ".reminder_disposition",
+    "PairingRecord": ".pairing", "VisitRecord": ".pairing",
+    "DonationItem": ".donation_item",
+    # W18-P3-1：sentiment_news 此前未注册 —— 全新安装的 create_all 不会建该表，
+    # 舆情页在新机器上恒 500（升级路径也不会补）。此处补登记。
+    "SentimentNews": ".sentiment",
+    # W18-P3-1（同批）：machine_code_permissions 亦未注册 —— 同属"新装缺表"。
+    "MachineCodePermission": ".rbac",
 }
 
 import sys as _sys

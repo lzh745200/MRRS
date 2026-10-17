@@ -16,20 +16,16 @@
 import os
 import tempfile
 import uuid
-from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
 
 import app.api.v1.data.data.analytics as analytics_mod
 import app.api.v1.data.data.dashboard as dash
 import app.api.v1.data.data.data_reports as dr
 import app.api.v1.data.data.reports as reports_mod
 import app.api.v1.policy as policy_mod
-from app.models.supported_village import SupportedVillage
 
 
 # ==================== 公共设施 ====================
@@ -38,7 +34,8 @@ from app.models.supported_village import SupportedVillage
 def q(**kw):
     """通用查询链 mock：链式调用自返回，scalar/first/all 可配。"""
     m = MagicMock()
-    for attr in ("filter", "order_by", "limit", "offset", "group_by", "select_from", "subquery"):
+    # join 于 W18 P0-1 加入 dashboard 人口查询链（每村最新年 join 分组子查询）
+    for attr in ("filter", "order_by", "limit", "offset", "group_by", "select_from", "subquery", "join"):
         getattr(m, attr).return_value = m
     m.scalar.return_value = kw.get("scalar")
     m.first.return_value = kw.get("first")
@@ -219,14 +216,19 @@ class TestPolicyBranchGaps:
 
 class TestDashboardBranchGaps:
     def test_query_village_stats_population_row_none(self):
-        """131->136：有村庄且有最新年份但人口汇总行查询为 None，人口/户数保持 0。"""
+        """有村庄但人口汇总行查询为 None，人口/户数保持 0。
+
+        W18 P0-1 改造后查询序列：①村范围 → ②total_villages →
+        ③人口「每村最新年」分组子查询（.group_by().subquery()）→
+        ④人口汇总行（first）→ ⑤学校统计行。第 5 个 db.query 给学校。
+        """
         db = db_of(
-            q(),                                        # 村庄范围查询
-            q(scalar=2),                                # total_villages
-            q(scalar=2026),                             # latest_year
-            q(first=None),                              # 人口汇总行（外层）
-            select(SupportedVillage.id).scalar_subquery(),  # in_() 内层子查询
-            q(first=(2, 1, 50, 5)),                     # 学校统计行
+            q(),                    # ① 村庄范围查询（subquery）
+            q(scalar=2),            # ② total_villages
+            q(),                    # ③ 人口分组子查询（group_by().subquery()）
+            q(first=None),          # ④ 人口汇总行（join 后 first）
+            q(),                    # ⑤ in_() 内层子查询（该查询未被调用）
+            q(first=(2, 1, 50, 5)),  # ⑥ 学校统计行
         )
         result = dash._query_village_stats(db, scope(True))
         assert result["total_villages"] == 2

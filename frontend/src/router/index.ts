@@ -386,6 +386,13 @@ export const routes: RouteRecordRaw[] = [
         component: () => retryImport(() => import('@/views/ruralWorks/checkin/Index.vue')),
         meta: { title: '驻村工作台' },
       },
+      // ── 结对帮扶与走访台账 ──
+      {
+        path: '/pairings',
+        name: 'PairingList',
+        component: () => retryImport(() => import('@/views/pairing/List.vue')),
+        meta: { menuKey: 'pairing', title: '结对帮扶' },
+      },
       // ── 组织机构 ──
       {
         path: '/organizations',

@@ -106,12 +106,15 @@ def test_list_reminders():
     mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
         _msg(id=2, message_type="deadline_warning", is_read=True),
     ]
+    # 处置富化查询（reminder_dispositions）无行
+    mock_db.query.return_value.filter.return_value.all.return_value = []
     with patch("app.core.database.SessionLocal", return_value=mock_db):
         # 2026-09-30 深审修复：提醒必须按接收人隔离，调用方需传 user_id
         rows = list_reminders(10, user_id=7)
     assert len(rows) == 1
     assert rows[0]["type"] == "deadline_warning"
     assert rows[0]["is_read"] is True
+    assert rows[0]["state"] == "open"
     mock_db.close.assert_called_once()
 
 

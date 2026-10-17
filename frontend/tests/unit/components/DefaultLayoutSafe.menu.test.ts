@@ -20,6 +20,25 @@ describe('DefaultLayoutSafe 侧边栏回归校验', () => {
     // Layout refactored — permission check moved to roleAccess utility
   })
 
+  it('结对帮扶入口存在且按 menuKey 门控（捐赠物资待 UI 落地）', () => {
+    // w17-002：结对帮扶台账页已建成（视图 + 路由 + menu-config + 后端菜单键）
+    // → 侧边栏入口按 menuKey 门控。
+    // w17-003 捐赠物资：后端 API/模型/迁移已完成，但前端页面与路由尚未建成，
+    // 因此**不在侧边栏挂入口**（挂了点击必 404，且 menuKeyAlignment 门禁会拦下
+    // 无路由的菜单项）。待 /donations 视图与路由落地后，在此加回 ['/donations', 'donation']。
+    const expected: Array<[string, string]> = [
+      ['/pairings', 'pairing'],
+    ]
+    for (const [path, menuKey] of expected) {
+      const idx = layoutSource.indexOf(`index="${path}"`)
+      expect(idx, `侧边栏缺少 ${path} 入口`).toBeGreaterThan(-1)
+      const before = layoutSource.slice(Math.max(0, idx - 120), idx)
+      expect(before, `${path} 缺少 ${menuKey} 门控`).toContain(
+        `v-if="menuStore.canAccessMenu('${menuKey}')"`
+      )
+    }
+  })
+
   it('侧边栏配置的菜单路径均存在于路由定义中', () => {
     // Extract menu paths from layout source. Filter out '/' which is a
     // breadcrumb home link (el-breadcrumb-item :to="{ path: '/' }"), not a

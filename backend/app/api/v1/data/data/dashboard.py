@@ -18,7 +18,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import case, func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.data_permission import OrgScopeFilter, get_org_scope
@@ -110,27 +110,40 @@ def _query_village_stats(db: Session, data_scope: OrgScopeFilter) -> dict:
     village_subq = village_query.subquery()
     total_villages = db.query(func.count()).select_from(village_subq).scalar() or 0
 
-    # 人口/户数：取最新年份的汇总数据
-    latest_year_sub = db.query(func.max(VillagePopulation.year)).scalar()
+    # 人口/户数：**每村取各自最新年份**（W18 P0-1）
+    # 原实现先取全库最大年份再求和：只要有一个村上报了新年份，其它尚未上报该年
+    # 的村就会被整体漏掉（实测同一 fixture 下与 statistics 口径差 500 人，工作台
+    # 与统计分析页数字打架）。改为按村分组取 max(year) 后再 join 汇总，与
+    # statistics.py / analytics_service 的口径统一。
     total_population = 0
     total_households = 0
-    if latest_year_sub and total_villages > 0:
+    if total_villages > 0:
+        pop_subq = (
+            db.query(
+                VillagePopulation.supported_village_id.label("vid"),
+                func.max(VillagePopulation.year).label("max_year"),
+            )
+            .group_by(VillagePopulation.supported_village_id)
+            .subquery()
+        )
         pop_row = (
             db.query(
                 func.coalesce(func.sum(VillagePopulation.total_population), 0),
                 func.coalesce(func.sum(VillagePopulation.total_households), 0),
             )
-            .filter(
-                VillagePopulation.year == latest_year_sub,
-                VillagePopulation.supported_village_id.in_(
-                    db.query(village_subq.c.id)
+            .join(
+                pop_subq,
+                and_(
+                    VillagePopulation.supported_village_id == pop_subq.c.vid,
+                    VillagePopulation.year == pop_subq.c.max_year,
                 ),
             )
+            .filter(VillagePopulation.supported_village_id.in_(db.query(village_subq.c.id)))
             .first()
         )
         if pop_row:
-            total_population = int(pop_row[0])
-            total_households = int(pop_row[1])
+            total_population = int(pop_row[0] or 0)
+            total_households = int(pop_row[1] or 0)
 
     # 学校统计（带数据范围过滤，仅统计活跃学校）
     school_query = db.query(
@@ -181,10 +194,19 @@ def _query_fund_stats(db: Session, data_scope: OrgScopeFilter) -> dict:
             village_query, SupportedVillage.organization_id,
             created_by_column=SupportedVillage.created_by,
         )
+        # W18 P1-2：未关联帮扶村的经费（village_id IS NULL）没有村归属判据，
+        # 原实现无条件纳入 → 非管理员看到的"总经费"包含其它组织的未关联村经费。
+        # 改为按 Fund.organization_id 判域（Fund 自身有组织列）；无归属的经费
+        # 仅全局管理员可见（data_scope 全量时不会进入本分支）。
+        fund_scope_query = data_scope.filter_by_org_ids(
+            db.query(Fund.id),
+            Fund.organization_id,
+            created_by_column=Fund.created_by,
+        )
         query = query.filter(
             or_(
                 Fund.village_id.in_(village_query),
-                Fund.village_id.is_(None),  # 未关联帮扶村的经费也纳入统计
+                and_(Fund.village_id.is_(None), Fund.id.in_(fund_scope_query)),
             )
         )
 
@@ -625,8 +647,17 @@ async def get_yearly_trends(
             func.count(Fund.id),
         ).filter(Fund.is_active == True)  # noqa: E712
         if not data_scope.has_full_access():
+            # W18 P1-2：未关联村的经费同样按 Fund.organization_id 判域
+            fund_scope_query = data_scope.filter_by_org_ids(
+                db.query(Fund.id),
+                Fund.organization_id,
+                created_by_column=Fund.created_by,
+            )
             fund_rows = fund_rows.filter(
-                or_(Fund.village_id.in_(accessible_villages), Fund.village_id.is_(None))
+                or_(
+                    Fund.village_id.in_(accessible_villages),
+                    and_(Fund.village_id.is_(None), Fund.id.in_(fund_scope_query)),
+                )
             )
         fund_by_year = {}
         for r in fund_rows.group_by(Fund.year).all():
@@ -697,11 +728,20 @@ def _avg_per_capita_income(db: Session, data_scope: OrgScopeFilter, year: Option
         col = getattr(AnnualIncome, col_name)
         query = db.query(func.coalesce(func.avg(col), 0))
         if hasattr(AnnualIncome, "supported_village_id"):
-            query = query.filter(
-                AnnualIncome.supported_village_id.in_(
-                    db.query(SupportedVillage.id).filter(SupportedVillage.is_active == True)  # noqa: E712
-                )
+            # W18 P0-2：必须把 data_scope 接线（原实现收下形参却从未使用 ——
+            # 部门级管理员看到的是**全库**人均收入，越权且不报警）。fail-closed：
+            # 无 scope 直接返回 0，绝不退化成"不过滤"。
+            if data_scope is None:
+                return 0.0
+            village_query = db.query(SupportedVillage.id).filter(
+                SupportedVillage.is_active == True  # noqa: E712
             )
+            village_query = data_scope.filter_by_org_ids(
+                village_query,
+                SupportedVillage.organization_id,
+                created_by_column=SupportedVillage.created_by,
+            )
+            query = query.filter(AnnualIncome.supported_village_id.in_(village_query))
         val = query.scalar()
         return float(val or 0)
     except Exception:

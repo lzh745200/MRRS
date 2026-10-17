@@ -96,6 +96,8 @@ from app.api.v1 import (  # noqa: E402
     subordinate_reports,
     files,
     permission_packs,
+    pairing,
+    donation,
 )
 
 # ==================== 按序注册 ====================
@@ -132,7 +134,7 @@ _BUSINESS_MODULES = [
     machine_code, effectiveness, sentiment,
     encryption, search, menus, permission_package,
     org_module_policy, subordinate_registry, control_package,
-    subordinate_reports, files, permission_packs,
+    subordinate_reports, files, permission_packs, pairing, donation,
 ]
 
 for _mod in _BUSINESS_MODULES:

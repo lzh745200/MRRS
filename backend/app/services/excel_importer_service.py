@@ -453,6 +453,30 @@ class ExcelImporterService:
         result.success = result.failed_rows == 0
         return result
 
+    def _soft_delete_scoped(self, model: Any) -> int:
+        """全量覆盖导入时的「清空」改为**软删除**（W18-D2）。
+
+        原实现用 `query.delete()` 物理删除，且不过滤 `is_active`：
+          1. 连回收站里的软删行一起物理抹掉（彻底不可恢复）；
+          2. `projects.village_id` / `funds.project_id` / `funds.village_id` 均为
+             `ON DELETE CASCADE` —— 只导入「帮扶村」一张表，也会把项目与经费
+             级联物理删除（实证 1村/1项目/1经费 → 项目0/经费0）。
+
+        改为软删除：符合本项目的软删模式（`is_active=False`），既满足「全量覆盖」
+        的语义（旧数据不再出现在列表/统计中），又不触发级联物理删除，且可随时
+        通过回收站恢复。返回影响行数。
+        """
+        if not hasattr(model, "is_active"):  # pragma: no cover - 本服务只处理带软删列的模型
+            query = scoped_filter(self.db.query(model), model, self.current_user) \
+                if self.current_user else self.db.query(model)
+            return query.delete(synchronize_session=False)
+
+        query = scoped_filter(self.db.query(model), model, self.current_user) \
+            if self.current_user else self.db.query(model)
+        # 只处理当前可见（未软删）的行，避免重复计数与无意义更新
+        query = query.filter(model.is_active.is_(True))
+        return query.update({model.is_active: False}, synchronize_session=False)
+
     def _import_full_mode(
         self,
         rows: List[Dict[str, Any]],
@@ -463,14 +487,8 @@ class ExcelImporterService:
         全量覆盖模式
         删除现有所有记录后导入新数据
         """
-        # 删除现有记录（仅当前用户数据范围）
-        if self.current_user:
-            query = scoped_filter(
-                self.db.query(SupportedVillage), SupportedVillage, self.current_user
-            )
-        else:
-            query = self.db.query(SupportedVillage)
-        query.delete(synchronize_session=False)
+        # W18-D2：改为软删除（原先 query.delete() 物理删除，且级联抹掉项目/经费）
+        self._soft_delete_scoped(SupportedVillage)
 
         for row_idx, row in enumerate(rows, 1):
             # 转换数据类型
@@ -581,10 +599,8 @@ class ExcelImporterService:
         if mode == ImportMode.INCREMENTAL:
             existing_names = set(name[0].strip().lower() for name in self.db.query(Project.name).all() if name[0])
         else:
-            query = scoped_filter(
-                self.db.query(Project), Project, self.current_user
-            ) if self.current_user else self.db.query(Project)
-            query.delete(synchronize_session=False)
+            # W18-D2：软删除（避免物理删除后无法恢复）
+            self._soft_delete_scoped(Project)
 
         # 预加载组织编码映射
         org_map = {o.code: o.id for o in self.db.query(Organization).all() if o.code}
@@ -652,10 +668,8 @@ class ExcelImporterService:
                 for name in self.db.query(Fund.name).all() if name[0]
             )
         else:
-            query = scoped_filter(
-                self.db.query(Fund), Fund, self.current_user
-            ) if self.current_user else self.db.query(Fund)
-            query.delete(synchronize_session=False)
+            # W18-D2：软删除（避免物理删除后无法恢复）
+            self._soft_delete_scoped(Fund)
 
         # 预加载项目编号映射
         project_map = {p.code: p.id for p in self.db.query(Project).all() if p.code}
@@ -723,12 +737,8 @@ class ExcelImporterService:
                 for name in self.db.query(School.name).all() if name[0]
             )
         else:
-            query = (
-                scoped_filter(self.db.query(School), School, self.current_user)
-                if self.current_user
-                else self.db.query(School)
-            )
-            query.delete(synchronize_session=False)
+            # W18-D2：软删除（避免物理删除后无法恢复）
+            self._soft_delete_scoped(School)
 
         for row_idx, row in enumerate(rows, 1):
             converted = validator.convert_row_types(row)

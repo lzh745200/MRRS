@@ -18,6 +18,11 @@
             <el-icon><Calendar /></el-icon>年度数据
           </el-button>
           <el-button @click="openChangeHistory">变更历史</el-button>
+          <el-button
+            class="btn-pairings"
+            @click="pushSafe(`/pairings?partner_type=village&partner_id=${village?.id ?? ''}`)"
+            >结对帮扶台账</el-button
+          >
         </div>
       </div>
 

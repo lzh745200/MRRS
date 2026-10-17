@@ -7,6 +7,13 @@
         <h2 class="page-title">帮扶学校详情</h2>
       </div>
       <div class="header-actions">
+        <el-button
+          type="primary"
+          plain
+          class="btn-pairings"
+          @click="pushSafe(`/pairings?partner_type=school&partner_id=${school.id}`)"
+          >结对帮扶台账</el-button
+        >
         <el-button type="primary" @click="handleEdit">
           <el-icon><Edit /></el-icon>编辑
         </el-button>
