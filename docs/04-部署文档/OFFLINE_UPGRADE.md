@@ -11,17 +11,20 @@
 
 | 平台 | 程序目录（升级覆盖） | 用户数据目录（升级保留） |
 |------|---------------------|--------------------------|
-| Windows | `C:\Program Files\帮扶管理系统\` | `%APPDATA%\帮扶管理系统\`（数据库 / logs / uploads / secrets.json） |
+| Windows | `C:\Program Files\Assistance-Management-Information-System\` | `%APPDATA%\Assistance-Management-Information-System\`（数据库 / logs / uploads） |
 | 麒麟（Electron DEB） | `/opt/assistance-management-system/` | Electron userData（Linux 上为 `$XDG_CONFIG_HOME`，默认 `~/.config/` 下以产品名命名的目录）+ `~/.bumofu/data/`（数据库） |
 | 麒麟（standalone DEB） | `/opt/assistance-management-system/` | 部署目录下 `data/`（由 systemd 服务配置决定） |
 
-> **Windows 数据目录口径（H11 统一，2026-10-14）**：真实数据目录是 Electron 的
-> `app.getPath('userData')`，即 `%APPDATA%\帮扶管理系统\`（目录名 = `package.json`
-> `productName`）。旧版文档与旧版卸载逻辑误用 `%LOCALAPPDATA%\bumofu-assistance\`——
-> 那只是**后端在无 `DATABASE_URL` 注入时的兜底目录**（`backend/app/utils/paths.py`），
-> 桌面端正常不会用到；安装器的卸载钩子现已改为删除真实目录，并顺带清理该旧遗留目录。
-> 备份请认准 `%APPDATA%\帮扶管理系统\database\rural_revitalization.db`，不要复制
-> `%LOCALAPPDATA%` 下的旧残留。
+> **Windows 数据目录口径（W19 实测修正，2026-10-17）**：真实数据目录是 Electron 的
+> `app.getPath('userData')` = `%APPDATA%\Assistance-Management-Information-System\`。
+> 目录名取决于 Electron 的 `app.name`：优先取**根** `package.json` 的 `productName`，
+> 根层没有则取 `name`；本仓库根层没有 `productName`（`build.productName` 只影响安装包/exe 命名）
+> → 取 `name`。历史文档按 "productName 优先" 写成 `%APPDATA%\帮扶管理系统\`，该目录
+> **根本不存在**（卸载删错目录、数据残留）。
+> `%LOCALAPPDATA%\bumofu-assistance\` 是**后端在无 `DATABASE_URL` 注入时的兜底目录**
+> （`backend/app/utils/paths.py`），桌面端个别功能（如数据包导出目录）仍会用到，
+> 卸载钩子会一并清理。
+> 备份请认准 `%APPDATA%\Assistance-Management-Information-System\database\rural_revitalization.db`。
 
 备份方式（三选一，推荐①）：
 
@@ -65,7 +68,7 @@
 2. 双击新版 `Setup.exe` → 安装程序默认安装到原目录（覆盖安装）。
    用户数据与数据库**自动保留**。
 3. 安装完成后启动应用。**首次启动时后端自动执行 Alembic 数据库迁移**
-   （`upgrade head`，日志见 `%APPDATA%\帮扶管理系统\logs\app.log`），
+   （`upgrade head`，日志见 `%APPDATA%\Assistance-Management-Information-System\logs\app.log`），
    等待时间可能略长于平时（首次启动需解压/迁移），属正常现象。
 4. 验证：登录后查看 **系统管理 → 更新日志**（版本号应为新版）；
    抽查核心列表页与一次导出操作。
@@ -88,7 +91,7 @@ sudo systemctl restart assistance-system
     （fail-loud），日志先记 `ERROR` 完整异常栈、再记 `CRITICAL`
     `生产环境迁移失败——中止启动…`。这是有意设计：避免带着漂移的 schema 长期运行
     造成不可见的数据风险。**代价是升级现场可能表现为"应用起不来"**，此时必须
-    取 `%APPDATA%\帮扶管理系统\logs\app.log` 排查，不要反复重装。
+    取 `%APPDATA%\Assistance-Management-Information-System\logs\app.log` 排查，不要反复重装。
   - **开发/测试环境**：保持启动韧性，记 `ERROR` 后降级为"自动补列"兜底并附
     `WARNING`，应用仍可用但 schema 可能落后 head。
 - **快速判据（无需翻日志）**：后端起来后访问 `/health`，看 `migration` 子对象——

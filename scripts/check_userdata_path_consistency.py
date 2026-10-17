@@ -37,29 +37,42 @@ def main():
         if re.search(r"setPath\(\s*['\"]userData['\"]", main_js):
             errors.append("electron/main.js 用了 setPath(userData)：与 NSIS 注册表口径不再同源")
 
-    # ── 2. productName 决定真实 userData 目录名 ──
+    # ── 2. Electron app.name 决定真实 userData 目录名 ──
+    # Electron 语义：app.name = 根 package.json 的 productName（有则用），否则 name。
+    # 注意 build.productName 只影响安装包/exe 命名，**不**影响 userData ——
+    # 历史门禁把它排在前面，于是"门禁通过但卸载删错目录"（W19 实测踩中）。
     pkg = json.loads(_read("package.json"))
-    build = pkg.get("build", {})
-    product_name = build.get("productName") or pkg.get("productName") or pkg.get("name")
-    if not product_name:
+    app_name = pkg.get("productName") or pkg.get("name")
+    if not app_name:
         errors.append("package.json 缺少 productName/name，无法确定 userData 目录名")
-        product_name = "<unknown>"
+        app_name = "<unknown>"
 
-    # ── 3. NSIS 钩子：安装期写入的路径必须等于 %APPDATA%\\<productName> ──
+    # ── 3. NSIS 钩子：安装期写入的路径必须指向**当前用户**的真实 userData ──
     hook = _read("build-scripts/electron-builder-nsis-hook.nsh")
-    # NSIS 源码里反斜杠要写成 \\（C 风格转义），因此匹配两个反斜杠的源文本形式
-    expected_literal = "$APPDATA\\\\" + product_name
+    # 两个实测约束（W19）：
+    #  a) perMachine 安装/卸载处于 all-users 上下文，$APPDATA 指向 C:\ProgramData，
+    #     用户目录必须用 $PROFILE 拼；
+    #  b) NSIS 反斜杠是字面量（makensis 实测 "C:\\A" → 两个反斜杠），
+    #     所以源码里应为单反斜杠，写成双反斜杠会得到错误路径。
+    expected_literal = "$PROFILE\\AppData\\Roaming\\" + app_name
     if expected_literal not in hook:
         errors.append(
             "NSIS 钩子未出现期望的 userData 字面量 " + expected_literal +
-            "（package.json productName=" + product_name + "）——安装期注册表/卸载期删除会与真实目录漂移"
+            "（Electron app.name=" + app_name + "）——安装期注册表/卸载期删除会与真实目录漂移"
+        )
+    if re.search(r"WriteRegStr[^\n]*UserDataPath[^\n]*\$APPDATA", hook):
+        errors.append(
+            "安装期注册表用 $APPDATA 拼用户目录：perMachine 下它指向 C:\\ProgramData，"
+            "卸载会删错目录（应使用 $PROFILE）"
         )
 
-    # 卸载段必须同时覆盖 APPDATA 真实目录与 LOCALAPPDATA 兜底目录
+    # 卸载段必须覆盖：真实 userData（多用户枚举）、LOCALAPPDATA 兜底目录、历史误判目录
     if "customUnInstall" not in hook:
         errors.append("NSIS 钩子缺少 customUnInstall 段")
-    if "LOCALAPPDATA" not in hook:
-        errors.append("NSIS 卸载段未清理 LOCALAPPDATA 兜底目录（后端未注入 env 时会写这里）")
+    if "FindFirst" not in hook:
+        errors.append("卸载段未枚举多用户 profile（$PROFILE\\..\\*）——多账号机器会残留用户数据")
+    if "bumofu-assistance" not in hook:
+        errors.append("卸载段未清理 bumofu-assistance 兜底数据目录（后端未注入 env 时会写这里）")
 
     # ── 4. backend paths.py 兜底目录名必须与钩子一致 ──
     paths_py = _read("backend/app/utils/paths.py")
@@ -80,7 +93,7 @@ def main():
         return 1
 
     print(
-        "[gate:userdata_path] OK: productName=" + product_name +
+        "[gate:userdata_path] OK: app.name=" + app_name +
         " | NSIS 注册表/兜底目录/卸载清理 三处一致"
     )
     return 0

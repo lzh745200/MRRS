@@ -13,12 +13,14 @@
 ;      卸载期读回删除，并以字面量兜底；详见 customUnInstall 段注释）
 ;   6. 卸载时清理桌面快捷方式
 ;
-; NSIS 字符串转义铁律（v1.11.0 安装失败复盘，2026-08-30）：
-;   NSIS 对双引号字符串做 C 风格转义：\r \n \t \v \" \\ 等会被真实转换。
-;   路径中的反斜杠必须写成 \\，否则 \resources → CR+esources、
-;   \vcredist → VT+credist，静默损坏传给 PowerShell/exec 的路径
-;   （初版即因此让 Get-FileHash 恒定报错，被误判为"哈希不匹配"中止安装）。
-;   修改本文件时逐行检查所有 \ 的意图。
+; NSIS 字符串转义规则（W19 实测修正，2026-10-17）：
+;   **反斜杠不是转义字符**，在双引号字符串里就是字面量 \（已用 makensis 实测：
+;   写 "C:\A\B" 得到两个反斜杠）；转义要用 $ 前缀（$\r $\n $\t $\" $\$）。
+;   因此路径直接写单反斜杠即可；写成 \\ 会得到**双反斜杠**（Windows 多数 API
+;   容忍，但注册表值与日志会失真，曾让卸载口径排查跑偏）。
+;   历史注释曾称"反斜杠必须写成 \\"（C 风格），那是误判。
+;   ⚠️ 另注意 perMachine=true 时 NSIS 处于 all-users 上下文：$APPDATA/$LOCALAPPDATA
+;   指向 C:\ProgramData，**不是**当前用户目录 —— 用户目录请用 $PROFILE 拼。
 ;
 ; 说明：
 ;   - $INSTDIR 由 electron-builder 设置为安装目录（Program Files\帮扶管理系统）
@@ -52,16 +54,22 @@
 ; 安装钩子：终止旧进程 + VC++ 校验安装 + 创建桌面快捷方式
 ; ----------------------------------------------------------------------------
 !macro customInstall
-  ; ─── 记录 Electron userData 目录（H11，2026-10-14）───
+  ; ─── 记录 Electron userData 目录（H11 / W19 实测修正，2026-10-17）───
   ; electron/main.js getUserDataPath() 打包态返回 app.getPath('userData')，
-  ; 全仓库无 setPath('userData', ...)、无任何地方设置 ELECTRON_USER_DATA_PATH
-  ; → 取 Electron 默认值 %APPDATA%\<app.name>，且 Electron 对 app.name 优先取
-  ; package.json 的 productName（"帮扶管理系统"）而非 name → 真实 userData 为
-  ; %APPDATA%\帮扶管理系统。此处安装期把该路径写入注册表作为单一事实源，
-  ; 卸载段读回后删除，避免卸载器自行拼路径、以及未来 productName 变更时
-  ; 安装/卸载两侧口径漂移。
+  ; 全仓库无 setPath('userData', ...)、无 ELECTRON_USER_DATA_PATH 设置 →
+  ; 取 Electron 默认值 %APPDATA%\<app.name>。
+  ; **关键（W19 实测修正）**：Electron 的 app.name 取根 package.json 的
+  ; productName，**没有**时才取 name。本仓库根层**没有** productName（只有
+  ; build.productName，那只影响安装包/exe 命名，不影响 userData）→
+  ; app.name = name = "Assistance-Management-Information-System"，
+  ; 真实 userData 即 %APPDATA%\Assistance-Management-Information-System。
+  ; 旧版此处按"productName 优先"写成 %APPDATA%\帮扶管理系统（该目录根本不存在），
+  ; 导致卸载时删错目录、真实数据库/密钥/日志全部残留（W18 P1-5 实证）。
+  ; 兜底：卸载段同时清理历史误判目录，避免老版本残留。
   ; perMachine=true（package.json build.nsis）→ 卸载器本就以管理员运行，HKLM 可用。
-  WriteRegStr HKLM "Software\Bumofu\AssistanceManagementSystem" "UserDataPath" "$APPDATA\\帮扶管理系统"
+  ; **perMachine 下 $APPDATA = C:\ProgramData**（all-users 上下文），
+  ; 用户目录必须用 $PROFILE 拼；路径写单反斜杠（见文件头转义规则）。
+  WriteRegStr HKLM "Software\Bumofu\AssistanceManagementSystem" "UserDataPath" "$PROFILE\AppData\Roaming\Assistance-Management-Information-System"
 
   ; 安装前终止可能正在运行的旧进程（升级场景）
   ; taskkill 在进程不存在时返回非零退出码，Pop 丢弃即可，不阻断安装
@@ -166,33 +174,47 @@
   skip_del_desktop:
 
   ; 询问用户是否删除用户数据目录（含 SQLite 数据库、上传文件、密钥、日志等）
-  ; H11（2026-10-14）：旧版删除目标 $LOCALAPPDATA\bumofu-assistance 与真实
-  ; 数据目录不一致，导致卸载后数据库/上传/密钥全部残留。生产数据实际全部
-  ; 位于 Electron userData（electron/main.js 将 DATABASE_URL/LOG_FILE/
-  ; UPLOAD_DIR/CACHE_DIR/EXPORT_DIR 与 secrets.json/crash.log 均放在
-  ; getUserDataPath() 下），即 %APPDATA%\帮扶管理系统。
-  ; 优先读安装段写入的注册表值（单一事实源，见 customInstall 段注释）；
-  ; 注册表值缺失（异常安装/手工清理）时回退到字面量。
+  ; W19 实测修正（2026-10-17）：
+  ;  · 真实 userData = %APPDATA%\Assistance-Management-Information-System
+  ;    （Electron app.name 取**根** package.json 的 productName，无则取 name；
+  ;     本仓库只有 build.productName，它只影响安装包/exe 命名）
+  ;  · perMachine 安装的卸载器处于 all-users 上下文：$APPDATA/$LOCALAPPDATA
+  ;    指向 C:\ProgramData，**不能**用于用户目录 → 一律用 $PROFILE 拼
+  ;  · 注册表值优先（安装期以 $PROFILE 写入），缺失时按 $PROFILE 推导
+  ;  · 多用户机器：枚举 $PROFILE\..\* 逐个清理（同一台机器可能有多个 Windows 账号）
+  ;  · 同时清理历史误判/兜底目录（旧版曾写 ProgramData\帮扶管理系统、
+  ;    %LOCALAPPDATA%\bumofu-assistance 等）
   ; deleteAppDataOnUninstall=false（package.json）保留 userData 小文件的
   ; 语义由本询问承接；/SD IDNO + MB_DEFBUTTON2（W6-T10）：静默卸载
   ; （企业批量部署）默认保留用户数据
   ReadRegStr $R0 HKLM "Software\Bumofu\AssistanceManagementSystem" "UserDataPath"
-  StrCmp $R0 "" uninst_user_data_fallback uninst_user_data_registry
-  uninst_user_data_registry:
-    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "是否同时删除用户数据（包含数据库）?$\n$\n位置: $R0" /SD IDNO IDNO keep_user_data
-      RMDir /r /REBOOTOK "$R0"
-      DetailPrint "已删除用户数据目录: $R0"
-      Goto uninst_legacy_cleanup
-  uninst_user_data_fallback:
-    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "是否同时删除用户数据（包含数据库）?$\n$\n位置: $APPDATA\\帮扶管理系统\\" /SD IDNO IDNO keep_user_data
-      RMDir /r /REBOOTOK "$APPDATA\\帮扶管理系统"
-      DetailPrint "已删除用户数据目录: $APPDATA\\帮扶管理系统"
-  uninst_legacy_cleanup:
-    ; 用户已同意删除用户数据：顺带清理旧版遗留目录。该目录是 frozen 后端
-    ; 在无 Electron 注入环境变量时的兜底数据目录（backend/app/utils/paths.py
-    ; get_app_data_dir），可能残留旧版数据库副本（敏感数据），一并删除。
-    RMDir /r /REBOOTOK "$LOCALAPPDATA\\bumofu-assistance"
-    DetailPrint "已清理遗留兜底数据目录: $LOCALAPPDATA\\bumofu-assistance"
+  StrCmp $R0 "" 0 uninst_have_path
+    StrCpy $R0 "$PROFILE\AppData\Roaming\Assistance-Management-Information-System"
+  uninst_have_path:
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "是否同时删除用户数据（包含数据库）?$\n$\n位置: $R0" /SD IDNO IDNO keep_user_data
+    RMDir /r /REBOOTOK "$R0"
+    DetailPrint "已删除用户数据目录: $R0"
+    ; 多用户机器：注册表只记录安装者，逐个 profile 清理同一目录
+    FindFirst $R9 $R1 "$PROFILE\..\*"
+    uninst_users_loop:
+      StrCmp $R1 "" uninst_users_done
+      StrCmp $R1 "." uninst_users_next
+      StrCmp $R1 ".." uninst_users_next
+      RMDir /r /REBOOTOK "$PROFILE\..\$R1\AppData\Roaming\Assistance-Management-Information-System"
+    uninst_users_next:
+      FindNext $R9 $R1
+      Goto uninst_users_loop
+    uninst_users_done:
+      FindClose $R9
+    ; 兜底数据目录（frozen 后端无 Electron 注入时的 paths.get_app_data_dir）
+    RMDir /r /REBOOTOK "$PROFILE\AppData\Local\bumofu-assistance"
+    RMDir /r /REBOOTOK "$LOCALAPPDATA\bumofu-assistance"
+    ; 历史误判目录（旧版本按 productName 假设 / 写入 ProgramData）
+    RMDir /r /REBOOTOK "$PROFILE\AppData\Roaming\帮扶管理系统"
+    RMDir /r /REBOOTOK "$APPDATA\帮扶管理系统"
+    RMDir /r /REBOOTOK "$APPDATA\Assistance-Management-Information-System"
+    RMDir /r /REBOOTOK "$APPDATA\bumofu-assistance"
+    DetailPrint "已清理历史误判/兜底数据目录（如存在）"
   keep_user_data:
   ; 清理本钩子自有注册表键（不动 electron-builder 的卸载信息键）
   DeleteRegKey HKLM "Software\Bumofu\AssistanceManagementSystem"

@@ -56,6 +56,12 @@
 - **捐赠菜单指向不存在路由**：侧边栏曾挂 `/donations` 入口但页面/路由未建（点击必 404，
   且被菜单对齐门禁判为无路由），已摘除并记录待办。
 - **诊断包/健康检查信息泄露收口**：数据库绝对路径、表名清单、异常原文不再出站（只留类名与聚合值）。
+- **卸载不删真实用户数据（W19 实机实证）**：Electron `app.name` 取根 `package.json` 的
+  `name`（根层无 `productName`），真实 userData 为 `%APPDATA%\Assistance-Management-Information-System`；
+  旧钩子按"productName 优先"写成 `%APPDATA%\帮扶管理系统`（不存在），且 perMachine 下
+  `$APPDATA`=`C:\ProgramData`、NSIS 反斜杠被误当 C 转义 —— 三处叠加导致卸载后数据库/密钥/日志
+  全部残留。现改为 `$PROFILE` 拼路径 + 卸载期枚举全部 Windows 账号 + 清理历史误判目录，
+  门禁同步改为 Electron 真实语义。
 
 ### Changed
 
