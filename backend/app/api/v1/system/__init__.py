@@ -104,6 +104,16 @@ except Exception as exc:
 router.include_router(error_report_router)
 logger.debug("已加载路由: system.error_report")
 
+# ---- 诊断包（P0-7，2026-10-17：现场排障一次性带全证据）----
+try:
+    from app.api.v1.system.diagnostics import router as diagnostics_router
+except Exception as exc:
+    # 深审 #78：子模块导入失败必须 fail-fast（诊断包缺失会让现场排障回到
+    # "隔电话挨个问"的状态，静默缺路由不可接受）。
+    raise RuntimeError(f"加载 system.diagnostics 路由失败: {exc}") from exc
+router.include_router(diagnostics_router)
+logger.debug("已加载路由: system.diagnostics")
+
 # ---- 系统健康检查 ----
 try:
     from app.api.v1.system.health import router as health_router

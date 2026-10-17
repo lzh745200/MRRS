@@ -148,7 +148,9 @@ def analyze_table_stats(engine=None):
             for (table_name,) in result.fetchall():
                 try:
                     # nosec B608 — sqlite_master 系统表名
-                    count_result = conn.execute(text(f"SELECT COUNT(*) FROM [{table_name}]"))  # nosec B608
+                    count_result = conn.execute(
+                        text(f"SELECT COUNT(*) FROM [{table_name}]")  # nosec B608 - 表名取自 sqlite_master
+                    )
                     row_count = count_result.scalar()
                     stats[table_name] = {"row_count": row_count}
                 except Exception:

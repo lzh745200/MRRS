@@ -18,7 +18,7 @@ def _fts_table_exists(db: Session) -> bool:
     """只读探测 FTS5 虚拟表是否已建立（不发 DDL、不提交）。"""
     try:
         row = db.execute(text(
-            f"SELECT name FROM sqlite_master WHERE type='table' AND name='{FTS_TABLE}'"  # nosec B608
+            f"SELECT name FROM sqlite_master WHERE type='table' AND name='{FTS_TABLE}'"  # nosec B608 - FTS_TABLE 常量
         )).fetchone()
         return row is not None
     except Exception:
@@ -40,12 +40,12 @@ def ensure_fts_table(db: Session) -> None:
         USING fts5(title, content, summary, keywords,
                    content='policies', content_rowid='id',
                    tokenize='unicode61')
-    """))  # nosec B608
+    """))  # nosec B608 - FTS_TABLE 为模块常量
     # 同步已有数据
     db.execute(text(f"""
         INSERT INTO {FTS_TABLE}(rowid, title, content, summary, keywords)
         SELECT id, title, content, summary, keywords FROM policies
-    """))  # nosec B608
+    """))  # nosec B608 - FTS_TABLE 为模块常量
     safe_commit(db)
     logger.info("FTS5 表 %s 已创建并同步", FTS_TABLE)
 
@@ -160,7 +160,10 @@ def sync_policy_to_fts(db: Session, policy_id: int) -> None:
         if not row:
             return
         # 先删除旧记录再插入（INSERT OR REPLACE 在 FTS5 中不支持）
-        db.execute(text(f"DELETE FROM {FTS_TABLE} WHERE rowid = :id"), {"id": policy_id})  # nosec B608
+        db.execute(
+            text(f"DELETE FROM {FTS_TABLE} WHERE rowid = :id"),  # nosec B608 - FTS_TABLE 常量
+            {"id": policy_id},
+        )
         # nosec B608 — FTS_TABLE 为模块级常量（非用户输入），数据均经 :param 参数化绑定
         insert_sql = (
             f"INSERT INTO {FTS_TABLE}(rowid, title, content, summary, keywords)"
@@ -179,7 +182,10 @@ def sync_policy_to_fts(db: Session, policy_id: int) -> None:
 def remove_policy_from_fts(db: Session, policy_id: int) -> None:
     """从 FTS 索引中删除政策（删除后调用）."""
     try:
-        db.execute(text(f"DELETE FROM {FTS_TABLE} WHERE rowid = :id"), {"id": policy_id})  # nosec B608
+        db.execute(
+            text(f"DELETE FROM {FTS_TABLE} WHERE rowid = :id"),  # nosec B608 - FTS_TABLE 常量
+            {"id": policy_id},
+        )
         safe_commit(db)
     except Exception:
         logger.warning("FTS删除失败 policy_id=%s（已删除政策可能仍可被搜索到）", policy_id, exc_info=True)

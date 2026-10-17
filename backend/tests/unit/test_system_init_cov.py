@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 
 SUBMODULES = [
-    "admin", "audit", "backup", "cache", "config_package", "env",
+    "admin", "audit", "backup", "cache", "config_package", "diagnostics", "env",
     "error_report", "health", "help", "i18n", "init", "metrics",
     "monitor", "system", "system_config", "tasks", "update_logs", "zero_trust",
 ]

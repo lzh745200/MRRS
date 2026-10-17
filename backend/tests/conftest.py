@@ -503,6 +503,11 @@ def client():
             _db_module.engine = _original_engine
             _db_module.SessionLocal = _original_session_local
             db.close()
+            # StaticPool 会一直持有那条内存连接：只 close 会话不 dispose 引擎，
+            # 连接要等引擎被 GC 时才由 sqlite3.Connection.__del__ 关闭 —— 每次使用
+            # 本 fixture 的用例都留下一条 unclosed database 告警（2026-10-17 分片
+            # 复跑实测 24 条），并且把告警"随机"归因到触发 GC 的那个用例头上。
+            engine.dispose()
     except Exception:
         # 失败必须显式暴露：静默吞掉会让 fixture 返回 None, 所有消费方
         # 测试被悄悄 skip, 呈现"绿但什么都没测"的假象（覆盖率门禁只能

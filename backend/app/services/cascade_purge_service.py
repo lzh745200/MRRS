@@ -47,13 +47,13 @@ class CascadePurgeService:
 
     def _count(self, table: str, col: str, rid: int) -> int:
         return self.db.execute(
-            text(f"SELECT COUNT(*) FROM {table} WHERE {col} = :rid"),  # nosec B608 表名来自元数据白名单
+            text(f"SELECT COUNT(*) FROM {table} WHERE {col} = :rid"),  # nosec B608 - 表名来自模型元数据白名单
             {"rid": rid},
         ).scalar() or 0
 
     def _delete(self, table: str, col: str, rid: int) -> int:
         res = self.db.execute(
-            text(f"DELETE FROM {table} WHERE {col} = :rid"),  # nosec B608
+            text(f"DELETE FROM {table} WHERE {col} = :rid"),  # nosec B608 - 表/列名来自模型元数据
             {"rid": rid},
         )
         return res.rowcount or 0
@@ -87,7 +87,7 @@ class CascadePurgeService:
     def _count_deep(self, t2: str, c2: str, p_table: str, p_col: str, rid: int) -> int:
         return self.db.execute(
             text(
-                f"SELECT COUNT(*) FROM {t2} WHERE {c2} IN "  # nosec B608
+                f"SELECT COUNT(*) FROM {t2} WHERE {c2} IN "  # nosec B608 - 表/列名来自模型元数据
                 f"(SELECT id FROM {p_table} WHERE {p_col} = :rid)"
             ),
             {"rid": rid},
@@ -185,7 +185,7 @@ class CascadePurgeService:
                 total += n
 
         res = self.db.execute(
-            text(f"DELETE FROM {root_table} WHERE id = :rid"),  # nosec B608
+            text(f"DELETE FROM {root_table} WHERE id = :rid"),  # nosec B608 - 表名来自模型元数据
             {"rid": row_id},
         )
         if (res.rowcount or 0) == 0:

@@ -87,7 +87,9 @@ class UserCascadeDeleteService:
             except ValueError:
                 continue
 
-            fk_rows = db.execute(text(f"PRAGMA foreign_key_list({tbl_ident})")).fetchall()
+            fk_rows = db.execute(
+                text(f"PRAGMA foreign_key_list({tbl_ident})")  # nosec B608 - _safe_ident 已校验
+            ).fetchall()
             if not fk_rows:
                 continue
             # PRAGMA foreign_key_list 列: (id, seq, table, from, to, on_update, on_delete, match)
@@ -100,7 +102,7 @@ class UserCascadeDeleteService:
                 continue
 
             # 查询列可空性: PRAGMA table_info 列 (cid, name, type, notnull, dflt_value, pk)
-            col_info = db.execute(text(f"PRAGMA table_info({tbl_ident})")).fetchall()
+            col_info = db.execute(text(f"PRAGMA table_info({tbl_ident})")).fetchall()  # nosec B608 - _safe_ident 已校验
             nullable_map = {ci[1]: (ci[3] == 0) for ci in col_info}
 
             for from_col, on_delete in user_refs:
@@ -115,7 +117,7 @@ class UserCascadeDeleteService:
                     try:
                         result = db.execute(
                             text(f"UPDATE {tbl_ident} SET {col_ident} = NULL "
-                                 f"WHERE {col_ident} = :uid"),  # nosec B608
+                                 f"WHERE {col_ident} = :uid"),  # nosec B608 - _safe_ident 已校验
                             {"uid": user_id},
                         )
                         set_null_records += result.rowcount or 0
@@ -127,14 +129,14 @@ class UserCascadeDeleteService:
                         )
                 elif on_delete == "CASCADE":
                     result = db.execute(
-                        text(f"DELETE FROM {tbl_ident} WHERE {col_ident} = :uid"),  # nosec B608
+                        text(f"DELETE FROM {tbl_ident} WHERE {col_ident} = :uid"),  # nosec B608 - _safe_ident 已校验
                         {"uid": user_id},
                     )
                     deleted_records += result.rowcount or 0
                 elif col_nullable:
                     result = db.execute(
                         text(f"UPDATE {tbl_ident} SET {col_ident} = NULL "
-                             f"WHERE {col_ident} = :uid"),  # nosec B608
+                             f"WHERE {col_ident} = :uid"),  # nosec B608 - _safe_ident 已校验
                         {"uid": user_id},
                     )
                     set_null_records += result.rowcount or 0
@@ -142,7 +144,7 @@ class UserCascadeDeleteService:
                     # 非空列无法置空（SET NULL + NOT NULL 矛盾），
                     # 删除引用记录以解除外键约束。
                     result = db.execute(
-                        text(f"DELETE FROM {tbl_ident} WHERE {col_ident} = :uid"),  # nosec B608
+                        text(f"DELETE FROM {tbl_ident} WHERE {col_ident} = :uid"),  # nosec B608 - _safe_ident 已校验
                         {"uid": user_id},
                     )
                     deleted_records += result.rowcount or 0

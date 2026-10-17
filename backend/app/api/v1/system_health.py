@@ -108,7 +108,9 @@ async def run_integrity_check(
                 text("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
             ).fetchall()
             for (tbl,) in tables:
-                idx_rows = db.execute(text(f'PRAGMA index_list("{tbl}")')).fetchall()
+                idx_rows = db.execute(
+                    text(f'PRAGMA index_list("{tbl}")')  # nosec B608 - 表名取自 sqlite_master
+                ).fetchall()
                 for idx_row in idx_rows:
                     actual_indexes.add(idx_row[1])  # index name
 

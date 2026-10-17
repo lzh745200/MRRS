@@ -240,7 +240,7 @@ Triggered on `push` to main、每个指向 main 的 PR、以及 `workflow_dispat
 （`push` 触发器 2026-09-04 才补上——此前直接推 main 不会跑任何 CI，因为
 build-* 只在 tag `v*` 触发、nightly 只在定时触发，main 实际处于无门禁状态。）
 
-七个 job 承载的门禁：
+八个 job 承载的门禁：
 
 | Job | 门禁 |
 |-----|------|
@@ -248,7 +248,8 @@ build-* 只在 tag `v*` 触发、nightly 只在定时触发，main 实际处于�
 | `frontend-check` | `vue-tsc --noEmit`、`npm run lint:check`、`vitest run --coverage` |
 | `lint` | flake8（`--max-line-length=120 --count --max-complexity=16`）、mypy（非阻断）、bandit `-ll` |
 | `security` | pip-audit（非阻断）、`npm audit --audit-level=high`（阻断）、SBOM 许可证清单 |
-| `static-analysis` | 软删过滤扫描、6 个棘轮门禁、版本一致性、前后端菜单对齐、后端综合安全审计、Alembic 单 head、覆盖率豁免理由棘轮 |
+| `static-analysis` | 软删过滤扫描、6 个棘轮门禁、原始 SQL f-string 豁免（`text(f"...")` 必须同行 `# nosec B608 - 理由`）、版本一致性、前后端菜单对齐、后端综合安全审计、Alembic 单 head、覆盖率豁免理由棘轮 |
+| `upgrade-rehearsal` | 升级排练（`backend/scripts/upgrade_rehearsal.py`）：取最近 `v*` 标签的旧代码建出老用户库 → 每表播一行 → 当前代码 `upgrade head` → 校验无表丢失/行数不变/`integrity_check=ok`/落在当前 head。安装包冒烟证明不了"老库升级后数据还在"，这一段此前靠人工 |
 | `e2e-test` | Playwright 浏览器套件（真实起后端+前端，独立 e2e_test.db；Linux chromium，失败上传报告 artifact） |
 | `windows-smoke` | windows-latest：跑编码/句柄/路径敏感子集 + flake8（前置 `PYTHONUTF8=1`）——把"只在 Windows 出现"的缺陷提前到 PR 阶段 |
 

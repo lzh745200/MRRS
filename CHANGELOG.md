@@ -5,6 +5,49 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.18] - 2026-10-17 — 🎯 门禁说真话 + 现场可自证（P0 批次）
+
+> 用例口径：后端 **12,795** / 前端 **6,363**（本地全量实测）；后端行+分支覆盖率 100%
+> （`backend/.coveragerc` fail_under=100），前端 12 组 glob 阈值 100%。
+> 本批**不新增业务功能**：全部围绕"让门禁给出可信结论"与"现场排障能自证"。
+
+### Added
+
+- **系统诊断包导出（仅管理员）**：`GET /api/v1/system/diagnostics/summary` 返回结构化摘要
+  （版本 / 构建指纹 / 平台 / 数据库健康与逐表行数 / 迁移状态 / 日志概况 / 资源快照）；
+  `GET /api/v1/system/diagnostics/bundle` 返回诊断包 ZIP（`summary.json` + 脱敏日志尾部 +
+  兼容 `sha256sum -c` 的 `checksums.txt`）。边界：不输出任何配置项与凭据；手机号 / 身份证号 /
+  口令类键值对出站前打码；异常只出境**类名**；导出动作写审计（写审计失败不阻断导出）。
+  任一子项失败（路径解析 / 构建信息 / 日志缺失 / psutil）只降级为 `error_type`，不拖垮整份诊断。
+- **升级排练门禁**：`backend/scripts/upgrade_rehearsal.py` + PR Checks 新作业
+  `upgrade-rehearsal`。语义：取最近 `v*` 标签的旧代码建出"老用户库" → 每张表播一行 →
+  当前代码 `upgrade head` → 校验"无表丢失 / 已播种表行数不变 / `PRAGMA integrity_check=ok` /
+  落在当前 head"。安装包冒烟证明不了"老用户的库升级后数据还在"，这一段过去只能靠人工在测试机点。
+- **测试抖动账本**：`scripts/ci_flake_report.py` 解析 pytest-rerunfailures 的 `RERUN` 行
+  （JUnit XML 不记录重跑），输出逐条清单与计数；pr-checks 只告警（`--warn-reruns 3`），
+  nightly 超过 10 次才失败；两份账本作为 CI 产物留存 90 天。
+- **原始 SQL f-string 豁免门禁**：`scripts/check_raw_sql_fstrings.py` 用 AST 取完整语句范围，
+  要求 `text(f"...")` 所在语句范围内必须有 `# nosec B608 - <理由>`；全仓 40 处调用点，
+  本次补登 26 处理由（9 个文件）。
+- **JSON 列可变性台账**：26 个 JSON 列逐列声明语义（25 个"整体替换" / 1 个 `MutableList`），
+  外加"声明检查 + 就地修改必须落库"的行为锁定。
+
+### Fixed
+
+- **100% 分支门禁的随机失败**：`generate_password` 的"重试直到满足复杂度"分支概率性未命中，
+  门禁**随机变红**（会训练团队忽略红线）；改为可控 `secrets.choice` 替身的确定性用例钉死。
+- **测试连接泄漏**：`tests/conftest.py` 的 `client` fixture 只 `close()` 会话、未 `dispose()`
+  引擎（`StaticPool` 会一直持着内存连接），每次使用都留下一条
+  `ResourceWarning: unclosed database` 并按 GC 时机**随机归因**到无关用例；修复后实测 18 → 0。
+- **分片运行的信号噪音**：逐片加 `--cov-fail-under=0`（此前每片都因"片内覆盖率不满 100%"
+  返回 exit 2，"这片的测试到底过没过"要人肉分辨）；真实门禁仍由末尾 `coverage report`
+  按 `.coveragerc` 承载（命令行不重复声明阈值）。
+
+### Changed
+
+- 版本号 `1.12.17` → `1.12.18`（`node scripts/sync-version.js --check` 15 处一致）。
+- PR Checks 作业数 7 → 8（新增 `upgrade-rehearsal`）；`static-analysis` 增补原始 SQL 豁免门禁。
+
 ## [1.12.17] - 2026-10-16 — 🛡️ R28 全系统排查修复（门禁 / 数据域 / 服务正确性 / 前端与构建）
 
 > 用例口径：后端 **12,6xx** / 前端 **6,3xx**（以 CI 实测为准）；双向覆盖率 100%（行+分支）。

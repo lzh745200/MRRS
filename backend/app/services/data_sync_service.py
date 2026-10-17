@@ -272,7 +272,7 @@ class DataSyncService:
                 """)  # nosec B608 — _validate_table_name 白名单验证
                 result = db.execute(query, {"since": since})
             else:
-                query = text(f"SELECT * FROM {safe_table} ORDER BY id")  # nosec B608
+                query = text(f"SELECT * FROM {safe_table} ORDER BY id")  # nosec B608 - safe_table 已白名单校验
                 result = db.execute(query)
 
             rows = result.fetchall()
@@ -474,7 +474,7 @@ class DataSyncService:
                 record_id = record.get("id")
                 if record_id:
                     existing = db.execute(
-                        text(f"SELECT * FROM {safe_table} WHERE id = :id"),  # nosec B608
+                        text(f"SELECT * FROM {safe_table} WHERE id = :id"),  # nosec B608 - safe_table 已白名单校验
                         {"id": record_id},
                     ).fetchone()
 
@@ -563,7 +563,7 @@ class DataSyncService:
         columns = ", ".join(safe_cols)
         placeholders = ", ".join([f":{k}" for k in record.keys()])
         safe_table = self._validate_table_name(table_name)
-        query = text(f"INSERT INTO {safe_table} ({columns}) VALUES ({placeholders})")  # nosec B608
+        query = text(f"INSERT INTO {safe_table} ({columns}) VALUES ({placeholders})")  # nosec B608 - 表/列名已白名单校验
         db.execute(query, record)
 
     async def _update_record(self, db: Session, table_name: str, record: Dict[str, Any]):
@@ -572,7 +572,7 @@ class DataSyncService:
         safe_cols = [self._sanitize_column_name(k) for k in record.keys()]
         set_clause = ", ".join([f"{col} = :{col}" for col in safe_cols])
         safe_table = self._validate_table_name(table_name)
-        query = text(f"UPDATE {safe_table} SET {set_clause} WHERE id = :id")  # nosec B608
+        query = text(f"UPDATE {safe_table} SET {set_clause} WHERE id = :id")  # nosec B608 - 表/列名已白名单校验
         record["id"] = record_id
         db.execute(query, record)
 
@@ -922,7 +922,7 @@ class DataSyncService:
                 if record_id:
                     # 检查记录是否存在
                     existing = db.execute(
-                        text(f"SELECT * FROM {safe_table} WHERE id = :id"),  # nosec B608
+                        text(f"SELECT * FROM {safe_table} WHERE id = :id"),  # nosec B608 - safe_table 已白名单校验
                         {"id": record_id},
                     ).fetchone()
 

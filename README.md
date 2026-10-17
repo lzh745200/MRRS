@@ -1,19 +1,19 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.12.17
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.12.18
 
-![Version](https://img.shields.io/badge/version-1.12.17-blue)
+![Version](https://img.shields.io/badge/version-1.12.18-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-18%2C704%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-19%2C158%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **12,422 passed**（622 文件）, 0 失败（含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **6,323 passed**（299 文件）, 0 失败 |
+| 后端测试 | **12,795 passed**（647 文件）, 0 失败（含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **6,363 passed**（301 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -31,8 +31,8 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-08（v1.12.15）— 后端 12,422 用例 + 行/分支覆盖率 100.00%、前端 6,323 用例（299 文件）全部通过；
-> flake8 0 / 6 项棘轮门禁 NEW=0 / vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（45 版本）
+> **上次全量验证**: 2026-10-17（v1.12.18）— 后端 12,795 用例（647 文件）+ 行/分支覆盖率 100.00%（40546 语句 / 9880 分支）、前端 6,363 用例（301 文件）全部通过；
+> flake8 0 / 6 项棘轮门禁 NEW=0 / vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（47 版本）
 
 ## 快速开始
 
@@ -103,10 +103,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端单元测试 | pytest | 12,422（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端单元测试 | pytest | 12,795（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,323（299 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 6,363（301 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 12 流程 | Login/Dashboard/Projects/Approval/Funds |
 | 性能测试 | Locust | 配置可用 | 负载测试 |
 | 属性测试 | fast-check | 多组 | 组件属性验证 |
@@ -162,7 +162,7 @@ npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本
 
 | 流水线 | 触发条件 | 内容 |
 |--------|---------|------|
-| **PR Checks**（7 作业） | Pull Request | 后端测试 + 覆盖率门禁（`.coveragerc` fail_under=100）+ 前端检查 + lint + security + **static-analysis（含 6 个预防棘轮门禁）** + E2E + **windows-smoke** |
+| **PR Checks**（8 作业） | Pull Request | 后端测试 + 覆盖率门禁（`.coveragerc` fail_under=100）+ **升级排练（最近发布标签的旧库 → 当前 head，数据/表/完整性校验）** + 前端检查 + lint + security + **static-analysis（6 个预防棘轮 + 原始 SQL 豁免 + 菜单/版本/迁移门禁）** + E2E + **windows-smoke** |
 | **Nightly Full** | 每日凌晨2:00 UTC | 全量测试 + 覆盖率报告 + Codecov + JUnit 报告 |
 | **Build Windows x64** | **tag v\*** / 手动 | PyInstaller onedir + electron-builder NSIS → 安装包挂到 Release |
 | **Build ARM64 deb** | **tag v\*** / 手动 | Docker Buildx QEMU + electron-builder DEB → 安装包挂到 Release |

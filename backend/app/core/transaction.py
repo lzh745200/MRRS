@@ -303,7 +303,7 @@ def _apply_tx_settings(sess: Session, isolation: Optional[str], readonly: bool):
     if IS_SQLITE:
         return
     if isolation:
-        sess.execute(text(f"SET TRANSACTION ISOLATION LEVEL {isolation}"))
+        sess.execute(text(f"SET TRANSACTION ISOLATION LEVEL {isolation}"))  # nosec B608 - 白名单校验后传入
     if readonly:
         sess.execute(text("SET TRANSACTION READ ONLY"))
 

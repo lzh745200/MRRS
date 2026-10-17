@@ -33,12 +33,31 @@ jobs:
           # 覆盖率门禁：阈值统一由 backend/.coveragerc 的 fail_under=100 单一承载
           # （2026-09-04 对齐 #21：移除内联 --cov-fail-under=98——命令行参数会
           #  屏蔽配置文件口径，此前 nightly 实际跑的是 98 旧门禁）
+          # 2026-10-17：加 -rR 并 tee 到日志 —— 抖动账本需要逐条 RERUN 清单
+          # （JUnit XML 不记录 rerun，实测 pytest-rerunfailures 15.0）。
+          LOG="$RUNNER_TEMP/pytest-nightly.log"
+          set -o pipefail
           python -m pytest tests/ -q --tb=line \
-            -n auto \
+            -n auto -rR \
             --cov=app --cov-report=html --cov-report=json --cov-report=xml \
             --reruns 2 --reruns-delay 1 \
             --durations=20 \
-            --junitxml=test-results.xml
+            --junitxml=test-results.xml 2>&1 | tee "$LOG"
+      # 抖动账本（2026-10-17）：nightly 是唯一"每天全量"的观察窗口，抖动趋势在此累积。
+      # 告警阈值 3、硬上限 10（超过 10 次说明不是个别用例，而是系统性不确定性）。
+      - name: Flaky test ledger
+        if: always()
+        run: |
+          python scripts/ci_flake_report.py --log "$RUNNER_TEMP/pytest-nightly.log" \
+            --out flaky-report.txt --warn-reruns 3 --max-reruns 10
+      - name: Upload flaky ledger
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flaky-ledger-nightly
+          path: flaky-report.txt
+          if-no-files-found: warn
+          retention-days: 90
       - name: Upload test results
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()

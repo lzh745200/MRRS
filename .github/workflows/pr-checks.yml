@@ -55,7 +55,25 @@ jobs:
             echo "========================"
           } > "$LOG"
           set -o pipefail
-          python -m pytest tests/ -q --tb=line -n auto --cov=app --cov-report=xml --cov-report=term-missing --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
+          # -rR：输出 “rerun test summary info”，逐条列出 RERUN <nodeid> ——
+          # 抖动账本（ci_flake_report.py）依赖它把"哪个用例重跑过"显式化
+          # （实测 JUnit XML 不记录 rerun，只有文本日志有）。
+          python -m pytest tests/ -q --tb=line -n auto -rR --cov=app --cov-report=xml --cov-report=term-missing --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
+      # 抖动账本（2026-10-17）：把 --reruns 掩盖的不确定性显式化并留存 90 天。
+      # 只告警不阻断（真实抖动需要人看清单决定"先修/再隔离"），阈值 3。
+      - name: Flaky test ledger
+        if: always()
+        run: |
+          python scripts/ci_flake_report.py --log "$RUNNER_TEMP/pytest.log" \
+            --out flaky-report.txt --warn-reruns 3
+      - name: Upload flaky ledger
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flaky-ledger
+          path: flaky-report.txt
+          if-no-files-found: warn
+          retention-days: 90
       # 分支覆盖棘轮（2026-10-06 测试质量审计 P0-1）：
       # .coveragerc 门禁只度量语句，"语句 100%" 对条件组合（a and b 短路 / except 兜底 /
       # 嵌套 if 部分真值）零约束。本步用 --cov-branch 单独度量并把分支覆盖钉在基线上
@@ -345,6 +363,12 @@ jobs:
           python backend/scripts/check_unbounded_read.py
           python backend/scripts/check_upload_endpoints.py
           python backend/scripts/check_scheduler_registration.py
+      # 原始 SQL f-string 豁免门禁（2026-10-17）：`text(f"...")` 必须带
+      # `# nosec B608 - <理由>`。用 AST 定位完整语句范围（多行 f-string
+      # 内含 SQL 括号也不会误判）；理由写在语句范围外不算。配套单测
+      # backend/tests/unit/test_raw_sql_fstring_gate.py 钉死仓库零违规。
+      - name: Raw SQL f-string exemption guard
+        run: python scripts/check_raw_sql_fstrings.py
       - name: Version consistency check
         run: node scripts/sync-version.js --check
       # 前后端菜单对齐门禁：前端菜单 key/path 与后端 MENU_DEFINITIONS/前端路由一致
@@ -371,6 +395,24 @@ jobs:
           git fetch --no-tags --deepen=50 origin main || true
           python scripts/check_pragma_reasons.py --diff-base auto \
             --allow-missing-base --max-bare 0
+
+  # 升级排练（P0-8，2026-10-17）：用最近**发布标签**的旧代码在临时库上建出"老用户库"，
+  # 每张表播一行，再用当前代码 upgrade head，校验"表集合不丢 / 行数不变 / 完整性 ok /
+  # 落在当前 head"。安装包冒烟只证明"能装能起"，证明不了"老用户的库升级后数据还在"——
+  # 这段过去靠人工在测试机点，漏做即现场事故（打包环境没有回退路径）。
+  upgrade-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0   # 需要完整 tag 历史来定位"上一个发布版本"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: '3.11' }
+      - run: pip install -r backend/requirements.txt
+      - name: Rehearse upgrade from the latest release tag
+        working-directory: backend
+        run: python scripts/upgrade_rehearsal.py
 
   # E2E 浏览器套件（Playwright，150 用例）：真实起后端(18000)+前端(15173)，
   # 独立 e2e_test.db。此前长期无 CI 执行导致选择器/密码腐化四周无人发现
