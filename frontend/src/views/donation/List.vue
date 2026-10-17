@@ -41,7 +41,7 @@
           <el-table-column prop="name" label="名称" min-width="140" />
           <el-table-column label="类别" width="90">
             <template #default="{ row }">
-              <el-tag size="small">{{ categoryLabel(row.category) }}</el-tag>
+              <el-tag size="small">{{ categoryLabel((row as DonationItem).category) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="数量" width="110">
@@ -52,14 +52,14 @@
           </el-table-column>
           <el-table-column prop="source_unit" label="来源单位" min-width="130" />
           <el-table-column label="去向" min-width="150">
-            <template #default="{ row }">{{ destinationText(row) }}</template>
+            <template #default="{ row }">{{ destinationText(row as DonationItem) }}</template>
           </el-table-column>
           <el-table-column prop="delivery_date" label="交付日期" width="110" />
           <el-table-column prop="receiver" label="签收人" width="100" />
           <el-table-column label="操作" width="140" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-              <el-button link type="danger" @click="remove(row)">删除</el-button>
+              <el-button link type="primary" @click="openEdit(row as DonationItem)">编辑</el-button>
+              <el-button link type="danger" @click="remove(row as DonationItem)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
