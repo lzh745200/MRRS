@@ -397,3 +397,6 @@ review.json
 # 并发会话在 backend/ 下另建的探测目录，同为中间产物（此前只忽略了 .scratch/**，
 # 漏掉 backend/.scratch/** 曾导致误提交）
 backend/.scratch/
+
+# 分片测试的原始输出（排障用，不入库）
+.scratch/**/*.raw
