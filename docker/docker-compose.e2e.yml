@@ -5,6 +5,14 @@
 # 注意: Docker Compose V2 已废弃 version 字段，此处不再声明
 
 services:
+  # E2E 后端：固定管理员口令为 admin123（与 e2e-playwright 的 E2E_PASSWORD 一致）。
+  # 生产/出厂种子口令是 zgcZGC733035#（app/core/constants.py），仅测试环境用此处覆盖；
+  # 注意 must_change_password 仍为 true —— tests/e2e/test_e2e.py 的 auth_payload
+  # 会话级 fixture 会自动完成"首登改密 + 重新登录"。
+  assistance-system:
+    environment:
+      - DEFAULT_ADMIN_PASSWORD=admin123
+
   # Playwright E2E 测试运行器
   e2e-playwright:
     image: mcr.microsoft.com/playwright:v1.45.0-jammy

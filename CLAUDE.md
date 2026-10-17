@@ -110,7 +110,10 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
 
 - 前端: http://localhost:5173（开发）/ http://localhost:8000（生产）
 - API 文档: http://localhost:8000/docs
-- 默认账号: `admin` / `admin123`
+- 默认账号: `admin` / `zgcZGC733035#`（出厂口令，见 `app/core/constants.py` 的
+  `FACTORY_ADMIN_PASSWORD`；保密部署请用 `DEFAULT_ADMIN_PASSWORD` 环境变量覆盖）
+  —— **首次登录强制修改密码**（服务端 `must_change_password` 拦截，直连 API 也被拦）
+  历史文档写的 `admin123` 是过时文案，已纠正
 
 ## 关键设计约定
 

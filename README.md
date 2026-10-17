@@ -73,7 +73,8 @@ cd frontend && npm install && npm run dev
 | 前端（生产） | http://localhost:8000 |
 | API 文档 | http://localhost:8000/docs |
 
-默认账号: `admin` / `admin123`（首次登录后请修改密码）
+默认账号: `admin` / `zgcZGC733035#`（出厂口令；`DEFAULT_ADMIN_PASSWORD` 环境变量可覆盖，
+保密部署务必覆盖）—— **首次登录强制修改密码**，改密前其它 API 一律 403
 
 ## 技术栈
 

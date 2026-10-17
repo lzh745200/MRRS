@@ -64,7 +64,7 @@ echo 启动开发环境:
 echo   后端: cd backend ^&^& .venv\Scripts\python start.py
 echo   前端: cd frontend ^&^& npm run dev
 echo.
-echo 默认账号: admin / admin123
+echo 默认账号: admin / zgcZGC733035#  (出厂口令，首次登录强制改密；可用 DEFAULT_ADMIN_PASSWORD 覆盖)
 echo API 文档: http://localhost:8000/docs
 echo.
 pause

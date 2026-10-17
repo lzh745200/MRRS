@@ -32,13 +32,14 @@
   E2E_BASE_URL: 前端地址（默认 http://localhost:5173）
   E2E_API_URL:  后端地址（默认 http://localhost:8000）
   E2E_USERNAME: 登录用户名（默认 admin）
-  E2E_PASSWORD: 登录密码（默认 admin123）
+  E2E_PASSWORD: 登录密码（默认 admin123；docker E2E 已用 DEFAULT_ADMIN_PASSWORD 对齐）
+  E2E_NEW_PASSWORD: 首登强制改密后的新口令（默认 E2e#Probe2026!x）
 """
 
 import os
 import re
 import pytest
-from playwright.sync_api import Page, expect, Browser, BrowserContext
+from playwright.sync_api import Page, expect, Browser
 
 
 # ============================================================
@@ -83,18 +84,50 @@ def auth_payload() -> dict:
     /auth/login 有滑动窗口限流（5 次/60s），每个测试单独 UI 登录会触发 429。
     认证令牌存于 sessionStorage（Playwright storage_state 不捕获），
     故会话级登录一次，各测试上下文用 init script 注入 sessionStorage。
+
+    **首登强制改密**：服务端 must_change_password 会拦截除「登录 / 改自己密码」外的
+    全部接口（403）。出厂种子账号必然处于该状态，因此本 fixture 会自动完成
+    「CSRF → 登录 → 改密 → 重新登录」，任何 E2E 环境（出厂口令或 DEFAULT_ADMIN_PASSWORD）都可直接跑。
     """
     import httpx
 
-    resp = httpx.post(
-        f"{API_URL}/api/v1/auth/login",
-        json={"username": USERNAME, "password": PASSWORD},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    body = resp.json()
-    assert body.get("code") == 200 and body.get("data"), f"E2E 登录失败: {body}"
-    return body["data"]
+    new_password = os.getenv("E2E_NEW_PASSWORD", "E2e#Probe2026!x")
+
+    def _csrf(client: httpx.Client) -> str:
+        body = client.get(f"{API_URL}/api/v1/auth/csrf-token", timeout=30).json()
+        return (body.get("data") or {}).get("csrf_token") or body.get("csrf_token") or ""
+
+    def _login(client: httpx.Client, password: str) -> dict:
+        resp = client.post(
+            f"{API_URL}/api/v1/auth/login",
+            json={"username": USERNAME, "password": password},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        assert body.get("code") == 200 and body.get("data"), f"E2E 登录失败: {body}"
+        return body["data"]
+
+    with httpx.Client() as client:
+        data = _login(client, PASSWORD)
+        if data.get("must_change_password"):
+            user_id = (data.get("user") or {}).get("id")
+            assert user_id, "首登改密缺少 user.id，无法继续"
+            # 服务端要求 CSRF cookie + header 同时存在；cookie 由同一 client 自动携带。
+            csrf = _csrf(client)
+            chg = client.put(
+                f"{API_URL}/api/v1/users/{user_id}/password",
+                headers={
+                    "Authorization": f"Bearer {data['access_token']}",
+                    "X-CSRF-Token": csrf,
+                },
+                json={"old_password": PASSWORD, "new_password": new_password},
+                timeout=30,
+            )
+            chg.raise_for_status()
+            # 改密会吊销旧令牌 → 用新口令重新登录再返回
+            data = _login(client, new_password)
+        return data
 
 
 @pytest.fixture
@@ -239,10 +272,8 @@ class TestDashboard:
         page = logged_in_page
         page.wait_for_load_state("networkidle")
 
-        # 查找快捷入口（可能是卡片或按钮组）
-        quick_actions = page.locator('.quick-action, .shortcut, [class*="quick"]')
-        # 至少应有一些可交互元素
-        page.wait_for_timeout(2000)  # 等待动态内容加载
+        # 查找快捷入口（可能是卡片或按钮组）；此处仅等待动态内容加载后做后续断言
+        page.wait_for_timeout(2000)
 
 
 # ============================================================
@@ -536,7 +567,6 @@ class TestNavigationSecurity:
         # 尝试通过 JS 导航到外部地址
         # Electron 的 will-navigate 会拦截非 127.0.0.1/localhost 的导航
         # 在浏览器环境中验证不会跳转到外部地址
-        current_url = page.url
         page.evaluate('window.location.href = "https://evil.example.com"')
         page.wait_for_timeout(2000)
 
@@ -608,8 +638,8 @@ class TestDataIntegrity:
             f"{API_URL}/api/v1/auth/login",
             data={"username": USERNAME, "password": PASSWORD},
         )
-        token = login_resp.json().get("access_token") or \
-                login_resp.json().get("data", {}).get("access_token", "")
+        body = login_resp.json()
+        token = body.get("access_token") or body.get("data", {}).get("access_token", "")
         headers = {"Authorization": f"Bearer {token}"}
 
         # 测试帮扶村列表
