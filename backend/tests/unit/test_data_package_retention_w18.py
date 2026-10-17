@@ -87,3 +87,78 @@ class TestUploadDirSize:
 
         svc = DataPackageService(db=MagicMock(), upload_dir=str(tmp_path / "absent"))
         assert svc.get_upload_dir_size() == 0
+
+class TestDataPackageCleanupJob:
+    """W18 P1-6：定时作业体（backup_scheduler.data_package_cleanup_job）。"""
+
+    def test_job_calls_cleanup_with_configured_days(self, monkeypatch):
+        import asyncio
+        import contextlib
+        from unittest.mock import MagicMock
+
+        import app.services.backup_scheduler as sched
+        from app.services.data_package_service import DataPackageService
+
+        seen = {}
+
+        def _clean(self, days):
+            seen["days"] = days
+            return 2
+
+        monkeypatch.setattr(sched, "get_db_context", lambda: contextlib.nullcontext(MagicMock()))
+        monkeypatch.setattr(sched, "get_int_config", lambda *a, **k: 5)
+        monkeypatch.setattr(DataPackageService, "cleanup_exported_files", _clean)
+
+        asyncio.run(sched.data_package_cleanup_job())
+        assert seen["days"] == 5
+
+    def test_job_swallows_cleanup_errors(self, monkeypatch):
+        """清理异常不得冒泡（否则拖垮整轮调度）。"""
+        import asyncio
+        import contextlib
+        from unittest.mock import MagicMock
+
+        import app.services.backup_scheduler as sched
+        from app.services.data_package_service import DataPackageService
+
+        monkeypatch.setattr(sched, "get_db_context", lambda: contextlib.nullcontext(MagicMock()))
+        monkeypatch.setattr(sched, "get_int_config", lambda *a, **k: 7)
+
+        def _boom(self, days):
+            raise RuntimeError("disk gone")
+
+        monkeypatch.setattr(DataPackageService, "cleanup_exported_files", _boom)
+        asyncio.run(sched.data_package_cleanup_job())  # 不应抛出
+
+
+class TestRetentionEdgeCases:
+    def test_cleanup_noop_when_dir_unreadable(self, service, monkeypatch):
+        monkeypatch.setattr(
+            "os.listdir", lambda _p: (_ for _ in ()).throw(OSError("denied"))
+        )
+        assert service.cleanup_exported_files(7) == 0
+
+    def test_size_zero_when_dir_unreadable(self, service, monkeypatch):
+        monkeypatch.setattr(
+            "os.listdir", lambda _p: (_ for _ in ()).throw(OSError("denied"))
+        )
+        assert service.get_upload_dir_size() == 0
+
+    def test_size_skips_subdirectory(self, service, tmp_path):
+        """子目录不计入占用（覆盖 isfile=False 的跳过分支）。"""
+        (tmp_path / "ok.zip").write_bytes(b"12345")
+        (tmp_path / "nested").mkdir()
+        assert service.get_upload_dir_size() == 5
+
+    def test_size_skips_unstattable_entry(self, service, tmp_path, monkeypatch):
+        (tmp_path / "ok.zip").write_bytes(b"123")
+        (tmp_path / "bad.zip").write_bytes(b"456")
+        real_getsize = os.path.getsize
+
+        def _flaky_getsize(path):
+            if str(path).endswith("bad.zip"):
+                raise OSError("locked")
+            return real_getsize(path)
+
+        monkeypatch.setattr(os.path, "getsize", _flaky_getsize)
+        assert service.get_upload_dir_size() == 3

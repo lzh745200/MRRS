@@ -199,7 +199,7 @@ def _query_fund_stats(db: Session, data_scope: OrgScopeFilter) -> dict:
         # 改为按 Fund.organization_id 判域（Fund 自身有组织列）；无归属的经费
         # 仅全局管理员可见（data_scope 全量时不会进入本分支）。
         fund_scope_query = data_scope.filter_by_org_ids(
-            db.query(Fund.id),
+            db.query(Fund.id).filter(Fund.is_active == True),  # noqa: E712
             Fund.organization_id,
             created_by_column=Fund.created_by,
         )
@@ -649,7 +649,7 @@ async def get_yearly_trends(
         if not data_scope.has_full_access():
             # W18 P1-2：未关联村的经费同样按 Fund.organization_id 判域
             fund_scope_query = data_scope.filter_by_org_ids(
-                db.query(Fund.id),
+                db.query(Fund.id).filter(Fund.is_active == True),  # noqa: E712
                 Fund.organization_id,
                 created_by_column=Fund.created_by,
             )

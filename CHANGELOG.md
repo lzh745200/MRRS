@@ -5,6 +5,61 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.19] - 2026-10-17 — 🧩 功能补全 + 数据完整性修复（W17/W18 批次）
+
+> 用例口径：后端 **13,057** / 前端 **6,409**（303 文件，本地全量实测）；
+> 后端行+分支覆盖率 100%（`backend/.coveragerc` fail_under=100）；flake8 / vue-tsc / eslint 0。
+> 迁移 50 个版本、单 head（`donation_item_001`）。
+
+### Added
+
+- **提醒中心处置闭环**：`POST /reminders/{id}/handle|ignore|snooze|reopen`（仅提醒接收人本人，
+  越权/不存在一律 404），新表 `reminder_dispositions`（迁移 `reminder_disp_001`）；
+  列表补 `state/note/snooze_until/link/entity_id` 与 `stats`（待处理/已处理/已忽略/已延期），
+  前端提醒中心支持逐条处理、忽略理由、延期天数、重新打开与"前往处理"。
+- **结对帮扶与走访台账**：`pairing_records` + `visit_records`（迁移 `pairing_001`），
+  主体（单位/支部/干部个人）↔ 对象（村/学校/学生）结对 + 走访明细（时间、人员、事项、附件、
+  可选关联项目/经费/物资）；前端 `views/pairing` 列表与详情、村/学校详情深链入口
+  （`/pairings?partner_type=village|school&partner_id=N`）。
+- **捐赠物资台账（后端）**：`donation_items`（迁移 `donation_item_001`）+ 服务 + API
+  （`/api/v1/donation-items`，envelope / 数据域 / 软删 / 审计）。**前端页面尚未建成**，
+  故侧边栏不放入口（避免点击 404）；待 UI 落地后按 `MENU_DEFINITIONS` 说明补回。
+- **指标字典**（`CONTEXT.md`）：总人口/总户数/人均收入/经费合计/报表村数等逐条登记
+  「定义 + 数据源 + 唯一实现 + 回归用例」，防止同一指标再出现两套口径。
+- **两道防腐门禁**（已接入 CI `static-analysis` 与 `make test-local`）：
+  `scripts/check_unused_scope_params.py`（AST 扫"作用域形参收下却从未使用"）、
+  `scripts/check_userdata_path_consistency.py`（Electron userData / NSIS 钩子 / paths.py 三处口径防漂移）。
+- **启动预检**（`app/startup/preflight.py`）：磁盘余量、数据库可写性、系统时钟落后于数据、
+  PII 加密密钥探针；只告警不阻断，启动线程内执行。
+- **诊断包业务段**：`/system/diagnostics` 新增 `business`（备份状态 / 调度器 / 后台任务失败 /
+  数据包占用），把"昨晚备份成功了吗、提醒为什么没发、导入为什么失败"变成可导出的事实。
+- **数据包导出保留策略**：每日 04:10 清理超过保留期（默认 7 天）的导出文件，避免长期运行撑满磁盘。
+
+### Fixed
+
+- **总人口两套口径（W18 P0-1）**：工作台取「全库最大年份」求和，统计页取「每村各自最新年」，
+  实测同一数据差 500 人（两个页面数字打架）。统一为每村最新年，并加一致性守护测试。
+- **`data_scope` 形参收下不用（W18 P0-2）**：`_avg_per_capita_income` 收了数据范围却从未参与过滤，
+  部门级管理员看到的是全库人均收入（越权且无告警）。已接线；无 scope 时 fail-closed 返回 0。
+- **报表总数封顶 100（W18 P1-1）**：`total_villages` 原用明细 `limit(100)` 后的 `len()`，改为独立
+  `count()` 并新增 `villages_truncated` 如实标注。
+- **未关联村经费越权（W18 P1-2）**：`village_id IS NULL` 的经费原先无条件计入所有用户合计，
+  改为按 `Fund.organization_id` 判域（无归属仅全局管理员可见）。
+- **提醒列表恒空**：`GET /reminders` 调用 `list_reminders()` 未传 `user_id`，编排器 fail-closed
+  返回空列表 —— 现已按当前登录人过滤。
+- **跨机数据包导入覆写本机记录（W18-D1）**：主键碰撞时不再 `ON CONFLICT DO UPDATE` 整体覆写，
+  改按业务键判定：同记录按 overwrite 更新/跳过，异记录换新 id 插入并登记映射。
+- **导入包内 `org_code` 覆盖目标组织（W18-D3）**：部门级管理员可把数据写进别的部门；
+  现包内组织仅作提示，最终必须落在调用者有权写入的组织集合内。
+- **全量覆盖导入误物理删除（W18-D2）**：四处物理删除改软删除，不再级联抹掉项目/经费。
+- **回收站单条 restore/purge 缺数据域守卫（W18-D6）**：与批量端点同口径接入。
+- **捐赠菜单指向不存在路由**：侧边栏曾挂 `/donations` 入口但页面/路由未建（点击必 404，
+  且被菜单对齐门禁判为无路由），已摘除并记录待办。
+- **诊断包/健康检查信息泄露收口**：数据库绝对路径、表名清单、异常原文不再出站（只留类名与聚合值）。
+
+### Changed
+
+- 版本 1.12.19（根 `package.json` 单源，15 个文件经 `sync-version.js --write` 同步）。
 ## [1.12.18] - 2026-10-17 — 🎯 门禁说真话 + 现场可自证（P0 批次）
 
 > 用例口径：后端 **12,795** / 前端 **6,363**（本地全量实测）；后端行+分支覆盖率 100%
