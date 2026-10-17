@@ -393,3 +393,7 @@ review.json
 
 # PPT 版本口径统一脚本的一次性备份
 .scratch/**/ppt-backup-*/
+
+# 并发会话在 backend/ 下另建的探测目录，同为中间产物（此前只忽略了 .scratch/**，
+# 漏掉 backend/.scratch/** 曾导致误提交）
+backend/.scratch/
