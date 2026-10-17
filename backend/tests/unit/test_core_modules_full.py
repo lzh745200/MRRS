@@ -86,6 +86,43 @@ class TestCoreSecurity:
         assert isinstance(password, str)
         assert len(password) > 0
 
+    def test_generate_password_retries_until_complex(self, monkeypatch):
+        """首次抽到的密码不满足复杂度要求时必须回绕重抽，直到满足为止。
+
+        守护 `app/core/security.py` 的 `182->178`（`while True` 的回绕弧）。
+        该分支此前**只靠随机命中**：一次抽到"无大写/无数字/无特殊字符"的概率虽低
+        但非零，于是 `.coveragerc` 的 `fail_under=100` 分支门禁变成不确定的 ——
+        CI 与本地串行的结论会不一致（2026-10-17 实测：CI 100.00%，本地 99.99%）。
+        这里用可控的 `secrets.choice` 替身**确定性地**走一遍回绕路径。
+        """
+        import app.core.security as sec
+
+        calls = {"n": 0}
+
+        def fake_choice(seq):
+            i = calls["n"]
+            calls["n"] += 1
+            if i < 12:          # 第 1 轮（默认 length=12）全 'a'：缺大写/数字/特殊字符
+                return "a"
+            return "Aa1!"[(i - 12) % 4]   # 第 2 轮起循环四类字符，必然满足全部要求
+
+        monkeypatch.setattr(sec.secrets, "choice", fake_choice)
+
+        password = sec.generate_password()
+
+        # 必须真的回绕过：第 2 轮至少抽了一次才返回
+        assert calls["n"] >= 13, "未发生回绕，该用例没有守护到 182->178"
+        assert len(password) == 12
+        assert any(c.isupper() for c in password)
+        assert any(c.islower() for c in password)
+        assert any(c.isdigit() for c in password)
+        assert any(not c.isalnum() for c in password)
+
+    def test_generate_password_respects_min_length(self):
+        """length < 8 时被抬到下限 8（不得生成过短密码）。"""
+        from app.core.security import generate_password
+        assert len(generate_password(length=4)) == 8
+
     def test_get_client_ip(self):
         """测试获取客户端IP"""
         from app.core.security import get_client_ip
