@@ -36,9 +36,15 @@
 
 - **100% 分支门禁的随机失败**：`generate_password` 的"重试直到满足复杂度"分支概率性未命中，
   门禁**随机变红**（会训练团队忽略红线）；改为可控 `secrets.choice` 替身的确定性用例钉死。
-- **测试连接泄漏**：`tests/conftest.py` 的 `client` fixture 只 `close()` 会话、未 `dispose()`
-  引擎（`StaticPool` 会一直持着内存连接），每次使用都留下一条
-  `ResourceWarning: unclosed database` 并按 GC 时机**随机归因**到无关用例；修复后实测 18 → 0。
+- **一项"修复"被 CI 证伪后回退（重要教训）**：曾给 `tests/conftest.py` 的 `client` fixture 加
+  `engine.dispose()`（`StaticPool` 一直持着内存连接，只 `close()` 会话会留下每条一次
+  `ResourceWarning: unclosed database`）。但 dispose 会把该连接**提前**关掉，而用例期间模块级
+  `SessionLocal` 正指向它 —— 运行时才解析 `SessionLocal` 的后台写线程（`audit-log-flusher`
+  每 5s 一次、`immediate-backup` 等）可能仍在写：sqlite3 是 C 扩展，use-after-free 不是
+  Python 异常而是**进程级 SIGSEGV**。实测发版门禁（Build Windows 的 smoke-test 全量跑）一次
+  崩掉两个 xdist worker，栈均在 `_flusher_loop → _persist_batch → safe_commit`；worker 的
+  覆盖率数据随进程整体丢失 → 覆盖率假性 83.45% → 门禁误红。已回退为**不 dispose**（连接交给
+  GC），代价仅是测试期告警噪音；`conftest.py` 原地留有详细注释防止重犯。
 - **分片运行的信号噪音**：逐片加 `--cov-fail-under=0`（此前每片都因"片内覆盖率不满 100%"
   返回 exit 2，"这片的测试到底过没过"要人肉分辨）；真实门禁仍由末尾 `coverage report`
   按 `.coveragerc` 承载（命令行不重复声明阈值）。

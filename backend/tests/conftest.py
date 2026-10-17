@@ -503,11 +503,20 @@ def client():
             _db_module.engine = _original_engine
             _db_module.SessionLocal = _original_session_local
             db.close()
-            # StaticPool 会一直持有那条内存连接：只 close 会话不 dispose 引擎，
-            # 连接要等引擎被 GC 时才由 sqlite3.Connection.__del__ 关闭 —— 每次使用
-            # 本 fixture 的用例都留下一条 unclosed database 告警（2026-10-17 分片
-            # 复跑实测 24 条），并且把告警"随机"归因到触发 GC 的那个用例头上。
-            engine.dispose()
+            # 刻意**不 dispose** 本用例的内存引擎（2026-10-17 曾短暂加上，被 CI 证伪后
+            # 回退，勿再引入）。`engine.dispose()` 会把这条 StaticPool 连接**提前**关掉，
+            # 而本 fixture 在用例期间把模块级 `app.core.database.SessionLocal` 指向了它
+            # —— 运行时才解析 `SessionLocal` 的后台写线程（审计兜底 `audit-log-flusher`
+            # 每 5s 一次；`immediate-backup`；`approval-reminder`；`async-export-villages`
+            # 等）可能正持有该连接在写。sqlite3 是 C 扩展：连接被提前关闭而线程仍在写
+            # = use-after-free，不是 Python 异常而是**进程级 SIGSEGV**。
+            # 实测（Build Windows 的 smoke-test，全量 pytest + xdist + --cov）：一次跑崩
+            # 两个 worker，栈均为 `_flusher_loop → _persist_batch → safe_commit`；
+            # worker 崩掉后其覆盖率数据整体丢失 → 覆盖率假性 83.45% → 发版门禁误红。
+            # 逐个 join 写入线程也不成立：上述线程有的无名、有的按需派生，无法穷举。
+            # 代价仅是连接留到 GC：每次使用本 fixture 留一条 `unclosed database`
+            # ResourceWarning（纯测试期噪音，不影响门禁与产物）。要彻底消除，需先让
+            # 后台线程不再通过模块级 SessionLocal 取会话 —— 属测试基建重构，另行立项。
     except Exception:
         # 失败必须显式暴露：静默吞掉会让 fixture 返回 None, 所有消费方
         # 测试被悄悄 skip, 呈现"绿但什么都没测"的假象（覆盖率门禁只能
