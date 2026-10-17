@@ -5,6 +5,31 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.20] - 2026-10-17 — 🔒 安装器卸载口径修正（W19 实机实证）
+
+> 本版为 v1.12.19 的安装器补丁：**应用功能与 v1.12.19 完全一致**，仅修正卸载删除的用户数据目录。
+> 用例口径与 v1.12.19 相同（后端 13,067 / 前端 6,409），覆盖率 100%。
+
+### Fixed
+
+- **卸载不删真实用户数据（隐私泄露，实机实证）**：三处错误叠加 ——
+  1) 目录名：Electron `app.name` 取**根** `package.json` 的 `productName`，根层没有才取 `name`；
+     本仓库只有 `build.productName`（仅影响安装包/exe 命名）→ 真实 userData 为
+     `%APPDATA%\Assistance-Management-Information-System`，而钩子按"productName 优先"
+     写成 `%APPDATA%\帮扶管理系统`（该目录根本不存在）；
+  2) 变量：perMachine 安装的卸载器处于 all-users 上下文，`$APPDATA` 指向 `C:\ProgramData`
+     （实测注册表被写成 `C:\ProgramData\\帮扶管理系统`）→ 用户目录必须用 `$PROFILE` 拼；
+  3) 转义：NSIS 反斜杠是**字面量**（makensis 实测 `"C:\A"` → 两个反斜杠），历史注释"必须写 `\\`"
+     是误判，导致注册表路径出现双反斜杠。
+
+  修复：安装期以 `$PROFILE\AppData\Roaming\<app.name>` 写入 `UserDataPath`；卸载期读回删除，
+  并枚举 `$PROFILE\..\*` 覆盖全部 Windows 账号；兜底清理 `%LOCALAPPDATA%\bumofu-assistance`
+  与历史误判目录（`ProgramData\帮扶管理系统` 等）。门禁 `check_userdata_path_consistency`
+  改为 Electron 真实语义，并强制使用 `$PROFILE`、必须枚举多用户、必须清兜底目录。
+
+  实机验证：安装后 `UserDataPath` = `C:\Users\<user>\AppData\Roaming\Assistance-Management-Information-System`
+  （单反斜杠、路径存在）；`/health` 返回 `version=1.12.20`、`git_hash`=本提交；静默卸载保留数据
+  （`/SD IDNO` 设计），程序目录清空、卸载项移除。
 ## [1.12.19] - 2026-10-17 — 🧩 功能补全 + 数据完整性修复（W17/W18 批次）
 
 > 用例口径：后端 **13,067** / 前端 **6,409**（303 文件，本地全量实测）；
