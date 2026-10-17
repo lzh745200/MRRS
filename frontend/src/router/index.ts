@@ -393,6 +393,13 @@ export const routes: RouteRecordRaw[] = [
         component: () => retryImport(() => import('@/views/pairing/List.vue')),
         meta: { menuKey: 'pairing', title: '结对帮扶' },
       },
+      // ── 捐赠物资台账（w17-003）──
+      {
+        path: '/donations',
+        name: 'DonationList',
+        component: () => retryImport(() => import('@/views/donation/List.vue')),
+        meta: { menuKey: 'donation', title: '捐赠物资' },
+      },
       // ── 组织机构 ──
       {
         path: '/organizations',

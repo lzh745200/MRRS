@@ -8,8 +8,9 @@ describe('config/menu-config', () => {
     expect(MENU_CONFIG.length).toBeGreaterThan(0)
   })
 
-  it('顶层菜单项数量为 18', () => {
-    expect(MENU_CONFIG.length).toBe(18)
+  it('顶层菜单项数量为 19', () => {
+    // w17-002 结对帮扶（18）→ w17-003 捐赠物资（19）
+    expect(MENU_CONFIG.length).toBe(19)
   })
 
   it('顶层 key 唯一', () => {
@@ -33,9 +34,10 @@ describe('config/menu-config', () => {
   it('getAllMenuKeys 返回全部 key 且无重复', () => {
     const keys = getAllMenuKeys()
     expect(new Set(keys).size).toBe(keys.length)
-    expect(keys).toHaveLength(55)
+    expect(keys).toHaveLength(56)
     expect(keys).not.toContain('user-permissions') // E2：已移除用户权限管理菜单
     expect(keys).toContain('system-permission-packs')
+    expect(keys).toContain('donation') // w17-003
     expect(keys).toContain('dashboard')
     expect(keys).toContain('system-overview')
     expect(keys).toContain('batch-import')

@@ -524,13 +524,16 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "order": 117,
         "roles": None,
     },
-    # 注：捐赠物资台账的菜单项暂不收录（原计划 key 为 donation、path 为 /donations、
-    # order 118、label 捐赠物资、icon Box、roles None）。原因：后端（模型/迁移/服务/API）
-    # 已完整落地且有测试，但前端台账页尚未建设 —— 见
-    # .scratch/w17-feature-completion/003-donation-material-ledger.md 的待办清单。
-    # 菜单对齐门禁（scripts/check_menu_alignment.py 规则 3）对后端 path 是零豁免全量校验：
-    # 收录一个前端无路由的 path，会让管理员点击后 404（历史事故：users-orgs）。
-    # 待前端页建成、路由 /donations 注册后，把该项补回 MENU_DEFINITIONS 即可。
+    {
+        # w17-003 捐赠物资台账：前端 views/donation/List.vue + /donations 路由已落地，
+        # 菜单对齐门禁（后端 path 零豁免）可满足。
+        "key": "donation",
+        "label": "捐赠物资",
+        "icon": "Box",
+        "path": "/donations",
+        "order": 118,
+        "roles": None,
+    },
 ]
 
 

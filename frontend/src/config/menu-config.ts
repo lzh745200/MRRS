@@ -349,6 +349,13 @@ export const MENU_CONFIG: MenuItem[] = [
     icon: 'Connection',
     order: 18,
   },
+  {
+    key: 'donation',
+    label: '捐赠物资',
+    path: '/donations',
+    icon: 'Box',
+    order: 19,
+  },
 ]
 
 export function getAllMenuKeys(): string[] {

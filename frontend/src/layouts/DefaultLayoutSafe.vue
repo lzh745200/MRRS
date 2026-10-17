@@ -58,6 +58,7 @@
               menuStore.canAccessMenu('projects') ||
               menuStore.canAccessMenu('schools') ||
               menuStore.canAccessMenu('pairing') ||
+              menuStore.canAccessMenu('donation') ||
               menuStore.canAccessMenu('policies') ||
               menuStore.canAccessMenu('funds-admin') ||
               menuStore.canAccessMenu('funds-user')
@@ -96,6 +97,14 @@
             <el-icon><Connection /></el-icon>
             <template #title>
               <span class="menu-title-text">结对帮扶</span>
+            </template>
+          </el-menu-item>
+
+          <!-- 捐赠物资：实物捐赠台账（图书/设备/物资，w17-003） -->
+          <el-menu-item v-if="menuStore.canAccessMenu('donation')" index="/donations">
+            <el-icon><Box /></el-icon>
+            <template #title>
+              <span class="menu-title-text">捐赠物资</span>
             </template>
           </el-menu-item>
 
@@ -480,6 +489,7 @@ import {
   Stamp,
   Checked,
   Connection,
+  Box,
   OfficeBuilding,
   Message,
   Bell,

@@ -140,6 +140,13 @@ class TestSchedulerTimerLifecycle:
     def _start(self, scheduler):
         import app.services.backup_scheduler as bs
 
+        # W19：同一 xdist worker 内其它用例可能已启动/残留调度器状态，
+        # 若 _scheduler_started 仍为 True，start 会早退 → 本用例偶发拿到 0 个
+        # Timer（CI 抖动账本里出现过 rerun）。此处强制复位，保证确定性。
+        bs._scheduler_started = False
+        _stopping.clear()
+        _timers.clear()
+        FakeTimer.registry = []
         with patch.object(bs.threading, "Timer", FakeTimer):
             bs.start_backup_scheduler()
         # start 内部用 patched Timer 创建；返回按任务名索引的替身
