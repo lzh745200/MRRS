@@ -12,8 +12,8 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **12,795 passed**（647 文件）, 0 失败（含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **6,363 passed**（301 文件）, 0 失败 |
+| 后端测试 | **13,067 passed**（664 文件）, 0 失败（含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **6,409 passed**（303 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -31,8 +31,8 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-17（v1.12.18）— 后端 12,795 用例（647 文件）+ 行/分支覆盖率 100.00%（40546 语句 / 9880 分支）、前端 6,363 用例（301 文件）全部通过；
-> flake8 0 / 6 项棘轮门禁 NEW=0 / vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（47 版本）
+> **上次全量验证**: 2026-10-17（v1.12.19）— 后端 13,067 用例（664 文件）+ 行/分支覆盖率 100.00%（41503 语句 / 10118 分支）、前端 6,409 用例（303 文件）全部通过；
+> flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（50 版本）
 
 ## 快速开始
 
@@ -103,10 +103,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端单元测试 | pytest | 12,795（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端单元测试 | pytest | 13,067（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,363（301 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 6,409（303 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 12 流程 | Login/Dashboard/Projects/Approval/Funds |
 | 性能测试 | Locust | 配置可用 | 负载测试 |
 | 属性测试 | fast-check | 多组 | 组件属性验证 |
