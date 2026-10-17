@@ -149,7 +149,7 @@ class AnalyticsService:
                     MAX(transition_fund_military_total + transition_fund_local_total) as max_investment
                 FROM supported_villages
                 WHERE is_active = 1 AND {village_scope}
-            """))
+            """))  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
             investment_row = investment_result.fetchone()
 
             # 人口统计
@@ -166,7 +166,7 @@ class AnalyticsService:
                     SELECT MAX(year) FROM village_population
                 )
                   AND sv.id IN ({self._scoped_id_sql(db, SupportedVillage, current_user)})
-            """))
+            """))  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
             population_row = population_result.fetchone()
 
             # 收入统计
@@ -180,7 +180,7 @@ class AnalyticsService:
                     SELECT MAX(year) FROM village_income
                 )
                   AND sv.id IN ({self._scoped_id_sql(db, SupportedVillage, current_user)})
-            """))
+            """))  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
             income_row = income_result.fetchone()
 
             # 基础设施投资分类
@@ -210,7 +210,7 @@ class AnalyticsService:
                       AND sv3.id IN ({infra_scope})
                 ) infra
                 GROUP BY investment_category
-            """))
+            """))  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
             infra_data = [{"category": row[0], "amount": float(row[1]) if row[1] else 0} for row in infra_result]
 
             return {
@@ -264,7 +264,7 @@ class AnalyticsService:
                   AND pop.year BETWEEN :start_year AND :end_year
                 GROUP BY pop.year
                 ORDER BY pop.year
-            """),
+            """),  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
                 {"start_year": start_year, "end_year": end_year},
             )
 
@@ -314,7 +314,7 @@ class AnalyticsService:
                     ) as demo_villages
                 FROM supported_villages
                 WHERE is_active = 1 AND id IN ({village_scope})
-            """))
+            """))  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
             village_row = village_result.fetchone()
 
             # 各类帮扶投资（子表经 supported_village_id 收敛到数据域内帮扶村）
@@ -346,7 +346,7 @@ class AnalyticsService:
                 FROM education_support
                 WHERE year = (SELECT MAX(year) FROM education_support)
                   AND supported_village_id IN ({village_scope})
-            """))
+            """))  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
             categories = [{"category": row[0], "amount": float(row[1]) if row[1] else 0} for row in category_result]
 
             return {
@@ -385,7 +385,7 @@ class AnalyticsService:
                       AND vp_pop.year = (SELECT MAX(year) FROM village_population)
                     GROUP BY province
                     ORDER BY total_investment DESC
-                """))
+                """))  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
             elif compare_type == "tier":
                 result = db.execute(text(f"""
                     SELECT
@@ -400,7 +400,7 @@ class AnalyticsService:
                       AND vi.year = (SELECT MAX(year) FROM village_income)
                     GROUP BY vp.is_revitalization_tier
                     ORDER BY avg_income DESC
-                """))
+                """))  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
             else:
                 return {"comparison": [], "compare_type": compare_type}
 

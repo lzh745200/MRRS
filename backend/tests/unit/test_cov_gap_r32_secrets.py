@@ -121,6 +121,42 @@ class TestInitDefaultKeySkipsBadVersionEntries:
         assert entry["revoked_at"] == 3.0
 
 
+class TestInitDefaultKeyEnvIntentWins:
+    """ENCRYPTION_KEY 显式指定 + 密钥库存在（M23 的 132->136 分支）。
+
+    语义：环境变量显式指定默认密钥时**操作者意图优先**（default 不被库里的
+    default_key 覆盖），但历史版本仍要加载 —— 否则轮换过的版本在重启后照样丢失。
+    该分支此前无用例触达：CI（`-n auto` 各 worker 进程环境隔离）里覆盖率 99.55%，
+    本地串行跑时靠前面用例遗留的 `ENCRYPTION_KEY` 环境变量"顺带"覆盖，属假绿。
+    """
+
+    def test_explicit_env_key_wins_but_store_versions_still_load(self, tmp_path, monkeypatch):
+        path = _keys_path(tmp_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "default_key": "store-default-material",
+                    "versions": [
+                        {"version_id": "v7", "key": "v7-material"},
+                        {"version_id": "v8", "key": "v8-material"},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("ENCRYPTION_KEY", "explicit-env-key")
+
+        mgr = SecretsManager()
+
+        # 操作者意图优先：库里的 default_key 不得覆盖显式指定的环境变量
+        assert mgr._secrets["default"] == "explicit-env-key"
+        # 历史版本仍要加载（M23 的核心目的：轮换过的版本重启后可解密）
+        assert mgr._secrets["v7"] == "v7-material"
+        assert mgr._secrets["v8"] == "v8-material"
+        assert {v["version_id"] for v in mgr._key_versions} == {"v7", "v8"}
+
+
 class TestCleanupKeepsRecentRevokedKey:
     def test_recently_revoked_key_is_kept(self):
         """已撤销但未超保留期的版本 → 不移除，循环回退（310->304）。"""
