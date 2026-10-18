@@ -144,3 +144,13 @@ $ python scripts/ppt_overflow_check.py
 - 前端全量：316 文件 / 6,707 用例全通过，12 组 glob 四指标 100%（vitest exit 0）。
 - `scripts/check_menu_alignment.py`：A=0/B=0/C=0/D=0/E=0，[OK] 6 板块 / 99 key / 85 path 全对齐。
 - `node scripts/sync-version.js --check` 通过；17 项静态门禁全 PASS。
+
+## 构建产物实测（Lead，2026-10-18 v1.13.0）
+
+- 后端 PyInstaller（onedir）：`backend/dist/assistance-backend/assistance-backend.exe` 32.6MB；
+  build info = `version=1.13.0 / git_hash=0523774 / builder=ci`；
+  `verify_package_no_tests` 与 `verify_build_info` 均 OK。
+- 前端构建：`frontend/dist` 653 个文件，`version.json` = 1.13.0。
+- Windows 安装包：`dist/electron/MRRS-Setup-1.13.0-x64.exe`（204 MB）。
+  SHA256：`e75f88d5b9fb510fc0ec408f9392f04aa7c68ecc9a31df2700cabbf01a09ae65`。
+- 发布提交：`0523774`（origin/main）；tag `v1.13.0` 已推送（触发 Actions Windows x64 + ARM64 构建）。
