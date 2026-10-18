@@ -70,16 +70,27 @@ def _create_pack(client, name="pack-a", menu_keys=("dashboard", "villages"), **k
 
 
 def _accessible_keys(client, user):
-    """以指定用户身份请求 /menus/accessible，返回 (body, 顶层菜单key集合)"""
+    """以指定用户身份请求 /menus/accessible，返回 (body, 顶层菜单 key 集合)
+
+    W21 单一菜单源 v2：顶层 key = sections 中的 items + dashboard（固定渲染不入 sections）。
+    """
     _set_auth(client, user)
     resp = client.get("/api/v1/menus/accessible")
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    return body, {m["key"] for m in body["data"]}
+    data = body["data"]
+    assert data["version"] == 2
+    top_keys = set()
+    if "dashboard" in data["flat_keys"]:
+        top_keys.add("dashboard")
+    for section in data["sections"]:
+        for item in section["items"]:
+            top_keys.add(item["key"])
+    return body, top_keys
 
 
-# 公开模块中的顶层菜单 key（子节点随父级出现在树内，不参与顶层集合比较）
-_PUBLIC_TOP_KEYS = {"policies", "helpData", "analytics"}
+# 公开模块中的顶层菜单 key（helpData/data-analysis 为历史兼容 key，不入 sections）
+_PUBLIC_TOP_KEYS = {"policies", "analytics"}
 
 
 # ── fixtures ─────────────────────────────────────────────────────────
@@ -399,21 +410,20 @@ class TestMenuResolution:
         body, keys = _accessible_keys(client, u1)
         assert body["source"] == "role"
         assert "dashboard" in keys
-        assert "system" not in keys  # 系统管理组仅管理员可见
+        assert "system-console-org" not in keys  # 系统管理 console 仅管理员可见
 
-        # 菜单树 = 角色默认过滤结果 + 公开模块强制并入（2026-08-15）
+        # 菜单树 = 角色默认过滤结果 + 公开模块强制并入（2026-08-15；v2 单一菜单源）
         from app.api.v1.menus import (
-            MENU_DEFINITIONS,
             _PUBLIC_ACCESS_KEYS,
-            _filter_menu_tree,
+            _build_flat_keys,
+            _build_sections,
             _get_role_default_menu_keys,
         )
 
-        expected = _filter_menu_tree(
-            MENU_DEFINITIONS,
-            set(_get_role_default_menu_keys("user")) | _PUBLIC_ACCESS_KEYS,
-        )
-        assert body["data"] == expected
+        allowed = set(_get_role_default_menu_keys("user")) | _PUBLIC_ACCESS_KEYS
+        expected_sections = _build_sections(allowed)
+        assert body["data"]["sections"] == expected_sections
+        assert body["data"]["flat_keys"] == _build_flat_keys(expected_sections, allowed)
 
 
 # =====================================================================

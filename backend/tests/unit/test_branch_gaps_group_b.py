@@ -522,18 +522,16 @@ class TestRuralWorksBranchGaps:
 # menus.py
 # ===========================================================================
 class TestMenusBranchGaps:
-    def test_filter_menu_tree_children_all_filtered_out(self):
-        """609->611：子节点全部无权限 → 父节点不带 children 键。"""
-        from app.api.v1.menus import _filter_menu_tree
+    def test_filter_entry_group_children_all_filtered_out(self):
+        """v2 单一菜单源：group 的子节点全部无权限 → 返回 None（不出现空分组）。"""
+        from app.api.v1.menus import _filter_entry
 
-        tree = [
-            {"key": "parent", "title": "父级",
-             "children": [{"key": "child1"}, {"key": "child2"}]},
-        ]
+        entry = {
+            "key": "parent", "label": "父级", "kind": "group", "roles": None, "order": 1,
+            "children": [{"key": "child1"}, {"key": "child2"}],
+        }
 
-        result = _filter_menu_tree(tree, allowed_keys={"parent"})
-
-        assert result == [{"key": "parent", "title": "父级"}]  # 空 children 被剔除
+        assert _filter_entry(entry, allowed_keys={"parent"}) is None  # 空 children 被剔除
 
 
 # ===========================================================================

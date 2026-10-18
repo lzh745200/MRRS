@@ -99,6 +99,21 @@ vi.mock('@/views/analytics/supported-villages/Detail.vue', () => ({
   default: { name: 'SupportedVillageDetailCoverageStub' },
 }))
 
+// 系统管理聚合页（v1.13.0 单一菜单源）：专属测试
+// tests/unit/views/system/SystemConsole.test.ts 深挂载全部分支；本文件执行全部懒加载
+// 组件函数时只验证模块可加载性，桩替换避免同一 .vue 出现第二个执行者导致 fnMap 合并错位。
+vi.mock('@/views/system/console/SystemConsole.vue', () => ({
+  default: { name: 'SystemConsoleCoverageStub' },
+}))
+
+// 布局 DefaultLayoutSafe.vue 同理：唯一执行者是
+// tests/unit/layouts/DefaultLayoutSafe.test.ts（渲染全分支 + 其静态 import 的
+// MenuSearchDialog/MobileBottomNav 在 layout 测试内以 vi.mock 桩掉）。本文件遍历
+// 懒加载组件函数会真实 import 布局模块，必须桩替换否则产生第二个执行者。
+vi.mock('@/layouts/DefaultLayoutSafe.vue', () => ({
+  default: { name: 'DefaultLayoutSafeCoverageStub' },
+}))
+
 import router, { routes } from '@/router'
 
 // ==================== Helpers ====================

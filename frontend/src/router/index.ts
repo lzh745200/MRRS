@@ -43,7 +43,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/bigscreen',
     name: 'BigScreen',
     component: () => retryImport(() => import('@/views/bigscreen/BigScreen.vue')),
-    meta: { title: '帮扶成效大屏' },
+    meta: { menuKey: 'bigscreen', title: '帮扶成效大屏' },
   },
   // ── 主布局（带侧边导航栏）──
   {
@@ -219,25 +219,25 @@ export const routes: RouteRecordRaw[] = [
         path: '/funds/analysis',
         name: 'FundAnalysis',
         component: () => retryImport(() => import('@/views/funds/Analysis.vue')),
-        meta: { menuKey: 'funds-admin', title: '经费分析' },
+        meta: { menuKey: 'funds-analysis', title: '经费分析' },
       },
       {
         path: '/funds/budget',
         name: 'FundBudget',
         component: () => retryImport(() => import('@/views/funds/Budget.vue')),
-        meta: { menuKey: 'funds-admin', title: '预算管理' },
+        meta: { menuKey: 'funds-budget', title: '预算管理' },
       },
       {
         path: '/funds/contract',
         name: 'FundContract',
         component: () => retryImport(() => import('@/views/funds/ContractManage.vue')),
-        meta: { menuKey: 'funds-admin', title: '合同管理' },
+        meta: { menuKey: 'funds-contract', title: '合同管理' },
       },
       {
         path: '/funds/anomaly',
         name: 'FundAnomaly',
         component: () => retryImport(() => import('@/views/funds/AnomalyList.vue')),
-        meta: { menuKey: 'funds-admin', title: '异常资金' },
+        meta: { menuKey: 'funds-anomaly', title: '异常资金' },
       },
       {
         path: '/funds/lifecycle',
@@ -255,7 +255,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/funds/report',
         name: 'FundReport',
         component: () => retryImport(() => import('@/views/funds/Report.vue')),
-        meta: { menuKey: 'funds-admin', title: '资金报告' },
+        meta: { menuKey: 'funds-report', title: '资金报告' },
       },
       {
         path: '/funds/apply',
@@ -271,7 +271,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/funds/transfer',
         name: 'FundTransfer',
         component: () => retryImport(() => import('@/views/funds/TransferVoucher.vue')),
-        meta: { menuKey: 'funds-admin', title: '转账凭证' },
+        meta: { menuKey: 'funds-transfer', title: '转账凭证' },
       },
       {
         path: '/funds/settlement',
@@ -327,25 +327,25 @@ export const routes: RouteRecordRaw[] = [
         path: '/approval',
         name: 'Approval',
         component: () => retryImport(() => import('@/views/approval/Overview.vue')),
-        meta: { title: '审批管理' },
+        meta: { menuKey: 'approval-overview', title: '审批管理' },
       },
       {
         path: '/approval/pending',
         name: 'ApprovalPending',
         component: () => retryImport(() => import('@/views/approval/PendingList.vue')),
-        meta: { menuKey: 'approval', title: '待审批' },
+        meta: { menuKey: 'approval-pending', title: '待审批' },
       },
       {
         path: '/approval/my',
         name: 'ApprovalMy',
         component: () => retryImport(() => import('@/views/approval/MyApplications.vue')),
-        meta: { title: '我的申请' },
+        meta: { menuKey: 'approval-my', title: '我的申请' },
       },
       {
         path: '/approval/history',
         name: 'ApprovalHistory',
         component: () => retryImport(() => import('@/views/approval/History.vue')),
-        meta: { title: '审批历史' },
+        meta: { menuKey: 'approval-history', title: '审批历史' },
       },
       {
         path: '/approval/center',
@@ -364,7 +364,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/rural-works/list',
         name: 'RuralWorksList',
         component: () => retryImport(() => import('@/views/ruralWorks/List.vue')),
-        meta: { title: '乡村工作列表' },
+        meta: { menuKey: 'rural-works-list', title: '乡村工作列表' },
       },
       {
         path: '/rural-works/analysis',
@@ -376,14 +376,14 @@ export const routes: RouteRecordRaw[] = [
         path: '/work-calendar',
         name: 'WorkCalendar',
         component: () => retryImport(() => import('@/views/work-calendar/Index.vue')),
-        meta: { title: '工作日历' },
+        meta: { menuKey: 'work-calendar', title: '工作日历' },
       },
       // ── 驻村工作台（打卡+月度总结） ──
       {
         path: '/rural-works/checkin',
         name: 'CheckinWorkbench',
         component: () => retryImport(() => import('@/views/ruralWorks/checkin/Index.vue')),
-        meta: { title: '驻村工作台' },
+        meta: { menuKey: 'checkin', title: '驻村工作台' },
       },
       // ── 结对帮扶与走访台账 ──
       {
@@ -447,13 +447,13 @@ export const routes: RouteRecordRaw[] = [
         path: '/data-sync/export',
         name: 'DataSyncExport',
         component: () => retryImport(() => import('@/views/dataSync/Export.vue')),
-        meta: { title: '数据导出' },
+        meta: { menuKey: 'data-sync-export', title: '数据导出' },
       },
       {
         path: '/data-sync/import',
         name: 'DataSyncImport',
         component: () => retryImport(() => import('@/views/dataSync/Import.vue')),
-        meta: { title: '数据导入' },
+        meta: { menuKey: 'data-sync-import', title: '数据导入' },
       },
       {
         path: '/data-sync/conflicts',
@@ -466,7 +466,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/data-package',
         name: 'DataPackage',
         component: () => retryImport(() => import('@/views/dataPackage/List.vue')),
-        meta: { menuKey: 'data-package-list', title: '数据包管理' },
+        meta: { menuKey: 'data-package', title: '数据包管理' },
       },
       {
         path: '/data-package/report',
@@ -491,7 +491,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/data-management',
         name: 'DataManagement',
         component: () => retryImport(() => import('@/views/dataManagement/Index.vue')),
-        meta: { title: '数据管理' },
+        meta: { menuKey: 'data-overview', title: '数据管理' },
       },
       // /data-management/backup 和 /data-management/logs 已整合到系统管理模块
       // 重定向定义见下方"旧版路径兼容重定向"区域
@@ -760,12 +760,22 @@ export const routes: RouteRecordRaw[] = [
         component: () => retryImport(() => import('@/views/system/TaskManager.vue')),
         meta: { menuKey: 'tasks', title: '后台任务', roles: ['admin', 'super_admin'] },
       },
+      // ── 系统管理聚合页（v1.13.0 单一菜单源：6 个板块共用同一容器页）──
+      // group ∈ org/security/ops/storage/settings/about，页内 Tab 由 query.tab 控制；
+      // 具体板块与 Tab 可见性由后端 /menus/accessible v2 的 console/tabs 节点决定
+      // （无单一 menuKey，故不声明 meta.menuKey；旧 /system/* 路由全部保留可直达）。
+      {
+        path: '/system/console/:group',
+        name: 'SystemConsole',
+        component: () => retryImport(() => import('@/views/system/console/SystemConsole.vue')),
+        meta: { title: '系统管理', roles: ['admin', 'super_admin'] },
+      },
       // ── 消息中心 ──
       {
         path: '/message',
         name: 'MessageCenter',
         component: () => retryImport(() => import('@/views/message/MessageCenter.vue')),
-        meta: { title: '消息中心' },
+        meta: { menuKey: 'messages', title: '消息中心' },
       },
       // ── 帮助 ──
       {
@@ -814,7 +824,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/reminder',
         name: 'ReminderCenter',
         component: () => retryImport(() => import('@/views/reminder/Index.vue')),
-        meta: { title: '提醒中心' },
+        meta: { menuKey: 'reminder', title: '提醒中心' },
       },
       // ── 舆情监测 ──
       {

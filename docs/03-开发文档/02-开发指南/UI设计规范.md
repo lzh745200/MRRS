@@ -56,14 +56,29 @@ Token 内已定义：
 规范：
 
 - 顶部栏高度：`--layout-header-height`
-- 侧边栏宽度（桌面）：展开 220px / 收起 64px
+- 侧边栏宽度（桌面）：展开 240px / 收起 68px（与 UI设计方案 §4.1 一致）
 - 移动端侧边栏：抽屉式（`mobile-open`）+ 遮罩（点击遮罩关闭）
 - 侧边栏颜色：使用 Token（`var(--color-primary-dark-1)` 等）
+
+### 4.2 导航结构（v1.13.0，后端单一菜单源）
+
+- **数据来源**：后端 `app/api/v1/menus.py` 的 `MENU_DEFINITIONS` v2（`sections` + `flat_keys`），
+  前端 `stores/menu.ts` 消费；**禁止在前端手写菜单段或维护菜单配置副本**（`config/menu-config.ts`、
+  `utils/systemMenu.ts` 已删除）。
+- **7 个板块**：工作台（固定首位，不入 sections）+ 帮扶业务 / 乡村振兴 / 工作协同 / 分析汇报 / 数据管理 / 系统管理。
+- **三种条目的渲染**：`page`（普通菜单项）、`group`（可折叠分组）、`console`（系统管理聚合页入口）。
+- **系统管理 6 聚合页**：组织与权限 / 安全与审计 / 运维与监控 / 备份与存储 / 系统设置 / 关于与反馈；
+  页内 Tab 切换，Tab 来自后端 `tabs[]`，仅渲染有权限的 Tab，旧路由全部保留。
+- **导航增强**：`Ctrl+K` 菜单搜索（label/key/path 过滤、键盘选择跳转、空态显示收藏+最近）、
+  收藏与最近访问（localStorage `nav:favorites` / `nav:recent`，上限 8）、移动端底部导航（数据驱动）。
+- **权限**：`canAccessMenu(key)` 含 console 的 `tabs[].key`；菜单可见性三级优先级不变
+  （用户级 > 权限包 > 角色默认）。详见《前后端契约规范》§4。
 
 本次已完成的改进点：
 
 - **侧边栏支持移动端抽屉**（遮罩关闭、路由变化自动收起的逻辑由 `useResponsiveSidebar` 提供）
 - **菜单颜色与布局色值收敛到 Token**，减少硬编码
+- **侧栏/移动端/权限面板全部数据驱动**（v1.13.0 导航改造，前端菜单副本已删除）
 
 ## 5. 组件使用规范（Element Plus）
 

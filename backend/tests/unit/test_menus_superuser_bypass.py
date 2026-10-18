@@ -1,4 +1,4 @@
-"""超级管理员菜单豁免（RBAC BugFix）回归测试
+"""超级管理员菜单豁免（RBAC BugFix）回归测试 —— v2 单一菜单源
 
 背景（2026-09-12）：app/api/v1/menus.py 的 _get_user_accessible_menu_keys
 过滤链为「用户级 allowed_menus > 绑定权限包 > 角色默认」，对超级管理员无豁免——
@@ -6,8 +6,9 @@ admin 被历史遗留的 allowed_menus 旧配置或权限包裁剪，导致 /men
 只下发少量菜单；而权限配置弹窗读取的 /menus/all 是全量，形成
 "弹窗全勾选、菜单看不到"。
 
-本文件锁定：
-  A. is_superuser=True 且 allowed_menus 是很小的旧集合 → /menus/accessible 返回全量
+W21（单一菜单源 v2）后响应结构改为
+`{version: 2, sections: [...], flat_keys: [...]}`，本文件锁定：
+  A. is_superuser=True 且 allowed_menus 是很小的旧集合 → 全量 menus
   B. 普通用户 allowed_menus 小集合 → 仍被裁剪（回归保护，行为不变）
   C. 仅 role='super_admin'（is_superuser 标志为 False）同样豁免
   D. 直接调用 _get_user_accessible_menu_keys 的函数级断言
@@ -23,11 +24,11 @@ from fastapi.testclient import TestClient
 # 历史遗留的"很小"用户级菜单配置（修复前会把系统设置等模块全部裁掉）
 SMALL_LEGACY_MENUS = json.dumps(["dashboard", "villages"])
 
-# 系统设置下的深层菜单 key —— 修复前不在旧 allowed_menus 里，超管也看不到
+# 系统设置下的深层菜单 key（v2 中作为 console tabs 下发）——修复前不在旧 allowed_menus 里
 DEEP_MENU_KEYS = ("machine-code", "cache", "admin-dashboard")
 
 
-# ── helpers（与 tests/unit/test_menu_api_extended.py 保持一致的构造方式）──
+# ── helpers ──────────────────────────────────────────────────────────
 def _make_user(
     user_id: int = 2,
     username: str = "testuser",
@@ -43,13 +44,8 @@ def _make_user(
     user.role = role
     user.is_superuser = is_superuser
     user.full_name = full_name
-
-    # allowed_menus is the raw DB column (JSON string or None)
     user.allowed_menus = allowed_menus
-    # permission_pack_id 默认未绑定（真实 User 模型的默认值为 None）
     user.permission_pack_id = None
-
-    # allowed_menus_list mirrors the real property on models.user.User
     if not allowed_menus:
         user.allowed_menus_list = None
     else:
@@ -60,18 +56,21 @@ def _make_user(
     return user
 
 
-def _flatten_tree(items: list[dict]) -> list[str]:
-    """扁平化接口返回的菜单树（含子节点）"""
-    keys: list[str] = []
-
-    def walk(nodes: list[dict]) -> None:
-        for node in nodes:
-            keys.append(node["key"])
-            if node.get("children"):
-                walk(node["children"])
-
-    walk(items)
+def _flatten_sections(sections: list[dict]) -> set[str]:
+    """展开 v2 sections 的可见 key（含 group/console 本身 + children + tabs）"""
+    keys: set[str] = set()
+    for section in sections:
+        for item in section["items"]:
+            keys.add(item["key"])
+            for child in item.get("children") or []:
+                keys.add(child["key"])
+            for tab in item.get("tabs") or []:
+                keys.add(tab["key"])
     return keys
+
+
+def _section_keys(body: dict) -> set[str]:
+    return _flatten_sections(body["data"]["sections"])
 
 
 # ── fixtures ─────────────────────────────────────────────────────────
@@ -109,8 +108,8 @@ def _login_as(menus_app, user: MagicMock) -> None:
 # =====================================================================
 class TestSuperuserBypass:
     def test_superuser_with_legacy_allowed_menus_gets_full_tree(self, menus_app, client):
-        """用例 A：is_superuser=True 且 allowed_menus 是很小的旧集合 → 全量菜单树"""
-        from app.api.v1.menus import MENU_DEFINITIONS, _flatten_menu_keys
+        """用例 A：is_superuser=True 且 allowed_menus 是很小的旧集合 → 全量菜单"""
+        from app.api.v1.menus import _iter_definition_keys
 
         user = _make_user(
             user_id=9,
@@ -125,13 +124,18 @@ class TestSuperuserBypass:
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
+        assert body["data"]["version"] == 2
 
-        keys = set(_flatten_tree(body["data"]))
-        # 全量 = MENU_DEFINITIONS 的全部 key（父级 + 子级）
-        assert keys == _flatten_menu_keys(MENU_DEFINITIONS)
-        # 修复前被裁掉的深层系统菜单必须可见
+        # 全量 = MENU_DEFINITIONS 的全部 key（父级 + children + tabs）；dashboard/历史兼容 key 不入 sections
+        all_keys = set(_iter_definition_keys())
+        from app.api.v1.menus import MENU_DEFINITIONS
+        legacy_keys = {entry["key"] for entry in MENU_DEFINITIONS if entry.get("legacy")}
+        assert _section_keys(body) == all_keys - {"dashboard"} - legacy_keys
+        # flat_keys 含 dashboard + 历史兼容 key，且为定义顺序全量
+        assert body["data"]["flat_keys"] == _iter_definition_keys()
+        # 修复前被裁掉的深层系统菜单必须可见（v2 中为 console tabs）
         for key in DEEP_MENU_KEYS:
-            assert key in keys
+            assert key in _section_keys(body)
 
     def test_superuser_source_reporting_unchanged(self, menus_app, client):
         """超管豁免只改 key 集合，不影响 source 判定逻辑（allowed_menus 存在 → 'user'）"""
@@ -168,18 +172,23 @@ class TestNormalUserUnchanged:
         assert resp.status_code == 200
         body = resp.json()
 
-        keys = set(_flatten_tree(body["data"]))
+        keys = _section_keys(body)
+        flat = set(body["data"]["flat_keys"])
         # 用户配置内的菜单仍然可见
-        assert "dashboard" in keys
+        assert "dashboard" in flat
         assert "villages" in keys
         # 修复前被裁掉的深层系统菜单，普通用户依旧不可见（未被豁免波及）
         for key in DEEP_MENU_KEYS:
             assert key not in keys
+            assert key not in flat
         # 全角色公开模块仍无条件并入（原有行为不变）
         assert "policies" in keys
+        assert "analytics" in keys
 
     def test_normal_user_allowed_menus_empty_stays_minimal(self, menus_app, client):
         """allowed_menus='[]' 的普通用户仅剩公开模块（回归保护）"""
+        from app.api.v1.menus import _PUBLIC_ACCESS_KEYS
+
         user = _make_user(
             user_id=11,
             username="user",
@@ -191,9 +200,13 @@ class TestNormalUserUnchanged:
 
         resp = client.get("/menus/accessible")
         assert resp.status_code == 200
-        keys = set(_flatten_tree(resp.json()["data"]))
-        assert keys == {"policies", "helpData", "data-analysis", "analytics",
-                        "analytics-dashboard", "analytics-map", "work-analysis"}
+        body = resp.json()
+        # 公开模块在 v2 sections 中的可见 key（helpData/data-analysis 为历史兼容 key，不入 sections）
+        assert _section_keys(body) == {
+            "policies", "analytics", "analytics-dashboard", "analytics-map", "work-analysis",
+        }
+        # flat_keys = 可见 key + 允许的历史兼容 key
+        assert set(body["data"]["flat_keys"]) == set(_PUBLIC_ACCESS_KEYS)
 
 
 # =====================================================================
@@ -213,7 +226,7 @@ class TestSuperAdminRoleOnly:
 
         resp = client.get("/menus/accessible")
         assert resp.status_code == 200
-        keys = set(_flatten_tree(resp.json()["data"]))
+        keys = _section_keys(resp.json())
         for key in DEEP_MENU_KEYS:
             assert key in keys
 
@@ -225,6 +238,7 @@ class TestBypassAtFunctionLevel:
             MENU_DEFINITIONS,
             _flatten_menu_keys,
             _get_user_accessible_menu_keys,
+            _iter_definition_keys,
         )
 
         superuser = _make_user(
@@ -233,16 +247,15 @@ class TestBypassAtFunctionLevel:
         )
         keys = _get_user_accessible_menu_keys(superuser, mock_db)
         assert keys == _flatten_menu_keys(MENU_DEFINITIONS)
+        assert keys == set(_iter_definition_keys())
 
     def test_normal_user_returns_trimmed_keys(self, mock_db):
         """普通用户同一函数仍走裁剪链（与用例 B 对应的函数级断言）"""
-        from app.api.v1.menus import _get_user_accessible_menu_keys
+        from app.api.v1.menus import _PUBLIC_ACCESS_KEYS, _get_user_accessible_menu_keys
 
         normal = _make_user(
             user_id=14, username="viewer", role="viewer",
             is_superuser=False, allowed_menus=SMALL_LEGACY_MENUS,
         )
         keys = _get_user_accessible_menu_keys(normal, mock_db)
-        assert keys == {"dashboard", "villages", "policies", "helpData",
-                        "data-analysis", "analytics", "analytics-dashboard",
-                        "analytics-map", "work-analysis"}
+        assert keys == {"dashboard", "villages"} | _PUBLIC_ACCESS_KEYS

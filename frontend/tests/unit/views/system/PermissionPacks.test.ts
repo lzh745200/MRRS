@@ -5,8 +5,8 @@
  * 新建/编辑对话框（名称校验、树勾选取值回退、创建/更新、失败文案）、删除确认三态、
  * 绑定用户对话框（角色过滤、预勾选、bind/unbind diff 全组合、失败文案）。
  *
- * 方案：mock '@/api/permissionPack'（6 个函数）+ '@/api/request'（/menus/all 与 /users），
- * el-table-column stub 注入样本行覆盖模板作用域插槽分支。
+ * 方案：mock '@/api/permissionPack'（6 个函数）+ '@/api/request'（/users）+
+ * '@/stores/menu'.fetchAllMenus（v2 sections 三级树）；el-table-column stub 注入样本行。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -14,27 +14,25 @@ import { mount, flushPromises } from '@vue/test-utils'
 const {
   ElMessage,
   confirmMock,
-  mockGet,
   mockApiRequest,
+  fetchAllMenus,
   apiList,
   apiCreate,
   apiUpdate,
   apiDelete,
   apiBind,
   apiUnbind,
-  menuConfigState,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   confirmMock: vi.fn(),
-  mockGet: vi.fn(),
   mockApiRequest: vi.fn(),
+  fetchAllMenus: vi.fn(),
   apiList: vi.fn(),
   apiCreate: vi.fn(),
   apiUpdate: vi.fn(),
   apiDelete: vi.fn(),
   apiBind: vi.fn(),
   apiUnbind: vi.fn(),
-  menuConfigState: { throwOnImport: false },
 }))
 
 vi.mock('element-plus', () => ({
@@ -43,7 +41,6 @@ vi.mock('element-plus', () => ({
 }))
 
 vi.mock('@/api/request', () => ({
-  get: mockGet,
   apiRequest: mockApiRequest,
   getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
 }))
@@ -57,25 +54,80 @@ vi.mock('@/api/permissionPack', () => ({
   unbindPackUsers: apiUnbind,
 }))
 
-// MENU_CONFIG 动态导入：默认返回最小静态配置；特定测试置 throwOnImport 使解构抛错（走内层 catch）
-vi.mock('@/config/menu-config', () => ({
-  get MENU_CONFIG() {
-    if (menuConfigState.throwOnImport) {
-      throw new Error('menu-config unavailable')
-    }
-    return [{ key: 'dashboard', label: '工作台' }]
-  },
+// 契约 §6：全量菜单由 store 的 /menus/all v2 sections 提供；menu-config 已删除，不再有静态回退
+vi.mock('@/stores/menu', () => ({
+  useMenuStore: () => ({ fetchAllMenus }),
 }))
 
 import PermissionPacks from '@/views/system/PermissionPacks.vue'
 
 // ── 样本数据 ──
-const menuTree = [
-  { key: 'dashboard', label: '工作台' },
+// v2 sections 夹具：覆盖 group（含 children）/ console（含 tabs）/ page / 空 children 防御分支
+const menuSections = [
   {
-    key: 'system-security',
+    key: 'business',
+    label: '帮扶业务',
+    order: 10,
+    items: [
+      { key: 'dashboard', label: '工作台', path: '/dashboard', kind: 'page' },
+      { key: 'empty-group', label: '空分组', kind: 'group' },
+    ],
+  },
+  {
+    key: 'system',
     label: '系统管理',
-    children: [{ key: 'backup', label: '备份管理' }],
+    order: 90,
+    items: [
+      {
+        key: 'system-security',
+        label: '系统安全',
+        kind: 'group',
+        children: [{ key: 'backup', label: '备份管理', path: '/system/backup', kind: 'page' }],
+      },
+      {
+        key: 'system-console-org',
+        label: '组织与权限',
+        path: '/system/console/org',
+        kind: 'console',
+        tabs: [{ key: 't-users', label: '用户管理', path: '/system/users' }],
+      },
+      {
+        key: 'empty-console',
+        label: '空聚合',
+        path: '/system/console/empty',
+        kind: 'console',
+      },
+    ],
+  },
+]
+
+const expectedTree = [
+  {
+    key: 'business',
+    label: '帮扶业务',
+    isSection: true,
+    children: [
+      { key: 'dashboard', label: '工作台' },
+      { key: 'empty-group', label: '空分组' },
+    ],
+  },
+  {
+    key: 'system',
+    label: '系统管理',
+    isSection: true,
+    children: [
+      {
+        key: 'system-security',
+        label: '系统安全',
+        children: [{ key: 'backup', label: '备份管理' }],
+      },
+      {
+        key: 'system-console-org',
+        label: '组织与权限',
+        children: [{ key: 't-users', label: '用户管理' }],
+      },
+      { key: 'empty-console', label: '空聚合' },
+    ],
   },
 ]
 
@@ -158,10 +210,9 @@ beforeEach(() => {
   apiDelete.mockResolvedValue({})
   apiBind.mockResolvedValue({})
   apiUnbind.mockResolvedValue({})
-  mockGet.mockResolvedValue({ data: menuTree })
+  fetchAllMenus.mockResolvedValue(menuSections)
   mockApiRequest.mockResolvedValue({ items: userRows })
   confirmMock.mockResolvedValue('confirm')
-  menuConfigState.throwOnImport = false
 })
 
 afterEach(() => {
@@ -174,11 +225,17 @@ describe('挂载与列表渲染', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     expect(apiList).toHaveBeenCalled()
-    expect(mockGet).toHaveBeenCalledWith('/menus/all')
+    expect(fetchAllMenus).toHaveBeenCalledTimes(1)
     expect(vm.packs).toEqual([packA, packB])
-    expect(vm.menuTreeData).toEqual(menuTree)
-    // 叶子集合：dashboard + backup（父级 system-security 不在内）
-    expect([...vm.leafKeySet].sort()).toEqual(['backup', 'dashboard'])
+    expect(vm.menuTreeData).toEqual(expectedTree)
+    // 叶子集合：page 叶子 + tab 叶子 + 无 children 的 console（板块/父级 key 不在内）
+    expect([...vm.leafKeySet].sort()).toEqual([
+      'backup',
+      'dashboard',
+      'empty-console',
+      'empty-group',
+      't-users',
+    ])
     // 描述 || '-'、菜单数 ?. ?? 0、状态三元、创建时间 formatDateTime 两侧
     // （name 列为 prop 直出，无作用域插槽，stub 不渲染文本，直接断言 vm 数据）
     const text = wrapper.text()
@@ -196,21 +253,15 @@ describe('挂载与列表渲染', () => {
     expect(vm.packs).toEqual([])
   })
 
-  it('loadMenuTree：res 直返（无 .data）与失败回退 MENU_CONFIG', async () => {
-    mockGet.mockResolvedValue(menuTree)
+  it('loadMenuTree：v2 sections 构建三级树；store 失败 → 空树', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    expect((wrapper.vm as any).menuTreeData).toEqual(menuTree)
+    expect((wrapper.vm as any).menuTreeData).toEqual(expectedTree)
 
-    mockGet.mockRejectedValue(new Error('down'))
+    fetchAllMenus.mockRejectedValue(new Error('down'))
     const wrapper2 = mountComp()
     await flushPromises()
-    await vi.dynamicImportSettled() // 等动态 import('@/config/menu-config') 落地
-    await flushPromises()
-    // 回退到前端静态配置（真实模块，包含 dashboard 项）
-    const data2 = (wrapper2.vm as any).menuTreeData
-    expect(Array.isArray(data2)).toBe(true)
-    expect(data2.length).toBeGreaterThan(0)
+    expect((wrapper2.vm as any).menuTreeData).toEqual([])
   })
 })
 
@@ -248,7 +299,7 @@ describe('新建/编辑对话框', () => {
     expect(apiCreate).not.toHaveBeenCalled()
   })
 
-  it('savePack 新建：树 ref 提供全选+半选 key，成功静默关闭并刷新', async () => {
+  it('savePack 新建：树 ref 提供全选+半选 key（板块展示键剔除），成功静默关闭并刷新', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -256,14 +307,15 @@ describe('新建/编辑对话框', () => {
     vm.editForm.name = '新包'
     vm.editForm.description = '描述'
     vm.menuTreeRef = {
-      getCheckedKeys: () => ['dashboard', 'backup'],
-      getHalfCheckedKeys: () => ['system-security'],
+      getCheckedKeys: () => ['dashboard', 'backup', 't-users'],
+      // 半选祖先里混入板块展示节点（system/business），保存时必须剔除
+      getHalfCheckedKeys: () => ['system', 'business', 'system-security', 'system-console-org'],
     }
     await vm.savePack()
     expect(apiCreate).toHaveBeenCalledWith({
       name: '新包',
       description: '描述',
-      menu_keys: ['dashboard', 'backup', 'system-security'],
+      menu_keys: ['dashboard', 'backup', 't-users', 'system-security', 'system-console-org'],
       is_active: true,
     })
     expect(vm.editDialogVisible).toBe(false)
@@ -477,18 +529,8 @@ describe('工具函数与对话框内联事件', () => {
 })
 
 describe('loadMenuTree 兜底与 openBind 数据形态', () => {
-  it('loadMenuTree：菜单接口失败且 MENU_CONFIG 解构抛错 → 置空（340-341）', async () => {
-    menuConfigState.throwOnImport = true
-    mockGet.mockRejectedValue(new Error('down'))
-    const wrapper = mountComp()
-    await flushPromises()
-    await vi.dynamicImportSettled()
-    await flushPromises()
-    expect((wrapper.vm as any).menuTreeData).toEqual([])
-  })
-
-  it('loadMenuTree：接口返回 0（falsy）→ 走 [] 兜底', async () => {
-    mockGet.mockResolvedValue(0)
+  it('loadMenuTree：store 返回空 sections → 空树', async () => {
+    fetchAllMenus.mockResolvedValue([])
     const wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).menuTreeData).toEqual([])
@@ -536,7 +578,9 @@ describe('模板内联处理器（按钮/输入/开关）', () => {
     const vm = wrapper.vm as any
 
     // 编辑按钮 → openEdit(row)
-    const editBtns = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '编辑')
+    const editBtns = wrapper
+      .findAll('el-button-stub')
+      .filter((b: any) => b.text().trim() === '编辑')
     expect(editBtns.length).toBe(6) // 操作列注入 6 行（packA/B/C + u1/u2/u3）
     await editBtns[0].trigger('click')
     await flushPromises()
@@ -560,13 +604,17 @@ describe('模板内联处理器（按钮/输入/开关）', () => {
     expect(apiUpdate).toHaveBeenCalled()
 
     // 绑定用户按钮 → openBind(row)
-    const bindBtns = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '绑定用户')
+    const bindBtns = wrapper
+      .findAll('el-button-stub')
+      .filter((b: any) => b.text().trim() === '绑定用户')
     await bindBtns[0].trigger('click')
     await flushPromises()
     expect(vm.bindingPack).toEqual(packA)
 
     // 取消按钮：绑定对话框 + 编辑对话框（覆盖 line 79/121 两个 onClick 内联处理器）
-    const cancelBtns = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '取消')
+    const cancelBtns = wrapper
+      .findAll('el-button-stub')
+      .filter((b: any) => b.text().trim() === '取消')
     await cancelBtns[1].trigger('click')
     expect(vm.bindDialogVisible).toBe(false)
     await cancelBtns[0].trigger('click')
@@ -579,4 +627,3 @@ describe('模板内联处理器（按钮/输入/开关）', () => {
     expect(apiDelete).toHaveBeenCalledWith(1)
   })
 })
-

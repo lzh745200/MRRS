@@ -5,6 +5,46 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.13.0] - 2026-10-18 — 导航/菜单单一源重构 + 系统管理 6 聚合页
+
+### Added
+
+- **导航增强**：Ctrl+K 菜单搜索（板块/入口/Tab 全量可搜、键盘上下选择+回车跳转、空搜索显示收藏与最近）、
+  最近访问与收藏（localStorage `nav:recent` / `nav:favorites`，上限 8 条，损坏数据自动回退）。
+- **系统管理 6 聚合页**（`/system/console/:group` + 页内 `?tab=<tab key>`）：
+  组织与权限 / 安全与审计 / 运维与监控 / 备份与存储 / 系统设置 / 关于与反馈；
+  Tabs 页内切换、当前 Tab 才加载对应页面组件，原页面组件与旧路由全部保留（深链不失效）。
+- **导航入口补齐**：汇报大屏、提醒中心、帮助中心、数据上报（上报/接收/版本）、批量操作、
+  综合数据录入、成效排名/评估、工作分析、舆情监测、驻村工作台。
+- **后端菜单 v2 单一源**：`MENU_SECTIONS`（6 板块）+ `MENU_DEFINITIONS` 扁平条目
+  （99 key / 85 个带 path 入口，条目 `kind` = `page`/`group`/`console`，`tabs` 承载聚合页页签）；
+  `/menus/accessible` 与 `/menus/all` 统一返回 `{version:2, sections, flat_keys}`。
+
+### Changed
+
+- 左侧导航重排为 **7 板块**：工作台（固定第一）+ 帮扶业务 / 乡村振兴 / 工作协同 / 分析汇报 / 数据管理 / 系统管理；
+  消除"分组标题与子菜单同名"重复，消息中心移入工作协同。
+- 前端侧栏、移动端底部导航、权限面板与权限包菜单树全部改为**后端菜单数据驱动**，
+  不再手写菜单段；权限面板为"板块→入口→Tab"三级树，保存协议仍为 key 数组。
+- 菜单过滤语义：`group` 任一子项可见即显示并裁剪子项；`console` 可见 = `console.key` 或任一
+  `tab.key ∈ allowed`（勾聚合页 key 视为全部 Tab 可见）；旧 key 全部保留，历史权限包/`allowed_menus` 不失效。
+- 菜单对齐门禁 `scripts/check_menu_alignment.py` 重写为规则 A~E（AST 解析单一源：
+  后端 path 可解析 / 前端 `meta.menuKey` 合法 / 无孤儿 key / 同路径不重复 / 板块唯一）。
+
+### Removed
+
+- **删除前端菜单副本**：`src/config/menu-config.ts`、`src/utils/systemMenu.ts` 及
+  `menu-config.test.ts`、`systemMenu.test.ts`、`menuKeyAlignment.test.ts`、
+  `DefaultLayoutSafe.menu.test.ts`、`DefaultLayout.property.test.ts`（源码字符串断言/假属性测试）。
+- 删除后端 3 个死菜单项：`user-backup`、`data-quality`、`system-security`（无独立导航出口/重复 path）。
+- 删除根目录旧 PPT 副本，`docs/帮扶管理信息系统介绍.pptx` 为唯一对外介绍材料。
+- 删除文档中"前后端菜单双轨同步 / menu-config 引用 / 旧系统管理入口清单"等过时说明。
+
+### Fixed
+
+- 修复历史遗留的"N 个已实现系统页面无任何 UI 入口"（系统管理 24+ 页面此前仅硬编码 6 个入口）
+  与"有菜单 key 但无页面/有页面但无菜单"的双向漂移（由规则 C 持续拦截）。
+
 ## [1.12.25] - 2026-10-18 — 🔧 ARM64 发布流水线彻底修复（镜像限流根因）
 
 ### Fixed

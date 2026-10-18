@@ -22,7 +22,16 @@ vi.mock('element-plus', async (importOriginal) => {
 // LoginEnhanced.test.ts 一个文件触碰，否则其在满量按 id 合并时 functions 跌到 88.23%
 // （Linux CI 红、Windows/Node25 绿——OS 间 v8 函数 id 顺序差异，不能作为放行依据）。
 // 此处以桩替换：main.ts 的 messageDefaults/版本契约断言不受影响，懒加载本体不再执行。
-vi.mock('@/views/auth/LoginEnhanced.vue', () => ({ default: { name: 'LoginEnhancedContractStub' } }))
+vi.mock('@/views/auth/LoginEnhanced.vue', () => ({
+  default: { name: 'LoginEnhancedContractStub' },
+}))
+
+// DefaultLayoutSafe.vue 同理：main.ts 初始导航会解析布局路由模块；按
+// vitest.config.ts 的 coverage-merge 不变量，布局的唯一执行者是
+// tests/unit/layouts/DefaultLayoutSafe.test.ts，此处桩替换避免第二个执行者。
+vi.mock('@/layouts/DefaultLayoutSafe.vue', () => ({
+  default: { name: 'DefaultLayoutSafeContractStub' },
+}))
 
 describe('提示层契约（main.ts 全局默认）', () => {
   it('messageDefaults 开启 grouping 去重、showClose、5s 时长', async () => {

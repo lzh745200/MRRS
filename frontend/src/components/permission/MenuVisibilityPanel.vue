@@ -52,11 +52,19 @@
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { get, put } from '@/api/request'
+import { useMenuStore } from '@/stores/menu'
+import type { MenuEntry, MenuSection } from '@/stores/menu'
 
+/**
+ * 菜单树节点（el-tree 数据源）。
+ * 三级结构：板块（纯分组，isSection=true）→ 入口（page/group/console）→ Tab/子页面。
+ * 板块 key 不属于后端菜单 key 集合，仅用于展示分组，绝不写入勾选集合/保存载荷。
+ */
 interface MenuTreeNode {
   key: string
   label: string
   children?: MenuTreeNode[]
+  isSection?: boolean
 }
 
 const props = defineProps<{
@@ -76,9 +84,19 @@ const menuTreeRef = ref()
 const saving = ref(false)
 const selectedMenuKeys = ref<string[] | null>([])
 const menuTreeData = ref<MenuTreeNode[]>([])
+const menuStore = useMenuStore()
 
 // 程序化同步树勾选期间置位：此间树回传的 check 事件不得再写回 selectedMenuKeys（避免反馈环）
 let syncingTree = false
+
+/** 板块分组节点的 key 集合：展示用，不参与勾选/保存（后端菜单 key 集合里没有它们） */
+const sectionKeySet = computed(() => {
+  const keys = new Set<string>()
+  for (const node of menuTreeData.value) {
+    if (node.isSection) keys.add(node.key)
+  }
+  return keys
+})
 
 /** child key → 父 key（用于补齐祖先键 / 计算展示前沿） */
 const parentMap = computed(() => {
@@ -137,21 +155,40 @@ function getMenuLabel(key: string): string {
   return menuLabelMap.value[key] || key
 }
 
+/** v2 入口（page/group/console）→ 树节点；console 的 tabs 作为第三级子节点 */
+function toEntryNode(entry: MenuEntry): MenuTreeNode {
+  const children =
+    entry.kind === 'console'
+      ? (entry.tabs ?? []).map((tab) => ({ key: tab.key, label: tab.label }))
+      : (entry.children ?? []).map(toEntryNode)
+  return children.length
+    ? { key: entry.key, label: entry.label, children }
+    : { key: entry.key, label: entry.label }
+}
+
+/** v2 sections → 三级 el-tree 数据：板块（分组）→ 入口 → Tab/子页面 */
+function buildMenuTree(sections: MenuSection[]): MenuTreeNode[] {
+  return sections.map((section) => ({
+    key: section.key,
+    label: section.label,
+    isSection: true,
+    children: section.items.map(toEntryNode),
+  }))
+}
+
+/**
+ * 加载全量菜单树。
+ * 契约 §6：/menus/all 的 v2 sections 由 menuStore.fetchAllMenus() 统一获取并存入
+ * allSections（不再读取前端静态菜单配置 menu-config，该文件已删除）。
+ */
 async function loadMenuTree() {
   try {
-    const res = await get('/menus/all')
-    menuTreeData.value = (res.data || res || []) as MenuTreeNode[]
-    buildLabelMap(menuTreeData.value)
+    menuTreeData.value = buildMenuTree(await menuStore.fetchAllMenus())
   } catch {
-    // 使用前端静态配置作为回退
-    try {
-      const { MENU_CONFIG } = await import('@/config/menu-config')
-      menuTreeData.value = MENU_CONFIG as unknown as MenuTreeNode[]
-      buildLabelMap(menuTreeData.value)
-    } catch {
-      menuTreeData.value = []
-    }
+    // 全量菜单加载失败不阻断权限保存：树为空，保存仍按既有 key 数组协议提交
+    menuTreeData.value = []
   }
+  buildLabelMap(menuTreeData.value)
 }
 
 /**
@@ -211,12 +248,17 @@ function onMenuCheck(_node: any, checked: any) {
       ? checked
       : []
   const halfCheckedKeys = Array.isArray(checked?.halfCheckedKeys) ? checked.halfCheckedKeys : []
-  const merged = new Set<string>([...checkedKeys, ...halfCheckedKeys])
-  // 兜底补齐祖先链（畸形/裁剪载荷下 halfCheckedKeys 可能缺失）
+  // 板块分组节点只是展示层（后端 key 集合没有它们），不得混入勾选/保存集合
+  const merged = new Set<string>()
+  for (const key of [...checkedKeys, ...halfCheckedKeys]) {
+    if (!sectionKeySet.value.has(key)) merged.add(key)
+  }
+  // 兜底补齐祖先链（畸形/裁剪载荷下 halfCheckedKeys 可能缺失）；
+  // 祖先中的板块节点同样跳过，但继续向上遍历
   for (const key of Array.from(merged)) {
     let parent = parentMap.value.get(key)
     while (parent) {
-      merged.add(parent)
+      if (!sectionKeySet.value.has(parent)) merged.add(parent)
       parent = parentMap.value.get(parent)
     }
   }

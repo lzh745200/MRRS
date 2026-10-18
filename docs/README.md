@@ -1,8 +1,9 @@
 # 文档中心
 
-帮扶管理信息系统 **v1.12.8**（2026-09-14）项目文档。
+帮扶管理信息系统 **v1.13.0**（2026-10-18）项目文档。
 
-> 📌 文档版本随 `backend/app/core/config.py` 的 `PROJECT_VERSION` 与 `package.json` 单一事实源同步；
+> 📌 文档版本随**根 `package.json` 的 `version`**（唯一权威来源，经 `node scripts/sync-version.js`
+> 同步到 `backend/app/core/config.py` 的 `PROJECT_VERSION` 等目标文件）保持一致；
 > 历史逐项变更见根目录 [CHANGELOG.md](../CHANGELOG.md)，本文档中心只保留"当前有效文档"。
 
 ## 快速入口
@@ -28,7 +29,8 @@
 ## 文档约定
 
 - 所有文档以项目根目录 `README.md` 为准
-- 版本号统一使用 `backend/app/core/config.py` 中的 `PROJECT_VERSION`
+- 版本号唯一权威来源是根 `package.json` 的 `version`（`node scripts/sync-version.js --check` 为 CI 门禁；
+  `backend/app/core/config.py` 的 `PROJECT_VERSION` 由同步脚本写入，不要单独手改）
 - Schema 以 `backend/app/models/` 和 Alembic 迁移为准
 - 构建配置以 `package.json` build 段 + `backend/assistance-backend.spec` 为准
 - 审计日志必须同时写入文件日志和数据库（audit_logs + login_attempts 表）

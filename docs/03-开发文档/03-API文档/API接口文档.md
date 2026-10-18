@@ -1,6 +1,6 @@
 # API 接口文档
 
-> **版本**:v1.12.8  **更新日期**:2026-09-14
+> **版本**:v1.13.0  **更新日期**:2026-10-18
 > **定位**:系统全部 HTTP 接口的清单与调用约定——**端点清单由脚本从源码自动提取**(与代码 100% 同步),业务导读人工维护。
 > **适用读者**:前后端开发者、联调与集成人员。零基础请先读《需求规格说明书》§3 理解业务流程。
 > **互动文档**:后端启动后(DEBUG 模式)访问 `http://127.0.0.1:8000/docs` 可在线调试(OpenAPI)。
@@ -561,13 +561,48 @@
 
 ### menus.py — 菜单权限管理 `/menus`
 
+> **菜单单一源（v1.13.0）**：菜单/导航的唯一权威是 `backend/app/api/v1/menus.py`（`MENU_SECTIONS` + `MENU_DEFINITIONS` v2）。
+> 前端侧栏、移动端底部导航、权限面板、权限包菜单树全部消费本模块接口，前端不再维护菜单配置副本。
+> 契约与过滤规则详见《[前后端契约规范 §4](../前后端契约规范.md)》。
+
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
-| GET | `/menus/accessible` | 返回当前登录用户可访问的完整菜单树。 | 登录 |
-| GET | `/menus/all` | 返回所有菜单项的完整定义，包含 roles 信息，供管理员配置使用 | 登录 |
+| GET | `/menus/accessible` | 返回当前登录用户可访问的 **v2 菜单结构**（`version=2` / `sections` / `flat_keys`），按角色/权限包/用户级配置裁剪。 | 登录 |
+| GET | `/menus/all` | 返回**同结构**的全量菜单定义（不做用户级过滤，含完整 `roles`、隐藏/历史兼容 key），供权限面板与权限包菜单树。 | 管理员 |
 | GET | `/menus/user-menus/{user_id}` | 获取用户的菜单权限配置详情 | 登录 |
 | PUT | `/menus/user-menus/{user_id}` | 设置用户的菜单权限。 | 登录 |
-| GET | `/menus/role-defaults` | 返回所有角色的默认菜单配置，用于管理员参考 | 登录 |
+| GET | `/menus/role-defaults` | 返回所有角色的默认菜单配置（key 列表），用于管理员参考 | 登录 |
+
+**v2 响应结构**（`data`）：
+
+```json
+{
+  "version": 2,
+  "sections": [
+    {
+      "key": "system", "label": "系统管理", "order": 90,
+      "items": [
+        {
+          "key": "system-console-storage", "label": "备份与存储", "path": "/system/console/storage",
+          "icon": "Box", "order": 40, "kind": "console", "roles": ["admin", "super_admin"],
+          "tabs": [
+            { "key": "backup", "label": "备份管理", "path": "/system/backup",
+              "icon": "FolderOpened", "order": 10, "roles": ["admin", "super_admin", "user"] }
+          ]
+        }
+      ]
+    }
+  ],
+  "flat_keys": ["dashboard", "backup", "system-console-storage", "..."]
+}
+```
+
+字段规则速查（完整规则见契约规范 §4）：
+
+- `kind`: `page`（有 path）| `group`（有 children，无 path）| `console`（有 path + tabs，Tab 页内切换）
+- `roles`: `null` = 所有角色；否则角色白名单（`normalize_role` 语义）
+- `flat_keys`: 过滤后可见的全部 key（含 group/console 自身 + children + tabs.key），供前端 `canAccessMenu` 与权限面板使用
+- 工作台 `dashboard` 由前端固定渲染，不在 `sections` 中；`legacy` 兼容 key 仅用于权限包/历史 `allowed_menus` 校验
 
 ### messages.py — 通知设置 `/notifications`
 

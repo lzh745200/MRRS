@@ -128,10 +128,10 @@ describe('Core view smoke tests', () => {
     expect(mod.default).toBeDefined()
   })
 
-  it('DefaultLayoutSafe imports', async () => {
-    const mod = await import('@/layouts/DefaultLayoutSafe.vue')
-    expect(mod.default).toBeDefined()
-  })
+  // DefaultLayoutSafe.vue 刻意不在此 bare import：layout 的唯一执行者是
+  // tests/unit/layouts/DefaultLayoutSafe.test.ts（渲染全分支）。按 vitest.config.ts
+  // coverage-merge 不变量，覆盖率门禁锁定的 .vue 全仓只允许一个测试文件执行，
+  // 第二处 bare import 会产出函数分片错位 → src/layouts functions 跌破 100%。
 })
 
 // ═══════════════════════════════════════════════════════

@@ -33,11 +33,12 @@
 ├── frontend/src/             # 前端（Vue 3 + TypeScript）
 │   ├── views/                # 页面视图
 │   │   ├── dashboard/        # 工作台（QuickActions, layout editor）
-│   │   ├── system/           # MonitoringDashboard 等系统页面
+│   │   ├── system/           # 系统管理页面 + console/SystemConsole.vue（6 聚合页）
 │   │   ├── analytics/        # 数据分析与帮扶村管理
 │   │   └── ...
-│   ├── components/           # 通用组件 + 业务组件
-│   ├── stores/               # Pinia 状态管理
+│   ├── components/           # 通用组件 + 业务组件（nav/MenuSearchDialog 菜单搜索）
+│   ├── composables/          # 组合式函数（useRecentMenus / useMenuFavorites 导航增强）
+│   ├── stores/               # Pinia 状态管理（menu.ts 消费后端 v2 菜单单一源）
 │   ├── router/               # 路由配置与守卫
 │   ├── api/                  # API 请求层
 │   └── utils/                # 工具函数
@@ -140,6 +141,17 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
 - **帮扶经费** 支持动态年度（用户可选择年份添加），不再固定 2021-2026
 - **工作台自定义布局**: 支持预设布局 + 拖拽排序 + 可见性切换，状态持久化到 localStorage
 - **QuickActions**: 4 组 26 个快捷入口（核心业务/数据同步/审批协作/系统管理）
+- **导航与菜单单一源** (2026-10-18, v1.13.0): 后端 `app/api/v1/menus.py` 的 `MENU_SECTIONS` + `MENU_DEFINITIONS`
+  （v2：`version/sections/flat_keys`；条目 `kind` = `page`/`group`/`console`）是**全站唯一菜单源**，
+  侧栏、移动端底部导航、权限面板/权限包菜单树全部数据驱动；**前端菜单副本已删除**
+  （`config/menu-config.ts`、`utils/systemMenu.ts` 及其测试），禁止再手写菜单段。
+  导航固定 7 板块（工作台 + 帮扶业务/乡村振兴/工作协同/分析汇报/数据管理/系统管理）；
+  系统管理收敛为 **6 个 console 聚合页**（组织与权限/安全与审计/运维与监控/备份与存储/系统设置/关于与反馈，
+  路由 `/system/console/:group`、页内 `?tab=<tab key>` 切换、**旧路由全部保留**、菜单 key 一个不改）。
+  导航增强：Ctrl+K 菜单搜索、最近访问/收藏（localStorage `nav:recent`/`nav:favorites`，上限 8）。
+  过滤优先级不变（superuser 全量 > `allowed_menus` > 启用中权限包 > 角色默认）；
+  console 可见 = `console.key` 或任一 `tab.key ∈ allowed`，勾聚合页 key 视为其全部 Tab 可见。
+  门禁 `scripts/check_menu_alignment.py` 规则 A~E（路径可解析 / `meta.menuKey` 合法 / 无孤儿 key / 路径不重复 / 板块唯一）。
 - **软删除模式** (2026-07-05): 模型使用 `is_active` 列（Boolean, default=True）。`is_active=False`=已删除。列表端点默认过滤 `is_active=True`，`include_deleted=true` 显示全部（管理员）。`to_dict()` 暴露 `isDeleted`/`is_deleted`。已应用于 `SupportedVillage`、`School`、`Project`、`Fund`。
 - **软删除权限收敛** (2026-07-20): `include_deleted` 参数通过 `enforce_admin_include_deleted` 依赖（`app/api/v1/deps.py`）统一收敛。非管理员传入 `include_deleted=true` 静默降级为 `False`（不抛 403）。4 个端点（supported-villages/schools/projects/funds）均使用 `Depends(enforce_admin_include_deleted)`。详情端点返回 `viewableBecause` 元数据（`build_viewable_because()` 函数）。`SoftDeleteMixin` 预留 `deleted_by` 审计字段。回归测试：`tests/unit/api/test_include_deleted_enforcement.py`（49 项）、E2E：`tests/unit/test_soft_delete_e2e.py`（2 项）。
 - **统一列表响应** (2026-07-08): 所有列表端点已使用 `ok_list()` (envelope)。新增列表端点必须使用 `ok_list()` 而非裸 dict。前端 `_unwrapList()` 仍兼容两种格式以保证向后兼容。
@@ -260,8 +272,9 @@ PR Checks 和 Nightly 工作流均上传覆盖率到 [Codecov](https://codecov.i
   + `services/user_permission_service.py` + 注册项）与两个前端零调用死端点
   `/rbac/frontend/route-permissions`、`/rbac/frontend/current-user-permissions`。`/rbac/*`
   为唯一 RBAC 入口。
-- **菜单**：删除死菜单键 `user-permissions`（后端 `menus.py` + 前端 `menu-config.ts`）；
-  保留三级优先级（`allowed_menus` > 权限包 > 角色默认）。
+- **菜单**：全站唯一菜单源为后端 `menus.py`（v1.13.0 起为 v2 `sections`+`flat_keys`，前端
+  `menu-config.ts`/`systemMenu.ts` 已删除）；保留三级优先级（`allowed_menus` > 权限包 > 角色默认）；
+  死菜单键 `user-permissions` 已删除。
 - **前端**：删除死路由 `/system/user-permissions`、孤儿页 `OperationLogs.vue`；修正
   `Menu.vue` 读取不存在的 `meta.requiresAdmin`→改读 `meta.roles`；移除 `UserManagement.vue`
   中与权限抽屉 Tab「菜单可见性」重复的独立"菜单权限"对话框。

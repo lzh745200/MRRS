@@ -60,6 +60,28 @@ def _make_user(
     return user
 
 
+def _section_keys(body: dict) -> list[str]:
+    """v2 单一菜单源：展开 sections 的可见 key（含 group/console 本身 + children + tabs）"""
+    keys: list[str] = []
+    for section in body["data"]["sections"]:
+        for item in section["items"]:
+            keys.append(item["key"])
+            for child in item.get("children") or []:
+                keys.append(child["key"])
+            for tab in item.get("tabs") or []:
+                keys.append(tab["key"])
+    return keys
+
+
+def _find_item(body: dict, key: str):
+    """v2：在 sections 中查找顶层条目"""
+    for section in body["data"]["sections"]:
+        for item in section["items"]:
+            if item["key"] == key:
+                return item
+    return None
+
+
 # ── fixtures ─────────────────────────────────────────────────────────
 @pytest.fixture
 def mock_db():
@@ -129,7 +151,8 @@ class TestGetAccessibleMenus:
         body = resp.json()
         assert body["success"] is True
         assert body["source"] == "role"
-        assert isinstance(body["data"], list)
+        assert isinstance(body["data"], dict)
+        assert body["data"]["version"] == 2
 
     def test_custom_source_when_allowed_menus_set(self, menus_app, client):
         """When the user has a custom allowed_menus list the source is 'user'.
@@ -142,8 +165,8 @@ class TestGetAccessibleMenus:
         body = resp.json()
         assert body["success"] is True
         assert body["source"] == "user"
-        keys = [m["key"] for m in body["data"]]
-        assert "dashboard" in keys
+        keys = _section_keys(body)
+        assert "dashboard" in body["data"]["flat_keys"]  # dashboard 固定渲染，不入 sections
         assert "policies" in keys          # 公开模块强制可见
         assert "analytics" in keys         # 公开模块强制可见
 
@@ -157,8 +180,9 @@ class TestGetAccessibleMenus:
         body = resp.json()
         assert body["success"] is True
         assert body["source"] == "user"
-        keys = [m["key"] for m in body["data"]]
+        keys = _section_keys(body)
         assert "dashboard" not in keys
+        assert "dashboard" not in body["data"]["flat_keys"]
         assert "policies" in keys
         assert "analytics" in keys
 
@@ -169,9 +193,9 @@ class TestGetAccessibleMenus:
         assert resp.status_code == 200
         body = resp.json()
         assert body["source"] == "role"
-        keys = [m["key"] for m in body["data"]]
-        assert "dashboard" in keys
-        assert "system" in keys
+        keys = _section_keys(body)
+        assert "dashboard" in body["data"]["flat_keys"]
+        assert "system-console-org" in keys
 
     def test_role_default_for_viewer_is_subset(self, menus_app, client, non_admin_user):
         """A viewer role sees fewer menus than an admin."""
@@ -179,15 +203,15 @@ class TestGetAccessibleMenus:
         resp = client.get("/menus/accessible")
         assert resp.status_code == 200
         body = resp.json()
-        keys = [m["key"] for m in body["data"]]
-        # viewer should NOT see system（系统管理仍仅管理员可见）
-        assert "system" not in keys
+        keys = _section_keys(body)
+        # viewer should NOT see 系统管理 console（仍仅管理员可见）
+        assert "system-console-org" not in keys
         # 经费管理对普通用户开放菜单（操作权限由 require_funds_operator_role 限制）
         assert "funds-admin" in keys
         assert "funds-lifecycle" in keys
         assert "funds-settlement" in keys
         # viewer should see generic-access menus
-        assert "dashboard" in keys
+        assert "dashboard" in body["data"]["flat_keys"]
 
     def test_custom_menus_include_children(self, menus_app, client):
         """When parent AND child keys are allowed, children appear in the tree."""
@@ -201,12 +225,13 @@ class TestGetAccessibleMenus:
         resp = client.get("/menus/accessible")
         assert resp.status_code == 200
         body = resp.json()
-        keys = [m["key"] for m in body["data"]]
+        keys = _section_keys(body)
         assert "analytics" in keys
-        assert "dashboard" in keys
+        assert "dashboard" in body["data"]["flat_keys"]
         # analytics has children; they should be included because all child keys
         # are explicitly in the allowed_menus list
-        analytics = next(m for m in body["data"] if m["key"] == "analytics")
+        analytics = _find_item(body, "analytics")
+        assert analytics is not None
         assert "children" in analytics
         assert len(analytics["children"]) > 0
 
@@ -217,8 +242,8 @@ class TestGetAccessibleMenus:
         assert resp.status_code == 200
         body = resp.json()
         assert body["source"] == "role"
-        keys = [m["key"] for m in body["data"]]
-        assert "system" in keys
+        keys = _section_keys(body)
+        assert "system-console-org" in keys
 
     def test_allowed_menus_is_empty_string_treated_as_none(self, menus_app, client):
         """allowed_menus = '' → falsy → allowed_menus_list returns None → role default."""
@@ -243,11 +268,13 @@ class TestGetAllMenus:
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
-        assert isinstance(body["data"], list)
-        # at least the well-known top-level menus should be present
-        keys = [m["key"] for m in body["data"]]
-        for k in ("dashboard", "villages", "schools", "system"):
+        assert isinstance(body["data"], dict)
+        assert body["data"]["version"] == 2
+        # at least the well-known menus should be present
+        keys = _section_keys(body)
+        for k in ("villages", "schools", "system-console-org"):
             assert k in keys
+        assert "dashboard" in body["data"]["flat_keys"]
 
     def test_super_admin_gets_all_definitions(self, menus_app, client, super_admin_user):
         _set_user(menus_app, super_admin_user)
@@ -633,28 +660,26 @@ class TestHelperFunctions:
         # total should be reasonable (14 top-level + children)
         assert len(all_keys) > 20
 
-    def test_filter_menu_tree_respects_allowed_keys(self):
-        from app.api.v1.menus import _filter_menu_tree, MENU_DEFINITIONS
-        filtered = _filter_menu_tree(MENU_DEFINITIONS, {"dashboard"})
-        assert len(filtered) == 1
-        assert filtered[0]["key"] == "dashboard"
-        assert "children" not in filtered[0]
+    def test_filter_entry_respects_allowed_keys(self):
+        from app.api.v1.menus import _filter_entry, MENU_DEFINITIONS
+        dashboard = next(entry for entry in MENU_DEFINITIONS if entry["key"] == "dashboard")
+        assert _filter_entry(dashboard, {"dashboard"})["key"] == "dashboard"
+        assert _filter_entry(dashboard, set()) is None
 
-    def test_filter_menu_tree_includes_children_when_parent_allowed(self):
-        from app.api.v1.menus import _filter_menu_tree, MENU_DEFINITIONS
-        # analytics has children; all children keys must also be in allowed_keys
-        filtered = _filter_menu_tree(
-            MENU_DEFINITIONS,
+    def test_filter_entry_includes_children_when_allowed(self):
+        from app.api.v1.menus import _filter_entry, _section_entries
+        analytics = next(e for e in _section_entries("report") if e["key"] == "analytics")
+        filtered = _filter_entry(
+            analytics,
             {"analytics", "analytics-dashboard", "analytics-map", "work-analysis"},
         )
-        analytics = next(m for m in filtered if m["key"] == "analytics")
-        assert "children" in analytics
-        assert len(analytics["children"]) == 3
+        assert "children" in filtered
+        assert len(filtered["children"]) == 3
 
-    def test_filter_menu_tree_empty_allowed_keys(self):
-        from app.api.v1.menus import _filter_menu_tree, MENU_DEFINITIONS
-        filtered = _filter_menu_tree(MENU_DEFINITIONS, set())
-        assert filtered == []
+    def test_filter_entry_empty_allowed_keys(self):
+        from app.api.v1.menus import _filter_entry, MENU_DEFINITIONS
+        dashboard = next(entry for entry in MENU_DEFINITIONS if entry["key"] == "dashboard")
+        assert _filter_entry(dashboard, set()) is None
 
     def test_role_default_menu_keys_are_frozenset(self):
         from app.api.v1.menus import _get_role_default_menu_keys

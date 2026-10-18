@@ -1,7 +1,9 @@
 /**
- * 帮扶管理信息系统 — 系统介绍 PPT（40 页）
+ * 帮扶管理信息系统 — 系统介绍 PPT（41 页）
  * 主题：军绿 + 荣誉金；字体：微软雅黑；画布 13.33×7.5
+ * 输出：固定写到本文件所在目录（docs/帮扶管理信息系统介绍.pptx），与运行时的 CWD 无关。
  */
+const path = require("path");
 const pptxgen = require("pptxgenjs");
 
 const p = new pptxgen();
@@ -199,7 +201,7 @@ function header(s, kicker, title) {
     color: TEXT, fontFace: F, margin: 0 });
   s.addText(String(pageNo).padStart(2, "0"), { x: W - 1.0, y: H - 0.55, w: 0.5, h: 0.3,
     fontSize: 11, color: MUTED, fontFace: F, align: "right", margin: 0 });
-  s.addText("帮扶管理信息系统 v1.12.18", { x: M, y: H - 0.55, w: 4, h: 0.3,
+  s.addText("帮扶管理信息系统 v1.13.0", { x: M, y: H - 0.55, w: 4, h: 0.3,
     fontSize: 10.5, color: MUTED, fontFace: F, margin: 0 });
 }
 function card(s, x, y, w, h, fill = BG) {
@@ -277,7 +279,7 @@ function sectionSlide(num, title, sub, items) {
     { text: "多机协同 · 军工级安全", options: {} },
   ], { x: 1.0, y: 4.75, w: 6, h: 0.85, fontSize: 16, color: LIGHT, fontFace: F,
     paraSpaceAfter: 6, margin: 0 });
-  s.addText("V1.12.18  |  2026-10-17  |  FastAPI + Vue 3 + Electron + SQLite", {
+  s.addText("V1.13.0  |  2026-10-18  |  FastAPI + Vue 3 + Electron + SQLite", {
     x: 1.0, y: 6.35, w: 10, h: 0.4, fontSize: 12.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
@@ -293,9 +295,9 @@ function sectionSlide(num, title, sub, items) {
   const toc = [
     ["01", "系统概述", "定位 · 使命 · 关键数字"],
     ["02", "技术架构", "技术栈 · 分层设计 · 离线优先"],
-    ["03", "功能模块", "七大业务域 · 71 个功能菜单"],
+    ["03", "功能模块", "一个工作台 + 六大板块 · 6 个聚合页"],
     ["04", "安全体系", "四角色权限 · PII 加密 · 审计合规"],
-    ["05", "质量工程", "19,158 项自动化测试 · CI/CD · 依赖自检"],
+    ["05", "质量工程", "2 万+ 项自动化测试 · CI/CD · 依赖自检"],
     ["06", "部署运行", "双平台安装包 · 备份升级 · 版本历程"],
   ];
   toc.forEach((t, i) => {
@@ -369,17 +371,17 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
 {
   const s = p.addSlide();
   header(s, "01 系统概述", "一眼看懂：系统规模");
-  stat(s, 0.55, 2.1, 3.0, "12,795", "后端自动化测试用例");
-  stat(s, 3.9, 2.1, 3.0, "6,363", "前端自动化测试用例");
-  stat(s, 7.25, 2.1, 3.0, "54", "功能菜单键（三级菜单树）");
-  stat(s, 10.6, 2.1, 2.4, "131", "业务页面视图");
+  stat(s, 0.55, 2.1, 3.0, "13,500+", "后端自动化测试用例");
+  stat(s, 3.9, 2.1, 3.0, "6,700+", "前端自动化测试用例");
+  stat(s, 7.25, 2.1, 3.0, "99", "菜单 key（后端单一源 v2）");
+  stat(s, 10.6, 2.1, 2.4, "139", "业务页面视图");
   s.addShape(p.shapes.LINE, { x: M, y: 3.95, w: W - 2 * M, h: 0, line: { color: "D8E0DA", width: 1 } });
   stat(s, 0.55, 4.35, 3.0, "93", "后端 API 模块（api/v1 含子包）", PRIMARY_L);
   stat(s, 3.9, 4.35, 3.0, "100", "后端服务（100 + 13 子包）", PRIMARY_L);
   stat(s, 7.25, 4.35, 3.0, "45", "数据库迁移版本", PRIMARY_L);
   stat(s, 10.6, 4.35, 2.4, "4", "用户角色", PRIMARY_L, 40);
   // 页脚数据来源：按框宽/框高自适应字号（原固定 12pt 在 12.3×0.4in 内需 2 行，超出 1.31×）
-  const noteP06 = "数据来源：2026-10-17 仓库实测（v1.12.18）—— 后端 12,795 用例全绿 / 行+分支覆盖率 100%（branch=True 严格门禁）· 前端 6,363 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告";
+  const noteP06 = "数据来源：2026-10-18 仓库实测（v1.13.0）—— 后端 13,500+ 用例全绿 / 行+分支覆盖率 100%（branch=True 严格门禁）· 前端 6,700+ 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告（以发布时全量实测为准）";
   const sizeP06 = fitFontSize(noteP06, 12.3, 0.4, 12, 9);
   fitNote("P06 数据来源", 12, sizeP06);
   s.addText(noteP06, {
@@ -449,12 +451,13 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
   card(s, M, 1.8, 6.0, 4.9);
   s.addText("规模", { x: 0.82, y: 2.05, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   bullets(s, [
-    "131 个业务视图（34 个功能目录）",
+    "139 个业务视图（34 个功能目录）",
     "25 个共享组件（PageHeader / EmptyState / BaseChart 等标准件）",
     "34 个 Pinia store + 30+ 组合式函数",
-    "301 个测试文件 · 6,363 个用例",
+    "313 个测试文件 · 6,700+ 个用例",
+    "后端 v2 菜单单一源：侧栏 / 移动端 / 权限面板全部数据驱动（Ctrl+K 搜索 / 收藏 / 最近访问）",
     "覆盖率门禁（行 + 分支 100%）+ lint --max-warnings=0 + vue-tsc 三重 CI 门禁",
-  ], 0.82, 2.55, 5.4, 3.9, { size: 13.5, gap: 10 });
+  ], 0.82, 2.55, 5.4, 3.9, { size: 13, gap: 9 });
   card(s, 6.85, 1.8, 6.0, 4.9);
   s.addText("设计系统", { x: 7.17, y: 2.05, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   bullets(s, [
@@ -556,37 +559,38 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
 
 /* ════════ 14 章节页：功能模块 ════════ */
 sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
-  "七大业务域 · 71 个功能菜单",
-  "业务：村/项目/资金/学校/政策",
-  "协同：数据包 · 审批 · 消息",
-  "分析：看板 · 报表 · 大屏",
+  "一个工作台 + 六大板块 · 99 个菜单 key",
+  "帮扶业务：村/项目/学校/经费/结对/政策",
+  "工作协同 + 分析汇报：审批 · 大屏 · 报表",
+  "系统管理：6 个聚合页 · 页内 Tab 切换",
 ]);
 
 /* 15 功能地图 */
 {
   const s = p.addSlide();
-  header(s, "03 功能模块", "功能地图：七大业务域");
+  header(s, "03 功能模块", "功能地图：一个工作台 + 六大板块");
   const domains = [
-    ["帮扶业务", "帮扶村 10 大板块 · 项目全生命周期 · 资金 8 阶段 · 学校助学", "villages / projects / funds / schools"],
-    ["政策与审批", "政策库 FTS5 全文检索 · 审批工作流 · 我的申请 · 审批历史", "policies / approval"],
-    ["数据协同", "数据包全量/增量导出导入 · 版本管理 · 冲突解决 · 接收包", "dataPackage / dataSync"],
-    ["数据分析", "分析仪表盘 · 年度对比 · 成效评估 · 报表导出 · 帮扶大屏", "analytics / bigscreen"],
-    ["驻村工作", "工作台账 · 驻村任务 · 工作日历 · 考核评估", "ruralWorks / work-calendar"],
-    ["系统管理", "用户/角色/菜单/组织 · 权限包 · 审计 · 备份 · 更新日志", "system / admin"],
+    ["工作台", "固定首位：KPI 卡 · 待办聚合 · 快捷操作 · 年度趋势", "dashboard"],
+    ["帮扶业务", "帮扶村 10 板块 · 项目全周期 · 经费台账/申请/资金周期 · 结对/捐赠/政策/移交", "villages / projects / funds"],
+    ["乡村振兴", "工作首页 · 工作列表 · 驻村工作台（打卡与台账）", "rural-works / checkin"],
+    ["工作协同", "待办 · 审批管理（总览/待审批/我的申请/历史）· 日历 · 提醒 · 消息", "todos / approval / reminder"],
+    ["分析汇报", "汇报大屏 · 数据分析（仪表盘/地图/工作分析/成效排名评估/舆情）· 报表模板/导出", "bigscreen / analytics / report"],
+    ["数据管理", "概览 · 导入导出 · 数据包与批量导入 · 校验/规则 · 综合录入 · 批量操作 · 数据上报", "data-package / data-upload"],
+    ["系统管理", "6 聚合页：组织与权限/安全与审计/运维与监控/备份与存储/系统设置/关于与反馈", "system-console-*"],
   ];
   domains.forEach((d, i) => {
-    const col = i % 3, row = Math.floor(i / 3);
-    const x = M + col * 4.28, y = 1.85 + row * 2.45;
-    card(s, x, y, 3.98, 2.1);
-    s.addText(d[0], { x: x + 0.28, y: y + 0.18, w: 3.4, h: 0.42, fontSize: 17, bold: true,
+    const col = i % 4, row = Math.floor(i / 4);
+    const x = M + col * 3.16, y = 1.8 + row * 2.35;
+    card(s, x, y, 3.0, 2.08);
+    s.addText(d[0], { x: x + 0.22, y: y + 0.13, w: 2.6, h: 0.38, fontSize: 15.5, bold: true,
       color: PRIMARY, fontFace: F, margin: 0 });
-    s.addText(d[1], { x: x + 0.28, y: y + 0.68, w: 3.5, h: 0.85, fontSize: 12, color: MUTED,
+    s.addText(d[1], { x: x + 0.22, y: y + 0.55, w: 2.62, h: 1.02, fontSize: 10.5, color: MUTED,
       fontFace: F, margin: 0 });
-    s.addText(d[2], { x: x + 0.28, y: y + 1.6, w: 3.5, h: 0.35, fontSize: 10.5, italic: true,
+    s.addText(d[2], { x: x + 0.22, y: y + 1.64, w: 2.62, h: 0.3, fontSize: 9, italic: true,
       color: PRIMARY_L, fontFace: F, margin: 0 });
   });
-  s.addText("+ 消息中心 · 待办中心 · 提醒中心 · 全局搜索 · 回收站 —— 贯穿各业务域的横向能力", {
-    x: M, y: 6.75, w: 12.3, h: 0.4, fontSize: 12.5, color: MUTED, fontFace: F, margin: 0 });
+  s.addText("+ Ctrl+K 菜单搜索 · 收藏 / 最近访问 · 权限包三级裁剪 · 旧路由全部保留 —— 由后端单一菜单源（v2）贯穿全站", {
+    x: M, y: 6.72, w: 12.3, h: 0.4, fontSize: 12, color: MUTED, fontFace: F, margin: 0 });
 }
 
 /* 16 工作台与看板 */
@@ -600,15 +604,16 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
     "待办聚合：待审批 / 待办任务 / 未读消息一键直达",
     "快捷操作自定义布局（QuickActions 拖拽）",
     "图表年度趋势：资金 / 项目双轴联动",
+    "侧栏 Ctrl+K 菜单搜索 · 收藏 / 最近访问（v1.13.0）",
     "工作台可按角色裁剪：viewer 只见只读面板",
-  ], 0.82, 2.55, 5.4, 3.9, { size: 13.5, gap: 10 });
+  ], 0.82, 2.55, 5.4, 3.9, { size: 13, gap: 9 });
   card(s, 6.85, 1.8, 6.0, 4.9);
   s.addText("分析仪表盘", { x: 7.17, y: 2.05, w: 4, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   bullets(s, [
     "年度对比：任选两年，村/项目/资金多维并排",
     "帮扶成效评估：村庄打分、排名、历年对比",
     "ECharts 统一主题（军绿科技风），全站图表一致",
-    "帮扶大屏：深色全屏模式，适用于展示/汇报场景",
+    "帮扶大屏：全屏汇报模式，支持按帮扶村/学校/单位筛选下钻",
     "图表空态统一：无数据不出现“白板图”",
   ], 7.17, 2.55, 5.4, 3.9, { size: 13.5, gap: 10 });
 }
@@ -784,24 +789,26 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
 /* 24 系统管理 */
 {
   const s = p.addSlide();
-  header(s, "03 功能模块", "系统管理：管理员的全套工具箱");
+  header(s, "03 功能模块", "系统管理：6 个聚合页 · 页内 Tab");
   const items = [
-    ["用户与组织", "用户增删改、组织树管理（启动钩子自动自愈）、组织删除级联守卫"],
-    ["角色与菜单", "四角色体系；菜单可见性按角色 + 用户级 + 权限包三级裁剪"],
-    ["权限包", "菜单权限套餐化管理：给一批用户一键授权"],
-    ["审计中心", "操作日志 / 登录尝试 / 安全事件 / API 访问，支持导出"],
-    ["备份中心", "智能备份、加密备份、上传恢复（流式防 OOM）"],
-    ["系统运维", "更新日志、配置包、机器码/通行码、密钥管理、数据分层归档"],
+    ["组织与权限", "用户与组织 · 角色管理 · 菜单管理 · 权限包管理 · 组织机构"],
+    ["安全与审计", "安全审计 · 零信任 · 密钥管理 · 数据分级 · 加密设置 · 机器码管理"],
+    ["运维与监控", "系统总览 · 健康检查 · 系统监控 · 缓存管理 · 后台任务 · 运行环境 · 错误上报"],
+    ["备份与存储", "备份管理 · 分片上传 · 地图瓦片 · 管控配置包 · 系统配置"],
+    ["系统设置", "多语言 · 邮件设置 · 更新日志"],
+    ["关于与反馈", "关于系统 · 反馈管理 · 帮助中心 · 管理面板"],
   ];
   items.forEach((it, i) => {
     const col = i % 2, row = Math.floor(i / 2);
-    const x = M + col * 6.35, y = 1.85 + row * 1.62;
-    card(s, x, y, 5.95, 1.35);
-    s.addText(it[0], { x: x + 0.3, y: y + 0.14, w: 5.3, h: 0.4, fontSize: 15, bold: true,
+    const x = M + col * 6.35, y = 1.8 + row * 1.58;
+    card(s, x, y, 5.95, 1.34);
+    s.addText(it[0], { x: x + 0.3, y: y + 0.12, w: 5.3, h: 0.4, fontSize: 15, bold: true,
       color: PRIMARY, fontFace: F, margin: 0 });
-    s.addText(it[1], { x: x + 0.3, y: y + 0.56, w: 5.35, h: 0.7, fontSize: 12, color: MUTED,
+    s.addText(it[1], { x: x + 0.3, y: y + 0.54, w: 5.4, h: 0.7, fontSize: 11.5, color: MUTED,
       fontFace: F, margin: 0 });
   });
+  s.addText("统一入口 + 页内 Tab：旧页面 / 旧路由全部保留（深链不失效），菜单 key 一个不改、权限包配置完全兼容", {
+    x: M, y: 6.75, w: 12.3, h: 0.4, fontSize: 12, color: MUTED, fontFace: F, margin: 0 });
 }
 
 /* ════════ 25 章节页：安全体系 ════════ */
@@ -836,7 +843,7 @@ sectionSlide("04", "安全体系", "SECURITY & COMPLIANCE", [
   });
   bullets(s, [
     "历史角色自动归一化：approval_leader / manager → admin，operator → user（前后端同源映射）",
-    "菜单可见性三级裁剪：角色默认 → 权限包 → 用户级配置；公开模块（政策/数据分析）全角色一致",
+    "菜单单一源（后端 v2：板块→入口→Tab）；可见性三级裁剪：角色默认 → 权限包 → 用户级配置；公开模块全角色一致",
     "写操作后端二次校验：viewer 写入一律 403，前端隐藏按钮只是体验层",
   ], M, 5.5, 12.3, 1.6, { size: 13, gap: 8 });
 }
@@ -964,7 +971,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
   s.addChart(p.charts.BAR, [{
     name: "用例数",
     labels: ["后端 pytest", "前端 vitest"],
-    values: [12381, 6323],
+    values: [13505, 6685],
   }], {
     x: M, y: 1.95, w: 6.6, h: 4.2, barDir: "col",
     chartColors: [PRIMARY, PRIMARY_L], varyColors: true,
@@ -975,10 +982,10 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
     showLegend: false, chartArea: { fill: { color: BG } },
   });
   // 数据来源脚注：缩短措辞 + 按框自适应（原固定 11pt 在 6.6×0.35in 内超出 1.38×）
-  const noteP32 = "数据来源：2026-10-17 实测（v1.12.18）· 后端 12,795 / 前端 6,363 用例 · 覆盖率 100%（行+分支）";
-  const sizeP32 = fitFontSize(noteP32, 6.6, 0.35, 11, 9);
+  const noteP32 = "数据来源：2026-10-18 实测口径（v1.13.0）· 后端 13,500+ / 前端 6,700+ · 覆盖率 100%（行+分支）· 以发布实测为准";
+  const sizeP32 = fitFontSize(noteP32, 6.6, 0.45, 11, 9);
   fitNote("P32 数据来源", 11, sizeP32);
-  s.addText(noteP32, { x: 0.7, y: 6.25, w: 6.6, h: 0.35,
+  s.addText(noteP32, { x: 0.7, y: 6.2, w: 6.6, h: 0.45,
     fontSize: sizeP32, color: MUTED, fontFace: F, margin: 0 });
   // 卡片高度自适应（≤ maxH 4.9in），正文按最终空间自动定字号
   bulletCard(s, 7.6, 1.95, 5.25, 4.2, "测试纪律", [
@@ -1121,13 +1128,13 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
 /* 38 版本历程 */
 {
   const s = p.addSlide();
-  header(s, "06 部署运行", "版本历程：三个月的密集演进");
+  header(s, "06 部署运行", "版本历程：持续的密集演进");
   const tl = [
-    ["v1.12.5", "09-12", "深度审计 13 项修复：目录穿越 / 存储型 XSS / 并发 / 备份 fail-loud"],
     ["v1.12.7", "09-13", "遗留风险二批：上传体积三层上限、导出回收、导入拒绝记录、Windows CI 可见性"],
     ["v1.12.8", "09-14", "R7 恢复维护闸门 / R12 低危批量 7 项 / R2 残余清零 / P-1~P-3 门禁 / R14 组织树修复"],
-    ["v1.12.9", "09-14", "深审缺陷批量修复（越权/数据完整性/静默失效）+ 响应信封与凭据语义修复 + 前后端覆盖率双双补齐至 100%（前端 10 个文件：安全守卫零覆盖、弱断言、死代码）"],
-    ["v1.12.10", "10-02", "跨平台 CI 双红根因修复：归档恢复穿越判定去平台化（Windows 风格路径曾绕过校验）、审批时间轴断言去时区依赖（UTC runner 与本地结论相反）+ 测试会话数据根隔离契约（Linux 上 override 曾被短路忽略）"],
+    ["v1.12.9", "09-14", "深审缺陷批量修复（越权/数据完整性/静默失效）+ 响应信封与凭据语义修复 + 前后端覆盖率双双补齐至 100%"],
+    ["v1.12.10", "10-02", "跨平台 CI 双红根因修复：归档恢复穿越判定去平台化、审批时间轴断言去时区依赖 + 测试会话数据根隔离契约"],
+    ["v1.13.0", "10-18", "导航架构重构：后端单一菜单源 v2（99 key / 6 板块）+ 系统管理 6 聚合页 + Ctrl+K 菜单搜索 / 收藏 / 最近访问；旧路由与权限包 key 全兼容"],
   ];
   s.addShape(p.shapes.LINE, { x: 1.1, y: 3.1, w: 11.1, h: 0, line: { color: "D8E0DA", width: 2 } });
   tl.forEach((t, i) => {
@@ -1146,7 +1153,7 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   });
   // 摘要条下移压缩：底边 6.85in，避开页脚文字带（体检器对 y ≥ 495pt 的页脚另有卡片归属判定）
   card(s, M, 5.9, 12.33, 0.95, PRIMARY_T);
-  s.addText("净效果：12,795 后端用例（行+分支覆盖率 100%）+ 6,363 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
+  s.addText("净效果：13,500+ 后端用例（行+分支覆盖率 100%）+ 6,700+ 前端用例全绿（以发布时全量实测为准）；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
     x: 0.82, y: 5.9, w: 11.6, h: 0.95, fontSize: 13.5, bold: true, color: TEXT,
     fontFace: F, valign: "middle", margin: 0 });
 }
@@ -1184,13 +1191,13 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   const tThanks = autoBox("谢谢观看", 11, 1.45, 54, 1.6, 36, true, 0, "P41 谢谢观看");
   s.addText("谢谢观看", { x: 0.96, y: 3.0, w: 11, h: tThanks.h, fontSize: tThanks.size, bold: true,
     color: "FFFFFF", fontFace: F, margin: 0 });
-  s.addText("帮扶管理信息系统 v1.12.18  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
+  s.addText("帮扶管理信息系统 v1.13.0  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
     x: 1.0, y: 4.55, w: 11, h: 0.45, fontSize: 13.5, color: LIGHT, fontFace: F, margin: 0 });
-  s.addText("12,795 后端用例（行+分支覆盖率 100%）+ 6,363 前端用例 全绿守护 · Windows x64 / 麒麟 ARM64 双平台离线交付", {
+  s.addText("13,500+ 后端用例 + 6,700+ 前端用例全绿守护 · 双平台离线交付（以发布实测为准）", {
     x: 1.0, y: 5.05, w: 11, h: 0.45, fontSize: 13.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
-p.writeFile({ fileName: "帮扶管理信息系统介绍.pptx" }).then(() => {
+p.writeFile({ fileName: path.join(__dirname, "帮扶管理信息系统介绍.pptx") }).then(() => {
   console.log("DONE pages=" + pageNo);
   console.log(`[自适应度量] 触发字号收缩 ${fitLog.length} 处：`);
   fitLog.forEach((l) => console.log("  · " + l));

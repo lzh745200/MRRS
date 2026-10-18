@@ -4,7 +4,7 @@
     <a href="#main-content" class="skip-link">跳到主内容</a>
 
     <!-- ============================================================ -->
-    <!-- 侧边栏 — 帮扶管理信息主题，精美分层导航                         -->
+    <!-- 侧边栏 — 完全由后端菜单 v2 data 驱动（工作台固定第一）           -->
     <!-- ============================================================ -->
     <el-aside
       :width="
@@ -24,7 +24,7 @@
         </transition>
       </div>
 
-      <!-- 导航菜单 — 每项带独立 v-if 权限守卫 -->
+      <!-- 导航菜单 — 数据驱动：工作台固定第一 → 收藏 → 最近访问 → 后端板块 -->
       <el-scrollbar class="aside-scrollbar">
         <el-menu
           :default-active="route.path"
@@ -42,7 +42,7 @@
             '--el-menu-hover-bg-color': 'rgba(255,255,255,0.08)',
           }"
         >
-          <!-- ════ 首页 ════ -->
+          <!-- ════ 工作台：固定第一（后端 sections 不含 dashboard） ════ -->
           <el-menu-item index="/dashboard" class="menu-item-dashboard">
             <el-icon><HomeFilled /></el-icon>
             <template #title>
@@ -50,321 +50,76 @@
             </template>
           </el-menu-item>
 
-          <!-- ════ 核心业务 ════ -->
-          <div
-            v-show="!isCollapsed"
-            v-if="
-              menuStore.canAccessMenu('villages') ||
-              menuStore.canAccessMenu('projects') ||
-              menuStore.canAccessMenu('schools') ||
-              menuStore.canAccessMenu('pairing') ||
-              menuStore.canAccessMenu('donation') ||
-              menuStore.canAccessMenu('handover') ||
-              menuStore.canAccessMenu('policies') ||
-              menuStore.canAccessMenu('funds-admin') ||
-              menuStore.canAccessMenu('funds-user')
-            "
-            class="menu-section-label"
-          >
-            <span>核心业务</span>
-          </div>
-
-          <!-- 帮扶村管理：单入口，年度概览/数据录入选为页内tab -->
-          <el-menu-item v-if="menuStore.canAccessMenu('villages')" index="/supported-villages">
-            <el-icon><Location /></el-icon>
-            <template #title>
-              <span class="menu-title-text">帮扶村管理</span>
-            </template>
-          </el-menu-item>
-
-          <!-- 帮扶项目：单入口，项目管控/导入为页内tab -->
-          <el-menu-item v-if="menuStore.canAccessMenu('projects')" index="/projects">
-            <el-icon><Folder /></el-icon>
-            <template #title>
-              <span class="menu-title-text">帮扶项目</span>
-            </template>
-          </el-menu-item>
-
-          <!-- 帮扶学校：单入口，学校分析为页内tab -->
-          <el-menu-item v-if="menuStore.canAccessMenu('schools')" index="/schools">
-            <el-icon><School /></el-icon>
-            <template #title>
-              <span class="menu-title-text">帮扶学校</span>
-            </template>
-          </el-menu-item>
-
-          <!-- 结对帮扶：主体↔对象台账（结对 + 走访记录） -->
-          <el-menu-item v-if="menuStore.canAccessMenu('pairing')" index="/pairings">
-            <el-icon><Connection /></el-icon>
-            <template #title>
-              <span class="menu-title-text">结对帮扶</span>
-            </template>
-          </el-menu-item>
-
-          <!-- 捐赠物资：实物捐赠台账（图书/设备/物资，w17-003） -->
-          <el-menu-item v-if="menuStore.canAccessMenu('donation')" index="/donations">
-            <el-icon><Box /></el-icon>
-            <template #title>
-              <span class="menu-title-text">捐赠物资</span>
-            </template>
-          </el-menu-item>
-
-          <!-- 工作移交：人员轮换时把「我负责/我发起」的资产一键交给接任人（w17-004） -->
-          <el-menu-item v-if="menuStore.canAccessMenu('handover')" index="/handover">
-            <el-icon><Switch /></el-icon>
-            <template #title>
-              <span class="menu-title-text">工作移交</span>
-            </template>
-          </el-menu-item>
-
-          <!-- 经费管理：多子项保留el-sub-menu，位置移到帮扶学校之后 -->
-          <el-sub-menu
-            v-if="menuStore.canAccessMenu('funds-admin') || menuStore.canAccessMenu('funds-user')"
-            index="fund-group"
-            popper-class="aside-popper"
-          >
-            <template #title>
-              <el-icon><Money /></el-icon>
-              <span class="menu-title-text">经费管理</span>
-            </template>
-            <!-- 子项各按自己的 menuKey 门控：仅凭父级 funds-admin/funds-user
-                 放行会让无权限的子项照样可见（对应路由 meta.menuKey 见 router/index.ts，
-                 缺失的历史路由按经费管理主键 funds-admin 收敛）。 -->
-            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds">
-              <span>经费总览</span>
-            </el-menu-item>
-            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/budget">
-              <span>预算管理</span>
-            </el-menu-item>
-            <el-menu-item v-if="menuStore.canAccessMenu('funds-user')" index="/funds/user">
-              <span>经费申请</span>
-            </el-menu-item>
-            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/contract">
-              <span>合同管理</span>
-            </el-menu-item>
-            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/transfer">
-              <span>转账凭证</span>
-            </el-menu-item>
-            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/anomaly">
-              <span>异常监控</span>
-            </el-menu-item>
+          <!-- ════ 收藏（有数据时才显示） ════ -->
+          <template v-if="visibleFavorites.length">
+            <div v-show="!isCollapsed" class="menu-section-label">
+              <span>收藏</span>
+            </div>
             <el-menu-item
-              v-if="menuStore.canAccessMenu('funds-lifecycle')"
-              index="/funds/lifecycle"
+              v-for="entry in visibleFavorites"
+              :key="`fav-${entry.key}`"
+              :index="entry.path"
             >
-              <span>资金周期</span>
+              <el-icon><StarFilled /></el-icon>
+              <template #title>
+                <span class="menu-title-text">{{ entry.label }}</span>
+              </template>
             </el-menu-item>
+          </template>
+
+          <!-- ════ 最近访问（有数据时才显示，已收藏项去重） ════ -->
+          <template v-if="visibleRecents.length">
+            <div v-show="!isCollapsed" class="menu-section-label">
+              <span>最近访问</span>
+            </div>
             <el-menu-item
-              v-if="menuStore.canAccessMenu('funds-settlement')"
-              index="/funds/settlement"
+              v-for="entry in visibleRecents"
+              :key="`recent-${entry.key}`"
+              :index="entry.path"
             >
-              <span>决算结算</span>
+              <el-icon><Clock /></el-icon>
+              <template #title>
+                <span class="menu-title-text">{{ entry.label }}</span>
+              </template>
             </el-menu-item>
-            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/analysis">
-              <span>经费分析</span>
-            </el-menu-item>
-            <el-menu-item v-if="menuStore.canAccessMenu('funds-admin')" index="/funds/report">
-              <span>经费报表</span>
-            </el-menu-item>
-          </el-sub-menu>
+          </template>
 
-          <el-menu-item v-if="menuStore.canAccessMenu('policies')" index="/policies">
-            <el-icon><Document /></el-icon>
-            <template #title>
-              <span class="menu-title-text">帮扶政策</span>
+          <!-- ════ 后端下发的板块（page / group / console 三种渲染） ════ -->
+          <template v-for="section in sidebarSections" :key="section.key">
+            <div v-show="!isCollapsed" class="menu-section-label">
+              <span>{{ section.label }}</span>
+            </div>
+            <template v-for="item in section.items" :key="item.key">
+              <!-- page：普通页面直链 -->
+              <el-menu-item v-if="item.kind === 'page'" :index="item.path">
+                <el-icon><component :is="resolveMenuIcon(item.icon)" /></el-icon>
+                <template #title>
+                  <span class="menu-title-text">{{ item.label }}</span>
+                </template>
+              </el-menu-item>
+              <!-- group：可折叠分组 -->
+              <el-sub-menu
+                v-else-if="item.kind === 'group'"
+                :index="`group-${item.key}`"
+                popper-class="aside-popper"
+              >
+                <template #title>
+                  <el-icon><component :is="resolveMenuIcon(item.icon)" /></el-icon>
+                  <span class="menu-title-text">{{ item.label }}</span>
+                </template>
+                <el-menu-item v-for="child in item.children" :key="child.key" :index="child.path">
+                  <span>{{ child.label }}</span>
+                </el-menu-item>
+              </el-sub-menu>
+              <!-- console：系统管理聚合页（页内 Tab 切换） -->
+              <el-menu-item v-else :index="item.path" class="menu-item-console">
+                <el-icon><component :is="resolveMenuIcon(item.icon)" /></el-icon>
+                <template #title>
+                  <span class="menu-title-text">{{ item.label }}</span>
+                </template>
+              </el-menu-item>
             </template>
-          </el-menu-item>
-
-          <!-- ════ 乡村振兴 ════ -->
-          <div
-            v-show="!isCollapsed"
-            v-if="menuStore.canAccessMenu('rural-works')"
-            class="menu-section-label"
-          >
-            <span>乡村振兴</span>
-          </div>
-
-          <el-sub-menu
-            v-if="menuStore.canAccessMenu('rural-works')"
-            index="rural-group"
-            popper-class="aside-popper"
-          >
-            <template #title>
-              <el-icon><Stamp /></el-icon>
-              <span class="menu-title-text">乡村振兴</span>
-            </template>
-            <el-menu-item index="/rural-works"><span>工作首页</span></el-menu-item>
-            <el-menu-item index="/rural-works/list"><span>工作列表</span></el-menu-item>
-          </el-sub-menu>
-
-          <!-- ════ 工作流 ════ -->
-          <div
-            v-show="!isCollapsed"
-            v-if="menuStore.canAccessMenu('approval') || menuStore.canAccessMenu('work-analysis')"
-            class="menu-section-label"
-          >
-            <span>工作流</span>
-          </div>
-
-          <el-sub-menu
-            v-if="menuStore.canAccessMenu('approval')"
-            index="approval-group"
-            popper-class="aside-popper"
-          >
-            <template #title>
-              <el-icon><Checked /></el-icon>
-              <span class="menu-title-text">审批管理</span>
-            </template>
-            <el-menu-item index="/approval"><span>审批概览</span></el-menu-item>
-            <el-menu-item index="/approval/pending"><span>待审批</span></el-menu-item>
-            <el-menu-item index="/approval/my"><span>我的申请</span></el-menu-item>
-            <el-menu-item index="/approval/history"><span>审批历史</span></el-menu-item>
-          </el-sub-menu>
-
-          <el-menu-item v-if="menuStore.canAccessMenu('work-analysis')" index="/work-calendar">
-            <el-icon><Calendar /></el-icon>
-            <template #title>
-              <span class="menu-title-text">工作日历</span>
-            </template>
-          </el-menu-item>
-
-          <el-menu-item v-if="menuStore.canAccessMenu('todos')" index="/todos">
-            <el-icon><Select /></el-icon>
-            <template #title>
-              <span class="menu-title-text">待办事项</span>
-            </template>
-          </el-menu-item>
-
-          <!-- ════ 数据分析 ════ -->
-          <div
-            v-show="!isCollapsed"
-            v-if="
-              menuStore.canAccessMenu('data') ||
-              menuStore.canAccessMenu('data-overview') ||
-              menuStore.canAccessMenu('report-templates') ||
-              menuStore.canAccessMenu('report-export') ||
-              menuStore.canAccessMenu('analytics') ||
-              menuStore.canAccessMenu('analytics-dashboard') ||
-              menuStore.canAccessMenu('analytics-map')
-            "
-            class="menu-section-label"
-          >
-            <span>数据分析</span>
-          </div>
-
-          <el-sub-menu
-            v-if="
-              menuStore.canAccessMenu('analytics') ||
-              menuStore.canAccessMenu('data') ||
-              menuStore.canAccessMenu('data-overview')
-            "
-            index="data-group"
-            popper-class="aside-popper"
-          >
-            <template #title>
-              <el-icon><DataAnalysis /></el-icon>
-              <span class="menu-title-text">数据分析</span>
-            </template>
-            <el-menu-item index="/data-analysis"><span>分析首页</span></el-menu-item>
-            <el-menu-item index="/data-analysis/dashboard"><span>分析仪表板</span></el-menu-item>
-            <el-menu-item index="/data-analysis/map"><span>地图可视化</span></el-menu-item>
-            <el-menu-item index="/report/templates"><span>报表模板</span></el-menu-item>
-            <el-menu-item index="/export/report"><span>报表导出</span></el-menu-item>
-            <el-menu-item index="/data-analysis/assessment"><span>成效评估</span></el-menu-item>
-            <el-menu-item index="/effectiveness"><span>帮扶成效</span></el-menu-item>
-          </el-sub-menu>
-
-          <!-- ════ 数据管理 ════ -->
-          <div
-            v-show="!isCollapsed"
-            v-if="
-              menuStore.canAccessMenu('data') ||
-              menuStore.canAccessMenu('data-overview') ||
-              menuStore.canAccessMenu('data-quality') ||
-              menuStore.canAccessMenu('data-logs') ||
-              menuStore.canAccessMenu('data-package-report') ||
-              menuStore.canAccessMenu('data-package-receive')
-            "
-            class="menu-section-label"
-          >
-            <span>数据管理</span>
-          </div>
-
-          <el-sub-menu
-            v-if="menuStore.canAccessMenu('data') || menuStore.canAccessMenu('data-overview')"
-            index="datasync-group"
-            popper-class="aside-popper"
-          >
-            <template #title>
-              <el-icon><Connection /></el-icon>
-              <span class="menu-title-text">数据管理</span>
-            </template>
-            <el-menu-item index="/data-management"><span>数据概览</span></el-menu-item>
-            <!-- 数据备份/操作日志入口已统一收归至系统管理 → 审计管理/备份管理 -->
-            <el-menu-item index="/data-sync/export"><span>数据导出</span></el-menu-item>
-            <el-menu-item index="/data-sync/import"><span>数据导入</span></el-menu-item>
-            <el-menu-item index="/data-package"><span>数据包与批量导入</span></el-menu-item>
-            <!-- 批量导入已整合至数据包管理 -->
-            <el-menu-item v-if="menuStore.canAccessMenu('data-verify')" index="/data-verify"
-              ><span>数据校验</span></el-menu-item
-            >
-          </el-sub-menu>
-
-          <!-- ════ 系统 ════ -->
-          <div
-            v-show="!isCollapsed"
-            v-if="menuStore.canAccessMenu('system')"
-            class="menu-section-label"
-          >
-            <span>系统管理</span>
-          </div>
-
-          <el-menu-item v-if="menuStore.canAccessMenu('users-orgs')" index="/organization">
-            <el-icon><OfficeBuilding /></el-icon>
-            <template #title>
-              <span class="menu-title-text">组织机构</span>
-            </template>
-          </el-menu-item>
-
-          <el-sub-menu
-            v-if="menuStore.canAccessMenu('system')"
-            index="system-group"
-            popper-class="aside-popper"
-          >
-            <template #title>
-              <el-icon><Setting /></el-icon>
-              <span class="menu-title-text">系统管理</span>
-            </template>
-            <!-- 静态「机器码与通行码」isAdmin 专属入口保留（机器码/通行码合一管理页）；
-                 machine-code / pass-code 两个菜单 key 由该入口承载，动态列表中去重跳过 -->
-            <el-menu-item v-if="authStore.isAdmin" index="/admin/machine-code/management"
-              ><span>机器码与通行码</span></el-menu-item
-            >
-            <!-- 其余子项改为后端菜单树动态渲染（2026-09-12：原硬编码 6 入口遗漏了
-                 system 组 25+ 功能项——缓存/零信任/更新日志/权限包/后台任务/数据分级/
-                 运行环境/系统总览/管理面板等全部无 UI 入口）。/menus/accessible 下发的
-                 菜单树本身已是后端按当前用户权限过滤的结果，故不逐项 canAccessMenu；
-                 path 解析（menuKey 路由兜底 / 漂移映射 / 死链跳过）、去重与排序规则
-                 统一见 @/utils/systemMenu -->
-            <el-menu-item v-for="item in systemMenuItems" :key="item.key" :index="item.path"
-              ><span>{{ item.label }}</span></el-menu-item
-            >
-          </el-sub-menu>
-
-          <!-- 备份管理：独立顶级入口（普通用户只读可见，不依赖 admin-only 的 system 组） -->
-          <el-menu-item v-if="menuStore.canAccessMenu('backup')" index="/system/backup">
-            <el-icon><FolderOpened /></el-icon>
-            <template #title>
-              <span class="menu-title-text">备份管理</span>
-            </template>
-          </el-menu-item>
-
-          <el-menu-item v-if="menuStore.canAccessMenu('messages')" index="/message">
-            <el-icon><Message /></el-icon>
-            <template #title>
-              <span class="menu-title-text">消息中心</span>
-            </template>
-          </el-menu-item>
+          </template>
         </el-menu>
       </el-scrollbar>
     </el-aside>
@@ -391,6 +146,19 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
+          <!-- 菜单搜索（Ctrl+K） -->
+          <el-tooltip content="菜单搜索 (Ctrl+K)" placement="bottom">
+            <span
+              class="theme-trigger menu-search-trigger"
+              role="button"
+              tabindex="0"
+              aria-label="菜单搜索"
+              @click="openMenuSearch"
+            >
+              <el-icon><Search /></el-icon>
+            </span>
+          </el-tooltip>
+
           <!-- 消息中心铃铛（未读角标） -->
           <el-tooltip content="消息中心" placement="bottom">
             <span class="theme-trigger message-bell" role="button" tabindex="0" @click="goMessages">
@@ -465,6 +233,8 @@
     </el-container>
     <!-- 移动端底部导航 -->
     <MobileBottomNav />
+    <!-- 菜单搜索（Ctrl+K） -->
+    <MenuSearchDialog v-model="menuSearchVisible" />
   </div>
 </template>
 
@@ -473,58 +243,114 @@ import { ref, computed, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
 import { SYSTEM_VERSION as systemVersion } from '@/config/constants'
 import { ElNotification } from 'element-plus'
 import { useAutoLock as useAutoLockModule } from '@/composables/useAutoLock'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useKeyboardShortcuts, type Shortcut } from '@/composables/useKeyboardShortcuts'
 import { useAuthStore } from '@/stores/auth'
-import { useMenuStore } from '@/stores/menu'
-import { resolveSystemMenuItems } from '@/utils/systemMenu'
+import { useMenuStore, type MenuEntry, type MenuKind } from '@/stores/menu'
+import { useMenuFavorites } from '@/composables/useMenuFavorites'
+import { useRecentMenus } from '@/composables/useRecentMenus'
+import { resolveMenuIcon } from '@/components/nav/menuIcons'
 import { useConfigStore, THEME_OPTIONS } from '@/stores/config'
 import { cancelAllRequests, freezeRequests } from '@/api/request'
 import MobileBottomNav from '@/components/layout/MobileBottomNav.vue'
+import MenuSearchDialog from '@/components/nav/MenuSearchDialog.vue'
 import {
   HomeFilled,
-  Folder,
-  FolderOpened,
-  Money,
-  Location,
-  DataAnalysis,
-  Setting,
   Expand,
   Fold,
   User,
-  School,
-  Document,
-  Stamp,
-  Checked,
-  Connection,
-  Box,
-  Switch,
-  OfficeBuilding,
-  Message,
   Bell,
-  Calendar,
   ArrowDown,
   Lock,
   SwitchButton,
-  Select,
   Brush,
   Check,
+  StarFilled,
+  Clock,
+  Search,
 } from '@element-plus/icons-vue'
 
+/** 侧栏普通链接（page / group children / 聚合页共用） */
+interface SidebarLink {
+  key: string
+  label: string
+  path: string
+  icon?: string
+}
+
+/** 侧栏一级入口：page 直链 / group 可折叠 / console 聚合页 */
+interface SidebarItem {
+  key: string
+  label: string
+  icon?: string
+  kind: MenuKind
+  path: string
+  children: SidebarLink[]
+}
+
+/** 侧栏板块 */
+interface SidebarSection {
+  key: string
+  label: string
+  items: SidebarItem[]
+}
+
 const route = useRoute()
-const router = useRouter()
 const { pushSafe } = useRouterSafe()
 const authStore = useAuthStore()
 const menuStore = useMenuStore()
 const configStore = useConfigStore()
+const { favorites } = useMenuFavorites()
+const { recentMenus: recents } = useRecentMenus()
 
-// ── 系统管理子菜单：基于后端菜单树动态渲染 ──
-// 菜单树来自 /menus/accessible（已按当前用户权限过滤），故子项不逐项
-// canAccessMenu；path 解析（menuKey 路由兜底 / 漂移映射 / 死链跳过）、
-// 去重（backup/messages/machine-code/pass-code）与 order 排序规则
-// 统一封装在 @/utils/systemMenu，可独立单测。
-const systemMenuItems = computed(() => resolveSystemMenuItems(menuStore.menus, router.getRoutes()))
+// ── 侧栏数据驱动：后端菜单 v2 → 渲染模型（保证模板零防御分支） ──
+function toSidebarLink(entry: MenuEntry): SidebarLink {
+  return {
+    key: entry.key,
+    label: entry.label,
+    path: entry.path as string,
+    icon: entry.icon,
+  }
+}
+
+function toSidebarItem(entry: MenuEntry): SidebarItem {
+  const children = entry.kind === 'group' ? (entry.children as MenuEntry[]).map(toSidebarLink) : []
+  return {
+    key: entry.key,
+    label: entry.label,
+    icon: entry.icon,
+    kind: entry.kind,
+    path: entry.kind === 'group' ? '' : (entry.path as string),
+    children,
+  }
+}
+
+const sidebarSections = computed<SidebarSection[]>(() =>
+  menuStore.sections.map((section) => ({
+    key: section.key,
+    label: section.label,
+    items: section.items.map(toSidebarItem),
+  }))
+)
+
+// ── 收藏 / 最近访问（localStorage；仅展示当前用户仍可访问的入口） ──
+const visibleFavorites = computed(() =>
+  favorites.value.filter((entry) => menuStore.canAccessMenu(entry.key))
+)
+const favoriteKeys = computed(() => new Set(visibleFavorites.value.map((entry) => entry.key)))
+const visibleRecents = computed(() =>
+  recents.value.filter(
+    (entry) => menuStore.canAccessMenu(entry.key) && !favoriteKeys.value.has(entry.key)
+  )
+)
+
+// ── 菜单搜索弹窗（Ctrl+K） ──
+const menuSearchVisible = ref(false)
+
+function openMenuSearch(): void {
+  menuSearchVisible.value = true
+}
 
 // ── 消息中心未读角标 ──
 const unreadCount = ref(0)
@@ -568,10 +394,9 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (unreadTimer !== null) {
-    window.clearInterval(unreadTimer)
-    unreadTimer = null
-  }
+  // 挂载即创建定时器，卸载时无条件清理（clearInterval(undefined) 为安全空操作）
+  window.clearInterval(unreadTimer as number)
+  unreadTimer = null
 })
 
 // ── 主题切换 ──
@@ -634,6 +459,14 @@ const currentRoute = computed(() => (route.meta?.title as string) || '')
 
 // ── 全局快捷键 ──
 const globalShortcuts: Shortcut[] = [
+  {
+    key: 'k',
+    ctrl: true,
+    handler: openMenuSearch,
+    description: '菜单搜索',
+    group: '导航',
+    disabledInInput: false,
+  },
   {
     key: 'h',
     ctrl: true,

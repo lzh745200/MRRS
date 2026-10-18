@@ -1,8 +1,8 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.12.25
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.13.0
 
-![Version](https://img.shields.io/badge/version-1.12.25-blue)
+![Version](https://img.shields.io/badge/version-1.13.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-19%2C158%2B-brightgreen)
@@ -12,8 +12,8 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **13,505 passed**（684 文件）, 0 失败（含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **6,685 passed**（316 文件）, 0 失败 |
+| 后端测试 | **13,550 passed**, 0 失败（含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **6,707 passed**（316 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -31,7 +31,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-18（v1.12.24）— 后端 13,505 用例（684 文件）+ 行/分支覆盖率 100.00%、前端 6,685 用例（316 文件）全部通过；
+> **上次全量验证**: 2026-10-18（v1.13.0）— 后端 13,550 用例 + 行/分支覆盖率 100.00%、前端 6,707 用例（316 文件）全部通过；
 > flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（50 版本）
 
 ## 快速开始
@@ -92,7 +92,8 @@ cd frontend && npm install && npm run dev
 ### 前端
 - **框架**: Vue 3 + TypeScript + Vite
 - **UI**: Element Plus + ECharts + Leaflet
-- **状态**: Pinia + 响应式菜单权限
+- **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`）数据驱动侧栏/移动端/权限面板；Ctrl+K 菜单搜索 + 收藏/最近访问
+- **状态**: Pinia
 - **测试**: Vitest + Playwright
 - **代码质量**: ESLint + Prettier + lint-staged
 
@@ -104,10 +105,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端单元测试 | pytest | 13,505（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端单元测试 | pytest | 13,550（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,685（316 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 6,707（316 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 12 流程 | Login/Dashboard/Projects/Approval/Funds |
 | 性能测试 | Locust | 配置可用 | 负载测试 |
 | 属性测试 | fast-check | 多组 | 组件属性验证 |
@@ -179,10 +180,11 @@ npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本
 │   ├── middleware/           # CSRF, 审计, 请求日志, 指标, maintenance_gate(写请求闸门)
 │   └── startup/              # 启动钩子（种子/监控/恢复/环境自检 + 组织树自愈）
 ├── frontend/src/             # 前端（Vue 3 + TypeScript，292 个源文件）
-│   ├── views/                # 页面视图（131 个 .vue）
-│   ├── components/           # 通用 + 业务组件
-│   ├── stores/               # Pinia 状态
-│   ├── composables/          # 组合式函数
+│   ├── views/                # 页面视图（含 system/console/SystemConsole.vue 6 个聚合页）
+│   ├── components/           # 通用 + 业务组件（nav/ 菜单搜索）
+│   ├── composables/          # 组合式函数（useRecentMenus / useMenuFavorites）
+│   ├── layouts/              # 主框架（数据驱动侧栏）
+│   ├── stores/               # Pinia 状态（menu.ts 消费后端 v2 菜单）
 │   └── utils/                # 工具函数
 ├── electron/                 # Electron 桌面壳
 ├── docker/                   # 多架构 Dockerfile + E2E compose
@@ -213,6 +215,17 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 > 发布校验和随 GitHub Release 一起提供（旧版 `SHA256SUMS-*` 已随版本归档清理）。
 
 ## 近期修复记录
+
+### 2026-10-18（v1.13.0）导航架构重构（向后兼容）
+- 🧭 **单一菜单源**：后端 `backend/app/api/v1/menus.py` 成为全站唯一菜单源（v2 `sections` + `flat_keys`；
+  `kind` = page/group/console），侧栏、移动端底部导航、权限面板/权限包菜单树全部数据驱动；
+  删除前端菜单副本 `frontend/src/config/menu-config.ts`、`frontend/src/utils/systemMenu.ts` 及其测试
+- 🗂️ **导航重排为 7 板块**：工作台（固定首位）+ 帮扶业务 / 乡村振兴 / 工作协同 / 分析汇报 / 数据管理 / 系统管理
+- 🧰 **系统管理 6 聚合页**：组织与权限 / 安全与审计 / 运维与监控 / 备份与存储 / 系统设置 / 关于与反馈，
+  页内 Tab 切换；旧页面、旧路由、旧菜单 key 全部保留（深链不失效、权限包配置兼容）
+- ⌨️ **导航增强**：Ctrl+K 菜单搜索、最近访问与收藏（localStorage `nav:recent` / `nav:favorites`，上限 8）
+- ✅ **门禁**：`scripts/check_menu_alignment.py` 重写为规则 A~E（6 板块 / 99 key / 85 带 path 入口全对齐）；
+  相关改动文件覆盖率 100%，`menus.py` 语句+分支 100%；发布门禁全量实测：后端 13,550 用例 / 语句 100.00%（43,293/43,293）+ 分支 100.00%（10,636/10,636），前端 6,707 用例（316 文件）/ 12 组 glob 四指标 100%
 
 ### 2026-09-14（v1.12.8）
 - 🛡️ **R7 恢复维护窗口**：备份恢复期间新的写请求一律 503、读请求放行、等待在途请求归零后执行、`finally` 解除；`/health` 暴露 `maintenance` 状态。修复"恢复时恰有在途写 → Windows 覆盖失败 / POSIX 写进旧 inode 静默丢提交"

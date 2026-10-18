@@ -142,18 +142,43 @@ import {
   unbindPackUsers,
   type PermissionPack,
 } from '@/api/permissionPack'
-import { get, apiRequest } from '@/api/request'
+import { apiRequest } from '@/api/request'
+import { useMenuStore } from '@/stores/menu'
+import type { MenuEntry, MenuSection } from '@/stores/menu'
 
 import { format } from '@/utils'
+
+/**
+ * 菜单树节点（el-tree 数据源）。
+ * 契约 §6：菜单树由 `/menus/all` 的 v2 sections 渲染为"板块 → 入口 → Tab"三级；
+ * 板块节点 isSection=true，仅作展示分组，不写入权限包 menu_keys（保存协议仍是旧 key 数组）。
+ */
+interface MenuTreeNode {
+  key: string
+  label: string
+  children?: MenuTreeNode[]
+  isSection?: boolean
+}
+
 const packs = ref<PermissionPack[]>([])
 const loading = ref(false)
-const menuTreeData = ref<any[]>([])
+const menuTreeData = ref<MenuTreeNode[]>([])
 const menuTreeRef = ref<any>()
+const menuStore = useMenuStore()
+
+/** 板块分组节点 key 集合：展示用，不属于后端菜单 key，保存时剔除 */
+const sectionKeySet = computed(() => {
+  const keys = new Set<string>()
+  for (const node of menuTreeData.value) {
+    if (node.isSection) keys.add(node.key)
+  }
+  return keys
+})
 
 // 叶子菜单 key 集合：父级 key（存在 children 的）不参与勾选回显
 const leafKeySet = computed(() => {
   const parents = new Set<string>()
-  const walk = (items: any[]) => {
+  const walk = (items: MenuTreeNode[]) => {
     for (const item of items) {
       if (item.children?.length) {
         parents.add(item.key)
@@ -163,7 +188,7 @@ const leafKeySet = computed(() => {
   }
   walk(menuTreeData.value)
   const leaves = new Set<string>()
-  const collect = (items: any[]) => {
+  const collect = (items: MenuTreeNode[]) => {
     for (const item of items) {
       if (!parents.has(item.key)) leaves.add(item.key)
       if (item.children?.length) collect(item.children)
@@ -214,7 +239,10 @@ async function savePack() {
     typeof tree.getCheckedKeys === 'function' &&
     typeof tree.getHalfCheckedKeys === 'function'
   ) {
-    menuKeys = [...(tree.getCheckedKeys() as string[]), ...(tree.getHalfCheckedKeys() as string[])]
+    menuKeys = [
+      ...(tree.getCheckedKeys() as string[]),
+      ...(tree.getHalfCheckedKeys() as string[]),
+    ].filter((key) => !sectionKeySet.value.has(key))
   }
   const payload = {
     name,
@@ -332,18 +360,38 @@ async function loadPacks() {
   }
 }
 
+/** v2 入口（page/group/console）→ 树节点；console 的 tabs 作为第三级子节点 */
+function toEntryNode(entry: MenuEntry): MenuTreeNode {
+  const children =
+    entry.kind === 'console'
+      ? (entry.tabs ?? []).map((tab) => ({ key: tab.key, label: tab.label }))
+      : (entry.children ?? []).map(toEntryNode)
+  return children.length
+    ? { key: entry.key, label: entry.label, children }
+    : { key: entry.key, label: entry.label }
+}
+
+/** v2 sections → 三级 el-tree 数据：板块（分组）→ 入口 → Tab/子页面 */
+function buildMenuTree(sections: MenuSection[]): MenuTreeNode[] {
+  return sections.map((section) => ({
+    key: section.key,
+    label: section.label,
+    isSection: true,
+    children: section.items.map(toEntryNode),
+  }))
+}
+
+/**
+ * 加载全量菜单树。
+ * 契约 §6：/menus/all 的 v2 sections 由 menuStore.fetchAllMenus() 统一获取
+ * （不再读取前端静态菜单配置 menu-config，该文件已删除）。
+ */
 async function loadMenuTree() {
   try {
-    const res: any = await get('/menus/all')
-    menuTreeData.value = res.data || res || []
+    menuTreeData.value = buildMenuTree(await menuStore.fetchAllMenus())
   } catch {
-    // 回退到前端静态菜单配置
-    try {
-      const { MENU_CONFIG } = await import('@/config/menu-config')
-      menuTreeData.value = MENU_CONFIG as unknown as any[]
-    } catch {
-      menuTreeData.value = []
-    }
+    // 菜单树加载失败不阻断页面：保存仍按既有 key 数组协议提交
+    menuTreeData.value = []
   }
 }
 

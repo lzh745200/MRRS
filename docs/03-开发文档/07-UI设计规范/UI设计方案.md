@@ -1,6 +1,6 @@
 # UI 设计方案
 
-> **版本**: v1.0 | **日期**: 2026-08-04 | **范围**: frontend/（Vue 3 + Element Plus）
+> **版本**: v1.0 | **日期**: 2026-08-04（2026-10-18 补充 v1.13.0 导航改版：7 板块 + 系统管理 6 聚合页 + 菜单搜索/最近/收藏） | **范围**: frontend/（Vue 3 + Element Plus）
 > 本文档是帮扶管理信息系统的 UI 设计总纲：设计定位、视觉基础、主题策略、组件/页面规范、状态与无障碍规范、实施路线图。
 > 配套代码事实源：`frontend/src/styles/tokens.scss`（设计 Token 唯一数据源）。
 
@@ -151,7 +151,7 @@
 - **启动应用**：`main.ts` 在 createApp 之前读取 localStorage 并应用到 DOM，避免主题闪烁（FOUC）。
 - **切换入口（双通道）**：
   - **顶栏切换器**（DefaultLayoutSafe header-right，全体用户）：仅开放已完成适配的 4 套 — 军绿（default）/ 明亮（light）/ 户外（outdoor）/ 高对比（high-contrast）。
-  - **系统设置页**（ConfigPackage，管理员）：开放全部 6 套（含深色 dark / 军旅 military，供调试与汇报场景）。
+  - **系统配置页**（系统管理 → 备份与存储 → **系统配置** `/system/config`，管理员）：开放全部 6 套（含深色 dark / 军旅 military，供调试与汇报场景）。
 - **默认值**：`'default'`（军绿）。
 - **开放节奏**：dark 与 military 待二期全站硬编码 Token 化后再进入顶栏切换器（military 的 `--color-bg-page` 为渐变值，用于 `background-color` 时失效，需先治理）。
 - **无障碍接入**：`styles/accessibility.css` 已由 main.ts 全局引入 — high-contrast 主题补全、outdoor 触控增强、焦点环、prefers-reduced-motion；其中会改变全站既有布局的两条全局尺寸规则（el-icon 最小 24px / el-button--small 最小 32px）已移除。
@@ -177,6 +177,23 @@
 | 顶栏 | 高 60px（`--layout-header-height`）；左：折叠按钮+面包屑；右：主题切换器+用户下拉 |
 | 内容区 | 最大宽 1400px（`--layout-content-max-width`），内边距 24px |
 | 页脚 | 高 28px，版本号 |
+
+**侧边栏导航结构（v1.13.0，完全数据驱动）**：
+
+```
+侧边栏
+├── 工作台（固定第一，/dashboard）
+├── 收藏（有数据时显示，最多 8 个）
+├── 最近访问（有数据时显示，最多 8 个）
+└── v-for sections（后端 /menus/accessible v2 下发，按 order 升序）
+    ├── 板块分组标题（帮扶业务 / 乡村振兴 / 工作协同 / 分析汇报 / 数据管理 / 系统管理）
+    ├── page 条目 → 普通菜单项
+    ├── group 条目 → 可折叠子菜单（如 经费管理 / 审批管理 / 数据分析 / 数据上报）
+    └── console 条目 → 聚合页入口（系统管理 6 个）
+```
+
+- 前端**不得再手写菜单段**；`dashboard` 固定渲染，其余全部来自后端 `MENU_DEFINITIONS` v2。
+- 移动端（<768px）：底部导航数据驱动（工作台 + sections 前 3 个入口 + "更多"），抽屉式侧栏保留。
 
 ### 4.2 卡片与对话框（军风标识）
 
@@ -214,6 +231,19 @@
 - 状态类图表优先用语义色（success/warning/danger）。
 - 图表必须随容器 resize（useECharts composable 已处理）；组件卸载前 dispose。
 
+### 4.7 导航与菜单搜索（v1.13.0）
+
+| 交互 | 规范 |
+|------|------|
+| **菜单搜索** | 任意页面 `Ctrl+K` 打开 `MenuSearchDialog`；搜索 `label` / `key` / `path`（大小写不敏感子串）；`↑`/`↓` 移动、`Enter` 跳转、`Esc` 关闭；空搜索显示"收藏 + 最近访问" |
+| **最近访问** | localStorage `nav:recent`，最多 8 条，按访问时间倒序、按 key 去重；损坏数据回退空数组 |
+| **收藏** | localStorage `nav:favorites`，最多 8 条；侧栏顶部"收藏"区与搜索弹窗共享同一份数据 |
+| **菜单权限** | `canAccessMenu(key)` 语义不变，额外支持 console 的 `tabs[].key`；无权限的 Tab 不渲染 |
+| **可访问性** | 搜索弹窗支持键盘全流程操作；侧栏可点击项保持 `role`/焦点可见；菜单激活态用金色文字 + 左缘主色条 |
+
+> 实现位置：`frontend/src/components/nav/MenuSearchDialog.vue`、`composables/useRecentMenus.ts`、
+> `composables/useMenuFavorites.ts`；数据源为 `stores/menu.ts`（后端单一菜单源 v2）。
+
 ---
 
 ## 5. 页面规范
@@ -239,6 +269,15 @@ KPI 卡（可点卡必须 `role="button" tabindex="0"` + 键盘事件）+ 图表
 ### 5.5 大屏（bigscreen）
 
 汇报模式：全屏自动轮播 KPI/经费趋势/成效排名/项目状态。视觉语言可局部启用 `[data-theme="military"]`（深绿渐变+金色徽章+发光效果，tokens.scss 已提供动画时长变量 `--animation-*`）。文字最小 24px，保证投影可读。
+
+### 5.6 系统管理聚合页（SystemConsole，v1.13.0）
+
+- 路由 `/system/console/:group`（group ∈ `org` / `security` / `ops` / `storage` / `settings` / `about`），
+  由 `views/system/console/SystemConsole.vue` 承载；标题/面包屑取后端 console 节点 `label`。
+- 页内用 `el-tabs` 切换，Tab 来自后端 console 节点的 `tabs[]`（**仅渲染有权限的 Tab**）；
+  当前 Tab 用 query `?tab=<tab.key>` 表达，切换用 `router.replace`（不产生历史堆栈）。
+- **只有当前 Tab 的页面组件会被异步加载**；Tab 内容复用原页面组件（旧页面、旧路由全部保留，深链不失效）。
+- 无权限 / 未知 group / 无可渲染 Tab：显示空态与"返回工作台"引导，不白屏。
 
 ---
 
