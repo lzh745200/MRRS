@@ -117,8 +117,11 @@ function mountComp() {
   })
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetAllMocks()
+  // 前序用例可能把 AuthStorage.getToken 改写为空 token（模块级 mock 对象），此处复位
+  const { AuthStorage } = await import('@/utils/authStorage')
+  AuthStorage.getToken = () => 't'
   routeBox.params = { id: '3' }
   getMock.mockImplementation((url: string) => {
     if (url.includes('/attachments')) return Promise.resolve({ data: { items: [att] } })
@@ -130,6 +133,9 @@ beforeEach(() => {
   confirmMock.mockResolvedValue(undefined)
   vi.stubGlobal('fetch', fetchMock)
   fetchMock.mockResolvedValue({ ok: true, blob: vi.fn().mockResolvedValue(new Blob(['x'])) })
+  // jsdom 未实现 URL.createObjectURL/revokeObjectURL：档案册下载链路需要它们
+  ;(URL as any).createObjectURL = vi.fn(() => 'blob:mock')
+  ;(URL as any).revokeObjectURL = vi.fn()
 })
 
 afterEach(() => {
@@ -491,5 +497,67 @@ describe('附件下载与模板', () => {
     await nextTick()
     expect(wrapper.text()).toContain('报告.pdf')
     expect(wrapper.text()).toContain('李四')
+  })
+})
+
+describe('档案册导出（w17-007）', () => {
+  it('handleExportDossier 成功触发 blob 下载', async () => {
+    const clickSpy = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {})
+    const wrapper = mountComp()
+    await flushPromises()
+    await (wrapper.vm as any).handleExportDossier()
+    const call = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+    expect(String(call[0])).toContain('/schools/3/dossier.pdf')
+    expect(call[1].headers.Authorization).toBe('Bearer t')
+    expect(ElMessage.success).toHaveBeenCalledWith('档案册已开始下载')
+    expect((wrapper.vm as any).dossierExporting).toBe(false)
+    clickSpy.mockRestore()
+  })
+
+  it('handleExportDossier 服务端非 2xx → 泛化错误提示', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, blob: vi.fn() })
+    const wrapper = mountComp()
+    await flushPromises()
+    await (wrapper.vm as any).handleExportDossier()
+    expect(logError).toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalledWith('导出档案册失败，请稍后重试')
+    expect((wrapper.vm as any).dossierExporting).toBe(false)
+  })
+
+  it('handleExportDossier 空 token → Authorization 为空串', async () => {
+    const clickSpy = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {})
+    const { AuthStorage } = await import('@/utils/authStorage')
+    AuthStorage.getToken = () => ''
+    const wrapper = mountComp()
+    await flushPromises()
+    await (wrapper.vm as any).handleExportDossier()
+    const call = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+    expect(call[1].headers.Authorization).toBe('')
+    expect(ElMessage.success).toHaveBeenCalledWith('档案册已开始下载')
+    clickSpy.mockRestore()
+  })
+
+  it('handleExportDossier 无学校 ID → 直接返回不请求', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.school.id = ''
+    const before = fetchMock.mock.calls.length
+    await vm.handleExportDossier()
+    expect(fetchMock.mock.calls.length).toBe(before)
+  })
+
+  it('「导出档案册」按钮点击触发下载', async () => {
+    const clickSpy = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {})
+    const wrapper = mountComp()
+    await flushPromises()
+    const btn = wrapper
+      .findAll('.el-button-stub')
+      .find((b) => b.text().includes('导出档案册'))
+    await btn!.trigger('click')
+    await flushPromises()
+    expect(fetchMock.mock.calls.some((c: any[]) => String(c[0]).includes('dossier.pdf'))).toBe(true)
+    expect(ElMessage.success).toHaveBeenCalledWith('档案册已开始下载')
+    clickSpy.mockRestore()
   })
 })

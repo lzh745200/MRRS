@@ -480,7 +480,7 @@ describe('筛选表单与操作栏模板产物', () => {
     expect(logInfo).toHaveBeenCalled()
     vm.dialogVisible = false
 
-    await btns(wrapper, '导出数据')[0].trigger('click')
+    await btns(wrapper, '导出当前筛选')[0].trigger('click')
     await flushPromises()
     expect(exportMock).toHaveBeenCalledTimes(1)
     expect(vm.exporting).toBe(false)
@@ -1147,6 +1147,122 @@ describe('导入错误明细', () => {
     await flushPromises()
     expect(logError).toHaveBeenCalled()
     expect(ElMessage.error).toHaveBeenCalledWith('导入功能需要后端支持，请先启动后端服务')
+    wrapper.unmount()
+  })
+})
+
+// ─────────────────────────────────────────────
+// 009：筛选状态记忆（sessionStorage）+ 导出当前筛选
+// ─────────────────────────────────────────────
+describe('筛选记忆 / 导出当前筛选（009）', () => {
+  // 全局 stub router 的首个路由为 '/'，useFilterMemory 按路由 path 生成 key
+  const MEMORY_KEY = 'filter_memory:/'
+
+  it('进入列表时恢复上次筛选，并用于首次查询', async () => {
+    sessionStorage.setItem(
+      MEMORY_KEY,
+      JSON.stringify({
+        keyword: '恢复村',
+        department: 'D1',
+        county: 'C1',
+        isRevitalizationTier: true,
+        isThreeRegions: 1,
+        yearStart: 2025,
+      })
+    )
+    const wrapper = mountList()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.filters).toMatchObject({
+      keyword: '恢复村',
+      department: 'D1',
+      county: 'C1',
+      isRevitalizationTier: true,
+      isThreeRegions: 1,
+      yearStart: 2025,
+    })
+    expect(listMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keyword: '恢复村',
+        department: 'D1',
+        county: 'C1',
+        is_revitalization_tier: true,
+        is_three_regions: 1,
+        year_start: 2025,
+      })
+    )
+    wrapper.unmount()
+  })
+
+  it('搜索 / 重置 / 分页时保存筛选到 sessionStorage', async () => {
+    const wrapper = mountList()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.filters.keyword = '保存村'
+    vm.filters.department = 'D2'
+    vm.handleSearch()
+    await flushPromises()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      keyword: '保存村',
+      department: 'D2',
+    })
+
+    vm.handleReset()
+    await flushPromises()
+    // undefined 字段会被 JSON.stringify 丢弃，重置后仅剩空 keyword
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toEqual({ keyword: '' })
+
+    vm.handleSizeChange(50)
+    await flushPromises()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      keyword: '',
+    })
+
+    vm.filters.keyword = '翻页村'
+    vm.handlePageChange(3)
+    await flushPromises()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      keyword: '翻页村',
+    })
+    wrapper.unmount()
+  })
+
+  it('损坏的 JSON 记忆 → 静默忽略且清除脏数据', async () => {
+    sessionStorage.setItem(MEMORY_KEY, '{broken json')
+    const wrapper = mountList()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.filters.keyword).toBe('')
+    expect(sessionStorage.getItem(MEMORY_KEY)).toBeNull()
+    expect(listMock).toHaveBeenCalledWith(expect.objectContaining({ keyword: undefined }))
+    wrapper.unmount()
+  })
+
+  it('导出当前筛选：按钮文案 + 复用 exportSupportedVillages 传当前（含恢复的）筛选参数', async () => {
+    sessionStorage.setItem(
+      MEMORY_KEY,
+      JSON.stringify({ keyword: '导出村', department: 'D1', county: 'C2', isRevitalizationTier: false })
+    )
+    const wrapper = mountList()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await btns(wrapper, '导出当前筛选')[0].trigger('click')
+    await flushPromises()
+    expect(exportMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keyword: '导出村',
+        department: 'D1',
+        county: 'C2',
+        is_revitalization_tier: false,
+        year: new Date().getFullYear(),
+      })
+    )
+    // 勾选行优先：有勾选时携带 village_ids 且 year undefined
+    vm.handleSelectionChange([rowA, rowB] as any)
+    await vm.handleExport()
+    await flushPromises()
+    expect(exportMock.mock.calls.at(-1)?.[0]).toMatchObject({ village_ids: [11, 12], year: undefined })
     wrapper.unmount()
   })
 })

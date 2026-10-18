@@ -1463,3 +1463,128 @@ describe('回收站（Phase C）', () => {
     })
   })
 })
+
+// ─────────────────────────────────────────────
+// 009：筛选状态记忆（sessionStorage）+ MoneyText 试点 + 导出当前筛选
+// ─────────────────────────────────────────────
+describe('筛选记忆 / MoneyText / 导出当前筛选（009）', () => {
+  // 全局 stub router 的首个路由为 '/'，useFilterMemory 按路由 path 生成 key
+  const MEMORY_KEY = 'filter_memory:/'
+
+  it('MoneyText 试点：金额列数值与 formatMoney4 一致，空值显示占位符', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const texts = wrapper.findAll('.money-text').map((n) => n.text())
+    // el-table-column 桩按 rowA~rowD 渲染金额列：100.5 / 200 / 0 / null
+    expect(texts).toEqual(['100.5', '200', '0', '-'])
+    wrapper.unmount()
+  })
+
+  it('进入列表时恢复上次筛选，并用于首次查询', async () => {
+    sessionStorage.setItem(
+      MEMORY_KEY,
+      JSON.stringify({
+        keyword: '恢复关键字',
+        type: 'project',
+        status: 'pending',
+        village_id: 7,
+        school_id: 9,
+      })
+    )
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.filterForm).toMatchObject({
+      keyword: '恢复关键字',
+      type: 'project',
+      status: 'pending',
+      village_id: 7,
+      school_id: 9,
+    })
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({
+          keyword: '恢复关键字',
+          fund_type: 'project',
+          status: 'pending',
+          village_id: 7,
+          school_id: 9,
+        }),
+      })
+    )
+    wrapper.unmount()
+  })
+
+  it('搜索 / 重置 / 状态筛选 / 分页时保存筛选到 sessionStorage', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.filterForm.keyword = '保存关键字'
+    vm.filterForm.type = 'education'
+    vm.handleSearch()
+    await flushPromises()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      keyword: '保存关键字',
+      type: 'education',
+    })
+
+    vm.handleReset()
+    await flushPromises()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      keyword: '',
+      type: '',
+      status: '',
+    })
+
+    vm.filterByStatus('allocated')
+    await flushPromises()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      status: 'allocated',
+    })
+
+    vm.handleSizeChange()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      status: 'allocated',
+    })
+    vm.handlePageChange()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      status: 'allocated',
+    })
+    wrapper.unmount()
+  })
+
+  it('损坏的 JSON 记忆 → 静默忽略（不崩溃）且清除脏数据', async () => {
+    sessionStorage.setItem(MEMORY_KEY, '{broken json')
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.filterForm.keyword).toBe('')
+    expect(sessionStorage.getItem(MEMORY_KEY)).toBeNull()
+    const params = mockApiRequest.mock.calls.at(-1)?.[0]?.params
+    expect(params?.keyword).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('导出当前筛选：按钮文案 + 复用 exportList 传当前（含恢复的）筛选参数', async () => {
+    sessionStorage.setItem(
+      MEMORY_KEY,
+      JSON.stringify({ keyword: '导出关键字', type: 'project', status: 'approved' })
+    )
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const headerBtns = wrapper.findAll('.el-button-stub')
+    const exportBtn = headerBtns.find((b) => b.text().includes('导出当前筛选'))
+    expect(exportBtn).toBeTruthy()
+    vm.filterForm.status = 'pending'
+    await exportBtn!.trigger('click')
+    await flushPromises()
+    expect(fundApiMock.exportList).toHaveBeenCalledWith({
+      search: '导出关键字',
+      type: 'project',
+      status: 'pending',
+    })
+    wrapper.unmount()
+  })
+})

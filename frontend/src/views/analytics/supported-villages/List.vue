@@ -112,7 +112,7 @@
         </el-button>
         <el-button :loading="exporting" @click="handleExport">
           <el-icon><Download /></el-icon>
-          导出数据
+          导出当前筛选
         </el-button>
         <el-button @click="handleDownloadTemplate">
           <el-icon><Download /></el-icon>
@@ -274,6 +274,7 @@
 
 <script setup lang="ts">
 import PageHeader from '@/components/common/PageHeader.vue'
+import { useFilterMemory } from '@/composables/useFilterMemory'
 import { DIALOG_LG } from '@/config/dialog'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
@@ -337,7 +338,18 @@ const filters = reactive<VillageFilters>({
   isThreeRegions: undefined,
   isEthnicArea: undefined,
   isKeyCounty: undefined,
+  // 年份筛选项同样参与记忆恢复（此前未在初始对象上声明，Object.assign 才补上）
+  yearStart: undefined,
 })
+
+// 筛选状态记忆：按当前路由 path 存 sessionStorage，刷新/返回列表时恢复
+const filterMemory = useFilterMemory<Record<string, any>>()
+function persistFilters() {
+  filterMemory.save({ ...filters })
+}
+function restoreFilters() {
+  filterMemory.apply(filters)
+}
 
 // 筛选选项
 const filterOptions = ref<{
@@ -482,6 +494,7 @@ async function loadFilterOptions() {
 // 搜索
 function handleSearch() {
   pagination.page = 1
+  persistFilters()
   loadData()
 }
 
@@ -501,6 +514,7 @@ function handleReset() {
     yearStart: undefined,
   })
   pagination.page = 1
+  persistFilters()
   loadData()
 }
 
@@ -515,11 +529,13 @@ function handleSortChange({ prop, order }: { prop: string | null; order: string 
 function handleSizeChange(size: number) {
   pagination.pageSize = size
   pagination.page = 1
+  persistFilters()
   loadData()
 }
 
 function handlePageChange(page: number) {
   pagination.page = page
+  persistFilters()
   loadData()
 }
 
@@ -819,6 +835,8 @@ async function handleDownloadTemplate() {
 
 // 初始化
 onMounted(() => {
+  // 先恢复上次筛选，再发起首次查询
+  restoreFilters()
   loadFilterOptions()
   loadData()
 })

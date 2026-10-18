@@ -10,6 +10,19 @@
       </el-tag>
     </div>
 
+    <!-- 可解释性：AI 结论的「为什么」（结构化依据，不生成自由文本结论） -->
+    <el-card v-if="explainability" class="why-panel" shadow="never">
+      <template #header>
+        <span class="why-title">为什么 · {{ explainabilityTitle }}</span>
+      </template>
+      <el-descriptions :column="1" border>
+        <el-descriptions-item v-for="row in explainabilityRows" :key="row.label" :label="row.label">
+          {{ row.value }}
+        </el-descriptions-item>
+        <el-descriptions-item label="数据范围">{{ dataScopeText }}</el-descriptions-item>
+      </el-descriptions>
+    </el-card>
+
     <!-- Tab导航 -->
     <el-tabs v-model="activeTab" type="border-card">
       <!-- 数据分析 -->
@@ -293,7 +306,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { DataAnalysis, Warning, Search } from '@element-plus/icons-vue'
 import {
@@ -305,10 +318,26 @@ import {
   detectAnomalies,
   recommendProjects,
   nlpQuery,
+  extractExplainability,
+  describeRationale,
+  describeDataScope,
+  type AIExplainability,
 } from '@/api/ai'
 
 const activeTab = ref('analyze')
 const serviceStatus = ref('loading')
+
+// --- 可解释性（为什么）---
+const explainability = ref<AIExplainability | null>(null)
+const explainabilityTitle = ref('')
+const explainabilityRows = computed(() => describeRationale(explainability.value?.rationale))
+const dataScopeText = computed(() => describeDataScope(explainability.value?.data_scope))
+
+/** 记录本次结论的结构化依据（后端 rationale/data_scope）；无依据时隐藏面板。 */
+function showWhy(title: string, payload: any) {
+  explainabilityTitle.value = title
+  explainability.value = extractExplainability(payload)
+}
 
 // --- 数据分析 ---
 const analyzeForm = reactive({ type: 'summary', description: '' })
@@ -387,6 +416,7 @@ async function runAnalyze() {
       ...inner,
       flattened: flattenObject(inner?.result || inner || {}),
     }
+    showWhy('数据分析', response)
     ElMessage.success('分析完成')
   } catch {
     ElMessage.error('分析失败')
@@ -410,6 +440,7 @@ async function runForecastIncome() {
           value: `人均 ${f.avg_per_capita_income ?? '-'} / 集体 ${f.avg_collective_income ?? '-'}`,
         }))
       : []
+    showWhy('收入趋势预测', response)
     ElMessage.success('预测完成')
   } catch {
     ElMessage.error('预测失败')
@@ -433,6 +464,7 @@ async function runForecastFunds() {
       { label: '预计年末使用率', value: pct(r.projected_year_end_usage_rate) },
       { label: '风险评估', value: r.risk_label || r.risk_level || '-' },
     ]
+    showWhy('经费完成率预测', response)
     ElMessage.success('预测完成')
   } catch {
     ElMessage.error('预测失败')
@@ -485,6 +517,7 @@ async function runAnomalyDetection() {
     } else {
       anomalyColumns.value = []
     }
+    showWhy('异常检测', response)
     ElMessage.success(`检测完成：发现 ${anomalyResult.value?.anomaly_count ?? 'N/A'} 个异常`)
   } catch {
     ElMessage.error('异常检测失败')
@@ -505,6 +538,7 @@ async function runRecommendProjects() {
     const data = response?.data ?? response
     const items = data?.data?.items || data?.items || data || []
     recommendResults.value = Array.isArray(items) ? items : []
+    showWhy('项目推荐', response)
     ElMessage.success('推荐完成')
   } catch {
     ElMessage.error('推荐失败')
@@ -521,6 +555,7 @@ async function runSystemRecommend() {
     const data = response?.data ?? response
     const recs = data?.data?.recommendations || data?.recommendations || []
     systemRecommendations.value = Array.isArray(recs) ? recs : []
+    showWhy('系统推荐', response)
     ElMessage.success('获取推荐成功')
   } catch {
     ElMessage.error('获取推荐失败')
@@ -541,6 +576,7 @@ async function runNlpQuery() {
     // 后端裸返回 {success, data, explanation, sql, query} 或 {success:false, error}
     const body = response?.success !== undefined ? response : response?.data
     nlpResult.value = body
+    showWhy('NLP 查询', response)
     nlpHistory.value.unshift(nlpForm.query.trim())
     if (nlpHistory.value.length > 10) nlpHistory.value.pop()
     ElMessage.success('查询完成')
@@ -647,5 +683,15 @@ checkStatus()
   margin-left: 12px;
   font-size: 12px;
   color: var(--color-info);
+}
+
+.why-panel {
+  margin-bottom: 16px;
+  border-left: 3px solid var(--color-primary-dark-1);
+}
+
+.why-title {
+  font-weight: 600;
+  color: var(--color-primary-dark-1);
 }
 </style>

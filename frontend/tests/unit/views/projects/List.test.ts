@@ -1170,3 +1170,119 @@ describe('回收站深度分支与视图切换', () => {
     })
   })
 })
+
+// ─────────────────────────────────────────────
+// 009：筛选状态记忆（sessionStorage）+ 导出当前筛选
+// ─────────────────────────────────────────────
+describe('筛选记忆 / 导出当前筛选（009）', () => {
+  // 全局 stub router 的首个路由为 '/'，useFilterMemory 按路由 path 生成 key
+  const MEMORY_KEY = 'filter_memory:/'
+
+  it('进入列表时恢复上次筛选，并用于首次查询', async () => {
+    sessionStorage.setItem(
+      MEMORY_KEY,
+      JSON.stringify({
+        name: '恢复项目',
+        status: 'completed',
+        type: 'education',
+        region: '都匀市',
+        year: 2024,
+      })
+    )
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.filterForm).toMatchObject({
+      name: '恢复项目',
+      status: 'completed',
+      type: 'education',
+      region: '都匀市',
+      year: 2024,
+    })
+    expect(projectApiMock.list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keyword: '恢复项目',
+        project_type: 'education',
+        status: 'completed',
+        region: '都匀市',
+        year: 2024,
+      })
+    )
+    wrapper.unmount()
+  })
+
+  it('搜索 / 重置 / 统计卡片 / 分页时保存筛选到 sessionStorage', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.filterForm.name = '保存项目'
+    vm.filterForm.region = '长顺县'
+    vm.handleSearch()
+    await flushPromises()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      name: '保存项目',
+      region: '长顺县',
+    })
+
+    vm.handleReset()
+    await flushPromises()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      name: '',
+      status: '',
+      type: '',
+      region: '',
+      year: null,
+    })
+
+    vm.handleStatClick('completed')
+    await flushPromises()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      status: 'completed',
+    })
+
+    vm.handleSizeChange()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      status: 'completed',
+    })
+    vm.handlePageChange()
+    expect(JSON.parse(sessionStorage.getItem(MEMORY_KEY) as string)).toMatchObject({
+      status: 'completed',
+    })
+    wrapper.unmount()
+  })
+
+  it('损坏的 JSON 记忆 → 静默忽略且清除脏数据', async () => {
+    sessionStorage.setItem(MEMORY_KEY, '{broken json')
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.filterForm.name).toBe('')
+    expect(sessionStorage.getItem(MEMORY_KEY)).toBeNull()
+    expect(projectApiMock.list).toHaveBeenCalledWith(
+      expect.objectContaining({ keyword: undefined })
+    )
+    wrapper.unmount()
+  })
+
+  it('导出当前筛选：按钮文案 + 复用 exportList 传当前（含恢复的）筛选参数', async () => {
+    sessionStorage.setItem(
+      MEMORY_KEY,
+      JSON.stringify({ name: '导出项目', type: 'infrastructure', status: 'in_progress' })
+    )
+    const wrapper = mountComp()
+    await flushPromises()
+    const btn = wrapper
+      .findAll('.el-button-stub')
+      .find((b) => b.text().includes('导出当前筛选'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    await flushPromises()
+    expect(projectApiMock.exportList).toHaveBeenCalledWith({
+      keyword: '导出项目',
+      project_type: 'infrastructure',
+      status: 'in_progress',
+    })
+    wrapper.unmount()
+  })
+})

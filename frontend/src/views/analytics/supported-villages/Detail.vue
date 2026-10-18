@@ -19,6 +19,13 @@
           </el-button>
           <el-button @click="openChangeHistory">变更历史</el-button>
           <el-button
+            class="btn-export-dossier"
+            :loading="dossierExporting"
+            @click="handleExportDossier"
+          >
+            <el-icon><Download /></el-icon>导出档案册
+          </el-button>
+          <el-button
             class="btn-pairings"
             @click="pushSafe(`/pairings?partner_type=village&partner_id=${village?.id ?? ''}`)"
             >结对帮扶台账</el-button
@@ -188,10 +195,10 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
-import { ArrowLeft, Edit, Calendar } from '@element-plus/icons-vue'
+import { ArrowLeft, Edit, Calendar, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ChangeHistoryDialog from '@/components/common/ChangeHistoryDialog.vue'
-import { getChangeHistory } from '@/api/supportedVillage'
+import { getChangeHistory, downloadVillageDossier } from '@/api/supportedVillage'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
 import echarts from '@/utils/echarts'
@@ -423,6 +430,25 @@ const handleEdit = () => {
 const handleYearlyData = () => {
   if (village.value) {
     pushSafe(`/supported-villages/${village.value.id}/yearly`)
+  }
+}
+
+// ── w17-007 一村一档 PDF 导出 ──
+const dossierExporting = ref(false)
+
+/** 导出档案册（封面 + 基本信息 + 年度数据 + 项目经费 + 附件照片清单） */
+async function handleExportDossier() {
+  const villageId = village.value?.id
+  if (!villageId) return
+  dossierExporting.value = true
+  try {
+    await downloadVillageDossier(Number(villageId))
+    ElMessage.success('档案册已开始下载')
+  } catch (error) {
+    logger.error('[VillageDetail] 导出档案册失败', error)
+    ElMessage.error('导出档案册失败，请稍后重试')
+  } finally {
+    dossierExporting.value = false
   }
 }
 

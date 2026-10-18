@@ -59,6 +59,7 @@
               menuStore.canAccessMenu('schools') ||
               menuStore.canAccessMenu('pairing') ||
               menuStore.canAccessMenu('donation') ||
+              menuStore.canAccessMenu('handover') ||
               menuStore.canAccessMenu('policies') ||
               menuStore.canAccessMenu('funds-admin') ||
               menuStore.canAccessMenu('funds-user')
@@ -105,6 +106,14 @@
             <el-icon><Box /></el-icon>
             <template #title>
               <span class="menu-title-text">捐赠物资</span>
+            </template>
+          </el-menu-item>
+
+          <!-- 工作移交：人员轮换时把「我负责/我发起」的资产一键交给接任人（w17-004） -->
+          <el-menu-item v-if="menuStore.canAccessMenu('handover')" index="/handover">
+            <el-icon><Switch /></el-icon>
+            <template #title>
+              <span class="menu-title-text">工作移交</span>
             </template>
           </el-menu-item>
 
@@ -490,6 +499,7 @@ import {
   Checked,
   Connection,
   Box,
+  Switch,
   OfficeBuilding,
   Message,
   Bell,

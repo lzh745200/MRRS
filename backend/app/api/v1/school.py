@@ -1475,3 +1475,48 @@ from app.api.v1.recycle_bin import (  # noqa: E402 —— 路由尾部挂载
 _register_rb_school(
     router, model=School, resource="学校",
 )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  w17-007 一校一档 PDF（档案 + 年度数据 + 项目经费 + 照片清单）
+# ═══════════════════════════════════════════════════════════════
+
+
+@router.get("/{school_id}/dossier.pdf")
+async def export_school_dossier(
+    school_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """导出一校一档 PDF（迎检 / 汇报成册用）。
+
+    - 数据域：记录不存在或越权可见性统一 404（不区分两类，避免探测存在性）；
+    - 生成成功写导出审计（导出留痕，军事合规）；
+    - 生成失败统一 500 泛化文案，异常细节只进服务端日志。
+    """
+    from urllib.parse import quote
+
+    from app.core.data_permission import check_record_access
+    from app.services.dossier_service import DossierService, record_dossier_audit
+
+    school = (
+        db.query(School)
+        .filter(School.id == school_id, School.is_active == True)  # noqa: E712
+        .first()
+    )
+    if school is None or not check_record_access(
+        school, current_user, owner_field="created_by", dept_field="organization_id"
+    ):
+        raise HTTPException(status_code=404, detail="学校不存在")
+    try:
+        pdf_bytes = DossierService(db, current_user).render_school_pdf(school)
+    except Exception:
+        logger.error("一校一档 PDF 生成失败: school_id=%s", school_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="档案册生成失败，请稍后重试")
+    record_dossier_audit(current_user, "school", school.id, school.name)
+    filename = quote(f"{school.name}_档案册.pdf")
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )

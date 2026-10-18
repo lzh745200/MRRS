@@ -13,6 +13,13 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from sqlalchemy.orm import Session
 
+from app.services.export_service import (
+    apply_scope_footnote,
+    build_scope_footnote,
+    describe_data_scope,
+    format_scope_footnote,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,6 +50,50 @@ class SupportedVillageExportService:
     def __init__(self, db: Session, current_user=None):
         self.db = db
         self.current_user = current_user
+
+    # ── w17-006 口径脚注 ──
+
+    def _generated_by(self) -> Optional[str]:
+        """生成人展示名（优先姓名，回退用户名）；无用户上下文时不输出该字段。"""
+        if self.current_user is None:
+            return None
+        return getattr(self.current_user, "full_name", None) or getattr(
+            self.current_user, "username", None
+        )
+
+    def _build_footnote(
+        self,
+        *,
+        year: Optional[int] = None,
+        modules: Optional[List[str]] = None,
+        village_ids: Optional[List[int]] = None,
+        department: Optional[str] = None,
+        support_unit: Optional[str] = None,
+        tiered_level: Optional[str] = None,
+        keyword: Optional[str] = None,
+        county: Optional[str] = None,
+        is_revitalization_tier: Optional[bool] = None,
+    ) -> str:
+        """构造本次导出的口径脚注文本（未使用的过滤条件自动省略，保持整洁）。"""
+        filters = {
+            "年度": year,
+            "关键词": keyword,
+            "区县": county,
+            "部门": department,
+            "帮扶单位": support_unit,
+            "梯次等级": tiered_level,
+            "是否振兴梯队": is_revitalization_tier,
+            "帮扶村ID": ",".join(str(i) for i in village_ids) if village_ids else None,
+            "导出模块": "、".join(MODULE_NAMES.get(m, m) for m in modules) if modules else None,
+        }
+        return format_scope_footnote(
+            build_scope_footnote(
+                filters=filters,
+                include_deleted=False,
+                scope=describe_data_scope(self.current_user),
+                generated_by=self._generated_by(),
+            )
+        )
 
     def _query_villages(
         self,
@@ -272,8 +323,13 @@ class SupportedVillageExportService:
         # 其它一律转字符串（兜底，保证不会因类型问题崩溃）
         return str(value)
 
-    def _build_excel(self, data: Dict[str, Any], statistics: Dict[str, Any]) -> bytes:
-        """将导出数据构建为 Excel 文件（统一军绿+金色样式 + A4 打印设置）。"""
+    def _build_excel(
+        self, data: Dict[str, Any], statistics: Dict[str, Any], footnote: Optional[str] = None
+    ) -> bytes:
+        """将导出数据构建为 Excel 文件（统一军绿+金色样式 + A4 打印设置）。
+
+        w17-006：每个数据 sheet 的数据区尾部追加口径脚注。
+        """
         from app.utils.excel_report_style import build_report_sheet, make_subtitle
 
         wb = Workbook()
@@ -286,7 +342,7 @@ class SupportedVillageExportService:
             mod_label = MODULE_NAMES.get(mod_name, mod_name)
             headers = list(rows[0].keys())
             matrix = [[row.get(h, "") for h in headers] for row in rows]
-            build_report_sheet(
+            ws, _start, data_end = build_report_sheet(
                 wb,
                 title=f"帮扶村数据导出 · {mod_label}",
                 headers=headers,
@@ -294,11 +350,15 @@ class SupportedVillageExportService:
                 subtitle=make_subtitle(extra=f"共 {len(rows)} 条记录"),
                 sheet_name=mod_label[:31],  # Excel sheet name max 31 chars
             )
+            if footnote:
+                apply_scope_footnote(
+                    ws, footnote, start_row=data_end + 2, col_count=max(len(headers), 1)
+                )
 
         # 统计 sheet
         stat_headers = ["统计项", "数值"]
         stat_rows = [[k, v] for k, v in statistics.items()]
-        build_report_sheet(
+        stat_ws, _stat_start, stat_end = build_report_sheet(
             wb,
             title="帮扶村数据导出 · 统计信息",
             headers=stat_headers,
@@ -306,6 +366,10 @@ class SupportedVillageExportService:
             subtitle=make_subtitle(),
             sheet_name="统计信息",
         )
+        if footnote:
+            apply_scope_footnote(
+                stat_ws, footnote, start_row=stat_end + 2, col_count=len(stat_headers)
+            )
 
         output = io.BytesIO()
         wb.save(output)
@@ -335,22 +399,33 @@ class SupportedVillageExportService:
         )
         data = self._collect_export_data(villages, modules=modules, year=year)
         statistics = self._generate_statistics(data)
+        footnote = self._build_footnote(
+            year=year,
+            modules=modules,
+            village_ids=village_ids,
+            department=department,
+            support_unit=support_unit,
+            tiered_level=tiered_level,
+            keyword=keyword,
+            county=county,
+            is_revitalization_tier=is_revitalization_tier,
+        )
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"supported_villages_export_{timestamp}.xlsx"
 
         if format == "csv":
             # CSV 简化导出：仅导出第一个模块的数据
-            content = self._build_csv(data)
+            content = self._build_csv(data, footnote)
             filename = f"supported_villages_export_{timestamp}.csv"
         else:
-            content = self._build_excel(data, statistics)
+            content = self._build_excel(data, statistics, footnote)
 
         logger.info("导出完成: %s, %d 模块, %d 村", filename, len(data), statistics.get("total_villages") or 0)
         return content, filename, statistics
 
-    def _build_csv(self, data: Dict[str, Any]) -> bytes:
-        """简化 CSV 导出（仅第一个模块）。"""
+    def _build_csv(self, data: Dict[str, Any], footnote: str = "") -> bytes:
+        """简化 CSV 导出（仅第一个模块）；w17-006：末尾追加 # 开头的口径脚注行。"""
         import csv
 
         output = io.StringIO()
@@ -363,4 +438,6 @@ class SupportedVillageExportService:
                 # 用 _coerce_cell 统一类型，避免 Decimal/enum 等产生非预期输出
                 writer.writerow({k: self._coerce_cell(v) for k, v in row.items()})
             break
+        if footnote:
+            output.write(f"\n# {footnote}\n")
         return output.getvalue().encode("utf-8-sig")

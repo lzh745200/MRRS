@@ -11,7 +11,7 @@
           <el-icon><Upload /></el-icon>批量导入
         </el-button>
         <el-button @click="handleExport">
-          <el-icon><Download /></el-icon>导出
+          <el-icon><Download /></el-icon>导出当前筛选
         </el-button>
         <el-button type="success" @click="pushSafe('/data-analysis')">
           <el-icon><TrendCharts /></el-icon>数据统计
@@ -267,6 +267,7 @@
 
 <script setup lang="ts">
 import PageHeader from '@/components/common/PageHeader.vue'
+import { useFilterMemory } from '@/composables/useFilterMemory'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
 import { getErrorMessage } from '@/utils/getErrorMessage'
@@ -306,6 +307,15 @@ const filterForm = reactive({
   region: '',
   year: null as number | null,
 })
+
+// 筛选状态记忆：按当前路由 path 存 sessionStorage，刷新/返回列表时恢复
+const filterMemory = useFilterMemory<Record<string, any>>()
+function persistFilters() {
+  filterMemory.save({ ...filterForm })
+}
+function restoreFilters() {
+  filterMemory.apply(filterForm)
+}
 
 // 统计数据
 const stats = reactive({
@@ -439,6 +449,7 @@ const loadData = async () => {
 // 事件处理
 const handleSearch = () => {
   pagination.page = 1
+  persistFilters()
   loadData()
 }
 
@@ -628,6 +639,7 @@ const handleStatClick = (status: string) => {
   filterForm.name = ''
   filterForm.type = ''
   pagination.page = 1
+  persistFilters()
   loadData()
 }
 
@@ -646,10 +658,12 @@ const handleExport = async () => {
 
 const handleSizeChange = () => {
   pagination.page = 1
+  persistFilters()
   loadData()
 }
 
 const handlePageChange = () => {
+  persistFilters()
   loadData()
 }
 
@@ -702,6 +716,8 @@ const handleBatchExport = async () => {
 }
 
 onMounted(() => {
+  // 先恢复上次筛选，再发起首次查询
+  restoreFilters()
   loadData()
   loadStats()
 })

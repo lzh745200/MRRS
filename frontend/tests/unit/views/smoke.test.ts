@@ -141,10 +141,13 @@ describe('Core view smoke tests', () => {
 describe('Business module view imports', () => {
   const businessViews = [
     ['Village List', '@/views/analytics/supported-villages/List.vue'],
-    ['Village Detail', '@/views/analytics/supported-villages/Detail.vue'],
+    // Village Detail 刻意不在此 bare import：已有专属全分支测试
+    // （analytics/supported-villages/Detail.test.ts 渲染全分支）。按 vitest.config.ts
+    // 的 coverage-merge 不变量，覆盖率门禁锁定的 .vue 全仓只允许一个测试文件执行，
+    // 否则 bare import 分片与专属测试分片的 v8 fnMap 按 id 合并会错位（functions < 100）。
     ['Village Yearly', '@/views/analytics/supported-villages/YearlyOverview.vue'],
     ['School List', '@/views/schools/List.vue'],
-    ['School Detail', '@/views/schools/Detail.vue'],
+    // School Detail 同上：专属全分支测试 tests/unit/views/schools/Detail.test.ts
     ['School Edit', '@/views/schools/Edit.vue'],
     ['School Analysis', '@/views/schools/Analysis.vue'],
     ['Project List', '@/views/projects/List.vue'],

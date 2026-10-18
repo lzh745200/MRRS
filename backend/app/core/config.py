@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.12.21"
+    PROJECT_VERSION: str = "1.12.22"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -407,7 +407,14 @@ class Settings(BaseSettings):
             # 日志也放在用户数据目录下
             if getattr(sys, "frozen", False):
                 self.LOG_DIR = f"{data_dir}/logs"
-                self.LOG_FILE = f"{data_dir}/logs/app.log"
+                # W18-offline P0-1：仅当 LOG_FILE 也仍是相对默认值时才改写。
+                # 历史缺陷：打包态无条件覆盖 LOG_FILE —— Electron 主进程经环境变量
+                # 注入的真实日志路径（userData/logs/app.log）被这里改写到
+                # LOCALAPPDATA/bumofu-assistance/data/logs，导致诊断包、修复引导页、
+                # 文档四处全部指向不存在的文件（现场首次装机失败时唯一的自助通道失效）。
+                # Electron 注入时 LOG_FILE 是绝对路径，不会进入本分支。
+                if self.LOG_FILE.startswith("./"):
+                    self.LOG_FILE = f"{data_dir}/logs/app.log"
         if self.UPLOAD_DIR.startswith("./"):
             self.UPLOAD_DIR = _get_default_uploads_dir()
         if self.EXPORT_DIR.startswith("./"):

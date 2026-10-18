@@ -49,6 +49,11 @@ from app.services.approval_workflow_service import (
     ApprovalWorkflowService,
     submit_entity_change_approval,
 )
+from app.services.yearly_rollforward_service import (
+    RollforwardError,
+    apply_rollforward,
+    build_prefill,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +145,39 @@ class YearlySectionData(BaseModel):
     """年度区块数据 — 字段由各 section 动态决定，路由层过滤安全属性"""
     year: Optional[int] = None
     model_config = {"extra": "allow"}
+
+
+class YearlyRollforwardRequest(BaseModel):
+    """批量沿用上年年度数据请求。
+
+    字段名以 snake_case 为准（CamelToSnakeMiddleware 会把前端 camelCase 键名转为
+    snake_case）；AliasChoices + populate_by_name 同时兼容未经中间件的 camelCase
+    直接调用，照搬 YearCopyRequest 的 H2d 修复样板。
+
+    - section_keys：板块白名单（必须属于 _SECTION_MODEL 的 key），非空；
+    - from_year：来源年份，缺省为 year-1；与 year 相同则拒绝（无意义复制）；
+    - overwrite：写入语义二选一——False（默认）只填空、不覆盖本年度已有非空值；
+      True 以上年值覆盖本年度值（前端写入前二次确认）。
+    """
+
+    model_config = {"populate_by_name": True}
+
+    section_keys: List[str] = Field(
+        ...,
+        min_length=1,
+        validation_alias=AliasChoices("section_keys", "sectionKeys"),
+        description="板块白名单（population/income/... /committee）",
+    )
+    from_year: Optional[int] = Field(
+        None,
+        validation_alias=AliasChoices("from_year", "fromYear"),
+        description="来源年份，缺省为上一年（year-1）",
+    )
+    overwrite: bool = Field(
+        False,
+        validation_alias=AliasChoices("overwrite", "allow_overwrite", "allowOverwrite"),
+        description="False=只填空不覆盖本年度已有非空值；True=覆盖本年度值",
+    )
 
 
 # ── 年度数据 Section → Model 映射 ──
@@ -1125,6 +1163,88 @@ async def get_yearly_data(
     return success_response(data=result, message="ok")
 
 
+@router.get("/{village_id}/yearly/{year}/prefill")
+async def get_yearly_prefill(
+    village_id: int,
+    year: int,
+    from_year: Optional[int] = Query(None, description="来源年份，缺省为上一年（year-1）"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """获取「从上年复制」预填数据与逐字段差异元信息。
+
+    - 数据域：与其它年度接口同口径（_get_village_or_404：村庄不存在 404、跨组织 403）；
+    - 返回每个板块的字段级差异元信息：status=copy（可沿用）/keep（本年度已有值保留）/
+      blank（上年空缺需重填），并给出 previousValue/currentValue/hasPreviousValue/
+      hasCurrentValue，前端据此高亮「沿用 / 保留 / 需重填」；
+    - from_year 缺省取 year-1；from_year == year 无意义，直接 400；
+    - 无上年数据时返回 HTTP 200 且 hasPreviousData=false + 友好 message，不报错。
+    """
+    _get_village_or_404(db, village_id, current_user)
+    source_year = year - 1 if from_year is None else from_year
+    if source_year == year:
+        raise HTTPException(status_code=400, detail="来源年份和目标年份不能相同")
+    prefill = build_prefill(db, village_id=village_id, year=year, from_year=source_year)
+    return success_response(data=prefill, message=prefill["message"])
+
+
+@router.post("/{village_id}/yearly/{year}/rollforward")
+async def rollforward_yearly_data(
+    village_id: int,
+    year: int,
+    data: YearlyRollforwardRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """批量沿用上年年度数据到指定年度（一次提交多个板块，事务原子）。
+
+    写入语义二选一（由 overwrite 显式选择，前端写入前二次确认并提示影响面）：
+    - 默认 overwrite=false（fill_empty）：只写本年度为空的字段（None/空白串/数值 0
+      视为未填报），本年度已有非空值一律保留，绝不覆盖；
+    - overwrite=true：所选板块中上年有值的字段覆盖本年度值。
+
+    约束：
+    - 只接受 section_keys 白名单（_SECTION_MODEL 的 key），未知板块 400；
+    - 只写板块模型业务列白名单，元数据列（id/supported_village_id/year/
+      created_at/updated_at）永不参与沿用；
+    - 所有板块在同一个事务内提交，任一板块失败整体回滚，不留半套数据；
+    - 数据域：与其它年度接口同口径（_get_village_or_404 校验村庄可见性），
+      且所有查询强制 supported_village_id，跨村不串数据；
+    - 无上年数据时返回 HTTP 200 + 友好提示（hasPreviousData=false、appliedFields=0），
+      不抛 500，也不写库。
+    """
+    _get_village_or_404(db, village_id, current_user)
+    source_year = data.from_year if data.from_year is not None else year - 1
+    try:
+        result = apply_rollforward(
+            db,
+            village_id=village_id,
+            year=year,
+            from_year=source_year,
+            section_keys=data.section_keys,
+            overwrite=data.overwrite,
+        )
+        safe_commit(db)
+    except RollforwardError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        # 任一板块写入失败：整体回滚，保证"一次提交多板块"的事务原子性
+        db.rollback()
+        raise
+    await _invalidate_village_cache()
+    if result["appliedFields"]:
+        message = (
+            f"已从 {source_year} 年沿用 {result['appliedFields']} 项字段到 {year} 年"
+            f"（{len(result['appliedSections'])} 个板块）"
+        )
+    elif result["hasPreviousData"]:
+        message = f"{source_year} 年数据在本年度均已填写，按「不覆盖已有值」语义未做修改"
+    else:
+        message = f"{source_year} 年没有可沿用的年度数据，未做任何修改，请手工填写"
+    return success_response(data=result, message=message)
+
+
 @router.post("/{village_id}/yearly/copy")
 async def copy_year_data(
     village_id: int,
@@ -1792,4 +1912,45 @@ async def download_all_templates(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=all_templates.xlsx"},
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  w17-007 一村一档 PDF（档案 + 年度数据 + 项目经费 + 照片清单）
+# ═══════════════════════════════════════════════════════════════
+
+
+@router.get("/{village_id}/dossier.pdf")
+async def export_village_dossier(
+    village_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """导出一村一档 PDF（迎检 / 汇报成册用）。
+
+    - 数据域：记录不存在或越权可见性统一 404（不区分两类，避免探测存在性）；
+    - 生成成功写导出审计（导出留痕，军事合规）；
+    - 生成失败统一 500 泛化文案，异常细节只进服务端日志。
+    """
+    from urllib.parse import quote
+
+    from app.core.data_permission import check_record_access
+    from app.services.dossier_service import DossierService, record_dossier_audit
+
+    village = db.query(SupportedVillage).filter(SupportedVillage.id == village_id).first()
+    if village is None or not check_record_access(
+        village, current_user, owner_field="created_by", dept_field="organization_id"
+    ):
+        raise HTTPException(status_code=404, detail="帮扶村不存在")
+    try:
+        pdf_bytes = DossierService(db, current_user).render_village_pdf(village)
+    except Exception:
+        logger.error("一村一档 PDF 生成失败: village_id=%s", village_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="档案册生成失败，请稍后重试")
+    record_dossier_audit(current_user, "supported_village", village.id, village.village_name)
+    filename = quote(f"{village.village_name}_档案册.pdf")
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
     )

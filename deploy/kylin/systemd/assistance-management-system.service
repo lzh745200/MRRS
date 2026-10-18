@@ -13,6 +13,11 @@ WorkingDirectory=/opt/assistance-management-system
 # 环境变量
 EnvironmentFile=/opt/assistance-management-system/config/kylin.env
 
+# W18-offline P0-2: HOME determines data dir derivation (paths.py).
+# Must point at writable /var/lib (useradd --home-dir points at read-only /opt),
+# otherwise backups/keys/uploads all land in the read-only install dir.
+Environment=HOME=/var/lib/assistance-management-system
+
 # 启动命令
 ExecStart=/opt/assistance-management-system/backend/assistance-management-backend
 ExecReload=/bin/kill -HUP $MAINPID

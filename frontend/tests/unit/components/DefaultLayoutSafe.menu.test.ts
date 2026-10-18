@@ -28,6 +28,7 @@ describe('DefaultLayoutSafe 侧边栏回归校验', () => {
     // 无路由的菜单项）。待 /donations 视图与路由落地后，在此加回 ['/donations', 'donation']。
     const expected: Array<[string, string]> = [
       ['/pairings', 'pairing'],
+      ['/handover', 'handover'],
     ]
     for (const [path, menuKey] of expected) {
       const idx = layoutSource.indexOf(`index="${path}"`)

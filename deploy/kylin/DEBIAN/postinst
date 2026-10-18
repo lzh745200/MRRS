@@ -28,7 +28,7 @@ fi
 if ! getent passwd ${APP_NAME} > /dev/null 2>&1; then
     useradd --system \
             --gid ${APP_NAME} \
-            --home-dir ${INSTALL_DIR} \
+            --home-dir ${DATA_DIR} \
             --shell /bin/false \
             --no-create-home \
             --comment "帮扶管理信息系统" \

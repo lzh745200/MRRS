@@ -25,18 +25,23 @@ const mockDetectAnomalies = vi.fn()
 const mockRecommendProjects = vi.fn()
 const mockNlpQuery = vi.fn()
 
-vi.mock('@/api/ai', () => ({
-  getStatus: (...args: any[]) => mockGetStatus(...args),
-  analyze: (...args: any[]) => mockAnalyze(...args),
-  getRecommendations: (...args: any[]) => mockGetRecommendations(...args),
-  forecastIncome: (...args: any[]) => mockForecastIncome(...args),
-  forecastFunds: (...args: any[]) => mockForecastFunds(...args),
-  predictTrend: vi.fn(),
-  detectAnomalies: (...args: any[]) => mockDetectAnomalies(...args),
-  recommendProjects: (...args: any[]) => mockRecommendProjects(...args),
-  recommendFundAllocation: vi.fn(),
-  nlpQuery: (...args: any[]) => mockNlpQuery(...args),
-}))
+vi.mock('@/api/ai', async (importOriginal) => {
+  // W17-008：可解释性提取/格式化是纯函数，保留真实实现（只 mock 网络调用）
+  const actual = await importOriginal<typeof import('@/api/ai')>()
+  return {
+    ...actual,
+    getStatus: (...args: any[]) => mockGetStatus(...args),
+    analyze: (...args: any[]) => mockAnalyze(...args),
+    getRecommendations: (...args: any[]) => mockGetRecommendations(...args),
+    forecastIncome: (...args: any[]) => mockForecastIncome(...args),
+    forecastFunds: (...args: any[]) => mockForecastFunds(...args),
+    predictTrend: vi.fn(),
+    detectAnomalies: (...args: any[]) => mockDetectAnomalies(...args),
+    recommendProjects: (...args: any[]) => mockRecommendProjects(...args),
+    recommendFundAllocation: vi.fn(),
+    nlpQuery: (...args: any[]) => mockNlpQuery(...args),
+  }
+})
 
 const mockMessage = vi.hoisted(() => ({
   success: vi.fn(),
@@ -1034,5 +1039,167 @@ describe('分支补测：template 零分支', () => {
     vm.forecastItems = [{ label: '2026年', value: '人均 10 / 集体 20' }]
     await nextTick()
     expect(wrapper.text()).toContain('2026年: 人均 10 / 集体 20')
+  })
+})
+
+// ==================== 可解释性（为什么）W17-008 ====================
+
+const SAMPLE_RATIONALE = {
+  version: 1,
+  method: 'yearly_segmented_aggregation',
+  basis_fields: ['VillageIncome.year'],
+  window: { start_year: 2021, end_year: 2023, year_count: 2 },
+  formula: { kind: 'group_by_aggregation' },
+  rules: [{ id: 'completed_projects' }],
+  assumptions: ['user_data_scope_applied'],
+}
+
+const SAMPLE_SCOPE = {
+  dataset: 'village_income',
+  scope: 'user_data_scope',
+  row_count: 12,
+  granularity: 'village_year',
+  window: null,
+  filters: [],
+  counts: { years: 2 },
+}
+
+describe('可解释性（为什么）', () => {
+  it('数据分析返回结构化依据时渲染「为什么」面板', async () => {
+    mockAnalyze.mockResolvedValue({
+      data: {
+        data: {
+          analysis_type: '趋势分析',
+          result: {},
+          rationale: SAMPLE_RATIONALE,
+          data_scope: SAMPLE_SCOPE,
+        },
+      },
+    })
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '开始分析')
+
+    const panel = wrapper.find('.why-panel')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('为什么')
+    expect(panel.text()).toContain('数据分析')
+    expect(panel.text()).toContain('yearly_segmented_aggregation')
+    expect(panel.text()).toContain('VillageIncome.year')
+    expect(panel.text()).toContain('start_year')
+    expect(panel.text()).toContain('group_by_aggregation')
+    expect(panel.text()).toContain('completed_projects')
+    expect(panel.text()).toContain('user_data_scope_applied')
+    expect(panel.text()).toContain('village_income · village_year · 12 条 · 范围 user_data_scope')
+  })
+
+  it('响应不含依据时隐藏面板（不编造依据）', async () => {
+    mockAnalyze.mockResolvedValue({ data: { data: { analysis_type: '摘要' } } })
+    const wrapper = mountAI()
+    await flushPromises()
+
+    expect(wrapper.find('.why-panel').exists()).toBe(false)
+    await clickButton(wrapper, '开始分析')
+    expect(wrapper.find('.why-panel').exists()).toBe(false)
+  })
+
+  it('收入预测带依据时展示对应标题', async () => {
+    mockForecastIncome.mockResolvedValue({
+      data: {
+        data: {
+          forecast: [{ year: 2031, avg_per_capita_income: 42, avg_collective_income: 3 }],
+          rationale: SAMPLE_RATIONALE,
+          data_scope: SAMPLE_SCOPE,
+        },
+      },
+    })
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '预测')
+    const panel = wrapper.find('.why-panel')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('收入趋势预测')
+    expect(panel.text()).toContain('12 条')
+  })
+
+  it('异常检测信封内带依据时展示面板', async () => {
+    mockDetectAnomalies.mockResolvedValue({
+      data: {
+        data: {
+          anomalies: [{ index: 1, value: 5 }],
+          rationale: SAMPLE_RATIONALE,
+          data_scope: SAMPLE_SCOPE,
+        },
+      },
+    })
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '检测异常')
+    const panel = wrapper.find('.why-panel')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('异常检测')
+    expect(panel.text()).toContain('yearly_segmented_aggregation')
+  })
+
+  it('项目推荐带依据时展示面板', async () => {
+    mockRecommendProjects.mockResolvedValue({
+      data: {
+        data: {
+          items: [{ name: '道路硬化' }],
+          rationale: SAMPLE_RATIONALE,
+          data_scope: SAMPLE_SCOPE,
+        },
+      },
+    })
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '推荐项目')
+    const panel = wrapper.find('.why-panel')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('项目推荐')
+  })
+
+  it('系统推荐带依据时展示面板', async () => {
+    mockGetRecommendations.mockResolvedValue({
+      data: {
+        data: {
+          recommendations: [{ priority: 'high', content: '尽快审批' }],
+          rationale: SAMPLE_RATIONALE,
+          data_scope: SAMPLE_SCOPE,
+        },
+      },
+    })
+    const wrapper = mountAI()
+    await flushPromises()
+
+    await clickButton(wrapper, '获取系统建议')
+    const panel = wrapper.find('.why-panel')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('系统推荐')
+  })
+
+  it('NLP 裸响应带依据时展示面板', async () => {
+    mockNlpQuery.mockResolvedValue({
+      success: true,
+      data: [{ count: 3 }],
+      rationale: SAMPLE_RATIONALE,
+      data_scope: SAMPLE_SCOPE,
+    })
+    const wrapper = mountAI()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.nlpForm.query = '有多少个村'
+
+    await vm.runNlpQuery()
+    await nextTick()
+
+    const panel = wrapper.find('.why-panel')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('NLP 查询')
+    expect(panel.text()).toContain('village_income · village_year')
   })
 })

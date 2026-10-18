@@ -400,6 +400,13 @@ export const routes: RouteRecordRaw[] = [
         component: () => retryImport(() => import('@/views/donation/List.vue')),
         meta: { menuKey: 'donation', title: '捐赠物资' },
       },
+      // ── 工作移交（w17-004）──
+      {
+        path: '/handover',
+        name: 'HandoverIndex',
+        component: () => retryImport(() => import('@/views/handover/Index.vue')),
+        meta: { menuKey: 'handover', title: '工作移交' },
+      },
       // ── 组织机构 ──
       {
         path: '/organizations',

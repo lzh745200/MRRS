@@ -74,6 +74,12 @@ vi.mock('@/views/pairing/List.vue', () => ({
   default: { name: 'PairingListCoverageStub' },
 }))
 
+// HandoverIndex.vue（w17-004）同理：专属测试
+// tests/unit/views/handover/Index.test.ts 深挂载全部分支；本文件仅执行懒加载函数本体。
+vi.mock('@/views/handover/Index.vue', () => ({
+  default: { name: 'HandoverIndexCoverageStub' },
+}))
+
 import router, { routes } from '@/router'
 
 // ==================== Helpers ====================

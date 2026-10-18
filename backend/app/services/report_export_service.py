@@ -12,6 +12,12 @@ import logging
 from datetime import datetime
 from io import BytesIO
 
+from app.services.export_service import (
+    build_scope_footnote,
+    describe_data_scope,
+    format_scope_footnote,
+)
+
 logger = logging.getLogger(__name__)
 
 # 与 export.py 的 _REPORT_TYPE_MAP 保持一致（service 层独立维护，避免反向依赖 api 层）
@@ -74,6 +80,29 @@ class ReportExportService:
 
         return scoped_filter(query, model, current_user)
 
+    # ────────────────────── 口径脚注（w17-006）──────────────────────
+
+    @staticmethod
+    def _report_footnote(current_user, year) -> dict:
+        """报表口径脚注字段（年度过滤 + 数据域 + 生成人；空字段自动省略）。"""
+        display_name = getattr(current_user, "full_name", None) or getattr(
+            current_user, "username", None
+        )
+        return build_scope_footnote(
+            filters={"年度": year},
+            include_deleted=False,
+            scope=describe_data_scope(current_user),
+            generated_by=display_name,
+        )
+
+    @staticmethod
+    def _render_footnote_text(data: dict) -> str:
+        """渲染口径脚注文本：优先用数据构建阶段挂载的字段，缺失时按年度兜底。"""
+        footnote = data.get("footnote")
+        if not isinstance(footnote, dict):
+            footnote = build_scope_footnote(filters={"年度": data.get("year")})
+        return format_scope_footnote(footnote)
+
     def generate_summary_report_data(self, db, year: int, current_user) -> dict:
         """生成年度帮扶工作总结数据（村/校/项目/经费四块合并）"""
         year = self._resolve_year(year)
@@ -107,7 +136,12 @@ class ReportExportService:
                 "table": fund["sections"][0]["table"] if fund["sections"] else None,
             },
         ]
-        return {"year": year, "title": _REPORT_TITLES["summary"], "sections": sections}
+        return {
+            "year": year,
+            "title": _REPORT_TITLES["summary"],
+            "sections": sections,
+            "footnote": self._report_footnote(current_user, year),
+        }
 
     def generate_fund_detail_report_data(self, db, year: int, current_user) -> dict:
         """生成经费明细报表数据（按经费类型分组聚合）
@@ -170,6 +204,7 @@ class ReportExportService:
                 "year": year,
                 "title": _REPORT_TITLES["fund_detail"],
                 "sections": [{"title": "经费执行明细", "paragraphs": paragraphs, "table": table}],
+                "footnote": self._report_footnote(current_user, year),
             }
         except Exception:
             logger.warning("经费明细数据查询失败（报表将输出空表）", exc_info=True)
@@ -177,6 +212,7 @@ class ReportExportService:
                 "year": year,
                 "title": _REPORT_TITLES["fund_detail"],
                 "sections": [{"title": "经费执行明细", "paragraphs": [f"{year} 年度经费数据查询失败。"], "table": None}],
+                "footnote": self._report_footnote(current_user, year),
             }
 
     def generate_project_progress_report_data(self, db, year: int, current_user) -> dict:
@@ -240,6 +276,7 @@ class ReportExportService:
                 "year": year,
                 "title": _REPORT_TITLES["project_progress"],
                 "sections": [{"title": "项目进展统计", "paragraphs": paragraphs, "table": table}],
+                "footnote": self._report_footnote(current_user, year),
             }
         except Exception:
             logger.warning("项目进度数据查询失败（报表将输出空表）", exc_info=True)
@@ -247,6 +284,7 @@ class ReportExportService:
                 "year": year,
                 "title": _REPORT_TITLES["project_progress"],
                 "sections": [{"title": "项目进展统计", "paragraphs": [f"{year} 年度项目数据查询失败。"], "table": None}],
+                "footnote": self._report_footnote(current_user, year),
             }
 
     def generate_school_statistics_report_data(self, db, year: int, current_user) -> dict:
@@ -295,6 +333,7 @@ class ReportExportService:
                     "table": None,
                 }
             ],
+            "footnote": self._report_footnote(current_user, year),
         }
 
     def generate_village_summary_report_data(self, db, year: int, current_user) -> dict:
@@ -331,6 +370,7 @@ class ReportExportService:
                     "table": None,
                 }
             ],
+            "footnote": self._report_footnote(current_user, year),
         }
 
     def generate_annual_summary_report_data(self, db, year: int, current_user) -> dict:
@@ -358,6 +398,7 @@ class ReportExportService:
             "project_progress": project_data,
             "fund_detail": fund_data,
             "sections": sections,
+            "footnote": self._report_footnote(current_user, year),
         }
 
     # ────────────────────── 渲染输出 ──────────────────────
@@ -469,6 +510,12 @@ class ReportExportService:
 
         if not has_content:
             doc.add_paragraph("本年度暂无相关数据。")
+
+        # w17-006：文末口径脚注（数据截止/过滤条件/软删除/范围/生成人/生成时间）
+        footnote_text = self._render_footnote_text(data)
+        if footnote_text:
+            footnote_para = doc.add_paragraph(footnote_text)
+            self._style_paragraph_runs(footnote_para, size=8, color="64748B")
 
         buf = BytesIO()
         doc.save(buf)
@@ -582,6 +629,9 @@ class ReportExportService:
             "heading", fontName="STSong-Light", fontSize=14, leading=20, spaceBefore=10, spaceAfter=4
         )
         body_style = ParagraphStyle("body", fontName="STSong-Light", fontSize=11, leading=16)
+        foot_style = ParagraphStyle(
+            "foot", fontName="STSong-Light", fontSize=8, leading=12, textColor=colors.grey
+        )
 
         story = [
             Paragraph(title, title_style),
@@ -611,6 +661,14 @@ class ReportExportService:
 
         if not has_content:
             story.append(Paragraph("本年度暂无相关数据。", body_style))
+
+        # w17-006：文末口径脚注（reportlab 按 mini-HTML 解析，统一转义）
+        footnote_text = self._render_footnote_text(data)
+        if footnote_text:
+            from xml.sax.saxutils import escape as _xml_escape
+
+            story.append(Spacer(1, 4 * mm))
+            story.append(Paragraph(_xml_escape(footnote_text), foot_style))
 
         # ── 两遍式画布：统一绘制页眉页脚与「共 N 页」──
         header_text = f"帮扶管理信息系统 · {title}"

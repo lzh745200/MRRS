@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   getDashboardStats: vi.fn(),
   getYearlyTrends: vi.fn(),
   getRankings: vi.fn(),
+  projectList: vi.fn(),
+  ElMessage: { warning: vi.fn(), success: vi.fn(), error: vi.fn() },
 }))
 
 vi.mock('@/api/dashboard', () => ({
@@ -17,14 +19,66 @@ vi.mock('@/api/effectiveness', () => ({
   getRankings: mocks.getRankings,
 }))
 
+vi.mock('@/api/projects', () => ({
+  projectApi: { list: mocks.projectList },
+}))
+
+vi.mock('element-plus', () => ({
+  ElMessage: mocks.ElMessage,
+}))
+
 vi.mock('@/components/common/BaseChart.vue', () => ({
   default: { name: 'BaseChart', template: '<div class="chart-stub" />' },
 }))
 
 import BigScreen from '@/views/bigscreen/BigScreen.vue'
+import { BIGSCREEN_CONFIG_KEY } from '@/views/bigscreen/bigscreenConfig'
+
+// 局部桩：设置抽屉 / 开关 / 频率单选 / 按钮需要渲染插槽并主动 emit，
+// 否则 v-model 产物与 @click 内联处理器永远不可达（functions 覆盖率缺口）。
+const settingsStubs = {
+  'el-button': {
+    props: ['disabled'],
+    emits: ['click'],
+    template:
+      '<button type="button" class="el-button-stub" :data-disabled="String(disabled)"' +
+      ' @click="$emit(\'click\')"><slot /></button>',
+  },
+  'el-drawer': {
+    props: ['modelValue', 'title'],
+    emits: ['update:modelValue'],
+    template:
+      '<div class="el-drawer-stub" :data-open="String(modelValue)" :data-title="title">' +
+      '<button type="button" class="drawer-close" @click="$emit(\'update:modelValue\', false)">x</button>' +
+      '<slot /></div>',
+  },
+  'el-switch': {
+    props: ['modelValue'],
+    emits: ['update:modelValue', 'change'],
+    template:
+      '<button type="button" class="el-switch-stub" :data-on="String(modelValue)"' +
+      ' @click="$emit(\'update:modelValue\', !modelValue); $emit(\'change\', !modelValue)" />',
+  },
+  'el-radio-group': {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template:
+      '<div class="el-radio-group-stub" :data-value="String(modelValue)">' +
+      '<button type="button" class="radio-60" @click="$emit(\'update:modelValue\', 60)">60</button>' +
+      '<button type="button" class="radio-off" @click="$emit(\'update:modelValue\', 0)">off</button>' +
+      '<slot /></div>',
+  },
+  'el-radio-button': {
+    props: ['value'],
+    template: '<span class="el-radio-button-stub"><slot /></span>',
+  },
+}
 
 function mountComp() {
-  return mount(BigScreen, { attachTo: document.body })
+  return mount(BigScreen, {
+    attachTo: document.body,
+    global: { stubs: { ...settingsStubs } },
+  })
 }
 
 describe('BigScreen.vue（帮扶成效大屏）', () => {
@@ -53,6 +107,12 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
       rankings: [
         { village_name: '甲村', score: 92 },
         { village_name: '乙村', score: 85 },
+      ],
+    })
+    mocks.projectList.mockResolvedValue({
+      items: [
+        { id: 1, name: '示范项目甲', responsible_person: '张三' },
+        { id: 2, name: '示范项目乙', responsible_person: '李四' },
       ],
     })
   })
@@ -300,5 +360,200 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
     expect(vm.rankings).toEqual([])
     expect(vm.rankOption.yAxis.data).toEqual([])
     wrapper.unmount()
+  })
+
+  // ─────────────────────────────────────────────
+  // 010：大屏可配置（卡片取舍/顺序、刷新频率、汇报脱敏）
+  // 注意：必须嵌套在本 describe 内，复用其 beforeEach（fake timers + 默认 mock）
+  // ─────────────────────────────────────────────
+  describe('大屏设置（010）', () => {
+  function findButton(wrapper: any, text: string) {
+    return wrapper.findAll('.el-button-stub').find((b: any) => b.text().includes(text))
+  }
+
+  function savedConfig() {
+    return JSON.parse(localStorage.getItem(BIGSCREEN_CONFIG_KEY) as string)
+  }
+
+  it('设置抽屉：打开/关闭、卡片显示开关、顺序调整与持久化', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    const trigger = findButton(wrapper, '设置')
+    expect(trigger).toBeTruthy()
+    await trigger!.trigger('click')
+    expect(vm.settingsVisible).toBe(true)
+    expect(wrapper.find('.el-drawer-stub').attributes('data-open')).toBe('true')
+    expect(wrapper.find('.el-drawer-stub').attributes('data-title')).toBe('大屏设置')
+
+    // 5 张卡片开关 + 1 个脱敏开关
+    const switches = wrapper.findAll('.el-switch-stub')
+    expect(switches.length).toBe(6)
+
+    // 隐藏「经费执行趋势」→ 图表少一张、配置写回 localStorage
+    await switches[0].trigger('click')
+    await flushPromises()
+    expect(vm.config.cards[0].visible).toBe(false)
+    expect(vm.visibleCards.map((c: any) => c.key)).not.toContain('fundTrend')
+    expect(wrapper.findAll('.chart-stub').length).toBe(3)
+    expect(savedConfig().cards[0].visible).toBe(false)
+
+    // 下移第一张卡片 → 顺序交换
+    let rows = wrapper.findAll('.settings-card-row')
+    await rows[0].findAll('.el-button-stub')[1].trigger('click')
+    await flushPromises()
+    expect(vm.config.cards.map((c: any) => c.key).slice(0, 2)).toEqual(['rank', 'fundTrend'])
+    expect(savedConfig().cards.map((c: any) => c.key).slice(0, 2)).toEqual(['rank', 'fundTrend'])
+
+    // 「经费执行趋势」上移回第一位；再触发首行上移/末行下移的越界守卫
+    rows = wrapper.findAll('.settings-card-row')
+    await rows[1].findAll('.el-button-stub')[0].trigger('click')
+    await flushPromises()
+    expect(vm.config.cards[0].key).toBe('fundTrend')
+    rows = wrapper.findAll('.settings-card-row')
+    await rows[0].findAll('.el-button-stub')[0].trigger('click')
+    await rows[rows.length - 1].findAll('.el-button-stub')[1].trigger('click')
+    expect(vm.config.cards[0].key).toBe('fundTrend')
+
+    // 关闭抽屉
+    await wrapper.find('.drawer-close').trigger('click')
+    expect(vm.settingsVisible).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('刷新频率：默认 30s；改 60s 后按新周期轮询；关闭自动刷新不产生任何轮询请求', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const calls = () => mocks.getDashboardStats.mock.calls.length
+
+    expect(document.body.textContent).toContain('数据每 30 秒自动刷新')
+    const initial = calls()
+    vi.advanceTimersByTime(30000)
+    await flushPromises()
+    expect(calls()).toBe(initial + 1)
+
+    // 切到 60 秒
+    await wrapper.find('.radio-60').trigger('click')
+    await flushPromises()
+    expect((wrapper.vm as any).config.refreshInterval).toBe(60)
+    expect(savedConfig().refreshInterval).toBe(60)
+    const afterSwitch = calls()
+    vi.advanceTimersByTime(30000)
+    await flushPromises()
+    expect(calls()).toBe(afterSwitch)
+    vi.advanceTimersByTime(30000)
+    await flushPromises()
+    expect(calls()).toBe(afterSwitch + 1)
+
+    // 关闭自动刷新：推进 5 分钟也不应产生轮询
+    await wrapper.find('.radio-off').trigger('click')
+    await flushPromises()
+    expect((wrapper.vm as any).config.refreshInterval).toBe(0)
+    expect(wrapper.text()).toContain('自动刷新已关闭')
+    const offCount = calls()
+    vi.advanceTimersByTime(300000)
+    await flushPromises()
+    expect(calls()).toBe(offCount)
+    wrapper.unmount()
+  })
+
+  it('汇报脱敏：隐藏金额精度与负责人姓名，刷新后保持', async () => {
+    mocks.getDashboardStats.mockResolvedValue({ total_villages: 1, total_funds: 1234000.567 })
+    mocks.getYearlyTrends.mockResolvedValue({
+      trends: [{ year: 2026, total_planned: 100.6, total_actual: 88.4, project_count: 3 }],
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // 非脱敏：保留 2 位小数精度，负责人姓名原样展示
+    expect(vm.kpis[4].value).toBe(1234000.57)
+    expect(vm.fundTrendOption.series[0].data).toEqual([100.6])
+    expect(wrapper.find('.leader-person').text()).toBe('张三')
+
+    await wrapper.findAll('.el-switch-stub')[5].trigger('click')
+    await flushPromises()
+    expect(vm.config.desensitized).toBe(true)
+    expect(savedConfig().desensitized).toBe(true)
+    // 脱敏：金额隐藏小数精度、负责人姓名打码
+    expect(vm.kpis[4].value).toBe(1234001)
+    expect(vm.fundTrendOption.series[0].data).toEqual([101])
+    expect(wrapper.find('.leader-person').text()).toBe('张*')
+    expect(wrapper.text()).toContain('汇报脱敏模式')
+
+    // 刷新（重新挂载）后配置仍保持
+    wrapper.unmount()
+    const remount = mountComp()
+    await flushPromises()
+    expect((remount.vm as any).config.desensitized).toBe(true)
+    expect(remount.find('.leader-person').text()).toBe('张*')
+    remount.unmount()
+  })
+
+  it('恢复默认：卡片全显示、30s、非脱敏，并重建轮询', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await wrapper.find('.radio-off').trigger('click')
+    await wrapper.findAll('.el-switch-stub')[0].trigger('click')
+    await wrapper.findAll('.el-switch-stub')[5].trigger('click')
+    await flushPromises()
+    expect(vm.config.refreshInterval).toBe(0)
+    expect(vm.config.desensitized).toBe(true)
+
+    await findButton(wrapper, '恢复默认')!.trigger('click')
+    await flushPromises()
+    expect(vm.config.refreshInterval).toBe(30)
+    expect(vm.config.desensitized).toBe(false)
+    expect(vm.config.cards.every((c: any) => c.visible)).toBe(true)
+
+    const before = mocks.getDashboardStats.mock.calls.length
+    vi.advanceTimersByTime(30000)
+    await flushPromises()
+    expect(mocks.getDashboardStats.mock.calls.length).toBe(before + 1)
+    wrapper.unmount()
+  })
+
+  it('负责人卡片数据形态：数组直返 / items / 信封 data.items / null 兜底', async () => {
+    mocks.projectList.mockResolvedValue([{ id: 1, name: '项目甲', responsible_person: '李四' }])
+    let wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).leaderRows).toEqual([{ id: 1, project: '项目甲', person: '李四' }])
+    wrapper.unmount()
+
+    mocks.projectList.mockResolvedValue({ items: [{ id: 2, name: '项目乙' }] })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).leaderRows[0]).toMatchObject({ project: '项目乙', person: '—' })
+    wrapper.unmount()
+
+    mocks.projectList.mockResolvedValue({ data: { items: [{ id: 3 }] } })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).leaderRows[0]).toMatchObject({ project: '—' })
+    wrapper.unmount()
+
+    mocks.projectList.mockResolvedValue(null)
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).projects).toEqual([])
+    expect(wrapper.findAll('.leader-item').length).toBe(0)
+    // 防御：projects 被置空（null/undefined）时 computed 兜底空数组
+    ;(wrapper.vm as any).projects = null
+    expect((wrapper.vm as any).leaderRows).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('四个数据接口全部失败 → 提示一次（failedCount === 4 分支）', async () => {
+    mocks.getDashboardStats.mockRejectedValue(new Error('x'))
+    mocks.getYearlyTrends.mockRejectedValue(new Error('x'))
+    mocks.getRankings.mockRejectedValue(new Error('x'))
+    mocks.projectList.mockRejectedValue(new Error('x'))
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(mocks.ElMessage.warning).toHaveBeenCalledWith('大屏数据加载失败，请检查服务连接')
+    wrapper.unmount()
+  })
   })
 })

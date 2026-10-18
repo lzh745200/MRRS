@@ -534,6 +534,16 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "order": 118,
         "roles": None,
     },
+    {
+        # w17-004 工作移交：前端 views/handover/Index.vue + /handover 路由已落地，
+        # 菜单对齐门禁（前端键必须存在于后端、后端 path 必须命中前端路由）可满足。
+        "key": "handover",
+        "label": "工作移交",
+        "icon": "Switch",
+        "path": "/handover",
+        "order": 119,
+        "roles": None,
+    },
 ]
 
 

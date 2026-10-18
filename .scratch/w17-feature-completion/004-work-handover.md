@@ -1,5 +1,5 @@
 ---
-labels: [ready-for-agent, severity-high]
+labels: [done, severity-high]
 blocks: []
 blocked-by: ["w17-feature-completion/001-reminder-disposition-closure.md"]
 ---
@@ -20,7 +20,24 @@ blocked-by: ["w17-feature-completion/001-reminder-disposition-closure.md"]
   交接单导出（Excel/PDF 至少其一）。
 
 **验收**
-- [ ] 移交在单事务内完成，失败全量回滚；跨组织目标拒绝（数据域 fail-closed）
-- [ ] 执行后原责任人工作台/待办清空、接任人可见
-- [ ] 审计留痕（移交人、接任人、逐项清单）
-- [ ] 覆盖率与门禁全绿
+- [x] 移交在单事务内完成，失败全量回滚；跨组织目标拒绝（数据域 fail-closed）
+- [x] 执行后原责任人工作台/待办清空、接任人可见
+- [x] 审计留痕（移交人、接任人、逐项清单）
+- [x] 覆盖率与门禁全绿
+
+## Resolution（2026-10-17，W19 完成）
+
+**后端**（2 个新模块 + 2 个测试文件）
+- `app/services/handover_service.py`：清单统计（村 `created_by` / 项目 / 待办 / 审批中申请，统一走
+  `filter_by_data_scope`）、接任人校验（不存在/停用 404、本人 422、跨组织或组织缺失 403、超管豁免）、
+  单事务执行（归属改写 + 审批转交留痕 + 双方站内消息 + `write_work_log` 审计）、历史回放。
+- `app/api/v1/handover.py`：`GET /handover/inventory`、`GET /handover/candidates`、
+  `POST /handover/execute`（伪造/越权 ID → 403；批量行数不一致 → 409；失败全量回滚）、`GET /handover/history`。
+- **历史由 WorkLog 承载**（log_type=handover，快照 JSON 存 attachments），不新增表/迁移。
+
+**前端**
+- `src/api/handover.ts` + `src/views/handover/Index.vue`（分组勾选 → 选接任人 → 确认执行 → 交接单弹窗
+  与 PDF 导出；移交历史回放/导出/分页）；路由 `/handover`、menu-config、侧边栏、后端 `MENU_DEFINITIONS` 同步。
+
+**验证**：新增后端 85 项测试全绿、service 283 stmts/108 branches 100%、API 28 stmts 100%；
+前端 21 项测试、两文件四指标 100%；flake8 0；vue-tsc 0；eslint 0；硬编码样式棘轮 345/345 NEW=0。

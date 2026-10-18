@@ -114,6 +114,16 @@ except Exception as exc:
 router.include_router(diagnostics_router)
 logger.debug("已加载路由: system.diagnostics")
 
+# ---- 业务数据体检（W17-008）----
+try:
+    from app.api.v1.system.business_health import router as business_health_router
+except Exception as exc:
+    # 深审 #78：子模块导入失败必须 fail-fast（业务数据体检缺失会让管理员
+    # 无法发现"村年度缺失/金额矛盾"这类数据质量问题，静默缺路由不可接受）。
+    raise RuntimeError(f"加载 system.business_health 路由失败: {exc}") from exc
+router.include_router(business_health_router)
+logger.debug("已加载路由: system.business_health")
+
 # ---- 系统健康检查 ----
 try:
     from app.api.v1.system.health import router as health_router

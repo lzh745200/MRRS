@@ -5,8 +5,8 @@
 前端业务页面全量报错。
 
 锁定的新契约：
-1. 48 个业务模块全部静态导入并注册（数量锁，防菜单键漂移式回退；
-   W17 新增 donation / pairing 两个业务模块后 46→48）
+1. 49 个业务模块全部静态导入并注册（数量锁，防菜单键漂移式回退；
+   W17 新增 donation / pairing 两个业务模块后 46→48；w17-004 工作移交 →49）
 2. 注册顺序不变量：supported_village_export 先于 supported_village
 3. 快速失败：任一路由模块导入失败 → 启动中止（禁止静默降级）
 4. 禁止回退到动态 importlib 加载
@@ -19,7 +19,7 @@ import pytest
 
 PKG = "app.api.v1"
 
-EXPECTED_BUSINESS_MODULE_COUNT = 48
+EXPECTED_BUSINESS_MODULE_COUNT = 49
 
 
 def _fresh_pkg():

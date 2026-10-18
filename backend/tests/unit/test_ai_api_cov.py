@@ -67,7 +67,10 @@ async def test_forecast_income():
     ) as rip:
         resp = await ai_mod.forecast_income(forecast_years=2, current_user=MagicMock(), db=MagicMock())
     assert resp["code"] == 200
-    assert resp["data"] == {"forecast": [1, 2]}
+    # W17-008：data 为 result 平铺 + 结构化 rationale / data_scope
+    assert resp["data"]["forecast"] == [1, 2]
+    assert resp["data"]["rationale"]["method"] == "ordinary_least_squares_regression"
+    assert resp["data"]["data_scope"]["dataset"] == "village_income"
     assert rip.await_count == 1
 
 
@@ -78,5 +81,7 @@ async def test_forecast_funds():
     ) as rip:
         resp = await ai_mod.forecast_funds(current_user=MagicMock(), db=MagicMock())
     assert resp["code"] == 200
-    assert resp["data"] == {"risk": "低"}
+    assert resp["data"]["risk"] == "低"
+    assert resp["data"]["rationale"]["method"] == "time_progress_ratio_projection"
+    assert resp["data"]["data_scope"]["dataset"] == "funds"
     assert rip.await_count == 1

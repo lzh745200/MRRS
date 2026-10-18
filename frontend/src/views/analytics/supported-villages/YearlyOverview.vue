@@ -31,6 +31,9 @@
             <el-icon><Upload /></el-icon>全部导入
           </el-button>
         </el-upload>
+        <el-button class="btn-rollforward" plain @click="rollforwardVisible = true">
+          从上年复制
+        </el-button>
       </div>
     </div>
 
@@ -123,12 +126,38 @@
         @saved="loadAllData"
       />
     </el-dialog>
+
+    <!-- 「从上年复制」：逐字段差异展示 + 批量选择 + 二次确认 + 批量沿用 -->
+    <el-dialog
+      v-model="rollforwardVisible"
+      append-to-body
+      :title="`从 ${selectedYear - 1} 年复制数据到 ${selectedYear} 年`"
+      :width="DIALOG_LG"
+      destroy-on-close
+    >
+      <YearlyRollforwardDialog
+        v-if="rollforwardVisible"
+        :village-id="villageId"
+        :year="selectedYear"
+        @close="rollforwardVisible = false"
+        @applied="loadAllData"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { DIALOG_LG } from '@/config/dialog'
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, markRaw } from 'vue'
+import {
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  watch,
+  nextTick,
+  markRaw,
+  defineAsyncComponent,
+} from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
 import { logger } from '@/utils/logger'
@@ -161,6 +190,13 @@ import {
 } from '@/api/supportedVillage'
 import type { YearlyDataSummary } from '@/types/analytics'
 import SectionDataForm from './components/SectionDataForm.vue'
+
+// 「从上年复制」弹窗按需异步加载：静态 import 会让每个挂载 YearlyOverview 的测试
+// 都执行该组件模块（覆盖率按 v8 fnMap 合并时多文件引用易互相污染），异步化后
+// 仅真正打开弹窗的测试文件执行它。
+const YearlyRollforwardDialog = defineAsyncComponent(
+  () => import('./components/YearlyRollforwardDialog.vue')
+)
 import echarts from '@/utils/echarts'
 import { getYearOptions } from '@/utils/yearOptions'
 import { format } from '@/utils'
@@ -184,6 +220,9 @@ const availableYears = computed(() => getYearOptions({ start: 2017 }))
 const editDialogVisible = ref(false)
 const editSectionKey = ref('')
 const editSectionTitle = ref('')
+
+// 「从上年复制」弹窗开关
+const rollforwardVisible = ref(false)
 
 // 板块定义
 // 注意：后端 /yearly/{year} 按 section 原始 key 返回（force-investment/party-building/industry 等），

@@ -69,6 +69,32 @@ vi.mock('@element-plus/icons-vue', () => {
   }
 })
 
+// 「从上年复制」弹窗按需异步加载：本文件只验证入口接线，桩替换真实组件模块，
+// 避免同一 .vue 被多个测试文件执行导致 v8 fnMap 分片合并污染（见 vitest.config 注释）。
+vi.mock('@/views/analytics/supported-villages/components/YearlyRollforwardDialog.vue', () => ({
+  // __esModule 必须显式声明：defineAsyncComponent 依据它把模块命名空间解包成 default，
+  // 否则会把模块对象当组件类型并触发 "__isTeleport export is not defined" 崩溃
+  __esModule: true,
+  default: {
+    name: 'YearlyRollforwardDialog',
+    emits: ['close', 'applied'],
+    template: '<div class="rollforward-dialog-stub">从上年复制弹窗</div>',
+  },
+}))
+
+// 编辑弹窗内容组件仅用于验证 close/saved 接线，用桩替换避免整表渲染拖慢用例
+vi.mock('@/views/analytics/supported-villages/components/SectionDataForm.vue', () => ({
+  __esModule: true,
+  default: {
+    name: 'SectionDataForm',
+    emits: ['close', 'saved'],
+    template:
+      '<div class="section-form-stub">' +
+      '<button type="button" class="section-close" @click="$emit(\'close\')">close</button>' +
+      '</div>',
+  },
+}))
+
 import YearlyOverview from '@/views/analytics/supported-villages/YearlyOverview.vue'
 
 const fullData = {
@@ -667,5 +693,72 @@ describe('YearlyOverview.vue deleteSection 板块 key 映射（H4）', () => {
     expect(year).toBe(vm.selectedYear)
     expect(typeof key).toBe('string')
     expect(key.length).toBeGreaterThan(0)
+  })
+})
+
+// 未解析的 el-dialog 会把插槽当组件 slot 丢弃，需用渲染插槽的桩承接弹窗内容
+const dialogStub = {
+  'el-dialog': {
+    name: 'StubElDialog',
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template:
+      '<div class="el-dialog-stub">' +
+      '<button type="button" class="dialog-model-toggle" @click="$emit(\'update:modelValue\', false)">' +
+      'close</button><slot /></div>',
+  },
+}
+
+describe('YearlyOverview.vue 「从上年复制」入口', () => {
+  it('点击按钮打开弹窗，close/applied 事件接线正确', async () => {
+    const wrapper = mountComp(dialogStub)
+    await flushPromises()
+    const vm = st(wrapper)
+    expect(vm.rollforwardVisible).toBe(false)
+
+    const button = wrapper.find('.btn-rollforward')
+    expect(button.exists()).toBe(true)
+    await button.trigger('click')
+    await flushPromises()
+
+    expect(vm.rollforwardVisible).toBe(true)
+    expect(wrapper.find('.rollforward-dialog-stub').exists()).toBe(true)
+    const dialog = wrapper.findComponent({ name: 'YearlyRollforwardDialog' })
+    expect(dialog.exists()).toBe(true)
+
+    const callsBefore = mocks.getYearlyData.mock.calls.length
+    dialog.vm.$emit('applied')
+    await flushPromises()
+    expect(mocks.getYearlyData.mock.calls.length).toBeGreaterThan(callsBefore)
+
+    // v-model: 弹窗自身 update:modelValue → rollforwardVisible=false
+    const toggles = wrapper.findAll('.dialog-model-toggle')
+    expect(toggles).toHaveLength(2)
+    await toggles[1].trigger('click')
+    await flushPromises()
+    expect(vm.rollforwardVisible).toBe(false)
+
+    // 重新打开，验证 @close 接线（重新查询：异步组件重建后旧实例已卸载，emit 会被忽略）
+    await button.trigger('click')
+    await flushPromises()
+    expect(vm.rollforwardVisible).toBe(true)
+    const reopened = wrapper.findComponent({ name: 'YearlyRollforwardDialog' })
+    expect(reopened.exists()).toBe(true)
+    reopened.vm.$emit('close')
+    await flushPromises()
+    expect(vm.rollforwardVisible).toBe(false)
+  })
+
+  it('编辑弹窗 SectionDataForm @close → editDialogVisible=false', async () => {
+    const wrapper = mountComp(dialogStub)
+    await flushPromises()
+    const vm = st(wrapper)
+    vm.openEditDialog('population')
+    await nextTick()
+    expect(vm.editDialogVisible).toBe(true)
+    expect(wrapper.find('.section-form-stub').exists()).toBe(true)
+    wrapper.findComponent({ name: 'SectionDataForm' }).vm.$emit('close')
+    await flushPromises()
+    expect(vm.editDialogVisible).toBe(false)
   })
 })

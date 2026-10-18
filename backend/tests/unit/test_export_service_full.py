@@ -146,13 +146,14 @@ class TestExportComprehensiveReport:
         assert ws_f.cell(row=6, column=3).value == 50000
 
     def test_empty_data_only_summary_sheet(self, svc):
-        """所有业务数据为空时仅创建汇总 sheet。"""
+        """所有业务数据为空时仅创建汇总 sheet（数据区尾部仍带 w17-006 口径脚注）。"""
         content = svc.export_comprehensive_report({}, [], [], [])
         wb = load_workbook(BytesIO(content))
         assert wb.sheetnames == ["汇总"]
-        # 空 summary → 汇总 sheet 仅抬头区 4 行 + 表头 1 行
+        # 空 summary → 抬头区 4 行 + 表头 1 行 + 空行 + 口径脚注 1 行 = 7 行
         ws = wb.active
-        assert ws.max_row == 5
+        assert ws.max_row == 7
+        assert "口径说明" in str(ws.cell(row=7, column=1).value)
 
     def test_only_village_data(self, svc):
         """只有 village_data 非空 → 仅创建汇总 + 村庄。"""

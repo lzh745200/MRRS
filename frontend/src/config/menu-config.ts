@@ -356,6 +356,13 @@ export const MENU_CONFIG: MenuItem[] = [
     icon: 'Box',
     order: 19,
   },
+  {
+    key: 'handover',
+    label: '工作移交',
+    path: '/handover',
+    icon: 'Switch',
+    order: 20,
+  },
 ]
 
 export function getAllMenuKeys(): string[] {

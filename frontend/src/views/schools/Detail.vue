@@ -8,6 +8,13 @@
       </div>
       <div class="header-actions">
         <el-button
+          class="btn-export-dossier"
+          :loading="dossierExporting"
+          @click="handleExportDossier"
+        >
+          <el-icon><Download /></el-icon>导出档案册
+        </el-button>
+        <el-button
           type="primary"
           plain
           class="btn-pairings"
@@ -220,6 +227,7 @@ import {
   Edit,
   Delete,
   Loading,
+  Download,
   Document,
   EditPen,
   DataAnalysis,
@@ -438,6 +446,37 @@ const handleDelete = async () => {
 
 const handleBack = () => {
   pushSafe('/schools')
+}
+
+// ── w17-007 一校一档 PDF 导出 ──
+const dossierExporting = ref(false)
+
+/** 导出档案册（封面 + 基本信息 + 年度资助 + 项目经费 + 附件照片清单） */
+async function handleExportDossier() {
+  const id = school.value.id
+  if (!id) return
+  dossierExporting.value = true
+  try {
+    const token = AuthStorage.getToken() || ''
+    const resp = await fetch(`${baseUrl}/schools/${id}/dossier.pdf`, {
+      headers: { Authorization: token ? `Bearer ${token}` : '' },
+    })
+    if (!resp.ok) throw new Error(`档案册下载失败（HTTP ${resp.status}）`)
+    const blob = await resp.blob()
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `${school.value.name}_档案册.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    ElMessage.success('档案册已开始下载')
+  } catch (err: any) {
+    logger.error('[Schools/Detail] 导出档案册失败', err)
+    ElMessage.error('导出档案册失败，请稍后重试')
+  } finally {
+    dossierExporting.value = false
+  }
 }
 
 async function loadProjects() {

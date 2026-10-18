@@ -175,3 +175,92 @@ export const importAllSectionsData = (villageId: number, year: number, file: Fil
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }
+
+// ── 年度数据滚动填报（复制上年 + 批量沿用）──
+// 逐字段差异元信息：status=copy（可沿用）/keep（本年度已有值保留）/blank（上年空缺需重填）
+export interface YearlyPrefillField {
+  field: string
+  label: string
+  previousValue: unknown
+  currentValue: unknown
+  hasPreviousValue: boolean
+  hasCurrentValue: boolean
+  status: 'copy' | 'keep' | 'blank'
+}
+
+export interface YearlyPrefillSection {
+  key: string
+  title: string
+  hasPreviousData: boolean
+  fields: YearlyPrefillField[]
+  copyableCount: number
+  keptCount: number
+  blankCount: number
+}
+
+export interface YearlyPrefillResult {
+  villageId: number
+  year: number
+  fromYear: number
+  hasPreviousData: boolean
+  sections: YearlyPrefillSection[]
+  summary: {
+    sectionCount: number
+    availableSectionCount: number
+    copyableFieldCount: number
+    keptFieldCount: number
+    blankFieldCount: number
+  }
+  message: string
+}
+
+export interface YearlyRollforwardSectionStats {
+  created: boolean
+  writtenFields: string[]
+  keptFields: string[]
+  memberCount: number
+}
+
+export interface YearlyRollforwardResult {
+  villageId: number
+  year: number
+  fromYear: number
+  mode: 'fill_empty' | 'overwrite'
+  hasPreviousData: boolean
+  appliedFields: number
+  keptFields: number
+  createdSections: string[]
+  appliedSections: string[]
+  skippedSections: Array<{ section: string; reason: string }>
+  sections: Record<string, YearlyRollforwardSectionStats>
+}
+
+/** 获取「从上年复制」预填数据与逐字段差异元信息（fromYear 缺省时由后端取 year-1） */
+export const getYearlyPrefill = (villageId: number, year: number, fromYear?: number) =>
+  get(
+    `/supported-villages/${villageId}/yearly/${year}/prefill`,
+    fromYear != null ? { from_year: fromYear } : undefined
+  )
+
+/**
+ * 批量沿用上年年度数据到指定年度（一次提交多个板块，后端事务原子）。
+ * 默认 overwrite=false：只填空、不覆盖本年度已有非空值；true 为覆盖语义（需二次确认）。
+ */
+export const rollforwardYearlyData = (
+  villageId: number,
+  year: number,
+  data: { sectionKeys: string[]; fromYear?: number; overwrite?: boolean }
+) =>
+  post(`/supported-villages/${villageId}/yearly/${year}/rollforward`, {
+    section_keys: data.sectionKeys,
+    from_year: data.fromYear,
+    overwrite: data.overwrite ?? false,
+  })
+
+// ── w17-007 一村一档 PDF（档案册一键成册，blob 下载）──
+/** 下载帮扶村档案册 PDF（封面 + 基本信息 + 年度数据 + 项目经费 + 附件清单） */
+export const downloadVillageDossier = (villageId: number) =>
+  downloadBlobAsFile(
+    () => request.get(`/supported-villages/${villageId}/dossier.pdf`, { responseType: 'blob' }),
+    { fallbackFileName: '帮扶村档案册.pdf' }
+  )

@@ -52,7 +52,11 @@ async def test_predict_trend():
     with patch.object(mod, "_get_trend_service", return_value=svc):
         req = mod.PredictRequest(historical_data=[{"date": "2024-01", "value": 1}])
         resp = await mod.predict_trend(request=req, db=MagicMock(), current_user=MagicMock())
-    assert resp == {"forecast": [1.0]}
+    # W17-008：服务结果平铺 + 结构化 rationale / data_scope 信封
+    assert resp["forecast"] == [1.0]
+    assert resp["rationale"]["method"] == "prophet"
+    assert resp["rationale"]["basis_fields"] == ["date", "value"]
+    assert resp["data_scope"]["row_count"] == 1
     svc.predict_time_series.assert_called_once()
 
 
@@ -63,7 +67,11 @@ async def test_detect_anomalies():
     with patch.object(mod, "_get_anomaly_service", return_value=svc):
         req = mod.AnomalyDetectionRequest(data=[{"value": 1}])
         resp = await mod.detect_anomalies(request=req, db=MagicMock(), current_user=MagicMock())
-    assert resp == {"anomalies": []}
+    # W17-008：返回改为结构化信封（anomalies + 计数 + 依据）
+    assert resp["anomalies"] == []
+    assert resp["anomaly_count"] == 0
+    assert resp["rationale"]["method"] == "isolation_forest_score"
+    assert resp["data_scope"]["row_count"] == 1
     svc.detect_anomalies.assert_called_once()
 
 
@@ -73,7 +81,10 @@ async def test_recommend_projects():
     svc.recommend_projects.return_value = {"items": []}
     with patch.object(mod, "_get_recommendation_service", return_value=svc):
         resp = await mod.recommend_projects(village_id=3, limit=5, db=MagicMock(), current_user=MagicMock())
-    assert resp == {"items": []}
+    assert resp["items"] == []
+    assert resp["total"] == 0
+    assert resp["rationale"]["method"] == "similar_village_success_scoring"
+    assert resp["data_scope"]["filters"][0]["value"] == 3
     svc.recommend_projects.assert_called_once()
 
 
@@ -84,7 +95,9 @@ async def test_recommend_fund_allocation():
     with patch.object(mod, "_get_recommendation_service", return_value=svc):
         req = mod.FundAllocationRequest(total_budget=100.0, village_ids=[1, 2])
         resp = await mod.recommend_fund_allocation(request=req, db=MagicMock(), current_user=MagicMock())
-    assert resp == {"alloc": {}}
+    assert resp["alloc"] == {}
+    assert resp["rationale"]["method"] == "weighted_need_allocation"
+    assert resp["data_scope"]["counts"]["requested_villages"] == 2
     svc.recommend_fund_allocation.assert_called_once()
 
 
@@ -96,6 +109,10 @@ def test_nlp_query():
     user = MagicMock()
     with patch.object(mod, "_get_nlp_service", return_value=svc):
         resp = mod.nlp_query(query="有多少个村", db=MagicMock(), current_user=user)
-    assert resp == {"rows": 2}
+    assert resp["rows"] == 2
+    assert resp["rationale"]["method"] == "parameterized_sql_template"
+    # 不回显 SQL 原文（避免把实现细节当"解释"输出）
+    assert "sql" not in resp["rationale"]["formula"]
+    assert resp["data_scope"]["row_count"] == 0
     svc.execute_query.assert_called_once()
     assert svc.execute_query.call_args.kwargs.get("user") is user

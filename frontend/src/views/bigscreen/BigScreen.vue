@@ -4,11 +4,63 @@
       <h1>帮扶管理信息系统 · 帮扶成效总览大屏</h1>
       <div class="bs-header-right">
         <span class="bs-clock">{{ clock }}</span>
+        <el-button class="settings-trigger" @click="openSettings">设置</el-button>
         <el-button @click="toggleFullscreen">
           {{ isFullscreen ? '退出全屏' : '全屏展示' }}
         </el-button>
       </div>
     </header>
+
+    <!-- 设置抽屉：卡片取舍与顺序 / 自动刷新频率 / 汇报脱敏（localStorage 持久化） -->
+    <el-drawer v-model="settingsVisible" title="大屏设置" size="360px">
+      <div class="settings-panel">
+        <div class="settings-section">
+          <div class="settings-title">卡片显示与顺序</div>
+          <div v-for="(card, index) in config.cards" :key="card.key" class="settings-card-row">
+            <el-switch
+              :model-value="card.visible"
+              @update:model-value="onCardVisibleChange(card, $event)"
+            />
+            <span class="settings-card-title">{{ card.title }}</span>
+            <el-button size="small" :disabled="index === 0" @click="moveCard(index, -1)"
+              >上移</el-button
+            >
+            <el-button
+              size="small"
+              :disabled="index === config.cards.length - 1"
+              @click="moveCard(index, 1)"
+              >下移</el-button
+            >
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">自动刷新频率</div>
+          <el-radio-group
+            :model-value="config.refreshInterval"
+            @update:model-value="onRefreshChange($event)"
+          >
+            <el-radio-button
+              v-for="option in refreshOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </el-radio-button>
+          </el-radio-group>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">汇报脱敏</div>
+          <div class="settings-desensitize">
+            <el-switch
+              :model-value="config.desensitized"
+              @update:model-value="onDesensitizeChange($event)"
+            />
+            <span class="settings-hint">隐藏金额精度与负责人姓名</span>
+          </div>
+        </div>
+        <el-button class="settings-reset" @click="resetSettings">恢复默认</el-button>
+      </div>
+    </el-drawer>
 
     <!-- KPI 总览 -->
     <section class="bs-kpi">
@@ -18,46 +70,79 @@
       </div>
     </section>
 
-    <!-- 图表区 -->
+    <!-- 图表 / 负责人卡片（按设置开关与排序渲染） -->
     <section class="bs-charts">
-      <div class="chart-card wide">
-        <div class="chart-title">经费执行趋势</div>
-        <BaseChart :option="fundTrendOption" class="chart-body" />
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">帮扶成效排名</div>
-        <BaseChart :option="rankOption" class="chart-body" />
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">项目状态分布</div>
-        <BaseChart :option="projectStatusOption" class="chart-body" />
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">年度对比</div>
-        <BaseChart :option="yearlyOption" class="chart-body" />
+      <div
+        v-for="card in visibleCards"
+        :key="card.key"
+        class="chart-card"
+        :class="{ wide: card.wide }"
+      >
+        <div class="chart-title">{{ card.title }}</div>
+        <BaseChart v-if="card.key === 'fundTrend'" :option="fundTrendOption" class="chart-body" />
+        <BaseChart v-else-if="card.key === 'rank'" :option="rankOption" class="chart-body" />
+        <BaseChart
+          v-else-if="card.key === 'projectStatus'"
+          :option="projectStatusOption"
+          class="chart-body"
+        />
+        <BaseChart v-else-if="card.key === 'yearly'" :option="yearlyOption" class="chart-body" />
+        <ul v-else class="leader-list">
+          <li v-for="row in leaderRows" :key="row.id" class="leader-item">
+            <span class="leader-project">{{ row.project }}</span>
+            <span class="leader-person">{{ row.person }}</span>
+          </li>
+        </ul>
       </div>
     </section>
 
-    <footer class="bs-footer">数据来源：本地数据库 · 数据每 30 秒自动刷新 · 汇报展示模式</footer>
+    <footer class="bs-footer">{{ footerText }}</footer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
 import BaseChart from '@/components/common/BaseChart.vue'
 import { getDashboardStats, getYearlyTrends } from '@/api/dashboard'
 import { getRankings } from '@/api/effectiveness'
+import { projectApi } from '@/api/projects'
+import {
+  REFRESH_LABELS,
+  REFRESH_OPTIONS,
+  defaultBigScreenConfig,
+  formatLeaderName,
+  hideAmountPrecision,
+  loadBigScreenConfig,
+  normalizeRefreshInterval,
+  saveBigScreenConfig,
+  type BigScreenCardConfig,
+  type BigScreenConfig,
+  type RefreshInterval,
+} from './bigscreenConfig'
 
 const isFullscreen = ref(false)
 const clock = ref('')
 const stats = ref<any>({})
 const yearlyTrends = ref<any[]>([])
 const rankings = ref<any[]>([])
+// 大屏配置：卡片开关与顺序、自动刷新频率、汇报脱敏；localStorage 持久化
+const config = reactive<BigScreenConfig>(loadBigScreenConfig())
+const settingsVisible = ref(false)
+const refreshOptions = REFRESH_OPTIONS
+// 重点项目负责人（脱敏开关控制姓名展示）
+const projects = ref<any[]>([])
 
 let clockTimer: number | null = null
-let rotateTimer: number | null = null
+let refreshTimer: number | null = null
+
+/** 金额展示：脱敏模式隐藏小数精度，否则保持原口径（万元、最多 2 位小数） */
+function displayMoney(value: unknown): number {
+  if (config.desensitized) return hideAmountPrecision(value)
+  if (value === null || value === undefined) return 0
+  return Math.round(Number(value) * 100) / 100
+}
 
 const kpis = computed(() => {
   const s = stats.value ?? {}
@@ -78,8 +163,9 @@ const kpis = computed(() => {
       label: '经费总额(万)',
       // 后端 total_funds 由 SUM(Fund.amount) 得来，而 Fund.amount 列即「申请金额(万元)」
       // （models/fund.py），/funds/statistics/overview 亦按万元直出——故此处已是万元，
-      // 不得再除 10000（旧实现除以 1 万，数值缩小 10000 倍）。保留 2 位小数。
-      value: s.total_funds != null ? Math.round(Number(s.total_funds) * 100) / 100 : 0,
+      // 不得再除 10000（旧实现除以 1 万，数值缩小 10000 倍）。保留 2 位小数；
+      // 汇报脱敏模式下隐藏小数精度。
+      value: displayMoney(s.total_funds),
     },
   ]
 })
@@ -97,14 +183,14 @@ const fundTrendOption = computed(() => {
         name: '计划投入',
         type: 'line',
         smooth: true,
-        data: data.map((d: any) => d.total_planned ?? d.planned ?? 0),
+        data: data.map((d: any) => displayMoney(d.total_planned ?? d.planned ?? 0)),
         itemStyle: { color: '#36cfc9' },
       },
       {
         name: '实际投入',
         type: 'line',
         smooth: true,
-        data: data.map((d: any) => d.total_actual ?? d.actual ?? 0),
+        data: data.map((d: any) => displayMoney(d.total_actual ?? d.actual ?? 0)),
         itemStyle: { color: '#ffd666' },
       },
     ],
@@ -175,6 +261,28 @@ const yearlyOption = computed(() => {
   }
 })
 
+/** 可见卡片（按配置顺序） */
+const visibleCards = computed(() => config.cards.filter((card) => card.visible))
+
+/** 重点项目负责人列表：脱敏模式下姓名打码 */
+const leaderRows = computed(() =>
+  (projects.value ?? []).slice(0, 5).map((row: any) => ({
+    id: row.id,
+    project: row.name ?? '—',
+    person: formatLeaderName(row.responsible_person, config.desensitized),
+  }))
+)
+
+/** 页脚：自动刷新状态 + 汇报模式（脱敏态明确标注） */
+const footerText = computed(() => {
+  const refresh =
+    config.refreshInterval === 0
+      ? '自动刷新已关闭'
+      : `数据每 ${REFRESH_LABELS[config.refreshInterval]}自动刷新`
+  const mode = config.desensitized ? '汇报脱敏模式' : '汇报展示模式'
+  return `数据来源：本地数据库 · ${refresh} · ${mode}`
+})
+
 async function loadAll() {
   let failedCount = 0
   // 不传 refresh=true：走后端 2 分钟 diskcache，避免大屏每 30s 轮询
@@ -199,9 +307,16 @@ async function loadAll() {
   } catch {
     failedCount++
   }
+  try {
+    const p = await projectApi.list({ page: 1, page_size: 5 })
+    // 兼容数组直返 / {items} / 信封 {data:{items}} 三种形态
+    projects.value = Array.isArray(p) ? p : (p?.items ?? p?.data?.items ?? [])
+  } catch {
+    failedCount++
+  }
   if (failedCount > 0) {
     logger.warn(`[BigScreen] ${failedCount} 个数据接口加载失败，已静默降级`)
-    if (failedCount === 3) {
+    if (failedCount === 4) {
       ElMessage.warning('大屏数据加载失败，请检查服务连接')
     }
   }
@@ -226,17 +341,63 @@ function onFullscreenChange() {
   isFullscreen.value = !!document.fullscreenElement
 }
 
+// ── 设置抽屉：卡片取舍/顺序、刷新频率、脱敏 ──
+function openSettings() {
+  settingsVisible.value = true
+}
+
+function onCardVisibleChange(card: BigScreenCardConfig, value: unknown) {
+  card.visible = value === true
+}
+
+function moveCard(index: number, offset: number) {
+  const target = index + offset
+  if (target < 0 || target >= config.cards.length) return
+  const [card] = config.cards.splice(index, 1)
+  config.cards.splice(target, 0, card)
+}
+
+function onRefreshChange(value: unknown) {
+  config.refreshInterval = normalizeRefreshInterval(value)
+}
+
+function onDesensitizeChange(value: unknown) {
+  config.desensitized = value === true
+}
+
+function resetSettings() {
+  Object.assign(config, defaultBigScreenConfig())
+}
+
+/** 按当前刷新频率重建轮询定时器；0 = 关闭自动刷新，不产生任何轮询请求 */
+function applyRefreshTimer(interval: RefreshInterval) {
+  if (refreshTimer !== null) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+  if (interval > 0) {
+    refreshTimer = window.setInterval(loadAll, interval * 1000)
+  }
+}
+
+// 配置变更：立即生效并写回 localStorage（深比较，卡片顺序/可见性/脱敏均会触发）
+watch(config, () => saveBigScreenConfig(config), { deep: true })
+watch(
+  () => config.refreshInterval,
+  (interval) => applyRefreshTimer(interval)
+)
+
 onMounted(() => {
   loadAll()
   tickClock()
   clockTimer = window.setInterval(tickClock, 1000)
-  rotateTimer = window.setInterval(loadAll, 30000)
+  applyRefreshTimer(config.refreshInterval)
   document.addEventListener('fullscreenchange', onFullscreenChange)
 })
 
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
-  if (rotateTimer) clearInterval(rotateTimer)
+  if (refreshTimer !== null) clearInterval(refreshTimer)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
 })
 </script>
@@ -280,6 +441,43 @@ onUnmounted(() => {
   font-family: var(--font-family-mono);
   color: #ffd666;
   font-size: 14px;
+}
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.settings-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.settings-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-card-title {
+  flex: 1;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.settings-desensitize {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.settings-reset {
+  align-self: flex-start;
 }
 .bs-kpi {
   display: grid;
@@ -329,6 +527,22 @@ onUnmounted(() => {
 .chart-body {
   flex: 1;
   min-height: 160px;
+}
+.leader-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.leader-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.leader-person {
+  color: var(--color-warning);
 }
 .bs-footer {
   text-align: center;

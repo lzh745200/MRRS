@@ -14,7 +14,7 @@
           <el-icon><Download /></el-icon>下载模板
         </el-button>
         <el-button :loading="exporting" :disabled="exporting" @click="handleExport">
-          <el-icon><Download /></el-icon>导出
+          <el-icon><Download /></el-icon>导出当前筛选
         </el-button>
       </template>
     </PageHeader>
@@ -336,7 +336,9 @@
         </el-table-column>
         <el-table-column prop="amount" label="金额(万元)" width="120" align="right">
           <template #default="scope">
-            <span class="amount-text">{{ formatAmount(scope.row.amount) }}</span>
+            <!-- MoneyText 试点：常规金额复用 formatMoney4 语义（千分位/最多 4 位小数），
+                 空值统一显示占位符；视觉与历史 amount-text 列一致 -->
+            <MoneyText class="amount-text" :value="scope.row.amount" />
           </template>
         </el-table-column>
         <el-table-column prop="project_name" label="关联项目" width="160" show-overflow-tooltip>
@@ -454,6 +456,8 @@
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
+import MoneyText from '@/components/common/MoneyText.vue'
+import { useFilterMemory } from '@/composables/useFilterMemory'
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { getYearOptions } from '@/utils/yearOptions'
@@ -520,6 +524,15 @@ const filterForm = reactive({
   village_id: '' as string | number,
   school_id: '' as string | number,
 })
+
+// 筛选状态记忆：按当前路由 path 存 sessionStorage，刷新/返回列表时恢复
+const filterMemory = useFilterMemory<Record<string, any>>()
+function persistFilters() {
+  filterMemory.save({ ...filterForm })
+}
+function restoreFilters() {
+  filterMemory.apply(filterForm)
+}
 
 // 帮扶村/学校下拉选项
 const villageOptions = ref<{ id: number; name: string }[]>([])
@@ -708,6 +721,7 @@ async function fetchData() {
 
 function handleSearch() {
   currentPage.value = 1
+  persistFilters()
   fetchData()
 }
 function handleReset() {
@@ -717,18 +731,22 @@ function handleReset() {
   filterForm.village_id = ''
   filterForm.school_id = ''
   currentPage.value = 1
+  persistFilters()
   fetchData()
 }
 function filterByStatus(status: string) {
   filterForm.status = status
   currentPage.value = 1
+  persistFilters()
   fetchData()
 }
 function handleSizeChange() {
   currentPage.value = 1
+  persistFilters()
   fetchData()
 }
 function handlePageChange() {
+  persistFilters()
   fetchData()
 }
 function handleCreate() {
@@ -927,6 +945,8 @@ async function loadSchoolOptions() {
 }
 
 onMounted(() => {
+  // 先恢复上次筛选，再发起首次查询（避免先按默认条件查一遍再查一遍）
+  restoreFilters()
   fetchData()
   loadStats()
   loadYearOverview()

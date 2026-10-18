@@ -26,10 +26,25 @@
           @keyup.enter="handleSearch"
         />
         <el-select v-model="query.category" placeholder="物资类别" clearable class="f-select">
-          <el-option v-for="o in DONATION_CATEGORIES" :key="o.value" :label="o.label" :value="o.value" />
+          <el-option
+            v-for="o in DONATION_CATEGORIES"
+            :key="o.value"
+            :label="o.label"
+            :value="o.value"
+          />
         </el-select>
-        <el-select v-model="query.destination_type" placeholder="去向类型" clearable class="f-select">
-          <el-option v-for="o in DONATION_DESTINATIONS" :key="o.value" :label="o.label" :value="o.value" />
+        <el-select
+          v-model="query.destination_type"
+          placeholder="去向类型"
+          clearable
+          class="f-select"
+        >
+          <el-option
+            v-for="o in DONATION_DESTINATIONS"
+            :key="o.value"
+            :label="o.label"
+            :value="o.value"
+          />
         </el-select>
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
@@ -37,7 +52,7 @@
 
       <EmptyState v-if="!loading && items.length === 0" description="暂无捐赠物资记录" />
       <template v-else>
-        <el-table :data="items" v-loading="loading" stripe>
+        <el-table v-loading="loading" :data="items" stripe>
           <el-table-column prop="name" label="名称" min-width="140" />
           <el-table-column label="类别" width="90">
             <template #default="{ row }">
@@ -85,7 +100,12 @@
         </el-form-item>
         <el-form-item label="类别" prop="category">
           <el-select v-model="form.category" class="w-full">
-            <el-option v-for="o in DONATION_CATEGORIES" :key="o.value" :label="o.label" :value="o.value" />
+            <el-option
+              v-for="o in DONATION_CATEGORIES"
+              :key="o.value"
+              :label="o.label"
+              :value="o.value"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="数量" prop="quantity">
@@ -99,17 +119,37 @@
           <el-input v-model="form.source_unit" maxlength="200" />
         </el-form-item>
         <el-form-item label="去向类型" prop="destination_type">
-          <el-select v-model="form.destination_type" class="w-full" @change="handleDestinationTypeChange">
-            <el-option v-for="o in DONATION_DESTINATIONS" :key="o.value" :label="o.label" :value="o.value" />
+          <el-select
+            v-model="form.destination_type"
+            class="w-full"
+            @change="handleDestinationTypeChange"
+          >
+            <el-option
+              v-for="o in DONATION_DESTINATIONS"
+              :key="o.value"
+              :label="o.label"
+              :value="o.value"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="去向对象" prop="destination_id">
-          <el-select v-model="form.destination_id" filterable clearable placeholder="选择具体对象" class="w-full">
+          <el-select
+            v-model="form.destination_id"
+            filterable
+            clearable
+            placeholder="选择具体对象"
+            class="w-full"
+          >
             <el-option v-for="o in destinationOptions" :key="o.id" :label="o.label" :value="o.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="交付日期">
-          <el-date-picker v-model="form.delivery_date" type="date" value-format="YYYY-MM-DD" class="w-full" />
+          <el-date-picker
+            v-model="form.delivery_date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            class="w-full"
+          />
         </el-form-item>
         <el-form-item label="签收人">
           <el-input v-model="form.receiver" maxlength="100" />
@@ -262,7 +302,12 @@ async function load() {
   loading.value = true
   try {
     const [listRes, statsRes] = await Promise.all([
-      getDonations({ ...query, keyword: query.keyword || undefined, category: query.category || undefined, destination_type: query.destination_type || undefined }),
+      getDonations({
+        ...query,
+        keyword: query.keyword || undefined,
+        category: query.category || undefined,
+        destination_type: query.destination_type || undefined,
+      }),
       getDonationStats(),
     ])
     items.value = listRes?.items ?? []
@@ -373,7 +418,9 @@ function buildPayload(): DonationPayload {
     destination_type: form.destination_type,
     delivery_date: form.delivery_date || null,
     receiver: form.receiver || null,
-    attachments: urls.length ? urls.map((url) => ({ url, file_name: url.split('/').pop() || null })) : null,
+    attachments: urls.length
+      ? urls.map((url) => ({ url, file_name: url.split('/').pop() || null }))
+      : null,
     remark: form.remark || null,
   }
   if (form.destination_type === 'village') payload.village_id = form.destination_id
