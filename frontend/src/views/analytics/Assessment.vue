@@ -51,7 +51,7 @@
       <!-- 明细表 -->
       <el-card style="margin-top: 16px">
         <template #header>评估指标明细</template>
-        <el-table v-loading="loading" :data="scores" border stripe>
+        <el-table v-loading="loading" :data="scores" border >
           <el-table-column prop="rank" label="排名" width="70" />
           <el-table-column prop="village_name" label="帮扶村" min-width="140" />
           <el-table-column prop="support_unit" label="帮扶单位" min-width="140" />

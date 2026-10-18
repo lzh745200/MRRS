@@ -268,12 +268,29 @@ class TestDashboard:
         expect(nav).to_be_visible(timeout=5000)
 
     def test_dashboard_quick_actions(self, logged_in_page: Page):
-        """测试：快捷入口区域"""
+        """测试：快捷入口区域真实渲染且首个入口可跳转。
+
+        W4-T3（2026-10-18）：原实现只有 ``wait_for_timeout``，无任何断言
+        （恒真占位）——改用真实断言：面板可见 + 至少一个入口按钮 +
+        点击后发生路由跳转。
+        """
         page = logged_in_page
         page.wait_for_load_state("networkidle")
 
-        # 查找快捷入口（可能是卡片或按钮组）；此处仅等待动态内容加载后做后续断言
-        page.wait_for_timeout(2000)
+        # 快捷入口面板必须可见（默认展开「核心业务」分组）
+        panel = page.locator(".quick-panel, .quick-actions").first
+        expect(panel).to_be_visible(timeout=10000)
+
+        buttons = page.locator(".quick-actions .action-btn")
+        expect(buttons.first).to_be_visible(timeout=10000)
+        assert buttons.count() > 0, "快捷入口未渲染任何按钮"
+
+        # 点击首个入口应离开仪表盘（路由跳转到目标页面）
+        target_text = buttons.first.inner_text().strip()
+        assert target_text, "快捷入口按钮应带可见文案"
+        buttons.first.click()
+        page.wait_for_load_state("networkidle")
+        expect(page).not_to_have_url(re.compile(r".*/dashboard/?$"))
 
 
 # ============================================================

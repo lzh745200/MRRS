@@ -50,155 +50,39 @@
       </el-form>
     </el-card>
 
-    <el-card class="table-card">
-      <template #header>
-        <div class="card-header">
-          <div class="title-area">
-            <span class="title">用户列表</span>
-            <el-badge
-              v-if="isAdmin && pendingCount > 0"
-              :value="pendingCount"
-              class="pending-badge"
-            >
-              <el-button type="warning" @click="showPendingUsers">待审核用户</el-button>
-            </el-badge>
-          </div>
-          <div v-if="isAdmin" v-permission="['admin', 'super_admin']" class="header-actions">
-            <el-button type="primary" @click="handleAdd">
-              <el-icon><Plus /></el-icon>
-              新增用户
-            </el-button>
-            <el-dropdown @command="handlePermPackageCommand">
-              <el-button type="info">
-                权限包
-                <el-icon><ArrowDown /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="export">导出权限包</el-dropdown-item>
-                  <el-dropdown-item command="import">导入权限包</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-        </div>
-      </template>
-
-      <el-alert
-        v-if="orgFilterId"
-        type="info"
-        :closable="false"
-        show-icon
-        style="margin-bottom: 12px"
-      >
-        <template #title>
-          当前仅显示该组织的成员
-          <el-button link type="primary" style="margin-left: 8px" @click="clearOrgFilter">
-            清除筛选
-          </el-button>
-        </template>
-      </el-alert>
-
-      <el-table v-loading="loading" :data="tableData" stripe border>
-        <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="username" label="用户名" min-width="120" />
-        <el-table-column prop="full_name" label="姓名" min-width="100">
-          <template #default="{ row }">
-            {{ ds(row.full_name, 'name') }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="role" label="角色" width="130">
-          <template #default="{ row }">
-            <el-tag :type="getRoleTagType(row.role)">{{ getRoleName(row.role) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="data_scope" label="数据范围" width="120">
-          <template #default="{ row }">
-            {{ getDataScopeName(row.data_scope) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="权限包" width="130">
-          <template #default="{ row }">
-            <el-tag v-if="row.permission_pack_id" type="warning">
-              {{ packNameMap[row.permission_pack_id] || '未知包' }}
-            </el-tag>
-            <span v-else class="role-default-text">角色默认</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="organization_name" label="所属组织" min-width="140">
-          <template #default="{ row }">
-            {{ row.organization_name || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="department" label="部门" min-width="120" />
-        <el-table-column prop="phone" label="手机号" width="130">
-          <template #default="{ row }">
-            {{ ds(row.phone, 'phone') }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="machine_code" label="机器码" width="120">
-          <template #default="{ row }">
-            <el-tag v-if="row.machine_code" type="success">
-              <el-icon><Key /></el-icon>
-              已绑定
-            </el-tag>
-            <el-tag v-else type="info">未绑定</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="last_login" label="最后登录" width="160" />
-        <el-table-column prop="is_active" label="状态" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'">
-              {{ row.is_active ? '启用' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="isAdmin" label="操作" width="320" align="center" fixed="right">
-          <template #default="{ row }">
-            <div class="action-buttons">
-              <el-button text type="primary" @click="handleEdit(row)">编辑</el-button>
-              <el-button text type="warning" @click="handleResetPassword(row)">重置密码</el-button>
-              <el-button text type="success" @click="handleRolePermission(row)"
-                >角色/权限</el-button
-              >
-              <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.size"
-        :total="pagination.total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
-        class="pagination"
-        @size-change="handleSizeChange"
-        @current-change="handlePageChange"
-      />
-    </el-card>
+    <!-- 用户列表卡片（W5-T10 拆至 components/UserTableCard.vue；数据/状态仍在本组件持有） -->
+    <UserTableCard
+      v-model:page="pagination.page"
+      v-model:size="pagination.size"
+      :users="tableData"
+      :loading="loading"
+      :is-admin="isAdmin"
+      :pending-count="pendingCount"
+      :org-filter-id="orgFilterId"
+      :pack-name-map="packNameMap"
+      :total="pagination.total"
+      :role-tag-type="getRoleTagType"
+      :role-name="getRoleName"
+      :data-scope-name="getDataScopeName"
+      :desensitize="ds"
+      @size-change="handleSizeChange"
+      @page-change="handlePageChange"
+      @add="handleAdd"
+      @open-pending="showPendingUsers"
+      @perm-command="handlePermPackageCommand"
+      @clear-org-filter="clearOrgFilter"
+      @edit="handleEdit"
+      @reset-password="handleResetPassword"
+      @role-permission="handleRolePermission"
+      @delete="handleDelete"
+    />
 
     <!-- 待审核用户对话框（2026-10-14 接通：此前按钮只拉数据、无弹窗消费） -->
-    <el-dialog v-model="pendingDialogVisible" append-to-body title="待审核用户" :width="DIALOG_MD">
-      <el-table v-if="pendingUsers.length > 0" stripe :data="pendingUsers" border>
-        <el-table-column prop="username" label="用户名" min-width="120" />
-        <el-table-column prop="full_name" label="姓名" min-width="100" />
-        <el-table-column prop="role" label="角色" width="110" />
-        <el-table-column prop="organization_name" label="所属组织" min-width="140" />
-        <el-table-column label="状态" width="90">
-          <template #default>
-            <el-tag type="warning">待审核</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="110" align="center">
-          <template #default="{ row }">
-            <el-button text type="primary" @click="approvePendingUser(row)">通过审核</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <EmptyState v-else description="暂无待审核用户" />
-    </el-dialog>
+    <PendingUsersDialog
+      v-model="pendingDialogVisible"
+      :users="pendingUsers"
+      @approve="approvePendingUser"
+    />
 
     <!-- 用户编辑对话框 -->
     <el-dialog v-model="dialogVisible" append-to-body :title="dialogTitle" :width="DIALOG_MD">
@@ -313,7 +197,7 @@
       <div v-if="isEdit" class="session-section">
         <el-divider content-position="left">活跃会话</el-divider>
         <div v-loading="sessionsLoading">
-          <el-table v-if="userSessions.length > 0" stripe :data="userSessions" border>
+          <el-table v-if="userSessions.length > 0" :data="userSessions" border>
             <el-table-column
               prop="session_id"
               label="会话ID"
@@ -354,37 +238,16 @@
       </template>
     </el-dialog>
 
-    <!-- 重置密码对话框 -->
-    <el-dialog v-model="resetPwdDialogVisible" append-to-body title="重置密码" :width="DIALOG_SM">
-      <el-form :model="resetPwdForm" label-width="100px">
-        <el-form-item label="用户名">
-          <el-input :value="currentUser?.username" disabled />
-        </el-form-item>
-        <el-form-item label="新密码">
-          <div style="display: flex; gap: 8px; width: 100%">
-            <el-input
-              v-model="resetPwdForm.newPassword"
-              type="password"
-              placeholder="请输入新密码"
-              show-password
-              style="flex: 1"
-            />
-            <el-button @click="generateResetPassword">自动生成</el-button>
-          </div>
-        </el-form-item>
-        <el-form-item v-if="resetPwdForm.newPassword" label="生成的密码">
-          <el-input :value="resetPwdForm.newPassword" readonly>
-            <template #append>
-              <el-button @click="copyPassword">复制</el-button>
-            </template>
-          </el-input>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="resetPwdDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmResetPassword">确认重置</el-button>
-      </template>
-    </el-dialog>
+    <!-- 重置密码对话框（W5-T10 拆至 components/ResetPasswordDialog.vue） -->
+    <ResetPasswordDialog
+      v-model="resetPwdDialogVisible"
+      :username="currentUser?.username"
+      :form="resetPwdForm"
+      @update:new-password="resetPwdForm.newPassword = $event"
+      @generate="generateResetPassword"
+      @copy="copyPassword"
+      @confirm="confirmResetPassword"
+    />
 
     <!-- 角色/权限分配抽屉 -->
     <PermissionAssignmentDrawer
@@ -393,53 +256,20 @@
       @saved="handlePermSaved"
     />
 
-    <!-- 导出权限包：角色选择对话框 -->
-    <el-dialog
+    <!-- 导出权限包：角色选择对话框（W5-T10 拆至 components/PermissionPackExportDialog.vue） -->
+    <PermissionPackExportDialog
       v-model="permExportDialogVisible"
-      append-to-body
-      title="导出权限包"
-      :width="DIALOG_SM"
-    >
-      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
-        不勾选任何角色将导出全部权限配置；勾选后仅导出所选角色及其用户绑定。
-      </el-alert>
-      <div v-loading="permRolesLoading" style="max-height: 320px; overflow: auto">
-        <el-checkbox-group v-model="permExportRoleNames">
-          <el-checkbox v-for="r in permExportRoleOptions" :key="r.name" :value="r.name">
-            {{ r.label || r.name }}
-          </el-checkbox>
-        </el-checkbox-group>
-        <div v-if="!permRolesLoading && permExportRoleOptions.length === 0" class="empty-hint">
-          未检测到自定义 RBAC 角色，可直接导出基础配置。
-        </div>
-      </div>
-      <el-divider style="margin: 12px 0" />
-      <el-form label-width="110px">
-        <el-form-item label="加密密码">
-          <el-input
-            v-model="permExportPassword"
-            type="password"
-            show-password
-            placeholder="可选；设置后导入需输入该密码"
-            clearable
-          />
-        </el-form-item>
-        <el-form-item label="机器码绑定">
-          <el-switch v-model="permBindMachineCode" />
-          <span class="form-hint">开启后仅本机可导入该权限包</span>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="permExportDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="exportingPermPackage"
-          @click="doExportPermissionPackage"
-        >
-          导出
-        </el-button>
-      </template>
-    </el-dialog>
+      :roles-loading="permRolesLoading"
+      :role-options="permExportRoleOptions"
+      :selected-roles="permExportRoleNames"
+      :password="permExportPassword"
+      :bind-machine-code="permBindMachineCode"
+      :exporting="exportingPermPackage"
+      @update:selected-roles="permExportRoleNames = $event"
+      @update:password="permExportPassword = $event"
+      @update:bind-machine-code="permBindMachineCode = $event"
+      @export="doExportPermissionPackage"
+    />
 
     <!-- ========== 角色管理 Tab ========== -->
     <div v-if="activeTab === 'roles'" class="role-section">
@@ -449,7 +279,7 @@
 </template>
 
 <script setup lang="ts">
-import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
+import { DIALOG_MD } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { logger } from '@/utils/logger'
@@ -465,13 +295,16 @@ function handleTabChange(_tab: any) {
   /* tab switched */
 }
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { Plus, Key, ArrowDown } from '@element-plus/icons-vue'
 import request, { get, post, put, del, apiRequest } from '@/api/request'
 import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
 import { listPermissionPacks } from '@/api/permissionPack'
 import { useAuthStore } from '@/stores/auth'
 import { useDesensitize } from '@/composables/useDesensitize'
 import PermissionAssignmentDrawer from '@/components/permission/PermissionAssignmentDrawer.vue'
+import UserTableCard from './components/UserTableCard.vue'
+import PendingUsersDialog from './components/PendingUsersDialog.vue'
+import ResetPasswordDialog from './components/ResetPasswordDialog.vue'
+import PermissionPackExportDialog from './components/PermissionPackExportDialog.vue'
 
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.isAdmin)

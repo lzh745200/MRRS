@@ -35,7 +35,7 @@ services:
         condition: service_healthy
     command: >
       bash -c "
-        pip install pytest pytest-playwright httpx &&
+        pip install pytest pytest-playwright pytest-timeout httpx &&
         python -m playwright install chromium &&
         python -m pytest /e2e/test_e2e.py -v --tb=short --timeout=60
       "
@@ -66,5 +66,11 @@ services:
       - "8089:8089"
 
 networks:
+  # W4-T4（2026-10-18）：不能标 external: true —— 干净机器上网络尚不存在时，
+  # compose 会直接报 "network assistance-network declared as external, but could
+  # not be found" 而中止（此前 `make test-e2e-docker` 在全新环境必失败）。
+  # 根 docker-compose.yml 已声明同名网络（name: assistance-network），此处与
+  # 之对齐（仅 name，不标 external），compose 会自动创建/复用同一网络，
+  # 两个 overlay 服务经它访问 assistance-system。
   assistance-network:
-    external: true
+    name: assistance-network

@@ -20,7 +20,7 @@ test.describe('工作台 Dashboard', () => {
     await navigateTo(page, '/dashboard')
     // 页面根容器（真实类名为 dashboard-home dashboard-modern）
     await expect(page.locator('.dashboard-home')).toBeVisible({ timeout: 10000 })
-    // 欢迎标题是唯一的 h1（PageHeader.vue：欢迎回来，xxx）
+    // 欢迎标题是唯一的 h1（共享 PageHeader 标准件：#title 插槽 + level=1）
     await expect(page.getByRole('heading', { level: 1 })).toContainText('欢迎回来')
   })
 

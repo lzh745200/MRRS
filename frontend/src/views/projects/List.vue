@@ -271,6 +271,7 @@ import { useFilterMemory } from '@/composables/useFilterMemory'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
 import { getErrorMessage } from '@/utils/getErrorMessage'
+import { getProjectStatusLabel } from '@/config/enums'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -375,19 +376,7 @@ const getStatusType = (status: string): 'success' | 'info' | 'warning' | 'danger
   return types[status] || 'info'
 }
 
-const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    draft: '草稿',
-    pending: '待审批',
-    approved: '已审批',
-    planning: '规划中',
-    in_progress: '进行中',
-    completed: '已完成',
-    cancelled: '已取消',
-    suspended: '已暂停',
-  }
-  return texts[status] || status
-}
+const getStatusText = (status: string) => getProjectStatusLabel(status)
 
 const getProgressColor = (progress: number) => {
   if (progress >= 80) return '#40916c'

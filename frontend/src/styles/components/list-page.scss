@@ -80,9 +80,9 @@
     border-right: none;
   }
 
-  /* 斑马纹 */
+  /* 斑马纹 —— W11-041：色值与全局规则统一（组件不再传 stripe 属性） */
   .el-table__body tr:nth-child(even) > td {
-    background-color: rgba(0, 0, 0, 0.015);
+    background-color: var(--color-bg-content, var(--color-bg-hover));
   }
   .el-table__body tr:hover > td {
     background-color: var(--color-bg-hover, rgba(0, 0, 0, 0.04)) !important;

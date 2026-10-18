@@ -94,7 +94,6 @@ function makeMockGet(overrides: Record<string, any> = {}) {
     '/system/chunked-upload/status': { active_uploads: 0, completed: 5 },
     '/system/config-package': { items: [{ id: 1, name: 'pkg1', version: '1.0' }], total: 1 },
     '/system/zero-trust/status': { enabled: true, devices: 3, alerts: 0 },
-    '/system/user-permissions': { items: [{ id: 1, user: 'admin', permissions: ['read'] }], total: 1 },
     ...overrides,
   }
   return vi.fn((url: string) => {
@@ -364,7 +363,7 @@ describe('UpdateLogs.vue', () => {
   })
 })
 
-// --- UserPermissions ---
+// --- ZeroTrust ---
 describe('ZeroTrust.vue', () => {
   it('渲染', async () => {
     const { default: Comp } = await import('@/views/system/ZeroTrust.vue')

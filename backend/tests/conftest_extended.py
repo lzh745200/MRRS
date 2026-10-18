@@ -22,7 +22,7 @@ sys.path.insert(0, str(project_root))
 @pytest.fixture(scope="function")
 def test_db():
     """SQLite内存数据库 —— 每次测试独立，测试后自动回滚"""
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, event
     from sqlalchemy.orm import sessionmaker
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})

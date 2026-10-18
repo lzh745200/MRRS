@@ -120,7 +120,6 @@
         v-else
         v-loading="policyStore.loading"
         :data="policiesData"
-        stripe
         border
         @sort-change="handleSortChange"
         @selection-change="handleSelectionChange"
@@ -604,7 +603,8 @@ onMounted(() => {
   color: $military-dark;
 }
 
-:deep(.el-table--striped .el-table__body tr.el-table__row--striped td) {
+/* W11-041：stripe 属性已移除 —— 本页品牌色斑马纹改挂行序（视觉保持不变） */
+:deep(.el-table__body tr.el-table__row:nth-child(even) > td.el-table__cell) {
   background-color: rgba(64, 145, 108, 0.05);
 }
 

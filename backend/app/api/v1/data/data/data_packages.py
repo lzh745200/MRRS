@@ -918,6 +918,7 @@ async def incremental_import(
             package_id=result.package_id,
             confirmed_by=current_user.id,
             overwrite_existing=True,
+            ts_guard=True,   # W18-D5：增量包重复应用不得覆盖本机新编辑
         )
         duration_ms = int((time.time() - start_time) * 1000)
 

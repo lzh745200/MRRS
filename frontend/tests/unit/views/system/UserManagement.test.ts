@@ -122,6 +122,10 @@ vi.mock('@/components/permission/PermissionAssignmentDrawer.vue', () => ({
 }))
 
 import UserManagement from '@/views/system/UserManagement.vue'
+// 拆分后的子组件（W5-T10）：本文件是它们在全仓的唯一执行者，
+// 直接 import 仅用于 findComponent 定位子组件 DOM，不产生第二个执行者。
+import UserTableCard from '@/views/system/components/UserTableCard.vue'
+import ResetPasswordDialog from '@/views/system/components/ResetPasswordDialog.vue'
 
 const sampleUser = {
   id: 1,
@@ -2152,5 +2156,212 @@ describe('加密权限包导入（Phase E）', () => {
     expect(ElMessage.success).not.toHaveBeenCalled()
     expect(vm.importingPermPackage).toBe(false) // finally 仍 cleanup
     spy.mockRestore()
+  })
+})
+
+// ═══════════════════════════════════════════════════════
+// 拆分后子组件的事件上抛（W5-T10 自 UserManagement.vue 拆至 components/）
+// —— 子组件模板内联处理器只有真实触发 click/update 事件才计入 functions 覆盖。
+// ═══════════════════════════════════════════════════════
+describe('子组件模板处理器（事件上抛父组件）', () => {
+  it('UserTableCard：新增/待审核/权限包下拉/分页事件上抛', async () => {
+    const wrapper = mountComp({
+      // 自定义 el-dropdown：暴露一个按钮主动 emit command，覆盖子组件 onPermCommand
+      'el-dropdown': {
+        name: 'ElDropdown',
+        emits: ['command'],
+        template:
+          '<div class="el-dropdown-stub"><slot />' +
+          '<button type="button" class="dropdown-command" @click="$emit(\'command\', \'export\')">cmd</button>' +
+          '<slot name="dropdown" /></div>',
+      },
+      // 自定义 el-pagination：暴露 size/current 事件按钮
+      'el-pagination': {
+        name: 'ElPagination',
+        emits: ['update:currentPage', 'update:pageSize', 'size-change', 'current-change'],
+        template:
+          '<div class="el-pagination-stub">' +
+          '<button type="button" class="page-size" @click="$emit(\'size-change\')">size</button>' +
+          '<button type="button" class="page-current" @click="$emit(\'current-change\')">cur</button></div>',
+      },
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const card = wrapper.findComponent(UserTableCard)
+    expect(card.exists()).toBe(true)
+
+    const findCardButton = (text: string) =>
+      card.findAll('el-button-stub').find((button) => button.text().includes(text))!
+
+    // 新增用户
+    await findCardButton('新增用户').trigger('click')
+    await flushPromises()
+    expect(vm.dialogVisible).toBe(true)
+
+    // 待审核用户（isAdmin && pendingCount>0 时才渲染）
+    expect(vm.pendingCount).toBeGreaterThan(0)
+    await findCardButton('待审核用户').trigger('click')
+    await flushPromises()
+    expect(vm.pendingDialogVisible).toBe(true)
+
+    // 权限包下拉命令 → 打开导出权限包对话框
+    await card.find('.dropdown-command').trigger('click')
+    await flushPromises()
+    expect(vm.permExportDialogVisible).toBe(true)
+
+    // 分页 size/current 事件 → 刷新列表
+    const callsBefore = mockApiRequest.mock.calls.length
+    await card.find('.page-size').trigger('click')
+    await card.find('.page-current').trigger('click')
+    await flushPromises()
+    expect(mockApiRequest.mock.calls.length).toBe(callsBefore + 2)
+    wrapper.unmount()
+  })
+
+  it('ResetPasswordDialog：自动生成/复制/确认重置/取消按钮上抛', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.handleResetPassword(sampleUser)
+    await nextTick()
+
+    const dialog = wrapper.findComponent(ResetPasswordDialog)
+    expect(dialog.exists()).toBe(true)
+    const findDialogButton = (text: string) =>
+      dialog.findAll('el-button-stub').find((button) => button.text().includes(text))!
+
+    // 自动生成（emit generate → 父组件填充新密码）
+    await findDialogButton('自动生成').trigger('click')
+    expect(vm.resetPwdForm.newPassword).toBe('Gen#Pass1')
+
+    // 复制（emit copy → 父组件写剪贴板）
+    await findDialogButton('复制').trigger('click')
+    await flushPromises()
+    expect(clipWrite).toHaveBeenCalledWith('Gen#Pass1')
+
+    // 确认重置（emit confirm → 父组件调接口并提示）
+    await findDialogButton('确认重置').trigger('click')
+    await flushPromises()
+    expect(mockPost).toHaveBeenCalledWith('/users/1/admin-reset-password', {
+      new_password: 'Gen#Pass1',
+    })
+    expect(alertMock).toHaveBeenCalled()
+    expect(vm.resetPwdDialogVisible).toBe(false)
+
+    // 取消按钮 → update:modelValue false 关闭弹窗
+    vm.resetPwdDialogVisible = true
+    await nextTick()
+    await findDialogButton('取消').trigger('click')
+    expect(vm.resetPwdDialogVisible).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('PermissionPackExportDialog：导出按钮上抛父组件导出流程', async () => {
+    mockPost.mockResolvedValue({
+      data: { file_name: 'pack.zip', role_count: 1, user_count: 2 },
+    })
+    const wrapper = mountComp(permDialogStubs)
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.permExportDialogVisible = true
+    await nextTick()
+
+    const dialog = findPermDialog(wrapper)!
+    expect(dialog).toBeTruthy()
+    const exportButton = dialog
+      .findAll('.el-button-stub')
+      .find((button: any) => button.text().trim() === '导出')!
+    await exportButton.trigger('click')
+    await flushPromises()
+
+    expect(mockPost).toHaveBeenCalledWith('/permission-packages/export', {})
+    expect(mockDownloadBlobAsFile).toHaveBeenCalled()
+    expect(ElMessage.success).toHaveBeenCalledWith('权限包导出成功 (1 个角色, 2 个用户)')
+    wrapper.unmount()
+  })
+})
+
+// ═══════════════════════════════════════════════════════
+// 真实渲染回归（原 UserManagementRender.test.ts / UserManagementRealRender.test.ts
+// 的价值点并入本文件 —— 保持「UserManagement.vue 全仓唯一执行者」的 coverage-merge 不变量）
+// ═══════════════════════════════════════════════════════
+describe('真实渲染 / DOM patch 回归', () => {
+  it('渲染用户列表（el-card 同时渲染 header 与默认插槽），且无 setAttribute 异常', async () => {
+    const onError = vi.fn()
+    const origError = console.error
+    console.error = (...args: any[]) => {
+      if (String(args[0] || '').includes('setAttribute')) onError(args)
+      origError(...args)
+    }
+
+    let wrapper: ReturnType<typeof mountComp> | undefined
+    try {
+      wrapper = mountComp({
+        'el-card': { template: '<div class="el-card"><slot name="header" /><slot /></div>' },
+      })
+      await flushPromises()
+    } finally {
+      console.error = origError
+    }
+
+    expect(onError).not.toHaveBeenCalled()
+    expect(wrapper!.text()).toContain('用户列表')
+    wrapper!.unmount()
+  })
+
+  it('真实 Element Plus 渲染无 InvalidCharacterError（setAttribute "0"）', async () => {
+    const errors: string[] = []
+    const origError = console.error
+    console.error = (...args: any[]) => {
+      const msg = String(args[0] || '')
+      if (msg.includes('setAttribute') || msg.includes('InvalidCharacterError')) {
+        errors.push(msg)
+      }
+      origError(...args)
+    }
+
+    let wrapper: ReturnType<typeof mountComp> | undefined
+    try {
+      wrapper = mountComp({
+        // 关闭全局 el-* stub，走真实 Element Plus 渲染（复现生产 DOM patch 路径）
+        'el-table': false,
+        'el-table-column': false,
+        'el-tabs': false,
+        'el-tab-pane': false,
+        'el-select': false,
+        'el-option': false,
+        'el-option-group': false,
+        'el-pagination': false,
+        'el-tag': false,
+        'el-badge': false,
+        'el-button': false,
+        'el-form': false,
+        'el-form-item': false,
+        'el-input': false,
+        'el-card': false,
+        'el-dialog': false,
+        'el-tree-select': false,
+        'el-switch': false,
+        'el-checkbox': false,
+        'el-checkbox-group': false,
+        'el-dropdown': false,
+        'el-dropdown-menu': false,
+        'el-dropdown-item': false,
+        'el-icon': false,
+        'el-divider': false,
+        'el-empty': false,
+        'el-alert': false,
+      })
+      await flushPromises()
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      await flushPromises()
+    } catch (e: any) {
+      errors.push(`MOUNT_ERROR: ${e?.message || e}`)
+    } finally {
+      console.error = origError
+      wrapper?.unmount()
+    }
+
+    expect(errors).toEqual([])
   })
 })

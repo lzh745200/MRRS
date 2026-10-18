@@ -15,6 +15,7 @@ declare module 'vue' {
     CommonChartErrorState: typeof import('./components/common/ChartErrorState.vue')['default']
     CommonErrorBoundary: typeof import('./components/common/ErrorBoundary.vue')['default']
     CommonGuizhouRegionSelector: typeof import('./components/common/GuizhouRegionSelector.vue')['default']
+    CommonMoneyText: typeof import('./components/common/MoneyText.vue')['default']
     CommonPageHeader: typeof import('./components/common/PageHeader.vue')['default']
     CommonStatsCard: typeof import('./components/common/StatsCard.vue')['default']
     DataPackageExportDialog: typeof import('./components/dataPackage/ExportDialog.vue')['default']

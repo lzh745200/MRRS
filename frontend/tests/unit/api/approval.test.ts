@@ -303,11 +303,13 @@ describe('api/approval', () => {
       expect(formatApprovalAction('xyz')).toBe('xyz')
     })
 
-    it('formatEntityType 已知类型', () => {
+    it('formatEntityType 已知类型（含 rural_work/assessment）', () => {
       expect(formatEntityType('supported_village')).toBe('帮扶村')
       expect(formatEntityType('project')).toBe('项目')
       expect(formatEntityType('fund')).toBe('经费')
       expect(formatEntityType('school')).toBe('学校')
+      expect(formatEntityType('rural_work')).toBe('乡村工作')
+      expect(formatEntityType('assessment')).toBe('考核复核')
     })
 
     it('formatEntityType 未知类型回退原值', () => {

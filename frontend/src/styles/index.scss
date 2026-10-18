@@ -289,7 +289,11 @@ body {
   font-size: 13px;
   border-bottom: 2px solid var(--color-accent-gold, var(--color-accent-gold));
 }
-.el-table--striped .el-table__body tr.el-table__row--striped td {
+/* 斑马纹 —— W11-041：统一由全局样式提供，组件不再逐个传 stripe 属性
+   （107 处冗余属性已移除，残留白名单 <10）。首选择器保留兼容仍显式开启
+   stripe 的少数表格；第二条按行序自动隔行着色，色值与移除前一致。 */
+.el-table--striped .el-table__body tr.el-table__row--striped td,
+.el-table__body > tr.el-table__row:nth-child(even) > td.el-table__cell {
   background-color: var(--color-bg-content, var(--color-bg-hover));
 }
 .el-pagination.is-background .el-pager li.is-active {

@@ -185,7 +185,10 @@ describe('System view imports', () => {
   const systemViews = [
     ['Audit Management', '@/views/system/AuditManagement.vue'],
     ['Backup Management', '@/views/system/BackupManagement.vue'],
-    ['User Management', '@/views/system/UserManagement.vue'],
+    // UserManagement.vue 刻意不在此 bare import：coverage-merge 不变量 ——
+    // 覆盖率门禁锁定的 .vue 全仓只允许一个测试文件执行（第二处 bare import 会在
+    // 各自 worker isolate 产出 fnMap 分片，满量按 v8 函数 id 合并时 functions < 100）。
+    // 专属全分支测试：tests/unit/views/system/UserManagement.test.ts。
     ['Role', '@/views/system/Role.vue'],
     ['Monitoring', '@/views/system/MonitoringDashboard.vue'],
     ['Menu', '@/views/system/Menu.vue'],
@@ -368,7 +371,10 @@ describe('API module imports', () => {
       const mod = await import(`@/api/${name}.ts`)
       const callables = Object.values(mod).filter((v) => typeof v === 'function')
       const hasApiObject = Object.values(mod).some(
-        (v) => v && typeof v === 'object' && Object.values(v as object).some((f) => typeof f === 'function')
+        (v) =>
+          v &&
+          typeof v === 'object' &&
+          Object.values(v as object).some((f) => typeof f === 'function')
       )
       expect(callables.length > 0 || hasApiObject).toBe(true)
     })

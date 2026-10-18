@@ -103,7 +103,7 @@
         <el-alert type="info" :closable="false" style="margin-bottom: 12px">
           共 {{ previewData.total }} 条数据，请确认无误后点击"确认导入"
         </el-alert>
-        <el-table stripe :data="previewData.rows.slice(0, 10)" border max-height="300">
+        <el-table  :data="previewData.rows.slice(0, 10)" border max-height="300">
           <el-table-column
             v-for="col in previewData.columns"
             :key="col"
@@ -154,7 +154,7 @@
           ><el-icon><Clock /></el-icon> 导入历史</span
         >
       </template>
-      <el-table v-loading="historyLoading" :data="history" stripe>
+      <el-table v-loading="historyLoading" :data="history" >
         <el-table-column prop="id" label="编号" width="70" />
         <el-table-column prop="file_name" label="文件名" min-width="180" />
         <el-table-column label="状态" width="100">

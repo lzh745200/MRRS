@@ -16,6 +16,7 @@
 
 均为正常业务分支，无不可达防御代码，故全部以真实断言覆盖，不使用 pragma 豁免。
 """
+import os
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -128,32 +129,33 @@ class TestDataPackageGaps:
         assert any("校验未通过" in ln for ln in lines)  # 362
 
     def test_export_data_type_since_time_filter(self, tmp_path):
-        # line 205-206：since_time 非 None 且模型有 updated_at → 追加时间过滤
+        """since_time 非 None 且模型有 updated_at → 追加时间过滤。
+
+        W18-D8：_export_data_type 已改 raw SQL 取数（防止 EncryptedText 把 PII
+        解密成明文写进数据包），过滤条件全部走 text() 绑定参数 —— 断言 SQL 与
+        参数而不是 ORM query 链。
+        """
         db = MagicMock()
-        q = db.query.return_value
-        q.filter.return_value = q  # 所有 filter 返回同一 query，末端 all() 为空
-        q.all.return_value = []
-        svc = DataPackageService(db, upload_dir=str(tmp_path))
+        db.execute.return_value.fetchall.return_value = []
 
-        class _FakeCol:
-            """SQLAlchemy 列占位：支持 > / == 生成假表达式（db/query 已 mock，
-            不执行真实 SQL），hasattr 均为 True 以驱动各过滤分支。"""
+        class _Col:
+            def __init__(self, name):
+                self.name = name
 
-            def __gt__(self, other):
-                return ("GT", other)
-
-            def __eq__(self, other):
-                return ("EQ", other)
-
-            def __hash__(self):
-                return id(self)
+        class _FakeTable:
+            columns = [
+                _Col("id"), _Col("created_by"), _Col("sync_version"), _Col("updated_at"),
+            ]
 
         class Dummy:
-            org_id = _FakeCol()
-            created_by = _FakeCol()
-            sync_version = _FakeCol()
-            updated_at = _FakeCol()
+            __tablename__ = "w18_scope_time_rows"
+            __table__ = _FakeTable()
+            org_id = 1
+            created_by = 1
+            sync_version = 1
+            updated_at = 1
 
+        svc = DataPackageService(db, upload_dir=str(tmp_path))
         result = svc._export_data_type(
             org_id=1,
             model=Dummy,
@@ -162,15 +164,67 @@ class TestDataPackageGaps:
             owner_id=5,
         )
         assert result == []
+        stmt, params = db.execute.call_args.args
+        sql = str(stmt)
+        assert "org_id = :org_id" in sql
+        assert "created_by = :owner_id" in sql
+        assert "sync_version > :since_sync" in sql
+        assert "updated_at > :since_time" in sql
+        assert params == {
+            "org_id": 1,
+            "owner_id": 5,
+            "since_sync": 2,
+            "since_time": datetime(2020, 1, 1),
+        }
 
     def test_count_packages_by_org(self, tmp_path):
-        # line 815-820：org/status/type 三重过滤后计数
+        # line 815-820：org/status/type 三重过滤后计数；无 status/type 时跳过两段过滤
         db = MagicMock()
         m = db.query.return_value
         m.filter.return_value = m
         m.count.return_value = 7
         svc = DataPackageService(db, upload_dir=str(tmp_path))
         assert svc.count_packages_by_org(org_id=1, status="active", type_filter="full") == 7
+        assert svc.count_packages_by_org(org_id=1) == 7
+
+    # ── W18 P1-6：导出文件保留期清理 / 目录占用 ──
+    def test_cleanup_exported_files_retention_paths(self, tmp_path):
+        import time as _time
+
+        old_file = tmp_path / "old.zip"
+        old_file.write_bytes(b"x")
+        new_file = tmp_path / "new.zip"
+        new_file.write_bytes(b"y")
+        (tmp_path / "subdir").mkdir()
+        old_ts = _time.time() - 10 * 86400
+        os.utime(old_file, (old_ts, old_ts))
+
+        svc = DataPackageService(MagicMock(), upload_dir=str(tmp_path))
+        assert svc.cleanup_exported_files(retention_days=7) == 1
+        assert not old_file.exists()          # 超过保留期 → 删除
+        assert new_file.exists()              # 未到期 → 保留
+        assert (tmp_path / "subdir").exists()  # 目录条目跳过
+        assert svc.cleanup_exported_files(retention_days=0) == 0  # <=0 不清理
+
+    def test_cleanup_exported_files_unlink_failure_continues(self, tmp_path):
+        import time as _time
+
+        locked = tmp_path / "locked.zip"
+        locked.write_bytes(b"x")
+        old_ts = _time.time() - 10 * 86400
+        os.utime(locked, (old_ts, old_ts))
+
+        svc = DataPackageService(MagicMock(), upload_dir=str(tmp_path))
+        with patch(
+            "app.services.data_package_service.os.unlink", side_effect=OSError("locked")
+        ):
+            assert svc.cleanup_exported_files(retention_days=7) == 0
+
+    def test_get_upload_dir_size_skips_subdirectories(self, tmp_path):
+        (tmp_path / "a.zip").write_bytes(b"abc")
+        (tmp_path / "nested").mkdir()
+        svc = DataPackageService(MagicMock(), upload_dir=str(tmp_path))
+        assert svc.get_upload_dir_size() == 3
 
 
 # ─────────────────────────────────────────────────────────────

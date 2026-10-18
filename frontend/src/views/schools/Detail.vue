@@ -101,6 +101,37 @@
         </div>
       </div>
 
+      <!-- 帮扶成效（数值一律来自服务端统计接口，不在本页对已加载列表做本地累加） -->
+      <div class="detail-card">
+        <div class="card-header">
+          <h3>帮扶成效</h3>
+          <el-button v-if="statsError" type="primary" plain size="small" @click="loadStatistics"
+            >重试</el-button
+          >
+        </div>
+        <div class="card-body">
+          <div v-loading="statsLoading" class="effect-stats">
+            <div class="effect-item">
+              <div class="effect-value">{{ statsValue('scholarship_count') }}</div>
+              <div class="effect-label">累计资助学生数</div>
+            </div>
+            <div class="effect-item">
+              <div class="effect-value">{{ statsValue('scholarship_total_amount', '元') }}</div>
+              <div class="effect-label">累计资助金额</div>
+            </div>
+            <div class="effect-item">
+              <div class="effect-value">{{ statsValue('project_count') }}</div>
+              <div class="effect-label">助学兴教项目数</div>
+            </div>
+            <div class="effect-item">
+              <div class="effect-value">{{ statsValue('project_total_budget', '万元') }}</div>
+              <div class="effect-label">项目预算总额</div>
+            </div>
+          </div>
+          <div v-if="statsError" class="effect-error">{{ statsError }}</div>
+        </div>
+      </div>
+
       <!-- 帮扶信息 -->
       <div class="detail-card">
         <div class="card-header">
@@ -200,6 +231,7 @@
                   <span v-if="att.created_at"> · {{ att.created_at.split('T')[0] }}</span>
                 </div>
               </div>
+              <el-button type="primary" link @click="openPreview(att)">预览</el-button>
               <el-button type="primary" link @click="downloadAttachment(att)">下载</el-button>
             </div>
           </div>
@@ -209,13 +241,22 @@
         </div>
       </div>
     </template>
+
+    <!-- 附件预览（通用组件：PDF 内嵌 iframe / Office 提示下载） -->
+    <FilePreview
+      v-model="previewVisible"
+      :fetch-blob="previewFetchBlob"
+      :file-name="previewFileName"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import FilePreview from '@/components/FilePreview.vue'
 import { logger } from '@/utils/logger'
 import { AuthStorage } from '@/utils/authStorage'
+import { buildSchoolLinkWarning, fetchSchoolLinkCounts } from '@/utils/schoolLinkWarning'
 
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
@@ -269,6 +310,38 @@ const school = ref<any>({
 const relatedProjects = ref<any[]>([])
 const scholarshipStudents = ref<any[]>([])
 
+// ── W10-030 帮扶成效统计卡（GET /schools/{id}/statistics）──
+const schoolStats = ref<any>(null)
+const statsLoading = ref(false)
+const statsError = ref('')
+
+/** 成效卡取值：加载中/未取到/字段缺失显示 '-'，其余直接展示接口值（不本地累加） */
+function statsValue(key: string, unit = ''): string {
+  const stats = schoolStats.value
+  if (!stats) return '-'
+  const raw = stats[key]
+  if (raw === undefined || raw === null) return '-'
+  return `${raw}${unit}`
+}
+
+async function loadStatistics() {
+  // onMounted 与 loadSchool 并行：学校未回填前用路由参数，数值化与 loadProjects 同口径
+  const id = Number(school.value.id || route.params.id)
+  if (!id) return
+  statsLoading.value = true
+  statsError.value = ''
+  try {
+    const raw: any = await schoolApi.getSchoolStatistics(id)
+    schoolStats.value = raw?.data ?? raw ?? null
+  } catch (error) {
+    logger.error('加载学校成效统计失败:', error)
+    schoolStats.value = null
+    statsError.value = '成效数据加载失败，请重试'
+  } finally {
+    statsLoading.value = false
+  }
+}
+
 const phaseMap: Record<string, string> = {
   research: '调研',
   approval: '立项审批',
@@ -291,6 +364,17 @@ function phaseTagType(p: string) {
 
 const attachments = ref<any[]>([])
 const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+
+// 附件预览（复用通用 FilePreview：PDF 内嵌 iframe / 图片直显 / Office 提示下载）
+const previewVisible = ref(false)
+const previewFileName = ref('')
+const previewFetchBlob = ref<() => Promise<Blob>>(() => Promise.resolve(new Blob()))
+
+function openPreview(att: any) {
+  previewFileName.value = att?.file_name || '附件'
+  previewFetchBlob.value = () => schoolApi.downloadAttachment(att.id) as Promise<Blob>
+  previewVisible.value = true
+}
 
 const teacherStudentRatio = computed(() => {
   const s = school.value.student_count || 0
@@ -428,12 +512,19 @@ const handleEdit = () => {
 }
 
 const handleDelete = async () => {
+  if (!school.value.id) return
+  // 删除前关联检查：有关联资助学生/助学兴教项目时给出警示文案二次确认（计数失败不阻断）
+  const warning = buildSchoolLinkWarning(await fetchSchoolLinkCounts(school.value.id))
   try {
-    await ElMessageBox.confirm('确定要删除这所学校吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
+    await ElMessageBox.confirm(
+      warning ? `${warning}确定要删除这所学校吗？` : '确定要删除这所学校吗？',
+      warning ? '关联数据警示' : '提示',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
     await del(`/schools/${school.value.id}`)
     ElMessage.success('删除成功')
     pushSafe('/schools')
@@ -505,10 +596,15 @@ onMounted(() => {
   loadAttachments()
   loadProjects()
   loadScholarship()
+  loadStatistics()
 })
 </script>
 
 <style lang="scss" scoped>
+/* 办学规模 / 帮扶成效统计块共用的品牌色（单一事实源，避免逐块重复硬编码） */
+$school-stat-bg: linear-gradient(135deg, rgba(27, 67, 50, 0.08) 0%, rgba(45, 106, 79, 0.05) 100%);
+$school-stat-border: 1px solid rgba(45, 106, 79, 0.15);
+
 .school-detail-page {
   padding: 20px;
 }
@@ -600,9 +696,9 @@ onMounted(() => {
   flex: 1;
   text-align: center;
   padding: 16px;
-  background: linear-gradient(135deg, rgba(27, 67, 50, 0.08) 0%, rgba(45, 106, 79, 0.05) 100%);
+  background: $school-stat-bg;
   border-radius: 8px;
-  border: 1px solid rgba(45, 106, 79, 0.15);
+  border: $school-stat-border;
 }
 
 .scale-value {
@@ -615,6 +711,40 @@ onMounted(() => {
   font-size: 13px;
   color: var(--color-text-secondary);
   margin-top: 4px;
+}
+
+/* 帮扶成效统计卡（W10-030） */
+.effect-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.effect-item {
+  flex: 1 1 160px;
+  text-align: center;
+  padding: 16px;
+  background: $school-stat-bg;
+  border-radius: 8px;
+  border: $school-stat-border;
+}
+
+.effect-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-primary-dark-1);
+}
+
+.effect-label {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+}
+
+.effect-error {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-danger);
 }
 
 :deep(.el-descriptions__label) {

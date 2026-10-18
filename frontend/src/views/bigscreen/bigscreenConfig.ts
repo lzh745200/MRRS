@@ -1,10 +1,11 @@
 /**
- * 大屏配置（卡片取舍与顺序 / 自动刷新频率 / 汇报脱敏）。
+ * 大屏配置（卡片取舍与顺序 / 自动刷新频率 / 汇报脱敏 / 筛选对象）。
  *
  * 持久化到 localStorage（浏览器本地、按角色/汇报现场自行调整），
- * 读取时对损坏 JSON、未知卡片 key、重复卡片、非法刷新频率等一律
- * 归一化回安全默认值 —— 配置永远可解析，绝不让大屏白屏。
+ * 读取时对损坏 JSON、未知卡片 key、重复卡片、非法刷新频率、非法筛选范围等
+ * 一律归一化回安全默认值 —— 配置永远可解析，绝不让大屏白屏。
  */
+import type { BigScreenScopeType } from '@/api/bigscreen'
 import { maskName } from '@/utils/desensitize'
 
 /** localStorage 配置键 */
@@ -26,17 +27,33 @@ export const REFRESH_LABELS: Record<number, string> = Object.fromEntries(
   REFRESH_OPTIONS.map((option) => [option.value, option.label])
 ) as Record<number, string>
 
+/** 筛查对象类型可选值（顺序即筛选条按钮顺序） */
+export const BIG_SCREEN_SCOPE_OPTIONS: ReadonlyArray<{
+  value: BigScreenScopeType
+  label: string
+}> = [
+  { value: 'all', label: '全部' },
+  { value: 'village', label: '帮扶村' },
+  { value: 'school', label: '帮扶学校' },
+  { value: 'unit', label: '帮扶单位' },
+]
+
 /** 大屏卡片定义（顺序即默认渲染顺序） */
 export const BIG_SCREEN_CARDS = [
   { key: 'fundTrend', title: '经费执行趋势', wide: true },
-  { key: 'rank', title: '帮扶成效排名', wide: false },
+  { key: 'rank', title: '经费投入排名', wide: false },
   { key: 'projectStatus', title: '项目状态分布', wide: false },
   { key: 'yearly', title: '年度对比', wide: false },
   { key: 'leaders', title: '重点项目负责人', wide: false },
+  { key: 'profile', title: '对象档案', wide: false },
+  { key: 'details', title: '帮扶明细', wide: true },
 ] as const
 
 /** 卡片 key 联合类型 */
 export type BigScreenCardKey = (typeof BIG_SCREEN_CARDS)[number]['key']
+
+/** 仅在选中具体对象（scope != all）时才有内容的卡片 */
+export const SCOPED_ONLY_CARD_KEYS: readonly BigScreenCardKey[] = ['profile', 'details']
 
 /** 单张卡片配置 */
 export interface BigScreenCardConfig {
@@ -46,19 +63,35 @@ export interface BigScreenCardConfig {
   visible: boolean
 }
 
+/** 当前筛选范围（持久化用，与后端 scope 回显解耦） */
+export interface BigScreenScopeConfig {
+  type: BigScreenScopeType
+  /** 帮扶村/学校用 id 定位；全部/单位为 null */
+  id: number | null
+  /** 帮扶村/学校/单位的名称（展示与单位定位用） */
+  name: string | null
+}
+
 /** 大屏完整配置 */
 export interface BigScreenConfig {
   cards: BigScreenCardConfig[]
   refreshInterval: RefreshInterval
   desensitized: boolean
+  scope: BigScreenScopeConfig
 }
 
-/** 默认配置：全部卡片可见、30 秒刷新、不脱敏 */
+/** 默认筛选范围：全部对象 */
+export function defaultBigScreenScope(): BigScreenScopeConfig {
+  return { type: 'all', id: null, name: null }
+}
+
+/** 默认配置：全部卡片可见、30 秒刷新、不脱敏、全部对象 */
 export function defaultBigScreenConfig(): BigScreenConfig {
   return {
     cards: BIG_SCREEN_CARDS.map((card) => ({ ...card, visible: true })),
     refreshInterval: 30,
     desensitized: false,
+    scope: defaultBigScreenScope(),
   }
 }
 
@@ -67,11 +100,36 @@ export function normalizeRefreshInterval(value: unknown): RefreshInterval {
   return REFRESH_OPTIONS.some((option) => option.value === value) ? (value as RefreshInterval) : 30
 }
 
+/** 筛选对象类型归一化：非法值一律回落「全部」 */
+export function normalizeBigScreenScopeType(value: unknown): BigScreenScopeType {
+  const option = BIG_SCREEN_SCOPE_OPTIONS.find((item) => item.value === value)
+  return option ? option.value : 'all'
+}
+
+/**
+ * 筛选范围归一化：
+ * - type 非法 → 全部；
+ * - 帮扶村/学校必须有整数 id，帮扶单位必须有非空 name，否则回落「全部」；
+ * - 全部对象不保存 id/name。
+ */
+export function normalizeBigScreenScope(raw: unknown): BigScreenScopeConfig {
+  const fallback = defaultBigScreenScope()
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fallback
+  const data = raw as Record<string, unknown>
+  const type = normalizeBigScreenScopeType(data.type)
+  const id = typeof data.id === 'number' && Number.isFinite(data.id) ? data.id : null
+  const name = typeof data.name === 'string' && data.name !== '' ? data.name : null
+  if (type === 'all') return fallback
+  if (type === 'unit') return name === null ? fallback : { type, id, name }
+  return id === null ? fallback : { type, id, name }
+}
+
 /**
  * 配置归一化：
  * - cards 按保存顺序保留「已知且不重复」的卡片，缺失卡片按默认顺序追加且可见；
  * - refreshInterval 非法 → 30 秒；
- * - desensitized 仅接受严格 true。
+ * - desensitized 仅接受严格 true；
+ * - scope 非法 → 全部对象。
  */
 export function normalizeBigScreenConfig(raw: unknown): BigScreenConfig {
   const fallback = defaultBigScreenConfig()
@@ -101,6 +159,7 @@ export function normalizeBigScreenConfig(raw: unknown): BigScreenConfig {
     cards,
     refreshInterval: normalizeRefreshInterval(data.refreshInterval),
     desensitized: data.desensitized === true,
+    scope: normalizeBigScreenScope(data.scope),
   }
 }
 

@@ -22,6 +22,17 @@ describe('utils/unwrapList', () => {
     expect(r).toEqual({ items: ['x'], total: 1 })
   })
 
+  it('format 0: 裸数组直返 -> total = 数组长度', () => {
+    expect(unwrapList([1, 2])).toEqual({ items: [1, 2], total: 2 })
+    expect(unwrapList([])).toEqual({ items: [], total: 0 })
+  })
+
+  it('format 1b: { data: [...] }（data 字段为数组）', () => {
+    expect(unwrapList({ data: [1, 2, 3] })).toEqual({ items: [1, 2, 3], total: 3 })
+    // 分页 total 存在时优先使用（数组仅作 items 载体）
+    expect(unwrapList({ data: [1], total: 9 })).toEqual({ items: [1], total: 9 })
+  })
+
   it('null res -> { items: [], total: 0 }', () => {
     expect(unwrapList(null)).toEqual({ items: [], total: 0 })
   })

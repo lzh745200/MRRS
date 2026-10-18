@@ -41,7 +41,7 @@
 
     <!-- Package List -->
     <el-card>
-      <el-table v-loading="loading" :data="packages" stripe>
+      <el-table v-loading="loading" :data="packages" >
         <el-table-column prop="package_code" label="包编码" width="200" />
         <el-table-column prop="file_name" label="文件名" min-width="150" />
         <el-table-column prop="file_size" label="大小" width="100">
@@ -135,7 +135,7 @@
             :key="preview.data_type"
             :label="`${getDataTypeLabel(preview.data_type)} (${preview.total})`"
           >
-            <el-table stripe :data="preview.sample" max-height="400">
+            <el-table  :data="preview.sample" max-height="400">
               <el-table-column
                 v-for="col in preview.columns"
                 :key="col"

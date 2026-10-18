@@ -309,6 +309,52 @@ class TestStatistics:
         resp = auth_setup.get(P("/schools/statistics"))
         assert resp.status_code == 200
 
+    def test_school_overview_statistics_with_links(self, auth_setup, school, db_session):
+        """单校成效统计：数值来自服务端聚合（详情页成效卡 + 删除前关联警示数据源）"""
+        db_session.add(SchoolProject(school_id=school.id, name="P1", budget=200.5))
+        db_session.add(ScholarshipStudent(school_id=school.id, student_name="S1", amount=300.0))
+        db_session.add(ScholarshipStudent(school_id=school.id, student_name="S2", amount=100.0))
+        db_session.commit()
+        resp = auth_setup.get(P(f"/schools/{school.id}/statistics"))
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["school_id"] == school.id
+        assert data["project_count"] == 1
+        assert data["project_total_budget"] == 200.5
+        assert data["scholarship_count"] == 2
+        assert data["scholarship_total_amount"] == 400.0
+        assert data["student_count"] == school.student_count
+        assert data["teacher_count"] == school.teacher_count
+
+    def test_school_overview_statistics_without_links(self, auth_setup, school):
+        """无关联记录时聚合回落为 0（coalesce 兜底，不抛 None 转换错误）"""
+        resp = auth_setup.get(P(f"/schools/{school.id}/statistics"))
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["project_count"] == 0
+        assert data["project_total_budget"] == 0.0
+        assert data["scholarship_count"] == 0
+        assert data["scholarship_total_amount"] == 0.0
+
+    def test_school_overview_statistics_not_found(self, auth_setup):
+        resp = auth_setup.get(P("/schools/99999/statistics"))
+        assert resp.status_code in (404, 500)
+
+    def test_school_overview_statistics_permission_denied(self, client, admin_user, school):
+        """跨组织访问单校统计 → 403/404（不得泄露他校关联规模）"""
+
+        async def mock_get_current_user():
+            u = MagicMock()
+            u.id = 2
+            u.role = "user"
+            u.is_superuser = False
+            u.organization_id = 2
+            return u
+
+        client.app.dependency_overrides[get_current_user] = mock_get_current_user
+        resp = client.get(P(f"/schools/{school.id}/statistics"))
+        assert resp.status_code in (403, 404)
+
 
 # ══════════════════════════════════════════════════════════════
 #  CRUD endpoints

@@ -56,10 +56,28 @@ module.exports = {
         // console.error(e.message) 属开发日志，不在此列。
         selector: "CallExpression[callee.object.name=/^(ElMessage|ElNotification|message|notification|toast)$/][callee.property.name=/^(error|warning)$/] > MemberExpression[object.name=/^(e|err|error|ex|exception|reason)$/][property.name='message']",
         message: "禁止把原始异常文案直接弹给用户（如 ElMessage.error(e.message)）。请用 getErrorMessage(e)。详见 W18 P2-2。"
+      },
+      {
+        // W5-T5：禁止手写 `.data.items` 解包。
+        // get/post/apiRequest 的拦截器已把 envelope.data 展开到顶层（数组载荷
+        // 自动落到 items），手写 `res.data.items` / `res.data?.items` /
+        // `data.data?.items` 会与顶层 items 形成双源漂移，且漏掉裸数组、
+        // 裸分页等历史形态（曾导致列表在个别端点上恒定为空）。
+        // 统一走 @/utils/unwrapList（唯一豁免见下方 overrides）。
+        selector: "MemberExpression[object.property.name='data'][property.name='items']",
+        message: "禁止手写 .data.items 解包。请改用 @/utils/unwrapList(res).items（详见 W5-T5）。"
       }
     ]
   },
   overrides: [
+    {
+      // unwrapList 是解包语义的唯一事实源，其内部必须直接访问 .data.items
+      // （该访问正是被上面规则禁止的模式），故对本文件整体关闭 no-restricted-syntax。
+      files: ['src/utils/unwrapList.ts'],
+      rules: {
+        'no-restricted-syntax': 'off'
+      }
+    },
     {
       // v-html 为有意使用，且渲染前均已过 DOMPurify / 正则转义消毒：
       //  - help/HelpCenter.vue：文章正文来自系统帮助文档库（受信任）；

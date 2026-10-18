@@ -6,7 +6,7 @@
 SQLAlchemy 认为属性未变、不生成 UPDATE，提交静默丢失 → 备用恢复码可无限复用。
 约定是："需要就地改的 JSON 列必须 ``MutableList``/``MutableDict.as_mutable(JSON)``"。
 
-本次横向排查（27 个 JSON 列逐一过筛）结论：**除 backup_codes 外，其余 26 列在代码里
+本次横向排查（28 个 JSON 列逐一过筛）结论：**除 backup_codes 外，其余 27 列在代码里
 全部是"整体赋值"（写入即完整快照），没有就地修改** —— 因此不需要 Mutable 包装；
 需要锁的是这条结论本身，防止将来新增 JSON 列时"默认裸列 + 就地改"重现 R19 缺陷。
 
@@ -66,6 +66,7 @@ REVIEWED_PLAIN_JSON_COLUMNS = {
     "import_histories.error_details",                # 导入错误明细：写入即定型
     "security_events.affected_resources",            # 安全事件：只增不改
     "security_events.details",
+    "visit_records.attachments",                     # 走访照片/附件：登记/更新时整列重写（w17-002）
 }
 
 # 就地改语义的列（必须 Mutable 包装）；R19 修复的 backup_codes 即此列。
@@ -117,9 +118,9 @@ class TestInventoryRatchet:
 
     def test_baseline_sizes_are_documented(self):
         """台账规模快照：防"大改后清单被顺手删空"式弱化。"""
-        assert len(REVIEWED_PLAIN_JSON_COLUMNS) == 26
+        assert len(REVIEWED_PLAIN_JSON_COLUMNS) == 27
         assert len(MUTABLE_JSON_COLUMNS) == 1
-        assert len(_json_columns()) == 27
+        assert len(_json_columns()) == 28
 
 
 class TestInplaceMutationSemantics:

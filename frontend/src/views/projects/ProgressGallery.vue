@@ -133,6 +133,7 @@ import { logger } from '@/utils/logger'
 import { projectsApi } from '@/api/projects'
 import { safeRouteParam } from '@/composables/useRouterSafe'
 import { AuthStorage } from '@/utils/authStorage'
+import { getProjectStatusLabel } from '@/config/enums'
 
 const route = useRoute()
 const router = useRouter()
@@ -248,17 +249,8 @@ function getStatusType(status?: string): ElTagType {
 }
 
 function getStatusText(status?: string) {
-  const map: Record<string, string> = {
-    draft: '草稿',
-    pending: '待审批',
-    approved: '已审批',
-    planning: '规划中',
-    in_progress: '进行中',
-    completed: '已完成',
-    cancelled: '已取消',
-    suspended: '已暂停',
-  }
-  return map[status ?? ''] ?? status ?? '-'
+  if (status == null) return '-'
+  return getProjectStatusLabel(status)
 }
 
 const goBack = () => router.back()

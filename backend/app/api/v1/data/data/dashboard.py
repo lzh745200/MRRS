@@ -576,6 +576,127 @@ async def get_kpi_trends(
         return success_response(data={"villages": 0, "population": 0, "income": 0, "investment": 0}, message="获取失败")
 
 
+def _build_yearly_trends(db: Session, data_scope: OrgScopeFilter, years: int) -> dict:
+    """构建最近 N 年的年度趋势数据（dashboard 端点与汇报大屏共用）。
+
+    返回结构与 ``GET /dashboard/yearly-trends`` 的 ``data`` 完全一致：
+    - ``years`` / ``villages`` / ``population`` / ``income``：分析页折线图；
+    - ``trends``：``[{year, total_planned, total_actual, project_count, fund_count}]``，
+      ``project_count`` 为真实项目数（按 ``start_date`` 年份，供大屏"年度对比"图），
+      ``fund_count`` 为经费记录条数（兼容旧 ``project_count`` 语义的保底字段）。
+
+    数据域口径：全量访问保持全局口径（与分析页历史行为一致）；非全量访问时
+    村/人口/经费三类查询套数据范围过滤（此前为全局数据，口径泄漏）。
+    """
+    now_year = datetime.now().year
+    year_list = list(range(now_year - years + 1, now_year + 1))
+
+    # ── 一次性按年聚合（取代逐年循环，SQL 数量从 ~4N 降至 N+3）──
+    if not data_scope.has_full_access():
+        accessible_villages = db.query(SupportedVillage.id).filter(
+            SupportedVillage.is_active == True  # noqa: E712
+        )
+        accessible_villages = data_scope.filter_by_org_ids(
+            accessible_villages, SupportedVillage.organization_id,
+            created_by_column=SupportedVillage.created_by,
+        )
+
+    # 帮扶村（按创建年份统计）
+    village_year_col = func.strftime("%Y", SupportedVillage.created_at)
+    village_rows = db.query(
+        village_year_col, func.count(SupportedVillage.id)
+    ).filter(SupportedVillage.is_active == True)  # noqa: E712
+    if not data_scope.has_full_access():
+        village_rows = data_scope.filter_by_org_ids(
+            village_rows, SupportedVillage.organization_id,
+            created_by_column=SupportedVillage.created_by,
+        )
+    villages_by_year = {
+        int(r[0]): int(r[1] or 0) for r in village_rows.group_by(village_year_col).all() if r[0]
+    }
+    villages_list = [villages_by_year.get(y, 0) for y in year_list]
+
+    # 人口（按年度表；非全量访问限定可访问帮扶村的年报，全量访问保持全局口径）
+    pop_rows = db.query(
+        VillagePopulation.year,
+        func.coalesce(func.sum(VillagePopulation.total_population), 0),
+    )
+    if not data_scope.has_full_access():
+        pop_rows = pop_rows.filter(
+            VillagePopulation.supported_village_id.in_(accessible_villages)
+        )
+    pop_by_year = {
+        int(r[0]): int(r[1] or 0) for r in pop_rows.group_by(VillagePopulation.year).all()
+    }
+    population_list = [pop_by_year.get(y, 0) for y in year_list]
+
+    # 人均收入（逐年取可用年份列，保持既有实现）
+    income_list = [round(_avg_per_capita_income(db, data_scope, year=y), 2) for y in year_list]
+
+    # 经费：计划投入/实际投入 + 记录条数（软删经费排除；year 为 None 的记录
+    # 无法归属任一年度，直接跳过——旧实现 int(None) 会抛错使整条趋势降级为空）
+    fund_rows = db.query(
+        Fund.year,
+        func.coalesce(func.sum(Fund.planned_amount), 0),
+        func.coalesce(func.sum(Fund.allocated_amount), 0),
+        func.count(Fund.id),
+    ).filter(Fund.is_active == True)  # noqa: E712
+    if not data_scope.has_full_access():
+        # W18 P1-2：未关联村的经费同样按 Fund.organization_id 判域
+        fund_scope_query = data_scope.filter_by_org_ids(
+            db.query(Fund.id).filter(Fund.is_active == True),  # noqa: E712
+            Fund.organization_id,
+            created_by_column=Fund.created_by,
+        )
+        fund_rows = fund_rows.filter(
+            or_(
+                Fund.village_id.in_(accessible_villages),
+                and_(Fund.village_id.is_(None), Fund.id.in_(fund_scope_query)),
+            )
+        )
+    fund_by_year = {}
+    for r in fund_rows.group_by(Fund.year).all():
+        if r[0] is None:
+            continue
+        fund_by_year[int(r[0])] = {
+            "planned": round(float(r[1] or 0), 2),
+            "actual": round(float(r[2] or 0), 2),
+            "count": int(r[3] or 0),
+        }
+
+    # 项目年度分布（按 start_date 年份；与项目总数统计同口径的范围过滤）
+    project_year_col = func.strftime("%Y", Project.start_date)
+    project_rows = db.query(
+        project_year_col, func.count(Project.id)
+    ).filter(
+        Project.status != "cancelled",
+        Project.is_active == True,  # noqa: E712
+    )
+    project_rows = _apply_project_scope(project_rows, data_scope)
+    project_by_year = {
+        int(r[0]): int(r[1] or 0) for r in project_rows.group_by(project_year_col).all() if r[0]
+    }
+
+    trends_list = []
+    for y in year_list:
+        f = fund_by_year.get(y)
+        trends_list.append({
+            "year": y,
+            "total_planned": f["planned"] if f else 0.0,
+            "total_actual": f["actual"] if f else 0.0,
+            "project_count": project_by_year.get(y, 0),
+            "fund_count": f["count"] if f else 0,
+        })
+
+    return {
+        "years": year_list,
+        "villages": villages_list,
+        "population": population_list,
+        "income": income_list,
+        "trends": trends_list,
+    }
+
+
 @router.get("/yearly-trends", summary="年度趋势（村/人口/收入/经费投入，兼容分析页与大屏）")
 async def get_yearly_trends(
     years: int = Query(5, ge=1, le=10),
@@ -583,122 +704,10 @@ async def get_yearly_trends(
     data_scope: OrgScopeFilter = Depends(get_org_scope),
     db: Session = Depends(get_db),
 ):
-    """按最近 N 年返回:
-    - years/villages/population/income: 分析页折线图
-    - trends: [{year, total_planned, total_actual, project_count, fund_count}]
-      project_count 为真实项目数（按 start_date 年份，供大屏"年度对比"图），
-      fund_count 为经费记录条数（兼容旧 project_count 语义的保底字段）
-    """
+    """按最近 N 年返回年度趋势（聚合逻辑抽到 ``_build_yearly_trends``，供大屏复用）。"""
     try:
-        from sqlalchemy import or_
-
-        now_year = datetime.now().year
-        year_list = list(range(now_year - years + 1, now_year + 1))
-
-        # ── 一次性按年聚合（取代逐年循环，SQL 数量从 ~4N 降至 N+3）──
-        # 全量访问保持全局口径（与分析页历史行为一致）；非全量访问时
-        # 村/人口/经费三类查询套数据范围过滤（此前为全局数据，口径泄漏）
-        if not data_scope.has_full_access():
-            accessible_villages = db.query(SupportedVillage.id).filter(
-                SupportedVillage.is_active == True  # noqa: E712
-            )
-            accessible_villages = data_scope.filter_by_org_ids(
-                accessible_villages, SupportedVillage.organization_id,
-                created_by_column=SupportedVillage.created_by,
-            )
-
-        # 帮扶村（按创建年份统计）
-        village_year_col = func.strftime("%Y", SupportedVillage.created_at)
-        village_rows = db.query(
-            village_year_col, func.count(SupportedVillage.id)
-        ).filter(SupportedVillage.is_active == True)  # noqa: E712
-        if not data_scope.has_full_access():
-            village_rows = data_scope.filter_by_org_ids(
-                village_rows, SupportedVillage.organization_id,
-                created_by_column=SupportedVillage.created_by,
-            )
-        villages_by_year = {
-            int(r[0]): int(r[1] or 0) for r in village_rows.group_by(village_year_col).all() if r[0]
-        }
-        villages_list = [villages_by_year.get(y, 0) for y in year_list]
-
-        # 人口（按年度表；非全量访问限定可访问帮扶村的年报，全量访问保持全局口径）
-        pop_rows = db.query(
-            VillagePopulation.year,
-            func.coalesce(func.sum(VillagePopulation.total_population), 0),
-        )
-        if not data_scope.has_full_access():
-            pop_rows = pop_rows.filter(
-                VillagePopulation.supported_village_id.in_(accessible_villages)
-            )
-        pop_by_year = {
-            int(r[0]): int(r[1] or 0) for r in pop_rows.group_by(VillagePopulation.year).all()
-        }
-        population_list = [pop_by_year.get(y, 0) for y in year_list]
-
-        # 人均收入（逐年取可用年份列，保持既有实现）
-        income_list = [round(_avg_per_capita_income(db, data_scope, year=y), 2) for y in year_list]
-
-        # 经费：计划投入/实际投入 + 记录条数（软删经费排除）
-        fund_rows = db.query(
-            Fund.year,
-            func.coalesce(func.sum(Fund.planned_amount), 0),
-            func.coalesce(func.sum(Fund.allocated_amount), 0),
-            func.count(Fund.id),
-        ).filter(Fund.is_active == True)  # noqa: E712
-        if not data_scope.has_full_access():
-            # W18 P1-2：未关联村的经费同样按 Fund.organization_id 判域
-            fund_scope_query = data_scope.filter_by_org_ids(
-                db.query(Fund.id).filter(Fund.is_active == True),  # noqa: E712
-                Fund.organization_id,
-                created_by_column=Fund.created_by,
-            )
-            fund_rows = fund_rows.filter(
-                or_(
-                    Fund.village_id.in_(accessible_villages),
-                    and_(Fund.village_id.is_(None), Fund.id.in_(fund_scope_query)),
-                )
-            )
-        fund_by_year = {}
-        for r in fund_rows.group_by(Fund.year).all():
-            fund_by_year[int(r[0])] = {
-                "planned": round(float(r[1] or 0), 2),
-                "actual": round(float(r[2] or 0), 2),
-                "count": int(r[3] or 0),
-            }
-
-        # 项目年度分布（按 start_date 年份；与项目总数统计同口径的范围过滤）
-        project_year_col = func.strftime("%Y", Project.start_date)
-        project_rows = db.query(
-            project_year_col, func.count(Project.id)
-        ).filter(
-            Project.status != "cancelled",
-            Project.is_active == True,  # noqa: E712
-        )
-        project_rows = _apply_project_scope(project_rows, data_scope)
-        project_by_year = {
-            int(r[0]): int(r[1] or 0) for r in project_rows.group_by(project_year_col).all() if r[0]
-        }
-
-        trends_list = []
-        for y in year_list:
-            f = fund_by_year.get(y)
-            trends_list.append({
-                "year": y,
-                "total_planned": f["planned"] if f else 0.0,
-                "total_actual": f["actual"] if f else 0.0,
-                "project_count": project_by_year.get(y, 0),
-                "fund_count": f["count"] if f else 0,
-            })
-
         return success_response(
-            data={
-                "years": year_list,
-                "villages": villages_list,
-                "population": population_list,
-                "income": income_list,
-                "trends": trends_list,
-            },
+            data=_build_yearly_trends(db, data_scope, years),
             message="年度趋势已获取",
         )
     except Exception as e:

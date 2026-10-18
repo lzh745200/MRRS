@@ -23,6 +23,7 @@ import { nextTick } from 'vue'
 
 const h = vi.hoisted(() => ({
   clickHandler: null as null | ((params: any) => any),
+  options: [] as any[],
 }))
 
 vi.mock('@/utils/echarts', () => {
@@ -31,7 +32,9 @@ vi.mock('@/utils/echarts', () => {
   }
   const makeChart = () => ({
     setOption(option: any) {
-      // 主动执行配置中的回调，覆盖 formatter / min / max 函数体语句
+      // 记录 option 供断言（主题色令牌化），并主动执行配置中的回调，
+      // 覆盖 formatter / min / max 函数体语句
+      h.options.push(option)
       const formatter = option?.tooltip?.formatter
       if (typeof formatter === 'function') {
         formatter({ marker: '<i/>', name: '测试', value: 1, percent: 2 })
@@ -58,8 +61,30 @@ vi.mock('@/utils/echarts', () => {
   }
 })
 
+// 色彩常量与 @/utils/echarts-theme 保持一致（避免 importActual 加载真实 echarts/core
+// 拖慢收集）；getCurrentTheme 固定为主题名即可
 vi.mock('@/utils/echarts-theme', () => ({
   getCurrentTheme: () => 'military',
+  COLOR_PALETTE: [
+    '#1e4d8c',
+    '#2d6a4f',
+    '#b8960c',
+    '#3b82f6',
+    '#52b788',
+    '#f59e0b',
+    '#ef4444',
+    '#8b5cf6',
+    '#06b6d4',
+    '#84cc16',
+    '#f97316',
+    '#ec4899',
+    '#6366f1',
+    '#14b8a6',
+    '#e11d48',
+    '#64748b',
+  ],
+  MILITARY_BLUE: '#1e4d8c',
+  REVITALIZATION_GREEN: '#2d6a4f',
 }))
 
 vi.mock('@/components/business/SystemStatus.vue', () => ({
@@ -139,6 +164,7 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     h.clickHandler = null
+    h.options = []
     vi.mocked(getFilterOptions).mockResolvedValue({
       departments: ['教育部', '卫健委'],
       supportUnits: [],
@@ -334,6 +360,26 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
     expect(clickSpy).toHaveBeenCalledTimes(1)
     clickSpy.mockRestore()
     wrapper.unmount()
+  })
+
+  it('图表轴色/边框色跟随 CSS 变量（暗色主题令牌化，W11-T45）', async () => {
+    document.documentElement.style.setProperty('--color-border-light', '#334155')
+    document.documentElement.style.setProperty('--color-text-primary', '#e5eaf3')
+    try {
+      const wrapper = mountDashboard()
+      await flushPromises()
+
+      expect(
+        h.options.some((o) => o?.tooltip?.borderColor === '#334155')
+      ).toBe(true)
+      expect(
+        h.options.some((o) => o?.tooltip?.textStyle?.color === '#e5eaf3')
+      ).toBe(true)
+      wrapper.unmount()
+    } finally {
+      document.documentElement.style.removeProperty('--color-border-light')
+      document.documentElement.style.removeProperty('--color-text-primary')
+    }
   })
 
   it('窗口 resize 触发图表重排', async () => {

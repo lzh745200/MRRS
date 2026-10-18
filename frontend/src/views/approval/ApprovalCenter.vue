@@ -82,6 +82,7 @@ export function batchRejectValidator(v: string): true | string {
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post } from '@/api/request'
+import { getApprovalStatusLabel, getEntityTypeLabel } from '@/config/enums'
 
 interface ApprovalTask {
   id: number
@@ -112,26 +113,13 @@ function statusType(status: string): 'success' | 'warning' | 'danger' | 'info' |
 }
 
 function entityTypeLabel(t?: string) {
-  const map: Record<string, string> = {
-    supported_village: '帮扶村',
-    project: '项目',
-    fund: '经费',
-    school: '学校',
-    rural_work: '乡村工作',
-    assessment: '考核复核',
-  }
-  return map[t || ''] || t || '通用'
+  return getEntityTypeLabel(t || '') || t || '通用'
 }
 
 function statusLabel(status: string) {
-  const map: Record<string, string> = {
-    pending: '待审批',
-    approved: '已通过',
-    rejected: '已驳回',
-    completed: '已完成',
-    withdrawn: '已撤回',
-  }
-  return map[status] || status
+  // completed 为历史遗留展示态（后端 ApprovalStatus 四态无此值），保留既有中文渲染
+  if (status === 'completed') return '已完成'
+  return getApprovalStatusLabel(status)
 }
 
 async function loadTasks() {

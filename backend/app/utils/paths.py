@@ -159,8 +159,17 @@ def get_backup_path(sub_path: str = "") -> Path:
 
     自动备份调度由 BACKUP_ENABLED 环境变量控制（见 auto_backup.py）。
     手动备份（管理员 API）始终使用此目录，不受该环境变量影响。
+
+    W18-offline P0-2：优先尊重 BACKUP_DIR 环境变量（kylin.env 一直在下发它，
+    但 Settings/此函数从未接收 —— "配了不生效"，麒麟部署的备份实际落到
+    $HOME/.bumofu/backups。部署模板与代码契约不一致的典型案例）。设了就用，
+    未设回退到数据目录下的 backups（既有行为不变）。
     """
-    base = get_app_data_dir() / "backups"
+    env_backup = os.environ.get("BACKUP_DIR")
+    if env_backup:
+        base = Path(env_backup)
+    else:
+        base = get_app_data_dir() / "backups"
     if sub_path:
         path = _safe_join(base, sub_path)
         if path.parent != base:

@@ -73,7 +73,7 @@
               <span class="title">下属组织（{{ detail.children?.length || 0 }}）</span>
             </div>
           </template>
-          <el-table v-if="detail.children?.length" :data="detail.children" border stripe>
+          <el-table v-if="detail.children?.length" :data="detail.children" border >
             <el-table-column type="index" label="序号" width="60" />
             <el-table-column prop="name" label="名称" min-width="200">
               <template #default="scope">
@@ -133,7 +133,7 @@
               </el-button>
             </div>
           </template>
-          <el-table v-loading="memberLoading" stripe :data="members" border>
+          <el-table v-loading="memberLoading"  :data="members" border>
             <el-table-column prop="full_name" label="姓名" min-width="80">
               <template #default="scope">
                 {{ ds(scope.row.full_name, 'name') || scope.row.username }}

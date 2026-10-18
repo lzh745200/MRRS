@@ -17,6 +17,8 @@ const { ElMessage, confirmMock, getMock, delMock, schoolApiMock, pushSafeMock, r
     schoolApiMock: {
       listProjects: vi.fn(),
       listScholarshipStudents: vi.fn(),
+      getSchoolStatistics: vi.fn(),
+      downloadAttachment: vi.fn(),
     },
     pushSafeMock: vi.fn(),
     routeBox: { params: { id: '3' } as Record<string, any> },
@@ -112,6 +114,12 @@ function mountComp() {
           emits: ['click'],
         },
         'el-icon': { template: '<span class="el-icon-stub"><slot /></span>' },
+        FilePreview: {
+          name: 'FilePreview',
+          template: '<div class="file-preview-stub" />',
+          props: ['modelValue', 'fetchBlob', 'fileName'],
+          emits: ['update:modelValue'],
+        },
       },
     },
   })
@@ -129,6 +137,13 @@ beforeEach(async () => {
   })
   schoolApiMock.listProjects.mockResolvedValue({ items: [project] })
   schoolApiMock.listScholarshipStudents.mockResolvedValue({ items: [student] })
+  schoolApiMock.getSchoolStatistics.mockResolvedValue({
+    scholarship_count: 0,
+    scholarship_total_amount: 0,
+    project_count: 0,
+    project_total_budget: 0,
+  })
+  schoolApiMock.downloadAttachment.mockResolvedValue(new Blob(['x'], { type: 'application/pdf' }))
   delMock.mockResolvedValue({})
   confirmMock.mockResolvedValue(undefined)
   vi.stubGlobal('fetch', fetchMock)
@@ -144,7 +159,7 @@ afterEach(() => {
 })
 
 describe('挂载与加载', () => {
-  it('onMounted 并行加载 4 路数据', async () => {
+  it('onMounted 并行加载 5 路数据', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -152,6 +167,8 @@ describe('挂载与加载', () => {
     expect(getMock).toHaveBeenCalledWith('/schools/3/attachments')
     expect(schoolApiMock.listProjects).toHaveBeenCalledWith(3)
     expect(schoolApiMock.listScholarshipStudents).toHaveBeenCalledWith(3)
+    // W10-030：成效统计卡走独立接口（不本地聚合）
+    expect(schoolApiMock.getSchoolStatistics).toHaveBeenCalledWith(3)
     expect(vm.school.name).toBe('第一小学')
     expect(vm.attachments).toHaveLength(1)
     expect(vm.relatedProjects).toHaveLength(1)
@@ -360,6 +377,167 @@ describe('computed 与字典函数', () => {
     expect(vm.phaseTagType('implementation')).toBe('primary')
     expect(vm.phaseTagType('acceptance')).toBe('warning')
     expect(vm.phaseTagType('x')).toBe('info')
+  })
+})
+
+describe('帮扶成效统计卡（W10-030）', () => {
+  it('数值来自接口（非本地列表聚合），四张卡渲染', async () => {
+    schoolApiMock.getSchoolStatistics.mockResolvedValueOnce({
+      scholarship_count: 42,
+      scholarship_total_amount: 9999,
+      project_count: 7,
+      project_total_budget: 12.5,
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    await nextTick()
+    expect(schoolApiMock.getSchoolStatistics).toHaveBeenCalledWith(3)
+    const text = wrapper.text()
+    expect(text).toContain('累计资助学生数')
+    expect(text).toContain('42')
+    expect(text).toContain('9999元')
+    expect(text).toContain('7')
+    expect(text).toContain('12.5万元')
+    // 本地资助列表只有 1 条（amount 500）：卡片不采用本地累加值
+    expect(text).not.toContain('500元')
+  })
+
+  it('接口失败 → 卡片显示 -、错误文案 + 重试按钮；重试成功恢复', async () => {
+    schoolApiMock.getSchoolStatistics.mockRejectedValueOnce(new Error('net'))
+    const wrapper = mountComp()
+    await flushPromises()
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(logError).toHaveBeenCalled()
+    expect(vm.statsError).toBe('成效数据加载失败，请重试')
+    expect(wrapper.text()).toContain('成效数据加载失败，请重试')
+    expect(wrapper.findAll('.effect-value').every((e) => e.text() === '-')).toBe(true)
+
+    schoolApiMock.getSchoolStatistics.mockResolvedValueOnce({ scholarship_count: 2 })
+    const retry = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('重试'))
+    await retry!.trigger('click')
+    await flushPromises()
+    expect(schoolApiMock.getSchoolStatistics).toHaveBeenCalledTimes(2)
+    expect(vm.statsError).toBe('')
+    expect(wrapper.text()).toContain('2')
+  })
+
+  it('响应带 data 包装 → 取内层；响应为 null → 置空显示 -', async () => {
+    schoolApiMock.getSchoolStatistics.mockResolvedValueOnce({ data: { scholarship_count: 9 } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.schoolStats).toEqual({ scholarship_count: 9 })
+
+    schoolApiMock.getSchoolStatistics.mockResolvedValueOnce(null)
+    await vm.loadStatistics()
+    expect(vm.schoolStats).toBeNull()
+    expect(vm.statsValue('scholarship_count')).toBe('-')
+  })
+
+  it('statsValue 分支：未加载/字段缺失 → "-"，有单位拼接', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.schoolStats = null
+    expect(vm.statsValue('scholarship_count')).toBe('-')
+    vm.schoolStats = { scholarship_count: undefined, scholarship_total_amount: null }
+    expect(vm.statsValue('scholarship_count')).toBe('-')
+    expect(vm.statsValue('scholarship_total_amount', '元')).toBe('-')
+    vm.schoolStats = {
+      scholarship_count: 3,
+      scholarship_total_amount: 600,
+      project_count: 2,
+      project_total_budget: 1.5,
+    }
+    expect(vm.statsValue('scholarship_count')).toBe('3')
+    expect(vm.statsValue('project_total_budget', '万元')).toBe('1.5万元')
+  })
+
+  it('无 id → 不请求统计（早退）', async () => {
+    routeBox.params = {}
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(schoolApiMock.getSchoolStatistics).not.toHaveBeenCalled()
+  })
+})
+
+describe('附件预览（复用 FilePreview，W10-030）', () => {
+  it('openPreview → 打开对话框并绑定文件名与 fetchBlob', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.openPreview(att)
+    expect(vm.previewVisible).toBe(true)
+    expect(vm.previewFileName).toBe('报告.pdf')
+    await nextTick() // 等模板把新的 fetchBlob 传给子组件
+    const fp = wrapper.findComponent({ name: 'FilePreview' })
+    expect(fp.exists()).toBe(true)
+    expect(fp.props('fetchBlob')).toBe(vm.previewFetchBlob)
+    await vm.previewFetchBlob()
+    expect(schoolApiMock.downloadAttachment).toHaveBeenCalledWith(1)
+    // FilePreview v-model 箭头：子组件关闭 → previewVisible 复位
+    fp.vm.$emit('update:modelValue', false)
+    expect(vm.previewVisible).toBe(false)
+  })
+
+  it('附件缺文件名 → 兜底「附件」', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openPreview({ id: 3 })
+    expect(vm.previewFileName).toBe('附件')
+  })
+
+  it('「预览」按钮点击 → openPreview（模板箭头）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    await nextTick()
+    const btn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('预览'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    expect((wrapper.vm as any).previewVisible).toBe(true)
+    expect((wrapper.vm as any).previewFileName).toBe('报告.pdf')
+  })
+})
+
+describe('删除前关联检查（W10-030）', () => {
+  it('有关联 → 确认文案前置警示，确认后删除并返回列表', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    // 挂载时的成效卡加载已消耗默认值；此处为 handleDelete 的关联计数单独指定
+    schoolApiMock.getSchoolStatistics.mockResolvedValueOnce({ scholarship_count: 2, project_count: 1 })
+    await (wrapper.vm as any).handleDelete()
+    expect(confirmMock).toHaveBeenCalledWith(
+      '该校已关联2 名资助学生、1 个助学兴教项目，删除前请确认无需继续维护这些关联数据。确定要删除这所学校吗？',
+      '关联数据警示',
+      expect.objectContaining({ confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    )
+    expect(delMock).toHaveBeenCalledWith('/schools/3')
+    expect(pushSafeMock).toHaveBeenCalledWith('/schools')
+  })
+
+  it('关联计数失败 → 降级为原文案（删除不被阻断）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    schoolApiMock.getSchoolStatistics.mockRejectedValueOnce(new Error('net'))
+    await (wrapper.vm as any).handleDelete()
+    expect(confirmMock).toHaveBeenCalledWith(
+      '确定要删除这所学校吗？',
+      '提示',
+      expect.anything()
+    )
+    expect(delMock).toHaveBeenCalledWith('/schools/3')
+  })
+
+  it('无学校 id → 早退，不请求计数也不删除', async () => {
+    routeBox.params = {}
+    const wrapper = mountComp()
+    await flushPromises()
+    await (wrapper.vm as any).handleDelete()
+    expect(schoolApiMock.getSchoolStatistics).not.toHaveBeenCalled()
+    expect(delMock).not.toHaveBeenCalled()
   })
 })
 

@@ -534,6 +534,79 @@ class TestVisits:
         assert data["organization_id"] == 1
         assert data["created_by"] == 7
 
+    def test_create_visit_with_attachments(self, api_client):
+        """w17-002 收尾：走访照片/凭证附件随记录落库并原样返回。"""
+        client, db, _state = api_client
+        p = _mk_pairing(db, organization_id=1, created_by=7)
+        resp = client.post(
+            f"/api/v1/pairings/{p.id}/visits",
+            json={
+                "visit_date": "2026-03-05",
+                "visitors": "甲、乙",
+                "attachments": [
+                    {"url": "/uploads/donations/a.jpg", "file_name": "现场1.jpg"},
+                    {"url": "/uploads/donations/b.pdf"},
+                ],
+            },
+        )
+        assert resp.status_code == 200
+        atts = resp.json()["data"]["attachments"]
+        assert [a["url"] for a in atts] == ["/uploads/donations/a.jpg", "/uploads/donations/b.pdf"]
+        assert atts[0]["file_name"] == "现场1.jpg"
+        assert atts[1]["file_name"] is None
+
+    def test_update_visit_replaces_attachments(self, api_client):
+        """附件语义是**整体替换**：update 传入新列表即整列重写。"""
+        client, db, _state = api_client
+        p = _mk_pairing(db, organization_id=1, created_by=7)
+        created = client.post(
+            f"/api/v1/pairings/{p.id}/visits",
+            json={
+                "visit_date": "2026-03-05",
+                "visitors": "甲",
+                "attachments": [{"url": "/uploads/donations/old.jpg"}],
+            },
+        ).json()["data"]
+
+        resp = client.put(
+            f"/api/v1/pairings/{p.id}/visits/{created['id']}",
+            json={"attachments": [{"url": "/uploads/donations/new.jpg", "file_name": "新.jpg"}]},
+        )
+        assert resp.status_code == 200
+        atts = resp.json()["data"]["attachments"]
+        assert atts == [{"url": "/uploads/donations/new.jpg", "file_name": "新.jpg"}]
+
+    def test_update_visit_without_attachments_keeps_existing(self, api_client):
+        """部分更新未携带 attachments 时不得清空既有附件（exclude_unset 语义）。"""
+        client, db, _state = api_client
+        p = _mk_pairing(db, organization_id=1, created_by=7)
+        created = client.post(
+            f"/api/v1/pairings/{p.id}/visits",
+            json={
+                "visit_date": "2026-03-05",
+                "visitors": "甲",
+                "attachments": [{"url": "/uploads/donations/keep.jpg"}],
+            },
+        ).json()["data"]
+
+        resp = client.put(
+            f"/api/v1/pairings/{p.id}/visits/{created['id']}",
+            json={"content": "补充走访结论"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["content"] == "补充走访结论"
+        assert [a["url"] for a in data["attachments"]] == ["/uploads/donations/keep.jpg"]
+
+    def test_visit_to_dict_defaults_empty_attachments(self):
+        """未登记附件时 to_dict 返回空列表（而非 None），前端可直接遍历。"""
+        from datetime import date as _date
+
+        from app.models.pairing import VisitRecord
+
+        visit = VisitRecord(pairing_id=1, visit_date=_date(2026, 3, 5), visitors="甲")
+        assert visit.to_dict()["attachments"] == []
+
     def test_create_visit_pairing_not_found(self, api_client):
         client, _db, _state = api_client
         resp = client.post(

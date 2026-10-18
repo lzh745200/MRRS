@@ -84,7 +84,7 @@
             </span>
             <el-button type="primary" @click="openMsDialog()">新增里程碑</el-button>
           </div>
-          <el-table v-loading="msLoading" :data="milestones" border stripe>
+          <el-table v-loading="msLoading" :data="milestones" border>
             <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
             <el-table-column prop="planned_date" label="计划日期" width="110" />
             <el-table-column prop="actual_date" label="实际日期" width="110">
@@ -143,19 +143,19 @@
           <div class="tab-toolbar">
             <el-button type="primary" @click="openTaskDialog()">新建任务</el-button>
           </div>
-          <el-table v-loading="tasksLoading" :data="tasks" stripe>
+          <el-table v-loading="tasksLoading" :data="tasks">
             <el-table-column prop="title" label="任务名称" min-width="180" />
             <el-table-column prop="status" label="状态" width="100">
               <template #default="{ row }">
                 <el-tag :type="taskStatusType(row.status)">{{
-                  statusMap[row.status]?.text ?? row.status
+                  getProjectStatusLabel(row.status) || row.status
                 }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="priority" label="优先级" width="90">
               <template #default="{ row }">
                 <el-tag :type="priorityType(row.priority)" effect="plain">{{
-                  row.priority ?? '普通'
+                  getTaskPriorityLabel(row.priority) || '普通'
                 }}</el-tag>
               </template>
             </el-table-column>
@@ -176,7 +176,7 @@
 
         <!-- 经费 -->
         <el-tab-pane label="经费" name="funds">
-          <el-table v-loading="fundsLoading" stripe :data="funds">
+          <el-table v-loading="fundsLoading" :data="funds">
             <el-table-column prop="name" label="经费名称" min-width="200" />
             <el-table-column prop="amount" label="金额（万元）" width="130">
               <template #default="{ row }">{{ row.amount ?? '-' }}</template>
@@ -202,7 +202,7 @@
               <el-button type="primary">上传附件</el-button>
             </el-upload>
           </div>
-          <el-table v-loading="filesLoading" stripe :data="files">
+          <el-table v-loading="filesLoading" :data="files">
             <el-table-column prop="filename" label="文件名" min-width="220">
               <template #default="{ row }">{{ row.filename ?? row.name ?? '-' }}</template>
             </el-table-column>
@@ -349,6 +349,7 @@ import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
 import { AuthStorage } from '@/utils/authStorage'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { chartColor } from '@/utils/chartColors'
+import { getProjectStatusLabel, getTaskPriorityLabel } from '@/config/enums'
 import FilePreview from '@/components/FilePreview.vue'
 
 const route = useRoute()
@@ -389,20 +390,23 @@ const taskForm = ref({
 
 // --- Computed ---
 type ElTagType = 'primary' | 'success' | 'warning' | 'info' | 'danger'
-const statusMap: Record<string, { type: ElTagType; text: string }> = {
-  draft: { type: 'info', text: '草稿' },
-  pending: { type: 'info', text: '待审批' },
-  approved: { type: 'primary', text: '已审批' },
-  planning: { type: 'info', text: '规划中' },
-  in_progress: { type: 'warning', text: '进行中' },
-  completed: { type: 'success', text: '已完成' },
-  cancelled: { type: 'danger', text: '已取消' },
-  suspended: { type: 'danger', text: '已暂停' },
+// 仅保留标签配色；中文文案统一走 src/config/enums.ts（PROJECT_STATUS）
+const statusTypeMap: Record<string, ElTagType> = {
+  draft: 'info',
+  pending: 'info',
+  approved: 'primary',
+  planning: 'info',
+  in_progress: 'warning',
+  completed: 'success',
+  cancelled: 'danger',
+  suspended: 'danger',
 }
-const statusType = computed((): ElTagType => statusMap[project.value?.status]?.type ?? 'info')
-const statusText = computed(
-  () => statusMap[project.value?.status]?.text ?? project.value?.status ?? '-'
-)
+const statusType = computed((): ElTagType => statusTypeMap[project.value?.status] ?? 'info')
+function projectStatusText(status?: string) {
+  if (status == null) return '-'
+  return getProjectStatusLabel(status)
+}
+const statusText = computed(() => projectStatusText(project.value?.status))
 const progressColor = computed(() => {
   const p = project.value?.progress ?? 0
   if (p >= 80) return '#40916c'

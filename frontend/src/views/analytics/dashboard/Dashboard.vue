@@ -210,7 +210,7 @@
           <el-icon><Close /></el-icon>
         </el-button>
       </div>
-      <el-table stripe :data="drillDownData.items" border max-height="300">
+      <el-table  :data="drillDownData.items" border max-height="300">
         <el-table-column prop="name" label="名称" />
         <el-table-column prop="value" label="数量" width="100" align="right" />
         <el-table-column prop="totalPopulation" label="人口" width="100" align="right" />
@@ -226,11 +226,21 @@ import { format } from '@/utils'
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { Download, OfficeBuilding, User, Money, TrendCharts, Close } from '@element-plus/icons-vue'
 import echarts from '@/utils/echarts'
-import { getCurrentTheme } from '@/utils/echarts-theme'
+import { getCurrentTheme, COLOR_PALETTE, MILITARY_BLUE, REVITALIZATION_GREEN } from '@/utils/echarts-theme'
 import SystemStatus from '@/components/business/SystemStatus.vue'
 import { getSummaryStatistics, getFilterOptions, drillDown } from '@/api/analytics'
 import { getDashboardStats, getYearlyTrends } from '@/api/dashboard'
 import type { SummaryStatistics, FilterOptions, DrillDownResult } from '@/types/analytics'
+
+/**
+ * 读取当前主题的 CSS 变量值（W11-T45 颜色令牌化）。
+ *
+ * tokens.scss 会随 html[data-theme] 重新定义这些变量；echarts option 里写死
+ * 浅色 hex（#e2e8f0/#1e293b/#64748b）会在暗色主题下刺眼，故轴/边框/文字色
+ * 一律在每次构建 option 时从 CSS 变量取值，取不到再回退到原浅色值。
+ */
+const themeColor = (name: string, fallback: string): string =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
 
 // =========================================================================
 // 年份与筛选
@@ -388,22 +398,22 @@ interface SparkConfig {
 
 const SPARK_CONFIGS: Record<string, SparkConfig> = {
   villages: {
-    color: '#1e4d8c',
+    color: MILITARY_BLUE,
     colorAlpha: 'rgba(30, 77, 140, 0.18)',
     colorStop: 'rgba(30, 77, 140, 0.02)',
   },
   population: {
-    color: '#2d6a4f',
+    color: REVITALIZATION_GREEN,
     colorAlpha: 'rgba(45, 106, 79, 0.18)',
     colorStop: 'rgba(45, 106, 79, 0.02)',
   },
   income: {
-    color: '#f59e0b',
+    color: COLOR_PALETTE[5], // 琥珀
     colorAlpha: 'rgba(245, 158, 11, 0.18)',
     colorStop: 'rgba(245, 158, 11, 0.02)',
   },
   investment: {
-    color: '#ef4444',
+    color: COLOR_PALETTE[6], // 警示红
     colorAlpha: 'rgba(239, 68, 68, 0.18)',
     colorStop: 'rgba(239, 68, 68, 0.02)',
   },
@@ -459,20 +469,30 @@ const createSparkOption = (data: number[], config: SparkConfig): echarts.ECharts
 // =========================================================================
 
 const updateCharts = async () => {
+  // 当前主题的轴/边框/文字/表面色：每次构建 option 时从 CSS 变量取值（暗色主题自动跟随）
+  const t = {
+    border: themeColor('--color-border-light', '#e2e8f0'),
+    textPrimary: themeColor('--color-text-primary', '#1e293b'),
+    textSecondary: themeColor('--color-text-secondary', '#64748b'),
+    axisLabel: themeColor('--color-border-dark', '#94a3b8'),
+    splitLine: themeColor('--color-border-lighter', '#f1f5f9'),
+    surface: themeColor('--color-bg-card', '#ffffff'),
+  }
+
   // ── 地域分布饼图（升级版） ──
   if (regionChart) {
     const v = statistics.value.villages
     regionChart.setOption({
-      color: ['#1e4d8c', '#2d6a4f', '#f59e0b', '#ef4444', '#94a3b8'],
+      color: [MILITARY_BLUE, REVITALIZATION_GREEN, COLOR_PALETTE[5], COLOR_PALETTE[6], t.axisLabel],
       tooltip: {
         trigger: 'item',
         backgroundColor: 'rgba(255,255,255,0.96)',
-        borderColor: '#e2e8f0',
+        borderColor: t.border,
         borderWidth: 1,
         borderRadius: 8,
         padding: [10, 14],
         textStyle: {
-          color: '#1e293b',
+          color: t.textPrimary,
           fontSize: 13,
         },
         formatter: (params: { marker: string; name: string; value: number; percent: number }) =>
@@ -482,7 +502,7 @@ const updateCharts = async () => {
       },
       legend: {
         bottom: 0,
-        textStyle: { color: '#64748b', fontSize: 12 },
+        textStyle: { color: t.textSecondary, fontSize: 12 },
       },
       series: [
         {
@@ -492,7 +512,7 @@ const updateCharts = async () => {
           avoidLabelOverlap: false,
           itemStyle: {
             borderRadius: 4,
-            borderColor: '#fff',
+            borderColor: t.surface,
             borderWidth: 3,
           },
           label: { show: false },
@@ -528,15 +548,15 @@ const updateCharts = async () => {
   if (investmentChart) {
     const inv = statistics.value.investment
     investmentChart.setOption({
-      color: ['#2d6a4f', '#1e4d8c', '#f59e0b'],
+      color: [REVITALIZATION_GREEN, MILITARY_BLUE, COLOR_PALETTE[5]],
       tooltip: {
         trigger: 'item',
         backgroundColor: 'rgba(255,255,255,0.96)',
-        borderColor: '#e2e8f0',
+        borderColor: t.border,
         borderWidth: 1,
         borderRadius: 8,
         padding: [10, 14],
-        textStyle: { color: '#1e293b', fontSize: 13 },
+        textStyle: { color: t.textPrimary, fontSize: 13 },
         formatter: (params: { marker: string; name: string; value: number; percent: number }) =>
           `${params.marker} ${params.name}<br/>
            <span  style="font-family:'DIN Alternate',monospace;font-size:18px;font-weight:700">${params.value}万</span>
@@ -544,7 +564,7 @@ const updateCharts = async () => {
       },
       legend: {
         bottom: 0,
-        textStyle: { color: '#64748b', fontSize: 12 },
+        textStyle: { color: t.textSecondary, fontSize: 12 },
       },
       series: [
         {
@@ -553,7 +573,7 @@ const updateCharts = async () => {
           center: ['50%', '46%'],
           itemStyle: {
             borderRadius: 4,
-            borderColor: '#fff',
+            borderColor: t.surface,
             borderWidth: 3,
           },
           label: { show: false },
@@ -601,24 +621,24 @@ const updateCharts = async () => {
     }
 
     trendChart.setOption({
-      color: ['#1e4d8c', '#2d6a4f', '#f59e0b'],
+      color: [MILITARY_BLUE, REVITALIZATION_GREEN, COLOR_PALETTE[5]],
       tooltip: {
         trigger: 'axis',
         backgroundColor: 'rgba(255,255,255,0.96)',
-        borderColor: '#e2e8f0',
+        borderColor: t.border,
         borderWidth: 1,
         borderRadius: 8,
         padding: [12, 16],
-        textStyle: { color: '#1e293b', fontSize: 13 },
+        textStyle: { color: t.textPrimary, fontSize: 13 },
         axisPointer: {
           type: 'cross',
-          crossStyle: { color: '#94a3b8' },
+          crossStyle: { color: t.axisLabel },
         },
       },
       legend: {
         data: ['帮扶村数', '覆盖人口(百人)', '人均收入(万)'],
         bottom: 0,
-        textStyle: { color: '#64748b', fontSize: 12 },
+        textStyle: { color: t.textSecondary, fontSize: 12 },
         itemGap: 24,
       },
       grid: {
@@ -631,25 +651,25 @@ const updateCharts = async () => {
         type: 'category',
         data: years.map((y) => `${y}年`),
         boundaryGap: false,
-        axisLine: { lineStyle: { color: '#e2e8f0' } },
+        axisLine: { lineStyle: { color: t.border } },
         axisTick: { show: false },
-        axisLabel: { color: '#94a3b8', fontSize: 11 },
+        axisLabel: { color: t.axisLabel, fontSize: 11 },
       },
       yAxis: [
         {
           type: 'value',
           name: '数量',
-          nameTextStyle: { color: '#94a3b8', fontSize: 11 },
-          splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-          axisLabel: { color: '#94a3b8', fontSize: 11 },
+          nameTextStyle: { color: t.axisLabel, fontSize: 11 },
+          splitLine: { lineStyle: { color: t.splitLine, type: 'dashed' } },
+          axisLabel: { color: t.axisLabel, fontSize: 11 },
         },
         {
           type: 'value',
           name: '收入(万)',
           position: 'right',
-          nameTextStyle: { color: '#94a3b8', fontSize: 11 },
+          nameTextStyle: { color: t.axisLabel, fontSize: 11 },
           splitLine: { show: false },
-          axisLabel: { color: '#94a3b8', fontSize: 11 },
+          axisLabel: { color: t.axisLabel, fontSize: 11 },
         },
       ],
       series: [
@@ -660,8 +680,8 @@ const updateCharts = async () => {
           itemStyle: {
             borderRadius: [6, 6, 0, 0],
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#3b82f6' },
-              { offset: 1, color: '#1e4d8c' },
+              { offset: 0, color: COLOR_PALETTE[3] },
+              { offset: 1, color: MILITARY_BLUE },
             ]),
           },
           data: villagesData,
@@ -673,8 +693,8 @@ const updateCharts = async () => {
           itemStyle: {
             borderRadius: [6, 6, 0, 0],
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#52b788' },
-              { offset: 1, color: '#2d6a4f' },
+              { offset: 0, color: COLOR_PALETTE[4] },
+              { offset: 1, color: REVITALIZATION_GREEN },
             ]),
           },
           data: populationData,
@@ -688,8 +708,8 @@ const updateCharts = async () => {
           symbolSize: 6,
           lineStyle: { width: 3 },
           itemStyle: {
-            color: '#f59e0b',
-            borderColor: '#fff',
+            color: COLOR_PALETTE[5],
+            borderColor: t.surface,
             borderWidth: 2,
           },
           areaStyle: {

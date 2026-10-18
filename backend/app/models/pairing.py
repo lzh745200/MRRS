@@ -7,7 +7,7 @@
 列表查询经 ``data_scope.filter_by_org_ids`` 过滤。
 """
 
-from sqlalchemy import Boolean, Column, Date, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Index, Integer, JSON, String, Text
 from sqlalchemy.sql import func
 
 from .base import Base, UtcDateTime
@@ -134,6 +134,10 @@ class VisitRecord(Base):
     purpose = Column(String(200), comment="走访事项")
     content = Column(Text, comment="走访内容与结果")
     materials = Column(String(200), comment="慰问物资简记")
+    # w17-002 收尾：走访照片/凭证附件（[{url, file_name}]，由通用 /files/upload 落盘后回填）。
+    # 语义为**整体替换**（登记/更新时整列重写），因此用裸 JSON 而非 MutableList
+    # —— 已登记进 tests/unit/test_json_column_mutability_ratchet.py 的「整体替换」台账。
+    attachments = Column(JSON, nullable=True, comment="走访照片/附件列表（[{url, file_name}]）")
     # 数据权限字段（新建时从结对记录继承，保证与主表同域）
     organization_id = Column(
         Integer,
@@ -161,6 +165,7 @@ class VisitRecord(Base):
             "purpose": self.purpose,
             "content": self.content,
             "materials": self.materials,
+            "attachments": list(self.attachments or []),
             "organization_id": self.organization_id,
             "created_by": self.created_by,
             "is_active": self.is_active,

@@ -65,12 +65,18 @@ DATA_TYPE_MODELS = {
 # W18-D1：跨机导入的业务键（用于判定"主键相同的两行是不是同一条业务记录"）。
 # 背景：数据包导出包含自增 id，两台机器都从 id=1 起步 —— 以 id 作冲突键会把
 # 目标机的真实记录整体覆写成源机数据（organization_id/created_at 一并改写，
-# 不可逆）。SQLite 下这不是概率问题而是必现。业务键取自各模型的自然唯一标识。
+# 不可逆）。SQLite 下这不是概率问题而是必现。
+#
+# 业务键原则：**不可变字段**。D5 修正（2026-10-18）：villages 原先含
+# village_name —— 而"改名"恰是增量更新的常见场景（同一条村记录改了名字），
+# 含可变字段会把"同一条记录的更新"误判成"两条不同记录"（relocated 分支），
+# 导致增量包永远插入新行而无法更新本机记录。组织归属是不可变的租户边界，
+# 用它区分"两台机器各自录入的第一条记录"（D1 的真实场景）。
 BUSINESS_KEYS: Dict[str, tuple] = {
-    "supported_villages": ("village_name", "organization_id"),
-    "projects": ("code",),
-    "funds": ("code",),
-    "schools": ("code",),
+    "supported_villages": ("organization_id",),
+    "projects": ("organization_id",),
+    "funds": ("organization_id",),
+    "schools": ("organization_id",),
 }
 
 
@@ -224,34 +230,51 @@ class DataPackageService:
 
         owner_id 非 None 且模型有 created_by 列时，仅导出该用户本人录入的记录。
         """
-        query = self.db.query(model)
+        # W18-D8：改用 raw SQL 拉取 —— 走 ORM 时 EncryptedText 的 TypeDecorator 会把
+        # PII 列**解密成明文**带进数据包（uploads/packages/*.zip 明文存活 7 天，还会被
+        # include_uploads 备份一起带走）；data_sync 链（.zip/.rrs）走 raw SQL 拿到的就是
+        # **密文**。两条同步链对 PII 处理相反是 D8 的核心：统一为密文出包（跨机部署本就
+        # 要求相同 ENCRYPTION_KEY，见 ADR-0005），导入侧沿用 TypeDecorator 透明解密/加密，
+        # 同密钥跨机导入后可读。表名/列名来自模型元数据，非用户输入，无注入面。
+        from sqlalchemy import text as _sql_text
+
+        table = model.__tablename__
+        col_names = [c.name for c in model.__table__.columns]
+        col_list = ", ".join(col_names)
+        # 本行的表名/列名全部来自模型元数据（非用户输入），过滤值一律走 text() 绑定参数
+        sql = "SELECT %s FROM %s" % (col_list, table)  # nosec B608 - 表名/列名取自 model.__table__ 元数据，无用户输入拼接
+        params = {}
+        conditions = []
         if hasattr(model, "org_id"):
-            query = query.filter(model.org_id == org_id)
+            conditions.append("org_id = :org_id")
+            params["org_id"] = org_id
         elif hasattr(model, "organization_id"):
-            query = query.filter(model.organization_id == org_id)
-
+            conditions.append("organization_id = :org_id")
+            params["org_id"] = org_id
         if owner_id is not None and hasattr(model, "created_by"):
-            query = query.filter(model.created_by == owner_id)
-
+            conditions.append("created_by = :owner_id")
+            params["owner_id"] = owner_id
         if since_sync_version is not None and hasattr(model, "sync_version"):
-            query = query.filter(model.sync_version > since_sync_version)
-
+            conditions.append("sync_version > :since_sync")
+            params["since_sync"] = since_sync_version
         if since_time is not None and hasattr(model, "updated_at"):
-            query = query.filter(model.updated_at > since_time)
+            conditions.append("updated_at > :since_time")
+            params["since_time"] = since_time
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        rows = self.db.execute(_sql_text(sql), params).fetchall()
 
-        records = query.all()
         result = []
-        for record in records:
+        for row in rows:
             record_dict = {}
-            for column in record.__table__.columns:
-                value = getattr(record, column.name)
+            for col_name, value in zip(col_names, row):
                 if isinstance(value, datetime):
                     value = value.isoformat()
                 elif isinstance(value, Decimal):
                     value = float(value)
                 elif value is not None and not isinstance(value, (str, int, float, bool, list, dict)):
                     value = str(value)
-                record_dict[column.name] = value
+                record_dict[col_name] = value
             result.append(record_dict)
         return result
 
@@ -447,8 +470,14 @@ class DataPackageService:
         return preview_list
 
     async def confirm_import(
-        self, package_id: int, confirmed_by: int, overwrite_existing: bool = False, selected_types: List[str] = None
+        self, package_id: int, confirmed_by: int, overwrite_existing: bool = False,
+        selected_types: List[str] = None, ts_guard: bool = False,
     ) -> DataPackageConfirmResult:
+        """确认导入数据。
+
+        ts_guard（W18-D5）：True 时覆盖更新仅在包内记录比本地新时执行 ——
+        增量包重复应用不再把本机新编辑打回旧版本。
+        """
         """确认导入数据 (核心重构：使用 Bulk Upsert 和独占锁)"""
         package = self.db.query(DataPackage).filter(DataPackage.id == package_id).first()
         if not package:
@@ -520,7 +549,8 @@ class DataPackageService:
 
                         # 🚀 调用批量 Upsert 方法
                         imp, skip, errs = self._bulk_upsert_records(
-                            model, accepted, resolved_org_id, overwrite_existing
+                            model, accepted, resolved_org_id, overwrite_existing,
+                            ts_guard=ts_guard,
                         )
                         imported_counts[data_type] = imp
                         skipped_counts[data_type] = skip + len(rejected)
@@ -550,16 +580,43 @@ class DataPackageService:
     def _clean_import_record(
         self, record: Dict, valid_columns: set, org_id: int, i: int, model: Any
     ) -> Optional[Dict]:
+        # W18-D8：datetime 列集合（按列类型判定，字符串形态无论有无 "T" 都要解析 ——
+        # raw SQL 导出的 ISO 串也可能以空格分隔，SQLite DateTime 只收 datetime 对象）
+        datetime_cols = {
+            c.name for c in model.__table__.columns
+            if isinstance(getattr(c.type, "impl", None), type) and "DateTime" in type(c.type).__name__
+            or (c.type is not None and "DateTime" in type(c.type).__name__)
+        }
         clean_data = {}
         for k, v in record.items():
             if k not in valid_columns:
                 continue
-            if isinstance(v, str) and "T" in v:
+            if k in datetime_cols and isinstance(v, str):
                 try:
-                    clean_data[k] = datetime.fromisoformat(v.replace("Z", "+00:00"))
+                    parsed = datetime.fromisoformat(v.replace("Z", "+00:00").replace(" ", "T", 1))
+                    # W18-D5：aware → naive UTC 归一。SQLite 存储侧是 naive UTC
+                    # 字符串（TimestampMixin/DateTime 无时区），aware datetime 作为
+                    # 绑定参数会被序列化成 "...+00:00" 后缀形态，与库内字符串比较时
+                    # 字典序错乱 → 时间戳守卫（where excluded > local）失效。
+                    if parsed.tzinfo is not None:
+                        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+                    clean_data[k] = parsed
                     continue
                 except ValueError:
                     pass
+            elif isinstance(v, str) and "T" in v:
+                try:
+                    parsed = datetime.fromisoformat(v.replace("Z", "+00:00"))
+                    if parsed.tzinfo is not None:
+                        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+                    clean_data[k] = parsed
+                    continue
+                except ValueError:
+                    pass
+            elif isinstance(v, datetime) and v.tzinfo is not None:
+                # 同上：直接传 datetime 的调用方（如回归测试）也要归一
+                clean_data[k] = v.astimezone(timezone.utc).replace(tzinfo=None)
+                continue
             clean_data[k] = v
 
         if "organization_id" in valid_columns:
@@ -569,7 +626,16 @@ class DataPackageService:
 
         return clean_data
 
-    def _build_upsert_statement(self, model: Any, clean_records: List[Dict], pk_name: str, overwrite: bool):
+    def _build_upsert_statement(
+        self, model: Any, clean_records: List[Dict], pk_name: str, overwrite: bool,
+        ts_guard: bool = False,
+    ):
+        """构造 SQLite upsert 语句。
+
+        ts_guard（W18-D5）：True 时 UPDATE 仅在「包内 updated_at **晚于** 本地」时
+        才执行 —— 增量包被重复应用时，旧包不能再覆盖本机新编辑（实测旧包把
+        "版本2-本地新编辑"打回"版本1"）。DO NOTHING（非覆盖）不受影响。
+        """
         stmt = sqlite_insert(model).values(clean_records)
         if overwrite:
             # M29（R27 排查）：`stmt.excluded` 为**表内全部列**提供伪列 —— 未出现在
@@ -583,7 +649,15 @@ class DataPackageService:
                 if c.name != pk_name and c.name in carried
             }
             if update_cols:
-                stmt = stmt.on_conflict_do_update(index_elements=[pk_name], set_=update_cols)
+                if ts_guard and "updated_at" in update_cols:
+                    # W18-D5：时间戳守卫 —— 本地行更新（或相等）时不覆盖。
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=[pk_name],
+                        set_=update_cols,
+                        where=stmt.excluded.updated_at > model.updated_at,
+                    )
+                else:
+                    stmt = stmt.on_conflict_do_update(index_elements=[pk_name], set_=update_cols)
             else:
                 # 记录只带主键（无任何可更新列）：DO UPDATE 空 SET 是非法 SQL，
                 # 语义等价于「冲突则忽略」。
@@ -635,7 +709,8 @@ class DataPackageService:
         return free_records, same_records, relocated
 
     def _bulk_upsert_records(
-        self, model: Any, records: List[Dict], org_id: int, overwrite: bool
+        self, model: Any, records: List[Dict], org_id: int, overwrite: bool,
+        ts_guard: bool = False,
     ) -> Tuple[int, int, List[DataPackageValidationError]]:
         """批量 Upsert (Insert or Update) 记录，保留原始 ID，解决外键孤儿问题"""
         if not records:
@@ -683,9 +758,14 @@ class DataPackageService:
         for r in free_records + same_records:
             groups.setdefault(frozenset(r.keys()), []).append(r)
 
+        # W18-D4（回执失真）：imported 按**真实写入行数**（result.rowcount）累计。
+        # 原实现 `imported += len(group_records)`：DO NOTHING（主键冲突且非覆盖）
+        # 的行一个都没写也照计数 —— 前端弹"导入成功 3 条"，库里 0 条新数据。
+        # rowcount 语义：INSERT 插入行计 1；DO UPDATE 命中更新计 1；DO NOTHING 计 0。
+        skipped = 0
         imported = 0
         for group_records in groups.values():
-            stmt = self._build_upsert_statement(model, group_records, pk_name, overwrite)
+            stmt = self._build_upsert_statement(model, group_records, pk_name, overwrite, ts_guard=ts_guard)
 
             try:
                 # 本组使用独立 SAVEPOINT：失败只回滚本组，保留同一外层事务中已导入的
@@ -694,8 +774,12 @@ class DataPackageService:
                 # 而 imported_counts 仍按"成功"计数并照常 commit（计数与数据不一致、
                 # 静默丢数据）。
                 with self.db.begin_nested():
-                    self.db.execute(stmt)
-                imported += len(group_records)
+                    result = self.db.execute(stmt)
+                    written = getattr(result, "rowcount", 0) or 0
+                    # rowcount 在 SQLite upsert 下 = 插入 + 实际更新的行数；
+                    # DO NOTHING 的行不计入 → 与"真实落库"一致。
+                    imported += max(0, written)
+                    skipped += max(0, len(group_records) - max(0, written))
             except Exception as e:
                 errors.append(DataPackageValidationError(
                     field=model.__tablename__, message=f"批量写入数据库失败: {e}", data_type=model.__tablename__
@@ -716,7 +800,7 @@ class DataPackageService:
                     data_type=model.__tablename__,
                 ))
 
-        return imported, 0, errors
+        return imported, skipped, errors
 
     # ========================================================================
     # 3. 加密导入导出功能

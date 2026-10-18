@@ -10,6 +10,7 @@
 """
 
 import logging
+import re
 import time
 import threading
 
@@ -24,6 +25,27 @@ _SKIP_PREFIXES = (
     "/favicon.ico",
 )
 
+# W5-T11：动态段归一的段形状（UUID / 纯数字，含负数）
+_UUID_SEGMENT_RE = re.compile(
+    r"/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?=/|$)"
+)
+_NUMERIC_SEGMENT_RE = re.compile(r"/-?\d+(?=/|$)")
+
+
+def _normalize_path(path: str) -> str:
+    """把路径中的动态段（UUID / 数字）替换为 ``{id}``。
+
+    W5-T11：``_path_durations`` 此前直接以原始 path 为键 —— 任何带资源 ID
+    的请求都会生成新键（``/api/v1/projects/1``、``/2``、``/3``…），全局单例
+    存储随长跑进程无界增长。归一化后同一资源的全部请求共享一个键；
+    Starlette 已命中的路由优先用 ``scope["route"].path`` 模板（更精确），
+    本函数是其不可用时的兜底。
+    """
+    if not path:
+        return path
+    normalized = _UUID_SEGMENT_RE.sub("/{id}", path)
+    return _NUMERIC_SEGMENT_RE.sub("/{id}", normalized)
+
 
 class _MetricsStore:
     """线程安全的指标存储"""
@@ -36,6 +58,7 @@ class _MetricsStore:
         self.total_duration = 0.0
         self._path_counts = {}  # (method, status) -> count
         self._path_durations = {}  # (method, path) -> [total, count, max]
+        self._max_path_keys = 500  # W5-T11：按路径键的容量上限（超出归入 __other__）
         self._slow_requests = []  # [(method, path, duration, timestamp)]
         self._max_slow = 100  # 最多保留 100 条慢请求记录
         # 慢请求阈值（秒）—— 来自 settings（SLOW_METRICS_THRESHOLD_SECONDS），
@@ -52,10 +75,16 @@ class _MetricsStore:
             key = (method, status)
             self._path_counts[key] = self._path_counts.get(key, 0) + 1
 
-            # 按路径统计耗时
+            # 按路径统计耗时（W5-T11：容量上限，防指标基数无界增长）
             path_key = (method, path)
             if path_key not in self._path_durations:
-                self._path_durations[path_key] = [0.0, 0, 0.0]
+                if len(self._path_durations) >= self._max_path_keys:
+                    # 已达上限：新路径统一归入 __other__ 桶
+                    path_key = (method, "__other__")
+                    if path_key not in self._path_durations:
+                        self._path_durations[path_key] = [0.0, 0, 0.0]
+                else:
+                    self._path_durations[path_key] = [0.0, 0, 0.0]
             entry = self._path_durations[path_key]
             entry[0] += duration
             entry[1] += 1
@@ -166,6 +195,12 @@ class MetricsMiddleware:
         method = scope.get("method", "?")
         start_time = time.time()
         status_code = 0
+
+        def _metric_path() -> str:
+            """记录用的路径键：路由模板优先，退化到段形状归一（W5-T11）。"""
+            route = scope.get("route")
+            template = getattr(route, "path", None) if route is not None else None
+            return template or _normalize_path(path)
         # 一次性标志：异常分支已按 500 记录后，finally 不得再按 status_code
         # 记第二次（深审 #33 —— 计数与耗时被重复累加，错误率虚高）。
         recorded = False
@@ -183,10 +218,10 @@ class MetricsMiddleware:
         except Exception:
             duration = time.time() - start_time
             recorded = True
-            metrics_store.record(method, path, 500, duration)
+            metrics_store.record(method, _metric_path(), 500, duration)
             raise
         finally:
             duration = time.time() - start_time
             metrics_store.dec_active()
             if status_code > 0 and not recorded:
-                metrics_store.record(method, path, status_code, duration)
+                metrics_store.record(method, _metric_path(), status_code, duration)

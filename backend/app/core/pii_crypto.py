@@ -76,15 +76,44 @@ def encrypt_pii(value: Optional[str]) -> Optional[str]:
     return MARKER + base64.b64encode(ct).decode("ascii")
 
 
+#: W18-offline P1-1：解密失败的可观测信号。原实现只写一条 error 日志就原样
+#: 返回密文 —— 换机/重装（密钥漂移）后用户在 UI 看到 "enc.v1:..." 却不知所以，
+#: 继续编辑保存会把密文固化成永久损坏。这里累计失败次数与首末时间，诊断包
+#: （/system/diagnostics）据此能说出「当前密钥解不开 N 个字段」这一事实。
+_decrypt_failures: dict = {"count": 0, "first_seen": None, "last_seen": None}
+
+
+def decrypt_failure_stats() -> dict:
+    """解密失败累计统计（只读快照，供诊断包消费）。"""
+    return dict(_decrypt_failures)
+
+
+def reset_decrypt_failure_stats() -> None:
+    """清零统计（测试用 / 密钥修复后由运维动作调用）。"""
+    _decrypt_failures.update({"count": 0, "first_seen": None, "last_seen": None})
+
+
 def decrypt_pii(value: Optional[str]) -> Optional[str]:
-    """标记密文 → 明文；未标记（历史明文/异常数据）原样返回；解密失败记日志后原样返回"""
+    """标记密文 → 明文；未标记（历史明文/异常数据）原样返回；解密失败记日志后原样返回。
+
+    W18-offline P1-1：解密失败不再只是静默 —— 除日志外累计失败计数与时间，
+    供诊断包/预检暴露「密钥漂移」这一现场事实。
+    """
     if not is_encrypted(value):
         return value
     try:
         raw = base64.b64decode(value[len(MARKER):])
         return _aessiv().decrypt(raw, [_ASSOC_DATA]).decode("utf-8")
     except Exception as e:
+        from datetime import datetime, timezone
+
         logger.error("PII 字段解密失败（密钥不匹配或数据损坏）: %s", e)
+        _stats = _decrypt_failures
+        _stats["count"] += 1
+        _now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if _stats["first_seen"] is None:
+            _stats["first_seen"] = _now
+        _stats["last_seen"] = _now
         return value
 
 

@@ -291,12 +291,14 @@ def _business_snapshot(db: Session) -> dict:
     # 换机/重装后最典型的事故是"能登录、能看列表，但身份证号全是乱码"。
     # 指纹用于比对（不泄露密钥），可解性用启动预检的同一判据，避免两套口径。
     try:
-        from app.core.pii_crypto import key_fingerprint
+        from app.core.pii_crypto import decrypt_failure_stats, key_fingerprint
         from app.startup.preflight import _check_encryption_key
 
         business["pii_encryption"] = {
             "key_fingerprint": key_fingerprint(),
             **_check_encryption_key(),
+            # W18-offline P1-1：运行期解密失败累计（换机/重装后密钥漂移的事实证据）
+            "decrypt_failures": decrypt_failure_stats(),
         }
     except Exception as exc:  # noqa: BLE001
         business["pii_encryption"] = {"error_type": type(exc).__name__}

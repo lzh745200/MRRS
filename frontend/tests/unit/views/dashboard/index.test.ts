@@ -7,7 +7,7 @@
  * onToggle、applyPreset 六个预设 + layoutSaved 2s 复位、handleBackup 成功/失败、
  * handleRestore、isAdmin 三种角色形态与快捷按钮 pushSafe、布局编辑器开关与弹窗内交互。
  *
- * 方案：子组件全部 stub（PageHeader/QuickActions/KpiCards/ChartRow/InfoRow/GlobalSearch），
+ * 方案：子组件全部 stub（PageHeader/HeaderActions/QuickActions/KpiCards/ChartRow/InfoRow），
  * 只测 index.vue 自身逻辑；mock '@/api/backup' createBackup 与 '@/stores/user'。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -76,10 +76,18 @@ vi.mock('@/utils/echarts', () => ({
 import Dashboard from '@/views/dashboard/index.vue'
 
 const childStubs = {
+  // 共享 PageHeader 标准件（W11-T45 去重后由 index.vue 引用）：渲染 title/extra 插槽，
+  // 使工作台的操作区 stub 与欢迎语插槽内容被真实渲染（覆盖 index.vue 的插槽函数）。
   PageHeader: {
     name: 'PageHeader',
-    template: '<div class="ph-stub" />',
-    emits: ['toggle-layout', 'backup-complete'],
+    props: ['title', 'subtitle', 'showBack', 'backTo', 'level'],
+    template: '<div class="ph-stub"><slot name="title" /><slot name="extra" /></div>',
+  },
+  HeaderActions: {
+    name: 'HeaderActions',
+    props: ['isAdmin', 'backingUp'],
+    template: '<div class="ha-stub" />',
+    emits: ['toggle-layout', 'backup'],
   },
   QuickActions: {
     name: 'QuickActions',
@@ -201,7 +209,7 @@ describe('布局加载与持久化', () => {
     const wrapper = mountComp()
     const vm = wrapper.vm as any
     await nextTick()
-    wrapper.findComponent({ name: 'PageHeader' }).vm.$emit('toggle-layout')
+    wrapper.findComponent({ name: 'HeaderActions' }).vm.$emit('toggle-layout')
     await nextTick()
     vm.layoutSections[2].visible = false
     await clickByText(wrapper, '恢复默认')
@@ -218,7 +226,7 @@ describe('布局编辑器', () => {
     const wrapper = mountComp()
     const vm = wrapper.vm as any
     expect(vm.showLayoutEditor).toBe(false)
-    wrapper.findComponent({ name: 'PageHeader' }).vm.$emit('toggle-layout')
+    wrapper.findComponent({ name: 'HeaderActions' }).vm.$emit('toggle-layout')
     await nextTick()
     expect(vm.showLayoutEditor).toBe(true)
     expect(wrapper.find('.layout-editor').exists()).toBe(true)
@@ -316,7 +324,7 @@ describe('拖拽排序', () => {
   it('模板内联事件：打开编辑器 → 真实 DOM 拖拽事件触发 onDragStart/onDrop/onDragEnd', async () => {
     const wrapper = mountComp()
     await nextTick()
-    wrapper.findComponent({ name: 'PageHeader' }).vm.$emit('toggle-layout')
+    wrapper.findComponent({ name: 'HeaderActions' }).vm.$emit('toggle-layout')
     await nextTick()
     const items = wrapper.findAll('.layout-item')
     expect(items.length).toBe(4)
@@ -474,5 +482,54 @@ describe('角色与快捷按钮', () => {
     await nextTick()
     expect((wrapper2.vm as any).isAdmin).toBe(false)
     wrapper2.unmount()
+  })
+})
+
+describe('页头：共享 PageHeader 骨架 + HeaderActions 操作区（W11-T45 去重）', () => {
+  it('标题/日期/层级与操作区 props 注入', async () => {
+    userBox.currentUser = {
+      full_name: '张科长',
+      username: 'zhang',
+      role: 'admin',
+      is_superuser: false,
+    }
+    const wrapper = mountComp()
+    await nextTick()
+
+    const header = wrapper.findComponent({ name: 'PageHeader' })
+    expect(header.props('title')).toBe('欢迎回来，张科长')
+    expect(header.props('subtitle')).toBe((wrapper.vm as any).formattedDate)
+    expect(header.props('level')).toBe(1)
+    expect(wrapper.find('.welcome-name').text()).toBe('张科长')
+    expect((wrapper.vm as any).formattedDate).toMatch(
+      /\d{4}年\d{1,2}月\d{1,2}日 周[日一二三四五六]/
+    )
+
+    const actions = wrapper.findComponent({ name: 'HeaderActions' })
+    expect(actions.props('isAdmin')).toBe(true)
+    expect(actions.props('backingUp')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('displayName 兜底：无 full_name → username；两者皆无 → 管理员', async () => {
+    userBox.currentUser = { username: 'zhangsan', role: 'user', is_superuser: false }
+    const wrapper = mountComp()
+    expect((wrapper.vm as any).displayName).toBe('zhangsan')
+    wrapper.unmount()
+
+    userBox.currentUser = { role: 'user', is_superuser: false }
+    const wrapper2 = mountComp()
+    expect((wrapper2.vm as any).displayName).toBe('管理员')
+    wrapper2.unmount()
+  })
+
+  it('HeaderActions emit backup → 复用页面 handleBackup 创建备份', async () => {
+    userBox.currentUser = { role: 'admin', is_superuser: false }
+    const wrapper = mountComp()
+    await nextTick()
+    wrapper.findComponent({ name: 'HeaderActions' }).vm.$emit('backup')
+    await flushPromises()
+    expect(mockCreateBackup).toHaveBeenCalledWith({ description: '手动备份' })
+    wrapper.unmount()
   })
 })

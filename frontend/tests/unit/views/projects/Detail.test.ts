@@ -325,6 +325,10 @@ describe('computed 计算属性', () => {
     await nextTick()
     expect(vm.statusType).toBe('info')
     expect(vm.statusText).toBe('unknown')
+    vm.project = {}
+    await nextTick()
+    expect(vm.statusType).toBe('info')
+    expect(vm.statusText).toBe('-')
   })
 
   it('progressColor 三分支', async () => {
@@ -384,6 +388,23 @@ describe('computed 计算属性', () => {
     expect(vm.priorityType('high')).toBe('warning')
     expect(vm.priorityType('urgent')).toBe('danger')
     expect(vm.priorityType('x')).toBe('info')
+  })
+
+  it('任务状态/优先级列中文渲染（不再裸露英文枚举）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const text = wrapper.text()
+    // 优先级列：high/urgent/low → 中文；缺字段行兜底「普通」
+    expect(text).toContain('高')
+    expect(text).toContain('紧急')
+    expect(text).toContain('低')
+    expect(text).toContain('普通')
+    expect(text).not.toContain('high')
+    expect(text).not.toContain('urgent')
+    // 状态列：pending/in_progress → 中文
+    // （注：col stub 会把任务样本行注入经费表状态列，那里仍按原实现裸露 status，故此处不断言英文缺席）
+    expect(text).toContain('待审批')
+    expect(text).toContain('进行中')
   })
 
   it('formatSize 全分支', async () => {

@@ -837,7 +837,7 @@
 |------|------|------|------|
 | GET | `/schools/import/template` | 下载导入模板（委托 ExcelTemplateService） | 登录/公开 |
 | POST | `/schools/import/excel` | 从 Excel 导入学校 | 登录 |
-| POST | `/schools/scholarship/import` | 从 Excel 导入奖学金资助学生 | 登录 |
+| POST | `/schools/scholarship/import` | 从 Excel 导入奖学金资助学生（**已弃用**，改用 `/schools/{school_id}/scholarship-students/import`；保留兼容旧“全校统一表”模板） | 登录 |
 | GET | `/schools/export` | 导出学校到 Excel | 登录 |
 | GET | `/schools/export/excel` | 导出学校到 Excel | 登录 |
 | GET | `/schools/statistics` | 学校统计数据（含助学兴教统计） | 登录 |

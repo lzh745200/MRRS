@@ -1,0 +1,25 @@
+# ============================================================
+# Codecov 配置 —— 覆盖率**展示**用途，不作为门禁（W4-T5）
+# ============================================================
+# 门禁的唯一事实源是本地/CI 的既有检查：
+#   - 后端：backend/.coveragerc 的 fail_under=100（branch=True）
+#   - 前端：frontend/vitest.config.ts 的 12 组 glob 阈值（四项指标全 100）
+# CI 中的 codecov-action 上传均带 `continue-on-error: true`（纯展示）。
+# 此文件显式关闭 Codecov 自身的 project/patch 状态检查，避免出现
+# “本地门禁 100% 已通过、Codecov 却因基线差异给出第二套判定”的口径漂移。
+coverage:
+  precision: 2
+  round: down
+  range: "95...100"
+  status:
+    project:
+      default:
+        enabled: false
+    patch:
+      default:
+        enabled: false
+
+# PR 评论保留（展示 diff/文件级明细），但不产生阻断性检查
+comment:
+  layout: "reach, diff, flags, files"
+  require_changes: true

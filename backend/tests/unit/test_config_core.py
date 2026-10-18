@@ -150,6 +150,19 @@ class TestModelPostInit:
         assert s.LOG_FILE.endswith("/logs/app.log")
         assert "\\" not in s.LOG_DIR
 
+    def test_frozen_relative_log_file_is_rewritten(self, monkeypatch):
+        """打包态下 LOG_FILE 仍是相对默认值时，必须改写到数据目录。
+
+        W18-offline P0-1 新增 `if self.LOG_FILE.startswith("./")` 守卫：
+        Electron 注入的绝对路径保留（见 test_offline_log_path_w18.py），相对默认值
+        仍要改写。测试会话里 conftest 把 LOG_FILE 覆盖成绝对路径，会绕过该改写行
+        —— 这里显式传相对值，保证守卫的「真」分支被覆盖（否则覆盖率门禁 100% 红）。
+        """
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        s = Settings(LOG_DIR="./logs", LOG_FILE="./logs/app.log")
+        assert s.LOG_FILE.endswith("/logs/app.log")
+        assert not s.LOG_FILE.startswith("./")
+
 
 # ---------------------------------------------------------------------------
 # _load_encrypted_secrets

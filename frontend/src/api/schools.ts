@@ -11,6 +11,8 @@ export const schoolsApi = {
 
   // ========== 统计与选项 ==========
   getStatistics: () => get('/schools/statistics'),
+  // 单校成效统计：详情页成效卡 + 删除前关联计数共用（服务端聚合）
+  getSchoolStatistics: (id: number | string) => get(`/schools/${id}/statistics`),
   getTypeOptions: () => get('/schools/options/types'),
   getStatusOptions: () => get('/schools/options/statuses'),
 

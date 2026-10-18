@@ -490,16 +490,10 @@ class TestDataSyncService:
         """
 
         class _Row:
-            """模拟 raw text() 查询返回的行（支持 keys() 与迭代）。"""
+            """模拟 raw text() 查询返回的行（SQLAlchemy 2.0 Row 暴露 `_mapping`）。"""
 
             def __init__(self, data):
-                self._data = data
-
-            def keys(self):
-                return list(self._data.keys())
-
-            def __iter__(self):
-                return iter(self._data.values())
+                self._mapping = data
 
         db = MagicMock()
         db.execute.return_value.fetchone.return_value = _Row(
@@ -522,13 +516,7 @@ class TestDataSyncService:
 
         class _Row:
             def __init__(self, data):
-                self._data = data
-
-            def keys(self):
-                return list(self._data.keys())
-
-            def __iter__(self):
-                return iter(self._data.values())
+                self._mapping = data
 
         db = MagicMock()
         db.execute.return_value.fetchone.return_value = _Row(
@@ -586,6 +574,9 @@ class TestDataSyncService:
     @pytest.mark.asyncio
     async def test_import_record_exception(self, service):
         db = MagicMock()
+        # 真 SessionTransaction 出异常时不吞异常（MagicMock 默认返回真值会吞），
+        # 逐条 SAVEPOINT 的失败路径依赖 `__exit__` 返回假值。
+        db.begin_nested.return_value.__exit__.return_value = False
         db.execute.side_effect = Exception("db error")
         result = await service._import_table_data(db, "supported_villages", [{"id": 1}], "skip", 1)
         assert result["failed"] == 1
@@ -956,6 +947,8 @@ class TestDataSyncService:
     @pytest.mark.asyncio
     async def test_enhanced_exception(self, service):
         db = MagicMock()
+        # 逐条 SAVEPOINT 失败路径：替身需与真 SessionTransaction 一致（不吞异常）
+        db.begin_nested.return_value.__exit__.return_value = False
         db.execute.side_effect = Exception("db error")
         r = await service._import_table_data_enhanced(db, "supported_villages", [{"id": 1}], "merge", 1)
         assert r["failed"] == 1

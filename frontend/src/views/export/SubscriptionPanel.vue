@@ -16,7 +16,7 @@
     <p class="section-desc">
       到期自动生成报表并保存到报表输出目录，站内消息通知；生成失败会逐条留痕，不影响其余订阅。
     </p>
-    <el-table v-loading="loadingSubs" :data="subscriptions" stripe>
+    <el-table v-loading="loadingSubs" :data="subscriptions" >
       <el-table-column prop="name" label="订阅名称" min-width="150" />
       <el-table-column label="频率" width="80">
         <template #default="{ row }">{{ freqLabel(row.frequency) }}</template>

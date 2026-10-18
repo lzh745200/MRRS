@@ -175,7 +175,7 @@
               <h3>数据预览 (共 {{ totalRows }} 条记录)</h3>
               <p class="preview-tip">请确认数据无误后点击确认导入</p>
             </div>
-            <el-table stripe :data="previewData" style="width: 100%" max-height="400" border>
+            <el-table  :data="previewData" style="width: 100%" max-height="400" border>
               <el-table-column
                 prop="rowIndex"
                 label="序号"
@@ -290,8 +290,8 @@ import { Download, Upload, Loading, Bell } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
-import { post, downloadBlob, parseContentDisposition } from '@/api/request'
-import request from '@/api/request'
+import { post, apiRequest } from '@/api/request'
+import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
 import { importEntities } from '@/api/import'
 
 interface ProjectData {
@@ -354,17 +354,18 @@ function clearFileList() {
 const downloadTemplate = async () => {
   downloading.value = true
   try {
-    // 使用裸 axios 实例：Blob 下载需要 AxiosResponse 的 headers 解析文件名
-    const resp = await request.get('/import/template', {
-      params: { entity_type: 'project' },
-      responseType: 'blob',
-    })
-    const filename = parseContentDisposition(
-      (resp.headers || {}) as Record<string, string>,
-      '项目导入模板.xlsx'
+    // W5-T5：改用具名 apiRequest<Blob>（返回值即 Blob）+ downloadBlobAsFile 统一下载；
+    // 不再依赖默认导出的裸 axios 实例与 Content-Disposition 解析，文件名用兜底名。
+    await downloadBlobAsFile(
+      () =>
+        apiRequest<Blob>({
+          method: 'GET',
+          url: '/import/template',
+          params: { entity_type: 'project' },
+          responseType: 'blob',
+        }),
+      { fallbackFileName: '项目导入模板.xlsx' }
     )
-    downloadBlob(new Blob([resp.data]), filename)
-    // 模板下载成功 — 浏览器已确认
   } catch {
     ElMessage.error('模板下载失败，请重试')
   } finally {

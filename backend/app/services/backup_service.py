@@ -609,6 +609,55 @@ class BackupService:
             shutil.copytree(self.uploads_dir, snapshot_uploads_dir)
         return snapshot_db_path, snapshot_uploads_dir
 
+    def _validate_backup_schema_version(self, backup_db_path: str) -> None:
+        """恢复前置校验：备份库的 alembic 版本不得高于当前代码 head（W18-D7）。
+
+        缺陷：原实现只校验 integrity_check。「新版本机器 → 旧版本机器」搬运备份包
+        （上传恢复正是为此设计）后，备份库的 alembic_version 高于当前代码全部迁移，
+        生产环境启动 alembic upgrade 直接 raise → **应用永久无法启动**，而恢复界面
+        本身也在应用内 → 用户无法自助回退。
+        """
+        import sqlite3
+
+        from alembic.config import Config as AlembicConfig
+        from alembic.script import ScriptDirectory
+
+        if not os.path.exists(backup_db_path):
+            return  # 由调用方按"缺库"处理
+        chk = sqlite3.connect(backup_db_path)
+        try:
+            row = chk.execute("SELECT version_num FROM alembic_version").fetchone()
+            backup_rev = row[0] if row else None
+        except sqlite3.OperationalError:
+            backup_rev = None   # 无 alembic_version 表（极老备份）→ 按可升级处理
+        finally:
+            chk.close()
+        if not backup_rev:
+            return
+        from app.utils.paths import get_project_backend_dir
+
+        backend_dir = Path(get_project_backend_dir())
+        cfg = AlembicConfig(str(backend_dir / "alembic.ini"))
+        # backend/alembic.ini 不含 script_location（由启动代码动态注入），
+        # 这里必须显式给 —— 否则 from_config 抛 CommandError 被吞 → 校验静默失效
+        cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+        try:
+            script_dir = ScriptDirectory.from_config(cfg)
+            head = script_dir.get_current_head()
+        except Exception:  # pragma: no cover - alembic 配置损坏属启动期问题
+            logger.warning("恢复前置校验: 迁移链不可读，跳过版本比对", exc_info=True)
+            return
+        if not head:
+            return
+        # backup_rev 必须是当前脚本链上可定位的 revision（在链上 → 可升级）
+        known = {rev.revision for rev in script_dir.walk_revisions()}
+        if backup_rev not in known:
+            msg = (
+                "该备份来自更高版本（schema revision %s 不在当前程序的迁移链上，"
+                "当前 head=%s）。请先升级本机程序后再恢复，或联系管理员。"
+            ) % (backup_rev, head)
+            raise BackupRestoreError(msg)
+
     def _restore_database_from_backup(self, temp_dir: str) -> bool:
         """从备份中恢复数据库（WAL 安全：先释放连接池再覆盖，清理残留 -wal/-shm）"""
         backup_db_path = os.path.join(temp_dir, "data", "rural_revitalization.db")
@@ -694,30 +743,76 @@ class BackupService:
         if snapshot_uploads_dir and os.path.exists(snapshot_uploads_dir):
             shutil.rmtree(snapshot_uploads_dir, ignore_errors=True)
 
+    def _preserve_snapshot(self, snapshot_db_path):
+        """把快照移入 backup_dir/pre_restore/（W18-D11）。
+
+        原实现把快照留在 %TEMP%：进程被杀/清理 TEMP 即永久丢失 —— 那是恢复失败时
+        用户唯一的"恢复前状态"。移入备份目录（有保留期治理）并返回新路径。
+        """
+        try:
+            from app.utils.paths import get_backup_path
+
+            pre_dir = get_backup_path("pre_restore")
+            pre_dir.mkdir(parents=True, exist_ok=True)
+            target = pre_dir / os.path.basename(snapshot_db_path)
+            if os.path.abspath(snapshot_db_path) != os.path.abspath(str(target)):
+                if os.path.exists(str(target)):
+                    try:
+                        os.unlink(str(target))
+                    except OSError:
+                        stem = os.path.splitext(os.path.basename(snapshot_db_path))[0]
+                        target = pre_dir / (stem + "_%d.db" % int(time.time()))
+                os.replace(snapshot_db_path, str(target))
+            return str(target)
+        except Exception:  # noqa: BLE001 - 保底：快照原地保留，不因移入失败而丢失
+            logger.warning("快照移入 pre_restore 目录失败，原地保留: %s",
+                           snapshot_db_path, exc_info=True)
+            return snapshot_db_path
+
     def _rollback_to_snapshots(self, snapshot_db_path, snapshot_uploads_dir):
-        """恢复失败时回滚到快照"""
+        """恢复失败时回滚到快照（W18-D11：原子替换 + 失败可自救）。
+
+        原实现 unlink+copy 两步：Windows 上库文件被后台线程占用时 unlink 失败 →
+        **半恢复状态**（备份内容已生效，回滚却失败）且快照困在 %TEMP%。
+        修复：os.replace 原子换名（同卷原子，无 unlink 窗口）；仍失败时把快照
+        移入 backup_dir/pre_restore/ 并把路径写进异常 —— 用户重启后能自助还原。
+        """
         if snapshot_db_path and os.path.exists(snapshot_db_path):
+            replaced = False
             if os.path.exists(self.database_path):
                 try:
-                    os.unlink(self.database_path)
-                except OSError as unlink_err:
-                    # Windows 上文件可能仍被占用（ERROR_SHARING_VIOLATION）。
-                    # 此时**不能**用 shutil.copy 原地覆盖：目标被占用时复制会失败或
-                    # 写出半截文件，并把真正的失败原因掩盖成另一个异常。
-                    # 快照必须保留，让用户可手工恢复。
-                    logger.error(
-                        "回滚: 无法删除原数据库文件 %s（%s），快照保留于 %s",
-                        self.database_path, unlink_err, snapshot_db_path,
-                    )
-                    raise RuntimeError(
-                        f"回滚失败：数据库文件被占用，无法还原快照；"
-                        f"原始快照已保留在 {snapshot_db_path}，请关闭占用进程后手工恢复"
-                    ) from unlink_err
-            shutil.copy(snapshot_db_path, self.database_path)
-            try:
-                os.unlink(snapshot_db_path)
-            except OSError:
-                logger.warning("回滚: 快照数据库文件清理失败（残留于 %s）", snapshot_db_path)
+                    # 原子换名：Windows 上目标被独占打开时仍可能失败，但不会出现
+                    # "旧文件已删、新文件没就位"的中间态
+                    os.replace(snapshot_db_path, self.database_path)
+                    replaced = True
+                except OSError as replace_err:
+                    # 兜底：copy2 覆盖（目标被独占时仍可能失败，与旧行为等价）
+                    try:
+                        shutil.copy2(snapshot_db_path, self.database_path)
+                        replaced = True
+                        try:
+                            os.unlink(snapshot_db_path)
+                        except OSError:
+                            pass
+                    except OSError as copy_err:
+                        preserved = self._preserve_snapshot(snapshot_db_path)
+                        logger.error(
+                            "回滚: 数据库文件 %s 被占用（replace: %s / copy: %s），快照已保留在 %s",
+                            self.database_path, replace_err, copy_err, preserved,
+                        )
+                        raise RuntimeError(
+                            "回滚失败：数据库文件被占用。恢复前快照已保留在 %s，"
+                            "请重启本程序（释放文件句柄）后按该路径手工恢复数据" % preserved
+                        ) from copy_err
+            else:
+                shutil.copy2(snapshot_db_path, self.database_path)
+                replaced = True
+            if replaced:  # pragma: no branch - 到此 replaced 必为 True（replace/copy 成功才置真，双失败已 raise）
+                try:
+                    if os.path.exists(snapshot_db_path):
+                        os.unlink(snapshot_db_path)
+                except OSError:
+                    logger.warning("回滚: 快照清理失败（残留于 %s）", snapshot_db_path)
         if snapshot_uploads_dir and os.path.exists(snapshot_uploads_dir):
             if os.path.exists(self.uploads_dir):
                 shutil.rmtree(self.uploads_dir, ignore_errors=True)
@@ -778,6 +873,11 @@ class BackupService:
 
             with zipfile.ZipFile(restore_source, "r") as zipf:
                 self._safe_extractall(zipf, temp_dir)
+
+            # W18-D7：版本前置校验（在覆盖生产库**之前**，失败即拒绝且不碰现场）
+            self._validate_backup_schema_version(
+                os.path.join(temp_dir, "data", "rural_revitalization.db")
+            )
 
             database_restored = self._restore_database_from_backup(temp_dir)
             if not database_restored:

@@ -338,15 +338,28 @@ async def import_schools_excel(
 
 
 # ── 奖学金学生导入 ──
+# W8-018：旧版端点（不带学校上下文）标记 deprecated。它按行内「学校」列解析 school_id，
+# 与新的 /{school_id}/scholarship-students/import（路径已带学校 id）参数模型不同，
+# 无法做函数级转发；「转发」以 OpenAPI deprecated 标记 + docstring 指向替代端点表达，
+# 端点行为保持不变（R5 探针锁测与历史批量模板仍依赖它）。
 
 
-@router.post("/scholarship/import", summary="导入奖学金学生Excel")
+@router.post(
+    "/scholarship/import",
+    summary="导入奖学金学生Excel（已弃用，请改用 /schools/{school_id}/scholarship-students/import）",
+    deprecated=True,
+)
 async def import_scholarship_students(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """从 Excel 导入奖学金资助学生"""
+    """从 Excel 导入奖学金资助学生（已弃用）。
+
+    替代端点：``POST /schools/{school_id}/scholarship-students/import``——显式携带学校 id，
+    执行数据权限校验与同校同年级去重。本端点仅保留兼容：面向旧"全校统一表"Excel 模板
+    （按第 6 列学校名解析 school_id），行为与响应结构保持不变。
+    """
     if not validate_excel_upload(file):
         raise HTTPException(status_code=400, detail="文件校验失败: 不是有效的 Excel 文件")
     content = await read_upload_with_limit(
@@ -566,6 +579,53 @@ async def get_school_statistics(
             "scholarship_count": scholarship_count,
             "scholarship_total_amount": scholarship_total_amount,
         }
+    )
+
+
+@router.get("/{school_id}/statistics")
+async def get_school_overview_statistics(
+    school_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """单校成效统计（详情页成效卡 + 删除前关联计数共用）。
+
+    数值一律由服务端聚合，前端不对详情页已加载的列表做本地累加；
+    累计资助学生数为该校资助记录数，累计资助金额为资助金额合计（元）。
+    """
+    school = _get_school_and_check_permission(school_id, current_user, db, "查看统计")
+
+    project_count = (
+        db.query(SchoolProject).filter(SchoolProject.school_id == school_id).count()
+    )
+    project_total_budget = float(
+        db.query(sa_func.coalesce(sa_func.sum(SchoolProject.budget), 0))
+        .filter(SchoolProject.school_id == school_id)
+        .scalar()
+    )
+    scholarship_count = (
+        db.query(ScholarshipStudent)
+        .filter(ScholarshipStudent.school_id == school_id)
+        .count()
+    )
+    scholarship_total_amount = float(
+        db.query(sa_func.coalesce(sa_func.sum(ScholarshipStudent.amount), 0))
+        .filter(ScholarshipStudent.school_id == school_id)
+        .scalar()
+    )
+
+    return success_response(
+        data={
+            "school_id": school.id,
+            "school_name": school.name,
+            "project_count": project_count,
+            "project_total_budget": project_total_budget,
+            "scholarship_count": scholarship_count,
+            "scholarship_total_amount": scholarship_total_amount,
+            "student_count": school.student_count or 0,
+            "teacher_count": school.teacher_count or 0,
+        },
+        message="成功",
     )
 
 

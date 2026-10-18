@@ -63,6 +63,14 @@ describe('api/schools — 统计与选项', () => {
     expect(result).toBe(body)
   })
 
+  it('getSchoolStatistics GET /schools/{id}/statistics（单校成效卡/删除关联计数）', async () => {
+    const body = { scholarship_count: 3, scholarship_total_amount: 900 }
+    mockGet.mockResolvedValueOnce(body)
+    const result = await schoolsApi.getSchoolStatistics(8)
+    expect(mockGet).toHaveBeenCalledWith('/schools/8/statistics')
+    expect(result).toBe(body)
+  })
+
   it('getTypeOptions GET /schools/options/types', async () => {
     mockGet.mockResolvedValueOnce(['小学'])
     const result = await schoolsApi.getTypeOptions()

@@ -97,7 +97,9 @@
           <button class="action-btn secondary" @click="pushSafe('/data-analysis/assessment')">
             <el-icon class="btn-icon"><Document /></el-icon><span class="btn-text">评估分析</span>
           </button>
-          <button class="action-btn secondary" @click="pushSafe('/supported-villages/yearly')">
+          <!-- W8-018：原指向 /supported-villages/yearly 过渡选择页（已移除），
+               现直达帮扶村列表，行内「年度数据」进入年度总览 -->
+          <button class="action-btn secondary" @click="pushSafe('/supported-villages')">
             <el-icon class="btn-icon"><Calendar /></el-icon><span class="btn-text">年度概览</span>
           </button>
         </div>

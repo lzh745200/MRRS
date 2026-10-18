@@ -177,7 +177,7 @@
         v-else-if="loadError.dimension && !hasDimensionData"
         :description="loadError.dimension"
       />
-      <el-table v-else :data="dimensionData" stripe border>
+      <el-table v-else :data="dimensionData"  border>
         <el-table-column type="index" label="序号" width="70" align="center" />
         <el-table-column prop="label" label="分组" min-width="160" />
         <el-table-column prop="count" label="记录数" width="100" align="center" />

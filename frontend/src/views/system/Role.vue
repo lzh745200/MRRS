@@ -46,7 +46,7 @@
         </div>
       </template>
 
-      <el-table :data="pagedRoles" stripe border>
+      <el-table :data="pagedRoles"  border>
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="name" label="角色名称" min-width="150" />
         <el-table-column prop="code" label="角色编码" min-width="120" />
@@ -124,7 +124,7 @@
       :title="`角色关联用户 - ${currentRole?.name}`"
       :width="DIALOG_MD"
     >
-      <el-table v-loading="loadingUsers" stripe :data="roleUsers" border>
+      <el-table v-loading="loadingUsers"  :data="roleUsers" border>
         <el-table-column type="index" label="序号" width="60" />
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column prop="full_name" label="姓名" min-width="100">

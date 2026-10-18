@@ -151,12 +151,11 @@ export const routes: RouteRecordRaw[] = [
       },
       // ── 帮扶村 ── （含旧路径重定向）
       { path: '/villages', redirect: '/supported-villages' },
-      {
-        path: '/supported-villages/yearly',
-        name: 'YearlyIndex',
-        component: () => import('@/views/analytics/supported-villages/YearlyIndex.vue'),
-        meta: { title: '年度概览' },
-      },
+      // W8-018：年度概览过渡选择页已移除（列表页行内「年度数据」直达年度总览）。
+      // 保留静态重定向有两个硬理由：① 旧书签与业务体检 entry（/supported-villages/yearly）
+      // 仍可用；② 若直接删路由，该路径会落到动态路由 /supported-villages/:id
+      // （id='yearly'）渲染详情页，产生接口报错的坏页面。
+      { path: '/supported-villages/yearly', redirect: '/supported-villages' },
       {
         path: '/villages/:id',
         redirect: (to: any) => `/supported-villages/${to.params.id}`,
@@ -598,6 +597,11 @@ export const routes: RouteRecordRaw[] = [
         path: '/system/roles',
         redirect: '/system/users',
         meta: { title: '角色管理 (已合并到用户管理)' },
+      },
+      {
+        path: '/system/user-permissions',
+        redirect: '/system/permission-packs',
+        meta: { title: '用户权限管理 (已下线，重定向到权限包管理)' },
       },
       {
         path: '/system/menus',

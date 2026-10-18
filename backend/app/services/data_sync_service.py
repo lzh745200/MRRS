@@ -10,12 +10,13 @@ from datetime import timezone, datetime
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 from contextlib import contextmanager
-from sqlalchemy import text
+from sqlalchemy import insert, text, update
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.error_handler import app_logger, BusinessLogicError
 from app.core.transaction import safe_commit
+from app.models.base import is_datetime_type
 from app.models.data_sync import DataSyncLog, DataConflict
 from app.services.encrypted_package import create_encrypted_package, extract_encrypted_package
 import hashlib as _hashlib
@@ -464,69 +465,75 @@ class DataSyncService:
         strategy: str,
         sync_log_id: int,
     ) -> Dict[str, Any]:
-        """导入表数据"""
+        """导入表数据。
+
+        W2-T7：逐条 SAVEPOINT（与 ``data_package_service`` 的批量导入同模式）——
+        单条记录失败只回滚该条的部分写入并计入 ``failed``，同一会话的后续记录不受
+        影响（此前裸 SQL 失败后无回滚点，失败条目的部分写入会被末尾 commit 固化）。
+        """
         safe_table = self._validate_table_name(table_name)
         result = {"total": len(records), "success": 0, "failed": 0, "conflicts": []}
 
         for record in records:
             try:
-                # 检查记录是否存在
-                record_id = record.get("id")
-                if record_id:
-                    existing = db.execute(
-                        text(f"SELECT * FROM {safe_table} WHERE id = :id"),  # nosec B608 - safe_table 已白名单校验
-                        {"id": record_id},
-                    ).fetchone()
+                with db.begin_nested():
+                    # 检查记录是否存在
+                    record_id = record.get("id")
+                    if record_id:
+                        existing = db.execute(
+                            text(f"SELECT * FROM {safe_table} WHERE id = :id"),  # nosec B608 - safe_table 已白名单校验
+                            {"id": record_id},
+                        ).fetchone()
 
-                    if existing:
-                        # 处理冲突
-                        if strategy == "skip":
-                            result["success"] += 1
-                            continue
-                        elif strategy == "overwrite":
-                            # 更新记录
-                            await self._update_record(db, table_name, record)
-                            result["success"] += 1
-                        elif strategy == "manual":
-                            # 记录冲突
-                            conflict = DataConflict(
-                                sync_log_id=sync_log_id,
-                                table_name=table_name,
-                                record_id=str(record_id),
-                                conflict_type="duplicate",
-                                local_data=dict(zip(existing.keys(), existing)),
-                                import_data=record,
-                                resolution="pending",
-                            )
-                            db.add(conflict)
-                            result["conflicts"].append(
-                                {
-                                    "table": table_name,
-                                    "record_id": record_id,
-                                    "type": "duplicate",
-                                }
-                            )
-                            result["success"] += 1
-                        else:
-                            # merge（智能合并）：仅当导入记录更新时覆盖，语义与加密包
-                            # 路径 _import_table_data_enhanced 的 merge 分支一致。
-                            # 历史缺陷：本分支缺失且无 else 兜底，而前端数据同步页的
-                            # **默认策略就是 merge**（"智能合并（推荐）"）—— 已存在
-                            # 记录既不被更新也不计入 success/failed/conflicts，接口却
-                            # 返回"导入成功"，且 total != success + failed，冲突数据
-                            # 静默不生效。未知策略同样落此分支并计入 success。
-                            existing_dict = dict(zip(existing.keys(), existing))
-                            if self._should_update_record(existing_dict, record):
+                        if existing:
+                            # 处理冲突
+                            if strategy == "skip":
+                                result["success"] += 1
+                                continue
+                            elif strategy == "overwrite":
+                                # 更新记录
                                 await self._update_record(db, table_name, record)
+                                result["success"] += 1
+                            elif strategy == "manual":
+                                # 记录冲突
+                                conflict = DataConflict(
+                                    sync_log_id=sync_log_id,
+                                    table_name=table_name,
+                                    record_id=str(record_id),
+                                    conflict_type="duplicate",
+                                    local_data=dict(existing._mapping),
+                                    import_data=record,
+                                    resolution="pending",
+                                )
+                                db.add(conflict)
+                                result["conflicts"].append(
+                                    {
+                                        "table": table_name,
+                                        "record_id": record_id,
+                                        "type": "duplicate",
+                                    }
+                                )
+                                result["success"] += 1
+                            else:
+                                # merge（智能合并）：仅当导入记录更新时覆盖，语义与加密包
+                                # 路径 _import_table_data_enhanced 的 merge 分支一致。
+                                # 历史缺陷：本分支缺失且无 else 兜底，而前端数据同步页的
+                                # **默认策略就是 merge**（"智能合并（推荐）"）—— 已存在
+                                # 记录既不被更新也不计入 success/failed/conflicts，接口却
+                                # 返回"导入成功"，且 total != success + failed，冲突数据
+                                # 静默不生效。未知策略同样落此分支并计入 success。
+                                existing_dict = dict(existing._mapping)
+                                if self._should_update_record(existing_dict, record):
+                                    await self._update_record(db, table_name, record)
+                                result["success"] += 1
+                        else:
+                            # 插入新记录
+                            await self._insert_record(db, table_name, record)
                             result["success"] += 1
                     else:
-                        # 插入新记录
+                        # 没有ID，直接插入
                         await self._insert_record(db, table_name, record)
                         result["success"] += 1
-                else:
-                    # 没有ID，直接插入
-                    await self._insert_record(db, table_name, record)
-                    result["success"] += 1
 
             except Exception as e:
                 self.logger.error(f"导入记录失败: {str(e)}")
@@ -557,24 +564,76 @@ class DataSyncService:
             raise ValueError(f"表名不在允许列表中: {table_name!r}")
         return table_name
 
+    @staticmethod
+    def _resolve_table(table_name: str):
+        """表名 → 模型元数据 Table（写入走列类型绑定，不再裸拼 SQL）。
+
+        白名单里的历史幽灵名（如 ``update_logs``/``attachments``）没有模型元数据，
+        这里显式失败让该条计入 failed —— 而不是把裸 SQL 打到不存在的表上。
+        """
+        from app.models import Base
+
+        table = Base.metadata.tables.get(table_name)
+        if table is None:
+            raise ValueError(f"未找到表 {table_name} 的模型元数据")
+        return table
+
+    @staticmethod
+    def _parse_datetime(value: str):
+        """ISO 时间字符串 → naive UTC datetime；无法解析时原样返回（由列绑定器报错）。
+
+        库内时间列为 naive UTC 墙钟（``UtcDateTime`` 口径），故带偏移的字符串先
+        换算到 UTC 再去时区，保证与既有行可比。
+        """
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return value
+        if parsed.tzinfo is not None:
+            return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
+
+    @classmethod
+    def _coerce_datetime_values(cls, table, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """把导出记录里的时间字符串转为 datetime。
+
+        导出侧走 raw ``SELECT``（不经类型处理），时间列是 ISO 字符串；而类型化
+        INSERT/UPDATE 绑定到 SQLite 时间列**只接受 datetime/date** —— 不转换会让
+        每条带 created_at/updated_at 的记录整条失败。
+        """
+        coerced = {}
+        for key, value in payload.items():
+            column = table.c.get(key)
+            if isinstance(value, str) and column is not None and is_datetime_type(column.type):
+                value = cls._parse_datetime(value)
+            coerced[key] = value
+        return coerced
+
     async def _insert_record(self, db: Session, table_name: str, record: Dict[str, Any]):
-        """插入记录"""
-        safe_cols = [self._sanitize_column_name(k) for k in record.keys()]
-        columns = ", ".join(safe_cols)
-        placeholders = ", ".join([f":{k}" for k in record.keys()])
+        """插入记录（W2-T7：类型化 INSERT，列类型/sync_version 默认值由元数据保证）。"""
         safe_table = self._validate_table_name(table_name)
-        query = text(f"INSERT INTO {safe_table} ({columns}) VALUES ({placeholders})")  # nosec B608 - 表/列名已白名单校验
-        db.execute(query, record)
+        for key in record:
+            self._sanitize_column_name(key)
+        table = self._resolve_table(safe_table)
+        db.execute(insert(table).values(**self._coerce_datetime_values(table, record)))
 
     async def _update_record(self, db: Session, table_name: str, record: Dict[str, Any]):
-        """更新记录"""
+        """更新记录（W2-T7：类型化 UPDATE + sync_version SQL 层原子自增）。
+
+        导入包里的 sync_version 是**源机**版本号（多数情况下 ≤ 本机），直接写入会
+        让本机版本号回退 —— 增量导出按 ``sync_version > since`` 过滤时漏行。这里
+        丢弃包内值、以本机当前值 +1 落库，与 ``models/base`` 的批量更新钩子同语义。
+        """
         record_id = record.pop("id")
-        safe_cols = [self._sanitize_column_name(k) for k in record.keys()]
-        set_clause = ", ".join([f"{col} = :{col}" for col in safe_cols])
-        safe_table = self._validate_table_name(table_name)
-        query = text(f"UPDATE {safe_table} SET {set_clause} WHERE id = :id")  # nosec B608 - 表/列名已白名单校验
-        record["id"] = record_id
-        db.execute(query, record)
+        for key in record:
+            self._sanitize_column_name(key)
+        payload = dict(record)
+        record["id"] = record_id  # 恢复调用方字典（resolve_conflict 复用同一对象）
+        table = self._resolve_table(self._validate_table_name(table_name))
+        payload = self._coerce_datetime_values(table, payload)
+        if "sync_version" in table.c:
+            payload["sync_version"] = table.c.sync_version + 1
+        db.execute(update(table).where(table.c.id == record_id).values(**payload))
 
     async def get_conflicts(self, sync_log_id: int) -> List[Dict[str, Any]]:
         """获取冲突列表"""
@@ -918,43 +977,44 @@ class DataSyncService:
 
         for record in records:
             try:
-                record_id = record.get("id")
-                if record_id:
-                    # 检查记录是否存在
-                    existing = db.execute(
-                        text(f"SELECT * FROM {safe_table} WHERE id = :id"),  # nosec B608 - safe_table 已白名单校验
-                        {"id": record_id},
-                    ).fetchone()
+                with db.begin_nested():
+                    record_id = record.get("id")
+                    if record_id:
+                        # 检查记录是否存在
+                        existing = db.execute(
+                            text(f"SELECT * FROM {safe_table} WHERE id = :id"),  # nosec B608 - safe_table 已白名单校验
+                            {"id": record_id},
+                        ).fetchone()
 
-                    if existing:
-                        # 记录存在，根据策略处理
-                        if strategy == "skip":
-                            result["skipped"] += 1
-                            result["success"] += 1
-                        elif strategy == "overwrite":
-                            await self._update_record(db, table_name, record)
-                            result["updated"] += 1
-                            result["success"] += 1
-                        elif strategy == "merge":
-                            # 智能合并：比较时间戳
-                            existing_dict = dict(zip(existing.keys(), existing))
-                            should_update = self._should_update_record(existing_dict, record)
-                            if should_update:
+                        if existing:
+                            # 记录存在，根据策略处理
+                            if strategy == "skip":
+                                result["skipped"] += 1
+                                result["success"] += 1
+                            elif strategy == "overwrite":
                                 await self._update_record(db, table_name, record)
                                 result["updated"] += 1
-                            else:
-                                result["skipped"] += 1
+                                result["success"] += 1
+                            elif strategy == "merge":
+                                # 智能合并：比较时间戳
+                                existing_dict = dict(existing._mapping)
+                                should_update = self._should_update_record(existing_dict, record)
+                                if should_update:
+                                    await self._update_record(db, table_name, record)
+                                    result["updated"] += 1
+                                else:
+                                    result["skipped"] += 1
+                                result["success"] += 1
+                        else:
+                            # 记录不存在，插入
+                            await self._insert_record(db, table_name, record)
+                            result["inserted"] += 1
                             result["success"] += 1
                     else:
-                        # 记录不存在，插入
+                        # 没有ID，直接插入
                         await self._insert_record(db, table_name, record)
                         result["inserted"] += 1
                         result["success"] += 1
-                else:
-                    # 没有ID，直接插入
-                    await self._insert_record(db, table_name, record)
-                    result["inserted"] += 1
-                    result["success"] += 1
 
             except Exception as e:
                 self.logger.error(f"导入记录失败: {str(e)}")

@@ -205,6 +205,19 @@ describe('状态映射', () => {
     expect(vm.statusLabel('withdrawn')).toBe('已撤回')
     expect(vm.statusLabel('xyz')).toBe('xyz')
   })
+
+  it('entityTypeLabel 映射（含 rural_work/assessment）与兜底', async () => {
+    const wrapper = mountComp()
+    const vm = wrapper.vm as any
+    expect(vm.entityTypeLabel('supported_village')).toBe('帮扶村')
+    expect(vm.entityTypeLabel('project')).toBe('项目')
+    expect(vm.entityTypeLabel('fund')).toBe('经费')
+    expect(vm.entityTypeLabel('school')).toBe('学校')
+    expect(vm.entityTypeLabel('rural_work')).toBe('乡村工作')
+    expect(vm.entityTypeLabel('assessment')).toBe('考核复核')
+    expect(vm.entityTypeLabel('custom')).toBe('custom')
+    expect(vm.entityTypeLabel(undefined)).toBe('通用')
+  })
 })
 
 describe('单个审批', () => {

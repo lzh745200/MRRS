@@ -80,6 +80,25 @@ vi.mock('@/views/handover/Index.vue', () => ({
   default: { name: 'HandoverIndexCoverageStub' },
 }))
 
+// DonationList.vue（w17-003）同理：专属测试
+// tests/unit/views/donation/List.test.ts 深挂载全部分支；本文件仅执行懒加载函数本体。
+vi.mock('@/views/donation/List.vue', () => ({
+  default: { name: 'DonationListCoverageStub' },
+}))
+
+// 工作台页头操作区（W11-T45 PageHeader 去重后的 views/dashboard/components/
+// HeaderActions.vue）同理：专属测试 tests/unit/views/dashboard/HeaderActions.test.ts
+// 深挂载全部分支；Dashboard 路由 chunk 会带入本模块，桩替换避免 fnMap 分片按 id 合并错位。
+vi.mock('@/views/dashboard/components/HeaderActions.vue', () => ({
+  default: { name: 'DashboardHeaderActionsCoverageStub' },
+}))
+
+// 帮扶村详情（w17-002 新增专属全分支测试 tests/unit/views/analytics/supported-villages/
+// Detail.test.ts）同理：本文件执行全部懒加载组件函数，桩替换避免 fnMap 分片按 id 合并错位。
+vi.mock('@/views/analytics/supported-villages/Detail.vue', () => ({
+  default: { name: 'SupportedVillageDetailCoverageStub' },
+}))
+
 import router, { routes } from '@/router'
 
 // ==================== Helpers ====================
@@ -164,6 +183,9 @@ describe('router/index.ts', () => {
       ['/system/help', '/help'],
       ['/system/roles', '/system/users'],
       ['/system/menu-permissions', '/system/users'],
+      // W8-018：用户权限管理页下线重定向 + 年度概览过渡页移除后的兼容重定向
+      ['/system/user-permissions', '/system/permission-packs'],
+      ['/supported-villages/yearly', '/supported-villages'],
       ['/analytics/map', '/data-analysis/map'],
       ['/analytics/dashboard', '/data-analysis/dashboard'],
       ['/analytics/work-analysis', '/data-analysis/reports'],

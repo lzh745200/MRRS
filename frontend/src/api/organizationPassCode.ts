@@ -1,5 +1,4 @@
-import { get, post, del } from '@/api/request'
-import request from '@/api/request'
+import { get, post, del, apiRequest } from '@/api/request'
 import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
 
 export type CreateOrganizationPassCodeRequest = {
@@ -51,7 +50,13 @@ export const exportOrganizationPassCodes = async (params?: {
   status?: string
 }) => {
   await downloadBlobAsFile(
-    () => request.get('/machine-code/organization/export', { params, responseType: 'blob' }),
+    () =>
+      apiRequest<Blob>({
+        method: 'GET',
+        url: '/machine-code/organization/export',
+        params,
+        responseType: 'blob',
+      }),
     { fallbackFileName: '组织通行证码.xlsx' }
   )
 }

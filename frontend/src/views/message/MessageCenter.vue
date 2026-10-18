@@ -60,7 +60,6 @@
             v-loading="loading"
             :data="messages"
             :row-class-name="getRowClassName"
-            stripe
             @selection-change="handleSelectionChange"
             @row-click="handleRowClick"
           >

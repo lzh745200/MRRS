@@ -88,6 +88,13 @@ describe('ChartRow 数据形状', () => {
     const vm = wrapper.vm as any
     expect(vm.projects).toEqual([{ name: '道路', progress: 85 }])
     expect(vm.funds).toEqual({ allocated: 100, pending: 20, planned: 10 })
+    // W8-018 清理锁定：/projects 请求必须只带 page_size，不得再带幽灵参数 summary
+    // （后端 list_projects 无该查询参数，FastAPI 会静默忽略）
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/projects',
+      params: { page_size: 5 },
+    })
     // 双图 setOption 均调用（bar + pie）
     expect(mockSetOption.mock.calls.length).toBeGreaterThanOrEqual(2)
     expect(wrapper.findAll('.chart-body').length).toBe(2)

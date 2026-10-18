@@ -60,9 +60,11 @@
             >
               {{ source }}：{{ count }}
             </el-tag>
-            <span v-if="!Object.keys(stats.by_source || {}).length" class="empty-hint"
-              >暂无数据</span
-            >
+            <EmptyState
+              v-if="!Object.keys(stats.by_source || {}).length"
+              text="暂无来源统计数据"
+              :size="60"
+            />
           </div>
         </el-card>
       </el-col>
@@ -144,7 +146,7 @@
       </el-form>
 
       <!-- 表格 -->
-      <el-table v-loading="tableLoading" :data="tableData" stripe border>
+      <el-table v-loading="tableLoading" :data="tableData"  border>
         <el-table-column prop="id" label="ID" width="70" align="center" />
         <el-table-column prop="createdAt" label="时间" width="170">
           <template #default="{ row }">

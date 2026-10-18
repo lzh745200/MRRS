@@ -112,7 +112,7 @@
         </div>
       </template>
 
-      <el-table v-loading="loading" :data="taskList" stripe style="width: 100%">
+      <el-table v-loading="loading" :data="taskList"  style="width: 100%">
         <el-table-column prop="task_id" label="任务ID" width="140">
           <template #default="{ row }">
             <el-tooltip :content="row.task_id" placement="top">

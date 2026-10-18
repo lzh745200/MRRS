@@ -306,6 +306,7 @@ import {
   type TaskDiff,
 } from '@/api/approval'
 import { listStaff } from '@/api/queries/user'
+import { getEntityTypeLabel } from '@/config/enums'
 
 // ==================== 状态 ====================
 
@@ -335,13 +336,12 @@ const taskDiff = ref<TaskDiff | null>(null)
 // 筛选条件（类型/提交时间）
 const filterType = ref('')
 const filterDateRange = ref<[string, string] | null>(null)
-const entityTypeOptions = [
-  { value: 'supported_village', label: '帮扶村' },
-  { value: 'project', label: '项目' },
-  { value: 'fund', label: '经费' },
-  { value: 'school', label: '学校' },
-  { value: 'rural_work', label: '乡村工作' },
-]
+// 筛选下拉仅暴露审批常用实体；中文标签单一取自 src/config/enums.ts ENTITY_TYPES
+const entityTypeFilterValues = ['supported_village', 'project', 'fund', 'school', 'rural_work']
+const entityTypeOptions = entityTypeFilterValues.map((value) => ({
+  value,
+  label: getEntityTypeLabel(value),
+}))
 
 const filteredTasks = computed(() => {
   let list = tasks.value

@@ -197,6 +197,11 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column prop="region" label="地区" min-width="170" show-overflow-tooltip>
+            <template #default="scope">
+              {{ formatRegion(scope.row) }}
+            </template>
+          </el-table-column>
           <el-table-column prop="address" label="地址" min-width="160" show-overflow-tooltip>
             <template #default="scope">
               {{ ds(scope.row.address, 'address') }}
@@ -283,6 +288,7 @@ import { DIALOG_SM } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
+import { buildSchoolLinkWarning, fetchSchoolLinkCounts } from '@/utils/schoolLinkWarning'
 
 import { ref, reactive, computed, onMounted, onActivated, onUnmounted, watch, nextTick } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -391,6 +397,18 @@ function getStatusTagType(status: string) {
   if (status === 'active') return 'success'
   if (status === 'completed') return 'primary'
   return 'info'
+}
+
+/**
+ * 地区列（行政区划级联文本）。
+ * 优先后端 to_dict 生成的 region（province+city+district，见 School.to_dict），
+ * 缺失时回退分字段拼接，仍无数据则显示 '-'。
+ */
+function formatRegion(row: any): string {
+  if (!row) return '-'
+  if (row.region) return row.region
+  const parts = [row.province, row.city, row.district].filter(Boolean)
+  return parts.length ? parts.join(' / ') : '-'
 }
 
 // ========== 统计图表 ==========
@@ -577,6 +595,19 @@ function handleEdit(row: any) {
 }
 async function handleDelete(row: any) {
   if (!row?.id) return
+  // 删除前关联检查：有关联资助学生/助学兴教项目时给出警示文案二次确认
+  const warning = buildSchoolLinkWarning(await fetchSchoolLinkCounts(row.id))
+  if (warning) {
+    try {
+      await ElMessageBox.confirm(warning, '关联数据警示', {
+        confirmButtonText: '仍要删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+  }
   try {
     await del(`/schools/${row.id}`)
     // 成功静默：删除成功仅刷新列表

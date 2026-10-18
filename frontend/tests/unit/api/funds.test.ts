@@ -13,9 +13,9 @@ const { mockGet, mockPost, mockPut, mockDelete, mockApiRequest, mockDownloadBlob
 
 // src/api/funds.ts 实际 import：
 //   import { get, post, put, del, apiRequest } from '@/api/request'  // 命名辅助，返回已解包的 envelope body
-//   import request from '@/api/request'                              // 默认导出（原始 axios 实例，exportList 用）
+// W5-T5 后不再有默认导出（裸 axios）导入；导出/下载统一走 apiRequest<Blob> + downloadBlobAsFile。
 // src/api/helpers/blobDownload.ts 还 import 了 parseContentDisposition / downloadBlob。
-// 因此 mock 必须提供全部命名导出 + default。
+// 因此 mock 必须提供全部命名导出（default 已无消费方，保留以防其它 import 链需要）。
 vi.mock('@/api/request', () => ({
   // 命名 get(url, params)：适配为 axios 风格断言 mockGet(url, { params })，
   // 用 rest 参数区分 get(url) 与 get(url, undefined)（测试对两者断言不同）
@@ -27,13 +27,6 @@ vi.mock('@/api/request', () => ({
   apiRequest: (...args: any[]) => mockApiRequest(...args),
   parseContentDisposition: (_headers: any, fallback = 'download') => fallback,
   downloadBlob: (...args: any[]) => mockDownloadBlob(...args),
-  // 默认导出：原始 axios 实例（exportList 走 request.get(url, config)）
-  default: {
-    get: (url: string, config?: any) => mockGet(url, config),
-    post: (url: string, data?: any, config?: any) => mockPost(url, data, config),
-    put: (url: string, data?: any) => mockPut(url, data),
-    delete: (url: string) => mockDelete(url),
-  },
   getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
 }))
 
@@ -45,23 +38,25 @@ describe('api/funds', () => {
   })
 
   describe('CRUD', () => {
-    it('list 调用 GET /funds', async () => {
-      mockGet.mockResolvedValue({ data: { items: [], total: 0 } })
-      await fundApi.list({ page: 1 })
+    it('list 调用 GET /funds 并返回解包后的 items/total', async () => {
+      mockGet.mockResolvedValue({ code: 200, data: { items: [{ id: 1 }], total: 7 } })
+      const r = await fundApi.list({ page: 1 })
       expect(mockGet).toHaveBeenCalledWith('/funds', { params: { page: 1 } })
+      expect(r).toEqual({ items: [{ id: 1 }], total: 7 })
     })
 
     it('list 无参时 params=undefined', async () => {
-      mockGet.mockResolvedValue({ data: { items: [], total: 0 } })
-      await fundApi.list()
+      mockGet.mockResolvedValue({ items: [], total: 0 })
+      const r = await fundApi.list()
       expect(mockGet).toHaveBeenCalledWith('/funds', { params: undefined })
+      expect(r).toEqual({ items: [], total: 0 })
     })
 
-    it('getById 调用 GET /funds/{id}', async () => {
-      mockGet.mockResolvedValue({ data: { id: 1, amount: 100 } })
+    it('getById 调用 GET /funds/{id} 并原样返回已解包 body', async () => {
+      mockGet.mockResolvedValue({ code: 200, data: { id: 1, amount: 100 } })
       const result = await fundApi.getById(1)
       expect(mockGet).toHaveBeenCalledWith('/funds/1')
-      expect(result).toEqual({ id: 1, amount: 100 })
+      expect(result).toEqual({ code: 200, data: { id: 1, amount: 100 } })
     })
 
     it('create 调用 POST /funds', async () => {
@@ -157,55 +152,63 @@ describe('api/funds', () => {
 
   describe('附件', () => {
     it('listAttachments 调用 GET /funds/{id}/attachments', async () => {
-      mockGet.mockResolvedValue({ data: { items: [], total: 0 } })
-      await fundApi.listAttachments(1)
+      mockGet.mockResolvedValue({ items: [], total: 0 })
+      const r = await fundApi.listAttachments(1)
       expect(mockGet).toHaveBeenCalledWith('/funds/1/attachments')
+      expect(r).toEqual({ items: [], total: 0 })
     })
 
-    it('listAttachments 响应为数组时直接返回', async () => {
-      mockGet.mockResolvedValue({ data: [{ id: 1 }] })
+    it('listAttachments 响应为裸数组时直接返回', async () => {
+      mockGet.mockResolvedValue([{ id: 1 }])
       const r = await fundApi.listAttachments(1)
-      expect(r.items).toHaveLength(1)
+      expect(r).toEqual({ items: [{ id: 1 }], total: 1 })
     })
 
-    it('listAttachments 响应仅含 data 字段', async () => {
-      mockGet.mockResolvedValue({ data: { data: [{ id: 2 }] } })
+    it('listAttachments 响应 data 字段为数组时（历史裸形态）返回该数组', async () => {
+      mockGet.mockResolvedValue({ data: [{ id: 2 }] })
       const r = await fundApi.listAttachments(1)
-      expect(r.items).toHaveLength(1)
+      expect(r.items).toEqual([{ id: 2 }])
     })
 
     it('listAttachments 响应为空对象时回退 []', async () => {
-      mockGet.mockResolvedValue({ data: {} })
+      mockGet.mockResolvedValue({})
       const r = await fundApi.listAttachments(1)
       expect(r).toEqual({ items: [], total: 0 })
     })
 
     it('deleteAttachment 调用 DELETE /funds/attachments/{id}', async () => {
-      mockDelete.mockResolvedValue({ data: {} })
-      await fundApi.deleteAttachment(5)
+      mockDelete.mockResolvedValue({ message: 'ok' })
+      const r = await fundApi.deleteAttachment(5)
       expect(mockDelete).toHaveBeenCalledWith('/funds/attachments/5')
+      expect(r).toEqual({ message: 'ok' })
     })
 
-    it('downloadAttachment 调用 blob GET 并触发下载', async () => {
-      mockGet.mockResolvedValue({ data: new Blob(['x']) })
+    it('downloadAttachment 调用 apiRequest blob GET 并触发下载', async () => {
+      mockApiRequest.mockResolvedValue(new Blob(['x']))
       await fundApi.downloadAttachment(5, '发票.pdf')
-      expect(mockGet).toHaveBeenCalledWith('/funds/attachments/5/download', {
+      expect(mockApiRequest).toHaveBeenCalledWith({
+        method: 'GET',
+        url: '/funds/attachments/5/download',
         responseType: 'blob',
       })
-      expect(mockDownloadBlob).toHaveBeenCalled()
+      expect(mockDownloadBlob).toHaveBeenCalledWith(expect.any(Blob), '发票.pdf')
     })
 
     it('downloadAttachment 无文件名用默认名', async () => {
-      mockGet.mockResolvedValue({ data: new Blob(['x']) })
+      mockApiRequest.mockResolvedValue(new Blob(['x']))
       await fundApi.downloadAttachment(5)
       expect(mockDownloadBlob).toHaveBeenCalledWith(expect.any(Blob), '附件下载')
     })
 
     it('getAttachmentBlob 返回 Blob', async () => {
       const blob = new Blob(['x'])
-      mockGet.mockResolvedValue({ data: blob })
+      mockApiRequest.mockResolvedValue(blob)
       const r = await fundApi.getAttachmentBlob(5)
-      expect(mockGet).toHaveBeenCalledWith('/funds/attachments/5/preview', { responseType: 'blob' })
+      expect(mockApiRequest).toHaveBeenCalledWith({
+        method: 'GET',
+        url: '/funds/attachments/5/preview',
+        responseType: 'blob',
+      })
       expect(r).toBe(blob)
     })
 
@@ -220,31 +223,31 @@ describe('api/funds', () => {
 
   describe('预算', () => {
     it('listBudgets 调用 GET /fund-budgets', async () => {
-      mockGet.mockResolvedValue({ data: { items: [], total: 0 } })
+      mockGet.mockResolvedValue({ items: [], total: 0 })
       await fundApi.listBudgets(2024)
       expect(mockGet).toHaveBeenCalledWith('/fund-budgets', { params: { year: 2024 } })
     })
 
     it('listBudgets 无 year 时 params=undefined', async () => {
-      mockGet.mockResolvedValue({ data: { items: [], total: 0 } })
+      mockGet.mockResolvedValue({ items: [], total: 0 })
       await fundApi.listBudgets()
       expect(mockGet).toHaveBeenCalledWith('/fund-budgets', { params: undefined })
     })
 
-    it('listBudgets 响应为数组时直接返回', async () => {
-      mockGet.mockResolvedValue({ data: [{ year: 2024 }] })
+    it('listBudgets 响应为裸数组时直接返回', async () => {
+      mockGet.mockResolvedValue([{ year: 2024 }])
       const r = await fundApi.listBudgets(2024)
-      expect(r.items).toHaveLength(1)
+      expect(r).toEqual({ items: [{ year: 2024 }], total: 1 })
     })
 
-    it('listBudgets 响应仅含 data 字段', async () => {
-      mockGet.mockResolvedValue({ data: { data: [{ year: 2025 }] } })
+    it('listBudgets 响应 data 字段为数组时（历史裸形态）返回该数组', async () => {
+      mockGet.mockResolvedValue({ data: [{ year: 2025 }] })
       const r = await fundApi.listBudgets(2025)
-      expect(r.items).toHaveLength(1)
+      expect(r.items).toEqual([{ year: 2025 }])
     })
 
     it('listBudgets 响应为空对象时回退 []', async () => {
-      mockGet.mockResolvedValue({ data: {} })
+      mockGet.mockResolvedValue({})
       const r = await fundApi.listBudgets(2025)
       expect(r).toEqual({ items: [], total: 0 })
     })
@@ -305,30 +308,30 @@ describe('api/funds', () => {
     })
 
     it('listTransactions 调用 apiRequest GET 且 items 为数组', async () => {
-      mockApiRequest.mockResolvedValue({ data: { items: [{ id: 1 }] } })
+      mockApiRequest.mockResolvedValue({ items: [{ id: 1 }], total: 1 })
       const r = await fundApi.listTransactions(9)
       expect(mockApiRequest).toHaveBeenCalledWith({
         method: 'GET',
         url: '/fund-budgets/transactions',
         params: { budget_id: 9 },
       })
-      expect(r.items).toHaveLength(1)
+      expect(r).toEqual({ items: [{ id: 1 }], total: 1 })
     })
 
-    it('listTransactions 响应为数组时直接返回', async () => {
-      mockApiRequest.mockResolvedValue({ data: [{ id: 1 }] })
+    it('listTransactions 响应为裸数组时直接返回', async () => {
+      mockApiRequest.mockResolvedValue([{ id: 1 }])
       const r = await fundApi.listTransactions(9)
-      expect(r.items).toHaveLength(1)
+      expect(r).toEqual({ items: [{ id: 1 }], total: 1 })
     })
 
-    it('listTransactions 响应仅含 data 字段', async () => {
-      mockApiRequest.mockResolvedValue({ data: { data: [{ id: 2 }] } })
+    it('listTransactions 响应 data 字段为数组时（历史裸形态）返回该数组', async () => {
+      mockApiRequest.mockResolvedValue({ data: [{ id: 2 }] })
       const r = await fundApi.listTransactions(9)
-      expect(r.items).toHaveLength(1)
+      expect(r.items).toEqual([{ id: 2 }])
     })
 
     it('listTransactions 响应为空对象时回退 []', async () => {
-      mockApiRequest.mockResolvedValue({ data: {} })
+      mockApiRequest.mockResolvedValue({})
       const r = await fundApi.listTransactions(9)
       expect(r).toEqual({ items: [], total: 0 })
     })
@@ -351,31 +354,35 @@ describe('api/funds', () => {
 
   describe('操作历史', () => {
     it('getStatusHistory GET /funds/{id}/history/status', async () => {
-      mockGet.mockResolvedValue({ data: { items: [] } })
-      await fundApi.getStatusHistory(1)
+      mockGet.mockResolvedValue({ items: [], total: 0 })
+      const r = await fundApi.getStatusHistory(1)
       expect(mockGet).toHaveBeenCalledWith('/funds/1/history/status')
+      expect(r).toEqual({ items: [], total: 0 })
     })
 
     it('getFieldHistory GET /funds/{id}/history/fields', async () => {
-      mockGet.mockResolvedValue({ data: { items: [] } })
+      mockGet.mockResolvedValue({ items: [], total: 0 })
       await fundApi.getFieldHistory(1)
       expect(mockGet).toHaveBeenCalledWith('/funds/1/history/fields')
     })
 
     it('getOperationHistory GET /funds/{id}/history/operations', async () => {
-      mockGet.mockResolvedValue({ data: { items: [] } })
+      mockGet.mockResolvedValue({ items: [], total: 0 })
       await fundApi.getOperationHistory(1)
       expect(mockGet).toHaveBeenCalledWith('/funds/1/history/operations')
     })
   })
 
   describe('exportList', () => {
-    it('调用 GET /export/funds（真实文件导出端点）with blob responseType', async () => {
-      mockGet.mockResolvedValue({ data: new Blob(['test']) })
+    it('调用 apiRequest GET /export/funds（真实文件导出端点）with blob responseType', async () => {
+      mockApiRequest.mockResolvedValue(new Blob(['test']))
       await fundApi.exportList({ type: 'project' })
       // 修复 2026-08-14：旧实现请求 /funds/export（返回 JSON），导出的是 JSON 文本；
       // 现改为 /export/funds 真实 xlsx 导出，参数映射 search→keyword / type→fund_type
-      expect(mockGet).toHaveBeenCalledWith('/export/funds', {
+      // W5-T5：改用具名 apiRequest（返回值即 Blob），不再走默认导出裸 axios 实例
+      expect(mockApiRequest).toHaveBeenCalledWith({
+        method: 'GET',
+        url: '/export/funds',
         params: { keyword: undefined, fund_type: 'project', status: undefined, format: 'xlsx' },
         responseType: 'blob',
       })
@@ -384,9 +391,11 @@ describe('api/funds', () => {
     })
 
     it('csv 格式显式指定', async () => {
-      mockGet.mockResolvedValue({ data: new Blob(['test']) })
+      mockApiRequest.mockResolvedValue(new Blob(['test']))
       await fundApi.exportList({ search: '桥' }, 'csv')
-      expect(mockGet).toHaveBeenCalledWith('/export/funds', {
+      expect(mockApiRequest).toHaveBeenCalledWith({
+        method: 'GET',
+        url: '/export/funds',
         params: { keyword: '桥', fund_type: undefined, status: undefined, format: 'csv' },
         responseType: 'blob',
       })

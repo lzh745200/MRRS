@@ -82,7 +82,7 @@ const DATA_PATHS = [
   '/work-calendar',
   '/data-analysis/map',
   '/data-analysis/assessment',
-  '/supported-villages/yearly',
+  '/supported-villages',
 ]
 
 const WORKFLOW_PATHS = [

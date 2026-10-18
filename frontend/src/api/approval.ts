@@ -5,6 +5,7 @@
  */
 
 import { get, post, put, del } from '@/api/request'
+import { getApprovalActionLabel, getEntityTypeLabel } from '@/config/enums'
 
 // ==================== 类型定义 ====================
 
@@ -433,23 +434,12 @@ export function formatApprovalStatus(status: string): {
  * 格式化审批操作
  */
 export function formatApprovalAction(action: string): string {
-  const actionMap: Record<string, string> = {
-    approve: '通过',
-    reject: '拒绝',
-    transfer: '转交',
-  }
-  return actionMap[action] || action
+  return getApprovalActionLabel(action)
 }
 
 /**
- * 格式化实体类型
+ * 格式化实体类型（映射源：src/config/enums.ts ENTITY_TYPES）
  */
 export function formatEntityType(entityType: string): string {
-  const typeMap: Record<string, string> = {
-    supported_village: '帮扶村',
-    project: '项目',
-    fund: '经费',
-    school: '学校',
-  }
-  return typeMap[entityType] || entityType
+  return getEntityTypeLabel(entityType)
 }

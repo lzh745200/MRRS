@@ -2,9 +2,8 @@
  * 经费管理 API
  */
 import { get, post, put, del, apiRequest } from '@/api/request'
-import request from '@/api/request'
 import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
-import type { PaginatedResponse } from '@/types/api'
+import { unwrapList, type UnwrappedList } from '@/utils/unwrapList'
 
 /** 经费记录 */
 export interface Fund {
@@ -69,59 +68,49 @@ const BUDGETS_BASE = '/fund-budgets'
 
 export const fundApi = {
   /** 获取经费列表 */
-  async list(params?: FundListParams): Promise<PaginatedResponse<Fund>> {
-    const response = await get(FUNDS_BASE, params)
-    return response.data
+  async list(params?: FundListParams): Promise<UnwrappedList<Fund>> {
+    const response = await get<any>(FUNDS_BASE, params)
+    return unwrapList<Fund>(response)
   },
 
   /** 获取经费详情 */
   async getById(id: number): Promise<Fund> {
-    const response = await get(`${FUNDS_BASE}/${id}`)
-    return response.data
+    return get<Fund>(`${FUNDS_BASE}/${id}`)
   },
 
   /** 创建经费记录 */
   async create(data: Partial<Fund>): Promise<Fund> {
-    const response = await post(FUNDS_BASE, data)
-    return response.data
+    return post<Fund>(FUNDS_BASE, data)
   },
 
   /** 更新经费记录 */
   async update(id: number, data: Partial<Fund>): Promise<Fund> {
-    const response = await put(`${FUNDS_BASE}/${id}`, data)
-    return response.data
+    return put<Fund>(`${FUNDS_BASE}/${id}`, data)
   },
 
   /** 删除经费记录 */
   async delete(id: number): Promise<{ message: string }> {
-    const response = await del(`${FUNDS_BASE}/${id}`)
-    return response.data
+    return del<{ message: string }>(`${FUNDS_BASE}/${id}`)
   },
 
   // ========== 工作流 ==========
   async approve(id: number, data?: WorkflowRequest) {
-    const response = await post(`${FUNDS_BASE}/${id}/approve`, data || {})
-    return response.data
+    return post(`${FUNDS_BASE}/${id}/approve`, data || {})
   },
   async reject(id: number, data?: WorkflowRequest) {
-    const response = await post(`${FUNDS_BASE}/${id}/reject`, data || {})
-    return response.data
+    return post(`${FUNDS_BASE}/${id}/reject`, data || {})
   },
   async allocate(id: number, data?: WorkflowRequest) {
-    const response = await post(`${FUNDS_BASE}/${id}/allocate`, data || {})
-    return response.data
+    return post(`${FUNDS_BASE}/${id}/allocate`, data || {})
   },
   async startUse(id: number, data?: WorkflowRequest) {
-    const response = await post(`${FUNDS_BASE}/${id}/start-use`, data || {})
-    return response.data
+    return post(`${FUNDS_BASE}/${id}/start-use`, data || {})
   },
   async complete(id: number, data?: WorkflowRequest) {
-    const response = await post(`${FUNDS_BASE}/${id}/complete`, data || {})
-    return response.data
+    return post(`${FUNDS_BASE}/${id}/complete`, data || {})
   },
   async audit(id: number, data?: WorkflowRequest) {
-    const response = await post(`${FUNDS_BASE}/${id}/audit`, data || {})
-    return response.data
+    return post(`${FUNDS_BASE}/${id}/audit`, data || {})
   },
 
   // ========== 统计 ==========
@@ -136,13 +125,17 @@ export const fundApi = {
   // ========== 导出（真实导出端点 /export/funds，xlsx/csv 文件下载） ==========
   // 修复 2026-08-14：旧实现下载 /funds/export（后端返回 JSON），用户得到
   // 名为 .csv 的 JSON 文本文件。现改为调用真实文件导出端点。
+  // W5-T5：改用具名 apiRequest<Blob>（不再依赖默认导出的裸 axios 实例）；
+  // 代价是不再解析响应头 Content-Disposition，文件名统一用下方兜底名。
   async exportList(
     params?: { search?: string; type?: string; status?: string },
     format: 'xlsx' | 'csv' = 'xlsx'
   ) {
     await downloadBlobAsFile(
       () =>
-        request.get('/export/funds', {
+        apiRequest<Blob>({
+          method: 'GET',
+          url: '/export/funds',
           params: {
             keyword: params?.search || undefined,
             fund_type: params?.type || undefined,
@@ -156,18 +149,12 @@ export const fundApi = {
   },
 
   // ========== 附件 ==========
-  async listAttachments(fundId: number) {
-    const res = await get(`${FUNDS_BASE}/${fundId}/attachments`)
-    const body: any = res.data
-    const items = Array.isArray(body) ? body : body?.items || body?.data || []
-    return { items, total: items.length } as {
-      items: unknown[]
-      total: number
-    }
+  async listAttachments(fundId: number): Promise<UnwrappedList<unknown>> {
+    const body = await get<any>(`${FUNDS_BASE}/${fundId}/attachments`)
+    return unwrapList<unknown>(body)
   },
   async deleteAttachment(attachmentId: number) {
-    const response = await del(`${FUNDS_BASE}/attachments/${attachmentId}`)
-    return response.data
+    return del(`${FUNDS_BASE}/attachments/${attachmentId}`)
   },
   getPreviewUrl(attachmentId: number) {
     return `/api/v1${FUNDS_BASE}/attachments/${attachmentId}/preview`
@@ -175,45 +162,42 @@ export const fundApi = {
   getDownloadUrl(attachmentId: number) {
     return `/api/v1${FUNDS_BASE}/attachments/${attachmentId}/download`
   },
-  /** 认证下载附件（通过 axios 携带 token，兼容 Electron） */
+  /** 认证下载附件（通过 apiRequest 携带 token，兼容 Electron） */
   async downloadAttachment(attachmentId: number, fileName?: string) {
     await downloadBlobAsFile(
       () =>
-        request.get(`${FUNDS_BASE}/attachments/${attachmentId}/download`, { responseType: 'blob' }),
+        apiRequest<Blob>({
+          method: 'GET',
+          url: `${FUNDS_BASE}/attachments/${attachmentId}/download`,
+          responseType: 'blob',
+        }),
       { fallbackFileName: fileName || '附件下载' }
     )
   },
   /** 认证获取附件 Blob（用于预览，兼容 Electron） */
   async getAttachmentBlob(attachmentId: number): Promise<Blob> {
-    const res = await request.get(`${FUNDS_BASE}/attachments/${attachmentId}/preview`, {
+    return apiRequest<Blob>({
+      method: 'GET',
+      url: `${FUNDS_BASE}/attachments/${attachmentId}/preview`,
       responseType: 'blob',
     })
-    return res.data as Blob
   },
 
   // ========== 经费状态/字段/操作历史 ==========
   async getStatusHistory(fundId: number) {
-    const response = await get(`${FUNDS_BASE}/${fundId}/history/status`)
-    return response.data
+    return get(`${FUNDS_BASE}/${fundId}/history/status`)
   },
   async getFieldHistory(fundId: number) {
-    const response = await get(`${FUNDS_BASE}/${fundId}/history/fields`)
-    return response.data
+    return get(`${FUNDS_BASE}/${fundId}/history/fields`)
   },
   async getOperationHistory(fundId: number) {
-    const response = await get(`${FUNDS_BASE}/${fundId}/history/operations`)
-    return response.data
+    return get(`${FUNDS_BASE}/${fundId}/history/operations`)
   },
 
   // ========== 预算 ==========
-  async listBudgets(year?: number) {
-    const res = await get(`${BUDGETS_BASE}`, year ? { year } : undefined)
-    const body: any = res.data
-    const items = Array.isArray(body) ? body : body?.items || body?.data || []
-    return { items, total: items.length } as {
-      items: unknown[]
-      total: number
-    }
+  async listBudgets(year?: number): Promise<UnwrappedList<unknown>> {
+    const body = await get<any>(`${BUDGETS_BASE}`, year ? { year } : undefined)
+    return unwrapList<unknown>(body)
   },
   async createBudget(data: {
     year: number
@@ -223,8 +207,7 @@ export const fundApi = {
     remaining_reason?: string
     remarks?: string
   }) {
-    const response = await post(BUDGETS_BASE, data)
-    return response.data
+    return post(BUDGETS_BASE, data)
   },
   async updateBudget(
     budgetId: number,
@@ -237,60 +220,42 @@ export const fundApi = {
       remarks?: string
     }>
   ) {
-    const response = await put(`${BUDGETS_BASE}/${budgetId}`, data)
-    return response.data
+    return put(`${BUDGETS_BASE}/${budgetId}`, data)
   },
   async deleteBudget(budgetId: number) {
-    const response = await del(`${BUDGETS_BASE}/${budgetId}`)
-    return response.data
+    return del(`${BUDGETS_BASE}/${budgetId}`)
   },
 
   // ========== 预算告警与汇总 ==========
   async getBudgetAlerts() {
-    const response = await get(`${BUDGETS_BASE}/alerts`)
-    return response.data
+    return get(`${BUDGETS_BASE}/alerts`)
   },
   // W8-T019：getBudgetSummary 已删除（全仓零消费方）。
 
   // ========== 帮扶村/学校经费汇总 ==========
   async getVillageFundSummary(villageId: number, year?: number) {
-    const response = await get(
-      `${FUNDS_BASE}/village/${villageId}/summary`,
-      year ? { year } : undefined
-    )
-    return response.data
+    return get(`${FUNDS_BASE}/village/${villageId}/summary`, year ? { year } : undefined)
   },
   async getSchoolFundSummary(schoolId: number, year?: number) {
-    const response = await get(
-      `${FUNDS_BASE}/school/${schoolId}/summary`,
-      year ? { year } : undefined
-    )
-    return response.data
+    return get(`${FUNDS_BASE}/school/${schoolId}/summary`, year ? { year } : undefined)
   },
 
   // ========== 预算交易记录 ==========
-  async listTransactions(budgetId: number) {
-    const res = await apiRequest({
+  async listTransactions(budgetId: number): Promise<UnwrappedList<unknown>> {
+    const body = await apiRequest<any>({
       method: 'GET',
       url: `${BUDGETS_BASE}/transactions`,
       params: { budget_id: budgetId },
     })
-    const body: any = res.data
-    const items = Array.isArray(body) ? body : body?.items || body?.data || []
-    return { items, total: items.length } as {
-      items: unknown[]
-      total: number
-    }
+    return unwrapList<unknown>(body)
   },
   async createTransaction(budgetId: number, data: Record<string, any>) {
-    const response = await post(`${BUDGETS_BASE}/transactions`, {
+    return post(`${BUDGETS_BASE}/transactions`, {
       ...data,
       budget_id: budgetId,
     })
-    return response.data
   },
   async deleteTransaction(transactionId: number) {
-    const response = await del(`${BUDGETS_BASE}/transactions/${transactionId}`)
-    return response.data
+    return del(`${BUDGETS_BASE}/transactions/${transactionId}`)
   },
 }

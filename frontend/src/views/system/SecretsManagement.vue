@@ -68,7 +68,6 @@
 
       <el-table
         v-loading="loadingVersions"
-        stripe
         :data="versions"
         border
         empty-text="暂无密钥版本"

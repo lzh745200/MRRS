@@ -30,7 +30,12 @@ class TestClassifyImportRecordsEdges:
     """W18-D1：主键碰撞三分类的兜底分支。"""
 
     def test_missing_business_key_is_treated_as_same(self, tmp_path):
-        """记录缺业务键（村名/组织为空）→ 无法判定身份 → 保守按同一记录。"""
+        """记录缺业务键（组织为空）→ 无法判定身份 → 保守按同一记录。
+
+        W18-D5 起 villages 的业务键只含不可变字段 organization_id（村名可变，
+        改名是增量更新常见场景）。此用例的组织为空 → `_business_key_of` 返回
+        None → `_classify_import_records` 归入 same（不覆写、也不凭空插入重复行）。
+        """
         from app.models.supported_village import SupportedVillage
 
         db = MagicMock()
@@ -39,7 +44,7 @@ class TestClassifyImportRecordsEdges:
 
         free, same, relocated = svc._classify_import_records(
             SupportedVillage,
-            [{"id": 1, "village_name": "", "organization_id": 1}],
+            [{"id": 1, "village_name": "", "organization_id": None}],
             "id",
         )
         assert free == []
@@ -62,6 +67,18 @@ class TestClassifyImportRecordsEdges:
         assert free == []
         assert same == []
         assert len(relocated) == 1
+
+
+    def test_unknown_model_has_no_business_key(self, tmp_path):
+        """模型不在 BUSINESS_KEYS 登记表 → `_business_key_of` 返回 None。"""
+        from app.services.data_package_service import _business_key_of
+
+        class UnknownModel:
+            __tablename__ = "w18_not_in_business_key_registry"
+
+        db = MagicMock()
+        _svc(db, tmp_path)  # 仅确保服务可构造
+        assert _business_key_of(UnknownModel, {"id": 1}) is None
 
 
 class TestRelocatedInsertEdge:

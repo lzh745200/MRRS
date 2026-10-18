@@ -8,6 +8,7 @@
 - 待办事项到期提醒（每日 08:00）
 - 工作周报生成（每周一 06:30）
 - 数据库维护（每日 03:00）
+- 审计/日志大表保留期清理（每日 04:20）
 
 注意：APScheduler 已移除，使用 threading.Timer 替代。
 """
@@ -346,6 +347,48 @@ async def message_cleanup_job():
             logger.info("消息清理完成，删除 %d 条过期消息（保留 30 天）", deleted)
         except Exception as e:
             logger.error("消息清理失败: %s", e, exc_info=True)
+
+
+async def audit_log_cleanup_job():
+    """审计/日志大表保留期清理（W5-T8，每日 04:20）。
+
+    六张审计/日志表（audit_logs / api_access_logs / login_attempts /
+    security_events / data_export_logs / token_blacklist）此前只增不减：
+    audit_middleware 在 H9 批量缓冲前对每个请求独立落库，长期运行下库体积、
+    WAL 与索引维护成本持续上升（备份/体检变慢）。本作业按各表保留期删除超期行
+    （默认值单一事实源在 audit_retention_service.DEFAULT_RETENTION_DAYS，可由
+    同名 SystemConfig 键覆盖；token_blacklist 只删已过期条目，永久吊销保留）。
+
+    失败不外抛（记 ERROR，下个周期重试），与其余清理作业同约定。
+    """
+    from app.services.audit_retention_service import (
+        DEFAULT_RETENTION_DAYS,
+        purge_expired_audit_rows,
+    )
+
+    with get_db_context() as db:
+        try:
+            retention_days = {
+                key: get_int_config(key, default, getter=get_config)
+                for key, default in DEFAULT_RETENTION_DAYS.items()
+            }
+            counts = purge_expired_audit_rows(db, retention_days)
+        except Exception:
+            # 清理失败不阻断其它任务（下个周期会再试），但必须可见
+            logger.error("审计日志保留期清理失败", exc_info=True)
+            return {}
+
+        total = sum(counts.values())
+        if total:
+            logger.info(
+                "审计日志保留期清理完成：删除 %d 行（%s；保留期 %s 天）",
+                total,
+                counts,
+                retention_days,
+            )
+        else:
+            logger.info("审计日志保留期清理完成：无超期数据")
+        return counts
 
 
 async def weekly_report_job():
@@ -769,6 +812,9 @@ def start_backup_scheduler():
     _schedule_daily(message_cleanup_job, 3, 30, "message_cleanup")
     # R27：过期/已吊销登录会话回收（user_sessions 只增不减）
     _schedule_daily(session_cleanup_job, 5, 15, "session_cleanup")
+    # W5-T8：审计/日志大表保留期清理（audit_logs/api_access_logs/login_attempts/
+    # security_events/data_export_logs/token_blacklist 六表只增不减，每请求双写）
+    _schedule_daily(audit_log_cleanup_job, 4, 20, "audit_log_cleanup")
     # R5：过期导出文件 + 残留 .part 回收（此前 expires_at 只用于拒绝下载，无回收）
     _schedule_daily(export_purge_job, 4, 0, "export_purge")
     _schedule_daily(restore_drill_job, 5, 45, "restore_drill")
@@ -787,7 +833,7 @@ def start_backup_scheduler():
     logger.info(
         "调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 自动打包 + 消息清理"
         " + 过期导出回收 + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发"
-        " + 分片清理 + 数据包清理）"
+        " + 分片清理 + 数据包清理 + 审计日志清理）"
     )
 
 

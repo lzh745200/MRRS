@@ -124,8 +124,9 @@ function mountComp() {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  requestMock.requestGet.mockResolvedValue({ data: new Blob(['x']), headers: {} })
-  requestMock.parseContentDisposition.mockReturnValue('项目导入模板.xlsx')
+  // W5-T5：downloadTemplate 收敛为具名 apiRequest<Blob>（返回值即 Blob 本身，
+  // 不再有 AxiosResponse.headers）→ downloadBlobAsFile 直接以兜底文件名触发下载。
+  requestMock.apiRequest.mockResolvedValue(new Blob(['x']))
   requestMock.downloadBlob.mockReturnValue(undefined)
   requestMock.post.mockResolvedValue({
     rows: previewRows,
@@ -224,17 +225,20 @@ describe('downloadTemplate', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     await vm.downloadTemplate()
-    // 使用裸 axios 实例（default export）请求 Blob，便于读取响应头文件名
-    expect(requestMock.requestGet).toHaveBeenCalledWith('/import/template', {
+    // 具名 apiRequest 发起 blob 请求（不再走默认导出的裸 axios 实例）
+    expect(requestMock.apiRequest).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/import/template',
       params: { entity_type: 'project' },
       responseType: 'blob',
     })
-    expect(requestMock.downloadBlob).toHaveBeenCalled()
+    // apiRequest 返回的 Blob 被直接交给统一下载器，文件名用兜底名
+    expect(requestMock.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '项目导入模板.xlsx')
     expect(vm.downloading).toBe(false)
   })
 
   it('失败 → 错误提示', async () => {
-    requestMock.requestGet.mockRejectedValue(new Error('net'))
+    requestMock.apiRequest.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
     await (wrapper.vm as any).downloadTemplate()
@@ -247,15 +251,18 @@ describe('downloadTemplate', () => {
     const btn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('下载导入模板'))
     await btn!.trigger('click')
     await flushPromises()
-    expect(requestMock.requestGet).toHaveBeenCalled()
+    expect(requestMock.apiRequest).toHaveBeenCalled()
   })
 
-  it('下载模板 resp 无 data → Blob 兜底（resp.data 缺失）', async () => {
-    requestMock.requestGet.mockResolvedValue({ headers: {} })
+  it('apiRequest 返回值非 Blob → 下载器拒绝 + 兜底错误提示', async () => {
+    // 204/空响应等场景：返回值既不是 Blob 也没有 data 字段，
+    // downloadBlobAsFile 会抛错，组件 catch 后给出统一失败提示。
+    requestMock.apiRequest.mockResolvedValueOnce({})
     const wrapper = mountComp()
     await flushPromises()
     await (wrapper.vm as any).downloadTemplate()
-    expect(requestMock.downloadBlob).toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalledWith('模板下载失败，请重试')
+    expect(requestMock.downloadBlob).not.toHaveBeenCalled()
   })
 })
 
@@ -664,13 +671,13 @@ describe('projects/Import.vue 文件名校验兜底', () => {
 })
 
 
-describe('downloadTemplate — 响应无 headers 字段的兜底分支', () => {
-  it('resp.headers 为 undefined → 以 {} 解析文件名并使用默认文件名', async () => {
-    requestMock.requestGet.mockResolvedValueOnce({ data: new Blob(['x']) })
+describe('downloadTemplate — 文件名契约（W5-T5）', () => {
+  it('改用具名 apiRequest 后不再解析响应头 → 始终使用兜底文件名', async () => {
     const wrapper = mountComp()
     await flushPromises()
     await (wrapper.vm as any).downloadTemplate()
-    expect(requestMock.parseContentDisposition).toHaveBeenCalledWith({}, '项目导入模板.xlsx')
-    expect(requestMock.downloadBlob).toHaveBeenCalled()
+    // 具名包装器返回的是 Blob 本体（无 headers），Content-Disposition 解析已刻意移除
+    expect(requestMock.parseContentDisposition).not.toHaveBeenCalled()
+    expect(requestMock.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '项目导入模板.xlsx')
   })
 })

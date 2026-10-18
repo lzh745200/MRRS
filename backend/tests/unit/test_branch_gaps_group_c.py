@@ -495,6 +495,7 @@ class _Col:
 class _BareTableModel:
     """既无 org_id 也无 organization_id 列的最小可导出模型替身。"""
 
+    __tablename__ = "w18_bare_export_rows"
     __table__ = SimpleNamespace(columns=[_Col("id"), _Col("name")])
 
 
@@ -507,14 +508,18 @@ class _FalsyManifest(DataPackageManifest):
 
 class TestDataPackageServiceBranches:
     def test_export_data_type_without_org_columns_applies_no_org_filter(self):
-        """203->206: 模型无 org_id/organization_id 列时跳过两个组织过滤分支。"""
+        """203->206: 模型无 org_id/organization_id 列时跳过两个组织过滤分支。
+
+        W18-D8 raw SQL 取数：无任何过滤条件时 SQL 不带 WHERE，行按列名转 dict。
+        """
         db = MagicMock()
-        record = SimpleNamespace(id=1, name="n1", __table__=_BareTableModel.__table__)
-        db.query.return_value = _query_mock(all=[record])
+        db.execute.return_value.fetchall.return_value = [(1, "n1")]
         svc = DataPackageService(db)
         result = svc._export_data_type(5, _BareTableModel)
         assert result == [{"id": 1, "name": "n1"}]
-        db.query.return_value.filter.assert_not_called()  # 未加任何组织过滤
+        stmt, params = db.execute.call_args.args
+        assert "WHERE" not in str(stmt).upper()
+        assert params == {}
 
     async def test_import_package_with_falsy_manifest_skips_manifest_serialization(self, tmp_path):
         """279->284: manifest 整体为假时不序列化 manifest_dict，落库为 None。"""

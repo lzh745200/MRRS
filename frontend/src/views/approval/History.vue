@@ -16,10 +16,12 @@
       <el-form :model="filterForm" inline>
         <el-form-item label="实体类型">
           <el-select v-model="filterForm.entity_type" placeholder="全部" clearable>
-            <el-option label="帮扶村" value="supported_village" />
-            <el-option label="项目" value="project" />
-            <el-option label="经费" value="fund" />
-            <el-option label="学校" value="school" />
+            <el-option
+              v-for="t in entityTypeOptions"
+              :key="t.value"
+              :label="t.label"
+              :value="t.value"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -42,7 +44,7 @@
 
     <!-- 历史列表 -->
     <el-card class="list-card">
-      <el-table v-loading="loading" :data="historyList" stripe>
+      <el-table v-loading="loading" :data="historyList">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="审批标题" min-width="200">
           <template #default="{ row }">
@@ -128,7 +130,7 @@
         <!-- 变更对比 -->
         <el-divider content-position="left">变更内容</el-divider>
         <div v-if="taskDiff" class="diff-view">
-          <el-table stripe :data="diffTableData" border>
+          <el-table :data="diffTableData" border>
             <el-table-column prop="field" label="字段" width="150" />
             <el-table-column prop="original" label="原值">
               <template #default="{ row }">
@@ -181,8 +183,16 @@ import {
   type ApprovalTask,
   type TaskDiff,
 } from '@/api/approval'
+import { getEntityTypeLabel } from '@/config/enums'
 
 // ==================== 状态 ====================
+
+// 实体类型筛选下拉：中文标签单一取自 src/config/enums.ts ENTITY_TYPES
+const entityTypeFilterValues = ['supported_village', 'project', 'fund', 'school']
+const entityTypeOptions = entityTypeFilterValues.map((value) => ({
+  value,
+  label: getEntityTypeLabel(value),
+}))
 
 const { pushSafe } = useRouterSafe()
 const loading = ref(false)

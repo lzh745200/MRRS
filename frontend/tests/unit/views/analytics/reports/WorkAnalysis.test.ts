@@ -203,6 +203,12 @@ const stubs = {
     props: ['percentage', 'status'],
     template: '<div class="el-progress-stub"></div>',
   },
+  // W11-041：图表空态
+  'el-empty': {
+    name: 'ElEmptyStub',
+    props: ['description'],
+    template: '<div class="el-empty-stub">{{ description }}</div>',
+  },
 }
 
 const mountPage = () =>
@@ -523,6 +529,20 @@ describe('分支补全：进度三元/映射兜底/分页 v-model/导出稀疏�
     expect(clickSpy).toHaveBeenCalledTimes(1)
     expect(ElMessage.warning).not.toHaveBeenCalled()
     clickSpy.mockRestore()
+    wrapper.unmount()
+  })
+
+  // W11-041：空数据 → 空态而非全 0 图
+  it('空数据时渲染 el-empty 空态且不渲染图表容器', async () => {
+    vi.mocked(getRuralWorks).mockResolvedValue({ items: [] } as any)
+    const wrapper = mountPage()
+    await flushPromises()
+    const empty = wrapper.find('.el-empty-stub')
+    expect(empty.exists()).toBe(true)
+    expect(empty.text()).toContain('暂无工作数据')
+    expect(wrapper.find('.charts-row').exists()).toBe(false)
+    // 空数据下 updateCharts 因 ref 不存在而短路（不创建实例）
+    expect(wrapper.find('.chart-body').exists()).toBe(false)
     wrapper.unmount()
   })
 })

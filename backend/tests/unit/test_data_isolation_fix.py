@@ -772,19 +772,18 @@ class TestForecastIncomeTrendDataIsolation:
 
     @pytest.fixture(autouse=True)
     def _ensure_sklearn_available(self):
-        """确保 sklearn.linear_model 在 sys.modules 中。
+        """确保 sklearn 可用（真实包优先；仅缺包环境注入替身）。
 
-        单元测试 conftest 会 mock sklearn/scipy，但可能未覆盖所有子模块
-       （如 scipy.sparse）。forecast_income_trend 内部 import
-        sklearn.linear_model 时可能触发 sklearn.utils → scipy.sparse
-        导入失败。此 fixture 确保 sklearn.linear_model 可用（mock 或真实），
-        避免全量测试套件中的 ModuleNotFoundError。
+        W4-T7（2026-10-18）：旧实现在"已安装但尚未 import"时也注入
+        MagicMock，反而把真实实现遮蔽掉；改为 find_spec 判定，仅在包确实
+        不存在时才兜底，避免全量测试套件中的 ModuleNotFoundError。
         """
         import sys
-        if "sklearn.linear_model" not in sys.modules:
-            sys.modules["sklearn.linear_model"] = MagicMock()
-        if "sklearn" not in sys.modules:
+        from importlib.util import find_spec
+
+        if find_spec("sklearn") is None and "sklearn" not in sys.modules:
             sys.modules["sklearn"] = MagicMock()
+            sys.modules["sklearn.linear_model"] = MagicMock()
 
     def test_forecast_income_trend_calls_filter_by_data_scope_with_user(self):
         """forecast_income_trend 应将 user 透传给 filter_by_data_scope。"""

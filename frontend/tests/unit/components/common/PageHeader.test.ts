@@ -19,6 +19,20 @@ describe('common/PageHeader 页头标准件', () => {
     })
     expect(w.find('.header-title').text()).toBe('经费管理')
     expect(w.find('.header-subtitle').text()).toBe('管理帮扶经费记录')
+    expect(w.find('h2.header-title').exists()).toBe(true)
+  })
+
+  it('title 插槽覆盖标题文本（工作台引号内金色用户名）', () => {
+    const w = mount(PageHeader, {
+      props: { title: '欢迎回来，管理员' },
+      slots: { title: '欢迎回来，<span class="gold">张科长</span>' },
+    })
+    expect(w.find('.header-title .gold').text()).toBe('张科长')
+  })
+
+  it('level=1 渲染 h1（工作台保留页面唯一一级标题语义）', () => {
+    const w = mount(PageHeader, { props: { title: '欢迎回来，管理员', level: 1 } })
+    expect(w.find('h1.header-title').text()).toBe('欢迎回来，管理员')
   })
 
   it('无副标题时不渲染 subtitle 节点', () => {

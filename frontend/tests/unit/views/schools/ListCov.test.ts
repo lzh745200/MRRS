@@ -19,6 +19,7 @@ const {
   apiRequestMock,
   delMock,
   getStatsMock,
+  getSchoolStatsMock,
   downloadTplMock,
   getTokenMock,
   fetchMock,
@@ -47,6 +48,7 @@ const {
     apiRequestMock: vi.fn(),
     delMock: vi.fn(),
     getStatsMock: vi.fn(),
+    getSchoolStatsMock: vi.fn(),
     downloadTplMock: vi.fn(),
     getTokenMock: vi.fn(),
     fetchMock: vi.fn(),
@@ -107,7 +109,11 @@ vi.mock('@/api/helpers/blobDownload', () => ({
 }))
 
 vi.mock('@/api/schools', () => ({
-  schoolApi: { getStatistics: getStatsMock, importExcel: importExcelMock },
+  schoolApi: {
+    getStatistics: getStatsMock,
+    getSchoolStatistics: getSchoolStatsMock,
+    importExcel: importExcelMock,
+  },
 }))
 
 vi.mock('@/api/import', () => ({
@@ -168,8 +174,9 @@ const fullStats = {
 }
 
 // el-table-column 注入的三行样本：
-// colRowA 全字段；colRowB 无 id/未知类型/students 回退/未知状态/无创建时间；colRowC 空类型/长名/无计数
-const colRowA = { ...schoolA }
+// colRowA 全字段（地区：分字段回退拼接）；colRowB 无 id/未知类型/students 回退/未知状态/
+// 无创建时间（地区：region 级联文本直出）；colRowC 空类型/长名/无计数（地区：两路均缺失 → '-'）
+const colRowA = { ...schoolA, province: '贵州省', city: '贵阳市', district: '花溪区' }
 const colRowB = {
   name: '无ID学校',
   type: 'alien',
@@ -178,6 +185,7 @@ const colRowB = {
   teachers: 2,
   support_status: 'weird',
   address: '',
+  region: '云南省昆明市盘龙区',
   created_at: '',
 }
 const colRowC = {
@@ -248,6 +256,8 @@ beforeEach(() => {
   vi.resetAllMocks()
   apiRequestMock.mockResolvedValue({ data: { items: [schoolA, schoolB], total: 2 } })
   getStatsMock.mockResolvedValue(fullStats)
+  // 删除前关联计数：默认无关联（走原有"无警示"删除路径）
+  getSchoolStatsMock.mockResolvedValue({ scholarship_count: 0, project_count: 0 })
   delMock.mockResolvedValue({})
   downloadTplMock.mockResolvedValue(undefined)
   getTokenMock.mockReturnValue('tok')
@@ -597,10 +607,75 @@ describe('查看 / 编辑 / 删除 / 新增', () => {
     expect(text).toContain('已完成')
     expect(text).toContain('2024-01-01') // created_at 切分
     expect(dsMock).toHaveBeenCalledWith('贵州省贵阳市', 'address')
+    // 地区列（W10-030）：region 级联文本直出 / 分字段回退拼接 / 两路缺失 '-'（样本见 colRowA/B/C）
+    expect(text).toContain('云南省昆明市盘龙区')
+    expect(text).toContain('贵州省 / 贵阳市 / 花溪区')
     const vm = wrapper.vm as any
+    expect(vm.formatRegion(null)).toBe('-')
+    expect(vm.formatRegion({})).toBe('-')
+    expect(vm.formatRegion({ region: '云南省昆明市盘龙区' })).toBe('云南省昆明市盘龙区')
+    expect(vm.formatRegion({ province: 'A', city: 'B', district: 'C' })).toBe('A / B / C')
     expect(vm.getStatusTagType('active')).toBe('success')
     expect(vm.getStatusTagType('completed')).toBe('primary')
     expect(vm.getStatusTagType('other')).toBe('info')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// W10-030 删除前关联检查：有关联学生/项目时给出警示文案二次确认
+// ─────────────────────────────────────────────────────────────
+describe('删除前关联检查（W10-030）', () => {
+  it('有关联 → 弹关联警示二次确认，确认后仍删除', async () => {
+    getSchoolStatsMock.mockResolvedValueOnce({ scholarship_count: 2, project_count: 1 })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleDelete({ id: 5, name: '阳光小学' })
+    await flushPromises()
+    expect(getSchoolStatsMock).toHaveBeenCalledWith(5)
+    expect(confirmMock).toHaveBeenCalledWith(
+      '该校已关联2 名资助学生、1 个助学兴教项目，删除前请确认无需继续维护这些关联数据。',
+      '关联数据警示',
+      expect.objectContaining({ confirmButtonText: '仍要删除', type: 'warning' })
+    )
+    expect(delMock).toHaveBeenCalledWith('/schools/5')
+    wrapper.unmount()
+  })
+
+  it('有关联但警示被取消 → 不调用删除接口', async () => {
+    getSchoolStatsMock.mockResolvedValueOnce({ scholarship_count: 1, project_count: 0 })
+    confirmMock.mockRejectedValueOnce('cancel')
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleDelete({ id: 6, name: 'X' })
+    await flushPromises()
+    expect(confirmMock).toHaveBeenCalledTimes(1)
+    expect(delMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('无关联 → 不弹警示，直接删除（保持原体验）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleDelete({ id: 7, name: 'Y' })
+    await flushPromises()
+    expect(confirmMock).not.toHaveBeenCalled()
+    expect(delMock).toHaveBeenCalledWith('/schools/7')
+    wrapper.unmount()
+  })
+
+  it('关联计数接口失败 → 降级为无警示，删除不被阻断', async () => {
+    getSchoolStatsMock.mockRejectedValueOnce(new Error('net'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleDelete({ id: 8, name: 'Z' })
+    await flushPromises()
+    expect(confirmMock).not.toHaveBeenCalled()
+    expect(delMock).toHaveBeenCalledWith('/schools/8')
+    wrapper.unmount()
   })
 })
 

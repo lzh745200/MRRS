@@ -44,36 +44,39 @@
       </div>
     </div>
 
-    <!-- 图表区域 -->
-    <div class="charts-row">
-      <div class="chart-card">
-        <div class="chart-card-header">
-          <h3>工作类型分布</h3>
+    <!-- 图表区域（W11-041：空数据渲染空态，而非全 0 图） -->
+    <template v-if="hasAnalysisData">
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>工作类型分布</h3>
+          </div>
+          <div class="chart-body">
+            <div ref="typeChartRef" style="height: 100%"></div>
+          </div>
         </div>
-        <div class="chart-body">
-          <div ref="typeChartRef" style="height: 100%"></div>
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>工作状态分布</h3>
+          </div>
+          <div class="chart-body">
+            <div ref="statusChartRef" style="height: 100%"></div>
+          </div>
         </div>
       </div>
-      <div class="chart-card">
-        <div class="chart-card-header">
-          <h3>工作状态分布</h3>
-        </div>
-        <div class="chart-body">
-          <div ref="statusChartRef" style="height: 100%"></div>
-        </div>
-      </div>
-    </div>
 
-    <div class="charts-row">
-      <div class="chart-card chart-card-full">
-        <div class="chart-card-header">
-          <h3>月度工作完成趋势</h3>
-        </div>
-        <div class="chart-body">
-          <div ref="trendChartRef" style="height: 100%"></div>
+      <div class="charts-row">
+        <div class="chart-card chart-card-full">
+          <div class="chart-card-header">
+            <h3>月度工作完成趋势</h3>
+          </div>
+          <div class="chart-body">
+            <div ref="trendChartRef" style="height: 100%"></div>
+          </div>
         </div>
       </div>
-    </div>
+    </template>
+    <el-empty v-else class="charts-empty" description="暂无工作数据，无法生成分析图表" />
 
     <!-- 数据明细表 -->
     <div class="table-card">
@@ -121,7 +124,7 @@
           </el-select>
         </div>
       </div>
-      <el-table v-loading="loading" :data="filteredTableData" border stripe style="width: 100%">
+      <el-table v-loading="loading" :data="filteredTableData" border style="width: 100%">
         <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="name" label="工作名称" min-width="200" show-overflow-tooltip />
         <el-table-column prop="typeName" label="工作类型" width="130">
@@ -213,6 +216,9 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const totalCount = ref(0)
 const allData = ref<any[]>([])
+
+// W11-041：图表空态 —— 无数据时不渲染全 0 图表，改展示空态提示
+const hasAnalysisData = computed(() => allData.value.length > 0)
 
 // 图表
 const typeChartRef = ref<HTMLDivElement | null>(null)
@@ -572,6 +578,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .work-analysis-page {
+  /* 卡片统一阴影：单一事实源（硬编码色值门禁：本文件仅保留此 1 处字面量） */
+  --work-analysis-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   padding: 20px;
   background: var(--color-bg-hover);
   min-height: 100vh;
@@ -587,7 +595,7 @@ onBeforeUnmount(() => {
   padding: 20px 24px;
   margin-bottom: 20px;
   border-left: 4px solid var(--color-primary-dark-1);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--work-analysis-card-shadow);
 }
 
 .page-title {
@@ -624,7 +632,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--work-analysis-card-shadow);
   transition: transform 0.2s;
 }
 
@@ -690,6 +698,15 @@ onBeforeUnmount(() => {
   margin-bottom: 20px;
 }
 
+/* W11-041：图表区空态（无数据时替代全 0 图表） */
+.charts-empty {
+  background: white;
+  border-radius: 8px;
+  padding: 48px 0;
+  margin-bottom: 20px;
+  box-shadow: var(--work-analysis-card-shadow);
+}
+
 .charts-row:has(.chart-card-full) {
   grid-template-columns: 1fr;
 }
@@ -699,7 +716,7 @@ onBeforeUnmount(() => {
   background: white;
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--work-analysis-card-shadow);
 }
 
 .chart-card-header h3 {
@@ -721,7 +738,7 @@ onBeforeUnmount(() => {
   background: white;
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--work-analysis-card-shadow);
 }
 
 .table-card-header {

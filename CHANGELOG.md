@@ -5,6 +5,51 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.23] - 2026-10-18 — 汇报大屏对象筛选（村/校/单位）+ 在途批次收口
+
+### Added
+
+- **汇报大屏对象维度筛选（W20）**：新增 `GET /api/v1/bigscreen/filters`（数据域内帮扶村 / 帮扶学校 /
+  帮扶单位三组筛选项；单位是村 `support_unit`、校 `support_unit`、项目 `responsible_unit`、
+  结对 `subject_name` 四路并集的自由文本 facet，同名合并计数）与
+  `GET /api/v1/bigscreen/overview?scope_type=all|village|school|unit`（KPI、经费趋势、项目状态、
+  年度对比、经费投入排名、重点项目负责人、对象档案与帮扶明细）。村/校不存在、已软删或越权返回 404；
+  非法维度 / 缺对象 ID / 单位名为空返回 400；单位无匹配返回 200 空统计。数据域沿用 `get_org_scope`，
+  软删模型显式过滤 `is_active`，输出不含 PII。
+- **大屏前端对象筛选**：`views/bigscreen/BigScreen.vue` 头部筛选条（全部 / 帮扶村 / 帮扶学校 / 帮扶单位 +
+  可搜索对象下拉 + 重置），KPI、图表与负责人改由单一 overview 接口渲染；scoped 时新增「对象档案」与
+  「帮扶明细」卡片；scope 与卡片显隐/排序/刷新频率/脱敏一并持久化到 localStorage；filters 仅加载一次、
+  自动刷新只轮询 overview；对象失效或越权 404 自动回退「全部」并去重告警。
+- **方案文档与用户手册**：新增 `docs/design/汇报大屏对象筛选与下钻方案.md`（背景、现状调研、四类 scope
+  方案、逐 scope 数据口径表、API 契约、交互流程、权限安全、性能降级、验收清单、后续演进），
+  `docs/02-用户手册/数据分析功能使用指南.md` 新增「汇报大屏按对象筛选」章节。
+- **单校成效统计端点**（W18 在途收口）：`GET /api/v1/schools/{school_id}/statistics`，由服务端聚合
+  学校项目数/预算、资助学生数与资助金额、学生规模，供学校详情与删除前关联校验使用。
+
+### Fixed
+
+- **W18 在途安全与数据完整性收口**：数据包导出改走原生 SQL，PII 列保持密文出包（不再经
+  TypeDecorator 解密后落入 zip）；跨机数据包主键冲突按业务键判定——缺失键不覆盖本机数据、
+  业务键不同则去主键插入；备份/恢复增加完整性与路径校验、恢复前置校验与失败降级；
+  同步导入时间戳统一 UTC 规范化；离线数据目录与日志路径按平台收口；学校统计、诊断与
+  审计保留策略等配套修复。
+- **测试与门禁收口**：补齐 W18 遗留 19 个「实现已变、测试未跟」的失败用例与 5 个模块
+  （`school.py` / `data_package_service.py` / `backup_service.py` / `pii_crypto.py` /
+  `database_health_service.py`）的语句+分支覆盖率缺口；修复 `UserManagement.vue` 拆分组件的
+  4 处 vue-tsc 类型错误、删除重复渲染测试与死 import、补齐子组件覆盖率；清零工作区新增硬编码色值。
+- **大屏口径修正**：KPI 标签去掉冗余的 "(万)"（由 `unit` 字段承载单位）；`Fund.year` 为 NULL 的
+  经费不再让年度趋势整段降级为空。
+
+### Changed
+
+- 年度趋势聚合从 `/dashboard/yearly-trends` 端点抽成 `_build_yearly_trends(db, data_scope, years)`，
+  由仪表盘与大屏共用，避免两套口径漂移。
+
+### Removed
+
+- 删除 `UserManagementRealRender.test.ts`、`UserManagementRender.test.ts`（与专属测试重复，
+  且违反"同一 .vue 单一执行者"覆盖率规程）、临时探针测试与拆分后残留的死 import。
+
 ## [1.12.22] - 2026-10-17 — 🧾 全部遗留工单落地（004~010 七项）
 
 > 用例口径：后端 **13,349**（676 文件）/ 前端 **6,612**（315 文件，本地全量实测）；

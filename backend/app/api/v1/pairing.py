@@ -74,12 +74,24 @@ class PairingUpdate(BaseModel):
     note: Optional[str] = Field(default=None, max_length=500)
 
 
+class VisitAttachment(BaseModel):
+    """走访照片/凭证附件（由通用 ``/files/upload`` 返回的元数据）。
+
+    与捐赠物资台账（donation.AttachmentItem）同一形态：只存 url + 文件名，
+    文件本体由 /files/upload 落盘，本表不重复实现上传。
+    """
+
+    url: str = Field(..., min_length=1, max_length=500)
+    file_name: Optional[str] = Field(default=None, max_length=300)
+
+
 class VisitCreate(BaseModel):
     visit_date: date
     visitors: str = Field(..., min_length=1, max_length=200)
     purpose: Optional[str] = Field(default=None, max_length=200)
     content: Optional[str] = None
     materials: Optional[str] = Field(default=None, max_length=200)
+    attachments: Optional[list[VisitAttachment]] = None
 
 
 class VisitUpdate(BaseModel):
@@ -88,6 +100,18 @@ class VisitUpdate(BaseModel):
     purpose: Optional[str] = Field(default=None, max_length=200)
     content: Optional[str] = None
     materials: Optional[str] = Field(default=None, max_length=200)
+    attachments: Optional[list[VisitAttachment]] = None
+
+
+def _normalize_attachments(items) -> list[dict]:
+    """统一附件存储形态（create 走全量 dump、update 走 exclude_unset，需归一）。"""
+    return [
+        {
+            "url": a["url"] if isinstance(a, dict) else a.url,
+            "file_name": a.get("file_name") if isinstance(a, dict) else a.file_name,
+        }
+        for a in items
+    ]
 
 
 # ==================== 内部工具 ====================
@@ -375,6 +399,9 @@ async def create_visit(
         purpose=data.purpose,
         content=data.content,
         materials=data.materials,
+        attachments=(
+            _normalize_attachments(data.attachments) if data.attachments is not None else None
+        ),
         organization_id=pairing.organization_id,
         created_by=current_user.id,
     )
@@ -398,7 +425,10 @@ async def update_visit(
     pairing = _get_pairing_or_404(db, pairing_id, current_user, "无权编辑该结对记录的走访")
     visit = _get_visit_or_404(db, pairing, visit_id, current_user, "无权编辑该走访记录")
 
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    if update_data.get("attachments") is not None:
+        update_data["attachments"] = _normalize_attachments(update_data["attachments"])
+    for key, value in update_data.items():
         setattr(visit, key, value)
     safe_commit(db)
     db.refresh(visit)

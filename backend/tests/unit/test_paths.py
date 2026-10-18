@@ -423,7 +423,17 @@ class TestGetUploadsPath:
 # ─────────────────────────────────────────────────────────────
 class TestGetDatabasePath:
     def test_returns_data_path_with_db_filename(self, monkeypatch, tmp_path):
+        """两级 URL 都不是绝对 sqlite 文件时，回落到传统 data/rural_revitalization.db。
+
+        W4-T6（2026-10-18）：conftest 现在把 DATABASE_URL（env + settings）统一为
+        会话临时库的**绝对**路径，而本用例测的恰是兜底分支，故显式清掉 env 并把
+        settings 改成内存库（db_file_from_url 对 `:memory:` 返回 None）。
+        """
         _setup_dev_mode(monkeypatch, tmp_path)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "DATABASE_URL", "sqlite:///:memory:")
         result = get_database_path()
         assert result == (tmp_path / "data" / "rural_revitalization.db").resolve()
 

@@ -56,7 +56,16 @@ _os.environ["BUMOFU_BACKEND_DIR_OVERRIDE"] = str(_APP_DATA_ROOT)
 # 回归守护：tests/unit/test_paths.py::TestSessionIsolationContract
 _os.environ["BUMOFU_DEV_MODE"] = "1"
 
-_os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+# W4-T6（2026-10-18）：测试库统一为**会话临时根下的绝对路径**（每个 pytest 进程 /
+# xdist worker 各自 mkdtemp 一份 → 天然按 worker 隔离）。历史写法是相对字面量
+# `sqlite:///./test.db`：Settings 在 import 期已按临时根归一成绝对路径建好全局引擎，
+# 但下面的 mock_settings fixture 又把 settings/env 强制回相对值 —— 任何**运行期现场
+# 解析**数据库路径的代码（paths.get_database_path、备份/恢复、升级排练）于是落到
+# CWD 的 backend/test.db，与引擎所指不是同一个文件；该相对文件还会被同一机器上的
+# 并发行共享，是 seed_admin / soft_delete / audit 顺序耦合抖动的来源。
+# 模块级与 fixture 统一引用本常量，两条路径不再分叉。
+TEST_DATABASE_URL = f"sqlite:///{(_APP_DATA_ROOT / 'test.db').as_posix()}"
+_os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 _os.environ["LOG_FILE"] = (_APP_DATA_ROOT / "logs" / "app.log").as_posix()
 
 # ── 前端构建产物桩：让 main.py 的前端服务分支在 Linux CI 上也能执行 ──
@@ -196,6 +205,11 @@ def pytest_collection_modifyitems(config, items):
         "test_coverage_gap_batch3",  # asyncio 事件循环敏感——其他测试破坏 loop 后失败
         "test_data_dashboard_api",
     }
+    # W4-T7（2026-10-18）：顺序耦合治理/随机序冒烟的逃生舱 —— 置 1 时保持
+    # pytest 的自然（或 pytest-randomly 的随机）集合顺序，用于暴露真实的
+    # "必须先跑"依赖；默认不设，维持既有的稳定运行序。
+    if os.environ.get("BUMOFU_TEST_NO_ITEM_REORDER") == "1":
+        return
     first = []
     rest = []
     for item in items:
@@ -774,7 +788,8 @@ def mock_settings():
     os.environ["SECRET_KEY"] = "test-secret-key-32-chars-long!!!!!"
     os.environ["ENVIRONMENT"] = "testing"
     os.environ["DEBUG"] = "true"
-    os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+    # W4-T6：绝对路径（本 worker 独有的临时库），与模块级常量同源，避免现场解析分叉
+    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
     os.environ["CSRF_ENABLED"] = "false"
     # 强制覆盖 settings 对象，防止模块已在 env 设置前实例化
     from app.core.config import settings
@@ -788,7 +803,7 @@ def mock_settings():
     settings.SECRET_KEY = "test-secret-key-32-chars-long!!!!!"
     settings.ENVIRONMENT = "testing"
     settings.DEBUG = True
-    settings.DATABASE_URL = "sqlite:///./test.db"
+    settings.DATABASE_URL = TEST_DATABASE_URL
     settings.CSRF_ENABLED = False
     # 确保 test.db 表结构存在（幂等）：直接连 SessionLocal 的测试（如 sync_version
     # 回归测试）依赖该库；全量测试中部分 teardown 可能清空表结构

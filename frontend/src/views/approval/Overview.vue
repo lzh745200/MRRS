@@ -108,6 +108,7 @@ import { getOverview, getPendingTasks, batchApprove } from '@/api/approval'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 
 import { format } from '@/utils'
+import { getEntityTypeLabel } from '@/config/enums'
 const { pushSafe } = useRouterSafe()
 
 const loading = ref(false)
@@ -121,19 +122,9 @@ const stats = reactive({
   total_count: 0,
 })
 
-const TYPE_LABELS: Record<string, string> = {
-  project: '项目',
-  fund: '经费',
-  village: '帮扶村',
-  school: '学校',
-  rural_work: '乡村工作',
-  policy: '政策',
-  other: '其他',
-}
-
 function typeLabel(t?: string) {
-  /* c8 ignore next -- TYPE_LABELS['other'] 恒有值，'其他' 兜底分支不可达 */
-  return TYPE_LABELS[t || 'other'] || t || '其他'
+  /* c8 ignore next -- ENTITY_TYPES['other'] 恒有值，'其他' 兜底分支不可达 */
+  return getEntityTypeLabel(t || 'other') || t || '其他'
 }
 
 const formatDate = (v?: string | null): string => format.formatDateTimeLocale(v)

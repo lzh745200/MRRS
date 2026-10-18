@@ -50,7 +50,7 @@
         <!-- 评估因子 -->
         <div class="factors-section">
           <h4>评估因子</h4>
-          <el-table stripe :data="assessment.factors" border style="width: 100%">
+          <el-table  :data="assessment.factors" border style="width: 100%">
             <el-table-column prop="factor" label="因子" min-width="140" />
             <el-table-column prop="score" label="评分" width="80" align="center">
               <template #default="{ row }">
@@ -209,7 +209,6 @@
         v-loading="loadingPolicies"
         :data="policies"
         border
-        stripe
         style="width: 100%"
         row-key="id"
       >
@@ -370,7 +369,7 @@
         </el-select>
       </div>
 
-      <el-table v-loading="loadingEvents" stripe :data="events" border style="width: 100%">
+      <el-table v-loading="loadingEvents"  :data="events" border style="width: 100%">
         <el-table-column
           prop="timestamp"
           label="时间"

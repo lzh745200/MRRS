@@ -155,15 +155,19 @@ class TestBusinessKeyHelper:
         from app.models.supported_village import SupportedVillage
         from app.services.data_package_service import _business_key_of
 
+        # W18-D5 修正：业务键只含不可变字段（organization_id）。village_name 可变
+        # （改名是增量更新的常见场景），含它会把"同一条记录的更新"误判成两条记录。
         key = _business_key_of(SupportedVillage, {"village_name": "某村", "organization_id": 3})
-        assert key == ("某村", 3)
+        assert key == (3,)
 
     def test_missing_key_part_returns_none(self):
         from app.models.supported_village import SupportedVillage
         from app.services.data_package_service import _business_key_of
 
+        # 缺 organization_id（唯一业务键字段）→ None
         assert _business_key_of(SupportedVillage, {"village_name": "某村"}) is None
-        assert _business_key_of(SupportedVillage, {"village_name": "  ", "organization_id": 1}) is None
+        # organization_id 为空串 → None（无法判定租户归属）
+        assert _business_key_of(SupportedVillage, {"village_name": "某村", "organization_id": "  "}) is None
 
     def test_unknown_model_returns_none(self):
         from app.services.data_package_service import _business_key_of

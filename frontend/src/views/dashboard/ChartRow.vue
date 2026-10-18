@@ -53,7 +53,9 @@ async function loadData() {
   error.value = false
   try {
     const [projRes, fundRes] = await Promise.all([
-      apiRequest({ method: 'GET', url: '/projects', params: { summary: true, page_size: 5 } }),
+      // W8-018：params 曾携带 /projects 后端列表接口不存在的 summary 幽灵参数
+      // （FastAPI 会静默忽略），已移除。
+      apiRequest({ method: 'GET', url: '/projects', params: { page_size: 5 } }),
       get('/dashboard/stats', { refresh: true }),
     ])
     projects.value = projRes?.data?.items || projRes?.data?.data || projRes?.items || []

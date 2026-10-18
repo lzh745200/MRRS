@@ -46,7 +46,8 @@ export type PolicyStatistics = {
 // ── Options ──
 export const getLevelOptions = () => get('/policies/options/levels')
 export const getStatusOptions = () => get('/policies/options/statuses')
-export const getPolicyTypes = () => get('/policies/options/levels')
+// W8-018：原政策类型选项函数曾是 getLevelOptions 的同 URL 复制
+// （/policies/options/levels），全仓无生产调用方（仅测试自测），已随清扫删除。
 export const searchPolicies = (query: string) => get('/policies/search', { q: query })
 
 // ── Categories ──

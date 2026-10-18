@@ -1,6 +1,18 @@
 <template>
   <div class="dashboard-home dashboard-modern">
-    <PageHeader @toggle-layout="showLayoutEditor = !showLayoutEditor" />
+    <PageHeader :title="welcomeTitle" :subtitle="formattedDate" :level="1">
+      <template #title>
+        欢迎回来，<span class="welcome-name">{{ displayName }}</span>
+      </template>
+      <template #extra>
+        <HeaderActions
+          :is-admin="isAdmin"
+          :backing-up="backingUp"
+          @toggle-layout="showLayoutEditor = !showLayoutEditor"
+          @backup="handleBackup"
+        />
+      </template>
+    </PageHeader>
 
     <!-- 自定义布局面板 -->
     <transition name="slide">
@@ -142,21 +154,25 @@ import {
   Money,
   EditPen,
 } from '@element-plus/icons-vue'
-import PageHeader from './PageHeader.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
+import HeaderActions from './components/HeaderActions.vue'
 import KpiCards from './KpiCards.vue'
 import QuickActions from './components/QuickActions.vue'
 import ChartRow from './ChartRow.vue'
 import InfoRow from './InfoRow.vue'
 import { useUserStore } from '@/stores/user'
+import { useAuthStore } from '@/stores/auth'
 import { createBackup } from '@/api/backup'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { isAdminUser } from '@/utils/roleAccess'
+import { format } from '@/utils'
 
 const { pushSafe } = useRouterSafe()
 const backingUp = ref(false)
 
 const showLayoutEditor = ref(false)
 const userStore = useUserStore()
+const authStore = useAuthStore()
 // M47：管理员判定统一走 roleAccess.isAdminUser()（读 AuthStorage 并 normalizeRole），
 // 不再硬编码原始 role —— 存量旧角色 manager/approval_leader 归一化后即 admin，
 // 原实现会把他们误判为非管理员（隐藏备份/恢复入口），与路由守卫口径不一致。
@@ -165,6 +181,13 @@ const userStore = useUserStore()
 //（store 变化时重新计算），也让测试替身走同一条判定路径。
 const isAdmin = computed(() => isAdminUser(userStore.currentUser))
 const isManager = computed(() => isAdmin.value)
+
+// 页头欢迎语与日期副标题：页头骨架走共享 PageHeader 标准件（#title / #extra 插槽）
+const displayName = computed(
+  () => authStore.user?.full_name || authStore.user?.username || '管理员'
+)
+const welcomeTitle = computed(() => `欢迎回来，${displayName.value}`)
+const formattedDate = computed(() => format.formatCnDate(new Date()))
 
 // 布局持久化
 const STORAGE_KEY = 'dashboard_layout_v2'
@@ -344,6 +367,10 @@ function handleRestore() {
 
 .kpi-strip {
   /* KpiCards 内部自行管理 5 列布局 */
+}
+
+.welcome-name {
+  color: $badge-gold;
 }
 
 .kpi-toolbar {

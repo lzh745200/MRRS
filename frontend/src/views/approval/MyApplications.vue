@@ -55,7 +55,7 @@
 
     <!-- 申请列表 -->
     <el-card>
-      <el-table v-loading="loading" :data="applications" stripe>
+      <el-table v-loading="loading" :data="applications">
         <el-table-column prop="title" label="申请标题" min-width="200" />
         <el-table-column prop="type" label="类型" width="120">
           <template #default="{ row }">
@@ -102,6 +102,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getMyTasks, formatEntityType, type ApprovalTask } from '@/api/approval'
 import { post } from '@/api/request'
+import { getApprovalStatusLabel } from '@/config/enums'
 
 import { format } from '@/utils'
 const loading = ref(false)
@@ -118,13 +119,7 @@ const stats = computed(() => {
   }
 })
 
-const statusLabel = (s: string) =>
-  ({
-    pending: '待审批',
-    approved: '已通过',
-    rejected: '已驳回',
-    withdrawn: '已撤回',
-  })[s] || s
+const statusLabel = (s: string) => getApprovalStatusLabel(s)
 const statusTagType = (
   s: string
 ): 'success' | 'warning' | 'danger' | 'info' | 'primary' | undefined =>

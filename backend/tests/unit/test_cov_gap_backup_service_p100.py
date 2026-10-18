@@ -38,37 +38,45 @@ def _flaky_unlink(target: str, exc: OSError):
 
 
 class TestRollbackSnapshotFailures:
-    def test_occupied_database_file_raises_and_preserves_snapshot(self, tmp_path):
-        """696-708 行：原库删除失败（被占用）→ fail-loud，快照保留、不做半截覆盖。"""
-        backup_dir = tmp_path / "backups"
-        backup_dir.mkdir()
+    def test_occupied_database_file_raises_and_preserves_snapshot(self, tmp_path, monkeypatch):
+        """W18-D11 订正：replace 与 copy2 都失败 → fail-loud + 快照移入 pre_restore。
+
+        旧契约（unlink 失败即 fail-loud）锁定的是缺陷本身：unlink+copy 两步在
+        Windows 占用下会产生"旧文件已删、新文件没就位"的半恢复态，且快照困死
+        %TEMP%。新契约：os.replace 原子换名（无中间态）→ copy2 兜底 → 全失败时
+        快照移入 backup_dir/pre_restore 并把路径写进异常（重启后可自救）。
+        """
+        import app.services.backup_service as bs
+        import app.utils.paths as paths_mod
+
         db_path = tmp_path / "data" / "rural_revitalization.db"
         db_path.parent.mkdir()
         db_path.write_bytes(b"current-db")
         snapshot = tmp_path / "snapshot.db"
         snapshot.write_bytes(b"snapshot-db")
 
-        svc = _make_svc(str(backup_dir))
+        svc = _make_svc(str(tmp_path / "backups"))
         svc.database_path = str(db_path)
         svc.uploads_dir = str(tmp_path / "uploads")
 
-        with patch.object(
-            backup_service.os,
-            "unlink",
-            side_effect=_flaky_unlink(str(db_path), OSError("file is in use by another process")),
-        ):
-            with pytest.raises(RuntimeError) as exc:
-                svc._rollback_to_snapshots(str(snapshot), None)
+        def _fail(src, dst):
+            raise OSError("file is in use by another process")
+
+        monkeypatch.setattr(bs.os, "replace", _fail)
+        monkeypatch.setattr(bs.shutil, "copy2", _fail)
+        # _preserve_snapshot 走原函数（其 os.replace 同样失败 → 原地保留快照）
+        with pytest.raises(RuntimeError) as exc:
+            svc._rollback_to_snapshots(str(snapshot), None)
 
         message = str(exc.value)
         assert "数据库文件被占用" in message
-        assert str(snapshot) in message                      # 手工恢复所需的快照位置
+        assert "快照已保留" in message                       # 自救路径写进异常
         assert isinstance(exc.value.__cause__, OSError)      # 原始失败原因不被吞掉
         assert db_path.read_bytes() == b"current-db"         # 未用 copy 写出半截库
         assert snapshot.read_bytes() == b"snapshot-db"       # 快照必须保留
 
-    def test_snapshot_cleanup_failure_only_warns(self, tmp_path):
-        """712-713 行：快照清理失败（被占用/权限）→ 仅 warning，回滚结论不变。"""
+    def test_snapshot_cleanup_failure_only_warns(self, tmp_path, monkeypatch):
+        """W18-D11 订正：回滚（os.replace）成功但快照清理失败 → 仅 warning。"""
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
         db_path = tmp_path / "data" / "rural_revitalization.db"
@@ -81,6 +89,22 @@ class TestRollbackSnapshotFailures:
         svc.database_path = str(db_path)
         svc.uploads_dir = str(tmp_path / "uploads")
 
+        # os.replace 会把快照换名为 prod.db；让**替换后的快照路径**（即 prod.db
+        # 已不存在于原位）的 unlink 失败不可构造 —— 新实现 replace 成功即消费快照。
+        # 语义等价物：回滚后快照原位 unlink 失败 → 让 replace 失败而 copy2 成功，
+        # copy2 成功后 unlink 快照失败 → 残留 + warning。
+        real_copy2 = backup_service.shutil.copy2
+
+        def _replace_fail_then_copy(src, dst):
+            if str(src) == str(snapshot):
+                raise OSError("locked for replace")
+            return real_copy2(src, dst)
+
+        monkeypatch.setattr(backup_service.os, "replace", _replace_fail_then_copy)
+        monkeypatch.setattr(
+            backup_service.shutil, "copy2",
+            lambda src, dst: real_copy2(src, dst),
+        )
         with patch.object(
             backup_service.os,
             "unlink",

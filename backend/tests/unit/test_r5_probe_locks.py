@@ -138,6 +138,23 @@ class TestScholarshipImportMapping:
         assert "学校不存在" in str(data.get("errors"))
 
 
+class TestLegacyScholarshipImportDeprecation:
+    """W8-018 清理锁定：旧版端点保留可用，但必须标记 deprecated 且指向替代端点。"""
+
+    def test_route_marked_deprecated_with_successor_pointer(self):
+        from app.main import app
+
+        route = next(
+            r
+            for r in app.routes
+            if getattr(r, "path", "") == "/api/v1/schools/scholarship/import"
+            and "POST" in getattr(r, "methods", set())
+        )
+        assert route.deprecated is True
+        assert "/{school_id}/scholarship-students/import" in (route.summary or "")
+        assert "scholarship-students/import" in (route.description or "")
+
+
 class TestRuralWorkVillageGuard:
     def test_dangling_village_id_400_not_500(self, auth_setup):
         """悬挂 village_id 必须 400 + 明细，不得裸 IntegrityError 500。"""

@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.12.22"
+    PROJECT_VERSION: str = "1.12.23"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -354,6 +354,16 @@ class Settings(BaseSettings):
         if self.USE_ENCRYPTED_SECRETS:
             self._load_encrypted_secrets()
 
+        self._apply_production_security_baseline()
+        self._warn_missing_pass_code_secret()
+        self._resolve_runtime_paths()
+
+    def _apply_production_security_baseline(self) -> None:
+        """生产环境安全基线：强制关闭 SQL echo + 确保字段加密密钥可用。
+
+        拆为独立方法：``model_post_init`` 决策点已达 C901 阈值（与
+        ``_absolutize_sqlite_url`` 同理），两条基线各自独立。
+        """
         # 安全基线：生产环境强制关闭 SQL echo，避免敏感数据（身份证/手机号/资金）
         # 落入日志。即使 .env 误配 DB_ECHO=true，生产环境也强制降级为 False。
         if self.ENVIRONMENT == "production" and self.DB_ECHO:
@@ -387,8 +397,8 @@ class Settings(BaseSettings):
                     exc,
                 )
 
-        self._warn_missing_pass_code_secret()
-
+    def _resolve_runtime_paths(self) -> None:
+        """把相对默认路径归一到用户数据目录（Windows 安装版 Program Files 只读）。"""
         # 动态设置数据目录路径（解决 Windows 安装版权限问题）
         # 首先获取默认数据目录，供后续使用
         data_dir = _get_default_data_dir()

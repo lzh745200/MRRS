@@ -5,24 +5,8 @@ from io import BytesIO
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-
-@pytest.fixture(autouse=True)
-def mock_settings():
-    import os
-    os.environ["SECRET_KEY"] = "test-secret-key-32-chars-long!!!!!"
-    os.environ["ENVIRONMENT"] = "testing"
-    os.environ["DEBUG"] = "true"
-    os.environ["DATABASE_URL"] = "sqlite:///./test.db"
-    os.environ["CSRF_ENABLED"] = "false"
-    from app.core.config import settings
-    settings.SECRET_KEY = "test-secret-key-32-chars-long!!!!!"
-    settings.ENVIRONMENT = "testing"
-    settings.DEBUG = True
-    settings.DATABASE_URL = "sqlite:///./test.db"
-    settings.CSRF_ENABLED = False
-    yield
-    for k in ["SECRET_KEY", "ENVIRONMENT", "DEBUG", "DATABASE_URL", "CSRF_ENABLED"]:
-        os.environ.pop(k, None)
+# W4-T6（2026-10-18）：删除本模块重复的 mock_settings fixture —— 见
+# tests/conftest.py 顶部 TEST_DATABASE_URL 注释（相对字面量会造成现场解析分叉）。
 
 
 @pytest.fixture

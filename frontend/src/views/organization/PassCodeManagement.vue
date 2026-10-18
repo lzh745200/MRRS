@@ -182,7 +182,7 @@
         </el-form-item>
       </el-form>
 
-      <el-table v-loading="loading" :data="tableData" border stripe style="width: 100%">
+      <el-table v-loading="loading" :data="tableData" border  style="width: 100%">
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="organization_name" label="组织单位" min-width="180" />
         <el-table-column prop="verification_code" label="校验码" width="100" align="center" />

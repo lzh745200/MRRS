@@ -1,10 +1,11 @@
 """
 数据与报表路由子模块
-聚合 analytics / statistics / reports / data_reports / data_packages / dashboard 路由
+聚合 analytics / statistics / reports / data_reports / data_packages / dashboard / bigscreen 路由
 """
 from fastapi import APIRouter
 
 from .analytics import router as analytics_router
+from .bigscreen import router as bigscreen_router
 from .dashboard import router as dashboard_router
 from .data_packages import router as data_packages_router
 from .data_quality import router as data_quality_router
@@ -20,6 +21,7 @@ router.include_router(reports_router)
 router.include_router(data_reports_router)
 router.include_router(data_packages_router)
 router.include_router(dashboard_router)
+router.include_router(bigscreen_router)
 router.include_router(data_quality_router, prefix="/data-quality")
 
 __all__ = ["router"]

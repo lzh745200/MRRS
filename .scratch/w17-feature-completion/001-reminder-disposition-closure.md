@@ -24,10 +24,10 @@ blocked-by: []
   重新打开 / 前往处理）+ 状态标签 + 过滤页签。
 
 **验收**
-- [ ] `GET /reminders` 按 `current_user.id` 真实返回本人提醒（修复恒空缺陷）
-- [ ] 处置幂等（重复处理不报错）、越权 404、参数非法 422、非法 id 404
-- [ ] 后端新代码行+分支 100%；前端新分支 100%；flake8/vue-tsc/eslint 0
-- [ ] 回归：`tests/unit/test_reminders.py`、`test_reminder_round2.py`、
+- [x] `GET /reminders` 按 `current_user.id` 真实返回本人提醒（修复恒空缺陷）
+- [x] 处置幂等（重复处理不报错）、越权 404、参数非法 422、非法 id 404
+- [x] 后端新代码行+分支 100%；前端新分支 100%；flake8/vue-tsc/eslint 0
+- [x] 回归：`tests/unit/test_reminders.py`、`test_reminder_round2.py`、
   `test_coverage_gap_batch8.py`、前端 `ReminderCenter.test.ts` 全绿
 
 ## Resolution（2026-10-17，已完成）

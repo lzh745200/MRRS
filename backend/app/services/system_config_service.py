@@ -113,6 +113,13 @@ class SystemConfigService:
         "auto_package_dir": {"value": "", "description": "自动打包目标目录（U盘/共享盘，留空=不启用）"},
         "last_package_time": {"value": "", "description": "最近自动打包时间"},
         "data_retention_days": {"value": "365", "description": "数据保留天数"},
+        # W5-T8：审计/日志大表保留期（天），由 backup_scheduler.audit_log_cleanup_job
+        # 读取；0 或负数 = 禁用该表自动清理（默认值见 audit_retention_service）。
+        "audit_log_retention_days": {"value": "180", "description": "审计日志（audit_logs）保留天数，0=不清理"},
+        "api_access_log_retention_days": {"value": "180", "description": "接口访问日志（api_access_logs）保留天数，0=不清理"},
+        "login_attempt_retention_days": {"value": "90", "description": "登录尝试（login_attempts）保留天数，0=不清理"},
+        "security_event_retention_days": {"value": "365", "description": "安全事件（security_events）保留天数，0=不清理"},
+        "data_export_log_retention_days": {"value": "365", "description": "数据导出日志（data_export_logs）保留天数，0=不清理"},
         "package_max_size_mb": {"value": "100", "description": "数据包最大大小（MB）"},
         "last_backup_time": {"value": "", "description": "最后备份时间"},
         "system_version": {"value": settings.PROJECT_VERSION, "description": "系统版本"},

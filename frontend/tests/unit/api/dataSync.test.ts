@@ -1,18 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// dataSync.ts 从 '@/api/request' 导入 get/post（自动拆信封，resolve body 即可）和
-// default（原始 axios 实例，downloadExportPackage 用于 blob 下载）；import 链还经过
-// '@/api/helpers/blobDownload'，因此 mock 必须额外提供 parseContentDisposition/downloadBlob。
-const { mockGet, mockPost, mockDownloadBlob } = vi.hoisted(() => ({
+// dataSync.ts 从 '@/api/request' 导入 get/post/apiRequest（自动拆信封，resolve body 即可）；
+// W5-T5 后 downloadExportPackage 改用 apiRequest<Blob>（返回值即 Blob），不再依赖默认导出。
+// import 链还经过 '@/api/helpers/blobDownload'，因此 mock 必须额外提供
+// parseContentDisposition/downloadBlob。
+const { mockGet, mockPost, mockApiRequest, mockDownloadBlob } = vi.hoisted(() => ({
   mockGet: vi.fn().mockResolvedValue({}),
   mockPost: vi.fn().mockResolvedValue({}),
+  mockApiRequest: vi.fn().mockResolvedValue({}),
   mockDownloadBlob: vi.fn(),
 }))
 
 vi.mock('@/api/request', () => ({
-  default: { get: (...args: any[]) => mockGet(...args) },
   get: (...args: any[]) => mockGet(...args),
   post: (...args: any[]) => mockPost(...args),
+  apiRequest: (...args: any[]) => mockApiRequest(...args),
   parseContentDisposition: (_headers: any, fallback: string) => fallback,
   downloadBlob: (...args: any[]) => mockDownloadBlob(...args),
   getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
@@ -79,18 +81,22 @@ describe('api/dataSync', () => {
   })
 
   it('downloadExportPackage 无扩展名时补 .rrs 兜底文件名', async () => {
-    mockGet.mockResolvedValue({ data: new Blob(['x']) })
+    mockApiRequest.mockResolvedValue(new Blob(['x']))
     await downloadExportPackage('pkg1')
-    expect(mockGet).toHaveBeenCalledWith('/data-sync/export/download/pkg1', {
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/data-sync/export/download/pkg1',
       responseType: 'blob',
     })
     expect(mockDownloadBlob).toHaveBeenCalledWith(expect.any(Blob), 'pkg1.rrs')
   })
 
   it('downloadExportPackage 已含扩展名时原样作兜底文件名', async () => {
-    mockGet.mockResolvedValue({ data: new Blob(['x']) })
+    mockApiRequest.mockResolvedValue(new Blob(['x']))
     await downloadExportPackage('pkg1.zip')
-    expect(mockGet).toHaveBeenCalledWith('/data-sync/export/download/pkg1.zip', {
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/data-sync/export/download/pkg1.zip',
       responseType: 'blob',
     })
     expect(mockDownloadBlob).toHaveBeenCalledWith(expect.any(Blob), 'pkg1.zip')

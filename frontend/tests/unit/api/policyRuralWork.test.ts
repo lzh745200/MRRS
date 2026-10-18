@@ -40,7 +40,6 @@ vi.mock('@/api/request', () => ({
 
 import {
   getLevelOptions,
-  getPolicyTypes,
   searchPolicies,
   getPolicyCategories,
   getPolicyStats,
@@ -88,10 +87,6 @@ describe('api/policy', () => {
 
   it('getLevelOptions', () => {
     getLevelOptions()
-    expect(mockGet).toHaveBeenCalledWith('/policies/options/levels')
-  })
-  it('getPolicyTypes', () => {
-    getPolicyTypes()
     expect(mockGet).toHaveBeenCalledWith('/policies/options/levels')
   })
   it('searchPolicies GET /policies/search with q', () => {

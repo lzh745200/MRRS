@@ -572,8 +572,16 @@ class TestPaths:
 
     def test_get_database_path(self):
         from app.utils.paths import get_database_path
+
         p = get_database_path()
-        assert 'rural_revitalization.db' in str(p)
+        # W4-T6（2026-10-18）：conftest 把 DATABASE_URL（env + settings）统一为
+        # 会话临时库的绝对路径后，路径解析必须与运行时 URL 指向同一文件，
+        # 而不是回落到默认的 rural_revitalization.db。
+        from urllib.parse import unquote
+
+        raw = os.environ["DATABASE_URL"].replace("sqlite:///", "", 1)
+        assert p == Path(unquote(raw))
+        assert p.name == "test.db"
 
     def test_get_log_path(self):
         from app.utils.paths import get_log_path

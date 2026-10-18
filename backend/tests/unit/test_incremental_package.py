@@ -20,51 +20,60 @@ class _FakeColumn:
 
 
 class _FakeTable:
-    columns = [_FakeColumn("id"), _FakeColumn("sync_version")]
+    def __init__(self, *column_names):
+        self.columns = [_FakeColumn(name) for name in column_names]
 
 
 class _FakeModel:
-    __table__ = _FakeTable()
+    """W18-D8：_export_data_type 走 raw SQL，模型只需表名 + 列元数据。"""
+
+    __tablename__ = "incremental_schools"
+    __table__ = _FakeTable("id", "sync_version")
     sync_version = 1
     org_id = 1
 
 
-def test_export_data_type_incremental_filter():
+def _svc_with_execute(rows=()):
     from app.services.data_package_service import DataPackageService
 
     db = MagicMock()
+    db.execute.return_value.fetchall.return_value = list(rows)
     svc = DataPackageService(db)
-    query = MagicMock()
-    query.filter.return_value = query
-    query.all.return_value = []
-    db.query.return_value = query
+    return svc, db
 
+
+def test_export_data_type_incremental_filter():
     # 增量: org 过滤 + sync_version 过滤
+    svc, db = _svc_with_execute()
     svc._export_data_type(1, _FakeModel(), since_sync_version=100)
-    assert query.filter.call_count == 2
+    stmt, params = db.execute.call_args.args
+    sql = str(stmt)
+    assert "org_id = :org_id" in sql
+    assert "sync_version > :since_sync" in sql
+    assert params == {"org_id": 1, "since_sync": 100}
 
-    # 全量: 仅 org 过滤
-    query.filter.reset_mock()
+    # 全量: 仅 org 过滤（sync_version 只作为选列出现，不得出现在 WHERE 条件）
     svc._export_data_type(1, _FakeModel(), since_sync_version=None)
-    assert query.filter.call_count == 1
+    stmt, params = db.execute.call_args.args
+    sql = str(stmt)
+    assert "sync_version > :since_sync" not in sql
+    assert "org_id = :org_id" in sql
+    assert params == {"org_id": 1}
 
 
 def test_export_data_type_incremental_no_sync_column():
-    from app.services.data_package_service import DataPackageService
-
-    db = MagicMock()
-    svc = DataPackageService(db)
-    query = MagicMock()
-    query.filter.return_value = query
-    query.all.return_value = []
-    db.query.return_value = query
-
     class _NoSyncModel:
-        __table__ = SimpleNamespace(columns=[_FakeColumn("id")])
+        __tablename__ = "incremental_no_sync"
+        __table__ = _FakeTable("id")
         org_id = 1
 
+    svc, db = _svc_with_execute()
     svc._export_data_type(1, _NoSyncModel(), since_sync_version=100)
-    assert query.filter.call_count == 1
+    stmt, params = db.execute.call_args.args
+    sql = str(stmt)
+    assert "sync_version > :since_sync" not in sql
+    assert "org_id = :org_id" in sql
+    assert params == {"org_id": 1}
 
 
 def test_export_api_passes_incremental():

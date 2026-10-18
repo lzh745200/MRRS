@@ -25,6 +25,16 @@ class TestGetDbPath:
             result = svc._get_db_path()
         assert result == abs_db
 
+    def test_relative_sqlite_path_joined_with_base_dir(self):
+        """相对 sqlite 路径（非绝对）→ 拼到 base_dir 下（74->76 假弧）。"""
+        from pathlib import Path
+
+        svc = DatabaseHealthService()
+        with patch("app.core.config.settings") as mock_settings:
+            mock_settings.DATABASE_URL = "sqlite:///data/relative_health.db"
+            result = svc._get_db_path()
+        assert result == svc.base_dir / Path("data/relative_health.db")
+
     def test_config_exception_falls_back_to_default(self):
         svc = DatabaseHealthService()
         with patch("app.core.config.settings", _BrokenSettings()):

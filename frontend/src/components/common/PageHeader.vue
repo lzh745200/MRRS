@@ -7,7 +7,9 @@
 
     <div class="header-main">
       <div class="header-text">
-        <h2 class="header-title">{{ title }}</h2>
+        <component :is="`h${level}`" class="header-title">
+          <slot name="title">{{ title }}</slot>
+        </component>
         <p v-if="subtitle" class="header-subtitle">{{ subtitle }}</p>
       </div>
       <div v-if="$slots.extra || $slots.default" class="header-extra">
@@ -33,6 +35,8 @@
  * - showBack：详情/编辑页显示返回按钮（router.back() 或回退到 fallback）
  * - slot default/extra：右侧操作区（主操作唯一且右置）
  * - slot metrics：标题下方的度量行
+ * - slot title：覆盖标题文本（如工作台的「欢迎回来，<金色用户名>」富文本），缺省渲染 title
+ * - level：标题语义层级，默认 2；页面唯一主标题（工作台）可传 1 保留 h1 语义
  */
 import { useRouter } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -45,8 +49,10 @@ const props = withDefaults(
     showBack?: boolean
     /** 点击返回时优先跳转的路由（不传则 router.back()） */
     backTo?: string
+    /** 标题标签层级（h1/h2/h3），默认 h2 */
+    level?: 1 | 2 | 3
   }>(),
-  { subtitle: '', showBack: false, backTo: '' }
+  { subtitle: '', showBack: false, backTo: '', level: 2 }
 )
 
 const router = useRouter()
