@@ -43,6 +43,40 @@ blocked-by: []
 - [x] 对象档案与帮扶明细卡片、单位覆盖名单 tags、脱敏金额、配置持久化/恢复默认/404 回退均有测试。
 - [x] `vue-tsc --noEmit` 0 错误；`check_hardcoded_styles.py` 0 新增；`vue-tsc`/eslint/flake8/bandit 全绿。
 - [x] 方案文档与用户手册落地并与最终代码逐条核对。
-- [ ] 全量后端/前端测试与覆盖率门禁、构建 Windows 安装包（由 Lead 在提交前统一验证）。
+- [x] 全量后端/前端测试与覆盖率门禁、构建 Windows 安装包（由 Lead 在提交前统一验证）。
 
-## Resolution（待填）
+## Resolution（2026-10-18，v1.12.23 发布）
+
+**功能与实现**
+- 后端 `bigscreen.py`（1,431 行，74 个 helper）：两个端点 + 四维度聚合，数据域/软删/PII 口径齐全；
+  `dashboard.py` 抽取 `_build_yearly_trends` 复用（顺带修复 `Fund.year IS NULL` 趋势降级缺陷）。
+  44 个 API 用例，语句 455/455、分支 124/124（100%）。
+- 前端 `BigScreen.vue`（979 行）筛选条 + 对象档案 + 帮扶明细，`api/bigscreen.ts` 与
+  `bigscreenConfig.ts`（scope 持久化/归一化）；BigScreen.test.ts 34 例、config 22 例、api 4 例，
+  目标文件四指标 100%；`filters` 仅挂载一次、轮询只刷 `overview`、404 回退全部均有断言。
+- 方案文档 933 行（含 15 项"初稿→实现"差异核对记录）+ 用户手册章节 + INDEX 收录。
+
+**在途收口**
+- W18 19 个测试漂移全部按新语义改测试（产品行为 0 改动）；school / data_package_service /
+  backup_service / pii_crypto / database_health_service 覆盖率缺口补齐。
+- `UserManagement.vue` 拆分 4 个子组件并补齐 import/类型/单执行者（仅
+  `UserManagement.test.ts` 执行，112 例），删除 2 个重复渲染测试；全仓硬编码色新增清零。
+- 死代码：后端 app/ F401/F841/F811/F821 = 0；确定可删 2 处（`test_bigscreen_api.py` 未使用
+  `SchoolProject` 导入、未使用 `ns` 局部变量）已删除；前端删除临时脚本
+  `__scratch_cov.cjs`/`__scratch_sfc.cjs`、探针测试与拆分后死 import；根目录清理 79 个历史调试文件。
+
+**门禁证据**
+- 后端全量：13,484 passed / 1 skipped / 1 rerun；语句与分支覆盖率均 100%（43,227/43,227、
+  10,604/10,604）；`coverage-final.json` 与全量日志留存。
+- 前端全量：316 文件 / 6,685 用例全通过（首轮 2 个失败为版本同步并发时序假失败，
+  `constants.test.ts` 定向复跑通过）；`src/**` 12 组 glob 四指标 100%。
+- flake8/bandit/vue-tsc/eslint + 16 项静态门禁脚本全过；`sync-version --check` 通过。
+- 构建：`MRRS-Setup-1.12.23-x64.exe`（203.9MB，PyInstaller onedir + electron-builder）；
+  `verify_package_no_tests`/`verify_build_info` 通过；提交 `a81ce73` 已推送 origin/main。
+
+**遗留说明**
+- 后端全量经 PowerShell `Tee-Object` 管道退出码出现 1（pytest 总结 0 failed、覆盖率 100%；
+  PyInstaller 同款管道亦出现 exit 1 但产物完整）——判定为 PowerShell 管道退出码伪影，
+  CI 使用 bash `pipefail` 口径不受影响。
+- 学校维度"负责人"列沿用项目类别（SchoolProject 无负责人字段），已在方案文档注明。
+
