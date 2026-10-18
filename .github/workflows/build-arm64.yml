@@ -34,7 +34,25 @@ jobs:
           # 纳入版本单一事实源，用 npm ci 才能在 CI 里暴露漂移）。
           # 层缓存不受影响：actions/setup-node 的 cache: 'npm'（cache-dependency-path
           # 指向 frontend/package-lock.json）缓存的是 ~/.npm 下载缓存，npm ci 同样命中。
-          npm ci --legacy-peer-deps --no-fund --no-audit
+          #
+          # v1.14.1 加固：v1.14.0 的 ARM64 Electron DEB 因本步骤 npm registry 网络抖动
+          # 直接失败（exit 1，非 lock 漂移），导致 Build Electron DEB 被 skip。与
+          # pr-checks/build-windows 同款加固：fetch 重试参数 + 最多 3 次重试。
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          npm config set fetch-timeout 300000
+          for i in 1 2 3; do
+            echo "===== npm ci attempt $i ====="
+            if npm ci --legacy-peer-deps --no-fund --no-audit; then
+              echo "npm ci OK (attempt $i)"
+              exit 0
+            fi
+            echo "npm ci attempt $i failed; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::npm ci 连续 3 次失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
+          exit 1
 
       - name: Build frontend
         working-directory: ./frontend
