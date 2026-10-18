@@ -1,8 +1,8 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.13.0
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.13.1
 
-![Version](https://img.shields.io/badge/version-1.13.0-blue)
+![Version](https://img.shields.io/badge/version-1.13.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-19%2C158%2B-brightgreen)
@@ -152,7 +152,10 @@ npx lint-staged                        # 仅检查暂存文件
 
 # 构建（两种方式，产物一致）
 # ① 推荐：推 tag 由 GitHub Actions 一次产出两个安装包并发布 Release
-git tag v1.12.8 && git push origin v1.12.8     # → Windows x64 .exe + 麒麟 ARM64 .deb
+#    发布前置条件：main 分支最近一次 PR Checks 必须为 success（tag 构建会自动校验）；
+#    tag 构建只做发布专项门禁（Windows 敏感子集 + 前端类型/导航子集 + 自包含冒烟），
+#    全量测试由 main 的 PR Checks 与 Nightly 承担，避免重复全量造成随机失败。
+git tag v1.13.1 && git push origin v1.13.1     # → Windows x64 .exe + 麒麟 ARM64 .deb
 # ② 本地（Windows 无 make 时）：fetch_vcredist → 前端构建 → 同步 → PyInstaller → electron-builder
 powershell -ExecutionPolicy Bypass -File scripts/build/fetch_vcredist.ps1
 cd frontend && npm run build && cd .. && cmd /c scripts\build\sync-frontend-dist.bat
@@ -166,8 +169,8 @@ npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本
 |--------|---------|------|
 | **PR Checks**（8 作业） | Pull Request | 后端测试 + 覆盖率门禁（`.coveragerc` fail_under=100）+ **升级排练（最近发布标签的旧库 → 当前 head，数据/表/完整性校验）** + 前端检查 + lint + security + **static-analysis（6 个预防棘轮 + 原始 SQL 豁免 + 菜单/版本/迁移门禁）** + E2E + **windows-smoke** |
 | **Nightly Full** | 每日凌晨2:00 UTC | 全量测试 + 覆盖率报告 + Codecov + JUnit 报告 |
-| **Build Windows x64** | **tag v\*** / 手动 | PyInstaller onedir + electron-builder NSIS → 安装包挂到 Release |
-| **Build ARM64 deb** | **tag v\*** / 手动 | Docker Buildx QEMU + electron-builder DEB → 安装包挂到 Release |
+| **Build Windows x64** | **tag v\*** / 手动 | 发布专项门禁（main PR Checks 绿 + Windows 敏感测试子集 + 前端类型/导航子集） → PyInstaller onedir + electron-builder NSIS → **安装包自包含冒烟**（解包后端 /health + 运行库/DLL 断言）→ Release |
+| **Build ARM64 deb** | **tag v\*** / 手动 | Docker Buildx QEMU（复用同一构建缓存）→ standalone DEB + Electron DEB → Release |
 
 ## 项目结构
 
@@ -208,13 +211,19 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 
 | 平台 | 安装包 | 获取方式 |
 |------|--------|---------|
-| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（约 228 MB，内置后端 exe + 前端产物 + VC++ 运行库） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA512） |
+| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（约 204 MB，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
 | 麒麟 V10 / 统信 UOS ARM64 | `*.deb`（自包含后端二进制） | 同上（`build-arm64.yml` 产出） |
 
-> 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；
-> 发布校验和随 GitHub Release 一起提供（旧版 `SHA256SUMS-*` 已随版本归档清理）。
+> **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
+> **运行环境**：Windows 10/11 x64（Electron 33 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
+> 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
 
 ## 近期修复记录
+
+### 2026-10-18（v1.13.1）发布构建修复与自包含验证
+- 🛠️ **Windows 发布构建恢复**：tag 构建不再重复跑全量测试（与 main 同代码却随机红），改为「main 最近 PR Checks 必须绿 + Windows 敏感后端子集 + 前端类型/导航子集 + 失败日志 artifact」，全量门禁仍由 main PR Checks 与 Nightly 承担
+- 🛠️ **ARM64 构建修复**：`Dockerfile.kylin-standalone` 的 `backend-output` 阶段 COPY 源路径由 `assistance-backend` 修正为实际产物 `assistance-management-backend`（Electron ARM64 DEB 连续两版缺失的根因）
+- ✅ **安装包自包含冒烟**：每次发布自动解包并启动打包后端，断言 `/health`、版本/指纹、数据库迁移 `at_head`，以及 Python/DLL/alembic/前端/VC++ 运行库齐全
 
 ### 2026-10-18（v1.13.0）导航架构重构（向后兼容）
 - 🧭 **单一菜单源**：后端 `backend/app/api/v1/menus.py` 成为全站唯一菜单源（v2 `sections` + `flat_keys`；

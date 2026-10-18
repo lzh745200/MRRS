@@ -5,6 +5,42 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.13.1] - 2026-10-18 — 修复 GitHub 发布构建失败 + 安装包自包含验证
+
+### Fixed
+
+- **Windows 发布构建失败（v1.13.0 未产出 Windows 安装包）**：tag 构建的 `smoke-test`
+  重复执行全量后端（1.3 万+）+ 全量前端（6.7 千+）测试；同一提交内容在 main 的 PR Checks
+  已全量跑绿（`c17b2ed success`），tag 侧重复运行却因 flaky 测试 / rerun 与覆盖率数据合并抖动
+  随机变红（实测失败发生在后端步骤 14.5 分钟处，`exit code 1`，无测试名可读），导致
+  `build-windows` 被 `needs: smoke-test` 阻断。重构发布门禁为：
+  ① **main 分支最近一次 PR Checks 必须 success**（发布前置校验，用内置 `GITHUB_TOKEN` 查询）；
+  ② Windows 敏感后端子集（菜单单一源 / 路径口径 / 备份对齐 / 数据同步路由 / 帮扶村 API /
+     打包卫生，249 用例）；
+  ③ 前端 `vue-tsc` + 导航重构关键子集（菜单 store / 布局 / 聚合页 / 路由表 / smoke，221 用例）；
+  ④ 失败时上传完整日志 artifact（`release-smoke-logs`），不再只能看到 `exit code 1`；
+  ⑤ 作业预算从 60 分钟降到 30 分钟。全量测试的权威位置仍是 main 的 PR Checks 与 Nightly。
+- **ARM64 发布构建失败（Electron ARM64 DEB 连续两版缺失）**：`docker/Dockerfile.kylin-standalone`
+  的 `backend-output` 阶段 `COPY --from=backend-builder /build/dist/assistance-backend` 路径错误
+  （PyInstaller 实际产物目录为 `assistance-management-backend`，见同文件 `deb-package` 阶段的
+  COPY 源），导致 `docker buildx --target backend-output` 三次重试全部在 COPY 阶段失败。
+  已修正为 `/build/dist/assistance-management-backend`（保留 `/assistance-backend` 目标名以匹配
+  Electron extraResources 期望目录）。
+
+### Added
+
+- **安装产物自包含冒烟（CI，Windows 构建作业）**：electron-builder 解包后直接启动打包后端
+  `resources/backend/assistance-backend/assistance-backend.exe`（按 Electron 运行期注入的数据目录
+  env），断言 `/health` 返回 `status=ok`、`version`、`git_hash`、数据库迁移 `at_head=true`；
+  并断言包内包含 `_internal/python311.dll`、`VCRUNTIME140.dll`、`VCRUNTIME140_1.dll`、
+  `MSVCP140.dll`、`alembic.ini`、前端 `index.html`、`vcredist/vc_redist.x64.exe`。
+  每次发布自动证明「解包即用、不依赖系统 Python / 预装依赖」。
+
+### Changed
+
+- 发布门禁职责划分写入 README：**全量测试 = main 的 PR Checks + Nightly；tag 构建 = 发布专项门禁
+  （main 绿 + 敏感子集 + 前端类型 + 自包含冒烟）**，避免 tag 与 main 重复全量造成随机失败。
+
 ## [1.13.0] - 2026-10-18 — 导航/菜单单一源重构 + 系统管理 6 聚合页
 
 ### Added

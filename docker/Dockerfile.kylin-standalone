@@ -158,7 +158,7 @@ RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --n
     fakeroot \
     && rm -rf /var/lib/apt/lists/*
 
-ARG VERSION=1.13.0
+ARG VERSION=1.13.1
 WORKDIR /package
 
 # 创建目录结构
@@ -254,5 +254,12 @@ COPY --from=deb-package /output/*.deb /output/
 # （toomanyrequests / Data limit exceeded）整条 ARM64 流水线失败，Release 丢失
 # MRRS-Setup-*-arm64.deb。改为复用本 Dockerfile 的 backend-builder 缓存层导出，
 # 与 standalone DEB 共享同一次 buildx 构建缓存，不再产生第二次冷拉取。
+#
+# v1.13.1 修复：backend-builder 的 PyInstaller 产物目录名来自
+# backend_linux_arm64_standalone.spec 的 name = assistance-management-backend
+# （见上面第 3 阶段 deb-package 的 COPY 源），此处曾误写成 assistance-backend，
+# 导致 `--target backend-output` 每次都在 COPY 阶段失败（v1.12.25 与 v1.13.0
+# ARM64 Electron DEB 缺失的直接根因）。COPY 到 /assistance-backend 的重命名是
+# 有意为之：Electron extraResources 期望 backend/assistance-backend 目录名。
 FROM scratch AS backend-output
-COPY --from=backend-builder /build/dist/assistance-backend /assistance-backend
+COPY --from=backend-builder /build/dist/assistance-management-backend /assistance-backend
