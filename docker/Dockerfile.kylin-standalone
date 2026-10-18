@@ -158,7 +158,7 @@ RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --n
     fakeroot \
     && rm -rf /var/lib/apt/lists/*
 
-ARG VERSION=1.13.3
+ARG VERSION=1.13.4
 WORKDIR /package
 
 # 创建目录结构
@@ -259,7 +259,18 @@ COPY --from=deb-package /output/*.deb /output/
 # backend_linux_arm64_standalone.spec 的 name = assistance-management-backend
 # （见上面第 3 阶段 deb-package 的 COPY 源），此处曾误写成 assistance-backend，
 # 导致 `--target backend-output` 每次都在 COPY 阶段失败（v1.12.25 与 v1.13.0
-# ARM64 Electron DEB 缺失的直接根因）。COPY 到 /assistance-backend 的重命名是
-# 有意为之：Electron extraResources 期望 backend/assistance-backend 目录名。
-FROM scratch AS backend-output
+# ARM64 Electron DEB 缺失的直接根因）。
+#
+# v1.13.4 修复：产物目录导出名修正后，**主程序文件名**仍为
+# assistance-management-backend（spec 的 EXE/COLLECT name），而 Electron Linux
+# 主进程按 `resources/backend/assistance-backend/assistance-backend` 启动
+# （electron/main.js exeName），workflow 也断言该文件名。scratch 阶段无法 RUN，
+# 因此改为 debian-slim（buster 层已被 deb-package 阶段拉取，命中共缓存）并在
+# 导出前重命名主程序；导出树仍为 dest/assistance-backend/assistance-backend。
+# 注：BASE_REGISTRY 由文件前部（deb-package 阶段之前）的全局 ARG 提供，此处不重复声明。
+FROM --platform=linux/arm64 ${BASE_REGISTRY}/debian:buster-slim AS backend-output
 COPY --from=backend-builder /build/dist/assistance-management-backend /assistance-backend
+RUN set -eux; \
+    mv /assistance-backend/assistance-management-backend /assistance-backend/assistance-backend; \
+    chmod +x /assistance-backend/assistance-backend; \
+    test -x /assistance-backend/assistance-backend
