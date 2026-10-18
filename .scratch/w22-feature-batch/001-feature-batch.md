@@ -103,3 +103,30 @@
 > 说明：本地第二次后端全量出现覆盖率数据合并异常（92.8%）与一次时间相关 flaky 失败，
 > 经串行干净重跑（第三次）确认 100% / 13,710 passed；CI 侧 `Build Windows Installer` 与
 > `PR Checks` 均为独立运行，不受该本地并行干扰。
+
+## 6. 发布构建失败彻底修复记录（v1.14.0 → v1.14.3）
+
+### 失败清单与根因
+
+| # | 失败项 | 根因 | 修复 | 验证 |
+|---|---|---|---|---|
+| 1 | PR Checks `e2e-test`（v1.14.0） | W22 侧栏 7 板块默认折叠，E2E 点击子菜单/断言子项失败（待办、权限包菜单可见性）；快捷导航/经费导航点击时序 flake | 新增 `expandAllSections`/`expandSection` helpers（写 `nav:expanded-sections`）；导航类用例 `toPass` 重试；审批页加载超时放宽 | 本地 E2E 全量 **154 passed**；CI e2e success |
+| 2 | PR Checks `upgrade-rehearsal`（v1.14.0/1.14.1） | W22 删 `villages` 表后，历史迁移 `village_status_001`（ALTER villages）与 `pii_encrypt_001`（SELECT villagers）在**空库 create_all 路径**上因表不存在失败 | 两处迁移改为表不存在时幂等跳过（老库升级行为不变） | 空库 `upgrade→downgrade→upgrade` 通过；CI upgrade-rehearsal success |
+| 3 | Build Windows v1.14.1（被门禁误拦） | 发布门禁只查「main 最近 completed PR Checks」；tag 推送瞬间其自身 PR Checks 在跑，最近 completed 是上一提交的失败 run | 新增 `scripts/check_release_gate.py`：优先查 tag commit 自身 PR Checks，in_progress 时轮询等待（≤75 分钟），cancelled/不存在回退 main 判定 | 本地三分支实测（success/failure/in_progress）；v1.14.3 Windows success |
+| 4 | ARM64 构建（v1.14.0/v1.14.2） | GitHub runner 到 npm registry / Docker 公共镜像网络抖动（`npm ci` 3 次全失败；QEMU buildx 3 次失败） | Build Frontend 加 npm 缓存 + `--prefer-offline` + 5 轮退避 + `npm install` 兜底；Docker 重试间隔 60/120s + 失败诊断；pr-checks 的 frontend-check/e2e-test 同款加固 | v1.14.3 ARM64 双包（Electron DEB + standalone DEB）success |
+| 5 | PR Checks `frontend-check`（v1.14.2） | 同 #4 npm registry 抖动（npm ci 3 次失败 → vitest 未启动） | setup-node 启用 npm 缓存；npm ci 5 轮 + prefer-offline + install 兜底 | v1.14.3 PR Checks 全绿 |
+
+### 最终结果（v1.14.3，提交 c671fbb / tag eb0b6bd）
+
+- **PR Checks：8/8 success**（backend-test 13,710 passed + 覆盖率 100%、frontend-check 321 文件/6,748、e2e-test 154、upgrade-rehearsal、lint、security、static-analysis、windows-smoke）
+- **Build Windows Installer (x64)：success**
+- **Build Self-Contained ARM64 Debian Package：success**（standalone DEB + Electron DEB）
+- **GitHub Release v1.14.3**（published 2026-10-18T14:39:26Z）：
+  - `MRRS-Setup-1.14.3-x64.exe`（272.6 MB，SHA256 `bb641ee0…`）
+  - `MRRS-Setup-1.14.3-arm64.deb`（195.9 MB）
+  - `assistance-management-system_1.14.3_arm64.deb`（57.9 MB）
+  - 3 份 SHA256SUMS
+- **本地安装包**：`MRRS-Setup-1.14.3-x64.exe`（260.4 MB，SHA256 `9eff039b…`），
+  自包含冒烟 **16/16 PASS**（Python/VC 运行库/alembic/前端/vcredist/OCR 模型与 onnxruntime DLL；
+  解包后端 `/health` = ok、version=1.14.3、git_hash=c671fbb、migration.at_head=true）。
+- 工作区干净，`main = c671fbb` = `origin/main`。
