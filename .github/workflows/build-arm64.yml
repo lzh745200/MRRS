@@ -14,65 +14,6 @@ permissions:
   contents: write
 
 jobs:
-  build-backend:
-    name: Build ARM64 Backend Binary
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Setup QEMU (ARM64 emulation)
-        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
-
-      - name: Pre-pull base image (ECR public fallback for EOL buster)
-        run: |
-          set -e
-          IMG="public.ecr.aws/docker/library/python:3.11-slim-buster"
-          for i in 1 2 3; do
-            echo "attempt $i: pulling $IMG"
-            if docker pull --platform linux/arm64 "$IMG"; then
-              docker tag "$IMG" python:3.11-slim-buster
-              break
-            fi
-            sleep 15
-            if [ "$i" = 3 ]; then
-              # 最终回退：直接尝试 Docker Hub 官方镜像（EOL 标签仍存在，仅匿名限流）
-              docker pull --platform linux/arm64 python:3.11-slim-buster
-            fi
-          done
-
-      # H12（2026-10-14）：ARM64 流水线此前不生成构建元数据 —— spec 的
-      # app/core/_build_info.json 条件收录随之落空，冻结点永远是 dev 指纹。
-      # 在 docker 构建前先在宿主生成（Dockerfile COPY backend/ 会带入，spec datas
-      # 收录到 _internal/app/core/）；非 tag 手动触发与 Windows 出包同口径传 ref_name。
-      - name: Generate build info (H12)
-        run: python3 scripts/generate_build_info.py "${{ github.ref_name || 'dev' }}"
-
-      - name: Build backend binary in ARM64 Debian Buster container
-        run: |
-          mkdir -p backend/dist
-          docker buildx build \
-            --platform linux/arm64 \
-            --build-arg BASE_REGISTRY=public.ecr.aws/docker/library \
-            --target output \
-            -f docker/Dockerfile.backend-arm64 \
-            --output type=local,dest=backend/dist \
-            --pull=false \
-            .
-
-      - name: Verify backend binary
-        run: |
-          ls -lh backend/dist/assistance-backend
-          file backend/dist/assistance-backend
-
-      - name: Upload backend artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: backend-arm64
-          path: backend/dist/assistance-backend
-
   build-frontend:
     name: Build Frontend
     runs-on: ubuntu-latest
@@ -108,7 +49,7 @@ jobs:
   build-electron-deb:
     name: Build Electron DEB Package
     runs-on: ubuntu-latest
-    needs: [build-backend, build-frontend]
+    needs: [standalone-deb, build-frontend]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -491,20 +432,56 @@ jobs:
         id: debver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Build standalone Kylin DEB
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          file: docker/Dockerfile.kylin-standalone
-          platforms: linux/arm64
-          outputs: type=local,dest=dist/deb
-          push: false
-          # DEB 内嵌版本号与发布 tag 对齐（Dockerfile ARG 默认 1.10.0，tag 触发时覆盖）
-          build-args: |
-            VERSION=${{ steps.debver.outputs.version }}
-          # 禁用 --no-cache：QEMU 仿真下 layer 缓存是唯一提速手段（AGENTS.md 铁律）
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # H12（2026-10-14）：构建元数据必须在 docker build 之前于宿主生成 —— 否则 spec 的
+      # app/core/_build_info.json 条件收录落空，冻结点永远是 dev 指纹。
+      # v1.12.25 起本作业同时产出 Electron DEB 所需的后端产物（原 build-backend 作业已删除），
+      # 因此这一步也在此生成，供 verify_build_info.py 门禁校验。
+      - name: Generate build info (H12)
+        run: python3 scripts/generate_build_info.py "${{ github.ref_name || 'dev' }}"
+
+      - name: Resolve base image registry (multi-source probe)
+        run: |
+          set -euo pipefail
+          # v1.12.25：Docker Hub / ECR 公共镜像匿名拉取配额耗尽是 ARM64 构建的已知失败源
+          # （错误：toomanyrequests / Data limit exceeded）。构建前探测可用镜像源，避免
+          # 单一源限流导致整条流水线失败；探测失败时回退 ECR（构建阶段仍有 GHA 层缓存兜底）。
+          for reg in public.ecr.aws/docker/library docker.io/library; do
+            if timeout 150 docker manifest inspect "${reg}/python:3.11-slim-buster" >/dev/null 2>&1 \
+               && timeout 150 docker manifest inspect "${reg}/node:22-bookworm" >/dev/null 2>&1; then
+              echo "BASE_REGISTRY=${reg}" >> "$GITHUB_ENV"
+              echo "选定基础镜像源: ${reg}"
+              exit 0
+            fi
+            echo "镜像源不可用，尝试下一个: ${reg}"
+          done
+          echo "BASE_REGISTRY=public.ecr.aws/docker/library" >> "$GITHUB_ENV"
+          echo "::warning::基础镜像源探测均失败，回退 public.ecr.aws/docker/library（依赖 GHA 缓存兜底）"
+
+      - name: Build standalone Kylin DEB (retry, cache-first)
+        run: |
+          set -euo pipefail
+          mkdir -p dist/deb
+          # 重试 3 次：QEMU 仿真 + 公共镜像网络抖动下的瞬态失败不应直接让发布失败。
+          for i in 1 2 3; do
+            echo "standalone DEB build attempt ${i} (BASE_REGISTRY=${BASE_REGISTRY})"
+            if docker buildx build \
+              --platform linux/arm64 \
+              --build-arg BASE_REGISTRY="${BASE_REGISTRY}" \
+              --build-arg VERSION="${{ steps.debver.outputs.version }}" \
+              --target output \
+              -f docker/Dockerfile.kylin-standalone \
+              --output type=local,dest=dist/deb \
+              --cache-from type=gha \
+              --cache-to type=gha,mode=max \
+              --pull=false .; then
+              exit 0
+            fi
+            if [ "${i}" = "3" ]; then
+              echo "::error::ARM64 standalone DEB 构建失败（已重试 3 次）"
+              exit 1
+            fi
+            sleep $((i * 30))
+          done
 
       - name: Verify standalone DEB (no CRLF in maintainer scripts)
         run: |
@@ -533,6 +510,46 @@ jobs:
           dpkg-deb -c "$DEB" | grep -E "opt/assistance-management-system/desktop/.*\.desktop" \
             || { echo "::error::载荷缺少 .desktop"; exit 1; }
           echo "桌面集成载荷断言通过"
+
+      # v1.12.25：复用同一 buildx 构建缓存导出后端 onedir（替代独立 build-backend 冷构建）。
+      # 根因：独立作业需再次冷拉 python:3.11-slim-buster，公共镜像匿名限流时直接失败，
+      # 导致 ARM64 流水线红 + Release 丢失 Electron DEB。此处与 standalone DEB 共享
+      # Dockerfile 的 backend-builder 缓存层，不再产生第二次基础镜像拉取。
+      - name: Build ARM64 backend binary (reuse build cache)
+        run: |
+          set -euo pipefail
+          mkdir -p backend/dist
+          for i in 1 2 3; do
+            echo "backend-output build attempt ${i} (BASE_REGISTRY=${BASE_REGISTRY})"
+            if docker buildx build \
+              --platform linux/arm64 \
+              --build-arg BASE_REGISTRY="${BASE_REGISTRY}" \
+              --target backend-output \
+              -f docker/Dockerfile.kylin-standalone \
+              --output type=local,dest=backend/dist \
+              --cache-from type=gha \
+              --pull=false .; then
+              break
+            fi
+            if [ "${i}" = "3" ]; then
+              echo "::error::ARM64 后端产物（backend-output）构建失败（已重试 3 次）"
+              exit 1
+            fi
+            sleep $((i * 20))
+          done
+          test -d backend/dist/assistance-backend || { echo "::error::backend-output 未导出期望目录"; ls -R backend/dist | head -20; exit 1; }
+          test -f backend/dist/assistance-backend/assistance-backend || { echo "::error::缺后端主程序"; exit 1; }
+          test -d backend/dist/assistance-backend/_internal || { echo "::error::缺 _internal"; exit 1; }
+          chmod +x backend/dist/assistance-backend/assistance-backend
+          file backend/dist/assistance-backend/assistance-backend
+          du -sh backend/dist/assistance-backend/_internal
+
+      - name: Upload ARM64 backend artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-arm64
+          path: backend/dist/assistance-backend
+          if-no-files-found: error
 
       # 产物 SHA256 清单（W6-T5；命名区分产物族，避免同 Release 覆盖）
       - name: Generate SHA256SUMS

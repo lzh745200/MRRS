@@ -158,7 +158,7 @@ RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --n
     fakeroot \
     && rm -rf /var/lib/apt/lists/*
 
-ARG VERSION=1.12.24
+ARG VERSION=1.12.25
 WORKDIR /package
 
 # 创建目录结构
@@ -246,3 +246,13 @@ RUN mkdir -p /output && \
 # ── Stage 4: 输出层（仅导出 DEB 文件）──
 FROM scratch AS output
 COPY --from=deb-package /output/*.deb /output/
+
+
+# ── Stage 5: ARM64 后端 onedir 产物（Electron DEB 复用）──
+# 背景（v1.12.25）：此前 Electron DEB 由独立 build-backend 作业冷启动构建，需再次
+# 拉取 python:3.11-slim-buster；Docker Hub / ECR 公共镜像匿名拉取配额耗尽时
+# （toomanyrequests / Data limit exceeded）整条 ARM64 流水线失败，Release 丢失
+# MRRS-Setup-*-arm64.deb。改为复用本 Dockerfile 的 backend-builder 缓存层导出，
+# 与 standalone DEB 共享同一次 buildx 构建缓存，不再产生第二次冷拉取。
+FROM scratch AS backend-output
+COPY --from=backend-builder /build/dist/assistance-backend /assistance-backend

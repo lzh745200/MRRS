@@ -5,6 +5,27 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.25] - 2026-10-18 — 🔧 ARM64 发布流水线彻底修复（镜像限流根因）
+
+### Fixed
+
+- **ARM64 流水线失败根因**：`build-backend` 作业独立冷启动 `docker buildx build`，需再次拉取
+  `python:3.11-slim-buster`；Docker Hub / ECR 公共镜像**匿名拉取配额耗尽**时返回
+  `toomanyrequests: Data limit exceeded`，buildx 随即无法解析基础镜像元数据，整条 ARM64 流水线失败，
+  Release 因此丢失 `MRRS-Setup-*-arm64.deb`（v1.12.23 / v1.12.24 均缺该产物；v1.12.20/21 正常）。
+  与同工作流 `standalone-deb`（带 GHA 层缓存、始终成功）对比后可确认是重复冷构建 + 公共镜像限流，
+  并非代码或打包脚本缺陷。
+- **修复方式（消除重复冷构建，而非绕过）**：
+  1. `docker/Dockerfile.kylin-standalone` 新增 `backend-output` 阶段，复用 `backend-builder` 已构建的
+     PyInstaller onedir 产物；
+  2. `standalone-deb` 作业在同一次 buildx 构建上下文中导出后端二进制并上传 `backend-arm64` 工件，
+     与 standalone DEB 共享层缓存，**不再产生第二次基础镜像拉取**；
+  3. 删除重复的 `build-backend` 作业，`build-electron-deb` 改为依赖 `standalone-deb` 的工件；
+  4. standalone DEB 构建改为 shell 重试（3 次，指数退避）+ 构建前镜像源探测
+     （`public.ecr.aws/docker/library` → `docker.io/library`），失败仅提示并回退，由 GHA 缓存兜底。
+- **效果**：ARM64 作业数减少 1 个；基础镜像只拉取一次；瞬态网络/限流失败可自动重试；
+  Release 恢复 Electron ARM64 DEB 产物（与 standalone DEB 并存的既有发布形态）。
+- 本版本无运行时代码变更（仅 CI/Dockerfile），Windows 安装包与 standalone DEB 内容与 v1.12.24 一致。
 ## [1.12.24] - 2026-10-18 — 🧹 W5-T5 解包口径收口 + 分支门禁确定性
 
 > 前端全量：**316 文件 / 6,685 用例**，`src/**` 12 组 glob 四指标 100%；后端全量 13,505 用例，行+分支 100%。
