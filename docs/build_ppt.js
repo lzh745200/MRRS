@@ -201,7 +201,7 @@ function header(s, kicker, title) {
     color: TEXT, fontFace: F, margin: 0 });
   s.addText(String(pageNo).padStart(2, "0"), { x: W - 1.0, y: H - 0.55, w: 0.5, h: 0.3,
     fontSize: 11, color: MUTED, fontFace: F, align: "right", margin: 0 });
-  s.addText("帮扶管理信息系统 v1.13.0", { x: M, y: H - 0.55, w: 4, h: 0.3,
+  s.addText("帮扶管理信息系统 v1.14.0", { x: M, y: H - 0.55, w: 4, h: 0.3,
     fontSize: 10.5, color: MUTED, fontFace: F, margin: 0 });
 }
 function card(s, x, y, w, h, fill = BG) {
@@ -279,7 +279,7 @@ function sectionSlide(num, title, sub, items) {
     { text: "多机协同 · 军工级安全", options: {} },
   ], { x: 1.0, y: 4.75, w: 6, h: 0.85, fontSize: 16, color: LIGHT, fontFace: F,
     paraSpaceAfter: 6, margin: 0 });
-  s.addText("V1.13.0  |  2026-10-18  |  FastAPI + Vue 3 + Electron + SQLite", {
+  s.addText("V1.14.0  |  2026-10-18  |  FastAPI + Vue 3 + Electron + SQLite", {
     x: 1.0, y: 6.35, w: 10, h: 0.4, fontSize: 12.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
@@ -295,7 +295,7 @@ function sectionSlide(num, title, sub, items) {
   const toc = [
     ["01", "系统概述", "定位 · 使命 · 关键数字"],
     ["02", "技术架构", "技术栈 · 分层设计 · 离线优先"],
-    ["03", "功能模块", "一个工作台 + 六大板块 · 6 个聚合页"],
+    ["03", "功能模块", "六大板块 · 一户一档/影像库/消费帮扶/OCR"],
     ["04", "安全体系", "四角色权限 · PII 加密 · 审计合规"],
     ["05", "质量工程", "2 万+ 项自动化测试 · CI/CD · 依赖自检"],
     ["06", "部署运行", "双平台安装包 · 备份升级 · 版本历程"],
@@ -371,17 +371,17 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
 {
   const s = p.addSlide();
   header(s, "01 系统概述", "一眼看懂：系统规模");
-  stat(s, 0.55, 2.1, 3.0, "13,500+", "后端自动化测试用例");
-  stat(s, 3.9, 2.1, 3.0, "6,700+", "前端自动化测试用例");
-  stat(s, 7.25, 2.1, 3.0, "99", "菜单 key（后端单一源 v2）");
-  stat(s, 10.6, 2.1, 2.4, "139", "业务页面视图");
+  stat(s, 0.55, 2.1, 3.0, "13,710", "后端自动化测试用例");
+  stat(s, 3.9, 2.1, 3.0, "6,748", "前端自动化测试用例");
+  stat(s, 7.25, 2.1, 3.0, "102", "菜单 key（含 15 legacy）");
+  stat(s, 10.6, 2.1, 2.4, "141", "业务页面视图");
   s.addShape(p.shapes.LINE, { x: M, y: 3.95, w: W - 2 * M, h: 0, line: { color: "D8E0DA", width: 1 } });
-  stat(s, 0.55, 4.35, 3.0, "93", "后端 API 模块（api/v1 含子包）", PRIMARY_L);
-  stat(s, 3.9, 4.35, 3.0, "100", "后端服务（100 + 13 子包）", PRIMARY_L);
-  stat(s, 7.25, 4.35, 3.0, "45", "数据库迁移版本", PRIMARY_L);
+  stat(s, 0.55, 4.35, 3.0, "91", "API 路由模块（含子包）", PRIMARY_L);
+  stat(s, 3.9, 4.35, 3.0, "110", "后端服务（100+ 子包）", PRIMARY_L);
+  stat(s, 7.25, 4.35, 3.0, "115", "数据库表（+5 新表 −4 旧表）", PRIMARY_L);
   stat(s, 10.6, 4.35, 2.4, "4", "用户角色", PRIMARY_L, 40);
   // 页脚数据来源：按框宽/框高自适应字号（原固定 12pt 在 12.3×0.4in 内需 2 行，超出 1.31×）
-  const noteP06 = "数据来源：2026-10-18 仓库实测（v1.13.0）—— 后端 13,500+ 用例全绿 / 行+分支覆盖率 100%（branch=True 严格门禁）· 前端 6,700+ 用例全绿 · flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告（以发布时全量实测为准）";
+  const noteP06 = "数据来源：2026-10-18 仓库实测（v1.14.0）—— 后端 13,710 用例全绿（1 skipped）/ 行+分支覆盖率 100%（44,423 stmts / 10,872 branches）· 前端 6,748 用例全绿（321 文件）· flake8 0 · bandit 0 中高危 · vue-tsc 0 · eslint 0 警告";
   const sizeP06 = fitFontSize(noteP06, 12.3, 0.4, 12, 9);
   fitNote("P06 数据来源", 12, sizeP06);
   s.addText(noteP06, {
@@ -451,13 +451,14 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
   card(s, M, 1.8, 6.0, 4.9);
   s.addText("规模", { x: 0.82, y: 2.05, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   bullets(s, [
-    "139 个业务视图（34 个功能目录）",
+    "141 个业务视图（37 个功能目录）",
     "25 个共享组件（PageHeader / EmptyState / BaseChart 等标准件）",
-    "34 个 Pinia store + 30+ 组合式函数",
-    "313 个测试文件 · 6,700+ 个用例",
+    "9 个 Pinia store + 14 个组合式函数",
+    "321 个测试文件 · 6,748 个用例",
     "后端 v2 菜单单一源：侧栏 / 移动端 / 权限面板全部数据驱动（Ctrl+K 搜索 / 收藏 / 最近访问）",
+    "7 板块标题 18px 加粗、默认折叠，展开状态记忆（nav:expanded-sections）",
     "覆盖率门禁（行 + 分支 100%）+ lint --max-warnings=0 + vue-tsc 三重 CI 门禁",
-  ], 0.82, 2.55, 5.4, 3.9, { size: 13, gap: 9 });
+  ], 0.82, 2.55, 5.4, 3.9, { size: 12, gap: 7 });
   card(s, 6.85, 1.8, 6.0, 4.9);
   s.addText("设计系统", { x: 7.17, y: 2.05, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   bullets(s, [
@@ -477,7 +478,7 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
     ["审计中间件", "记录 谁·何时·做什么"],
     ["认证与限流", "JWT 校验 · Token 黑名单 · 滑动窗口限流"],
     ["数据范围过滤", "按角色 + 组织自动限定可见数据"],
-    ["业务服务层", "100 个服务：资金 / 项目 / 数据包 / 审批…"],
+    ["业务服务层", "110 个服务：资金 / 项目 / 数据包 / 审批 / 一户一档 / OCR…"],
     ["统一信封响应", "success_response / ok_list"],
   ];
   steps.forEach((t, i) => {
@@ -493,24 +494,25 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
   bulletCard(s, M, 4.35, 12.33, 2.2, "工程纪律", [
     "事务工具箱：with_transaction / 嵌套事务 / 死锁重试 / 批量操作（1000 条/批）",
     "错误细节不出站：detail 一律泛化文案 + 日志 exc_info（源码扫描测试强制拦截）",
-    "响应格式统一：全部列表端点走 ok_list 信封（本轮收敛 51 处裸 dict）",
+    "响应格式统一：全部列表端点走 ok_list 信封",
+    "v1.14.0 新模块坚守：EncryptedText PII（一户一档）、软删必带 is_active、数据域 get_org_scope",
     "flake8 --count=0 与 bandit 中高危=0 是硬门禁",
-  ], { size: 13, gap: 7, min: 11, titleSize: 15, maxH: 2.5, label: "P11 工程纪律" });
+  ], { size: 12.5, gap: 6, min: 10, titleSize: 15, maxH: 2.5, label: "P11 工程纪律" });
 }
 
 /* 12 数据与模型 */
 {
   const s = p.addSlide();
-  header(s, "02 技术架构", "数据层：59 个模型的安全基座");
+  header(s, "02 技术架构", "数据层：64 个模型的安全基座");
   card(s, M, 1.8, 5.9, 4.9);
   s.addText("模型与迁移", { x: 0.82, y: 2.05, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   bullets(s, [
-    "59 个模型文件 / 120+ 模型类：村、项目、资金、学校、政策、组织、审计…",
+    "64 个模型文件 / 120+ 模型类：村、一户一档、项目、资金、影像、消费台账…",
+    "v1.14.0 数据迁移：+5 新表（households 三表 / photo_archives / consumption_records），−4 旧表（villages/villagers/industries/sentiment_news）",
     "TimestampMixin：created_at / updated_at / sync_version 自动维护",
     "SoftDeleteMixin：is_active 软删 + deleted_by 审计列",
-    "45 个 Alembic 迁移：含 PII 存量回填（幂等可重跑）与外键守护",
     "Schema 权威来源 = models/ + Alembic（init.sql 已删除）",
-  ], 0.82, 2.55, 5.3, 3.9, { size: 13.5, gap: 10 });
+  ], 0.82, 2.55, 5.3, 3.9, { size: 12.5, gap: 8 });
   card(s, 6.75, 1.8, 6.1, 4.9);
   s.addText("完整性守护", { x: 7.07, y: 2.05, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   bullets(s, [
@@ -559,9 +561,9 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
 
 /* ════════ 14 章节页：功能模块 ════════ */
 sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
-  "一个工作台 + 六大板块 · 99 个菜单 key",
-  "帮扶业务：村/项目/学校/经费/结对/政策",
-  "工作协同 + 分析汇报：审批 · 大屏 · 报表",
+  "一个工作台 + 六大板块 · 102 个菜单 key",
+  "一户一档 / 影像库 / 消费帮扶 三新模块",
+  "经费凭证 OCR · 报表模板组合导出",
   "系统管理：6 个聚合页 · 页内 Tab 切换",
 ]);
 
@@ -571,11 +573,11 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
   header(s, "03 功能模块", "功能地图：一个工作台 + 六大板块");
   const domains = [
     ["工作台", "固定首位：KPI 卡 · 待办聚合 · 快捷操作 · 年度趋势", "dashboard"],
-    ["帮扶业务", "帮扶村 10 板块 · 项目全周期 · 经费台账/申请/资金周期 · 结对/捐赠/政策/移交", "villages / projects / funds"],
-    ["乡村振兴", "工作首页 · 工作列表 · 驻村工作台（打卡与台账）", "rural-works / checkin"],
+    ["帮扶业务", "帮扶村 10 板块 · 一户一档 · 项目全周期 · 经费台账/申请/资金周期 · 结对/捐赠/政策/移交 · 消费帮扶", "villages / households / funds"],
+    ["乡村振兴", "工作首页 · 工作列表（驻村工作台已于 v1.14.0 下线）", "rural-works / rural-works-list"],
     ["工作协同", "待办 · 审批管理（总览/待审批/我的申请/历史）· 日历 · 提醒 · 消息", "todos / approval / reminder"],
-    ["分析汇报", "汇报大屏 · 数据分析（仪表盘/地图/工作分析/成效排名评估/舆情）· 报表模板/导出", "bigscreen / analytics / report"],
-    ["数据管理", "概览 · 导入导出 · 数据包与批量导入 · 校验/规则 · 综合录入 · 批量操作 · 数据上报", "data-package / data-upload"],
+    ["分析汇报", "汇报大屏 · 数据分析（仪表盘/地图/工作分析/成效排名评估）· 报表模板/导出 · 影像库", "bigscreen / analytics / media"],
+    ["数据管理", "概览 · 导入导出 · 数据包与批量导入 · 数据校验（三 Tab）· 综合录入 · 批量操作 · 数据上报", "data-package / data-upload"],
     ["系统管理", "6 聚合页：组织与权限/安全与审计/运维与监控/备份与存储/系统设置/关于与反馈", "system-console-*"],
   ];
   domains.forEach((d, i) => {
@@ -633,10 +635,37 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
   });
   bullets(s, [
     "按年度记录全村数据，跨年对比自动生成（人口/收入/资金投入趋势）",
+    "v1.14.0 起村下可建「一户一档」：户/成员/风险预警/走访挂户，并可一键汇总回填年度人口",
     "村档案变更历史：字段级 old → new 记录，谁改的、何时改、改了什么全程可溯",
     "村委会成员、脱贫跟踪、荣誉展示；软删除进回收站，管理员可恢复或彻底删除",
-    "年度板块数据支持 Excel 模板按板块导入（工作表名需与板块对应）；整村档案可导出（脱敏可选），支撑向上汇报",
-  ], M, 4.85, 12.3, 1.9, { size: 13.5, gap: 9, label: "P17 帮扶村要点" });
+    "年度板块数据支持 Excel 模板按板块导入；整村档案可导出（脱敏可选），支撑向上汇报",
+  ], M, 4.85, 12.3, 1.9, { size: 12.5, gap: 8, label: "P17 帮扶村要点" });
+}
+
+/* 17b 一户一档（W22 新增） */
+{
+  const s = p.addSlide();
+  header(s, "03 功能模块", "一户一档：从“一村一档”细到“一户一档”");
+  card(s, M, 1.8, 6.0, 4.9);
+  s.addText("户档案与成员", { x: 0.82, y: 2.05, w: 4, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "户主 / 户编号 / 户类型（一般户 / 脱贫户 / 监测户）/ 风险类型与等级",
+    "帮扶责任人 + 联系电话（PII 透明加密，ADR-0005）",
+    "家庭成员：关系 / 身份证（加密）/ 健康 / 就业 / 个人年收入 / 兜底保障",
+    "走访挂户：走访记录关联到户，自动回写“最近走访日期”",
+    "台账导出 xlsx / csv（含成员数、风险等级）",
+  ], 0.82, 2.55, 5.4, 3.9, { size: 12.5, gap: 9 });
+  card(s, 6.85, 1.8, 6.0, 4.9);
+  s.addText("风险预警与汇总回填", { x: 7.17, y: 2.05, w: 5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "连续未走访 >90 天且非一般户 → 中风险",
+    "大病 / 住房不安全 / 突发困难 → 高风险（逐项独立命中）",
+    "预警实时计算不落库；可一键登记风险记录并关闭闭环",
+    "一键汇总回填帮扶村年度人口：总户数 / 总人口 / 脱贫户 / 监测户（幂等 upsert）",
+    "数据域沿用：普通用户本人、管理员本组织及子树",
+  ], 7.17, 2.55, 5.4, 3.9, { size: 12.5, gap: 9 });
+  s.addText("v1.14.0 新增 households / household_members / household_risk_records 三表 + /households/* API（15 端点）", {
+    x: M, y: 6.85, w: 12.3, h: 0.35, fontSize: 11.5, color: MUTED, fontFace: F, margin: 0 });
 }
 
 /* 18 项目管理 */
@@ -687,8 +716,37 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
   bullets(s, [
     "合同 → 支付凭证 → 划转凭证 全链条挂接",
     "异常监控：超支 / 偏差 / 闲置 / 重复支付 / 缺凭证",
+    "凭证 OCR（v1.14.0）：拍照识别金额/日期回填，离线引擎不可用时降级手工录入",
     "普通用户全流程可操作（申请/审批/拨付/结算），审批留痕",
-  ], 7.17, 4.25, 5.4, 2.1, { size: 13, gap: 9 });
+  ], 7.17, 4.25, 5.4, 2.1, { size: 12.5, gap: 8 });
+}
+
+/* 19b 经费凭证 OCR（W22 新增） */
+{
+  const s = p.addSlide();
+  header(s, "03 功能模块", "经费凭证 OCR：拍一张，金额日期自动填");
+  const ocrFlow = ["上传凭证图片", "离线识别（CPU）", "回填金额 / 日期", "人工核对保存"];
+  ocrFlow.forEach((t, i) => {
+    const x = M + i * 3.1;
+    s.addShape(p.shapes.CHEVRON, { x, y: 2.0, w: 3.15, h: 1.0,
+      fill: { color: i === 3 ? PRIMARY_L : PRIMARY } });
+    s.addText(t, { x: x + 0.15, y: 2.0, w: 2.85, h: 1.0, fontSize: 13.5, bold: true,
+      color: "FFFFFF", fontFace: F, valign: "middle", margin: 0 });
+  });
+  card(s, M, 3.5, 6.0, 2.7);
+  s.addText("识别能力", { x: 0.82, y: 3.7, w: 4, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "离线引擎 rapidocr-onnxruntime 1.4.4（CPU / 中英文 / 不联网）",
+    "金额：￥ / ¥ / 元 / 千分位 / 小数；日期：YYYY-MM-DD / YYYY年M月D日 / YYYY/MM/DD",
+    "返回 text / amount / date / confidence / engine，结果自动回填录入项",
+  ], 0.82, 4.15, 5.4, 1.95, { size: 12.5, gap: 8 });
+  card(s, 6.85, 3.5, 6.0, 2.7);
+  s.addText("降级与安全", { x: 7.17, y: 3.7, w: 4, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "引擎不可用 → 503 + 前端提示手工录入，不阻断经费业务",
+    "图片限长 10MB；空内容 / 非图片 → 400",
+    "Windows 安装包内置 OCR 模型；ARM64 构建过滤降级",
+  ], 7.17, 4.15, 5.4, 1.95, { size: 12.5, gap: 8 });
 }
 
 /* 20 学校与政策 */
@@ -713,6 +771,30 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
     "全角色公开模块：普通用户与管理员可见性一致",
     "政策执行情况跟踪与关联业务引用",
   ], 7.17, 2.55, 5.4, 3.9, { size: 13.5, gap: 10 });
+}
+
+/* 20b 消费帮扶（W22 新增，替换舆情监测） */
+{
+  const s = p.addSlide();
+  header(s, "03 功能模块", "消费帮扶台账：逐笔记录帮销成果");
+  card(s, M, 1.8, 6.0, 4.9);
+  s.addText("台账要素", { x: 0.82, y: 2.05, w: 4, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "品类：农产品 / 畜禽 / 手工 / 其他；产品名称与数量单位",
+    "成交金额（元，必填）、采购方（单位）、供货方及类型（农户 / 合作社 / 企业）",
+    "年度（必填）、成交日期、凭证文件、备注；可关联帮扶村",
+    "新建 / 编辑 / 软删除；按年度 / 品类 / 村 / 关键词筛选",
+  ], 0.82, 2.55, 5.4, 3.9, { size: 12.5, gap: 9 });
+  card(s, 6.85, 1.8, 6.0, 4.9);
+  s.addText("统计与导出", { x: 7.17, y: 2.05, w: 4, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "年度统计：总金额 / 记录笔数 / 按品类分布 / 按村分布",
+    "台账导出 xlsx / csv（按当前筛选条件）",
+    "与帮扶村年度数据第 8 板块「消费帮扶」区分：年度板块按村按年统计，本台账逐笔记账",
+    "替换已下线的舆情监测；旧菜单 key sentiment 仅保留权限兼容、不再有导航入口",
+  ], 7.17, 2.55, 5.4, 3.9, { size: 12.5, gap: 9 });
+  s.addText("v1.14.0 新增 consumption_records 表 + /consumption/* API（6 端点）", {
+    x: M, y: 6.85, w: 12.3, h: 0.35, fontSize: 11.5, color: MUTED, fontFace: F, margin: 0 });
 }
 
 /* 21 审批中心 */
@@ -758,9 +840,38 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
     "组织访问校验 + 审计日志（本轮补齐）",
   ], 7.17, 2.48, 5.4, 2.2, { size: 12.5, gap: 7 });
   card(s, M, 5.0, 12.33, 1.7, PRIMARY_T);
-  s.addText("工程细节", { x: 0.82, y: 5.18, w: 3, h: 0.35, fontSize: 13, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
-  s.addText("manifest.json 清单（包型/组织/记录数/校验和/增量基准）+ data/{type}.json 明细；导入走 SAVEPOINT 事务 + 独占写锁（防 SQLITE_BUSY）；批量 upsert 保留原始主键，杜绝外键孤儿；三个端点 12 项接口测试锁定契约", {
+  s.addText("链路校验（v1.14.0）", { x: 0.82, y: 5.18, w: 4, h: 0.35, fontSize: 13, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  s.addText("「下级生成上报包 → 上级接收 / 导入 → 数据列表可见」整条链路已补端到端集成测试并修复断点；上报协议、端点与请求/响应结构不变，升级后建议做一次完整上报+接收演练。", {
     x: 0.82, y: 5.55, w: 11.6, h: 1.0, fontSize: 12.5, color: TEXT, fontFace: F, margin: 0 });
+}
+
+/* 22b 数据上报链路（W22 端到端修复） */
+{
+  const s = p.addSlide();
+  header(s, "03 功能模块", "数据上报链路：下级打包 → 上级接收 → 数据可见");
+  const chain = ["下级录入数据", "生成上报包", "上级接收", "字段级校验纠正", "预览确认入库", "数据列表可见"];
+  chain.forEach((t, i) => {
+    const x = M + i * 2.09;
+    s.addShape(p.shapes.CHEVRON, { x, y: 2.0, w: 2.2, h: 0.95,
+      fill: { color: i === 5 ? PRIMARY_L : PRIMARY } });
+    s.addText(t, { x: x + 0.12, y: 2.0, w: 1.95, h: 0.95, fontSize: 12, bold: true,
+      color: "FFFFFF", fontFace: F, valign: "middle", margin: 0 });
+  });
+  card(s, M, 3.45, 6.0, 3.2);
+  s.addText("链路要素", { x: 0.82, y: 3.65, w: 4, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "上报包：ZIP + manifest.json（组织/记录数/校验和/增量基准）",
+    "上报范围：普通用户仅本人录入，管理员为全组织",
+    "接收端：仅管理员可校验 / 接收 / 导入 / 确认入库",
+    "自动字段级校验：ok / corrected / rejected 三级",
+  ], 0.82, 4.1, 5.4, 2.4, { size: 12.5, gap: 8 });
+  card(s, 6.85, 3.45, 6.0, 3.2);
+  s.addText("v1.14.0 交付", { x: 7.17, y: 3.65, w: 4, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "补端到端集成测试并修复链路断点：生成 → 接收 → 导入 → 列表可见",
+    "上报协议与端点路径、请求/响应结构均未改变",
+    "升级后建议按用户手册做一次完整上报 + 接收演练",
+  ], 7.17, 4.1, 5.4, 2.4, { size: 12.5, gap: 8 });
 }
 
 /* 23 数据分析与报表 */
@@ -770,10 +881,10 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
   const cards2 = [
     ["分析仪表盘", "任选两年多维对比；村庄人口/收入趋势、资金投入走势、项目完成率一览"],
     ["成效评估", "村庄年度评分 + 排名 + 历年对比；评估结果回流帮扶决策"],
-    ["报表导出", "Word / PDF 真实渲染（python-docx / reportlab 内置中文字体），按年度真实聚合"],
-    ["帮扶大屏", "深色全屏大屏：核心指标 + 图表轮播，适配汇报展示场景"],
+    ["报表模板", "任意字段组合 + xlsx/csv/docx/pdf 导出 + 打印（v1.14.0 增强）"],
+    ["汇报大屏", "全屏汇报模式，支持按帮扶村/学校/单位筛选下钻；顶部可退出大屏"],
     ["地图可视化", "贵州 88 县区区域数据，帮扶分布上图；离线地图瓦片管理"],
-    ["工作分析", "驻村工作量统计（按人/按单位/按月），支撑考核"],
+    ["影像库", "现场照片归档 + EXIF/GPS 自动归类 + 多期对比图（v1.14.0 新增）"],
   ];
   cards2.forEach((c, i) => {
     const col = i % 3, row = Math.floor(i / 3);
@@ -786,6 +897,55 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
   });
 }
 
+/* 23b 报表模板组合导出（W22 增强） */
+{
+  const s = p.addSlide();
+  header(s, "03 功能模块", "报表模板：任意字段组合 · 四种格式 · 一键打印");
+  card(s, M, 1.8, 6.0, 4.9);
+  s.addText("字段自由组合", { x: 0.82, y: 2.05, w: 4, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "按模块读取可用字段（available-fields），勾选需要的列",
+    "按字段映射保存为报表模板（模板可复用、可下发）",
+    "导出前可预览数据，确认无误再生成文件",
+    "保留原有模板导入 / 下载能力",
+  ], 0.82, 2.55, 5.4, 3.9, { size: 12.5, gap: 9 });
+  card(s, 6.85, 1.8, 6.0, 4.9);
+  s.addText("多格式导出与打印", { x: 7.17, y: 2.05, w: 5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "格式：xlsx / csv / docx / pdf（单次上限 5000 行）",
+    "Word / PDF 复用 report_export_service，PDF 用 reportlab 内置中文字体（不依赖系统字体）",
+    "打印：先取 print-data（JSON），再走浏览器打印样式，适合 A4 台账上报",
+    "组织数据域沿用模板既有逻辑，导出结果与列表筛选一致",
+  ], 7.17, 2.55, 5.4, 3.9, { size: 12.5, gap: 9 });
+  s.addText("v1.14.0 新增 POST /report-templates/{id}/export 与 GET /report-templates/{id}/print-data", {
+    x: M, y: 6.85, w: 12.3, h: 0.35, fontSize: 11.5, color: MUTED, fontFace: F, margin: 0 });
+}
+
+/* 23c 影像库（W22 新增） */
+{
+  const s = p.addSlide();
+  header(s, "03 功能模块", "影像库：照片归档 + 多期对比，现场变化看得见");
+  card(s, M, 1.8, 6.0, 4.9);
+  s.addText("归档与自动归类", { x: 0.82, y: 2.05, w: 5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "上传后登记归档：关联帮扶村 / 学校 / 项目（三选一或空）+ 标签",
+    "自动解析 EXIF：拍摄时间（DateTimeOriginal）与 GPS 坐标",
+    "GPS ≤5km 就近自动匹配帮扶村；无 EXIF 时标记为手工来源",
+    "拍摄点标识 spot_key（默认 GPS 量化串）：同一拍摄点多期照片自动分组",
+    "按村 / 校 / 项目 / 标签 / 日期区间筛选；删除为软删除",
+  ], 0.82, 2.55, 5.4, 3.9, { size: 12.5, gap: 9 });
+  card(s, 6.85, 1.8, 6.0, 4.9);
+  s.addText("多期对比图", { x: 7.17, y: 2.05, w: 4, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "选同一拍摄点的多张照片，一键生成 PNG 对比图",
+    "≤3 张横排；≥4 张按 2 列排列；每张下方标注拍摄日期",
+    "单次最多 9 张，可下载留存，用于汇报与验收举证",
+    "图片只允许读取上传目录内文件，防路径穿越",
+  ], 7.17, 2.55, 5.4, 3.9, { size: 12.5, gap: 9 });
+  s.addText("v1.14.0 新增 photo_archives 表 + /media/photos/* API（7 端点，含对比图合成与下载）", {
+    x: M, y: 6.85, w: 12.3, h: 0.35, fontSize: 11.5, color: MUTED, fontFace: F, margin: 0 });
+}
+
 /* 24 系统管理 */
 {
   const s = p.addSlide();
@@ -795,7 +955,7 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
     ["安全与审计", "安全审计 · 零信任 · 密钥管理 · 数据分级 · 加密设置 · 机器码管理"],
     ["运维与监控", "系统总览 · 健康检查 · 系统监控 · 缓存管理 · 后台任务 · 运行环境 · 错误上报"],
     ["备份与存储", "备份管理 · 分片上传 · 地图瓦片 · 管控配置包 · 系统配置"],
-    ["系统设置", "多语言 · 邮件设置 · 更新日志"],
+    ["系统设置", "更新日志（v1.14.0 起多语言 / 邮件设置已下线）"],
     ["关于与反馈", "关于系统 · 反馈管理 · 帮助中心 · 管理面板"],
   ];
   items.forEach((it, i) => {
@@ -807,8 +967,8 @@ sectionSlide("03", "功能模块", "FUNCTIONAL MODULES", [
     s.addText(it[1], { x: x + 0.3, y: y + 0.54, w: 5.4, h: 0.7, fontSize: 11.5, color: MUTED,
       fontFace: F, margin: 0 });
   });
-  s.addText("统一入口 + 页内 Tab：旧页面 / 旧路由全部保留（深链不失效），菜单 key 一个不改、权限包配置完全兼容", {
-    x: M, y: 6.75, w: 12.3, h: 0.4, fontSize: 12, color: MUTED, fontFace: F, margin: 0 });
+  s.addText("统一入口 + 页内 Tab：旧页面 / 旧路由全部保留（深链不失效），菜单 key 一个不改、权限包配置完全兼容；v1.14.0 下线页面的 key 仅作权限兼容", {
+    x: M, y: 6.75, w: 12.3, h: 0.4, fontSize: 11.5, color: MUTED, fontFace: F, margin: 0 });
 }
 
 /* ════════ 25 章节页：安全体系 ════════ */
@@ -893,7 +1053,7 @@ sectionSlide("04", "安全体系", "SECURITY & COMPLIANCE", [
       line: { color: ACCENT, width: 2, endArrowType: "triangle" } });
   });
   s.addText([
-    { text: "覆盖 9 列：身份证号 / 电话类（含 users.phone）", options: { bullet: bu(), breakLine: true } },
+    { text: "覆盖 9 列：身份证号 / 电话类（含一户一档 helper_phone / id_card，v1.14.0 起替换 villagers 两列）", options: { bullet: bu(), breakLine: true } },
     { text: "密钥：ENCRYPTION_KEY 派生（多机同配）或运行时密钥库", options: { bullet: bu() } },
   ], { x: 3.45, y: 2.55, w: 2.95, h: 2.1, fontSize: 11.5, color: TEXT, fontFace: F,
     paraSpaceAfter: 8, margin: 0 });
@@ -971,7 +1131,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
   s.addChart(p.charts.BAR, [{
     name: "用例数",
     labels: ["后端 pytest", "前端 vitest"],
-    values: [13505, 6685],
+    values: [13710, 6748],
   }], {
     x: M, y: 1.95, w: 6.6, h: 4.2, barDir: "col",
     chartColors: [PRIMARY, PRIMARY_L], varyColors: true,
@@ -982,7 +1142,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
     showLegend: false, chartArea: { fill: { color: BG } },
   });
   // 数据来源脚注：缩短措辞 + 按框自适应（原固定 11pt 在 6.6×0.35in 内超出 1.38×）
-  const noteP32 = "数据来源：2026-10-18 实测口径（v1.13.0）· 后端 13,500+ / 前端 6,700+ · 覆盖率 100%（行+分支）· 以发布实测为准";
+  const noteP32 = "数据来源：2026-10-18 实测（v1.14.0）· 后端 13,710 / 前端 6,748 用例 · 覆盖率 100%（行+分支）· 1 skipped";
   const sizeP32 = fitFontSize(noteP32, 6.6, 0.45, 11, 9);
   fitNote("P32 数据来源", 11, sizeP32);
   s.addText(noteP32, { x: 0.7, y: 6.2, w: 6.6, h: 0.45,
@@ -1130,11 +1290,10 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   const s = p.addSlide();
   header(s, "06 部署运行", "版本历程：持续的密集演进");
   const tl = [
-    ["v1.12.7", "09-13", "遗留风险二批：上传体积三层上限、导出回收、导入拒绝记录、Windows CI 可见性"],
-    ["v1.12.8", "09-14", "R7 恢复维护闸门 / R12 低危批量 7 项 / R2 残余清零 / P-1~P-3 门禁 / R14 组织树修复"],
     ["v1.12.9", "09-14", "深审缺陷批量修复（越权/数据完整性/静默失效）+ 响应信封与凭据语义修复 + 前后端覆盖率双双补齐至 100%"],
     ["v1.12.10", "10-02", "跨平台 CI 双红根因修复：归档恢复穿越判定去平台化、审批时间轴断言去时区依赖 + 测试会话数据根隔离契约"],
-    ["v1.13.0", "10-18", "导航架构重构：后端单一菜单源 v2（99 key / 6 板块）+ 系统管理 6 聚合页 + Ctrl+K 菜单搜索 / 收藏 / 最近访问；旧路由与权限包 key 全兼容"],
+    ["v1.13.0", "10-18", "导航架构重构：后端单一菜单源 v2 + 系统管理 6 聚合页 + Ctrl+K 菜单搜索 / 收藏 / 最近访问；旧路由与权限包 key 全兼容"],
+    ["v1.14.0", "10-18", "功能大迭代：一户一档 / 影像库对比 / 消费帮扶台账 / 经费凭证 OCR / 报表组合导出 / 7 板块折叠 / 大屏退出；删遗留表与下线页面"],
   ];
   s.addShape(p.shapes.LINE, { x: 1.1, y: 3.1, w: 11.1, h: 0, line: { color: "D8E0DA", width: 2 } });
   tl.forEach((t, i) => {
@@ -1153,7 +1312,7 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   });
   // 摘要条下移压缩：底边 6.85in，避开页脚文字带（体检器对 y ≥ 495pt 的页脚另有卡片归属判定）
   card(s, M, 5.9, 12.33, 0.95, PRIMARY_T);
-  s.addText("净效果：13,500+ 后端用例（行+分支覆盖率 100%）+ 6,700+ 前端用例全绿（以发布时全量实测为准）；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
+  s.addText("净效果：13,710 后端用例（行+分支覆盖率 100%）+ 6,748 前端用例全绿；Windows x64 与麒麟 ARM64 两个离线安装包由 GitHub Actions 全自动构建并发布 Release", {
     x: 0.82, y: 5.9, w: 11.6, h: 0.95, fontSize: 13.5, bold: true, color: TEXT,
     fontFace: F, valign: "middle", margin: 0 });
 }
@@ -1191,9 +1350,9 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   const tThanks = autoBox("谢谢观看", 11, 1.45, 54, 1.6, 36, true, 0, "P41 谢谢观看");
   s.addText("谢谢观看", { x: 0.96, y: 3.0, w: 11, h: tThanks.h, fontSize: tThanks.size, bold: true,
     color: "FFFFFF", fontFace: F, margin: 0 });
-  s.addText("帮扶管理信息系统 v1.13.0  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
+  s.addText("帮扶管理信息系统 v1.14.0  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
     x: 1.0, y: 4.55, w: 11, h: 0.45, fontSize: 13.5, color: LIGHT, fontFace: F, margin: 0 });
-  s.addText("13,500+ 后端用例 + 6,700+ 前端用例全绿守护 · 双平台离线交付（以发布实测为准）", {
+  s.addText("13,710 后端用例 + 6,748 前端用例全绿守护 · 双平台离线交付", {
     x: 1.0, y: 5.05, w: 11, h: 0.45, fontSize: 13.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 

@@ -163,14 +163,14 @@ class TestRuralWorkVillageGuard:
             json={"name": "锁定悬挂工作", "village_id": 99999},
         )
         assert resp.status_code == 400, resp.text[:300]
-        assert "村庄不存在" in str(resp.json())
+        assert "帮扶村不存在" in str(resp.json())
 
     def test_valid_villages_table_id_creates(self, auth_setup, db_session):
-        """合法 villages 表 id（FK 目标表）创建成功。"""
+        """合法 supported_villages.id（W22 新 FK 目标）创建成功。"""
         from app.models.rural_work import RuralWork
-        from app.models.village import Village
+        from app.models.supported_village import SupportedVillage
 
-        v = Village(name="锁定工作村")
+        v = SupportedVillage(village_name="锁定工作村")
         db_session.add(v)
         db_session.commit()
         db_session.refresh(v)
@@ -183,7 +183,7 @@ class TestRuralWorkVillageGuard:
 
         row = db_session.query(RuralWork).filter_by(name="锁定合法工作").first()
         assert row is not None
-        assert row.village_id == v.id
+        assert row.supported_village_id == v.id
 
     def test_update_with_dangling_village_id_400(self, auth_setup, db_session):
         """更新路径同样校验：悬挂 village_id → 400（覆盖 update 路由 ValueError 分支）。"""
@@ -198,8 +198,8 @@ class TestRuralWorkVillageGuard:
             json={"village_id": 424242},
         )
         assert resp.status_code == 400, resp.text[:300]
-        assert "村庄不存在" in str(resp.json())
+        assert "帮扶村不存在" in str(resp.json())
 
         db_session.expire_all()
         row = db_session.query(RuralWork).filter_by(id=work.id).first()
-        assert row.village_id is None, "校验失败时不得部分写入"
+        assert row.supported_village_id is None, "校验失败时不得部分写入"

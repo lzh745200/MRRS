@@ -138,6 +138,14 @@ class VisitRecord(Base):
     # 语义为**整体替换**（登记/更新时整列重写），因此用裸 JSON 而非 MutableList
     # —— 已登记进 tests/unit/test_json_column_mutability_ratchet.py 的「整体替换」台账。
     attachments = Column(JSON, nullable=True, comment="走访照片/附件列表（[{url, file_name}]）")
+    # W22（v1.14.0）：走访挂户 —— 关联一户一档（可空，旧记录不强制）；创建/更新/删除时
+    # 由 pairing API 回写 households.last_visit_date，前端一户一档详情直接展示走访时间线。
+    household_id = Column(
+        Integer,
+        ForeignKey("households.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="关联一户一档ID",
+    )
     # 数据权限字段（新建时从结对记录继承，保证与主表同域）
     organization_id = Column(
         Integer,
@@ -166,6 +174,7 @@ class VisitRecord(Base):
             "content": self.content,
             "materials": self.materials,
             "attachments": list(self.attachments or []),
+            "household_id": self.household_id,
             "organization_id": self.organization_id,
             "created_by": self.created_by,
             "is_active": self.is_active,

@@ -81,6 +81,8 @@ class RuralTaskResponse(BaseModel):
     approved_by: Optional[int] = None
     approved_at: Optional[datetime] = None
     approval_comment: Optional[str] = None
+    # W22：村关联改为 supported_villages；为兼容既有前端同时保留 village_id
+    supported_village_id: Optional[int] = None
     village_id: Optional[int] = None
     village_name: Optional[str] = None
     rural_work_name: Optional[str] = None

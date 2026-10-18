@@ -5,6 +5,55 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.14.0] - 2026-10-18 — 功能大迭代（一户一档/影像库/消费帮扶/OCR/报表组合/导航折叠）
+
+### Added
+
+- **一户一档**：新表 `households` / `household_members` / `household_risk_records`，API `/households/*`，
+  页面 `/households` 与 `/households/:id`：家庭成员、帮扶责任人、风险类型、收入/务工/大病/住房监测指标；
+  风险等级与预警（连续未走访 >90 天且非一般户→中风险；大病/住房不安全/突发困难→高风险，服务层实时计算）；
+  走访记录挂户并回写最近走访日期；`POST /households/rollup` 按村自动汇总回填 `village_population` 年度人口
+  （消除"村里填一遍、户里再算一遍"重复录入）；台账导出 xlsx/csv。
+- **影像库**：新表 `photo_archives`，API `/media/photos/*`，页面 `/media`：按村/校/项目/时间/标签归档；
+  手机照片 EXIF 拍摄时间与 GPS 自动归类（≤5km 就近匹配帮扶村）；同一拍摄点多期照片按 `spot_key` 自动配对，
+  生成左右/2×N 滑动对比图 PNG（Pillow 合成 + 日期标注，GET/POST 双入口），可直接用于汇报材料。
+- **消费帮扶台账**（替换已下线的舆情监测）：新表 `consumption_records` + `/consumption/*` + 页面 `/consumption`：
+  品类（农产品/畜禽/手工/其他）、数量、金额、采购方、供货方（农户/合作社/企业）、年度、凭证、备注；
+  年度/品类/村统计与 xlsx/csv 导出；与帮扶村年度数据板块 `consumption_support` 区分。
+- **经费凭证 OCR**：`services/ocr_service.py`（rapidocr-onnxruntime 1.4.4，完全离线 CPU）+ `POST /funds/ocr-voucher`：
+  识别凭证文本并回填金额/日期（支持 ￥/¥/元/千分位、YYYY-MM-DD / YYYY年M月D日 / YYYY/MM/DD）；
+  引擎不可用时 503 降级、前端提示手工录入不阻断业务。
+- **报表模板组合导出**：`POST /report-templates/{id}/export?format=xlsx|csv|docx|pdf&year` +
+  `GET /report-templates/{id}/print-data?year`；前端任意字段勾选组合 → 预览 → 多格式导出 → 浏览器打印。
+- **导航体验**：7 板块标题放大（18px 加粗）、默认折叠、点击展开/收起（localStorage `nav:expanded-sections`）。
+- **汇报大屏退出**：大屏头部「退出大屏」→ 退出全屏并返回工作台。
+- **数据校验合并页**：`/data-verify` 单页三 Tab（校验执行 / 规则管理 / 字段说明），问题清单可定位跳转与导出；
+  独立「校验规则」菜单下线（key 保留 legacy）；字段中文说明承接原国际化字段翻译。
+
+### Changed
+
+- **数据上报链路修复**：枚举列导出的枚举名与导入校验的枚举值不一致导致上级整表 rejected（学校等）；
+  导出侧按模型列元数据归一为枚举值，补端到端集成测试（下级录入→生成上报包→上级接收导入→数据可见 + 重复导入幂等）。
+
+### Removed
+
+- **驻村工作台**：删除页面/路由（无后端模块），菜单 key `checkin` 保留 legacy。
+- **舆情监测**：删除后端 `api/v1/sentiment.py`、`models/sentiment.py`、`services/sentiment/`（采集/分析）与前端页面/API，
+  菜单 key `sentiment` 保留 legacy（改为消费帮扶）。
+- **国际化/邮件设置**：删除 `I18nManagement.vue` / `EmailSettings.vue` 及路由；菜单 key `i18n` / `email` 保留 legacy。
+- **Village/Villager 遗留表**：Alembic 迁移删除 `villages` / `villagers` / `industries` / `sentiment_news` 四表；
+  `rural_works` / `rural_tasks` / `tea_plantations` / `cactus_fruit_plots` 的 `village_id` 迁移为
+  `supported_village_id`（FK→`supported_villages`，按村名+组织回填）；删除对应模型/API/测试。
+- 数据概览页「已迁移/已统一/已整合」提示文案全部清除（保留功能入口）。
+
+### Testing
+
+- 后端全量：**13,710 passed / 1 skipped / 0 failed**；语句覆盖率 **100.00%**（44,423 stmts，0 miss）、分支覆盖率 **100.00%**（10,872 branches，0 partial）（pytest-cov `--cov=app --cov-branch`，`.coveragerc` fail_under=100）
+- 前端全量：**321 文件 / 6,748 passed / 0 failed**；12 组 glob 四指标 100%
+- 静态门禁：flake8（app/）0、bandit -ll 0、vue-tsc --noEmit 0、eslint src --max-warnings=0 0；
+  17 项静态门禁（菜单对齐 A~E、硬编码色、安全审计、Alembic 单 head、pragma 理由、版本一致性等）全部 PASS
+- Alembic：`upgrade → downgrade → upgrade` 通过（新表创建 / 旧表删除 / 列迁移 / 数据回填断言）
+
 ## [1.13.4] - 2026-10-18 — 修复 ARM64 后端产物主程序文件名（Electron DEB 最后一项阻断）
 
 ### Fixed

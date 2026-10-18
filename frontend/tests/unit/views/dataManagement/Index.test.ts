@@ -45,7 +45,8 @@ vi.mock('@/api/request', () => ({
   post: vi.fn(),
   put: vi.fn(),
   del: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import Index from '@/views/dataManagement/Index.vue'
 
@@ -187,7 +188,12 @@ describe('挂载与统计加载', () => {
   it('camelCase 数据 / 空 body 兜底 / village 数据缺失 items → 兜底为 0', async () => {
     // 列表端点返回空对象（无 items 键）→ 触发 `||  (Array.isArray(...) ? ... : [])` 防御链
     mockEndpoints({
-      '/dashboard/stats': { villageCount: 10, monthlyImports: 1, monthlyExports: 2, backupCount: 0 },
+      '/dashboard/stats': {
+        villageCount: 10,
+        monthlyImports: 1,
+        monthlyExports: 2,
+        backupCount: 0,
+      },
       '/import/history': {},
       '/system/audit/exports': {},
       '/system/backup': {},
@@ -374,7 +380,7 @@ describe('el-tabs 交互', () => {
 })
 
 describe('备份跳转', () => {
-  it('goBackupManagement → pushSafe(\'/system/backup\')', async () => {
+  it("goBackupManagement → pushSafe('/system/backup')", async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any

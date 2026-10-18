@@ -258,6 +258,8 @@ interface MountOptions {
   presetMenus?: boolean
   /** true = router-view 提供真实组件，覆盖 `<component :is>` 真分支 */
   routedView?: boolean
+  /** false = 保持板块默认折叠状态（默认 true 供既有渲染断言使用） */
+  expandAll?: boolean
 }
 
 async function mountLayout(options: MountOptions = {}): Promise<VueWrapper> {
@@ -284,7 +286,27 @@ async function mountLayout(options: MountOptions = {}): Promise<VueWrapper> {
   await nextTick()
   await flushPromises()
   await nextTick()
+  if (options.expandAll !== false) {
+    for (const toggle of wrapper.findAll('.menu-section-toggle')) {
+      await toggle.trigger('click')
+    }
+    await nextTick()
+  }
   return wrapper
+}
+
+/** 按板块标题文本定位折叠开关 */
+function sectionToggle(wrapper: VueWrapper, label: string) {
+  const toggle = wrapper.findAll('.menu-section-toggle').find((node) => node.text().includes(label))
+  expect(toggle, `板块「${label}」折叠开关`).toBeTruthy()
+  return toggle!
+}
+
+/** 板块入口是否可见（v-show） */
+function isVisible(wrapper: VueWrapper, index: string): boolean {
+  const node = wrapper.find(`.menu-item-stub[data-index="${index}"]`)
+  const style = node.attributes('style') ?? ''
+  return node.exists() && !style.includes('display: none')
 }
 
 function menuIndexes(wrapper: VueWrapper): string[] {
@@ -677,5 +699,86 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
     wrapper.unmount()
     dispatchKey('h', { ctrl: true })
     expect(mocks.pushSafe).not.toHaveBeenCalled()
+  })
+
+  // ══════════════════ W22：板块折叠放大 ══════════════════
+
+  it('板块默认折叠：标题放大加粗且入口隐藏，点击展开后持久化', async () => {
+    const wrapper = await mountLayout({ expandAll: false })
+    // 板块标题渲染（7 板块中的 2 个测试板块）
+    expect(sectionLabels(wrapper)).toEqual(['帮扶业务', '系统管理'])
+    const businessToggle = sectionToggle(wrapper, '帮扶业务')
+    expect(businessToggle.attributes('aria-expanded')).toBe('false')
+    expect(businessToggle.classes()).toContain('menu-section-toggle')
+    // 默认折叠：板块入口全部 v-show=false
+    expect(isVisible(wrapper, '/supported-villages')).toBe(false)
+    expect(isVisible(wrapper, '/system/console/org')).toBe(false)
+    // 工作台固定第一不受折叠影响
+    expect(isVisible(wrapper, '/dashboard')).toBe(true)
+
+    // 点击展开 → 入口可见、aria 切换、localStorage 记录展开集合
+    await businessToggle.trigger('click')
+    await nextTick()
+    expect(sectionToggle(wrapper, '帮扶业务').attributes('aria-expanded')).toBe('true')
+    expect(isVisible(wrapper, '/supported-villages')).toBe(true)
+    expect(JSON.parse(localStorage.getItem('nav:expanded-sections') as string)).toEqual([
+      'business',
+    ])
+    // 未点击的板块仍折叠（独立性）
+    expect(isVisible(wrapper, '/system/console/org')).toBe(false)
+
+    // 再次点击收起并写回空数组
+    await sectionToggle(wrapper, '帮扶业务').trigger('click')
+    await nextTick()
+    expect(isVisible(wrapper, '/supported-villages')).toBe(false)
+    expect(JSON.parse(localStorage.getItem('nav:expanded-sections') as string)).toEqual([])
+  })
+
+  it('展开状态从 localStorage 恢复（默认折叠）', async () => {
+    localStorage.setItem('nav:expanded-sections', JSON.stringify(['system']))
+    const wrapper = await mountLayout({ expandAll: false })
+    expect(isVisible(wrapper, '/supported-villages')).toBe(false)
+    expect(isVisible(wrapper, '/system/console/org')).toBe(true)
+  })
+
+  it('损坏 localStorage（非 JSON / 非数组）回退为全部折叠', async () => {
+    localStorage.setItem('nav:expanded-sections', '{bad-json')
+    let wrapper = await mountLayout({ expandAll: false })
+    expect(isVisible(wrapper, '/supported-villages')).toBe(false)
+    expect(sectionToggle(wrapper, '帮扶业务').attributes('aria-expanded')).toBe('false')
+
+    localStorage.setItem('nav:expanded-sections', JSON.stringify({ business: true }))
+    wrapper = await mountLayout({ expandAll: false })
+    expect(isVisible(wrapper, '/supported-villages')).toBe(false)
+  })
+
+  it('localStorage 写入失败时折叠仍生效（静默降级）', async () => {
+    const wrapper = await mountLayout({ expandAll: false })
+    const spy = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    try {
+      await sectionToggle(wrapper, '帮扶业务').trigger('click')
+      await nextTick()
+      expect(isVisible(wrapper, '/supported-villages')).toBe(true)
+      expect(sectionToggle(wrapper, '帮扶业务').attributes('aria-expanded')).toBe('true')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('折叠状态下仍可打开菜单搜索（Ctrl+K 与收藏/最近不受影响）', async () => {
+    useMenuFavorites().toggleFavorite({
+      key: 'villages',
+      label: '帮扶村管理',
+      path: '/supported-villages',
+    })
+    const wrapper = await mountLayout({ expandAll: false })
+    // 收藏区始终可见（不受板块折叠影响）
+    expect(sectionLabels(wrapper)).toContain('收藏')
+    expect(isVisible(wrapper, '/supported-villages')).toBe(true)
+    dispatchKey('k', { ctrl: true })
+    await nextTick()
+    expect(wrapper.findComponent({ name: 'MenuSearchDialog' }).props('modelValue')).toBe(true)
   })
 })

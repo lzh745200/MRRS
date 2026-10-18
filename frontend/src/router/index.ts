@@ -378,12 +378,18 @@ export const routes: RouteRecordRaw[] = [
         component: () => retryImport(() => import('@/views/work-calendar/Index.vue')),
         meta: { menuKey: 'work-calendar', title: '工作日历' },
       },
-      // ── 驻村工作台（打卡+月度总结） ──
+      // ── 一户一档（W22：家庭成员/帮扶责任人/风险预警/监测指标/走访挂户）──
       {
-        path: '/rural-works/checkin',
-        name: 'CheckinWorkbench',
-        component: () => retryImport(() => import('@/views/ruralWorks/checkin/Index.vue')),
-        meta: { menuKey: 'checkin', title: '驻村工作台' },
+        path: '/households',
+        name: 'HouseholdList',
+        component: () => retryImport(() => import('@/views/households/List.vue')),
+        meta: { menuKey: 'households', title: '一户一档' },
+      },
+      {
+        path: '/households/:id',
+        name: 'HouseholdDetail',
+        component: () => retryImport(() => import('@/views/households/Detail.vue')),
+        meta: { menuKey: 'households', title: '一户一档详情' },
       },
       // ── 结对帮扶与走访台账 ──
       {
@@ -645,12 +651,6 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '管控配置包', roles: ['admin', 'super_admin'] },
       },
       {
-        path: '/system/email',
-        name: 'SystemEmail',
-        component: () => retryImport(() => import('@/views/system/EmailSettings.vue')),
-        meta: { title: '邮件设置', roles: ['admin', 'super_admin'] },
-      },
-      {
         path: '/system/monitoring',
         name: 'SystemMonitoring',
         component: () => retryImport(() => import('@/views/system/MonitoringDashboard.vue')),
@@ -673,12 +673,6 @@ export const routes: RouteRecordRaw[] = [
         name: 'SystemUpdateLogs',
         component: () => retryImport(() => import('@/views/system/UpdateLogs.vue')),
         meta: { menuKey: 'update-logs', title: '更新日志', roles: ['admin', 'super_admin'] },
-      },
-      {
-        path: '/system/i18n',
-        name: 'SystemI18n',
-        component: () => retryImport(() => import('@/views/system/I18nManagement.vue')),
-        meta: { menuKey: 'i18n', title: '国际化管理', roles: ['admin', 'super_admin'] },
       },
       {
         path: '/system/chunked-upload',
@@ -826,12 +820,23 @@ export const routes: RouteRecordRaw[] = [
         component: () => retryImport(() => import('@/views/reminder/Index.vue')),
         meta: { menuKey: 'reminder', title: '提醒中心' },
       },
-      // ── 舆情监测 ──
+      // ── 消费帮扶台账（W22：原舆情监测改造）──
       {
         path: '/sentiment',
-        name: 'Sentiment',
-        component: () => retryImport(() => import('@/views/sentiment/Index.vue')),
-        meta: { menuKey: 'sentiment', title: '舆情监测' },
+        redirect: '/consumption',
+      },
+      {
+        path: '/consumption',
+        name: 'Consumption',
+        component: () => retryImport(() => import('@/views/consumption/List.vue')),
+        meta: { menuKey: 'consumption', title: '消费帮扶' },
+      },
+      // ── 影像库（W22：村/校/项目/时间/标签归档 + 多期照片对比）──
+      {
+        path: '/media',
+        name: 'MediaLibrary',
+        component: () => retryImport(() => import('@/views/media/PhotoArchive.vue')),
+        meta: { menuKey: 'media-library', title: '影像库' },
       },
       // ── 批量操作 ──
       {
@@ -865,18 +870,14 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: '/data-verify',
-        meta: { menuKey: 'data-verify' },
-        redirect: '/data-verify/rules',
+        name: 'DataVerify',
+        component: () => retryImport(() => import('@/views/dataVerify/Index.vue')),
+        meta: { menuKey: 'data-verify', title: '数据校验' },
       },
       {
+        // 旧深链兼容：/data-verify/rules 合并进数据校验页的「规则管理」Tab
         path: '/data-verify/rules',
-        name: 'ValidationRules',
-        component: () => retryImport(() => import('@/views/dataVerify/RulesManagement.vue')),
-        meta: {
-          menuKey: 'validation-rules',
-          title: '校验规则管理',
-          roles: ['admin', 'super_admin', 'user'],
-        },
+        redirect: '/data-verify?tab=rules',
       },
     ],
   },

@@ -149,3 +149,10 @@ python-docx==1.2.0  # report_export_service 使用
 # 日志跟随（tail -F 语义：轮转/截断检测、offset 断点续读）
 # ============================================================
 ponytail==0.9.3
+
+# ============================================================
+# 经费凭证 OCR（v1.14.0，离线 CPU 识别；Windows 安装包内置）
+# ARM64 构建在 docker/Dockerfile.kylin-standalone 中过滤本行及其传递依赖
+# （onnxruntime/opencv 无 buster ARM64 wheel），Linux 端 OCR 降级为不可用提示。
+# ============================================================
+rapidocr-onnxruntime==1.4.4

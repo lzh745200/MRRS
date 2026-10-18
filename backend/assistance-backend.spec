@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 from PyInstaller.compat import is_win
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files, collect_dynamic_libs
 
 # ========== 路径定义（使用 PyInstaller 预定义的 SPEC） ==========
 # SPEC 是 PyInstaller 在解析 spec 文件时自动注入的变量，表示 spec 文件的完整路径
@@ -152,6 +152,16 @@ if is_win:
 
 # 自动收集 app 包下的所有子模块（避免手动添加遗漏）
 hiddenimports += collect_submodules('app')
+
+# ========== 经费凭证 OCR（v1.14.0） ==========
+# rapidocr-onnxruntime 的模型文件（*.onnx/字典/配置）不是 .py，Analysis 不会自动收集；
+# onnxruntime 的动态库也需显式 collect_dynamic_libs，否则安装包内 OCR 初始化失败。
+# 条件收集：Linux ARM64 构建未安装 OCR 依赖（Dockerfile.kylin-standalone 过滤）时自动跳过。
+_rapidocr_spec = _ilu.find_spec('rapidocr_onnxruntime')
+if _rapidocr_spec and _rapidocr_spec.submodule_search_locations:
+    datas += collect_data_files('rapidocr_onnxruntime')
+    binaries += collect_dynamic_libs('onnxruntime')
+    hiddenimports += collect_submodules('rapidocr_onnxruntime') + collect_submodules('onnxruntime')
 
 # ========== 排除不需要的模块（减少打包体积，避免冲突） ==========
 excludes = [

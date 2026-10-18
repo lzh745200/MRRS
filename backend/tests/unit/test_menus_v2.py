@@ -79,8 +79,7 @@ CONTRACT_CONSOLES = {
     "system-console-settings": (
         "/system/console/settings",
         [
-            ("i18n", "/system/i18n"),
-            ("email", "/system/email"),
+            # W22（v1.14.0）：i18n 多语言与 email 邮件设置随需求下线（key 保留为 legacy）
             ("update-logs", "/system/update-logs"),
         ],
     ),

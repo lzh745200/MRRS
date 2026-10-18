@@ -31,8 +31,11 @@ router = APIRouter(prefix="/rural-tasks", tags=["乡村工作任务"])
 def _task_to_response(task: RuralTask) -> dict:
     """将 ORM 对象转为响应字典"""
     d = task.to_dict()
-    # 关联名称
-    d["village_name"] = task.village.name if task.village else None
+    # 关联名称（W22：村关联改为 supported_villages；响应同时给新/旧字段名兼容前端）
+    supported_village = getattr(task, "supported_village", None)
+    d["village_name"] = supported_village.village_name if supported_village else None
+    d["supported_village_id"] = task.supported_village_id
+    d["village_id"] = task.supported_village_id
     d["rural_work_name"] = task.rural_work.name if task.rural_work else None
     return d
 
@@ -98,7 +101,7 @@ async def list_tasks(
     if year:
         query = query.filter(RuralTask.year == year)
     if village_id:
-        query = query.filter(RuralTask.village_id == village_id)
+        query = query.filter(RuralTask.supported_village_id == village_id)
     if search:
         query = query.filter(RuralTask.title.contains(search))
 
@@ -203,7 +206,7 @@ async def create_task(
         contact_phone=data.contact_phone,
         planned_start=data.planned_start,
         planned_end=data.planned_end,
-        village_id=data.village_id,
+        supported_village_id=data.village_id,  # W22：schema 保留旧字段名，落新列
         status=TaskStatus.draft,
         created_by=current_user.id,
     )

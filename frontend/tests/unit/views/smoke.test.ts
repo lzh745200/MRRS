@@ -201,8 +201,6 @@ describe('System view imports', () => {
     ['Task Manager', '@/views/system/TaskManager.vue'],
     ['Secrets Management', '@/views/system/SecretsManagement.vue'],
     ['Zero Trust', '@/views/system/ZeroTrust.vue'],
-    ['Email Settings', '@/views/system/EmailSettings.vue'],
-    ['I18n Management', '@/views/system/I18nManagement.vue'],
     ['Data Tier', '@/views/system/DataTier.vue'],
   ]
 
@@ -244,7 +242,6 @@ describe('Data and workflow view imports', () => {
     ['Message Center', '@/views/message/MessageCenter.vue'],
     ['Work Calendar', '@/views/work-calendar/Index.vue'],
     ['Help Center', '@/views/help/HelpCenter.vue'],
-    ['Sentiment', '@/views/sentiment/Index.vue'],
   ]
 
   // W4-T3：把"import 成功即通过"升级为**编译契约**断言——
@@ -349,7 +346,8 @@ describe('API module imports', () => {
     'systemMonitor',
     'analytics',
     'dashboard',
-    'sentiment',
+    'media',
+    'consumption',
     'secrets',
     'twoFactor',
     'fundLifecycle',

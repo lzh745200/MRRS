@@ -19,12 +19,18 @@ import { nextTick } from 'vue'
 const mocks = vi.hoisted(() => ({
   getBigScreenFilters: vi.fn(),
   getBigScreenOverview: vi.fn(),
+  pushSafe: vi.fn(),
   ElMessage: { warning: vi.fn(), success: vi.fn(), error: vi.fn() },
 }))
 
 vi.mock('@/api/bigscreen', () => ({
   getBigScreenFilters: mocks.getBigScreenFilters,
   getBigScreenOverview: mocks.getBigScreenOverview,
+}))
+
+// W22 退出大屏：断言回到工作台
+vi.mock('@/composables/useRouterSafe', () => ({
+  useRouterSafe: () => ({ pushSafe: mocks.pushSafe }),
 }))
 
 vi.mock('element-plus', () => ({
@@ -1195,6 +1201,65 @@ describe('BigScreen.vue（帮扶成效大屏）', () => {
     vm.config.scope = { type: 'all', id: null, name: null }
     await nextTick()
     expect(vm.scopeObjectOptions).toEqual([])
+    wrapper.unmount()
+  })
+})
+
+// ─────────────────────────────────────────────
+// W22：退出大屏（退出全屏 + 返回工作台）
+// ─────────────────────────────────────────────
+describe('W22 退出大屏', () => {
+  it('非全屏时直接返回工作台', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = vmOf(wrapper)
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => null,
+    })
+    const exitSpy = vi.fn(() => Promise.resolve())
+    ;(document as any).exitFullscreen = exitSpy
+
+    vm.exitBigScreen()
+    expect(mocks.pushSafe).toHaveBeenCalledWith('/dashboard')
+    expect(exitSpy).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('全屏时先退出全屏再返回工作台；退出失败静默不阻断跳转', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = vmOf(wrapper)
+    vm.isFullscreen = true
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => document.documentElement,
+    })
+    const exitSpy = vi.fn(() => Promise.reject(new Error('exit failed')))
+    ;(document as any).exitFullscreen = exitSpy
+
+    vm.exitBigScreen()
+    await flushPromises()
+    expect(exitSpy).toHaveBeenCalled()
+    expect(vm.isFullscreen).toBe(false)
+    expect(mocks.pushSafe).toHaveBeenCalledWith('/dashboard')
+
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => null,
+    })
+    wrapper.unmount()
+  })
+
+  it('头部「退出大屏」按钮触发退出逻辑', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const btn = wrapper
+      .findAll('button.el-button-stub')
+      .find((b: any) => b.text().trim() === '退出大屏')
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    expect(mocks.pushSafe).toHaveBeenCalledWith('/dashboard')
     wrapper.unmount()
   })
 })

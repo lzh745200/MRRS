@@ -2,7 +2,7 @@
  * Comprehensive frontend API coverage tests.
  * Ensures all API modules are importable and their functions exist.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 // ══════════════════════════════════════════════════════════════
 // API module import tests
@@ -22,7 +22,8 @@ describe('API modules importable', () => {
     'projects',
     'ruralWork',
     'schools',
-    'sentiment',
+    'media',
+    'consumption',
     'supportedVillage',
     'systemMonitor',
     'todos',

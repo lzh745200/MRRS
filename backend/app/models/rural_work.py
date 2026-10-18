@@ -10,7 +10,7 @@ from sqlalchemy import ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base, EncryptedText, UtcDateTime
-from app.models.village import Village  # noqa: F401 — RuralWork.village relationship target
+from app.models.supported_village import SupportedVillage  # noqa: F401 — relationship target
 
 from .user import User  # noqa: F401 - relationship 字符串引用注册
 
@@ -47,7 +47,13 @@ class RuralWork(Base):
         default=WorkStatus.planned,
         nullable=False,
     )
-    village_id = Column(Integer, ForeignKey("villages.id", ondelete="CASCADE"), nullable=True)
+    # W22：village_id（遗留 villages 表）删除，改挂 supported_villages（帮扶村）
+    supported_village_id = Column(
+        Integer,
+        ForeignKey("supported_villages.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="关联帮扶村ID（W22 起替代遗留 villages.village_id）",
+    )
     responsible_person = Column(String(50), nullable=True)
     contact_phone = Column(EncryptedText(64), nullable=True, comment="联系电话(透明加密, ADR-0005)")
     start_date = Column(UtcDateTime(), nullable=True)
@@ -64,12 +70,12 @@ class RuralWork(Base):
         comment="所属组织ID（数据权限隔离；历史数据为空时按创建人过滤）",
     )
 
-    village = relationship("Village", backref="rural_works")
+    supported_village = relationship("SupportedVillage", foreign_keys=[supported_village_id])
     creator = relationship("User", foreign_keys=[created_by], backref="created_rural_works")
     updater = relationship("User", foreign_keys=[updated_by], backref="updated_rural_works")
 
     __table_args__ = (
         Index("ix_rural_works_type", "type"),
         Index("ix_rural_works_status", "status"),
-        Index("ix_rural_works_village_id", "village_id"),
+        Index("ix_rural_works_supported_village_id", "supported_village_id"),
     )

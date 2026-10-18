@@ -16,7 +16,10 @@ enableAutoUnmount(afterEach)
 
 const mockPush = vi.fn(() => Promise.resolve())
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: mockPush, resolve: vi.fn(() => ({ name: 'x', matched: [{ path: '/x' }] })) }),
+  useRouter: () => ({
+    push: mockPush,
+    resolve: vi.fn(() => ({ name: 'x', matched: [{ path: '/x' }] })),
+  }),
   useRoute: () => ({ params: {}, query: {}, path: '/system' }),
 }))
 
@@ -30,7 +33,8 @@ vi.mock('@/api/request', () => ({
   put: (...a: any[]) => mockPut(...a),
   del: (...a: any[]) => mockDel(...a),
   apiRequest: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), log: vi.fn() },
@@ -43,7 +47,11 @@ vi.mock('@/composables/useRouterSafe', () => ({
 
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
-  ElMessageBox: { confirm: vi.fn(() => Promise.resolve('confirm')), alert: vi.fn(), prompt: vi.fn() },
+  ElMessageBox: {
+    confirm: vi.fn(() => Promise.resolve('confirm')),
+    alert: vi.fn(),
+    prompt: vi.fn(),
+  },
 }))
 
 // Mock @element-plus/icons-vue — 使用 importOriginal 保留所有真实导出
@@ -55,10 +63,35 @@ vi.mock('@element-plus/icons-vue', async (importOriginal) => {
 // Mock @/api/chunkedUpload — ChunkedUploadManager.vue 导入 chunkedUploadApi
 vi.mock('@/api/chunkedUpload', () => ({
   chunkedUploadApi: {
-    initUpload: vi.fn(() => Promise.resolve({ session_id: 'test-session', file_name: 'test.txt', file_size: 1024, chunk_size: 5242880, total_chunks: 1, status: 'initialized' })),
+    initUpload: vi.fn(() =>
+      Promise.resolve({
+        session_id: 'test-session',
+        file_name: 'test.txt',
+        file_size: 1024,
+        chunk_size: 5242880,
+        total_chunks: 1,
+        status: 'initialized',
+      })
+    ),
     uploadChunk: vi.fn(() => Promise.resolve({ success: true, chunk_index: 0 })),
-    getProgress: vi.fn(() => Promise.resolve({ session_id: 'test-session', file_name: 'test.txt', total_chunks: 1, uploaded_chunks: 1, progress: 100, status: 'completed' })),
-    mergeChunks: vi.fn(() => Promise.resolve({ session_id: 'test-session', file_path: '/tmp/test.txt', file_name: 'test.txt', status: 'merged' })),
+    getProgress: vi.fn(() =>
+      Promise.resolve({
+        session_id: 'test-session',
+        file_name: 'test.txt',
+        total_chunks: 1,
+        uploaded_chunks: 1,
+        progress: 100,
+        status: 'completed',
+      })
+    ),
+    mergeChunks: vi.fn(() =>
+      Promise.resolve({
+        session_id: 'test-session',
+        file_path: '/tmp/test.txt',
+        file_name: 'test.txt',
+        status: 'merged',
+      })
+    ),
     cancelUpload: vi.fn(() => Promise.resolve({ success: true, message: 'cancelled' })),
   },
 }))
@@ -68,27 +101,97 @@ vi.mock('@/api/chunkedUpload', () => ({
 function makeMockGet(overrides: Record<string, any> = {}) {
   const defaults: Record<string, any> = {
     '/system/audit/stats': { todayOps: 5, activeUsers: 3, warnings: 1, failures: 2 },
-    '/system/audit/logs': { items: [{ id: 1, user: 'admin', action: 'login', target: '系统', time: '10:00', ip: '10.0.0.1', status: 'success' }], total: 1 },
-    '/system/audit/login-attempts': { items: [{ id: 1, user: 'admin', ip: '10.0.0.1', time: '10:00', success: true }], total: 1 },
-    '/system/backup/list': { items: [{ id: 1, filename: 'backup.zip', size: 1024, created_at: '2024-01-01', description: 'test' }], total: 1 },
-    '/system/backup/schedule': { enabled: true, frequency: 'daily', backup_time: '02:00', retention_count: 7 },
+    '/system/audit/logs': {
+      items: [
+        {
+          id: 1,
+          user: 'admin',
+          action: 'login',
+          target: '系统',
+          time: '10:00',
+          ip: '10.0.0.1',
+          status: 'success',
+        },
+      ],
+      total: 1,
+    },
+    '/system/audit/login-attempts': {
+      items: [{ id: 1, user: 'admin', ip: '10.0.0.1', time: '10:00', success: true }],
+      total: 1,
+    },
+    '/system/backup/list': {
+      items: [
+        {
+          id: 1,
+          filename: 'backup.zip',
+          size: 1024,
+          created_at: '2024-01-01',
+          description: 'test',
+        },
+      ],
+      total: 1,
+    },
+    '/system/backup/schedule': {
+      enabled: true,
+      frequency: 'daily',
+      backup_time: '02:00',
+      retention_count: 7,
+    },
     '/system/cache/status': { status: 'healthy', size: '100MB', keys: 500, hit_rate: '85%' },
     '/system/cache/keys': { items: [{ key: 'user_1', ttl: 300, size: 1024 }], total: 1 },
-    '/system/config': { items: [{ key: 'site_name', value: '帮扶系统', description: '站点名称' }], total: 1 },
-    '/system/update-logs': { items: [{ id: 1, version: '1.2.0', content: '修复', created_at: '2024-01-01' }], total: 1 },
-    '/system/tasks': { items: [{ id: 1, name: '清理任务', status: 'running', progress: 50 }], total: 1 },
-    '/system/roles': { items: [{ id: 1, name: 'admin', description: '管理员', permissions: [] }], total: 1 },
-    '/system/permissions': { items: [{ id: 1, name: 'user.create', description: '创建用户' }], total: 1 },
-    '/system/users': { items: [{ id: 1, username: 'admin', real_name: '管理员', role: 'admin', status: 'active' }], total: 1 },
-    '/system/email/settings': { smtp_host: 'localhost', smtp_port: 25, from_email: 'test@test.com' },
-    '/system/encryption/status': { enabled: true, algorithm: 'AES-256', key_rotation: '2024-01-01' },
-    '/system/env-check': { status: 'ok', checks: [{ name: 'Python', status: 'ok', version: '3.11' }] },
-    '/system/error-reports': { items: [{ id: 1, error_type: 'TypeError', message: 'test', time: '2024-01-01' }], total: 1 },
-    '/system/feedback': { items: [{ id: 1, user: 'admin', content: 'good', time: '2024-01-01' }], total: 1 },
+    '/system/config': {
+      items: [{ key: 'site_name', value: '帮扶系统', description: '站点名称' }],
+      total: 1,
+    },
+    '/system/update-logs': {
+      items: [{ id: 1, version: '1.2.0', content: '修复', created_at: '2024-01-01' }],
+      total: 1,
+    },
+    '/system/tasks': {
+      items: [{ id: 1, name: '清理任务', status: 'running', progress: 50 }],
+      total: 1,
+    },
+    '/system/roles': {
+      items: [{ id: 1, name: 'admin', description: '管理员', permissions: [] }],
+      total: 1,
+    },
+    '/system/permissions': {
+      items: [{ id: 1, name: 'user.create', description: '创建用户' }],
+      total: 1,
+    },
+    '/system/users': {
+      items: [{ id: 1, username: 'admin', real_name: '管理员', role: 'admin', status: 'active' }],
+      total: 1,
+    },
+    '/system/email/settings': {
+      smtp_host: 'localhost',
+      smtp_port: 25,
+      from_email: 'test@test.com',
+    },
+    '/system/encryption/status': {
+      enabled: true,
+      algorithm: 'AES-256',
+      key_rotation: '2024-01-01',
+    },
+    '/system/env-check': {
+      status: 'ok',
+      checks: [{ name: 'Python', status: 'ok', version: '3.11' }],
+    },
+    '/system/error-reports': {
+      items: [{ id: 1, error_type: 'TypeError', message: 'test', time: '2024-01-01' }],
+      total: 1,
+    },
+    '/system/feedback': {
+      items: [{ id: 1, user: 'admin', content: 'good', time: '2024-01-01' }],
+      total: 1,
+    },
     '/system/i18n/translations': { items: [{ key: 'hello', zh: '你好', en: 'Hello' }], total: 1 },
     '/system/map/tiles': { items: [{ id: 1, name: 'tile1', status: 'ready' }], total: 1 },
     '/system/menu': { items: [{ id: 1, title: '首页', path: '/', icon: 'home' }], total: 1 },
-    '/system/secrets': { items: [{ id: 1, name: 'DB_KEY', type: 'string', created_at: '2024-01-01' }], total: 1 },
+    '/system/secrets': {
+      items: [{ id: 1, name: 'DB_KEY', type: 'string', created_at: '2024-01-01' }],
+      total: 1,
+    },
     '/system/init/status': { initialized: true, steps: [{ name: 'DB', status: 'done' }] },
     '/system/data-tier': { items: [{ id: 1, table: 'logs', tier: 'cold', rows: 1000 }], total: 1 },
     '/system/chunked-upload/status': { active_uploads: 0, completed: 5 },
@@ -234,25 +337,6 @@ describe('DataTier.vue', () => {
   })
 })
 
-// --- EmailSettings ---
-describe('EmailSettings.vue', () => {
-  it('渲染并加载设置', async () => {
-    const { default: Comp } = await import('@/views/system/EmailSettings.vue')
-    const w = mount(Comp)
-    await flushPromises()
-    expect(w.exists()).toBe(true)
-  })
-  it('保存设置', async () => {
-    const { default: Comp } = await import('@/views/system/EmailSettings.vue')
-    const w = mount(Comp)
-    await flushPromises()
-    const vm = w.vm as any
-    if (vm.handleSave) await vm.handleSave()
-    if (vm.saveSettings) await vm.saveSettings()
-    if (vm.handleTest) await vm.handleTest()
-  })
-})
-
 // --- EncryptionSettings ---
 describe('EncryptionSettings.vue', () => {
   it('渲染', async () => {
@@ -287,16 +371,6 @@ describe('ErrorReports.vue', () => {
 describe('Feedback.vue', () => {
   it('渲染', async () => {
     const { default: Comp } = await import('@/views/system/Feedback.vue')
-    const w = mount(Comp)
-    await flushPromises()
-    expect(w.exists()).toBe(true)
-  })
-})
-
-// --- I18nManagement ---
-describe('I18nManagement.vue', () => {
-  it('渲染', async () => {
-    const { default: Comp } = await import('@/views/system/I18nManagement.vue')
     const w = mount(Comp)
     await flushPromises()
     expect(w.exists()).toBe(true)

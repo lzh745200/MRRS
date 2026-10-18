@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models.village import Village
 from app.models.organization import Organization
+from app.models.supported_village import SupportedVillage
 from app.services.data_package_service import DataPackageService
 
 
@@ -59,16 +59,13 @@ class TestEncryptedPackageFlow:
         return DataPackageService(real_db_session, upload_dir=temp_dir)
 
     @pytest.fixture
-    def test_villages(self, real_db_session: Session):
-        """创建测试村庄数据"""
-        # 清理可能存在的测试数据
-        real_db_session.query(Village).filter(Village.code.like("V00%")).delete()
-        real_db_session.commit()
-
+    def test_villages(self, real_db_session: Session, test_org: Organization):
+        """创建测试帮扶村数据（W22：数据包 villages 类型对应 supported_villages）。"""
         villages = [
-            Village(code="V001", name="测试村1", province="省1", city="市1"),
-            Village(code="V002", name="测试村2", province="省1", city="市1"),
-            Village(code="V003", name="测试村3", province="省2", city="市2"),
+            SupportedVillage(
+                village_name=f"测试村{i}", organization_id=test_org.id, is_active=True
+            )
+            for i in range(1, 4)
         ]
         for village in villages:
             real_db_session.add(village)

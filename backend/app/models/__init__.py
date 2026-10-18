@@ -26,7 +26,6 @@ _MODULE_MAP = {
     "EducationSupport": ".supported_village", "SupportFunding": ".supported_village",
     "ReportSubscription": ".supported_village", "VillageAttachment": ".supported_village",
     "VillageCommitteeInfo": ".supported_village", "VillageCommitteeMember": ".supported_village",
-    "Village": ".village", "Villager": ".village", "Industry": ".village",
     "TeaPlantation": ".industry", "CactusFruitPlot": ".industry",
     "Region": ".region",
     "Project": ".project", "ProjectTask": ".project", "ProjectFile": ".project",
@@ -80,9 +79,11 @@ _MODULE_MAP = {
     "ReminderDisposition": ".reminder_disposition",
     "PairingRecord": ".pairing", "VisitRecord": ".pairing",
     "DonationItem": ".donation_item",
-    # W18-P3-1：sentiment_news 此前未注册 —— 全新安装的 create_all 不会建该表，
-    # 舆情页在新机器上恒 500（升级路径也不会补）。此处补登记。
-    "SentimentNews": ".sentiment",
+    # W22（v1.14.0）：一户一档 + 影像库 + 消费帮扶
+    "Household": ".household", "HouseholdMember": ".household", "HouseholdRiskRecord": ".household",
+    "PhotoArchive": ".media",
+    "ConsumptionRecord": ".consumption",
+    # W22（v1.14.0）：sentiment（舆情）模块已随需求移除，表由迁移 drop。
     # W18-P3-1（同批）：machine_code_permissions 亦未注册 —— 同属"新装缺表"。
     "MachineCodePermission": ".rbac",
 }

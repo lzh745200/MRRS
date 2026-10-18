@@ -65,6 +65,8 @@
               <el-button type="primary" link @click="handleDownload(t)">下载</el-button>
               <el-button type="success" link @click="openFillDialog(t)">在线填报</el-button>
               <el-button link @click="openUploadDialog(t)">上传填报</el-button>
+              <el-button link @click="openOutputDialog(t, 'export')">导出数据</el-button>
+              <el-button link @click="openOutputDialog(t, 'print')">打印</el-button>
               <el-button link @click="handleEdit(t)">编辑</el-button>
               <el-button link type="danger" @click="handleDelete(t)">删除</el-button>
             </div>
@@ -95,6 +97,8 @@
               <el-button type="primary" link @click="handlePreview(t)">预览</el-button>
               <el-button type="primary" link @click="handleDownload(t)">下载</el-button>
               <el-button type="success" link @click="openFillDialog(t)">在线填报</el-button>
+              <el-button link @click="openOutputDialog(t, 'export')">导出数据</el-button>
+              <el-button link @click="openOutputDialog(t, 'print')">打印</el-button>
               <el-button link @click="handleEdit(t)">编辑</el-button>
               <el-button link type="danger" @click="handleDelete(t)">删除</el-button>
             </div>
@@ -453,12 +457,16 @@
         </div>
       </div>
     </el-dialog>
+
+    <!-- W22 报表增强：导出（Excel/CSV/Word/PDF）与打印预览 -->
+    <ReportOutputDialog v-model="showOutputDialog" :mode="outputMode" :template="outputTemplate" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import ReportOutputDialog from './components/ReportOutputDialog.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -497,6 +505,10 @@ const showCreateDialog = ref(false)
 const showEditDialog = ref(false)
 const showPreviewDialog = ref(false)
 const showUploadDialog = ref(false)
+// W22 报表增强：导出（Excel/CSV/Word/PDF）与打印预览对话框
+const showOutputDialog = ref(false)
+const outputMode = ref<'export' | 'print'>('export')
+const outputTemplate = ref<Template | null>(null)
 const showImportResult = ref(false)
 const editTemplate = ref<Template | null>(null)
 const previewTemplate = ref<Template | null>(null)
@@ -790,6 +802,13 @@ async function handleSaveEdit() {
 function handlePreview(t: Template) {
   previewTemplate.value = { ...t }
   showPreviewDialog.value = true
+}
+
+/** 打开「导出数据 / 打印预览」对话框（mode: export | print） */
+function openOutputDialog(t: Template, mode: 'export' | 'print') {
+  outputTemplate.value = { ...t }
+  outputMode.value = mode
+  showOutputDialog.value = true
 }
 
 async function handleDelete(t: Template) {

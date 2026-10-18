@@ -20,7 +20,6 @@ from pydantic import ValidationError
 from app.models.data_report import DataReport, ReportStatus
 from app.models.monitoring import AlertHistory, AlertRule
 from app.models.project import Project
-from app.models.sentiment import SentimentNews
 from app.models.system_config import SystemConfig
 
 
@@ -154,12 +153,6 @@ class TestSensitiveAndConstraintModels:
         col = FundAssetVerification.__table__.c.difference_rate
         assert col.type.precision == 12
         assert col.type.scale == 2
-
-    def test_sentiment_collected_at_has_default(self):
-        col = SentimentNews.__table__.c.collected_at
-        assert col.nullable is True
-        assert col.default is not None
-        assert col.server_default is not None
 
     def test_fund_history_time_defaults_are_aware_utc(self):
         from app.models.fund_history import FundFieldChange, FundStatusHistory

@@ -86,7 +86,7 @@ WORKDIR /build
 
 # 生成 ARM64 专用 requirements（排除无 ARM64 wheel 或单机版不需要的包）
 COPY backend/requirements.txt .
-RUN grep -v -E '^(prophet|cmdstanpy|stanio|scikit-learn|scipy|Scrapy|Twisted|matplotlib|redis|hiredis|selenium|python-magic-bin|pywin32-ctypes|Automat|constantly|hyperlink|incremental|itemadapter|itemloaders|parsel|Protego|PyDispatcher|queuelib|service-identity|sgmllib3k|tldextract|w3lib|zope|cssselect)' \
+RUN grep -v -E '^(prophet|cmdstanpy|stanio|scikit-learn|scipy|Scrapy|Twisted|matplotlib|redis|hiredis|selenium|python-magic-bin|pywin32-ctypes|Automat|constantly|hyperlink|incremental|itemadapter|itemloaders|parsel|Protego|PyDispatcher|queuelib|service-identity|sgmllib3k|tldextract|w3lib|zope|cssselect|rapidocr-onnxruntime|onnxruntime|opencv-python)' \
     requirements.txt > requirements-arm64.txt && \
     echo "python-magic==0.4.27" >> requirements-arm64.txt && \
     echo "--- ARM64 requirements ---" && \
@@ -158,7 +158,7 @@ RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --n
     fakeroot \
     && rm -rf /var/lib/apt/lists/*
 
-ARG VERSION=1.13.4
+ARG VERSION=1.14.0
 WORKDIR /package
 
 # 创建目录结构

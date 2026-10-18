@@ -13,16 +13,16 @@
 
 ```
 ├── backend/app/              # 后端（FastAPI）
-│   ├── api/v1/               # API 接口层（93 个模块 + 13 个子包）
+│   ├── api/v1/               # API 接口层（91 个路由模块 + 13 个子包）
 │   │   ├── auth/             # 认证模块
 │   │   ├── data/             # 数据分析
 │   │   ├── import_export/    # 异步导入导出
 │   │   ├── system/           # 系统管理
-│   │   └── ...               # 地图、经费、项目、帮扶村、学校、政策等
+│   │   └── ...               # 地图、经费、项目、帮扶村、学校、政策、一户一档、影像库、消费帮扶等
 │   ├── core/                 # 核心：config, security, database, cache, data_permission, transaction
-│   ├── models/               # SQLAlchemy 数据模型
+│   ├── models/               # SQLAlchemy 数据模型（含 household/media/consumption 等 W22 新模型）
 │   ├── schemas/              # Pydantic 数据校验
-│   ├── services/             # 业务逻辑层
+│   ├── services/             # 业务逻辑层（含 ocr_service / household_service / media_service 等）
 │   ├── middleware/            # CSRF, 审计, 请求日志, 指标
 │   └── utils/                # 工具类（含 win_proactor_fix 等平台修复）
 ├── backend/tests/            # 后端测试
@@ -35,6 +35,9 @@
 │   │   ├── dashboard/        # 工作台（QuickActions, layout editor）
 │   │   ├── system/           # 系统管理页面 + console/SystemConsole.vue（6 聚合页）
 │   │   ├── analytics/        # 数据分析与帮扶村管理
+│   │   ├── households/       # 一户一档（W22）
+│   │   ├── media/            # 影像库（W22）
+│   │   ├── consumption/      # 消费帮扶台账（W22）
 │   │   └── ...
 │   ├── components/           # 通用组件 + 业务组件（nav/MenuSearchDialog 菜单搜索）
 │   ├── composables/          # 组合式函数（useRecentMenus / useMenuFavorites 导航增强）
@@ -152,6 +155,24 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
   过滤优先级不变（superuser 全量 > `allowed_menus` > 启用中权限包 > 角色默认）；
   console 可见 = `console.key` 或任一 `tab.key ∈ allowed`，勾聚合页 key 视为其全部 Tab 可见。
   门禁 `scripts/check_menu_alignment.py` 规则 A~E（路径可解析 / `meta.menuKey` 合法 / 无孤儿 key / 路径不重复 / 板块唯一）。
+- **W22 功能迭代** (2026-10-18, v1.14.0):
+  - **一户一档**：新表 `households` / `household_members` / `household_risk_records`；API `/households/*`；
+    预警规则（连续未走访 >90 天且非一般户→medium；大病/住房不安全/突发困难→high，服务层实时计算不落库）；
+    走访挂户回写 `last_visit_date`；`POST /households/rollup` 幂等回填 `VillagePopulation`；台账 xlsx/csv 导出。
+  - **影像库**：新表 `photo_archives`；API `/media/photos/*`；EXIF 拍摄时间 + GPS（≤5km 就近匹配帮扶村）、
+    `spot_key` 多期分组、Pillow 生成 PNG 对比图（左右/2xN + 日期标注，≤9 张）。
+  - **消费帮扶**：新表 `consumption_records` + `/consumption/*`（替换已下线的舆情监测；与帮扶村年度板块
+    `consumption_support` 区分）；菜单 key `sentiment` 保留为 legacy。
+  - **经费凭证 OCR**：`services/ocr_service.py` + `POST /funds/ocr-voucher`；引擎 `rapidocr-onnxruntime==1.4.4`
+    （离线/CPU，Windows 安装包内置；ARM64 构建过滤降级）；不可用时返回 503，前端提示手工录入不阻断业务。
+  - **报表模板组合导出**：`POST /report-templates/{id}/export?format=xlsx|csv|docx|pdf&year` +
+    `GET /report-templates/{id}/print-data?year`（单次上限 5000 行）。
+  - **数据校验合并**：单页 `/data-verify`（Tabs：校验执行/规则管理/字段说明），独立「校验规则」菜单下线（key legacy）。
+  - **7 板块折叠**：侧栏板块标题 18px 加粗、默认折叠，展开集合存 localStorage `nav:expanded-sections`。
+  - **大屏退出**：`BigScreen.vue` 顶部「退出大屏」→ 退出全屏并回工作台；**数据上报链路**端到端校验修复（协议不变）。
+  - **遗留表清理**：删除 `villages` / `villagers` / `industries` / `sentiment_news` 四表；`rural_works` / `rural_tasks` /
+    `tea_plantations` / `cactus_fruit_plots` 的 `village_id` 迁移为 `supported_village_id`（FK→supported_villages）。
+  - 新增依赖：`rapidocr-onnxruntime==1.4.4`（离线 OCR；PDF 仍用 reportlab 内置中文字体）。
 - **软删除模式** (2026-07-05): 模型使用 `is_active` 列（Boolean, default=True）。`is_active=False`=已删除。列表端点默认过滤 `is_active=True`，`include_deleted=true` 显示全部（管理员）。`to_dict()` 暴露 `isDeleted`/`is_deleted`。已应用于 `SupportedVillage`、`School`、`Project`、`Fund`。
 - **软删除权限收敛** (2026-07-20): `include_deleted` 参数通过 `enforce_admin_include_deleted` 依赖（`app/api/v1/deps.py`）统一收敛。非管理员传入 `include_deleted=true` 静默降级为 `False`（不抛 403）。4 个端点（supported-villages/schools/projects/funds）均使用 `Depends(enforce_admin_include_deleted)`。详情端点返回 `viewableBecause` 元数据（`build_viewable_because()` 函数）。`SoftDeleteMixin` 预留 `deleted_by` 审计字段。回归测试：`tests/unit/api/test_include_deleted_enforcement.py`（49 项）、E2E：`tests/unit/test_soft_delete_e2e.py`（2 项）。
 - **统一列表响应** (2026-07-08): 所有列表端点已使用 `ok_list()` (envelope)。新增列表端点必须使用 `ok_list()` 而非裸 dict。前端 `_unwrapList()` 仍兼容两种格式以保证向后兼容。
@@ -232,9 +253,10 @@ PR Checks 和 Nightly 工作流均上传覆盖率到 [Codecov](https://codecov.i
 
 ## 2026-08-30 体检批次（v1.11.x）持久性约定
 
-- **PII 列已透明加密**（ADR-0005）：`villagers.id_card/phone`、`village_committee_members.phone`、
+- **PII 列已透明加密**（ADR-0005）：`households.helper_phone`、`household_members.id_card`、`village_committee_members.phone`、
   `users.phone`、`organizations/projects/rural_works/rural_tasks/schools.contact_phone` 共 9 列
-  使用 `EncryptedText`（确定性 AES-SIV，密文带 `enc.v1:` 标记）。对这些列**禁止裸 SQL 写入**
+  使用 `EncryptedText`（确定性 AES-SIV，密文带 `enc.v1:` 标记；v1.14.0 起原 `villagers.id_card/phone`
+  随遗留表删除，由一户一档两列承接）。对这些列**禁止裸 SQL 写入**
   （绕过 TypeDecorator 会落明文/破坏等值查询）；等值查询直接 `WHERE col = :明文` 即可命中密文。
   多机离线同步部署必须配置相同 `ENCRYPTION_KEY`（密钥派生见 `app/core/pii_crypto.py`）。
 - **数据权限 fail-closed**（ADR-0002）：`core/data_permission`（**唯一**数据范围模块）对缺过滤字段的模型降级"仅本人"

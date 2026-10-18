@@ -13,9 +13,11 @@
 
 1. **应用层列加密，不用 SQLCipher 做字段级需求**：`EncryptedText` TypeDecorator
    （`app/models/base.py`）+ `app/core/pii_crypto.py`，覆盖 9 列：
-   villagers.id_card / villagers.phone / village_committee_members.phone /
+   households.helper_phone / household_members.id_card / village_committee_members.phone /
    users.phone / organizations.contact_phone / projects.contact_phone /
    rural_works.contact_phone / rural_tasks.contact_phone / schools.contact_phone。
+   （v1.14.0 起原 villagers.id_card / villagers.phone 随遗留表删除，由一户一档
+   `households.helper_phone` 与 `household_members.id_card` 承接，仍为 9 列口径。）
 2. **确定性加密算法 AES-SIV（RFC 5297，cryptography 库 AESSIV）**：
    同明文恒同密文 → `WHERE phone = :v` 经绑定参数加密后直接命中密文，
    等值查询零改写。代价：暴露等值关系（同号可关联），无范围查询需求，可接受。

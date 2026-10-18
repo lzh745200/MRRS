@@ -169,7 +169,7 @@ API_ROUTER_FILES = [
     ('app.api.v1.data_sync', 'router'),
     ('app.api.v1.data_quality', 'router'),
     ('app.api.v1.system_health', 'router'),
-    ('app.api.v1.sentiment', 'router'),
+    ('app.api.v1.consumption', 'router'),
     ('app.api.v1.ai', 'router'),
     ('app.api.v1.batch_operations', 'router'),
     ('app.api.v1.validation', 'router'),]

@@ -108,10 +108,18 @@ class TestModelRelationships:
     """测试模型关系"""
 
     def test_village_relationships(self):
-        """测试村庄模型关系"""
-        from app.models.village import Village
-        # 检查关系属性
-        assert hasattr(Village, '__tablename__')
+        """W22：乡村工作挂帮扶村（SupportedVillage），遗留 Village 模型已删除。"""
+        from app.models.rural_task import RuralTask
+        from app.models.rural_work import RuralWork
+        from app.models.supported_village import SupportedVillage
+
+        assert hasattr(RuralWork, '__tablename__')
+        assert "supported_village_id" in RuralWork.__table__.columns
+        assert "village_id" not in RuralWork.__table__.columns
+        assert RuralWork.supported_village.property.mapper.class_ is SupportedVillage
+        assert "supported_village_id" in RuralTask.__table__.columns
+        assert "village_id" not in RuralTask.__table__.columns
+        assert RuralTask.supported_village.property.mapper.class_ is SupportedVillage
 
     def test_user_relationships(self):
         """测试用户模型关系"""

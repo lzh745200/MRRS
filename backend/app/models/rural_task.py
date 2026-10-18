@@ -12,10 +12,10 @@ from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base, EncryptedText, UtcDateTime
+from app.models.supported_village import SupportedVillage  # noqa: F401 — relationship target
 
 from .rural_work import RuralWork  # noqa: F401 - relationship 字符串引用注册
 from .user import User  # noqa: F401 - relationship 字符串引用注册
-from .village import Village  # noqa: F401 - relationship 字符串引用注册
 
 
 class TaskCategory(str, Enum):
@@ -106,8 +106,13 @@ class RuralTask(Base):
     approved_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     approved_at = Column(UtcDateTime(), nullable=True)
     approval_comment = Column(Text, nullable=True)
-    # 关联帮扶村
-    village_id = Column(Integer, ForeignKey("villages.id", ondelete="CASCADE"), nullable=True)
+    # 关联帮扶村（W22：原 village_id → supported_villages 表）
+    supported_village_id = Column(
+        Integer,
+        ForeignKey("supported_villages.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="关联帮扶村ID（W22 起替代遗留 villages.village_id）",
+    )
     # 附件（JSON存储文件列表）
     attachments = Column(Text, nullable=True)  # JSON: [{name, path, size}]
     # 审计
@@ -118,7 +123,7 @@ class RuralTask(Base):
 
     # 关系
     rural_work = relationship("RuralWork", backref="tasks")
-    village = relationship("Village", backref="rural_tasks")
+    supported_village = relationship("SupportedVillage", foreign_keys=[supported_village_id])
     creator = relationship("User", foreign_keys=[created_by], backref="created_rural_tasks")
     updater = relationship("User", foreign_keys=[updated_by], backref="updated_rural_tasks")
     submitter = relationship("User", foreign_keys=[submitted_by])
@@ -128,6 +133,6 @@ class RuralTask(Base):
         Index("ix_rural_tasks_work_year", "rural_work_id", "year"),
         Index("ix_rural_tasks_status", "status"),
         Index("ix_rural_tasks_category", "category"),
-        Index("ix_rural_tasks_village", "village_id"),
+        Index("ix_rural_tasks_village", "supported_village_id"),
         Index("ix_rural_tasks_year", "year"),
     )

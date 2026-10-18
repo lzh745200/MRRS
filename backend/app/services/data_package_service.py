@@ -94,6 +94,45 @@ def _business_key_of(model: Any, record: Dict) -> Optional[tuple]:
     return tuple(values)
 
 
+def _enum_column_map(model: Any) -> Dict[str, Any]:
+    """收集模型的 Enum 列 → 枚举类映射（W22 上报链路：导出时枚举名归一枚举值）。"""
+    enum_columns: Dict[str, Any] = {}
+    for column in model.__table__.columns:
+        enum_class = getattr(getattr(column, "type", None), "enum_class", None)
+        if enum_class is not None:
+            enum_columns[column.name] = enum_class
+    return enum_columns
+
+
+def _normalize_enum_export_value(value: Any, enum_class: Any) -> Any:
+    """把数据库中的枚举名（SQLAlchemy 默认存储形态）归一为枚举值。
+
+    导入侧字段校验只接受枚举值（如 ``primary``）；若导出保留 ORM 名称
+    （``PRIMARY``）会导致上报包整表校验失败。非字符串/历史脏值原样返回，
+    由导入校验给出明细。
+    """
+    if enum_class is None or not isinstance(value, str):
+        return value
+    try:
+        return enum_class[value].value
+    except KeyError:
+        try:
+            return enum_class(value).value
+        except ValueError:
+            return value
+
+
+def _normalize_export_data_value(value: Any) -> Any:
+    """导出值归一：datetime→ISO、Decimal→float、其他非 JSON 原生类型→str。"""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if value is not None and not isinstance(value, (str, int, float, bool, list, dict)):
+        return str(value)
+    return value
+
+
 class PackageValidationError(BusinessError):
     """数据包验证错误"""
     def __init__(self, errors: List[str]):
@@ -264,17 +303,18 @@ class DataPackageService:
             sql += " WHERE " + " AND ".join(conditions)
         rows = self.db.execute(_sql_text(sql), params).fetchall()
 
+        # W22 数据上报链路修复：raw SQL 取到的是数据库存储值 —— SQLAlchemy Enum
+        # （native_enum=False）默认落库的是**枚举名**（如 `PRIMARY`/`INACTIVE`），
+        # 而导入侧字段校验只接受**枚举值**（`primary`/`inactive`）→ 上报包被整表
+        # rejected，上级接收后学校/项目等数据不可见。这里把枚举列归一为 `.value`
+        # （PII 列仍保持密文原样，不影响 W18-D8）。
+        enum_columns = _enum_column_map(model)
         result = []
         for row in rows:
             record_dict = {}
             for col_name, value in zip(col_names, row):
-                if isinstance(value, datetime):
-                    value = value.isoformat()
-                elif isinstance(value, Decimal):
-                    value = float(value)
-                elif value is not None and not isinstance(value, (str, int, float, bool, list, dict)):
-                    value = str(value)
-                record_dict[col_name] = value
+                value = _normalize_enum_export_value(value, enum_columns.get(col_name))
+                record_dict[col_name] = _normalize_export_data_value(value)
             result.append(record_dict)
         return result
 

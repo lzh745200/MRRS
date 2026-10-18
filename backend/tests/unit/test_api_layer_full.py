@@ -55,9 +55,9 @@ class TestVillageEndpoints:
     """帮扶村管理接口测试"""
 
     def test_villages_list(self, client):
-        """测试帮扶村列表接口"""
+        """W22（v1.14.0）：/api/v1/villages 已随遗留表删除（旧前端路由 redirect 到 supported-villages）"""
         response = client.get("/api/v1/villages")
-        assert response.status_code in (200, 401, 403)
+        assert response.status_code == 404
 
 class TestFundEndpoints:
     """资金管理接口测试"""

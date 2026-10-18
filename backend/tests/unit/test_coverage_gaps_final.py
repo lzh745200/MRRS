@@ -1973,27 +1973,7 @@ class TestValidation:
 
 
 # ===================================================================
-# 58. villages.py  (1 line)
-# ===================================================================
-
-
-class TestVillages:
-
-    async def test_get_village_no_access(self):
-        from app.api.v1.villages import get_village
-        db = _mock_db()
-        user = _make_user()
-        village = MagicMock()
-        village.id = 1
-        db.query.return_value.filter.return_value.first.return_value = village
-        with patch("app.core.data_permission.check_record_access", return_value=False):
-            with pytest.raises(HTTPException) as exc_info:
-                await get_village(1, current_user=user, db=db)
-            assert exc_info.value.status_code == 403
-
-
-# ===================================================================
-# 59. work_logs.py  (3 lines)
+# 58. work_logs.py  (3 lines)
 # ===================================================================
 
 

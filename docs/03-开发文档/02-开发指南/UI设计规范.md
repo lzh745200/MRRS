@@ -60,12 +60,14 @@ Token 内已定义：
 - 移动端侧边栏：抽屉式（`mobile-open`）+ 遮罩（点击遮罩关闭）
 - 侧边栏颜色：使用 Token（`var(--color-primary-dark-1)` 等）
 
-### 4.2 导航结构（v1.13.0，后端单一菜单源）
+### 4.2 导航结构（v1.14.0，后端单一菜单源）
 
 - **数据来源**：后端 `app/api/v1/menus.py` 的 `MENU_DEFINITIONS` v2（`sections` + `flat_keys`），
   前端 `stores/menu.ts` 消费；**禁止在前端手写菜单段或维护菜单配置副本**（`config/menu-config.ts`、
   `utils/systemMenu.ts` 已删除）。
 - **7 个板块**：工作台（固定首位，不入 sections）+ 帮扶业务 / 乡村振兴 / 工作协同 / 分析汇报 / 数据管理 / 系统管理。
+- **板块折叠（v1.14.0）**：板块标题 18px 加粗、默认折叠；点击标题展开/收起，展开集合持久化到
+  localStorage `nav:expanded-sections`（默认空 = 全部折叠）。
 - **三种条目的渲染**：`page`（普通菜单项）、`group`（可折叠分组）、`console`（系统管理聚合页入口）。
 - **系统管理 6 聚合页**：组织与权限 / 安全与审计 / 运维与监控 / 备份与存储 / 系统设置 / 关于与反馈；
   页内 Tab 切换，Tab 来自后端 `tabs[]`，仅渲染有权限的 Tab，旧路由全部保留。

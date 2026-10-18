@@ -12,7 +12,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import build_viewable_because, enforce_admin_include_deleted
@@ -92,6 +92,8 @@ class VisitCreate(BaseModel):
     content: Optional[str] = None
     materials: Optional[str] = Field(default=None, max_length=200)
     attachments: Optional[list[VisitAttachment]] = None
+    # W22（v1.14.0）：走访挂户（可选；关联后回写 households.last_visit_date）
+    household_id: Optional[int] = None
 
 
 class VisitUpdate(BaseModel):
@@ -101,6 +103,7 @@ class VisitUpdate(BaseModel):
     content: Optional[str] = None
     materials: Optional[str] = Field(default=None, max_length=200)
     attachments: Optional[list[VisitAttachment]] = None
+    household_id: Optional[int] = None
 
 
 def _normalize_attachments(items) -> list[dict]:
@@ -166,9 +169,49 @@ def _write_log(db: Session, action: str, entity_id: int, title: str, current_use
     )
 
 
+def _resolve_household(db: Session, household_id: Optional[int], pairing: PairingRecord, current_user):
+    """校验并返回走访关联的一户一档（可空）；数据域必须与结对记录同组织。"""
+    if household_id is None:
+        return None
+    from app.core.permission_utils import is_admin
+    from app.models.household import Household
+
+    household = (
+        db.query(Household)
+        .filter(Household.id == household_id, Household.is_active == True)  # noqa: E712
+        .first()
+    )
+    if not household:
+        raise AppError.not_found("关联的一户一档")
+    if not is_admin(current_user) and household.organization_id not in (
+        None,
+        pairing.organization_id,
+    ):
+        raise AppError.forbidden("无权关联该户")
+    return household
+
+
+def _sync_household_last_visit(db: Session, household_id: Optional[int]) -> None:
+    """按该户有效走访记录重算 last_visit_date（无记录则清空）。"""
+    if household_id is None:
+        return
+    from app.models.household import Household
+
+    latest = (
+        db.query(func.max(VisitRecord.visit_date))
+        .filter(
+            VisitRecord.household_id == household_id,
+            VisitRecord.is_active == True,  # noqa: E712
+        )
+        .scalar()
+    )
+    household = db.query(Household).filter(Household.id == household_id).first()
+    if household:
+        household.last_visit_date = latest
+        safe_commit(db)
+
+
 # ==================== 结对台账 ====================
-
-
 @router.get("")
 async def list_pairings(
     page: int = Query(1, ge=1),
@@ -391,6 +434,7 @@ async def create_visit(
 ):
     """登记走访记录（组织域继承结对记录，保证与主表同域）。"""
     pairing = _get_pairing_or_404(db, pairing_id, current_user, "无权登记该结对记录的走访")
+    household = _resolve_household(db, data.household_id, pairing, current_user)
 
     visit = VisitRecord(
         pairing_id=pairing.id,
@@ -402,12 +446,14 @@ async def create_visit(
         attachments=(
             _normalize_attachments(data.attachments) if data.attachments is not None else None
         ),
+        household_id=household.id if household else None,
         organization_id=pairing.organization_id,
         created_by=current_user.id,
     )
     db.add(visit)
     safe_commit(db)
     db.refresh(visit)
+    _sync_household_last_visit(db, visit.household_id)
 
     _write_log(db, "create_visit", visit.id, data.visitors, current_user, detail=pairing.title)
     return success_response(data=visit.to_dict(), message="登记成功")
@@ -426,12 +472,19 @@ async def update_visit(
     visit = _get_visit_or_404(db, pairing, visit_id, current_user, "无权编辑该走访记录")
 
     update_data = data.model_dump(exclude_unset=True)
+    old_household_id = visit.household_id
+    if "household_id" in update_data:
+        household = _resolve_household(db, update_data.pop("household_id"), pairing, current_user)
+        visit.household_id = household.id if household else None
     if update_data.get("attachments") is not None:
         update_data["attachments"] = _normalize_attachments(update_data["attachments"])
     for key, value in update_data.items():
         setattr(visit, key, value)
     safe_commit(db)
     db.refresh(visit)
+    _sync_household_last_visit(db, old_household_id)
+    if visit.household_id != old_household_id:
+        _sync_household_last_visit(db, visit.household_id)
 
     _write_log(db, "update_visit", visit.id, visit.visitors, current_user, detail=pairing.title)
     return success_response(data=visit.to_dict(), message="更新成功")
@@ -451,6 +504,7 @@ async def delete_visit(
     visit.is_active = False
     visit.deleted_at = datetime.now(timezone.utc)
     safe_commit(db)
+    _sync_household_last_visit(db, visit.household_id)
 
     _write_log(db, "delete_visit", visit.id, visit.visitors, current_user, detail=pairing.title)
     return success_response(data={"id": visit.id}, message="删除成功")

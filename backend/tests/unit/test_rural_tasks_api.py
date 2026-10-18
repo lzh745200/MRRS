@@ -105,7 +105,8 @@ def _make_mock_task(
     t.approved_by = approved_by
     t.approved_at = approved_at
     t.approval_comment = approval_comment
-    t.village_id = village_id
+    # W22：模型列 village_id → supported_village_id；关系 supported_village
+    t.supported_village_id = village_id
     t.created_by = created_by
     t.created_at = created_at
     t.updated_at = updated_at
@@ -113,8 +114,8 @@ def _make_mock_task(
 
     # Relationships
     mock_village = MagicMock()
-    mock_village.name = village_name
-    t.village = mock_village
+    mock_village.village_name = village_name
+    t.supported_village = mock_village
 
     mock_work = MagicMock()
     mock_work.name = rural_work_name
@@ -150,7 +151,8 @@ def _make_mock_task(
             "approved_by": t.approved_by,
             "approved_at": t.approved_at,
             "approval_comment": t.approval_comment,
-            "village_id": t.village_id,
+            "supported_village_id": t.supported_village_id,
+            "village_id": t.supported_village_id,
             "created_by": t.created_by,
             "created_at": t.created_at,
             "updated_at": t.updated_at,
@@ -329,11 +331,12 @@ class TestListTasks:
         item = resp.json()["items"][0]
         assert item["village_name"] == "红花村"
         assert item["rural_work_name"] == "产业帮扶"
+        assert item["supported_village_id"] is None
 
     def test_items_null_relationships(self, client, mock_db):
         """When village/rural_work are None, names should be None."""
         t = _make_mock_task(1)
-        t.village = None
+        t.supported_village = None
         t.rural_work = None
         q = mock_db.query.return_value
         q.count.return_value = 1

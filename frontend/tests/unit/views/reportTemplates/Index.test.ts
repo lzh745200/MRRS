@@ -21,6 +21,15 @@ vi.mock('xlsx', () => ({
   writeFile: vi.fn(),
 }))
 
+// W22 报表增强子组件：由 ReportOutputDialog.test.ts 唯一真实执行，本文件只验证传参
+vi.mock('@/views/reportTemplates/components/ReportOutputDialog.vue', () => ({
+  default: {
+    name: 'ReportOutputDialogStub',
+    props: ['modelValue', 'mode', 'template'],
+    template: '<div class="report-output-dialog-stub" />',
+  },
+}))
+
 const {
   ElMessage,
   confirmMock,
@@ -52,16 +61,66 @@ vi.mock('@/api/request', () => ({
   put: mockPut,
   del: mockDel,
   apiRequest: mockApiRequest,
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import Templates from '@/views/reportTemplates/Index.vue'
 
 const templates = [
-  { id: 1, name: '导入模板A', type: 'import', module: 'village', description: '帮扶村导入', is_active: true, created_at: '2024-06-01', updated_at: '2024-06-02', fields: '["name","county"]' },
-  { id: 2, name: '导入模板B', type: 'import', module: 'school', description: '', is_active: false, created_at: '2024-06-03', updated_at: '2024-06-04', fields: '[{"excel_header":"H1","db_field":"db1"},"str"]' },
-  { id: 3, name: '导出模板C', type: 'export', module: 'fund', description: '经费导出', is_active: true, created_at: '2024-06-05', updated_at: '2024-06-06', fields: 'a,b,c' },
-  { id: 4, name: '导入模板D', type: 'import', module: 'weird', description: '未知模块', is_active: true, created_at: '2024-06-07', updated_at: '2024-06-08', fields: '{"bad json"' },
-  { id: 5, name: 'EXCEL 模板', type: 'import', module: 'village', description: 'Excel 描述', is_active: false, created_at: '2024-06-09', updated_at: '2024-06-10' },
+  {
+    id: 1,
+    name: '导入模板A',
+    type: 'import',
+    module: 'village',
+    description: '帮扶村导入',
+    is_active: true,
+    created_at: '2024-06-01',
+    updated_at: '2024-06-02',
+    fields: '["name","county"]',
+  },
+  {
+    id: 2,
+    name: '导入模板B',
+    type: 'import',
+    module: 'school',
+    description: '',
+    is_active: false,
+    created_at: '2024-06-03',
+    updated_at: '2024-06-04',
+    fields: '[{"excel_header":"H1","db_field":"db1"},"str"]',
+  },
+  {
+    id: 3,
+    name: '导出模板C',
+    type: 'export',
+    module: 'fund',
+    description: '经费导出',
+    is_active: true,
+    created_at: '2024-06-05',
+    updated_at: '2024-06-06',
+    fields: 'a,b,c',
+  },
+  {
+    id: 4,
+    name: '导入模板D',
+    type: 'import',
+    module: 'weird',
+    description: '未知模块',
+    is_active: true,
+    created_at: '2024-06-07',
+    updated_at: '2024-06-08',
+    fields: '{"bad json"',
+  },
+  {
+    id: 5,
+    name: 'EXCEL 模板',
+    type: 'import',
+    module: 'village',
+    description: 'Excel 描述',
+    is_active: false,
+    created_at: '2024-06-09',
+    updated_at: '2024-06-10',
+  },
 ]
 
 function mountComp() {
@@ -268,9 +327,7 @@ describe('工具函数', () => {
     expect(vm.parseFields(undefined)).toEqual([])
     expect(vm.parseFields('["a","b"]')).toEqual(['a', 'b'])
     expect(
-      vm.parseFields(
-        '[{"excel_header":"H1","db_field":"d"},{"db_field":"only_db"},{"x":1},"s",""]'
-      )
+      vm.parseFields('[{"excel_header":"H1","db_field":"d"},{"db_field":"only_db"},{"x":1},"s",""]')
     ).toEqual(['H1', 'only_db', '{"x":1}', 's'])
     expect(vm.parseFields('{"not":"array"}')).toEqual([])
     expect(vm.parseFields('a, b ,c')).toEqual(['a', 'b', 'c']) // JSON 失败 → split
@@ -470,7 +527,11 @@ describe('预览与删除', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     await vm.handleDelete(templates[0])
-    expect(confirmMock).toHaveBeenCalledWith('确定删除模板“导入模板A”？此操作不可恢复。', '提示', expect.objectContaining({ type: 'warning' }))
+    expect(confirmMock).toHaveBeenCalledWith(
+      '确定删除模板“导入模板A”？此操作不可恢复。',
+      '提示',
+      expect.objectContaining({ type: 'warning' })
+    )
     expect(mockDel).toHaveBeenCalledWith('/report-templates/1')
     expect(ElMessage.success).toHaveBeenCalledWith('删除成功')
     expect(mockGet).toHaveBeenCalled()
@@ -691,7 +752,9 @@ describe('上传填报', () => {
     vm.currentUploadTemplate = templates[1]
     vm.selectedFile = { name: 'x.xlsx' } as any
     // 先切换导入模式为 overwrite（radio 在第一阶段渲染）
-    wrapper.findAllComponents({ name: 'ElRadioGroup' })[0].vm.$emit('update:modelValue', 'overwrite')
+    wrapper
+      .findAllComponents({ name: 'ElRadioGroup' })[0]
+      .vm.$emit('update:modelValue', 'overwrite')
     expect(vm.importMode).toBe('overwrite')
     await vm.handleFilePreview()
     expect(vm.previewResult).toBeTruthy()
@@ -706,7 +769,17 @@ describe('上传填报', () => {
   })
 
   it('handleConfirmImport：早退；增量模式直接导入成功', async () => {
-    mockPost.mockResolvedValue({ data: { success: true, message: '完成', imported: 5, skipped: 1, deleted: 0, failed: 0, errors: [] } })
+    mockPost.mockResolvedValue({
+      data: {
+        success: true,
+        message: '完成',
+        imported: 5,
+        skipped: 1,
+        deleted: 0,
+        failed: 0,
+        errors: [],
+      },
+    })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -722,7 +795,15 @@ describe('上传填报', () => {
       expect.any(FormData),
       expect.anything()
     )
-    expect(vm.importResult).toEqual({ success: true, message: '完成', imported: 5, skipped: 1, deleted: 0, failed: 0, errors: [] })
+    expect(vm.importResult).toEqual({
+      success: true,
+      message: '完成',
+      imported: 5,
+      skipped: 1,
+      deleted: 0,
+      failed: 0,
+      errors: [],
+    })
     expect(vm.showUploadDialog).toBe(false)
     expect(vm.showImportResult).toBe(true)
     expect(mockGet).toHaveBeenCalled()
@@ -741,14 +822,28 @@ describe('上传填报', () => {
     expect(mockPost).not.toHaveBeenCalled()
 
     confirmMock.mockResolvedValueOnce('confirm')
-    mockPost.mockResolvedValue({ data: { success: true, message: 'm', imported: 1, skipped: 0, deleted: 2, failed: 0, errors: [] } })
+    mockPost.mockResolvedValue({
+      data: {
+        success: true,
+        message: 'm',
+        imported: 1,
+        skipped: 0,
+        deleted: 2,
+        failed: 0,
+        errors: [],
+      },
+    })
     await vm.handleConfirmImport()
     expect(confirmMock).toHaveBeenCalledWith(
       '全量覆盖将删除现有所有记录后重新导入，确定继续？',
       '危险操作确认',
       expect.anything()
     )
-    expect(mockPost).toHaveBeenCalledWith(expect.stringContaining('import_mode=overwrite'), expect.anything(), expect.anything())
+    expect(mockPost).toHaveBeenCalledWith(
+      expect.stringContaining('import_mode=overwrite'),
+      expect.anything(),
+      expect.anything()
+    )
 
     mockPost.mockRejectedValue({ response: { data: { detail: '后端拒绝' } } })
     await vm.handleConfirmImport()
@@ -768,7 +863,15 @@ describe('上传填报', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.showImportResult = true
-    vm.importResult = { success: true, message: '导入完成', imported: 3, skipped: 2, deleted: 1, failed: 1, errors: [{ row: 2, message: '行错误' }] }
+    vm.importResult = {
+      success: true,
+      message: '导入完成',
+      imported: 3,
+      skipped: 2,
+      deleted: 1,
+      failed: 1,
+      errors: [{ row: 2, message: '行错误' }],
+    }
     await nextTick()
     const text = wrapper.text()
     expect(text).toContain('导入完成')
@@ -788,7 +891,9 @@ describe('上传填报', () => {
     const vm = wrapper.vm as any
     vm.showUploadDialog = true
     await nextTick()
-    wrapper.findAllComponents({ name: 'ElRadioGroup' })[0].vm.$emit('update:modelValue', 'overwrite')
+    wrapper
+      .findAllComponents({ name: 'ElRadioGroup' })[0]
+      .vm.$emit('update:modelValue', 'overwrite')
     expect(vm.importMode).toBe('overwrite')
   })
 })
@@ -798,7 +903,12 @@ describe('在线填报与字段组合', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    const t = { id: 1, name: '测试模板', fields: JSON.stringify(['village_name', 'county']), module: 'village' }
+    const t = {
+      id: 1,
+      name: '测试模板',
+      fields: JSON.stringify(['village_name', 'county']),
+      module: 'village',
+    }
     await vm.openFillDialog(t)
     expect(vm.showFillDialog).toBe(true)
     expect(vm.fillFields.length).toBe(2)
@@ -810,7 +920,10 @@ describe('在线填报与字段组合', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.fillTemplate = { id: 1, name: '导出模板' }
-    vm.fillFields = [{ key: 'name', label: '名称' }, { key: 'county', label: '县' }]
+    vm.fillFields = [
+      { key: 'name', label: '名称' },
+      { key: 'county', label: '县' },
+    ]
     vm.fillRow = { name: '幸福村', county: '长顺县' }
     await vm.handleFillExport()
     expect(ElMessage.success).toHaveBeenCalledWith('已导出 Excel 文件')
@@ -958,7 +1071,9 @@ describe('在线填报全控件', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    const fillBtn = wrapper.findAll('el-button-stub').find((b: any) => b.text().includes('在线填报'))
+    const fillBtn = wrapper
+      .findAll('el-button-stub')
+      .find((b: any) => b.text().includes('在线填报'))
     if (fillBtn) {
       await fillBtn.trigger('click')
     } else {
@@ -1063,6 +1178,76 @@ describe('空响应与卡片按钮', () => {
     const btns = wrapper.findAll('el-button-stub').filter((b: any) => b.text().includes('在线填报'))
     if (btns.length > 1) await btns[btns.length - 1].trigger('click')
     expect(vm.showFillDialog).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+// W22 报表增强：导出数据 / 打印预览子对话框
+describe('W22 报表导出与打印入口', () => {
+  it('openOutputDialog：export / print 两种 mode 均写入模板并打开对话框', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const t = { id: 3, name: '导出模板C', type: 'export', module: 'fund', is_active: true }
+    vm.openOutputDialog(t, 'export')
+    await nextTick()
+    expect(vm.showOutputDialog).toBe(true)
+    expect(vm.outputMode).toBe('export')
+    expect(vm.outputTemplate).toEqual(t)
+
+    vm.openOutputDialog(t, 'print')
+    await nextTick()
+    expect(vm.outputMode).toBe('print')
+    wrapper.unmount()
+  })
+
+  it('卡片「导出数据」/「打印」按钮触发对话框并下传 props', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.templates = [{ id: 9, name: 'A', type: 'import', module: 'village', is_active: true }]
+    vm.activeTab = 'import'
+    await nextTick()
+
+    const exportBtn = findBtn(wrapper, '导出数据')
+    await exportBtn.trigger('click')
+    await nextTick()
+    let dialog = wrapper.findComponent({ name: 'ReportOutputDialogStub' })
+    expect(dialog.props('modelValue')).toBe(true)
+    expect(dialog.props('mode')).toBe('export')
+    expect((dialog.props('template') as any).id).toBe(9)
+
+    vm.showOutputDialog = false
+    await nextTick()
+    const printBtn = findBtn(wrapper, '打印')
+    await printBtn.trigger('click')
+    await nextTick()
+    dialog = wrapper.findComponent({ name: 'ReportOutputDialogStub' })
+    expect(dialog.props('mode')).toBe('print')
+
+    // 导出模板标签页的按钮（同一组件的第二套按钮）也被覆盖：全部点击后 props 仍正确
+    vm.templates = [
+      { id: 9, name: 'A', type: 'import', module: 'village', is_active: true },
+      { id: 10, name: 'B', type: 'export', module: 'fund', is_active: true },
+    ]
+    vm.activeTab = 'export'
+    await nextTick()
+    const exportBtns = wrapper
+      .findAll('el-button-stub')
+      .filter((b: any) => b.text().trim() === '导出数据')
+    for (const btn of exportBtns) await btn.trigger('click')
+    const printBtns = wrapper
+      .findAll('el-button-stub')
+      .filter((b: any) => b.text().trim() === '打印')
+    for (const btn of printBtns) await btn.trigger('click')
+    await nextTick()
+    dialog = wrapper.findComponent({ name: 'ReportOutputDialogStub' })
+    expect(dialog.props('mode')).toBe('print')
+
+    // 子组件自身关闭事件回写 v-model（覆盖 onUpdate:modelValue 处理器）
+    dialog.vm.$emit('update:modelValue', false)
+    await nextTick()
+    expect(vm.showOutputDialog).toBe(false)
     wrapper.unmount()
   })
 })

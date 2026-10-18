@@ -114,6 +114,24 @@ vi.mock('@/layouts/DefaultLayoutSafe.vue', () => ({
   default: { name: 'DefaultLayoutSafeCoverageStub' },
 }))
 
+// W22（v1.14.0）新增页面同理：各自有专属渲染测试深挂载全部分支，本文件只执行
+// 懒加载函数本体，桩替换避免同一 .vue 出现第二个执行者导致 fnMap 合并错位。
+vi.mock('@/views/households/List.vue', () => ({
+  default: { name: 'HouseholdListCoverageStub' },
+}))
+vi.mock('@/views/households/Detail.vue', () => ({
+  default: { name: 'HouseholdDetailCoverageStub' },
+}))
+vi.mock('@/views/media/PhotoArchive.vue', () => ({
+  default: { name: 'PhotoArchiveCoverageStub' },
+}))
+vi.mock('@/views/consumption/List.vue', () => ({
+  default: { name: 'ConsumptionListCoverageStub' },
+}))
+vi.mock('@/views/dataVerify/Index.vue', () => ({
+  default: { name: 'DataVerifyCoverageStub' },
+}))
+
 import router, { routes } from '@/router'
 
 // ==================== Helpers ====================
@@ -194,7 +212,7 @@ describe('router/index.ts', () => {
       ['/data-sync', '/data-sync/export'],
       ['/funds/apply', '/funds/user'],
       ['/effectiveness', '/effectiveness/rankings'],
-      ['/data-verify', '/data-verify/rules'],
+      ['/sentiment', '/consumption'],
       ['/system/help', '/help'],
       ['/system/roles', '/system/users'],
       ['/system/menu-permissions', '/system/users'],

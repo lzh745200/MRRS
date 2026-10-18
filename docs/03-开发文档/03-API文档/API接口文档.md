@@ -1,6 +1,6 @@
 # API 接口文档
 
-> **版本**:v1.13.0  **更新日期**:2026-10-18
+> **版本**:v1.14.0  **更新日期**:2026-10-18
 > **定位**:系统全部 HTTP 接口的清单与调用约定——**端点清单由脚本从源码自动提取**(与代码 100% 同步),业务导读人工维护。
 > **适用读者**:前后端开发者、联调与集成人员。零基础请先读《需求规格说明书》§3 理解业务流程。
 > **互动文档**:后端启动后(DEBUG 模式)访问 `http://127.0.0.1:8000/docs` 可在线调试(OpenAPI)。
@@ -9,7 +9,10 @@
 
 ## 1. 快速统计
 
-- **85 个路由模块 / 765 个端点**(含 auth/data/system 等子包)
+- **91 个路由模块 / 799 个端点**(含 auth/data/system 等子包;按 `@router` 装饰器扫描口径)
+- v1.14.0 变更:新增 `households`(`/households`)、`media`(`/media`)、`consumption`(`/consumption`) 三个模块与
+  `/funds/ocr-voucher`、`/report-templates/{id}/export|print-data`;删除 `villages`(`/villages`)、`sentiment`(`/sentiment`)、
+  `i18n`(`/system/i18n`) 模块(分别因遗留表清理、消费帮扶替换、国际化功能下线)。
 - 全部业务接口位于 `/api/v1` 前缀之下(下文路径均省略此前缀)
 
 ## 2. 统一调用约定(必读)
@@ -37,12 +40,12 @@
 | 域 | 模块(前缀) |
 |----|------------|
 | 认证与用户 | auth(`/auth`)、users(`/users`)、user_management(`/user-management`)、rbac(`/rbac`)、two_factor(`/two-factor`)、menus(`/menus`)、permission_packs、machine_code(`/machine-code`) |
-| 帮扶对象 | supported_village(`/supported-villages`)、supported_village_export、school(`/schools`)、villages(`/villages`)、village_templates、policy(`/policies`) |
+| 帮扶对象 | supported_village(`/supported-villages`)、supported_village_export、households(`/households` 一户一档)、school(`/schools`)、village_templates、policy(`/policies`)、consumption(`/consumption` 消费帮扶台账)、media(`/media` 影像库) |
 | 项目与资金 | projects(`/projects`)、project_milestones、funds(`/funds`)、fund_budgets(`/fund-budgets`)、fund_lifecycle(`/fund-lifecycle`) |
 | 乡村工作 | rural_works(`/rural-works`)、rural_tasks(`/rural-tasks`)、work_logs(`/work-logs`) |
 | 审批协作 | approval(`/approval`)、messages(`/messages`)、feedback(`/feedback`)、todos(`/todos`)、search(`/search`) |
 | 数据治理 | data/data_packages(`/data-packages`)、data/data_reports(`/data-reports`)、data_sync(`/data-sync`)、validation(`/validation`)、data_quality、import_export、batch_operations(`/batch`)、report_templates(`/report-templates`) |
-| 分析展示 | data/dashboard(`/dashboard`)、data/analytics(`/analytics`)、map(`/map`)、offline_map、effectiveness(`/effectiveness`)、assessment(`/assessment`)、ai(`/ai`)、ai_enhanced(`/ai-enhanced`) |
+| 分析展示 | data/dashboard(`/dashboard`)、data/analytics(`/analytics`)、map(`/map`)、offline_map、effectiveness(`/effectiveness`)、assessment(`/assessment`)、ai(`/ai`)、ai_enhanced(`/ai-enhanced`)、media(`/media` 影像库) |
 | 组织协同 | organization(`/organizations`)、subordinate_registry(`/subordinates`)、subordinate_reports(`/subordinate-reports`)、control_package(`/control-packages`)、org_module_policy(`/org-policies`)、permission_package(`/permission-packages`) |
 | 系统安全 | system/audit、system/zero_trust、system/backup、encryption、monitoring/secrets、monitoring/data_tier、system/health 等 |
 
@@ -201,6 +204,20 @@
 | POST | `/control-packages/import-preview` | 预览管控配置包内容（不执行导入） | 登录 |
 | POST | `/control-packages/import` | 导入并执行管控配置包 | 登录 |
 
+### consumption.py — 消费帮扶台账 `/consumption`
+
+> v1.14.0 新增，替换已下线的舆情监测（`/sentiment` 路由整体删除，旧前端路由 `/sentiment` 仅做页面跳转）。
+> 与帮扶村年度数据板块 `consumption_support`（按村按年统计）不同，本模块是**逐笔帮扶采购台账**。
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|------|
+| GET | `/consumption` | 消费帮扶台账列表（分页；筛选 `year` / `category` / `village_id` / `keyword`，响应含 `village_name`） | 登录 |
+| GET | `/consumption/statistics` | 年度统计：`{total_amount, record_count, by_category[], by_village[]}`（按数据域过滤） | 登录 |
+| GET | `/consumption/export` | 导出台账（`format=xlsx|csv`，按筛选条件） | 登录 |
+| POST | `/consumption` | 新建台账记录（品类/产品/数量/金额/采购方/供货方/年度等） | 登录 |
+| PUT | `/consumption/{record_id}` | 更新台账记录 | 登录 |
+| DELETE | `/consumption/{record_id}` | 软删台账记录 | 登录 |
+
 ### analytics.py — 数据分析 `/analytics`
 
 | 方法 | 路径 | 说明 | 鉴权 |
@@ -259,6 +276,9 @@
 | GET | `/data-packages/{package_id}/versions/compare` | 对比数据包两个版本的变更差异 | 登录 |
 | GET | `/data-packages/{package_id}/versions/{version_id}` | 获取指定版本的详细信息 | 登录 |
 | DELETE | `/data-packages/{package_id}/versions/{version_id}` | 删除指定版本记录 | 登录 |
+
+> **v1.14.0 链路校验**：「下级生成上报包 → 上级接收 / 导入 → 数据列表可见」整条链路已补端到端集成测试
+> 并修复断点；上报协议、端点路径与请求/响应结构均未改变。
 
 ### data_quality.py — 数据质量 ``
 
@@ -475,6 +495,30 @@
 | DELETE | `/funds/attachments/{attachment_id}` | 删除经费附件 | 登录 |
 | GET | `/funds/{fund_id}/attachments` | 获取经费附件列表 | 登录 |
 | POST | `/funds/{fund_id}/attachments` | 上传经费附件 | 登录 |
+| POST | `/funds/ocr-voucher` | 经费凭证 OCR 识别（multipart 图片，≤10MB）：返回 `{text, amount, date, confidence, engine}`；引擎不可用返回 503（前端降级手工录入，不阻断业务） | 登录 |
+
+### households.py — 一户一档 `/households`
+
+> v1.14.0 新增。数据域沿用 `get_org_scope` / `filter_by_org_ids`；软删模型查询默认过滤 `is_active`；
+> `helper_phone` / `id_card` 为 `EncryptedText`（PII 透明加密，禁止裸 SQL 写入）。
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|------|
+| GET | `/households` | 一户一档列表（`page/page_size/village_id/risk_level/household_type/keyword`）；items 含 `village_name`、`member_count`、`risk_alerts`（规则命中） | 登录 |
+| POST | `/households` | 新建户档案 | 登录 |
+| GET | `/households/alerts` | 预警清单（规则命中 + 未关闭风险记录；`level=low|medium|high` 过滤） | 登录 |
+| POST | `/households/rollup` | 按户汇总回填帮扶村当年度 `VillagePopulation`（`village_id`、可选 `year`；幂等 upsert，返回写回字段摘要） | 登录 |
+| GET | `/households/export` | 导出台账（`format=xlsx|csv`，可按 `village_id/risk_level` 筛选） | 登录 |
+| GET | `/households/{id}` | 户详情（含成员、风险记录、走访记录、预警） | 登录 |
+| PUT | `/households/{id}` | 更新户档案 | 登录 |
+| DELETE | `/households/{id}` | 软删除户档案 | 登录 |
+| GET | `/households/{id}/members` | 家庭成员列表 | 登录 |
+| POST | `/households/{id}/members` | 新增家庭成员 | 登录 |
+| PUT | `/households/{id}/members/{member_id}` | 更新家庭成员 | 登录 |
+| DELETE | `/households/{id}/members/{member_id}` | 软删除家庭成员 | 登录 |
+| GET | `/households/{id}/risk-records` | 风险记录列表 | 登录 |
+| POST | `/households/{id}/risk-records` | 登记风险记录（`risk_type/risk_level/reason`） | 登录 |
+| PUT | `/households/risk-records/{record_id}/close` | 关闭风险记录（填写关闭说明） | 登录 |
 
 ### async_export.py — 异步导出 `/async-export`
 
@@ -558,6 +602,21 @@
 | GET | `/map/search` | 离线地图搜索：按关键词搜索帮扶村和学校 | 登录 |
 | GET | `/map/tile-info` | 获取离线瓦片信息：是否可用、缩放级别范围、瓦片数量 | 登录/公开 |
 | GET | `/map/tiles/{z}/{x}/{y}.png` | 提供离线瓦片文件 | 登录/公开 |
+
+### media.py — 影像库 `/media`
+
+> v1.14.0 新增。图片文件本身复用 `/files/upload`（返回 URL 后注册归档）；`file_url` 只允许指向上传目录，
+> 对比图由服务端用 Pillow 合成。EXIF 解析拍摄时间与 GPS；GPS ≤5km 就近匹配帮扶村。
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|------|------|------|------|
+| GET | `/media/photos` | 影像归档列表（`page/page_size/village_id/school_id/project_id/tag/date_from/date_to`） | 登录 |
+| POST | `/media/photos` | 注册影像归档（后端解析 EXIF 补 `taken_at/gps`；GPS 就近匹配村；`spot_key` 默认取 GPS 量化串） | 登录 |
+| PUT | `/media/photos/{id}` | 更新归档信息（关联对象/标签/拍摄点等） | 登录 |
+| DELETE | `/media/photos/{id}` | 软删除归档记录 | 登录 |
+| GET | `/media/photos/compare?spot_key=` | 同拍摄点多期照片列表（按拍摄时间升序） | 登录 |
+| POST | `/media/photos/compare-image` | 生成多期对比图（body `ids[]`，≤9 张；Pillow 左右/2xN 拼接 + 日期标注，返回 PNG） | 登录 |
+| GET | `/media/photos/compare-image?ids=1,2,3` | 下载多期对比图（PNG，便于前端直接下载） | 登录 |
 
 ### menus.py — 菜单权限管理 `/menus`
 
@@ -836,6 +895,8 @@
 | DELETE | `/report-templates/{template_id}` | 删除模板 | 登录 |
 | GET | `/report-templates/{template_id}/download` | 下载模板 Excel 文件（根据字段映射自动生成） | 登录 |
 | POST | `/report-templates/{template_id}/upload` | 上传已填写的模板 Excel 文件 | 登录 |
+| POST | `/report-templates/{template_id}/export` | 按模板字段组合导出数据（`format=xlsx|csv|docx|pdf`，可选 `year`；单次上限 5000 行） | 登录 |
+| GET | `/report-templates/{template_id}/print-data` | 模板打印数据（JSON，前端浏览器打印用；可选 `year`） | 登录 |
 
 ### rural_tasks.py — 乡村工作任务 `/rural-tasks`
 
@@ -902,17 +963,6 @@
 | 方法 | 路径 | 说明 | 鉴权 |
 |------|------|------|------|
 | GET | `/search` | 全局关键词搜索，聚合帮扶村、项目、政策法规、资金、用户、学校六类数据。 | 登录 |
-
-### sentiment.py — 舆情监控 `/sentiment`
-
-| 方法 | 路径 | 说明 | 鉴权 |
-|------|------|------|------|
-| POST | `/sentiment/collect` | 采集新闻 | 登录 |
-| POST | `/sentiment/analyze` | 批量分析新闻情感 | 登录 |
-| GET | `/sentiment/news` | 获取新闻列表 | 登录 |
-| GET | `/sentiment/statistics` | 获取舆情统计 | 登录 |
-| GET | `/sentiment/hot-keywords` | 获取热词列表 | 登录 |
-| GET | `/sentiment/alerts` | 获取预警列表 | 登录 |
 
 ### subordinate_registry.py — 下级单位管理 `/subordinates`
 
@@ -1095,16 +1145,6 @@
 | GET | `/system/help/search` | 全文搜索帮助文档 | 登录/公开 |
 | GET | `/system/help/system-info` | 获取帮扶管理信息系统简介 | 登录/公开 |
 
-### i18n.py — 国际化 `/system/i18n`
-
-| 方法 | 路径 | 说明 | 鉴权 |
-|------|------|------|------|
-| GET | `/system/i18n/languages` | 获取系统支持的语言列表 | 登录/公开 |
-| GET | `/system/i18n/translations/{language}` | 获取指定语言的完整或命名空间内的翻译资源 | 登录/公开 |
-| GET | `/system/i18n/translate` | 获取指定键在目标语言下的翻译文本 | 登录/公开 |
-| GET | `/system/i18n/missing-keys` | 比较两种语言的翻译资源，找出目标语言中缺失的键 | 登录 |
-| GET | `/system/i18n/current` | 获取当前用户的语言设置 | 登录 |
-
 ### init.py — 系统初始化 `/system/init`
 
 | 方法 | 路径 | 说明 | 鉴权 |
@@ -1257,13 +1297,6 @@
 |------|------|------|------|
 | GET | `/templates` | 获取可用模板列表 | 登录 |
 | GET | `/templates/{module}` | 下载指定模块的Excel模板 | 登录 |
-
-### villages.py — 村庄管理 `/villages`
-
-| 方法 | 路径 | 说明 | 鉴权 |
-|------|------|------|------|
-| GET | `/villages` | 获取村庄列表（已优化 N+1 查询） | 登录 |
-| GET | `/villages/{village_id}` | 获取单个村庄详情（已优化 N+1 查询） | 登录 |
 
 ### work_logs.py — 工作日志 `/work-logs`
 

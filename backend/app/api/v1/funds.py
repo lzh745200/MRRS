@@ -14,6 +14,7 @@
 # 数据权限过滤已迁移到 app.core.data_scope_adapter.apply_scope_filter()
 # 支持组织树展开（org_children 含下级组织），与 school.py 行为一致
 
+import io
 import json
 import logging
 import mimetypes
@@ -24,6 +25,8 @@ from app.utils.helpers import FUND_MONEY_FIELDS, quantize_money
 from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import JSONResponse
+from PIL import Image
 from pydantic import AfterValidator, BaseModel, Field
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -35,8 +38,14 @@ from app.core.security import get_current_user
 from app.core.transaction import safe_commit
 from app.utils.pagination import keyset_paginate
 from app.core.data_permission import apply_scope_filter
+from app.services import ocr_service
 from app.services.work_log_service import write_work_log
-from app.utils.upload_helper import save_upload_file, get_attachment_response, delete_attachment_file
+from app.utils.upload_helper import (
+    delete_attachment_file,
+    get_attachment_response,
+    read_upload_with_limit,
+    save_upload_file,
+)
 
 from app.models.fund import Fund, FundAttachment
 from app.models.fund_history import FundFieldChange, FundStatusHistory, FundOperationLog
@@ -1497,3 +1506,63 @@ from app.api.v1.recycle_bin import (  # noqa: E402 —— 路由尾部挂载
 _register_rb_fund(
     router, model=Fund, resource="经费",
 )
+
+
+# ============================================================================
+# 经费凭证 OCR（W22 · 契约 §2 / §4）
+# ============================================================================
+
+# 凭证图片上限：10MB（带长度分块读，超限 413；与全库上传限长口径一致）
+_OCR_VOUCHER_MAX_BYTES = 10 * 1024 * 1024
+
+
+def _ocr_unavailable_response() -> JSONResponse:
+    """OCR 引擎不可用时的 503 降级响应（前端提示手工录入，不阻断业务）"""
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "success": False,
+            "code": 503,
+            "message": "OCR 引擎不可用，请手工录入金额与日期",
+        },
+    )
+
+
+@router.post("/ocr-voucher", summary="经费凭证 OCR 识别")
+async def ocr_voucher(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """识别经费凭证图片 → ``{text, amount, date, confidence, engine}``
+
+    - 引擎不可用：503 降级（前端提示手工录入，不阻断经费业务）；
+    - 图片为空 / 非图片 / 识别失败：400；
+    - 依赖懒加载，首次调用初始化约 1~2s，之后复用引擎实例。
+    """
+    if not ocr_service.available():
+        return _ocr_unavailable_response()
+    content = await read_upload_with_limit(
+        file,
+        _OCR_VOUCHER_MAX_BYTES,
+        limit_label="凭证图片",
+    )
+    if not content:
+        raise HTTPException(status_code=400, detail="凭证图片内容为空")
+    try:
+        with Image.open(io.BytesIO(content)) as image:
+            image.verify()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="不是有效的图片文件") from exc
+    try:
+        result = ocr_service.recognize(content)
+    except ocr_service.OCRUnavailableError:
+        return _ocr_unavailable_response()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info(
+        "经费凭证 OCR 识别成功: user=%s, amount=%s, date=%s",
+        getattr(current_user, "username", "unknown"),
+        result.get("amount"),
+        result.get("date"),
+    )
+    return success_response(data=result, message="识别成功")

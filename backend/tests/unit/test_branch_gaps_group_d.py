@@ -57,7 +57,6 @@ from app.api.v1.permission_package import (
     _safe_unlink,
     confirm_import_permission_package,
 )
-from app.api.v1.sentiment import get_news_list
 from app.api.v1.system.backup import BackupScheduleUpdate, delete_backup, update_backup_schedule
 from app.api.v1.validation import (
     FIELD_LABELS,
@@ -380,29 +379,6 @@ class TestPermissionPackageBranches:
         finally:
             if os.path.exists(str(file_path)):
                 os.unlink(str(file_path))
-
-
-class TestSentimentBranches:
-    """sentiment.py 102->105 / 105->108（两个可选过滤都缺省）。"""
-
-    async def test_news_list_without_optional_filters(self):
-        db = MagicMock()
-        q = MagicMock()
-        q.filter.return_value = q
-        q.order_by.return_value = q
-        q.limit.return_value = q
-        q.offset.return_value = q
-        q.all.return_value = []
-        resp = await get_news_list(
-            sentiment_label=None,
-            is_alert=None,
-            days=7,
-            limit=50,
-            offset=0,
-            current_user=SimpleNamespace(id=1),
-            db=db,
-        )
-        assert resp["data"]["items"] == []
 
 
 class TestSystemBackupBranches:

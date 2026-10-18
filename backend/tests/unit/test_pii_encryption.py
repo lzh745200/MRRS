@@ -46,29 +46,28 @@ def test_roundtrip_and_determinism():
 
 
 def test_orm_writes_ciphertext_reads_plaintext(db):
+    """W22：villagers 表已删除；改用 School.contact_phone 验证 ORM 透明加解密。"""
     session, _ = db
-    from app.models.village import Villager, Village
+    from app.models.organization import Organization
+    from app.models.school import School
 
-    village = Village(name="测试村")
-    session.add(village)
+    session.add(Organization(id=1, name="测试单位"))
     session.flush()
-    v = Villager(village_id=village.id, name="张三", id_card=ID_CARD, phone=PHONE)
-    session.add(v)
+    school = School(name="测试学校", contact_phone=PHONE, organization_id=1)
+    session.add(school)
     session.commit()
 
     # 裸 SQL 直读存储层 → 必须是标记密文，且不含明文
     conn = session.connection()
     row = conn.exec_driver_sql(
-        'SELECT id_card, phone FROM villagers WHERE id = ?', (v.id,)
+        "SELECT contact_phone FROM schools WHERE id = ?", (school.id,)
     ).fetchone()
-    assert is_encrypted(row[0]) and row[0] != ID_CARD
-    assert is_encrypted(row[1]) and row[1] != PHONE
+    assert is_encrypted(row[0]) and row[0] != PHONE
 
     # ORM 读取 → 透明解密
     session.expire_all()
-    v2 = session.query(Villager).filter(Villager.id == v.id).one()
-    assert v2.id_card == ID_CARD
-    assert v2.phone == PHONE
+    school2 = session.query(School).filter(School.id == school.id).one()
+    assert school2.contact_phone == PHONE
 
 
 def test_equality_query_matches_ciphertext(db):
@@ -126,7 +125,24 @@ def test_migration_list_matches_model_metadata():
         for col in table.columns:
             if isinstance(col.type, EncryptedText):
                 encrypted.add((table.name, col.name))
-    assert set(mod._iter_pii_columns()) == encrypted, "迁移回填清单与模型加密列不一致"
+    # W22 新表（households / household_members）由 w22 迁移直接建加密列，
+    # 不属于历史回填迁移的职责范围（无历史明文，ORM 直接写密文）；
+    # W22 同时删除了 villagers 表——历史回填清单中的 villagers 两列保留在迁移历史里
+    # （旧库升级时仍会执行回填），但当前模型不再包含该表。
+    w22_new_tables = {"households", "household_members"}
+    historical = {item for item in encrypted if item[0] not in w22_new_tables}
+    deleted_tables = {"villagers"}
+    migration_cols = {item for item in mod._iter_pii_columns() if item[0] not in deleted_tables}
+    assert migration_cols == historical, "迁移回填清单与模型加密列不一致"
+    # 新表 PII 列必须都是 EncryptedText（ORM 层透明加密）
+    assert {item for item in encrypted if item[0] in w22_new_tables} == {
+        ("households", "helper_phone"),
+        ("household_members", "id_card"),
+    }
+    # 被删除的表不得再出现在模型 metadata 中（防止"删表但忘删模型"）
+    from app.models import Base as _Base
+
+    assert all(table not in _Base.metadata.tables for table in deleted_tables)
 
 
 def test_key_fingerprint_is_stable_and_not_the_key(monkeypatch):

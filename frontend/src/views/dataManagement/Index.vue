@@ -28,34 +28,37 @@
 
     <!-- 功能模块选项卡 -->
     <el-tabs v-model="activeTab" type="border-card" class="main-tabs">
-      <!-- 数据导入（统一入口：/data-sync/import） -->
+      <!-- 数据导入（功能入口） -->
       <el-tab-pane label="数据导入" name="import">
         <el-card shadow="never" class="redirect-card">
-          <el-empty description="数据导入已统一至「数据同步 · 导入」（支持预览与校验）">
+          <div class="tab-entry">
+            <p class="tab-entry-title">数据导入</p>
             <el-button type="primary" @click="pushSafe('/data-sync/import')"
               >前往数据导入</el-button
             >
-          </el-empty>
+          </div>
         </el-card>
       </el-tab-pane>
 
-      <!-- 数据导出（统一入口：/data-sync/export） -->
+      <!-- 数据导出（功能入口） -->
       <el-tab-pane label="数据导出" name="export">
         <el-card shadow="never" class="redirect-card">
-          <el-empty description="数据导出已统一至「数据同步 · 导出」（支持加密与异步任务）">
+          <div class="tab-entry">
+            <p class="tab-entry-title">数据导出</p>
             <el-button type="primary" @click="pushSafe('/data-sync/export')"
               >前往数据导出</el-button
             >
-          </el-empty>
+          </div>
         </el-card>
       </el-tab-pane>
 
-      <!-- 数据备份（已整合至系统管理 → 备份管理，此处跳转避免功能重复） -->
+      <!-- 数据备份（功能入口） -->
       <el-tab-pane label="数据备份" name="backup">
         <el-card shadow="never" class="redirect-card">
-          <el-empty description="备份与恢复功能已整合至「系统管理 → 备份管理」">
+          <div class="tab-entry">
+            <p class="tab-entry-title">数据备份</p>
             <el-button type="primary" @click="goBackupManagement">前往备份管理</el-button>
-          </el-empty>
+          </div>
         </el-card>
       </el-tab-pane>
 
@@ -82,11 +85,10 @@ const { pushSafe } = useRouterSafe()
 // 异步加载子组件
 const QualitySection = defineAsyncComponent(() => import('./components/QualitySection.vue'))
 
-// 备份管理已整合至系统管理，跳转避免重复
+// 跳转系统管理 → 备份管理
 function goBackupManagement() {
   pushSafe('/system/backup')
 }
-
 // 状态
 const activeTab = ref('import')
 const stats = ref({
@@ -211,5 +213,19 @@ onMounted(() => {
     padding: 20px;
     min-height: 500px;
   }
+}
+
+.tab-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 4px;
+}
+
+.tab-entry-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-regular);
 }
 </style>

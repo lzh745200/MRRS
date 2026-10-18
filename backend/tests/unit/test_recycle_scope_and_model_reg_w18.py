@@ -94,11 +94,12 @@ class TestSingleRecordReachability:
 class TestModelRegistration:
     """W18-P3-1：模型必须全部登记进 _MODULE_MAP，否则全新安装不建表。"""
 
-    def test_sentiment_news_is_registered(self):
+    def test_consumption_record_is_registered(self):
+        """W22：消费帮扶台账模型必须登记进 _MODULE_MAP（替换已删除的 SentimentNews）。"""
         import app.models as models
 
-        assert "SentimentNews" in models._MODULE_MAP
-        assert models.SentimentNews.__tablename__ == "sentiment_news"
+        assert "ConsumptionRecord" in models._MODULE_MAP
+        assert models.ConsumptionRecord.__tablename__ == "consumption_records"
 
     def test_machine_code_permission_is_registered(self):
         import app.models as models

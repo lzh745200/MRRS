@@ -85,13 +85,30 @@
           </template>
 
           <!-- ════ 后端下发的板块（page / group / console 三种渲染） ════ -->
+          <!-- 板块标题：放大加粗 + 点击展开/收起（W22，默认折叠，状态持久化） -->
           <template v-for="section in sidebarSections" :key="section.key">
-            <div v-show="!isCollapsed" class="menu-section-label">
+            <button
+              v-show="!isCollapsed"
+              type="button"
+              class="menu-section-label menu-section-toggle"
+              :aria-expanded="isSectionExpanded(section.key)"
+              @click="toggleSection(section.key)"
+            >
               <span>{{ section.label }}</span>
-            </div>
+              <el-icon
+                class="section-toggle-icon"
+                :class="{ 'is-expanded': isSectionExpanded(section.key) }"
+              >
+                <ArrowDown />
+              </el-icon>
+            </button>
             <template v-for="item in section.items" :key="item.key">
               <!-- page：普通页面直链 -->
-              <el-menu-item v-if="item.kind === 'page'" :index="item.path">
+              <el-menu-item
+                v-if="item.kind === 'page'"
+                v-show="isSectionExpanded(section.key)"
+                :index="item.path"
+              >
                 <el-icon><component :is="resolveMenuIcon(item.icon)" /></el-icon>
                 <template #title>
                   <span class="menu-title-text">{{ item.label }}</span>
@@ -100,6 +117,7 @@
               <!-- group：可折叠分组 -->
               <el-sub-menu
                 v-else-if="item.kind === 'group'"
+                v-show="isSectionExpanded(section.key)"
                 :index="`group-${item.key}`"
                 popper-class="aside-popper"
               >
@@ -112,7 +130,12 @@
                 </el-menu-item>
               </el-sub-menu>
               <!-- console：系统管理聚合页（页内 Tab 切换） -->
-              <el-menu-item v-else :index="item.path" class="menu-item-console">
+              <el-menu-item
+                v-else
+                v-show="isSectionExpanded(section.key)"
+                :index="item.path"
+                class="menu-item-console"
+              >
                 <el-icon><component :is="resolveMenuIcon(item.icon)" /></el-icon>
                 <template #title>
                   <span class="menu-title-text">{{ item.label }}</span>
@@ -333,6 +356,48 @@ const sidebarSections = computed<SidebarSection[]>(() =>
     items: section.items.map(toSidebarItem),
   }))
 )
+
+// ── 七大板块折叠（W22）：默认折叠，点击标题展开/收起，状态记忆到 localStorage ──
+const EXPANDED_SECTIONS_KEY = 'nav:expanded-sections'
+
+function readExpandedSections(): Set<string> {
+  try {
+    const raw = localStorage.getItem(EXPANDED_SECTIONS_KEY)
+    if (!raw) return new Set()
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.filter((key): key is string => typeof key === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
+const expandedSections = ref<Set<string>>(readExpandedSections())
+
+/** 板块是否展开（默认折叠） */
+function isSectionExpanded(key: string): boolean {
+  return expandedSections.value.has(key)
+}
+
+function persistExpandedSections(): void {
+  try {
+    localStorage.setItem(EXPANDED_SECTIONS_KEY, JSON.stringify([...expandedSections.value]))
+  } catch {
+    /* 存储不可用时静默：本次会话仍可展开/收起 */
+  }
+}
+
+/** 点击板块标题：展开/收起并持久化 */
+function toggleSection(key: string): void {
+  const next = new Set(expandedSections.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  expandedSections.value = next
+  persistExpandedSections()
+}
 
 // ── 收藏 / 最近访问（localStorage；仅展示当前用户仍可访问的入口） ──
 const visibleFavorites = computed(() =>
@@ -669,6 +734,46 @@ function handleCommand(command: string) {
   letter-spacing: 0.06em;
   user-select: none;
   pointer-events: none;
+}
+
+/* ── 七大板块标题（W22）：放大加粗 + 可点击展开/收起 ── */
+.menu-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  width: calc(100% - 16px);
+  margin: 10px 8px 4px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-inverse);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.85;
+  transition:
+    background-color 0.22s ease,
+    opacity 0.22s ease;
+}
+
+.menu-section-toggle:hover,
+.menu-section-toggle:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+}
+
+.section-toggle-icon {
+  font-size: 14px;
+  transition: transform 0.22s ease;
+}
+
+.section-toggle-icon.is-expanded {
+  transform: rotate(180deg);
 }
 
 /* ===================================================================

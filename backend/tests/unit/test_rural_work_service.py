@@ -109,10 +109,10 @@ class TestCoerceDatetime:
 # ---------------------------------------------------------------------------
 
 def _make_mock_work(**overrides):
-    """创建 RuralWork ORM mock 对象。"""
+    """创建 RuralWork ORM mock 对象（W22：村关联为 supported_village/SupportedVillage）。"""
     now = datetime(2025, 6, 1, 12, 0, 0)
     village_mock = MagicMock()
-    village_mock.name = "测试村"
+    village_mock.village_name = "测试村"
     attrs = {
         "id": 1,
         "code": "RW-ABC123",
@@ -120,8 +120,8 @@ def _make_mock_work(**overrides):
         "description": "描述",
         "type": WorkType.infrastructure,
         "status": WorkStatus.planned,
-        "village_id": 10,
-        "village": village_mock,
+        "supported_village_id": 10,
+        "supported_village": village_mock,
         "responsible_person": "张三",
         "contact_phone": "13800138000",
         "start_date": now,
@@ -163,9 +163,12 @@ class TestRuralWorkService:
         assert result["id"] == 1
         assert result["code"] == "RW-ABC123"
         assert result["village_name"] == "测试村"
+        # W22：新列 supported_village_id + 旧字段 village_id 兼容输出
+        assert result["supported_village_id"] == 10
+        assert result["village_id"] == 10
 
     def test_to_dict_without_village(self, svc):
-        mock = _make_mock_work(village=None)
+        mock = _make_mock_work(supported_village=None)
         result = svc._to_dict(mock)
         assert result["village_name"] is None
 
@@ -361,52 +364,43 @@ class TestRuralWorkService:
     # ── get_villages_for_select ──
 
     def test_get_villages_for_select(self, svc):
-        """村庄下拉：从 supported_villages 读取并 upsert 到 villages 表（保持外键一致）"""
-        mock_db = MagicMock()
+        """W22：村庄下拉直接读 supported_villages，id 即乡村工作外键（不再 upsert 影子表）。"""
         sv1 = MagicMock()
-        sv1.name = "村1"
+        sv1.id = 1
+        sv1.village_name = "村1"
         sv1.county = "某县"
-        sv1.township = "某镇"
-        sv1.organization_id = 1
         sv2 = MagicMock()
-        sv2.name = "村2"
+        sv2.id = 2
+        sv2.village_name = "村2"
         sv2.county = None
-        sv2.township = None
-        sv2.organization_id = None
+        q = MagicMock()
+        q.filter.return_value = q
+        q.order_by.return_value.all.return_value = [sv1, sv2]
+        svc.db.query.return_value = q
 
-        def _query(model):
-            if model.__name__ == "SupportedVillage":
-                q = MagicMock()
-                q.filter.return_value = q
-                q.order_by.return_value.all.return_value = [sv1, sv2]
-                return q
-            # Village 查询：仅村2 已存在（id=2），村1 需新增
-            v2 = MagicMock()
-            v2.name = "村2"
-            v2.id = 2
-            q = MagicMock()
-            q.all.return_value = [v2]
-            return q
+        result = svc.get_villages_for_select()
+        assert result == [
+            {"id": 1, "name": "村1", "county": "某县"},
+            {"id": 2, "name": "村2", "county": None},
+        ]
 
-        mock_db.query.side_effect = _query
-        # flush 模拟真实数据库为主键赋值
-        def _flush():
-            added = mock_db.add.call_args[0][0]
-            if getattr(added, "id", None) is None:
-                added.id = 100
+    def test_get_villages_for_select_with_scope_user(self, svc):
+        """传入 current_user 时走 apply_scope_filter（管理员放行全量）。"""
+        from types import SimpleNamespace
 
-        mock_db.flush.side_effect = _flush
-        # get_villages_for_select 内部懒导入 SessionLocal → patch 源模块
-        with patch("app.core.database.SessionLocal", return_value=mock_db):
-            result = svc.get_villages_for_select()
-        assert len(result) == 2
-        assert result[0]["name"] == "村1"
-        assert result[0]["id"] == 100
-        assert result[1] == {"id": 2, "name": "村2", "county": None}
-        # 村1 被 upsert 进 villages 表
-        added = mock_db.add.call_args[0][0]
-        assert added.name == "村1"
-        mock_db.commit.assert_called_once()
+        sv1 = MagicMock()
+        sv1.id = 1
+        sv1.village_name = "村1"
+        sv1.county = None
+        q = MagicMock()
+        q.filter.return_value = q
+        q.order_by.return_value.all.return_value = [sv1]
+        svc.db.query.return_value = q
+        admin = SimpleNamespace(
+            id=1, role="admin", is_superuser=True, organization_id=1, data_scope="all"
+        )
+        result = svc.get_villages_for_select(current_user=admin)
+        assert result == [{"id": 1, "name": "村1", "county": None}]
 
     # ── generate_work_report ──
 

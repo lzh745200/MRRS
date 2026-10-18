@@ -58,7 +58,6 @@ from app.api.v1 import (  # noqa: E402
     supported_village,
     rural_works,
     rural_tasks,
-    villages,
     village_templates,
     validation,
     report_templates,
@@ -85,7 +84,6 @@ from app.api.v1 import (  # noqa: E402
     sync,
     machine_code,
     effectiveness,
-    sentiment,
     encryption,
     search,
     menus,
@@ -99,6 +97,9 @@ from app.api.v1 import (  # noqa: E402
     pairing,
     donation,
     handover,
+    consumption,
+    households,
+    media,
 )
 
 # ==================== 按序注册 ====================
@@ -127,16 +128,17 @@ _BUSINESS_MODULES = [
     organization, policy, projects, school,
     supported_village_export, supported_village,
     rural_works, rural_tasks,
-    villages, village_templates, validation, report_templates, approval,
+    village_templates, validation, report_templates, approval,
     messages, feedback, todos, ai, map, project_milestones,
     funds, fund_budgets, fund_lifecycle, work_logs, assessment,
     system_health, performance, monitoring_legacy, data_quality,
     ai_enhanced, data_sync, offline_map, batch_operations, sync,
-    machine_code, effectiveness, sentiment,
+    machine_code, effectiveness,
     encryption, search, menus, permission_package,
     org_module_policy, subordinate_registry, control_package,
     subordinate_reports, files, permission_packs, pairing, donation,
     handover,
+    consumption, households, media,
 ]
 
 for _mod in _BUSINESS_MODULES:

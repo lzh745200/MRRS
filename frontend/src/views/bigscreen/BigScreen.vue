@@ -8,6 +8,7 @@
         <el-button @click="toggleFullscreen">
           {{ isFullscreen ? '退出全屏' : '全屏展示' }}
         </el-button>
+        <el-button class="exit-bigscreen" @click="exitBigScreen">退出大屏</el-button>
       </div>
     </header>
 
@@ -232,6 +233,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
+import { useRouterSafe } from '@/composables/useRouterSafe'
 import BaseChart from '@/components/common/BaseChart.vue'
 import {
   getBigScreenFilters,
@@ -280,6 +282,7 @@ interface ScopeObjectOption {
   name: string | null
 }
 
+const { pushSafe } = useRouterSafe()
 const isFullscreen = ref(false)
 const clock = ref('')
 const filters = ref<BigScreenFilters>({ villages: [], schools: [], units: [] })
@@ -660,6 +663,15 @@ function toggleFullscreen(): void {
     document.exitFullscreen?.().catch(() => {})
     isFullscreen.value = false
   }
+}
+
+/** 退出大屏：若处于全屏先退出全屏，再返回工作台（W22） */
+function exitBigScreen(): void {
+  if (document.fullscreenElement) {
+    document.exitFullscreen?.().catch(() => {})
+    isFullscreen.value = false
+  }
+  pushSafe('/dashboard')
 }
 
 function onFullscreenChange(): void {

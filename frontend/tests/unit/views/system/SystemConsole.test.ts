@@ -2,7 +2,7 @@
  * views/system/console/SystemConsole.vue 专属测试（契约 §5/§8，四指标 100%）
  *
  * 单执行者规程：SystemConsole.vue 全仓只能被本文件执行。
- * - 契约 §5 的全部 30 个 Tab 子组件都在本文件用 `vi.mock` 工厂替换为桩组件
+ * - 契约 §5 的全部 Tab 子组件（W22 删 i18n/email 后 28 个）都在本文件用 `vi.mock` 工厂替换为桩组件
  *   （工厂不加载真实 .vue），真实子页仍由各自专属测试唯一执行；
  * - 另用 defineAsyncComponent 懒加载的 loader 为模块级函数：本文件通过遍历
  *   6 个板块的全部 Tab 各渲染一次，确保每个 loader 都被执行（functions 100%）。
@@ -35,7 +35,7 @@ const hoisted = vi.hoisted(() => {
 // ── store mock：SystemConsole 只消费 loaded/loading/sections/fetchMenus ──
 vi.mock('@/stores/menu', () => ({ useMenuStore: () => hoisted.menuState.store }))
 
-// ── 契约 §5：全部 Tab 子组件桩（30 个），工厂执行即记录"模块被加载" ──
+// ── 契约 §5：全部 Tab 子组件桩（W22 删 i18n/email 后 28 个），工厂执行即记录"模块被加载" ──
 vi.mock('@/views/system/UserManagement.vue', () => {
   hoisted.loadedModules.push('UserManagement')
   return { __esModule: true, default: hoisted.makeStub('UserManagement') }
@@ -128,14 +128,6 @@ vi.mock('@/views/system/ConfigPackage.vue', () => {
   hoisted.loadedModules.push('ConfigPackage')
   return { __esModule: true, default: hoisted.makeStub('ConfigPackage') }
 })
-vi.mock('@/views/system/I18nManagement.vue', () => {
-  hoisted.loadedModules.push('I18nManagement')
-  return { __esModule: true, default: hoisted.makeStub('I18nManagement') }
-})
-vi.mock('@/views/system/EmailSettings.vue', () => {
-  hoisted.loadedModules.push('EmailSettings')
-  return { __esModule: true, default: hoisted.makeStub('EmailSettings') }
-})
 vi.mock('@/views/system/UpdateLogs.vue', () => {
   hoisted.loadedModules.push('UpdateLogs')
   return { __esModule: true, default: hoisted.makeStub('UpdateLogs') }
@@ -173,7 +165,7 @@ const GROUP_TABS: Record<string, string[]> = {
     'error-reports',
   ],
   storage: ['backup', 'chunked-upload', 'map-tiles', 'control-package', 'config-package'],
-  settings: ['i18n', 'email', 'update-logs'],
+  settings: ['update-logs'],
   about: ['about', 'feedback', 'help', 'admin-dashboard'],
 }
 
@@ -189,7 +181,7 @@ const GROUP_LABELS: Record<string, string> = {
 /** 无前端组件映射的 Tab key（后端下发未知 key 时的防御分支） */
 const UNMAPPED_TAB = 'unknown-tab'
 
-/** 全部 30 个真实 Tab key（UNMAPPED_TAB 除外） */
+/** 全部 28 个真实 Tab key（UNMAPPED_TAB 除外） */
 const ALL_TAB_KEYS = Object.values(GROUP_TABS).flat()
 
 function buildSections() {
@@ -539,7 +531,7 @@ describe('菜单加载兜底（深链/刷新场景）', () => {
 })
 
 describe('契约 §5 组件映射完整性', () => {
-  it('30 个 Tab key 全部懒加载并渲染对应组件（每个异步 loader 均被执行）', async () => {
+  it('28 个 Tab key 全部懒加载并渲染对应组件（每个异步 loader 均被执行）', async () => {
     for (const [group, tabs] of Object.entries(GROUP_TABS)) {
       for (const tabKey of tabs) {
         const { wrapper, router } = await mountAt(`/system/console/${group}?tab=${tabKey}`)
@@ -548,9 +540,9 @@ describe('契约 §5 组件映射完整性', () => {
         wrapper.unmount()
       }
     }
-    // 30 个 mock 模块工厂各被执行且仅被执行一次（每个 defineAsyncComponent loader 都跑过）
-    expect(ALL_TAB_KEYS).toHaveLength(30)
-    expect(hoisted.loadedModules).toHaveLength(30)
-    expect(new Set(hoisted.loadedModules).size).toBe(30)
+    // 28 个 mock 模块工厂各被执行且仅被执行一次（每个 defineAsyncComponent loader 都跑过）
+    expect(ALL_TAB_KEYS).toHaveLength(28)
+    expect(hoisted.loadedModules).toHaveLength(28)
+    expect(new Set(hoisted.loadedModules).size).toBe(28)
   })
 })

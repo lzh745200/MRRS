@@ -8,7 +8,6 @@
 """
 
 from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.orm import relationship
 
 from .base import Base, TimestampMixin
 
@@ -31,9 +30,9 @@ class TeaPlantation(Base, TimestampMixin):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     village_id = Column(
         Integer,
-        ForeignKey("villages.id", ondelete="CASCADE"),
+        ForeignKey("supported_villages.id", ondelete="CASCADE"),
         nullable=False,
-        comment="所属村庄ID",
+        comment="所属帮扶村ID（W22：原 villages.id 改为 supported_villages.id）",
     )
     name = Column(String(100), nullable=False, comment="茶园名称")
     area_mu = Column(Float, default=0, comment="面积（亩）")
@@ -46,8 +45,6 @@ class TeaPlantation(Base, TimestampMixin):
     )
     quality_score = Column(Float, nullable=True, comment="品质评分（1-10）")
     description = Column(Text, nullable=True, comment="备注说明")
-
-    village = relationship("Village", back_populates="tea_plantations")
 
     def __repr__(self):
         return f"<TeaPlantation(id={self.id}, name={self.name}, variety={self.tea_variety})>"
@@ -77,9 +74,9 @@ class CactusFruitPlot(Base, TimestampMixin):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     village_id = Column(
         Integer,
-        ForeignKey("villages.id", ondelete="CASCADE"),
+        ForeignKey("supported_villages.id", ondelete="CASCADE"),
         nullable=False,
-        comment="所属村庄ID",
+        comment="所属帮扶村ID（W22：原 villages.id 改为 supported_villages.id）",
     )
     name = Column(String(100), nullable=False, comment="园区名称")
     area_mu = Column(Float, default=0, comment="面积（亩）")
@@ -93,8 +90,6 @@ class CactusFruitPlot(Base, TimestampMixin):
     soil_depth_cm = Column(Float, nullable=True, comment="土层厚度（厘米）")
     annual_rainfall_mm = Column(Float, nullable=True, comment="年降雨量（毫米）")
     description = Column(Text, nullable=True, comment="备注说明")
-
-    village = relationship("Village", back_populates="cactus_fruit_plots")
 
     def __repr__(self):
         return f"<CactusFruitPlot(id={self.id}, name={self.name})>"
@@ -174,7 +169,3 @@ def calculate_karst_adaptation(
     # 综合评分（三项等权重）
     score = (slope_score + depth_score + rain_score) / 3.0
     return round(min(10.0, max(1.0, score)), 2)
-
-
-# 循环引用延迟注册：确保 Village 在 mapper 配置前已定义（import 语句位于类定义之后）
-from . import village  # noqa: F401,E402

@@ -1,19 +1,19 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.13.4
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.14.0
 
-![Version](https://img.shields.io/badge/version-1.13.4-blue)
+![Version](https://img.shields.io/badge/version-1.14.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-19%2C158%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-20%2C000%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **13,550 passed**, 0 失败（含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **6,707 passed**（316 文件）, 0 失败 |
+| 后端测试 | **13,710 passed**, 0 失败（含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **6,748 passed**（321 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -31,7 +31,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-18（v1.13.0）— 后端 13,550 用例 + 行/分支覆盖率 100.00%、前端 6,707 用例（316 文件）全部通过；
+> **上次全量验证**: 2026-10-18（v1.14.0）— 后端 13,710 用例（1 skipped）+ 行/分支覆盖率 100.00%（44,423 stmts / 10,872 branches）、前端 6,748 用例（321 文件）全部通过；
 > flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（50 版本）
 
 ## 快速开始
@@ -85,6 +85,7 @@ cd frontend && npm install && npm run dev
 - **缓存**: diskcache + 内存 LRU
 - **任务**: threading.Timer 定时调度（备份计划/KPI预计算/异常检测, APScheduler 已移除）
 - **角色体系**: 4 核心角色（super_admin/admin/user/viewer）+ `normalize_role()` 向后兼容
+- **离线 OCR**: `rapidocr-onnxruntime==1.4.4`（CPU/离线，识别经费凭证金额与日期；Windows 安装包内置模型，ARM64 构建过滤降级）
 - **依赖自检**: 运行时依赖登记在 `backend/app/core/required_packages.py`（必需/可选/仅开发三级），
   启动自检与 `GET /api/v1/env/check` 按 **import 名** 校验；自包含安装包不误报、不给无效 pip 建议
 - **打包**: PyInstaller（x64 + ARM64）+ electron-builder（NSIS 安装包）
@@ -92,7 +93,7 @@ cd frontend && npm install && npm run dev
 ### 前端
 - **框架**: Vue 3 + TypeScript + Vite
 - **UI**: Element Plus + ECharts + Leaflet
-- **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`）数据驱动侧栏/移动端/权限面板；Ctrl+K 菜单搜索 + 收藏/最近访问
+- **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`）数据驱动侧栏/移动端/权限面板；Ctrl+K 菜单搜索 + 收藏/最近访问；7 板块默认折叠、可展开（`nav:expanded-sections`）
 - **状态**: Pinia
 - **测试**: Vitest + Playwright
 - **代码质量**: ESLint + Prettier + lint-staged
@@ -105,10 +106,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端单元测试 | pytest | 13,550（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端单元测试 | pytest | 13,710（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,707（316 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 6,748（321 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 12 流程 | Login/Dashboard/Projects/Approval/Funds |
 | 性能测试 | Locust | 配置可用 | 负载测试 |
 | 属性测试 | fast-check | 多组 | 组件属性验证 |
@@ -175,18 +176,18 @@ npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本
 ## 项目结构
 
 ```
-├── backend/app/              # 后端（FastAPI，339 个 py / 8.1 万行）
-│   ├── api/v1/               # API 接口层（93 个模块 + 13 个子包）
+├── backend/app/              # 后端（FastAPI，340+ 个 py / 8 万+ 行）
+│   ├── api/v1/               # API 接口层（91 个路由模块 + 13 个子包）
 │   ├── core/                 # 核心：config, security, database, transaction, cache, maintenance(维护闸门)
-│   ├── models/               # SQLAlchemy 数据模型（59 个文件）
-│   ├── services/             # 业务逻辑层（100 个服务 + 13 个子包）
+│   ├── models/               # SQLAlchemy 数据模型（64 个文件，含 W22 新增 household/media/consumption）
+│   ├── services/             # 业务逻辑层（100 个服务 + 13 个子包，含 ocr_service / household_service / media_service）
 │   ├── middleware/           # CSRF, 审计, 请求日志, 指标, maintenance_gate(写请求闸门)
 │   └── startup/              # 启动钩子（种子/监控/恢复/环境自检 + 组织树自愈）
-├── frontend/src/             # 前端（Vue 3 + TypeScript，292 个源文件）
-│   ├── views/                # 页面视图（含 system/console/SystemConsole.vue 6 个聚合页）
+├── frontend/src/             # 前端（Vue 3 + TypeScript，290+ 个源文件）
+│   ├── views/                # 页面视图（含 system/console 6 聚合页、households 一户一档、media 影像库、consumption 消费帮扶）
 │   ├── components/           # 通用 + 业务组件（nav/ 菜单搜索）
 │   ├── composables/          # 组合式函数（useRecentMenus / useMenuFavorites）
-│   ├── layouts/              # 主框架（数据驱动侧栏）
+│   ├── layouts/              # 主框架（数据驱动侧栏 + 7 板块折叠）
 │   ├── stores/               # Pinia 状态（menu.ts 消费后端 v2 菜单）
 │   └── utils/                # 工具函数
 ├── electron/                 # Electron 桌面壳
@@ -214,11 +215,28 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 | Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（约 204 MB，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
 | 麒麟 V10 / 统信 UOS ARM64 | `*.deb`（自包含后端二进制） | 同上（`build-arm64.yml` 产出） |
 
-> **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
+> **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 内置；ARM64 构建过滤降级为 503+手工录入）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
 > **运行环境**：Windows 10/11 x64（Electron 33 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
 > 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
 
 ## 近期修复记录
+
+### 2026-10-18（v1.14.0）功能大迭代：一户一档 / 影像库 / 消费帮扶 / OCR
+- 🏠 **一户一档**：新增 `households` / `household_members` / `household_risk_records` 三表与 `/households/*` API；
+  风险预警（连续未走访 >90 天且非一般户→中；大病/住房不安全/突发困难→高）、成员管理、走访挂户回写、
+  一键汇总回填帮扶村年度人口（`VillagePopulation`，幂等）、台账 xlsx/csv 导出
+- 📷 **影像库**：`photo_archives` 表 + `/media/photos/*`；EXIF 拍摄时间/GPS 自动解析、GPS ≤5km 就近匹配帮扶村、
+  `spot_key` 多期分组、Pillow 生成 PNG 对比图（左右/2xN + 日期标注）
+- 🛒 **消费帮扶台账**：`consumption_records` + `/consumption/*`（替换已下线的舆情监测；与帮扶村年度板块
+  `consumption_support` 区分），品类/金额/采购方/供货方统计与导出
+- 🧾 **经费凭证 OCR**：离线引擎 `rapidocr-onnxruntime==1.4.4` + `POST /funds/ocr-voucher`，识别金额/日期回填；
+  引擎不可用时 503 降级为手工录入，不阻断业务
+- 📊 **报表模板组合导出**：任意字段组合 → xlsx/csv/docx/pdf（单次上限 5000 行）+ 打印数据
+- 🧹 **界面精简**：删除驻村工作台、舆情监测、国际化/邮件设置、独立校验规则页（并入数据校验三 Tab）；
+  数据校验单页 `/data-verify`（校验执行/规则管理/字段说明）
+- 🧭 **导航体验**：7 板块标题 18px 加粗 + 默认折叠（`nav:expanded-sections`）；汇报大屏新增「退出大屏」
+- 🗃️ **遗留表清理**：删除 `villages` / `villagers` / `industries` / `sentiment_news`；`rural_works` / `rural_tasks` /
+  茶园 / 刺梨园改挂 `supported_villages`；数据上报「生成→接收→可见」链路端到端修复（协议不变）
 
 ### 2026-10-18（v1.13.1）发布构建修复与自包含验证
 - 🛠️ **Windows 发布构建恢复**：tag 构建不再重复跑全量测试（与 main 同代码却随机红），改为「main 最近 PR Checks 必须绿 + Windows 敏感后端子集 + 前端类型/导航子集 + 失败日志 artifact」，全量门禁仍由 main PR Checks 与 Nightly 承担

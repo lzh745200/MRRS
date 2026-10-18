@@ -1166,8 +1166,17 @@ def _rural_work_process_rows(
 
             village_id = None
             if data.get("village_name"):
-                from app.models.village import Village
-                v = db.query(Village).filter(Village.name == data["village_name"]).first()
+                # W22：乡村工作关联表改为 supported_villages（遗留 villages 已删除）
+                from app.models.supported_village import SupportedVillage
+
+                v = (
+                    db.query(SupportedVillage)
+                    .filter(
+                        SupportedVillage.village_name == data["village_name"],
+                        SupportedVillage.is_active == True,  # noqa: E712
+                    )
+                    .first()
+                )
                 if v:
                     village_id = v.id
 
@@ -1183,7 +1192,7 @@ def _rural_work_process_rows(
                 start_date=_safe_datetime(data.get("start_date")),
                 end_date=_safe_datetime(data.get("end_date")),
                 progress=_safe_int(data.get("progress")),
-                village_id=village_id,
+                supported_village_id=village_id,
                 created_by=user_id,
                 updated_by=user_id,
             )
@@ -1348,7 +1357,7 @@ MODULE_FIELDS: dict = {
     ],
     "rural_work": [
         {"key": "name", "label": "工作名称"}, {"key": "type", "label": "工作类型"},
-        {"key": "status", "label": "状态"}, {"key": "village_id", "label": "所属村庄"},
+        {"key": "status", "label": "状态"}, {"key": "supported_village_id", "label": "所属帮扶村"},
         {"key": "start_date", "label": "开始日期"}, {"key": "end_date", "label": "结束日期"},
         {"key": "progress", "label": "进度"}, {"key": "responsible_person", "label": "负责人"},
     ],
@@ -1358,3 +1367,273 @@ MODULE_FIELDS: dict = {
         {"key": "year", "label": "年度"},
     ],
 }
+
+# ==================== 报表模板增强：任意字段组合导出 / 打印数据（W22 v1.14.0） ====================
+#
+# 契约（.scratch/w22-feature-batch/000-contract.md §2）：
+#   POST /report-templates/{id}/export?format=xlsx|csv|docx|pdf&year
+#   GET  /report-templates/{id}/print-data?year
+# 数据口径：沿用模板模块 + 字段组合，查询经 scoped_filter（数据域单一真源），
+# 软删模型过滤 is_active，年度仅对具备 year 列的模块生效。
+
+#: 导出/打印单次最大行数（防止超大数据集把内存打满）
+TEMPLATE_EXPORT_LIMIT = 5000
+
+#: 模块中文名（导出标题/打印数据展示）
+MODULE_LABELS = {
+    "village": "帮扶村",
+    "school": "帮扶学校",
+    "fund": "帮扶经费",
+    "project": "帮扶项目",
+    "rural_work": "乡村工作",
+    "comprehensive": "综合汇总",
+}
+
+
+def _get_template_or_404(db: Session, template_id: int) -> ReportTemplate:
+    """按 ID 取模板，不存在抛 404。"""
+    template = db.query(ReportTemplate).filter(ReportTemplate.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="模板不存在")
+    return template
+
+
+def _template_module_model(module: str):
+    """模板模块 → ORM 模型（延迟导入，避免模块加载期引入全部业务模型）。"""
+    from app.models.fund import Fund
+    from app.models.project import Project
+    from app.models.rural_work import RuralWork
+    from app.models.school import School
+    from app.models.supported_village import SupportedVillage
+
+    return {
+        "village": SupportedVillage,
+        "school": School,
+        "fund": Fund,
+        "project": Project,
+        "rural_work": RuralWork,
+    }.get(module)
+
+
+def _export_cell_value(value):
+    """导出单元格值归一化：None→空串、枚举→值、日期→ISO、Decimal→float、布尔→是/否。"""
+    from datetime import date as _date
+    from datetime import datetime as _datetime
+    from decimal import Decimal as _Decimal
+    from enum import Enum as _Enum
+
+    if value is None:
+        return ""
+    if isinstance(value, _Enum):
+        return value.value
+    if isinstance(value, (_datetime, _date)):
+        return value.isoformat()
+    if isinstance(value, _Decimal):
+        return float(value)
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    return value
+
+
+def _template_row_value(row, db_field: str, village_names: dict):
+    """取一行中某字段的值；village_name / village_id 对关联模型做派生解析。"""
+    if db_field in ("village_id", "supported_village_id"):
+        return getattr(row, "supported_village_id", None) or getattr(row, "village_id", None)
+    if db_field == "village_name":
+        direct = getattr(row, "village_name", None)
+        if direct:
+            return direct
+        village_id = getattr(row, "supported_village_id", None) or getattr(row, "village_id", None)
+        return village_names.get(village_id)
+    return getattr(row, db_field, None)
+
+
+def _template_export_rows(
+    db: Session, template: ReportTemplate, year: Optional[int], current_user
+):
+    """按模板模块 + 字段组合组装导出数据。
+
+    Returns: ``(headers, columns, data_rows)``
+      - headers：excel_header 列表（导出表头 / docx/pdf 表头）；
+      - columns：``[{key,label}]``（前端打印用列定义）；
+      - data_rows：已归一化的二维值列表。
+    """
+    module = template.module or ""
+    model = _template_module_model(module)
+    if model is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"模块「{MODULE_LABELS.get(module, module)}」暂不支持数据导出",
+        )
+    fields = _normalize_template_fields(safe_json_loads(template.fields, default=[]))
+    if not fields:
+        raise HTTPException(status_code=400, detail="模板未配置字段映射")
+
+    query = db.query(model)
+    if hasattr(model, "is_active"):
+        query = query.filter(model.is_active == True)  # noqa: E712
+    if year and hasattr(model, "year"):
+        query = query.filter(model.year == year)
+    query = scoped_filter(query, model, current_user)
+    records = query.order_by(model.id.desc()).limit(TEMPLATE_EXPORT_LIMIT).all()
+
+    # 村名派生：批量预取，避免逐行查询（N+1）
+    village_names: dict = {}
+    need_village = any(
+        (f.get("db_field") or "") in ("village_name", "village_id", "supported_village_id")
+        for f in fields
+    )
+    if need_village and module != "village":
+        from app.models.supported_village import SupportedVillage
+
+        village_ids = {
+            getattr(r, "supported_village_id", None) or getattr(r, "village_id", None)
+            for r in records
+        }
+        village_ids.discard(None)
+        if village_ids:
+            village_names = dict(
+                db.query(SupportedVillage.id, SupportedVillage.village_name)
+                .filter(SupportedVillage.id.in_(village_ids))
+                .all()
+            )
+
+    headers = [f.get("excel_header") or f.get("db_field") or "" for f in fields]
+    columns = [
+        {"key": f.get("db_field") or "", "label": f.get("excel_header") or f.get("db_field") or ""}
+        for f in fields
+    ]
+    data_rows = [
+        [
+            _export_cell_value(_template_row_value(record, f.get("db_field") or "", village_names))
+            for f in fields
+        ]
+        for record in records
+    ]
+    return headers, columns, data_rows
+
+
+def _template_export_xlsx(template: ReportTemplate, headers: list, data_rows: list) -> bytes:
+    """生成 xlsx 字节（复用 excel_report_style 的 A4 打印设置）。"""
+    from openpyxl import Workbook
+
+    from app.utils.excel_report_style import setup_print
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = (template.name or "报表")[:31]
+    sheet.append(headers)
+    for row in data_rows:
+        sheet.append(row)
+    setup_print(
+        sheet,
+        col_count=max(len(headers), 1),
+        last_row=len(data_rows) + 1,
+        header_row=1,
+        header_left=f"帮扶管理信息系统 · {template.name or ''}",
+        landscape=len(headers) > 6,
+    )
+    output = io.BytesIO()
+    workbook.save(output)
+    workbook.close()
+    return output.getvalue()
+
+
+def _template_export_csv(headers: list, data_rows: list) -> bytes:
+    """生成 csv 字节（带 BOM，Excel 直接打开中文不乱码）。"""
+    import csv
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(headers)
+    writer.writerows(data_rows)
+    return ("\ufeff" + buffer.getvalue()).encode("utf-8")
+
+
+def _template_export_document(
+    template: ReportTemplate, headers: list, data_rows: list,
+    year: Optional[int], current_user, export_format: str,
+) -> bytes:
+    """生成 Word/PDF 字节：复用 ReportExportService 的排版能力（标题/表头/页码/脚注）。"""
+    from app.services.report_export_service import ReportExportService
+
+    data = {
+        "title": template.name or "报表",
+        "year": year or datetime.now().year,
+        "sections": [
+            {
+                "title": "数据明细",
+                "paragraphs": [],
+                "table": {"headers": headers, "rows": data_rows},
+            }
+        ],
+    }
+    service = ReportExportService()
+    if export_format == "docx":
+        return service.export_word("template_export", data)
+    return service.export_pdf("template_export", data)
+
+
+@router.post("/{template_id}/export", summary="按模板字段组合导出数据（xlsx/csv/docx/pdf）")
+async def export_template_data(
+    template_id: int,
+    format: str = Query("xlsx", description="导出格式: xlsx / csv / docx / pdf"),
+    year: Optional[int] = Query(None, description="年度筛选（模板模块支持 year 列时生效）"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """按模板字段组合导出当前数据域内的数据（W22 报表模板增强）。"""
+    if format not in ("xlsx", "csv", "docx", "pdf"):
+        raise HTTPException(status_code=400, detail=f"不支持的导出格式: {format}")
+
+    template = _get_template_or_404(db, template_id)
+    headers, _columns, data_rows = _template_export_rows(db, template, year, current_user)
+
+    if format == "xlsx":
+        content = _template_export_xlsx(template, headers, data_rows)
+    elif format == "csv":
+        content = _template_export_csv(headers, data_rows)
+    else:
+        content = _template_export_document(template, headers, data_rows, year, current_user, format)
+
+    media_type = {
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "csv": "text/csv; charset=utf-8",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "pdf": "application/pdf",
+    }[format]
+    import urllib.parse
+
+    year_label = str(year) if year else "全部"
+    filename = urllib.parse.quote(f"{template.name or '报表'}_{year_label}.{format}")
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
+
+
+@router.get("/{template_id}/print-data", summary="模板打印数据（前端打印用 JSON）")
+async def get_template_print_data(
+    template_id: int,
+    year: Optional[int] = Query(None, description="年度筛选（模板模块支持 year 列时生效）"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回前端打印用 JSON（复用导出的数据组装，不落文件）。"""
+    template = _get_template_or_404(db, template_id)
+    headers, columns, data_rows = _template_export_rows(db, template, year, current_user)
+    module = template.module or ""
+    return success_response(
+        data={
+            "template": _template_to_dict(template),
+            "module": module,
+            "module_label": MODULE_LABELS.get(module, module),
+            "year": year,
+            "headers": headers,
+            "columns": columns,
+            "rows": data_rows,
+            "total": len(data_rows),
+        },
+        message="成功",
+    )

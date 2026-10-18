@@ -119,8 +119,10 @@ def _to_work_status(val: Any) -> WorkStatus:
 
 
 # RuralWork 允许通过 schema/kwargs 批量赋值的字段白名单
+# W22：DB 列 village_id 已改为 supported_village_id（FK supported_villages），
+# 旧调用方仍可能传 village_id，由 update/create 内部归一。
 _WRITABLE_FIELDS = {
-    "name", "description", "type", "status", "village_id",
+    "name", "description", "type", "status", "supported_village_id",
     "responsible_person", "contact_phone", "start_date", "end_date",
     "target", "progress",
 }
@@ -137,19 +139,23 @@ class RuralWorkService:
     def _to_dict(r: RuralWork) -> Dict[str, Any]:
         """将 RuralWork ORM 对象序列化为前端友好的字典。
 
-        包含 village_name（通过 ORM relationship 懒加载），与
-        RuralWorkResponse schema 及前端表格 prop="village_name" 对齐。
+        W22：关联对象由遗留 Village 改为 SupportedVillage（帮扶村）；
+        响应同时给出 ``supported_village_id``（新）与 ``village_id``（旧前端兼容），
+        村名取 ``supported_villages.village_name``。
         """
+        supported_village_id = getattr(r, "supported_village_id", None)
         village_name = None
-        if r.village:
-            village_name = getattr(r.village, "name", None)
+        supported_village = getattr(r, "supported_village", None)
+        if supported_village is not None:
+            village_name = getattr(supported_village, "village_name", None)
         return {
             "id": r.id,
             "code": r.code,
             "name": r.name,
             "type": _safe_enum_value(r.type),
             "status": _safe_enum_value(r.status),
-            "village_id": r.village_id,
+            "supported_village_id": supported_village_id,
+            "village_id": supported_village_id,  # 兼容旧前端字段（W22 契约偏差说明）
             "village_name": village_name,
             "responsible_person": r.responsible_person,
             "contact_phone": r.contact_phone,
@@ -190,7 +196,7 @@ class RuralWorkService:
         if type:
             query = query.filter(RuralWork.type == type)
         if village_id:
-            query = query.filter(RuralWork.village_id == village_id)
+            query = query.filter(RuralWork.supported_village_id == village_id)
         if search:
             like = f"%{search}%"
             query = query.filter(
@@ -263,21 +269,23 @@ class RuralWorkService:
         return True
 
     def _validate_village_id(self, village_id: Optional[int]) -> None:
-        """校验 village_id 在 FK 目标表 villages 中存在。
+        """校验 village_id 对应的帮扶村存在。
 
-        RuralWork.village_id 的外键指向遗留 villages 表（非 supported_villages）；
-        传入不存在的 id 时 INSERT 触发 FOREIGN KEY constraint failed → 未处理
-        IntegrityError → 500（2026-09-05 R5 探针实测）。提前校验转为 ValueError，
-        由路由层转 400。
+        W22：RuralWork.supported_village_id 的外键指向 ``supported_villages``
+        （原遗留 villages 表已删除）；传入不存在的 id 时 INSERT 触发
+        FOREIGN KEY constraint failed → 未处理 IntegrityError → 500。
+        提前校验转为 ValueError，由路由层转 400。
         """
         if not village_id:
             return
-        from app.models.village import Village
+        from app.models.supported_village import SupportedVillage
 
-        if not self.db.query(Village.id).filter(Village.id == village_id).first():
+        if not self.db.query(SupportedVillage.id).filter(
+            SupportedVillage.id == village_id
+        ).first():
             raise ValueError(
-                f"所选村庄不存在（village_id={village_id}）。"
-                "请从「乡村振兴工作台」的村庄下拉中选择（下拉数据来自帮扶村自动同步）。"
+                f"所选帮扶村不存在（village_id={village_id}）。"
+                "请从乡村工作台的村庄下拉中选择。"
             )
 
     def create_rural_work(
@@ -299,7 +307,10 @@ class RuralWorkService:
         """
         payload = data.model_dump() if hasattr(data, "model_dump") else dict(data)
 
-        self._validate_village_id(payload.get("village_id"))
+        # W22：DB 列改为 supported_village_id（FK supported_villages）；
+        # 旧调用方/schema 仍可能传 village_id，这里兼容归一。
+        village_id = payload.get("village_id") or payload.get("supported_village_id")
+        self._validate_village_id(village_id)
 
         work = RuralWork(
             code=self._generate_code(),
@@ -307,7 +318,7 @@ class RuralWorkService:
             description=payload.get("description"),
             type=_to_work_type(payload.get("type")),
             status=_to_work_status(payload.get("status")),
-            village_id=payload.get("village_id"),
+            supported_village_id=village_id,
             responsible_person=payload.get("responsible_person"),
             contact_phone=payload.get("contact_phone"),
             start_date=payload.get("start_date"),
@@ -366,8 +377,13 @@ class RuralWorkService:
                 updates.update(dict(data))
         updates.update(kwargs)
 
-        if "village_id" in updates:
-            self._validate_village_id(updates.get("village_id"))
+        # W22：旧字段 village_id → 新列 supported_village_id 归一后再校验/写入
+        if "village_id" in updates and "supported_village_id" not in updates:
+            updates["supported_village_id"] = updates.pop("village_id")
+        else:
+            updates.pop("village_id", None)
+        if "supported_village_id" in updates:
+            self._validate_village_id(updates.get("supported_village_id"))
 
         for key, value in updates.items():
             if key not in _WRITABLE_FIELDS:
@@ -425,50 +441,28 @@ class RuralWorkService:
         )
 
     def get_villages_for_select(self, current_user: Any = None) -> List[Dict[str, Any]]:
-        """获取村庄列表（用于下拉选择）。
+        """获取帮扶村下拉列表（id / 村名 / 县市）。
 
-        系统真实村庄数据在 supported_villages 表；villages 表为 RuralWork 外键目标。
-        本方法从帮扶村表读取并独立事务 upsert 到 villages 表（按名称），
-        保证下拉有真实数据且外键一致。非管理员按数据权限过滤村庄。
+        W22：不再向遗留 villages 表 upsert 影子数据 —— 乡村工作直接外键
+        ``supported_villages``，下拉 id 即帮扶村 id。非管理员按数据权限过滤。
         """
         from app.core.data_permission import apply_scope_filter
-        from app.core.database import SessionLocal
         from app.models.supported_village import SupportedVillage
-        from app.models.village import Village
 
-        db = SessionLocal()
-        try:
-            sv_query = (
-                db.query(SupportedVillage)
-                .filter(SupportedVillage.is_active.is_(True))
-            )
-            if current_user is not None:
-                sv_query = apply_scope_filter(sv_query, current_user, SupportedVillage, db=db)
-            svs = sv_query.order_by(SupportedVillage.village_name.asc()).all()
-            existing = {v.name: v.id for v in db.query(Village).all()}
-            rows: List[Dict[str, Any]] = []
-            for sv in svs:
-                vid = existing.get(sv.name)
-                if vid is None:
-                    village = Village(
-                        name=sv.name,
-                        county=getattr(sv, "county", None),
-                        township=getattr(sv, "township", None),
-                        organization_id=getattr(sv, "organization_id", None),
-                    )
-                    db.add(village)
-                    db.flush()
-                    vid = village.id
-                    existing[sv.name] = vid
-                rows.append({
-                    "id": vid,
-                    "name": sv.name,
-                    "county": getattr(sv, "county", None),
-                })
-            safe_commit(db)
-        finally:
-            db.close()
-        return rows
+        query = self.db.query(SupportedVillage).filter(
+            SupportedVillage.is_active.is_(True)
+        )
+        if current_user is not None:
+            query = apply_scope_filter(query, current_user, SupportedVillage, db=self.db)
+        villages = query.order_by(SupportedVillage.village_name.asc()).all()
+        return [
+            {
+                "id": sv.id,
+                "name": sv.village_name,
+                "county": getattr(sv, "county", None),
+            }
+            for sv in villages
+        ]
 
     def generate_work_report(
         self,

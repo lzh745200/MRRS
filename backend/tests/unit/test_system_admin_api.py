@@ -72,13 +72,13 @@ class TestGetSystemInfo:
         from app.models.user import User
         from app.models.organization import Organization
         from app.models.project import Project
-        from app.models.village import Village
+        from app.models.supported_village import SupportedVillage
 
         mock_db._storage = {
             User: [MagicMock(id=1)],
             Organization: [MagicMock(id=1)],
             Project: [MagicMock(id=1)],
-            Village: [MagicMock(id=1)],
+            SupportedVillage: [MagicMock(id=1)],
         }
         self._fix_query_count(mock_db)
 

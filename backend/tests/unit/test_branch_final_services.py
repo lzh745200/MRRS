@@ -61,7 +61,6 @@ from app.services.reminder_service import ApprovalReminderService
 from app.services.retention_service import purge_expired_soft_deleted
 from app.services.rural_work_service import RuralWorkService
 from app.services.secrets_manager import SecretsManager
-from app.services.sentiment.crawler_service import CrawlerService, NewsItem
 from app.services.work_log_service import WorkLogService
 
 
@@ -123,44 +122,6 @@ class TestWorkLogServiceBranches:
 
 
 # ---------------------------------------------------------------------------
-# sentiment/crawler_service.py — 140, 122-124, 172-195
-# ---------------------------------------------------------------------------
-
-
-class TestCrawlerServiceBranches:
-    def test_fetch_rss_feeds_returns_empty_when_crawler_disabled(self, monkeypatch):
-        """140: 爬虫禁用（离线默认）时直接返回空列表，不发网络请求。"""
-        import app.services.sentiment.crawler_service as crawler_mod
-
-        monkeypatch.setattr(crawler_mod, "_CRAWLER_ENABLED", False)
-        assert CrawlerService.fetch_rss_feeds(MagicMock(), ["乡村振兴"]) == []
-
-    def test_get_instance_lazily_creates_singleton(self):
-        """122-124: 单例为空时惰性创建 SentimentCrawlerService 实例。"""
-        original = CrawlerService._instance
-        CrawlerService._instance = None
-        try:
-            inst = CrawlerService._get_instance()
-            assert inst is not None
-            assert CrawlerService._get_instance() is inst  # 后续调用复用同一实例
-        finally:
-            CrawlerService._instance = original
-
-    def test_save_news_persists_each_item(self):
-        """172-195: 保存新闻列表逐条入库并返回写入数量。"""
-        db = MagicMock()
-        news = [
-            NewsItem(title="标题A", source="RSS", url="u", content="c", keywords=["村"]),
-            NewsItem(title="标题B", source="RSS", url="u2", content="c2", keywords=[]),
-        ]
-        saved = CrawlerService.save_news(db, news)
-        assert saved == 2
-        assert db.add.call_count == 2
-        added = db.add.call_args_list[0].args[0]
-        assert added.title == "标题A"
-
-
-# ---------------------------------------------------------------------------
 # secrets_manager.py — 204->198
 # ---------------------------------------------------------------------------
 
@@ -214,10 +175,10 @@ class TestRuralWorkServiceBranches:
         svc.db.query.assert_not_called()
 
     def test_validate_village_id_raises_when_village_missing(self):
-        """278: village_id 在 villages 表不存在时抛 ValueError（转 400）。"""
+        """278: village_id 在 supported_villages 表不存在时抛 ValueError（转 400）。"""
         svc = RuralWorkService(MagicMock())
         svc.db.query.return_value = _query_mock(first=None)
-        with pytest.raises(ValueError, match="所选村庄不存在"):
+        with pytest.raises(ValueError, match="所选帮扶村不存在"):
             svc._validate_village_id(999)
 
     def test_update_rural_work_denied_returns_none(self, monkeypatch):
@@ -245,13 +206,13 @@ class TestRuralWorkServiceBranches:
         assert called == [7]
 
     def test_get_villages_for_select_applies_scope_for_user(self, monkeypatch):
-        """445: 传入 current_user 时对村庄查询应用数据范围过滤。"""
-        svc = RuralWorkService(MagicMock())
+        """445: 传入 current_user 时对帮扶村查询应用数据范围过滤（W22 不再 upsert 影子表）。"""
         db = MagicMock()
-        sv_query = _query_mock(all=[SimpleNamespace(name="甲村", county=None, township=None, organization_id=None)])
-        village_query = _query_mock(all=[])
-        db.query.side_effect = [sv_query, village_query]
-        monkeypatch.setattr("app.core.database.SessionLocal", lambda: db)
+        sv_query = _query_mock(
+            all=[SimpleNamespace(id=1, village_name="甲村", county=None)]
+        )
+        db.query.return_value = sv_query
+        svc = RuralWorkService(db)
         scope_calls = []
 
         def fake_apply_scope(query, user, model, db=None):
@@ -260,7 +221,7 @@ class TestRuralWorkServiceBranches:
 
         monkeypatch.setattr("app.core.data_permission.apply_scope_filter", fake_apply_scope)
         rows = svc.get_villages_for_select(current_user=SimpleNamespace(id=1))
-        assert [r["name"] for r in rows] == ["甲村"]
+        assert rows == [{"id": 1, "name": "甲村", "county": None}]
         assert len(scope_calls) == 1  # 非空用户触发范围过滤
 
 

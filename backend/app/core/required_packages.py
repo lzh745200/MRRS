@@ -57,6 +57,11 @@ OPTIONAL_RUNTIME_PACKAGES: Tuple[Dependency, ...] = (
     Dependency("reportlab", "reportlab", "PDF 导出"),
     Dependency("python-docx", "docx", "Word 导出"),
     Dependency("pillow", "PIL", "头像与图片处理"),
+    Dependency(
+        "rapidocr-onnxruntime",
+        "rapidocr_onnxruntime",
+        "经费凭证 OCR 识别（缺失时功能降级）",
+    ),
 )
 
 # ── 仅开发/测试期：不得计入运行时缺失（生产/安装包里本就没有）──
