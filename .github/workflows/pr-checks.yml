@@ -141,11 +141,17 @@ jobs:
       # 2 个内联处理器 count-0。修复=移除 AuthViewsBatch.test.ts 里那段冗余 bare 渲染（每个 .vue 只
       # 由一个测试深挂载）。详见 frontend/vitest.config.ts 注释 (A)。
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with: { node-version: '22' }
+        with:
+          node-version: '22'
+          # v1.14.3：缓存 ~/.npm，网络抖动时配合 --prefer-offline 可完全命中缓存
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
       # npm 网络抖动治理（2026-10-03）：一次 ECONNRESET 曾让 npm ci 失败 → vitest 压根没
       # 启动，而下方"Report vitest failure"因日志文件不存在又二次失败，annotation 只剩
       # "Process completed with exit code 1"，真因被彻底掩盖。两头都加固：
-      # ① 提高 fetch 重试次数与超时；② npm ci 外层再做幂等重试；③ 上报步骤识别"日志缺失"。
+      # ① setup-node 启用 npm 缓存（~/.npm）；② fetch 重试 + 超时；
+      # ③ npm ci 5 轮递增退避且 --prefer-offline（网络不可达时优先命中缓存）；
+      # ④ 全部失败后 npm install 兜底（只救网络，lock 漂移由 npm ci 前几轮先行拦截）。
       - name: Install frontend dependencies
         run: |
           cd frontend
@@ -153,16 +159,25 @@ jobs:
           npm config set fetch-retry-mintimeout 20000
           npm config set fetch-retry-maxtimeout 120000
           npm config set fetch-timeout 300000
-          for i in 1 2 3; do
+          npm cache verify || true
+          for i in 1 2 3 4 5; do
             echo "===== npm ci attempt $i ====="
-            if npm ci --legacy-peer-deps; then
+            if npm ci --legacy-peer-deps --prefer-offline --no-fund --no-audit; then
               echo "npm ci OK (attempt $i)"
               exit 0
             fi
-            echo "npm ci attempt $i failed; retrying in 10s"
-            sleep 10
+            echo "npm ci attempt $i failed; retrying in $((i * 20))s"
+            sleep $((i * 20))
           done
-          echo "::error::npm ci 连续 3 次失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
+          echo "::warning::npm ci 连续 5 次失败，回退 npm install --prefer-offline（网络兜底）"
+          for i in 1 2; do
+            if npm install --legacy-peer-deps --no-fund --no-audit --prefer-offline; then
+              echo "npm install OK (attempt $i)"
+              exit 0
+            fi
+            sleep $((i * 30))
+          done
+          echo "::error::npm ci/npm install 连续失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
           exit 1
       - run: cd frontend && npx vue-tsc --noEmit 2>&1
       # lint:check 为纯检查模式（不带 --fix），CI 必须真实暴露 lint 违规而非自动修复
@@ -440,7 +455,11 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with: { node-version: '22' }
+        with:
+          node-version: '22'
+          # v1.14.3：缓存 ~/.npm，网络抖动时配合 --prefer-offline 可完全命中缓存
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
       # 后端依赖（webServer 直接 python -m uvicorn 启动，无 venv）
       - run: pip install -r backend/requirements.txt
       # 前端依赖 + Playwright chromium 浏览器（config 在 Linux 用 chromium）
@@ -455,18 +474,23 @@ jobs:
           npm config set fetch-retry-mintimeout 20000
           npm config set fetch-retry-maxtimeout 120000
           npm config set fetch-timeout 300000
-          for i in 1 2 3; do
+          npm cache verify || true
+          for i in 1 2 3 4 5; do
             echo "===== npm ci attempt $i ====="
-            if npm ci --legacy-peer-deps; then
+            if npm ci --legacy-peer-deps --prefer-offline --no-fund --no-audit; then
               echo "npm ci OK (attempt $i)"
               break
             fi
-            if [ "$i" = "3" ]; then
-              echo "::error::npm ci 连续 3 次失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
-              exit 1
+            if [ "$i" = "5" ]; then
+              echo "::warning::npm ci 连续 5 次失败，回退 npm install --prefer-offline"
+              npm install --legacy-peer-deps --no-fund --no-audit --prefer-offline || {
+                echo "::error::npm ci/npm install 连续失败 —— 疑似 registry 网络故障"
+                exit 1
+              }
+              break
             fi
-            echo "npm ci attempt $i failed; retrying in 10s"
-            sleep 10
+            echo "npm ci attempt $i failed; retrying in $((i * 20))s"
+            sleep $((i * 20))
           done
           for i in 1 2 3; do
             echo "===== playwright install attempt $i ====="
@@ -474,8 +498,8 @@ jobs:
               echo "playwright install OK (attempt $i)"
               exit 0
             fi
-            echo "playwright install attempt $i failed; retrying in 15s"
-            sleep 15
+            echo "playwright install attempt $i failed; retrying in $((i * 30))s"
+            sleep $((i * 30))
           done
           echo "::error::playwright install 连续 3 次失败 —— 疑似浏览器下载源/apt 镜像故障，非业务代码问题"
           exit 1

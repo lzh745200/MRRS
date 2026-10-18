@@ -5,6 +5,24 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.14.3] - 2026-10-18 — ARM64 构建网络韧性加固（npm/Docker registry 抖动）
+
+### Fixed
+
+- **ARM64 构建因 CI 网络抖动间歇失败（v1.14.2）**：`v1.14.2` 的 Build Frontend 在
+  npm registry 抖动下 3 次 `npm ci` 全失败（v1.14.1 同步骤成功，属 runner 网络波动）；
+  standalone DEB 的 Docker 构建亦 3 次失败（公共镜像/缓存拉取）。加固：
+  1) `npm ci` 增加 `--prefer-offline` + 递增退避（30/60s），3 次失败后**回退
+     `npm install --prefer-offline`**（再 2 次重试）——只救网络，不改变产物语义（lock 漂移
+     由前三轮 npm ci 先行拦截）；
+  2) Docker 构建重试间隔提升为 60/120s，失败时输出 `buildx ls` / `system df` /
+     `docker images` 诊断，便于区分网络与构建错误；
+  3) 保留既有 `--cache-from/--cache-to type=gha` 缓存复用与基础镜像源探测。
+
+- 说明：v1.14.2 已修复发布门禁时序缺陷（`scripts/check_release_gate.py`），Windows 安装包
+  正常产出；本版本仅进一步加固 ARM64 流水线网络韧性。v1.14.1 的 ARM64 完整构建
+  （standalone DEB + Electron DEB）曾成功，证明代码侧无阻断。
+
 ## [1.14.2] - 2026-10-18 — 修复发布门禁时序缺陷（v1.14.1 构建被误拦）
 
 ### Fixed

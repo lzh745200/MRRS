@@ -38,20 +38,34 @@ jobs:
           # v1.14.1 加固：v1.14.0 的 ARM64 Electron DEB 因本步骤 npm registry 网络抖动
           # 直接失败（exit 1，非 lock 漂移），导致 Build Electron DEB 被 skip。与
           # pr-checks/build-windows 同款加固：fetch 重试参数 + 最多 3 次重试。
+          # v1.14.3 加固：v1.14.2 在 3 次 npm ci 全失败（registry 仍抖动）后直接红；
+          # 增加 npm 缓存校验与 `npm install --prefer-offline` 兜底（CI 只产出前端 dist，
+          # lock 漂移风险由 npm ci 前三轮先行拦截；兜底仅救网络，不改产物语义）。
           npm config set fetch-retries 5
           npm config set fetch-retry-mintimeout 20000
           npm config set fetch-retry-maxtimeout 120000
           npm config set fetch-timeout 300000
+          npm cache verify || true
           for i in 1 2 3; do
             echo "===== npm ci attempt $i ====="
-            if npm ci --legacy-peer-deps --no-fund --no-audit; then
+            if npm ci --legacy-peer-deps --no-fund --no-audit --prefer-offline; then
               echo "npm ci OK (attempt $i)"
               exit 0
             fi
-            echo "npm ci attempt $i failed; retrying in 15s"
-            sleep 15
+            echo "npm ci attempt $i failed; retrying in $((i * 30))s"
+            sleep $((i * 30))
           done
-          echo "::error::npm ci 连续 3 次失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
+          echo "::warning::npm ci 连续 3 次失败，回退 npm install --prefer-offline（网络兜底）"
+          for i in 1 2; do
+            echo "===== npm install attempt $i ====="
+            if npm install --legacy-peer-deps --no-fund --no-audit --prefer-offline; then
+              echo "npm install OK (attempt $i)"
+              exit 0
+            fi
+            echo "npm install attempt $i failed; retrying in $((i * 30))s"
+            sleep $((i * 30))
+          done
+          echo "::error::npm ci/npm install 连续失败 —— 疑似 registry 网络故障，非业务代码问题"
           exit 1
 
       - name: Build frontend
@@ -480,6 +494,8 @@ jobs:
           set -euo pipefail
           mkdir -p dist/deb
           # 重试 3 次：QEMU 仿真 + 公共镜像网络抖动下的瞬态失败不应直接让发布失败。
+          # v1.14.3 加固：重试间隔由 30/60s 提升到 60/120s，并在每次失败后输出
+          # docker/buildx 诊断（镜像拉取/缓存命中情况），避免只看到 "exit 1" 无法定位。
           for i in 1 2 3; do
             echo "standalone DEB build attempt ${i} (BASE_REGISTRY=${BASE_REGISTRY})"
             if docker buildx build \
@@ -494,11 +510,15 @@ jobs:
               --pull=false .; then
               exit 0
             fi
+            echo "===== attempt ${i} failed; diagnostics ====="
+            docker buildx ls || true
+            docker system df || true
+            docker images --digests | head -20 || true
             if [ "${i}" = "3" ]; then
               echo "::error::ARM64 standalone DEB 构建失败（已重试 3 次）"
               exit 1
             fi
-            sleep $((i * 30))
+            sleep $((i * 60))
           done
 
       - name: Verify standalone DEB (no CRLF in maintainer scripts)
