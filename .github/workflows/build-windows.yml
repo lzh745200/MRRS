@@ -39,30 +39,17 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: '22' }
 
-      # ① 发布前置门禁：main 分支最近一次 PR Checks 必须绿。tag 指向的提交内容
-      #    已包含在 main 的历史中，main 门禁结果就是该内容的权威全量结论。
-      - name: Verify main branch gate is green
+      # ① 发布前置门禁（v1.14.2 修复时序缺陷）：必须校验「tag 指向的提交」自身的
+      #    PR Checks 结论，而不是「main 最近一次 completed」——后者在 tag 推送瞬间可能
+      #    还指向更早的失败 run（v1.14.1 tag 构建即因此被误拦：68fc9cf 的 PR Checks
+      #    尚在 in_progress，而最近 completed 是 422f840 的 e2e/upgrade-rehearsal 失败）。
+      #    实现见 scripts/check_release_gate.py：tag commit 有 PR Checks → 轮询等待
+      #    完成（≤75 分钟）后按结论放行/阻断；无或并发取消 → 回退 main 最近 completed。
+      - name: Verify release gate is green
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/pr-checks.yml/runs?branch=main&per_page=5&status=completed"
-          JSON=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "$API")
-          echo "$JSON" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          runs = data.get('workflow_runs') or []
-          if not runs:
-              print('::warning::未找到 main 分支 PR Checks 历史，跳过前置校验（首次运行/权限受限）')
-              sys.exit(0)
-          latest = runs[0]
-          sha = (latest.get('head_sha') or '')[:7]
-          print(f\"main 最近一次 PR Checks: {sha} conclusion={latest.get('conclusion')} url={latest.get('html_url')}\")
-          if latest.get('conclusion') != 'success':
-              print('::error::main 分支最近一次 PR Checks 未通过 —— 禁止发布构建，请先在 main 修复门禁')
-              sys.exit(1)
-          "
+        run: python scripts/check_release_gate.py --timeout-minutes 75 --poll-seconds 60
 
       # 依赖安装（子集测试需要后端运行时/测试依赖；v1.13.2 修复：v1.13.1 重构时
       # 误删了本步骤，导致 `python -m pytest` 秒失败 No module named pytest）

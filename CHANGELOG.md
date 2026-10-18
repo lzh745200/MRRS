@@ -5,6 +5,23 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.14.2] - 2026-10-18 — 修复发布门禁时序缺陷（v1.14.1 构建被误拦）
+
+### Fixed
+
+- **发布前置门禁误拦合法 tag 构建**：v1.13.1 引入的门禁只检查「main 最近一次 completed 的
+  PR Checks」。v1.14.1 tag 推送瞬间，其自身 PR Checks 尚在 in_progress，而"最近 completed"
+  仍是上一提交（422f840）的 e2e/upgrade-rehearsal 失败 run → 门禁拒绝构建
+  （`main 分支最近一次 PR Checks 未通过`），导致 v1.14.1 Windows 安装包未产出。
+  新增 `scripts/check_release_gate.py` 并改造 `build-windows.yml`：
+  1) 优先查询 **tag 指向提交自身**的 PR Checks，completed success 放行、failure 阻断；
+  2) in_progress/queued 时**轮询等待**（上限 75 分钟）到完成再判定；
+  3) 该提交 PR Checks 被并发取消或不存在时，回退「main 最近 completed success」判定。
+  本地已用真实数据验证三分支（success 放行 / failure 阻断 / in_progress 等待超时阻断）。
+
+- 说明：v1.14.1 的代码修复（空库迁移链幂等、E2E 折叠适配、ARM64 npm 重试加固）不受影响，
+  其 PR Checks 中 `upgrade-rehearsal`、`e2e-test` 均已 **success**（本版本仅修 CI 门禁）。
+
 ## [1.14.1] - 2026-10-18 — 修复空库迁移链 / E2E 折叠适配 / ARM64 构建加固
 
 ### Fixed
