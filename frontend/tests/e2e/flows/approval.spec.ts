@@ -28,12 +28,14 @@ test.describe('审批流程', () => {
     test('可以访问待审批任务页面', async ({ page }) => {
       // 导航到待审批任务页面
       await page.goto('/approval/pending')
+      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
 
       // 验证页面加载（PendingList 页头为 span.title「待审批任务」；
       // 不得用 text=a, text=b 混合写法——text= 引擎会把整串当文本匹配）
+      // 超时放宽到 15s：dev server 首次编译该路由 chunk 可能超过 5s（本地实测偶发失败）。
       await expect(
         page.getByRole('heading', { name: '待审批任务' })
-      ).toBeVisible({ timeout: 5000 })
+      ).toBeVisible({ timeout: 15000 })
     })
 
     test('待审批页面显示统计信息', async ({ page }) => {

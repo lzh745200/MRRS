@@ -19,6 +19,8 @@
  */
 import { test, expect, request as playwrightRequest, type APIRequestContext } from '@playwright/test'
 
+import { expandAllSections } from '../helpers'
+
 const API_BASE = process.env.E2E_API_URL || 'http://127.0.0.1:18000/api/v1'
 const ADMIN = { username: 'admin', password: process.env.TEST_PASSWORD || 'E2e#Probe2026!x' }
 
@@ -136,6 +138,9 @@ test('权限包绑定用户后，菜单按包解析（包内可见、包外不�
 
   // 登录成功落工作台（新用户未设置 must_change_password/2FA/机器码绑定）
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 })
+
+  // W22（v1.14.0）：7 板块默认折叠 —— 先展开全部板块再断言子项可见性
+  await expandAllSections(page)
 
   // 侧边栏渲染（DefaultLayoutSafe 的 el-menu.aside-menu）
   const sidebar = page.locator('.aside-menu')

@@ -32,3 +32,36 @@ export async function navigateTo(page: Page, path: string) {
   await page.goto(path)
   await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
 }
+
+/** W22（v1.14.0）7 板块默认折叠时展开全部板块（localStorage 契约，见 DefaultLayoutSafe.vue）。 */
+const ALL_SECTION_KEYS = ['business', 'rural', 'collab', 'report', 'data', 'system']
+
+/**
+ * 展开侧栏全部板块并刷新（W22 起 7 板块默认折叠；需要点击子菜单/断言子项的用例先调用）。
+ * 直接写 localStorage `nav:expanded-sections`（实现契约）后 reload，比逐个点击标题更稳定。
+ */
+export async function expandAllSections(page: Page) {
+  await page.evaluate((keys) => {
+    localStorage.setItem('nav:expanded-sections', JSON.stringify(keys))
+  }, ALL_SECTION_KEYS)
+  await page.reload()
+  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
+}
+
+/** 展开指定板块（按 section key）后再继续；不刷新页面（切换折叠是客户端状态）。 */
+export async function expandSection(page: Page, sectionKey: string) {
+  await page.evaluate((key) => {
+    const raw = localStorage.getItem('nav:expanded-sections')
+    let keys: string[] = []
+    try {
+      const parsed = raw ? JSON.parse(raw) : []
+      keys = Array.isArray(parsed) ? parsed : []
+    } catch {
+      keys = []
+    }
+    if (!keys.includes(key)) keys.push(key)
+    localStorage.setItem('nav:expanded-sections', JSON.stringify(keys))
+  }, sectionKey)
+  await page.reload()
+  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
+}

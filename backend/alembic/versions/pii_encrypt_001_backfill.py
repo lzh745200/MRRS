@@ -39,10 +39,17 @@ def _iter_pii_columns():
 
 
 def upgrade() -> None:
+    import sqlalchemy as sa
+
     from app.core.pii_crypto import encrypt_pii, is_encrypted
 
     conn = op.get_bind()
+    insp = sa.inspect(conn)
     for table, column in _iter_pii_columns():
+        # W22（v1.14.0）：villagers 遗留表已删除。空库初始化路径的 001 baseline
+        # create_all 不再创建该表，历史回填必须跳过不存在的表（老库仍存在则照常回填）。
+        if not insp.has_table(table):
+            continue
         rows = conn.exec_driver_sql(
             f'SELECT id, "{column}" FROM "{table}" '
             f'WHERE "{column}" IS NOT NULL AND "{column}" NOT LIKE \'enc.v1:%\''
@@ -58,10 +65,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    import sqlalchemy as sa
+
     from app.core.pii_crypto import decrypt_pii
 
     conn = op.get_bind()
+    insp = sa.inspect(conn)
     for table, column in _iter_pii_columns():
+        if not insp.has_table(table):
+            continue
         rows = conn.exec_driver_sql(
             f'SELECT id, "{column}" FROM "{table}" WHERE "{column}" LIKE \'enc.v1:%\''
         ).fetchall()

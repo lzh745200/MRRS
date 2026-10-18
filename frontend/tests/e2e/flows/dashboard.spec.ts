@@ -9,7 +9,7 @@
  * - 经费概况
  */
 import { test, expect } from '@playwright/test'
-import { login, navigateTo } from '../helpers'
+import { expandAllSections, login, navigateTo } from '../helpers'
 
 test.describe('工作台 Dashboard', () => {
   test.beforeEach(async ({ page }) => {
@@ -85,6 +85,8 @@ test.describe('工作台 Dashboard', () => {
 
   test('待办事项功能', async ({ page }) => {
     await navigateTo(page, '/dashboard')
+    // W22（v1.14.0）：7 板块默认折叠 —— 先展开全部板块，再点"工作协同"下的待办入口
+    await expandAllSections(page)
     // 工作台页内没有待办输入框；待办事项入口在侧边栏菜单（跳转 /todos）
     await page.getByRole('menuitem', { name: '待办事项' }).click()
     await expect(page).toHaveURL(/\/todos/, { timeout: 5000 })

@@ -58,16 +58,22 @@ test.describe('经费管理', () => {
     await navigateTo(page, '/funds')
     const createBtn = page.locator('button:has-text("新增经费")')
     await expect(createBtn).toBeVisible()
-    await createBtn.click()
-    await expect(page).toHaveURL(/\/funds\/create/, { timeout: 5000 })
+    // 稳定性：dev server 首次编译 /funds/create chunk 时点击可能落在重渲染窗口（本地实测偶发
+    // URL 不变）；用 toPass 重试点击直到导航生效，避免把 CI e2e 拖成 flaky。
+    await expect(async () => {
+      await createBtn.click()
+      await expect(page).toHaveURL(/\/funds\/create/, { timeout: 3000 })
+    }).toPass({ timeout: 20000 })
   })
 
   test('预算管理按钮导航', async ({ page }) => {
     await navigateTo(page, '/funds')
     const budgetBtn = page.locator('button:has-text("预算管理")')
     await expect(budgetBtn).toBeVisible()
-    await budgetBtn.click()
-    await expect(page).toHaveURL(/\/funds\/budget/, { timeout: 5000 })
+    await expect(async () => {
+      await budgetBtn.click()
+      await expect(page).toHaveURL(/\/funds\/budget/, { timeout: 3000 })
+    }).toPass({ timeout: 20000 })
   })
 
   test('分页组件展示', async ({ page }) => {

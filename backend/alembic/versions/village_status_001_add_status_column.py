@@ -19,9 +19,14 @@ depends_on = None
 
 
 def upgrade():
-    """Add status column to villages table（幂等：已存在则跳过）."""
+    """Add status column to villages table（幂等：已存在或表已删除则跳过）."""
     insp = sa.inspect(op.get_bind())
-    cols = {c["name"] for c in insp.get_columns("villages")} if insp.has_table("villages") else set()
+    # W22（v1.14.0）：villages 遗留表已删除（w22_household_media_consumption_001 drop），
+    # 空库初始化路径的 001 baseline create_all 不再创建该表。历史迁移必须幂等跳过，
+    # 否则全新安装的 alembic upgrade head 会在本步失败（CI upgrade-rehearsal 实测）。
+    if not insp.has_table("villages"):
+        return
+    cols = {c["name"] for c in insp.get_columns("villages")}
     if "status" not in cols:
         op.add_column(
             "villages",
@@ -39,5 +44,8 @@ def upgrade():
 
 def downgrade():
     """Remove status column from villages table."""
+    insp = sa.inspect(op.get_bind())
+    if not insp.has_table("villages"):
+        return
     with op.batch_alter_table("villages") as batch_op:
         batch_op.drop_column("status")

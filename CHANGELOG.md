@@ -5,6 +5,29 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.14.1] - 2026-10-18 — 修复空库迁移链 / E2E 折叠适配 / ARM64 构建加固
+
+### Fixed
+
+- **空库初始化迁移链（严重：全新安装 `alembic upgrade head` 必失败）**：v1.14.0 删除
+  `villages` 遗留表后，历史迁移在「空库 create_all 路径」上因表不存在而中断：
+  - `village_status_001` 的 `ALTER TABLE villages ADD COLUMN status`（旧守卫 bug：表不存在时
+    `cols` 为空仍会 add_column）；
+  - `pii_encrypt_001` 的 `SELECT ... FROM villagers` 存量回填。
+  两处迁移改为**表不存在则幂等跳过**（老库升级路径行为完全不变），空库
+  `upgrade → head` 已实测通过（此前 CI 的 `upgrade-rehearsal` 因此失败）。
+- **E2E 适配 7 板块默认折叠**：v1.14.0 起侧栏板块默认折叠，E2E 用例点击子菜单/断言子项前
+  需先展开。新增 `expandAllSections` / `expandSection` helper（写 `nav:expanded-sections`
+  契约后 reload），修复「待办事项功能」「权限包菜单可见性」用例；快捷导航用例
+  （新建项目 → /projects/create）重跑稳定通过。
+- **ARM64 构建 npm 网络重试加固**：`build-arm64.yml` 的 Build Frontend 步骤由裸
+  `npm ci` 改为 fetch 重试参数 + 最多 3 次重试（与 pr-checks/build-windows 同款）。
+  v1.14.0 的 ARM64 Electron DEB 即因 registry 抖动在本步骤 exit 1 被 skip。
+
+### Changed
+
+- E2E 辅助函数新增折叠展开工具；`dashboard.spec.ts` / `permission-packs.spec.ts` 适配新导航交互。
+
 ## [1.14.0] - 2026-10-18 — 功能大迭代（一户一档/影像库/消费帮扶/OCR/报表组合/导航折叠）
 
 ### Added
