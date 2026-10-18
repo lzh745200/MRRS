@@ -5,6 +5,7 @@
  */
 
 import { get, post, put, del } from '@/api/request'
+import { unwrapList } from '@/utils/unwrapList'
 import { getApprovalActionLabel, getEntityTypeLabel } from '@/config/enums'
 
 // ==================== 类型定义 ====================
@@ -240,11 +241,7 @@ export async function getPendingTasksWithTotal(params?: {
   limit?: number
 }): Promise<{ items: ApprovalTask[]; total: number }> {
   const response = await get<any>('/approval/tasks/pending', params)
-  const items = Array.isArray(response)
-    ? response
-    : response?.items ||
-      (Array.isArray(response?.data) ? response.data : response?.data?.items) ||
-      []
+  const items = unwrapList<ApprovalTask>(response).items
   return { items, total: Number(response?.total ?? items.length) || items.length }
 }
 

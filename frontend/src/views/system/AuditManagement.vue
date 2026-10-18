@@ -95,7 +95,7 @@
             </div>
           </div>
 
-          <el-table v-loading="loading" :data="auditLogs"  style="margin-top: 16px">
+          <el-table v-loading="loading" :data="auditLogs" style="margin-top: 16px">
             <el-table-column type="index" label="#" width="50" />
             <el-table-column label="时间" width="170">
               <template #default="{ row }">{{ fmtTime(row.timestamp) }}</template>
@@ -123,7 +123,7 @@
       <!-- 登录日志 -->
       <el-tab-pane label="登录日志" name="login">
         <el-card shadow="never">
-          <el-table :data="loginLogs" >
+          <el-table :data="loginLogs">
             <el-table-column type="index" label="#" width="50" />
             <el-table-column label="时间" width="170">
               <template #default="{ row }">{{ fmtTime(row.timestamp) }}</template>
@@ -152,7 +152,7 @@
       <!-- 安全告警 -->
       <el-tab-pane label="安全告警" name="alerts">
         <el-card shadow="never">
-          <el-table :data="alerts" >
+          <el-table :data="alerts">
             <el-table-column type="index" label="#" width="50" />
             <el-table-column label="时间" width="170">
               <template #default="{ row }">{{ fmtTime(row.timestamp) }}</template>

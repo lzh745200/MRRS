@@ -37,12 +37,7 @@
               </el-form>
 
               <!-- 机器码列表 -->
-              <el-table
-                v-loading="loading"
-                :data="machineCodeList"
-                border
-                style="width: 100%"
-              >
+              <el-table v-loading="loading" :data="machineCodeList" border style="width: 100%">
                 <el-table-column type="index" label="序号" width="60" />
                 <el-table-column prop="machine_code" label="机器码" min-width="200">
                   <template #default="{ row }">
@@ -213,6 +208,7 @@
 
 <script setup lang="ts">
 import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, reactive, onMounted, computed } from 'vue'
@@ -291,7 +287,7 @@ const fetchMachineCodeList = async () => {
     // 拦截器已将 data.data 字段展开到顶层，但 data 键保留以兼容旧代码
     const data = response as any
     if (data.data) {
-      machineCodeList.value = data.data.items
+      machineCodeList.value = unwrapList<MachineCodeRecord>(data).items
       pagination.total = data.data.total
     }
   } catch (error: any) {

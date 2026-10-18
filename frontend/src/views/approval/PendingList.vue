@@ -286,6 +286,7 @@
 
 <script setup lang="ts">
 import { DIALOG_SM, DIALOG_LG } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { buildApprovalTimeline } from '@/utils/approvalTimeline'
@@ -556,7 +557,7 @@ async function handleTransfer(task: any) {
   transferSearching.value = false
   try {
     const res: any = await listStaff({ page_size: 200 })
-    const users = Array.isArray(res) ? res : res?.items || res?.data?.items || []
+    const users = unwrapList(res).items
     // 排除当前审批人自己
     candidateUsers.value = (users as any[]).filter((u: any) => u.id !== task.current_approver_id)
   } catch {
@@ -574,7 +575,7 @@ async function searchTransferUsers(query: string) {
     const params: Record<string, unknown> = { page_size: 50 }
     if (query && query.trim()) params.keyword = query.trim()
     const res: any = await listStaff(params)
-    const users = Array.isArray(res) ? res : res?.items || res?.data?.items || []
+    const users = Array.isArray(res) ? res : unwrapList(res).items
     candidateUsers.value = (users as any[]).filter(
       (u: any) => u.id !== currentTask.value?.current_approver_id
     )

@@ -306,6 +306,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { DataAnalysis, Warning, Search } from '@element-plus/icons-vue'
@@ -536,7 +537,7 @@ async function runRecommendProjects() {
   try {
     const response = await recommendProjects(recommendVillageId.value, recommendLimit.value)
     const data = response?.data ?? response
-    const items = data?.data?.items || data?.items || data || []
+    const items = unwrapList(data).items
     recommendResults.value = Array.isArray(items) ? items : []
     showWhy('项目推荐', response)
     ElMessage.success('推荐完成')

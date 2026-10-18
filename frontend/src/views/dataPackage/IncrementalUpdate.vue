@@ -167,6 +167,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { ElMessage } from 'element-plus'
 import { get, post } from '@/api/request'
 import { DATA_TYPES, DATA_TYPE_LABELS } from '@/constants/dataTypes'
@@ -219,8 +220,7 @@ const fetchPackageList = async () => {
   try {
     const response: any = await get('/data-packages')
     // 后端裸返回 {items, total, ...}（拦截器已解包）
-    const items =
-      response?.items || response?.data?.items || (Array.isArray(response) ? response : [])
+    const items = unwrapList<PackageItem>(response).items
     packageList.value = items.filter((p: PackageItem) => p.type !== 'update')
     incrementalPackages.value = items.filter((p: PackageItem) => p.type === 'update')
   } catch {

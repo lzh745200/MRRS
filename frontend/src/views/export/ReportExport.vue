@@ -185,7 +185,7 @@
         </el-button>
       </div>
 
-      <el-table v-loading="loadingHistory" :data="exportHistory" >
+      <el-table v-loading="loadingHistory" :data="exportHistory">
         <el-table-column prop="report_type" label="报表类型" width="150">
           <template #default="{ row }">
             {{ getReportTypeName(row.export_type || row.report_type) }}

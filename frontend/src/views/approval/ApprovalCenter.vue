@@ -80,6 +80,7 @@ export function batchRejectValidator(v: string): true | string {
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post } from '@/api/request'
 import { getApprovalStatusLabel, getEntityTypeLabel } from '@/config/enums'
@@ -139,10 +140,8 @@ async function loadTasks() {
     }
     const res: any = await get(url, params)
     // get() 已解包：envelope 的 data 数组被提升为顶层 items，total 在顶层
-    const list = Array.isArray(res)
-      ? res
-      : res?.items || (Array.isArray(res?.data) ? res.data : res?.data?.items) || []
-    tasks.value = Array.isArray(list) ? list : []
+    const parsedTasks = unwrapList<ApprovalTask>(res).items
+    tasks.value = Array.isArray(parsedTasks) ? parsedTasks : []
     total.value = Number(res?.total ?? tasks.value.length) || tasks.value.length
   } catch (e: unknown) {
     ElMessage.error(e instanceof Error ? e.message : '加载审批任务失败')

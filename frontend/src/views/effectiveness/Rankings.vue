@@ -47,7 +47,7 @@
 
     <!-- 排名表格 -->
     <div v-else class="table-card">
-      <el-table :data="rankings" >
+      <el-table :data="rankings">
         <el-table-column label="排名" width="80" align="center">
           <template #default="scope">
             <span class="rank-badge" :class="rankClass(scope.row.rank)">

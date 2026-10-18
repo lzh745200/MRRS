@@ -67,6 +67,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { useRoute } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -119,9 +120,12 @@ const loadConflicts = async () => {
 
     const response = await getConflicts(parseInt(syncLogId))
     if (response.success) {
+      const unwrappedConflicts = unwrapList(response).items
       const conflictList = Array.isArray(response.data)
         ? response.data
-        : response.data?.items || response.data?.data || []
+        : unwrappedConflicts.length
+          ? unwrappedConflicts
+          : response.data?.data || []
       conflicts.value = conflictList.map((c: any) => ({
         ...c,
         remote_data: c.import_data ?? c.remote_data,

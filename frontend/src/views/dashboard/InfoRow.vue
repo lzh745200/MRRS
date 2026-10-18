@@ -47,6 +47,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { ElMessage } from 'element-plus'
 import { EditPen, Close } from '@element-plus/icons-vue'
 import { put, del, apiRequest } from '@/api/request'
@@ -101,7 +102,7 @@ async function loadActivities() {
       url: '/dashboard/recent-activities',
       params: { limit: 10 },
     })
-    const data = (res as any)?.data?.items || (res as any)?.items || []
+    const data = unwrapList(res as any).items
     activities.value = (Array.isArray(data) ? data : []).slice(0, 10)
   } catch (e) {
     logger.error('近期动态加载失败', e)

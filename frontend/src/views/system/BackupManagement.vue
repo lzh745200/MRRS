@@ -326,6 +326,7 @@
 
 <script setup lang="ts">
 import { DIALOG_SM } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -531,7 +532,7 @@ async function fetchBackupList() {
   try {
     const res = await get('/system/backup')
     const resData = res.data
-    backupList.value = resData?.data?.items ?? resData?.items ?? []
+    backupList.value = unwrapList(resData).items
   } catch {
     ElMessage.error('获取备份列表失败')
   }

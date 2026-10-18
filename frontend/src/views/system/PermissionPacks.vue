@@ -129,6 +129,7 @@
 
 <script setup lang="ts">
 import { DIALOG_MD } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -273,7 +274,7 @@ async function openBind(row: any) {
       url: '/users',
       params: { page: 1, page_size: 500 },
     })
-    const users = res?.items || res?.data?.items || res || []
+    const users = unwrapList(res).items
     // 仅普通用户/访客可绑定（管理员不受权限包限制）
     bindableUsers.value = (users as any[]).filter((u) => u.role === 'user' || u.role === 'viewer')
   } catch {

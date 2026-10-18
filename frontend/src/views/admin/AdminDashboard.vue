@@ -213,6 +213,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { logger } from '@/utils/logger'
 
 import { ref, computed, onMounted } from 'vue'
@@ -308,9 +309,7 @@ function errText(e: unknown, fallback: string): string {
 
 /** 从响应中取数组（兼容裸数组 / {items} / envelope 展开后的两种形态） */
 function pickItems(res: any): any[] {
-  if (Array.isArray(res)) return res
-  const items = res?.items ?? res?.data?.items
-  return Array.isArray(items) ? items : []
+  return unwrapList(res).items
 }
 
 /** 从响应中取 payload（envelope 展开后字段已在顶层；未展开时回落到 data） */

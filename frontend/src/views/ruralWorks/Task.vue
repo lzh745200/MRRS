@@ -599,6 +599,7 @@
 
 <script lang="ts" setup>
 import { DIALOG_LG, DIALOG_MD, DIALOG_SM } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -685,7 +686,7 @@ async function loadStaffFromApi() {
   try {
     const { get } = await import('@/api/request')
     const response = await get('/users/staff-list')
-    const users = response?.data?.items || response?.items || response || []
+    const users = unwrapList(response).items
     if (Array.isArray(users) && users.length > 0) {
       staff.value = users.map((u: any) => ({
         id: String(u.id),

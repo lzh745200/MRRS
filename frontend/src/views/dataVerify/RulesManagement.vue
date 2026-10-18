@@ -52,7 +52,7 @@
 
     <!-- 规则表格 -->
     <el-card class="table-card">
-      <el-table v-loading="loading" :data="rules"  border>
+      <el-table v-loading="loading" :data="rules" border>
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column
           prop="description"

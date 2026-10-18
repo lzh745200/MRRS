@@ -146,7 +146,7 @@
       </el-form>
 
       <!-- 表格 -->
-      <el-table v-loading="tableLoading" :data="tableData"  border>
+      <el-table v-loading="tableLoading" :data="tableData" border>
         <el-table-column prop="id" label="ID" width="70" align="center" />
         <el-table-column prop="createdAt" label="时间" width="170">
           <template #default="{ row }">
@@ -278,6 +278,7 @@
 
 <script setup lang="ts">
 import { DIALOG_MD } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, View, Warning } from '@element-plus/icons-vue'
@@ -339,7 +340,7 @@ async function loadTableData() {
 
     const res = await errorReportApi.listReports(params)
     if (res.success && res.data) {
-      tableData.value = res.data.items || []
+      tableData.value = unwrapList<ErrorReport>(res).items
       tableTotal.value = res.data.total || 0
     }
   } catch (e: any) {

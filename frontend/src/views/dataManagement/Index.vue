@@ -69,6 +69,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { unwrapList } from '@/utils/unwrapList'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { ref, onMounted, defineAsyncComponent } from 'vue'
@@ -120,7 +121,7 @@ async function loadStats() {
       // 注意: /import/history 与 /audit/exports 的 page_size 上限为 100，
       // 传 200 会触发 422 导致统计恒为 0
       const hist: any = await get('/import/history', { page: 1, page_size: 100 })
-      const items = hist?.items || hist?.data?.items || (Array.isArray(hist?.data) ? hist.data : [])
+      const items = unwrapList(hist).items
       monthlyImports = (Array.isArray(items) ? items : []).filter((r: any) =>
         String(r.createdAt || r.created_at || '').startsWith(monthPrefix)
       ).length
@@ -129,7 +130,7 @@ async function loadStats() {
     }
     try {
       const exp: any = await get('/system/audit/exports', { page: 1, page_size: 100 })
-      const items = exp?.items || exp?.data?.items || (Array.isArray(exp?.data) ? exp.data : [])
+      const items = unwrapList(exp).items
       monthlyExports = (Array.isArray(items) ? items : []).filter((r: any) =>
         String(r.createdAt || r.created_at || '').startsWith(monthPrefix)
       ).length
@@ -138,7 +139,7 @@ async function loadStats() {
     }
     try {
       const bk: any = await get('/system/backup', { page: 1, page_size: 1000 })
-      const items = bk?.items || bk?.data?.items || (Array.isArray(bk?.data) ? bk.data : [])
+      const items = unwrapList(bk).items
       backupCount = Array.isArray(items) ? items.length : Number(bk?.total ?? 0) || 0
     } catch {
       /* 统计失败保持 0 */
@@ -156,7 +157,7 @@ async function loadStats() {
       url: '/supported-villages',
       params: { page: 1, page_size: 200 },
     })
-    const villages = villageRes.data?.items || []
+    const villages = unwrapList(villageRes).items
     const totalRecords = villages.length
     const validRecords = villages.filter(
       (v: any) => v.department && v.village_name && v.county

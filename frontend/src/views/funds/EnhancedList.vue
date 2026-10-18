@@ -455,6 +455,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { unwrapList } from '@/utils/unwrapList'
 import PageHeader from '@/components/common/PageHeader.vue'
 import MoneyText from '@/components/common/MoneyText.vue'
 import { useFilterMemory } from '@/composables/useFilterMemory'
@@ -706,8 +707,7 @@ async function fetchData() {
     })
     // 防御：apiRequest 已解包；信封保留 data 键，裸数据直接使用
     const resData = (response as any)?.data ?? response
-    tableData.value =
-      resData?.items || resData?.data?.items || (Array.isArray(resData) ? resData : [])
+    tableData.value = unwrapList(resData).items
     total.value = resData?.total || resData?.data?.total || tableData.value.length
   } catch (e) {
     error.value = true
@@ -920,7 +920,7 @@ async function loadVillageOptions() {
   try {
     const res = await getSupportedVillages({ page: 1, page_size: 200 })
     const body: any = res.data || res
-    const items = body?.items || body?.data?.items || (Array.isArray(body) ? body : [])
+    const items = unwrapList(body).items
     villageOptions.value = items.map((v: any) => ({
       id: v.id,
       name: v.village_name || v.name || `村${v.id}`,
@@ -934,7 +934,7 @@ async function loadSchoolOptions() {
   try {
     const res = await schoolsApi.list({ page: 1, page_size: 200 })
     const body: any = res.data || res
-    const items = body?.items || body?.data?.items || (Array.isArray(body) ? body : [])
+    const items = unwrapList(body).items
     schoolOptions.value = items.map((s: any) => ({
       id: s.id,
       name: s.school_name || s.name || `学校${s.id}`,

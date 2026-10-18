@@ -204,6 +204,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, ArrowLeft } from '@element-plus/icons-vue'
@@ -295,7 +296,7 @@ async function loadArticles() {
     }
     if (activeCategory.value) params.category = activeCategory.value
     const res = await helpApi.getArticles(params)
-    articles.value = res.data?.items || []
+    articles.value = unwrapList<HelpArticleSummary>(res).items
     articlesTotal.value = res.data?.total || 0
   } catch {
     ElMessage.error('加载文档列表失败')
@@ -338,7 +339,7 @@ async function doSearch() {
   searching.value = true
   try {
     const res = await helpApi.search(q, 20)
-    searchResults.value = res.data?.items || []
+    searchResults.value = unwrapList<HelpSearchResult>(res).items
     searchTotal.value = res.data?.total || 0
   } catch {
     ElMessage.error('搜索失败')

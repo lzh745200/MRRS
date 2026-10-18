@@ -210,7 +210,7 @@
           <el-icon><Close /></el-icon>
         </el-button>
       </div>
-      <el-table  :data="drillDownData.items" border max-height="300">
+      <el-table :data="drillDownData.items" border max-height="300">
         <el-table-column prop="name" label="名称" />
         <el-table-column prop="value" label="数量" width="100" align="right" />
         <el-table-column prop="totalPopulation" label="人口" width="100" align="right" />
@@ -226,7 +226,12 @@ import { format } from '@/utils'
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { Download, OfficeBuilding, User, Money, TrendCharts, Close } from '@element-plus/icons-vue'
 import echarts from '@/utils/echarts'
-import { getCurrentTheme, COLOR_PALETTE, MILITARY_BLUE, REVITALIZATION_GREEN } from '@/utils/echarts-theme'
+import {
+  getCurrentTheme,
+  COLOR_PALETTE,
+  MILITARY_BLUE,
+  REVITALIZATION_GREEN,
+} from '@/utils/echarts-theme'
 import SystemStatus from '@/components/business/SystemStatus.vue'
 import { getSummaryStatistics, getFilterOptions, drillDown } from '@/api/analytics'
 import { getDashboardStats, getYearlyTrends } from '@/api/dashboard'

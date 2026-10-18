@@ -586,6 +586,7 @@
 
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
+import { unwrapList } from '@/utils/unwrapList'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
@@ -654,7 +655,7 @@ const villages = ref<{ id: number | string; name: string; county?: string }[]>([
 async function loadVillageOptions() {
   try {
     const res = await get('/supported-villages/options/dropdown')
-    const items = res.data?.items || []
+    const items = unwrapList(res).items
     villages.value = items.map((v: any) => ({
       id: v.id,
       name: v.county ? `${v.name}（${v.county}）` : v.name,

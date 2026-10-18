@@ -313,6 +313,7 @@
 
 <script setup lang="ts">
 import { DIALOG_MD } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import { logger } from '@/utils/logger'
 
 import { ref, reactive, computed, onMounted } from 'vue'
@@ -464,8 +465,7 @@ async function fetchData() {
     })
     // 防御：apiRequest 已解包；信封保留 data 键，裸数据直接使用
     const resData = (response as any)?.data ?? response
-    tableData.value =
-      resData?.items || resData?.data?.items || (Array.isArray(resData) ? resData : [])
+    tableData.value = unwrapList(resData).items
     total.value = resData?.total || resData?.data?.total || tableData.value.length
   } catch (e) {
     logger.error('加载数据失败:', e)
@@ -578,7 +578,7 @@ async function loadVillageOptions() {
   try {
     const res = await getSupportedVillages({ page: 1, page_size: 200 })
     const body: any = res.data || res
-    const items = body?.items || body?.data?.items || (Array.isArray(body) ? body : [])
+    const items = unwrapList(body).items
     villageOptions.value = items
   } catch {
     /* 非关键路径，静默失败 */
@@ -592,7 +592,7 @@ async function loadSchoolOptions() {
   try {
     const res = await schoolsApi.list({ page: 1, page_size: 200 })
     const body: any = res.data || res
-    const items = body?.items || body?.data?.items || (Array.isArray(body) ? body : [])
+    const items = unwrapList(body).items
     schoolOptions.value = items
   } catch {
     /* 非关键路径，静默失败 */

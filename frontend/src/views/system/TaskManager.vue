@@ -112,7 +112,7 @@
         </div>
       </template>
 
-      <el-table v-loading="loading" :data="taskList"  style="width: 100%">
+      <el-table v-loading="loading" :data="taskList" style="width: 100%">
         <el-table-column prop="task_id" label="任务ID" width="140">
           <template #default="{ row }">
             <el-tooltip :content="row.task_id" placement="top">
@@ -266,6 +266,7 @@
 
 <script setup lang="ts">
 import { DIALOG_SM } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, VideoPause, Delete, Plus, Search } from '@element-plus/icons-vue'
@@ -386,7 +387,7 @@ async function fetchTaskList(showLoading = true) {
     }
     const res = await tasksApi.listTasks(params)
     if (res?.success) {
-      taskList.value = res.data?.items || []
+      taskList.value = unwrapList<TaskInfo>(res).items
       total.value = res.data?.total || 0
     }
   } catch {

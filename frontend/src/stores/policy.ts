@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref } from 'vue'
 import { get, post, put, del } from '@/api/request'
 import { logger } from '@/utils/logger'
@@ -36,7 +37,7 @@ export const usePolicyStore = defineStore('policy', () => {
       if (seq !== _listSeq) return // 已被更新的请求取代，丢弃过期响应
       if (res.code === 200 && res.data) {
         // 兼容三种响应形状：旧 bare data=[...] / 新信封 data={items,total} / 拦截器展开 items
-        const items = Array.isArray(res.data) ? res.data : res.items || res.data?.items || []
+        const items = unwrapList(res).items
         policyList.value = items
         total.value = res.total ?? items.length
       }

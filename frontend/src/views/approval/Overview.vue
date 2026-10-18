@@ -103,6 +103,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getOverview, getPendingTasks, batchApprove } from '@/api/approval'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -147,7 +148,7 @@ async function loadPending() {
   loading.value = true
   try {
     const res: any = await getPendingTasks({ limit: 10 })
-    pendingTasks.value = Array.isArray(res) ? res : res?.items || res?.data?.items || []
+    pendingTasks.value = unwrapList(res).items
   } catch {
     pendingTasks.value = []
   } finally {

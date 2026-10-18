@@ -29,7 +29,7 @@
         </div>
       </template>
 
-      <el-table v-loading="loading" :data="tableData"  border>
+      <el-table v-loading="loading" :data="tableData" border>
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="type" label="类型" width="100" align="center">
           <template #default="{ row }">
@@ -83,6 +83,7 @@
 
 <script setup lang="ts">
 import { DIALOG_MD } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { apiRequest } from '@/api/request'
@@ -123,7 +124,7 @@ async function loadData() {
       },
     })
     if (data?.data) {
-      tableData.value = data.data.items || []
+      tableData.value = unwrapList(data).items
       pagination.total = data.data.total || 0
     }
   } catch (e: any) {

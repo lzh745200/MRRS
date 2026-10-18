@@ -59,6 +59,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { unwrapList } from '@/utils/unwrapList'
 import BaseChart from '@/components/common/BaseChart.vue'
 import { get } from '@/api/request'
 
@@ -158,7 +159,7 @@ onMounted(async () => {
     )
     // 后端 ok_list 信封 → 拦截器把 items 提升到顶层，res.data 是 {items,total} 对象
     const payload: any = res
-    const list = Array.isArray(res?.data) ? res.data : payload?.items || payload?.data?.items || []
+    const list = Array.isArray(res?.data) ? res.data : unwrapList<Village>(payload).items
     tableData.value = list
   } catch {
     /* silent */

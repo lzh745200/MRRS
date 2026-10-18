@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref } from 'vue'
 import { get, post, put, del } from '@/api/request'
 import type { ApiResponse } from '@/types/api'
@@ -32,11 +33,7 @@ export const useUserStore = defineStore('user', () => {
     try {
       const res = await get<any>('/users', params)
       // 后端 GET /users 返回裸格式 {total, page, page_size, items}（无 envelope）
-      const items = Array.isArray(res?.items)
-        ? res.items
-        : Array.isArray(res?.data?.items)
-          ? res.data.items
-          : []
+      const items = Array.isArray(res?.items) ? res.items : unwrapList(res).items
       const totalCount =
         typeof res?.total === 'number'
           ? res.total

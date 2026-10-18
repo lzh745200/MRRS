@@ -191,6 +191,7 @@
 
 <script setup lang="ts">
 import { DIALOG_SM, DIALOG_MD } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
@@ -355,7 +356,9 @@ async function handleDeleteContract(id: number) {
 async function reloadContractAttachments() {
   try {
     const res: any = await fundLifecycleApi.listContractAttachments(currentContractId.value)
-    attachmentList.value = (res?.items ?? res?.data?.items ?? []).map((a: any) => ({
+    // 历史口径：裸数组形态按空列表处理（该端点只返回 items/envelope 形态）
+    const rawItems = Array.isArray(res) ? [] : (res?.items ?? unwrapList(res).items)
+    attachmentList.value = rawItems.map((a: any) => ({
       ...a,
       file_size: a.file_size ?? a.fileSize ?? '',
     }))

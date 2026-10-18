@@ -193,6 +193,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
 import { ArrowLeft, Edit, Calendar, Download } from '@element-plus/icons-vue'
@@ -212,16 +213,14 @@ async function openChangeHistory() {
   changeHistoryLoading.value = true
   try {
     const res: any = await getChangeHistory(safeRouteParam(route.params.id))
-    const items = res?.items || res?.data?.items || res || []
+    const items = unwrapList(res).items
     // 后端结构 {timestamp, username, action, changes[]} → 弹窗结构 {time, action, user}
-    changeHistory.value = Array.isArray(items)
-      ? items.map((item: any) => ({
-          time: item.timestamp || item.time || '',
-          action: item.action || 'update',
-          user: item.username || item.user || '未知用户',
-          changes: Array.isArray(item?.changes) ? item.changes : [],
-        }))
-      : []
+    changeHistory.value = items.map((item: any) => ({
+      time: item.timestamp || item.time || '',
+      action: item.action || 'update',
+      user: item.username || item.user || '未知用户',
+      changes: Array.isArray(item?.changes) ? item.changes : [],
+    }))
   } catch {
     ElMessage.error('加载变更历史失败')
   } finally {

@@ -25,6 +25,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import echarts from '@/utils/echarts'
 import { get, apiRequest } from '@/api/request'
@@ -58,7 +59,10 @@ async function loadData() {
       apiRequest({ method: 'GET', url: '/projects', params: { page_size: 5 } }),
       get('/dashboard/stats', { refresh: true }),
     ])
-    projects.value = projRes?.data?.items || projRes?.data?.data || projRes?.items || []
+    const unwrappedProjects = unwrapList(projRes).items
+    projects.value = unwrappedProjects.length
+      ? unwrappedProjects
+      : projRes?.data?.data || projRes?.items || []
     // get() 已解包响应，fundRes 直接是数据对象
     funds.value = {
       // 必须用 ?? 而非 ||：funds_allocated 合法为 0（全部未拨付）时，

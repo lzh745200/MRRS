@@ -333,6 +333,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -362,7 +363,7 @@ const selectedProjectId = ref<number | null>(null)
 async function loadProjectOptions() {
   try {
     const res: any = await projectsApi.list({ page: 1, page_size: 100 })
-    const list = res?.items ?? res?.data?.items ?? (Array.isArray(res) ? res : [])
+    const list = unwrapList(res).items
     projectOptions.value = Array.isArray(list) ? list : []
   } catch {
     projectOptions.value = []

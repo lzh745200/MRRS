@@ -5,6 +5,25 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.12.24] - 2026-10-18 — 🧹 W5-T5 解包口径收口 + 分支门禁确定性
+
+> 前端全量：**316 文件 / 6,685 用例**，`src/**` 12 组 glob 四指标 100%；后端全量 13,505 用例，行+分支 100%。
+
+### Fixed
+
+- **前端 50 处 `no-restricted-syntax` 违规（`.data.items` 手写解包）全部收敛到 `@/utils/unwrapList`**：
+  涵盖列表/详情/仪表盘/导出等 40 个文件；顺手修正 3 处「空数组 truthy 短路」语义缺陷
+  （ChartRow 的 `data.data` 嵌套、ConflictResolution 的 `data.data`、ContractManage 的数组形态兜底），
+  并补齐 `unwrapList<T>` 泛型使 vue-tsc 严格模式通过。此前 `npm run lint:check` 失败导致 PR Checks 红。
+- **版本兜底同步补漏**：`frontend/src/config/constants.ts` 的 `SYSTEM_VERSION` 硬编码兜底随单源同步更新，
+  修复 `constants.test.ts` 两例版本回落断言失败。
+
+### Added
+
+- **`backend/tests/unit/test_branch_closure_r22.py`（21 项）**：为 23 个历史错误/边界分支补真实行为回归
+  （help 片段边界、批量表白名单、cache None 哨兵、村附件扩展名、增量检测模型回退、管控包配置类型、
+  数据包友好错误、加密包与备份恢复清理路径、相对 LOG_FILE、凭证无项目、预览 50 行截断、政策导入非 dict、
+  注册认领竞争），使分支门禁不依赖测试执行顺序或未提交测试。
 ## [1.12.23] - 2026-10-18 — 汇报大屏对象筛选（村/校/单位）+ 在途批次收口
 
 ### Added

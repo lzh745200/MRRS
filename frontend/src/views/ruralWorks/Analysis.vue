@@ -240,7 +240,7 @@
           <el-option label="按投入资金排序" value="investment" />
         </el-select>
       </div>
-      <el-table v-loading="loading" :data="sortedAnalysisData" border  style="width: 100%">
+      <el-table v-loading="loading" :data="sortedAnalysisData" border style="width: 100%">
         <el-table-column prop="workName" label="工作名称" min-width="200" />
         <el-table-column prop="village" label="所属村庄" width="120" />
         <el-table-column prop="type" label="工作类型" width="120">

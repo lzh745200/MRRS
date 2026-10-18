@@ -50,7 +50,7 @@
         <!-- 评估因子 -->
         <div class="factors-section">
           <h4>评估因子</h4>
-          <el-table  :data="assessment.factors" border style="width: 100%">
+          <el-table :data="assessment.factors" border style="width: 100%">
             <el-table-column prop="factor" label="因子" min-width="140" />
             <el-table-column prop="score" label="评分" width="80" align="center">
               <template #default="{ row }">
@@ -369,7 +369,7 @@
         </el-select>
       </div>
 
-      <el-table v-loading="loadingEvents"  :data="events" border style="width: 100%">
+      <el-table v-loading="loadingEvents" :data="events" border style="width: 100%">
         <el-table-column
           prop="timestamp"
           label="时间"
@@ -410,6 +410,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { format } from '@/utils'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -664,7 +665,7 @@ async function loadEvents() {
     }
     const res = await zeroTrustApi.listEvents(params)
     if (res.success && res.data) {
-      events.value = res.data.items || []
+      events.value = unwrapList<SecurityEvent>(res).items
       eventTotal.value = res.data.total || 0
     } else {
       events.value = []

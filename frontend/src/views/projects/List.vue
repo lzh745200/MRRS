@@ -267,6 +267,7 @@
 
 <script setup lang="ts">
 import PageHeader from '@/components/common/PageHeader.vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { useFilterMemory } from '@/composables/useFilterMemory'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
@@ -422,7 +423,7 @@ const loadData = async () => {
     }
     const res = await projectApi.list(params)
     // 防御：兼容信封（data.items）与裸分页（items）两种形态
-    projectList.value = (res as any)?.data?.items ?? (res as any)?.items ?? []
+    projectList.value = unwrapList<Project>(res as any).items
     pagination.total = (res as any)?.data?.total ?? (res as any)?.total ?? 0
   } catch (e) {
     logger.error('[Projects] loadData failed:', e)

@@ -378,6 +378,7 @@
 
 <script setup lang="ts">
 import { DIALOG_SM, DIALOG_LG } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 
@@ -581,7 +582,7 @@ async function loadReceived() {
       page: receivedPagination.page,
       page_size: receivedPagination.pageSize,
     })
-    const items = res?.items || res?.data?.items || []
+    const items = unwrapList(res).items
     receivedItems.value = items.map((it: any) => ({
       ...it,
       _vs: parseValidationSummary(it.validation_summary),

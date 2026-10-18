@@ -164,6 +164,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage } from 'element-plus'
@@ -288,7 +289,7 @@ const loadImportHistory = async () => {
   try {
     const response: any = await getSyncLogs({ action: 'import', page: 1, page_size: 20 })
     // 兼容信封 items / 裸数组
-    const list = Array.isArray(response) ? response : response?.items || response?.data?.items || []
+    const list = unwrapList(response).items
     importHistory.value = Array.isArray(list) ? list : []
   } catch (error) {
     logger.error('加载导入历史失败', error)

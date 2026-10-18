@@ -78,7 +78,7 @@
         <el-card v-loading="historyLoading" class="handover-card">
           <EmptyState v-if="historyItems.length === 0" description="暂无移交记录" />
           <template v-else>
-            <el-table :data="historyItems" >
+            <el-table :data="historyItems">
               <el-table-column prop="record_no" label="交接单号" min-width="200" />
               <el-table-column label="交接双方" min-width="180">
                 <template #default="{ row }">
@@ -118,7 +118,7 @@
           <span>移交时间：{{ receipt.created_at }}</span>
         </div>
         <div v-if="receipt.note" class="receipt-note">备注：{{ receipt.note }}</div>
-        <el-table :data="receipt.items" >
+        <el-table :data="receipt.items">
           <el-table-column label="资产类型" width="120">
             <template #default="{ row }">{{ assetTypeLabel(row.type) }}</template>
           </el-table-column>

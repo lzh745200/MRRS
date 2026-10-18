@@ -176,6 +176,7 @@
 
 <script setup lang="ts">
 import { DIALOG_SM } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, type FormInstance } from 'element-plus'
@@ -230,7 +231,7 @@ const selectedProjectId = ref<number | null>(null)
 async function loadProjectOptions() {
   try {
     const res: any = await projectsApi.list({ page: 1, page_size: 100 })
-    const list = res?.items ?? res?.data?.items ?? (Array.isArray(res) ? res : [])
+    const list = unwrapList(res).items
     projectOptions.value = Array.isArray(list) ? list : []
   } catch {
     projectOptions.value = []

@@ -58,7 +58,7 @@
         <p>生成时间：{{ currentTime }}</p>
       </div>
 
-      <el-table :data="reportData"  border show-summary>
+      <el-table :data="reportData" border show-summary>
         <el-table-column prop="date" label="日期" width="120" />
         <el-table-column prop="projectName" label="项目名称" min-width="180" />
         <el-table-column prop="fundType" label="经费类型" width="100" align="center">

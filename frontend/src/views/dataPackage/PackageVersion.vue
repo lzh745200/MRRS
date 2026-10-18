@@ -213,6 +213,7 @@
 
 <script setup lang="ts">
 import { DIALOG_SM, DIALOG_LG } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
@@ -243,7 +244,7 @@ const handlePackageSelected = (id: string | number) => {
 const fetchSelectablePackages = async () => {
   try {
     const res: any = await get('/data-packages')
-    const items = res?.items || res?.data?.items || []
+    const items = unwrapList<PackageOption>(res).items
     selectablePackages.value = Array.isArray(items) ? items : []
     if (!packageId.value && selectablePackages.value.length === 1) {
       handlePackageSelected(selectablePackages.value[0].id)

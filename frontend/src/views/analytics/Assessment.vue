@@ -51,7 +51,7 @@
       <!-- 明细表 -->
       <el-card style="margin-top: 16px">
         <template #header>评估指标明细</template>
-        <el-table v-loading="loading" :data="scores" border >
+        <el-table v-loading="loading" :data="scores" border>
           <el-table-column prop="rank" label="排名" width="70" />
           <el-table-column prop="village_name" label="帮扶村" min-width="140" />
           <el-table-column prop="support_unit" label="帮扶单位" min-width="140" />
@@ -81,6 +81,7 @@
 
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, computed, onMounted } from 'vue'
 import BaseChart from '@/components/common/BaseChart.vue'
 import { get } from '@/api/request'
@@ -193,8 +194,8 @@ onMounted(async () => {
         weights: Record<string, number>
       }
     }>('/assessment/village-scores')
-    if (res.code === 200 && res.data?.items) {
-      scores.value = res.data.items
+    if (res.code === 200 && unwrapList(res).items) {
+      scores.value = unwrapList<VillageScoreItem>(res).items
     }
   } catch (e: any) {
     error.value = e?.response?.data?.message || e?.message || '获取评估数据失败'

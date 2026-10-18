@@ -11,7 +11,7 @@
         </div>
       </template>
 
-      <el-table v-loading="loading" :data="instances" >
+      <el-table v-loading="loading" :data="instances">
         <el-table-column
           prop="instanceCode"
           label="实例标识"

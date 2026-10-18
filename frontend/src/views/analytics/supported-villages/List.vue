@@ -274,6 +274,7 @@
 
 <script setup lang="ts">
 import PageHeader from '@/components/common/PageHeader.vue'
+import { unwrapList } from '@/utils/unwrapList'
 import { useFilterMemory } from '@/composables/useFilterMemory'
 import { DIALOG_LG } from '@/config/dialog'
 import { logger } from '@/utils/logger'
@@ -457,7 +458,7 @@ async function loadData() {
       with_summary: true,
     } as any)
     // 防御：兼容信封（data.items）与裸分页（items）两种形态
-    tableData.value = (response as any)?.data?.items ?? (response as any)?.items ?? []
+    tableData.value = unwrapList<SupportedVillage>(response as any).items
     pagination.total =
       (response as any)?.data?.total ?? (response as any)?.total ?? tableData.value.length
     serverSummary.value = (response as any)?.data?.summary ?? (response as any)?.summary ?? null

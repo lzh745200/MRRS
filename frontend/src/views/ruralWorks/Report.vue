@@ -50,7 +50,7 @@
 
       <el-card class="table-card">
         <template #header><span>工作明细</span></template>
-        <el-table :data="items"  border max-height="500">
+        <el-table :data="items" border max-height="500">
           <el-table-column type="index" label="序号" width="60" />
           <el-table-column prop="title" label="工作标题" min-width="180" show-overflow-tooltip />
           <el-table-column prop="type" label="类型" width="100" />

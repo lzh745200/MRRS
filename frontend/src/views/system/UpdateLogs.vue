@@ -105,6 +105,7 @@
 
 <script setup lang="ts">
 import { DIALOG_SM } from '@/config/dialog'
+import { unwrapList } from '@/utils/unwrapList'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -134,7 +135,7 @@ async function loadLogs() {
       page_size: pageSize,
     })
     if (result.success && result.data) {
-      logs.value = result.data.items || []
+      logs.value = unwrapList<UpdateLog>(result).items
       total.value = result.data.total || 0
     }
   } catch {
