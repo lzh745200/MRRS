@@ -5,6 +5,18 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.13.4] - 2026-10-18 — 修复 ARM64 后端产物主程序文件名（Electron DEB 最后一项阻断）
+
+### Fixed
+
+- **ARM64 Electron DEB 仍失败（v1.13.3 注解为「缺后端主程序」）**：`backend-output` 阶段 COPY 源路径
+  修正后目录已正确导出，但 PyInstaller Linux spec 的 `EXE/COLLECT name` 为
+  `assistance-management-backend`，导出目录内主程序仍是该名；Electron Linux 主进程与 workflow
+  均按 `resources/backend/assistance-backend/assistance-backend` 启动/断言，因此判失败。
+  `scratch` 阶段无法 `RUN`，改为基于 `debian:buster-slim`（deb-package 阶段已拉取、缓存命中）
+  在导出前重命名主程序并 `chmod +x`，导出树统一为
+  `backend/dist/assistance-backend/assistance-backend`。
+
 ## [1.13.3] - 2026-10-18 — 自包含冒烟步骤诊断增强（动态端口 + stdout/stderr 落盘）
 
 ### Fixed
