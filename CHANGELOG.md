@@ -5,6 +5,17 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.13.2] - 2026-10-18 — 修复发布门禁依赖安装遗漏
+
+### Fixed
+
+- **v1.13.1 的 smoke-test 重构遗漏依赖安装步骤**：`Backend release smoke subset` 直接执行
+  `python -m pytest`，但 runner 上只装了 Python 解释器，未安装 `backend/requirements*.txt`，
+  导致步骤秒失败（`No module named pytest`）、`build-windows` 被 `needs: smoke-test` 阻断。
+  已在 setup 与子集测试之间补回 `pip install -r backend/requirements.txt -r backend/requirements-dev.txt`，
+  并本地用 PyYAML 校验 workflow 步骤序列（checkout → setup → main 门禁 → 依赖安装 → 后端子集 →
+  前端子集 → 日志 artifact）。
+
 ## [1.13.1] - 2026-10-18 — 修复 GitHub 发布构建失败 + 安装包自包含验证
 
 ### Fixed

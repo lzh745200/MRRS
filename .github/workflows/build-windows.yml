@@ -63,6 +63,13 @@ jobs:
               print('::error::main 分支最近一次 PR Checks 未通过 —— 禁止发布构建，请先在 main 修复门禁')
               sys.exit(1)
           "
+
+      # 依赖安装（子集测试需要后端运行时/测试依赖；v1.13.2 修复：v1.13.1 重构时
+      # 误删了本步骤，导致 `python -m pytest` 秒失败 No module named pytest）
+      - name: Install backend dependencies
+        shell: bash
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
       # ② 后端 Windows 敏感子集（覆盖路径口径、备份对齐、数据同步路由、菜单单一源、
       #    帮扶村 API 契约、打包卫生门禁），约 1-2 分钟。
       - name: Backend release smoke subset
