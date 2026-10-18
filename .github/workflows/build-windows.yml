@@ -311,11 +311,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 10.2 安装产物自包含冒烟（v1.13.1，用户要求「任何电脑都能按使用」）：
+      # 10.2 安装产物自包含冒烟（v1.13.1 引入；v1.13.3 增加诊断输出与动态端口）：
       #      直接运行 electron-builder 解包后的打包后端 exe（onedir），按 Electron 运行期
       #      注入的数据目录 env 启动，验证「解包即用、不依赖系统 Python / 预装依赖 / 额外运行库」。
       #      runner 上虽然装了 Python，但该 exe 是 PyInstaller 冻结产物，加载的是同目录
-      #      _internal 下的解释器与 DLL；同时断言运行库与前端/瓦片资源都在包内。
+      #      _internal 下的解释器与 DLL；同时断言运行库与前端资源都在包内。
+      #      v1.13.3：固定 8123 端口在 runner 上可能被占用 → 18123 起自动挑选空闲端口；
+      #      后端 stdout/stderr 重定向落盘，失败时打印尾部并上传 artifact（否则只能看到 exit 1）。
       - name: Smoke test packaged backend (self-contained)
         shell: pwsh
         run: |
@@ -336,36 +338,72 @@ jobs:
             if (-not (Test-Path $p)) { throw "安装包缺少自包含运行时组件: $p" }
           }
           Write-Host "自包含组件检查通过（解释器/DLL/alembic/前端/VC++ 运行库均在包内）"
+
+          $port = 0
+          foreach ($candidate in 18123..18140) {
+            $inUse = Get-NetTCPConnection -LocalPort $candidate -State Listen -ErrorAction SilentlyContinue
+            if (-not $inUse) { $port = $candidate; break }
+          }
+          if ($port -eq 0) { throw "18123-18140 端口均被占用，无法启动冒烟后端" }
+          Write-Host "冒烟端口: $port"
+
           $data = Join-Path $env:RUNNER_TEMP "packaged-smoke-data"
           New-Item -ItemType Directory -Force -Path $data | Out-Null
-          $dbUrl = "sqlite:///" + (($data -replace '\\', '/') + "/smoke.db")
-          $env:DATABASE_URL = $dbUrl
-          $env:LOG_FILE = Join-Path $data "app.log"
+          $env:DATABASE_URL = "sqlite:///" + (($data -replace '\\', '/') + "/smoke.db")
+          $appLog = Join-Path $data "app.log"
+          $env:LOG_FILE = $appLog
           $env:UPLOAD_DIR = Join-Path $data "uploads"
           $env:EXPORT_DIR = Join-Path $data "exports"
           $env:CACHE_DIR = Join-Path $data "cache"
           $env:HOST = "127.0.0.1"
-          $env:PORT = "8123"
-          $proc = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru -WindowStyle Hidden
+          $env:PORT = "$port"
+          $stdout = Join-Path $data "backend-stdout.log"
+          $stderr = Join-Path $data "backend-stderr.log"
+          $proc = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru `
+            -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          $healthy = $false
+          $earlyExit = $false
           try {
-            $ok = $false
-            for ($i = 0; $i -lt 40; $i++) {
+            for ($i = 0; $i -lt 60; $i++) {
               Start-Sleep -Seconds 3
+              if ($proc.HasExited) { $earlyExit = $true; break }
               try {
-                $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8123/health' -UseBasicParsing -TimeoutSec 5
-                $ok = $true; break
+                $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/health" -UseBasicParsing -TimeoutSec 5
+                $healthy = $true; break
               } catch {}
             }
-            if (-not $ok) { throw "打包后端在干净环境未通过 /health（40 次轮询失败）" }
-            $health = $r.Content | ConvertFrom-Json
-            if ($health.status -ne 'ok') { throw "health.status=$($health.status)" }
-            if (-not $health.version) { throw "health 缺少 version" }
-            if (-not $health.git_hash) { throw "health 缺少 git_hash" }
-            if ($health.migration.at_head -ne $true) { throw "数据库未迁移到 head: $($health.migration | ConvertTo-Json -Compress)" }
-            Write-Host "打包后端自包含冒烟通过: version=$($health.version) git_hash=$($health.git_hash) migration_head=$($health.migration.head)"
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
           }
+          Write-Host "===== 打包后端 stdout（尾部）====="
+          if (Test-Path $stdout) { Get-Content $stdout -Tail 40 }
+          Write-Host "===== 打包后端 stderr（尾部）====="
+          if (Test-Path $stderr) { Get-Content $stderr -Tail 60 }
+          Write-Host "===== app.log（尾部）====="
+          if (Test-Path $appLog) { Get-Content $appLog -Tail 80 }
+          if ($earlyExit) {
+            Write-Host "::error::打包后端进程提前退出 exit_code=$($proc.ExitCode)（stderr/app.log 见上方步骤日志与 packaged-backend-smoke-logs artifact）"
+            throw "打包后端进程提前退出（exit_code=$($proc.ExitCode)），见上方日志"
+          }
+          if (-not $healthy) {
+            Write-Host "::error::打包后端未在 180 秒内通过 /health（端口 $port），见上方步骤日志与 artifact"
+            throw "打包后端未在 180 秒内通过 /health（端口 $port）"
+          }
+          $health = $r.Content | ConvertFrom-Json
+          if ($health.status -ne 'ok') { throw "health.status=$($health.status)" }
+          if (-not $health.version) { throw "health 缺少 version" }
+          if (-not $health.git_hash) { throw "health 缺少 git_hash" }
+          if ($health.migration.at_head -ne $true) { throw "数据库未迁移到 head: $($health.migration | ConvertTo-Json -Compress)" }
+          Write-Host "打包后端自包含冒烟通过: version=$($health.version) git_hash=$($health.git_hash) migration_head=$($health.migration.head)"
+
+      - name: Upload packaged backend smoke logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packaged-backend-smoke-logs
+          path: ${{ runner.temp }}/packaged-smoke-data/*.log
+          if-no-files-found: warn
+          retention-days: 14
 
       # 10.6 安装包内容抽查：NSIS 安装包可被 7z 列举，确认无测试内容
       #      规则收口到 scripts/verify_package_no_tests.py --listing（与文件树扫描同一

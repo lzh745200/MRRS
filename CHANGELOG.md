@@ -5,6 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.13.3] - 2026-10-18 — 自包含冒烟步骤诊断增强（动态端口 + stdout/stderr 落盘）
+
+### Fixed
+
+- **CI 自包含冒烟在 Windows runner 上超时失败**（v1.13.2 唯一阻断项，本地同脚本通过）：
+  固定端口 8123 可能被 runner 占用，且后端 stdout/stderr 未落盘导致失败时只能看到 exit code 1。
+  已改为 18123-18140 自动挑选空闲端口、后端输出重定向落盘并在失败时打印尾部、
+  失败原因用 ::error:: 输出（可被注解捕获）、日志上传 packaged-backend-smoke-logs artifact；
+  等待上限 180 秒，进程提前退出时立即诊断。
+
 ## [1.13.2] - 2026-10-18 — 修复发布门禁依赖安装遗漏
 
 ### Fixed
