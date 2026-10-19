@@ -5,6 +5,25 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.3] - 2026-10-19 — CI 后端测试分段执行（单进程内存峰值治理 + 失败诊断）
+
+### Fixed
+
+- **PR Checks `backend-test` 三连失败（v1.15.0/v1.15.1/v1.15.2）的根因治理**：
+  `-n auto`（xdist）→ `-n 2` → 串行（`-n` 移除）三种方式均在 ubuntu-latest 上以
+  「pytest 提前退出 + exit 1、无 FAILED 摘要、无覆盖率汇总表、进度行停在
+  `tests/integration/test_audit_integration.py` 附近」结束——特征为**进程被杀/崩溃**而非用例失败；
+  串行复现说明与 xdist 无关，更可能是 25 分钟单进程内存累积（大量 FastAPI TestClient /
+  SQLAlchemy 会话）触达 runner 内存上限（runner 于 2026-10-19 迁移 Ubuntu 26）。
+  本地全量同款命令通过：13,710 passed / 1 skipped / 100% 行+分支。
+  修复：backend-test 拆为两次独立进程执行——
+  ① `tests/integration tests/security`（重内存段，先跑完释放进程）；
+  ② `tests/unit`（长跑段，`--cov-append` 追加并输出报表）。
+  段间失败打印 `free -m` / `dmesg` 诊断并立即退出；用 `PIPESTATUS` 捕获真实 pytest 退出码
+  （避免 `tee` 掩盖）；覆盖率/重试/分支棘轮逻辑不变。
+
+- 说明：本版本仅修 CI 执行方式，产品代码与 UI v2.0 内容与 v1.15.0 完全一致（版本号同步更新）。
+
 ## [1.15.2] - 2026-10-19 — CI 后端测试改串行（彻底规避 xdist worker 崩溃）
 
 ### Fixed

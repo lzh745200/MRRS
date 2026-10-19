@@ -62,15 +62,35 @@ jobs:
           # 2026-10-17（W19）：此前棘轮步骤又跑了一遍全量 pytest（同一套用例、第二个
           # xdist 数据面），两跑之间偶发不一致（step5 通过、step8 读到 99.6x%）→
           # 门禁随机变红。改为单一数据源：本步产出 json，下一步只做比对。
-          # v1.15.2：backend-test 改为**串行**执行（去掉 pytest-xdist）。
-          # 现象：v1.15.0/v1.15.1 在 ubuntu-latest 上 `-n auto/-n 2` 均出现 pytest 提前退出，
-          # 覆盖率表只含部分模块（dashboard 71%/analytics 44%/batch_operations 31%），
-          # 无明确失败摘要 -> 更像 xdist worker 崩溃（runner 环境迁移/资源抖动），而非用例失败。
-          # 本地同命令全量通过（13,710 passed / 100% 行+分支），串行执行可彻底规避 worker 崩溃，
-          # 且失败时会输出明确用例（便于定位）。串行全量预计 25-30 分钟，job 上限提至 60 分钟。
-          python -m pytest tests/ -q --tb=short -rR --cov=app --cov-branch \
+          # v1.15.3：backend-test 分两段执行（单进程内存峰值治理）。
+          # 现象：v1.15.0（-n auto）/v1.15.1（-n 2）/v1.15.2（串行）在 ubuntu-latest 上均以
+          # pytest 提前退出 + exit 1 结束，无 FAILED 摘要、无覆盖率汇总表（进度行最后停在
+          # tests/integration/test_audit_integration.py 附近）——特征为**进程被杀/崩溃**，
+          # 而非用例失败；串行也复现说明与 xdist 无关，更可能是 25 分钟单进程内存累积
+          # （大量 TestClient/SQLAlchemy 会话）触达 runner 内存上限（runner 于 2026-10-19
+          # 迁移 Ubuntu 26）。本地全量通过：13,710 passed / 100% 行+分支。
+          # 修复：拆 integration/security（重内存段）与 unit（长跑段）两次独立进程执行，
+          # 段间释放内存；覆盖率用 --cov-append 合并，最后段输出报表；失败时打印 free -m 诊断。
+          rm -f .coverage
+          set -o pipefail
+          python -m pytest tests/integration tests/security -q --tb=short -rR \
+            --cov=app --cov-branch --cov-report= --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
+          SEG1=${PIPESTATUS[0]}
+          echo "===== integration/security exit=${SEG1} ====="
+          if [ "${SEG1}" != "0" ]; then
+            echo "::error::integration/security 段失败（exit ${SEG1}）"
+            free -m || true
+            dmesg 2>/dev/null | tail -20 || true
+            exit 1
+          fi
+          python -m pytest tests/unit -q --tb=short -rR \
+            --cov=app --cov-branch --cov-append \
             --cov-report=xml --cov-report=term-missing --cov-report=json:coverage-branch.json \
             --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
+          SEG2=${PIPESTATUS[0]}
+          echo "===== unit exit=${SEG2} ====="
+          free -m || true
+          exit ${SEG2}
       # 抖动账本（2026-10-17）：把 --reruns 掩盖的不确定性显式化并留存 90 天。
       # 只告警不阻断（真实抖动需要人看清单决定"先修/再隔离"），阈值 3。
       - name: Flaky test ledger
