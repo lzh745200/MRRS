@@ -5,6 +5,21 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.2] - 2026-10-19 — CI 后端测试改串行（彻底规避 xdist worker 崩溃）
+
+### Fixed
+
+- **PR Checks `backend-test` 在 ubuntu-latest 上提前退出（v1.15.0/v1.15.1）**：
+  `pytest -n auto`/`-n 2` 均出现 pytest 中途退出，覆盖率报告只含部分模块
+  （dashboard 71.70% / analytics 44.17% / batch_operations 31.14% / rbac 41.46%，且两版数字完全一致），
+  无明确失败用例摘要——特征为 **pytest-xdist worker 崩溃**（runner 环境迁移/资源抖动），非用例失败。
+  本地以同款命令全量复跑通过：**13,710 passed / 1 skipped / 100% 行+分支**（7 分 18 秒）。
+  修复：backend-test 改为**串行**执行（去掉 `-n`），`--tb=short` 以便失败时输出明确用例；
+  job 上限 90 分钟（串行全量预计 25–30 分钟），覆盖率/重试/棘轮逻辑不变。
+
+- 说明：v1.15.0/v1.15.1 的 ARM64 构建均已成功产出；Windows 安装包因 backend-test 门禁误红未产出。
+  本版本仅修 CI 执行方式，产品代码与 UI v2.0 内容与 v1.15.0 完全一致（版本号同步更新）。
+
 ## [1.15.1] - 2026-10-19 — CI 后端全量并发稳健化（修复 v1.15.0 Windows 包被门禁误拦）
 
 ### Fixed
