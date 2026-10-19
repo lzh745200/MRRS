@@ -31,6 +31,21 @@
   `register_denied_untrusted`，堵住「持安装包者用内置常量密钥离线伪造通行码自助开通」；回环来源
   （单机桌面）与已配置 secret 的部署行为完全不变。新增 11 条来源矩阵/审计/未开户断言测试。
 
+## [1.15.8] - 2026-10-19 — CI 6 段执行器补齐 tests/ 顶层测试（最终覆盖率门禁失败根因）
+
+### Fixed
+
+- **`backend-test` 6 段执行器遗漏 `tests/` 顶层 15 个测试文件**（v1.15.6/v1.15.7 的 CI 失败根因）：
+  v1.15.6 引入的 6 段执行器只覆盖 `tests/integration`、`tests/security`、`tests/unit`
+  （含根目录 + api/services/middleware/interfaces/utils 子目录），而 `tests/` 顶层还有
+  `test_approval_workflow.py`、`test_smoke.py`、`test_batch_operations.py` 等 **15 个测试文件**
+  未被任何段执行 → 最终 `--mode final` 的 `--cov-append` 数据缺少这些文件覆盖的代码路径
+  → 覆盖率 <100% → 门禁失败（无 FAILED 摘要，只有 Coverage failure）。
+  修复：新增 `seg5b-tests-root` 段（`tests/test_*.py`，位于 final 段之前），覆盖率合并后
+  仍由最后一段按 `.coveragerc` fail_under=100 判定。
+
+- 说明：本版本仅修 CI 执行范围，产品代码与 UI v2.0 内容与 v1.15.0 完全一致。
+
 ## [1.15.7] - 2026-10-19 — 修复 workflow 的无效 action SHA（CI job 3 秒失败根因）
 
 ### Fixed

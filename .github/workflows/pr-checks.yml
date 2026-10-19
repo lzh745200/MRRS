@@ -62,6 +62,11 @@ jobs:
       - name: "Backend tests + coverage (5/6: unit root b-d-g-h-j-l-m-q-s)"
         run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg5-unit-root-b --mode partial tests/unit/test_b*.py tests/unit/test_d*.py tests/unit/test_g*.py tests/unit/test_h*.py tests/unit/test_j*.py tests/unit/test_l*.py tests/unit/test_m*.py tests/unit/test_q*.py tests/unit/test_s*.py
 
+      # v1.15.8：补齐 tests/ 顶层 15 个 test_*.py（原 6 段只覆盖 unit/integration/security，
+      # 顶层 test_approval_workflow.py / test_smoke.py 等未执行 → 最终覆盖率 <100% → 门禁失败）。
+      - name: "Backend tests + coverage (5.5/6: tests root)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg5b-tests-root --mode partial tests/test_*.py
+
       - name: "Backend tests + coverage (6/6: unit root c-r-v, final coverage gate)"
         run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg6-unit-root-c --mode final tests/unit/test_c*.py tests/unit/test_r*.py tests/unit/test_v*.py
       # 抖动账本（2026-10-17）：把 --reruns 掩盖的不确定性显式化并留存 90 天。
