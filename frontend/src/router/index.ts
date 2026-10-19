@@ -602,6 +602,17 @@ export const routes: RouteRecordRaw[] = [
         },
       },
       {
+        // R33：单位授权包导入（下级单位唯一的授权写入口）
+        path: '/system/grant-import',
+        name: 'SystemGrantImport',
+        component: () => retryImport(() => import('@/views/system/GrantImport.vue')),
+        meta: {
+          menuKey: 'system-permission-packs',
+          title: '导入授权包',
+          roles: ['admin', 'super_admin'],
+        },
+      },
+      {
         path: '/system/roles',
         redirect: '/system/users',
         meta: { title: '角色管理 (已合并到用户管理)' },
