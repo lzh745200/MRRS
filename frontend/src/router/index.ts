@@ -613,6 +613,17 @@ export const routes: RouteRecordRaw[] = [
         },
       },
       {
+        // R33：单位授权配置（上级配置矩阵并导出授权包）
+        path: '/system/org-grant',
+        name: 'SystemOrgGrant',
+        component: () => retryImport(() => import('@/views/system/OrgGrant.vue')),
+        meta: {
+          menuKey: 'system-permission-packs',
+          title: '单位授权配置',
+          roles: ['admin', 'super_admin'],
+        },
+      },
+      {
         path: '/system/roles',
         redirect: '/system/users',
         meta: { title: '角色管理 (已合并到用户管理)' },
