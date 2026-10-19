@@ -21,7 +21,7 @@ from app.core.database import get_db
 from app.core.transaction import safe_commit
 from app.core.exceptions import InvalidCredentialsError, UserAlreadyExistsError
 from app.core.exceptions import ValidationError as BizValidationError
-from app.core.security import PasswordPolicy, check_rate_limit, get_client_ip
+from app.core.security import PasswordPolicy, build_auth_claims, check_rate_limit, get_client_ip
 from app.core.security import get_current_user as _get_current_user
 from app.core.security import is_local_request
 from app.core.security import verify_password
@@ -29,7 +29,7 @@ from app.core.token_manager import token_manager
 from app.schemas.auth import LoginData, LoginRequest, LoginResponse, TwoFactorLoginVerifyRequest, UserInfo
 from app.schemas.user import UserCreate
 from app.services.user_service import UserService
-from app.utils.audit_logger import AuditLogger
+from app.utils.audit_logger import AuditLevel, AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,58 @@ def _check_account_lockout(
     from app.services.lockout_service import get_lockout_service
     svc = get_lockout_service()
     svc.check_locked(user, username, db, now=now)
+
+
+# ── 注册来源门禁（W24 安全决策，2026-10-19，Lead 拍板）──
+# 背景（P1-5 审计）：未配置 PASS_CODE_SECRET 时，通行码 HMAC 使用随安装包分发的
+# 内置常量密钥；掌握安装包者可离线为自己的机器计算通行码，绕过管理员开户，
+# 自助注册 is_active=True 账号。
+# 决策：保留跨机注册产品能力（R9），但「非回环来源 + 未配置密钥」fail-closed；
+# 回环来源（单机桌面开箱）行为不变；已配置 PASS_CODE_SECRET 的部署行为完全不变。
+# 来源判定复用 core.security.get_client_ip：默认只取 TCP 对端地址，绝不信任可伪造
+# 的 X-Forwarded-For（否则伪造 127.0.0.1 即可绕过本门禁）；仅当部署显式配置
+# TRUST_PROXY_HEADERS=True（可信反向代理之后）才按代理头解析真实来源。
+# "testclient" 是 Starlette TestClient 的对端 host，与 middleware/request_logger 的
+# _DEFAULT_TRUSTED_PROXIES 口径一致（既有注册用例全部经 TestClient 驱动，
+# 不纳入会被整体误拦）。
+_REGISTER_LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", "testclient"})
+
+
+def _is_local_register_source(request: Request) -> bool:
+    """自助注册来源是否为本机（受信回环 / TestClient）。"""
+    return get_client_ip(request) in _REGISTER_LOCAL_HOSTS
+
+
+def _enforce_register_source_gate(request: Request, username: str, pass_code_secret: str) -> None:
+    """注册来源门禁：非回环来源 + 未配置 PASS_CODE_SECRET → 403（fail-closed）。
+
+    独立成函数的原因：① 安全判定可独立单测；② 不给 register_user 增加分支
+    （该端点 C901 复杂度已 13，flake8 阈值为 16）。
+    """
+    if _is_local_register_source(request) or pass_code_secret:
+        return
+    client_ip = get_client_ip(request)
+    logger.warning(
+        "拒绝非本机自助注册（未配置 PASS_CODE_SECRET）: username=%s ip=%s",
+        username,
+        client_ip,
+    )
+    AuditLogger.log(
+        action="register_denied_untrusted",
+        username=username,
+        resource_type="auth",
+        details={
+            "reason": "non_loopback_register_without_pass_code_secret",
+            "client_ip": client_ip,
+        },
+        level=AuditLevel.WARNING,
+        ip_address=client_ip,
+        user_agent=request.headers.get("user-agent"),
+    )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="服务器未配置 PASS_CODE_SECRET，禁止非本机自助注册，请联系管理员",
+    )
 
 
 router = APIRouter(prefix="/auth", tags=["认证"])
@@ -269,7 +321,7 @@ async def login(
     # 创建双Token（带 token_version，支持真正吊销）
     tokens = token_manager.create_token_pair(
         user.username,
-        extra_claims={"token_version": user.token_version_safe},
+        extra_claims=build_auth_claims(user),
     )
     access_token = tokens["access_token"]
     refresh_token_str = tokens["refresh_token"]
@@ -445,7 +497,7 @@ async def two_factor_verify_login(
     # 创建正式双Token
     tokens = token_manager.create_token_pair(
         user.username,
-        extra_claims={"token_version": user.token_version_safe},
+        extra_claims=build_auth_claims(user),
     )
     access_token = tokens["access_token"]
     refresh_token_str = tokens["refresh_token"]
@@ -717,7 +769,7 @@ async def refresh_token(request: Request, token: str = Body(..., embed=True), db
         # 签发新的 token pair（轮换 refresh_token 防止重放攻击）
         new_tokens = token_manager.create_token_pair(
             username,
-            extra_claims={"token_version": user.token_version_safe},
+            extra_claims=build_auth_claims(user),
         )
         new_access_token = new_tokens["access_token"]
         new_refresh_token = new_tokens["refresh_token"]
@@ -870,6 +922,10 @@ async def register_user(
             detail="注册尝试过于频繁，请稍后再试",
         )
 
+    # ── 来源门禁（W24 安全决策，2026-10-19）──
+    # 非回环来源 + 未配置 PASS_CODE_SECRET → 403（详见 _enforce_register_source_gate）。
+    _enforce_register_source_gate(request, username, _settings.PASS_CODE_SECRET)
+
     # 用户名验证
     is_valid, msg = PasswordPolicy.validate_username(username)
     if not is_valid:
@@ -958,7 +1014,7 @@ async def register_user(
         # 带可轮换 refresh_token，否则新用户「记住登录」持久化 refresh 分支恒缺失）
         tokens = token_manager.create_token_pair(
             user.username,
-            extra_claims={"token_version": user.token_version_safe},
+            extra_claims=build_auth_claims(user),
         )
         access_token = tokens["access_token"]
         refresh_token_str = tokens["refresh_token"]

@@ -24,32 +24,55 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      - name: Full test suite with coverage
-        run: |
-          cd backend
-          # 2026-08-24：改用 xdist 并行（对齐 PR Checks 已验证配方），
-          # 全量约 15-20 分钟完成；单进程模式需 60-90 分钟，
-          # 曾三次被外部协调取消（runs #10/#11/#12）。
-          # 覆盖率门禁：阈值统一由 backend/.coveragerc 的 fail_under=100 单一承载
-          # （2026-09-04 对齐 #21：移除内联 --cov-fail-under=98——命令行参数会
-          #  屏蔽配置文件口径，此前 nightly 实际跑的是 98 旧门禁）
-          # 2026-10-17：加 -rR 并 tee 到日志 —— 抖动账本需要逐条 RERUN 清单
-          # （JUnit XML 不记录 rerun，实测 pytest-rerunfailures 15.0）。
-          LOG="$RUNNER_TEMP/pytest-nightly.log"
-          set -o pipefail
-          python -m pytest tests/ -q --tb=line \
-            -n auto -rR \
-            --cov=app --cov-report=html --cov-report=json --cov-report=xml \
-            --reruns 2 --reruns-delay 1 \
-            --durations=20 \
-            --junitxml=test-results.xml 2>&1 | tee "$LOG"
+      # W24（v1.15.7）：与 PR Checks 同口径的 6 段独立 pytest 进程 —— nightly 是夜间全量，
+      # 同样存在「约 24 分钟进程消失（runner 内存峰值/进程被杀）」风险；拆段后每个进程退出即
+      # 释放内存与覆盖率对象，单段峰值显著降低。覆盖率用 --cov-append 跨进程合并，最终段
+      # 由 backend/.coveragerc fail_under=100 单一来源判定；--reruns 2 --reruns-delay 1 由
+      # scripts/ci_backend_test_segment.sh 统一保留（与 PR Checks 完全一致）。
+      # SEG_JUNIT=1 → 每段独立 JUnit（$RUNNER_TEMP/pytest-seg-<name>.xml，供 artifact 上传）；
+      # 最终段 SEG_COV_HTML=1 → 额外产出 backend/htmlcov/（nightly 的 HTML 覆盖率报告）。
+      # 注：本作业无分支覆盖率棘轮步骤；若后续新增，输入 coverage-branch.json 即来自最终段。
+      - name: Reset coverage data
+        run: rm -f backend/.coverage
+
+      - name: "Nightly backend tests (1/6: integration + security)"
+        env: { SEG_JUNIT: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg1-integration-security --mode first tests/integration tests/security
+
+      - name: "Nightly backend tests (2/6: unit api)"
+        env: { SEG_JUNIT: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg2-unit-api --mode partial tests/unit/api
+
+      - name: "Nightly backend tests (3/6: unit services/middleware/interfaces/utils)"
+        env: { SEG_JUNIT: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg3-unit-services --mode partial tests/unit/services tests/unit/middleware tests/unit/interfaces tests/unit/utils
+
+      - name: "Nightly backend tests (4/6: unit root a-e-f-i-n-o-p-t-u-w-y-z)"
+        env: { SEG_JUNIT: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg4-unit-root-a --mode partial tests/unit/test_a*.py tests/unit/test_e*.py tests/unit/test_f*.py tests/unit/test_i*.py tests/unit/test_n*.py tests/unit/test_o*.py tests/unit/test_p*.py tests/unit/test_t*.py tests/unit/test_u*.py tests/unit/test_w*.py tests/unit/test_y*.py tests/unit/test_z*.py
+
+      - name: "Nightly backend tests (5/6: unit root b-d-g-h-j-l-m-q-s)"
+        env: { SEG_JUNIT: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg5-unit-root-b --mode partial tests/unit/test_b*.py tests/unit/test_d*.py tests/unit/test_g*.py tests/unit/test_h*.py tests/unit/test_j*.py tests/unit/test_l*.py tests/unit/test_m*.py tests/unit/test_q*.py tests/unit/test_s*.py
+
+      - name: "Nightly backend tests (6/6: unit root c-r-v, final coverage gate)"
+        env: { SEG_JUNIT: "1", SEG_COV_HTML: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg6-unit-root-c --mode final tests/unit/test_c*.py tests/unit/test_r*.py tests/unit/test_v*.py
+
       # 抖动账本（2026-10-17）：nightly 是唯一"每天全量"的观察窗口，抖动趋势在此累积。
       # 告警阈值 3、硬上限 10（超过 10 次说明不是个别用例，而是系统性不确定性）。
       - name: Flaky test ledger
         if: always()
         run: |
-          python scripts/ci_flake_report.py --log "$RUNNER_TEMP/pytest-nightly.log" \
-            --out flaky-report.txt --warn-reruns 3 --max-reruns 10
+          shopt -s nullglob
+          LOGS=("$RUNNER_TEMP"/pytest-seg-*.log)
+          if [ ${#LOGS[@]} -eq 0 ]; then
+            echo "no pytest segment logs found — skipping flaky ledger"
+            exit 0
+          fi
+          ARGS=()
+          for f in "${LOGS[@]}"; do ARGS+=(--log "$f"); done
+          python scripts/ci_flake_report.py "${ARGS[@]}" --out flaky-report.txt --warn-reruns 3 --max-reruns 10
       - name: Upload flaky ledger
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -63,7 +86,7 @@ jobs:
         if: always()
         with:
           name: backend-test-results
-          path: backend/test-results.xml
+          path: ${{ runner.temp }}/pytest-seg-*.xml
       - name: Upload coverage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()

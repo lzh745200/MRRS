@@ -5,6 +5,32 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.8] - 2026-10-19 — 待决策项彻底落地：viewer 严格只读 + 非回环注册 fail-closed + ARM64 发布门禁 + nightly 稳定化
+
+### Added
+
+- **viewer 角色服务端强制只读**：新增集中式 ASGI 中间件 `backend/app/middleware/viewer_readonly.py`，
+  对已认证 viewer 的写方法（POST/PUT/PATCH/DELETE）在非白名单路径返回 403 统一信封，并写审计
+  `viewer_write_denied`；判定零 DB 查询（复用新增 `core.security.build_auth_claims()` 写入的令牌
+  role/uid 声明，login/2FA/refresh/register 四个签发点统一）；白名单仅自服务（登录/登出/刷新/2FA/
+  改本人密码/通知偏好/反馈）。旧令牌无 role 声明时 fail-open 过渡（8h 自然过期）。新增 33 条逐分支
+  单测 + 14 条真实 JWT 端到端用例，相关鉴权/令牌/中间件回归 675 条全绿。
+- **ARM64 发布门禁**：`build-arm64.yml` 两个 Release 前新增 `Verify release gate is green`
+  （复用 `scripts/check_release_gate.py --timeout-minutes 30`，permissions 增 `actions: read`），
+  Release 条件加 `&& success()`，门禁红时跳过发布。
+- **nightly 后端稳定化**：`nightly-full.yml` 由单步 `-n auto` 改为与 PR Checks 同口径的 6 段独立
+  进程（复用 `scripts/ci_backend_test_segment.sh`，新增向后兼容的 `SEG_JUNIT`/`SEG_COV_HTML`），
+  保留 `.coveragerc fail_under=100` 与 JUnit/HTML/codecov 上传。
+- **部署文档安全红线**：补齐多机/LAN 部署必须全实例统一 `PASS_CODE_SECRET`、viewer 严格只读说明，
+  修正失效的 Windows 部署链接。
+
+### Changed
+
+- **非回环自助注册 fail-closed**（安全决策，保留 R9 跨机注册能力）：`/auth/register` 在来源
+  **非回环**（不信任可伪造代理头）且 `PASS_CODE_SECRET` 未配置时返回 403 并审计
+  `register_denied_untrusted`，堵住「持安装包者用内置常量密钥离线伪造通行码自助开通」；回环来源
+  （单机桌面）与已配置 secret 的部署行为完全不变。新增 11 条来源矩阵/审计/未开户断言测试。
+
 ## [1.15.7] - 2026-10-19 — 修复 workflow 的无效 action SHA（CI job 3 秒失败根因）
 
 ### Fixed

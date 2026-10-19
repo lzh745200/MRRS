@@ -158,3 +158,118 @@ pytest tests/unit/test_feedback_api.py tests/unit/test_core_cache_cov.py \
 3. **P2-4 数据域口径分叉**：建议后续把列表/详情/导出全部收敛到 `core.data_permission` 的严格口径（村庄/学校先统一）。
 4. 备份列表 `file_path` 脱敏、创建接口幂等键属增强项。
 5. 本次只做定向测试；全量 100% 覆盖率门禁由 Lead 在干净工作区统一跑（我未跑全量、未提交、未改门禁/阈值/既有测试）。
+
+---
+
+# 附：W24「viewer 只读」产品决策落地（第二轮，2026-10-19，Lead 拍板后实现）
+
+> 本节省略了上文 P1-3「viewer 可写」的报告项 —— 该决策已从"报告·未改"升级为**已实现**。
+
+## 实现方式
+
+新增集中式纯 ASGI 中间件 `backend/app/middleware/viewer_readonly.py`：已认证且令牌
+`role` 声明为 viewer 的写方法（POST/PUT/PATCH/DELETE）在非白名单路径上直接 403；
+不读请求体、不查数据库、不承担鉴权职责（解析失败/无令牌/旧令牌 → fail-open 放行，
+由端点 `get_current_user` 兜底）。403 使用统一信封 `{code, message, detail, success}`；
+同时经 `AuditLogger` 落审计事件 `viewer_write_denied`（含 method/path/user_id/username/ip/ua），
+审计失败只记日志、不改变 403 语义。
+
+### 令牌身份声明（中间件不查 DB 的前提）
+
+JWT 原先只含 sub/token_version，中间件拿不到角色。新增 `core.security.build_auth_claims(user)`
+（security.py:257）在 4 个签发点写入非保留声明 `{token_version, role, uid, is_superuser}`：
+`auth/login`、`auth/two-factor/verify-login`、`auth/refresh`（轮换后仍带角色）、`auth/register`。
+旧令牌无 role 声明 → 中间件 fail-open（端点鉴权兜底），access token 8h 过期 / refresh 轮换后补齐；
+`token_version` 语义不变（W1-T5 强制下线不受影响）。
+
+### 模块化设计
+
+- `_WRITE_METHODS`（写方法集合）、`_SELF_SERVICE_WRITE_PATHS`（正则白名单）、
+  `_is_self_service_write` / `_bearer_token` / `_scope_header` / `resolve_viewer_identity` /
+  `_audit_denied` / `ViewerReadOnlyMiddleware`；
+- 白名单（仅账户自服务）：`/auth/{login,logout,refresh,change-password}`、`/auth/2fa/*`、
+  `/auth/two-factor/*`、`/auth/verify-*`、`/users/{id}/password`（首登强制改密链路必需，
+  否则 must_change_password 的 viewer 永久锁死）、`/notifications/preferences*`、`/feedback`；
+- **默认拦截**：`/todos*`（个人待办状态）、`/users/me/profile`（个人资料）、`/users/{id}/avatar`、
+  以及全部业务写接口 —— 与 Lead 决策「如实现成本高可先不加，默认拦截」一致，记录于此。
+
+### 中间件顺序（main.py）
+
+注册在 MaintenanceGate 之后、Audit/RequestLogger 之前（后注册者在外层）→ 位于 Audit/
+RequestLogger **之内**：被拒请求仍进访问日志与审计（可观测/可追责），且不进入
+Metrics/QueryCounter 与业务路由（不产生 DB/指标副作用）。CORS/SecurityHeaders 等外层
+中间件正常为 403 响应追加响应头；CSRF 启用时先于本层执行（CSRF 失败 403 优先）。
+
+## 测试与验证
+
+### 新增用例
+
+1. `backend/tests/unit/middleware/test_viewer_readonly.py`（33 条，逐分支驱动纯 ASGI）：
+   - 非 HTTP scope / GET 安全方法放行；
+   - viewer 写业务路径 403 + 统一信封字段断言；
+   - 白名单 10 条路径全放行（login/logout/refresh/2fa/two-factor/verify-*/改密/通知偏好×2/反馈）；
+   - 无令牌 / 非法令牌 / 非 Bearer / 空 Bearer / 旧令牌无 role 声明 → fail-open；
+   - user/admin/super_admin/manager 角色均不拦；
+   - 审计事件 kwargs（action/user_id/username/method+path/ip/ua）断言；无 UA 分支；审计抛异常仍返回 403；
+   - `decode_token` 抛异常 fail-open（覆盖防御分支，无 pragma 豁免）。
+2. `backend/tests/security/test_viewer_readonly_enforcement.py`（14 条，真实 app + 真实 JWT + 共享库）：
+   - viewer 写 supported-villages / policies / funds 三类各一 → 403，且 DB 行数不变；
+   - viewer DELETE 404/业务路径 → 403；
+   - 白名单放行：logout 200、改自己密码 400（旧密码错，证明穿透中间件）、通知偏好非 403、反馈 200；
+   - user/admin/super_admin 写 → 200；未认证写 → 401（中间件不拦截）；viewer GET → 200；
+   - 审计调用断言；
+   - **令牌声明回归**：登录 access token 含 role/uid/is_superuser/token_version；refresh 轮换后新 token 仍带 role；
+   - **首登强制改密不死锁**：must_change_password 的 viewer 业务写 403，但改自己密码 200。
+
+### 定向运行结果（未跑全量、未提交；工作区数据目录均在系统临时目录）
+
+```text
+pytest tests/security tests/unit/middleware -q --tb=short   -> 110 passed
+pytest tests/unit/middleware/test_viewer_readonly.py          -> 33 passed
+pytest tests/security/test_viewer_readonly_enforcement.py     -> 14 passed
+pytest 相关鉴权/令牌/中间件回归 340 条                         -> 340 passed
+  (test_auth_auth_api / test_auth_2fa_api_cov / test_token_manager / test_core_modules /
+   test_cov_gap_r32_core / test_must_change_password_guard / test_auth_revocation_closure /
+   test_get_current_user_session_contract_r23 / test_two_factor_security_r19 /
+   test_cov_final_security / test_middleware_ALL / test_v1129_gap_auth_lockout_2fa)
+pytest 其余真实登录依赖用例 223 条                            -> 223 passed
+  (test_smoke / integration/test_auth_integration / integration/test_comprehensive_functional /
+   test_api_auth_full / test_api_layer_full / test_branch_gaps_group_d /
+   test_org_passcode_cross_machine / test_user_scope_failclosed)
+pytest 中间件/核心安全回归 222 条                             -> 222 passed
+flake8（中间件/main/security/auth/两个新测试文件）               -> 0 违规
+```
+
+### 覆盖率证据
+
+`pytest tests/unit/middleware/test_viewer_readonly.py tests/security/test_viewer_readonly_enforcement.py
+  --cov=app.middleware.viewer_readonly --cov=app.core.security --cov-report=term-missing`：
+
+```text
+app\middleware\viewer_readonly.py      67      0     22      0  100.00%
+```
+
+新增 `build_auth_claims`（security.py:257-283）未出现在 security.py 的 Missing 列表中 ——
+登录/刷新真实链路用例已覆盖该函数全部行（无新增分支）。auth.py 4 个签发点均为既有分支内
+表达式替换（login/2fa/refresh/register 相关既有用例 + 新增声明断言用例覆盖）。
+
+### 端到端复验（真实 TestClient + 真实登录，p4/p3b 探测脚本）
+
+```text
+viewer_create_village: [403, {"code":403,"message":"只读账户（viewer）无权执行写操作…","success":false}]
+viewer_create_policy:  [403, …]
+viewer_create_worklog: [403, …]
+user_create_village:   [200, "创建成功"]
+viewer 读列表/详情/导出 xlsx（GET）: 200（只读不受影响）
+RBAC 写路由全量扫描（383 条）：viewer 非 401/403 响应由 8 条降至 5 条，且全部为白名单
+  自服务端点（auth/login、auth/2fa/verify-login、auth/logout、auth/refresh、feedback）。
+```
+
+## 已知边界（记录，不属缺陷）
+
+1. 升级瞬间已在用的旧 access token（无 role 声明）在自然过期前 fail-open，viewer 仍可写；
+   refresh 轮换/重新登录后立即生效（单机桌面 token 寿命 8h，属可接受的迁移窗口）。
+2. `/todos` 个人待办状态、`/users/me/profile`、头像上传按决策默认拦截，viewer 无法使用；
+   若产品后续需要，可加入 `_SELF_SERVICE_WRITE_PATHS` 白名单并补用例。
+3. 前端菜单/按钮的 viewer 只读展示属后续优化（本任务不改前端）。
+

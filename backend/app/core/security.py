@@ -254,6 +254,30 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
+def build_auth_claims(user) -> dict:
+    """构造 access/refresh 令牌的身份附加声明（token_version + role/uid）。
+
+    W24 viewer 只读决策（2026-10-19）：中间件层必须在**不查数据库**的前提下
+    判定当前令牌是否 viewer。历史令牌只含 sub/token_version，角色只存在于
+    数据库 —— 中间件早于依赖解析（get_current_user 的 DB 查询在其后），
+    因此把身份写成非保留声明随令牌下发。
+
+    - role / uid / is_superuser：供 middleware.viewer_readonly 做只读判定；
+    - token_version：既有强制下线（W1-T5）语义保持不变。
+
+    旧令牌（升级前签发）没有 role 声明 → 中间件 fail-open 放行、由端点鉴权兜底；
+    access token 8 小时自然过期、refresh 轮换后自动带新声明。
+    """
+    from app.core.constants import normalize_role
+
+    return {
+        "token_version": getattr(user, "token_version_safe", 0) or 0,
+        "role": normalize_role(getattr(user, "role", None)),
+        "uid": getattr(user, "id", None),
+        "is_superuser": bool(getattr(user, "is_superuser", False)),
+    }
+
+
 # ══════════════════════════════════════════════════════════════
 #  FastAPI 认证依赖
 # ══════════════════════════════════════════════════════════════

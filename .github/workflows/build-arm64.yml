@@ -12,6 +12,8 @@ concurrency:
 
 permissions:
   contents: write
+  # W24（v1.15.7）：发布前置门禁需读取 Actions 运行结论（scripts/check_release_gate.py）
+  actions: read
 
 jobs:
   build-frontend:
@@ -437,8 +439,19 @@ jobs:
             dist/electron/SHA256SUMS-electron-deb-arm64.txt
           if-no-files-found: error
 
-      - name: Create Release (Electron DEB)
+      # W24（v1.15.7）：与 build-windows 同口径的发布前置门禁 —— tag commit 的 PR Checks
+      # 必须为 success 才允许发布；门禁失败 → 本步失败 → 下方 Release 步骤被自动跳过并 ::error::，
+      # 不再"构建成功即发布"。超时 30 分钟（tag 构建时 PR Checks 通常已完成/接近完成，
+      # 无需 Windows 侧 75 分钟预算；actions: read 权限见文件顶部 permissions）。
+      - name: Verify release gate is green (Electron DEB)
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/check_release_gate.py --timeout-minutes 30 --poll-seconds 60
+
+      - name: Create Release (Electron DEB)
+        if: startsWith(github.ref, 'refs/tags/v') && success()
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |
@@ -638,8 +651,19 @@ jobs:
             dist/deb/output/SHA256SUMS-standalone-deb-arm64.txt
           if-no-files-found: error
 
-      - name: Create Release (standalone DEB)
+      # W24（v1.15.7）：与 build-windows 同口径的发布前置门禁 —— tag commit 的 PR Checks
+      # 必须为 success 才允许发布；门禁失败 → 本步失败 → 下方 Release 步骤被自动跳过并 ::error::，
+      # 不再"构建成功即发布"。超时 30 分钟（tag 构建时 PR Checks 通常已完成/接近完成，
+      # 无需 Windows 侧 75 分钟预算；actions: read 权限见文件顶部 permissions）。
+      - name: Verify release gate is green (standalone DEB)
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/check_release_gate.py --timeout-minutes 30 --poll-seconds 60
+
+      - name: Create Release (standalone DEB)
+        if: startsWith(github.ref, 'refs/tags/v') && success()
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |

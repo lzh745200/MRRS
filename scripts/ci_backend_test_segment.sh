@@ -28,6 +28,10 @@
 # --mode partial: 追加覆盖率，不判阈值
 # --mode final  : 追加覆盖率并输出报表，按 .coveragerc fail_under 判定最终阈值
 #
+# 可选环境变量（仅 nightly 等全量观察流水线使用；PR Checks 不设即保持原行为）：
+#   SEG_JUNIT=1    → 每段额外产出 JUnit XML（$RUNNER_TEMP/pytest-seg-<name>.xml）
+#   SEG_COV_HTML=1 → 最终段额外产出 HTML 覆盖率报告（backend/htmlcov/）
+#
 # 退出码 = pytest 退出码（脚本自身失败也是非 0）。仅用于 Linux CI（bash）。
 
 set -uo pipefail
@@ -51,6 +55,13 @@ fi
 SLUG=$(printf '%s' "$NAME" | tr -c 'A-Za-z0-9._-' '_')
 LOG_DIR="${RUNNER_TEMP:-/tmp}"
 LOG="$LOG_DIR/pytest-seg-$SLUG.log"
+# 全量观察型流水线（nightly）可通过环境变量追加报告：
+#   SEG_JUNIT=1    → 每段独立 JUnit XML（$LOG_DIR/pytest-seg-<name>.xml）
+#   SEG_COV_HTML=1 → 最终段额外产出 htmlcov/（nightly 需要 HTML 覆盖率报告）
+JUNIT_ARGS=()
+if [ -n "${SEG_JUNIT:-}" ]; then
+  JUNIT_ARGS+=(--junitxml="$LOG_DIR/pytest-seg-$SLUG.xml")
+fi
 
 COV_ARGS=(--cov=app --cov-branch --cov-append)
 case "$MODE" in
@@ -63,6 +74,9 @@ case "$MODE" in
     ;;
   final)
     COV_ARGS+=(--cov-report=term-missing --cov-report=json:coverage-branch.json --cov-report=xml)
+    if [ -n "${SEG_COV_HTML:-}" ]; then
+      COV_ARGS+=(--cov-report=html)
+    fi
     ;;
   *)
     echo "::error::ci_backend_test_segment.sh: unknown --mode '$MODE' (first|partial|final)"
@@ -77,7 +91,7 @@ date -u +"started_at=%Y-%m-%dT%H:%M:%SZ"
 
 set -o pipefail
 python -m pytest "$@" -q --tb=short -rR --reruns 2 --reruns-delay 1 \
-  "${COV_ARGS[@]}" 2>&1 | tee "$LOG"
+  "${JUNIT_ARGS[@]}" "${COV_ARGS[@]}" 2>&1 | tee "$LOG"
 STATUS=${PIPESTATUS[0]}
 
 echo "===== [$NAME] pytest exit=$STATUS ====="

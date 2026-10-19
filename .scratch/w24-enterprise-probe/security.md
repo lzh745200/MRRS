@@ -3,7 +3,7 @@
 - 时间：2026-10-19
 - 基线：git main（探测开始时 HEAD 5a182cd，v1.15.4）；后端 `backend/.venv/Scripts/python.exe`；Node 25/npm 11
 - 审计范围（写入范围）：`backend/app/core`、`backend/app/middleware`、`backend/app/utils`、`electron/main.js`、`electron/preload.js`、`docker/`、`nginx/`
-- 结论：**未发现 P0（可直接接管/绕过认证读到数据）缺陷**；修复 4 项 P1（含 1 项真实日志 PII 泄漏、1 项构建不可用、2 项配置红线），另有 1 项 P1、约 10 项 P2 需 Lead/产品决策，见下。
+- 结论：**未发现 P0（可直接接管/绕过认证读到数据）缺陷**；修复 **5 项 P1**（真实日志 PII 泄漏 / 构建不可用 / 缓存跨组织红线 / nginx 恢复 413 / 通行码注册回退），约 10 项 P2 建议见下。P1-5 已按 Lead 拍板实现（2026-10-19 第二批次）。
 
 ## 一、P0（必须本次修复）
 
@@ -47,9 +47,14 @@
   - `nginx/nginx.conf:26-30`：全局仍 100M（避免任意路径可推 10GB），新增 `server_tokens off`。
 - 验证：静态审查（行号如上）；本机未安装 nginx（无 `nginx -t` 条件），建议部署机执行 `nginx -t` 后重启复核。
 
-### P1-5【未修复·需产品/安全决策】通行码注册回退可被「持有安装包者」自助开通**已激活**账号（多机/LAN 部署）
+### P1-5【已修复·Lead 拍板实现】通行码注册回退可被「持有安装包者」自助开通**已激活**账号（多机/LAN 部署）
 
 - **风险等级：P1（多机/LAN/经 nginx 暴露部署）｜P3（默认单机 127.0.0.1 桌面部署）**。
+- **实现状态（2026-10-19，Lead 决策派发后）**：
+  - `backend/app/api/v1/auth/auth.py`：新增 `_REGISTER_LOCAL_HOSTS` / `_is_local_register_source()` / `_enforce_register_source_gate()`（约 75-127 行），并在 `register_user` 限流后、开户前调用（约 926-929 行）：**非回环来源 + `PASS_CODE_SECRET` 为空 → 403 + 审计 `register_denied_untrusted`**；回环/TestClient 来源与已配置 secret 的部署行为不变。来源判定复用 `core.security.get_client_ip`（默认只取 TCP 对端、不信任可伪造的 X-Forwarded-For；仅 TRUST_PROXY_HEADERS=True 的可信反代才读代理头）。
+  - `backend/app/core/config.py`：ADR-0004 说明与启动告警同步新基线（与 ENVIRONMENT 无关：非回环 + 未配 secret = fail-closed）。
+  - `backend/tests/unit/test_register_source_gate_w24.py`：新增 11 例（来源矩阵 7 例 + 非回环无 secret 403/审计断言 + 非回环有 secret 成功 + TestClient/回环保持原行为）。
+  - 验证：定向 167 passed（含 tests/security 9 例、跨机组织注册 7 例、auth API 48 例、integration auth 23 例、config 22 例）；新增代码分支全覆盖（`--cov=app` 下 auth.py 缺失行清单不含新增行）；flake8 0。
 - **触发条件（必须同时满足，缺一不成立）**：
   1. 后端监听面不是回环（`HOST=0.0.0.0`，或经 nginx/局域网访问；默认配置 `HOST=127.0.0.1`，默认单机桌面**不满足**）；
   2. 部署未配置 `PASS_CODE_SECRET`（默认空 → 使用随安装包分发的内置常量密钥，见证据链 1）；
@@ -64,12 +69,11 @@
   4. `/auth/register` 第 4 级 HMAC 自验证通过后创建 `is_active=True` 用户并直接返回令牌（`auth/auth.py:888-903, 920-931`），**无管理员审批**；仅 3 次/分钟/IP 限流（`auth/auth.py:858-871`）。
 - 影响：多机协同/`HOST=0.0.0.0` 部署下，LAN 内任何能访问 API 的攻击者可用「安装包内置常量 + 公开机器码接口」自助注册 active 账号（默认 role=user、数据范围 OWN，不能直接读他人数据，但可写入业务数据、占用账号、绕过管理员开户审计）；单机 `HOST=127.0.0.1` 桌面部署影响小。
 - 根因：跨机注册可用性（产品反馈 R9）压过 fail-closed 安全基线；`PASS_CODE_SECRET` 未在部署模板强制。
-- **决策归属：Product Decision（产品负责人）+ 安全负责人共同拍板** —— 本质是「跨机注册可用性（ADR-0004 / 2026-09-06 产品决策，R9 生产反馈驱动）」与「注册闸门强度」的取舍；安全侧只能给出风险量化，不能单方面改产品语义。技术落地由 api/service 层负责人执行（不在 security-probe 的写入范围）。
-- 建议选项（按推荐顺序，均不改变正常跨机注册体验）：
-  1. **部署强制**：所有多机/发布模板强制 `PASS_CODE_SECRET=<随机≥32 位>`（目前 `deploy/kylin/config/kylin.env`、`.env.example` 只有注释无强制），并在生产启动自检里对「多机部署 + 未配置」告警/拒绝；
-  2. **注册审批**：`/auth/register` 创建的账号改为 `is_active=False`（进入管理员审核队列），跨机注册体验不变但重获开户审批闸门；
-  3. **公开面收口**：`get-machine-code` 对非回环请求不再返回 machine_code（或加来源白名单/限流），抬高自动化利用门槛；
-  4. **可选**：`ENVIRONMENT=production` 且未配置 `PASS_CODE_SECRET` 时，HMAC 自验证路径 fail-closed（会牺牲无预录通行码的跨机注册，需产品确认）。
+- **决策与落地（2026-10-19 Lead 拍板，已实现）**：保留 R9 跨机注册能力，采用「来源分级」方案 —— 非回环来源 + 未配置 `PASS_CODE_SECRET` → 403 fail-closed；回环/TestClient 来源保持单机开箱行为；已配置 secret 的部署行为完全不变（实现与证据见本节开头）。
+- 后续可选加固（未实施，非本次范围）：
+  1. 发布模板强制 `PASS_CODE_SECRET=<随机≥32 位>`（`deploy/kylin/config/kylin.env`、`.env.example` 目前仅注释），生产启动自检对「多机部署 + 未配置」告警；
+  2. `/auth/register` 新账号改 `is_active=False` 进入管理员审批队列（改变产品语义，需产品确认）；
+  3. `get-machine-code` 对非回环请求不返回 machine_code（属 api 层，本次未改）。
 
 ## 三、P2（建议，未修改）
 
@@ -107,6 +111,9 @@
 | `nginx/nginx.conf` | server_tokens off + 注释 | P1-4 |
 | `nginx/conf.d/assistance.conf` | ^~ /api/ + 10g body + 长超时 | P1-4 |
 | `.scratch/w24-enterprise-probe/repro_log_redaction.py` | P1-1 复现脚本（留档） | P1-1 |
+| `backend/app/api/v1/auth/auth.py` | 注册来源门禁（非回环+无 secret → 403+审计） | P1-5 |
+| `backend/app/core/config.py` | ADR-0004 注释/启动告警同步新基线 | P1-5 |
+| `backend/tests/unit/test_register_source_gate_w24.py` | 新增 11 条来源门禁测试（新增文件） | P1-5 |
 
 ## 六、自验命令与结果（本轮实跑）
 
@@ -118,11 +125,14 @@
 4. `python .scratch/w24-enterprise-probe/repro_log_redaction.py` → `LEAK_IN_JSON_LOG: False`。
 5. `npm audit --omit=dev --json`（frontend）→ `{"info":0,"low":0,"moderate":0,"high":0,"critical":0,"total":0}`。
 6. `docker --version` → CommandNotFound（Docker CLI 不可用，docker 构建未能实跑）；`nginx -t` 无 nginx 可执行文件（未实跑）。
+7. **P1-5 第二批次（Lead 决策 implement 后）**：`pytest tests/unit/test_register_source_gate_w24.py tests/unit/test_auth_auth_api.py tests/unit/test_org_passcode_cross_machine.py tests/unit/test_branch_closure_r22.py tests/unit/test_auth_2fa_api_cov.py tests/integration/test_auth_integration.py tests/security/ tests/unit/test_config_core.py -q --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=0` → **167 passed**（55.6s）；`--cov=app` 报告中 `app/api/v1/auth/auth.py` 的缺失行清单**不含**新增门禁代码行（新增分支全覆盖）；`flake8 app/api/v1/auth/auth.py app/core/config.py tests/unit/test_register_source_gate_w24.py --max-line-length=120 --max-complexity=16` → 0。
+8. 环境坑记录（供 Lead 复跑参考）：`--cov=<点分模块名>`（如 `--cov=app.api.v1.auth.auth`）会让 coverage 在收集期提前 import 该模块，触发 bcrypt PyO3 扩展二次初始化（`ImportError: PyO3 modules compiled for CPython 3.8 or older may only be initialized once...`）→ 真实密码哈希用例出现 `passlib MissingBackendError` 假失败；改用项目标准 `--cov=app` 即全部通过。该现象与本次改动无关（同样的 `--cov=app` 对既有测试同样通过），全量门禁命令 `pytest tests/ --cov=app` 不受影响。
 
 ## 七、遗留风险与建议
 
-- P1-5（通行码自注册）是本次最大未决安全面，涉及 api/service 层与既有产品决策，需 Lead 决策后由对应负责人处理。
+- P1-5（通行码自注册）已按 Lead 2026-10-19 决策实现并验证（来源分级 fail-closed）；剩余可选加固见 P1-5 节末（部署模板强制 secret / 注册审批 / get-machine-code 收口），均非本次范围。
 - docker/nginx 两处修复为静态验证，需在具备 Docker/nginx 的环境做一次冒烟（`docker build --target runtime`、`nginx -t`）。
 - **协作异常（重要，已由 Lead 查明）**：外部提交 `9de7aea` 由另一个并行 AI 会话执行 `git add -A` 造成（非本 agent；我全程未执行任何 git 操作），已 **push 到 origin/main**，消息中未说明夹带的改动。该提交除各 agent 修复外，还误纳入 `_probe_bandit.json`（4804 行）、`backend/bumofu_pytest_appdata_*/**/runtime_secrets.json`（测试生成的运行期密钥样例）、`backend/pytest-of-Administrator/**` 等测试残留，与「不 commit / 不改版本号」硬约束冲突；Lead 已记录并将在最终报告中统一说明/整理，本 agent 未改写历史提交。
-- 我的 7 处改动已被该提交纳入但**内容完好**：`git diff HEAD` 为空 + 逐行标记复核（见六.1c）；后续如需重建干净提交，直接保留这些文件当前内容即可。
+- 我的第一批 7 处改动已被该提交纳入但**内容完好**：`git diff HEAD` 为空 + 逐行标记复核（见六.1c）；后续如需重建干净提交，直接保留这些文件当前内容即可。
+- 第二批次（P1-5 来源门禁）为**未提交工作区改动**：`backend/app/api/v1/auth/auth.py`、`backend/app/core/config.py`、新增 `backend/tests/unit/test_register_source_gate_w24.py`；注意 `auth.py`/`security.py` 同期也有其他 agent（backend-probe）的 `build_auth_claims` 重构改动，两批修改已在同一工作区共存并通过全部定向测试，Lead 重建提交时需整体保留。
 - 未覆盖说明：本轮未重复跑全量 pytest/vitest（Lead 已在跑）；前端代码不在我的写入范围（仅审计了其消费的服务端语义）。

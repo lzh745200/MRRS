@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.15.7"
+    PROJECT_VERSION: str = "1.15.8"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -106,10 +106,16 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY_DERIVATION: str = "pbkdf2"
 
     # 通行码 HMAC 自验证密钥（跨机器注册，ADR-0004 / W1 不变量 #5）。
-    # 留空 = 跨机器自验证禁用（fail-closed）：管理员必须在目标机器本机预录入通行码。
     # 多实例部署若需“管理员在 A 机为 B 机签发通行码、用户在 B 机自助注册”，
     # 必须在所有实例配置同一密钥。与 ENCRYPTION_KEY 不同，此密钥不可每机自动生成
     # （跨机验证要求共享同一秘密），故仅提供配置入口，缺失时启动告警而不自动派生。
+    #
+    # 安全基线（W24 决策 2026-10-19，与 ENVIRONMENT 无关）：
+    #   **留空 + 非回环来源的自助注册 = fail-closed 403**（api/v1/auth/auth.py 的
+    #   _enforce_register_source_gate）。原因：留空时 HMAC 用随安装包分发的内置常量
+    #   密钥，掌握安装包者可离线为自己机器计算通行码、绕过管理员开户自助注册。
+    #   回环来源（单机桌面开箱，HOST=127.0.0.1）不受影响，保持原行为；
+    #   已配置本密钥的部署行为完全不变（保留 R9 跨机注册产品能力）。
     PASS_CODE_SECRET: str = ""
 
     # 数据库连接池配置
@@ -334,19 +340,21 @@ class Settings(BaseSettings):
             logging.getLogger(__name__).error(f"加载加密密钥失败: {e}，回退到环境变量")
 
     def _warn_missing_pass_code_secret(self) -> None:
-        """ADR-0004：生产环境未配置 PASS_CODE_SECRET → 跨机器通行码 HMAC 自验证 fail-closed。
+        """ADR-0004 / W24：未配置 PASS_CODE_SECRET 的部署告警（启动期，仅 production）。
 
-        此密钥不可像 ENCRYPTION_KEY 那样每机自动生成（跨机验证要求多实例共享同一秘密），
-        故仅告警提示部署方按需显式配置；单机部署（管理员在本机预录入通行码）可忽略。
+        安全基线（2026-10-19 决策，与 ENVIRONMENT 无关）：非回环来源的自助注册在
+        未配置本密钥时 fail-closed 403（见 api/v1/auth/auth.py 的来源门禁）；回环来源
+        （单机桌面开箱）不受影响。此密钥不可像 ENCRYPTION_KEY 那样每机自动生成
+        （跨机验证要求多实例共享同一秘密），故仅告警提示部署方按需显式配置。
         """
         if self.ENVIRONMENT == "production" and not self.PASS_CODE_SECRET:
             import logging
 
             logging.getLogger(__name__).warning(
-                "PASS_CODE_SECRET 未配置：跨机器通行码使用内置常量密钥自验证"
-                "（2026-09-06 产品决策，取代 fail-closed）。"
-                "如需更高强度（内置常量不可伪造），"
+                "PASS_CODE_SECRET 未配置：非回环来源的自助注册已 fail-closed 拒绝"
+                "（W24 2026-10-19 安全基线）；跨机器注册若需保留，"
                 "请在所有实例统一配置同一随机 PASS_CODE_SECRET。"
+                "回环来源（单机桌面开箱）不受影响。"
             )
 
     def model_post_init(self, __context) -> None:

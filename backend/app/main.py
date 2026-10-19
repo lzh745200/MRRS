@@ -154,6 +154,17 @@ app.add_middleware(MetricsMiddleware)
 from app.middleware.maintenance_gate import MaintenanceGateMiddleware  # noqa: E402
 app.add_middleware(MaintenanceGateMiddleware)
 
+# 1c. viewer 只读闸门（W24 产品决策，2026-10-19）：viewer 角色严格只读，
+# 写方法（POST/PUT/PATCH/DELETE）在非"账户自服务"白名单上直接 403，
+# 判定依据为令牌内 role 声明（零 DB 查询），详见 middleware/viewer_readonly.py。
+# 注册位置：与 1b 同理在 Audit/RequestLogger 之后添加（后注册者在外层）→
+# 本层位于两者**之内**：被拒请求仍会经过访问日志与审计中间件（可观测、可追责），
+# 又不进入 Metrics/QueryCounter 与业务路由（不产生 DB/指标副作用）。
+# 与 CORS/SecurityHeaders 等外层中间件兼容：403 为普通 JSON 响应，会正常带
+# CORS 与安全响应头；CSRF 若启用则先于本层执行（CSRF 失败 403 优先）。
+from app.middleware.viewer_readonly import ViewerReadOnlyMiddleware  # noqa: E402
+app.add_middleware(ViewerReadOnlyMiddleware)
+
 # 2. 审计日志中间件
 app.add_middleware(AuditMiddleware)
 
