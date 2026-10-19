@@ -5,6 +5,17 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.12] - 2026-10-19 — backend-test 12 段执行器稳定版（合并 R33 后首次完整验证）
+
+### Fixed
+
+- **backend-test 12 段细粒度执行（含 R33 并入后的测试面）**：本版本在 R33（单位授权）代码并入
+  main 后重跑完整 CI，验证 12 段执行器（每段独立进程 + `PYTHONFAULTHANDLER=1`）在
+  ubuntu-24.04 上的稳定性；覆盖率 `--cov-append` 跨段合并、最后一段按 `--cov-fail-under=100` 判定。
+  该方案用于规避单进程全量在 GitHub runner 上的 SQLAlchemy C 扩展 SIGSEGV（exit 139）。
+
+- 说明：本版本主要验证 CI 修复与 R33 合并后的整体门禁；产品 UI v2.0 内容与 v1.15.0 一致。
+
 ## [1.15.11] - 2026-10-19 — backend-test 12 段细粒度执行（缓解 SQLAlchemy C 扩展 SEGV）+ faulthandler
 
 ### Fixed
