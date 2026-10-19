@@ -5,6 +5,22 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.9] - 2026-10-19 — backend-test 恢复单进程全量（分段方案等效性验证失败后回退）
+
+### Fixed
+
+- **分段执行无法与单进程全量等价（v1.15.3–v1.15.8 的覆盖率门禁失败根因）**：
+  本地按 CI 的 8 段顺序复现后，合并覆盖率 **99.99%**（缺
+  pp/services/secrets_manager.py:143 + 3 个分支、pp/api/v1/subordinate_reports.py 2 分支），
+  且 	est_core_hardening_r28_build_info.py::test_default_start_points_are_used 因
+  **测试顺序依赖**（跨进程模块级状态差异）失败——分段与单进程全量不等价。
+  修复：backend-test **恢复单进程全量**（pytest tests/ -q --tb=short -rR --cov=app --cov-branch
+  --cov-report=... --reruns 2），本地以同一命令实测 **13,710 passed / 1 skipped / 100% 行+分支**；
+  配合 v1.15.5 已固定的 **ubuntu-24.04** runner（规避 Ubuntu 26 迁移导致的进程崩溃），
+  以及 v1.15.7 已修复的 action SHA。保留 PIPESTATUS 退出码捕获与 ree -m 诊断。
+
+- 说明：本版本仅修 CI 执行方式；产品代码与 UI v2.0 内容与 v1.15.0 完全一致。
+
 ## [1.15.8] - 2026-10-19 — 待决策项彻底落地：viewer 严格只读 + 非回环注册 fail-closed + ARM64 发布门禁 + nightly 稳定化
 
 ### Added
