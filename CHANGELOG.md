@@ -5,6 +5,23 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.7] - 2026-10-19 — 修复 workflow 的无效 action SHA（CI job 3 秒失败根因）
+
+### Fixed
+
+- **PR Checks / 构建 Workflow 的 `actions/setup-python` 等 action 引用失效（v1.15.6）**：
+  v1.15.6 提交（及同一批的 workflow 调整）把 action 引用升级为
+  `actions/setup-python@ece7cb06... # v6.3.0` 等 SHA，但该 SHA 在 GitHub 上无法解析
+  （`Unable to resolve action ... unable to find version`）→ **backend-test job 在
+  "Set up job" 步骤 3 秒即失败**（所有依赖 action 的 job 同受影响），与测试代码无关。
+  修复：把 `.github/workflows/*.yml` 中全部 action 引用**回滚为 v1.15.5 已验证有效的 SHA**
+  （checkout v4 / setup-python v5 / setup-node v5 / upload-artifact v4 / download-artifact v4 /
+  cache v4 / codecov v4 / action-gh-release v2 / docker setup-buildx v3 / setup-qemu v3），
+  共 61 处，并做严格校验（YAML 合法 + 无残留无效 SHA）。
+
+- 说明：本版本仅修 CI 配置，产品代码与 UI v2.0 内容与 v1.15.0 完全一致；backend-test 的
+  6 段执行器（v1.15.6）与 ubuntu-24.04 固定（v1.15.5）保持不变。
+
 ## [1.15.6] - 2026-10-19 — 全面体检修复：CI 稳定化 + 数据权限缓存泄漏 + 前端依赖冲突 + 构建可复现（W24）
 
 ### Fixed
