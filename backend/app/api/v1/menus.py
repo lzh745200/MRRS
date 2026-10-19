@@ -1324,6 +1324,11 @@ def _get_user_bound_pack(user: User, db: Session) -> PermissionPack | None:
     )
 
 
+# 工作台 key：登录后的落地页。单位授权矩阵生效时也**恒定可见** ——
+# 否则被授权"什么都看不到"的单位登录即白屏，连申诉入口都没有。
+_DASHBOARD_MENU_KEY = "dashboard"
+
+
 # 全角色公开模块（2026-08-15 产品要求）：
 # 政策法规与数据分析对普通用户（user/viewer）与管理员完全一致，
 # 不受用户级 allowed_menus / 权限包 / 角色默认配置的裁剪。
@@ -1351,6 +1356,24 @@ def _get_user_accessible_menu_keys(user: User, db: Session) -> set[str]:
     """
     if _is_superuser(user):
         return _flatten_menu_keys(MENU_DEFINITIONS)
+
+    # ── R33：单位授权矩阵优先 ──
+    # 上级下发授权包后，单位内所有用户以矩阵为唯一依据（不再并入 _PUBLIC_ACCESS_KEYS，
+    # 否则上级"收掉数据分析"的意图会被强制公开项抵消）。
+    from app.services.effective_grant_service import get_grant_matrix
+
+    matrix = get_grant_matrix(db, user)
+    if matrix.active:
+        keys = matrix.visible_keys()
+        # 工作台是登录后的落地页，缺了会白屏，故恒定可见
+        keys.add(_DASHBOARD_MENU_KEY)
+        allowed = user.allowed_menus_list
+        if allowed is not None:
+            # 用户级配置**只能收窄、不能扩大**：否则本地管理员给某个用户设一份
+            # allowed_menus 就能绕过上级授权（下级无超管，这正是要防的路径）。
+            keys &= set(allowed)
+            keys.add(_DASHBOARD_MENU_KEY)
+        return keys
 
     allowed = user.allowed_menus_list
     if allowed is not None:

@@ -19,7 +19,7 @@ import pytest
 
 PKG = "app.api.v1"
 
-EXPECTED_BUSINESS_MODULE_COUNT = 50  # W22：-2 villages/sentiment，+3 households/media/consumption
+EXPECTED_BUSINESS_MODULE_COUNT = 51  # W22：-2 villages/sentiment，+3 households/media/consumption；R33：+1 org_grants
 
 
 def _fresh_pkg():

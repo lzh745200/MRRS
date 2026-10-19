@@ -34,7 +34,7 @@ from app.utils.win_proactor_fix import apply_windows_proactor_fix
 
 apply_windows_proactor_fix()
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -44,6 +44,7 @@ from starlette.types import Scope
 from app.core.audit_middleware import AuditMiddleware
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
+from app.core.grant_guard import enforce_write_grant
 from app.core.logging_config import init_logging
 from app.core.security import SecurityHeadersMiddleware
 from app.core.static_files import setup_static_files
@@ -120,6 +121,10 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.DEBUG else None,
     redirect_slashes=True,
     lifespan=lifespan,
+    # R33 单位授权守卫（app 级依赖，覆盖全部路由）。
+    # 默认 GRANT_GUARD_MODE=off → 函数首行即返回，零开销、零行为变化；
+    # 切 shadow/enforce 才真正裁决写接口。
+    dependencies=[Depends(enforce_write_grant)],
 )
 
 register_exception_handlers(app)

@@ -7,7 +7,7 @@ import enum
 from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import backref, relationship
 
-from .base import BaseModel, EncryptedText
+from .base import BaseModel, EncryptedText, UtcDateTime
 
 
 class OrganizationType(str, enum.Enum):
@@ -64,6 +64,39 @@ class Organization(BaseModel):
     path = Column(String(500), nullable=True, comment="路径")
     created_by = Column(Integer, nullable=True, comment="创建人ID")
     updated_by = Column(Integer, nullable=True, comment="更新人ID")
+
+    # ── R33 单位授权（org_grants）元信息 ──
+    # 授权矩阵本体在 org_grants 表；本处只记录"应用了哪个版本、谁签的、从哪来"，
+    # 用于离线包导入时的版本比对与篡改检测（见 services/effective_grant_service）。
+    grant_version = Column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False,
+        comment="已应用的授权包版本号（0=未授权，解析时回落 legacy）",
+    )
+    grant_signature = Column(
+        Text,
+        nullable=True,
+        comment="授权包签名（Ed25519 十六进制；空=未经签名/本地生成）",
+    )
+    grant_applied_at = Column(
+        UtcDateTime(),
+        nullable=True,
+        comment="授权包应用时间",
+    )
+    grant_source = Column(
+        String(16),
+        nullable=True,
+        comment="授权来源: import-离线包导入, local-本机配置, default-内置默认",
+    )
+    inherit_from_parent = Column(
+        Boolean,
+        default=True,
+        server_default="1",
+        nullable=False,
+        comment="是否继承上级单位授权（False=独立授权，不向上合并）",
+    )
 
     # 自引用关系（树形结构）
     children = relationship(

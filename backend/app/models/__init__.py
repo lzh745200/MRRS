@@ -72,6 +72,8 @@ _MODULE_MAP = {
     "UserOrganization": ".user_organization",
     "ErrorReport": ".error_report",
     "OrgModulePolicy": ".org_module_policy",
+    # R33：单位授权矩阵（上级下发、下级只读执行）
+    "OrgGrant": ".org_grant",
     "SubordinateInstance": ".subordinate_registry",
     "PermissionPack": ".permission_pack",
     "FileBlob": ".file_blob",
