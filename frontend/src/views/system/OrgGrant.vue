@@ -28,12 +28,23 @@
         <el-button :disabled="!meta" @click="exportPkg">导出授权包</el-button>
       </div>
 
-      <el-alert v-if="errorMsg" class="feedback" type="error" :closable="false" show-icon :title="errorMsg" />
+      <el-alert
+        v-if="errorMsg"
+        class="feedback"
+        type="error"
+        :closable="false"
+        show-icon
+        :title="errorMsg"
+      />
 
       <el-descriptions v-if="meta" class="feedback" :column="2" border>
-        <el-descriptions-item label="单位编码">{{ meta.org_code || '（未填写）' }}</el-descriptions-item>
+        <el-descriptions-item label="单位编码">{{
+          meta.org_code || '（未填写）'
+        }}</el-descriptions-item>
         <el-descriptions-item label="授权版本">{{ meta.grant_version }}</el-descriptions-item>
-        <el-descriptions-item label="授权来源">{{ meta.grant_source || '未授权' }}</el-descriptions-item>
+        <el-descriptions-item label="授权来源">{{
+          meta.grant_source || '未授权'
+        }}</el-descriptions-item>
         <el-descriptions-item label="签名校验">
           <el-tag :type="meta.signed ? 'success' : 'info'" size="small">
             {{ meta.signed ? '已签名' : '未签名' }}

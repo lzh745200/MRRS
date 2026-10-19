@@ -26,12 +26,7 @@ vi.mock('@/api/request', () => ({
   parseContentDisposition: mockParseCd,
 }))
 
-import {
-  exportGrantPackage,
-  getOrgGrants,
-  importGrantPackage,
-  setOrgGrants,
-} from '@/api/orgGrants'
+import { exportGrantPackage, getOrgGrants, importGrantPackage, setOrgGrants } from '@/api/orgGrants'
 
 describe('api/orgGrants', () => {
   beforeEach(() => {

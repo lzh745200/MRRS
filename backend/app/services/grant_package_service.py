@@ -46,7 +46,6 @@ from sqlalchemy.orm import Session
 
 from app.core.grant_signing import (
     SIGNATURE_FIELD,
-    GrantSigningError,
     sign_payload,
     verify_payload,
 )

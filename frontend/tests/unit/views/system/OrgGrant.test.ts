@@ -56,7 +56,10 @@ const STUBS = {
     template:
       '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>',
   },
-  'el-option': { props: ['label', 'value'], template: '<option :value="value">{{ label }}</option>' },
+  'el-option': {
+    props: ['label', 'value'],
+    template: '<option :value="value">{{ label }}</option>',
+  },
 }
 
 function factory() {

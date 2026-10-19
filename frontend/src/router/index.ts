@@ -607,7 +607,7 @@ export const routes: RouteRecordRaw[] = [
         name: 'SystemGrantImport',
         component: () => retryImport(() => import('@/views/system/GrantImport.vue')),
         meta: {
-          menuKey: 'system-permission-packs',
+          menuKey: 'system-grant-import',
           title: '导入授权包',
           roles: ['admin', 'super_admin'],
         },
@@ -618,7 +618,7 @@ export const routes: RouteRecordRaw[] = [
         name: 'SystemOrgGrant',
         component: () => retryImport(() => import('@/views/system/OrgGrant.vue')),
         meta: {
-          menuKey: 'system-permission-packs',
+          menuKey: 'system-org-grant',
           title: '单位授权配置',
           roles: ['admin', 'super_admin'],
         },

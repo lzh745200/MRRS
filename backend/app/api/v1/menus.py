@@ -648,6 +648,23 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "order": 50,
                 "roles": ["admin", "super_admin"],
             },
+            # R34：R33 单位授权的两个页面补齐导航出口（此前只有路由无菜单，用户不可达）
+            {
+                "key": "system-org-grant",
+                "label": "单位授权配置",
+                "path": "/system/org-grant",
+                "icon": "Key",
+                "order": 60,
+                "roles": ["admin", "super_admin"],
+            },
+            {
+                "key": "system-grant-import",
+                "label": "导入授权包",
+                "path": "/system/grant-import",
+                "icon": "Upload",
+                "order": 70,
+                "roles": ["admin", "super_admin"],
+            },
         ],
     },
     {

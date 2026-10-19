@@ -132,6 +132,17 @@ vi.mock('@/views/dataVerify/Index.vue', () => ({
   default: { name: 'DataVerifyCoverageStub' },
 }))
 
+// R33（v1.15.12）单位授权配置/导入两页同理：各自有专属深挂载测试
+// （tests/unit/views/system/OrgGrant.test.ts、tests/unit/views/system/GrantImport.test.ts）。
+// 本文件遍历全部懒加载组件函数时会真实 import 这两个模块，不桩替换即产生第二个执行者，
+// 满量按 id 合并 fnMap 时可能错位 → functions 跌破 100%（见 frontend/vitest.config.ts 注释 (A)）。
+vi.mock('@/views/system/OrgGrant.vue', () => ({
+  default: { name: 'OrgGrantCoverageStub' },
+}))
+vi.mock('@/views/system/GrantImport.vue', () => ({
+  default: { name: 'GrantImportCoverageStub' },
+}))
+
 import router, { routes } from '@/router'
 
 // ==================== Helpers ====================

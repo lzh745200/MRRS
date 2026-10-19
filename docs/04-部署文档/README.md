@@ -11,9 +11,9 @@
 | **Docker E2E** | 任意 | compose | `make test-e2e-docker` (E2E 测试专用配置) |
 | **升级/回滚（全平台）** | — | — | [离线升级与回滚指南](OFFLINE_UPGRADE.md) |
 
-## 部署前置检查（安全红线，v1.15.7）
+## 部署前置检查（安全红线，v1.15.12）
 
-> 部署到**多机 / 局域网 / 非回环访问**前先完成本节两项检查；否则现场会出现
+> 部署到**多机 / 局域网 / 非回环访问**前先完成本节 4 项检查；否则现场会出现
 > "用户自助注册被拒（403）""只读账号写操作 403"等看似故障的问题。
 
 ### 1. PASS_CODE_SECRET 必须全实例一致（多机 / LAN / 非回环）
@@ -38,6 +38,44 @@
   `viewer` 后又期望其可写。
 - 旧角色值由 `normalize_role()` 自动归一：`approval_leader`/`manager` → `admin`，
   `operator` → `user`。
+
+### 3. R33 单位授权包签名（**导入授权包前必须先配置验签公钥**）
+
+授权包 = 上级单位下发给下级单位的"模块授权矩阵"JSON，Ed25519 签名用于防篡改。
+出厂配置下不配置密钥，**导入授权包会直接失败**（带签名包 → 400「本机未配置验签公钥」；
+未签名包 → 400「授权包未签名」）。
+
+- **上级（下发方）**：配置 `GRANT_SIGNING_KEY`（32 字节 hex Ed25519 **私钥**）用于签发授权包。
+  ⚠️ 私钥必须保密、不得提交版本库、不得下发给下级。未配置时导出的包为未签名包，下级默认拒绝。
+- **下级（接收方）**：只配置 `GRANT_PUBKEY`（32 字节 hex **公钥**）用于导入验签。
+- `GRANT_ALLOW_UNSIGNED` **永远保持 false**：一旦开启即摧毁"授权包不可篡改"的防篡改设计
+  （仅离线演练可临时开启，演练后必须改回）。
+- 生成密钥对（在 `backend` 目录执行，输出 hex 私钥/公钥；私钥只留在上级机器）：
+
+  ```bash
+  # Windows
+  cd backend && .venv\Scripts\python.exe -c "from app.core.grant_signing import generate_keypair as g; k=g(); print('GRANT_SIGNING_KEY='+k[0]); print('GRANT_PUBKEY='+k[1])"
+  # Linux / macOS
+  cd backend && .venv/bin/python -c "from app.core.grant_signing import generate_keypair as g; k=g(); print('GRANT_SIGNING_KEY='+k[0]); print('GRANT_PUBKEY='+k[1])"
+  ```
+
+- 配置位置：Linux（麒麟/国产系统 DEB）写入 `/opt/assistance-management-system/config/kylin.env`
+  或 systemd `Environment=`；Windows 安装版配置系统/用户环境变量；后端可读取的 `.env` 同样生效。
+- 操作路径：上级「系统管理 → 组织与权限 → 单位授权」配置矩阵并导出签名包 → U 盘/内网摆渡
+  → 下级「单位授权 → 导入授权包」。**导入前必须先配置 `GRANT_PUBKEY`**。
+- 密钥轮换：旧包验签会全部失败，需上级用新私钥重签、所有下级同步更新公钥。
+
+### 4. R33 写收窄（GRANT_GUARD_MODE）为可选能力
+
+| 模式 | 行为 |
+|---|---|
+| `off`（默认） | 完全关闭写收窄；仅"菜单裁剪"生效（看不到无权菜单），接口层不额外拦截 |
+| `shadow` | 只记日志不拦截，用于上线前收集"将被拦"清单 |
+| `enforce` | 越权写请求返回 403（「无该模块的录入权限」） |
+
+- **生产建议**：先 `GRANT_GUARD_MODE=shadow` 观察 1~2 周，确认"将被拦"清单符合预期后再切 `enforce`；
+  不要直接把默认值改为 enforce（会把存量权限配置问题一次性暴露成 403）。
+- 切换只需改环境变量并重启后端，无需改代码。
 
 ## 一键构建 .deb
 

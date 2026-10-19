@@ -5,6 +5,41 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.13] - 2026-10-19 — R34 发布闭环：CI 红项修复 + R33 导航入口 + 文档/PPT 更新 + 冗余清理
+
+### Fixed
+
+- **PR Checks 红项修复（v1.15.12 遗留）**：flake8 F401（`grant_package_service.py` 未使用导入）、
+  `OrgGrant.vue` prettier 告警（lint:check --max-warnings=0 失败）、README 版本号未随 1.15.12
+  同步（version 单一源校验失败）——三者是 v1.15.12 的 PR Checks 红因，也是 Build Windows 被
+  release gate 拦截的直接原因。
+- **R33 单位授权功能 UI 不可达**：`/system/org-grant`、`/system/grant-import` 路由/页面/API 齐全但
+  单一菜单源 `menus.py` 无入口（用户不可达）。已在「系统管理 > 组织与权限」console 新增
+  「单位授权配置」「导入授权包」两个 tab，路由 `meta.menuKey` 同步；菜单对齐门禁 A~E 通过。
+- **前端死代码清理**：移除 `api/fundsRecycle.ts`、`api/schoolsRecycle.ts` 中未使用的 `request`
+  默认导入与 `export { request }` 死导出（全仓 0 消费方，已 grep 验证）。
+- **前端覆盖率合并稳定性**：`router-index.test.ts` 为 R33 两个懒加载页面补 `vi.mock` 桩，避免同一
+  `.vue` 被多个测试文件执行导致 v8 fnMap 合并失真（functions 跌破 100% 的历史机制）。
+
+### Docs
+
+- README / CLAUDE.md 测试规模与构建命令更新；`.env.example` 新增 R33 `GRANT_*` 配置块；
+  部署文档新增「导入授权包前必须配置 GRANT_PUBKEY」「GRANT_ALLOW_UNSIGNED 永远 false」
+  「GRANT_GUARD_MODE 默认 off，生产建议先 shadow 再 enforce」；新增
+  `docs/04-部署文档/RELEASE_NOTES-v1.15.13.md`。
+- PPT（`docs/帮扶管理信息系统介绍.pptx`）更新至 v1.15.13：版本号、测试规模（13,926 / 6,865）、
+  CI/CD 12 段与发布门禁、双平台包体积、R33 单位授权功能。
+
+### Verification（R34 最终复检）
+
+- 安全复检：P0 无；viewer 只读、非回环注册门禁、PII 加密/日志脱敏、上传 ZIP 限长、CSRF/安全头
+  回归 354 项通过；npm audit 生产依赖 0 漏洞；仓库无硬编码私钥。
+- R33 后端 5 个新模块覆盖率 **100%**（124 tests）；R33 前端 3 个新文件覆盖率 **100%**（36 tests）。
+- API 契约：830 后端路由 vs 528 前端调用点，0 不匹配；菜单对齐 A~E 通过。
+- Windows 构建链终审：v1.15.0 以来未产出 Windows exe **均为 PR Checks 红被 release gate 拦截**
+  （v1.15.5/v1.15.7 gate 失败、v1.15.6 action SHA 基建故障），非构建失败；v1.14.3 同配置曾成功
+  产出 285.9MB x64 安装包，构建流程自该版本仅 timeout 5 行改动。
+
 ## [1.15.12] - 2026-10-19 — backend-test 12 段执行器稳定版（合并 R33 后首次完整验证）
 
 ### Fixed

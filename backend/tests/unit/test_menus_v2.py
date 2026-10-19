@@ -41,6 +41,9 @@ CONTRACT_CONSOLES = {
             ("menus", "/system/menus"),
             ("system-permission-packs", "/system/permission-packs"),
             ("organizations", "/organization"),
+            # R34：R33 单位授权的两个页面补齐导航出口
+            ("system-org-grant", "/system/org-grant"),
+            ("system-grant-import", "/system/grant-import"),
         ],
     ),
     "system-console-security": (
@@ -118,6 +121,8 @@ OLD_MENU_KEYS = {
 NEW_TAB_KEYS = {
     "roles", "menus", "organizations", "encryption",
     "chunked-upload", "control-package", "config-package", "email",
+    # R34：R33 单位授权两个 tab（新增 key，无旧 key 可沿用）
+    "system-org-grant", "system-grant-import",
 }
 
 # 契约明确删除的死项 / 重复路径项
@@ -477,7 +482,7 @@ class TestAllMenus:
         # 完整 roles：admin console 带 roles 下发，tabs 完整
         console = _find_item(data["sections"], "system-console-org")
         assert console["roles"] == ["admin", "super_admin"]
-        assert len(console["tabs"]) == 5
+        assert len(console["tabs"]) == 7
         # 不做用户级过滤：非管理员专属条目也在
         assert "users-orgs" in keys
         # /all 的 sections 覆盖所有 section 归属的顶层条目（dashboard/legacy 不在 sections）

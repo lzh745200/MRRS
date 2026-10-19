@@ -65,8 +65,8 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 11244 用例 + 覆盖率门禁 100%
-cd frontend && npm test -- --run                                       # 前端 302 文件 / 6051 用例
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 13,900+ 用例（CI 12 段独立进程）+ 覆盖率门禁 100%
+cd frontend && npm test -- --run                                       # 前端 328 文件 / 6,865 用例
 cd backend && .venv/Scripts/python.exe -m flake8 app/ --max-line-length=120 --max-complexity=16
 cd frontend && npm run lint:check && npm run type-check
 
@@ -106,8 +106,8 @@ docker compose -f docker-compose.yml -f docker/docker-compose.e2e.yml --profile 
 cd frontend && npm run build
 bash scripts/build/sync-frontend-dist.sh          # 同步 + 完整性校验
 python scripts/audit_static_assets.py --verbose   # 静态资源审计
-build-scripts\\build_windows_complete.bat          # Windows 安装包
-bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build/build-installer-local.ps1   # Windows x64 安装包（NSIS，等价 make build-win-x64）
+make build-kylin-arm64                            # 麒麟 ARM64 安装包（Docker buildx + QEMU，CI 同款）
 ```
 
 ## 访问地址与默认账号

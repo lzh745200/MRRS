@@ -1,19 +1,19 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.15.9
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.15.13
 
-![Version](https://img.shields.io/badge/version-1.15.9-blue)
+![Version](https://img.shields.io/badge/version-1.15.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-20%2C500%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-20%2C700%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **13,710 passed**, 0 失败（含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **6,826 passed**（328 文件）, 0 失败 |
+| 后端测试 | **13,926 passed**, 1 skipped（本机 12 段实测，CI 为最终口径；含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **6,865 passed**（328 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -33,8 +33,9 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-19（v1.15.0）— 后端 13,710 用例（1 skipped）+ 行/分支覆盖率 100.00%（44,423 stmts / 10,872 branches）；
-> 前端 **328 文件 / 6,826 用例、12 组 glob 100%**；E2E 154+（含 10 页视觉回归基线）；
+> **上次全量验证**: 2026-10-19（v1.15.12）— 后端 13,926 用例（1 skipped）+ 行/分支覆盖率 100.00%
+> （CI 后端测试为 **12 段独立进程**分段执行，`--cov-append` 合并，最终段由 `.coveragerc` fail_under=100 单一来源判定）；
+> 前端 **328 文件 / 6,865 用例、12 组 glob 100%**；E2E 154+（含 10 页视觉回归基线）；
 > flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 硬编码色 305（基线 345，57 个文件）/ 版本单一来源一致 / Alembic 单 head（50 版本）
 
 ## 快速开始
@@ -67,6 +68,15 @@ bash scripts/dev-setup.sh    # Linux
 cd backend && python -m venv .venv && pip install -r requirements.txt && python start.py
 cd frontend && npm install && npm run dev
 ```
+
+### 部署安全必配项（发布版）
+
+> 完整口径见 [部署文档总览](docs/04-部署文档/README.md) 的「部署前置检查（安全红线）」。
+
+- **多机 / 局域网 / 非回环部署**：所有实例必须配置**同一**随机 `PASS_CODE_SECRET`（否则非本机自助注册 fail-closed 403）。
+- **viewer 为严格只读**：写操作（含直连 API）服务端一律 403；需要录入/审批请用 `user` 及以上角色。
+- **R33 单位授权包**：上级配置 `GRANT_SIGNING_KEY`（Ed25519 私钥，保密勿入库）签发授权包；下级配置 `GRANT_PUBKEY` 验签——**导入授权包前必须先配置验签公钥**，否则导入被拒绝（400）。`GRANT_ALLOW_UNSIGNED` 永远保持 false。
+- **R33 写收窄** `GRANT_GUARD_MODE` 默认 `off`（仅菜单裁剪生效）；可选 `shadow`（只记日志）→ `enforce`（越权写 403），生产建议先 shadow 观察再 enforce。
 
 ### 访问地址与默认账号
 
@@ -234,6 +244,14 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 > 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
 
 ## 近期修复记录
+
+### 2026-10-19（v1.15.8 ~ v1.15.12）安全收官 + R33 单位授权 + CI 稳定化
+
+- **viewer 严格只读**：写操作（含直连 API）服务端一律 403；未配置 `PASS_CODE_SECRET` 时非回环自助注册 fail-closed。
+- **R33 单位授权**：上级配置单位模块授权矩阵并按 Ed25519 签发授权包，下级验签导入；写收窄 `GRANT_GUARD_MODE` 默认 off（可选 shadow→enforce）。**导入授权包前必须配置 `GRANT_PUBKEY`**，`GRANT_ALLOW_UNSIGNED` 永远 false。
+- **发布门禁**：ARM64 工作流补 release gate（与 Windows 同口径：tag commit 的 PR Checks 必须全绿才发布）。
+- **CI 稳定性**：后端测试改 **12 段独立进程**（`--cov-append` 合并 + 覆盖率 100% 单一来源），消除“约 24 分钟进程消失”型失败；nightly 后端同步 6 段。
+- 测试规模：后端 13,926 用例（1 skipped）、前端 6,865 用例（328 文件）。
 
 ### 2026-10-19（v1.15.0）UI v2.0：主题 3 套 + 显示偏好 4 档 + 设计系统统一
 - 🎨 **主题 5→3**：军绿（默认，无 `data-theme`）/ 深色大屏 `dark-bigscreen`（大屏专用）/ 户外高对比 `outdoor`；
