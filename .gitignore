@@ -412,3 +412,4 @@ backend/bumofu_pytest_appdata_*/
 pytest-of-*/
 backend/pytest-of-*/
 backend/tmp*/
+_tmp_esbuild/
