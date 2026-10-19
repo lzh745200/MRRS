@@ -9,7 +9,7 @@
  *
  * 设计原则：
  * - 不破坏现有全局样式，通过 .dashboard-modern 作用域隔离
- * - 与 tokens.scss 和 [data-theme="military"] 完全兼容
+ * - 与 tokens.scss 完全兼容（主题 5→3 后深色语义归入 [data-theme="dark-bigscreen"]）
  * - 所有过渡使用 cubic-bezier 保证流畅度
  *
  * 集成方式：在 main.ts 中 `import '@/styles/dashboard-theme.scss'`

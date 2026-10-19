@@ -85,23 +85,64 @@
           </template>
 
           <!-- ════ 后端下发的板块（page / group / console 三种渲染） ════ -->
-          <!-- 板块标题：放大加粗 + 点击展开/收起（W22，默认折叠，状态持久化） -->
+          <!-- 板块标题：W22 折叠/记忆；W23 当前板块金色竖条 + 收起态悬停/聚焦浮层 -->
           <template v-for="section in sidebarSections" :key="section.key">
-            <button
+            <div
               v-show="!isCollapsed"
-              type="button"
-              class="menu-section-label menu-section-toggle"
-              :aria-expanded="isSectionExpanded(section.key)"
-              @click="toggleSection(section.key)"
+              class="section-head"
+              @mouseenter="showSectionFlyout(section.key, $event)"
+              @mouseleave="hideSectionFlyout"
             >
-              <span>{{ section.label }}</span>
-              <el-icon
-                class="section-toggle-icon"
-                :class="{ 'is-expanded': isSectionExpanded(section.key) }"
+              <button
+                type="button"
+                class="menu-section-label menu-section-toggle"
+                :class="{ 'is-current': currentSectionKey === section.key }"
+                :aria-expanded="isSectionExpanded(section.key)"
+                @click="toggleSection(section.key)"
+                @focus="showSectionFlyout(section.key, $event)"
               >
-                <ArrowDown />
-              </el-icon>
-            </button>
+                <span>{{ section.label }}</span>
+                <el-icon
+                  class="section-toggle-icon"
+                  :class="{ 'is-expanded': isSectionExpanded(section.key) }"
+                >
+                  <ArrowDown />
+                </el-icon>
+              </button>
+
+              <!-- 收起态浮层：hover/键盘聚焦板块标题时浮出该板块子项（fixed 定位不被侧栏裁剪） -->
+              <div
+                v-if="flyoutSection && flyoutSection.key === section.key"
+                class="section-flyout"
+                :style="{ top: `${flyoutTop}px` }"
+                data-test="section-flyout"
+              >
+                <div class="section-flyout-title">{{ section.label }}</div>
+                <template v-for="item in section.items" :key="`flyout-${item.key}`">
+                  <div v-if="item.kind === 'group'" class="section-flyout-group">
+                    <div class="section-flyout-group-title">{{ item.label }}</div>
+                    <button
+                      v-for="child in item.children"
+                      :key="`flyout-${child.key}`"
+                      type="button"
+                      class="section-flyout-item"
+                      @click="goFlyoutPath(child.path)"
+                    >
+                      <span>{{ child.label }}</span>
+                    </button>
+                  </div>
+                  <button
+                    v-else
+                    type="button"
+                    class="section-flyout-item"
+                    @click="goFlyoutPath(item.path)"
+                  >
+                    <el-icon><component :is="resolveMenuIcon(item.icon)" /></el-icon>
+                    <span>{{ item.label }}</span>
+                  </button>
+                </template>
+              </div>
+            </div>
             <template v-for="item in section.items" :key="item.key">
               <!-- page：普通页面直链 -->
               <el-menu-item
@@ -163,8 +204,11 @@
             <el-breadcrumb-item :to="{ path: '/' }">
               <el-icon class="breadcrumb-home"><HomeFilled /></el-icon>
             </el-breadcrumb-item>
-            <el-breadcrumb-item v-if="currentRoute">
-              <span class="breadcrumb-current">{{ currentRoute }}</span>
+            <el-breadcrumb-item v-if="breadcrumb.sectionLabel">
+              <span class="breadcrumb-section">{{ breadcrumb.sectionLabel }}</span>
+            </el-breadcrumb-item>
+            <el-breadcrumb-item v-if="breadcrumb.pageLabel">
+              <span class="breadcrumb-current">{{ breadcrumb.pageLabel }}</span>
             </el-breadcrumb-item>
           </el-breadcrumb>
         </div>
@@ -223,6 +267,9 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="appearance">
+                  <el-icon><Setting /></el-icon> 外观设置
+                </el-dropdown-item>
                 <el-dropdown-item command="profile">
                   <el-icon><User /></el-icon> 个人中心
                 </el-dropdown-item>
@@ -258,11 +305,21 @@
     <MobileBottomNav />
     <!-- 菜单搜索（Ctrl+K） -->
     <MenuSearchDialog v-model="menuSearchVisible" />
+    <!-- 外观设置（W23）：W1 外观面板（主题 + 字号/密度/对比/简化） -->
+    <el-dialog
+      v-model="appearanceVisible"
+      append-to-body
+      title="外观设置"
+      width="480px"
+      class="appearance-dialog"
+    >
+      <AppearanceSettings />
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, watch } from 'vue'
 import { SYSTEM_VERSION as systemVersion } from '@/config/constants'
 import { ElNotification } from 'element-plus'
 import { useAutoLock as useAutoLockModule } from '@/composables/useAutoLock'
@@ -278,6 +335,7 @@ import { useConfigStore, THEME_OPTIONS } from '@/stores/config'
 import { cancelAllRequests, freezeRequests } from '@/api/request'
 import MobileBottomNav from '@/components/layout/MobileBottomNav.vue'
 import MenuSearchDialog from '@/components/nav/MenuSearchDialog.vue'
+import AppearanceSettings from '@/components/settings/AppearanceSettings.vue'
 import {
   HomeFilled,
   Expand,
@@ -292,6 +350,7 @@ import {
   StarFilled,
   Clock,
   Search,
+  Setting,
 } from '@element-plus/icons-vue'
 
 /** 侧栏普通链接（page / group children / 聚合页共用） */
@@ -357,6 +416,57 @@ const sidebarSections = computed<SidebarSection[]>(() =>
   }))
 )
 
+// ── 当前路由匹配（W23）：面包屑「板块 › 页面」+ 当前板块自动展开 ──
+/** 路径命中：精确相等或位于其子路径（详情页归入列表入口） */
+function matchMenuPath(current: string, target: string): boolean {
+  return current === target || current.startsWith(`${target}/`)
+}
+
+/** 当前路由所属板块 key（工作台等未入板块的页面返回 null） */
+function sectionKeyForPath(path: string): string | null {
+  for (const section of sidebarSections.value) {
+    for (const item of section.items) {
+      const hit =
+        item.kind === 'group'
+          ? item.children.some((child) => matchMenuPath(path, child.path))
+          : matchMenuPath(path, item.path)
+      if (hit) return section.key
+    }
+  }
+  return null
+}
+
+const currentSectionKey = computed<string | null>(() => sectionKeyForPath(route.path))
+
+interface BreadcrumbInfo {
+  sectionLabel: string
+  pageLabel: string
+}
+
+/**
+ * 面包屑（W23）：工作台固定「工作台」；其它页面「板块 › 页面」，无匹配时回退 meta.title。
+ *
+ * v1.15.0 收口：按**最长路径优先**匹配（原实现按遍历顺序，`/rural-works/list` 会先命中
+ * 父级 `/rural-works` 的「工作首页」；详情页 `/households/:id` 同理需要更长前缀优先）。
+ */
+const breadcrumb = computed<BreadcrumbInfo>(() => {
+  if (route.path === '/dashboard') return { sectionLabel: '', pageLabel: '工作台' }
+  let best: { sectionLabel: string; pageLabel: string; pathLen: number } | null = null
+  for (const section of sidebarSections.value) {
+    for (const item of section.items) {
+      const entries = item.kind === 'group' ? item.children : [item]
+      for (const entry of entries) {
+        if (!matchMenuPath(route.path, entry.path)) continue
+        if (!best || entry.path.length > best.pathLen) {
+          best = { sectionLabel: section.label, pageLabel: entry.label, pathLen: entry.path.length }
+        }
+      }
+    }
+  }
+  if (best) return { sectionLabel: best.sectionLabel, pageLabel: best.pageLabel }
+  return { sectionLabel: '', pageLabel: (route.meta?.title as string) || '' }
+})
+
 // ── 七大板块折叠（W22）：默认折叠，点击标题展开/收起，状态记忆到 localStorage ──
 const EXPANDED_SECTIONS_KEY = 'nav:expanded-sections'
 
@@ -396,7 +506,55 @@ function toggleSection(key: string): void {
     next.add(key)
   }
   expandedSections.value = next
+  flyoutSectionKey.value = null
   persistExpandedSections()
+}
+
+/** 当前板块自动展开并保持（W23） */
+function ensureSectionExpanded(key: string): void {
+  if (expandedSections.value.has(key)) return
+  const next = new Set(expandedSections.value)
+  next.add(key)
+  expandedSections.value = next
+  persistExpandedSections()
+}
+
+watch(
+  currentSectionKey,
+  (key) => {
+    if (key) ensureSectionExpanded(key)
+  },
+  { immediate: true }
+)
+
+// ── 板块收起态浮层（W23）：hover / 键盘聚焦标题时浮出本板块子项 ──
+const flyoutSectionKey = ref<string | null>(null)
+const flyoutTop = ref(0)
+
+/** 当前浮层板块（key 只可能来自已渲染板块，直接断言为非空） */
+const flyoutSection = computed<SidebarSection | null>(() => {
+  const key = flyoutSectionKey.value
+  if (!key) return null
+  return sidebarSections.value.find((section) => section.key === key) as SidebarSection
+})
+
+/** 显示浮层：仅板块收起时生效（展开态已有内联子项） */
+function showSectionFlyout(key: string, event: Event): void {
+  if (isSectionExpanded(key)) return
+  flyoutSectionKey.value = key
+  // 事件派发期间 currentTarget 必为该板块标题/包裹层
+  const target = event.currentTarget as HTMLElement
+  flyoutTop.value = Math.round(target.getBoundingClientRect().top)
+}
+
+function hideSectionFlyout(): void {
+  flyoutSectionKey.value = null
+}
+
+/** 浮层子项跳转：先关闭浮层再导航 */
+function goFlyoutPath(path: string): void {
+  hideSectionFlyout()
+  pushSafe(path)
 }
 
 // ── 收藏 / 最近访问（localStorage；仅展示当前用户仍可访问的入口） ──
@@ -415,6 +573,13 @@ const menuSearchVisible = ref(false)
 
 function openMenuSearch(): void {
   menuSearchVisible.value = true
+}
+
+// ── 外观设置（W23）：W1 AppearanceSettings 落盘前为内联占位入口 ──
+const appearanceVisible = ref(false)
+
+function openAppearanceSettings(): void {
+  appearanceVisible.value = true
 }
 
 // ── 消息中心未读角标 ──
@@ -465,8 +630,8 @@ onBeforeUnmount(() => {
 })
 
 // ── 主题切换 ──
-// 顶栏仅开放已完成适配的主题；dark/military 待全站硬编码 Token 化后开放（见 UI 设计方案 §3）
-const HEADER_THEME_VALUES = ['default', 'light', 'outdoor', 'high-contrast']
+// 顶栏仅开放日常/现场主题；dark-bigscreen 为汇报大屏专用（大屏页强制启用），不在顶栏切换
+const HEADER_THEME_VALUES = ['default', 'outdoor']
 const headerThemeOptions = THEME_OPTIONS.filter((t) => HEADER_THEME_VALUES.includes(t.value))
 
 function handleThemeChange(command: string) {
@@ -520,7 +685,6 @@ useAutoLockModule({
 })
 
 const username = computed(() => authStore.user?.username || authStore.user?.full_name || '管理员')
-const currentRoute = computed(() => (route.meta?.title as string) || '')
 
 // ── 全局快捷键 ──
 const globalShortcuts: Shortcut[] = [
@@ -614,6 +778,9 @@ useKeyboardShortcuts(globalShortcuts)
 
 function handleCommand(command: string) {
   switch (command) {
+    case 'appearance':
+      openAppearanceSettings()
+      break
     case 'profile':
       pushSafe('/profile')
       break
@@ -646,12 +813,12 @@ function handleCommand(command: string) {
    侧边栏 — 深色主题
    =================================================================== */
 .layout-aside {
-  background: linear-gradient(180deg, #132818 0%, #1d3d2a 40%, #1d3d2a 100%);
+  background: var(--sidebar-bg);
   transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid color-mix(in srgb, var(--color-text-inverse) 8%, transparent);
 }
 
 /* ── Logo 区域 ── */
@@ -660,7 +827,7 @@ function handleCommand(command: string) {
   display: flex;
   align-items: center;
   padding: 0 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-text-inverse) 8%, transparent);
   gap: 0;
   flex-shrink: 0;
 }
@@ -671,13 +838,13 @@ function handleCommand(command: string) {
   flex-shrink: 0;
   border-radius: 50%;
   object-fit: cover;
-  background: #132818;
+  background: var(--color-primary-900, var(--color-primary-dark-2));
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .app-title {
-  color: $badge-gold;
-  font-size: 17px;
+  color: var(--color-accent-gold);
+  font-size: var(--text-lg, 16px);
   font-weight: 700;
   white-space: nowrap;
   letter-spacing: 1.5px;
@@ -774,6 +941,87 @@ function handleCommand(command: string) {
 
 .section-toggle-icon.is-expanded {
   transform: rotate(180deg);
+}
+
+/* ── W23：板块标题包裹层 + 当前板块金色竖条 ── */
+.section-head {
+  position: relative;
+}
+
+.menu-section-toggle {
+  position: relative;
+  min-height: 40px;
+}
+
+.menu-section-toggle.is-current::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 3px;
+  height: 22px;
+  border-radius: var(--radius-sm, 2px);
+  background: var(--color-accent-gold);
+  transform: translateY(-50%);
+}
+
+.menu-section-toggle.is-current {
+  color: var(--color-accent-gold);
+  opacity: 1;
+}
+
+/* ── W23：板块收起态浮层（hover / 键盘聚焦标题显示） ── */
+.section-flyout {
+  position: fixed;
+  left: calc(var(--layout-sidebar-width, 240px) + 8px);
+  z-index: 3000;
+  min-width: 200px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--spacing-sm, 8px);
+  border: 1px solid var(--color-border-dark);
+  border-radius: var(--radius-lg, 8px);
+  background: var(--color-primary-dark-1);
+  box-shadow: var(--shadow-md, 0 4px 12px transparent);
+}
+
+.section-flyout-title {
+  padding: 6px 10px;
+  color: var(--color-accent-gold);
+  font-size: var(--text-sm, 13px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.section-flyout-group-title {
+  padding: 8px 10px 4px;
+  color: var(--color-text-inverse);
+  font-size: var(--text-xs, 12px);
+  opacity: 0.65;
+}
+
+.section-flyout-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-control, 6px);
+  background: transparent;
+  color: var(--color-text-inverse);
+  font-size: var(--text-sm, 13px);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.section-flyout-item:hover,
+.section-flyout-item:focus-visible {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: var(--color-accent-gold);
 }
 
 /* ===================================================================
@@ -957,14 +1205,9 @@ function handleCommand(command: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
-  background: linear-gradient(
-    135deg,
-    $military-dark 0%,
-    var(--color-primary) 50%,
-    $military-dark 100%
-  );
-  border-bottom: 1px solid rgba(212, 175, 55, 0.25);
+  padding: 0 var(--spacing-lg);
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-accent-gold) 25%, transparent);
   flex-shrink: 0;
 }
 
@@ -976,36 +1219,47 @@ function handleCommand(command: string) {
 
 .collapse-btn {
   font-size: 20px;
-  color: rgba(255, 255, 255, 0.7) !important;
-  transition: color 0.2s ease;
+  color: var(--color-text-inverse) !important;
+  opacity: 0.72;
+  transition:
+    color 0.2s ease,
+    opacity 0.2s ease;
 }
 .collapse-btn:hover {
-  color: $badge-gold !important;
+  color: var(--color-accent-gold) !important;
+  opacity: 1;
   background: transparent !important;
 }
 
-/* 面包屑 */
+/* 面包屑（W23：板块 › 页面） */
 .header-left :deep(.el-breadcrumb) {
-  font-size: 13px;
+  font-size: var(--text-sm, 13px);
 }
 .header-left :deep(.el-breadcrumb__inner) {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-inverse);
   font-weight: 400;
-  transition: color 0.2s;
+  opacity: 0.66;
+  transition: opacity 0.2s;
 }
 .header-left :deep(.el-breadcrumb__inner.is-link:hover) {
-  color: $badge-gold;
+  color: var(--color-accent-gold);
+  opacity: 1;
 }
 .header-left :deep(.el-breadcrumb__separator) {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--color-text-inverse);
+  opacity: 0.35;
   margin: 0 8px;
 }
 .breadcrumb-home {
   font-size: 15px;
   vertical-align: -2px;
 }
+.breadcrumb-section {
+  color: var(--color-text-inverse);
+  opacity: 0.72;
+}
 .breadcrumb-current {
-  color: $badge-gold !important;
+  color: var(--color-accent-gold) !important;
   font-weight: 600;
 }
 
@@ -1016,7 +1270,7 @@ function handleCommand(command: string) {
   gap: 6px;
 }
 
-/* ── 主题切换器 ── */
+/* ── 主题切换器 / 顶栏图标（W23：统一 token 视觉） ── */
 .theme-switcher {
   outline: none;
 }
@@ -1028,16 +1282,19 @@ function handleCommand(command: string) {
   height: 32px;
   border-radius: 50%;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-text-inverse);
+  opacity: 0.72;
   font-size: 16px;
   transition:
     background-color 0.22s ease,
-    color 0.22s ease;
+    color 0.22s ease,
+    opacity 0.22s ease;
 }
 .theme-trigger:hover,
 .theme-trigger:focus-visible {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: $badge-gold;
+  background-color: color-mix(in srgb, currentColor 12%, transparent);
+  color: var(--color-accent-gold);
+  opacity: 1;
 }
 .theme-check {
   margin-right: 4px;
@@ -1054,16 +1311,17 @@ function handleCommand(command: string) {
   transition: background-color 0.22s ease;
 }
 .user-info:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: color-mix(in srgb, var(--color-text-inverse) 12%, transparent);
 }
 
 .header-avatar {
-  border: 2px solid rgba(212, 175, 55, 0.5);
+  border: 2px solid color-mix(in srgb, var(--color-accent-gold) 55%, transparent);
 }
 
 .username {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
+  font-size: var(--text-sm, 13px);
+  color: var(--color-text-inverse);
+  opacity: 0.88;
   font-weight: 500;
   max-width: 100px;
   overflow: hidden;
@@ -1073,11 +1331,14 @@ function handleCommand(command: string) {
 
 .dropdown-arrow {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-  transition: transform 0.2s ease;
+  color: var(--color-text-inverse);
+  opacity: 0.55;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
 }
 .user-info:hover .dropdown-arrow {
-  color: rgba(255, 255, 255, 0.7);
+  opacity: 0.85;
 }
 
 /* ===================================================================
@@ -1097,10 +1358,11 @@ function handleCommand(command: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-  background: #152718;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: var(--text-xs, 12px);
+  color: var(--color-text-inverse);
+  opacity: 0.55;
+  background: var(--sidebar-bg);
+  border-top: 1px solid color-mix(in srgb, var(--color-text-inverse) 6%, transparent);
   flex-shrink: 0;
   letter-spacing: 0.03em;
 }
@@ -1118,8 +1380,8 @@ function handleCommand(command: string) {
   left: 0;
   z-index: 1000;
   padding: 8px 16px;
-  background: $badge-gold;
-  color: #1a3c2a;
+  background: var(--color-accent-gold);
+  color: var(--color-primary-dark-1);
   font-weight: 700;
   border-radius: 0 0 4px 0;
   transition: top 0.2s;
@@ -1140,6 +1402,10 @@ function handleCommand(command: string) {
   /* MobileBottomNav 固定底部高 56px，为滚动容器留出底部净空，避免遮挡内容 */
   .layout-content {
     padding-bottom: calc(56px + var(--spacing-md));
+  }
+
+  .section-flyout {
+    display: none;
   }
 }
 </style>

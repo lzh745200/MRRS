@@ -63,8 +63,8 @@
   }
 }
 
-/* ── 高对比度模式 ── */
-[data-theme="high-contrast"] {
+/* ── 高对比度模式（UI v2.0：由显示偏好 data-contrast="high" 驱动，不再占用主题值） ── */
+[data-contrast="high"] {
   --el-color-primary: #0000cc;
   --el-color-text-primary: #000000;
   --el-color-text-regular: #000000;
@@ -72,21 +72,18 @@
   --el-border-color: #000000;
   --el-border-color-light: #333333;
 }
-[data-theme="high-contrast"] .el-card {
+[data-contrast="high"] .el-card {
   border: 2px solid #000;
 }
-[data-theme="high-contrast"] .el-button {
+[data-contrast="high"] .el-button {
   border: 2px solid #000;
 }
-[data-theme="high-contrast"] a,
-[data-theme="high-contrast"] .el-link {
+[data-contrast="high"] a,
+[data-contrast="high"] .el-link {
   text-decoration: underline;
 }
 
-/* ── 大字体模式（户外/老年用户） ── */
-[data-theme="outdoor"] {
-  font-size: 1.15em;
-}
+/* ── 大字体模式（户外/老年用户）：字号由主题 --font-scale: 1.5 承担，这里只放大触控目标 ── */
 [data-theme="outdoor"] .el-button {
   min-height: 44px;
   min-width: 44px;

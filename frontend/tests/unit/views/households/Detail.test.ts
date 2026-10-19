@@ -284,10 +284,32 @@ describe('households/Detail.vue（一户一档详情）', () => {
     expect(wrapper.findAll('.visit-table .col-cell').length).toBeGreaterThan(0)
     // 成员表两行
     expect(wrapper.findAll('.el-table-column-stub[data-label="姓名"] .col-cell')).toHaveLength(2)
+
+    // W2 UI v2：list-page + 左主右辅布局 + 卡片/统计卡/数字列
+    expect(wrapper.find('.household-detail-page').classes()).toContain('list-page')
+    expect(wrapper.find('.detail-layout').exists()).toBe(true)
+    expect(wrapper.find('.detail-main').exists()).toBe(true)
+    expect(wrapper.find('.detail-side').exists()).toBe(true)
+    expect(wrapper.findAll('.app-card')).toHaveLength(5)
+    expect(wrapper.findAll('.app-stat-card')).toHaveLength(4)
+    expect(wrapper.findAll('.stat-value').map((el) => el.text())).toEqual([
+      '12000.50',
+      '2',
+      '是',
+      '否',
+    ])
+    expect(wrapper.findAll('.stat-trend').map((el) => el.text())).toEqual([
+      '年度',
+      '当前',
+      '需关注',
+      '需改造',
+    ])
+    expect(wrapper.findAll('.num-cell')).toHaveLength(8)
+    expect(wrapper.findAll('.app-empty')).toHaveLength(0)
     wrapper.unmount()
   })
 
-  it('详情缺字段：数组缺省为空，页面显示空态与占位符', async () => {
+  it('详情缺字段：数组缺省为空，页面显示三件套空态与占位符', async () => {
     mocks.getHousehold.mockResolvedValue({
       ...HOUSEHOLD,
       household_code: null,
@@ -296,6 +318,8 @@ describe('households/Detail.vue（一户一档详情）', () => {
       address: null,
       monitoring_note: null,
       migrant_workers: null,
+      has_serious_illness: false,
+      housing_safe: true,
       risk_alerts: undefined,
       risk_records: undefined,
       visits: undefined,
@@ -313,15 +337,31 @@ describe('households/Detail.vue（一户一档详情）', () => {
     expect(wrapper.text()).toContain('暂无风险记录')
     expect(wrapper.text()).toContain('暂无家庭成员')
     expect(wrapper.text()).toContain('暂无走访记录')
+    expect(wrapper.findAll('.app-empty')).toHaveLength(4)
     // 空值占位符与务工人数 0 兜底
     expect(wrapper.text()).toContain('—')
     expect(wrapper.text()).toContain('务工人数')
+    // 统计卡另一侧分支：无大病 / 住房安全
+    expect(wrapper.findAll('.stat-value').map((el) => el.text())).toEqual([
+      '12000.50',
+      '0',
+      '否',
+      '是',
+    ])
+    expect(wrapper.findAll('.stat-trend').map((el) => el.text())).toEqual([
+      '年度',
+      '当前',
+      '无',
+      '安全',
+    ])
 
     // 加载中骨架分支
     vm.household = null
     vm.loading = true
     await nextTick()
-    expect(wrapper.text()).toContain('加载中…')
+    expect(wrapper.find('.app-loading').text()).toContain('档案加载中')
+    // household 为空时统计卡兜底（?. 空分支）
+    expect(vm.statCards.map((card: any) => card.value)).toEqual(['—', 0, '否', '否'])
     wrapper.unmount()
   })
 
@@ -346,17 +386,18 @@ describe('households/Detail.vue（一户一档详情）', () => {
     wrapper.unmount()
   })
 
-  it('加载失败 → 错误态，重试成功后恢复', async () => {
+  it('加载失败 → 错误态三件套，重试成功后恢复', async () => {
     mocks.getHousehold.mockRejectedValueOnce(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
+    expect(wrapper.find('.app-error').exists()).toBe(true)
     expect(wrapper.text()).toContain('档案加载失败，请稍后重试')
     expect(vmOf(wrapper).household).toBeNull()
 
     await wrapper.find('.btn-retry').trigger('click')
     await flushPromises()
     expect(vmOf(wrapper).household.id).toBe(7)
-    expect(wrapper.text()).not.toContain('档案加载失败，请稍后重试')
+    expect(wrapper.find('.app-error').exists()).toBe(false)
     wrapper.unmount()
   })
 

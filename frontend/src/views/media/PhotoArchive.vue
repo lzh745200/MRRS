@@ -428,9 +428,9 @@ const spotGroups = computed(() => {
 async function loadFilterOptions(): Promise<void> {
   try {
     const [villages, schools, projects] = await Promise.all([
-      getSupportedVillages({ page: 1, page_size: 500 }),
-      schoolsApi.list({ page: 1, page_size: 500 }),
-      projectsApi.list({ page: 1, page_size: 500 }),
+      getSupportedVillages({ page: 1, page_size: 200 }),
+      schoolsApi.list({ page: 1, page_size: 200 }),
+      projectsApi.list({ page: 1, page_size: 200 }),
     ])
     villageOptions.value = unwrapList<any>(villages).items.map((item) => ({
       value: Number(item.id),

@@ -242,9 +242,9 @@ describe('挂载与卡片渲染', () => {
     const wrapper = mountComp()
     await flushPromises()
 
-    expect(mocks.getSupportedVillages).toHaveBeenCalledWith({ page: 1, page_size: 500 })
-    expect(mocks.schoolsList).toHaveBeenCalledWith({ page: 1, page_size: 500 })
-    expect(mocks.projectsList).toHaveBeenCalledWith({ page: 1, page_size: 500 })
+    expect(mocks.getSupportedVillages).toHaveBeenCalledWith({ page: 1, page_size: 200 })
+    expect(mocks.schoolsList).toHaveBeenCalledWith({ page: 1, page_size: 200 })
+    expect(mocks.projectsList).toHaveBeenCalledWith({ page: 1, page_size: 200 })
     expect(mocks.getPhotos).toHaveBeenCalledWith({ page: 1, page_size: 12 })
 
     const vm = wrapper.vm as any

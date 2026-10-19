@@ -30,8 +30,8 @@ test.describe('乡村工作模块', () => {
     test('应该正确加载列表页面', async ({ page }) => {
       await navigateTo(page, '/rural-works/list')
 
-      // 验证页面标题（布局面包屑展示路由 meta.title）
-      await expect(page.locator('.breadcrumb-current')).toContainText('乡村工作列表', {
+      // 验证页面标题（W23 面包屑走菜单数据源：「乡村振兴 › 工作列表」）
+      await expect(page.locator('.breadcrumb-current')).toContainText('工作列表', {
         timeout: 10000,
       })
 

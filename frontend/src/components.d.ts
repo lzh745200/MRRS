@@ -10,6 +10,12 @@ declare module 'vue' {
     BusinessEmptyStateEmptyState: typeof import('./components/business/EmptyState/EmptyState.vue')['default']
     BusinessFundGuidePopover: typeof import('./components/business/FundGuidePopover.vue')['default']
     BusinessSystemStatus: typeof import('./components/business/SystemStatus.vue')['default']
+    CommonAppEmpty: typeof import('./components/common/AppEmpty.vue')['default']
+    CommonAppError: typeof import('./components/common/AppError.vue')['default']
+    CommonAppLoading: typeof import('./components/common/AppLoading.vue')['default']
+    CommonAppPageHeader: typeof import('./components/common/AppPageHeader.vue')['default']
+    CommonAppStatCard: typeof import('./components/common/AppStatCard.vue')['default']
+    CommonAppTableToolbar: typeof import('./components/common/AppTableToolbar.vue')['default']
     CommonBaseChart: typeof import('./components/common/BaseChart.vue')['default']
     CommonChangeHistoryDialog: typeof import('./components/common/ChangeHistoryDialog.vue')['default']
     CommonChartErrorState: typeof import('./components/common/ChartErrorState.vue')['default']
@@ -108,6 +114,7 @@ declare module 'vue' {
     PermissionRoleTagsPanel: typeof import('./components/permission/RoleTagsPanel.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SettingsAppearanceSettings: typeof import('./components/settings/AppearanceSettings.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

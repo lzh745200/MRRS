@@ -1,0 +1,72 @@
+[
+  {
+    "name": "dashboard",
+    "path": "/dashboard",
+    "title": "工作台",
+    "contentPresent": true,
+    "landmarksHit": [true]
+  },
+  {
+    "name": "supported-villages",
+    "path": "/supported-villages",
+    "title": "帮扶村管理",
+    "contentPresent": true,
+    "landmarksHit": [true]
+  },
+  {
+    "name": "projects",
+    "path": "/projects",
+    "title": "帮扶项目管理",
+    "contentPresent": true,
+    "landmarksHit": [true]
+  },
+  {
+    "name": "funds",
+    "path": "/funds",
+    "title": "经费管理",
+    "contentPresent": true,
+    "landmarksHit": [true]
+  },
+  {
+    "name": "households",
+    "path": "/households",
+    "title": "一户一档",
+    "contentPresent": true,
+    "landmarksHit": [true]
+  },
+  {
+    "name": "media",
+    "path": "/media",
+    "title": "影像库",
+    "contentPresent": true,
+    "landmarksHit": [true]
+  },
+  {
+    "name": "consumption",
+    "path": "/consumption",
+    "title": "消费帮扶",
+    "contentPresent": true,
+    "landmarksHit": [true]
+  },
+  {
+    "name": "system-console",
+    "path": "/system/console/org",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [true]
+  },
+  {
+    "name": "data-verify",
+    "path": "/data-verify",
+    "title": "数据校验",
+    "contentPresent": true,
+    "landmarksHit": [true]
+  },
+  {
+    "name": "bigscreen",
+    "path": "/bigscreen",
+    "title": "帮扶成效大屏",
+    "contentPresent": true,
+    "landmarksHit": [true]
+  }
+]

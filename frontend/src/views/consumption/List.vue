@@ -398,7 +398,7 @@ const villageStats = computed(() =>
 /** 村下拉选项 */
 async function loadVillageOptions(): Promise<void> {
   try {
-    const res = await getSupportedVillages({ page: 1, page_size: 500 })
+    const res = await getSupportedVillages({ page: 1, page_size: 200 })
     villageOptions.value = unwrapList<any>(res).items.map((item) => ({
       value: Number(item.id),
       label: String(item.village_name ?? `#${item.id}`),

@@ -352,7 +352,7 @@ const militaryTechTheme: ThemeConfig = {
 }
 
 // ============================================================================
-// 暗色主题变体 —— 兼容 [data-theme="dark"]
+// 暗色主题变体 —— 兼容 [data-theme="dark-bigscreen"]
 // ============================================================================
 
 const militaryTechDarkTheme: ThemeConfig = {
@@ -518,13 +518,13 @@ export function registerMilitaryTheme(): void {
 /**
  * 根据当前 DOM 环境自动选择主题。
  * 检测 document.documentElement 的 data-theme 属性：
- * - `data-theme="dark"` → "militaryTechDark"
+ * - `data-theme="dark-bigscreen"` / `"outdoor"` → "militaryTechDark"
  * - 其他 → "militaryTech"（默认浅色）
  */
 export function getCurrentTheme(): string {
   if (typeof document !== 'undefined') {
     const theme = document.documentElement.getAttribute('data-theme')
-    if (theme === 'dark') return 'militaryTechDark'
+    if (theme === 'dark-bigscreen' || theme === 'outdoor') return 'militaryTechDark'
   }
   return 'militaryTech'
 }

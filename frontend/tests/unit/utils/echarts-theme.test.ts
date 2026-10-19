@@ -52,8 +52,10 @@ describe('utils/echarts-theme', () => {
     expect(getCurrentTheme()).toBe('militaryTech')
   })
 
-  it('getCurrentTheme 检测 data-theme="dark"', () => {
-    document.documentElement.setAttribute('data-theme', 'dark')
+  it('getCurrentTheme 检测 data-theme="dark-bigscreen" / "outdoor"（主题 5→3）', () => {
+    document.documentElement.setAttribute('data-theme', 'dark-bigscreen')
+    expect(getCurrentTheme()).toBe('militaryTechDark')
+    document.documentElement.setAttribute('data-theme', 'outdoor')
     expect(getCurrentTheme()).toBe('militaryTechDark')
   })
 

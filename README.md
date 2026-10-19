@@ -1,11 +1,11 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.14.3
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.15.0
 
-![Version](https://img.shields.io/badge/version-1.14.3-blue)
+![Version](https://img.shields.io/badge/version-1.15.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-20%2C000%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-20%2C500%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 项目状态
@@ -13,7 +13,7 @@
 | 指标 | 结果 |
 |------|------|
 | 后端测试 | **13,710 passed**, 0 失败（含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **6,748 passed**（321 文件）, 0 失败 |
+| 前端测试 | **6,826 passed**（328 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -26,13 +26,16 @@
 | CI/CD | PR Checks + Nightly Full Suite + Codecov |
 | Sass | 1.101.0（modern-compiler API） |
 | 角色体系 | 4 核心角色 (super_admin/admin/user/viewer) |
+| UI 设计系统 | **UI v2.0**：主题 3 套（军绿默认 / 深色大屏 / 户外高对比）+ 显示偏好 4 档（字号/密度/高对比/简化，localStorage `ui:prefs`）+ 统一 Token/组件类 |
+| 前端质量门禁 | 视觉回归基线 10 个关键页面（`tests/e2e/visual`）+ Token 契约测试（`tests/unit/ui`）+ 硬编码色棘轮 345→305（57 个文件；目标 ≤200） |
 
 | 预防门禁 | 6 个棘轮扫描器（os._exit / 上传限长 / 无界读 / 子进程编码 / 目录替换 / 周期任务注册）接入 CI，NEW=0 |
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-18（v1.14.0）— 后端 13,710 用例（1 skipped）+ 行/分支覆盖率 100.00%（44,423 stmts / 10,872 branches）、前端 6,748 用例（321 文件）全部通过；
-> flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 版本单一来源一致 / Alembic 单 head（50 版本）
+> **上次全量验证**: 2026-10-19（v1.15.0）— 后端 13,710 用例（1 skipped）+ 行/分支覆盖率 100.00%（44,423 stmts / 10,872 branches）；
+> 前端 **328 文件 / 6,826 用例、12 组 glob 100%**；E2E 154+（含 10 页视觉回归基线）；
+> flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 硬编码色 305（基线 345，57 个文件）/ 版本单一来源一致 / Alembic 单 head（50 版本）
 
 ## 快速开始
 
@@ -92,10 +95,12 @@ cd frontend && npm install && npm run dev
 
 ### 前端
 - **框架**: Vue 3 + TypeScript + Vite
-- **UI**: Element Plus + ECharts + Leaflet
-- **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`）数据驱动侧栏/移动端/权限面板；Ctrl+K 菜单搜索 + 收藏/最近访问；7 板块默认折叠、可展开（`nav:expanded-sections`）
+- **UI**: Element Plus + ECharts + Leaflet；**UI v2.0 设计系统**（`tokens.scss`：主色阶/卡片边框/两级阴影/三档圆角/字号 calc 缩放/行高 1.6/tabular-nums）
+- **主题与显示偏好**: 主题 3 套（军绿默认 / 深色大屏 `dark-bigscreen` / 户外高对比 `outdoor`）；显示偏好 4 档（字号 compact/standard/large、密度 comfortable/compact、高对比、简化模式；localStorage `ui:prefs` + `<html data-*>`），外观设置面板统一入口
+- **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`）数据驱动侧栏/移动端/权限面板；Ctrl+K 命令面板 + 收藏/最近访问；7 板块默认折叠、可展开（`nav:expanded-sections`）；侧栏当前板块金色竖条 + 收起态浮层 + 面包屑「板块 › 页面」
+- **组件体系**: 全局类 `.app-card/.app-stat-card/.app-empty/.app-loading/.app-error/.app-table-toolbar` + `components/common/` 通用组件 6 个
 - **状态**: Pinia
-- **测试**: Vitest + Playwright
+- **测试**: Vitest + Playwright；视觉回归基线（10 个关键页面 DOM 结构快照）+ Token 契约测试
 - **代码质量**: ESLint + Prettier + lint-staged
 
 ### 桌面
@@ -109,8 +114,10 @@ cd frontend && npm install && npm run dev
 | 后端单元测试 | pytest | 13,710（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,748（321 文件） | API/Store/Component/Composable/Utils |
-| E2E 测试 | Playwright | 12 流程 | Login/Dashboard/Projects/Approval/Funds |
+| 前端单元测试 | Vitest | 6,826（328 文件） | API/Store/Component/Composable/Utils |
+| E2E 测试 | Playwright | 154+ 流程（17 个 spec） | Login/Dashboard/Projects/Approval/Funds/导航正确性/响应时间 |
+| 视觉回归 | Playwright | 10 个关键页面（DOM 结构快照，非像素） | 工作台/帮扶村/项目/经费/一户一档/影像库/消费帮扶/系统管理/数据校验/大屏 |
+| UI Token 契约 | Vitest | `tests/unit/ui/ui-tokens.test.ts` | 主题 3 套/字号缩放/密度/高对比/简化/大屏字号档/全局类 |
 | 性能测试 | Locust | 配置可用 | 负载测试 |
 | 属性测试 | fast-check | 多组 | 组件属性验证 |
 | 无障碍测试 | Vitest | 多组 | ARIA/键盘/颜色对比度 |
@@ -125,6 +132,12 @@ cd backend && pytest tests/ -q --tb=short
 
 # 前端
 cd frontend && npm test
+
+# 前端视觉回归基线（10 个关键页面 DOM 结构快照）
+cd frontend && npx playwright test tests/e2e/visual --reporter=list
+
+# UI Token 契约（主题 3 套 / 显示偏好 / 全局类）
+cd frontend && npx vitest run tests/unit/ui/ui-tokens.test.ts
 
 # 全量（不含 E2E）—— 有 make 的环境用 make test；Windows 无 make 时逐条执行
 cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app
@@ -185,10 +198,11 @@ npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本
 │   └── startup/              # 启动钩子（种子/监控/恢复/环境自检 + 组织树自愈）
 ├── frontend/src/             # 前端（Vue 3 + TypeScript，290+ 个源文件）
 │   ├── views/                # 页面视图（含 system/console 6 聚合页、households 一户一档、media 影像库、consumption 消费帮扶）
-│   ├── components/           # 通用 + 业务组件（nav/ 菜单搜索）
-│   ├── composables/          # 组合式函数（useRecentMenus / useMenuFavorites）
-│   ├── layouts/              # 主框架（数据驱动侧栏 + 7 板块折叠）
-│   ├── stores/               # Pinia 状态（menu.ts 消费后端 v2 菜单）
+│   ├── components/           # 通用 + 业务组件（common/ 6 个通用组件、nav/ 菜单搜索、settings/ 外观设置）
+│   ├── composables/          # 组合式函数（useUiPrefs 显示偏好、useRecentMenus / useMenuFavorites）
+│   ├── layouts/              # 主框架（数据驱动侧栏 + 当前板块金色竖条 + 收起浮层 + 面包屑）
+│   ├── styles/               # 样式体系（tokens.scss 设计 Token；components/{card,states,dialog,ui-v2,…}.scss 全局模板）
+│   ├── stores/               # Pinia 状态（menu.ts 消费后端 v2 菜单；config.ts 主题）
 │   └── utils/                # 工具函数
 ├── electron/                 # Electron 桌面壳
 ├── docker/                   # 多架构 Dockerfile + E2E compose
@@ -220,6 +234,23 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 > 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
 
 ## 近期修复记录
+
+### 2026-10-19（v1.15.0）UI v2.0：主题 3 套 + 显示偏好 4 档 + 设计系统统一
+- 🎨 **主题 5→3**：军绿（默认，无 `data-theme`）/ 深色大屏 `dark-bigscreen`（大屏专用）/ 户外高对比 `outdoor`；
+  旧值 light/dark/military/high-contrast 由 `normalizeTheme()` 迁移，历史用户不失效
+- 🔤 **显示偏好 4 档**：字号（紧凑/标准/大号，`--font-scale` 0.92/1/1.12）、密度（舒适/紧凑，表格行高 44/34px）、
+  高对比、简化模式（隐藏趋势箭头/辅助说明/高级字段）；localStorage `ui:prefs` + `<html data-*>`，
+  `composables/useUiPrefs.ts` 唯一入口，外观设置面板（头像下拉「外观设置」）即时生效并持久化
+- 🧱 **Token 升级**：主色阶 50/100/500/600/700/900、卡片边框、两级阴影（`--shadow-card`/`--shadow-pop`）、
+  三档圆角（8/6/999）、字号阶梯 calc 缩放、正文行高 1.6、数字 tabular-nums、侧栏深绿渐变 + 当前板块金色竖条
+- 🧩 **全局组件类 + 通用组件**：`.app-card/.app-stat-card/.app-empty/.app-loading/.app-error/.app-table-toolbar`；
+  `components/common/` 6 个通用组件（AppPageHeader/AppStatCard/AppEmpty/AppLoading/AppError/AppTableToolbar）
+- 🧭 **导航体验**：侧栏当前板块金色竖条、收起态 hover/键盘聚焦浮层、面包屑「板块 › 页面」、Ctrl+K 命令面板
+- 🖥️ **工作台/大屏**：工作台 KPI 统计卡 + 待办清单 + 图表层级；大屏三层结构 + 3m/6m/10m 距离字号分档 + 15s 自动轮播（可暂停/关闭）
+- 🧪 **视觉回归门禁**：`tests/unit/ui/ui-tokens.test.ts`（Token/主题/偏好/类契约）+ `tests/e2e/visual`（10 页 DOM 结构基线）；
+  硬编码色基线 345 → 305（57 个文件，目标 ≤200，改动文件零新增）
+- 🐛 **本轮修复的真实问题**：多列表页 `page_size=500` 超后端上限 200 → 422（统一为 200）；工作台 KPI 取消请求被误判为错误（已降级）；
+  Token 重复定义覆盖（已清理）；面包屑最长路径优先（`/rural-works/list` 不再错误命中父级目录）
 
 ### 2026-10-18（v1.14.0）功能大迭代：一户一档 / 影像库 / 消费帮扶 / OCR
 - 🏠 **一户一档**：新增 `households` / `household_members` / `household_risk_records` 三表与 `/households/*` API；

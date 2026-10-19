@@ -300,7 +300,7 @@ async function openBind(row: any) {
     const res: any = await apiRequest({
       method: 'GET',
       url: '/users',
-      params: { page: 1, page_size: 500 },
+      params: { page: 1, page_size: 200 },
     })
     const users = unwrapList(res).items
     // 仅普通用户/访客可绑定（管理员不受权限包限制）

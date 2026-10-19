@@ -1,30 +1,45 @@
 <template>
   <div class="chart-row">
-    <div class="chart-card">
+    <div class="chart-card app-card">
       <h3 class="chart-title">项目进度跟踪</h3>
-      <el-skeleton v-if="loading" animated :rows="5" class="chart-skeleton" />
-      <div v-else-if="error" class="chart-state chart-state--error">
+      <div v-if="loading" class="app-loading chart-loading" data-testid="chart-loading">
+        <el-skeleton animated :rows="5" class="chart-skeleton" />
+      </div>
+      <div
+        v-else-if="error"
+        class="chart-state chart-state--error app-error"
+        data-testid="chart-error"
+      >
         <span>数据加载失败，请稍后重试</span>
         <el-button type="primary" @click="loadAndRender">重试</el-button>
       </div>
-      <EmptyState v-else-if="!hasProjects" text="暂无项目数据" class="chart-empty" :size="72" />
+      <div v-else-if="!hasProjects" class="chart-empty app-empty" data-testid="chart-empty">
+        <p>暂无项目数据</p>
+      </div>
       <div v-else ref="barRef" class="chart-body" />
     </div>
-    <div class="chart-card">
+    <div class="chart-card app-card">
       <h3 class="chart-title">经费使用概览</h3>
-      <el-skeleton v-if="loading" animated :rows="5" class="chart-skeleton" />
-      <div v-else-if="error" class="chart-state chart-state--error">
+      <div v-if="loading" class="app-loading chart-loading" data-testid="chart-loading">
+        <el-skeleton animated :rows="5" class="chart-skeleton" />
+      </div>
+      <div
+        v-else-if="error"
+        class="chart-state chart-state--error app-error"
+        data-testid="chart-error"
+      >
         <span>数据加载失败，请稍后重试</span>
         <el-button type="primary" @click="loadAndRender">重试</el-button>
       </div>
-      <EmptyState v-else-if="!hasFunds" text="暂无经费数据" class="chart-empty" :size="72" />
+      <div v-else-if="!hasFunds" class="chart-empty app-empty" data-testid="chart-empty">
+        <p>暂无经费数据</p>
+      </div>
       <div v-else ref="pieRef" class="chart-body" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { unwrapList } from '@/utils/unwrapList'
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import echarts from '@/utils/echarts'
@@ -218,61 +233,73 @@ onUnmounted(() => {
 .chart-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: var(--spacing-md, 16px);
+
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
   }
 }
+
 .chart-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 20px 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--color-card-border, var(--color-border-light));
+  border-radius: var(--radius-card, 8px);
+  padding: var(--spacing-lg, 20px);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
 }
+
 .chart-title {
-  font-size: 15px;
+  font-size: var(--text-lg, 16px);
   font-weight: 600;
   color: var(--color-text-primary);
-  margin: 0 0 12px 0;
+  margin: 0 0 var(--spacing-sm, 12px) 0;
   display: flex;
   align-items: center;
   gap: 8px;
+
   &::before {
     content: '';
     display: inline-block;
     width: 4px;
     height: 16px;
     border-radius: 2px;
-    background: linear-gradient(180deg, #1e4d8c, var(--color-primary));
+    background: var(--color-primary);
   }
 }
+
 .chart-body {
   width: 100%;
   height: 260px;
 }
+
+.chart-loading,
 .chart-skeleton {
   height: 260px;
 }
+
 .chart-state {
   height: 260px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: $spacing-sm;
-  color: $color-text-secondary;
-  font-size: $font-size-md;
+  gap: var(--spacing-sm, 12px);
+  color: var(--color-text-secondary);
+  font-size: var(--text-md, 14px);
 }
+
 .chart-empty {
   height: 260px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  color: var(--color-text-secondary);
 
-  :deep(.el-empty__description p) {
-    color: $color-text-secondary;
-    font-size: $font-size-sm;
+  p {
+    margin: 0;
+    font-size: var(--text-sm, 13px);
   }
 }
 </style>

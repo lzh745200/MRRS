@@ -15,7 +15,7 @@ const { ElMessage, ElMessageBox, mockGet, mockPost, mockPut, mockDel, configStor
   mockPost: vi.fn(),
   mockPut: vi.fn(),
   mockDel: vi.fn(),
-  configStore: { theme: 'light', setTheme: vi.fn() },
+  configStore: { theme: 'default', setTheme: vi.fn() },
 }))
 
 vi.mock('element-plus', () => ({
@@ -93,7 +93,7 @@ async function mountComp() {
           props: ['modelValue'],
           emits: ['update:modelValue', 'change'],
           template:
-            '<div class="el-radio-group-stub" @click="$emit(\'update:modelValue\', \'dark\'); $emit(\'change\', \'dark\')"><slot /></div>',
+            '<div class="el-radio-group-stub" @click="$emit(\'update:modelValue\', \'dark-bigscreen\'); $emit(\'change\', \'dark-bigscreen\')"><slot /></div>',
         },
         'el-radio-button': {
           name: 'ElRadioButton',
@@ -113,7 +113,7 @@ beforeEach(() => {
   mockPost.mockResolvedValue({})
   mockPut.mockResolvedValue({})
   ElMessageBox.confirm.mockResolvedValue('confirm')
-  configStore.theme = 'light'
+  configStore.theme = 'default'
   configStore.setTheme = vi.fn()
   document.documentElement.removeAttribute('data-theme')
 })
@@ -134,27 +134,27 @@ describe('ConfigPackage.vue', () => {
   it('主题应用：合法/非法主题', async () => {
     const w = await mountComp()
     const vm = w.vm as any
-    vm.applyTheme('military')
-    expect(vm.currentTheme).toBe('military')
-    expect(configStore.setTheme).toHaveBeenCalledWith('military')
-    expect(document.documentElement.getAttribute('data-theme')).toBe('military')
+    vm.applyTheme('outdoor')
+    expect(vm.currentTheme).toBe('outdoor')
+    expect(configStore.setTheme).toHaveBeenCalledWith('outdoor')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('outdoor')
     vm.applyTheme('bogus-theme')
-    expect(vm.currentTheme).toBe('light')
-    expect(configStore.setTheme).toHaveBeenLastCalledWith('light')
+    expect(vm.currentTheme).toBe('default')
+    expect(configStore.setTheme).toHaveBeenLastCalledWith('default')
   })
 
-  it('主题为空 → 回退 light', async () => {
+  it('主题为空 → 回退 default', async () => {
     configStore.theme = ''
     const w = await mountComp()
-    expect((w.vm as any).currentTheme).toBe('light')
+    expect((w.vm as any).currentTheme).toBe('default')
   })
 
   it('主题选择器（radio-group）→ 应用主题', async () => {
     const w = await mountComp()
     const vm = w.vm as any
     await w.find('.el-radio-group-stub').trigger('click')
-    expect(vm.currentTheme).toBe('dark')
-    expect(configStore.setTheme).toHaveBeenCalledWith('dark')
+    expect(vm.currentTheme).toBe('dark-bigscreen')
+    expect(configStore.setTheme).toHaveBeenCalledWith('dark-bigscreen')
   })
 
   it('加载配置失败 → 空列表', async () => {
@@ -369,25 +369,29 @@ describe('ConfigPackage.vue', () => {
 
   describe('外观主题（T2.4）', () => {
     it('挂载时应用已存主题到 data-theme', async () => {
+      // 已存主题为户外高对比（主题 5→3 后的合法值）
+      configStore.theme = 'outdoor'
       const w = await mountComp()
-      expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+      expect(document.documentElement.getAttribute('data-theme')).toBe('outdoor')
+      expect((w.vm as any).currentTheme).toBe('outdoor')
     })
 
     it('applyTheme 切换主题并持久化到 store', async () => {
       const w = await mountComp()
       const vm = w.vm as any
-      vm.applyTheme('dark')
-      expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
-      expect(configStore.setTheme).toHaveBeenCalledWith('dark')
-      expect(vm.currentTheme).toBe('dark')
+    vm.applyTheme('dark-bigscreen')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark-bigscreen')
+    expect(configStore.setTheme).toHaveBeenCalledWith('dark-bigscreen')
+    expect(vm.currentTheme).toBe('dark-bigscreen')
     })
 
-    it('applyTheme 非法主题回退 light', async () => {
+  it('applyTheme 非法主题回退 default', async () => {
       const w = await mountComp()
       const vm = w.vm as any
       vm.applyTheme('neon')
-      expect(document.documentElement.getAttribute('data-theme')).toBe('light')
-      expect(vm.currentTheme).toBe('light')
+      // default 主题 = 移除 data-theme（渲染 :root 军绿默认）
+      expect(document.documentElement.hasAttribute('data-theme')).toBe(false)
+      expect(vm.currentTheme).toBe('default')
     })
 
     it('applyTheme default 移除 data-theme 属性（回到军绿默认）', async () => {

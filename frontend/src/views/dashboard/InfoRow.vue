@@ -1,11 +1,15 @@
 <template>
   <div class="info-row">
     <!-- 左侧：近期动态 -->
-    <div class="timeline-section">
+    <div class="timeline-section app-card">
       <h3 class="section-title">近期动态</h3>
       <div class="timeline-list">
-        <div v-if="loading" class="tl-state">加载中...</div>
-        <div v-else-if="error && activities.length === 0" class="tl-state tl-state--error">
+        <div v-if="loading" class="tl-state app-loading" data-testid="info-loading">加载中...</div>
+        <div
+          v-else-if="error && activities.length === 0"
+          class="tl-state tl-state--error app-error"
+          data-testid="info-error"
+        >
           <span>数据加载失败，请稍后重试</span>
           <el-button type="primary" @click="loadActivities">重试</el-button>
         </div>
@@ -36,7 +40,9 @@
               </button>
             </template>
           </div>
-          <div v-if="activities.length === 0" class="tl-empty">暂无动态</div>
+          <div v-if="activities.length === 0" class="tl-empty app-empty" data-testid="info-empty">
+            暂无动态
+          </div>
         </template>
       </div>
     </div>
@@ -133,34 +139,34 @@ onUnmounted(() => {
 .info-row {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 16px;
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
+  gap: var(--spacing-md, 16px);
 }
 
 .timeline-section {
   background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 20px 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--color-card-border, var(--color-border-light));
+  border-radius: var(--radius-card, 8px);
+  padding: var(--spacing-lg, 20px);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
 }
 
 .section-title {
-  font-size: 15px;
+  font-size: var(--text-lg, 16px);
   font-weight: 600;
   color: var(--color-text-primary);
-  margin: 0 0 16px 0;
+  margin: 0 0 var(--spacing-md, 16px) 0;
   display: flex;
   align-items: center;
   gap: 8px;
+
   &::before {
     content: '';
     display: inline-block;
     width: 4px;
     height: 16px;
     border-radius: 2px;
-    background: linear-gradient(180deg, #1e4d8c, var(--color-primary));
+    background: var(--color-primary);
   }
 }
 
@@ -169,106 +175,124 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0;
 }
+
 .timeline-item {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 0;
   border-bottom: 1px solid var(--color-border-lighter);
+
   &:last-child {
     border-bottom: none;
   }
 }
+
 .tl-time {
-  font-size: 11px;
+  font-size: var(--text-xs, 12px);
   color: var(--color-text-placeholder);
-  font-family: 'DIN Alternate', monospace;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   min-width: 50px;
 }
+
 .tl-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-pill, 999px);
   background: var(--color-primary);
   flex-shrink: 0;
 }
+
 .tl-text {
-  font-size: 13px;
+  font-size: var(--text-sm, 13px);
   color: var(--color-text-secondary);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .tl-target {
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   color: var(--color-text-placeholder);
   margin-left: 4px;
 }
+
 .tl-edit-btn,
 .tl-delete-btn {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   padding: 2px 6px;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--transition-fast, 0.2s);
   color: var(--color-text-placeholder);
-  border-radius: 4px;
+  border-radius: var(--radius-control, 6px);
   display: inline-flex;
   align-items: center;
 }
+
 .timeline-item:hover .tl-edit-btn,
 .timeline-item:hover .tl-delete-btn {
   opacity: 1;
 }
+
 .tl-edit-btn:hover {
   color: var(--color-primary);
   background: var(--color-bg-hover);
 }
+
 .tl-delete-btn:hover {
   color: var(--color-danger);
-  background: #fef2f2;
+  background: var(--color-danger-lightest);
 }
+
 .tl-edit-input {
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   padding: 2px 6px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-control, 6px);
   width: 80px;
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
 }
+
 .tl-save-btn,
 .tl-cancel-btn {
-  font-size: 11px;
+  font-size: var(--text-xs, 12px);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-control, 6px);
   padding: 2px 8px;
   cursor: pointer;
 }
+
 .tl-save-btn {
   background: var(--color-primary);
   color: var(--color-text-inverse);
 }
+
 .tl-cancel-btn {
-  background: #e5e7eb;
-  color: #374151;
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
 }
+
 .tl-empty {
   text-align: center;
   color: var(--color-text-placeholder);
-  font-size: 13px;
-  padding: 20px 0;
+  font-size: var(--text-sm, 13px);
+  padding: var(--spacing-lg, 20px) 0;
 }
+
 .tl-state {
   text-align: center;
-  color: $color-text-secondary;
-  font-size: 13px;
-  padding: 20px 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm, 13px);
+  padding: var(--spacing-lg, 20px) 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: $spacing-sm;
+  gap: var(--spacing-sm, 12px);
 }
 </style>

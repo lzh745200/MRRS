@@ -251,7 +251,7 @@ describe('挂载与统计卡', () => {
     const wrapper = mountComp()
     await flushPromises()
 
-    expect(mocks.getSupportedVillages).toHaveBeenCalledWith({ page: 1, page_size: 500 })
+    expect(mocks.getSupportedVillages).toHaveBeenCalledWith({ page: 1, page_size: 200 })
     expect(mocks.getConsumptionRecords).toHaveBeenCalledWith({
       page: 1,
       page_size: 20,

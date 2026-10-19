@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="菜单搜索"
+    title="命令面板 · 菜单搜索"
     width="560px"
     class="menu-search-dialog"
     append-to-body
@@ -55,6 +55,9 @@
         </div>
       </div>
       <el-empty v-else :description="emptyHint" :image-size="72" />
+      <p class="menu-search-hint" data-test="menu-search-hint">
+        ↑ ↓ 选择 · Enter 跳转 · Esc 关闭 · Ctrl+K 再次打开
+      </p>
     </div>
   </el-dialog>
 </template>
@@ -309,5 +312,15 @@ onUnmounted(() => window.removeEventListener('keydown', onWindowKeydown))
 .menu-search-item-star:hover,
 .menu-search-item-star.is-starred {
   color: var(--color-warning);
+}
+
+/* W23：命令面板快捷键提示（token 色，无硬编码） */
+.menu-search-hint {
+  margin: 0;
+  padding-top: var(--spacing-sm, 8px);
+  border-top: 1px solid var(--color-border-light);
+  color: var(--color-text-placeholder);
+  font-size: var(--text-xs, 12px);
+  text-align: center;
 }
 </style>

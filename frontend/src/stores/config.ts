@@ -7,30 +7,43 @@ export const THEME_STORAGE_KEY = 'theme'
 /** 默认主题标识（军绿，对应 tokens.scss :root；DOM 上不设置 data-theme 属性） */
 export const DEFAULT_THEME = 'default'
 
-/** 主题选项（顶栏切换器与系统设置共用） */
+/**
+ * 主题选项（顶栏切换器与外观设置共用）。
+ *
+ * UI v2.0（W23）：主题 5→3 收敛。`default`（= tokens.scss :root 军绿亮色）、
+ * `dark-bigscreen`（深色大屏）、`outdoor`（户外高对比）。
+ * 旧值 light/dark/military/high-contrast 由 normalizeTheme 迁移映射，历史用户不失效。
+ */
 export interface ThemeOption {
   value: string
   label: string
 }
 
 export const THEME_OPTIONS: ThemeOption[] = [
-  { value: 'default', label: '军绿' },
-  { value: 'light', label: '明亮' },
-  { value: 'dark', label: '深色' },
-  { value: 'military', label: '军旅' },
-  { value: 'outdoor', label: '户外' },
-  { value: 'high-contrast', label: '高对比' },
+  { value: 'default', label: '军绿（默认）' },
+  { value: 'dark-bigscreen', label: '深色大屏' },
+  { value: 'outdoor', label: '户外高对比' },
 ]
 
+/** 旧主题值迁移表（v1.15.0 主题 5→3）。 */
+export const LEGACY_THEME_MAP: Record<string, string> = {
+  light: 'default',
+  dark: 'dark-bigscreen',
+  military: 'default',
+  'high-contrast': 'outdoor',
+}
+
 /**
- * 主题取值白名单校验。
+ * 主题取值白名单校验（含旧值迁移）。
  *
  * 非法/未知主题一旦落到 data-theme 上（例如 localStorage 被写入 "darkk"），
  * 全站 token 全部失效（没有任何 [data-theme="darkk"] 规则命中）→ 界面裸奔。
  * 因此所有外部来源（localStorage / 后端配置）的主题值都必须先过这里。
  */
 export function normalizeTheme(value: unknown): string {
-  return THEME_OPTIONS.some((t) => t.value === value) ? (value as string) : DEFAULT_THEME
+  const raw = typeof value === 'string' ? value : ''
+  const mapped = LEGACY_THEME_MAP[raw] ?? raw
+  return THEME_OPTIONS.some((t) => t.value === mapped) ? mapped : DEFAULT_THEME
 }
 
 /**

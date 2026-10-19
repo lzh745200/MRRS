@@ -1,4 +1,4 @@
-﻿/**
+/**
  * views/households/List.vue 单元测试（四指标 100%）
  *
  * 单执行者：List.vue 全仓仅本文件执行（挂载）。
@@ -95,6 +95,20 @@ const ROW_B = {
   risk_alerts: [],
 }
 
+/** 监测户 + risk_alerts undefined（覆盖统计条分支与 ?? 兜底） */
+const ROW_C = {
+  id: 3,
+  supported_village_id: 13,
+  village_name: '丙村',
+  household_code: 'C-3',
+  household_name: '赵六',
+  household_type: 'monitor',
+  risk_type: 'sudden',
+  risk_level: 'medium',
+  member_count: 1,
+  risk_alerts: undefined,
+}
+
 const TABLE_ROWS = [ROW_A, ROW_B]
 
 const ALERT_A = {
@@ -133,6 +147,15 @@ const elementStubs = {
   'el-option': {
     props: ['label', 'value'],
     template: '<span class="el-option-stub" :data-value="String(value)">{{ label }}</span>',
+  },
+  // W2：操作列次要操作收进 el-dropdown（command 上抛）
+  'el-dropdown': {
+    emits: ['command'],
+    template:
+      '<div class="el-dropdown-stub">' +
+      '<button type="button" class="command-delete" @click="$emit(\'command\', \'delete\')">del</button>' +
+      '<button type="button" class="command-unknown" @click="$emit(\'command\', \'unknown\')">u</button>' +
+      '<slot /><slot name="dropdown" /></div>',
   },
   'el-input': {
     props: ['modelValue'],
@@ -240,7 +263,7 @@ describe('households/List.vue（一户一档列表）', () => {
     const wrapper = mountComp()
     await flushPromises()
 
-    expect(mocks.getSupportedVillages).toHaveBeenCalledWith({ page: 1, page_size: 500 })
+    expect(mocks.getSupportedVillages).toHaveBeenCalledWith({ page: 1, page_size: 200 })
     expect(mocks.getHouseholds).toHaveBeenCalledWith({
       page: 1,
       page_size: 10,
@@ -262,19 +285,66 @@ describe('households/List.vue（一户一档列表）', () => {
     expect(wrapper.text()).toContain('高')
     expect(wrapper.text()).toContain('连续未走访')
     expect(wrapper.text()).toContain('共 2 户')
+
+    // W2 UI v2：页面模板类 / 统计卡 / 数字列 / 筛选提示
+    expect(wrapper.find('.household-list-page').classes()).toContain('list-page')
+    expect(wrapper.findAll('.app-card')).toHaveLength(2) // 筛选卡 + 表格卡
+    expect(wrapper.findAll('.app-stat-card')).toHaveLength(4)
+    expect(wrapper.findAll('.stat-value').map((el) => el.text())).toEqual(['2', '1', '0', '1'])
+    expect(wrapper.findAll('.stat-trend')).toHaveLength(4)
+    expect(wrapper.find('.num-cell').exists()).toBe(true)
+    expect(wrapper.find('.list-hint').classes()).toContain('advanced-only')
     // 台账卡内空态不渲染（预警抽屉内的空态不计）
-    expect(wrapper.find('.table-card .empty-stub').exists()).toBe(false)
+    expect(wrapper.find('.table-card .app-empty').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('空列表 / 缺字段响应：空态渲染且计数归零', async () => {
+  it('统计条：当前页高风险 / 监测户 / 预警命中统计（含 risk_alerts 缺省兜底）', async () => {
+    mocks.getHouseholds.mockResolvedValue({ items: [ROW_A, ROW_B, ROW_C], total: 3 })
+    const wrapper = mountComp()
+    await flushPromises()
+    const values = wrapper.findAll('.stat-value').map((el) => el.text())
+    expect(values).toEqual(['3', '1', '1', '1'])
+    // items 置空兜底分支（?? []）
+    vmOf(wrapper).items = null
+    expect(vmOf(wrapper).statCards.map((card: any) => card.value)).toEqual([3, 0, 0, 0])
+    wrapper.unmount()
+  })
+
+  it('加载态骨架 / 错误态与重试', async () => {
+    mocks.getHouseholds.mockRejectedValueOnce(new Error('net'))
+    const wrapper = mountComp()
+    await flushPromises()
+    // 错误态 + 重试按钮
+    expect(wrapper.find('.app-error').exists()).toBe(true)
+    expect(wrapper.find('.app-error').text()).toContain('建档台账加载失败，请稍后重试')
+    expect(wrapper.find('.table-card .app-empty').exists()).toBe(false)
+
+    // 重试成功 → 恢复表格
+    const vm = vmOf(wrapper)
+    await wrapper.find('.btn-retry').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.app-error').exists()).toBe(false)
+    expect(wrapper.text()).toContain('张三')
+
+    // 加载骨架分支
+    vm.loading = true
+    vm.loadError = ''
+    await nextTick()
+    expect(wrapper.find('.app-loading').text()).toContain('数据加载中')
+    vm.loading = false
+    await nextTick()
+    wrapper.unmount()
+  })
+
+  it('空列表 / 缺字段响应：三件套空态渲染且计数归零', async () => {
     mocks.getHouseholds.mockResolvedValue({})
     const wrapper = mountComp()
     await flushPromises()
     const vm = vmOf(wrapper)
     expect(vm.items).toEqual([])
     expect(vm.total).toBe(0)
-    expect(wrapper.find('.empty-stub').attributes('data-description')).toBe('暂无建档记录')
+    expect(wrapper.find('.table-card .app-empty').text()).toBe('暂无建档记录')
     wrapper.unmount()
   })
 
@@ -454,7 +524,7 @@ describe('households/List.vue（一户一档列表）', () => {
     await flushPromises()
     const vm = vmOf(wrapper)
 
-    await wrapper.find('.btn-delete').trigger('click')
+    await wrapper.find('.command-delete').trigger('click')
     await flushPromises()
     expect(mocks.confirm).toHaveBeenCalled()
     expect(mocks.deleteHousehold).toHaveBeenCalledWith(1)
@@ -463,15 +533,21 @@ describe('households/List.vue（一户一档列表）', () => {
     // 取消删除
     mocks.confirm.mockRejectedValueOnce('cancel')
     mocks.deleteHousehold.mockClear()
-    await wrapper.find('.btn-delete').trigger('click')
+    await wrapper.find('.command-delete').trigger('click')
     await flushPromises()
     expect(mocks.deleteHousehold).not.toHaveBeenCalled()
 
     // 删除失败
     mocks.deleteHousehold.mockRejectedValueOnce(new Error('x'))
-    await wrapper.find('.btn-delete').trigger('click')
+    await wrapper.find('.command-delete').trigger('click')
     await flushPromises()
     expect(mocks.ElMessage.error).toHaveBeenCalledWith('删除失败')
+
+    // 未知 command → 不分发删除
+    mocks.deleteHousehold.mockClear()
+    await wrapper.find('.command-unknown').trigger('click')
+    await flushPromises()
+    expect(mocks.deleteHousehold).not.toHaveBeenCalled()
 
     // 末页最后一条 → page-1
     mocks.getHouseholds.mockResolvedValue({ items: [ROW_A], total: 1, page: 2, page_size: 10 })
@@ -569,6 +645,15 @@ describe('households/List.vue（一户一档列表）', () => {
     expect(wrapper.text()).toContain('连续 90 天未走访')
     expect(wrapper.text()).toContain('大病；住房不安全')
 
+    // 预警加载骨架
+    vm.alertsLoading = true
+    await nextTick()
+    expect(wrapper.find('.el-drawer-stub[data-title="风险预警"] .app-loading').text()).toContain(
+      '预警加载中'
+    )
+    vm.alertsLoading = false
+    await nextTick()
+
     await wrapper.find('.btn-alert-view').trigger('click')
     expect(mocks.pushSafe).toHaveBeenCalledWith('/households/1')
 
@@ -582,7 +667,10 @@ describe('households/List.vue（一户一档列表）', () => {
     mocks.getHouseholdAlerts.mockResolvedValueOnce([])
     await wrapper.find('.btn-alerts-refresh').trigger('click')
     await flushPromises()
-    expect(wrapper.findAll('.empty-stub').length).toBeGreaterThan(0)
+    expect(wrapper.findAll('.app-empty').length).toBeGreaterThan(0)
+    expect(wrapper.find('.el-drawer-stub[data-title="风险预警"] .app-empty').text()).toBe(
+      '暂无风险预警'
+    )
 
     // 失败降级
     mocks.getHouseholdAlerts.mockRejectedValueOnce(new Error('x'))

@@ -8,6 +8,7 @@ import {
   DEFAULT_THEME,
   THEME_STORAGE_KEY,
   THEME_OPTIONS,
+  LEGACY_THEME_MAP,
 } from '@/stores/config'
 
 describe('useConfigStore', () => {
@@ -32,22 +33,23 @@ describe('useConfigStore', () => {
     localStorage.setItem('theme', 'dark')
     setActivePinia(createPinia())
     const store = useConfigStore()
-    expect(store.theme).toBe('dark')
+    // v1.15.0 主题 5→3：旧值 dark 迁移为 dark-bigscreen
+    expect(store.theme).toBe('dark-bigscreen')
   })
 
   it('setTheme 修改 theme 并持久化到 localStorage', () => {
     const store = useConfigStore()
     store.setTheme('dark')
-    expect(store.theme).toBe('dark')
-    expect(localStorage.getItem('theme')).toBe('dark')
+    expect(store.theme).toBe('dark-bigscreen')
+    expect(localStorage.getItem('theme')).toBe('dark-bigscreen')
   })
 
   it('setTheme 多次调用会覆盖', () => {
     const store = useConfigStore()
-    store.setTheme('dark')
-    store.setTheme('light')
-    expect(store.theme).toBe('light')
-    expect(localStorage.getItem('theme')).toBe('light')
+    store.setTheme('dark-bigscreen')
+    store.setTheme('outdoor')
+    expect(store.theme).toBe('outdoor')
+    expect(localStorage.getItem('theme')).toBe('outdoor')
   })
 
   it('setTheme 非 default 主题设置 data-theme 属性', () => {
@@ -77,8 +79,8 @@ describe('applyThemeToDom', () => {
   })
 
   it('其他主题设置属性', () => {
-    applyThemeToDom('high-contrast')
-    expect(document.documentElement.getAttribute('data-theme')).toBe('high-contrast')
+    applyThemeToDom('outdoor')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('outdoor')
   })
 })
 
@@ -93,8 +95,13 @@ describe('主题取值 fail-closed（白名单 + 存储守卫）', () => {
   afterEach(() => vi.restoreAllMocks())
 
   it('normalizeTheme：白名单内保留，非法/非字符串回退默认主题', () => {
-    expect(normalizeTheme('dark')).toBe('dark')
-    expect(normalizeTheme('high-contrast')).toBe('high-contrast')
+    expect(normalizeTheme('dark-bigscreen')).toBe('dark-bigscreen')
+    expect(normalizeTheme('outdoor')).toBe('outdoor')
+    // 旧主题值迁移（light/military→default，dark→dark-bigscreen，high-contrast→outdoor）
+    expect(normalizeTheme('light')).toBe('default')
+    expect(normalizeTheme('military')).toBe('default')
+    expect(normalizeTheme('dark')).toBe('dark-bigscreen')
+    expect(normalizeTheme('high-contrast')).toBe('outdoor')
     expect(normalizeTheme('darkk')).toBe(DEFAULT_THEME)
     expect(normalizeTheme('')).toBe(DEFAULT_THEME)
     expect(normalizeTheme(null)).toBe(DEFAULT_THEME)
@@ -166,9 +173,9 @@ describe('主题取值 fail-closed（白名单 + 存储守卫）', () => {
       throw new Error('QuotaExceededError')
     })
     try {
-      expect(() => store.setTheme('dark')).not.toThrow()
-      expect(store.theme).toBe('dark')
-      expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+      expect(() => store.setTheme('dark-bigscreen')).not.toThrow()
+      expect(store.theme).toBe('dark-bigscreen')
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark-bigscreen')
       // 写盘失败：值不落盘（区别于正常路径的持久化断言）
       expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull()
     } finally {
@@ -182,9 +189,9 @@ describe('主题取值 fail-closed（白名单 + 存储守卫）', () => {
       throw 'QuotaExceededError'
     })
     try {
-      expect(() => store.setTheme('high-contrast')).not.toThrow()
-      expect(store.theme).toBe('high-contrast')
-      expect(document.documentElement.getAttribute('data-theme')).toBe('high-contrast')
+      expect(() => store.setTheme('outdoor')).not.toThrow()
+      expect(store.theme).toBe('outdoor')
+      expect(document.documentElement.getAttribute('data-theme')).toBe('outdoor')
     } finally {
       spy.mockRestore()
     }
@@ -208,12 +215,34 @@ describe('主题取值 fail-closed（白名单 + 存储守卫）', () => {
 describe('THEME_OPTIONS / THEME_STORAGE_KEY', () => {
   it('包含 default 军绿选项且值不重复', () => {
     const values = THEME_OPTIONS.map((t) => t.value)
-    expect(values).toContain('default')
+    expect(values).toEqual(['default', 'dark-bigscreen', 'outdoor'])
     expect(new Set(values).size).toBe(values.length)
     expect(THEME_OPTIONS.every((t) => t.label.length > 0)).toBe(true)
   })
 
   it('THEME_STORAGE_KEY 为 theme', () => {
     expect(THEME_STORAGE_KEY).toBe('theme')
+  })
+})
+
+describe('主题 5→3 收敛（v1.15.0 旧值迁移）', () => {
+  it('LEGACY_THEME_MAP 覆盖全部旧主题值', () => {
+    expect(LEGACY_THEME_MAP).toEqual({
+      light: 'default',
+      dark: 'dark-bigscreen',
+      military: 'default',
+      'high-contrast': 'outdoor',
+    })
+  })
+
+  it('旧值 readStoredTheme 迁移为合法新主题', () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'light')
+    expect(readStoredTheme()).toBe('default')
+    localStorage.setItem(THEME_STORAGE_KEY, 'military')
+    expect(readStoredTheme()).toBe('default')
+    localStorage.setItem(THEME_STORAGE_KEY, 'dark')
+    expect(readStoredTheme()).toBe('dark-bigscreen')
+    localStorage.setItem(THEME_STORAGE_KEY, 'high-contrast')
+    expect(readStoredTheme()).toBe('outdoor')
   })
 })

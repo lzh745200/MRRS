@@ -384,7 +384,7 @@
 // 19. 暗色主题兼容：黑底下阴影不可见，改用边框替代
 // ============================================================================
 
-[data-theme='dark'] {
+[data-theme='dark-bigscreen'] {
   .el-card {
     box-shadow: none;
     border-color: var(--color-border-light);

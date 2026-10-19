@@ -5,6 +5,55 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.0] - 2026-10-19 — UI v2.0：精美·科学·一致性的系统级视觉重构
+
+### Added
+
+- **设计系统 v2（Token 升级）**：主色阶 `--color-primary-50/100/500/600/700/900`；卡片边框 `--color-card-border` +
+  轻阴影两档（`--shadow-card` / `--shadow-pop`）；圆角三档（card 8 / control 6 / pill 999）；字号阶梯 `calc(* var(--font-scale))`；
+  正文行高 1.6；数字 `tabular-nums`；侧栏 `--sidebar-bg` 深绿渐变；金色仅三用（选中竖条/数据高亮/表头底线，面积 ≤5%）。
+- **主题 5→3 收敛**：军绿（默认）/ 深色大屏 `dark-bigscreen`（仅大屏页强制）/ 户外高对比 `outdoor`；
+  旧值 `light`/`military`→`default`、`dark`→`dark-bigscreen`、`high-contrast`→`outdoor` 自动迁移（历史用户不失效）。
+- **显示偏好 4 档**（localStorage `ui:prefs`，`<html data-*>` 驱动）：字号（紧凑/标准/大号，`--font-scale` 0.92/1/1.12）、
+  密度（舒适/紧凑，表格行高 44/34px）、高对比、简化模式（隐藏趋势箭头/辅助说明/高级字段）；
+  面板 `components/settings/AppearanceSettings.vue`，入口：头像下拉「外观设置」；损坏 JSON/非法值回退默认、存储不可用静默降级。
+- **全局模板样式与通用组件**：`card.scss`（`.app-card`/`.app-stat-card`/`.stat-trend`/`.num-cell`）、
+  `states.scss`（`.app-empty`/`.app-loading`/`.app-error` 三件套，错误必须可重试）、`dialog.scss`（三档宽度）、
+  `ui-v2.scss`（表格浅主色表头+金色底线/去斑马纹/hover/焦点环）；`components/common/` 6 个通用组件
+  （AppPageHeader/AppStatCard/AppEmpty/AppLoading/AppError/AppTableToolbar）+ 47 条专属测试。
+- **导航体验**：侧栏当前板块 3px 金色竖条、当前板块自动展开并持久化（`nav:expanded-sections`）、
+  **收起态 hover/键盘聚焦浮出子项浮层**、面包屑「板块 › 页面」、Ctrl+K 命令面板（页面+最近+动作）。
+- **工作台**：KPI 统计卡网格（28px/700/tabular-nums）+ 待办清单卡 + 图表两列 + 快捷入口/近期动态层级重排；
+  加载/错误/空态三件套统一；布局编辑器新增「待办」区块。
+- **汇报大屏**：三层结构（标题时间条 / KPI 大数字 / 2–3 列图表）；`data-bigscreen-distance="3m|6m|10m"`
+  字号分档（默认 6m）+ 页内切换；15s 自动轮播（可暂停/关闭，卸载/退出清理定时器）；深色主题双挂载（页面根 + documentElement，卸载恢复）。
+- **一户一档**：列表 4 张统计卡 + 筛选/表格卡 + 三件套 + 数字列右对齐 + 删除操作收进下拉；
+  详情左主右辅布局（≤1200px 单列）+ 4 张监测指标统计卡 + 时间线/走访卡片。
+- **质量门禁**：`tests/unit/ui/ui-tokens.test.ts`（22 条 Token/主题/偏好/大屏契约静态断言）；
+  `tests/e2e/visual/visual-baseline.spec.ts` 10 个关键页面 DOM 结构基线（跨平台 JSON，`UPDATE_VISUAL_BASELINE=1` 更新）。
+
+### Fixed
+
+- **列表页 `page_size=500` 超后端上限（200）导致 422**：一户一档/消费帮扶/影像库/权限包页面统一改为 200，
+  消除页面加载 422 与下拉选项缺失（测试断言同步）。
+- **工作台 KPI 取消请求误判为错误**：路由导航/卸载时 axios `CanceledError` 不再记录 error 日志、不置错误态、
+  不触发无谓重试（新增 code/name 两个取消分支测试）。
+- **Token 重复定义覆盖**：删除后置旧 `--shadow-card`/`--radius-lg-plus` 覆盖，v2 轻阴影与 8px 圆角实际生效。
+- **旧主题残留清理**：`echarts-theme` 运行时判定（`dark-bigscreen`/`outdoor`）、系统配置包主题选项（6→3）、
+  `theme-elevated` 深色块、`accessibility.css` 高对比改为 `data-contrast="high"`（不再占用主题值）。
+
+### Changed
+
+- 视觉一致性治理：硬编码色基线 **345 → 305**（改动文件零新增，基线只紧不松）。
+- 外观设置面板统一承载主题与 4 档显示偏好；系统配置包主题选项与顶栏一致（3 套）。
+
+### Verification
+
+- 前端全量：12 组 glob 四指标 100%（文件/用例数见测试报告）；`vue-tsc --noEmit` 0；eslint 0。
+- E2E：154 条既有用例 + 10 个视觉基线页面全绿。
+- 后端：13,710 passed / 1 skipped / 100% 行+分支（本次未改后端逻辑）。
+- 构建：Windows x64 安装包 + 麒麟 ARM64 deb（standalone + Electron）发布 Release v1.15.0。
+
 ## [1.14.3] - 2026-10-18 — ARM64 构建网络韧性加固（npm/Docker registry 抖动）
 
 ### Fixed

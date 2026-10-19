@@ -1,0 +1,98 @@
+/**
+ * UI v2.0 状态三件套（W23）：空态 / 加载 / 错误（必须可重试）
+ *
+ * 设计原则（契约 §1.2 设计原则「失败可见」）：
+ * - 空态：图标 + 主文案 + 说明 + 可选操作；
+ * - 加载：骨架行 + 轻脉冲，不用全屏遮罩；
+ * - 错误：图标 + 可读原因 + 重试按钮（禁止静默失败）。
+ */
+
+.app-empty,
+.app-loading,
+.app-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl) var(--spacing-md);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.app-empty__icon,
+.app-error__icon {
+  font-size: 40px;
+  color: var(--color-text-placeholder);
+  line-height: 1;
+}
+
+.app-error__icon {
+  color: var(--color-danger);
+}
+
+.app-empty__text,
+.app-error__message {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  color: var(--color-text-regular);
+}
+
+.app-empty__desc,
+.app-error__desc {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-placeholder);
+  max-width: 520px;
+  line-height: var(--line-height-normal);
+}
+
+.app-empty__action,
+.app-error__retry {
+  margin-top: var(--spacing-sm);
+}
+
+/* ── 加载骨架 ── */
+.app-loading {
+  align-items: stretch;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+}
+
+.app-loading__row {
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--color-border-lighter) 25%,
+    var(--color-bg-hover) 37%,
+    var(--color-border-lighter) 63%
+  );
+  background-size: 400% 100%;
+  animation: app-loading-shimmer 1.4s ease infinite;
+}
+
+.app-loading__row--short {
+  width: 40%;
+}
+
+.app-loading__row--medium {
+  width: 70%;
+}
+
+@keyframes app-loading-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loading__row {
+    animation: none;
+  }
+}

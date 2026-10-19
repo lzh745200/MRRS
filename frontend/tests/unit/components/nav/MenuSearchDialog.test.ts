@@ -187,6 +187,14 @@ describe('MenuSearchDialog.vue', () => {
     expect(wrapper.findAll('.menu-search-item-section')).toHaveLength(0)
   })
 
+  it('W23 命令面板：展示快捷键提示条', () => {
+    const wrapper = mountDialog()
+    const hint = wrapper.find('[data-test="menu-search-hint"]')
+    expect(hint.exists()).toBe(true)
+    expect(hint.text()).toContain('Enter')
+    expect(hint.text()).toContain('Ctrl+K')
+  })
+
   it('空搜索：不可访问（已删除/无权限）的记录被过滤', () => {
     const { recordMenu } = useRecentMenus()
     const { toggleFavorite } = useMenuFavorites()

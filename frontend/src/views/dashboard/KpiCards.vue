@@ -1,21 +1,27 @@
 <template>
   <div class="kpi-cards">
     <template v-if="loading">
-      <div v-for="i in 5" :key="'skeleton-' + i" class="kpi-col">
+      <div
+        v-for="i in 5"
+        :key="'skeleton-' + i"
+        class="kpi-col app-loading"
+        data-testid="kpi-loading"
+      >
         <el-skeleton animated :rows="2" class="stat-skeleton" />
       </div>
     </template>
-    <div v-else-if="error" class="kpi-error">
+    <div v-else-if="error" class="kpi-error app-error" data-testid="kpi-error">
       <span class="kpi-error__text">数据加载失败，请稍后重试</span>
       <el-button type="primary" @click="loadStats">重试</el-button>
     </div>
     <template v-else>
       <div v-for="(card, i) in cards" :key="i" class="kpi-col">
         <div
-          class="stat-card"
+          class="stat-card app-stat-card"
           :class="card.theme"
           role="button"
           tabindex="0"
+          data-testid="kpi-card"
           @click="navigateTo(card.route)"
           @keydown.enter.prevent="navigateTo(card.route)"
           @keydown.space.prevent="navigateTo(card.route)"
@@ -24,12 +30,12 @@
             <el-icon><component :is="card.icon" /></el-icon>
           </div>
           <div class="stat-content">
-            <div class="stat-label">{{ card.label }}</div>
-            <div class="stat-value">
+            <div class="stat-label kpi-label">{{ card.label }}</div>
+            <div class="stat-value kpi-value">
               <span class="data-number data-number--lg">{{ card.formatted }}</span>
               <span v-if="card.unit" class="data-unit">{{ card.unit }}</span>
             </div>
-            <div class="stat-trend" :class="trendClass(card.trend)">
+            <div class="stat-trend" :class="trendClass(card.trend)" data-testid="kpi-trend">
               <span class="trend-tag" :class="trendTagClass(card.trend)">
                 <el-icon class="trend-tag__icon">
                   <component :is="trendIcon(card.trend)" />
@@ -226,6 +232,10 @@ async function loadStats() {
       retryCount.value = 0
     }
   } catch (e) {
+    // 路由导航/组件卸载时 axios 取消在途请求（CanceledError）属正常中止：
+    // 不记录 error 日志、不置错误态、不触发重试（v1.15.0 W23 修复视觉回归噪声）。
+    const err = e as { code?: string; name?: string } | null
+    if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') return
     logger.error('KPI 统计数据加载失败', e)
     error.value = true
     // 失败（含路由导航取消请求的 CanceledError/后端冷启动）自动重试：
@@ -256,24 +266,28 @@ onBeforeUnmount(() => {
 <style scoped lang="scss">
 .kpi-cards {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--spacing-md, 16px);
+
   @media (max-width: 1200px) {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
   @media (max-width: 768px) {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
   @media (max-width: 480px) {
     grid-template-columns: 1fr;
   }
 }
 
 .stat-skeleton {
-  background: $color-bg-card;
-  padding: $spacing-md;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-sm;
+  background: var(--color-bg-card);
+  padding: var(--spacing-md, 16px);
+  border-radius: var(--radius-card, 8px);
+  border: 1px solid var(--color-card-border, var(--color-border-light));
+  box-shadow: var(--shadow-card);
 }
 
 .kpi-error {
@@ -281,33 +295,38 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: $spacing-md;
-  padding: $spacing-xl;
-  background: $color-bg-card;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-sm;
-  color: $color-text-secondary;
-  font-size: $font-size-md;
+  gap: var(--spacing-md, 16px);
+  padding: var(--spacing-xl, 24px);
+  background: var(--color-bg-card);
+  border-radius: var(--radius-card, 8px);
+  border: 1px solid var(--color-card-border, var(--color-border-light));
+  box-shadow: var(--shadow-card);
+  color: var(--color-text-secondary);
+  font-size: var(--text-md, 14px);
 }
 
 .stat-card {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
+  height: 100%;
   background: var(--color-bg-card);
-  padding: 18px 20px;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  padding: var(--spacing-md, 16px) var(--spacing-lg, 20px);
+  border: 1px solid var(--color-card-border, var(--color-border-light));
+  border-radius: var(--radius-card, 8px);
+  box-shadow: var(--shadow-card);
   transition:
-    box-shadow 0.3s,
-    transform 0.3s;
+    box-shadow var(--transition-fast, 0.2s),
+    transform var(--transition-fast, 0.2s);
   cursor: pointer;
   position: relative;
   overflow: hidden;
+
   &:hover {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-card-hover, var(--shadow-card));
     transform: translateY(-2px);
   }
+
   &::before {
     content: '';
     position: absolute;
@@ -315,70 +334,95 @@ onBeforeUnmount(() => {
     top: 20%;
     height: 60%;
     width: 4px;
-    border-radius: 0 4px 4px 0;
+    border-radius: 0 var(--radius-control, 6px) var(--radius-control, 6px) 0;
   }
+
   &.primary::before {
-    background: $color-primary;
+    background: var(--color-primary);
   }
+
   &.success::before {
-    background: $color-success;
+    background: var(--color-success);
   }
+
   &.warning::before {
-    background: $color-warning;
+    background: var(--color-warning);
   }
+
   &.danger::before {
-    background: $color-danger;
+    background: var(--color-danger);
   }
+
   &.info-card::before {
-    background: $color-info;
+    background: var(--color-info);
   }
 }
 
 .stat-icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: var(--radius-control, 6px);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: var(--text-xl, 18px);
   flex-shrink: 0;
-  margin-right: 12px;
+  margin-right: var(--spacing-sm, 12px);
 }
+
 .primary .stat-icon {
-  background: var(--color-primary-light-8);
-  color: $color-primary;
+  background: var(--color-primary-100, var(--color-primary-light-8));
+  color: var(--color-primary);
 }
+
 .success .stat-icon {
   background: var(--color-success-lightest);
-  color: $color-success;
+  color: var(--color-success);
 }
+
 .warning .stat-icon {
   background: var(--color-warning-lightest);
-  color: $color-warning;
+  color: var(--color-warning);
 }
+
 .danger .stat-icon {
   background: var(--color-danger-lightest);
-  color: $color-danger;
+  color: var(--color-danger);
 }
+
 .info-card .stat-icon {
   background: var(--color-info-lightest);
-  color: $color-info;
+  color: var(--color-info);
 }
 
 .stat-content {
   flex: 1;
   min-width: 0;
 }
+
 .stat-label {
-  font-size: 12px;
-  color: $color-text-secondary;
+  font-size: var(--text-sm, 13px);
+  color: var(--color-text-secondary);
   margin-bottom: 2px;
 }
+
 .stat-value {
   display: flex;
   align-items: baseline;
   gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-number {
+  font-size: var(--text-display, 28px);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: var(--leading-title, 1.25);
+}
+
+.data-unit {
+  font-size: var(--text-sm, 13px);
+  color: var(--color-text-secondary);
 }
 
 .stat-trend {
@@ -386,41 +430,49 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
 }
+
 .stat-trend--up {
-  color: $color-success;
+  color: var(--color-success);
 }
+
 .stat-trend--down {
-  color: $color-danger;
+  color: var(--color-danger);
 }
+
 .trend-label {
-  color: $color-text-placeholder;
-  font-size: 11px;
+  color: var(--color-text-placeholder);
+  font-size: var(--text-xs, 12px);
 }
+
 .trend-tag {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   font-weight: 600;
-  font-family: 'DIN Alternate', 'Roboto Mono', monospace;
-  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs, 12px);
   padding: 1px 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-pill, 999px);
 }
+
 .trend-tag--up {
-  color: $color-success;
+  color: var(--color-success);
   background: var(--color-success-lightest);
 }
+
 .trend-tag--down {
-  color: $color-danger;
+  color: var(--color-danger);
   background: var(--color-danger-lightest);
 }
+
 .trend-tag--flat {
-  color: $color-info;
+  color: var(--color-info);
   background: var(--color-info-lightest);
 }
+
 .trend-tag__icon {
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
 }
 </style>

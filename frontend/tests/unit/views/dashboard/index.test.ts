@@ -15,13 +15,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 
-const {
-  ElMessage,
-  mockCreateBackup,
-  mockPushSafe,
-  userBox,
-  logError,
-} = vi.hoisted(() => ({
+const { ElMessage, mockCreateBackup, mockPushSafe, userBox, logError } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   mockCreateBackup: vi.fn(),
   mockPushSafe: vi.fn(),
@@ -39,7 +33,8 @@ vi.mock('@/api/request', () => ({
   put: vi.fn(),
   del: vi.fn(),
   apiRequest: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/api/search', () => ({
   globalSearch: vi.fn(),
@@ -96,9 +91,9 @@ const childStubs = {
     emits: ['backup', 'restore'],
   },
   KpiCards: { name: 'KpiCards', template: '<div class="kpi-stub" />' },
+  TodoListPanel: { name: 'TodoListPanel', template: '<div class="todo-stub" />' },
   ChartRow: { name: 'ChartRow', template: '<div class="chart-stub" />' },
   InfoRow: { name: 'InfoRow', template: '<div class="info-stub" />' },
-  GlobalSearch: { name: 'GlobalSearch', template: '<div class="gs-stub" />' },
 }
 
 const elStubs = {
@@ -152,15 +147,21 @@ describe('布局加载与持久化', () => {
     await nextTick()
     expect(vm.layoutSections.map((s: any) => s.key)).toEqual([
       'kpi',
+      'todos',
       'charts',
       'quickActions',
       'info',
     ])
     expect(vm.visible.kpi).toBe(true)
     expect(wrapper.find('.kpi-stub').exists()).toBe(true)
+    expect(wrapper.find('.todo-stub').exists()).toBe(true)
     expect(wrapper.find('.chart-stub').exists()).toBe(true)
     expect(wrapper.find('.info-stub').exists()).toBe(true)
     expect(wrapper.text()).toContain('常用操作')
+    // 关闭「待办清单」→ 区块隐藏
+    vm.layoutSections[1].visible = false
+    await nextTick()
+    expect(wrapper.find('.todo-stub').exists()).toBe(false)
 
     vm.layoutSections[0].visible = false // watch deep → saveLayout
     await nextTick()
@@ -201,7 +202,7 @@ describe('布局加载与持久化', () => {
     // 损坏 JSON → catch → 回退默认
     localStorage.setItem('dashboard_layout_v2', '{oops')
     const wrapper3 = mountComp()
-    expect((wrapper3.vm as any).layoutSections.length).toBe(4)
+    expect((wrapper3.vm as any).layoutSections.length).toBe(5)
     wrapper3.unmount()
   })
 
@@ -253,9 +254,8 @@ describe('布局编辑器', () => {
   it('applyPreset 全部六个预设分支', async () => {
     const wrapper = mountComp()
     const vm = wrapper.vm as any
-    const allKeys = ['kpi', 'charts', 'quickActions', 'info']
-    const visibleKeys = () =>
-      vm.layoutSections.filter((s: any) => s.visible).map((s: any) => s.key)
+    const allKeys = ['kpi', 'todos', 'charts', 'quickActions', 'info']
+    const visibleKeys = () => vm.layoutSections.filter((s: any) => s.visible).map((s: any) => s.key)
 
     vm.applyPreset('default')
     expect(visibleKeys()).toEqual(allKeys)
@@ -266,7 +266,7 @@ describe('布局编辑器', () => {
     vm.applyPreset('role_admin')
     expect(visibleKeys()).toEqual(allKeys)
     vm.applyPreset('role_officer')
-    expect(visibleKeys()).toEqual(['kpi', 'charts', 'quickActions'])
+    expect(visibleKeys()).toEqual(['kpi', 'todos', 'charts', 'quickActions'])
     vm.applyPreset('role_viewer')
     expect(visibleKeys()).toEqual(['kpi', 'info'])
     wrapper.unmount()
@@ -277,7 +277,7 @@ describe('布局编辑器', () => {
     const vm = wrapper.vm as any
     vm.onToggle()
     expect(vm.layoutSaved).toBe(true)
-    expect(JSON.parse(localStorage.getItem('dashboard_layout_v2') || '[]').length).toBe(4)
+    expect(JSON.parse(localStorage.getItem('dashboard_layout_v2') || '[]').length).toBe(5)
     wrapper.unmount()
   })
 })
@@ -292,21 +292,21 @@ describe('拖拽排序', () => {
     // 同 key → 不动
     vm.onDragStart({} as any, 'kpi')
     vm.onDrop({} as any, 'kpi')
-    expect(order()).toEqual(['kpi', 'charts', 'quickActions', 'info'])
+    expect(order()).toEqual(['kpi', 'todos', 'charts', 'quickActions', 'info'])
 
-    // 把 kpi 拖到 charts 后面
+    // 把 kpi 拖到 charts 位置
     vm.onDrop({} as any, 'charts')
-    expect(order()).toEqual(['charts', 'kpi', 'quickActions', 'info'])
+    expect(order()).toEqual(['todos', 'charts', 'kpi', 'quickActions', 'info'])
 
     // 空 dragKey → 直接 return
     vm.onDragStart({} as any, '')
     vm.onDrop({} as any, 'kpi')
-    expect(order()).toEqual(['charts', 'kpi', 'quickActions', 'info'])
+    expect(order()).toEqual(['todos', 'charts', 'kpi', 'quickActions', 'info'])
 
     // from/to 未命中 → 跳过
     vm.onDragStart({} as any, 'nonexistent')
     vm.onDrop({} as any, 'kpi')
-    expect(order()).toEqual(['charts', 'kpi', 'quickActions', 'info'])
+    expect(order()).toEqual(['todos', 'charts', 'kpi', 'quickActions', 'info'])
 
     // dragOverKey 状态流转
     vm.onDragOver('info')
@@ -327,7 +327,7 @@ describe('拖拽排序', () => {
     wrapper.findComponent({ name: 'HeaderActions' }).vm.$emit('toggle-layout')
     await nextTick()
     const items = wrapper.findAll('.layout-item')
-    expect(items.length).toBe(4)
+    expect(items.length).toBe(5)
     await items[0].trigger('dragstart', { dataTransfer: {} })
     await items[2].trigger('dragover')
     await items[2].trigger('drop')
@@ -335,7 +335,7 @@ describe('拖拽排序', () => {
     await nextTick()
     const vm = wrapper.vm as any
     expect(vm.dragOverKey).toBe('')
-    // kpi 被移到 quickActions 后
+    // kpi 被移到 charts（items[2]）之后的位置
     expect(vm.layoutSections.map((s: any) => s.key)[2]).toBe('kpi')
     await items[0].trigger('dragleave')
     await nextTick()

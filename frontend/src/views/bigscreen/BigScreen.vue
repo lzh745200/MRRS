@@ -1,8 +1,35 @@
 <template>
-  <div class="big-screen" :class="{ fullscreen: isFullscreen }">
-    <header class="bs-header">
+  <div
+    class="bigscreen big-screen"
+    :class="{ fullscreen: isFullscreen }"
+    data-theme="dark-bigscreen"
+    :data-bigscreen-distance="distance"
+    :data-carousel-view="carouselView"
+  >
+    <header class="bs-layer-header bs-header">
       <h1>帮扶管理信息系统 · 帮扶成效总览大屏</h1>
       <div class="bs-header-right">
+        <!-- 距离字号分档：3m / 6m / 10m（默认 6m，仅影响大屏页字号） -->
+        <div class="distance-switch" role="group" aria-label="大屏字号距离档">
+          <el-button
+            v-for="option in distanceOptions"
+            :key="option.value"
+            size="small"
+            class="distance-option"
+            :class="{ active: distance === option.value }"
+            @click="onDistanceChange(option.value)"
+          >
+            {{ option.label }}
+          </el-button>
+        </div>
+        <!-- 自动轮播：15s 切换「KPI 组 / 图表组」数据视角（默认关闭） -->
+        <el-button class="carousel-toggle" @click="toggleCarousel">
+          {{ carouselToggleLabel }}
+        </el-button>
+        <el-button v-if="carouselEnabled" class="carousel-pause" @click="toggleCarouselPause">
+          {{ carouselPaused ? '继续' : '暂停' }}
+        </el-button>
+        <span v-if="carouselEnabled" class="carousel-status">{{ carouselViewLabel }}</span>
         <span class="bs-clock">{{ clock }}</span>
         <el-button class="settings-trigger" @click="openSettings">设置</el-button>
         <el-button @click="toggleFullscreen">
@@ -100,8 +127,8 @@
       </div>
     </el-drawer>
 
-    <!-- KPI 总览（直接渲染 /bigscreen/overview 的固定 5 项） -->
-    <section class="bs-kpi">
+    <!-- 第二层：KPI 大数字区（字号随距离档位缩放；轮播时高亮当前数据视角） -->
+    <section class="bs-layer-kpi bs-kpi" :class="{ 'carousel-focus': carouselKpiActive }">
       <div v-for="kpi in kpis" :key="kpi.key" class="kpi-item">
         <div class="kpi-value">{{ kpi.value }}</div>
         <div class="kpi-label">
@@ -110,8 +137,8 @@
       </div>
     </section>
 
-    <!-- 图表 / 负责人 / 对象档案 / 帮扶明细卡片（按设置开关与排序渲染） -->
-    <section class="bs-charts">
+    <!-- 第三层：图表 / 负责人 / 对象档案 / 帮扶明细卡片（2-3 列，按设置开关与排序渲染） -->
+    <section class="bs-layer-charts bs-charts" :class="{ 'carousel-focus': carouselChartsActive }">
       <div
         v-for="card in visibleCards"
         :key="card.key"
@@ -292,6 +319,119 @@ const overview = ref<BigScreenOverview | null>(null)
 const config = reactive<BigScreenConfig>(loadBigScreenConfig())
 const settingsVisible = ref(false)
 const refreshOptions = REFRESH_OPTIONS
+
+// ─────────────────────────────────────────────
+// W23 大屏 UI v2：距离字号分档 + 自动轮播
+// ─────────────────────────────────────────────
+/** 距离字号档位（契约 §0.4：3m 标准 / 6m ×1.25 / 10m ×1.5，默认 6m） */
+export type BigScreenDistance = '3m' | '6m' | '10m'
+const DEFAULT_BIGSCREEN_DISTANCE: BigScreenDistance = '6m'
+const BIGSCREEN_DISTANCES: ReadonlyArray<{ value: BigScreenDistance; label: string }> = [
+  { value: '3m', label: '3m' },
+  { value: '6m', label: '6m' },
+  { value: '10m', label: '10m' },
+]
+/** 大屏强制深色主题（仅本页挂载期间生效，卸载恢复原主题） */
+const BIGSCREEN_DARK_THEME = 'dark-bigscreen'
+
+/** 自动轮播间隔（15s）与数据视角（KPI 组 / 图表组） */
+const CAROUSEL_INTERVAL_MS = 15000
+const CAROUSEL_VIEWS = ['kpi', 'charts'] as const
+type BigScreenCarouselView = (typeof CAROUSEL_VIEWS)[number]
+const CAROUSEL_VIEW_LABELS: Record<BigScreenCarouselView, string> = {
+  kpi: '指标视角',
+  charts: '图表视角',
+}
+
+const distance = ref<BigScreenDistance>(DEFAULT_BIGSCREEN_DISTANCE)
+const distanceOptions = BIGSCREEN_DISTANCES
+const carouselEnabled = ref(false)
+const carouselPaused = ref(false)
+const carouselView = ref<BigScreenCarouselView>('kpi')
+let carouselTimer: number | null = null
+let previousTheme: string | null = null
+
+/** 距离档位归一化：非法值回落默认 6m */
+function normalizeDistance(value: unknown): BigScreenDistance {
+  return BIGSCREEN_DISTANCES.some((option) => option.value === value)
+    ? (value as BigScreenDistance)
+    : DEFAULT_BIGSCREEN_DISTANCE
+}
+
+function onDistanceChange(value: unknown): void {
+  distance.value = normalizeDistance(value)
+}
+
+/** 轮播开关按钮文案 */
+const carouselToggleLabel = computed(() => (carouselEnabled.value ? '关闭轮播' : '自动轮播'))
+
+/** 轮播当前数据视角文案 */
+const carouselViewLabel = computed(() => CAROUSEL_VIEW_LABELS[carouselView.value])
+
+/** 轮播运行时高亮当前视角（暂停时保持当前视角高亮） */
+const carouselKpiActive = computed(() => carouselEnabled.value && carouselView.value === 'kpi')
+const carouselChartsActive = computed(
+  () => carouselEnabled.value && carouselView.value === 'charts'
+)
+
+/** 切换到下一个数据视角（KPI 组 ↔ 图表组） */
+function nextCarouselView(): void {
+  const index = CAROUSEL_VIEWS.indexOf(carouselView.value)
+  carouselView.value = CAROUSEL_VIEWS[(index + 1) % CAROUSEL_VIEWS.length]
+}
+
+/** 按开关/暂停态重建轮播定时器；停止态不保留任何定时器 */
+function applyCarouselTimer(): void {
+  if (carouselTimer !== null) {
+    clearInterval(carouselTimer)
+    carouselTimer = null
+  }
+  if (carouselEnabled.value && !carouselPaused.value) {
+    carouselTimer = window.setInterval(nextCarouselView, CAROUSEL_INTERVAL_MS)
+  }
+}
+
+function startCarousel(): void {
+  if (carouselEnabled.value) return
+  carouselEnabled.value = true
+  carouselPaused.value = false
+  carouselView.value = 'kpi'
+  applyCarouselTimer()
+}
+
+function stopCarousel(): void {
+  carouselEnabled.value = false
+  carouselPaused.value = false
+  applyCarouselTimer()
+}
+
+/** 开关轮播：开启默认 KPI 视角；再次点击关闭并清理定时器 */
+function toggleCarousel(): void {
+  if (carouselEnabled.value) {
+    stopCarousel()
+    return
+  }
+  startCarousel()
+}
+
+/** 暂停/继续轮播（暂停时停止定时器并保留当前视角） */
+function toggleCarouselPause(): void {
+  carouselPaused.value = !carouselPaused.value
+  applyCarouselTimer()
+}
+
+/** 强制大屏深色主题（记录原主题，卸载时恢复，避免影响其它页面） */
+function applyPageTheme(): void {
+  const root = document.documentElement
+  previousTheme = root.getAttribute('data-theme')
+  root.setAttribute('data-theme', BIGSCREEN_DARK_THEME)
+}
+
+function restorePageTheme(): void {
+  const root = document.documentElement
+  if (previousTheme) root.setAttribute('data-theme', previousTheme)
+  else root.removeAttribute('data-theme')
+}
 
 let clockTimer: number | null = null
 let refreshTimer: number | null = null
@@ -665,8 +805,9 @@ function toggleFullscreen(): void {
   }
 }
 
-/** 退出大屏：若处于全屏先退出全屏，再返回工作台（W22） */
+/** 退出大屏：停轮播 → 若处于全屏先退出全屏 → 返回工作台（W22/W23） */
 function exitBigScreen(): void {
+  stopCarousel()
   if (document.fullscreenElement) {
     document.exitFullscreen?.().catch(() => {})
     isFullscreen.value = false
@@ -727,6 +868,8 @@ watch(
 )
 
 onMounted(() => {
+  // W23：大屏页强制深色主题（卸载恢复）；默认 6m 距离档
+  applyPageTheme()
   tickClock()
   clockTimer = window.setInterval(tickClock, 1000)
   applyRefreshTimer(config.refreshInterval)
@@ -735,13 +878,30 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  restorePageTheme()
   if (clockTimer) clearInterval(clockTimer)
   if (refreshTimer !== null) clearInterval(refreshTimer)
+  if (carouselTimer !== null) clearInterval(carouselTimer)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
 })
 </script>
 
 <style lang="scss" scoped>
+// ── W23 距离字号分档（契约 §0.4：3m 标准 / 6m ×1.25 / 10m ×1.5，默认 6m）──
+// 优先消费 W1 提供的 --bs-text-* token；未提供时用本地 --bs-distance-scale 兜底，
+// 保证大屏页在 token 落地前后都有正确的距离字号分档。
+.bigscreen {
+  --bs-distance-scale: 1.25;
+}
+.bigscreen[data-bigscreen-distance='3m'] {
+  --bs-distance-scale: 1;
+}
+.bigscreen[data-bigscreen-distance='6m'] {
+  --bs-distance-scale: 1.25;
+}
+.bigscreen[data-bigscreen-distance='10m'] {
+  --bs-distance-scale: 1.5;
+}
 .big-screen {
   min-height: 100vh;
   background: radial-gradient(ellipse at top, #0b1e3a 0%, #060d1f 60%, #04070f 100%);
@@ -762,7 +922,7 @@ onUnmounted(() => {
   padding-bottom: 10px;
 }
 .bs-header h1 {
-  font-size: 22px;
+  font-size: var(--bs-text-title, calc(22px * var(--bs-distance-scale, 1.25)));
   font-weight: 600;
   letter-spacing: 2px;
   background: linear-gradient(90deg, #40a9ff, #ffd666);
@@ -774,7 +934,27 @@ onUnmounted(() => {
 .bs-header-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 12px;
+}
+.distance-switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.distance-option.active {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary-light-5);
+}
+.carousel-status {
+  font-size: 12px;
+  color: var(--el-color-info);
+}
+.carousel-focus {
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 2px var(--el-color-primary-light-5);
 }
 .bs-clock {
   font-family: var(--font-family-mono);
@@ -831,20 +1011,26 @@ onUnmounted(() => {
   text-align: center;
 }
 .kpi-value {
-  font-size: 26px;
+  font-size: var(--bs-text-kpi, calc(34px * var(--bs-distance-scale, 1.25)));
   font-weight: 700;
   color: #40a9ff;
 }
 .kpi-label {
-  font-size: 13px;
+  font-size: var(--bs-text-body, calc(13px * var(--bs-distance-scale, 1.25)));
   color: #9fc6ef;
   margin-top: 4px;
 }
 .bs-charts {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  // 2-3 列图表：宽屏 3 列（宽卡片占 2 列），窄屏回落 2 列
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   flex: 1;
+}
+@media (max-width: 1400px) {
+  .bs-charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .chart-card {
   background: rgba(9, 24, 48, 0.65);
@@ -859,7 +1045,7 @@ onUnmounted(() => {
   min-height: 220px;
 }
 .chart-title {
-  font-size: 13px;
+  font-size: var(--bs-text-chart-title, calc(13px * var(--bs-distance-scale, 1.25)));
   color: #9fc6ef;
   margin-bottom: 4px;
 }

@@ -44,17 +44,24 @@ const mocks = vi.hoisted(() => ({
   cancelAllRequests: vi.fn(),
   config: { theme: 'default', setTheme: vi.fn() },
   themeOptions: [
-    { label: '默认', value: 'default' },
-    { label: '明亮', value: 'light' },
-    { label: '户外', value: 'outdoor' },
-    { label: '高对比', value: 'high-contrast' },
-    { label: '暗色', value: 'dark' },
+    { label: '军绿（默认）', value: 'default' },
+    { label: '深色大屏', value: 'dark-bigscreen' },
+    { label: '户外高对比', value: 'outdoor' },
   ],
 }))
 
-vi.mock('vue-router', () => ({
-  useRoute: () => mocks.route,
-}))
+vi.mock('vue-router', async () => {
+  // 真实 vue-router 的 route 是响应式的：用 reactive 包装以驱动组件内 watch/面包屑
+  const { reactive } = await import('vue')
+  mocks.route = reactive({
+    path: '/dashboard',
+    fullPath: '/dashboard',
+    meta: { title: '工作台' } as Record<string, unknown>,
+  })
+  return {
+    useRoute: () => mocks.route,
+  }
+})
 
 vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: (...args: any[]) => mocks.pushSafe(...args) }),
@@ -110,6 +117,10 @@ vi.mock('@/components/nav/MenuSearchDialog.vue', () => ({
     emits: ['update:modelValue'],
     template: '<div class="menu-search-dialog-stub" />',
   },
+}))
+// W1 外观面板由 AppearanceSettings.test.ts 唯一真实执行，本文件只桩掉
+vi.mock('@/components/settings/AppearanceSettings.vue', () => ({
+  default: { name: 'AppearanceSettingsStub', template: '<div class="appearance-settings-stub" />' },
 }))
 
 /** 契约 §2 的最小 v2 数据：page + group + console + 未知图标/无图标 */
@@ -250,6 +261,12 @@ const layoutStubs: Record<string, any> = {
   },
   'el-avatar': { template: '<span class="avatar-stub"><slot /></span>' },
   'el-icon': { template: '<i class="icon-stub"><slot /></i>' },
+  'el-dialog': {
+    name: 'ElDialog',
+    props: ['modelValue', 'title', 'width'],
+    emits: ['update:modelValue'],
+    template: '<div v-if="modelValue" class="dialog-stub"><h3>{{ title }}</h3><slot /></div>',
+  },
   CommonErrorBoundary: { template: '<div class="boundary-stub"><slot /></div>' },
 }
 
@@ -426,16 +443,16 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
     expect(mocks.get).not.toHaveBeenCalled()
   })
 
-  it('折叠按钮切换侧栏宽度并隐藏分区标签', async () => {
+  it('折叠按钮切换侧栏宽度并隐藏板块标题', async () => {
     const wrapper = await mountLayout()
     const aside = wrapper.find('.aside-stub')
     expect(aside.attributes('data-width')).toBe('var(--layout-sidebar-width, 240px)')
-    expect(wrapper.find('.menu-section-label').attributes('style')).toBeUndefined()
+    expect(wrapper.find('.section-head').attributes('style')).toBeUndefined()
 
     await wrapper.find('.button-stub').trigger('click')
     await nextTick()
     expect(aside.attributes('data-width')).toBe('var(--layout-sidebar-collapsed-width, 68px)')
-    expect(wrapper.find('.menu-section-label').attributes('style')).toContain('display: none')
+    expect(wrapper.find('.section-head').attributes('style')).toContain('display: none')
   })
 
   it('窄屏自动收起：初始 matches=true 收起，change 事件进入/退出窄屏', async () => {
@@ -492,9 +509,11 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
     expect(wrapper.find('.username').text()).toBe('管理员')
   })
 
-  it('路由无 meta.title 时不渲染面包屑当前项', async () => {
+  it('未匹配路由且无 meta.title 时不渲染面包屑层级', async () => {
+    mocks.route.path = '/mystery-page'
     mocks.route.meta = {}
     const wrapper = await mountLayout()
+    expect(wrapper.find('.breadcrumb-section').exists()).toBe(false)
     expect(wrapper.find('.breadcrumb-current').exists()).toBe(false)
   })
 
@@ -509,13 +528,16 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
     expect(mocks.pushSafe).toHaveBeenCalledWith('/message')
   })
 
-  it('主题切换器命令调用 configStore.setTheme；仅开放已适配主题', async () => {
+  it('主题切换器命令调用 configStore.setTheme；顶栏仅开放 default/outdoor', async () => {
     const wrapper = await mountLayout()
     const dropdowns = wrapper.findAllComponents(ElDropdownStub)
     dropdowns[0].vm.$emit('command', 'outdoor')
     expect(mocks.config.setTheme).toHaveBeenCalledWith('outdoor')
-    // dark 被过滤掉，未出现在主题选项中
-    expect(wrapper.find('.theme-switcher').text()).not.toContain('暗色')
+    const themeText = wrapper.find('.theme-switcher').text()
+    expect(themeText).toContain('军绿')
+    expect(themeText).toContain('户外高对比')
+    // dark-bigscreen 仅大屏使用，不出现在顶栏主题切换器
+    expect(themeText).not.toContain('深色大屏')
   })
 
   it('用户菜单命令：个人中心 / 修改密码 / 退出登录', async () => {
@@ -780,5 +802,199 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
     dispatchKey('k', { ctrl: true })
     await nextTick()
     expect(wrapper.findComponent({ name: 'MenuSearchDialog' }).props('modelValue')).toBe(true)
+  })
+
+  // ══════════════════ W23：面包屑 / 当前板块 / 收起态浮层 / 外观入口 ══════════════════
+
+  it('面包屑「板块 › 页面」：page / group 子项 / console / 详情前缀', async () => {
+    mocks.route.path = '/supported-villages'
+    mocks.route.meta = { title: '帮扶村' }
+    let wrapper = await mountLayout({ expandAll: false })
+    expect(wrapper.find('.breadcrumb-section').text()).toBe('帮扶业务')
+    expect(wrapper.find('.breadcrumb-current').text()).toBe('帮扶村管理')
+
+    mocks.route.path = '/funds' // group children
+    wrapper = await mountLayout({ expandAll: false })
+    expect(wrapper.find('.breadcrumb-section').text()).toBe('帮扶业务')
+    expect(wrapper.find('.breadcrumb-current').text()).toBe('经费台账')
+
+    mocks.route.path = '/system/console/org' // console 聚合页
+    wrapper = await mountLayout({ expandAll: false })
+    expect(wrapper.find('.breadcrumb-section').text()).toBe('系统管理')
+    expect(wrapper.find('.breadcrumb-current').text()).toBe('组织与权限')
+
+    mocks.route.path = '/supported-villages/42' // 详情页按入口前缀归入
+    wrapper = await mountLayout({ expandAll: false })
+    expect(wrapper.find('.breadcrumb-current').text()).toBe('帮扶村管理')
+  })
+
+  it('面包屑：工作台固定「工作台」；未匹配回退 meta.title', async () => {
+    mocks.route.path = '/dashboard'
+    let wrapper = await mountLayout()
+    expect(wrapper.find('.breadcrumb-section').exists()).toBe(false)
+    expect(wrapper.find('.breadcrumb-current').text()).toBe('工作台')
+
+    mocks.route.path = '/mystery-page'
+    mocks.route.meta = { title: '未知页' }
+    wrapper = await mountLayout()
+    expect(wrapper.find('.breadcrumb-section').exists()).toBe(false)
+    expect(wrapper.find('.breadcrumb-current').text()).toBe('未知页')
+  })
+
+  it('当前板块自动展开并保持，切换路由后新板块自动展开', async () => {
+    mocks.route.path = '/supported-villages'
+    const wrapper = await mountLayout({ expandAll: false })
+    // 当前板块（帮扶业务）自动展开，非当前板块保持折叠
+    expect(isVisible(wrapper, '/supported-villages')).toBe(true)
+    expect(isVisible(wrapper, '/system/console/org')).toBe(false)
+    const stored = JSON.parse(localStorage.getItem('nav:expanded-sections') as string)
+    expect(stored).toContain('business')
+
+    // 当前板块标题金色竖条（is-current 只标记当前板块）
+    expect(sectionToggle(wrapper, '帮扶业务').classes()).toContain('is-current')
+    expect(sectionToggle(wrapper, '系统管理').classes()).not.toContain('is-current')
+
+    // 路由切换 → 新板块自动展开，原板块保持展开
+    mocks.route.path = '/system/console/org'
+    await nextTick()
+    expect(isVisible(wrapper, '/system/console/org')).toBe(true)
+    expect(isVisible(wrapper, '/supported-villages')).toBe(true)
+    const expanded = JSON.parse(localStorage.getItem('nav:expanded-sections') as string)
+    expect(expanded).toEqual(expect.arrayContaining(['business', 'system']))
+    expect(sectionToggle(wrapper, '系统管理').classes()).toContain('is-current')
+
+    // 回到已展开板块：不重复追加（has 分支）
+    mocks.route.path = '/supported-villages'
+    await nextTick()
+    const again = JSON.parse(localStorage.getItem('nav:expanded-sections') as string)
+    expect(again.filter((key: string) => key === 'business')).toHaveLength(1)
+  })
+
+  it('板块收起态：hover 标题浮出子项浮层，点击子项跳转并关闭', async () => {
+    const wrapper = await mountLayout({ expandAll: false })
+    expect(wrapper.find('[data-test="section-flyout"]').exists()).toBe(false)
+
+    const heads = wrapper.findAll('.section-head')
+    // hover 帮扶业务标题 → 浮层展示 page 项与 group 子项
+    await heads[0].trigger('mouseenter')
+    await nextTick()
+    let flyout = wrapper.find('[data-test="section-flyout"]')
+    expect(flyout.exists()).toBe(true)
+    expect(flyout.find('.section-flyout-title').text()).toBe('帮扶业务')
+    const labels = flyout
+      .findAll('.section-flyout-item')
+      .map((item) => item.text().replace(/\s+/g, ''))
+    expect(labels).toEqual(['帮扶村管理', '经费台账'])
+
+    // 点击 page 子项 → 跳转并关闭浮层
+    await flyout.findAll('.section-flyout-item')[0].trigger('click')
+    expect(mocks.pushSafe).toHaveBeenCalledWith('/supported-villages')
+    expect(wrapper.find('[data-test="section-flyout"]').exists()).toBe(false)
+
+    // 键盘聚焦标题同样浮出；点击 group 子项跳转
+    await sectionToggle(wrapper, '帮扶业务').trigger('focus')
+    await nextTick()
+    flyout = wrapper.find('[data-test="section-flyout"]')
+    expect(flyout.exists()).toBe(true)
+    await flyout.findAll('.section-flyout-item')[1].trigger('click')
+    expect(mocks.pushSafe).toHaveBeenCalledWith('/funds')
+
+    // 鼠标移出板块标题区域 → 浮层关闭
+    await heads[0].trigger('mouseenter')
+    await nextTick()
+    expect(wrapper.find('[data-test="section-flyout"]').exists()).toBe(true)
+    await heads[0].trigger('mouseleave')
+    await nextTick()
+    expect(wrapper.find('[data-test="section-flyout"]').exists()).toBe(false)
+  })
+
+  it('板块展开态 hover 不显示浮层；展开/收起时清理浮层', async () => {
+    const wrapper = await mountLayout({ expandAll: false })
+    const heads = wrapper.findAll('.section-head')
+    await heads[1].trigger('mouseenter') // 系统管理（收起）
+    await nextTick()
+    expect(wrapper.find('[data-test="section-flyout"]').exists()).toBe(true)
+
+    // 点击标题展开 → 浮层立即清理
+    await sectionToggle(wrapper, '系统管理').trigger('click')
+    await nextTick()
+    expect(isVisible(wrapper, '/system/console/org')).toBe(true)
+    expect(wrapper.find('[data-test="section-flyout"]').exists()).toBe(false)
+
+    // 展开态 hover 不再显示浮层
+    await heads[1].trigger('mouseenter')
+    await nextTick()
+    expect(wrapper.find('[data-test="section-flyout"]').exists()).toBe(false)
+  })
+
+  it('浮层 console 子项点击跳转', async () => {
+    const wrapper = await mountLayout({ expandAll: false })
+    const heads = wrapper.findAll('.section-head')
+    await heads[1].trigger('mouseenter')
+    await nextTick()
+    const flyout = wrapper.find('[data-test="section-flyout"]')
+    expect(flyout.findAll('.section-flyout-item').map((item) => item.text())).toContain(
+      '组织与权限'
+    )
+    await flyout.findAll('.section-flyout-item')[0].trigger('click')
+    expect(mocks.pushSafe).toHaveBeenCalledWith('/system/console/org')
+  })
+
+  it('头像菜单「外观设置」打开外观面板并能关闭', async () => {
+    const wrapper = await mountLayout()
+    const dropdowns = wrapper.findAllComponents(ElDropdownStub)
+    dropdowns[1].vm.$emit('command', 'appearance')
+    await nextTick()
+
+    const dialog = wrapper.findComponent({ name: 'ElDialog' })
+    expect(dialog.props('modelValue')).toBe(true)
+    expect(dialog.props('title')).toBe('外观设置')
+    // W1 外观面板（本文件桩掉，真实执行者是 AppearanceSettings.test.ts）
+    expect(dialog.find('.appearance-settings-stub').exists()).toBe(true)
+
+    dialog.vm.$emit('update:modelValue', false)
+    await nextTick()
+    expect(dialog.props('modelValue')).toBe(false)
+  })
+})
+
+describe('面包屑最长路径优先（v1.15.0 收口）', () => {
+  const RURAL_PAYLOAD = (listFirst: boolean) => ({
+    sections: [
+      {
+        key: 'rural',
+        label: '乡村振兴',
+        order: 10,
+        items: listFirst
+          ? [
+              { key: 'rural-list', label: '工作列表', path: '/rural-works/list', icon: 'List', kind: 'page' },
+              { key: 'rural-home', label: '工作首页', path: '/rural-works', icon: 'Sunny', kind: 'page' },
+            ]
+          : [
+              { key: 'rural-home', label: '工作首页', path: '/rural-works', icon: 'Sunny', kind: 'page' },
+              { key: 'rural-list', label: '工作列表', path: '/rural-works/list', icon: 'List', kind: 'page' },
+            ],
+      },
+    ],
+    flat_keys: ['rural-list', 'rural-home'],
+  })
+
+  it('短前缀先出现、长路径后出现：替换为更长匹配（true 分支）', async () => {
+    const wrapper = await mountLayout()
+    useMenuStore().setMenus(RURAL_PAYLOAD(false) as never)
+    mocks.route.path = '/rural-works/list'
+    mocks.route.meta = { title: '路由标题' }
+    await nextTick()
+    expect(wrapper.find('.breadcrumb-section').text()).toBe('乡村振兴')
+    expect(wrapper.find('.breadcrumb-current').text()).toBe('工作列表')
+  })
+
+  it('长路径先出现、短前缀后出现：不覆盖（false 分支）', async () => {
+    const wrapper = await mountLayout()
+    useMenuStore().setMenus(RURAL_PAYLOAD(true) as never)
+    mocks.route.path = '/rural-works/list'
+    mocks.route.meta = { title: '路由标题' }
+    await nextTick()
+    expect(wrapper.find('.breadcrumb-current').text()).toBe('工作列表')
   })
 })

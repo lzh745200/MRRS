@@ -173,6 +173,30 @@ bash build-scripts/build-linux-arm64.sh           # Linux ARM64 安装包
   - **遗留表清理**：删除 `villages` / `villagers` / `industries` / `sentiment_news` 四表；`rural_works` / `rural_tasks` /
     `tea_plantations` / `cactus_fruit_plots` 的 `village_id` 迁移为 `supported_village_id`（FK→supported_villages）。
   - 新增依赖：`rapidocr-onnxruntime==1.4.4`（离线 OCR；PDF 仍用 reportlab 内置中文字体）。
+- **UI v2.0 设计系统** (2026-10-19, v1.15.0):
+  - **主题 5→3**：军绿（默认，无 `data-theme`）/ 深色大屏 `dark-bigscreen`（仅大屏页强制）/ 户外高对比 `outdoor`；
+    旧值 `light`/`military`→`default`、`dark`→`dark-bigscreen`、`high-contrast`→`outdoor` 由 `normalizeTheme()` 迁移，
+    非法值回落 default。入口：顶栏主题切换器 + 外观设置面板；`main.ts` 启动时 `applyThemeToDom(readStoredTheme())` 防闪烁。
+  - **显示偏好 4 档**（localStorage **`ui:prefs`**，唯一读写入口 `composables/useUiPrefs.ts`）：
+    `<html data-font-size="compact|standard|large">`（`--font-scale` 0.92/1/1.12）、
+    `data-density="comfortable|compact"`（表格行高 44/34px）、`data-contrast="normal|high"`、
+    `data-simplify="false|true"`（隐藏 `.stat-trend`/`.list-hint`/`.advanced-only`）；损坏 JSON/非法值回退默认、
+    存储不可用静默内存态；面板 `components/settings/AppearanceSettings.vue`（头像下拉「外观设置」），即时生效并持久化。
+  - **Token 升级**（`styles/tokens.scss`）：主色阶 50/100/500/600/700/900、`--color-card-border`、
+    阴影 2 档（`--shadow-card`/`--shadow-pop`）、圆角 3 档（card 8/control 6/pill 999）、字号阶梯 `calc(* var(--font-scale))`、
+    正文行高 1.6、数字 `tabular-nums`、侧栏 `--sidebar-bg` 深绿渐变 + 当前板块金色竖条（金色仅三用，面积 ≤5%）。
+  - **全局模板样式/类**：`styles/components/ui-v2.scss`（表格浅主色表头+金色底线/去斑马纹/密度/焦点环）、
+    `card.scss`（`.app-card`/`.app-stat-card`/`.stat-trend`/`.num-cell`）、`states.scss`（`.app-empty/.app-loading/.app-error`）、
+    `dialog.scss`（三档宽度）、`theme-elevated.scss`（精美增强层）；通用组件 `components/common/` 6 个
+    （AppPageHeader/AppStatCard/AppEmpty/AppLoading/AppError/AppTableToolbar + `index.ts`）。
+  - **导航体验**：侧栏当前板块金色竖条、收起态 hover/键盘聚焦浮层 `.section-flyout`、面包屑「板块 › 页面」、
+    Ctrl+K 命令面板/菜单搜索。
+  - **页面**：工作台 KPI 统计卡 + 待办清单 + 图表层级；大屏三层结构（标题时间条/KPI 大数字/2–3 列图表）+
+    `data-bigscreen-distance="3m|6m|10m"` 字号分档（默认 6m）+ 15s 自动轮播（可暂停/关闭、卸载清理定时器）；
+    一户一档左主右辅 + 统计卡。
+  - **质量门禁**：`tests/unit/ui/ui-tokens.test.ts`（Token/主题/偏好/全局类契约）、
+    `tests/e2e/visual/visual-baseline.spec.ts`（10 个关键页面 DOM 结构基线，`UPDATE_VISUAL_BASELINE=1` 更新）；
+    硬编码色棘轮 `check_hardcoded_styles.py` 基线 345 → 当前 305（57 个文件；目标 ≤200，以最终基线为准），改动文件零新增。
 - **软删除模式** (2026-07-05): 模型使用 `is_active` 列（Boolean, default=True）。`is_active=False`=已删除。列表端点默认过滤 `is_active=True`，`include_deleted=true` 显示全部（管理员）。`to_dict()` 暴露 `isDeleted`/`is_deleted`。已应用于 `SupportedVillage`、`School`、`Project`、`Fund`。
 - **软删除权限收敛** (2026-07-20): `include_deleted` 参数通过 `enforce_admin_include_deleted` 依赖（`app/api/v1/deps.py`）统一收敛。非管理员传入 `include_deleted=true` 静默降级为 `False`（不抛 403）。4 个端点（supported-villages/schools/projects/funds）均使用 `Depends(enforce_admin_include_deleted)`。详情端点返回 `viewableBecause` 元数据（`build_viewable_because()` 函数）。`SoftDeleteMixin` 预留 `deleted_by` 审计字段。回归测试：`tests/unit/api/test_include_deleted_enforcement.py`（49 项）、E2E：`tests/unit/test_soft_delete_e2e.py`（2 项）。
 - **统一列表响应** (2026-07-08): 所有列表端点已使用 `ok_list()` (envelope)。新增列表端点必须使用 `ok_list()` 而非裸 dict。前端 `_unwrapList()` 仍兼容两种格式以保证向后兼容。

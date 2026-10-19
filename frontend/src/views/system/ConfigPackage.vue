@@ -38,12 +38,9 @@
         <span>外观主题</span>
       </template>
       <el-radio-group v-model="currentTheme" @change="applyTheme">
-        <el-radio-button value="default">军绿</el-radio-button>
-        <el-radio-button value="light">明亮</el-radio-button>
-        <el-radio-button value="dark">深色</el-radio-button>
-        <el-radio-button value="military">军旅</el-radio-button>
-        <el-radio-button value="outdoor">户外</el-radio-button>
-        <el-radio-button value="high-contrast">高对比</el-radio-button>
+        <el-radio-button value="default">军绿（默认）</el-radio-button>
+        <el-radio-button value="dark-bigscreen">深色大屏</el-radio-button>
+        <el-radio-button value="outdoor">户外高对比</el-radio-button>
       </el-radio-group>
       <p class="theme-hint">主题实时切换并自动记忆，图表配色随主题联动。</p>
     </el-card>
@@ -126,11 +123,11 @@ const loading = ref(false)
 
 // ── 外观主题 ──
 const configStore = useConfigStore()
-const currentTheme = ref(configStore.theme || 'light')
-const THEMES = ['default', 'light', 'dark', 'military', 'outdoor', 'high-contrast']
+const currentTheme = ref(configStore.theme || 'default')
+const THEMES = ['default', 'dark-bigscreen', 'outdoor']
 
 function applyTheme(t: string | number | boolean | undefined) {
-  const theme = THEMES.includes(String(t)) ? String(t) : 'light'
+  const theme = THEMES.includes(String(t)) ? String(t) : 'default'
   currentTheme.value = theme
   if (theme === 'default') {
     document.documentElement.removeAttribute('data-theme')

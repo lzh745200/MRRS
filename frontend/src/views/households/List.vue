@@ -1,9 +1,9 @@
-﻿<template>
-  <div class="household-list-page">
-    <div class="page-header">
-      <div class="header-left">
+<template>
+  <div class="list-page household-list-page">
+    <header class="page-header">
+      <div class="header-info">
         <h2 class="page-title">一户一档</h2>
-        <span class="page-desc">按户建档、风险预警、走访挂户与台账导出</span>
+        <p class="page-desc">按户建档、风险预警、走访挂户与台账导出</p>
       </div>
       <div class="header-actions">
         <el-button class="btn-alerts" @click="openAlerts">风险预警</el-button>
@@ -16,9 +16,19 @@
         </el-button>
         <el-button type="primary" class="btn-create" @click="openCreate">新建档案</el-button>
       </div>
-    </div>
+    </header>
 
-    <el-card class="filter-card">
+    <!-- 统计条：建档户数 / 当前页高风险 / 监测户 / 预警命中 -->
+    <section class="stat-grid">
+      <div v-for="card in statCards" :key="card.key" class="app-stat-card stat-card">
+        <div class="stat-value num-cell">{{ card.value }}</div>
+        <div class="stat-label">{{ card.label }}</div>
+        <div class="stat-trend" :class="card.trendClass">{{ card.trend }}</div>
+      </div>
+    </section>
+
+    <!-- 筛选区 -->
+    <section class="app-card filter-card">
       <div class="filters">
         <el-select
           v-model="query.village_id"
@@ -60,96 +70,120 @@
         <el-button type="primary" class="btn-search" @click="handleSearch">查询</el-button>
         <el-button class="btn-reset" @click="handleReset">重置</el-button>
       </div>
-    </el-card>
+      <p class="list-hint advanced-only">风险预警按户实时计算，可在详情页一键登记为风险记录。</p>
+    </section>
 
-    <el-card class="table-card">
-      <template #header>
-        <div class="card-header">
-          <span>建档台账</span>
-          <span class="total-hint">共 {{ total }} 户</span>
-        </div>
+    <!-- 台账表格 -->
+    <section class="app-card table-card">
+      <div class="card-header">
+        <span class="card-title">建档台账</span>
+        <span class="total-hint">共 {{ total }} 户</span>
+      </div>
+
+      <div v-if="loading" class="app-loading">数据加载中…</div>
+      <div v-else-if="loadError" class="app-error">
+        <span class="error-text">{{ loadError }}</span>
+        <el-button type="primary" class="btn-retry" @click="loadData">重试</el-button>
+      </div>
+      <template v-else>
+        <div v-if="items.length === 0" class="app-empty">暂无建档记录</div>
+        <template v-else>
+          <el-table :data="items" class="household-table">
+            <el-table-column prop="household_name" label="户主" min-width="100" />
+            <el-table-column label="户编号" min-width="120">
+              <template #default="{ row }">{{ row.household_code || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="帮扶村" min-width="130">
+              <template #default="{ row }">{{ row.village_name || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="户类型" width="100">
+              <template #default="{ row }">
+                <el-tag :type="typeTagType(row.household_type)" size="small">
+                  {{ householdTypeLabel(row.household_type) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="风险等级" width="100">
+              <template #default="{ row }">
+                <el-tag :type="riskTagType(row.risk_level)" size="small">
+                  {{ riskLevelLabel(row.risk_level) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="帮扶责任人" width="120">
+              <template #default="{ row }">{{ formatHelperName(row.helper_name) }}</template>
+            </el-table-column>
+            <el-table-column label="成员数" width="90" align="right">
+              <template #default="{ row }">
+                <span class="num-cell">{{ row.member_count ?? 0 }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="最近走访" width="120">
+              <template #default="{ row }">{{ formatDate(row.last_visit_date) }}</template>
+            </el-table-column>
+            <el-table-column label="预警" min-width="150">
+              <template #default="{ row }">
+                <template v-if="alertsOf(row as HouseholdItem).length">
+                  <el-tag
+                    v-for="alert in alertsOf(row as HouseholdItem)"
+                    :key="alert"
+                    type="danger"
+                    size="small"
+                    class="alert-tag"
+                  >
+                    {{ alert }}
+                  </el-tag>
+                </template>
+                <span v-else class="muted">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="200" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  link
+                  type="primary"
+                  class="btn-view"
+                  @click="goDetail(row as HouseholdItem)"
+                >
+                  详情
+                </el-button>
+                <el-button
+                  link
+                  type="primary"
+                  class="btn-edit"
+                  @click="openEdit(row as HouseholdItem)"
+                >
+                  编辑
+                </el-button>
+                <el-dropdown
+                  class="row-actions"
+                  @command="handleRowCommand($event, row as HouseholdItem)"
+                >
+                  <el-button link type="danger" class="btn-more">更多</el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="delete">删除</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <el-pagination
+            class="pager pagination-wrapper"
+            background
+            layout="total, sizes, prev, pager, next"
+            :total="total"
+            :current-page="query.page"
+            :page-size="query.page_size"
+            :page-sizes="[10, 20, 50, 100]"
+            @current-change="handlePageChange"
+            @size-change="handleSizeChange"
+          />
+        </template>
       </template>
-
-      <el-table v-loading="loading" :data="items" class="household-table">
-        <el-table-column prop="household_name" label="户主" min-width="100" />
-        <el-table-column label="户编号" min-width="120">
-          <template #default="{ row }">{{ row.household_code || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="帮扶村" min-width="130">
-          <template #default="{ row }">{{ row.village_name || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="户类型" width="100">
-          <template #default="{ row }">
-            <el-tag :type="typeTagType(row.household_type)" size="small">
-              {{ householdTypeLabel(row.household_type) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="风险等级" width="100">
-          <template #default="{ row }">
-            <el-tag :type="riskTagType(row.risk_level)" size="small">
-              {{ riskLevelLabel(row.risk_level) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="帮扶责任人" width="120">
-          <template #default="{ row }">{{ formatHelperName(row.helper_name) }}</template>
-        </el-table-column>
-        <el-table-column label="成员数" width="80">
-          <template #default="{ row }">{{ row.member_count ?? 0 }}</template>
-        </el-table-column>
-        <el-table-column label="最近走访" width="120">
-          <template #default="{ row }">{{ formatDate(row.last_visit_date) }}</template>
-        </el-table-column>
-        <el-table-column label="预警" min-width="150">
-          <template #default="{ row }">
-            <template v-if="alertsOf(row as HouseholdItem).length">
-              <el-tag
-                v-for="alert in alertsOf(row as HouseholdItem)"
-                :key="alert"
-                type="danger"
-                size="small"
-                class="alert-tag"
-              >
-                {{ alert }}
-              </el-tag>
-            </template>
-            <span v-else class="muted">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" class="btn-view" @click="goDetail(row as HouseholdItem)"
-              >详情</el-button
-            >
-            <el-button link type="primary" class="btn-edit" @click="openEdit(row as HouseholdItem)"
-              >编辑</el-button
-            >
-            <el-button
-              link
-              type="danger"
-              class="btn-delete"
-              @click="handleDelete(row as HouseholdItem)"
-              >删除</el-button
-            >
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <EmptyState v-if="!loading && items.length === 0" description="暂无建档记录" />
-
-      <el-pagination
-        class="pager"
-        background
-        layout="total, sizes, prev, pager, next"
-        :total="total"
-        :current-page="query.page"
-        :page-size="query.page_size"
-        :page-sizes="[10, 20, 50, 100]"
-        @current-change="handlePageChange"
-        @size-change="handleSizeChange"
-      />
-    </el-card>
+    </section>
 
     <!-- 新建 / 编辑抽屉 -->
     <el-drawer
@@ -333,8 +367,8 @@
         <el-button class="btn-alerts-refresh" @click="loadAlerts">刷新</el-button>
       </div>
 
-      <div v-if="alertsLoading" class="muted alerts-loading">加载中…</div>
-      <EmptyState v-else-if="alerts.length === 0" description="暂无风险预警" />
+      <div v-if="alertsLoading" class="app-loading">预警加载中…</div>
+      <div v-else-if="alerts.length === 0" class="app-empty">暂无风险预警</div>
       <ul v-else class="alert-list">
         <li
           v-for="alert in alerts"
@@ -359,9 +393,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { getSupportedVillages } from '@/api/supportedVillage'
@@ -420,6 +453,7 @@ const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
 
 const loading = ref(false)
+const loadError = ref('')
 const exporting = ref(false)
 const saving = ref(false)
 const items = ref<HouseholdItem[]>([])
@@ -440,6 +474,44 @@ const query = reactive<{
   risk_level: '',
   household_type: '',
   keyword: '',
+})
+
+/** 统计条：总户数 + 当前页风险分布（实时派生，不额外请求） */
+const statCards = computed(() => {
+  const current = items.value ?? []
+  const highRisk = current.filter((row) => row.risk_level === 'high').length
+  const monitor = current.filter((row) => row.household_type === 'monitor').length
+  const alertHits = current.filter((row) => (row.risk_alerts ?? []).length > 0).length
+  return [
+    {
+      key: 'total',
+      label: '建档户数',
+      value: total.value,
+      trend: '累计',
+      trendClass: 'stat-trend--flat',
+    },
+    {
+      key: 'high',
+      label: '高风险户',
+      value: highRisk,
+      trend: '当前页',
+      trendClass: 'stat-trend--up',
+    },
+    {
+      key: 'monitor',
+      label: '监测户',
+      value: monitor,
+      trend: '当前页',
+      trendClass: 'stat-trend--flat',
+    },
+    {
+      key: 'alerts',
+      label: '预警命中',
+      value: alertHits,
+      trend: '当前页',
+      trendClass: 'stat-trend--down',
+    },
+  ]
 })
 
 // ── 新建 / 编辑 ──
@@ -525,7 +597,7 @@ function alertText(alert: HouseholdAlert): string {
 // ── 数据加载 ──
 async function loadVillages(): Promise<void> {
   try {
-    const res = await getSupportedVillages({ page: 1, page_size: 500 })
+    const res = await getSupportedVillages({ page: 1, page_size: 200 })
     const list = Array.isArray(res) ? res : (res?.items ?? [])
     villageOptions.value = list.map((row: any) => ({
       id: row.id,
@@ -538,6 +610,7 @@ async function loadVillages(): Promise<void> {
 
 async function loadData(): Promise<void> {
   loading.value = true
+  loadError.value = ''
   try {
     const params: HouseholdListQuery = {
       page: query.page,
@@ -553,6 +626,7 @@ async function loadData(): Promise<void> {
   } catch {
     items.value = []
     total.value = 0
+    loadError.value = '建档台账加载失败，请稍后重试'
     ElMessage.error('加载一户一档列表失败')
   } finally {
     loading.value = false
@@ -638,6 +712,11 @@ async function handleSave(): Promise<void> {
   } finally {
     saving.value = false
   }
+}
+
+/** 行操作下拉（当前仅删除为次要操作） */
+function handleRowCommand(command: string, row: HouseholdItem): void {
+  if (command === 'delete') void handleDelete(row)
 }
 
 async function handleDelete(row: HouseholdItem): Promise<void> {
@@ -753,48 +832,34 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+/* W2：结构/间距补充；颜色与卡片视觉由 W1 全局类（.list-page/.app-card/.app-stat-card/
+   .app-empty/.app-loading/.app-error/num-cell 等）统一提供，本文件不新增色值。 */
 .household-list-page {
-  padding: 20px;
-  background: var(--color-bg-hover);
-  min-height: 100vh;
+  padding: var(--spacing-lg, 20px);
 }
-.page-header {
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--spacing-md, 12px);
+  margin-bottom: var(--spacing-lg, 16px);
+}
+.stat-grid .stat-card {
+  padding: var(--spacing-lg, 16px);
+}
+.card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-}
-.header-left {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-.page-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--color-text-primary);
-}
-.page-desc {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-}
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.filter-card,
-.table-card {
-  margin-bottom: 16px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border-light);
+  margin-bottom: var(--spacing-md, 12px);
 }
 .filters {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--spacing-sm, 8px);
+}
+.list-hint {
+  margin: var(--spacing-sm, 8px) 0 0;
 }
 .f-village {
   width: 180px;
@@ -806,49 +871,23 @@ onMounted(() => {
 .f-keyword {
   width: 200px;
 }
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-.total-hint {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--color-text-secondary);
-}
 .alert-tag {
   margin-right: 4px;
   margin-bottom: 2px;
 }
-.muted {
-  color: var(--color-text-secondary);
-}
 .pager {
-  margin-top: 16px;
+  margin-top: var(--spacing-md, 12px);
   display: flex;
   justify-content: flex-end;
 }
-.household-form .form-village {
-  width: 100%;
-}
-.form-risk-type,
-.form-risk-level,
-.form-type {
-  width: 200px;
-}
 .rollup-hint {
   margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--color-text-secondary);
 }
 .alerts-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: var(--spacing-sm, 8px);
+  margin-bottom: var(--spacing-md, 12px);
 }
 .alert-level {
   width: 160px;
@@ -859,30 +898,19 @@ onMounted(() => {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-.alert-item {
-  padding: 10px 12px;
-  border: 1px solid var(--color-border-light);
-  border-radius: 8px;
-  background: var(--color-bg-card);
+  gap: var(--spacing-sm, 8px);
 }
 .alert-main {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-.alert-name {
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-.alert-village {
-  font-size: 12px;
-  color: var(--color-text-secondary);
+  gap: var(--spacing-sm, 8px);
 }
 .alert-reason {
   margin: 6px 0;
-  font-size: 13px;
-  color: var(--color-text-regular);
+}
+@media (max-width: 1200px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

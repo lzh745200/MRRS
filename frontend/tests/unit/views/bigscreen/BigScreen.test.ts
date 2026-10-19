@@ -1263,3 +1263,197 @@ describe('W22 退出大屏', () => {
     wrapper.unmount()
   })
 })
+
+// ─────────────────────────────────────────────
+// W23 大屏 UI v2：三层结构 / 距离字号分档 / 自动轮播 / 深色主题
+// ─────────────────────────────────────────────
+describe('W23 大屏 UI v2', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    localStorage.clear()
+    document.documentElement.removeAttribute('data-theme')
+    mocks.getBigScreenFilters.mockResolvedValue(FILTERS)
+    mocks.getBigScreenOverview.mockImplementation((params: any) =>
+      Promise.resolve(overviewFor(params))
+    )
+  })
+
+  afterEach(() => {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+    document.documentElement.removeAttribute('data-theme')
+    document.body.innerHTML = ''
+  })
+
+  it('三层结构 + 根元素强制 dark-bigscreen 主题、默认 6m 距离档', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+
+    const root = wrapper.find('.bigscreen.big-screen')
+    expect(root.exists()).toBe(true)
+    expect(root.attributes('data-theme')).toBe('dark-bigscreen')
+    expect(root.attributes('data-bigscreen-distance')).toBe('6m')
+    expect(root.attributes('data-carousel-view')).toBe('kpi')
+
+    // 三层：标题时间条 / KPI 大数字区 / 图表区
+    expect(wrapper.find('.bs-layer-header').exists()).toBe(true)
+    expect(wrapper.find('.bs-layer-kpi').exists()).toBe(true)
+    expect(wrapper.find('.bs-layer-charts').exists()).toBe(true)
+    expect(wrapper.findAll('.kpi-item')).toHaveLength(5)
+    expect(wrapper.findAll('.chart-card').length).toBeGreaterThanOrEqual(2)
+
+    // 挂载期间 documentElement 也被强制为深色大屏主题
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark-bigscreen')
+    wrapper.unmount()
+    // 卸载恢复（原本无主题 → 移除属性），不污染其它页面
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false)
+  })
+
+  it('挂载前已有主题：卸载时恢复原主题', async () => {
+    document.documentElement.setAttribute('data-theme', 'military')
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark-bigscreen')
+    wrapper.unmount()
+    expect(document.documentElement.getAttribute('data-theme')).toBe('military')
+  })
+
+  it('距离档切换：3m / 6m / 10m 更新根属性，非法值回落 6m', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = vmOf(wrapper)
+    const root = wrapper.find('.bigscreen')
+
+    expect(vm.distanceOptions.map((option: any) => option.value)).toEqual(['3m', '6m', '10m'])
+    expect(vm.distance).toBe('6m')
+
+    await findButton(wrapper, '10m')!.trigger('click')
+    expect(vm.distance).toBe('10m')
+    expect(root.attributes('data-bigscreen-distance')).toBe('10m')
+
+    await findButton(wrapper, '3m')!.trigger('click')
+    expect(vm.distance).toBe('3m')
+    expect(root.attributes('data-bigscreen-distance')).toBe('3m')
+
+    // 非法档位归一化回默认 6m
+    vm.onDistanceChange('20m')
+    await nextTick()
+    expect(vm.distance).toBe('6m')
+    expect(root.attributes('data-bigscreen-distance')).toBe('6m')
+    wrapper.unmount()
+  })
+
+  it('自动轮播默认关闭；开启后每 15s 切换 KPI/图表视角并高亮', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = vmOf(wrapper)
+
+    // 默认关闭：只有时钟 + 自动刷新两个定时器，无暂停按钮/视角文案
+    expect(vm.carouselEnabled).toBe(false)
+    expect(vm.carouselViewLabel).toBe('指标视角')
+    expect(vi.getTimerCount()).toBe(2)
+    expect(wrapper.find('.carousel-pause').exists()).toBe(false)
+    expect(wrapper.find('.carousel-status').exists()).toBe(false)
+    expect(wrapper.find('.bs-layer-kpi').classes()).not.toContain('carousel-focus')
+
+    await findButton(wrapper, '自动轮播')!.trigger('click')
+    expect(vm.carouselEnabled).toBe(true)
+    expect(vm.carouselPaused).toBe(false)
+    expect(vm.carouselView).toBe('kpi')
+    expect(vi.getTimerCount()).toBe(3)
+    expect(wrapper.find('.carousel-pause').exists()).toBe(true)
+    expect(wrapper.find('.carousel-status').text()).toBe('指标视角')
+    expect(wrapper.find('.bs-layer-kpi').classes()).toContain('carousel-focus')
+    expect(wrapper.find('.bs-layer-charts').classes()).not.toContain('carousel-focus')
+
+    // 15s → 图表视角
+    vi.advanceTimersByTime(15000)
+    await nextTick()
+    expect(vm.carouselView).toBe('charts')
+    expect(vm.carouselViewLabel).toBe('图表视角')
+    expect(wrapper.find('.bigscreen').attributes('data-carousel-view')).toBe('charts')
+    expect(wrapper.find('.bs-layer-kpi').classes()).not.toContain('carousel-focus')
+    expect(wrapper.find('.bs-layer-charts').classes()).toContain('carousel-focus')
+    expect(wrapper.find('.carousel-status').text()).toBe('图表视角')
+
+    // 再 15s → 回到指标视角（循环）
+    vi.advanceTimersByTime(15000)
+    await nextTick()
+    expect(vm.carouselView).toBe('kpi')
+    expect(wrapper.find('.bs-layer-kpi').classes()).toContain('carousel-focus')
+
+    // 关闭轮播：定时器清理、控件复位
+    await findButton(wrapper, '关闭轮播')!.trigger('click')
+    expect(vm.carouselEnabled).toBe(false)
+    expect(vi.getTimerCount()).toBe(2)
+    expect(wrapper.find('.carousel-pause').exists()).toBe(false)
+    expect(wrapper.find('.bs-layer-kpi').classes()).not.toContain('carousel-focus')
+    expect(wrapper.find('.bs-layer-charts').classes()).not.toContain('carousel-focus')
+    wrapper.unmount()
+  })
+
+  it('轮播暂停/继续：暂停停止定时器且保持当前视角，继续恢复切换', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = vmOf(wrapper)
+
+    vm.startCarousel()
+    // 重复开启走早退分支（不会叠加定时器）
+    vm.startCarousel()
+    expect(vi.getTimerCount()).toBe(3)
+    vi.advanceTimersByTime(15000)
+    await nextTick()
+    expect(vm.carouselView).toBe('charts')
+
+    await wrapper.find('.carousel-pause').trigger('click')
+    expect(vm.carouselPaused).toBe(true)
+    expect(wrapper.find('.carousel-pause').text()).toBe('继续')
+    expect(vi.getTimerCount()).toBe(2)
+    // 暂停期间推进 30s：视角保持、定时器不再切换
+    vi.advanceTimersByTime(30000)
+    await nextTick()
+    expect(vm.carouselView).toBe('charts')
+    expect(wrapper.find('.carousel-status').text()).toBe('图表视角')
+
+    await wrapper.find('.carousel-pause').trigger('click')
+    expect(vm.carouselPaused).toBe(false)
+    expect(wrapper.find('.carousel-pause').text()).toBe('暂停')
+    expect(vi.getTimerCount()).toBe(3)
+    vi.advanceTimersByTime(15000)
+    await nextTick()
+    expect(vm.carouselView).toBe('kpi')
+    wrapper.unmount()
+  })
+
+  it('退出大屏：清理轮播定时器后再返回工作台', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = vmOf(wrapper)
+    vm.startCarousel()
+    expect(vi.getTimerCount()).toBe(3)
+
+    await findButton(wrapper, '退出大屏')!.trigger('click')
+    expect(mocks.pushSafe).toHaveBeenCalledWith('/dashboard')
+    expect(vm.carouselEnabled).toBe(false)
+    // 轮播定时器已清理（仅剩时钟 + 自动刷新），卸载后全部归零
+    expect(vi.getTimerCount()).toBe(2)
+    wrapper.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('轮播状态不影响数据降级：overview 失败仍渲染零值 KPI 且可开轮播', async () => {
+    mocks.getBigScreenOverview.mockRejectedValue(new Error('net'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = vmOf(wrapper)
+
+    expect(vm.kpis.map((kpi: any) => kpi.value)).toEqual([0, 0, 0, '—', 0])
+    expect(wrapper.findAll('.kpi-item')).toHaveLength(5)
+    await findButton(wrapper, '自动轮播')!.trigger('click')
+    vi.advanceTimersByTime(15000)
+    await nextTick()
+    expect(vm.carouselView).toBe('charts')
+    wrapper.unmount()
+  })
+})

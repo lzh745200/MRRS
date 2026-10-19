@@ -32,12 +32,6 @@
   "#fafafa"
  ],
  "frontend/src/layouts/DefaultLayoutSafe.vue": [
-  "#132818",
-  "#1d3d2a",
-  "#1d3d2a",
-  "rgba(255, 255, 255, 0.08)",
-  "rgba(255, 255, 255, 0.08)",
-  "#132818",
   "rgba(0, 0, 0, 0.3)",
   "rgba(0, 0, 0, 0.4)",
   "rgba(255, 255, 255, 0.12)",
@@ -63,21 +57,6 @@
   "rgba(255, 255, 255, 0.08)",
   "rgba(255, 255, 255, 0.85)",
   "rgba(255, 255, 255, 0.07)",
-  "rgba(212, 175, 55, 0.25)",
-  "rgba(255, 255, 255, 0.7)",
-  "rgba(255, 255, 255, 0.6)",
-  "rgba(255, 255, 255, 0.3)",
-  "rgba(255, 255, 255, 0.7)",
-  "rgba(255, 255, 255, 0.1)",
-  "rgba(255, 255, 255, 0.1)",
-  "rgba(212, 175, 55, 0.5)",
-  "rgba(255, 255, 255, 0.85)",
-  "rgba(255, 255, 255, 0.4)",
-  "rgba(255, 255, 255, 0.7)",
-  "rgba(255, 255, 255, 0.4)",
-  "#152718",
-  "rgba(255, 255, 255, 0.06)",
-  "#1a3c2a",
   "rgba(255, 255, 255, 0.85)",
   "rgba(255, 255, 255, 0.75)",
   "rgba(255, 255, 255, 0.85)"
@@ -106,10 +85,7 @@
  ],
  "frontend/src/views/analytics/reports/WorkAnalysis.vue": [
   "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.1)",
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.06)"
+  "rgba(0, 0, 0, 0.1)"
  ],
  "frontend/src/views/analytics/supported-villages/Detail.vue": [
   "rgba(0, 0, 0, 0.06)"
@@ -206,28 +182,6 @@
   "rgba(64, 169, 255, 0.2)",
   "#9fc6ef",
   "#5a7ba8"
- ],
- "frontend/src/views/dashboard/ChartRow.vue": [
-  "rgba(0, 0, 0, 0.04)",
-  "#1e4d8c"
- ],
- "frontend/src/views/dashboard/index.vue": [
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.06)",
-  "#f0f4f3",
-  "#e2e8e4"
- ],
- "frontend/src/views/dashboard/InfoRow.vue": [
-  "rgba(0, 0, 0, 0.04)",
-  "#1e4d8c",
-  "#fef2f2",
-  "#d1d5db",
-  "#e5e7eb",
-  "#374151"
- ],
- "frontend/src/views/dashboard/KpiCards.vue": [
-  "rgba(0, 0, 0, 0.04)",
-  "rgba(0, 0, 0, 0.1)"
  ],
  "frontend/src/views/dashboard/components/GlobalSearch.vue": [
   "rgba(0, 0, 0, 0.12)",
@@ -421,18 +375,14 @@
   "#f9f9f9"
  ],
  "frontend/src/views/schools/Detail.vue": [
-  "rgba(0, 0, 0, 0.08)",
   "rgba(27, 67, 50, 0.08)",
   "rgba(45, 106, 79, 0.05)",
   "rgba(45, 106, 79, 0.15)",
+  "rgba(0, 0, 0, 0.08)",
   "rgba(45, 106, 79, 0.12)"
  ],
  "frontend/src/views/schools/Edit.vue": [
   "rgba(0, 0, 0, 0.08)"
- ],
- "frontend/src/views/sentiment/Index.vue": [
-  "rgba(45, 106, 79, 0.5)",
-  "rgba(27, 67, 50, 0.12)"
  ],
  "frontend/src/views/system/About.vue": [
   "rgba(27, 67, 50, 0.25)",

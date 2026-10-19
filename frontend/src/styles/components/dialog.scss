@@ -1,0 +1,58 @@
+/**
+ * UI v2.0 对话框三档宽度（W23）
+ *
+ * 用法：`<el-dialog class="dialog-lg">`（sm 480 / md 640 / lg 800）；
+ * 未声明时沿用 Element Plus 默认宽度。窄屏统一 92vw 防横向溢出（1366×768 验收项）。
+ */
+
+.el-dialog.dialog-sm {
+  --el-dialog-width: 480px;
+}
+
+.el-dialog.dialog-md {
+  --el-dialog-width: 640px;
+}
+
+.el-dialog.dialog-lg {
+  --el-dialog-width: 800px;
+}
+
+@media (max-width: 900px) {
+  .el-dialog.dialog-sm,
+  .el-dialog.dialog-md,
+  .el-dialog.dialog-lg {
+    --el-dialog-width: 92vw;
+  }
+}
+
+.el-dialog {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
+}
+
+.el-dialog__header {
+  margin-right: 0;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border-lighter);
+}
+
+.el-dialog__title {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.el-dialog__body {
+  padding: var(--spacing-lg);
+  color: var(--color-text-regular);
+}
+
+.el-dialog__footer {
+  padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-md);
+  border-top: 1px solid var(--color-border-lighter);
+}
+
+/* 抽屉统一 8px 视觉（右侧滑出，维持 Element 默认交互） */
+.el-drawer {
+  box-shadow: var(--shadow-pop);
+}

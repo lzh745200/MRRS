@@ -16,7 +16,7 @@
 
     <!-- 自定义布局面板 -->
     <transition name="slide">
-      <div v-if="showLayoutEditor" class="layout-editor">
+      <div v-if="showLayoutEditor" class="layout-editor app-card">
         <div class="layout-header">
           <span class="layout-title">
             <el-icon><Setting /></el-icon> 自定义布局
@@ -57,64 +57,68 @@
       </div>
     </transition>
 
-    <!-- KPI 统计横条 -->
-    <div v-if="visible.kpi" class="kpi-strip">
-      <div class="kpi-toolbar">
-        <span class="auto-refresh-hint">
-          <el-icon><Refresh /></el-icon>
-          数据每 60 秒自动刷新
-        </span>
-        <el-tooltip content="刷新数据" placement="top">
-          <el-button data-test="btn-refresh-kpi" circle :icon="Refresh" @click="refreshKpiData" />
-        </el-tooltip>
+    <!-- KPI 统计卡网格 -->
+    <section v-if="visible.kpi" class="dashboard-section kpi-strip app-card">
+      <div class="section-head">
+        <h2 class="section-title">数据概览</h2>
+        <div class="kpi-toolbar">
+          <span class="auto-refresh-hint">
+            <el-icon><Refresh /></el-icon>
+            数据每 60 秒自动刷新
+          </span>
+          <el-tooltip content="刷新数据" placement="top">
+            <el-button data-test="btn-refresh-kpi" circle :icon="Refresh" @click="refreshKpiData" />
+          </el-tooltip>
+        </div>
       </div>
       <KpiCards :key="kpiRefreshKey" />
-    </div>
+    </section>
 
-    <!-- 常用快捷操作（按角色权限显示） -->
-    <div class="shortcut-strip">
-      <span class="shortcut-label">常用操作</span>
-      <el-button
-        v-if="isAdmin"
-        type="primary"
-        plain
-        :icon="Plus"
-        @click="pushSafe('/projects/create')"
-      >
-        新建项目
-      </el-button>
-      <el-button
-        v-if="isAdmin"
-        type="success"
-        plain
-        :icon="House"
-        @click="pushSafe('/supported-villages')"
-      >
-        新增帮扶村
-      </el-button>
-      <el-button type="warning" plain :icon="Money" @click="pushSafe('/funds/user')">
-        资金申请
-      </el-button>
-      <el-button type="info" plain :icon="EditPen" @click="pushSafe('/data-package/report')">
-        数据上报
-      </el-button>
-    </div>
+    <!-- 待办清单 -->
+    <TodoListPanel v-if="visible.todos" class="dashboard-section" />
 
-    <!-- 中部：图表 + 快捷入口 -->
-    <div class="middle-row">
-      <div v-if="visible.charts" class="chart-panel">
-        <div class="panel-header">
-          <el-icon><TrendCharts /></el-icon>
-          <span>数据趋势</span>
-        </div>
-        <ChartRow />
-      </div>
-      <div v-if="visible.quickActions" class="quick-panel">
-        <div class="panel-header">
-          <el-icon><Grid /></el-icon>
-          <span>快捷入口</span>
-          <el-button text @click="showLayoutEditor = !showLayoutEditor">
+    <!-- 图表区（项目进度 / 经费概览 两列） -->
+    <ChartRow v-if="visible.charts" class="dashboard-section chart-panel" />
+
+    <!-- 快捷入口 / 近期动态 -->
+    <div class="bottom-row">
+      <section v-if="visible.quickActions" class="dashboard-section quick-panel app-card">
+        <div class="section-head">
+          <h2 class="section-title">快捷入口</h2>
+          <el-button
+            text
+            class="layout-toggle"
+            data-testid="dashboard-layout-toggle"
+            @click="showLayoutEditor = !showLayoutEditor"
+          >
             <el-icon><Setting /></el-icon>
+          </el-button>
+        </div>
+        <div class="shortcut-strip">
+          <span class="shortcut-label">常用操作</span>
+          <el-button
+            v-if="isAdmin"
+            type="primary"
+            plain
+            :icon="Plus"
+            @click="pushSafe('/projects/create')"
+          >
+            新建项目
+          </el-button>
+          <el-button
+            v-if="isAdmin"
+            type="success"
+            plain
+            :icon="House"
+            @click="pushSafe('/supported-villages')"
+          >
+            新增帮扶村
+          </el-button>
+          <el-button type="warning" plain :icon="Money" @click="pushSafe('/funds/user')">
+            资金申请
+          </el-button>
+          <el-button type="info" plain :icon="EditPen" @click="pushSafe('/data-package/report')">
+            数据上报
           </el-button>
         </div>
         <QuickActions
@@ -124,16 +128,9 @@
           @backup="handleBackup"
           @restore="handleRestore"
         />
-      </div>
-    </div>
+      </section>
 
-    <!-- 最新动态（全宽） -->
-    <div v-if="visible.info" class="info-panel">
-      <div class="panel-header">
-        <el-icon><Clock /></el-icon>
-        <span>最新动态</span>
-      </div>
-      <InfoRow />
+      <InfoRow v-if="visible.info" class="dashboard-section info-panel" />
     </div>
   </div>
 </template>
@@ -144,9 +141,6 @@ import { ElMessage } from 'element-plus'
 import {
   Setting,
   Rank,
-  TrendCharts,
-  Grid,
-  Clock,
   Select,
   Refresh,
   Plus,
@@ -157,6 +151,7 @@ import {
 import PageHeader from '@/components/common/PageHeader.vue'
 import HeaderActions from './components/HeaderActions.vue'
 import KpiCards from './KpiCards.vue'
+import TodoListPanel from './components/TodoListPanel.vue'
 import QuickActions from './components/QuickActions.vue'
 import ChartRow from './ChartRow.vue'
 import InfoRow from './InfoRow.vue'
@@ -193,6 +188,7 @@ const formattedDate = computed(() => format.formatCnDate(new Date()))
 const STORAGE_KEY = 'dashboard_layout_v2'
 const defaults = [
   { key: 'kpi', label: '数据概览', visible: true },
+  { key: 'todos', label: '待办清单', visible: true },
   { key: 'charts', label: '数据趋势', visible: true },
   { key: 'quickActions', label: '快捷入口', visible: true },
   { key: 'info', label: '最新动态', visible: true },
@@ -200,7 +196,7 @@ const defaults = [
 const layoutSections = reactive<{ key: string; label: string; visible: boolean }[]>([])
 
 function loadLayout() {
-  const VALID_KEYS = new Set(['kpi', 'charts', 'quickActions', 'info'])
+  const VALID_KEYS = new Set(['kpi', 'todos', 'charts', 'quickActions', 'info'])
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
@@ -357,20 +353,59 @@ function handleRestore() {
 
 <style scoped lang="scss">
 .dashboard-home {
-  padding: 20px;
+  padding: var(--spacing-lg, 20px);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--spacing-lg, 20px);
   max-width: 1440px;
   margin: 0 auto;
 }
 
-.kpi-strip {
-  /* KpiCards 内部自行管理 5 列布局 */
+.dashboard-section {
+  min-width: 0;
+}
+
+.app-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-card-border, var(--color-border-light));
+  border-radius: var(--radius-card, 8px);
+  padding: var(--spacing-lg, 20px);
+  box-shadow: var(--shadow-card);
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm, 12px);
+  margin-bottom: var(--spacing-sm, 12px);
+}
+
+.section-title {
+  margin: 0;
+  font-size: var(--text-lg, 16px);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 16px;
+    border-radius: 2px;
+    background: var(--color-primary);
+  }
+}
+
+.kpi-strip .section-head {
+  margin-bottom: var(--spacing-md, 16px);
 }
 
 .welcome-name {
-  color: $badge-gold;
+  color: var(--color-accent-gold);
 }
 
 .kpi-toolbar {
@@ -378,91 +413,76 @@ function handleRestore() {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  margin-bottom: 10px;
 }
 
 .auto-refresh-hint {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
-  color: var(--color-info);
+  font-size: var(--text-xs, 12px);
+  color: var(--color-text-secondary);
 
   .el-icon {
-    font-size: 13px;
+    font-size: var(--text-sm, 13px);
   }
+}
+
+.bottom-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--spacing-lg, 20px);
+  align-items: start;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.quick-panel,
+.info-panel {
+  min-width: 0;
 }
 
 .shortcut-strip {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
-  padding: 12px 20px;
-  background: var(--color-bg-card);
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  gap: var(--spacing-sm, 12px);
+  padding: var(--spacing-sm, 12px) 0;
+  border-bottom: 1px solid var(--color-border-lighter);
+  margin-bottom: var(--spacing-sm, 12px);
 }
 
 .shortcut-label {
-  font-size: 14px;
-  font-weight: 700;
-  color: $military-dark;
+  font-size: var(--text-sm, 13px);
+  font-weight: 600;
+  color: var(--color-text-primary);
   margin-right: 4px;
 }
 
-.middle-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-  align-items: start;
-  @media (max-width: 960px) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.chart-panel,
-.quick-panel,
-.info-panel {
-  background: var(--color-bg-card);
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 20px;
-  font-size: 15px;
-  font-weight: 700;
-  color: $military-dark;
-  background: linear-gradient(135deg, #f0f4f3, var(--color-bg-card));
-  border-bottom: 1px solid #e2e8e4;
-
-  .el-button {
-    margin-left: auto;
-  }
+.layout-toggle {
+  margin-left: auto;
 }
 
 // 布局编辑器
 .layout-editor {
   background: var(--color-bg-card);
-  border: 2px solid var(--el-color-primary);
-  border-radius: 12px;
-  padding: 16px 20px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-card, 8px);
+  padding: var(--spacing-md, 16px) var(--spacing-lg, 20px);
 }
+
 .layout-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--spacing-sm, 12px);
+  margin-bottom: var(--spacing-sm, 12px);
   padding-bottom: 10px;
   border-bottom: 1px solid var(--color-border-light);
 }
+
 .layout-title {
-  font-size: 15px;
+  font-size: var(--text-md, 14px);
   font-weight: 600;
   color: var(--color-text-primary);
   flex: 1;
@@ -470,27 +490,31 @@ function handleRestore() {
   align-items: center;
   gap: 6px;
 }
+
 .layout-sections {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
+
 .layout-item {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
   background: var(--color-bg-hover);
-  border-radius: 8px;
+  border-radius: var(--radius-control, 6px);
   min-width: 160px;
   cursor: grab;
   user-select: none;
+
   &:active {
     cursor: grabbing;
   }
 }
+
 .layout-saved {
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   color: var(--color-success);
   margin-right: 8px;
   display: inline-flex;
@@ -500,25 +524,29 @@ function handleRestore() {
 .layout-saved .el-icon {
   margin-right: 4px;
 }
+
 .layout-hint {
-  font-size: 12px;
-  color: var(--color-info);
+  font-size: var(--text-xs, 12px);
+  color: var(--color-text-secondary);
   margin: 0 0 10px;
   padding-left: 2px;
 }
+
 .drag-over {
-  background: var(--el-color-primary-light-9) !important;
-  border-color: var(--el-color-primary) !important;
+  background: var(--color-primary-100, var(--color-primary-light-8)) !important;
+  border-color: var(--color-primary) !important;
   transform: scale(1.03);
 }
+
 .drag-handle {
-  color: var(--color-info);
+  color: var(--color-text-secondary);
 }
 
 .slide-enter-active,
 .slide-leave-active {
-  transition: all 0.25s ease;
+  transition: all var(--transition-normal, 0.25s) ease;
 }
+
 .slide-enter-from,
 .slide-leave-to {
   opacity: 0;

@@ -1,25 +1,28 @@
-﻿<template>
-  <div class="household-detail-page">
-    <div class="page-header">
-      <div class="header-left">
+<template>
+  <div class="list-page household-detail-page">
+    <header class="page-header">
+      <div class="header-info">
         <el-button class="btn-back" @click="goBack">返回列表</el-button>
-        <h2 class="page-title">一户一档详情</h2>
+        <div>
+          <h2 class="page-title">一户一档详情</h2>
+          <p class="page-desc">档案、监测指标与风险/走访记录</p>
+        </div>
       </div>
       <div class="header-actions">
         <el-button class="btn-refresh" :loading="loading" @click="load">刷新</el-button>
       </div>
-    </div>
+    </header>
 
-    <div v-if="loadError" class="load-error">
+    <div v-if="loadError" class="app-error">
       <span class="error-text">{{ loadError }}</span>
       <el-button type="primary" class="btn-retry" @click="load">重试</el-button>
     </div>
-    <div v-else-if="!household && loading" class="muted loading-tip">加载中…</div>
+    <div v-else-if="!household && loading" class="app-loading">档案加载中…</div>
 
-    <template v-else-if="household">
-      <!-- 档案头 -->
-      <el-card class="profile-card">
-        <template #header>
+    <div v-else-if="household" class="detail-layout">
+      <!-- 主列：档案头 + 监测指标 + 家庭成员 -->
+      <div class="detail-main">
+        <section class="app-card profile-card">
           <div class="card-header">
             <span class="household-name">{{ household.household_name }}</span>
             <div class="badges">
@@ -31,134 +34,45 @@
               </el-tag>
             </div>
           </div>
-        </template>
-        <el-descriptions :column="3" border>
-          <el-descriptions-item label="户编号">
-            {{ household.household_code || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="帮扶村">
-            {{ household.village_name || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="帮扶责任人">
-            {{ household.helper_name || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="联系电话">{{ maskedPhone() }}</el-descriptions-item>
-          <el-descriptions-item label="详细地址" :span="2">
-            {{ household.address || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="最近走访">
-            {{ formatDate(household.last_visit_date) }}
-          </el-descriptions-item>
-          <el-descriptions-item label="风险类型">
-            {{ riskTypeLabel(household.risk_type) }}
-          </el-descriptions-item>
-          <el-descriptions-item label="监测备注" :span="2">
-            {{ household.monitoring_note || '—' }}
-          </el-descriptions-item>
-        </el-descriptions>
-      </el-card>
+          <el-descriptions :column="3" border>
+            <el-descriptions-item label="户编号">
+              {{ household.household_code || '—' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="帮扶村">
+              {{ household.village_name || '—' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="帮扶责任人">
+              {{ household.helper_name || '—' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="联系电话">{{ maskedPhone() }}</el-descriptions-item>
+            <el-descriptions-item label="详细地址" :span="2">
+              {{ household.address || '—' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="最近走访">
+              {{ formatDate(household.last_visit_date) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="风险类型">
+              {{ riskTypeLabel(household.risk_type) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="监测备注" :span="2">
+              {{ household.monitoring_note || '—' }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </section>
 
-      <!-- 监测指标卡 -->
-      <el-card class="indicator-card">
-        <template #header>
-          <div class="card-header"><span>监测指标</span></div>
-        </template>
-        <div class="indicator-grid">
-          <div class="indicator-item">
-            <div class="indicator-value">{{ formatMoney(household.annual_income) }}</div>
-            <div class="indicator-label">家庭年收入(元)</div>
+        <!-- 监测指标统计卡 -->
+        <section class="stat-grid">
+          <div v-for="card in statCards" :key="card.key" class="app-stat-card stat-card">
+            <div class="stat-value num-cell">{{ card.value }}</div>
+            <div class="stat-label">{{ card.label }}</div>
+            <div class="stat-trend" :class="card.trendClass">{{ card.trend }}</div>
           </div>
-          <div class="indicator-item">
-            <div class="indicator-value">{{ household.migrant_workers ?? 0 }}</div>
-            <div class="indicator-label">务工人数</div>
-          </div>
-          <div class="indicator-item">
-            <div class="indicator-value">{{ yesNo(household.has_serious_illness) }}</div>
-            <div class="indicator-label">大病</div>
-          </div>
-          <div class="indicator-item">
-            <div class="indicator-value">{{ yesNo(household.housing_safe) }}</div>
-            <div class="indicator-label">住房安全</div>
-          </div>
-        </div>
-      </el-card>
+        </section>
 
-      <!-- 预警提示 -->
-      <el-card class="alert-card">
-        <template #header>
-          <div class="card-header"><span>预警提示</span></div>
-        </template>
-        <template v-if="riskAlerts.length > 0">
-          <el-alert
-            v-for="alert in riskAlerts"
-            :key="alert"
-            class="risk-alert"
-            type="warning"
-            :closable="false"
-            show-icon
-            :title="alert"
-          />
-        </template>
-        <div v-else class="muted">暂无预警命中</div>
-      </el-card>
-
-      <!-- 风险记录时间线 -->
-      <el-card class="risk-card">
-        <template #header>
+        <!-- 家庭成员 -->
+        <section class="app-card member-card">
           <div class="card-header">
-            <span>风险记录</span>
-            <el-button
-              type="primary"
-              plain
-              size="small"
-              class="btn-add-risk"
-              @click="openRiskDialog"
-            >
-              登记风险
-            </el-button>
-          </div>
-        </template>
-        <el-timeline v-if="riskRecords.length > 0" class="risk-timeline">
-          <el-timeline-item
-            v-for="record in riskRecords"
-            :key="record.id"
-            :timestamp="formatDate(record.detected_at)"
-            placement="top"
-          >
-            <div class="risk-item">
-              <div class="risk-head">
-                <el-tag :type="riskTagType(record.risk_level)" size="small">
-                  {{ riskLevelLabel(record.risk_level) }}
-                </el-tag>
-                <span class="risk-type">{{ riskTypeLabel(record.risk_type) }}</span>
-                <el-tag :type="record.status === 'open' ? 'warning' : 'info'" size="small">
-                  {{ record.status === 'open' ? '跟进中' : '已关闭' }}
-                </el-tag>
-              </div>
-              <div class="risk-reason">{{ record.reason || '—' }}</div>
-              <div v-if="record.closed_note" class="risk-closed-note">
-                关闭说明：{{ record.closed_note }}
-              </div>
-              <el-button
-                v-if="record.status === 'open'"
-                link
-                type="primary"
-                class="btn-close-risk"
-                @click="closeRisk(record)"
-              >
-                关闭处理
-              </el-button>
-            </div>
-          </el-timeline-item>
-        </el-timeline>
-        <div v-else class="muted">暂无风险记录</div>
-      </el-card>
-
-      <!-- 家庭成员 -->
-      <el-card class="member-card">
-        <template #header>
-          <div class="card-header">
-            <span>家庭成员</span>
+            <span class="card-title">家庭成员</span>
             <el-button
               type="primary"
               plain
@@ -169,75 +83,144 @@
               新增成员
             </el-button>
           </div>
-        </template>
-        <el-table v-if="members.length > 0" :data="members" class="member-table">
-          <el-table-column prop="name" label="姓名" min-width="100" />
-          <el-table-column label="与户主关系" width="110">
-            <template #default="{ row }">{{ row.relation || '—' }}</template>
-          </el-table-column>
-          <el-table-column label="性别" width="70">
-            <template #default="{ row }">{{ row.gender || '—' }}</template>
-          </el-table-column>
-          <el-table-column label="出生年" width="90">
-            <template #default="{ row }">{{ row.birth_year ?? '—' }}</template>
-          </el-table-column>
-          <el-table-column label="健康状态" width="110">
-            <template #default="{ row }">{{ row.health_status || '—' }}</template>
-          </el-table-column>
-          <el-table-column label="就业状态" width="110">
-            <template #default="{ row }">{{ row.employment_status || '—' }}</template>
-          </el-table-column>
-          <el-table-column label="个人年收入(元)" width="130">
-            <template #default="{ row }">{{ formatMoney(row.income) }}</template>
-          </el-table-column>
-          <el-table-column label="兜底保障" width="90">
-            <template #default="{ row }">{{ yesNo(row.is_special_support) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="140" fixed="right">
-            <template #default="{ row }">
-              <el-button
-                link
-                type="primary"
-                class="btn-member-edit"
-                @click="openEditMember(row as HouseholdMember)"
-              >
-                编辑
-              </el-button>
-              <el-button
-                link
-                type="danger"
-                class="btn-member-delete"
-                @click="removeMember(row as HouseholdMember)"
-              >
-                删除
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <div v-else class="muted">暂无家庭成员</div>
-      </el-card>
+          <el-table v-if="members.length > 0" :data="members" class="member-table">
+            <el-table-column prop="name" label="姓名" min-width="100" />
+            <el-table-column label="与户主关系" width="110">
+              <template #default="{ row }">{{ row.relation || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="性别" width="70">
+              <template #default="{ row }">{{ row.gender || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="出生年" width="90" align="right">
+              <template #default="{ row }">
+                <span class="num-cell">{{ row.birth_year ?? '—' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="健康状态" width="110">
+              <template #default="{ row }">{{ row.health_status || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="就业状态" width="110">
+              <template #default="{ row }">{{ row.employment_status || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="个人年收入(元)" width="130" align="right">
+              <template #default="{ row }">
+                <span class="num-cell">{{ formatMoney(row.income) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="兜底保障" width="90">
+              <template #default="{ row }">{{ yesNo(row.is_special_support) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="140" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  link
+                  type="primary"
+                  class="btn-member-edit"
+                  @click="openEditMember(row as HouseholdMember)"
+                >
+                  编辑
+                </el-button>
+                <el-button
+                  link
+                  type="danger"
+                  class="btn-member-delete"
+                  @click="removeMember(row as HouseholdMember)"
+                >
+                  删除
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-else class="app-empty">暂无家庭成员</div>
+        </section>
+      </div>
 
-      <!-- 走访记录 -->
-      <el-card class="visit-card">
-        <template #header>
+      <!-- 辅列：预警 / 风险记录 / 走访 -->
+      <aside class="detail-side">
+        <section class="app-card alert-card">
+          <div class="card-header"><span class="card-title">预警提示</span></div>
+          <template v-if="riskAlerts.length > 0">
+            <el-alert
+              v-for="alert in riskAlerts"
+              :key="alert"
+              class="risk-alert"
+              type="warning"
+              :closable="false"
+              show-icon
+              :title="alert"
+            />
+          </template>
+          <div v-else class="app-empty">暂无预警命中</div>
+        </section>
+
+        <section class="app-card risk-card">
           <div class="card-header">
-            <span>走访记录</span>
+            <span class="card-title">风险记录</span>
+            <el-button
+              type="primary"
+              plain
+              size="small"
+              class="btn-add-risk"
+              @click="openRiskDialog"
+            >
+              登记风险
+            </el-button>
+          </div>
+          <el-timeline v-if="riskRecords.length > 0" class="risk-timeline">
+            <el-timeline-item
+              v-for="record in riskRecords"
+              :key="record.id"
+              :timestamp="formatDate(record.detected_at)"
+              placement="top"
+            >
+              <div class="risk-item">
+                <div class="risk-head">
+                  <el-tag :type="riskTagType(record.risk_level)" size="small">
+                    {{ riskLevelLabel(record.risk_level) }}
+                  </el-tag>
+                  <span class="risk-type">{{ riskTypeLabel(record.risk_type) }}</span>
+                  <el-tag :type="record.status === 'open' ? 'warning' : 'info'" size="small">
+                    {{ record.status === 'open' ? '跟进中' : '已关闭' }}
+                  </el-tag>
+                </div>
+                <div class="risk-reason">{{ record.reason || '—' }}</div>
+                <div v-if="record.closed_note" class="risk-closed-note">
+                  关闭说明：{{ record.closed_note }}
+                </div>
+                <el-button
+                  v-if="record.status === 'open'"
+                  link
+                  type="primary"
+                  class="btn-close-risk"
+                  @click="closeRisk(record)"
+                >
+                  关闭处理
+                </el-button>
+              </div>
+            </el-timeline-item>
+          </el-timeline>
+          <div v-else class="app-empty">暂无风险记录</div>
+        </section>
+
+        <section class="app-card visit-card">
+          <div class="card-header">
+            <span class="card-title">走访记录</span>
             <span class="total-hint">共 {{ visits.length }} 次</span>
           </div>
-        </template>
-        <el-table v-if="visits.length > 0" :data="visits" class="visit-table">
-          <el-table-column prop="visit_date" label="走访日期" width="120" />
-          <el-table-column prop="visitors" label="走访人" min-width="120" />
-          <el-table-column label="目的" min-width="140">
-            <template #default="{ row }">{{ row.purpose || '—' }}</template>
-          </el-table-column>
-          <el-table-column label="内容" min-width="180">
-            <template #default="{ row }">{{ row.content || '—' }}</template>
-          </el-table-column>
-        </el-table>
-        <div v-else class="muted">暂无走访记录</div>
-      </el-card>
-    </template>
+          <el-table v-if="visits.length > 0" :data="visits" class="visit-table">
+            <el-table-column prop="visit_date" label="走访日期" width="120" />
+            <el-table-column prop="visitors" label="走访人" min-width="120" />
+            <el-table-column label="目的" min-width="140">
+              <template #default="{ row }">{{ row.purpose || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="内容" min-width="180">
+              <template #default="{ row }">{{ row.content || '—' }}</template>
+            </el-table-column>
+          </el-table>
+          <div v-else class="app-empty">暂无走访记录</div>
+        </section>
+      </aside>
+    </div>
 
     <!-- 家庭成员对话框 -->
     <el-dialog
@@ -464,6 +447,41 @@ function maskedPhone(): string {
   return household.value?.helper_phone ? ds(household.value.helper_phone, 'phone') : '—'
 }
 
+/** 监测指标统计卡（趋势类仅高对比/简化模式语义，data-simplify 时由全局样式隐藏） */
+const statCards = computed(() => {
+  const current = household.value
+  return [
+    {
+      key: 'income',
+      label: '家庭年收入(元)',
+      value: formatMoney(current?.annual_income),
+      trend: '年度',
+      trendClass: 'stat-trend--flat',
+    },
+    {
+      key: 'migrant',
+      label: '务工人数',
+      value: current?.migrant_workers ?? 0,
+      trend: '当前',
+      trendClass: 'stat-trend--flat',
+    },
+    {
+      key: 'illness',
+      label: '大病',
+      value: yesNo(current?.has_serious_illness),
+      trend: current?.has_serious_illness ? '需关注' : '无',
+      trendClass: current?.has_serious_illness ? 'stat-trend--up' : 'stat-trend--down',
+    },
+    {
+      key: 'housing',
+      label: '住房安全',
+      value: yesNo(current?.housing_safe),
+      trend: current?.housing_safe === false ? '需改造' : '安全',
+      trendClass: current?.housing_safe === false ? 'stat-trend--up' : 'stat-trend--down',
+    },
+  ]
+})
+
 // ── 加载 ──
 async function load(): Promise<void> {
   loading.value = true
@@ -649,129 +667,64 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+/* W2：左主右辅布局；卡片/统计卡/三件套视觉由 W1 全局类提供，本文件不新增色值。 */
 .household-detail-page {
-  padding: 20px;
-  background: var(--color-bg-hover);
-  min-height: 100vh;
+  padding: var(--spacing-lg, 20px);
 }
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-.header-left {
+.page-header .header-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--spacing-md, 12px);
 }
-.page-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--color-text-primary);
+.detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--spacing-lg, 16px);
+  align-items: start;
 }
-.header-actions {
+.detail-main,
+.detail-side {
   display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.load-error {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 24px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border-light);
-  border-radius: 8px;
-}
-.error-text {
-  color: var(--color-danger);
-}
-.loading-tip {
-  padding: 24px;
-}
-.muted {
-  color: var(--color-text-secondary);
-}
-.profile-card,
-.indicator-card,
-.alert-card,
-.risk-card,
-.member-card,
-.visit-card {
-  margin-bottom: 16px;
-  background: var(--color-bg-card);
-  border: 1px solid var(--color-border-light);
+  flex-direction: column;
+  gap: var(--spacing-lg, 16px);
+  min-width: 0;
 }
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-md, 12px);
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--spacing-md, 12px);
+}
+.stat-grid .stat-card {
+  padding: var(--spacing-lg, 16px);
 }
 .badges {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-.household-name {
-  font-size: 16px;
-  color: var(--color-text-primary);
-}
-.indicator-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-.indicator-item {
-  text-align: center;
-  padding: 12px 8px;
-  border-radius: 8px;
-  background: var(--color-bg-hover);
-}
-.indicator-value {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--color-primary);
-}
-.indicator-label {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
+  gap: var(--spacing-sm, 8px);
 }
 .risk-alert {
-  margin-bottom: 8px;
-}
-.risk-timeline {
-  padding-left: 4px;
-}
-.risk-item {
-  padding: 4px 0;
+  margin-bottom: var(--spacing-sm, 8px);
 }
 .risk-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-.risk-type {
-  font-size: 13px;
-  color: var(--color-text-primary);
+  gap: var(--spacing-sm, 8px);
 }
 .risk-reason {
   margin: 6px 0;
-  font-size: 13px;
-  color: var(--color-text-regular);
 }
-.risk-closed-note {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-.total-hint {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--color-text-secondary);
+@media (max-width: 1200px) {
+  .detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

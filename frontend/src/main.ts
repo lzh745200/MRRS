@@ -29,6 +29,11 @@ import '@/styles/dashboard-theme.scss'
 import '@/styles/components/list-page.scss'
 // 表单/详情页统一升级 (Phase 3)
 import '@/styles/components/form-page.scss'
+// UI v2.0（W23）：统一卡片 / 状态三件套 / 对话框 / 表格视觉（全部 token 驱动）
+import '@/styles/components/card.scss'
+import '@/styles/components/states.scss'
+import '@/styles/components/dialog.scss'
+import '@/styles/components/ui-v2.scss'
 // 全站精美增强层 (UI v2.0 · U1)：柔和阴影/微交互/focus 光环，置于规范化层之后
 import '@/styles/theme-elevated.scss'
 // 打印样式（A4适配，隐藏非内容区域）
@@ -41,8 +46,11 @@ import '@/styles/accessibility.css'
 // 受限存储下 getItem 抛 SecurityError 会中断入口模块（白屏），
 // 非法主题值则会写到 data-theme 上导致全站 token 失效。
 import { applyThemeToDom, readStoredTheme } from '@/stores/config'
+import { initUiPrefs } from '@/composables/useUiPrefs'
 import { logger } from '@/utils/logger'
 applyThemeToDom(readStoredTheme())
+// UI v2.0（W23）：字号/密度/对比/简化 显示偏好写回 <html data-*>（首屏即生效，避免闪烁）
+initUiPrefs()
 
 // 一次性将旧版 localStorage token 迁移到 sessionStorage。
 // 迁移涉及 sessionStorage/localStorage 读写，受限存储/配额下会抛错：

@@ -1,0 +1,140 @@
+/**
+ * UI v2.0 统一卡片与统计卡（W23）
+ *
+ * 约定：所有页面新增卡片优先使用 `.app-card`（8px 圆角 + 边框 + 轻阴影）；
+ * 统计数字使用 `.app-stat-card` + `.kpi-value`（tabular-nums 纵向对齐）；
+ * 趋势箭头 `.stat-trend` 在 `[data-simplify="true"]` 下由 tokens.scss 隐藏。
+ */
+
+.app-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--spacing-lg);
+}
+
+.app-card--flat {
+  box-shadow: none;
+}
+
+.app-card--compact {
+  padding: var(--spacing-md);
+}
+
+.app-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.app-card__title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: var(--line-height-tight);
+}
+
+.app-stat-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--spacing-md) var(--spacing-lg);
+  min-height: 96px;
+  transition:
+    box-shadow var(--transition-fast, 0.15s ease),
+    transform var(--transition-fast, 0.15s ease);
+}
+
+.app-stat-card:hover {
+  box-shadow: var(--shadow-pop);
+  transform: translateY(-1px);
+}
+
+.app-stat-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius-control);
+  background: var(--color-primary-50);
+  color: var(--color-primary);
+  font-size: var(--font-size-xl);
+}
+
+.app-stat-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-stat-card__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpi-value,
+.app-stat-card__value {
+  font-size: calc(28px * var(--font-scale));
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-stat-card__unit {
+  margin-left: 2px;
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.stat-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-trend.is-up {
+  color: var(--color-success-dark, var(--color-success));
+}
+
+.stat-trend.is-down {
+  color: var(--color-danger-dark, var(--color-danger));
+}
+
+.num-highlight {
+  color: var(--color-primary-700);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.num-cell {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.list-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-placeholder);
+}
+
+[data-simplify="true"] .app-stat-card__icon {
+  display: none;
+}
