@@ -72,6 +72,3 @@ MODULE_DEFINITIONS = [
     {"key": "messages", "name": "消息中心", "category": "core"},
     {"key": "system", "name": "系统管理", "category": "system"},
 ]
-
-VALID_VISIBILITIES = {"visible", "hidden"}
-VALID_EDIT_MODES = {"full_edit", "read_only", "disabled"}

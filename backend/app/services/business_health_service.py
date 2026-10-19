@@ -39,7 +39,6 @@ MAX_ITEM_LIMIT = 200
 
 # 体检项在前端对应的处理入口（与 router 中的实际路由一致）
 ENTRY_VILLAGE_YEARLY = "/supported-villages/yearly"
-ENTRY_VILLAGE_LIST = "/supported-villages"
 ENTRY_PROJECTS = "/projects"
 ENTRY_FUNDS = "/funds"
 ENTRY_ORGANIZATIONS = "/organizations"

@@ -33,14 +33,6 @@ from sqlalchemy.sql import func
 
 from .base import Base, EncryptedText, UtcDateTime
 
-# 户类型：一般户 / 脱贫户 / 监测户
-HOUSEHOLD_TYPES = ("general", "poverty", "monitor")
-# 风险类型：无 / 收入骤减 / 大病 / 住房 / 突发困难 / 多重风险
-RISK_TYPES = ("none", "income_drop", "illness", "housing", "sudden", "multiple")
-# 风险等级：低 / 中 / 高
-RISK_LEVELS = ("low", "medium", "high")
-# 风险记录状态：处理中 / 已关闭
-RISK_RECORD_STATUSES = ("open", "closed")
 # 高风险风险类型（命中即预警）
 HIGH_RISK_TYPES = ("sudden", "multiple")
 

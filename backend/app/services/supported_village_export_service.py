@@ -41,7 +41,6 @@ MODULE_NAMES = {
 # 样式定义
 HEADER_FILL = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
 HEADER_FONT = Font(name="SimSun", size=11, bold=True, color="FFFFFF")
-DATA_FONT = Font(name="SimSun", size=10)
 
 
 class SupportedVillageExportService:

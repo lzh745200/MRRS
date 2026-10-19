@@ -15,13 +15,6 @@ logger = logging.getLogger(__name__)
 # 单次批量插入的批次大小
 BATCH_SIZE = 500
 
-# pandas 类型映射（dtype=str 可避免科学记数法等转换问题）
-PANDAS_READ_KWARGS = {
-    "engine": "openpyxl",
-    "dtype": str,
-    "keep_default_na": False,
-}
-
 
 def read_excel_raw(file_content: bytes) -> List[List[Any]]:
     """pandas 快速读取全部原始行（header=None，不做任何表头假设）。

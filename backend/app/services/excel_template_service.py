@@ -105,13 +105,6 @@ def _ensure_styles() -> None:
     _left_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
 
-A4_PAGE_SETUP = {
-    "paperSize": 9,  # A4
-    "orientation": "landscape",
-    "fitToWidth": 1,
-    "fitToHeight": 0,
-}
-
 # 各模板的中文名称映射
 TEMPLATE_NAMES = {
     "village": "帮扶村数据导入模板",

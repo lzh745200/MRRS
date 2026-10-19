@@ -26,7 +26,6 @@ EXTRA_INDEXES = [
     ("approval_records", "ix_approval_records_task_id", ["task_id"]),
     ("project_files", "ix_project_files_uploaded_by", ["uploaded_by"]),
     ("village_attachments", "ix_village_attachments_created_by", ["created_by"]),
-    ("villages", "ix_villages_organization_id", ["organization_id"]),
     # ── 状态/日期查询索引（经常 WHERE/ORDER BY 但无索引）──
     ("approval_workflows", "ix_approval_workflows_is_active", ["is_active"]),
     ("approval_tasks", "ix_approval_tasks_status", ["status"]),
