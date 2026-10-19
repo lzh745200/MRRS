@@ -218,6 +218,21 @@ def main():
     print("=" * 60)
 
 
+def _resolve_pythonw() -> str:
+    """计划任务使用的解释器绝对路径（优先无控制台的 pythonw.exe）。
+
+    计划任务以干净环境启动，PATH 里可能没有 python（本机实测指向已删除的 32 位
+    安装），因此**不得**写裸 `pythonw`/`python` —— 必须用当前解释器的绝对路径，
+    否则计划任务注册成功但每次执行都失败（静默不可复现）。
+    """
+    exe = Path(sys.executable)
+    if sys.platform == "win32":
+        pythonw = exe.with_name("pythonw.exe")
+        if pythonw.exists():
+            return str(pythonw)
+    return str(exe)
+
+
 def install_scheduled_task():
     """安装 Windows 计划任务：每周日凌晨 3 点自动清理。"""
     if sys.platform != "win32":
@@ -226,7 +241,13 @@ def install_scheduled_task():
 
     script_path = Path(__file__).resolve()
     task_name = "MRRMS_Cleanup"
-    command = f'schtasks /create /tn "{task_name}" /tr "pythonw {script_path} --execute" /sc weekly /d SUN /st 03:00 /f'
+    interpreter = _resolve_pythonw()
+    # /tr 参数内的可执行文件与脚本路径必须带引号（路径含空格时 schtasks 才能正确解析）
+    command = (
+        f'schtasks /create /tn "{task_name}" '
+        f'/tr "\\"{interpreter}\\" \\"{script_path}\\" --execute" '
+        f'/sc weekly /d SUN /st 03:00 /f'
+    )
 
     print(f"创建计划任务: {task_name}")
     print(f"命令: {command}")

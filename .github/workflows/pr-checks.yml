@@ -28,84 +28,59 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90   # 实测双遍全量（覆盖 + 分支棘轮）约 40-50 分钟
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d9649806c4678c61a1 # v6.3.0
         with: { python-version: '3.11' }
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      # 覆盖率门禁：阈值统一由 backend/.coveragerc 的 fail_under 单一承载
-      # (不再内联 --cov-fail-under，命令行参数会屏蔽配置文件口径)；
-      # pytest-cov 读取 .coveragerc fail_under 并在未达标时真实阻断(失败即红)。
-      # 注意：--dist loadfile 与 pytest-rerunfailures 不兼容（worker 崩溃时
-      # mark_test_pending 在 loadscope 调度器上抛 NotImplementedError），
-      # 使用默认 load 调度器让 rerun 正常生效。
-      # 输出 tee 到 runner.temp 日志并开 pipefail；加 --cov-report=term-missing 让未覆盖
-      # 行可见。失败时下方步骤提炼 ::error:: + upload-artifact——因为原"Report failed
-      # tests"用 --lf --no-cov 重跑，无法复现覆盖率不达标(fail_under=100)这类失败，
-      # 届时只会看到进度点而看不到真因；artifact 是公开仓库可下载的完整证据通道。
-      - name: Backend tests + coverage
-        run: |
-          cd backend
-          LOG="$RUNNER_TEMP/pytest.log"
-          {
-            echo "===== ENV SNAPSHOT ====="
-            python --version
-            echo "os: $(uname -a)"
-            echo "nproc: $(nproc)"
-            free -m 2>/dev/null || echo "(free unavailable)"
-            echo "========================"
-          } > "$LOG"
-          set -o pipefail
-          # -rR：输出 “rerun test summary info”，逐条列出 RERUN <nodeid> ——
-          # 抖动账本（ci_flake_report.py）依赖它把"哪个用例重跑过"显式化
-          # （实测 JUnit XML 不记录 rerun，只有文本日志有）。
-          # coverage-branch.json 同时供下一步"分支覆盖棘轮"读取 —— **只跑一次全量**。
-          # 2026-10-17（W19）：此前棘轮步骤又跑了一遍全量 pytest（同一套用例、第二个
-          # xdist 数据面），两跑之间偶发不一致（step5 通过、step8 读到 99.6x%）→
-          # 门禁随机变红。改为单一数据源：本步产出 json，下一步只做比对。
-          # v1.15.3：backend-test 分两段执行（单进程内存峰值治理）。
-          # 现象：v1.15.0（-n auto）/v1.15.1（-n 2）/v1.15.2（串行）在 ubuntu-latest 上均以
-          # pytest 提前退出 + exit 1 结束，无 FAILED 摘要、无覆盖率汇总表（进度行最后停在
-          # tests/integration/test_audit_integration.py 附近）——特征为**进程被杀/崩溃**，
-          # 而非用例失败；串行也复现说明与 xdist 无关，更可能是 25 分钟单进程内存累积
-          # （大量 TestClient/SQLAlchemy 会话）触达 runner 内存上限（runner 于 2026-10-19
-          # 迁移 Ubuntu 26）。本地全量通过：13,710 passed / 100% 行+分支。
-          # 修复：拆 integration/security（重内存段）与 unit（长跑段）两次独立进程执行，
-          # 段间释放内存；覆盖率用 --cov-append 合并，最后段输出报表；失败时打印 free -m 诊断。
-          rm -f .coverage
-          set -o pipefail
-          # 段 1 只覆盖部分模块：必须 --cov-fail-under=0（.coveragerc 的 fail_under=100
-          # 在单段结束时会误判覆盖率不足 -> 段 1 假失败）。最终 100% 由段 2 合并后校验。
-          python -m pytest tests/integration tests/security -q --tb=short -rR \
-            --cov=app --cov-branch --cov-report= --cov-fail-under=0 \
-            --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
-          SEG1=${PIPESTATUS[0]}
-          echo "===== integration/security exit=${SEG1} ====="
-          if [ "${SEG1}" != "0" ]; then
-            echo "::error::integration/security 段失败（exit ${SEG1}）"
-            free -m || true
-            dmesg 2>/dev/null | tail -20 || true
-            exit 1
-          fi
-          # -x：首个失败立即停止，确保 annotation 能看到明确失败用例（排查 Ubunt 26 迁移后的
-          # unit 段崩溃；--tb=long 输出完整 traceback）
-          python -m pytest tests/unit -q -x --tb=long -rR \
-            --cov=app --cov-branch --cov-append \
-            --cov-report=xml --cov-report=term-missing --cov-report=json:coverage-branch.json \
-            --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
-          SEG2=${PIPESTATUS[0]}
-          echo "===== unit exit=${SEG2} ====="
-          free -m || true
-          exit ${SEG2}
+      # ===== W24（v1.15.5）后端测试分段：独立进程 + 逐段可定位 =====
+      # 历史故障（v1.15.0~v1.15.4）：单个大进程约 24 分钟后消失（exit 1、无 FAILED
+      # 摘要、无覆盖率汇总表），日志停在 integration 段附近；xdist 与串行均复现，
+      # 符合 runner 内存峰值/进程被杀的签名（v1.15.3/v1.15.4 注释与 run annotation）。
+      # 规避手段：
+      #  1) 拆 6 个独立 pytest 进程（integration/security + unit 按目录/首字母均衡拆），
+      #     每进程退出即释放内存与覆盖率对象，单段峰值远低于全量；
+      #  2) 每段独立日志 + scripts/ci_backend_test_segment.sh：失败时把该段真实
+      #     FAILED/ERROR（无摘要则打日志尾部并标注「疑似被杀」）输出为 ::error::，
+      #     不再把 pytest 进度行误报成覆盖率缺口；
+      #  3) 覆盖率 --cov-append 跨进程合并：前 5 段 --cov-fail-under=0，第 6 段
+      #     不加该参数 → 仍由 backend/.coveragerc fail_under=100 单一来源判定。
+      - name: Reset coverage data
+        run: rm -f backend/.coverage
+
+      - name: "Backend tests + coverage (1/6: integration + security)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg1-integration-security --mode first tests/integration tests/security
+
+      - name: "Backend tests + coverage (2/6: unit api)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg2-unit-api --mode partial tests/unit/api
+
+      - name: "Backend tests + coverage (3/6: unit services/middleware/interfaces/utils)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg3-unit-services --mode partial tests/unit/services tests/unit/middleware tests/unit/interfaces tests/unit/utils
+
+      - name: "Backend tests + coverage (4/6: unit root a-e-f-i-n-o-p-t-u-w-y-z)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg4-unit-root-a --mode partial tests/unit/test_a*.py tests/unit/test_e*.py tests/unit/test_f*.py tests/unit/test_i*.py tests/unit/test_n*.py tests/unit/test_o*.py tests/unit/test_p*.py tests/unit/test_t*.py tests/unit/test_u*.py tests/unit/test_w*.py tests/unit/test_y*.py tests/unit/test_z*.py
+
+      - name: "Backend tests + coverage (5/6: unit root b-d-g-h-j-l-m-q-s)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg5-unit-root-b --mode partial tests/unit/test_b*.py tests/unit/test_d*.py tests/unit/test_g*.py tests/unit/test_h*.py tests/unit/test_j*.py tests/unit/test_l*.py tests/unit/test_m*.py tests/unit/test_q*.py tests/unit/test_s*.py
+
+      - name: "Backend tests + coverage (6/6: unit root c-r-v, final coverage gate)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg6-unit-root-c --mode final tests/unit/test_c*.py tests/unit/test_r*.py tests/unit/test_v*.py
       # 抖动账本（2026-10-17）：把 --reruns 掩盖的不确定性显式化并留存 90 天。
       # 只告警不阻断（真实抖动需要人看清单决定"先修/再隔离"），阈值 3。
       - name: Flaky test ledger
         if: always()
         run: |
-          python scripts/ci_flake_report.py --log "$RUNNER_TEMP/pytest.log" \
-            --out flaky-report.txt --warn-reruns 3
+          shopt -s nullglob
+          LOGS=("$RUNNER_TEMP"/pytest-seg-*.log)
+          if [ ${#LOGS[@]} -eq 0 ]; then
+            echo "no pytest segment logs found — skipping flaky ledger"
+            exit 0
+          fi
+          ARGS=()
+          for f in "${LOGS[@]}"; do ARGS+=(--log "$f"); done
+          python scripts/ci_flake_report.py "${ARGS[@]}" --out flaky-report.txt --warn-reruns 3
       - name: Upload flaky ledger
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: flaky-ledger
           path: flaky-report.txt
@@ -125,7 +100,7 @@ jobs:
             --baseline scripts/gate_baselines/branch_coverage_baseline.json
       - name: Upload branch coverage json
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: branch-coverage
           path: backend/coverage-branch.json
@@ -133,26 +108,33 @@ jobs:
       - name: Report backend failure
         if: failure()
         run: |
-          LOG="$RUNNER_TEMP/pytest.log"
-          # 关键信号优先(annotation 上限 ~10 条，GitHub 保留最先发出的)：
-          # 先出 term-missing 表里覆盖率 <100% 的文件行——它直接带 Missing 列(未覆盖行号)，
-          # 即 4 处缺口的精确位置；避免再用裸 "error" 匹配到 api_error.py 等 100% 文件刷屏。
-          echo "===== files with MISSING coverage (<100%, 带 Missing 行号) ====="
-          grep -E "\.py " "$LOG" | grep -vE " 100%| 100\.00%" | head -20 | sed 's/^/::error::/' || true
-          echo "===== coverage failure / test failures ====="
-          grep -nE "Coverage failure|Required test coverage|^TOTAL|FAILED|ERROR: " "$LOG" | head -20 | sed 's/^/::error::/' || true
+          shopt -s nullglob
+          LOGS=("$RUNNER_TEMP"/pytest-seg-*.log)
+          echo "===== 各段真实失败信号（优先于覆盖率缺口）====="
+          for f in "${LOGS[@]}"; do
+            echo "----- $(basename "$f") -----"
+            grep -aE "^(FAILED|ERROR) |INTERNALERROR|MemoryError|worker crashed|Killed|Out of memory|Coverage failure|Required test coverage" "$f" \
+              | head -6 | cut -c1-500 | sed 's/^/::error::/' || true
+          done
+          echo "===== 覆盖率表未达 100% 的文件（仅最终段）====="
+          FINAL=$(ls "$RUNNER_TEMP"/pytest-seg-*final*.log 2>/dev/null | head -1 || true)
+          if [ -n "$FINAL" ]; then
+            # 仅匹配 term-missing 表行（app/ 文件行或 TOTAL 行），不再匹配 pytest 进度行
+            # （tests/xxx.py ..... [ 8%]）——旧实现把进度行误报成覆盖率缺口，真因被淹没。
+            grep -aE "^(app/|TOTAL)" "$FINAL" | grep -avE "[[:space:]]100%" | head -10 | cut -c1-500 | sed 's/^/::error::/' || true
+          fi
           exit 1
       - name: Upload pytest log
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: pytest-log
-          path: ${{ runner.temp }}/pytest.log
+          path: ${{ runner.temp }}/pytest-seg-*.log
           if-no-files-found: ignore
           retention-days: 7
       # 上传覆盖率到 Codecov（展示用：fail_ci_if_error=false 且 continue-on-error，
       # 覆盖率阻断由上方 pytest-cov 读取 .coveragerc fail_under 承担，上传抖动不阻塞 PR）
-      - uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
+      - uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           directory: backend
           flags: backend
@@ -163,7 +145,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45   # 实测安装 + tsc + lint + 覆盖率约 20-25 分钟
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # Node 22（与仓库其余 CI 一致）。注意：src/views/auth/LoginEnhanced.vue 全量跑 functions
       # 跌到 88.23% 曾长期被误诊为"Node22 V8 跨分片合并幻影"并据此把此处升到 24，但 Node24 的 CI
       # 复现完全相同的 88.23%（f42ae680）——与 Node 版本无关。真因是 istanbul 按函数 id 合并冲突的
@@ -303,14 +285,14 @@ jobs:
           exit 1
       - name: Upload vitest log
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: vitest-coverage-log
           path: ${{ runner.temp }}/vitest-coverage.log
           if-no-files-found: ignore
           retention-days: 7
       # 上传覆盖率到 Codecov
-      - uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
+      - uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           directory: frontend
           flags: frontend
@@ -321,8 +303,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d9649806c4678c61a1 # v6.3.0
         with: { python-version: '3.11' }
       - run: pip install flake8 mypy bandit
       # flake8 零错误门禁
@@ -338,8 +320,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d9649806c4678c61a1 # v6.3.0
         with: { python-version: '3.11' }
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: '22' }
@@ -371,7 +353,7 @@ jobs:
           npm audit --json > npm-audit-full.json
       - name: Upload full npm audit report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: npm-audit-full
           path: frontend/npm-audit-full.json
@@ -382,7 +364,7 @@ jobs:
         run: |
           pip-licenses --from=mixed --with-system --with-description --format=csv --output-file=sbom.csv || true
       - name: Upload SBOM
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: sbom-license-list
           path: sbom.csv
@@ -392,8 +374,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d9649806c4678c61a1 # v6.3.0
         with: { python-version: '3.11' }
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with: { node-version: '22' }
@@ -464,10 +446,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0   # 需要完整 tag 历史来定位"上一个发布版本"
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d9649806c4678c61a1 # v6.3.0
         with: { python-version: '3.11' }
       - run: pip install -r backend/requirements.txt
       - name: Rehearse upgrade from the latest release tag
@@ -482,8 +464,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60   # 依赖安装 + Playwright chromium + 150 用例
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d9649806c4678c61a1 # v6.3.0
         with: { python-version: '3.11' }
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
@@ -540,7 +522,7 @@ jobs:
           npx playwright test --reporter=line
       - name: Upload E2E report on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: playwright-report
           path: frontend/playwright-report
@@ -561,8 +543,8 @@ jobs:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d9649806c4678c61a1 # v6.3.0
         with: { python-version: '3.11' }
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
       # 编码/句柄/路径敏感子集：管道解码、打包产物校验、备份路径、

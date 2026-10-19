@@ -1,4 +1,4 @@
-.PHONY: venv test-local test test-backend test-frontend test-e2e test-e2e-docker coverage deploy-check clean \
+.PHONY: venv python-check test-local test test-backend test-frontend test-e2e test-e2e-docker coverage deploy-check clean \
         build-deb build-deb-amd64 build-deb-arm64 build-deb-all \
         docker-build docker-build-amd64 docker-build-arm64 docker-build-all \
         deb-clean \
@@ -6,14 +6,32 @@
         build-win-x64 build-win-x86 build-win-all fetch-vcredist
 
 # 后端 Python 解释器：默认使用项目虚拟环境（裸 python 为 managed runtime，
-# 缺少 PyInstaller/pytest 等依赖）；所有调用均在 `cd backend &&` 之后，故用相对路径
-PYTHON ?= .venv/Scripts/python.exe
+# 缺少 PyInstaller/pytest 等依赖）；所有调用均在 `cd backend &&` 之后，故用相对路径。
+#
+# W24 构建缺陷修复（v1.15.5）：PATH 里的裸 python 可能指向已删除 / 32 位安装
+# （本机实测指向 C:\Users\...\Python311-32），导致 venv/install/dev/security 等目标
+# 直接失败且不可复现。因此：① 默认解释器按平台解析项目 venv；② 创建 venv 用
+# BOOTSTRAP_PY（可覆盖）；③ 需要系统解释器的命令显式报错并给修复指引，禁止静默回退
+# 裸 python；④ 本地/CI 可用 `make PYTHON=/abs/path/to/python <target>` 覆盖。
+ifeq ($(OS),Windows_NT)
+  VENV_PY ?= .venv/Scripts/python.exe
+  BOOTSTRAP_PY ?= py -3.11
+else
+  VENV_PY ?= .venv/bin/python3
+  BOOTSTRAP_PY ?= python3.11
+endif
+PYTHON ?= $(VENV_PY)
 
 # 本地环境一键准备（P-6：环境一致性）——建虚拟环境 + 装依赖 + 校验解释器版本
 # 说明：项目要求 Python 3.11（>=3.11.9 更佳，历史 .venv 为 3.11.0 时建议重建）
 venv:
-	@echo ">>> 准备后端虚拟环境..."
-	cd backend && python -m venv .venv
+	@echo ">>> 准备后端虚拟环境（bootstrap: $(BOOTSTRAP_PY)）..."
+	@command -v $(firstword $(BOOTSTRAP_PY)) >/dev/null 2>&1 || { \
+		echo "错误: 未找到 Python 引导解释器 '$(BOOTSTRAP_PY)'"; \
+		echo "请安装 64-bit Python 3.11 后重试，或显式指定: make venv BOOTSTRAP_PY=/path/to/python3.11"; \
+		echo "（PATH 里的裸 python 可能指向已删除/32 位安装，W24 构建缺陷）"; \
+		exit 1; }
+	cd backend && $(BOOTSTRAP_PY) -m venv .venv
 	cd backend && $(PYTHON) -m pip install --upgrade pip
 	cd backend && $(PYTHON) -m pip install -r requirements.txt -r requirements-dev.txt
 	@echo ">>> 版本自检:"
@@ -21,6 +39,11 @@ venv:
 	@echo ">>> 前端依赖:"
 	cd frontend && npm ci --legacy-peer-deps
 	@echo "✓ 环境就绪（后端 backend/.venv + 前端 frontend/node_modules）"
+
+# 解释器自检（W24）：确认解析到的项目 Python 可用且为 3.11（不通过则无需继续其余目标）
+python-check:
+	@echo ">>> 校验项目 Python 解释器..."
+	cd backend && $(PYTHON) -c "import sys; assert sys.version_info[:2] == (3, 11), 'Python 3.11 required: ' + sys.version; print('OK', sys.version)"
 
 # 本地全量门禁（与 CI 等价，P-6）：后端测试+覆盖率、flake8、前端 lint/type/test、
 # 6 项棘轮门禁、版本单一来源校验
@@ -36,7 +59,7 @@ test-local:
 	backend/$(PYTHON) scripts/check_unused_scope_params.py
 	backend/$(PYTHON) scripts/check_userdata_path_consistency.py
 	@echo ">>> [5/6] Alembic 单 head 校验..."
-	$(PYTHON) scripts/check_migrations.py || backend/$(PYTHON) scripts/check_migrations.py
+	backend/$(PYTHON) scripts/check_migrations.py
 	@echo ">>> [6/6] 版本单一来源校验..."
 	node scripts/sync-version.js --check
 	@echo "✓ 本地全量门禁通过"
@@ -99,7 +122,7 @@ security:
 	@echo ">>> 运行安全扫描..."
 	cd backend && \
 		$(PYTHON) -m bandit -r app/ -f json -o bandit-report.json && \
-		pip-audit -r requirements.txt
+		$(PYTHON) -m pip_audit -r requirements.txt
 
 # 清理测试产物（W4-T8：扩展根目录清理）
 clean:
@@ -124,10 +147,10 @@ clean:
 	# 后端以外的 __pycache__（根 tests/、scripts/、electron/ 等；排除依赖与虚拟环境）
 	-find . \( -name node_modules -o -name .venv -o -name .git -o -name dist \) -prune -o -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
-# 安装依赖
+# 安装依赖（W24：去掉裸 pip —— 统一用解析后的项目 Python）
 install:
 	@echo ">>> 安装依赖..."
-	cd backend && pip install -r requirements.txt && pip install pytest pytest-cov pytest-asyncio
+	cd backend && $(PYTHON) -m pip install -r requirements.txt && $(PYTHON) -m pip install pytest pytest-cov pytest-asyncio
 	cd frontend && npm ci
 
 # 运行开发服务器
@@ -135,7 +158,7 @@ dev:
 	@echo ">>> 启动开发服务器..."
 	@echo "后端: http://localhost:8000"
 	@echo "前端: http://localhost:5173"
-	cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
+	cd backend && $(PYTHON) -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
 	cd frontend && npm run dev
 
 # 构建生产版本

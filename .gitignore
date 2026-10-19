@@ -403,3 +403,12 @@ backend/.scratch/
 
 # 发布验证用隔离覆盖率数据（避免误提交二进制覆盖率库）
 backend/.coverage-final*
+# ===== W24 测试/探针临时产物（2026-10-19，防 git add -A 误提交）=====
+_probe_*.json
+probe_*
+mrr_w24_probe_*/
+bumofu_pytest_appdata_*/
+backend/bumofu_pytest_appdata_*/
+pytest-of-*/
+backend/pytest-of-*/
+backend/tmp*/

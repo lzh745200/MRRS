@@ -566,9 +566,15 @@ async def list_villages(
                  sort_by, sort_order],
                 default=str,
             ).encode()
-            _org_id = getattr(current_user, "organization_id", None) or 0
+            # 缓存键必须按「数据权限主体」隔离：同一组织内 admin 的数据域是
+            # 「本组织及子树」，user/viewer 是「仅本人」（见 core.data_permission
+            # .apply_scope_filter → OWN）。历史键只含 organization_id，同组织内
+            # 跨角色会命中同一键：管理员先查后，普通用户/访客即可读到管理员的
+            # 整组织列表（R29 探测实测数据泄漏）。对齐 policy.py 的
+            # policies:list:{user_id} 既有正确做法，按用户隔离。
+            _cache_scope = getattr(current_user, "id", None) or 0
             _hash = hashlib.md5(_key_data, usedforsecurity=False).hexdigest()
-            _ckey = f"villages:list:{_org_id}:{page}:{page_size}:{_hash}"
+            _ckey = f"villages:list:{_cache_scope}:{page}:{page_size}:{_hash}"
             _cached = await _cache.get(_ckey)
             if _cached is not None:
                 return _cached

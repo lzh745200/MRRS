@@ -175,19 +175,21 @@ export const routes: RouteRecordRaw[] = [
       {
         path: '/supported-villages',
         name: 'SupportedVillages',
-        component: () => import('@/views/analytics/supported-villages/List.vue'),
+        component: () => retryImport(() => import('@/views/analytics/supported-villages/List.vue')),
         meta: { menuKey: 'villages', title: '帮扶村管理' },
       },
       {
         path: '/supported-villages/:id',
         name: 'SupportedVillageDetail',
-        component: () => import('@/views/analytics/supported-villages/Detail.vue'),
+        component: () =>
+          retryImport(() => import('@/views/analytics/supported-villages/Detail.vue')),
         meta: { title: '帮扶村详情' },
       },
       {
         path: '/supported-villages/:id/yearly',
         name: 'SupportedVillagesYearly',
-        component: () => import('@/views/analytics/supported-villages/YearlyOverview.vue'),
+        component: () =>
+          retryImport(() => import('@/views/analytics/supported-villages/YearlyOverview.vue')),
         meta: { title: '年度概览' },
       },
       // ── 帮扶资金 ──
@@ -709,7 +711,10 @@ export const routes: RouteRecordRaw[] = [
         path: '/admin/machine-code/management',
         name: 'AdminMachineCodeManagement',
         component: () => retryImport(() => import('@/views/admin/MachineCodeManagement.vue')),
-        meta: { title: '机器码设置', roles: ['admin', 'super_admin'] },
+        // 该路径是后端菜单 system-console-security.tab(machine-code) 的落点，
+        // 必须带 meta.menuKey；此前 menuKey 只挂在 /admin/machine-code 上，
+        // 从菜单/聚合页 Tab 进入本页时守卫不做菜单可见性校验（菜单级权限形同虚设）。
+        meta: { menuKey: 'machine-code', title: '机器码设置', roles: ['admin', 'super_admin'] },
       },
       {
         path: '/admin/subordinates',

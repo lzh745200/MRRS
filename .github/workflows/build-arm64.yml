@@ -17,8 +17,10 @@ jobs:
   build-frontend:
     name: Build Frontend
     runs-on: ubuntu-latest
+    # W24：此前缺失 timeout —— 依赖安装卡死会白占并发额度并延迟发布反馈。
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
@@ -73,7 +75,7 @@ jobs:
         run: npm run build 2>&1  # stderr 重定向避免 GitHub Actions 误标失败注释
 
       - name: Upload frontend artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: frontend-dist
           path: frontend/dist/
@@ -82,8 +84,10 @@ jobs:
     name: Build Electron DEB Package
     runs-on: ubuntu-latest
     needs: [standalone-deb, build-frontend]
+    # W24：此前缺失 timeout（standalone-deb 已有 90）；electron-builder 卡死需可观测。
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
@@ -107,13 +111,13 @@ jobs:
           echo "dpkg-deb: $(which dpkg-deb)"
 
       - name: Download backend artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: backend-arm64
           path: ./downloaded/backend
 
       - name: Download frontend artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: frontend-dist
           path: ./downloaded/frontend
@@ -165,7 +169,7 @@ jobs:
           python3 scripts/verify_build_info.py --backend-dir backend/dist/assistance-backend
 
       - name: Cache Electron binary
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.cache/electron
@@ -425,7 +429,7 @@ jobs:
           cat SHA256SUMS-electron-deb-arm64.txt
 
       - name: Upload DEB Package
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: kylin-arm64-deb
           path: |
@@ -435,7 +439,7 @@ jobs:
 
       - name: Create Release (Electron DEB)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             dist/electron/*.deb
@@ -450,15 +454,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Set up QEMU (ARM64 emulation)
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Compute DEB version (strip v prefix, dpkg requires digit-leading)
         id: debver
@@ -489,6 +493,23 @@ jobs:
           echo "BASE_REGISTRY=public.ecr.aws/docker/library" >> "$GITHUB_ENV"
           echo "::warning::基础镜像源探测均失败，回退 public.ecr.aws/docker/library（依赖 GHA 缓存兜底）"
 
+      # W24（v1.15.5）：QEMU 冒烟。v1.15.4 的 standalone DEB 三次尝试总耗时仅 5m41s
+      # （含 60+120s 退避）→ 每次 docker build 在 <1 分钟内失败，不符合 pip/npm 编译
+      # 型失败特征，高度怀疑 runner 迁移（Ubuntu 26，2026-10-19）后 arm64 binfmt 未就绪。
+      # 在构建前显式验证模拟能力：失败时给出可读的 ::error::（含拉取错误尾部），
+      # 而不是只看到 "Process completed with exit code 1"。
+      - name: Verify QEMU ARM64 emulation (fail fast)
+        run: |
+          set -euo pipefail
+          docker buildx inspect --bootstrap
+          SMOKE_LOG="$RUNNER_TEMP/qemu-arm64-smoke.log"
+          if ! docker run --rm --platform linux/arm64 "${BASE_REGISTRY}/busybox:latest" uname -m > "$SMOKE_LOG" 2>&1; then
+            echo "::error::QEMU ARM64 冒烟失败（binfmt 未注册或 busybox 拉取失败）：$(tail -5 "$SMOKE_LOG" | tr '\n' '|' | cut -c1-800)"
+            exit 1
+          fi
+          cat "$SMOKE_LOG"
+          grep -q aarch64 "$SMOKE_LOG" || { echo "::error::QEMU ARM64 冒烟返回非 aarch64: $(cat "$SMOKE_LOG")"; exit 1; }
+
       - name: Build standalone Kylin DEB (retry, cache-first)
         run: |
           set -euo pipefail
@@ -497,7 +518,8 @@ jobs:
           # v1.14.3 加固：重试间隔由 30/60s 提升到 60/120s，并在每次失败后输出
           # docker/buildx 诊断（镜像拉取/缓存命中情况），避免只看到 "exit 1" 无法定位。
           for i in 1 2 3; do
-            echo "standalone DEB build attempt ${i} (BASE_REGISTRY=${BASE_REGISTRY})"
+            ATTEMPT_LOG="$RUNNER_TEMP/kylin-build-attempt-${i}.log"
+            echo "standalone DEB build attempt ${i} (BASE_REGISTRY=${BASE_REGISTRY}) log=${ATTEMPT_LOG}"
             if docker buildx build \
               --platform linux/arm64 \
               --build-arg BASE_REGISTRY="${BASE_REGISTRY}" \
@@ -507,18 +529,16 @@ jobs:
               --output type=local,dest=dist/deb \
               --cache-from type=gha \
               --cache-to type=gha,mode=max \
-              --pull=false .; then
+              --progress=plain \
+              --pull=false . > "$ATTEMPT_LOG" 2>&1; then
+              tail -15 "$ATTEMPT_LOG" || true
               exit 0
             fi
-            echo "===== attempt ${i} failed; diagnostics ====="
-            docker buildx ls || true
-            docker system df || true
-            docker images --digests | head -20 || true
-            if [ "${i}" = "3" ]; then
-              echo "::error::ARM64 standalone DEB 构建失败（已重试 3 次）"
-              exit 1
-            fi
-            sleep $((i * 60))
+            echo "===== attempt ${i} failed; build log tail ====="
+            tail -60 "$ATTEMPT_LOG" || true
+            echo "===== attempt ${i} ERROR lines (annotated) ====="
+            grep -aiE "error|failed|cannot|denied|no space|invalid|unsupported|not found" "$ATTEMPT_LOG" | tail -8 | cut -c1-400 | sed 's/^/::error::/' || true
+            echo "===== attempt ${i} failed; diagnostics ====="            sleep $((i * 60))
           done
 
       - name: Verify standalone DEB (no CRLF in maintainer scripts)
@@ -558,7 +578,8 @@ jobs:
           set -euo pipefail
           mkdir -p backend/dist
           for i in 1 2 3; do
-            echo "backend-output build attempt ${i} (BASE_REGISTRY=${BASE_REGISTRY})"
+            ATTEMPT_LOG="$RUNNER_TEMP/backend-output-attempt-${i}.log"
+            echo "backend-output build attempt ${i} (BASE_REGISTRY=${BASE_REGISTRY}) log=${ATTEMPT_LOG}"
             if docker buildx build \
               --platform linux/arm64 \
               --build-arg BASE_REGISTRY="${BASE_REGISTRY}" \
@@ -566,14 +587,14 @@ jobs:
               -f docker/Dockerfile.kylin-standalone \
               --output type=local,dest=backend/dist \
               --cache-from type=gha \
-              --pull=false .; then
+              --progress=plain \
+              --pull=false . > "$ATTEMPT_LOG" 2>&1; then
+              tail -15 "$ATTEMPT_LOG" || true
               break
             fi
-            if [ "${i}" = "3" ]; then
-              echo "::error::ARM64 后端产物（backend-output）构建失败（已重试 3 次）"
-              exit 1
-            fi
-            sleep $((i * 20))
+            echo "===== backend-output attempt ${i} build log tail ====="
+            tail -40 "$ATTEMPT_LOG" || true
+            grep -aiE "error|failed|cannot|denied|no space|invalid|unsupported|not found" "$ATTEMPT_LOG" | tail -6 | cut -c1-400 | sed 's/^/::error::/' || true            sleep $((i * 20))
           done
           test -d backend/dist/assistance-backend || { echo "::error::backend-output 未导出期望目录"; ls -R backend/dist | head -20; exit 1; }
           test -f backend/dist/assistance-backend/assistance-backend || { echo "::error::缺后端主程序"; exit 1; }
@@ -582,8 +603,20 @@ jobs:
           file backend/dist/assistance-backend/assistance-backend
           du -sh backend/dist/assistance-backend/_internal
 
+      - name: Upload build attempt logs
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: kylin-arm64-build-logs
+          path: |
+            ${{ runner.temp }}/kylin-build-attempt-*.log
+            ${{ runner.temp }}/backend-output-attempt-*.log
+            ${{ runner.temp }}/qemu-arm64-smoke.log
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Upload ARM64 backend artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: backend-arm64
           path: backend/dist/assistance-backend
@@ -597,7 +630,7 @@ jobs:
           cat SHA256SUMS-standalone-deb-arm64.txt
 
       - name: Upload standalone DEB
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: kylin-arm64-standalone-deb
           path: |
@@ -607,7 +640,7 @@ jobs:
 
       - name: Create Release (standalone DEB)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             dist/deb/output/*.deb

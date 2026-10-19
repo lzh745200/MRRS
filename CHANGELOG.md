@@ -5,6 +5,84 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.6] - 2026-10-19 — 全面体检修复：CI 稳定化 + 数据权限缓存泄漏 + 前端依赖冲突 + 构建可复现（W24）
+
+### Fixed
+
+- **v1.15.5 提交误含测试残留文件**：本地验证与探针脚本运行产生的
+  `_probe_bandit.json`、`backend/pytest-of-Administrator/`、`mrr_w24_probe_*/`、
+  `backend/bumofu_pytest_appdata_*/` 等临时产物被 `git add -A` 一并提交（当时未在 .gitignore 覆盖）。
+  已从版本库与工作区清理，并在 `.gitignore` 增加对应规则（`_probe_*.json`、`mrr_w24_probe_*/`、
+  `bumofu_pytest_appdata_*/`、`pytest-of-*/`），防止复发。
+- 保留合法的辅助脚本 `scripts/run-python.js`（Python 解释器解析）与 `scripts/run-frontend.bat`（前端启动）。
+
+### Fixed（W24 全面体检，2026-10-19）
+
+- **P0 数据权限缓存键跨角色泄漏**（backend）：`villages:list` / `schools:list` 缓存键仅含
+  `organization_id`，同组织内 admin 先查后 user/viewer 命中同一键并读到管理员的数据范围
+  （实测普通用户可见他组织记录，违反 OWN 仅本人数据域）；改为按用户隔离，与 `policies:list:{user_id}`
+  既定正确做法对齐；`organization.py` 的 `orgs:list` 读缓存有 `_global_view` 门禁而写缓存漏门禁
+  （普通用户可把受限结果写进全局键，超管 5 分钟内看到空列表），补同一门禁。
+- **P0 前端依赖 peer 冲突导致 CI 前端安装失败**（frontend）：`vite@^7.3.6` 与
+  `@vitejs/plugin-vue@^5.0.4`（peer 仅支持 vite ^5||^6）冲突，干净环境 `npm ci` 直接 ERESOLVE，
+  这是 v1.15.0–v1.15.4 Build Windows / Build ARM64 前端依赖安装失败的根因（此前误判为 registry 网络抖动）。
+  升级 `@vitejs/plugin-vue` 至 `^6.0.10`（peer 支持 vite ^5/^6/^7）并更新 lock；`npm ci --dry-run` 通过。
+- **P1 日志 PII 脱敏被绕过**：默认 `LOG_FORMAT=json` 下自定义 JsonFormatter 用
+  `formatException(exc_info)` 重新渲染原始堆栈，绕过 SensitiveDataFilter 写入的脱敏 `exc_text`，
+  身份证/手机号随异常明文落盘；改为复用脱敏缓存（新增回归测试）。
+- **P1 跨用户共享缓存泄漏 + 部署链路缺陷**：按数据范围裁剪的
+  `supported-villages/filter-options`、`organizations/tree` 响应 Cache-Control 由 `public` 改 `private`；
+  `docker/Dockerfile` 删除引用不存在 electron-builder 阶段的 COPY；nginx 备份恢复放开
+  `client_max_body_size 10g` + 600s 超时 + `^~ /api/` + `server_tokens off`。
+- **P1 CI backend-test 稳定性重设计**：新增 `scripts/ci_backend_test_segment.sh`，PR Checks 后端测试
+  拆为 6 个独立 pytest 进程（integration/security + unit 按目录/首字母 212+217+211=640 文件全覆盖），
+  前 5 段 `--cov-fail-under=0`、仅最后一段触发 `.coveragerc fail_under=100`；每段独立日志，
+  失败输出真实 FAILED/ERROR（无摘要则输出日志尾部并标注疑似被杀）。
+- **P1 CI 失败上报误报修复**：旧 "Report backend failure" 把 pytest 进度行当覆盖率缺口发成
+  `::error::` 注解（v1.15.4 失败 run 的 11 条注解全是 `tests/... [ 8%]` 误报），淹没真实信号；
+  改为只匹配真实 FAILED/ERROR/覆盖率不足行。
+- **P1 CI 基础设施升级**：4 个 workflow 全部 action 升级到 Node24 兼容版本并重新 SHA pin
+  （checkout v5.1.0 / setup-python v6.3.0 / upload-artifact v6.0.0 / download-artifact v7.0.0 /
+  cache v5.1.0 / codecov v5.5.5 / action-gh-release v3.0.3 / docker setup-* v4.x）；消除
+  "Node.js 20 is deprecated" 告警；build-windows smoke-test timeout 30→90 以覆盖 release gate
+  75 分钟轮询上限；build-arm64 补 job timeout + standalone-deb QEMU 冒烟与失败日志注解；
+  nightly 前端补内存上限与重试。
+- **P1 构建可复现性（裸 python）**：新增 `scripts/find-python.bat` / `scripts/run-python.js` /
+  `run-backend.bat` / `run-frontend.bat`；`Makefile`、`cleanup.py`、`build-installer-local.ps1`、
+  `cleanup.bat`/`dev-setup.bat`/`start-all.bat`/`stop-all.bat` 与根 `package.json` 的
+  `build:backend` 全部改为显式解析 `backend/.venv` → `py -3.11` → 报错退出（修复 PATH 中 32 位
+  Python 被删除后 `python` 不可用导致构建/启动直接失败；并修复 start-all.bat 从未真正启动服务的历史缺陷）。
+- **P2 分页上限缺失**：`GET /users`、`GET /machine-code/organization/list` 的 page_size 为裸 int
+  （SQLite `LIMIT -1` 等于全表），改用仓库统一 `clamp_offset_limit` 钳制。
+- **P2 仓库卫生**：清理 v1.15.5 误提交的测试/探针临时文件（见下），`.gitignore` 增加
+  `_probe_*.json` / `mrr_w24_probe_*/` / `bumofu_pytest_appdata_*/` / `pytest-of-*/` 等规则。
+
+### Documentation
+
+- 补齐 CHANGELOG v1.15.4 / v1.15.5 条目（当时写入脚本因锚点失配未落盘）。
+
+## [1.15.5] - 2026-10-19 — CI Runner 固定 ubuntu-24.04（规避 Ubuntu 26 迁移导致的 backend-test 崩溃）
+
+### Fixed
+
+- **PR Checks `backend-test` 连续失败（v1.15.0–v1.15.4）的根因定位与规避**：
+  时间线关键事实：**GitHub 于 2026-10-19 将 `ubuntu-latest` 迁移到 Ubuntu 26**
+  （Actions 输出明确提示 `ubuntu-latest label will migrate to Ubuntu 26 beginning October 19, 2026`），
+  而 v1.14.3 及更早（Ubuntu 24）backend-test 全部成功；本地（Windows）同命令全量通过
+  （13,710 passed / 100% 行+分支）。v1.15.4 的日志显示 integration/security 段完整执行到 97% 后，
+  unit 段仍以「无 FAILED 摘要、无覆盖率汇总表、exit 1」结束——特征为运行时崩溃。
+  修复：**PR Checks 的全部 7 个 job 固定 `runs-on: ubuntu-24.04`**（固定 runner 镜像是企业标准做法）；
+  unit 段追加 `-x --tb=long`（若仍有真实失败，annotation 立即显示首个失败用例完整 traceback）。
+
+## [1.15.4] - 2026-10-19 — backend-test 分段覆盖率阈值修复
+
+### Fixed
+
+- **backend-test 段 1（integration/security）因覆盖率阈值误判失败**：v1.15.3 拆分后，段 1 只覆盖部分模块，
+  单段结束时会触发 `.coveragerc` 的 `fail_under=100` 检查（33.87%）→ 假失败。
+  修复：段 1 增加 `--cov-fail-under=0`（最终 100% 由段 2 `--cov-append` 合并后校验）；
+  本地验证段 1 命令 exit 0（211 passed，`.coverage` 正常生成）。
+
 ## [1.15.3] - 2026-10-19 — CI 后端测试分段执行（单进程内存峰值治理 + 失败诊断）
 
 ### Fixed

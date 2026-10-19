@@ -27,10 +27,11 @@
           <!-- 2FA 验证模式 -->
           <template v-if="twoFactorRequired">
             <div class="form-group">
-              <label>双因素认证验证码</label>
+              <label for="login-totp-code">双因素认证验证码</label>
               <div class="input-wrapper">
                 <el-icon class="input-icon"><Key /></el-icon>
                 <input
+                  id="login-totp-code"
                   v-model="totpCode"
                   type="text"
                   placeholder="请输入6位TOTP验证码"
@@ -57,10 +58,11 @@
           <!-- 正常登录模式 -->
           <template v-else>
             <div class="form-group">
-              <label>账号</label>
+              <label for="login-username">账号</label>
               <div class="input-wrapper">
                 <el-icon class="input-icon"><User /></el-icon>
                 <input
+                  id="login-username"
                   v-model="username"
                   type="text"
                   placeholder="请输入用户名"
@@ -71,33 +73,39 @@
             </div>
 
             <div class="form-group">
-              <label>密码</label>
+              <label for="login-password">密码</label>
               <div class="input-wrapper">
                 <el-icon class="input-icon"><Lock /></el-icon>
                 <input
+                  id="login-password"
                   v-model="password"
                   :type="showPassword ? 'text' : 'password'"
                   placeholder="请输入密码"
                   class="custom-input"
                   autocomplete="current-password"
                 />
-                <span
+                <!-- 用原生 button 承载密码可见性切换：span+@click 无法键盘聚焦/触发，
+                     读屏与纯键盘用户无法操作。type=button 避免触发 form 提交。 -->
+                <button
+                  type="button"
                   class="toggle-password"
-                  aria-label="切换密码可见性"
+                  :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+                  :aria-pressed="showPassword"
                   @click="showPassword = !showPassword"
                 >
                   <el-icon v-if="showPassword"><View /></el-icon>
                   <el-icon v-else><Hide /></el-icon>
-                </span>
+                </button>
               </div>
             </div>
 
             <!-- 机器码验证（可选） -->
             <div v-if="showMachineCodeInput" class="form-group">
-              <label>机器码验证</label>
+              <label for="login-machine-code">机器码验证</label>
               <div class="input-wrapper">
                 <el-icon class="input-icon"><Key /></el-icon>
                 <input
+                  id="login-machine-code"
                   v-model="verificationCode"
                   type="text"
                   placeholder="请输入4位校验码"
@@ -708,6 +716,11 @@ const goToMachineCode = () => {
   filter: brightness(1.2);
   display: flex;
   align-items: center;
+  /* 语义化为原生 button 后清除浏览器默认外观，保持与原 span 一致的视觉 */
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: inherit;
 }
 
 .toggle-password:hover {

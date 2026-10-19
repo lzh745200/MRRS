@@ -22,6 +22,7 @@ from app.services.user_service import VALID_ROLES
 from app.core.constants import normalize_role
 from app.core.transaction import safe_commit
 from app.core.response import success_response
+from app.utils.pagination import clamp_offset_limit
 from app.utils.upload_helper import read_upload_with_limit
 
 logger = logging.getLogger(__name__)
@@ -367,7 +368,13 @@ async def list_users(
         query = query.filter(User.role == role)
 
     total = query.count()
-    users = query.options(joinedload(User.organization)).offset((page - 1) * page_size).limit(page_size).all()
+    # R29 探测：本端点 page/page_size 是裸 int（无 Query(ge/le) 约束）。
+    # SQLite 语义下 LIMIT -1 等于不限量，OFFSET 负数属非法偏移 —— 裸传
+    # (page-1)*page_size / limit 可被 page_size=-1 或超大值一次拉全表
+    # （既是 DoS 面也是信息暴露面）。与 feedback/rbac/data_sync 同口径，
+    # 用仓库唯一分页钳制入口收敛，避免再各处 max(skip, 0) 各写一遍。
+    offset, page_size = clamp_offset_limit((page - 1) * page_size, page_size)
+    users = query.options(joinedload(User.organization)).offset(offset).limit(page_size).all()
 
     # 批量查询机器码绑定信息
     user_ids = [u.id for u in users]

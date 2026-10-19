@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d9649806c4678c61a1 # v6.3.0
         with: { python-version: '3.11' }
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
       - name: Full test suite with coverage
@@ -52,25 +52,25 @@ jobs:
             --out flaky-report.txt --warn-reruns 3 --max-reruns 10
       - name: Upload flaky ledger
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: flaky-ledger-nightly
           path: flaky-report.txt
           if-no-files-found: warn
           retention-days: 90
       - name: Upload test results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: backend-test-results
           path: backend/test-results.xml
       - name: Upload coverage
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: backend-coverage-html
           path: backend/htmlcov/
-      - uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
+      - uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           directory: backend
           flags: backend-nightly
@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # Node 22（与仓库其余 CI 一致）。LoginEnhanced.vue 全量 functions 88.23% 的真因不是 Node
       # 版本（曾误诊升 24，Node24 CI 复现相同 88.23%/f42ae680），而是 istanbul 按 id 合并冲突的 v8
       # fnMap——该 .vue 被两个测试以不同 ElDialog 桩深挂载。已移除 AuthViewsBatch.test.ts 的冗余
@@ -110,21 +110,51 @@ jobs:
           done
           echo "::error::npm ci 连续 3 次失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
           exit 1
+      # W24（v1.15.5）：与 pr-checks 的 frontend-check 同口径 —— 单进程 v8 覆盖率在
+      # 7GB runner 上贴内存悬崖（历史上被 OS 硬杀、日志无错误信号），因此同样压低
+      # V8 堆上限，并保留一次整门禁重试；否则 nightly 只剩"红但无信息"。
       - name: Full test + coverage
-        run: cd frontend && npx vitest run --coverage --reporter=junit --outputFile=test-results.xml 2>&1
+        env:
+          NODE_OPTIONS: --max-old-space-size=5632
+        run: |
+          cd frontend
+          LOG="$RUNNER_TEMP/vitest-nightly.log"
+          : > "$LOG"
+          set -o pipefail
+          overall=1
+          for attempt in 1 2; do
+            echo "===== coverage attempt $attempt =====" | tee -a "$LOG"
+            if npx vitest run --coverage --reporter=junit --outputFile=test-results.xml 2>&1 | tee -a "$LOG"; then
+              overall=0
+              break
+            fi
+            echo "attempt $attempt 失败，15s 后重试" | tee -a "$LOG"
+            rm -rf coverage
+            sleep 15
+          done
+          [ "$overall" -eq 0 ] || echo "::error::nightly 前端覆盖率门禁连续 2 次失败（含 OOM 边缘可能）—— 详见上方日志"
+          exit $overall
+      - name: Upload vitest nightly log
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: vitest-nightly-log
+          path: ${{ runner.temp }}/vitest-nightly.log
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload test results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: frontend-test-results
           path: frontend/test-results.xml
       - name: Upload coverage
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: frontend-coverage
           path: frontend/coverage/
-      - uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
+      - uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           directory: frontend
           flags: frontend-nightly
@@ -136,7 +166,7 @@ jobs:
     needs: [backend-full, frontend-full]
     if: always()
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Generate quality summary
         run: |
           echo "## 每日质量报告 ($(date +%Y-%m-%d))" > quality-report.md
@@ -146,7 +176,7 @@ jobs:
           echo "| 后端测试 | ${{ needs.backend-full.result == 'success' && '✅' || '❌' }} |" >> quality-report.md
           echo "| 前端测试 | ${{ needs.frontend-full.result == 'success' && '✅' || '❌' }} |" >> quality-report.md
       - name: Upload quality report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: quality-report
           path: quality-report.md

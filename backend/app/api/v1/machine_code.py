@@ -768,7 +768,10 @@ async def list_organization_pass_codes(
         service = MachineCodeService(db)
 
         # 查询列表
-        skip = (page - 1) * page_size
+        # R29 探测：page/page_size 为裸 int（无 Query(ge/le) 约束），SQLite 下
+        # limit=-1 等于不限量、负 offset 非法。用仓库统一钳制入口收敛，防止
+        # page_size=-1/超大值一次拉全表（DoS + pass_code 批量暴露面）。
+        skip, page_size = clamp_offset_limit((page - 1) * page_size, page_size)
         records, total = service.get_organization_pass_codes(
             organization_id=organization_id,
             status=status,

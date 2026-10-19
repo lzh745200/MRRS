@@ -13,18 +13,25 @@
 
 ## 一键构建 .deb
 
-```bash
-# 在 Ubuntu 22.04+ 上
-sudo VERSION=1.2.0 ./build-scripts/build-deb-ubuntu.sh
+构建已统一收敛到 Docker（`docker/Dockerfile.kylin-standalone` / `Dockerfile.kylin-amd64`），
+本机无需安装 Python/Node 工具链：
 
-# Docker 交叉编译 ARM64
-docker run --rm --platform linux/arm64 \
-  -v "$(pwd):/build" -w /build \
-  ubuntu:22.04 bash -c "
-    apt-get update && apt-get install -y sudo && \
-    sudo VERSION=1.2.0 ./build-scripts/build-deb-ubuntu.sh
-  "
+```bash
+# ARM64 麒麟 V10（QEMU 交叉构建，CI 同款）
+make build-kylin-arm64
+
+# x86_64 麒麟 / 国产系统 standalone
+make build-deb-standalone-amd64
+
+# 或直接用 buildx（等价，产物落 dist/deb/kylin/）
+docker buildx build --platform linux/arm64 \
+  --build-arg VERSION=1.15.4 \
+  -f docker/Dockerfile.kylin-standalone \
+  --output type=local,dest=dist/deb .
 ```
+
+> 历史脚本 `build-scripts/build-deb-ubuntu.sh` 已删除（见
+> [国产电脑一键安装指南](02-Linux部署/国产电脑一键安装指南.md) 的说明）。
 
 ## 一键安装
 

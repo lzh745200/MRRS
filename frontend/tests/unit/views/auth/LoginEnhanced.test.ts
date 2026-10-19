@@ -348,6 +348,59 @@ describe('LoginEnhanced.vue', () => {
     expect(vm.showPassword).toBe(false)
   })
 
+  it('可访问性：label 通过 for/id 关联输入框，密码切换是原生 button', async () => {
+    const w = await mountComp()
+    // 常驻输入框：账号 / 密码
+    expect(w.find('input#login-username').exists()).toBe(true)
+    expect(w.find('input#login-password').exists()).toBe(true)
+    expect(w.find('label[for="login-username"]').exists()).toBe(true)
+    expect(w.find('label[for="login-password"]').exists()).toBe(true)
+
+    // 密码切换：原生 button（可聚焦、可键盘触发、不提交表单）+ 动态 aria
+    const toggle = w.find('.toggle-password')
+    expect(toggle.element.tagName).toBe('BUTTON')
+    expect(toggle.attributes('type')).toBe('button')
+    expect(toggle.attributes('aria-label')).toBe('显示密码')
+    expect(toggle.attributes('aria-pressed')).toBe('false')
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-label')).toBe('隐藏密码')
+    expect(toggle.attributes('aria-pressed')).toBe('true')
+
+    // 2FA 验证码输入框
+    ;(w.vm as any).twoFactorRequired = true
+    await nextTick()
+    expect(w.find('input#login-totp-code').exists()).toBe(true)
+    expect(w.find('label[for="login-totp-code"]').exists()).toBe(true)
+
+    // 机器码校验输入框
+    ;(w.vm as any).twoFactorRequired = false
+    ;(w.vm as any).showMachineCodeInput = true
+    await nextTick()
+    expect(w.find('input#login-machine-code').exists()).toBe(true)
+    expect(w.find('label[for="login-machine-code"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('输入框 v-model 双向绑定：账号 / 密码 / 机器码输入都写回表单状态', async () => {
+    // 覆盖率门禁回归：v-model 为原生 input 生成 onInput 内联处理器，
+    // 若测试只用 vm 赋值、不触发真实输入事件，三个处理器会落在未覆盖行
+    // （LoginEnhanced.vue 66/81/109）→ functions 86.95%。此处逐一点击输入。
+    const w = await mountComp()
+    const vm = w.vm as any
+
+    await w.find('input#login-username').setValue('admin')
+    expect(vm.username).toBe('admin')
+
+    await w.find('input#login-password').setValue('Secret#2026')
+    expect(vm.password).toBe('Secret#2026')
+
+    vm.showMachineCodeInput = true
+    await nextTick()
+    await w.find('input#login-machine-code').setValue('1234')
+    expect(vm.verificationCode).toBe('1234')
+    w.unmount()
+  })
+
   it('el-dialog 关闭（update:modelValue）→ 关闭导入对话框', async () => {
     const w = mount(LoginEnhanced, {
       global: {

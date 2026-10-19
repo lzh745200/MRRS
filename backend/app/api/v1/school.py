@@ -744,9 +744,14 @@ async def list_schools(
             _key_data = json.dumps(
                 [keyword, name, type, status_filter, include_deleted], default=str
             ).encode()
-            _org_id = getattr(current_user, "organization_id", None) or 0
+            # 缓存键必须按「数据权限主体」隔离：get_org_scope 下部门级 admin 是
+            # 全量/组织树可见，user/viewer 是「本组织及子树」或「仅本人」。
+            # 历史键只含 organization_id，同组织内 admin 先查后普通用户/访客会
+            # 命中同一键并读到管理员的更大范围列表（R29 探测实测数据泄漏）。
+            # 对齐 policy.py 的 policies:list:{user_id} 既有正确做法，按用户隔离。
+            _cache_scope = getattr(current_user, "id", None) or 0
             _hash = hashlib.md5(_key_data, usedforsecurity=False).hexdigest()
-            _ckey = f"schools:list:{_org_id}:{page}:{page_size}:{_hash}"
+            _ckey = f"schools:list:{_cache_scope}:{page}:{page_size}:{_hash}"
             _cached = await _cache.get(_ckey)
             if _cached is not None:
                 return _cached

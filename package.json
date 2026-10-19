@@ -1,6 +1,6 @@
 {
   "name": "Assistance-Management-Information-System",
-  "version": "1.15.5",
+  "version": "1.15.6",
   "private": true,
   "description": "帮扶管理系统 - 贵州省版 Standalone桌面应用",
   "main": "electron/main.js",
@@ -13,7 +13,7 @@
     "start": "electron .",
     "check:electron": "node --check electron/main.js && node --check electron/preload.js",
     "build": "npm run check:electron && npm run build:backend && electron-builder",
-    "build:backend": "cd backend && python -m PyInstaller assistance-backend.spec --clean --noconfirm",
+    "build:backend": "cd backend && node ../scripts/run-python.js -m PyInstaller assistance-backend.spec --clean --noconfirm",
     "build:linux": "electron-builder --linux",
     "build:deb": "electron-builder --linux deb",
     "build:arm64": "electron-builder --linux deb --arm64",

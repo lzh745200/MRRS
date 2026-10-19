@@ -259,8 +259,16 @@ async def get_organizations(
         )
         items_list = [OrganizationResponse.model_validate(item).model_dump(mode="json") for item in items]
         result = ok_list(items=items_list, total=total, page=page, page_size=page_size)
-        # 仅对默认无过滤请求写缓存
-        if not any([org_type, parent_id, is_active, keyword, search]) and page == 1 and page_size == 20:
+        # 仅对「可见全量」的管理员的默认无过滤请求写缓存。
+        # R29 探测实测：读已按 _global_view 门禁，写却漏了同一门禁 —— 普通用户
+        # 默认请求会把其受限结果（OWN 范围=空列表）写进全局键 "orgs:list"，
+        # 随后超管 5 分钟内的组织列表被污染成空/子集（跨用户缓存污染）。
+        if (
+            _global_view
+            and not any([org_type, parent_id, is_active, keyword, search])
+            and page == 1
+            and page_size == 20
+        ):
             await cache_manager.set(_cache_key, result, ttl=300)
         return result
     except Exception as e:  # pragma: no cover - 纯加速层：缓存读写失败不影响业务正确性

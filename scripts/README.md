@@ -4,6 +4,25 @@
 
 ## Windows 脚本
 
+> **Python 解析（W24）**：PATH 里的裸 `python` 可能指向已删除 / 32 位安装（本机实测
+> 指向 `...\Python311-32`），裸调用不可复现甚至会直接失败。所有 .bat 统一通过
+> `find-python.bat` 显式解析项目解释器，优先级
+> `MRRS_PYTHON` → `backend\.venv\Scripts\python.exe` → `py -3.11`；
+> 全部不可用时打印修复指引并 `exit /b 1`。Node 侧等价解析器为
+> `scripts/run-python.js`（供 npm 脚本使用：`node scripts/run-python.js --print`）。
+
+### 🐍 find-python.bat - 项目 Python 解析（被其它脚本复用）
+
+- 以 `call "%~dp0find-python.bat"` 方式调用，成功时导出 `PYTHON_EXE`（绝对路径），
+  失败时 errorlevel=1；`cleanup.bat` / `dev-setup.bat` / `run-backend.bat` 均复用它。
+- 不得使用 `setlocal`（变量需泄漏给调用方）。
+
+### ▶️ run-backend.bat / run-frontend.bat - 单服务启动器
+
+- 由 `start-all.bat` 在独立窗口调用（窗口标题 `后端服务` / `前端服务`，
+  `stop-all.bat` 按标题清理）；也可单独双击运行。
+- 设置 `MRRS_DRY_RUN=1` 可只打印将要执行的命令（供 CI/自检）。
+
 ### 🚀 start-all.bat - 一键启动所有服务
 
 **功能**：
@@ -12,6 +31,9 @@
 - 启动前端服务（Vite）
 - 等待服务就绪
 - 自动打开浏览器
+
+> v1.15.5 修复：本脚本此前只等待端口、**从未真正启动后端/前端**（历史改动误删启动行）。
+> 现改为调用 `run-backend.bat` / `run-frontend.bat` 各自开窗启动。
 
 **使用方法**：
 ```bash
@@ -134,9 +156,10 @@ scripts\start-all.bat
 
 ### 虚拟环境
 
-后端使用 Python 虚拟环境（`.venv`）：
-- 自动激活：脚本会自动调用 `activate.bat`
-- 手动激活：`.venv\Scripts\activate.bat`
+后端使用 Python 虚拟环境（`backend\.venv`）：
+- 脚本调用：统一经 `find-python.bat` 解析出绝对路径后调用，**不需要**手动激活，
+  也不依赖 PATH 里的裸 `python`
+- 手动激活（可选）：`backend\.venv\Scripts\activate.bat`
 - 退出：`deactivate`
 
 ---
@@ -150,4 +173,4 @@ scripts\start-all.bat
 
 ---
 
-**最后更新**: 2026-03-14
+**最后更新**: 2026-10-19（v1.15.5：W24 构建/启动脚本可复现性修复）

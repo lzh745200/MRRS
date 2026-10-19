@@ -25,7 +25,7 @@
    安装包内后端目录结构固定，白名单可按目录哈希清单审批。
 2. **PyInstaller 6 的 onedir 同样设置 `sys._MEIPASS`**（指向 `_internal/`），
    代码中 `_MEIPASS` 相对定位（map.py、static_files.py、main.py 的 alembic.ini
-   定位）无需改动；`backend/utils/paths.py` 本就按 `sys.frozen` 双模式防御。
+   定位）无需改动；`backend/app/utils/paths.py` 本就按 `sys.frozen` 双模式防御。
 3. **datas 摘除 `app/` 源码目录**：app 包经 `collect_submodules('app')` 进入
    PYZ 字节码；alembic `env.py` 的 `import app.models` 由冻结导入解析。
    `alembic/`（版本脚本按路径扫描）与 `alembic.ini` 必须保留为数据文件。

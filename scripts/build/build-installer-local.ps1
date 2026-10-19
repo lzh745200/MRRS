@@ -12,7 +12,9 @@
 # 正式发布仍推荐推 tag：git tag v<版本> && git push origin v<版本> → Actions 产出两个平台安装包。
 # Windows x64 offline installer build chain (ASCII only; mirrors Makefile build-win-x64)
 $ErrorActionPreference = 'Continue'
-Set-Location 'C:\military-Rural Revitalization-system'
+# W24：不再硬编码构建机绝对路径 —— 由脚本位置推导仓库根，任意 checkout 目录可复现
+$Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+Set-Location $Root
 $env:PYTHONUTF8 = '1'
 $env:PYTHONIOENCODING = 'utf-8'
 
@@ -32,8 +34,15 @@ cmd /c scripts\build\sync-frontend-dist.bat
 if ($LASTEXITCODE -ne 0) { Write-Host "[BUILD-FAIL] sync-frontend-dist exit=$LASTEXITCODE"; exit 1 }
 
 Write-Host "=== STEP 4/5: pyinstaller backend (onedir) ==="
+# W24：显式解析项目 Python（PATH 里的裸 python 可能指向已删除/32 位安装）
+$PythonExe = Join-Path $Root 'backend\.venv\Scripts\python.exe'
+if (-not (Test-Path $PythonExe)) {
+  Write-Host "[BUILD-FAIL] 缺少 $PythonExe"
+  Write-Host "请安装 64-bit Python 3.11 后重建 venv（scripts\dev-setup.bat 或 py -3.11 -m venv backend\.venv）"
+  exit 1
+}
 Push-Location backend
-.\.venv\Scripts\python.exe -m PyInstaller assistance-backend.spec --clean --noconfirm
+& $PythonExe -m PyInstaller assistance-backend.spec --clean --noconfirm
 $code = $LASTEXITCODE
 Pop-Location
 if ($code -ne 0) { Write-Host "[BUILD-FAIL] pyinstaller exit=$code"; exit 1 }

@@ -447,10 +447,15 @@ async function loadData() {
       department: filters.department || undefined,
       county: filters.county || undefined,
       year_start: filters.yearStart || undefined,
-      is_revitalization_tier: filters.isRevitalizationTier || undefined,
-      is_three_regions: filters.isThreeRegions || undefined,
-      is_ethnic_area: filters.isEthnicArea || undefined,
-      is_key_county: filters.isKeyCounty || undefined,
+      // 布尔筛选必须区分「未设置」与「设置为否」：后端对 Optional[bool] 只做
+      // is not None 判断，false 是有效过滤条件（只看非振兴梯队/非三区三州等）。
+      // 旧实现 `filters.x || undefined` 会把 false / 0（el-select 的「否」）吞成
+      // undefined → 用户选「否」却返回全部数据。口径与导出（下方 handleExport）一致。
+      is_revitalization_tier:
+        filters.isRevitalizationTier == null ? undefined : filters.isRevitalizationTier,
+      is_three_regions: filters.isThreeRegions == null ? undefined : filters.isThreeRegions,
+      is_ethnic_area: filters.isEthnicArea == null ? undefined : filters.isEthnicArea,
+      is_key_county: filters.isKeyCounty == null ? undefined : filters.isKeyCounty,
       // 回收站模式：管理员开启时附加 include_deleted=true
       // 后端 enforce_admin_include_deleted 依赖会兜底降级非管理员的请求
       include_deleted: showDeletedOnly.value ? true : undefined,

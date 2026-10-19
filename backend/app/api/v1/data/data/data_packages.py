@@ -26,7 +26,12 @@ from app.utils.upload_helper import (
 )
 from app.core.response import success_response
 from app.core.security import get_current_user
-from app.core.permission_utils import get_org_with_fallback, is_admin, require_admin
+from app.core.permission_utils import (
+    get_org_with_fallback,
+    is_admin,
+    is_superuser,
+    require_admin,
+)
 from app.models.import_export_history import OperationResult
 from app.models.data_package import PackageType
 from app.schemas.data_package import (DataPackageConfirmRequest,
@@ -244,6 +249,17 @@ async def list_data_packages(
     target_org_id = org_id
     if not target_org_id:
         target_org_id = getattr(current_user, "organization_id", None) or getattr(current_user, "org_id", None)
+
+    if not target_org_id and is_superuser(current_user):
+        # R29 探测：未绑定组织的出厂超管（默认安装即为该形态）走 /export 时经
+        # get_org_with_fallback 回退到首个活跃组织，列表却直接返回空 —— 刚导出的
+        # 数据包在「数据包版本 / 增量更新」页永远不可见。此处与导出链同口径回退，
+        # 只对真正的全局超管（is_superuser）生效：普通用户/部门 admin 不跨组织
+        # 回退，避免引入越权可见面。
+        target_org_id = get_org_with_fallback(
+            current_user=current_user,
+            get_first_org_callback=lambda: _get_first_active_org(service.db),
+        )
 
     if not target_org_id:
         return DataPackageListResponse(total=0, page=page, page_size=page_size, items=[])

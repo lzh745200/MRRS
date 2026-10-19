@@ -467,6 +467,43 @@ describe('筛选表单与操作栏模板产物', () => {
     wrapper.unmount()
   })
 
+  it('布尔筛选为否（false / 0）时原样透传，不被 || undefined 吞掉（回归）', async () => {
+    const wrapper = mountList()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 后端对 Optional[bool] 只做 is not None 判断：false / 0 是有效过滤条件。
+    // 旧实现 `filters.x || undefined` 会把「否」吞成 undefined → 选「否」却返回全部。
+    vm.filters.isRevitalizationTier = false
+    vm.filters.isThreeRegions = 0
+    vm.filters.isEthnicArea = 0
+    vm.filters.isKeyCounty = 0
+    listMock.mockClear()
+    vm.handleSearch()
+    await flushPromises()
+    expect(listMock.mock.calls.at(-1)?.[0]).toMatchObject({
+      is_revitalization_tier: false,
+      is_three_regions: 0,
+      is_ethnic_area: 0,
+      is_key_county: 0,
+    })
+
+    // 未设置（undefined）时仍不传，避免把「全部」误变成「否」
+    vm.filters.isRevitalizationTier = undefined
+    vm.filters.isThreeRegions = undefined
+    vm.filters.isEthnicArea = undefined
+    vm.filters.isKeyCounty = undefined
+    listMock.mockClear()
+    vm.handleSearch()
+    await flushPromises()
+    expect(listMock.mock.calls.at(-1)?.[0]).toMatchObject({
+      is_revitalization_tier: undefined,
+      is_three_regions: undefined,
+      is_ethnic_area: undefined,
+      is_key_county: undefined,
+    })
+    wrapper.unmount()
+  })
+
   it('操作栏：新增 / 导入 / 导出 / 下载模板 四个按钮', async () => {
     const wrapper = mountList()
     await flushPromises()
