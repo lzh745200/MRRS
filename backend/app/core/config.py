@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.15.9"
+    PROJECT_VERSION: str = "1.15.10"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -186,6 +186,18 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_PER_MINUTE: int = 60
     RATE_LIMIT_PER_HOUR: int = 1000
+
+    # R33 单位授权守卫模式：off-关闭(默认) / shadow-只记日志 / enforce-越权 403。
+    # 默认 off 保证升级零行为变化；上线时先切 shadow 收集"将被拦"清单，确认后再 enforce。
+    GRANT_GUARD_MODE: str = "off"
+
+    # R33 授权包签名（Ed25519，32 字节 hex）。
+    # 上级配置 GRANT_SIGNING_KEY（签发），下级配置 GRANT_PUBKEY（验签）；
+    # 下级只配公钥，即使被提取也无法伪造签名。
+    GRANT_SIGNING_KEY: str = ""
+    GRANT_PUBKEY: str = ""
+    # 是否允许导入未签名的授权包 —— 仅供本地自测，生产必须保持 False。
+    GRANT_ALLOW_UNSIGNED: bool = False
 
     # 日志配置
     LOG_LEVEL: str = "INFO"

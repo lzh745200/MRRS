@@ -5,6 +5,24 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.10] - 2026-10-19 — backend-test 回归 8 段执行器 + 补充精确覆盖率测试
+
+### Fixed
+
+- **backend-test 采用 8 段执行器（规避单进程在 Linux runner 的 SIGSEGV）**
+  v1.15.9 单进程全量在 ubuntu-24.04 上运行时以 **exit 139（SIGSEGV）** 崩溃（21 分钟处），
+  而 8 段执行器（每段独立进程）可完整跑完 → 回退分段方案（seg1 集成/安全 → seg2 api →
+  seg3 services/middleware/interfaces/utils → seg4/seg5/seg6 unit 根目录 → seg5b tests 顶层），
+  覆盖率使用 `--cov-append` 跨段合并、最后一段按 `.coveragerc fail_under=100` 判定。
+
+- **补充 2 个精确覆盖率测试**（补齐 99.99% 的缺口）：
+  - `tests/unit/test_v11510_subordinate_status_path.py`：`generate_status_report` 正常路径
+    （覆盖 status 上报包 zip 写入分支 130-132 / branch 128->134）；
+  - `tests/unit/test_v11510_secrets_store_branches.py`：密钥库加载的无效条目跳过（line 143）、
+    `expires_at/revoked_at` 写入（line 148）、全部无效时回退默认版本（branch 151->155）。
+
+- 说明：本版本仅修 CI 测试执行与测试补充，产品代码与 UI v2.0 内容与 v1.15.0 完全一致。
+
 ## [1.15.9] - 2026-10-19 — backend-test 恢复单进程全量（分段方案等效性验证失败后回退）
 
 ### Fixed

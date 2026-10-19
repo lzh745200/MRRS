@@ -47,32 +47,28 @@ jobs:
       - name: Reset coverage data
         run: rm -f backend/.coverage
 
-      - name: Backend tests + coverage
-        run: |
-          cd backend
-          LOG="$RUNNER_TEMP/pytest.log"
-          {
-            echo "===== ENV SNAPSHOT ====="
-            python --version
-            echo "os: $(uname -a)"
-            echo "nproc: $(nproc)"
-            free -m 2>/dev/null || echo "(free unavailable)"
-            echo "========================"
-          } > "$LOG"
-          set -o pipefail
-          # v1.15.9：恢复**单进程全量**（本地以同一命令实测 13,710 passed / 1 skipped / 100% 行+分支）。
-          # 分段执行（v1.15.3–v1.15.8 尝试 2/6/8 段）本地复现出 99.99% 覆盖率（1 行 + 3 分支缺失，
-          # 源于跨进程模块级状态差异）与顺序依赖测试失败（test_core_hardening_r28_build_info），
-          # 无法与单进程全量等价。单进程在 Ubuntu 26 上曾崩溃（v1.15.0–v1.15.2），v1.15.5 已固定
-          # ubuntu-24.04 → 恢复单进程全量是"本地验证配置 + 固定 runner 镜像"的最小风险组合。
-          # 保留：--reruns 2 / -rR（抖动账本依赖）/ 覆盖率 json（分支棘轮下一步读取）。
-          python -m pytest tests/ -q --tb=short -rR --cov=app --cov-branch \
-            --cov-report=xml --cov-report=term-missing --cov-report=json:coverage-branch.json \
-            --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
-          STATUS=${PIPESTATUS[0]}
-          echo "===== pytest exit=$STATUS ====="
-          free -m 2>/dev/null || true
-          exit $STATUS
+      - name: "Backend tests + coverage (1/6: integration + security)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg1-integration-security --mode first tests/integration tests/security
+
+      - name: "Backend tests + coverage (2/6: unit api)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg2-unit-api --mode partial tests/unit/api
+
+      - name: "Backend tests + coverage (3/6: unit services/middleware/interfaces/utils)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg3-unit-services --mode partial tests/unit/services tests/unit/middleware tests/unit/interfaces tests/unit/utils
+
+      - name: "Backend tests + coverage (4/6: unit root a-e-f-i-n-o-p-t-u-w-y-z)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg4-unit-root-a --mode partial tests/unit/test_a*.py tests/unit/test_e*.py tests/unit/test_f*.py tests/unit/test_i*.py tests/unit/test_n*.py tests/unit/test_o*.py tests/unit/test_p*.py tests/unit/test_t*.py tests/unit/test_u*.py tests/unit/test_w*.py tests/unit/test_y*.py tests/unit/test_z*.py
+
+      - name: "Backend tests + coverage (5/6: unit root b-d-g-h-j-l-m-q-s)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg5-unit-root-b --mode partial tests/unit/test_b*.py tests/unit/test_d*.py tests/unit/test_g*.py tests/unit/test_h*.py tests/unit/test_j*.py tests/unit/test_l*.py tests/unit/test_m*.py tests/unit/test_q*.py tests/unit/test_s*.py
+
+      # v1.15.8：补齐 tests/ 顶层 15 个 test_*.py（原 6 段只覆盖 unit/integration/security，
+      # 顶层 test_approval_workflow.py / test_smoke.py 等未执行 → 最终覆盖率 <100% → 门禁失败）。
+      - name: "Backend tests + coverage (5.5/6: tests root)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg5b-tests-root --mode partial tests/test_*.py
+
+      - name: "Backend tests + coverage (6/6: unit root c-r-v, final coverage gate)"
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg6-unit-root-c --mode final tests/unit/test_c*.py tests/unit/test_r*.py tests/unit/test_v*.py
       # 抖动账本（2026-10-17）：把 --reruns 掩盖的不确定性显式化并留存 90 天。
       # 只告警不阻断（真实抖动需要人看清单决定"先修/再隔离"），阈值 3。
       - name: Flaky test ledger
