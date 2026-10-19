@@ -62,7 +62,12 @@ jobs:
           # 2026-10-17（W19）：此前棘轮步骤又跑了一遍全量 pytest（同一套用例、第二个
           # xdist 数据面），两跑之间偶发不一致（step5 通过、step8 读到 99.6x%）→
           # 门禁随机变红。改为单一数据源：本步产出 json，下一步只做比对。
-          python -m pytest tests/ -q --tb=line -n auto -rR --cov=app --cov-branch \
+          # v1.15.1 稳定性加固：v1.15.0 的 backend-test 在 4 核 runner 上 `-n auto`
+          # （4 workers + 覆盖率 + 13,710 用例）出现 worker 偶发崩溃 -> pytest 提前退出、
+          # 覆盖率表只含已跑部分（dashboard/analytics 等模块显示低覆盖）-> 门禁误红。
+          # 本地同命令全量通过（13,710 passed / 100% 行+分支），故为 runner 资源抖动；
+          # 降为 `-n 2` 降低并发内存/CPU 压力（本地实测 7 分 18 秒，远低于 45 分钟上限）。
+          python -m pytest tests/ -q --tb=line -n 2 -rR --cov=app --cov-branch \
             --cov-report=xml --cov-report=term-missing --cov-report=json:coverage-branch.json \
             --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
       # 抖动账本（2026-10-17）：把 --reruns 掩盖的不确定性显式化并留存 90 天。

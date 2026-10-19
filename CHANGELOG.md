@@ -5,6 +5,22 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.1] - 2026-10-19 — CI 后端全量并发稳健化（修复 v1.15.0 Windows 包被门禁误拦）
+
+### Fixed
+
+- **PR Checks `backend-test` 在 4 核 runner 上偶发失败**：v1.15.0 的 backend-test 使用
+  `pytest -n auto`（4 workers + 覆盖率 + 13,710 用例），出现 xdist worker 偶发崩溃 → pytest 提前退出，
+  覆盖率报告只含已跑部分（dashboard/analytics/batch_operations 等模块显示低覆盖），门禁误红；
+  v1.15.0 的 Build Windows 因「tag commit 的 PR Checks 未通过」被正确阻断（门禁逻辑本身正常）。
+  本地以同款命令（`-n auto --cov=app --cov-branch`）全量复跑：**13,710 passed / 1 skipped / 100% 行+分支**，
+  证实为 runner 资源抖动而非代码/测试问题。
+  加固：backend-test 的 pytest 并发度由 `-n auto` 降为 **`-n 2`**（降低 4 核 runner 的并发内存/CPU 压力；
+  本地实测 7 分 18 秒，远低于 job 45 分钟上限），其余覆盖率/重试/棘轮逻辑不变。
+
+- 说明：v1.15.0 的 ARM64 构建（standalone DEB + Electron DEB）**已成功产出**并发布 Release；
+  v1.15.1 仅修 CI 稳定性，产品代码与 UI v2.0 内容与 v1.15.0 完全一致（版本号同步更新）。
+
 ## [1.15.0] - 2026-10-19 — UI v2.0：精美·科学·一致性的系统级视觉重构
 
 ### Added
