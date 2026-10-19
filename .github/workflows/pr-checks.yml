@@ -25,7 +25,7 @@ jobs:
   # （网络挂起 / xdist worker 僵死 / 浏览器下载无响应）会白占并发额度并延迟 PR 反馈。
   # 预算按实测耗时给约 2 倍余量，只拦"卡死"，不误伤正常慢跑。
   backend-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90   # 实测双遍全量（覆盖 + 分支棘轮）约 40-50 分钟
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -86,7 +86,9 @@ jobs:
             dmesg 2>/dev/null | tail -20 || true
             exit 1
           fi
-          python -m pytest tests/unit -q --tb=short -rR \
+          # -x：首个失败立即停止，确保 annotation 能看到明确失败用例（排查 Ubunt 26 迁移后的
+          # unit 段崩溃；--tb=long 输出完整 traceback）
+          python -m pytest tests/unit -q -x --tb=long -rR \
             --cov=app --cov-branch --cov-append \
             --cov-report=xml --cov-report=term-missing --cov-report=json:coverage-branch.json \
             --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
@@ -158,7 +160,7 @@ jobs:
         continue-on-error: true
 
   frontend-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45   # 实测安装 + tsc + lint + 覆盖率约 20-25 分钟
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -316,7 +318,7 @@ jobs:
         continue-on-error: true
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -333,7 +335,7 @@ jobs:
         run: cd backend && python -m bandit -r app/ -ll
 
   security:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -387,7 +389,7 @@ jobs:
           if-no-files-found: warn
 
   static-analysis:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -459,7 +461,7 @@ jobs:
   # 落在当前 head"。安装包冒烟只证明"能装能起"，证明不了"老用户的库升级后数据还在"——
   # 这段过去靠人工在测试机点，漏做即现场事故（打包环境没有回退路径）。
   upgrade-rehearsal:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -477,7 +479,7 @@ jobs:
   # （2026-09-06 R8 复活），纳入门禁防再腐化。Linux 用 chromium（config 按
   # 平台切换，Windows 本地用系统 Edge）。
   e2e-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60   # 依赖安装 + Playwright chromium + 150 用例
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

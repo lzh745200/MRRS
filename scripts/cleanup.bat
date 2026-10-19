@@ -11,15 +11,22 @@ echo  [0] 退出
 echo.
 set /p choice="请选择: "
 
+REM 显式解析项目 Python（PATH 里的裸 python 可能指向已删除/32 位安装）
+call "%~dp0find-python.bat"
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
+
 if "%choice%"=="1" (
-    python "%~dp0cleanup.py"
+    "%PYTHON_EXE%" "%~dp0cleanup.py"
     pause
 ) else if "%choice%"=="2" (
-    python "%~dp0cleanup.py" --execute
+    "%PYTHON_EXE%" "%~dp0cleanup.py" --execute
     pause
 ) else if "%choice%"=="3" (
     echo 需要管理员权限...
-    python "%~dp0cleanup.py" --schedule
+    "%PYTHON_EXE%" "%~dp0cleanup.py" --schedule
     pause
 ) else (
     echo 已取消

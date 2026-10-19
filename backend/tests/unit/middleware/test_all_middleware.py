@@ -81,7 +81,15 @@ class TestCacheHeadersMiddleware:
     async def test_cache_headers_matched(self):
         mw, req, resp = self._mw("/api/v1/organizations/tree")
         await mw.dispatch(req, AsyncMock(return_value=resp))
-        assert resp.headers.get("Cache-Control") == "public, max-age=300"
+        # 用户数据范围裁剪过的响应必须 private（禁止共享缓存跨用户复用）
+        assert resp.headers.get("Cache-Control") == "private, max-age=300"
+
+    @pytest.mark.asyncio
+    async def test_user_scoped_filter_options_not_public(self):
+        """按数据范围裁剪的 filter-options 响应不得标 public（跨组织缓存泄漏）。"""
+        mw, req, resp = self._mw("/api/v1/supported-villages/filter-options")
+        await mw.dispatch(req, AsyncMock(return_value=resp))
+        assert resp.headers.get("Cache-Control") == "private, max-age=300"
 
     @pytest.mark.asyncio
     async def test_cache_headers_unmatched(self):

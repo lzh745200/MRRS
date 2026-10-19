@@ -11,18 +11,23 @@ REM ── 1. Python 虚拟环境 ──
 echo [1/4] 初始化 Python 虚拟环境...
 cd /d "%~dp0..\backend"
 
-where python >nul 2>&1
+REM 显式解析项目 Python（PATH 里的裸 python 可能指向已删除/32 位安装）
+call "%~dp0find-python.bat"
 if errorlevel 1 (
-    echo [错误] 未找到 Python，请安装 Python 3.11 64-bit
     pause & exit /b 1
 )
 
 if not exist ".venv" (
-    python -m venv .venv
+    "%PYTHON_EXE%" -m venv .venv
     echo   虚拟环境已创建
 )
+set "PYTHON_EXE=%~dp0..\backend\.venv\Scripts\python.exe"
+if not exist "%PYTHON_EXE%" (
+    echo [错误] 虚拟环境解释器缺失: %PYTHON_EXE%
+    pause & exit /b 1
+)
 call .venv\Scripts\activate
-pip install -r requirements.txt -q
+"%PYTHON_EXE%" -m pip install -r requirements.txt -q
 echo [OK] Python 依赖安装完成
 
 REM ── 2. 前端依赖 ──
@@ -34,8 +39,8 @@ echo [OK] 前端依赖安装完成
 REM ── 3. Pre-commit hooks ──
 echo [3/4] 安装 Git hooks...
 cd /d "%~dp0.."
-pip install pre-commit -q
-pre-commit install
+"%PYTHON_EXE%" -m pip install pre-commit -q
+"%PYTHON_EXE%" -m pre_commit install
 echo [OK] Pre-commit hooks 已安装
 
 REM ── 4. 环境文件 ──
@@ -61,7 +66,7 @@ echo   初始化完成!
 echo ========================================
 echo.
 echo 启动开发环境:
-echo   后端: cd backend ^&^& .venv\Scripts\python start.py
+echo   后端: cd backend ^&^& .venv\Scripts\python.exe start.py
 echo   前端: cd frontend ^&^& npm run dev
 echo.
 echo 默认账号: admin / zgcZGC733035#  (出厂口令，首次登录强制改密；可用 DEFAULT_ADMIN_PASSWORD 覆盖)

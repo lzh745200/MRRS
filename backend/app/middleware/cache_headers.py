@@ -14,9 +14,14 @@ from starlette.middleware.base import BaseHTTPMiddleware
 # 缓存策略配置: (路径前缀, Cache-Control 值)
 # 注意：统计/概览类端点不缓存——增删改后必须立即可见，否则用户体验为"数据没更新"。
 CACHE_RULES = [
-    # 筛选选项 / 字典数据 — 5 分钟（极少变化）
-    ("/api/v1/supported-villages/filter-options", "public, max-age=300"),
-    ("/api/v1/organizations/tree", "public, max-age=300"),
+    # 筛选选项 / 字典数据 — 5 分钟（极少变化）。
+    # 注意：这两个 API 的响应**按当前用户数据范围裁剪**（filter-options 仅返回
+    # 本组织及子树的部门/县市；organizations/tree 对普通用户同样收敛），因此
+    # 必须用 private —— public 允许任何共享缓存（反代/企业缓存）跨用户复用，
+    # 会把 A 组织的数据返回给 B 组织（军审红线 S2 跨组织泄漏）。
+    # 静态资源无身份语义，保持 public。
+    ("/api/v1/supported-villages/filter-options", "private, max-age=300"),
+    ("/api/v1/organizations/tree", "private, max-age=300"),
     # 静态资源 — 1 小时
     ("/assets/", "public, max-age=3600, immutable"),
     ("/images/", "public, max-age=3600, immutable"),

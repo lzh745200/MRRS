@@ -151,7 +151,11 @@ class JsonFormatter(logging.Formatter):
             "line": record.lineno,
         }
         if record.exc_info and record.exc_info[1]:
-            log_entry["exception"] = self.formatException(record.exc_info)
+            # 复用 SensitiveDataFilter 写入的**已脱敏** exc_text：直接调用
+            # Formatter.formatException 会按 exc_info 重新渲染原始堆栈，绕过过滤器
+            # 的脱敏（身份证/手机号随异常消息原样落盘 —— LOG_FORMAT=json 为默认值，
+            # 即默认部署就中招）。CPython 标准 Formatter 同样优先复用 exc_text。
+            log_entry["exception"] = record.exc_text or self.formatException(record.exc_info)
         return _json.dumps(log_entry, ensure_ascii=False)
 
 

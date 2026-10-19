@@ -117,10 +117,13 @@ RUN chmod +x /app/backend/assistance-backend
 # 复制前端构建产物
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/
 
-# 复制 Electron 构建产物（deb 包）到 /app/electron-dist/（如果存在）
-RUN mkdir -p /app/electron-dist
-COPY --from=electron-builder /app/electron/dist/ /tmp/electron-dist/
-RUN cp /tmp/electron-dist/*.deb /app/electron-dist/ 2>/dev/null || true && rm -rf /tmp/electron-dist
+# 注：W24 修复 —— 此处原有 4 行 "COPY --from=electron-builder ..." 引用了一个
+# **已删除**的构建阶段（CHANGELOG 记录该阶段因 electron/ 无 package.json 从未可
+# 构建而移除），但 COPY 语句被遗漏。Docker BuildKit 会把 --from=electron-builder
+# 当外部镜像名去拉取，本地无同名镜像时 build 直接失败（pull access denied），
+# 导致文档与 Makefile 的 "docker compose up" / "make test-e2e-docker" 路径不可用。
+# Docker 内运行整套系统本来就不需要 deb 产物（Electron 打包由 build-windows.yml
+# 在 Windows runner 完成），故整段删除。
 
 # 创建启动脚本
 RUN cat > /app/start-services.sh << 'EOF'

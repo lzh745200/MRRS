@@ -24,10 +24,15 @@ if !errorlevel! equ 0 (
     echo   后端端口空闲
 )
 
-:: 启动后端（项目根目录，确保 .env 文件可被正确加载）
+:: 启动后端与前端（各自独立窗口；窗口标题与 stop-all.bat 的清理规则一致）
+:: 两端脚本内部显式解析项目 Python / npm，不再依赖 PATH 里的裸 python
 echo.
 echo [2/3] 启动后端服务...
 cd /d "%PROJECT_ROOT%"
+
+start "" "%~dp0run-backend.bat"
+timeout /t 3 /nobreak >nul
+start "" "%~dp0run-frontend.bat"
 
 :: 等待后端启动（使用 PowerShell 替代 curl）
 echo.
