@@ -73,8 +73,11 @@ jobs:
           # 段间释放内存；覆盖率用 --cov-append 合并，最后段输出报表；失败时打印 free -m 诊断。
           rm -f .coverage
           set -o pipefail
+          # 段 1 只覆盖部分模块：必须 --cov-fail-under=0（.coveragerc 的 fail_under=100
+          # 在单段结束时会误判覆盖率不足 -> 段 1 假失败）。最终 100% 由段 2 合并后校验。
           python -m pytest tests/integration tests/security -q --tb=short -rR \
-            --cov=app --cov-branch --cov-report= --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
+            --cov=app --cov-branch --cov-report= --cov-fail-under=0 \
+            --reruns 2 --reruns-delay 1 2>&1 | tee -a "$LOG"
           SEG1=${PIPESTATUS[0]}
           echo "===== integration/security exit=${SEG1} ====="
           if [ "${SEG1}" != "0" ]; then
