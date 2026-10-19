@@ -5,6 +5,20 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.15.11] - 2026-10-19 — backend-test 12 段细粒度执行（缓解 SQLAlchemy C 扩展 SEGV）+ faulthandler
+
+### Fixed
+
+- **backend-test 的 SIGSEGV 进一步定位**：v1.15.10 的 8 段方案中 seg5（unit root b-d-g-h-j-l-m-q-s，
+  5,154 用例）以 **exit 139（SIGSEGV）** 崩溃；annotation 中扩展模块列表含
+  `sqlalchemy.cyextension.*`，栈落在 pytest 启动尾部 → 特征为 **SQLAlchemy 2.x C 扩展在
+  GitHub runner（低内存/CPU 压力 + 单段 ~12 分钟）下的原生崩溃**（本地 Windows 同命令全量通过）。
+  修复：把 8 段细分为 **12 段**（单段测试量降至 ~1,000–2,500、时长 ~2–6 分钟），并为每段设置
+  **`PYTHONFAULTHANDLER=1`**（若仍崩溃，日志会输出 Python 级栈便于最终定位）；
+  覆盖率仍用 `--cov-append` 跨段合并、最后一段按 `.coveragerc` fail_under=100 判定。
+
+- 说明：本版本仅调整 CI 分段粒度；产品代码与 UI v2.0 内容与 v1.15.0 完全一致。
+
 ## [1.15.10] - 2026-10-19 — backend-test 回归 8 段执行器 + 补充精确覆盖率测试
 
 ### Fixed

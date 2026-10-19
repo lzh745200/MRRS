@@ -47,28 +47,56 @@ jobs:
       - name: Reset coverage data
         run: rm -f backend/.coverage
 
-      - name: "Backend tests + coverage (1/6: integration + security)"
-        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg1-integration-security --mode first tests/integration tests/security
+      # v1.15.11：12 段细粒度执行（单段测试量降至 ~1,000–2,500，显著降低 SQLAlchemy C 扩展
+      # 在 GitHub runner 上的 SIGSEGV 概率；每段独立进程 + 独立日志 + 失败信号）。
+      # PYTHONFAULTHANDLER=1：若仍崩溃，日志会打印 Python 级栈便于最终定位。
+      - name: "Backend tests + coverage (1/12: integration + security)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg01-integration --mode first tests/integration tests/security
 
-      - name: "Backend tests + coverage (2/6: unit api)"
-        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg2-unit-api --mode partial tests/unit/api
+      - name: "Backend tests + coverage (2/12: unit api)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg02-unit-api --mode partial tests/unit/api
 
-      - name: "Backend tests + coverage (3/6: unit services/middleware/interfaces/utils)"
-        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg3-unit-services --mode partial tests/unit/services tests/unit/middleware tests/unit/interfaces tests/unit/utils
+      - name: "Backend tests + coverage (3/12: unit services/middleware/interfaces/utils)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg03-unit-services --mode partial tests/unit/services tests/unit/middleware tests/unit/interfaces tests/unit/utils
 
-      - name: "Backend tests + coverage (4/6: unit root a-e-f-i-n-o-p-t-u-w-y-z)"
-        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg4-unit-root-a --mode partial tests/unit/test_a*.py tests/unit/test_e*.py tests/unit/test_f*.py tests/unit/test_i*.py tests/unit/test_n*.py tests/unit/test_o*.py tests/unit/test_p*.py tests/unit/test_t*.py tests/unit/test_u*.py tests/unit/test_w*.py tests/unit/test_y*.py tests/unit/test_z*.py
+      - name: "Backend tests + coverage (4/12: unit root a-e-f)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg04-unit-root-a --mode partial tests/unit/test_a*.py tests/unit/test_e*.py tests/unit/test_f*.py
 
-      - name: "Backend tests + coverage (5/6: unit root b-d-g-h-j-l-m-q-s)"
-        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg5-unit-root-b --mode partial tests/unit/test_b*.py tests/unit/test_d*.py tests/unit/test_g*.py tests/unit/test_h*.py tests/unit/test_j*.py tests/unit/test_l*.py tests/unit/test_m*.py tests/unit/test_q*.py tests/unit/test_s*.py
+      - name: "Backend tests + coverage (5/12: unit root i-n-o)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg05-unit-root-i --mode partial tests/unit/test_i*.py tests/unit/test_n*.py tests/unit/test_o*.py
 
-      # v1.15.8：补齐 tests/ 顶层 15 个 test_*.py（原 6 段只覆盖 unit/integration/security，
-      # 顶层 test_approval_workflow.py / test_smoke.py 等未执行 → 最终覆盖率 <100% → 门禁失败）。
-      - name: "Backend tests + coverage (5.5/6: tests root)"
-        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg5b-tests-root --mode partial tests/test_*.py
+      - name: "Backend tests + coverage (6/12: unit root p-t-u)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg06-unit-root-p --mode partial tests/unit/test_p*.py tests/unit/test_t*.py tests/unit/test_u*.py
 
-      - name: "Backend tests + coverage (6/6: unit root c-r-v, final coverage gate)"
-        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg6-unit-root-c --mode final tests/unit/test_c*.py tests/unit/test_r*.py tests/unit/test_v*.py
+      - name: "Backend tests + coverage (7/12: unit root w-y-z)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg07-unit-root-w --mode partial tests/unit/test_w*.py tests/unit/test_y*.py tests/unit/test_z*.py
+
+      - name: "Backend tests + coverage (8/12: unit root b-d)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg08-unit-root-b --mode partial tests/unit/test_b*.py tests/unit/test_d*.py
+
+      - name: "Backend tests + coverage (9/12: unit root g-h-j-l)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg09-unit-root-g --mode partial tests/unit/test_g*.py tests/unit/test_h*.py tests/unit/test_j*.py tests/unit/test_l*.py
+
+      - name: "Backend tests + coverage (10/12: unit root m-q-s)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg10-unit-root-m --mode partial tests/unit/test_m*.py tests/unit/test_q*.py tests/unit/test_s*.py
+
+      - name: "Backend tests + coverage (11/12: tests root)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg11-tests-root --mode partial tests/test_*.py
+
+      - name: "Backend tests + coverage (12/12: unit root c-r-v, final coverage gate)"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg12-unit-root-c --mode final tests/unit/test_c*.py tests/unit/test_r*.py tests/unit/test_v*.py
       # 抖动账本（2026-10-17）：把 --reruns 掩盖的不确定性显式化并留存 90 天。
       # 只告警不阻断（真实抖动需要人看清单决定"先修/再隔离"），阈值 3。
       - name: Flaky test ledger
