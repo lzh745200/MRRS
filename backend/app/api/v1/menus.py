@@ -1073,7 +1073,7 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "legacy": True,
     },
     {
-        # v1.15.16：一户一档入口已并入「帮扶村管理 → 年度数据」页（/supported-villages/:id/yearly），
+        # v1.15.15：一户一档入口已并入「帮扶村管理 → 年度数据」页（/supported-villages/:id/yearly），
         # 不再作为侧栏一级菜单；key 保留为 legacy 以兼容权限包 / 历史 allowed_menus / 深链守卫。
         "key": "households",
         "label": "一户一档（并入帮扶村年度数据）",

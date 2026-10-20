@@ -381,7 +381,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { menuKey: 'work-calendar', title: '工作日历' },
       },
       // ── 一户一档（W22：家庭成员/帮扶责任人/风险预警/监测指标/走访挂户）──
-      // v1.15.16：入口并入「帮扶村管理 → 年度数据」页，跟随帮扶村管理权限（menuKey: villages）；
+      // v1.15.15：入口并入「帮扶村管理 → 年度数据」页，跟随帮扶村管理权限（menuKey: villages）；
       // 后端 households 菜单 key 转为 legacy（仍兼容权限包 / 历史 allowed_menus 配置）。
       {
         path: '/households',

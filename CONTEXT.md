@@ -29,6 +29,12 @@
 4. **软删除**：核心业务模型用 `is_active` + `deleted_by`；审计类记录永不物理删除。
 5. **审计留痕**：写操作调用 `write_work_log()`；审批/授权/密码类操作必须留痕。
 6. **敏感数据**：身份证号等 PII 加密存储；日志与错误响应不得泄露内部细节。
+7. **导航与页面权限单一源**（v1.13.0 起，v1.15.15 补充）：菜单/导航唯一权威是后端 `api/v1/menus.py`
+   （`MENU_SECTIONS` + `MENU_DEFINITIONS`，v2 `version/sections/flat_keys`；当前 6 板块 / 104 key /
+   84 带 path 入口 / 16 legacy）；前端禁止手写菜单段。**页面访问权限跟随路由 `meta.menuKey`**：
+  需挂靠帮扶村权限的页面（含一户一档）`meta.menuKey = villages`；`households` 自 v1.15.15 起为
+  纯权限兼容 key（legacy，无导航出口，旧深链仍可直达）。新增页面/入口先改 `menus.py`，再跑
+  菜单对齐门禁 A~E。
 
 ## 指标字典（W18 P2-1，2026-10-17）
 
@@ -50,18 +56,20 @@ test_w18_metric_consistency.py（防"两套口径"）。
 
 ## 已知架构决策（ADR）
 
-见 `docs/adr/`。整改期间新增：
+见 `docs/adr/`（完整清单以该目录文件为准）。关键几条：
 - ADR-0001 认证唯一出口（token_manager.validate_token）
 - ADR-0002 数据隔离单一实现 fail-closed
 - ADR-0003 组织删除守卫
-- ADR-0004 通行码密钥 fail-closed
 - ADR-0005 PII 加密落地方式
 - ADR-0006 PyInstaller onedir
 - ADR-0007 前端指令体系启用
-
+- ADR-0008 破窗恢复（机器码重置密码）安全边界
 - ADR-0009 预算预警三级阈值(80提醒/90警告/100禁止拦截)
+- ADR-0010 自动备份机制统一（唯一真相源）
 - ADR-0011 经费编号 ZJ+年份+6位流水(flush 后按 id 序，手输不覆盖)
+- ADR-0012 轻量甘特图视图
 
 ## 整改工单
 
-`.scratch/w1-security-redline/ … w6-release-eng/`，规则见 `docs/agents/issue-tracker.md`。
+`.scratch/<wave>/<NNN>-slug.md`（本地 markdown 工单，一票一文件），规则见
+`docs/agents/issue-tracker.md`。

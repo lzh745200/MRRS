@@ -5,15 +5,15 @@
 ![Version](https://img.shields.io/badge/version-1.15.15-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-20%2C700%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **13,926 passed**, 1 skipped（本机 12 段实测，CI 为最终口径；含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **6,865 passed**（328 文件）, 0 失败 |
+| 后端测试 | **13,942 用例**, 1 skipped（本机单进程实测 13,939 passed + 2 条环境性失败；CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **6,867 passed**（331 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -33,10 +33,10 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-19（v1.15.12）— 后端 13,926 用例（1 skipped）+ 行/分支覆盖率 100.00%
+> **上次全量验证**: 2026-10-20（v1.15.15）— 后端 13,942 用例（1 skipped）+ 行/分支覆盖率 100.00%
 > （CI 后端测试为 **12 段独立进程**分段执行，`--cov-append` 合并，最终段由 `.coveragerc` fail_under=100 单一来源判定）；
-> 前端 **328 文件 / 6,865 用例、12 组 glob 100%**；E2E 154+（含 10 页视觉回归基线）；
-> flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 硬编码色 305（基线 345，57 个文件）/ 版本单一来源一致 / Alembic 单 head（50 版本）
+> 前端 **331 文件 / 6,867 用例、12 组 glob 100%**；E2E 154+（含 10 页视觉回归基线）；
+> flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 硬编码色 305（基线 345，57 个文件）/ 版本单一来源一致 / Alembic 单 head（54 版本）
 
 ## 快速开始
 
@@ -107,7 +107,7 @@ cd frontend && npm install && npm run dev
 - **框架**: Vue 3 + TypeScript + Vite
 - **UI**: Element Plus + ECharts + Leaflet；**UI v2.0 设计系统**（`tokens.scss`：主色阶/卡片边框/两级阴影/三档圆角/字号 calc 缩放/行高 1.6/tabular-nums）
 - **主题与显示偏好**: 主题 3 套（军绿默认 / 深色大屏 `dark-bigscreen` / 户外高对比 `outdoor`）；显示偏好 4 档（字号 compact/standard/large、密度 comfortable/compact、高对比、简化模式；localStorage `ui:prefs` + `<html data-*>`），外观设置面板统一入口
-- **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`）数据驱动侧栏/移动端/权限面板；Ctrl+K 命令面板 + 收藏/最近访问；7 板块默认折叠、可展开（`nav:expanded-sections`）；侧栏当前板块金色竖条 + 收起态浮层 + 面包屑「板块 › 页面」
+- **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`，6 板块 / 104 key / 84 带 path 入口 / 16 legacy）数据驱动侧栏/移动端/权限面板；Ctrl+K 命令面板 + 收藏/最近访问；7 板块默认折叠、可展开（`nav:expanded-sections`）；侧栏当前板块金色竖条 + 收起态浮层 + 面包屑「板块 › 页面」；v1.15.15 起「一户一档」入口并入帮扶村「年度数据管理」页（`households` key 转 legacy，路由 `meta.menuKey` 跟随 `villages`）
 - **组件体系**: 全局类 `.app-card/.app-stat-card/.app-empty/.app-loading/.app-error/.app-table-toolbar` + `components/common/` 通用组件 6 个
 - **状态**: Pinia
 - **测试**: Vitest + Playwright；视觉回归基线（10 个关键页面 DOM 结构快照）+ Token 契约测试
@@ -121,10 +121,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端单元测试 | pytest | 13,710（行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 13,942（1 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,826（328 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 6,867（331 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 154+ 流程（17 个 spec） | Login/Dashboard/Projects/Approval/Funds/导航正确性/响应时间 |
 | 视觉回归 | Playwright | 10 个关键页面（DOM 结构快照，非像素） | 工作台/帮扶村/项目/经费/一户一档/影像库/消费帮扶/系统管理/数据校验/大屏 |
 | UI Token 契约 | Vitest | `tests/unit/ui/ui-tokens.test.ts` | 主题 3 套/字号缩放/密度/高对比/简化/大屏字号档/全局类 |
@@ -199,14 +199,14 @@ npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本
 ## 项目结构
 
 ```
-├── backend/app/              # 后端（FastAPI，340+ 个 py / 8 万+ 行）
-│   ├── api/v1/               # API 接口层（91 个路由模块 + 13 个子包）
+├── backend/app/              # 后端（FastAPI，376 个 py / 12 万+ 行）
+│   ├── api/v1/               # API 接口层（100 个路由模块文件 = 55 顶层 + 5 子包；803 个端点）
 │   ├── core/                 # 核心：config, security, database, transaction, cache, maintenance(维护闸门)
-│   ├── models/               # SQLAlchemy 数据模型（64 个文件，含 W22 新增 household/media/consumption）
-│   ├── services/             # 业务逻辑层（100 个服务 + 13 个子包，含 ocr_service / household_service / media_service）
+│   ├── models/               # SQLAlchemy 数据模型（64 个文件 / 122 张表，含 W22 新增 household/media/consumption）
+│   ├── services/             # 业务逻辑层（107 个服务文件 / 5 个子包，含 ocr_service / household_service / media_service）
 │   ├── middleware/           # CSRF, 审计, 请求日志, 指标, maintenance_gate(写请求闸门)
 │   └── startup/              # 启动钩子（种子/监控/恢复/环境自检 + 组织树自愈）
-├── frontend/src/             # 前端（Vue 3 + TypeScript，290+ 个源文件）
+├── frontend/src/             # 前端（Vue 3 + TypeScript，330+ 个源文件：144 个页面 .vue / 32 个组件 .vue / 60 个 API 模块）
 │   ├── views/                # 页面视图（含 system/console 6 聚合页、households 一户一档、media 影像库、consumption 消费帮扶）
 │   ├── components/           # 通用 + 业务组件（common/ 6 个通用组件、nav/ 菜单搜索、settings/ 外观设置）
 │   ├── composables/          # 组合式函数（useUiPrefs 显示偏好、useRecentMenus / useMenuFavorites）
@@ -236,14 +236,24 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 
 | 平台 | 安装包 | 获取方式 |
 |------|--------|---------|
-| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（约 204 MB，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
-| 麒麟 V10 / 统信 UOS ARM64 | `*.deb`（自包含后端二进制） | 同上（`build-arm64.yml` 产出） |
+| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（v1.15.15：约 273 MB / 286,035,588 B，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
+| 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（v1.15.15：约 196 MB / 205,545,106 B）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（约 58 MB / 60,786,460 B） | 同上（`build-arm64.yml` 产出） |
 
 > **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 内置；ARM64 构建过滤降级为 503+手工录入）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
 > **运行环境**：Windows 10/11 x64（Electron 33 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
 > 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
 
 ## 近期修复记录
+
+### 2026-10-20（v1.15.13 ~ v1.15.15）R35 UI 精细化方案 C + 一户一档入口收敛 + 发布闭环
+
+- 🎨 **侧栏品牌区（v1.15.15）**：系统标识名 16→**20px / 800 单行**（logo 36px、侧栏头 64px），修正品牌名低于板块标题（18px）的层级倒挂；工作台提升为板块级入口（18px/700、Home 图标）。
+- 📊 **全站表格规范（v1.15.15）**：所有 el-table 启用 border（**117/117**）恢复列宽拖拽；序号列统一 **72px**（25/25）、选择列 **48px**（10/10）、操作列统一 fixed=right（67/67）。
+- 🧰 **筛选栏与页头统一（v1.15.15）**：清理 **114 处**行内宽度，改为全局 4 档规范（input 220 / select 160 / date 240 / number 120）+ 统一 16px 间距；**19 个列表页**接入共享 PageHeader（全站 31 页）。
+- 📐 **全局精细化层（v1.15.15）**：新增 `frontend/src/styles/components/ui-refine.scss`（筛选栏/表格规范 / 8px 栅格 / 响应式断点 1200·992·768）。
+- 🏠 **一户一档入口收敛（v1.15.15）**：「一户一档」不再占侧栏一级菜单，入口迁入 **帮扶村管理 → 年度数据管理**页首张卡片（`/households?village_id=<村ID>`，列表按村预筛选）；后端菜单 key `households` 转 **legacy**（权限包/历史 `allowed_menus`/深链兼容），路由 `meta.menuKey` 改为 `villages`（跟随帮扶村管理权限）；旧链接 `/households` 仍可直达。
+- ✅ **发布闭环**：v1.15.14 在 CI 全绿后成功构建 Windows x64 安装包；v1.15.15 双平台发布（PR Checks success / Build Windows Installer success / Build ARM64 Deb success），产出 Windows x64 NSIS（272.8 MB）与 ARM64 Electron DEB（196 MB）+ Web DEB（58 MB），附 `SHA256SUMS-*` 与 `latest.yml`。
+- 🧹 **v1.15.14**：`effectiveness_evaluations` 外键重建迁移 + 冗余退码清理；**v1.15.13**：R33 单位授权导航入口补齐（系统管理 → 组织与权限）、PR Checks 红项修复、文档/PPT 更新。
 
 ### 2026-10-19（v1.15.8 ~ v1.15.12）安全收官 + R33 单位授权 + CI 稳定化
 
@@ -300,7 +310,7 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 - 🧰 **系统管理 6 聚合页**：组织与权限 / 安全与审计 / 运维与监控 / 备份与存储 / 系统设置 / 关于与反馈，
   页内 Tab 切换；旧页面、旧路由、旧菜单 key 全部保留（深链不失效、权限包配置兼容）
 - ⌨️ **导航增强**：Ctrl+K 菜单搜索、最近访问与收藏（localStorage `nav:recent` / `nav:favorites`，上限 8）
-- ✅ **门禁**：`scripts/check_menu_alignment.py` 重写为规则 A~E（6 板块 / 99 key / 85 带 path 入口全对齐）；
+- ✅ **门禁**：`scripts/check_menu_alignment.py` 重写为规则 A~E（当前口径 6 板块 / 104 key / 84 带 path 入口 / 16 legacy 全对齐）；
   相关改动文件覆盖率 100%，`menus.py` 语句+分支 100%；发布门禁全量实测：后端 13,550 用例 / 语句 100.00%（43,293/43,293）+ 分支 100.00%（10,636/10,636），前端 6,707 用例（316 文件）/ 12 组 glob 四指标 100%
 
 ### 2026-09-14（v1.12.8）

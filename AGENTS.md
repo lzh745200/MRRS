@@ -14,7 +14,7 @@ FastAPI + Vue 3 + Electron + SQLite. Windows primary, Linux ARM64 (Kylin V10) se
 ```bash
 cd backend
 .venv\Scripts\python start.py                           # Start server (http://localhost:8000)
-python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~12381)
+python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~13942 cases, 1 skipped)
 python -m pytest tests/unit/test_xxx.py -v              # Run single test file
 # 必须带 --max-complexity=16：CI 的 lint 任务用这个组合，缺了它 C901 复杂度回归
 # 只在 CI 变红、本地静默放过（2026-09-04 已因此漏过 2 处）
@@ -28,7 +28,7 @@ python -m bandit -r app/ -ll                            # Security scan
 ```bash
 cd frontend
 npm run dev                                             # Dev server (http://localhost:5173)
-npm run test -- --run                                   # Run all tests (~6323, 299 test files)
+npm run test -- --run                                   # Run all tests (~6867 cases, 331 test files)
 npx vitest run tests/unit/views/xxx/xxx.test.ts        # Run single test file (tests live under tests/unit/)
 npm run lint                                            # ESLint --fix (改文件, 本地用, --max-warnings=0)
 npm run lint:check                                      # ESLint 纯检查 (CI gate, 不带 --fix)
@@ -555,7 +555,7 @@ Every new feature must verify:
 
 | Purpose | Path |
 |---------|------|
-| Version number | `backend/app/core/config.py` → `Settings.PROJECT_VERSION`（与 `frontend/package.json` 单一事实源同步） |
+| Version number | 单一事实源 = 根 `package.json` 的 `version` → `node scripts/sync-version.js --write` 同步到 `backend/app/core/config.py` 的 `Settings.PROJECT_VERSION` 等 23 处目标（含 8 个 optional；`--check` 为 CI 门禁） |
 | DB schema source | `backend/app/models/` + `backend/alembic/versions/` |
 | Baseline migration | `backend/alembic/versions/012_consolidate_baseline.py` |
 | API router registry | `backend/app/api/v1/__init__.py` → `_BUSINESS_MODULES` |

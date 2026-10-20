@@ -38,14 +38,14 @@
 
 1. 从 GitHub Releases（或内部下发渠道）获取新版安装包与配套
    `SHA256SUMS-*.txt`：
-   - Windows x64：`MRRS-Setup-<版本>.exe`（如 `MRRS-Setup-1.11.4.exe`）+
+   - Windows x64：`MRRS-Setup-<版本>-x64.exe`（如 `MRRS-Setup-1.15.15-x64.exe`，约 273 MB）+
      `SHA256SUMS-windows-x64.txt`
-   - 麒麟 ARM64：Electron 版 `MRRS-Setup-<版本>.deb`、standalone 版
-     `assistance-management-system_<版本>_arm64.deb` +
+   - 麒麟 ARM64：Electron 版 `MRRS-Setup-<版本>-arm64.deb`（约 196 MB）、standalone 版
+     `assistance-management-system_<版本>_arm64.deb`（约 58 MB）+
      `SHA256SUMS-electron-deb-arm64.txt` /
      `SHA256SUMS-standalone-deb-arm64.txt`
 
-   > 文件名由 `package.json` 的 `build.artifactName`（`MRRS-Setup-${version}.${ext}`）
+   > 文件名由 `package.json` 的 `build.artifactName`（`MRRS-Setup-${version}-${arch}.${ext}`）
    > 决定，不是产品显示名「帮扶管理系统」。
 2. 放入同一目录后校验完整性（**任何 FAILED 都必须停止升级**）：
 

@@ -13,7 +13,7 @@
 
 ```
 ├── backend/app/              # 后端（FastAPI）
-│   ├── api/v1/               # API 接口层（91 个路由模块 + 13 个子包）
+│   ├── api/v1/               # API 接口层（100 个路由模块文件 = 55 顶层 + 5 子包；803 个端点）
 │   │   ├── auth/             # 认证模块
 │   │   ├── data/             # 数据分析
 │   │   ├── import_export/    # 异步导入导出
@@ -35,12 +35,13 @@
 │   │   ├── dashboard/        # 工作台（QuickActions, layout editor）
 │   │   ├── system/           # 系统管理页面 + console/SystemConsole.vue（6 聚合页）
 │   │   ├── analytics/        # 数据分析与帮扶村管理
-│   │   ├── households/       # 一户一档（W22）
+│   │   ├── households/       # 一户一档（W22；v1.15.15 起无侧栏入口，从帮扶村年度数据页进入）
 │   │   ├── media/            # 影像库（W22）
 │   │   ├── consumption/      # 消费帮扶台账（W22）
 │   │   └── ...
-│   ├── components/           # 通用组件 + 业务组件（nav/MenuSearchDialog 菜单搜索）
-│   ├── composables/          # 组合式函数（useRecentMenus / useMenuFavorites 导航增强）
+│   ├── components/           # 通用组件 + 业务组件（common/ 共享 PageHeader 等、nav/MenuSearchDialog、settings/AppearanceSettings）
+│   ├── styles/               # 设计 Token + 全局模板（tokens.scss、components/{ui-v2,ui-refine,card,states,dialog,…}.scss）
+│   ├── composables/          # 组合式函数（useUiPrefs 显示偏好 / useRecentMenus / useMenuFavorites）
 │   ├── stores/               # Pinia 状态管理（menu.ts 消费后端 v2 菜单单一源）
 │   ├── router/               # 路由配置与守卫
 │   ├── api/                  # API 请求层
@@ -65,8 +66,8 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 13,900+ 用例（CI 12 段独立进程）+ 覆盖率门禁 100%
-cd frontend && npm test -- --run                                       # 前端 328 文件 / 6,865 用例
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 13,942 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
+cd frontend && npm test -- --run                                       # 前端 331 文件 / 6,867 用例
 cd backend && .venv/Scripts/python.exe -m flake8 app/ --max-line-length=120 --max-complexity=16
 cd frontend && npm run lint:check && npm run type-check
 
@@ -126,7 +127,7 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
 - `.env` 文件不纳入版本控制
 - 版本号**唯一权威来源**是根 `package.json` 的 `version`（后端经同步写入
   `backend/app/core/config.py` → `Settings.PROJECT_VERSION`）；
-  **18 处目标**（含若干 optional 项）由 `node scripts/sync-version.js --write` 单源同步，
+  **23 处目标**（含 8 个 optional 项）由 `node scripts/sync-version.js --write` 单源同步，
   `--check` 为 CI 门禁。⚠️ 旧脚本 `scripts/sync_version.py` 只覆盖 6 类文件且**无校验能力**，
   仅被构建流水线按 tag 使用，不要把它当作唯一同步手段
 - **发布流程**：本地门禁全绿 → 提交推送 → `git tag v<版本> && git push origin v<版本>`
@@ -197,6 +198,25 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
   - **质量门禁**：`tests/unit/ui/ui-tokens.test.ts`（Token/主题/偏好/全局类契约）、
     `tests/e2e/visual/visual-baseline.spec.ts`（10 个关键页面 DOM 结构基线，`UPDATE_VISUAL_BASELINE=1` 更新）；
     硬编码色棘轮 `check_hardcoded_styles.py` 基线 345 → 当前 305（57 个文件；目标 ≤200，以最终基线为准），改动文件零新增。
+- **UI 精细化方案 C** (2026-10-20, v1.15.15):
+  - **侧栏品牌区**：系统标识名 16→**20px / 800 单行**（logo 36px、侧栏头 64px），修正品牌名低于板块标题（18px）的层级倒挂；
+    工作台提升为板块级入口（18px/700、Home 图标），与 7 板块标题同构。
+  - **全站表格规范**：所有 el-table 启用 border（**117/117**，保留列宽拖拽）；序号列统一 **72px**（25/25）、
+    选择列 **48px**（10/10）、操作列统一 fixed=right（67/67）；新增列表页必须按此三列宽度 + border 编写。
+  - **筛选栏 4 档宽度**：input 220 / select 160 / date 240 / number 120，统一 16px 间距；已清理 **114 处**行内宽度，
+    禁止在筛选栏写死行内宽度；搜索按钮带图标、重置按钮 100%。
+  - **页面头部**：共享 `components/common/PageHeader.vue` 是 T1 列表页 / T2 详情页模板头部**唯一出口**
+    （19 个列表页接入、全站 31 页），新页面必须复用，禁止手写标题区。
+  - **全局精细化层**：`frontend/src/styles/components/ui-refine.scss`（筛选栏/表格规范 + 8px 栅格 +
+    响应式断点 1200/992/768）；设计契约见 `docs/design/{tokens,pages,components}.md`。
+  - 质量口径：硬编码色棘轮当前 **305**（基线 345，57 个文件，目标 ≤200），改动文件零新增。
+- **一户一档入口收敛** (2026-10-20, v1.15.15):
+  - 「一户一档」不再占侧栏一级菜单；入口 = **帮扶村管理 → 年度数据管理**页首张卡片
+    （`/households?village_id=<村ID>`，列表按村预筛选）。
+  - 后端菜单 key `households` 转 **legacy**（`menus.py`：无导航出口，仅权限包 / 历史 `allowed_menus` /
+    深链守卫兼容）；前端路由 `meta.menuKey` 改为 `villages`（跟随帮扶村管理权限）；
+    旧链接 `/households`、`/households/:id` 保留可直达。
+  - 需要挂靠帮扶村权限的新页面按此模式复用 `meta.menuKey`，不要新增侧栏一级菜单。
 - **软删除模式** (2026-07-05): 模型使用 `is_active` 列（Boolean, default=True）。`is_active=False`=已删除。列表端点默认过滤 `is_active=True`，`include_deleted=true` 显示全部（管理员）。`to_dict()` 暴露 `isDeleted`/`is_deleted`。已应用于 `SupportedVillage`、`School`、`Project`、`Fund`。
 - **软删除权限收敛** (2026-07-20): `include_deleted` 参数通过 `enforce_admin_include_deleted` 依赖（`app/api/v1/deps.py`）统一收敛。非管理员传入 `include_deleted=true` 静默降级为 `False`（不抛 403）。4 个端点（supported-villages/schools/projects/funds）均使用 `Depends(enforce_admin_include_deleted)`。详情端点返回 `viewableBecause` 元数据（`build_viewable_because()` 函数）。`SoftDeleteMixin` 预留 `deleted_by` 审计字段。回归测试：`tests/unit/api/test_include_deleted_enforcement.py`（49 项）、E2E：`tests/unit/test_soft_delete_e2e.py`（2 项）。
 - **统一列表响应** (2026-07-08): 所有列表端点已使用 `ok_list()` (envelope)。新增列表端点必须使用 `ok_list()` 而非裸 dict。前端 `_unwrapList()` 仍兼容两种格式以保证向后兼容。

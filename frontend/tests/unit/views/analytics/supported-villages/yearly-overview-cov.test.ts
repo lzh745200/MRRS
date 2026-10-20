@@ -501,7 +501,7 @@ describe('YearlyOverview.vue 交互与生命周期', () => {
     expect(mocks.pushSafe).toHaveBeenCalledWith('/supported-villages/1')
   })
 
-  it('一户一档入口：年度数据页内渲染入口卡，跳转该村户档案（v1.15.16 入口迁移）', async () => {
+  it('一户一档入口：年度数据页内渲染入口卡，跳转该村户档案（v1.15.15 入口迁移）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const entry = wrapper.find('[data-test="household-entry"]')

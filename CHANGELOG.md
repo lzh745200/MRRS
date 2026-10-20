@@ -5,6 +5,28 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布] — 2026-10-20 文档 / PPT 全量刷新 + 项目文件整理
+
+### Docs
+
+- **文档全量校准到 v1.15.15**：README / CLAUDE.md / CONTEXT.md / AGENTS.md 与 docs/ 全量更新（版本、测试规模
+  13,942 / 6,867·331 文件、菜单 6 板块 104 key·16 legacy、100 个路由模块 / 803 端点、122 张表、54 个 Alembic 版本、
+  v1.15.15 双平台发布物体积；补 R33 单位授权 / v1.15.14 FK 迁移 / R35 UI 精细化 / 一户一档入口迁移口径），修 10 条预存死链。
+- **演示 PPT 更新至 v1.15.15**：`docs/build_ppt.js` 源码直出 **51 页**（新增 R35 UI 精细化方案 C 页；版本号 / 测试规模 /
+  发布资产 / 一户一档入口迁移 / 版本历程全片同步），`scripts/ppt_overflow_check.py` 0 溢出；新增
+  `docs/帮扶管理信息系统介绍-更新说明-v1.15.15.md`。
+- **新增** `docs/04-部署文档/RELEASE_NOTES-v1.15.15.md`（升级必读 GRANT_* / PASS_CODE_SECRET / viewer 只读 /
+  DB 迁移提示 + 双平台安装包体积 + 校验清单）。
+- **重写** 根《项目文件结构说明.md》（v1.12.11 → v1.15.15，目录树 / 文件数 / 导航 / 门径口径全面校准）。
+
+### Chore
+
+- 删除 12 份过期一次性文档：R28 / W18 批次报告、代码审查报告-2026-10-08、系统全面排查报告-2026-10-14、
+  早期需求规划、架构评估约定（含空目录）、旧版 class/sequence Mermaid 图、RELEASE_NOTES-v1.15.13；
+  删除根 `COORDINATION.md`（已由 AGENTS.md / CLAUDE.md 协作约定取代）。
+- 清理仓库根 ignored 临时产物（运行日志 / 一次性脚本 / 探针临时目录 / 测试残留 db / 缓存）与 `.scratch/` 内
+  未跟踪大体积产物（仅本地清理，不入库）。
+
 ## [1.15.15] - 2026-10-20 — UI 精细化方案 C（品牌区 / 工作台板块级 / 全站表格规范 / 筛选栏统一 / 响应式）
 
 ### Changed
@@ -15,6 +37,9 @@
 - **筛选栏统一**：清理 **114 处**行内宽度，改为全局 4 档规范（input 220 / select 160 / date 240 / number 120）+ 统一 16px 间距；搜索按钮 28/28 带图标、筛选栏重置按钮 100% 带图标。
 - **页面头部统一**：**19 个列表页**接入共享 PageHeader（全站 31 页），标题/副标题/主操作位置统一。
 - **全局精细化层**：新增 frontend/src/styles/components/ui-refine.scss（筛选栏规范 / 表格规范 / 8px 栅格 / 响应式断点 1200·992·768）。
+- **一户一档入口收敛**：侧栏移除「一户一档」一级菜单，入口迁入「帮扶村管理 → 年度数据管理」页首张卡片
+  （`/households?village_id=<村ID>` 按村预筛选）；后端菜单 key `households` 转 legacy（权限包 / 历史
+  `allowed_menus` / 深链兼容），前端路由 `meta.menuKey` 改为 `villages`；旧链接 `/households`、`/households/:id` 仍可直达。
 
 ### Fixed
 

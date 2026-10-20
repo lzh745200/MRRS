@@ -1,6 +1,6 @@
 # UI 设计方案
 
-> **版本**: v2.0 | **日期**: 2026-08-04（v1.0 基线；2026-10-18 v1.13.0 导航改版 + v1.14.0 功能页面；**2026-10-19 v1.15.0 UI v2.0 重构**：主题 3 套、显示偏好 4 档、Token 升级、全局组件类/通用组件、侧栏金色竖条与折叠浮层、工作台 KPI、大屏三层结构与距离字号、视觉回归门禁） | **范围**: frontend/（Vue 3 + Element Plus）
+> **版本**: v2.1 | **日期**: 2026-10-20（v1.0 基线 2026-08-04；2026-10-18 v1.13.0 导航改版 + v1.14.0 功能页面；**2026-10-19 v1.15.0 UI v2.0 重构**：主题 3 套、显示偏好 4 档、Token 升级、全局组件类/通用组件、侧栏金色竖条与折叠浮层、工作台 KPI、大屏三层结构与距离字号、视觉回归门禁；**2026-10-20 v1.15.15 界面精细化方案 C**：品牌区/工作台板块级/全站表格规范/筛选栏 4 档/PageHeader 统一/ui-refine 响应式层） | **范围**: frontend/（Vue 3 + Element Plus）
 > 本文档是帮扶管理信息系统的 UI 设计总纲：设计定位、视觉基础、主题/显示偏好、组件/页面规范、状态与无障碍规范、实施路线图。
 > 配套代码事实源：`frontend/src/styles/tokens.scss`（设计 Token 唯一数据源）、`styles/components/*.scss`（全局模板样式）。
 
@@ -112,10 +112,24 @@
 | `--color-bg-hover` / `--color-bg-active` | `#f0f4f0` / `#e8f8ec` | 悬停 / 激活 |
 | `--color-border` → `--color-border-extra-light` | `#cbd5e1` → `#f8fafc` | 边框四档，由重到轻 |
 
+### 2.1 界面精细化方案 C（v1.15.15）
+
+> 目标：把 v1.15.0 建立的设计系统落到"每一页长得一样"的层面。实现契约见
+> `docs/design/{tokens,pages,components}.md` 与 `frontend/src/styles/components/ui-refine.scss`。
+
+| 维度 | 规范 | 落地 |
+|---|---|---|
+| **侧栏品牌区** | 系统标识名 20px / 800 单行（logo 36px、侧栏头 64px） | `layouts/` + 侧栏样式；工作台入口 18px/700 + Home 图标，与 7 板块标题同构 |
+| **表格** | 全站 `el-table` 启用 border；序号列 72px（25/25）、选择列 48px（10/10）、操作列 `fixed=right`（67/67） | 列宽可拖拽；长表格横向滚动操作列常驻 |
+| **筛选栏** | 4 档宽度：input 220 / select 160 / date 240 / number 120；统一 16px 间距；搜索按钮带图标 | 清理 114 处行内宽度；`ui-refine.scss` 统一约束 |
+| **页面头部** | 共享 `components/common/PageHeader.vue`：标题 + 副标题 + 主操作；T1 列表/T2 详情两套模板 | 19 个列表页接入（全站 31 页），取代 30+ 种手写标题区 |
+| **栅格与响应式** | 8px 栅格；断点 1200 / 992 / 768 | 筛选栏自动换行、页面栅格自适应 |
+| **质量门禁** | 硬编码色棘轮 305/305 零新增；lint:check + vue-tsc 0 错误 | 改动文件零新增硬编码 |
+
 ### 2.2 硬编码色治理（基线棘轮，v1.15.0）
 
 - 现状：`scripts/check_hardcoded_styles.py` 扫描 `.vue/.scss` 的硬编码色值；**基线 345 处 → 当前 305 处（57 个文件）**
-  （v1.15.0 实测，`hardcoded_styles_baseline.json` 已更新），本轮目标收敛到 **≤200 处**（后续计划）。
+  （v1.15.15 实测 305 处 / 57 个文件，`hardcoded_styles_baseline.json` 已更新），目标收敛到 **≤200 处**（后续计划）。
 - 规则：新增/改动文件**不允许新增**硬编码色（只能用 `var(--token)`）；存量只降不升；
   基线更新必须由门禁脚本 `--update-baseline` 生成并在 CI 中只紧不松。
 - 历史「语义蓝映射建议」表已完成治理，不再保留待决策项；新增语义色优先复用
@@ -375,7 +389,7 @@
 - 详情页：档案头（户主/村/类型/风险等级/帮扶责任人）+ 监测指标卡（年收入/务工人数/大病/住房安全）+
   成员表格（增删改）+ 风险记录时间线（登记/关闭）+ 预警提示 + 走访记录（挂户）。
 - 风险等级用语义色标签（low=success / medium=warning / high=danger），禁止硬编码色值。
-- **v1.15.16 入口迁移**：不再占用侧栏一级菜单，入口改为帮扶村「年度数据管理」页首张卡片
+- **v1.15.15 入口迁移**：不再占用侧栏一级菜单，入口改为帮扶村「年度数据管理」页首张卡片
   （卡片内「进入一户一档」→ `/households?village_id=<村ID>`，列表挂载时按该村预筛选）；
   列表/详情页面与路由保持不变，菜单 key `households` 转 legacy 以兼容旧权限配置。
 
@@ -468,6 +482,17 @@ AppPageHeader（标题/副标题）或 .page-header
 | 7 | 页面 | 工作台 KPI 统计卡 + 待办清单 + 图表层级；大屏三层结构 + 3m/6m/10m 字号分档 + 15s 自动轮播；一户一档左主右辅 + 统计卡 |
 | 8 | 质量门禁 | `tests/unit/ui/ui-tokens.test.ts`（Token/主题/偏好/类契约）+ `tests/e2e/visual`（10 页 DOM 结构基线）；硬编码色基线 345 → 305（57 个文件；目标 ≤200） |
 
+### 界面精细化方案 C 已完成（2026-10-20，v1.15.15）
+
+| # | 事项 | 内容 |
+|---|------|------|
+| 1 | 侧栏品牌区 | 系统标识名 20px/800 单行（logo 36px、侧栏头 64px）；工作台提升为板块级入口（18px/700 + Home 图标） |
+| 2 | 全站表格规范 | el-table border 117/117；序号列 72px（25/25）、选择列 48px（10/10）、操作列 fixed=right（67/67） |
+| 3 | 筛选栏统一 | 4 档宽度（220/160/240/120）+ 16px 间距；清理 114 处行内宽度；搜索/重置按钮带图标 |
+| 4 | 页面头部 | 共享 `PageHeader`：19 个列表页接入（全站 31 页） |
+| 5 | 精细化样式层 | `ui-refine.scss`：筛选栏/表格规范 + 8px 栅格 + 响应式断点 1200/992/768 |
+| 6 | 质量 | 硬编码色 305/305 零新增；lint:check / vue-tsc 0 错误；定向单测 45 files / 1325 tests 通过 |
+
 ### 二期（P1）
 
 | # | 事项 | 前置 |
@@ -493,6 +518,7 @@ AppPageHeader（标题/副标题）或 .page-header
 | `styles/tokens-vars.scss` | 纯 SCSS 变量（**禁止实体 CSS 规则**） | vite additionalData 自动注入每个 SFC |
 | `styles/index.scss` | 全局入口 + Element Plus `--el-*` 覆盖 + 弹层修复 | main.ts |
 | `styles/components/list-page.scss` | 列表页规范 | main.ts |
+| `styles/components/ui-refine.scss` | v1.15.15 精细化层：筛选栏 4 档 / 表格规范 / 8px 栅格 / 响应式断点 | main.ts |
 | `styles/components/form-page.scss` | 表单/详情规范 | main.ts |
 | `styles/components/card.scss` | `.app-card` / `.app-stat-card` / `.stat-trend` / `.num-*`（v2.0） | main.ts |
 | `styles/components/states.scss` | `.app-empty` / `.app-loading` / `.app-error` 三件套（v2.0） | main.ts |

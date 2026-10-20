@@ -1,6 +1,6 @@
 # API 接口文档
 
-> **版本**:v1.14.0  **更新日期**:2026-10-18
+> **版本**:v1.15.15  **更新日期**:2026-10-20（端点清单按源码重新扫描；v1.15.13~15 无新增路由模块）
 > **定位**:系统全部 HTTP 接口的清单与调用约定——**端点清单由脚本从源码自动提取**(与代码 100% 同步),业务导读人工维护。
 > **适用读者**:前后端开发者、联调与集成人员。零基础请先读《需求规格说明书》§3 理解业务流程。
 > **互动文档**:后端启动后(DEBUG 模式)访问 `http://127.0.0.1:8000/docs` 可在线调试(OpenAPI)。
@@ -9,10 +9,13 @@
 
 ## 1. 快速统计
 
-- **91 个路由模块 / 799 个端点**(含 auth/data/system 等子包;按 `@router` 装饰器扫描口径)
+- **100 个路由模块文件（55 顶层 + 5 子包）/ 803 个端点**(5 个子包为 auth/data/import_export/monitoring/system;按 `@router` 装饰器扫描口径)
 - v1.14.0 变更:新增 `households`(`/households`)、`media`(`/media`)、`consumption`(`/consumption`) 三个模块与
   `/funds/ocr-voucher`、`/report-templates/{id}/export|print-data`;删除 `villages`(`/villages`)、`sentiment`(`/sentiment`)、
   `i18n`(`/system/i18n`) 模块(分别因遗留表清理、消费帮扶替换、国际化功能下线)。
+- v1.15.13~v1.15.15 变更:无新增/删除路由模块与端点(v1.15.13 为 R33 单位授权补 UI 入口;v1.15.14 为
+  `effectiveness_evaluations` 外键重建迁移;v1.15.15 为 UI 精细化 + 「一户一档」入口收敛,均为前端/菜单侧变更)。
+  菜单 key `households` 自 v1.15.15 起为 **legacy**(无导航出口),路由 `meta.menuKey` 跟随 `villages`;接口路径不变。
 - 全部业务接口位于 `/api/v1` 前缀之下(下文路径均省略此前缀)
 
 ## 2. 统一调用约定(必读)
@@ -662,6 +665,8 @@
 - `roles`: `null` = 所有角色；否则角色白名单（`normalize_role` 语义）
 - `flat_keys`: 过滤后可见的全部 key（含 group/console 自身 + children + tabs.key），供前端 `canAccessMenu` 与权限面板使用
 - 工作台 `dashboard` 由前端固定渲染，不在 `sections` 中；`legacy` 兼容 key 仅用于权限包/历史 `allowed_menus` 校验
+- **v1.15.15 口径**：全站菜单 6 板块 / 104 key / 84 个带 path 入口 / 16 个 legacy key；
+  `households`（一户一档）已转 legacy（入口在帮扶村年度数据页），`meta.menuKey` = `villages`
 
 ### messages.py — 通知设置 `/notifications`
 

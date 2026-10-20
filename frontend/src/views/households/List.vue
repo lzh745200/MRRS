@@ -831,7 +831,7 @@ async function loadAlerts(): Promise<void> {
   }
 }
 
-/** 从「帮扶村管理 → 年度数据」页跳转时携带 village_id 预筛选（v1.15.16 入口迁移） */
+/** 从「帮扶村管理 → 年度数据」页跳转时携带 village_id 预筛选（v1.15.15 入口迁移） */
 function prefillFromQuery(): void {
   const villageId = Number(route.query.village_id)
   if (Number.isInteger(villageId) && villageId > 0) {
