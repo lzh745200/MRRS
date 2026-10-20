@@ -15,7 +15,7 @@ import pytest
 
 SUBMODULES = [
     "admin", "audit", "backup", "business_health", "cache", "config_package",
-    "diagnostics", "env", "error_report", "health", "help", "i18n", "init",
+    "diagnostics", "env", "error_report", "health", "help", "init",
     "metrics", "monitor", "system", "system_config", "tasks", "update_logs",
     "zero_trust",
 ]

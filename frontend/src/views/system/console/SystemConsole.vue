@@ -84,7 +84,7 @@ const GROUP_META: Record<string, { label: string; description: string }> = {
   },
   settings: {
     label: '系统设置',
-    description: '国际化、邮件与更新日志等基础系统配置。',
+    description: '更新日志等基础系统配置。',
   },
   about: {
     label: '关于与反馈',

@@ -109,7 +109,7 @@ OLD_MENU_KEYS = {
     "data-overview", "user-backup", "data-quality", "data-logs", "batch-operations",
     "system", "machine-code", "pass-code", "users-orgs", "system-config", "audit",
     "feedback", "backup", "cache", "monitor", "help", "health-check", "about",
-    "update-logs", "system-permission-packs", "tasks", "secrets", "i18n", "data-tier",
+    "update-logs", "system-permission-packs", "tasks", "secrets", "data-tier",
     "map-tiles", "environment", "zero-trust", "error-reports", "system-overview",
     "admin-dashboard", "messages", "effectiveness", "effectiveness-rankings",
     "effectiveness-evaluate", "todos", "sentiment", "reminder", "checkin",

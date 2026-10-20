@@ -100,7 +100,6 @@ MODULE_RULES: tuple = (
     ("/api/v1/machine-codes", "machine-code"),
     ("/api/v1/pass-codes", "pass-code"),
     ("/api/v1/validation-rules", "validation-rules"),
-    ("/api/v1/i18n", "i18n"),
     ("/api/v1/email", "email"),
     ("/api/v1/control-packages", "control-package"),
     ("/api/v1/config-packages", "config-package"),

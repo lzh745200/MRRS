@@ -915,17 +915,6 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "legacy": True,
     },
     {
-        "key": "i18n",
-        "label": "多语言（已移除）",
-        "path": None,
-        "icon": "Reading",
-        "order": 992,
-        "section": None,
-        "kind": "page",
-        "roles": ["admin", "super_admin"],
-        "legacy": True,
-    },
-    {
         "key": "email",
         "label": "邮件设置（已移除）",
         "path": None,

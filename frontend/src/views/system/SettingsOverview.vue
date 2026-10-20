@@ -139,8 +139,6 @@ import {
   Timer,
   Cpu,
   Setting,
-  Message,
-  Flag,
   Tickets,
 } from '@element-plus/icons-vue'
 import { get } from '@/api/request'
@@ -267,8 +265,6 @@ const navGroups: NavGroup[] = [
     title: '配置管理',
     items: [
       { label: '系统配置', path: '/system/config', icon: Setting },
-      { label: '邮件设置', path: '/system/email', icon: Message },
-      { label: '国际化', path: '/system/i18n', icon: Flag },
       { label: '更新日志', path: '/system/update-logs', icon: Tickets },
     ],
   },

@@ -12,7 +12,6 @@
 - error_report: 错误报告API
 - health: 系统健康检查API
 - help: 帮助信息API
-- i18n: 国际化API
 - init: 系统初始化API
 - metrics: 系统指标API
 - monitor: 系统监控API
@@ -144,15 +143,8 @@ except Exception as exc:
 router.include_router(help_router)
 logger.debug("已加载路由: system.help")
 
-# ---- 国际化 ----
-try:
-    from app.api.v1.system.i18n import router as i18n_router
-except Exception as exc:
-    # 深审 #78：子模块导入失败必须 fail-fast —— 原实现只记 warning，端点会
-    # 静默缺失（审计/零信任/备份这类安全路由缺失时无人察觉），且丢掉原始栈。
-    raise RuntimeError(f"加载 system.i18n 路由失败: {exc}") from exc
-router.include_router(i18n_router)
-logger.debug("已加载路由: system.i18n")
+# ---- 国际化 ---- 已于 v1.15.16 随需求下线（后端 API 与前端页面一并移除；
+# 系统为纯中文单语部署，多语言能力从未上线使用）
 
 # ---- 系统初始化 ----
 try:

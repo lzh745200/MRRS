@@ -23,7 +23,6 @@ const API_MODULES = [
   { name: 'machineCode', path: '@/api/machineCode' },
   { name: 'dataSync', path: '@/api/dataSync' },
   { name: 'env', path: '@/api/env' },
-  { name: 'i18n', path: '@/api/i18n' },
   { name: 'twoFactor', path: '@/api/twoFactor' },
   { name: 'supportedVillage', path: '@/api/supportedVillage' },
   { name: 'dashboard', path: '@/api/dashboard' },

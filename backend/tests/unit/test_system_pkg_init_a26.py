@@ -21,7 +21,7 @@ import app.api.v1.system as pkg
 
 SUBMODULES = [
     "admin", "audit", "backup", "cache", "config_package", "env",
-    "error_report", "health", "help", "i18n", "init", "metrics",
+    "error_report", "health", "help", "init", "metrics",
     "monitor", "system", "system_config", "tasks", "update_logs", "zero_trust",
 ]
 

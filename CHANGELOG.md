@@ -5,6 +5,28 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布] — 2026-10-20 系统管理：国际化彻底清除 + 导航死链治理
+
+### Removed
+
+- **国际化能力彻底移除**（系统为纯中文单语部署，该能力从未上线使用，前后端一并清掉）：
+  - 后端：删除 `app/api/v1/system/i18n.py`（5 个 GET 端点）、其在 `system/__init__.py` 的
+    注册与文档行、`write_route_map` 的 `/api/v1/i18n` 映射、`menus.py` 的 legacy 菜单 key
+    `i18n`、覆盖率测试 `test_system_i18n_cov.py`；同步更新 `test_system_init_cov.py`、
+    `test_system_pkg_init_a26.py`、`test_menus_v2.py` 的模块清单与 legacy key 集合。
+  - 前端：删除 `src/api/i18n.ts` 及其测试、`api-modules.test.ts` 的对应条目；
+    `SystemConsole.vue` 的「系统设置」描述去掉"国际化、邮件"。
+- **两处导航死链**：`SettingsOverview.vue` 快捷导航的「国际化 → `/system/i18n`」与
+  「邮件设置 → `/system/email`」都没有对应路由（点击即 404），已删除。
+  注：SMTP 一直走 `settings.SMTP_*` 环境变量，从来没有"邮件设置"页面；
+  `menus.py` 的 legacy key `email` 保留（供历史权限包兼容）。
+
+### Added
+
+- **导航死链门禁**：`src/utils/navLinks.ts` + `tests/unit/nav-links.test.ts`。
+  把导航配置里的 `path` 字面量与路由表的 `path` 字面量做文本比对，
+  以后往快捷导航或 console 里加一个不存在的路径，测试会直接变红。
+
 ## [未发布] — 2026-10-20 文档 / PPT 全量刷新 + 项目文件整理
 
 ### Docs
