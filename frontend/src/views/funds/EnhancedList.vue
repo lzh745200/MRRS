@@ -54,7 +54,7 @@
     <el-card class="year-overview-card">
       <div class="year-overview-header">
         <span class="year-overview-title">年度经费总览</span>
-        <el-select v-model="overviewYear" style="width: 120px" @change="loadYearOverview">
+        <el-select v-model="overviewYear" @change="loadYearOverview">
           <el-option v-for="y in yearOptions" :key="y" :label="`${y}年`" :value="y" />
         </el-select>
       </div>
@@ -203,17 +203,11 @@
             v-model="filterForm.keyword"
             placeholder="名称/项目/来源"
             clearable
-            style="width: 200px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
         <el-form-item label="经费类型">
-          <el-select
-            v-model="filterForm.type"
-            placeholder="全部类型"
-            clearable
-            style="width: 130px"
-          >
+          <el-select v-model="filterForm.type" placeholder="全部类型" clearable>
             <el-option label="项目经费" value="project" />
             <el-option label="运营经费" value="operation" />
             <el-option label="教育帮扶" value="education" />
@@ -223,12 +217,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select
-            v-model="filterForm.status"
-            placeholder="全部状态"
-            clearable
-            style="width: 130px"
-          >
+          <el-select v-model="filterForm.status" placeholder="全部状态" clearable>
             <el-option label="待审批" value="pending" />
             <el-option label="已计划" value="planned" />
             <el-option label="已批准" value="approved" />
@@ -240,24 +229,12 @@
           </el-select>
         </el-form-item>
         <el-form-item label="帮扶村">
-          <el-select
-            v-model="filterForm.village_id"
-            placeholder="全部村"
-            clearable
-            filterable
-            style="width: 160px"
-          >
+          <el-select v-model="filterForm.village_id" placeholder="全部村" clearable filterable>
             <el-option v-for="v in villageOptions" :key="v.id" :label="v.name" :value="v.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="帮扶学校">
-          <el-select
-            v-model="filterForm.school_id"
-            placeholder="全部学校"
-            clearable
-            filterable
-            style="width: 160px"
-          >
+          <el-select v-model="filterForm.school_id" placeholder="全部学校" clearable filterable>
             <el-option v-for="s in schoolOptions" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
         </el-form-item>
@@ -265,7 +242,10 @@
           <el-button type="primary" @click="handleSearch">
             <el-icon><Search /></el-icon>搜索
           </el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
         <el-form-item>
           <el-tooltip
@@ -315,6 +295,7 @@
         v-else
         ref="tableRef"
         v-loading="loading"
+        border
         :data="tableData"
         stripe
         @selection-change="handleSelectionChange"
@@ -322,8 +303,8 @@
         <template #empty>
           <EmptyState text="暂无数据" />
         </template>
-        <el-table-column type="selection" width="45" />
-        <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column type="selection" width="48" />
+        <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="name" label="经费名称" min-width="180">
           <template #default="scope">
             <el-link type="primary" @click="handleView(scope.row)">{{ scope.row.name }}</el-link>
@@ -388,7 +369,7 @@
             }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280">
+        <el-table-column fixed="right" label="操作" width="280">
           <template #default="scope">
             <el-button type="primary" link @click="handleView(scope.row)">查看</el-button>
             <el-button
@@ -481,6 +462,7 @@ import {
   DocumentChecked,
   FolderOpened,
   InfoFilled,
+  Refresh,
 } from '@element-plus/icons-vue'
 import { get, del, apiRequest } from '@/api/request'
 import { fundApi } from '@/api/funds'

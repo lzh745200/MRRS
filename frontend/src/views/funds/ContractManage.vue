@@ -11,7 +11,6 @@
           placeholder="合同状态"
           clearable
           size="default"
-          style="width: 140px"
           @change="handleFilterChange"
         >
           <el-option label="草稿" value="draft" />
@@ -22,7 +21,7 @@
         <el-button type="primary" @click="openCreateDialog">新建合同</el-button>
       </div>
 
-      <el-table v-loading="loading" stripe :data="contracts" size="default" class="mt-3">
+      <el-table v-loading="loading" border stripe :data="contracts" size="default" class="mt-3">
         <el-table-column prop="contract_no" label="合同编号" width="150" />
         <el-table-column
           prop="contract_name"
@@ -166,7 +165,7 @@
           </div>
         </template>
       </el-upload>
-      <el-table stripe :data="attachmentList" style="margin-top: 12px" max-height="320">
+      <el-table border stripe :data="attachmentList" style="margin-top: 12px" max-height="320">
         <el-table-column prop="file_name" label="文件名" min-width="200" show-overflow-tooltip />
         <el-table-column prop="file_size" label="大小" width="100">
           <template #default="{ row }">
@@ -175,7 +174,7 @@
         </el-table-column>
         <el-table-column prop="uploaded_by" label="上传人" width="100" />
         <el-table-column prop="created_at" label="上传时间" width="140" />
-        <el-table-column label="操作" width="130">
+        <el-table-column fixed="right" label="操作" width="130">
           <template #default="{ row }">
             <el-button link type="primary" @click="openAttachment(row)">打开</el-button>
             <el-button link type="primary" @click="downloadAttachment(row)">下载</el-button>

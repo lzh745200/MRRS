@@ -23,20 +23,10 @@
     <div class="filter-card">
       <el-form :model="filterForm" inline @submit.prevent>
         <el-form-item label="项目名称">
-          <el-input
-            v-model="filterForm.name"
-            placeholder="帮扶村/单位/项目编号"
-            clearable
-            style="width: 200px"
-          />
+          <el-input v-model="filterForm.name" placeholder="帮扶村/单位/项目编号" clearable />
         </el-form-item>
         <el-form-item label="项目状态">
-          <el-select
-            v-model="filterForm.status"
-            placeholder="全部状态"
-            clearable
-            style="width: 140px"
-          >
+          <el-select v-model="filterForm.status" placeholder="全部状态" clearable>
             <el-option label="草稿" value="draft" />
             <el-option label="待审批" value="pending" />
             <el-option label="已审批" value="approved" />
@@ -46,12 +36,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="帮扶类型">
-          <el-select
-            v-model="filterForm.type"
-            placeholder="全部类型"
-            clearable
-            style="width: 140px"
-          >
+          <el-select v-model="filterForm.type" placeholder="全部类型" clearable>
             <el-option label="基础设施" value="infrastructure" />
             <el-option label="教育帮扶" value="education" />
             <el-option label="产业发展" value="industry" />
@@ -62,12 +47,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="地区">
-          <el-select
-            v-model="filterForm.region"
-            placeholder="全部地区"
-            clearable
-            style="width: 140px"
-          >
+          <el-select v-model="filterForm.region" placeholder="全部地区" clearable>
             <el-option label="都匀市" value="都匀市" />
             <el-option label="长顺县" value="长顺县" />
             <el-option label="独山县" value="独山县" />
@@ -91,14 +71,16 @@
             controls-position="right"
             placeholder="全部年份"
             clearable
-            style="width: 140px"
           />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSearch">
             <el-icon><Search /></el-icon>搜索
           </el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
           <!-- 回收站入口（仅管理员）：查看已软删项目 -->
           <el-tooltip
             v-if="canViewDeleted"
@@ -187,11 +169,12 @@
         v-else-if="viewMode === 'table'"
         ref="tableRef"
         v-loading="loading"
+        border
         :data="projectList"
         stripe
         @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="45" />
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="code" label="项目编号" width="120" />
         <el-table-column prop="name" label="项目名称" min-width="200">
           <template #default="{ row }">
@@ -278,7 +261,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Download, Search, Upload, TrendCharts } from '@element-plus/icons-vue'
+import { Plus, Download, Search, Upload, TrendCharts, Refresh } from '@element-plus/icons-vue'
 import {
   projectApi,
   restoreProject,

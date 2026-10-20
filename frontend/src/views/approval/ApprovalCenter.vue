@@ -31,8 +31,14 @@
         <el-button type="danger" @click="handleBatchReject">批量驳回</el-button>
       </div>
 
-      <el-table v-loading="loading" :data="tasks" stripe @selection-change="handleSelectionChange">
-        <el-table-column v-if="activeTab === 'pending'" type="selection" width="45" />
+      <el-table
+        v-loading="loading"
+        border
+        :data="tasks"
+        stripe
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column v-if="activeTab === 'pending'" type="selection" width="48" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="title" label="审批标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="entity_type" label="类型" width="120" show-overflow-tooltip>

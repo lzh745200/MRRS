@@ -11,12 +11,12 @@
     <div class="filter-card">
       <el-form :model="filterForm" inline>
         <el-form-item label="评估年度">
-          <el-select v-model="filterForm.year" style="width: 140px" @change="handleSearch">
+          <el-select v-model="filterForm.year" @change="handleSearch">
             <el-option v-for="y in yearOptions" :key="y" :label="String(y)" :value="y" />
           </el-select>
         </el-form-item>
         <el-form-item label="显示数量">
-          <el-select v-model="filterForm.limit" style="width: 120px" @change="handleSearch">
+          <el-select v-model="filterForm.limit" @change="handleSearch">
             <el-option label="前10名" :value="10" />
             <el-option label="前20名" :value="20" />
             <el-option label="前50名" :value="50" />
@@ -47,7 +47,7 @@
 
     <!-- 排名表格 -->
     <div v-else class="table-card">
-      <el-table :data="rankings">
+      <el-table border :data="rankings">
         <el-table-column label="排名" width="80" align="center">
           <template #default="scope">
             <span class="rank-badge" :class="rankClass(scope.row.rank)">

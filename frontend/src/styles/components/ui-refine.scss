@@ -1,0 +1,126 @@
+/* ============================================================
+   UI 精细化统一层（R35 · 方案 C）
+   - 筛选栏控件统一宽度（4 档）
+   - 表格规范（可拖拽列宽提示 / 表头 / 单元格）
+   - 页面 8px 栅格
+   - 响应式断点（1200 / 992 / 768）
+   全部使用设计 token 与 color-mix，不引入新的硬编码色值。
+   ============================================================ */
+
+/* ── 1. 筛选栏：控件宽度 4 档 + 统一间距 ── */
+.filter-card,
+.app-filter {
+  .el-form-item {
+    margin-right: 16px;
+    margin-bottom: 12px;
+  }
+
+  .el-form-item:last-child {
+    margin-right: 0;
+  }
+
+  .el-form-item__label {
+    padding-right: 8px;
+    font-weight: 500;
+  }
+
+  .el-input,
+  .el-date-editor.el-input,
+  .el-date-editor--daterange {
+    width: 220px;
+  }
+
+  .el-select {
+    width: 160px;
+  }
+
+  .el-date-editor.el-input,
+  .el-date-editor--daterange {
+    width: 240px;
+  }
+
+  .el-input-number {
+    width: 120px;
+  }
+
+  .el-button + .el-button {
+    margin-left: 8px;
+  }
+}
+
+.app-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 16px;
+}
+
+/* ── 2. 表格规范 ── */
+.el-table {
+  th.el-table__cell {
+    font-weight: 600;
+  }
+
+  th.el-table__cell .cell {
+    white-space: nowrap;
+  }
+
+  .cell {
+    line-height: 1.5;
+  }
+}
+
+/* 列宽可拖拽：表头单元格右边界使用列宽调整光标（Element Plus 原生 resizable） */
+.el-table th.el-table__cell {
+  cursor: default;
+}
+
+/* ── 3. 页面 8px 栅格（间距统一 16px） ── */
+.page-container,
+.app-page {
+  padding: 16px;
+}
+
+.page-container > * + *,
+.app-page > * + * {
+  margin-top: 16px;
+}
+
+/* ── 4. 响应式断点 ── */
+@media (max-width: 1200px) {
+  .filter-card,
+  .app-filter {
+    .el-input,
+    .el-select,
+    .el-date-editor.el-input,
+    .el-date-editor--daterange {
+      width: 180px !important;
+    }
+  }
+}
+
+@media (max-width: 992px) {
+  .filter-card,
+  .app-filter {
+    .el-form-item {
+      display: block;
+      width: 100%;
+      margin-right: 0;
+    }
+
+    .el-input,
+    .el-select,
+    .el-date-editor.el-input,
+    .el-date-editor--daterange,
+    .el-input-number {
+      width: 100% !important;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .page-container,
+  .app-page {
+    padding: 12px;
+  }
+}

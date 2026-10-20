@@ -3,12 +3,7 @@
     <el-card class="filter-card">
       <el-form :inline="true" :model="filterForm">
         <el-form-item label="报表类型">
-          <el-select
-            v-model="filterForm.reportType"
-            placeholder="请选择报表类型"
-            clearable
-            style="width: 140px"
-          >
+          <el-select v-model="filterForm.reportType" placeholder="请选择报表类型" clearable>
             <el-option label="月度报表" value="monthly" />
             <el-option label="季度报表" value="quarterly" />
             <el-option label="年度报表" value="yearly" />
@@ -25,12 +20,7 @@
           />
         </el-form-item>
         <el-form-item label="经费类型">
-          <el-select
-            v-model="filterForm.fundType"
-            placeholder="全部"
-            clearable
-            style="width: 140px"
-          >
+          <el-select v-model="filterForm.fundType" placeholder="全部" clearable>
             <el-option v-for="(label, key) in FUND_TYPES" :key="key" :label="label" :value="key" />
           </el-select>
         </el-form-item>

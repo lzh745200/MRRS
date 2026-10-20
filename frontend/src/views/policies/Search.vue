@@ -73,8 +73,14 @@
         </el-row>
 
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">搜索</el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button type="primary" @click="handleSearch">
+            <el-icon><Search /></el-icon>
+            搜索
+          </el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -93,7 +99,7 @@
         border
         @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="55" />
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="title" label="政策标题" min-width="200">
           <template #default="scope">
             <el-link @click="handleViewDetail(scope.row.id)">{{ scope.row.title }}</el-link>
@@ -152,6 +158,7 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage } from 'element-plus'
 import { get, apiRequest } from '@/api/request'
 
+import { Refresh, Search } from '@element-plus/icons-vue'
 interface Policy {
   id: string
   title: string

@@ -154,7 +154,7 @@
           ><el-icon><Clock /></el-icon> 导入历史</span
         >
       </template>
-      <el-table v-loading="historyLoading" :data="history">
+      <el-table v-loading="historyLoading" border :data="history">
         <el-table-column prop="id" label="编号" width="70" />
         <el-table-column prop="file_name" label="文件名" min-width="180" />
         <el-table-column label="状态" width="100">

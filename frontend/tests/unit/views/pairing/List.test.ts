@@ -33,6 +33,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({
   useRoute: () => mocks.route,
+  // PageHeader 标准件的返回按钮依赖 useRouter；页面已接入 PageHeader（R34 精细化）
+  useRouter: () => ({ back: vi.fn() }),
 }))
 
 vi.mock('@/api/pairings', () => ({

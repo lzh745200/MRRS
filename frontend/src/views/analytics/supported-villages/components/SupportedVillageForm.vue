@@ -270,7 +270,13 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column v-if="mode !== 'view'" label="操作" width="130" align="center">
+        <el-table-column
+          v-if="mode !== 'view'"
+          fixed="right"
+          label="操作"
+          width="130"
+          align="center"
+        >
           <template #default="{ row }">
             <el-button type="primary" link @click="editFundingYear(row.year)">编辑</el-button>
             <el-popconfirm

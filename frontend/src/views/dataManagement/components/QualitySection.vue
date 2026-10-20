@@ -59,7 +59,7 @@
       </template>
 
       <!-- 检查项列表 -->
-      <el-table :data="checkItems">
+      <el-table border :data="checkItems">
         <el-table-column prop="name" label="检查项" min-width="200" />
         <el-table-column prop="description" label="说明" min-width="250" />
         <el-table-column label="状态" width="100">
@@ -78,7 +78,7 @@
             <span :class="{ 'text-danger': row.issues > 0 }">{{ row.issues }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100">
+        <el-table-column fixed="right" label="操作" width="100">
           <template #default="{ row }">
             <el-button
               v-if="row.issues > 0"
@@ -97,7 +97,7 @@
     <el-dialog v-model="showRuleDialog" append-to-body title="自定义数据校验" :width="DIALOG_MD">
       <el-form label-width="90px">
         <el-form-item label="校验模块">
-          <el-select v-model="ruleModule" style="width: 220px">
+          <el-select v-model="ruleModule">
             <el-option label="帮扶村" value="village" />
             <el-option label="经费管理" value="fund" />
             <el-option label="帮扶项目" value="project" />
@@ -152,7 +152,7 @@
         show-icon
         style="margin-bottom: 12px"
       />
-      <el-table v-if="ruleResult?.failed?.length" :data="ruleResult.failed" max-height="220">
+      <el-table v-if="ruleResult?.failed?.length" border :data="ruleResult.failed" max-height="220">
         <el-table-column prop="record_id" label="记录ID" width="90" />
         <el-table-column prop="label" label="记录" min-width="150" />
       </el-table>
@@ -170,7 +170,7 @@
       :title="`问题详情 - ${selectedCheck?.name}`"
       :width="DIALOG_MD"
     >
-      <el-table :data="issueDetails" max-height="400">
+      <el-table border :data="issueDetails" max-height="400">
         <el-table-column prop="record_id" label="记录ID" width="100" />
         <el-table-column prop="field" label="字段" width="120" />
         <el-table-column prop="issue" label="问题描述" />

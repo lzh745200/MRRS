@@ -71,7 +71,6 @@
               v-model="verifyForm.token"
               placeholder="6位验证码"
               maxlength="6"
-              style="width: 200px"
               @input="verifyForm.token = verifyForm.token.replace(/\D/g, '').slice(0, 6)"
             />
           </el-form-item>

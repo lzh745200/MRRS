@@ -9,13 +9,7 @@
     <el-card class="toolbar-card">
       <div class="toolbar">
         <div class="toolbar-left">
-          <el-select
-            v-model="filterModule"
-            placeholder="筛选模块"
-            clearable
-            style="width: 160px"
-            @change="loadRules"
-          >
+          <el-select v-model="filterModule" placeholder="筛选模块" clearable @change="loadRules">
             <el-option label="全部模块" value="" />
             <el-option label="帮扶村" value="supported_villages" />
             <el-option label="学校" value="schools" />
@@ -53,7 +47,7 @@
     <!-- 规则表格 -->
     <el-card class="table-card">
       <el-table v-loading="loading" :data="rules" border>
-        <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column
           prop="description"
           label="规则名称"

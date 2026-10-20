@@ -87,7 +87,7 @@
         <h3>{{ selectedYear }}年度预算分配</h3>
       </div>
       <div class="card-body">
-        <el-table :data="budgetData" show-summary :summary-method="getSummary">
+        <el-table border :data="budgetData" show-summary :summary-method="getSummary">
           <el-table-column prop="category" label="预算类别" width="160" />
           <el-table-column prop="budget" label="预算金额(万元)" width="140" align="right">
             <template #default="{ row }">

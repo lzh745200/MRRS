@@ -1,8 +1,11 @@
 <template>
   <div class="anomaly-container">
-    <el-page-header title="返回" @back="pushSafe('/funds')">
-      <template #content><span class="page-title">经费异常监控</span></template>
-    </el-page-header>
+    <PageHeader
+      title="经费异常监控"
+      subtitle="监控异常经费记录并跟踪处理状态"
+      show-back
+      back-to="/funds"
+    />
 
     <el-card class="mt-4" shadow="never">
       <div class="toolbar">
@@ -12,7 +15,6 @@
             placeholder="严重程度"
             clearable
             size="default"
-            style="width: 120px"
             @change="handleFilterChange"
           >
             <el-option label="提示" value="info" />
@@ -24,7 +26,6 @@
             placeholder="异常类型"
             clearable
             size="default"
-            style="width: 140px"
             @change="handleFilterChange"
           >
             <el-option label="超支" value="overspend" />
@@ -38,7 +39,6 @@
             placeholder="处理状态"
             clearable
             size="default"
-            style="width: 120px"
             @change="handleFilterChange"
           >
             <el-option label="未处理" :value="0" />
@@ -47,7 +47,7 @@
         </div>
       </div>
 
-      <el-table v-loading="loading" :data="anomalies" size="default" class="mt-3">
+      <el-table v-loading="loading" border :data="anomalies" size="default" class="mt-3">
         <el-table-column prop="anomaly_type_label" label="异常类型" width="120" />
         <el-table-column label="严重程度" width="100">
           <template #default="{ row }">
@@ -122,9 +122,9 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { fundLifecycleApi } from '@/api/fundLifecycle'
-import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
+import { safeRouteParam } from '@/composables/useRouterSafe'
+import PageHeader from '@/components/common/PageHeader.vue'
 
-const { pushSafe } = useRouterSafe()
 const route = useRoute()
 const projectId = route.query.project_id ? safeRouteParam(route.query.project_id) : undefined
 

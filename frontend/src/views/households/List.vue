@@ -1,10 +1,6 @@
 <template>
   <div class="list-page household-list-page">
-    <header class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">一户一档</h2>
-        <p class="page-desc">按户建档、风险预警、走访挂户与台账导出</p>
-      </div>
+    <PageHeader title="一户一档" subtitle="按户建档、风险预警、走访挂户与台账导出">
       <div class="header-actions">
         <el-button class="btn-alerts" @click="openAlerts">风险预警</el-button>
         <el-button class="btn-rollup" @click="openRollup">一键汇总回填</el-button>
@@ -16,7 +12,7 @@
         </el-button>
         <el-button type="primary" class="btn-create" @click="openCreate">新建档案</el-button>
       </div>
-    </header>
+    </PageHeader>
 
     <!-- 统计条：建档户数 / 当前页高风险 / 监测户 / 预警命中 -->
     <section class="stat-grid">
@@ -67,8 +63,14 @@
           clearable
           @keyup.enter="handleSearch"
         />
-        <el-button type="primary" class="btn-search" @click="handleSearch">查询</el-button>
-        <el-button class="btn-reset" @click="handleReset">重置</el-button>
+        <el-button type="primary" class="btn-search" @click="handleSearch">
+          <el-icon><Search /></el-icon>
+          查询
+        </el-button>
+        <el-button class="btn-reset" @click="handleReset">
+          <el-icon><Refresh /></el-icon>
+          重置
+        </el-button>
       </div>
       <p class="list-hint advanced-only">风险预警按户实时计算，可在详情页一键登记为风险记录。</p>
     </section>
@@ -88,7 +90,7 @@
       <template v-else>
         <div v-if="items.length === 0" class="app-empty">暂无建档记录</div>
         <template v-else>
-          <el-table :data="items" class="household-table">
+          <el-table border :data="items" class="household-table">
             <el-table-column prop="household_name" label="户主" min-width="100" />
             <el-table-column label="户编号" min-width="120">
               <template #default="{ row }">{{ row.household_code || '—' }}</template>
@@ -417,6 +419,8 @@ import {
   type HouseholdType,
 } from '@/api/households'
 
+import PageHeader from '@/components/common/PageHeader.vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 /** 户类型选项 */
 const HOUSEHOLD_TYPE_OPTIONS: { value: HouseholdType; label: string }[] = [
   { value: 'general', label: '一般户' },

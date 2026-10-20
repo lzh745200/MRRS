@@ -88,7 +88,6 @@
               v-model="filterStatus"
               placeholder="状态筛选"
               clearable
-              style="width: 140px"
               @change="handleSearch"
             >
               <el-option label="全部" value="" />
@@ -102,17 +101,19 @@
               v-model="filterType"
               placeholder="任务类型"
               clearable
-              style="width: 180px"
               @clear="handleSearch"
               @keyup.enter="handleSearch"
             />
             <el-button :icon="Search" @click="handleSearch">查询</el-button>
-            <el-button @click="resetFilters">重置</el-button>
+            <el-button @click="resetFilters">
+              <el-icon><Refresh /></el-icon>
+              重置
+            </el-button>
           </div>
         </div>
       </template>
 
-      <el-table v-loading="loading" :data="taskList" style="width: 100%">
+      <el-table v-loading="loading" border :data="taskList" style="width: 100%">
         <el-table-column prop="task_id" label="任务ID" width="140">
           <template #default="{ row }">
             <el-tooltip :content="row.task_id" placement="top">

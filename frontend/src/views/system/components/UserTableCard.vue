@@ -45,7 +45,7 @@
     </el-alert>
 
     <el-table v-loading="loading" :data="users" border>
-      <el-table-column type="index" label="序号" width="60" align="center" />
+      <el-table-column type="index" label="序号" width="72" align="center" />
       <el-table-column prop="username" label="用户名" min-width="120" />
       <el-table-column prop="full_name" label="姓名" min-width="100">
         <template #default="{ row }">

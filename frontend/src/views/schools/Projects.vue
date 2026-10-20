@@ -15,13 +15,7 @@
       class="filter-bar"
       style="margin-bottom: 16px; display: flex; gap: 12px; align-items: center"
     >
-      <el-select
-        v-model="filterPhase"
-        placeholder="筛选阶段"
-        clearable
-        style="width: 130px"
-        @change="filterProjects"
-      >
+      <el-select v-model="filterPhase" placeholder="筛选阶段" clearable @change="filterProjects">
         <el-option v-for="(label, val) in phaseMap" :key="val" :label="label" :value="val" />
       </el-select>
       <el-date-picker
@@ -30,13 +24,12 @@
         range-separator="至"
         start-placeholder="开始日期"
         end-placeholder="结束日期"
-        style="width: 260px"
         @change="filterProjects"
       />
     </div>
 
     <el-table v-loading="loading" :data="filteredProjects" stripe border>
-      <el-table-column type="index" label="序号" width="60" align="center" />
+      <el-table-column type="index" label="序号" width="72" align="center" />
       <el-table-column prop="name" label="项目名称" min-width="180" />
       <el-table-column prop="category" label="类别" width="100" />
       <el-table-column prop="phase" label="阶段" width="100">

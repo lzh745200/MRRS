@@ -9,7 +9,7 @@
     <el-card class="filter-card">
       <el-form :inline="true" :model="filters">
         <el-form-item label="状态">
-          <el-select v-model="filters.status" clearable placeholder="全部" style="width: 140px">
+          <el-select v-model="filters.status" clearable placeholder="全部">
             <el-option label="待审批" value="pending" />
             <el-option label="已通过" value="approved" />
             <el-option label="已驳回" value="rejected" />
@@ -23,12 +23,17 @@
             start-placeholder="开始"
             end-placeholder="结束"
             value-format="YYYY-MM-DD"
-            style="width: 260px"
           />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="loadData">查询</el-button>
-          <el-button @click="resetFilters">重置</el-button>
+          <el-button type="primary" @click="loadData">
+            <el-icon><Search /></el-icon>
+            查询
+          </el-button>
+          <el-button @click="resetFilters">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -55,7 +60,7 @@
 
     <!-- 申请列表 -->
     <el-card>
-      <el-table v-loading="loading" :data="applications">
+      <el-table v-loading="loading" border :data="applications">
         <el-table-column prop="title" label="申请标题" min-width="200" />
         <el-table-column prop="type" label="类型" width="120">
           <template #default="{ row }">
@@ -105,6 +110,7 @@ import { post } from '@/api/request'
 import { getApprovalStatusLabel } from '@/config/enums'
 
 import { format } from '@/utils'
+import { Refresh, Search } from '@element-plus/icons-vue'
 const loading = ref(false)
 const applications = ref<ApprovalTask[]>([])
 const filters = reactive({ status: '', dateRange: null as any })

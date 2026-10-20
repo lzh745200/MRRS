@@ -44,8 +44,14 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button type="primary" @click="handleSearch">
+            <el-icon><Search /></el-icon>
+            查询
+          </el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -211,7 +217,7 @@
                 {{ formatSessionTime(row.created_at) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="100" align="center">
+            <el-table-column fixed="right" label="操作" width="100" align="center">
               <template #default="{ row }">
                 <el-button
                   type="danger"
@@ -389,6 +395,7 @@ const formData = reactive({
 import { normalizeTreeNodes } from '@/utils/treeNormalizer'
 
 import { format } from '@/utils'
+import { Refresh, Search } from '@element-plus/icons-vue'
 const orgTreeOptions = ref<any[]>([])
 
 /**

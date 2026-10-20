@@ -78,7 +78,7 @@
                 </template>
                 <el-form label-width="100px">
                   <el-form-item label="预测年数">
-                    <el-select v-model="forecastYears" style="width: 120px">
+                    <el-select v-model="forecastYears">
                       <el-option :value="1" label="1年" />
                       <el-option :value="2" label="2年" />
                       <el-option :value="3" label="3年" />
@@ -121,7 +121,7 @@
         <div class="tab-content">
           <el-form :model="anomalyForm" label-width="100px">
             <el-form-item label="检测方式">
-              <el-select v-model="anomalyForm.method" style="width: 200px">
+              <el-select v-model="anomalyForm.method">
                 <el-option label="统计方法" value="statistical" />
                 <el-option label="孤立森林" value="isolation_forest" />
                 <el-option label="Z-Score" value="zscore" />
@@ -155,8 +155,13 @@
           <div v-if="anomalyResult" class="result-block">
             <el-divider />
             <h4>异常检测结果</h4>
-            <el-table v-if="anomalyResult.anomalies?.length" stripe :data="anomalyResult.anomalies">
-              <el-table-column type="index" label="#" width="50" />
+            <el-table
+              v-if="anomalyResult.anomalies?.length"
+              border
+              stripe
+              :data="anomalyResult.anomalies"
+            >
+              <el-table-column type="index" label="#" width="72" />
               <el-table-column v-for="col in anomalyColumns" :key="col" :prop="col" :label="col" />
               <el-table-column label="异常" width="80">
                 <template #default="scope">
@@ -189,7 +194,7 @@
                     />
                   </el-form-item>
                   <el-form-item label="推荐数">
-                    <el-select v-model="recommendLimit" style="width: 100px">
+                    <el-select v-model="recommendLimit">
                       <el-option :value="3" label="3个" />
                       <el-option :value="5" label="5个" />
                       <el-option :value="10" label="10个" />
@@ -255,7 +260,6 @@
               <el-input
                 v-model="nlpForm.query"
                 placeholder="例如：哪个村庄的人均收入最高？"
-                style="width: 480px"
                 clearable
                 @keyup.enter="runNlpQuery"
               />

@@ -83,7 +83,7 @@
               新增成员
             </el-button>
           </div>
-          <el-table v-if="members.length > 0" :data="members" class="member-table">
+          <el-table v-if="members.length > 0" :data="members" class="member-table" border>
             <el-table-column prop="name" label="姓名" min-width="100" />
             <el-table-column label="与户主关系" width="110">
               <template #default="{ row }">{{ row.relation || '—' }}</template>
@@ -207,7 +207,7 @@
             <span class="card-title">走访记录</span>
             <span class="total-hint">共 {{ visits.length }} 次</span>
           </div>
-          <el-table v-if="visits.length > 0" :data="visits" class="visit-table">
+          <el-table v-if="visits.length > 0" :data="visits" class="visit-table" border>
             <el-table-column prop="visit_date" label="走访日期" width="120" />
             <el-table-column prop="visitors" label="走访人" min-width="120" />
             <el-table-column label="目的" min-width="140">

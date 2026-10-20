@@ -9,7 +9,7 @@
         <h2 class="page-title">{{ villageName }} — 年度数据管理</h2>
       </div>
       <div class="header-actions">
-        <el-select v-model="selectedYear" style="width: 120px" @change="loadAllData">
+        <el-select v-model="selectedYear" @change="loadAllData">
           <el-option
             v-for="year in availableYears"
             :key="year"

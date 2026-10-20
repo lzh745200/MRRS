@@ -13,18 +13,18 @@
       </div>
       <el-form :model="filterForm" inline>
         <el-form-item v-if="dimension === 'period'" label="时间粒度">
-          <el-select v-model="filterForm.periodType" style="width: 120px" @change="handleSearch">
+          <el-select v-model="filterForm.periodType" @change="handleSearch">
             <el-option label="月度" value="monthly" />
             <el-option label="季度" value="quarterly" />
             <el-option label="年度" value="yearly" />
           </el-select>
         </el-form-item>
         <el-form-item label="年份范围">
-          <el-select v-model="filterForm.yearStart" placeholder="起始年份" style="width: 120px">
+          <el-select v-model="filterForm.yearStart" placeholder="起始年份">
             <el-option v-for="y in yearOptions" :key="'s' + y" :label="`${y}年`" :value="y" />
           </el-select>
           <span style="margin: 0 8px">至</span>
-          <el-select v-model="filterForm.yearEnd" placeholder="结束年份" style="width: 120px">
+          <el-select v-model="filterForm.yearEnd" placeholder="结束年份">
             <el-option v-for="y in yearOptions" :key="'e' + y" :label="`${y}年`" :value="y" />
           </el-select>
         </el-form-item>
@@ -178,7 +178,7 @@
         :description="loadError.dimension"
       />
       <el-table v-else :data="dimensionData" border>
-        <el-table-column type="index" label="序号" width="70" align="center" />
+        <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="label" label="分组" min-width="160" />
         <el-table-column prop="count" label="记录数" width="100" align="center" />
         <el-table-column prop="total_amount" label="总金额(万元)" width="130" align="right">

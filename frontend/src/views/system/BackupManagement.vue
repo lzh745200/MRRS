@@ -131,7 +131,13 @@
       </el-descriptions>
 
       <!-- 备份列表 -->
-      <el-table v-loading="loading" stripe :data="backupList" style="width: 100%; margin-top: 20px">
+      <el-table
+        v-loading="loading"
+        border
+        stripe
+        :data="backupList"
+        style="width: 100%; margin-top: 20px"
+      >
         <el-table-column prop="file_name" label="文件名" min-width="200" />
         <el-table-column prop="description" label="描述" min-width="150" />
         <el-table-column prop="backup_type" label="类型" width="80">
@@ -181,11 +187,7 @@
           <el-switch v-model="scheduleConfig.enabled" active-text="开启" inactive-text="关闭" />
         </el-form-item>
         <el-form-item label="备份频率">
-          <el-select
-            v-model="scheduleConfig.frequency"
-            placeholder="请选择频率"
-            style="width: 200px"
-          >
+          <el-select v-model="scheduleConfig.frequency" placeholder="请选择频率">
             <el-option label="每天" value="daily" />
             <el-option label="每周" value="weekly" />
             <el-option label="每月" value="monthly" />

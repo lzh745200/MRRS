@@ -23,7 +23,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="所在县市">
-          <el-select v-model="filters.county" placeholder="选择县市" clearable style="width: 140px">
+          <el-select v-model="filters.county" placeholder="选择县市" clearable>
             <el-option v-for="c in filterOptions.counties" :key="c" :label="c" :value="c" />
           </el-select>
         </el-form-item>
@@ -43,12 +43,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="重点帮扶县">
-          <el-select
-            v-model="filters.isKeyCounty"
-            placeholder="全部"
-            clearable
-            style="width: 140px"
-          >
+          <el-select v-model="filters.isKeyCounty" placeholder="全部" clearable>
             <el-option label="是" :value="1" />
             <el-option label="否" :value="0" />
           </el-select>
@@ -159,8 +154,8 @@
         @sort-change="handleSortChange"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="50" />
-        <el-table-column type="index" label="序号" width="60" />
+        <el-table-column type="selection" width="48" />
+        <el-table-column type="index" label="序号" width="72" />
         <el-table-column prop="department" label="部门单位" min-width="120" sortable="custom" />
         <el-table-column prop="supportUnit" label="帮扶单位" min-width="120" />
         <el-table-column prop="villageName" label="帮扶村名称" min-width="120">

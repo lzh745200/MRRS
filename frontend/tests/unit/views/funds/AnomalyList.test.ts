@@ -17,7 +17,11 @@ const { ElMessage, lifecycleApi, pushSafeMock, routeBox } = vi.hoisted(() => ({
   routeBox: { query: {} as Record<string, any> },
 }))
 
-vi.mock('vue-router', () => ({ useRoute: () => routeBox }))
+vi.mock('vue-router', () => ({
+  useRoute: () => routeBox,
+  // PageHeader 标准件的返回按钮依赖 useRouter；页面已接入 PageHeader（R34 精细化）
+  useRouter: () => ({ back: vi.fn() }),
+}))
 
 vi.mock('element-plus', () => ({ ElMessage }))
 
@@ -70,8 +74,7 @@ function mountComp() {
         },
         'el-card': { template: '<div class="el-card-stub"><slot /></div>' },
         'el-table': {
-          template:
-            '<div class="el-table-stub"><slot name="empty" /><slot name="default" /></div>',
+          template: '<div class="el-table-stub"><slot name="empty" /><slot name="default" /></div>',
         },
         'el-table-column': {
           name: 'ElTableColumn',
@@ -87,12 +90,11 @@ function mountComp() {
         },
         'el-select': {
           template:
-            '<div class="el-select-stub" @click="$emit(\'update:modelValue\', \'overspend\'); $emit(\'change\', \'overspend\')"><slot /></div>',
+            "<div class=\"el-select-stub\" @click=\"$emit('update:modelValue', 'overspend'); $emit('change', 'overspend')\"><slot /></div>",
         },
         'el-option': { template: '<div class="el-option-stub" />' },
         'el-input': {
-          template:
-            '<div class="el-input-stub" @click="$emit(\'update:modelValue\', \'说明\')" />',
+          template: '<div class="el-input-stub" @click="$emit(\'update:modelValue\', \'说明\')" />',
         },
         'el-button': {
           template: '<button class="el-button-stub" @click="$emit(\'click\')"><slot /></button>',
@@ -197,9 +199,7 @@ describe('挂载与列表', () => {
     lifecycleApi.listAnomalies.mockClear()
     await wrapper.find('.el-pagination-stub').trigger('click')
     await flushPromises()
-    expect(lifecycleApi.listAnomalies).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 2 })
-    )
+    expect(lifecycleApi.listAnomalies).toHaveBeenCalledWith(expect.objectContaining({ page: 2 }))
     expect(vm.page).toBe(2)
   })
 
@@ -230,7 +230,9 @@ describe('挂载与列表', () => {
   it('页头返回 → pushSafe /funds', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    await wrapper.findComponent({ name: 'ElPageHeader' }).vm.$emit('back')
+    // R34 精细化：页头改用共享 PageHeader 标准件（show-back + back-to），
+    // 返回按钮为 .back-btn，点击后由 backTo 走 pushSafe('/funds')。
+    await wrapper.find('.back-btn').trigger('click')
     expect(pushSafeMock).toHaveBeenCalledWith('/funds')
   })
 })

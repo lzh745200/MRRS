@@ -1,11 +1,6 @@
 <template>
   <div class="batch-page">
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">批量操作</h2>
-        <p class="page-desc">对帮扶数据进行批量更新、删除、导出和验证</p>
-      </div>
-    </div>
+    <PageHeader title="批量操作" subtitle="对帮扶数据进行批量更新、删除、导出和验证" />
 
     <!-- 操作配置 -->
     <div class="config-card">
@@ -175,6 +170,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check, Edit, Delete, Download } from '@element-plus/icons-vue'
 import { batchUpdate, batchDelete, batchExport, validateBatch } from '@/api/batchOperations'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 const batchForm = reactive({
   operation: 'update' as string,
   entity: 'supported_villages' as string,

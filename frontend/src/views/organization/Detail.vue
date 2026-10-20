@@ -74,7 +74,7 @@
             </div>
           </template>
           <el-table v-if="detail.children?.length" :data="detail.children" border>
-            <el-table-column type="index" label="序号" width="60" />
+            <el-table-column type="index" label="序号" width="72" />
             <el-table-column prop="name" label="名称" min-width="200">
               <template #default="scope">
                 <span class="org-name-link" @click="goToOrg(scope.row.id)">{{

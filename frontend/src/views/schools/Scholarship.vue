@@ -18,28 +18,16 @@
 
     <!-- 筛选栏 -->
     <div class="filter-bar">
-      <el-select
-        v-model="filterYear"
-        placeholder="筛选年度"
-        clearable
-        style="width: 140px"
-        @change="loadData"
-      >
+      <el-select v-model="filterYear" placeholder="筛选年度" clearable @change="loadData">
         <el-option v-for="y in yearOptions" :key="y" :label="`${y} 年`" :value="y" />
       </el-select>
-      <el-select
-        v-model="filterStatus"
-        placeholder="筛选状态"
-        clearable
-        style="width: 140px"
-        @change="filterLocal"
-      >
+      <el-select v-model="filterStatus" placeholder="筛选状态" clearable @change="filterLocal">
         <el-option v-for="(label, val) in statusMap" :key="val" :label="label" :value="val" />
       </el-select>
     </div>
 
     <el-table v-loading="loading" :data="filteredStudents" stripe border>
-      <el-table-column type="index" label="序号" width="60" align="center" />
+      <el-table-column type="index" label="序号" width="72" align="center" />
       <el-table-column prop="student_name" label="学生姓名" min-width="110" />
       <el-table-column prop="grade" label="年级" width="90" />
       <el-table-column prop="year" label="年度" width="80" align="center" />

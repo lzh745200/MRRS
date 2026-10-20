@@ -8,12 +8,7 @@
     <el-card v-if="invalidProject" class="mt-4" shadow="never">
       <el-empty description="请选择项目以查看决算与绩效">
         <div class="selector-row">
-          <el-select
-            v-model="selectedProjectId"
-            placeholder="选择项目"
-            filterable
-            style="width: 320px"
-          >
+          <el-select v-model="selectedProjectId" placeholder="选择项目" filterable>
             <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
           <el-button type="primary" :disabled="!selectedProjectId" @click="goSelectedProject">

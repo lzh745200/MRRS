@@ -14,7 +14,6 @@
           <el-select
             v-model="evalForm.villageId"
             placeholder="请选择村庄"
-            style="width: 240px"
             filterable
             @change="handleFormChange"
           >
@@ -22,7 +21,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="评估年度">
-          <el-select v-model="evalForm.year" style="width: 140px" @change="handleFormChange">
+          <el-select v-model="evalForm.year" @change="handleFormChange">
             <el-option v-for="y in yearOptions" :key="y" :label="String(y)" :value="y" />
           </el-select>
         </el-form-item>
@@ -77,12 +76,12 @@
           <h3>年度对比</h3>
           <el-form :model="compareForm" inline>
             <el-form-item label="对比年度">
-              <el-select v-model="compareForm.year1" style="width: 120px">
+              <el-select v-model="compareForm.year1">
                 <el-option v-for="y in yearOptions" :key="y" :label="String(y)" :value="y" />
               </el-select>
             </el-form-item>
             <el-form-item label="对比年度">
-              <el-select v-model="compareForm.year2" style="width: 120px">
+              <el-select v-model="compareForm.year2">
                 <el-option v-for="y in yearOptions" :key="y" :label="String(y)" :value="y" />
               </el-select>
             </el-form-item>

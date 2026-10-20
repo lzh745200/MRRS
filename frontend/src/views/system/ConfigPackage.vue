@@ -62,7 +62,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="说明" width="200" />
-        <el-table-column label="操作" width="160">
+        <el-table-column fixed="right" label="操作" width="160">
           <template #default="{ row }">
             <el-button text type="primary" @click="editConfig(row as any)">编辑</el-button>
             <el-button text type="danger" @click="deleteConfig(row as any)">删除</el-button>

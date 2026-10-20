@@ -1,14 +1,8 @@
 <template>
   <div class="data-management">
-    <!-- 页面标题 -->
-    <el-card class="header-card">
-      <template #header>
-        <div class="card-header">
-          <span class="title">数据管理中心</span>
-          <span class="subtitle">集中管理数据导入、导出和备份功能</span>
-        </div>
-      </template>
+    <PageHeader title="数据管理中心" subtitle="集中管理数据导入、导出和备份功能" />
 
+    <el-card class="header-card">
       <!-- 数据统计概览 -->
       <el-row :gutter="20">
         <el-col :span="6">
@@ -80,6 +74,7 @@ import { ElMessage } from 'element-plus'
 import { get, apiRequest } from '@/api/request'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 const { pushSafe } = useRouterSafe()
 
 // 异步加载子组件

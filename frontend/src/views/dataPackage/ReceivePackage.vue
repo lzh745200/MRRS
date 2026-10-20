@@ -89,13 +89,7 @@
         <el-card class="filter-card">
           <el-form :inline="true" :model="filters">
             <el-form-item label="上报单位">
-              <el-select
-                v-model="filters.sourceOrgId"
-                placeholder="选择单位"
-                clearable
-                filterable
-                style="width: 200px"
-              >
+              <el-select v-model="filters.sourceOrgId" placeholder="选择单位" clearable filterable>
                 <el-option
                   v-for="org in subordinateOrgs"
                   :key="org.id"
@@ -105,12 +99,7 @@
               </el-select>
             </el-form-item>
             <el-form-item label="状态">
-              <el-select
-                v-model="filters.status"
-                placeholder="全部状态"
-                clearable
-                style="width: 150px"
-              >
+              <el-select v-model="filters.status" placeholder="全部状态" clearable>
                 <el-option label="待接收" value="pending" />
                 <el-option label="已接收" value="received" />
                 <el-option label="已拒绝" value="rejected" />
@@ -123,19 +112,24 @@
                 range-separator="至"
                 start-placeholder="开始日期"
                 end-placeholder="结束日期"
-                style="width: 260px"
               />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="loadReports">查询</el-button>
-              <el-button @click="resetFilters">重置</el-button>
+              <el-button type="primary" @click="loadReports">
+                <el-icon><Search /></el-icon>
+                查询
+              </el-button>
+              <el-button @click="resetFilters">
+                <el-icon><Refresh /></el-icon>
+                重置
+              </el-button>
             </el-form-item>
           </el-form>
         </el-card>
 
         <!-- 数据列表 -->
         <el-card>
-          <el-table v-loading="loading" :data="reports" stripe>
+          <el-table v-loading="loading" border :data="reports" stripe>
             <el-table-column label="上报单位" min-width="150">
               <template #default="{ row }">
                 {{ row.source_org_name || row.title || `单位#${row.source_org_id}` }}
@@ -218,7 +212,7 @@
       <!-- 接收记录（仅管理员） -->
       <el-tab-pane v-if="isAdmin" label="接收记录" name="received">
         <el-card>
-          <el-table v-loading="receivedLoading" :data="receivedItems" stripe>
+          <el-table v-loading="receivedLoading" border :data="receivedItems" stripe>
             <el-table-column label="包编号" width="180">
               <template #default="{ row }">{{ row.package_code || '-' }}</template>
             </el-table-column>
@@ -333,7 +327,7 @@
             :key="preview.data_type"
             :label="`${getDataTypeLabel(preview.data_type)} (${preview.total})`"
           >
-            <el-table stripe :data="preview.sample" max-height="400">
+            <el-table border stripe :data="preview.sample" max-height="400">
               <el-table-column
                 v-for="col in preview.columns"
                 :key="col"
@@ -384,7 +378,7 @@ import { logger } from '@/utils/logger'
 
 import { ref, reactive, computed, onMounted, onErrorCaptured } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { UploadFilled, Folder } from '@element-plus/icons-vue'
+import { UploadFilled, Folder, Refresh, Search } from '@element-plus/icons-vue'
 import { useDataReportStore } from '@/stores/dataReport'
 import { useOrganizationStore } from '@/stores/organization'
 import { useAuthStore } from '@/stores/auth'

@@ -1,15 +1,11 @@
 <template>
   <div class="data-analysis-page">
-    <div class="page-header">
-      <div>
-        <h2 class="page-title">数据统计分析</h2>
-        <p class="page-desc">帮扶项目数据多维度统计与分析</p>
-      </div>
+    <PageHeader title="数据统计分析" subtitle="帮扶项目数据多维度统计与分析">
       <el-button :loading="loading" type="primary" plain @click="loadAnalysisData">
         <el-icon><Refresh /></el-icon>
         刷新数据
       </el-button>
-    </div>
+    </PageHeader>
 
     <div class="stats-row">
       <div class="stat-card">
@@ -87,11 +83,11 @@
             <h3>年度关键指标对比</h3>
             <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px">
               <span>对比年份：</span>
-              <el-select v-model="compareYearA" style="width: 110px">
+              <el-select v-model="compareYearA">
                 <el-option v-for="y in yearOptions" :key="'a' + y" :label="`${y}年`" :value="y" />
               </el-select>
               <span>vs</span>
-              <el-select v-model="compareYearB" style="width: 110px">
+              <el-select v-model="compareYearB">
                 <el-option v-for="y in yearOptions" :key="'b' + y" :label="`${y}年`" :value="y" />
               </el-select>
             </div>
@@ -141,6 +137,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import { get } from '@/api/request'
 import echarts from '@/utils/echarts'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 const activeTab = ref('investment')
 const loading = ref(false)
 

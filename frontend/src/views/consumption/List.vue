@@ -1,12 +1,9 @@
 <template>
   <div class="consumption-page">
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">消费帮扶台账</h2>
-        <p class="page-desc">
-          登记农产品/畜禽/手工等消费帮扶采购记录，按年度与品类统计采购金额与覆盖村
-        </p>
-      </div>
+    <PageHeader
+      title="消费帮扶台账"
+      subtitle="登记农产品/畜禽/手工等消费帮扶采购记录，按年度与品类统计采购金额与覆盖村"
+    >
       <div class="header-actions">
         <el-button type="primary" data-testid="create-btn" @click="openCreate">新建记录</el-button>
         <el-button :loading="exporting" data-testid="export-xlsx-btn" @click="exportData('xlsx')">
@@ -16,7 +13,7 @@
           导出 CSV
         </el-button>
       </div>
-    </div>
+    </PageHeader>
 
     <!-- 统计卡 -->
     <div v-loading="statsLoading" class="stats-row" data-testid="stats-row">
@@ -108,8 +105,14 @@
           class="filter-keyword"
           data-testid="filter-keyword"
         />
-        <el-button type="primary" data-testid="search-btn" @click="handleSearch">查询</el-button>
-        <el-button data-testid="reset-btn" @click="handleReset">重置</el-button>
+        <el-button type="primary" data-testid="search-btn" @click="handleSearch">
+          <el-icon><Search /></el-icon>
+          查询
+        </el-button>
+        <el-button data-testid="reset-btn" @click="handleReset">
+          <el-icon><Refresh /></el-icon>
+          重置
+        </el-button>
       </div>
     </el-card>
 
@@ -285,6 +288,8 @@ import type {
   ConsumptionStatistics,
 } from '@/api/consumption'
 
+import PageHeader from '@/components/common/PageHeader.vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 interface SelectOption {
   value: number
   label: string

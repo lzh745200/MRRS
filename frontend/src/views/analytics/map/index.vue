@@ -1,5 +1,7 @@
 <template>
   <div class="map-page-container">
+    <PageHeader title="地图可视化" subtitle="帮扶村与学校地理分布、路线与统计视图" />
+
     <div v-if="loading" class="map-loading">
       <el-skeleton :rows="8" animated />
     </div>
@@ -159,6 +161,7 @@ import { Van, Search } from '@element-plus/icons-vue'
 import { get } from '@/api/request'
 import { logger } from '@/utils/logger'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 const { pushSafe } = useRouterSafe()
 const loading = ref(true)
 const error = ref('')

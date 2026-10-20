@@ -71,7 +71,10 @@
           :value="option.value"
         />
       </el-select>
-      <el-button class="scope-reset" :disabled="!isScoped" @click="resetScope">重置</el-button>
+      <el-button class="scope-reset" :disabled="!isScoped" @click="resetScope">
+        <el-icon><Refresh /></el-icon>
+        重置
+      </el-button>
       <span v-if="scopeSubtitle" class="scope-subtitle">{{ scopeSubtitle }}</span>
     </section>
 
@@ -261,6 +264,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { useRouterSafe } from '@/composables/useRouterSafe'
+import { Refresh } from '@element-plus/icons-vue'
 import BaseChart from '@/components/common/BaseChart.vue'
 import {
   getBigScreenFilters,

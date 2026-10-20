@@ -97,7 +97,7 @@
         border
         @selection-change="(rows) => (bindSelection = rows)"
       >
-        <el-table-column type="selection" width="50" />
+        <el-table-column type="selection" width="48" />
         <el-table-column label="姓名" min-width="120">
           <template #default="{ row }">{{ row.full_name || row.username }}</template>
         </el-table-column>

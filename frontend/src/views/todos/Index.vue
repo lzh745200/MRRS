@@ -1,11 +1,6 @@
 <template>
   <div class="todos-page">
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">待办事项</h2>
-        <p class="page-desc">管理工作待办事项，跟踪任务完成情况</p>
-      </div>
-    </div>
+    <PageHeader title="待办事项" subtitle="管理工作待办事项，跟踪任务完成情况" />
 
     <!-- 添加待办 -->
     <div class="add-card">
@@ -14,13 +9,12 @@
           <el-input
             v-model="addForm.title"
             placeholder="输入待办事项..."
-            style="width: 360px"
             clearable
             @keyup.enter="handleAdd"
           />
         </el-form-item>
         <el-form-item label="优先级">
-          <el-select v-model="addForm.priority" style="width: 120px">
+          <el-select v-model="addForm.priority">
             <el-option label="高" value="high" />
             <el-option label="中" value="medium" />
             <el-option label="低" value="low" />
@@ -32,7 +26,6 @@
             type="date"
             placeholder="选择日期"
             value-format="YYYY-MM-DD"
-            style="width: 160px"
           />
         </el-form-item>
         <el-form-item>
@@ -198,6 +191,7 @@ import { Plus, Edit, Delete, Loading, Calendar } from '@element-plus/icons-vue'
 import { listTodos, createTodo, updateTodo, deleteTodo, toggleTodo } from '@/api/todos'
 
 import { format } from '@/utils'
+import PageHeader from '@/components/common/PageHeader.vue'
 const addForm = reactive({
   title: '',
   priority: 'medium' as string,

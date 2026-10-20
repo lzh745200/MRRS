@@ -7,7 +7,6 @@
           <el-select
             v-model="selectedPackageId"
             placeholder="请选择要管理版本的数据包"
-            style="width: 360px"
             @change="handlePackageSelected"
           >
             <el-option
@@ -30,7 +29,7 @@
       </template>
 
       <!-- 版本列表 -->
-      <el-table stripe :data="versionList" style="width: 100%">
+      <el-table border stripe :data="versionList" style="width: 100%">
         <el-table-column prop="version" label="版本号" width="120" />
         <el-table-column prop="description" label="版本说明" />
         <el-table-column label="变更统计" width="200">
@@ -49,7 +48,7 @@
             {{ formatTime(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="250">
+        <el-table-column fixed="right" label="操作" width="250">
           <template #default="{ row }">
             <el-button @click="handleViewDetail(row as VersionItem)"> 详情 </el-button>
             <el-button

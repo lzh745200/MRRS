@@ -189,7 +189,6 @@
           v-model="policyFilterCategory"
           placeholder="按类别筛选"
           clearable
-          style="width: 180px"
           @change="loadPolicies"
         >
           <el-option label="全部类别" value="" />
@@ -342,7 +341,6 @@
           v-model="eventFilterSeverity"
           placeholder="按严重程度筛选"
           clearable
-          style="width: 160px"
           @change="handleEventFilterChange"
         >
           <el-option label="全部" value="" />

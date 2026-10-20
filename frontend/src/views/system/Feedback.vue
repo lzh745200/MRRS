@@ -3,20 +3,21 @@
     <el-card class="search-card">
       <el-form :inline="true" :model="searchForm">
         <el-form-item label="反馈类型">
-          <el-select
-            v-model="searchForm.type"
-            placeholder="请选择反馈类型"
-            clearable
-            style="width: 140px"
-          >
+          <el-select v-model="searchForm.type" placeholder="请选择反馈类型" clearable>
             <el-option label="Bug反馈" value="bug" />
             <el-option label="功能建议" value="suggestion" />
             <el-option label="其他" value="other" />
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="loadData">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button type="primary" @click="loadData">
+            <el-icon><Search /></el-icon>
+            查询
+          </el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -30,7 +31,7 @@
       </template>
 
       <el-table v-loading="loading" :data="tableData" border>
-        <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="type" label="类型" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="typeTagMap[row.type] || 'info'">
@@ -89,6 +90,7 @@ import { ElMessage } from 'element-plus'
 import { apiRequest } from '@/api/request'
 import { useDesensitize } from '@/composables/useDesensitize'
 
+import { Refresh, Search } from '@element-plus/icons-vue'
 const { ds } = useDesensitize()
 
 const loading = ref(false)

@@ -1,5 +1,7 @@
 <template>
   <div class="rural-work-list-page">
+    <PageHeader title="乡村工作列表" subtitle="乡村振兴工作记录、筛选与统计概览" />
+
     <!-- 统计概览 -->
     <div class="stats-overview">
       <div v-for="stat in statsCards" :key="stat.label" class="stat-card">
@@ -18,7 +20,6 @@
             v-model="searchText"
             placeholder="搜索工作名称、负责人..."
             clearable
-            style="width: 240px"
             @clear="handleSearch"
             @keyup.enter="handleSearch"
           >
@@ -26,26 +27,14 @@
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
-          <el-select
-            v-model="filterStatus"
-            placeholder="状态筛选"
-            clearable
-            style="width: 140px"
-            @change="handleSearch"
-          >
+          <el-select v-model="filterStatus" placeholder="状态筛选" clearable @change="handleSearch">
             <el-option label="全部状态" value="" />
             <el-option label="计划中" value="planned" />
             <el-option label="进行中" value="in_progress" />
             <el-option label="已完成" value="completed" />
             <el-option label="已延期" value="delayed" />
           </el-select>
-          <el-select
-            v-model="filterType"
-            placeholder="类型筛选"
-            clearable
-            style="width: 160px"
-            @change="handleSearch"
-          >
+          <el-select v-model="filterType" placeholder="类型筛选" clearable @change="handleSearch">
             <el-option label="全部类型" value="" />
             <el-option label="基础设施建设" value="infrastructure" />
             <el-option label="产业发展" value="industry" />
@@ -53,17 +42,14 @@
             <el-option label="医疗健康" value="healthcare" />
             <el-option label="生态环境保护" value="environment" />
           </el-select>
-          <el-select
-            v-model="filterYear"
-            placeholder="年度筛选"
-            clearable
-            style="width: 130px"
-            @change="handleSearch"
-          >
+          <el-select v-model="filterYear" placeholder="年度筛选" clearable @change="handleSearch">
             <el-option label="全部年份" value="" />
             <el-option v-for="y in yearOptions" :key="y" :label="y + '年'" :value="y" />
           </el-select>
-          <el-button @click="resetFilters">重置</el-button>
+          <el-button @click="resetFilters">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </div>
         <div class="filter-right">
           <el-button type="success" @click="handleExport">
@@ -90,7 +76,7 @@
         </template>
       </el-result>
       <el-table v-else v-loading="loading" :data="filteredData" border style="width: 100%">
-        <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="name" label="工作名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="type" label="工作类型" width="130">
           <template #default="{ row }">
@@ -272,10 +258,11 @@ import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { getYearOptions } from '@/utils/yearOptions'
 import { useDesensitize } from '@/composables/useDesensitize'
-import { Search, Plus, Download } from '@element-plus/icons-vue'
+import { Search, Plus, Download, Refresh } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { WorkStatus, WorkType } from '@/api/ruralWork'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 // 类型映射
 const typeLabels: Record<string, string> = {
   infrastructure: '基础设施建设',

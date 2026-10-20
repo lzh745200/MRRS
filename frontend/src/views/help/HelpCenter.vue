@@ -84,6 +84,7 @@
 
           <el-table
             v-loading="loadingArticles"
+            border
             :data="articles"
             style="cursor: pointer"
             @row-click="viewArticle"

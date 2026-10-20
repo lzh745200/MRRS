@@ -87,8 +87,14 @@
           class="filter-date"
           data-testid="filter-date"
         />
-        <el-button type="primary" data-testid="search-btn" @click="handleSearch">查询</el-button>
-        <el-button data-testid="reset-btn" @click="handleReset">重置</el-button>
+        <el-button type="primary" data-testid="search-btn" @click="handleSearch">
+          <el-icon><Search /></el-icon>
+          查询
+        </el-button>
+        <el-button data-testid="reset-btn" @click="handleReset">
+          <el-icon><Refresh /></el-icon>
+          重置
+        </el-button>
       </div>
     </el-card>
 
@@ -308,7 +314,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload } from '@element-plus/icons-vue'
+import { Upload, Refresh, Search } from '@element-plus/icons-vue'
 import { DIALOG_LG, DIALOG_MD } from '@/config/dialog'
 import { formatDateTime } from '@/utils'
 import { unwrapList } from '@/utils/unwrapList'

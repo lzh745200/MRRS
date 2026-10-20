@@ -1,14 +1,13 @@
 <template>
   <div class="reminder-center">
-    <div class="page-header">
-      <h2>提醒中心</h2>
+    <PageHeader title="提醒中心" subtitle="集中查看审批超时、项目到期、预算超支等提醒">
       <div class="header-actions">
         <el-button :loading="loading" @click="load">刷新</el-button>
         <el-button type="primary" :loading="scanning" @click="handleScan">
           <el-icon><RefreshRight /></el-icon> 立即扫描
         </el-button>
       </div>
-    </div>
+    </PageHeader>
 
     <el-alert
       type="info"
@@ -106,6 +105,7 @@ import {
 
 import { format } from '@/utils'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 type FilterKey = 'open' | 'handled' | 'ignored' | 'all'
 
 const { pushSafe } = useRouterSafe()

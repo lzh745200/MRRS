@@ -823,7 +823,7 @@ function handleCommand(command: string) {
 
 /* ── Logo 区域 ── */
 .aside-header {
-  height: 60px;
+  height: 64px;
   display: flex;
   align-items: center;
   padding: 0 16px;
@@ -833,8 +833,8 @@ function handleCommand(command: string) {
 }
 
 .app-logo {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   border-radius: 50%;
   object-fit: cover;
@@ -844,11 +844,13 @@ function handleCommand(command: string) {
 
 .app-title {
   color: var(--color-accent-gold);
-  font-size: var(--text-lg, 16px);
-  font-weight: 700;
+  /* R35（方案 C）：品牌名单行 20px/800，与板块标题（18px）形成正确层级 */
+  font-size: var(--text-xl, 20px);
+  font-weight: 800;
   white-space: nowrap;
-  letter-spacing: 1.5px;
-  margin-left: 10px;
+  letter-spacing: 1px;
+  margin-left: 12px;
+  line-height: 1.2;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
@@ -1140,12 +1142,26 @@ function handleCommand(command: string) {
 }
 
 /* ── 工作台（Dashboard）特化 — 顶部间距 + 视觉突出 ── */
+/* R35（方案 C）：工作台保留 Home 图标，提升为「板块级入口」——
+   与七大板块标题同构（18px/700、同样的外边距/内边距/圆角），消除字号与图标层级倒挂 */
 .menu-item-dashboard {
-  margin-bottom: 4px !important;
+  height: auto !important;
+  line-height: 1.4 !important;
+  margin: 10px 8px 4px !important;
+  padding: 10px 12px !important;
+  border-radius: 8px !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em;
 }
-
 .menu-item-dashboard :deep(.el-icon) {
   color: $badge-gold;
+  font-size: 16px !important;
+  margin-right: 10px !important;
+}
+.menu-item-dashboard :deep(.menu-title-text) {
+  font-size: 18px !important;
+  font-weight: 700 !important;
 }
 
 /* ===================================================================

@@ -1,14 +1,9 @@
 <template>
   <div class="data-verify-page">
-    <div class="page-header">
-      <div>
-        <h2 class="page-title">数据校验</h2>
-        <p class="page-desc">
-          校验执行 / 规则管理 / 字段说明
-          三合一：一键查出问题数据、按规则维护校验策略、查阅字段中文说明
-        </p>
-      </div>
-    </div>
+    <PageHeader
+      title="数据校验"
+      subtitle="校验执行/规则管理/字段说明三合一：一键查出问题数据、维护校验策略、查阅字段说明"
+    />
 
     <!-- 页内 Tab（不依赖 el-tabs，便于键盘/测试与打印） -->
     <div class="dv-tabs" role="tablist">
@@ -199,6 +194,7 @@ import { get, post } from '@/api/request'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import RulesPanel from './components/RulesPanel.vue'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 /** 页内 Tab */
 type TabKey = 'verify' | 'rules' | 'fields'
 

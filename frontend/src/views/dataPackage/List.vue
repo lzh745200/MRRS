@@ -25,7 +25,7 @@
     <el-card class="filter-card">
       <el-form :inline="true" :model="filters">
         <el-form-item label="状态">
-          <el-select v-model="filters.status" placeholder="全部状态" clearable style="width: 150px">
+          <el-select v-model="filters.status" placeholder="全部状态" clearable>
             <el-option label="待处理" value="pending" />
             <el-option label="已验证" value="validated" />
             <el-option label="已导入" value="imported" />
@@ -33,15 +33,21 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="loadPackages">查询</el-button>
-          <el-button @click="resetFilters">重置</el-button>
+          <el-button type="primary" @click="loadPackages">
+            <el-icon><Search /></el-icon>
+            查询
+          </el-button>
+          <el-button @click="resetFilters">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <!-- Package List -->
     <el-card>
-      <el-table v-loading="loading" :data="packages">
+      <el-table v-loading="loading" border :data="packages">
         <el-table-column prop="package_code" label="包编码" width="200" />
         <el-table-column prop="file_name" label="文件名" min-width="150" />
         <el-table-column prop="file_size" label="大小" width="100">
@@ -135,7 +141,7 @@
             :key="preview.data_type"
             :label="`${getDataTypeLabel(preview.data_type)} (${preview.total})`"
           >
-            <el-table :data="preview.sample" max-height="400">
+            <el-table border :data="preview.sample" max-height="400">
               <el-table-column
                 v-for="col in preview.columns"
                 :key="col"
@@ -157,7 +163,7 @@ import { DIALOG_LG } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Upload, Download, Lock, Key } from '@element-plus/icons-vue'
+import { Upload, Download, Lock, Key, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logger } from '@/utils/logger'
 import ExportDialog from '@/components/dataPackage/ExportDialog.vue'

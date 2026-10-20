@@ -11,14 +11,13 @@
             v-model="searchQuery"
             placeholder="搜索任务名称、负责人、所属项目"
             clearable
-            style="width: 280px"
             @keyup.enter="handleSearch"
           >
             <template #prefix
               ><el-icon><Search /></el-icon
             ></template>
           </el-input>
-          <el-select v-model="selectedStatus" placeholder="任务状态" clearable style="width: 130px">
+          <el-select v-model="selectedStatus" placeholder="任务状态" clearable>
             <el-option label="全部状态" value="" />
             <el-option label="待分配" value="pending" />
             <el-option label="进行中" value="in_progress" />
@@ -26,13 +25,13 @@
             <el-option label="已延期" value="delayed" />
             <el-option label="已取消" value="cancelled" />
           </el-select>
-          <el-select v-model="selectedPriority" placeholder="优先级" clearable style="width: 120px">
+          <el-select v-model="selectedPriority" placeholder="优先级" clearable>
             <el-option label="全部" value="" />
             <el-option label="高" value="high" />
             <el-option label="中" value="medium" />
             <el-option label="低" value="low" />
           </el-select>
-          <el-select v-model="selectedAssignee" placeholder="负责人" clearable style="width: 130px">
+          <el-select v-model="selectedAssignee" placeholder="负责人" clearable>
             <el-option label="全部人员" value="" />
             <el-option
               v-for="person in staff"
@@ -41,8 +40,14 @@
               :value="person.id"
             />
           </el-select>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="resetFilters">重置</el-button>
+          <el-button type="primary" @click="handleSearch">
+            <el-icon><Search /></el-icon>
+            查询
+          </el-button>
+          <el-button @click="resetFilters">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </div>
         <div class="toolbar-right">
           <el-button @click="importTasks">
@@ -78,7 +83,7 @@
         @selection-change="handleSelectionChange"
         @row-dblclick="handleRowDoubleClick"
       >
-        <el-table-column type="selection" width="45" align="center" />
+        <el-table-column type="selection" width="48" align="center" />
         <el-table-column prop="id" label="编号" width="80" align="center" />
         <el-table-column prop="name" label="任务名称" min-width="200">
           <template #default="scope">
@@ -603,7 +608,15 @@ import { unwrapList } from '@/utils/unwrapList'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Plus, Upload, Download, ArrowDown, Document } from '@element-plus/icons-vue'
+import {
+  Search,
+  Plus,
+  Upload,
+  Download,
+  ArrowDown,
+  Document,
+  Refresh,
+} from '@element-plus/icons-vue'
 import { getRuralWorks, createRuralWork, updateRuralWork, deleteRuralWork } from '@/api/ruralWork'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'

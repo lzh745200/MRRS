@@ -58,12 +58,13 @@
           <el-table
             ref="tableRef"
             v-loading="loading"
+            border
             :data="messages"
             :row-class-name="getRowClassName"
             @selection-change="handleSelectionChange"
             @row-click="handleRowClick"
           >
-            <el-table-column type="selection" width="55" />
+            <el-table-column type="selection" width="48" />
             <el-table-column label="类型" width="120">
               <template #default="{ row }">
                 <el-tag :type="formatMessageType(row.message_type).type as any">

@@ -1,11 +1,7 @@
 <template>
   <div class="fund-list-page">
     <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">经费申请</h2>
-        <p class="page-desc">查看和管理您的经费申请记录，提交新申请或跟踪审批进度</p>
-      </div>
+    <PageHeader title="经费申请" subtitle="查看和管理您的经费申请记录，提交新申请或跟踪审批进度">
       <div class="header-actions">
         <el-button type="primary" @click="openApplyDialog">
           <el-icon><EditPen /></el-icon>提交经费申请
@@ -14,7 +10,7 @@
           <el-icon><Tickets /></el-icon>我的申请
         </el-button>
       </div>
-    </div>
+    </PageHeader>
 
     <!-- 统计卡片 -->
     <div class="stats-row">
@@ -44,17 +40,11 @@
             v-model="filterForm.keyword"
             placeholder="名称/项目/来源"
             clearable
-            style="width: 200px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
         <el-form-item label="经费类型">
-          <el-select
-            v-model="filterForm.type"
-            placeholder="全部类型"
-            clearable
-            style="width: 130px"
-          >
+          <el-select v-model="filterForm.type" placeholder="全部类型" clearable>
             <el-option label="项目经费" value="project" />
             <el-option label="运营经费" value="operation" />
             <el-option label="教育帮扶" value="education" />
@@ -64,12 +54,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select
-            v-model="filterForm.status"
-            placeholder="全部状态"
-            clearable
-            style="width: 130px"
-          >
+          <el-select v-model="filterForm.status" placeholder="全部状态" clearable>
             <el-option label="待审批" value="pending" />
             <el-option label="已计划" value="planned" />
             <el-option label="已批准" value="approved" />
@@ -83,15 +68,18 @@
           <el-button type="primary" @click="handleSearch">
             <el-icon><Search /></el-icon>搜索
           </el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
     </div>
 
     <!-- 数据表格 -->
     <div class="table-card">
-      <el-table v-loading="loading" :data="tableData" stripe>
-        <el-table-column type="index" label="序号" width="60" align="center" />
+      <el-table v-loading="loading" border :data="tableData" stripe>
+        <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="name" label="经费名称" min-width="180">
           <template #default="scope">
             <el-link type="primary" @click="handleView(scope.row)">{{ scope.row.name }}</el-link>
@@ -318,7 +306,7 @@ import { logger } from '@/utils/logger'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
-import { EditPen, Search, Tickets } from '@element-plus/icons-vue'
+import { EditPen, Search, Tickets, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { get, post, put, del, apiRequest } from '@/api/request'
@@ -326,6 +314,7 @@ import { useAuthStore } from '@/stores/auth'
 import { getSupportedVillages } from '@/api/supportedVillage'
 import { schoolsApi } from '@/api/schools'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 defineOptions({ name: 'UserFundList' })
 
 const { pushSafe } = useRouterSafe()

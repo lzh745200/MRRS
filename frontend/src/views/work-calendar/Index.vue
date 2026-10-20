@@ -1,10 +1,8 @@
 <template>
   <div class="work-calendar-page">
-    <div class="page-header">
-      <h2 class="page-title">工作日历</h2>
-      <p class="page-desc">帮扶工作安排与日程管理</p>
+    <PageHeader title="工作日历" subtitle="帮扶工作安排与日程管理">
       <el-button type="primary" @click="openDialog()">添加工作安排</el-button>
-    </div>
+    </PageHeader>
 
     <el-card shadow="never">
       <el-calendar v-model="currentDate">
@@ -87,6 +85,7 @@ import { format } from '@/utils'
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 interface WorkEvent {
   id: number
   date: string

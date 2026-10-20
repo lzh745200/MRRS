@@ -1,12 +1,8 @@
 <template>
   <div class="report-templates-page">
-    <div class="page-header">
-      <div>
-        <h2 class="page-title">报表模板管理</h2>
-        <p class="page-desc">管理数据导入导出模板和报表格式</p>
-      </div>
+    <PageHeader title="报表模板管理" subtitle="管理数据导入导出模板和报表格式">
       <el-button type="primary" @click="openCreateDialog">+ 新建模板</el-button>
-    </div>
+    </PageHeader>
 
     <!-- 搜索与筛选 -->
     <div class="filter-bar">
@@ -14,7 +10,6 @@
         v-model="searchText"
         placeholder="搜索模板名称或描述"
         clearable
-        style="width: 260px"
         @clear="onFilterChange"
         @keyup.enter="onFilterChange"
       >
@@ -22,13 +17,7 @@
           ><el-icon><Search /></el-icon
         ></template>
       </el-input>
-      <el-select
-        v-model="filterModule"
-        placeholder="关联模块"
-        clearable
-        style="width: 160px"
-        @change="onFilterChange"
-      >
+      <el-select v-model="filterModule" placeholder="关联模块" clearable @change="onFilterChange">
         <el-option label="全部模块" value="" />
         <el-option label="帮扶村" value="village" />
         <el-option label="帮扶学校" value="school" />
@@ -484,6 +473,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { get, post, put, del, apiRequest } from '@/api/request'
 
 import { format } from '@/utils'
+import PageHeader from '@/components/common/PageHeader.vue'
 interface Template {
   id: number
   name: string

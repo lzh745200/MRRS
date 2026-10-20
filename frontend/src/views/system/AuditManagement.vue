@@ -89,19 +89,25 @@
               />
             </div>
             <div class="filter-item filter-item-btn">
-              <el-button type="primary" @click="handleSearch">查询</el-button>
-              <el-button @click="handleReset">重置</el-button>
+              <el-button type="primary" @click="handleSearch">
+                <el-icon><Search /></el-icon>
+                查询
+              </el-button>
+              <el-button @click="handleReset">
+                <el-icon><Refresh /></el-icon>
+                重置
+              </el-button>
               <el-button :loading="exporting" @click="handleExportExcel">导出Excel</el-button>
             </div>
           </div>
 
-          <el-table v-loading="loading" :data="auditLogs" style="margin-top: 16px">
-            <el-table-column type="index" label="#" width="50" />
+          <el-table v-loading="loading" border :data="auditLogs" style="margin-top: 16px">
+            <el-table-column type="index" label="#" width="72" />
             <el-table-column label="时间" width="170">
               <template #default="{ row }">{{ fmtTime(row.timestamp) }}</template>
             </el-table-column>
             <el-table-column prop="user" label="用户" width="100" />
-            <el-table-column label="操作" width="100">
+            <el-table-column fixed="right" label="操作" width="100">
               <template #default="{ row }">
                 <el-tag :type="actionTagType(row.action)">{{ actionName(row.action) }}</el-tag>
               </template>
@@ -123,8 +129,8 @@
       <!-- 登录日志 -->
       <el-tab-pane label="登录日志" name="login">
         <el-card shadow="never">
-          <el-table :data="loginLogs">
-            <el-table-column type="index" label="#" width="50" />
+          <el-table border :data="loginLogs">
+            <el-table-column type="index" label="#" width="72" />
             <el-table-column label="时间" width="170">
               <template #default="{ row }">{{ fmtTime(row.timestamp) }}</template>
             </el-table-column>
@@ -152,8 +158,8 @@
       <!-- 安全告警 -->
       <el-tab-pane label="安全告警" name="alerts">
         <el-card shadow="never">
-          <el-table :data="alerts">
-            <el-table-column type="index" label="#" width="50" />
+          <el-table border :data="alerts">
+            <el-table-column type="index" label="#" width="72" />
             <el-table-column label="时间" width="170">
               <template #default="{ row }">{{ fmtTime(row.timestamp) }}</template>
             </el-table-column>
@@ -177,7 +183,7 @@
                 }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="80">
+            <el-table-column fixed="right" label="操作" width="80">
               <template #default="{ row }">
                 <el-button v-if="!row.handled" type="primary" link @click="handleAlert(row)"
                   >处理</el-button
@@ -200,6 +206,7 @@ import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
 import { logger } from '@/utils/logger'
 
 import { format } from '@/utils'
+import { Refresh, Search } from '@element-plus/icons-vue'
 const activeTab = ref('operations')
 const loading = ref(false)
 const filters = reactive({

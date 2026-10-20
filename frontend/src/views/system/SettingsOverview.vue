@@ -87,14 +87,14 @@
           <el-button link type="primary" @click="goTo('/system/audit')">查看全部</el-button>
         </div>
       </template>
-      <el-table v-loading="auditLoading" :data="auditLogs">
+      <el-table v-loading="auditLoading" border :data="auditLogs">
         <el-table-column label="时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
         <el-table-column label="用户" width="120">
           <template #default="{ row }">{{ row.username || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120">
+        <el-table-column fixed="right" label="操作" width="120">
           <template #default="{ row }">
             <el-tag :type="actionTagType(row.action)">{{ row.action || '-' }}</el-tag>
           </template>

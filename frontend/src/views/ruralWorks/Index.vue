@@ -1,5 +1,7 @@
 <template>
   <div class="rural-works-index">
+    <PageHeader title="乡村振兴" subtitle="乡村振兴工作、任务分配、数据分析与工作报告" />
+
     <el-tabs
       v-model="activeTab"
       type="border-card"
@@ -30,6 +32,7 @@ import RuralWorkTask from './Task.vue'
 import RuralWorkAnalysis from './Analysis.vue'
 import RuralWorkReport from './Report.vue'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 const route = useRoute()
 
 // 根据路由参数决定默认标签

@@ -66,7 +66,7 @@
 
           <el-form label-width="100px" :model="legacyForm">
             <el-form-item label="系统角色">
-              <el-select v-model="legacyForm.role" placeholder="选择系统角色" style="width: 240px">
+              <el-select v-model="legacyForm.role" placeholder="选择系统角色">
                 <el-option label="超级管理员" value="super_admin" />
                 <el-option label="管理员" value="admin" />
                 <el-option label="普通用户" value="user" />
@@ -74,7 +74,7 @@
               </el-select>
             </el-form-item>
             <el-form-item label="数据范围">
-              <el-select v-model="legacyForm.data_scope" style="width: 240px">
+              <el-select v-model="legacyForm.data_scope">
                 <el-option label="全部数据" value="all" />
                 <el-option label="本组织及子组织" value="org_children" />
                 <el-option label="本组织" value="org" />

@@ -10,12 +10,7 @@
     <el-card v-if="invalidProject" class="steps-card" shadow="never">
       <el-empty description="请选择项目以查看资金周期">
         <div class="selector-row">
-          <el-select
-            v-model="selectedProjectId"
-            placeholder="选择项目"
-            filterable
-            style="width: 320px"
-          >
+          <el-select v-model="selectedProjectId" placeholder="选择项目" filterable>
             <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
           <el-button type="primary" :disabled="!selectedProjectId" @click="goSelectedProject">
@@ -105,6 +100,7 @@
               />
               <el-table
                 v-if="complianceResult.issues?.length"
+                border
                 :data="complianceResult.issues"
                 class="mt-3"
               >
@@ -141,7 +137,13 @@
         <el-tab-pane label="计划下达" name="phase3">
           <div class="phase-content">
             <el-button :loading="loading" @click="loadAllocationPlan">加载拨付计划</el-button>
-            <el-table v-if="allocationItems.length" stripe :data="allocationItems" class="mt-3">
+            <el-table
+              v-if="allocationItems.length"
+              border
+              stripe
+              :data="allocationItems"
+              class="mt-3"
+            >
               <el-table-column prop="fund_name" label="经费名称" width="200" />
               <el-table-column prop="planned_amount" label="计划金额" width="120" />
               <el-table-column prop="approved_amount" label="批准金额" width="120" />
@@ -154,7 +156,7 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="120">
+              <el-table-column fixed="right" label="操作" width="120">
                 <template #default="{ row }">
                   <el-button
                     v-if="row.budget_locked"
@@ -212,7 +214,7 @@
               </el-button>
               <el-button :loading="loading" @click="loadDeviation">偏差分析</el-button>
             </div>
-            <el-table v-if="deviations.length" stripe :data="deviations" class="mt-3">
+            <el-table v-if="deviations.length" border stripe :data="deviations" class="mt-3">
               <el-table-column prop="fund_name" label="经费名称" width="200" />
               <el-table-column prop="project_progress" label="项目进度(%)" width="120" />
               <el-table-column prop="fund_progress" label="资金进度(%)" width="120" />

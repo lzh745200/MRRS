@@ -14,7 +14,6 @@
           start-placeholder="开始日期"
           end-placeholder="结束日期"
           value-format="YYYY-MM-DD"
-          style="width: 280px"
           @change="refreshData"
         />
         <el-button @click="refreshData">
@@ -87,7 +86,6 @@
             v-model="searchText"
             placeholder="搜索工作名称..."
             clearable
-            style="width: 220px"
             @keyup.enter="filterTable"
             @clear="filterTable"
           >
@@ -95,13 +93,7 @@
               ><el-icon><Search /></el-icon
             ></template>
           </el-input>
-          <el-select
-            v-model="filterType"
-            placeholder="工作类型"
-            clearable
-            style="width: 150px"
-            @change="filterTable"
-          >
+          <el-select v-model="filterType" placeholder="工作类型" clearable @change="filterTable">
             <el-option label="全部类型" value="" />
             <el-option label="基础设施建设" value="infrastructure" />
             <el-option label="产业发展" value="industry" />
@@ -109,13 +101,7 @@
             <el-option label="医疗健康" value="healthcare" />
             <el-option label="生态环境保护" value="environment" />
           </el-select>
-          <el-select
-            v-model="filterStatus"
-            placeholder="状态"
-            clearable
-            style="width: 130px"
-            @change="filterTable"
-          >
+          <el-select v-model="filterStatus" placeholder="状态" clearable @change="filterTable">
             <el-option label="全部状态" value="" />
             <el-option label="计划中" value="planned" />
             <el-option label="进行中" value="in_progress" />
@@ -125,7 +111,7 @@
         </div>
       </div>
       <el-table v-loading="loading" :data="filteredTableData" border style="width: 100%">
-        <el-table-column type="index" label="#" width="50" align="center" />
+        <el-table-column type="index" label="#" width="72" align="center" />
         <el-table-column prop="name" label="工作名称" min-width="200" show-overflow-tooltip />
         <el-table-column prop="typeName" label="工作类型" width="130">
           <template #default="{ row }">

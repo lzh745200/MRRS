@@ -179,7 +179,7 @@
               <el-table-column
                 prop="rowIndex"
                 label="序号"
-                width="80"
+                width="72"
                 type="index"
               ></el-table-column>
               <el-table-column prop="projectName" label="项目名称" width="200"></el-table-column>

@@ -96,7 +96,6 @@
           <el-input
             v-model="generateForm.verification_code"
             placeholder="选择组织后自动生成，或手动输入下级单位提供的校验码"
-            style="width: 280px"
             maxlength="4"
             clearable
           />
@@ -149,13 +148,7 @@
 
       <el-form :inline="true" :model="queryForm" class="query-form">
         <el-form-item label="组织单位">
-          <el-select
-            v-model="queryForm.organization_id"
-            placeholder="全部"
-            clearable
-            filterable
-            style="width: 200px"
-          >
+          <el-select v-model="queryForm.organization_id" placeholder="全部" clearable filterable>
             <el-option
               v-for="org in organizationList"
               :key="org.id"
@@ -166,7 +159,7 @@
         </el-form-item>
 
         <el-form-item label="状态">
-          <el-select v-model="queryForm.status" placeholder="全部" clearable style="width: 120px">
+          <el-select v-model="queryForm.status" placeholder="全部" clearable>
             <el-option label="待使用" value="pending" />
             <el-option label="已激活" value="active" />
             <el-option label="已撤销" value="revoked" />
@@ -183,7 +176,7 @@
       </el-form>
 
       <el-table v-loading="loading" :data="tableData" border style="width: 100%">
-        <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="organization_name" label="组织单位" min-width="180" />
         <el-table-column prop="verification_code" label="校验码" width="100" align="center" />
         <el-table-column prop="pass_code" label="通行证码" width="180">

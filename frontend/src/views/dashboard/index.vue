@@ -24,7 +24,7 @@
           <span v-if="layoutSaved" class="layout-saved"
             ><el-icon><Select /></el-icon> 已保存</span
           >
-          <el-select v-model="layoutPreset" style="width: 140px" @change="applyPreset">
+          <el-select v-model="layoutPreset" @change="applyPreset">
             <el-option label="默认布局" value="default" />
             <el-option label="紧凑模式" value="compact" />
             <el-option label="展开全部" value="expand" />

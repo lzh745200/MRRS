@@ -123,28 +123,13 @@
       </template>
       <el-form :inline="true" :model="archiveForm" class="archive-form">
         <el-form-item label="数据模型">
-          <el-input
-            v-model="archiveForm.modelName"
-            placeholder="例如：WorkLog"
-            style="width: 180px"
-          />
+          <el-input v-model="archiveForm.modelName" placeholder="例如：WorkLog" />
         </el-form-item>
         <el-form-item label="天数阈值">
-          <el-input-number
-            v-model="archiveForm.beforeDays"
-            :min="1"
-            :max="3650"
-            style="width: 140px"
-          />
+          <el-input-number v-model="archiveForm.beforeDays" :min="1" :max="3650" />
         </el-form-item>
         <el-form-item label="批次大小">
-          <el-input-number
-            v-model="archiveForm.batchSize"
-            :min="100"
-            :max="50000"
-            :step="100"
-            style="width: 140px"
-          />
+          <el-input-number v-model="archiveForm.batchSize" :min="100" :max="50000" :step="100" />
         </el-form-item>
         <el-form-item>
           <el-button
@@ -173,7 +158,7 @@
       </template>
       <el-tabs v-model="archiveTab" @tab-change="handleArchiveTabChange">
         <el-tab-pane label="冷归档" name="cold">
-          <el-table :data="coldArchives" style="width: 100%" empty-text="暂无非归档文件">
+          <el-table border :data="coldArchives" style="width: 100%" empty-text="暂无非归档文件">
             <el-table-column prop="name" label="文件名" min-width="200" />
             <el-table-column label="大小" width="120">
               <template #default="{ row }">
@@ -185,7 +170,7 @@
                 {{ row.modified }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="120">
+            <el-table-column fixed="right" label="操作" width="120">
               <template #default="{ row }">
                 <el-button type="primary" link @click="handleRestore(row)"> 恢复 </el-button>
               </template>
@@ -193,7 +178,7 @@
           </el-table>
         </el-tab-pane>
         <el-tab-pane label="温归档" name="warm">
-          <el-table :data="warmArchives" style="width: 100%" empty-text="暂无温归档文件">
+          <el-table border :data="warmArchives" style="width: 100%" empty-text="暂无温归档文件">
             <el-table-column prop="name" label="文件名" min-width="200" />
             <el-table-column label="大小" width="120">
               <template #default="{ row }">
@@ -205,7 +190,7 @@
                 {{ row.modified }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="120">
+            <el-table-column fixed="right" label="操作" width="120">
               <template #default="{ row }">
                 <el-button type="primary" link @click="handleRestore(row)"> 恢复 </el-button>
               </template>
@@ -227,7 +212,6 @@
             type="date"
             placeholder="选择日期"
             value-format="YYYY-MM-DD"
-            style="width: 180px"
           />
         </el-form-item>
         <el-form-item>

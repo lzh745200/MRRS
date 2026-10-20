@@ -1,12 +1,11 @@
 <template>
   <div class="donation-list">
-    <div class="page-header">
-      <h2>捐赠物资台账</h2>
+    <PageHeader title="捐赠物资台账" subtitle="登记捐赠物资与折价，跟踪物资使用去向">
       <div class="header-actions">
         <el-button :loading="loading" @click="load">刷新</el-button>
         <el-button type="primary" @click="openCreate">登记物资</el-button>
       </div>
-    </div>
+    </PageHeader>
 
     <div class="stats-row">
       <el-tag>总数 {{ stats.total }}</el-tag>
@@ -46,13 +45,19 @@
             :value="o.value"
           />
         </el-select>
-        <el-button type="primary" @click="handleSearch">查询</el-button>
-        <el-button @click="handleReset">重置</el-button>
+        <el-button type="primary" @click="handleSearch">
+          <el-icon><Search /></el-icon>
+          查询
+        </el-button>
+        <el-button @click="handleReset">
+          <el-icon><Refresh /></el-icon>
+          重置
+        </el-button>
       </div>
 
       <EmptyState v-if="!loading && items.length === 0" description="暂无捐赠物资记录" />
       <template v-else>
-        <el-table v-loading="loading" :data="items">
+        <el-table v-loading="loading" border :data="items">
           <el-table-column prop="name" label="名称" min-width="140" />
           <el-table-column label="类别" width="90">
             <template #default="{ row }">
@@ -192,6 +197,8 @@ import {
 } from '@/api/donations'
 import type { DonationItem, DonationPayload, DonationStats } from '@/api/donations'
 
+import PageHeader from '@/components/common/PageHeader.vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 interface Option {
   id: number
   label: string

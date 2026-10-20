@@ -1,5 +1,46 @@
 <template>
   <div class="organization-list-page">
+    <PageHeader title="组织管理" subtitle="维护组织架构、上下级关系与组织统计">
+      <div class="header-actions">
+        <el-input
+          v-model="searchText"
+          placeholder="搜索组织名称/编码..."
+          clearable
+          style="width: 220px; margin-right: 10px"
+          @clear="handleSearch"
+          @keyup.enter="handleSearch"
+        />
+        <el-select
+          v-model="filterType"
+          placeholder="全部类型"
+          clearable
+          style="width: 140px; margin-right: 10px"
+          @change="handleSearch"
+        >
+          <el-option label="部门单位" value="department" />
+          <el-option label="帮扶单位" value="support_unit" />
+        </el-select>
+        <el-select
+          v-model="filterStatus"
+          placeholder="全部状态"
+          clearable
+          style="width: 130px; margin-right: 10px"
+          @change="handleSearch"
+        >
+          <el-option label="正常" value="active" />
+          <el-option label="已停用" value="inactive" />
+        </el-select>
+        <el-button v-if="isAdmin" :loading="exporting" @click="handleExport">
+          <el-icon><Download /></el-icon>
+          <span>导出</span>
+        </el-button>
+        <el-button v-if="isAdmin" type="primary" @click="handleCreate">
+          <el-icon><Plus /></el-icon>
+          <span>新增组织</span>
+        </el-button>
+      </div>
+    </PageHeader>
+
     <!-- 统计卡片 -->
     <div class="stats-row">
       <el-card v-loading="statsLoading" shadow="hover" class="stat-card">
@@ -49,50 +90,6 @@
     </div>
 
     <el-card>
-      <template #header>
-        <div class="page-header">
-          <span class="page-title">组织管理</span>
-          <div class="header-actions">
-            <el-input
-              v-model="searchText"
-              placeholder="搜索组织名称/编码..."
-              clearable
-              style="width: 220px; margin-right: 10px"
-              @clear="handleSearch"
-              @keyup.enter="handleSearch"
-            />
-            <el-select
-              v-model="filterType"
-              placeholder="全部类型"
-              clearable
-              style="width: 140px; margin-right: 10px"
-              @change="handleSearch"
-            >
-              <el-option label="部门单位" value="department" />
-              <el-option label="帮扶单位" value="support_unit" />
-            </el-select>
-            <el-select
-              v-model="filterStatus"
-              placeholder="全部状态"
-              clearable
-              style="width: 130px; margin-right: 10px"
-              @change="handleSearch"
-            >
-              <el-option label="正常" value="active" />
-              <el-option label="已停用" value="inactive" />
-            </el-select>
-            <el-button v-if="isAdmin" :loading="exporting" @click="handleExport">
-              <el-icon><Download /></el-icon>
-              <span>导出</span>
-            </el-button>
-            <el-button v-if="isAdmin" type="primary" @click="handleCreate">
-              <el-icon><Plus /></el-icon>
-              <span>新增组织</span>
-            </el-button>
-          </div>
-        </div>
-      </template>
-
       <div v-if="isAdmin && !searchText && !filterType" class="drag-tip">
         <el-alert title="拖拽提示" type="info" :closable="false" show-icon>
           <template #default>
@@ -103,7 +100,7 @@
       </div>
 
       <el-table ref="tableRef" v-loading="loading" :data="tableData" border stripe row-key="id">
-        <el-table-column type="index" label="序号" width="60" />
+        <el-table-column type="index" label="序号" width="72" />
         <el-table-column prop="name" label="组织名称" min-width="180">
           <template #default="scope">
             <span class="org-name-link" @click="handleViewDetail(scope.row)">{{
@@ -259,6 +256,7 @@ import {
   deactivateOrganization,
 } from '@/api/organization'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 const { pushSafe } = useRouterSafe()
 
 // 获取认证状态

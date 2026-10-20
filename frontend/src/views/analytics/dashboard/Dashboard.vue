@@ -7,7 +7,7 @@
         <p class="page-desc">帮扶村综合数据分析与可视化</p>
       </div>
       <div class="header-actions">
-        <el-select v-model="selectedYear" style="width: 120px" @change="loadData">
+        <el-select v-model="selectedYear" @change="loadData">
           <el-option
             v-for="year in availableYears"
             :key="year"
@@ -28,13 +28,7 @@
     <div class="filter-card">
       <el-form :model="filters" inline>
         <el-form-item label="部门">
-          <el-select
-            v-model="filters.department"
-            placeholder="全部"
-            clearable
-            style="width: 140px"
-            @change="loadData"
-          >
+          <el-select v-model="filters.department" placeholder="全部" clearable @change="loadData">
             <el-option
               v-for="dept in filterOptions.departments"
               :key="dept"
@@ -44,13 +38,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="地域属性">
-          <el-select
-            v-model="filters.regionType"
-            placeholder="全部"
-            clearable
-            style="width: 140px"
-            @change="loadData"
-          >
+          <el-select v-model="filters.regionType" placeholder="全部" clearable @change="loadData">
             <el-option label="三区三州" value="isThreeRegions" />
             <el-option label="边疆地区" value="isBorderArea" />
             <el-option label="民族地区" value="isEthnicArea" />

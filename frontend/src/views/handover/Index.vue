@@ -1,9 +1,8 @@
 <template>
   <div class="handover-page">
-    <div class="page-header">
-      <h2>工作移交</h2>
+    <PageHeader title="工作移交" subtitle="离岗换岗时移交在办工作、资产与待办事项">
       <el-button :loading="inventoryLoading" @click="loadAll">刷新</el-button>
-    </div>
+    </PageHeader>
 
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane label="发起移交" name="execute">
@@ -78,7 +77,7 @@
         <el-card v-loading="historyLoading" class="handover-card">
           <EmptyState v-if="historyItems.length === 0" description="暂无移交记录" />
           <template v-else>
-            <el-table :data="historyItems">
+            <el-table border :data="historyItems">
               <el-table-column prop="record_no" label="交接单号" min-width="200" />
               <el-table-column label="交接双方" min-width="180">
                 <template #default="{ row }">
@@ -118,7 +117,7 @@
           <span>移交时间：{{ receipt.created_at }}</span>
         </div>
         <div v-if="receipt.note" class="receipt-note">备注：{{ receipt.note }}</div>
-        <el-table :data="receipt.items">
+        <el-table border :data="receipt.items">
           <el-table-column label="资产类型" width="120">
             <template #default="{ row }">{{ assetTypeLabel(row.type) }}</template>
           </el-table-column>
@@ -165,6 +164,7 @@ import type {
 } from '@/api/handover'
 import exportUtil from '@/utils/exportUtil'
 
+import PageHeader from '@/components/common/PageHeader.vue'
 const ASSET_TYPES: HandoverAssetType[] = ['village', 'project', 'todo', 'approval']
 
 function emptyInventory(): HandoverInventory {

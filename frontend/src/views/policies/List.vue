@@ -17,7 +17,6 @@
             v-model="searchForm.category"
             placeholder="请选择"
             clearable
-            style="width: 140px"
             @change="handleCategoryChange"
           >
             <el-option label="专项政策" value="military" />
@@ -29,7 +28,6 @@
             v-model="searchForm.organization_level"
             placeholder="请选择"
             clearable
-            style="width: 140px"
             :disabled="!searchForm.category"
           >
             <el-option
@@ -41,12 +39,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select
-            v-model="searchForm.status"
-            placeholder="请选择"
-            clearable
-            style="width: 140px"
-          >
+          <el-select v-model="searchForm.status" placeholder="请选择" clearable>
             <el-option label="有效" value="active" />
             <el-option label="失效" value="invalid" />
             <el-option label="草稿" value="draft" />
@@ -124,8 +117,8 @@
         @sort-change="handleSortChange"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column v-if="canDelete" type="selection" width="50" align="center" />
-        <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column v-if="canDelete" type="selection" width="48" align="center" />
+        <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="title" label="政策名称" min-width="200" show-overflow-tooltip />
         <el-table-column label="文号" width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ row.document_number || row.code || '-' }}</template>

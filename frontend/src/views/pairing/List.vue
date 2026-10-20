@@ -1,12 +1,11 @@
 <template>
   <div class="pairing-list">
-    <div class="page-header">
-      <h2>结对帮扶与走访台账</h2>
+    <PageHeader title="结对帮扶与走访台账" subtitle="记录结对关系与走访情况，跟踪帮扶进展">
       <div class="header-actions">
         <el-button :loading="loading" @click="load">刷新</el-button>
         <el-button type="primary" @click="openCreate">新建结对</el-button>
       </div>
-    </div>
+    </PageHeader>
 
     <div class="stats-row">
       <el-tag>结对总数 {{ stats.total }}</el-tag>
@@ -59,8 +58,14 @@
         <el-select v-model="query.status" placeholder="状态" clearable class="f-select">
           <el-option v-for="o in STATUS_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
         </el-select>
-        <el-button type="primary" @click="handleSearch">查询</el-button>
-        <el-button @click="handleReset">重置</el-button>
+        <el-button type="primary" @click="handleSearch">
+          <el-icon><Search /></el-icon>
+          查询
+        </el-button>
+        <el-button @click="handleReset">
+          <el-icon><Refresh /></el-icon>
+          重置
+        </el-button>
       </div>
 
       <div v-if="partnerScopeText" class="partner-scope">
@@ -70,7 +75,7 @@
         >
       </div>
 
-      <el-table v-loading="loading" :data="items" class="pairing-table">
+      <el-table v-loading="loading" border :data="items" class="pairing-table">
         <el-table-column label="帮扶主体" min-width="180">
           <template #default="{ row }">{{ subjectLabel(row as PairingItem) }}</template>
         </el-table-column>
@@ -253,12 +258,12 @@
         </el-button>
       </div>
 
-      <el-table v-loading="visitsLoading" :data="visits" size="small" class="visits-table">
+      <el-table v-loading="visitsLoading" border :data="visits" size="small" class="visits-table">
         <el-table-column prop="visit_date" label="走访日期" width="120" />
         <el-table-column prop="visitors" label="走访人员" width="150" />
         <el-table-column prop="purpose" label="走访事项" />
         <el-table-column prop="materials" label="慰问物资" />
-        <el-table-column label="操作" width="140">
+        <el-table-column fixed="right" label="操作" width="140">
           <template #default="{ row }">
             <el-button link class="act-visit-edit" @click="handleVisitEdit(row as VisitItem)">
               编辑
@@ -304,6 +309,8 @@ import {
   type VisitItem,
 } from '@/api/pairings'
 
+import PageHeader from '@/components/common/PageHeader.vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 const SUBJECT_OPTIONS = [
   { value: 'unit', label: '单位' },
   { value: 'branch', label: '党支部' },

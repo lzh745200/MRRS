@@ -22,7 +22,6 @@
                     v-model="queryForm.status"
                     placeholder="全部状态"
                     clearable
-                    style="width: 150px"
                     @change="handleQuery"
                   >
                     <el-option label="待使用" value="pending" />
@@ -31,14 +30,20 @@
                   </el-select>
                 </el-form-item>
                 <el-form-item>
-                  <el-button type="primary" @click="handleQuery">查询</el-button>
-                  <el-button @click="handleReset">重置</el-button>
+                  <el-button type="primary" @click="handleQuery">
+                    <el-icon><Search /></el-icon>
+                    查询
+                  </el-button>
+                  <el-button @click="handleReset">
+                    <el-icon><Refresh /></el-icon>
+                    重置
+                  </el-button>
                 </el-form-item>
               </el-form>
 
               <!-- 机器码列表 -->
               <el-table v-loading="loading" :data="machineCodeList" border style="width: 100%">
-                <el-table-column type="index" label="序号" width="60" />
+                <el-table-column type="index" label="序号" width="72" />
                 <el-table-column prop="machine_code" label="机器码" min-width="200">
                   <template #default="{ row }">
                     <el-tooltip :content="row.machine_code" placement="top">
@@ -141,7 +146,6 @@
                       v-model="createForm.pass_code"
                       placeholder="留空则自动生成"
                       maxlength="4"
-                      style="width: 200px"
                     />
                     <div class="pass-code-hint">
                       输入4位数字手动设置通行码，不填则系统自动生成32位通行码
@@ -214,7 +218,7 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { logger } from '@/utils/logger'
-import { Plus, CopyDocument } from '@element-plus/icons-vue'
+import { Plus, CopyDocument, Refresh, Search } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import PassCodeManagement from '@/views/organization/PassCodeManagement.vue'

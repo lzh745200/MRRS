@@ -56,7 +56,7 @@
           <el-button text type="primary" @click="pushSafe('/approval/pending')">查看全部</el-button>
         </div>
       </template>
-      <el-table v-loading="loading" stripe :data="pendingTasks" empty-text="暂无待审批任务">
+      <el-table v-loading="loading" border stripe :data="pendingTasks" empty-text="暂无待审批任务">
         <el-table-column prop="title" label="事项" min-width="220" show-overflow-tooltip />
         <el-table-column label="类型" width="110">
           <template #default="{ row }">
@@ -69,7 +69,7 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140">
+        <el-table-column fixed="right" label="操作" width="140">
           <template #default="{ row }">
             <el-button type="primary" @click="goApprove(row)">审批</el-button>
           </template>

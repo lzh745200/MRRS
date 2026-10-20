@@ -25,7 +25,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="filterForm.status" placeholder="全部" clearable style="width: 140px">
+          <el-select v-model="filterForm.status" placeholder="全部" clearable>
             <el-option label="待审批" value="pending" />
             <el-option label="已通过" value="approved" />
             <el-option label="已拒绝" value="rejected" />
@@ -37,14 +37,17 @@
             <el-icon><Search /></el-icon>
             搜索
           </el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <!-- 历史列表 -->
     <el-card class="list-card">
-      <el-table v-loading="loading" :data="historyList">
+      <el-table v-loading="loading" border :data="historyList">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="审批标题" min-width="200">
           <template #default="{ row }">

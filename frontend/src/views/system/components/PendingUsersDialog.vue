@@ -16,7 +16,7 @@
           <el-tag type="warning">待审核</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="110" align="center">
+      <el-table-column fixed="right" label="操作" width="110" align="center">
         <template #default="{ row }">
           <el-button text type="primary" @click="emit('approve', row)">通过审核</el-button>
         </template>

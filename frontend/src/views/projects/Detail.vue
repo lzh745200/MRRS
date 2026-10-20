@@ -143,7 +143,7 @@
           <div class="tab-toolbar">
             <el-button type="primary" @click="openTaskDialog()">新建任务</el-button>
           </div>
-          <el-table v-loading="tasksLoading" :data="tasks">
+          <el-table v-loading="tasksLoading" border :data="tasks">
             <el-table-column prop="title" label="任务名称" min-width="180" />
             <el-table-column prop="status" label="状态" width="100">
               <template #default="{ row }">
@@ -176,7 +176,7 @@
 
         <!-- 经费 -->
         <el-tab-pane label="经费" name="funds">
-          <el-table v-loading="fundsLoading" :data="funds">
+          <el-table v-loading="fundsLoading" border :data="funds">
             <el-table-column prop="name" label="经费名称" min-width="200" />
             <el-table-column prop="amount" label="金额（万元）" width="130">
               <template #default="{ row }">{{ row.amount ?? '-' }}</template>
@@ -202,7 +202,7 @@
               <el-button type="primary">上传附件</el-button>
             </el-upload>
           </div>
-          <el-table v-loading="filesLoading" :data="files">
+          <el-table v-loading="filesLoading" border :data="files">
             <el-table-column prop="filename" label="文件名" min-width="220">
               <template #default="{ row }">{{ row.filename ?? row.name ?? '-' }}</template>
             </el-table-column>
@@ -306,16 +306,9 @@
           <el-input v-model="msForm.name" maxlength="200" />
         </el-form-item>
         <el-form-item label="计划日期" required>
-          <el-date-picker
-            v-model="msForm.planned_date"
-            type="date"
-            value-format="YYYY-MM-DD"
-            style="width: 200px"
-          />
+          <el-date-picker v-model="msForm.planned_date" type="date" value-format="YYYY-MM-DD" />
         </el-form-item>
-        <el-form-item label="负责人"
-          ><el-input v-model="msForm.responsible_person" style="width: 200px"
-        /></el-form-item>
+        <el-form-item label="负责人"><el-input v-model="msForm.responsible_person" /></el-form-item>
         <el-form-item label="描述"
           ><el-input v-model="msForm.description" type="textarea" :rows="2"
         /></el-form-item>

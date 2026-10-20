@@ -102,13 +102,7 @@
       <!-- 筛选栏 -->
       <el-form :inline="true" :model="filters" class="filter-form">
         <el-form-item label="严重程度">
-          <el-select
-            v-model="filters.severity"
-            placeholder="全部"
-            clearable
-            style="width: 130px"
-            @change="handleSearch"
-          >
+          <el-select v-model="filters.severity" placeholder="全部" clearable @change="handleSearch">
             <el-option label="严重" value="critical" />
             <el-option label="错误" value="error" />
             <el-option label="警告" value="warning" />
@@ -116,13 +110,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select
-            v-model="filters.status"
-            placeholder="全部"
-            clearable
-            style="width: 130px"
-            @change="handleSearch"
-          >
+          <el-select v-model="filters.status" placeholder="全部" clearable @change="handleSearch">
             <el-option label="待处理" value="open" />
             <el-option label="处理中" value="in_progress" />
             <el-option label="已解决" value="resolved" />
@@ -134,14 +122,19 @@
             v-model="filters.source"
             placeholder="输入来源关键词"
             clearable
-            style="width: 180px"
             @clear="handleSearch"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button type="primary" @click="handleSearch">
+            <el-icon><Search /></el-icon>
+            查询
+          </el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
 
@@ -251,7 +244,7 @@
         <el-divider content-position="left">状态更新</el-divider>
         <el-form :model="updateForm" label-width="80px" class="update-form">
           <el-form-item label="状态">
-            <el-select v-model="updateForm.status" placeholder="请选择状态" style="width: 200px">
+            <el-select v-model="updateForm.status" placeholder="请选择状态">
               <el-option label="处理中" value="in_progress" />
               <el-option label="已解决" value="resolved" />
               <el-option label="已忽略" value="ignored" />
@@ -281,7 +274,7 @@ import { DIALOG_MD } from '@/config/dialog'
 import { unwrapList } from '@/utils/unwrapList'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, View, Warning } from '@element-plus/icons-vue'
+import { Refresh, View, Warning, Search } from '@element-plus/icons-vue'
 import { errorReportApi, type ErrorReport, type ErrorStats } from '@/api/errorReport'
 
 import { format } from '@/utils'

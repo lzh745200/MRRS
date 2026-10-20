@@ -46,7 +46,6 @@
         v-model="selectedRoleId"
         placeholder="选择要分配的角色"
         filterable
-        style="width: 320px"
         @change="assignRole"
       >
         <el-option

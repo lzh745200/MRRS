@@ -51,7 +51,7 @@
     <el-card class="filter-card" shadow="never">
       <el-form inline>
         <el-form-item label="类型">
-          <el-select v-model="filterType" placeholder="全部类型" clearable style="width: 140px">
+          <el-select v-model="filterType" placeholder="全部类型" clearable>
             <el-option
               v-for="t in entityTypeOptions"
               :key="t.value"
@@ -68,7 +68,6 @@
             start-placeholder="开始日期"
             end-placeholder="结束日期"
             value-format="YYYY-MM-DD"
-            style="width: 260px"
           />
         </el-form-item>
       </el-form>
@@ -79,12 +78,13 @@
       <el-table
         ref="tableRef"
         v-loading="loading"
+        border
         :data="filteredTasks"
         stripe
         row-key="id"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="55" />
+        <el-table-column type="selection" width="48" />
         <el-table-column label="优先级" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="row.priority > 0 ? 'danger' : 'info'" effect="dark">

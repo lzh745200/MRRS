@@ -34,6 +34,8 @@ import '@/styles/components/card.scss'
 import '@/styles/components/states.scss'
 import '@/styles/components/dialog.scss'
 import '@/styles/components/ui-v2.scss'
+// UI 精细化统一层（R35 · 方案 C）：筛选栏控件 4 档宽度 / 表格规范 / 8px 栅格 / 响应式断点
+import '@/styles/components/ui-refine.scss'
 // 全站精美增强层 (UI v2.0 · U1)：柔和阴影/微交互/focus 光环，置于规范化层之后
 import '@/styles/theme-elevated.scss'
 // 打印样式（A4适配，隐藏非内容区域）

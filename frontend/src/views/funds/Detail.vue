@@ -289,7 +289,7 @@
             <div class="detail-card" style="margin-bottom: 0">
               <div class="card-header"><h3>字段修改历史</h3></div>
               <div class="card-body">
-                <el-table v-if="fieldChanges.length" :data="fieldChanges">
+                <el-table v-if="fieldChanges.length" border :data="fieldChanges">
                   <el-table-column prop="field_name" label="字段" width="120" />
                   <el-table-column prop="old_value" label="旧值" show-overflow-tooltip>
                     <template #default="{ row }">
@@ -320,7 +320,7 @@
             <div class="detail-card" style="margin-bottom: 0">
               <div class="card-header"><h3>操作日志</h3></div>
               <div class="card-body">
-                <el-table v-if="operationLogs.length" :data="operationLogs">
+                <el-table v-if="operationLogs.length" border :data="operationLogs">
                   <el-table-column prop="operation_type" label="操作类型" width="150">
                     <template #default="{ row }">
                       <el-tag>{{ getOperationTypeLabel(row.operation_type) }}</el-tag>
@@ -353,12 +353,7 @@
               </div>
               <div class="card-body">
                 <div class="upload-bar" style="display: flex; align-items: center; gap: 8px">
-                  <el-select
-                    v-model="uploadCategory"
-                    size="default"
-                    style="width: 140px"
-                    data-test="upload-category"
-                  >
+                  <el-select v-model="uploadCategory" size="default" data-test="upload-category">
                     <el-option
                       v-for="opt in uploadCategories"
                       :key="opt.value"
@@ -382,7 +377,12 @@
                   </span>
                 </div>
 
-                <el-table v-if="attachments.length" :data="attachments" style="margin-top: 16px">
+                <el-table
+                  v-if="attachments.length"
+                  border
+                  :data="attachments"
+                  style="margin-top: 16px"
+                >
                   <el-table-column
                     prop="file_name"
                     label="文件名"
@@ -734,19 +734,13 @@
     <el-dialog v-model="expDialogVisible" append-to-body title="登记报销" :width="DIALOG_SM">
       <el-form label-width="90px">
         <el-form-item label="金额(万元)" required>
-          <el-input-number
-            v-model="expForm.amount"
-            :min="0.0001"
-            :precision="4"
-            style="width: 200px"
-          />
+          <el-input-number v-model="expForm.amount" :min="0.0001" :precision="4" />
         </el-form-item>
         <el-form-item label="日期" required>
           <el-date-picker
             v-model="expForm.transaction_date"
             type="date"
             value-format="YYYY-MM-DD"
-            style="width: 200px"
           />
         </el-form-item>
         <el-form-item label="用途" required>
@@ -758,12 +752,8 @@
             show-word-limit
           />
         </el-form-item>
-        <el-form-item label="经办人"
-          ><el-input v-model="expForm.handler" style="width: 200px"
-        /></el-form-item>
-        <el-form-item label="票据号"
-          ><el-input v-model="expForm.receipt_number" style="width: 200px"
-        /></el-form-item>
+        <el-form-item label="经办人"><el-input v-model="expForm.handler" /></el-form-item>
+        <el-form-item label="票据号"><el-input v-model="expForm.receipt_number" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="expDialogVisible = false">取消</el-button>

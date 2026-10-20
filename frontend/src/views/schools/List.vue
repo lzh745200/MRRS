@@ -98,17 +98,11 @@
             v-model="filterForm.keyword"
             placeholder="名称/编码/帮扶单位"
             clearable
-            style="width: 200px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
         <el-form-item label="学校类型">
-          <el-select
-            v-model="filterForm.type"
-            placeholder="全部类型"
-            clearable
-            style="width: 130px"
-          >
+          <el-select v-model="filterForm.type" placeholder="全部类型" clearable>
             <el-option label="小学" value="primary" />
             <el-option label="初中" value="middle" />
             <el-option label="高中" value="high" />
@@ -117,12 +111,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="帮扶状态">
-          <el-select
-            v-model="filterForm.status"
-            placeholder="全部状态"
-            clearable
-            style="width: 130px"
-          >
+          <el-select v-model="filterForm.status" placeholder="全部状态" clearable>
             <el-option label="帮扶中" value="active" />
             <el-option label="未帮扶" value="inactive" />
             <el-option label="已完成" value="completed" />
@@ -132,7 +121,10 @@
           <el-button type="primary" @click="handleSearch">
             <el-icon><Search /></el-icon>搜索
           </el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
         <el-form-item>
           <el-tooltip
@@ -164,11 +156,11 @@
         </template>
       </el-result>
       <template v-else>
-        <el-table v-loading="loading" :data="tableData" stripe>
+        <el-table v-loading="loading" border :data="tableData" stripe>
           <template #empty>
             <EmptyState text="暂无数据" />
           </template>
-          <el-table-column type="index" label="序号" width="60" align="center" />
+          <el-table-column type="index" label="序号" width="72" align="center" />
           <el-table-column prop="name" label="学校名称" min-width="180">
             <template #default="scope">
               <el-link type="primary" @click="handleView(scope.row)">{{ scope.row.name }}</el-link>
@@ -294,7 +286,7 @@ import { ref, reactive, computed, onMounted, onActivated, onUnmounted, watch, ne
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Download, Upload, Search } from '@element-plus/icons-vue'
+import { Plus, Download, Upload, Search, Refresh } from '@element-plus/icons-vue'
 import { del, apiRequest } from '@/api/request'
 import request from '@/api/request'
 import { downloadBlobAsFile } from '@/api/helpers/blobDownload'

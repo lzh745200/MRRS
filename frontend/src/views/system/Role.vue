@@ -29,8 +29,14 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
+          <el-button type="primary" @click="handleSearch">
+            <el-icon><Search /></el-icon>
+            查询
+          </el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -47,7 +53,7 @@
       </template>
 
       <el-table :data="pagedRoles" border>
-        <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="name" label="角色名称" min-width="150" />
         <el-table-column prop="code" label="角色编码" min-width="120" />
         <el-table-column prop="description" label="描述" min-width="200" />
@@ -125,7 +131,7 @@
       :width="DIALOG_MD"
     >
       <el-table v-loading="loadingUsers" :data="roleUsers" border>
-        <el-table-column type="index" label="序号" width="60" />
+        <el-table-column type="index" label="序号" width="72" />
         <el-table-column prop="username" label="用户名" min-width="120" />
         <el-table-column prop="full_name" label="姓名" min-width="100">
           <template #default="{ row }">
@@ -195,7 +201,7 @@ import { DIALOG_MD, DIALOG_LG } from '@/config/dialog'
 // ================================================================
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, ElTree } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { get, post, put, del } from '@/api/request'
