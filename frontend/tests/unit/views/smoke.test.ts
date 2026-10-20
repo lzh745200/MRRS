@@ -354,7 +354,6 @@ describe('API module imports', () => {
     'fundStatistics',
     'ai',
     'env',
-    'i18n',
     'offlineMap',
     'errorReport',
     'dataTier',
