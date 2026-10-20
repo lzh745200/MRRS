@@ -28,7 +28,7 @@
       />
     </div>
 
-    <el-table v-loading="loading" :data="filteredProjects" stripe border>
+    <el-table v-loading="loading" :data="filteredProjects" border>
       <el-table-column type="index" label="序号" width="72" align="center" />
       <el-table-column prop="name" label="项目名称" min-width="180" />
       <el-table-column prop="category" label="类别" width="100" />

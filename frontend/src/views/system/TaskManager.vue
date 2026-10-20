@@ -1,9 +1,9 @@
 <template>
   <div class="task-manager">
     <!-- ── Header ── -->
-    <div class="page-header">
-      <div class="header-left">
-        <h2 class="page-title">后台任务管理</h2>
+    <PageHeader title="后台任务管理" subtitle="后台任务创建、暂停与执行状态监控">
+      <template #title>
+        后台任务管理
         <el-badge
           v-if="runningCount.running > 0"
           :value="runningCount.running"
@@ -11,18 +11,20 @@
         >
           <el-tag type="warning" class="pulse-tag"> 运行中 </el-tag>
         </el-badge>
-      </div>
-      <div class="header-right">
-        <span v-if="lastUpdated" class="last-updated"> 更新于 {{ lastUpdated }} </span>
-        <el-switch v-model="autoRefresh" active-text="自动刷新" @change="toggleAutoRefresh" />
-        <el-button :icon="Refresh" :loading="loading" type="primary" @click="refreshAll">
-          刷新
-        </el-button>
-        <el-button :icon="Plus" type="success" @click="showCreateDialog = true">
-          创建任务
-        </el-button>
-      </div>
-    </div>
+      </template>
+      <template #extra>
+        <div class="header-right">
+          <span v-if="lastUpdated" class="last-updated"> 更新于 {{ lastUpdated }} </span>
+          <el-switch v-model="autoRefresh" active-text="自动刷新" @change="toggleAutoRefresh" />
+          <el-button :icon="Refresh" :loading="loading" type="primary" @click="refreshAll">
+            刷新
+          </el-button>
+          <el-button :icon="Plus" type="success" @click="showCreateDialog = true">
+            创建任务
+          </el-button>
+        </div>
+      </template>
+    </PageHeader>
 
     <!-- ── 任务统计行 ── -->
     <el-row :gutter="16" class="stats-row">
@@ -274,6 +276,7 @@ import { Refresh, VideoPause, Delete, Plus, Search } from '@element-plus/icons-v
 import { tasksApi, type TaskInfo, type TaskStats, type RunningTaskCount } from '@/api/tasks'
 
 import { format } from '@/utils'
+import PageHeader from '@/components/common/PageHeader.vue'
 // ==================== 响应式状态 ====================
 
 const loading = ref(false)

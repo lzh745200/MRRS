@@ -5,12 +5,7 @@
       <div class="print-header-title">帮扶管理信息系统 · 报表导出</div>
       <div class="print-header-subtitle">生成时间：{{ printTime }}</div>
     </div>
-    <el-card class="page-header">
-      <div class="header-content">
-        <h2>报表导出中心</h2>
-        <p class="description">导出各类统计报表和数据汇总</p>
-      </div>
-    </el-card>
+    <PageHeader title="报表导出中心" subtitle="导出各类统计报表和数据汇总" />
 
     <!-- 报表类型选择 -->
     <el-card class="report-types">
@@ -247,6 +242,7 @@ import {
   exportReportPdf,
 } from '@/api/export'
 import SubscriptionPanel from './SubscriptionPanel.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 // 报表类型定义
 // _exportReport 函数在模板中通过动态组件方式使用

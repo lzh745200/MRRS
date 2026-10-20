@@ -150,14 +150,9 @@ describe('funds/ContractManage.vue', () => {
 })
 
 // --- Detail ---
-describe('funds/Detail.vue', () => {
-  it('渲染并加载详情', async () => {
-    const { default: Comp } = await import('@/views/funds/Detail.vue')
-    const w = mount(Comp)
-    await flushPromises()
-    expect(w.exists()).toBe(true)
-  })
-})
+// funds/Detail.vue 刻意不在此挂载：coverage-merge 不变量要求“受阈值约束的 .vue 全仓只允许
+// 一个测试文件执行”（vitest.config.ts 注释 (A)），否则各 worker 分片的 v8 fnMap 按 id 合并
+// 会错位、functions 跌破 100%。专属全分支测试：tests/unit/views/funds/DetailCov.test.ts。
 
 // --- Report ---
 describe('funds/Report.vue', () => {

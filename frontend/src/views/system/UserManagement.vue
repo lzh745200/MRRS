@@ -61,7 +61,7 @@
       v-model:page="pagination.page"
       v-model:size="pagination.size"
       :users="tableData"
-      :loading="loading"
+      :loading="loading || importingPermPackage"
       :is-admin="isAdmin"
       :pending-count="pendingCount"
       :org-filter-id="orgFilterId"
@@ -90,159 +90,39 @@
       @approve="approvePendingUser"
     />
 
-    <!-- 用户编辑对话框 -->
-    <el-dialog v-model="dialogVisible" append-to-body :title="dialogTitle" :width="DIALOG_MD">
-      <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="formData.username" placeholder="请输入用户名" :disabled="isEdit" />
-        </el-form-item>
-        <el-form-item label="姓名" prop="full_name">
-          <el-input v-model="formData.full_name" placeholder="请输入姓名" />
-        </el-form-item>
-        <el-form-item v-if="!isEdit" label="初始密码" prop="password">
-          <div style="display: flex; gap: 8px; width: 100%">
-            <el-input
-              v-model="formData.password"
-              type="password"
-              placeholder="请输入密码"
-              show-password
-              style="flex: 1"
-            />
-            <el-button @click="generatePassword">自动生成</el-button>
-          </div>
-        </el-form-item>
-        <el-form-item label="角色" prop="role">
-          <el-select
-            v-model="formData.role"
-            placeholder="请选择角色"
-            style="width: 100%"
-            teleported
-            fit-input-width
-          >
-            <el-option
-              v-for="role in roleOptions"
-              :key="role.value"
-              :label="role.label"
-              :value="role.value"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="数据范围">
-          <el-select
-            v-model="formData.data_scope"
-            placeholder="请选择数据范围"
-            style="width: 100%"
-            teleported
-            fit-input-width
-          >
-            <el-option
-              v-for="scope in dataScopeOptions"
-              :key="scope.value"
-              :label="scope.label"
-              :value="scope.value"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="所属组织" prop="organization_id">
-          <el-tree-select
-            v-model="formData.organization_id"
-            :data="orgTreeOptions"
-            :props="{ label: 'name', value: 'id', children: 'children' } as any"
-            placeholder="请选择所属组织"
-            check-strictly
-            clearable
-            filterable
-            style="width: 100%"
-            teleported
-            fit-input-width
-          />
-        </el-form-item>
-        <el-form-item v-if="!isEdit" label="功能权限">
-          <el-select
-            v-model="formData.permissions"
-            multiple
-            placeholder="请选择该用户的功能权限（不选则使用角色默认权限）"
-            style="width: 100%"
-            collapse-tags
-            collapse-tags-tooltip
-            teleported
-            fit-input-width
-          >
-            <el-option-group
-              v-for="group in permissionGroups"
-              :key="group.category"
-              :label="group.category"
-            >
-              <el-option
-                v-for="perm in group.items"
-                :key="perm.code"
-                :label="perm.name"
-                :value="perm.code"
-              />
-            </el-option-group>
-          </el-select>
-          <div class="form-item-tip">
-            选择该用户可以使用的具体功能权限，未选择则使用角色默认权限
-          </div>
-        </el-form-item>
-        <el-form-item label="部门">
-          <el-input v-model="formData.department" placeholder="请输入部门" />
-        </el-form-item>
-        <el-form-item label="手机号" prop="phone">
-          <el-input v-model="formData.phone" placeholder="请输入手机号" />
-        </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="formData.email" placeholder="请输入邮箱" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="formData.is_active" active-text="启用" inactive-text="禁用" />
-        </el-form-item>
-      </el-form>
-
-      <!-- 活跃会话管理 (仅编辑模式) -->
-      <div v-if="isEdit" class="session-section">
-        <el-divider content-position="left">活跃会话</el-divider>
-        <div v-loading="sessionsLoading">
-          <el-table v-if="userSessions.length > 0" :data="userSessions" border>
-            <el-table-column
-              prop="session_id"
-              label="会话ID"
-              min-width="180"
-              show-overflow-tooltip
-            />
-            <el-table-column prop="ip_address" label="IP 地址" width="140" />
-            <el-table-column prop="user_agent" label="设备" min-width="160" show-overflow-tooltip />
-            <el-table-column prop="created_at" label="登录时间" width="170">
-              <template #default="{ row }">
-                {{ formatSessionTime(row.created_at) }}
-              </template>
-            </el-table-column>
-            <el-table-column fixed="right" label="操作" width="100" align="center">
-              <template #default="{ row }">
-                <el-button
-                  type="danger"
-                  :loading="revokingSession === row.session_id"
-                  @click="revokeSession(row)"
-                >
-                  强制登出
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <EmptyState v-else-if="!sessionsLoading" text="无活跃会话" :size="40" />
-        </div>
-        <div class="session-actions">
-          <el-button type="warning" :loading="resetting2fa" @click="handleReset2fa">
-            重置 2FA
-          </el-button>
-        </div>
-      </div>
-
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">确定</el-button>
-      </template>
-    </el-dialog>
+    <!-- 用户编辑对话框（W5-T10 拆至 components/UserFormDialog.vue；提交/校验规则仍在本组件） -->
+    <UserFormDialog
+      ref="userFormRef"
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      :is-edit="isEdit"
+      :form="formData"
+      :rules="rules"
+      :role-options="roleOptions"
+      :data-scope-options="dataScopeOptions"
+      :org-tree-options="orgTreeOptions"
+      :permission-groups="permissionGroups"
+      :submitting="submitting"
+      :sessions="userSessions"
+      :sessions-loading="sessionsLoading"
+      :revoking-session="revokingSession"
+      :resetting2fa="resetting2fa"
+      @update:username="formData.username = $event"
+      @update:full_name="formData.full_name = $event"
+      @update:password="formData.password = $event"
+      @update:role="formData.role = $event"
+      @update:data_scope="formData.data_scope = $event"
+      @update:organization_id="formData.organization_id = $event"
+      @update:permissions="formData.permissions = $event"
+      @update:department="formData.department = $event"
+      @update:phone="formData.phone = $event"
+      @update:email="formData.email = $event"
+      @update:is_active="formData.is_active = $event"
+      @generate-password="generatePassword"
+      @revoke-session="revokeSession"
+      @reset-2fa="handleReset2fa"
+      @submit="handleSubmit"
+    />
 
     <!-- 重置密码对话框（W5-T10 拆至 components/ResetPasswordDialog.vue） -->
     <ResetPasswordDialog
@@ -285,8 +165,6 @@
 </template>
 
 <script setup lang="ts">
-import { DIALOG_MD } from '@/config/dialog'
-import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { logger } from '@/utils/logger'
 import { generateRandomPassword } from '@/utils/clipboard'
@@ -300,17 +178,18 @@ const activeTab = ref('users')
 function handleTabChange(_tab: any) {
   /* tab switched */
 }
-import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import request, { get, post, put, del, apiRequest } from '@/api/request'
-import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { get, post, put, del, apiRequest } from '@/api/request'
 import { listPermissionPacks } from '@/api/permissionPack'
 import { useAuthStore } from '@/stores/auth'
 import { useDesensitize } from '@/composables/useDesensitize'
+import { usePermissionPackTransfer } from '@/composables/usePermissionPackTransfer'
 import PermissionAssignmentDrawer from '@/components/permission/PermissionAssignmentDrawer.vue'
 import UserTableCard from './components/UserTableCard.vue'
 import PendingUsersDialog from './components/PendingUsersDialog.vue'
 import ResetPasswordDialog from './components/ResetPasswordDialog.vue'
 import PermissionPackExportDialog from './components/PermissionPackExportDialog.vue'
+import UserFormDialog from './components/UserFormDialog.vue'
 
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.isAdmin)
@@ -356,7 +235,8 @@ const resetPwdDialogVisible = ref(false)
 const permDrawerVisible = ref(false)
 const permDrawerUser = ref<User | null>(null)
 const pendingDialogVisible = ref(false)
-const formRef = ref<FormInstance>()
+// 对话框组件 ref：只用于把 `validate(cb)` 转发给 components/UserFormDialog.vue（不再直连 el-form）
+const userFormRef = ref<InstanceType<typeof UserFormDialog> | null>(null)
 const currentUser = ref<User | null>(null)
 
 const pendingCount = ref(0)
@@ -394,7 +274,6 @@ const formData = reactive({
 
 import { normalizeTreeNodes } from '@/utils/treeNormalizer'
 
-import { format } from '@/utils'
 import { Refresh, Search } from '@element-plus/icons-vue'
 const orgTreeOptions = ref<any[]>([])
 
@@ -726,9 +605,9 @@ const handleEdit = (row: any) => {
 }
 
 const handleSubmit = async () => {
-  if (!formRef.value) return
+  if (!userFormRef.value) return
 
-  await formRef.value.validate(async (valid) => {
+  await userFormRef.value.validate(async (valid) => {
     if (!valid) return
 
     submitting.value = true
@@ -887,187 +766,31 @@ async function handleReset2fa() {
   }
 }
 
-const formatSessionTime = (time?: string | null): string => format.formatDateTimeLocale(time)
+// ── 权限包导入/导出（W5-T10 拆至 composables/usePermissionPackTransfer.ts） ──
+// 用户列表刷新由本组件注入：导入成功后必须回到第 1 页，否则新数据落在看不到的页码上。
+const {
+  exportingPermPackage,
+  importingPermPackage,
+  permExportDialogVisible,
+  permRolesLoading,
+  permExportRoleOptions,
+  permExportRoleNames,
+  permExportPassword,
+  permBindMachineCode,
+  openPermExportDialog,
+  doExportPermissionPackage,
+  handleImportPermissionPackage,
+} = usePermissionPackTransfer({
+  reload: loadData,
+  resetPage: () => {
+    pagination.page = 1
+  },
+})
 
-// ── 权限包导入/导出 ──
-const exportingPermPackage = ref(false)
-const importingPermPackage = ref(false)
-
+/** 权限包下拉命令分发（toolbar 的 export/import 两个入口） */
 const handlePermPackageCommand = (command: string) => {
   if (command === 'export') openPermExportDialog()
   else if (command === 'import') handleImportPermissionPackage()
-}
-
-// ── 导出：角色选择对话框（P1 选择性导出） ──
-const permExportDialogVisible = ref(false)
-const permRolesLoading = ref(false)
-const permExportRoleOptions = ref<{ name: string; label?: string }[]>([])
-const permExportRoleNames = ref<string[]>([])
-const permExportPassword = ref('')
-const permBindMachineCode = ref(false)
-
-async function openPermExportDialog() {
-  permExportDialogVisible.value = true
-  permExportRoleNames.value = []
-  permExportPassword.value = ''
-  permBindMachineCode.value = false
-  if (permExportRoleOptions.value.length > 0) return
-  permRolesLoading.value = true
-  try {
-    const res: any = await get('/rbac/roles', { limit: 200 })
-    const data = res?.data || res || {}
-    const roles = Array.isArray(data) ? data : data.data || data.items || []
-    permExportRoleOptions.value = roles.map((r: any) => ({
-      name: r.name,
-      label: r.label || r.description || r.name,
-    }))
-  } catch {
-    // 角色列表获取失败不阻断导出，仍可全量导出
-    permExportRoleOptions.value = []
-  } finally {
-    permRolesLoading.value = false
-  }
-}
-
-const doExportPermissionPackage = async () => {
-  exportingPermPackage.value = true
-  try {
-    const payload: Record<string, unknown> = {}
-    if (permExportRoleNames.value.length > 0) {
-      payload.role_names = permExportRoleNames.value
-    }
-    if (permExportPassword.value) {
-      payload.password = permExportPassword.value
-    }
-    if (permBindMachineCode.value) {
-      payload.bind_machine_code = true
-    }
-    const res = await post('/permission-packages/export', payload)
-    const data = res.data || res
-    if (!data.file_name) {
-      throw new Error('导出响应缺少 file_name')
-    }
-    // 必须走带 Authorization 拦截器的 axios 实例：/permission-packages/download
-    // 依赖 get_current_user，裸 <a> 导航不带认证头会恒 401（表现为“提示成功却没有文件”）。
-    // await 下载真正完成后才提示成功；失败会抛出并由下方 catch 提示真实原因。
-    await downloadBlobAsFile(
-      () =>
-        request.get(`/permission-packages/download/${encodeURIComponent(data.file_name)}`, {
-          responseType: 'blob',
-        }),
-      { fallbackFileName: data.file_name }
-    )
-    ElMessage.success(`权限包导出成功 (${data.role_count} 个角色, ${data.user_count} 个用户)`)
-    permExportDialogVisible.value = false
-  } catch (err: any) {
-    ElMessage.error(err?.userMessage || err?.response?.data?.detail || err?.message || '导出失败')
-  } finally {
-    exportingPermPackage.value = false
-  }
-}
-
-const handleImportPermissionPackage = () => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.zip'
-
-  // 清理函数：移除 input 元素 + 重置状态
-  const cleanup = () => {
-    importingPermPackage.value = false
-    input.remove()
-    window.removeEventListener('focus', cleanup)
-  }
-
-  // 用户取消文件对话框时 change 事件不触发，用 window focus 代理清理
-  window.addEventListener('focus', cleanup, { once: true })
-
-  input.addEventListener('change', async (e: Event) => {
-    // 用户已选择文件 → 取消 focus 清理（change 事件先于 focus）
-    window.removeEventListener('focus', cleanup)
-
-    importingPermPackage.value = true
-    try {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) {
-        cleanup()
-        return
-      }
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await post('/permission-packages/import', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      const result = res.data || res
-      // Phase E：加密包需要密码；预览失败且标记加密时提示输入并重传
-      let importPassword = ''
-      if (!result.success && /加密/.test(result.message || '')) {
-        try {
-          const { value } = await ElMessageBox.prompt(
-            '该权限包已加密，请输入导出时设置的密码：',
-            '解密密码',
-            {
-              inputType: 'password',
-              inputValidator: (v: string) => (v ? true : '密码不能为空'),
-            }
-          )
-          importPassword = value || ''
-        } catch {
-          cleanup()
-          return
-        }
-        const fd2 = new FormData()
-        fd2.append('file', file)
-        fd2.append('password', importPassword)
-        const res2 = await post('/permission-packages/import', fd2, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        })
-        const merged = res2.data || res2
-        Object.assign(result, merged)
-        if (!result.success) {
-          ElMessage.error(merged.message || result.message || '导入失败')
-          return
-        }
-      }
-      if (result.success) {
-        const p = result.preview || {}
-        let msg = `将导入 ${p.role_count || 0} 个角色, ${p.user_legacy_count || 0} 个用户权限`
-        if (p.warnings?.length) msg += `\n警告: ${p.warnings.join('; ')}`
-        // 选择导入模式：确定=合并（保留本机其他配置）；取消=完全替换；关闭=放弃
-        msg +=
-          '\n\n【合并导入】保留本机已有权限，仅追加包内配置\n【覆盖导入】清空本机现有配置后按包内容重建'
-        let mode: 'merge' | 'overwrite' | null = null
-        await ElMessageBox.confirm(msg, '选择导入模式', {
-          type: 'warning',
-          distinguishCancelAndClose: true,
-          confirmButtonText: '合并导入',
-          cancelButtonText: '覆盖导入',
-        })
-          .then(() => {
-            mode = 'merge'
-          })
-          .catch(async (action: any) => {
-            if (action === 'cancel') mode = 'overwrite'
-          })
-        if (!mode) return // 用户关闭 → 放弃导入
-        const cRes = await post(`/permission-packages/confirm/${encodeURIComponent(file.name)}`, {
-          overwrite_existing: mode === 'overwrite',
-          mode,
-        })
-        ElMessage.success(cRes.data?.message || cRes.message || '导入完成')
-        pagination.page = 1 // 重置到第1页，确保新建/编辑后的数据可见
-        loadData()
-      } else {
-        ElMessage.error(result.message || '导入失败')
-      }
-    } catch (err: any) {
-      if (err === 'cancel') return
-      ElMessage.error(err?.response?.data?.detail || err?.message || '导入失败')
-    } finally {
-      cleanup()
-    }
-  })
-
-  input.click()
 }
 
 const handleDelete = async (row: any) => {
@@ -1106,96 +829,15 @@ onMounted(() => {
   padding: 20px;
 }
 
-.search-card,
-.table-card {
+.search-card {
   margin-bottom: 20px;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border-light);
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.title-area {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.title {
-  font-size: 16px;
-  font-weight: bold;
-  color: var(--color-text-inverse);
-}
-
-.pending-badge :deep(.el-badge__content) {
-  top: 4px;
-}
-
-.role-default-text {
-  color: var(--color-text-secondary);
-  font-size: 13px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.pagination {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-:deep(.el-card__header) {
-  border-bottom: 1px solid var(--color-border-light);
-  padding: 15px 20px;
-}
-
+// 用户表格/表头/操作列/分页等样式随模板迁至 components/UserTableCard.vue（scoped 样式
+// 不会跨组件生效），此处只保留本组件仍有渲染的搜索卡与表单标签。
 :deep(.el-form-item__label) {
   color: var(--color-text-primary);
-}
-
-.action-buttons {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.action-buttons .el-button + .el-button {
-  margin-left: 0;
-}
-
-.action-buttons .el-button {
-  padding: 4px 8px;
-}
-
-.machine-code-preview {
-  margin-left: 10px;
-  color: var(--color-info);
-  font-size: 12px;
-}
-
-.form-item-tip {
-  font-size: 12px;
-  color: var(--color-info);
-  line-height: 1.4;
-  margin-top: 4px;
-}
-
-.session-section {
-  margin-top: 8px;
-}
-.session-actions {
-  margin-top: 12px;
-  display: flex;
-  gap: 8px;
 }
 </style>

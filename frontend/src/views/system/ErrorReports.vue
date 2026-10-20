@@ -1,17 +1,17 @@
 <template>
   <div class="error-reports-page">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h2 class="page-title">错误报告监控</h2>
-      <el-button
-        type="primary"
-        :icon="Refresh"
-        :loading="statsLoading && tableLoading"
-        @click="refreshAll"
-      >
-        刷新
-      </el-button>
-    </div>
+    <PageHeader title="错误报告监控" subtitle="错误上报汇总、分级研判与处理状态跟踪">
+      <template #extra>
+        <el-button
+          type="primary"
+          :icon="Refresh"
+          :loading="statsLoading && tableLoading"
+          @click="refreshAll"
+        >
+          刷新
+        </el-button>
+      </template>
+    </PageHeader>
 
     <!-- 错误统计概览 -->
     <el-row :gutter="16" class="stats-row">
@@ -278,6 +278,7 @@ import { Refresh, View, Warning, Search } from '@element-plus/icons-vue'
 import { errorReportApi, type ErrorReport, type ErrorStats } from '@/api/errorReport'
 
 import { format } from '@/utils'
+import PageHeader from '@/components/common/PageHeader.vue'
 // ==================== 统计数据 ====================
 const statsLoading = ref(false)
 const stats = ref<ErrorStats>({

@@ -47,6 +47,8 @@ const {
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: routeParams }),
+  // PageHeader（共享页头标准件）在 setup 阶段调用 useRouter()
+  useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
 }))
 
 vi.mock('@/composables/useRouterSafe', () => ({

@@ -78,7 +78,6 @@
         v-loading="loading"
         :data="filteredTasks"
         border
-        stripe
         style="width: 100%"
         @selection-change="handleSelectionChange"
         @row-dblclick="handleRowDoubleClick"
@@ -98,7 +97,7 @@
                 "
                 effect="dark"
                 class="priority-tag"
-                >{{ getPriorityLabel(scope.row.priority).replace('优先级', '') }}</el-tag
+                >{{ getTaskPriorityLabel(scope.row.priority) }}</el-tag
               >
               <span class="task-name-text">{{ scope.row.name }}</span>
             </div>
@@ -113,7 +112,7 @@
         <el-table-column prop="status" label="状态" width="90" align="center">
           <template #default="scope">
             <el-tag :type="getStatusTagType(scope.row.status)">{{
-              getStatusLabel(scope.row.status)
+              getTaskStatusLabel(scope.row.status)
             }}</el-tag>
           </template>
         </el-table-column>
@@ -132,7 +131,7 @@
           <template #default="scope">
             <div>
               <span :class="getDeadlineClass(scope.row as Task)">{{
-                formatDate(scope.row.deadline)
+                formatLocalDate(scope.row.deadline, '')
               }}</span>
               <el-tag
                 v-if="isOverdue(scope.row as Task)"
@@ -388,7 +387,7 @@
         <div class="task-progress-header">
           <h3 class="task-title">{{ currentTaskProgress.name }}</h3>
           <el-tag :type="getStatusTagType(currentTaskProgress.status)">{{
-            getStatusLabel(currentTaskProgress.status)
+            getTaskStatusLabel(currentTaskProgress.status)
           }}</el-tag>
         </div>
         <div class="task-progress-info">
@@ -415,7 +414,7 @@
               <el-col :span="12">
                 <el-form-item label="截止日期">
                   <span :class="currentTaskProgress ? getDeadlineClass(currentTaskProgress) : ''">
-                    {{ formatDate(currentTaskProgress.deadline) }}
+                    {{ formatLocalDate(currentTaskProgress.deadline, '') }}
                     <span
                       v-if="currentTaskProgress && isOverdue(currentTaskProgress)"
                       class="overdue-badge"
@@ -497,7 +496,7 @@
               <div class="history-header">
                 <div class="history-info">
                   <span class="history-assignee">{{ record.assigneeName }}</span>
-                  <span class="history-time">{{ formatDateTime(record.timestamp) }}</span>
+                  <span class="history-time">{{ formatDateTimeLocale(record.timestamp, '') }}</span>
                 </div>
                 <div class="history-progress-change">
                   进度更新:
@@ -541,64 +540,18 @@
       </template>
     </el-dialog>
 
-    <!-- 批量分配对话框 -->
-    <el-dialog
+    <!-- 批量分配对话框（W5-T10 拆至 components/BatchAssignDialog.vue；批量改写逻辑仍在本组件） -->
+    <BatchAssignDialog
+      ref="batchAssignFormRef"
       v-model="batchAssignDialogVisible"
-      append-to-body
-      title="批量分配任务"
-      :width="DIALOG_SM"
-      class="batch-assign-dialog"
-    >
-      <div class="batch-assign-content">
-        <p class="batch-assign-count">已选择 {{ selectedTasks.length }} 个任务</p>
-        <el-form
-          ref="batchAssignFormRef"
-          :model="batchAssignForm"
-          :rules="batchAssignRules"
-          label-width="100px"
-          class="batch-assign-form"
-        >
-          <el-form-item label="负责人" prop="assigneeId">
-            <el-select v-model="batchAssignForm.assigneeId" placeholder="请选择负责人">
-              <el-option
-                v-for="person in staff"
-                :key="person.id"
-                :label="person.name"
-                :value="person.id"
-              >
-                <div class="select-assignee-item">
-                  <el-avatar :size="24" :src="person.avatar" :alt="person.name">
-                    {{ person.name[0] }}
-                  </el-avatar>
-                  <span>{{ person.name }} - {{ person.position }}</span>
-                </div>
-              </el-option>
-            </el-select>
-          </el-form-item>
-          <el-form-item label="分配说明">
-            <el-input
-              v-model="batchAssignForm.note"
-              type="textarea"
-              placeholder="请输入分配说明（可选）"
-              :rows="3"
-              maxlength="200"
-              show-word-limit
-            />
-          </el-form-item>
-        </el-form>
-      </div>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="batchAssignDialogVisible = false">取消</el-button>
-          <el-button
-            type="primary"
-            :disabled="selectedTasks.length === 0"
-            @click="confirmBatchAssign"
-            >确认分配</el-button
-          >
-        </span>
-      </template>
-    </el-dialog>
+      :selected-count="selectedTasks.length"
+      :staff="staff"
+      :form="batchAssignForm"
+      :rules="batchAssignRules"
+      @update:assignee-id="batchAssignForm.assigneeId = $event"
+      @update:note="batchAssignForm.note = $event"
+      @confirm="confirmBatchAssign"
+    />
   </div>
 </template>
 
@@ -618,8 +571,10 @@ import {
   Refresh,
 } from '@element-plus/icons-vue'
 import { getRuralWorks, createRuralWork, updateRuralWork, deleteRuralWork } from '@/api/ruralWork'
+import { getTaskPriorityLabel, getTaskStatusLabel } from '@/config/enums'
 import { logger } from '@/utils/logger'
-import { format } from '@/utils'
+import { formatLocalDate, formatDateTimeLocale } from '@/utils/datetime'
+import BatchAssignDialog from './components/BatchAssignDialog.vue'
 // 为 FormRules 定义类型
 type FormRules = Record<string, any[]>
 
@@ -687,10 +642,11 @@ const isEditMode = ref(false)
 
 // 表单实例类型已在上方导入
 
-// 表单引用 - 修复Ref使用
+// 表单引用：task/assign 仍是 el-form 实例；batchAssign 自 W5-T10 起指向子组件
+// components/BatchAssignDialog.vue（由它转发 el-form 校验）。
 const taskFormRef = ref<InstanceType<(typeof import('element-plus'))['ElForm']> | null>(null)
 const assignFormRef = ref<InstanceType<(typeof import('element-plus'))['ElForm']> | null>(null)
-const batchAssignFormRef = ref<InstanceType<(typeof import('element-plus'))['ElForm']> | null>(null)
+const batchAssignFormRef = ref<InstanceType<typeof BatchAssignDialog> | null>(null)
 
 // 人员数据（从 API 加载，初始为空）
 const staff = ref<Staff[]>([])
@@ -1283,19 +1239,6 @@ const exportTasks = () => {
     return
   }
 
-  const statusMap: Record<string, string> = {
-    pending: '待分配',
-    in_progress: '进行中',
-    completed: '已完成',
-    delayed: '已延期',
-    cancelled: '已取消',
-  }
-  const priorityMap: Record<string, string> = {
-    high: '高',
-    medium: '中',
-    low: '低',
-  }
-
   const headers = [
     '任务编号',
     '任务名称',
@@ -1314,8 +1257,8 @@ const exportTasks = () => {
     task.name,
     task.projectName,
     task.assigneeName || '未分配',
-    statusMap[task.status] || task.status,
-    priorityMap[task.priority] || task.priority,
+    getTaskStatusLabel(task.status),
+    getTaskPriorityLabel(task.priority),
     task.progress,
     task.startDate,
     task.deadline,
@@ -1358,36 +1301,6 @@ const handleProgressFileChange = (_file: any, fileList: any[]) => {
 }
 
 // 辅助函数
-
-const getPriorityLabel = (priority: string) => {
-  switch (priority) {
-    case 'high':
-      return '高优先级'
-    case 'medium':
-      return '中优先级'
-    case 'low':
-      return '低优先级'
-    default:
-      return '未知优先级'
-  }
-}
-
-const getStatusLabel = (status: string) => {
-  switch (status) {
-    case 'pending':
-      return '待分配'
-    case 'in_progress':
-      return '进行中'
-    case 'completed':
-      return '已完成'
-    case 'delayed':
-      return '已延期'
-    case 'cancelled':
-      return '已取消'
-    default:
-      return '未知状态'
-  }
-}
 
 const getStatusTagType = (status: string) => {
   switch (status) {
@@ -1455,11 +1368,6 @@ const isOverdue = (task: Task) => {
   const deadline = new Date(task.deadline)
   return now > deadline
 }
-
-const formatDate = (dateString?: string | null): string => format.formatLocalDate(dateString, '')
-
-const formatDateTime = (dateTimeString?: string | null): string =>
-  format.formatDateTimeLocale(dateTimeString, '')
 </script>
 
 <style lang="scss" scoped>
@@ -1595,19 +1503,17 @@ const formatDateTime = (dateTimeString?: string | null): string =>
   }
 }
 
-// 对话框样式
+// 对话框样式（批量分配对话框的样式随组件迁至 components/BatchAssignDialog.vue）
 .task-dialog,
 .assign-dialog,
-.progress-dialog,
-.batch-assign-dialog {
+.progress-dialog {
   .dialog-footer {
     text-align: right;
   }
 }
 
 .task-form,
-.assign-form,
-.batch-assign-form {
+.assign-form {
   .select-assignee-item {
     display: flex;
     align-items: center;
@@ -1735,15 +1641,6 @@ const formatDateTime = (dateTimeString?: string | null): string =>
       padding: 30px;
       font-style: italic;
     }
-  }
-}
-
-.batch-assign-content {
-  .batch-assign-count {
-    margin-bottom: 20px;
-    font-size: 16px;
-    color: $military-dark;
-    font-weight: 500;
   }
 }
 

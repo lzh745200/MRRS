@@ -442,6 +442,17 @@ jobs:
         run: |
           python scripts/check_unused_scope_params.py
           python scripts/check_userdata_path_consistency.py
+      # W25（2026-10-20）：裸 dict 返回棘轮门禁（CONTEXT.md 不变量 3 envelope 契约）。
+      # 历史状态：旧实现在**两个层面**失效 ——
+      #   ① 扫描路径拼成 backend/scripts/app/api/v1（目录不存在）→ 恒报 0；
+      #   ② 单行正则只认 `return {` 同行形态，跨行裸 dict 漏判。
+      # 实测审批模块当时有 19 处裸 dict 而门禁全绿，且该脚本从未被任何 workflow 调用。
+      # 现改为 AST 判定 + 棘轮基线（backend/scripts/gate_baselines/bare_returns_baseline.json）：
+      # 只允许持平或减少，新增即为 NEW>0 失败。
+      - name: Bare dict return ratchet (envelope contract)
+        run: |
+          python backend/scripts/scan_bare_returns.py \
+            --baseline backend/scripts/gate_baselines/bare_returns_baseline.json
       - name: Raw SQL f-string exemption guard
         run: python scripts/check_raw_sql_fstrings.py
       - name: Version consistency check

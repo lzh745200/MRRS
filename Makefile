@@ -134,6 +134,9 @@ clean:
 	# （2026-09-13 实测累计 15.8GB 致命令通道瘫痪），随 clean 一并回收
 	rm -rf "$$TEMP/pytest-of-$${USERNAME:-$$USER}" 2>/dev/null || true
 	rm -rf /tmp/pytest-of-* 2>/dev/null || true
+	# 会话隔离数据根（tests/conftest.py 的 mkdtemp；gitignore 已覆盖，但多轮全量会累积占盘）
+	-find backend -maxdepth 1 -type d -name "bumofu_pytest_appdata_*" -exec rm -rf {} + 2>/dev/null || true
+	-find backend -maxdepth 2 -path "backend/data/test.db" -delete 2>/dev/null || true
 	cd frontend && rm -rf coverage playwright-report test-results
 	# 根目录 / frontend 遗留物
 	-rm -f vitest-*.log vitest-*.json vitest-*.mjs test.db 2>/dev/null || true

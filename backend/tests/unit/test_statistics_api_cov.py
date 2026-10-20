@@ -239,8 +239,10 @@ class TestAnalysisDataImpl:
         # fail-closed 回归（v1.12.9 扩面）：不只是 4 条经费口径，分类/消费/就业/县区
         # 等全部聚合查询都必须挂数据域隔离 —— 断言"至少覆盖原有的 4 条"且
         # 关键聚合分组查询均在内（21 处），避免以后新增聚合时漏挂过滤。
+        # W25（2026-10-20）：21 → 22 —— active_projects（Project 模型）此前**未挂**
+        # 数据域（直查全库，跨组织规模泄漏），现补入 scope 入口，故调用点 +1。
         assert scope.call_count >= 4
-        assert scope.call_count == 21
+        assert scope.call_count == 22
         ov = result["overview"]
         assert ov["total_villages"] == 2
         assert ov["total_investment"] == 150.0

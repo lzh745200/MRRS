@@ -413,3 +413,18 @@ pytest-of-*/
 backend/pytest-of-*/
 backend/tmp*/
 _tmp_esbuild/
+
+# ===== W25 测试临时文件（2026-10-20）=====
+# 本机 TEMP 目录存在「可创建不可删除」情形（杀软实时扫描持有句柄），
+# tempfile._get_default_tempdir() 的 _test_support 会判定其不可用并**回退到 CWD**
+# （= backend/），于是 mkstemp / NamedTemporaryFile 产物直接落进仓库：
+#   · backend/tmpXXXX.xlsx      —— 导入/导出测试的 NamedTemporaryFile
+#   · backend/upload_XXX.rrs    —— data_packages 加密包上传的 mkstemp
+#   · backend/tmpXXXXXXXX       —— 上两者的无扩展名“半成品”
+# 上面的 `backend/tmp*/`（带斜杠）只匹配**目录**，匹配不到独立文件；此处补齐。
+backend/tmp*
+backend/upload_*.rrs
+
+# E2E 证据产物（W19）：trace/HTML 报告体积大，不入库；report.json 保留
+deliverables/w19-e2e/traces/
+deliverables/w19-e2e/html-report/

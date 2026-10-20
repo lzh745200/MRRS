@@ -95,6 +95,28 @@ describe('schools/Detail.vue', () => {
     const { default: C } = await import('@/views/schools/Detail.vue')
     const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true)
   })
+
+  // W10-030：帮扶成效卡数值来自 GET /schools/{id}/statistics（非本地聚合）
+  it('帮扶成效卡展示 statistics 接口返回值', async () => {
+    const stats = {
+      scholarship_count: 7,
+      scholarship_total_amount: 1234,
+      project_count: 3,
+      project_total_budget: 56.5,
+    }
+    mockGet.mockImplementation((url: string) =>
+      String(url).includes('/statistics')
+        ? Promise.resolve({ data: stats, success: true })
+        : Promise.resolve({ ...schoolData, data: schoolData, success: true }),
+    )
+    const { default: C } = await import('@/views/schools/Detail.vue')
+    const w = mount(C)
+    await flushPromises()
+    const values = w.findAll('.effect-value').map((n) => n.text())
+    expect(values).toEqual(['7', '1234元', '3', '56.5万元'])
+    expect(mockGet).toHaveBeenCalledWith('/schools/1/statistics')
+    w.unmount()
+  })
 })
 describe('schools/Edit.vue', () => {
   it('渲染', async () => {
@@ -113,6 +135,17 @@ describe('schools/List.vue', () => {
     const w = mount(C); await flushPromises()
     const vm = w.vm as any
     if (vm.handleCreate) vm.handleCreate()
+  })
+
+  // W10-030：地区列渲染（优先后端 region，回退分字段拼接，缺省 '-'）
+  it('formatRegion 三分支（region / 分字段 / 空值）', async () => {
+    const { default: C } = await import('@/views/schools/List.vue')
+    const w = mount(C); await flushPromises()
+    const vm = w.vm as any
+    expect(vm.formatRegion({ region: '贵州省 贵阳市 南明区' })).toBe('贵州省 贵阳市 南明区')
+    expect(vm.formatRegion({ province: '贵州省', city: '贵阳市', district: '南明区' })).toBe('贵州省 / 贵阳市 / 南明区')
+    expect(vm.formatRegion({})).toBe('-')
+    expect(vm.formatRegion(null)).toBe('-')
   })
   it('导出', async () => {
     const { default: C } = await import('@/views/schools/List.vue')

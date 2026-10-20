@@ -65,3 +65,17 @@ smmap==5.0.3
 # matplotlib>=3.8.0              # Chart generation (requires C++ compiler)
 # playwright>=1.45.0             # E2E browser testing (requires C++ compiler)
 aiosqlite==0.22.1  # 测试专用: test_import_export_history_service_full.py 异步内存引擎
+
+# ============================================================
+# Test-only heavy deps / 顺序独立性（W4-T7）
+# ============================================================
+# scikit-learn 由 requirements.txt 提供（运行时依赖；scipy 随其安装）。
+# 单元测试使用**真实包**：tests/unit/conftest.py 不再向 sys.modules 注入替身，
+# 需要特定行为的用例在用例内显式 patch 目标模块。
+#
+# 随机顺序冒烟（按需手动执行，不默认启用，避免 CI 每次换序）：
+#   pip install pytest-randomly==3.16.0
+#   cd backend && python -m pytest tests/ -q -p randomly --randomly-seed=random
+# 未安装时 pytest 走自然顺序；两轮全量回归（自然序 + 随机序）见
+# .scratch/w4-quality-gates/007-remove-test-pollution.md。
+# pytest-randomly==3.16.0

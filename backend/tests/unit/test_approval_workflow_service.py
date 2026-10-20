@@ -921,12 +921,29 @@ class TestGetTaskDiff:
 
 
 # ══════════════════════════════════════════════════════════════
-# 单机模式：未分配审批人任务处理（2026-08-14 修复）
+# 未分配审批人任务处理
+# W25（2026-10-20）安全收口：原实现对 current_approver_id=None 无条件放行，
+# 等价于任何登录用户都能通过/驳回未分配任务并回写业务实体（经费直接放款）。
+# 现改为 fail-closed：未分配任务仅管理员（standalone）可处理。
 # ══════════════════════════════════════════════════════════════
 
 
 class TestUnassignedTaskActions:
-    def test_approve_unassigned_allowed(self, svc, mock_db):
+    def test_approve_unassigned_denied(self, svc, mock_db):
+        """非管理员处理未分配任务 → 拒绝，且绝不产生任何状态变更。"""
+        mock_task = MagicMock()
+        mock_task.id = 1
+        mock_task.status = ApprovalStatus.PENDING.value
+        mock_task.current_level = 1
+        mock_task.current_approver_id = None
+
+        with patch.object(svc, "get_task", return_value=mock_task):
+            result = svc.approve_task(1, 10)  # 非审批人、非 standalone
+        assert result is None
+        mock_db.query.return_value.filter.return_value.update.assert_not_called()
+
+    def test_approve_unassigned_allowed_for_standalone(self, svc, mock_db):
+        """管理员（standalone=True）仍可处理未分配任务（单机版运维闭环不破）。"""
         mock_node = MagicMock()
         mock_node.level = 1
         mock_node.approver_id = None
@@ -942,18 +959,29 @@ class TestUnassignedTaskActions:
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
-
-        # M30：原子抢占 mock 返回 rowcount=1
         mock_db.query.return_value.filter.return_value.update.return_value = 1
 
         with patch.object(svc, "get_task", return_value=mock_task):
-            result = svc.approve_task(1, 10)  # 非审批人、非 standalone
-            assert result is not None
-            # M30 订正：终态由原子 UPDATE 设置
-            claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
-            assert claim["status"] == ApprovalStatus.APPROVED.value
+            result = svc.approve_task(1, 10, standalone=True)
+        assert result is not None
+        claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
+        assert claim["status"] == ApprovalStatus.APPROVED.value
 
-    def test_reject_unassigned_allowed(self, svc, mock_db):
+    def test_reject_unassigned_denied(self, svc, mock_db):
+        """非管理员驳回未分配任务 → 拒绝（与 approve 同口径）。"""
+        mock_task = MagicMock()
+        mock_task.id = 1
+        mock_task.status = ApprovalStatus.PENDING.value
+        mock_task.current_level = 1
+        mock_task.current_approver_id = None
+
+        with patch.object(svc, "get_task", return_value=mock_task):
+            result = svc.reject_task(1, 10, opinion="驳回")
+        assert result is None
+        mock_db.query.return_value.filter.return_value.update.assert_not_called()
+
+    def test_reject_unassigned_allowed_for_standalone(self, svc, mock_db):
+        """管理员仍可驳回未分配任务。"""
         mock_task = MagicMock()
         mock_task.id = 1
         mock_task.status = ApprovalStatus.PENDING.value
@@ -962,16 +990,13 @@ class TestUnassignedTaskActions:
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
         mock_db.refresh = MagicMock()
-
-        # M30：原子抢占 mock 返回 rowcount=1
         mock_db.query.return_value.filter.return_value.update.return_value = 1
 
         with patch.object(svc, "get_task", return_value=mock_task):
-            result = svc.reject_task(1, 10, opinion="驳回")
-            assert result is not None
-            # M30 订正：驳回终态由原子 UPDATE 设置
-            claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
-            assert claim["status"] == ApprovalStatus.REJECTED.value
+            result = svc.reject_task(1, 10, opinion="驳回", standalone=True)
+        assert result is not None
+        claim = mock_db.query.return_value.filter.return_value.update.call_args.args[0]
+        assert claim["status"] == ApprovalStatus.REJECTED.value
 
     def test_transfer_unassigned_allowed(self, svc, mock_db):
         mock_task = MagicMock()

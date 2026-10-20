@@ -1,9 +1,9 @@
 <template>
   <div class="data-import-page">
-    <div class="page-header">
-      <h2>数据导入</h2>
-      <p class="page-desc">下载模板填写数据后上传，支持帮扶村、项目、资金、学校四种类型</p>
-    </div>
+    <PageHeader
+      title="数据导入"
+      subtitle="下载模板填写数据后上传，支持帮扶村、项目、资金、学校四种类型"
+    />
 
     <!-- 模板下载区 -->
     <el-card class="template-section" shadow="never">
@@ -198,6 +198,7 @@ import {
   type ImportHistory,
   type ImportMode,
 } from '@/api/import'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 const templates = [
   {

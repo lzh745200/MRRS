@@ -116,7 +116,7 @@
       </div>
     </el-card>
 
-    <el-table v-loading="loading" :data="records" border stripe data-testid="record-table">
+    <el-table v-loading="loading" :data="records" border data-testid="record-table">
       <el-table-column prop="year" label="年度" width="90" align="center" />
       <el-table-column label="记录日期" width="120" align="center">
         <template #default="{ row }">{{ formatDateText(row.record_date) }}</template>

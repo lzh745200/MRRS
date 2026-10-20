@@ -2,7 +2,7 @@
  * 项目里程碑 API（T020 断链接线）
  * 后端：backend/app/api/v1/project_milestones.py（prefix=/projects）
  */
-import { get, post, put, del } from './request'
+import { get, post, put, del } from '@/api/request'
 
 export interface ProjectMilestone {
   id: number

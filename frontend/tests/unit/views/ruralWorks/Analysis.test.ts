@@ -466,7 +466,8 @@ describe('视图与图表切换', () => {
       .pop()
     expect(horizontal).toBeTruthy()
     expect(horizontal.yAxis.inverse).toBe(true)
-    expect(horizontal.series[0].itemStyle.color).toBe('#0055aa')
+    // W11-T45：颜色令牌化 —— #0055aa 收敛为共享调色板亮蓝（COLOR_PALETTE[3]）
+    expect(horizontal.series[0].itemStyle.color).toBe('#3b82f6')
 
     // 雷达图：indicator 5 维，max 5（保留 Chart.js max/stepSize 语义）
     const radar = mockInstances.map((i) => i.option).find((o) => o?.series?.[0]?.type === 'radar')

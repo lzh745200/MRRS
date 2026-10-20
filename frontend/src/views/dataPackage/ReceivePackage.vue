@@ -1,18 +1,12 @@
 <template>
   <div class="receive-package">
-    <el-card class="page-header">
-      <div class="header-content">
-        <div style="display: flex; justify-content: space-between; align-items: center">
-          <div>
-            <h2>接收下级数据包</h2>
-            <p class="description">接收并处理下级单位上报的数据包</p>
-          </div>
-          <el-button v-if="isAdmin" type="primary" @click="showLocalImport = true">
-            <el-icon><Folder /></el-icon> 从本地文件导入
-          </el-button>
-        </div>
-      </div>
-    </el-card>
+    <PageHeader title="接收下级数据包" subtitle="接收并处理下级单位上报的数据包">
+      <template #extra>
+        <el-button v-if="isAdmin" type="primary" @click="showLocalImport = true">
+          <el-icon><Folder /></el-icon> 从本地文件导入
+        </el-button>
+      </template>
+    </PageHeader>
 
     <!-- 非管理员体验层提示（后端对导入/确认已强制 403） -->
     <el-alert v-if="!isAdmin" type="warning" show-icon :closable="false" class="admin-only-alert"
@@ -129,7 +123,7 @@
 
         <!-- 数据列表 -->
         <el-card>
-          <el-table v-loading="loading" border :data="reports" stripe>
+          <el-table v-loading="loading" border :data="reports">
             <el-table-column label="上报单位" min-width="150">
               <template #default="{ row }">
                 {{ row.source_org_name || row.title || `单位#${row.source_org_id}` }}
@@ -212,7 +206,7 @@
       <!-- 接收记录（仅管理员） -->
       <el-tab-pane v-if="isAdmin" label="接收记录" name="received">
         <el-card>
-          <el-table v-loading="receivedLoading" border :data="receivedItems" stripe>
+          <el-table v-loading="receivedLoading" border :data="receivedItems">
             <el-table-column label="包编号" width="180">
               <template #default="{ row }">{{ row.package_code || '-' }}</template>
             </el-table-column>
@@ -327,7 +321,7 @@
             :key="preview.data_type"
             :label="`${getDataTypeLabel(preview.data_type)} (${preview.total})`"
           >
-            <el-table border stripe :data="preview.sample" max-height="400">
+            <el-table border :data="preview.sample" max-height="400">
               <el-table-column
                 v-for="col in preview.columns"
                 :key="col"
@@ -387,6 +381,7 @@ import { get, post } from '@/api/request'
 import { downloadDataPackage, previewDataPackage } from '@/api/dataPackage'
 
 import { format } from '@/utils'
+import PageHeader from '@/components/common/PageHeader.vue'
 const reportStore = useDataReportStore()
 const orgStore = useOrganizationStore()
 const authStore = useAuthStore()

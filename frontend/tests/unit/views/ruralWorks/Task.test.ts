@@ -57,6 +57,10 @@ vi.mock('@/utils/logger', () => ({
 }))
 
 import Task from '@/views/ruralWorks/Task.vue'
+// 拆分后的子组件（W5-T10）：本文件是它在全仓的唯一执行者，
+// 直接 import 仅用于 findComponent 定位子组件 DOM，不产生第二个执行者。
+import BatchAssignDialog from '@/views/ruralWorks/components/BatchAssignDialog.vue'
+import { formatLocalDate, formatDateTimeLocale } from '@/utils/datetime'
 
 // API 任务样本：覆盖映射两侧（planned→pending、status 空兜底、id 空兜底、created_at 有无）
 const apiItem1 = {
@@ -157,7 +161,7 @@ function defaultGetImpl(url: string) {
   return Promise.resolve({})
 }
 
-function mountComp() {
+function mountComp(extraStubs: Record<string, any> = {}) {
   // setup.ts 的全局 el-* stub 默认不渲染插槽，需 renderStubDefaultSlot；
   // 具名插槽（footer/dropdown/prefix）与作用域插槽（表格行）需自定义 stub。
   return mount(Task, {
@@ -200,6 +204,8 @@ function mountComp() {
           props: ['percentage', 'status', 'strokeWidth', 'format'],
           template: '<div class="el-progress-stub" />',
         },
+        // 局部额外 stub 放末尾，可覆盖上方同名默认 stub
+        ...extraStubs,
       },
     },
   })
@@ -285,6 +291,19 @@ describe('挂载与数据加载', () => {
     expect(vm.tasks[1]).toMatchObject({ id: '102', name: '', status: 'pending', createdDate: '' })
     expect(vm.tasks[2]).toMatchObject({ id: 'T003', status: 'in_progress' })
     expect(vm.loading).toBe(false)
+  })
+
+  // W10-029：任务状态/优先级列使用共享 enums 单源渲染中文
+  it('状态/优先级列渲染中文标签（共享 enums）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const priorities = wrapper.findAll('.priority-tag').map((n) => n.text())
+    expect(priorities).toEqual(['高', '中', '低'])
+    const text = wrapper.text()
+    expect(text).toContain('待分配')
+    expect(text).toContain('进行中')
+    expect(text).toContain('已取消')
+    wrapper.unmount()
   })
 
   it('loadStaffFromApi：response.items 分支（无 data 层）', async () => {
@@ -1225,22 +1244,11 @@ describe('导入/导出任务', () => {
 })
 
 describe('辅助函数', () => {
-  it('getPriorityLabel / getStatusLabel / getStatusTagType 全分支', async () => {
+  // W10-029：状态/优先级标签改由 @/config/enums 单源提供（其分支由 enums.test.ts 覆盖）
+  it('getStatusTagType 全分支', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.getPriorityLabel('high')).toBe('高优先级')
-    expect(vm.getPriorityLabel('medium')).toBe('中优先级')
-    expect(vm.getPriorityLabel('low')).toBe('低优先级')
-    expect(vm.getPriorityLabel('x')).toBe('未知优先级')
-
-    expect(vm.getStatusLabel('pending')).toBe('待分配')
-    expect(vm.getStatusLabel('in_progress')).toBe('进行中')
-    expect(vm.getStatusLabel('completed')).toBe('已完成')
-    expect(vm.getStatusLabel('delayed')).toBe('已延期')
-    expect(vm.getStatusLabel('cancelled')).toBe('已取消')
-    expect(vm.getStatusLabel('x')).toBe('未知状态')
-
     expect(vm.getStatusTagType('pending')).toBe('info')
     expect(vm.getStatusTagType('in_progress')).toBe('primary')
     expect(vm.getStatusTagType('completed')).toBe('success')
@@ -1298,14 +1306,16 @@ describe('辅助函数', () => {
     expect(vm.isOverdue({ status: 'pending', deadline: '' })).toBe(false)
   })
 
-  it('formatDate / formatDateTime 空值与正常值', async () => {
+  it('日期列直接走 @/utils/datetime（本地 formatDate/formatDateTime 包装器已移除）', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    const vm = wrapper.vm as any
-    expect(vm.formatDate('')).toBe('')
-    expect(vm.formatDate('2024-01-15')).not.toBe('')
-    expect(vm.formatDateTime('')).toBe('')
-    expect(vm.formatDateTime('2024-01-15T10:00:00')).not.toBe('')
+    // 视图依赖的兜底语义：空值 → ''（不是 '-'），合法值 → zh-CN locale 串
+    expect(formatLocalDate('', '')).toBe('')
+    expect(formatLocalDate('2024-01-15', '')).not.toBe('')
+    expect(formatDateTimeLocale('', '')).toBe('')
+    expect(formatDateTimeLocale('2024-01-15T10:00:00', '')).not.toBe('')
+    // deadline 列由 formatLocalDate(deadline, '') 直接渲染（rowA = 2020-01-01）
+    expect(wrapper.text()).toContain('2020/1/1')
   })
 
   it('deadline 校验器：空值 / 早于开始日期 / 合法 / 无开始日期', async () => {
@@ -1467,5 +1477,43 @@ describe('模板行渲染与内联按钮', () => {
     expect(vm.isEditMode).toBe(false)
     spy.mockRestore()
     clickSpy.mockRestore()
+  })
+})
+
+// ═══════════════════════════════════════════════════════
+// 拆分后子组件（W5-T10 自 Task.vue 拆至 components/）
+// —— 子组件的模板内联处理器只有真实触发 click/emit 才计入 functions 覆盖。
+// ═══════════════════════════════════════════════════════
+describe('批量分配子组件（BatchAssignDialog）', () => {
+  it('确认分配按钮 → 子组件把 el-form 校验转发给父组件（真实链路）', async () => {
+    // 子组件独占 el-form 实例；父组件通过 defineExpose 的 validate() 转发，
+    // 这里给 el-form 桩注入 validate 以走通这条链路。
+    const validateFn = vi.fn().mockResolvedValue(true)
+    const wrapper = mountComp({
+      'el-form': {
+        name: 'ElForm',
+        template: '<form><slot /></form>',
+        methods: { validate: validateFn },
+      },
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGetRuralWorks.mockResolvedValue({ items: [] }) // 重载后清空，保留本地改写结果
+    vm.selectedTasks = [vm.tasks[0]]
+    vm.batchAssignForm.assigneeId = '1'
+    vm.batchAssignDialogVisible = true
+    await nextTick()
+
+    const dialog = wrapper.findComponent(BatchAssignDialog)
+    expect(dialog.exists()).toBe(true)
+    const confirmBtn = dialog
+      .findAll('el-button-stub')
+      .find((button) => button.text().includes('确认分配'))!
+    await confirmBtn.trigger('click')
+    await flushPromises()
+
+    expect(validateFn).toHaveBeenCalled()
+    expect(ElMessage.success).toHaveBeenCalledWith('成功分配 1 个任务')
+    wrapper.unmount()
   })
 })

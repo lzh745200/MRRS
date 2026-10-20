@@ -9,8 +9,8 @@ blocked-by: ["w8-dead-code/014-approval-center-contract.md"]
 **What to build:** PendingList 转交对话框 el-select remote 模式按关键词查用户（防抖），解除 200 人截断。
 
 **Acceptance criteria:**
-- [ ] remote-method 触发请求且 loading 态正确（vitest）
-- [ ] 排除当前审批人逻辑保留
+- [x] remote-method 触发请求且 loading 态正确（vitest）
+- [x] 排除当前审批人逻辑保留
 
 ## Resolution（W19 完成）
 

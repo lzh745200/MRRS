@@ -217,9 +217,17 @@ class TestDeleteWorkflow:
 # ── submit_approval ────────────────────────────────────────────────
 
 class TestSubmitApproval:
+    """提交审批的编排链路（实体归属守卫本身见 test_w25_security_fixes）。
+
+    W25：``/submit`` 新增了「被审实体必须在提交人数据域内」的守卫（P1-2 越权链），
+    本类只验证后续编排（工作流创建 / 无工作流 400），故对守卫打桩；
+    守卫自身的 404 分支由 ``test_w25_security_fixes.TestApprovalSubmitEntityOwnership`` 覆盖。
+    """
+
     def test_success(self, client_with_mocked_auth):
         task = make_mock_task()
-        with patch("app.api.v1.approval.ApprovalWorkflowService") as MockSvc:
+        with patch("app.api.v1.approval.ApprovalWorkflowService") as MockSvc, \
+                patch("app.api.v1.approval._assert_entity_submittable"):
             svc = MagicMock()
             svc.submit_approval.return_value = task
             MockSvc.return_value = svc
@@ -231,7 +239,8 @@ class TestSubmitApproval:
             assert resp.json()["data"]["task_id"] == 1
 
     def test_no_workflow(self, client_with_mocked_auth):
-        with patch("app.api.v1.approval.ApprovalWorkflowService") as MockSvc:
+        with patch("app.api.v1.approval.ApprovalWorkflowService") as MockSvc, \
+                patch("app.api.v1.approval._assert_entity_submittable"):
             svc = MagicMock()
             svc.submit_approval.return_value = None
             MockSvc.return_value = svc

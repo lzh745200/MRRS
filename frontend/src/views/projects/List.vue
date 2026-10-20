@@ -171,9 +171,11 @@
         v-loading="loading"
         border
         :data="projectList"
-        stripe
         @selection-change="handleSelectionChange"
       >
+        <template #empty>
+          <EmptyState text="暂无项目数据" action="去添加" :size="72" @action="handleCreate" />
+        </template>
         <el-table-column type="selection" width="48" />
         <el-table-column prop="code" label="项目编号" width="120" />
         <el-table-column prop="name" label="项目名称" min-width="200">
@@ -250,6 +252,7 @@
 
 <script setup lang="ts">
 import PageHeader from '@/components/common/PageHeader.vue'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { unwrapList } from '@/utils/unwrapList'
 import { useFilterMemory } from '@/composables/useFilterMemory'
 import { logger } from '@/utils/logger'

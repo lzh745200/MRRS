@@ -465,10 +465,17 @@ class ApprovalWorkflowService:
         if not task or task.status != ApprovalStatus.PENDING.value:
             return None
 
-        # 单机模式语义：standalone=True 跳过审批人校验；
-        # 未分配审批人（current_approver_id=None）的任务任何登录用户均可审批
-        if not standalone and task.current_approver_id not in (None, approver_id):
-            return None
+        # 单机模式语义：``standalone=True``（管理员）跳过审批人校验。
+        # W25 收口：``current_approver_id is None``（未分配审批人 —— role 型节点
+        # 解析失败时即产生该状态，见 _resolve_role_approver_id）原先与「指派给本人」
+        # 一起被放行，等价于**任何登录用户**都能通过任意未分配任务，并触发业务实体
+        # 状态回写（经费 pending→approved 等于绕过审批链放款）。现改为 fail-closed：
+        # 未分配任务仅管理员（standalone）可处理。
+        if not standalone:
+            if task.current_approver_id is None:
+                return None
+            if task.current_approver_id != approver_id:
+                return None
 
         # 当前级别（审批记录按操作发生时的级别落库）
         record_level = task.current_level
@@ -546,9 +553,12 @@ class ApprovalWorkflowService:
         if not task or task.status != ApprovalStatus.PENDING.value:
             return None
 
-        # 未分配审批人的任务任何登录用户均可驳回（单机模式语义）
-        if not standalone and task.current_approver_id not in (None, approver_id):
-            return None
+        # W25 收口：未分配审批人的任务不再对任意登录用户放行（见 approve_task 同款说明）。
+        if not standalone:
+            if task.current_approver_id is None:
+                return None
+            if task.current_approver_id != approver_id:
+                return None
 
         # M30：同 approve_task —— 原子抢占（status + current_level 双条件，
         # rowcount != 1 视为已被并发/重放请求处理）。

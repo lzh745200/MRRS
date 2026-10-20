@@ -26,7 +26,7 @@
       </el-select>
     </div>
 
-    <el-table v-loading="loading" :data="filteredStudents" stripe border>
+    <el-table v-loading="loading" :data="filteredStudents" border>
       <el-table-column type="index" label="序号" width="72" align="center" />
       <el-table-column prop="student_name" label="学生姓名" min-width="110" />
       <el-table-column prop="grade" label="年级" width="90" />

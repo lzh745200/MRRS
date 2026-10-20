@@ -1,9 +1,6 @@
 <template>
   <div class="rules-management">
-    <div class="page-header">
-      <h2 class="page-title">校验规则管理</h2>
-      <p class="page-desc">配置数据校验规则，对提交数据执行实时校验</p>
-    </div>
+    <PageHeader title="校验规则管理" subtitle="配置数据校验规则，对提交数据执行实时校验" />
 
     <!-- 工具栏 -->
     <el-card class="toolbar-card">
@@ -211,6 +208,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Plus, Refresh, VideoPlay } from '@element-plus/icons-vue'
 import { listRules, createRule, updateRule, deleteRule, runValidation } from '@/api/validationRules'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 const loading = ref(false)
 const submitting = ref(false)

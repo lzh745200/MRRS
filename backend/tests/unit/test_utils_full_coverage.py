@@ -581,7 +581,9 @@ class TestPaths:
 
         raw = os.environ["DATABASE_URL"].replace("sqlite:///", "", 1)
         assert p == Path(unquote(raw))
-        assert p.name == "test.db"
+        # W4-T6（2026-10-20）：xdist 每 worker 独立库文件名（test.db / test_gw0.db），
+        # 精确取值已由上一行「与运行时 DATABASE_URL 同一文件」锁定，这里只校验命名形状。
+        assert p.name.startswith("test") and p.suffix == ".db"
 
     def test_get_log_path(self):
         from app.utils.paths import get_log_path

@@ -83,6 +83,14 @@ export const TASK_PRIORITY = {
   high: '高',
   urgent: '紧急',
 } as const
+// 任务状态（W10-029：乡村工作任务列表/导出/进度弹窗共用，消除视图私有 switch/map）。
+export const TASK_STATUS = {
+  pending: '待分配',
+  in_progress: '进行中',
+  completed: '已完成',
+  delayed: '已延期',
+  cancelled: '已取消',
+} as const
 
 // Helper functions
 export function getFundTypeLabel(type: string) {
@@ -108,4 +116,7 @@ export function getEntityTypeLabel(entityType: string) {
 }
 export function getTaskPriorityLabel(priority: string) {
   return TASK_PRIORITY[priority as keyof typeof TASK_PRIORITY] || priority
+}
+export function getTaskStatusLabel(status: string) {
+  return TASK_STATUS[status as keyof typeof TASK_STATUS] || status
 }

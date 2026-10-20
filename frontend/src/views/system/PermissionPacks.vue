@@ -1,17 +1,18 @@
 <template>
   <div class="permission-packs-page">
     <el-card>
-      <div class="page-header">
-        <div>
-          <h2>权限包管理</h2>
-          <p class="description">配置菜单权限套餐，绑定给普通用户后可批量控制其可见功能板块</p>
-        </div>
-        <el-button type="primary" @click="openCreate">
-          <el-icon><Plus /></el-icon>新建权限包
-        </el-button>
-      </div>
+      <PageHeader
+        title="权限包管理"
+        subtitle="配置菜单权限套餐，绑定给普通用户后可批量控制其可见功能板块"
+      >
+        <template #extra>
+          <el-button type="primary" @click="openCreate">
+            <el-icon><Plus /></el-icon>新建权限包
+          </el-button>
+        </template>
+      </PageHeader>
 
-      <el-table v-loading="loading" :data="packs" border stripe>
+      <el-table v-loading="loading" :data="packs" border>
         <el-table-column prop="name" label="名称" min-width="140" />
         <el-table-column label="描述" min-width="200">
           <template #default="{ row }">{{ row.description || '-' }}</template>
@@ -147,6 +148,7 @@ import { useMenuStore } from '@/stores/menu'
 import type { MenuEntry, MenuSection } from '@/stores/menu'
 
 import { format } from '@/utils'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 /**
  * 菜单树节点（el-tree 数据源）。

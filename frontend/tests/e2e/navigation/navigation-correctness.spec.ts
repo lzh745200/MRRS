@@ -24,7 +24,7 @@ test.describe('导航正确性', () => {
   test('帮扶项目管理导航正确', async ({ page }) => {
     await navigateTo(page, '/projects')
     await expect(page).toHaveURL(/\/projects/)
-    await expect(page.locator('.el-table, .project-list, .el-empty')).toBeVisible({
+    await expect(page.locator('.el-table, .project-list, .el-empty').first()).toBeVisible({
       timeout: 10000,
     })
   })

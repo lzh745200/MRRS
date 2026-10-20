@@ -1,11 +1,6 @@
 <template>
   <div class="data-sync-export">
-    <el-card class="page-header">
-      <div class="header-content">
-        <h2>数据导出</h2>
-        <p class="description">导出数据包用于多台电脑间的数据同步和备份</p>
-      </div>
-    </el-card>
+    <PageHeader title="数据导出" subtitle="导出数据包用于多台电脑间的数据同步和备份" />
 
     <!-- 导出配置 -->
     <el-card class="export-config">
@@ -119,7 +114,7 @@
     <!-- 导出历史 -->
     <el-card class="export-history">
       <h3 class="section-title">导出历史</h3>
-      <el-table v-loading="loadingHistory" border stripe :data="exportHistory" style="width: 100%">
+      <el-table v-loading="loadingHistory" border :data="exportHistory" style="width: 100%">
         <template #empty>
           <EmptyState text="暂无导出记录" />
         </template>
@@ -161,6 +156,7 @@ import {
   getSyncLogs,
   type ExportEncryptedParams,
 } from '@/api/dataSync'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 const exportForm = ref({
   exportType: 'full' as 'full' | 'selective' | 'incremental',

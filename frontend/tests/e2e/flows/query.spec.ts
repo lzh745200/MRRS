@@ -33,7 +33,7 @@ test.describe('数据查询流程', () => {
   test('项目列表搜索功能', async ({ page }) => {
     await navigateTo(page, '/projects')
     // 等待页面加载
-    await expect(page.locator('.el-table, .project-list, .el-empty')).toBeVisible({
+    await expect(page.locator('.el-table, .project-list, .el-empty').first()).toBeVisible({
       timeout: 10000,
     })
 
@@ -56,7 +56,7 @@ test.describe('数据查询流程', () => {
 
   test('分页功能正常', async ({ page }) => {
     await navigateTo(page, '/projects')
-    await expect(page.locator('.el-table, .el-empty')).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('.el-table, .el-empty').first()).toBeVisible({ timeout: 10000 })
 
     // 检查分页组件是否存在
     const pagination = page.locator('.el-pagination')

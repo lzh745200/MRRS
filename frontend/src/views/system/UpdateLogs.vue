@@ -1,17 +1,15 @@
 <template>
   <div class="update-logs-page">
-    <div class="page-header">
-      <div>
-        <h2 class="page-title">系统更新日志</h2>
-        <p class="page-desc">查看系统版本更新历史和变更记录</p>
-      </div>
-      <div class="header-actions">
-        <el-button v-if="isAdmin" type="primary" @click="showAddDialog = true">
-          + 添加更新记录
-        </el-button>
-        <el-button :loading="loading" @click="refreshData">刷新</el-button>
-      </div>
-    </div>
+    <PageHeader title="系统更新日志" subtitle="查看系统版本更新历史和变更记录">
+      <template #extra>
+        <div class="header-actions">
+          <el-button v-if="isAdmin" type="primary" @click="showAddDialog = true">
+            + 添加更新记录
+          </el-button>
+          <el-button :loading="loading" @click="refreshData">刷新</el-button>
+        </div>
+      </template>
+    </PageHeader>
 
     <!-- 最新版本高亮卡片 -->
     <el-card v-if="latestLog" class="latest-card">
@@ -113,6 +111,7 @@ import { updateLogsApi, type UpdateLog } from '@/api/updateLogs'
 import { useAuthStore } from '@/stores/auth'
 
 import { format } from '@/utils'
+import PageHeader from '@/components/common/PageHeader.vue'
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.isAdmin)
 

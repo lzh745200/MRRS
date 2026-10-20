@@ -132,6 +132,31 @@ def _is_super_admin_account(user) -> bool:
     return normalize_role(getattr(user, "role", None)) == _SUPER_ADMIN_ROLE
 
 
+def _assert_can_grant_data_scope(current_user, data_scope: Optional[str]) -> None:
+    """仅超级管理员可授予「全部数据」范围（``data_scope="all"``）。
+
+    W25 漏洞收口：``apply_scope_filter``（data_permission.py:574）与
+    ``get_org_scope`` 都把 ``data_scope == "all"`` 当作**全局管理员**放行，
+    而原实现（create / update / update-permissions 三处）只校验取值合法性、
+    不校验**授予权限** —— 部门级 admin 可把任意账号（含自己）改成 ``all``，
+    一步获得全库数据可见性（资金/项目/帮扶村/一户一档全量）。
+    现与 ``_assert_can_manage_super_admin`` 同口径：仅超管可授予。
+
+    Raises:
+        HTTPException(403): 非超管试图授予 ``all``。
+    """
+    if data_scope != "all":
+        return
+    if is_superuser(current_user):
+        return
+    if normalize_role(getattr(current_user, "role", None)) == _SUPER_ADMIN_ROLE:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="仅超级管理员可授予「全部数据」范围",
+    )
+
+
 def _assert_can_manage_super_admin(
     current_user,
     target=None,
@@ -624,6 +649,8 @@ async def create_user(
     data_scope = data.data_scope or "org"
     if data_scope not in VALID_SCOPES:
         raise HTTPException(status_code=400, detail=f"无效的数据范围: {data_scope}")
+    # W25：授予「全部数据」仅超管可为（否则部门级 admin 可一步制造全库可见账号）
+    _assert_can_grant_data_scope(current_user, data_scope)
 
     # 禁止创建无组织管理员（产品决策 2026-09-14）：部门级管理员的职责边界就是其组织，
     # 无组织会让数据范围失去锚点（修复前更会因过滤被跳过而越权枚举全库用户）。
@@ -751,6 +778,8 @@ async def update_user(
     if "data_scope" in update_fields and update_fields["data_scope"]:
         if update_fields["data_scope"] not in VALID_SCOPES:
             raise HTTPException(status_code=400, detail="无效的数据范围")
+        # W25：授予「全部数据」仅超管可为
+        _assert_can_grant_data_scope(current_user, update_fields["data_scope"])
 
     # 邮箱归一化 + 唯一性校验。
     # 历史缺陷：更新路径既不归一化也不查重 —— ① 提交 "" 会占住邮箱唯一键
@@ -855,6 +884,8 @@ async def update_user_permissions(
     if "data_scope" in update_fields:
         if update_fields["data_scope"] not in VALID_SCOPES:
             raise HTTPException(status_code=400, detail=f"无效的数据范围: {update_fields['data_scope']}")
+        # W25：授予「全部数据」仅超管可为
+        _assert_can_grant_data_scope(current_user, update_fields["data_scope"])
 
     # 应用更新
     for field, value in update_fields.items():

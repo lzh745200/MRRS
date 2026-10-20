@@ -48,9 +48,23 @@ class TestHasGitWorktree:
         assert bi._has_git_worktree(deep) is True
 
     def test_default_start_points_are_used(self, monkeypatch, tmp_path):
-        """不传参时以「本文件位置 + CWD」为起点（默认分支可执行）。"""
-        monkeypatch.setattr(bi, "__file__", str(tmp_path / "build_info.py"))
-        monkeypatch.setattr(bi.Path, "cwd", classmethod(lambda cls: tmp_path))
+        """不传参时以「本文件位置 + CWD」为起点（默认分支可执行）。
+
+        W25 修复（2026-10-20）：原断言 ``is False`` 依赖「pytest 临时根向上 4 层
+        内没有 .git」，而 pytest 的 basetemp 默认落在 rootdir（``backend/``）下，
+        向上第 4 层恰好是仓库根 —— **任何 git checkout 内该断言必失败**
+        （pr-checks 第 12 段 final coverage gate 恒红）。
+
+        改为在临时根下再下钻 6 层作为起点：仍然走「不传参」的默认分支，
+        但 4 层窗口内不可能触及仓库根的 .git，断言与运行环境解耦。
+        """
+        deep = tmp_path
+        for part in ("a", "b", "c", "d", "e", "f"):
+            deep = deep / part
+        deep.mkdir(parents=True)
+
+        monkeypatch.setattr(bi, "__file__", str(deep / "build_info.py"))
+        monkeypatch.setattr(bi.Path, "cwd", classmethod(lambda cls: deep))
         assert bi._has_git_worktree() is False
 
 

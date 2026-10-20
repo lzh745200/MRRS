@@ -1,9 +1,6 @@
 <template>
   <div class="approval-overview">
-    <div class="page-header">
-      <h2 class="page-title">审批概览</h2>
-      <p class="page-desc">集中查看待办审批、我的申请与审批历史</p>
-    </div>
+    <PageHeader title="审批概览" subtitle="集中查看待办审批、我的申请与审批历史" />
 
     <!-- 统计仪表板 -->
     <div class="stats-row">
@@ -56,7 +53,7 @@
           <el-button text type="primary" @click="pushSafe('/approval/pending')">查看全部</el-button>
         </div>
       </template>
-      <el-table v-loading="loading" border stripe :data="pendingTasks" empty-text="暂无待审批任务">
+      <el-table v-loading="loading" border :data="pendingTasks" empty-text="暂无待审批任务">
         <el-table-column prop="title" label="事项" min-width="220" show-overflow-tooltip />
         <el-table-column label="类型" width="110">
           <template #default="{ row }">
@@ -110,6 +107,7 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 
 import { format } from '@/utils'
 import { getEntityTypeLabel } from '@/config/enums'
+import PageHeader from '@/components/common/PageHeader.vue'
 const { pushSafe } = useRouterSafe()
 
 const loading = ref(false)

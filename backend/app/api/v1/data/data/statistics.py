@@ -775,26 +775,29 @@ async def _get_analysis_data_impl(db: Session, current_user):
                                               VillageIncome, VillagePopulation)
     from app.core.data_permission import apply_scope_filter
 
-    def _scoped(q):
-        """H3：经费相关查询统一附加数据隔离。
+    def _scoped(q, model=SupportedVillage):
+        """H3：统计查询统一附加数据隔离。
 
         current_user 为必填位置参数（fail-closed，对齐 W5-006）：漏传即在调用点
         抛 TypeError，而非静默跳过隔离返回跨组织数据。
+
+        W25：新增 ``model`` 参数 —— 原先硬绑 ``SupportedVillage``，导致
+        ``active_projects``（Project 模型）无法复用本入口而直查全库
+        （跨组织规模泄漏，且与 get_summary 的同名指标两套口径）。
         """
-        return apply_scope_filter(q, current_user, SupportedVillage, db=db)
+        return apply_scope_filter(q, current_user, model, db=db)
 
     # --- 概览统计（软删村/项目不参与统计） ---
     total_villages = _scoped(
         db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True))
     ).count()
-    active_projects = (
-        db.query(Project)
-        .filter(
+    active_projects = _scoped(
+        db.query(Project).filter(
             Project.is_active == True,  # noqa: E712
             Project.status.in_(["in_progress", "approved", "active"]),
-        )
-        .count()
-    )
+        ),
+        Project,
+    ).count()
 
     # 总投入资金（H3：附加数据隔离，与列表 KPI(H1) 同源同口径）
     mil_total = (

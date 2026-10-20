@@ -1,20 +1,17 @@
 <template>
   <div class="settings-overview-page">
-    <!-- 页头 -->
-    <div class="page-header">
-      <div>
-        <h2 class="page-title">系统设置总览</h2>
-        <p class="page-desc">掌握系统健康状态，快速进入各项设置功能</p>
-      </div>
-      <div class="header-right">
-        <span v-if="lastUpdated" class="last-updated">
-          <el-icon><Clock /></el-icon> 更新于 {{ lastUpdated }}
-        </span>
-        <el-button :icon="Refresh" :loading="loading" type="primary" @click="refreshAll">
-          刷新
-        </el-button>
-      </div>
-    </div>
+    <PageHeader title="系统设置总览" subtitle="掌握系统健康状态，快速进入各项设置功能">
+      <template #extra>
+        <div class="header-right">
+          <span v-if="lastUpdated" class="last-updated">
+            <el-icon><Clock /></el-icon> 更新于 {{ lastUpdated }}
+          </span>
+          <el-button :icon="Refresh" :loading="loading" type="primary" @click="refreshAll">
+            刷新
+          </el-button>
+        </div>
+      </template>
+    </PageHeader>
 
     <!-- 系统健康状态 -->
     <el-card class="section-card">
@@ -121,6 +118,7 @@
 import { ref, computed, onMounted } from 'vue'
 import type { Component } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
+import PageHeader from '@/components/common/PageHeader.vue'
 import {
   Refresh,
   Clock,

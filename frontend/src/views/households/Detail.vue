@@ -1,17 +1,17 @@
 <template>
   <div class="list-page household-detail-page">
-    <header class="page-header">
-      <div class="header-info">
-        <el-button class="btn-back" @click="goBack">返回列表</el-button>
-        <div>
-          <h2 class="page-title">一户一档详情</h2>
-          <p class="page-desc">档案、监测指标与风险/走访记录</p>
+    <PageHeader
+      title="一户一档详情"
+      subtitle="档案、监测指标与风险/走访记录"
+      show-back
+      back-to="/households"
+    >
+      <template #extra>
+        <div class="header-actions">
+          <el-button class="btn-refresh" :loading="loading" @click="load">刷新</el-button>
         </div>
-      </div>
-      <div class="header-actions">
-        <el-button class="btn-refresh" :loading="loading" @click="load">刷新</el-button>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <div v-if="loadError" class="app-error">
       <span class="error-text">{{ loadError }}</span>
@@ -348,8 +348,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
+import PageHeader from '@/components/common/PageHeader.vue'
 import {
   closeHouseholdRiskRecord,
   createHouseholdMember,
@@ -384,7 +384,6 @@ const RISK_LEVEL_OPTIONS: { value: HouseholdRiskLevel; label: string }[] = [
   { value: 'high', label: '高' },
 ]
 
-const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
 const route = useRoute()
 const householdId = Number(route.params.id)
@@ -512,10 +511,6 @@ async function loadMembers(): Promise<void> {
   } catch {
     /* 成员接口失败保留详情内成员，不阻断页面 */
   }
-}
-
-function goBack(): void {
-  pushSafe('/households')
 }
 
 // ── 家庭成员 CRUD ──

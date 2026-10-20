@@ -159,7 +159,7 @@ const stubs = {
   // 自带 tbody 结构，initSortable 挂载即走 Sortable.create 分支（无需手动赋 tableRef）
   'el-table': {
     name: 'ElTable',
-    template: '<div><div class="el-table__body-wrapper"><tbody></tbody></div><slot /></div>',
+    template: '<div><div class="el-table__body-wrapper"><tbody></tbody></div><slot name="empty" /><slot /></div>',
     props: ['data'],
   },
   'el-table-column': {

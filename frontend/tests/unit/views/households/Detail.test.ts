@@ -48,6 +48,8 @@ vi.mock('@/composables/useDesensitize', () => ({
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: '7' } }),
+  // PageHeader（共享页头标准件）在 setup 阶段调用 useRouter()
+  useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
 }))
 
 import Detail from '@/views/households/Detail.vue'
@@ -404,7 +406,9 @@ describe('households/Detail.vue（一户一档详情）', () => {
   it('返回列表', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    await wrapper.find('.btn-back').trigger('click')
+    const back = wrapper.find('.back-btn')
+    expect(back.exists()).toBe(true)
+    await back.trigger('click')
     expect(mocks.pushSafe).toHaveBeenCalledWith('/households')
     wrapper.unmount()
   })

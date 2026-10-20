@@ -156,9 +156,9 @@
         </template>
       </el-result>
       <template v-else>
-        <el-table v-loading="loading" border :data="tableData" stripe>
+        <el-table v-loading="loading" border :data="tableData">
           <template #empty>
-            <EmptyState text="暂无数据" />
+            <EmptyState text="暂无学校数据" action="去添加" :size="72" @action="handleCreate" />
           </template>
           <el-table-column type="index" label="序号" width="72" align="center" />
           <el-table-column prop="name" label="学校名称" min-width="180">
@@ -295,6 +295,7 @@ import { restoreSchool, previewPurgeSchool, purgeSchool } from '@/api/schoolsRec
 import { useAuthStore } from '@/stores/auth'
 import { downloadImportTemplateAndSave } from '@/api/import'
 import echarts from '@/utils/echarts'
+import { COLOR_PALETTE, themeColor } from '@/utils/echarts-theme'
 
 const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
@@ -422,22 +423,24 @@ function buildStudentBarOption(): echarts.EChartsCoreOption {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
       backgroundColor: 'rgba(255,255,255,.96)',
-      borderColor: '#e2e8f0',
+      borderColor: themeColor('--color-border-light', '#e2e8f0'),
       borderRadius: 8,
-      textStyle: { color: '#1e293b', fontSize: 13 },
+      textStyle: { color: themeColor('--color-text-primary', '#1e293b'), fontSize: 13 },
     },
     grid: { left: 8, right: 32, top: 8, bottom: 8, containLabel: true },
     xAxis: {
       type: 'value',
-      axisLabel: { color: '#94a3b8', fontSize: 11 },
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
+      axisLabel: { color: themeColor('--color-border-dark', '#94a3b8'), fontSize: 11 },
+      splitLine: {
+        lineStyle: { color: themeColor('--color-border-lighter', '#f1f5f9'), type: 'dashed' },
+      },
     },
     yAxis: {
       type: 'category',
       data: rows.map((r: any) => (r.name.length > 8 ? r.name.slice(0, 8) + '…' : r.name)).reverse(),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: '#475569', fontSize: 12 },
+      axisLabel: { color: themeColor('--color-text-regular', '#475569'), fontSize: 12 },
     },
     series: [
       {
@@ -448,11 +451,16 @@ function buildStudentBarOption(): echarts.EChartsCoreOption {
         itemStyle: {
           borderRadius: [0, 6, 6, 0],
           color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#2d6a4f' },
-            { offset: 1, color: '#52b788' },
+            { offset: 0, color: COLOR_PALETTE[1] },
+            { offset: 1, color: COLOR_PALETTE[4] },
           ]),
         },
-        label: { show: true, position: 'right', color: '#64748b', fontSize: 11 },
+        label: {
+          show: true,
+          position: 'right',
+          color: themeColor('--color-text-secondary', '#64748b'),
+          fontSize: 11,
+        },
       },
     ],
   }
@@ -468,23 +476,36 @@ function buildTypePieOption(): echarts.EChartsCoreOption {
     .map(([key, value]) => ({ value, name: typeMap[key] || key }))
     .sort((a, b) => b.value - a.value)
   return {
-    color: ['#2d6a4f', '#1e4d8c', '#f59e0b', '#52b788', '#94a3b8'],
+    color: [
+      COLOR_PALETTE[1],
+      COLOR_PALETTE[0],
+      COLOR_PALETTE[5],
+      COLOR_PALETTE[4],
+      COLOR_PALETTE[15],
+    ],
     tooltip: {
       trigger: 'item',
       backgroundColor: 'rgba(255,255,255,.96)',
-      borderColor: '#e2e8f0',
+      borderColor: themeColor('--color-border-light', '#e2e8f0'),
       borderRadius: 8,
-      textStyle: { color: '#1e293b', fontSize: 13 },
+      textStyle: { color: themeColor('--color-text-primary', '#1e293b'), fontSize: 13 },
       formatter: (p: any) => `${p.marker} ${p.name}: <b>${p.value}所</b> (${p.percent}%)`,
     },
-    legend: { bottom: 0, textStyle: { color: '#64748b', fontSize: 11 } },
+    legend: {
+      bottom: 0,
+      textStyle: { color: themeColor('--color-text-secondary', '#64748b'), fontSize: 11 },
+    },
     series: [
       {
         name: '学校类型',
         type: 'pie',
         radius: ['45%', '70%'],
         center: ['50%', '46%'],
-        itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 3 },
+        itemStyle: {
+          borderRadius: 4,
+          borderColor: themeColor('--color-bg-card', '#fff'),
+          borderWidth: 3,
+        },
         label: { show: false },
         emphasis: { itemStyle: { shadowBlur: 16, shadowColor: 'rgba(0,0,0,.12)' } },
         data,

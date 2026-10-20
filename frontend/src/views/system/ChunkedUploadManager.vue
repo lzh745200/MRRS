@@ -1,9 +1,6 @@
 <template>
   <div class="chunked-upload-page">
-    <div class="page-header">
-      <h2 class="page-title">分片上传管理</h2>
-      <p class="page-desc">大文件分片上传演示，支持进度追踪和断点续传</p>
-    </div>
+    <PageHeader title="分片上传管理" subtitle="大文件分片上传演示，支持进度追踪和断点续传" />
 
     <!-- 文件选择区域 -->
     <el-card class="upload-card">
@@ -150,6 +147,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { chunkedUploadApi } from '@/api/chunkedUpload'
 import type { InitUploadResult, UploadProgress, MergeResult } from '@/api/chunkedUpload'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 type UploadState = 'idle' | 'initializing' | 'uploading' | 'merging' | 'done' | 'error'
 

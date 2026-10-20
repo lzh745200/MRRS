@@ -1,9 +1,6 @@
 <template>
   <div class="config-package-page">
-    <div class="page-header">
-      <h2>配置包管理</h2>
-      <p class="page-desc">系统配置导出、导入与版本管理</p>
-    </div>
+    <PageHeader title="配置包管理" subtitle="系统配置导出、导入与版本管理" />
 
     <!-- 操作区 -->
     <el-card style="margin-bottom: 16px">
@@ -111,6 +108,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Upload, RefreshRight, Refresh } from '@element-plus/icons-vue'
 import { get, post, put, del } from '@/api/request'
 import { useConfigStore } from '@/stores/config'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 interface ConfigItem {
   key: string

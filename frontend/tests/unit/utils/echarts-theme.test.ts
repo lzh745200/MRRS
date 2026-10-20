@@ -15,6 +15,7 @@ import {
   MILITARY_BLUE,
   REVITALIZATION_GREEN,
   BADGE_GOLD,
+  themeColor,
 } from '@/utils/echarts-theme'
 
 describe('utils/echarts-theme', () => {
@@ -75,5 +76,26 @@ describe('utils/echarts-theme', () => {
     expect(MILITARY_BLUE).toBe('#1e4d8c')
     expect(REVITALIZATION_GREEN).toBe('#2d6a4f')
     expect(BADGE_GOLD).toBe('#b8960c')
+  })
+
+  // W11-T45：图表轴/文字/分割线颜色跟随主题（读根元素 CSS 变量）
+  describe('themeColor', () => {
+    it('读取根元素 CSS 变量值', () => {
+      document.documentElement.style.setProperty('--color-text-primary', '#334155')
+      try {
+        expect(themeColor('--color-text-primary', '#000000')).toBe('#334155')
+      } finally {
+        document.documentElement.style.removeProperty('--color-text-primary')
+      }
+    })
+
+    it('变量缺失时回退 fallback', () => {
+      expect(themeColor('--w19-undefined-color-var', '#abcdef')).toBe('#abcdef')
+    })
+
+    it('document 不可用时回退 fallback', () => {
+      vi.stubGlobal('document', undefined)
+      expect(themeColor('--color-text-primary', '#abcdef')).toBe('#abcdef')
+    })
   })
 })

@@ -1,24 +1,23 @@
 <template>
   <div class="budget-page">
     <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-left">
-        <el-button :icon="ArrowLeft" @click="pushSafe('/funds')">返回经费管理</el-button>
-        <h2 class="page-title">预算管理</h2>
-      </div>
-      <div class="header-actions">
-        <el-select
-          v-model="selectedYear"
-          placeholder="选择年份"
-          style="width: 120px; margin-right: 10px"
-        >
-          <el-option v-for="y in yearOptions" :key="y" :label="`${y}年`" :value="y" />
-        </el-select>
-        <el-button type="primary" @click="handleAddBudget">
-          <el-icon><Plus /></el-icon>新增预算
-        </el-button>
-      </div>
-    </div>
+    <PageHeader
+      title="预算管理"
+      subtitle="按年度编制帮扶经费预算并跟踪执行进度"
+      show-back
+      back-to="/funds"
+    >
+      <template #extra>
+        <div class="header-actions">
+          <el-select v-model="selectedYear" placeholder="选择年份" class="year-select">
+            <el-option v-for="y in yearOptions" :key="y" :label="`${y}年`" :value="y" />
+          </el-select>
+          <el-button type="primary" @click="handleAddBudget">
+            <el-icon><Plus /></el-icon>新增预算
+          </el-button>
+        </div>
+      </template>
+    </PageHeader>
 
     <!-- 预算汇总 -->
     <div class="stats-row">
@@ -208,15 +207,15 @@
 import { DIALOG_SM } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { getYearOptions } from '@/utils/yearOptions'
-import { ArrowLeft, Plus } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { fundApi } from '@/api/funds'
 import BaseChart from '@/components/common/BaseChart.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import echarts from '@/utils/echarts'
 import { chartColor } from '@/utils/chartColors'
 import { GaugeChart } from 'echarts/charts'
@@ -237,8 +236,6 @@ interface BudgetRow {
   used: number
   remark: string
 }
-
-const { pushSafe } = useRouterSafe()
 
 const currentYear = new Date().getFullYear()
 // 预算年度范围：2000 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
@@ -498,24 +495,9 @@ onMounted(() => loadBudgets())
   padding: 20px;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--color-primary-dark-1);
+.year-select {
+  width: 120px;
+  margin-right: 10px;
 }
 
 .header-actions {

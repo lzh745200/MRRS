@@ -184,6 +184,13 @@ class BackupService:
         os.makedirs(self.backup_dir, exist_ok=True)
 
         # 增量备份配置
+        # ⚠️ 现状说明（W25 复核，2026-10-20）：``INCREMENTAL_BACKUP_ENABLED`` 目前
+        # **只被** :meth:`create_incremental_backup` 读取，而该方法在生产代码中
+        # **没有任何调度方/端点调用**（仅测试调用；``backup_scheduler``、``immediate_backup``、
+        # ``system/backup`` 与 ``version_service`` 走的全是全量 ``create_backup``）。
+        # 也就是说：把本开关设为 true **并不会**让系统自动做增量备份，默认值 true
+        # 只是历史遗留。真正接线（调度分流 + 恢复链验证）属独立功能项；
+        # 在那之前请勿把本开关当作"已启用增量备份"的依据。
         self.incremental_enabled = os.getenv("INCREMENTAL_BACKUP_ENABLED", "true").lower() == "true"
         # 压缩级别 0-9：非数字回退默认、越界收敛到合法区间。
         # 历史缺陷：裸 int() 在环境变量非数字时抛 ValueError → 每次构造

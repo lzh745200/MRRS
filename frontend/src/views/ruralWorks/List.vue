@@ -76,6 +76,9 @@
         </template>
       </el-result>
       <el-table v-else v-loading="loading" :data="filteredData" border style="width: 100%">
+        <template #empty>
+          <EmptyState text="暂无乡村工作数据" action="去添加" :size="72" @action="handleCreate" />
+        </template>
         <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="name" label="工作名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="type" label="工作类型" width="130">
@@ -263,6 +266,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import type { WorkStatus, WorkType } from '@/api/ruralWork'
 
 import PageHeader from '@/components/common/PageHeader.vue'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 // 类型映射
 const typeLabels: Record<string, string> = {
   infrastructure: '基础设施建设',

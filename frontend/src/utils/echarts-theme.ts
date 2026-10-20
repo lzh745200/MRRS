@@ -537,3 +537,19 @@ export { COLOR_PALETTE }
 export const MILITARY_BLUE = '#1e4d8c'
 export const REVITALIZATION_GREEN = '#2d6a4f'
 export const BADGE_GOLD = '#b8960c'
+
+/**
+ * 读取当前主题的 CSS 变量值 —— 图表轴/文字/分割线颜色必须跟随主题
+ * （W11-T45：暗色主题下写死浅色 hex 会刺眼）。
+ *
+ * 无 DOM 环境（SSR / 未挂载的单测）回退到 fallback，保证纯函数可测。
+ *
+ * @param name CSS 变量名（如 `--color-text-primary`）
+ * @param fallback 变量缺失或不可读时的回退色
+ */
+export function themeColor(name: string, fallback: string): string {
+  if (typeof document === 'undefined' || typeof getComputedStyle !== 'function') {
+    return fallback
+  }
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+}

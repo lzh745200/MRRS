@@ -1,0 +1,192 @@
+﻿��=== *gO(u PageHeader.vue �v view �e�N ===
+views/admin/AdminDashboard.vue  handwrittenHeader=false
+views/admin/MachineCode.vue  handwrittenHeader=false
+views/admin/OrgModulePolicy.vue  handwrittenHeader=false
+views/admin/SubordinateManagement.vue  handwrittenHeader=false
+views/ai/InteractiveResult.vue  handwrittenHeader=true
+views/analytics/Assessment.vue  handwrittenHeader=true
+views/analytics/dashboard/Dashboard.vue  handwrittenHeader=true
+views/analytics/map/MapVisualization.vue  handwrittenHeader=true
+views/analytics/reports/WorkAnalysis.vue  handwrittenHeader=true
+views/analytics/supported-villages/components/SectionDataForm.vue  handwrittenHeader=false
+views/analytics/supported-villages/components/SupportedVillageForm.vue  handwrittenHeader=false
+views/analytics/supported-villages/components/YearlyDataForm.vue  handwrittenHeader=false
+views/analytics/supported-villages/components/YearlyRollforwardDialog.vue  handwrittenHeader=false
+views/analytics/supported-villages/Detail.vue  handwrittenHeader=true
+views/analytics/supported-villages/YearlyOverview.vue  handwrittenHeader=true
+views/approval/ApprovalCenter.vue  handwrittenHeader=false
+views/approval/History.vue  handwrittenHeader=false
+views/approval/MyApplications.vue  handwrittenHeader=true
+views/approval/Overview.vue  handwrittenHeader=true
+views/auth/ChangePassword.vue  handwrittenHeader=true
+views/auth/ForgotPassword.vue  handwrittenHeader=false
+views/auth/GetMachineCode.vue  handwrittenHeader=false
+views/auth/LoginEnhanced.vue  handwrittenHeader=false
+views/auth/Profile.vue  handwrittenHeader=true
+views/auth/Register.vue  handwrittenHeader=false
+views/auth/TwoFactorSettings.vue  handwrittenHeader=true
+views/bigscreen/BigScreen.vue  handwrittenHeader=false
+views/dashboard/ChartRow.vue  handwrittenHeader=false
+views/dashboard/components/GlobalSearch.vue  handwrittenHeader=false
+views/dashboard/components/QuickActions.vue  handwrittenHeader=false
+views/dashboard/components/TodoListPanel.vue  handwrittenHeader=false
+views/dashboard/InfoRow.vue  handwrittenHeader=false
+views/dashboard/KpiCards.vue  handwrittenHeader=false
+views/dataEntry/ComprehensiveEntry.vue  handwrittenHeader=true
+views/dataManagement/components/QualitySection.vue  handwrittenHeader=false
+views/dataPackage/IncrementalUpdate.vue  handwrittenHeader=false
+views/dataPackage/PackageVersion.vue  handwrittenHeader=false
+views/dataPackage/ReceivePackage.vue  handwrittenHeader=true
+views/dataPackage/ReportPackage.vue  handwrittenHeader=true
+views/dataSync/ConflictResolution.vue  handwrittenHeader=false
+views/dataSync/Export.vue  handwrittenHeader=true
+views/dataSync/Import.vue  handwrittenHeader=true
+views/dataVerify/components/RulesPanel.vue  handwrittenHeader=true
+views/effectiveness/Evaluation.vue  handwrittenHeader=true
+views/effectiveness/Rankings.vue  handwrittenHeader=true
+views/errorPage/403.vue  handwrittenHeader=false
+views/errorPage/500.vue  handwrittenHeader=false
+views/export/ReportExport.vue  handwrittenHeader=true
+views/export/SubscriptionPanel.vue  handwrittenHeader=false
+views/funds/Analysis.vue  handwrittenHeader=false
+views/funds/Budget.vue  handwrittenHeader=true
+views/funds/ContractManage.vue  handwrittenHeader=true
+views/funds/Detail.vue  handwrittenHeader=true
+views/funds/Lifecycle.vue  handwrittenHeader=true
+views/funds/Report.vue  handwrittenHeader=false
+views/funds/Settlement.vue  handwrittenHeader=true
+views/funds/TransferVoucher.vue  handwrittenHeader=true
+views/help/HelpCenter.vue  handwrittenHeader=false
+views/households/Detail.vue  handwrittenHeader=true
+views/import/DataImport.vue  handwrittenHeader=true
+views/media/PhotoArchive.vue  handwrittenHeader=true
+views/NotFound.vue  handwrittenHeader=false
+views/organization/Detail.vue  handwrittenHeader=false
+views/organization/Edit.vue  handwrittenHeader=false
+views/organization/PassCodeManagement.vue  handwrittenHeader=false
+views/policies/Category.vue  handwrittenHeader=false
+views/policies/Detail.vue  handwrittenHeader=false
+views/policies/Edit.vue  handwrittenHeader=false
+views/policies/Search.vue  handwrittenHeader=false
+views/projects/Detail.vue  handwrittenHeader=false
+views/projects/Edit.vue  handwrittenHeader=true
+views/projects/GanttView.vue  handwrittenHeader=false
+views/projects/Import.vue  handwrittenHeader=false
+views/projects/ProgressGallery.vue  handwrittenHeader=true
+views/reportTemplates/components/ReportOutputDialog.vue  handwrittenHeader=false
+views/ruralWorks/Analysis.vue  handwrittenHeader=true
+views/ruralWorks/Report.vue  handwrittenHeader=false
+views/schools/Analysis.vue  handwrittenHeader=false
+views/schools/Detail.vue  handwrittenHeader=true
+views/schools/Edit.vue  handwrittenHeader=false
+views/schools/Projects.vue  handwrittenHeader=true
+views/schools/Scholarship.vue  handwrittenHeader=true
+views/system/About.vue  handwrittenHeader=false
+views/system/AuditManagement.vue  handwrittenHeader=true
+views/system/BackupManagement.vue  handwrittenHeader=false
+views/system/CacheManagement.vue  handwrittenHeader=false
+views/system/ChunkedUploadManager.vue  handwrittenHeader=true
+views/system/components/PendingUsersDialog.vue  handwrittenHeader=false
+views/system/components/PermissionPackExportDialog.vue  handwrittenHeader=false
+views/system/components/ResetPasswordDialog.vue  handwrittenHeader=false
+views/system/components/UserTableCard.vue  handwrittenHeader=false
+views/system/ConfigPackage.vue  handwrittenHeader=true
+views/system/console/SystemConsole.vue  handwrittenHeader=false
+views/system/ControlPackage.vue  handwrittenHeader=false
+views/system/DataTier.vue  handwrittenHeader=true
+views/system/EncryptionSettings.vue  handwrittenHeader=true
+views/system/EnvCheck.vue  handwrittenHeader=true
+views/system/ErrorReports.vue  handwrittenHeader=true
+views/system/Feedback.vue  handwrittenHeader=false
+views/system/GrantImport.vue  handwrittenHeader=false
+views/system/HealthCheck.vue  handwrittenHeader=true
+views/system/MapTileManager.vue  handwrittenHeader=true
+views/system/Menu.vue  handwrittenHeader=true
+views/system/MonitoringDashboard.vue  handwrittenHeader=true
+views/system/OrgGrant.vue  handwrittenHeader=false
+views/system/PermissionPacks.vue  handwrittenHeader=true
+views/system/Role.vue  handwrittenHeader=false
+views/system/SecretsManagement.vue  handwrittenHeader=true
+views/system/SettingsOverview.vue  handwrittenHeader=true
+views/system/TaskManager.vue  handwrittenHeader=true
+views/system/UpdateLogs.vue  handwrittenHeader=true
+views/system/ZeroTrust.vue  handwrittenHeader=true
+
+=== vQ-N�u<OKb�Qh��:S ===
+views/ai/InteractiveResult.vue
+views/analytics/Assessment.vue
+views/analytics/dashboard/Dashboard.vue
+views/analytics/map/MapVisualization.vue
+views/analytics/reports/WorkAnalysis.vue
+views/analytics/supported-villages/Detail.vue
+views/analytics/supported-villages/YearlyOverview.vue
+views/approval/MyApplications.vue
+views/approval/Overview.vue
+views/auth/ChangePassword.vue
+views/auth/Profile.vue
+views/auth/TwoFactorSettings.vue
+views/dataEntry/ComprehensiveEntry.vue
+views/dataPackage/ReceivePackage.vue
+views/dataPackage/ReportPackage.vue
+views/dataSync/Export.vue
+views/dataSync/Import.vue
+views/dataVerify/components/RulesPanel.vue
+views/effectiveness/Evaluation.vue
+views/effectiveness/Rankings.vue
+views/export/ReportExport.vue
+views/funds/Budget.vue
+views/funds/ContractManage.vue
+views/funds/Detail.vue
+views/funds/Lifecycle.vue
+views/funds/Settlement.vue
+views/funds/TransferVoucher.vue
+views/households/Detail.vue
+views/import/DataImport.vue
+views/media/PhotoArchive.vue
+views/projects/Edit.vue
+views/projects/ProgressGallery.vue
+views/ruralWorks/Analysis.vue
+views/schools/Detail.vue
+views/schools/Projects.vue
+views/schools/Scholarship.vue
+views/system/AuditManagement.vue
+views/system/ChunkedUploadManager.vue
+views/system/ConfigPackage.vue
+views/system/DataTier.vue
+views/system/EncryptionSettings.vue
+views/system/EnvCheck.vue
+views/system/ErrorReports.vue
+views/system/HealthCheck.vue
+views/system/MapTileManager.vue
+views/system/Menu.vue
+views/system/MonitoringDashboard.vue
+views/system/PermissionPacks.vue
+views/system/SecretsManagement.vue
+views/system/SettingsOverview.vue
+views/system/TaskManager.vue
+views/system/UpdateLogs.vue
+views/system/ZeroTrust.vue
+
+;`�� view=144 *g(uPageHeader=112 �u<OKb�Q=53
+
+=== [{	�h class L��Q�[�^�[IN ===
+views/consumption/List.vue:702 .filter-category = 130px
+views/consumption/List.vue:705 .filter-village = 170px
+views/consumption/List.vue:709 .filter-keyword = 220px
+views/donation/List.vue:507 .f-keyword = 240px
+views/donation/List.vue:510 .f-select = 150px
+views/help/HelpCenter.vue:404 .search-bar = 600px
+views/households/List.vue:879 .f-village = 180px
+views/households/List.vue:883 .f-type = 130px
+views/households/List.vue:886 .f-keyword = 200px
+views/media/PhotoArchive.vue:758 .filter-select = 160px
+views/media/PhotoArchive.vue:762 .filter-tag = 140px
+views/media/PhotoArchive.vue:766 .filter-date = 260px
+views/pairing/List.vue:764 .f-keyword = 220px
+views/pairing/List.vue:767 .f-select = 140px
+views/pairing/List.vue:770 .f-partner = 180px
+views/ruralWorks/Analysis.vue:1157 .filter-control-section = 150px
+views/system/AuditManagement.vue:495 .filter-item = 160px
+views/system/AuditManagement.vue:501 .filter-item-wide = 300px
+views/system/AuditManagement.vue:506 .filter-item-date = 280px
+

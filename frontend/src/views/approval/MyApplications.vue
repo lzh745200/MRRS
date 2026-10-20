@@ -1,9 +1,6 @@
 <template>
   <div class="my-applications">
-    <div class="page-header">
-      <h2 class="page-title">我的申请</h2>
-      <p class="page-desc">查看自己提交的审批申请及状态</p>
-    </div>
+    <PageHeader title="我的申请" subtitle="查看自己提交的审批申请及状态" />
 
     <!-- 筛选 -->
     <el-card class="filter-card">
@@ -111,6 +108,7 @@ import { getApprovalStatusLabel } from '@/config/enums'
 
 import { format } from '@/utils'
 import { Refresh, Search } from '@element-plus/icons-vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 const loading = ref(false)
 const applications = ref<ApprovalTask[]>([])
 const filters = reactive({ status: '', dateRange: null as any })

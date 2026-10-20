@@ -1,22 +1,22 @@
 <template>
   <div class="monitoring-dashboard">
-    <!-- ── Header ── -->
-    <div class="page-header">
-      <h2 class="page-title">系统监控面板</h2>
-      <div class="header-right">
-        <span v-if="lastUpdated" class="last-updated">
-          <el-icon><Clock /></el-icon> 更新于 {{ lastUpdated }}
-        </span>
-        <div class="health-badge" :class="scoreBadgeClass">
-          <span class="health-score-num">{{ healthScore }}</span>
-          <span class="health-score-label">分</span>
+    <PageHeader title="系统监控面板" subtitle="CPU/内存/磁盘与业务指标实时监控">
+      <template #extra>
+        <div class="header-right">
+          <span v-if="lastUpdated" class="last-updated">
+            <el-icon><Clock /></el-icon> 更新于 {{ lastUpdated }}
+          </span>
+          <div class="health-badge" :class="scoreBadgeClass">
+            <span class="health-score-num">{{ healthScore }}</span>
+            <span class="health-score-label">分</span>
+          </div>
+          <el-button :icon="Refresh" :loading="loading" type="primary" @click="refreshAll">
+            刷新
+          </el-button>
+          <el-button :icon="Download" @click="exportData"> 导出 </el-button>
         </div>
-        <el-button :icon="Refresh" :loading="loading" type="primary" @click="refreshAll">
-          刷新
-        </el-button>
-        <el-button :icon="Download" @click="exportData"> 导出 </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- ── 3 Primary Metric Cards (CPU / Memory / Disk) ── -->
     <div class="primary-metrics">
@@ -241,6 +241,7 @@ import {
 import echarts from '@/utils/echarts'
 import { get, apiRequest } from '@/api/request'
 import { useConfigStore } from '@/stores/config'
+import PageHeader from '@/components/common/PageHeader.vue'
 import { logger } from '@/utils/logger'
 import { chartColor, chartColorPrimary } from '@/utils/chartColors'
 

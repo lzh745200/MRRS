@@ -1,14 +1,17 @@
 <template>
   <div class="project-edit-container">
     <!-- 页面标题 -->
-    <div class="page-header">
+    <div class="edit-page-header">
       <el-breadcrumb separator="/">
         <el-breadcrumb-item :to="{ path: '/projects' }">项目管理</el-breadcrumb-item>
         <el-breadcrumb-item>
           {{ isEditMode ? '编辑项目' : '新建项目' }}
         </el-breadcrumb-item>
       </el-breadcrumb>
-      <h2 class="page-title">{{ isEditMode ? '编辑项目' : '新建项目' }}</h2>
+      <PageHeader
+        :title="isEditMode ? '编辑项目' : '新建项目'"
+        subtitle="维护项目基本信息、资金投入与实施进度"
+      />
     </div>
 
     <!-- 项目表单卡片 -->
@@ -599,6 +602,7 @@ import { Upload, ArrowLeft, Check, Wallet } from '@element-plus/icons-vue'
 import { projectApi } from '@/api/projects'
 import { get } from '@/api/request'
 import { AuthStorage } from '@/utils/authStorage'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 // 文件分类定义
 const fileCategories = [
@@ -1318,15 +1322,9 @@ onUnmounted(() => {
   background-color: var(--color-bg-hover);
 }
 
-.page-header {
-  margin-bottom: 24px;
-}
-
-.page-title {
-  font-size: 24px;
-  font-weight: bold;
-  color: var(--color-navy);
-  margin: 12px 0 0 0;
+.edit-page-header {
+  /* 间距由共享页头 PageHeader 统一提供（--spacing-lg），此处不再叠加 */
+  margin-bottom: 0;
 }
 
 .form-card {

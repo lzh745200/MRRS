@@ -43,6 +43,7 @@
 import { unwrapList } from '@/utils/unwrapList'
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import echarts from '@/utils/echarts'
+import { COLOR_PALETTE, themeColor } from '@/utils/echarts-theme'
 import { get, apiRequest } from '@/api/request'
 import { logger } from '@/utils/logger'
 
@@ -111,23 +112,25 @@ function buildBarOption(projectList: any[]): echarts.EChartsCoreOption {
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(255,255,255,.96)',
-      borderColor: '#e2e8f0',
+      borderColor: themeColor('--color-border-light', '#e2e8f0'),
       borderRadius: 8,
-      textStyle: { color: '#1e293b', fontSize: 13 },
+      textStyle: { color: themeColor('--color-text-primary', '#1e293b'), fontSize: 13 },
     },
     grid: { left: 8, right: 24, top: 8, bottom: 8 },
     xAxis: {
       type: 'value',
       max: 100,
-      axisLabel: { color: '#94a3b8', fontSize: 11 },
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
+      axisLabel: { color: themeColor('--color-border-dark', '#94a3b8'), fontSize: 11 },
+      splitLine: {
+        lineStyle: { color: themeColor('--color-border-lighter', '#f1f5f9'), type: 'dashed' },
+      },
     },
     yAxis: {
       type: 'category',
       data: names.reverse(),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: '#475569', fontSize: 12 },
+      axisLabel: { color: themeColor('--color-text-regular', '#475569'), fontSize: 12 },
     },
     series: [
       {
@@ -137,14 +140,14 @@ function buildBarOption(projectList: any[]): echarts.EChartsCoreOption {
         itemStyle: {
           borderRadius: [0, 6, 6, 0],
           color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#2d6a4f' },
-            { offset: 1, color: '#52b788' },
+            { offset: 0, color: COLOR_PALETTE[1] },
+            { offset: 1, color: COLOR_PALETTE[4] },
           ]),
         },
         label: {
           show: true,
           position: 'right',
-          color: '#64748b',
+          color: themeColor('--color-text-secondary', '#64748b'),
           fontSize: 11,
           formatter: '{c}%',
         },
@@ -159,22 +162,29 @@ function buildPieOption(fundsData: {
   planned: number
 }): echarts.EChartsCoreOption {
   return {
-    color: ['#2d6a4f', '#1e4d8c', '#f59e0b'],
+    color: [COLOR_PALETTE[1], COLOR_PALETTE[0], COLOR_PALETTE[5]],
     tooltip: {
       trigger: 'item',
       backgroundColor: 'rgba(255,255,255,.96)',
-      borderColor: '#e2e8f0',
+      borderColor: themeColor('--color-border-light', '#e2e8f0'),
       borderRadius: 8,
-      textStyle: { color: '#1e293b', fontSize: 13 },
+      textStyle: { color: themeColor('--color-text-primary', '#1e293b'), fontSize: 13 },
       formatter: (p: any) => `${p.marker} ${p.name}: <b>${p.value}万</b> (${p.percent}%)`,
     },
-    legend: { bottom: 0, textStyle: { color: '#64748b', fontSize: 11 } },
+    legend: {
+      bottom: 0,
+      textStyle: { color: themeColor('--color-text-secondary', '#64748b'), fontSize: 11 },
+    },
     series: [
       {
         type: 'pie',
         radius: ['55%', '78%'],
         center: ['50%', '46%'],
-        itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 3 },
+        itemStyle: {
+          borderRadius: 4,
+          borderColor: themeColor('--color-bg-card', '#fff'),
+          borderWidth: 3,
+        },
         label: { show: false },
         emphasis: {
           itemStyle: { shadowBlur: 16, shadowColor: 'rgba(0,0,0,.12)' },

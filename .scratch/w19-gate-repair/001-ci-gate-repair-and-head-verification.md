@@ -47,3 +47,22 @@ w17 十项工单全部改判 `done` 后，对发布提交 `29248ff`（v1.12.22�
 - 并行会话在 `29248ff` 之上的**未提交** w18 在途工作（`data_package_service.py`
   65.32%、`backup_service.py` 98.82%、`pii_crypto.py` 分支缺失，以及 R28 upsert /
   data-package 18 条测试失败）不属于本工单范围，已在会话内单独报告。
+
+## W19 收尾验证记录（2026-10-20 晚）
+
+- 主树后端全量 #1（-n 6 + 覆盖率）：**13926 passed / 3 failed**，覆盖率 **100.00%**（44877 stmts / 11028 branches）。
+  3 个失败均已修复：	est_grant_guard_r33（security 模块对象分叉）、	est_utils_full_coverage::test_get_database_path
+  （worker 库名）、	est_fund_approval_integration（审计定时刷写与 StaticPool 单连接竞态 → session 级 fixture 拉长间隔）。
+- 主树后端全量 #2（pytest-randomly 随机序）：8 failed / 12 errors，均为**既有**随机序耦合
+  （pp.main 被部分用例 reload、favicon/version/SPA、data_quality 鉴权、branch_gaps 组），
+  超出本票 8 文件范围；8 个原「必须先跑」文件随机序 **304 passed** 作为验收冒烟。
+- 主树后端全量 #3（常规顺序）：6 failed，**全部落在另一会话未提交的 W25 在途改动**上：
+  pp/services/approval_workflow_service.py、pp/api/v1/data/data/statistics.py，
+  以及其修改中的 	est_approval_workflow_service.py / 	est_coverage_tail_gaps.py。
+  按既定约束不修改他人在途代码。
+- 为获得不受在途改动影响的证据，在**工作区内**创建 HEAD 隔离检出
+  .scratch/w19-head-verify（HEAD=086e996），仅叠加本票的 5 个后端文件，
+  运行两轮全量（常规顺序 + -n 6 + 覆盖率）。日志：deliverables/w19-gates/。
+  注：系统临时目录在本环境不可写（纯 Python 亦 PermissionError），pytest 回落到 cwd 临时根；
+  工作区外的 worktree 会因沙箱权限导致 FileNotFoundError: No usable temporary directory，
+  故隔离检出放在工作区内。

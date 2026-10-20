@@ -17,9 +17,9 @@ test.describe('Village Lifecycle', () => {
 
   test('should open create village form', async ({ page }) => {
     await navigateTo(page, '/supported-villages')
-    const addBtn = page.locator(
-      'button:has-text("新增"), button:has-text("添加"), .el-button:has-text("新增")'
-    )
+    const addBtn = page
+      .locator('button:has-text("新增"), button:has-text("添加"), .el-button:has-text("新增")')
+      .first()
     if (await addBtn.isVisible()) {
       await addBtn.first().click()
       await expect(page.locator('.el-dialog, .el-drawer, form').first()).toBeVisible({

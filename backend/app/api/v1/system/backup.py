@@ -368,7 +368,11 @@ async def list_backups(
             items.append({
                 "backup_id": r.backup_id,
                 "file_name": r.file_name,
-                "file_path": r.file_path,
+                # W25：本端点设计为「任意已登录用户可读」（Electron 保留策略需要），
+                # 原实现把服务端**绝对路径**一并返回，对非管理员构成安装目录/盘符
+                # 等内部布局泄漏。前端与 Electron 主进程都只用 file_name 下载/清理，
+                # 故这里统一只给文件名（保留同名键以兼容既有消费方）。
+                "file_path": os.path.basename(r.file_path or r.file_name or ""),
                 "file_size": r.file_size,
                 "description": r.description,
                 "created_at": r.created_at.isoformat(),

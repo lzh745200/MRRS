@@ -223,7 +223,7 @@ const stubs: Record<string, any> = {
       '<button type="button" class="tb-sort-desc" @click="$emit(\'sort-change\', { prop: \'department\', order: \'descending\' })">d</button>' +
       '<button type="button" class="tb-sort-none" @click="$emit(\'sort-change\', { prop: null, order: null })">n</button>' +
       '<button type="button" class="tb-sel" @click="$emit(\'selection-change\', [rowA, rowB])">s</button>' +
-      '<slot /></div>',
+      '<slot name="empty" /><slot /></div>',
     data() {
       return { rowA, rowB }
     },

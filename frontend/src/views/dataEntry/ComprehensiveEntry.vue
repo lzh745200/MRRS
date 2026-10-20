@@ -1,9 +1,6 @@
 <template>
   <div class="comprehensive-entry">
-    <div class="page-header">
-      <h2 class="page-title">综合数据录入</h2>
-      <p class="page-desc">整合16个帮扶数据板块，分步骤录入完整数据</p>
-    </div>
+    <PageHeader title="综合数据录入" subtitle="整合16个帮扶数据板块，分步骤录入完整数据" />
 
     <!-- 步骤条 -->
     <div class="steps-card">
@@ -775,6 +772,7 @@ import type {
   HonorRecord,
   VillageCommitteeMember,
 } from '@/types/helpProject'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 const DRAFT_STORAGE_KEY = 'comprehensive_entry_draft'
 const AUTO_SAVE_INTERVAL = 30_000 // 30秒自动保存

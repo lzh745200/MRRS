@@ -1,9 +1,6 @@
 <template>
   <div class="assessment-page">
-    <div class="page-header">
-      <h2>成效评估</h2>
-      <p class="page-desc">乡村振兴帮扶工作成效综合评估</p>
-    </div>
+    <PageHeader title="成效评估" subtitle="乡村振兴帮扶工作成效综合评估" />
 
     <!-- 无数据时显示空状态 -->
     <EmptyState
@@ -85,6 +82,7 @@ import { unwrapList } from '@/utils/unwrapList'
 import { ref, computed, onMounted } from 'vue'
 import BaseChart from '@/components/common/BaseChart.vue'
 import { get } from '@/api/request'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 interface VillageScoreItem {
   village_id: number

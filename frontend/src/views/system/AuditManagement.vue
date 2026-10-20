@@ -1,9 +1,6 @@
 <template>
   <div class="audit-management-page">
-    <div class="page-header">
-      <h2 class="page-title">审计管理</h2>
-      <p class="page-desc">系统操作审计追踪，确保数据安全与合规</p>
-    </div>
+    <PageHeader title="审计管理" subtitle="系统操作审计追踪，确保数据安全与合规" />
 
     <!-- 审计统计 -->
     <div class="stats-row">
@@ -207,6 +204,7 @@ import { logger } from '@/utils/logger'
 
 import { format } from '@/utils'
 import { Refresh, Search } from '@element-plus/icons-vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 const activeTab = ref('operations')
 const loading = ref(false)
 const filters = reactive({

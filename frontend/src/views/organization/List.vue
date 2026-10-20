@@ -99,7 +99,10 @@
         </el-alert>
       </div>
 
-      <el-table ref="tableRef" v-loading="loading" :data="tableData" border stripe row-key="id">
+      <el-table ref="tableRef" v-loading="loading" :data="tableData" border row-key="id">
+        <template #empty>
+          <EmptyState text="暂无组织数据" action="去添加" :size="72" @action="handleCreate" />
+        </template>
         <el-table-column type="index" label="序号" width="72" />
         <el-table-column prop="name" label="组织名称" min-width="180">
           <template #default="scope">
@@ -257,6 +260,7 @@ import {
 } from '@/api/organization'
 
 import PageHeader from '@/components/common/PageHeader.vue'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 const { pushSafe } = useRouterSafe()
 
 // 获取认证状态

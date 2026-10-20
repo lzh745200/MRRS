@@ -1,11 +1,6 @@
 <template>
   <div class="evaluation-page">
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">成效评估</h2>
-        <p class="page-desc">评估帮扶村庄的综合成效并查看报告</p>
-      </div>
-    </div>
+    <PageHeader title="成效评估" subtitle="评估帮扶村庄的综合成效并查看报告" />
 
     <!-- 评估表单 -->
     <div class="form-card">
@@ -131,6 +126,7 @@ import { useUserStore } from '@/stores/user'
 import { getYearOptions } from '@/utils/yearOptions'
 
 import { format } from '@/utils'
+import PageHeader from '@/components/common/PageHeader.vue'
 const route = useRoute()
 const userStore = useUserStore()
 // 仅管理员可发起评估（后端 /effectiveness/evaluate 限 super_admin/admin）

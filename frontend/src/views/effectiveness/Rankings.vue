@@ -1,11 +1,6 @@
 <template>
   <div class="rankings-page">
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">成效排名</h2>
-        <p class="page-desc">查看帮扶村庄综合成效评分排名</p>
-      </div>
-    </div>
+    <PageHeader title="成效排名" subtitle="查看帮扶村庄综合成效评分排名" />
 
     <!-- 筛选 -->
     <div class="filter-card">
@@ -124,6 +119,7 @@ import { getRankings } from '@/api/effectiveness'
 import { useUserStore } from '@/stores/user'
 import { getYearOptions } from '@/utils/yearOptions'
 import { isAdminUser } from '@/utils/roleAccess'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 const { pushSafe } = useRouterSafe()
 const userStore = useUserStore()

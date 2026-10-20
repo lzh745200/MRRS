@@ -1,14 +1,12 @@
 <template>
   <div class="ai-interactive-page">
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">AI 智能分析</h2>
-        <p class="page-desc">利用AI技术进行数据分析、趋势预测、异常检测和智能推荐</p>
-      </div>
-      <el-tag :type="serviceStatus === 'available' ? 'success' : 'info'">
-        {{ serviceStatus === 'available' ? '服务可用' : '加载中...' }}
-      </el-tag>
-    </div>
+    <PageHeader title="AI 智能分析" subtitle="利用AI技术进行数据分析、趋势预测、异常检测和智能推荐">
+      <template #extra>
+        <el-tag :type="serviceStatus === 'available' ? 'success' : 'info'">
+          {{ serviceStatus === 'available' ? '服务可用' : '加载中...' }}
+        </el-tag>
+      </template>
+    </PageHeader>
 
     <!-- 可解释性：AI 结论的「为什么」（结构化依据，不生成自由文本结论） -->
     <el-card v-if="explainability" class="why-panel" shadow="never">
@@ -155,12 +153,7 @@
           <div v-if="anomalyResult" class="result-block">
             <el-divider />
             <h4>异常检测结果</h4>
-            <el-table
-              v-if="anomalyResult.anomalies?.length"
-              border
-              stripe
-              :data="anomalyResult.anomalies"
-            >
+            <el-table v-if="anomalyResult.anomalies?.length" border :data="anomalyResult.anomalies">
               <el-table-column type="index" label="#" width="72" />
               <el-table-column v-for="col in anomalyColumns" :key="col" :prop="col" :label="col" />
               <el-table-column label="异常" width="80">
@@ -328,6 +321,7 @@ import {
   describeDataScope,
   type AIExplainability,
 } from '@/api/ai'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 const activeTab = ref('analyze')
 const serviceStatus = ref('loading')

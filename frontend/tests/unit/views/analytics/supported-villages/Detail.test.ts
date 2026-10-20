@@ -43,7 +43,11 @@ vi.mock('vue-router', async () => {
     params: { id: '9' } as Record<string, any>,
     query: {} as Record<string, any>,
   })
-  return { useRoute: () => routeHolder.state }
+  return {
+    useRoute: () => routeHolder.state,
+    // PageHeader（共享页头标准件）在 setup 阶段调用 useRouter()
+    useRouter: () => ({ back: vi.fn(), push: vi.fn() }),
+  }
 })
 
 vi.mock('element-plus', () => ({ ElMessage }))
@@ -392,7 +396,9 @@ describe('页面模式与导航', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.handleBack()
+    const back = wrapper.find('.back-btn')
+    expect(back.exists()).toBe(true)
+    await back.trigger('click')
     expect(pushSafeMock).toHaveBeenCalledWith('/supported-villages')
     vm.handleEdit()
     expect(pushSafeMock).toHaveBeenCalledWith('/supported-villages/9?mode=edit')

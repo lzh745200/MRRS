@@ -247,7 +247,6 @@
         v-if="transitionFundingRows.length > 0"
         :data="transitionFundingRows"
         border
-        stripe
         style="margin-bottom: 16px"
       >
         <el-table-column label="年度" width="90" align="center">

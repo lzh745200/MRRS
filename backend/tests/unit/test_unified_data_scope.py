@@ -313,15 +313,102 @@ class TestGetOrgSubtree:
 # ── get_org_scope dependency ─────────────────────────────────────────
 
 class TestGetOrgScope:
-    async def test_admin_role_full_access(self):
+    async def test_dept_admin_limited_to_subtree(self):
+        """W25：部门级 admin（is_superuser=False）收敛到本组织及子树，绝不放行全量。
+
+        R27-H8/R28 只收口了 apply_scope_filter，get_org_scope 漏收口 →
+        部门级 admin 经 51 个调用点（一户一档/影像库/消费帮扶/学校/地图/大屏…）
+        跨组织可见。本用例锁定修复后的严格口径。
+        """
         from app.core.data_permission import get_org_scope
         user = MagicMock()
         user.role = "admin"
+        user.data_scope = "org"
+        user.organization_id = 7
+        user.is_superuser = False
+        mock_db = MagicMock()
+        with patch("app.core.data_permission.is_superuser", return_value=False):
+            with patch(
+                "app.core.data_permission._get_org_subtree",
+                return_value=([7, 8], ["本部", "下级"]),
+            ):
+                ds = await get_org_scope(current_user=user, db=mock_db)
+        assert ds.is_admin is False
+        assert ds.has_full_access() is False
+        assert ds.org_ids == [7, 8]
+
+    async def test_dept_admin_without_org_fail_closed(self):
+        """无组织归属的 admin → fail-closed 仅本人（ADR-0002），绝不放行全量。"""
+        from app.core.data_permission import get_org_scope
+        user = MagicMock()
+        user.role = "admin"
+        user.data_scope = "org"
+        user.organization_id = None
+        user.id = 33
+        with patch("app.core.data_permission.is_superuser", return_value=False):
+            ds = await get_org_scope(current_user=user, db=None)
+        assert ds.is_admin is False
+        assert ds.self_only is True
+        assert ds.user_id == 33
+
+    async def test_dept_admin_no_db_session_limited_to_own_org(self):
+        """无会话无法展开子树时至少限本组织，绝不放行全量。"""
+        from app.core.data_permission import get_org_scope
+        user = MagicMock()
+        user.role = "admin"
+        user.data_scope = "org"
+        user.organization_id = 12
+        with patch("app.core.data_permission.is_superuser", return_value=False):
+            ds = await get_org_scope(current_user=user, db=None)
+        assert ds.is_admin is False
+        assert ds.org_ids == [12]
+
+    async def test_dept_admin_empty_subtree_falls_back_to_own_org(self):
+        """组织树查不到（组织已删）→ fail-closed 至少限本组织。"""
+        from app.core.data_permission import get_org_scope
+        user = MagicMock()
+        user.role = "admin"
+        user.data_scope = "org"
+        user.organization_id = 15
+        mock_db = MagicMock()
+        with patch("app.core.data_permission.is_superuser", return_value=False):
+            with patch("app.core.data_permission._get_org_subtree", return_value=([], [])):
+                ds = await get_org_scope(current_user=user, db=mock_db)
+        assert ds.is_admin is False
+        assert ds.org_ids == [15]
+
+    async def test_super_admin_role_full_access(self):
+        """super_admin → 全量（无条件放行）。"""
+        from app.core.data_permission import get_org_scope
+        user = MagicMock()
+        user.role = "super_admin"
         user.data_scope = "org"
         with patch("app.core.data_permission.is_superuser", return_value=False):
             ds = await get_org_scope(current_user=user, db=None)
         assert ds.is_admin is True
         assert ds.has_full_access() is True
+
+    async def test_is_superuser_flag_full_access(self):
+        """is_superuser=True（role 任意，含 admin）→ 全量。"""
+        from app.core.data_permission import get_org_scope
+        user = MagicMock()
+        user.role = "admin"
+        user.data_scope = "org"
+        with patch("app.core.data_permission.is_superuser", return_value=True):
+            ds = await get_org_scope(current_user=user, db=None)
+        assert ds.is_admin is True
+
+    async def test_legacy_manager_role_is_not_admin(self):
+        """历史角色 manager 规范化为 admin → 与部门级 admin 同口径（子树）。"""
+        from app.core.data_permission import get_org_scope
+        user = MagicMock()
+        user.role = "manager"
+        user.data_scope = "org"
+        user.organization_id = 21
+        with patch("app.core.data_permission.is_superuser", return_value=False):
+            ds = await get_org_scope(current_user=user, db=None)
+        assert ds.is_admin is False
+        assert ds.org_ids == [21]
 
     async def test_data_scope_all_full_access(self):
         from app.core.data_permission import get_org_scope

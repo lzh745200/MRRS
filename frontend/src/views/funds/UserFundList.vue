@@ -78,7 +78,7 @@
 
     <!-- 数据表格 -->
     <div class="table-card">
-      <el-table v-loading="loading" border :data="tableData" stripe>
+      <el-table v-loading="loading" border :data="tableData">
         <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="name" label="经费名称" min-width="180">
           <template #default="scope">

@@ -30,8 +30,18 @@ Semantics:
   really need the org-tree visibility model (map / dashboard / statistics /
   organization tree — they also feed the org pickers) must opt in explicitly
   with ``admin_full_access=True``.
-* :func:`get_org_scope` (org-tree endpoints) keeps the org-tree visibility model
-  (admin sees all) — it stays a separate, explicitly named entry point.
+* W25 fix (2026-10-20): :func:`get_org_scope` used to keep the **org-tree
+  visibility model** ("admin sees all"), which meant a department-level admin saw
+  every organization through the 51 endpoints wired to it (households / media /
+  consumption / school / map / bigscreen / pairing / donation …) while the
+  ``apply_scope_filter`` plane showed only its own subtree — the very split R27-H8
+  fixed on the other plane, left open here.  It now follows the **same strict
+  role semantics** as :func:`apply_scope_filter`: only ``super_admin`` /
+  ``is_superuser`` / explicit ``data_scope="all"`` bypass the filter; a
+  department-level ``admin`` is limited to its own organization and its sub-tree.
+  Regular users keep the org-tree scope their ``data_scope`` field declares
+  (``org`` / ``org_children``) — that is a deliberate product choice for the
+  business pages, not a privilege escalation.
 """
 
 import logging
@@ -391,12 +401,22 @@ async def get_org_scope(
 
     Uses the user's ``role``, ``data_scope`` field and ``organization_id``
     to build an :class:`OrgScopeFilter`.
+
+    口径（W25 收口，与 :func:`apply_scope_filter` 一致）：
+        * ``data_scope="all"`` / ``super_admin`` / ``is_superuser`` → 全量；
+        * 部门级 ``admin``（``is_superuser=False``）→ **本组织及子树**，绝不放行全量；
+        * 其他角色 → 按其 ``data_scope`` 字段（``org`` / ``org_children`` / ``self``）。
     """
     role = getattr(current_user, "role", "user")
     user_data_scope = getattr(current_user, "data_scope", "org") or "org"
 
-    # Admin roles or explicit "all" scope → full access
-    if role in ("admin", "super_admin") or is_superuser(current_user) or user_data_scope == "all":
+    # 显式全局范围 → 放行全量（与 apply_scope_filter:574 同口径）
+    if user_data_scope == "all":
+        return OrgScopeFilter(is_admin=True)
+
+    # 真正的全局管理员才放行全量。R27-H8/R28 只收口了 apply_scope_filter，
+    # 本函数漏收口 → 部门级 admin 经 51 个调用点跨组织可见（W25 修复）。
+    if is_superuser(current_user) or normalize_role(role) == ROLE_SUPER_ADMIN:
         return OrgScopeFilter(is_admin=True)
 
     org_id = getattr(current_user, "organization_id", None)
@@ -410,6 +430,22 @@ async def get_org_scope(
             self_only=True,
             user_id=getattr(current_user, "id", None),
         )
+
+    # ── 部门级管理员：数据面严格口径（本组织及子树），忽略 data_scope 字段 ──
+    # 军审红线 S2：部门级 admin 导出/列表不得跨组织；此处与 apply_scope_filter
+    # 的 OWN_DEPT 分支保持同一语义，避免"列表看全量、导出只看本组织"的分裂。
+    if normalize_role(role) == ROLE_ADMIN:
+        if not org_id:
+            # 无组织 admin → fail-closed 仅本人（与 get_data_scope:117-118 一致）
+            return _no_org_self_only()
+        if db is None:
+            # 无会话时无法展开子树 → 至少限本组织（绝不放行全量）
+            return OrgScopeFilter(is_admin=False, org_ids=[org_id], org_names=[])
+        org_ids, org_names = _get_org_subtree(db, org_id)
+        if not org_ids:
+            # 组织已不存在/树为空 → fail-closed 至少限本组织
+            return OrgScopeFilter(is_admin=False, org_ids=[org_id], org_names=[])
+        return OrgScopeFilter(is_admin=False, org_ids=org_ids, org_names=org_names)
 
     # Self only
     if user_data_scope == "self":

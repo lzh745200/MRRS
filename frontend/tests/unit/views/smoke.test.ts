@@ -30,6 +30,7 @@ vi.mock('@/api/request', () => ({
 vi.mock('@/utils/echarts-theme', () => ({
   registerMilitaryTheme: vi.fn(),
   getCurrentTheme: vi.fn().mockReturnValue('militaryTech'),
+  themeColor: (_name: string, fallback: string) => fallback,
   COLOR_PALETTE: [],
   MILITARY_BLUE: '#1e4d8c',
   REVITALIZATION_GREEN: '#2d6a4f',
@@ -155,7 +156,9 @@ describe('Business module view imports', () => {
     ['Project Detail', '@/views/projects/Detail.vue'],
     ['Project Import', '@/views/projects/Import.vue'],
     ['Funds Index', '@/views/funds/EnhancedList.vue'],
-    ['Funds Detail', '@/views/funds/Detail.vue'],
+    // Funds Detail 刻意不在此 bare import：专属全分支测试 tests/unit/views/funds/DetailCov.test.ts。
+    // 按 vitest.config.ts 的 coverage-merge 不变量，覆盖率门禁锁定的 .vue 全仓只允许一个
+    // 测试文件执行（bare import 也产出 fnMap 分片，满量按 v8 函数 id 合并会错位）。
     ['Funds User List', '@/views/funds/UserFundList.vue'],
     ['Funds Report', '@/views/funds/Report.vue'],
     ['Policy List', '@/views/policies/List.vue'],
@@ -163,7 +166,7 @@ describe('Business module view imports', () => {
     ['Policy Detail', '@/views/policies/Detail.vue'],
     ['Rural Works Index', '@/views/ruralWorks/Index.vue'],
     ['Rural Works List', '@/views/ruralWorks/List.vue'],
-    ['Rural Works Task', '@/views/ruralWorks/Task.vue'],
+    // Rural Works Task 同上：专属全分支测试 tests/unit/views/ruralWorks/Task.test.ts。
     ['Rural Works Report', '@/views/ruralWorks/Report.vue'],
     ['Organization List', '@/views/organization/List.vue'],
     ['Organization Edit', '@/views/organization/Edit.vue'],

@@ -1,9 +1,6 @@
 <template>
   <div class="map-page">
-    <div class="page-header">
-      <h2>地图可视化</h2>
-      <p class="page-desc">帮扶村地理分布与数据概览</p>
-    </div>
+    <PageHeader title="地图可视化" subtitle="帮扶村地理分布与数据概览" />
 
     <el-row :gutter="16">
       <!-- 统计卡片 -->
@@ -35,7 +32,7 @@
     <!-- 数据表格 -->
     <el-card style="margin-top: 16px">
       <template #header>帮扶村列表</template>
-      <el-table v-loading="loading" :data="tableData" border stripe>
+      <el-table v-loading="loading" :data="tableData" border>
         <el-table-column prop="village_name" label="村庄名称" min-width="120" />
         <el-table-column prop="province" label="省份" width="100" />
         <el-table-column prop="county" label="县市" width="120" />
@@ -62,6 +59,7 @@ import { ref, computed, onMounted } from 'vue'
 import { unwrapList } from '@/utils/unwrapList'
 import BaseChart from '@/components/common/BaseChart.vue'
 import { get } from '@/api/request'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 interface Village {
   id: number

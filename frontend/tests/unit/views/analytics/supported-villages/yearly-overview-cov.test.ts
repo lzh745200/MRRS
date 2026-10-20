@@ -493,11 +493,12 @@ describe('YearlyOverview.vue 交互与生命周期', () => {
     expect(vm.editDialogVisible).toBe(true)
   })
 
-  it('handleBack：跳转村庄详情页', async () => {
+  it('返回详情：页头返回按钮跳转村庄详情页', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    const vm = wrapper.vm as any
-    vm.handleBack()
+    const back = wrapper.find('.back-btn')
+    expect(back.exists()).toBe(true)
+    await back.trigger('click')
     expect(mocks.pushSafe).toHaveBeenCalledWith('/supported-villages/1')
   })
 

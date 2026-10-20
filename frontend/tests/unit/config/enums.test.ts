@@ -10,6 +10,7 @@ import {
   APPROVAL_ACTIONS,
   ENTITY_TYPES,
   TASK_PRIORITY,
+  TASK_STATUS,
   getFundTypeLabel,
   getFundStatusLabel,
   getProjectStatusLabel,
@@ -18,6 +19,7 @@ import {
   getApprovalActionLabel,
   getEntityTypeLabel,
   getTaskPriorityLabel,
+  getTaskStatusLabel,
 } from '@/config/enums'
 
 describe('config/enums', () => {
@@ -192,6 +194,25 @@ describe('config/enums', () => {
     })
     it('未知优先级原样返回', () => {
       expect(getTaskPriorityLabel('xyz')).toBe('xyz')
+    })
+  })
+
+  // W10-029：任务状态共享映射（乡村工作任务列表/导出/进度弹窗单源）
+  describe('TASK_STATUS / getTaskStatusLabel', () => {
+    it('常量覆盖后端全部任务状态', () => {
+      expect(TASK_STATUS.pending).toBe('待分配')
+      expect(TASK_STATUS.in_progress).toBe('进行中')
+      expect(TASK_STATUS.completed).toBe('已完成')
+      expect(TASK_STATUS.delayed).toBe('已延期')
+      expect(TASK_STATUS.cancelled).toBe('已取消')
+    })
+    it('已知状态返回中文标签', () => {
+      expect(getTaskStatusLabel('pending')).toBe('待分配')
+      expect(getTaskStatusLabel('in_progress')).toBe('进行中')
+      expect(getTaskStatusLabel('completed')).toBe('已完成')
+    })
+    it('未知状态原样返回', () => {
+      expect(getTaskStatusLabel('xyz')).toBe('xyz')
     })
   })
 })

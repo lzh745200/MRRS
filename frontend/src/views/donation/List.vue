@@ -55,7 +55,12 @@
         </el-button>
       </div>
 
-      <EmptyState v-if="!loading && items.length === 0" description="暂无捐赠物资记录" />
+      <EmptyState
+        v-if="!loading && items.length === 0"
+        text="暂无捐赠物资记录"
+        action="去添加"
+        @action="openCreate"
+      />
       <template v-else>
         <el-table v-loading="loading" border :data="items">
           <el-table-column prop="name" label="名称" min-width="140" />

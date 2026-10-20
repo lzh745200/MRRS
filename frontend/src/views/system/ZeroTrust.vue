@@ -1,19 +1,13 @@
 <template>
   <div class="zero-trust-page">
     <!-- 页面标题 -->
-    <el-card class="page-header">
-      <div class="header-content">
-        <div class="header-left">
-          <h2>零信任安全</h2>
-          <p class="description">零信任安全态势感知与策略管理</p>
-        </div>
-        <div class="header-right">
-          <el-button :icon="Refresh" :loading="refreshingAll" @click="refreshAll">
-            刷新全部
-          </el-button>
-        </div>
-      </div>
-    </el-card>
+    <PageHeader title="零信任安全" subtitle="零信任安全态势感知与策略管理">
+      <template #extra>
+        <el-button :icon="Refresh" :loading="refreshingAll" @click="refreshAll">
+          刷新全部
+        </el-button>
+      </template>
+    </PageHeader>
 
     <!-- 第1部分: 信任评估仪表盘 -->
     <el-card class="assessment-card">
@@ -421,6 +415,7 @@ import {
   type SecurityEventStats,
   type AccessEvaluationResult,
 } from '@/api/zeroTrust'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 // ==================== 刷新全部 ====================
 

@@ -266,6 +266,7 @@ import { logger } from '@/utils/logger'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { Refresh } from '@element-plus/icons-vue'
 import BaseChart from '@/components/common/BaseChart.vue'
+import { COLOR_PALETTE, themeColor } from '@/utils/echarts-theme'
 import {
   getBigScreenFilters,
   getBigScreenOverview,
@@ -486,14 +487,14 @@ const fundTrendOption = computed(() => {
         type: 'line',
         smooth: true,
         data: data.map((d) => displayMoney(d.planned)),
-        itemStyle: { color: '#36cfc9' },
+        itemStyle: { color: COLOR_PALETTE[8] },
       },
       {
         name: '实际投入',
         type: 'line',
         smooth: true,
         data: data.map((d) => displayMoney(d.actual)),
-        itemStyle: { color: '#ffd666' },
+        itemStyle: { color: COLOR_PALETTE[5] },
       },
     ],
   }
@@ -511,7 +512,7 @@ const rankOption = computed(() => {
       {
         type: 'bar',
         data: rows.map((row) => row.score),
-        itemStyle: { color: '#40a9ff' },
+        itemStyle: { color: COLOR_PALETTE[3] },
       },
     ],
   }
@@ -522,7 +523,10 @@ const projectStatusOption = computed(() => {
   return {
     backgroundColor: 'transparent',
     tooltip: { trigger: 'item' },
-    legend: { bottom: 0, textStyle: { color: '#aaa' } },
+    legend: {
+      bottom: 0,
+      textStyle: { color: themeColor('--color-text-secondary', '#aaa') },
+    },
     series: [
       {
         type: 'pie',
@@ -550,7 +554,7 @@ const yearlyOption = computed(() => {
         type: 'bar',
         // project_count 为真实项目数；旧载荷缺该字段时回退经费记录数
         data: rows.map((row) => row.project_count ?? row.fund_count),
-        itemStyle: { color: '#b37feb' },
+        itemStyle: { color: COLOR_PALETTE[7] },
         barWidth: '40%',
       },
     ],

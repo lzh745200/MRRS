@@ -1,9 +1,6 @@
 <template>
   <div class="env-check-page">
-    <div class="page-header">
-      <h2 class="page-title">运行环境诊断</h2>
-      <p class="page-desc">检查系统运行环境，确保依赖完整性和系统健康</p>
-    </div>
+    <PageHeader title="运行环境诊断" subtitle="检查系统运行环境，确保依赖完整性和系统健康" />
 
     <!-- 健康状态总览 -->
     <el-card class="health-card">
@@ -178,6 +175,7 @@ import { ElMessage } from 'element-plus'
 import { Refresh, Search, SuccessFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import { envApi } from '@/api/env'
 import type { EnvCheckResult, SystemInfo } from '@/api/env'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 const checking = ref(false)
 const checkError = ref('')

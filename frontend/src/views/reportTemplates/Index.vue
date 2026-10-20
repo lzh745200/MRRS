@@ -118,7 +118,7 @@
             v-model="newTemplate.type"
             placeholder="请选择模板类型"
             clearable
-            style="width: 100%"
+            class="full-width"
           >
             <el-option label="导入模板" value="import" />
             <el-option label="导出模板" value="export" />
@@ -129,7 +129,7 @@
             v-model="newTemplate.module"
             placeholder="请选择关联模块"
             clearable
-            style="width: 100%"
+            class="full-width"
             @change="loadAvailableFields"
           >
             <el-option label="帮扶村" value="village" />
@@ -210,7 +210,7 @@
         type="info"
         :closable="false"
         show-icon
-        style="margin-bottom: 16px"
+        class="dialog-alert"
       />
       <el-form label-width="100px">
         <el-form-item
@@ -239,7 +239,7 @@
             previewTemplate.type === 'import' ? '导入模板' : '导出模板'
           }}</el-descriptions-item>
           <el-descriptions-item label="关联模块">
-            <span style="display: inline-flex; align-items: center; gap: 4px">
+            <span class="module-cell">
               <el-icon><component :is="moduleIcon(previewTemplate.module)" /></el-icon>
               {{ moduleLabel(previewTemplate.module) }}
             </span>
@@ -264,7 +264,7 @@
           <el-tag
             v-for="(field, idx) in parseFields(previewTemplate.fields)"
             :key="idx"
-            style="margin: 4px"
+            class="field-tag"
             >{{ field }}</el-tag
           >
         </div>
@@ -285,13 +285,7 @@
     >
       <!-- 第一步：选择文件和模式 -->
       <div v-if="!previewResult">
-        <el-alert
-          title="上传说明"
-          type="info"
-          :closable="false"
-          show-icon
-          style="margin-bottom: 16px"
-        >
+        <el-alert title="上传说明" type="info" :closable="false" show-icon class="dialog-alert">
           请先选择填写好的 Excel 文件，点击"预览数据"查看解析结果，确认无误后再点击"确认导入"。
         </el-alert>
 
@@ -302,16 +296,14 @@
           :on-change="onFileChange"
           :on-remove="onFileRemove"
           accept=".xlsx,.xls"
-          style="margin-bottom: 16px"
+          class="upload-block"
         >
           <el-button type="primary">
             <el-icon><Upload /></el-icon>
             选择 Excel 文件
           </el-button>
           <template #tip>
-            <div style="font-size: 12px; color: var(--color-text-placeholder); margin-top: 8px">
-              支持 .xlsx / .xls 格式，文件大小不超过 10MB
-            </div>
+            <div class="upload-tip">支持 .xlsx / .xls 格式，文件大小不超过 10MB</div>
           </template>
         </el-upload>
 
@@ -327,7 +319,7 @@
 
       <!-- 第二步：预览结果 -->
       <div v-else>
-        <el-descriptions :column="3" border style="margin-bottom: 16px">
+        <el-descriptions :column="3" border class="section-gap">
           <el-descriptions-item label="关联模块">
             {{ moduleLabel(previewResult.module) }}
           </el-descriptions-item>
@@ -351,10 +343,8 @@
         </el-descriptions>
 
         <!-- 预览数据表格 -->
-        <div v-if="previewResult.parsed_data?.length" style="margin-bottom: 16px">
-          <h4 style="margin: 0 0 8px; font-size: 14px; color: var(--color-primary)">
-            数据预览（前 {{ previewResult.parsed_data.length }} 条）
-          </h4>
+        <div v-if="previewResult.parsed_data?.length" class="section-gap">
+          <h4 class="preview-heading">数据预览（前 {{ previewResult.parsed_data.length }} 条）</h4>
           <el-table :data="previewResult.parsed_data" border max-height="220">
             <el-table-column
               v-for="col in previewColumns"
@@ -368,8 +358,8 @@
         </div>
 
         <!-- 错误列表 -->
-        <div v-if="previewResult.errors?.length" style="margin-bottom: 8px">
-          <h4 style="margin: 0 0 8px; font-size: 14px; color: var(--color-danger)">
+        <div v-if="previewResult.errors?.length" class="block-gap-sm">
+          <h4 class="preview-heading is-danger">
             错误详情（共 {{ previewResult.errors.length }} 条）
           </h4>
           <el-table :data="previewResult.errors" border max-height="160">
@@ -410,7 +400,7 @@
       <div v-if="importResult">
         <el-result v-if="importResult.success" icon="success" :title="importResult.message">
           <template #sub-title>
-            <el-descriptions :column="2" border style="margin-top: 16px">
+            <el-descriptions :column="2" border class="section-gap-top">
               <el-descriptions-item label="导入成功">
                 <el-tag type="success">{{ importResult.imported }}</el-tag> 条
               </el-descriptions-item>
@@ -437,8 +427,8 @@
         </el-result>
 
         <!-- 错误详情 -->
-        <div v-if="importResult.errors?.length" style="margin-top: 12px">
-          <h4 style="color: var(--color-danger)">失败详情</h4>
+        <div v-if="importResult.errors?.length" class="block-gap-top">
+          <h4 class="text-danger">失败详情</h4>
           <el-table :data="importResult.errors" border max-height="180">
             <el-table-column prop="row" label="行号" width="70" />
             <el-table-column prop="message" label="错误信息" />
@@ -916,21 +906,52 @@ onMounted(loadTemplates)
   flex-direction: column;
   gap: 20px;
 }
-.page-header {
-  display: flex;
-  justify-content: space-between;
+
+/* 表单/对话框内的布局工具类（原内联样式收敛） */
+.full-width {
+  width: 100%;
+}
+.dialog-alert {
+  margin-bottom: 16px;
+}
+.module-cell {
+  display: inline-flex;
   align-items: center;
+  gap: 4px;
 }
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--color-primary-dark-1);
-  margin: 0 0 4px;
+.field-tag {
+  margin: 4px;
 }
-.page-desc {
+.upload-block {
+  margin-bottom: 16px;
+}
+.upload-tip {
+  font-size: 12px;
+  color: var(--color-text-placeholder);
+  margin-top: 8px;
+}
+.section-gap {
+  margin-bottom: 16px;
+}
+.section-gap-top {
+  margin-top: 16px;
+}
+.block-gap-sm {
+  margin-bottom: 8px;
+}
+.block-gap-top {
+  margin-top: 12px;
+}
+.preview-heading {
+  margin: 0 0 8px;
   font-size: 14px;
-  color: var(--color-text-secondary);
-  margin: 0;
+  color: var(--color-primary);
+}
+.preview-heading.is-danger {
+  color: var(--color-danger);
+}
+.text-danger {
+  color: var(--color-danger);
 }
 
 .filter-bar {

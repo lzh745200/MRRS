@@ -1,11 +1,6 @@
 <template>
   <div class="encryption-settings">
-    <el-card class="page-header">
-      <div class="header-content">
-        <h2>数据库加密设置</h2>
-        <p class="description">管理数据库加密功能</p>
-      </div>
-    </el-card>
+    <PageHeader title="数据库加密设置" subtitle="管理数据库加密功能" />
 
     <!-- 加密状态 -->
     <el-card class="encryption-status">
@@ -138,6 +133,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { get, post } from '@/api/request'
 
 import { format } from '@/utils'
+import PageHeader from '@/components/common/PageHeader.vue'
 const encryptionStatus = ref({
   enabled: false,
   algorithm: '',

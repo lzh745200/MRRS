@@ -219,6 +219,7 @@ import {
   COLOR_PALETTE,
   MILITARY_BLUE,
   REVITALIZATION_GREEN,
+  themeColor,
 } from '@/utils/echarts-theme'
 import SystemStatus from '@/components/business/SystemStatus.vue'
 import { getSummaryStatistics, getFilterOptions, drillDown } from '@/api/analytics'
@@ -231,9 +232,8 @@ import type { SummaryStatistics, FilterOptions, DrillDownResult } from '@/types/
  * tokens.scss 会随 html[data-theme] 重新定义这些变量；echarts option 里写死
  * 浅色 hex（#e2e8f0/#1e293b/#64748b）会在暗色主题下刺眼，故轴/边框/文字色
  * 一律在每次构建 option 时从 CSS 变量取值，取不到再回退到原浅色值。
+ * 取值实现统一在 @/utils/echarts-theme 的 themeColor()（单一事实源）。
  */
-const themeColor = (name: string, fallback: string): string =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
 
 // =========================================================================
 // 年份与筛选

@@ -3,35 +3,31 @@
   <div style="display: contents">
     <div v-loading="loading" class="village-detail-page">
       <!-- 页面头部 -->
-      <div class="page-header">
-        <div class="header-info">
-          <el-button text @click="handleBack">
-            <el-icon><ArrowLeft /></el-icon>返回列表
-          </el-button>
-          <h2 class="page-title">{{ pageTitle }}</h2>
-        </div>
-        <div v-if="pageMode === 'view'" class="header-actions">
-          <el-button @click="handleEdit">
-            <el-icon><Edit /></el-icon>编辑
-          </el-button>
-          <el-button type="primary" @click="handleYearlyData">
-            <el-icon><Calendar /></el-icon>年度数据
-          </el-button>
-          <el-button @click="openChangeHistory">变更历史</el-button>
-          <el-button
-            class="btn-export-dossier"
-            :loading="dossierExporting"
-            @click="handleExportDossier"
-          >
-            <el-icon><Download /></el-icon>导出档案册
-          </el-button>
-          <el-button
-            class="btn-pairings"
-            @click="pushSafe(`/pairings?partner_type=village&partner_id=${village?.id ?? ''}`)"
-            >结对帮扶台账</el-button
-          >
-        </div>
-      </div>
+      <PageHeader :title="pageTitle" show-back back-to="/supported-villages">
+        <template #extra>
+          <div v-if="pageMode === 'view'" class="header-actions">
+            <el-button @click="handleEdit">
+              <el-icon><Edit /></el-icon>编辑
+            </el-button>
+            <el-button type="primary" @click="handleYearlyData">
+              <el-icon><Calendar /></el-icon>年度数据
+            </el-button>
+            <el-button @click="openChangeHistory">变更历史</el-button>
+            <el-button
+              class="btn-export-dossier"
+              :loading="dossierExporting"
+              @click="handleExportDossier"
+            >
+              <el-icon><Download /></el-icon>导出档案册
+            </el-button>
+            <el-button
+              class="btn-pairings"
+              @click="pushSafe(`/pairings?partner_type=village&partner_id=${village?.id ?? ''}`)"
+              >结对帮扶台账</el-button
+            >
+          </div>
+        </template>
+      </PageHeader>
 
       <!-- 编辑 / 创建模式 -->
       <template v-if="pageMode === 'edit' || pageMode === 'create'">
@@ -196,9 +192,10 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { unwrapList } from '@/utils/unwrapList'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
-import { ArrowLeft, Edit, Calendar, Download } from '@element-plus/icons-vue'
+import { Edit, Calendar, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ChangeHistoryDialog from '@/components/common/ChangeHistoryDialog.vue'
+import PageHeader from '@/components/common/PageHeader.vue'
 import { getChangeHistory, downloadVillageDossier } from '@/api/supportedVillage'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
@@ -414,10 +411,6 @@ const loadYearlyData = async () => {
   } finally {
     yearlyLoading.value = false
   }
-}
-
-const handleBack = () => {
-  pushSafe('/supported-villages')
 }
 
 const handleEdit = () => {

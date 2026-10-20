@@ -1,11 +1,6 @@
 <template>
   <div class="map-tile-manager">
-    <el-card class="page-header">
-      <div class="header-content">
-        <h2>地图瓦片管理</h2>
-        <p class="description">管理离线地图瓦片缓存</p>
-      </div>
-    </el-card>
+    <PageHeader title="地图瓦片管理" subtitle="管理离线地图瓦片缓存" />
 
     <!-- 瓦片状态 -->
     <el-card class="tile-status">
@@ -138,6 +133,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getMapStatus, downloadTiles, clearTiles } from '@/api/offlineMap'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 interface MapCoverage {
   total_tiles: number

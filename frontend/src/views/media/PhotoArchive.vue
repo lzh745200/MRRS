@@ -1,30 +1,31 @@
 <template>
   <div class="photo-archive-page">
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">影像库</h2>
-        <p class="page-desc">
-          按帮扶村/学校/项目归档现场影像，支持标签筛选、拍摄点多期对比与对比图导出
-        </p>
-      </div>
-      <div class="header-actions">
-        <el-upload
-          :action="uploadAction"
-          :headers="uploadHeaders"
-          :show-file-list="false"
-          :before-upload="beforeUpload"
-          :on-success="handleUploadSuccess"
-          :on-error="handleUploadError"
-          accept="image/*"
-          data-testid="photo-upload"
-        >
-          <el-button type="primary" :loading="uploading" data-testid="upload-btn">
-            <el-icon><Upload /></el-icon>上传照片
-          </el-button>
-        </el-upload>
-        <el-button :loading="loading" data-testid="refresh-btn" @click="loadPhotos">刷新</el-button>
-      </div>
-    </div>
+    <PageHeader
+      title="影像库"
+      subtitle="按帮扶村/学校/项目归档现场影像，支持标签筛选、拍摄点多期对比与对比图导出"
+    >
+      <template #extra>
+        <div class="header-actions">
+          <el-upload
+            :action="uploadAction"
+            :headers="uploadHeaders"
+            :show-file-list="false"
+            :before-upload="beforeUpload"
+            :on-success="handleUploadSuccess"
+            :on-error="handleUploadError"
+            accept="image/*"
+            data-testid="photo-upload"
+          >
+            <el-button type="primary" :loading="uploading" data-testid="upload-btn">
+              <el-icon><Upload /></el-icon>上传照片
+            </el-button>
+          </el-upload>
+          <el-button :loading="loading" data-testid="refresh-btn" @click="loadPhotos"
+            >刷新</el-button
+          >
+        </div>
+      </template>
+    </PageHeader>
 
     <!-- 筛选条 -->
     <el-card class="filter-card" shadow="never">
@@ -333,6 +334,7 @@ import {
   updatePhoto,
 } from '@/api/media'
 import type { PhotoArchive, PhotoArchiveQuery, PhotoCompareItem } from '@/api/media'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 interface SelectOption {
   value: number

@@ -64,7 +64,13 @@ _os.environ["BUMOFU_DEV_MODE"] = "1"
 # CWD 的 backend/test.db，与引擎所指不是同一个文件；该相对文件还会被同一机器上的
 # 并发行共享，是 seed_admin / soft_delete / audit 顺序耦合抖动的来源。
 # 模块级与 fixture 统一引用本常量，两条路径不再分叉。
-TEST_DATABASE_URL = f"sqlite:///{(_APP_DATA_ROOT / 'test.db').as_posix()}"
+# W4-T6 补充（2026-10-20）：文件名显式带 xdist worker 标识（gw0/gw1/...），
+# 即使未来有人把临时根改成进程间共享（或 --dist loadgroup 复用 worker），
+# 也不会再出现"两个 worker 指向同一个库文件"的退化。
+_XDIST_WORKER = _os.environ.get("PYTEST_XDIST_WORKER", "")
+TEST_DATABASE_URL = (
+    f"sqlite:///{(_APP_DATA_ROOT / ('test_' + _XDIST_WORKER + '.db' if _XDIST_WORKER else 'test.db')).as_posix()}"
+)
 _os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 _os.environ["LOG_FILE"] = (_APP_DATA_ROOT / "logs" / "app.log").as_posix()
 
@@ -187,44 +193,44 @@ except Exception:
 # collect_ignore removed
 
 
-def pytest_collection_modifyitems(config, items):
-    """将依赖 mock/TestClient 的测试文件移至集合最前，避免跨测试污染。
-
-    test_rbac_transactional.py 使用纯 MagicMock 数据库；
-    test_audit_integration.py 使用 TestClient + 依赖覆盖。
-    一旦其他测试触发 SQLAlchemy mapper 初始化或 FastAPI app 状态变更，
-    这些测试的 mock 链就会失效。提前运行可免受污染。
-    """
-    _POLLUTION_SENSITIVE = {
-        "test_rbac_transactional",
-        "test_audit_integration",
-        "test_unified_template",
-        "test_fund_budgets_api",
-        "test_project_milestones_api",
-        "test_statistics_api",
-        "test_coverage_gap_batch3",  # asyncio 事件循环敏感——其他测试破坏 loop 后失败
-        "test_data_dashboard_api",
-    }
-    # W4-T7（2026-10-18）：顺序耦合治理/随机序冒烟的逃生舱 —— 置 1 时保持
-    # pytest 的自然（或 pytest-randomly 的随机）集合顺序，用于暴露真实的
-    # "必须先跑"依赖；默认不设，维持既有的稳定运行序。
-    if os.environ.get("BUMOFU_TEST_NO_ITEM_REORDER") == "1":
-        return
-    first = []
-    rest = []
-    for item in items:
-        fname = item.nodeid.split("::")[0].split("/")[-1].replace(".py", "")
-        if fname in _POLLUTION_SENSITIVE:
-            first.append(item)
-        else:
-            rest.append(item)
-    items[:] = first + rest
+# ── W4-T7（2026-10-20）：顺序耦合治理完成 ──────────────────────────────────
+# 历史上这里有一段 `_POLLUTION_SENSITIVE` 强制排序（把 8 个"必须先跑"的文件移到
+# 集合最前：test_rbac_transactional / test_audit_integration / test_unified_template
+# / test_fund_budgets_api / test_project_milestones_api / test_statistics_api /
+# test_coverage_gap_batch3 / test_data_dashboard_api），以及 BUMOFU_TEST_NO_ITEM_REORDER
+# 逃生舱。这些文件依赖"先跑"的根因是模块级 mock 链/事件循环被其它测试破坏。
+# 该排序块已删除：顺序独立性由「全量自然顺序 + pytest-randomly 随机顺序」两轮回归
+# 锁定（见 .scratch/w4-quality-gates/007-remove-test-pollution.md Resolution）。
+# 新增测试若出现顺序依赖，应修 mock 链，禁止恢复强制排序。
 
 # 添加项目根目录到 Python 路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from fastapi.testclient import TestClient
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _stretch_audit_flush_interval():
+    """W4-T7：拉长审计批量落库的**定时**刷写间隔。
+
+    背景：`app/core/audit_middleware` 的 daemon 线程每 5s 刷写一次缓冲，而测试的
+    `client` fixture 使用 `sqlite:///:memory:` + StaticPool（全进程共用**一条**连接）。
+    定时刷写线程与请求事务在同一连接上交错时，全量 `-n auto` 高压运行中偶发
+    `Multi-row INSERT ... did not produce the correct number of INSERTed row`
+    （表现为 safe_commit 回滚、审批任务创建失败，单文件运行复现不了）。
+
+    请求结束时的显式 flush（dispatch 尾部 `_flush_pending`）不受影响，
+    因此 `test_audit_middleware_batching.py` 等审计落库断言仍走原路径；
+    该文件内部按需把常量 patch 回 60s / 0.05s 来验证定时刷写本身。
+    """
+    try:
+        from app.core import audit_middleware as _am
+
+        _am._FLUSH_INTERVAL_SECONDS = 3600.0
+    except Exception:  # pragma: no cover - 模块导入异常不应阻塞测试启动
+        pass
+    yield
 
 
 # 保留旧的mock_db用于不需要真实数据库的测试

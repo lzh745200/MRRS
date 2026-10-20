@@ -389,6 +389,54 @@ def delete_workflow(
 # ==================== Task Endpoints ====================
 
 
+def _assert_entity_submittable(db, current_user, entity_type: str, entity_id: int) -> None:
+    """W25：审批提交必须校验「被审实体」在提交人的数据域内。
+
+    原实现把任意 ``entity_id`` 直接交给服务层，不校验归属 —— 任一登录用户可对
+    **其它组织**的项目/经费/学校/帮扶村发起变更申请，诱导管理员审批通过后，
+    由回写 handler（``projects.py:_apply_project_approval_result`` 等）直接改写
+    跨组织实体状态，形成「伪造申请 → 审批 → 跨组织改数据」的完整越权链。
+
+    校验口径与列表页一致（``apply_scope_filter``）：看得见的实体才允许发起审批。
+    未知实体类型放行（保持向后兼容，由服务层与回写注册表决定支持范围）。
+    """
+    from importlib import import_module
+
+    from app.core.data_permission import apply_scope_filter
+
+    spec = _APPROVAL_ENTITY_MODELS.get((entity_type or "").strip().lower())
+    if spec is None:
+        return
+    module_path, class_name = spec
+    try:
+        model = getattr(import_module(module_path), class_name)
+    except (ImportError, AttributeError):  # pragma: no cover - 注册表与模型同步由测试守护
+        return
+    visible = apply_scope_filter(
+        db.query(model).filter(model.id == entity_id), current_user, model, db=db
+    ).first()
+    if visible is None:
+        # 不区分「不存在」与「无权」：避免通过 404/403 差异探测他组织实体 id
+        raise HTTPException(status_code=404, detail="待审批的实体不存在或无权访问")
+
+
+# 审批支持的实体类型 → (模型模块, 类名)。按需导入避免启动期重量级耦合。
+_APPROVAL_ENTITY_MODELS = {
+    "fund": ("app.models.fund", "Fund"),
+    "funds": ("app.models.fund", "Fund"),
+    "project": ("app.models.project", "Project"),
+    "projects": ("app.models.project", "Project"),
+    "school": ("app.models.school", "School"),
+    "schools": ("app.models.school", "School"),
+    "supported_village": ("app.models.supported_village", "SupportedVillage"),
+    "village": ("app.models.supported_village", "SupportedVillage"),
+    "villages": ("app.models.supported_village", "SupportedVillage"),
+    "policy": ("app.models.policy", "Policy"),
+    "policies": ("app.models.policy", "Policy"),
+    "rural_work": ("app.models.rural_work", "RuralWork"),
+}
+
+
 @router.post("/submit", summary="提交审批")
 def submit_approval(
     data: SubmitApprovalRequest,
@@ -400,6 +448,7 @@ def submit_approval(
 
     Requirements: 3.2 - 数据变更自动创建审批任务
     """
+    _assert_entity_submittable(db, current_user, data.entity_type, data.entity_id)
     service = ApprovalWorkflowService(db)
     task = service.submit_approval(
         entity_type=data.entity_type,
@@ -439,10 +488,14 @@ def approve_task(
     - 3.4: 记录审批意见和审批时间
     - 3.6: 审批通过后执行数据变更
 
-    单机版优化：允许当前用户直接审批（跳过审批人校验）
+    单机版优化：管理员可直接审批（跳过审批人校验）；普通用户仅能处理指派的
+    或自己提交后由流程指派给本人的任务 —— 未分配审批人的任务 fail-closed
+    （W25：原实现未传 ``standalone``，导致任何登录用户都能通过未分配任务）。
     """
     service = ApprovalWorkflowService(db)
-    task = service.approve_task(task_id, current_user.id, data.opinion)
+    task = service.approve_task(
+        task_id, current_user.id, data.opinion, standalone=is_admin(current_user)
+    )
 
     if not task:
         raise HTTPException(status_code=403, detail="无权限审批此任务或任务不存在")
@@ -474,13 +527,16 @@ def reject_task(
 
     Requirements: 3.5 - 审批拒绝后终止流程
 
-    单机版优化：允许当前用户直接拒绝（跳过审批人校验）
+    单机版优化：管理员可直接拒绝（跳过审批人校验）；普通用户仅能处理指派给
+    本人的任务 —— 未分配审批人的任务 fail-closed（W25，与 approve 同口径）。
     安全要求：驳回必须填写原因（与前端必填校验对齐，防止绕过前端空原因驳回）
     """
     if not data.opinion or not data.opinion.strip():
         raise HTTPException(status_code=400, detail="驳回必须填写原因")
     service = ApprovalWorkflowService(db)
-    task = service.reject_task(task_id, current_user.id, data.opinion)
+    task = service.reject_task(
+        task_id, current_user.id, data.opinion, standalone=is_admin(current_user)
+    )
 
     if not task:
         raise HTTPException(status_code=403, detail="无权限拒绝此任务或任务不存在")

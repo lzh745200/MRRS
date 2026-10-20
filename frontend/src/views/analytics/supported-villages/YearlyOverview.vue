@@ -1,41 +1,41 @@
 <template>
   <div v-loading="loading" class="yearly-overview-page">
     <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-info">
-        <el-button text @click="handleBack"
-          ><el-icon><ArrowLeft /></el-icon>返回详情</el-button
-        >
-        <h2 class="page-title">{{ villageName }} — 年度数据管理</h2>
-      </div>
-      <div class="header-actions">
-        <el-select v-model="selectedYear" @change="loadAllData">
-          <el-option
-            v-for="year in availableYears"
-            :key="year"
-            :label="`${year}年`"
-            :value="year"
-          />
-        </el-select>
-        <el-button type="primary" :loading="downloadingAll" @click="handleDownloadAllTemplates"
-          ><el-icon><Download /></el-icon>全部模板下载</el-button
-        >
-        <el-upload
-          :show-file-list="false"
-          :before-upload="() => false"
-          :on-change="handleImportAll"
-          accept=".xlsx,.xls"
-          class="inline-upload"
-        >
-          <el-button type="success" :loading="importingAll">
-            <el-icon><Upload /></el-icon>全部导入
+    <PageHeader
+      :title="`${villageName} — 年度数据管理`"
+      show-back
+      :back-to="`/supported-villages/${villageId}`"
+    >
+      <template #extra>
+        <div class="header-actions">
+          <el-select v-model="selectedYear" @change="loadAllData">
+            <el-option
+              v-for="year in availableYears"
+              :key="year"
+              :label="`${year}年`"
+              :value="year"
+            />
+          </el-select>
+          <el-button type="primary" :loading="downloadingAll" @click="handleDownloadAllTemplates"
+            ><el-icon><Download /></el-icon>全部模板下载</el-button
+          >
+          <el-upload
+            :show-file-list="false"
+            :before-upload="() => false"
+            :on-change="handleImportAll"
+            accept=".xlsx,.xls"
+            class="inline-upload"
+          >
+            <el-button type="success" :loading="importingAll">
+              <el-icon><Upload /></el-icon>全部导入
+            </el-button>
+          </el-upload>
+          <el-button class="btn-rollforward" plain @click="rollforwardVisible = true">
+            从上年复制
           </el-button>
-        </el-upload>
-        <el-button class="btn-rollforward" plain @click="rollforwardVisible = true">
-          从上年复制
-        </el-button>
-      </div>
-    </div>
+        </div>
+      </template>
+    </PageHeader>
 
     <!-- 板块卡片网格 -->
     <div class="section-grid">
@@ -177,8 +177,8 @@ import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
 import { logger } from '@/utils/logger'
 import { deleteYearlySection, resolveSectionApiKey } from '@/api/supportedVillage'
+import PageHeader from '@/components/common/PageHeader.vue'
 import {
-  ArrowLeft,
   Edit,
   Download,
   Upload,
@@ -719,10 +719,6 @@ async function handleImportAll(file: any) {
   } finally {
     importingAll.value = false
   }
-}
-
-function handleBack() {
-  pushSafe(`/supported-villages/${villageId.value}`)
 }
 
 /** 进入该村一户一档（v1.15.15：入口并入年度数据页，携带 village_id 预筛选） */

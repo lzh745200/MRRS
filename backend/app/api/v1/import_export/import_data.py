@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.permission_utils import is_superuser
+from app.core.permission_utils import is_admin, is_superuser
 from app.core.response import ok_list
 from app.core.security import get_current_user
 from app.models.user import User
@@ -235,6 +235,21 @@ async def _import_entities(
         import_mode = ImportMode(mode)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"无效的导入模式: {mode}，支持 incremental 或 full")
+
+    # W25 收口：导入是**写操作**，必须限管理员（原实现全部导入端点只有
+    # get_current_user）。普通用户上传一个 Excel 即可触发 full 模式：
+    # 先经 _soft_delete_scoped 软删本组织全部帮扶村/项目/经费/学校，
+    # 再按 Excel 内的 organization_code 把数据写进任意组织（见 excel_importer）。
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="仅管理员可执行数据导入")
+
+    # full（全量覆盖）会先软删本组织数据 → 仅超管可执行，避免部门级 admin
+    # 误操作/恶意清空本单位台账。
+    if import_mode is ImportMode.FULL and not is_superuser(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="全量覆盖导入（mode=full）仅超级管理员可执行：该模式会先软删本组织全部数据",
+        )
 
     if not file.filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")

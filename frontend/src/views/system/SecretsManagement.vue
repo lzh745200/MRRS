@@ -1,10 +1,10 @@
 <template>
   <div class="secrets-management">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <h3>密钥生命周期管理</h3>
-      <el-button :icon="Refresh" :loading="loadingStatus" @click="refreshAll"> 刷新 </el-button>
-    </div>
+    <PageHeader title="密钥生命周期管理" subtitle="加密密钥版本轮换、吊销与过期清理">
+      <template #extra>
+        <el-button :icon="Refresh" :loading="loadingStatus" @click="refreshAll"> 刷新 </el-button>
+      </template>
+    </PageHeader>
 
     <!-- 状态概览卡片 -->
     <el-row :gutter="16" class="status-row">
@@ -139,6 +139,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { secretsApi, type KeyVersion, type SecretsStatus } from '@/api/secrets'
 
 import { format } from '@/utils'
+import PageHeader from '@/components/common/PageHeader.vue'
 /**
  * el-table 作用域插槽回传的行类型（表格边界）。
  *

@@ -29,7 +29,7 @@
       </template>
 
       <!-- 版本列表 -->
-      <el-table border stripe :data="versionList" style="width: 100%">
+      <el-table border :data="versionList" style="width: 100%">
         <el-table-column prop="version" label="版本号" width="120" />
         <el-table-column prop="description" label="版本说明" />
         <el-table-column label="变更统计" width="200">

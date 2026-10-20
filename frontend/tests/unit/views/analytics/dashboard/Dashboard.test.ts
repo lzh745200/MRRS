@@ -65,6 +65,11 @@ vi.mock('@/utils/echarts', () => {
 // 拖慢收集）；getCurrentTheme 固定为主题名即可
 vi.mock('@/utils/echarts-theme', () => ({
   getCurrentTheme: () => 'military',
+  // W11-T45：与真实实现同语义（读根元素 CSS 变量，缺失/不可读回退 fallback）
+  themeColor: (name: string, fallback: string) =>
+    typeof getComputedStyle === 'function'
+      ? getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+      : fallback,
   COLOR_PALETTE: [
     '#1e4d8c',
     '#2d6a4f',

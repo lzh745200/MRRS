@@ -39,7 +39,7 @@ vi.mock('element-plus', () => ({
   ElTable: {
     name: 'ElTable',
     template:
-      '<div class="el-table-stub" @click="$emit(\'selection-change\', [rowA])"><slot name="default" /></div>',
+      '<div class="el-table-stub" @click="$emit(\'selection-change\', [rowA])"><slot name="empty" /><slot name="default" /></div>',
     methods: {
       clearSelection() {
         this.$emit('selection-change', [])
@@ -118,7 +118,7 @@ function mountComp() {
         'el-table': {
           name: 'ElTable',
           template:
-            '<div class="el-table-stub" @click="$emit(\'selection-change\', [rowA])"><slot name="default" /></div>',
+            '<div class="el-table-stub" @click="$emit(\'selection-change\', [rowA])"><slot name="empty" /><slot name="default" /></div>',
           methods: {
             clearSelection() {
               this.$emit('selection-change', [])

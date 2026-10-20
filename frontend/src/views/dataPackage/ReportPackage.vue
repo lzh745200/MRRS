@@ -1,21 +1,19 @@
 <template>
   <div class="report-package-page">
-    <div class="page-header">
-      <div class="header-info">
-        <h2 class="page-title">数据上报</h2>
-        <p class="page-desc">选择数据范围，生成并导出上报数据包</p>
-      </div>
-      <div class="header-actions">
-        <el-button
-          type="success"
-          :loading="oneClickLoading"
-          size="large"
-          @click="handleOneClickReport"
-        >
-          <el-icon><Cpu /></el-icon> 一键上报
-        </el-button>
-      </div>
-    </div>
+    <PageHeader title="数据上报" subtitle="选择数据范围，生成并导出上报数据包">
+      <template #extra>
+        <div class="header-actions">
+          <el-button
+            type="success"
+            :loading="oneClickLoading"
+            size="large"
+            @click="handleOneClickReport"
+          >
+            <el-icon><Cpu /></el-icon> 一键上报
+          </el-button>
+        </div>
+      </template>
+    </PageHeader>
 
     <!-- 步骤条 -->
     <el-steps :active="currentStep" align-center style="margin-bottom: 24px">
@@ -146,6 +144,7 @@ import { Cpu } from '@element-plus/icons-vue'
 import { post, apiRequest } from '@/api/request'
 import { useAuthStore } from '@/stores/auth'
 import { DATA_TYPES, DATA_TYPE_LABELS } from '@/constants/dataTypes'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 defineOptions({ name: 'ReportPackage' })
 

@@ -111,6 +111,12 @@ vi.mock('@/utils/logger', () => ({
 }))
 
 import Detail from '@/views/funds/Detail.vue'
+// 拆分后的子组件（W5-T10）：本文件是它们在全仓的唯一执行者，
+// 直接 import 仅用于 findComponent 定位子组件 DOM，不产生第二个执行者。
+import WorkflowDialog from '@/views/funds/components/WorkflowDialog.vue'
+import ExpenseDialog from '@/views/funds/components/ExpenseDialog.vue'
+import { formatDate } from '@/utils/datetime'
+import { formatMoney4 } from '@/utils/currency'
 
 // 详情数据（全字段真值）
 const fundDetail = {
@@ -966,20 +972,26 @@ describe('辅助函数', () => {
     expect(vm.getStatusText('')).toBe('-')
   })
 
-  it('formatMoney / formatDateTime / getOperationTypeLabel / formatOperationDetail', async () => {
+  it('金额/日期格式化统一走 @/utils（本地 formatMoney/formatDateTime 包装器已移除）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    // 与拆分前逐字一致的输出语义：formatMoney → formatMoney4；formatDateTime → formatDate
+    expect(formatMoney4(null)).toBe('0')
+    expect(formatMoney4(1234.5)).toBe('1,234.5')
+    expect(formatDate(null)).toBe('-')
+    expect(formatDate('')).toBe('-')
+    expect(formatDate('2024-01-11T08:00:00')).toBe('2024-01-11')
+    // 极端输入（null 原型对象）不得在渲染期抛错：统一兜底 '-'
+    const bad = Object.create(null)
+    expect(formatDate(bad)).toBe('-')
+    // 视图确实消费共享工具：经费信息卡片首项（申请金额）走 formatMoney4
+    expect(wrapper.find('.amount-text').text()).toBe('100 万元')
+  })
+
+  it('getOperationTypeLabel / formatOperationDetail 映射与兜底', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.formatMoney(null)).toBe('0')
-    expect(vm.formatMoney(1234.5)).toBe('1,234.5')
-
-    expect(vm.formatDateTime(null)).toBe('-')
-    expect(vm.formatDateTime('')).toBe('-')
-    expect(vm.formatDateTime('2024-01-11T08:00:00')).toBe('2024-01-11')
-    // 2026-10-03 收敛到 @/utils format：无法转日期的输入统一兜底 '-'，
-    // 渲染期绝不抛错（旧实现 catch 内的 String() 会二次抛错向外传播）
-    const bad = Object.create(null)
-    expect(vm.formatDateTime(bad)).toBe('-')
 
     expect(vm.getOperationTypeLabel('attachment_upload')).toBe('附件上传')
     expect(vm.getOperationTypeLabel('attachment_delete')).toBe('附件删除')
@@ -1664,6 +1676,62 @@ describe('报销登记对话框模板产物（onClick@431/@761、onUpdate:modelV
     expect(vm.expForm.transaction_date).toBe('')
     await expDialog(w).find('.el-date-picker-stub').trigger('click')
     expect(vm.expForm.transaction_date).toBe('2026-09-01')
+    w.unmount()
+  })
+})
+
+// ═══════════════════════════════════════════════════════
+// 拆分后子组件（W5-T10 自 Detail.vue 拆至 components/）
+// —— 子组件模板内联处理器只有真实触发 click/emit 才计入 functions 覆盖。
+// ═══════════════════════════════════════════════════════
+describe('报销/工作流对话框子组件（W5-T10 拆分）', () => {
+  it('ExpenseDialog：提交按钮 → 父组件 submitExpense（必填缺失只警告不发请求）', async () => {
+    setRoute('/funds/5', '5')
+    const w = mountComp()
+    await flushPromises()
+    const vm = w.vm as any
+    const dialog = w.findComponent(ExpenseDialog)
+    expect(dialog.exists()).toBe(true)
+
+    vm.expDialogVisible = true
+    Object.assign(vm.expForm, { amount: undefined, purpose: '', transaction_date: '' })
+    await nextTick()
+    const submit = dialog.findAll('el-button-stub').find((b: any) => b.text().trim() === '提交')!
+    expect(submit, '报销对话框提交按钮').toBeTruthy()
+    await submit.trigger('click')
+    await flushPromises()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请填写报销金额')
+    w.unmount()
+  })
+
+  it('WorkflowDialog：对话框标题/动作由父组件注入，字段与确认按钮上抛父组件', async () => {
+    setRoute('/funds/5', '5')
+    const w = mountComp()
+    await flushPromises()
+    const vm = w.vm as any
+    const dialog = w.findComponent(WorkflowDialog)
+    expect(dialog.exists()).toBe(true)
+
+    // 拨付动作 → 子组件按 action 渲染「拨付金额/拨付方式」
+    vm.doWorkflow('allocate')
+    await nextTick()
+    expect(dialog.props('action')).toBe('allocate')
+    expect(dialog.props('title')).toBe('拨付')
+    // 子组件字段改动经 update:* 上抛，父组件 wfForm 仍是唯一事实源
+    const numbers = dialog.findAllComponents({ name: 'ElInputNumber' })
+    expect(numbers.length).toBe(1)
+    numbers[0].vm.$emit('update:modelValue', 88)
+    expect(vm.wfForm.allocated_amount).toBe(88)
+    // 确认按钮 → 父组件 submitWorkflow（approve 分支）
+    vm.wfAction = 'approve'
+    vm.wfDialogTitle = '审批通过'
+    await nextTick()
+    await dialog
+      .findAll('el-button-stub')
+      .find((b: any) => b.text().trim() === '确认')!
+      .trigger('click')
+    await flushPromises()
+    expect(approveMock).toHaveBeenCalled()
     w.unmount()
   })
 })

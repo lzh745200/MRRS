@@ -1,11 +1,6 @@
 <template>
   <div class="data-sync-import">
-    <el-card class="page-header">
-      <div class="header-content">
-        <h2>数据导入</h2>
-        <p class="description">导入其他电脑导出的数据包</p>
-      </div>
-    </el-card>
+    <PageHeader title="数据导入" subtitle="导入其他电脑导出的数据包" />
 
     <!-- 导入配置 -->
     <el-card class="import-config">
@@ -124,7 +119,7 @@
     <!-- 导入历史 -->
     <el-card class="import-history">
       <h3 class="section-title">导入历史</h3>
-      <el-table v-loading="loadingHistory" border stripe :data="importHistory" style="width: 100%">
+      <el-table v-loading="loadingHistory" border :data="importHistory" style="width: 100%">
         <template #empty>
           <EmptyState text="暂无导入记录" />
         </template>
@@ -172,6 +167,7 @@ import { logger } from '@/utils/logger'
 import { importData, importEncryptedData, getSyncLogs } from '@/api/dataSync'
 import { format } from '@/utils'
 import type { UploadFile } from 'element-plus'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 const { pushSafe } = useRouterSafe()
 

@@ -149,11 +149,13 @@
         ref="tableRef"
         v-loading="loading"
         :data="tableData"
-        stripe
         border
         @sort-change="handleSortChange"
         @selection-change="handleSelectionChange"
       >
+        <template #empty>
+          <EmptyState text="暂无帮扶村数据" action="去添加" :size="72" @action="handleCreate" />
+        </template>
         <el-table-column type="selection" width="48" />
         <el-table-column type="index" label="序号" width="72" />
         <el-table-column prop="department" label="部门单位" min-width="120" sortable="custom" />
@@ -269,6 +271,7 @@
 
 <script setup lang="ts">
 import PageHeader from '@/components/common/PageHeader.vue'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { unwrapList } from '@/utils/unwrapList'
 import { useFilterMemory } from '@/composables/useFilterMemory'
 import { DIALOG_LG } from '@/config/dialog'

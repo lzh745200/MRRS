@@ -448,8 +448,9 @@ describe('模板事件', () => {
   it('返回按钮 → pushSafe /funds', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    const btn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('返回经费管理'))
-    await btn!.trigger('click')
+    const btn = wrapper.find('.back-btn')
+    expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
     expect(pushSafeMock).toHaveBeenCalledWith('/funds')
   })
 

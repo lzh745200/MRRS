@@ -120,6 +120,10 @@ const slotRowB = {
 }
 
 const stubs = {
+  'el-table': {
+    name: 'ElTable',
+    template: '<div class="el-table-stub"><slot name="empty" /><slot /></div>',
+  },
   'el-card': {
     name: 'ElCard',
     template: '<div class="el-card-stub"><slot name="header" /><slot /></div>',

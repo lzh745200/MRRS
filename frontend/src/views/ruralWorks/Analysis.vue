@@ -300,6 +300,7 @@ import {
   ArrowDown,
 } from '@element-plus/icons-vue'
 import echarts from '@/utils/echarts'
+import { COLOR_PALETTE, MILITARY_BLUE, themeColor } from '@/utils/echarts-theme'
 import { getRuralWorks } from '@/api/ruralWork'
 
 // 定义 ECharts 实例类型
@@ -663,7 +664,7 @@ const initTypeCharts = () => {
           radius: '60%',
           center: ['40%', '50%'],
           data: typeData.labels.map((name, i) => ({ name, value: typeData.values[i] })),
-          itemStyle: { borderColor: '#fff', borderWidth: 2 },
+          itemStyle: { borderColor: themeColor('--color-bg-card', '#fff'), borderWidth: 2 },
           label: { show: false },
         },
       ],
@@ -681,7 +682,7 @@ const initTypeCharts = () => {
           type: 'bar',
           data: typeData.values,
           barMaxWidth: 50,
-          itemStyle: { color: '#003366', borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: MILITARY_BLUE, borderRadius: [4, 4, 0, 0] },
         },
       ],
     })
@@ -711,7 +712,7 @@ const initStatusCharts = () => {
           radius: ['45%', '70%'],
           center: ['40%', '50%'],
           data: statusData.labels.map((name, i) => ({ name, value: statusData.values[i] })),
-          itemStyle: { borderColor: '#fff', borderWidth: 2 },
+          itemStyle: { borderColor: themeColor('--color-bg-card', '#fff'), borderWidth: 2 },
           label: { show: false },
         },
       ],
@@ -761,7 +762,7 @@ const initTrendChart = () => {
 
   trendChartInstance = echarts.init(trendChart.value)
   trendChartInstance.setOption({
-    color: ['#003366'],
+    color: [MILITARY_BLUE],
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
     legend: { top: 0, left: 'center' },
     grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
@@ -769,7 +770,7 @@ const initTrendChart = () => {
       type: 'category',
       boundaryGap: false,
       data: trendData.labels,
-      axisLine: { lineStyle: { color: '#003366' } },
+      axisLine: { lineStyle: { color: MILITARY_BLUE } },
     },
     yAxis: { type: 'value', min: 0 },
     series: [
@@ -785,8 +786,12 @@ const initTrendChart = () => {
         symbol: 'circle',
         symbolSize: 10,
         data: trendData.values,
-        lineStyle: { width: 3, color: '#003366' },
-        itemStyle: { color: '#003366', borderColor: '#fff', borderWidth: 2 },
+        lineStyle: { width: 3, color: MILITARY_BLUE },
+        itemStyle: {
+          color: MILITARY_BLUE,
+          borderColor: themeColor('--color-bg-card', '#fff'),
+          borderWidth: 2,
+        },
         areaStyle: { color: 'rgba(0, 51, 102, 0.1)' },
       },
     ],
@@ -812,7 +817,7 @@ const initVillageRankingChart = () => {
         type: 'bar',
         data: villageData.values,
         barMaxWidth: 24,
-        itemStyle: { color: '#0055aa', borderRadius: [0, 4, 4, 0] },
+        itemStyle: { color: COLOR_PALETTE[3], borderRadius: [0, 4, 4, 0] },
       },
     ],
   })
@@ -842,8 +847,12 @@ const initQualityAnalysisChart = () => {
             value: qualityData.values,
             name: '质量评分',
             areaStyle: { color: 'rgba(0, 51, 102, 0.2)' },
-            lineStyle: { color: '#003366', width: 2 },
-            itemStyle: { color: '#0055aa', borderColor: '#fff', borderWidth: 2 },
+            lineStyle: { color: MILITARY_BLUE, width: 2 },
+            itemStyle: {
+              color: COLOR_PALETTE[3],
+              borderColor: themeColor('--color-bg-card', '#fff'),
+              borderWidth: 2,
+            },
             symbolSize: 8,
           },
         ],

@@ -126,6 +126,8 @@ import UserManagement from '@/views/system/UserManagement.vue'
 // 直接 import 仅用于 findComponent 定位子组件 DOM，不产生第二个执行者。
 import UserTableCard from '@/views/system/components/UserTableCard.vue'
 import ResetPasswordDialog from '@/views/system/components/ResetPasswordDialog.vue'
+import UserFormDialog from '@/views/system/components/UserFormDialog.vue'
+import { formatDateTimeLocale } from '@/utils/datetime'
 
 const sampleUser = {
   id: 1,
@@ -730,7 +732,7 @@ describe('新增 / 编辑 / 提交', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.formRef = undefined
+    vm.userFormRef = undefined
     await vm.handleSubmit()
     expect(mockPost).not.toHaveBeenCalled()
     expect(mockPut).not.toHaveBeenCalled()
@@ -740,7 +742,7 @@ describe('新增 / 编辑 / 提交', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.formRef = { validate: (cb: any) => cb(false) }
+    vm.userFormRef = { validate: (cb: any) => cb(false) }
     await vm.handleSubmit()
     await flushPromises()
     expect(mockPost).not.toHaveBeenCalled()
@@ -754,7 +756,7 @@ describe('新增 / 编辑 / 提交', () => {
     vm.formData.username = 'newbie'
     vm.formData.full_name = '新人'
     vm.formData.permissions = ['data:view', 'data:edit']
-    vm.formRef = { validate: (cb: any) => cb(true) }
+    vm.userFormRef = { validate: (cb: any) => cb(true) }
     mockPost.mockResolvedValueOnce({ data: { data: { password: 'Init!234' } } })
     mockApiRequest.mockClear()
     await vm.handleSubmit()
@@ -778,7 +780,7 @@ describe('新增 / 编辑 / 提交', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.handleAdd()
-    vm.formRef = { validate: (cb: any) => cb(true) }
+    vm.userFormRef = { validate: (cb: any) => cb(true) }
     mockPost.mockResolvedValueOnce({ data: { data: {} } })
     await vm.handleSubmit()
     await flushPromises()
@@ -790,7 +792,7 @@ describe('新增 / 编辑 / 提交', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.handleEdit({ ...sampleUser })
-    vm.formRef = { validate: (cb: any) => cb(true) }
+    vm.userFormRef = { validate: (cb: any) => cb(true) }
     await vm.handleSubmit()
     await flushPromises()
     expect(mockPut).toHaveBeenCalledWith(
@@ -805,7 +807,7 @@ describe('新增 / 编辑 / 提交', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.handleAdd()
-    vm.formRef = { validate: (cb: any) => cb(true) }
+    vm.userFormRef = { validate: (cb: any) => cb(true) }
     mockPost.mockRejectedValueOnce({ response: { data: { detail: '用户名已存在' } } })
     await vm.handleSubmit()
     await flushPromises()
@@ -818,7 +820,7 @@ describe('新增 / 编辑 / 提交', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.handleAdd()
-    vm.formRef = { validate: (cb: any) => cb(true) }
+    vm.userFormRef = { validate: (cb: any) => cb(true) }
     mockPost.mockRejectedValueOnce(new Error('net'))
     await vm.handleSubmit()
     await flushPromises()
@@ -1123,13 +1125,19 @@ describe('会话管理', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('重置 2FA 失败，接口可能尚未实现')
   })
 
-  it('formatSessionTime：空值 / 正常时间 / 异常输入', async () => {
+  it('会话表时间格式化：UserFormDialog 直接渲染 @/utils/datetime（本地包装器已移除）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.formatSessionTime(null)).toBe('-')
-    expect(vm.formatSessionTime('2024-01-01T10:00:00')).not.toBe('-')
-    expect(vm.formatSessionTime(Symbol('bad'))).toBe('-')
+    vm.handleEdit({ ...sampleUser })
+    await flushPromises()
+    await nextTick()
+    // 与拆分前同源、同输出：正常时间 → zh-CN locale 串；null / 非法输入 → '-'
+    expect(formatDateTimeLocale('2024-01-01T10:00:00')).not.toBe('-')
+    expect(formatDateTimeLocale(null)).toBe('-')
+    expect(formatDateTimeLocale(Symbol('bad'))).toBe('-')
+    // 会话表 created_at 列已由子组件用共享工具直接渲染
+    expect(wrapper.text()).toMatch(/\d{4}\/\d{1,2}\/\d{1,2}/)
   })
 })
 
@@ -2253,6 +2261,74 @@ describe('子组件模板处理器（事件上抛父组件）', () => {
     await nextTick()
     await findDialogButton('取消').trigger('click')
     expect(vm.resetPwdDialogVisible).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('UserFormDialog：自动生成密码 / 重置 2FA / 取消 三个内联处理器上抛父组件', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    const dialog = wrapper.findComponent(UserFormDialog)
+    expect(dialog.exists()).toBe(true)
+    const findFormButton = (text: string) =>
+      dialog.findAll('el-button-stub').find((button) => button.text().includes(text))!
+
+    // 新增态才有「初始密码」区块 → 自动生成走父组件 generatePassword（表单数据仍归父组件）
+    vm.handleAdd()
+    await nextTick()
+    await findFormButton('自动生成').trigger('click')
+    expect(vm.formData.password).toBe('Gen#Pass1')
+
+    // 进入编辑态：会话区块（含「重置 2FA」）才渲染，currentUser 也就位
+    vm.handleEdit({ ...sampleUser })
+    await flushPromises()
+    await nextTick()
+    await findFormButton('重置 2FA').trigger('click')
+    await flushPromises()
+    expect(confirmMock).toHaveBeenCalled()
+    expect(mockPost).toHaveBeenCalledWith('/system/admin/users/1/two-factor/reset')
+
+    // 取消 → v-model 关闭（父组件 dialogVisible）
+    vm.dialogVisible = true
+    await nextTick()
+    await findFormButton('取消').trigger('click')
+    expect(vm.dialogVisible).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('UserFormDialog：确定按钮 → 子组件把 el-form 校验转发给父组件（通过 / 未通过两路）', async () => {
+    // 真实 el-form 由子组件持有；父组件不再直接拿 FormInstance，
+    // 因此这里给 el-form 桩注入 validate(cb) 以走通「子组件转发」这条真实链路。
+    const validateFn = vi.fn((cb: (valid: boolean) => void) => cb(true))
+    const wrapper = mountComp({
+      'el-form': {
+        name: 'ElForm',
+        template: '<form><slot /></form>',
+        methods: { validate: validateFn },
+      },
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const okButton = () =>
+      wrapper.findAll('el-button-stub').find((b) => b.text().trim() === '确定')!
+
+    vm.handleAdd()
+    vm.formData.username = 'newbie'
+    await nextTick()
+    await okButton().trigger('click')
+    await flushPromises()
+    expect(validateFn).toHaveBeenCalled()
+    expect(mockPost).toHaveBeenCalledWith('/users', expect.objectContaining({ username: 'newbie' }))
+
+    // 校验未通过 → 父组件不再提交
+    mockPost.mockClear()
+    validateFn.mockImplementation((cb: (valid: boolean) => void) => cb(false))
+    vm.handleAdd()
+    await nextTick()
+    await okButton().trigger('click')
+    await flushPromises()
+    expect(mockPost).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

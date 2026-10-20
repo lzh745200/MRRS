@@ -117,6 +117,9 @@
         @sort-change="handleSortChange"
         @selection-change="handleSelectionChange"
       >
+        <template #empty>
+          <EmptyState text="暂无政策数据" action="去添加" :size="72" @action="handleAdd" />
+        </template>
         <el-table-column v-if="canDelete" type="selection" width="48" align="center" />
         <el-table-column type="index" label="序号" width="72" align="center" />
         <el-table-column prop="title" label="政策名称" min-width="200" show-overflow-tooltip />
@@ -179,6 +182,7 @@
 <script setup lang="ts">
 import { logger } from '@/utils/logger'
 import PageHeader from '@/components/common/PageHeader.vue'
+import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'

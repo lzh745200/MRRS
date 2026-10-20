@@ -1,10 +1,10 @@
 <template>
   <div class="data-tier-page">
-    <!-- 页头 -->
-    <div class="page-header">
-      <h2>数据分级存储管理</h2>
-      <el-button :icon="Refresh" :loading="loading" @click="refreshAll"> 刷新 </el-button>
-    </div>
+    <PageHeader title="数据分级存储管理" subtitle="热/温/冷数据分级归档、恢复与过期清理">
+      <template #extra>
+        <el-button :icon="Refresh" :loading="loading" @click="refreshAll"> 刷新 </el-button>
+      </template>
+    </PageHeader>
 
     <!-- 分级摘要卡片 -->
     <el-row :gutter="20" class="stats-row">
@@ -57,21 +57,30 @@
             <div class="bar-item">
               <span class="bar-label">热数据</span>
               <div class="bar-track">
-                <div class="bar-fill bar-hot" :style="{ width: countPercent('hot') + '%' }"></div>
+                <div
+                  class="bar-fill bar-hot"
+                  :style="{ '--bar-percent': countPercent('hot') + '%' }"
+                ></div>
               </div>
               <span class="bar-value">{{ stats.hot_count ?? 0 }}</span>
             </div>
             <div class="bar-item">
               <span class="bar-label">温数据</span>
               <div class="bar-track">
-                <div class="bar-fill bar-warm" :style="{ width: countPercent('warm') + '%' }"></div>
+                <div
+                  class="bar-fill bar-warm"
+                  :style="{ '--bar-percent': countPercent('warm') + '%' }"
+                ></div>
               </div>
               <span class="bar-value">{{ stats.warm_count ?? 0 }}</span>
             </div>
             <div class="bar-item">
               <span class="bar-label">冷数据</span>
               <div class="bar-track">
-                <div class="bar-fill bar-cold" :style="{ width: countPercent('cold') + '%' }"></div>
+                <div
+                  class="bar-fill bar-cold"
+                  :style="{ '--bar-percent': countPercent('cold') + '%' }"
+                ></div>
               </div>
               <span class="bar-value">{{ stats.cold_count ?? 0 }}</span>
             </div>
@@ -87,21 +96,30 @@
             <div class="bar-item">
               <span class="bar-label">热数据</span>
               <div class="bar-track">
-                <div class="bar-fill bar-hot" :style="{ width: sizePercent('hot') + '%' }"></div>
+                <div
+                  class="bar-fill bar-hot"
+                  :style="{ '--bar-percent': sizePercent('hot') + '%' }"
+                ></div>
               </div>
               <span class="bar-value">{{ formatSize(stats.hot_size_mb) }}</span>
             </div>
             <div class="bar-item">
               <span class="bar-label">温数据</span>
               <div class="bar-track">
-                <div class="bar-fill bar-warm" :style="{ width: sizePercent('warm') + '%' }"></div>
+                <div
+                  class="bar-fill bar-warm"
+                  :style="{ '--bar-percent': sizePercent('warm') + '%' }"
+                ></div>
               </div>
               <span class="bar-value">{{ formatSize(stats.warm_size_mb) }}</span>
             </div>
             <div class="bar-item">
               <span class="bar-label">冷数据</span>
               <div class="bar-track">
-                <div class="bar-fill bar-cold" :style="{ width: sizePercent('cold') + '%' }"></div>
+                <div
+                  class="bar-fill bar-cold"
+                  :style="{ '--bar-percent': sizePercent('cold') + '%' }"
+                ></div>
               </div>
               <span class="bar-value">{{ formatSize(stats.cold_size_mb) }}</span>
             </div>
@@ -147,7 +165,7 @@
         :title="archiveResult.message"
         type="success"
         :closable="false"
-        style="margin-top: 12px"
+        class="result-alert"
       />
     </el-card>
 
@@ -158,7 +176,7 @@
       </template>
       <el-tabs v-model="archiveTab" @tab-change="handleArchiveTabChange">
         <el-tab-pane label="冷归档" name="cold">
-          <el-table border :data="coldArchives" style="width: 100%" empty-text="暂无非归档文件">
+          <el-table border :data="coldArchives" class="full-width" empty-text="暂无非归档文件">
             <el-table-column prop="name" label="文件名" min-width="200" />
             <el-table-column label="大小" width="120">
               <template #default="{ row }">
@@ -178,7 +196,7 @@
           </el-table>
         </el-tab-pane>
         <el-tab-pane label="温归档" name="warm">
-          <el-table border :data="warmArchives" style="width: 100%" empty-text="暂无温归档文件">
+          <el-table border :data="warmArchives" class="full-width" empty-text="暂无温归档文件">
             <el-table-column prop="name" label="文件名" min-width="200" />
             <el-table-column label="大小" width="120">
               <template #default="{ row }">
@@ -245,12 +263,7 @@
         <span class="title">归档清理</span>
       </template>
       <div class="cleanup-controls">
-        <el-input-number
-          v-model="cleanupMaxAge"
-          :min="1"
-          :max="3650"
-          style="width: 160px; margin-right: 16px"
-        />
+        <el-input-number v-model="cleanupMaxAge" :min="1" :max="3650" class="cleanup-age-input" />
         <span class="cleanup-label">天前的归档文件</span>
         <el-button type="danger" :loading="cleaningUp" @click="handleCleanup">
           清理过期归档
@@ -261,7 +274,7 @@
         :title="cleanupResult.message"
         type="success"
         :closable="false"
-        style="margin-top: 12px"
+        class="result-alert"
       />
     </el-card>
   </div>
@@ -272,6 +285,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, FolderOpened, Search } from '@element-plus/icons-vue'
 import { dataTierApi } from '@/api/dataTier'
+import PageHeader from '@/components/common/PageHeader.vue'
 import type {
   StorageStats,
   ArchiveFile,
@@ -531,17 +545,17 @@ onMounted(() => {
   padding: 20px;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+.full-width {
+  width: 100%;
 }
 
-.page-header h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
+.result-alert {
+  margin-top: 12px;
+}
+
+.cleanup-age-input {
+  width: 160px;
+  margin-right: 16px;
 }
 
 /* Tier cards */
@@ -613,6 +627,7 @@ onMounted(() => {
 
 .bar-fill {
   height: 100%;
+  width: var(--bar-percent, 0%);
   border-radius: 4px;
   transition: width 0.6s ease;
   min-width: 4px;

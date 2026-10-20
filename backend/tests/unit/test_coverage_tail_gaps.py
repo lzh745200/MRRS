@@ -276,7 +276,8 @@ class TestApprovalWorkflowEdge:
         svc = self._svc()
         task = MagicMock()
         task.status = ApprovalStatus.PENDING.value
-        task.current_approver_id = None
+        # W25：未分配任务对非管理员 fail-closed，故显式指派给调用者以到达角色解析分支
+        task.current_approver_id = 7
         task.current_level = 0
         node = MagicMock()
         node.level = 1
@@ -295,7 +296,7 @@ class TestApprovalWorkflowEdge:
         svc = self._svc()
         task = MagicMock()
         task.status = ApprovalStatus.PENDING.value
-        task.current_approver_id = None
+        task.current_approver_id = 7            # W25：显式指派以到达回写分支
         task.current_level = 1
         task.workflow.nodes = [MagicMock(level=1)]  # next_level=2 > len=1 → 终态
         with patch.object(svc, "get_task", return_value=task), \
@@ -308,7 +309,7 @@ class TestApprovalWorkflowEdge:
         task = MagicMock()
         task.id = 1
         task.status = ApprovalStatus.PENDING.value
-        task.current_approver_id = None
+        task.current_approver_id = 7            # W25：显式指派以到达回写分支
         task.current_level = 1
         with patch.object(svc, "get_task", return_value=task), \
              patch.object(svc, "apply_entity_change", return_value=False):
@@ -322,7 +323,7 @@ class TestApprovalWorkflowEdge:
         svc = ApprovalWorkflowService(db)
         task = MagicMock()
         task.status = ApprovalStatus.PENDING.value
-        task.current_approver_id = None
+        task.current_approver_id = 7            # W25：显式指派以到达抢占分支
         task.current_level = 1
         with patch.object(svc, "get_task", return_value=task), \
              patch.object(svc, "apply_entity_change") as apply_mock:

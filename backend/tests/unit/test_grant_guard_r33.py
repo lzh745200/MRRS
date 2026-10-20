@@ -71,7 +71,14 @@ class TestCurrentMode:
 class TestResolveUser:
     def test_decode_delegates_to_security_module(self, monkeypatch):
         """`_decode` 只是把调用转给 app.core.security.decode_token（保留可替换点）。"""
-        monkeypatch.setattr("app.core.security.decode_token", lambda t: {"sub": t})
+        # W4-T7：把 patch 与 sys.modules 绑定到同一个模块对象 —— 其它测试可能
+        # pop/重载 app.core.security，导致"补丁打在旧对象、_decode 解析到新对象"。
+        import sys
+
+        from app.core import security as _security
+
+        monkeypatch.setattr(_security, "decode_token", lambda t: {"sub": t})
+        monkeypatch.setitem(sys.modules, "app.core.security", _security)
         assert gg._decode("abc") == {"sub": "abc"}
 
     def test_no_authorization_header(self, fake_db):

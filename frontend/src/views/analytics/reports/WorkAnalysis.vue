@@ -1,29 +1,27 @@
 <template>
   <div class="work-analysis-page">
     <!-- 页面头部 -->
-    <div class="page-header-card">
-      <div class="header-left">
-        <h1 class="page-title">工作分析</h1>
-        <p class="page-desc">乡村振兴工作数据综合分析与可视化</p>
-      </div>
-      <div class="header-right">
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          value-format="YYYY-MM-DD"
-          @change="refreshData"
-        />
-        <el-button @click="refreshData">
-          <el-icon><Refresh /></el-icon> 刷新
-        </el-button>
-        <el-button type="success" @click="exportData">
-          <el-icon><Download /></el-icon> 导出报告
-        </el-button>
-      </div>
-    </div>
+    <PageHeader title="工作分析" subtitle="乡村振兴工作数据综合分析与可视化" :level="1">
+      <template #extra>
+        <div class="header-right">
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+            @change="refreshData"
+          />
+          <el-button @click="refreshData">
+            <el-icon><Refresh /></el-icon> 刷新
+          </el-button>
+          <el-button type="success" @click="exportData">
+            <el-icon><Download /></el-icon> 导出报告
+          </el-button>
+        </div>
+      </template>
+    </PageHeader>
 
     <!-- 统计卡片 -->
     <div class="stats-grid">
@@ -174,6 +172,7 @@ import {
 } from '@element-plus/icons-vue'
 import echarts from '@/utils/echarts'
 import { getRuralWorks } from '@/api/ruralWork'
+import PageHeader from '@/components/common/PageHeader.vue'
 
 // 类型映射
 const TYPE_LABELS: Record<string, string> = {
@@ -572,31 +571,6 @@ onBeforeUnmount(() => {
 }
 
 /* 页面头部 */
-.page-header-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: white;
-  border-radius: 8px;
-  padding: 20px 24px;
-  margin-bottom: 20px;
-  border-left: 4px solid var(--color-primary-dark-1);
-  box-shadow: var(--work-analysis-card-shadow);
-}
-
-.page-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--color-primary-dark-1);
-  margin: 0 0 4px 0;
-}
-
-.page-desc {
-  font-size: 14px;
-  color: var(--color-info);
-  margin: 0;
-}
-
 .header-right {
   display: flex;
   align-items: center;
@@ -762,12 +736,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
-  .page-header-card {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
   .stats-grid {
     grid-template-columns: 1fr;
   }

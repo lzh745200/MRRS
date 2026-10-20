@@ -146,32 +146,32 @@
                 <el-descriptions :column="3" border>
                   <el-descriptions-item label="申请金额"
                     ><span class="amount-text"
-                      >{{ formatMoney(fundData.amount) }} 万元</span
+                      >{{ formatMoney4(fundData.amount) }} 万元</span
                     ></el-descriptions-item
                   >
                   <el-descriptions-item label="计划金额"
                     ><span class="amount-text"
-                      >{{ formatMoney(fundData.planned_amount) }} 万元</span
+                      >{{ formatMoney4(fundData.planned_amount) }} 万元</span
                     ></el-descriptions-item
                   >
                   <el-descriptions-item label="批准金额"
                     ><span class="amount-text"
-                      >{{ formatMoney(fundData.approved_amount) }} 万元</span
+                      >{{ formatMoney4(fundData.approved_amount) }} 万元</span
                     ></el-descriptions-item
                   >
                   <el-descriptions-item label="拨付金额"
                     ><span class="amount-text"
-                      >{{ formatMoney(fundData.allocated_amount) }} 万元</span
+                      >{{ formatMoney4(fundData.allocated_amount) }} 万元</span
                     ></el-descriptions-item
                   >
                   <el-descriptions-item label="已使用金额"
                     ><span class="amount-text"
-                      >{{ formatMoney(fundData.used_amount) }} 万元</span
+                      >{{ formatMoney4(fundData.used_amount) }} 万元</span
                     ></el-descriptions-item
                   >
                   <el-descriptions-item label="剩余金额"
                     ><span class="amount-text"
-                      >{{ formatMoney(fundData.remaining_amount) }} 万元</span
+                      >{{ formatMoney4(fundData.remaining_amount) }} 万元</span
                     ></el-descriptions-item
                   >
                   <el-descriptions-item label="用途" :span="3">{{
@@ -212,22 +212,22 @@
                     approvalFlow.currentApprover || fundData.approved_by || '-'
                   }}</el-descriptions-item>
                   <el-descriptions-item label="审批日期">{{
-                    formatDateTime(fundData.approval_date)
+                    formatDate(fundData.approval_date)
                   }}</el-descriptions-item>
                   <el-descriptions-item label="拨付日期">{{
-                    formatDateTime(fundData.allocation_date)
+                    formatDate(fundData.allocation_date)
                   }}</el-descriptions-item>
                   <el-descriptions-item label="拨付方式">{{
                     fundData.allocation_method || '-'
                   }}</el-descriptions-item>
                   <el-descriptions-item label="开始日期">{{
-                    formatDateTime(fundData.start_date)
+                    formatDate(fundData.start_date)
                   }}</el-descriptions-item>
                   <el-descriptions-item label="结束日期">{{
-                    formatDateTime(fundData.end_date)
+                    formatDate(fundData.end_date)
                   }}</el-descriptions-item>
                   <el-descriptions-item label="审计日期">{{
-                    formatDateTime(fundData.audit_date)
+                    formatDate(fundData.audit_date)
                   }}</el-descriptions-item>
                   <el-descriptions-item label="审计结果">{{
                     fundData.audit_result || '-'
@@ -236,10 +236,10 @@
                     fundData.audit_opinion || '-'
                   }}</el-descriptions-item>
                   <el-descriptions-item label="创建时间">{{
-                    formatDateTime(fundData.created_at)
+                    formatDate(fundData.created_at)
                   }}</el-descriptions-item>
                   <el-descriptions-item label="更新时间" :span="2">{{
-                    formatDateTime(fundData.updated_at)
+                    formatDate(fundData.updated_at)
                   }}</el-descriptions-item>
                 </el-descriptions>
               </div>
@@ -256,7 +256,7 @@
                     v-for="item in statusHistory"
                     :key="item.id"
                     :type="getStatusType(item.to_status)"
-                    :timestamp="formatDateTime(item.operation_time)"
+                    :timestamp="formatDate(item.operation_time)"
                   >
                     <div class="timeline-content">
                       <div class="timeline-title">
@@ -304,7 +304,7 @@
                   <el-table-column prop="changed_by_name" label="修改人" width="120" />
                   <el-table-column prop="changed_at" label="修改时间" width="180">
                     <template #default="{ row }">
-                      {{ formatDateTime(row.changed_at) }}
+                      {{ formatDate(row.changed_at) }}
                     </template>
                   </el-table-column>
                 </el-table>
@@ -334,7 +334,7 @@
                   <el-table-column prop="operator_name" label="操作人" width="120" />
                   <el-table-column prop="created_at" label="操作时间" width="180">
                     <template #default="{ row }">
-                      {{ formatDateTime(row.created_at) }}
+                      {{ formatDate(row.created_at) }}
                     </template>
                   </el-table-column>
                 </el-table>
@@ -399,7 +399,7 @@
                   </el-table-column>
                   <el-table-column prop="uploaded_by" label="上传人" width="100" />
                   <el-table-column prop="created_at" label="上传时间" width="160">
-                    <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+                    <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
                   </el-table-column>
                   <el-table-column label="操作" width="180" fixed="right">
                     <template #default="{ row }">
@@ -426,7 +426,7 @@
             <div class="expense-toolbar">
               <span class="remain-hint">
                 剩余可用：<b>{{
-                  formatMoney(
+                  formatMoney4(
                     fundData.remaining_amount ??
                       Number(fundData.amount || 0) - Number(fundData.used_amount || 0)
                   )
@@ -685,86 +685,36 @@
         />
       </el-dialog>
     </template>
-    <!-- 工作流操作对话框 -->
-    <el-dialog
+    <!-- 工作流操作对话框（W5-T10 拆至 components/WorkflowDialog.vue；状态机与提交载荷仍在本组件） -->
+    <WorkflowDialog
       v-model="wfDialogVisible"
-      append-to-body
       :title="wfDialogTitle"
-      :width="DIALOG_SM"
-      :close-on-click-modal="false"
-    >
-      <el-form label-width="100px">
-        <el-form-item v-if="wfAction === 'allocate'" label="拨付金额(万元)"
-          ><el-input-number
-            v-model="wfForm.allocated_amount"
-            :min="0"
-            :precision="4"
-            style="width: 100%"
-        /></el-form-item>
-        <el-form-item v-if="wfAction === 'allocate'" label="拨付方式"
-          ><el-input v-model="wfForm.allocation_method" placeholder="如：银行转账"
-        /></el-form-item>
-        <el-form-item v-if="wfAction === 'audit'" label="审计结果">
-          <el-select
-            v-model="wfForm.audit_result"
-            placeholder="请选择审计结果"
-            clearable
-            style="width: 100%"
-          >
-            <el-option label="通过" value="通过" /><el-option
-              label="不通过"
-              value="不通过"
-            /><el-option label="有保留意见" value="有保留意见" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="意见/备注"
-          ><el-input
-            v-model="wfForm.opinion"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入意见或备注"
-        /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="wfDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="wfSubmitting" @click="submitWorkflow">确认</el-button>
-      </template>
-    </el-dialog>
+      :action="wfAction"
+      :form="wfForm"
+      :submitting="wfSubmitting"
+      @update:opinion="wfForm.opinion = $event"
+      @update:allocated_amount="wfForm.allocated_amount = $event"
+      @update:allocation_method="wfForm.allocation_method = $event"
+      @update:audit_result="wfForm.audit_result = $event"
+      @confirm="submitWorkflow"
+    />
 
-    <el-dialog v-model="expDialogVisible" append-to-body title="登记报销" :width="DIALOG_SM">
-      <el-form label-width="90px">
-        <el-form-item label="金额(万元)" required>
-          <el-input-number v-model="expForm.amount" :min="0.0001" :precision="4" />
-        </el-form-item>
-        <el-form-item label="日期" required>
-          <el-date-picker
-            v-model="expForm.transaction_date"
-            type="date"
-            value-format="YYYY-MM-DD"
-          />
-        </el-form-item>
-        <el-form-item label="用途" required>
-          <el-input
-            v-model="expForm.purpose"
-            type="textarea"
-            :rows="2"
-            maxlength="200"
-            show-word-limit
-          />
-        </el-form-item>
-        <el-form-item label="经办人"><el-input v-model="expForm.handler" /></el-form-item>
-        <el-form-item label="票据号"><el-input v-model="expForm.receipt_number" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="expDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="expSubmitting" @click="submitExpense">提交</el-button>
-      </template>
-    </el-dialog>
+    <!-- 报销登记对话框（W5-T10 拆至 components/ExpenseDialog.vue；校验与接口仍在本组件） -->
+    <ExpenseDialog
+      v-model="expDialogVisible"
+      :form="expForm"
+      :submitting="expSubmitting"
+      @update:amount="expForm.amount = $event"
+      @update:transaction_date="expForm.transaction_date = $event"
+      @update:purpose="expForm.purpose = $event"
+      @update:handler="expForm.handler = $event"
+      @update:receipt_number="expForm.receipt_number = $event"
+      @confirm="submitExpense"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { DIALOG_SM } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import FundGuidePopover from '@/components/business/FundGuidePopover.vue'
 import { logger } from '@/utils/logger'
@@ -779,8 +729,10 @@ import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { ArrowLeft, Edit, Delete, Loading, Upload } from '@element-plus/icons-vue'
 import { get, post, put, del, apiRequest } from '@/api/request'
 import { fundApi } from '@/api/funds'
-
-import { format } from '@/utils'
+import { formatDate } from '@/utils/datetime'
+import { formatMoney4 } from '@/utils/currency'
+import WorkflowDialog from './components/WorkflowDialog.vue'
+import ExpenseDialog from './components/ExpenseDialog.vue'
 const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
 const route = useRoute()
@@ -1112,13 +1064,6 @@ const getStatusText = (s: string) =>
   })[s] ||
   s ||
   '-'
-const formatMoney = (v: any) =>
-  v == null
-    ? '0'
-    : Number(v).toLocaleString('zh-CN', {
-        maximumFractionDigits: 4,
-      })
-const formatDateTime = (d?: string | null): string => format.formatDate(d)
 
 // 操作日志辅助函数
 const getOperationTypeLabel = (type: string): string => {
@@ -1150,7 +1095,9 @@ const wfAction = ref('')
 const wfSubmitting = ref(false)
 const wfForm = reactive({
   opinion: '',
-  allocated_amount: 0,
+  // el-input-number 的 update:modelValue 允许 undefined（清空输入框），
+  // 子组件 WorkflowDialog 的 emit 类型据此声明；提交时由 submitWorkflow 决定是否下发。
+  allocated_amount: 0 as number | undefined,
   allocation_method: '',
   audit_result: '通过',
 })

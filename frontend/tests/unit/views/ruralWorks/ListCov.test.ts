@@ -178,7 +178,7 @@ function mountComp() {
     global: {
       renderStubDefaultSlot: true,
       stubs: {
-        'el-table': { name: 'ElTable', template: '<div class="el-table-stub"><slot /></div>' },
+        'el-table': { name: 'ElTable', template: '<div class="el-table-stub"><slot name="empty" /><slot /></div>' },
         'el-table-column': {
           name: 'ElTableColumn',
           template:

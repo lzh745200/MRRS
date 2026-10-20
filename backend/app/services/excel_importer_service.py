@@ -453,6 +453,41 @@ class ExcelImporterService:
         result.success = result.failed_rows == 0
         return result
 
+    def _assert_org_reachable(self, target_org_id: Any) -> None:
+        """校验调用者可将数据写入 *target_org_id*（W25 跨组织写入守卫）。
+
+        Excel 行的 ``organization_code`` 决定落库组织；校验失败抛
+        ``PermissionError``，由调用方逐行捕获并计入 ``result.errors``
+        （该行被拒绝，其余行继续，不整体失败）。
+
+        放行条件（fail-closed 之外的白名单）：
+          * 无 ``current_user``（CLI/迁移/内部受信上下文）；
+          * 全局管理员（super_admin / is_superuser）；
+          * 目标组织 == 调用者本组织，或位于其组织子树内。
+        """
+        if self.current_user is None or target_org_id is None:
+            return
+        from app.core.permission_utils import is_superuser
+
+        if is_superuser(self.current_user):
+            return
+        user_org = getattr(self.current_user, "organization_id", None)
+        if user_org is None:
+            raise PermissionError("调用者无组织归属，不得导入到指定组织")
+        try:
+            target = int(target_org_id)
+            own = int(user_org)
+        except (TypeError, ValueError):
+            raise PermissionError(f"非法的目标组织标识: {target_org_id!r}")
+        if target == own:
+            return
+        from app.core.data_permission import _get_org_subtree
+
+        subtree_ids, _names = _get_org_subtree(self.db, own)
+        if target in [int(i) for i in (subtree_ids or [])]:
+            return
+        raise PermissionError(f"无权向组织 {target} 导入数据（超出本组织及子树范围）")
+
     def _soft_delete_scoped(self, model: Any) -> int:
         """全量覆盖导入时的「清空」改为**软删除**（W18-D2）。
 
@@ -628,7 +663,11 @@ class ExcelImporterService:
                 }
                 org_code = converted.get("organization_code")
                 if org_code and org_code in org_map:
-                    project_data["organization_id"] = org_map[org_code]
+                    target_org_id = org_map[org_code]
+                    # W25：Excel 内的 organization_code 决定落库组织，必须校验调用者
+                    # 可达性 —— 否则导入可把数据写进任意组织（跨组织写入）。
+                    self._assert_org_reachable(target_org_id)
+                    project_data["organization_id"] = target_org_id
 
                 project = Project(**project_data)
                 self.db.add(project)
