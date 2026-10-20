@@ -97,11 +97,13 @@
           <span class="title">系统备份管理</span>
           <div class="header-actions">
             <el-button :loading="loading" @click="refreshAll">刷新</el-button>
-            <template v-if="canOperateBackup">
-              <el-button type="success" @click="importDialogVisible = true"> 导入备份包 </el-button>
-              <el-button type="primary" @click="handleCreateBackup"> 创建备份 </el-button>
-            </template>
-            <el-tag v-else type="info">只读模式（普通用户）</el-tag>
+            <el-button v-if="canOperateBackup" type="success" @click="importDialogVisible = true">
+              导入备份包
+            </el-button>
+            <el-button v-if="canCreateBackup" type="primary" @click="handleCreateBackup">
+              创建备份
+            </el-button>
+            <el-tag v-if="!canCreateBackup" type="info">只读模式（普通用户）</el-tag>
           </div>
         </div>
       </template>
@@ -340,6 +342,25 @@ const canOperateBackup = computed(() => {
     if (!user) return true
     const role = user.role || ''
     return ['admin', 'super_admin'].includes(role) || !!user.is_superuser
+  } catch {
+    return true
+  }
+})
+
+/**
+ * R36：**创建备份对普通用户（user）开放**，viewer 仍只读。
+ *
+ * 为什么可以放开：备份文件只落在服务器/目标目录，创建接口不返回内容；
+ * 下载 / 恢复 / 删除仍由 `canOperateBackup` + 后端 `require_admin` 双重把关，
+ * 因此不会造成跨组织数据外流。
+ * 无用户信息时保持可见（后端权限兜底），兼容未注入用户态的旧测试场景。
+ */
+const canCreateBackup = computed(() => {
+  try {
+    const user: any = typeof AuthStorage.getUser === 'function' ? AuthStorage.getUser() : null
+    if (!user) return true
+    const role = user.role || ''
+    return ['admin', 'super_admin', 'user'].includes(role) || !!user.is_superuser
   } catch {
     return true
   }

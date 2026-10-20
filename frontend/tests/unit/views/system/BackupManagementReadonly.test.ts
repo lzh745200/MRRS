@@ -136,3 +136,93 @@ describe('备份管理只读模式（T11）', () => {
     w2.unmount()
   })
 })
+
+/**
+ * R36（2026-10-20）：创建备份对普通用户开放，viewer 仍只读。
+ *
+ * 安全性依据：创建接口只在服务器生成文件、不返回内容；下载/恢复/删除仍由
+ * `canOperateBackup` + 后端 `require_admin` 双重把关。
+ */
+const fullStubs = {
+  ...rowStubs,
+  'el-tag': { template: '<span class="el-tag-stub"><slot /></span>' },
+}
+
+describe('R36：创建备份对普通用户开放', () => {
+  it('user 角色：canCreateBackup=true 且 canOperateBackup=false', async () => {
+    getUserMock.mockReturnValue({ role: 'user', is_superuser: false })
+    const w = mountComp()
+    await flushPromises()
+    expect((w.vm as any).canCreateBackup).toBe(true)
+    expect((w.vm as any).canOperateBackup).toBe(false)
+    w.unmount()
+  })
+
+  it('admin / super_admin / is_superuser 均 canCreateBackup=true', async () => {
+    for (const user of [
+      { role: 'admin', is_superuser: false },
+      { role: 'super_admin', is_superuser: false },
+      { role: 'user', is_superuser: true },
+    ]) {
+      getUserMock.mockReturnValue(user)
+      const w = mountComp()
+      await flushPromises()
+      expect((w.vm as any).canCreateBackup).toBe(true)
+      w.unmount()
+    }
+  })
+
+  it('viewer 角色：canCreateBackup=false（只读角色不产生写副作用）', async () => {
+    getUserMock.mockReturnValue({ role: 'viewer', is_superuser: false })
+    const w = mountComp()
+    await flushPromises()
+    expect((w.vm as any).canCreateBackup).toBe(false)
+    w.unmount()
+  })
+
+  it('无 role 且非超管：canCreateBackup=false（role || "" 兜底）', async () => {
+    getUserMock.mockReturnValue({ is_superuser: false })
+    const w = mountComp()
+    await flushPromises()
+    expect((w.vm as any).canCreateBackup).toBe(false)
+    w.unmount()
+  })
+
+  it('getUser 抛错：canCreateBackup=true（后端权限兜底）', async () => {
+    getUserMock.mockImplementation(() => {
+      throw new Error('storage corrupted')
+    })
+    const w = mountComp()
+    await flushPromises()
+    expect((w.vm as any).canCreateBackup).toBe(true)
+    w.unmount()
+  })
+
+  it('user 页面：有「创建备份」，无下载/恢复/删除，且不显示只读标记', async () => {
+    getUserMock.mockReturnValue({ role: 'user', is_superuser: false })
+    const w = mountComp(fullStubs)
+    await flushPromises()
+
+    const texts = w.findAll('.el-button-stub').map((b: any) => b.text().trim())
+    expect(texts).toContain('创建备份')
+    expect(texts).not.toContain('导入备份包')
+    expect(texts).not.toContain('下载')
+    expect(texts).not.toContain('恢复')
+    expect(texts).not.toContain('删除')
+    expect(w.find('.readonly-hint').exists()).toBe(true)
+    expect(w.find('.el-tag-stub').text()).not.toContain('只读模式')
+    w.unmount()
+  })
+
+  it('viewer 页面：无「创建备份」，显示只读标记', async () => {
+    getUserMock.mockReturnValue({ role: 'viewer', is_superuser: false })
+    const w = mountComp(fullStubs)
+    await flushPromises()
+
+    const texts = w.findAll('.el-button-stub').map((b: any) => b.text().trim())
+    expect(texts).not.toContain('创建备份')
+    expect(texts).not.toContain('导入备份包')
+    expect(w.find('.el-tag-stub').text()).toContain('只读模式')
+    w.unmount()
+  })
+})

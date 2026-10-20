@@ -84,9 +84,12 @@ class TestCreateBackup:
             resp = client_with_mocked_auth.post(BASE, json={})
             assert resp.status_code == 500
 
-    def test_regular_user_cannot_create(self, client_with_regular_user_auth):
-        # 端点经 _authenticate_backup_request → get_current_user 解析身份，
-        # 此处 patch 模块级 get_current_user 返回普通用户，验证 require_admin 拦截
+    def test_regular_user_can_create(self, client_with_regular_user_auth):
+        """R36（2026-10-20）：普通用户可发起备份。
+
+        安全性依据：本端点只在服务器上生成文件、不返回内容；下载 / 恢复 / 删除
+        仍由 require_admin 把关，故放开创建不会造成跨组织数据外流。
+        """
         regular = MagicMock()
         regular.role = "user"
         regular.is_superuser = False
@@ -95,7 +98,43 @@ class TestCreateBackup:
             resp = client_with_regular_user_auth.post(
                 BASE, json={}, headers={"Authorization": "Bearer fake-token"}
             )
-        assert resp.status_code == 403
+        assert resp.status_code == 200, resp.text
+
+    def test_viewer_cannot_create(self, client_with_regular_user_auth):
+        """viewer 是只读角色，不应产生写副作用。"""
+        viewer = MagicMock()
+        viewer.role = "viewer"
+        viewer.is_superuser = False
+        viewer.username = "viewer"
+        with patch("app.core.security.get_current_user", return_value=viewer):
+            resp = client_with_regular_user_auth.post(
+                BASE, json={}, headers={"Authorization": "Bearer fake-token"}
+            )
+        assert resp.status_code == 403, resp.text
+
+    def test_blank_role_cannot_create(self, client_with_regular_user_auth):
+        """空角色 fail-closed：不能因为 normalize_role 兜底成 user 就白送写权限。"""
+        blank = MagicMock()
+        blank.role = "   "
+        blank.is_superuser = False
+        blank.username = "nobody"
+        with patch("app.core.security.get_current_user", return_value=blank):
+            resp = client_with_regular_user_auth.post(
+                BASE, json={}, headers={"Authorization": "Bearer fake-token"}
+            )
+        assert resp.status_code == 403, resp.text
+
+    def test_superuser_flag_bypasses_role_check(self, client_with_regular_user_auth):
+        """显式 is_superuser 标记即使 role 为空也放行（历史账号）。"""
+        su = MagicMock()
+        su.role = ""
+        su.is_superuser = True
+        su.username = "root"
+        with patch("app.core.security.get_current_user", return_value=su):
+            resp = client_with_regular_user_auth.post(
+                BASE, json={}, headers={"Authorization": "Bearer fake-token"}
+            )
+        assert resp.status_code == 200, resp.text
 
 
 # ── list_backups ─────────────────────────────────────────────────────

@@ -144,17 +144,35 @@ async def _jwt_user_from_request(request: Request) -> Any:
 
 
 async def _authenticate_backup_request(request: Request) -> str:
-    """备份创建鉴权：本机内部密钥 或 管理员 JWT 二选一。
+    """备份创建鉴权：本机内部密钥 或 已登录的写权限账号。
 
-    Electron 主进程的定时/托盘自动备份无 JWT，携带启动时注入环境变量的
-    X-Internal-Backup 密钥（与 shutdown 端点同模式）；普通用户走 JWT 管理员校验。
+    R36（2026-10-20）：**普通用户也可发起备份**。安全性依据 —— 备份文件只落在
+    服务器/目标目录，本端点不返回内容；下载（`/download/{filename}`）、恢复
+    （`/restore`、`/upload-restore`）、删除（`DELETE /{filename}`）仍全部由
+    `require_admin` 把关，数据不会因此外流。
+
+    被拒的两类账号（与 `deps.enforce_funds_operator` 的 fail-closed 口径一致）：
+    - `viewer`：只读角色，不应产生写副作用；
+    - 未分配有效角色：空角色被兜底成 `user` 等于白送写权限，故直接 403。
 
     Returns: 操作人标识（内部通道返回 "internal-backup"）
     """
     if _internal_backup_key_valid(request):
         return "internal-backup"
     user = await _jwt_user_from_request(request)
-    require_admin(user, error_message="仅超级管理员可创建备份")
+
+    from app.core.constants import normalize_role
+    from app.core.permission_utils import is_superuser
+
+    # 显式超管标记放行（历史账号 role 可能不是 super_admin）
+    if is_superuser(user):
+        return getattr(user, "username", "unknown")
+
+    raw_role = getattr(user, "role", None)
+    if not isinstance(raw_role, str) or not raw_role.strip():
+        raise HTTPException(status_code=403, detail="权限不足：账号未分配有效角色")
+    if normalize_role(raw_role) == "viewer":
+        raise HTTPException(status_code=403, detail="只读账号不可创建备份")
     return getattr(user, "username", "unknown")
 
 
