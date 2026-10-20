@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   pushSafe: vi.fn(),
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   confirm: vi.fn(),
+  // 路由 query 可改写：验证「从帮扶村年度数据页跳转携带 village_id 预筛选」分支
+  routeQuery: {} as Record<string, unknown>,
 }))
 
 vi.mock('@/api/households', () => ({
@@ -48,6 +50,11 @@ vi.mock('@/composables/useRouterSafe', () => ({
 
 vi.mock('@/composables/useDesensitize', () => ({
   useDesensitize: () => ({ ds: (value: any) => String(value) }),
+}))
+
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: mocks.routeQuery }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
 }))
 
 vi.mock('@/components/business/EmptyState/EmptyState.vue', () => ({
@@ -240,6 +247,7 @@ function vmOf(wrapper: ReturnType<typeof mountComp>) {
 describe('households/List.vue（一户一档列表）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.routeQuery = {}
     mocks.getHouseholds.mockResolvedValue({
       items: [ROW_A, ROW_B],
       total: 2,
@@ -297,6 +305,29 @@ describe('households/List.vue（一户一档列表）', () => {
     // 台账卡内空态不渲染（预警抽屉内的空态不计）
     expect(wrapper.find('.table-card .app-empty').exists()).toBe(false)
     wrapper.unmount()
+  })
+
+  it('年度数据页跳转携带 village_id：挂载即按该村预筛选（非法值忽略）', async () => {
+    mocks.routeQuery = { village_id: '11' }
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(vmOf(wrapper).query.village_id).toBe(11)
+    expect(mocks.getHouseholds).toHaveBeenCalledWith(expect.objectContaining({ village_id: 11 }))
+    wrapper.unmount()
+
+    // 0 / 非数字等非法值：不预筛选（village_id 保持 undefined）
+    mocks.getHouseholds.mockClear()
+    mocks.routeQuery = { village_id: '0' }
+    const zero = mountComp()
+    await flushPromises()
+    expect(vmOf(zero).query.village_id).toBeUndefined()
+    zero.unmount()
+
+    mocks.routeQuery = { village_id: 'abc' }
+    const invalid = mountComp()
+    await flushPromises()
+    expect(vmOf(invalid).query.village_id).toBeUndefined()
+    invalid.unmount()
   })
 
   it('统计条：当前页高风险 / 监测户 / 预警命中统计（含 risk_alerts 缺省兜底）', async () => {

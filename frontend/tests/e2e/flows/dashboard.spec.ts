@@ -92,7 +92,7 @@ test.describe('工作台 Dashboard', () => {
     await expect(page).toHaveURL(/\/todos/, { timeout: 5000 })
 
     // 待办页面标题与新增待办输入框
-    await expect(page.locator('.todos-page .page-title')).toContainText('待办事项', {
+    await expect(page.locator('.todos-page .header-title')).toContainText('待办事项', {
       timeout: 10000,
     })
     await expect(page.getByPlaceholder(/输入待办事项/)).toBeVisible({ timeout: 10000 })

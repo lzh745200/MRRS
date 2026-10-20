@@ -15,8 +15,11 @@ import { test, expect, Page } from '@playwright/test'
 
 // 登录辅助函数（storageState 已注入认证态，仅确认落在首页）
 async function login(page: Page) {
-  await page.goto('/')
-  await expect(page).not.toHaveURL(/\/login/, { timeout: 10000 })
+  // storageState 已注入认证态：以「应用壳（侧栏）渲染完成」为就绪信号。
+  // 不用 waitForLoadState('networkidle')——工作台有 WebSocket 长连接，networkidle 永不满足。
+  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('.layout-aside')).toBeVisible({ timeout: 20000 })
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 20000 })
 }
 
 test.describe('审批流程', () => {
@@ -90,8 +93,8 @@ test.describe('审批流程', () => {
       // 导航到帮扶村列表
       await page.goto('/villages')
 
-      // 等待列表加载
-      await page.waitForLoadState('networkidle')
+      // 等待列表加载（domcontentloaded：工作台/消息 WebSocket 长连接会让 networkidle 永不满足）
+      await page.waitForLoadState('domcontentloaded')
 
       // 点击编辑或查看按钮
       const editButton = page.locator('button:has-text("编辑"), button:has-text("修改")').first()

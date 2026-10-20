@@ -396,6 +396,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
@@ -453,6 +454,7 @@ const ROLLUP_FIELD_LABELS: Record<string, string> = {
   monitor_households: '监测户数',
 }
 
+const route = useRoute()
 const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
 
@@ -829,7 +831,16 @@ async function loadAlerts(): Promise<void> {
   }
 }
 
+/** 从「帮扶村管理 → 年度数据」页跳转时携带 village_id 预筛选（v1.15.16 入口迁移） */
+function prefillFromQuery(): void {
+  const villageId = Number(route.query.village_id)
+  if (Number.isInteger(villageId) && villageId > 0) {
+    query.village_id = villageId
+  }
+}
+
 onMounted(() => {
+  prefillFromQuery()
   void loadVillages()
   void loadData()
 })

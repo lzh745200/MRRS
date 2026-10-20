@@ -501,6 +501,19 @@ describe('YearlyOverview.vue 交互与生命周期', () => {
     expect(mocks.pushSafe).toHaveBeenCalledWith('/supported-villages/1')
   })
 
+  it('一户一档入口：年度数据页内渲染入口卡，跳转该村户档案（v1.15.16 入口迁移）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const entry = wrapper.find('[data-test="household-entry"]')
+    expect(entry.exists()).toBe(true)
+    expect(entry.text()).toContain('一户一档')
+    // 入口动作按钮由模板固定渲染（未解析的 el-button 插槽文本在 jsdom 中不展开，故按 class 断言）
+    expect(entry.find('.btn-households').exists()).toBe(true)
+    const vm = wrapper.vm as any
+    vm.goHouseholds()
+    expect(mocks.pushSafe).toHaveBeenCalledWith('/households?village_id=1')
+  })
+
   it('resize：防抖后 resize 图表', async () => {
     const wrapper = mountComp()
     await flushPromises()

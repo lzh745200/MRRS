@@ -90,17 +90,6 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "roles": None,
     },
     {
-        # W22（v1.14.0）：一户一档（家庭成员/帮扶责任人/风险类型/监测指标/预警/走访挂户）
-        "key": "households",
-        "label": "一户一档",
-        "path": "/households",
-        "icon": "House",
-        "order": 15,
-        "section": "business",
-        "kind": "page",
-        "roles": None,
-    },
-    {
         "key": "projects",
         "label": "帮扶项目",
         "path": "/projects",
@@ -1078,6 +1067,19 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "path": None,
         "icon": "TrendCharts",
         "order": 909,
+        "section": None,
+        "kind": "page",
+        "roles": None,
+        "legacy": True,
+    },
+    {
+        # v1.15.16：一户一档入口已并入「帮扶村管理 → 年度数据」页（/supported-villages/:id/yearly），
+        # 不再作为侧栏一级菜单；key 保留为 legacy 以兼容权限包 / 历史 allowed_menus / 深链守卫。
+        "key": "households",
+        "label": "一户一档（并入帮扶村年度数据）",
+        "path": None,
+        "icon": "House",
+        "order": 910,
         "section": None,
         "kind": "page",
         "roles": None,

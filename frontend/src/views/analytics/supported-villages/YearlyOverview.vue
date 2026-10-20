@@ -39,6 +39,21 @@
 
     <!-- 板块卡片网格 -->
     <div class="section-grid">
+      <!-- 一户一档：v1.15.16 起入口并入年度数据页（原侧栏一级菜单），按当前帮扶村进入户档案 -->
+      <div class="section-card household-card" data-test="household-entry">
+        <div class="section-card-header">
+          <el-icon class="section-icon"><House /></el-icon>
+          <h3>一户一档</h3>
+        </div>
+        <div class="section-summary">
+          <p class="household-desc">按户建档、风险预警、走访监测，查看并维护该村建档户档案</p>
+        </div>
+        <div class="section-card-actions">
+          <el-button type="primary" class="btn-households" @click="goHouseholds"
+            >进入一户一档</el-button
+          >
+        </div>
+      </div>
       <div v-for="section in sections" :key="section.key" class="section-card">
         <div class="section-card-header">
           <el-icon class="section-icon"><component :is="section.icon" /></el-icon>
@@ -710,6 +725,11 @@ function handleBack() {
   pushSafe(`/supported-villages/${villageId.value}`)
 }
 
+/** 进入该村一户一档（v1.15.16：入口并入年度数据页，携带 village_id 预筛选） */
+function goHouseholds() {
+  pushSafe(`/households?village_id=${villageId.value}`)
+}
+
 onMounted(() => {
   window.addEventListener('resize', handleChartResize)
   loadAllData()
@@ -833,6 +853,13 @@ onBeforeUnmount(() => {
   font-size: 13px;
   display: flex;
   align-items: center;
+}
+
+.household-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
 }
 
 .section-card-actions {
