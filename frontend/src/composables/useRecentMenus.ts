@@ -74,7 +74,13 @@ export function useRecentMenus() {
   /** 记录一次访问：去重后置顶，超过上限截断 */
   function recordMenu(entry: NavMenuRecord): void {
     const next = [
-      { key: entry.key, label: entry.label, path: entry.path, icon: entry.icon },
+      {
+        key: entry.key,
+        label: entry.label,
+        path: entry.path,
+        icon: entry.icon,
+        tabKey: entry.tabKey,
+      },
       ...recentMenus.value.filter((item) => item.key !== entry.key),
     ].slice(0, RECENT_MENUS_LIMIT)
     recentMenus.value = next

@@ -75,7 +75,13 @@ export function useMenuFavorites() {
       favoriteMenus.value = favoriteMenus.value.filter((item) => item.key !== entry.key)
     } else {
       favoriteMenus.value = [
-        { key: entry.key, label: entry.label, path: entry.path, icon: entry.icon },
+        {
+          key: entry.key,
+          label: entry.label,
+          path: entry.path,
+          icon: entry.icon,
+          tabKey: entry.tabKey,
+        },
         ...favoriteMenus.value,
       ].slice(0, MENU_FAVORITES_LIMIT)
     }

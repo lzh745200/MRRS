@@ -13,7 +13,7 @@
 
 ```
 ├── backend/app/              # 后端（FastAPI）
-│   ├── api/v1/               # API 接口层（100 个路由模块文件 = 55 顶层 + 5 子包；803 个端点）
+│   ├── api/v1/               # API 接口层（53 个路由模块 + 5 个子包；830 个端点）
 │   │   ├── auth/             # 认证模块
 │   │   ├── data/             # 数据分析
 │   │   ├── import_export/    # 异步导入导出
@@ -151,11 +151,18 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
   （`config/menu-config.ts`、`utils/systemMenu.ts` 及其测试），禁止再手写菜单段。
   导航固定 7 板块（工作台 + 帮扶业务/乡村振兴/工作协同/分析汇报/数据管理/系统管理）；
   系统管理收敛为 **6 个 console 聚合页**（组织与权限/安全与审计/运维与监控/备份与存储/系统设置/关于与反馈，
-  路由 `/system/console/:group`、页内 `?tab=<tab key>` 切换、**旧路由全部保留**、菜单 key 一个不改）。
-  导航增强：Ctrl+K 菜单搜索、最近访问/收藏（localStorage `nav:recent`/`nav:favorites`，上限 8）。
+  路由 `/system/console/:group`、页内 `?tab=<tab key>` 切换、**旧路由全部保留**、菜单 key 一个不改），
+  合计 **30 个功能 tab**。v1.15.18 起聚合页由横向 el-tabs 改为**左侧分组导航 + 右侧内容**
+  （`SystemConsole.vue` 的 `TAB_LAYOUT`，**纯呈现层**：不改 key/path/权限粒度/深链；
+  后端新增未登记 tab 自动落「其他」组，入口不丢；窄屏 ≤992px 转横向滚动）。
+  导航增强：Ctrl+K 菜单搜索**已覆盖 console 的 30 个 tab**（`flatEntries` 带 `parentLabel`+`tabKey`，
+  跳转 `/system/console/<group>?tab=<key>`）、最近访问/收藏（localStorage `nav:recent`/`nav:favorites`，
+  上限 8，记录含可选 `tabKey`）。操作说明见 `docs/02-用户手册/系统管理操作说明.md`。
   过滤优先级不变（superuser 全量 > `allowed_menus` > 启用中权限包 > 角色默认）；
   console 可见 = `console.key` 或任一 `tab.key ∈ allowed`，勾聚合页 key 视为其全部 Tab 可见。
-  门禁 `scripts/check_menu_alignment.py` 规则 A~E（路径可解析 / `meta.menuKey` 合法 / 无孤儿 key / 路径不重复 / 板块唯一）。
+  门禁：`scripts/check_menu_alignment.py` 规则 A~E（路径可解析 / `meta.menuKey` 合法 / 无孤儿 key / 路径不重复 / 板块唯一）、
+  `scripts/check_console_tab_mapping.py`（后端 console tab key ↔ 前端 `TAB_COMPONENTS` 双向一致，
+  防"有菜单无组件"功能静默消失）、`src/utils/navLinks.ts` + `nav-links.test.ts`（导航 path 必须可解析）。
 - **W22 功能迭代** (2026-10-18, v1.14.0):
   - **一户一档**：新表 `households` / `household_members` / `household_risk_records`；API `/households/*`；
     预警规则（连续未走访 >90 天且非一般户→medium；大病/住房不安全/突发困难→high，服务层实时计算不落库）；

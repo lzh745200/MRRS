@@ -202,6 +202,50 @@ describe('MobileBottomNav.vue（数据驱动）', () => {
     expect(mocks.pushSafe).toHaveBeenCalledWith('/funds')
   })
 
+  it('抽屉内点击 console 子项 → 跳转带 ?tab= 并记录最近访问（含 tabKey）', async () => {
+    useMenuStore().setMenus({
+      sections: [
+        {
+          key: 'system',
+          label: '系统管理',
+          order: 90,
+          items: [
+            {
+              key: 'system-console-storage',
+              label: '备份与存储',
+              path: '/system/console/storage',
+              kind: 'console',
+              order: 10,
+              tabs: [
+                { key: 'backup', label: '数据备份', path: '/system/backup', order: 1 },
+              ],
+            },
+          ],
+        },
+      ],
+      flat_keys: [],
+    })
+    setWidth(500)
+    const wrapper = mountNav()
+    const moreBtn = wrapper
+      .findAll('button.nav-btn')
+      .find((btn) => btn.find('.nav-label').text() === '更多')
+    expect(moreBtn).toBeDefined()
+    await moreBtn?.trigger('click')
+
+    const items = wrapper.findAll('button.mobile-menu-item')
+    const backupItem = items.find((item) => item.text().includes('数据备份'))
+    expect(backupItem).toBeDefined()
+    await backupItem?.trigger('click')
+
+    expect(mocks.pushSafe).toHaveBeenCalledWith({
+      path: '/system/console/storage',
+      query: { tab: 'backup' },
+    })
+    const { recentMenus } = useRecentMenus()
+    expect(recentMenus.value[0].tabKey).toBe('backup')
+  })
+
   it('点击「更多」打开抽屉并展示全量菜单', async () => {
     setWidth(500)
     const wrapper = mountNav()

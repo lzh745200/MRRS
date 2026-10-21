@@ -252,6 +252,35 @@ describe('useMenuStore', () => {
       expect(store.allKeys.has('7')).toBe(false)
     })
 
+    it('console 有 path 但无 tabs → 只产出聚合页自身扁平项（不展开子项）', () => {
+      const store = useMenuStore()
+      store.setMenus({
+        sections: [
+          {
+            key: 'system',
+            label: '系统管理',
+            order: 90,
+            items: [
+              {
+                key: 'system-console-empty-tabs',
+                label: '空聚合页',
+                path: '/system/console/empty',
+                kind: 'console',
+                order: 10,
+              },
+            ],
+          },
+        ],
+        flat_keys: [],
+      })
+
+      expect(store.flatEntries.map((entry) => entry.key)).toEqual([
+        'dashboard',
+        'system-console-empty-tabs',
+      ])
+      expect(store.flatEntries[1].tabKey).toBeUndefined()
+    })
+
     it('sections/flat_keys 均非数组时按空处理', () => {
       const store = useMenuStore()
       store.setMenus({ sections: 'nope', flat_keys: {} } as unknown as MenuPayloadV2)

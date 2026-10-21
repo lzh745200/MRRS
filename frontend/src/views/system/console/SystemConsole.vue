@@ -219,7 +219,6 @@ const renderableTabs = computed<MenuTab[]>(() =>
 /** 按左侧分组布局组织可渲染 Tab；未登记的 key 归入「其他」，保证入口不丢 */
 const groupedTabs = computed<{ label: string; tabs: MenuTab[] }[]>(() => {
   const visible = renderableTabs.value
-  if (visible.length === 0) return []
   const byKey = new Map(visible.map((tab) => [tab.key, tab]))
   const used = new Set<string>()
   const result: { label: string; tabs: MenuTab[] }[] = []

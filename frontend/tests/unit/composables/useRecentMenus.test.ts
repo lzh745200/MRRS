@@ -36,6 +36,30 @@ describe('useRecentMenus', () => {
     expect(localStorage.getItem(RECENT_MENUS_STORAGE_KEY)).toBeNull()
   })
 
+  it('recordMenu 保留 console 子项的 tabKey 并可从存储读回', () => {
+    const { recentMenus, recordMenu } = useRecentMenus()
+    recordMenu({ key: 'backup', label: '数据备份', path: '/system/console/storage', tabKey: 'backup' })
+    expect(recentMenus.value[0].tabKey).toBe('backup')
+
+    // 重新初始化（模拟刷新页面）：从 localStorage 读回，tabKey 仍是字符串
+    resetRecentMenus()
+    const reloaded = useRecentMenus()
+    expect(reloaded.recentMenus.value[0].tabKey).toBe('backup')
+  })
+
+  it('存储中 tabKey 非字符串的脏记录被整条丢弃', () => {
+    localStorage.setItem(
+      RECENT_MENUS_STORAGE_KEY,
+      JSON.stringify([
+        { key: 'bad-tab', label: '脏数据', path: '/bad', tabKey: 123 },
+        { key: 'ok', label: '正常', path: '/ok' },
+      ])
+    )
+    resetRecentMenus()
+    const { recentMenus } = useRecentMenus()
+    expect(recentMenus.value.map((entry) => entry.key)).toEqual(['ok'])
+  })
+
   it('recordMenu 记录访问并持久化（最新在前）', () => {
     const { recentMenus, recordMenu } = useRecentMenus()
     recordMenu(makeEntry(1))

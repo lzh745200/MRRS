@@ -226,6 +226,72 @@ describe('MenuSearchDialog.vue', () => {
     expect(findLabels(wrapper)).toEqual(['组织与权限'])
   })
 
+  it('搜索命中 console 子项 → 跳转带 ?tab= 并记录 tabKey', async () => {
+    useMenuStore().setMenus({
+      sections: [
+        {
+          key: 'system',
+          label: '系统管理',
+          order: 90,
+          items: [
+            {
+              key: 'system-console-storage',
+              label: '备份与存储',
+              path: '/system/console/storage',
+              kind: 'console',
+              order: 10,
+              tabs: [{ key: 'backup', label: '数据备份', path: '/system/backup', order: 1 }],
+            },
+          ],
+        },
+      ],
+      flat_keys: [],
+    })
+    const wrapper = mountDialog()
+    await typeKeyword(wrapper, '数据备份')
+    expect(findLabels(wrapper)).toEqual(['数据备份'])
+
+    await wrapper.find('.menu-search-item').trigger('click')
+    await nextTick()
+    expect(mocks.pushSafe).toHaveBeenCalledWith({
+      path: '/system/console/storage',
+      query: { tab: 'backup' },
+    })
+    const { recentMenus } = useRecentMenus()
+    expect(recentMenus.value[0].tabKey).toBe('backup')
+  })
+
+  it('收藏 console 子项时保留 tabKey（可从收藏直接回到对应 Tab）', async () => {
+    useMenuStore().setMenus({
+      sections: [
+        {
+          key: 'system',
+          label: '系统管理',
+          order: 90,
+          items: [
+            {
+              key: 'system-console-storage',
+              label: '备份与存储',
+              path: '/system/console/storage',
+              kind: 'console',
+              order: 10,
+              tabs: [{ key: 'backup', label: '数据备份', path: '/system/backup', order: 1 }],
+            },
+          ],
+        },
+      ],
+      flat_keys: [],
+    })
+    const wrapper = mountDialog()
+    await typeKeyword(wrapper, '数据备份')
+    await wrapper.find('.menu-search-item-star').trigger('click')
+    await nextTick()
+
+    const { favorites } = useMenuFavorites()
+    expect(favorites.value[0].key).toBe('backup')
+    expect(favorites.value[0].tabKey).toBe('backup')
+  })
+
   it('无匹配时展示搜索空态并重置高亮', async () => {
     const wrapper = mountDialog()
     await typeKeyword(wrapper, 'zzz-not-exists')
