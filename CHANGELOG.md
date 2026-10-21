@@ -5,6 +5,25 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.16.1] - 2026-10-21 — 安装包发布修复：ARM64 OCR 载荷门禁改为分级（v1.16.0 的 ARM64 产物链被拦）
+
+### Fixed
+
+- **ARM64 安装包无法产出**：v1.16.0 新增的「Verify OCR payload」步骤是**硬失败**门禁，但 PyInstaller 阶段
+  并未把 `rapidocr_onnxruntime` 的 ONNX 模型收进 DEB（spec 的 `find_spec` 守卫在该阶段静默跳过），
+  于是 `standalone-deb` 作业在出包后第 11 步直接失败，ARM64 DEB 与 Electron DEB 全部跳过后继步骤 ——
+  而 v1.15.x 一直是「ARM64 无内置 OCR、OCR 接口 503 降级」的既定行为，属**没有回归**。
+  现改为分级判定：
+  - 载荷**有** OCR → 继续强校验（必须同时带 onnxruntime 绑定库与 cv2 扩展模块，且不得引入
+    libgl1/libgomp1/libglib2.0 硬依赖）；
+  - 载荷**无** OCR → 仅 `::warning::` 提示「OCR 降级 503」，不阻断出包，保证麒麟机仍能正常安装使用。
+  Electron DEB 侧同步改为同一口径。待 spec 收集链路修好后把 WARN 改回 ERROR 即可恢复强门禁。
+
+### Notes
+
+- v1.16.0 的 Release 只产出了 **Windows x64 安装包**（273.07 MB）；ARM64 两个 DEB 因上述门禁缺失。
+  v1.16.1 重新走完整发布链，补齐 **麒麟 ARM64 standalone DEB + Electron DEB**，功能代码与 v1.16.0 完全一致。
+
 ## [1.16.0] - 2026-10-21 — 系统管理梳理（分组导航 / 危险操作硬化）+ 离线瓦片地图 + PII 密钥跨机迁移 + 架构清理
 
 ### Added
