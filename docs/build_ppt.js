@@ -201,7 +201,7 @@ function header(s, kicker, title) {
     color: TEXT, fontFace: F, margin: 0 });
   s.addText(String(pageNo).padStart(2, "0"), { x: W - 1.0, y: H - 0.55, w: 0.5, h: 0.3,
     fontSize: 11, color: MUTED, fontFace: F, align: "right", margin: 0 });
-  s.addText("帮扶管理信息系统 v1.15.15", { x: M, y: H - 0.55, w: 4, h: 0.3,
+  s.addText("帮扶管理信息系统 v1.16.0", { x: M, y: H - 0.55, w: 4, h: 0.3,
     fontSize: 10.5, color: MUTED, fontFace: F, margin: 0 });
 }
 function card(s, x, y, w, h, fill = BG) {
@@ -279,7 +279,7 @@ function sectionSlide(num, title, sub, items) {
     { text: "多机协同 · 军工级安全", options: {} },
   ], { x: 1.0, y: 4.75, w: 6, h: 0.85, fontSize: 16, color: LIGHT, fontFace: F,
     paraSpaceAfter: 6, margin: 0 });
-  s.addText("V1.15.15  |  2026-10-20  |  FastAPI + Vue 3 + Electron + SQLite", {
+  s.addText("V1.16.0  |  2026-10-21  |  FastAPI + Vue 3 + Electron + SQLite", {
     x: 1.0, y: 6.35, w: 10, h: 0.4, fontSize: 12.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
@@ -381,7 +381,7 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
   stat(s, 7.25, 4.35, 3.0, "122", "数据表（模型计数）", PRIMARY_L);
   stat(s, 10.6, 4.35, 2.4, "4", "用户角色", PRIMARY_L, 40);
   // 页脚数据来源：按框宽/框高自适应字号（原固定 12pt 在 12.3×0.4in 内需 2 行，超出 1.31×）
-  const noteP06 = "数据来源：2026-10-20（v1.15.15）—— 后端 13,942 用例（1 skipped）/ 行+分支 100%；前端 331 文件 / 6,867 用例（12 组 glob 100%）；UI 主题 3 套 · 显示偏好 4 档 · R35 表格规范 117/117 · 硬编码色 305（基线 345）";
+  const noteP06 = "数据来源：2026-10-21（v1.16.0）—— 后端 14,140 用例（1 skipped）/ 行+分支 100%；前端 332 文件 / 6,906 用例（12 组 glob 100%）；UI 主题 3 套 · 显示偏好 4 档 · R35 表格规范 117/117 · 硬编码色 305（基线 345）";
   const sizeP06 = fitFontSize(noteP06, 12.3, 0.4, 12, 9);
   fitNote("P06 数据来源", 12, sizeP06);
   s.addText(noteP06, {
@@ -542,6 +542,32 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
     "共享 PageHeader：19 个列表页接入，全站使用页 12 → 31",
     "ui-refine.scss：筛选栏 / 表格 / 8px 栅格 / 响应式断点（1200 · 992 · 768），全部走设计 token",
     "质量门禁：Token 契约测试 + 10 页视觉回归基线；lint / vue-tsc 0 告警",
+  ], 7.17, 2.55, 5.4, 3.9, { size: 11.5, gap: 8 });
+}
+
+/* 10e v1.16.0 系统管理梳理 + 危险操作硬化 */
+{
+  const s = p.addSlide();
+  header(s, "02 技术架构", "v1.16.0：系统管理梳理 + 危险操作硬化");
+  card(s, M, 1.8, 6.0, 4.9);
+  s.addText("系统管理与安全", { x: 0.82, y: 2.05, w: 4.5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "6 个聚合页改「左分组 + 右内容」，30 个 tab 按语义归组；纯呈现层，不改菜单 key / tab path / 权限 / ?tab= 深链",
+    "危险操作两档确认（useDangerConfirm）；重置他人密码必须手工输入目标用户名",
+    "四类危险操作强制审计：删除组织 / 恢复备份 / 轮换密钥 / 管理员重置密码",
+    "权限抽屉「生效概览」：角色 + 数据范围 + 菜单来源一屏可见",
+    "设备与授权中心：机器码 / 通行码批量复制，直达单位授权配置与导入授权包",
+    "备份权限：普通用户可创建备份，下载 / 恢复 / 删除仍限管理员",
+  ], 0.82, 2.55, 5.4, 3.9, { size: 11.5, gap: 8 });
+  card(s, 6.85, 1.8, 6.0, 4.9);
+  s.addText("离线能力与门禁", { x: 7.17, y: 2.05, w: 5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "离线瓦片地图：Leaflet 栅格瓦片，瓦片包构建机预置并进安装包；npm run tiles:verify",
+    "PII 密钥跨机迁移：/system/pii-key 查看指纹 / 导出 / 导入（只记指纹不记密钥本体）",
+    "ARM64 离线 OCR 出包门禁：真实识别冒烟 + 载荷断言，保持零外部依赖",
+    "新门禁：console tab ↔ TAB_COMPONENTS 双向一致、文档数字漂移、安全审计覆盖棘轮",
+    "修复：R33 单位授权两个 tab 因漏加组件映射而不可见（契约 28 → 30）",
+    "本版移出 R35 删表迁移：升级演练暴露数据丢失 / 升级中断风险，schema 维持 r34 head",
   ], 7.17, 2.55, 5.4, 3.9, { size: 11.5, gap: 8 });
 }
 

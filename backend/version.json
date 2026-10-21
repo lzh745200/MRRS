@@ -1,16 +1,17 @@
 {
   "version": "1.16.0",
-  "build": "20261016",
-  "release_date": "2026-10-16",
-  "description": "R28 全系统排查修复：数据域越权收敛 / 报表导出隔离 / 服务层正确性 / 中间件与限流 / 前端与构建链",
+  "build": "20261021",
+  "release_date": "2026-10-21",
+  "description": "系统管理梳理（分组导航 / 危险操作硬化）+ 离线瓦片地图 + PII 密钥跨机迁移 + ARM64 离线 OCR + 架构清理",
   "features": [
-    "数据域越权收敛：用户管理三处子树过滤统一到 _apply_user_data_scope（db 必填 fail-closed）；/export/villages、/data-sync、/system-health/*、/system/environment、/monitoring、/system/config 读端点、/batch/validate（含表名白名单）收敛为管理员/登录可见",
-    "报表导出数据域：公文报告导出六个 generate_*_report_data 改为强制 current_user 位置参数（漏传即 TypeError），部门级 admin 不再能借导出读到跨组织村/校/项目/经费总量与金额；/export/comprehensive 用户数聚合同步收敛",
-    "仪表盘与近期活动数据域：/dashboard/recent-activities 三路 feed（项目/经费/审批）按 get_org_scope 收敛，审批按「我提交/待我审批」；共享缓存仅全量访问者读写，普通用户按域现算",
-    "服务层正确性：审批 approve/reject 改带条件原子抢占；数据包批量 upsert 只更新实际携带列；组织导入两阶段回填 parent_id/path/level；冲突保留双方时后缀唯一化；2FA 并发撞唯一键回退；通知偏好写入 upsert；履约评分真实化",
-    "平台与性能：中间件链纯 ASGI 化并合并；限流器接线 settings.RATE_LIMIT_* 与整体关闭；token 黑名单清理节流；缓存 LRU 并支持缓存 None；Redis 适配器加锁并接线 REDIS_ENABLED（未装客户端安全降级）；系统时钟统一 UTC",
-    "错误细节不出站：system_health、system/metrics、/overview 去 str(e)/绝对路径/表名/行数明细，原文只进日志；/encryption/status 不再回吐 KDF 迭代数；匿名反馈 content 加 5000 字上限",
-    "构建与发布：Electron 真分块读大文件、worker 路径白名单上提主进程（path-guard 单一实现）、重启计数改稳定存活口径、will-navigate file:// 白名单；卸载删除真实 userData 口径统一；CI 收录 _build_info.json 使发布件构建指纹不再恒为 dev",
-    "门禁与守卫：修复 scan_mojibake 扫得出来但拦不住（mojibake 命中从不影响退出码）与 frontend/package.json 描述双重编码损坏；pragma 理由棘轮 0 无理由；后端 12.6k 用例 / 前端 6.3k 用例全绿，双向覆盖率 100%（行+分支）"
+    "系统管理聚合页左侧分组导航：6 个聚合页由横向 tab 平铺改为「左分组 + 右内容」，30 个 tab 按语义归组；分组为纯呈现层（TAB_LAYOUT），不改后端菜单 key / tab path / 权限粒度 / ?tab= 深链，未登记的新 tab 自动落「其他」组，窄屏 ≤992px 转横向滚动",
+    "危险操作硬化：新增 useDangerConfirm（普通确认 / 高危录入确认两档）；管理员重置他人密码改为必须手工输入目标用户名才能执行；删除组织、恢复备份、轮换密钥、管理员重置密码四类动作补强制审计（organization_delete / system_restore / secrets_rotate / admin_reset_password）",
+    "离线瓦片地图：前端引入 Leaflet 栅格瓦片（RasterTileLayer.vue + utils/mapTiles.ts），瓦片包由构建机预置到 resources/map-tiles 并复制进安装包；新增切片/校验/清单工具链与 npm run tiles:verify，Windows 构建增加瓦片预置校验步骤",
+    "PII 密钥跨机迁移：新增 /system/pii-key 查看指纹、/export 导出、/import 导入（仅管理员），解决多机离线同步时各机 ENCRYPTION_KEY 不一致导致 PII 密文永不可解的问题；导出导入只记指纹不记密钥本体，环境变量显式配置时拒绝导入",
+    "ARM64 离线 OCR 出包门禁：requirements-arm64-ocr.txt + headless cv2/onnxruntime，构建期真实识别冒烟，出包后断言 DEB 载荷含 rapidocr 模型与 onnxruntime/cv2 原生库且不引入 libgl1 等外部依赖",
+    "门禁增强：新增 console tab key ↔ 前端 TAB_COMPONENTS 双向一致检查（杜绝有菜单无组件导致功能静默消失）、文档数字漂移检查（端点数/路由模块数/前端测试文件数/后端用例数）、安全审计覆盖棘轮改为动态发现全部写路由模块",
+    "备份权限：普通用户可创建备份（备份文件只落服务器、创建接口不返回内容），下载 / 恢复 / 上传恢复 / 删除仍由 require_admin 把关；viewer 与未分配角色的账号 fail-closed 拒绝",
+    "修复：R33 单位授权「单位授权配置」「导入授权包」两个 tab 因前端漏加 TAB_COMPONENTS 映射而不可见（测试契约 28 → 30 个 tab）；恢复备份审计只记录可 JSON 序列化白名单字段（避免 datetime 导致审计写入失败）",
+    "本版移出 R35 删表迁移：升级演练（从上一 Release 建库并每表播种一行）复现出「表非空即 raise」会让老用户升级中断、装完起不来，schema 维持 r34 head，后续改为归档式清理再单独发布"
   ]
 }

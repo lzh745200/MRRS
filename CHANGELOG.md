@@ -50,6 +50,12 @@
   变体统一收敛为 `--color-white-{alpha}` / `--color-black-{alpha}` / `--color-primary-a{N}` / `--color-gold-a{N}`，
   **值与原字面量逐字节等价、视觉零变化**；硬编码色棘轮维持 154 处不新增。
 - **依赖**：前端新增 `leaflet@^1.9.4`；后端 `requirements.txt` 与 PyInstaller spec 同步 OCR/瓦片相关收集项。
+- **备份权限：普通用户可创建备份**（R36）：`POST /system/backup` 的鉴权由 `require_admin` 改为
+  「已登录且非 viewer」，前端新增 `canCreateBackup` 只驱动「创建备份」按钮。
+  安全性依据：创建接口只在服务器生成文件、**不返回任何内容**；下载 `/download/{filename}`、
+  恢复 `/restore`、`/upload-restore`、删除 `DELETE /{filename}` 仍全部 `require_admin`，
+  `/request-download` 仅发站内消息给超管不返回文件，故不构成跨组织数据外流。
+  `viewer` 与未分配有效角色的账号 fail-closed 403（后者防止空角色被兜底成 user 白送写权限）。
 
 ### Deferred（本版移出，避免升级事故）
 
