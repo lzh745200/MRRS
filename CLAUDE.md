@@ -204,7 +204,7 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
     一户一档左主右辅 + 统计卡。
   - **质量门禁**：`tests/unit/ui/ui-tokens.test.ts`（Token/主题/偏好/全局类契约）、
     `tests/e2e/visual/visual-baseline.spec.ts`（10 个关键页面 DOM 结构基线，`UPDATE_VISUAL_BASELINE=1` 更新）；
-    硬编码色棘轮 `check_hardcoded_styles.py` 基线 345 → 当前 305（57 个文件；目标 ≤200，以最终基线为准），改动文件零新增。
+    硬编码色棘轮 `check_hardcoded_styles.py` 基线 345 → 当前 **154**（40 个文件；**目标 ≤200 已达成**），改动文件零新增。
 - **UI 精细化方案 C** (2026-10-20, v1.15.15):
   - **侧栏品牌区**：系统标识名 16→**20px / 800 单行**（logo 36px、侧栏头 64px），修正品牌名低于板块标题（18px）的层级倒挂；
     工作台提升为板块级入口（18px/700、Home 图标），与 7 板块标题同构。
@@ -216,7 +216,10 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
     （19 个列表页接入、全站 31 页），新页面必须复用，禁止手写标题区。
   - **全局精细化层**：`frontend/src/styles/components/ui-refine.scss`（筛选栏/表格规范 + 8px 栅格 +
     响应式断点 1200/992/768）；设计契约见 `docs/design/{tokens,pages,components}.md`。
-  - 质量口径：硬编码色棘轮当前 **305**（基线 345，57 个文件，目标 ≤200），改动文件零新增。
+  - 质量口径：硬编码色棘轮当前 **154**（基线 345，40 个文件，**目标 ≤200 已达成**），改动文件零新增。
+    v1.15.19 起 `rgba(255,255,255,x)` / `rgba(0,0,0,x)` / 主色与金色的低透明度变体统一收敛为
+    `tokens.scss` 的「透明度阶梯」Token（`--color-white-{alpha}` / `--color-black-{alpha}` /
+    `--color-primary-a{N}` / `--color-gold-a{N}`），值与原字面量逐字节等价、视觉零变化。
 - **一户一档入口收敛** (2026-10-20, v1.15.15):
   - 「一户一档」不再占侧栏一级菜单；入口 = **帮扶村管理 → 年度数据管理**页首张卡片
     （`/households?village_id=<村ID>`，列表按村预筛选）。
@@ -224,6 +227,14 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
     深链守卫兼容）；前端路由 `meta.menuKey` 改为 `villages`（跟随帮扶村管理权限）；
     旧链接 `/households`、`/households/:id` 保留可直达。
   - 需要挂靠帮扶村权限的新页面按此模式复用 `meta.menuKey`，不要新增侧栏一级菜单。
+- **危险操作硬化** (2026-10-21, v1.15.18 批次 3): 四类不可逆/高影响操作必须二次确认且写审计 ——
+  删除组织（`X-Confirm-Password` 请求头验密）、恢复备份（红色警告弹窗 + 加密包密码）、
+  轮换密钥（令牌全失效提示）、**管理员重置他人密码（必须手工输入目标用户名）**。
+  前端统一走 `composables/useDangerConfirm.ts`（`confirmDanger({ typedConfirmation })` 为高危录入确认；
+  取消/关闭一律返回 `false`、绝不抛错）。新增危险操作必须复用该 composable，禁止各写一套。
+  后端四端点已补 `AuditLogger.log`，动作名 `organization_delete` / `system_restore` /
+  `secrets_rotate` / `admin_reset_password`（`details` 只放可 JSON 序列化字段：
+  恢复结果里的 datetime 会让 JSON 列写入失败）。
 - **软删除模式** (2026-07-05): 模型使用 `is_active` 列（Boolean, default=True）。`is_active=False`=已删除。列表端点默认过滤 `is_active=True`，`include_deleted=true` 显示全部（管理员）。`to_dict()` 暴露 `isDeleted`/`is_deleted`。已应用于 `SupportedVillage`、`School`、`Project`、`Fund`。
 - **软删除权限收敛** (2026-07-20): `include_deleted` 参数通过 `enforce_admin_include_deleted` 依赖（`app/api/v1/deps.py`）统一收敛。非管理员传入 `include_deleted=true` 静默降级为 `False`（不抛 403）。4 个端点（supported-villages/schools/projects/funds）均使用 `Depends(enforce_admin_include_deleted)`。详情端点返回 `viewableBecause` 元数据（`build_viewable_because()` 函数）。`SoftDeleteMixin` 预留 `deleted_by` 审计字段。回归测试：`tests/unit/api/test_include_deleted_enforcement.py`（49 项）、E2E：`tests/unit/test_soft_delete_e2e.py`（2 项）。
 - **统一列表响应** (2026-07-08): 所有列表端点已使用 `ok_list()` (envelope)。新增列表端点必须使用 `ok_list()` 而非裸 dict。前端 `_unwrapList()` 仍兼容两种格式以保证向后兼容。
