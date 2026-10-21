@@ -12,20 +12,22 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
 // vi.mock 工厂提升求值，引用对象须先放入 vi.hoisted 初始化
-const { userState, ElMessage, confirmMock, logError, apiMock, copyMock } = vi.hoisted(() => {
-  return {
-    userState: { currentUser: { role: 'admin' } as any },
-    ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
-    confirmMock: vi.fn(),
-    logError: vi.fn(),
-    apiMock: {
-      listMachineCodes: vi.fn(),
-      createMachineCode: vi.fn(),
-      revokeMachineCode: vi.fn(),
-    },
-    copyMock: vi.fn(),
-  }
-})
+const { userState, ElMessage, confirmMock, logError, apiMock, copyMock, pushSafeMock } =
+  vi.hoisted(() => {
+    return {
+      userState: { currentUser: { role: 'admin' } as any },
+      ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+      confirmMock: vi.fn(),
+      logError: vi.fn(),
+      apiMock: {
+        listMachineCodes: vi.fn(),
+        createMachineCode: vi.fn(),
+        revokeMachineCode: vi.fn(),
+      },
+      copyMock: vi.fn(),
+      pushSafeMock: vi.fn(),
+    }
+  })
 
 vi.mock('element-plus', () => ({
   ElMessage,
@@ -52,6 +54,11 @@ vi.mock('@/utils', () => ({
 
 vi.mock('@/utils/clipboard', () => ({
   copyToClipboard: copyMock,
+}))
+
+// 批次 3：批量复制与单位授权快捷入口会用到路由跳转
+vi.mock('@/composables/useRouterSafe', () => ({
+  useRouterSafe: () => ({ pushSafe: pushSafeMock }),
 }))
 
 import MachineCodeManagement from '@/views/admin/MachineCodeManagement.vue'
@@ -128,6 +135,38 @@ beforeEach(() => {
   copyMock.mockResolvedValue(true)
 })
 
+describe('批次 3 设备与授权中心增强', () => {
+  it('批量复制：未选中时直接返回；选中后按行拼接复制机器码/通行码', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    await vm.copySelectedCodes()
+    await vm.copySelectedPassCodes()
+    expect(copyMock).not.toHaveBeenCalled()
+
+    vm.handleSelectionChange([recA, recB])
+    expect(vm.selectedRows).toHaveLength(2)
+
+    await vm.copySelectedCodes()
+    expect(copyMock).toHaveBeenCalledWith(recA.machine_code + '\n' + recB.machine_code, '已复制 2 条机器码')
+
+    await vm.copySelectedPassCodes()
+    expect(copyMock).toHaveBeenCalledWith(recA.pass_code + '\n' + recB.pass_code, '已复制 2 条通行码')
+  })
+
+  it('单位授权快捷入口：跳转单位授权配置 / 导入授权包', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.goOrgGrant()
+    expect(pushSafeMock).toHaveBeenCalledWith('/system/org-grant', '单位授权配置')
+
+    vm.goGrantImport()
+    expect(pushSafeMock).toHaveBeenCalledWith('/system/grant-import', '导入授权包')
+  })
+})
 describe('权限与挂载', () => {
   it('super_admin / admin 均可访问；非管理员与 currentUser 缺失渲染 el-empty', async () => {
     userState.currentUser = { role: 'super_admin' }

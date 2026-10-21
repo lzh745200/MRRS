@@ -1025,6 +1025,18 @@ async def admin_reset_password(
     user.must_change_password = True
     safe_commit(db)
 
+    # 批次 3（危险操作强制审计）：管理员重置他人密码 = 账号接管级操作
+    from app.utils.audit_logger import AuditLogger
+
+    AuditLogger.log(
+        action="admin_reset_password",
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", ""),
+        resource_type="user",
+        resource_id=user_id,
+        details={"target_username": user.username, "forced_change": True},
+    )
+
     return {"code": 200, "message": "密码重置成功"}
 
 

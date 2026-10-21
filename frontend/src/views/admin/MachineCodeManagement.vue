@@ -41,8 +41,36 @@
                 </el-form-item>
               </el-form>
 
+              <!-- 批量操作（批次 3：设备与授权中心） -->
+              <div class="batch-bar">
+                <span class="batch-hint">已选 {{ selectedRows.length }} 条</span>
+                <el-button :disabled="selectedRows.length === 0" @click="copySelectedCodes">
+                  <el-icon><CopyDocument /></el-icon>
+                  复制所选机器码
+                </el-button>
+                <el-button :disabled="selectedRows.length === 0" @click="copySelectedPassCodes">
+                  <el-icon><CopyDocument /></el-icon>
+                  复制所选通行码
+                </el-button>
+                <el-button text type="primary" @click="goOrgGrant">
+                  单位授权配置
+                  <el-icon><ArrowRight /></el-icon>
+                </el-button>
+                <el-button text type="primary" @click="goGrantImport">
+                  导入授权包
+                  <el-icon><ArrowRight /></el-icon>
+                </el-button>
+              </div>
+
               <!-- 机器码列表 -->
-              <el-table v-loading="loading" :data="machineCodeList" border style="width: 100%">
+              <el-table
+                v-loading="loading"
+                :data="machineCodeList"
+                border
+                style="width: 100%"
+                @selection-change="handleSelectionChange"
+              >
+                <el-table-column type="selection" width="48" />
                 <el-table-column type="index" label="序号" width="72" />
                 <el-table-column prop="machine_code" label="机器码" min-width="200">
                   <template #default="{ row }">
@@ -218,7 +246,8 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { logger } from '@/utils/logger'
-import { Plus, CopyDocument, Refresh, Search } from '@element-plus/icons-vue'
+import { Plus, CopyDocument, Refresh, Search, ArrowRight } from '@element-plus/icons-vue'
+import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useUserStore } from '@/stores/user'
 import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import PassCodeManagement from '@/views/organization/PassCodeManagement.vue'
@@ -237,8 +266,39 @@ const isAdmin = computed(() => {
   return ADMIN_ROLES.includes(role)
 })
 
+const { pushSafe } = useRouterSafe()
 const activeTab = ref('machineCodes')
 const loading = ref(false)
+/** 表格多选行（批次 3：批量复制机器码/通行码） */
+const selectedRows = ref<MachineCodeRecord[]>([])
+
+function handleSelectionChange(rows: MachineCodeRecord[]) {
+  selectedRows.value = rows
+}
+
+/** 批量复制机器码（换行分隔，便于直接粘贴到表格/邮件） */
+async function copySelectedCodes() {
+  if (selectedRows.value.length === 0) return
+  const text = selectedRows.value.map((row) => row.machine_code).join('\n')
+  await copyToClipboard(text, `已复制 ${selectedRows.value.length} 条机器码`)
+}
+
+/** 批量复制通行码 */
+async function copySelectedPassCodes() {
+  if (selectedRows.value.length === 0) return
+  const text = selectedRows.value.map((row) => row.pass_code).join('\n')
+  await copyToClipboard(text, `已复制 ${selectedRows.value.length} 条通行码`)
+}
+
+/** 单位授权配置（上级单位下发授权包） */
+function goOrgGrant() {
+  pushSafe('/system/org-grant', '单位授权配置')
+}
+
+/** 导入授权包（下级单位执行上级授权） */
+function goGrantImport() {
+  pushSafe('/system/grant-import', '导入授权包')
+}
 const submitting = ref(false)
 const createDialogVisible = ref(false)
 const passCodeDialogVisible = ref(false)
@@ -418,6 +478,21 @@ onMounted(() => {
 <style scoped lang="scss">
 .machine-code-management {
   padding: 20px;
+}
+
+/* 批次 3：批量操作条（设备与授权中心） */
+.batch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.batch-hint {
+  margin-right: 4px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
 }
 
 .card-header {

@@ -891,6 +891,17 @@ async def delete_organization(
     except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         logger.debug("记录工作日志失败", exc_info=True)
     logger.info(f"删除成功: org_id={org_id}")
+    # 批次 3（危险操作强制审计）：删除组织属高影响操作，必须留审计痕迹
+    from app.utils.audit_logger import AuditLogger
+
+    AuditLogger.log(
+        action="organization_delete",
+        user_id=current_user.id,
+        username=getattr(current_user, "username", ""),
+        resource_type="organization",
+        resource_id=org_id,
+        details={"name": org.name, "type": "soft_delete"},
+    )
     await cache_manager.delete("orgs:list")
     _invalidate_dashboard_cache_safe()
 

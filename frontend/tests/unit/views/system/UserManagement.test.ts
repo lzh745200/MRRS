@@ -840,6 +840,36 @@ describe('重置密码', () => {
     expect(vm.resetPwdDialogVisible).toBe(true)
   })
 
+  it('批次 3：取消高危二次确认 → 不调用重置接口（含 username 缺失兜底）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 目标用户没有 username：覆盖 targetUsername 的 ?? '' 兜底
+    vm.handleResetPassword({ id: 9 })
+    vm.resetPwdForm.newPassword = 'New#Pass123'
+    promptMock.mockRejectedValueOnce('cancel')
+
+    await vm.confirmResetPassword()
+
+    expect(mockPost).not.toHaveBeenCalled()
+  })
+
+  it('批次 3：高危二次确认通过后才调用重置接口，并提示强制改密', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.handleResetPassword(sampleUser)
+    vm.resetPwdForm.newPassword = 'New#Pass123'
+    mockPost.mockResolvedValueOnce({ code: 200 })
+    promptMock.mockResolvedValueOnce({ value: sampleUser.username })
+
+    await vm.confirmResetPassword()
+
+    expect(mockPost).toHaveBeenCalledWith('/users/' + sampleUser.id + '/admin-reset-password', {
+      new_password: 'New#Pass123',
+    })
+    expect(promptMock).toHaveBeenCalled()
+  })
   it('confirmResetPassword：空密码 → 警告并返回', async () => {
     const wrapper = mountComp()
     await flushPromises()

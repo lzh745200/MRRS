@@ -185,6 +185,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { usePermissionPackTransfer } from '@/composables/usePermissionPackTransfer'
 import PermissionAssignmentDrawer from '@/components/permission/PermissionAssignmentDrawer.vue'
+import { useDangerConfirm } from '@/composables/useDangerConfirm'
 import UserTableCard from './components/UserTableCard.vue'
 import PendingUsersDialog from './components/PendingUsersDialog.vue'
 import ResetPasswordDialog from './components/ResetPasswordDialog.vue'
@@ -192,6 +193,7 @@ import PermissionPackExportDialog from './components/PermissionPackExportDialog.
 import UserFormDialog from './components/UserFormDialog.vue'
 
 const authStore = useAuthStore()
+const { confirmDanger } = useDangerConfirm()
 const isAdmin = computed(() => authStore.isAdmin)
 const { ds } = useDesensitize()
 const route = useRoute()
@@ -672,6 +674,19 @@ const confirmResetPassword = async () => {
     ElMessage.warning('请输入或生成新密码')
     return
   }
+
+  // 批次 3：管理员重置他人密码属账号接管级操作 → 必须手工输入目标用户名才能执行
+  const targetUsername = String(currentUser.value?.username ?? '')
+  const confirmed = await confirmDanger({
+    title: '确认重置密码',
+    message:
+      `即将重置用户「${targetUsername}」的密码。\n\n` +
+      '执行后该用户全部登录令牌立即失效，且下次登录会被强制改密。\n' +
+      '请确认你确实要接管该账号。',
+    confirmButtonText: '确认重置',
+    typedConfirmation: targetUsername,
+  })
+  if (!confirmed) return
 
   try {
     const newPwd = resetPwdForm.newPassword

@@ -7,6 +7,41 @@
     direction="rtl"
     @close="handleClose"
   >
+    <!-- 批次 3：生效概览 —— 身份 / 组织 / 角色 / 数据范围 / 权限来源一屏可见 -->
+    <div class="effective-summary" data-testid="permission-effective-summary">
+      <div class="summary-row">
+        <span class="summary-label">用户</span>
+        <span class="summary-value">
+          {{ user?.username || '-' }}
+          <span v-if="user?.full_name" class="summary-sub">（{{ user.full_name }}）</span>
+        </span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">系统角色</span>
+        <span class="summary-value">{{ roleLabel }}</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">数据范围</span>
+        <span class="summary-value">{{ dataScopeLabel }}</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">菜单权限</span>
+        <span class="summary-value">
+          {{ isMenuCustomized ? '自定义（逐项指定）' : '沿用角色默认' }}
+          <span class="summary-sub">
+            · 生效 {{ currentMenuKeys.length }} 项
+            <template v-if="!isMenuCustomized"
+              >（角色默认 {{ roleDefaultKeys.length }} 项）</template
+            >
+          </span>
+        </span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">RBAC 角色</span>
+        <span class="summary-value">{{ allRoles.length }} 个可选</span>
+      </div>
+    </div>
+
     <el-tabs v-model="activeTab" type="border-card">
       <!-- Tab 1: 角色分配 -->
       <el-tab-pane label="角色分配" name="roles">
@@ -164,6 +199,35 @@ let loadSeq = 0
 const legacyForm = ref({
   role: '',
   data_scope: '',
+})
+
+/** 系统角色中文标签（与全站 4 角色口径一致） */
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: '超级管理员',
+  admin: '管理员',
+  user: '普通用户',
+  viewer: '只读用户',
+}
+
+/** 当前生效的系统角色（优先抽屉里已加载的角色，其次用户身上的角色） */
+const roleLabel = computed(() => {
+  const role = legacyForm.value.role || props.user?.role || ''
+  if (!role) return '未设置'
+  return ROLE_LABELS[role] ? `${ROLE_LABELS[role]}（${role}）` : role
+})
+
+/** 数据范围中文标签 */
+const DATA_SCOPE_LABELS: Record<string, string> = {
+  all: '全部数据',
+  org_children: '本组织及子组织',
+  org: '本组织',
+  self: '仅本人',
+}
+
+const dataScopeLabel = computed(() => {
+  const scope = legacyForm.value.data_scope || props.user?.data_scope || ''
+  if (!scope) return '未设置'
+  return DATA_SCOPE_LABELS[scope] ? `${DATA_SCOPE_LABELS[scope]}（${scope}）` : scope
 })
 
 // ── 加载数据 ──
@@ -363,6 +427,39 @@ defineExpose({
 </script>
 
 <style scoped lang="scss">
+/* 批次 3：生效概览（只用设计 Token，无硬编码色值） */
+.effective-summary {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  background: var(--color-fill-light);
+}
+
+.summary-row {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.summary-label {
+  flex: 0 0 72px;
+  color: var(--color-text-secondary);
+}
+
+.summary-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+
+.summary-sub {
+  color: var(--color-text-secondary);
+}
+
 .legacy-section {
   padding: 8px 0;
 }

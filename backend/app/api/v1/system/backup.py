@@ -771,6 +771,17 @@ async def restore_backup(
             "系统已从备份恢复: %s，操作人: %s",
             body.filename, getattr(current_user, "username", "unknown"),
         )
+        # 批次 3（危险操作强制审计）：恢复备份覆盖全库，必须留审计痕迹
+        from app.utils.audit_logger import AuditLogger
+
+        AuditLogger.log(
+            action="system_restore",
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", "unknown"),
+            resource_type="backup",
+            resource_id=body.filename,
+            details={"result": result},
+        )
 
         # 恢复后建议重启服务以回收 SQLite 连接池
         logger.warning(

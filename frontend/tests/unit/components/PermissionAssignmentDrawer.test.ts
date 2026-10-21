@@ -185,6 +185,48 @@ describe('PermissionAssignmentDrawer.vue', () => {
     ])
   })
 
+  it('批次 3 生效概览：展示用户/系统角色/数据范围/权限来源', async () => {
+    const wrapper = mountDrawer({ user })
+    await flushPromises()
+
+    const summary = wrapper.find('[data-testid="permission-effective-summary"]')
+    expect(summary.exists()).toBe(true)
+    const text = summary.text()
+    expect(text).toContain('zhangsan')
+    // 系统角色 admin → 中文标签 + 原始值
+    expect(text).toContain('管理员（admin）')
+    // 数据范围 org → 中文标签 + 原始值
+    expect(text).toContain('本组织（org）')
+    // 权限来源：由 mock 的菜单配置决定（isCustomized=true → 自定义）
+    expect(text).toContain('自定义（逐项指定）')
+    expect(text).toContain('生效')
+  })
+
+  it('批次 3 生效概览：有全名时展示（姓名）副标题', async () => {
+    const wrapper = mountDrawer({
+      user: { id: 5, username: 'sunqi', full_name: '孙七', role: 'viewer', data_scope: 'self' },
+    })
+    await flushPromises()
+    const text = wrapper.find('[data-testid="permission-effective-summary"]').text()
+    expect(text).toContain('sunqi')
+    expect(text).toContain('孙七')
+    expect(text).toContain('只读用户（viewer）')
+    expect(text).toContain('仅本人（self）')
+  })
+
+  it('批次 3 生效概览：角色/数据范围为未知值时回退原始值，缺失时显示未设置', async () => {
+    const unknown = mountDrawer({ user: { id: 3, username: 'wangwu', role: 'legacy_role', data_scope: 'weird' } })
+    await flushPromises()
+    const unknownText = unknown.find('[data-testid="permission-effective-summary"]').text()
+    expect(unknownText).toContain('legacy_role')
+    expect(unknownText).toContain('weird')
+
+    // 无用户（未发起加载）→ legacyForm 为空 → 角色与数据范围都显示「未设置」
+    const empty = mountDrawer({ user: null })
+    await flushPromises()
+    const emptyText = empty.find('[data-testid="permission-effective-summary"]').text()
+    expect(emptyText.match(/未设置/g)?.length).toBe(2)
+  })
   it('无 user 时不发起加载请求；保存函数提前返回', async () => {
     const wrapper = mountDrawer({ user: null })
     await flushPromises()

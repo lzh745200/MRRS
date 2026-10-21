@@ -48,6 +48,17 @@ async def rotate_key(
     _require_admin(current_user)
     try:
         new_version = secrets_manager.rotate_key(version_id)
+        # 批次 3（危险操作强制审计）：密钥轮换会使全部既有密文/令牌受影响
+        from app.utils.audit_logger import AuditLogger
+
+        AuditLogger.log(
+            action="secrets_rotate",
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", ""),
+            resource_type="secrets",
+            resource_id=version_id,
+            details={"new_version": new_version},
+        )
         return success_response(data={"message": "密钥轮换成功", "new_version": new_version}, message="密钥轮换成功")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
