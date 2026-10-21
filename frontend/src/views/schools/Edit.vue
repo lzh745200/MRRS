@@ -444,7 +444,7 @@ onMounted(() => {
 .edit-card {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border-light);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px var(--color-black-8);
 }
 
 .card-header {

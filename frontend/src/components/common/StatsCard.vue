@@ -61,12 +61,12 @@ const trendText = computed(() => {
   background: var(--color-bg-card);
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 12px var(--color-black-6);
   transition: box-shadow 0.3s ease;
 }
 
 .stats-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 16px var(--color-black-10);
 }
 
 .stats-card__header {

@@ -246,7 +246,7 @@ onUnmounted(() => {
   transition: box-shadow 0.25s ease;
 
   &:hover {
-    box-shadow: var(--dash-card-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.06));
+    box-shadow: var(--dash-card-shadow-md, 0 4px 12px var(--color-black-6));
   }
 }
 

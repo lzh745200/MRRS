@@ -1008,7 +1008,7 @@ class TestMachineCodeServiceBranches:
 
 
 class TestOfflineMapServiceBranches:
-    """offline_map_service.py 106->105 与 151->153。"""
+    """offline_map_service.py 106->105（缓存目录中的普通文件不计入瓦片统计）。"""
 
     async def test_coverage_ignores_non_directory_entries(self, tmp_path):
         """106->105：缓存目录中的普通文件不计入瓦片统计。"""
@@ -1020,12 +1020,18 @@ class TestOfflineMapServiceBranches:
         assert stats["total_tiles"] == 0
         assert stats["zoom_levels"] == []
 
-    def test_download_region_idempotent(self, tmp_path):
-        """151->153：重复下载同一区域不重复登记。"""
-        svc = OfflineMapService(cache_dir=tmp_path / "tiles2")
-        assert svc.download_region("region-x") is True
-        assert svc.download_region("region-x") is True
-        assert svc._downloaded_regions == ["region-x"]
+    async def test_coverage_skips_png_in_non_zoom_dir(self, tmp_path):
+        """扫描只看 z/x/*.png：非数字缩放目录与非 png 文件均跳过。"""
+        cache_dir = tmp_path / "tiles"
+        (cache_dir / "tmp" / "1").mkdir(parents=True)
+        (cache_dir / "tmp" / "1" / "2.png").write_bytes(b"fake")
+        (cache_dir / "10" / "1").mkdir(parents=True)
+        (cache_dir / "10" / "1" / "2.png").write_bytes(b"tile")
+        (cache_dir / "10" / "stray.txt").write_bytes(b"x")
+        svc = OfflineMapService(cache_dir=cache_dir)
+        stats = await svc.get_coverage()
+        assert stats["total_tiles"] == 1
+        assert stats["zoom_levels"] == [10]
 
 
 class TestReportExportServiceBranches:

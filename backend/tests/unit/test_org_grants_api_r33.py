@@ -4,7 +4,8 @@
 覆盖点：
 - `_require_admin_and_reach` 的三种结果（非管理员 403 / 单位不存在 404 / 通过）；
 - 导入：空文件、超大文件、包不合法（400）、成功（落库 + 返回版本与模块数）；
-- 导出：单位缺 code（400）、成功（返回 JSON 下载，版本号 +1）；
+- 导出：单位缺 code（400）、成功（返回 JSON 下载，版本号 +1 **并落库**）、
+  连续导出不重复版本、导出失败不消耗版本号；
 - 查询：返回矩阵与元信息（含 applied_at 有值/无值两条分支）；
 - 设置：非法级别 400、成功（**替换**语义 + 版本递增 + source=local）。
 """
@@ -166,6 +167,39 @@ class TestExport:
         with pytest.raises(HTTPException) as exc:
             api.export_grant_package(org.id, db=db, current_user=ADMIN)
         assert exc.value.status_code == 400
+        # 失败的导出不得消耗版本号（落库必须发生在 build_package 成功之后）
+        db.refresh(org)
+        assert org.grant_version == 0
+
+    def test_export_persists_version(self, db):
+        """导出的 version+1 必须落库。
+
+        回归 R34-1：原实现只在包里写 version+1 而不落库，连续两次导出产出
+        相同版本号，下级机第二次导入被「拒绝降级导入」挡掉。
+        """
+        org = _org(db, version=2)
+        db.add(OrgGrant(organization_id=org.id, module_key="projects", level="view"))
+        db.commit()
+
+        resp = api.export_grant_package(org.id, db=db, current_user=ADMIN)
+        assert json.loads(resp.body.decode("utf-8"))["version"] == 3
+
+        db.refresh(org)
+        assert org.grant_version == 3
+
+    def test_consecutive_exports_never_reuse_version(self, db):
+        """两次导出必须产出不同版本，否则下级机无法二次导入。"""
+        org = _org(db, version=0)
+        db.add(OrgGrant(organization_id=org.id, module_key="projects", level="view"))
+        db.commit()
+
+        v1 = json.loads(
+            api.export_grant_package(org.id, db=db, current_user=ADMIN).body.decode("utf-8")
+        )["version"]
+        v2 = json.loads(
+            api.export_grant_package(org.id, db=db, current_user=ADMIN).body.decode("utf-8")
+        )["version"]
+        assert (v1, v2) == (1, 2)
 
 
 class TestGet:
@@ -192,6 +226,29 @@ class TestGet:
 
 
 class TestSet:
+    def test_matrix_brief_empty(self):
+        """空矩阵摘要为空串（审计消息不出现 None，也不抛异常）。"""
+        assert api._matrix_brief({}) == ""
+
+    def test_writes_audit_log(self, db, monkeypatch):
+        """授权矩阵变更属权限提升操作，必须留痕并记录变更前后差异（P1-3）。"""
+        calls = []
+        monkeypatch.setattr(api, "write_work_log",
+                            lambda *a, **kw: calls.append((a, kw)))
+        org = _org(db, version=1)
+        db.add(OrgGrant(organization_id=org.id, module_key="old", level="edit"))
+        db.commit()
+
+        api.set_org_grants(org.id, api.GrantSetRequest(grants={"projects": "view"}),
+                           db=db, current_user=ADMIN)
+
+        assert len(calls) == 1
+        args, kwargs = calls[0]
+        assert args[0] is db
+        assert (args[1], args[2], args[3]) == ("system_config", "grant_set", org.id)
+        assert "old=edit" in args[4] and "projects=view" in args[4]
+        assert kwargs["username"] == "admin"
+
     def test_invalid_level(self, db):
         org = _org(db)
         body = api.GrantSetRequest(grants={"projects": "own"})

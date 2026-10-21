@@ -5,52 +5,72 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布] — 2026-10-21 系统管理批次 3：危险操作硬确认 + 强制审计 + 一体化抽屉 + 设备授权中心
+## [1.16.0] - 2026-10-21 — 系统管理梳理（分组导航 / 危险操作硬化）+ 离线瓦片地图 + PII 密钥跨机迁移 + 架构清理
 
 ### Added
 
+- **PII 密钥跨机迁移 API**（`api/v1/system/pii_key.py`，R34-2 / P1-2）：多机离线同步时 PII 列以密文出包，
+  要求各机 `ENCRYPTION_KEY` 一致，但默认每台机各自随机生成 → 同步到对端后密文永不可解（界面只显示 `enc.v1:…`）。
+  新增 `GET /system/pii-key`（查看指纹与配置来源）、`GET /system/pii-key/export`、`POST /system/pii-key/import`；
+  三个端点仅管理员可用，导出/导入写审计（**只记指纹不记密钥本体**），环境变量显式配置时拒绝导入（避免误以为已生效）。
+- **离线瓦片地图**：前端引入 Leaflet（`leaflet` + `@types/leaflet`）、新增 `components/map/RasterTileLayer.vue`
+  与 `utils/mapTiles.ts`；地图页改为栅格瓦片渲染，瓦片包由构建机预置（`resources/map-tiles/`，本体不进 git）。
+  Electron 打包配置把 `map-tiles` 复制进安装包；新增 `npm run tiles:verify`。
+- **瓦片工具链** `scripts/tiles/`：切片/校验/清单（MANIFEST.json）生成，`verify_tiles.py --require-min N` 作为门禁；
+  Windows 构建增加「Verify map tiles preset」步骤（默认允许 0 张，仓库变量 `MAP_TILES_REQUIRED=1` 时强制）。
+- **ARM64 离线 OCR 出包门禁**（E 区）：`requirements-arm64-ocr.txt` + Dockerfile 安装 headless cv2/onnxruntime，
+  构建期跑 `docker/ocr_smoke_arm64.py` 真实识别冒烟；出包后断言 DEB 载荷含 rapidocr ONNX 模型、
+  `onnxruntime_pybind11_state`、`cv2.*.so`，且 `Depends` 不含 libgl1/libgomp1/libglib2.0（保持零外部依赖）。
+- **本地等价 CI 的分段测试执行器** `scripts/run_backend_tests_segmented.py`（12 段 + `--cov-append` 合并，
+  绕开单进程在 88% 处 SQLAlchemy `engine.dispose()` 的 Windows access violation）。
+- **文档数字漂移门禁** `scripts/check_doc_numbers.py`（端点数 / 路由模块数 / 前端测试文件数 / 后端用例数）。
+- **安全审计覆盖棘轮**：`scripts/security_audit.py` 改为**动态发现**全部写路由模块，与
+  `backend/scripts/gate_baselines/audit_work_log_baseline.json` 比对，基线外新增即失败。
 - **危险操作统一二次确认**：新增 `composables/useDangerConfirm.ts`（普通确认 / 高危录入确认两种强度），
   管理员**重置他人密码**改为「必须手工输入目标用户名」才能执行（此前点一下按钮即可接管账号）。
 - **危险操作强制审计**（后端补 4 处 `AuditLogger.log`）：
   删除组织 `organization_delete`、恢复备份 `system_restore`、轮换密钥 `secrets_rotate`、
   管理员重置密码 `admin_reset_password` —— 均可在「安全与审计 → 安全审计」按操作类型检索。
 - **权限抽屉「生效概览」**（`PermissionAssignmentDrawer.vue`）：顶部一屏展示用户（含姓名）、
-  系统角色、数据范围（中文 + 原值）、菜单权限来源（自定义 / 沿用角色默认 + 生效项数）、RBAC 可选角色数，
-  免去在三个页签间来回确认。
-- **设备与授权中心**（`MachineCodeManagement.vue`）：表格支持多选 →
-  「复制所选机器码 / 复制所选通行码」（按行换行拼接）；顶部新增「单位授权配置」「导入授权包」直达入口；
-  原「组织通行码」页签完整保留。
+  系统角色、数据范围（中文 + 原值）、菜单权限来源（自定义 / 沿用角色默认 + 生效项数）、RBAC 可选角色数。
+- **设备与授权中心**（`MachineCodeManagement.vue`）：表格支持多选 → 复制所选机器码 / 通行码；
+  顶部新增「单位授权配置」「导入授权包」直达入口；原「组织通行码」页签完整保留。
+- **聚合页左侧分组导航**（`SystemConsole.vue`）：系统管理 6 个聚合页由横向 tab 平铺改为「左分组 + 右内容」，
+  分组为**纯呈现层**（`TAB_LAYOUT`），不改后端菜单 key / tab path / 权限粒度 / `?tab=` 深链；
+  未登记的新 tab 自动落「其他」组，窄屏 ≤992px 转横向滚动。
+- **Ctrl+K 菜单搜索直达系统管理子功能**（`stores/menu.ts`）：console 的 30 个 tab 进入 `flatEntries`
+  （带 `parentLabel`/`tabKey`），搜索「权限包管理」「备份」「机器码」可直接跳 `?tab=<key>`；
+  最近访问 / 收藏 / 移动端「更多」抽屉同步支持 `tabKey` 回跳。
+- **新增门禁 `scripts/check_console_tab_mapping.py`**（CI static-analysis）：后端 console tab key ↔ 前端
+  `TAB_COMPONENTS` 双向一致，杜绝「有菜单无组件」导致功能静默消失。
 
-### Docs
+### Changed
 
-- `docs/02-用户手册/系统管理操作说明.md` 增补第七章「本次增强的操作变化」，逐项说明四类危险操作的确认方式
-  与审计动作名、抽屉概览字段、批量复制与授权入口、Ctrl+K 直达范围。
+- **透明度 Token 收敛**（`styles/tokens.scss`）：`rgba(255,255,255,x)` / `rgba(0,0,0,x)` / 主色与金色低透明度
+  变体统一收敛为 `--color-white-{alpha}` / `--color-black-{alpha}` / `--color-primary-a{N}` / `--color-gold-a{N}`，
+  **值与原字面量逐字节等价、视觉零变化**；硬编码色棘轮维持 154 处不新增。
+- **依赖**：前端新增 `leaflet@^1.9.4`；后端 `requirements.txt` 与 PyInstaller spec 同步 OCR/瓦片相关收集项。
 
-## [未发布] — 2026-10-21 系统管理结构梳理（R35）：聚合页分组导航 + 菜单搜索直达子功能
+### Removed
 
-### Added
-
-- **聚合页左侧分组导航**（`SystemConsole.vue`）：系统管理 6 个聚合页原先把 tab 横向平铺
-  （运维与监控 7 项在小屏溢出），现改为「左侧分组导航 + 右侧内容」。分组为**纯呈现层**
-  （`TAB_LAYOUT` 前端映射），**不改变**后端菜单 key / tab path / 权限粒度 / `?tab=` 深链语义；
-  后端新增未登记的 tab 自动落入「其他」分组，入口不丢。
-  分组：组织与权限（账号与组织 / 权限配置 / 组织与单位）、安全与审计（审计 / 访问控制 / 密钥与加密）、
-  运维与监控（运行状态 / 任务与日志）、备份与存储（备份 / 数据包与存储）、系统设置、关于与反馈。
-  窄屏（≤992px）自动转为横向滚动分组条。
-- **Ctrl+K 菜单搜索直达系统管理子功能**（`stores/menu.ts` → `buildFlatEntries`）：
-  console 的 30 个 tab 现在也进入 `flatEntries`（带 `parentLabel` 与 `tabKey`），
-  搜索「权限包管理」「备份」「机器码」可直接跳转 `/system/console/<group>?tab=<key>`；
-  最近访问 / 收藏（`NavMenuRecord`）与移动端「更多」抽屉同步支持 `tabKey` 回跳。
+- **R35 迁移清理 6 张零引用空表**（`r35_drop_legacy_tables_001.py`）：`comments` / `messages_extended` /
+  `sentiment_keywords` / `sentiment_reports` / `workflow_definitions` / `workflow_instances`。
+  逐表 `EXISTS` 检查幂等；**删除前断言表为空**（有数据直接 raise，绝不静默丢数据）；
+  先删子表再删其余；`downgrade` 显式 `NotImplementedError`（空表不可恢复索引/约束语义）。
 
 ### Fixed
 
-- **R33 单位授权两个 tab 在聚合页不可见**：后端 `menus.py` 早已下发
-  `system-org-grant` / `system-grant-import`，但前端 `TAB_COMPONENTS` 漏加映射，
-  被 `renderableTabs` 静默过滤 → 用户只能手输 URL 才能进入「单位授权配置 / 导入授权包」。
-  已补齐映射，并把 `SystemConsole` 测试契约从 28 个 tab 更新到 30 个。
-- **新增门禁 `scripts/check_console_tab_mapping.py`**（接入 CI static-analysis）：
-  校验「后端 console tab key」与「前端 TAB_COMPONENTS」双向一致，
-  以后任何新增 tab 忘了加组件（或残留僵尸映射）都会直接让 CI 变红。
+- **R33 单位授权两个 tab 在聚合页不可见**：后端 `menus.py` 早已下发 `system-org-grant` / `system-grant-import`，
+  但前端 `TAB_COMPONENTS` 漏加映射，被 `renderableTabs` 静默过滤 → 只能手输 URL 才进得去。已补齐，
+  测试契约 28 → 30 个 tab。
+- **恢复备份审计只记可 JSON 序列化白名单字段**：恢复结果含 datetime 会让 `audit_logs.new_value` 写入失败，
+  虽被兜底吞掉但审计会丢，改为 `{filename, restored}`。
+
+### Docs
+
+- 新增 `docs/02-用户手册/系统管理操作说明.md`（6 聚合页 / 30 功能分组总览 + 逐项操作 + 危险操作确认与审计动作名）。
+- 新增《离线OCR与瓦片预置方案》《离线功能适用性核查报告》；技术栈说明 / 麒麟 V10 部署方案同步更新。
+- `CLAUDE.md` 增补「危险操作硬化」约定与分段测试/文档数字门禁说明。
 
 ## [1.15.17] - 2026-10-21 — 系统管理：国际化彻底清除 + 导航死链治理 + 依赖安全修复
 

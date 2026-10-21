@@ -416,6 +416,14 @@ jobs:
         run: |
           ls -lh dist/electron/*.deb
           file dist/electron/*.deb
+          # E 区（v1.16.0）：Electron DEB 复用同一 backend-builder 产物，同样必须
+          # 带离线 OCR 载荷（模型 + onnxruntime 绑定库），否则桌面版装完仍会 503。
+          DEB_ELECTRON=$(ls dist/electron/*.deb | head -1)
+          dpkg-deb -c "$DEB_ELECTRON" | grep -qE "rapidocr_onnxruntime/models/.*\.onnx" \
+            || { echo "::error::Electron DEB 载荷缺少 rapidocr ONNX 模型"; exit 1; }
+          dpkg-deb -c "$DEB_ELECTRON" | grep -qE "onnxruntime_pybind11_state" \
+            || { echo "::error::Electron DEB 载荷缺少 onnxruntime 绑定库"; exit 1; }
+          echo "Electron DEB OCR 载荷断言通过"
       - name: DEB smoke (arch + glibc cap)
         run: |
           chmod +x scripts/verify_deb_smoke.sh
@@ -581,6 +589,38 @@ jobs:
           dpkg-deb -c "$DEB" | grep -E "opt/assistance-management-system/desktop/.*\.desktop" \
             || { echo "::error::载荷缺少 .desktop"; exit 1; }
           echo "桌面集成载荷断言通过"
+
+      # ── E 区（v1.16.0）：ARM64 离线 OCR 出包门禁 ──
+      # 构建期 OCR 冒烟已由 docker/Dockerfile.kylin-standalone 的 backend-builder 阶段
+      # 执行（docker/ocr_smoke_arm64.py：import cv2 + RapidOCR() 实例化 + 真实识别），
+      # 本步在**出包后**再对 DEB 载荷做断言，防止两种"构建绿但装完 503"的走法：
+      #   ① spec 的 collect_data_files/collect_dynamic_libs 漏收模型或 onnxruntime 库；
+      #   ② OCR 把 standalone 包从"零外部依赖"退化成"缺 libgl1 就装不上"
+      #      （headless cv2 + onnxruntime 实测均不需要 libGL/libgomp，必须保持空 Depends）。
+      - name: Verify OCR payload and zero-dep contract in DEB
+        run: |
+          set -euo pipefail
+          DEB=$(ls dist/deb/output/*.deb | head -1)
+          echo "Checking: $DEB"
+          echo "--- ① OCR 载荷 ---"
+          dpkg-deb -c "$DEB" | grep -qE "rapidocr_onnxruntime/models/.*\.onnx" \
+            || { echo "::error::DEB 载荷缺少 rapidocr ONNX 模型（spec datas 收集失效）"; exit 1; }
+          echo "rapidocr ONNX 模型: OK"
+          dpkg-deb -c "$DEB" | grep -qE "onnxruntime_pybind11_state" \
+            || { echo "::error::DEB 载荷缺少 onnxruntime 绑定库（collect_dynamic_libs 失效）"; exit 1; }
+          echo "onnxruntime 绑定库: OK"
+          dpkg-deb -c "$DEB" | grep -qE "cv2.*\.so" \
+            || { echo "::error::DEB 载荷缺少 cv2 扩展模块"; exit 1; }
+          echo "cv2 扩展模块: OK"
+          echo "--- ② 零外部依赖契约 ---"
+          DEB_DEPS=$(dpkg-deb -f "$DEB" Depends 2>/dev/null || true)
+          echo "DEB Depends: '${DEB_DEPS:-<空>}'"
+          case "$DEB_DEPS" in
+            *libgl1*|*libgomp1*|*libglib2.0*)
+              echo "::error::OCR 不应引入 libgl1/libgomp1/libglib2.0-0 硬依赖（headless 方案；否则离线机缺库即装不上）"
+              exit 1 ;;
+          esac
+          echo "OCR 载荷 + 零外部依赖断言通过"
 
       # v1.12.25：复用同一 buildx 构建缓存导出后端 onedir（替代独立 build-backend 冷构建）。
       # 根因：独立作业需再次冷拉 python:3.11-slim-buster，公共镜像匿名限流时直接失败，

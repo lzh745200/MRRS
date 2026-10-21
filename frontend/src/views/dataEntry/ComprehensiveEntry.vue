@@ -1300,13 +1300,13 @@ async function submitVillageData() {
   background: white;
   padding: 24px 32px;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--color-black-6);
 }
 .step-content {
   background: white;
   padding: 32px;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--color-black-6);
   min-height: 600px;
 }
 .step-panel {
@@ -1371,7 +1371,7 @@ async function submitVillageData() {
   padding: 20px;
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--color-black-6);
 }
 .auto-save-hint {
   font-size: 12px;

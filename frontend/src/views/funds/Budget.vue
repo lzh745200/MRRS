@@ -514,8 +514,8 @@ onMounted(() => loadBudgets())
 
 .stat-item {
   flex: 1;
-  background: linear-gradient(135deg, rgba(27, 67, 50, 0.08) 0%, rgba(45, 106, 79, 0.05) 100%);
-  border: 1px solid rgba(45, 106, 79, 0.2);
+  background: linear-gradient(135deg, var(--color-primary-a8) 0%, var(--color-primary-a5) 100%);
+  border: 1px solid var(--color-primary-a20);
   border-radius: 8px;
   padding: 16px 20px;
   text-align: center;
@@ -554,7 +554,7 @@ onMounted(() => loadBudgets())
 .detail-card {
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px var(--color-black-8);
   margin-bottom: 20px;
   overflow: hidden;
 }

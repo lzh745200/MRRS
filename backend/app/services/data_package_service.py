@@ -133,6 +133,17 @@ def _normalize_export_data_value(value: Any) -> Any:
     return value
 
 
+def _local_pii_key_fingerprint() -> str:
+    """本机 PII 密钥指纹；密钥不可用时返回空串（导出不因密钥问题失败）。"""
+    try:
+        from app.core.pii_crypto import key_fingerprint
+
+        return key_fingerprint()
+    except Exception:
+        logger.warning("读取 PII 密钥指纹失败，数据包将不携带指纹", exc_info=True)
+        return ""
+
+
 class PackageValidationError(BusinessError):
     """数据包验证错误"""
     def __init__(self, errors: List[str]):
@@ -226,6 +237,7 @@ class DataPackageService:
             base_package_id=base_package_id,
             export_scope="self" if owner_id is not None else "org",
             exported_by_name=exported_by_name,
+            key_fingerprint=_local_pii_key_fingerprint(),
         )
 
         file_name = f"{package_code}.zip"
@@ -390,6 +402,28 @@ class DataPackageService:
             preview=preview, validation=validation,
         )
 
+    def _check_pii_key_fingerprint(self, manifest_dict: dict, errors: List) -> None:
+        """PII 密钥漂移校验（P1-2）。
+
+        PII 列以**密文**出包（见 `_export_data_type` 的 W18-D8 决策），目标机密钥
+        不同则密文永久不可解（UI 显示 `enc.v1:...` 乱码，用户以为"同步成功"）。
+        旧包无该字段 → 跳过（向后兼容）；本机指纹不可用 → 不误拦。
+        """
+        package_fp = str(manifest_dict.get("key_fingerprint") or "").strip()
+        if not package_fp:
+            return
+        local_fp = _local_pii_key_fingerprint()
+        if local_fp and package_fp != local_fp:
+            errors.append(DataPackageValidationError(
+                field="key_fingerprint",
+                message=(
+                    "数据包由不同 PII 密钥的机器导出（包 %s / 本机 %s），"
+                    "导入后身份证、手机号等加密字段将无法解密。"
+                    "请先在「系统管理→运维与监控→PII 密钥」导入源机密钥，"
+                    "或改用不含 PII 的数据包。" % (package_fp, local_fp)
+                ),
+            ))
+
     async def validate_package(self, file_path: str) -> DataPackageValidationResult:
         """验证数据包 (同步方法)"""
         errors = []
@@ -425,6 +459,8 @@ class DataPackageService:
                     manifest = DataPackageManifest(**manifest_dict)
                 except Exception as e:
                     errors.append(DataPackageValidationError(field="manifest", message=f"manifest格式错误: {str(e)}"))
+
+                self._check_pii_key_fingerprint(manifest_dict, errors)
 
                 for data_type in manifest_dict.get("data_types", []):
                     data_file = f"data/{data_type}.json"

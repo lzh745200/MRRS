@@ -196,6 +196,18 @@ jobs:
         shell: bash
         run: cd backend && python -m PyInstaller assistance-backend.spec --clean --noconfirm
 
+      # 7b. 瓦片包预置校验（F 区，2026-10-21）：默认 --require-min 0 —— 允许本次
+      #     构建不带预置瓦片（仓库只有占位 README），但仍校验 MANIFEST 合法性
+      #     （resources/map-tiles/MANIFEST.json 存在时必须自洽）。
+      #     仓库变量 MAP_TILES_REQUIRED=1 时要求至少 1 张瓦片，防止"忘了拷瓦片
+      #     就出包、装机后地图空白"静默发生。瓦片本体不进 git，由构建机拷入。
+      - name: Verify map tiles preset
+        shell: bash
+        env:
+          MAP_TILES_REQUIRED: ${{ vars.MAP_TILES_REQUIRED || '0' }}
+        run: |
+          python scripts/tiles/verify_tiles.py --require-min "${MAP_TILES_REQUIRED:-0}"
+
       # 8. 验证后端产物（onedir 目录布局，ADR-0006）
       - name: Verify backend exe
         shell: pwsh

@@ -616,7 +616,7 @@ onMounted(() => {
 
 .action-btn.gold:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.4);
+  box-shadow: 0 4px 12px var(--color-gold-a40);
 }
 
 .admin-stats-grid {
@@ -629,7 +629,7 @@ onMounted(() => {
   background: white;
   border-radius: 10px;
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px var(--color-black-5);
 }
 
 .stat-header {
@@ -689,7 +689,7 @@ onMounted(() => {
 .admin-card {
   background: white;
   border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px var(--color-black-5);
   overflow: hidden;
 }
 

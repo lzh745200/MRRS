@@ -1,0 +1,119 @@
+{
+  "note": "本地/夜间性能基线；小数据集噪声大，仅用于数量级回归判定",
+  "tolerance_ratio": 2.0,
+  "min_delta_ms": 50.0,
+  "queries": [
+    {
+      "name": "全表 COUNT funds",
+      "avg_ms": 0.109,
+      "p95_ms": 0.14,
+      "min_ms": 0.078,
+      "max_ms": 0.185,
+      "rows": 1
+    },
+    {
+      "name": "条件查询 funds.status",
+      "avg_ms": 0.217,
+      "p95_ms": 0.224,
+      "min_ms": 0.195,
+      "max_ms": 0.321,
+      "rows": 5
+    },
+    {
+      "name": "JOIN funds × supported_villages",
+      "avg_ms": 0.113,
+      "p95_ms": 0.121,
+      "min_ms": 0.1,
+      "max_ms": 0.157,
+      "rows": 12
+    },
+    {
+      "name": "GROUP BY funds.status 聚合",
+      "avg_ms": 0.111,
+      "p95_ms": 0.131,
+      "min_ms": 0.089,
+      "max_ms": 0.134,
+      "rows": 4
+    },
+    {
+      "name": "深分页 OFFSET 10000",
+      "avg_ms": 0.149,
+      "p95_ms": 0.187,
+      "min_ms": 0.132,
+      "max_ms": 0.214,
+      "rows": 0
+    },
+    {
+      "name": "Keyset 分页",
+      "avg_ms": 0.277,
+      "p95_ms": 0.287,
+      "min_ms": 0.268,
+      "max_ms": 0.294,
+      "rows": 12
+    },
+    {
+      "name": "年度收入查询",
+      "avg_ms": 0.102,
+      "p95_ms": 0.11,
+      "min_ms": 0.092,
+      "max_ms": 0.12,
+      "rows": 0
+    },
+    {
+      "name": "Dashboard 按省份/梯队统计",
+      "avg_ms": 0.099,
+      "p95_ms": 0.105,
+      "min_ms": 0.093,
+      "max_ms": 0.118,
+      "rows": 2
+    },
+    {
+      "name": "一户一档 列表+组织过滤",
+      "avg_ms": 0.103,
+      "p95_ms": 0.107,
+      "min_ms": 0.098,
+      "max_ms": 0.116,
+      "rows": 0
+    },
+    {
+      "name": "一户一档 成员聚合",
+      "avg_ms": 0.083,
+      "p95_ms": 0.09,
+      "min_ms": 0.077,
+      "max_ms": 0.1,
+      "rows": 0
+    },
+    {
+      "name": "一户一档 风险预警扫描",
+      "avg_ms": 0.087,
+      "p95_ms": 0.09,
+      "min_ms": 0.075,
+      "max_ms": 0.136,
+      "rows": 1
+    },
+    {
+      "name": "导出 经费台账（全量排序）",
+      "avg_ms": 0.289,
+      "p95_ms": 0.29,
+      "min_ms": 0.274,
+      "max_ms": 0.364,
+      "rows": 12
+    },
+    {
+      "name": "导出 帮扶村年度数据 JOIN",
+      "avg_ms": 0.148,
+      "p95_ms": 0.156,
+      "min_ms": 0.139,
+      "max_ms": 0.166,
+      "rows": 30
+    },
+    {
+      "name": "工作日志按时间倒序分页",
+      "avg_ms": 0.412,
+      "p95_ms": 0.416,
+      "min_ms": 0.409,
+      "max_ms": 0.428,
+      "rows": 50
+    }
+  ]
+}

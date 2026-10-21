@@ -336,23 +336,24 @@ class TestGetDistances:
 
 
 class TestGetTileInfo:
-    def test_tiles_not_available(self, client):
-        with patch("app.api.v1.map.TILES_DIR") as mock_dir:
-            mock_dir.exists.return_value = False
+    def test_tiles_not_available(self, client, tmp_path):
+        with patch("app.api.v1.map.TILES_DIR", tmp_path / "absent"):
             resp = client.get(f"{BASE}/tile-info")
             assert resp.status_code == 200
             data = resp.json()["data"]
             assert data["available"] is False
+            assert data["tileCount"] == 0
+            assert data["manifest"] is None
 
-    def test_tiles_available(self, client):
-        with patch("app.api.v1.map.TILES_DIR") as mock_dir:
-            mock_dir.exists.return_value = True
-            mock_dir.iterdir.return_value = []
-            mock_dir.rglob.return_value = []
+    def test_tiles_available(self, client, tmp_path):
+        (tmp_path / "not-a-zoom").mkdir()
+        with patch("app.api.v1.map.TILES_DIR", tmp_path):
             resp = client.get(f"{BASE}/tile-info")
             assert resp.status_code == 200
             data = resp.json()["data"]
             assert data["available"] is False
+            assert data["zoomLevels"] == []
+            assert data["dir"] == tmp_path.name
 
 
 class TestServeTile:

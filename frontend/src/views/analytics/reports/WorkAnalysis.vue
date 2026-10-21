@@ -564,7 +564,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .work-analysis-page {
   /* 卡片统一阴影：单一事实源（硬编码色值门禁：本文件仅保留此 1 处字面量） */
-  --work-analysis-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --work-analysis-card-shadow: 0 1px 4px var(--color-black-6);
   padding: 20px;
   background: var(--color-bg-hover);
   min-height: 100vh;
@@ -598,7 +598,7 @@ onBeforeUnmount(() => {
 
 .stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px var(--color-black-10);
 }
 
 .stat-icon {

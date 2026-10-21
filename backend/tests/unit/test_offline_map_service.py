@@ -22,7 +22,6 @@ class TestOfflineMapService:
             service = OfflineMapService(cache_dir=Path(tmpdir))
             assert service is not None
             assert service._map_data == {}
-            assert service._downloaded_regions == []
 
     def test_get_tile_path(self):
         """测试获取瓦片路径"""
@@ -141,32 +140,6 @@ class TestOfflineMapService:
         assert isinstance(y, int)
         assert x >= 0
         assert y >= 0
-
-    def test_download_region(self):
-        """测试下载区域"""
-        from app.services.offline_map_service import OfflineMapService
-        service = OfflineMapService()
-        result = service.download_region("beijing")
-        assert result is True
-        assert "beijing" in service._downloaded_regions
-
-    def test_is_region_available(self):
-        """测试检查区域可用性"""
-        from app.services.offline_map_service import OfflineMapService
-        service = OfflineMapService()
-        assert service.is_region_available("beijing") is False
-        service.download_region("beijing")
-        assert service.is_region_available("beijing") is True
-
-    def test_get_downloaded_regions(self):
-        """测试获取已下载区域"""
-        from app.services.offline_map_service import OfflineMapService
-        service = OfflineMapService()
-        service.download_region("beijing")
-        service.download_region("shanghai")
-        regions = service.get_downloaded_regions()
-        assert "beijing" in regions
-        assert "shanghai" in regions
 
     def test_clear_cache(self):
         """测试清除缓存"""

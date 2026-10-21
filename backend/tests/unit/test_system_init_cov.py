@@ -1,7 +1,8 @@
 """app.api.v1.system.__init__ 覆盖率攻坚测试
 
-19 个子路由（含 W17-008 新增 business_health）的 try/import + fail-fast 结构：
-- 正常路径：19 个子模块全部 import 成功（已被全量套件覆盖）
+20 个子路由（含 W17-008 新增 business_health、R34-2 新增 pii_key）的
+try/import + fail-fast 结构：
+- 正常路径：20 个子模块全部 import 成功（已被全量套件覆盖）
 - 异常路径（本文件）：sys.modules 注入 None 使 import 失败 → RuntimeError
   （深审 #78 改写：原实现只记 warning 并静默丢端点，现为 fail-fast，
   首个失败子模块即抛出，异常链保留原始 ImportError）
@@ -16,8 +17,8 @@ import pytest
 SUBMODULES = [
     "admin", "audit", "backup", "business_health", "cache", "config_package",
     "diagnostics", "env", "error_report", "health", "help", "init",
-    "metrics", "monitor", "system", "system_config", "tasks", "update_logs",
-    "zero_trust",
+    "metrics", "monitor", "pii_key", "system", "system_config", "tasks",
+    "update_logs", "zero_trust",
 ]
 
 

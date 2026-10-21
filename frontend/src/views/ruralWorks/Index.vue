@@ -64,7 +64,7 @@ function handleTabChange(name: string | number) {
 
 .rural-works-tabs {
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px var(--color-black-8);
 }
 
 .rural-works-tabs :deep(.el-tabs__header) {
@@ -78,7 +78,7 @@ function handleTabChange(name: string | number) {
 }
 
 .rural-works-tabs :deep(.el-tabs__item) {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-white-70);
   font-size: 15px;
   font-weight: 500;
   padding: 0 24px;

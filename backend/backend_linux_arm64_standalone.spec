@@ -13,10 +13,16 @@ datas 使用目录收集方式（非 glob），避免 PyInstaller 6.21 glob 解�
 import os
 import sys
 import glob
-from PyInstaller.utils.hooks import collect_submodules
+import importlib.util as _ilu
+from PyInstaller.utils.hooks import (
+    collect_data_files,
+    collect_dynamic_libs,
+    collect_submodules,
+)
 
 block_cipher = None
 backend_dir = os.path.dirname(os.path.abspath(SPEC))
+project_root = os.path.dirname(backend_dir)  # 项目根目录（resources/ 在其下）
 
 # ── 数据文件：直接收集整个目录，避免 glob 解析问题 ──
 datas = [
@@ -27,6 +33,14 @@ datas = [
     # alembic 配置文件
     (os.path.join(backend_dir, 'alembic.ini'), '.'),
 ]
+
+# 地图瓦片（resources/map-tiles）：app/api/v1/map.py 在冻结态按
+# ``sys._MEIPASS/resources/map-tiles`` 解析（onedir 下 _MEIPASS = _internal/），
+# 因此目标目录必须是 'resources/map-tiles'。存在性守卫：仓库尚未生成瓦片时跳过，
+# 不改变现有构建行为（与 Windows spec 的同款片段保持完全一致）。
+_tiles_dir = os.path.join(project_root, 'resources', 'map-tiles')
+if os.path.isdir(_tiles_dir):
+    datas.append((_tiles_dir, os.path.join('resources', 'map-tiles')))
 
 # ── 二进制文件：手动收集 libmagic 共享库（确保离线可用） ──
 binaries = []
@@ -104,6 +118,41 @@ hiddenimports += collect_submodules('sqlalchemy')
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 hiddenimports += collect_submodules('app')
+
+# ══════════════════════════════════════════════════════════════════════
+# 经费凭证 OCR（E 区 · v1.16.0：ARM64 恢复内置离线 OCR）
+# ──────────────────────────────────────────────────────────────────────
+# 背景：v1.14.0 起 Windows 安装包内置 rapidocr-onnxruntime，而 ARM64 曾因
+# "onnxruntime / opencv 无 buster ARM64 wheel" 的理由在
+# docker/Dockerfile.kylin-standalone 里被 grep 过滤掉，Linux 端 OCR 降级为
+# 503 + 手工录入。2026-10-21 复核该理由已过时：cp311/aarch64 三类轮子齐备
+# （onnxruntime→manylinux_2_28_aarch64、opencv-python→cp37-abi3
+# manylinux2014_aarch64、rapidocr-onnxruntime→py3-none-any 且模型随 wheel），
+# 构建基座 buster 的 glibc 恰为 2.28，满足 manylinux_2_28 的 glibc>=2.28 前提。
+#
+# 必须显式收集（与 Windows assistance-backend.spec 同款，见其 156-164 行）：
+#   - rapidocr_onnxruntime 的 *.onnx 模型 / 字典 / 配置不是 .py，Analysis 不会
+#     自动收集 → collect_data_files；
+#   - onnxruntime 的 capi 动态库（onnxruntime_pybind11_state*.so、provider .so）
+#     需要 collect_dynamic_libs，否则冻结态 RapidOCR() 初始化即失败（仍回落 503）；
+#   - 两者都存在动态/延迟导入 → collect_submodules 补齐 hiddenimports。
+# 双 find_spec 守卫：任一包缺失（未来再做裁剪构建、或本地未装）时静默跳过，
+# 保持既有降级链，绝不让 spec 直接崩。
+_rapidocr_spec = _ilu.find_spec('rapidocr_onnxruntime')
+if _rapidocr_spec and _rapidocr_spec.submodule_search_locations:
+    datas += collect_data_files('rapidocr_onnxruntime')
+    hiddenimports += collect_submodules('rapidocr_onnxruntime')
+    print("[SPEC] 已收集 rapidocr_onnxruntime 模型数据与子模块")
+else:
+    print("[SPEC] 未安装 rapidocr_onnxruntime，跳过 OCR 数据收集（OCR 将降级 503）")
+
+_ort_spec = _ilu.find_spec('onnxruntime')
+if _ort_spec and _ort_spec.submodule_search_locations:
+    binaries += collect_dynamic_libs('onnxruntime')
+    hiddenimports += collect_submodules('onnxruntime')
+    print("[SPEC] 已收集 onnxruntime 动态库与子模块")
+else:
+    print("[SPEC] 未安装 onnxruntime，跳过 OCR 动态库收集（OCR 将降级 503）")
 
 a = Analysis(
     ['start.py'],

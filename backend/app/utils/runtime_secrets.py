@@ -204,6 +204,39 @@ def get_or_create_secret(key: str, *, generate=None, require_persisted: bool = F
     return new_value
 
 
+def set_secret(key: str, value: str) -> None:
+    """覆盖写入指定密钥（用于导入跨机密钥，如 PII_AESSIV_KEY）。
+
+    与 `get_or_create_secret` 的区别：本函数**强制覆盖**既有值，不做"存在即返回"。
+    多机离线同步场景下，运维需要把源机密钥原样搬到目标机，覆盖是唯一手段。
+
+    Args:
+        key: 密钥名称。
+        value: 新密钥值（调用方负责强度校验）。
+
+    Raises:
+        RuntimeError: 密钥文件不可读或写入失败（静态数据密钥不能静默降级）。
+    """
+    secrets_file = _resolve_secrets_file()
+    loaded: dict[str, str] = {}
+    try:
+        with open(secrets_file, "r", encoding="utf-8") as f:
+            loaded = json.load(f) or {}
+        if not isinstance(loaded, dict):
+            loaded = {}
+    except FileNotFoundError:
+        pass
+    except (json.JSONDecodeError, PermissionError) as exc:
+        raise RuntimeError(f"无法读取运行时密钥文件 {secrets_file}: {exc}") from exc
+
+    loaded[key] = value
+    try:
+        _atomic_write_json(secrets_file, loaded)
+    except Exception as exc:
+        raise RuntimeError(f"无法持久化密钥 {key} 到 {secrets_file}: {exc}") from exc
+    _logger.info("已覆盖写入密钥 '%s' 到 %s", key, secrets_file)
+
+
 def _resolve_secrets_file() -> Path:
     """解析 runtime_secrets.json 文件路径。"""
     if os.environ.get("RUNTIME_SECRETS_FILE"):

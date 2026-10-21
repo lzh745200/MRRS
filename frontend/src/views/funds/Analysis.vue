@@ -537,8 +537,8 @@ onMounted(() => {
 .chart-card,
 .ranking-card {
   margin-bottom: 20px;
-  background: rgba(10, 30, 20, 0.5);
-  border: 1px solid rgba(64, 145, 108, 0.3);
+  background: var(--color-primary-dark-a50);
+  border: 1px solid var(--color-primary-light-a30);
 }
 
 .title {
@@ -556,9 +556,9 @@ onMounted(() => {
 .stat-box {
   text-align: center;
   padding: 20px;
-  background: rgba(64, 145, 108, 0.1);
+  background: var(--color-primary-light-a10);
   border-radius: 8px;
-  border: 1px solid rgba(64, 145, 108, 0.3);
+  border: 1px solid var(--color-primary-light-a30);
 }
 
 .stat-value {
@@ -570,12 +570,12 @@ onMounted(() => {
 
 .stat-label {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-white-70);
 }
 
 :deep(.el-card__header) {
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark-1) 100%);
-  border-bottom: 1px solid rgba(64, 145, 108, 0.3);
+  border-bottom: 1px solid var(--color-primary-light-a30);
   color: var(--color-text-inverse);
 }
 </style>

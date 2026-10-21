@@ -204,8 +204,15 @@ class BatchService:
         return {"success": True, "success_count": count, "skipped": skipped}
 
     async def batch_export(self, table_name: str, ids: List[int],
-                           format: str = "xlsx", **kwargs) -> Dict[str, Any]:
+                           format: str = "xlsx", *,
+                           organization_id: int | None = None,
+                           is_superuser: bool = False, **kwargs) -> Dict[str, Any]:
         self._validate_table_name(table_name)
+        # P0 越权/信息泄露封堵（与 batch_update / batch_delete / validate_batch 同口径）：
+        # 原实现漏了本守卫，导致 `batch_export("users")` 可把 User.to_dict() 整表导出，
+        # 其中含 hashed_password（bcrypt 哈希）、role、is_superuser、token_version、
+        # phone/email 等敏感列；且无组织过滤，部门级 admin 可跨组织导出全部账号。
+        _reject_protected_table(table_name)
         from io import BytesIO
         import base64
         try:
@@ -215,6 +222,10 @@ class BatchService:
             query = self.db.query(model)
             if ids:
                 query = query.filter(model.id.in_(ids))
+            # 数据隔离（S2 红线）：非超管只能导出本组织数据，与 update/delete 一致
+            org_col = getattr(model, 'organization_id', None)
+            if not is_superuser and organization_id is not None and org_col is not None:
+                query = query.filter(org_col == organization_id)
             records = [r.to_dict() for r in query.all()]
             wb = Workbook()
             ws = wb.active

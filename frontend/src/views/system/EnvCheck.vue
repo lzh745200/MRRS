@@ -90,6 +90,46 @@
       </el-table>
     </el-card>
 
+    <!-- PII 加密密钥（多机离线同步的解钥统一入口） -->
+    <el-card class="pii-key-card">
+      <template #header>
+        <div class="card-header">
+          <span>PII 加密密钥</span>
+          <div class="header-info">
+            <el-tag :type="piiKeyTagType">{{ piiKeySourceLabel }}</el-tag>
+            <el-button
+              type="primary"
+              :icon="Download"
+              :loading="piiKeyLoading"
+              style="margin-left: 12px"
+              @click="handleExportKey"
+            >
+              导出密钥
+            </el-button>
+            <el-button :icon="Upload" style="margin-left: 8px" @click="handleImportKey">
+              导入密钥
+            </el-button>
+          </div>
+        </div>
+      </template>
+
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="密钥指纹">
+          <span class="pii-fingerprint">{{ piiKeyStatus?.fingerprint || '不可用' }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="配置来源">
+          {{ piiKeySourceLabel }}
+        </el-descriptions-item>
+      </el-descriptions>
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-top: 12px"
+        title="多机离线同步时各机必须使用同一把密钥；否则对方的身份证、手机号等加密字段将无法解密。"
+      />
+    </el-card>
+
     <!-- 缺失包警告 -->
     <el-card v-if="missingPackages.length > 0" class="warning-card">
       <template #header>
@@ -171,10 +211,20 @@
 <script setup lang="ts">
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Refresh, Search, SuccessFilled, CircleCloseFilled } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  Refresh,
+  Search,
+  SuccessFilled,
+  CircleCloseFilled,
+  Download,
+  Upload,
+} from '@element-plus/icons-vue'
 import { envApi } from '@/api/env'
 import type { EnvCheckResult, SystemInfo } from '@/api/env'
+import { piiKeyApi } from '@/api/piiKey'
+import type { PiiKeyStatus, PiiKeyExportResult } from '@/api/piiKey'
+import { downloadBlob } from '@/api/request'
 import PageHeader from '@/components/common/PageHeader.vue'
 
 const checking = ref(false)
@@ -251,8 +301,83 @@ async function runCheck() {
   }
 }
 
+// ==================== PII 加密密钥（多机离线同步） ====================
+
+const piiKeyStatus = ref<PiiKeyStatus | null>(null)
+const piiKeyLoading = ref(false)
+
+const piiKeySourceLabel = computed(() => {
+  const src = piiKeyStatus.value?.source
+  if (src === 'env') return '环境变量'
+  if (src === 'runtime') return '运行时存储'
+  return '-'
+})
+
+const piiKeyTagType = computed<'success' | 'info' | 'warning'>(() => {
+  const src = piiKeyStatus.value?.source
+  if (src === 'env') return 'success'
+  if (src === 'runtime') return 'info'
+  return 'warning'
+})
+
+async function loadPiiKeyStatus() {
+  try {
+    piiKeyStatus.value = await piiKeyApi.status()
+  } catch {
+    // 密钥状态读取失败不影响环境诊断主流程
+    piiKeyStatus.value = null
+  }
+}
+
+function writeKeyFile(result: PiiKeyExportResult) {
+  const payload = JSON.stringify(
+    { fingerprint: result.fingerprint, key: result.key, source: result.source },
+    null,
+    2
+  )
+  const name = `pii-key-${result.fingerprint || 'unknown'}.json`
+  downloadBlob(new Blob([payload], { type: 'application/json' }), name)
+}
+
+async function handleExportKey() {
+  piiKeyLoading.value = true
+  try {
+    const result = await piiKeyApi.exportKey()
+    writeKeyFile(result)
+    ElMessage.success('密钥已导出，请通过安全渠道传递')
+  } catch (err: any) {
+    ElMessage.error(err?.message || '导出密钥失败')
+  } finally {
+    piiKeyLoading.value = false
+  }
+}
+
+async function handleImportKey() {
+  let secret = ''
+  try {
+    const res = await ElMessageBox.prompt(
+      '粘贴源机导出的密钥文件中的 key 字段值。导入后本机立即改用该密钥。',
+      '导入 PII 密钥',
+      { inputType: 'textarea', confirmButtonText: '导入', cancelButtonText: '取消' }
+    )
+    secret = res.value
+  } catch {
+    return // 用户取消
+  }
+  piiKeyLoading.value = true
+  try {
+    piiKeyStatus.value = await piiKeyApi.importKey(secret)
+    ElMessage.success('密钥已导入并立即生效')
+  } catch (err: any) {
+    ElMessage.error(err?.message || '导入密钥失败')
+  } finally {
+    piiKeyLoading.value = false
+  }
+}
+
 onMounted(() => {
   runCheck()
+  loadPiiKeyStatus()
 })
 </script>
 
@@ -347,6 +472,13 @@ onMounted(() => {
 }
 .deps-card {
   background: var(--color-bg-card);
+}
+.pii-key-card {
+  background: var(--color-bg-card);
+}
+.pii-fingerprint {
+  font-family: monospace;
+  letter-spacing: 0.5px;
 }
 .health-card {
   background: var(--color-bg-card);

@@ -602,7 +602,7 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 /* 办学规模 / 帮扶成效统计块共用的品牌色（单一事实源，避免逐块重复硬编码） */
-$school-stat-bg: linear-gradient(135deg, rgba(27, 67, 50, 0.08) 0%, rgba(45, 106, 79, 0.05) 100%);
+$school-stat-bg: linear-gradient(135deg, var(--color-primary-a8) 0%, var(--color-primary-a5) 100%);
 $school-stat-border: 1px solid rgba(45, 106, 79, 0.15);
 
 .school-detail-page {
@@ -661,7 +661,7 @@ $school-stat-border: 1px solid rgba(45, 106, 79, 0.15);
 .detail-card {
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px var(--color-black-8);
   margin-bottom: 20px;
   overflow: hidden;
 }

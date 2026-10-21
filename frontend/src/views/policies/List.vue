@@ -534,9 +534,9 @@ onMounted(() => {
 .search-card,
 .table-card {
   margin-bottom: 20px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(64, 145, 108, 0.3);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--color-white-95);
+  border: 1px solid var(--color-primary-light-a30);
+  box-shadow: 0 2px 8px var(--color-black-10);
 }
 
 .card-header {
@@ -573,17 +573,17 @@ onMounted(() => {
 }
 
 :deep(.el-input__wrapper) {
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: var(--color-white-90);
 }
 
 :deep(.el-select__wrapper),
 :deep(.el-select .el-input__wrapper) {
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: var(--color-white-90);
 }
 
 :deep(.el-table) {
-  --el-table-bg-color: rgba(255, 255, 255, 0.9);
-  --el-table-tr-bg-color: rgba(255, 255, 255, 0.9);
+  --el-table-bg-color: var(--color-white-90);
+  --el-table-tr-bg-color: var(--color-white-90);
   --el-table-header-bg-color: rgba(64, 145, 108, 0.15);
   --el-table-text-color: $military-dark;
   --el-table-header-text-color: $military-dark;
@@ -606,13 +606,13 @@ onMounted(() => {
 }
 
 :deep(.el-table__body tr:hover > td) {
-  background-color: rgba(64, 145, 108, 0.1);
+  background-color: var(--color-primary-light-a10);
 }
 
 :deep(.el-pagination) {
   --el-pagination-text-color: $military-dark;
-  --el-pagination-bg-color: rgba(255, 255, 255, 0.9);
-  --el-pagination-button-bg-color: rgba(255, 255, 255, 0.9);
+  --el-pagination-bg-color: var(--color-white-90);
+  --el-pagination-button-bg-color: var(--color-white-90);
   --el-pagination-button-disabled-bg-color: rgba(200, 200, 200, 0.3);
 }
 

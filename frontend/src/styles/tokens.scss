@@ -90,6 +90,64 @@
   --color-border-dark: #94a3b8;
 }
 
+// ==================== 透明度阶梯 Token（R34-4 / C1 硬编码色值消化）====================
+//
+// 为什么单独成组：登录页玻璃态、侧栏深色菜单、大屏等场景大量使用
+// `rgba(255,255,255,x)` / `rgba(0,0,0,x)` / 主色与金色的低透明度变体。
+// 这类值此前散落写成字面量（全站 195 处 rgba），导致①主题换肤时无法统一调整；
+// ②暗色/高对比主题下笔误难以发现；③硬编码色棘轮长期卡在 305 处降不下来。
+// 统一收敛为「颜色-透明度」语义 token，值与原字面量**逐字节等价**，视觉零变化。
+//
+// 命名：`--color-{color}-{alpha百分比}`，alpha 直接用 0-100 整数便于检索。
+:root {
+  // ── 白（深色底上的前景、玻璃态描边/浮层）──
+  --color-white-3: rgba(255, 255, 255, 0.03);
+  --color-white-5: rgba(255, 255, 255, 0.05);
+  --color-white-7: rgba(255, 255, 255, 0.07);
+  --color-white-8: rgba(255, 255, 255, 0.08);
+  --color-white-10: rgba(255, 255, 255, 0.1);
+  --color-white-12: rgba(255, 255, 255, 0.12);
+  --color-white-15: rgba(255, 255, 255, 0.15);
+  --color-white-20: rgba(255, 255, 255, 0.2);
+  --color-white-22: rgba(255, 255, 255, 0.22);
+  --color-white-30: rgba(255, 255, 255, 0.3);
+  --color-white-35: rgba(255, 255, 255, 0.35);
+  --color-white-45: rgba(255, 255, 255, 0.45);
+  --color-white-50: rgba(255, 255, 255, 0.5);
+  --color-white-60: rgba(255, 255, 255, 0.6);
+  --color-white-70: rgba(255, 255, 255, 0.7);
+  --color-white-72: rgba(255, 255, 255, 0.72);
+  --color-white-80: rgba(255, 255, 255, 0.8);
+  --color-white-82: rgba(255, 255, 255, 0.82);
+  --color-white-85: rgba(255, 255, 255, 0.85);
+  --color-white-90: rgba(255, 255, 255, 0.9);
+  --color-white-95: rgba(255, 255, 255, 0.95);
+
+  // ── 黑（阴影、遮罩）──
+  --color-black-5: rgba(0, 0, 0, 0.05);
+  --color-black-6: rgba(0, 0, 0, 0.06);
+  --color-black-8: rgba(0, 0, 0, 0.08);
+  --color-black-10: rgba(0, 0, 0, 0.1);
+  --color-black-30: rgba(0, 0, 0, 0.3);
+  --color-black-40: rgba(0, 0, 0, 0.4);
+  --color-black-50: rgba(0, 0, 0, 0.5);
+
+  // ── 主色（#2d6a4f）与主色浅阶（#40916c）/ 深阶（#1b4332）的透明变体 ──
+  --color-primary-a5: rgba(45, 106, 79, 0.05);
+  --color-primary-a8: rgba(27, 67, 50, 0.08);
+  --color-primary-a20: rgba(45, 106, 79, 0.2);
+  --color-primary-light-a10: rgba(64, 145, 108, 0.1);
+  --color-primary-light-a30: rgba(64, 145, 108, 0.3);
+  --color-primary-dark-a50: rgba(10, 30, 20, 0.5);
+
+  // ── 金色（#d4af37）透明变体：侧栏当前项、大屏高亮 ──
+  --color-gold-a10: rgba(212, 175, 55, 0.1);
+  --color-gold-a20: rgba(212, 175, 55, 0.2);
+  --color-gold-a30: rgba(212, 175, 55, 0.3);
+  --color-gold-a40: rgba(212, 175, 55, 0.4);
+  --color-gold-a50: rgba(212, 175, 55, 0.5);
+}
+
 // ==================== UI v2.0 视觉 Token（W23）====================
 
 :root {

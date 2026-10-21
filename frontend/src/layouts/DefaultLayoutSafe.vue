@@ -839,7 +839,7 @@ function handleCommand(command: string) {
   border-radius: 50%;
   object-fit: cover;
   background: var(--color-primary-900, var(--color-primary-dark-2));
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  filter: drop-shadow(0 2px 4px var(--color-black-30));
 }
 
 .app-title {
@@ -851,7 +851,7 @@ function handleCommand(command: string) {
   letter-spacing: 1px;
   margin-left: 12px;
   line-height: 1.2;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 3px var(--color-black-40);
 }
 
 .fade-title-enter-active,
@@ -874,11 +874,11 @@ function handleCommand(command: string) {
 }
 
 .aside-scrollbar :deep(.el-scrollbar__thumb) {
-  background-color: rgba(255, 255, 255, 0.12);
+  background-color: var(--color-white-12);
   border-radius: 3px;
 }
 .aside-scrollbar :deep(.el-scrollbar__thumb:hover) {
-  background-color: rgba(255, 255, 255, 0.22);
+  background-color: var(--color-white-22);
 }
 
 /* ── 菜单根：强制亮色文字（覆盖 Element Plus 默认暗色）── */
@@ -887,11 +887,11 @@ function handleCommand(command: string) {
   padding: 8px 0;
 
   /* 直接设置 Element Plus CSS 变量，从根源解决黑色文字 */
-  --el-menu-text-color: rgba(255, 255, 255, 0.82) !important;
+  --el-menu-text-color: var(--color-white-82) !important;
   --el-menu-hover-text-color: var(--color-text-inverse) !important;
   --el-menu-active-color: $badge-gold !important;
   --el-menu-bg-color: transparent !important;
-  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.08) !important;
+  --el-menu-hover-bg-color: var(--color-white-8) !important;
 }
 
 /* ── 菜单分区标签 ── */
@@ -899,7 +899,7 @@ function handleCommand(command: string) {
   padding: 16px 20px 6px 20px;
   font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--color-white-45);
   letter-spacing: 0.06em;
   user-select: none;
   pointer-events: none;
@@ -1035,7 +1035,7 @@ function handleCommand(command: string) {
 .aside-menu :deep(.el-sub-menu__title),
 .aside-menu :deep(.el-menu-item) *,
 .aside-menu :deep(.el-sub-menu__title) * {
-  color: rgba(255, 255, 255, 0.82) !important;
+  color: var(--color-white-82) !important;
 }
 
 /* 取消 Element Plus 默认左侧栏 — 改用自定义 ::before 指示器 */
@@ -1060,7 +1060,7 @@ function handleCommand(command: string) {
 .aside-menu :deep(.el-sub-menu__title:hover),
 .aside-menu :deep(.el-menu-item:hover) *,
 .aside-menu :deep(.el-sub-menu__title:hover) * {
-  background-color: rgba(255, 255, 255, 0.07) !important;
+  background-color: var(--color-white-7) !important;
   color: var(--color-text-inverse) !important;
 }
 
@@ -1096,17 +1096,17 @@ function handleCommand(command: string) {
 
 /* 子菜单箭头 */
 .aside-menu :deep(.el-sub-menu__icon-arrow) {
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--color-white-35);
   transition: color 0.22s ease;
   right: 14px;
 }
 .aside-menu :deep(.el-sub-menu__title:hover .el-sub-menu__icon-arrow) {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-white-70);
 }
 
 /* ── 子菜单（内联展开）样式 ── */
 .aside-menu :deep(.el-menu--inline) {
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: var(--color-white-3) !important;
   border-radius: 0 0 8px 8px;
   margin: 0 8px;
   padding: 4px 0;
@@ -1119,25 +1119,25 @@ function handleCommand(command: string) {
   font-size: 13px;
   border-radius: 6px;
   margin: 1px 4px;
-  color: rgba(255, 255, 255, 0.72) !important;
+  color: var(--color-white-72) !important;
   background-color: transparent !important;
 }
 
 .aside-menu :deep(.el-menu--inline .el-menu-item) *,
 .aside-menu :deep(.el-menu--inline .el-menu-item span) {
-  color: rgba(255, 255, 255, 0.72) !important;
+  color: var(--color-white-72) !important;
 }
 
 .aside-menu :deep(.el-menu--inline .el-menu-item:hover),
 .aside-menu :deep(.el-menu--inline .el-menu-item:hover) * {
   color: var(--color-text-inverse) !important;
-  background-color: rgba(255, 255, 255, 0.05) !important;
+  background-color: var(--color-white-5) !important;
 }
 
 .aside-menu :deep(.el-menu--inline .el-menu-item.is-active),
 .aside-menu :deep(.el-menu--inline .el-menu-item.is-active) * {
   color: $badge-gold !important;
-  background: rgba(212, 175, 55, 0.1) !important;
+  background: var(--color-gold-a10) !important;
   box-shadow: inset 3px 0 0 $badge-gold;
 }
 
@@ -1169,17 +1169,17 @@ function handleCommand(command: string) {
    =================================================================== */
 :deep(.aside-popper) {
   background: #1d3d2a !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid var(--color-white-10) !important;
   border-radius: 10px !important;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: 0 8px 30px var(--color-black-40) !important;
   padding: 6px 0 !important;
 
   /* 弹出菜单 CSS 变量覆盖 */
-  --el-menu-text-color: rgba(255, 255, 255, 0.85) !important;
+  --el-menu-text-color: var(--color-white-85) !important;
   --el-menu-hover-text-color: var(--color-text-inverse) !important;
   --el-menu-active-color: $badge-gold !important;
   --el-menu-bg-color: transparent !important;
-  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.08) !important;
+  --el-menu-hover-bg-color: var(--color-white-8) !important;
 }
 
 :deep(.aside-popper .el-menu--popup) {
@@ -1190,7 +1190,7 @@ function handleCommand(command: string) {
 :deep(.aside-popper .el-menu-item),
 :deep(.aside-popper .el-menu-item) *,
 :deep(.aside-popper .el-menu-item span) {
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: var(--color-white-85) !important;
   height: 40px;
   line-height: 40px;
   font-size: 13px;
@@ -1202,7 +1202,7 @@ function handleCommand(command: string) {
 
 :deep(.aside-popper .el-menu-item:hover),
 :deep(.aside-popper .el-menu-item:hover) * {
-  background-color: rgba(255, 255, 255, 0.07) !important;
+  background-color: var(--color-white-7) !important;
   color: var(--color-text-inverse) !important;
 }
 
@@ -1435,7 +1435,7 @@ function handleCommand(command: string) {
 .layout-aside .el-sub-menu__title span,
 .layout-aside .el-menu-item i,
 .layout-aside .el-sub-menu__title i {
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: var(--color-white-85) !important;
 }
 
 .layout-aside .el-menu-item:hover,
@@ -1469,7 +1469,7 @@ function handleCommand(command: string) {
 /* 弹出层子菜单 */
 .aside-popper .el-menu-item,
 .aside-popper .el-menu-item span {
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: var(--color-white-85) !important;
 }
 .aside-popper .el-menu-item:hover,
 .aside-popper .el-menu-item:hover span {

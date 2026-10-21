@@ -169,7 +169,7 @@ function exportCSV() {
   padding: 20px;
   border-radius: 8px;
   text-align: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px var(--color-black-8);
 }
 .stat-card.success {
   border-left: 4px solid var(--color-success);

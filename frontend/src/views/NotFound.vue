@@ -38,7 +38,7 @@ const goHome = () => {
   font-size: 120px;
   font-weight: bold;
   margin-bottom: 20px;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  text-shadow: 2px 2px 4px var(--color-black-30);
 }
 
 .error-message {

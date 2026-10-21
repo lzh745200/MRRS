@@ -103,6 +103,24 @@ function getFrontendPath() {
   return path.join(__dirname, '..', 'frontend', 'dist');
 }
 
+/**
+ * 离线瓦片仓目录（F 区：安装包预置瓦片 + 离线导入）。
+ *
+ * 打包态用 extraResources 复制到 <resources>/map-tiles 的预置瓦片；
+ * 开发态（app 未打包，process.resourcesPath 指向 Electron 自带 resources）
+ * 回退到仓库根 resources/map-tiles。两者都用 existsSync 守卫，避免把不存在的
+ * 路径注入后端（后端 MAP_TILES_DIR 是"环境变量优先、不校验存在性"的语义）。
+ */
+function getTilesDir() {
+  const packagedTiles = path.join(process.resourcesPath, 'map-tiles');
+  try {
+    if (app.isPackaged && fs.existsSync(packagedTiles)) return packagedTiles;
+  } catch (_) {}
+  const devTiles = path.join(__dirname, '..', 'resources', 'map-tiles');
+  if (fs.existsSync(devTiles)) return devTiles;
+  return packagedTiles;
+}
+
 function getIconPath() {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'icon.png');
@@ -379,6 +397,7 @@ async function startBackend(stderrCapture = null, isFirstStart = false) {
     CACHE_DIR: cacheDir,
     EXPORT_DIR: exportsDir,
     FRONTEND_DIST_PATH: getFrontendPath(),
+    MAP_TILES_DIR: process.env.MAP_TILES_DIR || getTilesDir(),
     ENVIRONMENT: 'production',
     PROJECT_VERSION: appVersion,
     INTERNAL_BACKUP_KEY,

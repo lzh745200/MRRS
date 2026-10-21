@@ -1,25 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockGet, mockPost } = vi.hoisted(() => ({
+const { mockGet, mockPost, mockDelete } = vi.hoisted(() => ({
   mockGet: vi.fn().mockResolvedValue({ data: {} }),
   mockPost: vi.fn().mockResolvedValue({ data: {} }),
+  mockDelete: vi.fn().mockResolvedValue({ data: {} }),
 }))
 
 vi.mock('@/api/request', () => {
   const requestInstance = {
     get: (...args: unknown[]) => mockGet(...args),
     post: (...args: unknown[]) => mockPost(...args),
+    delete: (...args: unknown[]) => mockDelete(...args),
   }
   return {
     default: requestInstance,
     get: requestInstance.get,
     post: requestInstance.post,
+    del: requestInstance.delete,
   }
 })
 
 import { restoreFund, previewPurgeFund, purgeFund } from '@/api/fundsRecycle'
 import { restoreSchool, previewPurgeSchool, purgeSchool } from '@/api/schoolsRecycle'
-import { offlineMapApi, getMapStatus } from '@/api/offlineMap'
+import { clearTiles, importTiles } from '@/api/offlineMap'
 
 describe('api/fundsRecycle', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -88,12 +91,16 @@ describe('api/schoolsRecycle', () => {
 describe('api/offlineMap', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('getTiles / getStatus / getMapStatus 路径正确', async () => {
-    await offlineMapApi.getTiles(10, 1, 2)
-    expect(mockGet).toHaveBeenCalledWith('/offline-map/tiles/10/1/2')
-    await offlineMapApi.getStatus()
-    expect(mockGet).toHaveBeenCalledWith('/offline-map/status')
-    await getMapStatus()
-    expect(mockGet).toHaveBeenCalledWith('/offline-map/status')
+  it('importTiles 走 multipart 且携带 zip 文件', async () => {
+    const file = new File(['x'], 'tiles.zip')
+    await importTiles(file)
+    const [url, body] = mockPost.mock.calls[0]
+    expect(url).toBe('/map/tiles/import')
+    expect((body as FormData).get('file')).toBe(file)
+  })
+
+  it('clearTiles 走 DELETE /offline-map/clear', async () => {
+    await clearTiles()
+    expect(mockDelete).toHaveBeenCalledWith('/offline-map/clear')
   })
 })

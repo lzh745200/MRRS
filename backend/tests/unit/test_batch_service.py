@@ -405,6 +405,53 @@ class TestBatchExport:
         with pytest.raises(BusinessLogicError, match="不允许的表名"):
             await svc.batch_export("bad_table", [1])
 
+    async def test_rejects_protected_users_table(self):
+        """P0：users 表禁止批量导出。
+
+        否则 User.to_dict() 会把 hashed_password / role / is_superuser /
+        token_version / phone 等敏感列整表导出，bcrypt 哈希可离线爆破。
+        """
+        from app.services.batch_service import BatchService
+        from app.core.error_handler import BusinessLogicError
+        svc = BatchService(db=Mock())
+        with pytest.raises(BusinessLogicError, match="不允许通过批量接口操作"):
+            await svc.batch_export("users", [1])
+        svc.db.query.assert_not_called()
+
+    async def test_rejects_protected_organizations_table(self):
+        from app.services.batch_service import BatchService
+        from app.core.error_handler import BusinessLogicError
+        svc = BatchService(db=Mock())
+        with pytest.raises(BusinessLogicError, match="不允许通过批量接口操作"):
+            await svc.batch_export("organizations", [1])
+
+    async def test_org_scope_filter_applied_for_dept_admin(self):
+        """部门级 admin 导出只能命中本组织（S2 红线：不得跨组织）。"""
+        from app.services.batch_service import BatchService
+        svc = BatchService(db=Mock())
+        svc.db.query.return_value.filter.return_value.filter.return_value\
+            .all.return_value = []
+        await svc.batch_export("projects", [1], organization_id=7, is_superuser=False)
+        svc.db.query.return_value.filter.assert_called_once()
+        svc.db.query.return_value.filter.return_value.filter.assert_called_once()
+
+    async def test_superuser_export_has_no_org_filter(self):
+        """超管导出不加组织过滤（保留全局导出能力）。"""
+        from app.services.batch_service import BatchService
+        svc = BatchService(db=Mock())
+        svc.db.query.return_value.filter.return_value.all.return_value = []
+        await svc.batch_export("projects", [1], organization_id=7, is_superuser=True)
+        svc.db.query.return_value.filter.assert_called_once()
+        svc.db.query.return_value.filter.return_value.filter.assert_not_called()
+
+    async def test_table_without_org_column_skips_org_filter(self):
+        """无 organization_id 列的表（如 work_logs）不加组织过滤，也不报错。"""
+        from app.services.batch_service import BatchService
+        svc = BatchService(db=Mock())
+        svc.db.query.return_value.filter.return_value.all.return_value = []
+        await svc.batch_export("work_logs", [1], organization_id=7, is_superuser=False)
+        svc.db.query.return_value.filter.return_value.filter.assert_not_called()
+
     async def test_success(self):
         from app.services.batch_service import BatchService
         svc = BatchService(db=Mock())

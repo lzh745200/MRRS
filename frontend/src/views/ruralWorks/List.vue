@@ -651,7 +651,7 @@ onMounted(() => {
   border-radius: 8px;
   padding: 20px;
   text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--color-black-6);
   border-left: 4px solid var(--color-primary-dark-1);
   transition: transform 0.2s;
 }

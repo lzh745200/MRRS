@@ -99,6 +99,39 @@ export async function getMapConfig(): Promise<Record<string, any>> {
   return get(BASE_URL + '/config')
 }
 
-export async function getTileInfo(): Promise<Record<string, any>> {
+/**
+ * 离线瓦片包清单（随瓦片包一起由运维生成，后端 `/map/tile-info` 透出）。
+ * 关键字段：provider —— 'amap'/'gaode' 表示底图为 GCJ-02 坐标系（标记点需偏移修正）。
+ */
+export interface TileManifest {
+  /** 瓦片来源：如 'amap'（GCJ-02）/ 'osm'（WGS-84）/ 自建离线包标识 */
+  provider?: string
+  /** 瓦片包生成时间（ISO 字符串，直接展示给运维） */
+  generatedAt?: string
+  /** 瓦片包版本/名称 */
+  version?: string
+  [key: string]: unknown
+}
+
+/**
+ * 本机离线瓦片信息（GET /map/tile-info）。
+ * 归一化后字段恒定存在，缺省值见 `@/utils/mapTiles` 的 normalizeTileInfo。
+ */
+export interface TileInfo {
+  /** 后端声明瓦片是否可用（瓦片目录存在且含 .png） */
+  available: boolean
+  /** .png 瓦片总数 */
+  tileCount: number
+  /** 已预置的缩放级别（升序） */
+  zoomLevels: number[]
+  /** 瓦片总字节数 */
+  totalBytes: number
+  /** 瓦片根目录（便于运维核对） */
+  dir: string
+  /** 瓦片包清单 */
+  manifest: TileManifest | null
+}
+
+export async function getTileInfo(): Promise<TileInfo> {
   return get(BASE_URL + '/tile-info')
 }

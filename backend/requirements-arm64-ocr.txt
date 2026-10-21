@@ -1,0 +1,47 @@
+# ============================================================
+# ARM64（麒麟 V10）离线 OCR 依赖清单（E 区 · v1.16.0）
+# ============================================================
+# 用途：docker/Dockerfile.kylin-standalone 的 backend-builder 阶段追加安装，
+# 使 standalone DEB / Electron DEB 两条 ARM64 产物都内置离线 OCR。
+#
+# 为什么单独一份文件：
+#   1) 主清单 backend/requirements.txt 保持跨平台唯一（Windows 走 opencv-python
+#      非 headless 版，随 rapidocr 的默认依赖安装）；
+#   2) ARM64 一律用 **opencv-python-headless**：非 headless 的 cv2 在 import 阶段
+#      会 dlopen libGL.so.1 / libglib-2.0.so.0，离线麒麟机常常没有图形栈，
+#      而且会把原本"零外部依赖、dpkg -i 即装"的 standalone DEB 变成
+#      "缺 libgl1 就装不上"；
+#   3) 全部精确 pin，避免构建时解析漂移（ARM64 轮子由 PyPI 的 manylinux 标签保证）。
+#
+# 安装方式（见 Dockerfile）：本文件**不含** rapidocr 引擎本体 ——
+# 它是 `pip install --no-deps rapidocr-onnxruntime==1.4.4` 单独安装的，
+# 因为 rapidocr 的依赖名写死 opencv-python（非 headless），带依赖安装会把
+# opencv-python 拉回来并顶掉 headless。
+#
+# 2026-10-21 PyPI 实测的 aarch64 / cp311 轮子（本清单每个包都有）：
+#   opencv_python_headless-4.12.0.88-cp37-abi3-manylinux2014_aarch64...whl  31.6 MB
+#   onnxruntime-1.31.0-cp311-cp311-manylinux_2_28_aarch64.whl               20.4 MB
+#   pyclipper-1.4.0-cp311-cp311-manylinux_2_24_aarch64...whl                 0.9 MB
+#   shapely-2.2.0-cp311-cp311-manylinux_2_24_aarch64...whl                   2.1 MB
+#   tqdm-4.70.1-py3-none-any.whl / flatbuffers-25.12.19-py2.py3-none-any.whl
+#   protobuf-7.36.2-cp310-abi3-manylinux2014_aarch64.whl
+# 其余 rapidocr 依赖（numpy/Pillow/PyYAML/six）已由主清单精确 pin，不在此重复。
+#
+# 目标机前提：glibc >= 2.28（麒麟 V10 = 2.28；manylinux_2_28 轮子的硬性下限）。
+# ============================================================
+
+# 图像处理（headless：无 libGL/libglib 依赖，不改变 DEB 的零外部依赖）
+opencv-python-headless==4.12.0.88
+
+# ONNX 推理运行时（manylinux_2_28_aarch64；libonnxruntime.so 最高引用 GLIBC_2.28，
+# DT_NEEDED 仅 libc/libdl/libgcc_s/libm/libpthread/librt/libstdc++，不需要 libgomp）
+onnxruntime==1.31.0
+
+# rapidocr 的其余运行时依赖（引擎本体由 Dockerfile 用 --no-deps 单独安装）
+pyclipper==1.4.0
+shapely==2.2.0
+tqdm==4.70.1
+
+# onnxruntime 的传递依赖（显式 pin，避免构建期解析漂移）
+flatbuffers==25.12.19
+protobuf==7.36.2

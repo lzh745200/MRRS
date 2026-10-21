@@ -2,8 +2,8 @@
 
 覆盖 4 个端点全部分支：
 - GET /tiles/{z}/{x}/{y}：缩放非法400 / 命中200 / 未命中404 / 服务异常
-- GET /status：成功 / 异常
-- POST /download：纬度/经度/缩放/顺序四类参数400 / 成功 / 异常（管理员）
+- GET /status：真实瓦片目录统计 / 异常
+- POST /download：在线抓取已下线 → 显式 501（管理员）
 - DELETE /clear：成功 / 异常（管理员）
 """
 
@@ -19,7 +19,7 @@ BASE = "/api/v1/offline-map"
 
 
 @pytest.fixture
-def client():
+def client(tmp_path):
     from app.main import app
 
     original = app.dependency_overrides.copy()
@@ -29,7 +29,9 @@ def client():
     svc = MagicMock()
     svc.get_tile = AsyncMock(return_value=b"\x89PNG-tile")
     svc.get_coverage = AsyncMock(return_value={"tiles": 100})
-    with patch("app.api.v1.offline_map.offline_map_service", svc):
+    with patch("app.api.v1.offline_map.offline_map_service", svc), patch(
+        "app.api.v1.offline_map.TILES_DIR", tmp_path / "tiles-store"
+    ):
         yield TestClient(app, raise_server_exceptions=False), svc
     app.dependency_overrides = original
 
@@ -69,7 +71,12 @@ class TestGetStatus:
         c, _ = client
         resp = c.get(f"{BASE}/status")
         assert resp.status_code == 200
-        assert resp.json()["data"]["tiles"] == 100
+        data = resp.json()["data"]
+        # 瓦片仓目录不存在 → 计数为零；历史缓存覆盖仍原样透传
+        assert data["available"] is False
+        assert data["tileCount"] == 0
+        assert data["downloadSupported"] is False
+        assert data["cache"]["tiles"] == 100
 
     def test_status_error(self, client):
         c, svc = client
@@ -80,45 +87,26 @@ class TestGetStatus:
 
 
 class TestDownloadTiles:
-    def _post(self, c, **kw):
-        params = dict(min_lat=30.0, max_lat=31.0, min_lon=120.0, max_lon=121.0, min_zoom=4, max_zoom=12)
-        params.update(kw)
-        return c.post(f"{BASE}/download", params=params)
-
-    def test_invalid_latitude_400(self, client):
+    def test_download_returns_501(self, client):
         c, _ = client
-        assert self._post(c, min_lat=-91).status_code == 400
-        assert self._post(c, max_lat=91).status_code == 400
+        resp = c.post(
+            f"{BASE}/download",
+            params={
+                "min_lat": 30.0,
+                "max_lat": 31.0,
+                "min_lon": 120.0,
+                "max_lon": 121.0,
+                "min_zoom": 4,
+                "max_zoom": 12,
+            },
+        )
+        assert resp.status_code == 501
+        assert "不支持在线抓取瓦片" in resp.json()["detail"]
 
-    def test_invalid_longitude_400(self, client):
+    def test_download_params_ignored_still_501(self, client):
+        """参数不再校验：一律显式失败，避免前端误以为有抓取能力。"""
         c, _ = client
-        assert self._post(c, min_lon=-181).status_code == 400
-        assert self._post(c, max_lon=181).status_code == 400
-
-    def test_invalid_zoom_400(self, client):
-        c, _ = client
-        assert self._post(c, min_zoom=-1).status_code == 400
-        assert self._post(c, max_zoom=19).status_code == 400
-
-    def test_zoom_order_400(self, client):
-        c, _ = client
-        assert self._post(c, min_zoom=12, max_zoom=4).status_code == 400
-
-    def test_download_success(self, client):
-        c, svc = client
-        svc.download_region.return_value = True
-        resp = self._post(c)
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
-        assert "30.0,120.0-31.0,121.0@4-12" == resp.json()["data"]["region"]
-        svc.download_region.assert_called_once()
-
-    def test_download_error(self, client):
-        c, svc = client
-        svc.download_region.side_effect = RuntimeError("net down")
-        resp = self._post(c)
-        assert resp.status_code in (400, 500)
-        assert "下载地图瓦片失败" in resp.text
+        assert c.post(f"{BASE}/download").status_code == 501
 
 
 class TestClearTiles:

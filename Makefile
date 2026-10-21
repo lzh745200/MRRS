@@ -48,8 +48,8 @@ python-check:
 # 本地全量门禁（与 CI 等价，P-6）：后端测试+覆盖率、flake8、前端 lint/type/test、
 # 6 项棘轮门禁、版本单一来源校验
 test-local:
-	@echo ">>> [1/6] 后端测试 + 覆盖率门禁..."
-	cd backend && $(PYTHON) -m pytest tests/ -q --cov=app
+	@echo ">>> [1/6] 后端测试 + 覆盖率门禁（CI 12 段等价）..."
+	backend/$(PYTHON) scripts/run_backend_tests_segmented.py
 	@echo ">>> [2/6] flake8..."
 	cd backend && $(PYTHON) -m flake8 app/ --max-line-length=120 --max-complexity=16
 	@echo ">>> [3/6] 前端 lint / type-check / 测试..."
@@ -69,9 +69,12 @@ test: test-backend test-frontend
 	@echo "✓ 所有测试通过"
 
 # 后端测试
+# 按 CI 的 12 段运行：单进程 `pytest tests/` 会在约 88% 处进程级崩溃
+# （SQLAlchemy engine.dispose() 的 Windows access violation，崩溃前无 FAILED），
+# 故本地也必须分段，否则无法验证覆盖率门禁。详见 scripts/run_backend_tests_segmented.py
 test-backend:
-	@echo ">>> 运行后端测试..."
-	cd backend && $(PYTHON) -m pytest tests/ -v --tb=short --cov=app
+	@echo ">>> 运行后端测试（CI 12 段等价）..."
+	backend/$(PYTHON) scripts/run_backend_tests_segmented.py
 
 # 前端测试
 test-frontend:

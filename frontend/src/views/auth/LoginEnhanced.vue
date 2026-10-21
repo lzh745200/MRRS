@@ -556,11 +556,11 @@ const goToMachineCode = () => {
   width: 950px;
   max-width: 95vw;
   max-height: 95vh;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-white-8);
   backdrop-filter: blur(20px);
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--color-white-15);
+  box-shadow: 0 25px 50px -12px var(--color-black-50);
   z-index: 1;
   overflow: hidden auto;
 }
@@ -594,7 +594,7 @@ const goToMachineCode = () => {
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+  filter: drop-shadow(0 4px 8px var(--color-black-30));
 }
 
 .brand-title {
@@ -605,7 +605,7 @@ const goToMachineCode = () => {
   line-height: 1.4;
   letter-spacing: 3px;
   color: var(--military-gold);
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 2px 4px var(--color-black-30);
 }
 
 .brand-subtitle {
@@ -615,22 +615,22 @@ const goToMachineCode = () => {
   text-align: center;
   margin: 0;
   padding: 12px 20px;
-  border: 1px solid rgba(212, 175, 55, 0.3);
+  border: 1px solid var(--color-gold-a30);
   border-radius: 8px;
-  background: rgba(212, 175, 55, 0.1);
+  background: var(--color-gold-a10);
 }
 
 /* 右侧登录卡片 */
 .login-card {
   flex: 1;
   padding: 50px 60px;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--color-white-15);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  border-left: 1px solid var(--color-white-20);
 }
 
 .card-header {
@@ -643,11 +643,11 @@ const goToMachineCode = () => {
   color: var(--color-text-inverse);
   margin: 0 0 10px 0;
   font-weight: 600;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 2px 4px var(--color-black-30);
 }
 
 .card-header p {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-white-80);
   font-size: 15px;
   margin: 0;
 }
@@ -659,7 +659,7 @@ const goToMachineCode = () => {
 .form-group label {
   display: block;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-white-90);
   margin-bottom: 8px;
   font-weight: 500;
 }
@@ -674,7 +674,7 @@ const goToMachineCode = () => {
   position: absolute;
   left: 14px;
   font-size: 18px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-white-60);
   z-index: 1;
   display: flex;
   align-items: center;
@@ -683,27 +683,27 @@ const goToMachineCode = () => {
 .custom-input {
   width: 100%;
   padding: 14px 45px 14px 45px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--color-white-30);
   border-radius: 10px;
   font-size: 15px;
   transition:
     border-color 0.3s ease,
     background-color 0.3s ease,
     box-shadow 0.3s ease;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--color-white-10);
   color: var(--color-text-inverse);
   box-sizing: border-box;
 }
 
 .custom-input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-white-50);
 }
 
 .custom-input:focus {
   outline: none;
   border-color: var(--military-gold);
-  background: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.2);
+  background: var(--color-white-20);
+  box-shadow: 0 0 0 4px var(--color-gold-a20);
 }
 
 .toggle-password {
@@ -729,7 +729,7 @@ const goToMachineCode = () => {
 
 .hint-text {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-white-60);
   margin: 6px 0 0 0;
   line-height: 1.4;
 }
@@ -749,12 +749,12 @@ const goToMachineCode = () => {
     box-shadow 0.3s ease,
     background 0.3s ease;
   margin-top: 10px;
-  box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);
+  box-shadow: 0 4px 15px var(--color-gold-a40);
 }
 
 .login-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.5);
+  box-shadow: 0 6px 20px var(--color-gold-a50);
   background: linear-gradient(135deg, #e0c048, var(--military-gold));
 }
 
@@ -782,8 +782,8 @@ const goToMachineCode = () => {
   width: 100%;
   padding: 12px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--color-white-80);
+  border: 1px solid var(--color-white-30);
   border-radius: 10px;
   font-size: 14px;
   cursor: pointer;
@@ -846,7 +846,7 @@ const goToMachineCode = () => {
 
 .copyright {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-white-60);
   margin: 0;
 }
 
@@ -930,7 +930,7 @@ const goToMachineCode = () => {
   .login-card {
     padding: 30px 24px;
     border-left: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    border-top: 1px solid var(--color-white-20);
   }
 }
 

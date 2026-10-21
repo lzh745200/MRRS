@@ -49,6 +49,7 @@ from app.core.grant_signing import (
     sign_payload,
     verify_payload,
 )
+from app.core.transaction import safe_commit
 from app.models.org_grant import VALID_GRANT_LEVELS, OrgGrant
 from app.models.organization import Organization
 
@@ -197,7 +198,8 @@ def apply_package(
     org.grant_signature = signature or None
     org.grant_applied_at = datetime.now(timezone.utc)
     org.grant_source = "import"
-    db.commit()
+    # safe_commit：失败自动 rollback，避免"矩阵已替换但版本号/签名未落库"的半提交态
+    safe_commit(db)
 
     # 版本号已变 → 旧缓存自然失效；显式清一次更稳妥（同版本重复导入的边界）
     from app.services.effective_grant_service import clear_cache

@@ -11,38 +11,33 @@ vi.mock('@/api/request', () => ({
   getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
 }))
 
-import { offlineMapApi, clearTiles, downloadTiles, getMapStatus } from '@/api/offlineMap'
+import { clearTiles, importTiles } from '@/api/offlineMap'
 
 describe('api/offlineMap', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('offlineMapApi.getTiles with z/x/y', () => {
-    offlineMapApi.getTiles(10, 512, 256)
-    expect(mockGet).toHaveBeenCalledWith('/offline-map/tiles/10/512/256')
+  it('importTiles POST /map/tiles/import，multipart 字段名 file', async () => {
+    const file = new File(['zip-bytes'], 'guizhou.zip', { type: 'application/zip' })
+    await importTiles(file)
+
+    expect(mockPost).toHaveBeenCalledTimes(1)
+    const [url, body] = mockPost.mock.calls[0]
+    expect(url).toBe('/map/tiles/import')
+    expect(body).toBeInstanceOf(FormData)
+    const form = body as FormData
+    expect(form.get('file')).toBe(file)
   })
-  it('offlineMapApi.getStatus', () => {
-    offlineMapApi.getStatus()
-    expect(mockGet).toHaveBeenCalledWith('/offline-map/status')
-  })
-  it('clearTiles DELETE /offline-map/clear', () => {
-    clearTiles()
+
+  it('clearTiles DELETE /offline-map/clear', async () => {
+    await clearTiles()
     expect(mockDelete).toHaveBeenCalledWith('/offline-map/clear')
   })
-  it('downloadTiles POST /offline-map/download with params', () => {
-    downloadTiles({
-      min_lat: 30,
-      max_lat: 40,
-      min_lon: 110,
-      max_lon: 120,
-      min_zoom: 4,
-      max_zoom: 12,
-    })
-    expect(mockPost).toHaveBeenCalledWith('/offline-map/download', null, {
-      params: { min_lat: 30, max_lat: 40, min_lon: 110, max_lon: 120, min_zoom: 4, max_zoom: 12 },
-    })
-  })
-  it('getMapStatus GET', () => {
-    getMapStatus()
-    expect(mockGet).toHaveBeenCalledWith('/offline-map/status')
+
+  it('已下线的假下载端点不再导出（getTiles / downloadTiles / getMapStatus）', async () => {
+    const mod = (await import('@/api/offlineMap')) as Record<string, unknown>
+    expect(mod.getTiles).toBeUndefined()
+    expect(mod.downloadTiles).toBeUndefined()
+    expect(mod.getMapStatus).toBeUndefined()
+    expect(mod.offlineMapApi).toBeUndefined()
   })
 })

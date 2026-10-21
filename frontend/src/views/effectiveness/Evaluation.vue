@@ -375,7 +375,7 @@ onMounted(() => {
 .result-card {
   background: var(--color-bg-card, var(--color-bg-card));
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px var(--color-black-8);
   margin-bottom: 20px;
   overflow: hidden;
 }

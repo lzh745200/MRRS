@@ -995,7 +995,7 @@ watch(healthExpanded, (val) => {
     transform 0.2s ease;
 }
 .primary-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px var(--color-black-8);
   transform: translateY(-2px);
 }
 .primary-card.status-normal {
@@ -1125,7 +1125,7 @@ watch(healthExpanded, (val) => {
   transition: box-shadow 0.2s ease;
 }
 .secondary-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--color-black-6);
 }
 .secondary-card.card-error {
   opacity: 0.55;

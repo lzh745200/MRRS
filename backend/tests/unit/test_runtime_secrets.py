@@ -398,3 +398,77 @@ class TestAtomicWriteJson:
             with pytest.raises(OSError):
                 _atomic_write_json(dest, {"key": "value"})
         assert not dest.exists()
+
+
+# ---------------------------------------------------------------------------
+# set_secret（R34-2：跨机密钥导入入口，强制覆盖语义）
+# ---------------------------------------------------------------------------
+
+
+class TestSetSecret:
+    """`set_secret` 与 `get_or_create_secret` 的关键区别是**强制覆盖**。
+
+    多机离线同步场景下运维要把源机 PII 密钥原样搬到目标机，必须能覆盖既有值；
+    同时静态数据密钥落盘失败不得静默降级（否则历史密文重启后不可解）。
+    """
+
+    def test_overwrites_existing_value(self, tmp_path):
+        from app.utils.runtime_secrets import set_secret
+
+        dest = tmp_path / "secrets.json"
+        dest.write_text(json.dumps({"PII_AESSIV_KEY": "old", "OTHER": "keep"}),
+                        encoding="utf-8")
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(dest)}):
+            set_secret("PII_AESSIV_KEY", "new-value")
+        data = json.loads(dest.read_text(encoding="utf-8"))
+        assert data == {"PII_AESSIV_KEY": "new-value", "OTHER": "keep"}
+
+    def test_creates_file_when_absent(self, tmp_path):
+        from app.utils.runtime_secrets import set_secret
+
+        dest = tmp_path / "nested" / "secrets.json"
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(dest)}):
+            set_secret("K", "v")
+        assert json.loads(dest.read_text(encoding="utf-8")) == {"K": "v"}
+
+    def test_non_dict_json_treated_as_empty(self, tmp_path):
+        """密钥文件被外部破坏成数组/标量时按空处理（与 get_or_create 同口径）。"""
+        from app.utils.runtime_secrets import set_secret
+
+        dest = tmp_path / "secrets.json"
+        dest.write_text("[1, 2, 3]", encoding="utf-8")
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(dest)}):
+            set_secret("K", "v")
+        assert json.loads(dest.read_text(encoding="utf-8")) == {"K": "v"}
+
+    def test_corrupt_json_raises(self, tmp_path):
+        """文件存在但内容损坏：必须显式失败，绝不覆盖掉旧密钥。"""
+        from app.utils.runtime_secrets import set_secret
+
+        dest = tmp_path / "secrets.json"
+        dest.write_text("{not-json", encoding="utf-8")
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(dest)}):
+            with pytest.raises(RuntimeError, match="无法读取运行时密钥文件"):
+                set_secret("K", "v")
+        assert dest.read_text(encoding="utf-8") == "{not-json"
+
+    def test_permission_error_raises(self, tmp_path):
+        from app.utils.runtime_secrets import set_secret
+
+        dest = tmp_path / "secrets.json"
+        dest.write_text("{}", encoding="utf-8")
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(dest)}), \
+             patch("builtins.open", side_effect=PermissionError("denied")):
+            with pytest.raises(RuntimeError, match="无法读取运行时密钥文件"):
+                set_secret("K", "v")
+
+    def test_write_failure_raises(self, tmp_path):
+        from app.utils.runtime_secrets import set_secret
+
+        dest = tmp_path / "secrets.json"
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(dest)}), \
+             patch("app.utils.runtime_secrets._atomic_write_json",
+                   side_effect=OSError("disk full")):
+            with pytest.raises(RuntimeError, match="无法持久化密钥"):
+                set_secret("K", "v")
+

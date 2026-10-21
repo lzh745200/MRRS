@@ -605,7 +605,7 @@ const redirectToList = () => {
     background: var(--color-bg-card);
     border-radius: 4px;
     padding: 30px;
-    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 12px 0 var(--color-black-10);
   }
   .important-text {
     font-size: 16px;

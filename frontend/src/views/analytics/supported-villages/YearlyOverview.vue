@@ -789,7 +789,7 @@ onBeforeUnmount(() => {
   background: white;
   border-radius: 10px;
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--color-black-6);
   transition:
     transform 0.2s,
     box-shadow 0.2s;
@@ -797,7 +797,7 @@ onBeforeUnmount(() => {
 
 .section-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 16px var(--color-black-10);
 }
 
 .section-card-header {

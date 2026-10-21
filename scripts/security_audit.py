@@ -14,12 +14,19 @@
   --strict: 发现任何违规即返回非零退出码（CI 模式）
   --verbose: 打印详细信息（含被豁免项）
 
+写操作用审计（Scan 4）的覆盖面：
+  动态发现 `backend/app/api/**` 下所有含 POST/PUT/PATCH/DELETE 路由的模块，
+  与基线 `backend/scripts/gate_baselines/audit_work_log_baseline.json` 比对。
+  基线内的存量未审计模块仅报告不阻断；**基线外新增**即 NEW>0 失败。
+  存量已补齐后用 `--write-audit-baseline` 收敛基线（棘轮只紧不松）。
+
 受控豁免（见下方 EXEMPTION_RE）:
   在模块内以顶层注释声明 `# security-audit: exempt <rule> — <reason>` 可将
   该模块从对应扫描项豁免；理由须 ≥8 字符，否则标记不生效。豁免项不计入
   total，故 --strict 在真阳性全部修复后退出 0。
 """
 
+import json
 import os
 import re
 import sys
@@ -35,7 +42,10 @@ ORG_MODELS = {
     "project", "school", "supported_village", "user", "user_organization", "village",
 }
 
-# 需要审计写操作的模块
+# 需要审计写操作的模块（**已废弃**：原硬编码清单只覆盖 22 个模块，实测 54 个
+# 顶层模块中有 32 个 / 128 个写端点完全在扫描范围外，households / media / files
+# 等高敏模块长期裸奔。现改为 `discover_write_modules()` 动态发现 + 基线棘轮，
+# 保留常量仅为向后兼容（无调用方）。
 WRITE_OP_MODULES = [
     "ai", "ai_enhanced", "approval", "batch_operations", "data_quality",
     "effectiveness", "encryption", "feedback", "machine_code", "map",
@@ -44,6 +54,14 @@ WRITE_OP_MODULES = [
     "rural_tasks", "sentiment", "supported_village", "todos",
     "user_permissions", "validation",
 ]
+
+# 视为"已留痕"的审计入口
+AUDIT_TOKENS = ("write_work_log", "AuditLogger", "audit_logger", "record_audit")
+
+# 动态发现的未审计模块基线（棘轮：只允许持平或减少）
+AUDIT_BASELINE_FILE = (
+    PROJECT_ROOT / "backend" / "scripts" / "gate_baselines" / "audit_work_log_baseline.json"
+)
 
 # ── 受控豁免机制（R26-T01）──────────────────────────────────────────────
 # 豁免指令约定：位于模块文件内任意位置（推荐文件头 docstring 之后 / import 之前），
@@ -176,55 +194,101 @@ def scan_missing_ok_list(verbose=False):
     return violations
 
 
+def discover_write_modules():
+    """动态发现所有含写路由（POST/PUT/PATCH/DELETE）的 API 模块。
+
+    返回 [(abs_path, content, project_relative_posix_path)]。
+
+    为什么不用固定清单：授权/审计覆盖面必须随代码增长自动扩张。历史实现是
+    25 项硬编码清单（含 sentiment/user_permissions 等已删除模块），实测只覆盖
+    22/54 个顶层模块；households（PII 最密集，9 个写端点）、media、files、
+    data_sync、reminders、recycle_bin 等均不在清单内，长期无业务审计。
+    """
+    modules = []
+    api_root = BACKEND_APP / "api"
+    for fp in sorted(api_root.rglob("*.py")):
+        if fp.name == "__init__.py":
+            continue
+        try:
+            with open(fp, encoding="utf-8") as fh:
+                content = fh.read()
+        except Exception:
+            continue
+        if not re.search(r'@router\.(post|put|delete|patch)', content):
+            continue
+        rel_path = os.path.relpath(fp, PROJECT_ROOT).replace("\\", "/")
+        modules.append((fp, content, rel_path))
+    return modules
+
+
+def _load_audit_baseline():
+    """读取未审计模块基线（不存在时返回空集合 = 最严）。"""
+    if not AUDIT_BASELINE_FILE.exists():
+        return []
+    try:
+        data = json.loads(AUDIT_BASELINE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    return list(data.get("modules", []))
+
+
+def _write_audit_baseline(modules):
+    """重新生成基线（棘轮只紧不松：仅允许显式收敛）。"""
+    AUDIT_BASELINE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"total": len(modules), "modules": sorted(modules)}
+    AUDIT_BASELINE_FILE.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"[baseline] {len(modules)} entries -> {AUDIT_BASELINE_FILE.name}")
+
+
 def scan_missing_write_work_log(verbose=False):
-    """扫描写操作缺少 write_work_log 的模块"""
-    violations = []
-    for module_name in WRITE_OP_MODULES:
-        # 查找模块文件
-        module_paths = [
-            BACKEND_APP / "api" / "v1" / f"{module_name}.py",
-            BACKEND_APP / "api" / "v1" / "system" / f"{module_name}.py",
-            BACKEND_APP / "api" / "v1" / "auth" / f"{module_name}.py",
-        ]
-        for fp in module_paths:
-            if not fp.exists():
-                continue
-            rel_path = os.path.relpath(fp, PROJECT_ROOT)
-            try:
-                with open(fp, encoding="utf-8") as fh:
-                    content = fh.read()
-            except Exception:
-                continue
+    """扫描写操作缺少审计留痕的模块（动态发现 + 基线棘轮）。
 
-            # 检查是否有写操作（POST/PUT/DELETE 路由）
-            has_write_ops = bool(
-                re.search(r'@router\.(post|put|delete|patch)', content)
-            )
-            if not has_write_ops:
-                continue
+    只把**基线之外**的未审计模块记为违规（NEW>0 即失败）；基线内的存量债务
+    仅报告、不阻断，避免历史欠账让门禁永久变红。已修复的基线条目以 STALE
+    提示收敛（棘轮只紧不松）。
+    """
+    modules = discover_write_modules()
+    unaudited = []
+    for _fp, content, rel_path in modules:
+        # 受控豁免：显式豁免标记（须带 ≥8 字符理由）在审计判定【之前】生效
+        exemption = _find_exemption(content, "work_log")
+        if exemption:
+            if verbose:
+                print(f"  exempt: {rel_path} — {exemption}")
+            continue
+        if any(tok in content for tok in AUDIT_TOKENS):
+            continue
+        unaudited.append(rel_path)
 
-            # 受控豁免：显式豁免标记（须带 ≥8 字符理由）在 has_work_log 判定【之前】生效。
-            # 豁免项不计入 total，但仍需可见（--verbose/--strict 时打印理由）。
-            exemption = _find_exemption(content, "work_log")
-            if exemption:
-                if verbose:
-                    print(f"  exempt: {rel_path} — {exemption}")
-                break
+    baseline = _load_audit_baseline()
+    new = sorted(set(unaudited) - set(baseline))
+    stale = sorted(set(baseline) - set(unaudited))
 
-            # 检查是否调用了 write_work_log
-            has_work_log = "write_work_log" in content
+    if "--write-audit-baseline" in sys.argv:
+        _write_audit_baseline(unaudited)
+        return []
 
-            if not has_work_log:
-                violations.append(
-                    f"  {rel_path} — has write operations but no write_work_log call"
-                )
-            break
     if verbose:
-        if violations:
-            print(f"[write_work_log] Found {len(violations)} violations")
-        else:
-            print("[write_work_log] OK — all write modules call write_work_log")
-    return violations
+        print(
+            f"[write_work_log] 写模块={len(modules)} 未审计={len(unaudited)} "
+            f"baseline={len(baseline)} NEW={len(new)}"
+        )
+        for item in unaudited:
+            print(f"  {item} — 有写路由但无审计调用")
+    if stale:
+        print(
+            f"[stale] {len(stale)} 条基线已不再命中（已补审计），"
+            f"请跑 `--write-audit-baseline` 收敛："
+        )
+        for item in stale:
+            print(f"  {item}")
+
+    return [
+        f"  {p} — has write operations but no audit call (NEW since baseline)"
+        for p in new
+    ]
 
 
 def scan_missing_data_scope(verbose=False):

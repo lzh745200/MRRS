@@ -1,281 +1,225 @@
 <template>
   <div class="map-tile-manager">
-    <PageHeader title="地图瓦片管理" subtitle="管理离线地图瓦片缓存" />
+    <PageHeader title="地图瓦片管理" subtitle="查看离线瓦片覆盖情况，导入运维生成的瓦片包" />
 
-    <!-- 瓦片状态 -->
-    <el-card class="tile-status">
-      <h3 class="section-title">瓦片状态</h3>
-      <el-descriptions :column="3" border>
-        <el-descriptions-item label="总瓦片数">
-          {{ coverage.total_tiles }}
+    <el-alert
+      class="map-tile-tip"
+      type="info"
+      :closable="false"
+      show-icon
+      title="地图默认使用内置矢量地图；如需栅格瓦片底图，请由运维生成瓦片包后在此导入。"
+    />
+
+    <!-- 覆盖情况 -->
+    <el-card class="map-tile-card">
+      <h3 class="section-title">瓦片覆盖情况</h3>
+
+      <el-descriptions v-loading="loading" :column="3" border>
+        <el-descriptions-item label="是否可用">
+          <el-tag :type="tileUsable ? 'success' : 'info'">
+            {{ tileUsable ? '已预置' : '未预置' }}
+          </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="占用空间">
-          {{ coverage.total_size_mb }} MB
-        </el-descriptions-item>
-        <el-descriptions-item label="缩放级别">
-          {{ Object.keys(coverage.zoom_levels).length }}
-        </el-descriptions-item>
+        <el-descriptions-item label="瓦片数量">{{ tileInfo.tileCount }}</el-descriptions-item>
+        <el-descriptions-item label="占用空间">{{ sizeLabel }}</el-descriptions-item>
+        <el-descriptions-item label="缩放级别">{{ zoomLabel }}</el-descriptions-item>
+        <el-descriptions-item label="瓦片目录">{{ dirLabel }}</el-descriptions-item>
+        <el-descriptions-item label="生成时间">{{ generatedAtLabel }}</el-descriptions-item>
       </el-descriptions>
 
-      <div v-if="Object.keys(coverage.zoom_levels).length > 0" class="zoom-levels">
-        <h4>各级别瓦片数量</h4>
-        <el-table border :data="zoomLevelData" style="width: 100%">
-          <el-table-column prop="level" label="缩放级别" width="120" />
-          <el-table-column prop="count" label="瓦片数量" />
-          <el-table-column fixed="right" label="操作" width="150">
-            <template #default>
-              <el-button type="danger" @click="handleClearLevel()"> 清理 </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+      <div v-if="zoomLevels.length > 0" class="zoom-levels">
+        <h4>已预置的缩放级别</h4>
+        <div class="zoom-level-tags">
+          <el-tag v-for="level in zoomLevels" :key="level" type="info" size="small">
+            {{ level }}
+          </el-tag>
+        </div>
       </div>
 
+      <el-alert
+        v-if="unavailableHint"
+        class="map-tile-hint"
+        type="warning"
+        :closable="false"
+        :title="unavailableHint"
+      />
+      <el-alert
+        v-if="gcj02"
+        class="map-tile-hint"
+        type="warning"
+        :closable="false"
+        :title="GCJ02_HINT"
+      />
+
       <div class="actions">
-        <el-button type="primary" @click="loadStatus">刷新状态</el-button>
-        <el-button type="danger" @click="handleClearAll">清理所有瓦片</el-button>
+        <el-button type="primary" :loading="loading" @click="loadTileInfo">刷新状态</el-button>
+        <el-button type="danger" @click="handleClearTiles">清空瓦片缓存</el-button>
       </div>
     </el-card>
 
-    <!-- 下载瓦片 -->
-    <el-card class="tile-download">
-      <h3 class="section-title">下载瓦片</h3>
-      <el-alert title="注意" type="warning" :closable="false" style="margin-bottom: 20px">
-        下载瓦片需要网络连接,大范围下载可能需要较长时间
-      </el-alert>
+    <!-- 导入瓦片包 -->
+    <el-card class="map-tile-card">
+      <h3 class="section-title">导入瓦片包</h3>
+      <p class="import-desc">
+        瓦片包为 .zip（内部按 <code>{z}/{x}/{y}.png</code> 组织，最大
+        512MB）。导入后在地图可视化页切换到「瓦片底图」即可查看，全程不联网。
+      </p>
 
-      <el-form :model="downloadForm" label-width="120px">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="最小纬度">
-              <el-input-number
-                v-model="downloadForm.min_lat"
-                :min="-90"
-                :max="90"
-                :precision="4"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="最大纬度">
-              <el-input-number
-                v-model="downloadForm.max_lat"
-                :min="-90"
-                :max="90"
-                :precision="4"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
+      <el-upload
+        ref="uploadRef"
+        class="tile-upload"
+        accept=".zip"
+        :auto-upload="false"
+        :limit="1"
+        :on-change="handleFileChange"
+        :on-remove="handleFileRemove"
+        :on-exceed="handleFileExceed"
+      >
+        <el-button>选择瓦片包</el-button>
+        <template #tip>
+          <div class="upload-tip">仅支持 .zip 格式；一次只能导入一个瓦片包</div>
+        </template>
+      </el-upload>
 
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="最小经度">
-              <el-input-number
-                v-model="downloadForm.min_lon"
-                :min="-180"
-                :max="180"
-                :precision="4"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="最大经度">
-              <el-input-number
-                v-model="downloadForm.max_lon"
-                :min="-180"
-                :max="180"
-                :precision="4"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="最小缩放">
-              <el-input-number
-                v-model="downloadForm.min_zoom"
-                :min="0"
-                :max="18"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="最大缩放">
-              <el-input-number
-                v-model="downloadForm.max_zoom"
-                :min="0"
-                :max="18"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-form-item>
-          <el-button type="primary" :loading="downloading" @click="handleDownload">
-            开始下载
-          </el-button>
-          <el-button @click="usePresetRegion('guizhou')"> 使用贵州省预设 </el-button>
-          <el-button @click="usePresetRegion('bijie')"> 使用毕节市预设 </el-button>
-        </el-form-item>
-      </el-form>
+      <div class="actions">
+        <el-button type="primary" :loading="importing" @click="handleImportTiles">
+          导入瓦片包
+        </el-button>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { getMapStatus, downloadTiles, clearTiles } from '@/api/offlineMap'
+/**
+ * 地图瓦片管理（覆盖查看 + 导入瓦片包）
+ *
+ * 语义变更（离线部署）：
+ * - 旧的「下载瓦片（需要网络连接）」已删除 —— 后端 POST /offline-map/download 改为显式失败，
+ *   瓦片改由运维离线生成 .zip 瓦片包后在此导入（POST /map/tiles/import，管理员）。
+ * - 状态数据源统一为 GET /map/tile-info（available/tileCount/zoomLevels/totalBytes/dir/manifest）。
+ * - 清空缓存仍走后端 DELETE /offline-map/clear（整体清理，不支持按缩放级别）。
+ */
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox, type UploadFile, type UploadInstance } from 'element-plus'
+import { getTileInfo, type TileInfo } from '@/api/map'
+import { clearTiles, importTiles } from '@/api/offlineMap'
+import {
+  GCJ02_HINT,
+  formatManifestTime,
+  formatTileBytes,
+  formatZoomRange,
+  isGcj02,
+  isTileMapUsable,
+  normalizeTileImportResult,
+  normalizeTileInfo,
+  tileInfoHint,
+  validateTilePackage,
+} from '@/utils/mapTiles'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import PageHeader from '@/components/common/PageHeader.vue'
 
-interface MapCoverage {
-  total_tiles: number
-  total_size_mb: number
-  zoom_levels: Record<string, number>
-}
+const tileInfo = ref<TileInfo>(normalizeTileInfo(null))
+const loading = ref(false)
+const importing = ref(false)
+/** 是否已完成一次状态读取（未读完时不展示"未预置"提示，避免闪烁） */
+const loaded = ref(false)
+const pendingFile = ref<File | null>(null)
+const uploadRef = ref<UploadInstance>()
 
-const coverage = ref<MapCoverage>({
-  total_tiles: 0,
-  total_size_mb: 0,
-  zoom_levels: {},
-})
+const tileUsable = computed(() => isTileMapUsable(tileInfo.value))
+const sizeLabel = computed(() => formatTileBytes(tileInfo.value.totalBytes))
+const zoomLabel = computed(() => formatZoomRange(tileInfo.value.zoomLevels))
+const zoomLevels = computed(() => tileInfo.value.zoomLevels)
+const dirLabel = computed(() => tileInfo.value.dir || '—')
+const generatedAtLabel = computed(() => formatManifestTime(tileInfo.value.manifest))
+const unavailableHint = computed(() => (loaded.value ? tileInfoHint(tileInfo.value) : ''))
+const gcj02 = computed(() => isGcj02(tileInfo.value.manifest))
 
-const downloadForm = ref({
-  min_lat: 24.5,
-  max_lat: 29.2,
-  min_lon: 103.6,
-  max_lon: 109.5,
-  min_zoom: 4,
-  max_zoom: 12,
-})
-
-const downloading = ref(false)
-
-const zoomLevelData = computed(() => {
-  return Object.entries(coverage.value.zoom_levels)
-    .map(([level, count]) => ({
-      level: parseInt(level),
-      count,
-    }))
-    .sort((a, b) => a.level - b.level)
-})
-
-const loadStatus = async () => {
+/** 读取本机瓦片覆盖情况（GET /map/tile-info） */
+async function loadTileInfo() {
+  loading.value = true
   try {
-    const response = await getMapStatus()
-    if (response.success) {
-      /* c8 ignore next */ // 防御性代码：success=true 时后端必带 data；缺 data 模板 Object.keys(zoom_levels) 会抛错
-      coverage.value = response.data || {}
-    }
+    tileInfo.value = normalizeTileInfo(await getTileInfo())
   } catch (error: any) {
-    ElMessage.error(error.message || '加载状态失败')
-  }
-}
-
-const handleDownload = async () => {
-  try {
-    await ElMessageBox.confirm('下载瓦片可能需要较长时间,确定要继续吗?', '确认下载', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-
-    downloading.value = true
-    const response = await downloadTiles(downloadForm.value)
-
-    if (response.success) {
-      // 后端返回 {success, data:{region}}（无 downloaded/failed 计数）
-      ElMessage.success(`下载完成! 区域 ${response.data?.region || '已记录'}`)
-      await loadStatus()
-    }
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || '下载失败')
-    }
+    ElMessage.error(getErrorMessage(error, '读取瓦片信息失败'))
   } finally {
-    downloading.value = false
+    loaded.value = true
+    loading.value = false
   }
 }
 
-const handleClearLevel = async () => {
+/** el-upload 选择文件后先做前端校验（.zip / 非空 / ≤512MB），再待用户点击导入 */
+function handleFileChange(file: UploadFile) {
+  const raw = (file?.raw ?? null) as File | null
+  const validation = validateTilePackage(raw)
+  if (!validation.ok) {
+    pendingFile.value = null
+    ElMessage.error(validation.message)
+    uploadRef.value?.clearFiles()
+    return
+  }
+  pendingFile.value = raw
+}
+
+function handleFileRemove() {
+  pendingFile.value = null
+}
+
+/** limit=1：重复选择时提示先移除已选文件 */
+function handleFileExceed() {
+  ElMessage.warning('一次只能导入一个瓦片包，请先移除已选择的文件')
+}
+
+async function handleImportTiles() {
+  if (!pendingFile.value) {
+    ElMessage.warning('请先选择 .zip 瓦片包')
+    return
+  }
+  importing.value = true
   try {
-    // 后端 /offline-map/clear 为整体清理（不支持按缩放级别），提示语如实说明
+    const outcome = normalizeTileImportResult(await importTiles(pendingFile.value))
+    if (!outcome.ok) {
+      ElMessage.error(outcome.message)
+      return
+    }
+    ElMessage.success(outcome.message)
+    pendingFile.value = null
+    uploadRef.value?.clearFiles()
+    await loadTileInfo()
+  } catch (error: any) {
+    // 后端中文失败原因（detail/message）经拦截器挂到 userMessage，由 getErrorMessage 提取
+    ElMessage.error(getErrorMessage(error, '导入瓦片包失败'))
+  } finally {
+    importing.value = false
+  }
+}
+
+async function handleClearTiles() {
+  try {
     await ElMessageBox.confirm(
-      `系统当前为整体瓦片缓存清理（不区分缩放级别）。确定要继续吗?`,
-      '确认清理',
+      '将删除本机全部离线瓦片（含已导入的瓦片包），确定要继续吗？',
+      '确认清空',
       {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning',
       }
     )
-
-    const response = await clearTiles()
-    if (response.success) {
-      // 后端返回 {success:true, message}（无 data 键）
-      ElMessage.success(response.message || '瓦片缓存已清理')
-      await loadStatus()
-    }
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || '清理失败')
-    }
+  } catch {
+    return
   }
-}
-
-const handleClearAll = async () => {
   try {
-    await ElMessageBox.confirm('确定要清理所有瓦片吗?', '确认清理', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-
     const response = await clearTiles()
-    if (response.success) {
-      ElMessage.success(response.message || '瓦片缓存已清理')
-      await loadStatus()
-    }
+    ElMessage.success(response?.message || '瓦片缓存已清空')
+    await loadTileInfo()
   } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || '清理失败')
-    }
-  }
-}
-
-const usePresetRegion = (region: string) => {
-  if (region === 'guizhou') {
-    // 贵州省
-    downloadForm.value = {
-      min_lat: 24.5,
-      max_lat: 29.2,
-      min_lon: 103.6,
-      max_lon: 109.5,
-      min_zoom: 4,
-      max_zoom: 8,
-    }
-  } else if (region === 'bijie') {
-    // 毕节市
-    downloadForm.value = {
-      min_lat: 26.5,
-      max_lat: 27.9,
-      min_lon: 105.3,
-      max_lon: 106.8,
-      min_zoom: 9,
-      max_zoom: 12,
-    }
+    ElMessage.error(getErrorMessage(error, '清空瓦片缓存失败'))
   }
 }
 
 onMounted(() => {
-  loadStatus()
+  loadTileInfo()
 })
 </script>
 
@@ -284,26 +228,11 @@ onMounted(() => {
   padding: 20px;
 }
 
-.page-header {
-  margin-bottom: 20px;
-
-  .header-content {
-    h2 {
-      margin: 0 0 8px 0;
-      font-size: 24px;
-      color: var(--color-text-primary);
-    }
-
-    .description {
-      margin: 0;
-      color: var(--color-info);
-      font-size: 14px;
-    }
-  }
+.map-tile-tip {
+  margin-bottom: 16px;
 }
 
-.tile-status,
-.tile-download {
+.map-tile-card {
   margin-bottom: 20px;
 }
 
@@ -315,6 +244,10 @@ onMounted(() => {
   padding-bottom: 10px;
 }
 
+.map-tile-hint {
+  margin-top: 16px;
+}
+
 .zoom-levels {
   margin-top: 20px;
 
@@ -323,6 +256,31 @@ onMounted(() => {
     font-size: 16px;
     color: var(--color-text-primary);
   }
+}
+
+.zoom-level-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.import-desc {
+  margin: 0 0 16px 0;
+  color: var(--color-text-regular);
+  font-size: 14px;
+
+  code {
+    padding: 0 4px;
+    border-radius: 3px;
+    background: var(--color-bg-hover);
+    font-family: var(--font-family-mono);
+  }
+}
+
+.upload-tip {
+  margin-top: 8px;
+  color: var(--color-info);
+  font-size: 12px;
 }
 
 .actions {

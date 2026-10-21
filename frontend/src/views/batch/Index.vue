@@ -501,7 +501,7 @@ function handleReset() {
 .result-card {
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px var(--color-black-8);
   overflow: hidden;
 }
 

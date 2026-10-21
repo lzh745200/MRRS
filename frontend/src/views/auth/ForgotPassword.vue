@@ -276,11 +276,11 @@ const goToLogin = () => {
 }
 
 .forgot-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--color-white-95);
   backdrop-filter: blur(20px);
   border-radius: 16px;
   padding: 40px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px var(--color-black-30);
 }
 
 .card-header {
@@ -297,7 +297,7 @@ const goToLogin = () => {
   background: linear-gradient(135deg, $badge-gold, var(--color-accent-gold));
   border-radius: 50%;
   margin-bottom: 20px;
-  box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);
+  box-shadow: 0 4px 15px var(--color-gold-a40);
 }
 
 .icon {
@@ -372,7 +372,7 @@ const goToLogin = () => {
 }
 
 .link {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-white-90);
   text-decoration: none;
   transition: color 0.3s;
 
@@ -382,7 +382,7 @@ const goToLogin = () => {
 }
 
 .separator {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-white-50);
   margin: 0 15px;
 }
 
@@ -407,7 +407,7 @@ const goToLogin = () => {
   gap: 12px;
   margin: 16px 0;
   padding: 16px 20px;
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--color-black-6);
   border-radius: 8px;
   border: 1px dashed var(--color-border);
 }

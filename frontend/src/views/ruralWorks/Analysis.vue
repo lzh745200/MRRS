@@ -1108,7 +1108,7 @@ const getQualityScoreClass = (score: number) => {
   padding: 20px;
   margin-bottom: 20px;
   position: relative;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px var(--color-black-10);
 
   &::before {
     content: '';

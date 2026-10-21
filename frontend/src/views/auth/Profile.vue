@@ -590,7 +590,7 @@ onMounted(() => {
   background: var(--color-bg-card);
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px 0 var(--color-black-8);
 }
 
 .avatar-section {
@@ -674,7 +674,7 @@ onMounted(() => {
   background: var(--color-bg-card);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px 0 var(--color-black-8);
 }
 
 .card-header {

@@ -59,6 +59,15 @@ _build_info_path = os.path.join(backend_dir, 'app', 'core', '_build_info.json')
 if os.path.exists(_build_info_path):
     datas.append((_build_info_path, os.path.join('app', 'core')))
 
+# 离线瓦片包（F 区，2026-10-21）：安装包预置瓦片的 PyInstaller 侧收集。
+# 目标目录 'resources/map-tiles' 与运行期解析一致（app/api/v1/map.py 的
+# sys._MEIPASS/resources/map-tiles 分支；onedir 下 _MEIPASS == _internal/）。
+# 存在性守卫：源码树只有占位 README（未预置瓦片）时跳过，避免 PyInstaller
+# 对不存在的 datas 源报错；有瓦片时自动随后端产物一起分发。
+_tiles_dir = os.path.join(project_root, 'resources', 'map-tiles')
+if os.path.isdir(_tiles_dir):
+    datas.append((_tiles_dir, os.path.join('resources', 'map-tiles')))
+
 # 自动收集 prophet 包数据（如果存在；x86/ARM64 构建时可能未安装，自动跳过）。
 # prophet 仍为可选依赖（trend_prediction_service 函数级延迟导入，缺失时降级），
 # 其数据文件无法由 Analysis 自动发现，故按存在性条件收集。

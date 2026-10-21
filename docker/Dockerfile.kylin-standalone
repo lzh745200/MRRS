@@ -86,17 +86,66 @@ WORKDIR /build
 
 # 生成 ARM64 专用 requirements（排除无 ARM64 wheel 或单机版不需要的包）
 COPY backend/requirements.txt .
-RUN grep -v -E '^(prophet|cmdstanpy|stanio|scikit-learn|scipy|Scrapy|Twisted|matplotlib|redis|hiredis|selenium|python-magic-bin|pywin32-ctypes|Automat|constantly|hyperlink|incremental|itemadapter|itemloaders|parsel|Protego|PyDispatcher|queuelib|service-identity|sgmllib3k|tldextract|w3lib|zope|cssselect|rapidocr-onnxruntime|onnxruntime|opencv-python)' \
+# v1.16.0（E 区 · ARM64 离线 OCR）：
+#   ① 过滤正则**不再**剔除 rapidocr-onnxruntime / onnxruntime / opencv-python ——
+#      2026-10-21 PyPI 实测 cp311/aarch64 全部有轮子（见 .scratch/offline-audit/
+#      E-arm64-ocr-plan.md 的 wheel 清单）：onnxruntime 1.31.0
+#      (manylinux_2_28_aarch64)、opencv cp37-abi3 manylinux2014_aarch64、
+#      rapidocr-onnxruntime 1.4.4 (py3-none-any，ONNX 模型随 wheel)。
+#      构建基座 buster 的 glibc 恰为 2.28，正好满足 manylinux_2_28 的 glibc>=2.28 前提
+#      （Lead 实测 libonnxruntime.so 引用的最高符号版本 = GLIBC_2.28）。
+#   ② 传递依赖的精确 pin 放在 requirements-arm64-ocr.txt。
+COPY backend/requirements-arm64-ocr.txt .
+RUN grep -v -E '^(prophet|cmdstanpy|stanio|scikit-learn|scipy|Scrapy|Twisted|matplotlib|redis|hiredis|selenium|python-magic-bin|pywin32-ctypes|Automat|constantly|hyperlink|incremental|itemadapter|itemloaders|parsel|Protego|PyDispatcher|queuelib|service-identity|sgmllib3k|tldextract|w3lib|zope|cssselect)' \
     requirements.txt > requirements-arm64.txt && \
     echo "python-magic==0.4.27" >> requirements-arm64.txt && \
     echo "--- ARM64 requirements ---" && \
     wc -l requirements-arm64.txt
 
+# OCR 的**安装方式替换**（不是能力降级，OCR 在 ARM64 上已完整启用）：
+# rapidocr-onnxruntime 的依赖名写死 opencv-python（非 headless 版，import 时会 dlopen
+# libGL.so.1 / libglib-2.0.so.0）。离线麒麟机往往没有图形栈，也不该为 OCR 把原本
+# "零外部依赖、dpkg -i 即装"的 standalone 包变成"缺 libgl1 就装不上"。
+# 因此：从批量清单里摘出 rapidocr 这一行，改由下方 `pip install --no-deps` 单独安装，
+# cv2 一律使用 opencv-python-headless 轮子。rapidocr 的其余依赖（onnxruntime /
+# pyclipper / shapely / tqdm / numpy / pillow / PyYAML / six）全部显式 pin。
+RUN grep -v -E '^rapidocr-onnxruntime' requirements-arm64.txt > requirements-arm64-base.txt && \
+    echo "--- ARM64 base requirements（不含 OCR 引擎本体）---" && \
+    wc -l requirements-arm64-base.txt && \
+    echo "--- ARM64 OCR 追加段 ---" && \
+    cat requirements-arm64-ocr.txt
+
 # 安装 Python 依赖（使用默认 PyPI + 重试机制确保可靠性）
+# 分三步：① 主依赖（含 numpy/pillow/pandas 等）② OCR 依赖（headless cv2 + onnxruntime
+# + pyclipper/shapely/tqdm，正常解析依赖）③ OCR 引擎本体（--no-deps，避免 pip 拉回
+# 非 headless 的 opencv-python）。
 RUN pip install --retries 3 --timeout 120 \
-    -r requirements-arm64.txt pyinstaller > /tmp/pip-install.log 2>&1; \
+    -r requirements-arm64-base.txt pyinstaller > /tmp/pip-install.log 2>&1; \
     code=$?; tail -20 /tmp/pip-install.log; \
     if [ $code -ne 0 ]; then echo "ERROR: pip install 失败 (exit code $code)"; exit 1; fi
+
+RUN pip install --retries 3 --timeout 120 \
+    -r requirements-arm64-ocr.txt > /tmp/pip-install-ocr.log 2>&1; \
+    code=$?; tail -20 /tmp/pip-install-ocr.log; \
+    if [ $code -ne 0 ]; then echo "ERROR: OCR 依赖安装失败 (exit code $code)"; exit 1; fi
+
+RUN pip install --retries 3 --timeout 120 --no-deps \
+    rapidocr-onnxruntime==1.4.4 > /tmp/pip-install-rapidocr.log 2>&1; \
+    code=$?; tail -20 /tmp/pip-install-rapidocr.log; \
+    if [ $code -ne 0 ]; then echo "ERROR: rapidocr 安装失败 (exit code $code)"; exit 1; fi && \
+    echo "=== OCR 相关已安装发行包 ===" && \
+    pip list 2>/dev/null | grep -iE "opencv|onnxruntime|rapidocr|pyclipper|shapely|tqdm|numpy|pillow" || true
+
+# ── OCR 冒烟（E 区 · v1.16.0）：构建期证明 ARM64 离线 OCR 真正可用 ──
+# 脚本放在仓库里（docker/ocr_smoke_arm64.py），不用 Dockerfile heredoc ——
+# heredoc 需要 dockerfile frontend >=1.4，而本文件刻意不加 # syntax 指令
+# （否则构建时要额外拉 docker/dockerfile 前端镜像，离线内网不可接受）。
+# 脚本自身断言：未装非 headless opencv-python（--require-headless）、import cv2、
+# RapidOCR() 实例化（onnxruntime 动态库 + ONNX 模型就位）、对合成图实际识别且含数字。
+COPY docker/ocr_smoke_arm64.py /tmp/ocr_smoke_arm64.py
+RUN python /tmp/ocr_smoke_arm64.py --require-headless > /tmp/ocr-smoke.log 2>&1; \
+    code=$?; tail -40 /tmp/ocr-smoke.log; \
+    if [ $code -ne 0 ]; then echo "ERROR: ARM64 OCR 冒烟失败（见上方日志）"; exit 1; fi
 
 # 复制后端源码
 COPY backend/ .
@@ -128,6 +177,23 @@ RUN test -d dist/assistance-management-backend || (echo "ERROR: PyInstaller 打�
     (test -f dist/assistance-management-backend/alembic.ini && echo "OK: alembic.ini 已打包" || echo "WARN: alembic.ini 未找到") && \
     echo "后端打包成功"
 
+# 冻结产物 OCR 载荷断言（E 区 · v1.16.0）：
+# spec 里的 collect_data_files('rapidocr_onnxruntime') / collect_dynamic_libs('onnxruntime')
+# 带 find_spec 守卫 —— 一旦依赖装好了却被漏收（守卫判空、路径变更），
+# 依赖在环境里存在但安装包里没有模型/动态库，运行期仍旧回落 503。
+# 这里直接对 onedir 产物断言关键文件，把"打包漏收"拦在构建期。
+RUN echo "=== 冻结产物 OCR 载荷断言 ===" && \
+    MODELS=$(find dist/assistance-management-backend -path "*rapidocr_onnxruntime/models*" -name "*.onnx" | wc -l | tr -d ' ') && \
+    echo "rapidocr ONNX 模型文件数: $MODELS" && \
+    test "$MODELS" -ge 2 || (echo "ERROR: 冻结产物缺少 rapidocr ONNX 模型（datas 收集失效）" && exit 1) && \
+    ORT=$(find dist/assistance-management-backend -name "onnxruntime_pybind11_state*" | wc -l | tr -d ' ') && \
+    echo "onnxruntime 绑定库数: $ORT" && \
+    test "$ORT" -ge 1 || (echo "ERROR: 冻结产物缺少 onnxruntime 绑定库（collect_dynamic_libs 失效）" && exit 1) && \
+    CV2=$(find dist/assistance-management-backend -name "cv2*.so" | wc -l | tr -d ' ') && \
+    echo "cv2 扩展模块数: $CV2" && \
+    test "$CV2" -ge 1 || (echo "ERROR: 冻结产物缺少 cv2 扩展模块" && exit 1) && \
+    echo "OK: 冻结产物 OCR 载荷齐全（模型 + onnxruntime 绑定 + cv2）"
+
 # 关键验证：检查 PyInstaller 打包的 libpython3.11.so 不依赖高于 2.28 的 GLIBC
 # 这是之前在麒麟 V10 上崩溃的根本原因
 RUN echo "=== GLIBC 兼容性验证 ===" && \
@@ -158,7 +224,7 @@ RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --n
     fakeroot \
     && rm -rf /var/lib/apt/lists/*
 
-ARG VERSION=1.15.17
+ARG VERSION=1.16.0
 WORKDIR /package
 
 # 创建目录结构
@@ -214,7 +280,16 @@ RUN find DEBIAN opt/assistance-management-system/scripts opt/assistance-manageme
     chmod 755 opt/assistance-management-system/scripts/start-kylin.sh && \
     chmod 755 opt/assistance-management-system/backend/assistance-management-backend 2>/dev/null || true
 
-# 生成 DEBIAN/control — 无外部依赖（完全自包含，libmagic/libsqlite3 已打包进后端）
+# 生成 DEBIAN/control — 无外部依赖（完全自包含）
+# v1.16.0（E 区 · ARM64 离线 OCR）复核结论：**仍然零外部依赖**，不要把 OCR 变成
+# "离线机缺 libgl1 就装不上"的硬依赖：
+#   - cv2 走 opencv-python-headless（见上方 OCR 依赖安装步骤），headless 轮子
+#     不链接 libGL.so.1 / libglib-2.0.so.0 → 目标机无需图形栈；
+#   - onnxruntime 1.31.0 aarch64 的 libonnxruntime.so 实测 DT_NEEDED 只有
+#     libc/libdl/libgcc_s/libm/libpthread/librt/libstdc++，**不需要 libgomp**，
+#     引用的最高 GLIBC 符号版本 = 2.28（正好等于麒麟 V10）；
+#   - libmagic/libsqlite3 本来就打包进后端（见 spec 的 binaries 收集）。
+# 故 Depends 保持为空；若未来换回非 headless opencv，必须在这里补 libgl1。
 RUN echo "Package: assistance-management-system" > DEBIAN/control && \
     echo "Version: ${VERSION}" >> DEBIAN/control && \
     echo "Architecture: arm64" >> DEBIAN/control && \
@@ -227,7 +302,7 @@ RUN echo "Package: assistance-management-system" > DEBIAN/control && \
     echo "Description: 全面推进乡村振兴工作综合管理平台" >> DEBIAN/control && \
     echo " 完全单机版，适用于麒麟 V10 ARM64 系统。" >> DEBIAN/control && \
     echo " 集成村庄管理、项目跟踪、资金监管、数据分析等功能。" >> DEBIAN/control && \
-    echo " 无外部依赖，安装即用。" >> DEBIAN/control
+    echo " 无外部依赖（Python 运行时/前端/离线 OCR 模型均已内置），安装即用。" >> DEBIAN/control
 
 # 构建 DEB 包
 RUN mkdir -p /output && \

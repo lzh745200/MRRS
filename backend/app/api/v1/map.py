@@ -16,20 +16,30 @@ from typing import Optional
 from app.core.config import settings as _settings
 from app.utils.helpers import safe_json_loads
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.response import ok_list
-from ...core.security import get_current_user
+from ...core.security import get_current_user, require_admin
 from ...models.school import School
 from ...models.supported_village import SupportedVillage
 from app.core.data_permission import OrgScopeFilter, get_org_scope
 from app.core.transaction import safe_commit
+from app.services.offline_map_service import (
+    MAX_TILE_UPLOAD_BYTES,
+    TilePackageError,
+    import_tile_directory,
+    import_tile_zip_bytes,
+    read_manifest_file,
+    scan_tiles_dir,
+)
 from app.services.work_log_service import write_work_log
 from app.core.response import success_response
+from app.utils.audit_logger import AuditAction, AuditLogger
+from app.utils.upload_helper import read_upload_with_limit
 
 logger = logging.getLogger(__name__)
 
@@ -117,17 +127,31 @@ def invalidate_map_cache() -> None:
 
 
 def _resolve_tiles_dir() -> Path:
-    """解析瓦片存储目录，兼容 PyInstaller / 开发模式"""
+    """解析瓦片存储目录，兼容 PyInstaller / Electron / 开发模式。
+
+    优先级（F 区约定，与打包接线严格一致）：
+
+    1. ``MAP_TILES_DIR`` 环境变量 —— Electron 主进程注入（安装包内即
+       ``<resources>/map-tiles``，也允许运维指向可写的自定义瓦片仓，
+       导入升级写入的就是该目录）；
+    2. PyInstaller 冻结态 ``sys._MEIPASS/resources/map-tiles``
+       （``assistance-backend.spec`` 的 datas 目标目录）；
+    3. 开发/源码态仓库根 ``resources/map-tiles``（与根 package.json 的
+       extraResources 源目录同一份）。
+
+    注意：环境变量即使指向尚不存在的目录也直接采信 —— 运维首次导入瓦片
+    时由导入端点创建目录，不能因为"目录还没建"就悄悄回退到别处。
+    """
+    env_path = os.environ.get("MAP_TILES_DIR")
+    if env_path:
+        return Path(env_path)
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         p = Path(meipass) / "resources" / "map-tiles"
         if p.exists():
             return p
-    env_path = os.environ.get("MAP_TILES_DIR")
-    if env_path:
-        return Path(env_path)
-    # 开发模式：项目根目录/resources/map-tiles
-    return Path(__file__).resolve().parent.parent.parent.parent / "resources" / "map-tiles"
+    # 开发模式：仓库根目录/resources/map-tiles（源码树为 backend/app/api/v1/map.py）
+    return Path(__file__).resolve().parents[4] / "resources" / "map-tiles"
 
 
 TILES_DIR = _resolve_tiles_dir()
@@ -624,36 +648,130 @@ async def search_map_markers(
     return results
 
 
+def _tiles_dir_public_name() -> str:
+    """瓦片目录的公开名（仅最后一级目录名）。
+
+    安全口径：瓦片端点保持匿名可访问（Leaflet ``<img>`` 直接请求，无法携带
+    JWT），因此响应里**不得**回显完整磁盘路径 —— 只暴露 ``map-tiles`` 这类
+    目录名；需要完整路径的运维操作使用 ``POST /map/tiles/import`` 的响应
+    （管理员端点）。
+    """
+    return TILES_DIR.name or "map-tiles"
+
+
 @router.get("/tile-info")
 async def get_tile_info():
-    """获取离线瓦片信息：是否可用、缩放级别范围、瓦片数量"""
+    """获取离线瓦片信息：是否可用、缩放级别、瓦片数量、体积与 MANIFEST 元数据"""
+    dir_name = _tiles_dir_public_name()
     if not TILES_DIR.exists():
         return success_response(data={
             "available": False,
             "tileCount": 0,
             "zoomLevels": [],
-            "dir": str(TILES_DIR),
+            "totalBytes": 0,
+            "dir": dir_name,
+            "manifest": None,
         })
 
-    zoom_levels = sorted(int(d.name) for d in TILES_DIR.iterdir() if d.is_dir() and d.name.isdigit())
-    if not zoom_levels:
-        return success_response(data={
-            "available": False,
-            "tileCount": 0,
-            "zoomLevels": [],
-            "dir": str(TILES_DIR),
-        })
-
-    # 统计 .png 文件数量
-    tile_count = sum(1 for _ in TILES_DIR.rglob("*.png"))
-    return success_response(data={
+    stats = scan_tiles_dir(TILES_DIR)
+    zoom_levels = stats["zoom_levels"]
+    tile_count = stats["total_tiles"]
+    data = {
         "available": tile_count > 0,
         "tileCount": tile_count,
         "zoomLevels": zoom_levels,
-        "minZoom": zoom_levels[0],
-        "maxZoom": zoom_levels[-1],
-        "dir": str(TILES_DIR),
-    })
+        "totalBytes": stats["total_bytes"],
+        "dir": dir_name,
+        # MANIFEST.json 缺失/损坏 → None（不影响瓦片服务本身）
+        "manifest": read_manifest_file(TILES_DIR / "MANIFEST.json"),
+    }
+    if zoom_levels:
+        data["minZoom"] = zoom_levels[0]
+        data["maxZoom"] = zoom_levels[-1]
+    return success_response(data=data)
+
+
+@router.post("/tiles/import")
+async def import_tiles(
+    file: UploadFile = File(default=None, description="瓦片包 ZIP（含 MANIFEST.json 与 z/x/y.png）"),
+    source_dir: str = Form(default=None, description="本机瓦片目录路径（U 盘导入，与 file 二选一）"),
+    current_user=Depends(require_admin()),
+):
+    """导入离线瓦片包（管理员）。
+
+    两条导入路径（二选一）：
+
+    - ``file``：multipart 上传 ZIP 瓦片包（适合 ≤512MB 的常规包）；
+    - ``source_dir``：服务端本机目录（适合 U 盘上的大包，免上传）。
+
+    两条路径共用同一套校验：MANIFEST 合法性、tileCount/totalBytes/缩放范围
+    与实际文件一致性、可选 SHA256、瓦片数与总体积上限、zip-slip 与符号链接
+    防护。导入为**合并**写入（既有瓦片保留，同名覆盖），可用于瓦片升级。
+    """
+    if file is None and not source_dir:
+        raise HTTPException(status_code=400, detail="请上传瓦片包 ZIP（file）或指定本机瓦片目录（source_dir）")
+    if file is not None and source_dir:
+        raise HTTPException(status_code=400, detail="file 与 source_dir 只能二选一")
+
+    dest = TILES_DIR
+    origin = "upload" if file is not None else "local-directory"
+    try:
+        if file is not None:
+            content = await read_upload_with_limit(
+                file, MAX_TILE_UPLOAD_BYTES, limit_label="瓦片包"
+            )
+            result = import_tile_zip_bytes(content, dest)
+        else:
+            result = import_tile_directory(Path(source_dir), dest)
+    except TilePackageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except HTTPException:
+        raise
+    except OSError as exc:
+        logger.error("瓦片包写入失败: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="瓦片包写入失败，请检查瓦片目录写入权限或磁盘空间")
+    except Exception as exc:  # 兜底：解析类异常一律 400，不把堆栈透给调用方
+        logger.error("瓦片包处理失败: %s", exc, exc_info=True)
+        raise HTTPException(status_code=400, detail="瓦片包解析失败，请确认文件完整且格式正确")
+
+    stats = scan_tiles_dir(dest)
+    try:
+        AuditLogger.log(
+            action=AuditAction.IMPORT,
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", None),
+            resource_type="map_tiles",
+            details={
+                "origin": origin,
+                "tileCount": result["tileCount"],
+                "totalBytes": result["totalBytes"],
+                "overwritten": result["overwritten"],
+                "zoomLevels": result["zoomLevels"],
+                "ignored": result["ignored"],
+                "provider": result["manifest"].get("provider"),
+            },
+        )
+    except Exception:  # 审计失败不得回滚已完成的导入
+        logger.warning("瓦片导入审计日志写入失败", exc_info=True)
+
+    return success_response(
+        message="瓦片包导入完成",
+        data={
+            "tileCount": result["tileCount"],
+            "totalBytes": result["totalBytes"],
+            "overwritten": result["overwritten"],
+            "zoomLevels": result["zoomLevels"],
+            "ignored": result["ignored"],
+            "source": origin,
+            "dir": str(dest),
+            "manifest": result["manifest"],
+            "store": {
+                "tileCount": stats["total_tiles"],
+                "totalBytes": stats["total_bytes"],
+                "zoomLevels": stats["zoom_levels"],
+            },
+        },
+    )
 
 
 @router.get("/tiles/{z}/{x}/{y}.png")

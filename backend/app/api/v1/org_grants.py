@@ -24,6 +24,7 @@ from app.core.config import settings
 from app.core.data_permission import _get_org_subtree, assert_org_reachable
 from app.core.permission_utils import require_admin
 from app.core.response import success_response
+from app.core.transaction import safe_commit
 from app.models.org_grant import VALID_GRANT_LEVELS, OrgGrant
 from app.models.organization import Organization
 from app.services.effective_grant_service import clear_cache
@@ -65,6 +66,11 @@ def _require_admin_and_reach(db: Session, current_user, org_id: int, action: str
 def _matrix_of(db: Session, org_id: int) -> dict:
     rows = db.query(OrgGrant).filter(OrgGrant.organization_id == org_id).all()
     return {row.module_key: row.level for row in rows}
+
+
+def _matrix_brief(grants: dict) -> str:
+    """授权矩阵的可读摘要（审计日志用；排序保证同一矩阵输出稳定）。"""
+    return ",".join("%s=%s" % (k, grants[k]) for k in sorted(grants))
 
 
 def _local_org_code(db: Session) -> str:
@@ -152,6 +158,17 @@ def export_grant_package(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     payload = export_package_bytes(package)
+    # 版本号必须落库（R34-1 缺陷修复）：原实现只在包里写 `version+1` 而不落库，
+    # 连续两次导出会产出**相同版本号**，下级机第二次导入必被
+    # `apply_package` 的「拒绝降级导入」挡掉（包版本 <= 本机当前版本）——
+    # 多机离线授权分发因此只能成功一次。落库后每次导出都预留新版本。
+    # 注意顺序：build_package 可能因矩阵含非法级别抛 400，故落库必须在其后。
+    org.grant_version = version
+    safe_commit(db)
+    # 缓存 key 含 grant_version：版本变了旧 entry 自然不再命中；显式清一次
+    # 避免"反复导出但不改矩阵"在 _CACHE 里堆出多个内容相同的 key。
+    clear_cache()
+
     filename = "grant-%s-v%d.json" % (org.code, version)
     return Response(
         content=payload,
@@ -200,14 +217,34 @@ def set_org_grants(
                 % (key, level, "/".join(sorted(VALID_GRANT_LEVELS))),
             )
 
+    # 审计需要变更前快照，必须在删除前读取
+    before = _matrix_of(db, org_id)
+
+    # 裸 delete + 逐条 add 在同一事务内完成：safe_commit 失败会自动 rollback，
+    # 不会留下"矩阵已清空但新矩阵未写入"的中间态。
     db.query(OrgGrant).filter(OrgGrant.organization_id == org_id).delete()
     for key, level in body.grants.items():
         db.add(OrgGrant(organization_id=org_id, module_key=key, level=level))
 
     org.grant_version = (org.grant_version or 0) + 1
     org.grant_source = "local"
-    db.commit()
+    safe_commit(db)
     clear_cache()
+
+    # 授权矩阵决定"哪个单位能看/能改哪个模块"，属权限提升操作，必须留痕（P1-3）。
+    # 审计失败不阻断主流程（与 import 端点保持一致）。
+    try:
+        write_work_log(
+            db, "system_config", "grant_set", org_id,
+            "设置单位授权矩阵 v%s（%d 个模块）: %s → %s" % (
+                org.grant_version, len(body.grants),
+                _matrix_brief(before), _matrix_brief(body.grants),
+            ),
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", ""),
+        )
+    except Exception:  # pragma: no cover - 审计失败不阻断主流程
+        logger.warning("记录授权矩阵变更审计日志失败", exc_info=True)
 
     return success_response(
         data={"organization_id": org_id, "grant_version": org.grant_version,

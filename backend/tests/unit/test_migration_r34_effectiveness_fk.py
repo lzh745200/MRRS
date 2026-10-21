@@ -111,10 +111,18 @@ class TestRevisionChain:
         assert mod.down_revision == "r33_org_grants_001"
 
     def test_single_head_is_this_migration(self):
+        """迁移链必须单 head（防 MultipleHeads 导致打包后启动失败）。
+
+        原实现硬编码 `heads == [r34]`。新增任何后续迁移（如 r35 legacy 表清理）
+        都会让该断言失效 —— 但那并不代表链路坏掉。此处改为断言**真实契约**：
+        全链只有一个 head，且 r34 仍在链上可定位。
+        """
         cfg = Config(str(_BACKEND / "alembic.ini"))
         cfg.set_main_option("script_location", str(_BACKEND / "alembic"))
-        heads = list(ScriptDirectory.from_config(cfg).get_heads())
-        assert heads == [_REVISION]
+        script = ScriptDirectory.from_config(cfg)
+        heads = list(script.get_heads())
+        assert len(heads) == 1, "迁移链出现分叉：%s" % heads
+        assert _REVISION in {rev.revision for rev in script.walk_revisions()}
 
 
 class TestUpgradeFixesLegacyForeignKey:

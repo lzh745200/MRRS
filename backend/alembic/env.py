@@ -26,8 +26,18 @@ import app.models  # noqa: F401
 # Alembic Config 对象
 config = context.config
 
-# 使用应用配置中的数据库 URL
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# URL 的唯一来源是 app settings（settings 自身读 DATABASE_URL 环境变量）。
+# alembic.ini 里的 `sqlalchemy.url` 只是占位值，运行时一律由下面这行决定。
+#
+# 历史缺陷（P2-2）：此处原为**无条件**覆盖。任何"在副本/临时库上演练迁移"的
+# 调用，若只改 Config 的 `sqlalchemy.url`，都会被静默改写回 settings.DATABASE_URL
+# 指向的真实库（实测复现：探针指向副本，迁移实际打在主库）。`upgrade_rehearsal.py`
+# 之所以正确，是因为它用多进程 + `DATABASE_URL` 环境变量，属巧合而非设计。
+#
+# 修复：增加显式逃生口 `alembic.url_override`。只有调用方**主动**设置它才覆盖；
+# CLI 默认行为（ini 占位值 → settings）完全不变，单一事实源仍是 settings。
+_url_override = config.get_main_option("alembic.url_override", None)
+config.set_main_option("sqlalchemy.url", _url_override or settings.DATABASE_URL)
 
 # 配置日志
 # 仅当 root 尚未配置 handler 时才走 fileConfig（即 alembic CLI 独立运行场景）。

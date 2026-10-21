@@ -5,7 +5,6 @@
  ],
  "frontend/src/components/business/SystemStatus.vue": [
   "rgba(0, 0, 0, 0.04)",
-  "rgba(0, 0, 0, 0.06)",
   "#22c55e",
   "rgba(34, 197, 94, 0.5)",
   "rgba(239, 68, 68, 0.4)",
@@ -21,10 +20,6 @@
   "#f87171",
   "#1e4d8c"
  ],
- "frontend/src/components/common/StatsCard.vue": [
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.1)"
- ],
  "frontend/src/components/layout/MobileBottomNav.vue": [
   "#1a3c2a"
  ],
@@ -32,46 +27,18 @@
   "#fafafa"
  ],
  "frontend/src/layouts/DefaultLayoutSafe.vue": [
-  "rgba(0, 0, 0, 0.3)",
-  "rgba(0, 0, 0, 0.4)",
-  "rgba(255, 255, 255, 0.12)",
-  "rgba(255, 255, 255, 0.22)",
-  "rgba(255, 255, 255, 0.82)",
-  "rgba(255, 255, 255, 0.08)",
-  "rgba(255, 255, 255, 0.45)",
-  "rgba(255, 255, 255, 0.82)",
-  "rgba(255, 255, 255, 0.07)",
   "rgba(212, 175, 55, 0.16)",
   "rgba(212, 175, 55, 0.04)",
-  "rgba(255, 255, 255, 0.35)",
-  "rgba(255, 255, 255, 0.7)",
-  "rgba(255, 255, 255, 0.03)",
-  "rgba(255, 255, 255, 0.72)",
-  "rgba(255, 255, 255, 0.72)",
-  "rgba(255, 255, 255, 0.05)",
-  "rgba(212, 175, 55, 0.1)",
   "#1d3d2a",
-  "rgba(255, 255, 255, 0.1)",
-  "rgba(0, 0, 0, 0.4)",
-  "rgba(255, 255, 255, 0.85)",
-  "rgba(255, 255, 255, 0.08)",
-  "rgba(255, 255, 255, 0.85)",
-  "rgba(255, 255, 255, 0.07)",
-  "rgba(255, 255, 255, 0.85)",
-  "rgba(255, 255, 255, 0.75)",
-  "rgba(255, 255, 255, 0.85)"
+  "rgba(255, 255, 255, 0.75)"
  ],
  "frontend/src/views/NotFound.vue": [
   "#667eea",
-  "#764ba2",
-  "rgba(0, 0, 0, 0.3)"
+  "#764ba2"
  ],
  "frontend/src/views/admin/AdminDashboard.vue": [
   "rgba(27, 67, 50, 0.3)",
   "#c9a227",
-  "rgba(212, 175, 55, 0.4)",
-  "rgba(0, 0, 0, 0.05)",
-  "rgba(0, 0, 0, 0.05)",
   "#10b981",
   "#dbeafe",
   "#1d4ed8",
@@ -83,41 +50,16 @@
   "#fef3e6",
   "#f5dab1"
  ],
- "frontend/src/views/analytics/reports/WorkAnalysis.vue": [
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.1)"
- ],
- "frontend/src/views/analytics/supported-villages/Detail.vue": [
-  "rgba(0, 0, 0, 0.06)"
- ],
- "frontend/src/views/analytics/supported-villages/YearlyOverview.vue": [
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.1)"
- ],
  "frontend/src/views/auth/ChangePassword.vue": [
-  "rgba(0, 0, 0, 0.08)",
   "#f8f9fa",
   "#e6f7ff"
  ],
- "frontend/src/views/auth/ForgotPassword.vue": [
-  "rgba(255, 255, 255, 0.95)",
-  "rgba(0, 0, 0, 0.3)",
-  "rgba(212, 175, 55, 0.4)",
-  "rgba(255, 255, 255, 0.9)",
-  "rgba(255, 255, 255, 0.5)",
-  "rgba(0, 0, 0, 0.06)"
- ],
  "frontend/src/views/auth/GetMachineCode.vue": [
-  "rgba(255, 255, 255, 0.95)",
-  "rgba(0, 0, 0, 0.3)",
-  "rgba(212, 175, 55, 0.4)",
   "#fff9e6",
   "#fff5d6",
-  "rgba(0, 0, 0, 0.1)",
   "#e8f5e9",
   "#c8e6c9",
-  "#81c784",
-  "rgba(255, 255, 255, 0.9)"
+  "#81c784"
  ],
  "frontend/src/views/auth/LoginEnhanced.vue": [
   "#f0e68c",
@@ -125,45 +67,13 @@
   "#0a1a12",
   "rgba(8, 28, 21, 0.85)",
   "rgba(27, 67, 50, 0.7)",
-  "rgba(255, 255, 255, 0.08)",
-  "rgba(255, 255, 255, 0.15)",
-  "rgba(0, 0, 0, 0.5)",
   "rgba(27, 67, 50, 0.95)",
   "rgba(8, 28, 21, 0.98)",
-  "rgba(0, 0, 0, 0.3)",
-  "rgba(0, 0, 0, 0.3)",
-  "rgba(212, 175, 55, 0.3)",
-  "rgba(212, 175, 55, 0.1)",
-  "rgba(255, 255, 255, 0.15)",
-  "rgba(255, 255, 255, 0.2)",
-  "rgba(0, 0, 0, 0.3)",
-  "rgba(255, 255, 255, 0.8)",
-  "rgba(255, 255, 255, 0.9)",
-  "rgba(255, 255, 255, 0.6)",
-  "rgba(255, 255, 255, 0.3)",
-  "rgba(255, 255, 255, 0.1)",
-  "rgba(255, 255, 255, 0.5)",
-  "rgba(255, 255, 255, 0.2)",
-  "rgba(212, 175, 55, 0.2)",
-  "rgba(255, 255, 255, 0.6)",
-  "rgba(212, 175, 55, 0.4)",
-  "rgba(212, 175, 55, 0.5)",
   "#e0c048",
   "#f5d76e",
-  "rgba(255, 255, 255, 0.8)",
-  "rgba(255, 255, 255, 0.3)",
   "rgba(254, 215, 215, 0.2)",
   "#fca5a5",
-  "rgba(254, 215, 215, 0.3)",
-  "rgba(255, 255, 255, 0.6)",
-  "rgba(255, 255, 255, 0.2)"
- ],
- "frontend/src/views/auth/Profile.vue": [
-  "rgba(0, 0, 0, 0.08)",
-  "rgba(0, 0, 0, 0.08)"
- ],
- "frontend/src/views/batch/Index.vue": [
-  "rgba(0, 0, 0, 0.08)"
+  "rgba(254, 215, 215, 0.3)"
  ],
  "frontend/src/views/bigscreen/BigScreen.vue": [
   "#0b1e3a",
@@ -198,73 +108,31 @@
   "#fbc4c4",
   "#fde2e2"
  ],
- "frontend/src/views/dataAnalysis/Index.vue": [
-  "rgba(0, 0, 0, 0.06)"
- ],
  "frontend/src/views/dataEntry/ComprehensiveEntry.vue": [
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.06)",
-  "#e8e8e8",
-  "rgba(0, 0, 0, 0.06)"
- ],
- "frontend/src/views/effectiveness/Evaluation.vue": [
-  "rgba(0, 0, 0, 0.08)"
+  "#e8e8e8"
  ],
  "frontend/src/views/errorPage/403.vue": [
-  "#0a1929",
-  "rgba(255, 255, 255, 0.05)",
-  "rgba(0, 0, 0, 0.3)"
+  "#0a1929"
  ],
  "frontend/src/views/errorPage/500.vue": [
-  "#0a1929",
-  "rgba(255, 255, 255, 0.05)",
-  "rgba(0, 0, 0, 0.3)"
+  "#0a1929"
  ],
  "frontend/src/views/export/ReportExport.vue": [
   "#f0f9f4",
   "#e8f5e9"
  ],
- "frontend/src/views/funds/Analysis.vue": [
-  "rgba(10, 30, 20, 0.5)",
-  "rgba(64, 145, 108, 0.3)",
-  "rgba(64, 145, 108, 0.1)",
-  "rgba(64, 145, 108, 0.3)",
-  "rgba(255, 255, 255, 0.7)",
-  "rgba(64, 145, 108, 0.3)"
- ],
  "frontend/src/views/funds/Budget.vue": [
-  "rgba(27, 67, 50, 0.08)",
-  "rgba(45, 106, 79, 0.05)",
-  "rgba(45, 106, 79, 0.2)",
-  "rgba(0, 0, 0, 0.08)",
   "rgba(45, 106, 79, 0.25)",
   "rgba(45, 106, 79, 0.15)",
   "rgba(45, 106, 79, 0.25)"
  ],
  "frontend/src/views/funds/Detail.vue": [
-  "rgba(0, 0, 0, 0.08)",
-  "#b3e19d",
-  "rgba(0, 0, 0, 0.08)"
+  "#b3e19d"
  ],
  "frontend/src/views/funds/EnhancedList.vue": [
   "#f0f9f4",
   "#f7f9fc",
   "#f0f5ff"
- ],
- "frontend/src/views/funds/Report.vue": [
-  "rgba(10, 30, 20, 0.5)",
-  "rgba(64, 145, 108, 0.3)",
-  "rgba(255, 255, 255, 0.7)",
-  "rgba(64, 145, 108, 0.1)",
-  "rgba(64, 145, 108, 0.3)",
-  "rgba(255, 255, 255, 0.7)",
-  "rgba(64, 145, 108, 0.3)",
-  "rgba(255, 255, 255, 0.9)"
- ],
- "frontend/src/views/funds/UserFundList.vue": [
-  "rgba(27, 67, 50, 0.08)",
-  "rgba(45, 106, 79, 0.05)",
-  "rgba(45, 106, 79, 0.2)"
  ],
  "frontend/src/views/help/HelpCenter.vue": [
   "#fff3cd",
@@ -273,40 +141,18 @@
   "#2e6b55"
  ],
  "frontend/src/views/policies/Category.vue": [
-  "rgba(10, 30, 20, 0.5)",
-  "rgba(64, 145, 108, 0.3)",
   "rgba(45, 106, 79, 0.1)",
-  "rgba(45, 106, 79, 0.3)",
-  "rgba(45, 106, 79, 0.2)",
-  "rgba(45, 106, 79, 0.2)",
-  "rgba(45, 106, 79, 0.2)"
+  "rgba(45, 106, 79, 0.3)"
  ],
  "frontend/src/views/policies/Edit.vue": [
-  "rgba(10, 30, 20, 0.3)",
-  "rgba(255, 255, 255, 0.95)",
-  "rgba(64, 145, 108, 0.3)",
-  "rgba(0, 0, 0, 0.1)",
-  "rgba(255, 255, 255, 0.9)",
-  "rgba(255, 255, 255, 0.9)",
-  "rgba(255, 255, 255, 0.9)",
-  "rgba(255, 255, 255, 0.9)"
+  "rgba(10, 30, 20, 0.3)"
  ],
  "frontend/src/views/policies/List.vue": [
   "rgba(10, 30, 20, 0.3)",
-  "rgba(255, 255, 255, 0.95)",
-  "rgba(64, 145, 108, 0.3)",
-  "rgba(0, 0, 0, 0.1)",
-  "rgba(255, 255, 255, 0.9)",
-  "rgba(255, 255, 255, 0.9)",
-  "rgba(255, 255, 255, 0.9)",
-  "rgba(255, 255, 255, 0.9)",
   "rgba(64, 145, 108, 0.15)",
   "rgba(64, 145, 108, 0.2)",
   "rgba(64, 145, 108, 0.15)",
   "rgba(64, 145, 108, 0.05)",
-  "rgba(64, 145, 108, 0.1)",
-  "rgba(255, 255, 255, 0.9)",
-  "rgba(255, 255, 255, 0.9)",
   "rgba(200, 200, 200, 0.3)"
  ],
  "frontend/src/views/policies/Search.vue": [
@@ -316,12 +162,8 @@
   "#f8faf9",
   "#e6ebe8"
  ],
- "frontend/src/views/projects/Edit.vue": [
-  "rgba(0, 0, 0, 0.1)"
- ],
  "frontend/src/views/projects/Import.vue": [
   "#0066cc",
-  "rgba(0, 0, 0, 0.1)",
   "#0066cc",
   "#0066cc",
   "#004080",
@@ -329,21 +171,16 @@
   "#0066cc"
  ],
  "frontend/src/views/projects/List.vue": [
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.12)",
-  "rgba(0, 0, 0, 0.06)"
+  "rgba(0, 0, 0, 0.12)"
  ],
  "frontend/src/views/reportTemplates/Index.vue": [
-  "#eee",
-  "rgba(64, 145, 108, 0.1)"
+  "#eee"
  ],
  "frontend/src/views/ruralWorks/Analysis.vue": [
   "#0055aa",
   "#0055aa",
   "rgba(0, 51, 102, 0.15)",
   "#ddd",
-  "rgba(0, 0, 0, 0.1)",
   "#0055aa",
   "#0055aa",
   "rgba(0, 51, 102, 0.2)",
@@ -358,38 +195,18 @@
   "#f5f5f5"
  ],
  "frontend/src/views/ruralWorks/Index.vue": [
-  "rgba(0, 0, 0, 0.08)",
-  "rgba(255, 255, 255, 0.7)",
   "rgba(212, 175, 55, 0.12)"
  ],
- "frontend/src/views/ruralWorks/List.vue": [
-  "rgba(0, 0, 0, 0.06)"
- ],
- "frontend/src/views/ruralWorks/Report.vue": [
-  "rgba(0, 0, 0, 0.08)"
- ],
  "frontend/src/views/ruralWorks/Task.vue": [
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.06)",
-  "rgba(0, 0, 0, 0.06)",
   "#f9f9f9"
  ],
  "frontend/src/views/schools/Detail.vue": [
-  "rgba(27, 67, 50, 0.08)",
-  "rgba(45, 106, 79, 0.05)",
   "rgba(45, 106, 79, 0.15)",
-  "rgba(0, 0, 0, 0.08)",
   "rgba(45, 106, 79, 0.12)"
- ],
- "frontend/src/views/schools/Edit.vue": [
-  "rgba(0, 0, 0, 0.08)"
  ],
  "frontend/src/views/system/About.vue": [
   "rgba(27, 67, 50, 0.25)",
   "rgba(27, 67, 50, 0.1)"
- ],
- "frontend/src/views/system/AuditManagement.vue": [
-  "rgba(0, 0, 0, 0.06)"
  ],
  "frontend/src/views/system/DataTier.vue": [
   "#ccc",
@@ -407,8 +224,6 @@
   "#c45656"
  ],
  "frontend/src/views/system/MonitoringDashboard.vue": [
-  "rgba(0, 0, 0, 0.08)",
-  "rgba(0, 0, 0, 0.06)",
   "#f5f5f5"
  ],
  "frontend/src/views/system/Role.vue": [

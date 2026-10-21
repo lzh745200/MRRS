@@ -1,6 +1,6 @@
 {
   "name": "Assistance-Management-Information-System",
-  "version": "1.15.17",
+  "version": "1.16.0",
   "private": true,
   "description": "帮扶管理系统 - 贵州省版 Standalone桌面应用",
   "main": "electron/main.js",
@@ -20,6 +20,7 @@
     "build:win": "npm run check:electron && npm run build:backend && electron-builder --win --x64",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win --mac --linux",
+    "tiles:verify": "python scripts/tiles/verify_tiles.py",
     "postinstall": "electron-builder install-app-deps"
   },
   "license": "UNLICENSED",
@@ -64,6 +65,14 @@
         "to": "frontend",
         "filter": [
           "**/*"
+        ]
+      },
+      {
+        "from": "resources/map-tiles",
+        "to": "map-tiles",
+        "filter": [
+          "**/*",
+          "!README.md"
         ]
       },
       {

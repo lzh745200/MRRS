@@ -26,6 +26,7 @@
         <el-radio-group v-model="viewMode">
           <el-radio-button value="geographic">地理视图</el-radio-button>
           <el-radio-button value="statistical">统计视图</el-radio-button>
+          <el-radio-button value="tiles">瓦片底图</el-radio-button>
         </el-radio-group>
 
         <!-- 坐标定位 -->
@@ -141,16 +142,42 @@
         @marker-click="handleMarkerClick"
         @region-click="handleRegionClick"
       />
+
+      <!-- 瓦片底图：按需懒加载 Leaflet（默认视图仍是上面的 ECharts 矢量地图） -->
+      <div v-else-if="viewMode === 'tiles'" v-loading="tileInfoLoading" class="map-tiles-panel">
+        <el-alert
+          v-if="tileNotice"
+          class="map-tiles-notice"
+          type="warning"
+          :closable="false"
+          show-icon
+          :title="tileNotice"
+        />
+        <RasterTileLayer
+          v-if="tileUsable"
+          :markers="tileMarkers"
+          :tile-info="tileInfo"
+          height="calc(100vh - 180px)"
+          @marker-click="handleMarkerClick"
+          @tile-error="handleTileError"
+          @fallback="handleTilesFallback"
+        />
+        <div v-if="!tileUsable" class="map-tiles-empty">
+          <el-button type="primary" @click="handleTilesFallback">返回矢量视图</el-button>
+        </div>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, shallowRef, onMounted } from 'vue'
+import { ref, computed, shallowRef, onMounted, watch, defineAsyncComponent } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouterSafe } from '@/composables/useRouterSafe'
-import { getMapMarkers, getRegions } from '@/api/map'
+import { getMapMarkers, getRegions, getTileInfo, type TileInfo } from '@/api/map'
 import { parseCoordinate, calculateRoute, type LatLng, type RouteResult } from '@/utils/geo'
+import { getErrorMessage } from '@/utils/getErrorMessage'
+import { isTileMapUsable, normalizeTileInfo, tileInfoHint } from '@/utils/mapTiles'
 
 interface RouteResultWithName extends RouteResult {
   destinationName?: string
@@ -162,10 +189,25 @@ import { get } from '@/api/request'
 import { logger } from '@/utils/logger'
 
 import PageHeader from '@/components/common/PageHeader.vue'
+
+/**
+ * 瓦片底图组件按需懒加载：默认视图（geographic，ECharts 矢量）不加载 Leaflet，
+ * 保证既有视觉基线与环境零额外依赖。
+ */
+const RasterTileLayer = defineAsyncComponent(() => import('@/components/map/RasterTileLayer.vue'))
+
 const { pushSafe } = useRouterSafe()
 const loading = ref(true)
 const error = ref('')
-const viewMode = ref<'geographic' | 'statistical'>('geographic')
+const viewMode = ref<'geographic' | 'statistical' | 'tiles'>('geographic')
+
+// ── 瓦片底图（可选视图） ──
+/** 本机瓦片信息；null 表示尚未读取或读取失败 */
+const tileInfo = shallowRef<TileInfo | null>(null)
+const tileInfoLoading = ref(false)
+/** 不可用/读取失败时的中文说明（可用时为空串，模板据此隐藏提示） */
+const tileNotice = ref('')
+const tileUsable = computed(() => isTileMapUsable(tileInfo.value))
 
 // Single source of truth: raw API response data
 const rawVillages = shallowRef<any[]>([])
@@ -248,6 +290,31 @@ const geographicRegionData = computed(() => {
   return Object.entries(countyMap).map(([name, value]) => ({ name, value }))
 })
 
+/**
+ * 瓦片底图上叠加的标注点：与矢量视图同一批数据，额外保留 id 以复用
+ * handleMarkerClick 的跳转行为（村庄详情页）。
+ */
+const tileMarkers = computed(() => [
+  ...rawVillages.value
+    .filter((v: any) => v.lng != null && v.lat != null)
+    .map((v: any) => ({
+      id: v.id,
+      name: v.name,
+      lng: v.lng,
+      lat: v.lat,
+      type: 'village',
+    })),
+  ...rawSchools.value
+    .filter((s: any) => s.lng != null && s.lat != null)
+    .map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      lng: s.lng,
+      lat: s.lat,
+      type: 'school',
+    })),
+])
+
 /** Statistical: full-attribute marker list (derived from same raw data) */
 const markers = computed(() => [
   ...rawVillages.value.map((v: any) => ({
@@ -322,6 +389,39 @@ function handleMarkerClick(marker: any) {
 function handleRegionClick(region: any) {
   logger.debug('Region clicked', region)
 }
+
+// ── 瓦片底图 ──
+
+/** 读取本机瓦片信息（切换视图时懒加载；不联网，只调本机后端 tile-info） */
+async function loadTileInfo() {
+  tileInfoLoading.value = true
+  tileNotice.value = ''
+  try {
+    const info = normalizeTileInfo(await getTileInfo())
+    tileInfo.value = info
+    tileNotice.value = tileInfoHint(info)
+  } catch (e: any) {
+    tileInfo.value = null
+    tileNotice.value = `读取离线瓦片信息失败：${getErrorMessage(e, '请稍后重试')}`
+  } finally {
+    tileInfoLoading.value = false
+  }
+}
+
+/** Leaflet tileerror（后端 404 = 该层级未预置）：提示并回退矢量视图 */
+function handleTileError() {
+  ElMessage.warning('瓦片底图加载失败，已切回矢量地图')
+  handleTilesFallback()
+}
+
+/** 回退到默认的 ECharts 矢量视图 */
+function handleTilesFallback() {
+  viewMode.value = 'geographic'
+}
+
+watch(viewMode, (mode) => {
+  if (mode === 'tiles') loadTileInfo()
+})
 
 /** 输入经纬度定位 */
 function handleLocate() {
@@ -437,6 +537,23 @@ onMounted(loadData)
   border-bottom: 1px solid #f5dab1;
   font-size: 13px;
   color: var(--color-text-regular);
+}
+
+/* 瓦片底图视图 */
+.map-tiles-panel {
+  position: relative;
+  padding: 12px 16px;
+  min-height: 400px;
+}
+
+.map-tiles-notice {
+  margin-bottom: 12px;
+}
+
+.map-tiles-empty {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
 }
 
 /* 搜索结果样式 */

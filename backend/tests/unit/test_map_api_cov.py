@@ -87,16 +87,26 @@ def _school(**kw):
 
 
 class TestResolveTilesDir:
+    def test_env_takes_priority(self, monkeypatch, tmp_path):
+        """F 区约定：MAP_TILES_DIR 环境变量优先于 _MEIPASS 与开发态目录。"""
+        meipass = tmp_path / "frozen"
+        (meipass / "resources" / "map-tiles").mkdir(parents=True)
+        monkeypatch.setattr(sys, "_MEIPASS", str(meipass), raising=False)
+        monkeypatch.setenv("MAP_TILES_DIR", str(tmp_path / "custom"))
+        assert map_mod._resolve_tiles_dir() == tmp_path / "custom"
+
     def test_meipass_branch(self, monkeypatch, tmp_path):
         tiles = tmp_path / "resources" / "map-tiles"
         tiles.mkdir(parents=True)
         monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+        monkeypatch.delenv("MAP_TILES_DIR", raising=False)
         assert map_mod._resolve_tiles_dir() == tiles
 
-    def test_meipass_missing_falls_to_env(self, monkeypatch, tmp_path):
+    def test_meipass_missing_falls_to_default(self, monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path / "nope"), raising=False)
-        monkeypatch.setenv("MAP_TILES_DIR", str(tmp_path))
-        assert map_mod._resolve_tiles_dir() == tmp_path
+        monkeypatch.delenv("MAP_TILES_DIR", raising=False)
+        result = map_mod._resolve_tiles_dir()
+        assert result.name == "map-tiles"
 
     def test_default_dev_path(self, monkeypatch):
         monkeypatch.delattr(sys, "_MEIPASS", raising=False)
@@ -310,17 +320,12 @@ class TestGetCoordsFuzzy:
 
 
 class TestTileInfoWithZoom:
-    def test_zoom_levels_and_png_count(self, map_client):
-        fake_dir = MagicMock()
-        zoom = MagicMock()
-        zoom.is_dir.return_value = True
-        zoom.name = "12"
-        other = MagicMock()
-        other.is_dir.return_value = False
-        other.name = "readme.txt"
-        fake_dir.iterdir.return_value = [zoom, other]
-        fake_dir.rglob.return_value = iter(["a.png", "b.png", "c.png"])
-        with patch.object(map_mod, "TILES_DIR", fake_dir):
+    def test_zoom_levels_and_png_count(self, map_client, tmp_path):
+        for y in (2, 3, 4):
+            path = tmp_path / "12" / "1" / f"{y}.png"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"\x89PNG\r\n\x1a\ntile")
+        with patch.object(map_mod, "TILES_DIR", tmp_path):
             resp = map_client.get(f"{BASE}/tile-info")
         assert resp.status_code == 200
         data = resp.json()["data"]
@@ -329,3 +334,7 @@ class TestTileInfoWithZoom:
         assert data["zoomLevels"] == [12]
         assert data["minZoom"] == 12
         assert data["maxZoom"] == 12
+        assert data["totalBytes"] == 3 * len(b"\x89PNG\r\n\x1a\ntile")
+        assert data["manifest"] is None
+        # 安全口径：只回显目录名，不回显完整磁盘路径
+        assert data["dir"] == tmp_path.name

@@ -251,11 +251,11 @@ const copyAllInfo = () => {
 }
 
 .main-card {
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--color-white-95);
   backdrop-filter: blur(20px);
   border-radius: 16px;
   padding: 40px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px var(--color-black-30);
 }
 
 .card-header {
@@ -272,7 +272,7 @@ const copyAllInfo = () => {
   background: linear-gradient(135deg, $badge-gold, var(--color-accent-gold));
   border-radius: 50%;
   margin-bottom: 20px;
-  box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4);
+  box-shadow: 0 4px 15px var(--color-gold-a40);
 }
 
 .icon {
@@ -339,7 +339,7 @@ const copyAllInfo = () => {
   color: $military-dark;
   letter-spacing: 8px;
   font-family: 'Courier New', monospace;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+  text-shadow: 2px 2px 4px var(--color-black-10);
 }
 
 .machine-code-section {
@@ -442,7 +442,7 @@ const copyAllInfo = () => {
 }
 
 .link {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-white-90);
   text-decoration: none;
   transition: color 0.3s;
 

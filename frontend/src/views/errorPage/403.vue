@@ -45,9 +45,9 @@ const goBack = () => {
   text-align: center;
   padding: 40px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--color-white-5);
   backdrop-filter: blur(10px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px var(--color-black-30);
 }
 
 .error-code {

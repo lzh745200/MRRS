@@ -331,8 +331,8 @@ onMounted(() => {
 .filter-card,
 .report-card {
   margin-bottom: 20px;
-  background: rgba(10, 30, 20, 0.5);
-  border: 1px solid rgba(64, 145, 108, 0.3);
+  background: var(--color-primary-dark-a50);
+  border: 1px solid var(--color-primary-light-a30);
 }
 
 .card-header {
@@ -358,7 +358,7 @@ onMounted(() => {
 }
 
 .report-header p {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-white-70);
   margin: 5px 0;
 }
 
@@ -374,14 +374,14 @@ onMounted(() => {
 .summary-item {
   text-align: center;
   padding: 20px;
-  background: rgba(64, 145, 108, 0.1);
+  background: var(--color-primary-light-a10);
   border-radius: 8px;
-  border: 1px solid rgba(64, 145, 108, 0.3);
+  border: 1px solid var(--color-primary-light-a30);
 }
 
 .summary-label {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-white-70);
   margin-bottom: 8px;
 }
 
@@ -397,13 +397,13 @@ onMounted(() => {
 
 :deep(.el-card__header) {
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark-1) 100%);
-  border-bottom: 1px solid rgba(64, 145, 108, 0.3);
+  border-bottom: 1px solid var(--color-primary-light-a30);
   color: var(--color-text-inverse);
 }
 
 :deep(.el-table) {
   background: transparent;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-white-90);
 }
 
 :deep(.el-table th.el-table__cell) {

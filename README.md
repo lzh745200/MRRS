@@ -1,8 +1,8 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.15.17
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.16.0
 
-![Version](https://img.shields.io/badge/version-1.15.17-blue)
+![Version](https://img.shields.io/badge/version-1.16.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
@@ -98,7 +98,7 @@ cd frontend && npm install && npm run dev
 - **缓存**: diskcache + 内存 LRU
 - **任务**: threading.Timer 定时调度（备份计划/KPI预计算/异常检测, APScheduler 已移除）
 - **角色体系**: 4 核心角色（super_admin/admin/user/viewer）+ `normalize_role()` 向后兼容
-- **离线 OCR**: `rapidocr-onnxruntime==1.4.4`（CPU/离线，识别经费凭证金额与日期；Windows 安装包内置模型，ARM64 构建过滤降级）
+- **离线 OCR**: `rapidocr-onnxruntime==1.4.4`（CPU/离线，识别经费凭证金额与日期；**Windows 与 ARM64 安装包均内置模型**。ARM64 侧改用 `opencv-python-headless` + 构建期冒烟，避免为 OCR 引入图形栈依赖；ARM64 安装包体积因此增加约 65–80 MB，前提是目标机 glibc ≥ 2.28）
 - **依赖自检**: 运行时依赖登记在 `backend/app/core/required_packages.py`（必需/可选/仅开发三级），
   启动自检与 `GET /api/v1/env/check` 按 **import 名** 校验；自包含安装包不误报、不给无效 pip 建议
 - **打包**: PyInstaller（x64 + ARM64）+ electron-builder（NSIS 安装包）
@@ -239,7 +239,7 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 | Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（v1.15.15：约 273 MB / 286,035,588 B，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
 | 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（v1.15.15：约 196 MB / 205,545,106 B）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（约 58 MB / 60,786,460 B） | 同上（`build-arm64.yml` 产出） |
 
-> **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 内置；ARM64 构建过滤降级为 503+手工录入）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
+> **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 与 ARM64 安装包均内置；模型随包约 15 MB，ARM64 侧要求目标机 glibc ≥ 2.28）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
 > **运行环境**：Windows 10/11 x64（Electron 33 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
 > 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
 

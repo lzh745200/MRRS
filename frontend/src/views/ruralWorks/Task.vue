@@ -1384,7 +1384,7 @@ const isOverdue = (task: Task) => {
   border-radius: 8px;
   padding: 24px 28px 20px;
   border-left: 4px solid $military-dark;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px var(--color-black-6);
 
   .page-header-inner {
     display: flex;
@@ -1421,7 +1421,7 @@ const isOverdue = (task: Task) => {
   border-radius: 8px;
   padding: 16px 20px;
   margin-bottom: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px var(--color-black-6);
 
   .toolbar-row {
     display: flex;
@@ -1452,7 +1452,7 @@ const isOverdue = (task: Task) => {
   background: white;
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px var(--color-black-6);
 
   .task-name-cell {
     display: flex;

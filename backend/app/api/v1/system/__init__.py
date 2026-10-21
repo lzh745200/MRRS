@@ -176,6 +176,16 @@ except Exception as exc:
 router.include_router(monitor_router)
 logger.debug("已加载路由: system.monitor")
 
+# ---- PII 密钥管理（R34-2：多机同步密钥漂移的自助修复入口）----
+try:
+    from app.api.v1.system.pii_key import router as pii_key_router
+except Exception as exc:
+    # 深审 #78：子模块导入失败必须 fail-fast —— 原实现只记 warning，端点会
+    # 静默缺失（审计/零信任/备份这类安全路由缺失时无人察觉），且丢掉原始栈。
+    raise RuntimeError(f"加载 system.pii_key 路由失败: {exc}") from exc
+router.include_router(pii_key_router)
+logger.debug("已加载路由: system.pii_key")
+
 # ---- 核心系统 ----
 try:
     from app.api.v1.system.system import router as system_router

@@ -209,7 +209,11 @@ async def batch_export(
     require_admin(current_user)
     try:
         svc = BatchService(db)
-        result = await svc.batch_export(table_name=request.table_name, ids=request.ids, format=request.format)
+        result = await svc.batch_export(
+            table_name=request.table_name, ids=request.ids, format=request.format,
+            organization_id=getattr(current_user, 'organization_id', None),
+            is_superuser=is_superuser(current_user),
+        )
         return success_response(data=result)
     except ValidationError:
         raise

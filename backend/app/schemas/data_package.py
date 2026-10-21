@@ -97,6 +97,11 @@ class DataPackageManifest(BaseModel):
     base_package_id: Optional[int] = None  # 基础包ID（增量更新时）
     export_scope: Optional[str] = None  # 导出范围: self(仅本人录入)/org(全组织)，旧包无此字段
     exported_by_name: Optional[str] = None  # 导出人姓名，旧包无此字段
+    # PII 密钥指纹（SHA-256 前 16 位，见 core/pii_crypto.key_fingerprint）。
+    # 多机离线同步时 PII 列以**密文**出包，目标机密钥不同则密文永久不可解；
+    # 导入侧据此比对并拒绝，避免"导入成功但身份证/手机号全是乱码"。
+    # 旧包无此字段（None）→ 跳过校验，保持向后兼容。
+    key_fingerprint: Optional[str] = None
     changes: Optional[Dict[str, Any]] = None  # 变更记录（增量更新时）
     created_at: Optional[datetime] = None
 

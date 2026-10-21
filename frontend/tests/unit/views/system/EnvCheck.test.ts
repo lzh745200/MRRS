@@ -8,18 +8,37 @@ import { nextTick } from 'vue'
 
 enableAutoUnmount(afterEach)
 
-const { ElMessage, envApi } = vi.hoisted(() => ({
+const { ElMessage, ElMessageBox, envApi, piiKeyApi, downloadBlob } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+  ElMessageBox: {
+    confirm: vi.fn(() => Promise.resolve('confirm')),
+    alert: vi.fn(),
+    prompt: vi.fn(),
+  },
   envApi: { check: vi.fn() },
+  piiKeyApi: {
+    status: vi.fn(),
+    exportKey: vi.fn(),
+    importKey: vi.fn(),
+  },
+  downloadBlob: vi.fn(),
 }))
 
 vi.mock('@/api/env', () => ({
   envApi,
 }))
 
+vi.mock('@/api/piiKey', () => ({
+  piiKeyApi,
+}))
+
+vi.mock('@/api/request', () => ({
+  downloadBlob,
+}))
+
 vi.mock('element-plus', () => ({
   ElMessage,
-  ElMessageBox: { confirm: vi.fn(() => Promise.resolve('confirm')), alert: vi.fn() },
+  ElMessageBox,
   ElNotification: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }))
 
@@ -93,6 +112,22 @@ async function mountComp() {
 beforeEach(() => {
   vi.clearAllMocks()
   envApi.check.mockResolvedValue(envResult)
+  piiKeyApi.status.mockResolvedValue({
+    fingerprint: 'fp1234567890abcd',
+    source: 'runtime',
+    available: true,
+  })
+  piiKeyApi.exportKey.mockResolvedValue({
+    fingerprint: 'fp1234567890abcd',
+    key: 'secret-key-value',
+    source: 'runtime',
+    available: true,
+  })
+  piiKeyApi.importKey.mockResolvedValue({
+    fingerprint: 'newfp0000000000',
+    source: 'runtime',
+    available: true,
+  })
 })
 
 describe('EnvCheck.vue', () => {
@@ -267,3 +302,125 @@ describe('EnvCheck.vue R15 依赖三级分组', () => {
   })
 })
 
+describe('EnvCheck.vue PII 加密密钥（R34-2）', () => {
+  it('状态加载：runtime 来源 → 指纹显示 + info 标签 + 运行时存储', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    expect(piiKeyApi.status).toHaveBeenCalled()
+    expect(vm.piiKeyStatus.fingerprint).toBe('fp1234567890abcd')
+    expect(vm.piiKeySourceLabel).toBe('运行时存储')
+    expect(vm.piiKeyTagType).toBe('info')
+    expect(w.text()).toContain('fp1234567890abcd')
+  })
+
+  it('状态加载：env 来源 → success 标签 + 环境变量', async () => {
+    piiKeyApi.status.mockResolvedValue({
+      fingerprint: 'envfingerprint01',
+      source: 'env',
+      available: true,
+    })
+    const w = await mountComp()
+    const vm = w.vm as any
+    expect(vm.piiKeySourceLabel).toBe('环境变量')
+    expect(vm.piiKeyTagType).toBe('success')
+  })
+
+  it('状态未加载 → 占位 “-” 与 warning 标签、指纹显示不可用', async () => {
+    piiKeyApi.status.mockRejectedValue(new Error('boom'))
+    const w = await mountComp()
+    const vm = w.vm as any
+    expect(vm.piiKeyStatus).toBeNull()
+    expect(vm.piiKeySourceLabel).toBe('-')
+    expect(vm.piiKeyTagType).toBe('warning')
+    expect(w.text()).toContain('不可用')
+  })
+
+  it('导出密钥成功 → 触发下载 + 成功提示', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.handleExportKey()
+    await flushPromises()
+    expect(piiKeyApi.exportKey).toHaveBeenCalled()
+    expect(downloadBlob).toHaveBeenCalledTimes(1)
+    const [blob, name] = downloadBlob.mock.calls[0]
+    expect(blob).toBeInstanceOf(Blob)
+    expect(name).toBe('pii-key-fp1234567890abcd.json')
+    expect(ElMessage.success).toHaveBeenCalledWith('密钥已导出，请通过安全渠道传递')
+    expect(vm.piiKeyLoading).toBe(false)
+  })
+
+  it('导出密钥：指纹为空 → 文件名回落 unknown', async () => {
+    piiKeyApi.exportKey.mockResolvedValue({
+      fingerprint: '',
+      key: 'k',
+      source: 'runtime',
+      available: false,
+    })
+    const w = await mountComp()
+    await (w.vm as any).handleExportKey()
+    await flushPromises()
+    expect(downloadBlob.mock.calls[0][1]).toBe('pii-key-unknown.json')
+  })
+
+  it('导出密钥失败：有 message → 用 message 提示', async () => {
+    piiKeyApi.exportKey.mockRejectedValue({ message: '导出被拒绝' })
+    const w = await mountComp()
+    await (w.vm as any).handleExportKey()
+    expect(ElMessage.error).toHaveBeenCalledWith('导出被拒绝')
+  })
+
+  it('导出密钥失败：无 message → 默认文案', async () => {
+    piiKeyApi.exportKey.mockRejectedValue({})
+    const w = await mountComp()
+    await (w.vm as any).handleExportKey()
+    expect(ElMessage.error).toHaveBeenCalledWith('导出密钥失败')
+  })
+
+  it('导入密钥成功 → 更新状态 + 成功提示', async () => {
+    ElMessageBox.prompt.mockResolvedValue({ value: 'new-secret' })
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.handleImportKey()
+    await flushPromises()
+    expect(piiKeyApi.importKey).toHaveBeenCalledWith('new-secret')
+    expect(vm.piiKeyStatus.fingerprint).toBe('newfp0000000000')
+    expect(ElMessage.success).toHaveBeenCalledWith('密钥已导入并立即生效')
+  })
+
+  it('导入密钥取消 → 不调用接口', async () => {
+    ElMessageBox.prompt.mockRejectedValue('cancel')
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.handleImportKey()
+    expect(piiKeyApi.importKey).not.toHaveBeenCalled()
+    expect(vm.piiKeyLoading).toBe(false)
+  })
+
+  it('导入密钥失败：有 message → 用 message 提示', async () => {
+    ElMessageBox.prompt.mockResolvedValue({ value: 'x' })
+    piiKeyApi.importKey.mockRejectedValue({ message: '密钥格式错误' })
+    const w = await mountComp()
+    await (w.vm as any).handleImportKey()
+    expect(ElMessage.error).toHaveBeenCalledWith('密钥格式错误')
+  })
+
+  it('导入密钥失败：无 message → 默认文案', async () => {
+    ElMessageBox.prompt.mockResolvedValue({ value: 'x' })
+    piiKeyApi.importKey.mockRejectedValue({})
+    const w = await mountComp()
+    await (w.vm as any).handleImportKey()
+    expect(ElMessage.error).toHaveBeenCalledWith('导入密钥失败')
+  })
+
+  it('卡片渲染：导出/导入按钮可点击', async () => {
+    const w = await mountComp()
+    const buttons = w.findAll('button')
+    const exportBtn = buttons.find((b) => b.text().includes('导出密钥'))
+    const importBtn = buttons.find((b) => b.text().includes('导入密钥'))
+    expect(exportBtn).toBeTruthy()
+    expect(importBtn).toBeTruthy()
+    await exportBtn!.trigger('click')
+    await flushPromises()
+    expect(piiKeyApi.exportKey).toHaveBeenCalled()
+  })
+})

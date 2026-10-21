@@ -740,7 +740,7 @@ onMounted(() => {
   background: white;
   padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--color-black-6);
 }
 
 .stats-row {
@@ -754,7 +754,7 @@ onMounted(() => {
   padding: 20px;
   border-radius: 8px;
   text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--color-black-6);
   transition: all 0.3s;
 }
 
@@ -794,7 +794,7 @@ onMounted(() => {
   background: white;
   padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--color-black-6);
   display: flex;
   flex-direction: column;
 }

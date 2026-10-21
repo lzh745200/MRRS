@@ -980,7 +980,7 @@ onMounted(loadTemplates)
 }
 .template-item:hover {
   border-color: var(--color-primary-light-1);
-  box-shadow: 0 2px 8px rgba(64, 145, 108, 0.1);
+  box-shadow: 0 2px 8px var(--color-primary-light-a10);
 }
 .t-icon {
   font-size: 32px;

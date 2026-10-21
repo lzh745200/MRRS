@@ -20,9 +20,10 @@ import pytest
 import app.api.v1.system as pkg
 
 SUBMODULES = [
-    "admin", "audit", "backup", "cache", "config_package", "env",
-    "error_report", "health", "help", "init", "metrics",
-    "monitor", "system", "system_config", "tasks", "update_logs", "zero_trust",
+    "admin", "audit", "backup", "business_health", "cache", "config_package",
+    "diagnostics", "env", "error_report", "health", "help", "init", "metrics",
+    "monitor", "pii_key", "system", "system_config", "tasks", "update_logs",
+    "zero_trust",
 ]
 
 INIT_PATH = os.path.join(os.path.dirname(pkg.__file__), "__init__.py")

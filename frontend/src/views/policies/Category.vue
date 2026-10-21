@@ -207,8 +207,8 @@ onMounted(() => {
 .category-card,
 .action-card {
   margin-bottom: 20px;
-  background: rgba(10, 30, 20, 0.5);
-  border: 1px solid rgba(64, 145, 108, 0.3);
+  background: var(--color-primary-dark-a50);
+  border: 1px solid var(--color-primary-light-a30);
 }
 
 .card-header {
@@ -263,12 +263,12 @@ onMounted(() => {
     border-color: rgba(45, 106, 79, 0.3);
 
     &:hover {
-      background: rgba(45, 106, 79, 0.2);
-      box-shadow: 0 4px 12px rgba(45, 106, 79, 0.2);
+      background: var(--color-primary-a20);
+      box-shadow: 0 4px 12px var(--color-primary-a20);
     }
 
     .level-icon {
-      background: rgba(45, 106, 79, 0.2);
+      background: var(--color-primary-a20);
       color: var(--color-primary);
     }
   }
