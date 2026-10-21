@@ -51,12 +51,15 @@
   **值与原字面量逐字节等价、视觉零变化**；硬编码色棘轮维持 154 处不新增。
 - **依赖**：前端新增 `leaflet@^1.9.4`；后端 `requirements.txt` 与 PyInstaller spec 同步 OCR/瓦片相关收集项。
 
-### Removed
+### Deferred（本版移出，避免升级事故）
 
-- **R35 迁移清理 6 张零引用空表**（`r35_drop_legacy_tables_001.py`）：`comments` / `messages_extended` /
-  `sentiment_keywords` / `sentiment_reports` / `workflow_definitions` / `workflow_instances`。
-  逐表 `EXISTS` 检查幂等；**删除前断言表为空**（有数据直接 raise，绝不静默丢数据）；
-  先删子表再删其余；`downgrade` 显式 `NotImplementedError`（空表不可恢复索引/约束语义）。
+- **清理 6 张 W22 遗留空表**（`comments` / `messages_extended` / `sentiment_keywords` /
+  `sentiment_reports` / `workflow_definitions` / `workflow_instances`）：原实现为「表非空即 raise」的
+  删表迁移。升级演练（`scripts/upgrade_rehearsal.py`，从上一个 Release 版本建库并**每表播种一行**）
+  复现出真实风险 —— 老用户库里这些表可能有历史数据，一旦非空，**升级会直接中断、新版本装完起不来**；
+  即便为空，演练的「无表丢失 / 行数不变」两条基线也会判为数据丢失。
+  结论：**本版不带该迁移**，schema 维持 r34 head；后续如需清理，应改为「非空表改名为
+  `legacy_<table>` 归档、只删真正空表」，并同步升级演练白名单后再单独发布。
 
 ### Fixed
 
