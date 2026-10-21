@@ -241,7 +241,9 @@ function buildFlatEntries(sections: MenuSection[]): FlatMenuEntry[] {
           // console 的 tabs 也进入扁平列表（R35）：Ctrl+K 菜单搜索 / 移动端「更多」
           // 能直达系统管理下的每个子功能（如「权限包管理」「备份恢复」），
           // 而不是只能搜到 6 个聚合页本身。跳转时由消费方拼 `?tab=` 保留聚合页上下文。
-          for (const tab of item.tabs ?? []) {
+          // kind==='console' 时 toEntry 保证 tabs 一定是数组（可能为空），无需再兜底，
+          // 这样也避免一个永远走不到的 ?? [] 分支拖累 100% 分支覆盖率门禁。
+          for (const tab of item.tabs as MenuTab[]) {
             flat.push({
               key: tab.key,
               label: tab.label,
