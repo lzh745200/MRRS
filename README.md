@@ -236,7 +236,7 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 
 | 平台 | 安装包 | 获取方式 |
 |------|--------|---------|
-| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（v1.15.15：约 273 MB / 286,035,588 B，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
+| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（v1.16.0：约 273 MB / 286,330,486 B，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
 | 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（v1.15.15：约 196 MB / 205,545,106 B）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（约 58 MB / 60,786,460 B） | 同上（`build-arm64.yml` 产出） |
 
 > **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 与 ARM64 安装包均内置；模型随包约 15 MB，ARM64 侧要求目标机 glibc ≥ 2.28）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
