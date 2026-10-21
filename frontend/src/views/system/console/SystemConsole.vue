@@ -109,6 +109,10 @@ const TAB_COMPONENTS: Record<string, Component> = {
     () => import('@/views/system/PermissionPacks.vue')
   ),
   organizations: defineAsyncComponent(() => import('@/views/organization/List.vue')),
+  // R33 单位授权（v1.15.17 修复）：两个 tab 早已在后端菜单下发，但此前漏加组件映射，
+  // 会被 renderableTabs 过滤掉 → 聚合页不可见（只能手输 URL）。新增 tab 必须同步此处。
+  'system-org-grant': defineAsyncComponent(() => import('@/views/system/OrgGrant.vue')),
+  'system-grant-import': defineAsyncComponent(() => import('@/views/system/GrantImport.vue')),
   audit: defineAsyncComponent(() => import('@/views/system/AuditManagement.vue')),
   'zero-trust': defineAsyncComponent(() => import('@/views/system/ZeroTrust.vue')),
   secrets: defineAsyncComponent(() => import('@/views/system/SecretsManagement.vue')),

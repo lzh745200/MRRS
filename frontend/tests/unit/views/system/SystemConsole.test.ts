@@ -56,6 +56,14 @@ vi.mock('@/views/organization/List.vue', () => {
   hoisted.loadedModules.push('OrganizationList')
   return { __esModule: true, default: hoisted.makeStub('OrganizationList') }
 })
+vi.mock('@/views/system/OrgGrant.vue', () => {
+  hoisted.loadedModules.push('OrgGrant')
+  return { __esModule: true, default: hoisted.makeStub('OrgGrant') }
+})
+vi.mock('@/views/system/GrantImport.vue', () => {
+  hoisted.loadedModules.push('GrantImport')
+  return { __esModule: true, default: hoisted.makeStub('GrantImport') }
+})
 vi.mock('@/views/system/AuditManagement.vue', () => {
   hoisted.loadedModules.push('AuditManagement')
   return { __esModule: true, default: hoisted.makeStub('AuditManagement') }
@@ -153,7 +161,15 @@ import SystemConsole from '@/views/system/console/SystemConsole.vue'
 
 // ── 契约 §4/§5 测试夹具：6 个板块的 console 节点与 tabs（key 与组件映射一一对应）──
 const GROUP_TABS: Record<string, string[]> = {
-  org: ['users-orgs', 'roles', 'menus', 'system-permission-packs', 'organizations'],
+  org: [
+    'users-orgs',
+    'roles',
+    'menus',
+    'system-permission-packs',
+    'organizations',
+    'system-org-grant',
+    'system-grant-import',
+  ],
   security: ['audit', 'zero-trust', 'secrets', 'data-tier', 'encryption', 'machine-code'],
   ops: [
     'system-overview',
@@ -181,7 +197,7 @@ const GROUP_LABELS: Record<string, string> = {
 /** 无前端组件映射的 Tab key（后端下发未知 key 时的防御分支） */
 const UNMAPPED_TAB = 'unknown-tab'
 
-/** 全部 28 个真实 Tab key（UNMAPPED_TAB 除外） */
+/** 全部 30 个真实 Tab key（UNMAPPED_TAB 除外；含 R33 单位授权 2 个） */
 const ALL_TAB_KEYS = Object.values(GROUP_TABS).flat()
 
 function buildSections() {
@@ -403,11 +419,11 @@ describe('group 解析与可见 Tab', () => {
   })
 
   it('canAccessMenu 兜底过滤无权限 Tab；全部无权限 → 空态', async () => {
-    // 部分无权限：roles 被 canAccessMenu 拒绝，其余 4 个保留
+    // 部分无权限：roles 被 canAccessMenu 拒绝，其余 org 板块 Tab 全部保留
     const partial = makeStore()
     partial.canAccessMenu.mockImplementation((key: string) => key !== 'roles')
     const hidden = await mountAt('/system/console/org', partial)
-    expect(hidden.wrapper.findAll('.tab-label')).toHaveLength(4)
+    expect(hidden.wrapper.findAll('.tab-label')).toHaveLength(GROUP_TABS.org.length - 1)
     expect(hidden.wrapper.text()).not.toContain('roles页签')
 
     // 全部无权限：console 节点存在但无可见 Tab → 空态（标题仍取节点 label）
@@ -531,7 +547,7 @@ describe('菜单加载兜底（深链/刷新场景）', () => {
 })
 
 describe('契约 §5 组件映射完整性', () => {
-  it('28 个 Tab key 全部懒加载并渲染对应组件（每个异步 loader 均被执行）', async () => {
+  it('30 个 Tab key 全部懒加载并渲染对应组件（每个异步 loader 均被执行）', async () => {
     for (const [group, tabs] of Object.entries(GROUP_TABS)) {
       for (const tabKey of tabs) {
         const { wrapper, router } = await mountAt(`/system/console/${group}?tab=${tabKey}`)
@@ -540,9 +556,9 @@ describe('契约 §5 组件映射完整性', () => {
         wrapper.unmount()
       }
     }
-    // 28 个 mock 模块工厂各被执行且仅被执行一次（每个 defineAsyncComponent loader 都跑过）
-    expect(ALL_TAB_KEYS).toHaveLength(28)
-    expect(hoisted.loadedModules).toHaveLength(28)
-    expect(new Set(hoisted.loadedModules).size).toBe(28)
+    // 30 个 mock 模块工厂各被执行且仅被执行一次（每个 defineAsyncComponent loader 都跑过）
+    expect(ALL_TAB_KEYS).toHaveLength(30)
+    expect(hoisted.loadedModules).toHaveLength(30)
+    expect(new Set(hoisted.loadedModules).size).toBe(30)
   })
 })

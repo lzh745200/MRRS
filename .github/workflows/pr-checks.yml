@@ -460,6 +460,11 @@ jobs:
       # 前后端菜单对齐门禁：前端菜单 key/path 与后端 MENU_DEFINITIONS/前端路由一致
       - name: Menu alignment check
         run: python scripts/check_menu_alignment.py
+      # console Tab 映射完整性：后端 menus.py 的每个 console tab 必须在前端
+      # SystemConsole.vue 的 TAB_COMPONENTS 有组件映射（否则聚合页静默隐藏该功能，
+      # 如 2026-10-21 发现的 R33 单位授权两个 tab 不可见）
+      - name: Console tab mapping check
+        run: python scripts/check_console_tab_mapping.py
       # 后端综合安全审计：裸 db.commit()、跨组织删除、缺 ok_list/write_work_log/filter_by_data_scope
       - name: Backend comprehensive security audit
         run: python scripts/security_audit.py --verbose
