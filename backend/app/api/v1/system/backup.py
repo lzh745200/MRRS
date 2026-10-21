@@ -780,7 +780,9 @@ async def restore_backup(
             username=getattr(current_user, "username", "unknown"),
             resource_type="backup",
             resource_id=body.filename,
-            details={"result": result},
+            # 只记录可 JSON 序列化的白名单字段：恢复结果里可能含 datetime，
+            # 直接塞进 JSON 列会让审计写入失败（虽被兜底吞掉，但审计就丢了）
+            details={"filename": body.filename, "restored": bool(result)},
         )
 
         # 恢复后建议重启服务以回收 SQLite 连接池
