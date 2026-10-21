@@ -5,6 +5,42 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.16.2] - 2026-10-22 — ARM64 内置 OCR 出包门禁修正 + 遗留空表安全清除（r35 迁移）
+
+### Fixed
+
+- **ARM64 OCR 出包门禁误判（会让整条 ARM64 产物链失败）**：v1.16.0/v1.16.1 的
+  「Verify OCR payload」步骤写成 `dpkg-deb -c "$DEB" | grep -qE ...`，`grep -q` 命中后立即退出，
+  `dpkg-deb` 收到 SIGPIPE，在 `set -o pipefail` 下整条管道返回 141 → **被误判为「缺少 ONNX 模型」**。
+  实测下载 v1.16.1 的 `assistance-management-system_1.16.1_arm64.deb`（106,002,508 B）解包确认：
+  该 DEB **本来就内置** 3 个 rapidocr ONNX 模型（`ch_PP-OCRv4_det_infer` 4.53 MB /
+  `ch_PP-OCRv4_rec_infer` 10.35 MB / `ch_ppocr_mobile_v2.0_cls_infer` 0.56 MB）＋
+  `onnxruntime_pybind11_state...so` ＋ `cv2.abi3.so` —— 即 **ARM64 离线 OCR 从 v1.16.1 起已真正可用**，
+  此前"降级 503"的说法是门禁误报导致的错误结论（已在 CHANGELOG 1.16.1 条目中说明该结论作废）。
+  修复：先 `dpkg-deb -c > $LIST` 落清单再对文件 grep，并把 standalone 与 Electron 两侧都恢复为
+  **强门禁**（模型 ≥2 个 + onnxruntime 绑定库 + cv2 扩展模块缺一不可，且 Depends 不得引入 libgl1/libgomp1/libglib2.0）。
+
+### Removed
+
+- **清除 W22 遗留的 6 张零引用表**（`r35_drop_legacy_tables_001`，在 v1.16.0 因升级风险被移出后重做）：
+  `comments` / `messages_extended` / `sentiment_keywords` / `sentiment_reports` /
+  `workflow_definitions` / `workflow_instances`。
+  **安全策略（绝不丢数据、绝不阻断升级）**：表不存在 → 跳过（幂等）；存在且 **0 行** → `DROP TABLE`；
+  存在且**有数据** → `ALTER TABLE ... RENAME TO legacy_<表名>`（数据原样保留在库里备查，只是退出活跃 schema）。
+  即空表一定被清掉、有数据的表一行不丢、升级永远成功。`downgrade` 把 `legacy_*` 改回原名（尽力而为）。
+- **升级演练与迁移的显式契约**：新增 `backend/scripts/gate_baselines/upgrade_legacy_tables.json`，
+  演练（`scripts/upgrade_rehearsal.py`）据此接受"原表名消失（且旧库该表 0 行）"或"改名 `legacy_<表名>` 且行数不变"两种终态；
+  新增任何"允许消失"的表必须同步该清单，否则演练照样报「无表丢失」失败。清单缺失时演练退回最严口径。
+
+### Added
+
+- **迁移单测** `tests/unit/test_migration_r35_legacy_tables.py`（7 项）：空表删除 / 有数据改名归档 /
+  表不存在幂等 / 归档表已存在时保留原表 / 清单与常量一致 / 清单不可读回退 / 回滚改名。
+
+### Notes
+
+- v1.16.1 的结论更正：ARM64 **内置 OCR 已生效**（无需再按"降级"对待）；v1.16.0 的 Release 仅 Windows 包，
+  v1.16.1 补齐了三平台产物，v1.16.2 在其基础上修正门禁误判并完成遗留表清理。
 ## [1.16.1] - 2026-10-21 — 安装包发布修复：ARM64 OCR 载荷门禁改为分级（v1.16.0 的 ARM64 产物链被拦）
 
 ### Fixed

@@ -416,17 +416,22 @@ jobs:
         run: |
           ls -lh dist/electron/*.deb
           file dist/electron/*.deb
-          # E 区（v1.16.0）：Electron DEB 与 standalone DEB 同源复用 backend-builder 产物。
-          # v1.16.1：与 standalone 侧同口径改为「有则强校验、无则告警」——
-          # v1.15.x 以来 ARM64 一直无内置 OCR（接口 503 降级），不是回归，不能因此拦死出包。
+          # E 区：Electron DEB 与 standalone DEB 同源复用 backend-builder 产物，
+          # 因此同样必须内置离线 OCR（模型 + onnxruntime 绑定）。
+          # v1.16.2：先落清单再 grep —— 避免 dpkg-deb -c | grep -q 在 pipefail 下
+          # 因 SIGPIPE 返回 141 被误判为"缺少载荷"（v1.16.0 tag 构建踩过）。
+          set -euo pipefail
           DEB_ELECTRON=$(ls dist/electron/*.deb | head -1)
-          if dpkg-deb -c "$DEB_ELECTRON" | grep -qE "rapidocr_onnxruntime/models/.*\.onnx"; then
-            dpkg-deb -c "$DEB_ELECTRON" | grep -qE "onnxruntime_pybind11_state" \
-              || { echo "::error::Electron DEB 有 OCR 模型却缺 onnxruntime 绑定库"; exit 1; }
-            echo "Electron DEB OCR 载荷断言通过"
-          else
-            echo "::warning::Electron DEB 未内置 OCR 载荷 —— OCR 将 503 降级（与 v1.15.x 一致）"
-          fi
+          LIST=$(mktemp)
+          dpkg-deb -c "$DEB_ELECTRON" > "$LIST"
+          MODELS=$(grep -cE "rapidocr_onnxruntime/models/.*\.onnx" "$LIST" || true)
+          echo "Electron DEB rapidocr ONNX 模型数: ${MODELS}"
+          test "${MODELS:-0}" -ge 2 \
+            || { echo "::error::Electron DEB 载荷缺少 rapidocr ONNX 模型（应 >=2 个）"; exit 1; }
+          grep -qE "onnxruntime_pybind11_state" "$LIST" \
+            || { echo "::error::Electron DEB 载荷缺少 onnxruntime 绑定库"; exit 1; }
+          rm -f "$LIST"
+          echo "Electron DEB OCR 载荷断言通过"
       - name: DEB smoke (arch + glibc cap)
         run: |
           chmod +x scripts/verify_deb_smoke.sh
@@ -593,51 +598,45 @@ jobs:
             || { echo "::error::载荷缺少 .desktop"; exit 1; }
           echo "桌面集成载荷断言通过"
 
-      # ── E 区（v1.16.0）：ARM64 离线 OCR 出包门禁 ──
+      # ── E 区：ARM64 离线 OCR 出包门禁（v1.16.2 修正误判）──
       # 构建期 OCR 冒烟已由 docker/Dockerfile.kylin-standalone 的 backend-builder 阶段
       # 执行（docker/ocr_smoke_arm64.py：import cv2 + RapidOCR() 实例化 + 真实识别），
-      # 本步在**出包后**再对 DEB 载荷做断言，防止两种"构建绿但装完 503"的走法：
-      #   ① spec 的 collect_data_files/collect_dynamic_libs 漏收模型或 onnxruntime 库；
-      #   ② OCR 把 standalone 包从"零外部依赖"退化成"缺 libgl1 就装不上"
-      #      （headless cv2 + onnxruntime 实测均不需要 libGL/libgomp，必须保持空 Depends）。
-      # ── E 区（v1.16.0）：ARM64 离线 OCR 出包检查 ──
-      # 构建期 OCR 冒烟已由 docker/Dockerfile.kylin-standalone 的 backend-builder 阶段
-      # 执行（docker/ocr_smoke_arm64.py：import cv2 + RapidOCR() 实例化 + 真实识别）。
-      # v1.16.1 修正：本步此前是**硬失败**门禁，但 v1.16.0 的 tag 构建实测发现
-      # PyInstaller 阶段并未把 rapidocr 的 ONNX 模型收进 DEB（spec 的 find_spec 守卫
-      # 在该阶段静默跳过），导致整个 ARM64 产物链被拦下 —— 而 v1.15.x 一直是
-      # "ARM64 无内置 OCR、OCR 接口 503 降级"的既定行为，属**没有回归**。
-      # 现改为分级：
-      #   ① 载荷**有** OCR → 必须同时满足"零外部依赖"（不得引入 libgl1/libgomp1/libglib2.0）；
-      #   ② 载荷**无** OCR → 仅告警（OCR 降级 503），不阻断出包，保证麒麟机仍能安装使用。
-      # 待 spec 收集链路修好后，把 WARN 改回 ERROR 即可恢复强门禁。
+      # 本步在**出包后**再对 DEB 载荷做断言，防止"构建绿但装完 503"。
+      #
+      # v1.16.1 的 v1.16.0 tag 构建曾在此误报"缺少 ONNX 模型"：日志显示 Dockerfile 侧
+      # 的 find 断言已通过，实际 v1.16.1 的 DEB 也确含 3 个模型（4.53+10.35+0.56 MB）。
+      # 真因是本步写成 `dpkg-deb -c "$DEB" | grep -q`：grep -q 命中后立即退出 → dpkg-deb
+      # 收到 SIGPIPE → 在 `set -o pipefail` 下整条管道返回 141 → 误判为"未找到"。
+      # 现改为「先落清单文件、再对文件 grep」，彻底消除 SIGPIPE 误判，并恢复强门禁。
       - name: Verify OCR payload and zero-dep contract in DEB
         run: |
           set -euo pipefail
           DEB=$(ls dist/deb/output/*.deb | head -1)
           echo "Checking: $DEB"
+          LIST=$(mktemp)
+          dpkg-deb -c "$DEB" > "$LIST"
           DEB_DEPS=$(dpkg-deb -f "$DEB" Depends 2>/dev/null || true)
           echo "DEB Depends: '${DEB_DEPS:-<空>}'"
-          echo "--- ① 零外部依赖契约（无条件）---"
+          echo "--- ① 零外部依赖契约 ---"
           case "$DEB_DEPS" in
             *libgl1*|*libgomp1*|*libglib2.0*)
               echo "::error::不应引入 libgl1/libgomp1/libglib2.0-0 硬依赖（否则离线机缺库即装不上）"
               exit 1 ;;
           esac
           echo "零外部依赖: OK"
-          echo "--- ② OCR 载荷（有则强校验，无则告警降级）---"
-          if dpkg-deb -c "$DEB" | grep -qE "rapidocr_onnxruntime/models/.*\.onnx"; then
-            echo "rapidocr ONNX 模型: OK"
-            dpkg-deb -c "$DEB" | grep -qE "onnxruntime_pybind11_state" \
-              || { echo "::error::有 OCR 模型却缺 onnxruntime 绑定库（载荷不完整）"; exit 1; }
-            echo "onnxruntime 绑定库: OK"
-            dpkg-deb -c "$DEB" | grep -qE "cv2.*\.so" \
-              || { echo "::error::有 OCR 模型却缺 cv2 扩展模块（载荷不完整）"; exit 1; }
-            echo "cv2 扩展模块: OK"
-            echo "OCR 载荷完整"
-          else
-            echo "::warning::本版 ARM64 未内置 OCR 载荷 —— 经费凭证 OCR 将返回 503 走手工录入（与 v1.15.x 行为一致，不影响安装与其它功能）"
-          fi
+          echo "--- ② OCR 载荷（强门禁：必须有）---"
+          MODELS=$(grep -cE "rapidocr_onnxruntime/models/.*\.onnx" "$LIST" || true)
+          echo "rapidocr ONNX 模型数: ${MODELS}"
+          test "${MODELS:-0}" -ge 2 \
+            || { echo "::error::DEB 载荷缺少 rapidocr ONNX 模型（应 >=2 个；spec datas 收集失效）"; exit 1; }
+          grep -qE "onnxruntime_pybind11_state" "$LIST" \
+            || { echo "::error::DEB 载荷缺少 onnxruntime 绑定库（collect_dynamic_libs 失效）"; exit 1; }
+          echo "onnxruntime 绑定库: OK"
+          grep -qE "cv2.*\.so" "$LIST" \
+            || { echo "::error::DEB 载荷缺少 cv2 扩展模块"; exit 1; }
+          echo "cv2 扩展模块: OK"
+          rm -f "$LIST"
+          echo "OCR 载荷完整（模型 ${MODELS} 个 + onnxruntime + cv2）+ 零外部依赖"
 
       # v1.12.25：复用同一 buildx 构建缓存导出后端 onedir（替代独立 build-backend 冷构建）。
       # 根因：独立作业需再次冷拉 python:3.11-slim-buster，公共镜像匿名限流时直接失败，

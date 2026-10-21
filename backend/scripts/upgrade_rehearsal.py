@@ -139,6 +139,24 @@ def seed_all_tables(engine):
     return set(seeded), skipped
 
 
+LEGACY_MANIFEST = Path(__file__).resolve().parent / "gate_baselines" / "upgrade_legacy_tables.json"
+
+
+def load_legacy_contract():
+    """读取"允许消失"的遗留表清单（与 r35 迁移同源）。
+
+    返回 (允许消失的表名集合, 归档前缀)。清单缺失/损坏时返回空集合 ——
+    即退回最严格口径（任何表消失都算丢失），绝不静默放宽。
+    """
+    try:
+        payload = json.loads(LEGACY_MANIFEST.read_text(encoding="utf-8"))
+        tables = payload.get("legacy_tables") or []
+        prefix = str(payload.get("archive_prefix") or "legacy_")
+        return {str(t) for t in tables}, prefix
+    except (OSError, ValueError):
+        return set(), "legacy_"
+
+
 def table_state(engine):
     """当前库的表集合 + 各表行数 + 完整性检查。"""
     from sqlalchemy import MetaData, func, select, text
@@ -239,15 +257,36 @@ def main() -> int:
 
         step("完整性检查", new_state["integrity"] == "ok", new_state["integrity"])
 
-        lost_tables = sorted(old_state["tables"] - new_state["tables"])
+        legacy_tables, archive_prefix = load_legacy_contract()
+        lost_tables = []
+        for name in sorted(old_state["tables"] - new_state["tables"]):
+            if name not in legacy_tables:
+                lost_tables.append(name)
+                continue
+            # 清单内的表："空表删除"或"有数据→改名 legacy_<表名> 且行数不变"两种终态都接受
+            old_count = seeded_state["counts"].get(name, 0)
+            archived_count = new_state["counts"].get(archive_prefix + name)
+            if old_count == 0 or archived_count == old_count:
+                continue
+            lost_tables.append(name)
         step("无表丢失", not lost_tables, ",".join(lost_tables) if lost_tables else "%d 表完好" % len(old_state["tables"]))
         if lost_tables or new_state["integrity"] != "ok":
             failures.append("schema")
 
-        lost_rows = sorted(
-            name for name in seeded
-            if new_state["counts"].get(name, -1) != seeded_state["counts"].get(name, -2)
-        )
+        lost_rows = []
+        for name in seeded:
+            old_count = seeded_state["counts"].get(name, 0)
+            if name in legacy_tables:
+                # 遗留表：允许被删（仅当旧库 0 行）或改名为归档且行数一致
+                if name not in new_state["counts"] and old_count == 0:
+                    continue
+                if new_state["counts"].get(archive_prefix + name) == old_count:
+                    continue
+                lost_rows.append(name)
+                continue
+            if new_state["counts"].get(name, -1) != seeded_state["counts"].get(name, -2):
+                lost_rows.append(name)
+        lost_rows = sorted(lost_rows)
         step("已播种表行数不变", not lost_rows, ",".join(lost_rows) if lost_rows else "%d 表数据完好" % len(seeded))
         if lost_rows:
             failures.append("data")
