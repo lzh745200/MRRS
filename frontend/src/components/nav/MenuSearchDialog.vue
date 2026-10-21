@@ -90,6 +90,8 @@ interface SearchEntry {
   icon?: string
   sectionLabel?: string
   index: number
+  /** console 子项：跳转目标为 `path?tab=<tabKey>` */
+  tabKey?: string
 }
 
 /** 结果分组：搜索态单组「搜索结果」；空搜索为「收藏」+「最近访问」 */
@@ -155,6 +157,7 @@ const groups = computed<SearchGroup[]>(() => {
           path: record.path,
           icon: record.icon,
           sectionLabel: 'sectionLabel' in record ? record.sectionLabel : undefined,
+          tabKey: 'tabKey' in record ? record.tabKey : undefined,
           index,
         }
         index += 1
@@ -171,11 +174,22 @@ const selectableEntries = computed(() => groups.value.flatMap((group) => group.e
 /** 空态提示语：无历史 vs 无搜索结果 */
 const emptyHint = computed(() => (keyword.value.trim() ? '未找到匹配的菜单' : '暂无收藏与最近访问'))
 
+/** console 子项跳转目标：保留聚合页上下文（`?tab=`），普通菜单原样跳转 */
+function entryTarget(entry: SearchEntry): string | { path: string; query: { tab: string } } {
+  return entry.tabKey ? { path: entry.path, query: { tab: entry.tabKey } } : entry.path
+}
+
 /** 选中并跳转：记录最近访问、关闭弹窗、安全跳转 */
 function choose(entry: SearchEntry): void {
-  recordMenu({ key: entry.key, label: entry.label, path: entry.path, icon: entry.icon })
+  recordMenu({
+    key: entry.key,
+    label: entry.label,
+    path: entry.path,
+    icon: entry.icon,
+    tabKey: entry.tabKey,
+  })
   visible.value = false
-  pushSafe(entry.path)
+  pushSafe(entryTarget(entry))
 }
 
 /** 键盘回车：跳转当前高亮项 */
@@ -193,7 +207,13 @@ function moveActive(delta: number): void {
 
 /** 收藏切换（行内星标，阻止冒泡避免触发跳转） */
 function toggleFavoriteEntry(entry: SearchEntry): void {
-  toggleFavorite({ key: entry.key, label: entry.label, path: entry.path, icon: entry.icon })
+  toggleFavorite({
+    key: entry.key,
+    label: entry.label,
+    path: entry.path,
+    icon: entry.icon,
+    tabKey: entry.tabKey,
+  })
 }
 
 /** 全局键盘监听：仅弹窗打开时生效 */

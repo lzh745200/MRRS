@@ -177,17 +177,23 @@ describe('useMenuStore', () => {
       expect(store.loading).toBe(false)
       expect(store.loadFailed).toBe(false)
 
-      // flatEntries：工作台固定第一 → page → group children → console
+      // flatEntries：工作台固定第一 → page → group children → console 自身 → console tabs
       expect(store.flatEntries.map((entry) => entry.key)).toEqual([
         'dashboard',
         'villages',
         'funds-admin',
         'system-console-org',
+        'users-orgs',
       ])
       expect(store.flatEntries[2].parentKey).toBe('funds')
       expect(store.flatEntries[2].parentLabel).toBe('经费管理')
       expect(store.flatEntries[1].sectionLabel).toBe('帮扶业务')
       expect(store.flatEntries[3].kind).toBe('console')
+      // R35：console 子项（tab）也进入扁平列表，带 parent 与 tabKey 供 “?tab=” 跳转
+      expect(store.flatEntries[4].tabKey).toBe('users-orgs')
+      expect(store.flatEntries[4].parentKey).toBe('system-console-org')
+      expect(store.flatEntries[4].parentLabel).toBe('组织与权限')
+      expect(store.flatEntries[4].path).toBe('/system/console/org')
 
       // allKeys：后端 flat_keys ∪ 工作台 ∪ 结构 key ∪ tabs.key
       for (const key of [
@@ -238,6 +244,7 @@ describe('useMenuStore', () => {
         'dashboard',
         'ok-child',
         'console-dirty',
+        'tab-ok',
         'no-label-page',
       ])
       // flat_keys 非字符串项被过滤，合法项并入 allKeys
@@ -443,7 +450,8 @@ describe('useMenuStore', () => {
       await store.fetchMenus()
       expect(mockGet).toHaveBeenCalledWith('/menus/accessible')
       expect(store.sections).toHaveLength(2)
-      expect(store.flatEntries.length).toBe(4)
+      // 3 个普通条目 + console 自身 + 1 个 console tab
+      expect(store.flatEntries.length).toBe(5)
       expect(store.loaded).toBe(true)
       expect(store.loading).toBe(false)
       expect(store.loadFailed).toBe(false)

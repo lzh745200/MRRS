@@ -134,11 +134,17 @@ function isActive(path: string) {
   return route.path === path || route.path.startsWith(path + '/')
 }
 
-/** 记录最近访问并跳转 */
+/** 记录最近访问并跳转（console 子项带 ?tab= 保留聚合页上下文） */
 function navigateEntry(entry: FlatMenuEntry) {
-  recordMenu({ key: entry.key, label: entry.label, path: entry.path, icon: entry.icon })
+  recordMenu({
+    key: entry.key,
+    label: entry.label,
+    path: entry.path,
+    icon: entry.icon,
+    tabKey: entry.tabKey,
+  })
   drawerVisible.value = false
-  pushSafe(entry.path)
+  pushSafe(entry.tabKey ? { path: entry.path, query: { tab: entry.tabKey } } : entry.path)
 }
 
 /** 底部按钮：普通入口直接跳转，「更多」打开抽屉 */

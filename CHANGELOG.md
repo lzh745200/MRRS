@@ -5,6 +5,32 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布] — 2026-10-21 系统管理结构梳理（R35）：聚合页分组导航 + 菜单搜索直达子功能
+
+### Added
+
+- **聚合页左侧分组导航**（`SystemConsole.vue`）：系统管理 6 个聚合页原先把 tab 横向平铺
+  （运维与监控 7 项在小屏溢出），现改为「左侧分组导航 + 右侧内容」。分组为**纯呈现层**
+  （`TAB_LAYOUT` 前端映射），**不改变**后端菜单 key / tab path / 权限粒度 / `?tab=` 深链语义；
+  后端新增未登记的 tab 自动落入「其他」分组，入口不丢。
+  分组：组织与权限（账号与组织 / 权限配置 / 组织与单位）、安全与审计（审计 / 访问控制 / 密钥与加密）、
+  运维与监控（运行状态 / 任务与日志）、备份与存储（备份 / 数据包与存储）、系统设置、关于与反馈。
+  窄屏（≤992px）自动转为横向滚动分组条。
+- **Ctrl+K 菜单搜索直达系统管理子功能**（`stores/menu.ts` → `buildFlatEntries`）：
+  console 的 30 个 tab 现在也进入 `flatEntries`（带 `parentLabel` 与 `tabKey`），
+  搜索「权限包管理」「备份」「机器码」可直接跳转 `/system/console/<group>?tab=<key>`；
+  最近访问 / 收藏（`NavMenuRecord`）与移动端「更多」抽屉同步支持 `tabKey` 回跳。
+
+### Fixed
+
+- **R33 单位授权两个 tab 在聚合页不可见**：后端 `menus.py` 早已下发
+  `system-org-grant` / `system-grant-import`，但前端 `TAB_COMPONENTS` 漏加映射，
+  被 `renderableTabs` 静默过滤 → 用户只能手输 URL 才能进入「单位授权配置 / 导入授权包」。
+  已补齐映射，并把 `SystemConsole` 测试契约从 28 个 tab 更新到 30 个。
+- **新增门禁 `scripts/check_console_tab_mapping.py`**（接入 CI static-analysis）：
+  校验「后端 console tab key」与「前端 TAB_COMPONENTS」双向一致，
+  以后任何新增 tab 忘了加组件（或残留僵尸映射）都会直接让 CI 变红。
+
 ## [1.15.17] - 2026-10-21 — 系统管理：国际化彻底清除 + 导航死链治理 + 依赖安全修复
 
 ### Removed

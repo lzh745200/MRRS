@@ -59,6 +59,11 @@ export interface FlatMenuEntry {
   sectionLabel: string
   parentKey?: string
   parentLabel?: string
+  /**
+   * console 子项（tab）专用：点击后跳转 `path?tab=<tabKey>`。
+   * 普通 page / group children / console 自身均无此字段。
+   */
+  tabKey?: string
 }
 
 /**
@@ -233,6 +238,23 @@ function buildFlatEntries(sections: MenuSection[]): FlatMenuEntry[] {
             sectionKey: section.key,
             sectionLabel: section.label,
           })
+          // console 的 tabs 也进入扁平列表（R35）：Ctrl+K 菜单搜索 / 移动端「更多」
+          // 能直达系统管理下的每个子功能（如「权限包管理」「备份恢复」），
+          // 而不是只能搜到 6 个聚合页本身。跳转时由消费方拼 `?tab=` 保留聚合页上下文。
+          for (const tab of item.tabs ?? []) {
+            flat.push({
+              key: tab.key,
+              label: tab.label,
+              path: item.path,
+              icon: tab.icon ?? item.icon,
+              kind: 'console',
+              sectionKey: section.key,
+              sectionLabel: section.label,
+              parentKey: item.key,
+              parentLabel: item.label,
+              tabKey: tab.key,
+            })
+          }
         }
       } else {
         // group 的 children 已由 toEntry 保证为非空数组（无需再防御）

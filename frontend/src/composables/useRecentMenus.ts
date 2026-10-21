@@ -14,6 +14,8 @@ export interface NavMenuRecord {
   label: string
   path: string
   icon?: string
+  /** console 子项（tab）跳转目标：`path?tab=<tabKey>`；普通菜单无此字段 */
+  tabKey?: string
 }
 
 export const RECENT_MENUS_STORAGE_KEY = 'nav:recent'
@@ -29,7 +31,9 @@ function isStoredRecord(value: unknown): value is NavMenuRecord {
   return (
     typeof record.key === 'string' &&
     typeof record.label === 'string' &&
-    typeof record.path === 'string'
+    typeof record.path === 'string' &&
+    // tabKey 可选；一旦存在必须是字符串（脏数据整条丢弃，避免跳转到 ?tab=undefined）
+    (record.tabKey === undefined || typeof record.tabKey === 'string')
   )
 }
 

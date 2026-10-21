@@ -348,7 +348,8 @@ describe('Tab 懒加载与切换（query.tab 同步）', () => {
     expect(store.fetchMenus).not.toHaveBeenCalled() // loaded=true → 不主动请求
 
     const replaceSpy = vi.spyOn(router, 'replace')
-    wrapper.findComponent({ name: 'ElTabsStub' }).vm.$emit('update:modelValue', 'monitor')
+    // R35：横向 el-tabs 改为左侧分组导航，切换通过点击导航项触发
+    await wrapper.find('[data-testid="system-console-nav-monitor"]').trigger('click')
     await flushPromises()
     await flushPromises()
 
@@ -375,7 +376,7 @@ describe('group 解析与可见 Tab', () => {
       '用户、角色、菜单、权限包与组织架构'
     )
     // 可见 tabs = 后端下发的 5 个（全部有组件映射）
-    expect(wrapper.findAll('.tab-label').map((n) => n.text())).toEqual(
+    expect(wrapper.findAll('.nav-item').map((n) => n.text())).toEqual(
       GROUP_TABS.org.map((key) => `${key}页签`)
     )
     expect((wrapper.vm as any).currentTab).toBe('users-orgs')
@@ -407,7 +408,7 @@ describe('group 解析与可见 Tab', () => {
 
     // 后端下发了前端无映射的 key：不渲染该 tab，数量仍为 7（ops 真实 tab 数）
     const unmapped = await mountAt(`/system/console/ops?tab=${UNMAPPED_TAB}`)
-    expect(unmapped.wrapper.findAll('.tab-label')).toHaveLength(GROUP_TABS.ops.length)
+    expect(unmapped.wrapper.findAll('.nav-item')).toHaveLength(GROUP_TABS.ops.length)
     expect(unmapped.wrapper.text()).not.toContain('未映射页签')
     expect((unmapped.wrapper.vm as any).currentTab).toBe('system-overview')
   })
@@ -423,7 +424,7 @@ describe('group 解析与可见 Tab', () => {
     const partial = makeStore()
     partial.canAccessMenu.mockImplementation((key: string) => key !== 'roles')
     const hidden = await mountAt('/system/console/org', partial)
-    expect(hidden.wrapper.findAll('.tab-label')).toHaveLength(GROUP_TABS.org.length - 1)
+    expect(hidden.wrapper.findAll('.nav-item')).toHaveLength(GROUP_TABS.org.length - 1)
     expect(hidden.wrapper.text()).not.toContain('roles页签')
 
     // 全部无权限：console 节点存在但无可见 Tab → 空态（标题仍取节点 label）
@@ -444,7 +445,7 @@ describe('空态：未知 group / 无权限 / 无可渲染 Tab', () => {
     expect(wrapper.find('[data-testid="system-console-description"]').text()).toContain(
       '该板块不存在或已下线'
     )
-    expect(wrapper.find('.tabs-stub').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="system-console-nav"]').exists()).toBe(false)
 
     await wrapper.find('[data-testid="system-console-back"]').trigger('click')
     await flushPromises()
@@ -543,6 +544,60 @@ describe('菜单加载兜底（深链/刷新场景）', () => {
     expect(store.fetchMenus).toHaveBeenCalledTimes(1)
     expect(wrapper.find('[data-testid="system-console-empty"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="system-console-title"]').text()).toBe('组织与权限')
+  })
+})
+
+describe('R35 左侧分组导航', () => {
+  it('未登记布局的 console group → 全部 Tab 落入「其他」分组（入口不丢）', async () => {
+    const store = makeStore({
+      sections: [
+        {
+          key: 'system',
+          label: '系统管理',
+          order: 90,
+          items: [
+            {
+              key: 'system-console-legacy',
+              label: '历史板块',
+              path: '/system/console/legacy',
+              kind: 'console',
+              order: 1,
+              tabs: [
+                { key: 'users-orgs', label: '用户与组织', path: '/system/users', order: 1 },
+                { key: 'audit', label: '安全审计', path: '/system/audit', order: 2 },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    const { wrapper } = await mountAt('/system/console/legacy', store)
+
+    expect(wrapper.findAll('.nav-group-title').map((n) => n.text())).toEqual(['其他'])
+    expect(wrapper.findAll('.nav-item')).toHaveLength(2)
+  })
+
+  it('某分组内的 Tab 全部无权限 → 该分组整体跳过，不影响其他分组', async () => {
+    const store = makeStore()
+    // security 板块的「审计」组只有 audit，被拒绝后该组应整体不渲染
+    store.canAccessMenu.mockImplementation((key: string) => key !== 'audit')
+    const { wrapper } = await mountAt('/system/console/security', store)
+
+    const groupTitles = wrapper.findAll('.nav-group-title').map((n) => n.text())
+    expect(groupTitles).not.toContain('审计')
+    expect(groupTitles).toEqual(['访问控制', '密钥与加密'])
+    expect(wrapper.findAll('.nav-item')).toHaveLength(GROUP_TABS.security.length - 1)
+  })
+
+  it('当前分组导航项高亮（aria-current 与 is-active）', async () => {
+    const { wrapper } = await mountAt('/system/console/org?tab=roles')
+
+    const active = wrapper.find('[data-testid="system-console-nav-roles"]')
+    expect(active.classes()).toContain('is-active')
+    expect(active.attributes('aria-current')).toBe('page')
+    const inactive = wrapper.find('[data-testid="system-console-nav-users-orgs"]')
+    expect(inactive.classes()).not.toContain('is-active')
+    expect(inactive.attributes('aria-current')).toBeUndefined()
   })
 })
 

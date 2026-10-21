@@ -21,23 +21,33 @@
     <!-- 菜单尚未就绪时只显示骨架，避免把"未加载"误判成"无权限" -->
     <el-skeleton v-if="booting" :rows="6" animated data-testid="system-console-loading" />
 
-    <el-tabs
-      v-else-if="renderableTabs.length"
-      v-model="currentTab"
-      class="console-tabs"
-      data-testid="system-console-tabs"
-    >
-      <el-tab-pane v-for="tab in renderableTabs" :key="tab.key" :label="tab.label" :name="tab.key">
-        <!-- 仅渲染当前 Tab 的组件：其余 Tab 的异步模块不会被加载 -->
-        <div
-          v-if="currentTab === tab.key"
-          class="console-pane"
-          :data-testid="`system-console-pane-${tab.key}`"
-        >
-          <component :is="TAB_COMPONENTS[tab.key]" />
+    <!-- R35：横向 Tab 平铺（7 项在小屏溢出）改为「左侧分组导航 + 右侧内容」。
+         分组仅为呈现层，后端菜单 key / path / 权限粒度与 ?tab= 深链语义完全不变。 -->
+    <div v-else-if="renderableTabs.length" class="console-body">
+      <nav class="console-nav" data-testid="system-console-nav" aria-label="系统管理子导航">
+        <div v-for="layoutGroup in groupedTabs" :key="layoutGroup.label" class="nav-group">
+          <p class="nav-group-title">{{ layoutGroup.label }}</p>
+          <button
+            v-for="tab in layoutGroup.tabs"
+            :key="tab.key"
+            type="button"
+            class="nav-item"
+            :class="{ 'is-active': currentTab === tab.key }"
+            :data-testid="`system-console-nav-${tab.key}`"
+            :aria-current="currentTab === tab.key ? 'page' : undefined"
+            @click="currentTab = tab.key"
+          >
+            {{ tab.label }}
+          </button>
         </div>
-      </el-tab-pane>
-    </el-tabs>
+      </nav>
+      <section class="console-content">
+        <!-- 仅渲染当前 Tab 的组件：其余 Tab 的异步模块不会被加载 -->
+        <div class="console-pane" :data-testid="`system-console-pane-${currentTab}`">
+          <component :is="TAB_COMPONENTS[currentTab]" />
+        </div>
+      </section>
+    </div>
 
     <el-empty v-else :description="EMPTY_HINT" data-testid="system-console-empty">
       <el-button type="primary" data-testid="system-console-empty-back" @click="goDashboard">
@@ -143,6 +153,40 @@ const router = useRouter()
 const menuStore = useMenuStore()
 const { pushSafe } = useRouterSafe()
 
+/**
+ * 左侧分组布局（R35，纯呈现层）：
+ * - 只影响「页内如何组织 tab」，**不改变**后端菜单 key / tab path / 权限粒度 / ?tab= 深链；
+ * - 后端新增 tab 而未在此登记时自动落入「其他」分组，不会丢失入口。
+ */
+const TAB_LAYOUT: Record<string, { label: string; keys: string[] }[]> = {
+  org: [
+    { label: '账号与组织', keys: ['users-orgs'] },
+    { label: '权限配置', keys: ['roles', 'menus', 'system-permission-packs'] },
+    { label: '组织与单位', keys: ['organizations', 'system-org-grant', 'system-grant-import'] },
+  ],
+  security: [
+    { label: '审计', keys: ['audit'] },
+    { label: '访问控制', keys: ['zero-trust', 'machine-code'] },
+    { label: '密钥与加密', keys: ['secrets', 'data-tier', 'encryption'] },
+  ],
+  ops: [
+    {
+      label: '运行状态',
+      keys: ['system-overview', 'health-check', 'monitor', 'cache', 'environment'],
+    },
+    { label: '任务与日志', keys: ['tasks', 'error-reports'] },
+  ],
+  storage: [
+    { label: '备份', keys: ['backup'] },
+    {
+      label: '数据包与存储',
+      keys: ['chunked-upload', 'map-tiles', 'control-package', 'config-package'],
+    },
+  ],
+  settings: [{ label: '系统设置', keys: ['update-logs'] }],
+  about: [{ label: '关于与反馈', keys: ['about', 'feedback', 'help', 'admin-dashboard'] }],
+}
+
 /** 当前板块分组（org/security/ops/storage/settings/about） */
 const group = computed(() => String(route.params.group))
 
@@ -171,6 +215,26 @@ const renderableTabs = computed<MenuTab[]>(() =>
     (tab) => Boolean(TAB_COMPONENTS[tab.key]) && menuStore.canAccessMenu(tab.key)
   )
 )
+
+/** 按左侧分组布局组织可渲染 Tab；未登记的 key 归入「其他」，保证入口不丢 */
+const groupedTabs = computed<{ label: string; tabs: MenuTab[] }[]>(() => {
+  const visible = renderableTabs.value
+  if (visible.length === 0) return []
+  const byKey = new Map(visible.map((tab) => [tab.key, tab]))
+  const used = new Set<string>()
+  const result: { label: string; tabs: MenuTab[] }[] = []
+  for (const layoutGroup of TAB_LAYOUT[group.value] ?? []) {
+    const tabs = layoutGroup.keys
+      .map((key) => byKey.get(key))
+      .filter((tab): tab is MenuTab => tab !== undefined)
+    if (tabs.length === 0) continue
+    for (const tab of tabs) used.add(tab.key)
+    result.push({ label: layoutGroup.label, tabs })
+  }
+  const rest = visible.filter((tab) => !used.has(tab.key))
+  if (rest.length > 0) result.push({ label: '其他', tabs: rest })
+  return result
+})
 
 /** 板块标题：优先后端菜单节点 label，其次静态板块元数据，未知 group 用兜底文案 */
 const boardTitle = computed(
@@ -246,12 +310,101 @@ function goDashboard() {
     flex-shrink: 0;
   }
 
-  .console-tabs {
-    min-height: 200px;
+  /* ── R35：左侧分组导航 + 右侧内容 ── */
+  .console-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    min-height: 320px;
+  }
+
+  .console-nav {
+    flex: 0 0 176px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 12px 10px;
+    border: 1px solid var(--color-card-border);
+    border-radius: var(--radius-card);
+    background: var(--color-card-bg);
+  }
+
+  .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .nav-group-title {
+    margin: 0 0 4px;
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--color-text-secondary);
+  }
+
+  .nav-item {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-text-primary);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color 0.18s ease,
+      color 0.18s ease;
+  }
+
+  .nav-item:hover {
+    background: var(--color-fill-light);
+  }
+
+  .nav-item:focus-visible {
+    outline: 2px solid var(--color-primary-500);
+    outline-offset: 1px;
+  }
+
+  .nav-item.is-active {
+    background: var(--color-primary-50);
+    color: var(--color-primary-700);
+    font-weight: 600;
+  }
+
+  .console-content {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .console-pane {
     padding-top: 4px;
+  }
+
+  /* 窄屏：左侧导航转为横向滚动条，内容占满整行 */
+  @media (max-width: 992px) {
+    .console-body {
+      flex-direction: column;
+    }
+
+    .console-nav {
+      flex: 0 0 auto;
+      width: 100%;
+      flex-direction: row;
+      gap: 12px;
+      overflow-x: auto;
+    }
+
+    .nav-group {
+      flex: 0 0 auto;
+    }
+
+    .nav-group-title {
+      font-size: 11px;
+    }
   }
 }
 </style>
