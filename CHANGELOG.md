@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布] — 2026-10-20 系统管理：国际化彻底清除 + 导航死链治理
+## [1.15.17] - 2026-10-21 — 系统管理：国际化彻底清除 + 导航死链治理 + 依赖安全修复
 
 ### Removed
 
@@ -27,9 +27,20 @@
   把导航配置里的 `path` 字面量与路由表的 `path` 字面量做文本比对，
   以后往快捷导航或 console 里加一个不存在的路径，测试会直接变红。
 
-## [未发布] — 2026-10-20 文档 / PPT 全量刷新 + 项目文件整理
+### Fixed
 
-### Docs
+- **生产依赖安全漏洞（阻断发布的根因）**：`axios@1.20.0` 传递依赖
+  `follow-redirects@1.16.0` 命中两个高危公告
+  （GHSA-q3jh-wrc6-jgq8 数组型 header 绕过跨域凭据剥离、GHSA-8r9p-f939-6h3c
+  sensitiveHeaders 正则转义缺陷）。CI `security` 作业的
+  `npm audit --omit=dev` 为阻断门禁，v1.15.16 的 tag 构建即因此被 release gate 拦下。
+  修复：`package.json` → `overrides.follow-redirects = ^1.16.1`，
+  锁定 `follow-redirects@1.16.1`；`npm audit --omit=dev` 恢复 **0 漏洞**，
+  前端 lint / vue-tsc / 全量测试（331 文件 6882 用例）与 `npm ci --dry-run` 均通过。
+
+### 同批：文档 / PPT 全量刷新 + 项目文件整理
+
+#### Docs
 
 - **文档全量校准到 v1.15.15**：README / CLAUDE.md / CONTEXT.md / AGENTS.md 与 docs/ 全量更新（版本、测试规模
   13,942 / 6,867·331 文件、菜单 6 板块 104 key·16 legacy、100 个路由模块 / 803 端点、122 张表、54 个 Alembic 版本、
@@ -41,7 +52,7 @@
   DB 迁移提示 + 双平台安装包体积 + 校验清单）。
 - **重写** 根《项目文件结构说明.md》（v1.12.11 → v1.15.15，目录树 / 文件数 / 导航 / 门径口径全面校准）。
 
-### Chore
+#### Chore
 
 - 删除 12 份过期一次性文档：R28 / W18 批次报告、代码审查报告-2026-10-08、系统全面排查报告-2026-10-14、
   早期需求规划、架构评估约定（含空目录）、旧版 class/sequence Mermaid 图、RELEASE_NOTES-v1.15.13；
