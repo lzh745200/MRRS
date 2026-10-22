@@ -232,7 +232,7 @@ class TestOrganizationScopeGuards:
         svc.would_create_cycle.assert_called_once_with(5, 7)
         svc.recompute_subtree_paths.assert_called_once_with(org)
 
-    async def test_update_with_new_unique_code(self, monkeypatch):
+    async def test_update_code_locked_returns_422(self, monkeypatch):
         """改编码且库中无重复 → 不抛 400，继续更新（775->778）。"""
         from app.api.v1 import organization as orgmod
 

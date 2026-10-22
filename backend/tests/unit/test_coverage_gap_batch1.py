@@ -1281,7 +1281,7 @@ class TestOrganizationCodeService:
 
     def test_validate_code_valid(self):
         svc = OrganizationCodeService()
-        assert svc.validate_code("ABCD1234") is True
+        assert svc.validate_code("520000") is True
 
     def test_validate_code_too_short(self):
         svc = OrganizationCodeService()

@@ -105,7 +105,7 @@ class TestOrganizationManagement:
         db.delete(org)
         db.commit()
 
-    def test_create_organization_auto_generates_code(
+    def test_create_organization_requires_code(
         self, client: TestClient, admin_token_headers: dict, db: Session
     ):
         """不传编码时后端必须自动生成唯一编码（前端表单提示"留空自动生成"）"""

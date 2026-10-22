@@ -63,6 +63,12 @@ class TestRegisterLocalSourceMatrix:
 
 
 class TestRegisterSourceGate:
+    @pytest.fixture(autouse=True)
+    def _enable_self_register(self, monkeypatch):
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "SELF_REGISTER_MODE", "controlled", raising=False)
+
     @patch("app.api.v1.auth.auth.UserService")
     @patch("app.api.v1.auth.auth.AuditLogger")
     @patch("app.api.v1.auth.auth.get_client_ip", return_value="10.20.30.40")

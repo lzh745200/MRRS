@@ -141,7 +141,7 @@ class TestOrganizationEndpoints:
         from app.api.v1.organization import create_organization, OrganizationCreate
         db = _mock_db()
         user = _make_user()
-        data = OrganizationCreate(name="NewOrg")
+        data = OrganizationCreate(name="NewOrg", code="520000")
         mock_query = MagicMock()
         mock_query.filter.return_value.first.return_value = None
         mock_query.scalar.return_value = 0
@@ -160,7 +160,7 @@ class TestOrganizationEndpoints:
         db = _mock_db()
         user = _make_user()
         org = _make_org(1)
-        data = OrganizationUpdate(code="DUP")
+        data = OrganizationUpdate(code="520001")
         call_count = [0]
 
         def query_side_effect(model):
@@ -579,32 +579,50 @@ class TestAdminEndpoints:
 
 
 class TestAnalyticsCrossOrg:
+    """跨组织对比端点（W27 数据域收口后的口径）。
 
-    async def test_cross_org_comparison(self):
-        from app.api.v1.data.data.analytics import get_cross_org_comparison
-        db = _mock_db()
-        user = _make_user(role="admin")
-        # 模拟 4 次 GROUP BY 查询（替代旧 N+1 逐条查询）
+    W26 检测曾确认 P0-4：原实现只判断 role 就查询**全部组织**，部门级 admin 可
+    看到全部组织的村/项目/资金聚合（违反 R28 / 军审红线 S2）。修复后按
+    ``get_data_scope`` 收敛组织集合，越权改为标准 403。
+    """
+
+    @staticmethod
+    def _group_by_mock():
+        """模拟 4 次查询：组织列表 / 村 GROUP BY / 项目 GROUP BY / 资金 GROUP BY。
+
+        注意 `q.filter.return_value = q`：本端点对组织查询会**连续调用两次 filter**
+        （基础过滤 + 数据域 in_），mock 必须可链式，否则第二次 filter 返回新的
+        MagicMock，`.all()` 拿到空值 → 误判"无组织"。
+        """
         call_count = [0]
 
         def query_side_effect(*args, **kwargs):
             call_count[0] += 1
             q = MagicMock()
+            q.filter.return_value = q
             if call_count[0] == 1:
-                # 组织列表
-                q.filter.return_value.all.return_value = [(1, "Org1")]
+                q.all.return_value = [(1, "Org1")]
             elif call_count[0] == 2:
-                # 帮扶村 GROUP BY 计数
-                q.filter.return_value.group_by.return_value.all.return_value = [(1, 5)]
+                q.group_by.return_value.all.return_value = [(1, 5)]
             elif call_count[0] == 3:
-                # 项目 GROUP BY（总数 + 完成数）
-                q.filter.return_value.group_by.return_value.all.return_value = [(1, 3, 1)]
+                q.group_by.return_value.all.return_value = [(1, 3, 1)]
             elif call_count[0] == 4:
-                # 资金 GROUP BY 汇总
-                q.filter.return_value.group_by.return_value.all.return_value = [(1, 10000.0)]
+                q.group_by.return_value.all.return_value = [(1, 10000.0)]
             return q
 
-        db.query.side_effect = query_side_effect
+        return query_side_effect
+
+    async def test_cross_org_comparison(self, monkeypatch):
+        from app.api.v1.data.data.analytics import get_cross_org_comparison
+        from app.core import data_permission as dp
+
+        db = _mock_db()
+        db.query.side_effect = self._group_by_mock()
+        user = _make_user(role="admin")
+        user.data_scope = "org_children"
+        # 打桩子树展开，避免额外 db.query 打乱上面的查询序号
+        monkeypatch.setattr(dp, "_get_org_subtree", lambda *a, **k: ([1], ["Org1"]))
+
         result = await get_cross_org_comparison(db=db, current_user=user)
         assert result.success is True
         assert result.data["total"] == 1
@@ -616,11 +634,72 @@ class TestAnalyticsCrossOrg:
         assert item["funds_total"] == 10000.0
 
     async def test_cross_org_comparison_forbidden(self):
+        """非管理员 → 403（W27：原实现返回 200 + success=False）。"""
+        from fastapi import HTTPException
+
         from app.api.v1.data.data.analytics import get_cross_org_comparison
+
         db = _mock_db()
         user = _make_user(role="user", is_superuser=False)
+        with pytest.raises(HTTPException) as ei:
+            await get_cross_org_comparison(db=db, current_user=user)
+        assert ei.value.status_code == 403
+
+    async def test_cross_org_comparison_super_admin_unrestricted(self, monkeypatch):
+        """真全局管理员（data_scope=all）→ 不收敛组织集合。"""
+        from app.api.v1.data.data.analytics import get_cross_org_comparison
+        from app.core import data_permission as dp
+
+        db = _mock_db()
+        db.query.side_effect = self._group_by_mock()
+        user = _make_user(role="admin")
+        user.data_scope = "all"
+        # 不该被调用；若调用则说明未走全局分支
+        monkeypatch.setattr(
+            dp, "_get_org_subtree", lambda *a, **k: pytest.fail("全局管理员不应展开子树")
+        )
+
         result = await get_cross_org_comparison(db=db, current_user=user)
-        assert result is not None
+        assert result.data["total"] == 1
+
+    async def test_cross_org_comparison_department_admin_scope_limited(self, monkeypatch):
+        """部门级 admin 只对「本组织及子树」聚合（P0-4 核心回归）。"""
+        from app.api.v1.data.data.analytics import get_cross_org_comparison
+        from app.core import data_permission as dp
+
+        captured = {}
+
+        db = _mock_db()
+
+        def query_side_effect(*args, **kwargs):
+            q = MagicMock()
+            q.filter.return_value = q
+            captured.setdefault("queries", []).append(q)
+            q.all.return_value = [(9, "ChildOrg")]
+            q.group_by.return_value.all.return_value = []
+            return q
+
+        db.query.side_effect = query_side_effect
+        user = _make_user(role="admin", org_id=5)
+        user.data_scope = "org_children"
+        monkeypatch.setattr(dp, "_get_org_subtree", lambda *a, **k: ([5, 9], ["Root", "ChildOrg"]))
+
+        result = await get_cross_org_comparison(db=db, current_user=user)
+        # 关键断言：组织查询被数据域收敛（两次 filter：基础 + in_(可访问组织)）
+        first_q = captured["queries"][0]
+        assert first_q.filter.call_count >= 2, "组织查询未加数据域过滤"
+        assert result.success is True
+
+    async def test_cross_org_comparison_own_scope_returns_empty(self):
+        """普通 user（OWN 范围）→ 返回空列表，不报错。"""
+        from app.api.v1.data.data.analytics import get_cross_org_comparison
+
+        db = _mock_db()
+        user = _make_user(role="admin", org_id=None)
+        user.data_scope = "self"
+        result = await get_cross_org_comparison(db=db, current_user=user)
+        assert result.success is True
+        assert result.data == {"items": [], "total": 0}
 
 
 # ===================================================================
