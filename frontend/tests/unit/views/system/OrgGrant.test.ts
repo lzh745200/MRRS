@@ -9,12 +9,13 @@
  * 错误文案三级回退、签名标签两分支、单位编码缺省分支。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
-const { mockGet, mockSet, mockExport, ElMessage, flatEntries } = vi.hoisted(() => ({
+const { mockGet, mockSet, mockExport, mockTree, ElMessage, flatEntries } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockSet: vi.fn(),
   mockExport: vi.fn(),
+  mockTree: vi.fn(),
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   flatEntries: [
     { key: 'dashboard', label: '工作台' },
@@ -28,6 +29,7 @@ vi.mock('@/api/orgGrants', () => ({
   setOrgGrants: mockSet,
   exportGrantPackage: mockExport,
 }))
+vi.mock('@/api/organization', () => ({ getOrganizationTree: mockTree }))
 vi.mock('@/stores/menu', () => ({
   useMenuStore: () => ({ flatEntries }),
 }))
@@ -79,6 +81,8 @@ const MATRIX = {
 describe('views/system/OrgGrant', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // 默认无单位可选（走"未加载到单位列表"提示），个别用例按需给树
+    mockTree.mockResolvedValue([])
   })
 
   it('初始态：只有说明，无矩阵与错误', () => {
@@ -122,8 +126,9 @@ describe('views/system/OrgGrant', () => {
     const text = wrapper.text()
     expect(text).toContain('C001')
     expect(text).toContain('已签名')
-    expect(wrapper.findAll('select')).toHaveLength(3) // dashboard / projects / legacy
-    expect(wrapper.findAll('option')).toHaveLength(9)
+    // 1 个单位选择器 + dashboard / projects / legacy 三行级别选择
+    expect(wrapper.findAll('select')).toHaveLength(4)
+    expect(wrapper.findAll('option')).toHaveLength(9 + 0) // 单位树为空，加上 3 行 × 3 级别
   })
 
   it('加载成功（未签名 + 无单位编码）：走 info 标签与缺省文案', async () => {
@@ -182,7 +187,8 @@ describe('views/system/OrgGrant', () => {
     wrapper.vm.onOrgIdInput('7')
     await wrapper.vm.load()
     await wrapper.vm.$nextTick()
-    expect(wrapper.findAll('select')).toHaveLength(2)
+    // 1 个单位选择器 + dashboard / projects 两行级别选择
+    expect(wrapper.findAll('select')).toHaveLength(3)
   })
 
   it('保存：只提交非 none 的模块，并回填版本号', async () => {
@@ -193,8 +199,8 @@ describe('views/system/OrgGrant', () => {
     await wrapper.vm.load()
     await wrapper.vm.$nextTick()
 
-    // 把 dashboard 从 none 改为 edit
-    await wrapper.findAll('select')[0].setValue('edit')
+    // 第一行（dashboard）是索引 1 —— 索引 0 是单位选择器
+    await wrapper.findAll('select')[1].setValue('edit')
     await wrapper.vm.save()
 
     expect(mockSet).toHaveBeenCalledWith(7, { legacy: 'edit', projects: 'view', dashboard: 'edit' })
@@ -251,5 +257,109 @@ describe('views/system/OrgGrant', () => {
     await wrapper.vm.exportPkg()
     expect(mockExport).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('请先填写有效的单位 ID')
+  })
+})
+
+describe('views/system/OrgGrant —— 单位选择器（v1.16.3）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockTree.mockResolvedValue([])
+  })
+
+  it('拍平单位树：层级缩进 + 名称（编码）+ 缺字段与非法 id 兜底', () => {
+    const wrapper = factory()
+    const opts = wrapper.vm.flattenOrgs([
+      {
+        id: 1,
+        name: '省中心',
+        code: 'S01',
+        children: [{ id: 2, name: '市分中心', code: 'C02', children: [] }],
+      },
+      { id: 0, name: '非法ID' },
+      { id: 3 },
+    ])
+    expect(opts.map((o: any) => o.id)).toEqual([1, 2, 3])
+    expect(opts[0].label).toBe('省中心（S01）')
+    expect(opts[1].label.startsWith('　')).toBe(true)
+    expect(opts[1].label).toContain('市分中心（C02）')
+    expect(opts[2].label).toBe('未命名单位')
+  })
+
+  it('flattenOrgs 对非数组/空输入返回空列表（防脏数据）', () => {
+    const wrapper = factory()
+    expect(wrapper.vm.flattenOrgs(null)).toEqual([])
+    expect(wrapper.vm.flattenOrgs('x')).toEqual([])
+    expect(wrapper.vm.flattenOrgs([])).toEqual([])
+  })
+
+  it('挂载即拉取单位树；为空时提示可改用手工输入且手工仍可用', async () => {
+    const wrapper = factory()
+    await flushPromises()
+    expect(mockTree).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('未能加载单位列表')
+
+    wrapper.vm.toggleManual()
+    await wrapper.vm.$nextTick()
+    wrapper.vm.onOrgIdInput('7')
+    mockGet.mockResolvedValue(MATRIX)
+    await wrapper.vm.load()
+    expect(mockGet).toHaveBeenCalledWith(7)
+  })
+
+  it('单位树加载异常：置失败标志，手工输入仍可用', async () => {
+    mockTree.mockRejectedValue(new Error('boom'))
+    const wrapper = factory()
+    await flushPromises()
+    expect(wrapper.text()).toContain('未能加载单位列表')
+    wrapper.vm.toggleManual()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('input.org-input').exists()).toBe(true)
+  })
+
+  it('选择单位：写入 ID 并清空上一个单位的矩阵（避免把 A 的矩阵存到 B）', async () => {
+    mockGet.mockResolvedValue(MATRIX)
+    const wrapper = factory()
+    wrapper.vm.onOrgIdInput('7')
+    await wrapper.vm.load()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.matrix').exists()).toBe(true)
+
+    wrapper.vm.onOrgSelect('8')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.matrix').exists()).toBe(false)
+    expect(wrapper.find('.descriptions').exists()).toBe(false)
+
+    wrapper.vm.onOrgSelect(null)
+    await wrapper.vm.load()
+    expect(wrapper.text()).toContain('请先填写有效的单位 ID')
+  })
+
+  it('切换手工模式：非法值清空、合法值保留，可切回选择器', async () => {
+    mockTree.mockResolvedValue([{ id: 1, name: '省中心', code: 'S01' }])
+    const wrapper = factory()
+    await flushPromises()
+    expect(wrapper.find('select.org-input').exists()).toBe(true)
+
+    wrapper.vm.onOrgSelect('abc')
+    wrapper.vm.toggleManual()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('input.org-input').exists()).toBe(true)
+    expect(wrapper.vm.orgIdText).toBe('')
+
+    // 合法值保留：手工模式下填 7，切回选择器后值仍在
+    wrapper.vm.onOrgIdInput('7')
+    wrapper.vm.toggleManual()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.vm.orgIdText).toBe('7')
+    expect(wrapper.find('select.org-input').exists()).toBe(true)
+  })
+
+  it('有单位时下拉渲染「名称（编码）」选项', async () => {
+    mockTree.mockResolvedValue([{ id: 5, name: '帮扶总站', code: 'F05' }])
+    const wrapper = factory()
+    await flushPromises()
+    const option = wrapper.findAll('option').find((o) => o.text().includes('帮扶总站'))
+    expect(option).toBeTruthy()
+    expect(option!.text()).toContain('F05')
   })
 })
