@@ -715,7 +715,6 @@ async def create_organization(
             status_code=422,
             detail="组织层级与行政区划代码不一致：省级 XX0000 / 市州级 XXYY00 / 县市级 XXYYZZ",
         )
-    org_data["level"] = inferred_level
     # 跨级校验：子级必须恰为父级 +1（根组织只能建省级）
     child_order = OrganizationCodeService.level_order(inferred_level) or 0
     parent_order = (
@@ -726,6 +725,8 @@ async def create_organization(
             status_code=422,
             detail="层级必须逐级挂接：省级 → 市州级 → 县市级（当前上级层级不匹配）",
         )
+
+    org_data["level"] = str(child_order)  # 落库保持历史"深度数字"口径
 
     # 排序值自动递增：新增组织默认排到同级末尾
     # （sort_order 未显式指定或为 0 时，取当前最大值 +1）

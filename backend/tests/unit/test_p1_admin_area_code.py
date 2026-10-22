@@ -148,7 +148,14 @@ class TestOrganizationCodeRules:
 
 # ── 3. 注册开关与公开配置 ─────────────────────────────────────────────
 class TestSelfRegisterGate:
-    def test_register_closed_by_default(self, client):
+    def test_register_closed_by_default(self, client, monkeypatch):
+        from app.api.v1.auth import auth as auth_module
+
+        async def _allow(**_kwargs):
+            return True
+
+        monkeypatch.setattr(auth_module, "check_rate_limit", _allow)
+        monkeypatch.setattr(auth_module, "get_client_ip", lambda _r: "127.0.0.1")
         resp = client.post(
             "/api/v1/auth/register",
             json={"username": "newbie", "password": "Str0ng!Pass123", "pass_code": "x"},

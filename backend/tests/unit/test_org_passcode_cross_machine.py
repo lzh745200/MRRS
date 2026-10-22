@@ -119,6 +119,12 @@ class TestDeterministicOrgPassCode:
 
 
 class TestOrgSelfVerifyRegistration:
+    @pytest.fixture(autouse=True)
+    def _enable_self_register(self, monkeypatch):
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "SELF_REGISTER_MODE", "controlled", raising=False)
+
     def _csrf_login_headers(self, client):
         r = client.get("/api/v1/auth/csrf-token")
         token = (r.json().get("data") or {}).get("csrf_token")

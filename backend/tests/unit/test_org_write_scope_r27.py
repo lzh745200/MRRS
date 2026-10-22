@@ -194,7 +194,7 @@ class TestR27DeptAdminCrossBranchDenied:
 
         before = org_db.query(Organization).count()
         resp = dept_client.post(
-            "/api/v1/organizations", json={"name": "越权新组织", "parent_id": 8}
+            "/api/v1/organizations", json={"name": "越权新组织", "parent_id": 8, "code": "520100"}
         )
         assert resp.status_code == 403
         assert DENY_PREFIX + "创建组织" in resp.json()["detail"]
@@ -249,7 +249,7 @@ class TestR27DeptAdminOwnSubtreeAllowed:
 
     def test_create_under_own_subtree_ok(self, dept_client, org_db):
         resp = dept_client.post(
-            "/api/v1/organizations", json={"name": "A新小组", "parent_id": 2}
+            "/api/v1/organizations", json={"name": "A新小组", "parent_id": 2, "code": "520102"}
         )
         assert resp.status_code == 200
         from app.models.organization import Organization
@@ -288,7 +288,7 @@ class TestR27SuperuserUnchanged:
 
     def test_create_under_other_branch_ok(self, super_client, org_db):
         resp = super_client.post(
-            "/api/v1/organizations", json={"name": "B新小组", "parent_id": 8}
+            "/api/v1/organizations", json={"name": "B新小组", "parent_id": 8, "code": "520103"}
         )
         assert resp.status_code == 200
         from app.models.organization import Organization

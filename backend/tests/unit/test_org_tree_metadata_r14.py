@@ -61,7 +61,7 @@ class TestCreateOrganizationTreeMetadata:
     async def test_root_org_gets_path_and_level(self, client):
         db = _db()
         try:
-            org = await _create_org(db, {"name": "根组织R14"})
+            org = await _create_org(db, {"name": "根组织R14", "code": "520000"})
             assert org.path == f"/{org.id}/"
             assert str(org.level) == "1"
         finally:
@@ -70,8 +70,8 @@ class TestCreateOrganizationTreeMetadata:
     async def test_child_org_extends_parent_path(self, client):
         db = _db()
         try:
-            parent = await _create_org(db, {"name": "父组织R14"})
-            child = await _create_org(db, {"name": "子组织R14", "parent_id": parent.id})
+            parent = await _create_org(db, {"name": "父组织R14", "code": "530000"})
+            child = await _create_org(db, {"name": "子组织R14", "parent_id": parent.id, "code": "530100"})
             assert child.path == f"/{parent.id}/{child.id}/"
             assert str(child.level) == "2"
         finally:
@@ -83,7 +83,7 @@ class TestCreateOrganizationTreeMetadata:
         db = _db()
         try:
             with pytest.raises(HTTPException) as exc:
-                await _create_org(db, {"name": "孤儿组织R14", "parent_id": 999999})
+                await _create_org(db, {"name": "孤儿组织R14", "parent_id": 999999, "code": "540100"})
             assert exc.value.status_code == 400
         finally:
             db.close()
@@ -95,7 +95,7 @@ class TestCreateOrganizationTreeMetadata:
 
         db = _db()
         try:
-            org = await _create_org(db, {"name": "权限组织R14"})
+            org = await _create_org(db, {"name": "权限组织R14", "code": "550000"})
             org_id = org.id
             user = User(username="r14_member", hashed_password="x", role="user",
                         organization_id=org_id, is_active=True)
