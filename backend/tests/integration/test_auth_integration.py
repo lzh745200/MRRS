@@ -1,6 +1,7 @@
 """
 认证 API 集成测试 — auth flow API changed
 """
+import pytest
 from unittest.mock import patch
 
 
@@ -70,6 +71,13 @@ class TestLogin:
 
 
 class TestRegister:
+    @pytest.fixture(autouse=True)
+    def _enable_self_register(self, monkeypatch):
+        """注册链路用例需显式开启注册（默认 off 由专门用例覆盖）。"""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "SELF_REGISTER_MODE", "controlled", raising=False)
+
     """注册接口测试"""
 
     def test_register_success(self, client):
