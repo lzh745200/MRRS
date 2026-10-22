@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import ADMIN_ROLES, normalize_role
 from app.core.database import get_db
+from app.core.response import success_response
 from app.core.transaction import safe_commit
 from app.core.exceptions import InvalidCredentialsError, UserAlreadyExistsError
 from app.core.exceptions import ValidationError as BizValidationError
@@ -879,11 +880,7 @@ async def get_csrf_token(request: Request, response: Response) -> dict:
 async def public_config() -> Any:
     """登录页需要的公开配置：是否允许自助注册（不含任何敏感信息）。"""
     mode = str(getattr(_settings, "SELF_REGISTER_MODE", "off")).lower()
-    return {
-        "code": 200,
-        "message": "success",
-        "data": {"self_register_enabled": mode == "controlled"},
-    }
+    return success_response(data={"self_register_enabled": mode == "controlled"})
 
 
 @router.post("/register", response_model=LoginResponse)

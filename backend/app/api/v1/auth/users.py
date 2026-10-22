@@ -1069,7 +1069,7 @@ async def unlock_user(
         resource_id=user_id,
         details={"target_username": user.username},
     )
-    return {"code": 200, "message": "账号已解锁"}
+    return success_response(data={"unlocked": True}, message="账号已解锁")
 
 
 @router.put("/{user_id}/password")
