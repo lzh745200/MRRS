@@ -311,7 +311,12 @@ class TestGetTypeOptions:
         resp = client_admin.get("/api/v1/organizations/types/options")
         assert resp.status_code == 200
         assert len(resp.json()["data"]["types"]) == 2
-        assert len(resp.json()["data"]["levels"]) == 4
+        levels = resp.json()["data"]["levels"]
+        # 业务只有省 / 市州 / 县市三级，且带 code_length 供前端自动带出层级
+        assert len(levels) == 3
+        assert [lv["value"] for lv in levels] == ["level_1", "level_2", "level_3"]
+        # 6 位行政区划代码的末位规律提示
+        assert "0000" in levels[0]["code_suffix"]
 
 
 # ---------------------------------------------------------------------------
@@ -344,8 +349,9 @@ class TestCreateOrganization:
 
     def test_success(self, client_admin, mock_db):
         mock_db.query.return_value.first.return_value = None
+        # 编码即行政区划代码（4 位=市州级），层级由编码自动推导
         resp = client_admin.post("/api/v1/organizations", json={
-            "name": "新组织", "org_type": "department", "level": "level_2",
+            "name": "新组织", "org_type": "department", "code": "520000",
         })
         assert resp.status_code == 200
         # write_work_log 成功时会额外 add WorkLog
@@ -356,14 +362,16 @@ class TestCreateOrganization:
     def test_duplicate_code(self, client_admin, mock_db):
         mock_db.query.return_value.first.return_value = _make_mock_org(1)
         resp = client_admin.post("/api/v1/organizations", json={
-            "name": "重复", "code": "DUP",
+            "name": "重复", "code": "520100",
         })
         assert resp.status_code == 400
 
-    def test_without_code_no_dup_check(self, client_admin, mock_db):
+    def test_missing_code_returns_422(self, client_admin, mock_db):
+        """编码（行政区划代码）必填：缺失时 422，且不落库。"""
         mock_db.query.return_value.first.return_value = None
         resp = client_admin.post("/api/v1/organizations", json={"name": "无编码"})
-        assert resp.status_code == 200
+        assert resp.status_code == 422
+        assert "组织编码" in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -386,12 +394,13 @@ class TestUpdateOrganization:
         resp = client_admin.put("/api/v1/organizations/1", json={"name": "新名称"})
         assert resp.status_code == 200
 
-    def test_duplicate_code(self, client_admin, mock_db):
+    def test_code_locked_after_create(self, client_admin, mock_db):
+        """编码锁定：行政区划代码是跨机匹配依据，创建后不允许修改。"""
         q = mock_db.query.return_value
-        existing = _make_mock_org(2)
-        q.first.side_effect = [existing, _make_mock_org(1)]
-        resp = client_admin.put("/api/v1/organizations/1", json={"code": "DUP", "name": "测试"})
-        assert resp.status_code == 400
+        q.first.return_value = _make_mock_org(1, code="520100")
+        resp = client_admin.put("/api/v1/organizations/1", json={"code": "520200"})
+        assert resp.status_code == 422
+        assert "锁定" in resp.text
 
     def test_update_with_org_type_and_level(self, client_admin, mock_db):
         q = mock_db.query.return_value

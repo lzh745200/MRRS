@@ -316,6 +316,12 @@ const formRules: FormRules = {
 function formatLevel(level: any): string {
   if (!level) return '未设置'
   const levelStr = String(level)
+  const levelLabels: Record<string, string> = {
+    level_1: '省级单位',
+    level_2: '市州级单位',
+    level_3: '县市级单位',
+  }
+  if (levelLabels[String(level)]) return levelLabels[String(level)]
   // 兼容两种历史形态：枚举 `level_N` 与深度数字 `N`。
   // 2026-10-14 修复：此前数字形态被原样回显（列表显示"3"、树端点显示"第3级"），
   // 同一字段两处口径不一致；现统一显示为"第N级"。

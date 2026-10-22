@@ -216,6 +216,12 @@ const formatDate = (dateStr?: string | null): string => format.formatDate(dateSt
 const formatLevel = (level: any): string => {
   if (!level) return '未设置'
   const levelStr = String(level)
+  const levelLabels: Record<string, string> = {
+    level_1: '省级单位',
+    level_2: '市州级单位',
+    level_3: '县市级单位',
+  }
+  if (levelLabels[String(level)]) return levelLabels[String(level)]
   const match = levelStr.match(/level_(\d+)/)
   if (match) return `第${match[1]}级`
   return levelStr

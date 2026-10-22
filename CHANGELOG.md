@@ -5,6 +5,30 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.16.4] - 2026-10-22 — 组织编码改用行政区划代码（3 级） + 默认关闭自助注册 + 账号解锁
+
+### Changed
+
+- **组织编码 = 行政区划代码**（GB/T 2260，统一 6 位）：`XX0000` 省级 / `XXYY00` 市州级 / `XXYYZZ` 县市级。
+  判定口径集中在 `OrganizationCodeService`（唯一实现）：`normalize_admin_code()` / `infer_level()` / `level_order()`。
+- **组织层级收敛为 3 级**：`OrganizationLevel` 由 5 值收敛为 3 值；`/organizations/types/options`
+  只下发「省级/市州级/县市级」并附 6 位编码末位提示。
+- **创建组织**：编码必填、纯数字 6 位；层级由编码自动推导（显式传值必须一致，否则 422）；
+  **跨级校验**（子级必须恰为父级 +1，根组织只能建省级）；删除旧 `ORG%06d` 自动生成编码分支。
+- **更新组织**：编码锁定（创建后不可修改，需变更请停用后新建），返回 422 并说明原因。
+- **自助注册默认关闭**：新增配置 `SELF_REGISTER_MODE`（默认 `off`），关闭时
+  `POST /auth/register` 返回 403「系统已关闭自助注册，请联系管理员创建账号」；
+  新增公开端点 `GET /auth/public-config`。
+- **注册不再自动创建组织**：`self_verify_org_pass_code()` 找不到组织时直接返回 None。
+- **账号解锁**：新增 `POST /users/{user_id}/unlock`（仅管理员；清锁定计数 + 写 `account_unlock` 审计）。
+- **前端对齐**：组织列表/详情层级标签改为「省级单位/市州级单位/县市级单位」；组织表单编码必填并提示 6 位规则。
+
+### Tests
+
+- 新增 `backend/tests/unit/test_p1_admin_area_code.py`（28 例）：编码校验三分支、层级推断三档、
+  跨级校验、编码锁定、注册开关、公开配置、账号解锁（404/403/成功）。
+- 更新既有组织/枚举/认证/覆盖用例至新契约（编码必填、3 级枚举、默认关注册）。
+
 ## [1.16.3] - 2026-10-22 — 单位授权改用「单位选择器」 + 权限/机构/角色/用户/注册登录操作说明
 
 ### Changed

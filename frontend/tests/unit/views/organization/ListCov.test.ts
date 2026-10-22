@@ -159,7 +159,8 @@ const stubs = {
   // 自带 tbody 结构，initSortable 挂载即走 Sortable.create 分支（无需手动赋 tableRef）
   'el-table': {
     name: 'ElTable',
-    template: '<div><div class="el-table__body-wrapper"><tbody></tbody></div><slot name="empty" /><slot /></div>',
+    template:
+      '<div><div class="el-table__body-wrapper"><tbody></tbody></div><slot name="empty" /><slot /></div>',
     props: ['data'],
   },
   'el-table-column': {
@@ -387,7 +388,7 @@ describe('表格列插槽与行交互', () => {
     expect(text).toContain('帮扶单位')
     expect(text).toContain('custom_type') // v-else 且 org_type 真值侧
     expect(text).toContain('未设置') // org_type 空 → ||'未设置'；level null/0 → formatLevel 未设置
-    expect(text).toContain('第2级') // level_2 匹配
+    expect(text).toContain('市州级单位') // level_2 匹配
     expect(text).toContain('正常')
     expect(text).toContain('停用')
   })
@@ -862,7 +863,7 @@ describe('formatLevel', () => {
     const vm = wrapper.vm as any
     expect(vm.formatLevel(null)).toBe('未设置')
     expect(vm.formatLevel(0)).toBe('未设置')
-    expect(vm.formatLevel('level_3')).toBe('第3级')
+    expect(vm.formatLevel('level_3')).toBe('县市级单位')
     // 数字形态（后端建组织时写入的深度）与枚举形态显示统一为"第N级"
     expect(vm.formatLevel(5)).toBe('第5级')
     expect(vm.formatLevel('abc')).toBe('abc')

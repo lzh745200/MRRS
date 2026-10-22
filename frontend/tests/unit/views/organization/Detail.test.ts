@@ -13,21 +13,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-const {
-  ElMessage,
-  mockGetDetail,
-  mockGetMembers,
-  mockPushSafe,
-  routeBox,
-  logError,
-} = vi.hoisted(() => ({
-  ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
-  mockGetDetail: vi.fn(),
-  mockGetMembers: vi.fn(),
-  mockPushSafe: vi.fn(),
-  routeBox: { params: {} as Record<string, any> },
-  logError: vi.fn(),
-}))
+const { ElMessage, mockGetDetail, mockGetMembers, mockPushSafe, routeBox, logError } = vi.hoisted(
+  () => ({
+    ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+    mockGetDetail: vi.fn(),
+    mockGetMembers: vi.fn(),
+    mockPushSafe: vi.fn(),
+    routeBox: { params: {} as Record<string, any> },
+    logError: vi.fn(),
+  })
+)
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeBox,
@@ -84,7 +79,10 @@ const detailData = {
     { id: 4, name: '子单位', code: 'SUB', org_type: 'support_unit', level: 3, sort_order: 1 },
     { id: 5, name: '部门B', code: 'B', org_type: 'custom', level: null, sort_order: 2 },
   ],
-  ancestors: [{ id: 1, name: '总部' }, { id: 2, name: '分部' }],
+  ancestors: [
+    { id: 1, name: '总部' },
+    { id: 2, name: '分部' },
+  ],
 }
 
 const memberA = { id: 1, full_name: '张三', username: 'zhangsan', role: 'super_admin' }
@@ -97,7 +95,10 @@ const memberG = { id: 7, username: 'weird', role: 'weird_role' }
 const memberH = { id: 8, username: 'empty', role: '' }
 
 const stubs = {
-  'el-breadcrumb': { name: 'ElBreadcrumb', template: '<div class="el-breadcrumb-stub"><slot /></div>' },
+  'el-breadcrumb': {
+    name: 'ElBreadcrumb',
+    template: '<div class="el-breadcrumb-stub"><slot /></div>',
+  },
   'el-breadcrumb-item': {
     name: 'ElBreadcrumbItem',
     template: '<span class="el-breadcrumb-item-stub"><slot /></span>',
@@ -105,12 +106,26 @@ const stubs = {
   },
   'el-row': { name: 'ElRow', template: '<div class="el-row-stub"><slot /></div>' },
   'el-col': { name: 'ElCol', template: '<div class="el-col-stub"><slot /></div>' },
-  'el-card': { name: 'ElCard', template: '<div class="el-card-stub"><slot name="header" /><slot /></div>' },
+  'el-card': {
+    name: 'ElCard',
+    template: '<div class="el-card-stub"><slot name="header" /><slot /></div>',
+  },
   'el-button': { name: 'ElButton', template: '<button class="el-button-stub"><slot /></button>' },
-  'el-descriptions': { name: 'ElDescriptions', template: '<div class="el-descriptions-stub"><slot /></div>' },
-  'el-descriptions-item': { name: 'ElDescriptionsItem', props: ['label'], template: '<div class="el-descriptions-item-stub">{{ label }}<slot /></div>' },
+  'el-descriptions': {
+    name: 'ElDescriptions',
+    template: '<div class="el-descriptions-stub"><slot /></div>',
+  },
+  'el-descriptions-item': {
+    name: 'ElDescriptionsItem',
+    props: ['label'],
+    template: '<div class="el-descriptions-item-stub">{{ label }}<slot /></div>',
+  },
   'el-tag': { name: 'ElTag', template: '<span class="el-tag-stub"><slot /></span>' },
-  'el-table': { name: 'ElTable', template: '<div class="el-table-stub"><slot /></div>', props: ['data'] },
+  'el-table': {
+    name: 'ElTable',
+    template: '<div class="el-table-stub"><slot /></div>',
+    props: ['data'],
+  },
   'el-table-column': {
     name: 'ElTableColumn',
     props: ['prop', 'label', 'type'],
@@ -118,10 +133,24 @@ const stubs = {
       '<div class="el-table-column-stub" :label="label"><slot :row="rowA" /><slot :row="rowB" /><slot :row="rowC" /><slot :row="rowD" /><slot :row="rowE" /><slot :row="rowF" /><slot :row="rowG" /><slot :row="rowH" /><slot :row="childA" /><slot :row="childB" /><slot :row="childC" /></div>',
     data() {
       return {
-        rowA: memberA, rowB: memberB, rowC: memberC, rowD: memberD, rowE: memberE, rowF: memberF, rowG: memberG, rowH: memberH,
+        rowA: memberA,
+        rowB: memberB,
+        rowC: memberC,
+        rowD: memberD,
+        rowE: memberE,
+        rowF: memberF,
+        rowG: memberG,
+        rowH: memberH,
         childA: detailData.children[0],
         childB: detailData.children[1],
-        childC: { id: 6, name: '部门单位子组织', code: 'DEP', org_type: 'department', level: 1, sort_order: 1 },
+        childC: {
+          id: 6,
+          name: '部门单位子组织',
+          code: 'DEP',
+          org_type: 'department',
+          level: 1,
+          sort_order: 1,
+        },
       }
     },
   },
@@ -130,7 +159,11 @@ const stubs = {
     props: ['description'],
     template: '<div class="el-empty-stub">{{ description }}</div>',
   },
-  'el-pagination': { name: 'ElPagination', template: '<div class="el-pagination-stub" />', emits: ['update:currentPage', 'current-change'] },
+  'el-pagination': {
+    name: 'ElPagination',
+    template: '<div class="el-pagination-stub" />',
+    emits: ['update:currentPage', 'current-change'],
+  },
 }
 
 function mountComp() {
@@ -151,7 +184,10 @@ beforeEach(() => {
   routeBox.params = { id: '3' }
   mockGetDetail.mockResolvedValue({ data: { data: detailData } })
   mockGetMembers.mockResolvedValue({
-    data: { items: [memberA, memberB, memberC, memberD, memberE, memberF, memberG, memberH], total: 15 },
+    data: {
+      items: [memberA, memberB, memberC, memberD, memberE, memberF, memberG, memberH],
+      total: 15,
+    },
   })
 })
 
@@ -176,7 +212,7 @@ describe('挂载与详情加载', () => {
     expect(text).toContain('分部')
     expect(text).toContain('某单位')
     expect(text).toContain('部门单位')
-    expect(text).toContain('第2级')
+    expect(text).toContain('市州级单位')
     expect(text).toContain('正常')
     expect(text).toContain('脱敏:张三')
     expect(text).toContain('子单位')
@@ -228,7 +264,14 @@ describe('挂载与详情加载', () => {
           org_type: 'support_unit',
           children: [
             { id: 4, name: '子单位', code: 'SUB', org_type: 'department', level: 3, sort_order: 1 },
-            { id: 5, name: '部门B', code: 'B', org_type: 'support_unit', level: null, sort_order: 2 },
+            {
+              id: 5,
+              name: '部门B',
+              code: 'B',
+              org_type: 'support_unit',
+              level: null,
+              sort_order: 2,
+            },
           ],
         },
       },

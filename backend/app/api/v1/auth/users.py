@@ -1040,6 +1040,38 @@ async def admin_reset_password(
     return {"code": 200, "message": "密码重置成功"}
 
 
+@router.post("/{user_id}/unlock", summary="解锁被登录失败锁定的账号")
+async def unlock_user(
+    user_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """管理员手动解锁账号（登录失败次数达阈值后的锁定）。
+
+    锁定本身由 LockoutService 维护；这里只清除计数与锁定标记，不触碰密码与令牌。
+    动作写审计（account_unlock），可追溯到操作人。
+    """
+    require_admin(current_user)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise NotFoundException("用户不存在")
+
+    from app.services.lockout_service import get_lockout_service
+    from app.utils.audit_logger import AuditLogger
+
+    get_lockout_service().clear(user, db)
+    AuditLogger.log(
+        action="account_unlock",
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", ""),
+        resource_type="user",
+        resource_id=user_id,
+        details={"target_username": user.username},
+    )
+    return {"code": 200, "message": "账号已解锁"}
+
+
 @router.put("/{user_id}/password")
 async def change_password(
     user_id: int,

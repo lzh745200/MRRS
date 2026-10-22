@@ -24,6 +24,11 @@ from ...core.response import ok_list
 from ...core.security import get_current_user
 from ...models.organization import Organization, OrganizationLevel, OrganizationType
 from ...models.user import User
+from ...services.organization_code_service import (
+    ADMIN_AREA_CODE_SUFFIX_HINTS,
+    LEVEL_LABELS,
+    OrganizationCodeService,
+)
 from ...services.organization_service import OrganizationService
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
@@ -623,11 +628,11 @@ async def get_type_options():
             {"value": "department", "label": "部门单位"},
             {"value": "support_unit", "label": "帮扶单位"},
         ],
+        # 只有省 / 市州 / 县市三级；code_suffix 用于前端提示 6 位编码的末位规律
         "levels": [
-            {"value": "level_1", "label": "一级单位"},
-            {"value": "level_2", "label": "二级单位"},
-            {"value": "level_3", "label": "三级单位"},
-            {"value": "level_4", "label": "四级单位"},
+            {"value": level, "label": LEVEL_LABELS[level],
+             "code_suffix": ADMIN_AREA_CODE_SUFFIX_HINTS[level]}
+            for level in ("level_1", "level_2", "level_3")
         ],
     })
 
@@ -668,11 +673,14 @@ async def create_organization(
     ) and not is_superuser(current_user):
         raise HTTPException(status_code=403, detail="仅管理员可执行此操作")
 
-    # 检查编码是否重复
-    if data.code:
-        existing = db.query(Organization).filter(Organization.code == data.code).first()
-        if existing:
-            raise HTTPException(status_code=400, detail="组织编码已存在")
+    # 编码即行政区划代码（省 2 位 / 市州 4 位 / 县市 6 位），是跨机匹配的唯一依据，必填
+    try:
+        org_code = OrganizationCodeService.normalize_admin_code(data.code)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    existing = db.query(Organization).filter(Organization.code == org_code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="组织编码已存在")
 
     # 转换枚举类型
     org_data = data.model_dump(exclude_defaults=False)
@@ -697,9 +705,27 @@ async def create_organization(
         # 完全由 parent_id 决定，校验父级即可）。
         _assert_org_write_scope(db, current_user, [org_data["parent_id"]], action="创建组织")
 
-    if not org_data.get("level"):
-        depth = len([seg for seg in str(parent.path or "").split("/") if seg]) if parent else 0
-        org_data["level"] = depth + 1
+    # 层级由行政区划代码长度推导（省=2 位 / 市州=4 位 / 县市=6 位），不允许与编码矛盾
+    inferred_level = OrganizationCodeService.infer_level(org_code)
+    declared_level = org_data.get("level")
+    if declared_level and OrganizationCodeService.level_order(declared_level) != (
+        OrganizationCodeService.level_order(inferred_level)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="组织层级与行政区划代码不一致：省级 XX0000 / 市州级 XXYY00 / 县市级 XXYYZZ",
+        )
+    org_data["level"] = inferred_level
+    # 跨级校验：子级必须恰为父级 +1（根组织只能建省级）
+    child_order = OrganizationCodeService.level_order(inferred_level) or 0
+    parent_order = (
+        OrganizationCodeService.level_order(parent.level) if parent is not None else 0
+    )
+    if child_order != parent_order + 1:
+        raise HTTPException(
+            status_code=422,
+            detail="层级必须逐级挂接：省级 → 市州级 → 县市级（当前上级层级不匹配）",
+        )
 
     # 排序值自动递增：新增组织默认排到同级末尾
     # （sort_order 未显式指定或为 0 时，取当前最大值 +1）
@@ -715,19 +741,10 @@ async def create_organization(
         )
         org_data["sort_order"] = (max_order or 0) + 1
 
+    org_data["code"] = org_code
     org = Organization(**org_data)
     db.add(org)
     db.flush()  # 先获取自增 id，供自动生成编码使用
-    if not org.code:
-        # 前端表单提示"留空自动生成"：按自增 id 生成唯一编码（id 唯一故编码唯一）
-        if org.id is not None:
-            org.code = f"ORG{org.id:06d}"
-        else:
-            # db.flush 未回填自增 id 的兜底（测试替身等场景）：随机后缀保证编码非空唯一
-            import secrets
-
-            org.code = f"ORG{secrets.token_hex(3).upper()}"
-
     # path 与 OrganizationService.create_organization 同口径：
     # 根组织 /{id}/，子组织 {父 path}{id}/（前缀匹配是组织树查询的唯一依据）。
     # 2026-10-14：父级 path 为空（历史数据）时**不能**让子级退化成根路径 ——
@@ -777,11 +794,12 @@ async def update_organization(
     # R27（2026-10-14）：跨组织越权守卫 —— 目标组织必须在调用者子树内
     _assert_org_write_scope(db, current_user, [org_id], action="修改组织")
 
-    # 检查编码是否重复
-    if data.code:
-        existing = db.query(Organization).filter(Organization.code == data.code, Organization.id != org_id).first()
-        if existing:
-            raise HTTPException(status_code=400, detail="组织编码已存在")
+    # 编码锁定：行政区划代码是跨机匹配的唯一依据，创建后不允许修改（需变更请停用后新建）
+    if data.code is not None and data.code != org.code:
+        raise HTTPException(
+            status_code=422,
+            detail="组织编码已锁定，不允许修改；如需变更请停用该组织后新建",
+        )
 
     update_data = data.model_dump(exclude_unset=True)
 

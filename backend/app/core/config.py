@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.16.3"
+    PROJECT_VERSION: str = "1.16.4"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -159,6 +159,8 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30  # 30天，单机版延长
     BCRYPT_ROUNDS: int = 12  # OWASP 建议 12 轮以上
     PASSWORD_EXPIRE_DAYS: int = 90  # 密码有效期（天）
+    # 自助注册开关：off（默认；单机 + 上下级 + 介质传输场景推荐）/ controlled（允许凭通行码注册）
+    SELF_REGISTER_MODE: str = "off"
     MAX_FAILED_LOGIN_ATTEMPTS: int = 5  # 最大登录失败次数
     ACCOUNT_LOCKOUT_MINUTES: int = 30  # 账户锁定时长（分钟）
 

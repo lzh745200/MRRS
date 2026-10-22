@@ -377,10 +377,13 @@ class MachineCodeService:
             .first()
         )
         if not org:
-            org = Organization(name=org_name_clean)
-            self.db.add(org)
-            safe_commit(self.db)
-            self.db.refresh(org)
+            # 注册不再自动建组织：组织树只能由管理员或上级授权包建立，
+            # 否则任何人凭「单位名称」就能在本机造出一个合法组织节点。
+            logger.warning(
+                "组织通行码自验证失败：本机不存在组织 %s，拒绝注册（不自动建组织）",
+                org_name_clean,
+            )
+            return None
 
         record = (
             self.db.query(MachineCode)

@@ -875,6 +875,17 @@ async def get_csrf_token(request: Request, response: Response) -> dict:
     }
 
 
+@router.get("/public-config", summary="登录页公开配置（无需登录）")
+async def public_config() -> Any:
+    """登录页需要的公开配置：是否允许自助注册（不含任何敏感信息）。"""
+    mode = str(getattr(_settings, "SELF_REGISTER_MODE", "off")).lower()
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {"self_register_enabled": mode == "controlled"},
+    }
+
+
 @router.post("/register", response_model=LoginResponse)
 async def register_user(
     request: Request,
@@ -925,6 +936,12 @@ async def register_user(
     # ── 来源门禁（W24 安全决策，2026-10-19）──
     # 非回环来源 + 未配置 PASS_CODE_SECRET → 403（详见 _enforce_register_source_gate）。
     _enforce_register_source_gate(request, username, _settings.PASS_CODE_SECRET)
+    # 自助注册默认关闭：单机 + 介质传输场景下，账号应由管理员创建
+    if str(getattr(_settings, "SELF_REGISTER_MODE", "off")).lower() != "controlled":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="系统已关闭自助注册，请联系管理员创建账号",
+        )
 
     # 用户名验证
     is_valid, msg = PasswordPolicy.validate_username(username)

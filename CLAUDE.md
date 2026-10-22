@@ -232,6 +232,13 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
     深链守卫兼容）；前端路由 `meta.menuKey` 改为 `villages`（跟随帮扶村管理权限）；
     旧链接 `/households`、`/households/:id` 保留可直达。
   - 需要挂靠帮扶村权限的新页面按此模式复用 `meta.menuKey`，不要新增侧栏一级菜单。
+- **组织编码 = 行政区划代码** (2026-10-22, v1.16.4): `organizations.code` 是跨机匹配的唯一依据，
+  统一 **6 位行政区划代码**（GB/T 2260）：`XX0000` 省级 / `XXYY00` 市州级 / `XXYYZZ` 县市级。
+  判定口径只在 `services/organization_code_service.py`（`normalize_admin_code` / `infer_level` / `level_order`），
+  **禁止在其它模块重复实现**。组织层级固定 **3 级**（`OrganizationLevel` 只有 level_1~3）；
+  创建时编码必填、层级由编码推导、**必须逐级挂接**（根只能是省级，跨级 422）；
+  创建后 **编码不可修改**（需变更只能停用后新建）。自助注册默认关闭（`SELF_REGISTER_MODE=off`），
+  注册流程 **不得自动创建组织**（组织树只由管理员或上级授权包建立）。
 - **遗留表清理契约** (2026-10-22, v1.16.2): 迁移清理"代码零引用"的历史表时**禁止直接 DROP 有数据的表** ——
   统一走 `r35_drop_legacy_tables_001` 的三分支策略：表不存在→跳过；**0 行→DROP**；**有数据→改名 `legacy_<表名>` 归档**
   （数据保留、退出活跃 schema、升级永不中断）。「允许消失」的表必须登记在

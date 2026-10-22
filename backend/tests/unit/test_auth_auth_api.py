@@ -1,5 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 from datetime import datetime, timezone, timedelta
 
 
@@ -639,6 +641,14 @@ class TestCsrfToken:
 
 class TestRegister:
     prefix = "/api/v1/auth"
+
+    @pytest.fixture(autouse=True)
+    def _enable_self_register(self, monkeypatch):
+        """这些用例验证注册业务分支，需显式开启（默认 off 由专门用例覆盖）。"""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "SELF_REGISTER_MODE", "controlled", raising=False)
+
 
     @patch("app.api.v1.auth.auth.check_rate_limit", new_callable=AsyncMock)
     @patch("app.api.v1.auth.auth.get_client_ip", return_value="127.0.0.1")

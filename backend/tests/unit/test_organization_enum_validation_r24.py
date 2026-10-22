@@ -41,13 +41,18 @@ def client(real_db_session):
 
 class TestInvalidOrgEnums:
     def test_invalid_level_returns_422(self, client):
-        resp = client.post("/api/v1/organizations", json={"name": "R24 单位", "level": "1"})
+        resp = client.post(
+            "/api/v1/organizations", json={"name": "R24 单位", "code": "520000", "level": "1"}
+        )
         assert resp.status_code == 422
         assert "无效的组织层级" in resp.text
         assert "level_1" in resp.text
 
     def test_invalid_org_type_returns_422(self, client):
-        resp = client.post("/api/v1/organizations", json={"name": "R24 单位", "org_type": "military"})
+        resp = client.post(
+            "/api/v1/organizations",
+            json={"name": "R24 单位", "code": "520000", "org_type": "military"},
+        )
         assert resp.status_code == 422
         assert "无效的组织类型" in resp.text
         assert "department" in resp.text
@@ -55,13 +60,13 @@ class TestInvalidOrgEnums:
     def test_valid_enums_accepted(self, client):
         resp = client.post(
             "/api/v1/organizations",
-            json={"name": "R24 合法单位", "level": "level_1", "org_type": "department"},
+            json={"name": "R24 合法单位", "code": "520000", "org_type": "department"},
         )
         assert resp.status_code in (200, 201), resp.text
 
     def test_update_invalid_level_returns_422(self, client, real_db_session):
         created = client.post(
-            "/api/v1/organizations", json={"name": "R24 待更新单位", "level": "level_1"}
+            "/api/v1/organizations", json={"name": "R24 待更新单位", "code": "520000"}
         )
         assert created.status_code in (200, 201)
         # R7-F1：信封响应

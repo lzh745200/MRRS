@@ -17,7 +17,15 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="组织编码" prop="code">
-              <el-input v-model="formData.code" placeholder="留空自动生成" :disabled="isEdit" />
+              <el-input
+                v-model="formData.code"
+                placeholder="6 位行政区划代码，如 520000 / 520100 / 520102"
+                maxlength="6"
+                :disabled="isEdit"
+              />
+              <div class="form-hint">
+                省级 XX0000、市州级 XXYY00、县市级 XXYYZZ；创建后不可修改。
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -144,6 +152,10 @@ const formData = reactive({
 })
 
 const rules: FormRules = {
+  code: [
+    { required: true, message: '请输入 6 位行政区划代码', trigger: 'blur' },
+    { pattern: /^\d{6}$/, message: '必须是 6 位数字（如 520000）', trigger: 'blur' },
+  ],
   name: [{ required: true, message: '请输入组织名称', trigger: 'blur' }],
   org_type: [{ required: true, message: '请选择组织类型', trigger: 'change' }],
   contact_phone: [
@@ -279,5 +291,13 @@ onMounted(() => {
 .title {
   font-size: 16px;
   font-weight: bold;
+}
+</style>
+
+<style scoped>
+.form-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 </style>

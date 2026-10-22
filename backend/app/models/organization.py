@@ -21,11 +21,10 @@ class OrganizationType(str, enum.Enum):
 class OrganizationLevel(str, enum.Enum):
     """组织层级"""
 
+    # 业务只有省 / 市州 / 县市 三级，与行政区划代码长度一一对应（见 organization_code_service）
     LEVEL_1 = "level_1"
     LEVEL_2 = "level_2"
     LEVEL_3 = "level_3"
-    LEVEL_4 = "level_4"
-    LEVEL_5 = "level_5"
 
 
 class Organization(BaseModel):

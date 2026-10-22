@@ -52,10 +52,11 @@ class TestCreateOrganization:
         from app.api.v1.organization import create_organization
 
         data = MagicMock(name="data")
-        data.code = None
+        data.code = "520000"  # 行政区划代码（省）—— 编码必填后由测试提供
         data.model_dump.return_value = {"name": "新组织", "sort_order": 3}
 
         db = MagicMock(name="db")
+        db.query.return_value.filter.return_value.first.return_value = None
         user = SimpleNamespace(id=1, username="admin", role="admin", is_superuser=False)
 
         with patch("app.api.v1.organization.safe_commit"):

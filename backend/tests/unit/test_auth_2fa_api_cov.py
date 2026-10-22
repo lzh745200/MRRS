@@ -9,6 +9,8 @@ Mock 风格与 test_auth_auth_api.py 保持一致。
 
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
+
 
 def _make_user(**kwargs):
     user = Mock()
@@ -370,6 +372,13 @@ class TestLogoutDirectCall:
 
 
 class TestRegisterCreateUserReraise:
+    @pytest.fixture(autouse=True)
+    def _enable_self_register(self, monkeypatch):
+        """这些用例验证注册业务分支，需显式开启（默认 off 由专门用例覆盖）。"""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "SELF_REGISTER_MODE", "controlled", raising=False)
+
     """try 块内 create_user 抛 UserAlreadyExistsError → except 透传（836 行）"""
 
     prefix = "/api/v1/auth"
