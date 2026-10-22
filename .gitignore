@@ -428,3 +428,8 @@ backend/upload_*.rrs
 # E2E 证据产物（W19）：trace/HTML 报告体积大，不入库；report.json 保留
 deliverables/w19-e2e/traces/
 deliverables/w19-e2e/html-report/
+
+# .scratch 涓嬬殑鍥剧墖鎺㈡祴浜х墿锛堢摝鐗囧垏鐗囩瓑锛夛紝浠?.md 宸ュ崟鍏ュ簱
+.scratch/**/*.png
+.scratch/**/*.jpg
+.scratch/**/*.webp
