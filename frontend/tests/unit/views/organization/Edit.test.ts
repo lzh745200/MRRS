@@ -88,8 +88,15 @@ const parentOrgs = [
 ]
 
 const stubs = {
-  'el-card': { name: 'ElCard', template: '<div class="el-card-stub"><slot name="header" /><slot /></div>' },
-  'el-button': { name: 'ElButton', props: ['disabled', 'loading'], template: '<button class="el-button-stub"><slot /></button>' },
+  'el-card': {
+    name: 'ElCard',
+    template: '<div class="el-card-stub"><slot name="header" /><slot /></div>',
+  },
+  'el-button': {
+    name: 'ElButton',
+    props: ['disabled', 'loading'],
+    template: '<button class="el-button-stub"><slot /></button>',
+  },
   'el-form': {
     name: 'ElForm',
     template: '<div class="el-form-stub"><slot /></div>',
@@ -107,8 +114,18 @@ const stubs = {
   'el-form-item': { name: 'ElFormItem', template: '<div class="el-form-item-stub"><slot /></div>' },
   'el-row': { name: 'ElRow', template: '<div class="el-row-stub"><slot /></div>' },
   'el-col': { name: 'ElCol', template: '<div class="el-col-stub"><slot /></div>' },
-  'el-input': { name: 'ElInput', props: ['modelValue', 'disabled'], template: '<div class="el-input-stub"><slot /></div>', emits: ['update:modelValue'] },
-  'el-select': { name: 'ElSelect', props: ['modelValue'], template: '<div class="el-select-stub"><slot /></div>', emits: ['update:modelValue', 'change'] },
+  'el-input': {
+    name: 'ElInput',
+    props: ['modelValue', 'disabled'],
+    template: '<div class="el-input-stub"><slot /></div>',
+    emits: ['update:modelValue'],
+  },
+  'el-select': {
+    name: 'ElSelect',
+    props: ['modelValue'],
+    template: '<div class="el-select-stub"><slot /></div>',
+    emits: ['update:modelValue', 'change'],
+  },
   'el-option': { name: 'ElOption', template: '<div />' },
   'el-switch': {
     name: 'ElSwitch',
@@ -265,7 +282,9 @@ describe('编辑模式', () => {
     // parentOptions 排除当前 id=5
     expect(vm.parentOptions.map((o: any) => o.id)).toEqual([3, 9])
     // 编码输入框 disabled
-    const codeInput = wrapper.findAllComponents({ name: 'ElInput' }).find((i: any) => i.props('disabled'))
+    const codeInput = wrapper
+      .findAllComponents({ name: 'ElInput' })
+      .find((i: any) => i.props('disabled'))
     expect(codeInput).toBeTruthy()
     wrapper.unmount()
   })
@@ -387,10 +406,12 @@ describe('编辑模式', () => {
     await clickBtn(wrapper, '保存')
     // 后端 update 走 exclude_unset：传 undefined 等于不提交该字段 → 父级不变。
     // 只有显式 null 才能把组织置为顶级（对齐列表页对话框的行为）。
-    expect(mockUpdateOrganization).toHaveBeenCalledWith(5, expect.objectContaining({ parent_id: null }))
+    expect(mockUpdateOrganization).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({ parent_id: null })
+    )
     wrapper.unmount()
   })
-
 
   it('handleSubmit 编辑失败 → 错误提示；空字段 → undefined', async () => {
     routeBox.params = { id: '7' }

@@ -74,7 +74,14 @@ vi.mock('@/utils/logger', () => ({
 import PassCodeManagement from '@/views/organization/PassCodeManagement.vue'
 
 const orgTree = [
-  { id: 1, name: '总部', children: [{ id: 2, name: '分部' }, { id: 3, name: '小队', children: [{ id: 4, name: '小组' }] }] },
+  {
+    id: 1,
+    name: '总部',
+    children: [
+      { id: 2, name: '分部' },
+      { id: 3, name: '小队', children: [{ id: 4, name: '小组' }] },
+    ],
+  },
   { id: 5, name: '独立单位' },
 ]
 
@@ -109,7 +116,10 @@ const passRowC = {
 const passRowD = { id: 13, pass_code: 'PASS-DDDD', status: 'weird' }
 
 const stubs = {
-  'el-card': { name: 'ElCard', template: '<div class="el-card-stub"><slot name="header" /><slot /></div>' },
+  'el-card': {
+    name: 'ElCard',
+    template: '<div class="el-card-stub"><slot name="header" /><slot /></div>',
+  },
   'el-alert': { name: 'ElAlert', template: '<div class="el-alert-stub"><slot /></div>' },
   'el-form': {
     name: 'ElForm',
@@ -147,9 +157,17 @@ const stubs = {
     template: '<div class="el-switch-stub" />',
     emits: ['update:modelValue', 'change'],
   },
-  'el-button': { name: 'ElButton', props: ['disabled', 'loading', 'icon'], template: '<button class="el-button-stub"><slot /></button>' },
+  'el-button': {
+    name: 'ElButton',
+    props: ['disabled', 'loading', 'icon'],
+    template: '<button class="el-button-stub"><slot /></button>',
+  },
   'el-icon': { name: 'ElIcon', template: '<span class="el-icon-stub"><slot /></span>' },
-  'el-table': { name: 'ElTable', template: '<div class="el-table-stub"><slot /></div>', props: ['data'] },
+  'el-table': {
+    name: 'ElTable',
+    template: '<div class="el-table-stub"><slot /></div>',
+    props: ['data'],
+  },
   'el-table-column': {
     name: 'ElTableColumn',
     props: ['prop', 'label', 'type'],
@@ -160,7 +178,11 @@ const stubs = {
     },
   },
   'el-tag': { name: 'ElTag', template: '<span class="el-tag-stub"><slot /></span>' },
-  'el-pagination': { name: 'ElPagination', template: '<div class="el-pagination-stub" />', emits: ['update:currentPage', 'update:pageSize', 'size-change', 'current-change'] },
+  'el-pagination': {
+    name: 'ElPagination',
+    template: '<div class="el-pagination-stub" />',
+    emits: ['update:currentPage', 'update:pageSize', 'size-change', 'current-change'],
+  },
 }
 
 const validateResult = { value: true }
@@ -334,7 +356,9 @@ describe('生成机器通行码', () => {
     const vm = wrapper.vm as any
     vm.machineForm.machine_code = 'a'.repeat(64)
     await vm.handleGenerateMachinePassCode()
-    expect(ElMessage.warning).toHaveBeenCalledWith('生成成功但未获取到通行码，请稍后刷新机器码管理页查看')
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      '生成成功但未获取到通行码，请稍后刷新机器码管理页查看'
+    )
     wrapper.unmount()
   })
 
@@ -417,7 +441,9 @@ describe('生成组织通行证码', () => {
     mockVerificationCode.mockRejectedValue(new Error('code down'))
     await vm.handleOrganizationChange(1)
     expect(logError).toHaveBeenCalled()
-    expect(ElMessage.warning).toHaveBeenCalledWith('自动获取校验码失败，请手动输入下级单位提供的校验码')
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      '自动获取校验码失败，请手动输入下级单位提供的校验码'
+    )
     wrapper.unmount()
   })
 
@@ -577,7 +603,9 @@ describe('格式化与模板', () => {
     const text = wrapper.text()
     expect(text).toContain('-') // revoked/weird 行操作列
     // 复制按钮点击（pass_code 列）
-    const copyBtns = wrapper.findAll('.el-button-stub').filter((b: any) => b.find('.el-icon-stub').exists() && b.text().trim() === '')
+    const copyBtns = wrapper
+      .findAll('.el-button-stub')
+      .filter((b: any) => b.find('.el-icon-stub').exists() && b.text().trim() === '')
     if (copyBtns.length) {
       await copyBtns[0].trigger('click')
       expect(mockCopy).toHaveBeenCalledWith('PASS-AAAA', '通行证码')
