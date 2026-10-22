@@ -233,37 +233,24 @@ class TestOrganizationScopeGuards:
         svc.recompute_subtree_paths.assert_called_once_with(org)
 
     async def test_update_code_locked_returns_422(self, monkeypatch):
-        """改编码且库中无重复 → 不抛 400，继续更新（775->778）。"""
+        """已编码组织改码 → 422（编码是跨机匹配唯一依据，不允许修改）。"""
+        from fastapi import HTTPException
+
         from app.api.v1 import organization as orgmod
 
         db = MagicMock()
-        org = SimpleNamespace(id=5, name="本组织", code=None, parent_id=None)
-        # 第 1 次 first()：存在性检查 → org；第 2 次：编码查重 → None
-        db.query.return_value.filter.return_value.first.side_effect = [org, None]
+        org = SimpleNamespace(id=5, name="本组织", code="520100", parent_id=None)
+        db.query.return_value.filter.return_value.first.return_value = org
 
         data = MagicMock()
-        data.code = "NEWCODE"
+        data.code = "520200"
         data.model_dump.return_value = {"name": "改名"}
 
-        svc = MagicMock()
         monkeypatch.setattr(orgmod, "_assert_org_write_scope", lambda *a, **k: None)
-        monkeypatch.setattr(orgmod, "OrganizationService", lambda _db: svc)
-        monkeypatch.setattr(orgmod, "safe_commit", lambda *a, **k: None)
-        monkeypatch.setattr(orgmod, "write_work_log", lambda *a, **k: None)
-        monkeypatch.setattr(orgmod, "_coerce_org_enums", lambda d: None)
-        monkeypatch.setattr(orgmod, "_invalidate_dashboard_cache_safe", lambda: None)
-        monkeypatch.setattr(orgmod, "cache_manager", MagicMock(delete=AsyncMock()))
-
-        resp = await orgmod.update_organization(5, data, _admin(), db)
-
-        assert resp["code"] == 200
-        assert org.name == "改名"
-
-
-# ══════════════════════════════════════════════════════════════════
-#  app/api/v1/recycle_bin.py
-# ══════════════════════════════════════════════════════════════════
-
+        with pytest.raises(HTTPException) as ei:
+            await orgmod.update_organization(5, data, _admin(), db)
+        assert ei.value.status_code == 422
+        assert "锁定" in ei.value.detail
 
 class TestReachableIds:
     def _dept_admin(self):

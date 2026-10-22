@@ -1288,10 +1288,12 @@ class TestOrganizationCodeService:
         assert svc.validate_code("AB") is False
 
     def test_validate_code_non_alnum(self):
-        # R20：生成编码含连字符（prefix-CODE），校验须放行 -；其余非字母数字仍拒绝
+        """v1.16.4：编码统一为 6 位行政区划代码，非 6 位数字一律拒绝。"""
         svc = OrganizationCodeService()
-        assert svc.validate_code("ABCD-EFGH") is True
+        assert svc.validate_code("ABCD-EFGH") is False
         assert svc.validate_code("ABCD!EFGH") is False
+        assert svc.validate_code("52000A") is False
+        assert svc.validate_code("520000") is True
 
     def test_get_code_info_found(self):
         svc = OrganizationCodeService()

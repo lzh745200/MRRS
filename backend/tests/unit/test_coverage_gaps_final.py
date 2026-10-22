@@ -156,26 +156,21 @@ class TestOrganizationEndpoints:
             assert result["data"].name == "NewOrg"
 
     async def test_update_org_code_dup(self):
-        from app.api.v1.organization import update_organization, OrganizationUpdate
+        """v1.16.4：编码锁定 —— 改码直接 422。"""
+        from fastapi import HTTPException
+
+        from app.api.v1.organization import OrganizationUpdate, update_organization
+
         db = _mock_db()
-        user = _make_user()
         org = _make_org(1)
+        org.code = "520000"
         data = OrganizationUpdate(code="520001")
-        call_count = [0]
+        db.query.return_value.filter.return_value.first.return_value = org
 
-        def query_side_effect(model):
-            q = MagicMock()
-            call_count[0] += 1
-            if call_count[0] == 1:
-                q.filter.return_value.first.return_value = org
-            else:
-                q.filter.return_value.first.return_value = _make_org(99)
-            return q
-
-        db.query.side_effect = query_side_effect
         with pytest.raises(HTTPException) as exc_info:
-            await update_organization(1, data, current_user=user, db=db)
-        assert exc_info.value.status_code == 400
+            await update_organization(1, data, current_user=_make_user(), db=db)
+        assert exc_info.value.status_code == 422
+        assert "锁定" in exc_info.value.detail
 
     async def test_update_org_write_log_fails(self):
         from app.api.v1.organization import update_organization, OrganizationUpdate
