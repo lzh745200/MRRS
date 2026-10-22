@@ -353,21 +353,22 @@ class TestOrganizationBranchGaps:
         """232->exit：response 为 None → 直接返回，不设置头。"""
         assert org_mod._set_no_cache_headers(None) is None
 
-    async def test_update_organization_unique_code(self):
-        """680->683：新编码无冲突 → 不抛 400，正常更新。"""
-        org = SimpleNamespace(id=1, name="组织A", code=None)
+    async def test_update_organization_code_locked(self):
+        """v1.16.4：行政区划编码创建后锁定，改编码一律 422。"""
+        from fastapi import HTTPException
+
+        org = SimpleNamespace(id=1, name="组织A", code="520000")
+        org.parent_id = None
         db = MagicMock()
-        db.query.side_effect = [_query(org), _query(None)]  # 组织存在；新编码无重复
-        data = org_mod.OrganizationUpdate(code="UNIQ-X")
+        db.query.side_effect = [_query(org)]
+        data = org_mod.OrganizationUpdate(code="520001")
 
-        with patch.object(org_mod, "safe_commit"), \
-             patch.object(org_mod, "write_work_log"), \
-             patch.object(org_mod, "cache_manager") as cm:
-            cm.delete = AsyncMock()
-            resp = await org_mod.update_organization(1, data, current_user=_admin_user(), db=db)
+        with pytest.raises(HTTPException) as exc:
+            await org_mod.update_organization(1, data, current_user=_admin_user(), db=db)
 
-        assert org.code == "UNIQ-X"
-        assert resp["code"] == 200
+        assert exc.value.status_code == 422
+        assert "锁定" in str(exc.value.detail)
+        assert org.code == "520000"
 
     async def test_move_organization_parent_chain_terminates(self):
         """父链到根自然结束 → 正常移动，不抛循环错误。"""

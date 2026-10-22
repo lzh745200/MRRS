@@ -392,6 +392,10 @@ class TestRegisterClaimRace:
         from app.api.v1.auth import auth as mod
 
         monkeypatch.setattr(mod, "check_rate_limit", AsyncMock(return_value=True))
+        # v1.16.4 起自助注册默认关闭，注册链路用例需显式开启
+        from app.core.config import settings as _settings
+
+        monkeypatch.setattr(_settings, "SELF_REGISTER_MODE", "controlled", raising=False)
         machine_svc = MagicMock()
         machine_svc.get_machine_code.return_value = "MC-1"
         machine_svc.verify_pass_code.return_value = SimpleNamespace(id=5, organization_id=None)
