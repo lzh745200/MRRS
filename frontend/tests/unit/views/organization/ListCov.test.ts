@@ -144,6 +144,15 @@ const slotRowD = {
   is_active: false,
   parent_id: null,
 }
+// 历史形态 level_N（未映射到 3 级标签的旧值）→ 走"第N级"回退分支
+const slotRowE = {
+  id: 5,
+  name: '戊组织',
+  org_type: 'department',
+  level: 'level_4',
+  is_active: true,
+  parent_id: 3,
+}
 
 const stubs = {
   'el-card': {
@@ -166,9 +175,15 @@ const stubs = {
   'el-table-column': {
     name: 'ElTableColumn',
     template:
-      '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /><slot :row="rowC" /><slot :row="rowD" /></div>',
+      '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /><slot :row="rowC" /><slot :row="rowD" /><slot :row="rowE" /></div>',
     data() {
-      return { rowA: slotRowA, rowB: slotRowB, rowC: slotRowC, rowD: slotRowD }
+      return {
+        rowA: slotRowA,
+        rowB: slotRowB,
+        rowC: slotRowC,
+        rowD: slotRowD,
+        rowE: slotRowE,
+      }
     },
   },
 }
