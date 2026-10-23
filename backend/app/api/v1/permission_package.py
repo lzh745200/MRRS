@@ -15,6 +15,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db, SessionLocal
+from app.services.package_import_guard import (
+    assert_not_duplicate,
+    record_import,
+)
 from app.core.security import get_current_user
 from app.core.permission_utils import is_admin
 from app.models.user import User
@@ -284,6 +288,8 @@ def confirm_import_permission_package(
     current_user: Optional[User] = Depends(_optional_current_user),
     db: Session = Depends(get_db),
     request: Request = None,
+    # 同一校验和的权限包重复确认必须显式声明（追加在末尾，避免打乱既有位置参数调用）
+    force: bool = False,
 ):
     """
     确认导入权限配置包，将所有权限配置写入数据库。
@@ -305,6 +311,9 @@ def confirm_import_permission_package(
 
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="导入文件不存在，请先通过 /import 上传")
+
+    # P2：权限包查重（确认阶段才拦，避免预览就被挡）
+    checksum = assert_not_duplicate(db, file_path, force=force)
 
     service = PermissionPackageService(db)
     try:
@@ -337,5 +346,15 @@ def confirm_import_permission_package(
         )
     except Exception:
         logger.debug("记录工作日志失败", exc_info=True)
+
+    # P2：写导入台账（失败不阻断）
+    record_import(
+        db,
+        checksum=checksum,
+        package_type="permission_package",
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", ""),
+        file_name=file_name,
+    )
 
     return JSONResponse(content=result)
