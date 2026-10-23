@@ -29,6 +29,10 @@ from app.services.package_import_guard import (
     assert_not_duplicate,
     record_import,
 )
+from app.services.package_org_code import (
+    MATCH_MISMATCH,
+    check_org_code,
+)
 from app.core.security import get_current_user
 from app.core.permission_utils import (
     get_org_with_fallback,
@@ -506,6 +510,8 @@ async def import_data_package(
     org_id: Optional[int] = None,
     # 同一校验和的包再次导入必须显式确认（介质场景高频误操作）
     force: bool = False,
+    # 来源单位码与本机不一致时是否仍然导入（默认阻断，防止挂错组织）
+    allow_org_mismatch: bool = False,
     request: Request = None,
     current_user=Depends(get_current_user),
     service: DataPackageService = Depends(get_package_service),
@@ -567,6 +573,14 @@ async def import_data_package(
             file_path=temp_file.name, file_name=file.filename, org_id=target_org_id, imported_by=current_user.id
         )
 
+        # P2：来源单位码核对（不匹配且未显式放行 → 阻断并说明差异）
+        org_check = check_org_code(service.db, result.manifest, target_org_id)
+        if org_check["status"] == MATCH_MISMATCH and not allow_org_mismatch:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=org_check["message"],
+            )
+
         duration_ms = int((time.time() - start_time) * 1000)
 
         # 记录导入历史
@@ -605,7 +619,7 @@ async def import_data_package(
             user_id=getattr(current_user, "id", None),
             username=getattr(current_user, "username", ""),
             file_name=file.filename or "",
-            source_org_code=str(target_org_id),
+            source_org_code=org_check.get("package_org_code") or None,
             record_count=sum(result.manifest.record_counts.values()) if result.manifest else 0,
             result="success" if result.validation.is_valid else "invalid",
         )
