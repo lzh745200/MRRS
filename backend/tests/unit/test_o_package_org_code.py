@@ -4,8 +4,6 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
-
 from app.services.package_org_code import (
     MATCH_MISMATCH,
     MATCH_OK,
