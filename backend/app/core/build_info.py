@@ -86,6 +86,17 @@ def get_build_info() -> dict:
 
     from app.core.config import settings
 
-    info.setdefault("version", settings.PROJECT_VERSION)
+    # 版本号唯一权威来源是 settings.PROJECT_VERSION（根 package.json 同步）。
+    # 构建指纹只提供 git_hash / build_time / builder：外壳里残留的旧
+    # _build_info.json（CI 产物、已 gitignore）不得让 /health 报出旧版本。
+    fingerprint_version = info.get("version")
+    if fingerprint_version and fingerprint_version != settings.PROJECT_VERSION:
+        logger.debug(
+            "构建指纹版本(%s)与运行时版本(%s)不一致，以运行时为准",
+            fingerprint_version,
+            settings.PROJECT_VERSION,
+        )
+    info["version"] = settings.PROJECT_VERSION
+
     _cached = info
     return info
