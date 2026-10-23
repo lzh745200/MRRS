@@ -37,6 +37,10 @@ from app.services.grant_package_service import (
 from app.services.system_config_service import SystemConfigService
 from app.services.work_log_service import write_work_log
 from app.utils.upload_helper import read_upload_with_limit
+from app.services.package_import_guard import (
+    assert_content_not_duplicate,
+    record_import,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +90,8 @@ def _local_org_code(db: Session) -> str:
 @router.post("/import", summary="导入授权包（下级）")
 async def import_grant_package(
     file: UploadFile = File(..., description="授权包 JSON 文件"),
+    # 同一校验和的授权包再次导入必须显式确认
+    force: bool = False,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -103,6 +109,9 @@ async def import_grant_package(
     )
     if not content:
         raise HTTPException(status_code=400, detail="授权包内容为空")
+
+    # P2：授权包查重（内容哈希；重复且未 force → 409）
+    checksum = assert_content_not_duplicate(db, content, force=force)
 
     try:
         result = apply_package(
@@ -125,6 +134,18 @@ async def import_grant_package(
         )
     except Exception:  # pragma: no cover - 审计失败不阻断主流程
         logger.warning("记录授权包导入审计日志失败", exc_info=True)
+
+    # P2：写导入台账（失败不阻断）
+    record_import(
+        db,
+        checksum=checksum,
+        package_type="grant_package",
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", ""),
+        file_name=getattr(file, "filename", "") or "",
+        source_org_code=result.get("org_code") if isinstance(result, dict) else None,
+        record_count=result.get("modules", 0) if isinstance(result, dict) else 0,
+    )
 
     return success_response(data=result, message="授权包已应用")
 

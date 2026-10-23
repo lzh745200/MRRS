@@ -54,6 +54,29 @@ def package_checksum(file_path: str) -> str:
     return digest.hexdigest()
 
 
+def content_checksum(content: bytes) -> str:
+    """计算内存内容（字节）的 SHA256：用于在内存里解析的包（如授权包 JSON）。"""
+    if not content:
+        return ""
+    return hashlib.sha256(content).hexdigest()
+
+
+def assert_content_not_duplicate(
+    db: Session,
+    content: bytes,
+    *,
+    force: bool = False,
+) -> str:
+    """内存内容版本的导入前查重（授权包等直接在内存解析的场景）。"""
+    checksum = content_checksum(content)
+    if not checksum:
+        return ""
+    previous = find_previous_import(db, checksum)
+    if previous and not force:
+        raise HTTPException(status_code=409, detail=build_duplicate_message(previous))
+    return checksum
+
+
 def _json_safe(value: Any) -> Any:
     """把值转成可 JSON 序列化的形态（datetime 转 ISO 字符串）。"""
     if isinstance(value, datetime):

@@ -9,7 +9,9 @@ import pytest
 
 from app.models.audit import AuditLog
 from app.services.package_import_guard import (
+    assert_content_not_duplicate,
     assert_not_duplicate,
+    content_checksum,
     build_duplicate_message,
     find_previous_import,
     package_checksum,
@@ -202,3 +204,39 @@ class TestAssertNotDuplicate:
         )
         checksum = assert_not_duplicate(self._db_returning(row), str(p), force=True)
         assert checksum == package_checksum(str(p))
+
+
+class TestContentChecksum:
+    """在内存解析的包（授权包 JSON）用字节哈希。"""
+
+    def test_empty_bytes(self):
+        assert content_checksum(b"") == ""
+
+    def test_matches_sha256(self):
+        payload = b'{"format":"grant"}'
+        assert content_checksum(payload) == hashlib.sha256(payload).hexdigest()
+
+
+class TestAssertContentNotDuplicate:
+    def _db_returning(self, row):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = row
+        return db
+
+    def test_empty_content_skips(self):
+        assert assert_content_not_duplicate(MagicMock(), b"") == ""
+
+    def test_first_import_returns_checksum(self):
+        assert assert_content_not_duplicate(self._db_returning(None), b"abc") == content_checksum(b"abc")
+
+    def test_duplicate_without_force_raises_409(self):
+        from fastapi import HTTPException
+
+        row = AuditLog(username="admin", created_at=None, resource_type="grant_package", new_value={})
+        with pytest.raises(HTTPException) as exc:
+            assert_content_not_duplicate(self._db_returning(row), b"abc")
+        assert exc.value.status_code == 409
+
+    def test_duplicate_with_force_passes(self):
+        row = AuditLog(username="admin", created_at=None, resource_type="grant_package", new_value={})
+        assert assert_content_not_duplicate(self._db_returning(row), b"abc", force=True) == content_checksum(b"abc")
