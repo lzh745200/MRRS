@@ -1,6 +1,6 @@
 # API 接口文档
 
-> **版本**:v1.15.15  **更新日期**:2026-10-20（端点清单按源码重新扫描；v1.15.13~15 无新增路由模块）
+> **版本**:v1.17.1  **更新日期**:2026-10-24（端点清单按源码重新扫描；v1.17 新增 /self-check 与介质链路治理）
 > **定位**:系统全部 HTTP 接口的清单与调用约定——**端点清单由脚本从源码自动提取**(与代码 100% 同步),业务导读人工维护。
 > **适用读者**:前后端开发者、联调与集成人员。零基础请先读《需求规格说明书》§3 理解业务流程。
 > **互动文档**:后端启动后(DEBUG 模式)访问 `http://127.0.0.1:8000/docs` 可在线调试(OpenAPI)。
@@ -9,14 +9,20 @@
 
 ## 1. 快速统计
 
-- **100 个路由模块文件（55 顶层 + 5 子包）/ 803 个端点**(5 个子包为 auth/data/import_export/monitoring/system;按 `@router` 装饰器扫描口径)
+- **93 个路由模块文件（53 顶层 + 5 子包）/ 849 个端点**(5 个子包为 auth/data/import_export/monitoring/system;按 `@router` 装饰器扫描口径)
 - v1.14.0 变更:新增 `households`(`/households`)、`media`(`/media`)、`consumption`(`/consumption`) 三个模块与
   `/funds/ocr-voucher`、`/report-templates/{id}/export|print-data`;删除 `villages`(`/villages`)、`sentiment`(`/sentiment`)、
   `i18n`(`/system/i18n`) 模块(分别因遗留表清理、消费帮扶替换、国际化功能下线)。
 - v1.15.13~v1.15.15 变更:无新增/删除路由模块与端点(v1.15.13 为 R33 单位授权补 UI 入口;v1.15.14 为
   `effectiveness_evaluations` 外键重建迁移;v1.15.15 为 UI 精细化 + 「一户一档」入口收敛,均为前端/菜单侧变更)。
   菜单 key `households` 自 v1.15.15 起为 **legacy**(无导航出口),路由 `meta.menuKey` 跟随 `villages`;接口路径不变。
-- 全部业务接口位于 `/api/v1` 前缀之下(下文路径均省略此前缀)
+- **v1.17.0~v1.17.1 变更**：新增 `system/self_check.py`（`/self-check`，1 端点，仅管理员）；
+  数据包/授权包/权限包/配置包四类导入端点各新增可选参数（`force`、`allow_org_mismatch`），**不新增路径**；
+  删除 `rural_tasks` 相关路由（随 r36 迁移清理零引用表）。
+- **介质链路治理约定**（v1.17.0）：
+  - 四类导入在格式/完整性校验后，按**整包 SHA256** 查 `audit_logs` 台账；命中重复返回 **409**，需 `force=true` 放行。
+  - 数据包导入另做**来源单位码核对**：包内 `org_code` 与本机目标单位码不一致返回 **409**，需 `allow_org_mismatch=true` 放行。
+  - 导入成功写 `package_import` 台账；确认导入再写 `package_receipt` 回执（接收单位码/来源单位码/记录数/冲突策略）。- 全部业务接口位于 `/api/v1` 前缀之下(下文路径均省略此前缀)
 
 ## 2. 统一调用约定(必读)
 

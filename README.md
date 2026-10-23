@@ -8,12 +8,21 @@
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
+## 本版亮点（v1.17）
+
+- **介质链路治理**：数据包/授权包/权限包/配置包四类导入统一**整包查重（SHA256）+ 导入台账 + 回执**，
+  同一包重复导入默认 409 拦截、可显式放行；**来源单位码核对**防"上级/邻县包导进本单位"后数据挂错组织树
+- **系统自检**：`GET /api/v1/self-check` + 设置页卡片，一次体检 6 项（单位码 / 组织层级 / 待审核账号 /
+  账号锁定 / PII 密钥指纹 / 介质导入近况）
+- **W27 全栈收敛**：三类包完整性校验（checksum 强制 + Ed25519 验签）、经费禁止自批、
+  跨机业务键修复（修复同组织两台机器导入时记录被覆写/丢弃的 P0 缺陷）、迁移 r36~r41
+
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **13,942 用例**, 1 skipped（本机单进程实测 13,939 passed + 2 条环境性失败；CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **6,867 passed**（331 文件）, 0 失败 |
+| 后端测试 | **14,364 用例**, 1 skipped（本机单进程实测 14,363 passed + 2 条环境性失败；CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **7,020 passed**（339 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -124,7 +133,7 @@ cd frontend && npm install && npm run dev
 | 后端测试（全量） | pytest | 13,942（1 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,867（331 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 6,867（339 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 154+ 流程（17 个 spec） | Login/Dashboard/Projects/Approval/Funds/导航正确性/响应时间 |
 | 视觉回归 | Playwright | 10 个关键页面（DOM 结构快照，非像素） | 工作台/帮扶村/项目/经费/一户一档/影像库/消费帮扶/系统管理/数据校验/大屏 |
 | UI Token 契约 | Vitest | `tests/unit/ui/ui-tokens.test.ts` | 主题 3 套/字号缩放/密度/高对比/简化/大屏字号档/全局类 |
