@@ -14,18 +14,21 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 
+import ImportPreviewDialog from '@/components/import/ImportPreviewDialog.vue'
+
 // vi.mock 工厂提升求值，引用对象须先放入 vi.hoisted 初始化
-const { ElMessage, confirmMock, mockPost, mockApiRequest, mockGet, logError, authState } = vi.hoisted(() => {
-  return {
-    ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
-    confirmMock: vi.fn(),
-    mockPost: vi.fn(),
-    mockApiRequest: vi.fn(),
-    mockGet: vi.fn(),
-    logError: vi.fn(),
-    authState: { isAdmin: true },
-  }
-})
+const { ElMessage, confirmMock, mockPost, mockApiRequest, mockGet, logError, authState } =
+  vi.hoisted(() => {
+    return {
+      ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+      confirmMock: vi.fn(),
+      mockPost: vi.fn(),
+      mockApiRequest: vi.fn(),
+      mockGet: vi.fn(),
+      logError: vi.fn(),
+      authState: { isAdmin: true },
+    }
+  })
 
 vi.mock('element-plus', () => ({
   ElMessage,
@@ -42,7 +45,8 @@ vi.mock('@/api/request', () => ({
   put: vi.fn(),
   del: vi.fn(),
   apiRequest: (...args: any[]) => mockApiRequest(...args),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/logger', () => ({
   logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -786,7 +790,11 @@ describe('接收记录 tab（仅管理员）', () => {
     // parseValidationSummary：非数组 / 匹配 / 无匹配
     expect(vm.parseValidationSummary(null)).toBeNull()
     expect(vm.parseValidationSummary('not-array')).toBeNull()
-    expect(vm.parseValidationSummary(['通过2条/纠正1条/拒绝0条'])).toEqual({ ok: 2, corrected: 1, rejected: 0 })
+    expect(vm.parseValidationSummary(['通过2条/纠正1条/拒绝0条'])).toEqual({
+      ok: 2,
+      corrected: 1,
+      rejected: 0,
+    })
     expect(vm.parseValidationSummary(['无匹配行'])).toBeNull()
     // classifyWarningLine 三态
     expect(vm.classifyWarningLine('某字段校验未通过')).toBe('rejected')
@@ -1073,7 +1081,9 @@ describe('接收记录 tab（仅管理员）', () => {
     expect(text).toContain('ORG-2')
 
     // 接收记录 预览 按钮（仅 validated 行）：报告列表 3 + 接收记录 1
-    const previewBtns = wrapper.findAll('el-button-stub').filter((b: any) => b.text().trim() === '预览')
+    const previewBtns = wrapper
+      .findAll('el-button-stub')
+      .filter((b: any) => b.text().trim() === '预览')
     expect(previewBtns.length).toBe(4)
     await previewBtns[3].trigger('click')
     await flushPromises()
@@ -1118,3 +1128,64 @@ describe('接收记录 tab（仅管理员）', () => {
   })
 })
 
+describe('ReceivePackage · P2 重复包确认', () => {
+  it('409：弹出确认框并解析时间/操作人；确认后带 force 重传', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const raw = new File(['x'], 'dup.zip')
+    mockPost.mockRejectedValueOnce({
+      response: {
+        status: 409,
+        data: {
+          detail:
+            '该数据包已于 2026-10-23T08:00:00 由 admin 导入过；如确需再次导入，请传入 force=true',
+        },
+      },
+    })
+
+    await vm.handleLocalFileChange({ raw })
+    await nextTick()
+
+    expect(vm.duplicateVisible).toBe(true)
+    expect(vm.duplicateInfo).toEqual({ createdAt: '2026-10-23T08:00:00', username: 'admin' })
+
+    mockPost.mockResolvedValueOnce({ package_id: 9, validation: { warnings: [] } })
+    await vm.onDuplicateConfirm()
+    await nextTick()
+
+    expect(mockPost).toHaveBeenLastCalledWith(
+      '/data-packages/import',
+      expect.any(FormData),
+      expect.objectContaining({ params: { force: true } })
+    )
+    expect(vm.localImportStep).toBe(1)
+  })
+
+  it('409 但文案不可解析：仍弹窗且告警字段为空；取消后清空待处理文件', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    mockPost.mockRejectedValueOnce({ response: { status: 409, data: {} } })
+    await vm.handleLocalFileChange({ raw: new File(['x'], 'dup2.zip') })
+    await nextTick()
+
+    expect(vm.duplicateVisible).toBe(true)
+    expect(vm.duplicateInfo).toEqual({})
+
+    // 弹窗自身 update:visible（v-model 反向同步）也要生效
+    const dialog = wrapper.findComponent(ImportPreviewDialog)
+    dialog.vm.$emit('update:visible', false)
+    await nextTick()
+    expect(vm.duplicateVisible).toBe(false)
+
+    vm.onDuplicateCancel()
+    expect(vm.duplicateVisible).toBe(false)
+
+    // 取消后再次确认不应触发上传
+    const callsBefore = mockPost.mock.calls.length
+    await vm.onDuplicateConfirm()
+    expect(mockPost.mock.calls.length).toBe(callsBefore)
+  })
+})

@@ -362,12 +362,23 @@
       </el-result>
     </el-card>
   </div>
+  <!-- P2：重复包导入确认（后端 409 → 显式允许 force） -->
+  <ImportPreviewDialog
+    v-model:visible="duplicateVisible"
+    title="该数据包已导入过"
+    :info="{ type: '数据包', fileName: localImportInfo.fileName }"
+    :duplicate="duplicateInfo"
+    allow-force
+    @confirm="onDuplicateConfirm"
+    @cancel="onDuplicateCancel"
+  />
 </template>
 
 <script setup lang="ts">
 import { DIALOG_SM, DIALOG_LG } from '@/config/dialog'
 import { unwrapList } from '@/utils/unwrapList'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import ImportPreviewDialog from '@/components/import/ImportPreviewDialog.vue'
 import { logger } from '@/utils/logger'
 
 import { ref, reactive, computed, onMounted, onErrorCaptured } from 'vue'
@@ -702,14 +713,26 @@ const localImporting = ref(false)
 const localUploadRef = ref<any>(null)
 const localImportInfo = reactive({ fileName: '', packageId: '' })
 
-async function handleLocalFileChange(file: any) {
-  const raw = file?.raw || file
-  if (!raw) return
+// P2：重复包确认（后端按整包校验和查重，重复时返回 409，由用户显式允许）
+const duplicateVisible = ref(false)
+const duplicateInfo = ref<{ createdAt?: string; username?: string } | null>(null)
+let pendingDuplicateFile: File | null = null
+
+/** 从后端 409 文案里解析「已于 X 由 Y 导入过」 */
+function parseDuplicateDetail(detail: unknown): { createdAt?: string; username?: string } {
+  const text = typeof detail === 'string' ? detail : ''
+  const matched = text.match(/已于\s*(.*?)\s*由\s*(.*?)\s*导入过/)
+  return matched ? { createdAt: matched[1], username: matched[2] } : {}
+}
+
+/** 上传本地数据包（force=true 时允许重复导入） */
+async function uploadLocalPackage(raw: File, force = false): Promise<void> {
   const formData = new FormData()
   formData.append('file', raw)
   try {
     const data = await post('/data-packages/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      params: force ? { force: true } : {},
     })
     if (data?.errors?.length) {
       ElMessage.error(`数据包验证失败: ${data.errors[0]}`)
@@ -720,9 +743,35 @@ async function handleLocalFileChange(file: any) {
     localImportInfo.fileName = raw.name
     localImportInfo.packageId = String(data?.package_id || '')
     localImportStep.value = 1
-  } catch {
+  } catch (err: any) {
+    if (err?.response?.status === 409) {
+      pendingDuplicateFile = raw
+      duplicateInfo.value = parseDuplicateDetail(err?.response?.data?.detail)
+      duplicateVisible.value = true
+      return
+    }
     ElMessage.error('数据包上传失败，请检查文件格式')
   }
+}
+
+async function handleLocalFileChange(file: any) {
+  const raw = file?.raw || file
+  if (!raw) return
+  await uploadLocalPackage(raw)
+}
+
+/** 重复包确认：带 force=true 重新上传 */
+async function onDuplicateConfirm(): Promise<void> {
+  duplicateVisible.value = false
+  const file = pendingDuplicateFile
+  pendingDuplicateFile = null
+  if (!file) return
+  await uploadLocalPackage(file, true)
+}
+
+function onDuplicateCancel(): void {
+  duplicateVisible.value = false
+  pendingDuplicateFile = null
 }
 
 async function confirmLocalImport() {
