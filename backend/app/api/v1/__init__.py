@@ -32,6 +32,7 @@ api_v1_router = APIRouter(prefix="/api/v1")
 from app.api.v1.auth import router as auth_router  # noqa: E402
 from app.api.v1.data import router as data_router  # noqa: E402
 from app.api.v1.import_export import router as import_export_router  # noqa: E402
+from app.api.v1.system import self_check as system_self_check  # noqa: E402
 from app.api.v1.system import router as system_router  # noqa: E402
 from app.api.v1.monitoring import (  # noqa: E402
     metrics as monitoring_metrics_module,
@@ -114,6 +115,7 @@ logger.debug("已加载路由: system")
 
 # system 子模块直挂（历史表面，勿删）
 api_v1_router.include_router(system_health_module.router)
+api_v1_router.include_router(system_self_check.router)
 api_v1_router.include_router(system_env_module.router)
 api_v1_router.include_router(system_config_package_module.router)
 

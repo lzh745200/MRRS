@@ -74,6 +74,9 @@
       </el-row>
     </el-card>
 
+    <!-- P3：系统自检（配置一致性体检） -->
+    <SelfCheckCard />
+
     <!-- 最近审计日志 -->
     <el-card class="section-card">
       <template #header>
@@ -119,6 +122,7 @@ import { ref, computed, onMounted } from 'vue'
 import type { Component } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import PageHeader from '@/components/common/PageHeader.vue'
+import SelfCheckCard from '@/components/system/SelfCheckCard.vue'
 import {
   Refresh,
   Clock,
