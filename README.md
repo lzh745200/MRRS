@@ -42,9 +42,9 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-21（v1.16.0）— 后端 14,140 用例（1 skipped）+ 行/分支覆盖率 100.00%
+> **上次全量验证**: 2026-10-21（v1.16.0）— 后端 14,364 用例（1 skipped）+ 行/分支覆盖率 100.00%
 > （CI 后端测试为 **12 段独立进程**分段执行，`--cov-append` 合并，最终段由 `.coveragerc` fail_under=100 单一来源判定）；
-> 前端 **332 文件 / 6,906 用例、12 组 glob 100%**；E2E 165（含 10 页视觉回归基线）；
+> 前端 **339 文件 / 7,020 用例、12 组 glob 100%**；E2E 165（含 10 页视觉回归基线）；
 > flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 硬编码色 305（基线 345，57 个文件）/ 版本单一来源一致 / Alembic 单 head（54 版本）
 
 ## 快速开始
@@ -130,10 +130,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端测试（全量） | pytest | 13,942（1 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 14,364（1 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 6,867（339 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 7,020（339 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 154+ 流程（17 个 spec） | Login/Dashboard/Projects/Approval/Funds/导航正确性/响应时间 |
 | 视觉回归 | Playwright | 10 个关键页面（DOM 结构快照，非像素） | 工作台/帮扶村/项目/经费/一户一档/影像库/消费帮扶/系统管理/数据校验/大屏 |
 | UI Token 契约 | Vitest | `tests/unit/ui/ui-tokens.test.ts` | 主题 3 套/字号缩放/密度/高对比/简化/大屏字号档/全局类 |
@@ -209,9 +209,9 @@ npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本
 
 ```
 ├── backend/app/              # 后端（FastAPI，376 个 py / 12 万+ 行）
-│   ├── api/v1/               # API 接口层（100 个路由模块文件 = 55 顶层 + 5 子包；803 个端点）
+│   ├── api/v1/               # API 接口层（100 个路由模块文件 = 55 顶层 + 5 子包；849 个端点）
 │   ├── core/                 # 核心：config, security, database, transaction, cache, maintenance(维护闸门)
-│   ├── models/               # SQLAlchemy 数据模型（64 个文件 / 122 张表，含 W22 新增 household/media/consumption）
+│   ├── models/               # SQLAlchemy 数据模型（64 个文件 / 124 张表，含 W22 新增 household/media/consumption）
 │   ├── services/             # 业务逻辑层（107 个服务文件 / 5 个子包，含 ocr_service / household_service / media_service）
 │   ├── middleware/           # CSRF, 审计, 请求日志, 指标, maintenance_gate(写请求闸门)
 │   └── startup/              # 启动钩子（种子/监控/恢复/环境自检 + 组织树自愈）

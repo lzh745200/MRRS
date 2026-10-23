@@ -1,7 +1,7 @@
 # UI 设计规范（Token 驱动 · UI v2.0）
 
-> **版本**: v2.1（v1.15.15，2026-10-20；v2.0 为 v1.15.0 UI v2.0 基线）｜配套总纲：《[UI设计方案](../07-UI设计规范/UI设计方案.md)》
-> v1.15.15 增补：表格 border/序号 72px/选择 48px/操作列 fixed、筛选栏 4 档宽度、PageHeader 统一、`ui-refine.scss` 栅格与断点。
+> **版本**: v2.1（v1.17.1，2026-10-24；v2.0 为 v1.17.1 UI v2.0 基线）｜配套总纲：《[UI设计方案](../07-UI设计规范/UI设计方案.md)》
+> v1.17.1 增补：表格 border/序号 72px/选择 48px/操作列 fixed、筛选栏 4 档宽度、PageHeader 统一、`ui-refine.scss` 栅格与断点。
 > 本文档定义本系统的 UI 视觉与交互规范，用于保证界面一致性、美观度与跨设备响应式体验。
 
 ## 1. 设计原则
@@ -115,7 +115,7 @@
 
 1. 新增样式放在 `styles/` 体系（Token/组件/布局），禁止散落页面；优先复用全局类/通用组件。
 2. 颜色只能用 `var(--xxx)`/`$xxx`：**改动文件零新增硬编码色**；`check_hardcoded_styles.py` 棘轮只降不升
-   （基线 345 → 当前 305（57 个文件），目标 ≤200，后续计划）。
+   （基线 345 → 当前 154（40 个文件），目标 ≤200，后续计划）。
 3. 显示偏好只经 `useUiPrefs` 读写 `ui:prefs` 与 `<html data-*>`，禁止组件自行写 data 属性。
 4. `tokens-vars.scss` 只放变量（禁止 `:root`/选择器等实体规则）。
 5. 视觉回归：改 UI 跑 `tests/unit/ui/ui-tokens.test.ts` + `npx playwright test tests/e2e/visual`；
