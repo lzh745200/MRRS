@@ -62,6 +62,10 @@ class AuditAction(str, Enum):
     CONFIG_CHANGE = "config_change"
 
     # 权限操作
+    # 介质数据包（P2）：导入/导出台账动作
+    PACKAGE_IMPORT = "package_import"
+    PACKAGE_EXPORT = "package_export"
+
     PERMISSION_GRANT = "permission_grant"
     PERMISSION_REVOKE = "permission_revoke"
     ROLE_CHANGE = "role_change"
