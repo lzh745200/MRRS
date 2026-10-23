@@ -104,6 +104,7 @@ declare module 'vue' {
     ElUpload: typeof import('element-plus/es')['ElUpload']
     FilePreview: typeof import('./components/FilePreview.vue')['default']
     FundsYearlyComparisonChart: typeof import('./components/funds/YearlyComparisonChart.vue')['default']
+    ImportImportPreviewDialog: typeof import('./components/import/ImportPreviewDialog.vue')['default']
     LayoutMobileBottomNav: typeof import('./components/layout/MobileBottomNav.vue')['default']
     MapOfflineMap: typeof import('./components/map/OfflineMap.vue')['default']
     MapPicker: typeof import('./components/MapPicker.vue')['default']
@@ -116,6 +117,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SettingsAppearanceSettings: typeof import('./components/settings/AppearanceSettings.vue')['default']
+    SystemSelfCheckCard: typeof import('./components/system/SelfCheckCard.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']
