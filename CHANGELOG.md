@@ -5,6 +5,54 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.17.0] - 2026-10-23 — 介质链路治理（查重/台账/单位码/回执） + 系统自检 + W27 全栈收敛
+
+### Added（P2 介质链路治理）
+
+- **整包查重**：新增 `services/package_import_guard.py`，以整包 SHA256 为指纹查 `audit_logs` 台账；
+  同一包重复导入默认 **409**，需显式 `force=true` 放行。数据包 / 授权包 / 权限包 / 配置包四类导入已接入。
+- **导入台账**：导入成功写 `package_import`（类型/来源单位码/校验和/记录数/结果），
+  查重与追溯共用一张表，**不新增业务表、不新增迁移**。
+- **导入回执**：确认导入后写 `package_receipt`（接收单位码、来源单位码、记录数、冲突策略），
+  上级凭回执即可登记闭环。
+- **来源单位码核对**：新增 `services/package_org_code.py`；数据包导入时比对包内 `org_code`
+  与本机目标单位码，不一致默认 **409** 阻断（`allow_org_mismatch=true` 可放行），
+  防止"把上级/邻县的包导进本单位"后数据挂错组织树。
+- **冲突策略落库**：确认导入时把「逐条比对 / 以包为准」写入导入历史 `details_json`，事后可追溯。
+- **前端**：新增 `components/import/ImportPreviewDialog.vue`（包信息 + 差异 + 重复告警 + 策略三选）；
+  数据包接收页与授权包导入页在收到 409 时弹出该确认框，用户确认后带 `force=true` 重传。
+
+### Added（P3 系统自检）
+
+- 新增 `services/self_check_service.py` 与 `GET /api/v1/self-check`（仅管理员），一次体检 6 项：
+  **单位码**（缺失/格式/层级不符/重复）、**组织层级**（跨级挂接/根非省级）、
+  **待审核账号**、**账号锁定**、**PII 密钥指纹**、**介质导入近况**（近 30 天失败数）。
+- 「系统设置」页新增自检卡片（`components/system/SelfCheckCard.vue`）：正常/提醒/异常三态，
+  每项带可读说明，一键重新检查。
+
+### Changed（W27 全栈收敛，随本版一并合入）
+
+- **包完整性校验**（`core/package_integrity.py`）：管控包 / 配置包 / 权限包导入强制校验 `checksum`；
+  配置 `PACKAGE_PUBKEY` 后强制验签（fail-closed）。生成侧配 `PACKAGE_SIGNING_KEY` 即签名。
+- **经费禁止自批**（`FUND_ALLOW_SELF_APPROVAL` 默认 False）：创建人不得审批自己创建的经费记录。
+- **跨机业务键修复**：`BUSINESS_KEYS` 由「仅组织」改为「组织 + 业务唯一标识」
+  （villages: 组织+县+村名；projects/funds/schools: 组织+code），
+  修复同组织两台机器导入时"记录被整体覆写或静默丢弃"的 P0 缺陷；业务键不可判定时改走 relocated（新增行），绝不覆写。
+- **迁移 r36~r41**：删除 `rural_tasks` / `budget_records` / `annual_income` / `issues` 等零引用表与列，
+  全部沿用「空表 DROP / 有数据改名归档」契约。
+- 新增门禁：`check_no_assert_tests.py`（测试必须有断言）、`check_sync_coverage.py`（同步链路覆盖）。
+
+### Docs
+
+- CLAUDE.md 新增「介质链路治理」与「系统自检」契约条目；端点数/测试文件数同步（849 / 336）。
+
+### Tests
+
+- 新增 `test_o_package_import_guard.py`（25 例）、`test_o_package_org_code.py`（12 例）、
+  `test_p3_self_check_service.py`（18 例）、`test_p3_self_check_api.py`（2 例）；
+  守卫模块与自检服务覆盖率均 **100%**；前端自检卡片 10 例 / 100%。
+- 后端 12 段全绿（14,364 用例）；前端 337 文件 / 7,010 用例全绿。
+
 ## [1.16.4] - 2026-10-22 — 组织编码改用行政区划代码（3 级） + 默认关闭自助注册 + 账号解锁
 
 ### Changed

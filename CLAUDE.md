@@ -245,6 +245,19 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
   `backend/scripts/gate_baselines/upgrade_legacy_tables.json`，升级演练据此接受
   「原表名消失（旧库 0 行）」或「改名归档且行数不变」；清单缺失时演练退回最严口径（任何表消失都算丢失）。
   迁移逻辑要抽成可单测的纯函数（如 `apply_cleanup(bind)`），三种分支必须有用例覆盖。
+- **介质链路治理** (2026-10-23, v1.17.0): 离线 + 上下级 + 介质传输下，**每类导入都必须可追溯**。
+  - 查重：`services/package_import_guard.py` 以**整包 SHA256**为指纹（数据包读文件、授权包/配置包读内容字节），
+    命中 `audit_logs` 台账即 **409**，需显式 `force=true` 放行；**禁止各导入端点各写一套指纹/查重逻辑**。
+  - 台账：导入写 `package_import`（类型/来源单位码/校验和/记录数），确认导入再写 `package_receipt`
+    （接收单位码/来源单位码/冲突策略）—— 复用 `audit_logs`，**不新增业务表、不新增迁移**。
+  - 单位码：`services/package_org_code.py` 比对包内 `org_code` 与本机目标单位码，
+    不一致默认 409（`allow_org_mismatch=true` 放行），防"上级/邻县包导进本单位"后数据挂错组织树。
+  - 前端统一用 `components/import/ImportPreviewDialog.vue`（包信息 + 差异 + 重复告警 + 冲突策略三选）；
+    收到 409 时显示该弹窗，用户确认后带 `force=true` 重传。
+- **系统自检** (2026-10-23, v1.17.0): `GET /api/v1/self-check`（仅管理员）+ `services/self_check_service.py`
+  一次性体检 6 项 —— 单位码（缺失/格式/层级不符/重复）、组织层级（跨级挂接/根非省级）、
+  待审核账号、账号锁定、PII 密钥指纹、介质导入近况。**只读**，不修数据；
+  新增检查项必须带 `level`（ok/warn/error）与可读 `detail`，前端 `components/system/SelfCheckCard.vue` 直接渲染。
 - **危险操作硬化** (2026-10-21, v1.15.18 批次 3): 四类不可逆/高影响操作必须二次确认且写审计 ——
   删除组织（`X-Confirm-Password` 请求头验密）、恢复备份（红色警告弹窗 + 加密包密码）、
   轮换密钥（令牌全失效提示）、**管理员重置他人密码（必须手工输入目标用户名）**。
