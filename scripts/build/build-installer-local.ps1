@@ -1,4 +1,4 @@
-# build-installer-local.ps1 — Windows x64 离线安装包本地构建链（等价 make build-win-x64）
+﻿# build-installer-local.ps1 — Windows x64 离线安装包本地构建链（等价 make build-win-x64）
 #
 # 为什么需要它：Windows 默认不带 make，且 CI 走 tag 触发；本脚本把官方构建链固化成一条命令，
 # 避免每次手工敲 5 步（顺序错一步就会打出缺资源/缺后端的包）。
