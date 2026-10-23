@@ -59,7 +59,9 @@ export async function importGrantPackage(file: File, force = false): Promise<Gra
   const form = new FormData()
   form.append('file', file)
   // force=true：同一校验和的授权包已导入过时，用户显式确认后放行（P2）
-  const res = await post<any>(`${BASE}/import`, form, force ? { params: { force: true } } : {})
+  // force=true：同一校验和的授权包已导入过时，用户显式确认后放行（P2）
+  const config = force ? { params: { force: true } } : {}
+  const res = await post<any>(`${BASE}/import`, form, config)
   return res?.data ?? res
 }
 

@@ -73,6 +73,27 @@ describe('api/orgGrants', () => {
     expect(res).toEqual({ org_code: 'C001', version: 1, modules: 2, signed: true })
   })
 
+  it('importGrantPackage：force=true 时带 params.force', async () => {
+    mockPost.mockResolvedValue({ data: { org_code: 'C001', version: 2, modules: 3, signed: true } })
+    const file = new File(['{}'], 'pkg2.json', { type: 'application/json' })
+    const res = await importGrantPackage(file, true)
+
+    const [url, form, config] = mockPost.mock.calls[0]
+    expect(url).toBe('/org-grants/import')
+    expect(form).toBeInstanceOf(FormData)
+    expect((config as any).params).toEqual({ force: true })
+    expect(res.modules).toBe(3)
+  })
+
+  it('importGrantPackage：force=false 时不带 force 参数', async () => {
+    mockPost.mockResolvedValue({ data: { org_code: 'C001', version: 1, modules: 1, signed: true } })
+    const file = new File(['{}'], 'pkg3.json', { type: 'application/json' })
+    await importGrantPackage(file, false)
+
+    const [, , config] = mockPost.mock.calls[0]
+    expect((config as any).params).toBeUndefined()
+  })
+
   it('importGrantPackage：无 data 包裹时直返响应', async () => {
     mockPost.mockResolvedValue({ org_code: 'C002', version: 5, modules: 1, signed: false })
     const res = await importGrantPackage(new File(['{}'], 'p.json'))
