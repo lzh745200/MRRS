@@ -38,6 +38,7 @@ import app.api.v1.system.metrics as metrics_mod
 import app.api.v1.system.system as system_mod
 import app.api.v1.system.tasks as tasks_mod
 import app.api.v1.system.zero_trust as zt_mod
+from app.core.package_integrity import sign_manifest
 from app.api.v1.system.audit import BatchDeleteRequest
 from app.core.cache import CacheManager, SimpleCache
 
@@ -219,7 +220,7 @@ class TestConfigPackageJsonRoundTrip:
         svc.get.return_value = None
         with patch.object(cfg_pkg_mod, "SystemConfigService", return_value=svc):
             body = cfg_pkg_mod.ConfigPackageImportRequest(
-                data=json.dumps({"name": "pkg", "configs": {"nested": {"a": [1, 2]}}}),
+                data=json.dumps(sign_manifest({"name": "pkg", "configs": {"nested": {"a": [1, 2]}}}, None)),
                 overwrite=True,
             )
             result = await cfg_pkg_mod.import_config_package(

@@ -480,13 +480,10 @@ class TestListVillages:
 class TestDeleteFlows:
     async def test_batch_delete_zero_affected_skips_backup(self, monkeypatch):
         # 817->821：delete_count 为 0 时不触发即时备份
+        # W27：批量删除已收紧为**管理员专属**（绕过单条审批门的高危路径），
+        # 且不再创建 entity_id=0 的伪审批任务。
         monkeypatch.setattr("app.core.security.verify_password", lambda *a, **k: True)
         monkeypatch.setattr(sv, "apply_scope_filter", lambda query, *a, **k: query)
-        submitted = {}
-        monkeypatch.setattr(
-            sv, "submit_entity_change_approval",
-            lambda *a, **k: submitted.setdefault("task", 55),
-        )
         backup = MagicMock()
         monkeypatch.setattr(
             "app.services.immediate_backup.trigger_immediate_backup", backup
@@ -504,14 +501,15 @@ class TestDeleteFlows:
                                role="admin", is_superuser=True)
         resp = await sv.batch_delete_villages(data, current_user=user, db=db)
         assert resp["data"]["deleted"] == 0
-        assert resp["data"]["approval_task_id"] == 55
+        assert "approval_task_id" not in resp["data"]
         backup.assert_not_called()
 
     async def test_batch_delete_wrong_password_raises(self, monkeypatch):
         monkeypatch.setattr("app.core.security.verify_password", lambda *a, **k: False)
         db = MagicMock()
         data = sv.BatchDeleteRequest(ids=[1], confirm_password="bad")
-        user = SimpleNamespace(id=1, hashed_password="h")
+        # W27：批量删除需管理员；用管理员用户以触达密码校验分支
+        user = SimpleNamespace(id=1, hashed_password="h", role="admin", is_superuser=True)
         with pytest.raises(HTTPException) as ei:
             await sv.batch_delete_villages(data, current_user=user, db=db)
         assert ei.value.status_code == 400
@@ -519,10 +517,19 @@ class TestDeleteFlows:
     async def test_batch_delete_empty_ids_raises(self):
         db = MagicMock()
         data = sv.BatchDeleteRequest(ids=[], confirm_password="pw")
-        user = SimpleNamespace(id=1)
+        user = SimpleNamespace(id=1, role="admin", is_superuser=True)
         with pytest.raises(HTTPException) as ei:
             await sv.batch_delete_villages(data, current_user=user, db=db)
         assert ei.value.status_code == 400
+
+    async def test_batch_delete_requires_admin(self):
+        """W27：非管理员批量删除 → 403（改走单条删除的审批门）。"""
+        db = MagicMock()
+        data = sv.BatchDeleteRequest(ids=[1], confirm_password="pw")
+        user = SimpleNamespace(id=1, role="user", is_superuser=False)
+        with pytest.raises(HTTPException) as ei:
+            await sv.batch_delete_villages(data, current_user=user, db=db)
+        assert ei.value.status_code == 403
 
     async def test_delete_village_already_recycled_conflicts(self, monkeypatch):
         # 958：已在回收站的记录重复 DELETE → 409
@@ -545,17 +552,14 @@ class TestDeleteFlows:
 
         monkeypatch.setattr(sv, "_invalidate_village_cache", _noop)
         monkeypatch.setattr(sv, "_record_village_change", MagicMock())
-
-        async def _submit(*a, **k):
-            return 1
-
-        monkeypatch.setattr(sv, "submit_entity_change_approval", _submit)
         db = MagicMock()
-        user = SimpleNamespace(id=1)
+        # W27：管理员直通（is_superuser=True）→ 即时软删且不建伪审批任务
+        user = SimpleNamespace(id=1, role="admin", is_superuser=True)
         resp = await sv.delete_village(1, current_user=user, db=db)
         assert resp["code"] == 200
         assert village.is_active is False
         assert village.deleted_at is not None
+        assert "approval_task_id" not in resp["data"]
 
 
 # ==================== 回收站：预览 / 恢复 / 彻底删除 ====================
@@ -594,12 +598,12 @@ class TestRecycleBinFlows:
 
         monkeypatch.setattr(sv, "_invalidate_village_cache", _noop)
         monkeypatch.setattr(sv, "_record_village_change", MagicMock())
-        monkeypatch.setattr(sv, "submit_entity_change_approval", lambda *a, **k: 11)
         db = MagicMock()
         resp = await sv.restore_village(
-            1, current_user=SimpleNamespace(id=1, role="admin"), db=db
+            1, current_user=SimpleNamespace(id=1, role="admin", is_superuser=True), db=db
         )
-        assert resp["data"]["approval_task_id"] == 11
+        # W27：恢复端点本身已 require_admin，直通生效、不再建伪审批任务
+        assert "approval_task_id" not in resp["data"]
         assert valley.is_active is True
         assert valley.deleted_at is None
 

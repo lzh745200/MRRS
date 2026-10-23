@@ -15,6 +15,9 @@ export const TILE_URL_TEMPLATE = '/api/v1/map/tiles/{z}/{x}/{y}.png'
 /** 瓦片版权标注（离线包无外网来源，标注为本机离线瓦片） */
 export const TILE_ATTRIBUTION = '离线瓦片'
 
+/** OSM/ODbL 署名（ODbL 要求在任何使用 OSM 数据的成品上显示） */
+export const OSM_ATTRIBUTION = '© OpenStreetMap contributors'
+
 /** 导入瓦片包上限：后端 multipart 默认上限 512MB（app/middleware/body_size_limit.py） */
 export const TILE_PACKAGE_MAX_BYTES = 512 * 1024 * 1024
 
@@ -109,6 +112,21 @@ export function isGcj02(manifest: TileManifest | null | undefined): boolean {
   const provider = manifest?.provider
   if (typeof provider !== 'string' || !provider.trim()) return false
   return GCJ02_PROVIDERS.includes(provider.trim().toLowerCase())
+}
+
+/**
+ * 底图署名文案：OSM 衍生瓦片必须显示 ODbL 署名，其余用"离线瓦片"。
+ * 判定依据：manifest.provider 含 osm，或 license 含 ODbL/OpenStreetMap（不区分大小写）。
+ */
+export function tileAttribution(manifest: TileManifest | null | undefined): string {
+  const provider = typeof manifest?.provider === 'string' ? manifest.provider.toLowerCase() : ''
+  const license = typeof manifest?.license === 'string' ? manifest.license.toLowerCase() : ''
+  const isOsm =
+    provider.includes('osm') ||
+    license.includes('osm') ||
+    license.includes('openstreetmap') ||
+    license.includes('odbl')
+  return isOsm ? OSM_ATTRIBUTION : TILE_ATTRIBUTION
 }
 
 /** 字节数 → 人类可读体积（0 / 非法值 → '0 B'） */

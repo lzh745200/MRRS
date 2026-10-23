@@ -196,13 +196,13 @@ class TestM29UpsertMissingKeys:
         s = session_factory()
         # organization_id 参与业务键判定（W18-D1/D5）：本机行必须带与导入目标
         # 一致的组织归属，否则会被判为「撞 id 的另一条记录」而改号插入。
-        s.add(School(id=501, name="原学校名", address="原地址", principal="原校长", organization_id=1))
+        s.add(School(id=501, name="原学校名", code="SCH-501", address="原地址", principal="原校长", organization_id=1))
         s.commit()
 
         svc = DataPackageService(s)
         imported, skipped, errors = svc._bulk_upsert_records(
             School,
-            [{"id": 501, "name": "新学校名"}],  # 未携带 address/principal
+            [{"id": 501, "name": "新学校名", "code": "SCH-501"}],  # 未携带 address/principal
             org_id=1,
             overwrite=True,
         )
@@ -220,13 +220,13 @@ class TestM29UpsertMissingKeys:
         from app.services.data_package_service import DataPackageService
 
         s = session_factory()
-        s.add(School(id=502, name="原学校", address="原地址", organization_id=1))
+        s.add(School(id=502, name="原学校", code="SCH-502", address="原地址", organization_id=1))
         s.commit()
 
         svc = DataPackageService(s)
         svc._bulk_upsert_records(
             School,
-            [{"id": 502, "name": "新学校", "address": None}],  # 显式 None 与缺键不同
+            [{"id": 502, "name": "新学校", "code": "SCH-502", "address": None}],  # 显式 None 与缺键不同
             org_id=1,
             overwrite=True,
         )
@@ -241,8 +241,8 @@ class TestM29UpsertMissingKeys:
         from app.services.data_package_service import DataPackageService
 
         s = session_factory()
-        s.add(School(id=503, name="A 校", address="A 地址", principal="A 校长", organization_id=1))
-        s.add(School(id=504, name="B 校", address="B 地址", principal="B 校长", organization_id=1))
+        s.add(School(id=503, name="A 校", code="SCH-503", address="A 地址", principal="A 校长", organization_id=1))
+        s.add(School(id=504, name="B 校", code="SCH-504", address="B 地址", principal="B 校长", organization_id=1))
         s.commit()
 
         svc = DataPackageService(s)
@@ -250,8 +250,8 @@ class TestM29UpsertMissingKeys:
         svc._bulk_upsert_records(
             School,
             [
-                {"id": 503, "name": "A 新", "address": "A 新地址"},
-                {"id": 504, "name": "B 新", "principal": "B 新校长"},
+                {"id": 503, "name": "A 新", "code": "SCH-503", "address": "A 新地址"},
+                {"id": 504, "name": "B 新", "code": "SCH-504", "principal": "B 新校长"},
             ],
             org_id=1,
             overwrite=True,

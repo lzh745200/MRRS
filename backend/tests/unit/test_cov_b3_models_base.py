@@ -26,9 +26,9 @@ class TestSoftDeleteWithOperator:
 
 class TestBaseModelToDictDatetime:
     def test_to_dict_isoformat_for_datetime(self):
-        from app.models.annual_income import AnnualIncome
+        from app.models.annual_population import AnnualPopulation as _IncomeModel
 
-        income = AnnualIncome()
+        income = _IncomeModel()
         income.id = 1
         income.created_at = datetime(2024, 5, 6, 7, 8, 9, tzinfo=timezone.utc)
         income.updated_at = None
@@ -37,9 +37,9 @@ class TestBaseModelToDictDatetime:
         assert d["updatedAt"] is None
 
     def test_to_dict_snake_case(self):
-        from app.models.annual_income import AnnualIncome
+        from app.models.annual_population import AnnualPopulation as _IncomeModel
 
-        income = AnnualIncome()
+        income = _IncomeModel()
         income.id = 2
         d = income.to_dict(camel_case=False)
         assert "created_at" in d

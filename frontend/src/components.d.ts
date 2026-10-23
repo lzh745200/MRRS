@@ -107,6 +107,7 @@ declare module 'vue' {
     LayoutMobileBottomNav: typeof import('./components/layout/MobileBottomNav.vue')['default']
     MapOfflineMap: typeof import('./components/map/OfflineMap.vue')['default']
     MapPicker: typeof import('./components/MapPicker.vue')['default']
+    MapRasterTileLayer: typeof import('./components/map/RasterTileLayer.vue')['default']
     NavMenuSearchDialog: typeof import('./components/nav/MenuSearchDialog.vue')['default']
     PermissionMenuVisibilityPanel: typeof import('./components/permission/MenuVisibilityPanel.vue')['default']
     PermissionPermissionAssignmentDrawer: typeof import('./components/permission/PermissionAssignmentDrawer.vue')['default']

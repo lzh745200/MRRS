@@ -317,20 +317,42 @@ from app.services.effectiveness_service import EffectivenessService  # noqa: E40
 
 
 class TestEffectivenessEvaluateVillage:
-    def test_compute_indicators_and_rank_update(self):
+    def test_compute_indicators_and_rank_update(self, monkeypatch):
+        """评估写入 + 排名回写（排名循环是 `evaluate_village` 自身逻辑）。
+
+        W27：人均收入指标改读 ``village_income`` 后，`_compute_indicators` 的查询序列
+        变化较大；本用例聚焦 `evaluate_village` 的落库/排名编排，故对指标计算打桩，
+        指标本身的分支由 ``test_branch_gaps_group_c::TestEffectivenessServiceBranches`` 覆盖。
+        """
         village = SimpleNamespace(id=1, village_name="测试村")
-        income_obj = SimpleNamespace(per_capita_income_2025=10000)
-        prev_obj = SimpleNamespace(per_capita_income_2024=8000)
         row1 = SimpleNamespace(rank=None)
         row2 = SimpleNamespace(rank=1)
+
+        monkeypatch.setattr(
+            EffectivenessService,
+            "_compute_indicators",
+            staticmethod(lambda db, v, y: {
+                "economic": 100.0,
+                "social": 48.0,
+                "ecological": 70.0,
+                "indicators": {
+                    "per_capita_income": 10000.0,
+                    "income_growth_rate": 25.0,
+                    "infrastructure_count": 2,
+                    "industry_count": 3,
+                    "data_complete": True,
+                },
+            }),
+        )
 
         db = MagicMock()
         q = MagicMock()
         q.filter.return_value = q
         q.order_by.return_value = q
-        q.first.side_effect = [village, None, prev_obj]
-        q.all.side_effect = [[income_obj], [row1, row2]]
-        q.scalar.side_effect = [2, 3]
+        # first() 依次：①村庄存在性 → village；②同年度已有评估 → None（新建）。
+        # 多给几个 None 兜底，避免内部查询次数变化即 StopIteration。
+        q.first.side_effect = [village, None, None, None]
+        q.all.return_value = [row1, row2]
         db.query.return_value = q
 
         result = EffectivenessService.evaluate_village(db, 1, 2025, 99)

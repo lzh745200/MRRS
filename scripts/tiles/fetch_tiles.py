@@ -132,7 +132,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--zoom", default=DEFAULT_ZOOM, help=f"缩放范围（默认 {DEFAULT_ZOOM}）")
     parser.add_argument("--out", default=DEFAULT_OUT, help=f"输出目录（默认 {DEFAULT_OUT}）")
     parser.add_argument("--key", default="", help="天地图 tk（provider=tianditu 必填）")
+    parser.add_argument(
+        "--header",
+        action="append",
+        default=[],
+        metavar="NAME:VALUE",
+        help="附加请求头（可重复），如 --header 'Authorization: Bearer xxx'；内网瓦片服务用",
+    )
     parser.add_argument("--zoom-offset", type=int, default=0, help="URL 中 z 的偏移量（天地图 WMTS 层级校准）")
+    parser.add_argument(
+        "--scheme",
+        choices=("xyz", "tms"),
+        default="xyz",
+        help="瓦片编号方案：xyz（默认，y 自北向南）或 tms（y 自南向北，部分内网/GeoServer 服务用）",
+    )
     parser.add_argument("--rate", type=float, default=2.0, help="限速 req/s（默认 2）")
     parser.add_argument("--retries", type=int, default=3, help="单瓦片重试次数（默认 3）")
     parser.add_argument("--timeout", type=float, default=15.0, help="单请求超时秒数（默认 15）")
@@ -144,23 +157,45 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _tile_url(template: str, z: int, x: int, y: int, key: str, zoom_offset: int) -> str:
+def _tile_url(
+    template: str, z: int, x: int, y: int, key: str, zoom_offset: int, scheme: str = "xyz"
+) -> str:
     url_z = z + zoom_offset
+    url_y = y
+    if scheme == "tms":
+        # TMS 的 y 轴自南向北，与 XYZ 相反：同级别总行数 - 1 - y
+        url_y = (1 << url_z) - 1 - y
     return (
         template.replace("{z}", str(url_z))
         .replace("{x}", str(x))
-        .replace("{y}", str(y))
+        .replace("{y}", str(url_y))
+        .replace("{-y}", str((1 << url_z) - 1 - y))
         .replace("{key}", key)
         .replace("{s}", str((x + y) % 4 + 1))
     )
 
 
-def fetch_one(url: str, timeout: float, retries: int) -> bytes:
+def _parse_headers(raw_headers) -> dict:
+    """把 ``--header NAME:VALUE`` 列表解析为请求头字典（供内网瓦片服务鉴权）。"""
+    headers = {"User-Agent": USER_AGENT}
+    for item in raw_headers or []:
+        if ":" not in item:
+            raise TileToolError(f"--header 格式应为 NAME:VALUE，收到: {item!r}")
+        name, value = item.split(":", 1)
+        name = name.strip()
+        if not name:
+            raise TileToolError(f"--header 缺少头名称，收到: {item!r}")
+        headers[name] = value.strip()
+    return headers
+
+
+def fetch_one(url: str, timeout: float, retries: int, headers: dict = None) -> bytes:
     """抓取单张瓦片（带重试）；失败抛 TileToolError。"""
     last_error = "unknown"
+    request_headers = dict(headers or {"User-Agent": USER_AGENT})
     for attempt in range(1, max(1, retries) + 1):
         try:
-            request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            request = urllib.request.Request(url, headers=request_headers)
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 data = response.read(MAX_TILE_MEMBER_BYTES + 1)
             if len(data) > MAX_TILE_MEMBER_BYTES:
@@ -185,6 +220,7 @@ def main(argv=None) -> int:  # noqa: C901 - CLI 编排（参数校验/限速/重
         z_min, z_max = parse_zoom(args.zoom)
         profile = PROVIDERS[args.provider]
         template = args.url_template or profile["url"]
+        request_headers = _parse_headers(args.header)
         if profile.get("requires_key") and not args.key:
             if args.dry_run:
                 warn("provider=tianditu 缺少 --key，实际抓取会全部失败（dry-run 仅统计）")
@@ -237,7 +273,12 @@ def main(argv=None) -> int:  # noqa: C901 - CLI 编排（参数校验/限速/重
                 time.sleep(wait)
             last_request = time.monotonic()
             try:
-                data = fetch_one(_tile_url(template, z, x, y, args.key, args.zoom_offset), args.timeout, args.retries)
+                data = fetch_one(
+                    _tile_url(template, z, x, y, args.key, args.zoom_offset, args.scheme),
+                    args.timeout,
+                    args.retries,
+                    request_headers,
+                )
             except TileToolError as exc:
                 failures.append(f"{rel}\t{exc}")
                 continue

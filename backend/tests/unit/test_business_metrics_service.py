@@ -88,7 +88,7 @@ class TestGetFundUtilizationMetrics:
         mock_query.group_by.return_value.all.return_value = [("completed", 5, 50000.0)]
         mock_query.scalar.side_effect = [10, 100000.0]
         result = service.get_fund_utilization_metrics(mock_db)
-        assert result["total_funds"] == 10
+        assert result["funds_count"] == 10
         assert result["total_amount"] == 100000.0
         assert result["completed_funds"] == 5
         assert result["completed_amount"] == 50000.0
@@ -100,7 +100,7 @@ class TestGetFundUtilizationMetrics:
         mock_query.group_by.return_value.all.return_value = []
         mock_query.scalar.side_effect = [0, 0]
         result = service.get_fund_utilization_metrics(mock_db)
-        assert result["total_funds"] == 0
+        assert result["funds_count"] == 0
         assert result["total_amount"] == 0
         assert result["allocation_rate"] == 0
 

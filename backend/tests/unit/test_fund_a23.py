@@ -10,7 +10,6 @@ from datetime import date, datetime
 import pytest
 
 from app.models.fund import (
-    BudgetRecord,
     Fund,
     FundAttachment,
     _enrich_fund_time_fields,
@@ -112,32 +111,5 @@ class TestFundAttachmentToDict:
         assert d["created_at"] is None
 
 
-class TestBudgetRecordToDict:
-    def test_full_fields(self):
-        rec = BudgetRecord(
-            id=1,
-            year=2024,
-            category="infrastructure",
-            budget_amount=100,
-            used_amount=30,
-            remaining_reason=None,
-            remarks="备注",
-            created_at=datetime(2024, 1, 1, 8, 0),
-            updated_at=datetime(2024, 6, 1, 8, 0),
-        )
-        d = rec.to_dict()
-        assert d["year"] == 2024
-        assert d["budget_amount"] == 100.0
-        assert d["used_amount"] == 30.0
-        assert d["remaining"] == 70.0
-        assert d["created_at"] == "2024-01-01T08:00:00"
-        assert d["updated_at"] == "2024-06-01T08:00:00"
-
-    def test_none_amounts_and_timestamps(self):
-        rec = BudgetRecord(id=2, year=2024, category="education")
-        d = rec.to_dict()
-        assert d["budget_amount"] == 0.0
-        assert d["used_amount"] == 0.0
-        assert d["remaining"] == 0.0
-        assert d["created_at"] is None
-        assert d["updated_at"] is None
+# W27 P1（死模型清理）：`BudgetRecord` 已删除（迁移 r37_drop_budget_records_001）。
+# 原 TestBudgetRecordToDict 两个用例随之移除 —— 不保留"测不存在的模型"的空壳。

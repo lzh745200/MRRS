@@ -110,12 +110,11 @@ def check_village_references(village_id: int):
     if settings.DATABASE_URL.startswith("sqlite"):
         event.listens_for(engine, "connect")(_configure_sqlite_pragmas)
 
-    # 需要检查的表
+    # 需要检查的表（annual_income 已于 W27 删除，见迁移 r38）
     tables_to_check = [
         'annual_population',
         'annual_infrastructure',
         'annual_industry',
-        'annual_income',
         'projects',
         'work_logs',
         'funds',

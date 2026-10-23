@@ -262,35 +262,10 @@ class FundAttachment(Base):
         }
 
 
-class BudgetRecord(Base):
-    """预算记录"""
-    __tablename__ = "budget_records"
-    __table_args__ = (
-        Index("ix_budget_records_year", "year"),
-        Index("ix_budget_records_category", "category"),
-        {"extend_existing": True},
-    )
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    year = Column(Integer, nullable=False, comment="年度")
-    category = Column(String(100), nullable=False, comment="预算类别")
-    budget_amount = Column(Numeric(15, 4), default=0, comment="预算金额(万元)")
-    used_amount = Column(Numeric(15, 4), default=0, comment="已使用金额(万元)")
-    remaining_reason = Column(Text, nullable=True, comment="结余原因")
-    remarks = Column(Text, nullable=True, comment="备注")
-    created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
-    updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now(), comment="更新时间")
-
-    def to_dict(self):
-        return {
-            "id": self.id, "year": self.year, "category": self.category,
-            "budget_amount": float(self.budget_amount or 0),
-            "used_amount": float(self.used_amount or 0),
-            "remaining": float((self.budget_amount or 0) - (self.used_amount or 0)),
-            "remaining_reason": self.remaining_reason, "remarks": self.remarks,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-        }
+# W27 P1（死模型清理）：`BudgetRecord`（表 `budget_records`）已删除。
+# 它全仓零引用（无端点/服务使用），且缺 organization_id/created_by 无法做数据域
+# 隔离；真正的预算功能是 `FundBudget`（models/fund_budget.py，带 organization_id）。
+# 数据库侧由迁移 `r37_drop_budget_records_001` 走三分支清理（空表删除/有数据改名归档）。
 
 
 # 确保关联模型在映射器配置前注册至 SQLAlchemy，以便

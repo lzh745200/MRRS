@@ -99,7 +99,9 @@ class TestSummaryExcludesSoftDeleted:
         assert resp.status_code == 200, resp.text[:200]
         data = resp.json().get("data") or resp.json()
         assert data["total_projects"] == 1
-        assert data["total_funds"] == 1
+        # W27：该字段原名为 total_funds 但值是**条数**（COUNT），与 dashboard 里
+        # 同名却是 SUM(amount) 的字段同名异义，已更名为 funds_count。
+        assert data["funds_count"] == 1
         assert data["approved_funds_amount"] == 100
 
     def test_projects_statistics_exclude_deleted(self, client_and_db):

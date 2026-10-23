@@ -72,7 +72,8 @@ QUERIES = [
     ("Keyset 分页", "SELECT * FROM funds WHERE id < 10000 ORDER BY id DESC LIMIT 20", {}),
     (
         "年度收入查询",
-        "SELECT * FROM annual_income WHERE supported_village_id = 1 AND year = 2024",
+        # W27/r38：annual_income 已删除，收入统一走行式 village_income
+        "SELECT * FROM village_income WHERE supported_village_id = 1 AND year = 2024",
         {},
     ),
     (

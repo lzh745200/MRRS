@@ -146,6 +146,31 @@ class TestContentChecksum:
         assert preview["success"] is False
         assert any("校验和" in e for e in preview.get("errors", []))
 
+    def test_unsigned_package_rejected_when_pubkey_configured(
+        self, two_machines, monkeypatch
+    ):
+        """W27（P0-7）：本机配了 `PACKAGE_PUBKEY` 时，**未签名**包必须被拒绝。
+
+        这条覆盖 `import_package` 里"签名校验失败 → 直接返回 success=False"的
+        调用点（`_signature_error` 本身另有无密钥/验签两类单测）。
+        """
+        from app.core.grant_signing import generate_keypair
+
+        import app.core.config as cfg
+
+        session_a, session_b, _, _ = two_machines
+        exported = PermissionPackageService(session_a()).export_package()
+        src = exported["file_path"]
+        assert src
+
+        _priv, pub = generate_keypair()
+        monkeypatch.setattr(cfg.settings, "PACKAGE_PUBKEY", pub, raising=False)
+
+        preview = PermissionPackageService(session_b()).import_package(src)
+        assert preview["success"] is False
+        assert "签名" in preview.get("message", "")
+        assert any("未签名" in e for e in preview.get("errors", []))
+
         try:
             os.unlink(src)
         except OSError:

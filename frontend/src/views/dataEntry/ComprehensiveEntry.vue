@@ -752,10 +752,17 @@
 
 <script setup lang="ts">
 import { format } from '@/utils'
+import { unwrapList } from '@/utils/unwrapList'
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { post } from '@/api/request'
+import {
+  createSupportedVillage,
+  getSupportedVillages,
+  saveCommitteeData,
+  saveYearlySectionData,
+  updateSupportedVillage,
+} from '@/api/supportedVillage'
 import {
   PROVINCES,
   HELP_TYPES,
@@ -1183,14 +1190,84 @@ function goPrevStep() {
   }
 }
 
-const handleSaveDraft = async () => {
+/**
+ * 保存草稿（W27 修复 W26-P0-5「综合录入假提交」）。
+ *
+ * ## 原实现的缺陷
+ * 草稿按钮会调用 `submitVillageData()` —— **在数据库里新建一个帮扶村**。
+ * 用户点「保存草稿」只是暂存，却产生了正式业务记录（还可能重复建村）。
+ *
+ * ## 现行为
+ * 草稿**只写本机 localStorage**（`saveDraftToLocal`），绝不触达服务器；
+ * 文案明确写「本机」，避免用户误以为已入库。
+ */
+const handleSaveDraft = () => {
   saveDraftToLocal()
-  try {
-    await submitVillageData()
-    ElMessage.success('草稿已保存到服务器')
-  } catch (e: any) {
-    ElMessage.success('草稿已保存到本地')
+  ElMessage.success('草稿已保存到本机（未提交到服务器）')
+}
+
+/**
+ * 本次提交**无法保存**的内容（W27：必须显式告知，禁止静默丢弃）。
+ *
+ * ## 为什么会有"无法保存"
+ * 本页表单字段与后端年度板块模型存在结构性差异，例如：
+ *   - 产业帮扶：前端是 `projectType/projectCount`，后端是
+ *     `planting_breeding / workshop / rural_tourism / other_industry`（分类口径不同）；
+ *   - 党建/医疗/教育：前端是 `activityType/activityCount`，后端是
+ *     `paired_branches / party_instructors / joint_activities / ...`；
+ *   - 消费/就业：前端金额字段与后端 `village_products_purchase` 等语义不完全等价。
+ * 这些差异需要业务口径确认后才能落地映射 —— **不得臆造映射**（会把数据写错类别）。
+ * 因此这里如实列出"不会保存"的项，让用户在提交前就知道。
+ */
+function collectUnsavedItems(): string[] {
+  const items: string[] = []
+  const i = formData.industryHelp
+  if (i.projectType || i.projectCount || i.employmentDriven) {
+    items.push('产业帮扶：项目类型 / 项目数量 / 带动就业人数')
   }
+  const infra = formData.infrastructureHelp
+  if (infra.projectType || infra.projectCount || infra.beneficiaries) {
+    items.push('基础设施：项目类型 / 项目数量 / 受益人数')
+  }
+  const party = formData.partyBuildingHelp
+  if (party.activityType || party.activityCount) {
+    items.push('党建帮扶：活动类型 / 活动次数')
+  }
+  const med = formData.medicalHelp
+  if (med.activityType || med.activityCount || med.beneficiaries) {
+    items.push('医疗帮扶：活动类型 / 活动次数 / 受益人数')
+  }
+  const cons = formData.consumptionHelp
+  if (cons.purchaseAmount || cons.productType || cons.salesAmount) {
+    items.push('消费帮扶：采购金额 / 产品类型 / 销售金额')
+  }
+  const emp = formData.employmentHelp
+  if (emp.employedCount || emp.trainedCount || emp.laborExportCount) {
+    items.push('就业帮扶：已就业 / 已培训 / 劳务输出人数')
+  }
+  const edu = formData.educationHelp
+  if (edu.activityType || edu.activityCount) {
+    items.push('教育帮扶：活动类型 / 活动次数')
+  }
+  if (formData.committeeInfo.members?.length) {
+    items.push('村委成员名单（本接口只保存村委概况/特色产业/集体收入）')
+  }
+  if (formData.honors?.length) {
+    items.push('荣誉记录')
+  }
+  const collab = formData.collaboration
+  if (
+    collab?.isCrossUnit ||
+    collab?.isCrossProvince ||
+    collab?.isCrossCity ||
+    collab?.description
+  ) {
+    items.push('跨单位协作信息')
+  }
+  if (fileList.value?.length) {
+    items.push('本页附件（请到帮扶村详情的对应板块上传）')
+  }
+  return items
 }
 
 const handleSubmit = async () => {
@@ -1199,16 +1276,26 @@ const handleSubmit = async () => {
     return
   }
   try {
-    await ElMessageBox.confirm('确认提交数据进行审核？提交后将清除本地草稿。', '提交确认', {
-      type: 'info',
-    })
+    // W27：把"不会保存"的内容在确认框里如实列出 —— 原实现静默丢弃，
+    // 用户以为 16 个板块都提交了，实际只入库 3 个。
+    const unsaved = collectUnsavedItems()
+    const unsavedTip = unsaved.length
+      ? `<div style="margin-top:8px;text-align:left;line-height:1.7">` +
+        `<b>以下内容本次不会保存到服务器：</b><br/>· ${unsaved.join('<br/>· ')}` +
+        `</div>`
+      : ''
+    await ElMessageBox.confirm(
+      `确认提交数据进行审核？提交后将清除本地草稿。${unsavedTip}`,
+      '提交确认',
+      { type: unsaved.length ? 'warning' : 'info', dangerouslyUseHTMLString: true }
+    )
     await submitVillageData()
     clearDraft()
     ElMessage.success('数据已提交审核')
     currentStep.value = 0
   } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(e?.response?.data?.detail || '提交失败')
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error(e?.response?.data?.detail || e?.message || '提交失败')
     }
   }
 }
@@ -1222,6 +1309,64 @@ onUnmounted(() => {
   if (autoSaveTimer) clearInterval(autoSaveTimer)
 })
 
+/**
+ * 解析目标帮扶村：同「组织 + 县 + 村名」视为同一条记录，复用而非重复建村。
+ *
+ * W27（W26-P0-5）：原实现**无条件** `POST /supported-villages`，
+ * 同一村每提交一次就多一条重复记录（后端业务键也是同样口径）。
+ * 这里先按键查询，命中则改为更新。
+ */
+async function resolveVillageId(payload: Record<string, any>): Promise<number | null> {
+  const name = (payload.village_name || '').trim()
+  const county = (payload.county || '').trim()
+  if (!name) return null
+  try {
+    const res: any = await getSupportedVillages({
+      keyword: name,
+      village_name: name,
+      page: 1,
+      page_size: 50,
+    })
+    // 统一走 unwrapList（禁止手写 .data.items 解包，见 W5-T5）；
+    // 该工具已覆盖 裸数组 / {items} / {data:[...]} / {data:{items}} 四种形态。
+    const list: any[] = unwrapList(res).items
+    const hit = list.find(
+      (v: any) =>
+        String(v.village_name || '').trim() === name && String(v.county || '').trim() === county
+    )
+    if (hit?.id) {
+      await updateSupportedVillage(Number(hit.id), payload)
+      return Number(hit.id)
+    }
+  } catch {
+    // 查询失败不阻断：退回新建（后端仍有唯一性/业务键保护）
+  }
+  const created = await createSupportedVillage(payload)
+  const village = created?.data ?? created
+  return village?.id ? Number(village.id) : null
+}
+
+/**
+ * 提交本次录入（W27 修复「综合录入假提交」）。
+ *
+ * ## 原实现的缺陷（W26-P0-5）
+ * 页面声称「整合 16 个帮扶数据板块」，但实际只提交 **3 个**
+ * （帮扶村基础信息、人口+收入、力量投入）；产业/基建/党建/医疗/消费/就业/教育/
+ * 村委信息 **全部静默丢弃**，最后仍然弹出「数据已提交审核」。
+ *
+ * ## 现实现
+ * 1. 帮扶村：按「组织+县+村名」复用或新建；
+ * 2. 人口 / 收入 / 力量投入：每年一条；
+ * 3. **产业 / 基建 / 党建 / 医疗 / 教育**：提交与后端模型**同名可映射**的字段
+ *    （`investment`，教育另有 `aided_students`）；
+ * 4. **村委信息**：`overview / special_industry / collective_income_desc /
+ *    collective_income_amount` 与后端一一对应；
+ * 5. 逐板块收集失败信息，**有任何失败就抛出**，让上层显示「提交失败」
+ *    而不是伪装成功。
+ *
+ * 字段口径不一致的部分（项目类型/活动类型/消费/就业等）不做臆造映射，
+ * 由 `collectUnsavedItems()` 在提交前明确列出。
+ */
 async function submitVillageData() {
   const b = formData.basicInfo
   const payload = {
@@ -1240,39 +1385,114 @@ async function submitVillageData() {
     is_revitalization_tier: b.isRevitalizationTier || undefined,
     is_in_overall_plan: b.includedInOverallPlan,
   }
-  const res = await post('/supported-villages', payload)
-  const village = res.data
-  const villageId = village?.id || village?.data?.id
+  const villageId = await resolveVillageId(payload)
+  if (!villageId) {
+    throw new Error('帮扶村创建失败：后端未返回有效 ID')
+  }
 
-  if (!villageId) return village
+  const failures: string[] = []
+  const attempt = async (label: string, fn: () => Promise<any>) => {
+    try {
+      await fn()
+    } catch (e: any) {
+      failures.push(`${label}：${e?.response?.data?.detail || e?.message || '保存失败'}`)
+    }
+  }
 
-  // 提交每年的人口数据和收入数据
+  // —— 人口 / 收入（每年一条）——
   for (const pop of formData.populationData) {
     if (pop.totalPopulation > 0 || pop.households > 0) {
-      await post(`/supported-villages/${villageId}/yearly/${pop.year}/population`, {
-        total_population: pop.totalPopulation,
-        total_households: pop.households,
-      })
+      await attempt(`人口数据(${pop.year})`, () =>
+        saveYearlySectionData(villageId, pop.year, 'population', {
+          total_population: pop.totalPopulation,
+          total_households: pop.households,
+        })
+      )
     }
     if (pop.perCapitaIncome > 0 || pop.collectiveEconomyIncome > 0) {
-      await post(`/supported-villages/${villageId}/yearly/${pop.year}/income`, {
-        per_capita_income: pop.perCapitaIncome,
-        collective_income: pop.collectiveEconomyIncome,
-      })
+      await attempt(`收入数据(${pop.year})`, () =>
+        saveYearlySectionData(villageId, pop.year, 'income', {
+          per_capita_income: pop.perCapitaIncome,
+          collective_income: pop.collectiveEconomyIncome,
+        })
+      )
     }
   }
 
-  // 提交每年的力量投入数据
+  // —— 力量投入（每年一条）——
   for (const inv of formData.investmentData) {
     if (inv.leaderVisits > 0 || inv.soldierVisits > 0) {
-      await post(`/supported-villages/${villageId}/yearly/${inv.year}/force-investment`, {
-        senior_leader_visits: inv.leaderVisits,
-        unit_soldier_visits: inv.soldierVisits,
-      })
+      await attempt(`力量投入(${inv.year})`, () =>
+        saveYearlySectionData(villageId, inv.year, 'force-investment', {
+          senior_leader_visits: inv.leaderVisits,
+          unit_soldier_visits: inv.soldierVisits,
+        })
+      )
     }
   }
 
-  return village
+  // —— 专项帮扶：只提交与后端模型同名可映射的字段 ——
+  const i = formData.industryHelp
+  if (i.investment > 0) {
+    await attempt('产业帮扶投入', () =>
+      saveYearlySectionData(villageId, i.year, 'industry', { investment: i.investment })
+    )
+  }
+  const infra = formData.infrastructureHelp
+  if (infra.investment > 0) {
+    await attempt('基础设施投入', () =>
+      saveYearlySectionData(villageId, infra.year, 'infrastructure', {
+        investment: infra.investment,
+      })
+    )
+  }
+  const party = formData.partyBuildingHelp
+  if (party.investment > 0) {
+    await attempt('党建帮扶投入', () =>
+      saveYearlySectionData(villageId, party.year, 'party-building', {
+        investment: party.investment,
+      })
+    )
+  }
+  const med = formData.medicalHelp
+  if (med.investment > 0) {
+    await attempt('医疗帮扶投入', () =>
+      saveYearlySectionData(villageId, med.year, 'medical', { investment: med.investment })
+    )
+  }
+  const edu = formData.educationHelp
+  if (edu.investment > 0 || edu.aidedStudents > 0) {
+    await attempt('教育帮扶', () =>
+      saveYearlySectionData(villageId, edu.year, 'education', {
+        investment: edu.investment,
+        aided_students: edu.aidedStudents,
+      })
+    )
+  }
+
+  // —— 村委信息：四个字段与后端 VillageCommitteeInfo 一一对应 ——
+  const committee = formData.committeeInfo
+  if (
+    committee.overview ||
+    committee.specialIndustry ||
+    committee.collectiveIncomeDesc ||
+    committee.collectiveIncomeAmount > 0
+  ) {
+    await attempt('村委信息', () =>
+      saveCommitteeData(villageId, {
+        overview: committee.overview || null,
+        special_industry: committee.specialIndustry || null,
+        collective_income_desc: committee.collectiveIncomeDesc || null,
+        collective_income_amount: committee.collectiveIncomeAmount || 0,
+      })
+    )
+  }
+
+  if (failures.length) {
+    // 不吞错：部分失败必须让用户知道，否则又是"看起来提交成功"
+    throw new Error(`${failures.length} 项保存失败：\n${failures.join('\n')}`)
+  }
+  return { id: villageId }
 }
 </script>
 

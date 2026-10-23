@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
+from app.core.package_integrity import sign_manifest
 from app.api.v1.control_package import (
     GenerateControlPackageRequest,
     _resolve_package_target_org,
@@ -149,7 +150,7 @@ class TestImportPackageTargetOrgGuard:
     async def test_import_with_manifest_missing_target_org_is_400(self):
         """导入路径端到端：清单缺 target_organization_id → 400，且不写入任何策略。"""
         content = _zip_bytes({
-            "manifest.json": json.dumps({"package_type": "control"}),
+            "manifest.json": json.dumps(sign_manifest({"package_type": "control"}, None)),
             "module_policy.json": json.dumps([
                 {"module_key": "funds", "visibility": "visible", "edit_mode": "editable"},
             ]),
@@ -167,7 +168,7 @@ class TestImportPackageTargetOrgGuard:
     async def test_import_with_boolean_target_org_is_400(self):
         """True 能通过 isinstance(x, int)，必须被显式 bool 判断拦下（line 290-291）。"""
         content = _zip_bytes({
-            "manifest.json": json.dumps({"package_type": "control", "target_organization_id": True}),
+            "manifest.json": json.dumps(sign_manifest({"package_type": "control", "target_organization_id": True}, None)),
             "module_policy.json": json.dumps([]),
         })
         file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=content))

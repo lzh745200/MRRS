@@ -138,10 +138,13 @@ class TestImportConfigPackage:
         assert resp.status_code == 403
 
     def test_success_overwrite_true(self, client_with_mocked_auth):
-        package_data = json.dumps({
+        from app.core.package_integrity import sign_manifest
+
+        # W27：配置包导入强制 checksum 校验 —— 测试数据须由 sign_manifest 封装
+        package_data = json.dumps(sign_manifest({
             "name": "test-pkg", "version": "1.0",
             "configs": {"k1": "v1", "k2": "v2"},
-        })
+        }, None))
         with patch("app.api.v1.system.config_package.SystemConfigService") as MockSvc:
             mock_svc = MagicMock()
             mock_svc.get.return_value = None
@@ -159,10 +162,12 @@ class TestImportConfigPackage:
             assert mock_svc.set.call_count == 2
 
     def test_success_overwrite_false_skips_existing(self, client_with_mocked_auth):
-        package_data = json.dumps({
+        from app.core.package_integrity import sign_manifest
+
+        package_data = json.dumps(sign_manifest({
             "name": "pkg", "version": "1.0",
             "configs": {"new_key": "val", "existing_key": "old_val"},
-        })
+        }, None))
         with patch("app.api.v1.system.config_package.SystemConfigService") as MockSvc:
             mock_svc = MagicMock()
             def mock_get(key):
@@ -196,14 +201,28 @@ class TestImportConfigPackage:
         )
         assert resp.status_code == 400
 
+    def test_empty_configs_after_integrity_check(self, client_with_mocked_auth):
+        """通过完整性校验但 configs 为空 → 400（W27：补 package_integrity 后的空集分支）。"""
+        from app.core.package_integrity import sign_manifest
+
+        sealed = json.dumps(sign_manifest({"name": "empty", "configs": {}}, None))
+        with patch("app.api.v1.system.config_package.SystemConfigService"):
+            resp = client_with_mocked_auth.post(self.URL, json={"data": sealed})
+        assert resp.status_code == 400
+        assert "没有配置数据" in resp.json().get("detail", "")
+
     def test_server_error(self, client_with_mocked_auth):
+        from app.core.package_integrity import sign_manifest
+
+        # W27：数据须先通过完整性校验，才能进入服务层并触发 500
+        sealed = json.dumps(sign_manifest({"configs": {"k": "v"}}, None))
         with patch("app.api.v1.system.config_package.SystemConfigService") as MockSvc:
             mock_svc = MagicMock()
             mock_svc.get.side_effect = Exception("Import failed")
             MockSvc.return_value = mock_svc
 
             resp = client_with_mocked_auth.post(
-                self.URL, json={"data": '{"configs": {"k": "v"}}'},
+                self.URL, json={"data": sealed},
             )
             assert resp.status_code == 500
 

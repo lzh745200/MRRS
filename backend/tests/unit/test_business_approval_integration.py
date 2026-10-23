@@ -80,27 +80,37 @@ class TestProjectApprovalIntegration:
 
 class TestVillageApprovalIntegration:
     def test_create_village_creates_task(self, client):
+        """W27 真门禁：**创建是增量操作，即时生效且不再产生审批任务**。
+
+        原断言"创建返回 approval_task_id"属伪闭环（任务无字段可回写）。真门禁只覆盖
+        非管理员的 update/delete；创建保持直通。门控路径见
+        ``test_w27_approval_gate.py::TestVillageEndpointGate``。
+        """
         resp = client.post("/api/v1/supported-villages", json={
             "village_name": "审批集成测试村",
             "county": "测试县",
         })
         assert resp.status_code in (200, 201)
-        task_id = resp.json()["data"].get("approval_task_id")
-        assert task_id is not None
-        assert any(t["id"] == task_id for t in _pending_of_type(client, "supported_village"))
+        data = resp.json()["data"]
+        assert data.get("id") is not None
+        assert "approval_task_id" not in data, "创建不应再创建伪审批任务"
+        # 记录已真实落库
+        got = client.get(f"/api/v1/supported-villages/{data['id']}")
+        assert got.status_code == 200
 
 
 class TestSchoolApprovalIntegration:
     def test_create_school_creates_task(self, client):
+        """W27 真门禁：学校创建即时生效，不再产生伪审批任务。"""
         resp = client.post("/api/v1/schools", json={
             "name": "审批集成测试学校",
             "code": "SCH-APPROVAL-001",
             "district": "测试区",
         })
         assert resp.status_code in (200, 201)
-        task_id = resp.json()["data"].get("approval_task_id")
-        assert task_id is not None
-        assert any(t["id"] == task_id for t in _pending_of_type(client, "school"))
+        data = resp.json()["data"]
+        assert data.get("id") is not None
+        assert "approval_task_id" not in data, "创建不应再创建伪审批任务"
 
     def test_scholarship_pending_creates_task_and_approve_writes_back(self, client):
         school_resp = client.post("/api/v1/schools", json={
@@ -143,7 +153,12 @@ class TestRuralWorkApprovalIntegration:
 
 
 class TestPolicyApprovalIntegration:
-    def test_publish_policy_creates_task(self, client):
+    def test_publish_policy_admin_direct_effect(self, client):
+        """W27 真门禁：管理员发布**直通**（即时生效），不再产生伪审批任务。
+
+        非管理员的发布改为「不落库 + 建 pending 任务」，见
+        ``test_w27_approval_gate.py::TestPolicyEndpointGate``。
+        """
         create_resp = client.post("/api/v1/policies", json={
             "title": "审批集成测试政策",
             "level": "provincial",
@@ -154,6 +169,8 @@ class TestPolicyApprovalIntegration:
 
         resp = client.post(f"/api/v1/policies/{policy_id}/publish")
         assert resp.status_code == 200
-        task_id = resp.json()["data"].get("approval_task_id")
-        assert task_id is not None
-        assert any(t["id"] == task_id for t in _pending_of_type(client, "policy"))
+        data = resp.json()["data"]
+        assert "approval_task_id" not in data, "管理员直通不应创建伪审批任务"
+        # 状态已即时生效
+        detail = client.get(f"/api/v1/policies/{policy_id}").json()["data"]
+        assert detail["status"] == "active"

@@ -29,19 +29,87 @@ from app.services.approval_workflow_service import (
     ApprovalWorkflowService,
     submit_entity_change_approval,
 )
+from app.services.approval_gate import open_change_approval, requires_approval
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/policies", tags=["政策法规"])
 
+# 真门禁：发布/归档的审批任务用该保留键携带"目标状态"
+POLICY_TARGET_STATUS_KEY = "__target_status__"
+
+
+def _assert_policy_writable(policy, current_user) -> None:
+    """政策写操作归属守卫（W27 修复 W26-P0-3「政策写操作越权」）。
+
+    ## 缺陷（W26 全栈检测确认）
+    `update` / `delete` / `publish` / `archive` / `upload` 五个写端点此前只经过
+    ``require_policy_operator_role()``（``api/v1/deps.py:31-38`` 的**函数体就是
+    ``return None``**，放行全部已认证角色），随后用**裸 ID** 取记录：
+
+        policy = db.query(Policy).filter(Policy.id == policy_id).first()
+
+    因此任意 ``user`` 角色账号可改写 / 软删 / 发布 / 归档**他人创建的未发布草稿**
+    （``viewer`` 被 ``ViewerReadOnlyMiddleware`` 拦在写方法之外，不受影响）。
+    而软删在模块内没有恢复入口（``delete_policy`` 只置 ``is_active=False``，
+    列表恒 ``filter(is_active)``）⇒ **越权即造成不可逆的政务资料丢失**。
+
+    ## 修复口径
+    写权限按「归属」收敛，与产品既定意图（``deps.py`` 文档："普通用户的政策法规
+    功能与管理员完全一致"）兼容 —— 每个用户仍可完整增删改查**自己**的政策：
+
+    * 管理员（``is_admin``：super_admin / admin / is_superuser）→ 全部可写；
+    * 普通用户 → 仅可写 ``created_by == 本人`` 的记录；
+    * 其余（含 ``created_by`` 为空的历史脏数据）→ **fail-closed 403**。
+
+    读侧早已是正确口径（``get_policy`` 的 ``is_admin or status=='active' or
+    created_by==me``），本次把写侧补齐，消除"读得比我改不得"的不对称。
+
+    Raises:
+        HTTPException(403): 非管理员试图写他人政策。
+    """
+    from app.core.permission_utils import is_admin
+
+    if is_admin(current_user):
+        return
+    creator = getattr(policy, "created_by", None)
+    if creator is not None and creator == getattr(current_user, "id", None):
+        return
+    raise HTTPException(status_code=403, detail="无权修改他人创建的政策")
+
 
 def _apply_policy_approval_result(db: Session, task) -> None:
-    """审批终态回写政策（注册到 ApprovalWorkflowService）
+    """审批通过后**真正应用**政策状态变更（W27 真门禁）。
 
-    政策发布/归档为管理员的直接操作（已即时生效），审批任务为审计留痕；
-    此处保留处理器接口，便于后续将发布动作改为审批门控。
+    ## 为什么需要它
+    原实现是空函数 ``_ = (db, task)``：审批「通过/驳回」对政策零效果，而
+    publish/archive 在提交时已即时改状态 —— 审批中心纯装饰（W26 检测 C2）。
+
+    ## change_data 约定（由 publish/archive 在门控路径写入）
+    ``{POLICY_TARGET_STATUS_KEY: "active"|"invalid", "title": ...}``
+
+    目标状态白名单校验，非法值只记 WARNING 不写库；政策不存在则放弃。
     """
-    _ = (db, task)
+    data = getattr(task, "change_data", None) or {}
+    target = data.get(POLICY_TARGET_STATUS_KEY)
+    policy_id = getattr(task, "entity_id", None)
+    if target not in ("active", "invalid"):
+        logger.warning(
+            "政策审批回写：非法目标状态 %r（task=%s）", target, getattr(task, "id", None)
+        )
+        return
+    if policy_id is None:
+        logger.warning("政策审批回写：任务缺少 entity_id（task=%s）", getattr(task, "id", None))
+        return
+    policy = db.query(Policy).filter(Policy.id == policy_id).first()
+    if policy is None:
+        logger.warning(
+            "政策审批回写：记录不存在，放弃（policy_id=%s task=%s）",
+            policy_id, getattr(task, "id", None),
+        )
+        return
+    setattr(policy, "status", target)
+    db.flush()
 
 
 ApprovalWorkflowService.register_entity_apply_handler("policy", _apply_policy_approval_result)
@@ -939,6 +1007,7 @@ async def upload_policy_file(
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
+    _assert_policy_writable(policy, current_user)
 
     # 扩展名（用于回写 file_type，与历史行为一致：存小写扩展名而非 MIME）
     _orig_name = file.filename or ""
@@ -1423,6 +1492,7 @@ async def update_policy(
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
+    _assert_policy_writable(policy, current_user)
 
     try:
         update_data = data.model_dump(exclude_unset=True)
@@ -1487,6 +1557,7 @@ async def delete_policy(
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
+    _assert_policy_writable(policy, current_user)
 
     policy.is_active = False
     safe_commit(db)
@@ -1509,26 +1580,39 @@ async def publish_policy(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """发布政策"""
+    """发布政策
+
+    W27 真门禁：非管理员的发布请求**不即时生效**，登记待审批任务；审批通过后由
+    ``_apply_policy_approval_result`` 写入 ``status="active"``，驳回则状态不变。
+    管理员直通（单机运维闭环）。
+    """
     require_policy_operator_role(current_user)
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
+    _assert_policy_writable(policy, current_user)
+
+    if requires_approval(current_user):
+        pending_task_id = open_change_approval(
+            db,
+            current_user=current_user,
+            entity_type="policy",
+            entity_id=policy_id,
+            title=f"政策发布：{policy.title}",
+            change_data={POLICY_TARGET_STATUS_KEY: "active", "title": policy.title},
+            original_data={"status": policy.status, "title": policy.title},
+        )
+        return success_response(
+            data={"id": policy_id, "approval_task_id": pending_task_id,
+                  "pending_approval": True},
+            message="发布已提交审批，审批通过后生效",
+        )
 
     setattr(policy, "status", "active")
     safe_commit(db)
     await _invalidate_policy_list_cache()
-    # 数据变更自动创建审批任务（Requirement 3.2）：政策发布进入待审批板块（审计留痕）
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="policy",
-        entity_id=policy_id,
-        submitter_id=current_user.id,
-        title=f"政策发布：{policy.title}",
-        change_data={"title": policy.title, "status": "active"},
-    )
-    return success_response(data={"id": policy_id, "approval_task_id": approval_task_id},
-                            message="发布成功")
+    # W27：管理员直通不建伪任务（变更已生效）
+    return success_response(data={"id": policy_id}, message="发布成功")
 
 
 @router.post("/{policy_id}/archive")
@@ -1537,26 +1621,37 @@ async def archive_policy(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """归档政策"""
+    """归档政策
+
+    W27 真门禁：同 publish —— 非管理员的归档请求进入审批门。
+    """
     require_policy_operator_role(current_user)
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
+    _assert_policy_writable(policy, current_user)
+
+    if requires_approval(current_user):
+        pending_task_id = open_change_approval(
+            db,
+            current_user=current_user,
+            entity_type="policy",
+            entity_id=policy_id,
+            title=f"政策归档：{policy.title}",
+            change_data={POLICY_TARGET_STATUS_KEY: "invalid", "title": policy.title},
+            original_data={"status": policy.status, "title": policy.title},
+        )
+        return success_response(
+            data={"id": policy_id, "approval_task_id": pending_task_id,
+                  "pending_approval": True},
+            message="归档已提交审批，审批通过后生效",
+        )
 
     setattr(policy, "status", "invalid")
     safe_commit(db)
     await _invalidate_policy_list_cache()
-    # 数据变更自动创建审批任务（Requirement 3.2）：政策归档进入待审批板块（审计留痕）
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="policy",
-        entity_id=policy_id,
-        submitter_id=current_user.id,
-        title=f"政策归档：{policy.title}",
-        change_data={"title": policy.title, "status": "invalid"},
-    )
-    return success_response(data={"id": policy_id, "approval_task_id": approval_task_id},
-                            message="归档成功")
+    # W27：管理员直通不建伪任务
+    return success_response(data={"id": policy_id}, message="归档成功")
 
 
 # ==================== 收藏API ====================
@@ -1659,3 +1754,13 @@ def _attachment_urls_of(policy: Policy) -> list:
         rel = _os.path.relpath(normalized, base).replace(_os.sep, "/")
         return [f"/uploads/{rel}"]
     return [fp]
+
+
+# ==================== 回收站（W27 P1）====================
+# 政策删除是软删（is_active=False），此前无恢复通道 —— 误删只能改库。
+# 放在文件末尾：`/batch-restore`、`/batch-purge` 必须晚于 `/batch-delete`
+# 与全部 `/{policy_id}/...` 路由注册，避免被动态段捕获。
+from app.api.v1.recycle_bin import register_recycle_bin_routes as _register_recycle  # noqa: E402
+from app.models.policy import Policy as _Policy  # noqa: E402
+
+_register_recycle(router, model=_Policy, resource="政策")

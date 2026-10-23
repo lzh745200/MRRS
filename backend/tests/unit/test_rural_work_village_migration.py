@@ -13,11 +13,11 @@ from sqlalchemy.pool import StaticPool
 
 
 def test_rural_models_only_expose_supported_village_id():
-    from app.models.rural_task import RuralTask
+    """W27：``rural_tasks`` 模块已下线，此处只校验 ``RuralWork`` 的村关联口径。"""
     from app.models.rural_work import RuralWork
     from app.models.supported_village import SupportedVillage
 
-    for model in (RuralWork, RuralTask):
+    for model in (RuralWork,):
         columns = model.__table__.c
         assert "supported_village_id" in columns
         assert "village_id" not in columns
@@ -127,37 +127,5 @@ class TestRuralWorkServiceVillageMigration:
         assert rows == [{"id": village.id, "name": "幸福村", "county": None}]
 
 
-class TestRuralTasksEndpointResponseFields:
-    def test_task_response_has_new_and_legacy_fields(self):
-        from types import SimpleNamespace
-
-        from app.api.v1.rural_tasks import _task_to_response
-
-        class Task:
-            supported_village_id = 9
-            supported_village = SimpleNamespace(village_name="幸福村")
-            rural_work = SimpleNamespace(name="产业帮扶")
-
-            def to_dict(self):
-                return {"id": 1, "title": "任务"}
-
-        payload = _task_to_response(Task())
-        assert payload["supported_village_id"] == 9
-        assert payload["village_id"] == 9
-        assert payload["village_name"] == "幸福村"
-        assert payload["rural_work_name"] == "产业帮扶"
-
-    def test_task_response_without_relations(self):
-        from app.api.v1.rural_tasks import _task_to_response
-
-        class Task:
-            supported_village_id = None
-            supported_village = None
-            rural_work = None
-
-            def to_dict(self):
-                return {"id": 2}
-
-        payload = _task_to_response(Task())
-        assert payload["village_name"] is None
-        assert payload["rural_work_name"] is None
+# W27：``class TestRuralTasksEndpointResponseFields`` 随 ``rural_tasks`` 模块下线一并删除
+# （该模块 9 个端点、RuralTask 模型、rural_task schema 均已移除，表由迁移归档）。

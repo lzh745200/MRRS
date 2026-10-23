@@ -627,7 +627,10 @@ class TestApproveDataReport:
 
         mock_svc = Mock()
         mock_svc.db = Mock()
-        mock_svc.db.query.return_value.filter.return_value.first.return_value = mock_report_row
+        # W27：包查询（第 2 次 first）必须显式返回 None，否则会走 confirm_import 分支
+        mock_svc.db.query.return_value.filter.return_value.first.side_effect = [
+            mock_report_row, None,
+        ]
         _setup_service_override(client_with_mocked_auth, mock_svc)
 
         with patch("app.services.data_package_service.DataPackageService") as mock_pkg_cls:
@@ -666,12 +669,49 @@ class TestApproveDataReport:
         _setup_service_override(client_with_mocked_auth, mock_svc)
 
         mock_pkg_svc = Mock()
-        mock_pkg_svc.confirm_import = AsyncMock()
+        # W27（W26-P0-6）：批准必须校验导入结果 —— mock 返回成功字典
+        mock_pkg_svc.confirm_import = AsyncMock(return_value={"success": True, "imported": 1})
 
         with patch("app.services.data_package_service.DataPackageService", return_value=mock_pkg_svc):
             resp = client_with_mocked_auth.post(f"{BASE}/1/approve")
             assert resp.status_code == 200
             mock_pkg_svc.confirm_import.assert_awaited_once()
+
+    def test_approve_aborted_when_import_result_not_success(self, client_with_mocked_auth):
+        """W27 核心回归（W26-P0-6）：导入未成功时不得置为「已批准」。
+
+        原实现忽略 `confirm_import` 返回值 —— 即使校验未通过/导入被拒，
+        上报也会被置为已批准，导致"上级审批通过但数据其实没进来"。
+        """
+        _setup_user_override(client_with_mocked_auth, org_id=1)
+        mock_report_row = Mock()
+        mock_report_row.id = 1
+        mock_report_row.status = "submitted"
+        mock_report_row.target_org_id = 1
+        mock_report_row.package_id = 10
+        mock_report_row._sa_instance_state = Mock()
+
+        mock_package = Mock()
+        mock_package.id = 10
+
+        mock_svc = Mock()
+        mock_svc.db = Mock()
+        mock_query = Mock()
+        mock_filter = Mock()
+        mock_filter.first.side_effect = [mock_report_row, mock_package]
+        mock_query.filter.return_value = mock_filter
+        mock_svc.db.query.return_value = mock_query
+        _setup_service_override(client_with_mocked_auth, mock_svc)
+
+        mock_pkg_svc = Mock()
+        mock_pkg_svc.confirm_import = AsyncMock(
+            return_value={"success": False, "errors": ["checksum mismatch"]}
+        )
+
+        with patch("app.services.data_package_service.DataPackageService", return_value=mock_pkg_svc):
+            resp = client_with_mocked_auth.post(f"{BASE}/1/approve")
+        assert resp.status_code == 400
+        assert mock_report_row.status == "submitted"   # 未被改为 approved
 
     def test_package_import_failure(self, client_with_mocked_auth):
         _setup_user_override(client_with_mocked_auth, org_id=1)

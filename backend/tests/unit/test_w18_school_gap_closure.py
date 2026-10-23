@@ -145,12 +145,12 @@ class TestCreateUpdateSchoolBranches:
 
         with patch.object(sch, "safe_commit"), \
                 patch.object(sch, "write_work_log"), \
-                patch.object(sch, "submit_entity_change_approval", return_value=7), \
                 patch.object(sch, "_invalidate_school_list_cache", AsyncMock()), \
                 patch("app.api.v1.data.data.dashboard.invalidate_dashboard_cache"):
             result = await sch.create_school(data, _user(), db)
 
-        assert result["data"]["approval_task_id"] == 7
+        # W27：创建即时生效，不再返回伪审批任务
+        assert "approval_task_id" not in result["data"]
         db.add.assert_called_once()
 
     async def test_update_school_code_no_conflict(self):
@@ -163,12 +163,12 @@ class TestCreateUpdateSchoolBranches:
         with patch.object(sch, "require_data_permission"), \
                 patch.object(sch, "safe_commit"), \
                 patch.object(sch, "write_work_log"), \
-                patch.object(sch, "submit_entity_change_approval", return_value=8), \
                 patch.object(sch, "_invalidate_school_list_cache", AsyncMock()), \
                 patch("app.api.v1.data.data.dashboard.invalidate_dashboard_cache"):
             result = await sch.update_school(1, data, _user(), db)
 
-        assert result["data"]["approval_task_id"] == 8
+        # W27：管理员直通，不再返回伪审批任务
+        assert "approval_task_id" not in result["data"]
         assert school.name == "新校名"
 
 

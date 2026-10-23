@@ -42,14 +42,40 @@ def _service(db):
 
 
 def _village(name, org_id):
-    from app.models.supported_village import SupportedVillage
+    """构造一条帮扶村导入记录。
+
+    W27：业务键改为「组织 + 行政区划 + 村名」（见
+    ``data_package_service.BUSINESS_KEYS``），因此这里必须带上行政区划字段 ——
+    否则业务键不可判定，记录会被 fail-safe 归入 relocated（新 id 插入）。
+    """
+    from app.models.supported_village import SupportedVillage  # noqa: F401 - 确保模型注册
 
     return {
         "id": 1,
         "village_name": name,
         "organization_id": org_id,
+        "province": "贵州省",
+        "city": "黔南州",
+        "county": "长顺县",
+        "township": "示范镇",
         "is_active": 1,
     }
+
+
+def _local_village(village_id, name, org_id, **kw):
+    """构造一条本机已存在的帮扶村（行政区划与 _village 默认值一致）。"""
+    from app.models.supported_village import SupportedVillage
+
+    return SupportedVillage(
+        id=village_id,
+        village_name=name,
+        organization_id=org_id,
+        province=kw.get("province", "贵州省"),
+        city=kw.get("city", "黔南州"),
+        county=kw.get("county", "长顺县"),
+        township=kw.get("township", "示范镇"),
+        is_active=kw.get("is_active", True),
+    )
 
 
 class TestPrimaryKeyCollisionAcrossMachines:
@@ -80,10 +106,10 @@ class TestPrimaryKeyCollisionAcrossMachines:
         assert rows[1].id != 1                   # 源 id 未被沿用
 
     def test_same_business_key_updates_in_place_when_overwrite(self, db):
-        """同一业务记录（村名+组织相同）才允许按主键更新。"""
+        """同一业务记录（组织 + 行政区划 + 村名相同）才允许按主键更新。"""
         from app.models.supported_village import SupportedVillage
 
-        db.add(SupportedVillage(id=1, village_name="同名村", organization_id=1, is_active=True))
+        db.add(_local_village(1, "同名村", 1))
         db.commit()
 
         svc = _service(db)
@@ -103,7 +129,7 @@ class TestPrimaryKeyCollisionAcrossMachines:
         """非覆盖模式：同一业务记录保持本机值（不被包内数据改写）。"""
         from app.models.supported_village import SupportedVillage
 
-        db.add(SupportedVillage(id=1, village_name="同名村", organization_id=1, is_active=True))
+        db.add(_local_village(1, "同名村", 1))
         db.commit()
 
         svc = _service(db)
@@ -114,6 +140,30 @@ class TestPrimaryKeyCollisionAcrossMachines:
         rows = db.query(SupportedVillage).all()
         assert len(rows) == 1
         assert rows[0].is_active is True
+
+    def test_same_org_but_different_village_never_overwrites_local(self, db):
+        """W26-P0-1 核心回归：**同组织**两台机器、主键相撞但村名不同。
+
+        修复前业务键只有 organization_id，同组织必然"判定为同一条"→ 本机真实村
+        被源机数据覆写（不可逆）。修复后必须两行共存、本机记录原样保留。
+        """
+        from app.models.supported_village import SupportedVillage
+
+        db.add(_local_village(1, "B机的真实村", 1))
+        db.commit()
+
+        svc = _service(db)
+        imp, _skip, errs = svc._bulk_upsert_records(
+            SupportedVillage, [_village("A机的村", 1)], org_id=1, overwrite=True
+        )
+        assert errs == []
+        assert imp == 1
+
+        rows = db.query(SupportedVillage).order_by(SupportedVillage.id).all()
+        assert len(rows) == 2, "同组织跨机导入不得覆写本机记录"
+        assert rows[0].village_name == "B机的真实村"
+        assert rows[1].village_name == "A机的村"
+        assert rows[1].id != 1
 
     def test_free_primary_key_inserts_directly(self, db):
         """主键空闲时行为不变：直接插入。"""
@@ -151,23 +201,49 @@ class TestPrimaryKeyCollisionAcrossMachines:
 class TestBusinessKeyHelper:
     """业务键抽取的边界。"""
 
+    _FULL = {
+        "organization_id": 3,
+        "province": "贵州省",
+        "city": "黔南州",
+        "county": "长顺县",
+        "township": "示范镇",
+        "village_name": "某村",
+    }
+
     def test_known_model_returns_key_tuple(self):
         from app.models.supported_village import SupportedVillage
         from app.services.data_package_service import _business_key_of
 
-        # W18-D5 修正：业务键只含不可变字段（organization_id）。village_name 可变
-        # （改名是增量更新的常见场景），含它会把"同一条记录的更新"误判成两条记录。
-        key = _business_key_of(SupportedVillage, {"village_name": "某村", "organization_id": 3})
-        assert key == (3,)
+        # W27：业务键 = 组织 + 县 + 村名（见 BUSINESS_KEYS 注释）。
+        # 旧实现只有 organization_id —— 同组织内恒相同，导致跨机导入必覆写（P0-1）。
+        key = _business_key_of(SupportedVillage, self._FULL)
+        assert key == (3, "长顺县", "某村")
+
+    def test_key_is_stable_regardless_of_dict_order(self):
+        from app.models.supported_village import SupportedVillage
+        from app.services.data_package_service import _business_key_of
+
+        reversed_dict = dict(reversed(list(self._FULL.items())))
+        assert _business_key_of(SupportedVillage, self._FULL) == _business_key_of(
+            SupportedVillage, reversed_dict
+        )
 
     def test_missing_key_part_returns_none(self):
         from app.models.supported_village import SupportedVillage
         from app.services.data_package_service import _business_key_of
 
-        # 缺 organization_id（唯一业务键字段）→ None
-        assert _business_key_of(SupportedVillage, {"village_name": "某村"}) is None
-        # organization_id 为空串 → None（无法判定租户归属）
-        assert _business_key_of(SupportedVillage, {"village_name": "某村", "organization_id": "  "}) is None
+        # 缺 organization_id → None
+        rec = dict(self._FULL)
+        rec.pop("organization_id")
+        assert _business_key_of(SupportedVillage, rec) is None
+        # 业务键三要素任一为空 → None（不可判定 → 由调用方按 relocated 处理）
+        for field in ("organization_id", "county", "village_name"):
+            partial = dict(self._FULL)
+            partial[field] = "  "
+            assert _business_key_of(SupportedVillage, partial) is None, f"{field} 空白时应不可判定"
+        # 非业务键字段缺失不影响判定（乡镇常缺填，不能因此退化为 relocated）
+        partial = {k: v for k, v in self._FULL.items() if k != "township"}
+        assert _business_key_of(SupportedVillage, partial) == (3, "长顺县", "某村")
 
     def test_unknown_model_returns_none(self):
         from app.services.data_package_service import _business_key_of

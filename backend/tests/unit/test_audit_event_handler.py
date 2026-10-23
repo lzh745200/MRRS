@@ -189,10 +189,11 @@ class TestAuditEventLifecycle:
         from app.services.audit_event_handler import setup_audit_events
         with patch("app.services.audit_event_handler.event.listen") as mock_listen:
             result = setup_audit_events()
-            # 26 个默认模型 * 3 个事件 = 78
-            # （user_sessions 是基础设施表，2026-10-14 有意不纳入业务审计事件）
-            assert result == 26
-            assert mock_listen.call_count == 78
+            # 25 个默认模型 * 3 个事件 = 75
+            # （user_sessions 是基础设施表，2026-10-14 有意不纳入业务审计事件；
+            #   rural_tasks 于 W27 随模块下线移出审计注册，26 → 25）
+            assert result == 25
+            assert mock_listen.call_count == 75
 
     def test_setup_custom_models(self):
         from app.services.audit_event_handler import setup_audit_events

@@ -1,6 +1,6 @@
 {
   "$comment": "升级演练（scripts/upgrade_rehearsal.py）的显式契约：这里列出的表允许在升级后消失。语义：原表名消失时旧库该表必须为 0 行；否则必须改名为 legacy_<表名> 且行数不变。",
-  "revision": "r35_drop_legacy_tables_001",
+  "revision": "r41_drop_issues_001",
   "archive_prefix": "legacy_",
   "legacy_tables": [
     "workflow_instances",
@@ -8,6 +8,10 @@
     "comments",
     "messages_extended",
     "sentiment_keywords",
-    "sentiment_reports"
+    "sentiment_reports",
+    "rural_tasks",
+    "budget_records",
+    "annual_income",
+    "issues"
   ]
 }

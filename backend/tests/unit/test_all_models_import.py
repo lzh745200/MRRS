@@ -77,9 +77,8 @@ class TestModelClassesImport:
 
 
     def test_import_issue_tracking(self):
-        """测试导入IssueTracking"""
-        from app.models.issue_tracking import Issue, Feedback
-        assert Issue is not None
+        """测试导入 IssueTracking（W27：Issue 已删除，仅 Feedback 在用）"""
+        from app.models.issue_tracking import Feedback
         assert Feedback is not None
 
     def test_import_effectiveness(self):
@@ -94,12 +93,12 @@ class TestModelClassesImport:
         assert DataConflict is not None
 
     def test_import_annual_models(self):
-        """测试导入年度模型"""
-        from app.models.annual_income import AnnualIncome
+        """测试导入年度模型（W27：AnnualIncome 已删除，人均收入统一到 VillageIncome）"""
         from app.models.annual_industry import AnnualIndustry
         from app.models.annual_infrastructure import AnnualInfrastructure
         from app.models.annual_population import AnnualPopulation
-        assert AnnualIncome is not None
+        from app.models.supported_village import VillageIncome
+        assert VillageIncome is not None
         assert AnnualIndustry is not None
         assert AnnualInfrastructure is not None
         assert AnnualPopulation is not None
@@ -108,8 +107,10 @@ class TestModelRelationships:
     """测试模型关系"""
 
     def test_village_relationships(self):
-        """W22：乡村工作挂帮扶村（SupportedVillage），遗留 Village 模型已删除。"""
-        from app.models.rural_task import RuralTask
+        """W22：乡村工作挂帮扶村（SupportedVillage），遗留 Village 模型已删除。
+
+        W27：``rural_tasks`` 模块已下线，此处只校验 ``RuralWork``。
+        """
         from app.models.rural_work import RuralWork
         from app.models.supported_village import SupportedVillage
 
@@ -117,9 +118,6 @@ class TestModelRelationships:
         assert "supported_village_id" in RuralWork.__table__.columns
         assert "village_id" not in RuralWork.__table__.columns
         assert RuralWork.supported_village.property.mapper.class_ is SupportedVillage
-        assert "supported_village_id" in RuralTask.__table__.columns
-        assert "village_id" not in RuralTask.__table__.columns
-        assert RuralTask.supported_village.property.mapper.class_ is SupportedVillage
 
     def test_user_relationships(self):
         """测试用户模型关系"""

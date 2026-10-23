@@ -29,12 +29,14 @@ def _village_q(existing_ids=(), first_value="__unset__"):
 class TestClassifyImportRecordsEdges:
     """W18-D1：主键碰撞三分类的兜底分支。"""
 
-    def test_missing_business_key_is_treated_as_same(self, tmp_path):
-        """记录缺业务键（组织为空）→ 无法判定身份 → 保守按同一记录。
+    def test_missing_business_key_goes_to_relocated(self, tmp_path):
+        """记录缺业务键 → 无法判定身份 → **fail-safe 归入 relocated（新 id 插入）**。
 
-        W18-D5 起 villages 的业务键只含不可变字段 organization_id（村名可变，
-        改名是增量更新常见场景）。此用例的组织为空 → `_business_key_of` 返回
-        None → `_classify_import_records` 归入 same（不覆写、也不凭空插入重复行）。
+        W27（W26 全栈检测 P0-1）修正：旧实现把 ``key is None`` 归入 ``same``，
+        而 ``same`` 在 overwrite=True 时会**覆写本机同主键记录** —— 业务键不可判定
+        恰恰意味着"我们并不知道它是不是同一条记录"，此时覆写属不可逆的数据丢失。
+        现改为 relocated：去掉主键后以新 id 插入，本机原记录保持不动。
+        代价是可能产生重复行（可人工合并、可恢复），这是有意的安全取舍。
         """
         from app.models.supported_village import SupportedVillage
 
@@ -48,11 +50,16 @@ class TestClassifyImportRecordsEdges:
             "id",
         )
         assert free == []
-        assert len(same) == 1
-        assert relocated == []
+        assert same == [], "业务键不可判定时绝不能判为同一条记录"
+        assert len(relocated) == 1
 
     def test_local_row_vanished_falls_back_to_relocated(self, tmp_path):
-        """主键命中但本地行已不存在（并发删除）→ 按"不同记录"改号插入。"""
+        """主键命中但本地行已不存在（并发删除）→ 按"不同记录"改号插入。
+
+        W27 备注：记录必须带齐业务键（`organization_id` + `county` + `village_name`），
+        否则会在更早的「业务键不可判定」分支就 continue，走不到本用例要验证的
+        「主键占用但本地行消失」路径（这也是该分支一度成为覆盖率最后一处缺口的原因）。
+        """
         from app.models.supported_village import SupportedVillage
 
         db = MagicMock()
@@ -61,7 +68,7 @@ class TestClassifyImportRecordsEdges:
 
         free, same, relocated = svc._classify_import_records(
             SupportedVillage,
-            [{"id": 1, "village_name": "某村", "organization_id": 1}],
+            [{"id": 1, "village_name": "某村", "county": "某县", "organization_id": 1}],
             "id",
         )
         assert free == []

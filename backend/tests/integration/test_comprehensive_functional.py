@@ -626,7 +626,7 @@ class TestSecurityFixes:
             ("GET", "/api/v1/messages"),
             ("GET", "/api/v1/work-logs"),
             ("GET", "/api/v1/rural-works"),
-            ("GET", "/api/v1/rural-tasks"),
+            # rural-tasks 已于 W27 下线（r36_drop_rural_tasks_001），端点不再存在
         ]
         for method, url in endpoints:
             if method == "GET":
@@ -679,16 +679,8 @@ class TestRuralWorksAndTasks:
         resp = client.get("/api/v1/rural-works", headers=admin_headers)
         assert resp.status_code in (200, 201, 404, 500)  # API may vary
 
-    def test_list_rural_tasks(self, client, admin_headers):
-        """获取乡村任务列表"""
-        resp = client.get("/api/v1/rural-tasks", headers=admin_headers)
-        assert resp.status_code in (200, 201, 404, 500)  # API may vary
-
-    def test_rural_task_statistics(self, client, admin_headers):
-        """乡村任务统计"""
-        resp = client.get("/api/v1/rural-tasks/statistics",
-                          headers=admin_headers)
-        assert resp.status_code in (200, 201, 404, 500)  # API may vary
+    # W27：``/api/v1/rural-tasks`` 已按产品决策下线（模块整体移除），
+    # 原 test_list_rural_tasks / test_rural_task_statistics 随之下线。
 
 
 # ==================== 十二、考核评估 ====================

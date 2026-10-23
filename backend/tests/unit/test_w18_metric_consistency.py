@@ -11,8 +11,7 @@
 import pytest
 
 from app.core.data_permission import OrgScopeFilter
-from app.models.annual_income import AnnualIncome
-from app.models.supported_village import SupportedVillage, VillagePopulation
+from app.models.supported_village import SupportedVillage, VillageIncome, VillagePopulation
 
 
 def _mk_village(db, name, org_id=None, created_by=None):
@@ -89,15 +88,19 @@ class TestPopulationMetricConsistency:
 
 
 class TestAvgPerCapitaIncomeScope:
-    """P0-2：data_scope 必须真正参与过滤（fail-closed）。"""
+    """P0-2：data_scope 必须真正参与过滤（fail-closed）。
+
+    W27：人均纯收入统一到 ``village_income``（行式）。原实现读 ``annual_income``
+    的年份列 —— 该表全仓从不写入、dev 库 0 行，本用例因此改用行式表造数。
+    """
 
     def test_scope_only_counts_visible_org(self, real_db_session):
         db = real_db_session
         v1 = _mk_village(db, "一村", org_id=1)
         v2 = _mk_village(db, "二村", org_id=2)
         db.add_all([
-            AnnualIncome(supported_village_id=v1.id, year=2025, per_capita_income_2025=10),
-            AnnualIncome(supported_village_id=v2.id, year=2025, per_capita_income_2025=30),
+            VillageIncome(supported_village_id=v1.id, year=2025, per_capita_income=10),
+            VillageIncome(supported_village_id=v2.id, year=2025, per_capita_income=30),
         ])
         db.commit()
 
@@ -110,7 +113,7 @@ class TestAvgPerCapitaIncomeScope:
     def test_none_scope_is_fail_closed(self, real_db_session):
         db = real_db_session
         v1 = _mk_village(db, "一村", org_id=1)
-        db.add(AnnualIncome(supported_village_id=v1.id, year=2025, per_capita_income_2025=10))
+        db.add(VillageIncome(supported_village_id=v1.id, year=2025, per_capita_income=10))
         db.commit()
 
         from app.api.v1.data.data.dashboard import _avg_per_capita_income

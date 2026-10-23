@@ -201,6 +201,22 @@ class Settings(BaseSettings):
     # 是否允许导入未签名的授权包 —— 仅供本地自测，生产必须保持 False。
     GRANT_ALLOW_UNSIGNED: bool = False
 
+    # W27 三类包（管控配置包 / 系统配置包 / 权限包）完整性校验。
+    # 分层策略（详见 app/core/package_integrity.py 模块文档）：
+    #   * checksum（SHA-256）**始终强制**，无需任何密钥基建；
+    #   * 配置 PACKAGE_PUBKEY 后才**强制要求 Ed25519 签名**（fail-closed）；
+    #     未配置时仅记录提示，仍做 checksum 校验 —— 避免"应用内刚生成、
+    #     另一台机器带回"的常见现场流程被默认拒收。
+    # 需要防"U 盘载体被替换"的部署：生成方配 PACKAGE_SIGNING_KEY，导入方配 PACKAGE_PUBKEY。
+    PACKAGE_SIGNING_KEY: str = ""
+    PACKAGE_PUBKEY: str = ""
+
+    # W27 P1：经费「不能自批」。
+    # 默认 False = 禁止创建人审批自己创建的经费记录（财务内控 / 审计要求）。
+    # 例外：超级管理员（单机部署的最终审核人）。
+    # 若某部署确实只有一名操作员且必须自批，显式设为 True 并在审计说明中登记。
+    FUND_ALLOW_SELF_APPROVAL: bool = False
+
     # 日志配置
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "./logs/app.log"

@@ -107,7 +107,6 @@ class TestUpdateVillageDictGuards:
             patch.object(sv, "safe_commit"),
             patch.object(sv, "_invalidate_village_cache", AsyncMock()),
             patch.object(sv, "_record_village_change"),
-            patch.object(sv, "submit_entity_change_approval", return_value=77),
         ):
             result = await sv.update_village(
                 1, data=fake_data, current_user=_admin(), db=db
@@ -115,7 +114,8 @@ class TestUpdateVillageDictGuards:
         assert village.id == 1          # id 未被 update_dict 覆盖
         assert village.village_name == "新名"
         assert not hasattr(village, "department")  # 未知字段未 setattr
-        assert result["data"]["approval_task_id"] == 77
+        # W27：管理员直通，不再返回伪审批任务
+        assert "approval_task_id" not in result["data"]
 
 
 class TestPurgeVillageStatsFailure:

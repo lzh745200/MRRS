@@ -283,13 +283,15 @@ class TrendPredictionService:
         Returns:
             预测结果
         """
-        from app.models.annual_income import AnnualIncome
+        from app.models.supported_village import VillageIncome
 
-        # 查询历史收入数据（AnnualIncome 外键为 supported_village_id，人均收入按年份列存储）
+        # W27（W26-P0-2）：改读 **village_income（行式）** —— 原实现读
+        # ``annual_income``（年份列 per_capita_income_YYYY），该表全仓从不写入、
+        # dev 库 0 行、且年份列写死到 2025，导致趋势预测恒"无历史收入数据"。
         income_records = (
-            db.query(AnnualIncome)
-            .filter(AnnualIncome.supported_village_id == village_id)
-            .order_by(AnnualIncome.year)
+            db.query(VillageIncome)
+            .filter(VillageIncome.supported_village_id == village_id)
+            .order_by(VillageIncome.year)
             .all()
         )
 
@@ -297,10 +299,10 @@ class TrendPredictionService:
             return {"predictions": [], "error": "无历史收入数据"}
 
         # 准备数据
-        historical_data = []
-        for record in income_records:
-            value = getattr(record, f"per_capita_income_{record.year}", 0)
-            historical_data.append({"date": f"{record.year}-01-01", "value": float(value or 0)})
+        historical_data = [
+            {"date": f"{record.year}-01-01", "value": float(record.per_capita_income or 0)}
+            for record in income_records
+        ]
 
         # 预测
         return TrendPredictionService.predict_time_series(

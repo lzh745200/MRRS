@@ -960,8 +960,9 @@ class TestVillageDeleteGuard:
         ghost = _NS(id=5, is_active=False, village_name="回收站村")
         monkeypatch.setattr(sv, "_get_village_or_404", lambda *a, **k: ghost)
         monkeypatch.setattr(sv, "safe_commit", lambda *a, **k: None)
-        submit = MagicMock()
-        monkeypatch.setattr(sv, "submit_entity_change_approval", submit)
+        # W27：审批任务统一经 approval_gate 创建，此处观察该入口是否被触达
+        open_gate = MagicMock()
+        monkeypatch.setattr(sv, "open_change_approval", open_gate)
 
         with pytest.raises(_HTTPException) as exc:
             import asyncio
@@ -971,18 +972,24 @@ class TestVillageDeleteGuard:
             )
 
         assert exc.value.status_code == 409
-        submit.assert_not_called(), "不得重复创建审批任务"
+        open_gate.assert_not_called(), "不得重复创建审批任务"
 
     def test_active_village_deletes_normally(self, monkeypatch):
         from types import SimpleNamespace as _NS
 
         from app.api.v1 import supported_village as sv
 
-        active = _NS(id=6, is_active=True, village_name="在册村")
+        active = _NS(id=6, is_active=True, village_name="在册村", deleted_at=None)
         monkeypatch.setattr(sv, "_get_village_or_404", lambda *a, **k: active)
         monkeypatch.setattr(sv, "safe_commit", lambda *a, **k: None)
-        submit = MagicMock(return_value=77)
-        monkeypatch.setattr(sv, "submit_entity_change_approval", submit)
+
+        async def _noop():
+            return None
+
+        monkeypatch.setattr(sv, "_invalidate_village_cache", _noop)
+        # W27：管理员直通——不经过审批门、不创建伪任务
+        open_gate = MagicMock()
+        monkeypatch.setattr(sv, "open_change_approval", open_gate)
 
         import asyncio
 
@@ -990,7 +997,8 @@ class TestVillageDeleteGuard:
             sv.delete_village(village_id=6, current_user=MagicMock(), db=MagicMock())
         )
         assert result["code"] == 200
-        submit.assert_called_once()
+        assert active.is_active is False
+        open_gate.assert_not_called()
 
 
 class TestSectionAttachmentStoredName:

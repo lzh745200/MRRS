@@ -159,10 +159,17 @@ class TestKeepBothForeignKeyRemap:
         db.flush = MagicMock()
         # 所有业务键查询 miss → 全部走"新记录"路径，旧 id 被记录进 id_mapping
         db.query.return_value.filter.return_value.all.return_value = []
+        # W27：villages 业务键改为多列（组织+行政区划+村名）后不再走批量预取，
+        # 改为逐条 .first() 查询 —— 必须显式返回 None 才能表示"本机无此记录"。
+        db.query.return_value.filter.return_value.first.return_value = None
 
         r = SmartConflictResolver(db)
         data = {
-            "villages": [{"id": 1, "village_name": "V", "name": "V"}],
+            "villages": [{
+                "id": 1, "village_name": "V", "name": "V",
+                "organization_id": 1, "province": "贵州省", "city": "黔南州",
+                "county": "长顺县", "township": "示范镇",
+            }],
             "projects": [{"id": 2, "code": "P", "name": "P", "village_id": 1}],
             "funds": [{"id": 3, "code": "F", "name": "F", "project_id": 2}],
         }

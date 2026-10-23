@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import pytest
 from fastapi import HTTPException, Request
 
+from app.core.package_integrity import sign_manifest
 from app.api.v1.control_package import (
     GenerateControlPackageRequest,
     generate_control_package,
@@ -214,7 +215,7 @@ class TestImportControlPackagePreview:
         policies = [{"module_key": "funds", "visibility": "visible", "edit_mode": "full_edit"}]
         users = [{"username": "u1"}]
         content = _make_zip({
-            "manifest.json": json.dumps(manifest),
+            "manifest.json": json.dumps(sign_manifest(manifest, None)),
             "module_policy.json": json.dumps(policies),
             "users.json": json.dumps(users),
         })
@@ -258,7 +259,7 @@ class TestImportControlPackagePreview:
     async def test_preview_wrong_package_type(self, mock_db, admin_user):
         """manifest with wrong package_type → valid=False."""
         manifest = {"package_type": "data"}
-        content = _make_zip({"manifest.json": json.dumps(manifest)})
+        content = _make_zip({"manifest.json": json.dumps(sign_manifest(manifest, None))})
         f = _mock_upload_file(content, "pkg.zip")
         result = await import_control_package_preview(
             file=f, db=mock_db, current_user=admin_user
@@ -288,7 +289,7 @@ class TestImportControlPackagePreview:
     async def test_preview_no_optional_files(self, mock_db, admin_user):
         """Manifest only, no module_policy.json or users.json."""
         manifest = {"package_type": "control"}
-        content = _make_zip({"manifest.json": json.dumps(manifest)})
+        content = _make_zip({"manifest.json": json.dumps(sign_manifest(manifest, None))})
         f = _mock_upload_file(content, "pkg.zip")
         result = await import_control_package_preview(
             file=f, db=mock_db, current_user=admin_user
@@ -312,7 +313,7 @@ class TestImportControlPackage:
         ]
         sys_cfg = {"system_name": "NewVal"}  # 必须在管控包配置白名单内（v1.12.9）
         content = _make_zip({
-            "manifest.json": json.dumps(manifest),
+            "manifest.json": json.dumps(sign_manifest(manifest, None)),
             "module_policy.json": json.dumps(policies),
             "system_config.json": json.dumps(sys_cfg),
         })
@@ -368,7 +369,7 @@ class TestImportControlPackage:
     async def test_import_wrong_type(self, mock_db, admin_user):
         """Wrong package_type → 400."""
         manifest = {"package_type": "data"}
-        content = _make_zip({"manifest.json": json.dumps(manifest)})
+        content = _make_zip({"manifest.json": json.dumps(sign_manifest(manifest, None))})
         f = _mock_upload_file(content, "pkg.zip")
         with pytest.raises(HTTPException) as exc_info:
             await import_control_package(
@@ -391,7 +392,7 @@ class TestImportControlPackage:
         manifest = {"package_type": "control", "target_organization_id": 1}
         policies = [{"module_key": "funds", "visibility": "v", "edit_mode": "e"}]
         content = _make_zip({
-            "manifest.json": json.dumps(manifest),
+            "manifest.json": json.dumps(sign_manifest(manifest, None)),
             "module_policy.json": json.dumps(policies),
         })
         f = _mock_upload_file(content, "pkg.zip")
@@ -407,7 +408,7 @@ class TestImportControlPackage:
     async def test_import_work_log_exception(self, mock_wl, mock_db, admin_user):
         """write_work_log failure is swallowed on import."""
         manifest = {"package_type": "control", "target_organization_id": 1}
-        content = _make_zip({"manifest.json": json.dumps(manifest)})
+        content = _make_zip({"manifest.json": json.dumps(sign_manifest(manifest, None))})
         f = _mock_upload_file(content, "pkg.zip")
         mock_db.query = MagicMock(return_value=MagicMock())
         result = await import_control_package(

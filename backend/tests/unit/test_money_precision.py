@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.models.fund import BudgetRecord, Fund
+from app.models.fund import Fund
 from app.models.project import Project
 from app.utils.helpers import (
     BUDGET_MONEY_FIELDS,
@@ -73,9 +73,14 @@ class TestModelColumnScale:
         col = getattr(Fund, field).property.columns[0]
         assert col.type.scale == 4
 
-    @pytest.mark.parametrize("field", ["budget_amount", "used_amount"])
-    def test_budget_record_columns_scale_4(self, field):
-        col = getattr(BudgetRecord, field).property.columns[0]
+    # W27：BudgetRecord（表 budget_records）已作为死模型删除（迁移 r37）。
+    # 金额精度由 FundBudget 承接（budget_amount / executed_amount），见下。
+
+    @pytest.mark.parametrize("field", ["budget_amount", "executed_amount"])
+    def test_fund_budget_columns_scale_4(self, field):
+        from app.models.fund_budget import FundBudget
+
+        col = getattr(FundBudget, field).property.columns[0]
         assert col.type.scale == 4
 
     def test_ratio_columns_stay_scale_2(self):

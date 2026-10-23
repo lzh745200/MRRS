@@ -200,13 +200,6 @@ class TestModelsToDict:
         d = f.to_dict()
         assert d is not None
 
-    def test_rural_task_to_dict(self):
-        from app.models.rural_task import RuralTask
-        r = RuralTask()
-        r.id = 1
-        d = r.to_dict()
-        assert d is not None
-
     def test_audit_to_dict(self):
         from app.models.audit import AuditLog
         a = AuditLog()
@@ -336,12 +329,9 @@ class TestModelsToDict:
 
 
 
-    def test_annual_income_to_dict(self):
-        from app.models.annual_income import AnnualIncome
-        a = AnnualIncome()
-        a.id = 1
-        d = a.to_dict()
-        assert d is not None
+    # W27 P1（死模型清理）：AnnualIncome/annual_income 已删除（迁移 r38）。
+    # 人均纯收入统一由 supported_village.VillageIncome（行式）承接，已由
+    # test_w27_metrics_unify / test_w18_metric_consistency 覆盖。
 
     def test_annual_population_to_dict(self):
         from app.models.annual_population import AnnualPopulation
@@ -401,9 +391,10 @@ class TestModelsToDict:
         assert d is not None
 
 
-    def test_issue_tracking_to_dict(self):
-        from app.models.issue_tracking import Issue
-        i = Issue()
+    def test_feedback_to_dict(self):
+        """W27：`Issue` 已删除（迁移 r41），反馈模型改用 `Feedback` 覆盖 to_dict。"""
+        from app.models.issue_tracking import Feedback
+        i = Feedback()
         i.id = 1
         d = i.to_dict()
         assert d is not None
@@ -441,7 +432,6 @@ class TestSchemasImportable:
         'app.schemas.organization',
         'app.schemas.policy',
         'app.schemas.project',
-        'app.schemas.rural_task',
         'app.schemas.school',
         'app.schemas.user',
         'app.schemas.village',
@@ -509,7 +499,6 @@ class TestAllModelsImportable:
         'app.models.policy',
         'app.models.work_log',
         'app.models.rural_work',
-        'app.models.rural_task',
         'app.models.report_template',
         'app.models.fund_budget',
         'app.models.fund_lifecycle',
@@ -530,7 +519,6 @@ class TestAllModelsImportable:
         'app.models.token_blacklist',
         'app.models.two_factor_auth',
         'app.models.validation_rule',
-        'app.models.annual_income',
         'app.models.annual_population',
         'app.models.annual_industry',
         'app.models.annual_infrastructure',

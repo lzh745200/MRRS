@@ -44,12 +44,19 @@
 | 指标 | 定义/公式 | 数据源 | 唯一实现 | 回归 |
 |------|-----------|--------|----------|------|
 | 帮扶村总数 | 过滤后 count(supported_villages.id)，仅 is_active=True | supported_villages | dashboard._query_village_stats | test_w18_metric_consistency |
-| 总人口 | **每村取各自最新年份**的 total_population 后求和（不是"全库最大年份"） | village_population | dashboard._query_village_stats / statistics（同口径） | test_w18_metric_consistency.TestPopulationMetricConsistency |
+| 总人口 | **每村取各自最新年份**的 total_population 后求和（不是"全库最大年份"） | village_population | ORM：dashboard._query_village_stats；raw-SQL：analytics_service（W27 已同口径） | test_w18_metric_consistency.TestPopulationMetricConsistency |
 | 总户数 | 同"总人口"口径（每村最新年 total_households 求和） | village_population | 同上 | 同上 |
-| 人均纯收入 | 指定年份列 per_capita_income_<year> 的平均值，**必须接 data_scope**；无 scope 返回 0（fail-closed） | annual_income | dashboard._avg_per_capita_income | test_w18_metric_consistency.TestAvgPerCapitaIncomeScope |
-| 经费合计 | 过滤后 sum(funds.amount)；未关联村（village_id IS NULL）的经费按 funds.organization_id 判域 | funds | dashboard 经费统计 | test_dashboard_trends |
+| 人均纯收入 | **`village_income` 行式表** `per_capita_income` 的平均值；`year` 缺省取"每村各自最新年"；**必须接 data_scope**，无 scope 返回 0（fail-closed） | **village_income**（W27 起；~~annual_income~~ 已废弃：该表全仓从不写入、dev 库 0 行、年份列写死 2025） | **`services/metrics_service.avg_per_capita_income`**（dashboard / 大屏 / 统计 / 数据分析 / 成效评估 全部委托它） | test_w27_metrics_unify + test_w18_metric_consistency.TestAvgPerCapitaIncomeScope |
+| 经费合计（金额） | 过滤后 sum(funds.amount)（**全状态**）；未关联村（village_id IS NULL）的经费按 funds.organization_id 判域 | funds | dashboard 经费统计（`_query_fund_stats`） | test_dashboard_trends |
+| 经费条数 | 过滤后 count(funds.id)。**W27 更名**：原字段名 `total_funds` 与上面的"金额"同名异义，现统一叫 `funds_count` | funds | statistics `/summary`、`/overview`、business_metrics_service | test_soft_delete_statistics |
 | 报表村总数 | **独立 count()**，不得用明细 limit(100) 后的 len() | supported_villages | reports.generate_report | test_reports_api_cov |
 | 金额单位 | 后端存储与接口一律**万元**，前端按需格式化；不得混用元 | —— | —— | —— |
+
+> **W27 核心指标收口**（2026-10-23，W26-P0-2）：检测确认"4 个指标里 3 个口径不一致"
+> ——人均纯收入读了一张**从未被写入**的表、总人口在 analytics 侧仍用全库最大年、
+> 经费"合计"在统计侧实为 COUNT。现已统一，并**禁止**再出现第二套实现：
+> `tests/unit/test_w27_metrics_unify.py::TestIncomeMetricSingleSource` 会扫描模块，
+> 一旦有人重新 `from app.models.annual_income import ...` 取指标即变红。
 
 **防腐门禁**：scripts/check_unused_scope_params.py（防"形参收下不用"）、
 test_w18_metric_consistency.py（防"两套口径"）。

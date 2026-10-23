@@ -13,6 +13,22 @@ from sqlalchemy.sql import func as sa_func
 logger = logging.getLogger(__name__)
 
 
+def _income_value_of(income: Any) -> float:
+    """取年度收入记录中的人均纯收入（行式表 `village_income`：字段即 per_capita_income）。
+
+    W27 第 12 轮：从 `recommend_fund_allocation` 的内嵌闭包提到模块级 ——
+    原实现的**脏值分支**（`per_capita_income` 无法转 float）只有完整跑一次资金分配
+    才能覆盖，是当时覆盖率 99.99% 的最后 2 行。提到模块级后可直接单测。
+    """
+    if income is None:
+        return 0.0
+    value = getattr(income, "per_capita_income", None)
+    try:
+        return float(value) if value is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 class RecommendationService:
     """智能推荐服务"""
 
@@ -150,9 +166,8 @@ class RecommendationService:
             资金分配建议
         """
         from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
-        from app.models.annual_income import AnnualIncome
         from app.models.annual_population import AnnualPopulation
-        from app.models.supported_village import SupportedVillage
+        from app.models.supported_village import SupportedVillage, VillageIncome
 
         if not village_ids:
             return {"allocations": [], "error": "村庄列表为空"}
@@ -193,22 +208,25 @@ class RecommendationService:
         pop_by_village = {p.supported_village_id: p for p in pop_rows}
 
         # 批量查询所有村庄的最新收入数据（避免 N+1）
+        # W27（W26-P0-2）：改读 **village_income（行式）** —— 原实现读 annual_income
+        # 的年份列，该表全仓从不写入（dev 库 0 行）且年份列写死 2025，
+        # 导致"收入低"维度恒为 0、资金分配建议失真。
         inc_subq = (
             db.query(
-                AnnualIncome.supported_village_id,
-                sa_func.max(AnnualIncome.year).label("max_year"),
+                VillageIncome.supported_village_id,
+                sa_func.max(VillageIncome.year).label("max_year"),
             )
-            .filter(AnnualIncome.supported_village_id.in_(village_ids))
-            .group_by(AnnualIncome.supported_village_id)
+            .filter(VillageIncome.supported_village_id.in_(village_ids))
+            .group_by(VillageIncome.supported_village_id)
             .subquery()
         )
         inc_rows = (
-            db.query(AnnualIncome)
+            db.query(VillageIncome)
             .join(
                 inc_subq,
                 and_(
-                    AnnualIncome.supported_village_id == inc_subq.c.supported_village_id,
-                    AnnualIncome.year == inc_subq.c.max_year,
+                    VillageIncome.supported_village_id == inc_subq.c.supported_village_id,
+                    VillageIncome.year == inc_subq.c.max_year,
                 ),
             )
             .all()
@@ -216,14 +234,8 @@ class RecommendationService:
         inc_by_village = {i.supported_village_id: i for i in inc_rows}
 
         def _income_value(income: Any) -> float:
-            """取年度收入记录中对应年份的人均纯收入（按年份列动态取值，兼容任意年份）"""
-            if income is None:
-                return 0.0
-            value = getattr(income, f"per_capita_income_{income.year}", None)
-            try:
-                return float(value) if value is not None else 0.0
-            except (TypeError, ValueError):
-                return 0.0
+            """取人均纯收入（委托模块级 `_income_value_of`，便于单测覆盖脏值分支）。"""
+            return _income_value_of(income)
 
         # 计算每个村庄的需求指数
         allocations = []

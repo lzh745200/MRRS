@@ -1,65 +1,13 @@
 """
-乡村振兴任务API全面测试
-覆盖app/api/v1/rural_tasks.py和rural_works.py的所有路由
+乡村振兴工作 API 全面测试
+
+覆盖 ``app/api/v1/rural_works.py`` 的全部路由。
+
+W27：``rural_tasks`` 模块已按产品决策**下线**（9 个端点 / ``RuralTask`` 模型 /
+``rural_task`` schema 全部移除，表由迁移归档），因此原 ``TestRuralTasksAPI``
+（10 个用例）随之删除。乡村振兴页面实际一直走 ``/rural-works``，功能不受影响。
 """
 
-
-
-
-class TestRuralTasksAPI:
-    """测试乡村振兴任务API"""
-
-    def test_rural_tasks_list(self, client):
-        """测试任务列表"""
-        response = client.get("/api/v1/rural-tasks")
-        assert response.status_code in [200, 401, 403]
-
-    def test_rural_tasks_list_with_filters(self, client):
-        """测试任务列表带过滤"""
-        response = client.get("/api/v1/rural-tasks?status=pending&priority=high")
-        assert response.status_code in [200, 401, 403]
-
-    def test_rural_tasks_detail(self, client):
-        """测试任务详情"""
-        response = client.get("/api/v1/rural-tasks/1")
-        assert response.status_code in [200, 401, 403, 404, 405]
-
-    def test_rural_tasks_create_empty(self, client):
-        """测试创建空任务"""
-        response = client.post("/api/v1/rural-tasks", json={})
-        assert response.status_code in [200, 401, 403, 422]
-
-    def test_rural_tasks_create_with_data(self, client):
-        """测试创建任务"""
-        response = client.post("/api/v1/rural-tasks", json={
-            "title": "测试任务",
-            "description": "任务描述"
-        })
-        assert response.status_code in [200, 201, 401, 403, 422]
-
-    def test_rural_tasks_update(self, client):
-        """测试更新任务"""
-        response = client.put("/api/v1/rural-tasks/1", json={
-            "title": "更新任务"
-        })
-        assert response.status_code in [200, 401, 403, 404, 405, 422]
-
-    def test_rural_tasks_delete(self, client):
-        """测试删除任务"""
-        response = client.delete("/api/v1/rural-tasks/1")
-        assert response.status_code in [200, 401, 403, 404, 405]
-
-    def test_rural_tasks_assign(self, client):
-        """测试分配任务"""
-        response = client.post("/api/v1/rural-tasks/1/assign", json={
-            "user_id": 1
-        })
-        assert response.status_code in [200, 401, 403, 404, 405, 422]
-
-    def test_rural_tasks_complete(self, client):
-        """测试完成任务"""
-        response = client.post("/api/v1/rural-tasks/1/complete")
-        assert response.status_code in [200, 401, 403, 404, 405]
 
 class TestRuralWorksAPI:
     """测试乡村振兴工作API"""

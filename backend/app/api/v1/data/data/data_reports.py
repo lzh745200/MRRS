@@ -368,11 +368,20 @@ async def approve_data_report(
 
     if package:
         try:
-            await package_service.confirm_import(
+            import_result = await package_service.confirm_import(
                 package_id=package.id, confirmed_by=current_user.id, overwrite_existing=False
             )
         except Exception:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="导入数据包失败，请稍后重试或联系管理员")
+
+        # W27（W26-P0-6）：**必须校验导入结果**。
+        # 原实现忽略 confirm_import 的返回值：即使校验未通过/导入被拒（success=False），
+        # 上报也会被置为「已批准」—— 上级审批通过但数据其实没进来，台账与业务数据双双失真。
+        if not (isinstance(import_result, dict) and import_result.get("success")):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="数据包导入未成功（校验未通过或导入被拒绝），已中止批准；请先复核数据包后重试",
+            )
 
     # 更新上报状态
     from datetime import datetime, timezone

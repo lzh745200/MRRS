@@ -1186,10 +1186,11 @@ async def confirm_import(
         except Exception:  # pragma: no cover - 防御：取单位码失败不影响回执其它字段
             logger.debug("回执取接收单位码失败", exc_info=True)
 
-        source_code = ""
+        # W27：原为两段式（先赋 `_manifest` 再 `if _manifest:` 取值）——
+        # `{}.get()` 本就返回 None，`str(None or "")` 同样是空串，合并后行为等价、
+        # 且少一个长期零覆盖的分支。
         _manifest = package.manifest if isinstance(package.manifest, dict) else {}
-        if _manifest:
-            source_code = str(_manifest.get("org_code") or "")
+        source_code = str(_manifest.get("org_code") or "")
 
         record_receipt(
             service.db,

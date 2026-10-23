@@ -5,6 +5,7 @@ import zipfile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from app.core.package_integrity import sign_manifest
 from app.api.v1.control_package import import_control_package
 
 
@@ -20,7 +21,7 @@ class TestImportControlPackage:
     async def test_new_system_config_key_is_added(self):
         """白名单内的新配置键 → db.add 新建（v1.12.9 起仅允许白名单键交换）"""
         content = _zip_bytes({
-            "manifest.json": json.dumps({"package_type": "control"}),
+            "manifest.json": json.dumps(sign_manifest({"package_type": "control"}, None)),
             "system_config.json": json.dumps({"organization_name": 123}),
         })
         file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=content))
@@ -46,7 +47,7 @@ class TestImportControlPackage:
     async def test_non_whitelisted_system_config_key_skipped(self):
         """非白名单键（可覆盖安全/路径配置）必须跳过并计入 skipped_configs。"""
         content = _zip_bytes({
-            "manifest.json": json.dumps({"package_type": "control"}),
+            "manifest.json": json.dumps(sign_manifest({"package_type": "control"}, None)),
             "system_config.json": json.dumps({"brand_new_key": 123, "encryption_salt": "evil"}),
         })
         file = SimpleNamespace(filename="pkg.zip", read=AsyncMock(return_value=content))

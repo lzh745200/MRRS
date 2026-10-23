@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import case, func as sa_func
@@ -307,24 +307,65 @@ async def get_cross_org_comparison(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """跨组织对比分析（仅 super_admin/admin 可用）
+    """跨组织对比分析（管理员；按调用者数据域收敛组织范围）
 
     按组织分组聚合：帮扶村数、项目数、资金总额、完成率。
+
+    ## W27 修复（W26 全栈检测 P0-4）
+    原实现只校验 ``role in ("admin","super_admin")``，随后**查询全部活跃组织**
+    并全组织 GROUP BY —— 部门级 admin（``role="admin"``、``is_superuser=False``）
+    因此能看到**全部组织**的村数/项目数/资金总额/完成率，违反 R27-H8/R28 收敛
+    结论（部门级 admin 应限「本组织及子树」）与军审红线 S2。
+
+    现改为：先按 ``get_data_scope`` 决定可见组织集合，再只对这些组织聚合
+    （口径与 ``apply_scope_filter`` 的 OWN_DEPT 分支一致）：
+      * ``super_admin`` / ``is_superuser`` / ``data_scope="all"`` → 全部组织；
+      * 部门级 admin → 本组织及子树；
+      * 其它（OWN）→ 无组织级可见性，返回空列表（不报错，语义为"无权对比"）。
+
+    另：越权由「HTTP 200 + success=False」改为标准 **403**，与全站错误口径一致
+    （本端点无前端调用方，接口语义变更无破坏性）。
     """
+    from app.core.data_permission import DataScope, _get_org_subtree, _get_user_org_id, get_data_scope
+
     role = getattr(current_user, "role", "")
     is_super = getattr(current_user, "is_superuser", False)
     if role not in ("admin", "super_admin") and not is_super:
-        return AnalyticsResponse(success=False, data=None, message="仅管理员可查看跨组织对比")
+        raise HTTPException(status_code=403, detail="仅管理员可查看跨组织对比")
 
     from app.models.organization import Organization
     from app.models.project import Project
     from app.models.fund import Fund
     from app.models.supported_village import SupportedVillage
 
-    # 1. 查询所有活跃组织（1 次查询）
-    orgs = db.query(Organization.id, Organization.name).filter(
+    # 决定可见组织集合：None = 不受限（真全局管理员）
+    allowed_org_ids: Optional[list] = None
+    if getattr(current_user, "data_scope", None) != "all":
+        data_scope = get_data_scope(current_user)
+        if data_scope != DataScope.ALL:
+            user_org_id = _get_user_org_id(current_user)
+            if data_scope == DataScope.OWN_DEPT and user_org_id is not None:
+                subtree_ids, _names = _get_org_subtree(db, user_org_id)
+                allowed_org_ids = subtree_ids or [user_org_id]
+            else:
+                # OWN（或有 org 约束但取不到组织）→ 组织级对比无可见范围
+                allowed_org_ids = []
+
+    if allowed_org_ids is not None and not allowed_org_ids:
+        return AnalyticsResponse(
+            success=True,
+            data={"items": [], "total": 0},
+            message="当前账号无组织级对比权限",
+        )
+
+    # 1. 查询可见组织（1 次查询）
+    org_query = db.query(Organization.id, Organization.name).filter(
         Organization.is_active == True  # noqa: E712
-    ).all()
+    )
+    if allowed_org_ids is not None:
+        org_query = org_query.filter(Organization.id.in_(allowed_org_ids))
+    orgs = org_query.all()
+
     org_map = {
         org_id: {"organization_id": org_id, "organization_name": org_name,
                  "villages": 0, "projects_total": 0,

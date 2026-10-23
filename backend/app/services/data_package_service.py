@@ -67,16 +67,39 @@ DATA_TYPE_MODELS = {
 # 目标机的真实记录整体覆写成源机数据（organization_id/created_at 一并改写，
 # 不可逆）。SQLite 下这不是概率问题而是必现。
 #
-# 业务键原则：**不可变字段**。D5 修正（2026-10-18）：villages 原先含
-# village_name —— 而"改名"恰是增量更新的常见场景（同一条村记录改了名字），
-# 含可变字段会把"同一条记录的更新"误判成"两条不同记录"（relocated 分支），
-# 导致增量包永远插入新行而无法更新本机记录。组织归属是不可变的租户边界，
-# 用它区分"两台机器各自录入的第一条记录"（D1 的真实场景）。
+# 业务键原则：**能稳定区分"同一条记录"与"两条不同记录"**。
+#
+# W27 修复（W26 全栈检测 P0-1「同组织跨机主键碰撞」）
+# --------------------------------------------------
+# 旧定义只有一个字段：
+#     {"supported_villages": ("organization_id",), ... 全部仅 organization_id }
+# 而导入时 ``_clean_record`` 又把**每条记录**的 organization_id 强制改写为目标组织
+# （见下方 :698-701 附近）—— 于是「同组织两台机器」这一**最常见部署**下，所有
+# 记录的业务键完全相同，"判定为同一条记录"恒成立：
+#     * overwrite=True  → 本机真实记录被源机数据覆写（不可逆）
+#     * overwrite=False → 源机记录被静默丢弃
+#     * relocated（换新 id 插入）分支永不触发
+# 即 W18-D1 当年的修复**只在跨组织场景成立**。
+#
+# 现改为「组织 + 业务唯一标识」：
+#   * projects / schools 的 ``code`` 在 DB 层就是 **UNIQUE** 列，天然可作身份；
+#   * funds 的 ``code`` 按 ADR-0011（``ZJ+年份+6位流水``）生成，是业务编号；
+#   * supported_villages 无单列唯一键，用「组织 + 县 + 村名」复合键。
+#     **为什么只到"县"不再细分乡镇**：县内的行政村名在行政区划上唯一，足以区分
+#     记录；而乡镇/街道常因历史数据未填而在导入时缺失 —— 把可选字段纳入业务键会
+#     让键频繁"不可判定"，退化成 relocated（每次都新增重复行）。用最少的必填字段
+#     换取"既不误合并、也不无谓重复"。
+# 仍保留 organization_id：导入会把记录归到目标组织，带组织可确保**跨组织**导出/
+# 导入时不会把别组织的同编号记录误认为同一条（保持 W18-D1 的正确行为）。
+#
+# 已知取舍（有意为之）：村庄**改名**会导致业务键变化 → 判为"两条不同记录" →
+# 源机记录以新 id 插入，产生重复行。重复行可人工合并（可恢复），而覆写不可恢复，
+# 故在"重复"与"丢失"之间必须选前者。
 BUSINESS_KEYS: Dict[str, tuple] = {
-    "supported_villages": ("organization_id",),
-    "projects": ("organization_id",),
-    "funds": ("organization_id",),
-    "schools": ("organization_id",),
+    "supported_villages": ("organization_id", "county", "village_name"),
+    "projects": ("organization_id", "code"),
+    "funds": ("organization_id", "code"),
+    "schools": ("organization_id", "code"),
 }
 
 
@@ -772,7 +795,11 @@ class DataPackageService:
         for rec in collided:
             key = _business_key_of(model, rec)
             if key is None:
-                same_records.append(rec)
+                # W27 fail-safe（W26-P0-1）：业务键**不可判定**时绝不能当成
+                # "同一条记录"去覆写本机数据 —— 那是不可逆的数据丢失。
+                # 改为 relocated：去掉主键后以新 id 插入，本机原记录保持不动。
+                # 代价是可能产生重复行（可人工合并、可恢复），这是有意的取舍。
+                relocated.append(rec)
                 continue
             local = self.db.query(model).filter(getattr(model, pk_name) == rec[pk_name]).first()
             local_key = None

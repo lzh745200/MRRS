@@ -27,14 +27,45 @@ class TestSecretsManagerCreation:
             manager._init_default_key()
             assert manager._secrets["default"] == "env_key_value"
 
+    def test_init_default_key_reads_existing_key_file(self, tmp_path):
+        """W27 补：已存在密钥文件时**复用**其中密钥（不得每次重新生成）。
+
+        这是「重启后数据可恢复」的前提：重新生成会让历史密文全部解不开。
+        """
+        from cryptography.fernet import Fernet
+
+        from app.services.secrets_manager import SecretsManager
+
+        key_dir = tmp_path / "bumofu-assistance" / "data"
+        key_dir.mkdir(parents=True)
+        persisted = Fernet.generate_key().decode()
+        (key_dir / ".secrets_manager_key").write_text(persisted, encoding="utf-8")
+
+        env = {k: v for k, v in os.environ.items() if k != "ENCRYPTION_KEY"}
+        env["LOCALAPPDATA"] = str(tmp_path)
+        with patch.dict(os.environ, env, clear=True):
+            manager = SecretsManager()
+
+        assert manager._secrets["default"] == persisted
+
     def test_init_default_key_import_error(self):
-        """测试初始化 - Fernet导入失败回退"""
+        """测试初始化 - Fernet 导入失败时回退生成合法 key。
+
+        W27 修正测试手法：原实现 patch `builtins.__import__` 让**所有** import
+        抛 ImportError —— 这会把 except 分支里 `_generate_fallback_key()` 自身所需
+        的导入也一并打断，ImportError 从 except 分支逃逸，用例恒红（既有失败，
+        与被测行为无关）。改为只把 `cryptography` 从 sys.modules 抹掉，
+        精确模拟"可选依赖未安装"。
+        """
+        import sys
+
         from app.services.secrets_manager import SecretsManager
 
         with patch.dict(os.environ, {}):
-            with patch('builtins.__import__', side_effect=ImportError("No module named 'cryptography'")):
+            with patch.dict(sys.modules, {"cryptography": None,
+                                          "cryptography.fernet": None}):
                 manager = SecretsManager()
-                # 由于ImportError，应该使用secrets.token_urlsafe
+                # 由于 ImportError，应走兜底生成
                 assert "default" in manager._secrets
 
 class TestGetSecret:

@@ -215,7 +215,33 @@ class ApprovalWorkflowService:
 
         自动匹配实体类型的活跃工作流，创建审批任务。
         若无匹配工作流，返回None。
+
+        ## 幂等（W27，W26「空壳测试」暴露的真实缺陷）
+        同一实体**已有内容相同的待审批任务**时，直接返回该任务，不新建第二条 ——
+        原实现无此判定，重复提交（双击保存、前端重试、真门禁下用户重复点提交）
+        会在待审批板块堆出多条同实体任务，审批人需逐条处理才能让变更生效。
+        「重复提交返回既存状态」本就是本功能的设计意图（见
+        ``tests/test_approval_idempotency.py``），只是此前从未被断言过。
+
+        **判定口径是「同一变更」而非「同一实体」**：`change_data` 不同说明是一次
+        新的修改（如创建后再编辑），必须允许其独立进入审批流，不能被前一条任务吞掉。
+        `isinstance` 守卫同时保证测试替身（MagicMock）不会被误判为已存在任务。
         """
+        existing = (
+            self.db.query(ApprovalTask)
+            .filter(
+                ApprovalTask.entity_type == entity_type,
+                ApprovalTask.entity_id == entity_id,
+                ApprovalTask.status == ApprovalStatus.PENDING.value,
+            )
+            .order_by(ApprovalTask.id.desc())
+            .first()
+        )
+        if isinstance(existing, ApprovalTask) and (
+            (existing.change_data or None) == (change_data or None)
+        ):
+            return existing
+
         workflow = (
             self.db.query(ApprovalWorkflow)
             .options(joinedload(ApprovalWorkflow.nodes))

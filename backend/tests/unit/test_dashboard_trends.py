@@ -41,7 +41,9 @@ def test_kpi_trends_success():
         assert data["villages"] == 12
         assert data["population"] == 3400
         assert data["income"] == 8800.5
-        assert data["investment"] == 9000.0  # 5000 + 8000/2
+        # W27：原公式 `funds_allocated + total_funds/2`（5000+8000/2=9000）是无业务
+        # 定义的自造口径，已改为 CONTEXT.md 定义的「经费合计」= 全状态 SUM(amount)
+        assert data["investment"] == 8000.0
     finally:
         app.dependency_overrides.clear()
 
@@ -126,41 +128,35 @@ def test_yearly_trends_structure():
         app.dependency_overrides.clear()
 
 
-def test_avg_per_capita_income_no_columns():
+def test_avg_per_capita_income_no_data_returns_zero():
+    """W27：无 village_income 数据 → 0.0（实现已统一到行式表，不再读 annual_income）。"""
     from app.api.v1.data.data.dashboard import _avg_per_capita_income
 
     mock_db = MagicMock()
+    q = MagicMock()
+    q.filter.return_value = q
+    q.join.return_value = q
+    q.with_entities.return_value = q
+    q.scalar.return_value = None
+    mock_db.query.return_value = q
 
-    class _FakeCols:
-        name = "id"
-
-    class _FakeTable:
-        columns = [_FakeCols()]
-
-    class _FakeModel:
-        __table__ = _FakeTable()
-
-    with patch("app.models.annual_income.AnnualIncome", _FakeModel):
-        assert _avg_per_capita_income(mock_db, MagicMock()) == 0.0
+    assert _avg_per_capita_income(mock_db, MagicMock()) == 0.0
 
 
 def test_avg_per_capita_income_specific_year_missing():
+    """W27：指定年份无数据 → 0.0。"""
     from app.api.v1.data.data.dashboard import _avg_per_capita_income
 
     mock_db = MagicMock()
+    q = MagicMock()
+    q.filter.return_value = q
+    q.join.return_value = q
+    q.with_entities.return_value = q
+    q.scalar.return_value = None
+    mock_db.query.return_value = q
 
-    class _FakeCols:
-        name = "per_capita_income_2024"
-
-    class _FakeTable:
-        columns = [_FakeCols()]
-
-    class _FakeModel:
-        __table__ = _FakeTable()
-
-    with patch("app.models.annual_income.AnnualIncome", _FakeModel):
-        # 请求 2025 年但只有 2024 列 → 0
-        assert _avg_per_capita_income(mock_db, MagicMock(), year=2025) == 0.0
+    # 请求 2025 年但当年无数据 → 0
+    assert _avg_per_capita_income(mock_db, MagicMock(), year=2025) == 0.0
 
 
 def test_yearly_trends_exception_fallback():

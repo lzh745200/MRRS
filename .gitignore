@@ -433,3 +433,8 @@ deliverables/w19-e2e/html-report/
 .scratch/**/*.png
 .scratch/**/*.jpg
 .scratch/**/*.webp
+
+# 离线瓦片本体（体积大，由构建机拷入；仅 README 占位入库）
+resources/map-tiles/**/*.png
+resources/map-tiles/MANIFEST.json
+

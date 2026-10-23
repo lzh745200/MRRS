@@ -110,11 +110,9 @@ def _query_village_stats(db: Session, data_scope: OrgScopeFilter) -> dict:
     village_subq = village_query.subquery()
     total_villages = db.query(func.count()).select_from(village_subq).scalar() or 0
 
-    # 人口/户数：**每村取各自最新年份**（W18 P0-1）
-    # 原实现先取全库最大年份再求和：只要有一个村上报了新年份，其它尚未上报该年
-    # 的村就会被整体漏掉（实测同一 fixture 下与 statistics 口径差 500 人，工作台
-    # 与统计分析页数字打架）。改为按村分组取 max(year) 后再 join 汇总，与
-    # statistics.py / analytics_service 的口径统一。
+    # 人口/户数：**每村取各自最新年份**（W18 P0-1 口径）。
+    # 与 services/analytics_service 的裸 SQL 分支口径一致（后者 W27 已同步修正）；
+    # 由 tests/unit/test_w27_metrics_unify.py 用同一 fixture 锁定两者同数。
     total_population = 0
     total_households = 0
     if total_villages > 0:
@@ -567,7 +565,11 @@ async def get_kpi_trends(
                 "villages": village_stats.get("total_villages", 0),
                 "population": village_stats.get("total_population", 0),
                 "income": round(income, 2),
-                "investment": round(fund_stats.get("funds_allocated", 0) + fund_stats.get("total_funds", 0) / 2, 2),
+                # W27（W26-P0-2）：原公式 `funds_allocated + total_funds / 2` 是
+                # **无业务定义的自造口径**（把两个不同集合相加再折半，既非"总额"也非
+                # "已拨付"）。改为 CONTEXT.md 指标字典定义的「经费合计」= 全状态 SUM(amount)，
+                # 与工作台 KPI / 汇报大屏同一数字来源。
+                "investment": round(fund_stats.get("total_funds", 0), 2),
             },
             message="KPI 趋势已获取",
         )
@@ -716,44 +718,23 @@ async def get_yearly_trends(
 
 
 def _avg_per_capita_income(db: Session, data_scope: OrgScopeFilter, year: Optional[int] = None) -> float:
-    """人均收入: annual_income 表按年列存储(per_capita_income_{year})。
-    未指定年份时取最大可用年份列的平均值。
-    """
-    try:
-        from app.models.annual_income import AnnualIncome
+    """人均纯收入（W27：委托 ``services.metrics_service`` 单一实现）。
 
-        # 找出含 per_capita_income_ 前缀的最大年份列
-        col_names = [c.name for c in AnnualIncome.__table__.columns if c.name.startswith("per_capita_income_")]
-        if not col_names:
-            return 0.0
-        target_year = year
-        if target_year is None:
-            # 取最大可用年份列
-            avail_years = [int(n.rsplit("_", 1)[1]) for n in col_names]
-            target_year = max(avail_years)
-        col_name = f"per_capita_income_{target_year}"
-        if col_name not in col_names:
-            return 0.0
-        col = getattr(AnnualIncome, col_name)
-        query = db.query(func.coalesce(func.avg(col), 0))
-        if hasattr(AnnualIncome, "supported_village_id"):
-            # W18 P0-2：必须把 data_scope 接线（原实现收下形参却从未使用 ——
-            # 部门级管理员看到的是**全库**人均收入，越权且不报警）。fail-closed：
-            # 无 scope 直接返回 0，绝不退化成"不过滤"。
-            if data_scope is None:
-                return 0.0
-            village_query = db.query(SupportedVillage.id).filter(
-                SupportedVillage.is_active == True  # noqa: E712
-            )
-            village_query = data_scope.filter_by_org_ids(
-                village_query,
-                SupportedVillage.organization_id,
-                created_by_column=SupportedVillage.created_by,
-            )
-            query = query.filter(AnnualIncome.supported_village_id.in_(village_query))
-        val = query.scalar()
-        return float(val or 0)
+    ## 口径变更（W26-P0-2）
+    原实现读 ``annual_income`` 表的**年份列**（`per_capita_income_2020..2025`），
+    而该表**只被读、从不被写**（全仓 0 处写入，dev 库 0 行），且年份列写死到 2025 ——
+    工作台的人均收入因此恒为 0/陈旧，与其余 5 处读 ``village_income``（行式）的实现
+    给出**两个不同数字**。
+
+    现统一到 ``village_income``（行式，有真实数据、无需每年改模型）。
+    """
+    from app.services.metrics_service import accessible_village_ids_query, avg_per_capita_income
+
+    try:
+        village_q = accessible_village_ids_query(db, data_scope)
+        return avg_per_capita_income(db, village_q, year=year)
     except Exception:
+        logger.warning("人均纯收入查询失败，按 fail-closed 返回 0", exc_info=True)
         return 0.0
 
 

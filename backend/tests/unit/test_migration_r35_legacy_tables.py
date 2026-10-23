@@ -112,8 +112,16 @@ def test_existing_archive_block_keeps_original_table():
 
 
 def test_manifest_matches_module_constants():
+    """清单是**多个**遗留清理迁移的并集，故只要求本迁移的表是清单的子集。
+
+    W27：``r36_drop_rural_tasks_001`` 也往同一清单登记了 ``rural_tasks``，
+    若这里继续断言"完全相等"，新增任何清理迁移都会误红。
+    """
     mod = load_migration()
-    assert sorted(mod.manifest_tables()) == sorted(mod.LEGACY_TABLES)
+    manifest = set(mod.manifest_tables())
+    assert set(mod.LEGACY_TABLES) <= manifest, (
+        "r35 的遗留表必须全部登记在 upgrade_legacy_tables.json，否则升级演练会误判数据丢失"
+    )
 
 
 def test_manifest_fallback_when_file_unreadable(tmp_path, monkeypatch):

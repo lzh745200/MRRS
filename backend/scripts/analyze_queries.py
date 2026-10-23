@@ -32,7 +32,7 @@ HIGH_FREQ_QUERIES = [
     {
         "name": "年度收入-按年份查询",
         "sql": """
-            SELECT * FROM annual_income
+            SELECT * FROM village_income
             WHERE supported_village_id = ? AND year = ?
         """
     },
@@ -170,8 +170,8 @@ def generate_index_recommendations():
         "CREATE INDEX IF NOT EXISTS ix_funds_status_village_amount ON funds(status, village_id, CAST(amount AS REAL));",
         # 审批记录-高频实体查询
         "CREATE INDEX IF NOT EXISTS ix_approval_records_entity_status ON approval_records(entity_type, entity_id, status);",
-        # 年度快照覆盖索引（避免回表）
-        "CREATE INDEX IF NOT EXISTS ix_annual_income_covering ON annual_income(supported_village_id, year, per_capita_income_2025, village_collective_income_2025);",
+        # 年度收入覆盖索引（表已从 annual_income 换成行式 village_income，W27/r38）
+        "CREATE INDEX IF NOT EXISTS ix_village_income_covering ON village_income(supported_village_id, year, per_capita_income);",
         # 项目-按村庄和状态
         "CREATE INDEX IF NOT EXISTS ix_projects_village_status ON projects(village_id, status);",
     ]

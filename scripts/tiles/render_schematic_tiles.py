@@ -126,7 +126,7 @@ def prefecture_centers(feats):
     return out
 
 
-def draw_tile(z, tx, ty, features, feats, pref_centers, license_note):
+def draw_tile(z, tx, ty, features, feats, pref_centers, license_note):  # noqa: C901
     from PIL import Image, ImageDraw
 
     img = Image.new("RGB", (TILE_SIZE, TILE_SIZE), (247, 250, 247))
@@ -218,7 +218,7 @@ def draw_tile(z, tx, ty, features, feats, pref_centers, license_note):
     return img
 
 
-def main(argv=None) -> int:
+def main(argv=None) -> int:  # noqa: C901
     parser = argparse.ArgumentParser(
         description="用项目内置 GeoJSON 离线渲染示意瓦片包（无外部数据、可离线）"
     )

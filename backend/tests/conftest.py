@@ -111,7 +111,57 @@ if _sys.stderr and hasattr(_sys.stderr, 'reconfigure'):
     except Exception:
         pass
 
+# ── fd 级捕获 + 非 UTF-8 日志句柄（W27：本轮踩到并修的测试基建缺陷） ──────
+# 症状：一批**与本主题无关**的用例集体 ERROR，堆栈落在 pytest 的
+#   `FDCapture.snap() → tmpfile.read()`：
+#   UnicodeDecodeError: 'utf-8' codec can't decode byte 0xb8 in position 64
+# 根因：应用日志在 import 期就把 `logging.StreamHandler` 绑到了**当时的** sys.stdout
+#   （Windows 控制台默认 cp936）。此后 pytest 用 `capfd` 类用例切到 fd 级捕获，
+#   日志里的中文按 GBK 字节写进捕获临时文件，而 pytest 用 **utf-8** 读取 → 直接抛错。
+#   报错发生在捕获层，因此表现为"日志无关的用例莫名其妙全红"，极难定位。
+# 修法：把已存在的 StreamHandler 重新绑定到上面刚 reconfigure 成 utf-8 的流。
+#   只处理指向真实标准流的句柄（文件/轮转句柄不动）。
+def _rebind_stream_handlers() -> None:
+    import logging as _logging
+
+    real = {id(_sys.__stdout__): _sys.stdout, id(_sys.__stderr__): _sys.stderr}
+    roots = [_logging.getLogger()]
+    roots.extend(_logging.Logger.manager.loggerDict.values())
+    for logger in roots:
+        if not isinstance(logger, _logging.Logger):
+            continue
+        for handler in list(getattr(logger, "handlers", [])):
+            if not isinstance(handler, _logging.StreamHandler):
+                continue
+            if isinstance(handler, _logging.FileHandler):
+                continue
+            stream = getattr(handler, "stream", None)
+            replacement = real.get(id(stream))
+            if replacement is not None:
+                try:
+                    handler.setStream(replacement)
+                except Exception:  # pragma: no cover - 防御：个别句柄不支持换流
+                    pass
+
+
+_rebind_stream_handlers()
+
 import pytest
+
+
+def pytest_runtest_setup(item):  # noqa: ARG001
+    """每个用例开始前惰性重绑日志句柄。
+
+    为什么不用 session 级 autouse fixture：那会在**会话一开始**就 `import app.main`，
+    强行提前触发应用初始化（日志/种子/中间件），改变既有用例的执行顺序敏感点
+    —— 实测全量跑时 `test_seed_default_admin::test_top_org_fetch_failure` 因
+    `commit` 调用次数变为 2 而红（单跑 88 例全绿），正是这类顺序扰动。
+    改为 runtest 钩子：句柄由真正用到 `app.*` 的用例在导入期建立，钩子在下一个
+    用例开始前把它重绑到 utf-8 流即可，**不强制提前导入任何模块**。
+    """
+    _rebind_stream_handlers()
+
+
 
 # ── 根因修复：会话启动时清理遗留 test.db（跨会话残留导致顺序敏感偶发失败） ──
 import os as _cleanup_os
@@ -171,6 +221,75 @@ def _join_immediate_backup_threads():
     for _t in _threading.enumerate():
         if _t.name == "immediate-backup" and _t.is_alive():
             _t.join(timeout=10)
+
+
+# ── 根因修复：回滚「测试把 app.* 模块替换成 MagicMock」造成的跨用例污染（W27 第 12 轮）──
+# 症状（W27 第 9~11 轮反复出现）：单进程全量跑时，偶发某个**与本主题无关**的用例失败，
+# 且**每次换一个文件/方法**；单跑、整文件跑都全绿。典型断言是
+#   Expected 'commit' to have been called once. Called 2 times.
+#
+# 已定位的机制：某些用例直接写 `sys.modules["app.services.lockout_service"] = MagicMock(...)`
+# （用替身模拟"模块不可用"），若没在 teardown 还原，后续用例再
+# `patch("app.services.lockout_service.get_lockout_service")` 就打到**替身**上，
+# 真实服务照常运行并多提交一次 —— 于是计数翻倍。
+#
+# 处置：每个用例结束后，把被**替换成 Mock 或删除**的 app.* 模块还原为原始对象，
+# 并给出警告（附用例 id），让污染可见而不是靠后续用例"莫名变红"来暴露。
+# 只针对 Mock/删除两种形态，不做全量 sys.modules 快照（性能与误伤都不可接受）。
+_MODULE_SWAP_MARKER = "allow_module_swap"
+
+
+def _is_mock_object(obj) -> bool:
+    from unittest.mock import Base
+
+    return isinstance(obj, Base)
+
+
+@pytest.fixture(autouse=True)
+def _rollback_app_module_swaps(request):
+    _allowed = request.node.get_closest_marker(_MODULE_SWAP_MARKER) is not None
+    snapshot = {
+        k: v for k, v in sys.modules.items() if k == "app" or k.startswith("app.")
+    }
+    yield
+    if _allowed:
+        return
+
+    import warnings as _warnings
+
+    def _restore(name, original, how):
+        try:
+            if original is None:
+                # 用例**首次导入**后又被换成 Mock：删掉即可，下次 import 会重新加载真模块
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+        except Exception:  # pragma: no cover - 防御
+            return
+        _warnings.warn(
+            f"[test-isolation] {request.node.nodeid} 把 sys.modules[{name!r}] "
+            f"{how}且未还原，已自动还原 —— 这类污染会让**后续无关用例**偶发失败"
+            f"（W27 已实际遇到：commit/close 计数翻倍）。请改用 monkeypatch"
+            f"或在 teardown 还原；确需跨用例保留时打 @pytest.mark.{_MODULE_SWAP_MARKER}。",
+            stacklevel=1,
+        )
+
+    # ① 快照里有的：被删除 或 被替换成 Mock → 还原
+    for name, original in snapshot.items():
+        current = sys.modules.get(name)
+        if current is original:
+            continue
+        if current is None or _is_mock_object(current):
+            _restore(name, original, "替换为 Mock" if current is not None else "删除")
+
+    # ② 快照里没有的（用例内**首次导入**）：若现在是 Mock → 删掉，让下次 import 重新加载
+    for name, current in list(sys.modules.items()):
+        if name in snapshot:
+            continue
+        if not (name == "app" or name.startswith("app.")):
+            continue
+        if _is_mock_object(current):
+            _restore(name, None, "替换为 Mock（用例内首次导入）")
 
 
 # ── 根因修复：会话启动时强制导入全部模型子模块，确保 SQLAlchemy mapper 注册表完整 ──

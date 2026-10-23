@@ -270,7 +270,10 @@ async def recommend_fund_allocation(
     allocations = result.get("allocations") or []
     rationale = build_rationale(
         "weighted_need_allocation",
-        ["AnnualPopulation.population", "AnnualIncome.per_capita_income"],
+        # W27：原写法引用 `AnnualIncome.per_capita_income` —— 该属性**不存在**
+        # （annual_income 表是年份列 per_capita_income_2020..2025，且全仓从不写入），
+        # 一旦被渲染即 AttributeError。统一改为实际数据源 village_income（行式）。
+        ["VillagePopulation.total_population", "VillageIncome.per_capita_income"],
         formula={
             "kind": "proportional_allocation",
             "expression": (

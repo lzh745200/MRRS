@@ -47,16 +47,55 @@ from app.services.approval_workflow_service import (
     ApprovalWorkflowService,
     submit_entity_change_approval,
 )
+from app.services.approval_gate import (
+    DELETED_KEY,
+    open_change_approval,
+    requires_approval,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _apply_school_approval_result(db: Session, task) -> None:
-    """审批终态回写学校（注册到 ApprovalWorkflowService）
+    """审批通过后**真正应用**学校变更（W27 真门禁，注册到 ApprovalWorkflowService）。
 
-    学校无 pending 状态门，审批通过后无字段需回写；保留处理器接口便于后续扩展。
+    ## 为什么需要它
+    原实现是空函数 ``_ = (db, task)``：审批「通过/驳回」对学校零效果，而变更在
+    提交时已即时落库 —— 审批中心纯装饰（W26 检测 C2「审批伪闭环」）。
+
+    ## change_data 约定（由本模块 update/delete 端点写入）
+    * 更新：``{"字段": 新值, ...}``（扁平字典，便于审批页字段级 diff）
+    * 删除：``{"__deleted__": True}``
+
+    实体不存在（并发删除）→ 记 WARNING 放弃，不抛错。
     """
-    _ = (db, task)
+    from app.services.approval_gate import apply_field_changes, is_delete_marker
+
+    data = getattr(task, "change_data", None) or {}
+    school_id = getattr(task, "entity_id", None)
+    if school_id is None:
+        logger.warning("学校审批回写：任务缺少 entity_id（task=%s）", getattr(task, "id", None))
+        return
+
+    school = db.query(School).filter(School.id == school_id).first()
+    if school is None:
+        logger.warning(
+            "学校审批回写：记录不存在，放弃（school_id=%s task=%s）",
+            school_id, getattr(task, "id", None),
+        )
+        return
+
+    if is_delete_marker(data):
+        school.is_active = False
+        school.deleted_at = datetime.now(timezone.utc)
+    else:
+        applied = apply_field_changes(school, data)
+        if applied == 0:
+            logger.info(
+                "学校审批回写：无字段需要应用（school_id=%s task=%s）",
+                school_id, getattr(task, "id", None),
+            )
+    db.flush()
 
 
 def _apply_scholarship_approval_result(db: Session, task) -> None:
@@ -313,18 +352,10 @@ async def import_schools_excel(
             invalidate_dashboard_cache()
         except Exception:
             logger.debug("仪表盘缓存失效跳过", exc_info=True)
-        # 数据变更自动创建审批任务：学校批量导入进入待审批板块（审计留痕）
-        approval_task_id = submit_entity_change_approval(
-            db,
-            entity_type="school",
-            entity_id=0,
-            submitter_id=current_user.id,
-            title=f"学校批量导入：成功 {imported} 所，失败 {len(errors)} 所",
-            change_data={"imported": imported, "failed": len(errors), "errors": errors[:20]},
-        )
+        # W27：批量导入已逐行落库生效，**不再**创建 entity_id=0 的伪审批任务
+        # （无实体可回写，只会污染审批队列；W26 检测 C2）。
         return success_response(
-            data={"imported": imported, "failed": len(errors), "errors": errors,
-                  "approval_task_id": approval_task_id},
+            data={"imported": imported, "failed": len(errors), "errors": errors},
             message=f"成功导入 {imported} 所学校",
         )
     except Exception:
@@ -420,18 +451,10 @@ async def import_scholarship_students(
                 errors.append(_fmt_row_error(row_idx, e, str(e),
                                              row[0] if row and len(row) > 0 else "?"))
         safe_commit(db)
-        # 数据变更自动创建审批任务：资助学生批量导入进入待审批板块（审计留痕）
-        approval_task_id = submit_entity_change_approval(
-            db,
-            entity_type="scholarship_student",
-            entity_id=0,
-            submitter_id=current_user.id,
-            title=f"资助学生批量导入：成功 {imported} 名，失败 {len(errors)} 名",
-            change_data={"imported": imported, "failed": len(errors), "errors": errors[:20]},
-        )
+        # W27：批量导入已逐行落库生效，不再创建 entity_id=0 的伪审批任务
+        # （无实体可回写；W26 检测 C2）。
         return success_response(
-            data={"imported": imported, "failed": len(errors), "errors": errors,
-                  "approval_task_id": approval_task_id},
+            data={"imported": imported, "failed": len(errors), "errors": errors},
             message=f"成功导入 {imported} 名资助学生",
         )
     finally:
@@ -894,21 +917,9 @@ async def create_school(
     except Exception:
         logger.debug("仪表盘缓存失效失败")
 
-    # 数据变更自动创建审批任务（Requirement 3.2）：学校新增进入待审批板块
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="school",
-        entity_id=school.id,
-        submitter_id=current_user.id,
-        title=f"学校新增：{school.name}",
-        change_data={"name": school.name, "code": school.code,
-                     "district": school.district,
-                     "type": school.type.value if isinstance(school.type, SchoolType) else school.type,
-                     "support_status": school.support_status.value
-                     if isinstance(school.support_status, SupportStatus) else school.support_status},
-    )
+    # W27：创建是增量操作，即时生效；**不再**创建审批任务（真门禁只覆盖
+    # update/delete 的非管理员路径；门控创建需占位实体机制，尚无 id 可引用）。
     data = school.to_dict()
-    data["approval_task_id"] = approval_task_id
     return success_response(data=data, message="创建成功")
 
 
@@ -919,7 +930,11 @@ async def update_school(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """更新学校"""
+    """更新学校
+
+    W27 真门禁：非管理员的变更**不落库**，登记待审批任务，审批通过后由
+    ``_apply_school_approval_result`` 写入；管理员直通（单机运维闭环）。
+    """
     school = db.query(School).filter(School.id == school_id).first()
     if not school:
         raise AppError.not_found("学校")
@@ -937,6 +952,23 @@ async def update_school(
     if "code" in update_data and update_data["code"] == "":
         update_data["code"] = None
 
+    # ── W27 真门禁：非管理员不落库，只登记待审批变更 ──
+    if requires_approval(current_user):
+        pending_task_id = open_change_approval(
+            db,
+            current_user=current_user,
+            entity_type="school",
+            entity_id=school.id,
+            title=f"学校变更：{school.name}",
+            change_data=update_data,
+            original_data=school.to_dict(),
+        )
+        return success_response(
+            data={"id": school.id, "approval_task_id": pending_task_id,
+                  "pending_approval": True},
+            message="变更已提交审批，审批通过后生效",
+        )
+
     # 检查编码唯一性（如果要更新编码）
     if "code" in update_data and update_data["code"]:
         existing = db.query(School).filter(School.code == update_data["code"], School.id != school_id).first()
@@ -949,15 +981,6 @@ async def update_school(
         update_data["type"] = SchoolType(type_val)
     if "support_status" in update_data and update_data["support_status"]:
         update_data["support_status"] = SupportStatus(update_data["support_status"])
-
-    # 变更前快照（供审批任务变更对比 original_data）
-    old_data = {
-        "name": school.name,
-        "code": school.code,
-        "district": school.district,
-        "support_status": school.support_status.value
-        if isinstance(school.support_status, SupportStatus) else school.support_status,
-    }
 
     for key, value in update_data.items():
         setattr(school, key, value)
@@ -984,21 +1007,9 @@ async def update_school(
     except Exception:
         logger.debug("仪表盘缓存失效失败")
 
-    # 数据变更自动创建审批任务（Requirement 3.2）：学校修改进入待审批板块
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="school",
-        entity_id=school.id,
-        submitter_id=current_user.id,
-        title=f"学校变更：{school.name}",
-        change_data={"name": school.name, "code": school.code, "district": school.district,
-                     "support_status": school.support_status.value
-                     if isinstance(school.support_status, SupportStatus) else school.support_status},
-        original_data=old_data,
-    )
-    data = school.to_dict()
-    data["approval_task_id"] = approval_task_id
-    return success_response(data=data, message="更新成功")
+    # W27：管理员直通路径**不再**创建审批任务 —— 变更已生效，再建任务会产生
+    # "已通过但无事可做"的伪任务（W26 检测 C2）。审计由上方 write_work_log 承担。
+    return success_response(data=school.to_dict(), message="更新成功")
 
 
 @router.delete("/{school_id}")
@@ -1018,6 +1029,24 @@ async def delete_school(
         db,
         error_message="无权删除该学校数据",
     )
+
+    # ── W27 真门禁：非管理员不落库，只登记删除待审批 ──
+    if requires_approval(current_user):
+        pending_task_id = open_change_approval(
+            db,
+            current_user=current_user,
+            entity_type="school",
+            entity_id=school.id,
+            title=f"学校删除：{school.name}",
+            change_data={DELETED_KEY: True, "name": school.name, "code": school.code},
+            original_data={"name": school.name, "code": school.code,
+                           "district": school.district},
+        )
+        return success_response(
+            data={"id": school.id, "approval_task_id": pending_task_id,
+                  "pending_approval": True},
+            message="删除已提交审批，审批通过后生效",
+        )
 
     school.is_active = False
     school.deleted_at = datetime.now(timezone.utc)
@@ -1043,18 +1072,8 @@ async def delete_school(
     except Exception:
         logger.debug("仪表盘缓存失效失败")
 
-    # 数据变更自动创建审批任务：学校删除进入待审批板块
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="school",
-        entity_id=school.id,
-        submitter_id=current_user.id,
-        title=f"学校删除：{school.name}",
-        change_data={"deleted": True, "name": school.name, "code": school.code},
-        original_data={"name": school.name, "code": school.code, "district": school.district},
-    )
-    return success_response(data={"id": school.id, "approval_task_id": approval_task_id},
-                            message="删除成功")
+    # W27：管理员直通不建伪任务；审计由上方 write_work_log 承担。
+    return success_response(data={"id": school.id}, message="删除成功")
 
 
 # ==================== 学校附件管理 ====================

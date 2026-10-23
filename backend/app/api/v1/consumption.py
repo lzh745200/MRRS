@@ -253,3 +253,10 @@ async def delete_consumption(
 
     _write_log(db, "delete", record.id, record.item_name, current_user)
     return success_response(data={"id": record.id}, message="删除成功")
+
+
+# ==================== 回收站（W27 P1）====================
+# 删除是软删（is_active=False + deleted_at），此前无恢复通道，误删只能改库。
+from app.api.v1.recycle_bin import register_recycle_bin_routes  # noqa: E402
+
+register_recycle_bin_routes(router, model=ConsumptionRecord, resource="消费帮扶记录")

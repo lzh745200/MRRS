@@ -116,12 +116,29 @@ class ConflictDetectionResult:
         self.no_conflict_records = no_conflict_records
 
 
-# 业务唯一键映射（不依赖org_id）
+# 业务唯一键映射（**不含 organization_id**）。
+#
+# ⚠️ 单一事实源是 ``app.services.data_package_service.BUSINESS_KEYS``。本字典只保留
+# 「业务标识部分」（去掉 organization_id）—— 因为本解析器正是在**跨组织**视角比较
+# 记录，组织归属本身可能被导入改写，不能作为身份的一部分。
+#
+# 曾经两张表各自硬编码、且键名不一致（此处用 ``villages``，数据包侧用
+# ``supported_villages``），极易漂移。现由
+# ``tests/unit/test_w27_sync_business_key.py::test_conflict_resolver_keys_match_single_source``
+# 强制两者在「业务标识部分」保持一致；改动任一侧都会让该测试变红。
 BUSINESS_KEY_FIELDS = {
-    "villages": ["village_name"],  # 帮扶村使用村名作为唯一键
-    "projects": ["code"],  # 项目使用code作为唯一键
-    "funds": ["code"],  # 资金使用code作为唯一键
-    "schools": ["code"],  # 学校使用code作为唯一键
+    "villages": ["county", "village_name"],
+    "projects": ["code"],
+    "funds": ["code"],
+    "schools": ["code"],
+}
+
+# 本字典的键名 → 数据包侧的表名（用于一致性测试与读者对照）
+BUSINESS_KEY_FIELDS_TABLE_ALIAS = {
+    "villages": "supported_villages",
+    "projects": "projects",
+    "funds": "funds",
+    "schools": "schools",
 }
 
 # 数据类型模型映射

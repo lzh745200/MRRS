@@ -26,7 +26,7 @@ print("=" * 60)
 business_modules = [
     'organization', 'policy', 'projects', 'school',
     'supported_village', 'supported_village_export',
-    'rural_works', 'rural_tasks',
+    'rural_works',
     'villages', 'village_templates', 'validation', 'report_templates',
     'approval', 'messages', 'feedback', 'todos', 'ai', 'map',
     'project_milestones', 'funds', 'fund_budgets', 'fund_lifecycle',

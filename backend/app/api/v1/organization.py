@@ -795,8 +795,14 @@ async def update_organization(
     # R27（2026-10-14）：跨组织越权守卫 —— 目标组织必须在调用者子树内
     _assert_org_write_scope(db, current_user, [org_id], action="修改组织")
 
-    # 编码锁定：行政区划代码是跨机匹配的唯一依据，创建后不允许修改（需变更请停用后新建）
-    if data.code is not None and data.code != org.code:
+    # 编码锁定：行政区划代码是跨机匹配的唯一依据，**创建后不允许修改**
+    # （需变更请停用后新建）。
+    #
+    # W27 补充：新增「首次赋码」豁免 —— 老库（v1.16.4 之前）升级上来的组织
+    # ``code`` 可能为 NULL。若按 ``data.code != org.code`` 一律拒绝，这些组织将
+    # **永远无法补齐编码**，与 v1.16.4「编码必填、逐级挂接」的目标直接冲突。
+    # 故：``org.code`` 为空时允许一次性赋码；已编码组织仍严格禁止改码。
+    if data.code is not None and org.code and data.code != org.code:
         raise HTTPException(
             status_code=422,
             detail="组织编码已锁定，不允许修改；如需变更请停用该组织后新建",

@@ -1,53 +1,35 @@
-"""Issue tracking models."""
+"""Issue tracking models.
+
+W27 P1（死模型清理，迁移 r41_drop_issues_001）：
+
+**`Issue` 模型（表 `issues`）已删除** —— 实测全仓零生产引用：
+* 无任何端点/服务使用它（`/feedback` 端点只用 `Feedback`）；
+* 前端无对应页面；
+* 它自带的 6 个"扩展字段"（`steps_to_reproduce` / `expected_behavior` /
+  `actual_behavior` / `version_found` / `version_fixed` / `assignee`）本就零引用
+  —— 它们是"问题追踪"功能只做了一半留下的骨架。
+
+删除整表而非只删字段：`issues` 表除了这些死字段只剩
+`title`/`description`/`priority`/`status`/`category`/`reporter`/`tags`/
+`severity`/`environment`，而**没有任何写入路径** —— 保留一张永远为空的表
+只会让人误以为"问题追踪"功能可用。
+
+**`Feedback` 模型（表 `feedback`）保留** —— 它是**活的功能**：
+`api/v1/feedback.py` 的 `GET/POST /api/v1/feedback` 已注册并在用。
+其未接线的扩展字段（`rating` / `device_info` / `responded_at` / `responded_by`）
+属"已实现功能的可扩展点"，**不是死字段** —— 接线它们比删除它们更有价值
+（例如 `responded_at`/`responded_by` 对应"反馈回复"这一常见运营动作）。
+"""
 
 from sqlalchemy import Column, Index, Integer, String, Text
 
 from .base import BaseModel, UtcDateTime
 
 
-class Issue(BaseModel):
-    """Issue tracking model."""
-
-    __tablename__ = "issues"
-
-    __table_args__ = (
-        Index("ix_issues_status_priority", "status", "priority"),
-        Index("ix_issues_category_status", "category", "status"),
-    )
-
-    title = Column(String(200), nullable=False, index=True, comment="问题标题")
-    description = Column(Text, nullable=False, comment="问题描述")
-    steps_to_reproduce = Column(Text, comment="重现步骤")
-    expected_behavior = Column(Text, comment="期望行为")
-    actual_behavior = Column(Text, comment="实际行为")
-
-    # Classification fields
-    priority = Column(String(20), nullable=False, index=True, comment="优先级")
-    status = Column(String(20), nullable=False, index=True, comment="状态")
-    category = Column(String(50), nullable=False, index=True, comment="分类")
-
-    # Assignment fields
-    reporter = Column(String(100), nullable=False, comment="报告人")
-    assignee = Column(String(100), comment="负责人")
-
-    # Version tracking
-    version_found = Column(String(50), nullable=False, index=True, comment="发现版本")
-    version_fixed = Column(String(50), comment="修复版本")
-
-    # Additional metadata
-    tags = Column(String(500), comment="标签")
-    severity = Column(String(20), comment="严重程度")
-    environment = Column(String(100), comment="环境信息")
-
-    def __repr__(self):
-        return f"<Issue(id={self.id}, title='{self.title}', status='{self.status}', priority='{self.priority}')>"
-
-
 class Feedback(BaseModel):
     """User feedback model."""
 
     __tablename__ = "feedback"
-
     __table_args__ = (
         Index("ix_feedback_status_priority", "status", "priority"),
         Index("ix_feedback_user_id", "user_id"),

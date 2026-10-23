@@ -124,9 +124,12 @@ class TestBatchDeleteCoverage:
         try:
             vid1 = _create_village(client, "跨组织批量删除测试村")
 
-            # org=2 普通用户尝试批量删除 org=1 的记录
-            user2 = _make_user(role="user", org_id=2)
+            # W27：批量删除已收紧为**管理员专属**（非管理员改走单条删除的审批门）。
+            # 因此这里用「另一组织的**管理员**」验证跨组织隔离仍然生效
+            # —— 隔离由 apply_scope_filter 保证，与角色是否 admin 无关。
+            user2 = _make_user(role="admin", org_id=2)
             user2.id = 2
+            user2.is_superuser = False
             client.app.dependency_overrides[get_current_user] = lambda: user2
 
             resp = client.post(

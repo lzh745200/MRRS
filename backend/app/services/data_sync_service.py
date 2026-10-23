@@ -213,6 +213,19 @@ class DataSyncService:
                         export_errors[table_name] = str(e)
                         export_data["data"][table_name] = []
 
+                # 上报台账随包走（W27，W26-P0-6）
+                # ------------------------------------------------------------
+                # data_reports 有 6 个外键（source/target_org_id → organizations、
+                # submitted_by/reviewed_by/created_by → users、package_id → data_packages），
+                # **不能**直接塞进 data 表清单（目标机没有对应 ID 时会 FK 违约）。
+                # 故按「组织编码 + 用户名」做**规范化**导出（v1.16.4 的组织编码
+                # = 行政区划代码，是跨机匹配唯一依据），导入端再解析回本机 ID。
+                try:
+                    export_data["report_ledger"] = self._export_report_ledger(db)
+                except Exception as e:  # pragma: no cover - 防御分支
+                    export_errors["report_ledger"] = str(e)
+                    export_data["report_ledger"] = []
+
                 # 保存数据包
                 package_path = await self._save_export_package(export_data, package_name, config.include_files)
 
@@ -398,6 +411,11 @@ class DataSyncService:
                         error_msg = f"导入表 {table_name} 失败: {str(e)}"
                         result["errors"].append(error_msg)
                         self.logger.error(error_msg)
+
+                # 上报台账重映射导入（W27，W26-P0-6）
+                # 抽成 `_apply_report_ledger` 便于单测覆盖"台账失败不阻断整包导入"
+                # 这一分支（原内联 try/except 只能靠完整 import_package 流程触发）。
+                self._apply_report_ledger(db, import_data, result)
 
                 # 更新同步日志
                 sync_log.status = "completed"
@@ -608,6 +626,129 @@ class DataSyncService:
                 value = cls._parse_datetime(value)
             coerced[key] = value
         return coerced
+
+    # ── 上报台账跨机传递（W27，W26-P0-6）────────────────────────────────
+    #
+    # 为什么不能像普通表那样直接塞进 data 清单：
+    #   data_reports 的 6 个外键（source_org_id / target_org_id → organizations、
+    #   submitted_by / reviewed_by / created_by → users、package_id → data_packages）
+    #   指向**本机自增 ID**。目标机同一组织/用户是不同 ID，直接搬行会 FK 违约
+    #   或被错绑到别人名下。
+    #
+    # 做法：导出时把 ID 换成**跨机稳定标识**（组织编码 = 行政区划代码，见 v1.16.4；
+    # 用户用 username），导入端解析回本机 ID。report_code 是 UNIQUE 业务键，天然幂等。
+    # 无法解析的行（目标机没有该组织/用户）跳过并记日志 —— 台账是审计材料，
+    # 宁可少一条也不要绑错人。
+
+    def _export_report_ledger(self, db: Session) -> List[Dict[str, Any]]:
+        """导出规范化上报台账（组织编码 + 用户名，不含本地 ID）。"""
+        from app.models.data_report import DataReport
+        from app.models.organization import Organization
+        from app.models.user import User
+
+        org_codes = {o.id: o.code for o in db.query(Organization).all()}
+        usernames = {u.id: u.username for u in db.query(User).all()}
+
+        rows: List[Dict[str, Any]] = []
+        for rep in db.query(DataReport).all():
+            rows.append({
+                "report_code": rep.report_code,
+                "source_org_code": org_codes.get(rep.source_org_id),
+                "target_org_code": org_codes.get(rep.target_org_id),
+                "status": rep.status,
+                "title": rep.title,
+                "report_type": rep.report_type,
+                "description": rep.description,
+                "comment": rep.comment,
+                "rejection_reason": rep.rejection_reason,
+                "deadline": rep.deadline.isoformat() if rep.deadline else None,
+                "submitted_at": rep.submitted_at.isoformat() if rep.submitted_at else None,
+                "submitted_by_username": usernames.get(rep.submitted_by),
+                "reviewed_at": rep.reviewed_at.isoformat() if rep.reviewed_at else None,
+                "reviewed_by_username": usernames.get(rep.reviewed_by),
+                "created_at": rep.created_at.isoformat() if rep.created_at else None,
+            })
+        return rows
+
+    def _apply_report_ledger(self, db: Session, import_data: Dict[str, Any], result: Dict[str, Any]) -> None:
+        """把包内 `report_ledger` 应用到本机（失败**不阻断**整包导入）。
+
+        台账是审计材料：它的导入失败应记进 ``result["errors"]`` 让用户看到，
+        但不应让整包业务数据回滚 —— 否则一个坏台账行会拖垮整次同步。
+        抽成独立方法是为了让"失败分支"可被单测直接命中（原先内联在
+        ``import_package`` 里，只有完整跑一次包导入才能覆盖）。
+        """
+        ledger = import_data.get("report_ledger")
+        if not ledger:
+            return
+        try:
+            result["report_ledger_applied"] = self._import_report_ledger(db, ledger)
+        except Exception as e:
+            error_msg = f"导入上报台账失败: {e}"
+            result["errors"].append(error_msg)
+            self.logger.error(error_msg)
+
+    def _import_report_ledger(self, db: Session, rows: List[Dict[str, Any]]) -> int:
+        """把规范化台账解析回本机 ID 并 upsert（按 report_code 幂等）。返回应用条数。"""
+        from datetime import datetime as _dt
+
+        from app.models.data_report import DataReport
+        from app.models.organization import Organization
+        from app.models.user import User
+
+        if not rows:
+            return 0
+        org_ids = {o.code: o.id for o in db.query(Organization).all() if o.code}
+        user_ids = {u.username: u.id for u in db.query(User).all()}
+
+        def _dt_or_none(value):
+            if not value:
+                return None
+            try:
+                return _dt.fromisoformat(str(value))
+            except ValueError:
+                return None
+
+        applied = 0
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            code = row.get("report_code")
+            src_code = row.get("source_org_code")
+            dst_code = row.get("target_org_code")
+            if not code or not src_code or not dst_code:
+                self.logger.warning("上报台账跳过（缺 report_code/组织编码）: %r", row)
+                continue
+            src_id = org_ids.get(src_code)
+            dst_id = org_ids.get(dst_code)
+            if src_id is None or dst_id is None:
+                self.logger.warning(
+                    "上报台账跳过（本机缺组织编码 %s / %s，report_code=%s）",
+                    src_code, dst_code, code,
+                )
+                continue
+
+            existing = db.query(DataReport).filter(DataReport.report_code == code).first()
+            target_obj = existing or DataReport(report_code=code)
+            target_obj.source_org_id = src_id
+            target_obj.target_org_id = dst_id
+            target_obj.status = row.get("status") or target_obj.status or "pending"
+            target_obj.title = row.get("title")
+            target_obj.report_type = row.get("report_type")
+            target_obj.description = row.get("description")
+            target_obj.comment = row.get("comment")
+            target_obj.rejection_reason = row.get("rejection_reason")
+            target_obj.deadline = _dt_or_none(row.get("deadline"))
+            target_obj.submitted_at = _dt_or_none(row.get("submitted_at"))
+            target_obj.submitted_by = user_ids.get(row.get("submitted_by_username"))
+            target_obj.reviewed_at = _dt_or_none(row.get("reviewed_at"))
+            target_obj.reviewed_by = user_ids.get(row.get("reviewed_by_username"))
+            if existing is None:
+                db.add(target_obj)
+            applied += 1
+        db.flush()
+        self.logger.info("上报台账导入：应用 %d 条", applied)
+        return applied
 
     async def _insert_record(self, db: Session, table_name: str, record: Dict[str, Any]):
         """插入记录（W2-T7：类型化 INSERT，列类型/sync_version 默认值由元数据保证）。"""

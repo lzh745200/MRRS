@@ -131,7 +131,10 @@ def test_migration_list_matches_model_metadata():
     # （旧库升级时仍会执行回填），但当前模型不再包含该表。
     w22_new_tables = {"households", "household_members"}
     historical = {item for item in encrypted if item[0] not in w22_new_tables}
-    deleted_tables = {"villagers"}
+    # W27：``rural_tasks`` 随模块下线被移除（模型/表均由 r36 迁移归档），
+    # 历史回填清单里仍保留其 contact_phone（旧库升级时照常执行回填），
+    # 但当前模型不再包含该表 —— 与 villagers 同属"已删表保留在迁移历史"。
+    deleted_tables = {"villagers", "rural_tasks"}
     migration_cols = {item for item in mod._iter_pii_columns() if item[0] not in deleted_tables}
     assert migration_cols == historical, "迁移回填清单与模型加密列不一致"
     # 新表 PII 列必须都是 EncryptedText（ORM 层透明加密）

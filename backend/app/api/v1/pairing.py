@@ -508,3 +508,21 @@ async def delete_visit(
 
     _write_log(db, "delete_visit", visit.id, visit.visitors, current_user, detail=pairing.title)
     return success_response(data={"id": visit.id}, message="删除成功")
+
+
+# ==================== 回收站（W27 P1）====================
+# 结对记录与走访记录都是软删，此前无恢复通道；挂接通用回收站路由。
+# 放在文件末尾：`/batch-restore`、`/batch-purge` 必须晚于全部 `/{id}/...` 注册。
+#
+# ⚠️ 两张表**不能注册在同一个 router 上**：通用回收站的路径同为 `/{rid}/restore`、
+# `/batch-restore` 等，重复注册会产生**完全相同的路径**，后者被先注册者永久遮蔽
+# （"看着注册了其实调不到"的假修复）。因此走访记录用**子路由 + `/visits` 前缀**，
+# 最终路径为 `/pairings/visits/{rid}/restore`，与结对记录的 `/pairings/{rid}/restore`
+# 天然不冲突；也与既有 `/{pairing_id}/visits/{visit_id}` 段数不同，不会互相捕获。
+from app.api.v1.recycle_bin import register_recycle_bin_routes  # noqa: E402
+
+register_recycle_bin_routes(router, model=PairingRecord, resource="结对帮扶记录")
+
+visits_recycle_router = APIRouter(tags=["结对帮扶与走访台账"])
+register_recycle_bin_routes(visits_recycle_router, model=VisitRecord, resource="走访记录")
+router.include_router(visits_recycle_router, prefix="/visits")

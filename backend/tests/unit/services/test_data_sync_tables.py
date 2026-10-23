@@ -91,6 +91,11 @@ class TestExportErrorSurfacing:
                 def first(self):
                     return None
 
+                def all(self):
+                    # W27：导出新增「上报台账」查询（organizations/users/data_reports），
+                    # 空库语义下返回空列表即可
+                    return []
+
             fake_db.query.return_value = Q()
 
             from app.services.data_sync_service import ExportConfig
@@ -133,6 +138,11 @@ class TestExportErrorSurfacing:
 
                 def first(self):
                     return None
+
+                def all(self):
+                    # W27：导出新增「上报台账」查询（organizations/users/data_reports），
+                    # 空库语义下返回空列表即可
+                    return []
 
             fake_db.query.return_value = Q()
 

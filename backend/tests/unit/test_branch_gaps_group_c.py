@@ -282,12 +282,15 @@ class TestRbacServiceBranches:
 
 class TestEffectivenessServiceBranches:
     def _indicator_db(self, incomes, prev, infra=2, industry=1):
+        """W27：人均收入改读 ``village_income``（行式），每村每年一行、字段即
+        ``per_capita_income``。因此当年收入查询改用 ``.first()``（原为 ``.all()``
+        读 annual_income 的年份列）。"""
         db = MagicMock()
-        income_all_q = _query_mock(all=incomes)
+        income_q = _query_mock(first=incomes[0] if incomes else None)
         prev_q = _query_mock(first=prev)
         infra_q = _query_mock(scalar=infra)
         industry_q = _query_mock(scalar=industry)
-        db.query = MagicMock(side_effect=[income_all_q, prev_q, infra_q, industry_q])
+        db.query = MagicMock(side_effect=[income_q, prev_q, infra_q, industry_q])
         return db
 
     def test_compute_indicators_without_income_data_uses_baseline(self):
@@ -302,14 +305,24 @@ class TestEffectivenessServiceBranches:
         assert result["ecological"] == 70.0  # 60 + 2*5
 
     def test_compute_indicators_negative_prev_income_keeps_growth_zero(self):
-        """95->99: 上年人均收入为负时增长率保持 0，不做除法。"""
-        incomes = [SimpleNamespace(per_capita_income_2024=5000)]
-        prev = SimpleNamespace(per_capita_income_2023=-100)
+        """上年人均收入为负时增长率保持 0，不做除法（行式表字段 per_capita_income）。"""
+        incomes = [SimpleNamespace(per_capita_income=5000)]
+        prev = SimpleNamespace(per_capita_income=-100)
         db = self._indicator_db(incomes=incomes, prev=prev, infra=0, industry=0)
         result = EffectivenessService._compute_indicators(db, SimpleNamespace(id=1), 2024)
         assert result["indicators"]["per_capita_income"] == 5000.0
         assert result["indicators"]["income_growth_rate"] == 0.0
         assert result["economic"] == 60.0  # 人均收入封顶 60，增长率为 0
+
+    def test_compute_indicators_growth_computed(self):
+        """两年都有收入时计算增长率（W27 改读 village_income 后的增长分支）。"""
+        incomes = [SimpleNamespace(per_capita_income=5000)]
+        prev = SimpleNamespace(per_capita_income=4000)
+        db = self._indicator_db(incomes=incomes, prev=prev, infra=0, industry=0)
+        result = EffectivenessService._compute_indicators(db, SimpleNamespace(id=1), 2024)
+        assert result["indicators"]["per_capita_income"] == 5000.0
+        assert result["indicators"]["income_growth_rate"] == 25.0
+        assert result["indicators"]["data_complete"] is True
 
     def test_evaluate_village_keeps_rank_when_already_correct(self):
         """197->196: 排名已正确时跳过回写。"""

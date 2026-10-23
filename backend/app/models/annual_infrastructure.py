@@ -1,11 +1,9 @@
 # coding: utf-8
 from sqlalchemy import (
     Column,
-    Float,
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -33,16 +31,14 @@ class AnnualInfrastructure(BaseModel):
     )
     year = Column(Integer, nullable=False, comment="年份")
 
-    infrastructure_investment_2025 = Column(Numeric(15, 4), default=0, comment="基础设施投入_2025")
-    infrastructure_investment_2026 = Column(Numeric(15, 4), default=0, comment="基础设施投入_2026")
-    infrastructure_investment_total = Column(Numeric(15, 4), default=0, comment="基础设施投入总计")
-
-    road_km_2025 = Column(Float, default=0, comment="乡村道路公里_2025")
-    housing_renovations_2025 = Column(Integer, default=0, comment="住房改造_2025")
-    water_facilities_2025 = Column(Integer, default=0, comment="水利设施_2025")
-    cultural_squares_2025 = Column(Integer, default=0, comment="文化广场_2025")
-    bookhouses_internet_cubs_2025 = Column(Integer, default=0, comment="书屋/网吧_2025")
-    other_infrastructure_2025 = Column(Integer, default=0, comment="其他_2025")
+    # W27 P1（死字段清理，迁移 r39_prune_annual_infra_cols_001）：
+    # 原有一批"年份写死进列名"的字段已移除 —— infrastructure_investment_2025/2026/total、
+    # road_km_2025、housing_renovations_2025、water_facilities_2025、cultural_squares_2025、
+    # bookhouses_internet_cubs_2025、other_infrastructure_2025。
+    # 它们与已删的 annual_income 是同一反模式（每过一年就得改模型），且全仓零引用；
+    # 真正的行式明细在 infrastructure_improvement（investment/road_km/housing_renovation/
+    # water_facilities/cultural_plaza/library_cafe，按 year 分行）。
+    # 本表保留的意义仅为"当年是否填报过"（effectiveness_service 用 COUNT(id) 判断）。
 
     village = relationship("SupportedVillage", backref="annual_infrastructure_data")
 

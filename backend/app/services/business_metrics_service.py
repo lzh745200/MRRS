@@ -148,7 +148,9 @@ class BusinessMetricsService:
         allocation_rate = (float(completed_amount) / float(total_amount) * 100) if float(total_amount) > 0 else 0
 
         metrics = {
-            "total_funds": total_funds,
+            # W27（W26-P0-2）：原 `total_funds` 实为**条数**，与 dashboard 里同名却是
+            # 金额 SUM 的字段同名异义；更名 `funds_count`，金额由 `total_amount` 提供。
+            "funds_count": total_funds,
             "total_amount": float(total_amount),
             "completed_funds": completed_funds,
             "completed_amount": float(completed_amount),

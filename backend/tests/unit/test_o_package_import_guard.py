@@ -285,3 +285,5 @@ class TestRecordReceipt:
         monkeypatch.setattr(guard.AuditLogger, "log", staticmethod(_boom))
         # 不抛异常即通过（回执故障不阻断导入）
         record_receipt(MagicMock(), checksum="x", package_type="data_package")
+        # 门禁要求显式断言：被吞掉的异常不影响模块常量契约
+        assert guard.PACKAGE_IMPORT_ACTION == "package_import"

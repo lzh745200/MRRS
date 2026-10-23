@@ -65,7 +65,6 @@ def _get_entity_type(instance) -> str:
         "UserPermission": "permission",
         "UserRole": "user_role",
         "Organization": "org",
-        "RuralTask": "rural_task",
         "Message": "message",
         "Feedback": "feedback",
         "MachineCode": "machine_code",
@@ -143,7 +142,6 @@ def setup_audit_events(models: list = None):
         from app.models.policy import Policy, PolicyCategory
         from app.models.project import Project
         from app.models.rbac import RbacRole, UserPermission, UserRole
-        from app.models.rural_task import RuralTask
         from app.models.school import ScholarshipStudent, School, SchoolProject
         from app.models.supported_village import SupportedVillage
         from app.models.todo import Todo
@@ -158,7 +156,6 @@ def setup_audit_events(models: list = None):
             Message,
             Organization, Policy, PolicyCategory, Project,
             RbacRole, UserPermission, UserRole,
-            RuralTask,
             ScholarshipStudent, School, SchoolProject,
             SupportedVillage, Todo, User,
             ApprovalTask, ApprovalWorkflow,

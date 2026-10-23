@@ -195,7 +195,6 @@ class TestAPIRouters:
         ('app.api.v1.fund_lifecycle', 'router'),
         ('app.api.v1.fund_budgets', 'router'),
         ('app.api.v1.rural_works', 'router'),
-        ('app.api.v1.rural_tasks', 'router'),
         ('app.api.v1.search', 'router'),
         ('app.api.v1.map', 'router'),
         ('app.api.v1.messages', 'router'),

@@ -45,9 +45,11 @@ from app.core.data_permission import apply_scope_filter
 from app.api.v1.deps import enforce_admin_include_deleted, build_viewable_because
 from app.schemas.supported_village import SupportedVillageCreate, SupportedVillageUpdate
 from app.core.transaction import safe_commit, savepoint
-from app.services.approval_workflow_service import (
-    ApprovalWorkflowService,
-    submit_entity_change_approval,
+from app.services.approval_workflow_service import ApprovalWorkflowService
+from app.services.approval_gate import (
+    DELETED_KEY,
+    open_change_approval,
+    requires_approval,
 )
 from app.services.yearly_rollforward_service import (
     RollforwardError,
@@ -104,12 +106,48 @@ def _resolve_village_sort(sort_by: Optional[str], sort_order: Optional[str]):
 
 
 def _apply_village_approval_result(db: Session, task) -> None:
-    """审批终态回写帮扶村（注册到 ApprovalWorkflowService）
+    """审批通过后**真正应用**帮扶村变更（W27 真门禁，注册到 ApprovalWorkflowService）。
 
-    帮扶村无 pending 状态门（创建即生效），审批通过后无字段需回写；
-    此处保留处理器接口，便于后续扩展（如 transition_status 审批门）。
+    ## 为什么需要它
+    原实现是空函数 ``_ = (db, task)``：审批「通过/驳回」对帮扶村零效果，而变更在
+    提交时已即时落库 —— 审批中心纯装饰（W26 检测 C2「审批伪闭环」）。
+
+    ## change_data 约定（由本模块 update/delete 端点写入）
+    * 更新：``{"字段": 新值, ...}``（扁平字典，便于审批页字段级 diff）
+    * 删除：``{"__deleted__": True}``
+
+    ## 语义
+    * 删除标记 → 置 ``is_active=False`` + ``deleted_at``（与 delete_village 一致）；
+    * 否则逐字段 ``setattr``（跳过主键/归属审计列/保留键）；
+    * 实体已被并发删除或不存在 → 记 WARNING 并放弃，不抛错（审批不应因实体消失而失败）。
     """
-    _ = (db, task)
+    from app.services.approval_gate import apply_field_changes, is_delete_marker
+
+    data = getattr(task, "change_data", None) or {}
+    village_id = getattr(task, "entity_id", None)
+    if village_id is None:
+        logger.warning("帮扶村审批回写：任务缺少 entity_id（task=%s）", getattr(task, "id", None))
+        return
+
+    village = db.query(SupportedVillage).filter(SupportedVillage.id == village_id).first()
+    if village is None:
+        logger.warning(
+            "帮扶村审批回写：记录不存在，放弃（village_id=%s task=%s）",
+            village_id, getattr(task, "id", None),
+        )
+        return
+
+    if is_delete_marker(data):
+        village.is_active = False
+        village.deleted_at = datetime.now(timezone.utc)
+    else:
+        applied = apply_field_changes(village, data)
+        if applied == 0:
+            logger.info(
+                "帮扶村审批回写：无字段需要应用（village_id=%s task=%s）",
+                village_id, getattr(task, "id", None),
+            )
+    db.flush()
 
 
 ApprovalWorkflowService.register_entity_apply_handler("supported_village", _apply_village_approval_result)
@@ -808,18 +846,11 @@ async def import_villages(
             errors.append(msg if msg.startswith("第") else f"第{row_idx}行: {msg}")
     safe_commit(db)
     await _invalidate_village_cache()
-    # 数据变更自动创建审批任务：批量导入进入待审批板块（审计留痕）
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="supported_village",
-        entity_id=0,
-        submitter_id=current_user.id,
-        title=f"帮扶村批量导入：成功 {imported} 条，跳过 {len(errors)} 条",
-        change_data={"imported": imported, "failed": len(errors), "errors": errors[:20]},
-    )
+    # W27：批量导入是数据装载操作（逐行写库已生效），**不再**创建审批任务 ——
+    # entity_id=0 的任务无实体可回写，属伪任务（W26 检测 C2）。
+    # 导入结果由响应体的 imported/failed/errors 与 work_log 留痕。
     return success_response(
-        data={"imported": imported, "failed": len(errors), "errors": errors,
-              "approval_task_id": approval_task_id},
+        data={"imported": imported, "failed": len(errors), "errors": errors},
         message=f"成功导入 {imported} 条记录" + (f"，{len(errors)} 条跳过" if errors else ""),
     )
 
@@ -830,7 +861,14 @@ async def batch_delete_villages(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """批量软删帮扶村（仅可删除当前用户有权访问的记录，二次密码确认防误删）"""
+    """批量软删帮扶村（**仅管理员**；二次密码确认防误删）
+
+    W27：批量删除是**绕过单条审批门**的高危路径，故收紧为管理员专属。
+    非管理员请走单条 ``DELETE /supported-villages/{id}``（会进入审批门，通过后生效）。
+    """
+    from app.core.permission_utils import require_admin
+
+    require_admin(current_user)
     if not data.ids:
         raise HTTPException(status_code=400, detail="请提供要删除的ID列表")
     # 二次确认：校验当前用户密码（单机共用电脑防误删，与组织删除对齐）
@@ -848,22 +886,15 @@ async def batch_delete_villages(
     )
     safe_commit(db)
     await _invalidate_village_cache()
-    # 数据变更自动创建审批任务：批量删除进入待审批板块（审计留痕）
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="supported_village",
-        entity_id=0,
-        submitter_id=current_user.id,
-        title=f"帮扶村批量删除：{deleted_count} 条",
-        change_data={"deleted": True, "deleted_count": deleted_count, "ids": data.ids},
-    )
+    # W27：管理员直通不建伪审批任务（entity_id=0 的任务本无意义）；
+    # 审计由下方即时备份 + work_log 承担。
     # 单机防丢失：批量删除后触发一次即时备份
     if deleted_count:
         from app.services.immediate_backup import trigger_immediate_backup
 
         trigger_immediate_backup(description=f"批量删除帮扶村{deleted_count}条后备份", delay=1.0)
     return success_response(
-        data={"deleted": deleted_count, "approval_task_id": approval_task_id},
+        data={"deleted": deleted_count},
         message=f"已删除 {deleted_count} 条记录",
     )
 
@@ -906,17 +937,10 @@ async def create_village(
         db, AuditAction.CREATE, current_user, village, new_data=_village_to_diff_dict(village),
         detail=f"创建帮扶村: {village.village_name}",
     )
-    # 数据变更自动创建审批任务（Requirement 3.2）：帮扶村新增进入待审批板块
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="supported_village",
-        entity_id=village.id,
-        submitter_id=current_user.id,
-        title=f"帮扶村新增：{village.village_name}",
-        change_data=_village_to_diff_dict(village),
-    )
-    return success_response(data={"id": village.id, "approval_task_id": approval_task_id},
-                            message="创建成功")
+    # W27：创建是增量操作，即时生效；**不再**创建审批任务。
+    # 真门禁只覆盖 update/delete（非管理员）—— 门控"创建"需要占位实体机制
+    # （实体尚无 id，审批任务无法引用），故创建保持直通并移除伪任务。
+    return success_response(data={"id": village.id}, message="创建成功")
 
 
 @router.put("/{village_id}")
@@ -926,7 +950,11 @@ async def update_village(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """更新帮扶村（过渡状态变更需管理员权限 + 写入审计日志）"""
+    """更新帮扶村（过渡状态变更需管理员权限 + 写入审计日志）
+
+    W27 真门禁：非管理员的变更**不落库**，登记待审批任务，审批通过后由
+    ``_apply_village_approval_result`` 写入；管理员直通（单机运维闭环）。
+    """
     village = _get_village_or_404(db, village_id, current_user)
     update_dict = data.model_dump(exclude_unset=True)
     old_snapshot = _village_to_diff_dict(village)
@@ -953,6 +981,23 @@ async def update_village(
             },
         )
 
+    # ── W27 真门禁：非管理员不落库，只登记待审批变更 ──
+    if requires_approval(current_user):
+        pending_task_id = open_change_approval(
+            db,
+            current_user=current_user,
+            entity_type="supported_village",
+            entity_id=village.id,
+            title=f"帮扶村变更：{village.village_name}",
+            change_data=update_dict,
+            original_data=old_snapshot,
+        )
+        return success_response(
+            data={"id": village.id, "approval_task_id": pending_task_id,
+                  "pending_approval": True},
+            message="变更已提交审批，审批通过后生效",
+        )
+
     for key, value in update_dict.items():
         if key == "id":
             continue
@@ -972,18 +1017,9 @@ async def update_village(
         old_data=old_snapshot, new_data=_village_to_diff_dict(village),
         detail=f"更新帮扶村: {village.village_name}",
     )
-    # 数据变更自动创建审批任务（Requirement 3.2）：帮扶村修改进入待审批板块（含变更对比）
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="supported_village",
-        entity_id=village.id,
-        submitter_id=current_user.id,
-        title=f"帮扶村变更：{village.village_name}",
-        change_data=_village_to_diff_dict(village),
-        original_data=old_snapshot,
-    )
-    return success_response(data={"id": village.id, "approval_task_id": approval_task_id},
-                            message="更新成功")
+    # W27：管理员直通路径**不再**创建审批任务 —— 变更已生效，再建任务会产生
+    # "已通过但无事可做"的伪任务（W26 检测 C2）。审计留痕由 _record_village_change 承担。
+    return success_response(data={"id": village.id}, message="更新成功")
 
 
 @router.delete("/{village_id}")
@@ -1001,22 +1037,29 @@ async def delete_village(
     if not village.is_active:
         raise HTTPException(status_code=409, detail="该帮扶村已在回收站中，请勿重复删除")
 
+    # ── W27 真门禁：非管理员不落库，只登记删除待审批 ──
+    if requires_approval(current_user):
+        pending_task_id = open_change_approval(
+            db,
+            current_user=current_user,
+            entity_type="supported_village",
+            entity_id=village.id,
+            title=f"帮扶村删除：{village.village_name}",
+            change_data={DELETED_KEY: True, "village_name": village.village_name},
+            original_data=_village_to_diff_dict(village),
+        )
+        return success_response(
+            data={"id": village.id, "approval_task_id": pending_task_id,
+                  "pending_approval": True},
+            message="删除已提交审批，审批通过后生效",
+        )
+
     village.is_active = False
     village.deleted_at = datetime.now(timezone.utc)
     safe_commit(db)
     await _invalidate_village_cache()
-    # 数据变更自动创建审批任务：帮扶村删除进入待审批板块
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="supported_village",
-        entity_id=village.id,
-        submitter_id=current_user.id,
-        title=f"帮扶村删除：{village.village_name}",
-        change_data={"deleted": True, "village_name": village.village_name},
-        original_data=_village_to_diff_dict(village),
-    )
-    return success_response(data={"id": village.id, "approval_task_id": approval_task_id},
-                            message="删除成功")
+    # W27：管理员直通不建伪任务；审计由 work_log / 变更历史承担。
+    return success_response(data={"id": village.id}, message="删除成功")
 
 
 # ── 回收站：恢复 / 彻底删除（仅管理员） ──
@@ -1073,18 +1116,9 @@ async def restore_village(
         old_data=old_snapshot, new_data=_village_to_diff_dict(village),
         detail=f"从回收站恢复帮扶村: {village.village_name}",
     )
-    approval_task_id = submit_entity_change_approval(
-        db,
-        entity_type="supported_village",
-        entity_id=village.id,
-        submitter_id=current_user.id,
-        title=f"帮扶村恢复：{village.village_name}",
-        change_data={"restored": True, "village_name": village.village_name},
-    )
-    return success_response(
-        data={"id": village.id, "approval_task_id": approval_task_id},
-        message="恢复成功",
-    )
+    # W27：恢复端点本身已 require_admin，管理员直通即生效，不再创建审批任务
+    # （否则产生"已通过但无事可做"的伪任务，污染审批队列）。
+    return success_response(data={"id": village.id}, message="恢复成功")
 
 
 @router.post("/{village_id}/purge")

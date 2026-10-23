@@ -33,12 +33,12 @@ import type { TileInfo } from '@/api/map'
 import { chartColor, chartColorPrimary } from '@/utils/chartColors'
 import {
   GCJ02_HINT,
-  TILE_ATTRIBUTION,
   TILE_LOAD_FAILED_HINT,
   TILE_URL_TEMPLATE,
   convertMarkersForTiles,
   isGcj02,
   isTileMapUsable,
+  tileAttribution,
   tileInfoHint,
   toDisplayCoord,
 } from '@/utils/mapTiles'
@@ -127,7 +127,8 @@ function initMap(info: TileInfo) {
     minZoom: info.zoomLevels[0],
     maxZoom: info.zoomLevels[info.zoomLevels.length - 1],
     noWrap: true,
-    attribution: TILE_ATTRIBUTION,
+    // OSM/ODbL 衍生底图必须显示署名（见 utils/mapTiles.tileAttribution）
+    attribution: tileAttribution(info.manifest),
   })
   tileLayer.on('tileerror', handleTileError)
   tileLayer.addTo(map)

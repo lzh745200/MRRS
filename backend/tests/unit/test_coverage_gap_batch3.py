@@ -1099,7 +1099,7 @@ class TestTrendPredictionService:
 
     def test_predict_village_income_no_data(self):
         from app.services.ai.trend_prediction_service import TrendPredictionService
-        with patch("app.models.annual_income.AnnualIncome") as MockIncome:
+        with patch("app.models.supported_village.VillageIncome") as MockIncome:
             db = MagicMock()
             db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
             result = TrendPredictionService.predict_village_income(db, 1)
@@ -1107,7 +1107,7 @@ class TestTrendPredictionService:
 
     def test_predict_village_income_with_data(self):
         from app.services.ai.trend_prediction_service import TrendPredictionService
-        with patch("app.models.annual_income.AnnualIncome") as MockIncome:
+        with patch("app.models.supported_village.VillageIncome") as MockIncome:
             db = MagicMock()
             record = MagicMock()
             record.year = 2022

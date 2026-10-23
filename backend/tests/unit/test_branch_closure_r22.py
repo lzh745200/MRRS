@@ -149,10 +149,11 @@ class TestControlPackageConfigType:
         import json
         import zipfile
         from app.api.v1 import control_package as mod
+        from app.core.package_integrity import sign_manifest
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
-            zf.writestr("manifest.json", json.dumps({"package_type": "control"}))
+            zf.writestr("manifest.json", json.dumps(sign_manifest({"package_type": "control"}, None)))
             zf.writestr("system_config.json", json.dumps(["not-a-dict"]))
         payload = buf.getvalue()
         monkeypatch.setattr(mod, "read_upload_with_limit", AsyncMock(return_value=payload))

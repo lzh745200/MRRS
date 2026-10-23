@@ -311,3 +311,16 @@ async def create_risk_record(
     return success_response(
         data=household_service.serialize_risk_record(record), message="登记成功"
     )
+
+
+# ==================== 回收站（W27 P1）====================
+#
+# 删除是软删（is_active=False + deleted_at），此前**没有恢复通道** ——
+# 误删只能改库。挂接通用回收站路由后可恢复 / 彻底删除（管理员 + 二次确认密码）。
+#
+# 放在文件末尾是有意的：`/batch-restore`、`/batch-purge` 必须晚于所有
+# `/{household_id}/...` 路由注册，避免被动态段捕获。
+from app.api.v1.recycle_bin import register_recycle_bin_routes  # noqa: E402
+from app.models.household import Household  # noqa: E402
+
+register_recycle_bin_routes(router, model=Household, resource="户档案")

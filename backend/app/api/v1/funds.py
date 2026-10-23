@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.api.v1.deps import require_funds_operator_role, enforce_admin_include_deleted, build_viewable_because
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.core.transaction import safe_commit
@@ -939,10 +940,38 @@ def _transition_status(
         logger.debug("写入状态流转操作日志失败", exc_info=True)
 
 
+def _assert_can_approve_fund(fund, current_user) -> None:
+    """经费「不能自批」守卫（W27 P1，财务内控 / 审计要求）。
+
+    ## 缺陷
+    ``approve_fund`` 原先只校验操作角色与数据域，**不校验创建人** ——
+    录入人（或其同账号）可以直接审批自己创建的经费记录，"录入—审批"合一，
+    资金类数据失去双人复核的意义。
+
+    ## 语义
+    * ``FUND_ALLOW_SELF_APPROVAL=True`` → 放行（单操作员部署的显式例外）；
+    * 超级管理员 → 放行（单机部署的最终审核人，避免自我死锁）；
+    * 其余情况创建人 == 审批人 → 403。
+
+    驳回**不受限**：驳回自己的提交不会让资金流出，且现场常需要自行撤回。
+    """
+    if getattr(settings, "FUND_ALLOW_SELF_APPROVAL", False):
+        return
+    if getattr(current_user, "is_superuser", False):
+        return
+    creator = getattr(fund, "created_by", None)
+    if creator is not None and creator == getattr(current_user, "id", None):
+        raise HTTPException(
+            status_code=403,
+            detail="不能审批自己创建的经费记录，请由其他有审批权限的同事复核",
+        )
+
+
 @router.post("/{fund_id}/approve")
 def approve_fund(fund_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     require_funds_operator_role(current_user)
     fund = _get_fund_or_404(db, fund_id, current_user)
+    _assert_can_approve_fund(fund, current_user)
     _transition_status(db, fund, "approved", ["pending", "planned"],
                        required_attachments=[],  # 至少需要 1 个附件
                        operator=current_user,

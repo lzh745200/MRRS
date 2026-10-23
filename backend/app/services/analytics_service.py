@@ -155,31 +155,39 @@ class AnalyticsService:
             # 人口统计
             # 表名为模型声明的单数名（VillagePopulation.__tablename__ = "village_population"）；
             # 历史复数写法会让 SQL 直接报 no such table 并被下方 except 吞掉 → 恒空结果。
+            #
+            # W27（W26-P0-2）：原 WHERE 用 `vp.year = (SELECT MAX(year) ...)`（**全库最大年**）
+            # —— 正是 CONTEXT.md:47 判为缺陷的 W18 P0-1 形态，且当年份不齐时会整体漏村。
+            # 改为 JOIN「每村各自最新年份」子查询，与 metrics_service.population_totals 同口径。
             population_result = db.execute(text(f"""
                 SELECT
                     SUM(vp.total_population) as total_population,
                     SUM(vp.resident_population) as total_resident,
                     AVG(vp.resident_population * 100.0 / NULLIF(vp.total_population, 0)) as avg_resident_rate
                 FROM village_population vp
+                JOIN (
+                    SELECT supported_village_id AS vid, MAX(year) AS max_year
+                    FROM village_population GROUP BY supported_village_id
+                ) latest ON latest.vid = vp.supported_village_id AND latest.max_year = vp.year
                 JOIN supported_villages sv ON sv.id = vp.supported_village_id AND sv.is_active = 1
-                WHERE vp.year = (
-                    SELECT MAX(year) FROM village_population
-                )
-                  AND sv.id IN ({self._scoped_id_sql(db, SupportedVillage, current_user)})
+                WHERE sv.id IN ({self._scoped_id_sql(db, SupportedVillage, current_user)})
             """))  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
             population_row = population_result.fetchone()
 
             # 收入统计
+            # W27（W26-P0-2）：同人口，改为「每村各自最新年」；数据源本就是行式
+            # village_income（与 metrics_service.avg_per_capita_income 同表同口径）。
             income_result = db.execute(text(f"""
                 SELECT
                     AVG(vi.per_capita_income) as avg_per_capita_income,
                     AVG(vi.county_per_capita_income) as avg_county_income
                 FROM village_income vi
+                JOIN (
+                    SELECT supported_village_id AS vid, MAX(year) AS max_year
+                    FROM village_income GROUP BY supported_village_id
+                ) latest ON latest.vid = vi.supported_village_id AND latest.max_year = vi.year
                 JOIN supported_villages sv ON sv.id = vi.supported_village_id AND sv.is_active = 1
-                WHERE vi.year = (
-                    SELECT MAX(year) FROM village_income
-                )
-                  AND sv.id IN ({self._scoped_id_sql(db, SupportedVillage, current_user)})
+                WHERE sv.id IN ({self._scoped_id_sql(db, SupportedVillage, current_user)})
             """))  # nosec B608 - 插值为 _scoped_id_sql 以 literal_binds 编译出的整型子查询，列名均为调用方字面量，无用户可控字符串
             income_row = income_result.fetchone()
 

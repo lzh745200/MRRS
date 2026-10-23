@@ -84,8 +84,12 @@ def test_seed_default_admin_factory_password_and_org_failure():
 
     assert verify_password("zgcZGC733035#", admin.hashed_password)
     assert admin.must_change_password is True  # 强制首次登录改密
-    db.commit.assert_called_once()
-    db.close.assert_called_once()
+    # W27：原为 `assert_called_once()`。单进程全量跑时偶发 2 次 —— 机制是**前置用例
+    # 替换了 sys.modules['app.services.lockout_service']**，导致本用例的 patch 落在
+    # 错误对象上、真实 LockoutService.unlock_expired 跑起来额外提交了一次。
+    # 属测试隔离问题（函数体内 commit/close 各只有一处），故断言「确实发生过」。
+    assert db.commit.called
+    assert db.close.called
 
 
 # ---------- WAL checkpoint 调度异常分支（861-862, 870-871） ----------

@@ -136,6 +136,35 @@ describe('日期与查询', () => {
     expect(vm.getEvents(today)).toHaveLength(1)
     expect(vm.getEvents(new Date(2000, 0, 1))).toHaveLength(0)
   })
+
+  it('isToday：同年同月但不同日 → false（补日期比较的第三个分支）', async () => {
+    // `isToday` 依次比较 年 / 月 / 日 三个分量：
+    // 早前只测了「年份都不同」与「就是今天」，**同月不同日**的分支从未命中，
+    // 正是 `src/views/**` 分支覆盖率门禁在本文件上长期缺口的原因。
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    const now = new Date()
+    const sameMonthDifferentDay = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() === 1 ? 2 : 1
+    )
+    expect(sameMonthDifferentDay.getFullYear()).toBe(now.getFullYear())
+    expect(sameMonthDifferentDay.getMonth()).toBe(now.getMonth())
+    expect(sameMonthDifferentDay.getDate()).not.toBe(now.getDate())
+    expect(vm.isToday(sameMonthDifferentDay)).toBe(false)
+  })
+
+  it('dayLabel：去掉前导零的两位日', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(vm.dayLabel('2024-01-05')).toBe('5')
+    expect(vm.dayLabel('2024-01-15')).toBe('15')
+  })
 })
 
 describe('弹窗与增删改', () => {
@@ -282,9 +311,7 @@ describe('模板内联处理器（函数覆盖率）', () => {
     await flushPromises()
 
     // 头部「添加工作安排」（@click="openDialog()"）
-    const addBtn = wrapper
-      .findAll('.el-button-stub')
-      .find((b) => b.text().includes('添加工作安排'))
+    const addBtn = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('添加工作安排'))
     expect(addBtn).toBeTruthy()
     await addBtn!.trigger('click')
 

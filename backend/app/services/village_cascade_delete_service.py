@@ -36,7 +36,7 @@ class VillageCascadeDeleteService:
         ("annual_population", "supported_village_id"),
         ("annual_infrastructure", "supported_village_id"),
         ("annual_industry", "supported_village_id"),
-        ("annual_income", "supported_village_id"),
+        # annual_income 已于 W27 删除（迁移 r38）：人均纯收入统一到 village_income
         # 帮扶支持表
         ("consumption_support", "supported_village_id"),
         ("education_support", "supported_village_id"),

@@ -17,6 +17,7 @@ async def test_auto_package_disabled():
 
 @pytest.mark.asyncio
 async def test_auto_package_no_target_dir():
+    """未配置目标目录 → 直接返回，不得实例化打包服务。"""
     from app.services.backup_scheduler import auto_package_job
 
     def cfg(key, default=None):
@@ -25,11 +26,16 @@ async def test_auto_package_no_target_dir():
 
     with patch("app.services.backup_scheduler.get_db_context"):
         with patch("app.services.backup_scheduler.get_config", side_effect=cfg):
-            await auto_package_job()  # 不应抛异常
+            with patch(
+                "app.services.data_package_service.DataPackageService"
+            ) as mk_svc:
+                await auto_package_job()
+                mk_svc.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_auto_package_target_not_writable():
+    """目标盘不可写 → 不打包（不抛异常）。"""
     from app.services.backup_scheduler import auto_package_job
 
     def cfg(key, default=None):
@@ -39,7 +45,11 @@ async def test_auto_package_target_not_writable():
     with patch("app.services.backup_scheduler.get_db_context"):
         with patch("app.services.backup_scheduler.get_config", side_effect=cfg):
             with patch("app.utils.drive_detect.ensure_target_dir", return_value=False):
-                await auto_package_job()
+                with patch(
+                    "app.services.data_package_service.DataPackageService"
+                ) as mk_svc:
+                    await auto_package_job()
+                    mk_svc.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -157,8 +167,19 @@ async def test_auto_package_no_org():
 
 
 @pytest.mark.asyncio
-async def test_auto_package_exception_safe():
+async def test_auto_package_exception_safe(caplog):
+    """数据库上下文获取失败 → 异常被吞并记日志，不向上冒泡（调度器不可崩）。"""
+    import logging
+
     from app.services.backup_scheduler import auto_package_job
 
-    with patch("app.services.backup_scheduler.get_db_context", side_effect=RuntimeError("boom")):
-        await auto_package_job()  # 不应抛出
+    with caplog.at_level(logging.ERROR):
+        with patch(
+            "app.services.backup_scheduler.get_db_context",
+            side_effect=RuntimeError("boom"),
+        ):
+            result = await auto_package_job()
+
+    assert result is None                      # 无返回值，调用方（调度器）不受影响
+    # 日志内容（caplog.text 已做过 args 插值，避免手工 % 格式化踩参数类型）
+    assert "boom" in caplog.text

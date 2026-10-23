@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_active_user, get_db
+from app.core.config import settings
 from app.core.data_permission import _get_org_subtree, assert_org_reachable
 from app.core.response import success_response
 from app.core.permission_utils import is_admin
@@ -165,6 +166,10 @@ def generate_control_package(
             "system_config": len(system_config_data),
         },
     }
+    # W27（W26-P0-7）：补 checksum（强制）与签名（生成方配了私钥时）
+    from app.core.package_integrity import sign_manifest
+
+    manifest = sign_manifest(manifest, settings.PACKAGE_SIGNING_KEY)
 
     # 5. 打包 ZIP
     buffer = io.BytesIO()
@@ -306,6 +311,25 @@ def _resolve_package_target_org(db: Session, manifest: dict, current_user: User)
     return org_id
 
 
+def _verify_control_manifest(manifest: dict) -> None:
+    """管控包完整性校验（W27，W26-P0-7）。
+
+    checksum 强制；配置了 ``PACKAGE_PUBKEY`` 时强制要求 Ed25519 签名。
+    抽成独立函数以降低 `import_control_package` 的圈复杂度（C901）。
+    """
+    from app.core.package_integrity import PackageIntegrityError, verify_manifest
+
+    try:
+        verify_manifest(
+            manifest,
+            public_key_hex=settings.PACKAGE_PUBKEY,
+            allow_unsigned=True,
+            package_label="管控配置包",
+        )
+    except PackageIntegrityError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/import")
 async def import_control_package(
     file: UploadFile = File(...),
@@ -332,6 +356,9 @@ async def import_control_package(
             manifest = json.loads(read_zip_member(zf, "manifest.json"))
             if manifest.get("package_type") != "control":
                 raise HTTPException(status_code=400, detail="非管控配置包类型")
+
+            # W27（W26-P0-7）：完整性校验 —— checksum 强制；配了 PACKAGE_PUBKEY 则强制验签
+            _verify_control_manifest(manifest)
 
             # 导入模块策略
             applied_policies = 0

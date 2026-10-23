@@ -53,35 +53,31 @@ class EffectivenessService:
 
     @staticmethod
     def _compute_indicators(db, village: Any, year: int) -> Dict[str, Any]:
-        """基于村庄年度数据计算三唯评估指标（无数据时给出中性基线）。"""
-        from app.models.annual_income import AnnualIncome
+        """基于村庄年度数据计算三唯评估指标（无数据时给出中性基线）。
+
+        W27（W26-P0-2）：人均收入改读 **``village_income``（行式）** ——
+        原实现读 ``annual_income`` 的年份列（`per_capita_income_2020..2025`），
+        而该表**只被读、从不被写**（全仓 0 处写入、dev 库 0 行）且年份列写死到 2025，
+        导致成效评估的人均收入恒为 0/陈旧，且与工作台/大屏口径不一致。
+        """
         from app.models.annual_infrastructure import AnnualInfrastructure
         from app.models.annual_industry import AnnualIndustry
+        from app.models.supported_village import VillageIncome
         from sqlalchemy import func
 
-        # 年度收入（人均收入与增长率）
-        # AnnualIncome 的人均收入按年份分散列存储（per_capita_income_2020..2025），
-        # 外键为 supported_village_id（village_id 字段已废弃）。
-        income_field = f"per_capita_income_{year}"
-        prev_field = f"per_capita_income_{year - 1}"
-        incomes = (
-            db.query(AnnualIncome)
-            .filter(AnnualIncome.supported_village_id == village.id, AnnualIncome.year == year)
-            .all()
-        )
-        per_capita = 0.0
+        def _income_of(y: int):
+            row = (
+                db.query(VillageIncome)
+                .filter(VillageIncome.supported_village_id == village.id, VillageIncome.year == y)
+                .first()
+            )
+            return float(getattr(row, "per_capita_income", 0) or 0) if row else 0.0
+
+        per_capita = _income_of(year)
         income_growth = 0.0
-        if incomes and getattr(incomes[0], income_field, None) is not None:
-            per_capita = float(getattr(incomes[0], income_field) or 0)
-        prev = (
-            db.query(AnnualIncome)
-            .filter(AnnualIncome.supported_village_id == village.id, AnnualIncome.year == year - 1)
-            .first()
-        )
-        if prev and getattr(prev, prev_field, None) and per_capita > 0:
-            prev_val = float(getattr(prev, prev_field) or 0)
-            if prev_val > 0:
-                income_growth = round((per_capita - prev_val) / prev_val * 100, 1)
+        prev_val = _income_of(year - 1)
+        if prev_val > 0 and per_capita > 0:
+            income_growth = round((per_capita - prev_val) / prev_val * 100, 1)
 
         # 基础设施覆盖
         infra_count = (
@@ -109,7 +105,8 @@ class EffectivenessService:
             "income_growth_rate": income_growth,
             "infrastructure_count": infra_count,
             "industry_count": industry_count,
-            "data_complete": bool(incomes),
+            # W27：数据完整度按「当年是否有收入数据」判定（原实现依赖 incomes 列表）
+            "data_complete": bool(per_capita),
         }
         return {
             "economic": min(100, economic),

@@ -434,6 +434,17 @@ class PermissionPackageService:
                 else:
                     warnings.append("配置包缺少内容校验和（旧版本导出），已跳过完整性校验")
 
+                # W27（W26-P0-7）：来源签名校验（仅在配置了 PACKAGE_PUBKEY 时强制）。
+                # 内容完整性已由上面的 content_checksum 承担；本层补"来源可信"。
+                _sig_err = self._signature_error(manifest)
+                if _sig_err is not None:
+                    errors.append(_sig_err)
+                    return {
+                        "success": False,
+                        "errors": errors,
+                        "message": "权限包签名校验失败，已拒绝导入",
+                    }
+
                 export_usernames = {u["username"] for u in user_legacy_data}
 
                 # 检查哪些用户在当前系统中存在
@@ -1022,6 +1033,30 @@ class PermissionPackageService:
     # ================================================================
     # 工具方法
     # ================================================================
+
+    def _signature_error(self, manifest) -> Optional[str]:
+        """校验权限包**来源签名**；失败返回错误文案，通过返回 None。
+
+        W27 第 12 轮：从 `import_package` 内联 try/except 抽出 —— 该失败分支是当时
+        覆盖率门禁的最后一处缺口（只有把 PACKAGE_PUBKEY 配上 + 构造一个未签名包
+        + 完整跑一次导入才能命中）。抽出后可直接单测，且 `import_package` 更短。
+
+        语义（详见 `core/package_integrity.verify_optional_signature`）：
+        未配置 `PACKAGE_PUBKEY` → 不校验（保留旧包与无密钥基建可用性）；
+        已配置 → 签名必须存在且验签通过，否则拒绝（fail-closed）。
+        """
+        from app.core.config import settings as _settings
+        from app.core.package_integrity import PackageIntegrityError, verify_optional_signature
+
+        try:
+            verify_optional_signature(
+                manifest,
+                public_key_hex=_settings.PACKAGE_PUBKEY,
+                package_label="权限配置包",
+            )
+        except PackageIntegrityError as exc:
+            return str(exc)
+        return None
 
     def _calculate_checksum(self, file_path: str) -> str:
         """计算文件的 SHA-256 校验和"""

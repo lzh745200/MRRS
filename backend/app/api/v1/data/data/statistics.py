@@ -202,7 +202,11 @@ async def get_summary(current_user=Depends(get_current_user), db: Session = Depe
             "total_villages": villages_count,
             "total_schools": schools_count,
             "total_projects": projects_count,
-            "total_funds": funds_count,
+            # W27（W26-P0-2）：此字段原名为 ``total_funds``，但值是 **`COUNT(Fund.id)` 记录条数**，
+            # 与 dashboard/bigscreen/assessment 里同为 ``total_funds`` 却是 `SUM(amount) 金额`
+            # 的字段**同名异义**，是本轮"经费合计三口径"混淆的根源。
+            # 现更名为 ``funds_count``（条数）；金额仍由 ``approved_funds_amount`` 提供。
+            "funds_count": funds_count,
             "approved_funds_amount": funds_sum,
             "projects_by_status": projects_status_dist,
             "active_projects": active_projects,
@@ -1029,7 +1033,8 @@ async def get_dashboard_data(current_user=Depends(get_current_user), db: Session
                 ),
                 Project,
             ).count(),
-            "total_funds": _scoped(db.query(Fund).filter(Fund.is_active == True), Fund).count(),  # noqa: E712
+            # W27：同 ``/summary`` —— COUNT 语义字段由 ``total_funds`` 更名为 ``funds_count``
+            "funds_count": _scoped(db.query(Fund).filter(Fund.is_active == True), Fund).count(),  # noqa: E712
         }
 
         funds_total = (

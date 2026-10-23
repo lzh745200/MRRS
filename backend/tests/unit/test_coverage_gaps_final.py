@@ -575,10 +575,17 @@ class TestAdminEndpoints:
 
 class TestAnalyticsCrossOrg:
 
+    @staticmethod
+    def _super_user():
+        """真全局管理员：组织集合不受限（W27 起按数据域收敛）。"""
+        u = _make_user(role="super_admin", is_superuser=True)
+        u.data_scope = "all"
+        return u
+
     async def test_cross_org_comparison(self):
         from app.api.v1.data.data.analytics import get_cross_org_comparison
         db = _mock_db()
-        user = _make_user(role="admin")
+        user = self._super_user()
         # 模拟 4 次 GROUP BY 查询（替代旧 N+1 逐条查询）
         call_count = [0]
 
@@ -611,11 +618,97 @@ class TestAnalyticsCrossOrg:
         assert item["funds_total"] == 10000.0
 
     async def test_cross_org_comparison_forbidden(self):
+        """W27（W26-P0-4）：越权由「200 + success=False」改为标准 403。"""
         from app.api.v1.data.data.analytics import get_cross_org_comparison
         db = _mock_db()
         user = _make_user(role="user", is_superuser=False)
+        with pytest.raises(HTTPException) as ei:
+            await get_cross_org_comparison(db=db, current_user=user)
+        assert ei.value.status_code == 403
+
+    async def test_dept_admin_scoped_to_subtree(self, monkeypatch):
+        """W27：部门级 admin 只能看到「本组织及子树」（W26-P0-4 的核心修复）。
+
+        覆盖 analytics 的 OWN_DEPT 分支：取子树 → 用 `in_(allowed_org_ids)` 过滤组织。
+        """
+        from app.api.v1.data.data.analytics import get_cross_org_comparison
+        from app.core.data_permission import DataScope
+
+        calls = {"org_filter": False}
+        db = _mock_db()
+        user = _make_user(role="admin", is_superuser=False)
+        user.data_scope = None
+
+        monkeypatch.setattr(
+            "app.core.data_permission.get_data_scope", lambda u: DataScope.OWN_DEPT
+        )
+        monkeypatch.setattr("app.core.data_permission._get_user_org_id", lambda u: 7)
+        monkeypatch.setattr(
+            "app.core.data_permission._get_org_subtree", lambda d, oid: ([7, 8], ["a", "b"])
+        )
+
+        call_count = [0]
+
+        def query_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            q = MagicMock()
+            if call_count[0] == 1:
+                q.filter.return_value.all.return_value = [(7, "本部门")]
+                # 第二层 filter（组织白名单）被调用即证明做了收敛
+                original_filter = q.filter.return_value
+
+                def _second_filter(*a, **k):
+                    calls["org_filter"] = True
+                    return original_filter
+
+                original_filter.filter = _second_filter
+            else:
+                q.filter.return_value.group_by.return_value.all.return_value = []
+            return q
+
+        db.query.side_effect = query_side_effect
         result = await get_cross_org_comparison(db=db, current_user=user)
-        assert result is not None
+
+        assert result.success is True
+        assert result.data["total"] == 1
+        assert result.data["items"][0]["organization_id"] == 7
+        assert calls["org_filter"] is True, "部门级 admin 未按子树收敛组织范围"
+
+    async def test_own_scope_returns_empty_result(self, monkeypatch):
+        """普通用户（OWN 数据域）→ 无组织级可见范围，返回空列表而不是报错。"""
+        from app.api.v1.data.data.analytics import get_cross_org_comparison
+        from app.core.data_permission import DataScope
+
+        db = _mock_db()
+        user = _make_user(role="admin", is_superuser=False)  # 有 admin 角色但数据域是 OWN
+        user.data_scope = None
+
+        monkeypatch.setattr(
+            "app.core.data_permission.get_data_scope", lambda u: DataScope.OWN
+        )
+        result = await get_cross_org_comparison(db=db, current_user=user)
+
+        assert result.success is True
+        assert result.data == {"items": [], "total": 0}
+        assert "无组织级对比权限" in (result.message or "")
+
+    async def test_own_dept_without_org_returns_empty(self, monkeypatch):
+        """OWN_DEPT 但取不到组织 id → 同样退化为空结果（fail-closed，不放行全量）。"""
+        from app.api.v1.data.data.analytics import get_cross_org_comparison
+        from app.core.data_permission import DataScope
+
+        db = _mock_db()
+        user = _make_user(role="admin", is_superuser=False)
+        user.data_scope = None
+
+        monkeypatch.setattr(
+            "app.core.data_permission.get_data_scope", lambda u: DataScope.OWN_DEPT
+        )
+        monkeypatch.setattr("app.core.data_permission._get_user_org_id", lambda u: None)
+        result = await get_cross_org_comparison(db=db, current_user=user)
+
+        assert result.data["total"] == 0
+        assert result.data["items"] == []
 
 
 # ===================================================================
@@ -1298,65 +1391,12 @@ class TestAuditLogger:
 
 
 # ===================================================================
-# 28. rural_tasks.py  (4 lines)
+# 28. rural_tasks.py — **模块已于 W27 下线**（见 r36_drop_rural_tasks_001）
 # ===================================================================
-
-
-class TestRuralTasks:
-
-    def test_get_task_forbidden(self):
-        from app.api.v1.rural_tasks import _get_task_or_403
-        db = _mock_db()
-        user = _make_user(role="user", is_superuser=False, uid=99)
-        task = MagicMock()
-        task.created_by = 1
-        db.query.return_value.filter.return_value.first.return_value = task
-        with patch("app.api.v1.rural_tasks.is_admin", return_value=False):
-            with pytest.raises(HTTPException) as exc_info:
-                _get_task_or_403(1, user, db)
-            assert exc_info.value.status_code == 403
-
-    async def test_list_tasks_non_admin_filter(self):
-        from app.api.v1.rural_tasks import list_tasks
-        db = _mock_db()
-        user = _make_user(role="user", is_superuser=False, uid=5)
-        mock_q = MagicMock()
-        mock_q.filter.return_value = mock_q
-        mock_q.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
-        mock_q.count.return_value = 0
-        db.query.return_value = mock_q
-        with patch("app.api.v1.rural_tasks.is_admin", return_value=False):
-            result = await list_tasks(
-                skip=0, limit=10, order_by="created_at", order_desc=True,
-                current_user=user, db=db,
-            )
-            assert result is not None
-
-    async def test_task_stats_non_admin(self):
-        from app.api.v1.rural_tasks import get_statistics
-        db = _mock_db()
-        user = _make_user(role="user", is_superuser=False, uid=5)
-        mock_q = MagicMock()
-        mock_q.filter.return_value = mock_q
-        mock_q.count.return_value = 0
-        db.query.return_value = mock_q
-        with patch("app.api.v1.rural_tasks.is_admin", return_value=False):
-            result = await get_statistics(current_user=user, db=db)
-            assert result is not None
-
-    async def test_batch_delete_non_admin(self):
-        from app.api.v1.rural_tasks import batch_delete_tasks
-        db = _mock_db()
-        user = _make_user(role="user", is_superuser=False, uid=5)
-        mock_q = MagicMock()
-        mock_q.filter.return_value.filter.return_value.delete.return_value = 2
-        db.query.return_value = mock_q
-        with patch("app.api.v1.rural_tasks.is_admin", return_value=False), \
-             patch("app.api.v1.rural_tasks.safe_commit"):
-            result = await batch_delete_tasks({"ids": [1, 2]}, current_user=user, db=db)
-            assert result.data["deleted"] == 2
-
-
+#
+# 原有 4 个用例（_get_task_or_403 / list_tasks / get_statistics /
+# batch_delete_tasks）随模块删除一并移除。rural_tasks 与 rural_works 语义重叠，
+# 属重复功能；下线后不再有可测对象，也不应以 skip 掩盖（避免"空壳测试"）。
 # ===================================================================
 # 29. core/permissions.py  (2 lines)
 # ===================================================================

@@ -11,7 +11,7 @@ import { nextTick } from 'vue'
 
 // vi.mock 工厂会被提升到模块顶部注册，直接引用顶层变量会触发 TDZ；
 // 所有被工厂引用的对象放入 vi.hoisted 中先行初始化。
-const { ElMessage, confirmMock, mockPost } = vi.hoisted(() => {
+const { ElMessage, confirmMock, mockPost, mockGet, mockPut } = vi.hoisted(() => {
   return {
     ElMessage: {
       success: vi.fn(),
@@ -21,6 +21,8 @@ const { ElMessage, confirmMock, mockPost } = vi.hoisted(() => {
     },
     confirmMock: vi.fn(),
     mockPost: vi.fn(),
+    mockGet: vi.fn(),
+    mockPut: vi.fn(),
   }
 })
 
@@ -31,7 +33,13 @@ vi.mock('element-plus', () => ({
 
 vi.mock('@/api/request', () => ({
   post: mockPost,
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  get: mockGet,
+  put: mockPut,
+  del: vi.fn(),
+  apiRequest: vi.fn(),
+  default: vi.fn(),
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 import ComprehensiveEntry from '@/views/dataEntry/ComprehensiveEntry.vue'
 
@@ -139,7 +147,13 @@ function makeFullDraft() {
         },
       ],
       investmentData: [
-        { year: currentYear - 6, militaryInvestment: 5, localInvestment: 6, leaderVisits: 2, soldierVisits: 3 },
+        {
+          year: currentYear - 6,
+          militaryInvestment: 5,
+          localInvestment: 6,
+          leaderVisits: 2,
+          soldierVisits: 3,
+        },
       ],
     },
     currentStep: 2,
@@ -155,7 +169,11 @@ function makeFullDraft() {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  // 用例间隔离：残留草稿会被 loadDraftFromLocal 恢复，导致"不会保存的项"随执行顺序漂移
+  localStorage.clear()
   mockPost.mockResolvedValue({ data: { id: 101 } })
+  // W27：提交前会先按「县 + 村名」查重（getSupportedVillages），默认查无同名村 → 走新建
+  mockGet.mockResolvedValue({ items: [] })
   confirmMock.mockResolvedValue(undefined)
 })
 
@@ -506,7 +524,6 @@ describe('步骤校验与导航', () => {
   })
 })
 
-
 describe('步骤校验扩展分支', () => {
   it('步骤1投资数据不完整/为空时拦截', async () => {
     const wrapper = mountComp()
@@ -608,20 +625,17 @@ describe('步骤校验扩展分支', () => {
 })
 
 describe('保存草稿与提交审核', () => {
-  it('保存草稿：服务器成功与失败两条提示路径', async () => {
+  it('保存草稿：只写本机 localStorage，绝不请求服务器（W27 P0-5）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const btn = wrapper.findAll('el-button-stub').find((b) => b.text().includes('保存草稿'))!
-    // 成功
-    mockPost.mockResolvedValueOnce({ data: { id: 101 } })
+    mockPost.mockClear()
     await btn.trigger('click')
     await flushPromises()
-    expect(ElMessage.success).toHaveBeenCalledWith('草稿已保存到服务器')
-    // 失败（落本地）
-    mockPost.mockRejectedValueOnce(new Error('net'))
-    await btn.trigger('click')
-    await flushPromises()
-    expect(ElMessage.success).toHaveBeenCalledWith('草稿已保存到本地')
+    // 核心回归：草稿不得触发任何服务器写入（原实现会 POST 新建帮扶村）
+    expect(mockPost).not.toHaveBeenCalled()
+    expect(ElMessage.success).toHaveBeenCalledWith('草稿已保存到本机（未提交到服务器）')
+    expect(localStorage.getItem(DRAFT_KEY)).toBeTruthy()
     wrapper.unmount()
   })
 
@@ -647,25 +661,47 @@ describe('保存草稿与提交审核', () => {
     vm.currentStep = 4
     await nextTick()
     confirmMock.mockRejectedValueOnce('cancel')
-    await wrapper.findAll('el-button-stub').find((b) => b.text() === '提交审核')!.trigger('click')
+    await wrapper
+      .findAll('el-button-stub')
+      .find((b) => b.text() === '提交审核')!
+      .trigger('click')
     await flushPromises()
     expect(ElMessage.error).not.toHaveBeenCalled()
     expect(ElMessage.success).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('提交审核：确认非 cancel 异常时按取消处理不报错', async () => {
+  it('提交审核：关窗（close）也按取消处理，不弹错误', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     fillBasic(vm)
     vm.currentStep = 4
     await nextTick()
-    // 确认弹窗 reject 非 'cancel' 值 → 走 ElMessage.error
     confirmMock.mockRejectedValueOnce('close')
-    await wrapper.findAll('el-button-stub').find((b) => b.text() === '提交审核')!.trigger('click')
+    await wrapper
+      .findAll('el-button-stub')
+      .find((b) => b.text() === '提交审核')!
+      .trigger('click')
     await flushPromises()
-    expect(ElMessage.error).toHaveBeenCalledWith('提交失败')
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('提交审核：真实异常显示失败原因', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.currentStep = 4
+    await nextTick()
+    confirmMock.mockRejectedValueOnce(new Error('disk full'))
+    await wrapper
+      .findAll('el-button-stub')
+      .find((b) => b.text() === '提交审核')!
+      .trigger('click')
+    await flushPromises()
+    expect(ElMessage.error).toHaveBeenCalledWith('disk full')
     wrapper.unmount()
   })
 
@@ -674,16 +710,21 @@ describe('保存草稿与提交审核', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     fillBasic(vm)
-    // 先保存一次草稿，验证提交后清除
     vm.saveDraftToLocal()
     expect(localStorage.getItem(DRAFT_KEY)).toBeTruthy()
     vm.currentStep = 4
     await nextTick()
-    await wrapper.findAll('el-button-stub').find((b) => b.text() === '提交审核')!.trigger('click')
+    await wrapper
+      .findAll('el-button-stub')
+      .find((b) => b.text() === '提交审核')!
+      .trigger('click')
     await flushPromises()
-    expect(confirmMock).toHaveBeenCalledWith('确认提交数据进行审核？提交后将清除本地草稿。', '提交确认', {
-      type: 'info',
-    })
+    // 确认框始终开启 HTML 渲染（用于列出"不会保存"的项）
+    expect(confirmMock).toHaveBeenCalledWith(
+      expect.stringContaining('确认提交数据进行审核？提交后将清除本地草稿。'),
+      '提交确认',
+      expect.objectContaining({ dangerouslyUseHTMLString: true })
+    )
     expect(mockPost).toHaveBeenCalledWith(
       '/supported-villages',
       expect.objectContaining({ department: '某部', village_name: '幸福村', province: '贵州省' })
@@ -692,6 +733,92 @@ describe('保存草稿与提交审核', () => {
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
     expect(vm.lastSavedAt).toBe('')
     expect(vm.currentStep).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('提交审核：存在"不会保存"的板块时用 warning 并逐项列出（W27 P0-5 核心）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    // 这些字段与后端模型口径不一致，必须显式告知而不是静默丢弃
+    vm.formData.industryHelp.projectType = '光伏'
+    vm.formData.consumptionHelp.purchaseAmount = 12
+    vm.formData.honors = [{ name: '先进集体' }]
+    vm.formData.collaboration.isCrossUnit = true
+    vm.currentStep = 4
+    await nextTick()
+    await wrapper
+      .findAll('el-button-stub')
+      .find((b) => b.text() === '提交审核')!
+      .trigger('click')
+    await flushPromises()
+    const [msg, , opts] = confirmMock.mock.calls[confirmMock.mock.calls.length - 1]
+    expect(opts.type).toBe('warning')
+    expect(msg).toContain('以下内容本次不会保存到服务器')
+    expect(msg).toContain('产业帮扶')
+    expect(msg).toContain('消费帮扶')
+    expect(msg).toContain('荣誉记录')
+    expect(msg).toContain('跨单位协作信息')
+    wrapper.unmount()
+  })
+
+  it('提交审核：其余"不会保存"分支同样被列出（基建/党建/医疗/教育/村委成员/附件/就业）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.formData.infrastructureHelp.projectCount = 2
+    vm.formData.partyBuildingHelp.activityType = '主题党日'
+    vm.formData.medicalHelp.beneficiaries = 30
+    vm.formData.educationHelp.activityCount = 4
+    vm.formData.employmentHelp.employedCount = 8
+    vm.formData.committeeInfo.members = [{ name: '张三' }]
+    vm.fileList = [{ name: 'a.png' }]
+    vm.currentStep = 4
+    await nextTick()
+    await wrapper
+      .findAll('el-button-stub')
+      .find((b) => b.text() === '提交审核')!
+      .trigger('click')
+    await flushPromises()
+    const msg = confirmMock.mock.calls[confirmMock.mock.calls.length - 1][0] as string
+    expect(msg).toContain('基础设施')
+    expect(msg).toContain('党建帮扶')
+    expect(msg).toContain('医疗帮扶')
+    expect(msg).toContain('教育帮扶')
+    expect(msg).toContain('就业帮扶')
+    expect(msg).toContain('村委成员名单')
+    expect(msg).toContain('附件')
+    wrapper.unmount()
+  })
+
+  it('提交审核：无"不会保存"项时不显示提示段，类型为 info', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 只填必填步骤（步骤0 基础信息 + 步骤1 投资数据），专项/消费留空
+    vm.formData.basicInfo.department = '某部'
+    vm.formData.basicInfo.supportUnit = '某旅'
+    vm.formData.basicInfo.villageName = '幸福村'
+    vm.formData.basicInfo.helpType = 'industry'
+    vm.formData.basicInfo.province = '520000'
+    vm.formData.investmentData.forEach((d: any) => {
+      d.militaryInvestment = 1
+      d.localInvestment = 1
+      d.leaderVisits = 1
+      d.soldierVisits = 1
+    })
+    vm.currentStep = 4
+    await nextTick()
+    await wrapper
+      .findAll('el-button-stub')
+      .find((b) => b.text() === '提交审核')!
+      .trigger('click')
+    await flushPromises()
+    const call = confirmMock.mock.calls[confirmMock.mock.calls.length - 1]
+    expect(call[0]).toBe('确认提交数据进行审核？提交后将清除本地草稿。')
+    expect(call[2].type).toBe('info')
     wrapper.unmount()
   })
 
@@ -710,13 +837,13 @@ describe('保存草稿与提交审核', () => {
     mockPost.mockRejectedValueOnce(new Error('boom'))
     await submitBtn().trigger('click')
     await flushPromises()
-    expect(ElMessage.error).toHaveBeenCalledWith('提交失败')
+    expect(ElMessage.error).toHaveBeenCalledWith('boom')
     wrapper.unmount()
   })
 })
 
 describe('submitVillageData 数据组装', () => {
-  it('villageId 直连 + 年度数据条件提交全组合', async () => {
+  it('新建帮扶村 + 年度数据条件提交全组合', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -727,13 +854,41 @@ describe('submitVillageData 数据组装', () => {
     vm.formData.basicInfo.isRevitalizationTier = true
     vm.formData.populationData = [
       // 人口：左侧真（totalPopulation>0）
-      { year: 2024, totalPopulation: 100, households: 0, povertyAlleviatedPopulation: 0, perCapitaIncome: 0, collectiveEconomyIncome: 0 },
+      {
+        year: 2024,
+        totalPopulation: 100,
+        households: 0,
+        povertyAlleviatedPopulation: 0,
+        perCapitaIncome: 0,
+        collectiveEconomyIncome: 0,
+      },
       // 人口：右侧真（households>0）；收入：左侧真（perCapitaIncome>0）
-      { year: 2023, totalPopulation: 0, households: 5, povertyAlleviatedPopulation: 0, perCapitaIncome: 5000, collectiveEconomyIncome: 0 },
+      {
+        year: 2023,
+        totalPopulation: 0,
+        households: 5,
+        povertyAlleviatedPopulation: 0,
+        perCapitaIncome: 5000,
+        collectiveEconomyIncome: 0,
+      },
       // 人口：两侧假；收入：右侧真（collectiveEconomyIncome>0）
-      { year: 2022, totalPopulation: 0, households: 0, povertyAlleviatedPopulation: 0, perCapitaIncome: 0, collectiveEconomyIncome: 88 },
+      {
+        year: 2022,
+        totalPopulation: 0,
+        households: 0,
+        povertyAlleviatedPopulation: 0,
+        perCapitaIncome: 0,
+        collectiveEconomyIncome: 88,
+      },
       // 全零：均不提交
-      { year: 2021, totalPopulation: 0, households: 0, povertyAlleviatedPopulation: 0, perCapitaIncome: 0, collectiveEconomyIncome: 0 },
+      {
+        year: 2021,
+        totalPopulation: 0,
+        households: 0,
+        povertyAlleviatedPopulation: 0,
+        perCapitaIncome: 0,
+        collectiveEconomyIncome: 0,
+      },
     ]
     vm.formData.investmentData = [
       { year: 2024, militaryInvestment: 0, localInvestment: 0, leaderVisits: 2, soldierVisits: 0 },
@@ -764,29 +919,293 @@ describe('submitVillageData 数据组装', () => {
     wrapper.unmount()
   })
 
-  it('villageId 嵌套形态与空值早退；可选字段假值侧为 undefined', async () => {
+  it('同「县 + 村名」已存在时改为更新，不重复建村（W27 P0-5）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     fillBasic(vm)
-    // 嵌套 { data: { id } }
-    mockPost.mockResolvedValue({ data: { data: { id: 102 } } })
+    vm.formData.basicInfo.county = '云岩区'
+    // 后端已有同名村 → 应走 PUT 而不是 POST
+    mockGet.mockResolvedValue({
+      items: [{ id: 77, village_name: '幸福村', county: '云岩区' }],
+    })
+    await vm.submitVillageData()
+    expect(mockPut).toHaveBeenCalledWith(
+      '/supported-villages/77',
+      expect.objectContaining({ village_name: '幸福村' })
+    )
+    expect(mockPost).not.toHaveBeenCalledWith('/supported-villages', expect.anything())
+    wrapper.unmount()
+  })
+
+  it('查重接口异常时退回新建（不阻断提交）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    mockGet.mockRejectedValue(new Error('net'))
     await vm.submitVillageData()
     expect(mockPost).toHaveBeenCalledWith(
       '/supported-villages',
+      expect.objectContaining({ village_name: '幸福村' })
+    )
+    wrapper.unmount()
+  })
+
+  it('专项帮扶与村委信息按可映射字段提交（W27 P0-5 核心）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.formData.industryHelp.investment = 10
+    vm.formData.infrastructureHelp.investment = 20
+    vm.formData.partyBuildingHelp.investment = 30
+    vm.formData.medicalHelp.investment = 40
+    vm.formData.educationHelp.investment = 50
+    vm.formData.educationHelp.aidedStudents = 6
+    vm.formData.committeeInfo.overview = '概况'
+    vm.formData.committeeInfo.specialIndustry = '茶叶'
+    await vm.submitVillageData()
+    const urls = mockPost.mock.calls.map((c) => c[0] as string)
+    for (const section of [
+      'industry',
+      'infrastructure',
+      'party-building',
+      'medical',
+      'education',
+    ]) {
+      expect(urls.some((u) => u.endsWith(`/${section}`))).toBe(true)
+    }
+    // 教育额外带 aided_students
+    const eduCall = mockPost.mock.calls.find((c) => String(c[0]).endsWith('/education'))!
+    expect(eduCall[1]).toEqual(expect.objectContaining({ investment: 50, aided_students: 6 }))
+    // 村委信息走专用端点，字段名与后端模型一致
+    const committeeCall = mockPost.mock.calls.find((c) => String(c[0]).endsWith('/committee'))!
+    expect(committeeCall[1]).toEqual(
       expect.objectContaining({
-        city: undefined,
-        county: undefined,
-        township: undefined,
-        is_revitalization_tier: undefined,
+        overview: '概况',
+        special_industry: '茶叶',
+        collective_income_amount: 0,
       })
     )
-    // res.data 为 null → 直接返回，不发年度请求
+    wrapper.unmount()
+  })
+
+  it('零值板块不提交；任一项失败则抛出并汇总（不伪装成功）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    // 零值 → 不产生请求
+    vm.formData.industryHelp.investment = 0
+    await vm.submitVillageData()
+    const urls = mockPost.mock.calls.map((c) => c[0] as string)
+    expect(urls.some((u) => u.endsWith('/industry'))).toBe(false)
+
+    // 有值但保存失败 → 必须 throw（上层显示「提交失败」而不是「已提交审核」）
     mockPost.mockClear()
+    vm.formData.infrastructureHelp.investment = 5
+    mockPost.mockImplementation((url: string) => {
+      if (String(url).endsWith('/infrastructure')) {
+        return Promise.reject({ response: { data: { detail: '字段非法' } } })
+      }
+      return Promise.resolve({ data: { id: 101 } })
+    })
+    await expect(vm.submitVillageData()).rejects.toThrow(/1 项保存失败/)
+    wrapper.unmount()
+  })
+
+  it('后端未返回 ID 时抛出（不再静默返回）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
     mockPost.mockResolvedValue({ data: null })
-    const result = await vm.submitVillageData()
-    expect(result).toBeNull()
-    expect(mockPost).toHaveBeenCalledTimes(1)
+    await expect(vm.submitVillageData()).rejects.toThrow(/未返回有效 ID/)
+    wrapper.unmount()
+  })
+
+  it('村名为空时不查重、不提交（resolveVillageId 早退）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.formData.basicInfo.villageName = '   '
+    await expect(vm.submitVillageData()).rejects.toThrow(/未返回有效 ID/)
+    expect(mockGet).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('查重返回数组/裸 data 两种形态都能识别（unwrapList 两侧）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.formData.basicInfo.county = '云岩区'
+    // 直接是数组
+    mockGet.mockResolvedValue([{ id: 88, village_name: '幸福村', county: '云岩区' }])
+    await vm.submitVillageData()
+    expect(mockPut).toHaveBeenCalledWith('/supported-villages/88', expect.anything())
+
+    // 裸 data 数组形态
+    mockPut.mockClear()
+    mockPost.mockClear()
+    mockGet.mockResolvedValue({ data: [{ id: 89, village_name: '幸福村', county: '云岩区' }] })
+    await vm.submitVillageData()
+    expect(mockPut).toHaveBeenCalledWith('/supported-villages/89', expect.anything())
+    wrapper.unmount()
+  })
+
+  it('教育仅填资助学生、村委仅填单个字段时也会提交（分支两侧）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.formData.educationHelp.investment = 0
+    vm.formData.educationHelp.aidedStudents = 3 // 第二操作数为真
+    vm.formData.committeeInfo.overview = ''
+    vm.formData.committeeInfo.specialIndustry = ''
+    vm.formData.committeeInfo.collectiveIncomeDesc = '说明' // 第三操作数为真
+    vm.formData.committeeInfo.collectiveIncomeAmount = 0
+    await vm.submitVillageData()
+    const urls = mockPost.mock.calls.map((c) => c[0] as string)
+    expect(urls.some((u) => u.endsWith('/education'))).toBe(true)
+
+    // 只填集体收入金额（第四操作数为真）
+    mockPost.mockClear()
+    vm.formData.committeeInfo.collectiveIncomeDesc = ''
+    vm.formData.committeeInfo.collectiveIncomeAmount = 12
+    await vm.submitVillageData()
+    const urls2 = mockPost.mock.calls.map((c) => c[0] as string)
+    expect(urls2.some((u) => u.endsWith('/committee'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('村委全空时不提交 committee 端点', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.formData.committeeInfo.overview = ''
+    vm.formData.committeeInfo.specialIndustry = ''
+    vm.formData.committeeInfo.collectiveIncomeDesc = ''
+    vm.formData.committeeInfo.collectiveIncomeAmount = 0
+    await vm.submitVillageData()
+    const urls = mockPost.mock.calls.map((c) => c[0] as string)
+    expect(urls.some((u) => u.endsWith('/committee'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('查重结果不匹配（县不同 / 村名为空）时仍走新建', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.formData.basicInfo.county = '云岩区'
+    mockGet.mockResolvedValue({
+      items: [
+        { id: 90, village_name: '幸福村', county: '南明区' }, // 村名同、县不同
+        { id: 91, village_name: '', county: '云岩区' }, // 村名为空（走 '' 兜底）
+        { id: 92, county: '云岩区' }, // village_name 字段缺失
+      ],
+    })
+    await vm.submitVillageData()
+    expect(mockPut).not.toHaveBeenCalled()
+    expect(mockPost).toHaveBeenCalledWith(
+      '/supported-villages',
+      expect.objectContaining({ village_name: '幸福村' })
+    )
+    wrapper.unmount()
+  })
+
+  it('查重返回 null 时安全退回新建（列表解包兜底分支）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    mockGet.mockResolvedValue(null) // res ?? {} 的 null 侧
+    await vm.submitVillageData()
+    expect(mockPost).toHaveBeenCalledWith(
+      '/supported-villages',
+      expect.objectContaining({ village_name: '幸福村' })
+    )
+    wrapper.unmount()
+  })
+
+  it('候选记录缺 county 字段时不匹配（比较兜底分支）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.formData.basicInfo.county = '云岩区'
+    mockGet.mockResolvedValue({ items: [{ id: 93, village_name: '幸福村' }] }) // 无 county
+    await vm.submitVillageData()
+    expect(mockPut).not.toHaveBeenCalled()
+    expect(mockPost).toHaveBeenCalledWith(
+      '/supported-villages',
+      expect.objectContaining({ village_name: '幸福村' })
+    )
+    wrapper.unmount()
+  })
+
+  it('村庄名为空字符串时早退（字段缺省兜底）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.formData.basicInfo.villageName = ''
+    await expect(vm.submitVillageData()).rejects.toThrow(/未返回有效 ID/)
+    expect(mockGet).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('提交异常无 detail/message 时显示兜底文案「提交失败」', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.currentStep = 4
+    await nextTick()
+    // 查重失败后新建也失败，且异常对象既无 response.detail 也无 message
+    mockGet.mockRejectedValue({})
+    mockPost.mockRejectedValue({})
+    await wrapper
+      .findAll('el-button-stub')
+      .find((b) => b.text() === '提交审核')!
+      .trigger('click')
+    await flushPromises()
+    expect(ElMessage.error).toHaveBeenCalledWith('提交失败')
+    wrapper.unmount()
+  })
+
+  it('省份为空时回退贵州省', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    // 直接调用 submitVillageData（不经步骤校验），构造无法识别省份的空值形态
+    vm.formData.basicInfo.province = ''
+    await vm.submitVillageData()
+    expect(mockPost).toHaveBeenCalledWith(
+      '/supported-villages',
+      expect.objectContaining({ province: '贵州省' })
+    )
+    wrapper.unmount()
+  })
+
+  it('保存失败且异常无 message 时使用兜底文案', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fillBasic(vm)
+    vm.formData.industryHelp.projectType = ''
+    mockPost.mockImplementation((url: string) => {
+      if (String(url).endsWith('/industry')) {
+        return Promise.reject({}) // 无 response.detail、无 message
+      }
+      return Promise.resolve({ data: { id: 101 } })
+    })
+    await expect(vm.submitVillageData()).rejects.toThrow(/保存失败/)
     wrapper.unmount()
   })
 })

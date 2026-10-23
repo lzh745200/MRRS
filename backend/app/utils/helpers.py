@@ -138,7 +138,7 @@ FUND_MONEY_FIELDS = frozenset({
     "allocated_amount", "used_amount", "remaining_amount",
 })
 
-# FundBudget / BudgetRecord 的金额字段（万元）
+# FundBudget 的金额字段（万元）。W27：BudgetRecord 已删除，注释同步收窄。
 BUDGET_MONEY_FIELDS = frozenset({"budget_amount", "executed_amount", "used_amount"})
 
 

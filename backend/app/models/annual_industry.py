@@ -1,5 +1,5 @@
 # coding: utf-8
-from sqlalchemy import Column, ForeignKey, Index, Integer, Numeric, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Index, Integer, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import BaseModel
@@ -25,14 +25,13 @@ class AnnualIndustry(BaseModel):
     )
     year = Column(Integer, nullable=False, comment="年份")
 
-    industry_investment_2025 = Column(Numeric(15, 4), default=0, comment="产业投入_2025")
-    industry_investment_2026 = Column(Numeric(15, 4), default=0, comment="产业投入_2026")
-    industry_investment_total = Column(Numeric(15, 4), default=0, comment="产业投入合计")
-
-    industry_2025_planting_and_breeding = Column(Integer, default=0, comment="2025年种植养殖")
-    industry_2025_workshops = Column(Integer, default=0, comment="2025年帮扶车间")
-    industry_2025_rural_tourism = Column(Integer, default=0, comment="2025年乡村旅游")
-    industry_2025_other = Column(Integer, default=0, comment="2025年其他")
+    # W27 P1（死字段清理，迁移 r40_prune_annual_industry_cols_001）：
+    # 原有一批"年份写死进列名"的字段已移除 —— industry_investment_2025/2026/total、
+    # industry_2025_planting_and_breeding / workshops / rural_tourism / other。
+    # 与已删的 annual_income 同属一种反模式（每过一年要改模型），且全仓零引用；
+    # 真正的行式明细在 industry_support（investment/planting_breeding/workshop/
+    # rural_tourism/other_industry，按 year 分行）。
+    # 本表保留的意义仅为"当年是否填报过"（effectiveness_service 用 COUNT(id) 判断）。
 
     village = relationship("SupportedVillage", backref="annual_industry_data")
 

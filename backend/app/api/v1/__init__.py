@@ -57,7 +57,6 @@ from app.api.v1 import (  # noqa: E402
     supported_village_export,  # 必须先于 supported_village（见上）
     supported_village,
     rural_works,
-    rural_tasks,
     village_templates,
     validation,
     report_templates,
@@ -128,7 +127,7 @@ api_v1_router.include_router(reminders_router)
 _BUSINESS_MODULES = [
     organization, policy, projects, school,
     supported_village_export, supported_village,
-    rural_works, rural_tasks,
+    rural_works,
     village_templates, validation, report_templates, approval,
     messages, feedback, todos, ai, map, project_milestones,
     funds, fund_budgets, fund_lifecycle, work_logs, assessment,

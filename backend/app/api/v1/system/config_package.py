@@ -17,6 +17,10 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.permission_utils import require_admin
 from app.services.system_config_service import SystemConfigService
+from app.services.package_import_guard import (
+    assert_content_not_duplicate,
+    record_import,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +79,26 @@ async def list_config_packages(
         raise HTTPException(status_code=500, detail="获取配置包列表失败，请稍后重试或联系管理员")
 
 
+def _verify_config_package_integrity(package) -> None:
+    """系统配置包完整性校验（W27，W26-P0-7）。
+
+    抽成独立函数以降低导入端点的圈复杂度。checksum 强制；配置了
+    ``PACKAGE_PUBKEY`` 时强制要求 Ed25519 签名（fail-closed）。
+    """
+    from app.core.config import settings as _settings
+    from app.core.package_integrity import PackageIntegrityError, verify_manifest
+
+    try:
+        verify_manifest(
+            package,
+            public_key_hex=_settings.PACKAGE_PUBKEY,
+            allow_unsigned=True,
+            package_label="系统配置包",
+        )
+    except PackageIntegrityError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/export", summary="导出当前系统配置为配置包")
 async def export_config_package(
     body: ConfigPackageExportRequest,
@@ -104,6 +128,11 @@ async def export_config_package(
             "configs": config_data,
             "include_defaults": body.include_defaults,
         }
+        # W27（W26-P0-7）：补 checksum（强制）与签名（生成方配了私钥时）
+        from app.core.config import settings as _settings
+        from app.core.package_integrity import sign_manifest
+
+        package = sign_manifest(package, _settings.PACKAGE_SIGNING_KEY)
 
         # 保存配置包记录
         svc.set(
@@ -132,6 +161,8 @@ async def import_config_package(
     body: ConfigPackageImportRequest,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
+    # 同一校验和的配置包再次导入必须显式确认
+    force: bool = False,
 ):
     """从 JSON 配置包导入系统配置
 
@@ -146,6 +177,14 @@ async def import_config_package(
             package = json.loads(body.data)
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="配置包数据格式无效，请稍后重试或联系管理员")
+
+        # W27（W26-P0-7）：完整性校验 —— checksum 强制；配了 PACKAGE_PUBKEY 则强制验签
+        _verify_config_package_integrity(package)
+
+        # P2：配置包查重（内容哈希；重复且未 force → 409）
+        checksum = assert_content_not_duplicate(
+            db, str(body.data or "").encode("utf-8"), force=force
+        )
 
         configs = package.get("configs", {})
         if not configs:
@@ -174,6 +213,17 @@ async def import_config_package(
             package.get("name", "unknown"),
             imported_count, skipped_count,
             getattr(current_user, "username", "unknown"),
+        )
+
+        # P2：写导入台账（失败不阻断）
+        record_import(
+            db,
+            checksum=checksum,
+            package_type="config_package",
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", ""),
+            file_name="config_package.json",
+            record_count=imported_count,
         )
 
         return {
