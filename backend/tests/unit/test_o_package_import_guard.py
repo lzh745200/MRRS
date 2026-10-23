@@ -16,6 +16,7 @@ from app.services.package_import_guard import (
     find_previous_import,
     package_checksum,
     record_import,
+    record_receipt,
 )
 
 
@@ -240,3 +241,47 @@ class TestAssertContentNotDuplicate:
     def test_duplicate_with_force_passes(self):
         row = AuditLog(username="admin", created_at=None, resource_type="grant_package", new_value={})
         assert assert_content_not_duplicate(self._db_returning(row), b"abc", force=True) == content_checksum(b"abc")
+
+
+class TestRecordReceipt:
+    """导入回执：上级凭此登记闭环。"""
+
+    def test_writes_receipt_entry(self, monkeypatch):
+        captured = {}
+
+        def _fake_log(**kwargs):
+            captured.update(kwargs)
+
+        from app.services import package_import_guard as guard
+
+        monkeypatch.setattr(guard.AuditLogger, "log", staticmethod(_fake_log))
+
+        record_receipt(
+            MagicMock(),
+            checksum="c" * 64,
+            package_type="data_package",
+            receiver_org_code="520100",
+            source_org_code="520000",
+            record_count=25,
+            username="admin",
+            file_name="a.zip",
+            strategy="compare",
+        )
+
+        assert captured["resource_id"] == "c" * 64
+        details = captured["details"]
+        assert details["receiver_org_code"] == "520100"
+        assert details["source_org_code"] == "520000"
+        assert details["record_count"] == 25
+        assert details["strategy"] == "compare"
+        assert details["received_at"]
+
+    def test_swallows_audit_failure(self, monkeypatch):
+        def _boom(**kwargs):
+            raise RuntimeError("db down")
+
+        from app.services import package_import_guard as guard
+
+        monkeypatch.setattr(guard.AuditLogger, "log", staticmethod(_boom))
+        # 不抛异常即通过（回执故障不阻断导入）
+        record_receipt(MagicMock(), checksum="x", package_type="data_package")

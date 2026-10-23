@@ -65,6 +65,7 @@ class AuditAction(str, Enum):
     # 介质数据包（P2）：导入/导出台账动作
     PACKAGE_IMPORT = "package_import"
     PACKAGE_EXPORT = "package_export"
+    PACKAGE_RECEIPT = "package_receipt"
 
     PERMISSION_GRANT = "permission_grant"
     PERMISSION_REVOKE = "permission_revoke"

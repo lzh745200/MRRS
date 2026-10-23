@@ -188,3 +188,40 @@ def assert_not_duplicate(
             detail=build_duplicate_message(previous),
         )
     return checksum
+
+
+def record_receipt(
+    db: Session,
+    *,
+    checksum: str,
+    package_type: str,
+    receiver_org_code: str = "",
+    source_org_code: str = "",
+    record_count: int = 0,
+    user_id: Optional[int] = None,
+    username: str = "",
+    file_name: str = "",
+    strategy: str = "",
+) -> None:
+    """写一条导入回执（供上级凭介质回执登记闭环；失败不阻断主流程）。"""
+    try:
+        AuditLogger.log(
+            action=AuditAction.PACKAGE_RECEIPT,
+            user_id=user_id,
+            username=username,
+            resource_type=package_type,
+            resource_id=checksum,
+            details={
+                "checksum": checksum,
+                "package_type": package_type,
+                "receiver_org_code": _json_safe(receiver_org_code),
+                "source_org_code": _json_safe(source_org_code),
+                "record_count": record_count,
+                "strategy": _json_safe(strategy),
+                "file_name": _json_safe(file_name),
+                "received_at": datetime.now().isoformat(),
+            },
+            level=AuditLevel.INFO,
+        )
+    except Exception:  # pragma: no cover - 防御：回执写失败不阻断导入
+        logger.debug("数据包回执写入失败", exc_info=True)

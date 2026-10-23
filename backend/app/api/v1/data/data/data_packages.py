@@ -29,6 +29,7 @@ from app.services.package_import_guard import (
     assert_not_duplicate,
     record_import,
 )
+from app.services.package_import_guard import record_receipt
 from app.services.package_org_code import (
     MATCH_MISMATCH,
     check_org_code,
@@ -1143,6 +1144,9 @@ async def confirm_import(
         op_result = OperationResult.SUCCESS if result.success else OperationResult.FAILED
         total_imported = sum(result.imported_counts.values())
 
+        # P2：冲突策略落库（逐条比对=不覆盖 / 以包为准=覆盖），事后可追溯
+        conflict_strategy = "package" if data.overwrite_existing else "compare"
+
         history_service.record_confirm(
             package_id=package_id,
             org_id=package.org_id,
@@ -1155,6 +1159,8 @@ async def confirm_import(
                 "imported_counts": result.imported_counts,
                 "skipped_counts": result.skipped_counts,
                 "error_counts": result.error_counts,
+                "conflict_strategy": conflict_strategy,
+                "package_checksum": package.checksum or "",
             },
             ip_address=get_client_ip(request),
         )
@@ -1164,6 +1170,38 @@ async def confirm_import(
             service.db, "confirm", package_id,
             package.file_name or package.package_code, current_user,
             detail=f"确认导入，成功 {total_imported} 条，跳过 {sum(result.skipped_counts.values())} 条",
+        )
+
+        # P2：写导入回执（失败不阻断；上级凭此登记闭环）
+        receiver_code = ""
+        try:
+            from app.models.organization import Organization
+
+            _org = (
+                service.db.query(Organization)
+                .filter(Organization.id == package.org_id)
+                .first()
+            )
+            receiver_code = str(getattr(_org, "code", "") or "")
+        except Exception:  # pragma: no cover - 防御：取单位码失败不影响回执其它字段
+            logger.debug("回执取接收单位码失败", exc_info=True)
+
+        source_code = ""
+        _manifest = package.manifest if isinstance(package.manifest, dict) else {}
+        if _manifest:
+            source_code = str(_manifest.get("org_code") or "")
+
+        record_receipt(
+            service.db,
+            checksum=package.checksum or "",
+            package_type="data_package",
+            receiver_org_code=receiver_code,
+            source_org_code=source_code,
+            record_count=total_imported,
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", ""),
+            file_name=package.file_name or "",
+            strategy=conflict_strategy,
         )
 
         return result
