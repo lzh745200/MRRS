@@ -25,6 +25,10 @@ from app.utils.upload_helper import (
     read_zip_member,
 )
 from app.core.response import success_response
+from app.services.package_import_guard import (
+    assert_not_duplicate,
+    record_import,
+)
 from app.core.security import get_current_user
 from app.core.permission_utils import (
     get_org_with_fallback,
@@ -500,6 +504,8 @@ async def export_data_package(
 async def import_data_package(
     file: UploadFile = File(...),
     org_id: Optional[int] = None,
+    # 同一校验和的包再次导入必须显式确认（介质场景高频误操作）
+    force: bool = False,
     request: Request = None,
     current_user=Depends(get_current_user),
     service: DataPackageService = Depends(get_package_service),
@@ -554,6 +560,9 @@ async def import_data_package(
         temp_file.write(content)
         temp_file.close()
 
+        # P2：整包校验和查重（重复且未 force → 409，口径见 package_import_guard）
+        checksum = assert_not_duplicate(service.db, temp_file.name, force=force)
+
         result = await service.import_package(
             file_path=temp_file.name, file_name=file.filename, org_id=target_org_id, imported_by=current_user.id
         )
@@ -586,6 +595,19 @@ async def import_data_package(
             service.db, "import", result.package_id,
             file.filename or result.package_code, current_user,
             detail=f"接收数据包，校验{'通过' if result.validation.is_valid else '未通过'}",
+        )
+
+        # P2：写导入台账（失败不阻断主流程，仅供查重与追溯）
+        record_import(
+            service.db,
+            checksum=checksum,
+            package_type="data_package",
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", ""),
+            file_name=file.filename or "",
+            source_org_code=str(target_org_id),
+            record_count=sum(result.manifest.record_counts.values()) if result.manifest else 0,
+            result="success" if result.validation.is_valid else "invalid",
         )
 
         return result

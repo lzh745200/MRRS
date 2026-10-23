@@ -17,6 +17,7 @@ import hashlib
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.logging import logger
@@ -31,9 +32,20 @@ PACKAGE_IMPORT_ACTION = "package_import"
 
 
 def package_checksum(file_path: str) -> str:
-    """计算整包 SHA256（分块读取，1MB 一块）。"""
+    """计算整包 SHA256（分块读取，1MB 一块）。
+
+    文件不可读（被删 / 测试桩路径）时返回空串：调用方据此跳过查重，
+    绝不因为"算不出指纹"而阻断导入。
+    """
+    if not file_path:
+        return ""
+    try:
+        fp = open(file_path, "rb")
+    except OSError:
+        logger.debug("数据包不可读，跳过校验和计算: %s", file_path)
+        return ""
     digest = hashlib.sha256()
-    with open(file_path, "rb") as fp:
+    with fp:
         while True:
             chunk = fp.read(_CHUNK_SIZE)
             if not chunk:
@@ -123,3 +135,33 @@ def record_import(
         )
     except Exception:  # pragma: no cover - 防御：台账写失败不阻断导入
         logger.debug("数据包台账写入失败", exc_info=True)
+
+
+def assert_not_duplicate(
+    db: Session,
+    file_path: str,
+    *,
+    force: bool = False,
+) -> str:
+    """导入前查重（一站式）：返回整包校验和；命中重复且未 force 时抛 409。
+
+    端点只调用本函数，不自己写分支，保证"查重口径"只有一处实现。
+
+    Args:
+        db: 数据库会话（查询审计台账）
+        file_path: 已落盘的包文件路径
+        force: 是否允许重复导入
+
+    Returns:
+        整包校验和；包不可读时返回空串（调用方据此跳过台账记录）。
+    """
+    checksum = package_checksum(file_path)
+    if not checksum:
+        return ""
+    previous = find_previous_import(db, checksum)
+    if previous and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=build_duplicate_message(previous),
+        )
+    return checksum
