@@ -5,6 +5,32 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.17.1] - 2026-10-24 — 版本号口径修复 + 本地安装包构建修复
+
+### Fixed
+
+- **`/health` 版本号不再被陈旧构建指纹覆盖**：`_build_info.json` 是 CI 构建产物（已 gitignore），
+  开发机残留上一次构建的指纹时，`/health` 会一直报旧版本（实测 v1.15.7 vs 代码 1.17.0），
+  运维据此误判"版本未生效"。现明确 **版本号唯一权威来源是 `settings.PROJECT_VERSION`**
+  （由根 `package.json` 单源同步），构建指纹只提供 `git_hash` / `build_time` / `builder`。
+  新增 `tests/unit/test_build_info_version_authority.py`（10 例，`app/core/build_info.py` 覆盖率 100%）。
+- **`scripts/build/build-installer-local.ps1` 补 UTF-8 BOM**：该脚本含中文且此前无 BOM，
+  Windows PowerShell 5.1 按 GBK 解析 → `Array index expression is missing` 等语法错误，
+  **本地安装包构建完全不可用**。补 BOM 后本地 `MRRS-Setup-<ver>-x64.exe` 构建成功
+  （与同目录 `fetch_vcredist.ps1` / `verify_frontend_manifest.ps1` 口径一致）。
+
+### Docs
+
+- 新增 `docs/02-用户手册/介质数据包导入与系统自检操作说明.md`：离线介质包的查重 / 来源单位码核对 /
+  导入台账与回执、六项系统自检、多机交接推荐流程与常见问题。已加入用户手册索引。
+
+### Verification
+
+- 后端 12 段全量 **14,364 用例全绿 + 覆盖率 100%**；前端 **339 文件 / 7,020 用例全绿 + 覆盖率 100%**
+- 升级演练 v1.16.4(r35) → 当前(r41)：122 表数据完好、落在 head
+- 8 道棘轮门禁 + 菜单对齐 A~E + console tab 30/30 + 文档数字 + 版本一致性 + 硬编码色棘轮 154/154 全绿
+- 本地完整构建：前端 683 文件 12.27 MB、静态资源审计 0 缺失、Windows 安装包 378.1 MB
+
 ## [1.17.0] - 2026-10-23 — 介质链路治理（查重/台账/单位码/回执） + 系统自检 + W27 全栈收敛
 
 ### Added（P2 介质链路治理）
