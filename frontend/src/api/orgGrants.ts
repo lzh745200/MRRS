@@ -55,10 +55,11 @@ export async function setOrgGrants(
 }
 
 /** 导入授权包文件（下级） */
-export async function importGrantPackage(file: File): Promise<GrantImportResult> {
+export async function importGrantPackage(file: File, force = false): Promise<GrantImportResult> {
   const form = new FormData()
   form.append('file', file)
-  const res = await post<any>(`${BASE}/import`, form)
+  // force=true：同一校验和的授权包已导入过时，用户显式确认后放行（P2）
+  const res = await post<any>(`${BASE}/import`, form, force ? { params: { force: true } } : {})
   return res?.data ?? res
 }
 

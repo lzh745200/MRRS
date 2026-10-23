@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 
 const { mockImport, ElMessage } = vi.hoisted(() => ({
   mockImport: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('element-plus', () => ({ ElMessage }))
 vi.mock('@/api/orgGrants', () => ({ importGrantPackage: mockImport }))
 
 import GrantImport from '@/views/system/GrantImport.vue'
+import ImportPreviewDialog from '@/components/import/ImportPreviewDialog.vue'
 
 const STUBS = {
   'el-card': { template: '<div><slot name="header" /><slot /></div>' },
@@ -147,5 +149,62 @@ describe('views/system/GrantImport', () => {
 
     await wrapper.vm.submit()
     expect(mockImport).not.toHaveBeenCalled()
+  })
+})
+
+describe('views/system/GrantImport · P2 重复包确认', () => {
+  it('409：弹窗并解析时间/操作人；确认后带 force 重新导入', async () => {
+    const wrapper = factory()
+    const file = pickFile(wrapper, 'dup.json')
+    mockImport.mockRejectedValueOnce({
+      response: {
+        status: 409,
+        data: {
+          detail:
+            '该数据包已于 2026-10-23T09:00:00 由 admin 导入过；如确需再次导入，请传入 force=true',
+        },
+      },
+    })
+    await wrapper.vm.submit()
+    await nextTick()
+
+    expect((wrapper.vm as any).duplicateVisible).toBe(true)
+    expect((wrapper.vm as any).duplicateInfo).toEqual({
+      createdAt: '2026-10-23T09:00:00',
+      username: 'admin',
+    })
+
+    mockImport.mockResolvedValueOnce({ org_code: '520000', version: 3, modules: 5, signed: true })
+    await (wrapper.vm as any).onDuplicateConfirm()
+    expect(mockImport).toHaveBeenLastCalledWith(file, true)
+    expect((wrapper.vm as any).duplicateVisible).toBe(false)
+  })
+
+  it('409 文案不可解析：仍弹窗；取消后清空待处理文件且不再请求', async () => {
+    const wrapper = factory()
+    pickFile(wrapper, 'dup2.json')
+    mockImport.mockRejectedValueOnce({ response: { status: 409, data: {} } })
+    await wrapper.vm.submit()
+    await nextTick()
+
+    expect((wrapper.vm as any).duplicateVisible).toBe(true)
+    expect((wrapper.vm as any).duplicateInfo).toEqual({})
+
+    // 弹窗自身 update:visible 反向同步
+    const dialog = wrapper.findComponent(ImportPreviewDialog)
+    dialog.vm.$emit('update:visible', false)
+    await nextTick()
+    expect((wrapper.vm as any).duplicateVisible).toBe(false)
+    ;(wrapper.vm as any).onDuplicateCancel()
+    const callsBefore = mockImport.mock.calls.length
+    await (wrapper.vm as any).onDuplicateConfirm()
+    expect(mockImport.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('parseDuplicateDetail：非字符串 / 不匹配均返回空对象', () => {
+    const vm = factory().vm as any
+    expect(vm.parseDuplicateDetail(undefined)).toEqual({})
+    expect(vm.parseDuplicateDetail(123)).toEqual({})
+    expect(vm.parseDuplicateDetail('没有匹配文案')).toEqual({})
   })
 })

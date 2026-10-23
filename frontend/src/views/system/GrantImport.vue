@@ -56,6 +56,16 @@
       </el-descriptions>
     </el-card>
   </div>
+  <!-- P2：重复授权包导入确认（后端 409 → 显式允许 force） -->
+  <ImportPreviewDialog
+    v-model:visible="duplicateVisible"
+    title="该授权包已导入过"
+    :info="{ type: '授权包', fileName: fileList[0]?.name }"
+    :duplicate="duplicateInfo"
+    allow-force
+    @confirm="onDuplicateConfirm"
+    @cancel="onDuplicateCancel"
+  />
 </template>
 
 <script setup lang="ts">
@@ -68,6 +78,7 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { importGrantPackage, type GrantImportResult } from '@/api/orgGrants'
+import ImportPreviewDialog from '@/components/import/ImportPreviewDialog.vue'
 
 const fileList = ref<any[]>([])
 const submitting = ref(false)
@@ -85,19 +96,33 @@ function onRemove(): void {
   errorMsg.value = ''
 }
 
-async function submit(): Promise<void> {
-  const raw = fileList.value[0]?.raw
-  if (!raw) {
-    errorMsg.value = '请先选择授权包文件'
-    return
-  }
+// P2：重复包确认（后端按内容哈希查重，重复时 409，由用户显式允许）
+const duplicateVisible = ref(false)
+const duplicateInfo = ref<{ createdAt?: string; username?: string } | null>(null)
+let pendingDuplicateFile: File | null = null
+
+/** 从后端 409 文案里解析「已于 X 由 Y 导入过」 */
+function parseDuplicateDetail(detail: unknown): { createdAt?: string; username?: string } {
+  const text = typeof detail === 'string' ? detail : ''
+  const matched = text.match(/已于\s*(.*?)\s*由\s*(.*?)\s*导入过/)
+  return matched ? { createdAt: matched[1], username: matched[2] } : {}
+}
+
+/** 真正执行导入（force=true 时允许重复导入） */
+async function doImport(file: File, force = false): Promise<void> {
   submitting.value = true
   try {
-    result.value = await importGrantPackage(raw as File)
+    result.value = await importGrantPackage(file, force)
     errorMsg.value = ''
     ElMessage.success('授权包已应用')
   } catch (e: any) {
     result.value = null
+    if (e?.response?.status === 409) {
+      pendingDuplicateFile = file
+      duplicateInfo.value = parseDuplicateDetail(e?.response?.data?.detail)
+      duplicateVisible.value = true
+      return
+    }
     // 后端把不可读原因放在 detail 里；取不到时逐级回退
     errorMsg.value = e?.response?.data?.detail || e?.message || '导入失败'
   } finally {
@@ -105,9 +130,39 @@ async function submit(): Promise<void> {
   }
 }
 
+async function submit(): Promise<void> {
+  const raw = fileList.value[0]?.raw
+  if (!raw) {
+    errorMsg.value = '请先选择授权包文件'
+    return
+  }
+  await doImport(raw as File)
+}
+
+/** 重复包确认：带 force=true 重新导入 */
+async function onDuplicateConfirm(): Promise<void> {
+  duplicateVisible.value = false
+  const file = pendingDuplicateFile
+  pendingDuplicateFile = null
+  if (!file) return
+  await doImport(file, true)
+}
+
+function onDuplicateCancel(): void {
+  duplicateVisible.value = false
+  pendingDuplicateFile = null
+}
+
 // 暴露给单测驱动（jsdom 下 el-upload 的 change 事件不稳定）。
 // 仅用于测试，生产无副作用：外部调用方不会拿到组件实例。
-defineExpose({ submit, onChange, onRemove })
+defineExpose({
+  submit,
+  onChange,
+  onRemove,
+  onDuplicateConfirm,
+  onDuplicateCancel,
+  parseDuplicateDetail,
+})
 </script>
 
 <style scoped>
