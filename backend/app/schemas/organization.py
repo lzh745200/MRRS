@@ -25,6 +25,15 @@ class OrganizationBase(BaseModel):
 class OrganizationCreate(OrganizationBase):
     """创建组织"""
 
+    # 组织编码 = 6 位行政区划代码（GB/T 2260），必填；
+    # 层级由编码推导（XX0000 省级 / XXYY00 市州级 / XXYYZZ 县市级），
+    # 口径唯一来源 services/organization_code_service.py。
+    code: str = Field(
+        ...,
+        min_length=6,
+        max_length=6,
+        description="组织编码（6 位行政区划代码，如 520000/520100/520102）",
+    )
     code_prefix: Optional[str] = Field(None, max_length=50, description="编码前缀")
     sort_order: int = 0
 
@@ -32,6 +41,13 @@ class OrganizationCreate(OrganizationBase):
 class OrganizationUpdate(BaseModel):
     """更新组织 - 所有字段可选"""
 
+    # 编码只读：端点对「传入且与库中不同」一律 422；此处声明字段仅为让
+    # 校验层能识别该字段并给出明确语义（否则被 Pydantic 静默丢弃/端点 AttributeError）。
+    code: Optional[str] = Field(
+        None,
+        max_length=6,
+        description="组织编码（只读，不可修改；变更需停用后新建）",
+    )
     name: Optional[str] = Field(None, min_length=1, max_length=100, description="组织名称")
     parent_id: Optional[int] = None
     level: Optional[str] = Field(None, max_length=50, description="层级")

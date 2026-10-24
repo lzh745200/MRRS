@@ -254,7 +254,7 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
     不一致默认 409（`allow_org_mismatch=true` 放行），防"上级/邻县包导进本单位"后数据挂错组织树。
   - 前端统一用 `components/import/ImportPreviewDialog.vue`（包信息 + 差异 + 重复告警 + 冲突策略三选）；
     收到 409 时显示该弹窗，用户确认后带 `force=true` 重传。
-- **系统自检** (2026-10-23, v1.17.0): `GET /api/v1/self-check`（仅管理员）+ `services/self_check_service.py`
+- **系统自检** (2026-10-23, v1.17.0): `GET /api/v1/system/self-check`（仅管理员）+ `services/self_check_service.py`
   一次性体检 6 项 —— 单位码（缺失/格式/层级不符/重复）、组织层级（跨级挂接/根非省级）、
   待审核账号、账号锁定、PII 密钥指纹、介质导入近况。**只读**，不修数据；
   新增检查项必须带 `level`（ok/warn/error）与可读 `detail`，前端 `components/system/SelfCheckCard.vue` 直接渲染。

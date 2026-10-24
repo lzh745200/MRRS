@@ -134,6 +134,7 @@ class TestSchemaValidation:
         from app.schemas.organization import OrganizationCreate
         org = OrganizationCreate(
             name="测试组织",
+            code="520000",  # v1.17.2：组织编码 = 6 位行政区划代码，必填
             level="1",
             type="unit",
             org_type="army"

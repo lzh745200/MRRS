@@ -201,7 +201,7 @@ function header(s, kicker, title) {
     color: TEXT, fontFace: F, margin: 0 });
   s.addText(String(pageNo).padStart(2, "0"), { x: W - 1.0, y: H - 0.55, w: 0.5, h: 0.3,
     fontSize: 11, color: MUTED, fontFace: F, align: "right", margin: 0 });
-  s.addText("帮扶管理信息系统 v1.16.0", { x: M, y: H - 0.55, w: 4, h: 0.3,
+  s.addText("帮扶管理信息系统 v1.17.2", { x: M, y: H - 0.55, w: 4, h: 0.3,
     fontSize: 10.5, color: MUTED, fontFace: F, margin: 0 });
 }
 function card(s, x, y, w, h, fill = BG) {
@@ -279,7 +279,7 @@ function sectionSlide(num, title, sub, items) {
     { text: "多机协同 · 军工级安全", options: {} },
   ], { x: 1.0, y: 4.75, w: 6, h: 0.85, fontSize: 16, color: LIGHT, fontFace: F,
     paraSpaceAfter: 6, margin: 0 });
-  s.addText("V1.16.0  |  2026-10-21  |  FastAPI + Vue 3 + Electron + SQLite", {
+  s.addText("V1.17.2  |  2026-10-24  |  FastAPI + Vue 3 + Electron + SQLite", {
     x: 1.0, y: 6.35, w: 10, h: 0.4, fontSize: 12.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
@@ -568,6 +568,30 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
     "新门禁：console tab ↔ TAB_COMPONENTS 双向一致、文档数字漂移、安全审计覆盖棘轮",
     "修复：R33 单位授权两个 tab 因漏加组件映射而不可见（契约 28 → 30）",
     "本版移出 R35 删表迁移：升级演练暴露数据丢失 / 升级中断风险，schema 维持 r34 head",
+  ], 7.17, 2.55, 5.4, 3.9, { size: 11.5, gap: 8 });
+}
+
+/* 10f v1.17.2 端到端排查：「单测绿、真机废」两类缺陷 */
+{
+  const s = p.addSlide();
+  header(s, "02 技术架构", "v1.17.2：端到端排查 —— 单测绿、真机废");
+  card(s, M, 1.8, 6.0, 4.9);
+  s.addText("两个真机缺陷", { x: 0.82, y: 2.05, w: 4.5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "组织创建恒 422：OrganizationCreate 漏 code 字段，端点直读 data.code",
+    "单测用 MagicMock 传 data 不会暴露 → 新装机器无法创建任何组织",
+    "系统自检恒 404：后端注册在 /api/v1/self-check，前端调 /api/v1/system/self-check",
+    "两者都属「测试全绿、真机全废」，覆盖率 100% 也拦不住",
+    "修法：code 必填 6 位；自检改为经 system 包聚合注册并删除根级重复注册",
+  ], 0.82, 2.55, 5.4, 3.9, { size: 11.5, gap: 8 });
+  card(s, 6.85, 1.8, 6.0, 4.9);
+  s.addText("排查方法与防回归", { x: 7.17, y: 2.05, w: 5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "隔离实例（独立 DB + 独立端口）走真实 HTTP 全链路：登录→强制改密→CSRF→组织树→数据包→自检",
+    "新增 TestClient 契约测试 8 例，锁定「缺 code/短码/非数字码 → 422」",
+    "路径契约用例：断言前端 selfCheck.ts 与后端路由一致，根级不存在",
+    "全仓契约审计：412 条前端路径 vs 720 条后端路由，零错位",
+    "死代码清理：6 个未接入组件 + barrel + 3 个一次性脚本（ErrorBoundary 经核实仍在用）",
   ], 7.17, 2.55, 5.4, 3.9, { size: 11.5, gap: 8 });
 }
 
@@ -1487,7 +1511,7 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   const tThanks = autoBox("谢谢观看", 11, 1.45, 54, 1.6, 36, true, 0, "P41 谢谢观看");
   s.addText("谢谢观看", { x: 0.96, y: 3.0, w: 11, h: tThanks.h, fontSize: tThanks.size, bold: true,
     color: "FFFFFF", fontFace: F, margin: 0 });
-  s.addText("帮扶管理信息系统 v1.15.15  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
+  s.addText("帮扶管理信息系统 v1.17.2  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
     x: 1.0, y: 4.55, w: 11, h: 0.45, fontSize: 13.5, color: LIGHT, fontFace: F, margin: 0 });
   s.addText("13,942 后端用例 + 6,867 前端用例全绿守护 · 10 页视觉回归基线 · 双平台离线交付", {
     x: 1.0, y: 5.05, w: 11, h: 0.45, fontSize: 13.5, color: "8FA298", fontFace: F, margin: 0 });

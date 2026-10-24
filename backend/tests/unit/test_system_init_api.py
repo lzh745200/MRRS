@@ -31,6 +31,7 @@ class TestCheckInitStatus:
         mock_svc.is_initialized.return_value = True
         mock_svc.get.side_effect = lambda key, default=None: {
             "organization_name": "测试单位",
+                "organization_code": "520000",
             "system_name": "测试系统",
             "init_timestamp": "2024-01-01T00:00:00",
         }.get(key, default)
@@ -65,6 +66,7 @@ class TestInitializeSystem:
                 f"{BASE}/initialize",
                 json={
                     "organization_name": "测试单位",
+                "organization_code": "520000",
                     "admin_username": "admin",
                     "admin_password": "Str0ng!Passw0rd",
                 },
@@ -80,6 +82,7 @@ class TestInitializeSystem:
                 f"{BASE}/initialize",
                 json={
                     "organization_name": "测试单位",
+                "organization_code": "520000",
                     "admin_username": "admin",
                     "admin_password": "Str0ng!Passw0rd",
                 },

@@ -73,7 +73,7 @@ Get-FileHash .\MRRS-Setup-1.17.1-x64.exe -Algorithm SHA256
 
 **系统自检（P3）**
 
-- `GET /api/v1/self-check`（仅管理员）+ 设置页卡片，一次体检 6 项：
+- `GET /api/v1/system/self-check`（仅管理员）+ 设置页卡片，一次体检 6 项：
   单位码（缺失/格式/层级不符/重复）、组织层级（跨级挂接/根非省级）、待审核账号、
   账号锁定、PII 密钥指纹、介质导入近况（近 30 天失败数）
 

@@ -441,3 +441,6 @@ resources/map-tiles/MANIFEST.json
 
 # 鏈湴璇婃柇/鍥炲綊鏃ュ織锛堜笉鍏ュ簱锛塦nlogs/
 
+
+# 本地端到端冒烟实例（独立数据库/端口，不入库）
+.smoke/

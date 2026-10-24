@@ -5,6 +5,70 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.17.2] - 2026-10-24 — 端到端排查修复：组织创建不可用 + 自检路径错位
+
+> 本版由一次**真实 HTTP 端到端排查**驱动：在隔离实例（独立 DB + 独立端口）上完整走通了
+> 「出厂登录 → 强制改密 → CSRF 双提交 → 组织树 → 帮扶村 → 数据包导出/导入/查重/回执 → 系统自检」链路。
+
+### Fixed（两项均为"单测绿、真机废"的高危缺陷）
+
+- **创建组织在真实 HTTP 下必然失败（严重）**：`OrganizationCreate` schema 漏掉 `code` 字段，
+  而端点 `api/v1/organization.py` 创建路径直接读 `data.code` —— Pydantic 模型无此属性，
+  请求一进来就 422（校验层）/AttributeError。单元测试用 MagicMock 传 `data` 时不会暴露。
+  **后果**：新装机器无法创建任何组织 → 上下级部署无法初始化。
+  修复：`OrganizationCreate.code` 必填（6 位，min/max_length=6）；`OrganizationUpdate.code` 可选
+  （仅用于给出"编码只读"的明确语义）。
+- **系统自检端点路径错位（真机 404）**：模块注册在 `/api/v1/self-check`（根级），
+  而前端与文档调用 `/api/v1/system/self-check`（system 包聚合路由）→ 设置页自检卡片恒 404。
+  修复：改为经 `api/v1/system/__init__.py` 聚合注册（与 diagnostics / business-health 同构），
+  并移除 `api/v1/__init__.py` 中的重复单独注册。
+
+### Added（防回归）
+
+- `tests/unit/test_p3_org_create_http_contract.py`（8 例）：**只走 TestClient**，
+  锁定「缺 code → 422 / 短码 → 422 / 非数字码 → 422 / 合法载荷不被 schema 拦」。
+- `test_p3_self_check_api.py` 增补路径契约用例：断言路由为 `/api/v1/system/self-check`、
+  根级不存在，并校验前端 `api/selfCheck.ts` 调用路径与后端一致。
+
+### Verification（本次端到端实测）
+
+| 环节 | 结果 |
+|---|---|
+| 出厂口令登录 → must_change_password=true | PASS |
+| 强制改密期业务 API 被 403 拦截 | PASS |
+| CSRF 双提交（cookie + X-CSRF-Token） | PASS |
+| 改密 → 重登录（新口令） | PASS |
+| 系统自检 6 项（单位码/层级/账号/锁定/PII/介质） | PASS |
+| 组织树 省→市→县 + 层级自动推导（1/2/3） | PASS |
+| 反例：跨级挂接 422 / 重复编码 400 / 缺编码 422 / 改编码 422 | PASS |
+| 帮扶村创建 / 权限包 CRUD / 权限包导出 / 用户创建 | PASS |
+| 数据包导出 → 下载 → 导入 | PASS |
+| 来源单位码不一致 → 409（含可读说明） | PASS |
+| allow_org_mismatch=true 放行导入 | PASS |
+| 同一包重复导入 → 409「已于 X 由 Y 导入过…请传 force=true」 | PASS |
+| force=true 放行重复导入 | PASS |
+| 确认导入 → 写回执 → 自检显示「成功回执 1 条」 | PASS |
+
+### Removed（死代码清理，本轮静态审计结论）
+
+审计方法：从 `main.ts` / `app.main` 出发做 import 图可达性分析 + 模板全局组件名扫描 +
+一次性脚本引用反查 + 文档相对链接校验（127 份 md / 132 条相对链接 / 死链 0）。
+
+- **6 个从未接入任何页面的通用组件**：`AppEmpty` / `AppError` / `AppLoading` /
+  `AppPageHeader` / `AppStatCard` / `AppTableToolbar`。核实方式：`src/**/*.vue` 中既无
+  `<AppXxx>` 也无全局名 `<CommonAppXxx>` 引用；`components.d.ts` 里只是自动注册残留。
+  其中 `AppPageHeader` 与在用的 `PageHeader.vue`（19 个列表页接入）职能重复。
+  连带删除 barrel `components/common/index.ts` 与 7 个测试文件。
+- **`ErrorBoundary.vue` 予以保留**：审计脚本初判"不可达"是误报 ——
+  `layouts/DefaultLayoutSafe.vue` 通过全局名 `<CommonErrorBoundary>` 使用它。
+  这条误报说明「只查 `<ErrorBoundary>` 标签」不够，必须同时查 unplugin 的 `Common` 前缀。
+- **3 个一次性 PPT 版本脚本**：`scripts/update_pptx_versions_20260912/20261016/20261017.py`。
+  全仓无任何引用，其职能已被 `docs/build_ppt.js` 源码重建取代。
+
+### Tests
+
+- 后端 12 段全量回归 + 前端 339 文件 / 7,020 用例，覆盖率门禁均 100%。
+
 ## [1.17.1] - 2026-10-24 — 版本号口径修复 + 本地安装包构建修复
 
 ### Fixed

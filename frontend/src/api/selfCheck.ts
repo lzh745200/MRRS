@@ -1,7 +1,8 @@
 /**
  * 系统自检 API（P3）。
  *
- * GET /system/self-check —— 仅管理员；只返回配置一致性结论，不含 PII。
+ * GET /api/v1/system/self-check —— 仅管理员；只返回配置一致性结论，不含 PII。
+ * 与 diagnostics / business-health 等同属 system 包聚合路由（/api/v1/system/*）。
  */
 import { get } from '@/api/request'
 

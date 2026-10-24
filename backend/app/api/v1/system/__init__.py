@@ -123,6 +123,14 @@ except Exception as exc:
 router.include_router(business_health_router)
 logger.debug("已加载路由: system.business_health")
 
+# ---- 系统自检（P3）----
+try:
+    from app.api.v1.system.self_check import router as self_check_router
+except Exception as exc:
+    raise RuntimeError(f"加载 system.self_check 路由失败: {exc}") from exc
+router.include_router(self_check_router)
+logger.debug("已加载路由: system.self_check")
+
 # ---- 系统健康检查 ----
 try:
     from app.api.v1.system.health import router as health_router

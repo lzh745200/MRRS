@@ -115,6 +115,78 @@ async def initialize_system(
         _INIT_LOCK.release()
 
 
+def _resolve_root_org_code(raw_code: Optional[str]) -> str:
+    """校验并规范化根组织编码（6 位行政区划代码，必须是省级 XX0000）。
+
+    组织编码是 v1.16.4 起的强制契约（跨机匹配唯一依据）；初始化缺失/非法时
+    必须给 400 可操作指引，不得让 OrganizationCreate 的校验错误冒泡成 500。
+    """
+    from app.services.organization_code_service import OrganizationCodeService
+
+    code = (raw_code or "").strip()
+    if not code:
+        raise HTTPException(
+            status_code=400,
+            detail="首次初始化必须提供单位编码（6 位行政区划代码，如 520000）",
+        )
+    try:
+        root_code = OrganizationCodeService.normalize_admin_code(code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    level = OrganizationCodeService.infer_level(root_code)
+    if OrganizationCodeService.level_order(level) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="根组织必须是省级单位（编码末四位为 0000，如 520000）",
+        )
+    return root_code
+
+
+async def _ensure_root_organization(db, request, steps) -> int:
+    """创建或复用根组织单位，返回其 id。
+
+    抽成独立函数有两个原因：降低 _run_initialization 的圈复杂度（CI C901=16），
+    以及把"根组织必须是省级编码"的校验与失败语义收敛在一处。
+    """
+    from app.models.organization import Organization
+    from app.schemas.organization import OrganizationCreate
+    from app.services.organization_service import OrganizationService
+
+    try:
+        root_org = (
+            db.query(Organization)
+            .filter(Organization.parent_id.is_(None))
+            .order_by(Organization.id.asc())
+            .first()
+        )
+        if root_org is None:
+            root_code = _resolve_root_org_code(request.organization_code)
+            org_svc = OrganizationService(db)
+            root_org = await org_svc.create_organization(
+                OrganizationCreate(
+                    name=request.organization_name,
+                    code=root_code,
+                    is_active=True,
+                ),
+                created_by=0,
+            )
+            steps.append({"step": "organization", "status": "success", "message": "根组织单位创建成功"})
+        else:
+            steps.append({"step": "organization", "status": "skipped", "message": "根组织单位已存在，直接复用"})
+        return int(root_org.id)
+    except HTTPException:
+        # 参数类错误（编码缺失/非法/非省级）原样上抛，不能被包成 500
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error("根组织单位创建失败，初始化中止: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="根组织单位创建失败，系统未初始化；请检查数据库可用性后重试，或联系管理员",
+        )
+
+
 async def _run_initialization(
     request: InitRequest,
     db: Session = Depends(get_db),
@@ -148,37 +220,7 @@ async def _run_initialization(
         steps.append({"step": "validate", "status": "success", "message": "参数验证通过"})
 
         # 步骤1b：创建（或复用）根组织单位
-        # 深审 #83：文档承诺"创建根组织单位"，原实现完全不建组织，却在末尾把
-        # organization_id 硬编码成 1 —— 当根组织不是 id=1（预置数据/序列漂移/
-        # 历史库）时配置指向不存在的组织，组织级数据权限与上报归属全部错位。
-        from app.models.organization import Organization
-        from app.schemas.organization import OrganizationCreate
-        from app.services.organization_service import OrganizationService
-
-        try:
-            root_org = (
-                db.query(Organization)
-                .filter(Organization.parent_id.is_(None))
-                .order_by(Organization.id.asc())
-                .first()
-            )
-            if root_org is None:
-                org_svc = OrganizationService(db)
-                root_org = await org_svc.create_organization(
-                    OrganizationCreate(name=request.organization_name, is_active=True),
-                    created_by=0,
-                )
-                steps.append({"step": "organization", "status": "success", "message": "根组织单位创建成功"})
-            else:
-                steps.append({"step": "organization", "status": "skipped", "message": "根组织单位已存在，直接复用"})
-            root_org_id = int(root_org.id)
-        except Exception as e:
-            db.rollback()
-            logger.error("根组织单位创建失败，初始化中止: %s", e, exc_info=True)
-            raise HTTPException(
-                status_code=500,
-                detail="根组织单位创建失败，系统未初始化；请检查数据库可用性后重试，或联系管理员",
-            )
+        root_org_id = await _ensure_root_organization(db, request, steps)
 
         # 步骤2：初始化系统配置
         svc.initialize_defaults()
