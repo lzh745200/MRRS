@@ -10,6 +10,19 @@
 > 本批包含三块：① 登录页 UI 务实化改造（修死链与不可见错误）；② R35 三层对齐门禁落地并修掉它抓出的漂移；
 > ③ 复验时发现 `backend/.coveragerc` 被误删导致 100% 覆盖率门禁**静默失效**，恢复后补齐全部缺口。
 
+### 发布产物（GitHub Actions 构建，`v1.18.1` Release）
+
+| 安装包 | 平台 | 大小 | SHA256 |
+|---|---|---|---|
+| `MRRS-Setup-1.18.1-x64.exe` | Windows 10/11 x64（NSIS，自包含） | 270.02 MB | `beab6f9081720bd084b2cce6491a2a984b7fdbf079be012388749d824e2eb7c9` |
+| `MRRS-Setup-1.18.1-arm64.deb` | 麒麟 V10 / 统信 ARM64（Electron） | 266.65 MB | `7afd80faa948bbccce8598ebff3a3da36a779c33013d1d95a4f7a04fe1643016` |
+| `assistance-management-system_1.18.1_arm64.deb` | 麒麟 V10 / 统信 ARM64（standalone） | 98.07 MB | `14581820e7686c9f2578dd27c24588a6d36d7ef9892c360dc4525921d9ae0524` |
+
+构建链路：tag `v1.18.1` → `build-windows.yml` / `build-arm64.yml` 均 **success**；
+发布前置门禁 `scripts/check_release_gate.py`（要求该 commit 的 PR Checks 全绿）通过；
+安装包内含打包后后端自检（self-contained smoke）与「无测试文件 / 构建信息存在」断言。
+详细下载说明见 `docs/04-部署文档/RELEASE_NOTES-v1.18.1.md`。
+
 ### Added
 
 - **登录页公开配置扩展**：`GET /api/v1/auth/public-config` 新增 `lockout_minutes` / `max_failed_attempts`
