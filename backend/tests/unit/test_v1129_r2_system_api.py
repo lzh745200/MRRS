@@ -374,8 +374,11 @@ class TestBatchDeleteRequestNormalization:
 
 
 def _init_request():
+    # v1.16.4 起组织编码是首次初始化的强制契约（_resolve_root_org_code 缺 code 直接 400），
+    # 本文件此前漏传导致 test_root_org_created_when_absent 在干净库上必然失败。
     return init_mod.InitRequest(
         organization_name="某单位",
+        organization_code="520000",
         admin_username="admin",
         admin_password="Str0ng!Passw0rd#2026",
     )

@@ -21,7 +21,7 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **14,364 用例**, 1 skipped（本机单进程实测 14,363 passed + 2 条环境性失败；CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
+| 后端测试 | **14,404 用例**, 1 skipped（本机分段实测；CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
 | 前端测试 | **7,020 passed**（339 文件）, 0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
@@ -42,10 +42,10 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-21（v1.16.0）— 后端 14,364 用例（1 skipped）+ 行/分支覆盖率 100.00%
+> **上次全量验证**: 2026-10-24（v1.17.2）— 后端 14,404 用例（1 skipped）+ 行/分支覆盖率 100.00%
 > （CI 后端测试为 **12 段独立进程**分段执行，`--cov-append` 合并，最终段由 `.coveragerc` fail_under=100 单一来源判定）；
-> 前端 **339 文件 / 7,020 用例、12 组 glob 100%**；E2E 165（含 10 页视觉回归基线）；
-> flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 硬编码色 305（基线 345，57 个文件）/ 版本单一来源一致 / Alembic 单 head（54 版本）
+> 前端 **329 文件 / 6,995 用例、12 组 glob 100%**；E2E 165（含 10 页视觉回归基线）；
+> flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 硬编码色 154（棘轮 154/154）/ 版本单一来源一致 / Alembic 单 head（61 版本）
 
 ## 快速开始
 
@@ -253,6 +253,21 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 > 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
 
 ## 近期修复记录
+
+### 2026-10-24（v1.17.2）端到端排查修复 + 死代码清理
+
+- 🐞 **组织创建在真实 HTTP 下必然失败（严重）**：`OrganizationCreate` 漏掉 `code` 字段，而端点创建路径
+  直接读 `data.code` —— 单测用 MagicMock 传 `data` 不会暴露，**新装机器因此无法创建任何组织**。
+  已补 `code` 必填（6 位），`OrganizationUpdate.code` 改为可选（编码只读语义）。
+- 🧭 **系统自检端点路径错位**：模块注册在 `/api/v1/self-check`（根级），前端与文档调用
+  `/api/v1/system/self-check` → 设置页自检卡片恒 404。改为经 `system` 包聚合注册并移除根级重复注册。
+- 🧪 **防回归**：新增 `test_p3_org_create_http_contract.py`（8 例，只走 TestClient 锁定 422 契约）；
+  自检路径契约用例断言前后端一致；补齐 `test_v1129_r2_system_api.py` 漏传的 `organization_code`。
+- 🧹 **死代码清理**：移除 6 个从未接入任何页面的通用组件（AppEmpty / AppError / AppLoading /
+  AppPageHeader / AppStatCard / AppTableToolbar）及其 barrel 与 7 个测试文件，移除 3 个已被
+  `build_ppt.js` 取代的一次性 PPT 脚本；`ErrorBoundary` 经核实仍在 `DefaultLayoutSafe` 通过全局名使用，予以保留。
+- 🔍 **全仓审计结论**：后端 379 个模块零死代码；前端 412 条 API 路径 vs 后端 720 条路由**零错位**；
+  127 份文档 132 条相对链接**死链 0**；`npm audit --omit=dev` **0 漏洞**；PPT 53 页 **0 溢出**。
 
 ### 2026-10-21（v1.16.0）系统管理梳理 + 危险操作硬化 + 离线瓦片地图 + PII 密钥迁移
 

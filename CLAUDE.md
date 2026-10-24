@@ -66,11 +66,11 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 14,364 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 14,404 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
-cd frontend && npm test -- --run                                       # 前端 336 文件（用例数以输出为准）
+cd frontend && npm test -- --run                                       # 前端 329 文件（用例数以输出为准）
 # 文档数字漂移门禁（端点数 / 路由模块数 / 前端测试文件数 / 后端用例数）：
 #   python scripts/check_doc_numbers.py [--full] [--update]
 cd backend && .venv/Scripts/python.exe -m flake8 app/ --max-line-length=120 --max-complexity=16
