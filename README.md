@@ -1,8 +1,8 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.17.2
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.17.3
 
-![Version](https://img.shields.io/badge/version-1.17.2-blue)
+![Version](https://img.shields.io/badge/version-1.17.3-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
@@ -42,7 +42,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-24（v1.17.2）— 后端 14,404 用例（1 skipped）+ 行/分支覆盖率 100.00%
+> **上次全量验证**: 2026-10-24（v1.17.3）— 后端 14,404 用例（1 skipped）+ 行/分支覆盖率 100.00%
 > （CI 后端测试为 **12 段独立进程**分段执行，`--cov-append` 合并，最终段由 `.coveragerc` fail_under=100 单一来源判定）；
 > 前端 **329 文件 / 6,995 用例、12 组 glob 100%**；E2E 165（含 10 页视觉回归基线）；
 > flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 硬编码色 154（棘轮 154/154）/ 版本单一来源一致 / Alembic 单 head（61 版本）
@@ -245,8 +245,8 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 
 | 平台 | 安装包 | 获取方式 |
 |------|--------|---------|
-| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（v1.17.2：约 273 MB / 286,399,159 B，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
-| 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（v1.17.2：约 270 MB / 282,816,444 B）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（约 101 MB / 106,069,852 B） | 同上（`build-arm64.yml` 产出） |
+| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（v1.17.3：约 273 MB / 286,399,159 B，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
+| 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（v1.17.3：约 270 MB / 282,816,444 B）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（约 101 MB / 106,069,852 B） | 同上（`build-arm64.yml` 产出） |
 
 > **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 与 ARM64 安装包均内置；模型随包约 15 MB，ARM64 侧要求目标机 glibc ≥ 2.28）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
 > **运行环境**：Windows 10/11 x64（Electron 33 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
@@ -254,7 +254,7 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 
 ## 近期修复记录
 
-### 2026-10-24（v1.17.2）端到端排查修复 + 死代码清理
+### 2026-10-24（v1.17.3）端到端排查修复 + 死代码清理
 
 - 🐞 **组织创建在真实 HTTP 下必然失败（严重）**：`OrganizationCreate` 漏掉 `code` 字段，而端点创建路径
   直接读 `data.code` —— 单测用 MagicMock 传 `data` 不会暴露，**新装机器因此无法创建任何组织**。

@@ -168,3 +168,52 @@ class TestVerifyFileIntegrity:
     def test_default_base_dir_resolves_repo_root(self):
         """base_dir 缺省时上溯三级定位仓库根，不抛异常（仓库内文件真实存在）。"""
         _verify_file_integrity()
+
+
+class TestFrozenRuntimeSkip:
+    """冻结运行时（PyInstaller）跳过源码完整性检查。
+
+    打包后 .py 源文件已编译进可执行文件，按源码路径检查必然"缺失"——
+    会产生 4 条误导性 WARNING（让人误以为安装包损坏）。
+    """
+
+    def test_frozen_skips_source_check(self, tmp_path, monkeypatch):
+        import sys as _sys
+
+        from app.startup import environment as env_mod
+
+        called = {"n": 0}
+
+        def _spy(*a, **k):
+            called["n"] += 1
+            return []
+
+        monkeypatch.setattr(env_mod, "_collect_integrity_mismatches", _spy)
+        monkeypatch.setattr(_sys, "frozen", True, raising=False)
+
+        env_mod._verify_file_integrity(base_dir=tmp_path)
+        assert called["n"] == 0, "冻结运行时不应对 .py 执行完整性比对"
+
+    def test_dev_runtime_still_checks(self, tmp_path, monkeypatch):
+        import sys as _sys
+
+        from app.startup import environment as env_mod
+
+        (tmp_path / "integrity_manifest.json").unlink(missing_ok=True)
+        for rel in ("app/core/config.py", "app/core/security.py", "app/core/database.py", "app/main.py"):
+            f = tmp_path / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("x", encoding="utf-8")
+
+        called = {"n": 0}
+
+        def _spy(base_dir, critical, manifest):
+            called["n"] += 1
+            assert len(critical) == 4
+            return []
+
+        monkeypatch.setattr(env_mod, "_collect_integrity_mismatches", _spy)
+        monkeypatch.setattr(_sys, "frozen", False, raising=False)
+
+        env_mod._verify_file_integrity(base_dir=tmp_path)
+        assert called["n"] == 1, "开发态必须保留源码完整性检查"

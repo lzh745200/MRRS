@@ -1,4 +1,4 @@
-# Release Notes — v1.17.2（2026-10-24）
+# Release Notes — v1.17.3（2026-10-24）
 
 > 本文件供 GitHub Release 正文使用；对应同版本 CHANGELOG 条目见根目录 `CHANGELOG.md`
 > 的 `[1.17.2]` 段。
@@ -21,7 +21,7 @@ Get-FileHash .\MRRS-Setup-1.17.2-x64.exe -Algorithm SHA256
 
 ### 1. 数据库迁移：**本版无 schema 变更**
 
-v1.17.2 只修业务代码与测试，**Alembic head 保持 r41**（61 个版本、单 head）。
+v1.17.3 只修业务代码与测试，**Alembic head 保持 r41**（61 个版本、单 head）。
 从 v1.17.0 / v1.17.1 升级无需额外迁移步骤；从 v1.16.x 升级仍走 r36~r41 的既有迁移。
 
 - 升级前仍建议先备份（系统管理 → 备份与存储 → 备份），或离线复制

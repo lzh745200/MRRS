@@ -94,3 +94,52 @@ class TestSetupStaticFiles:
             from app.core.static_files import setup_static_files
             result = setup_static_files(app)
             assert result == "/app/frontend"
+
+
+class TestOnedirLayoutDiscovery:
+    """PyInstaller onedir 真实结构：<resources>/backend/assistance-backend/_internal。
+
+    前端产物在 <resources>/frontend（与 backend 同级）。此用例锁定"上溯三级"推导：
+    Electron 侧一旦漏传 FRONTEND_DIST_PATH，后端仍能自己找到前端，避免白屏 404。
+    """
+
+    def _make_layout(self, tmp_path):
+        resources = tmp_path / "resources"
+        meipass = resources / "backend" / "assistance-backend" / "_internal"
+        meipass.mkdir(parents=True)
+        frontend = resources / "frontend"
+        frontend.mkdir(parents=True)
+        (frontend / "index.html").write_text("<html></html>", encoding="utf-8")
+        return resources, meipass, frontend
+
+    def test_onedir_meipass_resolves_sibling_frontend(self, tmp_path, monkeypatch):
+        resources, meipass, frontend = self._make_layout(tmp_path)
+        monkeypatch.delenv("FRONTEND_DIST_PATH", raising=False)
+        monkeypatch.setattr(sys, "_MEIPASS", str(meipass), raising=False)
+
+        from app.core.static_files import find_frontend_dir
+
+        assert find_frontend_dir() == str(frontend)
+
+    def test_onedir_layout_path_math(self, tmp_path):
+        """推导口径锁定：_MEIPASS 上溯三级即 <resources>，前端在其下的 frontend/。
+
+        （不直接调 find_frontend_dir：开发态源码树 frontend/dist 会抢先命中，
+        该用例只验证"打包结构下推导出的路径确实指向前端目录"。）
+        """
+        resources, meipass, frontend = self._make_layout(tmp_path)
+        assert (meipass.parent.parent.parent / "frontend").resolve() == frontend.resolve()
+        assert (frontend / "index.html").is_file()
+
+    def test_env_var_still_wins_over_layout(self, tmp_path, monkeypatch):
+        """Electron 显式传参优先（不破坏既有契约）。"""
+        resources, meipass, frontend = self._make_layout(tmp_path)
+        other = tmp_path / "explicit"
+        other.mkdir()
+        (other / "index.html").write_text("<html></html>", encoding="utf-8")
+        monkeypatch.setenv("FRONTEND_DIST_PATH", str(other))
+        monkeypatch.setattr(sys, "_MEIPASS", str(meipass), raising=False)
+
+        from app.core.static_files import find_frontend_dir
+
+        assert find_frontend_dir() == str(other)

@@ -5,6 +5,45 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.17.3] - 2026-10-24 — 打包环境可用性修复（前端目录自发现 + 完整性检查误报）
+
+> 本版由一次**真实安装包离线验证**驱动：把打包后的后端 exe 放到全新空目录
+> （空 `%APPDATA%` / `%LOCALAPPDATA%`）里启动，模拟"任意电脑首次安装"。
+
+### Fixed
+
+- **打包后端在无环境变量时找不到前端（真机白屏风险，重要）**：
+  Electron 通过 `http://127.0.0.1:<port>` 加载界面，依赖环境变量 `FRONTEND_DIST_PATH` 指路。
+  但 PyInstaller onedir 的实际布局是
+  `<resources>/backend/assistance-backend/_internal`（`_MEIPASS`）+
+  `<resources>/frontend`（与 backend 同级），原候选表缺少"自 `_MEIPASS` 上溯三级"这条，
+  一旦 Electron 侧漏传该变量（手工启动后端排障、升级后环境变量遗漏、麒麟用 systemd 直跑），
+  浏览器访问 `/` 直接 **404**，桌面端表现为**白屏**。
+  修复：新增两条候选 —— `_MEIPASS` 上溯三级 `/frontend`、冻结态 `sys.executable` 的 `/frontend`
+  （注意 exe 是**文件**路径，需先去掉文件名再上溯三级，合计**四级**；只上溯三级会落到
+  `<resources>/backend/frontend` 这个不存在的位置）；
+  显式传入的 `FRONTEND_DIST_PATH` 仍最优先（不破坏既有契约）。
+- **冻结运行时误报「关键文件缺失」**：`startup/environment.py` 对 `app/core/config.py` 等 4 个
+  .py 源文件做存在性检查，而 PyInstaller 包里源码已编译进可执行文件 —— 启动日志恒刷 4 条
+  `WARNING 文件完整性检查: 关键文件缺失: app/core/config.py`，让运维误判"安装包损坏"。
+  修复：冻结运行时（`sys.frozen`）**跳过源码检查并记录 INFO 说明原因**
+  （防篡改由代码签名 + 安装包 SHA256 承担），开发态检查逻辑原样保留。
+
+### Verification（离线安装包实测）
+
+| 场景 | 结果 |
+|---|---|
+| 空 `%LOCALAPPDATA%` 首次启动打包后端 | 自动建库（`data/` `data_sync/` `uploads/` `archives/` `cache/` `logs/` `offline_tiles/`）并启动成功 |
+| `/health` | 200，`status=ok`，`migration.at_head=true` |
+| 出厂口令登录 | 200，`must_change_password=true`（首次登录强制改密生效） |
+| 未传 `FRONTEND_DIST_PATH` 时访问 `/` | 修复后 200（含 `id="app"`）；修复前 404 |
+| 启动日志 | 修复后不再出现「关键文件缺失」误报 |
+
+### Tests
+
+- `test_static_files.py` 增补 onedir 布局推导用例（上溯三级 = resources，前端在其下）；
+- `test_environment_integrity_helpers.py` 增补「冻结跳过 / 开发态保留」双向用例。
+
 ## [1.17.2] - 2026-10-24 — 端到端排查修复：组织创建不可用 + 自检路径错位
 
 > 本版由一次**真实 HTTP 端到端排查**驱动：在隔离实例（独立 DB + 独立端口）上完整走通了

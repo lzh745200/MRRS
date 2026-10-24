@@ -56,11 +56,17 @@ def _safe_join(base: Path, sub_path: str) -> Path:
 def is_bundled() -> bool:
     """检测是否在 PyInstaller 打包环境中运行
 
-    注意：以前同时检查 sys.frozen 和 sys._MEIPASS，但 _MEIPASS 仅在
-    onefile 模式下存在。onedir 模式下 sys.frozen=True 但 _MEIPASS 不存在，
-    导致打包后 is_bundled() 误判为 False，进而使用 CWD（如 Program Files
-    只读目录）作为数据目录，引发 PermissionError。
-    现仅检查 sys.frozen，兼容 onefile 和 onedir 两种模式。
+    仅检查 ``sys.frozen``，**不要**用 ``sys._MEIPASS`` 做"是否打包"的布尔判据。
+
+    历史原因：PyInstaller < 6 的 onedir 模式不设置 ``_MEIPASS``（仅 onefile 设置），
+    用它判断打包态会在 onedir 下误判为 False，进而把 CWD（如 Program Files
+    只读目录）当数据目录，引发 PermissionError。
+
+    版本事实（与 ``assistance-backend.spec`` 的注释口径一致）：PyInstaller 6+
+    两种模式都会设置 ``_MEIPASS``，onefile 指向临时解压目录、onedir 指向
+    ``<app>/_internal``。它表示的是**资源目录**而非打包标志，取值随版本/模式
+    变化；定位前端/瓦片等资源请走 ``static_files.find_frontend_dir`` 与
+    ``map._resolve_tiles_dir`` 的候选路径方式，不要自己另写上溯级数。
     """
     return getattr(sys, "frozen", False)
 

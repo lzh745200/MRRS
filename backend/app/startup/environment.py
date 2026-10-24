@@ -154,6 +154,18 @@ def _verify_file_integrity(base_dir: Path | None = None):
     Raises:
         FileIntegrityError: 提供了清单且存在缺失/哈希不符/无法读取的关键文件。
     """
+    # 冻结运行时（PyInstaller onedir/onefile）里 .py 源文件已被编译进可执行文件，
+    # 对源码存在性的检查必然报「缺失」——属于误报（日志里会刷 4 条 WARNING，
+    # 让运维误以为安装包损坏）。此时直接跳过，并明确记录原因。
+    import sys as _sys
+
+    if getattr(_sys, "frozen", False):
+        logger.info(
+            "文件完整性检查: 冻结运行时（PyInstaller）下跳过源码文件检查 —— "
+            "关键模块已编译进可执行文件，防篡改由代码签名与安装包 SHA256 承担"
+        )
+        return
+
     _critical_files = [
         "app/core/config.py",
         "app/core/security.py",
