@@ -6,9 +6,9 @@
 
 | 安装包 | 适用平台 | 大小 | SHA256 |
 |---|---|---|---|
-| `MRRS-Setup-1.17.3-x64.exe` | Windows 10/11 x64 | 273 MB | 见 Release 内 `SHA256SUMS-windows-x64.txt` |
-| `MRRS-Setup-1.17.3-arm64.deb` | 麒麟 V10 / 统信 ARM64（Electron） | 270 MB | 见 `SHA256SUMS-electron-deb-arm64.txt` |
-| `assistance-management-system_1.17.3_arm64.deb` | 麒麟 V10 / 统信 ARM64（standalone） | 101 MB | 见 `SHA256SUMS-standalone-deb-arm64.txt` |
+| `MRRS-Setup-1.17.3-x64.exe` | Windows 10/11 x64 | 273.13 MB | `36130151f45e74d38773ee3a1c9275d24057040b93c669ec33b7afc926075e59` |
+| `MRRS-Setup-1.17.3-arm64.deb` | 麒麟 V10 / 统信 ARM64（Electron） | 269.72 MB | `114bd41539905465d502ff4f3505942af82872397be004d20034d1717c56f141` |
+| `assistance-management-system_1.17.3_arm64.deb` | 麒麟 V10 / 统信 ARM64（standalone） | 101.17 MB | `ff30e8fbac8e090e8e5f70d7f703688c2bb53dbb4f5ded0f1fa266a8ab31c850` |
 
 离线校验（Windows）：
 
@@ -86,5 +86,5 @@ PyInstaller 实际布局是：
 |---|---|
 | 后端 12 段全量 + 覆盖率 | 100% 门禁通过 |
 | 前端全量 + 覆盖率 | 329 文件 / 6,995 用例，100% |
-| CI PR Checks | 待本次构建回填 |
-| 双平台构建 | 待本次构建回填 |
+| CI PR Checks | **8/8 success**（run `40076409380` / commit `842b3f2`） |
+| 双平台构建 | **Windows x64 success / ARM64 DEB success**（standalone + Electron 均通过） |
