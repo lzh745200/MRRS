@@ -95,6 +95,7 @@ class HouseholdMemberCreate(BaseModel):
     employment_status: Optional[str] = Field(default=None, max_length=32)
     income: Optional[float] = Field(default=None, ge=0, description="个人年收入(元)")
     is_special_support: bool = False
+    remarks: Optional[str] = Field(default=None, max_length=500, description="备注")
 
 
 class HouseholdMemberUpdate(BaseModel):
@@ -110,6 +111,7 @@ class HouseholdMemberUpdate(BaseModel):
     employment_status: Optional[str] = Field(default=None, max_length=32)
     income: Optional[float] = Field(default=None, ge=0)
     is_special_support: Optional[bool] = None
+    remarks: Optional[str] = Field(default=None, max_length=500, description="备注")
 
 
 class HouseholdRiskRecordCreate(BaseModel):
@@ -170,6 +172,7 @@ class HouseholdMemberResponse(BaseModel):
     employment_status: Optional[str] = None
     income: Optional[float] = None
     is_special_support: bool = False
+    remarks: Optional[str] = None
     organization_id: Optional[int] = None
     created_by: Optional[int] = None
     is_active: bool = True

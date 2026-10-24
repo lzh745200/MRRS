@@ -108,7 +108,13 @@ async def get_subordinate_dashboard(
     """获取下级单位上报仪表板"""
     if not hasattr(current_user, "org_id") or not current_user.org_id:
         return SubordinateReportDashboard(
-            total_subordinates=0, reported_count=0, unreported_count=0, statistics=None, subordinates=[]
+            total_subordinates=0,
+            reported_count=0,
+            not_reported_count=0,
+            pending_review_count=0,
+            overdue_count=0,
+            report_rate=0.0,
+            subordinates=[],
         )
 
     return service.get_subordinate_dashboard(current_user.org_id)

@@ -12,12 +12,28 @@ Covers remaining uncovered lines introduced by the standalone v1.7.0 batch:
 """
 
 import os
+
+import re as _re
 import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.utils import drive_detect
+
+
+def _count_expected_scheduler_timers(src: str) -> int:
+    """按 `start_backup_scheduler` 源码推导应创建的 Timer 数。
+
+    原实现逐个点名利手方法（`_schedule_daily/_schedule_interval/_schedule_weekly`），
+    R36 新增 `_schedule_backup_catchup()`（一次性补跑，同样 1 个 Timer）后
+    该口径就漏算 1 个 → 断言恒为 16 vs 实得 17。
+
+    改为**通用匹配任意 `_schedule_<name>(` 调用点**：每个登记函数恰好创建 1 个
+    Timer（daily/weekly/interval 各自首个 Timer、oneshot 与 catchup 各 1 个），
+    今后再加调度入口无需再改这里。
+    """
+    return len(_re.findall(r"_schedule_\w+\(", src))
 
 
 # ===========================================================================
@@ -575,11 +591,7 @@ class TestBackupSchedulerExtras:
             import inspect as _inspect
 
             _src = _inspect.getsource(bs.start_backup_scheduler)
-            _expected = (
-                _src.count("_schedule_daily(")
-                + _src.count("_schedule_interval(")
-                + _src.count("_schedule_weekly(")
-            )
+            _expected = _count_expected_scheduler_timers(_src)
             assert _expected >= 14
             assert mock_timer.call_count == _expected
             assert fake_timer.start.call_count == _expected
@@ -763,11 +775,7 @@ class TestSchedulerJobsTriggered:
         import inspect as _inspect
 
         _src = _inspect.getsource(bs.start_backup_scheduler)
-        _expected = (
-            _src.count("_schedule_daily(")
-            + _src.count("_schedule_interval(")
-            + _src.count("_schedule_weekly(")
-        )
+        _expected = _count_expected_scheduler_timers(_src)
         assert len(CapturingTimer.instances) == _expected, f"实得 {len(CapturingTimer.instances)}"
         assert _expected >= 14
         # 找到 name 含 "reminder_scan" 的 timer 并触发其 _job 闭包
@@ -813,11 +821,7 @@ class TestSchedulerJobsTriggered:
         import inspect as _inspect
 
         _src = _inspect.getsource(bs.start_backup_scheduler)
-        _expected = (
-            _src.count("_schedule_daily(")
-            + _src.count("_schedule_interval(")
-            + _src.count("_schedule_weekly(")
-        )
+        _expected = _count_expected_scheduler_timers(_src)
         assert len(CapturingTimer.instances) == _expected, f"实得 {len(CapturingTimer.instances)}"
         assert _expected >= 14
         target = next(t for t in CapturingTimer.instances if t.name == "scheduler-kpi_precalculate")

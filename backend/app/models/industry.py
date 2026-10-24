@@ -23,12 +23,15 @@ class TeaPlantation(Base, TimestampMixin):
     __tablename__ = "tea_plantations"
 
     __table_args__ = (
-        Index("ix_tea_village_id", "village_id"),
+        Index("ix_tea_supported_village_id", "supported_village_id"),
         Index("ix_tea_harvest_year", "harvest_year"),
     )
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    village_id = Column(
+    # W22 起库里已改名为 supported_village_id（FK→supported_villages.id），
+    # 但模型一直留在旧名 village_id —— 这正是三层对齐门禁报出的模型/库漂移
+    # （r42_align_stack_columns_001 的 downgrade/upgrade 均按 supported_village_id 操作）。
+    supported_village_id = Column(
         Integer,
         ForeignKey("supported_villages.id", ondelete="CASCADE"),
         nullable=False,
@@ -67,12 +70,12 @@ class CactusFruitPlot(Base, TimestampMixin):
     __tablename__ = "cactus_fruit_plots"
 
     __table_args__ = (
-        Index("ix_cactus_village_id", "village_id"),
+        Index("ix_cactus_supported_village_id", "supported_village_id"),
         Index("ix_cactus_harvest_year", "harvest_year"),
     )
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    village_id = Column(
+    supported_village_id = Column(
         Integer,
         ForeignKey("supported_villages.id", ondelete="CASCADE"),
         nullable=False,

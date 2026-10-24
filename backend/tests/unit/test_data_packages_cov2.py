@@ -143,6 +143,18 @@ class _FakeNoUpdatedAtModel:
     organization_id = 1
 
 
+class _FakePlainModel:
+    """既无 organization_id 也无 org_id，但有 updated_at。
+
+    上面两个 fake 各带其中一个字段，`hasattr(model, "org_id")` 的**假分支**因此
+    从未被走到；DATA_TYPE_MODELS 一旦接入按 id（而非组织归属）的表就落这条路径。
+    """
+    id = 1
+    updated_at = datetime(2026, 1, 1)
+    created_at = datetime(2026, 1, 1)
+    is_active = 1
+
+
 class TestDetectChanges:
     URL = "/api/v1/data-packages/incremental/detect-changes"
 
@@ -183,8 +195,100 @@ class TestDetectChanges:
         assert by_type["fake-noupdated"] == {"added": 0, "modified": 0, "deleted": 0, "total": 0}
         assert "unknown" not in by_type
 
+    def test_model_without_any_org_field(self, ctx):
+        """既无 organization_id 也无 org_id → 不加组织过滤，仍按 updated_at 统计。
+
+        覆盖 `hasattr(model, "org_id")` 的**假分支**（785->787）：
+        现有两个 fake 各带其一，永远走不到这里。
+        """
+        ctx["svc"].get_package.return_value = SimpleNamespace(created_at=datetime(2026, 1, 1))
+        q = MagicMock(name="query")
+        q.filter.return_value = q
+        q.scalar.side_effect = [5, 2, 1]  # changed / added / deleted
+        ctx["svc"].db.query.return_value = q
+
+        with (
+            patch.object(dp, "get_org_with_fallback", return_value=5),
+            patch("app.services.data_package_service.DATA_TYPE_MODELS", {"plain": _FakePlainModel}),
+        ):
+            resp = ctx["client"].post(f"{self.URL}?base_package_id=1&data_types=plain")
+
+        assert resp.status_code == 200
+        # changed=5, added=2, deleted=1 → modified = 5 - 2 - 1 = 2
+        assert resp.json()["data"]["summary"]["by_type"]["plain"] == {
+            "added": 2,
+            "modified": 2,
+            "deleted": 1,
+            "total": 5,
+        }
+
 
 # ==================== incremental/export 端点 ====================
+
+
+class TestImportOrgMismatchBlocked:
+    """`POST /data-packages/import`：来源单位码不一致且未显式放行 → 409。
+
+    介质治理（v1.17.0）的核心防线：上级/邻县的数据包误导入本单位会让数据挂错
+    组织树，事后很难拆。默认阻断，只有 `allow_org_mismatch=true` 才放行。
+    """
+
+    URL = "/api/v1/data-packages/import"
+
+    def _post(self, ctx, **params):
+        files = {"file": ("pkg.zip", b"PK\x03\x04fakezip", "application/zip")}
+        return ctx["client"].post(self.URL, params={"org_id": 1, **params}, files=files)
+
+    def test_mismatch_without_force_is_409(self, ctx):
+        from unittest.mock import AsyncMock
+
+        import app.api.v1.data.data.data_packages as dp
+
+        ctx["svc"].import_package = AsyncMock(
+            return_value=SimpleNamespace(manifest={"org_code": "520100"})
+        )
+        with (
+            patch.object(dp, "read_upload_with_limit", new=AsyncMock(return_value=b"PK\x03\x04x")),
+            patch.object(dp, "assert_not_duplicate", return_value="abc123"),
+            patch.object(
+                dp,
+                "check_org_code",
+                return_value={"status": dp.MATCH_MISMATCH, "message": "单位码不一致：包 520100 / 本机 520200"},
+            ),
+        ):
+            resp = self._post(ctx)
+
+        assert resp.status_code == 409
+        assert "单位码不一致" in resp.json()["detail"]
+
+    def test_mismatch_with_allow_flag_passes(self, ctx):
+        """显式放行时不得阻断（上级包按需导入的合法路径）。"""
+        from unittest.mock import AsyncMock
+
+        import app.api.v1.data.data.data_packages as dp
+
+        ctx["svc"].import_package = AsyncMock(
+            return_value=SimpleNamespace(
+                manifest={"org_code": "520100"},
+                imported_counts={},
+                skipped_counts={},
+                error_counts={},
+            )
+        )
+        with (
+            patch.object(dp, "read_upload_with_limit", new=AsyncMock(return_value=b"PK\x03\x04x")),
+            patch.object(dp, "assert_not_duplicate", return_value="abc123"),
+            patch.object(
+                dp,
+                "check_org_code",
+                return_value={"status": dp.MATCH_MISMATCH, "message": "单位码不一致"},
+            ),
+            patch.object(dp, "record_receipt", return_value=None, create=True),
+            patch.object(dp, "_safe_write_work_log", return_value=None, create=True),
+        ):
+            resp = self._post(ctx, allow_org_mismatch="true")
+
+        assert resp.status_code != 409
 
 
 class TestIncrementalExport:

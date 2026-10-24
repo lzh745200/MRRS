@@ -965,12 +965,13 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
     except BackupKeyMismatchError as e:
         # 跨机迁移：备份来自不同密钥的机器 → 409（服务层已写审计）。
         # 仍需清理已落盘的临时包（与其它失败分支一致）。
-        if file_path:
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            except OSError:
-                pass
+        # 本分支只能由下方 `svc.restore_backup(file_path, ...)` 抛错进入，
+        # 而 file_path 在那之前（落盘时）就已赋值 —— 故无需再判 None。
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except OSError:
+            pass
         raise HTTPException(status_code=409, detail=e.message)
     except ValueError as e:
         # 与通用异常一致：清理已保存的临时文件，避免磁盘泄漏

@@ -384,7 +384,7 @@ class TestDataReportServiceBranches:
         assert result.comment == "初始备注"
         assert result.reviewed_by == 9
 
-    async def test_subordinate_dashboard_groups_reports_and_counts_unreported(self):
+    async def test_subordinate_dashboard_groups_reports_and_counts_not_reported(self):
         """385->387 / 406->409: 同源第二份报告并入既有分组；无报告下级计为未上报。"""
         svc = DataReportService(MagicMock())
         sub_a = SimpleNamespace(id=11, name="甲村", code="V001")
@@ -401,7 +401,10 @@ class TestDataReportServiceBranches:
         dashboard = svc.get_subordinate_dashboard(1)
         assert dashboard.total_subordinates == 2
         assert dashboard.reported_count == 1
-        assert dashboard.unreported_count == 0  # schema 未接收 not_reported_count，保持默认
+        # R35 三层对齐：schema 原先声明 unreported_count，导致 service 传入的
+        # not_reported_count 被 Pydantic 静默丢弃（前端拿不到该字段）。
+        # 修正后 not_reported_count 才是真实值：2 个下级、1 个已上报 → 1 个未上报。
+        assert dashboard.not_reported_count == 1
         assert dashboard.subordinates[0].total_reports == 2  # 同源报告归入同一分组
         assert dashboard.subordinates[0].pending_reports == 1
         assert dashboard.subordinates[0].approved_reports == 1

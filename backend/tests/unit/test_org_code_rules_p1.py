@@ -175,6 +175,32 @@ class TestSelfRegisterGate:
         on = client.get("/api/v1/auth/public-config")
         assert on.json()["data"]["self_register_enabled"] is True
 
+    def test_public_config_exposes_lockout_policy(self, client, monkeypatch):
+        """W27 登录页 UI：前端需要锁定策略才能显示倒计时。
+
+        没有这两个字段时，用户被 423 锁定时只看到一句"请X分钟后再试"，
+        既不知道还有多久，也不知道再错几次会被锁。
+        """
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "ACCOUNT_LOCKOUT_MINUTES", 42, raising=False)
+        monkeypatch.setattr(settings, "MAX_FAILED_LOGIN_ATTEMPTS", 7, raising=False)
+        # 端点模块级常量在导入时已固化，需同步打补丁
+        import app.api.v1.auth.auth as auth_module
+
+        monkeypatch.setattr(auth_module, "_LOCKOUT_MINUTES", 42)
+        monkeypatch.setattr(auth_module, "_MAX_FAILED_ATTEMPTS", 7)
+
+        data = client.get("/api/v1/auth/public-config").json()["data"]
+        assert data["lockout_minutes"] == 42
+        assert data["max_failed_attempts"] == 7
+
+    def test_public_config_does_not_leak_org_identity(self, client):
+        """登录前不泄露部署单位身份，也不返回不存在的"全局 2FA"字段。"""
+        data = client.get("/api/v1/auth/public-config").json()["data"]
+        for forbidden in ("org_name", "org_code", "organization", "two_factor_required"):
+            assert forbidden not in data
+
 
 # ── 4. 账号解锁接口 ───────────────────────────────────────────────────
 class TestUnlockEndpoint:

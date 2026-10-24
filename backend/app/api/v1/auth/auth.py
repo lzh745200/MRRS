@@ -878,9 +878,30 @@ async def get_csrf_token(request: Request, response: Response) -> dict:
 
 @router.get("/public-config", summary="登录页公开配置（无需登录）")
 async def public_config() -> Any:
-    """登录页需要的公开配置：是否允许自助注册（不含任何敏感信息）。"""
+    """登录页需要的公开配置（**不含任何敏感信息**，可公开）。
+
+    W27 登录页 UI 优化：原实现只返回 ``self_register_enabled``，导致两个实际缺陷：
+
+    1. **注册入口死链** —— 前端从不调用本端点，"注册账户"永远显示，
+       而 ``SELF_REGISTER_MODE`` 默认 ``"off"``，点进去必然被拒；
+    2. **锁定/限流没有倒计时** —— 后端返回 ``423 账户已锁定，请X分钟后再试``
+       与 ``429 登录尝试过于频繁``，但前端无法得知锁定*时长*与*阈值*，
+       只能干巴巴显示一行字，用户不知道还要等多久、再错几次会被锁。
+
+    故补两个**非敏感**字段（纯策略参数，登录前本就该可见）：
+    ``lockout_minutes`` / ``max_failed_attempts``。
+
+    刻意**不**返回的字段（避免"看着有、其实假"）：
+    * 单位名称 / 单位码等组织信息 —— 登录前不泄露部署单位身份；
+    * 全局"是否强制 2FA" —— 本系统 2FA 是**按用户**开启（``users.two_factor_enabled``），
+      不存在全局开关；硬造一个恒为 false 的字段只会误导调用方。
+    """
     mode = str(getattr(_settings, "SELF_REGISTER_MODE", "off")).lower()
-    return success_response(data={"self_register_enabled": mode == "controlled"})
+    return success_response(data={
+        "self_register_enabled": mode == "controlled",
+        "lockout_minutes": int(_LOCKOUT_MINUTES),
+        "max_failed_attempts": int(_MAX_FAILED_ATTEMPTS),
+    })
 
 
 @router.post("/register", response_model=LoginResponse)

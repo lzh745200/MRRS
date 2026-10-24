@@ -182,6 +182,7 @@ class HouseholdMember(Base):
     )
     income = Column(Numeric(14, 2), nullable=True, comment="个人年收入(元)")
     is_special_support = Column(Boolean, nullable=False, default=False, comment="是否兜底保障对象")
+    remarks = Column(String(500), nullable=True, comment="备注")
 
     # 数据域与软删
     organization_id = Column(
@@ -219,6 +220,7 @@ class HouseholdMember(Base):
             "employment_status": self.employment_status,
             "income": float(self.income) if self.income is not None else None,
             "is_special_support": bool(self.is_special_support),
+            "remarks": self.remarks,
             "organization_id": self.organization_id,
             "created_by": self.created_by,
             "is_active": self.is_active,

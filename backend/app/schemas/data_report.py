@@ -103,17 +103,29 @@ class SubordinateReportSummary(BaseModel):
 
     org_id: int
     org_name: str = ""
+    org_code: str = ""
     total_reports: int = 0
     pending_reports: int = 0
     approved_reports: int = 0
     rejected_reports: int = 0
+    latest_report_date: Optional[datetime] = None
+    has_overdue: bool = False
 
 
 class SubordinateReportDashboard(BaseModel):
-    """下级单位上报仪表板"""
+    """下级单位上报仪表板
+
+    R35 三层对齐：service（data_report_service.get_subordinate_dashboard）实际返回的
+    是 not_reported_count / pending_review_count / overdue_count / report_rate 这一套，
+    而本 schema 原先声明成 unreported_count / statistics —— Pydantic 默认 extra=ignore
+    会把 service 传入的这四个字段**静默丢弃**，前端拿到的字段名与声明不一致。
+    此处按 service 的真实返回修正声明（不改变真机行为，只让契约与实际一致）。
+    """
 
     total_subordinates: int = 0
     reported_count: int = 0
-    unreported_count: int = 0
-    statistics: Optional[DataReportStatistics] = None
+    not_reported_count: int = 0
+    pending_review_count: int = 0
+    overdue_count: int = 0
+    report_rate: float = 0.0
     subordinates: List[SubordinateReportSummary] = Field(default_factory=list)

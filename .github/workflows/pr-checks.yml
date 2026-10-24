@@ -501,6 +501,26 @@ jobs:
           python scripts/check_pragma_reasons.py --diff-base auto \
             --allow-missing-base --max-bare 0
 
+  # R35 三层对齐门禁（2026-10-24）：前端接口层 ↔ 后端路由/Pydantic ↔ 数据库 schema。
+  # 防"单测绿、真机废"的契约漂移（v1.17.2 的 /api/v1/system/self-check 恒 404、
+  # OrganizationCreate 漏 code 字段即此类 —— 单测用 MagicMock 传 data 不会暴露）。
+  #
+  # 为什么必须独立作业：门禁要 import app.main（fastapi/sqlalchemy/pydantic）并用
+  # alembic 起临时库，因此需要后端运行期依赖；而 static-analysis 作业只装了 alembic
+  # 与几个 lint 工具，放在那里会因 ModuleNotFoundError 恒红（实测 EXIT=2）。
+  # B 轴基线是"临时空库 + alembic upgrade head"，不读本机开发库，CI 与本地一致。
+  stack-alignment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: '3.11' }
+      - run: pip install -r backend/requirements.txt
+      - name: Stack alignment check (frontend/backend/database)
+        working-directory: backend
+        run: python ../scripts/check_stack_alignment.py
+
   # 升级排练（P0-8，2026-10-17）：用最近**发布标签**的旧代码在临时库上建出"老用户库"，
   # 每张表播一行，再用当前代码 upgrade head，校验"表集合不丢 / 行数不变 / 完整性 ok /
   # 落在当前 head"。安装包冒烟只证明"能装能起"，证明不了"老用户的库升级后数据还在"——

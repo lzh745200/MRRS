@@ -89,6 +89,11 @@ class Project(Base):
         nullable=True,
         comment="负责单位ID",
     )
+    region_code = Column(
+        String(20),
+        nullable=True,
+        comment="行政区划编码（关联 regions.code，用于数据权限前缀匹配）",
+    )
 
     budget = Column(Numeric(15, 4), default=0, comment="预算金额(万元)")
     actual_cost = Column(Numeric(15, 4), default=0, comment="实际花费(万元)")
