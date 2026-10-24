@@ -451,6 +451,33 @@ jobs:
             dist/electron/SHA256SUMS-windows-x64.txt
           retention-days: 30
 
+      # 11.5 准备 Release 正文（单源：仓库里的 RELEASE_NOTES-<tag>.md）
+      # 为什么需要：Release 由 3 个作业各自上传（本文件 1 个 + build-arm64.yml 2 个），
+      # softprops/action-gh-release 每次都会重写 body —— 不传 body 的作业会把正文清空。
+      # v1.18.1 实测就出现过「Release 正文 0 字符」：Windows 侧写了正文，随后 ARM64 两个
+      # 作业把 body 覆盖成空。故三个发布步骤统一改为从同一文件 body_path 读取。
+      - name: Prepare release body
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          SRC="docs/04-部署文档/RELEASE_NOTES-${GITHUB_REF_NAME}.md"
+          if [ -f "$SRC" ]; then
+            cp "$SRC" "$RUNNER_TEMP/release-body.md"
+            echo "使用发布说明: $SRC"
+          else
+            {
+              echo "## ${GITHUB_REF_NAME}"
+              echo
+              echo "> 本版未提供 \`docs/04-部署文档/RELEASE_NOTES-${GITHUB_REF_NAME}.md\`，"
+              echo "> 逐项变更见仓库根目录 \`CHANGELOG.md\`。"
+              echo
+              echo "## 产物完整性校验（SHA256）"
+              echo
+              echo "下载安装包与对应 \`SHA256SUMS-*.txt\` 到同一目录后执行 \`sha256sum -c SHA256SUMS-*.txt\`，"
+              echo "所有行必须为 \`OK\`。"
+            } > "$RUNNER_TEMP/release-body.md"
+            echo "::warning::未找到 $SRC，使用兜底正文"
+          fi
+
       # 12. 发布 Release (仅 tag 触发)
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -459,15 +486,5 @@ jobs:
           files: |
             dist/electron/*.exe
             dist/electron/SHA256SUMS-windows-x64.txt
-          generate_release_notes: true
-          body: |
-            ## 产物完整性校验（SHA256）
-
-            下载安装包与对应 `SHA256SUMS-*.txt` 到同一目录后执行：
-
-            ```bash
-            sha256sum -c SHA256SUMS-windows-x64.txt
-            ```
-
-            所有行必须为 `OK`；出现 `FAILED` 表示文件损坏或被篡改，请勿安装。
-            > 代码签名（W6-T1）待证书采购到位后启用，届时本节补充 Authenticode 验签说明。
+          generate_release_notes: false
+          body_path: ${{ runner.temp }}/release-body.md
