@@ -59,6 +59,10 @@ MULTIPART_BODY_LIMITS = (
     ("/api/v1/permission-packages", 512 * 1024 * 1024),
     # 数据同步导入 512MB
     ("/api/v1/data-sync", 512 * 1024 * 1024),
+    # 离线瓦片包导入 512MB（对齐 offline_map_service.MAX_TILE_UPLOAD_BYTES）；
+    # 此前该路径未登记，multipart 被收紧到全局 10MB，导致市州包（7~17MB）
+    # 与全省包（59MB）上传直接 413「上传内容超过大小限制 (10MB)」。
+    ("/api/v1/map/tiles", 512 * 1024 * 1024),
 )
 # 其余 multipart 端点默认上限
 DEFAULT_MULTIPART_BODY_LIMIT = 512 * 1024 * 1024
@@ -97,15 +101,20 @@ def _resolve_body_limit(request: Request, max_body_size: int):
     """计算本次请求允许的累计字节上限；None 表示不限（批量 JSON 端点）。"""
     path = request.url.path
     media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
-    is_upload_path = any(path.startswith(p) for p in LARGE_PAYLOAD_PATH_PREFIXES)
+    # 两类放开口径要分开：
+    # - 大 JSON 白名单：multipart 用分级上限、非 multipart 不限（批量导入 JSON）；
+    # - 仅有 multipart 分级登记的路径（如 /api/v1/map/tiles/import）：只放宽 multipart，
+    #   非 multipart 仍走全局 10MB，避免把 JSON 面一起放开。
+    is_large_payload = any(path.startswith(p) for p in LARGE_PAYLOAD_PATH_PREFIXES)
+    has_multipart_limit = any(path.startswith(p) for p, _limit in MULTIPART_BODY_LIMITS)
 
     if media_type == MULTIPART_MEDIA_TYPE:
         multipart_limit = _multipart_limit_for(path)
-        if is_upload_path:
+        if is_large_payload or has_multipart_limit:
             return multipart_limit
         # 非上传路径伪造 multipart 头：收紧到全局上限，防止绕过 10MB 限制
         return min(multipart_limit, max_body_size)
-    if is_upload_path:
+    if is_large_payload:
         return None
     return max_body_size
 

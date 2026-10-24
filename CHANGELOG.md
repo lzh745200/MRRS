@@ -5,6 +5,26 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.17.4] - 2026-10-24 — 离线瓦片包导入被 10MB 请求体上限拦截（现场 413）
+
+### Fixed
+
+- **导入瓦片包报「上传内容超过大小限制 (10MB)，请拆分或压缩后重试」**：
+  `BodySizeLimitMiddleware` 对 multipart 请求只在路径命中 `LARGE_PAYLOAD_PATH_PREFIXES`
+  时才采用分级上限；`/api/v1/map/tiles/import` 既不在该白名单、也没有
+  `MULTIPART_BODY_LIMITS` 条目，于是被 `min(DEFAULT_MULTIPART_BODY_LIMIT, max_body_size)`
+  收紧到全局 **10MB** —— 而市州包为 7~17MB、全省包 59MB，必然 413。
+  修复：
+  1) `MULTIPART_BODY_LIMITS` 增加 `("/api/v1/map/tiles", 512MB)`（对齐
+     `offline_map_service.MAX_TILE_UPLOAD_BYTES`）；
+  2) `_resolve_body_limit` 区分「大 JSON 白名单」与「仅 multipart 分级登记」两类路径 ——
+     后者只放宽 multipart，**非 multipart 仍受全局 10MB**，不放开 JSON 面，也不削弱
+     「非上传路径伪造 multipart 头收紧到 10MB」的既有反绕过策略。
+- 回归测试：`backend/tests/unit/test_body_size_limit_map_tiles.py`（6 项，覆盖 512MB 放行、
+  前缀覆盖、非 multipart 仍 10MB、未登记路径伪造 multipart 仍 10MB、备份 10GB 不受影响）；
+  中间件模块覆盖率 100%；实测 12MB / 60MB multipart 已能到达端点（返回 403 CSRF 而非 413）。
+- 版本号单源同步至 **1.17.4**（`node scripts/sync-version.js --write`，14 个文件）。
+
 ## [1.17.3] - 2026-10-24 — 打包环境可用性修复（前端目录自发现 + 完整性检查误报）
 
 > 本版由一次**真实安装包离线验证**驱动：把打包后的后端 exe 放到全新空目录
