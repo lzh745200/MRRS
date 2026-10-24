@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env pwsh
+#!/usr/bin/env pwsh
 # ============================================================
 # Windows 安装包一键构建（前端 -> 资源同步 -> PyInstaller -> NSIS）
 # ------------------------------------------------------------
@@ -67,7 +67,10 @@ try {
         if ($LASTEXITCODE -ne 0) { Fail "npm run build:win 失败" }
     } finally { Pop-Location }
 
-    $pkg = Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
+    # 用 UTF-8 显式读取：Windows PowerShell 5.1 的 Get-Content 默认按 ANSI 解码，
+    # package.json 里的中文 productName 会让 ConvertFrom-Json 报 ArgumentException。
+    $pkgRaw = [System.IO.File]::ReadAllText((Join-Path $root 'package.json'), [System.Text.Encoding]::UTF8)
+    $pkg = $pkgRaw | ConvertFrom-Json
     $exeName = "MRRS-Setup-$($pkg.version)-x64.exe"
     $exe = Join-Path (Join-Path (Join-Path $root 'dist') 'electron') $exeName
     if (-not (Test-Path $exe)) { Fail "未找到安装包：$exe" }

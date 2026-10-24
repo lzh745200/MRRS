@@ -31,7 +31,7 @@
 ### Changed
 
 - **安装包瘦身**：`assistance-backend.spec` 瓦片收集改为构建开关 `INCLUDE_MAP_TILES=1`（默认关）；Electron 版由
-  extraResources + `MAP_TILES_DIR` 提供瓦片，不再重复打包（预期 378MB → ~318MB）。ARM64 standalone 不受影响。
+  extraResources + `MAP_TILES_DIR` 提供瓦片，不再重复打包（**实测 378.4MB → 316.7MB**，省 61.7MB；解包 826.9MB → 763.7MB）。ARM64 standalone 不受影响。
 - `/api/v1/map/config` 的 `map_type`：`"gaode"` → `"vector"`（前端零消费方）。
 - 通知偏好 3 个端点响应追加 `emailChannel: "unavailable_offline"`（只增不删）。
 - **`httpx` 登记运行时必需依赖**（启动期硬依赖，此前缺失即 ImportError 且自检不覆盖）。
