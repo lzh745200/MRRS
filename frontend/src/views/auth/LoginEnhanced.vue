@@ -1,10 +1,18 @@
 <template>
   <div class="login-page">
-    <!-- 背景轮播（仅渲染当前图，避免12张同时加载） -->
-    <div class="background-carousel">
-      <div class="bg-slide active" :style="{ backgroundImage: `url(${currentBg})` }"></div>
-      <div class="bg-overlay"></div>
-    </div>
+    <!--
+      静态单背景（W27 UI 优化）：
+      原来 12 张 JPG 共 3.51MB 全量预加载 + 5s 轮播，是 Electron 冷启动首屏的主要负担，
+      且风景轮播对军警/政务系统是气质减分项。现改为 1 张静态图 + 深绿渐变叠加
+      （保证任意背景图下表单文字对比度稳定）；图片加载失败时由 .login-bg 的
+      background-color（Token）兜底，不出现白屏/黑屏。
+    -->
+    <div
+      class="login-bg"
+      aria-hidden="true"
+      :style="{ backgroundImage: `url(${LOGIN_BACKGROUND})` }"
+    ></div>
+    <div class="login-bg-overlay" aria-hidden="true"></div>
 
     <div class="login-container">
       <!-- 左侧品牌区 -->
@@ -19,11 +27,37 @@
       <!-- 右侧登录卡片 -->
       <div class="login-card">
         <div class="card-header">
-          <h2>用户登录</h2>
-          <p>请输入您的账号和密码</p>
+          <h2>{{ twoFactorRequired ? '双因素认证' : '用户登录' }}</h2>
+          <p>
+            {{
+              twoFactorRequired ? '请输入认证器中的 6 位验证码' : '请输入您的账号、密码与机器校验码'
+            }}
+          </p>
         </div>
 
-        <form class="login-form" @submit.prevent="handleLogin">
+        <!--
+          结构化提示条（W27）：原实现把所有失败压成一条红字，
+          用户被锁定/限流时不知道还要等多久。现按类型分色 + 倒计时 + 可选直达动作。
+        -->
+        <div
+          v-if="alert"
+          class="alert"
+          :class="`alert--${alert.type}`"
+          role="alert"
+          aria-live="assertive"
+        >
+          <span class="alert-text">{{ alert.text }}</span>
+          <button
+            v-if="alert.action === 'machine-code'"
+            type="button"
+            class="alert-action"
+            @click="goToMachineCode"
+          >
+            去获取机器码
+          </button>
+        </div>
+
+        <form class="login-form" novalidate @submit.prevent="handleLogin">
           <!-- 2FA 验证模式 -->
           <template v-if="twoFactorRequired">
             <div class="form-group">
@@ -32,21 +66,24 @@
                 <el-icon class="input-icon"><Key /></el-icon>
                 <input
                   id="login-totp-code"
+                  ref="totpInput"
                   v-model="totpCode"
                   type="text"
-                  placeholder="请输入6位TOTP验证码"
+                  placeholder="请输入 6 位验证码"
                   class="custom-input"
                   maxlength="6"
                   inputmode="numeric"
                   pattern="[0-9]*"
+                  autocomplete="one-time-code"
                   autofocus
+                  @input="onTotpInput"
                 />
               </div>
-              <p class="hint-text">请打开您的认证器应用（如 Google Authenticator）获取验证码</p>
+              <p class="hint-text">输满 6 位将自动验证，无需再点按钮</p>
             </div>
 
-            <button type="submit" class="login-btn" :disabled="loading">
-              <span v-if="!loading">验证并登录</span>
+            <button type="submit" class="login-btn" :disabled="busy">
+              <span v-if="!busy">验证并登录</span>
               <span v-else>验证中...</span>
             </button>
 
@@ -63,11 +100,13 @@
                 <el-icon class="input-icon"><User /></el-icon>
                 <input
                   id="login-username"
+                  ref="usernameInput"
                   v-model="username"
                   type="text"
                   placeholder="请输入用户名"
                   class="custom-input"
                   autocomplete="username"
+                  autofocus
                 />
               </div>
             </div>
@@ -78,11 +117,13 @@
                 <el-icon class="input-icon"><Lock /></el-icon>
                 <input
                   id="login-password"
+                  ref="passwordInput"
                   v-model="password"
                   :type="showPassword ? 'text' : 'password'"
                   placeholder="请输入密码"
                   class="custom-input"
                   autocomplete="current-password"
+                  @keyup="onPasswordKeyup"
                 />
                 <!-- 用原生 button 承载密码可见性切换：span+@click 无法键盘聚焦/触发，
                      读屏与纯键盘用户无法操作。type=button 避免触发 form 提交。 -->
@@ -97,6 +138,10 @@
                   <el-icon v-else><Hide /></el-icon>
                 </button>
               </div>
+              <!-- 大写锁定提示：政务场景密码含大写字母，CapsLock 忘记关是最常见的登录失败原因 -->
+              <p v-if="capsLockOn" class="field-hint field-hint--warn" role="status">
+                大写锁定已开启，请输入小写字母或先关闭 CapsLock
+              </p>
             </div>
 
             <!-- 机器码验证（可选） -->
@@ -108,35 +153,73 @@
                   id="login-machine-code"
                   v-model="verificationCode"
                   type="text"
-                  placeholder="请输入4位校验码"
+                  placeholder="请输入 4 位校验码"
                   class="custom-input"
                   maxlength="4"
                 />
               </div>
-              <p class="hint-text">首次登录需要验证机器码，请联系管理员获取校验码</p>
+              <p class="hint-text">本机尚未授权登录，请向管理员索取 4 位校验码</p>
             </div>
 
-            <button type="submit" class="login-btn" :disabled="loading">
-              <span v-if="!loading">立即登录</span>
-              <span v-else>登录中...</span>
+            <button type="submit" class="login-btn" :disabled="busy">
+              <span v-if="loading">登录中...</span>
+              <span v-else-if="lockRemaining > 0">请稍候 {{ lockLabel }}</span>
+              <span v-else>立即登录</span>
             </button>
 
-            <label class="remember-me">
-              <input v-model="rememberMe" type="checkbox" />
-              <span>记住登录</span>
-            </label>
+            <div class="login-extras">
+              <label class="remember-me">
+                <input v-model="rememberMe" type="checkbox" />
+                <span>记住登录</span>
+              </label>
+              <a href="#" class="text-link" @click.prevent="goToForgotPassword">忘记密码？</a>
+            </div>
           </template>
         </form>
 
-        <!-- 忘记密码链接 -->
-        <div class="extra-actions">
-          <a href="#" class="forgot-link" @click.prevent="goToForgotPassword"> 忘记密码？ </a>
-          <a href="#" class="register-link" @click.prevent="goToRegister"> 注册账户 </a>
-          <a href="/get-machine-code" class="machine-code-link" @click.prevent="goToMachineCode">
-            获取机器码
-          </a>
-          <a href="#" class="forgot-link" @click.prevent="openPermissionImport"> 导入权限包 </a>
-        </div>
+        <!-- 首次使用三步引导：把原本散落在角落的机器码/权限包/通行码入口收成一条上手路径 -->
+        <section class="first-use">
+          <button
+            type="button"
+            class="first-use-toggle"
+            :aria-expanded="firstUseOpen"
+            aria-controls="first-use-steps"
+            @click="firstUseOpen = !firstUseOpen"
+          >
+            <span>首次使用？查看开通步骤</span>
+            <span class="chev" :class="{ 'is-open': firstUseOpen }" aria-hidden="true">▾</span>
+          </button>
+          <ol v-show="firstUseOpen" id="first-use-steps" class="first-use-steps">
+            <li>
+              <span class="step-no" aria-hidden="true">1</span>
+              <div class="step-body">
+                <p class="step-title">获取本机机器码</p>
+                <button type="button" class="step-btn" @click="goToMachineCode">
+                  打开机器码页
+                </button>
+              </div>
+            </li>
+            <li>
+              <span class="step-no" aria-hidden="true">2</span>
+              <div class="step-body">
+                <p class="step-title">导入管理员导出的权限包（.zip）</p>
+                <button type="button" class="step-btn" @click="openPermissionImport">
+                  导入权限包
+                </button>
+              </div>
+            </li>
+            <li>
+              <span class="step-no" aria-hidden="true">3</span>
+              <div class="step-body">
+                <p class="step-title">用通行码注册账号</p>
+                <button v-if="canSelfRegister" type="button" class="step-btn" @click="goToRegister">
+                  注册账户
+                </button>
+                <p v-else class="step-note">本机未开启自助注册，请联系管理员开通账号</p>
+              </div>
+            </li>
+          </ol>
+        </section>
 
         <!-- 权限包导入对话框 -->
         <el-dialog
@@ -181,9 +264,6 @@
         </el-dialog>
 
         <div class="card-footer">
-          <div v-if="errorMsg" class="error-banner">
-            {{ errorMsg }}
-          </div>
           <p class="copyright">© 2026 V{{ systemVersion }} {{ copyrightOwner }}版权所有</p>
         </div>
       </div>
@@ -203,22 +283,229 @@ import { User, Lock, Key, View, Hide, UploadFilled } from '@element-plus/icons-v
 import { AuthStorage } from '@/utils/authStorage'
 import { logger } from '@/utils/logger'
 import type { UploadFile, UploadUserFile } from 'element-plus'
-import { post } from '@/api/request'
+import { get, post } from '@/api/request'
 
 const router = useRouter()
 const { pushSafe } = useRouterSafe()
 const authStore = useAuthStore()
+
+/** 登录页背景图（单张静态；换图只改这一处） */
+const LOGIN_BACKGROUND = '/images/login-bg/bg1.jpg'
+
+/** 429 限流后的默认冷却秒数（后端未透出具体值，取与后端提示一致的保守值） */
+const RATE_LIMIT_COOLDOWN_SECONDS = 60
+
+interface PublicConfig {
+  self_register_enabled: boolean
+  lockout_minutes: number
+  max_failed_attempts: number
+}
+
+/**
+ * 登录页公开配置（`GET /auth/public-config`，无需登录、不含敏感信息）。
+ *
+ * **fail-closed 默认值**：全部取"最保守"（不允许自助注册、无倒计时可用）。
+ * 若请求失败（后端未就绪/超时），注册入口保持隐藏 —— 宁可不显示，
+ * 也不给用户一个点了必然失败的链接（W27 修复「注册账户死链」）。
+ */
+const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
+  self_register_enabled: false,
+  lockout_minutes: 0,
+  max_failed_attempts: 0,
+}
+
+const publicConfig = ref<PublicConfig>({ ...DEFAULT_PUBLIC_CONFIG })
+const canSelfRegister = computed(() => publicConfig.value.self_register_enabled === true)
 
 const username = ref('')
 const password = ref('')
 const verificationCode = ref('')
 const rememberMe = ref(false)
 const loading = ref(false)
-const errorMsg = ref('')
 const showPassword = ref(false)
 const showMachineCodeInput = ref(false)
+const firstUseOpen = ref(false)
+const capsLockOn = ref(false)
 const systemVersion = SYSTEM_VERSION
 const copyrightOwner = COPYRIGHT_OWNER
+
+const usernameInput = ref<HTMLInputElement | null>(null)
+const passwordInput = ref<HTMLInputElement | null>(null)
+const totpInput = ref<HTMLInputElement | null>(null)
+
+/**
+ * 结构化提示（替代原「一条红字」）。
+ *
+ * `errorMsg` 保留为**文案单一来源**（既有测试直接读 `vm.errorMsg`），
+ * `alertType` / `alertAction` 承载语义，模板统一从 `alert` 计算属性渲染。
+ * 三者由 `setAlert()` 一并维护，避免出现"有文案无颜色"或反之的中间态。
+ */
+const errorMsg = ref('')
+const alertType = ref<'danger' | 'warn' | 'info'>('danger')
+const alertAction = ref<'machine-code' | null>(null)
+
+interface LoginAlert {
+  type: 'danger' | 'warn' | 'info'
+  text: string
+  action?: 'machine-code'
+}
+
+const alert = computed<LoginAlert | null>(() => {
+  if (!errorMsg.value) return null
+  return {
+    type: alertType.value,
+    text: errorMsg.value,
+    ...(alertAction.value ? { action: alertAction.value } : {}),
+  }
+})
+
+/** 设置/清空提示（传 null 清空） */
+function setAlert(next: LoginAlert | null) {
+  if (!next) {
+    errorMsg.value = ''
+    alertAction.value = null
+    return
+  }
+  alertType.value = next.type
+  alertAction.value = next.action ?? null
+  errorMsg.value = next.text
+}
+
+/** 锁定/限流倒计时（秒）。>0 时提交按钮禁用，倒计时结束自动恢复。 */
+const lockRemaining = ref(0)
+let lockTimer: number | null = null
+
+/** 提交按钮是否不可用（加载中 或 冷却中） */
+const busy = computed(() => loading.value || lockRemaining.value > 0)
+
+/**
+ * 冷却剩余时间的可读文案。
+ *
+ * 锁定时长按**分钟**计（默认 30 分钟 = 1800 秒），按钮上直接写 "请稍候 1800s"
+ * 既难读也会把按钮文字挤到换行；故 ≥1 分钟用 `X 分 YY 秒`，不足 1 分钟用 `N 秒`。
+ */
+const lockLabel = computed(() => {
+  const total = lockRemaining.value
+  if (total <= 0) return ''
+  if (total < 60) return `${total} 秒`
+  return `${Math.floor(total / 60)} 分 ${String(total % 60).padStart(2, '0')} 秒`
+})
+
+/** 清空所有计时器（卸载时调用，避免内存泄漏与卸载后 setState） */
+function clearLockTimer() {
+  if (lockTimer !== null) {
+    window.clearInterval(lockTimer)
+    lockTimer = null
+  }
+}
+
+/**
+ * 启动冷却倒计时。
+ * @param seconds 倒计时秒数；<=0 视为不启动（保持按钮可用，由后端继续把关）
+ */
+function startLockCountdown(seconds: number) {
+  clearLockTimer()
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    lockRemaining.value = 0
+    return
+  }
+  lockRemaining.value = Math.floor(seconds)
+  lockTimer = window.setInterval(() => {
+    lockRemaining.value -= 1
+    if (lockRemaining.value <= 0) {
+      lockRemaining.value = 0
+      clearLockTimer()
+    }
+  }, 1000)
+}
+
+/** 登录失败类型（决定提示颜色、倒计时与直达动作） */
+type LoginFailureKind =
+  | 'locked'
+  | 'rate-limited'
+  | 'inactive'
+  | 'machine-unauthorized'
+  | 'auth'
+  | 'system'
+
+/**
+ * 分类登录失败。
+ *
+ * `authStore.login()` 把 HTTP 状态码吞掉了（只返回 `{status,message}`），
+ * 而规格要求**不改认证语义**，故这里优先读可选的 `httpStatus`（若将来 store 透出），
+ * 否则回落到后端稳定错误文案匹配。两种依据都有单测锁定。
+ */
+function classifyLoginFailure(
+  result: { message?: string; httpStatus?: number } | undefined
+): LoginFailureKind {
+  const status = result?.httpStatus
+  const message = String(result?.message || '')
+  if (status === 423 || message.includes('锁定')) return 'locked'
+  if (status === 429 || message.includes('频繁')) return 'rate-limited'
+  if (message.includes('未激活')) return 'inactive'
+  if (message.includes('未授权')) return 'machine-unauthorized'
+  if (status === 401 || message) return 'auth'
+  return 'system'
+}
+
+/** 各失败类型的兜底文案（接口/store 都没给 message 时使用） */
+const FAILURE_DEFAULT_TEXT: Record<LoginFailureKind, string> = {
+  locked: '账户已锁定，请稍后再试',
+  'rate-limited': '登录尝试过于频繁，请稍后再试',
+  inactive: '账户尚未激活，请联系管理员',
+  'machine-unauthorized': '本机未授权登录，请先获取机器码并联系管理员',
+  auth: '用户名或密码错误',
+  system: '登录失败',
+}
+
+/** 取失败文案：优先接口/store 的原文，缺失时按类型兜底（纯函数，便于逐类型单测） */
+function failureText(kind: LoginFailureKind, message: string): string {
+  return message || FAILURE_DEFAULT_TEXT[kind]
+}
+
+/** 按失败类型生成结构化提示（并启动需要的倒计时） */
+function applyLoginFailure(result: { message?: string; httpStatus?: number } | undefined) {
+  const kind = classifyLoginFailure(result)
+  // 文案来源顺序与改造前一致：接口返回 message → store.error → 类型兜底。
+  // store 的 error 是 authStore.login 内部记录的同一份错误（含网络异常场景），
+  // 丢掉它会让"接口没给 message"的情况退化成无信息提示。
+  const message = String(result?.message || authStore.error || '')
+  const text = failureText(kind, message)
+  if (kind === 'locked') {
+    // 锁定期间按钮禁用：优先用后端透出的锁定分钟数（public-config），
+    // 取不到（=0）时不倒计时，仅提示 —— 前端**不假定**解锁时间
+    const minutes = publicConfig.value.lockout_minutes
+    startLockCountdown(minutes > 0 ? minutes * 60 : 0)
+    setAlert({ type: 'warn', text })
+    return
+  }
+  if (kind === 'rate-limited') {
+    startLockCountdown(RATE_LIMIT_COOLDOWN_SECONDS)
+    setAlert({ type: 'warn', text })
+    return
+  }
+  if (kind === 'machine-unauthorized') {
+    setAlert({ type: 'info', text, action: 'machine-code' })
+    return
+  }
+  setAlert({ type: 'danger', text })
+}
+
+/** 拉取登录页公开配置；失败静默降级（fail-closed：注册入口保持隐藏） */
+async function loadPublicConfig() {
+  try {
+    const res: any = await get('/auth/public-config')
+    const data: any = res?.data ?? res ?? {}
+    publicConfig.value = {
+      self_register_enabled: data.self_register_enabled === true,
+      lockout_minutes: Number(data.lockout_minutes) || 0,
+      max_failed_attempts: Number(data.max_failed_attempts) || 0,
+    }
+  } catch (err) {
+    logger.warn('[Login] 拉取登录页公开配置失败，按最保守策略降级', err)
+    publicConfig.value = { ...DEFAULT_PUBLIC_CONFIG }
+  }
+}
 
 // 权限包导入状态
 const permissionImportVisible = ref(false)
@@ -299,7 +586,7 @@ async function handlePermissionImport() {
     } else {
       // 读 _body（加密包重传后的响应）而非首次 body：重传失败（如密码错误）时
       // 应展示重传返回的真实错误，而不是首次那句「该权限包已加密」误导排查。
-      // 非加密路径下 _body === body（第 248 行初始化），行为完全不变。
+      // 非加密路径下 _body === body（初始化），行为完全不变。
       ElMessage.error(_body.message || _body.detail || '权限包验证失败')
     }
   } catch (err: any) {
@@ -315,72 +602,48 @@ const twoFactorRequired = ref(false)
 const totpCode = ref('')
 const tempToken = ref('')
 
-// 当前背景图（只加载一张，避免12张同时请求）
-const currentBg = computed(() => backgroundImages[currentBgIndex.value])
-
-// 背景图片列表
-const backgroundImages = [
-  '/images/login-bg/bg1.jpg',
-  '/images/login-bg/bg2.jpg',
-  '/images/login-bg/bg3.jpg',
-  '/images/login-bg/bg4.jpg',
-  '/images/login-bg/bg5.jpg',
-  '/images/login-bg/bg6.jpg',
-  '/images/login-bg/bg7.jpg',
-  '/images/login-bg/bg8.jpg',
-  '/images/login-bg/bg9.jpg',
-  '/images/login-bg/bg10.jpg',
-  '/images/login-bg/bg11.jpg',
-  '/images/login-bg/bg12.jpg',
-]
-
-const currentBgIndex = ref(0)
-let carouselInterval: number | null = null
-const imagesPreloaded = ref(false)
-
-// 预加载所有背景图片，确保轮播流畅无黑屏
-const preloadAllImages = async (): Promise<void> => {
-  const promises = backgroundImages.map((src) => {
-    return new Promise<void>((resolve) => {
-      const img = new Image()
-      img.onload = () => resolve()
-      img.onerror = () => resolve() // 失败也继续，不阻塞轮播
-      img.src = src
-    })
-  })
-  await Promise.all(promises)
-  imagesPreloaded.value = true
+/**
+ * 2FA 验证码输入处理：满 6 位自动提交。
+ *
+ * 防重复：`handleLogin` 内部 `if (busy) return` 已兜住并发的第二次触发；
+ * 这里再判 `loading` 避免输入事件连发导致多次请求。
+ */
+function onTotpInput() {
+  const digits = totpCode.value.replace(/\D/g, '').slice(0, 6)
+  if (digits !== totpCode.value) totpCode.value = digits
+  if (digits.length === 6 && !loading.value) {
+    void handleLogin()
+  }
 }
 
-const startCarousel = () => {
-  if (carouselInterval) clearInterval(carouselInterval)
-  carouselInterval = window.setInterval(() => {
-    currentBgIndex.value = (currentBgIndex.value + 1) % backgroundImages.length
-  }, 5000)
+/** 大写锁定检测：不支持 getModifierState 的环境静默不提示 */
+function onPasswordKeyup(event: KeyboardEvent) {
+  const supported = typeof event?.getModifierState === 'function'
+  capsLockOn.value = supported ? event.getModifierState('CapsLock') === true : false
 }
 
-onMounted(async () => {
-  // 先预加载所有背景图，再启动轮播 — 杜绝黑屏/闪烁
-  await preloadAllImages()
-  startCarousel()
+onMounted(() => {
+  void loadPublicConfig()
+  // 自动聚焦账号（autofocus 属性在部分容器内不生效，这里显式兜底）
+  usernameInput.value?.focus?.()
 })
 
 onUnmounted(() => {
-  if (carouselInterval) {
-    clearInterval(carouselInterval)
-  }
+  clearLockTimer()
 })
 
 const handleLogin = async () => {
+  if (busy.value) return
+
   // 2FA 验证模式
   if (twoFactorRequired.value) {
     if (!totpCode.value || totpCode.value.length < 6) {
-      errorMsg.value = '请输入6位TOTP验证码'
+      setAlert({ type: 'info', text: '请输入 6 位 TOTP 验证码' })
       return
     }
 
     loading.value = true
-    errorMsg.value = ''
+    setAlert(null)
 
     try {
       const success = await authStore.verifyTwoFactorLogin(tempToken.value, totpCode.value)
@@ -389,9 +652,14 @@ const handleLogin = async () => {
         navigateAfterLogin()
         return
       }
-      errorMsg.value = authStore.error || '2FA验证失败'
+      setAlert({ type: 'danger', text: authStore.error || '2FA 验证失败，请检查验证码后重试' })
+      // 失败即清空并重新聚焦，避免用户反复提交同一错误码
+      totpCode.value = ''
+      totpInput.value?.focus?.()
     } catch (err: any) {
-      errorMsg.value = '2FA验证异常: ' + (err.message || '未知错误')
+      setAlert({ type: 'danger', text: '2FA 验证异常: ' + (err.message || '未知错误') })
+      totpCode.value = ''
+      totpInput.value?.focus?.()
     } finally {
       loading.value = false
     }
@@ -400,12 +668,14 @@ const handleLogin = async () => {
 
   // 正常登录模式
   if (!username.value || !password.value) {
-    errorMsg.value = '请输入用户名和密码'
+    setAlert({ type: 'info', text: '请输入用户名和密码' })
+    if (!username.value) usernameInput.value?.focus?.()
+    else passwordInput.value?.focus?.()
     return
   }
 
   loading.value = true
-  errorMsg.value = ''
+  setAlert(null)
 
   try {
     const result = await authStore.login(username.value, password.value)
@@ -413,7 +683,7 @@ const handleLogin = async () => {
     if (result.status === 'two_factor_required') {
       // 切换到 2FA 验证模式
       twoFactorRequired.value = true
-      tempToken.value = result.tempToken
+      tempToken.value = (result as { tempToken?: string }).tempToken || ''
       totpCode.value = ''
       return
     }
@@ -424,9 +694,15 @@ const handleLogin = async () => {
       return
     }
 
-    errorMsg.value = result.message || authStore.error || '登录失败'
+    // 失败：分类提示 + 清空密码并聚焦（政务场景多人共用一台机器，
+    // 残留密码既不方便也不安全）
+    applyLoginFailure(result as { message?: string; httpStatus?: number })
+    password.value = ''
+    passwordInput.value?.focus?.()
   } catch (err: any) {
-    errorMsg.value = '登录系统异常: ' + (err.message || '未知错误')
+    setAlert({ type: 'danger', text: '登录系统异常: ' + (err.message || '未知错误') })
+    password.value = ''
+    passwordInput.value?.focus?.()
   } finally {
     loading.value = false
   }
@@ -470,12 +746,11 @@ const navigateAfterLogin = () => {
   pushSafe('/dashboard')
 }
 
-/** 重置 2FA 状态，返回正常登录 */
 const resetTwoFactor = () => {
   twoFactorRequired.value = false
-  tempToken.value = ''
   totpCode.value = ''
-  errorMsg.value = ''
+  tempToken.value = ''
+  setAlert(null)
 }
 
 const goToForgotPassword = () => {
@@ -492,14 +767,18 @@ const goToMachineCode = () => {
 </script>
 
 <style lang="scss" scoped>
-/* 定义变量 */
+/*
+  颜色一律走 Design Token（`src/styles/tokens.scss`）：
+  W27 把原先 4 处硬编码色值（#f0e68c / #a8dadc / #0a1a12 / #e0c048）与两处 rgba 收进 Token，
+  硬编码色棘轮因此只减不增。
+*/
 .login-page {
   --military-dark: var(--color-primary-dark-2);
   --military-green: var(--color-primary-dark-1);
   --military-gold: var(--color-accent-gold);
-  --military-gold-light: #f0e68c;
+  --military-gold-light: var(--color-badge-gold-lighter);
   --text-white: var(--color-bg-card);
-  --text-gray: #a8dadc;
+  --text-gray: var(--color-white-60);
 }
 
 .login-page {
@@ -507,48 +786,34 @@ const goToMachineCode = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--military-dark);
+  background-color: var(--color-primary-dark-2);
   position: relative;
   overflow-y: auto;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-/* 背景轮播 */
-.background-carousel {
+/* 静态单背景 */
+.login-bg {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 0;
-}
-
-.bg-slide {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
   background-size: cover;
   background-position: center;
-  background-color: #0a1a12; /* 绿色底色 — 图片加载前不露黑 */
-  opacity: 0;
-  transition: opacity 1.5s ease-in-out;
-  will-change: opacity;
+  /* 图片加载失败/未就绪时的底色（Token，不露白屏） */
+  background-color: var(--color-primary-dark-2);
 }
 
-.bg-slide.active {
-  opacity: 1;
-}
-
-.bg-overlay {
+.login-bg-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(8, 28, 21, 0.85) 0%, rgba(27, 67, 50, 0.7) 100%);
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-dark-a50) 0%,
+    var(--color-primary-dark-1) 100%
+  );
+  opacity: 0.92;
 }
 
 .login-container {
@@ -558,17 +823,40 @@ const goToMachineCode = () => {
   max-height: 95vh;
   background: var(--color-white-8);
   backdrop-filter: blur(20px);
-  border-radius: 24px;
+  border-radius: 16px;
   border: 1px solid var(--color-white-15);
   box-shadow: 0 25px 50px -12px var(--color-black-50);
   z-index: 1;
   overflow: hidden auto;
+  /* 入场动效：一次淡入上移，克制不喧宾夺主 */
+  animation: login-card-in 260ms ease-out both;
+}
+
+@keyframes login-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-container {
+    animation: none;
+  }
 }
 
 /* 左侧品牌区 */
 .brand-section {
   flex: 1;
-  background: linear-gradient(135deg, rgba(27, 67, 50, 0.95) 0%, rgba(8, 28, 21, 0.98) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--color-primary-dark-1) 0%,
+    var(--color-primary-dark-2) 100%
+  );
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -616,14 +904,14 @@ const goToMachineCode = () => {
   margin: 0;
   padding: 12px 20px;
   border: 1px solid var(--color-gold-a30);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: var(--color-gold-a10);
 }
 
 /* 右侧登录卡片 */
 .login-card {
   flex: 1;
-  padding: 50px 60px;
+  padding: 44px 52px;
   background: var(--color-white-15);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -635,11 +923,11 @@ const goToMachineCode = () => {
 
 .card-header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 26px;
 }
 
 .card-header h2 {
-  font-size: 28px;
+  font-size: 26px;
   color: var(--color-text-inverse);
   margin: 0 0 10px 0;
   font-weight: 600;
@@ -648,12 +936,76 @@ const goToMachineCode = () => {
 
 .card-header p {
   color: var(--color-white-80);
-  font-size: 15px;
+  font-size: 14px;
   margin: 0;
 }
 
+/* 结构化提示条：按类型分色（危险/警告/信息），不再一律红字 */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-card);
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+  border: 1px solid transparent;
+  border-left-width: 3px;
+  background: var(--color-white-10);
+  animation: alert-shake 320ms ease-in-out 1;
+}
+
+.alert--danger {
+  color: var(--color-danger-lighter);
+  border-left-color: var(--color-danger);
+}
+
+.alert--warn {
+  color: var(--color-warning-light-5);
+  border-left-color: var(--color-warning);
+}
+
+.alert--info {
+  color: var(--color-white-90);
+  border-left-color: var(--military-gold);
+}
+
+.alert-text {
+  flex: 1;
+}
+
+.alert-action {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-control, 6px);
+  border: 1px solid var(--military-gold);
+  background: var(--color-gold-a10);
+  color: var(--military-gold-light);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.alert-action:hover {
+  background: var(--color-gold-a20);
+}
+
+@keyframes alert-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
 .form-group {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .form-group label {
@@ -682,14 +1034,15 @@ const goToMachineCode = () => {
 
 .custom-input {
   width: 100%;
-  padding: 14px 45px 14px 45px;
+  height: 44px;
+  padding: 0 45px;
   border: 2px solid var(--color-white-30);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   font-size: 15px;
   transition:
-    border-color 0.3s ease,
-    background-color 0.3s ease,
-    box-shadow 0.3s ease;
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
   background: var(--color-white-10);
   color: var(--color-text-inverse);
   box-sizing: border-box;
@@ -699,11 +1052,14 @@ const goToMachineCode = () => {
   color: var(--color-white-50);
 }
 
+/* 聚焦态：金色边框 + 左侧 2px 金色竖条（复用侧栏"当前板块"同款视觉语言） */
 .custom-input:focus {
   outline: none;
   border-color: var(--military-gold);
   background: var(--color-white-20);
-  box-shadow: 0 0 0 4px var(--color-gold-a20);
+  box-shadow:
+    inset 2px 0 0 0 var(--military-gold),
+    0 0 0 4px var(--color-gold-a20);
 }
 
 .toggle-password {
@@ -712,7 +1068,7 @@ const goToMachineCode = () => {
   font-size: 18px;
   cursor: pointer;
   user-select: none;
-  transition: transform 0.2s;
+  transition: transform 160ms;
   filter: brightness(1.2);
   display: flex;
   align-items: center;
@@ -734,43 +1090,39 @@ const goToMachineCode = () => {
   line-height: 1.4;
 }
 
+.field-hint {
+  font-size: 12px;
+  margin: 6px 0 0 0;
+  line-height: 1.4;
+  color: var(--color-white-60);
+}
+
+.field-hint--warn {
+  color: var(--color-warning-light-5);
+}
+
 .login-btn {
   width: 100%;
-  padding: 16px;
+  height: 44px;
   background: linear-gradient(135deg, var(--military-gold), var(--color-accent-gold));
   color: var(--military-dark);
   border: none;
-  border-radius: 10px;
-  font-size: 17px;
+  border-radius: var(--radius-card);
+  font-size: 16px;
   font-weight: 700;
   cursor: pointer;
   transition:
-    transform 0.3s ease,
-    box-shadow 0.3s ease,
-    background 0.3s ease;
-  margin-top: 10px;
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+  margin-top: 8px;
   box-shadow: 0 4px 15px var(--color-gold-a40);
 }
 
 .login-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: 0 6px 20px var(--color-gold-a50);
-  background: linear-gradient(135deg, #e0c048, var(--military-gold));
-}
-
-.remember-me {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-  font-size: 13px;
-  color: var(--military-gold-light, #f5d76e);
-  cursor: pointer;
-  user-select: none;
-}
-.remember-me input {
-  accent-color: var(--military-gold, var(--color-accent-gold));
-  cursor: pointer;
+  background: linear-gradient(135deg, var(--color-badge-gold-light), var(--military-gold));
 }
 
 .login-btn:disabled {
@@ -780,16 +1132,16 @@ const goToMachineCode = () => {
 
 .back-btn {
   width: 100%;
-  padding: 12px;
+  height: 44px;
   background: transparent;
   color: var(--color-white-80);
   border: 1px solid var(--color-white-30);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   font-size: 14px;
   cursor: pointer;
   transition:
-    border-color 0.3s ease,
-    color 0.3s ease;
+    border-color 160ms ease,
+    color 160ms ease;
   margin-top: 12px;
 }
 
@@ -803,45 +1155,148 @@ const goToMachineCode = () => {
   cursor: not-allowed;
 }
 
-.extra-actions {
+.login-extras {
   display: flex;
-  justify-content: space-around;
-  margin-top: 16px;
-  padding: 0 4px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
   gap: 12px;
-  flex-wrap: wrap;
 }
 
-.forgot-link,
-.register-link,
-.machine-code-link {
-  font-size: 14px;
+.remember-me {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-white-80);
+  cursor: pointer;
+  user-select: none;
+}
+
+.remember-me input {
+  accent-color: var(--military-gold);
+  cursor: pointer;
+}
+
+.text-link {
+  font-size: 13px;
   color: var(--military-gold-light);
   text-decoration: none;
-  transition: color 0.3s ease;
+  transition: color 160ms ease;
 }
 
-.forgot-link:hover,
-.register-link:hover,
-.machine-code-link:hover {
+.text-link:hover {
   color: var(--military-gold);
   text-decoration: underline;
 }
 
-.card-footer {
-  margin-top: 28px;
+/* 首次使用三步引导 */
+.first-use {
+  margin-top: 22px;
+  border-top: 1px solid var(--color-white-15);
+  padding-top: 14px;
+}
+
+.first-use-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 2px;
+  background: transparent;
+  border: none;
+  color: var(--color-white-80);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.first-use-toggle:hover {
+  color: var(--military-gold-light);
+}
+
+.chev {
+  transition: transform 160ms ease;
+}
+
+.chev.is-open {
+  transform: rotate(180deg);
+}
+
+.first-use-steps {
+  list-style: none;
+  margin: 10px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.first-use-steps li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.step-no {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--color-gold-a40);
+  background: var(--color-gold-a10);
+  color: var(--military-gold-light);
+  font-size: 12px;
+  line-height: 18px;
   text-align: center;
 }
 
-.error-banner {
-  background: rgba(254, 215, 215, 0.2);
-  color: #fca5a5;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 14px;
-  margin-bottom: 14px;
-  border: 1px solid rgba(254, 215, 215, 0.3);
-  backdrop-filter: blur(10px);
+.step-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.step-title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-white-80);
+  line-height: 1.5;
+}
+
+.step-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-white-60);
+  line-height: 1.5;
+}
+
+.step-btn {
+  flex: none;
+  padding: 5px 12px;
+  border-radius: var(--radius-control, 6px);
+  border: 1px solid var(--color-white-30);
+  background: var(--color-white-8);
+  color: var(--color-white-90);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.step-btn:hover {
+  border-color: var(--military-gold);
+  color: var(--military-gold-light);
+}
+
+.card-footer {
+  margin-top: 20px;
+  text-align: center;
 }
 
 .copyright {
@@ -851,24 +1306,24 @@ const goToMachineCode = () => {
 }
 
 /* 响应式 */
-@media (max-height: 750px) {
+@media (max-height: 780px) {
   .login-container {
-    width: 860px;
+    width: 880px;
   }
 
   .brand-section {
-    padding: 30px 30px;
+    padding: 28px 28px;
   }
 
   .logo-wrapper {
-    width: 80px;
-    height: 80px;
-    margin-bottom: 16px;
+    width: 76px;
+    height: 76px;
+    margin-bottom: 14px;
   }
 
   .brand-title {
     font-size: 26px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
   }
 
   .brand-subtitle {
@@ -877,11 +1332,11 @@ const goToMachineCode = () => {
   }
 
   .login-card {
-    padding: 30px 40px;
+    padding: 24px 36px;
   }
 
   .card-header {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
   }
 
   .card-header h2 {
@@ -889,20 +1344,16 @@ const goToMachineCode = () => {
   }
 
   .form-group {
-    margin-bottom: 16px;
+    margin-bottom: 14px;
   }
 
-  .custom-input {
-    padding: 10px 40px 10px 40px;
-  }
-
-  .login-btn {
-    padding: 12px;
-    font-size: 15px;
+  .first-use {
+    margin-top: 14px;
+    padding-top: 10px;
   }
 
   .card-footer {
-    margin-top: 16px;
+    margin-top: 12px;
   }
 }
 
@@ -915,7 +1366,7 @@ const goToMachineCode = () => {
   }
 
   .brand-section {
-    padding: 30px 24px;
+    padding: 28px 24px;
   }
 
   .brand-title {
@@ -923,22 +1374,38 @@ const goToMachineCode = () => {
   }
 
   .logo-wrapper {
-    width: 80px;
-    height: 80px;
+    width: 76px;
+    height: 76px;
   }
 
   .login-card {
-    padding: 30px 24px;
+    padding: 28px 24px;
     border-left: none;
     border-top: 1px solid var(--color-white-20);
   }
 }
 
 @media (max-width: 600px) {
-  .extra-actions {
+  .login-extras {
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
+  }
+
+  .step-body {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alert,
+  .chev,
+  .custom-input,
+  .login-btn,
+  .toggle-password {
+    animation: none;
+    transition: none;
   }
 }
 </style>

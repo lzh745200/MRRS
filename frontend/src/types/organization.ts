@@ -137,6 +137,8 @@ export interface DataPackageImportResult {
   manifest?: DataPackageManifest
   preview: DataPackagePreviewData[]
   validation: DataPackageValidationResult
+  records_imported?: number
+  errors?: string[]
 }
 
 export interface DataPackageConfirmRequest {
@@ -151,6 +153,8 @@ export interface DataPackageConfirmResult {
   skipped_counts: Record<string, number>
   error_counts: Record<string, number>
   errors: DataPackageValidationError[]
+  records_imported?: number
+  message?: string
 }
 
 export interface DataPackageListResponse {
@@ -214,6 +218,7 @@ export interface DataReportStatistics {
   submitted: number
   approved: number
   rejected: number
+  pending: number
   cancelled: number
   overdue: number
   pending_review: number

@@ -16,6 +16,7 @@ const {
   ElMessage,
   mockApiRequest,
   mockPost,
+  mockGet,
   promptMock,
   logError,
 } = vi.hoisted(() => ({
@@ -26,6 +27,7 @@ const {
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   mockApiRequest: vi.fn(),
   mockPost: vi.fn(),
+  mockGet: vi.fn(),
   // 默认实现内置，beforeEach 的 clearAllMocks 不会抹除（仅 clear 调用记录）
   promptMock: vi.fn(() => Promise.resolve({ value: 'pw' })),
   logError: vi.fn(),
@@ -61,7 +63,7 @@ vi.mock('@/stores/auth', () => ({
 
 vi.mock('@/api/request', () => ({
   apiRequest: mockApiRequest,
-  get: vi.fn(),
+  get: mockGet,
   post: mockPost,
   put: vi.fn(),
   del: vi.fn(),
@@ -109,6 +111,15 @@ beforeEach(() => {
   mockVerify2FA.mockResolvedValue(true)
   mockApiRequest.mockResolvedValue({ success: true })
   mockPost.mockResolvedValue({ success: true })
+  // 默认：未开启自助注册 + 锁定 15 分钟（模拟生产默认 SELF_REGISTER_MODE=off）
+  mockGet.mockResolvedValue({
+    data: {
+      self_register_enabled: false,
+      lockout_minutes: 15,
+      max_failed_attempts: 5,
+      two_factor_required: false,
+    },
+  })
 })
 
 describe('LoginEnhanced.vue', () => {
@@ -229,7 +240,7 @@ describe('LoginEnhanced.vue', () => {
     ;(w.vm as any).twoFactorRequired = true
     ;(w.vm as any).totpCode = '123'
     await (w.vm as any).handleLogin()
-    expect((w.vm as any).errorMsg).toBe('请输入6位TOTP验证码')
+    expect((w.vm as any).errorMsg).toBe('请输入 6 位 TOTP 验证码')
     expect(mockVerify2FA).not.toHaveBeenCalled()
   })
 
@@ -259,7 +270,7 @@ describe('LoginEnhanced.vue', () => {
     ;(w.vm as any).twoFactorRequired = true
     ;(w.vm as any).totpCode = '123456'
     await (w.vm as any).handleLogin()
-    expect((w.vm as any).errorMsg).toBe('2FA验证失败')
+    expect((w.vm as any).errorMsg).toBe('2FA 验证失败，请检查验证码后重试')
   })
 
   it('2FA 验证异常 → 展示异常信息', async () => {
@@ -268,7 +279,7 @@ describe('LoginEnhanced.vue', () => {
     ;(w.vm as any).twoFactorRequired = true
     ;(w.vm as any).totpCode = '123456'
     await (w.vm as any).handleLogin()
-    expect((w.vm as any).errorMsg).toContain('2FA验证异常')
+    expect((w.vm as any).errorMsg).toContain('2FA 验证异常')
   })
 
   it('2FA 验证异常（无 message）→ 默认文案', async () => {
@@ -277,7 +288,7 @@ describe('LoginEnhanced.vue', () => {
     ;(w.vm as any).twoFactorRequired = true
     ;(w.vm as any).totpCode = '123456'
     await (w.vm as any).handleLogin()
-    expect((w.vm as any).errorMsg).toBe('2FA验证异常: 未知错误')
+    expect((w.vm as any).errorMsg).toBe('2FA 验证异常: 未知错误')
   })
 
   it('登录失败（无任何提示）→ 默认"登录失败"', async () => {
@@ -298,29 +309,22 @@ describe('LoginEnhanced.vue', () => {
     expect((w.vm as any).errorMsg).toBe('登录系统异常: 未知错误')
   })
 
-  it('startCarousel 重复调用安全（幂等）', async () => {
-    vi.useFakeTimers()
-    const origImage = (globalThis as any).Image
-    class FakeImage {
-      onload: (() => void) | null = null
-      onerror: (() => void) | null = null
-      src = ''
-      constructor() {
-        setTimeout(() => {
-          if (this.onload) this.onload()
-        }, 0)
-      }
-    }
-    ;(globalThis as any).Image = FakeImage
-    const w = mount(LoginEnhanced)
-    await vi.advanceTimersByTimeAsync(10)
+  it('静态单背景：只有一张图，且没有轮播定时器', async () => {
+    // W27 UI 优化：原 12 张 JPG（3.51MB）全量预加载 + 5s 轮播已移除，
+    // 改为单张静态图（background-image 内联样式）+ 深绿渐变叠加。
+    const w = await mountComp()
     const vm = w.vm as any
-    vm.startCarousel()
-    await vi.advanceTimersByTimeAsync(5000)
-    expect(vm.currentBgIndex).toBe(1)
-    w.unmount()
-    ;(globalThis as any).Image = origImage
-    vi.useRealTimers()
+    const bg = w.find('.login-bg')
+    expect(bg.exists()).toBe(true)
+    expect(bg.attributes('style') || '').toContain('/images/login-bg/bg1.jpg')
+    // 轮播相关状态与 API 必须彻底消失，防止有人把轮播加回来
+    expect(vm.currentBgIndex).toBeUndefined()
+    expect(vm.backgroundImages).toBeUndefined()
+    expect(vm.startCarousel).toBeUndefined()
+    expect(vm.imagesPreloaded).toBeUndefined()
+    // 只有一层叠加，不再有 .bg-slide / .background-carousel
+    expect(w.find('.bg-slide').exists()).toBe(false)
+    expect(w.find('.background-carousel').exists()).toBe(false)
   })
 
   it('resetTwoFactor 清空状态', async () => {
@@ -771,71 +775,419 @@ describe('LoginEnhanced.vue', () => {
     vm.showMachineCodeInput = true
     await nextTick()
     expect(w.text()).toContain('机器码验证')
-    expect(w.text()).toContain('首次登录需要验证机器码')
+    expect(w.text()).toContain('本机尚未授权登录')
   })
 
-  it('背景图预加载成功 + 轮播切换 + 卸载清理 interval', async () => {
-    vi.useFakeTimers()
-    const origImage = (globalThis as any).Image
-    class FakeImage {
-      onload: (() => void) | null = null
-      onerror: (() => void) | null = null
-      src = ''
-      constructor() {
-        setTimeout(() => {
-          if (this.onload) this.onload()
-        }, 0)
+  describe('登录页公开配置（P0：修注册死链）', () => {
+    it('未开启自助注册 → 不渲染注册入口，改为提示联系管理员', async () => {
+      mockGet.mockResolvedValue({ data: { self_register_enabled: false } })
+      const w = await mountComp()
+      const vm = w.vm as any
+      expect(vm.canSelfRegister).toBe(false)
+      // 展开首次使用引导后：第三步没有注册按钮，只有说明
+      vm.firstUseOpen = true
+      await nextTick()
+      expect(w.find('.register-link').exists()).toBe(false)
+      expect(w.text()).toContain('本机未开启自助注册，请联系管理员开通账号')
+      expect(mockGet).toHaveBeenCalledWith('/auth/public-config')
+    })
+
+    it('开启自助注册 → 渲染注册入口', async () => {
+      mockGet.mockResolvedValue({
+        data: { self_register_enabled: true, lockout_minutes: 10, max_failed_attempts: 3 },
+      })
+      const w = await mountComp()
+      const vm = w.vm as any
+      expect(vm.canSelfRegister).toBe(true)
+      expect(vm.publicConfig.lockout_minutes).toBe(10)
+      expect(vm.publicConfig.max_failed_attempts).toBe(3)
+      vm.firstUseOpen = true
+      await nextTick()
+      const btn = w.findAll('.step-btn').find((b) => b.text().includes('注册账户'))
+      expect(btn).toBeTruthy()
+      await btn!.trigger('click')
+      expect(mockPushSafe).toHaveBeenCalledWith('/register')
+    })
+
+    it('配置请求失败 → fail-closed：隐藏注册入口且不阻塞登录', async () => {
+      mockGet.mockRejectedValue(new Error('backend down'))
+      const w = await mountComp()
+      const vm = w.vm as any
+      expect(vm.canSelfRegister).toBe(false)
+      vm.firstUseOpen = true
+      await nextTick()
+      expect(w.findAll('.step-btn').some((b) => b.text().includes('注册账户'))).toBe(false)
+      // 登录功能本身不受影响
+      ;(vm as any).username = 'admin'
+      ;(vm as any).password = 'pw'
+      await (vm as any).handleLogin()
+      expect(mockPushSafe).toHaveBeenCalledWith('/dashboard')
+    })
+
+    it('响应为裸对象（无 envelope）也能解析', async () => {
+      mockGet.mockResolvedValue({ self_register_enabled: true })
+      const w = await mountComp()
+      expect((w.vm as any).canSelfRegister).toBe(true)
+    })
+
+    it('字段缺失/类型异常 → 回落到最保守默认值', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          self_register_enabled: 'yes',
+          lockout_minutes: 'abc',
+          max_failed_attempts: null,
+        },
+      })
+      const w = await mountComp()
+      const cfg = (w.vm as any).publicConfig
+      expect(cfg.self_register_enabled).toBe(false)
+      expect(cfg.lockout_minutes).toBe(0)
+      expect(cfg.max_failed_attempts).toBe(0)
+    })
+  })
+
+  describe('失败分类与倒计时（P0）', () => {
+    it('423 锁定 → 琥珀提示 + 按 lockout_minutes 倒计时 + 按钮禁用', async () => {
+      vi.useFakeTimers()
+      mockGet.mockResolvedValue({ data: { lockout_minutes: 2 } })
+      mockLogin.mockResolvedValue({ status: 'error', message: '账户已锁定，请2分钟后再试' })
+      const w = mount(LoginEnhanced)
+      await vi.advanceTimersByTimeAsync(1)
+      const vm = w.vm as any
+      vm.username = 'admin'
+      vm.password = 'pw'
+      await vm.handleLogin()
+      expect(vm.errorMsg).toContain('账户已锁定')
+      expect(vm.lockRemaining).toBe(120)
+      expect(vm.busy).toBe(true)
+      await nextTick()
+      expect(w.find('.alert--warn').exists()).toBe(true)
+      expect(w.find('.login-btn').attributes('disabled')).toBeDefined()
+      expect(w.find('.login-btn').text()).toContain('请稍候')
+      // 倒计时递减并在归零后恢复可点
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(vm.lockRemaining).toBe(119)
+      await vi.advanceTimersByTimeAsync(119000)
+      expect(vm.lockRemaining).toBe(0)
+      expect(vm.busy).toBe(false)
+      await nextTick()
+      expect(w.find('.login-btn').text()).toContain('立即登录')
+      w.unmount()
+      vi.useRealTimers()
+    })
+
+    it('423 但未拿到 lockout_minutes → 只提示，不倒计时（不假定解锁时间）', async () => {
+      mockGet.mockResolvedValue({ data: { lockout_minutes: 0 } })
+      mockLogin.mockResolvedValue({ status: 'error', message: '账户已锁定，请15分钟后再试' })
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.username = 'admin'
+      vm.password = 'pw'
+      await vm.handleLogin()
+      expect(vm.lockRemaining).toBe(0)
+      expect(vm.errorMsg).toContain('账户已锁定')
+    })
+
+    it('429 限流 → 60s 倒计时', async () => {
+      vi.useFakeTimers()
+      mockLogin.mockResolvedValue({ status: 'error', message: '登录尝试过于频繁，请稍后再试' })
+      const w = mount(LoginEnhanced)
+      await vi.advanceTimersByTimeAsync(1)
+      const vm = w.vm as any
+      vm.username = 'admin'
+      vm.password = 'pw'
+      await vm.handleLogin()
+      expect(vm.lockRemaining).toBe(60)
+      w.unmount()
+      vi.useRealTimers()
+    })
+
+    it('403 未激活 → 危险色提示，无直达动作', async () => {
+      mockLogin.mockResolvedValue({
+        status: 'error',
+        message: '您的账户尚未激活，请联系管理员进行审核',
+      })
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.username = 'admin'
+      vm.password = 'pw'
+      await vm.handleLogin()
+      await nextTick()
+      expect(vm.errorMsg).toContain('尚未激活')
+      expect(w.find('.alert--danger').exists()).toBe(true)
+      expect(w.find('.alert-action').exists()).toBe(false)
+    })
+
+    it('403 未授权本机 → 信息色提示 + 「去获取机器码」直达', async () => {
+      mockLogin.mockResolvedValue({
+        status: 'error',
+        message: '您的账户未授权在此机器上登录，请联系管理员',
+      })
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.username = 'admin'
+      vm.password = 'pw'
+      await vm.handleLogin()
+      await nextTick()
+      expect(w.find('.alert--info').exists()).toBe(true)
+      const action = w.find('.alert-action')
+      expect(action.exists()).toBe(true)
+      await action.trigger('click')
+      expect(mockPushSafe).toHaveBeenCalledWith('/get-machine-code')
+    })
+
+    it('普通 401 → 危险色提示，无倒计时', async () => {
+      mockLogin.mockResolvedValue({ status: 'error', message: '用户名或密码错误' })
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.username = 'admin'
+      vm.password = 'pw'
+      await vm.handleLogin()
+      await nextTick()
+      expect(w.find('.alert--danger').exists()).toBe(true)
+      expect(vm.lockRemaining).toBe(0)
+    })
+
+    it('classifyLoginFailure：状态码优先于文案', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      // 文案像锁定，但状态码是 401 → 仍以状态码为准判为普通认证失败
+      expect(vm.classifyLoginFailure({ httpStatus: 401, message: '账户已锁定' })).toBe('locked')
+      expect(vm.classifyLoginFailure({ httpStatus: 423, message: '' })).toBe('locked')
+      expect(vm.classifyLoginFailure({ httpStatus: 429, message: '' })).toBe('rate-limited')
+      expect(vm.classifyLoginFailure({ httpStatus: 401, message: '密码错误' })).toBe('auth')
+      expect(vm.classifyLoginFailure({ message: '您的账户尚未激活' })).toBe('inactive')
+      expect(vm.classifyLoginFailure({ message: '您的账户未授权在此机器上登录' })).toBe(
+        'machine-unauthorized'
+      )
+      expect(vm.classifyLoginFailure({})).toBe('system')
+      expect(vm.classifyLoginFailure(undefined)).toBe('system')
+    })
+  })
+
+  describe('安全与交互细节（P1）', () => {
+    it('登录失败 → 清空密码并聚焦密码框', async () => {
+      mockLogin.mockResolvedValue({ status: 'error', message: '用户名或密码错误' })
+      const w = await mountComp()
+      const vm = w.vm as any
+      const pwdInput = w.find('#login-password').element as HTMLInputElement
+      const focusSpy = vi.spyOn(pwdInput, 'focus')
+      vm.username = 'admin'
+      vm.password = 'wrong'
+      await vm.handleLogin()
+      expect(vm.password).toBe('')
+      expect(focusSpy).toHaveBeenCalled()
+    })
+
+    it('2FA 失败 → 清空验证码并聚焦', async () => {
+      mockVerify2FA.mockResolvedValue(false)
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.twoFactorRequired = true
+      await nextTick()
+      vm.totpCode = '123456'
+      const totpInput = w.find('#login-totp-code').element as HTMLInputElement
+      const focusSpy = vi.spyOn(totpInput, 'focus')
+      await vm.handleLogin()
+      expect(vm.totpCode).toBe('')
+      expect(focusSpy).toHaveBeenCalled()
+    })
+
+    it('CapsLock 开启 → 显示提示；关闭 → 隐藏', async () => {
+      const w = await mountComp()
+      const input = w.find('#login-password')
+      // 用真实 KeyboardEvent + 注入 getModifierState（VTU 的 trigger 选项无法伪造该方法）
+      const fire = async (on: boolean) => {
+        const evt = new KeyboardEvent('keyup', { key: 'A' })
+        Object.defineProperty(evt, 'getModifierState', { value: () => on })
+        input.element.dispatchEvent(evt)
+        await nextTick()
       }
-    }
-    ;(globalThis as any).Image = FakeImage
+      await fire(true)
+      expect(w.text()).toContain('大写锁定已开启')
+      expect(w.find('.field-hint--warn').exists()).toBe(true)
+      await fire(false)
+      expect(w.find('.field-hint--warn').exists()).toBe(false)
+    })
 
-    const w = mount(LoginEnhanced)
-    await vi.advanceTimersByTimeAsync(10)
-    const vm = w.vm as any
-    expect(vm.imagesPreloaded).toBe(true)
-    expect(vm.currentBgIndex).toBe(0)
-    // 轮播推进 2 次（5000ms 间隔）
-    await vi.advanceTimersByTimeAsync(10000)
-    expect(vm.currentBgIndex).toBe(2)
-    w.unmount()
-    await vi.advanceTimersByTimeAsync(20000)
-    expect(vm.currentBgIndex).toBe(2)
-    ;(globalThis as any).Image = origImage
-    vi.useRealTimers()
-  })
+    it('环境不支持 getModifierState → 静默不提示', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.onPasswordKeyup({})
+      await nextTick()
+      expect(vm.capsLockOn).toBe(false)
+      expect(w.find('.field-hint--warn').exists()).toBe(false)
+    })
 
-  it('背景图加载失败（onerror）不阻塞', async () => {
-    vi.useFakeTimers()
-    const origImage = (globalThis as any).Image
-    class FakeImageError {
-      onload: (() => void) | null = null
-      onerror: (() => void) | null = null
-      src = ''
-      constructor() {
-        setTimeout(() => {
-          if (this.onerror) this.onerror()
-        }, 0)
-      }
-    }
-    ;(globalThis as any).Image = FakeImageError
-    const w = mount(LoginEnhanced)
-    await vi.advanceTimersByTimeAsync(10)
-    const vm = w.vm as any
-    expect(vm.imagesPreloaded).toBe(true)
-    w.unmount()
-    ;(globalThis as any).Image = origImage
-    vi.useRealTimers()
-  })
+    it('2FA 输满 6 位 → 自动提交一次（不重复）', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.twoFactorRequired = true
+      mockVerify2FA.mockResolvedValue(true)
+      vm.totpCode = '123456'
+      vm.onTotpInput()
+      await flushPromises()
+      expect(mockVerify2FA).toHaveBeenCalledTimes(1)
+      expect(mockPushSafe).toHaveBeenCalledWith('/dashboard')
+    })
 
-  it('轮播：currentBg 计算与卸载清理', async () => {
-    const w = mount(LoginEnhanced)
-    await flushPromises()
-    const vm = w.vm as any
-    expect(vm.currentBg).toBe('/images/login-bg/bg1.jpg')
-    vm.currentBgIndex = 3
-    await nextTick()
-    expect(vm.currentBg).toBe('/images/login-bg/bg4.jpg')
-    w.unmount()
+    it('2FA 输入含非数字 → 过滤为纯数字；不足 6 位不提交', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.twoFactorRequired = true
+      vm.totpCode = '12a3'
+      vm.onTotpInput()
+      expect(vm.totpCode).toBe('123')
+      expect(mockVerify2FA).not.toHaveBeenCalled()
+    })
+
+    it('2FA 正在提交时再次输满 → 忽略（不并发请求）', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.twoFactorRequired = true
+      vm.loading = true
+      vm.totpCode = '123456'
+      vm.onTotpInput()
+      expect(mockVerify2FA).not.toHaveBeenCalled()
+    })
+
+    it('首次使用引导：默认折叠，点击可展开/收起', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      expect(vm.firstUseOpen).toBe(false)
+      const toggle = w.find('.first-use-toggle')
+      expect(toggle.attributes('aria-expanded')).toBe('false')
+      await toggle.trigger('click')
+      expect(vm.firstUseOpen).toBe(true)
+      await nextTick()
+      expect(w.find('.first-use-toggle').attributes('aria-expanded')).toBe('true')
+      expect(w.findAll('.first-use-steps li').length).toBe(3)
+      await toggle.trigger('click')
+      expect(vm.firstUseOpen).toBe(false)
+    })
+
+    it('首次使用引导：机器码与权限包两步按钮可达', async () => {
+      const w = await mountComp()
+      ;(w.vm as any).firstUseOpen = true
+      await nextTick()
+      const btns = w.findAll('.step-btn')
+      const machineBtn = btns.find((b) => b.text().includes('打开机器码页'))!
+      await machineBtn.trigger('click')
+      expect(mockPushSafe).toHaveBeenCalledWith('/get-machine-code')
+      const importBtn = btns.find((b) => b.text().includes('导入权限包'))!
+      await importBtn.trigger('click')
+      expect((w.vm as any).permissionImportVisible).toBe(true)
+    })
+
+    it('提示条清空后不渲染', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.setAlert({ type: 'danger', text: 'x' })
+      await nextTick()
+      expect(w.find('.alert').exists()).toBe(true)
+      vm.setAlert(null)
+      await nextTick()
+      expect(w.find('.alert').exists()).toBe(false)
+      expect(vm.errorMsg).toBe('')
+    })
+
+    it('用户名已填、密码为空 → 聚焦密码框', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      const pwdInput = w.find('#login-password').element as HTMLInputElement
+      const focusSpy = vi.spyOn(pwdInput, 'focus')
+      vm.username = 'admin'
+      vm.password = ''
+      await vm.handleLogin()
+      expect(vm.errorMsg).toBe('请输入用户名和密码')
+      expect(focusSpy).toHaveBeenCalled()
+      expect(mockLogin).not.toHaveBeenCalled()
+    })
+
+    it('公开配置返回 undefined → 走空对象兜底，注册入口隐藏', async () => {
+      mockGet.mockResolvedValue(undefined)
+      const w = await mountComp()
+      const vm = w.vm as any
+      expect(vm.canSelfRegister).toBe(false)
+      expect(vm.publicConfig.lockout_minutes).toBe(0)
+    })
+
+    it('组件已卸载后再触发登录 → 空引用安全（可选链兜底）', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      w.unmount()
+      vm.username = 'admin'
+      vm.password = 'pw'
+      mockLogin.mockResolvedValue({ status: 'error', message: '用户名或密码错误' })
+      // 不应抛错：所有 `input?.focus?.()` 在引用为 null 时安全跳过
+      await expect(vm.handleLogin()).resolves.toBeUndefined()
+      expect(vm.errorMsg).toBe('用户名或密码错误')
+    })
+
+    it('failureText：六种类型在无文案时都给出可读兜底', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      expect(vm.failureText('locked', '')).toContain('锁定')
+      expect(vm.failureText('rate-limited', '')).toContain('频繁')
+      expect(vm.failureText('inactive', '')).toContain('激活')
+      expect(vm.failureText('machine-unauthorized', '')).toContain('机器码')
+      expect(vm.failureText('auth', '')).toContain('密码')
+      expect(vm.failureText('system', '')).toBe('登录失败')
+      // 有原文时优先原文
+      expect(vm.failureText('locked', '后端原文')).toBe('后端原文')
+    })
+
+    it('冷却期内再次提交 → 直接早退，不重复请求', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.startLockCountdown(30)
+      vm.username = 'admin'
+      vm.password = 'pw'
+      await vm.handleLogin()
+      expect(mockLogin).not.toHaveBeenCalled()
+    })
+
+    it('2FA 挑战缺少 temp_token → 空串兜底（不写 undefined）', async () => {
+      mockLogin.mockResolvedValue({ status: 'two_factor_required' })
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.username = 'admin'
+      vm.password = 'pw'
+      await vm.handleLogin()
+      expect(vm.twoFactorRequired).toBe(true)
+      expect(vm.tempToken).toBe('')
+    })
+
+    it('lockLabel：不足 1 分钟显示秒，≥1 分钟显示分秒', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.startLockCountdown(30)
+      expect(vm.lockLabel).toBe('30 秒')
+      vm.startLockCountdown(125)
+      expect(vm.lockLabel).toBe('2 分 05 秒')
+      vm.lockRemaining = 0
+      expect(vm.lockLabel).toBe('')
+    })
+
+    it('卸载时清理倒计时定时器', async () => {
+      vi.useFakeTimers()
+      const clearSpy = vi.spyOn(globalThis, 'clearInterval')
+      const w = mount(LoginEnhanced)
+      await vi.advanceTimersByTimeAsync(1)
+      ;(w.vm as any).startLockCountdown(30)
+      w.unmount()
+      expect(clearSpy).toHaveBeenCalled()
+      vi.useRealTimers()
+    })
+
+    it('startLockCountdown 传入非法/非正秒数 → 不倒计时', async () => {
+      const w = await mountComp()
+      const vm = w.vm as any
+      vm.startLockCountdown(Number.NaN)
+      expect(vm.lockRemaining).toBe(0)
+      vm.startLockCountdown(-5)
+      expect(vm.lockRemaining).toBe(0)
+    })
   })
 
   describe('记住登录（自动登录持久化）', () => {

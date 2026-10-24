@@ -31,7 +31,7 @@ export interface MessageListResponse {
   total: number
   page: number
   page_size: number
-  unread_count: number
+  total_pages: number
 }
 
 /** 通知偏好 */

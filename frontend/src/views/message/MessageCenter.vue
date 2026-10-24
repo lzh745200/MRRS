@@ -320,8 +320,11 @@ async function loadMessages() {
     })
     messages.value = response?.items ?? []
     total.value = response?.total ?? 0
-    // 列表响应不含 unread_count（在 /messages/unread-count 端点），单独获取
-    unreadCount.value = response?.unread_count ?? (await loadUnreadCountValue())
+    // 列表响应不含 unread_count（在 /messages/unread-count 端点），单独获取。
+    // W27：`MessageListResponse` 已按后端实际契约改为 `total_pages`（无 unread_count），
+    // 原先的 `response?.unread_count ?? …` 属于对已不存在字段的读取（TS 报错 + 永远走右支），
+    // 直接调用独立端点，语义不变。
+    unreadCount.value = await loadUnreadCountValue()
   } catch (error) {
     ElMessage.error('加载消息列表失败')
   } finally {

@@ -11,11 +11,18 @@ import type { ApiResponse } from '@/types/api'
 
 export type UserInfo = AuthData['user']
 
-/** login() 返回结果 */
+/**
+ * login() 返回结果
+ *
+ * W27：error 分支新增可选 `httpStatus`。
+ * 登录页需要区分 423（已锁定）/ 429（过于频繁）/ 403（未激活 / 未授权本机）才能
+ * 给出倒计时与直达动作；只靠中文文案匹配太脆。该字段是**纯增量信息**，
+ * 不改变任何既有行为（仍返回 status/message）。
+ */
 export type LoginResult =
   | { status: 'success' }
   | { status: 'two_factor_required'; tempToken: string }
-  | { status: 'error'; message: string }
+  | { status: 'error'; message: string; httpStatus?: number }
 
 /** Wire-format login response (snake_case, matches backend JSON) */
 interface LoginPayload {
@@ -225,9 +232,14 @@ export const useAuthStore = defineStore('auth', () => {
       error.value = res.message || '登录失败'
       return { status: 'error', message: error.value }
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || '登录失败'
+      // W27 修复：FastAPI 的错误体是 `{detail: "..."}`，而这里原先只读 `data.message`
+      // —— 于是 423「账户已锁定，请30分钟后再试」这类中文文案全部丢失，
+      // 用户实际看到的是 axios 的 "Request failed with status code 423"。
+      // 与 verifyTwoFactorLogin 的取值顺序保持一致（detail → message → err.message）。
+      const msg =
+        err?.response?.data?.detail || err?.response?.data?.message || err?.message || '登录失败'
       error.value = msg
-      return { status: 'error', message: msg }
+      return { status: 'error', message: msg, httpStatus: err?.response?.status }
     }
   }
 

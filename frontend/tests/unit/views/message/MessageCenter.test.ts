@@ -158,6 +158,10 @@ beforeEach(() => {
   mockDeleteMessages.mockResolvedValue({})
   // clearReadMessages 返回解包后的 body（此处 body 直接是数量）
   mockClearReadMessages.mockResolvedValue(2)
+  // 未读数走独立端点 GET /messages/unread-count（列表响应不含 unread_count，
+  // W27 起 MessageListResponse 只有 total_pages）。不设默认值时 loadUnreadCountValue()
+  // 拿到 undefined → unreadCount 恒为 0，徽标与断言全部失真。
+  mockUnreadCount.mockResolvedValue({ total: 3 })
   confirmMock.mockResolvedValue('confirm')
 })
 
@@ -636,7 +640,9 @@ describe('列表响应缺 items/total 兜底（v1.8.0）', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    ;(mockGetMessages as any).mockResolvedValueOnce({ unread_count: 0 })
+    ;(mockGetMessages as any).mockResolvedValueOnce({})
+    // 未读数来自独立端点，不随列表响应变化（W27 起列表响应只有 total_pages）
+    ;(mockUnreadCount as any).mockResolvedValueOnce({ total: 0 })
     await vm.loadMessages()
     expect(vm.messages).toEqual([])
     expect(vm.total).toBe(0)

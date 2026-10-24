@@ -74,6 +74,7 @@ export interface HouseholdMember {
   employment_status?: string | null
   income?: number | null
   is_special_support?: boolean
+  remarks?: string | null
   created_at?: string | null
   updated_at?: string | null
 }
@@ -159,6 +160,7 @@ export interface HouseholdMemberPayload {
   employment_status?: string | null
   income?: number | null
   is_special_support?: boolean
+  remarks?: string | null
 }
 
 /** 风险记录登记载荷 */
