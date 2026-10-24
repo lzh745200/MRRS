@@ -140,6 +140,13 @@ python scripts/tiles/import_tiles.py --source deliverables/osm-tiles-20261022/gu
 
 多包可叠加导入（同名瓦片覆盖，不重复占空间）。导入后地图页切到「瓦片底图」即可全离线浏览。
 
+> **导入体积上限（v1.17.4 修复）**：瓦片包上传走 multipart，中间件上限 **512MB**
+> （对齐 `offline_map_service.MAX_TILE_UPLOAD_BYTES`）。此前该路径未登记在
+> `MULTIPART_BODY_LIMITS`，被全局 10MB 收紧，导致市州包（7~17MB）与全省包（59MB）
+> 上传报「上传内容超过大小限制 (10MB)，请拆分或压缩后重试」；v1.17.4 已修复，
+> 且**非 multipart 请求仍限 10MB**（未放开 JSON 面）。前端另有 512MB 预校验。
+> 若将来包体超过 512MB，需同时调整中间件条目与服务层常量，或按市州拆分导入。
+
 ---
 
 ## 六点五、内置进安装包（2026-10-22 实测）
