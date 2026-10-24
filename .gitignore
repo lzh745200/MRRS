@@ -444,3 +444,8 @@ resources/map-tiles/MANIFEST.json
 
 # 本地端到端冒烟实例（独立数据库/端口，不入库）
 .smoke/
+
+# 涓存椂鍐掔儫/鎺㈡祴鑴氭湰锛堜笉鍏ュ簱锛塦n_*.ps1
+backend/_e2e*.py
+frontend/logs-*.txt
+
