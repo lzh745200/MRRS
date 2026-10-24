@@ -58,8 +58,12 @@ test.describe('登录流程', () => {
     // 点击登录按钮
     await page.locator('button[type="submit"], button:has-text("登录")').click()
 
-    // 验证显示错误提示
-    await expect(page.locator('.el-message--error, .error-message, [role="alert"]')).toBeVisible({
+    // 验证显示错误提示。
+    // v1.18.1：登录页的提示条也带 role="alert"，与 Element Plus 的 ElMessage toast
+    // 会同时命中同一选择器 —— Playwright 严格模式下多元素直接判失败，故收敛到 .first()。
+    await expect(
+      page.locator('.el-message--error, .error-message, [role="alert"]').first()
+    ).toBeVisible({
       timeout: 5000,
     })
   })
@@ -71,9 +75,12 @@ test.describe('登录流程', () => {
     // 点击登录按钮
     await page.locator('button[type="submit"], button:has-text("登录")').click()
 
-    // 验证显示验证错误（登录页使用 .error-banner 展示非表单校验错误）
+    // 验证显示验证错误：v1.18.1 起登录页统一用 .alert（role=alert）展示，
+    // 原 .error-banner 已随登录页重构移除；保留旧类名以兼容回滚。
     await expect(
-      page.locator('.error-banner, .el-form-item__error, .validation-error').first()
+      page
+        .locator('.alert, .error-banner, .el-form-item__error, .validation-error, [role="alert"]')
+        .first()
     ).toBeVisible({ timeout: 3000 })
   })
 
@@ -87,9 +94,12 @@ test.describe('登录流程', () => {
     // 点击登录按钮
     await page.locator('button[type="submit"], button:has-text("登录")').click()
 
-    // 验证显示验证错误（登录页使用 .error-banner 展示非表单校验错误）
+    // 验证显示验证错误：v1.18.1 起登录页统一用 .alert（role=alert）展示，
+    // 原 .error-banner 已随登录页重构移除；保留旧类名以兼容回滚。
     await expect(
-      page.locator('.error-banner, .el-form-item__error, .validation-error').first()
+      page
+        .locator('.alert, .error-banner, .el-form-item__error, .validation-error, [role="alert"]')
+        .first()
     ).toBeVisible({ timeout: 3000 })
   })
 
