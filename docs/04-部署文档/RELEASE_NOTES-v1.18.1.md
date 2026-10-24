@@ -6,9 +6,12 @@
 
 | 安装包 | 适用平台 | 大小 | SHA256 |
 |---|---|---|---|
-| `MRRS-Setup-1.18.1-x64.exe` | Windows 10/11 x64 | 构建完成后回填 | 构建完成后回填 |
-| `MRRS-Setup-1.18.1-arm64.deb` | 麒麟 V10 / 统信 ARM64（Electron） | 构建完成后回填 | 构建完成后回填 |
-| `assistance-management-system_1.18.1_arm64.deb` | 麒麟 V10 / 统信 ARM64（standalone） | 构建完成后回填 | 构建完成后回填 |
+| [`MRRS-Setup-1.18.1-x64.exe`](https://github.com/lzh745200/MRRS/releases/download/v1.18.1/MRRS-Setup-1.18.1-x64.exe) | Windows 10/11 x64（NSIS 安装包，含全部运行时） | 270.02 MB | `beab6f9081720bd084b2cce6491a2a984b7fdbf079be012388749d824e2eb7c9` |
+| [`MRRS-Setup-1.18.1-arm64.deb`](https://github.com/lzh745200/MRRS/releases/download/v1.18.1/MRRS-Setup-1.18.1-arm64.deb) | 麒麟 V10 / 统信 ARM64（Electron） | 266.65 MB | `7afd80faa948bbccce8598ebff3a3da36a779c33013d1d95a4f7a04fe1643016` |
+| [`assistance-management-system_1.18.1_arm64.deb`](https://github.com/lzh745200/MRRS/releases/download/v1.18.1/assistance-management-system_1.18.1_arm64.deb) | 麒麟 V10 / 统信 ARM64（standalone） | 98.07 MB | `14581820e7686c9f2578dd27c24588a6d36d7ef9892c360dc4525921d9ae0524` |
+
+> 同一 Release 还附带 `SHA256SUMS-*.txt` 三个校验文件与 Windows 自动更新所需的
+> `latest.yml` / `.exe.blockmap`。以上 SHA256 与 GitHub Release 资产的 `digest` 字段一致。
 
 离线校验（Windows）：
 
