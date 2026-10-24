@@ -22,8 +22,8 @@ import app.api.v1.system as pkg
 SUBMODULES = [
     "admin", "audit", "backup", "business_health", "cache", "config_package",
     "diagnostics", "env", "error_report", "health", "help", "init", "metrics",
-    "monitor", "pii_key", "system", "system_config", "tasks", "update_logs",
-    "zero_trust",
+    "monitor", "pii_key", "self_check", "system", "system_config", "tasks",
+    "update_logs", "zero_trust",
 ]
 
 INIT_PATH = os.path.join(os.path.dirname(pkg.__file__), "__init__.py")
@@ -58,4 +58,18 @@ def test_package_init_fails_fast_on_submodule_import_failure():
         with pytest.raises(RuntimeError) as exc_info:
             _exec_fresh("system_pkg_init_a26_broken")
     assert "加载 system.admin 路由失败" in str(exc_info.value)
+    assert isinstance(exc_info.value.__cause__, ImportError)
+
+
+def test_package_init_fails_fast_when_self_check_missing():
+    """self_check（P3 系统自检）导入失败必须 fail-fast。
+
+    上面的"全部子模块置 None"用例只会命中**第一个**模块（admin）的 except，
+    新增的 self_check 因此从未被覆盖 —— CI 合并覆盖率在 `system/__init__.py`
+    留下 129-130 两行缺口。本用例只让 self_check 失败，其余模块正常加载。
+    """
+    with patch.dict(sys.modules, {"app.api.v1.system.self_check": None}):
+        with pytest.raises(RuntimeError) as exc_info:
+            _exec_fresh("system_pkg_init_a26_selfcheck")
+    assert "加载 system.self_check 路由失败" in str(exc_info.value)
     assert isinstance(exc_info.value.__cause__, ImportError)
