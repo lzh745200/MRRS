@@ -4,26 +4,39 @@
 
 ## 一、下载与校验
 
-| 安装包 | 适用平台 | 大小 | SHA256 |
-|---|---|---|---|
-| [`MRRS-Setup-1.18.1-x64.exe`](https://github.com/lzh745200/MRRS/releases/download/v1.18.1/MRRS-Setup-1.18.1-x64.exe) | Windows 10/11 x64（NSIS 安装包，含全部运行时） | 270.02 MB | `beab6f9081720bd084b2cce6491a2a984b7fdbf079be012388749d824e2eb7c9` |
-| [`MRRS-Setup-1.18.1-arm64.deb`](https://github.com/lzh745200/MRRS/releases/download/v1.18.1/MRRS-Setup-1.18.1-arm64.deb) | 麒麟 V10 / 统信 ARM64（Electron） | 266.65 MB | `7afd80faa948bbccce8598ebff3a3da36a779c33013d1d95a4f7a04fe1643016` |
-| [`assistance-management-system_1.18.1_arm64.deb`](https://github.com/lzh745200/MRRS/releases/download/v1.18.1/assistance-management-system_1.18.1_arm64.deb) | 麒麟 V10 / 统信 ARM64（standalone） | 98.07 MB | `14581820e7686c9f2578dd27c24588a6d36d7ef9892c360dc4525921d9ae0524` |
+| 安装包 | 适用平台 |
+|---|---|
+| `MRRS-Setup-1.18.1-x64.exe` | Windows 10/11 x64（NSIS 安装包，含全部运行时） |
+| `MRRS-Setup-1.18.1-arm64.deb` | 麒麟 V10 / 统信 ARM64（Electron） |
+| `assistance-management-system_1.18.1_arm64.deb` | 麒麟 V10 / 统信 ARM64（standalone，无 Electron） |
 
-> 同一 Release 还附带 `SHA256SUMS-*.txt` 三个校验文件与 Windows 自动更新所需的
-> `latest.yml` / `.exe.blockmap`。以上 SHA256 与 GitHub Release 资产的 `digest` 字段一致。
+同一 Release 附带 **`SHA256SUMS-*.txt`** 三个校验文件（分别对应 x64 exe / ARM64 Electron deb /
+ARM64 standalone deb），以及 Windows 自动更新所需的 `latest.yml` / `.exe.blockmap`。
+
+> **为什么本页不写死体积与 SHA256**：本项目的安装包由 GitHub Actions 现场构建，
+> **构建产物不是逐字节可复现的**（PyInstaller/electron-builder 打包含时间戳与压缩差异）——
+> 同一份源码重跑一次，产物 SHA256 就会变。正文里写死哈希等于给用户一份"注定会过期"的清单
+> （v1.18.1 首次发布就踩过：重打 tag 重建后，正文里的哈希与资产实际值不符）。
+> 因此**体积与 SHA256 一律以 Release 资产的 `SHA256SUMS-*.txt` 与资产页显示为准**，
+> 该文件由构建作业在出包后对真实文件执行 `sha256sum` 生成，天然自洽。
 
 离线校验（Windows）：
 
 ```powershell
+# 下载 exe 与 SHA256SUMS-windows-x64.txt 到同一目录
 Get-FileHash .\MRRS-Setup-1.18.1-x64.exe -Algorithm SHA256
+# 与 SHA256SUMS-windows-x64.txt 中的值逐字符比对
 ```
 
 离线校验（麒麟/统信）：
 
 ```bash
-sha256sum MRRS-Setup-1.18.1-arm64.deb
+# 下载 deb 与对应 SHA256SUMS-*.txt 到同一目录
+sha256sum -c SHA256SUMS-electron-deb-arm64.txt
+sha256sum -c SHA256SUMS-standalone-deb-arm64.txt
 ```
+
+所有行必须为 `OK`；出现 `FAILED` 表示文件损坏或被篡改，请勿安装。
 
 ## 二、本版重点
 

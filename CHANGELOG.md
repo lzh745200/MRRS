@@ -12,15 +12,21 @@
 
 ### 发布产物（GitHub Actions 构建，`v1.18.1` Release）
 
-| 安装包 | 平台 | 大小 | SHA256 |
-|---|---|---|---|
-| `MRRS-Setup-1.18.1-x64.exe` | Windows 10/11 x64（NSIS，自包含） | 270.02 MB | `beab6f9081720bd084b2cce6491a2a984b7fdbf079be012388749d824e2eb7c9` |
-| `MRRS-Setup-1.18.1-arm64.deb` | 麒麟 V10 / 统信 ARM64（Electron） | 266.65 MB | `7afd80faa948bbccce8598ebff3a3da36a779c33013d1d95a4f7a04fe1643016` |
-| `assistance-management-system_1.18.1_arm64.deb` | 麒麟 V10 / 统信 ARM64（standalone） | 98.07 MB | `14581820e7686c9f2578dd27c24588a6d36d7ef9892c360dc4525921d9ae0524` |
+| 安装包 | 平台 | 体积 |
+|---|---|---|
+| `MRRS-Setup-1.18.1-x64.exe` | Windows 10/11 x64（NSIS，自包含） | 约 270 MB |
+| `MRRS-Setup-1.18.1-arm64.deb` | 麒麟 V10 / 统信 ARM64（Electron） | 约 267 MB |
+| `assistance-management-system_1.18.1_arm64.deb` | 麒麟 V10 / 统信 ARM64（standalone） | 约 98 MB |
+
+> **体积与 SHA256 以 [Release 资产](https://github.com/lzh745200/MRRS/releases/tag/v1.18.1) 为准**：
+> 构建产物非逐字节可复现（PyInstaller/electron-builder 含时间戳），同一源码重建会改变 SHA256，
+> 故不在文档里写死哈希；每个 Release 均附带 `SHA256SUMS-*.txt`（出包后对真实文件生成）。
 
 构建链路：tag `v1.18.1` → `build-windows.yml` / `build-arm64.yml` 均 **success**；
 发布前置门禁 `scripts/check_release_gate.py`（要求该 commit 的 PR Checks 全绿）通过；
-安装包内含打包后后端自检（self-contained smoke）与「无测试文件 / 构建信息存在」断言。
+安装包内含打包后后端自检（self-contained smoke）与「无测试文件 / 构建信息存在」断言；
+Release 正文由 `scripts/prepare_release_body.py` 以本仓库发布说明为**单源**生成
+（原先 3 个作业各自写 body，不传 body 的作业会把正文覆盖成空）。
 详细下载说明见 `docs/04-部署文档/RELEASE_NOTES-v1.18.1.md`。
 
 ### Added

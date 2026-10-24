@@ -256,8 +256,8 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 
 | 平台 | 安装包 | 获取方式 |
 |------|--------|---------|
-| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（v1.18.1：270.02 MB / 283,132,447 B，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
-| 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（v1.18.1：266.65 MB / 279,602,570 B）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（v1.18.1：98.07 MB / 102,833,024 B） | 同上（`build-arm64.yml` 产出） |
+| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（**自包含**，约 270 MB） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建；体积与 SHA256 以 Release 资产的 `SHA256SUMS-windows-x64.txt` 为准） |
+| 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（约 267 MB）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（约 98 MB） | 同上（`build-arm64.yml` 产出；校验见对应的 `SHA256SUMS-*.txt`） |
 
 > **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 与 ARM64 安装包均内置；模型随包约 15 MB，ARM64 侧要求目标机 glibc ≥ 2.28）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
 > **运行环境**：Windows 10/11 x64（Electron 33 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
