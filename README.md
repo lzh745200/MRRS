@@ -256,14 +256,34 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 
 | 平台 | 安装包 | 获取方式 |
 |------|--------|---------|
-| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（v1.17.3：约 273 MB / 286,398,521 B，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
-| 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（v1.17.3：约 270 MB / 282,830,112 B）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（约 101 MB / 106,083,152 B） | 同上（`build-arm64.yml` 产出） |
+| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（v1.18.1：270.02 MB / 283,132,447 B，**自包含**） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建并附带 SHA256） |
+| 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（v1.18.1：266.65 MB / 279,602,570 B）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（v1.18.1：98.07 MB / 102,833,024 B） | 同上（`build-arm64.yml` 产出） |
 
 > **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 与 ARM64 安装包均内置；模型随包约 15 MB，ARM64 侧要求目标机 glibc ≥ 2.28）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
 > **运行环境**：Windows 10/11 x64（Electron 33 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
 > 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
 
 ## 近期修复记录
+
+### 2026-10-24（v1.18.1）登录门面重构 + 三层对齐门禁 + 门禁真绿复验
+
+- 🐞 **登录页「注册账户」是死链**：`SELF_REGISTER_MODE` 默认 `off`（不开放自助注册），但前端**无条件显示**注册入口，
+  而后端早已提供 `GET /api/v1/auth/public-config`、前端一次都没调用。现按配置显隐，**取不到配置即隐藏**（fail-closed）。
+- 🐞 **后端中文错误文案全部丢失**：`authStore.login` 读 `err.response.data.message`，而 FastAPI 返回 `{detail}` ——
+  用户被锁定时看到的是 `Request failed with status code 423`，而不是「账户已锁定，请30分钟后再试」。
+  改为 `detail → message → err.message`，并透出可选 `httpStatus`。
+- ✨ **锁定/限流可见化**：`public-config` 新增 `lockout_minutes` / `max_failed_attempts`，
+  登录页显示「请稍候 30 分 00 秒」倒计时并禁用按钮；403 未授权本机额外给「去获取机器码」直达。
+- ✨ **登录页其余打磨**：失败即清空密码并聚焦、CapsLock 提示、2FA 满 6 位自动提交、「首次使用？」三步引导；
+  背景 12 张 3.51MB 轮播 → 1 张静态图（**净减 3.16MB**）。
+- 🔒 **R35 三层对齐门禁**（`scripts/check_stack_alignment.py`）：前端 API 路径 ↔ 后端路由、ORM 模型 ↔ 数据库 schema、
+  前后端字段三轴一次比对。上线即抓到两处真漂移：行业模型列名与 `r42` 迁移不一致、
+  `DataReportStatistics` 前端缺 `pending`，均已修复。
+- 🔒 **100% 覆盖率门禁曾静默失效**：`backend/.coveragerc` 被误删 → `fail_under=100` 不再生效，
+  分段执行器报的 12/12「全绿」实际只有 99%。恢复配置并补齐 7 处缺口后为
+  **45,782 语句 / 11,376 分支，Miss 0 / BrPart 0**。
+- 🐞 **备份上传恢复的临时包泄漏**：密钥指纹不一致（409）时未清理已落盘的临时包，
+  每次跨机误导入都会留下一个可能上 GB 的残包；现按「存在则删、失败只记日志」处理且保持 409 语义。
 
 ### 2026-10-24（v1.17.3）端到端排查修复 + 死代码清理
 
