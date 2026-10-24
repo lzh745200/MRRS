@@ -26,16 +26,25 @@ else
 fi
 
 if ! getent passwd ${APP_NAME} > /dev/null 2>&1; then
+    # W18-offline P0-2：服务用户的 HOME 必须落在可写数据目录（而非只读 /opt）。
+    # --create-home 直接创建 ${DATA_DIR}，与下方 mkdir/chown 幂等叠加；
+    # paths.get_app_data_dir() 亦按 kylin.env 的 BUMOFU_DATA_DIR 解析，双层保证。
     useradd --system \
             --gid ${APP_NAME} \
             --home-dir ${DATA_DIR} \
             --shell /bin/false \
-            --no-create-home \
+            --create-home \
             --comment "帮扶管理信息系统" \
             ${APP_NAME}
-    echo "  已创建系统用户: ${APP_NAME}"
+    echo "  已创建系统用户: ${APP_NAME}（HOME=${DATA_DIR}）"
 else
     echo "  系统用户已存在: ${APP_NAME}"
+    # 升级自旧版（HOME=/opt/... 只读）时修正服务用户 HOME，否则备份/密钥仍写不进去。
+    CURRENT_HOME="$(getent passwd ${APP_NAME} | cut -d: -f6)"
+    if [ "${CURRENT_HOME}" != "${DATA_DIR}" ]; then
+        usermod --home ${DATA_DIR} ${APP_NAME}
+        echo "  已将服务用户 HOME 从 ${CURRENT_HOME} 修正为 ${DATA_DIR}"
+    fi
 fi
 
 # ── 2. 创建数据目录 ──
@@ -56,10 +65,12 @@ fi
 echo "[3/8] 设置权限..."
 chown -R ${APP_NAME}:${APP_NAME} "${DATA_DIR}"
 chown -R ${APP_NAME}:${APP_NAME} "${LOG_DIR}"
-# 2750：组可写——桌面用户（加入 ${APP_NAME} 组）直接启动回退路径时
-# 可写 SQLite/日志，否则 _direct_start 降级目录也会失败
-chmod 2750 "${DATA_DIR}"
-chmod 2750 "${LOG_DIR}"
+# 2770：组可写（setgid + rwxrws---）。桌面用户加入 ${APP_NAME} 组后，
+# 直接启动回退路径（_direct_start）才能写 SQLite/日志；旧值 2750 实际是
+# 组只读（r-x），与注释声称的"组可写"不符，导致降级路径仍打不开数据库
+# （W18-offline P0-2 复核修正）。others 仍无任何权限。
+chmod 2770 "${DATA_DIR}"
+chmod 2770 "${LOG_DIR}"
 
 # 后端可执行权限
 if [ -f "${INSTALL_DIR}/backend/assistance-management-backend" ]; then

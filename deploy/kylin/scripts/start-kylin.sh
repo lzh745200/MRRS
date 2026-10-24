@@ -46,17 +46,22 @@ _direct_start() {
         log "直接启动后端二进制（非 systemd 模式）..."
         cd /opt/assistance-management-system
         export FRONTEND_DIST_PATH=/opt/assistance-management-system/frontend
-        # 数据/日志目录可能归 root 所有且组不可写（postinst 750）——
-        # 桌面用户直接启动时降级到 $HOME，避免 SQLite/日志打开失败导致回退路径也起不来
+        # 数据/日志目录可能归 root 所有且组不可写（postinst 2770 setgid）——
+        # 桌面用户直接启动时降级到 XDG 用户数据目录，避免 SQLite/日志打开失败
+        # 导致回退路径也起不来。降级目录必须与 backend/app/utils/paths.py 的默认
+        # Linux 数据根一致（~/.local/share/bumofu），否则同一用户会出现两套数据。
         local DATA_DIR=/var/lib/assistance-management-system
         local LOG_BASE=/var/log/assistance-management-system
         if ! [ -w "$DATA_DIR" ] || ! [ -w "$LOG_BASE" ]; then
-            DATA_DIR="$HOME/.assistance-management-system"
+            DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/bumofu"
             LOG_BASE="$DATA_DIR/logs"
             mkdir -p "$DATA_DIR/database" "$DATA_DIR/uploads" "$DATA_DIR/exports" \
                      "$DATA_DIR/cache" "$DATA_DIR/backups" "$LOG_BASE" 2>/dev/null
             log "系统目录不可写，数据目录降级为: $DATA_DIR"
         fi
+        # W18-offline P0-2：显式数据根（paths.get_app_data_dir 第一优先级），
+        # 与下方各 *_DIR 环境变量指向同一目录，避免路径双源。
+        export BUMOFU_DATA_DIR="$DATA_DIR"
         export DATABASE_URL="sqlite:///$DATA_DIR/database/rural_revitalization.db"
         export UPLOAD_DIR="$DATA_DIR/uploads"
         export EXPORT_DIR="$DATA_DIR/exports"

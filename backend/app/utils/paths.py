@@ -9,7 +9,10 @@
   见 electron/main.js getUserDataPath 与 build-scripts NSIS 钩子 H11 注释）。
   本模块在 frozen 且无环境变量时的兜底目录为 %LOCALAPPDATA%\\bumofu-assistance
   （见 get_app_data_dir），桌面端正常不落到该目录，卸载时由 NSIS 钩子一并清理。
-- Linux 生产环境（麒麟V10 ARM64）：使用家目录隐藏文件夹（~/.bumofu/）
+- Linux 生产环境（麒麟V10 ARM64）：**显式环境变量优先** ——
+  ``BUMOFU_DATA_DIR`` → ``XDG_DATA_HOME/bumofu`` → ``~/.local/share/bumofu``
+  （W18-offline P0-2：不再回退 ``~/.bumofu``，避免 standalone 服务用户 HOME
+  指向只读安装目录时数据/密钥/备份全部落到不可写路径）。
 """
 
 import os
@@ -76,6 +79,33 @@ def is_linux() -> bool:
     return platform.system() == "Linux"
 
 
+def _resolve_linux_app_data_dir() -> Path:
+    """解析 Linux 生产/打包态的数据根（W18-offline P0-2 收口）。
+
+    优先级（显式环境变量优先，**绝不**再回退 ``Path.home()/.bumofu``）：
+
+    1. ``BUMOFU_DATA_DIR``：部署模板显式指定（麒麟 standalone 为
+       ``/var/lib/assistance-management-system``，见 ``deploy/kylin/config/kylin.env``）；
+    2. ``XDG_DATA_HOME/bumofu``：遵循 XDG Base Directory 规范；
+    3. ``~/.local/share/bumofu``：XDG 默认值（Linux 上通常可写）。
+
+    历史缺陷：旧实现固定 ``Path.home()/.bumofu``。麒麟 standalone 以服务用户运行、
+    ``HOME`` 被 systemd 指向 ``/opt/安装目录``（只读）→ 数据库/密钥/备份全部落到
+    不可写目录：备份全废、PII 读取 500。``kylin.env`` 下发的 ``DATABASE_URL`` /
+    ``BACKUP_DIR`` 等虽被下游消费，但数据根不读它们，仍派生到 ``$HOME/.bumofu``
+    （路径双源），本函数把数据根收口到显式环境变量。
+
+    空值/纯空白环境变量按未设置处理（部署脚本常以 ``VAR=`` 占位）。
+    """
+    explicit = (os.environ.get("BUMOFU_DATA_DIR") or "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    xdg = (os.environ.get("XDG_DATA_HOME") or "").strip()
+    if xdg:
+        return Path(xdg).expanduser() / "bumofu"
+    return Path.home() / ".local" / "share" / "bumofu"
+
+
 def get_project_backend_dir() -> Path:
     """基于模块文件位置推断 backend 项目根目录（与 CWD 无关）。
 
@@ -111,15 +141,20 @@ def get_app_data_dir() -> Path:
     """
     获取应用数据目录
 
+    Linux/打包态的数据根解析见 ``_resolve_linux_app_data_dir``（显式环境变量优先，
+    不再回退 ``~/.bumofu``）；Windows 打包分支保持既有语义
+    （``LOCALAPPDATA/bumofu-assistance``，无环境变量时才回退 ``~/.bumofu``）。
+
     返回:
         Path: 可写的应用数据目录路径
     """
     if is_bundled() or (is_linux() and not os.environ.get("BUMOFU_DEV_MODE")):
         if is_linux():
-            # Linux（麒麟V10 ARM64）：使用家目录隐藏文件夹
-            data_dir = Path.home() / ".bumofu"
+            # Linux（麒麟V10 ARM64 / standalone）：BUMOFU_DATA_DIR → XDG_DATA_HOME
+            # → ~/.local/share/bumofu（W18-offline P0-2，见 _resolve_linux_app_data_dir）
+            data_dir = _resolve_linux_app_data_dir()
         else:
-            # Windows：使用 AppData/Local
+            # Windows：使用 AppData/Local（行为保持不变）
             base_dir = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
             if base_dir:
                 data_dir = Path(base_dir) / "bumofu-assistance"
@@ -166,14 +201,21 @@ def get_backup_path(sub_path: str = "") -> Path:
     自动备份调度由 BACKUP_ENABLED 环境变量控制（见 auto_backup.py）。
     手动备份（管理员 API）始终使用此目录，不受该环境变量影响。
 
-    W18-offline P0-2：优先尊重 BACKUP_DIR 环境变量（kylin.env 一直在下发它，
-    但 Settings/此函数从未接收 —— "配了不生效"，麒麟部署的备份实际落到
-    $HOME/.bumofu/backups。部署模板与代码契约不一致的典型案例）。设了就用，
-    未设回退到数据目录下的 backups（既有行为不变）。
+    解析链（与 ``get_database_path()`` 同款"环境变量优先、不做存在性校验"）：
+
+    1. ``BACKUP_DIR`` 环境变量 —— 部署模板显式下发（麒麟 ``kylin.env`` 指向
+       ``/var/lib/assistance-management-system/backups``）；设了就用，**不校验/不创建**
+       目录（首次恢复由调用方创建），避免只读介质/延迟挂载时误判；
+    2. 推断 ``<app_data_dir>/backups`` —— ``app_data_dir`` 已按
+       ``BUMOFU_DATA_DIR``/XDG 解析（见 ``get_app_data_dir``）。
+
+    W18-offline P0-2：历史上 ``BACKUP_DIR`` 从未被本函数接收，麒麟部署的备份实际
+    落到 ``$HOME/.bumofu/backups``（服务用户 HOME 只读 → 备份全废）；现已收口。
+    空值/纯空白 ``BACKUP_DIR`` 按未设置处理。
     """
-    env_backup = os.environ.get("BACKUP_DIR")
+    env_backup = (os.environ.get("BACKUP_DIR") or "").strip()
     if env_backup:
-        base = Path(env_backup)
+        base = Path(env_backup).expanduser()
     else:
         base = get_app_data_dir() / "backups"
     if sub_path:
@@ -201,7 +243,9 @@ def get_cache_path(sub_path: str = "") -> Path:
     # 缓存使用 Local 目录（不漫游）
     if is_bundled() or (is_linux() and not os.environ.get("BUMOFU_DEV_MODE")):
         if is_linux():
-            base = Path.home() / ".bumofu" / "cache"
+            # Linux：缓存对齐数据根（BUMOFU_DATA_DIR/XDG），不再写 ~/.bumofu/cache
+            # —— 服务用户 HOME 只读时旧路径必然失败（W18-offline P0-2 同源缺陷）。
+            base = get_app_data_dir() / "cache"
         else:
             base_dir = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
             if base_dir:

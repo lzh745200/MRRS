@@ -17,6 +17,8 @@
 import logging
 import os
 import shutil
+import threading
+import time
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
@@ -25,6 +27,15 @@ logger = logging.getLogger(__name__)
 # 阈值（单机离线现场经验值）
 DISK_FREE_WARN_MB = 1024
 CLOCK_DRIFT_WARN_DAYS = 1
+
+# R36：/health 用的时钟检查缓存时长（秒）。
+# /health 会被 Electron/监控高频轮询，若每次都查一次"最近审计时间"，等于给热路径
+# 加一条 DB 查询；而时钟漂移是分钟级现象，缓存 2 分钟完全够用（长跑机器仍能发现）。
+CLOCK_HEALTH_CACHE_TTL_SECONDS = 120
+
+_clock_cache: Dict = {}
+_clock_cache_at: Optional[float] = None
+_clock_lock = threading.Lock()
 
 
 def _check_disk_free() -> Dict:
@@ -91,6 +102,41 @@ def _check_clock_drift() -> Dict:
         return {"status": "ok", "behind_days": round(max(behind_days, 0.0), 1)}
     except Exception as exc:  # noqa: BLE001
         return {"status": "unknown", "error_type": type(exc).__name__}
+
+
+def _clock_health_payload(result: Dict) -> Dict:
+    """把预检结果收敛为 ``/health`` 的 ``clock`` 载荷 ``{status, behind_days}``。
+
+    只出二元组：``/health`` 无需认证，``reason``/``error_type`` 等内部细节留在
+    启动日志与诊断包里（口径同 migration 只出异常类名）。
+    """
+    return {
+        "status": result.get("status", "unknown"),
+        "behind_days": result.get("behind_days"),
+    }
+
+
+def clock_health(max_age_seconds: Optional[int] = None) -> Dict:
+    """时钟漂移的可查询状态（供 ``/health`` 使用；R36）。
+
+    带 TTL 缓存（默认 ``CLOCK_HEALTH_CACHE_TTL_SECONDS``）：TTL 内重复调用不查库，
+    过期后重新检查 —— 长跑机器（离线现场常年不重启）上的时钟漂移因此仍能被发现。
+
+    返回 ``{status, behind_days}``：``ok`` / ``warning``（落后于数据记录）/
+    ``unknown``（检查本身失败，例如库不可读）。
+    """
+    global _clock_cache_at
+    ttl = CLOCK_HEALTH_CACHE_TTL_SECONDS if max_age_seconds is None else max_age_seconds
+    with _clock_lock:
+        now = time.monotonic()
+        if _clock_cache and _clock_cache_at is not None and (now - _clock_cache_at) < ttl:
+            return _clock_health_payload(_clock_cache)
+        # 持锁执行检查：并发 /health 轮询时只跑一次，避免打爆数据库
+        result = _check_clock_drift()
+        _clock_cache.clear()
+        _clock_cache.update(result)
+        _clock_cache_at = now
+        return _clock_health_payload(result)
 
 
 def _sample_existing_ciphertext() -> Optional[str]:

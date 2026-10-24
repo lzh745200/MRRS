@@ -24,6 +24,7 @@ from app.core.security import get_current_user
 from app.core.permission_utils import require_admin
 from app.services.backup_service import (
     BackupIncompleteError,
+    BackupKeyMismatchError,
     BackupService,
     get_backup_service,
 )
@@ -72,6 +73,13 @@ class RestoreBackupRequest(BaseModel):
     """恢复备份请求"""
     filename: str = Field(..., description="备份文件名")
     password: Optional[str] = Field(None, description="加密密码（加密备份必需）")
+    allow_key_mismatch: bool = Field(
+        False,
+        description=(
+            "备份的 PII 密钥指纹与本机不一致时是否强制恢复。默认 False："
+            "拒绝并提示敏感字段将不可读；确认使用旧密钥时才可置 True。"
+        ),
+    )
 
 
 class DeleteBackupRequest(BaseModel):
@@ -765,7 +773,12 @@ async def restore_backup(
         file_path = _resolve_backup_file_path(body.filename)
 
         svc = get_backup_service(db)
-        result = svc.restore_backup(file_path, password=_resolve_auto_backup_password(body.password))
+        result = svc.restore_backup(
+            file_path,
+            password=_resolve_auto_backup_password(body.password),
+            allow_key_mismatch=body.allow_key_mismatch,
+            operator=getattr(current_user, "username", "unknown"),
+        )
 
         logger.warning(
             "系统已从备份恢复: %s，操作人: %s",
@@ -797,6 +810,10 @@ async def restore_backup(
             "message": "系统恢复成功（建议重启应用以确保数据库连接正确）",
             "data": result,
         }
+    except BackupKeyMismatchError as e:
+        # 备份来自不同密钥的机器（跨机/重装）：默认拒绝自动恢复。
+        # 服务层已写审计（system_restore_key_mismatch），这里只负责 409 语义。
+        raise HTTPException(status_code=409, detail=e.message)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:
@@ -812,6 +829,13 @@ async def restore_backup(
 async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分风险高
     file: UploadFile = File(...),
     password: Optional[str] = Form(None),
+    allow_key_mismatch: bool = Form(
+        False,
+        description=(
+            "备份的 PII 密钥指纹与本机不一致时是否强制恢复（默认 False，"
+            "跨机迁移时若确认使用旧密钥才置 true）"
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -915,7 +939,12 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
 
         # 调用恢复逻辑
         svc = get_backup_service(db)
-        result = svc.restore_backup(file_path, password=password)
+        result = svc.restore_backup(
+            file_path,
+            password=password,
+            allow_key_mismatch=allow_key_mismatch,
+            operator=getattr(current_user, "username", "unknown"),
+        )
 
         logger.warning(
             "系统已从上传的备份恢复: %s，操作人: %s",
@@ -933,6 +962,16 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
             "message": "上传恢复成功（建议重启应用以确保数据库连接正确）",
             "data": result,
         }
+    except BackupKeyMismatchError as e:
+        # 跨机迁移：备份来自不同密钥的机器 → 409（服务层已写审计）。
+        # 仍需清理已落盘的临时包（与其它失败分支一致）。
+        if file_path:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except OSError:
+                pass
+        raise HTTPException(status_code=409, detail=e.message)
     except ValueError as e:
         # 与通用异常一致：清理已保存的临时文件，避免磁盘泄漏
         if file_path:

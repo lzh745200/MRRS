@@ -27,6 +27,41 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# 连接级健康快照（R36 · 离线长期运行可靠性）
+#
+# 背景：`PRAGMA journal_mode=WAL` 只是**请求**，SQLite 可以拒绝或降级
+# （数据库在只读介质/网络盘、或已有连接持有不同的 journal_mode）。旧实现
+# `cursor.execute(...)` 不看返回值，于是"以为开了 WAL，实际是 delete 模式"：
+# 并发读写退化成互斥，长时间运行后偶发 SQLITE_BUSY，而 /health 一切正常。
+#
+# 这里把**实际生效值**记到模块级快照，供 /health 与诊断包查询（不落库、不加表）。
+# 只保留最近一次连接的结果：PRAGMA 是 per-connection 的，但同一进程内各连接
+# 取值一致；保留最近值足以让"没进 WAL"这件事对运维可见。
+# ---------------------------------------------------------------------------
+_database_health_lock = threading.Lock()
+_database_health: dict[str, Any] = {}
+
+
+def _record_database_health(**fields: Any) -> None:
+    """更新连接级健康快照（模块内低频写，读多写少）。"""
+    with _database_health_lock:
+        _database_health.update(fields)
+
+
+def database_health() -> dict[str, Any]:
+    """返回数据库连接级健康快照（供 /health 与诊断使用）。
+
+    字段：
+      - ``journal_mode``：实际生效的 journal 模式（``wal`` / ``delete`` / …），
+        尚未建立过连接时为 ``unknown``；
+      - ``journal_mode_ok``：是否已确认 WAL 生效（None = 尚未探测）；
+      - ``check_error_type``：探测过程本身异常的类名（不记异常原文，避免路径泄露）。
+    """
+    with _database_health_lock:
+        return dict(_database_health)
+
+
 # 模块级常量：SQLite PRAGMA 调优值（避免每次连接重复计算）
 # 解析逻辑统一走 app.utils.env_utils.parse_env_int（单一事实源，非法值回退默认）
 from app.utils.env_utils import parse_env_int  # noqa: E402
@@ -134,7 +169,47 @@ def _set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
         logger.info("SQLCipher 数据库加密已启用 (cipher=%s)", cipher_version[0])
 
     # 1. 核心日志与一致性
+    # R36：`PRAGMA journal_mode=WAL` 只是**请求**，SQLite 可以拒绝或降级
+    # （数据库在只读介质/不支持共享内存的网络盘上、或已有连接持有不同 journal 模式）。
+    # 旧实现不看返回值 → “以为开了 WAL，实际 delete 模式”：并发读写退化为互斥，
+    # 长时间运行后偶发 SQLITE_BUSY，而 /health 一切正常。这里读回实际值并记录，
+    # 非 wal 时告警（探测本身失败不得阻断连接建立 —— 离线现场能跑比完美更重要）。
     cursor.execute("PRAGMA journal_mode=WAL")         # 启用 WAL 模式，支持并发读写
+    try:
+        _journal_row = cursor.fetchone()
+        _journal_mode = (
+            str(_journal_row[0]).strip().lower() if _journal_row else "unknown"
+        )
+    except Exception as _probe_err:  # noqa: BLE001 - 探测失败不阻断连接
+        _journal_mode = "unknown"
+        _record_database_health(
+            journal_mode="unknown",
+            journal_mode_ok=False,
+            check_error_type=type(_probe_err).__name__,
+        )
+        logger.warning(
+            "读取 journal_mode 返回值失败（%s），无法确认 WAL 是否生效",
+            type(_probe_err).__name__,
+        )
+    else:
+        if _journal_mode == "wal":
+            _record_database_health(
+                journal_mode="wal",
+                journal_mode_ok=True,
+                check_error_type=None,
+            )
+        else:
+            _record_database_health(
+                journal_mode=_journal_mode,
+                journal_mode_ok=False,
+                check_error_type=None,
+            )
+            logger.warning(
+                "SQLite 未进入 WAL 模式（实际 journal_mode=%s）：并发读写退化为互斥，"
+                "高并发/长事务下可能出现 SQLITE_BUSY 与写阻塞。常见原因：数据库位于"
+                "只读介质或不支持共享内存的网络盘、其它连接已持有不同 journal 模式。",
+                _journal_mode,
+            )
     cursor.execute("PRAGMA foreign_keys=ON")          # 强制外键约束
 
     # 2. 性能与安全性平衡

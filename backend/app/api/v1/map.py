@@ -243,7 +243,9 @@ async def get_map_config(
         "data": {
             "center": {"lng": QIANNAN_CENTER[0], "lat": QIANNAN_CENTER[1]},
             "zoom": 9,
-            "map_type": "gaode",
+            # 前端实际渲染的是 ECharts 离线矢量地图（components/map/OfflineMap.vue），
+            # 从无高德在线底图；对外声明 vector 才与离线事实一致（审计 A 区 A8 关联）。
+            "map_type": "vector",
             "offline_enabled": True,
             "tiles_url": "/api/v1/map/tiles",
         },

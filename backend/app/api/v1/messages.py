@@ -448,6 +448,17 @@ async def get_message(
 
 notifications_router = APIRouter(prefix="/notifications", tags=["通知设置"])
 
+# 离线单机版：后端唯一的 SMTP 发送方是 alert_service 的外部告警通道，
+# 通知偏好里的 email_* 开关没有任何实际投递实现（离线适配审计 A11）。
+# 响应统一追加该标识，供前端将"邮件通知"置灰，避免用户以为开启了就能收到邮件。
+EMAIL_CHANNEL_STATUS_UNAVAILABLE_OFFLINE = "unavailable_offline"
+
+
+def _mark_email_channel_unavailable(payload: dict) -> dict:
+    """在通知偏好响应上追加 ``emailChannel`` 标识；不改动任何既有字段。"""
+    payload["emailChannel"] = EMAIL_CHANNEL_STATUS_UNAVAILABLE_OFFLINE
+    return payload
+
 
 @notifications_router.get("/preferences")
 async def get_notification_preferences(
@@ -472,7 +483,7 @@ async def get_notification_preferences(
     result["email_approval"] = email.get("approval", True)
     result["email_task"] = email.get("task", True)
 
-    return result
+    return _mark_email_channel_unavailable(result)
 
 
 @notifications_router.put("/preferences")
@@ -520,7 +531,7 @@ async def update_notification_preferences(
     )
 
     updated = service.get_preference(current_user.id)
-    return service.preference_to_dict(updated)
+    return _mark_email_channel_unavailable(service.preference_to_dict(updated))
 
 
 @notifications_router.put("/preferences/site-message")
@@ -556,7 +567,7 @@ async def update_email_settings(
         task=data.task,
         report=data.report,
     )
-    return service.preference_to_dict(preference)
+    return _mark_email_channel_unavailable(service.preference_to_dict(preference))
 
 
 @notifications_router.put("/preferences/quiet-hours")

@@ -5,6 +5,45 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.0] - 2026-10-24 — 离线加固批次：告警开关 / 误导口径 / 备份可迁移 / 麒麟数据目录 / 长期运行可靠性
+
+> 本批来自"系统还有什么问题"体检结论的第 1、2 批；所有改动均有红→绿测试与门禁记录。
+
+### Added
+
+- **`OFFLINE_MODE` 统一开关（默认 `True`）**：`alert_service` 邮件/Webhook 两通道入口先短路（INFO + `return False`，
+  不做配置解析/DNS/建连）；需外呼时设 `OFFLINE_MODE=false`。SMTP 同步调用改 `asyncio.to_thread`，不再阻塞事件循环。
+- **备份携带密钥指纹**：`backup_info.json` 新增 `key_fingerprint`（SHA256 前 16 位，复用 `pii_crypto.key_fingerprint()`，
+  **不含密钥本体**）。恢复时指纹不一致 → **409**（`allow_key_mismatch=true` 可强制，写审计
+  `system_restore_key_mismatch`）；旧备份无字段仍兼容。顺带修复历史全量包 `backup_info.json` 用 `str(dict)`
+  写出的非法 JSON（`_parse_backup_info`：json → `ast.literal_eval` 回退）。
+- **`/health` 新增 `clock` 与 `database` 只读块**：时钟漂移 `{status, behind_days}`（120s TTL 缓存、不含异常原文）；
+  数据库 `{journal_mode, journal_mode_ok, check_error_type}`（WAL 不可用可见化）。顶层 `status`/HTTP 码不变。
+- **备份启动补跑（catch-up）**：启动 15s 后若"从未备份或距上次 > `backup_interval_days`"立即补跑一次
+  （`threading.Timer` 登记 `_timers`、不自我重排；补跑后当日 02:00 任务自然跳过）。
+- **麒麟/离线数据目录收口**：Linux/打包态数据根改为 `BUMOFU_DATA_DIR` → `XDG_DATA_HOME/bumofu` →
+  `~/.local/share/bumofu`（不再回退 `~/.bumofu`）；`get_backup_path()` 支持 `BACKUP_DIR` 优先（三段链）；
+  `get_cache_path()` Linux 分支对齐 `<app_data_dir>/cache`。kylin：`kylin.env` 增 `BUMOFU_DATA_DIR`，
+  `postinst` 用 `--create-home`、目录权限 2750→2770，`start-kylin.sh` 同步导出与降级目录。
+- **Windows 构建脚本**：新增 `scripts/build/sync-frontend.ps1`（robocopy 等价同步，替代失效的 bash 脚本）与
+  `scripts/build/build-win.ps1`（TEMP 重定向规避 esbuild `Access is denied`；可选 `-IncludeMapTilesInBackend`）。
+
+### Changed
+
+- **安装包瘦身**：`assistance-backend.spec` 瓦片收集改为构建开关 `INCLUDE_MAP_TILES=1`（默认关）；Electron 版由
+  extraResources + `MAP_TILES_DIR` 提供瓦片，不再重复打包（预期 378MB → ~318MB）。ARM64 standalone 不受影响。
+- `/api/v1/map/config` 的 `map_type`：`"gaode"` → `"vector"`（前端零消费方）。
+- 通知偏好 3 个端点响应追加 `emailChannel: "unavailable_offline"`（只增不删）。
+- **`httpx` 登记运行时必需依赖**（启动期硬依赖，此前缺失即 ImportError 且自检不覆盖）。
+- `scripts/check_doc_numbers.py` 输出改 UTF-8（修复 Windows GBK 控制台下 `✓` 触发 UnicodeEncodeError 假红）。
+
+### Known issues（本批未做，建议下批）
+
+- `POST /api/v1/system/admin/restore?filename=` 旧端点直接 `shutil.copy2` 覆盖 DB，绕过维护窗口/schema 校验/
+  密钥指纹闸门；前端零调用，建议下线或改走 `restore_backup()`。
+- 前端 `BackupManagement.vue` 未传 `allow_key_mismatch`：跨密钥恢复目前只能直连 API（建议 UI 加二次确认）。
+- 安装包仍未代码签名（证书待采购）。
+
 ## [1.17.4] - 2026-10-24 — 离线瓦片包导入被 10MB 请求体上限拦截（现场 413）
 
 ### Fixed

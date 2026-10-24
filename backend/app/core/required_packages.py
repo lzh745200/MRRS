@@ -50,6 +50,10 @@ REQUIRED_RUNTIME_PACKAGES: Tuple[Dependency, ...] = (
     Dependency("pydantic", "pydantic", "请求/响应数据校验"),
     Dependency("pandas", "pandas", "报表与数据分析"),
     Dependency("openpyxl", "openpyxl", "Excel 导入导出"),
+    # alert_service 在模块顶层 `import httpx`，该模块经 services/monitoring_service
+    # → api/v1/monitoring_legacy → api/v1/__init__ 在启动期导入 —— 缺包即启动失败，
+    # 故与 requirements.txt 同步登记为运行时必需（离线默认不发请求，但导入必须成功）。
+    Dependency("httpx", "httpx", "外部告警 Webhook 客户端（启动期顶层导入）"),
 )
 
 # ── 运行时可选：缺失只影响对应导出/图片功能，不影响系统启动 ──

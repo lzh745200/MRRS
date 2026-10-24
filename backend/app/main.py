@@ -336,6 +336,29 @@ def health():
     except Exception:  # pragma: no cover — /health 不得因附带信号失败（路径解析异常）
         same_volume = None
 
+    # R36（离线长期运行可靠性）：
+    # ① clock —— 系统时钟是否落后于数据最新记录（startup/preflight 检查结果，
+    #    带 TTL 缓存，避免高频轮询把"最近审计时间"查询打到热路径）。
+    #    时钟被手动改慢会让"最近 N 天"统计漏数据、定时任务错时，必须可见。
+    # ② database —— WAL 的实际生效值（PRAGMA journal_mode 会被 SQLite 降级，
+    #    旧实现不看返回值 → "以为开了 WAL，实际 delete 模式"，并发读写退化为互斥）。
+    # 两者都**只增字段**，不改既有键与顶层 status（附带信号失败不阻断可用性）。
+    from app.core.database import database_health as _database_health
+    from app.startup.preflight import clock_health as _clock_health
+
+    try:
+        clock = _clock_health()
+    except Exception:  # noqa: BLE001 - 附带信号失败不得让 /health 5xx
+        clock = {"status": "unknown", "behind_days": None}
+
+    try:
+        database_snapshot = _database_health()
+    except Exception:  # pragma: no cover - 快照读取为纯内存操作，理论上不会失败
+        database_snapshot = {}
+    # 尚未建立过连接（或快照被清空）时明确回报 unknown，而不是缺字段
+    database_snapshot.setdefault("journal_mode", "unknown")
+    database_snapshot.setdefault("journal_mode_ok", None)
+
     return {
         "status": "ok",
         "version": info.get("version", "unknown"),
@@ -355,6 +378,9 @@ def health():
         },
         # R7：维护窗口可见性 —— active=true 表示恢复中（写请求被 503 拒绝）
         "maintenance": _maintenance_status(),
+        # R36：时钟漂移（ok/warning/unknown + behind_days）与 WAL 实际生效值
+        "clock": clock,
+        "database": database_snapshot,
         "restore_drill": {
             "status": _drill.get("status"),
             "checked_at": _drill.get("checked_at"),

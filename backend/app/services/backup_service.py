@@ -3,6 +3,7 @@
 新增功能：增量备份、备份验证、备份加密（AES-256）、备份压缩级别配置
 """
 
+import ast
 import base64
 import hashlib
 import json
@@ -20,7 +21,7 @@ from pathlib import Path
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -52,6 +53,71 @@ class BackupIncompleteError(Exception):
     def __init__(self, message: str):
         self.message = message
         super().__init__(message)
+
+
+# ── PII 密钥指纹（备份可迁移性，批次 2）─────────────────────────────────
+# 背景（历史 P1）：换机/重装后 ENCRYPTION_KEY 不同，备份包里的 9 列 AES-SIV
+# 密文将永久不可解，而备份包不含任何密钥线索、恢复时也无从判断。
+# 取舍：**不把密钥写进备份**（写进去等于把密钥随包扩散，离线介质更易泄漏），
+# 只写 SHA-256 前 16 位指纹（``app.core.pii_crypto.key_fingerprint``，与
+# 自检「PII 密钥指纹」同一口径），恢复时比对；不一致默认拒绝，可显式强制。
+KEY_FINGERPRINT_FIELD = "key_fingerprint"
+
+KEY_MISMATCH_MESSAGE = (
+    "备份来自不同密钥的机器，恢复后敏感字段（身份证号/联系电话等）将不可读；"
+    "如确认使用旧密钥，请先导入密钥或使用强制恢复（allow_key_mismatch=true）。"
+)
+
+
+class BackupKeyMismatchError(BackupRestoreError):
+    """备份包的 PII 密钥指纹与本机不一致（跨机/重装后恢复）。
+
+    Attributes:
+        backup_fingerprint: 备份包记录的指纹（16 位十六进制）
+        current_fingerprint: 本机当前密钥指纹
+    """
+
+    def __init__(
+        self,
+        message: str = KEY_MISMATCH_MESSAGE,
+        backup_fingerprint: Optional[str] = None,
+        current_fingerprint: Optional[str] = None,
+    ):
+        super().__init__(message)
+        self.backup_fingerprint = backup_fingerprint
+        self.current_fingerprint = current_fingerprint
+
+
+def _current_key_fingerprint() -> Optional[str]:
+    """本机 PII 密钥指纹；密钥不可用/读取失败时返回 None（不阻断备份/恢复）。"""
+    try:
+        from app.core.pii_crypto import key_fingerprint
+
+        return key_fingerprint()
+    except Exception:
+        logger.warning("读取 PII 密钥指纹失败，本次跳过密钥一致性标记/校验", exc_info=True)
+        return None
+
+
+def _parse_backup_info(raw: Any) -> Optional[Dict[str, Any]]:
+    """解析 ``backup_info.json``（兼容历史 ``str(dict)`` 写法）。
+
+    历史全量备份用 ``zipf.writestr(..., str(backup_info))`` 写入，是 Python
+    dict 的 repr（单引号），``json.loads`` 必然失败；早期读取方（preview /
+    verify）因此一直拿不到元信息。这里先按 JSON 解析，失败再退回
+    ``ast.literal_eval``，两种格式都能读；非对象/不可解析一律返回 None
+    （调用方按"旧备份、无指纹"兼容处理）。
+    """
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="replace")
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        try:
+            parsed = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 class BackupRecord:
@@ -402,7 +468,17 @@ class BackupService:
                     "database_included": os.path.exists(self.database_path),
                     "created_at": datetime.now().isoformat(),
                 }
-                zipf.writestr("backup_info.json", str(backup_info))
+                # PII 密钥指纹：跨机/重装后判断"备份里的密文还能不能解"。
+                # 只写指纹（16 位十六进制），绝不写密钥材料本身；读不到指纹时
+                # 省略该字段（保持旧包格式，恢复端按"无指纹"兼容处理）。
+                _fp = _current_key_fingerprint()
+                if _fp:
+                    backup_info[KEY_FINGERPRINT_FIELD] = _fp
+                # 写合法 JSON（历史用 str(dict)，preview/verify 的 json.loads 必然失败）
+                zipf.writestr(
+                    "backup_info.json",
+                    json.dumps(backup_info, ensure_ascii=False, indent=2),
+                )
             # 原子替换：最终路径要么不存在、要么是完整包
             os.replace(part_path, backup_file_path)
         except Exception:
@@ -836,33 +912,179 @@ class BackupService:
             except OSError:
                 pass
 
-    def restore_backup(self, backup_file_path: str, password: str | None = None) -> Dict:
+    # ── PII 密钥指纹校验（批次 2：备份可迁移性）──────────────────────
+
+    @staticmethod
+    def _read_backup_key_fingerprint(zip_path: str) -> Optional[str]:
+        """读取备份包记录的本机 PII 密钥指纹；无法读到则返回 None。
+
+        None 的语义是「旧备份/无指纹/元信息不可读」——调用方按兼容放行处理
+        （不能因为老包没有线索就锁死恢复通道，那才是真正的数据不可用）。
+        加密备份必须先解密：调用方传入的是已解密后的 ``restore_source``。
+        """
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zipf:
+                raw = read_zip_member(zipf, "backup_info.json")
+        except Exception:
+            # 缺成员（KeyError）/坏 ZIP/体积超限（HTTPException）：交给后续
+            # 恢复流程按既有语义报错，此处只表示"读不到指纹"
+            logger.debug("备份包未提供可读的 backup_info.json: %s", zip_path, exc_info=True)
+            return None
+        info = _parse_backup_info(raw)
+        if not info:
+            return None
+        fp = info.get(KEY_FINGERPRINT_FIELD)
+        if isinstance(fp, str) and fp.strip():
+            return fp.strip()
+        return None
+
+    @staticmethod
+    def _audit_key_mismatch(
+        filename: str,
+        backup_fingerprint: str,
+        current_fingerprint: str,
+        forced: bool,
+        operator: Optional[str] = None,
+    ) -> None:
+        """审计密钥指纹不一致（拒绝与强制都留痕）。
+
+        只写指纹（16 位十六进制），不写任何密钥材料；审计失败不得影响恢复语义。
+        """
+        try:
+            from app.utils.audit_logger import AuditLevel, AuditLogger
+
+            AuditLogger.log(
+                action="system_restore_key_mismatch",
+                username=operator,
+                resource_type="backup",
+                resource_id=filename,
+                details={
+                    "filename": filename,
+                    "backup_fingerprint": backup_fingerprint,
+                    "current_fingerprint": current_fingerprint,
+                    "forced": bool(forced),
+                },
+                level=AuditLevel.WARNING if forced else AuditLevel.CRITICAL,
+            )
+        except Exception:
+            logger.error("密钥指纹不一致审计写入失败（不影响恢复判定）", exc_info=True)
+
+    def _enforce_key_fingerprint(
+        self,
+        restore_source: str,
+        backup_file_path: str,
+        allow_key_mismatch: bool,
+        operator: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """恢复前的密钥一致性闸门（**必须在覆盖生产库之前**调用）。
+
+        Returns:
+            指纹不一致且被显式放行时返回 ``{"forced": True, ...}``，用于在恢复
+            结果里标记"这次恢复是有意跨密钥的"；其余情况返回 None。
+
+        Raises:
+            BackupKeyMismatchError: 指纹不一致且未显式放行。
+        """
+        backup_fp = self._read_backup_key_fingerprint(restore_source)
+        if not backup_fp:
+            # 旧备份/无指纹/元信息不可读 → 兼容放行（无法判断 ≠ 不一致）
+            logger.info("备份包未记录 PII 密钥指纹（旧备份），跳过密钥一致性校验")
+            return None
+
+        current_fp = _current_key_fingerprint()
+        if not current_fp:
+            # 本机指纹算不出来（密钥未初始化）→ 无法判定，放行但留 warning
+            logger.warning(
+                "本机 PII 密钥指纹不可用，无法校验备份密钥一致性（备份指纹=%s）",
+                backup_fp,
+            )
+            return None
+
+        if backup_fp == current_fp:
+            return None
+
+        filename = os.path.basename(backup_file_path)
+        self._audit_key_mismatch(
+            filename=filename,
+            backup_fingerprint=backup_fp,
+            current_fingerprint=current_fp,
+            forced=allow_key_mismatch,
+            operator=operator,
+        )
+        if allow_key_mismatch:
+            logger.warning(
+                "备份密钥指纹与本机不一致（备份=%s，本机=%s），已按强制恢复继续: %s",
+                backup_fp, current_fp, filename,
+            )
+            return {
+                "forced": True,
+                "backup_fingerprint": backup_fp,
+                "current_fingerprint": current_fp,
+            }
+        logger.error(
+            "拒绝恢复：备份密钥指纹与本机不一致（备份=%s，本机=%s）: %s",
+            backup_fp, current_fp, filename,
+        )
+        raise BackupKeyMismatchError(
+            KEY_MISMATCH_MESSAGE,
+            backup_fingerprint=backup_fp,
+            current_fingerprint=current_fp,
+        )
+
+    def restore_backup(
+        self,
+        backup_file_path: str,
+        password: str | None = None,
+        allow_key_mismatch: bool = False,
+        operator: Optional[str] = None,
+    ) -> Dict:
         """从备份恢复系统（R7：外层维护窗口 + 事务保护 + 加密检测）
 
         维护窗口语义见 app.core.maintenance：
         置位维护模式 → 等在途请求归零 → 执行恢复 → finally 解除。
 
+        Args:
+            backup_file_path: 备份文件路径
+            password: 加密密码（加密备份必需）
+            allow_key_mismatch: 备份的 PII 密钥指纹与本机不一致时是否强制继续
+                （默认 False：拒绝并给出明确中文提示；见 BackupKeyMismatchError）
+            operator: 操作人标识（仅用于审计留痕，可为 None）
+
         Returns:
             恢复结果（含 maintenance_window_ms，供前端/日志留痕）
         """
         with maintenance_window("restore_backup") as window:
-            result = self._restore_backup_impl(backup_file_path, password)
+            result = self._restore_backup_impl(
+                backup_file_path,
+                password,
+                allow_key_mismatch=allow_key_mismatch,
+                operator=operator,
+            )
             result["maintenance_window_ms"] = window.elapsed_ms()
             return result
 
-    def _restore_backup_impl(self, backup_file_path: str, password: str | None = None) -> Dict:
+    def _restore_backup_impl(
+        self,
+        backup_file_path: str,
+        password: str | None = None,
+        allow_key_mismatch: bool = False,
+        operator: Optional[str] = None,
+    ) -> Dict:
         """
         恢复实现（调用方须已进入维护窗口）
 
         Args:
             backup_file_path: 备份文件路径
             password: 加密密码（加密备份必需）
+            allow_key_mismatch: 密钥指纹不一致时是否强制继续
+            operator: 操作人标识（审计用）
 
         Returns:
             恢复结果
 
         Raises:
             ValueError: 备份文件已加密但未提供密码，或密码错误
+            BackupKeyMismatchError: 备份密钥指纹与本机不一致且未强制放行
         """
         if not os.path.exists(backup_file_path):
             raise FileNotFoundError(f"备份文件不存在: {backup_file_path}")
@@ -873,6 +1095,12 @@ class BackupService:
         snapshot_uploads_dir = None
 
         try:
+            # 密钥一致性闸门（批次 2）：**必须在建快照与覆盖生产库之前**。
+            # 不一致且未强制 → 抛 BackupKeyMismatchError，现场库一个字节都不动。
+            key_mismatch = self._enforce_key_fingerprint(
+                restore_source, backup_file_path, allow_key_mismatch, operator
+            )
+
             # 快照必须建在 try 内：否则它在磁盘写满/文件被占用时抛错，
             # 后面的 finally 不会执行 —— restore_XXXX 临时目录与（加密备份解密出的）
             # 明文临时包会永久残留在 %TEMP%，后者还是敏感数据落盘
@@ -897,12 +1125,24 @@ class BackupService:
 
             self._cleanup_snapshots(snapshot_db_path, snapshot_uploads_dir)
 
-            return {
+            result = {
                 "success": True,
                 "message": "系统恢复成功",
                 "database_restored": database_restored,
                 "uploads_restored": uploads_restored,
             }
+            if key_mismatch:
+                # 让调用方/前端能明确区分「强制的跨密钥恢复」与普通恢复
+                result["key_mismatch"] = key_mismatch
+                result["message"] = (
+                    "系统恢复成功（已按强制方式跨密钥恢复，敏感字段可能不可读）"
+                )
+            return result
+
+        except BackupKeyMismatchError:
+            # 拒绝发生在任何写操作之前：无需回滚，保留原始异常类型与中文提示
+            # （被下方通用分支包装成 BackupRestoreError 会丢掉 409 语义）
+            raise
 
         except Exception as e:
             self._rollback_to_snapshots(snapshot_db_path, snapshot_uploads_dir)
@@ -1209,6 +1449,9 @@ class BackupService:
                 "created_at": datetime.now().isoformat(),
                 "manifest": current_manifest,
             }
+            _fp = _current_key_fingerprint()
+            if _fp:
+                backup_info[KEY_FINGERPRINT_FIELD] = _fp
             zipf.writestr(
                 "backup_info.json",
                 json.dumps(backup_info, indent=2, ensure_ascii=False),
@@ -1361,10 +1604,10 @@ class BackupService:
                         "message": f"ZIP文件损坏: {bad_file}",
                     }
 
-                # 读取备份信息
+                # 读取备份信息（兼容历史 str(dict) 写法，见 _parse_backup_info）
                 try:
                     backup_info_data = read_zip_member(zipf, "backup_info.json")
-                    backup_info = json.loads(backup_info_data)
+                    backup_info = _parse_backup_info(backup_info_data)
                 except Exception:
                     backup_info = None
 

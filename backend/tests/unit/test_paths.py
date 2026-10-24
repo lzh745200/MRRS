@@ -142,22 +142,26 @@ class TestGetAppDataDir:
         assert result == real_backend
         assert result != tmp_path
 
-    def test_prod_linux_without_dev_mode_uses_home(self, monkeypatch, tmp_path):
+    def test_prod_linux_without_dev_mode_uses_local_share(self, monkeypatch, tmp_path):
+        """Linux 生产默认 = ~/.local/share/bumofu（W18-offline P0-2，不再回退 ~/.bumofu）。"""
         monkeypatch.setattr(platform, "system", lambda: "Linux")
         monkeypatch.delenv("BUMOFU_DEV_MODE", raising=False)
+        monkeypatch.delenv("BUMOFU_DATA_DIR", raising=False)
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
         fake_home = tmp_path / "home"
         monkeypatch.setattr(Path, "home", lambda: fake_home)
         result = get_app_data_dir()
-        assert result == fake_home / ".bumofu"
+        assert result == fake_home / ".local" / "share" / "bumofu"
         assert result.exists()
 
     def test_project_backend_dir_env_override_direct(self, monkeypatch, tmp_path):
         """BUMOFU_BACKEND_DIR_OVERRIDE 在调用时生效（W1 不变量 #11 的机制本体）。
 
         Windows 开发路径 get_app_data_dir() 走 else 分支间接覆盖 override 行；
-        Linux 生产路径 get_app_data_dir 提前返回 ~/.bumofu、根本不经过
-        get_project_backend_dir —— CI(Linux) 上 override 分支恒缺 1 行导致
-        fail_under=100 门禁红（2026-09-05 PR Checks 实测）。此处直接调用锁定。
+        Linux 生产路径 get_app_data_dir 走 *_resolve_linux_app_data_dir*
+        （BUMOFU_DATA_DIR/XDG）而不经过 get_project_backend_dir —— CI(Linux) 上
+        override 分支恒缺 1 行导致 fail_under=100 门禁红（2026-09-05 PR Checks
+        实测）。此处直接调用锁定。
         """
         monkeypatch.setenv("BUMOFU_BACKEND_DIR_OVERRIDE", str(tmp_path))
         assert get_project_backend_dir() == tmp_path
@@ -165,14 +169,16 @@ class TestGetAppDataDir:
         monkeypatch.delenv("BUMOFU_BACKEND_DIR_OVERRIDE")
         assert get_project_backend_dir().name == "backend"
 
-    def test_bundled_linux_uses_home(self, monkeypatch, tmp_path):
+    def test_bundled_linux_uses_local_share(self, monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "frozen", True, raising=False)
         monkeypatch.setattr(sys, "_MEIPASS", "/fake", raising=False)
         monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.delenv("BUMOFU_DATA_DIR", raising=False)
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
         fake_home = tmp_path / "home"
         monkeypatch.setattr(Path, "home", lambda: fake_home)
         result = get_app_data_dir()
-        assert result == fake_home / ".bumofu"
+        assert result == fake_home / ".local" / "share" / "bumofu"
 
     def test_bundled_windows_with_localappdata(self, monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "frozen", True, raising=False)
@@ -334,22 +340,28 @@ class TestGetCachePath:
         with pytest.raises(PathTraversalError):
             get_cache_path("../escape")
 
-    def test_bundled_linux_uses_home_cache(self, monkeypatch, tmp_path):
+    def test_bundled_linux_uses_local_share_cache(self, monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "frozen", True, raising=False)
         monkeypatch.setattr(sys, "_MEIPASS", "/fake", raising=False)
         monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.delenv("BUMOFU_DATA_DIR", raising=False)
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
         fake_home = tmp_path / "home"
         monkeypatch.setattr(Path, "home", lambda: fake_home)
-        assert get_cache_path("") == fake_home / ".bumofu" / "cache"
+        assert get_cache_path("") == fake_home / ".local" / "share" / "bumofu" / "cache"
 
     def test_bundled_linux_with_sub_path(self, monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "frozen", True, raising=False)
         monkeypatch.setattr(sys, "_MEIPASS", "/fake", raising=False)
         monkeypatch.setattr(platform, "system", lambda: "Linux")
+        monkeypatch.delenv("BUMOFU_DATA_DIR", raising=False)
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
         fake_home = tmp_path / "home"
         monkeypatch.setattr(Path, "home", lambda: fake_home)
         result = get_cache_path("a/b.json")
-        assert result == (fake_home / ".bumofu" / "cache" / "a" / "b.json").resolve()
+        assert result == (
+            fake_home / ".local" / "share" / "bumofu" / "cache" / "a" / "b.json"
+        ).resolve()
 
     def test_bundled_windows_with_localappdata(self, monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "frozen", True, raising=False)
@@ -379,15 +391,17 @@ class TestGetCachePath:
         monkeypatch.setattr(Path, "home", lambda: fake_home)
         assert get_cache_path("") == fake_home / ".bumofu" / "cache"
 
-    def test_prod_linux_without_dev_mode_uses_home_cache(
+    def test_prod_linux_without_dev_mode_uses_local_share_cache(
         self, monkeypatch, tmp_path
     ):
-        """非 bundled 但 Linux 生产（无 BUMOFU_DEV_MODE）也走 home 分支。"""
+        """非 bundled 但 Linux 生产（无 BUMOFU_DEV_MODE）也走数据根缓存分支。"""
         monkeypatch.setattr(platform, "system", lambda: "Linux")
         monkeypatch.delenv("BUMOFU_DEV_MODE", raising=False)
+        monkeypatch.delenv("BUMOFU_DATA_DIR", raising=False)
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
         fake_home = tmp_path / "home"
         monkeypatch.setattr(Path, "home", lambda: fake_home)
-        assert get_cache_path("") == fake_home / ".bumofu" / "cache"
+        assert get_cache_path("") == fake_home / ".local" / "share" / "bumofu" / "cache"
 
 
 # ─────────────────────────────────────────────────────────────

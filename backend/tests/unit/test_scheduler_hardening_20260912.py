@@ -164,6 +164,8 @@ class TestSchedulerTimerLifecycle:
             _src.count("_schedule_daily(")
             + _src.count("_schedule_interval(")
             + _src.count("_schedule_weekly(")
+            # R36：启动一次性补跑（backup_catchup）同样必须经统一登记（_register_timer）
+            + _src.count("_schedule_backup_catchup(")
         )
         assert len(named) == _expected, f"{_expected} 个周期任务必须全部登记（实得 {len(named)}）"
         assert _expected >= 14

@@ -14,6 +14,8 @@ class TestSendEmailAlert:
         mock_server = MagicMock()
         mock_server.__enter__.return_value = mock_server
         with patch("app.services.alert_service.settings") as mock_st:
+            # 出厂默认 OFFLINE_MODE=True（离线短路）；这些用例验证的是"非离线"原路径
+            mock_st.OFFLINE_MODE = False
             mock_st.SMTP_HOST = "smtp.test.com"
             mock_st.SMTP_PORT = 587
             mock_st.SMTP_USER = "user@test.com"
@@ -42,6 +44,8 @@ class TestSendEmailAlert:
         mock_server = MagicMock()
         mock_server.__enter__.return_value = mock_server
         with patch("app.services.alert_service.settings") as mock_st:
+            # 出厂默认 OFFLINE_MODE=True（离线短路）；这些用例验证的是"非离线"原路径
+            mock_st.OFFLINE_MODE = False
             mock_st.SMTP_HOST = "smtp.test.com"
             mock_st.SMTP_PORT = 587
             mock_st.SMTP_USER = "user@test.com"
@@ -65,6 +69,8 @@ class TestSendEmailAlert:
         mock_server = MagicMock()
         mock_server.__enter__.return_value = mock_server
         with patch("app.services.alert_service.settings") as mock_st:
+            # 出厂默认 OFFLINE_MODE=True（离线短路）；这些用例验证的是"非离线"原路径
+            mock_st.OFFLINE_MODE = False
             mock_st.SMTP_HOST = "smtp.test.com"
             mock_st.SMTP_PORT = 587
             mock_st.SMTP_USER = "user@test.com"
@@ -87,6 +93,8 @@ class TestSendEmailAlert:
         from app.services.alert_service import AlertService
 
         with patch("app.services.alert_service.settings") as mock_st:
+            # 出厂默认 OFFLINE_MODE=True（离线短路）；这些用例验证的是"非离线"原路径
+            mock_st.OFFLINE_MODE = False
             mock_st.SMTP_HOST = None
             mock_st.SMTP_USER = None
             mock_st.SMTP_PASSWORD = None
@@ -109,6 +117,8 @@ class TestSendEmailAlert:
         from app.services.alert_service import AlertService
 
         with patch("app.services.alert_service.settings") as mock_st:
+            # 出厂默认 OFFLINE_MODE=True（离线短路）；这些用例验证的是"非离线"原路径
+            mock_st.OFFLINE_MODE = False
             mock_st.SMTP_HOST = "smtp.test.com"
             mock_st.SMTP_USER = "user"
             mock_st.SMTP_PASSWORD = "pass"
@@ -127,6 +137,13 @@ class TestSendEmailAlert:
 
 class TestSendWebhookAlert:
     """覆盖 send_webhook_alert 所有分支"""
+
+    @pytest.fixture(autouse=True)
+    def _non_offline(self, monkeypatch):
+        """本类验证"非离线"原路径；出厂 OFFLINE_MODE=True 会在入口短路。"""
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "OFFLINE_MODE", False, raising=False)
 
     @pytest.mark.asyncio
     async def test_generic_default(self):

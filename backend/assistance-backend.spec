@@ -62,10 +62,16 @@ if os.path.exists(_build_info_path):
 # 离线瓦片包（F 区，2026-10-21）：安装包预置瓦片的 PyInstaller 侧收集。
 # 目标目录 'resources/map-tiles' 与运行期解析一致（app/api/v1/map.py 的
 # sys._MEIPASS/resources/map-tiles 分支；onedir 下 _MEIPASS == _internal/）。
-# 存在性守卫：源码树只有占位 README（未预置瓦片）时跳过，避免 PyInstaller
-# 对不存在的 datas 源报错；有瓦片时自动随后端产物一起分发。
+#
+# 2026-10-24（v1.17.x）：改为**构建开关**，默认不收集。
+# 原因：Electron 桌面版通过 extraResources 把瓦片放到 <resources>/map-tiles，
+# 并由 Electron 注入 MAP_TILES_DIR；PyInstaller 再收集一份会让安装包多 ~60MB
+# （实测 378MB → 预计 ~318MB）。仅「不带 Electron 的 standalone 后端分发」
+# 才需要内置，届时构建时设置 INCLUDE_MAP_TILES=1。ARM64 standalone 使用
+# backend_linux_arm64_standalone.spec，仍按其自身逻辑收集。
+_include_map_tiles = os.environ.get('INCLUDE_MAP_TILES', '0') == '1'
 _tiles_dir = os.path.join(project_root, 'resources', 'map-tiles')
-if os.path.isdir(_tiles_dir):
+if _include_map_tiles and os.path.isdir(_tiles_dir):
     datas.append((_tiles_dir, os.path.join('resources', 'map-tiles')))
 
 # 自动收集 prophet 包数据（如果存在；x86/ARM64 构建时可能未安装，自动跳过）。

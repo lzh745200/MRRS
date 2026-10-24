@@ -15,6 +15,7 @@
 
 import logging
 import os
+import sys
 import threading
 from datetime import datetime, timedelta
 
@@ -30,6 +31,10 @@ _timers: list[threading.Timer] = []
 # 停止标志：_job 在重排下一次之前必须检查，否则 stop 之后 interval/daily 链
 # 仍会继续自我重排（cancel 只能取消「尚未触发」的 Timer，拦不住正在运行中的 _job）
 _stopping = threading.Event()
+
+# R36：启动补跑延迟（秒）。等 lifespan 其余启动步骤（建表/迁移/静态资源）落地后
+# 再跑，避免与首启初始化抢锁；一次性任务，不自我重排。
+BACKUP_CATCHUP_DELAY_SECONDS = 15
 
 
 def _register_timer(timer: threading.Timer) -> None:
@@ -90,6 +95,97 @@ def _cleanup_expired_backups(db) -> int:
     return retention_days
 
 
+def _backup_interval_days() -> int:
+    """自动备份间隔（天）—— ``auto_backup_job`` 与启动补跑的**单一事实源**。"""
+    return get_int_config("backup_interval_days", 1, getter=get_config)
+
+
+def _last_backup_time(db):
+    """读取 ``last_backup_time``（未配置/空串/脏值 → ``None``，视为从未备份）。
+
+    用 ``time_utils.parse_local_wallclock`` 归一：带时区偏移的脏值不再因
+    naive - aware 抛 TypeError 逃逸成"整个自动备份失败"。
+
+    R36：抽成函数是为了让 ``auto_backup_job`` 与启动补跑
+    （``_backup_catchup_due``）读**完全同一份**判定输入 —— 否则两处口径漂移会
+    在补跑后重复备份，或该补的时候不补。
+    """
+    from app.models.system_config import SystemConfig
+
+    last_row = (
+        db.query(SystemConfig).filter(SystemConfig.key == "last_backup_time").first()
+    )
+    if last_row and isinstance(getattr(last_row, "value", None), str) and last_row.value:
+        return parse_local_wallclock(last_row.value)
+    return None
+
+
+def _backup_catchup_due(now: "datetime | None" = None, db=None) -> "tuple[bool, int]":
+    """启动补跑判定：返回 ``(是否需要补跑, 间隔天数)``。
+
+    R36（离线长期运行可靠性）：单机现场常见"机器每天只开机几小时 / 刚好错过
+    02:00"，纯每日定时会让自动备份长期不执行。启动时补跑一次即可兜住。
+
+    **幂等**：判定口径与 ``auto_backup_job`` 的间隔 early-return 完全一致
+    （同 ``backup_interval_days`` 配置键、同 ``last_backup_time``、同
+    ``parse_local_wallclock`` 归一）。补跑成功后 ``BackupService`` 会刷新
+    ``last_backup_time``，当日 02:00 的 daily 任务据此正常跳过 —— 不会重复备份。
+    从未备份（无记录/脏值）视为到期：这种情况本就该立刻有一份备份。
+    """
+    interval_days = _backup_interval_days()
+    if db is None:
+        with get_db_context() as session:
+            last_ts = _last_backup_time(session)
+    else:
+        last_ts = _last_backup_time(db)
+    if last_ts is None:
+        return True, interval_days
+    current = now or datetime.now()
+    return (current - last_ts) >= timedelta(days=interval_days), interval_days
+
+
+def _is_pytest_process() -> bool:
+    """当前进程是否 pytest 测试进程（启动补跑的保护开关）。
+
+    为什么需要：启动补跑是**定时器**触发的真实备份，而测试进程里调度器常被
+    ``start_backup_scheduler()`` 直接拉起 —— 定时器会在**用例之间**触发，
+    落真实备份文件、写 ``last_backup_time`` 与管理员消息，造成跨用例污染与
+    偶发失败（而每日任务因为延迟数小时，永远等不到）。生产进程不加载 pytest
+    （PyInstaller 产物也不含），因此对真实运行零影响；测试通过 patch 本函数
+    来验证补跑语义。
+    """
+    return "pytest" in sys.modules or bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+
+def _run_backup_catchup_job() -> None:
+    """启动补跑（一次性）：距上次备份超过间隔或从未备份 → 立即补跑一次自动备份。
+
+    退出语义沿用 ``_stopping``：已停止时连判定都不做（不做幽灵 DB 写），
+    判定通过后若期间收到停止信号也不再开跑。判定异常只记 ERROR 不向上抛 ——
+    调度线程不允许因单次失败而中断。
+    """
+    if _stopping.is_set():
+        return
+    if _is_pytest_process():
+        # 测试进程：定时器会在用例间触发，绝不能在这里落真实备份
+        logger.debug("pytest 进程，跳过启动补跑")
+        return
+    try:
+        due, interval_days = _backup_catchup_due()
+    except Exception:
+        logger.error("启动备份补跑判定失败（本次跳过，下次启动再试）", exc_info=True)
+        return
+    if not due:
+        logger.info("距上次备份未超过 %d 天，跳过启动补跑", interval_days)
+        return
+    logger.warning(
+        "距上次备份已超过 %d 天或从未备份，启动时立即补跑一次自动备份", interval_days
+    )
+    if _stopping.is_set():
+        return
+    _run_scheduler_job(auto_backup_job)
+
+
 async def auto_backup_job():
     """自动备份任务（后端调度唯一真相源）。
 
@@ -108,22 +204,11 @@ async def auto_backup_job():
             retention_days = _cleanup_expired_backups(db)
 
             # 间隔检查: 距上次备份不足 interval_days 则跳过
-            from datetime import datetime as _dt, timedelta as _td
-            from app.models.system_config import SystemConfig
-
-            interval_days = get_int_config("backup_interval_days", 1, getter=get_config)
-            last_row = (
-                db.query(SystemConfig)
-                .filter(SystemConfig.key == "last_backup_time")
-                .first()
-            )
-            if last_row and isinstance(getattr(last_row, "value", None), str) and last_row.value:
-                # 用 time_utils.parse_local_wallclock 归一：带时区偏移的脏值不再因
-                # naive - aware 抛 TypeError 逃逸成"整个自动备份失败"。
-                last_ts = parse_local_wallclock(last_row.value)
-                if last_ts is not None and _dt.now() - last_ts < _td(days=interval_days):
-                    logger.info("距上次备份不足 %d 天，跳过自动备份", interval_days)
-                    return
+            interval_days = _backup_interval_days()
+            last_ts = _last_backup_time(db)
+            if last_ts is not None and datetime.now() - last_ts < timedelta(days=interval_days):
+                logger.info("距上次备份不足 %d 天，跳过自动备份", interval_days)
+                return
 
             from app.utils.drive_detect import ensure_target_dir
 
@@ -792,6 +877,30 @@ def _schedule_interval(coro_func, interval_seconds, task_name):
     t.start()
 
 
+def _schedule_oneshot(coro_func, delay_seconds, task_name):
+    """一次性延迟任务（**不**自我重排）。
+
+    R36：启动补跑这类"只做一次"的动作不能走 ``_schedule_daily/interval``
+    （后者会周期重排）。但仍沿用 R8 的登记约定：Timer 经 ``_register_timer``
+    入表（stop 时可 cancel），触发时先看 ``_stopping``（停止后不执行）。
+    """
+    def _job():
+        if _stopping.is_set():
+            return
+        _run_scheduler_job(coro_func)
+
+    t = threading.Timer(delay_seconds, _job)
+    t.daemon = True
+    t.name = f"scheduler-{task_name}"
+    _register_timer(t)
+    t.start()
+
+
+def _schedule_backup_catchup(delay_seconds: int = BACKUP_CATCHUP_DELAY_SECONDS) -> None:
+    """登记启动备份补跑（一次性；判定与执行见 ``_run_backup_catchup_job``）。"""
+    _schedule_oneshot(_run_backup_catchup_job, delay_seconds, "backup_catchup")
+
+
 def start_backup_scheduler():
     """启动后台调度器（仅轻量任务，不含自动备份和 VACUUM）
 
@@ -808,6 +917,11 @@ def start_backup_scheduler():
     _schedule_daily(recycle_retention_job, 4, 30, "recycle_retention")
     _schedule_daily(anomaly_detection_job, 1, 0, "anomaly_detection")
     _schedule_daily(auto_backup_job, 2, 0, "auto_backup")
+    # R36（离线长期运行可靠性）：启动补跑 —— 机器每天只开机数小时/刚好错过 02:00 时，
+    # 纯每日定时会让自动备份长期不执行。启动后延迟 BACKUP_CATCHUP_DELAY_SECONDS 秒
+    # 判定一次：距上次备份超过 backup_interval_days（或从未备份）→ 立即补跑一次。
+    # 一次性、不重排；判定口径与 auto_backup_job 完全一致，补跑后当日 02:00 正常跳过。
+    _schedule_backup_catchup()
     _schedule_daily(auto_package_job, 3, 0, "auto_package")
     _schedule_daily(message_cleanup_job, 3, 30, "message_cleanup")
     # R27：过期/已吊销登录会话回收（user_sessions 只增不减）
@@ -831,7 +945,7 @@ def start_backup_scheduler():
 
     _scheduler_started = True
     logger.info(
-        "调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 自动打包 + 消息清理"
+        "调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 启动补跑 + 自动打包 + 消息清理"
         " + 过期导出回收 + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发"
         " + 分片清理 + 数据包清理 + 审计日志清理）"
     )

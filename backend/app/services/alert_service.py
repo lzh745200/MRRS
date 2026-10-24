@@ -1,8 +1,14 @@
 """
 告警服务
 提供多渠道告警功能(邮件、Webhook)
+
+离线契约：``settings.OFFLINE_MODE``（出厂默认 True）为真时，两个通道都在
+**入口处**短路 —— 不解析 DNS、不建立连接、不发起 HTTP 请求，只记 INFO
+日志并返回 False。完全离线单机部署因此不存在任何出网行为；现场确需接入
+内网邮件服务器或钉钉/企业微信，必须显式设置 ``OFFLINE_MODE=false``。
 """
 
+import asyncio
 import logging
 import smtplib
 import ssl
@@ -16,6 +22,34 @@ import httpx
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# 离线短路日志模板（%s 为通道名），便于现场按同一前缀检索日志
+_OFFLINE_SKIP_LOG = "离线模式，跳过外部告警（%s通道）"
+
+
+def _offline_mode() -> bool:
+    """读取离线总开关；属性缺失时按"离线"处理（安全默认，宁可不发也不出网）。"""
+    return bool(getattr(settings, "OFFLINE_MODE", True))
+
+
+def _send_email_sync(
+    host: str,
+    port: int,
+    user: str,
+    password: str,
+    message: MIMEMultipart,
+    timeout: int,
+) -> None:
+    """同步 SMTP 发送实现（由 ``asyncio.to_thread`` 包裹，不阻塞事件循环）。
+
+    深审 #69：starttls 必须显式传 SSL context（否则不校验证书链/主机名），
+    且 SMTP 必须带 timeout（服务器挂起时不再无限阻塞）。
+    """
+    context = ssl.create_default_context()
+    with smtplib.SMTP(host, port, timeout=timeout) as server:
+        server.starttls(context=context)
+        server.login(user, password)
+        server.send_message(message)
 
 
 class AlertService:
@@ -32,9 +66,14 @@ class AlertService:
             message: 邮件内容
 
         Returns:
-            是否发送成功
+            是否发送成功（离线模式下恒为 False，且不产生任何网络 I/O）
         """
         try:
+            # 离线总开关：入口处短路，先于任何配置解析 / DNS 解析 / 建连
+            if _offline_mode():
+                logger.info(_OFFLINE_SKIP_LOG, "邮件")
+                return False
+
             # 获取SMTP配置
             smtp_host = getattr(settings, "SMTP_HOST", None)
             smtp_port = getattr(settings, "SMTP_PORT", 587)
@@ -44,7 +83,7 @@ class AlertService:
             # default 不会生效 → 发件人为空。改为显式回退到 smtp_user（深审 #70）。
             smtp_from = getattr(settings, "SMTP_FROM", None) or smtp_user
 
-            # 超时：SMTP 服务器挂起时无限阻塞（且本函数在事件循环内同步执行）。
+            # 超时：SMTP 服务器挂起时避免无限阻塞。
             smtp_timeout = getattr(settings, "SMTP_TIMEOUT", 10)
             try:
                 smtp_timeout = max(1, int(smtp_timeout))
@@ -64,15 +103,17 @@ class AlertService:
 
             msg.attach(MIMEText(message, "plain", "utf-8"))
 
-            # 发送邮件
-            # 深审 #69：原实现 starttls() 不带 SSL context，smtplib 会退回
-            # 不校验证书链/主机名的默认上下文，随后明文发送凭据（可被 MITM）；
-            # 且 SMTP 无 timeout，服务器不响应即无限阻塞。两者一并修复。
-            context = ssl.create_default_context()
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as server:
-                server.starttls(context=context)
-                server.login(smtp_user, smtp_password)
-                server.send_message(msg)
+            # 发送邮件：smtplib 是同步阻塞调用，必须移出事件循环线程，
+            # 否则 SMTP 服务器不响应时整个 ASGI loop 被卡住（≤ SMTP_TIMEOUT 秒）。
+            await asyncio.to_thread(
+                _send_email_sync,
+                smtp_host,
+                smtp_port,
+                smtp_user,
+                smtp_password,
+                msg,
+                smtp_timeout,
+            )
 
             logger.info(f"邮件告警已发送: {subject}")
             return True
@@ -92,9 +133,14 @@ class AlertService:
             webhook_type: Webhook类型(generic/dingtalk/wecom)
 
         Returns:
-            是否发送成功
+            是否发送成功（离线模式下恒为 False，且不创建任何 HTTP 客户端）
         """
         try:
+            # 离线总开关：入口处短路，先于构造 payload / 创建 httpx 客户端
+            if _offline_mode():
+                logger.info(_OFFLINE_SKIP_LOG, "Webhook")
+                return False
+
             # 根据类型构造不同的消息格式
             if webhook_type == "dingtalk":
                 payload = {

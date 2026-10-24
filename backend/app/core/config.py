@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.17.4"
+    PROJECT_VERSION: str = "1.18.0"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -259,6 +259,12 @@ class Settings(BaseSettings):
     # MetricsMiddleware：单请求耗时 > 该值（**秒**，注意单位）即计入慢请求列表，
     # 经 /system/monitor/api-stats 的 slow_requests / slow_threshold_seconds 暴露。
     SLOW_METRICS_THRESHOLD_SECONDS: float = 1.0
+
+    # ── 离线模式总开关（默认开启＝完全离线单机部署）──
+    # 为真时，所有外部通道（SMTP 邮件告警 / Webhook 告警）在入口处短路：
+    # 不解析 DNS、不建连、不发 HTTP，仅记 INFO 日志并返回 False。
+    # 现场若确需接入内网邮件/钉钉，显式设环境变量 OFFLINE_MODE=false 才放行。
+    OFFLINE_MODE: bool = True
 
     # 告警配置
     ALERT_EMAIL_RECIPIENTS: Optional[List[str]] = None

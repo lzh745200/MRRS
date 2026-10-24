@@ -231,9 +231,12 @@ class TestRestoreIntegration:
         )
         observed = {}
 
-        def fake_impl(self, backup_file_path, password=None):
+        def fake_impl(self, backup_file_path, password=None, **kwargs):
+            # 批次 2 起 _restore_backup_impl 增加 allow_key_mismatch / operator
+            # 两个可选参数（PII 密钥指纹闸门）；本用例只关注维护窗口语义。
             observed["active"] = mw.is_active()
             observed["reason"] = mw.status()["reason"]
+            observed["kwargs"] = kwargs
             return {"success": True}
 
         monkeypatch.setattr(BackupService, "_restore_backup_impl", fake_impl, raising=True)

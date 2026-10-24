@@ -26,6 +26,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Windows 控制台默认 GBK，打印 "✓"/"✗" 会 UnicodeEncodeError 并使门禁假红；
+# 门禁输出统一用 UTF-8（不支持 reconfigure 的旧解释器静默跳过）。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):  # pragma: no cover - 仅旧解释器/特殊重定向
+    pass
+
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "frontend"
