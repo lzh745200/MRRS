@@ -1,17 +1,14 @@
 {
-  "version": "1.17.1",
-  "build": "20261021",
-  "release_date": "2026-10-21",
-  "description": "系统管理梳理（分组导航 / 危险操作硬化）+ 离线瓦片地图 + PII 密钥跨机迁移 + ARM64 离线 OCR + 架构清理",
+  "version": "1.17.2",
+  "build": "20261024",
+  "release_date": "2026-10-24",
+  "description": "端到端排查修复：组织创建不可用 + 自检路径错位（两项均为「单测绿、真机废」的高危缺陷）+ 死代码清理",
   "features": [
-    "系统管理聚合页左侧分组导航：6 个聚合页由横向 tab 平铺改为「左分组 + 右内容」，30 个 tab 按语义归组；分组为纯呈现层（TAB_LAYOUT），不改后端菜单 key / tab path / 权限粒度 / ?tab= 深链，未登记的新 tab 自动落「其他」组，窄屏 ≤992px 转横向滚动",
-    "危险操作硬化：新增 useDangerConfirm（普通确认 / 高危录入确认两档）；管理员重置他人密码改为必须手工输入目标用户名才能执行；删除组织、恢复备份、轮换密钥、管理员重置密码四类动作补强制审计（organization_delete / system_restore / secrets_rotate / admin_reset_password）",
-    "离线瓦片地图：前端引入 Leaflet 栅格瓦片（RasterTileLayer.vue + utils/mapTiles.ts），瓦片包由构建机预置到 resources/map-tiles 并复制进安装包；新增切片/校验/清单工具链与 npm run tiles:verify，Windows 构建增加瓦片预置校验步骤",
-    "PII 密钥跨机迁移：新增 /system/pii-key 查看指纹、/export 导出、/import 导入（仅管理员），解决多机离线同步时各机 ENCRYPTION_KEY 不一致导致 PII 密文永不可解的问题；导出导入只记指纹不记密钥本体，环境变量显式配置时拒绝导入",
-    "ARM64 离线 OCR 出包门禁：requirements-arm64-ocr.txt + headless cv2/onnxruntime，构建期真实识别冒烟，出包后断言 DEB 载荷含 rapidocr 模型与 onnxruntime/cv2 原生库且不引入 libgl1 等外部依赖",
-    "门禁增强：新增 console tab key ↔ 前端 TAB_COMPONENTS 双向一致检查（杜绝有菜单无组件导致功能静默消失）、文档数字漂移检查（端点数/路由模块数/前端测试文件数/后端用例数）、安全审计覆盖棘轮改为动态发现全部写路由模块",
-    "备份权限：普通用户可创建备份（备份文件只落服务器、创建接口不返回内容），下载 / 恢复 / 上传恢复 / 删除仍由 require_admin 把关；viewer 与未分配角色的账号 fail-closed 拒绝",
-    "修复：R33 单位授权「单位授权配置」「导入授权包」两个 tab 因前端漏加 TAB_COMPONENTS 映射而不可见（测试契约 28 → 30 个 tab）；恢复备份审计只记录可 JSON 序列化白名单字段（避免 datetime 导致审计写入失败）",
-    "本版移出 R35 删表迁移：升级演练（从上一 Release 建库并每表播种一行）复现出「表非空即 raise」会让老用户升级中断、装完起不来，schema 维持 r34 head，后续改为归档式清理再单独发布"
+    "组织创建（严重）：OrganizationCreate 漏掉 code 字段，而端点创建路径直接读 data.code —— 真实 HTTP 请求一进来就 422/AttributeError，单测用 MagicMock 传 data 不暴露。后果是新装机器无法创建任何组织、上下级部署无法初始化。已补 code 必填（6 位），OrganizationUpdate.code 改为可选（编码只读语义）",
+    "系统自检端点路径错位（真机 404）：模块注册在 /api/v1/self-check（根级），而前端与文档调用 /api/v1/system/self-check → 设置页自检卡片恒 404。改为经 api/v1/system 聚合注册（与 diagnostics / business-health 同构），并移除根级重复单独注册",
+    "防回归：新增 tests/unit/test_p3_org_create_http_contract.py（8 例）——只走 TestClient，锁定「缺 code → 422 / 短码 → 422 / 非数字码 → 422 / 合法载荷不被 schema 拦」；test_p3_self_check_api.py 增补路径契约用例，断言路由为 /api/v1/system/self-check、根级不存在，并校验前端 api/selfCheck.ts 与后端一致",
+    "端到端实测（隔离实例，独立 DB + 独立端口）：出厂口令登录 → 强制改密 → 业务 API 403 拦截 → CSRF 双提交 → 改密重登录 → 系统自检 6 项 → 组织树省/市/县层级自动推导 → 反例（跨级挂接 422 / 重复编码 400 / 缺编码 422 / 改编码 422）→ 帮扶村与权限包 → 数据包导出/下载/导入 → 来源单位码不一致 409 → 重复导入 409 与 force 放行 → 写回执，全链路 PASS",
+    "死代码清理：移除 6 个从未接入任何页面的通用组件（AppEmpty / AppError / AppLoading / AppPageHeader / AppStatCard / AppTableToolbar）及其 barrel 出口与 7 个测试文件（AppPageHeader 与在用的 PageHeader 重复）；移除 3 个已被 docs/build_ppt.js 取代的一次性 PPT 版本脚本（update_pptx_versions_20260912/20261016/20261017）；ErrorBoundary 经核实仍在 DefaultLayoutSafe.vue 通过全局名使用，予以保留",
+    "全量回归：后端 12 段分段执行 + 覆盖率 100%；前端全量 + 12 组 glob 覆盖率 100%；flake8（含 --max-complexity=16）0 错误、bandit 0、ESLint 0、vue-tsc 0"
   ]
 }
